@@ -291,4 +291,18 @@ void main() {
     expect(select['ids'], [8]);
   });
 
+  testWidgets('Option+arrows pass through the Timeline to the window (nudge), plain arrows step the frame', (tester) async {
+    await mountRows(tester, 3);
+    await tester.tapAt(Offset(tlX(4) - 344, tlTop + tlPitch - 703)); // an empty lane: the Timeline takes focus
+    await tester.pump(const Duration(milliseconds: 50));
+    sent.clear();
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(sent.where((m) => m['op'] == 'seek'), isEmpty);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(sent.where((m) => m['op'] == 'seek'), isNotEmpty);
+  });
 }

@@ -26,8 +26,10 @@ mixin TimelineView<T extends StatefulWidget>
       timelineSession.cancelPreview();
       return KeyEventResult.handled;
     }
-    if (k == LogicalKeyboardKey.arrowLeft ||
-        k == LogicalKeyboardKey.arrowRight) {
+    // Option+arrows are the window's (nudge the selection, or move picked keys).
+    if ((k == LogicalKeyboardKey.arrowLeft ||
+            k == LogicalKeyboardKey.arrowRight) &&
+        !HardwareKeyboard.instance.isAltPressed) {
       final delta =
           (k == LogicalKeyboardKey.arrowLeft ? -1 : 1) *
           (HardwareKeyboard.instance.isShiftPressed ? 10 : 1);
