@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:math' as math;
 
+import 'package:flutter/gestures.dart' show HitTestResult;
 import 'package:flutter/widgets.dart';
 
 import '../../hf/desk/notes.dart';
@@ -189,8 +190,11 @@ class _LiveNotesState extends State<LiveNotes> {
     final box = _desk.currentContext?.findRenderObject();
     final point = event['point'];
     if (box is! RenderBox || !box.attached || point is! List) return false;
-    final local = box.globalToLocal(Offset((point[0] as num).toDouble(), (point[1] as num).toDouble()));
-    if (!(Offset.zero & box.size).contains(local)) return false;
+    final global = Offset((point[0] as num).toDouble(), (point[1] as num).toDouble());
+    // only where the desk is actually hit (a hidden tab stays mounted but is not under the pointer), as Classic does
+    final hits = HitTestResult();
+    WidgetsBinding.instance.hitTestInView(hits, global, View.of(context).viewId);
+    if (!hits.path.any((h) => identical(h.target, box))) return false;
     host.dropImages([for (final p in event['paths'] as List? ?? const []) if (p is String) p]);
     return true;
   }

@@ -81,8 +81,17 @@ void main() {
     expect(sent.last, {'op': 'sequence', 'layers': [5, 3], 'shape': {'kind': 'Bezier', 'x1': .2, 'y1': .1, 'x2': .8, 'y2': .9}});
     expect(sent.where((m) => m['op'] == 'ease'), isEmpty);
 
-    // keys picked: back to shaping their intervals
+    // one picked key has no interval to shape: still the ghost mode (Classic's rule)
     c.document.value = {...c.state, 'selectedKeys': [{'layer': 3, 'property': 'opacity', 'frame': 0}]};
+    await Future<void>.delayed(Duration.zero);
+    expect(host.sequence, 2);
+    // an interval to shape: back to shaping it
+    c.document.value = {
+      ...c.state,
+      'easeIntervals': [
+        {'layer': 3, 'property': 'opacity', 'frame': 0, 'end': 10, 'shape': {'kind': 'Linear'}},
+      ],
+    };
     await Future<void>.delayed(Duration.zero);
     expect(host.sequence, 0);
     host.dispose();
@@ -225,5 +234,24 @@ void main() {
     expect(ease['kind'], 'Bezier');
     expect(ease['x1'], closeTo(.3, 1e-9));
     await tester.pumpWidget(const SizedBox());
+  });
+  test('a kept curve of another kind keeps its own numbers when it is read back and written again', () async {
+    final bounce = {'kind': 'Bounce', 'bounces': 3.0, 'handles': [[.5, .5]], 'samples': [[0, 0], [1, 1]]};
+    final c = EditorSession()
+      ..document.value = {
+        'capabilities': ['ease'],
+        'easeKinds': [
+          {'kind': 'Linear', 'samples': [[0, 0], [1, 1]]},
+          bounce,
+        ],
+        'easeIntervals': [],
+      };
+    c.deskWork.value = {'ease': {'kind': 'Bounce', 'bounces': 5.0}};
+    final host = LiveEaseHost(c);
+    final seg = host.intervals.single;
+    expect(seg.model!['bounces'], 5.0, reason: 'the kept number, not the kind default');
+    await host.apply(0, seg);
+    expect(c.deskWork.value['ease'], {'kind': 'Bounce', 'bounces': 5.0});
+    host.dispose();
   });
 }

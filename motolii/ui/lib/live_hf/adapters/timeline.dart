@@ -439,6 +439,7 @@ class _LiveTimelineState extends State<LiveTimeline>
                       ? () => c.command('split')
                       : null,
                   onMarkerContext: (id, at) => _markerContext(id, at, context),
+                  frameWidth: pixelsPerFrame,
                   onContext: (at, global) => menuAt(
                     at - toFace,
                     (items) => showHfMenu<String>(

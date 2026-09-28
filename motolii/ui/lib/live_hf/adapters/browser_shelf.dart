@@ -81,6 +81,7 @@ class _LiveBrowserShelfState extends State<LiveBrowserShelf> {
       ..clear()
       ..addAll(ids);
     seat.notify();
+    widget.controller.placePanel('Media', 'show');
   }
 
   void _changed() {
@@ -405,6 +406,11 @@ class _Seat extends ChangeNotifier implements BrowserSeat {
   @override
   KeyEventResult key(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    // a key typed into a field (the search) is the field's, never the shelf's (Classic frame_keys)
+    final typing = FocusManager.instance.primaryFocus?.context;
+    if (typing != null && (typing.widget is EditableText || typing.findAncestorWidgetOfExactType<EditableText>() != null)) {
+      return KeyEventResult.ignored;
+    }
     final digit = int.tryParse(event.logicalKey.keyLabel);
     if (digit != null && digit <= 7 && selected.isNotEmpty) {
       userState.collect(selected, digit);

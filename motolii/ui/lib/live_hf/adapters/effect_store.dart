@@ -32,8 +32,19 @@ class SessionEffectStore extends ParamStore {
 
   List<Map<String, dynamic>> get _others => [for (final l in c.layers) if (l['id'] != layerId) l];
 
+  /// The other layers by a label each one alone answers to: its name, with its id when another has the same name.
+  Map<String, int> get _refs {
+    final others = _others;
+    final names = <String, int>{};
+    for (final l in others) names.update('${l['name']}', (n) => n + 1, ifAbsent: () => 1);
+    return {
+      for (final l in others)
+        (names['${l['name']}']! > 1 ? '${l['name']} · ${l['id']}' : '${l['name']}'): (l['id'] as num).toInt(),
+    };
+  }
+
   String? _nameOf(Object? id) =>
-      id is num && id != 0 ? _others.where((l) => l['id'] == id.toInt()).map((l) => '${l['name']}').firstOrNull : null;
+      id is num && id != 0 ? _refs.entries.where((e) => e.value == id.toInt()).map((e) => e.key).firstOrNull : null;
 
   void _load() {
     final layer = _layer();
@@ -49,7 +60,7 @@ class SessionEffectStore extends ParamStore {
               ...r,
               // a layer picker names the other layers and shows its layer by name (Classic IN-094: None + the others)
               if (_picksLayer(r)) ...{
-                'refs': [for (final l in _others) '${l['name']}'],
+                'refs': [..._refs.keys],
                 'value': _nameOf(r['value']),
               },
               'animated': (r['keys'] as List?)?.isNotEmpty ?? false,
@@ -111,7 +122,7 @@ class SessionEffectStore extends ParamStore {
     if (_picksLayer(row(id))) {
       // the layer, by id (0 = None), in one step as Classic's picker writes it
       if (frozen) return;
-      final target = v == null ? 0 : (_others.where((l) => '${l['name']}' == v).map((l) => l['id']).firstOrNull ?? 0);
+      final target = v == null ? 0 : (_refs[v] ?? 0);
       row(id)['value'] = v;
       notifyListeners();
       c.command('setProperty', {'layer': layerId, 'property': id, 'value': target});

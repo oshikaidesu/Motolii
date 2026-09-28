@@ -390,6 +390,9 @@ void main() {
     await tester.tapAt(Offset(150, tlTop + tlPitch + tlRowH / 2 - 703), buttons: kSecondaryButton);
     await tester.pumpAndSettle();
     final before = sent.length;
+    // the menu is taller than this short view: it scrolls inside it
+    await tester.ensureVisible(find.text('Group'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Group'));
     await tester.pump();
     expect(sent.length, before);

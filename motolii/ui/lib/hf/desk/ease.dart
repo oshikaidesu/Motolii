@@ -125,6 +125,12 @@ abstract class EaseHost implements Listenable {
   int? get current;
   double? playhead(int? interval);
 
+  /// Moves when the document playhead does (the graph's line follows it without rebuilding the desk).
+  Listenable get frame;
+
+  /// Whether there are saved presets to clear (the copied curve is not one).
+  bool get canClear;
+
   /// How many layers the curve spreads delays over (the Ease desk's ghost mode: several layers picked, no keys);
   /// 0 when it shapes key intervals.
   int get sequence;
@@ -165,12 +171,15 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
     setState(() {
       _held = h.intervals;
       if (sel >= _held.length) sel = _held.isEmpty ? 0 : _held.length - 1;
-      // the interval shown is the one the playhead is in (or last passed), as Classic's desk follows it
+      // the interval shown follows the playhead when the playhead enters another one (Classic's desk); a chip the
+      // user picks stays until then
       final now = h.current;
-      if (now != null && sel >= 0 && now < _held.length) sel = now;
+      if (now != null && now != _followed && sel >= 0 && now < _held.length) sel = now;
+      _followed = now;
     });
   }
 
+  int? _followed;
   void _write() => widget.host?.apply(mixed ? null : sel, cur);
   final saved = <List<double>>[[.7, 0, .3, 1], [.2, .9, .6, 1.2]];
   int sel = 0; // -1 = all intervals (mixed)
@@ -454,7 +463,7 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
           GestureDetector(
             key: ValueKey('ease-saved-$i'),
             onTap: () {
-              void take(Seg to) { to.p = s.p; if (s.bez) to.setValues(s.values); }
+              void take(Seg to) { to.p = s.p; if (s.bez) { to.setValues(s.values); } else { to.model = s.model; } }
               setState(() { if (mixed) { for (final t in segs) { take(t); } } else { take(cur); } });
               _write();
             },
@@ -463,7 +472,7 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
         _chip('ease-copy', 'Copy curve', () => h.copyCurve(cur)),
         _chip('ease-save', 'Save preset', () => h.savePreset(cur)),
         _chip('ease-new-keys', 'Use for new keys', () => h.useForNewKeys(cur)),
-        if (h.saved.isNotEmpty) _chip('ease-clear', 'Clear', h.clearSaved),
+        if (h.canClear) _chip('ease-clear', 'Clear', h.clearSaved),
       ]);
 
   Widget _chip(String key, String t, VoidCallback f) => GestureDetector(
@@ -523,7 +532,10 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
           ),
       ]);
 
-  Widget _plot({required bool labels}) => LayoutBuilder(builder: (context, box) {
+  // Only the plot follows the playhead (its line), frame by frame; the rest of the desk is not rebuilt.
+  Widget _plot({required bool labels}) => ListenableBuilder(listenable: widget.host?.frame ?? Listenable.merge(const []), builder: (context, _) => _plotBody(labels: labels));
+
+  Widget _plotBody({required bool labels}) => LayoutBuilder(builder: (context, box) {
         final size = Size(box.maxWidth, box.maxHeight);
         final startFrame = mixed ? 0 : segs.take(sel).fold<int>(0, (a, b) => a + b.frames);
         final shown = peek == null ? cur.shape : presets[peek!].shape;
@@ -562,10 +574,11 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
           if (!cur.bez) {
             // another kind: the host moves its handle and describes the curve again (latest answer wins)
             final seg = cur, handle = drag!, ask = ++_asks;
-            widget.host?.model(seg, handle, Offset(x, y)).then((m) {
-              if (m == null || !mounted || ask != _asks || drag == null) return;
-              setState(() { _moved = true; seg.model = m; });
-              widget.host?.preview(mixed ? null : sel, seg);
+            _moved = true;
+            _pending = widget.host?.model(seg, handle, Offset(x, y)).then((m) {
+              if (m == null || !mounted || ask != _asks) return;
+              setState(() => seg.model = m);
+              if (drag != null) widget.host?.preview(mixed ? null : sel, seg);
             });
             return;
           }
@@ -598,7 +611,10 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
             final wrote = drag != null && _moved;
             _moved = false;
             setState(() => drag = null);
-            if (wrote) _write();
+            // a quick flick of another kind's handle is written once the host has described the curve it made
+            final pending = _pending;
+            _pending = null;
+            if (wrote) pending == null ? _write() : pending.then((_) { if (mounted) _write(); });
           },
           onPointerCancel: (_) {
             if (drag != null && _moved) widget.host?.cancel();
@@ -612,6 +628,7 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
   final _plotKeys = FocusNode(debugLabel: 'ease plot');
   (int, List<double>)? _before;
   Map<String, dynamic>? _beforeModel;
+  Future<void>? _pending;
   int _asks = 0;
 }
 

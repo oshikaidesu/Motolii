@@ -1,5 +1,6 @@
 // A short list that drops from a bar box (the Stage's view box): the reference's dark box, one line per choice.
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'place.dart';
@@ -29,7 +30,9 @@ Future<T?> showHfMenu<T>(BuildContext context, Rect at, List<(T, String)> items,
   final space = box?.size ?? Size.infinite;
   final origin = box == null ? Offset.zero : box.globalToLocal(Offset.zero);
   final local = at.shift(origin);
-  final height = items.length * 28.0 + 8 + 9.0 * items.where((i) => dividers.contains(i.$1) && i != items.last).length;
+  final full = items.length * 28.0 + 8 + 9.0 * items.where((i) => dividers.contains(i.$1) && i != items.last).length;
+  // a menu taller than the window scrolls inside it
+  final height = math.min(full, math.max(40.0, space.height - 8));
   final top = local.bottom + 2 + height <= space.height
       ? local.bottom + 2
       : (local.top - 2 - height).clamp(0.0, double.infinity);
@@ -73,7 +76,8 @@ Future<T?> showHfMenu<T>(BuildContext context, Rect at, List<(T, String)> items,
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 3),
           decoration: BoxDecoration(color: const Color(0xFF1D1D1D), border: Border.all(color: const Color(0xFF3E3E3D)), borderRadius: BorderRadius.circular(3)),
-          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          constraints: BoxConstraints(maxHeight: height),
+          child: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             for (final (i, (v, label)) in items.indexed) ...[
               MouseRegion(
                 cursor: disabled.contains(v) ? SystemMouseCursors.basic : SystemMouseCursors.click,
@@ -94,7 +98,7 @@ Future<T?> showHfMenu<T>(BuildContext context, Rect at, List<(T, String)> items,
               ),
               if (dividers.contains(v) && v != items.last.$1) Container(height: 1, margin: const EdgeInsets.symmetric(vertical: 4), color: H.rule),
             ],
-          ]),
+          ])),
         ),
       ),
     ]),

@@ -345,6 +345,7 @@ class _LiveBrowserState extends State<LiveBrowser> {
           onColorMenu: (swatch, at) => _colorMenu(context, swatch, at),
           usedFonts: _usedFonts,
           onGradient: (gradient) => _applyGradient(gradient),
+          onGradientMenu: (gradient, at) => _gradientMenu(context, gradient, at),
           colorEditor: (wheel) => LiveColorInstrument(c: c, wheel: wheel),
           currentColor: () {
             final target = colorTarget(c);
@@ -399,7 +400,21 @@ class _LiveBrowserState extends State<LiveBrowser> {
       if (saved) ('forget', 'Forget swatch'),
     ]);
     if (chosen == 'apply') await _applyColor(swatch);
-    if (chosen == 'forget') await forgetSwatch(c, int.parse(swatch.$1.split(':').last));
+    if (chosen == 'forget') await _forget(_savedSwatches()[int.parse(swatch.$1.split(':').last)]);
+  }
+
+  /// Forget the saved swatch that is this one when the choice is made (the list may have changed while the menu was
+  /// open), not the one at the index it had.
+  Future<void> _forget(Map<String, dynamic> item) async {
+    final key = jsonEncode(item['stops']);
+    final at = _savedSwatches().indexWhere((s) => jsonEncode(s['stops']) == key);
+    if (at >= 0) await forgetSwatch(c, at);
+  }
+
+  Future<void> _gradientMenu(BuildContext context, Map<String, dynamic> item, Offset at) async {
+    final chosen = await showHfMenu<String>(context, Rect.fromLTWH(at.dx, at.dy, 180, 0), [('apply', 'Apply'), ('forget', 'Forget swatch')]);
+    if (chosen == 'apply') await _applyGradient(item);
+    if (chosen == 'forget') await _forget(item);
   }
 
   Future<void> _applyGradient(Map<String, dynamic> item) async {

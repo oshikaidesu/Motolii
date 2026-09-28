@@ -52,7 +52,8 @@ class LiveEaseHost extends ChangeNotifier implements EaseHost {
   /// carry a ghost — the curve spreads their delays, in the order they were picked.
   List<Map<String, dynamic>> _layers = const [];
   List<Map<String, dynamic>> _sequenceLayers() {
-    if (EditorSession.maps(c.state['selectedKeys']).isNotEmpty) return const [];
+    // Classic's rule: no key interval to shape (a single picked key has none) and several ghostable layers
+    if (EditorSession.maps(c.state['easeIntervals']).isNotEmpty) return const [];
     final byId = {for (final l in c.layers) l['id']: l};
     final picked = [
       for (final id in c.selectedIds)
@@ -65,14 +66,19 @@ class LiveEaseHost extends ChangeNotifier implements EaseHost {
   int get sequence => _layers.length;
 
   // The playhead moves the graph's line and the interval shown (Classic DK-012/015): heard only when either changes.
-  (int?, double?) _head = (null, null);
+  // The playhead moves only the graph's line (frame, below), and the interval shown only when it changes: the desk is
+  // not rebuilt every frame of playback.
+  int? _now;
   void _frame() {
-    final next = (current, playhead(current));
-    if (next != _head) {
-      _head = next;
+    final next = current;
+    if (next != _now) {
+      _now = next;
       notifyListeners();
     }
   }
+
+  @override
+  Listenable get frame => c.frame;
 
   /// The interval under the playhead, else the last one before it (Classic DK-012).
   @override
@@ -118,9 +124,21 @@ class LiveEaseHost extends ChangeNotifier implements EaseHost {
       seg.setValues([for (final n in ['x1', 'y1', 'x2', 'y2']) (shape[n] as num? ?? 0).toDouble()]);
     } else if (shape['samples'] is List) {
       seg.model = shape; // the host's full description, with this curve's own parameters
+    } else if (seg.model != null && shape.keys.any((k) => k != 'kind')) {
+      // a kept curve carries its parameters, not its samples: those parameters, drawn once the host describes them
+      seg.model = {...seg.model!, ...shape};
+      model(seg, null, null).then((m) {
+        if (m != null) {
+          seg.model = m;
+          notifyListeners();
+        }
+      });
     }
     return seg;
   }
+
+  @override
+  bool get canClear => _presets.isNotEmpty;
 
   // Classic's Ease desk keeps these in the desk settings: the copied curve (`curveClip`), the saved presets
   // (`easePresets`) and the shape new keys take (`newKeyShape`).
@@ -172,7 +190,7 @@ class LiveEaseHost extends ChangeNotifier implements EaseHost {
         c.error.value = '${reply['error']}';
         return null;
       }
-      return reply;
+      return reply['kind'] == null ? null : reply; // no description, no change
     } catch (e) {
       c.error.value = '$e';
       return null;

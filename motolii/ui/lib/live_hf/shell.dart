@@ -45,6 +45,7 @@ class _LiveShellState extends State<LiveShell> {
   void initState() {
     super.initState();
     c.confirmClose = () => mayReplace(context, c);
+    console; // the log listens from the start: an error while the document opens is kept too
     c.panelPlacementRequested = (name, placement) async {
       if (placement == 'hide') {
         workspace?.dock.close(name);

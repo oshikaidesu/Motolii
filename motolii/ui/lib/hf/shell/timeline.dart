@@ -121,12 +121,16 @@ class TimelineModel {
     this.onCoreLabelCancel,
     this.tabs = true,
     this.onContext,
+    this.frameWidth = 1,
     this.marquee,
     this.dropGuide,
     this.dropInside = false,
     this.marqueeInk = const Color(0xFFFFBC53),
     this.guideInk = const Color(0xFFB0E3EF),
   });
+
+  /// How wide one frame is drawn (a key at the playhead is within half of it).
+  final double frameWidth;
 
   /// A right press at [at] (the frame's coordinates) over a row's label or the tracks.
   final void Function(Offset at, Offset global)? onContext;
@@ -289,7 +293,7 @@ List<RI> timeline(TimelineModel m) {
     }
     if (r.lane) {
       // keyed at the playhead: a solid mark; otherwise an outline one says a key can be added here
-      final keyed = r.keys.any((k) => (k - m.playhead).abs() < .5);
+      final keyed = r.keys.any((k) => (k - m.playhead).abs() < math.max(.5, m.frameWidth / 2));
       items.add(Hg(547, cy, 10, HG.diamond, keyed ? H.text : H.text3));
       continue;
     }

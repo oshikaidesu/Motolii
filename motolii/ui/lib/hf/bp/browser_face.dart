@@ -26,6 +26,7 @@ class BrowserModel {
     this.currentColor,
     this.onColorMenu,
     this.usedFonts = const {},
+    this.onGradientMenu,
     this.fonts = fontsBase,
     this.fontGroups,
     this.selectedFont,
@@ -51,6 +52,7 @@ class BrowserModel {
   final Color? currentColor;
   final void Function(Sw swatch, Offset at)? onColorMenu;
   final Set<String> usedFonts;
+  final void Function(Map<String, dynamic> gradient, Offset at)? onGradientMenu;
   final List<FontItem> fonts;
   final List<List<String>>? fontGroups;
   final String? selectedFont;
@@ -79,6 +81,7 @@ Widget _body(BrowserModel m) => KeyedSubtree(
         editor: m.colorEditor,
         current: m.currentColor,
         onSwatchMenu: m.onColorMenu,
+        onGradientMenu: m.onGradientMenu,
         controller: m.fontController,
       ),
       3 => FontsPanel(

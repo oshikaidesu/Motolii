@@ -190,6 +190,7 @@ class ColorsPanel extends StatefulWidget {
     this.gradients,
     this.onSwatch,
     this.onSwatchMenu,
+    this.onGradientMenu,
     this.onGradient,
     this.editor,
     this.current,
@@ -201,8 +202,9 @@ class ColorsPanel extends StatefulWidget {
   final List<Map<String, dynamic>>? gradients;
   final ValueChanged<Sw>? onSwatch;
 
-  /// A swatch's right-click, at the pointer.
+  /// A swatch's right-click, at the pointer; a saved gradient's likewise.
   final void Function(Sw swatch, Offset at)? onSwatchMenu;
+  final void Function(Map<String, dynamic> gradient, Offset at)? onGradientMenu;
   final ValueChanged<Map<String, dynamic>>? onGradient;
   /// The live colour editor at the wheel's side; without one the reference instrument is drawn.
   final Widget Function(double wheel)? editor;
@@ -308,6 +310,7 @@ class _ColorsPanelState extends State<ColorsPanel>
             _Gradients(
               items: widget.gradients,
               onTap: widget.onGradient,
+              onMenu: widget.onGradientMenu,
               controller: widget.controller,
             ),
           ],
@@ -679,9 +682,10 @@ class _Swatches extends StatelessWidget {
 }
 
 class _Gradients extends StatelessWidget {
-  const _Gradients({this.items, this.onTap, this.controller});
+  const _Gradients({this.items, this.onTap, this.onMenu, this.controller});
   final List<Map<String, dynamic>>? items;
   final ValueChanged<Map<String, dynamic>>? onTap;
+  final void Function(Map<String, dynamic> item, Offset at)? onMenu;
   final EditorSession? controller;
 
   List<Color> _colors(List<dynamic> stops) => [
@@ -744,6 +748,7 @@ class _Gradients extends StatelessWidget {
           GestureDetector(
             behavior: HitTestBehavior.opaque,
             onTap: onTap == null ? null : () => onTap!(item),
+            onSecondaryTapDown: onMenu == null ? null : (e) => onMenu!(item, e.globalPosition),
             child: _tile(item),
           ),
     ],

@@ -54,6 +54,12 @@ void main() {
     expect(find.text('Number required'), findsOneWidget);
     expect(find.byType(EditableText), findsOneWidget);
     expect(s.row('x')['value'], 10.0);
+    // Esc leaves; the next typing starts clean
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(ValueToy));
+    await tester.pumpAndSettle();
+    expect(find.text('Number required'), findsNothing);
   });
 
   testWidgets('Esc in a text value puts it back', (tester) async {

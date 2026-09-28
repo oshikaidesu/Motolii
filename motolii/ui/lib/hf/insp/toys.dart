@@ -169,6 +169,7 @@ class _ValueToyState extends State<ValueToy> {
     ctl.text = widget.slot.whole ? '${shown.round()}' : (shown == shown.roundToDouble() ? shown.toStringAsFixed(1) : '$shown');
     ctl.selection = TextSelection(baseOffset: 0, extentOffset: ctl.text.length);
     _cancel = false;
+    _bad = false;
     _subject = widget.slot.store.subject;
     setState(() => editing = true);
   }

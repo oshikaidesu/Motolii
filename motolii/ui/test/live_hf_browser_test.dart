@@ -260,6 +260,18 @@ void main() {
       expect(sent.map((m) => m['op']), isNot(contains('delete')));
       expect(sent.last, {'op': 'removeAsset', 'id': 'asset-a'});
 
+      // Backspace typed into the search is the search's: a picked file is not removed
+      sent.clear();
+      await tester.tap(asset);
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.sendKeyEvent(LogicalKeyboardKey.slash);
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.backspace);
+      await tester.pumpAndSettle();
+      expect(sent.where((m) => m['op'] == 'removeAsset'), isEmpty);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+
       // while files are carried over the window the shelf says where they go
       c.dragging.value = true;
       await tester.pumpAndSettle();
