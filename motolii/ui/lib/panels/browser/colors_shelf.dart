@@ -7,7 +7,7 @@ import 'package:flutter/services.dart';
 import '../../foundation/metrics.dart';
 import '../../foundation/theme.dart';
 import '../../session/editor_session.dart';
-import 'color_palette.dart';
+import '../../session/media_actions.dart' as media show savePalette;
 import 'color_picker.dart';
 import '../../session/color_edit.dart' show colorTarget;
 import 'color_values.dart';
@@ -15,7 +15,7 @@ import 'fill_definitions.dart';
 import 'parts.dart';
 import 'shelf.dart';
 
-export 'color_palette.dart';
+export '../../session/color_palette.dart';
 export 'color_values.dart';
 
 /// Colours: the wheel edits the selected layer's slot; the tiles are the
@@ -278,19 +278,8 @@ class ColorsShelf extends BrowserShelf {
 
   /// The picture's main colours become saved solids, shown at once.
   static Future<void> savePalette(BrowserHost host, Uint8List bytes) async {
-    final colors = await paletteOf(bytes);
-    if (colors.isEmpty) {
-      host.controller.error.value = 'No colours found in that image';
-      return;
-    }
-    await host.controller.storeDesk('swatches', [
-      ...saved(host.controller),
-      for (final c in colors)
-        {
-          'stops': [c],
-        },
-    ]);
-    if (host.mounted) host.showCategory('Colors', 'Saved');
+    if (await media.savePalette(host.controller, bytes) && host.mounted)
+      host.showCategory('Colors', 'Saved');
   }
 
   static List<Map<String, dynamic>> saved(EditorSession c) =>

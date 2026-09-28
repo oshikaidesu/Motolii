@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -65,6 +66,8 @@ void main() {
             'setAttrs',
             'moveKeys',
             'split',
+            'removeAsset',
+            'replaceAsset',
           ],
           'createKinds': [
             {'id': 'text', 'name': 'Text'},
@@ -198,6 +201,15 @@ void main() {
         find.ancestor(of: asset, matching: find.byType(Draggable<Map<String, dynamic>>)),
       );
       expect(carried.data, {'asset': 'asset-a', 'name': 'clip.mov'});
+
+      // right-click: the file's own actions (Classic's Media menu), then Favorites
+      await tester.tap(asset, buttons: kSecondaryButton);
+      await tester.pumpAndSettle();
+      for (final label in ['Replace selected layer', 'Copy path', 'Remove from library', 'Add to Favorites'])
+        expect(find.text(label), findsOneWidget, reason: label);
+      await tester.tap(find.text('Remove from library'));
+      await tester.pumpAndSettle();
+      expect(sent.last, {'op': 'removeAsset', 'id': 'asset-a'});
 
       await tester.pumpWidget(const SizedBox());
       c.dispose();

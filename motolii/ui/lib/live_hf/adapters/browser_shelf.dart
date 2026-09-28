@@ -13,6 +13,7 @@ import '../../hf/bp/shelf_grid.dart';
 import '../../hf/bp/things.dart';
 import '../../hf/glyphs.dart';
 import '../../session/editor_session.dart';
+import '../../session/media_actions.dart';
 import 'browser_user.dart';
 
 /// Live Media assets drawn through the existing hf shelf grammar.
@@ -378,15 +379,29 @@ class _Seat extends ChangeNotifier implements BrowserSeat {
   void more(BuildContext context, Offset at) {
     if (selected.isEmpty) return;
     final id = selected.last;
+    final item = itemsById[id];
     final favorite = userState.views.favorites.contains(id);
-    showHfMenu<String>(context, Rect.fromLTWH(at.dx, at.dy, 190, 0), [
-      (
-        favorite ? 'remove' : 'favorite',
-        favorite ? 'Remove from Favorites' : 'Add to Favorites',
-      ),
-    ]).then((action) {
+    // An imported file's own actions (Classic's Media menu, one owner), then the Browser's Favorites.
+    final actions = item == null ? const <MediaAction>[] : mediaActions(c, item);
+    showHfMenu<String>(
+      context,
+      Rect.fromLTWH(at.dx, at.dy, 220, 0),
+      [
+        for (final a in actions) ('media:${a.value}', a.label),
+        (
+          favorite ? 'remove' : 'favorite',
+          favorite ? 'Remove from Favorites' : 'Add to Favorites',
+        ),
+      ],
+      disabled: {
+        for (final a in actions)
+          if (!a.enabled) 'media:${a.value}',
+      },
+    ).then((action) {
       if (action == 'remove') userState.collect([id], 0);
       if (action == 'favorite') userState.collect([id], 1);
+      if (action != null && action.startsWith('media:') && item != null)
+        mediaAct(c, action.substring(6), item, id: item['assetId']);
     });
   }
 

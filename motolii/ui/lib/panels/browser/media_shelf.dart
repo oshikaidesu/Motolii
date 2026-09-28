@@ -6,7 +6,9 @@ import 'package:flutter/services.dart';
 import '../../foundation/metrics.dart';
 import '../../foundation/theme.dart';
 import '../../session/editor_session.dart';
-import 'colors_shelf.dart';
+import '../../session/media_actions.dart';
+
+export '../../session/media_actions.dart' show filePath, revealLabel;
 import 'create_shelf.dart';
 import 'parts.dart';
 import 'shelf.dart';
@@ -166,74 +168,28 @@ class MediaShelf extends BrowserShelf {
   List<EditorMenuItem<String>> menu(
     BrowserHost host,
     Map<String, dynamic> item,
-  ) {
-    if (item['builtin'] == true) return const [];
-    final missing = item['missing'] == true;
-    final path = filePath(item);
-    return [
+  ) => [
+    for (final action in mediaActions(host.controller, item))
       EditorMenuItem<String>(
-        value: 'replace',
-        enabled:
-            host.has('replaceAsset') &&
-            !missing &&
-            host.controller.selectedIds.isNotEmpty,
-        child: const Text('Replace selected layer'),
+        value: action.value,
+        enabled: action.enabled,
+        child: Text(action.label),
       ),
-      if (path != null && !missing) ...[
-        EditorMenuItem<String>(value: 'reveal', child: Text(revealLabel)),
-        const EditorMenuItem<String>(
-          value: 'open',
-          child: Text('Open with default app'),
-        ),
-        if ('${item['mime']}'.startsWith('image/'))
-          const EditorMenuItem<String>(
-            value: 'palette',
-            child: Text('Extract palette'),
-          ),
-      ],
-      if (path != null)
-        const EditorMenuItem<String>(
-          value: 'copyPath',
-          child: Text('Copy path'),
-        ),
-      if (host.has('relinkAsset'))
-        EditorMenuItem<String>(
-          value: 'relink',
-          child: Text(missing ? 'Locate file…' : 'Relink to another file…'),
-        ),
-      EditorMenuItem<String>(
-        value: 'remove',
-        enabled: host.has('removeAsset') && item['used'] != true,
-        child: const Text('Remove from library'),
-      ),
-    ];
-  }
+  ];
 
   @override
   Future<void> act(
     BrowserHost host,
     String action,
     Map<String, dynamic> item,
-  ) async {
-    final c = host.controller;
-    final path = filePath(item);
-    switch (action) {
-      case 'replace':
-        await c.command('replaceAsset', {'id': item['id']});
-      case 'reveal':
-        await c.native('reveal', {'path': path});
-      case 'open':
-        await c.native('openFile', {'path': path});
-      case 'copyPath':
-        await Clipboard.setData(ClipboardData(text: path ?? ''));
-      case 'relink':
-        await _relink(host, item);
-      case 'palette':
-        await ColorsShelf.savePalette(host, File('$path').readAsBytesSync());
-      case 'remove':
-        await c.command('removeAsset', {'id': item['id']});
-    }
-  }
+  ) => mediaAct(
+    host.controller,
+    action,
+    item,
+    paletteSaved: () {
+      if (host.mounted) host.showCategory('Colors', 'Saved');
+    },
+  );
 
   @override
   void delete(BrowserHost host, Map<String, dynamic> item) {
@@ -304,33 +260,6 @@ class MediaShelf extends BrowserShelf {
 
   /// Pick a file of the same family and point the asset at it. The layers
   /// keep the asset; only the file behind it changes.
-  Future<void> _relink(BrowserHost host, Map<String, dynamic> item) async {
-    final family = '${item['mime']}'.split('/').first;
-    final extensions = switch (family) {
-      'image' => const [
-        'png',
-        'jpg',
-        'jpeg',
-        'webp',
-        'bmp',
-        'gif',
-        'tif',
-        'tiff',
-      ],
-      'video' => const ['mp4', 'mov', 'mkv', 'webm'],
-      'audio' => const ['wav', 'mp3', 'flac', 'aac'],
-      _ => const <String>[],
-    };
-    final picked = await host.controller.native('pickImport', {
-      if (extensions.isNotEmpty) 'extensions': extensions,
-    });
-    if (picked is! List || picked.isEmpty || !host.mounted) return;
-    await host.controller.command('relinkAsset', {
-      'id': item['id'],
-      'path': '${picked.first}',
-    });
-  }
-
   /// Dimensions, rate and length, from what the file itself says.
   static String _mediaFact(Map<String, dynamic> item) {
     final facts = item['facts'];
@@ -455,13 +384,6 @@ Widget mediaThumbnail(Map<String, dynamic> item, double tileScale) => Builder(
   },
 );
 
-/// The plain path behind a card; the status may carry it as a file URI.
-String? filePath(Map<String, dynamic> item) {
-  final raw = item['path'] as String?;
-  if (raw == null || raw.isEmpty) return null;
-  return raw.startsWith('file:') ? Uri.parse(raw).toFilePath() : raw;
-}
-
 /// The file's size, for the menu's facts.
 String fileFact(String path) {
   final file = File(path);
@@ -479,9 +401,4 @@ String homely(String path) {
       : path;
 }
 
-/// The system's own name for showing a file where it lives.
-String get revealLabel => Platform.isMacOS
-    ? 'Reveal in Finder'
-    : Platform.isWindows
-    ? 'Show in Explorer'
-    : 'Show in file manager';
+
