@@ -37,13 +37,19 @@ enum HeadMode { full, compact, stacked }
 
 /// The header: identity and a few small keys. Search is a magnifier until it is used; then it takes the row.
 class PanelHeader extends StatefulWidget {
-  const PanelHeader({super.key, required this.title, required this.icon, required this.search, required this.hint, this.mode = HeadMode.full, this.count, this.extra});
+  const PanelHeader({super.key, required this.title, required this.icon, required this.search, required this.hint, this.mode = HeadMode.full, this.count, this.extra, this.lead, this.height});
   final String title, hint;
   final Widget icon;
   final SearchCapability search;
   final HeadMode mode;
   final String? count;
   final Widget? extra;
+
+  /// Takes the row's leading space (the title's) — a panel's class strip, when classes share the header row.
+  final Widget? lead;
+
+  /// A row lower than the mode's own (the compact one-row header of Create and Media).
+  final double? height;
   @override
   State<PanelHeader> createState() => _PanelHeaderState();
 }
@@ -76,14 +82,14 @@ class _PanelHeaderState extends State<PanelHeader> {
 
   @override
   Widget build(BuildContext context) {
-    final h = switch (widget.mode) { HeadMode.full => 52.0, HeadMode.compact => 40.0, HeadMode.stacked => 34.0 };
+    final h = widget.height ?? switch (widget.mode) { HeadMode.full => 52.0, HeadMode.compact => 40.0, HeadMode.stacked => 34.0 };
     return ListenableBuilder(
       listenable: widget.search,
       builder: (_, __) {
         final searching = open || widget.search.active;
         return Container(
           height: h,
-          padding: const EdgeInsets.only(left: 12, right: 4),
+          padding: EdgeInsets.only(left: widget.lead == null ? 12 : 0, right: 4),
           decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: kRule2))),
           child: searching
               ? Row(children: [
@@ -104,7 +110,8 @@ class _PanelHeaderState extends State<PanelHeader> {
                   ),
                 ])
               : Row(children: [
-                  if (DockedPanel.of(context)) const Spacer()
+                  if (widget.lead != null) Expanded(child: widget.lead!)
+                  else if (DockedPanel.of(context)) const Spacer()
                   else if (widget.mode != HeadMode.stacked) ...[
                     widget.icon,
                     SizedBox(width: widget.mode == HeadMode.full ? 12 : 8),
@@ -117,7 +124,7 @@ class _PanelHeaderState extends State<PanelHeader> {
                     setState(() => open = true);
                     WidgetsBinding.instance.addPostFrameCallback((_) => widget.search.request());
                   }),
-                  if (widget.mode != HeadMode.compact) const HeaderKey(HG.grid4),
+                  if (widget.mode != HeadMode.compact && widget.lead == null) const HeaderKey(HG.grid4),
                   Builder(builder: (context) => HeaderKey(HG.kebab, onTap: () {
                     final seat = BrowserSeatScope.of(context);
                     final box = context.findRenderObject() as RenderBox?;
@@ -176,11 +183,13 @@ class PanelShell extends StatelessWidget {
       final tools = seat?.tools(context);
       final header = PanelHeader(
         title: title, icon: icon, search: search, hint: hint, mode: mode, count: count,
+        lead: stripped ? ClassStrip(classify, groups, bare: true) : null,
+        height: stripped ? 30 : null,
         extra: tools == null && (isWide || stripped) ? null : Row(mainAxisSize: MainAxisSize.min, children: [if (tools != null) tools, if (!isWide && !stripped) ClassChip(classify)]),
       );
       final under = seat?.header(context);
       final hh = switch (mode) { HeadMode.full => 52.0, HeadMode.compact => 40.0, HeadMode.stacked => 34.0 };
-      final bodySize = Size(isWide ? w - columnWidth : w, h - hh - (stripped ? 28 : 0));
+      final bodySize = Size(isWide ? w - columnWidth : w, h - (stripped ? 30 : hh));
       final shell = search.keys(Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         header,
         if (under != null) under,
@@ -188,7 +197,7 @@ class PanelShell extends StatelessWidget {
           child: isStrip
               ? strip(context, bodySize)
               : stripped
-                  ? Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [ClassStrip(classify, groups), Expanded(child: wide(context, bodySize))])
+                  ? wide(context, bodySize)
               : isWide
                   ? Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [ClassColumn(classify, groups, width: columnWidth), Expanded(child: wide(context, bodySize))])
                   : narrow(context, bodySize),

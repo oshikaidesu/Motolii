@@ -23,6 +23,9 @@ Future<void> pick(WidgetTester tester, String menu, String item) async {
   await tester.pumpAndSettle();
 }
 
+/// A Create key by its name: the board prints no caption; the name is the key's semantics label.
+Finder mark(String name) => find.byWidgetPredicate((w) => w is Semantics && w.properties.label == name);
+
 void main() {
   void size(WidgetTester tester) {
     tester.view.physicalSize = const Size(1600, 1000);
@@ -37,7 +40,7 @@ void main() {
     await open(tester);
 
     // Browser: pick a thing and it is made.
-    final tile = find.text('Rectangle').first;
+    final tile = mark('Rectangle').first;
     await tester.tap(tile);
     await tester.pump(const Duration(milliseconds: 40));
     await tester.tap(tile); // a shape is placed by double click
@@ -112,7 +115,7 @@ void main() {
     await open(tester);
 
     // Pick the first shape by clicking it (a click on a thing that makes a layer only picks).
-    await tester.tap(find.text('Rectangle').first);
+    await tester.tap(mark('Rectangle').first);
     await tester.pumpAndSettle();
     expect(native.ops, isNot(contains('create')), reason: 'a click only picks');
 
@@ -136,11 +139,11 @@ void main() {
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(EditableText).first, 'ellip');
     await tester.pumpAndSettle();
-    expect(find.text('Ellipse'), findsWidgets);
-    expect(find.text('Rectangle'), findsNothing, reason: 'the search narrowed the list');
+    expect(mark('Ellipse'), findsWidgets);
+    expect(mark('Rectangle'), findsNothing, reason: 'the search narrowed the list');
     await tester.enterText(find.byType(EditableText).first, '');
     await tester.pumpAndSettle();
-    expect(find.text('Rectangle'), findsWidgets);
+    expect(mark('Rectangle'), findsWidgets);
     expect(tester.takeException(), isNull);
   });
 }

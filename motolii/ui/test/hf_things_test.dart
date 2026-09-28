@@ -29,6 +29,9 @@ Map<String, dynamic> good() => {
 List<Issue> check(Registry r, Map<String, dynamic> j, {Set<String> implemented = const {}}) => validateThings(r, [('t.json', j)], implemented: implemented);
 Set<String> rules(List<Issue> l) => {for (final i in l) i.rule};
 
+/// A Create key by its name: the board prints no caption; the name is the key's semantics label.
+Finder mark(String name) => find.byWidgetPredicate((w) => w is Semantics && w.properties.label == name);
+
 void main() {
   final reg = loadCatalog(dir).registry;
 
@@ -147,10 +150,10 @@ void main() {
     testWidgets('Create shows a registered physics thing with no physics code', (t) async {
       final cat = loadCatalog(dir, sets: const ['builtin', 'stress']);
       await t.pumpWidget(host(CreatePanel(catalog: cat)));
-      expect(find.text('PHYSICS'), findsNothing); // a class in the column, not a section, until chosen
+      // (under All it is a section of its own; that the old grid never built it on this surface was an accident of lazy layout)
       await t.tap(find.text('Physics').first);
       await t.pump();
-      expect(find.text('Spring'), findsOneWidget);
+      expect(mark('Spring'), findsOneWidget);
     });
     testWidgets('a structured query reaches the Effects panel through the shared search', (t) async {
       final cat = loadCatalog(dir, sets: const ['builtin', 'stress']);

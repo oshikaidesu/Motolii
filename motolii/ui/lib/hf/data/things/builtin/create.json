@@ -19,7 +19,7 @@
    "face": {
     "type": "mark",
     "mark": "text",
-    "color": "#FFCB3D"
+    "color": "#EEF0F4"
    }
   },
   {
@@ -41,7 +41,7 @@
    "face": {
     "type": "mark",
     "mark": "rect",
-    "color": "#6C7CFF"
+    "color": "#2F8CFF"
    }
   },
   {
@@ -63,7 +63,7 @@
    "face": {
     "type": "mark",
     "mark": "rounded",
-    "color": "#6C7CFF"
+    "color": "#FF6FA5"
    }
   },
   {
@@ -85,7 +85,7 @@
    "face": {
     "type": "mark",
     "mark": "ellipse",
-    "color": "#6C7CFF"
+    "color": "#FF7A9E"
    }
   },
   {
@@ -107,7 +107,7 @@
    "face": {
     "type": "mark",
     "mark": "star",
-    "color": "#6C7CFF"
+    "color": "#FFC83A"
    }
   },
   {
@@ -129,7 +129,7 @@
    "face": {
     "type": "mark",
     "mark": "polygon",
-    "color": "#6C7CFF"
+    "color": "#7A55FF"
    }
   },
   {
@@ -150,7 +150,7 @@
    "face": {
     "type": "mark",
     "mark": "line",
-    "color": "#5E7BFF"
+    "color": "#D9DBE1"
    }
   },
   {
@@ -171,7 +171,7 @@
    "face": {
     "type": "mark",
     "mark": "arrow",
-    "color": "#5E7BFF"
+    "color": "#D9DBE1"
    }
   },
   {
@@ -192,7 +192,7 @@
    "face": {
     "type": "mark",
     "mark": "path",
-    "color": "#5E7BFF"
+    "color": "#8C8DFF"
    }
   },
   {
@@ -214,7 +214,7 @@
    "face": {
     "type": "mark",
     "mark": "blob",
-    "color": "#7A66F0"
+    "color": "#3FD2B4"
    }
   },
   {
@@ -236,7 +236,7 @@
    "face": {
     "type": "mark",
     "mark": "pen",
-    "color": "#EDEDF0"
+    "color": "#E6E8EC"
    }
   },
   {
@@ -257,7 +257,7 @@
    "face": {
     "type": "mark",
     "mark": "pencil",
-    "color": "#EDEDF0"
+    "color": "#E6E8EC"
    }
   },
   {
@@ -279,7 +279,7 @@
    "face": {
     "type": "mark",
     "mark": "spray",
-    "color": "#6C7CFF"
+    "color": "#8C8DFF"
    }
   },
   {
@@ -300,7 +300,7 @@
    "face": {
     "type": "mark",
     "mark": "eraser",
-    "color": "#EDEDF0"
+    "color": "#E6E8EC"
    }
   },
   {
@@ -321,7 +321,7 @@
    "face": {
     "type": "mark",
     "mark": "cube",
-    "color": "#7A66F0"
+    "color": "#35B4F5"
    }
   },
   {
@@ -342,7 +342,7 @@
    "face": {
     "type": "mark",
     "mark": "sphere",
-    "color": "#6C7CFF"
+    "color": "#6A55FF"
    }
   },
   {
@@ -363,7 +363,7 @@
    "face": {
     "type": "mark",
     "mark": "torus",
-    "color": "#7A66F0"
+    "color": "#2ED3C0"
    }
   },
   {
@@ -384,7 +384,7 @@
    "face": {
     "type": "mark",
     "mark": "cylinder",
-    "color": "#6C7CFF"
+    "color": "#F77FA6"
    }
   },
   {
@@ -405,7 +405,7 @@
    "face": {
     "type": "mark",
     "mark": "cone",
-    "color": "#6C7CFF"
+    "color": "#FF7A3A"
    }
   },
   {
@@ -426,7 +426,7 @@
    "face": {
     "type": "mark",
     "mark": "pyramid",
-    "color": "#7A66F0"
+    "color": "#FFB02E"
    }
   },
   {
@@ -447,7 +447,7 @@
    "face": {
     "type": "mark",
     "mark": "plane",
-    "color": "#7A66F0"
+    "color": "#4C7DFF"
    }
   },
   {
@@ -468,7 +468,7 @@
    "face": {
     "type": "mark",
     "mark": "nul",
-    "color": "#B7B9BD"
+    "color": "#D9DBE1"
    }
   },
   {
@@ -489,7 +489,7 @@
    "face": {
     "type": "mark",
     "mark": "camera",
-    "color": "#B7B9BD"
+    "color": "#D9DBE1"
    }
   },
   {
@@ -510,7 +510,7 @@
    "face": {
     "type": "mark",
     "mark": "light",
-    "color": "#FFCB3D"
+    "color": "#FFC83A"
    }
   },
   {
@@ -531,7 +531,7 @@
    "face": {
     "type": "mark",
     "mark": "particles",
-    "color": "#B7B9BD"
+    "color": "#6E8CFF"
    }
   },
   {
@@ -552,7 +552,7 @@
    "face": {
     "type": "mark",
     "mark": "stage",
-    "color": "#B7B9BD"
+    "color": "#D9DBE1"
    }
   }
  ]

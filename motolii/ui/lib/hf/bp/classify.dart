@@ -128,9 +128,12 @@ class _Row extends StatelessWidget {
 /// A horizontal class strip: the same capability as the column, laid along the top so the body keeps the seat's
 /// whole width (Create's board, Media's sheet). Groups are separated by space; the chosen class is underlined.
 class ClassStrip extends StatefulWidget {
-  const ClassStrip(this.classify, this.groups, {super.key});
+  const ClassStrip(this.classify, this.groups, {super.key, this.bare = false});
   final ClassifyCapability classify;
   final List<List<String>> groups;
+
+  /// Inside a header row (the row draws the rule), not a band of its own.
+  final bool bare;
   @override
   State<ClassStrip> createState() => _ClassStripState();
 }
@@ -162,7 +165,7 @@ class _ClassStripState extends State<ClassStrip> {
         listenable: widget.classify,
         builder: (_, __) => Container(
           height: 28,
-          decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: kRule2))),
+          decoration: widget.bare ? null : const BoxDecoration(border: Border(bottom: BorderSide(color: kRule2))),
           child: SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             physics: const ClampingScrollPhysics(),

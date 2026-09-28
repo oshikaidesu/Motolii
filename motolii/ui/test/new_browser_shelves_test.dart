@@ -45,6 +45,9 @@ Future<(Recording, Native)> mount(WidgetTester tester, String shelf, Map<String,
   return (c, native);
 }
 
+/// A Create key by its name: the board prints no caption; the name is the key's semantics label.
+Finder mark(String name) => find.byWidgetPredicate((w) => w is Semantics && w.properties.label == name);
+
 void main() {
   testWidgets('Fonts: one row per installed family, search narrows, a click picks, Enter sets the family on the text', (tester) async {
     final (c, _) = await mount(tester, 'Fonts', {
@@ -267,9 +270,9 @@ void main() {
       'capabilities': ['create', 'applyEffect'],
     };
     final (c, _) = await mount(tester, 'Create', doc);
-    expect(find.text('Repeater'), findsOneWidget);
+    expect(mark('Repeater'), findsOneWidget);
     expect(find.text('Copies'), findsWidgets, reason: 'the class column files it under Copies');
-    final tile = find.text('Repeater');
+    final tile = mark('Repeater');
     await tester.tap(tile);
     await tester.pump(const Duration(milliseconds: 40));
     await tester.tap(tile);

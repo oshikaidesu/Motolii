@@ -28,6 +28,9 @@ Future<void> openSearch(WidgetTester t) async {
 
 final catalog = loadCatalog('lib/hf/data/things');
 
+/// A Create key by its name: the board prints no caption; the name is the key's semantics label.
+Finder mark(String name) => find.byWidgetPredicate((w) => w is Semantics && w.properties.label == name);
+
 void main() {
   // Layout in tests needs the real UI face: the default test font is far wider and would overflow.
   setUpAll(() async {
@@ -84,8 +87,8 @@ void main() {
       expect(find.byType(EditableText), findsOneWidget);
       await t.enterText(find.byType(EditableText), 'sphere');
       await t.pump();
-      expect(find.text('Sphere'), findsOneWidget);
-      expect(find.text('Cube'), findsNothing);
+      expect(mark('Sphere'), findsOneWidget);
+      expect(mark('Cube'), findsNothing);
       await t.enterText(find.byType(EditableText), 'nothing here');
       await t.pump();
       expect(find.textContaining('No mark matches'), findsOneWidget);
@@ -96,12 +99,12 @@ void main() {
       await t.pumpWidget(host(CreatePanel(catalog: catalog), 370, 640));
       await t.tap(find.text('Shapes').first);
       await t.pump();
-      expect(find.text('Rectangle'), findsOneWidget);
-      expect(find.text('Cube'), findsNothing);
+      expect(mark('Rectangle'), findsOneWidget);
+      expect(mark('Cube'), findsNothing);
       await t.tap(find.text('3D').first);
       await t.pump();
-      expect(find.text('Cube'), findsOneWidget);
-      expect(find.text('Rectangle'), findsNothing);
+      expect(mark('Cube'), findsOneWidget);
+      expect(mark('Rectangle'), findsNothing);
     });
 
     testWidgets('Create: narrow keeps its classes along the top, and the chosen one on screen', (t) async {

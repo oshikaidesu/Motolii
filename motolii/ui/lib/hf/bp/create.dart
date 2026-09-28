@@ -2,12 +2,12 @@ import 'dart:math' as math;
 import 'package:flutter/widgets.dart';
 import '../glyphs.dart';
 import 'classify.dart';
+import 'create_board.dart';
 import 'common.dart';
 import 'effects.dart';
 import 'faces.dart';
 import 'search.dart';
 import 'seat.dart';
-import 'shelf_sections.dart';
 import 'shell.dart';
 import 'things.dart';
 
@@ -51,8 +51,8 @@ class _CreatePanelState extends State<CreatePanel> with WithDiscovery<CreatePane
             hint: 'Search create',
             count: _count(shown.length),
             classStrip: true,
-            wide: (c, s) => shown.isEmpty ? emptyBody('No mark matches "${search.query}".') : _grid(sections, s.width, captions: true, recent: !search.active),
-            narrow: (c, s) => shown.isEmpty ? emptyBody('No mark matches.') : _grid(sections, s.width, captions: s.width >= 120, recent: !search.active && s.width >= 120),
+            wide: (c, s) => shown.isEmpty ? emptyBody('No mark matches "${search.query}".') : SymbolMatrix(sections: sections, recent: search.active ? const [] : _recent(), width: s.width, scene: widget.scene),
+            narrow: (c, s) => shown.isEmpty ? emptyBody('No mark matches.') : SymbolMatrix(sections: sections, recent: search.active ? const [] : _recent(), width: s.width, scene: widget.scene),
             strip: (c, s) => _strip(shown, s.height),
           );
         },
@@ -60,58 +60,11 @@ class _CreatePanelState extends State<CreatePanel> with WithDiscovery<CreatePane
 
   static String _count(int n) => n >= 1000 ? '${n ~/ 1000},${(n % 1000).toString().padLeft(3, '0')}' : '$n';
 
-  /// A symbol board, not a card list: the object is the face, the name a small line under it, no ground under either.
-  /// Cells share their space with their neighbours (no card edge), so a narrow seat holds the whole box.
-  Widget _grid(Map<String, List<Thing>> sections, double w, {required bool captions, required bool recent}) {
-    const pad = 8.0, gap = 2.0, cellMin = 48.0;
-    final scale = BrowserSeatScope.of(context)?.tileScale ?? 1;
-    final grid = shelfColumns(w, cellMin * scale, pad: pad, gap: gap);
-    BrowserSeatScope.of(context)?.shows([for (final e in sections.values) ...e], grid.columns);
-    if (grid.width <= 0) return const SizedBox.shrink(); // a seat squeezed to nothing (a Dock split) shows nothing, not an error
-    final cellH = captions ? grid.width.clamp(0.0, 44.0) + 14 : grid.width;
-    final used = recent ? _recent() : const <Thing>[];
-    return CustomScrollView(
-      physics: const ClampingScrollPhysics(),
-      slivers: [
-        for (final e in sections.entries) ...[
-          SliverToBoxAdapter(child: Padding(padding: const EdgeInsets.symmetric(horizontal: pad + 2), child: ShelfHeading(_sentence(e.key), count: e.value.length))),
-          SliverPadding(
-            padding: const EdgeInsets.symmetric(horizontal: pad),
-            sliver: SliverGrid(
-              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: grid.columns, mainAxisSpacing: gap, crossAxisSpacing: gap, childAspectRatio: grid.width / cellH),
-              delegate: SliverChildBuilderDelegate((c, i) => seated(c, e.value[i], _Tile(e.value[i], widget.scene, captions)), childCount: e.value.length),
-            ),
-          ),
-        ],
-        if (used.isNotEmpty) ...[
-          const SliverToBoxAdapter(child: Padding(padding: EdgeInsets.symmetric(horizontal: pad + 2), child: ShelfHeading('Recently used'))),
-          SliverToBoxAdapter(
-            child: SizedBox(
-              height: 32,
-              child: ListView.separated(
-                scrollDirection: Axis.horizontal,
-                physics: const ClampingScrollPhysics(),
-                padding: const EdgeInsets.symmetric(horizontal: pad),
-                itemCount: used.length,
-                separatorBuilder: (_, __) => const SizedBox(width: gap),
-                itemBuilder: (c, i) => SizedBox(width: 32, child: seated(c, used[i], _Tile(used[i], widget.scene, false))),
-              ),
-            ),
-          ),
-        ],
-        const SliverToBoxAdapter(child: SizedBox(height: 10)),
-      ],
-    );
-  }
-
   /// The quick shelf: what was taken last (the user's Recent), a few, newest first.
   List<Thing> _recent() {
     final byId = {for (final t in views.scope) t.id: t};
     return [for (final id in (widget.user?.recent ?? const <String>[])) if (byId[id] case final t?) t].take(8).toList();
   }
-
-  /// "PRIMITIVES" reads as "Primitives"; "3D" stays.
-  static String _sentence(String s) => s.length < 3 || s != s.toUpperCase() ? s : '${s[0]}${s.substring(1).toLowerCase()}';
 
   Widget _strip(List<Thing> shown, double h) => ListView.builder(
         scrollDirection: Axis.horizontal,
@@ -156,8 +109,7 @@ class _TileState extends State<_Tile> {
 }
 
 class MarkPainter extends CustomPainter {
-  /// The data's colour, lifted toward white: a silhouette reads against the tile at shelf size (the hue stays the object's).
-  MarkPainter(this.mk, Color color) : color = Color.lerp(color, const Color(0xFFFFFFFF), .1)!;
+  MarkPainter(this.mk, this.color);
   final Mk mk;
   final Color color;
   @override
@@ -187,7 +139,8 @@ class MarkPainter extends CustomPainter {
       case Mk.rounded:
         cv.drawRRect(RRect.fromRectAndRadius(box(.84), Radius.circular(s * .24)), fill);
       case Mk.ellipse:
-        cv.drawCircle(c, s * .43, Paint()..shader = RadialGradient(center: const Alignment(-.35, -.4), colors: [tone(.4), color, tone(-.2)]).createShader(Rect.fromCircle(center: c, radius: s * .43)));
+        // a flat 2D oval, so it is never read as the shaded 3D sphere next to it
+        cv.drawOval(Rect.fromCenter(center: c, width: s * .92, height: s * .7), fill);
       case Mk.star:
         final p = Path();
         for (var i = 0; i < 10; i++) {

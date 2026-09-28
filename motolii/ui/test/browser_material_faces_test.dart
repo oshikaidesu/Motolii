@@ -8,6 +8,8 @@ import '../lib/hf/bp/common.dart' show sans;
 import '../lib/hf/bp/catalog_io.dart';
 import '../lib/hf/bp/classify.dart' show ClassStrip;
 import '../lib/hf/bp/create.dart';
+import '../lib/hf/bp/create_board.dart';
+import '../lib/hf/bp/shell.dart' show PanelHeader;
 import '../lib/hf/bp/faces.dart';
 import '../lib/hf/bp/shelf_sections.dart';
 import '../lib/hf/bp/things.dart';
@@ -17,6 +19,9 @@ import '../lib/session/editor_session.dart';
 
 /// Create is a toybox (the object is the face, the name a caption) and Media is material (each family drawn as what it
 /// is). The shelf's mechanics — picking, keys, placing — are unchanged underneath.
+/// A Create key by its name: the board prints no caption; the name is the key's semantics label.
+Finder mark(String name) => find.byWidgetPredicate((w) => w is Semantics && w.properties.label == name);
+
 void main() {
   final sent = <Map<String, dynamic>>[];
   setUp(() {
@@ -83,18 +88,24 @@ void main() {
     c.dispose();
   });
 
-  testWidgets('Create: a cardless symbol board under a class strip, sentence headings, and a quick shelf of what was taken last', (t) async {
+  testWidgets('Create: a Swiss symbol matrix — identifiers, uncaptioned marks, one header row, a Recent row', (t) async {
     final catalog = loadCatalog('lib/hf/data/things');
     final user = UserViews(recent: ['motolii.sphere']);
     await t.pumpWidget(host(t, CreatePanel(catalog: catalog, user: user), 420, 3000));
     await t.pump();
-    expect(find.text('Primitives'), findsOneWidget, reason: 'PRIMITIVES reads as a heading, not tiny caps');
-    expect(find.text('Recently used'), findsOneWidget);
-    // a board, not cards: no ground under a key until the pointer is on it, and the whole box fits a Product Home seat
-    expect(find.byType(ClassStrip), findsOneWidget);
-    expect(t.getSize(find.byType(ThingFace).first).width, lessThanOrEqualTo(40));
-    for (final name in ['Text', 'Cube', 'Camera', 'Stage']) {
-      expect(find.text(name), findsWidgets, reason: name);
+    // a symbol matrix: section identifiers, keys without captions (the name is the key's label), marks of 24-30 px
+    expect(find.text('PRIMITIVES'), findsOneWidget);
+    expect(find.text('RECENT'), findsOneWidget, reason: 'what was taken last is the last row');
+    expect(find.text('Sphere'), findsNothing, reason: 'no caption under every mark');
+    for (final name in ['Text', 'Cube', 'Camera', 'Stage', 'Sphere']) {
+      expect(mark(name), findsWidgets, reason: name);
     }
+    final face = t.getSize(find.byType(ThingFace).first);
+    expect(face.width, inInclusiveRange(24, 30));
+    // one compact header row: the classes share it with search and the menu
+    expect(find.byType(ClassStrip), findsOneWidget);
+    expect(t.getSize(find.ancestor(of: find.byType(ClassStrip), matching: find.byType(PanelHeader))).height, lessThanOrEqualTo(32));
+    // at the default seat width a row holds at least six marks
+    expect(SymbolMatrix.columns(324 - 0), greaterThanOrEqualTo(6));
   });
 }
