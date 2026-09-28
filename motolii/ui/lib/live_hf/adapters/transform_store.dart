@@ -1,3 +1,4 @@
+import 'dart:convert';
 
 import 'package:flutter/widgets.dart';
 
@@ -82,13 +83,27 @@ class SessionTransformStore extends TransformStore {
 
   static List<TLayer> _readAll(EditorSession c) {
     final names = {for (final l in c.layers) l['id']: '${l['name']}'};
+    // what each row drives, counted in one pass over every link (not once per layer)
+    final drives = <Object?, Map<String, int>>{};
+    for (final l in c.layers) {
+      for (final r in panelRows(l['properties'])) {
+        final link = r['link'];
+        if (link is Map) {
+          final of = drives.putIfAbsent(link['layer'], () => <String, int>{});
+          of['${link['property']}'] = (of['${link['property']}'] ?? 0) + 1;
+        }
+      }
+    }
     return [
       for (final l in c.liveLayers())
         layerOf(l)
-          ..drives.addAll(drivesOf(c, l['id'] as int))
+          ..drives.addAll(drives[l['id']] ?? const {})
           ..links.forEach((_, link) => link['name'] = names[link['layer']] ?? 'Relation'),
     ];
   }
+
+  /// What the last absorb read: the same document gives the same Instrument, so nothing is rebuilt or told.
+  int? _read_;
 
   bool _gesture = false;
 
@@ -99,6 +114,9 @@ class SessionTransformStore extends TransformStore {
   /// Instrument owns its values, and the last commit reads the document again.
   void absorb() {
     if (_gesture || c.layers.isEmpty) return;
+    final read = Object.hash(jsonEncode(c.liveLayers()), Object.hashAll(c.selectedIds), c.activeLayer?['id'], c.animating);
+    if (read == _read_) return;
+    _read_ = read;
     layers
       ..clear()
       ..addAll(_read(c));
@@ -124,12 +142,14 @@ class SessionTransformStore extends TransformStore {
   @override
   void committed(String id) {
     _gesture = false;
+    _read_ = null; // a gesture's own values are the Instrument's until the document is read again
     c.command('commitPreview');
   }
 
   @override
   void cancelledGesture(String id) {
     _gesture = false;
+    _read_ = null; // a gesture's own values are the Instrument's until the document is read again
     c.command('cancelPreview');
   }
 
