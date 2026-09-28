@@ -5,6 +5,8 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../lib/hf/bp/effects.dart';
+import '../lib/hf/bp/shell.dart' show HeaderKey;
+import '../lib/hf/glyphs.dart' show HG;
 import '../lib/live_hf/adapters/browser.dart';
 import '../lib/session/editor_session.dart';
 import '../lib/hf/shell/place.dart';
@@ -68,6 +70,7 @@ void main() {
             'split',
             'removeAsset',
             'replaceAsset',
+            'reloadEffects',
           ],
           'createKinds': [
             {'id': 'text', 'name': 'Text'},
@@ -143,6 +146,16 @@ void main() {
       await tester.tap(find.text('Effects').last);
       await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('browser-tab-1')), findsOneWidget);
+      // the header's more menu reads the effect shelf again (Classic's Reload)
+      final kebab = find.descendant(
+        of: find.byKey(const ValueKey('browser-tab-1')),
+        matching: find.byWidgetPredicate((w) => w is HeaderKey && w.g == HG.kebab),
+      );
+      await tester.tap(kebab.first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Reload effects'));
+      await tester.pumpAndSettle();
+      expect(sent.last['op'], 'reloadEffects');
       expect(find.text('Motion Blur'), findsWidgets);
       await tester.tap(find.text('Motion Blur').last);
       await tester.pumpAndSettle();

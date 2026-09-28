@@ -31,6 +31,19 @@ void main() {
     s.dispose();
   });
 
+  testWidgets('Background offers Classic\'s presets; a custom colour highlights none', (tester) async {
+    final c = EditorSession()..document.value = {'background': [0.3, 0.1, 0.2, 1.0]};
+    final s = CompositionStore(c);
+    expect(s.row('background')['choices'], ['Black', 'Dark', 'Grey', 'White']);
+    expect(s.row('background')['value'], -1);
+    s.set('background', 3);
+    await tester.pump();
+    expect(sent.last, {'op': 'composition', 'background': [1.0, 1.0, 1.0, 1.0]});
+    c.document.value = {'background': [0.5, 0.5, 0.5, 1.0]};
+    expect(CompositionStore(c).row('background')['value'], 2);
+    s.dispose();
+  });
+
   testWidgets('the Export sheet shows the frame, the range and the job', (tester) async {
     tester.view.physicalSize = const Size(1200, 900);
     tester.view.devicePixelRatio = 1;

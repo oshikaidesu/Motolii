@@ -311,6 +311,7 @@ class _LiveBrowserState extends State<LiveBrowser> {
     final name = const ['Create', 'Effects', 'Colors', 'Fonts', 'Media'][tab];
     final user = _user(name);
     seat.userSource = user;
+    seat.effectsTab = tab == 1;
     seat.recentlyUsed = user.used;
     seat.collect = user.collect;
     final fonts = _fonts();
@@ -429,6 +430,9 @@ class _LiveSeat extends ChangeNotifier implements BrowserSeat {
   UserViews? get user => _userSource?.views;
   Future<void> Function(String id)? recentlyUsed;
   Future<void> Function(Iterable<String> ids, int collection)? collect;
+
+  /// The seat is showing Effects: its menu also reads the effect shelf again (Classic's Reload).
+  bool effectsTab = false;
   final _things = <Thing>[];
   String? _selectedId;
   void refresh() => notifyListeners();
@@ -521,17 +525,23 @@ class _LiveSeat extends ChangeNotifier implements BrowserSeat {
 
   @override
   void more(BuildContext context, Offset at) {
-    final id = _selectedId;
-    if (id == null || _userSource == null) return;
-    final selected = _userSource!.collectionOf(id) == 1;
+    final id = _userSource == null ? null : _selectedId;
+    final reload = effectsTab && c.supports('reloadEffects');
+    if (id == null && !reload) return;
+    final selected = id != null && _userSource!.collectionOf(id) == 1;
     showHfMenu<String>(context, Rect.fromLTWH(at.dx, at.dy, 200, 0), [
-      (
-        selected ? 'remove' : 'favorite',
-        selected ? 'Remove from Favorites' : 'Add to Favorites',
-      ),
+      if (id != null)
+        (
+          selected ? 'remove' : 'favorite',
+          selected ? 'Remove from Favorites' : 'Add to Favorites',
+        ),
+      if (reload) ('reload', 'Reload effects'),
     ]).then((action) {
-      if (action == null) return;
-      collect?.call([id], action == 'remove' ? 0 : 1);
+      if (action == 'reload') {
+        c.command('reloadEffects');
+      } else if (action != null && id != null) {
+        collect?.call([id], action == 'remove' ? 0 : 1);
+      }
     });
   }
 

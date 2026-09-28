@@ -91,7 +91,7 @@ class _ExportState extends State<_Export> {
 /// through `composition`.
 Future<void> showCompositionSheet(BuildContext context, EditorSession c) {
   final store = CompositionStore(c);
-  return showHfSheet(context, title: 'Composition', width: 360, body: (_, close) => SizedBox(height: 260, child: InspectorBody(store: store, subject: 'Composition'))).whenComplete(store.dispose);
+  return showHfSheet(context, title: 'Composition', width: 360, body: (_, close) => SizedBox(height: 300, child: InspectorBody(store: store, subject: 'Composition'))).whenComplete(store.dispose);
 }
 
 const _rates = [(24000, 1001), (24, 1), (25, 1), (30000, 1001), (30, 1), (50, 1), (60000, 1001), (60, 1)];
@@ -109,13 +109,24 @@ class CompositionStore extends ParamStore {
       {'id': 'height', 'label': 'Height', 'kind': 'u32', 'value': s['height'] ?? 1080, 'min': 16, 'max': 8192, 'unit': 'px', 'hero': true},
       {'id': 'fps', 'label': 'Frame rate', 'kind': 'enum', 'choices': [for (final r in _rates) (r.$1 / r.$2).toStringAsFixed(r.$2 == 1 ? 0 : 3)], 'value': i < 0 ? 4 : i},
       {'id': 'durationFrames', 'label': 'Length', 'kind': 'u32', 'value': s['durationFrames'] ?? 300, 'min': 1, 'unit': 'f'},
+      // AE's Composition Settings > Background Color: the ground where no environment layer is (Classic's presets)
+      {'id': 'background', 'label': 'Background', 'kind': 'enum', 'choices': [for (final g in _greys) g.$1], 'value': _grey(s['background'])},
     ];
+  }
+
+  static const _greys = [('Black', 0.0), ('Dark', 0.12), ('Grey', 0.5), ('White', 1.0)];
+
+  static int _grey(Object? raw) {
+    final v = raw is List && raw.length >= 3 ? [for (final x in raw.take(3)) (x as num).toDouble()] : null;
+    if (v == null) return -1;
+    return _greys.indexWhere((g) => v.every((x) => (x - g.$2).abs() < .002));
   }
 
   void _write(String id) {
     final v = row(id)['value'];
     final args = switch (id) {
       'fps' => {'fpsNum': _rates[(v as num).toInt()].$1, 'fpsDen': _rates[v.toInt()].$2},
+      'background' => {'background': [for (var i = 0; i < 3; i++) _greys[(v as num).toInt()].$2, 1.0]},
       _ => {id: (v as num).round()},
     };
     c.command('composition', args);

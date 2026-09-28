@@ -365,7 +365,9 @@ class ChoiceToy extends StatelessWidget {
   Widget build(BuildContext context) {
     final row = store.row(id);
     final choices = [for (final c in (row['choices'] as List)) '$c'];
-    final cur = ((row['value'] as num?) ?? 0).round().clamp(0, choices.length - 1);
+    // a value that is none of the choices (a colour no preset names) highlights none
+    final raw = ((row['value'] as num?) ?? 0).round();
+    final cur = raw < 0 || raw >= choices.length ? -1 : raw;
     final frozen = store.frozen;
     void pick(int i) { if (!frozen) store.set(id, (i + choices.length) % choices.length); }
     if (choices.length <= 4) {
