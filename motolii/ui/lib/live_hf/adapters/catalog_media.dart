@@ -8,49 +8,83 @@ import 'browser_item.dart';
 import 'media_browser.dart';
 import 'media_fluid.dart';
 import 'media_preview.dart';
+import 'project_source.dart';
 
 /// The catalog's controls over the Thumbnail view: SOURCES (which folders), TYPES (what), a search (which). Where, What
 /// and Which are separate; the view (How) is the shelf's own masonry, unchanged. A skin over [CatalogSession].
-class CatalogMedia extends StatelessWidget {
-  const CatalogMedia({super.key, required this.session, this.explore, this.initial = BrowserView.thumbnail, this.startOn, this.startOpen = false, this.exploreLayout, this.exploreRepaint, this.exploreNote, this.startColumn = 60});
+class CatalogMedia extends StatefulWidget {
+  const CatalogMedia({super.key, required this.session, this.explore, this.initial = BrowserView.thumbnail, this.startOn, this.startOpen = false, this.exploreLayout, this.exploreRepaint, this.exploreNote, this.startColumn = 60, this.startProject = false});
   final CatalogSession session;
   final ExploreLayout? exploreLayout;
   final Listenable? exploreRepaint;
   final String? exploreNote;
   final double startColumn;
+
+  /// Starts on the work's own assets (a story, a restored choice).
+  final bool startProject;
   final String? startOn;
   final bool startOpen;
   final ExploreBuilder? explore;
   final BrowserView initial;
 
+  @override
+  State<CatalogMedia> createState() => _CatalogMediaState();
+}
+
+class _CatalogMediaState extends State<CatalogMedia> {
+  CatalogSession get session => widget.session;
+  late bool project = widget.startProject;
+  late final ProjectSource _project = ProjectSource(session.c, kinds: () => session.kinds, text: () => session.text);
+
+  @override
+  void dispose() {
+    _project.dispose();
+    super.dispose();
+  }
+
   static const _types = [('All', null), ('▣', 'image'), ('▶', 'video'), ('♪', 'audio'), ('3D', 'model'), ('360°', 'environment')];
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
-        listenable: session,
+        listenable: Listenable.merge([session, session.c.document]),
         builder: (context, _) {
           final chosen = session.chosenSources;
           return MediaBrowser(
-            source: session,
+            source: project ? _project : session,
             faces: _Faces(session),
-            explore: explore,
-            exploreLayout: exploreLayout,
-            exploreRepaint: exploreRepaint,
-            exploreNote: exploreNote,
-            startColumn: startColumn,
-            onReveal: (item) => session.c.native('reveal', {'path': item.path}),
-            onPlace: session.c.supports('placeCatalogAsset') ? (item) => session.c.command('placeCatalogAsset', {'id': item.id}) : null,
-            initial: initial,
-            startOn: startOn,
-            startOpen: startOpen,
+            explore: widget.explore,
+            exploreLayout: widget.exploreLayout,
+            exploreRepaint: widget.exploreRepaint,
+            exploreNote: widget.exploreNote,
+            startColumn: widget.startColumn,
+            onReveal: (item) {
+              if (item.path.isNotEmpty) session.c.native('reveal', {'path': item.path});
+            },
+            onPlace: (item) {
+              if (item.id.startsWith(ProjectSource.prefix)) {
+                session.c.command('placeAsset', {'id': item.id.substring(ProjectSource.prefix.length)});
+              } else if (session.c.supports('placeCatalogAsset')) {
+                session.c.command('placeCatalogAsset', {'id': item.id});
+              }
+            },
+            initial: widget.initial,
+            startOn: widget.startOn,
+            startOpen: widget.startOpen,
             sort: session.sort,
             descending: session.descending,
             onSort: (key) => session.choose(sort: key, descending: session.sort == key ? !session.descending : false),
             controls: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
               _Row(label: 'Sources', children: [
-                _Chip('All', chosen == null, () => session.choose(sources: () => null)),
+                _Chip('This project', project, () => setState(() => project = true)),
+                _Chip('All', !project && chosen == null, () {
+                  setState(() => project = false);
+                  session.choose(sources: () => null);
+                }),
                 for (final s in session.sources)
-                  _Chip(s.name + (s.available ? '' : ' ·off'), chosen?.contains(s.id) ?? false, () => session.choose(sources: () => {s.id}), dim: !s.enabled || !s.available),
+                  _Chip(s.name + (s.available ? '' : ' ·off'), !project && (chosen?.contains(s.id) ?? false), () {
+                    setState(() => project = false);
+                    session.choose(sources: () => {s.id});
+                  }, dim: !s.enabled || !s.available),
               ]),
               _Row(label: 'Types', children: [
                 for (final (label, kind) in _types) _Chip(label, kind == null ? session.kinds.isEmpty : session.kinds.contains(kind), () => session.choose(kinds: kind == null ? {} : {kind})),
@@ -76,9 +110,9 @@ class _Faces implements FaceService {
   _Faces(this.session);
   final CatalogSession session;
   @override
-  Future<String?> frameAt(BrowserItem item, double seconds, {int edge = 480}) => session.frameAt(item.id, seconds, edge: edge);
+  Future<String?> frameAt(BrowserItem item, double seconds, {int edge = 480}) async => item.id.startsWith(ProjectSource.prefix) ? null : session.frameAt(item.id, seconds, edge: edge);
   @override
-  Future<String?> pictureOf(BrowserItem item) => session.pictureOf(item.id);
+  Future<String?> pictureOf(BrowserItem item) async => item.id.startsWith(ProjectSource.prefix) ? null : session.pictureOf(item.id);
 }
 
 class _Row extends StatelessWidget {

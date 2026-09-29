@@ -77,6 +77,12 @@ final browserStories = <Story>[
 /// host, queried by the host; the Browser only asks and draws. State is the explorer's own (run.sh sets MOTOLII_STATE_DIR).
 Future<void> _registerFixtureSources(EditorSession c) => _reconcileSources(c, [(fixture('media'), 'Media'), (fixture('models/glb'), 'Models')]);
 
+/// A work that already owns three assets (the catalog's sources are registered as well): the Browser's "This project".
+Future<void> _projectHoldsSome(EditorSession c) async {
+  await _registerFixtureSources(c);
+  await c.importPaths([fixture('media/afterglow.jpg'), fixture('media/coast-drift.mp4'), fixture('media/drum-loop.wav')]);
+}
+
 /// The folders as they nest on disk (Models holds glb/ and the raw glTF folders with their textures): folder browsing.
 Future<void> _registerNestedSources(EditorSession c) => _reconcileSources(c, [(fixture('media'), 'Media'), (fixture('models'), 'Models')]);
 
@@ -102,8 +108,9 @@ Widget _catalogBrowser(EditorSession c) => _CatalogHost(c);
 
 
 class _CatalogHost extends StatefulWidget {
-  const _CatalogHost(this.c, {this.view = BrowserView.thumbnail, this.startOn, this.startOpen = false, this.startSource, this.startColumn = 60});
+  const _CatalogHost(this.c, {this.view = BrowserView.thumbnail, this.startOn, this.startOpen = false, this.startSource, this.startColumn = 60, this.startProject = false});
   final double startColumn;
+  final bool startProject;
   final EditorSession c;
   final String? startSource;
   final BrowserView view;
@@ -131,11 +138,12 @@ class _CatalogHostState extends State<_CatalogHost> {
   }
 
   @override
-  Widget build(BuildContext context) => CatalogMedia(session: session, explore: exploreView, exploreLayout: exploreLayout, exploreRepaint: exploreChanged, exploreNote: 'Nearest by colour · prototype (no similarity source yet) · lines join the nearest five; sounds and models have no colour and stand outermost', initial: widget.view, startOn: widget.startOn, startOpen: widget.startOpen, startColumn: widget.startColumn);
+  Widget build(BuildContext context) => CatalogMedia(session: session, explore: exploreView, exploreLayout: exploreLayout, exploreRepaint: exploreChanged, exploreNote: 'Nearest by colour · prototype (no similarity source yet) · lines join the nearest five; sounds and models have no colour and stand outermost', initial: widget.view, startOn: widget.startOn, startOpen: widget.startOpen, startColumn: widget.startColumn, startProject: widget.startProject);
 }
 
 final catalogStories = <Story>[
   Story('Browser catalog, real sources', Scene('night-sky.rrd', inputs: _registerFixtureSources), _catalogBrowser, width: 288, height: 900),
+  Story('Browser catalog, this project', Scene('night-sky.rrd', inputs: _projectHoldsSome), (c) => _CatalogHost(c, startProject: true), width: 420, height: 700),
   Story('Browser catalog, big faces', Scene('night-sky.rrd', inputs: _registerFixtureSources), (c) => _CatalogHost(c, startColumn: 104, startOn: 'coast-drift.mp4'), width: 288, height: 900),
   Story('Browser catalog, real sources, wide', Scene('night-sky.rrd', inputs: _registerFixtureSources), _catalogBrowser, width: 560, height: 900),
   Story('Browser catalog, preview clip', Scene('night-sky.rrd', inputs: _registerFixtureSources), (c) => _CatalogHost(c, startOn: 'coast-drift.mp4', startOpen: true), width: 420, height: 800),
