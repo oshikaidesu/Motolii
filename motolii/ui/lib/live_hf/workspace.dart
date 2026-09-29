@@ -16,6 +16,9 @@ import 'adapters/depth.dart';
 import 'adapters/ease.dart';
 import 'adapters/history.dart';
 import 'adapters/notes.dart';
+import 'adapters/depth_alt.dart';
+import 'adapters/desk_session.dart';
+import '../hf/shell/sheet.dart' show HfAction;
 import 'adapters/relations.dart';
 import 'adapters/right_seat.dart';
 import 'adapters/timeline.dart';
@@ -74,7 +77,15 @@ class LiveWorkspace {
         'Graph': PanelDef('Graph', 'Graph', () => const ColoredBox(color: kGround), glyph: HG.alongPath, minSize: 180),
         'Console': PanelDef('Console', 'Console', () => LiveConsole(log: console), glyph: HG.type, minSize: 180),
         'Blend': PanelDef('Blend', 'Blend', () => NewBlend(controller: c), glyph: HG.composite, minSize: 220),
-        'Depth': PanelDef('Depth', 'Depth', () => NewDepth(controller: c), glyph: HG.diamond, minSize: 220),
+        'Depth': PanelDef(
+          'Depth',
+          'Depth',
+          () => ValueListenableBuilder(valueListenable: altDepthSkin, builder: (_, alt, __) => alt ? AltDepth(host: DeskSession.of(c).depth) : NewDepth(controller: c)),
+          // TEMPORARY: the desks' Skin Swap Proof switch
+          tools: () => HfAction('A/B', onTap: () => altDepthSkin.value = !altDepthSkin.value),
+          glyph: HG.diamond,
+          minSize: 220,
+        ),
         'Ease': PanelDef('Ease', 'Ease', () => LiveEase(c: c), glyph: HG.arrow, minSize: 240),
         'History': PanelDef('History', 'History', () => NewHistory(controller: c), glyph: HG.power, minSize: 220),
         'Notes': PanelDef('Notes', 'Notes', () => LiveNotes(c: c), glyph: HG.star, minSize: 240),
