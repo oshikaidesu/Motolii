@@ -10,14 +10,13 @@ import 'top.dart';
 import '../neutral.dart';
 
 class TopBar extends StatelessWidget {
-  const TopBar(this.m, {super.key, this.onModeAt, this.keyEnabled = const [true, true, true]});
+  const TopBar(this.m, {super.key, this.onModeAt});
   final TopModel m;
 
   /// A mode key pressed, with its own rectangle in global coordinates (a task opened from it anchors there).
-  final void Function(int mode, Rect key)? onModeAt;
+  final void Function(TopMode mode, Rect key)? onModeAt;
 
   /// Which of Fit · Pin · Open has an operation (one without is drawn quiet, not as a live key).
-  final List<bool> keyEnabled;
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(builder: (context, box) {
@@ -58,8 +57,8 @@ class TopBar extends StatelessWidget {
             const Spacer(flex: 2),
             _Modes(m, onModeAt),
             const Spacer(),
-            for (final (i, g) in const [HG.fit, HG.pin, HG.folder].indexed)
-              _Key(onTap: keyEnabled[i] && m.onKey != null ? () => m.onKey!(i) : null, fill: H.raised, edge: H.rule, child: SizedBox(width: 16, height: 16, child: CustomPaint(painter: HgPainter(g, keyEnabled[i] ? N.g86 : N.g44, H.raised)))),
+            for (final (g, f) in [(HG.fit, m.onFit), (HG.pin, m.onPin), (HG.folder, m.onOpen)])
+              _Key(onTap: f, fill: H.raised, edge: H.rule, child: SizedBox(width: 16, height: 16, child: CustomPaint(painter: HgPainter(g, f != null ? N.g86 : N.g44, H.raised)))),
             if (motto) ...[
               const SizedBox(width: 16),
               Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.end, children: [
@@ -130,13 +129,13 @@ class _Glyph extends StatelessWidget {
 class _Modes extends StatelessWidget {
   const _Modes(this.m, this.onModeAt);
   final TopModel m;
-  final void Function(int mode, Rect key)? onModeAt;
+  final void Function(TopMode mode, Rect key)? onModeAt;
   @override
   Widget build(BuildContext context) => Container(
         height: UiMetrics.control + 2,
         decoration: BoxDecoration(color: H.raised, border: Border.all(color: H.rule), borderRadius: BorderRadius.circular(3)),
         child: Row(mainAxisSize: MainAxisSize.min, children: [
-          for (final (i, label) in const ['EDIT', 'PLAY', 'EXPORT'].indexed)
+          for (final (mode, label) in const [(TopMode.edit, 'EDIT'), (TopMode.play, 'PLAY'), (TopMode.export, 'EXPORT')])
             Builder(
               builder: (context) => MouseRegion(
                 cursor: m.onMode == null && onModeAt == null ? SystemMouseCursors.basic : SystemMouseCursors.click,
@@ -145,16 +144,16 @@ class _Modes extends StatelessWidget {
                   onTap: () {
                     final box = context.findRenderObject() as RenderBox?;
                     if (onModeAt != null && box != null) {
-                      onModeAt!(i, box.localToGlobal(Offset.zero) & box.size);
+                      onModeAt!(mode, box.localToGlobal(Offset.zero) & box.size);
                     } else {
-                      m.onMode?.call(i);
+                      m.onMode?.call(mode);
                     }
                   },
                   child: Container(
                     width: 70,
                     alignment: Alignment.center,
-                    color: m.mode == i ? H.mode : null,
-                    child: Text(label, style: H.s(11, w: FontWeight.w600, ls: .8, color: m.mode == i ? N.g100 : H.text2)),
+                    color: m.mode == mode ? H.mode : null,
+                    child: Text(label, style: H.s(11, w: FontWeight.w600, ls: .8, color: m.mode == mode ? N.g100 : H.text2)),
                   ),
                 ),
               ),

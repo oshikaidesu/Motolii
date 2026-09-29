@@ -58,9 +58,9 @@ class _SessionTopState extends State<SessionTop> {
         listenable: Listenable.merge([c.playing, c.slice('sessionTop', _watched)]),
         builder: (context, _) {
           final playing = c.playing.value;
-          Future<void> mode(int i, [Rect? key]) async {
-            if ((i == 0 && playing) || (i == 1 && !playing)) c.togglePlayback();
-            if (i == 2) {
+          Future<void> mode(TopMode to, [Rect? key]) async {
+            if ((to == TopMode.edit && playing) || (to == TopMode.play && !playing)) c.togglePlayback();
+            if (to == TopMode.export) {
               setState(() => exporting = true);
               await showExportSheet(context, c, anchor: key);
               if (mounted) setState(() => exporting = false);
@@ -70,7 +70,7 @@ class _SessionTopState extends State<SessionTop> {
           return TopBar(
             TopModel(
               readouts: readouts,
-              mode: exporting ? 2 : (playing ? 1 : 0),
+              mode: exporting ? TopMode.export : (playing ? TopMode.play : TopMode.edit),
               onPlay: c.togglePlayback,
               onStop: () {
                 c.stopPlayback();
@@ -79,14 +79,13 @@ class _SessionTopState extends State<SessionTop> {
               onAnimate: c.supports('animate') ? () => c.toggleAnimate() : null,
               onMarker: c.supports('addMarker') ? () => c.command('addMarker') : null,
               onMode: mode,
-              onKey: (i) async {
-                // Fit frames the Stage (the same operation as Cmd+0); Open replaces the document; Pin has no operation
-                if (i == 0) stageView(c, 'Fit');
-                if (i == 2 && await mayReplace(context, c)) await c.chooseOpen();
+              // Fit frames the Stage (the same operation as Cmd+0); Open replaces the document; Pin has no operation
+              onFit: c.supports('stageView') ? () => stageView(c, 'Fit') : null,
+              onOpen: () async {
+                if (await mayReplace(context, c)) await c.chooseOpen();
               },
             ),
             onModeAt: mode,
-            keyEnabled: [c.supports('stageView'), false, true],
           );
         },
       );
