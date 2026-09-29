@@ -51,7 +51,11 @@ class LayoutStore extends ParamStore {
   double gd(String id) => ((row(id)['value'] as num?) ?? 0).toDouble();
   double get padX => ((row('layout.padding')['value'] as List)[0] as num).toDouble();
   double get padY => ((row('layout.padding')['value'] as List)[1] as num).toDouble();
-  bool get gridOn => gi('layout.display') != 0;
+  /// The Grid switch: on only for Grid (2). A Flex group (1) shows it off, so turning it off never undoes Flex.
+  bool get gridOn => gi('layout.display') == 2;
+
+  /// Arranged at all (Flex or Grid): gap, padding and the diagram's arrangement apply.
+  bool get arranged => gi('layout.display') != 0;
   bool fixed(String axis) => gi('layout.${axis == 'w' ? 'horizontal' : 'vertical'}_sizing') == 2;
 
   /// Several rows as one edit: a gesture that changes Justify and Align together is one commit, as Classic's pad is.

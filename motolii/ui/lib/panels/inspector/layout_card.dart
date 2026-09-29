@@ -102,7 +102,7 @@ mixin _InspectorLayoutCard on _InspectorControls, _InspectorFolds {
           alignment: Alignment.centerLeft,
           child: EditorSwitch(
             compact: true,
-            on: display != 0,
+            on: display == 2,
             glyph: Glyph.grid_on,
             label: 'display: grid',
             onChanged: can

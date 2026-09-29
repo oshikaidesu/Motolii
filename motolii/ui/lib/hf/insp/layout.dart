@@ -80,7 +80,7 @@ class _LayoutInstrumentState extends State<LayoutInstrument> {
   bool _narrow = false;
 
   List<Widget> _groupBody(double w, bool narrow) {
-    final on = s.gridOn;
+    final on = s.arranged;
     final adv = [for (final r in s.rows) if (r['advanced'] == true) r];
     return [
       LayoutDiagram(s, size: Size(w, narrow ? 156 : 196)),

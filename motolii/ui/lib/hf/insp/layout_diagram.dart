@@ -110,7 +110,7 @@ class _LayoutDiagramState extends State<LayoutDiagram> {
     // Columns and Rows work with Grid off, as Classic's wells do; everything else is gated by Grid
     if (near(geo.colHandle, 11)) { grab = _G.cols; _v0 = s.gi('layout.grid_columns').toDouble(); }
     else if (near(geo.rowHandle, 11)) { grab = _G.rows; _v0 = s.gi('layout.grid_rows').toDouble(); }
-    else if (s.gridOn) {
+    else if (s.arranged) {
       if (near(geo.gapHandle, 10)) { grab = _G.gap; _v0 = s.gd('layout.gap'); }
       else if (near(geo.padCorner, 9)) { grab = _G.padBoth; _v0 = s.padX; _w0 = s.padY; }
       else if (near(geo.padL, 9)) { grab = _G.padL; _v0 = s.padX; }
@@ -232,7 +232,7 @@ class _Painter extends CustomPainter {
 
   @override
   void paint(Canvas c, Size sz) {
-    final on = s.gridOn, off = s.frozen;
+    final on = s.arranged, off = s.frozen;
     final a = off ? .5 : 1.0;
     c.drawRRect(RRect.fromRectAndRadius(Offset.zero & sz, const Radius.circular(6)), Paint()..color = N.g07);
     // the space the container is offered
