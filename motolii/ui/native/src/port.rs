@@ -5,7 +5,7 @@ use crate::doc::store::*;
 use serde_json::{Value as J,json};
 use crate::viewer::{KeySel,ColorSlot};
 fn e(error:impl std::fmt::Display)->String{error.to_string()}
-pub(crate) const CAPABILITIES:&[&str]=&["status","preferences","notes","stageView","stageWindow","select","setProperty","previewProperties","commitPreview","cancelPreview","setText","previewText","styleText","setFont","setAttrs","create","duplicate","ghost","sequence","previewSequence","copy","cut","paste","delete","group","ungroup","reorder","split","setTiming","toggleKey","moveKeys","ease","setColor","previewColor","focusColor","applyPalette","applyEffect","removeEffect","expandEffect","moveEffect","enableEffect","animate","clip","addMarker","setMarker","deleteMarker","composition","import","placeAsset","removeAsset","replaceAsset","relinkAsset","save","new","undo","redo","seek","anchor","freeze","setFillMode","setGradient","previewBlend","applyBlend","relate","unrelate","setTimings","previewTimings","stageGesture","export","exportStatus","cancelExport","play","pause","tick","moveLayers","pickColor","historyGoto","reloadEffects","runScript","rerunScript","scopeEffect"];
+pub(crate) const CAPABILITIES:&[&str]=&["status","preferences","notes","stageView","stageWindow","select","setProperty","previewProperties","commitPreview","cancelPreview","setText","previewText","styleText","setFont","setAttrs","create","duplicate","ghost","sequence","previewSequence","copy","cut","paste","delete","group","ungroup","reorder","split","setTiming","toggleKey","moveKeys","ease","setColor","previewColor","focusColor","applyPalette","applyEffect","removeEffect","expandEffect","moveEffect","enableEffect","animate","clip","addMarker","setMarker","deleteMarker","composition","import","placeAsset","removeAsset","replaceAsset","relinkAsset","save","new","undo","redo","seek","anchor","freeze","setFillMode","setGradient","previewBlend","applyBlend","relate","unrelate","setTimings","previewTimings","stageGesture","nudge","export","exportStatus","cancelExport","play","pause","tick","moveLayers","pickColor","historyGoto","reloadEffects","runScript","rerunScript","scopeEffect"];
 fn num(j:&J,key:&str)->Result<f64,String>{j[key].as_f64().filter(|v|v.is_finite()).ok_or_else(||format!("Missing finite {key}"))}
 fn integer(j:&J,key:&str)->Result<i64,String>{j[key].as_i64().ok_or_else(||format!("Missing integer {key}"))}
 fn layer(j:&J)->Result<LayerId,String>{j["layer"].as_u64().map(LayerId).ok_or("Missing layer".into())}
@@ -204,6 +204,7 @@ impl EditorRuntime{
             "split"=>{let ids=self.selected_required()?.to_vec();let copies=editor::timeline_edit::split_layers(&mut self.doc,&ids,self.viewer.frame).map_err(e)?;if copies.is_empty(){return Err("Playhead must be inside a layer".into())}self.pick(copies);}
             "setTimings"|"previewTimings"=>{let mut edits=Vec::new();for change in j["changes"].as_array().ok_or("Missing timing changes")?{edits.extend(self.timing_edits(change)?);}if op=="previewTimings"{self.set_preview(edits)?;}else{self.apply(edits)?;}}
             "stageGesture"=>self.stage_gesture(&j)?,
+            "nudge"=>self.nudge(&j)?,
             "setTiming"=>{let id=layer(&j)?;let old=self.doc.view().meta(id).map_err(e)?.ok_or("Layer metadata missing")?.timing;let mut next=old;next.start=integer(&j,"start")?;next.duration=integer(&j,"duration")?;next.source_in=integer(&j,"sourceIn")?;let move_keys=next.duration==old.duration&&next.source_in==old.source_in;let edits=editor::functions::verb::retime_layer(&self.doc,id,old,next,move_keys).map_err(e)?;self.apply(edits)?;}
             "toggleKey"=>{let id=layer(&j)?;let name=string(&j,"property")?;let at=self.time()?;
                 if name=="content"{editor::text::toggle_content_key(&mut self.doc,id,at,String::new()).map_err(e)?;}
@@ -322,11 +323,7 @@ impl EditorRuntime{
                 let drag=self.depth_drag(j)?;self.stage_drag=Some(editor::stage::DragSession::Depth(drag));
             }
             "begin"=>{let interaction=self.preview_tag.take();self.cancel_preview();self.preview_tag=interaction;let ids=ids(&j["ids"])?;let start=serde_json::from_value(j["start"].clone()).map_err(e)?;
-                let at=self.time()?;
-                let projection=ids.last().and_then(|id|self.doc.view().attrs(*id).ok().flatten()).map_or(LayerProjection::ThreeD,|a|a.projection);
-                let observer=self.view_camera(seen)?;
-                let projection_camera=self.projection_camera(seen,projection)?;
-                let drag=editor::stage::DragSession::begin(&self.doc,&mut self.engine,&ids,string(j,"mode")?,j["handle"].as_str().unwrap_or("body"),start,at,observer,projection_camera,self.viewer.stage_view_scale,self.viewer.stage_held.as_deref())?;
+                let drag=self.stage_drag_begin(seen,&ids,string(j,"mode")?,j["handle"].as_str().unwrap_or("body"),start)?;
                 self.pick(ids);self.stage_drag=Some(drag);
             }
             "update"=>{let drag=self.stage_drag.as_ref().ok_or("No Stage gesture")?;let point=serde_json::from_value(j["point"].clone()).map_err(e)?;
@@ -337,48 +334,6 @@ impl EditorRuntime{
             "cancel"=>self.cancel_preview(),
             _=>return Err("Unknown Stage gesture phase".into()),
         }Ok(())
-    }
-    /// 箱(Boxcam)の取っ手か作業範囲の辺を掴む。camera: `ids` の 1 台と `handle`(center / zoom / roll)。extent: `handle` が辺(top / right / bottom / left)。
-    /// 選択は変えない(箱の中心を掴んで選ぶのは skin の press)。
-    fn boxcam_drag(&self,j:&J,seen:crate::viewer::View)->Result<editor::boxcam::BoxcamDrag,String>{
-        use editor::boxcam::{BoxcamGrip,BoxcamHandle};
-        let start:[f64;2]=serde_json::from_value(j["start"].clone()).map_err(e)?;
-        let at=self.time()?;
-        let scale=if seen==crate::viewer::View::User{self.viewer.user_camera.distance_scale as f64}else{1.0};
-        let grip=if j["mode"]=="extent"{
-            let extent=motolii_render::picture::resolve::camera::resolve_stage_extent(&self.doc.view(),at).map_err(e)?;
-            let layer=extent.layer.ok_or("No working area")?;
-            let side=match string(j,"handle")?{"top"=>0,"right"=>1,"bottom"=>2,"left"=>3,_=>return Err("Unknown working-area side".into())};
-            BoxcamGrip::Extent{layer,side,margins:extent.margins.map(f64::from)}
-        }else{
-            let layer=*ids(&j["ids"])?.last().ok_or("Missing camera")?;
-            if let Some(reason)=editor::functions::lens::edit_rejection(&self.doc.view(),layer).map_err(e)?{return Err(reason.into())}
-            let (camera,corners)=self.camera_box(layer)?;
-            let corners=corners.ok_or("The camera box is not fully in view")?;
-            let centroid=corners.iter().fold([0.0,0.0],|a,c|[a[0]+c[0] as f64/4.0,a[1]+c[1] as f64/4.0]);
-            BoxcamGrip::Camera{layer,handle:BoxcamHandle::parse(string(j,"handle")?)?,centroid,center:camera.center.map(f64::from),zoom:camera.zoom as f64,roll:camera.roll_degrees as f64}
-        };
-        Ok(editor::boxcam::BoxcamDrag{grip,start,scale,at,revision:self.doc.revision()})
-    }
-    /// Depth desk の図で層(`ids` の 1 つ)かカメラ(`handle`: camera)を掴む。値の元は図に描いたのと同じ depthLayout。
-    fn depth_drag(&mut self,j:&J)->Result<editor::depth_drag::DepthDrag,String>{
-        use editor::depth_drag::{DepthDrag,DepthGrip};
-        let at=self.time()?;
-        let scene=self.engine.frame_graph_editor_scene(&self.doc.view(),at).map_err(e)?;
-        let layout=self.depth_layout(&scene)?;
-        let f=|v:&J|v.as_f64().ok_or_else(||"Depth layout is incomplete".to_string());
-        let three=|v:&J|->Result<[f64;3],String>{Ok([f(&v[0])?,f(&v[1])?,f(&v[2])?])};
-        let grip=if j["handle"]=="camera"{
-            let camera=&layout["camera"];
-            let layer=LayerId(camera["layer"].as_u64().ok_or("The camera is not a layer")?);
-            DepthGrip::Camera{layer,pitch:f(&camera["orbit"][0])?,base:f(&camera["baseDistance"])?}
-        }else{
-            let layer=*ids(&j["ids"])?.last().ok_or("Missing layer")?;
-            let item=layout["items"].as_array().into_iter().flatten().find(|i|i["id"]==layer.0).ok_or("The layer is not on the Depth plan")?;
-            if item["locked"]==true{return Err("Layer is locked".into())}
-            DepthGrip::Layer{layer,local:three(&item["local"])?,inverse_x:three(&item["inverseX"])?,inverse_z:three(&item["inverseZ"])?}
-        };
-        Ok(DepthDrag{grip,at,revision:self.doc.revision()})
     }
     fn accept_paste(&mut self,result:editor::clipboard::PasteResult){match result{
         editor::clipboard::PasteResult::Layers(ids)=>{self.pick(ids);self.viewer.selected_keys.clear();}
@@ -464,6 +419,7 @@ mod freeze_op {
 #[cfg(test)]
 mod sequence_preview;
 mod spread;
+mod stage_grabs;
 mod blend_targets;
 mod markers;
 mod ease_intervals;
