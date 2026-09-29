@@ -11,7 +11,6 @@ import 'seat.dart';
 import '../neutral.dart';
 
 const kTile = N.g13;
-const kLabel = Color(0xFF7481C4);
 
 class GlyphBox extends StatelessWidget {
   const GlyphBox(this.g, {super.key, this.size = 17, this.color = N.g82});
@@ -229,7 +228,7 @@ class SectionLabel extends StatelessWidget {
   const SectionLabel(this.text, {super.key});
   final String text;
   @override
-  Widget build(BuildContext context) => Padding(padding: const EdgeInsets.fromLTRB(2, 14, 0, 8), child: Text(text.toUpperCase(), softWrap: false, style: sans(9.5, c: kLabel, w: FontWeight.w600, ls: 1.1)));
+  Widget build(BuildContext context) => Padding(padding: const EdgeInsets.fromLTRB(2, 14, 0, 8), child: Text(text.toUpperCase(), softWrap: false, style: sans(9, c: N.g63, w: FontWeight.w600, ls: 1.1)));
 }
 
 Widget emptyBody(String text) => Padding(padding: const EdgeInsets.fromLTRB(14, 18, 14, 4), child: Text(text, style: sans(11.5, c: kMuted)));

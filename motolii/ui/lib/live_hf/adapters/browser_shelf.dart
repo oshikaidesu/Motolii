@@ -220,7 +220,19 @@ class _Seat extends ChangeNotifier implements BrowserSeat {
   Widget? tools(BuildContext context) => GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: c.importFiles,
-        child: const Padding(padding: EdgeInsets.all(6), child: Text('Import', style: TextStyle(color: N.g86))),
+        // its own place after the classes: a hairline, then a quiet tool with a small picture of what it brings in
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Container(width: 1, height: 14, color: N.g20),
+          const SizedBox(width: 6),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              const GlyphBox(HG.plus, size: 11, color: N.g63),
+              const SizedBox(width: 4),
+              Text('Import', style: sans(11, c: N.g76, w: FontWeight.w500)),
+            ]),
+          ),
+        ]),
       );
   @override
   Widget? header(BuildContext context) => null;

@@ -143,10 +143,10 @@ class _FontsPanelState extends State<FontsPanel>
             : '$n',
         wide: (c, s) => shown.isEmpty
             ? emptyBody('No typeface matches "${search.query}".')
-            : _list(shown, s.width, 66),
+            : _list(shown, s.width, 44),
         narrow: (c, s) => shown.isEmpty
             ? emptyBody('No typeface matches.')
-            : _list(shown, s.width, s.width >= 110 ? 46 : 42),
+            : _list(shown, s.width, 34),
         strip: (c, s) => ListView.builder(
           scrollDirection: Axis.horizontal,
           physics: const ClampingScrollPhysics(),
@@ -179,7 +179,7 @@ class _FontsPanelState extends State<FontsPanel>
       widget.selectedFamily == null
           ? i == 0 && !search.active && !classify.filtering
           : shown[i].family == widget.selectedFamily,
-      sample: () => _sample(shown[i], h >= 60 ? 36 : 24),
+      sample: () => _sample(shown[i], h >= 40 ? 22 : 18),
       onTap: widget.onSelect == null ? null : () => widget.onSelect!(shown[i]),
       onDoubleTap: widget.onCreate == null
           ? null
@@ -240,7 +240,7 @@ class _Row extends StatelessWidget {
   final VoidCallback? onTap, onDoubleTap, onFavorite;
   @override
   Widget build(BuildContext context) {
-    final big = h >= 60;
+    final big = h >= 40;
     return GestureDetector(
       key: ValueKey('hf-font:${f.family}'),
       behavior: HitTestBehavior.opaque,
@@ -276,7 +276,7 @@ class _Row extends StatelessWidget {
             : Row(
                 children: [
                   SizedBox(
-                    width: big ? 62 : 40,
+                    width: big ? 38 : 30,
                     child:
                         sample?.call() ??
                         Text(
@@ -284,7 +284,7 @@ class _Row extends StatelessWidget {
                           softWrap: false,
                           style: TextStyle(
                             fontFamily: f.family,
-                            fontSize: big ? 36 : 24,
+                            fontSize: big ? 22 : 18,
                             color: N.g95,
                             height: 1,
                           ),
@@ -298,21 +298,22 @@ class _Row extends StatelessWidget {
                         Text(
                           f.name,
                           softWrap: false,
-                          overflow: TextOverflow.clip,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                             fontFamily: f.family,
-                            fontSize: big ? 14.5 : 13,
+                            fontSize: 12.5,
                             color: N.g91,
                             height: 1.1,
                           ),
                         ),
                         if (big) ...[
-                          const SizedBox(height: 5),
+                          const SizedBox(height: 3),
                           Text(
                             '${f.meta}${f.facts.isEmpty ? '' : '  ·  ${f.facts.join('  ')}'}',
                             softWrap: false,
-                            overflow: TextOverflow.clip,
-                            style: sans(10, c: kMuted),
+                            overflow: TextOverflow.ellipsis,
+                            style: sans(9.5, c: kMuted),
                           ),
                         ],
                       ],
@@ -342,7 +343,7 @@ class _Star extends CustomPainter {
   void paint(Canvas c, Size s) {
     final p = Path();
     for (var i = 0; i < 10; i++) {
-      final r = i.isEven ? 7.2 : 3.2;
+      final r = i.isEven ? 6 : 2.7;
       final a = -1.5708 + i * 0.6283;
       final q = Offset(8 + r * math.cos(a), 8.4 + r * math.sin(a));
       i == 0 ? p.moveTo(q.dx, q.dy) : p.lineTo(q.dx, q.dy);
@@ -353,9 +354,9 @@ class _Star extends CustomPainter {
       on
           ? (Paint()..color = N.g91)
           : (Paint()
-              ..color = kMuted
+              ..color = N.g33
               ..style = PaintingStyle.stroke
-              ..strokeWidth = 1.2),
+              ..strokeWidth = 1),
     );
   }
 
