@@ -1,17 +1,22 @@
 import 'package:flutter/widgets.dart';
 
 import '../../hf/bp/common.dart' show sans;
-import '../../hf/bp/things.dart';
 import '../../hf/metrics.dart';
 import '../../hf/neutral.dart';
 import 'catalog_session.dart';
-import 'media_library.dart';
+import 'browser_item.dart';
+import 'media_browser.dart';
+import 'media_preview.dart';
 
 /// The catalog's controls over the Thumbnail view: SOURCES (which folders), TYPES (what), a search (which). Where, What
 /// and Which are separate; the view (How) is the shelf's own masonry, unchanged. A skin over [CatalogSession].
 class CatalogMedia extends StatelessWidget {
-  const CatalogMedia({super.key, required this.session});
+  const CatalogMedia({super.key, required this.session, this.explore, this.initial = BrowserView.thumbnail, this.startOn, this.startOpen = false});
   final CatalogSession session;
+  final String? startOn;
+  final bool startOpen;
+  final ExploreBuilder? explore;
+  final BrowserView initial;
 
   static const _types = [('All', null), ('▣', 'image'), ('▶', 'video'), ('♪', 'audio'), ('3D', 'model'), ('360°', 'environment')];
 
@@ -20,39 +25,48 @@ class CatalogMedia extends StatelessWidget {
         listenable: session,
         builder: (context, _) {
           final chosen = session.chosenSources;
-          final items = {for (final e in session.entries) e.id: session.itemOf(e)};
-          final things = [
-            for (final e in session.entries)
-              Thing.fromJson({'id': e.id, 'name': e.name, 'kind': 'item', 'family': 'catalog', 'source': 'catalog', 'face': const {'type': 'shelf'}}),
-          ];
-          return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            _Row(label: 'Sources', children: [
-              _Chip('All', chosen == null, () => session.choose(sources: () => null)),
-              for (final s in session.sources)
-                _Chip(s.name + (s.available ? '' : ' ·off'), chosen?.contains(s.id) ?? false, () => session.choose(sources: () => {s.id}), dim: !s.enabled || !s.available),
+          return MediaBrowser(
+            source: session,
+            faces: _Faces(session),
+            explore: explore,
+            initial: initial,
+            startOn: startOn,
+            startOpen: startOpen,
+            sort: session.sort,
+            descending: session.descending,
+            onSort: (key) => session.choose(sort: key, descending: session.sort == key ? !session.descending : false),
+            controls: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              _Row(label: 'Sources', children: [
+                _Chip('All', chosen == null, () => session.choose(sources: () => null)),
+                for (final s in session.sources)
+                  _Chip(s.name + (s.available ? '' : ' ·off'), chosen?.contains(s.id) ?? false, () => session.choose(sources: () => {s.id}), dim: !s.enabled || !s.available),
+              ]),
+              _Row(label: 'Types', children: [
+                for (final (label, kind) in _types) _Chip(label, kind == null ? session.kinds.isEmpty : session.kinds.contains(kind), () => session.choose(kinds: kind == null ? {} : {kind})),
+              ]),
+              Container(
+                height: UiMetrics.control + 4,
+                margin: const EdgeInsets.fromLTRB(6, 3, 6, 3),
+                padding: const EdgeInsets.symmetric(horizontal: 6),
+                decoration: BoxDecoration(color: N.g07, borderRadius: BorderRadius.circular(3)),
+                alignment: Alignment.centerLeft,
+                child: _Search(session),
+              ),
+              if (session.failure != null) Padding(padding: const EdgeInsets.all(9), child: Text('${session.failure}', style: Dn.label(N.g69))),
             ]),
-            _Row(label: 'Types', children: [
-              for (final (label, kind) in _types)
-                _Chip(label, kind == null ? session.kinds.isEmpty : session.kinds.contains(kind), () => session.choose(kinds: kind == null ? {} : {kind})),
-            ]),
-            Container(
-              height: UiMetrics.control + 4,
-              margin: const EdgeInsets.fromLTRB(6, 3, 6, 3),
-              padding: const EdgeInsets.symmetric(horizontal: 6),
-              decoration: BoxDecoration(color: N.g07, borderRadius: BorderRadius.circular(3)),
-              alignment: Alignment.centerLeft,
-              child: _Search(session),
-            ),
-            Expanded(
-              child: session.failure != null
-                  ? Padding(padding: const EdgeInsets.all(9), child: Text('${session.failure}', style: Dn.label(N.g69)))
-                  : session.entries.isEmpty
-                      ? Padding(padding: const EdgeInsets.all(9), child: Text(session.sources.isEmpty ? 'Add a folder to see its media.' : 'Nothing matches.', style: Dn.label(N.g56)))
-                      : LayoutBuilder(builder: (context, box) => MediaLibraryBody(sections: {'': things}, shown: things, items: items, width: box.maxWidth)),
-            ),
-          ]);
+          );
         },
       );
+}
+
+/// The preview's questions, answered by the owner through the session.
+class _Faces implements FaceService {
+  _Faces(this.session);
+  final CatalogSession session;
+  @override
+  Future<String?> frameAt(BrowserItem item, double seconds) => session.frameAt(item.id, seconds);
+  @override
+  Future<String?> pictureOf(BrowserItem item) => session.pictureOf(item.id);
 }
 
 class _Row extends StatelessWidget {

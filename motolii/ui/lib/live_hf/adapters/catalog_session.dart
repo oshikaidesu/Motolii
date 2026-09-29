@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 
 import '../../session/editor_session.dart';
+import 'browser_item.dart';
 
 /// A registered folder, as the catalog owner reports it.
 class CatalogSource {
@@ -35,7 +36,7 @@ class CatalogEntry {
 /// The Media Catalog as the Flutter skin sees it: which sources, types and words the person chose, the result set the
 /// owner (native, `catalog/`) built for them, and the faces asked for what is in view. Nothing here scans a folder, keeps an
 /// index or filters an asset list: a change of choice is a new query, and the answer is the owner's.
-class CatalogSession extends ChangeNotifier {
+class CatalogSession extends ChangeNotifier implements ResultSource {
   CatalogSession(this.c);
   final EditorSession c;
 
@@ -50,6 +51,8 @@ class CatalogSession extends ChangeNotifier {
   Set<String> kinds = {}; // empty = every type
   String text = '';
   ({String source, String prefix})? folder;
+  String sort = 'name';
+  bool descending = false;
 
   /// Faces by the entry's `faceKey` (it changes when the file does): {thumbnail, peaks, facts}.
   final faces = <String, Map<String, dynamic>>{};
@@ -97,7 +100,9 @@ class CatalogSession extends ChangeNotifier {
         _took(await _call({'op': 'enrich', 'limit': 200}));
       }, requery: false);
 
-  Future<void> choose({Set<String>? Function()? sources, Set<String>? kinds, String? text, ({String source, String prefix})? Function()? folder}) => _guard(() async {
+  Future<void> choose({Set<String>? Function()? sources, Set<String>? kinds, String? text, ({String source, String prefix})? Function()? folder, String? sort, bool? descending}) => _guard(() async {
+        if (sort != null) this.sort = sort;
+        if (descending != null) this.descending = descending;
         if (sources != null) chosenSources = sources();
         if (kinds != null) this.kinds = kinds;
         if (text != null) this.text = text;
@@ -123,6 +128,8 @@ class CatalogSession extends ChangeNotifier {
       if (folder != null) 'folder': {'source': folder!.source, 'prefix': folder!.prefix},
       if (kinds.isNotEmpty) 'kinds': kinds.toList(),
       if (text.trim().isNotEmpty) 'text': text.trim(),
+      'sort': sort,
+      'descending': descending,
       'limit': 2000,
     });
     if (mine != _sequence) return; // a newer choice was made while this one was being answered
@@ -153,6 +160,48 @@ class CatalogSession extends ChangeNotifier {
         }
       }
     }
+  }
+
+  @override
+  List<BrowserItem> get items => [for (final e in entries) itemFor(e)];
+
+  BrowserItem itemFor(CatalogEntry e) {
+    final face = faces[e.faceKey] ?? const {};
+    final facts = EditorSession.map(face['facts']);
+    final j = e.json;
+    num? n(Object? v) => v is num ? v : null;
+    return BrowserItem(
+      id: e.id,
+      name: e.name,
+      path: e.path,
+      kind: e.kind,
+      mime: '${j['mime']}',
+      source: '${j['sourceName']}',
+      rel: '${j['rel']}',
+      size: n(j['size'])?.toInt(),
+      mtimeNs: n(j['mtimeNs'])?.toInt(),
+      width: n(j['width'] ?? facts['width'])?.toInt(),
+      height: n(j['height'] ?? facts['height'])?.toInt(),
+      seconds: n(facts['seconds'])?.toDouble(),
+      sampleRate: n(facts['sampleRate'])?.toInt(),
+      channels: n(facts['channels'])?.toInt(),
+      faceKey: e.faceKey,
+      missing: e.missing,
+      thumbnail: face['thumbnail'] as String?,
+      peaks: face['peaks'],
+    );
+  }
+
+  /// A clip's frame at a time (a scrub in the preview): a data URI, or null.
+  Future<String?> frameAt(String id, double seconds, {int edge = 480}) async {
+    final reply = await _call({'op': 'frame', 'id': id, 'at': seconds, 'edge': edge});
+    return reply['frame'] as String?;
+  }
+
+  /// A still at a size the preview shows it at: a data URI, or null.
+  Future<String?> pictureOf(String id, {int edge = 1024}) async {
+    final reply = await _call({'op': 'picture', 'id': id, 'edge': edge});
+    return reply['picture'] as String?;
   }
 
   /// The item the Media shelf's own faces draw (the same map its imported assets have).

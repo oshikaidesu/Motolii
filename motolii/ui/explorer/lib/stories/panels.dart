@@ -7,6 +7,7 @@ import 'package:motolii_stage5/hf/neutral.dart';
 import 'package:motolii_stage5/live_hf/adapters/browser.dart';
 import 'package:motolii_stage5/live_hf/adapters/catalog_media.dart';
 import 'package:motolii_stage5/live_hf/adapters/catalog_session.dart';
+import 'package:motolii_stage5/live_hf/adapters/media_browser.dart' show BrowserView;
 import 'package:motolii_stage5/live_hf/adapters/depth.dart';
 import 'package:motolii_stage5/live_hf/adapters/ease.dart';
 import 'package:motolii_stage5/live_hf/adapters/notes.dart';
@@ -15,6 +16,8 @@ import 'package:motolii_stage5/live_hf/adapters/top.dart';
 import 'package:motolii_stage5/panels/stage.dart' show StagePanel;
 import 'package:motolii_stage5/session/editor_session.dart';
 import 'package:widgetbook/widgetbook.dart';
+
+import '../paper/explore_view.dart';
 
 import '../story.dart';
 
@@ -85,9 +88,13 @@ Future<void> _registerFixtureSources(EditorSession c) async {
 
 Widget _catalogBrowser(EditorSession c) => _CatalogHost(c);
 
+
 class _CatalogHost extends StatefulWidget {
-  const _CatalogHost(this.c);
+  const _CatalogHost(this.c, {this.view = BrowserView.thumbnail, this.startOn, this.startOpen = false});
   final EditorSession c;
+  final BrowserView view;
+  final String? startOn;
+  final bool startOpen;
   @override
   State<_CatalogHost> createState() => _CatalogHostState();
 }
@@ -101,12 +108,17 @@ class _CatalogHostState extends State<_CatalogHost> {
   }
 
   @override
-  Widget build(BuildContext context) => CatalogMedia(session: session);
+  Widget build(BuildContext context) => CatalogMedia(session: session, explore: exploreView, initial: widget.view, startOn: widget.startOn, startOpen: widget.startOpen);
 }
 
 final catalogStories = <Story>[
   Story('Browser catalog, real sources', Scene('night-sky.rrd', inputs: _registerFixtureSources), _catalogBrowser, width: 288, height: 900),
   Story('Browser catalog, real sources, wide', Scene('night-sky.rrd', inputs: _registerFixtureSources), _catalogBrowser, width: 560, height: 900),
+  Story('Browser catalog, preview clip', Scene('night-sky.rrd', inputs: _registerFixtureSources), (c) => _CatalogHost(c, startOn: 'coast-drift.mp4', startOpen: true), width: 420, height: 800),
+  Story('Browser catalog, preview model', Scene('night-sky.rrd', inputs: _registerFixtureSources), (c) => _CatalogHost(c, startOn: 'Camera_01.glb', startOpen: true), width: 420, height: 800),
+  Story('Browser catalog, preview sound wide', Scene('night-sky.rrd', inputs: _registerFixtureSources), (c) => _CatalogHost(c, startOn: 'drum-loop.wav', startOpen: true), width: 640, height: 500),
+  Story('Browser catalog, list', Scene('night-sky.rrd', inputs: _registerFixtureSources), (c) => _CatalogHost(c, view: BrowserView.list, startOn: 'afterglow.jpg'), width: 420, height: 700),
+  Story('Browser catalog, explore', Scene('night-sky.rrd', inputs: _registerFixtureSources), (c) => _CatalogHost(c, view: BrowserView.explore, startOn: 'afterglow.jpg'), width: 420, height: 700),
 ];
 
 final otherStories = <Story>[

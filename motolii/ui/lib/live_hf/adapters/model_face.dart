@@ -12,9 +12,12 @@ import '../../hf/neutral.dart';
 /// edits, places and renders nothing for the work. A file flutter_scene cannot read (its importer takes glTF/GLB) keeps
 /// [fallback].
 class ModelFace extends StatefulWidget {
-  const ModelFace({super.key, required this.path, required this.fallback});
+  const ModelFace({super.key, required this.path, required this.fallback, this.turnable = false});
   final String path;
   final Widget fallback;
+
+  /// A drag turns the model (the preview's live face); a shelf tile stays still.
+  final bool turnable;
 
   /// Whether the face can be drawn from this file (GLB/glTF): the others keep their glyph without trying.
   static bool reads(String path) {
@@ -30,6 +33,8 @@ class _ModelFaceState extends State<ModelFace> {
   final scene = Scene();
   Node? node;
   PerspectiveCamera? camera;
+  Aabb3? _bounds;
+  double _yaw = .55, _pitch = .35;
   bool failed = false;
 
   @override
@@ -50,13 +55,16 @@ class _ModelFaceState extends State<ModelFace> {
       if (mounted) {
         setState(() {
           node = n;
-          camera = _frame(bounds, Vector3(.55, .35, -1));
+          _bounds = bounds;
+          camera = _frame(bounds, _direction());
         });
       }
     } catch (_) {
       if (mounted) setState(() => failed = true);
     }
   }
+
+  Vector3 _direction() => Vector3(math.sin(_yaw) * math.cos(_pitch), math.sin(_pitch), -math.cos(_yaw) * math.cos(_pitch));
 
   /// The distance at which every corner of the bounds is inside the square view (the model, not its bounding sphere).
   PerspectiveCamera _frame(Aabb3 b, Vector3 dir) {
@@ -86,6 +94,19 @@ class _ModelFaceState extends State<ModelFace> {
   Widget build(BuildContext context) {
     if (failed) return widget.fallback;
     final cam = camera;
-    return ColoredBox(color: N.g13, child: cam == null ? widget.fallback : SceneView(scene, camera: cam));
+    final view = ColoredBox(color: N.g13, child: cam == null ? widget.fallback : SceneView(scene, camera: cam));
+    if (!widget.turnable || cam == null) return view;
+    return MouseRegion(
+      cursor: SystemMouseCursors.grab,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onPanUpdate: (d) => setState(() {
+          _yaw += d.delta.dx * .012;
+          _pitch = (_pitch + d.delta.dy * .012).clamp(-1.2, 1.2);
+          camera = _frame(_bounds!, _direction());
+        }),
+        child: view,
+      ),
+    );
   }
 }

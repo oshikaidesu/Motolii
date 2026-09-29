@@ -19,11 +19,16 @@ import 'model_face.dart';
 /// sound a band) in staggered columns packed tight (4 px), one line of name under each. The shelf's mechanics (picking,
 /// carrying, menus, keys) are the seat's.
 class MediaLibraryBody extends StatelessWidget {
-  const MediaLibraryBody({super.key, required this.sections, required this.shown, required this.items, required this.width});
+  const MediaLibraryBody({super.key, required this.sections, required this.shown, required this.items, required this.width, this.selected, this.onTap, this.onOpen});
   final Map<String, List<Thing>> sections;
   final List<Thing> shown;
   final Map<String, Map<String, dynamic>> items;
   final double width;
+
+  /// A skin that chooses (the catalog's Browser): the chosen piece is ringed, a tap chooses, a double tap opens it. Without
+  /// these the shelf's own seat does all of that.
+  final String? selected;
+  final ValueChanged<String>? onTap, onOpen;
 
   /// Width over height for a piece: what the file says, else what its family usually is.
   static double aspectOf(Map<String, dynamic> item) {
@@ -62,7 +67,7 @@ class MediaLibraryBody extends StatelessWidget {
           if (e.key.isNotEmpty) SliverToBoxAdapter(child: Padding(padding: const EdgeInsets.symmetric(horizontal: margin), child: ShelfHeading(e.key, count: e.value.length, first: e.key == sections.keys.first))),
           SliverPadding(
             padding: EdgeInsets.fromLTRB(margin, e.key.isEmpty ? 8 : 0, margin, 0),
-            sliver: SliverToBoxAdapter(child: _Board(things: e.value, items: items, cols: cols, colW: colW, gap: gap)),
+            sliver: SliverToBoxAdapter(child: _Board(things: e.value, items: items, cols: cols, colW: colW, gap: gap, selected: selected, onTap: onTap, onOpen: onOpen)),
           ),
         ],
         const SliverToBoxAdapter(child: SizedBox(height: 9)),
@@ -73,11 +78,19 @@ class MediaLibraryBody extends StatelessWidget {
 
 /// Staggered columns: each card goes to the shortest column, so pieces of different shapes pack without holes.
 class _Board extends StatelessWidget {
-  const _Board({required this.things, required this.items, required this.cols, required this.colW, required this.gap});
+  const _Board({required this.things, required this.items, required this.cols, required this.colW, required this.gap, this.selected, this.onTap, this.onOpen});
+  final String? selected;
+  final ValueChanged<String>? onTap, onOpen;
   final List<Thing> things;
   final Map<String, Map<String, dynamic>> items;
   final int cols;
   final double colW, gap;
+
+  /// The shelf's seat (its picking, carrying and menus) when it has one; else this skin's own tap and double tap.
+  Widget _chosen(BuildContext context, Thing t, Widget card) {
+    if (onTap == null) return seated(context, t, card);
+    return GestureDetector(behavior: HitTestBehavior.opaque, onTap: () => onTap!(t.id), onDoubleTap: onOpen == null ? null : () => onOpen!(t.id), child: card);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -91,7 +104,7 @@ class _Board extends StatelessWidget {
         if (heights[c] < heights[at] - 1) at = c;
       }
       heights[at] += h + gap;
-      columns[at].add(Padding(padding: EdgeInsets.only(bottom: gap), child: SizedBox(height: h, child: seated(context, t, MaterialCard(item: item, name: t.name, index: things.indexOf(t) + 1, roomy: colW >= 100)))));
+      columns[at].add(Padding(padding: EdgeInsets.only(bottom: gap), child: SizedBox(height: h, child: _chosen(context, t, MaterialCard(item: item, name: t.name, index: things.indexOf(t) + 1, roomy: colW >= 100, selected: selected == t.id)))));
     }
     return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
       for (var c = 0; c < cols; c++) ...[
@@ -107,7 +120,8 @@ const _captionHeight = 14.0;
 /// One piece: its picture, rounded, at its own proportions; under it its name and, when the card has room, its size or
 /// length.
 class MaterialCard extends StatelessWidget {
-  const MaterialCard({super.key, required this.item, required this.name, this.index, this.roomy = true});
+  const MaterialCard({super.key, required this.item, required this.name, this.index, this.roomy = true, this.selected = false});
+  final bool selected;
   final Map<String, dynamic> item;
   final String name;
   final int? index;
@@ -131,6 +145,7 @@ class MaterialCard extends StatelessWidget {
           face,
           // what kind of thing it is, where the eye lands first: ▶ a clip, ♪ a sound, 3D a model, 360° an environment
           if (_mark(item) case final mark?) Positioned(left: 2.5, top: 2.5, child: _Badge(Text(mark, softWrap: false, style: sans(8.5, c: mediaKind(item) == 'HDR' ? N.g86 : N.g95, w: mediaKind(item) == 'HDR' ? FontWeight.w500 : FontWeight.w600)))),
+          if (selected) const Positioned.fill(child: PickedRing()),
           // placed in the work: a small light dot in the corner
           if (item['used'] == true && !missing) Positioned(right: 4.5, top: 4.5, child: Container(width: 4.5, height: 4.5, decoration: BoxDecoration(color: N.g95, shape: BoxShape.circle, border: Border.all(color: N.g07.withValues(alpha: .5))))),
         ]),
