@@ -254,7 +254,7 @@ class _RelationsPanelState extends State<RelationsPanel> {
           Container(width: 8, height: 8, decoration: const BoxDecoration(color: kRed, shape: BoxShape.circle)),
           const SizedBox(width: 8),
           Expanded(child: Text(r.source.name(c), softWrap: false, overflow: TextOverflow.ellipsis, style: sans(12.5, c: kInk, w: FontWeight.w600))),
-          GestureDetector(key: const ValueKey('relation-delete'), onTap: () async { for (final m in r.mappings) { await c.command('unrelate', {'layers': r.members, 'property': m.property}); } c.relationFocus.value = null; }, child: Text('✕', style: sans(12, c: kMuted))),
+          GestureDetector(key: const ValueKey('relation-delete'), onTap: () => RelationsSession.of(c).remove(r), child: Text('✕', style: sans(12, c: kMuted))),
         ]),
         _label('SOURCE RANGE'),
         _range('in', _shown('in', r.inMin, r.inMax).$1, _shown('in', r.inMin, r.inMax).$2, 'px', (lo, hi) => s.scrubRange('in', lo, hi), onDone: () => _write(r), current: _sourceValue({'layer': r.source.layer, 'property': r.source.property, 'component': r.source.component})),
@@ -267,10 +267,6 @@ class _RelationsPanelState extends State<RelationsPanel> {
               if (!editing) {
                 setState(() => picking = r.members.toSet());
                 return;
-              }
-              final gone = r.members.where((m) => !picking!.contains(m)).toList();
-              for (final m in r.mappings) {
-                if (gone.isNotEmpty) await c.command('unrelate', {'layers': gone, 'property': m.property});
               }
               await _write(r, members: picking!);
               setState(() => picking = null);

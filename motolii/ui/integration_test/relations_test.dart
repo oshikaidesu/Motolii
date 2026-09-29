@@ -46,5 +46,13 @@ void main() {
     expect(after, hasLength(1), reason: 'both destinations carry the new source range');
     expect(after.single.inMin, 10);
     expect(after.single.mappings, hasLength(2));
+
+    // the panel's delete: every destination comes off in one step, and one undo brings the whole relation back
+    await rs.remove(after.single);
+    await frames(t);
+    expect(relationsOf(c).where((r) => r.source.layer == src), isEmpty);
+    await c.command('undo');
+    await frames(t);
+    expect(relationsOf(c).where((r) => r.source.layer == src).single.mappings, hasLength(2), reason: 'one delete, one undo');
   });
 }

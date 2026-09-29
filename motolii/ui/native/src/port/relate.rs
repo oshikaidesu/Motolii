@@ -78,27 +78,42 @@ impl EditorRuntime {
         }
         }
         drop(view);
+        // "release": things leaving the relation in the same edit (the member set changed): their links come off.
+        if j["release"].is_array() {
+            let gone = ids(&j["release"])?;
+            let names: Vec<PropertyId> = destinations.iter().map(|(p, _, _)| p.clone()).collect();
+            intents.extend(self.unrelate_intents(&gone, &names)?);
+        }
         self.apply(intents)
     }
 
-    /// The links come off and each thing keeps the value it shows now, as its own.
+    /// The links come off and each thing keeps the value it shows now, as its own. `properties` (or one `property`):
+    /// every destination of a relation comes off in one step.
     pub(super) fn unrelate(&mut self, j: &J) -> Result<(), String> {
-        let destination = PropertyId::new(string(j, "property")?).map_err(e)?;
-        let members = ids(&j["layers"])?;
+        let destinations: Vec<PropertyId> = match j["properties"].as_array() {
+            Some(list) => list.iter().map(|p| PropertyId::new(p.as_str().ok_or("Invalid property")?).map_err(e)).collect::<Result<_, String>>()?,
+            None => vec![PropertyId::new(string(j, "property")?).map_err(e)?],
+        };
+        let intents = self.unrelate_intents(&ids(&j["layers"])?, &destinations)?;
+        if intents.is_empty() { return Ok(()) }
+        self.apply(intents)
+    }
+
+    fn unrelate_intents(&self, members: &[LayerId], destinations: &[PropertyId]) -> Result<Vec<Intent>, String> {
         let view = self.doc.view().without_transients();
         let at = self.time()?;
         let mut intents = Vec::new();
-        for &member in &members {
-            let Some(source) = view.property_source(member, &destination).map_err(e)? else { continue };
-            if source.as_link_only().is_none() { continue }
-            let current = view.value_at(member, &destination, at).map_err(e)?
-                .or(motolii_edit::document::edit::default_value(&view, member, &destination).map_err(e)?)
-                .ok_or("No value to keep")?;
-            intents.push(Intent::SetConstant { layer: member, property: destination.clone(), value: current });
+        for destination in destinations {
+            for &member in members {
+                let Some(source) = view.property_source(member, destination).map_err(e)? else { continue };
+                if source.as_link_only().is_none() { continue }
+                let current = view.value_at(member, destination, at).map_err(e)?
+                    .or(motolii_edit::document::edit::default_value(&view, member, destination).map_err(e)?)
+                    .ok_or("No value to keep")?;
+                intents.push(Intent::SetConstant { layer: member, property: destination.clone(), value: current });
+            }
         }
-        drop(view);
-        if intents.is_empty() { return Ok(()) }
-        self.apply(intents)
+        Ok(intents)
     }
 }
 
@@ -207,6 +222,29 @@ mod tests {
         let status = rt.status().unwrap();
         let row = status["layers"].as_array().unwrap().iter().find(|l| l["id"] == circles[0].0).unwrap()["properties"].as_array().unwrap().iter().find(|p| p["id"] == "rotation").unwrap().clone();
         assert_eq!(row["link"]["inMin"], 200.0, "one re-range is one undo step");
+    }
+
+    /// A relation deleted is one step for all its destinations; a member let go while the relation is rewritten is the
+    /// same step as the rewrite.
+    #[test]
+    fn a_relation_comes_off_in_one_step() {
+        let (mut rt, origin, circles) = rig();
+        relate(&mut rt, origin, &circles, "scale", 0.5, 1.5);
+        relate(&mut rt, origin, &circles, "rotation", -30.0, 30.0);
+        let linked = |rt: &EditorRuntime, l: LayerId, p: &str| rt.doc.view().property_source(l, &PropertyId::new(p).unwrap()).unwrap().is_some_and(|s| s.as_link_only().is_some());
+        let all: Vec<u64> = circles.iter().map(|m| m.0).collect();
+        rt.request(json!({"op": "unrelate", "layers": all, "properties": ["scale", "rotation"]})).unwrap();
+        assert!(circles.iter().all(|&m| !linked(&rt, m, "scale") && !linked(&rt, m, "rotation")));
+        rt.request(json!({"op": "undo"})).unwrap();
+        assert!(circles.iter().all(|&m| linked(&rt, m, "scale") && linked(&rt, m, "rotation")), "one delete, one undo");
+
+        let kept: Vec<u64> = circles[1..].iter().map(|m| m.0).collect();
+        rt.request(json!({"op": "relate", "source": {"layer": origin.0, "property": "position", "component": 0}, "inMin": 200.0, "inMax": 800.0,
+            "members": kept, "release": [circles[0].0],
+            "mappings": [{"property": "scale", "outMin": 0.5, "outMax": 1.5}, {"property": "rotation", "outMin": -30.0, "outMax": 30.0}]})).unwrap();
+        assert!(!linked(&rt, circles[0], "scale") && !linked(&rt, circles[0], "rotation") && linked(&rt, circles[1], "rotation"));
+        rt.request(json!({"op": "undo"})).unwrap();
+        assert!(linked(&rt, circles[0], "scale") && linked(&rt, circles[0], "rotation"), "the member change is one step");
     }
 
     /// Unrelate keeps what each thing shows; a deleted source leaves the members at their own values; a deleted member

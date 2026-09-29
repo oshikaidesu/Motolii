@@ -98,13 +98,23 @@ class RelationsSession extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// The relation comes off every destination at once (one undo); each thing keeps what it shows.
+  Future<void> remove(Relation r) async {
+    await c.command('unrelate', {'layers': r.members, 'properties': [for (final m in r.mappings) m.property]});
+    c.relationFocus.value = null;
+  }
+
+  /// Written on release, every destination at once (a link has no preview). [members]: the new member set; anyone who
+  /// left it is let go in the same step.
   Future<void> write(Relation r, {Set<int>? members}) async {
     final (inMin, inMax) = shown('in', r.inMin, r.inMax);
+    final gone = members == null ? const <int>[] : [for (final m in r.members) if (!members.contains(m)) m];
     await c.command('relate', {
       'source': {'layer': r.source.layer, 'property': r.source.property, 'component': r.source.component},
       'inMin': inMin,
       'inMax': inMax,
       'members': (members ?? r.members.toSet()).toList()..sort(),
+      if (gone.isNotEmpty) 'release': gone,
       'mappings': [
         for (final m in r.mappings)
           () {
