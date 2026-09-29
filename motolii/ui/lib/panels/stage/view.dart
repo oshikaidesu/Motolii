@@ -13,50 +13,15 @@ mixin _StageView on State<StagePanel> {
   late final StageSession _session = StageSession.of(c, widget.view);
   Size _viewport = Size.zero;
 
-  /// The document with the rendered frame laid over it: one copy per
-  /// (document, frame). Every conversion and hit test on the Stage reads it,
-  /// so a hover or a scrub frame must not pay for the overlay again.
-  Map<String, dynamic>? _stateCache, _stateFrom, _renderedFrom;
-  Map<String, dynamic> get _state {
-    if (!c.renderedIsFresh) return c.state;
-    final state = c.state, rendered = c.rendered.value;
-    if (!identical(state, _stateFrom) || !identical(rendered, _renderedFrom)) {
-      _stateFrom = state;
-      _renderedFrom = rendered;
-      _stateCache = {...state, ...rendered, 'layers': c.liveLayers()};
-    }
-    return _stateCache!;
-  }
-
-  List<Map<String, dynamic>>? _layersCache;
-  Map<String, dynamic>? _layersFrom;
-  List<Map<String, dynamic>> get _layers {
-    final state = _state;
-    if (!identical(state, _layersFrom)) {
-      _layersFrom = state;
-      _layersCache = EditorSession.maps(state['layers']);
-    }
-    return _layersCache!;
-  }
-
-  Map<String, dynamic>? get _active {
-    for (final layer in _layers) {
-      if (c.selectedIds.isNotEmpty && layer['id'] == c.selectedIds.last)
-        return layer;
-    }
-    return null;
-  }
-
-  List<Map<String, dynamic>> get _cameras =>
-      _userStage ? EditorSession.maps(_state['cameraGizmos']) : [];
-  Map<String, dynamic> get _observer => EditorSession.map(_state['observer']);
-  bool get _front => !_userStage || _observer['front'] != false;
-  bool get _home => !_userStage || _observer['home'] != false;
-  double get _observerScale => _userStage ? numOf(_observer['scale'], 1) : 1;
-  Map<String, dynamic>? get _extent => _userStage && _observer['extent'] is Map
-      ? EditorSession.map(_observer['extent'])
-      : null;
-  bool get _extend => c.deskWork.value['stageExtend'] == true;
+  // what the view reads is the session's; these names are the skin's shorthand for it
+  Map<String, dynamic> get _state => _session.state;
+  Map<String, dynamic>? get _active => _session.active;
+  List<Map<String, dynamic>> get _cameras => _session.cameras;
+  Map<String, dynamic> get _observer => _session.observer;
+  bool get _front => _session.front;
+  bool get _home => _session.home;
+  Map<String, dynamic>? get _extent => _session.extent;
+  bool get _extend => _session.extending;
   List<Offset> _extentPoints() => [
     for (final p in (_extent?['points'] as List?) ?? []) ?_point(p),
   ];

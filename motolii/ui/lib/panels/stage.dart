@@ -69,7 +69,6 @@ class StagePanel extends StatefulWidget {
 mixin _StageGrip on State<StagePanel> {
   int? _pointer;
   Offset? _startScreen, _lastScreen, _startComp;
-  bool _finishing = false;
 }
 
 /// The Stage is one responsibility per mixin: what it looks at, the window it
@@ -101,11 +100,8 @@ class _StagePanelState extends State<StagePanel>
   void dispose() {
     HardwareKeyboard.instance.removeHandler(_heldKey);
     _session.removeListener(_viewChanged);
-    if (_dragging) {
-      _pending = null;
-      final args = _gesture('cancel', _startComp!);
-      _drained.whenComplete(() => c.command('stageGesture', args));
-    }
+    // a pointer gone with its tab lets its gesture go
+    if (_pointer != null) _finish(true);
     c.viewCommand.removeListener(_viewCommand);
     c.runtimeEpoch.removeListener(_runtimeChanged);
     c.detachView(widget.view);

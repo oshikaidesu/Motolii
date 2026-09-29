@@ -378,7 +378,7 @@ mixin _StageChrome
     final outlines = <List<Offset>>[];
     Offset? anchorPreview;
     for (final layer in _visible.where(
-      (l) => gizmos && _grabbable(l) && c.selectedIds.contains(l['id']),
+      (l) => gizmos && StageSession.grabbable(l) && c.selectedIds.contains(l['id']),
     )) {
       final points = _corners(layer);
       if (points.isNotEmpty && touching.contains(layer['id']))
