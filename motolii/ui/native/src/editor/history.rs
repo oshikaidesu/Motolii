@@ -52,8 +52,11 @@ fn now() -> f64 {
         .unwrap_or(0.0)
 }
 
-/// 記録の置き場。Swift の設定と同じ MotoliiStage5 の下。
+/// 記録の置き場。Swift の設定と同じ MotoliiStage5 の下(MOTOLII_STATE_DIR があればそこ: 実アプリの試験は利用者の記録に触れない)。
 pub fn default_file() -> Option<PathBuf> {
+    if let Some(dir) = std::env::var_os("MOTOLII_STATE_DIR") {
+        return Some(PathBuf::from(dir).join("history.jsonl"));
+    }
     let home = std::env::var_os("HOME")?;
     Some(
         PathBuf::from(home)

@@ -782,8 +782,10 @@ final class ProbeHost: NSObject {
     case "readSettings", "writeSettings":
       session.worker.async {
         let outcome: Result<Any, Error> = Result {
-          let support = try FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
-          let directory = support.appendingPathComponent("MotoliiStage5", isDirectory: true)
+          // MOTOLII_STATE_DIR: a run that must not touch the person's own layout (the real-app tests) keeps its own
+          let directory = try ProcessInfo.processInfo.environment["MOTOLII_STATE_DIR"].map { URL(fileURLWithPath: $0, isDirectory: true) }
+            ?? FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
+              .appendingPathComponent("MotoliiStage5", isDirectory: true)
           let file = directory.appendingPathComponent("layout.json")
           if call.method == "readSettings" {
             guard FileManager.default.fileExists(atPath: file.path) else { return [String: Any]() }

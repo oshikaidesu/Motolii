@@ -34,15 +34,15 @@ case "${1:-dev}" in
     "$window_check_dir/check"
     ;;
   # The real app driven like a person (integration_test): controls found by accessible name, outcomes read from the
-  # work. It opens a scratch copy of the document, never the document itself.
+  # work. It opens a scratch copy of the document, never the document itself, and keeps its own layout and history.
   it)
     [[ -n "$flutter_bin" ]] || { echo 'Install Flutter and set FLUTTER_BIN or add it to PATH.'; exit 1; }
     export MOTOLII_NATIVE_LIBRARY="$workspace/target/debug/libmotolii_ui.dylib"
     [[ -f "$MOTOLII_NATIVE_LIBRARY" ]] || { echo 'Run scripts/motolii-ui.sh native once, then it.'; exit 1; }
     it_defines=(--dart-define=MOTOLII_SHELL=live)
+    it_dir=$(mktemp -d /tmp/motolii-it.XXXXXX)
+    trap 'rm -rf -- "$it_dir"' EXIT
     if [[ -n "${2:-}" ]]; then
-      it_dir=$(mktemp -d /tmp/motolii-it.XXXXXX)
-      trap 'rm -rf -- "$it_dir"' EXIT
       cp -- "$2" "$it_dir/document.rrd"
       it_defines+=(--dart-define="MOTOLII_DOCUMENT=$it_dir/document.rrd")
     fi
@@ -50,6 +50,8 @@ case "${1:-dev}" in
     cd "$ui"; it_failed=0
     for it_file in integration_test/*_test.dart; do
       [[ -n "${2:-}" ]] && cp -- "$2" "$it_dir/document.rrd"
+      # each file starts from no saved layout and no history, and never writes the person's own
+      rm -rf -- "$it_dir/state"; mkdir -p "$it_dir/state"; export MOTOLII_STATE_DIR="$it_dir/state"
       "$flutter_bin" test "$it_file" -d macos "${it_defines[@]}" || it_failed=1
     done
     exit $it_failed
