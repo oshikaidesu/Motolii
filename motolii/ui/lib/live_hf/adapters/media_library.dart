@@ -35,7 +35,7 @@ class MediaLibraryBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const margin = 10.0, gap = 3.0;
+    const margin = 10.0, gap = 6.0;
     final body = width - margin * 2;
     // cards of at least 70 px: three across the default seat, more as it widens
     final cols = math.max(1, ((body + gap) / (70 + gap)).floor());
@@ -90,7 +90,7 @@ class _Board extends StatelessWidget {
   }
 }
 
-const _captionHeight = 18.0;
+const _captionHeight = 20.0;
 
 /// One piece: its picture, rounded, at its own proportions; under it its name and, when the card has room, its size or
 /// length.
@@ -109,8 +109,8 @@ class MaterialCard extends StatelessWidget {
     final fact = roomy ? _fact(item) : '';
     Widget face = DecoratedBox(
       position: DecorationPosition.foreground,
-      decoration: BoxDecoration(border: Border.all(color: N.glaze9, width: .5)),
-      child: ClipRect(child: ColoredBox(color: N.g13, child: materialFace(item))),
+      decoration: BoxDecoration(borderRadius: BorderRadius.circular(6), border: Border.all(color: N.glaze9)),
+      child: ClipRRect(borderRadius: BorderRadius.circular(6), child: ColoredBox(color: N.g13, child: materialFace(item))),
     );
     if (missing) face = Opacity(opacity: .4, child: face);
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -123,10 +123,9 @@ class MaterialCard extends StatelessWidget {
       ),
       SizedBox(
         height: _captionHeight,
-        child: Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
-          if (index != null) Padding(padding: const EdgeInsets.only(right: 5), child: Text(index!.toString().padLeft(2, '0'), style: mono(8.5, c: N.signal))),
-          Expanded(child: Text(missing ? 'Missing · $name' : name, maxLines: 1, softWrap: false, overflow: TextOverflow.ellipsis, style: sans(10.5, c: N.g91, w: FontWeight.w600, ls: -.1))),
-          if (fact.isNotEmpty) Padding(padding: const EdgeInsets.only(left: 4), child: Text(fact, softWrap: false, style: mono(8.5, c: N.g51))),
+        child: Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+          Expanded(child: Text(missing ? 'Missing · $name' : name, maxLines: 1, softWrap: false, overflow: TextOverflow.ellipsis, style: sans(10.5, c: N.g86, w: FontWeight.w500))),
+          if (fact.isNotEmpty) Padding(padding: const EdgeInsets.only(left: 4), child: Text(fact, softWrap: false, style: sans(9.5, c: N.g51))),
         ]),
       ),
     ]);

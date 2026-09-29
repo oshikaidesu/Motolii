@@ -253,16 +253,16 @@ class _LiveColorInstrumentState extends State<LiveColorInstrument> {
                           key: const ValueKey('hf-color-target'),
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: mono(8.5, c: N.signal),
+                          style: sans(10.5, c: N.g63, w: FontWeight.w500),
                         ),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 6),
                       Row(children: [
                         Expanded(
                           child: EditableText(
                             key: const ValueKey('hf-color-hex'),
                             controller: hex,
                             focusNode: hexFocus,
-                            style: sans(15, c: N.g95, w: FontWeight.w700, ls: -.4),
+                            style: sans(15, c: N.g95, w: FontWeight.w600),
                             cursorColor: N.g82,
                             backgroundCursorColor: N.g00,
                             onSubmitted: _typed,

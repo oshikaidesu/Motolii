@@ -3,7 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/widgets.dart';
 
 import '../neutral.dart';
-import 'common.dart' show mono;
+import 'common.dart' show sans;
 
 /// Colours as blocks: the colour itself in large squares, three across the default seat, 2 px apart, its hex set
 /// inside at the bottom left in an ink that reads on it (a swatch card, as current palettes are shown); an edge only
@@ -17,12 +17,12 @@ class SwatchCards extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const gap = 2.0;
+    const gap = 6.0;
     final cols = math.max(2, ((width + gap) / 80).floor());
     final cell = (width - gap * (cols - 1)) / cols;
     final ground = N.g10.computeLuminance();
     return Wrap(spacing: gap, runSpacing: gap, children: [
-      for (final (i, v) in items.take(300).indexed)
+      for (final v in items.take(300))
         GestureDetector(
           key: ValueKey('hf-color:${v.$1}'),
           behavior: HitTestBehavior.opaque,
@@ -34,17 +34,10 @@ class SwatchCards extends StatelessWidget {
             return Container(
               width: cell,
               height: cell * .78,
-              padding: const EdgeInsets.fromLTRB(6, 5, 6, 6),
-              decoration: BoxDecoration(color: color, border: (l - ground).abs() < .06 ? Border.all(color: N.g26, width: .5) : null),
-              // a specimen sheet: its number at the top, its value at the foot, both in small mono in an ink that reads on it
-              child: Builder(builder: (_) {
-                final ink = l > .45 ? N.g07.withValues(alpha: .78) : N.g100.withValues(alpha: .9);
-                return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text((i + 1).toString().padLeft(2, '0'), style: mono(8, c: ink)),
-                  const Spacer(),
-                  Text('#${(v.$2 & 0xFFFFFF).toRadixString(16).padLeft(6, '0').toUpperCase()}', softWrap: false, style: mono(9, c: ink)),
-                ]);
-              }),
+              padding: const EdgeInsets.fromLTRB(8, 0, 6, 7),
+              alignment: Alignment.bottomLeft,
+              decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(8), border: Border.all(color: (l - ground).abs() < .06 ? N.g20 : N.glaze9)),
+              child: Text('#${(v.$2 & 0xFFFFFF).toRadixString(16).padLeft(6, '0').toUpperCase()}', softWrap: false, style: sans(10, c: l > .45 ? N.g07.withValues(alpha: .8) : N.g100.withValues(alpha: .92), w: FontWeight.w500)),
             );
           }),
         ),

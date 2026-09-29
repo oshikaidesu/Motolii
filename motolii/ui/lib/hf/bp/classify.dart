@@ -104,7 +104,7 @@ class _ClassColumnState extends State<ClassColumn> {
 }
 
 class _Row extends StatelessWidget {
-  const _Row(this.label, this.on, this.tap);
+  const _Row(this.label, this.on, this.tap, {super.key});
   final String label;
   final bool on;
   final VoidCallback tap;
@@ -117,10 +117,9 @@ class _Row extends StatelessWidget {
           child: Align(
             alignment: Alignment.centerLeft,
             child: Container(
-              // the chosen class printed in reverse, as a poster marks its current item
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-              color: on ? N.g95 : null,
-              child: Text(label, softWrap: false, overflow: TextOverflow.clip, style: sans(11.5, c: on ? N.g07 : N.g56, w: on ? FontWeight.w700 : FontWeight.w500)),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(color: on ? N.g20 : null, borderRadius: BorderRadius.circular(6)),
+              child: Text(label, softWrap: false, overflow: TextOverflow.clip, style: sans(11.5, c: on ? N.g95 : N.g56, w: FontWeight.w500)),
             ),
           ),
         ),
