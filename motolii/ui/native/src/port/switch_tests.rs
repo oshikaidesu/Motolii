@@ -70,3 +70,17 @@ fn a_diamond_key_takes_the_animate_ease(){
     let track=rt.doc.view().track(id,&PropertyId::new("opacity").unwrap()).unwrap().unwrap();
     assert_eq!(track.keys()[1].interp,Interp::Linear,"not animating: Linear, as before");
 }
+
+/// The eyedropper picks and applies in one request: a pick outside the frame applies nothing (not the last colour),
+/// a pick inside is one step.
+#[test]
+fn a_failed_pick_applies_nothing(){
+    let mut rt=EditorRuntime::open("").unwrap();
+    rt.request(json!({"op":"create","kind":"rectangle"})).unwrap();
+    rt.request(json!({"op":"pickColor","x":10.0,"y":10.0,"apply":true})).unwrap();
+    let (undo,_)=rt.doc.history_depth();
+    assert!(rt.request(json!({"op":"pickColor","x":-5.0,"y":10.0,"apply":true})).is_err());
+    assert_eq!(rt.doc.history_depth().0,undo,"nothing applied");
+    rt.request(json!({"op":"undo"})).unwrap();
+    assert_eq!(rt.doc.history_depth().0,undo-1,"the pick that worked was one step");
+}

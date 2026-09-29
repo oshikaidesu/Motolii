@@ -376,9 +376,8 @@ class StageSession extends ChangeNotifier {
   Future<void> _pickColor(Offset comp) async {
     c.eyedropper.value = false;
     if (!c.supports('pickColor')) return;
-    await c.command('pickColor', {'x': comp.dx, 'y': comp.dy});
-    final rgba = c.state['pickedColor'];
-    if (rgba is List && c.supports('applyPalette')) await c.command('applyPalette', {'rgba': rgba});
+    // picked and applied by the host in one request: a pick that fails applies nothing
+    await c.command('pickColor', {'x': comp.dx, 'y': comp.dy, 'apply': true});
   }
 }
 
