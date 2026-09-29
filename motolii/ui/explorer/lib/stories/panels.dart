@@ -1,4 +1,6 @@
 // The other surfaces the first visual round needed, each the production panel the workspace builds.
+import 'dart:io';
+
 import 'package:flutter/widgets.dart';
 import 'package:motolii_stage5/hf/bp/effects.dart' show EffectScene;
 import 'package:motolii_stage5/hf/neutral.dart';
@@ -36,7 +38,17 @@ final inspectorStories = <Story>[
   Story('Nothing chosen', Scene('night-sky.rrd', inputs: (s) => s.command('select', {'ids': []})), _inspector, width: 387, height: 400),
 ];
 
+/// Pictures of different shapes in the library, through the product's own import.
+Future<void> _importMedia(EditorSession c) async {
+  final dir = Directory(fixture('media'));
+  final paths = [for (final f in dir.listSync()..sort((a, b) => a.path.compareTo(b.path))) if (f.path.endsWith('.jpg')) f.path];
+  await c.command('import', {'paths': paths});
+}
+
 final browserStories = <Story>[
+  Story('Browser Media, a real library', Scene('night-sky.rrd', inputs: _importMedia), (c) => _browser(c, 4), width: 324, height: 900),
+  Story('Browser Media, a real library, wide', Scene('night-sky.rrd', inputs: _importMedia), (c) => _browser(c, 4), width: 560, height: 900),
+  Story('Browser Colors, a real palette', Scene('palette.js', inputs: (s) => _choose(s, 1)), (c) => _browser(c, 2), width: 324, height: 800),
   for (final (i, name) in const ['Create', 'Effects', 'Colors', 'Fonts', 'Media'].indexed) ...[
     Story('Browser $name', Scene('night-sky.rrd', inputs: (s) => _choose(s, 2)), (c) => _browser(c, i), width: 324, height: 800),
     Story('Browser $name narrow', Scene('night-sky.rrd', inputs: (s) => _choose(s, 2)), (c) => _browser(c, i), width: 240, height: 600),

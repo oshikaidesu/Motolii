@@ -6,6 +6,7 @@ import 'package:flutter/widgets.dart';
 import '../../foundation/hsv_triangle.dart';
 import '../glyphs.dart';
 import 'classify.dart';
+import 'color_cards.dart';
 import 'common.dart';
 import 'search.dart';
 import 'shell.dart';
@@ -308,7 +309,7 @@ class _ColorsPanelState extends State<ColorsPanel>
             emptyBody('No colour matches "${search.query}".'),
           for (final e in sections.entries) ...[
             SectionLabel(e.key),
-            _Swatches(e.value, 22, onTap: widget.onSwatch, onMenu: widget.onSwatchMenu),
+            SwatchCards(e.value, s.width - pad * 2, onTap: widget.onSwatch, onMenu: widget.onSwatchMenu),
           ],
           if (gradients && !hasGradients) emptyBody('No saved gradients.'),
           if (gradients || (!filtering && !wheelOnly && hasGradients)) ...[

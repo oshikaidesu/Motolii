@@ -13,9 +13,9 @@ import '../../hf/glyphs.dart';
 import '../../hf/neutral.dart';
 import '../../hf/shell/place.dart' show H;
 
-/// Media as material: each family is shown by what it is — a still by its picture (over a checker, so a cut-out reads
-/// as one), a clip by its picture with its motion and length, a sound by its own waveform. The name is always readable;
-/// size, rate and length are the quiet second line. The shelf's mechanics (picking, carrying, menus, keys) are the seat's.
+/// Media as material, on a pinboard: each piece a rounded card at its own proportions (a still or a clip by its width
+/// and height, an HDR plate 2:1, a sound a band for its waveform) in staggered columns, its name under it and one quiet
+/// fact. The shelf's mechanics (picking, carrying, menus, keys) are the seat's.
 class MediaLibraryBody extends StatelessWidget {
   const MediaLibraryBody({super.key, required this.sections, required this.shown, required this.items, required this.width});
   final Map<String, List<Thing>> sections;
@@ -23,38 +23,32 @@ class MediaLibraryBody extends StatelessWidget {
   final Map<String, Map<String, dynamic>> items;
   final double width;
 
-  /// Each family its own cell: a still or an HDR plate is a small square (56 px and up), a clip or a sound a wider
-  /// 4:3 face (64 px and up, where its motion mark, waveform and length fit). About five a row at the default seat.
-  static ({double column, double aspect}) cellOf(String family) => switch (family) {
-        'Video' || 'Audio' => (column: 64, aspect: 4 / 3),
-        _ => (column: 56, aspect: 1),
-      };
+  /// Width over height for a piece: what the file says, else what its family usually is.
+  static double aspectOf(Map<String, dynamic> item) {
+    final facts = item['facts'];
+    if (facts is Map && facts['width'] is num && facts['height'] is num && (facts['height'] as num) > 0) {
+      return ((facts['width'] as num) / (facts['height'] as num)).clamp(.5, 2.4).toDouble();
+    }
+    return switch ('${item['family']}') { 'HDR' => 2, 'Audio' => 2.4, 'Video' => 16 / 9, _ => 1 };
+  }
 
   @override
   Widget build(BuildContext context) {
-    const pad = 10.0, gap = 6.0;
+    const pad = 10.0, gap = 8.0;
     final seat = BrowserSeatScope.of(context);
-    final scale = seat?.tileScale ?? 1;
-    final grids = {for (final key in sections.keys) key: shelfColumns(width, cellOf(key).column * scale, pad: pad, gap: gap)};
-    // the keys walk the tiles in the order they are drawn (section by section), not the data's order
-    seat?.shows([for (final e in sections.values) ...e], grids.values.isEmpty ? 1 : grids.values.first.columns);
-    if (grids.values.any((g) => g.width <= 0)) return const SizedBox.shrink();
+    final cols = width >= 520 ? 3 : (width >= 200 ? 2 : 1);
+    final colW = (width - pad * 2 - gap * (cols - 1)) / cols;
+    // the keys walk the pieces in the order they are listed, section by section
+    seat?.shows([for (final e in sections.values) ...e], cols);
+    if (colW <= 0) return const SizedBox.shrink();
     return CustomScrollView(
       physics: const ClampingScrollPhysics(),
       slivers: [
         for (final e in sections.entries) ...[
-          if (e.key.isNotEmpty) SliverToBoxAdapter(child: Padding(padding: const EdgeInsets.symmetric(horizontal: pad + 1), child: ShelfHeading(e.key, count: e.value.length))),
+          if (e.key.isNotEmpty) SliverToBoxAdapter(child: Padding(padding: const EdgeInsets.fromLTRB(pad + 1, 4, pad, 0), child: ShelfHeading(e.key, count: e.value.length))),
           SliverPadding(
-            padding: EdgeInsets.fromLTRB(pad, e.key.isEmpty ? 8 : 0, pad, 2),
-            sliver: SliverGrid(
-              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: grids[e.key]!.columns,
-                mainAxisSpacing: gap,
-                crossAxisSpacing: gap,
-                childAspectRatio: grids[e.key]!.width / (grids[e.key]!.width / cellOf(e.key).aspect + _captionHeight),
-              ),
-              delegate: SliverChildBuilderDelegate((c, i) => seated(c, e.value[i], MaterialCard(item: items[e.value[i].id] ?? const {}, name: e.value[i].name)), childCount: e.value.length),
-            ),
+            padding: EdgeInsets.fromLTRB(pad, e.key.isEmpty ? 10 : 2, pad, 6),
+            sliver: SliverToBoxAdapter(child: _Board(things: e.value, items: items, cols: cols, colW: colW, gap: gap)),
           ),
         ],
         const SliverToBoxAdapter(child: SizedBox(height: 12)),
@@ -63,9 +57,40 @@ class MediaLibraryBody extends StatelessWidget {
   }
 }
 
-const _captionHeight = 14.0;
+/// Staggered columns: each card goes to the shortest column, so pieces of different shapes pack without holes.
+class _Board extends StatelessWidget {
+  const _Board({required this.things, required this.items, required this.cols, required this.colW, required this.gap});
+  final List<Thing> things;
+  final Map<String, Map<String, dynamic>> items;
+  final int cols;
+  final double colW, gap;
 
-/// One piece of material: its face (landscape, never cropped to a postage stamp), its name, one quiet line of facts.
+  @override
+  Widget build(BuildContext context) {
+    final columns = [for (var i = 0; i < cols; i++) <Widget>[]];
+    final heights = List.filled(cols, 0.0);
+    for (final t in things) {
+      final item = items[t.id] ?? const <String, dynamic>{};
+      final h = colW / MediaLibraryBody.aspectOf(item) + _captionHeight;
+      var at = 0;
+      for (var c = 1; c < cols; c++) {
+        if (heights[c] < heights[at] - 1) at = c;
+      }
+      heights[at] += h + gap;
+      columns[at].add(Padding(padding: EdgeInsets.only(bottom: gap), child: SizedBox(height: h, child: seated(context, t, MaterialCard(item: item, name: t.name)))));
+    }
+    return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      for (var c = 0; c < cols; c++) ...[
+        if (c > 0) SizedBox(width: gap),
+        SizedBox(width: colW, child: Column(children: columns[c])),
+      ],
+    ]);
+  }
+}
+
+const _captionHeight = 34.0;
+
+/// One piece: its picture, rounded, at its own proportions; its name; one quiet fact.
 class MaterialCard extends StatelessWidget {
   const MaterialCard({super.key, required this.item, required this.name});
   final Map<String, dynamic> item;
@@ -74,20 +99,32 @@ class MaterialCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final missing = item['missing'] == true;
-    Widget face = ClipRRect(borderRadius: BorderRadius.circular(3), child: materialFace(item));
+    Widget face = ClipRRect(borderRadius: BorderRadius.circular(10), child: materialFace(item));
     if (missing) face = Opacity(opacity: .4, child: face);
-    // one short line: the name. Size, rate and channels are in the tile's menu (and the Inspector), not always on show.
+    final fact = _fact(item);
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       Expanded(child: face),
       SizedBox(
         height: _captionHeight,
         child: Padding(
-          padding: const EdgeInsets.only(top: 2),
-          child: Text(missing ? 'Missing · $name' : name, maxLines: 1, softWrap: false, overflow: TextOverflow.ellipsis, style: sans(10, c: N.g86, w: FontWeight.w500)),
+          padding: const EdgeInsets.fromLTRB(2, 6, 2, 0),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(missing ? 'Missing · $name' : name, maxLines: 1, softWrap: false, overflow: TextOverflow.ellipsis, style: sans(11, c: N.g91, w: FontWeight.w600)),
+            if (fact.isNotEmpty) Text(fact, maxLines: 1, softWrap: false, overflow: TextOverflow.ellipsis, style: sans(9.5, c: N.g51)),
+          ]),
         ),
       ),
     ]);
   }
+}
+
+/// One short fact under a piece: its size, or its length.
+String _fact(Map<String, dynamic> item) {
+  final facts = item['facts'];
+  final seconds = _seconds(item);
+  if (seconds != null) return _clock(seconds);
+  if (facts is Map && facts['width'] is num) return '${facts['width']} × ${facts['height']}';
+  return ''; // the section heading already says what family it is
 }
 
 /// What the material is, drawn as itself.
@@ -113,6 +150,15 @@ String _clock(double seconds) {
 final _decoded = <int, Uint8List>{};
 
 Widget? _picture(Map<String, dynamic> item) {
+  // a still on disk is drawn from its file (a card is larger than the thumbnail), decoded no larger than it is shown
+  final file = item['path'];
+  if (file is String && item['missing'] != true && '${item['mime']}'.startsWith('image/')) {
+    return Image.file(File(file), fit: BoxFit.cover, cacheWidth: 640, gaplessPlayback: true, errorBuilder: (_, __, ___) => _thumbnail(item) ?? _glyph(HG.image));
+  }
+  return _thumbnail(item);
+}
+
+Widget? _thumbnail(Map<String, dynamic> item) {
   final thumbnail = item['thumbnail'];
   if (thumbnail is String && thumbnail.startsWith('data:')) {
     final key = Object.hash(item['id'], thumbnail.length);
