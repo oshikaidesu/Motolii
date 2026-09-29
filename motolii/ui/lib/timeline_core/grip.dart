@@ -93,7 +93,9 @@ mixin TimelineGrip<T extends StatefulWidget> on State<T>, TimelineFrame<T> {
         ids = primary ? {...ids, ...range}.toList() : range;
       }
     } else if (primary) {
-      ids.contains(id) ? ids.remove(id) : ids.add(id);
+      anchor = id;
+      timelineSession.command('select', {'toggle': id});
+      return;
     } else {
       ids = [id];
     }

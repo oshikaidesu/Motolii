@@ -56,7 +56,7 @@ mixin _InspectorEffectsCard on _InspectorControls, _InspectorFolds {
         await c.command('moveEffect', {
           'layer': layer['id'],
           'id': effect['id'],
-          'to': chosen == 'earlier' ? index - 1 : index + 1,
+          'step': chosen == 'earlier' ? -1 : 1,
         });
       case 'roll':
         await _roll(layer, effect);
@@ -185,7 +185,6 @@ mixin _InspectorEffectsCard on _InspectorControls, _InspectorFolds {
                 ? () => c.command('enableEffect', {
                     'layer': layer['id'],
                     'id': effect['id'],
-                    'enabled': effect['enabled'] == false,
                   })
                 : null,
           ),

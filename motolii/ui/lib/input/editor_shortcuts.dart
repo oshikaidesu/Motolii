@@ -74,7 +74,7 @@ class EditorShortcuts {
       }
       if (k == LogicalKeyboardKey.keyG) op = shift ? 'ungroup' : 'group';
       if (k == LogicalKeyboardKey.keyA) {
-        c.command('select', {'ids': c.layers.map((l) => l['id']).toList()});
+        c.command('select', {'all': true});
         return KeyEventResult.handled;
       }
       if (k == LogicalKeyboardKey.keyS) {
@@ -150,7 +150,7 @@ class EditorShortcuts {
         return KeyEventResult.handled;
       }
       if (k == LogicalKeyboardKey.keyA && !shift) {
-        c.setAnimate(!c.animating);
+        c.toggleAnimate();
         return KeyEventResult.handled;
       }
       final props = {

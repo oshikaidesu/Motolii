@@ -131,7 +131,7 @@ class _LiveCameraState extends State<LiveCamera> {
       // the layer's own name, not the word "Camera" (Classic IN-002)
       title: '${widget.c.layers.where((l) => l['id'] == widget.layer).firstOrNull?['name'] ?? 'Camera'}',
       animating: widget.c.supports('animate') ? widget.c.animating : null,
-      onAnimate: () => widget.c.setAnimate(!widget.c.animating),
+      onAnimate: () => widget.c.toggleAnimate(),
     ),
   );
 }

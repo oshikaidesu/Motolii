@@ -102,7 +102,7 @@ class _TransformInstrumentState extends State<TransformInstrument> {
         GestureDetector(
           key: const ValueKey('tf-animate'),
           behavior: HitTestBehavior.opaque,
-          onTap: () => s.setAnimate(!s.animating),
+          onTap: s.toggleAnimate,
           child: Row(children: [
             SizedBox(width: 12, height: 12, child: CustomPaint(painter: _DiamondP(s.animating, kYellow))),
             const SizedBox(width: 5),

@@ -146,7 +146,7 @@ class _Transport extends StatelessWidget {
             tip: 'Animate (A): values you touch become keys',
             lit: c.animating ? ShellTokens.pink : null,
             onTap: c.supports('animate')
-                ? () => c.setAnimate(!c.animating)
+                ? () => c.toggleAnimate()
                 : null,
             child: Container(
               width: ShellTokens.keyGlyph,

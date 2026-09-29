@@ -216,7 +216,9 @@ class TimelineSession extends ChangeNotifier {
         ids = mods.primary ? {...ids, ...range}.toList() : range;
       }
     } else if (mods.primary) {
-      ids.contains(id) ? ids.remove(id) : ids.add(id);
+      _anchor = id;
+      c.command('select', {'toggle': id});
+      return;
     } else {
       ids = [id];
     }

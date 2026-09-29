@@ -246,6 +246,9 @@ class TransformStore extends ParamStore {
     notifyListeners();
   }
 
+  /// The Animate switch pressed (a host flips what it holds).
+  void toggleAnimate() => setAnimate(!animating);
+
   /// Anchor: the shown layer alone, one of nine places. Locked layers refuse.
   void setAnchor(double x, double y) {
     if (!canEdit) return;

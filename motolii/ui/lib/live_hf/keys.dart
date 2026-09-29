@@ -71,9 +71,7 @@ class LiveKeys {
       case LogicalKeyboardKey.keyG when cmd:
         op(shift ? 'ungroup' : 'group');
       case LogicalKeyboardKey.keyA when cmd:
-        op('select', {
-          'ids': [for (final l in c.layers) l['id']],
-        });
+        op('select', {'all': true});
       case LogicalKeyboardKey.keyS when cmd:
         c.save(as: shift);
       case LogicalKeyboardKey.keyK when cmd && !alt:
@@ -136,7 +134,7 @@ class LiveKeys {
           c.focusProperty.value = 'anchor';
         }();
       case LogicalKeyboardKey.keyA when !cmd && !shift:
-        if (c.supports('animate')) c.setAnimate(!c.animating);
+        if (c.supports('animate')) c.toggleAnimate();
       case LogicalKeyboardKey.keyP ||
               LogicalKeyboardKey.keyS ||
               LogicalKeyboardKey.keyR ||

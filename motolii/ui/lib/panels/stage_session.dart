@@ -187,8 +187,9 @@ class StageSession extends ChangeNotifier {
             ..clear()
             ..add(id);
         }
+        // what the drag guard expects; the host decides what is chosen
         _ids = ids;
-        if (c.supports('select')) c.command('select', {'ids': ids});
+        if (c.supports('select')) c.command('select', _additive ? {'toggle': id} : {'ids': ids});
         // a click selects; a drag begins once the pointer leaves the skin's slop
         _handle = 'body';
         gesture = StGesture.pending;
@@ -277,7 +278,8 @@ class StageSession extends ChangeNotifier {
         'phase': phase,
         'view': view,
         'mode': _mode,
-        'ids': _ids,
+        // a layer drag carries what the host has chosen; a camera box names its camera
+        if (_mode == 'camera') 'ids': _ids,
         'start': [_start!.dx, _start!.dy],
         'point': [point.dx, point.dy],
         'handle': _handle,

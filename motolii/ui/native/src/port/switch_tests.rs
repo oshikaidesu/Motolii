@@ -84,3 +84,39 @@ fn a_failed_pick_applies_nothing(){
     rt.request(json!({"op":"undo"})).unwrap();
     assert_eq!(rt.doc.history_depth().0,undo-1,"the pick that worked was one step");
 }
+
+/// Presses the host resolves from what it holds: Cmd-click in and out, Cmd+A, the Animate switch, an effect's bypass
+/// and its Earlier / Later. Two presses before the UI hears back still undo each other.
+#[test]
+fn presses_are_resolved_by_the_host(){
+    let mut rt=EditorRuntime::open("").unwrap();
+    let mut made=Vec::new();
+    for _ in 0..3{rt.request(json!({"op":"create","kind":"rectangle"})).unwrap();made.push(rt.viewer.selected().unwrap());}
+    rt.request(json!({"op":"select","ids":[made[0].0]})).unwrap();
+    rt.request(json!({"op":"select","toggle":made[1].0})).unwrap();
+    assert_eq!(rt.viewer.selected_ids,vec![made[0],made[1]]);
+    rt.request(json!({"op":"select","toggle":made[1].0})).unwrap();
+    assert_eq!(rt.viewer.selected_ids,vec![made[0]]);
+    rt.request(json!({"op":"select","all":true})).unwrap();
+    assert_eq!(rt.viewer.selected_ids.len(),3);
+
+    rt.request(json!({"op":"animate","toggle":true})).unwrap();
+    rt.request(json!({"op":"animate","toggle":true})).unwrap();
+    assert!(matches!(rt.viewer.animate,crate::edit::Animate::Off),"two presses: off again");
+
+    let id=made[0];
+    rt.request(json!({"op":"select","ids":[id.0]})).unwrap();
+    let plugins:Vec<String>=crate::render::engine::known_effects().iter().take(2).map(|d|d.plugin_id.clone()).collect();
+    rt.request(json!({"op":"applyEffect","pluginIds":plugins})).unwrap();
+    let effects=|rt:&EditorRuntime|rt.doc.view().effects(id).unwrap();
+    let first=effects(&rt)[0].id;
+    let enabled=|rt:&EditorRuntime|!matches!(rt.doc.view().value_at(id,&PropertyId::effect_enabled(first),rt.time().unwrap()).unwrap(),Some(Value::Bool(false)));
+    rt.request(json!({"op":"enableEffect","layer":id.0,"id":first.0})).unwrap();
+    assert!(!enabled(&rt));
+    rt.request(json!({"op":"enableEffect","layer":id.0,"id":first.0})).unwrap();
+    assert!(enabled(&rt),"two presses: on again");
+    rt.request(json!({"op":"moveEffect","layer":id.0,"id":first.0,"step":1})).unwrap();
+    assert_eq!(effects(&rt)[1].id,first,"later by one");
+    rt.request(json!({"op":"moveEffect","layer":id.0,"id":first.0,"step":1})).unwrap();
+    assert_eq!(effects(&rt)[1].id,first,"already last: stays");
+}

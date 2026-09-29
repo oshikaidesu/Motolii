@@ -46,7 +46,7 @@ class NewEffectCard extends StatelessWidget {
     });
     switch (chosen) {
       case 'earlier' || 'later':
-        InspectorSession.of(c).moveEffect(layer['id'] as int, effect['id'], chosen == 'earlier' ? index - 1 : index + 1);
+        InspectorSession.of(c).stepEffect(layer['id'] as int, effect['id'], chosen == 'earlier' ? -1 : 1);
       case 'roll':
         await rollEffect(c, layer['id'] as int, effect);
       case 'rest':
@@ -87,7 +87,7 @@ class NewEffectCard extends StatelessWidget {
             GestureDetector(
               key: ValueKey('effect-toggle:${effect['id']}'),
               behavior: HitTestBehavior.opaque,
-              onTap: InspectorSession.of(c).canEnableEffects && !_held ? () => InspectorSession.of(c).enableEffect(layer['id'] as int, effect['id'], !on) : null,
+              onTap: InspectorSession.of(c).canEnableEffects && !_held ? () => InspectorSession.of(c).flipEffect(layer['id'] as int, effect['id']) : null,
               child: Padding(padding: const EdgeInsets.all(4), child: SizedBox(width: 13, height: 13, child: CustomPaint(painter: HgPainter(HG.power, on ? kAccent : kMuted, kRaised)))),
             ),
             Builder(builder: (context) => GestureDetector(

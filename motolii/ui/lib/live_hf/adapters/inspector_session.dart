@@ -121,6 +121,16 @@ class InspectorSession extends ChangeNotifier {
 
   Future<void> expandEffect(int layer, Object effect) => c.command('expandEffect', {'layer': layer, 'id': effect});
   Future<void> removeEffect(int layer, Object effect) => c.command('removeEffect', {'layer': layer, 'id': effect});
+  /// Earlier (-1) / later (+1) from where the host has it now.
+  void stepEffect(int layer, Object effect, int step) {
+    if (canMoveEffects) c.command('moveEffect', {'layer': layer, 'id': effect, 'step': step});
+  }
+
+  /// The bypass switch: the host flips what the document holds.
+  void flipEffect(int layer, Object effect) {
+    if (canEnableEffects) c.command('enableEffect', {'layer': layer, 'id': effect});
+  }
+
   bool get canEnableEffects => c.supports('enableEffect');
   void enableEffect(int layer, Object effect, bool enabled) {
     if (canEnableEffects) c.command('enableEffect', {'layer': layer, 'id': effect, 'enabled': enabled});

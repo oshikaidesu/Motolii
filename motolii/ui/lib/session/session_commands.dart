@@ -19,6 +19,13 @@ mixin SessionCommands on SessionCore {
     'shape': newKeyShape,
   });
 
+  /// The Animate switch pressed: the host flips what it holds (a second press before the reply still flips back).
+  Future<void> toggleAnimate() => command('animate', {
+    'toggle': true,
+    'from': animateFrom,
+    'shape': newKeyShape,
+  });
+
   /// Point the Fonts shelf at a text layer: the Inspector's font value is the
   /// name, choosing is the shelf's job (the colour swatch and wheel, likewise).
   Future<void> focusFont(Map<String, dynamic> layer) async {

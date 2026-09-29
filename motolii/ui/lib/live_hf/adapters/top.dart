@@ -76,7 +76,7 @@ class _SessionTopState extends State<SessionTop> {
                 c.stopPlayback();
                 c.seek(0);
               },
-              onAnimate: c.supports('animate') ? () => c.setAnimate(!c.animating) : null,
+              onAnimate: c.supports('animate') ? () => c.toggleAnimate() : null,
               onMarker: c.supports('addMarker') ? () => c.command('addMarker') : null,
               onMode: mode,
               onKey: (i) async {
