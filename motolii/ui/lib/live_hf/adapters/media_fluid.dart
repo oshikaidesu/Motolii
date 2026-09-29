@@ -271,7 +271,7 @@ class _FluidBoardState extends State<FluidBoard> {
           final fit = (frame.content.width, frame.content.height, graph.edges.length, graph.hubs.length);
           if (_fitted != fit) {
             _fitted = fit;
-            final scale = math.min(1.0, math.min(box.maxWidth / content.width, box.maxHeight / content.height));
+            final scale = graph.initialScale ?? math.min(1.0, math.min(box.maxWidth / content.width, box.maxHeight / content.height));
             _view.value = Matrix4.identity()..scale(scale, scale, 1);
           }
         }

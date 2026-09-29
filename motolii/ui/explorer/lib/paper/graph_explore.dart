@@ -17,11 +17,14 @@ const _all = {'folder', 'source', 'project', 'duplicate', 'type'};
 class GraphChoice extends ChangeNotifier {
   /// [relations]: which kinds of relation are shown. The map itself is laid out from all of them and never re-packed by this:
   /// a filter only changes what is visible.
-  GraphChoice({this.hops = 0, Set<String>? relations}) : relations = relations ?? {..._all};
+  GraphChoice({this.hops = 0, Set<String>? relations, this.scale}) : relations = relations ?? {..._all};
 
   /// 0 = global (everything), 1 or 2 = local.
   int hops;
   final Set<String> relations;
+
+  /// A fixed first zoom for the camera (contact sheets compare at one magnification).
+  final double? scale;
 
   /// The map: where each node of the Global graph settled. It outlives selections, filters that come and go, and the
   /// Explore view being closed and opened, so an asset stays where the person last saw it (a new node starts near what it
@@ -290,7 +293,7 @@ Frame _build(GraphChoice choice, List<BrowserItem> items, String? selected, int 
       hubs.add(GraphHub(id: node.id, label: rel.hubLabel[node.id]!, relation: rel.hubRelation[node.id]!, rect: rect));
     }
   }
-  return (faces: faces, labels: labels, links: const <String>[], graph: GraphOverlay(hubs: [for (final h in hubs) if (visible.contains(h.relation)) h], edges: [for (final e in rel.edges) if (seen(e) && idx.containsKey(e.a) && idx.containsKey(e.b)) e]), content: Size(w, h));
+  return (faces: faces, labels: labels, links: const <String>[], graph: GraphOverlay(initialScale: choice.scale, hubs: [for (final h in hubs) if (visible.contains(h.relation)) h], edges: [for (final e in rel.edges) if (seen(e) && idx.containsKey(e.a) && idx.containsKey(e.b)) e]), content: Size(w, h));
 }
 
 /// Global / Local, and which relations are drawn (their colours are the lines').

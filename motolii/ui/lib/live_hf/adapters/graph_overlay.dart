@@ -22,7 +22,10 @@ class GraphEdge {
 
 /// What Explore's graph adds to a [Frame]: hubs, the edges between nodes, and what to hold back while one node is in focus.
 class GraphOverlay {
-  const GraphOverlay({required this.hubs, required this.edges});
+  const GraphOverlay({required this.hubs, required this.edges, this.initialScale});
+
+  /// The camera's first zoom when the caller wants one (a comparison at one magnification); else the whole map is fitted.
+  final double? initialScale;
   final List<GraphHub> hubs;
   final List<GraphEdge> edges;
 
