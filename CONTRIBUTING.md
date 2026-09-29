@@ -11,6 +11,8 @@ Current development is **Stage 5**, in `motolii/`. Flutter UI work belongs in `m
 
 Document/Intent owns authored changes and Undo. Native ViewerState owns selection, viewing time and observer state; Flutter owns widget presentation, focus and layout. Neither is a second owner of the work. Reuse the canonical doc/render crates rather than copying them into UI. The current Rust editor layer is `motolii/ui/native/src/editor`; old Dioxus helpers are historical references, not a second maintenance target. [Module boundaries](docs/stage5/modules.md) and [provenance](docs/stage5/imported-edit-helpers.json) identify the owners.
 
+Presentation may choose what the user intends; it may not decide what that intent means. Flutter owns gestures, hit-testing, hover and focus, layout and paint, and the state of an interaction in progress. Computing the next value from the current one (`!current`, value + delta), converting between property, time, world and local spaces, clamping, snapping or trimming, choosing which layers an edit reaches, splitting one action into several writes, deciding where an Undo step ends, and computing a preview differently from its commit all belong to the owner. The core, in turn, does not decide product meaning from pixels or widget geometry. A new UI action should read as: UI action → one operation → its owner → one transaction. `ui/test/boundary_test.dart` checks the part of this that the source shows unambiguously.
+
 ## Development loop
 
 Use the prerequisites in [README](README.md), then run from the repository root:

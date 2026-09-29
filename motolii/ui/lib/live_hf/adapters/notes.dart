@@ -78,17 +78,18 @@ class LiveNotesHost extends ChangeNotifier implements NotesHost {
   @override
   void showing(int page) => _shown = page;
 
-  /// Pictures dropped on the desk become image cards on the page shown (Classic DK-062), one after another.
+  /// Pictures dropped on the desk become image cards on the page shown (Classic DK-062), fanned out, in one step.
   Future<void> dropImages(List<String> paths) async {
     final pageId = await _page(_shown);
-    for (var i = 0; i < paths.length; i++) {
-      await c.command('notes', {
-        'page': pageId,
-        'action': 'image',
-        'path': paths[i],
-        'block': {'id': 'b${DateTime.now().microsecondsSinceEpoch}$i', ..._frame(NBlock('image', Offset(40.0 + i * 24, 40.0 + i * 24), const Size(110, 80), '', 0))},
-      });
-    }
+    final stamp = DateTime.now().microsecondsSinceEpoch;
+    await c.command('notes', {
+      'page': pageId,
+      'action': 'images',
+      'images': [
+        for (var i = 0; i < paths.length; i++)
+          {'path': paths[i], 'block': {'id': 'b$stamp$i', ..._frame(NBlock('image', Offset(40.0 + i * 24, 40.0 + i * 24), const Size(110, 80), '', 0))}},
+      ],
+    });
   }
 
   @override
