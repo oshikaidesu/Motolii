@@ -13,10 +13,62 @@ import 'package:flutter/widgets.dart';
 import 'package:motolii_stage5/hf/metrics.dart';
 import 'package:motolii_stage5/hf/neutral.dart';
 import 'package:motolii_stage5/live_hf/adapters/browser_item.dart';
+import 'package:motolii_stage5/live_hf/adapters/media_fluid.dart' show Frame;
 import 'package:motolii_stage5/live_hf/adapters/media_library.dart' show materialFace;
 
 final _colours = <String, HSLColor?>{};
 final _asked = <String>{};
+
+/// Bumped when a colour has been measured: the places change by themselves.
+final exploreChanged = ValueNotifier<int>(0);
+
+void _wantColours(List<BrowserItem> items) {
+  for (final it in items) {
+    if (_colours[it.id] != null) continue;
+    if (!_asked.add('${it.id}:${it.thumbnail?.length}')) continue;
+    _measure(it).then((c) {
+      if (c != null) {
+        _colours[it.id] = c;
+        exploreChanged.value++;
+      }
+    });
+  }
+}
+
+/// The chosen asset in the middle, the rest in rings round it, nearest colour first (what has no colour goes outermost).
+Frame exploreLayout(List<BrowserItem> items, String? selected, Size viewport) {
+  _wantColours(items);
+  final centre = items.firstWhere((i) => i.id == selected, orElse: () => items.first);
+  final around = [for (final i in items) if (i.id != centre.id) i];
+  final c0 = _colours[centre.id];
+  double rank(BrowserItem i) => (c0 == null || _colours[i.id] == null) ? 9 : _distance(c0, _colours[i.id]!);
+  around.sort((a, b) => rank(a).compareTo(rank(b)));
+  const node = 46.0, step = 62.0, first = 66.0, big = 96.0;
+  final centres = <String, Offset>{};
+  var ring = 0, index = 0;
+  while (index < around.length) {
+    final members = around.skip(index).take(6 + ring * 6).toList();
+    index += members.length;
+    members.sort((a, b) => (_colours[a.id]?.hue ?? 0).compareTo(_colours[b.id]?.hue ?? 0));
+    final radius = first + ring * step;
+    for (final (k, m) in members.indexed) {
+      final angle = -math.pi / 2 + (k + (ring.isOdd ? .5 : 0)) * 2 * math.pi / members.length;
+      centres[m.id] = Offset(math.cos(angle) * radius, math.sin(angle) * radius);
+    }
+    ring++;
+  }
+  final reach = (first + math.max(0, ring - 1) * step + node) + 12;
+  final w = math.max(viewport.width, reach * 2), h = math.max(viewport.height, reach * 2);
+  final faces = <String, Rect>{};
+  for (final i in items) {
+    final base = i.id == centre.id ? big : node;
+    final a = i.aspect;
+    final fw = a >= 1 ? base : base * a, fh = a >= 1 ? base / a : base;
+    final c = Offset(w / 2, h / 2) + (i.id == centre.id ? Offset.zero : centres[i.id]!);
+    faces[i.id] = Rect.fromCenter(center: c, width: fw, height: fh);
+  }
+  return (faces: faces, labels: const <String, Rect>{}, content: Size(w, h));
+}
 
 Future<HSLColor?> _measure(BrowserItem it) async {
   Uint8List? bytes;

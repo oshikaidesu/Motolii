@@ -5,6 +5,7 @@ import '../../hf/bp/things.dart';
 import '../../hf/metrics.dart';
 import '../../hf/neutral.dart';
 import 'browser_item.dart';
+import 'media_fluid.dart';
 import 'media_library.dart';
 import 'media_list.dart';
 import 'media_preview.dart';
@@ -22,8 +23,18 @@ enum BrowserView { list, thumbnail, explore }
 typedef ExploreBuilder = Widget Function(BuildContext context, List<BrowserItem> items, String? selected, ValueChanged<String> onTap, ValueChanged<String>? onOpen);
 
 class MediaBrowser extends StatefulWidget {
-  const MediaBrowser({super.key, required this.source, this.controls, this.faces, this.explore, this.sort = 'name', this.descending = false, this.onSort, this.onReveal, this.initial = BrowserView.thumbnail, this.startOn, this.startOpen = false});
+  const MediaBrowser({super.key, required this.source, this.controls, this.faces, this.explore, this.sort = 'name', this.descending = false, this.onSort, this.onReveal, this.initial = BrowserView.thumbnail, this.startOn, this.startOpen = false, this.exploreLayout, this.exploreRepaint, this.fluidUpTo = 300});
   final ResultSource source;
+
+  /// Where Explore puts the faces (for the fluid board). Without it Explore is `explore` alone, and the views swap.
+  final ExploreLayout? exploreLayout;
+
+  /// Fires when Explore's places change by themselves (a colour was measured): the board asks again.
+  final Listenable? exploreRepaint;
+
+  /// The fluid board draws every face at once, so it serves result sets up to this size; larger ones use the views that
+  /// draw only what is on screen.
+  final int fluidUpTo;
 
   /// A browser that starts with an asset (by name) chosen, and its preview open or not (a story, a restored session).
   final String? startOn;
@@ -117,7 +128,7 @@ class MediaBrowserState extends State<MediaBrowser> {
             focusNode: focus,
             onKeyEvent: (_, e) => _key(items, e),
             child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-              _Header(view: view, count: items.length, hasExplore: widget.explore != null, onView: (v) => setState(() => view = v)),
+              _Header(view: view, count: items.length, hasExplore: widget.explore != null || widget.exploreLayout != null, onView: (v) => setState(() => view = v)),
               if (widget.controls != null) widget.controls!,
               Expanded(
                 flex: 5,
@@ -135,6 +146,22 @@ class MediaBrowserState extends State<MediaBrowser> {
 
   Widget _body(List<BrowserItem> items) {
     if (items.isEmpty) return Padding(padding: const EdgeInsets.all(9), child: Text('Nothing matches.', style: Dn.label(N.g56)));
+    final fluid = items.length <= widget.fluidUpTo && (view != BrowserView.explore || widget.exploreLayout != null);
+    if (fluid) {
+      return LayoutBuilder(builder: (context, box) => Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            AnimatedSize(
+              duration: const Duration(milliseconds: 260),
+              alignment: Alignment.topCenter,
+              child: view == BrowserView.list ? MediaListHeader(width: box.maxWidth, sort: widget.sort, descending: widget.descending, onSort: widget.onSort ?? (_) {}) : const SizedBox(width: double.infinity),
+            ),
+            Expanded(
+              child: ListenableBuilder(
+                listenable: widget.exploreRepaint ?? const _Never(),
+                builder: (context, _) => FluidBoard(items: items, selected: selected, view: view.name, onTap: choose, onOpen: open, explore: widget.exploreLayout),
+              ),
+            ),
+          ]));
+    }
     switch (view) {
       case BrowserView.list:
         return MediaListView(items: items, selected: selected, onTap: choose, onOpen: open, sort: widget.sort, descending: widget.descending, onSort: widget.onSort ?? (_) {});
@@ -178,4 +205,12 @@ class _Header extends StatelessWidget {
           Text('$count', style: Dn.value(N.g51).copyWith(fontSize: 10)),
         ]),
       );
+}
+
+class _Never implements Listenable {
+  const _Never();
+  @override
+  void addListener(VoidCallback listener) {}
+  @override
+  void removeListener(VoidCallback listener) {}
 }

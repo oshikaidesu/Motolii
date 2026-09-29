@@ -6,13 +6,16 @@ import '../../hf/neutral.dart';
 import 'catalog_session.dart';
 import 'browser_item.dart';
 import 'media_browser.dart';
+import 'media_fluid.dart';
 import 'media_preview.dart';
 
 /// The catalog's controls over the Thumbnail view: SOURCES (which folders), TYPES (what), a search (which). Where, What
 /// and Which are separate; the view (How) is the shelf's own masonry, unchanged. A skin over [CatalogSession].
 class CatalogMedia extends StatelessWidget {
-  const CatalogMedia({super.key, required this.session, this.explore, this.initial = BrowserView.thumbnail, this.startOn, this.startOpen = false});
+  const CatalogMedia({super.key, required this.session, this.explore, this.initial = BrowserView.thumbnail, this.startOn, this.startOpen = false, this.exploreLayout, this.exploreRepaint});
   final CatalogSession session;
+  final ExploreLayout? exploreLayout;
+  final Listenable? exploreRepaint;
   final String? startOn;
   final bool startOpen;
   final ExploreBuilder? explore;
@@ -29,6 +32,8 @@ class CatalogMedia extends StatelessWidget {
             source: session,
             faces: _Faces(session),
             explore: explore,
+            exploreLayout: exploreLayout,
+            exploreRepaint: exploreRepaint,
             initial: initial,
             startOn: startOn,
             startOpen: startOpen,
@@ -77,7 +82,7 @@ class _Row extends StatelessWidget {
   Widget build(BuildContext context) => Padding(
         padding: const EdgeInsets.fromLTRB(6, 4, 6, 0),
         child: Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
-          SizedBox(width: 44, child: Text(label.toUpperCase(), style: Dn.micro(N.g51))),
+          SizedBox(width: 54, child: Text(label.toUpperCase(), style: Dn.micro(N.g51))),
           Expanded(child: SizedBox(height: 20, child: ListView(scrollDirection: Axis.horizontal, children: children))),
         ]),
       );

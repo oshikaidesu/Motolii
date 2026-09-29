@@ -108,7 +108,7 @@ class _CatalogHostState extends State<_CatalogHost> {
   }
 
   @override
-  Widget build(BuildContext context) => CatalogMedia(session: session, explore: exploreView, initial: widget.view, startOn: widget.startOn, startOpen: widget.startOpen);
+  Widget build(BuildContext context) => CatalogMedia(session: session, explore: exploreView, exploreLayout: exploreLayout, exploreRepaint: exploreChanged, initial: widget.view, startOn: widget.startOn, startOpen: widget.startOpen);
 }
 
 final catalogStories = <Story>[

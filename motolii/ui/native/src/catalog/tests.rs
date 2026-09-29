@@ -589,3 +589,4 @@ fn the_owner_orders_a_result_set() {
     assert_eq!(order(Sort::Kind, false), vec!["c.wav", "b.png", "a.mov"]);
 }
 
+
