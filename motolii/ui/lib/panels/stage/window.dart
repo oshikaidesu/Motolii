@@ -148,7 +148,9 @@ mixin _StageWindow on State<StagePanel>, _StageView {
       _askedAt = _frameCount;
       _askedWindow = window;
     }
-    _drawnWindow = c.commandNow('stageWindow', window) ? window : null;
+    // the newest window wins: a hand-pan or a wheel asks at the pace of the hand, and only the latest is worth drawing
+    c.commandDirect('stageWindow', window, 'stageWindow');
+    _drawnWindow = null;
   }
 
   void _noteWindowLag(Object? rendered) {

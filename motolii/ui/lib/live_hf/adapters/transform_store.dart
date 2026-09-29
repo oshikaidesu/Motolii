@@ -132,25 +132,25 @@ class SessionTransformStore extends TransformStore {
     _gesture = true;
     // One edit and how it spreads: the host puts it to the rest of the selection (a drag keeps each layer's own
     // offset, a typed number sets the axes that changed) and leaves locked layers alone.
-    c.command('previewProperties', {
+    c.commandDirect('previewProperties', {
       'edits': [
         {'layer': activeId, 'property': id, 'value': values[activeId] ?? values.values.first, 'spread': typing ? 'typed' : 'offset'},
       ],
-    });
+    }, '$activeId:$id');
   }
 
   @override
   void committed(String id) {
     _gesture = false;
     _read_ = null; // a gesture's own values are the Instrument's until the document is read again
-    c.command('commitPreview');
+    c.commandDirect('commitPreview');
   }
 
   @override
   void cancelledGesture(String id) {
     _gesture = false;
     _read_ = null; // a gesture's own values are the Instrument's until the document is read again
-    c.command('cancelPreview');
+    c.commandDirect('cancelPreview');
   }
 
   @override

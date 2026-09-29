@@ -197,6 +197,57 @@ void main() {
     report.writeln('LAT   inputs ${LatencyProbe.events.where((e) => e.name == 'pointer').length}, commands sent ${LatencyProbe.events.where((e) => e.name == 'cmd:previewProperties').length} (the rest were replaced by newer values)');
     await c.command('cancelPreview');
 
+    // 6. the live Inspector's own path: a preview per tick straight to the session (`command`, the old way) and through the
+    // latest-wins path (`commandDirect`), at a 125 Hz hand in real time; how far behind the newest input is the last picture?
+    for (final direct in [false, true]) {
+      LatencyProbe.events.clear();
+      var m = 0;
+      final id = layers.first['id'];
+      final hand2 = Timer.periodic(const Duration(milliseconds: 8), (_) {
+        LatencyProbe.mark('pointer');
+        final args = {
+          'edits': [
+            {'layer': id, 'property': 'position', 'value': [900.0 + m * 2, 500.0 + m], 'spread': 'offset'}
+          ]
+        };
+        m++;
+        if (direct) {
+          c.commandDirect('previewProperties', args, '$id:position');
+        } else {
+          c.command('previewProperties', args);
+        }
+      });
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 1500)));
+      hand2.cancel();
+      final stopped = LatencyProbe.events.where((e) => e.name == 'pointer').last.us;
+      final sw = Stopwatch()..start();
+      await c.commandDirect('commitPreview');
+      final settle = (LatencyProbe.events.where((e) => e.name == 'render-accepted').last.us - stopped) / 1000;
+      await frames(t, 8);
+      final sent = LatencyProbe.events.where((e) => e.name == 'cmd:previewProperties').length;
+      report.writeln('LAT live Inspector path, ${direct ? 'latest-wins (commandDirect)' : 'every tick queued (command)'}: $m inputs; $sent sent; after the hand stopped the last picture was taken in ${settle.toStringAsFixed(0)} ms');
+      await c.command('undo');
+      await frames(t, 6);
+    }
+
+    // 7. a long hand-pan at 125 Hz in real time: how far behind is the picture when the hand stops?
+    {
+      LatencyProbe.events.clear();
+      final hand3 = Timer.periodic(const Duration(milliseconds: 8), (_) {
+        LatencyProbe.mark('pointer');
+        session.panBy(const Offset(1, 0), size);
+      });
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 1500)));
+      hand3.cancel();
+      final stopped = LatencyProbe.events.where((e) => e.name == 'pointer').last.us;
+      final inputs = LatencyProbe.events.where((e) => e.name == 'pointer').length;
+      await frames(t, 20);
+      final accepted = LatencyProbe.events.where((e) => e.name == 'render-accepted' && e.us > stopped).toList();
+      final sent = LatencyProbe.events.where((e) => e.name == 'cmd:stageWindow').length;
+      final last = LatencyProbe.events.where((e) => e.name == 'render-accepted').last.us;
+      report.writeln('LAT stage pan, 125 Hz hand for 1.5 s: $inputs inputs; $sent window requests; the last picture was taken in ${((last - stopped) / 1000).toStringAsFixed(0)} ms after the hand stopped (${accepted.length} renders after it stopped)');
+    }
+
     // ignore: avoid_print
     print(report);
     File('/tmp/latency_report.txt').writeAsStringSync(report.toString());

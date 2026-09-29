@@ -112,11 +112,11 @@ class SessionEffectStore extends ParamStore {
     super.preview(id, v);
     _gesture = true;
     // One edit; the host spreads it over the selection (a drag by offset, a typed number on the axes that changed).
-    c.command('previewProperties', {
+    c.commandDirect('previewProperties', {
       'edits': [
         {'layer': layerId, 'property': id, 'value': row(id)['value'], 'spread': typing ? 'typed' : 'offset'},
       ],
-    });
+    }, '$layerId:$id');
   }
 
   @override
@@ -124,13 +124,13 @@ class SessionEffectStore extends ParamStore {
     if (frozen) return;
     super.commit(id);
     _gesture = false;
-    c.command('commitPreview');
+    c.commandDirect('commitPreview');
   }
 
   @override
   void cancelled(String id) {
     _gesture = false;
-    c.command('cancelPreview');
+    c.commandDirect('cancelPreview');
   }
 
   @override

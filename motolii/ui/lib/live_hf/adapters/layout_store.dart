@@ -84,11 +84,11 @@ class SessionLayoutStore extends LayoutStore {
     if (frozen) return;
     super.preview(id, v);
     _gesture = true;
-    c.command('previewProperties', {
+    c.commandDirect('previewProperties', {
       'edits': [
         {'layer': layerId, 'property': id, 'value': row(id)['value']},
       ],
-    });
+    }, '$layerId:$id');
   }
 
   /// Several rows as one edit: one preview carrying all of them, then the commit that follows.
@@ -99,17 +99,17 @@ class SessionLayoutStore extends LayoutStore {
       super.preview(e.key, e.value);
     }
     _gesture = true;
-    c.command('previewProperties', {
+    c.commandDirect('previewProperties', {
       'edits': [
         for (final e in values.entries) {'layer': layerId, 'property': e.key, 'value': row(e.key)['value']},
       ],
-    });
+    }, '$layerId:${values.keys.join(',')}');
   }
 
   @override
   void cancelled(String id) {
     _gesture = false;
-    c.command('cancelPreview');
+    c.commandDirect('cancelPreview');
   }
 
   @override
@@ -117,6 +117,6 @@ class SessionLayoutStore extends LayoutStore {
     if (frozen) return;
     super.commit(id);
     _gesture = false;
-    c.command('commitPreview');
+    c.commandDirect('commitPreview');
   }
 }

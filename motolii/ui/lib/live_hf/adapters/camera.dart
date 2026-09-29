@@ -62,11 +62,11 @@ class SessionCameraStore extends CameraStore {
     super.preview(id, v);
     if (frozen) return;
     _gesture = true;
-    c.command('previewProperties', {
+    c.commandDirect('previewProperties', {
       'edits': [
         {'layer': layer, 'property': id, 'value': row(id)['value']},
       ],
-    });
+    }, '$layer:$id');
   }
 
   @override
@@ -74,13 +74,13 @@ class SessionCameraStore extends CameraStore {
     super.commit(id);
     if (!_gesture) return;
     _gesture = false;
-    c.command('commitPreview');
+    c.commandDirect('commitPreview');
   }
 
   @override
   void cancelled(String id) {
     _gesture = false;
-    c.command('cancelPreview');
+    c.commandDirect('cancelPreview');
   }
 
   @override

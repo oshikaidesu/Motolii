@@ -64,10 +64,56 @@ mixin SessionCommands on SessionCore {
   Future<void> command(String op, [Map<String, dynamic> args = const {}]) {
     if (_disposed) return Future<void>.value();
     LatencyProbe.mark('cmd:$op');
-    if (op == 'save') {
-      return native('flushEditors').then((_) => _command(op, args));
+    Future<void> run() {
+      if (op == 'save') {
+        return native('flushEditors').then((_) => _command(op, args));
+      }
+      return _command(op, args);
     }
-    return _command(op, args);
+
+    // An edit that comes while continuous previews are still queued follows them: it never overtakes the last preview.
+    if (_directFlying || _direct.isNotEmpty) return _directDrained.then((_) => run());
+    return run();
+  }
+
+  // ---- direct manipulation: the newest preview wins, order is kept --------------------------------------------------
+  final _direct = <_DirectItem>[];
+  bool _directFlying = false;
+  Future<void> _directDrained = Future<void>.value();
+
+  /// A command sent while a hand is holding something (a preview, and the commit or cancel that ends it). Nothing waits for
+  /// the previous preview's render: while one is in flight, a newer preview *replaces* the one waiting behind it (only the
+  /// newest position of a gesture is worth drawing), and a commit, a cancel or any other command keeps its place after the
+  /// previews before it. Same-[key] previews are the same gesture; without a key an item is never replaced.
+  Future<void> commandDirect(String op, [Map<String, dynamic> args = const {}, String? key]) {
+    if (_disposed) return Future<void>.value();
+    LatencyProbe.mark('cmd:$op');
+    if (key != null && _direct.isNotEmpty && _direct.last.key == key && _direct.last.op == op) {
+      _direct.last.args = args;
+      return _direct.last.done.future;
+    }
+    final item = _DirectItem(op, args, key);
+    _direct.add(item);
+    if (!_directFlying) {
+      _directFlying = true;
+      _directDrained = _flyDirect();
+    }
+    return item.done.future;
+  }
+
+  Future<void> _flyDirect() async {
+    try {
+      while (_direct.isNotEmpty) {
+        final item = _direct.removeAt(0);
+        try {
+          await _command(item.op, item.args);
+        } finally {
+          item.done.complete();
+        }
+      }
+    } finally {
+      _directFlying = false;
+    }
   }
 
   Future<void> _command(String op, Map<String, dynamic> args) {
@@ -123,4 +169,12 @@ mixin SessionCommands on SessionCore {
   void cancelPreview() {
     command('cancelPreview');
   }
+}
+
+class _DirectItem {
+  _DirectItem(this.op, this.args, this.key);
+  final String op;
+  Map<String, dynamic> args;
+  final String? key;
+  final done = Completer<void>();
 }
