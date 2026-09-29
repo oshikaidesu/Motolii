@@ -5,9 +5,9 @@ import 'package:flutter/widgets.dart';
 import '../../hf/bp/common.dart';
 import '../../hf/desk/common.dart' show kInk, kWell;
 import '../../session/editor_session.dart';
-import '../../session/read_model.dart';
 import 'relations_model.dart';
 import '../../hf/neutral.dart';
+import 'relations_session.dart';
 
 /// Relations v0: the place to pick the things a source drives. The things at the current time are dots where they are
 /// on the Stage; a click, a Shift click or a lasso makes the member set. The relation itself is the links the document
@@ -23,26 +23,30 @@ class _RelationsPanelState extends State<RelationsPanel> {
   EditorSession get c => widget.controller;
   static const _watched = ['layers', 'selectedIds', 'frame', 'capabilities', 'documentRevision', 'width', 'height'];
 
-  /// The member set being chosen (for a draft, or when a relation's members are being edited).
-  Set<int>? picking;
+  /// What the Relations desk is doing lives in the RelationsSession (it outlives this panel); the panel keeps only
+  /// its picture: the dots and the lasso being drawn.
+  late final RelationsSession s = RelationsSession.of(c);
+  Set<int>? get picking => s.picking;
+  set picking(Set<int>? v) => s.picking = v;
+  Map<String, dynamic>? get draft => s.draft;
   List<Offset>? lasso;
-  Map<String, dynamic>? draft; // {source, destination, inMin, inMax, outMin, outMax}
   final focus = FocusNode(debugLabel: 'relations');
 
   @override
   void initState() {
     super.initState();
     c.slice('relations', _watched).addListener(_redraw);
-    c.relationDraft.addListener(_draftArrived);
     c.relationFocus.addListener(_redraw);
-    _draftArrived();
+    s.addListener(_redraw);
+    s.arrived.addListener(_arrived);
   }
 
   @override
   void dispose() {
     c.slice('relations', _watched).removeListener(_redraw);
-    c.relationDraft.removeListener(_draftArrived);
     c.relationFocus.removeListener(_redraw);
+    s.removeListener(_redraw);
+    s.arrived.removeListener(_arrived);
     focus.dispose();
     super.dispose();
   }
@@ -51,72 +55,20 @@ class _RelationsPanelState extends State<RelationsPanel> {
     if (mounted) setState(() {});
   }
 
-  void _draftArrived() {
-    final d = c.relationDraft.value;
-    if (d == null) return;
-    final sourceValue = _sourceValue(d);
-    setState(() {
-      draft = {
-        'source': Map<String, dynamic>.from(d),
-        'destination': null,
-        // a range around where the source is now, in its own units
-        'inMin': sourceValue - 300,
-        'inMax': sourceValue + 300,
-        'outMin': null,
-        'outMax': null,
-      };
-      picking = {};
-      lasso = null;
-    });
+  void _arrived() {
+    lasso = null;
     focus.requestFocus();
   }
 
-  double _sourceValue(Map<String, dynamic> src) {
-    final l = c.layers.where((l) => l['id'] == src['layer']).firstOrNull;
-    final row = l == null ? null : panelRows(l['properties']).where((r) => r['id'] == src['property']).firstOrNull;
-    final v = row?['value'];
-    if (v is List) return ((v[src['component'] as int? ?? 0]) as num).toDouble();
-    return (v as num?)?.toDouble() ?? 0;
-  }
-
-  // ---- what the document holds ------------------------------------------------------------------------------
-  List<Relation> get relations => relationsOf(c);
-  Relation? get focused {
-    final f = c.relationFocus.value;
-    if (f == null) return null;
-    return relations.where((r) => r.source.layer == f['layer'] && r.source.property == f['property'] && r.source.component == (f['component'] ?? 0)).firstOrNull;
-  }
-
-  // ---- the operations (the host's) --------------------------------------------------------------------------
+  double _sourceValue(Map<String, dynamic> src) => s.sourceValue(src);
+  List<Relation> get relations => s.relations;
+  Relation? get focused => s.focused;
   Future<void> _relate(RelationSource src, double inMin, double inMax, Set<int> members, String property, double outMin, double outMax) =>
-      c.command('relate', {
-        'source': {'layer': src.layer, 'property': src.property, 'component': src.component},
-        'inMin': inMin, 'inMax': inMax,
-        'members': members.toList()..sort(),
-        'property': property, 'outMin': outMin, 'outMax': outMax,
-      });
-
-  Future<void> _create() async {
-    final d = draft!;
-    final src = RelationSource.fromDraft(d['source'] as Map<String, dynamic>);
-    final prop = d['destination'] as String;
-    final unit = unitOf(prop);
-    await _relate(src, d['inMin'], d['inMax'], picking!, prop, unit.toDoc(d['outMin']), unit.toDoc(d['outMax']));
-    c.relationDraft.value = null;
-    c.relationFocus.value = {'layer': src.layer, 'property': src.property, 'component': src.component};
-    setState(() {
-      draft = null;
-      picking = null;
-    });
-  }
-
+      s.relate(src, inMin, inMax, members, property, outMin, outMax);
+  Future<void> _create() => s.create();
   void _cancel() {
-    c.relationDraft.value = null;
-    setState(() {
-      draft = null;
-      picking = null;
-      lasso = null;
-    });
+    lasso = null;
+    s.cancel();
   }
 
   // ---- the dots -------------------------------------------------------------------------------------------------
@@ -305,7 +257,7 @@ class _RelationsPanelState extends State<RelationsPanel> {
           GestureDetector(key: const ValueKey('relation-delete'), onTap: () async { for (final m in r.mappings) { await c.command('unrelate', {'layers': r.members, 'property': m.property}); } c.relationFocus.value = null; }, child: Text('✕', style: sans(12, c: kMuted))),
         ]),
         _label('SOURCE RANGE'),
-        _range('in', _shown('in', r.inMin, r.inMax).$1, _shown('in', r.inMin, r.inMax).$2, 'px', (lo, hi) => setState(() => _draft['in'] = (lo, hi)), onDone: () => _write(r), current: _sourceValue({'layer': r.source.layer, 'property': r.source.property, 'component': r.source.component})),
+        _range('in', _shown('in', r.inMin, r.inMax).$1, _shown('in', r.inMin, r.inMax).$2, 'px', (lo, hi) => s.scrubRange('in', lo, hi), onDone: () => _write(r), current: _sourceValue({'layer': r.source.layer, 'property': r.source.property, 'component': r.source.component})),
         _label('MEMBERS'),
         Row(children: [
           Expanded(child: Text('${(picking ?? r.members.toSet()).length} things', key: const ValueKey('relations-count'), style: sans(11.5, c: kInk))),
@@ -332,7 +284,7 @@ class _RelationsPanelState extends State<RelationsPanel> {
             Expanded(child: Text(labelOf(m.property), key: ValueKey('mapping-${m.property}'), style: sans(11.5, c: kInk, w: FontWeight.w600))),
             GestureDetector(key: ValueKey('mapping-remove-${m.property}'), onTap: () => c.command('unrelate', {'layers': r.members, 'property': m.property}), child: Text('✕', style: sans(11, c: kMuted))),
           ]),
-          _range('out-${m.property}', _shown('out-${m.property}', unitOf(m.property).fromDoc(m.outMin), unitOf(m.property).fromDoc(m.outMax)).$1, _shown('out-${m.property}', unitOf(m.property).fromDoc(m.outMin), unitOf(m.property).fromDoc(m.outMax)).$2, unitOf(m.property).suffix, (lo, hi) => setState(() => _draft['out-${m.property}'] = (lo, hi)), onDone: () => _write(r)),
+          _range('out-${m.property}', _shown('out-${m.property}', unitOf(m.property).fromDoc(m.outMin), unitOf(m.property).fromDoc(m.outMax)).$1, _shown('out-${m.property}', unitOf(m.property).fromDoc(m.outMin), unitOf(m.property).fromDoc(m.outMax)).$2, unitOf(m.property).suffix, (lo, hi) => s.scrubRange('out-${m.property}', lo, hi), onDone: () => _write(r)),
           const SizedBox(height: 6),
         ],
         Wrap(spacing: 5, runSpacing: 5, children: [
@@ -347,28 +299,8 @@ class _RelationsPanelState extends State<RelationsPanel> {
     );
   }
 
-  /// A range being scrubbed (by its key: 'in', or 'out-<property>'), shown until it is let go. A link has no preview,
-  /// so the relation is written once, on release, with every destination in one edit (one undo step).
-  final _draft = <String, (double, double)>{};
-  (double, double) _shown(String key, double lo, double hi) => _draft[key] ?? (lo, hi);
-
-  Future<void> _write(Relation r, {Set<int>? members}) async {
-    final (inMin, inMax) = _shown('in', r.inMin, r.inMax);
-    await c.command('relate', {
-      'source': {'layer': r.source.layer, 'property': r.source.property, 'component': r.source.component},
-      'inMin': inMin, 'inMax': inMax,
-      'members': (members ?? r.members.toSet()).toList()..sort(),
-      'mappings': [
-        for (final m in r.mappings)
-          () {
-            final u = unitOf(m.property);
-            final (lo, hi) = _draft.containsKey('out-${m.property}') ? (u.toDoc(_draft['out-${m.property}']!.$1), u.toDoc(_draft['out-${m.property}']!.$2)) : (m.outMin, m.outMax);
-            return {'property': m.property, 'outMin': lo, 'outMax': hi};
-          }(),
-      ],
-    });
-    if (mounted) setState(_draft.clear);
-  }
+  (double, double) _shown(String key, double lo, double hi) => s.shown(key, lo, hi);
+  Future<void> _write(Relation r, {Set<int>? members}) => s.write(r, members: members);
 
   /// Two ends of a range, each scrubbed, with the value now marked between them.
   Widget _range(String key, double lo, double hi, String suffix, void Function(double, double) change, {VoidCallback? onDone, double? current}) => Row(children: [

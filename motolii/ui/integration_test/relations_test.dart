@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 
 import 'package:motolii_stage5/live_hf/adapters/relations_model.dart';
+import 'package:motolii_stage5/live_hf/adapters/relations_session.dart';
 import 'package:motolii_stage5/live_hf/adapters/timeline.dart';
 import 'package:motolii_stage5/live_hf/main.dart' as app;
 
@@ -36,14 +37,10 @@ void main() {
     await frames(t);
     expect(relationsOf(c).where((r) => r.source.layer == src).single.mappings, hasLength(2));
 
-    // the panel's range scrub, let go: one relate carrying every destination (a link has no preview)
-    await c.command('relate', {
-      ...relate('opacity', 1, inMin: 10, inMax: 200)..remove('property')..remove('outMin')..remove('outMax'),
-      'mappings': [
-        {'property': 'opacity', 'outMin': 0.0, 'outMax': 1.0},
-        {'property': 'rotation', 'outMin': 0.0, 'outMax': 90.0},
-      ],
-    });
+    // the panel's range scrub, let go: the RelationsSession writes every destination at once (a link has no preview)
+    final rs = RelationsSession.of(c);
+    rs.scrubRange('in', 10, 200);
+    await rs.write(relationsOf(c).where((r) => r.source.layer == src).single);
     await frames(t);
     final after = relationsOf(c).where((r) => r.source.layer == src).toList();
     expect(after, hasLength(1), reason: 'both destinations carry the new source range');
