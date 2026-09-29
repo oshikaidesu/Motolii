@@ -97,6 +97,13 @@ fn faces_json(c: &Catalog, ids: &[String]) -> J {
     json!({ "faces": out })
 }
 
+/// The catalog for a caller inside the host (a work looking up its missing media), under the same lock the JSON door takes.
+pub(crate) fn with<R>(f: impl FnOnce(&mut Catalog) -> R) -> Result<R, String> {
+    let mut guard = shared().lock().map_err(|_| "catalog lock poisoned".to_owned())?;
+    let c = guard.as_mut().map_err(|e| e.clone())?;
+    Ok(f(c))
+}
+
 /// One request. Errors come back as `{"error": …}`; nothing here panics into the host.
 pub(crate) fn request(text: &str) -> String {
     let reply = std::panic::catch_unwind(|| handle(text)).unwrap_or_else(|_| Err("catalog panic".into()));
@@ -193,17 +200,24 @@ fn handle(text: &str) -> Result<J, String> {
     }
 }
 
+/// Tests share one process and so one catalog: it lives in a folder made once for them, never in a person's state.
+#[cfg(test)]
+pub(crate) fn use_test_state() {
+    static DIR: OnceLock<tempfile::TempDir> = OnceLock::new();
+    let dir = DIR.get_or_init(|| tempfile::tempdir().unwrap());
+    std::env::set_var("MOTOLII_STATE_DIR", dir.path());
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn an_unknown_op_and_bad_json_answer_with_an_error_and_do_not_panic() {
-        let dir = tempfile::tempdir().unwrap();
-        std::env::set_var("MOTOLII_STATE_DIR", dir.path());
+        use_test_state();
         assert!(request("{not json").contains("error"));
         assert!(request(r#"{"op":"nope"}"#).contains("Unknown catalog op"));
         let listed: J = serde_json::from_str(&request(r#"{"op":"sources"}"#)).unwrap();
-        assert!(listed["sources"].as_array().unwrap().is_empty());
+        assert!(listed["sources"].is_array());
     }
 }

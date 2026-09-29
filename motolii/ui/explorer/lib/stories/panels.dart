@@ -73,10 +73,20 @@ final browserStories = <Story>[
 
 /// The real Catalog over the explorer's own fixtures: two registered folders (media/ and the GLB models), indexed by the
 /// host, queried by the host; the Browser only asks and draws. State is the explorer's own (run.sh sets MOTOLII_STATE_DIR).
-Future<void> _registerFixtureSources(EditorSession c) async {
+Future<void> _registerFixtureSources(EditorSession c) => _reconcileSources(c, [(fixture('media'), 'Media'), (fixture('models/glb'), 'Models')]);
+
+/// The folders as they nest on disk (Models holds glb/ and the raw glTF folders with their textures): folder browsing.
+Future<void> _registerNestedSources(EditorSession c) => _reconcileSources(c, [(fixture('media'), 'Media'), (fixture('models'), 'Models')]);
+
+/// Makes the catalog's sources exactly these (by name and root), then indexes: a story starts from a known catalog.
+Future<void> _reconcileSources(EditorSession c, List<(String, String)> wanted) async {
   final s = CatalogSession(c);
   await s.load();
-  for (final (path, name) in [(fixture('media'), 'Media'), (fixture('models/glb'), 'Models')]) {
+  for (final have in s.sources) {
+    final want = wanted.where((w) => w.$2 == have.name);
+    if (want.isEmpty || Directory(want.first.$1).resolveSymbolicLinksSync() != have.root) await s.removeSource(have.id);
+  }
+  for (final (path, name) in wanted) {
     if (!s.sources.any((x) => x.name == name)) await s.addSource(path, name: name);
   }
   await s.refresh();
@@ -90,8 +100,9 @@ Widget _catalogBrowser(EditorSession c) => _CatalogHost(c);
 
 
 class _CatalogHost extends StatefulWidget {
-  const _CatalogHost(this.c, {this.view = BrowserView.thumbnail, this.startOn, this.startOpen = false});
+  const _CatalogHost(this.c, {this.view = BrowserView.thumbnail, this.startOn, this.startOpen = false, this.startSource});
   final EditorSession c;
+  final String? startSource;
   final BrowserView view;
   final String? startOn;
   final bool startOpen;
@@ -100,7 +111,16 @@ class _CatalogHost extends StatefulWidget {
 }
 
 class _CatalogHostState extends State<_CatalogHost> {
-  late final CatalogSession session = CatalogSession(widget.c)..load();
+  late final CatalogSession session = CatalogSession(widget.c);
+  @override
+  void initState() {
+    super.initState();
+    session.load().then((_) {
+      final named = session.sources.where((s) => s.name == widget.startSource);
+      if (named.isNotEmpty) session.choose(sources: () => {named.first.id});
+    });
+  }
+
   @override
   void dispose() {
     session.dispose();
@@ -117,6 +137,7 @@ final catalogStories = <Story>[
   Story('Browser catalog, preview clip', Scene('night-sky.rrd', inputs: _registerFixtureSources), (c) => _CatalogHost(c, startOn: 'coast-drift.mp4', startOpen: true), width: 420, height: 800),
   Story('Browser catalog, preview model', Scene('night-sky.rrd', inputs: _registerFixtureSources), (c) => _CatalogHost(c, startOn: 'Camera_01.glb', startOpen: true), width: 420, height: 800),
   Story('Browser catalog, preview sound wide', Scene('night-sky.rrd', inputs: _registerFixtureSources), (c) => _CatalogHost(c, startOn: 'drum-loop.wav', startOpen: true), width: 640, height: 500),
+  Story('Browser catalog, folders', Scene('night-sky.rrd', inputs: _registerNestedSources), (c) => _CatalogHost(c, view: BrowserView.list, startSource: 'Models'), width: 420, height: 700),
   Story('Browser catalog, list', Scene('night-sky.rrd', inputs: _registerFixtureSources), (c) => _CatalogHost(c, view: BrowserView.list, startOn: 'afterglow.jpg'), width: 420, height: 700),
   Story('Browser catalog, explore', Scene('night-sky.rrd', inputs: _registerFixtureSources), (c) => _CatalogHost(c, view: BrowserView.explore, startOn: 'afterglow.jpg'), width: 420, height: 700),
 ];

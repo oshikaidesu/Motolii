@@ -56,6 +56,8 @@ pub struct EditorRuntime {
     /// host の再生 pulse が既に提出した時刻。Flutter の vsync ではなく native
     /// の時計がこれを進め、同じ作中コマを二度 CPU で解かない。
     playback_rendered_frame: Option<i64>,
+    /// What the last look through the catalog found for the missing media of this work (see `port/relink.rs`).
+    relink_report: Option<serde_json::Value>,
 }
 
 pub use frames::FrameReady;
@@ -95,7 +97,7 @@ impl EditorRuntime {
         Ok(Self {
             doc, engine, viewer, clipboard: Default::default(),
             path: if path.is_empty() { None } else { Some(path.into()) }, saved_signature,
-            exporter: Default::default(), freezer: Default::default(), device_id,
+            exporter: Default::default(), freezer: Default::default(), relink_report: None, device_id,
             render_count: 0, render_ms: 0.0, reply: CString::new("{}").unwrap(), error: None,
             preview: None, preview_tag: None, stage_drag: None,
             snapshot_cache: Default::default(), full_status_revision: Default::default(),

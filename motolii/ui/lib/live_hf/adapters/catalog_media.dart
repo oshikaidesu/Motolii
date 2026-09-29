@@ -49,6 +49,7 @@ class CatalogMedia extends StatelessWidget {
               _Row(label: 'Types', children: [
                 for (final (label, kind) in _types) _Chip(label, kind == null ? session.kinds.isEmpty : session.kinds.contains(kind), () => session.choose(kinds: kind == null ? {} : {kind})),
               ]),
+              if (session.folderSource != null) _Folders(session),
               Container(
                 height: UiMetrics.control + 4,
                 margin: const EdgeInsets.fromLTRB(6, 3, 6, 3),
@@ -133,4 +134,23 @@ class _SearchState extends State<_Search> {
         backgroundCursorColor: N.g00,
         onChanged: (v) => widget.session.choose(text: v),
       );
+}
+
+/// Folder browsing: where in the source the result set is taken from. A crumb goes up; a folder goes in. It is one more
+/// way to make the result set (Where), not another browser: the views below read the same set.
+class _Folders extends StatelessWidget {
+  const _Folders(this.session);
+  final CatalogSession session;
+  @override
+  Widget build(BuildContext context) {
+    final source = session.folderSource!;
+    final name = session.sources.where((s) => s.id == source).map((s) => s.name).firstOrNull ?? '';
+    final path = (session.folder?.prefix ?? '').split('/').where((p) => p.isNotEmpty).toList();
+    void go(List<String> parts) => session.choose(folder: () => (source: source, prefix: parts.join('/')));
+    return _Row(label: 'Folder', children: [
+      _Chip(name, path.isEmpty, () => go(const [])),
+      for (final (i, part) in path.indexed) _Chip('/ $part', i == path.length - 1, () => go(path.sublist(0, i + 1))),
+      for (final f in session.subfolders) _Chip('${f.name} ${f.assets}', false, () => go([...path, f.name]), dim: true),
+    ]);
+  }
 }

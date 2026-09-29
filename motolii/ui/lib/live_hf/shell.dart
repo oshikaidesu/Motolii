@@ -17,6 +17,8 @@ import 'keys.dart';
 import 'ui_scale.dart';
 import 'workspace.dart';
 
+String _notice(String effects, String relink) => effects.isNotEmpty ? effects : relink;
+
 /// A path: once the document is open, the 1536x1024 default workspace is written there as a PNG for review.
 const _shot = String.fromEnvironment('MOTOLII_SHOT');
 
@@ -39,8 +41,8 @@ class _LiveShellState extends State<LiveShell> {
 
   /// Every operation error and document notice, for the Console (freeze progress and effect catalogue notices, as
   /// the Classic status line reads them).
-  late final notice = c.slice('notice', const [], derived: () => freezeNotice(c.state) ?? effectsNotice(c.state));
-  late final console = ConsoleLog(c, notice, (doc) => freezeNotice(doc) ?? effectsNotice(doc));
+  late final notice = c.slice('notice', const [], derived: () => freezeNotice(c.state) ?? _notice(effectsNotice(c.state), relinkNotice(c.state)));
+  late final console = ConsoleLog(c, notice, (doc) => freezeNotice(doc) ?? _notice(effectsNotice(doc), relinkNotice(doc)));
 
   @override
   void initState() {
@@ -66,6 +68,12 @@ class _LiveShellState extends State<LiveShell> {
     scene = await EffectScene.build();
     await c.initialize();
     if (!mounted) return;
+    // media that is not where the work last saw it: looked for in the catalog before it is left missing
+    if (c.supports('relinkFromCatalog') && EditorSession.maps(c.state['assets']).any((a) => a['missing'] == true)) {
+      try {
+        await c.command('relinkFromCatalog');
+      } catch (_) {}
+    }
     workspace = LiveWorkspace(c: c, scene: scene, console: console, onDetach: _detach);
     LiveUiScale.instance.persist = (v) => c.storeSetting(LiveUiScale.settingsKey, v);
     try {

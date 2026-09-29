@@ -25,7 +25,9 @@ use std::path::{Path, PathBuf};
 
 use rusqlite::{params, Connection, OptionalExtension};
 
-pub(crate) use bridge::request;
+pub(crate) use bridge::{request, with};
+#[cfg(test)]
+pub(crate) use bridge::use_test_state;
 pub(crate) use query::{Entry, FolderCount, Query, ResultSet, Sort};
 pub(crate) use resolve::{Resolution, SavedRef};
 

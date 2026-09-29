@@ -54,6 +54,9 @@ class CatalogSession extends ChangeNotifier implements ResultSource {
   String sort = 'name';
   bool descending = false;
 
+  /// The sub-folders directly under the chosen folder (the owner's answer), for folder browsing.
+  List<({String name, int assets})> subfolders = const [];
+
   /// Faces by the entry's `faceKey` (it changes when the file does): {thumbnail, peaks, facts}.
   final faces = <String, Map<String, dynamic>>{};
   var _asked = <String>{};
@@ -133,12 +136,27 @@ class CatalogSession extends ChangeNotifier implements ResultSource {
       'limit': 2000,
     });
     if (mine != _sequence) return; // a newer choice was made while this one was being answered
+    await _folders();
     if (reply['error'] != null) throw StateError('${reply['error']}');
     revision = (reply['revision'] as num).toInt();
     total = (reply['total'] as num).toInt();
     entries = [for (final e in reply['entries'] as List) CatalogEntry(EditorSession.map(e))];
     unawaited(_askFaces(mine));
   }
+
+  /// Folder browsing needs one source in view: its sub-folders under the folder chosen (none when several are).
+  Future<void> _folders() async {
+    final only = folder?.source ?? ((chosenSources?.length ?? 0) == 1 ? chosenSources!.first : (sources.where((s) => s.enabled).length == 1 ? sources.firstWhere((s) => s.enabled).id : null));
+    if (only == null) {
+      subfolders = const [];
+      return;
+    }
+    final reply = await _call({'op': 'folders', 'source': only, 'prefix': folder?.prefix ?? ''});
+    subfolders = [for (final f in (reply['folders'] as List? ?? const [])) (name: '${EditorSession.map(f)['name']}', assets: (EditorSession.map(f)['assets'] as num).toInt())];
+  }
+
+  /// The source folder browsing is in (the chosen folder's, else the only one chosen), if any.
+  String? get folderSource => folder?.source ?? ((chosenSources?.length ?? 0) == 1 ? chosenSources!.first : (sources.where((s) => s.enabled).length == 1 ? sources.firstWhere((s) => s.enabled).id : null));
 
   /// Faces for what is in the result set that has none yet, a few at a time (the owner makes them from the files with
   /// the routines the shelf already uses; each is cached under the file's own key).
