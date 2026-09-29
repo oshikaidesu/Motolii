@@ -82,34 +82,33 @@ class LiveWorkspace {
         'Relations': PanelDef('Relations', 'Relations', () => RelationsPanel(controller: c), glyph: HG.attach, minSize: 240),
         'Web': PanelDef('Web', 'Web', () => NewWeb(controller: c), glyph: HG.search, minSize: 220),
       },
-      // Weights are the REFERENCE frame's own rectangles (`proto_hf/shell_face.dart`'s 1536×1024 geometry),
-      // not tuned by eye: Browser 324, the Stage/Inspector row 779+387, that row 632 tall against
-      // Timeline's 291 — Dock adds move/resize/split/detach/persist over this shape, it does not redraw
-      // it. The desks (Blend/Depth/Ease/History/Notes) have no seat of their own in the reference: they
-      // are not part of the default topology, only PanelDefs `activate()` can still open on demand.
-      (item) => DockingRow([
-        DockingTabs([
-          item('Create'),
-          item('Effects'),
-          item('Colors'),
-          item('Fonts'),
-          item('Media'),
-        ], weight: .21),
-        DockingColumn([
-          DockingRow([
-            DockingTabs([
-              item('Stage'),
-              item('Camera'),
-            ], weight: .668),
-            item('Inspector', weight: .332),
-          ], weight: .685),
-          DockingTabs([item('Timeline'), item('Graph'), item('Console')], weight: .315),
-        ], weight: .79),
+      // Browser, Stage and Inspector in a row over Timeline and the Desk (2026-09-29, the user's arrangement): the Browser no
+      // longer runs the full height, and the desks (Ease, Depth, Blend, History, Notes) have a seat of their own.
+      (item) => DockingColumn([
+        DockingRow([
+          DockingTabs([
+            item('Create'),
+            item('Effects'),
+            item('Colors'),
+            item('Fonts'),
+            item('Media'),
+          ], weight: .22),
+          DockingTabs([
+            item('Stage'),
+            item('Camera'),
+          ], weight: .50),
+          item('Inspector', weight: .28),
+        ], weight: .68),
+        DockingRow([
+          DockingTabs([item('Timeline'), item('Graph'), item('Console')], weight: .81),
+          // the Desk is square-based: as wide as the row is tall at a MacBook's default window (0.32 of the height, 0.19 of the width)
+          DockingTabs([item('Ease'), item('Depth'), item('Blend'), item('History'), item('Notes')], weight: .19),
+        ], weight: .32),
       ]),
       onDetach: onDetach,
       allowClose: false,
       // the Home panels stay (Reset Layout brings them back anyway); a panel opened on demand closes (Classic WS-04/05)
-      closable: (id) => !const {'Create', 'Effects', 'Colors', 'Fonts', 'Media', 'Stage', 'Camera', 'Inspector', 'Timeline', 'Graph', 'Console'}.contains(id),
+      closable: (id) => !const {'Create', 'Effects', 'Colors', 'Fonts', 'Media', 'Stage', 'Camera', 'Inspector', 'Timeline', 'Graph', 'Console', 'Ease', 'Depth', 'Blend', 'History', 'Notes'}.contains(id),
       seats: true,
     );
   }
