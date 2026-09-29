@@ -10,7 +10,6 @@ import '../../hf/glyphs.dart';
 import '../../hf/neutral.dart';
 import '../../hf/shell/menu.dart' show showHfMenu;
 import '../../hf/shell/place.dart' show H, Fam;
-import '../../hf/shell/sheet.dart' show HfAction;
 import '../../input/viewport_motion.dart';
 import '../../session/editor_session.dart';
 import '../../timeline_core/layout.dart' show TrackRow;
@@ -25,10 +24,72 @@ class LiveTimelineTools extends StatelessWidget {
   Widget build(BuildContext context) => ListenableBuilder(
         listenable: c.document,
         builder: (context, _) => Row(mainAxisSize: MainAxisSize.min, children: [
-          HfAction('Split', onTap: c.supports('split') ? () => c.command('split') : null),
-          HfAction('Marker', onTap: c.supports('addMarker') ? () => c.command('addMarker') : null),
+          _Tool('Split', _ToolGlyph.split, c.supports('split') ? () => c.command('split') : null),
+          _Tool('Marker', _ToolGlyph.marker, c.supports('addMarker') ? () => c.command('addMarker') : null),
+          const SizedBox(width: 4),
         ]),
       );
+}
+
+enum _ToolGlyph { split, marker }
+
+/// A quiet strip tool: a small picture of what it does and its name, no box; it lights under the pointer.
+class _Tool extends StatefulWidget {
+  const _Tool(this.label, this.glyph, this.onTap);
+  final String label;
+  final _ToolGlyph glyph;
+  final VoidCallback? onTap;
+  @override
+  State<_Tool> createState() => _ToolState();
+}
+
+class _ToolState extends State<_Tool> {
+  bool _over = false;
+  @override
+  Widget build(BuildContext context) {
+    final live = widget.onTap != null;
+    final ink = !live ? N.g33 : (_over ? N.g95 : N.g63);
+    return MouseRegion(
+      cursor: live ? SystemMouseCursors.click : SystemMouseCursors.basic,
+      onEnter: (_) => setState(() => _over = true),
+      onExit: (_) => setState(() => _over = false),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: widget.onTap,
+        child: Container(
+          height: 24,
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          decoration: BoxDecoration(color: _over && live ? N.g15 : null, borderRadius: BorderRadius.circular(3)),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            SizedBox.square(dimension: 11, child: CustomPaint(painter: _ToolPainter(widget.glyph, live ? (widget.glyph == _ToolGlyph.marker ? H.record : ink) : N.g33))),
+            const SizedBox(width: 6),
+            Text(widget.label, style: sans(11.5, c: ink, w: FontWeight.w500)),
+          ]),
+        ),
+      ),
+    );
+  }
+}
+
+class _ToolPainter extends CustomPainter {
+  _ToolPainter(this.g, this.color);
+  final _ToolGlyph g;
+  final Color color;
+  @override
+  void paint(Canvas cv, Size s) {
+    final w = s.width, h = s.height, p = Paint()..color = color;
+    switch (g) {
+      case _ToolGlyph.marker: // the marker's own head, as the ruler draws it
+        cv.drawPath(Path()..moveTo(w * .2, h * .1)..lineTo(w * .8, h * .1)..lineTo(w * .8, h * .6)..lineTo(w * .5, h * .9)..lineTo(w * .2, h * .6)..close(), p);
+      case _ToolGlyph.split: // a bar cut where the playhead stands
+        cv.drawRRect(RRect.fromLTRBR(0, h * .32, w * .42, h * .68, const Radius.circular(1)), p);
+        cv.drawRRect(RRect.fromLTRBR(w * .58, h * .32, w, h * .68, const Radius.circular(1)), p);
+        cv.drawRect(Rect.fromLTWH(w * .5 - .5, 0, 1, h), p);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_ToolPainter o) => o.g != g || o.color != color;
 }
 
 /// A layer's colour, by its id so it stays with the layer wherever it scrolls.
@@ -70,8 +131,10 @@ class _LiveTimelineState extends State<LiveTimeline> {
   }
 
   // ---- the skin's transforms -------------------------------------------------------------------------------------
-  double xOf(num frame) => labelW + (frame - s.startFrame) * s.pixelsPerFrame;
-  double frameAt(double x) => s.startFrame + (x - labelW) / s.pixelsPerFrame;
+  /// Frame 0 sits a little in from the name column, so the first bar and the playhead are not pressed against it.
+  static const inset = 12.0;
+  double xOf(num frame) => labelW + inset + (frame - s.startFrame) * s.pixelsPerFrame;
+  double frameAt(double x) => s.startFrame + (x - labelW - inset) / s.pixelsPerFrame;
   double yOf(int row) => rulerH + (row - s.firstRow) * rowH;
   double rowAt(double y) => s.firstRow + (y - rulerH) / rowH;
 
@@ -383,7 +446,7 @@ class _LiveTimelineState extends State<LiveTimeline> {
                 overflow: TextOverflow.ellipsis,
                 style: lane
                     ? sans(11, c: N.g63)
-                    : sans(12, c: c.selectedIds.contains(r.id) ? N.g100 : N.g82, w: group || c.selectedIds.contains(r.id) ? FontWeight.w600 : FontWeight.w400),
+                    : sans(12, c: r.layer['hidden'] == true ? N.g44 : (c.selectedIds.contains(r.id) ? N.g100 : N.g82), w: group || c.selectedIds.contains(r.id) ? FontWeight.w600 : FontWeight.w400),
               ),
             ),
           ),
@@ -395,22 +458,26 @@ class _LiveTimelineState extends State<LiveTimeline> {
         width: labelW,
         height: rowH,
         child: Row(children: [
-          const SizedBox(width: 6),
+          // the chosen layer's own colour, a thin edge at the column's left
+          Container(width: 2, height: rowH, color: !lane && c.selectedIds.contains(r.id) ? (r.isGroup ? N.g63 : _family(r.id).t) : null),
+          const SizedBox(width: 4),
           if (lane) ...[
-            SizedBox(width: 48 + 6 + indent + 18),
+            SizedBox(width: indent + 14 + 18 + 4),
             name,
             mark(_Diamond(keyed: r.keys.any((k) => (k['frame'] as num).round() == c.frame.value)), () => s.toggleKeyHere(i), w: 24),
+            const SizedBox(width: 24),
           ] else ...[
-            mark(glyph(r.layer['hidden'] == true ? HG.eyeOff : HG.eye, r.layer['hidden'] == true ? N.g38 : N.g63, size: 12), () => s.toggleSwitch(i, 'hidden')),
-            mark(r.layer['solo'] == true || quiet ? glyph(HG.solo, N.g38, on: r.layer['solo'] == true) : const SizedBox(), () => s.toggleSwitch(i, 'solo')),
-            mark(r.layer['locked'] == true || quiet ? glyph(HG.lock, N.g38, on: r.layer['locked'] == true) : const SizedBox(), () => s.toggleSwitch(i, 'locked')),
-            SizedBox(width: 6 + indent),
+            SizedBox(width: indent),
             mark(_Twirl(open: group ? r.groupOpen : r.lanesOpen, strong: group), () => group ? s.toggleFold(i) : s.toggleLanes(i), w: 14),
             SizedBox(width: 18, child: Center(child: _Chip(r))),
             const SizedBox(width: 4),
             name,
             if (group) mark(_Twirl(open: r.lanesOpen, strong: false), () => s.toggleLanes(i), w: 14),
-            mark(r.layer['clipToBelow'] == true || quiet ? glyph(HG.crop, N.g38, on: r.layer['clipToBelow'] == true) : const SizedBox(), () => s.toggleSwitch(i, 'clipToBelow'), w: 22),
+            // switches in one quiet column at the right: always in the same place, lit only when on
+            mark(r.layer['clipToBelow'] == true || quiet ? glyph(HG.crop, N.g38, on: r.layer['clipToBelow'] == true) : const SizedBox(), () => s.toggleSwitch(i, 'clipToBelow'), w: 18),
+            mark(glyph(r.layer['hidden'] == true ? HG.eyeOff : HG.eye, r.layer['hidden'] == true ? N.g76 : (quiet ? N.g56 : N.g38), size: 12), () => s.toggleSwitch(i, 'hidden')),
+            mark(glyph(HG.solo, quiet ? N.g44 : N.g26, on: r.layer['solo'] == true), () => s.toggleSwitch(i, 'solo')),
+            mark(glyph(HG.lock, quiet ? N.g44 : N.g26, on: r.layer['locked'] == true), () => s.toggleSwitch(i, 'locked')),
           ],
           const SizedBox(width: 2),
         ]),
@@ -497,19 +564,23 @@ class _RowsPainter extends CustomPainter {
     final major = steps.firstWhere((f) => f * s.pixelsPerFrame >= 70, orElse: () => steps.last);
     final minor = steps.lastWhere((f) => f < major && major % f == 0 && f * s.pixelsPerFrame >= 8, orElse: () => major);
     final last = t.frameAt(size.width).ceil();
+    final grid = <double>[];
+    final end = t.xOf((c.state['durationFrames'] as num? ?? 1 << 30).toDouble());
     for (var f = math.max(0, s.startFrame.floor() ~/ minor * minor); f <= last; f += minor) {
       final x = t.xOf(f);
       if (x < L) continue;
       final isMajor = f % major == 0;
-      cv.drawRect(Rect.fromLTWH(x.roundToDouble(), isMajor ? top - 8 : top - 4, 1, isMajor ? 8 : 4), fill..color = isMajor ? N.g44 : N.g26);
+      cv.drawRect(Rect.fromLTWH(x.roundToDouble(), isMajor ? top - 7 : top - 3, 1, isMajor ? 7 : 3), fill..color = isMajor ? N.g44 : N.g26);
+      if (isMajor) grid.add(x.roundToDouble());
       if (isMajor) {
         final m = f ~/ (rate * 60), sec = (f ~/ rate) % 60, ff = f % rate;
         final label = major < rate ? '${sec.toString().padLeft(2, '0')}:${ff.toString().padLeft(2, '0')}' : '${m.toString().padLeft(2, '0')}:${sec.toString().padLeft(2, '0')}';
-        final tp = TextPainter(text: TextSpan(text: label, style: mono(10, c: N.g63)), textDirection: TextDirection.ltr)..layout();
-        tp.paint(cv, Offset(x + 4, 4));
+        final tp = TextPainter(text: TextSpan(text: label, style: mono(9.5, c: N.g56)), textDirection: TextDirection.ltr)..layout();
+        tp.paint(cv, Offset(x + 3, 2));
         tp.dispose();
       }
     }
+    cv.drawRect(Rect.fromLTWH(L, top - 1, size.width - L, 1), fill..color = N.g15);
     final picked = s.selectedKeys;
     final moving = s.gesture == TlGesture.keys ? s.initialKeys : s.settlingKeys;
     final shift = s.gesture == TlGesture.keys ? s.deltaFrames : s.settlingDelta;
@@ -524,6 +595,11 @@ class _RowsPainter extends CustomPainter {
       cv.drawRect(Rect.fromLTWH(0, y + rh - 1, size.width, 1), fill..color = N.g13);
       cv.save();
       cv.clipRect(Rect.fromLTWH(L, y, size.width - L, rh));
+      // under the bars: past the composition's end is darker, and each second has a faint line
+      if (end < size.width) cv.drawRect(Rect.fromLTRB(end, y, size.width, y + rh - 1), fill..color = N.g00.withValues(alpha: .22));
+      for (final gx in grid) {
+        cv.drawRect(Rect.fromLTWH(gx, y, 1, rh - 1), fill..color = N.glaze4);
+      }
       double keyX(Map<String, dynamic> k) {
         final f = (k['frame'] as num).toInt();
         final carried = moving.any((m) => tlSameKey(m, k) || (m['layer'] == k['layer'] && m['frame'] == k['frame'] && r.property == null));
@@ -535,18 +611,25 @@ class _RowsPainter extends CustomPainter {
         // while a bar is held the host's preview is already in the layer (the Stage shows the same)
         final timing = r.layer;
         final start = (timing['start'] as num? ?? 0).toDouble(), end = start + (timing['duration'] as num? ?? 0).toDouble();
-        // quiet until chosen: a wall of full-colour bars out-shouts the work; the chosen layer takes its full colour
+        // quiet until chosen, without going muddy: the hue and lightness stay, the colour is a little calmer; the chosen
+        // layer takes its full colour and a light edge
         final tone = r.isGroup ? N.g38 : _family(r.id).t;
-        final colour = r.layer['hidden'] == true ? N.g20 : (selected ? tone : Color.lerp(N.g10, tone, t.hover == i ? .62 : .5)!);
+        final hsl = HSLColor.fromColor(tone);
+        final calm = hsl.withSaturation(hsl.saturation * (t.hover == i ? .8 : .62)).withLightness(hsl.lightness * .86).toColor();
+        final colour = r.layer['hidden'] == true ? N.g20 : (selected ? tone : calm);
         final ghost = r.layer['ghost'];
         if (ghost is num && ghost != 0) {
           final a = ghost > 0 ? end : math.max(0.0, start + ghost), b = ghost > 0 ? end + ghost : start;
-          cv.drawRRect(RRect.fromRectAndRadius(Rect.fromLTRB(t.xOf(a), cy - 6, t.xOf(b), cy + 6), const Radius.circular(3)), fill..color = colour.withValues(alpha: .28));
+          cv.drawRRect(RRect.fromRectAndRadius(Rect.fromLTRB(t.xOf(a), cy - 7, t.xOf(b), cy + 7), const Radius.circular(3)), fill..color = colour.withValues(alpha: .28));
         }
         if (r.layer['kind'] != 'Camera') {
           // however short in time, a bar is drawn at least 3 px, so it can be seen where it is grabbed
-          final bar = Rect.fromLTRB(t.xOf(start), cy - 6, math.max(t.xOf(end), t.xOf(start) + 3), cy + 6);
+          final bar = Rect.fromLTRB(t.xOf(start), cy - 7, math.max(t.xOf(end), t.xOf(start) + 3), cy + 7);
           cv.drawRRect(RRect.fromRectAndRadius(bar, const Radius.circular(3)), fill..color = colour);
+          if (selected) cv.drawRRect(RRect.fromRectAndRadius(bar.deflate(.5), const Radius.circular(2.5)), Paint()..style = PaintingStyle.stroke..color = N.g100.withValues(alpha: .55));
+        } else {
+          // a camera has no picture of its own: a hairline for its time, so its keys sit on something
+          cv.drawRect(Rect.fromLTRB(t.xOf(start), cy - .5, t.xOf(end), cy + .5), fill..color = selected ? N.g51 : N.g26);
         }
         final wave = waves[r.id];
         if (wave != null && wave.isNotEmpty) {
@@ -561,10 +644,14 @@ class _RowsPainter extends CustomPainter {
         }
         if (!r.lanesOpen) {
           final byFrame = <int, Map<String, dynamic>>{for (final k in r.allKeys) (k['frame'] as num).toInt(): k};
+          // where it moves: a faint line from its first key to its last
+          if (byFrame.length > 1) {
+            final xs = [for (final k in byFrame.values) keyX(k)]..sort();
+            cv.drawRect(Rect.fromLTRB(xs.first, cy - .5, xs.last, cy + .5), fill..color = N.g100.withValues(alpha: selected ? .45 : .28));
+          }
           for (final k in byFrame.values) {
             final on = r.allKeys.where((a) => a['frame'] == k['frame']).any(isPicked);
-            final onBar = r.layer['kind'] != 'Camera';
-            _diamond(cv, Offset(keyX(k), cy), on ? 4.6 : 3.6, on ? accent : (onBar && selected ? N.g10 : N.g86), on ? N.g100 : null);
+            _diamond(cv, Offset(keyX(k), cy), on ? 4.8 : 3.8, on ? accent : N.g95, on ? N.g100 : N.g07);
           }
         }
       } else {
@@ -590,13 +677,21 @@ class _RowsPainter extends CustomPainter {
       }
       cv.restore();
     }
+    final below = t.yOf(s.rows.length);
+    if (below < size.height) {
+      if (end < size.width) cv.drawRect(Rect.fromLTRB(end, below, size.width, size.height), fill..color = N.g00.withValues(alpha: .22));
+      for (final gx in grid) {
+        cv.drawRect(Rect.fromLTWH(gx, below, 1, size.height - below), fill..color = N.glaze4);
+      }
+    }
+    if (end > L && end < size.width) cv.drawRect(Rect.fromLTWH(end, top, 1, size.height - top), fill..color = N.g26);
     // markers
     for (final m in EditorSession.maps(c.state['markers'])) {
       final id = '${m['id']}';
       final x = t.xOf(s.markerDrag?.$1 == id ? s.markerDrag!.$2 : (m['frame'] as num).toDouble());
       if (x < L - 6) continue;
-      cv.drawRect(Rect.fromLTWH(x - .5, top, 1, size.height - top), fill..color = H.record.withValues(alpha: .45));
-      cv.drawPath(Path()..moveTo(x - 4, top - 10)..lineTo(x + 4, top - 10)..lineTo(x + 4, top - 4)..lineTo(x, top)..lineTo(x - 4, top - 4)..close(), fill..color = H.record);
+      cv.drawRect(Rect.fromLTWH(x - .5, top, 1, size.height - top), fill..color = H.record.withValues(alpha: .22));
+      cv.drawPath(Path()..moveTo(x - 3.5, top - 9)..lineTo(x + 3.5, top - 9)..lineTo(x + 3.5, top - 4)..lineTo(x, top)..lineTo(x - 3.5, top - 4)..close(), fill..color = H.record);
     }
     cv.drawRect(Rect.fromLTWH(L - 1, 0, 1, size.height), fill..color = N.g15);
     if (s.marquee case final m?) {
@@ -629,7 +724,9 @@ class _HeadPainter extends CustomPainter {
     if (x < t.labelW - 1) return;
     final fill = Paint()..color = H.playhead;
     cv.drawRect(Rect.fromLTWH(x - .5, 0, 1, size.height), fill);
-    cv.drawPath(Path()..addRRect(RRect.fromRectAndRadius(Rect.fromLTWH(x - 5, 2, 10, 11), const Radius.circular(2)))..moveTo(x - 5, 12)..lineTo(x, 17)..lineTo(x + 5, 12), fill);
+    // the head lives in the ruler's lower band, under the time labels
+    const top = _LiveTimelineState.rulerH;
+    cv.drawPath(Path()..moveTo(x - 5, top - 11)..lineTo(x + 5, top - 11)..lineTo(x + 5, top - 5)..lineTo(x, top)..lineTo(x - 5, top - 5)..close(), fill);
   }
 
   @override
