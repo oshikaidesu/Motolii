@@ -213,6 +213,8 @@ class _EffectsPanelState extends State<EffectsPanel> with WithDiscovery<EffectsP
           final shown = [for (final t in found) if (views.contains(classify.selected, t)) t];
           final n = shown.length;
           return PanelShell(
+            // classes along the top, as Create and Media: the body keeps the seat's whole width
+            classStrip: true,
             title: 'Effects',
             icon: const GlyphBox(HG.pie, size: 22, color: N.g95),
             search: search,

@@ -271,7 +271,7 @@ class BrowserSession extends ChangeNotifier {
     if (scripts.contains('Kana')) return 'あ';
     if (scripts.contains('Hangul')) return '가';
     if (scripts.contains('Arabic')) return 'ع';
-    if (scripts.contains('Cyrillic')) return 'Я';
+    if (scripts.contains('Cyrillic') && !scripts.contains('Latin')) return 'Я'; // a Latin face that also has Cyrillic reads as Latin
     return 'Aa';
   }
 

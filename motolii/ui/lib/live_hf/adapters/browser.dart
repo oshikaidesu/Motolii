@@ -146,8 +146,8 @@ class _LiveSeat extends ChangeNotifier implements BrowserSeat {
                   )
                 // an effect that ships no snapshot: a quiet face (its name is the caption under the tile)
                 : const QuietFace()
-          // on the tile's own ground: a snapshot that is empty (an effect with nothing to show alone) is still a tile
-          : ClipRRect(borderRadius: BorderRadius.circular(3), child: ColoredBox(color: N.g13, child: Image.memory(pic.data!, fit: BoxFit.cover, gaplessPlayback: true))),
+          // over the quiet face: a snapshot that is empty (an effect with nothing to show alone) still reads as a tile
+          : ClipRRect(borderRadius: BorderRadius.circular(3), child: Stack(fit: StackFit.expand, children: [const QuietFace(), Image.memory(pic.data!, fit: BoxFit.cover, gaplessPlayback: true)])),
     );
   }
 

@@ -249,6 +249,8 @@ class _ColorsPanelState extends State<ColorsPanel>
           ? true
           : widget.gradients!.isNotEmpty;
       return PanelShell(
+            // classes along the top, as Create and Media: the body keeps the seat's whole width
+            classStrip: true,
         title: 'Colors',
         icon: const GlyphBox(HG.color, size: 22, color: N.g95),
         search: search,

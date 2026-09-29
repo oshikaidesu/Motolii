@@ -129,9 +129,13 @@ class _FontsPanelState extends State<FontsPanel>
           : view == 'Used Here'
           ? widget.items.where((f) => widget.used.contains(f.family)).toList()
           : classify.apply(widget.items, (f) => f.cls);
-      final shown = search.apply(pool, (f) => [f.name, f.cls, ...f.facts]);
+      // the system's own private faces (their names start with '.') stay out of the list until a search asks for them
+      final private = search.query.trimLeft().startsWith('.');
+      final shown = search.apply(private ? pool : [for (final f in pool) if (!f.family.startsWith('.')) f], (f) => [f.name, f.cls, ...f.facts]);
       final n = shown.length;
       return PanelShell(
+            // classes along the top, as Create and Media: the body keeps the seat's whole width
+            classStrip: true,
         title: 'Fonts',
         icon: const GlyphBox(HG.text, size: 22, color: N.g95),
         search: search,
@@ -208,13 +212,16 @@ class _FontsPanelState extends State<FontsPanel>
     final sampleLayer =
         widget.sampleLayer ??
         (layer?['kind'] == 'Text' ? (layer!['id'] as num).toInt() : null);
+    // with no Text layer chosen the host's sample is the face's name, which the row already shows in that face: the
+    // slot keeps its readable glyph; with a Text layer chosen the host shows that text in the face
+    if (sampleLayer == null) return placeholder;
     return NativeVisualSample(
       key: ValueKey('font-sample:$sampleLayer:${font.family}'),
       controller: controller,
       request: {
         'kind': 'font',
         'family': font.family,
-        if (sampleLayer != null) 'layer': sampleLayer,
+        'layer': sampleLayer,
       },
       fit: BoxFit.contain,
       placeholder: placeholder,
