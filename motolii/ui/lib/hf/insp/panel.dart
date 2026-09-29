@@ -91,29 +91,29 @@ class _InspectorBodyState extends State<InspectorBody> {
   Widget build(BuildContext context) => ListenableBuilder(
         listenable: Listenable.merge([widget.store, search]),
         builder: (context, _) => LayoutBuilder(builder: (context, box) {
-          final narrow = box.maxWidth < 250;
+          final narrow = box.maxWidth < 188;
           final rows = search.active ? search.apply(widget.store.rows, (r) => ['${r['label']}', '${r['id']}', '${r['section'] ?? ''}']) : widget.store.rows;
           final entries = layoutOf(rows, advancedOpen: advancedOpen, flat: search.active, narrow: narrow);
           return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
+              padding: const EdgeInsets.fromLTRB(9, 7.5, 9, 4.5),
               child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                 Row(children: [
-                  Expanded(child: Text(widget.subject, softWrap: false, overflow: TextOverflow.clip, style: sans(13.5, c: kInk, w: FontWeight.w600))),
-                  if (widget.store.frozen) Container(margin: const EdgeInsets.only(right: 8), padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3), decoration: BoxDecoration(border: Border.all(color: N.g26), borderRadius: BorderRadius.circular(10)), child: Text('Frozen', style: sans(9.5, c: kMuted, w: FontWeight.w600))),
+                  Expanded(child: Text(widget.subject, softWrap: false, overflow: TextOverflow.clip, style: sans(11, c: kInk, w: FontWeight.w600))),
+                  if (widget.store.frozen) Container(margin: const EdgeInsets.only(right: 6), padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(border: Border.all(color: N.g26), borderRadius: BorderRadius.circular(7.5)), child: Text('Frozen', style: sans(9.5, c: kMuted, w: FontWeight.w600))),
                   Text('${widget.store.rows.length}', key: const ValueKey('insp-count'), style: mono(10, c: kMuted)),
                 ]),
-                const SizedBox(height: 6),
-                SearchField(search, 'Filter', height: 24),
+                const SizedBox(height: 4.5),
+                SearchField(search, 'Filter', height: 18),
               ]),
             ),
             Expanded(
               child: entries.isEmpty
-                  ? Padding(padding: const EdgeInsets.all(20), child: Text('No parameter matches', style: sans(12, c: kMuted)))
+                  ? Padding(padding: const EdgeInsets.all(15), child: Text('No parameter matches', style: sans(11, c: kMuted)))
                   : ListView.builder(
                       key: const ValueKey('insp-list'),
                       controller: scroll,
-                      padding: const EdgeInsets.fromLTRB(12, 2, 12, 16),
+                      padding: const EdgeInsets.fromLTRB(9, 1.5, 9, 12),
                       itemCount: entries.length,
                       itemBuilder: (_, i) => _entry(entries[i]),
                     ),
@@ -126,19 +126,19 @@ class _InspectorBodyState extends State<InspectorBody> {
 }
 
 Widget paramEntry(PEntry e, ParamStore store, Tones tones, VoidCallback toggleAdvanced) => switch (e) {
-        PSection(:final label) => Padding(padding: const EdgeInsets.only(top: 10, bottom: 4), child: Row(children: [Container(key: ValueKey('tone-$label'), width: 3, height: 9, margin: const EdgeInsets.only(right: 6), decoration: BoxDecoration(color: tones.ofGroup(label), borderRadius: BorderRadius.circular(1.5))), Text(label.toUpperCase(), style: sans(9, c: N.g51, w: FontWeight.w600, ls: 1.3))])),
+        PSection(:final label) => Padding(padding: const EdgeInsets.only(top: 7.5, bottom: 3), child: Row(children: [Container(key: ValueKey('tone-$label'), width: 2, height: 7, margin: const EdgeInsets.only(right: 4.5), decoration: BoxDecoration(color: tones.ofGroup(label), borderRadius: BorderRadius.circular(1.5))), Text(label.toUpperCase(), style: sans(9.5, c: N.g51, w: FontWeight.w600, ls: 1.3))])),
         PFold(:final count, :final open) => GestureDetector(
             key: const ValueKey('advanced-fold'),
             behavior: HitTestBehavior.opaque,
             onTap: () => toggleAdvanced(),
-            child: Padding(padding: const EdgeInsets.only(top: 10, bottom: 4), child: Row(children: [Container(width: 3, height: 9, margin: const EdgeInsets.only(right: 6), decoration: BoxDecoration(color: tones.advanced, borderRadius: BorderRadius.circular(1.5))), Text(open ? '▾' : '▸', style: sans(10, c: kMuted)), const SizedBox(width: 6), Text('ADVANCED', style: sans(9, c: N.g51, w: FontWeight.w600, ls: 1.3)), const SizedBox(width: 6), Text('$count', style: mono(9.5, c: N.g44))])),
+            child: Padding(padding: const EdgeInsets.only(top: 7.5, bottom: 3), child: Row(children: [Container(width: 2, height: 7, margin: const EdgeInsets.only(right: 4.5), decoration: BoxDecoration(color: tones.advanced, borderRadius: BorderRadius.circular(1.5))), Text(open ? '▾' : '▸', style: sans(10, c: kMuted)), const SizedBox(width: 4.5), Text('ADVANCED', style: sans(9.5, c: N.g51, w: FontWeight.w600, ls: 1.3)), const SizedBox(width: 4.5), Text('$count', style: mono(9.5, c: N.g44))])),
           ),
         PCells(:final rows, :final hero) => Padding(
             padding: const EdgeInsets.only(bottom: UiMetrics.cellGap),
             child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
               for (final (i, r) in rows.indexed) ...[
                 Expanded(child: ParamCell(store, r, hero: hero, tone: tones.of(r))),
-                if (i < rows.length - 1) const SizedBox(width: 6),
+                if (i < rows.length - 1) const SizedBox(width: 4.5),
               ],
             ]),
           ),
@@ -163,7 +163,7 @@ class _ParamSheetState extends State<ParamSheet> {
   Widget build(BuildContext context) => ListenableBuilder(
         listenable: widget.store,
         builder: (context, _) => LayoutBuilder(builder: (context, box) {
-          final entries = layoutOf(widget.store.rows, advancedOpen: advancedOpen, narrow: box.maxWidth < 250);
+          final entries = layoutOf(widget.store.rows, advancedOpen: advancedOpen, narrow: box.maxWidth < 188);
           return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             for (final e in entries) paramEntry(e, widget.store, tones, () => setState(() => advancedOpen = !advancedOpen)),
           ]);
@@ -216,13 +216,13 @@ class ParamCell extends StatelessWidget {
               behavior: HitTestBehavior.opaque,
               onTap: store.keyable && !store.frozen ? () => store.toggleKey(id) : null,
               child: Padding(
-                padding: const EdgeInsets.only(right: 4),
-                child: SizedBox(key: ValueKey('anim-$id'), width: 7, height: 7, child: CustomPaint(painter: _Diamond(row['keyedNow'] == true, row['animated'] == true ? tone : dimTone(tone)))),
+                padding: const EdgeInsets.only(right: 3),
+                child: SizedBox(key: ValueKey('anim-$id'), width: 5, height: 5, child: CustomPaint(painter: _Diamond(row['keyedNow'] == true, row['animated'] == true ? tone : dimTone(tone)))),
               ),
             ),
           Expanded(child: Row(children: [
             Flexible(child: Text(label, softWrap: false, overflow: TextOverflow.ellipsis, style: sans(11, c: hero ? N.g86 : N.g69, w: hero ? FontWeight.w600 : FontWeight.w500))),
-            if (mod) Padding(padding: const EdgeInsets.only(left: 5), child: Container(key: ValueKey('mod-$id'), width: 4, height: 4, decoration: BoxDecoration(color: t, shape: BoxShape.circle))),
+            if (mod) Padding(padding: const EdgeInsets.only(left: 4), child: Container(key: ValueKey('mod-$id'), width: 3, height: 3, decoration: BoxDecoration(color: t, shape: BoxShape.circle))),
           ])),
           // a relation: this value is driven by another (◉ its source), or drives others (◉ how many)
           if (row['link'] is Map || (row['drives'] is int && row['drives'] > 0))
@@ -231,20 +231,20 @@ class ParamCell extends StatelessWidget {
               behavior: HitTestBehavior.opaque,
               onTap: () => store.focusRelation(id),
               child: Container(
-                margin: const EdgeInsets.only(left: 6),
-                padding: const EdgeInsets.symmetric(horizontal: 6),
-                decoration: BoxDecoration(color: H.relation, borderRadius: BorderRadius.circular(6)),
-                child: Text(row['link'] is Map ? '◉ ${(row['link'] as Map)['name'] ?? 'Relation'}' : '◉ ${row['drives']}', style: sans(8.5, c: N.g10, w: FontWeight.w700)),
+                margin: const EdgeInsets.only(left: 4.5),
+                padding: const EdgeInsets.symmetric(horizontal: 4.5),
+                decoration: BoxDecoration(color: H.relation, borderRadius: BorderRadius.circular(4.5)),
+                child: Text(row['link'] is Map ? '◉ ${(row['link'] as Map)['name'] ?? 'Relation'}' : '◉ ${row['drives']}', style: sans(9.5, c: N.g10, w: FontWeight.w700)),
               ),
             ),
-          if (linkable) GestureDetector(key: ValueKey('link-$id'), behavior: HitTestBehavior.opaque, onTap: store.frozen ? null : () => store.toggleLink(id), child: Container(margin: const EdgeInsets.only(left: 6), padding: const EdgeInsets.symmetric(horizontal: 6), decoration: BoxDecoration(color: linked ? t : null, border: linked ? null : Border.all(color: N.g26), borderRadius: BorderRadius.circular(6)), child: Text('Link', style: sans(8.5, c: linked ? N.g10 : kMuted, w: FontWeight.w700)))),
-          if (accessory != null) GestureDetector(key: ValueKey('route-acc-$id'), behavior: HitTestBehavior.opaque, onTap: () => store.route(accessory, id), child: Container(margin: const EdgeInsets.only(left: 6), padding: const EdgeInsets.symmetric(horizontal: 6), decoration: BoxDecoration(border: Border.all(color: t.withValues(alpha: .7)), borderRadius: BorderRadius.circular(6)), child: Text('$accessory →', style: sans(8.5, c: t, w: FontWeight.w700)))),
-          if (mod && !store.frozen) GestureDetector(key: ValueKey('reset-$id'), behavior: HitTestBehavior.opaque, onTap: () => store.resetMany(ids), child: Padding(padding: const EdgeInsets.only(left: 8), child: Text('↺', style: sans(11, c: N.g33)))),
+          if (linkable) GestureDetector(key: ValueKey('link-$id'), behavior: HitTestBehavior.opaque, onTap: store.frozen ? null : () => store.toggleLink(id), child: Container(margin: const EdgeInsets.only(left: 4.5), padding: const EdgeInsets.symmetric(horizontal: 4.5), decoration: BoxDecoration(color: linked ? t : null, border: linked ? null : Border.all(color: N.g26), borderRadius: BorderRadius.circular(4.5)), child: Text('Link', style: sans(9.5, c: linked ? N.g10 : kMuted, w: FontWeight.w700)))),
+          if (accessory != null) GestureDetector(key: ValueKey('route-acc-$id'), behavior: HitTestBehavior.opaque, onTap: () => store.route(accessory, id), child: Container(margin: const EdgeInsets.only(left: 4.5), padding: const EdgeInsets.symmetric(horizontal: 4.5), decoration: BoxDecoration(border: Border.all(color: t.withValues(alpha: .7)), borderRadius: BorderRadius.circular(4.5)), child: Text('$accessory →', style: sans(9.5, c: t, w: FontWeight.w700)))),
+          if (mod && !store.frozen) GestureDetector(key: ValueKey('reset-$id'), behavior: HitTestBehavior.opaque, onTap: () => store.resetMany(ids), child: Padding(padding: const EdgeInsets.only(left: 6), child: Text('↺', style: sans(11, c: N.g33)))),
         ]),
       ),
       const SizedBox(height: UiMetrics.labelGap),
       toy,
-      if (actions.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 4), child: Wrap(spacing: 5, children: [for (final a in actions) ActionChip(store, id, a, tone: tone)])),
+      if (actions.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 3), child: Wrap(spacing: 4, children: [for (final a in actions) ActionChip(store, id, a, tone: tone)])),
     ]);
   }
 }

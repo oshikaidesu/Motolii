@@ -70,9 +70,9 @@ class _CreatePanelState extends State<CreatePanel> with WithDiscovery<CreatePane
   Widget _strip(List<Thing> shown, double h) => ListView.builder(
         scrollDirection: Axis.horizontal,
         physics: const ClampingScrollPhysics(),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 7.5, vertical: 7.5),
         itemCount: shown.length,
-        itemBuilder: (c, i) => Padding(padding: const EdgeInsets.only(right: 5), child: SizedBox(width: math.min(h - 20, 54), child: seated(c, shown[i], _Tile(shown[i], widget.scene, false)))),
+        itemBuilder: (c, i) => Padding(padding: const EdgeInsets.only(right: 4), child: SizedBox(width: math.min(h - 20, 54), child: seated(c, shown[i], _Tile(shown[i], widget.scene, false)))),
       );
 }
 
@@ -93,14 +93,14 @@ class _TileState extends State<_Tile> {
         onEnter: (_) => setState(() => _hover = true),
         onExit: (_) => setState(() => _hover = false),
         child: DecoratedBox(
-          decoration: BoxDecoration(color: _hover ? kRaisedHi : null, borderRadius: BorderRadius.circular(3)),
+          decoration: BoxDecoration(color: _hover ? kRaisedHi : null, borderRadius: BorderRadius.circular(2)),
           child: LayoutBuilder(builder: (context, box) {
             final face = (box.maxWidth * .78).clamp(0.0, 40.0);
             return Column(mainAxisAlignment: MainAxisAlignment.center, children: [
               SizedBox(width: face, height: face, child: ThingFace(widget.thing, scene: widget.scene)),
               if (widget.caption)
                 Padding(
-                  padding: const EdgeInsets.only(top: 3),
+                  padding: const EdgeInsets.only(top: 2),
                   child: Text(widget.thing.name, maxLines: 1, softWrap: false, overflow: TextOverflow.fade, textAlign: TextAlign.center, style: sans(9.5, c: N.g86, w: FontWeight.w500)),
                 ),
             ]);

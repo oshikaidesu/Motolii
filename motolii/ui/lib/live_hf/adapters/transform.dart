@@ -44,7 +44,7 @@ class _NewTransformState extends State<NewTransform> {
       builder: (context, box) {
         final instrument = TransformInstrument(s, showHeader: widget.showHeader);
         // Narrower than the Instrument's wide layout it scrolls inside a fixed height.
-        return box.maxWidth < 230 ? SizedBox(height: 460, child: instrument) : instrument;
+        return box.maxWidth < 230 ? SizedBox(height: 345, child: instrument) : instrument;
       },
     );
   }

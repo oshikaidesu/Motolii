@@ -142,15 +142,15 @@ class _NotesDeskState extends State<NotesDesk> {
           Expanded(child: LayoutBuilder(builder: (context, b) => _canvas(Size(b.maxWidth, b.maxHeight), false))),
           _zoomBar(),
         ]),
-        strip: (c, s) => Padding(padding: const EdgeInsets.fromLTRB(8, 2, 8, 8), child: LayoutBuilder(builder: (context, b) => _canvas(Size(b.maxWidth, b.maxHeight), true))),
-        tall: (c, s) => Padding(padding: const EdgeInsets.fromLTRB(8, 4, 8, 8), child: LayoutBuilder(builder: (context, b) => _canvas(Size(b.maxWidth, b.maxHeight), true))),
+        strip: (c, s) => Padding(padding: const EdgeInsets.fromLTRB(6, 1.5, 6, 6), child: LayoutBuilder(builder: (context, b) => _canvas(Size(b.maxWidth, b.maxHeight), true))),
+        tall: (c, s) => Padding(padding: const EdgeInsets.fromLTRB(6, 3, 6, 6), child: LayoutBuilder(builder: (context, b) => _canvas(Size(b.maxWidth, b.maxHeight), true))),
       );
 
   Widget _toolbar() => Container(
-        height: 44,
-        padding: const EdgeInsets.symmetric(horizontal: 10),
+        height: 33,
+        padding: const EdgeInsets.symmetric(horizontal: 7.5),
         child: Row(children: [
-          for (var i = 0; i < 5; i++) Padding(padding: const EdgeInsets.only(right: 4), child: _tool(i)),
+          for (var i = 0; i < 5; i++) Padding(padding: const EdgeInsets.only(right: 3), child: _tool(i)),
           const Spacer(),
           for (var p = 0; p < (widget.host?.pageCount ?? 3); p++)
             GestureDetector(
@@ -160,7 +160,7 @@ class _NotesDeskState extends State<NotesDesk> {
                 _absorb();
               },
               onSecondaryTapDown: widget.host == null ? null : (e) => _pageMenu(p, e.globalPosition),
-              child: Container(width: 26, height: 26, margin: const EdgeInsets.only(left: 4), alignment: Alignment.center, decoration: BoxDecoration(border: Border.all(color: p == page ? kAccent : kRule2), borderRadius: BorderRadius.circular(3), color: p == page ? kAccentDim.withValues(alpha: .4) : null), child: Text('${p + 1}', style: sans(11, c: p == page ? kInk : kMuted))),
+              child: Container(width: 19.5, height: 19.5, margin: const EdgeInsets.only(left: 3), alignment: Alignment.center, decoration: BoxDecoration(border: Border.all(color: p == page ? kAccent : kRule2), borderRadius: BorderRadius.circular(2), color: p == page ? kAccentDim.withValues(alpha: .4) : null), child: Text('${p + 1}', style: sans(11, c: p == page ? kInk : kMuted))),
             ),
         ]),
       );
@@ -208,9 +208,9 @@ class _NotesDeskState extends State<NotesDesk> {
           if (i == 3) _add('ref');
         },
         child: Container(
-          height: 30,
-          width: 30,
-          decoration: BoxDecoration(color: i == tool ? kAccentDim.withValues(alpha: .4) : null, border: Border.all(color: i == tool ? kAccent : kRule2), borderRadius: BorderRadius.circular(3)),
+          height: 22.5,
+          width: 22.5,
+          decoration: BoxDecoration(color: i == tool ? kAccentDim.withValues(alpha: .4) : null, border: Border.all(color: i == tool ? kAccent : kRule2), borderRadius: BorderRadius.circular(2)),
           child: CustomPaint(painter: _ToolP(i)),
         ),
       );
@@ -222,15 +222,15 @@ class _NotesDeskState extends State<NotesDesk> {
   }
 
   Widget _zoomBar() => Container(
-        height: 40,
-        padding: const EdgeInsets.symmetric(horizontal: 12),
+        height: 30,
+        padding: const EdgeInsets.symmetric(horizontal: 9),
         child: Row(children: [
           Text('Page ${page + 1}  ·  ${blocks.length} blocks', style: sans(11, c: kMuted)),
           const Spacer(),
-          GestureDetector(key: const ValueKey('zoom-out'), onTap: () => setState(() => zoom = clampD(zoom - .25, .25, 3)), child: Padding(padding: const EdgeInsets.symmetric(horizontal: 6), child: Text('−', style: sans(18, c: N.g82)))),
-          SizedBox(width: 48, child: Text('${(zoom * 100).round()}%', key: const ValueKey('zoom-label'), textAlign: TextAlign.center, style: mono(11, c: N.g82))),
-          GestureDetector(key: const ValueKey('zoom-in'), onTap: () => setState(() => zoom = clampD(zoom + .25, .25, 3)), child: Padding(padding: const EdgeInsets.symmetric(horizontal: 6), child: Text('+', style: sans(18, c: N.g82)))),
-          const SizedBox(width: 10),
+          GestureDetector(key: const ValueKey('zoom-out'), onTap: () => setState(() => zoom = clampD(zoom - .25, .25, 3)), child: Padding(padding: const EdgeInsets.symmetric(horizontal: 4.5), child: Text('−', style: sans(13.5, c: N.g82)))),
+          SizedBox(width: 36, child: Text('${(zoom * 100).round()}%', key: const ValueKey('zoom-label'), textAlign: TextAlign.center, style: mono(11, c: N.g82))),
+          GestureDetector(key: const ValueKey('zoom-in'), onTap: () => setState(() => zoom = clampD(zoom + .25, .25, 3)), child: Padding(padding: const EdgeInsets.symmetric(horizontal: 4.5), child: Text('+', style: sans(13.5, c: N.g82)))),
+          const SizedBox(width: 7.5),
           GestureDetector(key: const ValueKey('zoom-fit'), onTap: () => setState(() => _fit(const Size(310, 490))), child: Text('Fit', style: sans(11, c: kAccent))),
         ]),
       );
@@ -280,7 +280,7 @@ class _NotesDeskState extends State<NotesDesk> {
             painter: _DotsP(p, z),
             child: OverflowBox(
               alignment: Alignment.topLeft,
-              minWidth: 3000, maxWidth: 3000, minHeight: 3000, maxHeight: 3000,
+              minWidth: 2250, maxWidth: 2250, minHeight: 2250, maxHeight: 2250,
               child: Transform(
                 transform: Matrix4.translationValues(p.dx, p.dy, 0)..scale(z, z, 1),
                 child: Stack(clipBehavior: Clip.none, children: [for (final (i, b) in blocks.indexed) _placed(i, b, z)]),
@@ -317,12 +317,12 @@ class _NotesDeskState extends State<NotesDesk> {
           child: Stack(clipBehavior: Clip.none, children: [
             Positioned.fill(child: _body(b, i)),
             if (selected == i) ...[
-              Positioned.fill(child: IgnorePointer(child: DecoratedBox(decoration: BoxDecoration(border: Border.all(color: kAccent, width: 1.6 / z), borderRadius: BorderRadius.circular(2))))),
+              Positioned.fill(child: IgnorePointer(child: DecoratedBox(decoration: BoxDecoration(border: Border.all(color: kAccent, width: 1 / z), borderRadius: BorderRadius.circular(1.5))))),
               Positioned(
                 right: -6 / z,
                 bottom: -6 / z,
-                width: 14 / z,
-                height: 14 / z,
+                width: 10.5 / z,
+                height: 10.5 / z,
                 child: GestureDetector(
                   key: const ValueKey('resize'),
                   dragStartBehavior: DragStartBehavior.down,
@@ -342,27 +342,27 @@ class _NotesDeskState extends State<NotesDesk> {
         final col = const [kYellow, kPink, kBlue, kMint][b.tint % 4];
         final ink = N.g10;
         return Container(
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(color: col, borderRadius: BorderRadius.circular(3)),
+          padding: const EdgeInsets.all(7.5),
+          decoration: BoxDecoration(color: col, borderRadius: BorderRadius.circular(2)),
           child: editing == i
-              ? EditableText(key: const ValueKey('note-edit'), controller: _ctl, focusNode: _focus, autofocus: true, maxLines: null, style: sans(12, c: ink, w: FontWeight.w600), cursorColor: ink, backgroundCursorColor: ink, onChanged: (t) => b.text = t)
-              : Text(b.text, style: sans(12, c: ink, w: FontWeight.w600)),
+              ? EditableText(key: const ValueKey('note-edit'), controller: _ctl, focusNode: _focus, autofocus: true, maxLines: null, style: sans(11, c: ink, w: FontWeight.w600), cursorColor: ink, backgroundCursorColor: ink, onChanged: (t) => b.text = t)
+              : Text(b.text, style: sans(11, c: ink, w: FontWeight.w600)),
         );
       case 'image':
         final png = b.png;
-        return ClipRRect(borderRadius: BorderRadius.circular(3), child: png == null ? CustomPaint(painter: _PicP()) : Image.memory(png, fit: BoxFit.cover, gaplessPlayback: true));
+        return ClipRRect(borderRadius: BorderRadius.circular(2), child: png == null ? CustomPaint(painter: _PicP()) : Image.memory(png, fit: BoxFit.cover, gaplessPlayback: true));
       case 'ref':
         return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10),
-          decoration: BoxDecoration(color: kViolet, borderRadius: BorderRadius.circular(14)),
+          padding: const EdgeInsets.symmetric(horizontal: 7.5),
+          decoration: BoxDecoration(color: kViolet, borderRadius: BorderRadius.circular(10.5)),
           child: Row(children: [
-            Container(width: 8, height: 8, decoration: const BoxDecoration(color: N.g10, shape: BoxShape.circle)),
-            const SizedBox(width: 8),
-            Expanded(child: Text(b.text, softWrap: false, overflow: TextOverflow.clip, style: sans(12, c: N.g10, w: FontWeight.w600))),
+            Container(width: 6, height: 6, decoration: const BoxDecoration(color: N.g10, shape: BoxShape.circle)),
+            const SizedBox(width: 6),
+            Expanded(child: Text(b.text, softWrap: false, overflow: TextOverflow.clip, style: sans(11, c: N.g10, w: FontWeight.w600))),
           ]),
         );
       default:
-        return Align(alignment: Alignment.centerLeft, child: Text(b.text, softWrap: false, style: const TextStyle(fontFamily: 'Snell Roundhand', fontSize: 26, color: N.g95)));
+        return Align(alignment: Alignment.centerLeft, child: Text(b.text, softWrap: false, style: const TextStyle(fontFamily: 'Snell Roundhand', fontSize: 19.5, color: N.g95)));
     }
   }
 }
@@ -409,11 +409,11 @@ class _ToolP extends CustomPainter {
       case 0:
         c.drawPath(Path()..moveTo(m.dx - 4, m.dy - 6)..lineTo(m.dx - 4, m.dy + 6)..lineTo(m.dx - 1, m.dy + 3)..lineTo(m.dx + 3, m.dy + 7)..lineTo(m.dx + 5, m.dy + 5)..lineTo(m.dx + 1, m.dy + 1)..lineTo(m.dx + 5, m.dy - 1)..close(), p);
       case 1:
-        c.drawRect(Rect.fromCenter(center: m, width: 12, height: 12), p);
+        c.drawRect(Rect.fromCenter(center: m, width: 9, height: 9), p);
         c.drawLine(m + const Offset(-3, -1), m + const Offset(3, -1), p);
         c.drawLine(m + const Offset(-3, 2), m + const Offset(1, 2), p);
       case 2:
-        c.drawRect(Rect.fromCenter(center: m, width: 14, height: 11), p);
+        c.drawRect(Rect.fromCenter(center: m, width: 10.5, height: 8), p);
         c.drawPath(Path()..moveTo(m.dx - 6, m.dy + 4)..lineTo(m.dx - 2, m.dy)..lineTo(m.dx + 1, m.dy + 3)..lineTo(m.dx + 3, m.dy + 1)..lineTo(m.dx + 6, m.dy + 4), p);
       case 3:
         c.drawCircle(m + const Offset(-3, 0), 3.5, p);

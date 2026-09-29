@@ -167,28 +167,28 @@ class _BlendDeskState extends State<BlendDesk> {
         title: 'Blend',
         subtitle: 'LAYER · COMPOSITE',
         full: (c, s) => Padding(
-          padding: const EdgeInsets.fromLTRB(12, 14, 12, 0),
+          padding: const EdgeInsets.fromLTRB(9, 10.5, 9, 0),
           child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             // the result and who it applies to stay put; only the list of modes scrolls under them
             _equation(),
-            const SizedBox(height: 12),
+            const SizedBox(height: 9),
             _targets(),
-            const SizedBox(height: 10),
+            const SizedBox(height: 7.5),
             Expanded(
               child: SingleChildScrollView(
                 key: const ValueKey('blend-scroll'),
-                padding: const EdgeInsets.only(bottom: 16),
+                padding: const EdgeInsets.only(bottom: 12),
                 child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                  Wrap(spacing: 6, runSpacing: 8, children: [for (var i = 0; i < blendModes.length; i++) _tile(i, (s.width - 24 - 18) / 4)]),
-                  const SizedBox(height: 16),
+                  Wrap(spacing: 4.5, runSpacing: 6, children: [for (var i = 0; i < blendModes.length; i++) _tile(i, (s.width - 24 - 18) / 4)]),
+                  const SizedBox(height: 12),
                   GestureDetector(
                     key: const ValueKey('blend-stage'),
                     behavior: HitTestBehavior.opaque,
                     onTap: () => setState(() => previewOnStage = !previewOnStage),
                     child: Row(children: [
-                      Container(width: 18, height: 18, decoration: BoxDecoration(color: previewOnStage ? kBlue : null, border: previewOnStage ? null : Border.all(color: N.g38, width: 1.6), borderRadius: BorderRadius.circular(3)), child: previewOnStage ? CustomPaint(painter: _TickP()) : null),
-                      const SizedBox(width: 10),
-                      Text('Preview on Stage', style: sans(11.5, c: N.g76)),
+                      Container(width: 13.5, height: 13.5, decoration: BoxDecoration(color: previewOnStage ? kBlue : null, border: previewOnStage ? null : Border.all(color: N.g38, width: 1), borderRadius: BorderRadius.circular(2)), child: previewOnStage ? CustomPaint(painter: _TickP()) : null),
+                      const SizedBox(width: 7.5),
+                      Text('Preview on Stage', style: sans(11, c: N.g76)),
                     ]),
                   ),
                 ]),
@@ -197,12 +197,12 @@ class _BlendDeskState extends State<BlendDesk> {
           ]),
         ),
         strip: (c, s) => Padding(
-          padding: const EdgeInsets.fromLTRB(10, 4, 10, 8),
-          child: LayoutBuilder(builder: (context, b) => SingleChildScrollView(scrollDirection: Axis.horizontal, child: Row(children: [for (var i = 0; i < blendModes.length; i++) Padding(padding: const EdgeInsets.only(right: 4), child: _mark(i, b.maxHeight * 1.5, b.maxHeight))]))),
+          padding: const EdgeInsets.fromLTRB(7.5, 3, 7.5, 6),
+          child: LayoutBuilder(builder: (context, b) => SingleChildScrollView(scrollDirection: Axis.horizontal, child: Row(children: [for (var i = 0; i < blendModes.length; i++) Padding(padding: const EdgeInsets.only(right: 3), child: _mark(i, b.maxHeight * 1.5, b.maxHeight))]))),
         ),
         tall: (c, s) => Padding(
-          padding: const EdgeInsets.all(8),
-          child: SingleChildScrollView(child: Wrap(spacing: 4, runSpacing: 4, children: [for (var i = 0; i < blendModes.length; i++) _mark(i, s.width - 16, 58)])),
+          padding: const EdgeInsets.all(6),
+          child: SingleChildScrollView(child: Wrap(spacing: 3, runSpacing: 3, children: [for (var i = 0; i < blendModes.length; i++) _mark(i, s.width - 16, 58)])),
         ),
       );
 
@@ -211,26 +211,26 @@ class _BlendDeskState extends State<BlendDesk> {
     final m = shown;
     return Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
       Column(mainAxisSize: MainAxisSize.min, children: [
-        Container(width: 40, height: 40, decoration: const BoxDecoration(color: kYellow, shape: BoxShape.circle)),
-        const SizedBox(height: 4),
-        Text('A', style: sans(10.5, c: kMuted, w: FontWeight.w600)),
-        const SizedBox(height: 10),
-        Container(width: 40, height: 40, decoration: const BoxDecoration(color: kBlue, shape: BoxShape.circle)),
-        const SizedBox(height: 4),
-        Text('B', style: sans(10.5, c: kMuted, w: FontWeight.w600)),
+        Container(width: 30, height: 30, decoration: const BoxDecoration(color: kYellow, shape: BoxShape.circle)),
+        const SizedBox(height: 3),
+        Text('A', style: sans(10, c: kMuted, w: FontWeight.w600)),
+        const SizedBox(height: 7.5),
+        Container(width: 30, height: 30, decoration: const BoxDecoration(color: kBlue, shape: BoxShape.circle)),
+        const SizedBox(height: 3),
+        Text('B', style: sans(10, c: kMuted, w: FontWeight.w600)),
       ]),
-      SizedBox(width: 26, child: Center(child: Text('→', style: sans(22, c: kMuted)))),
+      SizedBox(width: 19.5, child: Center(child: Text('→', style: sans(16.5, c: kMuted)))),
       Expanded(
         child: Column(children: [
-          SizedBox(key: const ValueKey('blend-result'), height: 108, width: double.infinity, child: m == null ? Center(child: Text(host != null && host!.names.isEmpty ? 'Nothing' : 'Mixed', style: sans(18, c: kMuted))) : CustomPaint(painter: ResultPainter(m))),
-          const SizedBox(height: 8),
+          SizedBox(key: const ValueKey('blend-result'), height: 81, width: double.infinity, child: m == null ? Center(child: Text(host != null && host!.names.isEmpty ? 'Nothing' : 'Mixed', style: sans(13.5, c: kMuted))) : CustomPaint(painter: ResultPainter(m))),
+          const SizedBox(height: 6),
           // The runtime's own specimen of this mode on the layer: its colour over the beds the runtime draws.
           if (m != null && host != null && host!.beds(blendModes[m].key).isNotEmpty)
             Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: SizedBox(key: const ValueKey('blend-beds'), height: 10, child: Row(children: [for (final c in host!.beds(blendModes[m].key)) Expanded(child: ColoredBox(color: c))])),
+              padding: const EdgeInsets.only(bottom: 6),
+              child: SizedBox(key: const ValueKey('blend-beds'), height: 7.5, child: Row(children: [for (final c in host!.beds(blendModes[m].key)) Expanded(child: ColoredBox(color: c))])),
             ),
-          Text(m == null ? (host != null && host!.names.isEmpty ? 'No layer' : 'Targets differ') : blendModes[m].name, style: sans(17, c: kInk, w: FontWeight.w600)),
+          Text(m == null ? (host != null && host!.names.isEmpty ? 'No layer' : 'Targets differ') : blendModes[m].name, style: sans(13, c: kInk, w: FontWeight.w600)),
         ]),
       ),
     ]);
@@ -238,18 +238,18 @@ class _BlendDeskState extends State<BlendDesk> {
 
   Widget _targets() => Row(children: [
         Text('TARGETS', style: sans(9.5, c: kMuted, w: FontWeight.w500, ls: 1.4)),
-        const SizedBox(width: 12),
+        const SizedBox(width: 9),
         // With a host the selection decides the targets; the chips only say who they are.
         if (host != null) ...[
-          for (final n in host!.names.take(2)) Padding(padding: const EdgeInsets.only(right: 6), child: Container(height: 26, padding: const EdgeInsets.symmetric(horizontal: 10), alignment: Alignment.center, decoration: BoxDecoration(color: kYellow, borderRadius: BorderRadius.circular(13)), child: Text(n, softWrap: false, overflow: TextOverflow.clip, style: sans(11, c: N.g10, w: FontWeight.w600)))),
+          for (final n in host!.names.take(2)) Padding(padding: const EdgeInsets.only(right: 4.5), child: Container(height: 19.5, padding: const EdgeInsets.symmetric(horizontal: 7.5), alignment: Alignment.center, decoration: BoxDecoration(color: kYellow, borderRadius: BorderRadius.circular(10)), child: Text(n, softWrap: false, overflow: TextOverflow.clip, style: sans(11, c: N.g10, w: FontWeight.w600)))),
           if (host!.names.length > 2) Text('+${host!.names.length - 2}', style: sans(11, c: kMuted)),
         ] else
         for (final i in [0, 1]) Padding(
-          padding: const EdgeInsets.only(right: 6),
+          padding: const EdgeInsets.only(right: 4.5),
           child: GestureDetector(
             key: ValueKey('blend-target-$i'),
             onTap: () => setState(() { if (targeted.contains(i)) { if (targeted.length > 1) targeted.remove(i); } else { targeted.add(i); } }),
-            child: Container(height: 26, padding: const EdgeInsets.symmetric(horizontal: 10), alignment: Alignment.center, decoration: BoxDecoration(color: targeted.contains(i) ? kYellow : null, border: targeted.contains(i) ? null : Border.all(color: N.g26), borderRadius: BorderRadius.circular(13)), child: Text('Layer ${i + 2}', style: sans(11, c: targeted.contains(i) ? N.g10 : N.g76, w: FontWeight.w600))),
+            child: Container(height: 19.5, padding: const EdgeInsets.symmetric(horizontal: 7.5), alignment: Alignment.center, decoration: BoxDecoration(color: targeted.contains(i) ? kYellow : null, border: targeted.contains(i) ? null : Border.all(color: N.g26), borderRadius: BorderRadius.circular(10)), child: Text('Layer ${i + 2}', style: sans(11, c: targeted.contains(i) ? N.g10 : N.g76, w: FontWeight.w600))),
           ),
         ),
       ]);
@@ -269,8 +269,8 @@ class _BlendDeskState extends State<BlendDesk> {
           child: Container(
             width: w < 0 ? 0 : w,
             height: h < 0 ? 0 : h,
-            decoration: BoxDecoration(color: i == sel ? kRaisedHi : null, border: i == sel ? Border.all(color: kYellow, width: 2) : null, borderRadius: BorderRadius.circular(6)),
-            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(color: i == sel ? kRaisedHi : null, border: i == sel ? Border.all(color: kYellow, width: 1.5) : null, borderRadius: BorderRadius.circular(4.5)),
+            padding: const EdgeInsets.all(3),
             child: CustomPaint(painter: ResultPainter(i)),
           ),
         ),
@@ -280,7 +280,7 @@ class _BlendDeskState extends State<BlendDesk> {
         width: w,
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           _mark(i, w, 40),
-          const SizedBox(height: 4),
+          const SizedBox(height: 3),
           Text(blendModes[i].name, softWrap: false, overflow: TextOverflow.clip, textAlign: TextAlign.center, style: sans(9.5, c: i == sel ? kInk : N.g63, w: i == sel ? FontWeight.w600 : FontWeight.w400)),
         ]),
       );

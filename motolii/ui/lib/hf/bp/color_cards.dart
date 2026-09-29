@@ -17,8 +17,8 @@ class SwatchCards extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const gap = 6.0;
-    final cols = math.max(2, ((width + gap) / 80).floor());
+    const gap = 4.0;
+    final cols = math.max(2, ((width + gap) / 60).floor());
     final cell = (width - gap * (cols - 1)) / cols;
     final ground = N.g10.computeLuminance();
     return Wrap(spacing: gap, runSpacing: gap, children: [
@@ -34,9 +34,9 @@ class SwatchCards extends StatelessWidget {
             return Container(
               width: cell,
               height: cell * .78,
-              padding: const EdgeInsets.fromLTRB(8, 0, 6, 7),
+              padding: const EdgeInsets.fromLTRB(6, 0, 4.5, 5),
               alignment: Alignment.bottomLeft,
-              decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(8), border: Border.all(color: (l - ground).abs() < .06 ? N.g20 : N.glaze9)),
+              decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(6), border: Border.all(color: (l - ground).abs() < .06 ? N.g20 : N.glaze9)),
               child: Text('#${(v.$2 & 0xFFFFFF).toRadixString(16).padLeft(6, '0').toUpperCase()}', softWrap: false, style: sans(10, c: l > .45 ? N.g07.withValues(alpha: .8) : N.g100.withValues(alpha: .92), w: FontWeight.w500)),
             );
           }),

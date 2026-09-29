@@ -154,15 +154,15 @@ class _FontsPanelState extends State<FontsPanel>
         strip: (c, s) => ListView.builder(
           scrollDirection: Axis.horizontal,
           physics: const ClampingScrollPhysics(),
-          padding: const EdgeInsets.all(10),
+          padding: const EdgeInsets.all(7.5),
           itemCount: shown.length,
           itemBuilder: (_, i) => Padding(
-            padding: const EdgeInsets.only(right: 6),
+            padding: const EdgeInsets.only(right: 4.5),
             child: Container(
               width: math.min(72, s.height * 1.3),
               decoration: BoxDecoration(
                 color: kTile,
-                borderRadius: BorderRadius.circular(4),
+                borderRadius: BorderRadius.circular(3),
               ),
               child: Center(child: _sample(shown[i], 24)),
             ),
@@ -259,12 +259,12 @@ class _Row extends StatelessWidget {
           border: Border(
             left: BorderSide(
               color: chosen ? N.g91 : N.clear,
-              width: 2,
+              width: 1.5,
             ),
             bottom: const BorderSide(color: kRule2),
           ),
         ),
-        padding: const EdgeInsets.only(left: 10, right: 8),
+        padding: const EdgeInsets.only(left: 7.5, right: 6),
         child: w < 110
             ? Center(
                 child:
@@ -274,7 +274,7 @@ class _Row extends StatelessWidget {
                       softWrap: false,
                       style: TextStyle(
                         fontFamily: f.family,
-                        fontSize: 22,
+                        fontSize: 16.5,
                         color: N.g95,
                         height: 1,
                       ),
@@ -309,13 +309,13 @@ class _Row extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                             fontFamily: f.family,
-                            fontSize: 12.5,
+                            fontSize: 11,
                             color: N.g91,
                             height: 1.1,
                           ),
                         ),
                         if (big) ...[
-                          const SizedBox(height: 3),
+                          const SizedBox(height: 2),
                           Text(
                             '${f.meta}${f.facts.isEmpty ? '' : '  ·  ${f.facts.join('  ')}'}',
                             softWrap: false,
@@ -331,8 +331,8 @@ class _Row extends StatelessWidget {
                       behavior: HitTestBehavior.opaque,
                       onTap: onFavorite,
                       child: SizedBox(
-                        width: 20,
-                        height: 20,
+                        width: 15,
+                        height: 15,
                         child: CustomPaint(painter: _Star(f.favorite)),
                       ),
                     ),

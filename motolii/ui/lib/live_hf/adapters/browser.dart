@@ -146,7 +146,7 @@ class _LiveSeat extends ChangeNotifier implements BrowserSeat {
                 // an effect that ships no snapshot: a quiet face (its name is the caption under the tile)
                 : const QuietFace()
           // over the quiet face: a snapshot that is empty (an effect with nothing to show alone) still reads as a tile
-          : ClipRRect(borderRadius: BorderRadius.circular(3), child: Stack(fit: StackFit.expand, children: [const QuietFace(), Image.memory(pic.data!, fit: BoxFit.cover, gaplessPlayback: true)])),
+          : ClipRRect(borderRadius: BorderRadius.circular(2), child: Stack(fit: StackFit.expand, children: [const QuietFace(), Image.memory(pic.data!, fit: BoxFit.cover, gaplessPlayback: true)])),
     );
   }
 
@@ -168,7 +168,7 @@ class _LiveSeat extends ChangeNotifier implements BrowserSeat {
         ? 'Double-click a face to add a text layer'
         : '${t['name'] ?? 'Text'} · ${EditorSession.map(t['text'])['content'] ?? ''}'.trim();
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 6, 12, 2),
+      padding: const EdgeInsets.fromLTRB(9, 4.5, 9, 1.5),
       child: Text(line, key: const ValueKey('fonts-header'), maxLines: 1, overflow: TextOverflow.ellipsis, style: sans(11, c: kMuted)),
     );
   }

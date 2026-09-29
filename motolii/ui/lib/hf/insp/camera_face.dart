@@ -16,7 +16,7 @@ class CameraGeom {
   CameraGeom(this.size, this.s);
   final Size size;
   final CameraStore s;
-  static const orbitR = 54.0, ringR = 70.0;
+  static const orbitR = 40.5, ringR = 52.5;
 
   Offset get c => Offset(size.width / 2, size.height / 2);
 
@@ -143,7 +143,7 @@ class _Painter extends CustomPainter {
     final off = s.frozen;
     final a = off ? .45 : 1.0;
     final ctr = g.c;
-    c.drawRRect(RRect.fromRectAndRadius(Offset.zero & sz, const Radius.circular(6)), Paint()..color = N.g07);
+    c.drawRRect(RRect.fromRectAndRadius(Offset.zero & sz, const Radius.circular(4.5)), Paint()..color = N.g07);
     // the roll ring: a twist about the ray, turns kept
     c.drawCircle(ctr, CameraGeom.ringR, Paint()..color = rollColor.withValues(alpha: .28 * a)..style = PaintingStyle.stroke..strokeWidth = 1.3);
     for (var i = 0; i < 12; i++) {
@@ -162,7 +162,7 @@ class _Painter extends CustomPainter {
     c.save();
     c.translate(dh.dx, dh.dy);
     c.rotate(g.rayDir.direction + math.pi / 2);
-    final bar = RRect.fromRectAndRadius(Rect.fromCenter(center: Offset.zero, width: 16, height: 6), const Radius.circular(3));
+    final bar = RRect.fromRectAndRadius(Rect.fromCenter(center: Offset.zero, width: 12, height: 4.5), const Radius.circular(2));
     c.drawRRect(bar, Paint()..color = distanceColor.withValues(alpha: a));
     c.drawRRect(bar, Paint()..color = N.g07..style = PaintingStyle.stroke..strokeWidth = 1.2);
     c.restore();
@@ -170,7 +170,7 @@ class _Painter extends CustomPainter {
     c.save();
     c.translate(eye.dx, eye.dy);
     c.rotate((ctr - eye).direction);
-    final body = RRect.fromRectAndRadius(const Rect.fromLTRB(-9, -6, 5, 6), const Radius.circular(2.5));
+    final body = RRect.fromRectAndRadius(const Rect.fromLTRB(-9, -6, 5, 6), const Radius.circular(2));
     final lens = Path()..moveTo(5, -3.5)..lineTo(11, -6.5)..lineTo(11, 6.5)..lineTo(5, 3.5)..close();
     final fill = g.behind ? N.g07 : orbitColor.withValues(alpha: a);
     c.drawRRect(body, Paint()..color = fill);
@@ -194,10 +194,10 @@ class _Painter extends CustomPainter {
     c.drawCircle(rh, 4.6, Paint()..color = rollColor.withValues(alpha: a));
     c.drawCircle(rh, 4.6, Paint()..color = N.g07..style = PaintingStyle.stroke..strokeWidth = 1.3);
     final t = 'pitch ${s.pitch.toStringAsFixed(0)}°  yaw ${s.yaw.toStringAsFixed(0)}°   ×${s.distance.toStringAsFixed(2)}   roll ${s.roll.toStringAsFixed(0)}°';
-    final tp = TextPainter(text: TextSpan(text: t, style: mono(8.5, c: N.g51)), textDirection: TextDirection.ltr, maxLines: 1, ellipsis: '…')..layout(maxWidth: sz.width - 16);
+    final tp = TextPainter(text: TextSpan(text: t, style: mono(9.5, c: N.g51)), textDirection: TextDirection.ltr, maxLines: 1, ellipsis: '…')..layout(maxWidth: sz.width - 16);
     tp.paint(c, const Offset(8, 7));
     if (locked) {
-      final lp = TextPainter(text: TextSpan(text: 'TARGET LAYER', style: sans(8, c: targetColor, w: FontWeight.w700, ls: 1)), textDirection: TextDirection.ltr)..layout();
+      final lp = TextPainter(text: TextSpan(text: 'TARGET LAYER', style: sans(9.5, c: targetColor, w: FontWeight.w700, ls: 1)), textDirection: TextDirection.ltr)..layout();
       lp.paint(c, Offset(sz.width - lp.width - 8, sz.height - lp.height - 6));
     }
   }

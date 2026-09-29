@@ -7,6 +7,7 @@ import 'package:flutter/widgets.dart';
 import '../../foundation/theme.dart';
 import '../../hf/bp/common.dart' show sans, mono;
 import '../../hf/glyphs.dart';
+import '../../hf/metrics.dart';
 import '../../hf/neutral.dart';
 import '../../hf/shell/menu.dart' show showHfMenu;
 import '../../hf/shell/place.dart' show H, Fam;
@@ -57,13 +58,13 @@ class _ToolState extends State<_Tool> {
         behavior: HitTestBehavior.opaque,
         onTap: widget.onTap,
         child: Container(
-          height: 24,
-          padding: const EdgeInsets.symmetric(horizontal: 8),
+          height: 20,
+          padding: const EdgeInsets.symmetric(horizontal: 6),
           decoration: BoxDecoration(color: _over && live ? N.g15 : null, borderRadius: BorderRadius.circular(3)),
           child: Row(mainAxisSize: MainAxisSize.min, children: [
-            SizedBox.square(dimension: 11, child: CustomPaint(painter: _ToolPainter(widget.glyph, live ? (widget.glyph == _ToolGlyph.marker ? H.record : ink) : N.g33))),
-            const SizedBox(width: 6),
-            Text(widget.label, style: sans(11.5, c: ink, w: FontWeight.w500)),
+            SizedBox.square(dimension: 9, child: CustomPaint(painter: _ToolPainter(widget.glyph, live ? (widget.glyph == _ToolGlyph.marker ? H.record : ink) : N.g33))),
+            const SizedBox(width: 5),
+            Text(widget.label, style: Dn.name(ink)),
           ]),
         ),
       ),
@@ -108,10 +109,10 @@ class LiveTimeline extends StatefulWidget {
 
 class _LiveTimelineState extends State<LiveTimeline> {
   // the skin's geometry: its own, told to nobody
-  static const rowH = 22.0, rulerH = 24.0, keySlop = 6.0, edgeSlop = 5.0, dragSlop = 4.0;
+  static const rowH = UiMetrics.rowTight, rulerH = 20.0, keySlop = 6.0, edgeSlop = 5.0, dragSlop = 4.0;
 
   /// The name column: a share of the seat, so a narrow window keeps its time.
-  double labelW = 236;
+  double labelW = 180;
 
   EditorSession get c => widget.c;
   late final TimelineSession s = TimelineSession.of(c);
@@ -132,7 +133,7 @@ class _LiveTimelineState extends State<LiveTimeline> {
 
   // ---- the skin's transforms -------------------------------------------------------------------------------------
   /// Frame 0 sits a little in from the name column, so the first bar and the playhead are not pressed against it.
-  static const inset = 12.0;
+  static const inset = 9.0;
   double xOf(num frame) => labelW + inset + (frame - s.startFrame) * s.pixelsPerFrame;
   double frameAt(double x) => s.startFrame + (x - labelW - inset) / s.pixelsPerFrame;
   double yOf(int row) => rulerH + (row - s.firstRow) * rowH;
@@ -270,7 +271,7 @@ class _LiveTimelineState extends State<LiveTimeline> {
   // ---- build -------------------------------------------------------------------------------------------------------
   @override
   Widget build(BuildContext context) => LayoutBuilder(builder: (context, box) {
-        labelW = (box.maxWidth * .26).clamp(168.0, 264.0);
+        labelW = (box.maxWidth * .22).clamp(132.0, 220.0);
         final frames = math.max(1.0, (box.maxWidth - labelW) / s.pixelsPerFrame), rows = math.max(1.0, (box.maxHeight - rulerH) / rowH);
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) s.viewport(frames: frames, rows: rows);
@@ -391,7 +392,7 @@ class _LiveTimelineState extends State<LiveTimeline> {
     return Positioned(
       left: x - 6,
       top: 0,
-      width: 12,
+      width: 12, // a pointer target: as wide as it was, however small the mark
       height: rulerH,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
@@ -413,15 +414,15 @@ class _LiveTimelineState extends State<LiveTimeline> {
       if (y > 4000) break;
       final r = s.rows[i];
       final lane = r.property != null, group = r.isGroup && !lane;
-      final indent = r.depth * 12.0;
-      Widget mark(Widget child, VoidCallback? onTap, {double w = 16}) => SizedBox(
+      final indent = r.depth * 9.0;
+      Widget mark(Widget child, VoidCallback? onTap, {double w = 14}) => SizedBox(
             width: w,
             height: rowH,
             child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: onTap, child: Center(child: child)),
           );
-      Widget glyph(HG g, Color color, {bool on = false, double size = 11}) => Container(
-            width: 15,
-            height: 15,
+      Widget glyph(HG g, Color color, {bool on = false, double size = 9}) => Container(
+            width: 12,
+            height: 12,
             decoration: on ? BoxDecoration(color: H.toggleOn, borderRadius: BorderRadius.circular(3)) : null,
             alignment: Alignment.center,
             child: SizedBox.square(dimension: size, child: CustomPaint(painter: HgPainter(g, on ? N.g100 : color, on ? H.toggleOn : N.g10))),
@@ -445,8 +446,8 @@ class _LiveTimelineState extends State<LiveTimeline> {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: lane
-                    ? sans(11, c: N.g63)
-                    : sans(12, c: r.layer['hidden'] == true ? N.g44 : (c.selectedIds.contains(r.id) ? N.g100 : N.g82), w: group || c.selectedIds.contains(r.id) ? FontWeight.w600 : FontWeight.w400),
+                    ? Dn.label(N.g69)
+                    : Dn.name(r.layer['hidden'] == true ? N.g56 : (c.selectedIds.contains(r.id) ? N.g100 : N.g86), group || c.selectedIds.contains(r.id) ? FontWeight.w600 : FontWeight.w500),
               ),
             ),
           ),
@@ -460,25 +461,25 @@ class _LiveTimelineState extends State<LiveTimeline> {
         child: Row(children: [
           // the chosen layer's own colour, a thin edge at the column's left
           Container(width: 2, height: rowH, color: !lane && c.selectedIds.contains(r.id) ? (r.isGroup ? N.g63 : _family(r.id).t) : null),
-          const SizedBox(width: 4),
+          const SizedBox(width: 3),
           if (lane) ...[
-            SizedBox(width: indent + 14 + 8),
+            SizedBox(width: indent + 11 + 6),
             // which layer these lanes belong to: its own colour, a thin line where its chip stands
             Container(width: 1.5, height: rowH, color: (r.isGroup ? N.g51 : _family(r.id).t).withValues(alpha: .7)),
-            const SizedBox(width: 12.5),
+            const SizedBox(width: 9),
             name,
-            mark(_Diamond(keyed: r.keys.any((k) => (k['frame'] as num).round() == c.frame.value)), () => s.toggleKeyHere(i), w: 24),
-            const SizedBox(width: 24),
+            mark(_Diamond(keyed: r.keys.any((k) => (k['frame'] as num).round() == c.frame.value)), () => s.toggleKeyHere(i), w: 20),
+            const SizedBox(width: 18),
           ] else ...[
             SizedBox(width: indent),
-            mark(_Twirl(open: group ? r.groupOpen : r.lanesOpen, strong: group), () => group ? s.toggleFold(i) : s.toggleLanes(i), w: 14),
-            SizedBox(width: 18, child: Center(child: _Chip(r))),
-            const SizedBox(width: 4),
+            mark(_Twirl(open: group ? r.groupOpen : r.lanesOpen, strong: group), () => group ? s.toggleFold(i) : s.toggleLanes(i), w: 12),
+            SizedBox(width: 15, child: Center(child: _Chip(r))),
+            const SizedBox(width: 3),
             name,
-            if (group) mark(_Twirl(open: r.lanesOpen, strong: false), () => s.toggleLanes(i), w: 14),
+            if (group) mark(_Twirl(open: r.lanesOpen, strong: false), () => s.toggleLanes(i), w: 12),
             // switches in one quiet column at the right: always in the same place, lit only when on
-            mark(r.layer['clipToBelow'] == true || quiet ? glyph(HG.crop, N.g38, on: r.layer['clipToBelow'] == true) : const SizedBox(), () => s.toggleSwitch(i, 'clipToBelow'), w: 18),
-            mark(glyph(r.layer['hidden'] == true ? HG.eyeOff : HG.eye, r.layer['hidden'] == true ? N.g76 : (quiet ? N.g56 : N.g38), size: 12), () => s.toggleSwitch(i, 'hidden')),
+            mark(r.layer['clipToBelow'] == true || quiet ? glyph(HG.crop, N.g38, on: r.layer['clipToBelow'] == true) : const SizedBox(), () => s.toggleSwitch(i, 'clipToBelow'), w: 15),
+            mark(glyph(r.layer['hidden'] == true ? HG.eyeOff : HG.eye, r.layer['hidden'] == true ? N.g76 : (quiet ? N.g56 : N.g38), size: 10), () => s.toggleSwitch(i, 'hidden')),
             mark(glyph(HG.solo, quiet ? N.g44 : N.g26, on: r.layer['solo'] == true), () => s.toggleSwitch(i, 'solo')),
             mark(glyph(HG.lock, quiet ? N.g44 : N.g26, on: r.layer['locked'] == true), () => s.toggleSwitch(i, 'locked')),
           ],
@@ -494,7 +495,7 @@ class _Twirl extends StatelessWidget {
   const _Twirl({required this.open, required this.strong});
   final bool open, strong;
   @override
-  Widget build(BuildContext context) => SizedBox(width: 9, height: 9, child: CustomPaint(painter: _TriPainter(open, strong ? N.g69 : N.g51)));
+  Widget build(BuildContext context) => SizedBox(width: 7, height: 7, child: CustomPaint(painter: _TriPainter(open, strong ? N.g69 : N.g51)));
 }
 
 class _TriPainter extends CustomPainter {
@@ -519,9 +520,9 @@ class _Chip extends StatelessWidget {
   Widget build(BuildContext context) {
     final kind = r.layer['kind'];
     if (kind == 'Camera' || r.isGroup) {
-      return SizedBox.square(dimension: 12, child: CustomPaint(painter: HgPainter(kind == 'Camera' ? HG.camera : HG.list, N.g69, N.g10)));
+      return SizedBox.square(dimension: 10, child: CustomPaint(painter: HgPainter(kind == 'Camera' ? HG.camera : HG.list, N.g69, N.g10)));
     }
-    return Container(width: 10, height: 10, decoration: BoxDecoration(color: r.layer['hidden'] == true ? N.g33 : _family(r.id).n, borderRadius: BorderRadius.circular(2.5)));
+    return Container(width: 8, height: 8, decoration: BoxDecoration(color: r.layer['hidden'] == true ? N.g33 : _family(r.id).n, borderRadius: BorderRadius.circular(2)));
   }
 }
 
@@ -529,7 +530,7 @@ class _Diamond extends StatelessWidget {
   const _Diamond({required this.keyed});
   final bool keyed;
   @override
-  Widget build(BuildContext context) => SizedBox.square(dimension: 9, child: CustomPaint(painter: _DiamondPainter(keyed ? N.g95 : null, N.g56)));
+  Widget build(BuildContext context) => SizedBox.square(dimension: 8, child: CustomPaint(painter: _DiamondPainter(keyed ? N.g95 : null, N.g56)));
 }
 
 class _DiamondPainter extends CustomPainter {
@@ -543,14 +544,14 @@ class _DiamondPainter extends CustomPainter {
 
 /// A key's half-size from how close the keys on its row sit: roomy rows get the full mark, crowded rows smaller ones.
 double _keySize(List<double> xs) {
-  if (xs.length < 2) return 3.8;
+  if (xs.length < 2) return 3.2;
   final sorted = [...xs]..sort();
   var gap = double.infinity;
   for (var i = 1; i < sorted.length; i++) {
     final d = sorted[i] - sorted[i - 1];
     if (d > .5 && d < gap) gap = d;
   }
-  return gap.isFinite ? (gap / 3.2).clamp(2.4, 3.8) : 3.8;
+  return gap.isFinite ? (gap / 3.6).clamp(2.0, 3.2) : 3.2;
 }
 
 void _diamond(Canvas cv, Offset c, double r, Color? fill, Color? edge) {
@@ -585,13 +586,13 @@ class _RowsPainter extends CustomPainter {
       final x = t.xOf(f);
       if (x < L) continue;
       final isMajor = f % major == 0;
-      cv.drawRect(Rect.fromLTWH(x.roundToDouble(), isMajor ? top - 7 : top - 3, 1, isMajor ? 7 : 3), fill..color = isMajor ? N.g44 : N.g26);
+      cv.drawRect(Rect.fromLTWH(x.roundToDouble(), isMajor ? top - 6 : top - 3, 1, isMajor ? 6 : 3), fill..color = isMajor ? N.g44 : N.g26);
       if (isMajor) grid.add(x.roundToDouble());
       if (isMajor) {
         final m = f ~/ (rate * 60), sec = (f ~/ rate) % 60, ff = f % rate;
         final label = major < rate ? '${sec.toString().padLeft(2, '0')}:${ff.toString().padLeft(2, '0')}' : '${m.toString().padLeft(2, '0')}:${sec.toString().padLeft(2, '0')}';
-        final tp = TextPainter(text: TextSpan(text: label, style: mono(9.5, c: N.g56)), textDirection: TextDirection.ltr)..layout();
-        tp.paint(cv, Offset(x + 3, 2));
+        final tp = TextPainter(text: TextSpan(text: label, style: Dn.value(N.g63).copyWith(fontSize: 9.5)), textDirection: TextDirection.ltr)..layout();
+        tp.paint(cv, Offset(x + 3, 3));
         tp.dispose();
       }
     }
@@ -635,12 +636,12 @@ class _RowsPainter extends CustomPainter {
         final ghost = r.layer['ghost'];
         if (ghost is num && ghost != 0) {
           final a = ghost > 0 ? end : math.max(0.0, start + ghost), b = ghost > 0 ? end + ghost : start;
-          cv.drawRRect(RRect.fromRectAndRadius(Rect.fromLTRB(t.xOf(a), cy - 7, t.xOf(b), cy + 7), const Radius.circular(3)), fill..color = colour.withValues(alpha: .28));
+          cv.drawRRect(RRect.fromRectAndRadius(Rect.fromLTRB(t.xOf(a), cy - 5.5, t.xOf(b), cy + 5.5), const Radius.circular(2.5)), fill..color = colour.withValues(alpha: .28));
         }
         if (r.layer['kind'] != 'Camera') {
           // however short in time, a bar is drawn at least 3 px, so it can be seen where it is grabbed
-          final bar = Rect.fromLTRB(t.xOf(start), cy - 7, math.max(t.xOf(end), t.xOf(start) + 3), cy + 7);
-          cv.drawRRect(RRect.fromRectAndRadius(bar, const Radius.circular(3)), fill..color = colour);
+          final bar = Rect.fromLTRB(t.xOf(start), cy - 5.5, math.max(t.xOf(end), t.xOf(start) + 3), cy + 5.5);
+          cv.drawRRect(RRect.fromRectAndRadius(bar, const Radius.circular(2.5)), fill..color = colour);
           if (selected) cv.drawRRect(RRect.fromRectAndRadius(bar.deflate(.5), const Radius.circular(2.5)), Paint()..style = PaintingStyle.stroke..color = N.g100.withValues(alpha: .55));
         } else {
           // a camera has no picture of its own: a hairline for its time, so its keys sit on something
@@ -652,7 +653,7 @@ class _RowsPainter extends CustomPainter {
           for (final col in wave) {
             final x = t.xOf((col['frame'] as num).toDouble());
             if (x < L || x > size.width) continue;
-            final h = math.min(rh / 2 - 2, ((col['max'] as num) - (col['min'] as num)).toDouble() / 2 * 9);
+            final h = math.min(rh / 2 - 2, ((col['max'] as num) - (col['min'] as num)).toDouble() / 2 * 7);
             if (h > .3) p.addRect(Rect.fromLTRB(x, cy - h, x + math.max(1.0, s.pixelsPerFrame * .7), cy + h));
           }
           cv.drawPath(p, fill..color = Color.lerp(H.wave, N.g100, .38)!);
@@ -674,14 +675,14 @@ class _RowsPainter extends CustomPainter {
       } else {
         final keys = [...r.keys]..sort((a, b) => (a['frame'] as num).compareTo(b['frame'] as num));
         for (var n = 0; n + 1 < keys.length; n++) {
-          final a = keyX(tlKeyOf(r, keys[n])) + 5, b = keyX(tlKeyOf(r, keys[n + 1])) - 5;
+          final a = keyX(tlKeyOf(r, keys[n])) + 4, b = keyX(tlKeyOf(r, keys[n + 1])) - 4;
           if (b <= a) continue;
           final chosen = isPicked(tlKeyOf(r, keys[n])) && isPicked(tlKeyOf(r, keys[n + 1]));
           final linear = EditorSession.map(keys[n]['interp'])['kind'] == 'Linear';
           final line = Paint()..strokeWidth = chosen ? 1.6 : 1..color = chosen ? accent : N.g51;
           if (linear) {
-            for (var x = a; x < b; x += 6) {
-              cv.drawLine(Offset(x, cy), Offset(math.min(x + 3, b), cy), line);
+            for (var x = a; x < b; x += 5) {
+              cv.drawLine(Offset(x, cy), Offset(math.min(x + 2.5, b), cy), line);
             }
           } else {
             cv.drawLine(Offset(a, cy), Offset(b, cy), line);
@@ -709,7 +710,7 @@ class _RowsPainter extends CustomPainter {
       final x = t.xOf(s.markerDrag?.$1 == id ? s.markerDrag!.$2 : (m['frame'] as num).toDouble());
       if (x < L - 6) continue;
       cv.drawRect(Rect.fromLTWH(x - .5, top, 1, size.height - top), fill..color = H.record.withValues(alpha: .22));
-      cv.drawPath(Path()..moveTo(x - 3.5, top - 9)..lineTo(x + 3.5, top - 9)..lineTo(x + 3.5, top - 4)..lineTo(x, top)..lineTo(x - 3.5, top - 4)..close(), fill..color = H.record);
+      cv.drawPath(Path()..moveTo(x - 3, top - 8)..lineTo(x + 3, top - 8)..lineTo(x + 3, top - 4)..lineTo(x, top)..lineTo(x - 3, top - 4)..close(), fill..color = H.record);
     }
     cv.drawRect(Rect.fromLTWH(L - 1, 0, 1, size.height), fill..color = N.g15);
     if (s.marquee case final m?) {
@@ -719,11 +720,11 @@ class _RowsPainter extends CustomPainter {
     }
     if (s.drop case final d?) {
       final y = top + (d.at - s.firstRow) * rh;
-      final guide = Paint()..color = H.guide..strokeWidth = 2..style = PaintingStyle.stroke;
+      final guide = Paint()..color = H.guide..strokeWidth = 1.5..style = PaintingStyle.stroke;
       if (d.inside) {
         cv.drawRect(Rect.fromLTWH(1, y + 1, size.width - 2, rh - 2), guide);
       } else {
-        cv.drawLine(Offset(d.depth * 12.0 + 60, y), Offset(size.width, y), guide);
+        cv.drawLine(Offset(d.depth * 9.0 + 45, y), Offset(size.width, y), guide);
       }
     }
   }
@@ -744,7 +745,7 @@ class _HeadPainter extends CustomPainter {
     cv.drawRect(Rect.fromLTWH(x - .5, 0, 1, size.height), fill);
     // the head lives in the ruler's lower band, under the time labels
     const top = _LiveTimelineState.rulerH;
-    cv.drawPath(Path()..moveTo(x - 5, top - 11)..lineTo(x + 5, top - 11)..lineTo(x + 5, top - 5)..lineTo(x, top)..lineTo(x - 5, top - 5)..close(), fill);
+    cv.drawPath(Path()..moveTo(x - 4, top - 9)..lineTo(x + 4, top - 9)..lineTo(x + 4, top - 4)..lineTo(x, top)..lineTo(x - 4, top - 4)..close(), fill);
   }
 
   @override

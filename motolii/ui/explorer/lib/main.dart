@@ -12,9 +12,10 @@ import 'shots.dart';
 import 'stories/panels.dart';
 import 'stories/paper.dart';
 import 'stories/timeline.dart';
+import 'stories/workspace.dart';
 
 /// Every story, in the order the explorer lists them.
-final allStories = [...timelineStories, ...inspectorStories, ...browserStories, ...otherStories, ...paperStories];
+final allStories = [...timelineStories, ...inspectorStories, ...browserStories, ...otherStories, ...paperStories, ...workspaceStories];
 
 void main() {
   // production reads some of its data relative to motolii/ui (where `flutter run` starts it); so does the explorer
@@ -39,6 +40,6 @@ class Explorer extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Widgetbook.material(
         themeMode: ThemeMode.dark,
-        directories: [timelineComponent, ...panelComponents, paperComponent],
+        directories: [timelineComponent, ...panelComponents, paperComponent, workspaceComponent],
       );
 }

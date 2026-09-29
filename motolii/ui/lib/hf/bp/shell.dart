@@ -31,7 +31,7 @@ class HeaderKey extends StatelessWidget {
   Widget build(BuildContext context) => GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: onTap,
-        child: SizedBox(width: 30, height: 30, child: Center(child: GlyphBox(g, size: 16, color: on ? N.g95 : N.g69))),
+        child: SizedBox(width: 22.5, height: 22.5, child: Center(child: GlyphBox(g, size: 16, color: on ? N.g95 : N.g69))),
       );
 }
 
@@ -94,11 +94,11 @@ class _PanelHeaderState extends State<PanelHeader> {
         final searching = open || widget.search.active;
         return Container(
           height: h,
-          padding: EdgeInsets.only(left: widget.lead == null ? 12 : 0, right: 4),
+          padding: EdgeInsets.only(left: widget.lead == null ? 12 : 0, right: 3),
           decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: kRule2))),
           child: searching
               ? Row(children: [
-                  Expanded(child: SearchField(widget.search, widget.hint, height: 28, trailing: widget.count == null || !widget.search.active ? null : Text(widget.count!, style: mono(10)))),
+                  Expanded(child: SearchField(widget.search, widget.hint, height: 21, trailing: widget.count == null || !widget.search.active ? null : Text(widget.count!, style: mono(10)))),
                   Builder(builder: (context) => HeaderKey(HG.kebab, onTap: () {
                     final seat = BrowserSeatScope.of(context);
                     final box = context.findRenderObject() as RenderBox?;
@@ -111,7 +111,7 @@ class _PanelHeaderState extends State<PanelHeader> {
                       widget.search.focus.unfocus();
                       setState(() => open = false);
                     },
-                    child: const SizedBox(width: 30, height: 30, child: Center(child: GlyphBox(HG.cross, size: 14, color: kMuted))),
+                    child: const SizedBox(width: 22.5, height: 22.5, child: Center(child: GlyphBox(HG.cross, size: 14, color: kMuted))),
                   ),
                 ])
               : Row(children: [
@@ -124,7 +124,7 @@ class _PanelHeaderState extends State<PanelHeader> {
                   ] else
                     const Spacer(),
                   if (widget.extra != null) widget.extra!,
-                  if (widget.count != null && widget.mode == HeadMode.full) Padding(padding: const EdgeInsets.only(left: 8, right: 6), child: Text(widget.count!, style: mono(9.5, c: N.g44))),
+                  if (widget.count != null && widget.mode == HeadMode.full) Padding(padding: const EdgeInsets.only(left: 6, right: 4.5), child: Text(widget.count!, style: mono(9.5, c: N.g44))),
                   HeaderKey(HG.search, onTap: () {
                     setState(() => open = true);
                     WidgetsBinding.instance.addPostFrameCallback((_) => widget.search.request());
@@ -232,4 +232,4 @@ class SectionLabel extends StatelessWidget {
   Widget build(BuildContext context) => SwissHeading(text);
 }
 
-Widget emptyBody(String text) => Padding(padding: const EdgeInsets.fromLTRB(14, 18, 14, 4), child: Text(text, style: sans(11.5, c: kMuted)));
+Widget emptyBody(String text) => Padding(padding: const EdgeInsets.fromLTRB(10.5, 13.5, 10.5, 3), child: Text(text, style: sans(11, c: kMuted)));

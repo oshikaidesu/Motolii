@@ -30,14 +30,14 @@ class SwissHeading extends StatelessWidget {
   final bool rule; // kept for callers; a heading no longer draws a rule
   @override
   Widget build(BuildContext context) => Padding(
-        padding: EdgeInsets.only(top: rule ? 14 : 10, bottom: 8),
+        padding: EdgeInsets.only(top: rule ? 14 : 10, bottom: 6),
         child: Row(children: [
-          Flexible(child: Text(text, softWrap: false, overflow: TextOverflow.ellipsis, style: sans(11.5, c: N.g91, w: FontWeight.w600))),
+          Flexible(child: Text(text, softWrap: false, overflow: TextOverflow.ellipsis, style: sans(11, c: N.g91, w: FontWeight.w600))),
           if (count != null)
             Container(
-              margin: const EdgeInsets.only(left: 6),
-              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-              decoration: BoxDecoration(color: N.g15, borderRadius: BorderRadius.circular(4)),
+              margin: const EdgeInsets.only(left: 4.5),
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+              decoration: BoxDecoration(color: N.g15, borderRadius: BorderRadius.circular(3)),
               child: Text('$count', style: sans(9.5, c: N.g63, w: FontWeight.w500)),
             ),
         ]),
@@ -58,7 +58,7 @@ class PickedRing extends StatelessWidget {
   Widget build(BuildContext context) => IgnorePointer(
         child: DecoratedBox(
           decoration: BoxDecoration(
-            border: Border.all(color: N.g95, width: 2),
+            border: Border.all(color: N.g95, width: 1.5),
             borderRadius: BorderRadius.circular(radius),
           ),
         ),

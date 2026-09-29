@@ -197,7 +197,7 @@ class _LiveColorInstrumentState extends State<LiveColorInstrument> {
                     ),
                   ],
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 6),
                 SizedBox(
                   height: wheel,
                   child: Row(
@@ -205,7 +205,7 @@ class _LiveColorInstrumentState extends State<LiveColorInstrument> {
                       _drag(
                         SizedBox(
                           key: const ValueKey('hf-color-value'),
-                          width: 10,
+                          width: 7.5,
                           height: wheel,
                           child: CustomPaint(
                             painter: ColorBar(
@@ -222,13 +222,13 @@ class _LiveColorInstrumentState extends State<LiveColorInstrument> {
                         ),
                         (p, {start = false}) => _bar('value', p, start: start),
                       ),
-                      const SizedBox(width: 4),
+                      const SizedBox(width: 3),
                       Opacity(
                         opacity: alpha ? 1 : .4,
                         child: _drag(
                           SizedBox(
                             key: const ValueKey('hf-color-alpha'),
-                            width: 10,
+                            width: 7.5,
                             height: wheel,
                             child: CustomPaint(
                               painter: ColorBar(1, color, 1.0 - edit.value[3]),
@@ -241,7 +241,7 @@ class _LiveColorInstrumentState extends State<LiveColorInstrument> {
                     ],
                   ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 9),
                 // the readout (Swiss): what the wheel edits in small caps, then its value, both flush left
                 Expanded(
                   child: Column(
@@ -253,16 +253,16 @@ class _LiveColorInstrumentState extends State<LiveColorInstrument> {
                           key: const ValueKey('hf-color-target'),
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: sans(10.5, c: N.g63, w: FontWeight.w500),
+                          style: sans(10, c: N.g63, w: FontWeight.w500),
                         ),
-                      const SizedBox(height: 6),
+                      const SizedBox(height: 4.5),
                       Row(children: [
                         Expanded(
                           child: EditableText(
                             key: const ValueKey('hf-color-hex'),
                             controller: hex,
                             focusNode: hexFocus,
-                            style: sans(15, c: N.g95, w: FontWeight.w600),
+                            style: sans(11, c: N.g95, w: FontWeight.w600),
                             cursorColor: N.g82,
                             backgroundCursorColor: N.g00,
                             onSubmitted: _typed,
@@ -279,7 +279,7 @@ class _LiveColorInstrumentState extends State<LiveColorInstrument> {
                         ),
                       ]),
                       // the same colour in the other numbers people ask for, in the space beside the wheel
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 6),
                       for (final (a, b) in [
                         ('R ${(color.r * 255).round()}', 'H ${hsv.hue.round()}°'),
                         ('G ${(color.g * 255).round()}', 'S ${(hsv.saturation * 100).round()}'),
@@ -289,14 +289,14 @@ class _LiveColorInstrumentState extends State<LiveColorInstrument> {
                         Padding(
                           padding: const EdgeInsets.only(top: 1),
                           child: Row(children: [
-                            SizedBox(width: 40, child: Text(a, softWrap: false, style: sans(10, c: N.g56))),
+                            SizedBox(width: 30, child: Text(a, softWrap: false, style: sans(10, c: N.g56))),
                             Text(b, softWrap: false, style: sans(10, c: N.g56)),
                           ]),
                         ),
                       // while armed, what to do next
                       if (picking)
                         Padding(
-                          padding: const EdgeInsets.only(top: 6),
+                          padding: const EdgeInsets.only(top: 4.5),
                           child: Text('Click the Stage to pick · Esc cancels', key: const ValueKey('hf-eyedropper-hint'), maxLines: 2, style: sans(9.5, c: kMuted)),
                         ),
                     ],

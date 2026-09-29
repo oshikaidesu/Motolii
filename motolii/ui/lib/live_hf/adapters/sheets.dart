@@ -17,7 +17,7 @@ import '../../session/export_actions.dart';
 Future<void> showExportSheet(BuildContext context, EditorSession c, {Rect? anchor}) {
   final a = anchor ?? _topRight(context);
   final key = GlobalKey<_ExportState>();
-  return showHfPopover(context, anchor: a, title: 'Export', width: 320, primary: () => key.currentState?.exportAction, body: (_, close) => _Export(key: key, c: c, close: close));
+  return showHfPopover(context, anchor: a, title: 'Export', width: 240, primary: () => key.currentState?.exportAction, body: (_, close) => _Export(key: key, c: c, close: close));
 }
 
 Rect _topRight(BuildContext context) {
@@ -98,7 +98,7 @@ class _ExportState extends State<_Export> {
     final phase = job['phase'];
     final failed = phase == 'failed' || phase == 'error';
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+      padding: const EdgeInsets.fromLTRB(9, 7.5, 9, 9),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         HfFormRow('Output', HfFact('${s['width']} × ${s['height']} · $rate fps · MP4')),
         HfFormRow(
@@ -121,7 +121,7 @@ class _ExportState extends State<_Export> {
               _ => '$phase',
             }, color: failed ? H.record : H.text2),
           ),
-        const SizedBox(height: 4),
+        const SizedBox(height: 3),
         Row(mainAxisAlignment: MainAxisAlignment.end, children: [
           HfAction(running ? 'Stop' : 'Cancel', onTap: running ? (c.supports('cancelExport') ? () => c.command('cancelExport') : null) : widget.close),
           HfAction('Export…', kind: HfActionKind.primary, onTap: exportAction),
@@ -136,8 +136,8 @@ class _ExportState extends State<_Export> {
 /// in view (the settings change what it shows) and Colors, where Background colour hands the ground, is not dimmed.
 Future<void> showCompositionSheet(BuildContext context, EditorSession c, {Rect? anchor}) {
   final store = CompositionStore(c);
-  return showHfPopover(context, anchor: anchor ?? _topRight(context), title: 'Composition', width: 300, body: (_, close) => Padding(
-        padding: const EdgeInsets.fromLTRB(12, 4, 12, 10),
+  return showHfPopover(context, anchor: anchor ?? _topRight(context), title: 'Composition', width: 225, body: (_, close) => Padding(
+        padding: const EdgeInsets.fromLTRB(9, 3, 9, 7.5),
         child: ParamSheet(store, thingId: 'composition'),
       )).whenComplete(store.dispose);
 }

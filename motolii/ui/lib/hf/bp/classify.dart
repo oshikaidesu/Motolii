@@ -89,14 +89,14 @@ class _ClassColumnState extends State<ClassColumn> {
           decoration: const BoxDecoration(border: Border(right: BorderSide(color: kRule2))),
           child: ListView(
             controller: scroll,
-            padding: const EdgeInsets.fromLTRB(12, 10, 6, 10),
+            padding: const EdgeInsets.fromLTRB(9, 7.5, 4.5, 7.5),
             physics: const ClampingScrollPhysics(),
             children: [
               for (final (gi, g) in widget.groups.indexed) ...[
-                if (gi > 0) const SizedBox(height: 14),
+                if (gi > 0) const SizedBox(height: 10.5),
                 for (final c in g) _Row(c, c == widget.classify.selected, () => widget.classify.select(c)),
               ],
-              if (widget.trailingPlus) Padding(padding: const EdgeInsets.only(top: 12), child: Text('+', style: sans(15, c: kMuted))),
+              if (widget.trailingPlus) Padding(padding: const EdgeInsets.only(top: 9), child: Text('+', style: sans(11, c: kMuted))),
             ],
           ),
         ),
@@ -113,13 +113,13 @@ class _Row extends StatelessWidget {
         behavior: HitTestBehavior.opaque,
         onTap: tap,
         child: SizedBox(
-          height: 27,
+          height: 20,
           child: Align(
             alignment: Alignment.centerLeft,
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(color: on ? N.g20 : null, borderRadius: BorderRadius.circular(6)),
-              child: Text(label, softWrap: false, overflow: TextOverflow.clip, style: sans(11.5, c: on ? N.g95 : N.g56, w: FontWeight.w500)),
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(color: on ? N.g20 : null, borderRadius: BorderRadius.circular(4.5)),
+              child: Text(label, softWrap: false, overflow: TextOverflow.clip, style: sans(11, c: on ? N.g95 : N.g56, w: FontWeight.w500)),
             ),
           ),
         ),
@@ -176,7 +176,7 @@ class _ClassStripState extends State<ClassStrip> {
   Widget build(BuildContext context) => ListenableBuilder(
         listenable: widget.classify,
         builder: (_, __) => Container(
-          height: 28,
+          height: 21,
           decoration: widget.bare ? null : const BoxDecoration(border: Border(bottom: BorderSide(color: kRule2))),
           // an edge fades where more classes scroll that way: a cut-off name reads as "more", not as a clipped label
           child: NotificationListener<ScrollMetricsNotification>(
@@ -192,14 +192,14 @@ class _ClassStripState extends State<ClassStrip> {
                 child: SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
                   physics: const ClampingScrollPhysics(),
-                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  padding: const EdgeInsets.symmetric(horizontal: 7.5),
                   child: Row(children: [
                     for (final (gi, g) in widget.groups.indexed) ...[
-                      if (gi > 0) const SizedBox(width: 10),
+                      if (gi > 0) const SizedBox(width: 7.5),
                       for (final c in g)
                         Padding(
                           key: c == widget.classify.selected ? _chosen : null,
-                          padding: const EdgeInsets.only(right: 2),
+                          padding: const EdgeInsets.only(right: 1.5),
                           child: _Row(c, c == widget.classify.selected, () => widget.classify.select(c)),
                         ),
                     ],
@@ -223,10 +223,10 @@ class ClassChip extends StatelessWidget {
             ? GestureDetector(
                 onTap: () => classify.select(classify.all),
                 child: Container(
-                  height: 20,
-                  padding: const EdgeInsets.symmetric(horizontal: 7),
-                  decoration: BoxDecoration(color: kSel, borderRadius: BorderRadius.circular(3)),
-                  child: Center(child: Text('${classify.selected}  ×', softWrap: false, style: sans(10.5, c: N.g91))),
+                  height: 15,
+                  padding: const EdgeInsets.symmetric(horizontal: 5),
+                  decoration: BoxDecoration(color: kSel, borderRadius: BorderRadius.circular(2)),
+                  child: Center(child: Text('${classify.selected}  ×', softWrap: false, style: sans(10, c: N.g91))),
                 ),
               )
             : const SizedBox.shrink(),

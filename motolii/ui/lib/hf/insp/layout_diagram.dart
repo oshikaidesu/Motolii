@@ -234,7 +234,7 @@ class _Painter extends CustomPainter {
   void paint(Canvas c, Size sz) {
     final on = s.arranged, off = s.frozen;
     final a = off ? .5 : 1.0;
-    c.drawRRect(RRect.fromRectAndRadius(Offset.zero & sz, const Radius.circular(6)), Paint()..color = N.g07);
+    c.drawRRect(RRect.fromRectAndRadius(Offset.zero & sz, const Radius.circular(4.5)), Paint()..color = N.g07);
     // the space the container is offered
     final dash = Paint()..color = N.g20..strokeWidth = 1;
     final av = g.avail;
@@ -242,8 +242,8 @@ class _Painter extends CustomPainter {
     for (var y = av.top; y < av.bottom; y += 8) { c.drawLine(Offset(av.left, y), Offset(av.left, math.min(y + 4, av.bottom)), dash); c.drawLine(Offset(av.right, y), Offset(av.right, math.min(y + 4, av.bottom)), dash); }
     final dim = on ? 1.0 : .45;
     final p = g.parent, inn = g.inner;
-    c.drawRRect(RRect.fromRectAndRadius(p, const Radius.circular(4)), Paint()..color = N.g13);
-    c.drawRRect(RRect.fromRectAndRadius(p, const Radius.circular(4)), Paint()..color = sizeColor.withValues(alpha: .8 * dim * a)..style = PaintingStyle.stroke..strokeWidth = 1.6);
+    c.drawRRect(RRect.fromRectAndRadius(p, const Radius.circular(3)), Paint()..color = N.g13);
+    c.drawRRect(RRect.fromRectAndRadius(p, const Radius.circular(3)), Paint()..color = sizeColor.withValues(alpha: .8 * dim * a)..style = PaintingStyle.stroke..strokeWidth = 1.6);
     // padding: the wall's thickness, shown by the line it holds the children off with
     final pd = Paint()..color = spaceColor.withValues(alpha: .7 * dim * a)..strokeWidth = 1.2;
     for (var x = inn.left; x < inn.right; x += 6) { c.drawLine(Offset(x, inn.top), Offset(math.min(x + 3, inn.right), inn.top), pd); c.drawLine(Offset(x, inn.bottom), Offset(math.min(x + 3, inn.right), inn.bottom), pd); }
@@ -253,12 +253,12 @@ class _Painter extends CustomPainter {
     for (var iy = 0; iy < 3; iy++) { for (var ix = 0; ix < 3; ix++) { c.drawCircle(Offset(inn.left + inn.width * (ix + .5) / 3, inn.top + inn.height * (iy + .5) / 3), grab == _G.align ? 2.4 : 1.4, dots); } }
     // children
     for (final b in g.boxes) {
-      final rr = RRect.fromRectAndRadius(b, const Radius.circular(3));
+      final rr = RRect.fromRectAndRadius(b, const Radius.circular(2));
       c.drawRRect(rr, Paint()..color = (on ? N.g20 : N.g15));
       c.drawRRect(rr, Paint()..color = arrangeColor.withValues(alpha: .75 * dim * a)..style = PaintingStyle.stroke..strokeWidth = 1.3);
     }
     void bar(Offset o, bool vertical, Color col, {bool hollow = false}) {
-      final r = RRect.fromRectAndRadius(Rect.fromCenter(center: o, width: vertical ? 6 : 16, height: vertical ? 16 : 6), const Radius.circular(3));
+      final r = RRect.fromRectAndRadius(Rect.fromCenter(center: o, width: vertical ? 6 : 16, height: vertical ? 16 : 6), const Radius.circular(2));
       c.drawRRect(r, Paint()..color = hollow ? N.g07 : col.withValues(alpha: a));
       c.drawRRect(r, Paint()..color = col.withValues(alpha: a)..style = PaintingStyle.stroke..strokeWidth = 1.4);
     }
@@ -274,7 +274,7 @@ class _Painter extends CustomPainter {
       final gh = g.gapHandle;
       if (gh != null) dot(gh, spaceColor, r: 4);
       dot(g.padCorner, spaceColor, r: 4);
-      for (final o in [g.padL, g.padR, g.padT, g.padB]) { c.drawRect(Rect.fromCenter(center: o, width: 6, height: 6), Paint()..color = spaceColor); }
+      for (final o in [g.padL, g.padR, g.padT, g.padB]) { c.drawRect(Rect.fromCenter(center: o, width: 4.5, height: 4.5), Paint()..color = spaceColor); }
       // sizing: solid where the number counts (Fixed), hollow where the container hugs or fills
       dot(g.sizeW, sizeColor, hollow: !s.fixed('w'));
       dot(g.sizeH, sizeColor, hollow: !s.fixed('h'));
@@ -282,7 +282,7 @@ class _Painter extends CustomPainter {
     final t = on
         ? '${g.cols} × ${s.gi('layout.grid_rows') == 0 ? 'auto' : s.gi('layout.grid_rows')}   gap ${s.gd('layout.gap').round()}   pad ${s.padX.round()}·${s.padY.round()}   ${justifyNames[s.gi('layout.justify_content').clamp(0, 5)]} / ${alignNames[s.gi('layout.align_items').clamp(0, 3)]}'
         : 'Grid off';
-    final tp = TextPainter(text: TextSpan(text: t, style: mono(8.5, c: N.g51)), textDirection: TextDirection.ltr, maxLines: 1, ellipsis: '…')..layout(maxWidth: sz.width - 20);
+    final tp = TextPainter(text: TextSpan(text: t, style: mono(9.5, c: N.g51)), textDirection: TextDirection.ltr, maxLines: 1, ellipsis: '…')..layout(maxWidth: sz.width - 20);
     tp.paint(c, const Offset(10, 7));
   }
 

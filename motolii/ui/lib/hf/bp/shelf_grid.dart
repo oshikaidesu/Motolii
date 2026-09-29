@@ -94,9 +94,9 @@ class _ShelfGridPanelState extends State<ShelfGridPanel> with WithDiscovery<Shel
             strip: (c, s) => ListView.builder(
               scrollDirection: Axis.horizontal,
               physics: const ClampingScrollPhysics(),
-              padding: const EdgeInsets.all(10),
+              padding: const EdgeInsets.all(7.5),
               itemCount: shown.length,
-              itemBuilder: (c, i) => Padding(padding: const EdgeInsets.only(right: 6), child: SizedBox(width: math.min(s.height * 1.3, 96), child: seated(c, shown[i], ThingFace(shown[i])))),
+              itemBuilder: (c, i) => Padding(padding: const EdgeInsets.only(right: 4.5), child: SizedBox(width: math.min(s.height * 1.3, 96), child: seated(c, shown[i], ThingFace(shown[i])))),
             ),
           );
         },
@@ -107,36 +107,36 @@ class _ShelfGridPanelState extends State<ShelfGridPanel> with WithDiscovery<Shel
     if (own != null) return shown.isEmpty ? emptyBody(empty) : own(context, sections, shown, s);
     final seat = BrowserSeatScope.of(context);
     final tiling = seat?.tiling(context, s.width);
-    final pad = tiling?.padding ?? 12.0, gap = tiling?.gap ?? 6.0;
+    final pad = tiling?.padding ?? 9.0, gap = tiling?.gap ?? 5.0;
     final scale = seat?.tileScale ?? 1;
-    final column = tiling?.column ?? (narrow && s.width < 210 ? s.width - pad * 2 : 96.0 * scale);
+    final column = tiling?.column ?? (narrow && s.width < 210 ? s.width - pad * 2 : 72.0 * scale);
     final cols = math.max(1, ((s.width - pad * 2 + gap) / (column + gap)).floor());
     seat?.shows(shown, cols);
     final tileW = (s.width - pad * 2 - gap * (cols - 1)) / cols;
-    final captioned = tiling == null && widget.captions && tileW >= 60;
-    final extent = tiling?.extent ?? tileW * .84 + (captioned ? 18 : 0);
+    final captioned = tiling == null && widget.captions && tileW >= 48;
+    final extent = tiling?.extent ?? tileW * .84 + (captioned ? 14 : 0);
     return CustomScrollView(
       physics: const ClampingScrollPhysics(),
       slivers: [
         if (editor != null) SliverToBoxAdapter(child: editor),
-        if (shown.isEmpty) SliverToBoxAdapter(child: SizedBox(height: 120, child: emptyBody(empty))),
+        if (shown.isEmpty) SliverToBoxAdapter(child: SizedBox(height: 90, child: emptyBody(empty))),
         for (final e in sections.entries) ...[
           if (e.key.isNotEmpty) SliverToBoxAdapter(child: Padding(padding: EdgeInsets.symmetric(horizontal: pad), child: SectionLabel(e.key))),
           SliverPadding(
-            padding: EdgeInsets.fromLTRB(pad, e.key.isEmpty ? 10 : 0, pad, 6),
+            padding: EdgeInsets.fromLTRB(pad, e.key.isEmpty ? 10 : 0, pad, 4.5),
             sliver: SliverGrid(
               gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: cols, mainAxisSpacing: gap, crossAxisSpacing: gap, childAspectRatio: tileW / extent),
               delegate: SliverChildBuilderDelegate((c, i) => seated(c, e.value[i], _tile(e.value[i], captioned)), childCount: e.value.length),
             ),
           ),
         ],
-        const SliverToBoxAdapter(child: SizedBox(height: 12)),
+        const SliverToBoxAdapter(child: SizedBox(height: 9)),
       ],
     );
   }
 
   Widget _tile(Thing t, bool caption) => Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Expanded(child: ThingFace(t)),
-        if (caption) Padding(padding: const EdgeInsets.only(top: 5), child: Text(t.name, softWrap: false, maxLines: 1, overflow: TextOverflow.ellipsis, style: sans(10.5, c: N.g76))),
+        if (caption) Padding(padding: const EdgeInsets.only(top: 4), child: Text(t.name, softWrap: false, maxLines: 1, overflow: TextOverflow.ellipsis, style: sans(10, c: N.g76))),
       ]);
 }

@@ -296,7 +296,7 @@ class _ColorsPanelState extends State<ColorsPanel>
     final full = !filtering || wheelOnly;
     return SingleChildScrollView(
       physics: const ClampingScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(pad, 14, pad, 14),
+      padding: const EdgeInsets.fromLTRB(pad, 10.5, pad, 10.5),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -305,7 +305,7 @@ class _ColorsPanelState extends State<ColorsPanel>
           else
             _MiniInstrument(color: widget.current),
           if (!wheelOnly && (n > 0 || gradients || !filtering))
-            const SizedBox(height: 4),
+            const SizedBox(height: 3),
           if (n == 0 && !gradients && !wheelOnly)
             emptyBody('No colour matches "${search.query}".'),
           for (final e in sections.entries) ...[
@@ -331,7 +331,7 @@ class _ColorsPanelState extends State<ColorsPanel>
     final wheel = (s.width - 24).clamp(70.0, 150.0);
     return SingleChildScrollView(
       physics: const ClampingScrollPhysics(),
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(9),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -347,18 +347,18 @@ class _ColorsPanelState extends State<ColorsPanel>
             ),
           if ((!filtering || wheelOnly) && widget.editor == null)
             Padding(
-              padding: const EdgeInsets.only(top: 6, bottom: 4),
+              padding: const EdgeInsets.only(top: 4.5, bottom: 3),
               child: Center(
                 child: Text(
                   '#E8508F',
-                  style: mono(10.5, c: N.g76),
+                  style: mono(10, c: N.g76),
                 ),
               ),
             ),
           if (shown.isEmpty && filtering && !wheelOnly)
             emptyBody('No colour matches.'),
           if (!wheelOnly) ...[
-            const SizedBox(height: 4),
+            const SizedBox(height: 3),
             _Swatches(shown, 20, onTap: widget.onSwatch, onMenu: widget.onSwatchMenu),
           ],
         ],
@@ -371,22 +371,22 @@ class _ColorsPanelState extends State<ColorsPanel>
     return ListView.builder(
       scrollDirection: Axis.horizontal,
       physics: const ClampingScrollPhysics(),
-      padding: const EdgeInsets.all(10),
+      padding: const EdgeInsets.all(7.5),
       itemCount: shown.length + (addControl ? 1 : 0),
       itemBuilder: (_, i) => Padding(
-        padding: const EdgeInsets.only(right: 6),
+        padding: const EdgeInsets.only(right: 4.5),
         child: addControl && i == shown.length
             ? SizedBox(
-                width: 30,
+                width: 22.5,
                 child: Center(
-                  child: Text('+', style: sans(16, c: kMuted)),
+                  child: Text('+', style: sans(12, c: kMuted)),
                 ),
               )
             : Container(
                 width: math.min(h - 20, 38),
                 decoration: BoxDecoration(
                   color: Color(shown[i].$2),
-                  borderRadius: BorderRadius.circular(3),
+                  borderRadius: BorderRadius.circular(2),
                 ),
               ),
       ),
@@ -408,33 +408,33 @@ class _Instrument extends StatelessWidget {
             height: wheel,
             child: CustomPaint(painter: WheelPainter()),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           SizedBox(
             width: wheel,
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Text('#E8508F', style: mono(11, c: N.g82)),
-                const SizedBox(width: 8),
+                const SizedBox(width: 6),
                 const GlyphBox(HG.composite, size: 13, color: kMuted),
               ],
             ),
           ),
         ],
       ),
-      const SizedBox(width: 12),
+      const SizedBox(width: 9),
       SizedBox(
         height: wheel,
         child: Row(
           children: [
             SizedBox(
-              width: 11,
+              width: 8,
               height: wheel,
               child: CustomPaint(painter: ColorBar(0)),
             ),
-            const SizedBox(width: 9),
+            const SizedBox(width: 7),
             SizedBox(
-              width: 11,
+              width: 8,
               height: wheel,
               child: CustomPaint(painter: ColorBar(1)),
             ),
@@ -452,24 +452,24 @@ class _MiniInstrument extends StatelessWidget {
   Widget build(BuildContext context) => Row(
     children: [
       SizedBox(
-        width: 54,
-        height: 54,
+        width: 40.5,
+        height: 40.5,
         child: CustomPaint(
           painter: WheelPainter(
             color == null ? null : HSVColor.fromColor(color!),
           ),
         ),
       ),
-      const SizedBox(width: 12),
+      const SizedBox(width: 9),
       Container(
-        width: 30,
-        height: 30,
+        width: 22.5,
+        height: 22.5,
         decoration: BoxDecoration(
           color: color ?? _firstSwatch,
-          borderRadius: BorderRadius.circular(3),
+          borderRadius: BorderRadius.circular(2),
         ),
       ),
-      const SizedBox(width: 10),
+      const SizedBox(width: 7.5),
       Text(
         color == null ? '#E8508F' : hexText(color!),
         style: mono(11, c: N.g82),
@@ -490,7 +490,7 @@ class ColorBar extends CustomPainter {
   void paint(Canvas c, Size s) {
     final r = RRect.fromRectAndRadius(
       Offset.zero & s,
-      const Radius.circular(3),
+      const Radius.circular(2),
     );
     if (kind == 1) {
       c.save();
@@ -661,8 +661,8 @@ class _Swatches extends StatelessWidget {
   final void Function(Sw swatch, Offset at)? onMenu;
   @override
   Widget build(BuildContext context) => Wrap(
-    spacing: 5,
-    runSpacing: 5,
+    spacing: 4,
+    runSpacing: 4,
     children: [
       for (final v in items.take(600))
         GestureDetector(
@@ -675,7 +675,7 @@ class _Swatches extends StatelessWidget {
             height: size,
             decoration: BoxDecoration(
               color: Color(v.$2),
-              borderRadius: BorderRadius.circular(3),
+              borderRadius: BorderRadius.circular(2),
             ),
           ),
         ),
@@ -711,10 +711,10 @@ class _Gradients extends StatelessWidget {
 
   Widget _tile(Map<String, dynamic> item) {
     final placeholder = Container(
-      width: 78,
-      height: 15,
+      width: 58.5,
+      height: 11,
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(3),
+        borderRadius: BorderRadius.circular(2),
         gradient: LinearGradient(
           colors: _colors(item['stops'] as List? ?? const []),
         ),
@@ -736,16 +736,16 @@ class _Gradients extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Wrap(
-    spacing: 8,
-    runSpacing: 8,
+    spacing: 6,
+    runSpacing: 6,
     children: [
       if (items == null)
         for (final g in _grads)
           Container(
-            width: 78,
-            height: 15,
+            width: 58.5,
+            height: 11,
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(3),
+              borderRadius: BorderRadius.circular(2),
               gradient: LinearGradient(
                 colors: [for (final c in g.$2) Color(c)],
               ),

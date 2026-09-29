@@ -35,10 +35,10 @@ class MediaLibraryBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const margin = 8.0, gap = 4.0;
+    const margin = 6.0, gap = 3.0;
     final body = width - margin * 2;
-    // cards of at least 58 px: four across the default seat, more as it widens
-    final cols = math.max(1, ((body + gap) / (58 + gap)).floor());
+    // cards of at least 44 px: four across the default seat, more as it widens
+    final cols = math.max(1, ((body + gap) / (44 + gap)).floor());
     final colW = (body - gap * (cols - 1)) / cols;
     final seat = BrowserSeatScope.of(context);
     seat?.shows([for (final e in sections.values) ...e], cols);
@@ -53,7 +53,7 @@ class MediaLibraryBody extends StatelessWidget {
             sliver: SliverToBoxAdapter(child: _Board(things: e.value, items: items, cols: cols, colW: colW, gap: gap)),
           ),
         ],
-        const SliverToBoxAdapter(child: SizedBox(height: 12)),
+        const SliverToBoxAdapter(child: SizedBox(height: 9)),
       ],
     );
   }
@@ -90,7 +90,7 @@ class _Board extends StatelessWidget {
   }
 }
 
-const _captionHeight = 16.0;
+const _captionHeight = 14.0;
 
 /// One piece: its picture, rounded, at its own proportions; under it its name and, when the card has room, its size or
 /// length.
@@ -109,8 +109,8 @@ class MaterialCard extends StatelessWidget {
     final fact = roomy ? _fact(item) : '';
     Widget face = DecoratedBox(
       position: DecorationPosition.foreground,
-      decoration: BoxDecoration(borderRadius: BorderRadius.circular(4), border: Border.all(color: N.glaze9)),
-      child: ClipRRect(borderRadius: BorderRadius.circular(4), child: ColoredBox(color: N.g13, child: materialFace(item))),
+      decoration: BoxDecoration(borderRadius: BorderRadius.circular(3), border: Border.all(color: N.glaze9)),
+      child: ClipRRect(borderRadius: BorderRadius.circular(3), child: ColoredBox(color: N.g13, child: materialFace(item))),
     );
     if (missing) face = Opacity(opacity: .4, child: face);
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -118,14 +118,14 @@ class MaterialCard extends StatelessWidget {
         child: Stack(fit: StackFit.expand, children: [
           face,
           // placed in the work: a small light dot in the corner
-          if (item['used'] == true && !missing) Positioned(right: 6, top: 6, child: Container(width: 6, height: 6, decoration: BoxDecoration(color: N.g95, shape: BoxShape.circle, border: Border.all(color: N.g07.withValues(alpha: .5))))),
+          if (item['used'] == true && !missing) Positioned(right: 4.5, top: 4.5, child: Container(width: 4.5, height: 4.5, decoration: BoxDecoration(color: N.g95, shape: BoxShape.circle, border: Border.all(color: N.g07.withValues(alpha: .5))))),
         ]),
       ),
       SizedBox(
         height: _captionHeight,
         child: Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
           Expanded(child: Text(missing ? 'Missing · $name' : name, maxLines: 1, softWrap: false, overflow: TextOverflow.ellipsis, style: sans(9.5, c: N.g82, w: FontWeight.w500))),
-          if (fact.isNotEmpty) Padding(padding: const EdgeInsets.only(left: 4), child: Text(fact, softWrap: false, style: sans(9, c: N.g51))),
+          if (fact.isNotEmpty) Padding(padding: const EdgeInsets.only(left: 3), child: Text(fact, softWrap: false, style: sans(9.5, c: N.g51))),
         ]),
       ),
     ]);
@@ -202,8 +202,8 @@ class _Badge extends StatelessWidget {
   final Widget child;
   @override
   Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1.5),
-        decoration: BoxDecoration(color: N.veil, borderRadius: BorderRadius.circular(3)),
+        padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1.5),
+        decoration: BoxDecoration(color: N.veil, borderRadius: BorderRadius.circular(2)),
         child: child,
       );
 }
@@ -216,8 +216,8 @@ class _MotionFace extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Stack(fit: StackFit.expand, children: [
         picture ?? _glyph(HG.image),
-        const Center(child: _Badge(SizedBox(width: 8, height: 9, child: CustomPaint(painter: _Play())))),
-        if (seconds != null) Positioned(right: 3, bottom: 3, child: _Badge(Text(_clock(seconds!), style: mono(9.5, c: N.g95)))),
+        const Center(child: _Badge(SizedBox(width: 6, height: 7, child: CustomPaint(painter: _Play())))),
+        if (seconds != null) Positioned(right: 2, bottom: 2, child: _Badge(Text(_clock(seconds!), style: mono(9.5, c: N.g95)))),
       ]);
 }
 
@@ -248,7 +248,7 @@ class _WaveFace extends StatelessWidget {
     return Stack(fit: StackFit.expand, children: [
       const ColoredBox(color: _waveFloor),
       if (columns.isEmpty) const Center(child: GlyphBox(HG.headphones, size: 24)) else CustomPaint(painter: _Wave(columns)),
-      if (seconds != null) Positioned(right: 3, bottom: 3, child: _Badge(Text(_clock(seconds!), style: mono(9.5, c: N.g95)))),
+      if (seconds != null) Positioned(right: 2, bottom: 2, child: _Badge(Text(_clock(seconds!), style: mono(9.5, c: N.g95)))),
     ]);
   }
 }

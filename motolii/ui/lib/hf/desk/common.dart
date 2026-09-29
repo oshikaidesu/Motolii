@@ -64,7 +64,7 @@ class _IconP extends CustomPainter {
 class Dots3 extends StatelessWidget {
   const Dots3({super.key});
   @override
-  Widget build(BuildContext context) => SizedBox(width: 30, height: 30, child: CustomPaint(painter: _D3()));
+  Widget build(BuildContext context) => SizedBox(width: 22.5, height: 22.5, child: CustomPaint(painter: _D3()));
 }
 
 class _D3 extends CustomPainter {
@@ -96,7 +96,7 @@ class DeskShell extends StatelessWidget {
         return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           Container(
             height: hh,
-            padding: EdgeInsets.only(left: showSub ? 16 : 12, right: 6),
+            padding: EdgeInsets.only(left: showSub ? 16 : 12, right: 4.5),
             decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: kRule2))),
             child: Row(children: [
               if (!docked) ...[DeskIcon(kind, size: showSub ? 20 : 18), SizedBox(width: showSub ? 10 : 8)],
@@ -104,7 +104,7 @@ class DeskShell extends StatelessWidget {
               if (docked) Expanded(child: Text(subtitle, softWrap: false, overflow: TextOverflow.clip, style: sans(9.5, c: kMuted, w: FontWeight.w500, ls: 1.1))) else Expanded(
                 child: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text(title, softWrap: false, overflow: TextOverflow.clip, style: sans(showSub ? 14 : 13, c: kInk, w: FontWeight.w600, ls: -0.2)),
-                  if (showSub) ...[const SizedBox(height: 2), Text(subtitle, softWrap: false, overflow: TextOverflow.clip, style: sans(9.5, c: kMuted, w: FontWeight.w500, ls: 1.1))],
+                  if (showSub) ...[const SizedBox(height: 1.5), Text(subtitle, softWrap: false, overflow: TextOverflow.clip, style: sans(9.5, c: kMuted, w: FontWeight.w500, ls: 1.1))],
                 ]),
               ),
               if (trailing != null && showSub) trailing!,
@@ -125,8 +125,8 @@ class NumBox extends StatelessWidget {
   Widget build(BuildContext context) => Container(
         width: width,
         height: compact ? 38 : 52,
-        padding: EdgeInsets.fromLTRB(9, compact ? 5 : 7, 8, 6),
-        decoration: BoxDecoration(color: kWell, border: Border.all(color: kRule2), borderRadius: BorderRadius.circular(3)),
+        padding: EdgeInsets.fromLTRB(7, compact ? 5 : 7, 6, 4.5),
+        decoration: BoxDecoration(color: kWell, border: Border.all(color: kRule2), borderRadius: BorderRadius.circular(2)),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(label, style: sans(9.5, c: kMuted)),
           const Spacer(),
@@ -143,9 +143,9 @@ class SliderRow extends StatelessWidget {
   final ValueChanged<double>? onChanged;
   @override
   Widget build(BuildContext context) => SizedBox(
-        height: 28,
+        height: 21,
         child: Row(children: [
-          SizedBox(width: labelWidth, child: Text(label, softWrap: false, overflow: TextOverflow.clip, style: sans(11.5, c: N.g82))),
+          SizedBox(width: labelWidth, child: Text(label, softWrap: false, overflow: TextOverflow.clip, style: sans(11, c: N.g82))),
           Expanded(
             child: LayoutBuilder(builder: (context, b) {
               void at(double x) => onChanged?.call(clampD((x - 6) / (b.maxWidth - 12), 0, 1));
@@ -153,12 +153,12 @@ class SliderRow extends StatelessWidget {
                 behavior: HitTestBehavior.opaque,
                 onTapDown: (d) => at(d.localPosition.dx),
                 onPanUpdate: (d) => at(d.localPosition.dx),
-                child: SizedBox(height: 28, child: CustomPaint(painter: _Track(t))),
+                child: SizedBox(height: 21, child: CustomPaint(painter: _Track(t))),
               );
             }),
           ),
-          const SizedBox(width: 10),
-          SizedBox(width: 38, child: Text(value, textAlign: TextAlign.right, softWrap: false, style: sans(11.5, c: N.g82))),
+          const SizedBox(width: 7.5),
+          SizedBox(width: 28.5, child: Text(value, textAlign: TextAlign.right, softWrap: false, style: sans(11, c: N.g82))),
         ]),
       );
 }
@@ -195,8 +195,8 @@ class Segmented extends StatelessWidget {
               child: Container(
               height: height,
               margin: EdgeInsets.only(right: i == items.length - 1 ? 0 : 6),
-              decoration: BoxDecoration(color: i == active ? kAccentDim.withValues(alpha: .45) : kWell, border: Border.all(color: i == active ? kAccent : kRule2), borderRadius: BorderRadius.circular(3)),
-              child: Center(child: Text(items[i], softWrap: false, style: sans(12, c: i == active ? kInk : N.g69))),
+              decoration: BoxDecoration(color: i == active ? kAccentDim.withValues(alpha: .45) : kWell, border: Border.all(color: i == active ? kAccent : kRule2), borderRadius: BorderRadius.circular(2)),
+              child: Center(child: Text(items[i], softWrap: false, style: sans(11, c: i == active ? kInk : N.g69))),
             ),
             ),
           ),
@@ -210,18 +210,18 @@ class DropRow extends StatelessWidget {
   final VoidCallback? onTap;
   @override
   Widget build(BuildContext context) => SizedBox(
-        height: 34,
+        height: 25.5,
         child: Row(children: [
-          SizedBox(width: labelWidth, child: Text(label, softWrap: false, style: sans(11.5, c: N.g82))),
+          SizedBox(width: labelWidth, child: Text(label, softWrap: false, style: sans(11, c: N.g82))),
           Expanded(
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
               onTap: onTap,
               child: Container(
-                height: 30,
-                padding: const EdgeInsets.symmetric(horizontal: 10),
-                decoration: BoxDecoration(color: kWell, border: Border.all(color: kRule2), borderRadius: BorderRadius.circular(3)),
-                child: Row(children: [Text(value, style: sans(12, c: kInk)), const Spacer(), SizedBox(width: 12, height: 8, child: CustomPaint(painter: _Chev()))]),
+                height: 22.5,
+                padding: const EdgeInsets.symmetric(horizontal: 7.5),
+                decoration: BoxDecoration(color: kWell, border: Border.all(color: kRule2), borderRadius: BorderRadius.circular(2)),
+                child: Row(children: [Text(value, style: sans(11, c: kInk)), const Spacer(), SizedBox(width: 9, height: 6, child: CustomPaint(painter: _Chev()))]),
               ),
             ),
           ),

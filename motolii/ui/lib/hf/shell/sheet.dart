@@ -65,12 +65,12 @@ class _HfActionState extends State<HfAction> {
         onTap: widget.onTap,
         child: Container(
           height: UiMetrics.control,
-          constraints: const BoxConstraints(minWidth: 56),
-          margin: const EdgeInsets.only(left: 8),
-          padding: const EdgeInsets.symmetric(horizontal: 12),
+          constraints: const BoxConstraints(minWidth: 42),
+          margin: const EdgeInsets.only(left: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 9),
           alignment: Alignment.center,
-          decoration: BoxDecoration(color: ground, border: Border.all(color: edge), borderRadius: BorderRadius.circular(3)),
-          child: Text(widget.label, softWrap: false, style: H.s(12, w: primary ? FontWeight.w600 : FontWeight.w500, color: ink)),
+          decoration: BoxDecoration(color: ground, border: Border.all(color: edge), borderRadius: BorderRadius.circular(2)),
+          child: Text(widget.label, softWrap: false, style: H.s(11, w: primary ? FontWeight.w600 : FontWeight.w500, color: ink)),
         ),
       ),
     );
@@ -87,8 +87,8 @@ class HfChoice<T> extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(
         height: UiMetrics.control,
-        padding: const EdgeInsets.all(2),
-        decoration: BoxDecoration(color: N.g07, border: Border.all(color: H.rule), borderRadius: BorderRadius.circular(4)),
+        padding: const EdgeInsets.all(1.5),
+        decoration: BoxDecoration(color: N.g07, border: Border.all(color: H.rule), borderRadius: BorderRadius.circular(3)),
         child: Row(mainAxisSize: MainAxisSize.min, children: [
           for (final (v, label, enabled) in options)
             _Segment(label, on: v == value, onTap: enabled && onChanged != null && v != value ? () => onChanged!(v) : null, enabled: enabled),
@@ -120,10 +120,10 @@ class _SegmentState extends State<_Segment> {
           behavior: HitTestBehavior.opaque,
           onTap: widget.onTap,
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 9),
             alignment: Alignment.center,
-            decoration: BoxDecoration(color: widget.on ? H.selHi : (_over && widget.onTap != null ? H.raised : null), borderRadius: BorderRadius.circular(3)),
-            child: Text(widget.label, softWrap: false, style: H.s(12, w: widget.on ? FontWeight.w600 : FontWeight.w400, color: !widget.enabled ? N.g44 : (widget.on ? H.text : H.text2))),
+            decoration: BoxDecoration(color: widget.on ? H.selHi : (_over && widget.onTap != null ? H.raised : null), borderRadius: BorderRadius.circular(2)),
+            child: Text(widget.label, softWrap: false, style: H.s(11, w: widget.on ? FontWeight.w600 : FontWeight.w400, color: !widget.enabled ? N.g44 : (widget.on ? H.text : H.text2))),
           ),
         ),
       );
@@ -151,7 +151,7 @@ class HfFact extends StatelessWidget {
   final String value;
   final Color color;
   @override
-  Widget build(BuildContext context) => Text(value, softWrap: false, overflow: TextOverflow.ellipsis, style: H.m(12, color: color));
+  Widget build(BuildContext context) => Text(value, softWrap: false, overflow: TextOverflow.ellipsis, style: H.m(11, color: color));
 }
 
 /// A compact housing for a short task: anchored under the control that asked for it (its right edge on the
@@ -206,20 +206,20 @@ Future<void> showHfPopover(BuildContext context, {required Rect anchor, required
               decoration: BoxDecoration(
                 color: N.g13,
                 border: Border.all(color: N.g26),
-                borderRadius: BorderRadius.circular(4),
+                borderRadius: BorderRadius.circular(3),
                 boxShadow: const [BoxShadow(color: N.shade40, blurRadius: 16, offset: Offset(0, 6))],
               ),
               child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                 Container(
                   height: UiMetrics.chromeRow,
-                  padding: const EdgeInsets.only(left: 12, right: 4),
+                  padding: const EdgeInsets.only(left: 9, right: 3),
                   decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: H.rule2))),
                   child: Row(children: [
-                    Expanded(child: Text(title, style: H.s(12.5, w: FontWeight.w600, color: H.text))),
+                    Expanded(child: Text(title, style: H.s(11, w: FontWeight.w600, color: H.text))),
                     GestureDetector(
                       behavior: HitTestBehavior.opaque,
                       onTap: close,
-                      child: MouseRegion(cursor: SystemMouseCursors.click, child: SizedBox(width: UiMetrics.hit, height: UiMetrics.hit, child: Center(child: SizedBox(width: 10, height: 10, child: CustomPaint(painter: HgPainter(HG.cross, H.text3, N.g13)))))),
+                      child: MouseRegion(cursor: SystemMouseCursors.click, child: SizedBox(width: UiMetrics.hit, height: UiMetrics.hit, child: Center(child: SizedBox(width: 7.5, height: 7.5, child: CustomPaint(painter: HgPainter(HG.cross, H.text3, N.g13)))))),
                     ),
                   ]),
                 ),
@@ -263,18 +263,18 @@ Future<void> showHfSheet(BuildContext context, {required String title, required 
         Center(
           child: Container(
             width: width,
-            decoration: BoxDecoration(color: N.g13, border: Border.all(color: N.g26), borderRadius: BorderRadius.circular(3)),
+            decoration: BoxDecoration(color: N.g13, border: Border.all(color: N.g26), borderRadius: BorderRadius.circular(2)),
             child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
               Container(
                 height: UiMetrics.chromeRow + 4,
-                padding: const EdgeInsets.only(left: 14, right: 6),
+                padding: const EdgeInsets.only(left: 10.5, right: 4.5),
                 decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: H.rule))),
                 child: Row(children: [
-                  Expanded(child: Text(title, style: H.s(13, w: FontWeight.w600, color: H.text))),
+                  Expanded(child: Text(title, style: H.s(11, w: FontWeight.w600, color: H.text))),
                   GestureDetector(
                     behavior: HitTestBehavior.opaque,
                     onTap: close,
-                    child: SizedBox(width: 28, height: 28, child: Center(child: SizedBox(width: 12, height: 12, child: CustomPaint(painter: HgPainter(HG.cross, H.text2, N.g13))))),
+                    child: SizedBox(width: 21, height: 21, child: Center(child: SizedBox(width: 9, height: 9, child: CustomPaint(painter: HgPainter(HG.cross, H.text2, N.g13))))),
                   ),
                 ]),
               ),

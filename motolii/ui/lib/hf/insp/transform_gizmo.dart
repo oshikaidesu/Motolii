@@ -261,7 +261,7 @@ class _GizmoPainter extends CustomPainter {
     final s = g.s, l = s.active, mode = g.widget.mode;
     final role = enabled ? modeColor[mode]! : N.g33;
     final c = g.c;
-    cv.drawRRect(RRect.fromRectAndRadius(Offset.zero & sz, const Radius.circular(6)), Paint()..color = N.g07);
+    cv.drawRRect(RRect.fromRectAndRadius(Offset.zero & sz, const Radius.circular(4.5)), Paint()..color = N.g07);
     // a quiet field that slides under the body as Position changes: the world moves, the body stays
     final dot = Paint()..color = N.g15;
     const step = 16.0;
@@ -300,7 +300,7 @@ class _GizmoPainter extends CustomPainter {
         void arrow(Offset to, String t) {
           cv.drawLine(c, to, Paint()..color = role..strokeWidth = 2);
           handle(to, r: 5);
-          final tp = TextPainter(text: TextSpan(text: t, style: sans(8, c: N.g07, w: FontWeight.w800)), textDirection: TextDirection.ltr)..layout();
+          final tp = TextPainter(text: TextSpan(text: t, style: sans(9.5, c: N.g07, w: FontWeight.w800)), textDirection: TextDirection.ltr)..layout();
           tp.paint(cv, to - Offset(tp.width / 2, tp.height / 2));
         }
         arrow(c + Offset(g.ringR, 0), 'X');
@@ -310,7 +310,7 @@ class _GizmoPainter extends CustomPainter {
         for (final o in cs) { handle(o); }
         for (final (sx, sy) in [(-1, 0), (1, 0), (0, -1), (0, 1)]) { handle(g.toScreen(Offset(sx * g.half.dx, sy * g.half.dy)), r: 4, col: kInk); }
         if (s.linked.contains('scale')) {
-          final tp = TextPainter(text: TextSpan(text: 'LINKED', style: sans(8, c: role, w: FontWeight.w700, ls: 1)), textDirection: TextDirection.ltr)..layout();
+          final tp = TextPainter(text: TextSpan(text: 'LINKED', style: sans(9.5, c: role, w: FontWeight.w700, ls: 1)), textDirection: TextDirection.ltr)..layout();
           tp.paint(cv, Offset(sz.width - tp.width - 8, sz.height - tp.height - 6));
         }
       case TMode.rotate:
@@ -321,7 +321,7 @@ class _GizmoPainter extends CustomPainter {
         cv.drawLine(c, tip, Paint()..color = role.withValues(alpha: .6)..strokeWidth = 1.2);
         handle(tip, r: 6);
         if (g.widget.rotAxis != 0) {
-          final tp = TextPainter(text: TextSpan(text: g.widget.rotAxis == 1 ? 'X AXIS' : 'Y AXIS', style: sans(8, c: role, w: FontWeight.w700, ls: 1)), textDirection: TextDirection.ltr)..layout();
+          final tp = TextPainter(text: TextSpan(text: g.widget.rotAxis == 1 ? 'X AXIS' : 'Y AXIS', style: sans(9.5, c: role, w: FontWeight.w700, ls: 1)), textDirection: TextDirection.ltr)..layout();
           tp.paint(cv, const Offset(8, 8));
         }
       case TMode.anchor:
@@ -343,7 +343,7 @@ class _GizmoPainter extends CustomPainter {
       TMode.rotate => '${(g.widget.rotAxis == 1 ? l.rotX : (g.widget.rotAxis == 2 ? l.rotY : l.rotation)).toStringAsFixed(1)}°',
       TMode.anchor => '${l.anchor[0]}, ${l.anchor[1]}',
     };
-    final tp = TextPainter(text: TextSpan(text: mode == TMode.anchor ? '' : t, style: mono(9, c: N.g63)), textDirection: TextDirection.ltr)..layout();
+    final tp = TextPainter(text: TextSpan(text: mode == TMode.anchor ? '' : t, style: mono(9.5, c: N.g63)), textDirection: TextDirection.ltr)..layout();
     tp.paint(cv, const Offset(8, 8));
   }
 

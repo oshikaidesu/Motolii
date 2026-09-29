@@ -102,18 +102,18 @@ class SearchField extends StatelessWidget {
         listenable: search,
         builder: (_, __) => Container(
           height: height,
-          padding: const EdgeInsets.only(left: 8, right: 6),
-          decoration: BoxDecoration(color: kRaised, border: Border.all(color: search.focus.hasFocus ? N.g44 : kRule2), borderRadius: BorderRadius.circular(3)),
+          padding: const EdgeInsets.only(left: 6, right: 4.5),
+          decoration: BoxDecoration(color: kRaised, border: Border.all(color: search.focus.hasFocus ? N.g44 : kRule2), borderRadius: BorderRadius.circular(2)),
           child: Row(children: [
-            SizedBox(width: 13, height: 13, child: CustomPaint(painter: magnifier(kMuted))),
-            const SizedBox(width: 7),
+            SizedBox(width: 10, height: 10, child: CustomPaint(painter: magnifier(kMuted))),
+            const SizedBox(width: 5),
             Expanded(
               child: Stack(alignment: Alignment.centerLeft, children: [
-                if (!search.active) Text(hint, softWrap: false, overflow: TextOverflow.clip, style: sans(11.5, c: kMuted)),
+                if (!search.active) Text(hint, softWrap: false, overflow: TextOverflow.clip, style: sans(11, c: kMuted)),
                 EditableText(
                   controller: search.controller,
                   focusNode: search.focus,
-                  style: sans(11.5, c: N.g91),
+                  style: sans(11, c: N.g91),
                   cursorColor: N.g91,
                   backgroundCursorColor: kMuted,
                   selectionColor: H.textSelection,
@@ -124,9 +124,9 @@ class SearchField extends StatelessWidget {
             if (search.active)
               GestureDetector(
                 onTap: search.clear,
-                child: SizedBox(width: 16, height: 16, child: CustomPaint(painter: _X())),
+                child: SizedBox(width: 12, height: 12, child: CustomPaint(painter: _X())),
               ),
-            if (trailing != null) ...[const SizedBox(width: 4), trailing!],
+            if (trailing != null) ...[const SizedBox(width: 3), trailing!],
           ]),
         ),
       );
@@ -196,10 +196,10 @@ class _SearchKeyFaceState extends State<SearchKeyFace> {
               WidgetsBinding.instance.addPostFrameCallback((_) => widget.search.request());
             },
             child: Container(
-              width: 26,
-              height: 26,
-              decoration: BoxDecoration(color: kRaised, border: Border.all(color: kRule2), borderRadius: BorderRadius.circular(3)),
-              child: Center(child: SizedBox(width: 13, height: 13, child: CustomPaint(painter: magnifier(kMuted)))),
+              width: 19.5,
+              height: 19.5,
+              decoration: BoxDecoration(color: kRaised, border: Border.all(color: kRule2), borderRadius: BorderRadius.circular(2)),
+              child: Center(child: SizedBox(width: 10, height: 10, child: CustomPaint(painter: magnifier(kMuted)))),
             ),
           );
         },
@@ -207,4 +207,4 @@ class _SearchKeyFaceState extends State<SearchKeyFace> {
 }
 
 /// Every presentation words its own empty state.
-Widget emptyNote(String text) => Padding(padding: const EdgeInsets.fromLTRB(4, 14, 4, 4), child: Text(text, softWrap: true, style: sans(11.5, c: kMuted)));
+Widget emptyNote(String text) => Padding(padding: const EdgeInsets.fromLTRB(3, 10.5, 3, 3), child: Text(text, softWrap: true, style: sans(11, c: kMuted)));

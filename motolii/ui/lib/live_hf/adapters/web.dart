@@ -30,14 +30,14 @@ class _NewWebState extends State<NewWeb> {
   @override
   Widget build(BuildContext context) => Container(
         color: kGround,
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(9),
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          SizedBox(width: 40, height: 40, child: CustomPaint(painter: HgPainter(HG.search, kMuted, kGround))),
-          const SizedBox(height: 12),
-          Padding(padding: const EdgeInsets.only(bottom: 4), child: Text('WEBSITE', style: sans(9, c: N.g51, w: FontWeight.w600, ls: 1.2))),
+          SizedBox(width: 30, height: 30, child: CustomPaint(painter: HgPainter(HG.search, kMuted, kGround))),
+          const SizedBox(height: 9),
+          Padding(padding: const EdgeInsets.only(bottom: 3), child: Text('WEBSITE', style: sans(9.5, c: N.g51, w: FontWeight.w600, ls: 1.2))),
           Container(
-            decoration: BoxDecoration(color: kTile, borderRadius: BorderRadius.circular(5)),
-            padding: const EdgeInsets.symmetric(horizontal: 8),
+            decoration: BoxDecoration(color: kTile, borderRadius: BorderRadius.circular(4)),
+            padding: const EdgeInsets.symmetric(horizontal: 6),
             child: EditableText(
               key: const ValueKey('web-url'),
               controller: _field,
@@ -49,7 +49,7 @@ class _NewWebState extends State<NewWeb> {
               onEditingComplete: () => c.storeDesk('webUrl', _field.text),
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           GestureDetector(
             key: const ValueKey('web-open'),
             behavior: HitTestBehavior.opaque,
@@ -58,9 +58,9 @@ class _NewWebState extends State<NewWeb> {
               await c.native('openWeb', {'url': _url});
             },
             child: Container(
-              height: 28,
+              height: 21,
               alignment: Alignment.center,
-              decoration: BoxDecoration(color: kTile, borderRadius: BorderRadius.circular(5)),
+              decoration: BoxDecoration(color: kTile, borderRadius: BorderRadius.circular(4)),
               child: Text('Open in browser', style: sans(11, c: kInk, w: FontWeight.w500)),
             ),
           ),

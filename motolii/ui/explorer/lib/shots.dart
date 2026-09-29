@@ -65,7 +65,7 @@ class _ShotRunnerState extends State<ShotRunner> {
         minHeight: 0,
         maxWidth: double.infinity,
         maxHeight: double.infinity,
-        child: RepaintBoundary(key: _frame, child: KeyedSubtree(key: ValueKey(_at), child: framed(s, s.width, s.height, 1.0, onReady: _ready))),
+        child: RepaintBoundary(key: _frame, child: KeyedSubtree(key: ValueKey(_at), child: framed(s, s.width, s.height, s.scale, onReady: _ready))),
       ),
     );
   }

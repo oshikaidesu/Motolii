@@ -81,17 +81,17 @@ Future<T?> showHfMenu<T>(BuildContext context, Rect at, List<(T, String)> items,
         top: top,
         width: width,
         child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 3),
-          decoration: BoxDecoration(color: N.g13, border: Border.all(color: N.g26), borderRadius: BorderRadius.circular(3)),
+          padding: const EdgeInsets.symmetric(vertical: 2),
+          decoration: BoxDecoration(color: N.g13, border: Border.all(color: N.g26), borderRadius: BorderRadius.circular(2)),
           constraints: BoxConstraints(maxHeight: height),
           child: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             for (final (i, (v, label)) in items.indexed) ...[
               if (info.contains(v))
                 Container(
                   height: UiMetrics.menuRow - 4,
-                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  padding: const EdgeInsets.symmetric(horizontal: 7.5),
                   alignment: Alignment.centerLeft,
-                  child: Text(label, softWrap: false, overflow: TextOverflow.ellipsis, style: i == 0 ? H.s(12, w: FontWeight.w600, color: H.text2) : H.m(11, color: H.text3)),
+                  child: Text(label, softWrap: false, overflow: TextOverflow.ellipsis, style: i == 0 ? H.s(11, w: FontWeight.w600, color: H.text2) : H.m(11, color: H.text3)),
                 )
               else
               MouseRegion(
@@ -107,18 +107,18 @@ Future<T?> showHfMenu<T>(BuildContext context, Rect at, List<(T, String)> items,
                   onTap: disabled.contains(v) ? null : () => close(v),
                   child: Container(
                     height: UiMetrics.menuRow,
-                    padding: const EdgeInsets.only(left: 4, right: 10),
+                    padding: const EdgeInsets.only(left: 3, right: 7.5),
                     alignment: Alignment.centerLeft,
                     color: hot.value == i ? H.selHi : null,
                     child: Row(children: [
-                      SizedBox(width: 16, child: v == selected ? Text('✓', textAlign: TextAlign.center, style: H.s(11, color: H.text2)) : null),
-                      Expanded(child: Text(label, softWrap: false, overflow: TextOverflow.ellipsis, style: H.s(12.5, color: disabled.contains(v) ? N.g44 : H.text))),
-                      if (shortcuts[v] case final key?) Padding(padding: const EdgeInsets.only(left: 16), child: Text(key, style: H.s(11.5, color: H.text3))),
+                      SizedBox(width: 12, child: v == selected ? Text('✓', textAlign: TextAlign.center, style: H.s(11, color: H.text2)) : null),
+                      Expanded(child: Text(label, softWrap: false, overflow: TextOverflow.ellipsis, style: H.s(11, color: disabled.contains(v) ? N.g44 : H.text))),
+                      if (shortcuts[v] case final key?) Padding(padding: const EdgeInsets.only(left: 12), child: Text(key, style: H.s(11, color: H.text3))),
                     ]),
                   ),
                 ),
               ),
-              if (dividers.contains(v) && v != items.last.$1) Container(height: 1, margin: const EdgeInsets.symmetric(vertical: 4), color: H.rule),
+              if (dividers.contains(v) && v != items.last.$1) Container(height: 1, margin: const EdgeInsets.symmetric(vertical: 3), color: H.rule),
             ],
           ])),
         ),

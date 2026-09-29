@@ -2,6 +2,7 @@
 import 'package:widgetbook/widgetbook.dart';
 
 import '../paper/broken.dart';
+import '../paper/density.dart';
 import 'package:flutter/widgets.dart';
 
 import '../paper/library.dart';
@@ -21,6 +22,7 @@ Widget _faces(double size, {bool named = true}) => ColoredBox(
     );
 
 final paperStories = <Story>[
+  Story('Density specimen roles and rhythm', const Scene(''), (_) => densitySpecimen(), width: 780, height: 560),
   for (final name in paperLibrary.keys) Story('Browser library $name', const Scene(''), (_) => PaperLibrary(name), width: 320, height: 900),
   Story('Browser 3D faces 140', const Scene(''), (_) => _faces(140), width: 320, height: 400),
   Story('Browser 3D faces 68', const Scene(''), (_) => _faces(68), width: 320, height: 300),

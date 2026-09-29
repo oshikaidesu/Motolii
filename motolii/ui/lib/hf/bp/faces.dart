@@ -30,7 +30,7 @@ class ThingFace extends StatelessWidget {
         Widget p = CustomPaint(painter: FxPainter('${f['base']}', s));
         final hue = (f['hue'] as num).toDouble();
         if (hue != 0) p = ColorFiltered(colorFilter: hueFilter(hue), child: p);
-        return ClipRRect(borderRadius: BorderRadius.circular(3), child: p);
+        return ClipRRect(borderRadius: BorderRadius.circular(2), child: p);
       case 'curve':
         return CustomPaint(painter: CurvePainter('${f['fn']}', (f['hue'] as num).toDouble()));
       default:
@@ -44,7 +44,7 @@ class QuietFace extends StatelessWidget {
   const QuietFace({super.key});
   @override
   Widget build(BuildContext context) => DecoratedBox(
-        decoration: BoxDecoration(color: N.g13, border: Border.all(color: N.g20), borderRadius: BorderRadius.circular(3)),
+        decoration: BoxDecoration(color: N.g13, border: Border.all(color: N.g20), borderRadius: BorderRadius.circular(2)),
         child: const Center(child: GlyphBox(HG.pie, size: 16, color: N.g33)),
       );
 }

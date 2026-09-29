@@ -22,48 +22,50 @@ class TopBar extends StatelessWidget {
   Widget build(BuildContext context) => LayoutBuilder(builder: (context, box) {
         final w = box.maxWidth;
         // what folds, first to last, as the window narrows: the motto, the brand's line, the duration readout
-        final motto = w >= 1240, tagline = w >= 1060, duration = w >= 900;
+        final motto = w >= 1000, tagline = w >= 820, duration = w >= 680;
         return Container(
           height: UiMetrics.topBar,
           padding: const EdgeInsets.symmetric(horizontal: UiMetrics.pad),
           decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: H.rule))),
           child: Row(children: [
-            Text('Motolii', style: H.s(18, w: FontWeight.w600, ls: -0.3, color: H.text2)),
+            Text('Motolii', style: H.s(14, w: FontWeight.w600, ls: -0.1, color: H.text2)),
             if (tagline) ...[
-              const SizedBox(width: 12),
+              const SizedBox(width: 9),
               Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text('Motion', style: H.s(10.5, color: N.g76)),
-                Text('for More Relations.', style: H.s(10.5, color: N.g76)),
+                Text('Motion', style: Dn.label(N.g76)),
+                const SizedBox(height: 1),
+                Text('for More Relations.', style: Dn.label(N.g76)),
               ]),
             ],
             const Spacer(flex: 2),
             _Key(onTap: m.onPlay, fill: H.play, edge: H.play, child: const _Play()),
-            _Key(onTap: m.onStop, fill: N.g10, edge: N.g20, child: Container(width: 9, height: 9, color: N.g56)),
-            _Key(onTap: m.onAnimate, fill: N.g13, edge: N.g26, child: Container(width: 11, height: 11, decoration: const BoxDecoration(color: H.record, shape: BoxShape.circle))),
-            const SizedBox(width: 14),
+            _Key(onTap: m.onStop, fill: N.g10, edge: N.g20, child: Container(width: 7, height: 7, color: N.g56)),
+            _Key(onTap: m.onAnimate, fill: N.g13, edge: N.g26, child: Container(width: 9, height: 9, decoration: const BoxDecoration(color: H.record, shape: BoxShape.circle))),
+            const SizedBox(width: 10),
             ValueListenableBuilder<List<String>>(
               valueListenable: m.readouts,
               builder: (_, r, __) => Row(children: [
-                Text(r[0], style: H.m(12, color: N.g86)),
+                Text(r[0], style: Dn.value()),
                 if (duration) ...[
-                  Container(width: 1, height: 12, margin: const EdgeInsets.symmetric(horizontal: 10), color: N.g44),
-                  Text(r[1], style: H.m(12, color: N.g86)),
+                  Container(width: 1, height: 10, margin: const EdgeInsets.symmetric(horizontal: 7), color: N.g44),
+                  Text(r[1], style: Dn.value()),
                 ],
-                const SizedBox(width: 14),
-                Text(r[2], style: H.m(12, color: N.g86)),
+                const SizedBox(width: 10),
+                Text(r[2], style: Dn.value()),
               ]),
             ),
-            _Glyph(HG.plus, size: 13, onTap: m.onMarker),
+            _Glyph(HG.plus, size: 11, onTap: m.onMarker),
             const Spacer(flex: 2),
             _Modes(m, onModeAt),
             const Spacer(),
             for (final (g, f) in [(HG.fit, m.onFit), (HG.pin, m.onPin), (HG.folder, m.onOpen)])
-              _Key(onTap: f, fill: H.raised, edge: H.rule, child: SizedBox(width: 16, height: 16, child: CustomPaint(painter: HgPainter(g, f != null ? N.g86 : N.g44, H.raised)))),
+              _Key(onTap: f, fill: H.raised, edge: H.rule, child: SizedBox(width: 13, height: 13, child: CustomPaint(painter: HgPainter(g, f != null ? N.g86 : N.g44, H.raised)))),
             if (motto) ...[
-              const SizedBox(width: 16),
+              const SizedBox(width: 12),
               Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.end, children: [
-                Text('Less numbers.', style: H.m(10.5, color: H.text2)),
-                Text('More motion.', style: H.m(10.5, color: H.text2)),
+                Text('Less numbers.', style: Dn.value(H.text2).copyWith(fontSize: 10)),
+                const SizedBox(height: 1),
+                Text('More motion.', style: Dn.value(H.text2).copyWith(fontSize: 10)),
               ]),
             ],
           ]),
@@ -85,9 +87,9 @@ class _Key extends StatelessWidget {
           behavior: HitTestBehavior.opaque,
           onTap: onTap,
           child: Container(
-            width: 32,
+            width: 26,
             height: UiMetrics.control + 2,
-            margin: const EdgeInsets.only(left: 5),
+            margin: const EdgeInsets.only(left: 4),
             alignment: Alignment.center,
             decoration: BoxDecoration(color: fill, border: Border.all(color: edge), borderRadius: BorderRadius.circular(3)),
             child: child,
@@ -99,7 +101,7 @@ class _Key extends StatelessWidget {
 class _Play extends StatelessWidget {
   const _Play();
   @override
-  Widget build(BuildContext context) => SizedBox(width: 11, height: 12, child: CustomPaint(painter: _PlayPainter()));
+  Widget build(BuildContext context) => SizedBox(width: 9, height: 10, child: CustomPaint(painter: _PlayPainter()));
 }
 
 class _PlayPainter extends CustomPainter {
@@ -120,7 +122,7 @@ class _Glyph extends StatelessWidget {
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: onTap,
-          child: SizedBox(width: UiMetrics.hit + 4, height: UiMetrics.hit + 4, child: Center(child: SizedBox(width: size, height: size, child: CustomPaint(painter: HgPainter(g, N.g82, H.window))))),
+          child: SizedBox(width: UiMetrics.hit, height: UiMetrics.hit, child: Center(child: SizedBox(width: size, height: size, child: CustomPaint(painter: HgPainter(g, N.g82, H.window))))),
         ),
       );
 }
@@ -150,10 +152,10 @@ class _Modes extends StatelessWidget {
                     }
                   },
                   child: Container(
-                    width: 70,
+                    width: 54,
                     alignment: Alignment.center,
                     color: m.mode == mode ? H.mode : null,
-                    child: Text(label, style: H.s(11, w: FontWeight.w600, ls: .8, color: m.mode == mode ? N.g100 : H.text2)),
+                    child: Text(label, style: Dn.label(m.mode == mode ? N.g100 : H.text2, FontWeight.w600).copyWith(letterSpacing: .7)),
                   ),
                 ),
               ),

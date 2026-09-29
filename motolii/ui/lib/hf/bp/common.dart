@@ -95,7 +95,7 @@ class Leaf extends StatelessWidget {
   /// What a host adds around each tab (the Dock: drag to move/split, right click for the panel menu). The tab's look
   /// is the Leaf's own either way.
   final Widget Function(int index, Widget tab)? tabWrap;
-  static double labelled(String n) => 46 + n.length * 6.6;
+  static double labelled(String n) => 34 + n.length * 6.1;
   @override
   Widget build(BuildContext context) {
     final stacked = tabs.length > 1;
@@ -180,8 +180,8 @@ class _Tab extends StatelessWidget {
   final bool compact;
   @override
   Widget build(BuildContext context) => Container(
-    height: 30,
-    padding: EdgeInsets.symmetric(horizontal: compact ? 7 : 10),
+    height: UiMetrics.chromeRow,
+    padding: EdgeInsets.symmetric(horizontal: compact ? 6 : 8),
     decoration: BoxDecoration(
       color: (selected && !single) ? kSel : null,
       border: const Border(right: BorderSide(color: kRule2)),
@@ -190,8 +190,8 @@ class _Tab extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         SizedBox(
-          width: 15,
-          height: 15,
+          width: 12,
+          height: 12,
           child: CustomPaint(
             painter: HfTabGlyph(
               t.glyph,
@@ -200,16 +200,8 @@ class _Tab extends StatelessWidget {
           ),
         ),
         if (!compact) ...[
-          const SizedBox(width: 7),
-          Text(
-            t.name,
-            softWrap: false,
-            style: sans(
-              12,
-              c: selected ? N.g95 : kMuted,
-              w: FontWeight.w500,
-            ),
-          ),
+          const SizedBox(width: 6),
+          Text(t.name, softWrap: false, style: Dn.name(selected ? N.g95 : N.g63)),
         ],
       ],
     ),
@@ -231,8 +223,8 @@ class SearchBox extends StatelessWidget {
   final String hint;
   @override
   Widget build(BuildContext context) => Container(
-    height: 26,
-    padding: const EdgeInsets.symmetric(horizontal: 8),
+    height: UiMetrics.control,
+    padding: const EdgeInsets.symmetric(horizontal: 6),
     decoration: BoxDecoration(
       color: kRaised,
       border: Border.all(color: kRule2),
@@ -241,17 +233,17 @@ class SearchBox extends StatelessWidget {
     child: Row(
       children: [
         SizedBox(
-          width: 13,
-          height: 13,
+          width: 11,
+          height: 11,
           child: CustomPaint(painter: HfTabGlyph(HG.search, kMuted)),
         ),
-        const SizedBox(width: 7),
+        const SizedBox(width: 5),
         Expanded(
           child: Text(
             hint,
             softWrap: false,
             overflow: TextOverflow.clip,
-            style: sans(11.5, c: kMuted),
+            style: Dn.label(N.g63),
           ),
         ),
       ],
@@ -263,8 +255,8 @@ class SearchKey extends StatelessWidget {
   const SearchKey({super.key});
   @override
   Widget build(BuildContext context) => Container(
-    width: 26,
-    height: 26,
+    width: UiMetrics.control,
+    height: UiMetrics.control,
     decoration: BoxDecoration(
       color: kRaised,
       border: Border.all(color: kRule2),
@@ -272,8 +264,8 @@ class SearchKey extends StatelessWidget {
     ),
     child: Center(
       child: SizedBox(
-        width: 13,
-        height: 13,
+        width: 11,
+        height: 11,
         child: CustomPaint(painter: HfTabGlyph(HG.search, kMuted)),
       ),
     ),
@@ -287,12 +279,12 @@ class Chips extends StatelessWidget {
   final int active;
   @override
   Widget build(BuildContext context) => SizedBox(
-    height: 24,
+    height: 18,
     child: Row(
       children: [
         for (var i = 0; i < items.length; i++)
           Container(
-            margin: const EdgeInsets.only(right: 12),
+            margin: const EdgeInsets.only(right: 9),
             decoration: BoxDecoration(
               border: Border(
                 bottom: BorderSide(
@@ -308,7 +300,7 @@ class Chips extends StatelessWidget {
                 items[i],
                 softWrap: false,
                 style: caps(
-                  10.5,
+                  10,
                   c: i == active ? N.g95 : kMuted,
                 ),
               ),
@@ -325,7 +317,7 @@ class Section extends StatelessWidget {
   final bool compact;
   @override
   Widget build(BuildContext context) => Padding(
-    padding: EdgeInsets.only(top: compact ? 8 : 12, bottom: 6),
+    padding: EdgeInsets.only(top: compact ? 6 : 9, bottom: 5),
     child: Row(
       children: [
         Flexible(
@@ -333,10 +325,10 @@ class Section extends StatelessWidget {
             label.toUpperCase(),
             softWrap: false,
             overflow: TextOverflow.clip,
-            style: caps(compact ? 9 : 10),
+            style: caps(compact ? 9.5 : 10),
           ),
         ),
-        const SizedBox(width: 6),
+        const SizedBox(width: 5),
         const Expanded(
           child: SizedBox(height: 1, child: ColoredBox(color: kRule2)),
         ),

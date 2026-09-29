@@ -166,39 +166,39 @@ class _DepthDeskState extends State<DepthDesk> {
         title: 'Depth',
         subtitle: 'STAGE VIEW',
         trailing: host != null ? null : SizedBox(
-          width: 112,
-          child: Segmented(const ['Top', 'Front', 'Side'], view == DView.top ? 0 : (view == DView.front ? 1 : 2), height: 24, onChanged: (i) => setState(() => view = [DView.top, DView.front, DView.side][i])),
+          width: 84,
+          child: Segmented(const ['Top', 'Front', 'Side'], view == DView.top ? 0 : (view == DView.front ? 1 : 2), height: 18, onChanged: (i) => setState(() => view = [DView.top, DView.front, DView.side][i])),
         ),
         full: (c, s) => Padding(
-          padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+          padding: const EdgeInsets.fromLTRB(9, 9, 9, 9),
           child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             Expanded(child: _diagram(view, true)),
-            const SizedBox(height: 12),
+            const SizedBox(height: 9),
             Row(children: [
               Expanded(child: NumBox('Camera', '${camDist.round()}', compact: true)),
-              const SizedBox(width: 6),
+              const SizedBox(width: 4.5),
               Expanded(child: NumBox('FOV', '${fov.round()}°', compact: true)),
-              const SizedBox(width: 6),
+              const SizedBox(width: 4.5),
               Expanded(child: NumBox(selName, '${selDist.round()}', compact: true)),
             ]),
-            const SizedBox(height: 12),
-            Row(children: [_key(kInk, 'Camera'), const SizedBox(width: 14), _key(kYellow, 'Selected'), const SizedBox(width: 14), _key(kBlue, 'Other layers')]),
-            const SizedBox(height: 10),
+            const SizedBox(height: 9),
+            Row(children: [_key(kInk, 'Camera'), const SizedBox(width: 10.5), _key(kYellow, 'Selected'), const SizedBox(width: 10.5), _key(kBlue, 'Other layers')]),
+            const SizedBox(height: 7.5),
             Text(host?.targetName == null ? 'Drag layers or the camera to move them. Camera settings live in Inspector.' : 'Looking at ${host!.targetName}. Drag layers or the camera to move them. Camera settings live in Inspector.', style: sans(10, c: kMuted)),
           ]),
         ),
-        strip: (c, s) => Padding(padding: const EdgeInsets.fromLTRB(8, 2, 8, 8), child: _diagram(DView.topWide, false)),
+        strip: (c, s) => Padding(padding: const EdgeInsets.fromLTRB(6, 1.5, 6, 6), child: _diagram(DView.topWide, false)),
         tall: (c, s) => Padding(
-          padding: const EdgeInsets.all(8),
+          padding: const EdgeInsets.all(6),
           child: Column(children: [
             Expanded(child: _diagram(DView.top, false)),
-            const SizedBox(height: 6),
-            Row(children: [Expanded(child: NumBox('Dist', '${camDist.round()}', compact: true)), const SizedBox(width: 5), Expanded(child: NumBox('FOV', '${fov.round()}°', compact: true))]),
+            const SizedBox(height: 4.5),
+            Row(children: [Expanded(child: NumBox('Dist', '${camDist.round()}', compact: true)), const SizedBox(width: 4), Expanded(child: NumBox('FOV', '${fov.round()}°', compact: true))]),
           ]),
         ),
       );
 
-  Widget _key(Color c, String t) => Row(children: [Container(width: 10, height: 10, decoration: BoxDecoration(color: c, shape: BoxShape.circle)), const SizedBox(width: 6), Text(t, style: sans(10.5, c: N.g69))]);
+  Widget _key(Color c, String t) => Row(children: [Container(width: 7.5, height: 7.5, decoration: BoxDecoration(color: c, shape: BoxShape.circle)), const SizedBox(width: 4.5), Text(t, style: sans(10, c: N.g69))]);
 
   Widget _diagram(DView v, bool detail) => LayoutBuilder(builder: (context, box) {
         final size = Size(box.maxWidth, box.maxHeight);
@@ -282,7 +282,7 @@ class DepthPainter extends CustomPainter {
 
   @override
   void paint(Canvas c, Size s) {
-    final rr = RRect.fromRectAndRadius(Offset.zero & s, const Radius.circular(6));
+    final rr = RRect.fromRectAndRadius(Offset.zero & s, const Radius.circular(4.5));
     c.drawRRect(rr, Paint()..color = N.g07);
     c.save();
     c.clipRRect(rr);
@@ -307,9 +307,9 @@ class DepthPainter extends CustomPainter {
       for (var i = 0; i < g.layers.length; i++) {
         final l = g.layers[i];
         final r = Rect.fromCenter(center: g.px(l.x, l.y, l.z), width: l.w * g.k, height: l.h * g.k);
-        c.drawRRect(RRect.fromRectAndRadius(r, const Radius.circular(3)), Paint()..color = depthLayerColor(i, selected).withValues(alpha: .92));
-        if (i == selected) c.drawRRect(RRect.fromRectAndRadius(r.inflate(3), const Radius.circular(5)), Paint()..color = kInk..style = PaintingStyle.stroke..strokeWidth = 2);
-        if (detail) _text(c, '${i + 1}', r.center, sans(12, c: N.g10, w: FontWeight.w700), centre: true);
+        c.drawRRect(RRect.fromRectAndRadius(r, const Radius.circular(2)), Paint()..color = depthLayerColor(i, selected).withValues(alpha: .92));
+        if (i == selected) c.drawRRect(RRect.fromRectAndRadius(r.inflate(3), const Radius.circular(4)), Paint()..color = kInk..style = PaintingStyle.stroke..strokeWidth = 2);
+        if (detail) _text(c, '${i + 1}', r.center, sans(11, c: N.g10, w: FontWeight.w700), centre: true);
       }
       c.drawCircle(cp, 9, Paint()..color = kInk);
       c.drawCircle(cp, 4, Paint()..color = N.g07);
@@ -349,7 +349,7 @@ class DepthPainter extends CustomPainter {
       c.save();
       c.translate(cp.dx, cp.dy);
       c.rotate(fwdU ? math.pi / 2 : 0);
-      final body = RRect.fromRectAndRadius(const Rect.fromLTRB(-13, -3, 13, 17), const Radius.circular(3));
+      final body = RRect.fromRectAndRadius(const Rect.fromLTRB(-13, -3, 13, 17), const Radius.circular(2));
       c.drawPath(Path()..moveTo(-13, -3)..lineTo(-7, -15)..lineTo(7, -15)..lineTo(13, -3)..close(), Paint()..color = kInk);
       c.drawRRect(body, Paint()..color = kInk);
       c.restore();
@@ -359,7 +359,7 @@ class DepthPainter extends CustomPainter {
     c.drawLine(o + const Offset(-9, 0), o + const Offset(9, 0), cross);
     c.drawLine(o + const Offset(0, -9), o + const Offset(0, 9), cross);
     if (detail) {
-      _text(c, 'TARGET', o + const Offset(30, 18), sans(8.5, c: kMuted, ls: 1.2), centre: true);
+      _text(c, 'TARGET', o + const Offset(30, 18), sans(9.5, c: kMuted, ls: 1.2), centre: true);
       _text(c, switch (v) { DView.top => 'TOP', DView.front => 'FRONT', DView.side => 'SIDE', DView.topWide => 'TOP' }, const Offset(12, 14), sans(10, c: kMuted, w: FontWeight.w600, ls: 1.4));
     }
     c.restore();

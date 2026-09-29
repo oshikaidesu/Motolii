@@ -107,17 +107,17 @@ class _HistoryDeskState extends State<HistoryDesk> {
             child: ListView.builder(
               controller: _scroll,
               itemExtent: _rowH,
-              padding: const EdgeInsets.fromLTRB(0, 8, 0, 8),
+              padding: const EdgeInsets.fromLTRB(0, 6, 0, 6),
               itemCount: entries.length,
               itemBuilder: (_, i) => GestureDetector(key: ValueKey(i == at ? 'row-current' : 'row-$i'), behavior: HitTestBehavior.opaque, onTap: () => go(i), child: _row(i, _rowH)),
             ),
           ),
           Container(
-            padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+            padding: const EdgeInsets.fromLTRB(10.5, 7.5, 10.5, 7.5),
             decoration: const BoxDecoration(border: Border(top: BorderSide(color: kRule2))),
             child: Row(children: [
               Expanded(child: widget.entries != null ? _btn('undo', 'Undo', '⌘Z', widget.onUndo != null, () => widget.onUndo?.call()) : _btn('undo', 'Undo', '⌘Z', at > 0, () => go(at - 1))),
-              const SizedBox(width: 8),
+              const SizedBox(width: 6),
               Expanded(child: widget.entries != null ? _btn('redo', 'Redo', '⇧⌘Z', widget.onRedo != null, () => widget.onRedo?.call()) : _btn('redo', 'Redo', '⇧⌘Z', at < entries.length - 1, () => go(at + 1))),
             ]),
           ),
@@ -130,7 +130,7 @@ class _HistoryDeskState extends State<HistoryDesk> {
         tall: (c, s) {
           final h = ((s.height - 16) / entries.length).clamp(14.0, 34.0);
           return Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8),
+            padding: const EdgeInsets.symmetric(vertical: 6),
             child: Column(children: [for (var i = 0; i < entries.length; i++) GestureDetector(key: ValueKey(i == at ? 'row-current' : 'row-$i'), behavior: HitTestBehavior.opaque, onTap: () => go(i), child: _row(i, h, labels: false, w: s.width))]),
           );
         },
@@ -140,10 +140,10 @@ class _HistoryDeskState extends State<HistoryDesk> {
         key: ValueKey('history-$id'),
         onTap: on ? f : null,
         child: Container(
-          height: 36,
-          decoration: BoxDecoration(color: kWell, border: Border.all(color: kRule2), borderRadius: BorderRadius.circular(3)),
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          child: Row(children: [Text(l, style: sans(12.5, c: on ? kInk : N.g38)), const Spacer(), Text(k, style: sans(11, c: kMuted))]),
+          height: 27,
+          decoration: BoxDecoration(color: kWell, border: Border.all(color: kRule2), borderRadius: BorderRadius.circular(2)),
+          padding: const EdgeInsets.symmetric(horizontal: 9),
+          child: Row(children: [Text(l, style: sans(11, c: on ? kInk : N.g38)), const Spacer(), Text(k, style: sans(11, c: kMuted))]),
         ),
       );
 
@@ -160,7 +160,7 @@ class _HistoryDeskState extends State<HistoryDesk> {
         SizedBox(width: labels ? 58 : w, height: h, child: CustomPaint(painter: _Node(i == 0, i == entries.length - 1, cur, reached, i < at, e.mark))),
         if (labels) ...[
           Expanded(child: Text(e.label, softWrap: false, overflow: TextOverflow.clip, style: sans(cur ? 13.5 : 12, c: ink, w: cur ? FontWeight.w600 : FontWeight.w400))),
-          Padding(padding: const EdgeInsets.only(right: 16), child: Text(e.time, style: mono(9.5, c: reached ? N.g44 : N.g26))),
+          Padding(padding: const EdgeInsets.only(right: 12), child: Text(e.time, style: mono(9.5, c: reached ? N.g44 : N.g26))),
         ],
       ]),
     );
@@ -175,7 +175,7 @@ void _drawMark(Canvas c, Offset o, Mark m, Color col) {
   final p = Paint()..color = col..style = PaintingStyle.stroke..strokeWidth = 1.7..strokeCap = StrokeCap.round..strokeJoin = StrokeJoin.round;
   switch (m) {
     case Mark.save:
-      c.drawRect(Rect.fromCenter(center: o, width: 9, height: 9), Paint()..color = col);
+      c.drawRect(Rect.fromCenter(center: o, width: 7, height: 7), Paint()..color = col);
     case Mark.open:
       c.drawPath(Path()..moveTo(o.dx - 5, o.dy + 4)..lineTo(o.dx - 5, o.dy - 4)..lineTo(o.dx - 1.5, o.dy - 4)..lineTo(o.dx, o.dy - 2)..lineTo(o.dx + 5, o.dy - 2)..lineTo(o.dx + 5, o.dy + 4)..close(), p);
     case Mark.warn:
@@ -185,7 +185,7 @@ void _drawMark(Canvas c, Offset o, Mark m, Color col) {
       c.drawLine(o + const Offset(-2.6, -2.6), o + const Offset(2.6, 2.6), Paint()..color = kWell..style = PaintingStyle.stroke..strokeWidth = 1.7..strokeCap = StrokeCap.round);
       c.drawLine(o + const Offset(2.6, -2.6), o + const Offset(-2.6, 2.6), Paint()..color = kWell..style = PaintingStyle.stroke..strokeWidth = 1.7..strokeCap = StrokeCap.round);
     case Mark.end:
-      c.drawRect(Rect.fromCenter(center: o, width: 10, height: 10), p);
+      c.drawRect(Rect.fromCenter(center: o, width: 7.5, height: 7.5), p);
     case Mark.none:
       break;
   }

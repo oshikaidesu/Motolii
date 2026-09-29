@@ -227,9 +227,9 @@ class _EffectsPanelState extends State<EffectsPanel> with WithDiscovery<EffectsP
             strip: (c, s) => ListView.builder(
               scrollDirection: Axis.horizontal,
               physics: const ClampingScrollPhysics(),
-              padding: const EdgeInsets.all(10),
+              padding: const EdgeInsets.all(7.5),
               itemCount: shown.length,
-              itemBuilder: (_, i) => Padding(padding: const EdgeInsets.only(right: 6), child: AspectRatio(aspectRatio: 1.5, child: ThingFace(shown[i], scene: widget.scene))),
+              itemBuilder: (_, i) => Padding(padding: const EdgeInsets.only(right: 4.5), child: AspectRatio(aspectRatio: 1.5, child: ThingFace(shown[i], scene: widget.scene))),
             ),
           );
         },
@@ -245,12 +245,12 @@ class _EffectsPanelState extends State<EffectsPanel> with WithDiscovery<EffectsP
     final showCaption = tileW >= 60;
     return GridView.builder(
       physics: const ClampingScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(pad, 14, pad, 12),
-      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: cols, mainAxisSpacing: 9, crossAxisSpacing: gap, childAspectRatio: tileW / (tileW * .84 + (showCaption ? 18 : 0))),
+      padding: const EdgeInsets.fromLTRB(pad, 10.5, pad, 9),
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: cols, mainAxisSpacing: 7, crossAxisSpacing: gap, childAspectRatio: tileW / (tileW * .84 + (showCaption ? 18 : 0))),
       itemCount: shown.length,
       itemBuilder: (c, i) => seated(c, shown[i], Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         AspectRatio(aspectRatio: 1 / .84, child: ThingFace(shown[i], scene: widget.scene)),
-        if (showCaption) Padding(padding: const EdgeInsets.only(top: 5), child: Text(shown[i].name, softWrap: false, maxLines: 1, overflow: TextOverflow.ellipsis, style: sans(10.5, c: N.g76))),
+        if (showCaption) Padding(padding: const EdgeInsets.only(top: 4), child: Text(shown[i].name, softWrap: false, maxLines: 1, overflow: TextOverflow.ellipsis, style: sans(10, c: N.g76))),
       ])),
     );
   }

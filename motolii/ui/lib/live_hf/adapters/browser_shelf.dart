@@ -105,10 +105,10 @@ class _LiveBrowserShelfState extends State<LiveBrowserShelf> {
                   duration: const Duration(milliseconds: 120),
                   child: Container(
                     key: const ValueKey('media-drop-hint'),
-                    margin: const EdgeInsets.all(8),
+                    margin: const EdgeInsets.all(6),
                     alignment: Alignment.center,
-                    decoration: BoxDecoration(color: N.veil, border: Border.all(color: N.g95, width: 1.4), borderRadius: BorderRadius.circular(6)),
-                    child: Text('Drop to import', style: sans(13, c: N.g95)),
+                    decoration: BoxDecoration(color: N.veil, border: Border.all(color: N.g95, width: 1.4), borderRadius: BorderRadius.circular(4.5)),
+                    child: Text('Drop to import', style: sans(11, c: N.g95)),
                   ),
                 ),
               ),
@@ -148,7 +148,7 @@ class _Seat extends ChangeNotifier implements BrowserSeat {
         : Draggable<Map<String, dynamic>>(
             data: carried,
             dragAnchorStrategy: pointerDragAnchorStrategy,
-            feedback: IgnorePointer(child: Opacity(opacity: .85, child: SizedBox(width: 72, height: 72, child: tile))),
+            feedback: IgnorePointer(child: Opacity(opacity: .85, child: SizedBox(width: 54, height: 54, child: tile))),
             child: child,
           );
     return carry(
@@ -170,12 +170,12 @@ class _Seat extends ChangeNotifier implements BrowserSeat {
             if (s.mediaPicked.contains(thing.id)) const Positioned.fill(child: PickedRing()),
             // state at a glance (Classic BR-059/096): a missing file, in use, and the collection it is kept in
             if (item['missing'] == true)
-              const Positioned(left: 4, top: 4, child: IgnorePointer(child: Text('!', style: TextStyle(color: kPink, fontSize: 12, fontWeight: FontWeight.w800)))),
+              const Positioned(left: 3, top: 3, child: IgnorePointer(child: Text('!', style: TextStyle(color: kPink, fontSize: 11, fontWeight: FontWeight.w800)))),
             if (item['used'] == true)
-              Positioned(right: 4, bottom: 4, child: IgnorePointer(child: Container(width: 6, height: 6, decoration: const BoxDecoration(color: H.play, shape: BoxShape.circle)))),
+              Positioned(right: 3, bottom: 3, child: IgnorePointer(child: Container(width: 4.5, height: 4.5, decoration: const BoxDecoration(color: H.play, shape: BoxShape.circle)))),
             if (userState.collectionOf(thing.id) case final n? when n > 1)
-              Positioned(left: 4, bottom: 4, child: IgnorePointer(child: Container(width: 7, height: 7, decoration: BoxDecoration(color: _collectionColors[n - 2], shape: BoxShape.circle)))),
-            if (favorite) const Positioned(right: 4, top: 4, child: IgnorePointer(child: Text('★', style: TextStyle(color: _warn, fontSize: 11)))),
+              Positioned(left: 3, bottom: 3, child: IgnorePointer(child: Container(width: 5, height: 5, decoration: BoxDecoration(color: _collectionColors[n - 2], shape: BoxShape.circle)))),
+            if (favorite) const Positioned(right: 3, top: 3, child: IgnorePointer(child: Text('★', style: TextStyle(color: _warn, fontSize: 11)))),
           ],
         ),
       ),
@@ -206,8 +206,8 @@ class _Seat extends ChangeNotifier implements BrowserSeat {
     return Center(
       child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
         GlyphBox(family == 'Audio' ? HG.headphones : HG.image, size: 24),
-        const SizedBox(height: 6),
-        Text(family, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: N.g76, fontSize: 9)),
+        const SizedBox(height: 4.5),
+        Text(family, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: N.g76, fontSize: 9.5)),
       ]),
     );
   }
@@ -222,13 +222,13 @@ class _Seat extends ChangeNotifier implements BrowserSeat {
         onTap: c.importFiles,
         // its own place after the classes: a hairline, then a quiet tool with a small picture of what it brings in
         child: Row(mainAxisSize: MainAxisSize.min, children: [
-          Container(width: 1, height: 14, color: N.g20),
-          const SizedBox(width: 6),
+          Container(width: 1, height: 10.5, color: N.g20),
+          const SizedBox(width: 4.5),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 4.5),
             child: Row(mainAxisSize: MainAxisSize.min, children: [
               const GlyphBox(HG.plus, size: 11, color: N.g63),
-              const SizedBox(width: 4),
+              const SizedBox(width: 3),
               Text('Import', style: sans(11, c: N.g76, w: FontWeight.w500)),
             ]),
           ),

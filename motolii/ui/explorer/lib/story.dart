@@ -31,11 +31,11 @@ class Scene {
 
 /// A named state of a panel: the scene it opens, the panel it draws, and the size it is first seen at.
 class Story {
-  const Story(this.name, this.scene, this.panel, {this.width = 1080, this.height = 300});
+  const Story(this.name, this.scene, this.panel, {this.width = 1080, this.height = 300, this.scale = 1.0});
   final String name;
   final Scene scene;
   final Widget Function(EditorSession c) panel;
-  final double width, height;
+  final double width, height, scale;
 }
 
 /// A story in Widgetbook: its size and UI scale are knobs.
@@ -44,7 +44,7 @@ WidgetbookUseCase useCase(Story s) => WidgetbookUseCase(
       builder: (context) {
         final w = context.knobs.double.slider(label: 'Width', initialValue: s.width, min: 240, max: 2000, divisions: 176, precision: 0);
         final h = context.knobs.double.slider(label: 'Height', initialValue: s.height, min: 120, max: 1200, divisions: 108, precision: 0);
-        final scale = context.knobs.object.segmented<double>(label: 'UI scale', options: const [.70, .85, 1.0, 1.15, 1.30], initialOption: 1.0, labelBuilder: (v) => '${(v * 100).round()}%');
+        final scale = context.knobs.object.segmented<double>(label: 'UI scale', options: const [.70, .75, .80, .85, .90, 1.0, 1.15, 1.30], initialOption: s.scale, labelBuilder: (v) => '${(v * 100).round()}%');
         return ColoredBox(color: N.g00, child: Center(child: framed(s, w, h, scale)));
       },
     );
