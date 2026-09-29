@@ -70,7 +70,9 @@ pub(crate) fn default_palette() -> Vec<ColorSwatch> {
         .collect()
 }
 
-pub(crate) fn used_colors_from_doc(doc: &Document) -> Vec<ColorSwatch> {
+/// The colours the work shows at [at]: a text's fills, and a shape's fill as drawn (the layer's Fill Color property,
+/// which the palette writes and the renderer applies over solid fills, before the raw shape's own).
+pub(crate) fn used_colors_from_doc(doc: &Document, at: crate::doc::store::RationalTime) -> Vec<ColorSwatch> {
     let view = doc.view();
     let mut seen = std::collections::BTreeSet::new();
     let mut out = Vec::new();
@@ -90,7 +92,10 @@ pub(crate) fn used_colors_from_doc(doc: &Document) -> Vec<ColorSwatch> {
                 );
             }
         }
-        if let Ok(shapes) = view.shapes(layer) {
+        let drawn = PropertyId::new(crate::doc::store::property::SHAPE_FILL_COLOR).ok().and_then(|p| view.value_at(layer, &p, at).ok().flatten());
+        if let Some(Value::Color(c)) = drawn {
+            push_swatch(&mut seen, &mut out, c.map(|v| (v.clamp(0.0, 1.0) * 255.0).round() as u8));
+        } else if let Ok(shapes) = view.shapes(layer) {
             for node in &shapes {
                 shape_fill_colors(node, &mut seen, &mut out);
             }

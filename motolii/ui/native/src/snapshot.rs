@@ -310,7 +310,7 @@ impl EditorRuntime{
             let path=a.path_absolute.clone();let missing=path.as_ref().is_none_or(|p|!std::path::Path::new(p).exists());
             Ok(json!({"id":a.id.to_string(),"name":a.name,"path":path,"mime":a.asset_type,"used":used,"missing":missing,"thumbnail":path.as_ref().and_then(|p|if a.asset_type.starts_with("image/"){editor::thumbnail::image_data_uri(p)}else if a.asset_type.starts_with("video/"){editor::thumbnail::video_data_uri(p)}else{None}),"role":match a.role{AssetRole::Reference=>"reference",_=>"material"},"facts":path.as_ref().filter(|_|!missing).and_then(|p|editor::thumbnail::facts(p,&a.asset_type)),"seconds":a.duration.map(|d|d.as_seconds_f64()),"peaks":path.as_ref().filter(|_|!missing&&a.asset_type.starts_with("audio/")).and_then(|p|editor::thumbnail::audio_peaks(p))}))
         }).collect();
-        let used=editor::fixture::used_colors_from_doc(&self.doc);let authored=!used.is_empty();
+        let used=editor::fixture::used_colors_from_doc(&self.doc,self.time()?);let authored=!used.is_empty();
         let swatches=if authored{used}else{editor::fixture::default_palette()};
         let palette:Vec<_>=swatches.iter().map(|s|json!({"rgba":s.rgba.map(|x|x as f64/255.0),"hex":s.hex,"used":authored})).collect();
         let markers:Result<Vec<_>,String>=view.markers().map_err(e)?.into_iter().map(|m|Ok(json!({"id":format!("{}/{}",m.time.num(),m.time.den()),"frame":m.time.try_to_frame_round(comp.fps).map_err(e)?,"name":m.name,"body":m.body}))).collect();

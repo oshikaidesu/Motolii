@@ -207,3 +207,14 @@ fn the_ground_switch_keeps_the_colour(){
     rt.request(json!({"op":"composition","transparent":true})).unwrap();
     assert_eq!(bg(&rt),[0.2,0.3,0.4,0.0]);
 }
+
+/// A colour put on a shape through the palette is among the colours the work uses (the reader reads what is drawn).
+#[test]
+fn a_painted_colour_is_used_here(){
+    let mut rt=EditorRuntime::open("").unwrap();
+    rt.request(json!({"op":"create","kind":"rectangle"})).unwrap();
+    rt.request(json!({"op":"applyPalette","rgba":[0.2,0.4,0.8,1.0]})).unwrap();
+    let status=rt.build_status().unwrap();
+    let hexes:Vec<String>=status["palette"].as_array().unwrap().iter().map(|p|p["hex"].as_str().unwrap_or("").to_uppercase()).collect();
+    assert!(hexes.iter().any(|h|h.contains("3366CC")),"{hexes:?}");
+}
