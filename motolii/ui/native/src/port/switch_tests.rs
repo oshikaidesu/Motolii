@@ -144,3 +144,24 @@ fn a_group_key_and_a_reset_are_one_step(){
     assert_eq!(value(&rt,made[0],"position"),Some(Value::Vec2([0.0,0.0])));
     assert_eq!(value(&rt,made[1],"position"),Some(Value::Vec2([0.0,0.0])),"every chosen layer to its own default, both axes");
 }
+
+/// Several library items removed together are one step; an item still placed in the work stays.
+#[test]
+fn library_items_leave_together(){
+    let dir=std::env::temp_dir().join(format!("motolii-assets-{}",std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let mut paths=Vec::new();
+    for (i,name) in ["a.png","b.png","c.png"].iter().enumerate(){
+        let p=dir.join(name);image::RgbaImage::from_pixel(2+i as u32,2,image::Rgba([i as u8*80,0,0,255])).save(&p).unwrap();paths.push(p.to_string_lossy().into_owned());
+    }
+    let mut rt=EditorRuntime::open("").unwrap();
+    rt.request(json!({"op":"import","paths":paths})).unwrap();
+    let ids:Vec<u64>=rt.doc.view().assets().unwrap().iter().map(|a|a.id.get()).collect();
+    assert_eq!(ids.len(),3);
+    rt.request(json!({"op":"placeAsset","id":ids[2]})).unwrap();
+    let before=rt.doc.history_depth().0;
+    rt.request(json!({"op":"removeAsset","ids":ids})).unwrap();
+    assert_eq!(rt.doc.view().assets().unwrap().len(),1,"the placed one stays");
+    assert_eq!(rt.doc.history_depth().0,before+1,"one step");
+    let _=std::fs::remove_dir_all(&dir);
+}

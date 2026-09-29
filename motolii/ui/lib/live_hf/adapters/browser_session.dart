@@ -414,13 +414,10 @@ class BrowserSession extends ChangeNotifier {
   }
 
   /// The picked files removed from the library (only those nothing uses; layers are never touched).
+  /// The picked library items leave in one step; the host keeps the ones still in use.
   void removePickedMedia() {
-    for (final id in mediaPicked.toList()) {
-      final item = mediaItem(id);
-      if (item == null) continue;
-      final remove = mediaActions(c, item).where((a) => a.value == 'remove').firstOrNull;
-      if (remove != null && remove.enabled) mediaAct(c, 'remove', item, id: item['assetId']);
-    }
+    final ids = [for (final id in mediaPicked) if (mediaItem(id)?['assetId'] case final asset?) asset];
+    if (ids.isNotEmpty && c.supports('removeAsset')) c.command('removeAsset', {'ids': ids});
   }
 
   List<MediaAction> mediaActionsOf(String id) {
