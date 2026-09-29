@@ -16,6 +16,8 @@ mod resolve;
 mod scan;
 mod schema;
 #[cfg(test)]
+mod bench;
+#[cfg(test)]
 mod tests;
 
 use std::path::{Path, PathBuf};
