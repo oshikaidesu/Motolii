@@ -243,6 +243,37 @@ Widget libraryHeader(int count, {String on = 'All'}) => Container(
       ]),
     );
 
+// Explore, by the pictures' own colour (measured from their pixels, nothing added): left to right by hue, each column
+// light to dark; nothing overlaps, every piece whole. Sounds and models, which
+// have no picture colour, sit in a row of their own below.
+Widget exploreColour(double w, double height) {
+  const gap = 3.0, margin = 6.0;
+  // left to right by hue (from orange round the wheel), five columns of equal count; each column light to dark
+  double turn(L l) => ((l.hue! - .08) % 1 + 1) % 1;
+  final coloured = library.where((l) => l.hue != null).toList()..sort((a, b) => turn(a).compareTo(turn(b)));
+  final plain = library.where((l) => l.hue == null).toList();
+  final per = (coloured.length / 5).ceil();
+  final cols = <String, List<L>>{
+    for (var i = 0; i < 5; i++) '$i': coloured.skip(i * per).take(per).toList()..sort((a, b) => b.light!.compareTo(a.light!)),
+  };
+  final colW = (w - margin * 2 - gap * 4) / 5;
+  return ListView(padding: const EdgeInsets.all(margin), children: [
+    Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      for (final (i, e) in cols.entries.indexed) ...[
+        if (i > 0) const SizedBox(width: gap),
+        SizedBox(width: colW, child: Column(children: [
+          for (final l in e.value)
+            Padding(padding: const EdgeInsets.only(bottom: gap), child: SizedBox(width: colW, height: colW / aspectOf(l), child: ClipRRect(borderRadius: BorderRadius.circular(3), child: marked(l, face(l))))),
+        ])),
+      ],
+    ]),
+    const SizedBox(height: 6),
+    Wrap(spacing: gap, runSpacing: gap, children: [
+      for (final l in plain) SizedBox(width: (w - margin * 2 - gap * 3) / 4, height: (w - margin * 2 - gap * 3) / 4 / aspectOf(l), child: ClipRRect(borderRadius: BorderRadius.circular(3), child: marked(l, face(l)))),
+    ]),
+  ]);
+}
+
 final paperLibrary = <String, Widget Function(double, double)>{
   '0 Thumbnail mixed': (w, h) => mixed(w),
   '0b Thumbnail mixed, 36 HDR': (w, h) {
@@ -254,6 +285,7 @@ final paperLibrary = <String, Widget Function(double, double)>{
   '1 Thumbnail': (w, h) => thumbnail(w),
   '2 Detail': (w, h) => detail(w),
   '3 Explore': explore,
+  '3b Explore by colour': (w, h) => exploreColour(w, h),
 };
 
 class PaperLibrary extends StatelessWidget {
