@@ -520,7 +520,7 @@ class _Chip extends StatelessWidget {
   Widget build(BuildContext context) {
     final kind = r.layer['kind'];
     if (kind == 'Camera' || r.isGroup) {
-      return SizedBox.square(dimension: 10, child: CustomPaint(painter: HgPainter(kind == 'Camera' ? HG.camera : HG.list, N.g69, N.g10)));
+      return SizedBox.square(dimension: 10, child: CustomPaint(painter: HgPainter(kind == 'Camera' ? HG.camera : HG.list, kind == 'Camera' ? (r.layer['hidden'] == true ? N.g33 : _family(r.id).n) : N.g69, N.g10)));
     }
     return Container(width: 8, height: 8, decoration: BoxDecoration(color: r.layer['hidden'] == true ? N.g33 : _family(r.id).n, borderRadius: BorderRadius.circular(2)));
   }
@@ -638,15 +638,12 @@ class _RowsPainter extends CustomPainter {
           final a = ghost > 0 ? end : math.max(0.0, start + ghost), b = ghost > 0 ? end + ghost : start;
           cv.drawRRect(RRect.fromRectAndRadius(Rect.fromLTRB(t.xOf(a), cy - 7.5, t.xOf(b), cy + 7.5), const Radius.circular(2.5)), fill..color = colour.withValues(alpha: .28));
         }
-        if (r.layer['kind'] != 'Camera') {
-          // however short in time, a bar is drawn at least 3 px, so it can be seen where it is grabbed
+        {
+          // however short in time, a bar is drawn at least 3 px, so it can be seen where it is grabbed; a camera is a
+          // layer like the others (its own colour, its span): the one in force at a moment is the core's rule
           final bar = Rect.fromLTRB(t.xOf(start), cy - 7.5, math.max(t.xOf(end), t.xOf(start) + 3), cy + 7.5);
           cv.drawRRect(RRect.fromRectAndRadius(bar, const Radius.circular(2.5)), fill..color = colour);
           if (selected) cv.drawRRect(RRect.fromRectAndRadius(bar.deflate(.5), const Radius.circular(2.5)), Paint()..style = PaintingStyle.stroke..color = N.g100.withValues(alpha: .55));
-        } else {
-          // a camera has no picture of its own: a slim quiet bar for its time, so its keys sit on something and the rows
-          // keep one rhythm (a bare hairline read as a missing tooth)
-          cv.drawRRect(RRect.fromRectAndRadius(Rect.fromLTRB(t.xOf(start), cy - 2.5, t.xOf(end), cy + 2.5), const Radius.circular(2)), fill..color = selected ? N.g44 : N.g20);
         }
         final wave = waves[r.id];
         if (wave != null && wave.isNotEmpty) {
