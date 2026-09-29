@@ -11,17 +11,29 @@ import 'package:motolii_stage5/live_hf/adapters/browser_item.dart';
 import 'package:motolii_stage5/live_hf/adapters/graph_overlay.dart';
 import 'package:motolii_stage5/live_hf/adapters/media_fluid.dart';
 
+import 'similarity_graph.dart';
+
 /// What the person chose for the graph: which relations to draw, and global or local (1 or 2 hops round the chosen one).
 const _all = {'folder', 'source', 'project', 'duplicate', 'type'};
 
 class GraphChoice extends ChangeNotifier {
   /// [relations]: which kinds of relation are shown. The map itself is laid out from all of them and never re-packed by this:
   /// a filter only changes what is visible.
-  GraphChoice({this.hops = 0, Set<String>? relations, this.scale}) : relations = relations ?? {..._all};
+  GraphChoice({this.hops = 0, Set<String>? relations, this.scale, this.knn, this.overlay = false}) : relations = relations ?? {..._all};
 
   /// 0 = global (everything), 1 or 2 = local.
   int hops;
   final Set<String> relations;
+
+  /// Null: the hub topology (Source / Folder / Type / Project as nodes). A number: the sparse similarity graph, each asset
+  /// joined to its k nearest; metadata is then only an overlay ([overlay]: type tints and folder regions).
+  final int? knn;
+  bool overlay;
+
+  void toggleOverlay() {
+    overlay = !overlay;
+    notifyListeners();
+  }
 
   /// A fixed first zoom for the camera (contact sheets compare at one magnification).
   final double? scale;
@@ -132,6 +144,10 @@ ExploreLayout graphLayout(GraphChoice choice, Set<String> Function() usedPaths) 
   return (items, selected, viewport) {
     final visible = {...choice.relations};
     final used = usedPaths();
+    if (choice.knn != null) return _knnLayout(choice, items, selected, used, () => (lastKey, last), (k, f) {
+      lastKey = k;
+      last = f;
+    });
     final topology = '${items.map((i) => i.id).join(',')}|${used.length}|${items.map((i) => i.fingerprint).join(',').hashCode}';
     final shown = (visible.toList()..sort()).join(',');
     // Global: the layout is a function of the graph alone, so choosing an asset (or resizing the seat) never asks for one.
@@ -311,7 +327,12 @@ class GraphBar extends StatelessWidget {
           child: Wrap(spacing: 4, runSpacing: 3, crossAxisAlignment: WrapCrossAlignment.center, children: [
             for (final (n, label) in const [(0, 'Global'), (1, 'Local 1'), (2, 'Local 2'), (3, 'Local 3')]) _Chip(label, choice.hops == n, () => choice.setHops(n)),
             const SizedBox(width: 6),
-            for (final (kind, label) in _kinds) _Chip(label, choice.relations.contains(kind), () => choice.toggle(kind), dot: relationColors[kind]),
+            if (choice.knn == null)
+              for (final (kind, label) in _kinds) _Chip(label, choice.relations.contains(kind), () => choice.toggle(kind), dot: relationColors[kind])
+            else ...[
+              _Chip('k=${choice.knn}', true, () {}),
+              _Chip('Type · Folder overlay', choice.overlay, choice.toggleOverlay),
+            ],
           ]),
         ),
       );
@@ -336,4 +357,155 @@ class _Chip extends StatelessWidget {
           ]),
         ),
       );
+}
+
+
+Frame _emptyFrame() => (faces: const <String, Rect>{}, labels: const <String, Rect>{}, links: const <String>[], graph: null, content: const Size(1, 1));
+
+/// The similarity graph as the Explore layout: the same rules as the hub map (Global keeps one stored layout whatever is
+/// chosen or how big the seat is; Local is the explicit look round the chosen asset), on sparse nearest-neighbour edges.
+Frame _knnLayout(GraphChoice choice, List<BrowserItem> items, String? selected, Set<String> used, (String?, Frame?) Function() cached, void Function(String, Frame) store) {
+  final topology = '${items.map((i) => i.id).join(',')}|${used.length}|${choice.knn}|${items.map((i) => '${i.mtimeNs}${i.fingerprint}').join(',').hashCode}';
+  final key = choice.hops == 0 ? 'g|$topology|${choice.overlay}' : 'l${choice.hops}|$selected|$topology|${choice.overlay}';
+  var (lastKey, last) = cached();
+  if (key != lastKey || last == null) {
+    last = _buildKnn(choice, items, selected, used);
+    store(key, last);
+  }
+  final frame = last;
+  final chosen = frame.faces[selected];
+  if (choice.hops != 0 || chosen == null) return frame;
+  return (faces: frame.faces, labels: {selected!: Rect.fromLTWH(chosen.left - 20, chosen.bottom + 1, chosen.width + 40, 14)}, links: frame.links, graph: frame.graph, content: frame.content);
+}
+
+Frame _buildKnn(GraphChoice choice, List<BrowserItem> items, String? selected, Set<String> used) {
+  if (items.isEmpty) return _emptyFrame();
+  final hops = choice.hops;
+  final String focus = items.any((i) => i.id == selected) ? selected! : items.first.id;
+  final all = knnEdges(items, choice.knn!, used);
+  final adj = <String, List<String>>{};
+  for (final e in all) {
+    adj.putIfAbsent(e.a, () => []).add(e.b);
+    adj.putIfAbsent(e.b, () => []).add(e.a);
+  }
+  final include = <String>{};
+  if (hops == 0) {
+    include.addAll(items.map((i) => i.id));
+  } else {
+    Set<String> frontier = {focus};
+    include.add(focus);
+    for (var d = 0; d < hops; d++) {
+      frontier = {for (final id in frontier) for (final to in adj[id] ?? const <String>[]) if (include.add(to)) to};
+    }
+  }
+  final byId = {for (final i in items) i.id: i};
+  final nodes = <_Node>[];
+  for (final i in items) {
+    if (!include.contains(i.id)) continue;
+    final base = (i.id == focus && hops > 0) ? 76.0 : 42.0;
+    final a = i.aspect;
+    nodes.add(_Node(i.id, a >= 1 ? base : base * a, a >= 1 ? base / a : base));
+  }
+  final n = nodes.length;
+  final area = math.max(560.0 * 400.0, n * 110.0 * 110.0);
+  final w = math.sqrt(area * 1.4), h = math.sqrt(area / 1.4);
+  final k = math.sqrt(w * h / math.max(1, n)) * .8;
+  final idx = {for (final (i, node) in nodes.indexed) node.id: i};
+  final links = [for (final e in all) if (idx.containsKey(e.a) && idx.containsKey(e.b)) (idx[e.a]!, idx[e.b]!, e.relation == 'duplicate' ? 1.4 : .9)];
+  final global = hops == 0;
+  var iters = n <= 120 ? 260 : 120;
+  var t = math.min(w, h) / 6;
+  var remembered = 0;
+  for (final (i, node) in nodes.indexed) {
+    final mem = global ? choice.memory[node.id] : null;
+    if (mem != null) {
+      node.p = mem;
+      node.old = true;
+      remembered++;
+      continue;
+    }
+    final placed = [for (final to in adj[node.id] ?? const <String>[]) if (global && choice.memory[to] != null) choice.memory[to]!];
+    final hash = node.id.hashCode & 0xffff;
+    if (placed.isNotEmpty) {
+      final mean = placed.fold(Offset.zero, (a, b) => a + b) / placed.length.toDouble();
+      node.p = mean + Offset(math.cos(hash / 65535 * 6.28) * 36, math.sin(hash / 65535 * 6.28) * 36);
+    } else {
+      final ang = 2 * math.pi * i / math.max(1, n) + hash / 65535 * .3;
+      final rad = math.min(w, h) * (.25 + (hash % 97) / 97 * .2);
+      node.p = Offset(w / 2 + math.cos(ang) * rad, h / 2 + math.sin(ang) * rad);
+    }
+    if (node.id == focus && hops > 0) {
+      node.p = Offset(w / 2, h / 2);
+      node.pinned = true;
+    }
+  }
+  var simulate = true;
+  if (global && remembered == nodes.length) {
+    simulate = false;
+  } else if (global && remembered > 0) {
+    iters = 90;
+    t = math.min(w, h) / 40;
+  }
+  if (simulate) _settle(nodes, links, w, h, k, iters, t);
+  if (global) {
+    for (final node in nodes) {
+      choice.memory[node.id] = node.p;
+    }
+  }
+  final faces = <String, Rect>{};
+  for (final node in nodes) {
+    faces[node.id] = Rect.fromCenter(center: node.p, width: node.w, height: node.h);
+  }
+  final overlay = choice.overlay;
+  return (
+    faces: faces,
+    labels: const <String, Rect>{},
+    links: const <String>[],
+    graph: GraphOverlay(
+      initialScale: choice.scale,
+      hubs: const [],
+      edges: [for (final e in all) if (idx.containsKey(e.a) && idx.containsKey(e.b)) e],
+      tints: overlay ? {for (final id in faces.keys) id: kindTints[byId[id]!.kind] ?? const Color(0xFF888888)} : const {},
+      blobs: overlay ? folderBlobs(items, faces) : const [],
+    ),
+    content: Size(w, h),
+  );
+}
+
+/// The force layout: repel by size, attract along links, cool down; what is `old` (already on the map) only gives way a little.
+void _settle(List<_Node> nodes, List<(int, int, double)> links, double w, double h, double k, int iters, double t0) {
+  final n = nodes.length;
+  var t = t0;
+  for (var it = 0; it < iters; it++) {
+    final disp = List<Offset>.filled(n, Offset.zero);
+    for (var i = 0; i < n; i++) {
+      for (var j = i + 1; j < n; j++) {
+        var d = nodes[i].p - nodes[j].p;
+        var dist = d.distance;
+        if (dist < .01) {
+          d = Offset((i - j) * .01, .01);
+          dist = d.distance;
+        }
+        final eff = math.max(dist - (nodes[i].r + nodes[j].r) * .8, 2.0);
+        final v = d / dist * (k * k / eff);
+        disp[i] += v;
+        disp[j] -= v;
+      }
+    }
+    for (final (a, b, wt) in links) {
+      final d = nodes[a].p - nodes[b].p;
+      final dist = math.max(d.distance, .01);
+      final v = d / dist * (dist * dist / k * wt);
+      disp[a] -= v;
+      disp[b] += v;
+    }
+    for (var i = 0; i < n; i++) {
+      disp[i] += (Offset(w / 2, h / 2) - nodes[i].p) * .05;
+      if (nodes[i].pinned) continue;
+      final len = math.max(disp[i].distance, .01);
+      nodes[i].p += disp[i] / len * math.min(len, nodes[i].old ? t * .12 : t);
+      nodes[i].p = Offset(nodes[i].p.dx.clamp(nodes[i].w / 2 + 30, w - nodes[i].w / 2 - 30), nodes[i].p.dy.clamp(nodes[i].h / 2 + 30, h - nodes[i].h / 2 - 30));
+    }
+    t *= .985;
+  }
 }

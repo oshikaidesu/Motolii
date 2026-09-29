@@ -22,7 +22,11 @@ class GraphEdge {
 
 /// What Explore's graph adds to a [Frame]: hubs, the edges between nodes, and what to hold back while one node is in focus.
 class GraphOverlay {
-  const GraphOverlay({required this.hubs, required this.edges, this.initialScale});
+  const GraphOverlay({required this.hubs, required this.edges, this.initialScale, this.tints = const {}, this.blobs = const []});
+
+  /// Metadata that is not topology: a thin colour on a face (its type), and soft regions behind faces that share a place.
+  final Map<String, Color> tints;
+  final List<({Offset at, double radius, Color color})> blobs;
 
   /// The camera's first zoom when the caller wants one (a comparison at one magnification); else the whole map is fitted.
   final double? initialScale;
@@ -47,6 +51,7 @@ class GraphOverlay {
 
 /// One colour per relation kind (the kind's identity, not a position): also the filter chips' dots.
 const relationColors = {
+  'similar': Color(0xFF8A94A8),
   'folder': Color(0xFF7FB2E5),
   'source': Color(0xFFE5B27F),
   'type': Color(0xFFA48FE0),
@@ -98,4 +103,19 @@ class HubPill extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Soft regions behind the faces that share a place (a folder): drawn under the lines, never a line themselves.
+class GraphBlobs extends CustomPainter {
+  GraphBlobs(this.blobs);
+  final List<({Offset at, double radius, Color color})> blobs;
+  @override
+  void paint(Canvas canvas, Size size) {
+    for (final b in blobs) {
+      canvas.drawCircle(b.at, b.radius, Paint()..color = b.color);
+    }
+  }
+
+  @override
+  bool shouldRepaint(GraphBlobs o) => true;
 }

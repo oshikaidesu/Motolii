@@ -197,6 +197,8 @@ class _FluidBoardState extends State<FluidBoard> {
                       ),
                     ),
                   ),
+                if (graph != null && graph.blobs.isNotEmpty)
+                  Positioned.fill(child: IgnorePointer(child: CustomPaint(painter: GraphBlobs(graph.blobs)))),
                 // Explore's graph: the proven relations as lines (they wait out a move, so they never point at where a face was)
                 if (graph != null)
                   Positioned.fill(
@@ -255,7 +257,7 @@ class _FluidBoardState extends State<FluidBoard> {
                           onExit: graph == null ? null : (_) => setState(() => _hot = null),
                           child: Opacity(
                             opacity: dim(it.id) ? .28 : 1,
-                            child: _carried(it, frame.faces[it.id]!, _Face(it, selected: widget.picked.contains(it.id) || it.id == widget.selected, marked: widget.view != 'list', faces: widget.faces, held: widget.holding[it.id], short: widget.view == 'explore' && it.id != widget.selected)),
+                            child: _tinted(graph?.tints[it.id], _carried(it, frame.faces[it.id]!, _Face(it, selected: widget.picked.contains(it.id) || it.id == widget.selected, marked: widget.view != 'list', faces: widget.faces, held: widget.holding[it.id], short: widget.view == 'explore' && it.id != widget.selected))),
                           ),
                         )),
                       ),
@@ -285,6 +287,9 @@ class _FluidBoardState extends State<FluidBoard> {
   Widget _press(String id, Widget child) => Listener(onPointerDown: (e) {
         if (e.buttons & kPrimaryButton != 0) widget.onTap(id);
       }, child: child);
+
+  /// A face with a thin colour round it (metadata such as its type; the picture is untouched).
+  Widget _tinted(Color? tint, Widget face) => tint == null ? face : Stack(fit: StackFit.expand, children: [face, IgnorePointer(child: DecoratedBox(decoration: BoxDecoration(borderRadius: BorderRadius.circular(3), border: Border.all(color: tint, width: 1.5))))]);
 
   /// A face that can be carried (to the Timeline) is dragged as itself; one that cannot is only the face.
   Widget _carried(BrowserItem it, Rect rect, Widget face) {
