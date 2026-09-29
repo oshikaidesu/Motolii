@@ -31,6 +31,8 @@ class _ShotRunnerState extends State<ShotRunner> {
 
   Future<void> _ready() async {
     // frames are driven here (warm-up frames need no vsync), so shots work with the window covered or on another space
+    // MOTOLII_EXPLORER_SETTLE: extra milliseconds for stories that load files after they are attached (a 3D face)
+    await Future<void>.delayed(Duration(milliseconds: int.tryParse(Platform.environment['MOTOLII_EXPLORER_SETTLE'] ?? '') ?? 0));
     for (var i = 0; i < 8; i++) {
       await Future<void>.delayed(const Duration(milliseconds: 90));
       WidgetsBinding.instance.scheduleWarmUpFrame();
