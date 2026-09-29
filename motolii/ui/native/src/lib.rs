@@ -4,6 +4,7 @@ pub use motolii_edit as edit;
 pub use motolii_render as render;
 #[allow(unused_imports)]
 use crate::edit::{Animate, Document, Intent};
+mod catalog;
 mod editor;
 mod frames;
 mod owners;
