@@ -6,6 +6,7 @@ import 'package:flutter/widgets.dart';
 
 import '../foundation/panel_controls/scale.dart';
 import '../hf/shell/place.dart' show H;
+import 'editor_theme.dart';
 import 'shell.dart';
 import 'ui_scale.dart';
 
@@ -15,7 +16,8 @@ void main() => runApp(WidgetsApp(
       textStyle: H.s(12),
       pageRouteBuilder: <T>(RouteSettings settings, WidgetBuilder builder) => PageRouteBuilder<T>(settings: settings, pageBuilder: (context, _, __) => builder(context)),
       // the UI's size scales the whole root — the overlay with its menus and sheets included — and nothing of the work
-      builder: (context, child) => EditorScale(
+      // the foundation's widgets (the Stage's chrome) take the live app's colours
+      builder: (context, child) => liveEditorTheme.wrap(EditorScale(
         notifier: LiveUiScale.instance.factor,
         child: ValueListenableBuilder<double>(
           valueListenable: LiveUiScale.instance.factor,
@@ -24,6 +26,6 @@ void main() => runApp(WidgetsApp(
             const Positioned.fill(child: UiScaleReadout()),
           ]),
         ),
-      ),
+      )),
       home: const LiveShell(),
     ));
