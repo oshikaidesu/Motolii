@@ -163,7 +163,7 @@ impl EditorRuntime{
         }) else{return Ok(Json::Null)};
         let pointer=self.viewer.stage_pointer.filter(|_|self.viewer.stage_view==seen);
         let camera=if seen==View::User{self.viewer.user_camera}else{self.engine.resolve_camera(&view,time).map_err(e)?};
-        let Some(data)=editor::gizmo3d::draw_data(comp.spec(),camera,&targets,pointer,self.viewer.stage_view_scale,self.viewer.stage_held.as_deref()) else{return Ok(Json::Null)};
+        let Some(data)=editor::gizmo3d::draw_data(comp.spec(),camera,&targets,pointer,self.viewer.view_scale(seen),self.viewer.stage_held.as_deref()) else{return Ok(Json::Null)};
         Ok(json!({"vertices":data.vertices,"colors":data.colors,"indices":data.indices}))
     }
     /// Stage に置いた箱(Boxcam): Camera 層ごとの frustum と取っ手。Stage の comp 画像 px。

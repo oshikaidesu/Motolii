@@ -39,7 +39,8 @@ pub(crate) struct ViewerState {
     pub pick_serial: u64,
     pub stage_snap: [Option<f64>; 2],
     pub stage_pointer: Option<[f64; 2]>,
-    pub stage_view_scale: f64,
+    /// 画面 px あたりの comp px、見る所(Stage / Camera)ごと: 取っ手の大きさと吸い付きの距離はその絵の縮尺で決まる。
+    pub stage_view_scale: HashMap<View, f64>,
     pub stage_held: Option<String>,
     pub stage_window: Option<Window>,
     pub stage_view: View,
@@ -48,6 +49,7 @@ pub(crate) struct ViewerState {
 }
 
 impl ViewerState {
+    pub fn view_scale(&self, seen: View) -> f64 { self.stage_view_scale.get(&seen).copied().unwrap_or(1.0) }
     pub(crate) fn new(view: &StoreView<'_>, revision: Revision) -> Self {
         let clock = Clock::from_view(view, 60.0);
         clock.sync_view(view);
@@ -63,7 +65,7 @@ impl ViewerState {
             pick_serial: 0,
             stage_snap: [None, None],
             stage_pointer: None,
-            stage_view_scale: 1.0,
+            stage_view_scale: HashMap::new(),
             stage_held: None,
             stage_window: None,
             stage_view: View::User,
@@ -153,13 +155,13 @@ mod tests {
         first.selected_ids = vec![LayerId(2)];
         first.clock.seek_frame(30);
         first.frame = 30;
-        first.stage_view_scale = 2.0;
+        first.stage_view_scale.insert(View::User, 2.0);
         first.stage_pointer = Some([120.0, 240.0]);
         assert_eq!(first.selected(), Some(LayerId(2)));
         assert_eq!(second.selected(), Some(LayerId(1)));
         assert_eq!(second.clock.current_frame(), 0);
         assert_eq!(second.frame, 0);
-        assert_eq!(second.stage_view_scale, 1.0);
+        assert_eq!(second.view_scale(View::User), 1.0);
         assert_eq!(second.stage_pointer, None);
         assert_eq!(doc.revision(), revision);
         assert_eq!(doc.history_depth(), history);

@@ -7,7 +7,7 @@ impl EditorRuntime {
         let projection=ids.last().and_then(|id|self.doc.view().attrs(*id).ok().flatten()).map_or(LayerProjection::ThreeD,|a|a.projection);
         let observer=self.view_camera(seen)?;
         let projection_camera=self.projection_camera(seen,projection)?;
-        editor::stage::DragSession::begin(&self.doc,&mut self.engine,ids,mode,handle,start,at,observer,projection_camera,self.viewer.stage_view_scale,self.viewer.stage_held.as_deref())
+        editor::stage::DragSession::begin(&self.doc,&mut self.engine,ids,mode,handle,start,at,observer,projection_camera,self.viewer.view_scale(seen),self.viewer.stage_held.as_deref())
     }
     /// 矢印キーの nudge(AE の Alt+矢印): 選んだ層を、出力(Camera)の画面で `x`, `y` px 動かす。Stage で掴んで動かすのと同じ
     /// 移動の写像を 1 手で通す(Undo 一発)。

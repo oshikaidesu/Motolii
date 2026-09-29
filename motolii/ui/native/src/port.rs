@@ -309,10 +309,10 @@ impl EditorRuntime{
         editor::functions::verb::retime_layer(&self.doc,id,old,next,next.duration==old.duration&&next.source_in==old.source_in).map_err(e)
     }
     fn stage_gesture(&mut self,j:&J)->Result<(),String>{
-        if let Some(scale)=j["viewScale"].as_f64().filter(|s|s.is_finite()&&*s>0.0){self.viewer.stage_view_scale=scale;}
-        if let Some(held)=j.get("held"){self.viewer.stage_held=held.as_str().map(str::to_owned);}
-        // どの絵で掴んだか。Stage と Camera は投影が違う。
+        // どの絵で掴んだか。Stage と Camera は投影も縮尺も違う。
         let seen=crate::viewer::View::parse(j["view"].as_str().unwrap_or("Camera"))?;
+        if let Some(scale)=j["viewScale"].as_f64().filter(|s|s.is_finite()&&*s>0.0){self.viewer.stage_view_scale.insert(seen,scale);}
+        if let Some(held)=j.get("held"){self.viewer.stage_held=held.as_str().map(str::to_owned);}
         match string(j,"phase")?{
             // hover。掴まないので Document には触らず、ギズモの絵だけが変わる。
             "hover"=>{self.viewer.stage_pointer=serde_json::from_value(j["point"].clone()).ok();self.viewer.stage_view=seen;}
@@ -327,7 +327,7 @@ impl EditorRuntime{
                 self.pick(ids);self.stage_drag=Some(drag);
             }
             "update"=>{let drag=self.stage_drag.as_ref().ok_or("No Stage gesture")?;let point=serde_json::from_value(j["point"].clone()).map_err(e)?;
-                let (point,guides)=drag.snap(point,j["snap"].as_bool().unwrap_or(false),self.viewer.stage_view_scale);self.viewer.stage_snap=guides;
+                let (point,guides)=drag.snap(point,j["snap"].as_bool().unwrap_or(false),self.viewer.view_scale(seen));self.viewer.stage_snap=guides;
                 let edits=drag.edits(&self.doc,point,j["shift"].as_bool().unwrap_or(false),j["alt"].as_bool().unwrap_or(false),self.viewer.animate)?;self.set_preview(edits)?;
             }
             "commit"=>{self.stage_drag=None;self.viewer.stage_snap=[None,None];if let Some((owner,edits))=self.preview.take(){self.doc.clear_preview_edits(owner);self.apply(edits)?;}}
