@@ -3309,6 +3309,7 @@ dependencies = [
  "motolii-jobs",
  "motolii-render",
  "motolii-script",
+ "notify",
  "objc2",
  "objc2-core-foundation",
  "objc2-io-surface",

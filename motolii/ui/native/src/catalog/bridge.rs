@@ -116,6 +116,12 @@ pub(crate) fn request(text: &str) -> String {
 
 fn handle(text: &str) -> Result<J, String> {
     let j: J = serde_json::from_str(text).map_err(|e| e.to_string())?;
+    if j["op"] == "watch" {
+        // a signal for changes, not the truth: on, the sources are refreshed after they change; off, only when asked.
+        // (Before the catalog lock is taken: starting to watch reads the sources through it.)
+        let roots = if j["on"].as_bool().unwrap_or(true) { super::watch::start()? } else { super::watch::stop() };
+        return Ok(json!({"watching": super::watch::watching(), "roots": roots}));
+    }
     let guard = &mut *shared().lock().map_err(|_| "catalog lock poisoned".to_owned())?;
     let c = guard.as_mut().map_err(|e| e.clone())?;
     let state = |c: &Catalog| json!({"revision": c.revision(), "sources": c.sources().iter().map(source_json).collect::<Vec<_>>(), "pending": c.pending_enrich()});

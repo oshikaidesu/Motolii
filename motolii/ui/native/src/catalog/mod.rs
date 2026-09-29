@@ -15,6 +15,7 @@ mod matching;
 mod query;
 mod resolve;
 mod scan;
+mod watch;
 mod schema;
 #[cfg(test)]
 mod bench;

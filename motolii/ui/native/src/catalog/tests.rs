@@ -590,3 +590,33 @@ fn the_owner_orders_a_result_set() {
 }
 
 
+
+#[test]
+fn a_change_under_a_watched_source_is_indexed_without_asking() {
+    use std::time::{Duration, Instant};
+    let mut t = Tree::new();
+    t.write("Src/a.png");
+    let root = fs::canonicalize(t.path("Src")).unwrap();
+    super::use_test_state();
+    let id = super::with(|c| {
+        let s = c.add_source(&root, Some("watched")).unwrap();
+        c.refresh(Some(&s.id)).unwrap();
+        s.id
+    })
+    .unwrap();
+    assert_eq!(super::watch::start().unwrap() >= 1, true);
+    let count = |id: &str| super::with(|c| c.query(&Query { sources: Some(vec![id.to_owned()]), ..Default::default() }).unwrap().total).unwrap();
+    assert_eq!(count(&id), 1);
+    t.write("Src/sub/b.mov");
+    t.mv("Src/a.png", "Src/renamed.png");
+    let until = Instant::now() + Duration::from_secs(10);
+    while Instant::now() < until && super::with(|c| c.query(&Query { sources: Some(vec![id.clone()]), text: Some("renamed".into()), ..Default::default() }).unwrap().total).unwrap() == 0 {
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    assert_eq!(count(&id), 2, "the new file and the rename were picked up by the watcher");
+    // the rename kept the asset (the watcher only signals; the refresh is the ordinary diff)
+    let names = super::with(|c| c.query(&Query { sources: Some(vec![id.clone()]), ..Default::default() }).unwrap().entries.into_iter().map(|e| e.rel_path).collect::<Vec<_>>()).unwrap();
+    assert!(names.contains(&"renamed.png".to_owned()) && names.contains(&"sub/b.mov".to_owned()), "{names:?}");
+    super::watch::stop();
+    super::with(|c| c.remove_source(&id).unwrap()).unwrap();
+}
