@@ -342,14 +342,19 @@ impl EditorRuntime{
             let current:Vec<_>=self.viewer.selected_keys.iter().map(|key|json!({"layer":key.layer.0,"property":key.property.as_ref().map(|p|p.name()),"frame":(key.at_sec*fps).round()as i64})).collect();
             if *expected!=json!(current){return Err("Easing selection changed".into())}
         }
-        if self.viewer.selected_keys.is_empty(){return Err("Select keyframes".into())}
+        // The keys to ease: the ones named ("keys": a desk easing one interval says which), else the selection.
+        let keys:Vec<crate::viewer::KeySel>=match j["keys"].as_array(){
+            Some(list)=>{let fps=editor::keyframe_edit::document_fps(&self.doc).map_err(e)?.as_f64();list.iter().map(|k|Ok(crate::viewer::KeySel{layer:LayerId(k["layer"].as_u64().ok_or("Missing key layer")?),property:k["property"].as_str().map(PropertyId::new).transpose().map_err(e)?,at_sec:k["frame"].as_f64().ok_or("Missing key frame")?/fps})).collect::<Result<_,String>>()?}
+            None=>self.viewer.selected_keys.clone(),
+        };
+        if keys.is_empty(){return Err("Select keyframes".into())}
         let kind=string(j,"kind")?;
         if kind.starts_with("EasyEase"){
             let side=match kind{"EasyEase"=>editor::keymap::EaseSide::Both,"EasyEaseIn"=>editor::keymap::EaseSide::In,"EasyEaseOut"=>editor::keymap::EaseSide::Out,_=>return Err("Unknown easing".into())};
-            editor::ease::apply_easy(&mut self.doc,&self.viewer.selected_keys,side)?;
+            editor::ease::apply_easy(&mut self.doc,&keys,side)?;
         }else{
             let shape=editor::ease_kinds::decode(j)?;
-            let starts=editor::ease::segments(&self.viewer.selected_keys);editor::ease::apply(&mut self.doc,&starts,shape)?;
+            let starts=editor::ease::segments(&keys);editor::ease::apply(&mut self.doc,&starts,shape)?;
         }Ok(())
     }
     fn edit_marker(&mut self,op:&str,j:&J)->Result<(),String>{

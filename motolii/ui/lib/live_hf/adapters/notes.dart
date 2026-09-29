@@ -6,6 +6,7 @@ import 'package:flutter/widgets.dart';
 
 import '../../hf/desk/notes.dart';
 import '../../session/editor_session.dart';
+import 'desk_session.dart';
 
 /// The Notes desk over the document's notebook (`notebook` in the status, `notes` to change it). Text, image and
 /// reference blocks are the host's; a kind it does not hold (a hand line) is not added. An image comes from the
@@ -176,7 +177,7 @@ class LiveNotes extends StatefulWidget {
 }
 
 class _LiveNotesState extends State<LiveNotes> {
-  late final host = LiveNotesHost(widget.c);
+  LiveNotesHost get host => DeskSession.of(widget.c).notes;
   final _desk = GlobalKey();
 
   @override
@@ -209,7 +210,6 @@ class _LiveNotesState extends State<LiveNotes> {
   @override
   void dispose() {
     if (widget.c.fileDropTarget == _drop) widget.c.fileDropTarget = null;
-    host.dispose();
     super.dispose();
   }
 

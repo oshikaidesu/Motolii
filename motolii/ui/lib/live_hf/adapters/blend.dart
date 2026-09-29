@@ -3,6 +3,7 @@ import 'package:flutter/widgets.dart';
 import '../../hf/desk/blend.dart';
 import '../../session/editor_session.dart';
 import 'blend_host.dart';
+import 'desk_session.dart';
 
 /// The finished Blend desk over the selected layers: one mode per tile, hover previews on Stage, a click is one step.
 class NewBlend extends StatefulWidget {
@@ -13,11 +14,10 @@ class NewBlend extends StatefulWidget {
 }
 
 class _NewBlendState extends State<NewBlend> {
-  late final BlendController blend = BlendController(widget.controller);
+  BlendController get blend => DeskSession.of(widget.controller).blend;
 
   @override
   void dispose() {
-    blend.dispose();
     super.dispose();
   }
 

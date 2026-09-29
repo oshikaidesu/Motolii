@@ -3,6 +3,7 @@ import 'package:flutter/widgets.dart';
 import '../../hf/desk/depth.dart';
 import '../../session/editor_session.dart';
 import 'depth_host.dart';
+import 'desk_session.dart';
 
 /// The finished Depth desk over the scene's floor plan: layers and the camera drag as they do on Stage.
 class NewDepth extends StatefulWidget {
@@ -13,11 +14,10 @@ class NewDepth extends StatefulWidget {
 }
 
 class _NewDepthState extends State<NewDepth> {
-  late final DepthController depth = DepthController(widget.controller);
+  DepthController get depth => DeskSession.of(widget.controller).depth;
 
   @override
   void dispose() {
-    depth.dispose();
     super.dispose();
   }
 

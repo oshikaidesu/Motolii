@@ -4,6 +4,7 @@ import 'package:flutter/widgets.dart';
 
 import '../../hf/desk/ease.dart';
 import '../../session/editor_session.dart';
+import 'desk_session.dart';
 
 /// The Ease desk's curves over the session: the host's ease kinds (`easeKinds`, each drawn from its own samples), the
 /// intervals of the picked keys (`easeIntervals`), and `ease` for a changed curve — for one interval its first key is
@@ -268,19 +269,13 @@ class LiveEaseHost extends ChangeNotifier implements EaseHost {
       if (_canSequence) await c.command('sequence', payload);
       return;
     }
-    final picked = {'ids': [...c.selectedIds], 'keys': [...EditorSession.maps(c.state['selectedKeys'])]};
+    // one interval is eased by naming its key (the selection is left as it is): one command, one undo step
     final narrowed = interval != null && interval < _rows.length;
-    if (narrowed) {
-      final r = _rows[interval];
-      await c.command('select', {
-        'ids': [r['layer']],
-        'keys': [
-          {'layer': r['layer'], 'property': r['property'], 'frame': r['frame']},
-        ],
-      });
-    }
-    await c.command('ease', _shape(curve));
-    if (narrowed) await c.command('select', picked);
+    final r = narrowed ? _rows[interval] : null;
+    await c.command('ease', {
+      ..._shape(curve),
+      if (r != null) 'keys': [{'layer': r['layer'], 'property': r['property'], 'frame': r['frame']}],
+    });
   }
 
   @override
@@ -301,10 +296,9 @@ class LiveEase extends StatefulWidget {
 }
 
 class _LiveEaseState extends State<LiveEase> {
-  late final host = LiveEaseHost(widget.c);
+  LiveEaseHost get host => DeskSession.of(widget.c).ease;
   @override
   void dispose() {
-    host.dispose();
     super.dispose();
   }
 
