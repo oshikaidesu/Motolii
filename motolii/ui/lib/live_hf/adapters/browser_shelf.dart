@@ -34,7 +34,7 @@ class LiveBrowserShelf extends StatefulWidget {
 }
 
 /// A family's word on the shelf (the library's own family names are the menus' and facts').
-const _familyLabel = {'2D': 'Images', 'Folder': 'Folders'};
+const _familyLabel = {'2D': '▣', 'Video': '▶', 'Audio': '♪', 'HDR': '360°', 'Folder': 'Folders'};
 
 class _LiveBrowserShelfState extends State<LiveBrowserShelf> {
   EditorSession get c => widget.controller;
@@ -59,7 +59,7 @@ class _LiveBrowserShelfState extends State<LiveBrowserShelf> {
   /// The library as the hf shelf grammar reads it: its things, their family word, the shelf face.
   List<Map<String, dynamic>> _items() => [
         for (final item in s.mediaItems)
-          {...item, 'kind': 'item', 'family': _familyLabel[item['family']] ?? item['family'], 'source': 'builtin', 'capabilities': <String>[], 'face': const {'type': 'shelf'}},
+          {...item, 'kind': 'item', 'mediaFamily': item['family'], 'family': _familyLabel[item['family']] ?? item['family'], 'source': 'builtin', 'capabilities': <String>[], 'face': const {'type': 'shelf'}},
       ];
 
   Catalog _catalog(List<Map<String, dynamic>> rows) {
@@ -90,7 +90,6 @@ class _LiveBrowserShelfState extends State<LiveBrowserShelf> {
               user: widget.user.views,
               search: s.search('Media'),
               classify: s.classify('Media'),
-              sections: true,
               classStrip: true,
               body: (context, sections, shown, size) => MediaLibraryBody(sections: sections, shown: shown, items: seat.itemsById, width: size.width),
             ),

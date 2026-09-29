@@ -5,7 +5,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/widgets.dart';
 
-import '../../hf/bp/common.dart' show mono, sans;
+import '../../hf/bp/common.dart' show sans;
 import '../../hf/bp/seat.dart';
 import '../../hf/bp/shell.dart' show GlyphBox, kTile;
 import '../../hf/bp/shelf_sections.dart';
@@ -13,6 +13,7 @@ import '../../hf/bp/things.dart';
 import '../../hf/glyphs.dart';
 import '../../hf/neutral.dart';
 import '../../hf/shell/place.dart' show H;
+import 'model_face.dart';
 
 /// Media on a pinboard: each piece at its own proportions (a still or clip by its width and height, an HDR plate 2:1, a
 /// sound a band) in staggered columns packed tight (4 px), one line of name under each. The shelf's mechanics (picking,
@@ -30,7 +31,7 @@ class MediaLibraryBody extends StatelessWidget {
     if (facts is Map && facts['width'] is num && facts['height'] is num && (facts['height'] as num) > 0) {
       return ((facts['width'] as num) / (facts['height'] as num)).clamp(.5, 2.4).toDouble();
     }
-    return switch ('${item['family']}') { 'HDR' => 2, 'Audio' => 2.4, 'Video' => 16 / 9, _ => 1 };
+    return switch (mediaKind(item)) { 'HDR' => 2, 'Audio' => 2.4, 'Video' => 16 / 9, _ => 1 };
   }
 
   @override
@@ -41,12 +42,23 @@ class MediaLibraryBody extends StatelessWidget {
     final cols = math.max(1, ((body + gap) / (44 + gap)).floor());
     final colW = (body - gap * (cols - 1)) / cols;
     final seat = BrowserSeatScope.of(context);
-    seat?.shows([for (final e in sections.values) ...e], cols);
+    // every kind on one board, no headings: the kinds alternate (a stack of one kind would read as a section)
+    final byFamily = <String, List<Thing>>{};
+    for (final t in shown) {
+      (byFamily[mediaKind(items[t.id] ?? const {})] ??= []).add(t);
+    }
+    final mixed = [
+      for (var i = 0; byFamily.values.any((l) => i < l.length); i++)
+        for (final l in byFamily.values)
+          if (i < l.length) l[i],
+    ];
+    final board = {'': mixed};
+    seat?.shows(mixed, cols);
     if (colW <= 0) return const SizedBox.shrink();
     return CustomScrollView(
       physics: const ClampingScrollPhysics(),
       slivers: [
-        for (final e in sections.entries) ...[
+        for (final e in board.entries) ...[
           if (e.key.isNotEmpty) SliverToBoxAdapter(child: Padding(padding: const EdgeInsets.symmetric(horizontal: margin), child: ShelfHeading(e.key, count: e.value.length, first: e.key == sections.keys.first))),
           SliverPadding(
             padding: EdgeInsets.fromLTRB(margin, e.key.isEmpty ? 8 : 0, margin, 0),
@@ -117,6 +129,8 @@ class MaterialCard extends StatelessWidget {
       Expanded(
         child: Stack(fit: StackFit.expand, children: [
           face,
+          // what kind of thing it is, where the eye lands first: ▶ a clip, ♪ a sound, 3D a model, 360° an environment
+          if (_mark(item) case final mark?) Positioned(left: 2.5, top: 2.5, child: _Badge(Text(mark, softWrap: false, style: sans(8.5, c: mediaKind(item) == 'HDR' ? N.g86 : N.g95, w: mediaKind(item) == 'HDR' ? FontWeight.w500 : FontWeight.w600)))),
           // placed in the work: a small light dot in the corner
           if (item['used'] == true && !missing) Positioned(right: 4.5, top: 4.5, child: Container(width: 4.5, height: 4.5, decoration: BoxDecoration(color: N.g95, shape: BoxShape.circle, border: Border.all(color: N.g07.withValues(alpha: .5))))),
         ]),
@@ -133,20 +147,35 @@ class MaterialCard extends StatelessWidget {
 }
 
 /// What the material is, drawn as itself.
-Widget materialFace(Map<String, dynamic> item) => switch ('${item['family']}') {
+Widget materialFace(Map<String, dynamic> item) => switch (mediaKind(item)) {
       'Audio' => _WaveFace(peaks: item['peaks'], seconds: _seconds(item)),
       'Video' => _MotionFace(picture: _picture(item), seconds: _seconds(item)),
-      'Images' => Stack(fit: StackFit.expand, children: [const CustomPaint(painter: _Checker()), _picture(item) ?? _glyph(HG.image)]),
+      '3D' => item['path'] is String && item['missing'] != true && ModelFace.reads(item['path'] as String) ? ModelFace(path: item['path'] as String, fallback: _picture(item) ?? _glyph(HG.image)) : (_picture(item) ?? _glyph(HG.image)),
+      '2D' => Stack(fit: StackFit.expand, children: [const CustomPaint(painter: _Checker()), _picture(item) ?? _glyph(HG.image)]),
       _ => _picture(item) ?? _glyph(HG.image),
     };
 
-/// What a piece is, in a few characters: its length, its size, or its kind.
-String _fact(Map<String, dynamic> item) {
+/// What a piece is by the library's own family word (2D, Video, Audio, 3D, HDR, Folder): the shelf's class labels are marks, this is not.
+String mediaKind(Map<String, dynamic> item) => '${item['mediaFamily'] ?? item['family']}';
+
+/// The corner mark of a piece that is not a still: its kind (and, for a clip or a sound, its length).
+String? _mark(Map<String, dynamic> item) {
   final seconds = _seconds(item);
-  if (seconds != null) return _clock(seconds);
+  return switch (mediaKind(item)) {
+    'Video' => seconds == null ? '▶' : '▶ ${_clock(seconds)}',
+    'Audio' => seconds == null ? '♪' : '♪ ${_clock(seconds)}',
+    '3D' => '3D',
+    'HDR' => '360°',
+    _ => null,
+  };
+}
+
+/// What a piece is, beside its name: its size (a sound has none; its length is in the mark).
+String _fact(Map<String, dynamic> item) {
+  if (mediaKind(item) == 'Audio' || mediaKind(item) == 'HDR') return '';
   final facts = item['facts'];
   if (facts is Map && facts['width'] is num && facts['height'] is num) return '${facts['width']}×${facts['height']}';
-  return '${item['family'] ?? ''}' == 'HDR' ? '360°' : '';
+  return '';
 }
 
 
@@ -216,17 +245,7 @@ class _MotionFace extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Stack(fit: StackFit.expand, children: [
         picture ?? _glyph(HG.image),
-        const Center(child: _Badge(SizedBox(width: 6, height: 7, child: CustomPaint(painter: _Play())))),
-        if (seconds != null) Positioned(right: 2, bottom: 2, child: _Badge(Text(_clock(seconds!), style: mono(9.5, c: N.g95)))),
       ]);
-}
-
-class _Play extends CustomPainter {
-  const _Play();
-  @override
-  void paint(Canvas cv, Size s) => cv.drawPath(Path()..moveTo(0, 0)..lineTo(s.width, s.height / 2)..lineTo(0, s.height)..close(), Paint()..color = N.g95);
-  @override
-  bool shouldRepaint(_Play o) => false;
 }
 
 /// The Timeline's waveform hue (its quiet floor and its trace), lifted so a sound reads at shelf size.
@@ -248,7 +267,6 @@ class _WaveFace extends StatelessWidget {
     return Stack(fit: StackFit.expand, children: [
       const ColoredBox(color: _waveFloor),
       if (columns.isEmpty) const Center(child: GlyphBox(HG.headphones, size: 24)) else CustomPaint(painter: _Wave(columns)),
-      if (seconds != null) Positioned(right: 2, bottom: 2, child: _Badge(Text(_clock(seconds!), style: mono(9.5, c: N.g95)))),
     ]);
   }
 }

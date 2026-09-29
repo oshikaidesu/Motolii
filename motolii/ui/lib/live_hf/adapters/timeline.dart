@@ -5,7 +5,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
 import '../../foundation/theme.dart';
-import '../../hf/bp/common.dart' show sans, mono;
 import '../../hf/glyphs.dart';
 import '../../hf/metrics.dart';
 import '../../hf/neutral.dart';

@@ -40,9 +40,20 @@ final inspectorStories = <Story>[
 
 /// Pictures of different shapes in the library, through the product's own import.
 Future<void> _importMedia(EditorSession c) async {
+  // every kind the shelf shows: stills, clips, sounds, environments (media/), and models (models/glb/*.glb, the format the importer takes)
+  const exts = ['.jpg', '.png', '.mp4', '.mov', '.wav', '.mp3', '.hdr', '.exr'];
   final dir = Directory(fixture('media'));
-  final paths = [for (final f in dir.listSync()..sort((a, b) => a.path.compareTo(b.path))) if (f.path.endsWith('.jpg')) f.path];
-  await c.command('import', {'paths': paths});
+  final paths = [for (final f in dir.listSync()..sort((a, b) => a.path.compareTo(b.path))) if (exts.any(f.path.endsWith)) f.path];
+  final models = Directory(fixture('models/glb'));
+  if (models.existsSync()) paths.addAll([for (final f in models.listSync()) if (f.path.endsWith('.glb')) f.path]);
+  // one by one: what the host cannot take (says why on the console) does not stop the rest
+  for (final p in paths) {
+    try {
+      await c.command('import', {'paths': [p]});
+    } catch (e) {
+      stdout.writeln('EXPLORER_IMPORT_SKIPPED $p: $e');
+    }
+  }
 }
 
 final browserStories = <Story>[

@@ -104,7 +104,7 @@ class _ClassColumnState extends State<ClassColumn> {
 }
 
 class _Row extends StatelessWidget {
-  const _Row(this.label, this.on, this.tap, {super.key});
+  const _Row(this.label, this.on, this.tap);
   final String label;
   final bool on;
   final VoidCallback tap;

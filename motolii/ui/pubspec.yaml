@@ -8,6 +8,7 @@ dependencies:
   flutter:
     sdk: flutter
   docking: ^1.16.2 # production hf workspace + proto_hf dock probe
+  flutter_scene: ^0.23.0
 flutter:
   uses-material-design: true
   fonts:
@@ -18,6 +19,8 @@ flutter:
           weight: 500
         - asset: assets/fonts/Inter-SemiBold.ttf
           weight: 600
+  assets:
+    - flutter_scene_generated/
 
 dev_dependencies:
   flutter_test:
