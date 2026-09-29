@@ -620,3 +620,42 @@ fn a_change_under_a_watched_source_is_indexed_without_asking() {
     super::watch::stop();
     super::with(|c| c.remove_source(&id).unwrap()).unwrap();
 }
+
+#[test]
+fn a_query_does_not_wait_for_an_index_run() {
+    use std::time::{Duration, Instant};
+    let mut t = Tree::new();
+    for i in 0..6000 {
+        t.write(&format!("Big/d{}/f{i}.png", i % 40));
+    }
+    let root = fs::canonicalize(t.path("Big")).unwrap();
+    super::use_test_state();
+    let id = super::with(|c| c.add_source(&root, Some("big")).unwrap().id).unwrap();
+    let running = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true));
+    let flag = running.clone();
+    let sid = id.clone();
+    let indexer = std::thread::spawn(move || {
+        let t0 = Instant::now();
+        let r = super::index::refresh_unlocked(Some(&sid)).unwrap();
+        flag.store(false, std::sync::atomic::Ordering::SeqCst);
+        (t0.elapsed(), r[0].added)
+    });
+    // ask while it walks: the worst wait for the lock is what the person would feel as a stall
+    let mut worst = Duration::ZERO;
+    let mut asked = 0;
+    while running.load(std::sync::atomic::Ordering::SeqCst) {
+        let t0 = Instant::now();
+        super::with(|c| c.query(&Query { limit: 20, ..Default::default() }).unwrap().total).unwrap();
+        let w = t0.elapsed();
+        worst = worst.max(w);
+        asked += 1;
+        std::thread::sleep(Duration::from_millis(1));
+    }
+    let (took, added) = indexer.join().unwrap();
+    println!("index {took:?} for {added} files; {asked} queries meanwhile, slowest {worst:?}");
+    assert_eq!(added, 6000);
+    assert!(asked > 3, "the index run was too quick to measure anything");
+    // the walk and the reads are outside the lock; only the one write is inside it
+    assert!(worst < Duration::from_millis(60), "a query waited {worst:?} during a {took:?} run");
+    super::with(|c| c.remove_source(&id).unwrap()).unwrap();
+}

@@ -60,13 +60,21 @@ fn resolution_json(r: &Resolution) -> J {
     }
 }
 
-/// The faces the shelf's own code already knows how to draw, made from files the catalog names: the catalog does not
-/// draw; it hands the existing thumbnail / waveform / facts routines the path (they cache under it).
-fn faces_json(c: &Catalog, ids: &[String]) -> J {
+fn entries_of(c: &Catalog, ids: &[String]) -> Vec<Entry> {
     let cond = format!("a.uid IN ({})", vec!["?"; ids.len().max(1)].join(","));
     let args: Vec<Value> = if ids.is_empty() { vec![Value::Text(String::new())] } else { ids.iter().cloned().map(Value::Text).collect() };
+    c.entries_where(&cond, &args)
+}
+
+fn state_of(c: &Catalog) -> J {
+    json!({"revision": c.revision(), "sources": c.sources().iter().map(source_json).collect::<Vec<_>>(), "pending": c.pending_enrich()})
+}
+
+/// The faces the shelf's own code already knows how to draw, made from files the catalog names: the catalog does not
+/// draw; it hands the existing thumbnail / waveform / facts routines the path (they cache under it).
+fn faces_json(entries: Vec<Entry>) -> J {
     let mut out = serde_json::Map::new();
-    for e in c.entries_where(&cond, &args) {
+    for e in entries {
         if e.missing || !e.source_available {
             continue;
         }
@@ -122,9 +130,49 @@ fn handle(text: &str) -> Result<J, String> {
         let roots = if j["on"].as_bool().unwrap_or(true) { super::watch::start()? } else { super::watch::stop() };
         return Ok(json!({"watching": super::watch::watching(), "roots": roots}));
     }
+    // The slow ops read files (a walk, fingerprints, thumbnails, decoded frames): none of them holds the catalog lock while
+    // it does, so a query or a click never waits behind one. The lock is taken only to read what is needed and to write.
+    match j["op"].as_str().unwrap_or("sources") {
+        "refresh" => {
+            let reports = super::index::refresh_unlocked(j["id"].as_str())?;
+            let mut s = with(|c| state_of(c))?;
+            s["reports"] = json!(reports.iter().map(|r| json!({"source": r.source, "scanned": r.scanned, "added": r.added, "changed": r.changed, "moved": r.moved, "missing": r.missing, "ambiguous": r.ambiguous, "errors": r.errors.len(), "unavailable": r.unavailable, "folderMoves": r.folder_moves})).collect::<Vec<_>>());
+            return Ok(s);
+        }
+        "enrich" => {
+            let done = super::index::enrich_unlocked(j["limit"].as_u64().unwrap_or(200) as usize)?;
+            let mut s = with(|c| state_of(c))?;
+            s["done"] = done.into();
+            return Ok(s);
+        }
+        "faces" => {
+            let ids = strings(&j["ids"]).unwrap_or_default();
+            let entries = with(|c| entries_of(c, &ids))?;
+            return Ok(faces_json(entries));
+        }
+        "picture" => {
+            let e = with(|c| c.entries_where("a.uid = ? AND a.state = 0 AND s.available = 1", &[Value::Text(j["id"].as_str().unwrap_or("").to_owned())]).into_iter().next())?.ok_or("No such picture")?;
+            if !matches!(e.kind, MediaKind::Image | MediaKind::Environment) {
+                return Err("Not a still".into());
+            }
+            let edge = j["edge"].as_u64().unwrap_or(1024).clamp(64, 4096) as u32;
+            return Ok(json!({"picture": crate::editor::thumbnail::image_data_uri_sized(&e.abs_path, edge)}));
+        }
+        "frame" => {
+            // one frame of a clip at a time, for scrubbing in the preview; a person's file is only read
+            let e = with(|c| c.entries_where("a.uid = ? AND a.state = 0 AND s.available = 1", &[Value::Text(j["id"].as_str().unwrap_or("").to_owned())]).into_iter().next())?.ok_or("No such clip")?;
+            if e.kind != MediaKind::Video {
+                return Err("Not a clip".into());
+            }
+            let at = j["at"].as_f64().unwrap_or(0.0);
+            let edge = j["edge"].as_u64().unwrap_or(480).clamp(32, 1280) as u32;
+            return Ok(json!({"frame": crate::editor::thumbnail::video_frame_at(&e.abs_path, at, edge)}));
+        }
+        _ => {}
+    }
     let guard = &mut *shared().lock().map_err(|_| "catalog lock poisoned".to_owned())?;
     let c = guard.as_mut().map_err(|e| e.clone())?;
-    let state = |c: &Catalog| json!({"revision": c.revision(), "sources": c.sources().iter().map(source_json).collect::<Vec<_>>(), "pending": c.pending_enrich()});
+    let state = state_of;
     let id = || j["id"].as_str().ok_or_else(|| "Missing id".to_owned());
     match j["op"].as_str().unwrap_or("sources") {
         "sources" => Ok(state(c)),
@@ -148,18 +196,6 @@ fn handle(text: &str) -> Result<J, String> {
             c.relocate_source(id()?, std::path::Path::new(j["path"].as_str().ok_or("Missing path")?))?;
             Ok(state(c))
         }
-        "refresh" => {
-            let reports = c.refresh(j["id"].as_str())?;
-            let mut s = state(c);
-            s["reports"] = json!(reports.iter().map(|r| json!({"source": r.source, "scanned": r.scanned, "added": r.added, "changed": r.changed, "moved": r.moved, "missing": r.missing, "ambiguous": r.ambiguous, "errors": r.errors.len(), "unavailable": r.unavailable, "folderMoves": r.folder_moves})).collect::<Vec<_>>());
-            Ok(s)
-        }
-        "enrich" => {
-            let done = c.enrich(j["limit"].as_u64().unwrap_or(200) as usize);
-            let mut s = state(c);
-            s["done"] = done.into();
-            Ok(s)
-        }
         "forgetMissing" => {
             let n = c.forget_missing(id()?)?;
             let mut s = state(c);
@@ -182,25 +218,6 @@ fn handle(text: &str) -> Result<J, String> {
                 .map(|r| SavedRef { path: r["path"].as_str().unwrap_or("").to_owned(), size: r["size"].as_u64(), content_hash: r["contentHash"].as_str().map(str::to_owned), file_name: r["fileName"].as_str().map(str::to_owned) })
                 .collect();
             Ok(json!({"results": c.resolve_many(&refs).iter().map(resolution_json).collect::<Vec<_>>()}))
-        }
-        "faces" => Ok(faces_json(c, &strings(&j["ids"]).unwrap_or_default())),
-        "picture" => {
-            let e = c.entries_where("a.uid = ? AND a.state = 0 AND s.available = 1", &[Value::Text(id()?.to_owned())]).into_iter().next().ok_or("No such picture")?;
-            if !matches!(e.kind, MediaKind::Image | MediaKind::Environment) {
-                return Err("Not a still".into());
-            }
-            let edge = j["edge"].as_u64().unwrap_or(1024).clamp(64, 4096) as u32;
-            Ok(json!({"picture": crate::editor::thumbnail::image_data_uri_sized(&e.abs_path, edge)}))
-        }
-        "frame" => {
-            // one frame of a clip at a time, for scrubbing in the preview; a person's file is only read
-            let e = c.entries_where("a.uid = ? AND a.state = 0 AND s.available = 1", &[Value::Text(id()?.to_owned())]).into_iter().next().ok_or("No such clip")?;
-            if e.kind != MediaKind::Video {
-                return Err("Not a clip".into());
-            }
-            let at = j["at"].as_f64().unwrap_or(0.0);
-            let edge = j["edge"].as_u64().unwrap_or(480).clamp(32, 1280) as u32;
-            Ok(json!({"frame": crate::editor::thumbnail::video_frame_at(&e.abs_path, at, edge)}))
         }
         other => Err(format!("Unknown catalog op {other}")),
     }

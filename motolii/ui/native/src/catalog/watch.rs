@@ -82,7 +82,7 @@ pub(crate) fn start() -> Result<usize, String> {
                 return;
             }
             for id in dirty.drain() {
-                let _ = with(|c| c.refresh(Some(&id)));
+                let _ = super::index::refresh_unlocked(Some(&id));
             }
         }
     });
