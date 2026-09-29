@@ -124,20 +124,7 @@ class LiveKeys {
         nudgeSelection(c, 0, (k == LogicalKeyboardKey.arrowUp ? -1.0 : 1.0) * (shift ? 10 : 1));
       case LogicalKeyboardKey.arrowUp || LogicalKeyboardKey.arrowDown
           when !cmd && !alt:
-        final ids = [for (final l in c.layers) (l['id'] as num).toInt()];
-        if (ids.isNotEmpty) {
-          final ix = ids.indexOf(
-            c.selectedIds.isEmpty ? -1 : c.selectedIds.last,
-          );
-          op('select', {
-            'ids': [
-              ids[(ix + (k == LogicalKeyboardKey.arrowUp ? -1 : 1) * (shift ? 10 : 1)).clamp(
-                0,
-                ids.length - 1,
-              )],
-            ],
-          });
-        }
+        op('select', {'step': (k == LogicalKeyboardKey.arrowUp ? -1 : 1) * (shift ? 10 : 1)});
       case LogicalKeyboardKey.keyM when !cmd:
         op('addMarker');
       case LogicalKeyboardKey.keyA when !cmd && shift:

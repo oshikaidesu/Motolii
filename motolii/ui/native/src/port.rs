@@ -160,7 +160,12 @@ impl EditorRuntime{
         match op{
             "notes"=>self.edit_notes(&j)?,
             "select"=>{
-                let chosen=if let Some(a)=j.get("ids"){ids(a)?}else{j["id"].as_u64().map(LayerId).into_iter().collect()};
+                // "step": the layer that many rows below (above, negative) the last chosen one, kept in the list.
+                let chosen=if let Some(step)=j["step"].as_i64(){
+                    let order=crate::snapshot::stacking_order(&self.doc.view());
+                    let at=self.viewer.selected_ids.last().and_then(|l|order.iter().position(|o|o==l)).map_or(-1,|i|i as i64);
+                    order.get((at+step).clamp(0,order.len() as i64-1).max(0) as usize).copied().into_iter().collect()
+                }else if let Some(a)=j.get("ids"){ids(a)?}else{j["id"].as_u64().map(LayerId).into_iter().collect()};
                 if chosen.iter().any(|id|!self.doc.view().has_layer(*id)){return Err("Unknown layer".into())}
                 self.pick(chosen);self.viewer.selected_keys.clear();
                 if let Some(keys)=j["keys"].as_array(){let fps=editor::keyframe_edit::document_fps(&self.doc).map_err(e)?.as_f64();
@@ -178,7 +183,7 @@ impl EditorRuntime{
             "setFont" if j["scope"].is_string()=>{let edits=editor::text_format::edits(&self.doc,layer(&j)?,self.time()?,&j)?;self.apply(edits)?;}
             "setFont"=>{let intent=editor::text::font_intent(&self.doc,layer(&j)?,string(&j,"family")?)?;if j["preview"].as_bool()==Some(true){self.set_preview(vec![intent])?}else{self.apply([intent])?}}
             "setText"=>{let id=layer(&j)?;if self.doc.view().text_document(id).map_err(e)?.is_none(){return Err("Select a Text layer".into())}let at=self.time()?;editor::text::write_content(&mut self.doc,id,at,string(&j,"content")?.into()).map_err(e)?;}
-            "setAttrs"=>{let patch=attrs_patch(&j["patch"])?;let layers=ids(&j["layers"])?;
+            "setAttrs"=>{let patch=attrs_patch(&j["patch"])?;let layers=self.attrs_targets(&j)?;
                 if patch.ghost.is_some_and(|g|g.is_some()){if let Some(l)=layers.iter().find(|&&l|!editor::timeline_edit::ghostable(&self.doc.view(),l)){return Err(format!("Layer {} cannot carry a ghost",l.0))}}
                 if patch.projection.is_some(){
                     let at=self.time()?;

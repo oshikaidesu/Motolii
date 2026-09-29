@@ -173,13 +173,13 @@ class SessionTransformStore extends TransformStore {
   @override
   void setProjection(String p) {
     if (!canEdit) return;
-    c.command('setAttrs', {'layers': c.selectedIds.isEmpty ? [activeId] : c.selectedIds, 'patch': {'projection': p}});
+    c.command('setAttrs', {'layer': activeId, 'spread': true, 'patch': {'projection': p}});
   }
 
   @override
   void setParent(int? id) {
     if (!canEdit) return;
-    c.command('setAttrs', {'layers': [activeId], 'patch': {'parent': id}});
+    c.command('setAttrs', {'layer': activeId, 'patch': {'parent': id}});
   }
 
   /// World: the same three operations Classic's `_world()` sends, one layer, one edit each.
@@ -188,7 +188,7 @@ class SessionTransformStore extends TransformStore {
     if (!canEdit) return;
     switch (key) {
       case 'environment':
-        c.command('setAttrs', {'layers': [activeId], 'patch': {'environment': value}});
+        c.command('setAttrs', {'layer': activeId, 'patch': {'environment': value}});
       case 'ghost':
         c.command('ghost', {'enabled': value});
       case 'clipToBelow':

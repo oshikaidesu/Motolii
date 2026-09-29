@@ -140,16 +140,8 @@ class EditorShortcuts {
         final d = (k == LogicalKeyboardKey.arrowUp ? -1 : 1) * (shift ? 10 : 1);
         if (alt)
           nudgeSelection(c, 0, d.toDouble());
-        else {
-          final ids = c.layers.map((l) => (l['id'] as num).toInt()).toList();
-          final ix = ids.indexOf(
-            c.selectedIds.isEmpty ? -1 : c.selectedIds.last,
-          );
-          if (ids.isNotEmpty)
-            c.command('select', {
-              'ids': [ids[(ix + d.sign).clamp(0, ids.length - 1)]],
-            });
-        }
+        else
+          c.command('select', {'step': d.sign});
         return KeyEventResult.handled;
       }
       if (k == LogicalKeyboardKey.keyM) op = 'addMarker';

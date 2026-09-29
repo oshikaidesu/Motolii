@@ -264,9 +264,7 @@ impl EditorRuntime{
         let revision=format!("{:?}",self.doc.revision());
         let live=self.viewer.clock.playing()&&self.full_status_revision.borrow().as_deref()==Some(revision.as_str());
         // 並べ替えの鍵も 1 層 1 回。sort_by_key は比較のたびに鍵を引くので、store を O(n log n) 回叩いていた。
-        let mut ids=view.layers();
-        let order:std::collections::HashMap<LayerId,i16>=ids.iter().map(|id|(*id,view.meta(*id).ok().flatten().map_or(0,|m|m.order))).collect();
-        ids.sort_by_key(|id|std::cmp::Reverse((order.get(id).copied().unwrap_or(0),id.0)));
+        let ids=stacking_order(&view);
         let mut layers=Vec::new();
         let keys=self.layer_keys(&view,at,&scene,&clipping,live)?;
         // 軽い status で行(値・効果)を持つのは選択中の層だけ —— Inspector と Stage の枠が読む物。
@@ -604,4 +602,12 @@ fn box_corners(comp:crate::doc::core::CompSpec,camera:crate::doc::core::Resolved
         let t=if ray.z.abs()>1e-6{-eye.z/ray.z}else{-1.0};
         screen(if t>0.0{eye+ray*t}else{eye+ray})
     }).collect()
+}
+
+/// The layers top first, as the status lists them (and as stepping through them with the arrow keys goes).
+pub(crate) fn stacking_order(view:&crate::doc::store::StoreView<'_>)->Vec<LayerId>{
+    let mut ids=view.layers();
+    let order:std::collections::HashMap<LayerId,i16>=ids.iter().map(|id|(*id,view.meta(*id).ok().flatten().map_or(0,|m|m.order))).collect();
+    ids.sort_by_key(|id|std::cmp::Reverse((order.get(id).copied().unwrap_or(0),id.0)));
+    ids
 }

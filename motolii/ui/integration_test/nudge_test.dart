@@ -1,4 +1,4 @@
-// Alt+Shift+Right on the chosen layer: it moves ten pixels of the output in one step (the real app and its host).
+// Alt+Shift+Right on the chosen layer moves it on the output in one step; Down chooses the next layer (the real app).
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
@@ -43,5 +43,11 @@ void main() {
     await c.command('undo');
     await frames(t);
     expect(position(), before, reason: 'one key, one undo');
+
+    // Down chooses the next layer in the listed order
+    final order = [for (final l in c.layers) l['id'] as int];
+    await t.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await frames(t);
+    expect(c.selectedIds, [order[(order.indexOf(id) + 1).clamp(0, order.length - 1)]]);
   });
 }
