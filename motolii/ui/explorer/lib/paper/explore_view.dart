@@ -96,7 +96,7 @@ Frame exploreLayout(List<BrowserItem> items, String? selected, Size viewport) {
     rings = <List<BrowserItem>>[];
     radii = <double>[];
     index = 0;
-    final r1 = big / 2 + node / 2 + 8;
+    final r1 = big / 2 + node / 2 + 8 + 14; // 14: the chosen asset's name under it
     for (var k = 0;; k++) {
       final r = r1 + k * (node + gap + 4);
       if (r + node / 2 + margin > halfW || index >= around.length) break;
@@ -133,7 +133,7 @@ Frame exploreLayout(List<BrowserItem> items, String? selected, Size viewport) {
     faces[m.id] = at(m, Offset(margin + (n % cols) * (node + gap) + node / 2, top + (n ~/ cols) * (node + gap) + node / 2), node);
   }
   final bottom = rest.isEmpty ? cy + reach + margin : top + ((rest.length - 1) ~/ cols + 1) * (node + gap) + margin;
-  return (faces: faces, labels: const <String, Rect>{}, links: _nearest(items, centre.id, 5), content: Size(viewport.width, math.max(viewport.height, bottom)));
+  return (faces: faces, labels: {centre.id: Rect.fromLTWH(cx - big / 2, cy + big / 2 + 1, big, 14)}, links: _nearest(items, centre.id, 5), content: Size(viewport.width, math.max(viewport.height, bottom)));
 }
 
 /// The few nearest by colour (only those that have a colour to compare), for the spokes drawn from the centre.

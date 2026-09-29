@@ -241,7 +241,8 @@ class _FluidBoardState extends State<FluidBoard> {
           const SizedBox(width: 8),
         ]);
       case 'thumbnail':
-        return Align(alignment: Alignment.bottomLeft, child: Text(it.name, maxLines: 1, softWrap: false, overflow: TextOverflow.ellipsis, style: Dn.label(on ? N.g100 : N.g82, FontWeight.w500)));
+      case 'explore':
+        return Align(alignment: widget.view == 'explore' ? Alignment.topCenter : Alignment.bottomLeft, child: Text(it.name, maxLines: 1, softWrap: false, overflow: TextOverflow.ellipsis, textAlign: widget.view == 'explore' ? TextAlign.center : TextAlign.start, style: Dn.label(on ? N.g100 : N.g82, FontWeight.w500)));
       default:
         return const SizedBox.shrink();
     }
