@@ -41,11 +41,15 @@ Color _markColor(Mark m) => switch (m) { Mark.warn => _amber, Mark.error => _red
 /// With no [entries] it is the fixture (its own list, its own position). With a host's entries it draws them and asks the
 /// host to go to one: [at] is the current index and [onGo] is how a click, Undo or Redo moves it.
 class HistoryDesk extends StatefulWidget {
-  const HistoryDesk({super.key, this.entries, this.at = 0, this.onGo, this.canGo = true});
+  const HistoryDesk({super.key, this.entries, this.at = 0, this.onGo, this.canGo = true, this.onUndo, this.onRedo});
   final List<Entry>? entries;
   final int at;
   final ValueChanged<int>? onGo;
   final bool canGo;
+
+  /// Undo / Redo: one edit back or forward, what ⌘Z and ⇧⌘Z do (null: the buttons step along the list). A null
+  /// callback with a host means there is nothing to undo or redo.
+  final VoidCallback? onUndo, onRedo;
   @override
   State<HistoryDesk> createState() => _HistoryDeskState();
 }
@@ -112,9 +116,9 @@ class _HistoryDeskState extends State<HistoryDesk> {
             padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
             decoration: const BoxDecoration(border: Border(top: BorderSide(color: kRule2))),
             child: Row(children: [
-              Expanded(child: _btn('undo', 'Undo', '⌘Z', at > 0, () => go(at - 1))),
+              Expanded(child: widget.entries != null ? _btn('undo', 'Undo', '⌘Z', widget.onUndo != null, () => widget.onUndo?.call()) : _btn('undo', 'Undo', '⌘Z', at > 0, () => go(at - 1))),
               const SizedBox(width: 8),
-              Expanded(child: _btn('redo', 'Redo', '⇧⌘Z', at < entries.length - 1, () => go(at + 1))),
+              Expanded(child: widget.entries != null ? _btn('redo', 'Redo', '⇧⌘Z', widget.onRedo != null, () => widget.onRedo?.call()) : _btn('redo', 'Redo', '⇧⌘Z', at < entries.length - 1, () => go(at + 1))),
             ]),
           ),
         ]),

@@ -28,7 +28,7 @@ class NewHistory extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
-        listenable: controller.slice('history', const ['history', 'capabilities']),
+        listenable: controller.slice('history', const ['history', 'undo', 'redo', 'capabilities']),
         builder: (context, _) {
           final history = panelMap(controller.state['history']);
           final rows = panelRows(history['entries']);
@@ -43,6 +43,8 @@ class NewHistory extends StatelessWidget {
             entries: [for (final r in rows) Entry('${r['label']}', _time(r['at']), _mark('${r['kind']}'))],
             at: current < 0 ? 0 : current,
             canGo: panelCan(controller, 'historyGoto'),
+            onUndo: ((controller.state['undo'] as num?) ?? 0) > 0 && panelCan(controller, 'undo') ? () => controller.command('undo') : null,
+            onRedo: ((controller.state['redo'] as num?) ?? 0) > 0 && panelCan(controller, 'redo') ? () => controller.command('redo') : null,
             onGo: (i) {
               final h = rows[i]['head'];
               if (h is num) controller.command('historyGoto', {'head': h.toInt()});
