@@ -44,22 +44,18 @@ class LiveNotesHost extends ChangeNotifier implements NotesHost {
   @override
   bool can(String kind) => const {'note', 'image', 'ref'}.contains(kind);
 
-  Future<String> _page(int page) async {
+  /// The page shown, by id; null before the notebook has one (the host then makes the first page in the same edit).
+  Future<String?> _page(int page) async {
     final pages = _pages;
-    if (page < pages.length) return '${pages[page]['id']}';
-    await c.command('notes', {'page': 'p1', 'action': 'addPage', 'title': 'Page 1'});
-    return 'p1';
+    return page < pages.length ? '${pages[page]['id']}' : null;
   }
 
   @override
   Future<int?> addPage() async {
-    final ids = {for (final p in _pages) '${p['id']}'};
-    var n = _pages.length + 1;
-    while (ids.contains('p$n')) n++;
-    await c.command('notes', {'page': 'p$n', 'action': 'addPage', 'title': 'Untitled page'});
-    if (c.error.value != null) return null;
-    final at = _pages.indexWhere((p) => p['id'] == 'p$n');
-    return at < 0 ? null : at;
+    // the host names the page; it goes last
+    await c.command('notes', {'action': 'addPage', 'title': 'Untitled page'});
+    if (c.error.value != null || _pages.isEmpty) return null;
+    return _pages.length - 1;
   }
 
   @override

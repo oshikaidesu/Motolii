@@ -7,8 +7,15 @@ fn text<'a>(j:&'a J,key:&str)->Result<&'a str,String>{j[key].as_str().ok_or_else
 impl EditorRuntime {
     pub(crate) fn edit_notes(&mut self,j:&J)->Result<(),String>{
         let mut book=self.doc.view().notebook().map_err(|e|e.to_string())?;
-        let id=text(j,"page")?;
         let action=text(j,"action")?;
+        // no page named: a new page takes the next free id; a block goes on the first page, made in the same edit
+        // when the notebook has none yet
+        let fresh;
+        let id=match j["page"].as_str(){
+            Some(id)=>id,
+            None if action=="addPage"=>{let mut n=book.pages.len()+1;while book.pages.iter().any(|p|p.id==format!("p{n}")){n+=1;}fresh=format!("p{n}");fresh.as_str()}
+            None=>{if book.pages.is_empty(){book.pages.push(NotePage{id:"p1".into(),title:"Page 1".into(),blocks:vec![]});}fresh=book.pages[0].id.clone();fresh.as_str()}
+        };
         if action=="addPage" {
             if book.pages.iter().any(|p|p.id==id){return Err("Page already exists".into())}
             book.pages.push(NotePage{id:id.into(),title:j["title"].as_str().unwrap_or("Untitled page").into(),blocks:vec![]});
@@ -76,5 +83,26 @@ mod tests {
         assert_eq!(rt.doc.view().notebook().unwrap().pages[0].blocks[0].height,50.0,"the card follows the picture's shape");
         rt.request(json!({"op":"undo"})).unwrap();
         assert_eq!(blocks(&rt),0,"one drop, one undo");
+    }
+}
+
+#[cfg(test)]
+mod pages {
+    use crate::EditorRuntime;
+    use serde_json::json;
+    /// The host names new pages, and a first note on an empty notebook makes its page in the same step.
+    #[test]
+    fn the_host_names_pages_and_makes_the_first_one(){
+        let mut rt=EditorRuntime::open("").unwrap();
+        let block=json!({"id":"n1","kind":"text","x":0.0,"y":0.0,"width":100.0,"height":80.0,"text":"hi","z":0});
+        rt.request(json!({"op":"notes","action":"putBlock","block":block})).unwrap();
+        let book=rt.doc.view().notebook().unwrap();
+        assert_eq!((book.pages.len(),book.pages[0].blocks.len()),(1,1));
+        rt.request(json!({"op":"undo"})).unwrap();
+        assert!(rt.doc.view().notebook().unwrap().pages.is_empty(),"page and note were one step");
+        rt.request(json!({"op":"notes","action":"addPage","title":"A"})).unwrap();
+        rt.request(json!({"op":"notes","action":"addPage","title":"B"})).unwrap();
+        let ids:Vec<_>=rt.doc.view().notebook().unwrap().pages.iter().map(|p|p.id.clone()).collect();
+        assert_eq!(ids,vec!["p1","p2"],"two quick presses, two pages");
     }
 }
