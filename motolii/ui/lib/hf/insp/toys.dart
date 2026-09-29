@@ -235,7 +235,7 @@ class _ValueToyState extends State<ValueToy> {
               borderRadius: BorderRadius.circular(5),
               child: Stack(children: [
                 if (tint > 0) Positioned.fill(child: ColoredBox(color: tone.withValues(alpha: tint))),
-                if (track) Positioned.fill(key: ValueKey('track-${s.id}'), child: Align(alignment: Alignment.centerLeft, child: FractionallySizedBox(widthFactor: frac, heightFactor: 1, child: ColoredBox(color: tone.withValues(alpha: frozen ? .12 : .32))))),
+                if (track) Positioned.fill(key: ValueKey('track-${s.id}'), child: Align(alignment: Alignment.centerLeft, child: FractionallySizedBox(widthFactor: frac, heightFactor: 1, child: DecoratedBox(decoration: BoxDecoration(color: tone.withValues(alpha: frozen ? .08 : .16), border: Border(bottom: BorderSide(color: tone.withValues(alpha: frozen ? .3 : .75), width: 1.5))))))),
                 Positioned(left: 0, top: 0, bottom: 0, width: edge, child: ColoredBox(color: tone)),
                 Positioned.fill(child: Padding(
                   padding: EdgeInsets.only(left: edge + 9, right: 9),

@@ -162,20 +162,24 @@ class _TransformInstrumentState extends State<TransformInstrument> {
   }
 
   // ---- what the layer meets the scene with: how it blends and (an Image only) its flags -------------------------
-  Widget _flag(String key, String label, bool on, VoidCallback? tap) => GestureDetector(
-        key: ValueKey('world-$key'),
-        behavior: HitTestBehavior.opaque,
-        onTap: tap,
-        child: Container(
-          height: 26,
-          margin: const EdgeInsets.only(bottom: 4),
-          padding: const EdgeInsets.symmetric(horizontal: 8),
-          decoration: BoxDecoration(color: kTile, borderRadius: BorderRadius.circular(5)),
-          child: Row(children: [
-            Container(width: 26, height: 15, padding: const EdgeInsets.all(2), alignment: on ? Alignment.centerRight : Alignment.centerLeft, decoration: BoxDecoration(color: on ? kYellow : N.g26, borderRadius: BorderRadius.circular(8)), child: Container(width: 11, height: 11, decoration: const BoxDecoration(color: kInk, shape: BoxShape.circle))),
-            const SizedBox(width: 7),
-            Expanded(child: Text(label, style: sans(11, c: tap == null ? N.g33 : N.g82))),
-          ]),
+  /// A world switch: a short name on a chip, lit when on; what it does is its semantics label.
+  Widget _flag(String key, String label, String meaning, bool on, VoidCallback? tap) => Semantics(
+        label: meaning,
+        toggled: on,
+        child: GestureDetector(
+          key: ValueKey('world-$key'),
+          behavior: HitTestBehavior.opaque,
+          onTap: tap,
+          child: Container(
+            height: 24,
+            padding: const EdgeInsets.symmetric(horizontal: 9),
+            decoration: BoxDecoration(color: on ? kYellow.withValues(alpha: .16) : kTile, border: Border.all(color: on ? kYellow.withValues(alpha: .6) : kTile), borderRadius: BorderRadius.circular(5)),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              Container(width: 6, height: 6, decoration: BoxDecoration(color: on ? kYellow : N.g33, shape: BoxShape.circle)),
+              const SizedBox(width: 6),
+              Text(label, style: sans(11, c: tap == null ? N.g33 : (on ? kYellow : N.g76), w: FontWeight.w500)),
+            ]),
+          ),
         ),
       );
 
@@ -184,16 +188,27 @@ class _TransformInstrumentState extends State<TransformInstrument> {
     if (l.kind == 'Camera') return const SizedBox.shrink();
     final edit = s.canEdit;
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      Padding(padding: const EdgeInsets.only(bottom: 4), child: Text('WORLD', style: sans(9, c: N.g51, w: FontWeight.w600, ls: 1.2))),
-      GestureDetector(
-        key: const ValueKey('world-blend'),
-        behavior: HitTestBehavior.opaque,
-        onTap: edit ? s.openBlend : null,
-        child: Container(height: 26, margin: const EdgeInsets.only(bottom: 4), alignment: Alignment.centerLeft, padding: const EdgeInsets.symmetric(horizontal: 8), decoration: BoxDecoration(color: kTile, borderRadius: BorderRadius.circular(5)), child: Text(l.blendMode, key: const ValueKey('world-blend-name'), style: sans(11, c: edit ? N.g82 : N.g33, w: FontWeight.w500))),
-      ),
-      if (l.kind == 'Image') _flag('environment', 'Environment: this image lights and surrounds the scene', l.environment, edit ? () => s.setWorldFlag('environment', !l.environment) : null),
-      if (l.ghostable) _flag('ghost', 'Ghost: the same layer seen later by a delay', l.ghost != null, edit && s.worldCan('ghost') ? () => s.setWorldFlag('ghost', l.ghost == null) : null),
-      _flag('clip', 'Clip to the layer below', l.clipToBelow, edit && s.worldCan('clip') ? () => s.setWorldFlag('clipToBelow', null) : null),
+      Padding(padding: const EdgeInsets.only(bottom: 6), child: Text('WORLD', style: sans(9, c: N.g51, w: FontWeight.w600, ls: 1.2))),
+      Row(children: [
+        SizedBox(width: 44, child: Text('Blend', style: sans(10.5, c: N.g56))),
+        Expanded(
+          child: GestureDetector(
+            key: const ValueKey('world-blend'),
+            behavior: HitTestBehavior.opaque,
+            onTap: edit ? s.openBlend : null,
+            child: Container(height: 24, alignment: Alignment.centerLeft, padding: const EdgeInsets.symmetric(horizontal: 8), decoration: BoxDecoration(color: kTile, borderRadius: BorderRadius.circular(5)), child: Row(children: [
+              Expanded(child: Text(l.blendMode, key: const ValueKey('world-blend-name'), style: sans(11, c: edit ? N.g82 : N.g33, w: FontWeight.w500))),
+              Text('›', style: sans(12, c: N.g44)),
+            ])),
+          ),
+        ),
+      ]),
+      const SizedBox(height: 6),
+      Wrap(spacing: 5, runSpacing: 5, children: [
+        if (l.ghostable) _flag('ghost', 'Ghost', 'Ghost: the same layer seen later by a delay', l.ghost != null, edit && s.worldCan('ghost') ? () => s.setWorldFlag('ghost', l.ghost == null) : null),
+        _flag('clip', 'Clip to below', 'Clip to the layer below', l.clipToBelow, edit && s.worldCan('clip') ? () => s.setWorldFlag('clipToBelow', null) : null),
+        if (l.kind == 'Image') _flag('environment', 'Environment', 'Environment: this image lights and surrounds the scene', l.environment, edit ? () => s.setWorldFlag('environment', !l.environment) : null),
+      ]),
     ]);
   }
 
@@ -244,14 +259,14 @@ class _TransformInstrumentState extends State<TransformInstrument> {
         key: const ValueKey('route-depth'),
         behavior: HitTestBehavior.opaque,
         onTap: () => s.route('Depth', 'depth'),
-        child: Container(height: 22, padding: const EdgeInsets.symmetric(horizontal: 8), alignment: Alignment.center, decoration: BoxDecoration(border: Border.all(color: kViolet.withValues(alpha: .7)), borderRadius: BorderRadius.circular(11)), child: Text('Depth →', style: sans(9.5, c: kViolet, w: FontWeight.w700))),
+        child: Container(height: 22, padding: const EdgeInsets.symmetric(horizontal: 4), alignment: Alignment.center, child: Text('Depth →', style: sans(10, c: kViolet.withValues(alpha: .85), w: FontWeight.w600))),
       );
 
   Widget _linkChip() => GestureDetector(
         key: const ValueKey('link-scale'),
         behavior: HitTestBehavior.opaque,
         onTap: s.canEdit ? () => s.toggleLink('scale') : null,
-        child: Container(width: 26, height: UiMetrics.control, decoration: BoxDecoration(color: s.linked.contains('scale') ? kBlue : kTile, borderRadius: BorderRadius.circular(5)), child: Center(child: SizedBox(width: 14, height: 14, child: CustomPaint(painter: _LinkP(s.linked.contains('scale') ? N.g10 : kMuted, s.linked.contains('scale')))))),
+        child: Container(width: 26, height: UiMetrics.control, decoration: BoxDecoration(color: s.linked.contains('scale') ? kBlue.withValues(alpha: .16) : null, border: Border.all(color: s.linked.contains('scale') ? kBlue.withValues(alpha: .7) : N.g20), borderRadius: BorderRadius.circular(5)), child: Center(child: SizedBox(width: 14, height: 14, child: CustomPaint(painter: _LinkP(s.linked.contains('scale') ? kBlue : kMuted, s.linked.contains('scale')))))),
       );
 
   bool _modified(List<String> ids) => ids.any((i) => s.rows.any((r) => r['id'] == i) && modified(s.row(i)));
@@ -277,7 +292,7 @@ class _TransformInstrumentState extends State<TransformInstrument> {
           key: ValueKey('glyph-$id'),
           behavior: HitTestBehavior.opaque,
           onTap: m == null ? null : () => setState(() => mode = m),
-          child: Container(width: 22, height: UiMetrics.control, margin: const EdgeInsets.only(right: 5), alignment: Alignment.center, decoration: BoxDecoration(color: active ? tone : null, borderRadius: BorderRadius.circular(5)), child: SizedBox(width: 14, height: 14, child: glyph ?? CustomPaint(painter: RoleGlyph(m!, active ? N.g10 : tone)))),
+          child: Container(width: 22, height: UiMetrics.control, margin: const EdgeInsets.only(right: 5), alignment: Alignment.center, decoration: BoxDecoration(color: active ? tone.withValues(alpha: .18) : null, borderRadius: BorderRadius.circular(5)), child: SizedBox(width: 14, height: 14, child: glyph ?? CustomPaint(painter: RoleGlyph(m!, tone)))),
         ),
         Expanded(child: values),
         // every line keeps the same end column (the scale line's link chip, empty elsewhere): the X · Y · Z columns line up
