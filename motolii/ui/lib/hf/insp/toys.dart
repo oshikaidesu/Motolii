@@ -149,11 +149,11 @@ class _ValueToyState extends State<ValueToy> {
     final h = widget.hero ? UiMetrics.controlHero : UiMetrics.control;
     final ink = frozen ? N.g33 : _readout;
     final unit = widget.showUnit ? s.unit : null;
-    // colour mass follows importance: an ordinary Value has a thin edge, a touched one a wider edge and a tint, a hero more
+    // colour mass follows importance, quietly: a thin edge; a touched value a wider edge and a tint; a hero a faint tint
     final active = dragging || hover || focus.hasFocus || editing;
     final tone = frozen ? dimTone(widget.tone) : widget.tone;
-    final edge = widget.hero || active ? 6.0 : 3.0;
-    final tint = widget.hero ? .16 : (active ? .11 : 0.0);
+    final edge = active ? 4.0 : 3.0;
+    final tint = widget.hero ? .07 : (active ? .09 : 0.0);
     return Focus(
       focusNode: focus,
       onKeyEvent: (_, e) {

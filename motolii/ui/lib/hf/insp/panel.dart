@@ -221,7 +221,7 @@ class ParamCell extends StatelessWidget {
               ),
             ),
           Expanded(child: Row(children: [
-            Flexible(child: Text(label, softWrap: false, overflow: TextOverflow.ellipsis, style: sans(hero ? 11.5 : 11, c: hero ? kInk : N.g69, w: hero ? FontWeight.w600 : FontWeight.w500))),
+            Flexible(child: Text(label, softWrap: false, overflow: TextOverflow.ellipsis, style: sans(11, c: hero ? N.g86 : N.g69, w: hero ? FontWeight.w600 : FontWeight.w500))),
             if (mod) Padding(padding: const EdgeInsets.only(left: 5), child: Container(key: ValueKey('mod-$id'), width: 4, height: 4, decoration: BoxDecoration(color: t, shape: BoxShape.circle))),
           ])),
           // a relation: this value is driven by another (◉ its source), or drives others (◉ how many)

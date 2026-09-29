@@ -233,8 +233,10 @@ class _EffectsPanelState extends State<EffectsPanel> with WithDiscovery<EffectsP
         },
       );
 
-  Widget _grid(List<Thing> shown, double w, int cols) {
+  Widget _grid(List<Thing> shown, double w, int most) {
     const pad = 12.0, gap = 6.0;
+    // as many columns as keep a tile wide enough to carry its name under it (never more than asked for)
+    final cols = ((w - pad * 2 + gap) / (72 + gap)).floor().clamp(1, most);
     final tileW = (w - pad * 2 - gap * (cols - 1)) / cols;
     if (tileW <= 0) return const SizedBox.shrink(); // a seat squeezed to nothing shows nothing, not an error
     BrowserSeatScope.of(context)?.shows(shown, cols);
@@ -246,7 +248,7 @@ class _EffectsPanelState extends State<EffectsPanel> with WithDiscovery<EffectsP
       itemCount: shown.length,
       itemBuilder: (c, i) => seated(c, shown[i], Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         AspectRatio(aspectRatio: 1 / .84, child: ThingFace(shown[i], scene: widget.scene)),
-        if (showCaption) Padding(padding: const EdgeInsets.only(top: 5), child: Text(shown[i].name, softWrap: false, overflow: TextOverflow.clip, style: sans(10.5, c: N.g76))),
+        if (showCaption) Padding(padding: const EdgeInsets.only(top: 5), child: Text(shown[i].name, softWrap: false, maxLines: 1, overflow: TextOverflow.ellipsis, style: sans(10.5, c: N.g76))),
       ])),
     );
   }

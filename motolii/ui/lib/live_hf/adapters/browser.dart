@@ -5,14 +5,15 @@ import 'package:flutter/widgets.dart';
 import '../../hf/bp/browser_face.dart';
 import '../../hf/bp/common.dart' show sans, kMuted;
 import '../../hf/bp/effects.dart';
+import '../../hf/bp/faces.dart' show QuietFace;
 import '../../hf/shell/menu.dart' show showHfMenu;
 import '../../hf/bp/seat.dart';
 import '../../hf/bp/things.dart';
+import '../../hf/neutral.dart';
 import '../../session/editor_session.dart';
 import 'browser_session.dart';
 import 'browser_shelf.dart';
 import 'colors.dart';
-import '../../hf/neutral.dart';
 
 /// The Browser as a skin over [BrowserSession]: it lays out the reference faces (browserFace), dresses tiles with what
 /// they do, and hands every gesture to the session.
@@ -143,17 +144,10 @@ class _LiveSeat extends ChangeNotifier implements BrowserSeat {
                 ? CustomPaint(
                     painter: FxPainter('${thing.face['base']}', scene),
                   )
-                // an effect that ships no snapshot keeps its name as its tile (the native contract)
-                : Center(
-                    child: Text(
-                      thing.name,
-                      textAlign: TextAlign.center,
-                      maxLines: 3,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(color: N.g69, fontSize: 10),
-                    ),
-                  )
-          : Image.memory(pic.data!, fit: BoxFit.cover, gaplessPlayback: true),
+                // an effect that ships no snapshot: a quiet face (its name is the caption under the tile)
+                : const QuietFace()
+          // on the tile's own ground: a snapshot that is empty (an effect with nothing to show alone) is still a tile
+          : ClipRRect(borderRadius: BorderRadius.circular(3), child: ColoredBox(color: N.g13, child: Image.memory(pic.data!, fit: BoxFit.cover, gaplessPlayback: true))),
     );
   }
 

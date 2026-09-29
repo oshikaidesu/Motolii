@@ -2,9 +2,12 @@
 // a new type is added here once, never per thing.
 import 'dart:math' as math;
 import 'package:flutter/widgets.dart';
+import '../glyphs.dart';
+import '../neutral.dart';
 import 'create.dart';
 import 'effects.dart';
 import 'seat.dart';
+import 'shell.dart' show GlyphBox;
 import 'things.dart';
 
 Color hexColor(String h) => Color(0xFF000000 | int.parse(h.substring(1), radix: 16));
@@ -23,7 +26,7 @@ class ThingFace extends StatelessWidget {
         return CustomPaint(painter: MarkPainter(Mk.values.byName('${f['mark']}'), hexColor('${f['color']}')));
       case 'fx':
         final s = scene;
-        if (s == null) return const SizedBox.shrink();
+        if (s == null) return const QuietFace();
         Widget p = CustomPaint(painter: FxPainter('${f['base']}', s));
         final hue = (f['hue'] as num).toDouble();
         if (hue != 0) p = ColorFiltered(colorFilter: hueFilter(hue), child: p);
@@ -31,9 +34,19 @@ class ThingFace extends StatelessWidget {
       case 'curve':
         return CustomPaint(painter: CurvePainter('${f['fn']}', (f['hue'] as num).toDouble()));
       default:
-        return const SizedBox.shrink();
+        return const QuietFace();
     }
   }
+}
+
+/// A thing with no picture to show: a quiet tile, so a grid of faces has no holes (its name is the caption).
+class QuietFace extends StatelessWidget {
+  const QuietFace({super.key});
+  @override
+  Widget build(BuildContext context) => DecoratedBox(
+        decoration: BoxDecoration(color: N.g13, border: Border.all(color: N.g20), borderRadius: BorderRadius.circular(3)),
+        child: const Center(child: GlyphBox(HG.pie, size: 16, color: N.g33)),
+      );
 }
 
 /// A phenomenon drawn as its own curve: spring, decay, orbit... the face for things that act over time.

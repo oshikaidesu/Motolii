@@ -137,6 +137,6 @@ class _ShelfGridPanelState extends State<ShelfGridPanel> with WithDiscovery<Shel
 
   Widget _tile(Thing t, bool caption) => Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Expanded(child: ThingFace(t)),
-        if (caption) Padding(padding: const EdgeInsets.only(top: 5), child: Text(t.name, softWrap: false, overflow: TextOverflow.clip, style: sans(10.5, c: N.g76))),
+        if (caption) Padding(padding: const EdgeInsets.only(top: 5), child: Text(t.name, softWrap: false, maxLines: 1, overflow: TextOverflow.ellipsis, style: sans(10.5, c: N.g76))),
       ]);
 }
