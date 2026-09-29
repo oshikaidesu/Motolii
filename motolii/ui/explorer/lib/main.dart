@@ -15,7 +15,7 @@ import 'stories/timeline.dart';
 import 'stories/workspace.dart';
 
 /// Every story, in the order the explorer lists them.
-final allStories = [...timelineStories, ...inspectorStories, ...browserStories, ...otherStories, ...paperStories, ...workspaceStories];
+final allStories = [...timelineStories, ...inspectorStories, ...browserStories, ...catalogStories, ...otherStories, ...paperStories, ...workspaceStories];
 
 void main() {
   // production reads some of its data relative to motolii/ui (where `flutter run` starts it); so does the explorer

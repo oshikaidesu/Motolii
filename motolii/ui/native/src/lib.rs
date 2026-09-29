@@ -259,6 +259,19 @@ impl EditorRuntime {
     }
 }
 
+/// The media catalog (`catalog/`): one JSON request in, one JSON reply out, for the host's catalog queue. The reply is held
+/// in a buffer that stays valid until the next call (calls are serialised by the host), so the caller copies it at once.
+#[no_mangle]
+pub unsafe extern "C" fn motolii_catalog_request(request: *const c_char) -> *const c_char {
+    use std::sync::Mutex;
+    static REPLY: Mutex<Option<std::ffi::CString>> = Mutex::new(None);
+    let text = if request.is_null() { String::new() } else { unsafe { CStr::from_ptr(request) }.to_string_lossy().into_owned() };
+    let reply = std::ffi::CString::new(catalog::request(&text)).unwrap_or_else(|_| std::ffi::CString::new("{\"error\":\"bad reply\"}").unwrap());
+    let mut held = REPLY.lock().unwrap_or_else(|e| e.into_inner());
+    *held = Some(reply);
+    held.as_ref().map_or(std::ptr::null(), |r| r.as_ptr())
+}
+
 #[no_mangle]
 pub unsafe extern "C" fn motolii_probe_open(path: *const c_char) -> *mut EditorRuntime {
     match catch_unwind(AssertUnwindSafe(|| {

@@ -9,6 +9,7 @@
 //! Sources are read-only: nothing here moves, renames, deletes or writes a source file. The index is a rebuildable file
 //! (`catalog.sqlite` in the state folder); removing a source or the index never touches the files under it.
 
+mod bridge;
 mod index;
 mod matching;
 mod query;
@@ -24,6 +25,7 @@ use std::path::{Path, PathBuf};
 
 use rusqlite::{params, Connection, OptionalExtension};
 
+pub(crate) use bridge::request;
 pub(crate) use query::{Entry, FolderCount, Query, ResultSet};
 pub(crate) use resolve::{Resolution, SavedRef};
 

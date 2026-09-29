@@ -85,6 +85,7 @@ private final class ProbeRuntime {
   typealias FrameReady = @convention(c) (UnsafeMutableRawPointer?, UnsafePointer<CChar>?, UInt32) -> Void
   typealias SetFrameReady = @convention(c) (UnsafeMutableRawPointer, FrameReady?, UnsafeMutableRawPointer?) -> Int32
   typealias FinishFrames = @convention(c) (UnsafeMutableRawPointer) -> Int32
+  typealias CatalogRequest = @convention(c) (UnsafePointer<CChar>?) -> UnsafePointer<CChar>?
   /// An IOSurface-backed buffer may cross to the render actor solely to retain
   /// it until Metal has imported the surface. No pixel access occurs here.
   fileprivate struct PlaybackTarget: @unchecked Sendable {
@@ -111,6 +112,10 @@ private final class ProbeRuntime {
   fileprivate private(set) var context: UnsafeMutableRawPointer?
   fileprivate private(set) var location: String?
   private var requestFunction: Request?
+  /// The media catalog is the app's, not a document's: its own function and its own queue, so a big scan never waits on
+  /// (or holds up) rendering, and Flutter's thread only receives the reply.
+  private var catalogFunction: CatalogRequest?
+  private let catalogQueue = DispatchQueue(label: "motolii.catalog", qos: .utility)
   fileprivate var renderFunction: Render?
   private var playbackTickFunction: PlaybackTick?
   private var closeFunction: Close?
@@ -199,6 +204,7 @@ private final class ProbeRuntime {
       }
       let start = try symbol("motolii_probe_open", Open.self)
       requestFunction = try symbol("motolii_probe_request", Request.self)
+      catalogFunction = try symbol("motolii_catalog_request", CatalogRequest.self)
       renderFunction = try symbol("motolii_probe_render", Render.self)
       playbackTickFunction = try symbol("motolii_probe_playback_tick", PlaybackTick.self)
       closeFunction = try symbol("motolii_probe_close", Close.self)
@@ -313,6 +319,21 @@ private final class ProbeRuntime {
       throw ProbeFailure.message("Rust reply is not a JSON object")
     }
     return reply
+  }
+
+  /// One catalog request (JSON in, JSON out) on the catalog queue; the reply comes back on the main thread.
+  func catalog(_ command: String, completion: @escaping (Result<[String: Any], Error>) -> Void) {
+    let function = catalogFunction
+    catalogQueue.async {
+      let outcome: Result<[String: Any], Error> = Result {
+        guard let function else { throw ProbeFailure.message("The catalog is not ready") }
+        guard let pointer = command.withCString({ function($0) }) else { throw ProbeFailure.message("Catalog returned no reply") }
+        let data = Data(String(cString: pointer).utf8)
+        guard let reply = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw ProbeFailure.message("Catalog reply is not a JSON object") }
+        return reply
+      }
+      DispatchQueue.main.async { completion(outcome) }
+    }
   }
 
   func status() throws -> [String: Any] { try request("{\"op\":\"status\",\"bootstrap\":true}") }
@@ -919,6 +940,14 @@ final class ProbeHost: NSObject {
       if let image = NSImage(pasteboard: .general), let tiff = image.tiffRepresentation, let bitmap = NSBitmapImageRep(data: tiff), let png = bitmap.representation(using: .png, properties: [:]) {
         result(["png": png.base64EncodedString()])
       } else { result(["text": NSPasteboard.general.string(forType: .string) ?? ""]) }
+    case "catalog":
+      guard let command = args["command"] as? String else { fail(result, "catalog requires a JSON command string"); return }
+      session.runtime.catalog(command) { outcome in
+        switch outcome {
+        case .success(let reply): result(reply)
+        case .failure(let error): self.fail(result, String(describing: error))
+        }
+      }
     case "easeModel":
       var query = args
       query["op"] = "easeModel"

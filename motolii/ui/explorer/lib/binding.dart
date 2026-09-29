@@ -50,6 +50,8 @@ class _ProbeMessenger extends BinaryMessenger {
     switch (method) {
       case 'windowInfo':
         return {'id': 'explorer', 'main': true, 'panels': const [], 'paneState': const {}, 'panelWindows': 0};
+      case 'catalog':
+        return RealHost.catalog(args['command'] as String);
       case 'readSettings':
         return const <String, dynamic>{};
       case 'writeSettings' || 'flushEditors' || 'detach' || 'ensureSurfaces' || 'placePanel':

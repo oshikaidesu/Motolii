@@ -9,6 +9,7 @@ import 'package:ffi/ffi.dart';
 typedef _OpenC = Pointer<Void> Function(Pointer<Utf8>);
 typedef _RequestC = Pointer<Utf8> Function(Pointer<Void>, Pointer<Utf8>);
 typedef _CloseC = Void Function(Pointer<Void>);
+typedef _CatalogC = Pointer<Utf8> Function(Pointer<Utf8>);
 
 class RealHost {
   RealHost._(this._context);
@@ -17,6 +18,19 @@ class RealHost {
   static final _open = _lib.lookupFunction<_OpenC, _OpenC>('motolii_probe_open');
   static final _request = _lib.lookupFunction<_RequestC, _RequestC>('motolii_probe_request');
   static final _close = _lib.lookupFunction<_CloseC, void Function(Pointer<Void>)>('motolii_probe_close');
+  static final _catalog = _lib.lookupFunction<_CatalogC, _CatalogC>('motolii_catalog_request');
+
+  /// The media catalog (one per process, not per document): a JSON request, the JSON reply.
+  static Map<String, dynamic> catalog(String command) {
+    final p = command.toNativeUtf8();
+    try {
+      final reply = _catalog(p);
+      if (reply == nullptr) throw StateError('The catalog gave no reply');
+      return (jsonDecode(reply.toDartString()) as Map).cast<String, dynamic>();
+    } finally {
+      malloc.free(p);
+    }
+  }
 
   /// explorer/ sits in motolii/ui; the workspace builds the library into motolii/target/debug.
   static String _defaultLibrary() {

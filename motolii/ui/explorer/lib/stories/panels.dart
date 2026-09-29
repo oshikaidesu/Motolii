@@ -5,6 +5,8 @@ import 'package:flutter/widgets.dart';
 import 'package:motolii_stage5/hf/bp/effects.dart' show EffectScene;
 import 'package:motolii_stage5/hf/neutral.dart';
 import 'package:motolii_stage5/live_hf/adapters/browser.dart';
+import 'package:motolii_stage5/live_hf/adapters/catalog_media.dart';
+import 'package:motolii_stage5/live_hf/adapters/catalog_session.dart';
 import 'package:motolii_stage5/live_hf/adapters/depth.dart';
 import 'package:motolii_stage5/live_hf/adapters/ease.dart';
 import 'package:motolii_stage5/live_hf/adapters/notes.dart';
@@ -66,6 +68,47 @@ final browserStories = <Story>[
   ],
 ];
 
+/// The real Catalog over the explorer's own fixtures: two registered folders (media/ and the GLB models), indexed by the
+/// host, queried by the host; the Browser only asks and draws. State is the explorer's own (run.sh sets MOTOLII_STATE_DIR).
+Future<void> _registerFixtureSources(EditorSession c) async {
+  final s = CatalogSession(c);
+  await s.load();
+  for (final (path, name) in [(fixture('media'), 'Media'), (fixture('models/glb'), 'Models')]) {
+    if (!s.sources.any((x) => x.name == name)) await s.addSource(path, name: name);
+  }
+  await s.refresh();
+  while (s.pending > 0) {
+    await s.enrichSome();
+  }
+  s.dispose();
+}
+
+Widget _catalogBrowser(EditorSession c) => _CatalogHost(c);
+
+class _CatalogHost extends StatefulWidget {
+  const _CatalogHost(this.c);
+  final EditorSession c;
+  @override
+  State<_CatalogHost> createState() => _CatalogHostState();
+}
+
+class _CatalogHostState extends State<_CatalogHost> {
+  late final CatalogSession session = CatalogSession(widget.c)..load();
+  @override
+  void dispose() {
+    session.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => CatalogMedia(session: session);
+}
+
+final catalogStories = <Story>[
+  Story('Browser catalog, real sources', Scene('night-sky.rrd', inputs: _registerFixtureSources), _catalogBrowser, width: 288, height: 900),
+  Story('Browser catalog, real sources, wide', Scene('night-sky.rrd', inputs: _registerFixtureSources), _catalogBrowser, width: 560, height: 900),
+];
+
 final otherStories = <Story>[
   Story('Stage chrome', Scene('night-sky.rrd', inputs: (s) => _choose(s, 2)), (c) => StagePanel(controller: c, view: 'User'), width: 779, height: 520),
   Story('Top bar', const Scene('night-sky.rrd'), (c) => SessionTop(c: c), width: 1536, height: 64),
@@ -76,6 +119,6 @@ final otherStories = <Story>[
 
 final panelComponents = [
   WidgetbookComponent(name: 'Inspector', useCases: [for (final s in inspectorStories) useCase(s)]),
-  WidgetbookComponent(name: 'Browser', useCases: [for (final s in browserStories) useCase(s)]),
+  WidgetbookComponent(name: 'Browser', useCases: [for (final s in [...browserStories, ...catalogStories]) useCase(s)]),
   WidgetbookComponent(name: 'Stage, top bar, desks', useCases: [for (final s in otherStories) useCase(s)]),
 ];
