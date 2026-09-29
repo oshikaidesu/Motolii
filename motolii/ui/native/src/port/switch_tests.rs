@@ -178,3 +178,19 @@ fn a_row_delete_takes_the_layers(){
     rt.request(json!({"op":"delete","layers":true})).unwrap();
     assert!(!rt.doc.view().has_layer(id),"the layer went, not only its key");
 }
+
+/// A ghost or a sequence over a selection with a locked layer in it goes on the others (a locked layer is left).
+#[test]
+fn ghosts_pass_over_a_locked_layer(){
+    let mut rt=EditorRuntime::open("").unwrap();
+    let mut made=Vec::new();
+    for _ in 0..2{rt.request(json!({"op":"create","kind":"rectangle"})).unwrap();made.push(rt.viewer.selected().unwrap());}
+    rt.request(json!({"op":"toggle","layer":made[1].0,"flag":"locked"})).unwrap();
+    rt.request(json!({"op":"select","ids":[made[0].0,made[1].0]})).unwrap();
+    rt.request(json!({"op":"ghost","enabled":true})).unwrap();
+    let ghost=|rt:&EditorRuntime,l:LayerId|rt.doc.view().attrs(l).unwrap().unwrap().ghost;
+    assert!(ghost(&rt,made[0]).is_some());
+    assert!(ghost(&rt,made[1]).is_none());
+    rt.request(json!({"op":"sequence","layers":[made[0].0,made[1].0],"ghosts":[3,6]})).unwrap();
+    assert_eq!(ghost(&rt,made[0]),Some(3));
+}
