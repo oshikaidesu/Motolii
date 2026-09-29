@@ -85,6 +85,7 @@ private final class ProbeRuntime {
   typealias FrameReady = @convention(c) (UnsafeMutableRawPointer?, UnsafePointer<CChar>?, UInt32) -> Void
   typealias SetFrameReady = @convention(c) (UnsafeMutableRawPointer, FrameReady?, UnsafeMutableRawPointer?) -> Int32
   typealias FinishFrames = @convention(c) (UnsafeMutableRawPointer) -> Int32
+  typealias CatalogOnChange = @convention(c) (Wake?, UnsafeMutableRawPointer?) -> Void
   typealias CatalogRequest = @convention(c) (UnsafePointer<CChar>?) -> UnsafePointer<CChar>?
   /// An IOSurface-backed buffer may cross to the render actor solely to retain
   /// it until Metal has imported the surface. No pixel access occurs here.
@@ -210,6 +211,9 @@ private final class ProbeRuntime {
       closeFunction = try symbol("motolii_probe_close", Close.self)
       finishFunction = try symbol("motolii_probe_finish_frames", FinishFrames.self)
       let watch = try symbol("motolii_probe_watch_effects", Watch.self)
+      // the catalog's own watcher found the index changed (a file came, moved or went): a bare "look again", from another thread
+      let catalogOnChange = try symbol("motolii_catalog_on_change", CatalogOnChange.self)
+      catalogOnChange({ _ in DispatchQueue.main.async { ProbeSession.shared.catalogChanged() } }, nil)
       let setFrameReady = try symbol("motolii_probe_set_frame_ready", SetFrameReady.self)
       context = path.withCString { start($0) }
       guard let context else { throw ProbeFailure.message("Rust could not open the document") }
@@ -497,6 +501,12 @@ final class ProbeSession {
   private var playbackSurfaceFlip = false
   private var confirming = false
   var terminationApproved = false
+
+  /// The catalog changed under its own watcher. Every window that shows a catalog asks again (nothing travels but the signal).
+  fileprivate func catalogChanged() {
+    precondition(Thread.isMainThread)
+    for host in hosts.allObjects where !host.closed && host.attached { host.channel.invokeMethod("catalogChanged", arguments: nil) }
+  }
 
   /// 効果の file が変わった。棚を読み直すのは main の窓(Dart が reloadEffects を送り、絵を描き直し、他の窓へ配る)。
   fileprivate func effectsChanged() {

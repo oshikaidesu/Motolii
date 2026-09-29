@@ -64,6 +64,10 @@ abstract class SessionCore {
   /// Files are being carried over this window; the shelves can say "drop here".
   final dragging = ValueNotifier<bool>(false);
 
+  /// Counts the host's "the media catalog changed under its own watcher" (a file came, moved or went). It carries nothing else:
+  /// whoever shows the catalog asks it again.
+  final catalogTick = ValueNotifier<int>(0);
+
   final error = ValueNotifier<String?>(null);
 
   /// 直前の取り込みで棚に入った asset の id。Browser が Media を開いて選ぶ。

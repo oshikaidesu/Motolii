@@ -173,6 +173,7 @@ mixin SessionNative on SessionCore {
       if (call.method == 'effectsChanged' && windowInfo['main'] != false) {
         command('reloadEffects');
       }
+      if (call.method == 'catalogChanged') catalogTick.value++;
       if (call.method == 'documentClosed') {
         _cancelCadence();
         playing.value = false;

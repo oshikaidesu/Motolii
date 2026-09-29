@@ -27,6 +27,7 @@ use std::path::{Path, PathBuf};
 use rusqlite::{params, Connection, OptionalExtension};
 
 pub(crate) use bridge::{request, with};
+pub(crate) use watch::set_listener;
 #[cfg(test)]
 pub(crate) use bridge::use_test_state;
 pub(crate) use query::{Entry, FolderCount, Query, ResultSet, Sort};

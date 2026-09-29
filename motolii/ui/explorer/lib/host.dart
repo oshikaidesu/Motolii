@@ -10,6 +10,8 @@ typedef _OpenC = Pointer<Void> Function(Pointer<Utf8>);
 typedef _RequestC = Pointer<Utf8> Function(Pointer<Void>, Pointer<Utf8>);
 typedef _CloseC = Void Function(Pointer<Void>);
 typedef _CatalogC = Pointer<Utf8> Function(Pointer<Utf8>);
+typedef _WakeC = Void Function(Pointer<Void>);
+typedef _OnChangeC = Void Function(Pointer<NativeFunction<_WakeC>>, Pointer<Void>);
 
 class RealHost {
   RealHost._(this._context);
@@ -19,6 +21,17 @@ class RealHost {
   static final _request = _lib.lookupFunction<_RequestC, _RequestC>('motolii_probe_request');
   static final _close = _lib.lookupFunction<_CloseC, void Function(Pointer<Void>)>('motolii_probe_close');
   static final _catalog = _lib.lookupFunction<_CatalogC, _CatalogC>('motolii_catalog_request');
+
+  static final _onChange = _lib.lookupFunction<_OnChangeC, void Function(Pointer<NativeFunction<_WakeC>>, Pointer<Void>)>('motolii_catalog_on_change');
+  static NativeCallable<_WakeC>? _wake;
+
+  /// The catalog's own watcher found its index changed (a bare signal, from another thread): what the macOS runner
+  /// hears through the same entry point. The callback runs on this isolate.
+  static void onCatalogChange(void Function() changed) {
+    _wake?.close();
+    final wake = _wake = NativeCallable<_WakeC>.listener((Pointer<Void> _) => changed());
+    _onChange(wake.nativeFunction, nullptr);
+  }
 
   /// The media catalog (one per process, not per document): a JSON request, the JSON reply.
   static Map<String, dynamic> catalog(String command) {

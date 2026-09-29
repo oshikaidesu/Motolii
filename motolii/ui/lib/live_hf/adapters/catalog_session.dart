@@ -73,8 +73,42 @@ class CatalogSession extends ChangeNotifier implements ResultSource {
 
   Future<void> load() => _guard(() async {
         _took(await _call({'op': 'sources'}));
+        // the owner watches the folders and says (catalogTick) when its index changed; a watcher that cannot start only
+        // means the view learns on the next thing the person does, as before
+        try {
+          await _call({'op': 'watch', 'on': true});
+        } catch (_) {}
+        if (!_listening) {
+          _listening = true;
+          c.catalogTick.addListener(_changed);
+        }
         await _query();
       });
+
+  bool _listening = false;
+  bool _changing = false, _again = false;
+
+  /// The owner's index changed: the same choices, asked again (the sources too: one may have come or gone). Signals that
+  /// arrive while this runs make it run once more, not once each.
+  Future<void> _changed() async {
+    if (_disposed) return;
+    if (_changing) {
+      _again = true;
+      return;
+    }
+    _changing = true;
+    try {
+      do {
+        _again = false;
+        await _guard(() async {
+          _took(await _call({'op': 'sources'}));
+          await _query();
+        });
+      } while (_again && !_disposed);
+    } finally {
+      _changing = false;
+    }
+  }
 
   Future<void> addSource(String path, {String? name}) => _guard(() async {
         _took(await _call({'op': 'addSource', 'path': path, if (name != null) 'name': name}));
@@ -244,6 +278,7 @@ class CatalogSession extends ChangeNotifier implements ResultSource {
   @override
   void dispose() {
     _disposed = true;
+    if (_listening) c.catalogTick.removeListener(_changed);
     super.dispose();
   }
 }

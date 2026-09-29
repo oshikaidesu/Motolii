@@ -102,3 +102,9 @@ Seven rounds with a critic that sees only screenshots and the concept image. Rou
 - Sound play button: no playback capability exists.
 
 The critic gate was NOT passed; the owner's own look is the remaining judge.
+
+## Production readiness (2026-09-30)
+
+- **No lock while reading files.** The walk, the fingerprints, image sizes, thumbnails and clip frames all run outside the catalog lock; the lock is taken to read what is needed and for short writes (new files go in batches of 400 with a breath between, because a std Mutex is not fair). A test asks queries while 6000 files are indexed: the slowest wait was 11 ms (76 ms before the batching, 110 ms before the split).
+- **The watcher reaches the window.** The catalog's watcher refreshes the index on its own; when that changed it, the host sends a bare `catalogChanged` (C callback `motolii_catalog_on_change` -> main thread -> channel; the Explorer hears the same through dart:ffi). `CatalogSession` starts the watcher and asks its current query again (signals arriving meanwhile coalesce). Nothing but "look again" is pushed.
+- **Proved in the real app:** `integration_test/catalog_follows_test.dart` adds, renames and deletes files under a registered folder from outside the app; the result follows with nothing asked, and the renamed file keeps its asset id.

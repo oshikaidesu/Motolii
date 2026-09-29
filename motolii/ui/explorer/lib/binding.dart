@@ -10,7 +10,18 @@ import 'host.dart';
 
 class ExplorerBinding extends WidgetsFlutterBinding {
   static ExplorerBinding? _instance;
-  static ExplorerBinding ensure() => _instance ??= ExplorerBinding();
+  static ExplorerBinding ensure() {
+    final fresh = _instance == null;
+    final binding = _instance ??= ExplorerBinding();
+    // as the macOS runner does: the catalog's "changed" arrives on the probe channel, and the session's own handler hears it
+    if (fresh) {
+      RealHost.onCatalogChange(() {
+        const codec = StandardMethodCodec();
+        binding.defaultBinaryMessenger.handlePlatformMessage('motolii/probe', codec.encodeMethodCall(const MethodCall('catalogChanged')), (_) {});
+      });
+    }
+    return binding;
+  }
 
   /// The host the story on screen talks to.
   RealHost? host;

@@ -604,6 +604,11 @@ fn a_change_under_a_watched_source_is_indexed_without_asking() {
         s.id
     })
     .unwrap();
+    static HEARD: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+    unsafe extern "C" fn heard(_: *mut std::ffi::c_void) {
+        HEARD.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    }
+    super::set_listener(Some(heard), std::ptr::null_mut());
     assert_eq!(super::watch::start().unwrap() >= 1, true);
     let count = |id: &str| super::with(|c| c.query(&Query { sources: Some(vec![id.to_owned()]), ..Default::default() }).unwrap().total).unwrap();
     assert_eq!(count(&id), 1);
@@ -614,6 +619,8 @@ fn a_change_under_a_watched_source_is_indexed_without_asking() {
         std::thread::sleep(Duration::from_millis(100));
     }
     assert_eq!(count(&id), 2, "the new file and the rename were picked up by the watcher");
+    assert!(HEARD.load(std::sync::atomic::Ordering::SeqCst) >= 1, "the listener was told the index changed");
+    super::set_listener(None, std::ptr::null_mut());
     // the rename kept the asset (the watcher only signals; the refresh is the ordinary diff)
     let names = super::with(|c| c.query(&Query { sources: Some(vec![id.clone()]), ..Default::default() }).unwrap().entries.into_iter().map(|e| e.rel_path).collect::<Vec<_>>()).unwrap();
     assert!(names.contains(&"renamed.png".to_owned()) && names.contains(&"sub/b.mov".to_owned()), "{names:?}");

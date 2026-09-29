@@ -23,6 +23,21 @@ static RUNNING: OnceLock<Mutex<Option<Running>>> = OnceLock::new();
 /// How long the sources stay quiet before the changed ones are refreshed (a copy of many files is one refresh).
 const QUIET: Duration = Duration::from_millis(400);
 
+/// Who hears that the watcher changed the catalog: one small wake, no data (the listener asks the catalog what it needs).
+static LISTENER: Mutex<Option<(unsafe extern "C" fn(*mut std::ffi::c_void), usize)>> = Mutex::new(None);
+
+/// Sets (or, with `None`, clears) the wake called from the watcher's thread after a refresh it ran changed the index.
+pub(crate) fn set_listener(wake: Option<unsafe extern "C" fn(*mut std::ffi::c_void)>, user: *mut std::ffi::c_void) {
+    *LISTENER.lock().unwrap_or_else(|e| e.into_inner()) = wake.map(|w| (w, user as usize));
+}
+
+fn tell_listener() {
+    let heard = *LISTENER.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some((wake, user)) = heard {
+        unsafe { wake(user as *mut std::ffi::c_void) };
+    }
+}
+
 fn slot() -> &'static Mutex<Option<Running>> {
     RUNNING.get_or_init(|| Mutex::new(None))
 }
@@ -81,8 +96,13 @@ pub(crate) fn start() -> Result<usize, String> {
             if stop_rx.try_recv().is_ok() {
                 return;
             }
+            let before = with(|c| c.revision()).unwrap_or(-1);
             for id in dirty.drain() {
                 let _ = super::index::refresh_unlocked(Some(&id));
+            }
+            // a person's view holds the revision it drew; this is the only push, and it carries nothing but "look again"
+            if with(|c| c.revision()).unwrap_or(-1) != before {
+                tell_listener();
             }
         }
     });

@@ -274,6 +274,14 @@ pub unsafe extern "C" fn motolii_catalog_request(request: *const c_char) -> *con
     held.as_ref().map_or(std::ptr::null(), |r| r.as_ptr())
 }
 
+/// `wake(user)` is called, from another thread, after the catalog's own watcher changed the index (a file added, moved or
+/// gone under a source). It carries nothing: the caller goes back to the main thread and asks the catalog again.
+/// `None` removes it. The catalog is the app's, so this is per process, not per document.
+#[no_mangle]
+pub unsafe extern "C" fn motolii_catalog_on_change(wake: Option<unsafe extern "C" fn(*mut std::ffi::c_void)>, user: *mut std::ffi::c_void) {
+    catalog::set_listener(wake, user);
+}
+
 #[no_mangle]
 pub unsafe extern "C" fn motolii_probe_open(path: *const c_char) -> *mut EditorRuntime {
     match catch_unwind(AssertUnwindSafe(|| {
