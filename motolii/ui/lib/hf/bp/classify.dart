@@ -118,8 +118,8 @@ class _Row extends StatelessWidget {
             alignment: Alignment.centerLeft,
             child: Container(
               padding: const EdgeInsets.only(bottom: 2),
-              decoration: BoxDecoration(border: Border(bottom: BorderSide(color: on ? N.g91 : N.clear, width: 1.5))),
-              child: Text(label, softWrap: false, overflow: TextOverflow.clip, style: sans(11.5, c: on ? N.g95 : N.g63, w: on ? FontWeight.w600 : FontWeight.w400, ls: -0.1)),
+              decoration: BoxDecoration(border: Border(bottom: BorderSide(color: on ? N.g95 : N.clear, width: 1))),
+              child: Text(label, softWrap: false, overflow: TextOverflow.clip, style: sans(11, c: on ? N.g95 : N.g56, w: FontWeight.w500)),
             ),
           ),
         ),

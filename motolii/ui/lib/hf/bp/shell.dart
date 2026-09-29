@@ -8,6 +8,7 @@ import 'common.dart';
 import 'search.dart';
 import '../metrics.dart';
 import 'seat.dart';
+import 'shelf_sections.dart' show SwissHeading;
 import '../neutral.dart';
 
 const kTile = N.g13;
@@ -123,7 +124,7 @@ class _PanelHeaderState extends State<PanelHeader> {
                   ] else
                     const Spacer(),
                   if (widget.extra != null) widget.extra!,
-                  if (widget.count != null && widget.mode == HeadMode.full) Padding(padding: const EdgeInsets.only(right: 6), child: Text(widget.count!, style: mono(10))),
+                  if (widget.count != null && widget.mode == HeadMode.full) Padding(padding: const EdgeInsets.only(left: 8, right: 6), child: Text(widget.count!, style: mono(9.5, c: N.g44))),
                   HeaderKey(HG.search, onTap: () {
                     setState(() => open = true);
                     WidgetsBinding.instance.addPostFrameCallback((_) => widget.search.request());
@@ -228,7 +229,7 @@ class SectionLabel extends StatelessWidget {
   const SectionLabel(this.text, {super.key});
   final String text;
   @override
-  Widget build(BuildContext context) => Padding(padding: const EdgeInsets.fromLTRB(2, 14, 0, 8), child: Text(text.toUpperCase(), softWrap: false, style: sans(9, c: N.g63, w: FontWeight.w600, ls: 1.1)));
+  Widget build(BuildContext context) => SwissHeading(text);
 }
 
 Widget emptyBody(String text) => Padding(padding: const EdgeInsets.fromLTRB(14, 18, 14, 4), child: Text(text, style: sans(11.5, c: kMuted)));

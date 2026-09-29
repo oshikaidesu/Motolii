@@ -181,18 +181,6 @@ class _LiveColorInstrumentState extends State<LiveColorInstrument> {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            // what the wheel edits, in words (Classic's title over the wheel)
-            if (edit.target case final target?)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Text(
-                  colorTargetTitle(c, target),
-                  key: const ValueKey('hf-color-target'),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: sans(11, c: kMuted),
-                ),
-              ),
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -207,61 +195,9 @@ class _LiveColorInstrumentState extends State<LiveColorInstrument> {
                       ),
                       _wheel,
                     ),
-                    const SizedBox(height: 8),
-                    SizedBox(
-                      width: wheel,
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          SizedBox(
-                            width: 64,
-                            child: EditableText(
-                              key: const ValueKey('hf-color-hex'),
-                              controller: hex,
-                              focusNode: hexFocus,
-                              style: mono(11, c: N.g82),
-                              cursorColor: N.g82,
-                              backgroundCursorColor: N.g00,
-                              textAlign: TextAlign.center,
-                              onSubmitted: _typed,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          GestureDetector(
-                            key: const ValueKey('hf-eyedropper'),
-                            behavior: HitTestBehavior.opaque,
-                            onTap: () {
-                              focus.requestFocus();
-                              edit.toggleEyedropper();
-                            },
-                            child: GlyphBox(
-                              HG.composite,
-                              size: 13,
-                              color: picking ? N.g95 : kMuted,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    // while armed, what to do next (Classic's hint under the hex)
-                    if (picking)
-                      SizedBox(
-                        width: wheel,
-                        child: Padding(
-                          padding: const EdgeInsets.only(top: 4),
-                          child: Text(
-                            'Click the Stage to pick · Esc cancels',
-                            key: const ValueKey('hf-eyedropper-hint'),
-                            textAlign: TextAlign.center,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: sans(10, c: kMuted),
-                          ),
-                        ),
-                      ),
                   ],
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 8),
                 SizedBox(
                   height: wheel,
                   child: Row(
@@ -269,7 +205,7 @@ class _LiveColorInstrumentState extends State<LiveColorInstrument> {
                       _drag(
                         SizedBox(
                           key: const ValueKey('hf-color-value'),
-                          width: 11,
+                          width: 10,
                           height: wheel,
                           child: CustomPaint(
                             painter: ColorBar(
@@ -286,13 +222,13 @@ class _LiveColorInstrumentState extends State<LiveColorInstrument> {
                         ),
                         (p, {start = false}) => _bar('value', p, start: start),
                       ),
-                      const SizedBox(width: 9),
+                      const SizedBox(width: 4),
                       Opacity(
                         opacity: alpha ? 1 : .4,
                         child: _drag(
                           SizedBox(
                             key: const ValueKey('hf-color-alpha'),
-                            width: 11,
+                            width: 10,
                             height: wheel,
                             child: CustomPaint(
                               painter: ColorBar(1, color, 1.0 - edit.value[3]),
@@ -302,6 +238,52 @@ class _LiveColorInstrumentState extends State<LiveColorInstrument> {
                               _bar('alpha', p, start: start),
                         ),
                       ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                // the readout (Swiss): what the wheel edits in small caps, then its value, both flush left
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (edit.target case final target?)
+                        Text(
+                          colorTargetTitle(c, target).toUpperCase(),
+                          key: const ValueKey('hf-color-target'),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: sans(9, c: N.g56, w: FontWeight.w600, ls: .55),
+                        ),
+                      const SizedBox(height: 6),
+                      Row(children: [
+                        Expanded(
+                          child: EditableText(
+                            key: const ValueKey('hf-color-hex'),
+                            controller: hex,
+                            focusNode: hexFocus,
+                            style: mono(13, c: N.g95),
+                            cursorColor: N.g82,
+                            backgroundCursorColor: N.g00,
+                            onSubmitted: _typed,
+                          ),
+                        ),
+                        GestureDetector(
+                          key: const ValueKey('hf-eyedropper'),
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () {
+                            focus.requestFocus();
+                            edit.toggleEyedropper();
+                          },
+                          child: GlyphBox(HG.composite, size: 12, color: picking ? N.g95 : kMuted),
+                        ),
+                      ]),
+                      // while armed, what to do next
+                      if (picking)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 6),
+                          child: Text('Click the Stage to pick · Esc cancels', key: const ValueKey('hf-eyedropper-hint'), maxLines: 2, style: sans(9.5, c: kMuted)),
+                        ),
                     ],
                   ),
                 ),

@@ -12,19 +12,32 @@ const kShelfPad = 3 * kShelfUnit, kShelfGap = 2 * kShelfUnit;
 
 /// A section's heading: the class read at a glance (sentence weight, not tiny caps) and how many it holds.
 class ShelfHeading extends StatelessWidget {
-  const ShelfHeading(this.text, {super.key, this.count});
+  const ShelfHeading(this.text, {super.key, this.count, this.first = false});
   final String text;
   final int? count;
-  // the same height the tiny caps label took (14 above, 8 below); the weight and the light do the reading
+
+  /// The first section under the strip: the strip's own rule is enough.
+  final bool first;
+  @override
+  Widget build(BuildContext context) => SwissHeading(text, count: count, rule: !first);
+}
+
+/// The Browser's one heading voice (Swiss): a hairline across the body, then small tracked caps at the left and the
+/// count at the right edge in figures of one width.
+class SwissHeading extends StatelessWidget {
+  const SwissHeading(this.text, {super.key, this.count, this.rule = true});
+  final String text;
+  final int? count;
+  final bool rule;
   @override
   Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.fromLTRB(0, 10, 0, 4),
-        child: Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic, children: [
-          Flexible(child: Text(text, softWrap: false, overflow: TextOverflow.ellipsis, style: sans(11, c: N.g95, w: FontWeight.w600, ls: .2))),
-          if (count != null) ...[
-            const SizedBox(width: 6),
-            Text('$count', style: mono(10, c: kMuted)),
-          ],
+        padding: EdgeInsets.only(top: rule ? 12 : 8, bottom: 6),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          if (rule) ...[Container(height: 1, color: N.g15), const SizedBox(height: 5)],
+          Row(children: [
+            Expanded(child: Text(text.toUpperCase(), softWrap: false, overflow: TextOverflow.ellipsis, style: sans(9, c: N.g56, w: FontWeight.w600, ls: .55))),
+            if (count != null) Text('$count', style: mono(9, c: N.g44)),
+          ]),
         ]),
       );
 }

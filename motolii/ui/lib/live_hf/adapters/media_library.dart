@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:flutter/widgets.dart';
@@ -13,9 +14,9 @@ import '../../hf/glyphs.dart';
 import '../../hf/neutral.dart';
 import '../../hf/shell/place.dart' show H;
 
-/// Media as material, on a pinboard: each piece a rounded card at its own proportions (a still or a clip by its width
-/// and height, an HDR plate 2:1, a sound a band for its waveform) in staggered columns, its name under it and one quiet
-/// fact. The shelf's mechanics (picking, carrying, menus, keys) are the seat's.
+/// Media on a pinboard: each piece at its own proportions (a still or clip by its width and height, an HDR plate 2:1, a
+/// sound a band) in staggered columns packed tight (4 px), one line of name under each. The shelf's mechanics (picking,
+/// carrying, menus, keys) are the seat's.
 class MediaLibraryBody extends StatelessWidget {
   const MediaLibraryBody({super.key, required this.sections, required this.shown, required this.items, required this.width});
   final Map<String, List<Thing>> sections;
@@ -34,21 +35,21 @@ class MediaLibraryBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const pad = 10.0, gap = 6.0;
+    const margin = 10.0, gap = 4.0;
+    final body = width - margin * 2;
+    // cards of at least 70 px: three across the default seat, more as it widens
+    final cols = math.max(1, ((body + gap) / (70 + gap)).floor());
+    final colW = (body - gap * (cols - 1)) / cols;
     final seat = BrowserSeatScope.of(context);
-    // cards of at least 68 px: three across the default seat (its body is a little under 288), more as it widens
-    final cols = ((width - pad * 2 + gap) / (68 + gap)).floor().clamp(1, 8);
-    final colW = (width - pad * 2 - gap * (cols - 1)) / cols;
-    // the keys walk the pieces in the order they are listed, section by section
     seat?.shows([for (final e in sections.values) ...e], cols);
     if (colW <= 0) return const SizedBox.shrink();
     return CustomScrollView(
       physics: const ClampingScrollPhysics(),
       slivers: [
         for (final e in sections.entries) ...[
-          if (e.key.isNotEmpty) SliverToBoxAdapter(child: Padding(padding: const EdgeInsets.fromLTRB(pad + 1, 4, pad, 0), child: ShelfHeading(e.key, count: e.value.length))),
+          if (e.key.isNotEmpty) SliverToBoxAdapter(child: Padding(padding: const EdgeInsets.symmetric(horizontal: margin), child: ShelfHeading(e.key, count: e.value.length, first: e.key == sections.keys.first))),
           SliverPadding(
-            padding: EdgeInsets.fromLTRB(pad, e.key.isEmpty ? 10 : 2, pad, 6),
+            padding: EdgeInsets.fromLTRB(margin, e.key.isEmpty ? 8 : 0, margin, 0),
             sliver: SliverToBoxAdapter(child: _Board(things: e.value, items: items, cols: cols, colW: colW, gap: gap)),
           ),
         ],
@@ -89,9 +90,9 @@ class _Board extends StatelessWidget {
   }
 }
 
-const _captionHeight = 27.0;
+const _captionHeight = 14.0;
 
-/// One piece: its picture, rounded, at its own proportions; its name; one quiet fact.
+/// One piece: its picture at its own proportions, and its name.
 class MaterialCard extends StatelessWidget {
   const MaterialCard({super.key, required this.item, required this.name});
   final Map<String, dynamic> item;
@@ -100,33 +101,21 @@ class MaterialCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final missing = item['missing'] == true;
-    Widget face = ClipRRect(borderRadius: BorderRadius.circular(7), child: materialFace(item));
+    Widget face = ClipRRect(borderRadius: BorderRadius.circular(4), child: ColoredBox(color: N.g07, child: materialFace(item)));
     if (missing) face = Opacity(opacity: .4, child: face);
-    final fact = _fact(item);
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       Expanded(child: face),
       SizedBox(
         height: _captionHeight,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(1, 4, 1, 0),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(missing ? 'Missing · $name' : name, maxLines: 1, softWrap: false, overflow: TextOverflow.ellipsis, style: sans(10, c: N.g91, w: FontWeight.w600)),
-            if (fact.isNotEmpty) Text(fact, maxLines: 1, softWrap: false, overflow: TextOverflow.ellipsis, style: sans(8.5, c: N.g51)),
-          ]),
+        child: Align(
+          alignment: Alignment.bottomLeft,
+          child: Text(missing ? 'Missing · $name' : name, maxLines: 1, softWrap: false, overflow: TextOverflow.ellipsis, style: sans(9, c: N.g82, w: FontWeight.w500)),
         ),
       ),
     ]);
   }
 }
 
-/// One short fact under a piece: its size, or its length.
-String _fact(Map<String, dynamic> item) {
-  final facts = item['facts'];
-  final seconds = _seconds(item);
-  if (seconds != null) return _clock(seconds);
-  if (facts is Map && facts['width'] is num) return '${facts['width']} × ${facts['height']}';
-  return ''; // the section heading already says what family it is
-}
 
 /// What the material is, drawn as itself.
 Widget materialFace(Map<String, dynamic> item) => switch ('${item['family']}') {

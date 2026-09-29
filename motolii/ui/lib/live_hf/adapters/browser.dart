@@ -9,7 +9,6 @@ import '../../hf/bp/faces.dart' show QuietFace;
 import '../../hf/shell/menu.dart' show showHfMenu;
 import '../../hf/bp/seat.dart';
 import '../../hf/bp/things.dart';
-import '../../hf/neutral.dart';
 import '../../session/editor_session.dart';
 import 'browser_session.dart';
 import 'browser_shelf.dart';
