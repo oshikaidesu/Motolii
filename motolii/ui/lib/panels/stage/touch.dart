@@ -434,7 +434,7 @@ mixin _StageTouch
       return;
     }
     if (_panning) {
-      setState(() => _pan += event.localPosition - old);
+      _session.panBy(event.localPosition - old, _viewport);
       return;
     }
     final point = _toComp(event.localPosition);

@@ -9,8 +9,8 @@ mixin _StageView on State<StagePanel> {
 
   bool get _userStage => widget.view == 'User';
 
-  double? _zoom;
-  Offset _pan = Offset.zero;
+  /// Where this view looks lives in the StageSession (it outlives the tab); the tab's size is the skin's own.
+  late final StageSession _session = StageSession.of(c, widget.view);
   Size _viewport = Size.zero;
 
   /// The document with the rendered frame laid over it: one copy per
@@ -65,55 +65,22 @@ mixin _StageView on State<StagePanel> {
       ? _toScreen(Offset(numOf(p[0]), numOf(p[1])))
       : null;
 
-  double get _width =>
-      (numOf(_state['width'], 1920)).clamp(1, double.infinity).toDouble();
-  double get _height =>
-      (numOf(_state['height'], 1080)).clamp(1, double.infinity).toDouble();
-  double get _scale =>
-      _zoom ??
-      math.min(
-        math.max(1, _viewport.width - 32) / _width,
-        math.max(1, _viewport.height - 32) / _height,
-      );
-  Offset get _origin =>
-      Offset(
-        (_viewport.width - _width * _scale) / 2,
-        (_viewport.height - _height * _scale) / 2,
-      ) +
-      _pan;
+  double get _width => _session.width;
+  double get _height => _session.height;
+  double get _scale => _session.scaleIn(_viewport);
+  Offset get _origin => _session.originIn(_viewport);
 
-  Offset _toComp(Offset p) => (p - _origin) / _scale;
-  Offset _toScreen(Offset p) => _origin + p * _scale;
+  Offset _toComp(Offset p) => _session.toComp(p, _viewport);
+  Offset _toScreen(Offset p) => _session.toScreen(p, _viewport);
   bool get _shift => HardwareKeyboard.instance.isShiftPressed;
   bool get _add =>
       _shift ||
       HardwareKeyboard.instance.isMetaPressed ||
       HardwareKeyboard.instance.isControlPressed;
 
-  void _fit() {
-    setState(() {
-      _zoom = null;
-      _pan = Offset.zero;
-    });
-    if (_userStage && c.supports('stageView')) {
-      c.command('stageView', {'fit': true});
-    }
-  }
+  void _fit() => _session.fit();
 
-  void _zoomAt(double next, Offset anchor) {
-    final point = _toComp(anchor);
-    final scale = next.clamp(.02, 16.0).toDouble();
-    setState(() {
-      _zoom = scale;
-      _pan =
-          anchor -
-          point * scale -
-          Offset(
-            (_viewport.width - _width * scale) / 2,
-            (_viewport.height - _height * scale) / 2,
-          );
-    });
-  }
+  void _zoomAt(double next, Offset anchor) => _session.zoomAt(next, anchor, _viewport);
 
   void _viewCommand() {
     if (!Visibility.of(context)) return;
@@ -122,10 +89,7 @@ mixin _StageView on State<StagePanel> {
       case 'Fit':
         _fit();
       case 'Actual':
-        setState(() {
-          _zoom = 1;
-          _pan = Offset.zero;
-        });
+        _session.actual();
       case 'In':
         _zoomAt(_scale * 1.2, _viewport.center(Offset.zero));
       case 'Out':

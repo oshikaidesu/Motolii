@@ -28,10 +28,7 @@ mixin _StageChrome
   @override
   void fit() => _fit();
   @override
-  void resetZoom() => setState(() {
-        _zoom = 1;
-        _pan = Offset.zero;
-      });
+  void resetZoom() => _session.actual();
   @override
   void zoomOut() => _zoomAt(((_scale * 100).round() - 1) / 100, _viewport.center(Offset.zero));
   @override
@@ -172,10 +169,7 @@ mixin _StageChrome
                     _button('Fit', _fit),
                     _button(
                       '100%',
-                      () => setState(() {
-                        _zoom = 1;
-                        _pan = Offset.zero;
-                      }),
+                      _session.actual,
                     ),
                     _button(
                       '−',

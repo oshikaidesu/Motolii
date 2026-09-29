@@ -14,6 +14,7 @@ import '../foundation/theme.dart';
 import '../foundation/metrics.dart';
 import '../foundation/glyphs.dart';
 import 'stage/geometry.dart';
+import 'stage_session.dart';
 
 part 'stage/overlay.dart';
 part 'stage/view.dart';
@@ -83,17 +84,23 @@ class _StagePanelState extends State<StagePanel>
         _StageCamera,
         _StageTouch,
         _StageChrome {
+  void _viewChanged() {
+    if (mounted) setState(() {});
+  }
+
   @override
   void initState() {
     super.initState();
     c.viewCommand.addListener(_viewCommand);
     c.runtimeEpoch.addListener(_runtimeChanged);
+    _session.addListener(_viewChanged);
     HardwareKeyboard.instance.addHandler(_heldKey);
   }
 
   @override
   void dispose() {
     HardwareKeyboard.instance.removeHandler(_heldKey);
+    _session.removeListener(_viewChanged);
     if (_dragging) {
       _pending = null;
       final args = _gesture('cancel', _startComp!);
