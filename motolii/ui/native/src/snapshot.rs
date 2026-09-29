@@ -178,15 +178,8 @@ impl EditorRuntime{
             let camera=self.engine.camera_of_scene_layer_in(&view,&scene.layers,id,time).map_err(e)?;
             let projection=crate::doc::core::camera_projection(comp,camera);
             let rotation=projection.rotation.inverse();
-            let depth=crate::doc::core::distance_from_camera(comp,0.0)*camera.distance_scale;
-            let height=depth*(projection.vertical_fov_radians*0.5).tan();let width=height*projection.aspect_ratio;
-            let corners=[glam::vec3(-width,-height,-depth),glam::vec3(width,-height,-depth),glam::vec3(width,height,-depth),glam::vec3(-width,height,-depth)];
+            let corners=box_corners(comp,camera,&screen);
             let eye=projection.eye;
-            let corners:Vec<_>=corners.into_iter().map(|p|{
-                let ray=rotation*p;
-                let t=if ray.z.abs()>1e-6{-eye.z/ray.z}else{-1.0};
-                screen(if t>0.0{eye+ray*t}else{eye+ray})
-            }).collect();
             let display=crate::doc::core::distance_from_camera(comp,0.0)*0.15;
             let fh=display*(projection.vertical_fov_radians*0.5).tan();let fw=fh*projection.aspect_ratio;
             let frustum:Vec<_>=[(-fw,-fh),(fw,-fh),(fw,fh),(-fw,fh)].into_iter().map(|(x,y)|screen(eye+rotation*glam::vec3(x,y,-display))).collect();
@@ -198,6 +191,15 @@ impl EditorRuntime{
             if seen>=2||pyramid{gizmos.push(json!({"id":id.0,"points":corners,"eye":eye,"frustum":frustum,"up":up,"target":screen(camera.target(comp)),"authorable":authorable&&seen==4,"center":camera.center,"zoom":camera.zoom,"roll":camera.roll_degrees}));}
         }
         Ok(json!(gizmos))
+    }
+
+    /// 掴んだ箱: 解決済みのカメラと、4 角(Stage の comp 画像 px、全部見えている時だけ)。
+    pub(crate) fn camera_box(&self,id:LayerId)->Result<(crate::doc::core::ResolvedCamera,Option<[[f32;2];4]>),String>{
+        let view=self.doc.view();let time=self.time()?;let comp=view.composition().map_err(e)?.ok_or("No composition")?.spec();
+        let scene=self.engine.frame_graph_cached_scene(&view,time).ok_or("FrameGraph editor scene is not prepared")?;
+        let camera=self.engine.camera_of_scene_layer_in(&view,&scene.layers,id,time).map_err(e)?;
+        let corners=box_corners(comp,camera,&self.observer_screen()?);
+        Ok((camera,corners.iter().copied().collect::<Option<Vec<_>>>().and_then(|c|c.try_into().ok())))
     }
 
     /// 出力(Camera)で見た枠。anchor など view を問わない用途。
@@ -589,3 +591,17 @@ mod camera_target_tests {
 
 #[cfg(test)]
 mod camera_view_cage_tests;
+
+/// 箱(Boxcam)の 4 角: カメラの画角が comp 面(z = 0)に落ちる所を、観測者の画面へ。描く所と掴む所が同じ写像を使う。
+fn box_corners(comp:crate::doc::core::CompSpec,camera:crate::doc::core::ResolvedCamera,screen:&impl Fn(glam::Vec3)->Option<[f32;2]>)->Vec<Option<[f32;2]>>{
+    let projection=crate::doc::core::camera_projection(comp,camera);
+    let rotation=projection.rotation.inverse();
+    let depth=crate::doc::core::distance_from_camera(comp,0.0)*camera.distance_scale;
+    let height=depth*(projection.vertical_fov_radians*0.5).tan();let width=height*projection.aspect_ratio;
+    let eye=projection.eye;
+    [glam::vec3(-width,-height,-depth),glam::vec3(width,-height,-depth),glam::vec3(width,height,-depth),glam::vec3(-width,height,-depth)].into_iter().map(|p|{
+        let ray=rotation*p;
+        let t=if ray.z.abs()>1e-6{-eye.z/ray.z}else{-1.0};
+        screen(if t>0.0{eye+ray*t}else{eye+ray})
+    }).collect()
+}

@@ -1,7 +1,7 @@
 pub mod functions; pub mod timeline_edit; pub mod placement_edit; pub mod clipboard; pub mod keyframe_edit; pub mod ease; pub mod fixture; pub mod color; pub mod create; pub mod keymap;
 pub mod text;
 pub mod blend_preview; pub mod thumbnail; pub mod ease_kinds; pub mod sequence_delays; pub mod members;
-pub mod stage;
+pub mod stage; pub mod boxcam;
 pub mod gizmo3d;
 
 pub mod notes;

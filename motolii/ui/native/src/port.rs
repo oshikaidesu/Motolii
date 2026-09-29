@@ -315,6 +315,9 @@ impl EditorRuntime{
         match string(j,"phase")?{
             // hover。掴まないので Document には触らず、ギズモの絵だけが変わる。
             "hover"=>{self.viewer.stage_pointer=serde_json::from_value(j["point"].clone()).ok();self.viewer.stage_view=seen;}
+            "begin" if matches!(j["mode"].as_str(),Some("camera"|"extent"))=>{let interaction=self.preview_tag.take();self.cancel_preview();self.preview_tag=interaction;
+                let drag=self.boxcam_drag(j,seen)?;self.stage_drag=Some(editor::stage::DragSession::Boxcam(drag));
+            }
             "begin"=>{let interaction=self.preview_tag.take();self.cancel_preview();self.preview_tag=interaction;let ids=ids(&j["ids"])?;let start=serde_json::from_value(j["start"].clone()).map_err(e)?;
                 let at=self.time()?;
                 let projection=ids.last().and_then(|id|self.doc.view().attrs(*id).ok().flatten()).map_or(LayerProjection::ThreeD,|a|a.projection);
@@ -331,6 +334,28 @@ impl EditorRuntime{
             "cancel"=>self.cancel_preview(),
             _=>return Err("Unknown Stage gesture phase".into()),
         }Ok(())
+    }
+    /// 箱(Boxcam)の取っ手か作業範囲の辺を掴む。camera: `ids` の 1 台と `handle`(center / zoom / roll)。extent: `handle` が辺(top / right / bottom / left)。
+    /// 選択は変えない(箱の中心を掴んで選ぶのは skin の press)。
+    fn boxcam_drag(&self,j:&J,seen:crate::viewer::View)->Result<editor::boxcam::BoxcamDrag,String>{
+        use editor::boxcam::{BoxcamGrip,BoxcamHandle};
+        let start:[f64;2]=serde_json::from_value(j["start"].clone()).map_err(e)?;
+        let at=self.time()?;
+        let scale=if seen==crate::viewer::View::User{self.viewer.user_camera.distance_scale as f64}else{1.0};
+        let grip=if j["mode"]=="extent"{
+            let extent=motolii_render::picture::resolve::camera::resolve_stage_extent(&self.doc.view(),at).map_err(e)?;
+            let layer=extent.layer.ok_or("No working area")?;
+            let side=match string(j,"handle")?{"top"=>0,"right"=>1,"bottom"=>2,"left"=>3,_=>return Err("Unknown working-area side".into())};
+            BoxcamGrip::Extent{layer,side,margins:extent.margins.map(f64::from)}
+        }else{
+            let layer=*ids(&j["ids"])?.last().ok_or("Missing camera")?;
+            if let Some(reason)=editor::functions::lens::edit_rejection(&self.doc.view(),layer).map_err(e)?{return Err(reason.into())}
+            let (camera,corners)=self.camera_box(layer)?;
+            let corners=corners.ok_or("The camera box is not fully in view")?;
+            let centroid=corners.iter().fold([0.0,0.0],|a,c|[a[0]+c[0] as f64/4.0,a[1]+c[1] as f64/4.0]);
+            BoxcamGrip::Camera{layer,handle:BoxcamHandle::parse(string(j,"handle")?)?,centroid,center:camera.center.map(f64::from),zoom:camera.zoom as f64,roll:camera.roll_degrees as f64}
+        };
+        Ok(editor::boxcam::BoxcamDrag{grip,start,scale,at,revision:self.doc.revision()})
     }
     fn accept_paste(&mut self,result:editor::clipboard::PasteResult){match result{
         editor::clipboard::PasteResult::Layers(ids)=>{self.pick(ids);self.viewer.selected_keys.clear();}

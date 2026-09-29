@@ -569,6 +569,7 @@ fn translation_map(fit: &Fit, geom: &SelGeom, parent: glam::Affine3A, start: [f6
 pub(crate) enum DragSession {
     Cage(CageDrag),
     Spatial(crate::editor::gizmo3d::SpatialDrag),
+    Boxcam(crate::editor::boxcam::BoxcamDrag),
 }
 impl DragSession {
     /// `projection_camera` は 2D・2.5D を置くカメラ: Stage は既定、Camera は作中(描いた絵と同じ写像で掴む)。
@@ -586,6 +587,7 @@ impl DragSession {
         match self {
             Self::Cage(drag)=>drag.edits(doc,point,shift,alt,animate),
             Self::Spatial(drag)=>drag.edits(doc,point,shift,animate),
+            Self::Boxcam(drag)=>drag.edits(doc,point,animate),
         }
     }
 }

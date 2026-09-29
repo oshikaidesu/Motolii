@@ -99,7 +99,6 @@ class StageSession extends ChangeNotifier {
   Map<String, dynamic> get observer => EditorSession.map(state['observer']);
   bool get front => !userStage || observer['front'] != false;
   bool get home => !userStage || observer['home'] != false;
-  double get observerScale => userStage ? numOf(observer['scale'], 1) : 1;
   Map<String, dynamic>? get extent => userStage && observer['extent'] is Map ? EditorSession.map(observer['extent']) : null;
   bool get extending => c.deskWork.value['stageExtend'] == true;
 
@@ -156,11 +155,6 @@ class StageSession extends ChangeNotifier {
   /// The marquee, in composition coordinates.
   Rect? marquee;
 
-  /// A camera box or working-area edge being carried.
-  Map<String, dynamic>? _cameraDrag;
-  String _cameraHandle = 'center';
-  int _extentSide = 0;
-
   bool get busy => gesture != null || _finishing;
 
   /// A press on [target] at [comp].
@@ -178,14 +172,10 @@ class StageSession extends ChangeNotifier {
       case StPan():
         gesture = StGesture.pan;
       case StExtentEdge(:final side):
-        _cameraDrag = extent;
-        _extentSide = side;
-        gesture = StGesture.extent;
+        _carry(StGesture.extent, 'extent', const [], const ['top', 'right', 'bottom', 'left'][side], comp, mods);
       case StCameraHandle(:final camera, :final handle):
         if (handle == 'center') c.command('select', {'ids': [camera['id']]});
-        _cameraDrag = camera;
-        _cameraHandle = handle;
-        gesture = StGesture.camera;
+        _carry(StGesture.camera, 'camera', [(camera['id'] as num).toInt()], handle, comp, mods);
       case StHandle(:final handle):
         _begin(comp, c.selectedIds, handle, mods);
       case StLayer(:final id):
@@ -219,10 +209,8 @@ class StageSession extends ChangeNotifier {
       case StGesture.pending when beyondSlop && _ids.isNotEmpty && c.supports('stageGesture'):
         _begin(_start!, _ids, 'body', mods, viewScale: viewScale);
         _update(comp, mods, viewScale);
-      case StGesture.layer:
+      case StGesture.layer || StGesture.camera || StGesture.extent:
         _update(comp, mods, viewScale);
-      case StGesture.camera || StGesture.extent:
-        _carryCamera(comp);
       default:
         break;
     }
@@ -244,9 +232,6 @@ class StageSession extends ChangeNotifier {
         gesture = null;
       case StGesture.pan:
         gesture = null;
-      case StGesture.camera || StGesture.extent:
-        _finishCamera(false);
-        return;
       case StGesture.marquee:
         final box = marquee!;
         if (c.supports('select')) {
@@ -261,10 +246,6 @@ class StageSession extends ChangeNotifier {
   }
 
   void cancel(Offset comp, StMods mods, double viewScale) {
-    if (gesture == StGesture.camera || gesture == StGesture.extent) {
-      _finishCamera(true);
-      return;
-    }
     _finish(true, comp, mods, viewScale);
   }
 
@@ -281,7 +262,18 @@ class StageSession extends ChangeNotifier {
     _drained = c.command('stageGesture', _gestureArgs('begin', comp, mods, viewScale));
   }
 
-  Map<String, dynamic> _gestureArgs(String phase, Offset point, StMods mods, double viewScale) => {
+  /// A camera box handle or a working-area edge, carried by the host like any Stage gesture: the host turns the
+  /// pointer into the camera's or the area's values. The view's scale is left as it is.
+  void _carry(StGesture kind, String mode, List<int> ids, String handle, Offset comp, StMods mods) {
+    if (!c.supports('stageGesture')) return;
+    gesture = kind;
+    _ids = ids;
+    _handle = handle;
+    _mode = mode;
+    _drained = c.command('stageGesture', _gestureArgs('begin', comp, mods, null));
+  }
+
+  Map<String, dynamic> _gestureArgs(String phase, Offset point, StMods mods, double? viewScale) => {
         'phase': phase,
         'view': view,
         'mode': _mode,
@@ -289,7 +281,7 @@ class StageSession extends ChangeNotifier {
         'start': [_start!.dx, _start!.dy],
         'point': [point.dx, point.dy],
         'handle': _handle,
-        'viewScale': viewScale,
+        if (viewScale != null) 'viewScale': viewScale,
         'shift': mods.shift,
         'alt': mods.alt,
         // Cmd while moving: snap to other boxes' edges and centres (After Effects)
@@ -319,7 +311,7 @@ class StageSession extends ChangeNotifier {
   Future<void> _finish(bool cancel, Offset comp, StMods mods, double viewScale) async {
     if (_finishing) return;
     _finishing = true;
-    final wasDragging = gesture == StGesture.layer;
+    final wasDragging = gesture == StGesture.layer || gesture == StGesture.camera || gesture == StGesture.extent;
     if (cancel) _pending = null;
     try {
       if (wasDragging) {
@@ -371,72 +363,6 @@ class StageSession extends ChangeNotifier {
     } finally {
       _orbitSending = false;
     }
-  }
-
-  // ---- the camera box and the working area (Boxcam) ----------------------------------------------------------------
-  List<Map<String, dynamic>>? _cameraPending;
-  bool _cameraSending = false;
-  Future<void> _sendCamera() async {
-    if (_cameraSending) return;
-    _cameraSending = true;
-    try {
-      while (_cameraPending != null) {
-        final edits = _cameraPending!;
-        _cameraPending = null;
-        await c.command('previewProperties', {'edits': edits});
-      }
-    } finally {
-      _cameraSending = false;
-    }
-  }
-
-  void _carryCamera(Offset comp) {
-    final start = _start!;
-    if (gesture == StGesture.extent) {
-      final ext = _cameraDrag!;
-      final delta = (comp - start) * observerScale;
-      // top 0, right 1, bottom 2, left 3 -> margins [left, top, right, bottom]
-      final (index, outward) = switch (_extentSide) { 0 => (1, -delta.dy), 1 => (2, delta.dx), 2 => (3, delta.dy), _ => (0, -delta.dx) };
-      final margins = ext['margins'] as List;
-      _cameraPending = [
-        {'layer': ext['layer'], 'property': ['stage.left', 'stage.top', 'stage.right', 'stage.bottom'][index], 'value': math.max(0, numOf(margins[index]) + outward)},
-      ];
-      _sendCamera();
-      return;
-    }
-    final camera = _cameraDrag!;
-    final box = cameraBox(camera);
-    if (box.length != 4) return;
-    final centreOf = box.reduce((a, b) => a + b) / 4;
-    final edits = <Map<String, dynamic>>[];
-    switch (_cameraHandle) {
-      case 'roll':
-        final delta = (math.atan2(comp.dy - centreOf.dy, comp.dx - centreOf.dx) - math.atan2(start.dy - centreOf.dy, start.dx - centreOf.dx)) * 180 / math.pi;
-        edits.add({'layer': camera['id'], 'property': 'camera.roll', 'value': numOf(camera['roll']) - delta});
-      case 'center':
-        final delta = (comp - start) * observerScale;
-        final c0 = camera['center'] as List;
-        edits.add({'layer': camera['id'], 'property': 'camera.center', 'value': [numOf(c0[0]) + delta.dx, numOf(c0[1]) + delta.dy]});
-      default:
-        final ratio = (comp - centreOf).distance / math.max(1e-6, (start - centreOf).distance);
-        edits.add({'layer': camera['id'], 'property': 'camera.zoom', 'value': numOf(camera['zoom'], 1) / math.max(ratio, .01)});
-    }
-    _cameraPending = edits;
-    _sendCamera();
-  }
-
-  Future<void> _finishCamera(bool cancel) async {
-    _cameraDrag = null;
-    _finishing = true;
-    if (cancel) _cameraPending = null;
-    while (_cameraSending) {
-      await Future<void>.delayed(Duration.zero);
-    }
-    await c.command(cancel ? 'cancelPreview' : 'commitPreview');
-    gesture = null;
-    _start = null;
-    _finishing = false;
-    notifyListeners();
   }
 
   /// The working area switched on (a Stage layer is made when there is none) or off.
