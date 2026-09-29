@@ -277,13 +277,13 @@ class _LiveTimelineState extends State<LiveTimeline> {
         });
         final theme = EditorTheme.of(context);
         return DragTarget<Map<String, dynamic>>(
-          onWillAcceptWithDetails: (d) => d.data['asset'] != null && c.supports('placeAsset'),
+          onWillAcceptWithDetails: (d) => d.data['asset'] != null && c.supports(d.data['catalog'] == true ? 'placeCatalogAsset' : 'placeAsset'),
           onMove: (d) {
             final p = (context.findRenderObject() as RenderBox).globalToLocal(d.offset);
             s.aimAsset(row: rowAt(p.dy), frame: p.dx >= labelW ? frameAt(p.dx) : null);
           },
           onLeave: (_) => s.leaveAsset(),
-          onAcceptWithDetails: (d) => s.acceptAsset(d.data['asset']),
+          onAcceptWithDetails: (d) => s.acceptAsset(d.data['asset'], catalog: d.data['catalog'] == true),
           builder: (context, _, __) => Focus(
             focusNode: focus,
             onKeyEvent: _key,

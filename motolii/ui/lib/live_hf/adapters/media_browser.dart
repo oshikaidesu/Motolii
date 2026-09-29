@@ -1,8 +1,11 @@
+import 'dart:math' as math;
+
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
 import '../../hf/bp/things.dart';
 import '../../hf/metrics.dart';
+import '../../hf/shell/menu.dart' show showHfMenu;
 import '../../hf/neutral.dart';
 import 'browser_item.dart';
 import 'media_fluid.dart';
@@ -23,7 +26,7 @@ enum BrowserView { list, thumbnail, explore }
 typedef ExploreBuilder = Widget Function(BuildContext context, List<BrowserItem> items, String? selected, ValueChanged<String> onTap, ValueChanged<String>? onOpen);
 
 class MediaBrowser extends StatefulWidget {
-  const MediaBrowser({super.key, required this.source, this.controls, this.faces, this.explore, this.sort = 'name', this.descending = false, this.onSort, this.onReveal, this.onPlace, this.initial = BrowserView.thumbnail, this.startOn, this.startOpen = false, this.exploreLayout, this.exploreRepaint, this.exploreNote, this.exploreBar, this.holding = const {}, this.startColumn = 60, this.fluidUpTo = 300});
+  const MediaBrowser({super.key, required this.source, this.controls, this.faces, this.explore, this.sort = 'name', this.descending = false, this.onSort, this.onReveal, this.onPlace, this.menuOf, this.onMenu, this.onRemove, this.carry, this.initial = BrowserView.thumbnail, this.startOn, this.startOpen = false, this.exploreLayout, this.exploreRepaint, this.exploreNote, this.exploreBar, this.holding = const {}, this.startColumn = 60, this.fluidUpTo = 300});
   final ResultSource source;
 
   /// Where Explore puts the faces (for the fluid board). Without it Explore is `explore` alone, and the views swap.
@@ -63,6 +66,17 @@ class MediaBrowser extends StatefulWidget {
 
   /// Uses the asset in the work (only when the host can): the work admits it as its own then, and browsing alone never does.
   final void Function(BrowserItem item)? onPlace;
+
+  /// The right-click menu of an item (what the person clicked on, and everything picked): rows to show, and what to do with
+  /// the one chosen. The caller owns what each row means; the browser only picks, shows and hands back.
+  final List<({String value, String label, bool enabled})> Function(BrowserItem item, List<BrowserItem> picked)? menuOf;
+  final void Function(String action, BrowserItem item, List<BrowserItem> picked)? onMenu;
+
+  /// Delete / Backspace over the picked items (the caller decides what it may remove: never a source file).
+  final void Function(List<BrowserItem> picked)? onRemove;
+
+  /// What dragging an item carries to a drop target such as the Timeline, or null when it cannot be carried.
+  final Map<String, dynamic>? Function(BrowserItem item)? carry;
   final BrowserView initial;
 
   @override
@@ -83,6 +97,11 @@ class MediaBrowserState extends State<MediaBrowser> {
     super.dispose();
   }
 
+  /// Everything picked; [selected] is the last pick (the one the preview and the ring's focus read).
+  final picked = <String>{};
+  String? _anchor;
+  double _width = 320;
+
   BrowserItem? _item(List<BrowserItem> items) {
     for (final i in items) {
       if (i.id == selected) return i;
@@ -90,39 +109,174 @@ class MediaBrowserState extends State<MediaBrowser> {
     return null;
   }
 
+  List<BrowserItem> _pickedItems(List<BrowserItem> items) => [for (final i in items) if (picked.contains(i.id)) i];
+
+  /// A click picks one; with Cmd/Ctrl it adds or drops one; with Shift it picks the run from the anchor (in the order shown).
   void choose(String id) {
     focus.requestFocus();
-    setState(() => selected = id);
+    final kb = HardwareKeyboard.instance;
+    final items = widget.source.items;
+    setState(() {
+      if (kb.isMetaPressed || kb.isControlPressed) {
+        picked.contains(id) ? picked.remove(id) : picked.add(id);
+        _anchor = id;
+        selected = picked.contains(id) ? id : (picked.isEmpty ? null : picked.last);
+      } else if (kb.isShiftPressed && _anchor != null) {
+        final a = items.indexWhere((i) => i.id == _anchor), b = items.indexWhere((i) => i.id == id);
+        if (a >= 0 && b >= 0) {
+          picked
+            ..clear()
+            ..addAll(items.sublist(math.min(a, b), math.max(a, b) + 1).map((i) => i.id));
+          selected = id;
+        }
+      } else {
+        picked
+          ..clear()
+          ..add(id);
+        selected = id;
+        _anchor = id;
+      }
+    });
+  }
+
+  /// Picks these and nothing else (something imported, a caller's own choice).
+  void pick(Iterable<String> ids) => setState(() {
+        picked
+          ..clear()
+          ..addAll(ids);
+        selected = picked.isEmpty ? null : picked.last;
+        _anchor = selected;
+      });
+
+  /// Double-click is what the old shelf made it: use the asset (place it). Where the caller cannot place, it opens the preview.
+  void useAsset(String id) {
+    final item = widget.source.items.where((i) => i.id == id).firstOrNull;
+    if (item != null && widget.onPlace != null) {
+      _to(id);
+      widget.onPlace!(item);
+    } else {
+      open(id);
+    }
   }
 
   void open(String id) => setState(() {
+        picked
+          ..clear()
+          ..add(id);
         selected = id;
+        _anchor = id;
         preview = true;
       });
 
-  void step(List<BrowserItem> items, int by) {
+  void _to(String id) => setState(() {
+        picked
+          ..clear()
+          ..add(id);
+        selected = id;
+        _anchor = id;
+      });
+
+  /// One step by the arrows. Thumbnail is a masonry, so up and down go to the nearest face above or below by where it is.
+  void step(List<BrowserItem> items, {int by = 0, int rows = 0}) {
     if (items.isEmpty) return;
     final at = items.indexWhere((i) => i.id == selected);
-    setState(() => selected = items[(at + by).clamp(0, items.length - 1)].id);
+    if (rows != 0 && view == BrowserView.thumbnail) {
+      final frame = FluidBoard.thumbnail(items, _width, thumbMin);
+      final here = at < 0 ? null : frame.faces[items[at].id];
+      if (here == null) return _to(items[rows > 0 ? 0 : items.length - 1].id);
+      String? best;
+      var bestScore = double.infinity;
+      for (final e in frame.faces.entries) {
+        final dy = (e.value.center.dy - here.center.dy) * rows;
+        if (dy <= 1) continue;
+        final score = dy + 2 * (e.value.center.dx - here.center.dx).abs();
+        if (score < bestScore) {
+          bestScore = score;
+          best = e.key;
+        }
+      }
+      if (best != null) _to(best);
+      return;
+    }
+    _to(items[(at + (by != 0 ? by : rows)).clamp(0, items.length - 1)].id);
   }
 
+  bool get _typing => FocusManager.instance.primaryFocus?.context?.widget is EditableText;
+
   KeyEventResult _key(List<BrowserItem> items, KeyEvent e) {
-    if (e is! KeyDownEvent) return KeyEventResult.ignored;
+    if (e is! KeyDownEvent || _typing) return KeyEventResult.ignored;
     final k = e.logicalKey;
-    if (k == LogicalKeyboardKey.escape && preview) {
-      setState(() => preview = false);
+    final kb = HardwareKeyboard.instance;
+    if (k == LogicalKeyboardKey.escape) {
+      if (preview) {
+        setState(() => preview = false);
+      } else if (picked.isNotEmpty) {
+        setState(() {
+          picked.clear();
+          selected = null;
+        });
+      } else {
+        return KeyEventResult.ignored;
+      }
+      return KeyEventResult.handled;
+    }
+    if (k == LogicalKeyboardKey.keyA && (kb.isMetaPressed || kb.isControlPressed)) {
+      setState(() {
+        picked
+          ..clear()
+          ..addAll(items.map((i) => i.id));
+        selected = items.isEmpty ? null : items.last.id;
+      });
       return KeyEventResult.handled;
     }
     if (k == LogicalKeyboardKey.space && selected != null) {
       setState(() => preview = !preview);
       return KeyEventResult.handled;
     }
-    final by = view == BrowserView.list ? (k == LogicalKeyboardKey.arrowDown ? 1 : k == LogicalKeyboardKey.arrowUp ? -1 : 0) : (k == LogicalKeyboardKey.arrowRight ? 1 : k == LogicalKeyboardKey.arrowLeft ? -1 : 0);
-    if (by != 0) {
-      step(items, by);
+    if ((k == LogicalKeyboardKey.enter || k == LogicalKeyboardKey.numpadEnter) && selected != null && widget.onPlace != null) {
+      widget.onPlace!(_item(items) ?? items.first);
+      return KeyEventResult.handled;
+    }
+    if ((k == LogicalKeyboardKey.delete || k == LogicalKeyboardKey.backspace) && picked.isNotEmpty && widget.onRemove != null) {
+      widget.onRemove!(_pickedItems(items));
+      return KeyEventResult.handled;
+    }
+    if (k == LogicalKeyboardKey.home && items.isNotEmpty) {
+      _to(items.first.id);
+      return KeyEventResult.handled;
+    }
+    if (k == LogicalKeyboardKey.end && items.isNotEmpty) {
+      _to(items.last.id);
+      return KeyEventResult.handled;
+    }
+    final side = k == LogicalKeyboardKey.arrowRight ? 1 : (k == LogicalKeyboardKey.arrowLeft ? -1 : 0);
+    final down = k == LogicalKeyboardKey.arrowDown ? 1 : (k == LogicalKeyboardKey.arrowUp ? -1 : 0);
+    if (view == BrowserView.list && down != 0) {
+      step(items, by: down);
+      return KeyEventResult.handled;
+    }
+    if (view != BrowserView.list && (side != 0 || down != 0)) {
+      if (view == BrowserView.thumbnail && side == 0) {
+        step(items, rows: down);
+      } else {
+        step(items, by: side != 0 ? side : down);
+      }
       return KeyEventResult.handled;
     }
     return KeyEventResult.ignored;
+  }
+
+  Future<void> _menu(String id, Offset at) async {
+    final items = widget.source.items;
+    final item = items.where((i) => i.id == id).firstOrNull;
+    if (item == null || widget.menuOf == null) return;
+    // right-clicking something not picked picks it alone; on a pick, the whole pick stays
+    if (!picked.contains(id)) _to(id);
+    focus.requestFocus();
+    final rows = widget.menuOf!(item, _pickedItems(items));
+    if (rows.isEmpty || !mounted) return;
+    final chosen = await showHfMenu<String>(context, Rect.fromLTWH(at.dx, at.dy, 180, 0), [('', item.name), for (final r in rows) (r.value, r.label)], info: const {''}, disabled: {for (final r in rows) if (!r.enabled) r.value});
+    if (chosen != null && chosen.isNotEmpty) widget.onMenu?.call(chosen, item, _pickedItems(widget.source.items));
   }
 
   @override
@@ -138,6 +292,7 @@ class MediaBrowserState extends State<MediaBrowser> {
               preview = widget.startOpen;
             }
           }
+          picked.removeWhere((id) => !items.any((i) => i.id == id));
           final chosen = _item(items);
           final showPreview = preview && chosen != null;
           return Focus(
@@ -166,7 +321,9 @@ class MediaBrowserState extends State<MediaBrowser> {
     if (items.isEmpty) return Padding(padding: const EdgeInsets.all(9), child: Text('Nothing matches.', style: Dn.label(N.g56)));
     final fluid = items.length <= widget.fluidUpTo && (view != BrowserView.explore || widget.exploreLayout != null);
     if (fluid) {
-      return LayoutBuilder(builder: (context, box) => Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      return LayoutBuilder(builder: (context, box) {
+        _width = box.maxWidth;
+        return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             AnimatedSize(
               duration: const Duration(milliseconds: 160),
               curve: Curves.easeOutCubic,
@@ -176,10 +333,11 @@ class MediaBrowserState extends State<MediaBrowser> {
             Expanded(
               child: ListenableBuilder(
                 listenable: widget.exploreRepaint ?? const _Never(),
-                builder: (context, _) => FluidBoard(items: items, selected: selected, view: view.name, onTap: choose, onOpen: open, explore: widget.exploreLayout, faces: widget.faces, holding: widget.holding, minColumn: thumbMin, revealOn: preview),
+                builder: (context, _) => FluidBoard(items: items, selected: selected, picked: picked, carry: widget.carry, onMenu: widget.menuOf == null ? null : _menu, view: view.name, onTap: choose, onOpen: useAsset, explore: widget.exploreLayout, faces: widget.faces, holding: widget.holding, minColumn: thumbMin, revealOn: preview),
               ),
             ),
-          ]));
+          ]);
+      });
     }
     switch (view) {
       case BrowserView.list:

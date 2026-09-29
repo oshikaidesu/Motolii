@@ -70,7 +70,7 @@ void main() {
     }
   });
 
-  testWidgets('a pointer merely over a clip changes nothing but a hairline; dragging across it asks for the frame', (t) async {
+  testWidgets('a pointer merely over a clip changes nothing but a hairline; pressing its scrub track asks for the frame', (t) async {
     final asked = <double>[];
     final clip = BrowserItem(id: 'clip', name: 'clip.mp4', path: '/nowhere/clip.mp4', kind: 'video', mime: 'video/mp4', width: 1280, height: 720, seconds: 8);
     final faces = _Faces(asked);
@@ -88,9 +88,10 @@ void main() {
     await t.pump(const Duration(milliseconds: 50));
     expect(asked, isEmpty, reason: 'hover alone does not scrub');
     expect(t.getRect(find.byKey(const ValueKey('face-clip'))), face, reason: 'and does not move or resize the face');
-    // pressed and dragged: the frame under the pointer
-    await mouse.down(Offset(face.left + face.width * .25, face.center.dy));
-    await mouse.moveTo(Offset(face.left + face.width * .75, face.center.dy));
+    // pressed on the scrub track (the strip along its foot) and dragged: the frame under the pointer
+    final foot = face.bottom - 4;
+    await mouse.down(Offset(face.left + face.width * .25, foot));
+    await mouse.moveTo(Offset(face.left + face.width * .75, foot));
     await t.pump();
     await t.pump(const Duration(milliseconds: 50));
     expect(asked, isNotEmpty);

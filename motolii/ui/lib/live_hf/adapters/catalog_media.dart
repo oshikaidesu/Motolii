@@ -8,6 +8,8 @@ import 'browser_item.dart';
 import 'media_browser.dart';
 import 'media_fluid.dart';
 import 'media_preview.dart';
+import '../../session/editor_session.dart' show EditorSession;
+import '../../session/media_actions.dart' show mediaAct, mediaActions, revealLabel;
 import 'project_source.dart';
 
 /// The catalog's controls over the Thumbnail view: SOURCES (which folders), TYPES (what), a search (which). Where, What
@@ -35,10 +37,32 @@ class CatalogMedia extends StatefulWidget {
 class _CatalogMediaState extends State<CatalogMedia> {
   CatalogSession get session => widget.session;
   late bool project = widget.startProject;
+  final _browser = GlobalKey<MediaBrowserState>();
+  List<String> _seenImport = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    session.c.importedAssets.addListener(_imported);
+  }
+
+  /// Something was just imported (a button, a drop): the work's own assets are shown and the new ones picked, as the old
+  /// shelf did.
+  void _imported() {
+    final ids = session.c.importedAssets.value;
+    if (ids.isEmpty || identical(ids, _seenImport)) return;
+    _seenImport = ids;
+    setState(() => project = true);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _browser.currentState?.pick([for (final id in ids) '${ProjectSource.prefix}$id']));
+  }
+
+  EditorSession get _c => session.c;
+
   late final ProjectSource _project = ProjectSource(session.c, kinds: () => session.kinds, text: () => session.text);
 
   @override
   void dispose() {
+    session.c.importedAssets.removeListener(_imported);
     _project.dispose();
     super.dispose();
   }
@@ -50,7 +74,9 @@ class _CatalogMediaState extends State<CatalogMedia> {
         listenable: Listenable.merge([session, session.c.document]),
         builder: (context, _) {
           final chosen = session.chosenSources;
-          return MediaBrowser(
+          return Stack(fit: StackFit.passthrough, children: [
+            MediaBrowser(
+            key: _browser,
             source: project ? _project : session,
             faces: _Faces(session),
             explore: widget.explore,
@@ -62,13 +88,11 @@ class _CatalogMediaState extends State<CatalogMedia> {
             onReveal: (item) {
               if (item.path.isNotEmpty) session.c.native('reveal', {'path': item.path});
             },
-            onPlace: (item) {
-              if (item.id.startsWith(ProjectSource.prefix)) {
-                session.c.command('placeAsset', {'id': item.id.substring(ProjectSource.prefix.length)});
-              } else if (session.c.supports('placeCatalogAsset')) {
-                session.c.command('placeCatalogAsset', {'id': item.id});
-              }
-            },
+            menuOf: _menuOf,
+            onMenu: _onMenu,
+            onRemove: _onRemove,
+            carry: _carry,
+            onPlace: _place,
             initial: widget.initial,
             startOn: widget.startOn,
             startOpen: widget.startOpen,
@@ -77,6 +101,7 @@ class _CatalogMediaState extends State<CatalogMedia> {
             onSort: (key) => session.choose(sort: key, descending: session.sort == key ? !session.descending : false),
             controls: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
               _Row(label: 'Sources', children: [
+                if (session.c.supports('import')) _Chip('＋ Import…', false, () => session.c.importFiles()),
                 _Chip('This project', project, () => setState(() => project = true)),
                 _Chip('All', !project && chosen == null, () {
                   setState(() => project = false);
@@ -102,9 +127,76 @@ class _CatalogMediaState extends State<CatalogMedia> {
               ),
               if (session.failure != null) Padding(padding: const EdgeInsets.all(9), child: Text('${session.failure}', style: Dn.label(N.g69))),
             ]),
-          );
+            ),
+            // while files are carried over the window the Browser says where they go; it takes no pointer
+            Positioned.fill(
+              child: IgnorePointer(
+                child: ListenableBuilder(
+                  listenable: session.c.dragging,
+                  builder: (context, _) => AnimatedOpacity(
+                    opacity: session.c.dragging.value ? 1 : 0,
+                    duration: const Duration(milliseconds: 120),
+                    child: Container(
+                      key: const ValueKey('media-drop-hint'),
+                      margin: const EdgeInsets.all(6),
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(color: N.veil, border: Border.all(color: N.g95, width: 1.4), borderRadius: BorderRadius.circular(4.5)),
+                      child: Text('Drop to import', style: sans(11, c: N.g95)),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ]);
         },
       );
+
+  // ---- what the person can do to what they picked: the old Media shelf's own operations, over both kinds of item --------
+
+  bool _mine(BrowserItem i) => i.id.startsWith(ProjectSource.prefix);
+
+  void _place(BrowserItem item) {
+    if (_mine(item)) {
+      _c.command('placeAsset', {'id': item.id.substring(ProjectSource.prefix.length)});
+    } else if (_c.supports('placeCatalogAsset')) {
+      _c.command('placeCatalogAsset', {'id': item.id});
+    }
+  }
+
+  /// A work's asset carries the document's own menu; a catalog asset only what does nothing to any file.
+  List<({String value, String label, bool enabled})> _menuOf(BrowserItem item, List<BrowserItem> picked) {
+    final raw = _project.raw(item.id);
+    final place = (value: 'place', label: 'Place', enabled: !item.missing && _c.supports(raw != null ? 'placeAsset' : 'placeCatalogAsset'));
+    if (raw != null) return [place, ...mediaActions(_c, raw)];
+    final has = item.path.isNotEmpty && !item.missing;
+    return [
+      place,
+      if (has) (value: 'reveal', label: revealLabel, enabled: true),
+      if (has) (value: 'open', label: 'Open with default app', enabled: true),
+      if (has && item.mime.startsWith('image/')) (value: 'palette', label: 'Extract palette', enabled: true),
+      if (item.path.isNotEmpty) (value: 'copyPath', label: 'Copy path', enabled: true),
+    ];
+  }
+
+  void _onMenu(String action, BrowserItem item, List<BrowserItem> picked) {
+    if (action == 'place') return _place(item);
+    final raw = _project.raw(item.id);
+    mediaAct(_c, action, raw ?? {'path': item.path, 'mime': item.mime, 'name': item.name}, id: raw?['id']);
+  }
+
+  /// Delete over the pick removes the work's own unused assets from its library (the host keeps the used ones). A catalog
+  /// asset has nothing to remove here, and no source file is ever deleted by the Browser.
+  void _onRemove(List<BrowserItem> picked) {
+    final ids = [for (final i in picked) if (_project.raw(i.id) case final raw?) raw['id']];
+    if (ids.isNotEmpty && _c.supports('removeAsset')) _c.command('removeAsset', {'ids': ids});
+  }
+
+  Map<String, dynamic>? _carry(BrowserItem item) {
+    if (item.missing) return null;
+    final raw = _project.raw(item.id);
+    if (raw != null) return _c.supports('placeAsset') ? {'asset': '${raw['id']}', 'name': item.name} : null;
+    return _c.supports('placeCatalogAsset') ? {'asset': item.id, 'name': item.name, 'catalog': true} : null;
+  }
 }
 
 /// The preview's questions, answered by the owner through the session.

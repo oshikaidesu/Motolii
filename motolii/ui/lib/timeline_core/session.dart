@@ -424,11 +424,12 @@ class TimelineSession extends ChangeNotifier {
     notifyListeners();
   }
 
-  void acceptAsset(Object asset) {
+  /// [catalog]: the id is a Media Catalog asset's (the work admits it as it is placed), not an asset the work already owns.
+  void acceptAsset(Object asset, {bool catalog = false}) {
     final d = drop, f = assetFrame;
     leaveAsset();
     if (d == null) return;
-    c.command('placeAsset', {'id': asset, 'target': d.target, 'placement': d.placement, if (f != null) 'start': math.max(0, f.round())});
+    c.command(catalog ? 'placeCatalogAsset' : 'placeAsset', {'id': asset, 'target': d.target, 'placement': d.placement, if (f != null) 'start': math.max(0, f.round())});
   }
 
   // ---- keys ------------------------------------------------------------------------------------------------------

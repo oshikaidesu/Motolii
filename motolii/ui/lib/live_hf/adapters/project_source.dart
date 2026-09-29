@@ -32,6 +32,16 @@ class ProjectSource extends ChangeNotifier implements ResultSource {
         _ => 'image',
       };
 
+  /// The document's own map for an item (what the media menu reads: path, mime, used, missing), by the item's id.
+  Map<String, dynamic>? raw(String id) {
+    if (!id.startsWith(prefix)) return null;
+    final key = id.substring(prefix.length);
+    for (final a in EditorSession.maps(c.state['assets'])) {
+      if ('${a['id']}' == key) return a;
+    }
+    return null;
+  }
+
   @override
   List<BrowserItem> get items {
     num? n(Object? v) => v is num ? v : null;
@@ -59,6 +69,7 @@ class ProjectSource extends ChangeNotifier implements ResultSource {
         channels: n(facts['channels'])?.toInt(),
         faceKey: '$prefix${a['id']}',
         missing: a['missing'] == true,
+        used: a['used'] == true,
         thumbnail: a['thumbnail'] as String?,
         peaks: a['peaks'],
       ));

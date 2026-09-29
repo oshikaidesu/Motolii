@@ -11,7 +11,7 @@ import '../../hf/bp/seat.dart';
 import '../../hf/bp/things.dart';
 import '../../session/editor_session.dart';
 import 'browser_session.dart';
-import 'browser_shelf.dart';
+import 'media_seat.dart';
 import 'colors.dart';
 
 /// The Browser as a skin over [BrowserSession]: it lays out the reference faces (browserFace), dresses tiles with what
@@ -90,7 +90,7 @@ class _LiveBrowserState extends State<LiveBrowser> {
           onFontCreate: (font) => s.applyFont(font, create: s.dressing == null),
           onFontFavorite: s.toggleFavoriteFont,
           fontController: c,
-          media: tab == 4 ? LiveBrowserShelf(controller: c, name: 'Media', user: s.user('Media')) : null,
+          media: tab == 4 ? MediaSeat(c: c) : null,
           onTab: widget.fixedTab == null ? (i) => setState(() => tab = i) : null,
         ),
       ),

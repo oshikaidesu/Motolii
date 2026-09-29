@@ -23,6 +23,7 @@ class BrowserItem {
     this.faceKey = '',
     this.fingerprint,
     this.missing = false,
+    this.used = false,
     this.thumbnail,
     this.peaks,
   });
@@ -37,6 +38,9 @@ class BrowserItem {
   final int? size, mtimeNs, width, height, sampleRate, channels;
   final double? seconds;
   final bool missing;
+
+  /// A layer of the work uses this asset (only a work's own asset can be used; the host then keeps it in the library).
+  final bool used;
 
   /// A picture for a clip or an environment: a data URI (an image is drawn from its own file).
   final String? thumbnail;
@@ -77,7 +81,7 @@ class BrowserItem {
         if (thumbnail != null) 'thumbnail': thumbnail,
         if (peaks != null) 'peaks': peaks,
         'missing': missing,
-        'used': false,
+        'used': used,
       };
 
   String get typeWord => switch (kind) { 'image' => 'Image', 'video' => 'Video', 'audio' => 'Audio', 'model' => '3D', 'environment' => 'HDR', _ => kind };

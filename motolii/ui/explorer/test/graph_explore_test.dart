@@ -3,10 +3,12 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:motolii_explorer/paper/graph_explore.dart';
 import 'package:motolii_stage5/live_hf/adapters/browser_item.dart';
+import 'package:motolii_stage5/live_hf/adapters/media_fluid.dart';
 
 BrowserItem item(String id, String rel, {String source = 'S', String kind = 'image', String? fp}) => BrowserItem(id: id, name: id, path: '/r/$rel', kind: kind, mime: 'x/y', source: source, rel: rel, fingerprint: fp);
 
 void main() {
+  mapInALens();
   final items = [
     item('a', 'x/a.png'), item('b', 'x/b.png'), item('c', 'y/c.png'), item('d', 'y/d.png'),
     item('e', 'e.wav', kind: 'audio'), item('f', 'x/f.glb', kind: 'model', fp: 'same'), item('g', 'y/g.glb', kind: 'model', fp: 'same'),
@@ -58,5 +60,31 @@ void main() {
   test('sound and models are as placed as pictures: no colour decides anything', () {
     final frame = graphLayout(GraphChoice(), () => {})(items, 'a', seat);
     expect(frame.faces.keys.toSet(), {for (final i in items) i.id});
+  });
+}
+
+void mapInALens() {
+  final items = [for (var i = 0; i < 8; i++) item('n$i', 'f${i % 3}/n$i.png')];
+  Widget lens(double width, GraphChoice choice) => Directionality(
+        textDirection: TextDirection.ltr,
+        child: Align(alignment: Alignment.topLeft, child: SizedBox(width: width, height: 500, child: FluidBoard(items: items, selected: 'n0', view: 'explore', onTap: (_) {}, explore: graphLayout(choice, () => {})))),
+      );
+
+  testWidgets('narrowing the Browser changes the lens, not the map: same world positions, same camera', (t) async {
+    final choice = GraphChoice();
+    await t.pumpWidget(lens(420, choice));
+    await t.pumpAndSettle();
+    final camera = t.widget<InteractiveViewer>(find.byType(InteractiveViewer)).transformationController!;
+    final before = camera.value.clone();
+    final wide = graphLayout(choice, () => {})(items, 'n0', const Size(420, 500));
+    await t.pumpWidget(lens(210, choice));
+    await t.pumpAndSettle();
+    final narrow = graphLayout(choice, () => {})(items, 'n0', const Size(210, 500));
+    expect(narrow.faces, wide.faces, reason: 'not one node moved in the world');
+    expect(narrow.content, wide.content);
+    expect(camera.value, before, reason: 'and the camera was not refitted to the smaller seat');
+    await t.pumpWidget(lens(420, choice));
+    await t.pumpAndSettle();
+    expect(graphLayout(choice, () => {})(items, 'n0', const Size(420, 500)).faces, wide.faces, reason: 'widened again: the same map');
   });
 }

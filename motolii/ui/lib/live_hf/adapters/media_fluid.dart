@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
+import 'package:flutter/gestures.dart' show kPrimaryButton;
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 
@@ -25,8 +26,17 @@ typedef ExploreLayout = Frame Function(List<BrowserItem> items, String? selected
 /// change of projection moves the same faces (the selection, the identity and the scroll context stay). List lays them in
 /// rows with their facts beside, Thumbnail packs them at their own shapes with a name under each, Explore is the caller's.
 class FluidBoard extends StatefulWidget {
-  const FluidBoard({super.key, required this.items, required this.selected, required this.view, required this.onTap, this.onOpen, this.explore, this.faces, this.holding = const {}, this.minColumn = defaultColumn, this.revealOn = false});
+  const FluidBoard({super.key, required this.items, required this.selected, required this.view, required this.onTap, this.onOpen, this.explore, this.faces, this.holding = const {}, this.minColumn = defaultColumn, this.revealOn = false, this.picked = const {}, this.carry, this.onMenu});
   final List<BrowserItem> items;
+
+  /// Everything picked (the chosen one, `selected`, is the last of them): each carries the ring.
+  final Set<String> picked;
+
+  /// What dragging a face carries to a drop target (the Timeline), or null when it cannot be carried.
+  final Map<String, dynamic>? Function(BrowserItem item)? carry;
+
+  /// A right-click on a face or its row, at a global position.
+  final void Function(String id, Offset at)? onMenu;
 
   /// The narrowest a Thumbnail column may be (the person's size choice: wider columns, bigger faces).
   final double minColumn;
@@ -158,7 +168,9 @@ class _FluidBoardState extends State<FluidBoard> {
   Widget build(BuildContext context) => LayoutBuilder(builder: (context, box) {
         _viewport = Size(box.maxWidth, box.maxHeight);
         final frame = _frame(_viewport);
-        final content = Size(math.max(frame.content.width, box.maxWidth), math.max(frame.content.height, box.maxHeight));
+        // Thumbnail and List lay out to the seat's width (responsive layout). Explore's graph is a world with its own size: the
+        // seat is only the lens on it, so its size never enters the map.
+        final content = frame.graph != null ? frame.content : Size(math.max(frame.content.width, box.maxWidth), math.max(frame.content.height, box.maxHeight));
         final move = _instant ? Duration.zero : _move;
         const curve = _curve;
         final graph = frame.graph;
@@ -206,11 +218,11 @@ class _FluidBoardState extends State<FluidBoard> {
                       instant: _instant,
                       child: GestureDetector(
                         behavior: HitTestBehavior.opaque,
-                        onTap: () => widget.onTap(it.id),
                         onDoubleTap: widget.onOpen == null ? null : () => widget.onOpen!(it.id),
+                        onSecondaryTapDown: widget.onMenu == null ? null : (d) => widget.onMenu!(it.id, d.globalPosition),
                         // each label is laid out at the width it was made for (the box is still growing or shrinking, and an
                         // outgoing label keeps its own): clipped, never squeezed
-                        child: ClipRect(
+                        child: _press(it.id, ClipRect(
                           child: AnimatedSwitcher(
                             duration: const Duration(milliseconds: 120),
                             reverseDuration: Duration.zero,
@@ -226,7 +238,7 @@ class _FluidBoardState extends State<FluidBoard> {
                               ),
                             ),
                           ),
-                        ),
+                        )),
                       ),
                     ),
                   if (frame.faces[it.id] != null)
@@ -236,13 +248,16 @@ class _FluidBoardState extends State<FluidBoard> {
                       instant: _instant,
                       child: GestureDetector(
                         behavior: HitTestBehavior.opaque,
-                        onTap: () => widget.onTap(it.id),
                         onDoubleTap: widget.onOpen == null ? null : () => widget.onOpen!(it.id),
-                        child: MouseRegion(
+                        onSecondaryTapDown: widget.onMenu == null ? null : (d) => widget.onMenu!(it.id, d.globalPosition),
+                        child: _press(it.id, MouseRegion(
                           onEnter: graph == null ? null : (_) => setState(() => _hot = it.id),
                           onExit: graph == null ? null : (_) => setState(() => _hot = null),
-                          child: Opacity(opacity: dim(it.id) ? .28 : 1, child: _Face(it, selected: it.id == widget.selected, marked: widget.view != 'list', faces: widget.faces, held: widget.holding[it.id], short: widget.view == 'explore' && it.id != widget.selected)),
-                        ),
+                          child: Opacity(
+                            opacity: dim(it.id) ? .28 : 1,
+                            child: _carried(it, frame.faces[it.id]!, _Face(it, selected: widget.picked.contains(it.id) || it.id == widget.selected, marked: widget.view != 'list', faces: widget.faces, held: widget.holding[it.id], short: widget.view == 'explore' && it.id != widget.selected)),
+                          ),
+                        )),
                       ),
                     ),
                 ],
@@ -251,8 +266,9 @@ class _FluidBoardState extends State<FluidBoard> {
           );
         // the graph is a canvas to look round (pan and zoom are the person's own moves); every other projection scrolls
         if (graph != null) {
-          // the whole graph in view to begin with (the layout may be larger than the seat); pan and zoom are then the person's
-          final fit = (frame.content.width, frame.content.height, box.maxWidth, box.maxHeight, graph.edges.length);
+          // the camera starts with the whole map in view, once per map (a different graph, not a different seat): resizing the
+          // Browser only changes how much of the same map is seen, and the person's own pan and zoom are never taken back
+          final fit = (frame.content.width, frame.content.height, graph.edges.length, graph.hubs.length);
           if (_fitted != fit) {
             _fitted = fit;
             final scale = math.min(1.0, math.min(box.maxWidth / content.width, box.maxHeight / content.height));
@@ -263,6 +279,25 @@ class _FluidBoardState extends State<FluidBoard> {
             ? InteractiveViewer(transformationController: _view, constrained: false, minScale: .2, maxScale: 3.5, boundaryMargin: const EdgeInsets.all(600), child: board)
             : SingleChildScrollView(controller: scroll, physics: const ClampingScrollPhysics(), scrollDirection: Axis.vertical, child: board);
       });
+
+  /// Choosing happens on the press itself, whatever else the face answers to: a tap handler beside a double-tap one waits out
+  /// the double-tap window, and a click that lands late feels like lag. Only the primary button chooses (the other opens a menu).
+  Widget _press(String id, Widget child) => Listener(onPointerDown: (e) {
+        if (e.buttons & kPrimaryButton != 0) widget.onTap(id);
+      }, child: child);
+
+  /// A face that can be carried (to the Timeline) is dragged as itself; one that cannot is only the face.
+  Widget _carried(BrowserItem it, Rect rect, Widget face) {
+    final data = widget.carry?.call(it);
+    if (data == null) return face;
+    return Draggable<Map<String, dynamic>>(
+      data: data,
+      dragAnchorStrategy: pointerDragAnchorStrategy,
+      feedback: IgnorePointer(child: Opacity(opacity: .85, child: SizedBox(width: math.max(48.0, math.min(rect.width, 120.0)), height: math.max(32.0, math.min(rect.height, 90.0)), child: ClipRRect(borderRadius: BorderRadius.circular(3), child: materialFace(it.shelf))))),
+      childWhenDragging: Opacity(opacity: .4, child: face),
+      child: face,
+    );
+  }
 
   Widget _label(BrowserItem it, double width) {
     final on = it.id == widget.selected;
@@ -351,35 +386,27 @@ class _Face extends StatefulWidget {
 }
 
 class _FaceState extends State<_Face> {
-  bool hover = false; // a pointer is over it: a colour/border change only, nothing moves or is cropped
-  Offset? at; // while a pointer is dragged across a clip, sound or model: 0..1 across the tile
-  Offset? _down; // where the button went down (a click is not a drag)
-  String? frame; // a clip's frame under the drag
+  bool hover = false; // a pointer is over it: a hairline only, nothing moves or is cropped
+  double? at; // 0..1 along a clip's scrub track while a pointer is on it
+  String? frame; // the clip's frame at that place
   bool _busy = false;
   double? _wanted;
 
   BrowserItem get item => widget.item;
 
-  /// What can be worked by dragging over it (a still has nothing more to show than its face).
-  bool get _draggable => item.kind == 'video' || item.kind == 'audio' || item.kind == 'model';
-
   @override
   void initState() {
     super.initState();
-    if (widget.held != null) _at(widget.held!);
+    if (widget.held != null) _scrub(widget.held!.dx);
   }
 
-  void _drag(PointerEvent e, Size size) {
-    if (size.width <= 0 || size.height <= 0 || _down == null || !_draggable) return;
-    if (at == null && (e.localPosition - _down!).distance < 4) return;
-    _at(Offset((e.localPosition.dx / size.width).clamp(0.0, 1.0), (e.localPosition.dy / size.height).clamp(0.0, 1.0)));
-  }
-
-  void _at(Offset p) {
-    setState(() => at = p);
+  /// A clip answers a pointer pressed on its scrub track (the strip along its foot) by showing the frame there; the rest of
+  /// the face is for choosing and carrying, so dragging it never scrubs.
+  void _scrub(double p) {
+    setState(() => at = p.clamp(0.0, 1.0));
     final faces = widget.faces, seconds = item.seconds;
-    if (item.kind == 'video' && faces != null && seconds != null) {
-      _wanted = p.dx * seconds;
+    if (faces != null && seconds != null) {
+      _wanted = at! * seconds;
       if (_busy) return;
       _busy = true;
       () async {
@@ -395,7 +422,6 @@ class _FaceState extends State<_Face> {
   }
 
   void _release() {
-    _down = null;
     if (at == null) return;
     setState(() {
       at = null;
@@ -405,48 +431,45 @@ class _FaceState extends State<_Face> {
   }
 
   Widget _content() {
-    final p = at;
     final base = materialFace(item.shelf);
-    if (p == null) {
-      if (item.kind == 'model' && widget.faces != null) return ModelFace(path: item.path, fallback: base);
-      // a clip carries its scrub track at rest (faint), so it reads as something to run a pointer along
-      if (item.kind == 'video') return Stack(fit: StackFit.expand, children: [base, Align(alignment: Alignment.bottomCenter, child: Container(height: 2, color: const Color(0x40FFFFFF)))]);
-      return base;
-    }
-    switch (item.kind) {
-      case 'video':
-        final bytes = frame == null ? null : _decode(frame!);
-        return Stack(fit: StackFit.expand, children: [
-          bytes == null ? base : Image.memory(bytes, fit: BoxFit.cover, gaplessPlayback: true),
-          Align(alignment: Alignment.bottomLeft, child: Container(height: 4, color: const Color(0x99000000), alignment: Alignment.centerLeft, child: FractionallySizedBox(widthFactor: p.dx, child: Container(height: 3, color: N.g100)))),
-        ]);
-      case 'audio':
-        return Stack(fit: StackFit.expand, children: [base, Align(alignment: Alignment(p.dx * 2 - 1, 0), child: Container(width: 1.5, color: N.g100))]);
-      case 'model':
-        return ModelFace(path: item.path, fallback: base, hoverYaw: p.dx);
-      default:
-        return base;
-    }
+    if (item.kind == 'model' && widget.faces != null) return ModelFace(path: item.path, fallback: base);
+    if (item.kind != 'video') return base;
+    final bytes = frame == null ? null : _decode(frame!);
+    return Stack(fit: StackFit.expand, children: [
+      bytes == null ? base : Image.memory(bytes, fit: BoxFit.cover, gaplessPlayback: true),
+      // the scrub track at rest (faint), and its position while a pointer is on it
+      Align(alignment: Alignment.bottomLeft, child: Container(height: at == null ? 2 : 4, color: at == null ? const Color(0x40FFFFFF) : const Color(0x99000000), alignment: Alignment.centerLeft, child: at == null ? null : FractionallySizedBox(widthFactor: at, child: Container(height: 3, color: N.g100)))),
+    ]);
   }
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(builder: (context, box) => MouseRegion(
-        cursor: _draggable ? SystemMouseCursors.grab : MouseCursor.defer,
         onEnter: (_) => setState(() => hover = true),
         onExit: (_) => setState(() => hover = false),
-        child: Listener(
-          onPointerDown: (e) => _down = e.localPosition,
-          onPointerMove: (e) => _drag(e, box.biggest),
-          onPointerUp: (_) => _release(),
-          onPointerCancel: (_) => _release(),
-          child: Stack(fit: StackFit.expand, children: [
-            ClipRRect(borderRadius: BorderRadius.circular(3), child: ColoredBox(color: N.g13, child: _content())),
-            if (widget.marked && item.mark.isNotEmpty && at == null) Positioned(left: 2.5, top: 2.5, child: Container(padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1.5), decoration: BoxDecoration(color: N.veil, borderRadius: BorderRadius.circular(2)), child: Text(widget.short ? item.mark.split(' ').first : item.mark, softWrap: false, style: Dn.micro(N.g95).copyWith(fontSize: 8.5)))),
-            // hover: a hairline only (the picture is neither scaled nor cropped, and nothing moves)
-            if (hover && !widget.selected) IgnorePointer(child: DecoratedBox(decoration: BoxDecoration(borderRadius: BorderRadius.circular(3), border: Border.all(color: N.g69, width: 1)))),
-            if (widget.selected) const IgnorePointer(child: _Ring()),
-          ]),
-        ),
+        child: Stack(fit: StackFit.expand, children: [
+          ClipRRect(borderRadius: BorderRadius.circular(3), child: ColoredBox(color: N.g13, child: _content())),
+          if (widget.marked && item.mark.isNotEmpty && at == null) Positioned(left: 2.5, top: 2.5, child: Container(padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1.5), decoration: BoxDecoration(color: N.veil, borderRadius: BorderRadius.circular(2)), child: Text(widget.short ? item.mark.split(' ').first : item.mark, softWrap: false, style: Dn.micro(N.g95).copyWith(fontSize: 8.5)))),
+          if (item.used && !item.missing && box.maxWidth > 30) Positioned(right: 3, top: 3, child: Container(width: 5, height: 5, decoration: BoxDecoration(color: N.g95, shape: BoxShape.circle, border: Border.all(color: N.g07.withValues(alpha: .5))))),
+          if (item.missing) Positioned(right: 3, top: 3, child: Container(padding: const EdgeInsets.symmetric(horizontal: 3), decoration: BoxDecoration(color: const Color(0xFFFFD166), borderRadius: BorderRadius.circular(2)), child: Text('!', style: Dn.micro(N.g00).copyWith(fontSize: 9, fontWeight: FontWeight.w700)))),
+          // hover: a hairline only (the picture is neither scaled nor cropped, and nothing moves)
+          if (hover && !widget.selected) IgnorePointer(child: DecoratedBox(decoration: BoxDecoration(borderRadius: BorderRadius.circular(3), border: Border.all(color: N.g69, width: 1)))),
+          if (widget.selected) const IgnorePointer(child: _Ring()),
+          if (item.kind == 'video' && box.maxWidth > 40 && box.maxHeight > 24)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              height: 12,
+              child: Listener(
+                behavior: HitTestBehavior.opaque,
+                onPointerDown: (e) => _scrub(e.localPosition.dx / box.maxWidth),
+                onPointerMove: (e) => _scrub(e.localPosition.dx / box.maxWidth),
+                onPointerUp: (_) => _release(),
+                onPointerCancel: (_) => _release(),
+                child: const MouseRegion(cursor: SystemMouseCursors.resizeLeftRight),
+              ),
+            ),
+        ]),
       ));
 }
 
