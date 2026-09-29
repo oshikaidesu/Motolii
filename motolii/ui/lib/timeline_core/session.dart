@@ -475,6 +475,8 @@ class TimelineSession extends ChangeNotifier {
       showLanes(row, all: value == 'lanes:all');
     } else if (value.startsWith('freeze:') && id != null) {
       c.command('freeze', {'layer': id, 'enabled': value == 'freeze:on'});
+    } else if (value == 'delete' && id != null) {
+      c.command('delete', {'layers': true});
     } else if (!value.contains(':')) {
       c.command(value);
     }

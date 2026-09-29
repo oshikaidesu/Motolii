@@ -218,6 +218,8 @@ impl EditorRuntime{
                 if self.viewer.selected_keys.is_empty(){let ids=self.selected_required()?.to_vec();let copies=editor::timeline_edit::duplicate_layers(&mut self.doc,&ids).map_err(e)?;self.pick(copies);}
                 else{let c=editor::clipboard::Clipboard::default();c.copy_keys(&self.doc,&self.viewer.selected_keys).map_err(e)?;let fps=editor::keyframe_edit::document_fps(&self.doc).map_err(e)?.as_f64();let at=self.viewer.selected_keys.iter().map(|k|(k.at_sec*fps).round()as i64).max().unwrap_or(self.viewer.frame).saturating_add(1);let result=c.paste(&mut self.doc,None,at).map_err(e)?;self.accept_paste(result);}
             }
+            // `layers`: the layer row's Delete means the chosen layers, even with keys chosen too
+            "delete" if j["layers"]==true=>{self.viewer.selected_keys.clear();self.delete_selection()?;}
             "delete"=>self.delete_selection()?,
             "group"=>{let ids=self.selected_required()?.to_vec();let group=self.doc.group_layers(&ids).map_err(e)?.ok_or("No group created")?;self.pick(vec![group]);self.viewer.selected_keys.clear();}
             "ungroup"=>{let ids=self.selected_required()?.to_vec();let children=self.doc.ungroup_layers(&ids).map_err(e)?;if children.is_empty(){return Err("Select a Group".into())}self.pick(children);self.viewer.selected_keys.clear();}

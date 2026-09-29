@@ -165,3 +165,16 @@ fn library_items_leave_together(){
     assert_eq!(rt.doc.history_depth().0,before+1,"one step");
     let _=std::fs::remove_dir_all(&dir);
 }
+
+/// Delete from a layer row's menu deletes the chosen layers, even when keys are chosen as well.
+#[test]
+fn a_row_delete_takes_the_layers(){
+    let mut rt=EditorRuntime::open("").unwrap();
+    rt.request(json!({"op":"create","kind":"rectangle"})).unwrap();
+    let id=rt.viewer.selected().unwrap();
+    rt.request(json!({"op":"toggleKey","layer":id.0,"property":"opacity"})).unwrap();
+    rt.request(json!({"op":"select","ids":[id.0],"keys":[{"layer":id.0,"property":"opacity","frame":0}]})).unwrap();
+    assert!(!rt.viewer.selected_keys.is_empty());
+    rt.request(json!({"op":"delete","layers":true})).unwrap();
+    assert!(!rt.doc.view().has_layer(id),"the layer went, not only its key");
+}
