@@ -18,6 +18,7 @@ import 'package:motolii_stage5/session/editor_session.dart';
 import 'package:widgetbook/widgetbook.dart';
 
 import '../paper/explore_view.dart';
+import '../paper/filmstrip.dart';
 
 import '../story.dart';
 
@@ -137,6 +138,7 @@ final catalogStories = <Story>[
   Story('Browser catalog, preview clip', Scene('night-sky.rrd', inputs: _registerFixtureSources), (c) => _CatalogHost(c, startOn: 'coast-drift.mp4', startOpen: true), width: 420, height: 800),
   Story('Browser catalog, preview model', Scene('night-sky.rrd', inputs: _registerFixtureSources), (c) => _CatalogHost(c, startOn: 'Camera_01.glb', startOpen: true), width: 420, height: 800),
   Story('Browser catalog, preview sound wide', Scene('night-sky.rrd', inputs: _registerFixtureSources), (c) => _CatalogHost(c, startOn: 'drum-loop.wav', startOpen: true), width: 640, height: 500),
+  Story('Browser catalog, fluid filmstrip', Scene('night-sky.rrd', inputs: _registerFixtureSources), (c) => FluidFilmstrip(c), width: 1020, height: 860),
   Story('Browser catalog, folders', Scene('night-sky.rrd', inputs: _registerNestedSources), (c) => _CatalogHost(c, view: BrowserView.list, startSource: 'Models'), width: 420, height: 700),
   Story('Browser catalog, list', Scene('night-sky.rrd', inputs: _registerFixtureSources), (c) => _CatalogHost(c, view: BrowserView.list, startOn: 'afterglow.jpg'), width: 420, height: 700),
   Story('Browser catalog, explore', Scene('night-sky.rrd', inputs: _registerFixtureSources), (c) => _CatalogHost(c, view: BrowserView.explore, startOn: 'afterglow.jpg'), width: 420, height: 700),

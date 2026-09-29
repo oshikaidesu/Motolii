@@ -126,7 +126,12 @@ class _SearchState extends State<_Search> {
   }
 
   @override
-  Widget build(BuildContext context) => EditableText(
+  Widget build(BuildContext context) => Stack(alignment: Alignment.centerLeft, children: [
+        ListenableBuilder(listenable: controller, builder: (_, __) => controller.text.isEmpty ? Text('Search assets', style: Dn.label(N.g44)) : const SizedBox.shrink()),
+        _field(),
+      ]);
+
+  Widget _field() => EditableText(
         controller: controller,
         focusNode: focus,
         style: Dn.name(N.g95),

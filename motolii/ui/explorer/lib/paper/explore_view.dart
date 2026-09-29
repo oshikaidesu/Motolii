@@ -35,41 +35,6 @@ void _wantColours(List<BrowserItem> items) {
   }
 }
 
-/// The chosen asset in the middle, the rest in rings round it, nearest colour first (what has no colour goes outermost).
-Frame exploreLayout(List<BrowserItem> items, String? selected, Size viewport) {
-  _wantColours(items);
-  final centre = items.firstWhere((i) => i.id == selected, orElse: () => items.first);
-  final around = [for (final i in items) if (i.id != centre.id) i];
-  final c0 = _colours[centre.id];
-  double rank(BrowserItem i) => (c0 == null || _colours[i.id] == null) ? 9 : _distance(c0, _colours[i.id]!);
-  around.sort((a, b) => rank(a).compareTo(rank(b)));
-  const node = 46.0, step = 62.0, first = 66.0, big = 96.0;
-  final centres = <String, Offset>{};
-  var ring = 0, index = 0;
-  while (index < around.length) {
-    final members = around.skip(index).take(6 + ring * 6).toList();
-    index += members.length;
-    members.sort((a, b) => (_colours[a.id]?.hue ?? 0).compareTo(_colours[b.id]?.hue ?? 0));
-    final radius = first + ring * step;
-    for (final (k, m) in members.indexed) {
-      final angle = -math.pi / 2 + (k + (ring.isOdd ? .5 : 0)) * 2 * math.pi / members.length;
-      centres[m.id] = Offset(math.cos(angle) * radius, math.sin(angle) * radius);
-    }
-    ring++;
-  }
-  final reach = (first + math.max(0, ring - 1) * step + node) + 12;
-  final w = math.max(viewport.width, reach * 2), h = math.max(viewport.height, reach * 2);
-  final faces = <String, Rect>{};
-  for (final i in items) {
-    final base = i.id == centre.id ? big : node;
-    final a = i.aspect;
-    final fw = a >= 1 ? base : base * a, fh = a >= 1 ? base / a : base;
-    final c = Offset(w / 2, h / 2) + (i.id == centre.id ? Offset.zero : centres[i.id]!);
-    faces[i.id] = Rect.fromCenter(center: c, width: fw, height: fh);
-  }
-  return (faces: faces, labels: const <String, Rect>{}, content: Size(w, h));
-}
-
 Future<HSLColor?> _measure(BrowserItem it) async {
   Uint8List? bytes;
   final t = it.thumbnail;
@@ -107,6 +72,57 @@ double _distance(HSLColor a, HSLColor b) {
   return math.sqrt(math.pow(dh * w * 1.6, 2) + math.pow(a.lightness - b.lightness, 2) + math.pow((a.saturation - b.saturation) * .6, 2));
 }
 
+/// The chosen asset in the middle, the rest in rings round it, nearest colour first (what has no colour goes outermost).
+/// The rings stay inside the seat's width (a face never falls off the side); what does not fit on a ring stands in rows
+/// below the last one, so the space grows downward, where the seat scrolls.
+Frame exploreLayout(List<BrowserItem> items, String? selected, Size viewport) {
+  _wantColours(items);
+  final centre = items.firstWhere((i) => i.id == selected, orElse: () => items.first);
+  final around = [for (final i in items) if (i.id != centre.id) i];
+  final c0 = _colours[centre.id];
+  double rank(BrowserItem i) => (c0 == null || _colours[i.id] == null) ? 9 : _distance(c0, _colours[i.id]!);
+  around.sort((a, b) => rank(a).compareTo(rank(b)));
+  const node = 40.0, gap = 4.0, big = 88.0, margin = 8.0;
+  final halfW = viewport.width / 2;
+  final r1 = big / 2 + node / 2 + 8;
+  final rings = <List<BrowserItem>>[];
+  final radii = <double>[];
+  var index = 0;
+  for (var k = 0;; k++) {
+    final r = r1 + k * (node + gap + 2);
+    if (r + node / 2 + margin > halfW || index >= around.length) break;
+    final cap = math.max(4, (2 * math.pi * r / (node + gap)).floor());
+    rings.add(around.skip(index).take(cap).toList());
+    radii.add(r);
+    index += rings.last.length;
+  }
+  final reach = radii.isEmpty ? big / 2 : radii.last + node / 2;
+  final cx = viewport.width / 2, cy = margin + reach;
+  final faces = <String, Rect>{};
+  Rect at(BrowserItem i, Offset c, double base) {
+    final a = i.aspect;
+    return Rect.fromCenter(center: c, width: a >= 1 ? base : base * a, height: a >= 1 ? base / a : base);
+  }
+
+  faces[centre.id] = at(centre, Offset(cx, cy), big);
+  for (final (k, members) in rings.indexed) {
+    final sorted = [...members]..sort((a, b) => (_colours[a.id]?.hue ?? 0).compareTo(_colours[b.id]?.hue ?? 0));
+    for (final (n, m) in sorted.indexed) {
+      final angle = -math.pi / 2 + (n + (k.isOdd ? .5 : 0)) * 2 * math.pi / sorted.length;
+      faces[m.id] = at(m, Offset(cx + math.cos(angle) * radii[k], cy + math.sin(angle) * radii[k]), node);
+    }
+  }
+  // the rest, in rows under the rings
+  final rest = around.skip(index).toList();
+  final cols = math.max(1, ((viewport.width - margin * 2 + gap) / (node + gap)).floor());
+  final top = cy + reach + node / 2 + 14;
+  for (final (n, m) in rest.indexed) {
+    faces[m.id] = at(m, Offset(margin + (n % cols) * (node + gap) + node / 2, top + (n ~/ cols) * (node + gap) + node / 2), node);
+  }
+  final bottom = rest.isEmpty ? cy + reach + margin : top + ((rest.length - 1) ~/ cols + 1) * (node + gap) + margin;
+  return (faces: faces, labels: const <String, Rect>{}, content: Size(viewport.width, math.max(viewport.height, bottom)));
+}
+
 Widget exploreView(BuildContext context, List<BrowserItem> items, String? selected, ValueChanged<String> onTap, ValueChanged<String>? onOpen) => _Explore(items: items, selected: selected, onTap: onTap, onOpen: onOpen);
 
 class _Explore extends StatefulWidget {
@@ -121,112 +137,44 @@ class _Explore extends StatefulWidget {
 
 class _ExploreState extends State<_Explore> {
   @override
-  void initState() {
-    super.initState();
-    _measureAll();
-  }
-
-  @override
-  void didUpdateWidget(_Explore old) {
-    super.didUpdateWidget(old);
-    _measureAll();
-  }
-
-  void _measureAll() {
-    for (final it in widget.items) {
-      final key = '${it.id}:${it.thumbnail?.length}';
-      if (_colours.containsKey(it.id) && _colours[it.id] != null) continue;
-      if (!_asked.add(key)) continue;
-      _measure(it).then((c) {
-        if (c != null) {
-          _colours[it.id] = c;
-          if (mounted) setState(() {});
-        }
-      });
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final items = widget.items;
-    final centre = items.firstWhere((i) => i.id == widget.selected, orElse: () => items.first);
-    final around = [for (final i in items) if (i.id != centre.id) i];
-    final c0 = _colours[centre.id];
-    // near by colour first; what has no colour of its own goes last
-    double rank(BrowserItem i) => (c0 == null || _colours[i.id] == null) ? 9 : _distance(c0, _colours[i.id]!);
-    around.sort((a, b) => rank(a).compareTo(rank(b)));
-    const node = 46.0, step = 62.0, first = 62.0;
-    final placed = <String, Offset>{};
-    var ring = 0, slot = 0, index = 0;
-    List<BrowserItem> take(int n) {
-      final out = around.skip(index).take(n).toList();
-      index += out.length;
-      return out;
-    }
-
-    while (index < around.length) {
-      final capacity = 6 + ring * 6;
-      final members = take(capacity)..sort((a, b) => ((_colours[a.id]?.hue ?? 0)).compareTo(_colours[b.id]?.hue ?? 0));
-      final radius = first + ring * step;
-      for (final (k, m) in members.indexed) {
-        final angle = -math.pi / 2 + (k + (ring.isOdd ? .5 : 0)) * 2 * math.pi / members.length;
-        placed[m.id] = Offset(math.cos(angle) * radius, math.sin(angle) * radius);
-      }
-      ring++;
-      slot++;
-    }
-    final extent = (first + math.max(0, ring - 1) * step + node) * 2 + 24;
-    return LayoutBuilder(builder: (context, box) {
-      final size = math.max(extent, math.min(box.maxWidth, box.maxHeight));
-      return InteractiveViewer(
-        constrained: false,
-        minScale: .4,
-        maxScale: 2.5,
-        boundaryMargin: const EdgeInsets.all(120),
-        child: SizedBox(
-          width: math.max(size, box.maxWidth),
-          height: math.max(size, box.maxHeight),
-          child: Stack(children: [
-            for (final i in items)
-              AnimatedPositioned(
-                key: ValueKey('explore-${i.id}'),
-                duration: const Duration(milliseconds: 380),
-                curve: Curves.easeOutCubic,
-                left: math.max(size, box.maxWidth) / 2 + (i.id == centre.id ? 0 : placed[i.id]!.dx) - _w(i, i.id == centre.id) / 2,
-                top: math.max(size, box.maxHeight) / 2 + (i.id == centre.id ? 0 : placed[i.id]!.dy) - _h(i, i.id == centre.id) / 2,
-                width: _w(i, i.id == centre.id),
-                height: _h(i, i.id == centre.id),
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () => widget.onTap(i.id),
-                  onDoubleTap: widget.onOpen == null ? null : () => widget.onOpen!(i.id),
-                  child: Container(
-                    decoration: BoxDecoration(borderRadius: BorderRadius.circular(4), border: Border.all(color: i.id == centre.id ? N.g95 : N.glaze15, width: i.id == centre.id ? 2 : 1)),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(3),
-                      child: Stack(fit: StackFit.expand, children: [
-                        ColoredBox(color: N.g13, child: materialFace(i.shelf)),
-                        if (i.mark.isNotEmpty) Positioned(left: 2, top: 2, child: Container(padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1), decoration: BoxDecoration(color: N.veil, borderRadius: BorderRadius.circular(2)), child: Text(i.mark, style: Dn.micro(N.g95).copyWith(fontSize: 8)))),
-                      ]),
+  Widget build(BuildContext context) => ListenableBuilder(
+        listenable: exploreChanged,
+        builder: (context, _) => LayoutBuilder(builder: (context, box) {
+          final frame = exploreLayout(widget.items, widget.selected, Size(box.maxWidth, box.maxHeight));
+          final chosen = widget.items.firstWhere((i) => i.id == widget.selected, orElse: () => widget.items.first).id;
+          return SingleChildScrollView(
+            child: SizedBox(
+              width: frame.content.width,
+              height: frame.content.height,
+              child: Stack(children: [
+                for (final i in widget.items)
+                  AnimatedPositioned(
+                    key: ValueKey('explore-${i.id}'),
+                    duration: const Duration(milliseconds: 380),
+                    curve: Curves.easeOutCubic,
+                    left: frame.faces[i.id]!.left,
+                    top: frame.faces[i.id]!.top,
+                    width: frame.faces[i.id]!.width,
+                    height: frame.faces[i.id]!.height,
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () => widget.onTap(i.id),
+                      onDoubleTap: widget.onOpen == null ? null : () => widget.onOpen!(i.id),
+                      child: Container(
+                        decoration: BoxDecoration(borderRadius: BorderRadius.circular(4), border: Border.all(color: i.id == chosen ? N.g95 : N.glaze15, width: i.id == chosen ? 2 : 1)),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(3),
+                          child: Stack(fit: StackFit.expand, children: [
+                            ColoredBox(color: N.g13, child: materialFace(i.shelf)),
+                            if (i.mark.isNotEmpty) Positioned(left: 2, top: 2, child: Container(padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1), decoration: BoxDecoration(color: N.veil, borderRadius: BorderRadius.circular(2)), child: Text(i.mark, style: Dn.micro(N.g95).copyWith(fontSize: 8)))),
+                          ]),
+                        ),
+                      ),
                     ),
                   ),
-                ),
-              ),
-          ]),
-        ),
+              ]),
+            ),
+          );
+        }),
       );
-    });
-  }
-
-  double _w(BrowserItem i, bool centre) {
-    final base = centre ? 96.0 : 46.0;
-    final a = i.aspect;
-    return a >= 1 ? base : base * a;
-  }
-
-  double _h(BrowserItem i, bool centre) {
-    final base = centre ? 96.0 : 46.0;
-    final a = i.aspect;
-    return a >= 1 ? base / a : base;
-  }
 }
