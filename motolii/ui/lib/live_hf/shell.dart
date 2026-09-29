@@ -14,7 +14,6 @@ import '../session/status_notice.dart';
 import 'adapters/document.dart';
 import 'adapters/top.dart';
 import 'keys.dart';
-import 'shell_alt.dart';
 import 'ui_scale.dart';
 import 'workspace.dart';
 
@@ -149,8 +148,7 @@ class _LiveShellState extends State<LiveShell> {
               child: Column(
                 children: [
                   SessionTop(c: c),
-                  // TEMPORARY: the shell's Skin Swap Proof switch
-                  Expanded(child: ValueListenableBuilder(valueListenable: altShellSkin, builder: (_, alt, __) => alt ? AltShell(defs: workspace!.dock.defs) : workspace!.build())),
+                  Expanded(child: workspace!.build()),
                 ],
               ),
             ),
