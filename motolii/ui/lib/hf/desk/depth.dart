@@ -322,7 +322,11 @@ class DepthPainter extends CustomPainter {
       final e1 = fwdU ? cp + w2p(far, -lat) : cp + w2p(-lat, far);
       final e2 = fwdU ? cp + w2p(far, lat) : cp + w2p(lat, far);
       // the field of view: one flat fan
-      c.drawPath(Path()..moveTo(cp.dx, cp.dy)..lineTo(e1.dx, e1.dy)..lineTo(e2.dx, e2.dy)..close(), Paint()..color = kBlue.withValues(alpha: .22));
+      // what the camera sees: a light wash and its two edges, a view over the plan rather than a slab on it
+      c.drawPath(Path()..moveTo(cp.dx, cp.dy)..lineTo(e1.dx, e1.dy)..lineTo(e2.dx, e2.dy)..close(), Paint()..color = kBlue.withValues(alpha: .08));
+      final edge = Paint()..color = kBlue.withValues(alpha: .45)..strokeWidth = 1;
+      c.drawLine(cp, e1, edge);
+      c.drawLine(cp, e2, edge);
       // where the selected layer sits: a dashed line back to the camera
       final dash = Paint()..color = kInk.withValues(alpha: .5)..strokeWidth = 1.4;
       final dv = sp - cp;

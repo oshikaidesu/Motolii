@@ -4,19 +4,33 @@ import 'dart:io';
 
 import 'package:flutter/material.dart' show ThemeMode;
 import 'package:flutter/widgets.dart';
+import 'package:motolii_stage5/hf/shell/place.dart' show H;
 import 'package:widgetbook/widgetbook.dart';
 
 import 'binding.dart';
 import 'shots.dart';
+import 'stories/panels.dart';
 import 'stories/timeline.dart';
 
 /// Every story, in the order the explorer lists them.
-final allStories = [...timelineStories];
+final allStories = [...timelineStories, ...inspectorStories, ...browserStories, ...otherStories];
 
 void main() {
+  // production reads some of its data relative to motolii/ui (where `flutter run` starts it); so does the explorer
+  final ui = Platform.environment['MOTOLII_UI_DIR'];
+  if (ui != null && ui.isNotEmpty) Directory.current = ui;
   ExplorerBinding.ensure();
   final shots = Platform.environment['MOTOLII_EXPLORER_SHOTS'];
-  runApp(shots == null || shots.isEmpty ? const Explorer() : Directionality(textDirection: TextDirection.ltr, child: ShotRunner(stories: allStories, dir: shots)));
+  runApp(shots == null || shots.isEmpty
+      ? const Explorer()
+      // the same kind of root production's live main builds (overlay, text style), with the shots instead of the shell
+      : WidgetsApp(
+          color: H.window,
+          debugShowCheckedModeBanner: false,
+          textStyle: H.s(12),
+          pageRouteBuilder: <T>(RouteSettings settings, WidgetBuilder builder) => PageRouteBuilder<T>(settings: settings, pageBuilder: (context, _, __) => builder(context)),
+          home: ShotRunner(stories: allStories, dir: shots),
+        ));
 }
 
 class Explorer extends StatelessWidget {
@@ -24,6 +38,6 @@ class Explorer extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Widgetbook.material(
         themeMode: ThemeMode.dark,
-        directories: [timelineComponent],
+        directories: [timelineComponent, ...panelComponents],
       );
 }

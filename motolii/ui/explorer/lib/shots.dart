@@ -30,9 +30,10 @@ class _ShotRunnerState extends State<ShotRunner> {
   static String slug(String name) => name.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '-').replaceAll(RegExp(r'^-|-$'), '');
 
   Future<void> _ready() async {
-    await Future<void>.delayed(const Duration(milliseconds: 700));
-    for (var i = 0; i < 6; i++) {
-      await WidgetsBinding.instance.endOfFrame;
+    // frames are driven here (warm-up frames need no vsync), so shots work with the window covered or on another space
+    for (var i = 0; i < 8; i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 90));
+      WidgetsBinding.instance.scheduleWarmUpFrame();
     }
     final box = _frame.currentContext?.findRenderObject() as RenderRepaintBoundary?;
     if (box != null) {
@@ -44,6 +45,7 @@ class _ShotRunnerState extends State<ShotRunner> {
     if (!mounted) return;
     if (_at + 1 < _todo.length) {
       setState(() => _at++);
+      WidgetsBinding.instance.scheduleWarmUpFrame();
     } else {
       File('${widget.dir}/done.txt').writeAsStringSync('${_todo.length} ${DateTime.now()}');
       stdout.writeln('EXPLORER_SHOTS ${_todo.length} ${widget.dir}');
@@ -55,8 +57,12 @@ class _ShotRunnerState extends State<ShotRunner> {
     final s = _todo[_at];
     return ColoredBox(
       color: N.g00,
-      child: UnconstrainedBox(
+      child: OverflowBox(
         alignment: Alignment.topLeft,
+        minWidth: 0,
+        minHeight: 0,
+        maxWidth: double.infinity,
+        maxHeight: double.infinity,
         child: RepaintBoundary(key: _frame, child: KeyedSubtree(key: ValueKey(_at), child: framed(s, s.width, s.height, 1.0, onReady: _ready))),
       ),
     );

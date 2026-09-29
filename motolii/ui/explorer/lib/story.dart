@@ -7,6 +7,7 @@ import 'dart:io';
 import 'package:flutter/widgets.dart';
 import 'package:motolii_stage5/foundation/panel_controls/scale.dart';
 import 'package:motolii_stage5/hf/neutral.dart';
+import 'package:motolii_stage5/hf/shell/place.dart' show H;
 import 'package:motolii_stage5/live_hf/editor_theme.dart';
 import 'package:motolii_stage5/live_hf/ui_scale.dart';
 import 'package:motolii_stage5/session/editor_session.dart';
@@ -54,13 +55,14 @@ Widget framed(Story s, double width, double height, double scale, {VoidCallback?
   return SizedBox(
     width: width,
     height: height,
-    child: liveEditorTheme.wrap(EditorScale(
+    // production's default text style (the live main sets it on its WidgetsApp)
+    child: liveEditorTheme.wrap(DefaultTextStyle(style: H.s(12), child: EditorScale(
       notifier: LiveUiScale.instance.factor,
       child: ValueListenableBuilder<double>(
         valueListenable: LiveUiScale.instance.factor,
         builder: (context, f, _) => EditorScaledViewport(scale: f, child: StoryHost(key: ValueKey(s.scene), scene: s.scene, panel: s.panel, onReady: onReady)),
       ),
-    )),
+    ))),
   );
 }
 
@@ -101,6 +103,7 @@ class _StoryHostState extends State<StoryHost> {
       await widget.scene.inputs?.call(session);
       if (!mounted) return session.dispose();
       setState(() => c = session);
+      WidgetsBinding.instance.scheduleWarmUpFrame();
       widget.onReady?.call();
     } catch (e) {
       if (mounted) setState(() => failed = e);

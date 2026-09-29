@@ -429,8 +429,9 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
                     height: 42,
                     margin: EdgeInsets.only(right: i == presets.length - 1 ? 0 : 5),
                     padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(color: _presetColors[i % _presetColors.length], borderRadius: BorderRadius.circular(5), border: !mixed && cur.p == i ? Border.all(color: kInk, width: 2.4) : null),
-                    child: CustomPaint(size: Size.infinite, painter: _Icon(p.shape, N.g10, 2.4)),
+                    // a quiet tile with the curve in its colour; the chosen one takes a tint and an edge of it
+                    decoration: BoxDecoration(color: !mixed && cur.p == i ? _presetColors[i % _presetColors.length].withValues(alpha: .18) : (peek == i ? N.g15 : N.g13), borderRadius: BorderRadius.circular(5), border: Border.all(color: !mixed && cur.p == i ? _presetColors[i % _presetColors.length] : N.g20, width: !mixed && cur.p == i ? 1.4 : 1)),
+                    child: CustomPaint(size: Size.infinite, painter: _Icon(p.shape, _presetColors[i % _presetColors.length], 2)),
                   ),
                 ),
               ),
@@ -522,11 +523,12 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
                 height: 36,
                 margin: EdgeInsets.only(right: i == segs.length - 1 ? 0 : 4),
                 padding: EdgeInsets.symmetric(horizontal: compact ? 2 : 5, vertical: 6),
-                decoration: BoxDecoration(color: _segColors[i % _segColors.length], borderRadius: BorderRadius.circular(5), border: sel == i ? Border.all(color: kInk, width: 2.4) : null),
+                // an interval: its colour as a wash and a line, stronger when it is the one being eased
+                decoration: BoxDecoration(color: _segColors[i % _segColors.length].withValues(alpha: sel == i ? .24 : .1), borderRadius: BorderRadius.circular(5), border: Border.all(color: _segColors[i % _segColors.length].withValues(alpha: sel == i ? 1 : .35), width: sel == i ? 1.4 : 1)),
                 child: Row(children: [
-                  if (!compact && sg.frames >= 8) Text('${sg.frames}f', style: sans(10, c: N.g10, w: FontWeight.w700)),
+                  if (!compact && sg.frames >= 8) Text('${sg.frames}f', style: sans(10, c: N.g76, w: FontWeight.w700)),
                   if (!compact && sg.frames >= 8) const SizedBox(width: 4),
-                  Expanded(child: CustomPaint(size: Size.infinite, painter: _Icon(sg.shape, N.g10, 1.8))),
+                  Expanded(child: CustomPaint(size: Size.infinite, painter: _Icon(sg.shape, _segColors[i % _segColors.length], 1.8))),
                 ]),
               ),
             ),
