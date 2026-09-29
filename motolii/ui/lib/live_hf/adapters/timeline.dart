@@ -270,7 +270,7 @@ class _LiveTimelineState extends State<LiveTimeline> {
   // ---- build -------------------------------------------------------------------------------------------------------
   @override
   Widget build(BuildContext context) => LayoutBuilder(builder: (context, box) {
-        labelW = (box.maxWidth * .26).clamp(168.0, 236.0);
+        labelW = (box.maxWidth * .26).clamp(168.0, 264.0);
         final frames = math.max(1.0, (box.maxWidth - labelW) / s.pixelsPerFrame), rows = math.max(1.0, (box.maxHeight - rulerH) / rowH);
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) s.viewport(frames: frames, rows: rows);
@@ -462,7 +462,10 @@ class _LiveTimelineState extends State<LiveTimeline> {
           Container(width: 2, height: rowH, color: !lane && c.selectedIds.contains(r.id) ? (r.isGroup ? N.g63 : _family(r.id).t) : null),
           const SizedBox(width: 4),
           if (lane) ...[
-            SizedBox(width: indent + 14 + 18 + 4),
+            SizedBox(width: indent + 14 + 8),
+            // which layer these lanes belong to: its own colour, a thin line where its chip stands
+            Container(width: 1.5, height: rowH, color: (r.isGroup ? N.g51 : _family(r.id).t).withValues(alpha: .7)),
+            const SizedBox(width: 12.5),
             name,
             mark(_Diamond(keyed: r.keys.any((k) => (k['frame'] as num).round() == c.frame.value)), () => s.toggleKeyHere(i), w: 24),
             const SizedBox(width: 24),
@@ -536,6 +539,18 @@ class _DiamondPainter extends CustomPainter {
   void paint(Canvas cv, Size s) => _diamond(cv, s.center(Offset.zero), s.width / 2, fill, edge);
   @override
   bool shouldRepaint(_DiamondPainter o) => o.fill != fill || o.edge != edge;
+}
+
+/// A key's half-size from how close the keys on its row sit: roomy rows get the full mark, crowded rows smaller ones.
+double _keySize(List<double> xs) {
+  if (xs.length < 2) return 3.8;
+  final sorted = [...xs]..sort();
+  var gap = double.infinity;
+  for (var i = 1; i < sorted.length; i++) {
+    final d = sorted[i] - sorted[i - 1];
+    if (d > .5 && d < gap) gap = d;
+  }
+  return gap.isFinite ? (gap / 3.2).clamp(2.4, 3.8) : 3.8;
 }
 
 void _diamond(Canvas cv, Offset c, double r, Color? fill, Color? edge) {
@@ -649,9 +664,11 @@ class _RowsPainter extends CustomPainter {
             final xs = [for (final k in byFrame.values) keyX(k)]..sort();
             cv.drawRect(Rect.fromLTRB(xs.first, cy - .5, xs.last, cy + .5), fill..color = N.g100.withValues(alpha: selected ? .45 : .28));
           }
+          // keys close together are drawn smaller, so a busy bar stays a bar with marks on it, not a string of beads
+          final size = _keySize([for (final k in byFrame.values) keyX(k)]);
           for (final k in byFrame.values) {
             final on = r.allKeys.where((a) => a['frame'] == k['frame']).any(isPicked);
-            _diamond(cv, Offset(keyX(k), cy), on ? 4.8 : 3.8, on ? accent : N.g95, on ? N.g100 : N.g07);
+            _diamond(cv, Offset(keyX(k), cy), on ? size + 1 : size, on ? accent : N.g95, on ? N.g100 : N.g07);
           }
         }
       } else {
@@ -670,9 +687,10 @@ class _RowsPainter extends CustomPainter {
             cv.drawLine(Offset(a, cy), Offset(b, cy), line);
           }
         }
+        final size = _keySize([for (final k in keys) keyX(tlKeyOf(r, k))]) + .2;
         for (final k in keys) {
           final key = tlKeyOf(r, k), on = isPicked(key);
-          _diamond(cv, Offset(keyX(key), cy), on ? 4.6 : 4, on ? accent : N.g86, on ? N.g100 : null);
+          _diamond(cv, Offset(keyX(key), cy), on ? size + .8 : size, on ? accent : N.g86, on ? N.g100 : null);
         }
       }
       cv.restore();
