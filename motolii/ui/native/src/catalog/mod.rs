@@ -26,7 +26,7 @@ use std::path::{Path, PathBuf};
 use rusqlite::{params, Connection, OptionalExtension};
 
 pub(crate) use bridge::request;
-pub(crate) use query::{Entry, FolderCount, Query, ResultSet};
+pub(crate) use query::{Entry, FolderCount, Query, ResultSet, Sort};
 pub(crate) use resolve::{Resolution, SavedRef};
 
 /// What a file is, as the importer's own table says (`asset_type_for_extension`).

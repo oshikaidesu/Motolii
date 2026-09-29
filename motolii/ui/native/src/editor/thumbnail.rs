@@ -36,6 +36,14 @@ pub(crate) fn image_data_uri(path: &str) -> Option<String> {
     })
 }
 
+/// A still (any the importer takes, an environment too) as a PNG data URI at most `edge` on its longest side: the preview's
+/// picture. Read now, not remembered (it is big; the shelf's small one is).
+pub(crate) fn image_data_uri_sized(path: &str, edge: u32) -> Option<String> {
+    let (rgba, width, height) = crate::render::media::decode_still_srgb(path).ok()?;
+    let image = image::DynamicImage::ImageRgba8(image::RgbaImage::from_raw(width, height, rgba)?);
+    encode(if width.max(height) > edge { image.thumbnail(edge, edge) } else { image })
+}
+
 fn encode(image: image::DynamicImage) -> Option<String> {
     let mut png = std::io::Cursor::new(Vec::new());
     image.write_to(&mut png, image::ImageFormat::Png).ok()?;
@@ -57,6 +65,27 @@ fn encode_png_bytes(png: Vec<u8>) -> Option<String> {
 
 pub(crate) fn video_data_uri(path: &str) -> Option<String> {
     remembered(path, || video_frame(path))
+}
+
+/// One frame of a clip at a time (a scrub in the preview): read now, not remembered; `edge` is its longest side.
+pub(crate) fn video_frame_at(path: &str, at: f64, edge: u32) -> Option<String> {
+    use std::io::Read as _;
+
+    let scale = format!("scale={edge}:{edge}:force_original_aspect_ratio=decrease");
+    let mut child = ffmpeg_sidecar::command::FfmpegCommand::new()
+        .args(["-ss", &format!("{:.3}", at.max(0.0))])
+        .input(path)
+        .args(["-vframes", "1", "-vf", &scale, "-f", "image2pipe", "-vcodec", "png"])
+        .pipe_stdout()
+        .spawn()
+        .ok()?;
+    let mut png = Vec::new();
+    child.take_stdout()?.read_to_end(&mut png).ok()?;
+    let status = child.wait().ok()?;
+    if !status.success() || png.is_empty() {
+        return None;
+    }
+    encode_png_bytes(png)
 }
 
 fn video_frame(path: &str) -> Option<String> {
@@ -141,11 +170,13 @@ fn make_facts(path: &str, mime: &str) -> Option<serde_json::Value> {
     }
     if mime.starts_with("video/") {
         let info = crate::render::media::probe(path).ok()?;
+        // a stream that does not carry its own length still has one in its container
+        let seconds = info.duration.or_else(|| crate::render::media::probe_container(path).ok().and_then(|c| c.duration)).map(|d| d.as_seconds_f64());
         return Some(json!({
             "width": info.width,
             "height": info.height,
             "fps": info.fps.as_f64(),
-            "seconds": info.duration.map(|d| d.as_seconds_f64()),
+            "seconds": seconds,
         }));
     }
     if mime.starts_with("audio/") {

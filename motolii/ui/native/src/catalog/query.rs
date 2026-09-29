@@ -6,6 +6,35 @@ use rusqlite::params_from_iter;
 
 use super::{err, scan::join, Catalog, MediaKind};
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) enum Sort {
+    #[default]
+    Name,
+    Kind,
+    Size,
+    Modified,
+}
+
+impl Sort {
+    pub(crate) fn parse(key: &str) -> Self {
+        match key {
+            "kind" => Self::Kind,
+            "size" => Self::Size,
+            "modified" => Self::Modified,
+            _ => Self::Name,
+        }
+    }
+    fn order(self, descending: bool) -> String {
+        let dir = if descending { "DESC" } else { "ASC" };
+        match self {
+            Self::Name => format!("a.filename COLLATE NOCASE {dir}, a.id"),
+            Self::Kind => format!("a.kind {dir}, a.filename COLLATE NOCASE, a.id"),
+            Self::Size => format!("a.size {dir}, a.filename COLLATE NOCASE, a.id"),
+            Self::Modified => format!("a.mtime_ns {dir}, a.filename COLLATE NOCASE, a.id"),
+        }
+    }
+}
+
 #[derive(Clone, Debug, Default)]
 pub(crate) struct Query {
     /// Which sources (ids); None = every enabled source.
@@ -20,6 +49,9 @@ pub(crate) struct Query {
     pub text: Option<String>,
     /// Include the assets whose file is missing (a resolver's or a repair view's question; a library view says no).
     pub include_missing: bool,
+    /// The order the owner returns them in (a list view's column headers ask; the view never re-sorts).
+    pub sort: Sort,
+    pub descending: bool,
     pub offset: usize,
     /// 0 = a page of 500.
     pub limit: usize,
@@ -161,7 +193,7 @@ impl Catalog {
         let mut all = args.clone();
         all.push(Value::Integer(limit as i64));
         all.push(Value::Integer(q.offset as i64));
-        let mut st = self.db.prepare(&format!("{SELECT_ENTRY} WHERE {cond} ORDER BY a.filename COLLATE NOCASE, a.id LIMIT ? OFFSET ?")).map_err(err)?;
+        let mut st = self.db.prepare(&format!("{SELECT_ENTRY} WHERE {cond} ORDER BY {} LIMIT ? OFFSET ?", q.sort.order(q.descending))).map_err(err)?;
         let rows = st.query_map(params_from_iter(all.iter()), entry_from_row).map_err(err)?;
         Ok(ResultSet { revision: self.revision(), total: total as usize, offset: q.offset, entries: rows.flatten().collect() })
     }

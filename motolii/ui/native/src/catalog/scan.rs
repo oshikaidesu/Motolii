@@ -61,21 +61,21 @@ pub(crate) fn scan(root: &Path) -> Scan {
         let Ok(rel) = path.strip_prefix(root) else { continue };
         let rel = rel.components().map(|c| c.as_os_str().to_string_lossy().into_owned()).collect::<Vec<_>>().join("/");
         let mtime_ns = meta.modified().ok().and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map(|d| d.as_nanos() as i64).unwrap_or(0);
-        let (dev, ino) = if is_link { (0, 0) } else { identity(&meta) };
+        let (dev, ino) = if is_link { (0, 0) } else { identity(path) };
         out.entries.push(FsEntry { filename: entry.file_name().to_string_lossy().into_owned(), rel, size: meta.len(), mtime_ns, dev, ino, media_type });
     }
     out
 }
 
-#[cfg(unix)]
-fn identity(meta: &std::fs::Metadata) -> (u64, u64) {
-    use std::os::unix::fs::MetadataExt;
-    (meta.dev(), meta.ino())
-}
-
-#[cfg(not(unix))]
-fn identity(_: &std::fs::Metadata) -> (u64, u64) {
-    (0, 0)
+/// The platform's file identity, from the `file-id` crate (inode on Unix, file index on Windows): what a rename or a move
+/// on one volume leaves unchanged. (0, 0) when there is none.
+fn identity(path: &Path) -> (u64, u64) {
+    match file_id::get_file_id(path) {
+        Ok(file_id::FileId::Inode { device_id, inode_number }) => (device_id, inode_number),
+        Ok(file_id::FileId::LowRes { volume_serial_number, file_index }) => (volume_serial_number as u64, file_index),
+        Ok(file_id::FileId::HighRes { volume_serial_number, file_id }) => (volume_serial_number, (file_id as u64) ^ ((file_id >> 64) as u64)),
+        Err(_) => (0, 0),
+    }
 }
 
 /// `root` joined with a `/`-separated relative path.

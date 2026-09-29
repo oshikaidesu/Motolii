@@ -7,7 +7,7 @@ use std::sync::{Mutex, OnceLock};
 use rusqlite::types::Value;
 use serde_json::{json, Value as J};
 
-use super::{Catalog, Entry, MediaKind, Query, Resolution, SavedRef, Source};
+use super::{Catalog, Entry, MediaKind, Query, Resolution, SavedRef, Sort, Source};
 
 static CATALOG: OnceLock<Mutex<Result<Catalog, String>>> = OnceLock::new();
 
@@ -43,6 +43,8 @@ fn query_of(j: &J) -> Query {
         kinds: strings(&j["kinds"]).map(|k| k.iter().filter_map(|k| MediaKind::parse(k)).collect()),
         text: j["text"].as_str().map(str::to_owned),
         include_missing: j["includeMissing"].as_bool().unwrap_or(false),
+        sort: Sort::parse(j["sort"].as_str().unwrap_or("name")),
+        descending: j["descending"].as_bool().unwrap_or(false),
         offset: j["offset"].as_u64().unwrap_or(0) as usize,
         limit: j["limit"].as_u64().unwrap_or(0) as usize,
     }
@@ -169,6 +171,24 @@ fn handle(text: &str) -> Result<J, String> {
             Ok(json!({"results": c.resolve_many(&refs).iter().map(resolution_json).collect::<Vec<_>>()}))
         }
         "faces" => Ok(faces_json(c, &strings(&j["ids"]).unwrap_or_default())),
+        "picture" => {
+            let e = c.entries_where("a.uid = ? AND a.state = 0 AND s.available = 1", &[Value::Text(id()?.to_owned())]).into_iter().next().ok_or("No such picture")?;
+            if !matches!(e.kind, MediaKind::Image | MediaKind::Environment) {
+                return Err("Not a still".into());
+            }
+            let edge = j["edge"].as_u64().unwrap_or(1024).clamp(64, 4096) as u32;
+            Ok(json!({"picture": crate::editor::thumbnail::image_data_uri_sized(&e.abs_path, edge)}))
+        }
+        "frame" => {
+            // one frame of a clip at a time, for scrubbing in the preview; a person's file is only read
+            let e = c.entries_where("a.uid = ? AND a.state = 0 AND s.available = 1", &[Value::Text(id()?.to_owned())]).into_iter().next().ok_or("No such clip")?;
+            if e.kind != MediaKind::Video {
+                return Err("Not a clip".into());
+            }
+            let at = j["at"].as_f64().unwrap_or(0.0);
+            let edge = j["edge"].as_u64().unwrap_or(480).clamp(32, 1280) as u32;
+            Ok(json!({"frame": crate::editor::thumbnail::video_frame_at(&e.abs_path, at, edge)}))
+        }
         other => Err(format!("Unknown catalog op {other}")),
     }
 }

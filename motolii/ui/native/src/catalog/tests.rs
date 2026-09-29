@@ -572,3 +572,19 @@ fn a_page_of_a_query_is_a_slice_with_the_total() {
     assert_eq!((page.total, page.entries.len(), page.offset), (25, 5, 20));
     assert_eq!(page.revision, c.revision());
 }
+
+#[test]
+fn the_owner_orders_a_result_set() {
+    let mut t = Tree::new();
+    t.write_bytes("b.png", &[0; 30]);
+    t.write_bytes("a.mov", &[0; 10]);
+    t.write_bytes("c.wav", &[0; 20]);
+    let mut c = catalog();
+    c.add_source(t.dir.path(), None).unwrap();
+    c.refresh(None).unwrap();
+    let order = |sort, descending| names(&c.query(&Query { sort, descending, ..Default::default() }).unwrap());
+    assert_eq!(order(Sort::Name, false), vec!["a.mov", "b.png", "c.wav"]);
+    assert_eq!(order(Sort::Name, true), vec!["c.wav", "b.png", "a.mov"]);
+    assert_eq!(order(Sort::Size, false), vec!["a.mov", "c.wav", "b.png"]);
+    assert_eq!(order(Sort::Kind, false), vec!["c.wav", "b.png", "a.mov"]);
+}
