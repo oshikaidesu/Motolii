@@ -103,14 +103,20 @@ class MaterialCard extends StatelessWidget {
     final missing = item['missing'] == true;
     Widget face = ClipRRect(borderRadius: BorderRadius.circular(4), child: ColoredBox(color: N.g07, child: materialFace(item)));
     if (missing) face = Opacity(opacity: .4, child: face);
+    // placed in the work: a small light mark in the picture's corner
+    if (item['used'] == true && !missing) {
+      face = Stack(fit: StackFit.expand, children: [face, Positioned(left: 4, top: 4, child: Container(width: 5, height: 5, decoration: BoxDecoration(color: N.g95, shape: BoxShape.circle, border: Border.all(color: N.g07.withValues(alpha: .6)))))]);
+    }
+    final fact = _fact(item);
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       Expanded(child: face),
       SizedBox(
         height: _captionHeight,
-        child: Align(
-          alignment: Alignment.bottomLeft,
-          child: Text(missing ? 'Missing · $name' : name, maxLines: 1, softWrap: false, overflow: TextOverflow.ellipsis, style: sans(9, c: N.g82, w: FontWeight.w500)),
-        ),
+        // the name, and in the rest of the line what the piece is: its size, or its length
+        child: Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+          Expanded(child: Text(missing ? 'Missing · $name' : name, maxLines: 1, softWrap: false, overflow: TextOverflow.ellipsis, style: sans(9, c: N.g82, w: FontWeight.w500))),
+          if (fact.isNotEmpty) Padding(padding: const EdgeInsets.only(left: 4), child: Text(fact, softWrap: false, style: mono(7.5, c: N.g44))),
+        ]),
       ),
     ]);
   }
@@ -124,6 +130,15 @@ Widget materialFace(Map<String, dynamic> item) => switch ('${item['family']}') {
       'Images' => Stack(fit: StackFit.expand, children: [const CustomPaint(painter: _Checker()), _picture(item) ?? _glyph(HG.image)]),
       _ => _picture(item) ?? _glyph(HG.image),
     };
+
+/// What a piece is, in a few characters: its length, its size, or its kind.
+String _fact(Map<String, dynamic> item) {
+  final seconds = _seconds(item);
+  if (seconds != null) return _clock(seconds);
+  final facts = item['facts'];
+  if (facts is Map && facts['width'] is num && facts['height'] is num) return '${facts['width']}×${facts['height']}';
+  return '${item['family'] ?? ''}' == 'HDR' ? '360°' : '';
+}
 
 double? _seconds(Map<String, dynamic> item) {
   final facts = item['facts'];

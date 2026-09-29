@@ -278,6 +278,21 @@ class _LiveColorInstrumentState extends State<LiveColorInstrument> {
                           child: GlyphBox(HG.composite, size: 12, color: picking ? N.g95 : kMuted),
                         ),
                       ]),
+                      // the same colour in the other numbers people ask for, in the space beside the wheel
+                      const SizedBox(height: 8),
+                      for (final (a, b) in [
+                        ('R ${(color.r * 255).round()}', 'H ${hsv.hue.round()}°'),
+                        ('G ${(color.g * 255).round()}', 'S ${(hsv.saturation * 100).round()}'),
+                        ('B ${(color.b * 255).round()}', 'V ${(hsv.value * 100).round()}'),
+                        if (alpha) ('A ${(edit.value[3] * 100).round()}%', ''),
+                      ])
+                        Padding(
+                          padding: const EdgeInsets.only(top: 1),
+                          child: Row(children: [
+                            SizedBox(width: 38, child: Text(a, softWrap: false, style: mono(8.5, c: N.g56))),
+                            Text(b, softWrap: false, style: mono(8.5, c: N.g56)),
+                          ]),
+                        ),
                       // while armed, what to do next
                       if (picking)
                         Padding(
