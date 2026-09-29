@@ -246,7 +246,7 @@ class _TimelinePanelState extends State<TimelinePanel>
                                             ].contains(gesture)
                                             ? {
                                                 for (final r in timingRows)
-                                                  r.id: timing(r),
+                                                  r.id: drawnTiming(r),
                                               }
                                             : const {},
                                       ),

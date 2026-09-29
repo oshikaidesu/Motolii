@@ -194,3 +194,16 @@ fn ghosts_pass_over_a_locked_layer(){
     rt.request(json!({"op":"sequence","layers":[made[0].0,made[1].0],"ghosts":[3,6]})).unwrap();
     assert_eq!(ghost(&rt,made[0]),Some(3));
 }
+
+/// The ground switch sets only the alpha; the button form flips what the document holds.
+#[test]
+fn the_ground_switch_keeps_the_colour(){
+    let mut rt=EditorRuntime::open("").unwrap();
+    rt.request(json!({"op":"composition","background":[0.2,0.3,0.4,1.0]})).unwrap();
+    let bg=|rt:&EditorRuntime|rt.doc.view().composition().unwrap().unwrap().background;
+    rt.request(json!({"op":"composition","transparent":"toggle"})).unwrap();
+    rt.request(json!({"op":"composition","transparent":"toggle"})).unwrap();
+    assert_eq!(bg(&rt),[0.2,0.3,0.4,1.0],"two presses: solid again, same colour");
+    rt.request(json!({"op":"composition","transparent":true})).unwrap();
+    assert_eq!(bg(&rt),[0.2,0.3,0.4,0.0]);
+}

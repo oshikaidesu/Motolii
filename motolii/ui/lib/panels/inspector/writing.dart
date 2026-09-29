@@ -39,11 +39,11 @@ mixin _InspectorWriting on _InspectorReading {
     required bool preview,
   }) async {
     final id = '${row['id']}';
-    // One edit; the host spreads it over the selection: a drag keeps each layer's own offset, a typed number is
-    // put to every target as it is, and locked layers are left alone.
+    // One edit; the host spreads it over the selection: a drag keeps each layer's own offset, a typed number sets
+    // the axes that changed, and locked layers are left alone.
     await c.command('previewProperties', {
       'edits': [
-        {'layer': layer['id'], 'property': id, 'value': next, 'spread': preview ? 'offset' : 'absolute'},
+        {'layer': layer['id'], 'property': id, 'value': next, 'spread': preview ? 'offset' : 'typed'},
       ],
     });
     if (!preview) await c.command('commitPreview');
@@ -58,7 +58,7 @@ mixin _InspectorWriting on _InspectorReading {
     await c.command('previewProperties', {
       'edits': [
         for (final e in values.entries)
-          {'layer': layer['id'], 'property': e.key, 'value': e.value, 'spread': preview ? 'offset' : 'absolute'},
+          {'layer': layer['id'], 'property': e.key, 'value': e.value, 'spread': preview ? 'offset' : 'typed'},
       ],
     });
     if (!preview) await c.command('commitPreview');

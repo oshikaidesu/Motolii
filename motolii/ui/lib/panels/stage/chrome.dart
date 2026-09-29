@@ -46,7 +46,7 @@ mixin _StageChrome
   @override
   bool get canToggleGround => c.supports('composition');
   @override
-  void toggleGround() => _toggleGround();
+  void toggleGround() => c.command('composition', {'transparent': 'toggle'});
   @override
   bool get extending => _extend;
   @override
@@ -62,17 +62,9 @@ mixin _StageChrome
     return bg is List && bg.length == 4 && numOf(bg[3], 1) < 1;
   }
 
-  /// 透明と solid を往復する。solid へ戻す時は、透明にする前の色ではなく黒
-  /// (色は Composition の欄が持つ)。1 ジェスチャ = 1 undo。
-  void _toggleGround() {
-    final bg = _state['background'];
-    final grey = bg is List && bg.length == 4
-        ? [numOf(bg[0]), numOf(bg[1]), numOf(bg[2])]
-        : [0.0, 0.0, 0.0];
-    c.command('composition', {
-      'background': [...grey, _transparentGround ? 1.0 : 0.0],
-    });
-  }
+  /// 透明と solid: switch が選んだ方を host へ。色はそのまま、alpha だけ(色は Composition の欄が持つ)。1 ジェスチャ = 1 undo。
+  void _setGround(bool transparent) =>
+      c.command('composition', {'transparent': transparent});
 
   /// Snap guides arrive as composition x / y; the frame's corners carry
   /// them to the screen (top-left, top-right, bottom-right, bottom-left).
@@ -305,7 +297,7 @@ mixin _StageChrome
                           ? 'The frame has no ground; the export carries alpha'
                           : 'Drop the ground so the export carries alpha',
                       onChanged: c.supports('composition')
-                          ? (_) => _toggleGround()
+                          ? _setGround
                           : null,
                     ),
                   ),

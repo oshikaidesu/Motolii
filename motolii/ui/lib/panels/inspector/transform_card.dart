@@ -177,7 +177,8 @@ mixin _InspectorTransformCard on _InspectorControls {
                   selected: layer['projection'] == p,
                   onPick: can
                       ? () => c.command('setAttrs', {
-                          'layers': c.selectedIds,
+                          'layer': layer['id'],
+                          'spread': true,
                           'patch': {'projection': p},
                         })
                       : null,

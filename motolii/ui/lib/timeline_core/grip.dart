@@ -47,8 +47,6 @@ mixin TimelineGrip<T extends StatefulWidget> on State<T>, TimelineFrame<T> {
       await timelineSession.command('commitPreview');
     else if (has('setTimings'))
       await timelineSession.command('setTimings', {'changes': changes});
-    else if (changes.length == 1)
-      await timelineSession.command('setTiming', changes.single);
     finishing = false;
   }
 
@@ -395,11 +393,20 @@ mixin TimelineGrip<T extends StatefulWidget> on State<T>, TimelineFrame<T> {
     rowDropGuide = null;
   });
 
-  Map<String, dynamic> timing(TrackRow row) => tlTiming(row.id, row.layer, const {
+  /// Where the bar is drawn while gripped (a picture; see [timing] for what is sent).
+  Map<String, dynamic> drawnTiming(TrackRow row) => tlDrawnTiming(row.id, row.layer, const {
         'trimIn': TlGesture.trimIn,
         'trimOut': TlGesture.trimOut,
         'slip': TlGesture.slip,
       }[gesture] ?? TlGesture.move, deltaFrames);
+
+  /// The kind of timing change and how far: the host works out the new start, length and source (timing_delta),
+  /// against the document as it is when the change arrives.
+  Map<String, dynamic> timing(TrackRow row) => {
+        'layer': row.id,
+        'mode': const {'trimIn': 'trimStart', 'trimOut': 'trimEnd', 'slip': 'slip'}[gesture] ?? 'move',
+        'delta': deltaFrames,
+      };
 
   void end(PointerUpEvent event) {
     endAt(event, event.localPosition);
