@@ -525,11 +525,15 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
                 padding: EdgeInsets.symmetric(horizontal: compact ? 2 : 5, vertical: 4.5),
                 // an interval: its colour as a wash and a line, stronger when it is the one being eased
                 decoration: BoxDecoration(color: _segColors[i % _segColors.length].withValues(alpha: sel == i ? .24 : .1), borderRadius: BorderRadius.circular(4), border: Border.all(color: _segColors[i % _segColors.length].withValues(alpha: sel == i ? 1 : .35), width: sel == i ? 1.4 : 1)),
-                child: Row(children: [
-                  if (!compact && sg.frames >= 8) Text('${sg.frames}f', style: sans(10, c: N.g76, w: FontWeight.w700)),
-                  if (!compact && sg.frames >= 8) const SizedBox(width: 3),
-                  Expanded(child: CustomPaint(size: Size.infinite, painter: _Icon(sg.shape, _segColors[i % _segColors.length], 1.8))),
-                ]),
+                // the frame count only where the interval is wide enough to carry it (a narrow seat keeps the shape)
+                child: LayoutBuilder(builder: (context, box) {
+                  final label = !compact && sg.frames >= 8 && box.maxWidth >= 42;
+                  return Row(children: [
+                    if (label) Text('${sg.frames}f', style: sans(10, c: N.g76, w: FontWeight.w700)),
+                    if (label) const SizedBox(width: 3),
+                    Expanded(child: CustomPaint(size: Size.infinite, painter: _Icon(sg.shape, _segColors[i % _segColors.length], 1.8))),
+                  ]);
+                }),
               ),
             ),
           ),
