@@ -21,12 +21,16 @@ class BrowserItem {
     this.sampleRate,
     this.channels,
     this.faceKey = '',
+    this.fingerprint,
     this.missing = false,
     this.thumbnail,
     this.peaks,
   });
 
   final String id, name, path, mime, source, rel, faceKey;
+
+  /// The catalog's cheap content fingerprint, once learned: two assets with the same one are the same bytes.
+  final String? fingerprint;
 
   /// image | video | audio | model | environment (the catalog's own words for the media type).
   final String kind;

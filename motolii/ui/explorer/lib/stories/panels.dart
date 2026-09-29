@@ -19,6 +19,7 @@ import 'package:widgetbook/widgetbook.dart';
 
 import '../paper/explore_view.dart';
 import '../paper/filmstrip.dart';
+import '../paper/graph_explore.dart';
 import '../paper/live_tiles.dart';
 
 import '../story.dart';
@@ -83,6 +84,12 @@ Future<void> _projectHoldsSome(EditorSession c) async {
   await c.importPaths([fixture('media/afterglow.jpg'), fixture('media/coast-drift.mp4'), fixture('media/drum-loop.wav')]);
 }
 
+/// The nested Models folder and Media, and a work holding three assets: a world with folders, Sources and a project.
+Future<void> _graphWorld(EditorSession c) async {
+  await _registerNestedSources(c);
+  await c.importPaths([fixture('media/afterglow.jpg'), fixture('media/coast-drift.mp4'), fixture('models/glb/Camera_01.glb')]);
+}
+
 /// The folders as they nest on disk (Models holds glb/ and the raw glTF folders with their textures): folder browsing.
 Future<void> _registerNestedSources(EditorSession c) => _reconcileSources(c, [(fixture('media'), 'Media'), (fixture('models'), 'Models')]);
 
@@ -108,7 +115,10 @@ Widget _catalogBrowser(EditorSession c) => _CatalogHost(c);
 
 
 class _CatalogHost extends StatefulWidget {
-  const _CatalogHost(this.c, {this.view = BrowserView.thumbnail, this.startOn, this.startOpen = false, this.startSource, this.startColumn = 60, this.startProject = false});
+  const _CatalogHost(this.c, {this.view = BrowserView.thumbnail, this.startOn, this.startOpen = false, this.startSource, this.startColumn = 60, this.startProject = false, this.graphHops});
+
+  /// Explore B (the relation graph) instead of A (colour nearness): 0 = global, 1 or 2 = local hops.
+  final int? graphHops;
   final double startColumn;
   final bool startProject;
   final EditorSession c;
@@ -122,6 +132,8 @@ class _CatalogHost extends StatefulWidget {
 
 class _CatalogHostState extends State<_CatalogHost> {
   late final CatalogSession session = CatalogSession(widget.c);
+  late final GraphChoice choice = GraphChoice(hops: widget.graphHops ?? 0);
+  Set<String> _used() => {for (final a in EditorSession.maps(widget.c.state['assets'])) '${a['path']}'};
   @override
   void initState() {
     super.initState();
@@ -138,12 +150,15 @@ class _CatalogHostState extends State<_CatalogHost> {
   }
 
   @override
-  Widget build(BuildContext context) => CatalogMedia(session: session, explore: exploreView, exploreLayout: exploreLayout, exploreRepaint: exploreChanged, exploreNote: 'Nearest by colour · prototype (no similarity source yet) · lines join the nearest five; sounds and models have no colour and stand outermost', initial: widget.view, startOn: widget.startOn, startOpen: widget.startOpen, startColumn: widget.startColumn, startProject: widget.startProject);
+  Widget build(BuildContext context) => CatalogMedia(session: session, explore: exploreView, exploreLayout: widget.graphHops == null ? exploreLayout : graphLayout(choice, _used), exploreRepaint: widget.graphHops == null ? exploreChanged : choice, exploreBar: widget.graphHops == null ? null : GraphBar(choice: choice), exploreNote: 'Nearest by colour · prototype (no similarity source yet) · lines join the nearest five; sounds and models have no colour and stand outermost', initial: widget.view, startOn: widget.startOn, startOpen: widget.startOpen, startColumn: widget.startColumn, startProject: widget.startProject);
 }
 
 final catalogStories = <Story>[
   Story('Browser catalog, real sources', Scene('night-sky.rrd', inputs: _registerFixtureSources), _catalogBrowser, width: 288, height: 900),
   Story('Browser catalog, this project', Scene('night-sky.rrd', inputs: _projectHoldsSome), (c) => _CatalogHost(c, startProject: true), width: 420, height: 700),
+  Story('Browser catalog, explore B global', Scene('night-sky.rrd', inputs: _graphWorld), (c) => _CatalogHost(c, view: BrowserView.explore, startOn: 'afterglow.jpg', graphHops: 0), width: 560, height: 760),
+  Story('Browser catalog, explore B local 1', Scene('night-sky.rrd', inputs: _graphWorld), (c) => _CatalogHost(c, view: BrowserView.explore, startOn: 'coast-drift.mp4', graphHops: 1), width: 560, height: 760),
+  Story('Browser catalog, explore B local 2', Scene('night-sky.rrd', inputs: _graphWorld), (c) => _CatalogHost(c, view: BrowserView.explore, startOn: 'coast-drift.mp4', graphHops: 2), width: 560, height: 760),
   Story('Browser catalog, big faces', Scene('night-sky.rrd', inputs: _registerFixtureSources), (c) => _CatalogHost(c, startColumn: 104, startOn: 'coast-drift.mp4'), width: 288, height: 900),
   Story('Browser catalog, real sources, wide', Scene('night-sky.rrd', inputs: _registerFixtureSources), _catalogBrowser, width: 560, height: 900),
   Story('Browser catalog, preview clip', Scene('night-sky.rrd', inputs: _registerFixtureSources), (c) => _CatalogHost(c, startOn: 'coast-drift.mp4', startOpen: true), width: 420, height: 800),

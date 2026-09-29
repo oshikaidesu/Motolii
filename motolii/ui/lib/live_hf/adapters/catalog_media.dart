@@ -13,11 +13,12 @@ import 'project_source.dart';
 /// The catalog's controls over the Thumbnail view: SOURCES (which folders), TYPES (what), a search (which). Where, What
 /// and Which are separate; the view (How) is the shelf's own masonry, unchanged. A skin over [CatalogSession].
 class CatalogMedia extends StatefulWidget {
-  const CatalogMedia({super.key, required this.session, this.explore, this.initial = BrowserView.thumbnail, this.startOn, this.startOpen = false, this.exploreLayout, this.exploreRepaint, this.exploreNote, this.startColumn = 60, this.startProject = false});
+  const CatalogMedia({super.key, required this.session, this.explore, this.initial = BrowserView.thumbnail, this.startOn, this.startOpen = false, this.exploreLayout, this.exploreRepaint, this.exploreNote, this.exploreBar, this.startColumn = 60, this.startProject = false});
   final CatalogSession session;
   final ExploreLayout? exploreLayout;
   final Listenable? exploreRepaint;
   final String? exploreNote;
+  final Widget? exploreBar;
   final double startColumn;
 
   /// Starts on the work's own assets (a story, a restored choice).
@@ -56,6 +57,7 @@ class _CatalogMediaState extends State<CatalogMedia> {
             exploreLayout: widget.exploreLayout,
             exploreRepaint: widget.exploreRepaint,
             exploreNote: widget.exploreNote,
+            exploreBar: widget.exploreBar,
             startColumn: widget.startColumn,
             onReveal: (item) {
               if (item.path.isNotEmpty) session.c.native('reveal', {'path': item.path});

@@ -238,6 +238,7 @@ class CatalogSession extends ChangeNotifier implements ResultSource {
       sampleRate: n(facts['sampleRate'])?.toInt(),
       channels: n(facts['channels'])?.toInt(),
       faceKey: e.faceKey,
+      fingerprint: j['fingerprint'] as String?,
       missing: e.missing,
       thumbnail: face['thumbnail'] as String?,
       peaks: face['peaks'],

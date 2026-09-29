@@ -9,13 +9,14 @@ import 'package:flutter/widgets.dart';
 import '../../hf/metrics.dart';
 import '../../hf/neutral.dart';
 import 'browser_item.dart';
+import 'graph_overlay.dart';
 import 'media_library.dart' show materialFace;
 import 'media_list.dart' show MediaListHeader;
 import 'media_preview.dart' show FaceService;
 import 'model_face.dart';
 
 /// Where every face of a projection stands: faces and the labels by them, in one scrolling content.
-typedef Frame = ({Map<String, Rect> faces, Map<String, Rect> labels, Size content, List<String> links});
+typedef Frame = ({Map<String, Rect> faces, Map<String, Rect> labels, Size content, List<String> links, GraphOverlay? graph});
 
 /// Explore's places: given by the caller (a prototype: there is no similarity backend).
 typedef ExploreLayout = Frame Function(List<BrowserItem> items, String? selected, Size viewport);
@@ -67,7 +68,7 @@ class FluidBoard extends StatefulWidget {
       labels[it.id] = Rect.fromLTWH(x, y + h, colW, caption);
       heights[at] += h + caption + gap;
     }
-    return (faces: faces, labels: labels, links: const <String>[], content: Size(width, heights.fold(0.0, math.max) + margin));
+    return (faces: faces, labels: labels, links: const <String>[], graph: null, content: Size(width, heights.fold(0.0, math.max) + margin));
   }
 
   /// List: a row each, a small face at its own shape, the facts beside it.
@@ -80,7 +81,7 @@ class FluidBoard extends StatefulWidget {
       faces[it.id] = Rect.fromLTWH(8 + (boxW - fw) / 2, top + (rowHeight - fh) / 2, fw, fh);
       labels[it.id] = Rect.fromLTWH(62, top, width - 62, rowHeight);
     }
-    return (faces: faces, labels: labels, links: const <String>[], content: Size(width, items.length * rowHeight));
+    return (faces: faces, labels: labels, links: const <String>[], graph: null, content: Size(width, items.length * rowHeight));
   }
 
   @override
@@ -95,6 +96,11 @@ class _FluidBoardState extends State<FluidBoard> {
   static const _move = Duration(milliseconds: 200);
   static const _curve = Curves.easeOutCubic;
   bool _instant = false;
+
+  /// The node under the pointer in Explore's graph: with the chosen one it decides what stays emphasised.
+  String? _hot;
+  final _view = TransformationController();
+  Object? _fitted;
 
   /// While the faces are on their way the labels stay out (they would run into one another); they return when the faces land.
   bool _moving = false;
@@ -111,6 +117,7 @@ class _FluidBoardState extends State<FluidBoard> {
   @override
   void dispose() {
     _landed?.cancel();
+    _view.dispose();
     scroll.dispose();
     super.dispose();
   }
@@ -154,11 +161,12 @@ class _FluidBoardState extends State<FluidBoard> {
         final content = Size(math.max(frame.content.width, box.maxWidth), math.max(frame.content.height, box.maxHeight));
         final move = _instant ? Duration.zero : _move;
         const curve = _curve;
-        return SingleChildScrollView(
-          controller: scroll,
-          physics: const ClampingScrollPhysics(),
-          scrollDirection: Axis.vertical,
-          child: TweenAnimationBuilder<Size>(
+        final graph = frame.graph;
+        final focus = graph == null ? null : (_hot ?? widget.selected);
+        final near = focus == null ? const <String>{} : graph!.neighbours(focus);
+        bool dim(String id) => focus != null && id != focus && !near.contains(id);
+        Offset? centre(String id) => frame.faces[id]?.center ?? graph?.hubs.where((h) => h.id == id).firstOrNull?.rect.center;
+        final board = TweenAnimationBuilder<Size>(
             tween: Tween<Size>(end: content),
             duration: move,
             curve: curve,
@@ -177,6 +185,19 @@ class _FluidBoardState extends State<FluidBoard> {
                       ),
                     ),
                   ),
+                // Explore's graph: the proven relations as lines (they wait out a move, so they never point at where a face was)
+                if (graph != null)
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: AnimatedOpacity(
+                        opacity: _moving ? 0 : 1,
+                        duration: Duration(milliseconds: _moving ? 0 : 120),
+                        child: CustomPaint(painter: GraphEdges(edges: graph.edges, at: centre, focus: focus, near: near)),
+                      ),
+                    ),
+                  ),
+                if (graph != null)
+                  for (final h in graph.hubs) _Glide(key: ValueKey('hub-${h.id}'), rect: h.rect, instant: _instant, child: MouseRegion(onEnter: (_) => setState(() => _hot = h.id), onExit: (_) => setState(() => _hot = null), child: HubPill(hub: h, dim: dim(h.id)))),
                 for (final it in widget.items) ...[
                   if (frame.labels[it.id] != null)
                     _Glide(
@@ -217,14 +238,30 @@ class _FluidBoardState extends State<FluidBoard> {
                         behavior: HitTestBehavior.opaque,
                         onTap: () => widget.onTap(it.id),
                         onDoubleTap: widget.onOpen == null ? null : () => widget.onOpen!(it.id),
-                        child: _Face(it, selected: it.id == widget.selected, marked: widget.view != 'list', faces: widget.faces, held: widget.holding[it.id], short: widget.view == 'explore' && it.id != widget.selected),
+                        child: MouseRegion(
+                          onEnter: graph == null ? null : (_) => setState(() => _hot = it.id),
+                          onExit: graph == null ? null : (_) => setState(() => _hot = null),
+                          child: Opacity(opacity: dim(it.id) ? .28 : 1, child: _Face(it, selected: it.id == widget.selected, marked: widget.view != 'list', faces: widget.faces, held: widget.holding[it.id], short: widget.view == 'explore' && it.id != widget.selected)),
+                        ),
                       ),
                     ),
                 ],
               ]),
             ),
-          ),
-        );
+          );
+        // the graph is a canvas to look round (pan and zoom are the person's own moves); every other projection scrolls
+        if (graph != null) {
+          // the whole graph in view to begin with (the layout may be larger than the seat); pan and zoom are then the person's
+          final fit = (frame.content.width, frame.content.height, box.maxWidth, box.maxHeight, graph.edges.length);
+          if (_fitted != fit) {
+            _fitted = fit;
+            final scale = math.min(1.0, math.min(box.maxWidth / content.width, box.maxHeight / content.height));
+            _view.value = Matrix4.identity()..scale(scale, scale, 1);
+          }
+        }
+        return graph != null
+            ? InteractiveViewer(transformationController: _view, constrained: false, minScale: .2, maxScale: 3.5, boundaryMargin: const EdgeInsets.all(600), child: board)
+            : SingleChildScrollView(controller: scroll, physics: const ClampingScrollPhysics(), scrollDirection: Axis.vertical, child: board);
       });
 
   Widget _label(BrowserItem it, double width) {

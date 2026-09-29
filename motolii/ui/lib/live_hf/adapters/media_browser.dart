@@ -23,7 +23,7 @@ enum BrowserView { list, thumbnail, explore }
 typedef ExploreBuilder = Widget Function(BuildContext context, List<BrowserItem> items, String? selected, ValueChanged<String> onTap, ValueChanged<String>? onOpen);
 
 class MediaBrowser extends StatefulWidget {
-  const MediaBrowser({super.key, required this.source, this.controls, this.faces, this.explore, this.sort = 'name', this.descending = false, this.onSort, this.onReveal, this.onPlace, this.initial = BrowserView.thumbnail, this.startOn, this.startOpen = false, this.exploreLayout, this.exploreRepaint, this.exploreNote, this.holding = const {}, this.startColumn = 60, this.fluidUpTo = 300});
+  const MediaBrowser({super.key, required this.source, this.controls, this.faces, this.explore, this.sort = 'name', this.descending = false, this.onSort, this.onReveal, this.onPlace, this.initial = BrowserView.thumbnail, this.startOn, this.startOpen = false, this.exploreLayout, this.exploreRepaint, this.exploreNote, this.exploreBar, this.holding = const {}, this.startColumn = 60, this.fluidUpTo = 300});
   final ResultSource source;
 
   /// Where Explore puts the faces (for the fluid board). Without it Explore is `explore` alone, and the views swap.
@@ -34,6 +34,9 @@ class MediaBrowser extends StatefulWidget {
 
   /// One honest line under the controls while Explore is shown (what nearness means).
   final String? exploreNote;
+
+  /// The caller's own controls for Explore (its relation filters, global or local), shown instead of the note.
+  final Widget? exploreBar;
 
   /// Pointers held over faces, for a story (see FluidBoard.holding).
   final Map<String, Offset> holding;
@@ -143,7 +146,8 @@ class MediaBrowserState extends State<MediaBrowser> {
             child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
               _Header(view: view, count: items.length, hasExplore: widget.explore != null || widget.exploreLayout != null, onView: (v) => setState(() => view = v), size: view == BrowserView.thumbnail ? (thumbMin - 44) / 96 : null, onSize: (f) => setState(() => thumbMin = 44 + f * 96)),
               if (widget.controls != null) widget.controls!,
-              if (view == BrowserView.explore && widget.exploreNote != null) Padding(padding: const EdgeInsets.fromLTRB(9, 3, 9, 0), child: Text(widget.exploreNote!, style: Dn.label(N.g51))),
+              if (view == BrowserView.explore && widget.exploreBar != null) widget.exploreBar!,
+              if (view == BrowserView.explore && widget.exploreBar == null && widget.exploreNote != null) Padding(padding: const EdgeInsets.fromLTRB(9, 3, 9, 0), child: Text(widget.exploreNote!, style: Dn.label(N.g51))),
               Expanded(
                 flex: 5,
                 child: ClipRect(child: _body(items)),

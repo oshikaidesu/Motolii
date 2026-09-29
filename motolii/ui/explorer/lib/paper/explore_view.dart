@@ -133,7 +133,7 @@ Frame exploreLayout(List<BrowserItem> items, String? selected, Size viewport) {
     faces[m.id] = at(m, Offset(margin + (n % cols) * (node + gap) + node / 2, top + (n ~/ cols) * (node + gap) + node / 2), node);
   }
   final bottom = rest.isEmpty ? cy + reach + margin : top + ((rest.length - 1) ~/ cols + 1) * (node + gap) + margin;
-  return (faces: faces, labels: {centre.id: Rect.fromLTWH(cx - big / 2, cy + big / 2 + 1, big, 14)}, links: _nearest(items, centre.id, 5), content: Size(viewport.width, math.max(viewport.height, bottom)));
+  return (faces: faces, labels: {centre.id: Rect.fromLTWH(cx - big / 2, cy + big / 2 + 1, big, 14)}, links: _nearest(items, centre.id, 5), graph: null, content: Size(viewport.width, math.max(viewport.height, bottom)));
 }
 
 /// The few nearest by colour (only those that have a colour to compare), for the spokes drawn from the centre.
