@@ -22,24 +22,21 @@ class ShelfHeading extends StatelessWidget {
   Widget build(BuildContext context) => SwissHeading(text, count: count, rule: !first);
 }
 
-/// The Browser's one heading voice: the section's name in plain semibold, its count in a small quiet pill.
+/// The Browser's one heading voice, set like a grid poster: a hairline across the column, the section's name large
+/// and tight under it, its count in small mono in the second ink at the far edge.
 class SwissHeading extends StatelessWidget {
   const SwissHeading(this.text, {super.key, this.count, this.rule = true});
   final String text;
   final int? count;
-  final bool rule; // kept for callers; a heading no longer draws a rule
+  final bool rule;
   @override
-  Widget build(BuildContext context) => Padding(
-        padding: EdgeInsets.only(top: rule ? 14 : 10, bottom: 8),
-        child: Row(children: [
-          Flexible(child: Text(text, softWrap: false, overflow: TextOverflow.ellipsis, style: sans(11.5, c: N.g91, w: FontWeight.w600))),
-          if (count != null)
-            Container(
-              margin: const EdgeInsets.only(left: 6),
-              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-              decoration: BoxDecoration(color: N.g15, borderRadius: BorderRadius.circular(4)),
-              child: Text('$count', style: sans(9.5, c: N.g63, w: FontWeight.w500)),
-            ),
+  Widget build(BuildContext context) => Container(
+        margin: EdgeInsets.only(top: rule ? 16 : 8, bottom: 8),
+        padding: const EdgeInsets.only(top: 5),
+        decoration: const BoxDecoration(border: Border(top: BorderSide(color: N.g38, width: .5))),
+        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Expanded(child: Text(text, softWrap: false, overflow: TextOverflow.ellipsis, style: sans(17, c: N.g95, w: FontWeight.w700, ls: -.5))),
+          if (count != null) Padding(padding: const EdgeInsets.only(top: 1), child: Text(count!.toString().padLeft(2, '0'), style: mono(9, c: N.signal))),
         ]),
       );
 }

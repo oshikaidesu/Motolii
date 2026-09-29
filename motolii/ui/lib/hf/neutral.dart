@@ -38,5 +38,6 @@ abstract final class N {
   static const glaze80 = Color(0xCCFFFFFF);
   static const veil = Color(0xCC191919); // a label over a picture
   static const veilHi = Color(0xE6202020); // a readout over the work
+  static const signal = Color(0xFFFF4F1A); // the one second ink (a poster's orange): indexes and counts, never a fill
   static const inkSoft = Color(0xB3191919); // dark ink at 70 % on a colour
 }
