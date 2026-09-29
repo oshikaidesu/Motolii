@@ -12,12 +12,13 @@ class SwatchCards extends StatelessWidget {
   final ValueChanged<(String, int, String)>? onTap;
   final void Function((String, int, String) swatch, Offset at)? onMenu;
 
-  static const _heights = [78.0, 104.0, 88.0, 66.0, 96.0, 72.0];
+  static const _heights = [46.0, 62.0, 52.0, 40.0, 58.0, 44.0];
 
   @override
   Widget build(BuildContext context) {
-    const gap = 6.0;
-    final cols = width >= 250 ? 3 : 2;
+    const gap = 5.0;
+    // about 58 px a card: four across the default seat
+    final cols = ((width + gap) / (58 + gap)).floor().clamp(2, 10);
     final columns = [for (var i = 0; i < cols; i++) <Widget>[]];
     final heights = List.filled(cols, 0.0);
     for (final (i, v) in items.take(300).indexed) {
@@ -38,10 +39,10 @@ class SwatchCards extends StatelessWidget {
           onSecondaryTapDown: onMenu == null ? null : (e) => onMenu!(v, e.globalPosition),
           child: Container(
             height: h,
-            padding: const EdgeInsets.fromLTRB(8, 0, 8, 7),
+            padding: const EdgeInsets.fromLTRB(6, 0, 4, 5),
             alignment: Alignment.bottomLeft,
-            decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(10), border: Border.all(color: N.glaze9)),
-            child: Text((v.$2 & 0xFFFFFF).toRadixString(16).padLeft(6, '0').toUpperCase(), softWrap: false, style: mono(9.5, c: ink)),
+            decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(7), border: Border.all(color: N.glaze9)),
+            child: Text((v.$2 & 0xFFFFFF).toRadixString(16).padLeft(6, '0').toUpperCase(), softWrap: false, style: mono(8, c: ink)),
           ),
         ),
       ));

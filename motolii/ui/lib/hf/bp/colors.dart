@@ -291,7 +291,8 @@ class _ColorsPanelState extends State<ColorsPanel>
     bool hasGradients,
   ) {
     const pad = 12.0;
-    final wheel = math.min((s.width - pad * 2) * .68, 176.0);
+    // the wheel is a tool above the palette, not the page: about half the seat
+    final wheel = math.min((s.width - pad * 2) * .5, 136.0);
     final full = !filtering || wheelOnly;
     return SingleChildScrollView(
       physics: const ClampingScrollPhysics(),

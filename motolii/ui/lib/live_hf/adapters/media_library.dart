@@ -34,9 +34,10 @@ class MediaLibraryBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const pad = 10.0, gap = 8.0;
+    const pad = 10.0, gap = 6.0;
     final seat = BrowserSeatScope.of(context);
-    final cols = width >= 520 ? 3 : (width >= 200 ? 2 : 1);
+    // cards of at least 68 px: three across the default seat (its body is a little under 288), more as it widens
+    final cols = ((width - pad * 2 + gap) / (68 + gap)).floor().clamp(1, 8);
     final colW = (width - pad * 2 - gap * (cols - 1)) / cols;
     // the keys walk the pieces in the order they are listed, section by section
     seat?.shows([for (final e in sections.values) ...e], cols);
@@ -88,7 +89,7 @@ class _Board extends StatelessWidget {
   }
 }
 
-const _captionHeight = 34.0;
+const _captionHeight = 27.0;
 
 /// One piece: its picture, rounded, at its own proportions; its name; one quiet fact.
 class MaterialCard extends StatelessWidget {
@@ -99,7 +100,7 @@ class MaterialCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final missing = item['missing'] == true;
-    Widget face = ClipRRect(borderRadius: BorderRadius.circular(10), child: materialFace(item));
+    Widget face = ClipRRect(borderRadius: BorderRadius.circular(7), child: materialFace(item));
     if (missing) face = Opacity(opacity: .4, child: face);
     final fact = _fact(item);
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -107,10 +108,10 @@ class MaterialCard extends StatelessWidget {
       SizedBox(
         height: _captionHeight,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(2, 6, 2, 0),
+          padding: const EdgeInsets.fromLTRB(1, 4, 1, 0),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(missing ? 'Missing · $name' : name, maxLines: 1, softWrap: false, overflow: TextOverflow.ellipsis, style: sans(11, c: N.g91, w: FontWeight.w600)),
-            if (fact.isNotEmpty) Text(fact, maxLines: 1, softWrap: false, overflow: TextOverflow.ellipsis, style: sans(9.5, c: N.g51)),
+            Text(missing ? 'Missing · $name' : name, maxLines: 1, softWrap: false, overflow: TextOverflow.ellipsis, style: sans(10, c: N.g91, w: FontWeight.w600)),
+            if (fact.isNotEmpty) Text(fact, maxLines: 1, softWrap: false, overflow: TextOverflow.ellipsis, style: sans(8.5, c: N.g51)),
           ]),
         ),
       ),
