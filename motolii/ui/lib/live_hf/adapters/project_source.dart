@@ -78,3 +78,34 @@ class ProjectSource extends ChangeNotifier implements ResultSource {
     return out;
   }
 }
+
+/// The environments the app carries with it (the sky and studio panoramas): an asset the work does not own until one is
+/// placed (`create`). They were part of the old Media library, so they stay one Source of the Browser.
+class BundledSource extends ChangeNotifier implements ResultSource {
+  BundledSource(this.c, {required this.kinds, required this.text}) {
+    c.document.addListener(notifyListeners);
+  }
+  final EditorSession c;
+  final Set<String> Function() kinds;
+  final String Function() text;
+
+  static const prefix = 'bundled:';
+
+  @override
+  void dispose() {
+    c.document.removeListener(notifyListeners);
+    super.dispose();
+  }
+
+  @override
+  List<BrowserItem> get items {
+    final chosen = kinds();
+    if (chosen.isNotEmpty && !chosen.contains('environment')) return const [];
+    final words = text().toLowerCase().split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();
+    return [
+      for (final b in EditorSession.maps(c.state['backgrounds']))
+        if (words.every((w) => '${b['name']}'.toLowerCase().contains(w)))
+          BrowserItem(id: '$prefix${b['id']}', name: '${b['name']}', path: '${b['path'] ?? ''}', kind: 'environment', mime: 'image/hdr', source: 'Bundled', faceKey: '$prefix${b['id']}', thumbnail: b['thumbnail'] as String?),
+    ];
+  }
+}

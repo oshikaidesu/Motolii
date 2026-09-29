@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/widgets.dart';
 
 import '../../hf/bp/common.dart' show sans;
@@ -37,6 +39,8 @@ class CatalogMedia extends StatefulWidget {
 class _CatalogMediaState extends State<CatalogMedia> {
   CatalogSession get session => widget.session;
   late bool project = widget.startProject;
+  bool bundled = false;
+  late final BundledSource _bundled = BundledSource(session.c, kinds: () => session.kinds, text: () => session.text);
   final _browser = GlobalKey<MediaBrowserState>();
   List<String> _seenImport = const [];
 
@@ -64,6 +68,7 @@ class _CatalogMediaState extends State<CatalogMedia> {
   void dispose() {
     session.c.importedAssets.removeListener(_imported);
     _project.dispose();
+    _bundled.dispose();
     super.dispose();
   }
 
@@ -77,7 +82,7 @@ class _CatalogMediaState extends State<CatalogMedia> {
           return Stack(fit: StackFit.passthrough, children: [
             MediaBrowser(
             key: _browser,
-            source: project ? _project : session,
+            source: project ? _project : (bundled ? _bundled : session),
             faces: _Faces(session),
             explore: widget.explore,
             exploreLayout: widget.exploreLayout,
@@ -101,17 +106,31 @@ class _CatalogMediaState extends State<CatalogMedia> {
             onSort: (key) => session.choose(sort: key, descending: session.sort == key ? !session.descending : false),
             controls: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
               _Row(label: 'Sources', children: [
-                if (session.c.supports('import')) _Chip('＋ Import…', false, () => session.c.importFiles()),
-                _Chip('This project', project, () => setState(() => project = true)),
-                _Chip('All', !project && chosen == null, () {
-                  setState(() => project = false);
+                _Chip('This project', project, () => setState(() {
+                  project = true;
+                  bundled = false;
+                })),
+                _Chip('Bundled', bundled, () => setState(() {
+                  bundled = true;
+                  project = false;
+                })),
+                _Chip('All', !project && !bundled && chosen == null, () {
+                  setState(() {
+                    project = false;
+                    bundled = false;
+                  });
                   session.choose(sources: () => null);
                 }),
                 for (final s in session.sources)
-                  _Chip(s.name + (s.available ? '' : ' ·off'), !project && (chosen?.contains(s.id) ?? false), () {
-                    setState(() => project = false);
+                  _Chip(s.name + (s.available ? '' : ' ·off'), !project && !bundled && (chosen?.contains(s.id) ?? false), () {
+                    setState(() {
+                      project = false;
+                      bundled = false;
+                    });
                     session.choose(sources: () => {s.id});
                   }, dim: !s.enabled || !s.available),
+                _Chip('＋ Folder…', false, _addFolder),
+                if (session.c.supports('import')) _Chip('＋ Import…', false, () => session.c.importFiles()),
               ]),
               _Row(label: 'Types', children: [
                 for (final (label, kind) in _types) _Chip(label, kind == null ? session.kinds.isEmpty : session.kinds.contains(kind), () => session.choose(kinds: kind == null ? {} : {kind})),
@@ -153,10 +172,21 @@ class _CatalogMediaState extends State<CatalogMedia> {
 
   // ---- what the person can do to what they picked: the old Media shelf's own operations, over both kinds of item --------
 
+  /// A folder becomes a Source (the catalog indexes it and watches it; nothing in it is ever written).
+  Future<void> _addFolder() async {
+    final picked = await _c.native('pickImport', {});
+    if (picked is! List) return;
+    for (final path in picked.whereType<String>()) {
+      if (Directory(path).existsSync()) await session.addSource(path);
+    }
+  }
+
   bool _mine(BrowserItem i) => i.id.startsWith(ProjectSource.prefix);
 
   void _place(BrowserItem item) {
-    if (_mine(item)) {
+    if (item.id.startsWith(BundledSource.prefix)) {
+      _c.command('create', {'kind': 'background:${item.id.substring(BundledSource.prefix.length)}'});
+    } else if (_mine(item)) {
       _c.command('placeAsset', {'id': item.id.substring(ProjectSource.prefix.length)});
     } else if (_c.supports('placeCatalogAsset')) {
       _c.command('placeCatalogAsset', {'id': item.id});
@@ -165,6 +195,7 @@ class _CatalogMediaState extends State<CatalogMedia> {
 
   /// A work's asset carries the document's own menu; a catalog asset only what does nothing to any file.
   List<({String value, String label, bool enabled})> _menuOf(BrowserItem item, List<BrowserItem> picked) {
+    if (item.id.startsWith(BundledSource.prefix)) return [(value: 'place', label: 'Place', enabled: _c.supports('create'))];
     final raw = _project.raw(item.id);
     final place = (value: 'place', label: 'Place', enabled: !item.missing && _c.supports(raw != null ? 'placeAsset' : 'placeCatalogAsset'));
     if (raw != null) return [place, ...mediaActions(_c, raw)];
@@ -192,7 +223,7 @@ class _CatalogMediaState extends State<CatalogMedia> {
   }
 
   Map<String, dynamic>? _carry(BrowserItem item) {
-    if (item.missing) return null;
+    if (item.missing || item.id.startsWith(BundledSource.prefix)) return null;
     final raw = _project.raw(item.id);
     if (raw != null) return _c.supports('placeAsset') ? {'asset': '${raw['id']}', 'name': item.name} : null;
     return _c.supports('placeCatalogAsset') ? {'asset': item.id, 'name': item.name, 'catalog': true} : null;
@@ -216,9 +247,9 @@ class _Row extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Padding(
         padding: const EdgeInsets.fromLTRB(6, 4, 6, 0),
-        child: Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
-          SizedBox(width: 54, child: Text(label.toUpperCase(), style: Dn.micro(N.g51))),
-          Expanded(child: SizedBox(height: 20, child: ListView(scrollDirection: Axis.horizontal, children: children))),
+        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          SizedBox(width: 54, height: 20, child: Align(alignment: Alignment.centerLeft, child: Text(label.toUpperCase(), style: Dn.micro(N.g51)))),
+          Expanded(child: Wrap(spacing: 0, runSpacing: 3, children: [for (final c in children) SizedBox(height: 20, child: c)])),
         ]),
       );
 }
@@ -235,9 +266,8 @@ class _Chip extends StatelessWidget {
         child: Container(
           margin: const EdgeInsets.only(right: 3),
           padding: const EdgeInsets.symmetric(horizontal: 6),
-          alignment: Alignment.center,
           decoration: BoxDecoration(color: on ? N.g20 : null, borderRadius: BorderRadius.circular(3)),
-          child: Text(label, softWrap: false, style: sans(10.5, c: on ? N.g95 : (dim ? N.g44 : N.g63), w: on ? FontWeight.w600 : FontWeight.w500)),
+          child: Center(widthFactor: 1, child: Text(label, softWrap: false, style: sans(10.5, c: on ? N.g95 : (dim ? N.g44 : N.g63), w: on ? FontWeight.w600 : FontWeight.w500))),
         ),
       );
 }

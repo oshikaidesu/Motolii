@@ -120,3 +120,9 @@ Not yet ported (old shelf had them; no new meaning involved): Favorites / collec
 Decision Queue (new meaning only): 6. What "Remove" means for a catalog asset (forget it from the index / stop the source) and that no Browser action ever deletes a source file — nothing is wired to Delete for catalog assets today.
 
 Real-app checks run: all integration tests (with the fixture document) plus `catalog_follows_test` and `catalog_place_test`.
+
+## Real-window pass of the production Media seat (2026-09-30)
+
+Looked at in the live app (scratch document, isolated state). Found and fixed: the Sources row scrolled sideways at seat width so Bundled / All were hidden (now wraps); the bundled HDR environments the old library listed had gone (now the `Bundled` Source, placed with `create`); there was no way to register a folder (now `＋ Folder…`, through the existing folder-capable picker). Confirmed by hand: click chooses at once (ring on press), double-click places a layer, the seat's Sources / Types / search read cleanly. Not confirmed by hand (the driving tool cannot send keys to a background window): Enter / arrows / Delete in the window (covered by widget tests) and Place -> undo in the window (covered by the real-app test). One thing seen and not examined: after placing the bundled Sunset sky the Stage showed black (the same `create` the old shelf used; the render, not the Browser).
+
+Direction settled with the owner: the old shelf is a behavioural floor (do not lose basic operations), not a spec to reproduce. Favorites / Recents / Collections 1-7 are not ported; they get re-thought inside the Sources / Places + Library / Types + Collections + Search -> Result Set model. Explore B: hubs for Source / Folder / Project / Type, direct edges only for true pairwise relations (same bytes); filters are visibility over one stable map.
