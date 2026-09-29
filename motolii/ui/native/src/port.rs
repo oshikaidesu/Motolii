@@ -5,7 +5,7 @@ use crate::doc::store::*;
 use serde_json::{Value as J,json};
 use crate::viewer::{KeySel,ColorSlot};
 fn e(error:impl std::fmt::Display)->String{error.to_string()}
-pub(crate) const CAPABILITIES:&[&str]=&["status","preferences","notes","stageView","stageWindow","select","setProperty","previewProperties","commitPreview","cancelPreview","setText","previewText","styleText","setFont","setAttrs","create","duplicate","ghost","sequence","previewSequence","copy","cut","paste","delete","group","ungroup","reorder","split","setTiming","toggleKey","moveKeys","ease","setColor","previewColor","focusColor","applyPalette","applyEffect","removeEffect","expandEffect","moveEffect","enableEffect","animate","clip","addMarker","setMarker","deleteMarker","composition","import","placeAsset","removeAsset","replaceAsset","relinkAsset","save","new","undo","redo","seek","anchor","freeze","setFillMode","setGradient","previewBlend","applyBlend","relate","unrelate","setTimings","previewTimings","stageGesture","nudge","export","exportStatus","cancelExport","play","pause","tick","moveLayers","pickColor","historyGoto","reloadEffects","runScript","rerunScript","scopeEffect"];
+pub(crate) const CAPABILITIES:&[&str]=&["status","preferences","notes","stageView","stageWindow","select","setProperty","previewProperties","commitPreview","cancelPreview","setText","previewText","styleText","setFont","setAttrs","create","duplicate","ghost","sequence","previewSequence","copy","cut","paste","delete","group","ungroup","reorder","split","setTiming","toggleKey","moveKeys","ease","setColor","previewColor","focusColor","applyPalette","applyEffect","removeEffect","expandEffect","moveEffect","enableEffect","animate","clip","addMarker","setMarker","deleteMarker","composition","import","placeAsset","removeAsset","replaceAsset","relinkAsset","save","new","undo","redo","seek","anchor","freeze","setFillMode","setGradient","previewBlend","applyBlend","relate","unrelate","setTimings","previewTimings","stageGesture","nudge","toggle","export","exportStatus","cancelExport","play","pause","tick","moveLayers","pickColor","historyGoto","reloadEffects","runScript","rerunScript","scopeEffect"];
 fn num(j:&J,key:&str)->Result<f64,String>{j[key].as_f64().filter(|v|v.is_finite()).ok_or_else(||format!("Missing finite {key}"))}
 fn integer(j:&J,key:&str)->Result<i64,String>{j[key].as_i64().ok_or_else(||format!("Missing integer {key}"))}
 fn layer(j:&J)->Result<LayerId,String>{j["layer"].as_u64().map(LayerId).ok_or("Missing layer".into())}
@@ -205,6 +205,11 @@ impl EditorRuntime{
             "setTimings"|"previewTimings"=>{let mut edits=Vec::new();for change in j["changes"].as_array().ok_or("Missing timing changes")?{edits.extend(self.timing_edits(change)?);}if op=="previewTimings"{self.set_preview(edits)?;}else{self.apply(edits)?;}}
             "stageGesture"=>self.stage_gesture(&j)?,
             "nudge"=>self.nudge(&j)?,
+            // 層のスイッチ(目・solo・鍵): 今の値は host が読む。UI の写しが古くても、押した数だけ切り替わる。
+            "toggle"=>{let layer=layer(&j)?;let flag=match string(&j,"flag")?{"hidden"=>editor::functions::verb::LayerFlag::Hidden,"solo"=>editor::functions::verb::LayerFlag::Solo,"locked"=>editor::functions::verb::LayerFlag::Locked,_=>return Err("Unknown layer switch".into())};
+                let attrs=self.doc.view().attrs(layer).map_err(e)?.ok_or("Layer not found")?;
+                let on=match flag{editor::functions::verb::LayerFlag::Hidden=>attrs.hidden,editor::functions::verb::LayerFlag::Solo=>attrs.solo,editor::functions::verb::LayerFlag::Locked=>attrs.locked};
+                let edits=editor::functions::verb::flag_intents(&self.doc,layer,flag,!on).map_err(e)?;self.apply(edits)?;}
             "setTiming"=>{let id=layer(&j)?;let old=self.doc.view().meta(id).map_err(e)?.ok_or("Layer metadata missing")?.timing;let mut next=old;next.start=integer(&j,"start")?;next.duration=integer(&j,"duration")?;next.source_in=integer(&j,"sourceIn")?;let move_keys=next.duration==old.duration&&next.source_in==old.source_in;let edits=editor::functions::verb::retime_layer(&self.doc,id,old,next,move_keys).map_err(e)?;self.apply(edits)?;}
             "toggleKey"=>{let id=layer(&j)?;let name=string(&j,"property")?;let at=self.time()?;
                 if name=="content"{editor::text::toggle_content_key(&mut self.doc,id,at,String::new()).map_err(e)?;}
@@ -459,6 +464,8 @@ mod blend_interaction_tests {
 
 #[cfg(test)]
 mod timing_drag_tests;
+#[cfg(test)]
+mod switch_tests;
 
 #[cfg(test)]
 mod path_effect_tests {

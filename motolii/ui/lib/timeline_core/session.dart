@@ -82,8 +82,8 @@ class TimelineSession extends ChangeNotifier {
     final r = rows[row];
     if (field == 'clipToBelow') {
       if (has('clip')) c.command('clip', {'layer': r.id});
-    } else if (has('setAttrs')) {
-      c.command('setAttrs', {'layers': [r.id], 'patch': {field: r.layer[field] != true}});
+    } else if (has('toggle')) {
+      c.command('toggle', {'layer': r.id, 'flag': field});
     }
   }
 

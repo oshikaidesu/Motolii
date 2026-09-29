@@ -162,11 +162,8 @@ mixin TimelineGrip<T extends StatefulWidget> on State<T>, TimelineFrame<T> {
         ][column.clamp(0, 3)];
         if (field == 'clipToBelow') {
           if (has('clip')) timelineSession.command('clip', {'layer': row.id});
-        } else if (has('setAttrs'))
-          timelineSession.command('setAttrs', {
-            'layers': [row.id],
-            'patch': {field: row.layer[field] != true},
-          });
+        } else if (has('toggle'))
+          timelineSession.command('toggle', {'layer': row.id, 'flag': field});
         gesture = null;
         return;
       }

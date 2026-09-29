@@ -73,6 +73,7 @@ enum DocumentOperation {
   previewTimings('previewTimings'),
   stageGesture('stageGesture'),
   nudge('nudge'),
+  toggle('toggle'),
   exportDocument('export'),
   exportStatus('exportStatus'),
   cancelExport('cancelExport'),

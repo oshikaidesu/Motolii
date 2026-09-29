@@ -69,6 +69,14 @@ void main() {
     final bars = s.rows.where((r) => r.property == null && r.layer['kind'] != 'Camera').map((r) => r.id).toSet();
     expect(c.selectedIds.toSet().containsAll(bars), isTrue);
 
+    // the eye pressed twice before the document answers: hidden, then shown again
+    final eyeRow = s.rows.indexWhere((r) => r.property == null && r.layer['hidden'] != true && r.layer['locked'] != true);
+    final eyeId = s.rows[eyeRow].id;
+    s.toggleSwitch(eyeRow, 'hidden');
+    s.toggleSwitch(eyeRow, 'hidden');
+    await frames(t, 20);
+    expect(c.layers.firstWhere((l) => l['id'] == eyeId)['hidden'] == true, isFalse, reason: 'two presses, back where it was');
+
     // the session outlives its skin: throw the panel away and it is the same one, where it was
     expect(identical(TimelineSession.of(c), s), isTrue);
     expect(EditorSession.maps(c.state['layers']), isNotEmpty);
