@@ -95,7 +95,7 @@ impl EditorRuntime{
         self.viewer.stage_window=next;
         Ok(changed)
     }
-    fn depth_layout(&self,scene:&crate::render::frame_graph::SceneValue)->Result<Json,String>{
+    pub(crate) fn depth_layout(&self,scene:&crate::render::frame_graph::SceneValue)->Result<Json,String>{
         let view=self.doc.view();let time=self.time()?;let comp=view.composition().map_err(e)?.ok_or("No composition")?.spec();
         // 原点は注視点。カメラは eye の位置に置き、drag で orbit と距離を author する。
         let seen=self.engine.resolve_camera(&view,time).map_err(e)?;

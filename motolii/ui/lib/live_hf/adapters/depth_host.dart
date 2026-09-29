@@ -6,9 +6,8 @@ import '../../hf/desk/depth.dart';
 import '../../session/editor_session.dart';
 
 /// What the Depth desk does with the document: the floor plan is `depthLayout` (each layer's point around the camera's
-/// target, and the basis to turn a drag on the plan into a change of its position), a press selects, a drag is a preview
-/// of `position` or of the camera's orbit and distance, and a release commits it (a cancel puts it back). The operations
-/// are the ones the Classic desk sends (`select`, `previewProperties`, `commitPreview`, `cancelPreview`).
+/// target), a press selects and grabs, a drag streams the plan's movement to the host (`stageGesture`, mode depth), which
+/// previews the position or the camera's orbit and distance, and a release commits it (a cancel puts it back).
 class DepthController extends ChangeNotifier implements DepthHost {
   DepthController(this.c) {
     _slice = c.slice('depth', const ['depthLayout', 'selectedId', 'selectedIds', 'capabilities'])..addListener(_changed);
@@ -18,7 +17,7 @@ class DepthController extends ChangeNotifier implements DepthHost {
   late final DocumentSlice _slice;
   Map<String, dynamic>? _grab;
   Future<void> _tail = Future.value();
-  List<Map<String, dynamic>>? _pending;
+  Map<String, dynamic>? _pending;
   bool _sending = false, _finishing = false, _gone = false;
 
   Map<String, dynamic> get _data => EditorSession.map(c.state['depthLayout']);
@@ -62,7 +61,7 @@ class DepthController extends ChangeNotifier implements DepthHost {
     if (_finishing || _grab != null) return;
     if (hit == -1 && cameraSelectable) {
       c.command('select', {'ids': [_camera['layer']]});
-      _grab = {'camera': _camera};
+      _begin({'handle': 'camera'});
       return;
     }
     if (hit < 0 || hit >= _rows.length) {
@@ -72,45 +71,35 @@ class DepthController extends ChangeNotifier implements DepthHost {
     final row = _rows[hit];
     c.command('select', {'ids': [row['id']]});
     if (row['locked'] == true) return;
-    _grab = Map.of(row);
+    _begin({'ids': [row['id']]});
   }
 
+  /// The host carries the grab (`stageGesture`, mode depth): it turns the plan's movement into the position, or the
+  /// camera's orbit and distance.
+  void _begin(Map<String, dynamic> grab) {
+    if (!c.supports('stageGesture')) return;
+    _grab = {'phase': 'begin', 'mode': 'depth', 'start': const [0.0, 0.0], 'point': const [0.0, 0.0], ...grab};
+    _tail = c.command('stageGesture', _grab!);
+  }
+
+  /// [wx], [wz]: for a layer, how far it has moved on the plan; for the camera, where the eye is around the target.
   @override
   void drag(int hit, double wx, double wz) {
     final grab = _grab;
     if (grab == null) return;
-    if (grab['camera'] is Map) {
-      // The eye moves around the target: its direction is the yaw, its flat distance over cos(pitch) the distance.
-      final cam = grab['camera'] as Map;
-      final orbit = cam['orbit'] as List;
-      final pitch = (orbit[0] as num).toDouble();
-      final yaw = math.atan2(-wx, -wz) * 180 / math.pi;
-      final flat = math.sqrt(wx * wx + wz * wz);
-      final cos = math.max(0.05, math.cos(pitch * math.pi / 180).abs());
-      final base = (cam['baseDistance'] as num).toDouble();
-      _pending = [
-        {'layer': cam['layer'], 'property': 'camera.orbit', 'value': [pitch, yaw]},
-        {'layer': cam['layer'], 'property': 'camera.distance', 'value': (flat / cos / base).clamp(0.01, 100)},
-      ];
-    } else {
-      final x = grab['inverseX'] as List, z = grab['inverseZ'] as List, local = grab['local'] as List;
-      final next = List.generate(3, (i) => (local[i] as num).toDouble() + (x[i] as num) * wx + (z[i] as num) * wz);
-      _pending = [
-        {'layer': grab['id'], 'property': 'position', 'value': [next[0], next[1]]},
-        {'layer': grab['id'], 'property': 'position.z', 'value': next[2]},
-      ];
-    }
-    if (!_sending) _tail = _drain();
+    _pending = {...grab, 'phase': 'update', 'point': [wx, wz]};
+    if (!_sending) _tail = _drain(_tail);
   }
 
-  Future<void> _drain() async {
+  Future<void> _drain(Future<void> previous) async {
     if (_sending) return;
     _sending = true;
     try {
+      await previous;
       while (_pending != null) {
-        final edits = _pending!;
+        final args = _pending!;
         _pending = null;
-        await c.command('previewProperties', {'edits': edits});
+        await c.command('stageGesture', args);
       }
     } finally {
       _sending = false;
@@ -121,13 +110,17 @@ class DepthController extends ChangeNotifier implements DepthHost {
   void release({bool cancel = false}) => _finish(cancel);
 
   Future<void> _finish(bool cancel) async {
-    if (_grab == null) return;
+    final grab = _grab;
+    if (grab == null) return;
     _grab = null;
     _finishing = true;
     if (cancel) _pending = null;
-    await _tail;
-    await c.command(cancel ? 'cancelPreview' : 'commitPreview');
-    _finishing = false;
+    try {
+      await _tail;
+      await c.command('stageGesture', {...grab, 'phase': cancel ? 'cancel' : 'commit'});
+    } finally {
+      _finishing = false;
+    }
   }
 
   @override

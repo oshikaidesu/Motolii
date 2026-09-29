@@ -318,6 +318,9 @@ impl EditorRuntime{
             "begin" if matches!(j["mode"].as_str(),Some("camera"|"extent"))=>{let interaction=self.preview_tag.take();self.cancel_preview();self.preview_tag=interaction;
                 let drag=self.boxcam_drag(j,seen)?;self.stage_drag=Some(editor::stage::DragSession::Boxcam(drag));
             }
+            "begin" if j["mode"]=="depth"=>{let interaction=self.preview_tag.take();self.cancel_preview();self.preview_tag=interaction;
+                let drag=self.depth_drag(j)?;self.stage_drag=Some(editor::stage::DragSession::Depth(drag));
+            }
             "begin"=>{let interaction=self.preview_tag.take();self.cancel_preview();self.preview_tag=interaction;let ids=ids(&j["ids"])?;let start=serde_json::from_value(j["start"].clone()).map_err(e)?;
                 let at=self.time()?;
                 let projection=ids.last().and_then(|id|self.doc.view().attrs(*id).ok().flatten()).map_or(LayerProjection::ThreeD,|a|a.projection);
@@ -356,6 +359,26 @@ impl EditorRuntime{
             BoxcamGrip::Camera{layer,handle:BoxcamHandle::parse(string(j,"handle")?)?,centroid,center:camera.center.map(f64::from),zoom:camera.zoom as f64,roll:camera.roll_degrees as f64}
         };
         Ok(editor::boxcam::BoxcamDrag{grip,start,scale,at,revision:self.doc.revision()})
+    }
+    /// Depth desk の図で層(`ids` の 1 つ)かカメラ(`handle`: camera)を掴む。値の元は図に描いたのと同じ depthLayout。
+    fn depth_drag(&mut self,j:&J)->Result<editor::depth_drag::DepthDrag,String>{
+        use editor::depth_drag::{DepthDrag,DepthGrip};
+        let at=self.time()?;
+        let scene=self.engine.frame_graph_editor_scene(&self.doc.view(),at).map_err(e)?;
+        let layout=self.depth_layout(&scene)?;
+        let f=|v:&J|v.as_f64().ok_or_else(||"Depth layout is incomplete".to_string());
+        let three=|v:&J|->Result<[f64;3],String>{Ok([f(&v[0])?,f(&v[1])?,f(&v[2])?])};
+        let grip=if j["handle"]=="camera"{
+            let camera=&layout["camera"];
+            let layer=LayerId(camera["layer"].as_u64().ok_or("The camera is not a layer")?);
+            DepthGrip::Camera{layer,pitch:f(&camera["orbit"][0])?,base:f(&camera["baseDistance"])?}
+        }else{
+            let layer=*ids(&j["ids"])?.last().ok_or("Missing layer")?;
+            let item=layout["items"].as_array().into_iter().flatten().find(|i|i["id"]==layer.0).ok_or("The layer is not on the Depth plan")?;
+            if item["locked"]==true{return Err("Layer is locked".into())}
+            DepthGrip::Layer{layer,local:three(&item["local"])?,inverse_x:three(&item["inverseX"])?,inverse_z:three(&item["inverseZ"])?}
+        };
+        Ok(DepthDrag{grip,at,revision:self.doc.revision()})
     }
     fn accept_paste(&mut self,result:editor::clipboard::PasteResult){match result{
         editor::clipboard::PasteResult::Layers(ids)=>{self.pick(ids);self.viewer.selected_keys.clear();}
