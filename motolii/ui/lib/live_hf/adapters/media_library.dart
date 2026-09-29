@@ -36,7 +36,7 @@ class MediaLibraryBody extends StatelessWidget {
     if (facts is Map && facts['width'] is num && facts['height'] is num && (facts['height'] as num) > 0) {
       return ((facts['width'] as num) / (facts['height'] as num)).clamp(.5, 2.4).toDouble();
     }
-    return switch (mediaKind(item)) { 'HDR' => 2, 'Audio' => 2.4, 'Video' => 16 / 9, _ => 1 };
+    return switch (mediaKind(item)) { 'HDR' => 2, 'Audio' => 1.7, 'Video' => 16 / 9, _ => 1 };
   }
 
   @override

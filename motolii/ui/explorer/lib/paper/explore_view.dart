@@ -82,14 +82,17 @@ Frame exploreLayout(List<BrowserItem> items, String? selected, Size viewport) {
   final c0 = _colours[centre.id];
   double rank(BrowserItem i) => (c0 == null || _colours[i.id] == null) ? 9 : _distance(c0, _colours[i.id]!);
   around.sort((a, b) => rank(a).compareTo(rank(b)));
-  const node = 40.0, gap = 4.0, big = 88.0, margin = 8.0;
+  // faces as big as the seat lets them be: 52 px for a few dozen, less for many
   final halfW = viewport.width / 2;
+  final node = math.min(around.length <= 40 ? 52.0 : (around.length <= 90 ? 40.0 : 30.0), math.max(30.0, halfW / 3.3));
+  final big = (halfW * .6).clamp(72.0, 120.0).toDouble();
+  const gap = 4.0, margin = 8.0;
   final r1 = big / 2 + node / 2 + 8;
   final rings = <List<BrowserItem>>[];
   final radii = <double>[];
   var index = 0;
   for (var k = 0;; k++) {
-    final r = r1 + k * (node + gap + 2);
+    final r = r1 + k * (node + gap + 4);
     if (r + node / 2 + margin > halfW || index >= around.length) break;
     final cap = math.max(4, (2 * math.pi * r / (node + gap)).floor());
     rings.add(around.skip(index).take(cap).toList());
@@ -97,7 +100,9 @@ Frame exploreLayout(List<BrowserItem> items, String? selected, Size viewport) {
     index += rings.last.length;
   }
   final reach = radii.isEmpty ? big / 2 : radii.last + node / 2;
-  final cx = viewport.width / 2, cy = margin + reach;
+  final rest0 = around.length - index;
+  // with nothing left over, the rings are centred in the seat; else they sit at the top and the rest stands under them
+  final cx = viewport.width / 2, cy = rest0 == 0 ? math.max(margin + reach, viewport.height / 2) : margin + reach;
   final faces = <String, Rect>{};
   Rect at(BrowserItem i, Offset c, double base) {
     final a = i.aspect;

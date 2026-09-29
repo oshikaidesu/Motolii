@@ -23,7 +23,7 @@ enum BrowserView { list, thumbnail, explore }
 typedef ExploreBuilder = Widget Function(BuildContext context, List<BrowserItem> items, String? selected, ValueChanged<String> onTap, ValueChanged<String>? onOpen);
 
 class MediaBrowser extends StatefulWidget {
-  const MediaBrowser({super.key, required this.source, this.controls, this.faces, this.explore, this.sort = 'name', this.descending = false, this.onSort, this.onReveal, this.initial = BrowserView.thumbnail, this.startOn, this.startOpen = false, this.exploreLayout, this.exploreRepaint, this.fluidUpTo = 300});
+  const MediaBrowser({super.key, required this.source, this.controls, this.faces, this.explore, this.sort = 'name', this.descending = false, this.onSort, this.onReveal, this.initial = BrowserView.thumbnail, this.startOn, this.startOpen = false, this.exploreLayout, this.exploreRepaint, this.exploreNote, this.holding = const {}, this.startColumn = 44, this.fluidUpTo = 300});
   final ResultSource source;
 
   /// Where Explore puts the faces (for the fluid board). Without it Explore is `explore` alone, and the views swap.
@@ -31,6 +31,15 @@ class MediaBrowser extends StatefulWidget {
 
   /// Fires when Explore's places change by themselves (a colour was measured): the board asks again.
   final Listenable? exploreRepaint;
+
+  /// One honest line under the controls while Explore is shown (what nearness means).
+  final String? exploreNote;
+
+  /// Pointers held over faces, for a story (see FluidBoard.holding).
+  final Map<String, Offset> holding;
+
+  /// The narrowest a Thumbnail column starts at (the size slider moves it).
+  final double startColumn;
 
   /// The fluid board draws every face at once, so it serves result sets up to this size; larger ones use the views that
   /// draw only what is on screen.
@@ -60,6 +69,7 @@ class MediaBrowserState extends State<MediaBrowser> {
   bool preview = false;
   final focus = FocusNode(debugLabel: 'media browser');
   bool _seeded = false;
+  late double thumbMin = widget.startColumn;
 
   @override
   void dispose() {
@@ -128,8 +138,9 @@ class MediaBrowserState extends State<MediaBrowser> {
             focusNode: focus,
             onKeyEvent: (_, e) => _key(items, e),
             child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-              _Header(view: view, count: items.length, hasExplore: widget.explore != null || widget.exploreLayout != null, onView: (v) => setState(() => view = v)),
+              _Header(view: view, count: items.length, hasExplore: widget.explore != null || widget.exploreLayout != null, onView: (v) => setState(() => view = v), size: view == BrowserView.thumbnail ? (thumbMin - 44) / 96 : null, onSize: (f) => setState(() => thumbMin = 44 + f * 96)),
               if (widget.controls != null) widget.controls!,
+              if (view == BrowserView.explore && widget.exploreNote != null) Padding(padding: const EdgeInsets.fromLTRB(9, 3, 9, 0), child: Text(widget.exploreNote!, style: Dn.label(N.g51))),
               Expanded(
                 flex: 5,
                 child: ClipRect(child: _body(items)),
@@ -157,7 +168,7 @@ class MediaBrowserState extends State<MediaBrowser> {
             Expanded(
               child: ListenableBuilder(
                 listenable: widget.exploreRepaint ?? const _Never(),
-                builder: (context, _) => FluidBoard(items: items, selected: selected, view: view.name, onTap: choose, onOpen: open, explore: widget.exploreLayout),
+                builder: (context, _) => FluidBoard(items: items, selected: selected, view: view.name, onTap: choose, onOpen: open, explore: widget.exploreLayout, faces: widget.faces, holding: widget.holding, minColumn: thumbMin, revealOn: preview),
               ),
             ),
           ]));
@@ -177,7 +188,9 @@ class MediaBrowserState extends State<MediaBrowser> {
 }
 
 class _Header extends StatelessWidget {
-  const _Header({required this.view, required this.count, required this.hasExplore, required this.onView});
+  const _Header({required this.view, required this.count, required this.hasExplore, required this.onView, this.size, required this.onSize});
+  final double? size; // 0..1, only while Thumbnail is shown
+  final ValueChanged<double> onSize;
   final BrowserView view;
   final int count;
   final bool hasExplore;
@@ -202,6 +215,7 @@ class _Header extends StatelessWidget {
                 ),
               ),
           const Spacer(),
+          if (size != null) Padding(padding: const EdgeInsets.only(right: 8), child: SizedBox(width: 74, child: _SizeSlider(value: size!, onChanged: onSize))),
           Text('$count', style: Dn.value(N.g51).copyWith(fontSize: 10)),
         ]),
       );
@@ -213,4 +227,36 @@ class _Never implements Listenable {
   void addListener(VoidCallback listener) {}
   @override
   void removeListener(VoidCallback listener) {}
+}
+
+/// A small size slider: smaller faces at the left, bigger at the right.
+class _SizeSlider extends StatelessWidget {
+  const _SizeSlider({required this.value, required this.onChanged});
+  final double value;
+  final ValueChanged<double> onChanged;
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(builder: (context, box) {
+        void set(Offset p) => onChanged((p.dx / box.maxWidth).clamp(0.0, 1.0));
+        return GestureDetector(
+          key: const ValueKey('thumb-size'),
+          behavior: HitTestBehavior.opaque,
+          onPanDown: (d) => set(d.localPosition),
+          onPanUpdate: (d) => set(d.localPosition),
+          child: CustomPaint(size: Size(box.maxWidth, 22), painter: _SizePainter(value)),
+        );
+      });
+}
+
+class _SizePainter extends CustomPainter {
+  const _SizePainter(this.value);
+  final double value;
+  @override
+  void paint(Canvas c, Size s) {
+    final y = s.height / 2;
+    c.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(0, y - 1, s.width, 2), const Radius.circular(1)), Paint()..color = N.g26);
+    c.drawCircle(Offset(3 + value * (s.width - 6), y), 4.5, Paint()..color = N.g91);
+  }
+
+  @override
+  bool shouldRepaint(_SizePainter o) => o.value != value;
 }

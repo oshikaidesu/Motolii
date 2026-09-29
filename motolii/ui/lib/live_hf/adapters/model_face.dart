@@ -12,12 +12,15 @@ import '../../hf/neutral.dart';
 /// edits, places and renders nothing for the work. A file flutter_scene cannot read (its importer takes glTF/GLB) keeps
 /// [fallback].
 class ModelFace extends StatefulWidget {
-  const ModelFace({super.key, required this.path, required this.fallback, this.turnable = false});
+  const ModelFace({super.key, required this.path, required this.fallback, this.turnable = false, this.hoverYaw});
   final String path;
   final Widget fallback;
 
   /// A drag turns the model (the preview's live face); a shelf tile stays still.
   final bool turnable;
+
+  /// A pointer passing over a shelf tile turns the model by this much (0..1 across the tile), without a click.
+  final double? hoverYaw;
 
   /// Whether the face can be drawn from this file (GLB/glTF): the others keep their glyph without trying.
   static bool reads(String path) {
@@ -32,7 +35,6 @@ class ModelFace extends StatefulWidget {
 class _ModelFaceState extends State<ModelFace> {
   final scene = Scene();
   Node? node;
-  PerspectiveCamera? camera;
   Aabb3? _bounds;
   double _yaw = .55, _pitch = .35;
   bool failed = false;
@@ -56,7 +58,6 @@ class _ModelFaceState extends State<ModelFace> {
         setState(() {
           node = n;
           _bounds = bounds;
-          camera = _frame(bounds, _direction());
         });
       }
     } catch (_) {
@@ -64,10 +65,13 @@ class _ModelFaceState extends State<ModelFace> {
     }
   }
 
-  Vector3 _direction() => Vector3(math.sin(_yaw) * math.cos(_pitch), math.sin(_pitch), -math.cos(_yaw) * math.cos(_pitch));
+  Vector3 _direction() {
+    final yaw = widget.hoverYaw == null ? _yaw : _yaw + (widget.hoverYaw! - .5) * 2.4;
+    return Vector3(math.sin(yaw) * math.cos(_pitch), math.sin(_pitch), -math.cos(yaw) * math.cos(_pitch));
+  }
 
   /// The distance at which every corner of the bounds is inside the square view (the model, not its bounding sphere).
-  PerspectiveCamera _frame(Aabb3 b, Vector3 dir) {
+  PerspectiveCamera _frame(Aabb3 b, Vector3 dir, [double aspect = 1]) {
     const fov = 40 * math.pi / 180;
     final d = dir.normalized(), c = b.center;
     final right = Vector3(0, 1, 0).cross(d).normalized(), up = d.cross(right).normalized();
@@ -76,7 +80,8 @@ class _ModelFaceState extends State<ModelFace> {
       for (final y in [b.min.y, b.max.y]) {
         for (final z in [b.min.z, b.max.z]) {
           final v = Vector3(x, y, z) - c;
-          dist = math.max(dist, v.dot(d) + math.max(v.dot(right).abs(), v.dot(up).abs()) / math.tan(fov / 2));
+          // fitted to the view's own shape: the horizontal field is `aspect` times the vertical one
+          dist = math.max(dist, v.dot(d) + math.max(v.dot(right).abs() / aspect, v.dot(up).abs()) / math.tan(fov / 2));
         }
       }
     }
@@ -93,20 +98,24 @@ class _ModelFaceState extends State<ModelFace> {
   @override
   Widget build(BuildContext context) {
     if (failed) return widget.fallback;
-    final cam = camera;
-    final view = ColoredBox(color: N.g13, child: cam == null ? widget.fallback : SceneView(scene, camera: cam));
-    if (!widget.turnable || cam == null) return view;
-    return MouseRegion(
-      cursor: SystemMouseCursors.grab,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onPanUpdate: (d) => setState(() {
-          _yaw += d.delta.dx * .012;
-          _pitch = (_pitch + d.delta.dy * .012).clamp(-1.2, 1.2);
-          camera = _frame(_bounds!, _direction());
-        }),
-        child: view,
-      ),
-    );
+    final bounds = _bounds;
+    if (bounds == null) return ColoredBox(color: N.g13, child: widget.fallback);
+    return LayoutBuilder(builder: (context, box) {
+      final aspect = box.maxHeight > 0 && box.maxWidth.isFinite ? box.maxWidth / box.maxHeight : 1.0;
+      final cam = _frame(bounds, _direction(), aspect);
+      final view = ColoredBox(color: N.g13, child: SceneView(scene, camera: cam));
+      if (!widget.turnable) return view;
+      return MouseRegion(
+        cursor: SystemMouseCursors.grab,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onPanUpdate: (d) => setState(() {
+            _yaw += d.delta.dx * .012;
+            _pitch = (_pitch + d.delta.dy * .012).clamp(-1.2, 1.2);
+          }),
+          child: view,
+        ),
+      );
+    });
   }
 }

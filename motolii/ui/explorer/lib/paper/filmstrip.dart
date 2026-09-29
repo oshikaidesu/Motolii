@@ -27,7 +27,7 @@ class _FluidFilmstripState extends State<FluidFilmstrip> {
   String view = 'list';
   String? selected;
   final frames = <(String, ui.Image)>[];
-  static const size = Size(230, 380);
+  static const size = Size(230, 540);
 
   @override
   void initState() {

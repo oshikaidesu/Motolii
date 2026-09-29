@@ -44,6 +44,7 @@ class MediaListView extends StatelessWidget {
                     child: Row(children: [
                       SizedBox(width: 54, child: Align(alignment: Alignment.centerLeft, child: _Face(it, selected: on))),
                       Expanded(child: Text(it.name, maxLines: 1, softWrap: false, overflow: TextOverflow.ellipsis, style: Dn.name(on ? N.g100 : N.g91))),
+                      const SizedBox(width: 8),
                       SizedBox(width: 42, child: Text(it.typeWord, softWrap: false, style: Dn.label(N.g63))),
                       SizedBox(width: 40, child: Text(clockText(it.seconds), softWrap: false, style: Dn.value(N.g69).copyWith(fontSize: 10))),
                       if (wide) SizedBox(width: 54, child: Text(sizeText(it.size), softWrap: false, textAlign: TextAlign.right, style: Dn.value(N.g69).copyWith(fontSize: 10))),

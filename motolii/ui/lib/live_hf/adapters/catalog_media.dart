@@ -12,10 +12,12 @@ import 'media_preview.dart';
 /// The catalog's controls over the Thumbnail view: SOURCES (which folders), TYPES (what), a search (which). Where, What
 /// and Which are separate; the view (How) is the shelf's own masonry, unchanged. A skin over [CatalogSession].
 class CatalogMedia extends StatelessWidget {
-  const CatalogMedia({super.key, required this.session, this.explore, this.initial = BrowserView.thumbnail, this.startOn, this.startOpen = false, this.exploreLayout, this.exploreRepaint});
+  const CatalogMedia({super.key, required this.session, this.explore, this.initial = BrowserView.thumbnail, this.startOn, this.startOpen = false, this.exploreLayout, this.exploreRepaint, this.exploreNote, this.startColumn = 44});
   final CatalogSession session;
   final ExploreLayout? exploreLayout;
   final Listenable? exploreRepaint;
+  final String? exploreNote;
+  final double startColumn;
   final String? startOn;
   final bool startOpen;
   final ExploreBuilder? explore;
@@ -34,6 +36,8 @@ class CatalogMedia extends StatelessWidget {
             explore: explore,
             exploreLayout: exploreLayout,
             exploreRepaint: exploreRepaint,
+            exploreNote: exploreNote,
+            startColumn: startColumn,
             initial: initial,
             startOn: startOn,
             startOpen: startOpen,
@@ -70,7 +74,7 @@ class _Faces implements FaceService {
   _Faces(this.session);
   final CatalogSession session;
   @override
-  Future<String?> frameAt(BrowserItem item, double seconds) => session.frameAt(item.id, seconds);
+  Future<String?> frameAt(BrowserItem item, double seconds, {int edge = 480}) => session.frameAt(item.id, seconds, edge: edge);
   @override
   Future<String?> pictureOf(BrowserItem item) => session.pictureOf(item.id);
 }
@@ -149,11 +153,10 @@ class _Folders extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final source = session.folderSource!;
-    final name = session.sources.where((s) => s.id == source).map((s) => s.name).firstOrNull ?? '';
     final path = (session.folder?.prefix ?? '').split('/').where((p) => p.isNotEmpty).toList();
     void go(List<String> parts) => session.choose(folder: () => (source: source, prefix: parts.join('/')));
     return _Row(label: 'Folder', children: [
-      _Chip(name, path.isEmpty, () => go(const [])),
+      _Chip('/', path.isEmpty, () => go(const [])),
       for (final (i, part) in path.indexed) _Chip('/ $part', i == path.length - 1, () => go(path.sublist(0, i + 1))),
       for (final f in session.subfolders) _Chip('${f.name} ${f.assets}', false, () => go([...path, f.name]), dim: true),
     ]);

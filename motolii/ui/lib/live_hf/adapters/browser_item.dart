@@ -47,15 +47,15 @@ class BrowserItem {
     return switch (kind) {
       'video' => seconds == null ? '▶' : '▶ ${clock(seconds!)}',
       'audio' => seconds == null ? '♪' : '♪ ${clock(seconds!)}',
-      'model' => '3D',
-      'environment' => '360°',
+      'model' => '3D ↻',
+      'environment' => '360° ↔',
       _ => '',
     };
   }
 
   double get aspect => switch (kind) {
         'environment' => 2,
-        'audio' => 2.4,
+        'audio' => 1.7,
         'model' => 1,
         _ => (width != null && height != null && height! > 0) ? (width! / height!).clamp(.5, 2.4).toDouble() : (kind == 'video' ? 16 / 9 : 1),
       };

@@ -1,9 +1,13 @@
 // The fluid board moves the same faces between projections: the selection and the identity stay, and a face is between its
 // two places part-way through the change (motion, not a swap).
+import 'dart:ui' show PointerDeviceKind;
+
+import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:motolii_stage5/live_hf/adapters/browser_item.dart';
 import 'package:motolii_stage5/live_hf/adapters/media_fluid.dart';
+import 'package:motolii_stage5/live_hf/adapters/media_preview.dart' show FaceService;
 
 BrowserItem item(int i, String kind, {int? w, int? h}) => BrowserItem(id: 'a$i', name: 'asset$i', path: '/nowhere/asset$i', kind: kind, mime: 'x/y', width: w, height: h, size: 1000 * (i + 1));
 
@@ -26,6 +30,7 @@ void main() {
     await t.pumpAndSettle();
     final inList = faceOf(t, 'a3');
     await t.pumpWidget(board('thumbnail', selected: 'a3'));
+    await t.pump(const Duration(milliseconds: 150)); // the stagger: this face sets off some 127 ms in
     await t.pump(const Duration(milliseconds: 120));
     final part = faceOf(t, 'a3');
     await t.pumpAndSettle();
@@ -62,4 +67,40 @@ void main() {
       }
     }
   });
+
+  testWidgets('a pointer passing over a clip asks the owner for the frame it is over, without a click', (t) async {
+    final asked = <double>[];
+    final clip = BrowserItem(id: 'clip', name: 'clip.mp4', path: '/nowhere/clip.mp4', kind: 'video', mime: 'video/mp4', width: 1280, height: 720, seconds: 8);
+    final faces = _Faces(asked);
+    await t.pumpWidget(Directionality(
+      textDirection: TextDirection.ltr,
+      child: Align(alignment: Alignment.topLeft, child: SizedBox(width: 320, height: 420, child: FluidBoard(items: [clip], selected: null, view: 'thumbnail', onTap: (_) {}, faces: faces))),
+    ));
+    await t.pumpAndSettle();
+    final face = t.getRect(find.byKey(const ValueKey('face-clip')));
+    final mouse = await t.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: Offset.zero);
+    await mouse.moveTo(Offset(face.left + face.width * .25, face.center.dy));
+    await t.pump();
+    await mouse.moveTo(Offset(face.left + face.width * .75, face.center.dy));
+    await t.pump();
+    await t.pump(const Duration(milliseconds: 50));
+    expect(asked, isNotEmpty);
+    expect(asked.last, closeTo(6, .6), reason: 'three quarters across an 8 second clip');
+    await mouse.moveTo(const Offset(319, 419));
+    await t.pump();
+  });
+}
+
+class _Faces implements FaceService {
+  _Faces(this.asked);
+  final List<double> asked;
+  @override
+  Future<String?> frameAt(BrowserItem item, double seconds, {int edge = 480}) async {
+    asked.add(seconds);
+    return null;
+  }
+
+  @override
+  Future<String?> pictureOf(BrowserItem item) async => null;
 }
