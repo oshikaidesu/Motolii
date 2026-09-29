@@ -90,3 +90,15 @@ Decision Queue (meaning, for the person to decide):
 3. Relink at open writes to the work (undoable): keep it automatic, or ask first?
 4. Folder selection: everything below (library view) or only what stands in it (folder view)? Both queries exist.
 5. Explore: keep colour nearness as the first honest projection, or wait for a real similarity source?
+
+## Blind critic gate (Browser vs the North Star image) — status 2026-09-30
+
+Seven rounds with a critic that sees only screenshots and the concept image. Rounds 1–6 each produced real fixes (ring over the face, label collisions, Explore off the seat and unsized, size slider, live-face hints, stagger, lines to the nearest five, every asset in one field, chosen asset named, larger default faces). Round 7 still says FAIL, on points that repeat decided items or read the still filmstrip / shot canvas as defects:
+
+- Explore "small, not filling the pane": the field is width-limited (no face may leave the seat) and centred; the tall blank area is shot canvas. Stretching to an ellipse is possible, not done.
+- Filmstrip early frames "bunch in a column": the first ms of a staggered move from the List rows; stills cannot show the path. A recorded motion check would settle it (the widget test asserts identity and no overlap).
+- Selection Preview docked below rather than over the result: in the Decision Queue.
+- Region labels ("Sky", "City") in Explore: declined, invented meaning (no similarity source).
+- Sound play button: no playback capability exists.
+
+The critic gate was NOT passed; the owner's own look is the remaining judge.
