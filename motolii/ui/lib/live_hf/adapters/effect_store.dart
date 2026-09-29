@@ -95,10 +95,10 @@ class SessionEffectStore extends ParamStore {
     if (frozen) return;
     super.preview(id, v);
     _gesture = true;
-    // One edit; the host spreads it over the selection (a drag by offset, a typed number as it is).
+    // One edit; the host spreads it over the selection (a drag by offset, a typed number on the axes that changed).
     c.command('previewProperties', {
       'edits': [
-        {'layer': layerId, 'property': id, 'value': row(id)['value'], 'spread': typing ? 'absolute' : 'offset'},
+        {'layer': layerId, 'property': id, 'value': row(id)['value'], 'spread': typing ? 'typed' : 'offset'},
       ],
     });
   }
