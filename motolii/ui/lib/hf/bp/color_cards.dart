@@ -3,7 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/widgets.dart';
 
 import '../neutral.dart';
-import 'common.dart' show mono;
+import 'common.dart' show sans;
 
 /// Colours as blocks: the colour itself in large squares, three across the default seat, 2 px apart, its hex set
 /// inside at the bottom left in an ink that reads on it (a swatch card, as current palettes are shown); an edge only
@@ -17,7 +17,7 @@ class SwatchCards extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const gap = 2.0;
+    const gap = 6.0;
     final cols = math.max(2, ((width + gap) / 80).floor());
     final cell = (width - gap * (cols - 1)) / cols;
     final ground = N.g10.computeLuminance();
@@ -34,10 +34,10 @@ class SwatchCards extends StatelessWidget {
             return Container(
               width: cell,
               height: cell * .78,
-              padding: const EdgeInsets.fromLTRB(7, 0, 6, 6),
+              padding: const EdgeInsets.fromLTRB(8, 0, 6, 7),
               alignment: Alignment.bottomLeft,
-              decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(2), border: (l - ground).abs() < .06 ? Border.all(color: N.g20) : null),
-              child: Text('#${(v.$2 & 0xFFFFFF).toRadixString(16).padLeft(6, '0').toUpperCase()}', softWrap: false, style: mono(9, c: l > .45 ? N.g07.withValues(alpha: .8) : N.g100.withValues(alpha: .9))),
+              decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(8), border: Border.all(color: (l - ground).abs() < .06 ? N.g20 : N.glaze9)),
+              child: Text('#${(v.$2 & 0xFFFFFF).toRadixString(16).padLeft(6, '0').toUpperCase()}', softWrap: false, style: sans(10, c: l > .45 ? N.g07.withValues(alpha: .8) : N.g100.withValues(alpha: .92), w: FontWeight.w500)),
             );
           }),
         ),

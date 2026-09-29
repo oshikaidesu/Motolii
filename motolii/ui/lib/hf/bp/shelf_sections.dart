@@ -22,22 +22,24 @@ class ShelfHeading extends StatelessWidget {
   Widget build(BuildContext context) => SwissHeading(text, count: count, rule: !first);
 }
 
-/// The Browser's one heading voice (Swiss): a hairline across the body, then small tracked caps at the left and the
-/// count at the right edge in figures of one width.
+/// The Browser's one heading voice: the section's name in plain semibold, its count in a small quiet pill.
 class SwissHeading extends StatelessWidget {
   const SwissHeading(this.text, {super.key, this.count, this.rule = true});
   final String text;
   final int? count;
-  final bool rule;
+  final bool rule; // kept for callers; a heading no longer draws a rule
   @override
   Widget build(BuildContext context) => Padding(
-        padding: EdgeInsets.only(top: rule ? 12 : 8, bottom: 6),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          if (rule) ...[Container(height: 1, color: N.g15), const SizedBox(height: 5)],
-          Row(children: [
-            Expanded(child: Text(text.toUpperCase(), softWrap: false, overflow: TextOverflow.ellipsis, style: mono(8.5, c: N.g76, ls: .6))),
-            if (count != null) Text(count!.toString().padLeft(2, '0'), style: mono(8.5, c: N.g44)),
-          ]),
+        padding: EdgeInsets.only(top: rule ? 14 : 10, bottom: 8),
+        child: Row(children: [
+          Flexible(child: Text(text, softWrap: false, overflow: TextOverflow.ellipsis, style: sans(11.5, c: N.g91, w: FontWeight.w600))),
+          if (count != null)
+            Container(
+              margin: const EdgeInsets.only(left: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+              decoration: BoxDecoration(color: N.g15, borderRadius: BorderRadius.circular(4)),
+              child: Text('$count', style: sans(9.5, c: N.g63, w: FontWeight.w500)),
+            ),
         ]),
       );
 }

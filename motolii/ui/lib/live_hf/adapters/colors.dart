@@ -249,11 +249,11 @@ class _LiveColorInstrumentState extends State<LiveColorInstrument> {
                     children: [
                       if (edit.target case final target?)
                         Text(
-                          colorTargetTitle(c, target).toUpperCase(),
+                          colorTargetTitle(c, target),
                           key: const ValueKey('hf-color-target'),
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: sans(9, c: N.g56, w: FontWeight.w600, ls: .55),
+                          style: sans(10.5, c: N.g63, w: FontWeight.w500),
                         ),
                       const SizedBox(height: 6),
                       Row(children: [
@@ -262,7 +262,7 @@ class _LiveColorInstrumentState extends State<LiveColorInstrument> {
                             key: const ValueKey('hf-color-hex'),
                             controller: hex,
                             focusNode: hexFocus,
-                            style: mono(13, c: N.g95),
+                            style: sans(15, c: N.g95, w: FontWeight.w600),
                             cursorColor: N.g82,
                             backgroundCursorColor: N.g00,
                             onSubmitted: _typed,
@@ -289,8 +289,8 @@ class _LiveColorInstrumentState extends State<LiveColorInstrument> {
                         Padding(
                           padding: const EdgeInsets.only(top: 1),
                           child: Row(children: [
-                            SizedBox(width: 38, child: Text(a, softWrap: false, style: mono(8.5, c: N.g56))),
-                            Text(b, softWrap: false, style: mono(8.5, c: N.g56)),
+                            SizedBox(width: 40, child: Text(a, softWrap: false, style: sans(10, c: N.g56))),
+                            Text(b, softWrap: false, style: sans(10, c: N.g56)),
                           ]),
                         ),
                       // while armed, what to do next

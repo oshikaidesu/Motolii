@@ -117,9 +117,9 @@ class _Row extends StatelessWidget {
           child: Align(
             alignment: Alignment.centerLeft,
             child: Container(
-              padding: const EdgeInsets.only(bottom: 2),
-              decoration: BoxDecoration(border: Border(bottom: BorderSide(color: on ? N.g95 : N.clear, width: 1))),
-              child: Text(label, softWrap: false, overflow: TextOverflow.clip, style: sans(11, c: on ? N.g95 : N.g56, w: FontWeight.w500)),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(color: on ? N.g20 : null, borderRadius: BorderRadius.circular(6)),
+              child: Text(label, softWrap: false, overflow: TextOverflow.clip, style: sans(11.5, c: on ? N.g95 : N.g56, w: FontWeight.w500)),
             ),
           ),
         ),
@@ -199,7 +199,7 @@ class _ClassStripState extends State<ClassStrip> {
                       for (final c in g)
                         Padding(
                           key: c == widget.classify.selected ? _chosen : null,
-                          padding: const EdgeInsets.only(right: 10),
+                          padding: const EdgeInsets.only(right: 2),
                           child: _Row(c, c == widget.classify.selected, () => widget.classify.select(c)),
                         ),
                     ],

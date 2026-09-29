@@ -5,7 +5,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/widgets.dart';
 
-import '../../hf/bp/common.dart' show mono;
+import '../../hf/bp/common.dart' show mono, sans;
 import '../../hf/bp/seat.dart';
 import '../../hf/bp/shell.dart' show GlyphBox, kTile;
 import '../../hf/bp/shelf_sections.dart';
@@ -35,7 +35,7 @@ class MediaLibraryBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const margin = 10.0, gap = 2.0;
+    const margin = 10.0, gap = 6.0;
     final body = width - margin * 2;
     // cards of at least 70 px: three across the default seat, more as it widens
     final cols = math.max(1, ((body + gap) / (70 + gap)).floor());
@@ -90,10 +90,10 @@ class _Board extends StatelessWidget {
   }
 }
 
-const _captionHeight = 0.0;
+const _captionHeight = 20.0;
 
-/// One piece: its picture at its own proportions, and on a dark strip across its foot its index, its name and what it
-/// is (size or length), in small mono caps — no caption rows under the pictures, so the board stays tight.
+/// One piece: its picture, rounded, at its own proportions; under it its name and, when the card has room, its size or
+/// length.
 class MaterialCard extends StatelessWidget {
   const MaterialCard({super.key, required this.item, required this.name, this.index, this.roomy = true});
   final Map<String, dynamic> item;
@@ -107,30 +107,28 @@ class MaterialCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final missing = item['missing'] == true;
     final fact = roomy ? _fact(item) : '';
-    Widget face = ColoredBox(color: N.g07, child: materialFace(item));
-    if (missing) face = Opacity(opacity: .4, child: face);
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(1),
-      child: Stack(fit: StackFit.expand, children: [
-        face,
-        Positioned(
-          left: 0,
-          right: 0,
-          bottom: 0,
-          child: Container(
-            padding: const EdgeInsets.fromLTRB(4, 8, 4, 3),
-            decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [N.g00.withValues(alpha: 0), N.g00.withValues(alpha: .78)])),
-            child: Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
-              if (index != null) Padding(padding: const EdgeInsets.only(right: 4), child: Text(index!.toString().padLeft(2, '0'), style: mono(7, c: N.g63))),
-              Expanded(child: Text((missing ? 'Missing · $name' : name).toUpperCase(), maxLines: 1, softWrap: false, overflow: TextOverflow.ellipsis, style: mono(7.5, c: N.g95))),
-              if (fact.isNotEmpty) Padding(padding: const EdgeInsets.only(left: 4), child: Text(fact, softWrap: false, style: mono(7, c: N.g69))),
-            ]),
-          ),
-        ),
-        // placed in the work: a small light mark in the corner
-        if (item['used'] == true && !missing) Positioned(right: 4, top: 4, child: Container(width: 5, height: 5, decoration: const BoxDecoration(color: N.g95, shape: BoxShape.circle))),
-      ]),
+    Widget face = DecoratedBox(
+      position: DecorationPosition.foreground,
+      decoration: BoxDecoration(borderRadius: BorderRadius.circular(6), border: Border.all(color: N.glaze9)),
+      child: ClipRRect(borderRadius: BorderRadius.circular(6), child: ColoredBox(color: N.g13, child: materialFace(item))),
     );
+    if (missing) face = Opacity(opacity: .4, child: face);
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      Expanded(
+        child: Stack(fit: StackFit.expand, children: [
+          face,
+          // placed in the work: a small light dot in the corner
+          if (item['used'] == true && !missing) Positioned(right: 6, top: 6, child: Container(width: 6, height: 6, decoration: BoxDecoration(color: N.g95, shape: BoxShape.circle, border: Border.all(color: N.g07.withValues(alpha: .5))))),
+        ]),
+      ),
+      SizedBox(
+        height: _captionHeight,
+        child: Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+          Expanded(child: Text(missing ? 'Missing · $name' : name, maxLines: 1, softWrap: false, overflow: TextOverflow.ellipsis, style: sans(10.5, c: N.g86, w: FontWeight.w500))),
+          if (fact.isNotEmpty) Padding(padding: const EdgeInsets.only(left: 4), child: Text(fact, softWrap: false, style: sans(9.5, c: N.g51))),
+        ]),
+      ),
+    ]);
   }
 }
 

@@ -1,6 +1,7 @@
 import 'package:flutter/widgets.dart';
 
 import 'common.dart';
+import 'shelf_sections.dart' show SwissHeading;
 import 'effects.dart';
 import 'faces.dart';
 import 'seat.dart';
@@ -37,8 +38,8 @@ class CreateTiles extends StatelessWidget {
       physics: const ClampingScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(pad, 6, pad, 8),
       children: [
-        for (final e in sections.entries) _section(context, e.key.toUpperCase(), e.value, w),
-        if (recent.isNotEmpty) _section(context, 'RECENT', recent.take(cols).toList(), w),
+        for (final e in sections.entries) _section(context, e.key[0].toUpperCase() + e.key.substring(1).toLowerCase(), e.value, w),
+        if (recent.isNotEmpty) _section(context, 'Recent', recent.take(cols).toList(), w),
       ],
     );
   }
@@ -47,7 +48,7 @@ class CreateTiles extends StatelessWidget {
   Widget _section(BuildContext context, String id, List<Thing> things, double w) => Padding(
         padding: const EdgeInsets.only(top: 4, bottom: 6),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Padding(padding: const EdgeInsets.only(left: 2, bottom: 4), child: Text(id, softWrap: false, style: sans(9, c: N.g69, w: FontWeight.w600, ls: .9))),
+          SwissHeading(id, rule: false),
           Wrap(
             spacing: gap,
             runSpacing: gap,
