@@ -90,13 +90,19 @@ class FluidBoard extends StatefulWidget {
 class _FluidBoardState extends State<FluidBoard> {
   final scroll = ScrollController();
 
+  /// Moving between projections: it starts on the input's own frame and only slows at the end (ease-out), and it is short.
+  /// The same asset keeps its identity through it; a long, slow move would not make it any more continuous.
+  static const _move = Duration(milliseconds: 200);
+  static const _curve = Curves.easeOutCubic;
+  bool _instant = false;
+
   /// While the faces are on their way the labels stay out (they would run into one another); they return when the faces land.
   bool _moving = false;
   Timer? _landed;
   void _hush() {
     _landed?.cancel();
     setState(() => _moving = true);
-    _landed = Timer(const Duration(milliseconds: 420), () {
+    _landed = Timer(_move + const Duration(milliseconds: 40), () {
       if (mounted) setState(() => _moving = false);
     });
   }
@@ -121,7 +127,9 @@ class _FluidBoardState extends State<FluidBoard> {
     if (old.revealOn != widget.revealOn) {
       SchedulerBinding.instance.addPostFrameCallback((_) => _reveal());
     }
-    if (old.view != widget.view || old.minColumn != widget.minColumn) {
+    // a size being dragged is direct manipulation: the faces follow it 1:1, nothing animates behind the pointer
+    _instant = old.view == widget.view && old.minColumn != widget.minColumn;
+    if (old.view != widget.view) {
       _hush();
       // the same asset stays in view across the change: bring the chosen one to the middle of the new arrangement
       SchedulerBinding.instance.addPostFrameCallback((_) => _reveal());
@@ -136,7 +144,7 @@ class _FluidBoardState extends State<FluidBoard> {
     final rect = _frame(_viewport).faces[id];
     if (rect == null) return;
     final target = (rect.center.dy - _viewport.height / 2).clamp(0.0, math.max(0.0, scroll.position.maxScrollExtent)).toDouble();
-    scroll.animateTo(target, duration: const Duration(milliseconds: 380), curve: Curves.easeInOutCubic);
+    scroll.animateTo(target, duration: _move, curve: _curve);
   }
 
   @override
@@ -144,8 +152,8 @@ class _FluidBoardState extends State<FluidBoard> {
         _viewport = Size(box.maxWidth, box.maxHeight);
         final frame = _frame(_viewport);
         final content = Size(math.max(frame.content.width, box.maxWidth), math.max(frame.content.height, box.maxHeight));
-        const move = Duration(milliseconds: 380);
-        const curve = Curves.easeInOutCubic;
+        final move = _instant ? Duration.zero : _move;
+        const curve = _curve;
         return SingleChildScrollView(
           controller: scroll,
           physics: const ClampingScrollPhysics(),
@@ -164,7 +172,7 @@ class _FluidBoardState extends State<FluidBoard> {
                     child: IgnorePointer(
                       child: AnimatedOpacity(
                         opacity: _moving ? 0 : 1,
-                        duration: Duration(milliseconds: _moving ? 60 : 300),
+                        duration: Duration(milliseconds: _moving ? 0 : 120),
                         child: CustomPaint(painter: _Spokes(frame.faces[widget.selected]!.center, [for (final id in frame.links) if (frame.faces[id] != null) frame.faces[id]!.center])),
                       ),
                     ),
@@ -174,7 +182,7 @@ class _FluidBoardState extends State<FluidBoard> {
                     _Glide(
                       key: ValueKey('label-${it.id}'),
                       rect: frame.labels[it.id]!,
-                      delay: _delay(it),
+                      instant: _instant,
                       child: GestureDetector(
                         behavior: HitTestBehavior.opaque,
                         onTap: () => widget.onTap(it.id),
@@ -183,8 +191,8 @@ class _FluidBoardState extends State<FluidBoard> {
                         // outgoing label keeps its own): clipped, never squeezed
                         child: ClipRect(
                           child: AnimatedSwitcher(
-                            duration: const Duration(milliseconds: 220),
-                            reverseDuration: const Duration(milliseconds: 70),
+                            duration: const Duration(milliseconds: 120),
+                            reverseDuration: Duration.zero,
                             child: KeyedSubtree(
                               key: ValueKey('${widget.view}-${it.id}'),
                               child: OverflowBox(
@@ -193,7 +201,7 @@ class _FluidBoardState extends State<FluidBoard> {
                                 maxWidth: frame.labels[it.id]!.width,
                                 minHeight: frame.labels[it.id]!.height,
                                 maxHeight: frame.labels[it.id]!.height,
-                                child: AnimatedOpacity(opacity: _moving ? 0 : 1, duration: Duration(milliseconds: _moving ? 60 : 180), child: _label(it, frame.labels[it.id]!.width)),
+                                child: AnimatedOpacity(opacity: _moving ? 0 : 1, duration: Duration(milliseconds: _moving ? 0 : 120), child: _label(it, frame.labels[it.id]!.width)),
                               ),
                             ),
                           ),
@@ -204,7 +212,7 @@ class _FluidBoardState extends State<FluidBoard> {
                     _Glide(
                       key: ValueKey('face-${it.id}'),
                       rect: frame.faces[it.id]!,
-                      delay: _delay(it),
+                      instant: _instant,
                       child: GestureDetector(
                         behavior: HitTestBehavior.opaque,
                         onTap: () => widget.onTap(it.id),
@@ -218,14 +226,6 @@ class _FluidBoardState extends State<FluidBoard> {
           ),
         );
       });
-
-  /// Faces set off one after another in the order the list shows them (a ripple, not everything at once), so a path can be
-  /// followed: the first leaves at once, the last some 170 ms later.
-  Duration _delay(BrowserItem it) {
-    final i = widget.items.indexOf(it);
-    final n = math.max(1, widget.items.length - 1);
-    return Duration(milliseconds: (170 * i / n).round());
-  }
 
   Widget _label(BrowserItem it, double width) {
     final on = it.id == widget.selected;
@@ -249,44 +249,42 @@ class _FluidBoardState extends State<FluidBoard> {
   }
 }
 
-/// A face is a small instrument for what it is, under a passing pointer (no click, so choosing and carrying stay as they
-/// are): a clip scrubs to where the pointer is, a sound shows a position, a model turns, a panorama pans and a still zooms.
-/// Moves a child from where it stood to a new rectangle, after a delay, along one smooth path (position and size together).
+/// Moves a child from where it stood to a new rectangle, along one path (position and size together): at once, slowing
+/// only as it lands. A small change is a jump, and `instant` (a size being dragged) is 1:1 with no motion at all.
 class _Glide extends StatefulWidget {
-  const _Glide({super.key, required this.rect, required this.delay, required this.child});
+  const _Glide({super.key, required this.rect, this.instant = false, required this.child});
   final Rect rect;
-  final Duration delay;
+  final bool instant;
   final Widget child;
   @override
   State<_Glide> createState() => _GlideState();
 }
 
 class _GlideState extends State<_Glide> with SingleTickerProviderStateMixin {
-  late final AnimationController _c = AnimationController(vsync: this, duration: const Duration(milliseconds: 360));
+  late final AnimationController _c = AnimationController(vsync: this, duration: _FluidBoardState._move);
   late Rect _from = widget.rect, _to = widget.rect;
-  Timer? _wait;
 
   @override
   void didUpdateWidget(_Glide old) {
     super.didUpdateWidget(old);
     if (old.rect == widget.rect) return;
     // start from wherever it is now (a change of mind mid-flight continues from there)
-    _from = _now;
+    final here = _now;
+    final far = (here.topLeft - widget.rect.topLeft).distance > 6 || math.max((here.width - widget.rect.width).abs(), (here.height - widget.rect.height).abs()) > 6;
+    _from = here;
     _to = widget.rect;
-    _wait?.cancel();
-    if (widget.delay == Duration.zero) {
-      _c.forward(from: 0);
+    if (widget.instant || !far) {
+      _from = _to;
+      _c.value = 1;
     } else {
-      _c.value = 0;
-      _wait = Timer(widget.delay, () => mounted ? _c.forward(from: 0) : null);
+      _c.forward(from: 0); // the first frame after the input already shows movement (ease-out starts fast)
     }
   }
 
-  Rect get _now => Rect.lerp(_from, _to, Curves.easeInOutCubic.transform(_c.value))!;
+  Rect get _now => Rect.lerp(_from, _to, _FluidBoardState._curve.transform(_c.value))!;
 
   @override
   void dispose() {
-    _wait?.cancel();
     _c.dispose();
     super.dispose();
   }
@@ -302,6 +300,8 @@ class _GlideState extends State<_Glide> with SingleTickerProviderStateMixin {
       );
 }
 
+/// A face keeps its whole picture whatever the pointer does: a pointer over it only draws a hairline. A clip, a sound or a
+/// model answers a drag across it (scrub, position, turn); a click still chooses. A still has nothing to drag.
 class _Face extends StatefulWidget {
   const _Face(this.item, {required this.selected, required this.marked, this.faces, this.held, this.short = false});
   final bool short;
@@ -314,12 +314,17 @@ class _Face extends StatefulWidget {
 }
 
 class _FaceState extends State<_Face> {
-  Offset? at; // the pointer, 0..1 across the tile
-  String? frame; // a clip's frame at the pointer
+  bool hover = false; // a pointer is over it: a colour/border change only, nothing moves or is cropped
+  Offset? at; // while a pointer is dragged across a clip, sound or model: 0..1 across the tile
+  Offset? _down; // where the button went down (a click is not a drag)
+  String? frame; // a clip's frame under the drag
   bool _busy = false;
   double? _wanted;
 
   BrowserItem get item => widget.item;
+
+  /// What can be worked by dragging over it (a still has nothing more to show than its face).
+  bool get _draggable => item.kind == 'video' || item.kind == 'audio' || item.kind == 'model';
 
   @override
   void initState() {
@@ -327,8 +332,9 @@ class _FaceState extends State<_Face> {
     if (widget.held != null) _at(widget.held!);
   }
 
-  void _over(PointerEvent e, Size size) {
-    if (size.width <= 0 || size.height <= 0) return;
+  void _drag(PointerEvent e, Size size) {
+    if (size.width <= 0 || size.height <= 0 || _down == null || !_draggable) return;
+    if (at == null && (e.localPosition - _down!).distance < 4) return;
     _at(Offset((e.localPosition.dx / size.width).clamp(0.0, 1.0), (e.localPosition.dy / size.height).clamp(0.0, 1.0)));
   }
 
@@ -351,11 +357,15 @@ class _FaceState extends State<_Face> {
     }
   }
 
-  void _left() => setState(() {
-        at = null;
-        frame = null;
-        _wanted = null;
-      });
+  void _release() {
+    _down = null;
+    if (at == null) return;
+    setState(() {
+      at = null;
+      frame = null;
+      _wanted = null;
+    });
+  }
 
   Widget _content() {
     final p = at;
@@ -377,9 +387,6 @@ class _FaceState extends State<_Face> {
         return Stack(fit: StackFit.expand, children: [base, Align(alignment: Alignment(p.dx * 2 - 1, 0), child: Container(width: 1.5, color: N.g100))]);
       case 'model':
         return ModelFace(path: item.path, fallback: base, hoverYaw: p.dx);
-      case 'environment':
-      case 'image':
-        return Transform.scale(scale: item.kind == 'environment' ? 2.4 : 2.6, alignment: FractionalOffset(p.dx, p.dy), child: base);
       default:
         return base;
     }
@@ -387,13 +394,22 @@ class _FaceState extends State<_Face> {
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(builder: (context, box) => MouseRegion(
-        onHover: (e) => _over(e, box.biggest),
-        onExit: (_) => _left(),
-        child: Stack(fit: StackFit.expand, children: [
-          ClipRRect(borderRadius: BorderRadius.circular(3), child: ColoredBox(color: N.g13, child: _content())),
-          if (widget.marked && item.mark.isNotEmpty && at == null) Positioned(left: 2.5, top: 2.5, child: Container(padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1.5), decoration: BoxDecoration(color: N.veil, borderRadius: BorderRadius.circular(2)), child: Text(widget.short ? item.mark.split(' ').first : item.mark, softWrap: false, style: Dn.micro(N.g95).copyWith(fontSize: 8.5)))),
-          if (widget.selected) const IgnorePointer(child: _Ring()),
-        ]),
+        cursor: _draggable ? SystemMouseCursors.grab : MouseCursor.defer,
+        onEnter: (_) => setState(() => hover = true),
+        onExit: (_) => setState(() => hover = false),
+        child: Listener(
+          onPointerDown: (e) => _down = e.localPosition,
+          onPointerMove: (e) => _drag(e, box.biggest),
+          onPointerUp: (_) => _release(),
+          onPointerCancel: (_) => _release(),
+          child: Stack(fit: StackFit.expand, children: [
+            ClipRRect(borderRadius: BorderRadius.circular(3), child: ColoredBox(color: N.g13, child: _content())),
+            if (widget.marked && item.mark.isNotEmpty && at == null) Positioned(left: 2.5, top: 2.5, child: Container(padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1.5), decoration: BoxDecoration(color: N.veil, borderRadius: BorderRadius.circular(2)), child: Text(widget.short ? item.mark.split(' ').first : item.mark, softWrap: false, style: Dn.micro(N.g95).copyWith(fontSize: 8.5)))),
+            // hover: a hairline only (the picture is neither scaled nor cropped, and nothing moves)
+            if (hover && !widget.selected) IgnorePointer(child: DecoratedBox(decoration: BoxDecoration(borderRadius: BorderRadius.circular(3), border: Border.all(color: N.g69, width: 1)))),
+            if (widget.selected) const IgnorePointer(child: _Ring()),
+          ]),
+        ),
       ));
 }
 

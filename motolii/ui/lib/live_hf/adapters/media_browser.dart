@@ -164,7 +164,8 @@ class MediaBrowserState extends State<MediaBrowser> {
     if (fluid) {
       return LayoutBuilder(builder: (context, box) => Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             AnimatedSize(
-              duration: const Duration(milliseconds: 260),
+              duration: const Duration(milliseconds: 160),
+              curve: Curves.easeOutCubic,
               alignment: Alignment.topCenter,
               child: view == BrowserView.list ? MediaListHeader(width: box.maxWidth, sort: widget.sort, descending: widget.descending, onSort: widget.onSort ?? (_) {}) : const SizedBox(width: double.infinity),
             ),

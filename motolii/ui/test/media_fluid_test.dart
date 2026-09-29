@@ -30,12 +30,14 @@ void main() {
     await t.pumpAndSettle();
     final inList = faceOf(t, 'a3');
     await t.pumpWidget(board('thumbnail', selected: 'a3'));
-    await t.pump(const Duration(milliseconds: 150)); // the stagger: this face sets off some 127 ms in
-    await t.pump(const Duration(milliseconds: 120));
+    await t.pump(const Duration(milliseconds: 16)); // the very next frame already shows it moving (ease-out, no wind-up)
+    final first = faceOf(t, 'a3');
+    await t.pump(const Duration(milliseconds: 60));
     final part = faceOf(t, 'a3');
     await t.pumpAndSettle();
     final inThumb = faceOf(t, 'a3');
     expect(inList, isNot(inThumb));
+    expect(first, isNot(inList), reason: 'the first frame after the input already moved it: no delayed start');
     expect(part, isNot(inList), reason: 'it has left the list place');
     expect(part, isNot(inThumb), reason: 'and is not yet at the thumbnail place: it is moving');
     // and the layout it settles into is the projection's own
@@ -68,7 +70,7 @@ void main() {
     }
   });
 
-  testWidgets('a pointer passing over a clip asks the owner for the frame it is over, without a click', (t) async {
+  testWidgets('a pointer merely over a clip changes nothing but a hairline; dragging across it asks for the frame', (t) async {
     final asked = <double>[];
     final clip = BrowserItem(id: 'clip', name: 'clip.mp4', path: '/nowhere/clip.mp4', kind: 'video', mime: 'video/mp4', width: 1280, height: 720, seconds: 8);
     final faces = _Faces(asked);
@@ -83,10 +85,31 @@ void main() {
     await mouse.moveTo(Offset(face.left + face.width * .25, face.center.dy));
     await t.pump();
     await mouse.moveTo(Offset(face.left + face.width * .75, face.center.dy));
+    await t.pump(const Duration(milliseconds: 50));
+    expect(asked, isEmpty, reason: 'hover alone does not scrub');
+    expect(t.getRect(find.byKey(const ValueKey('face-clip'))), face, reason: 'and does not move or resize the face');
+    // pressed and dragged: the frame under the pointer
+    await mouse.down(Offset(face.left + face.width * .25, face.center.dy));
+    await mouse.moveTo(Offset(face.left + face.width * .75, face.center.dy));
     await t.pump();
     await t.pump(const Duration(milliseconds: 50));
     expect(asked, isNotEmpty);
     expect(asked.last, closeTo(6, .6), reason: 'three quarters across an 8 second clip');
+    await mouse.up();
+    await mouse.moveTo(const Offset(319, 419));
+    await t.pump();
+  });
+
+  testWidgets('a still is never scaled or cropped by the pointer', (t) async {
+    await t.pumpWidget(board('thumbnail'));
+    await t.pumpAndSettle();
+    final before = faceOf(t, 'a0');
+    final mouse = await t.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: Offset.zero);
+    await mouse.moveTo(before.center);
+    await t.pump(const Duration(milliseconds: 200));
+    expect(faceOf(t, 'a0'), before);
+    expect(find.descendant(of: find.byKey(const ValueKey('face-a0')), matching: find.byType(Transform)), findsNothing, reason: 'nothing under the pointer is scaled');
     await mouse.moveTo(const Offset(319, 419));
     await t.pump();
   });
