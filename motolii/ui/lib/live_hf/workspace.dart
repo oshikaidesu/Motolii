@@ -19,8 +19,6 @@ import 'adapters/notes.dart';
 import 'adapters/relations.dart';
 import 'adapters/right_seat.dart';
 import 'adapters/timeline.dart';
-import 'adapters/stage_alt.dart';
-import '../hf/shell/sheet.dart' show HfAction;
 import 'adapters/web.dart';
 
 /// The product workspace for the hf client. Faces/tools own their content;
@@ -53,9 +51,7 @@ class LiveWorkspace {
         'Camera': PanelDef(
           'Camera',
           'Camera',
-          () => ValueListenableBuilder(valueListenable: altStageSkin, builder: (_, alt, __) => alt ? AltStage(c: c) : StagePanel(controller: c, view: 'Camera')),
-          // TEMPORARY: the Stage's Skin Swap Proof switch
-          tools: () => HfAction('A/B', onTap: () => altStageSkin.value = !altStageSkin.value),
+          () => StagePanel(controller: c, view: 'Camera'),
           glyph: HG.camera,
           minSize: 320,
         ),
