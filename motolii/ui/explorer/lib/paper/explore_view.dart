@@ -84,20 +84,28 @@ Frame exploreLayout(List<BrowserItem> items, String? selected, Size viewport) {
   around.sort((a, b) => rank(a).compareTo(rank(b)));
   // faces as big as the seat lets them be: 52 px for a few dozen, less for many
   final halfW = viewport.width / 2;
-  final node = math.min(around.length <= 40 ? 52.0 : (around.length <= 90 ? 40.0 : 30.0), math.max(30.0, halfW / 3.3));
   final big = (halfW * .6).clamp(72.0, 120.0).toDouble();
   const gap = 4.0, margin = 8.0;
-  final r1 = big / 2 + node / 2 + 8;
-  final rings = <List<BrowserItem>>[];
-  final radii = <double>[];
+  // every asset gets a place in the field: try the largest faces first, and smaller ones until all fit inside the seat's width
+  final widest = math.min(around.length <= 40 ? 52.0 : (around.length <= 90 ? 40.0 : 30.0), math.max(30.0, halfW / 3.3));
+  var node = widest;
+  late List<List<BrowserItem>> rings;
+  late List<double> radii;
   var index = 0;
-  for (var k = 0;; k++) {
-    final r = r1 + k * (node + gap + 4);
-    if (r + node / 2 + margin > halfW || index >= around.length) break;
-    final cap = math.max(4, (2 * math.pi * r / (node + gap)).floor());
-    rings.add(around.skip(index).take(cap).toList());
-    radii.add(r);
-    index += rings.last.length;
+  for (;; node -= 3) {
+    rings = <List<BrowserItem>>[];
+    radii = <double>[];
+    index = 0;
+    final r1 = big / 2 + node / 2 + 8;
+    for (var k = 0;; k++) {
+      final r = r1 + k * (node + gap + 4);
+      if (r + node / 2 + margin > halfW || index >= around.length) break;
+      final cap = math.max(4, (2 * math.pi * r / (node + gap)).floor());
+      rings.add(around.skip(index).take(cap).toList());
+      radii.add(r);
+      index += rings.last.length;
+    }
+    if (index >= around.length || node - 3 < 30) break;
   }
   final reach = radii.isEmpty ? big / 2 : radii.last + node / 2;
   final rest0 = around.length - index;

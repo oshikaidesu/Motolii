@@ -12,7 +12,7 @@ import 'media_preview.dart';
 /// The catalog's controls over the Thumbnail view: SOURCES (which folders), TYPES (what), a search (which). Where, What
 /// and Which are separate; the view (How) is the shelf's own masonry, unchanged. A skin over [CatalogSession].
 class CatalogMedia extends StatelessWidget {
-  const CatalogMedia({super.key, required this.session, this.explore, this.initial = BrowserView.thumbnail, this.startOn, this.startOpen = false, this.exploreLayout, this.exploreRepaint, this.exploreNote, this.startColumn = 44});
+  const CatalogMedia({super.key, required this.session, this.explore, this.initial = BrowserView.thumbnail, this.startOn, this.startOpen = false, this.exploreLayout, this.exploreRepaint, this.exploreNote, this.startColumn = 60});
   final CatalogSession session;
   final ExploreLayout? exploreLayout;
   final Listenable? exploreRepaint;
