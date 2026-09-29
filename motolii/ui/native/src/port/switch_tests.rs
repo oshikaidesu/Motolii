@@ -51,3 +51,22 @@ fn stepping_through_layers_follows_the_listed_order(){
     rt.request(json!({"op":"select","step":-1})).unwrap();
     assert_eq!(rt.viewer.selected_ids,vec![order[order.len()-2]]);
 }
+
+/// A key made with the diamond takes the same ease as a key made by editing the value while animating.
+#[test]
+fn a_diamond_key_takes_the_animate_ease(){
+    let mut rt=EditorRuntime::open("").unwrap();
+    rt.request(json!({"op":"create","kind":"rectangle"})).unwrap();
+    let id=rt.viewer.selected().unwrap();
+    rt.request(json!({"op":"animate","enabled":true,"shape":{"kind":"power2.out"}})).unwrap();
+    let chosen=rt.viewer.animate.interp();
+    assert_ne!(chosen,Interp::Linear);
+    rt.request(json!({"op":"toggleKey","layer":id.0,"property":"opacity"})).unwrap();
+    let track=rt.doc.view().track(id,&PropertyId::new("opacity").unwrap()).unwrap().unwrap();
+    assert_eq!(track.keys()[0].interp,chosen);
+    rt.request(json!({"op":"animate","enabled":false})).unwrap();
+    rt.request(json!({"op":"seek","frame":10})).unwrap();
+    rt.request(json!({"op":"toggleKey","layer":id.0,"property":"opacity"})).unwrap();
+    let track=rt.doc.view().track(id,&PropertyId::new("opacity").unwrap()).unwrap().unwrap();
+    assert_eq!(track.keys()[1].interp,Interp::Linear,"not animating: Linear, as before");
+}

@@ -25,7 +25,8 @@ impl Animate {
     pub fn from(origin: RationalTime) -> Self {
         Animate::From { origin, interp: Interp::Linear }
     }
-    fn interp(self) -> Interp {
+    /// The ease a key made now takes: the chosen one while animating, Linear otherwise.
+    pub fn interp(self) -> Interp {
         match self {
             Animate::Off => Interp::Linear,
             Animate::Now { interp } | Animate::From { interp, .. } => interp,
