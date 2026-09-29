@@ -15,7 +15,7 @@ import 'media_preview.dart' show FaceService;
 import 'model_face.dart';
 
 /// Where every face of a projection stands: faces and the labels by them, in one scrolling content.
-typedef Frame = ({Map<String, Rect> faces, Map<String, Rect> labels, Size content});
+typedef Frame = ({Map<String, Rect> faces, Map<String, Rect> labels, Size content, List<String> links});
 
 /// Explore's places: given by the caller (a prototype: there is no similarity backend).
 typedef ExploreLayout = Frame Function(List<BrowserItem> items, String? selected, Size viewport);
@@ -67,7 +67,7 @@ class FluidBoard extends StatefulWidget {
       labels[it.id] = Rect.fromLTWH(x, y + h, colW, caption);
       heights[at] += h + caption + gap;
     }
-    return (faces: faces, labels: labels, content: Size(width, heights.fold(0.0, math.max) + margin));
+    return (faces: faces, labels: labels, links: const <String>[], content: Size(width, heights.fold(0.0, math.max) + margin));
   }
 
   /// List: a row each, a small face at its own shape, the facts beside it.
@@ -80,7 +80,7 @@ class FluidBoard extends StatefulWidget {
       faces[it.id] = Rect.fromLTWH(8 + (boxW - fw) / 2, top + (rowHeight - fh) / 2, fw, fh);
       labels[it.id] = Rect.fromLTWH(62, top, width - 62, rowHeight);
     }
-    return (faces: faces, labels: labels, content: Size(width, items.length * rowHeight));
+    return (faces: faces, labels: labels, links: const <String>[], content: Size(width, items.length * rowHeight));
   }
 
   @override
@@ -158,6 +158,17 @@ class _FluidBoardState extends State<FluidBoard> {
               width: size.width,
               height: size.height,
               child: Stack(clipBehavior: Clip.hardEdge, children: [
+                // Explore: a line from the chosen asset to each of its nearest (what the layout says is near, nothing more)
+                if (widget.view == 'explore' && frame.links.isNotEmpty && frame.faces[widget.selected] != null)
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: AnimatedOpacity(
+                        opacity: _moving ? 0 : 1,
+                        duration: Duration(milliseconds: _moving ? 60 : 300),
+                        child: CustomPaint(painter: _Spokes(frame.faces[widget.selected]!.center, [for (final id in frame.links) if (frame.faces[id] != null) frame.faces[id]!.center])),
+                      ),
+                    ),
+                  ),
                 for (final it in widget.items) ...[
                   if (frame.labels[it.id] != null)
                     _Glide(
@@ -403,4 +414,22 @@ Uint8List? _decode(String dataUri) {
   } catch (_) {
     return null;
   }
+}
+
+class _Spokes extends CustomPainter {
+  _Spokes(this.from, this.to);
+  final Offset from;
+  final List<Offset> to;
+  @override
+  void paint(Canvas canvas, Size size) {
+    final p = Paint()
+      ..color = N.g51
+      ..strokeWidth = 1;
+    for (final t in to) {
+      canvas.drawLine(from, t, p);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_Spokes o) => o.from != from || o.to.length != to.length || [for (var i = 0; i < to.length; i++) if (to[i] != o.to[i]) 1].isNotEmpty;
 }

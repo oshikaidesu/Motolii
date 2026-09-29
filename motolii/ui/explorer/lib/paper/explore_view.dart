@@ -125,7 +125,16 @@ Frame exploreLayout(List<BrowserItem> items, String? selected, Size viewport) {
     faces[m.id] = at(m, Offset(margin + (n % cols) * (node + gap) + node / 2, top + (n ~/ cols) * (node + gap) + node / 2), node);
   }
   final bottom = rest.isEmpty ? cy + reach + margin : top + ((rest.length - 1) ~/ cols + 1) * (node + gap) + margin;
-  return (faces: faces, labels: const <String, Rect>{}, content: Size(viewport.width, math.max(viewport.height, bottom)));
+  return (faces: faces, labels: const <String, Rect>{}, links: _nearest(items, centre.id, 5), content: Size(viewport.width, math.max(viewport.height, bottom)));
+}
+
+/// The few nearest by colour (only those that have a colour to compare), for the spokes drawn from the centre.
+List<String> _nearest(List<BrowserItem> items, String? selected, int n) {
+  final centre = items.firstWhere((i) => i.id == selected, orElse: () => items.first);
+  final c0 = _colours[centre.id];
+  if (c0 == null) return const [];
+  final r = [for (final i in items) if (i.id != centre.id && _colours[i.id] != null) (i.id, _distance(c0, _colours[i.id]!))]..sort((a, b) => a.$2.compareTo(b.$2));
+  return [for (final e in r.take(n)) e.$1];
 }
 
 Widget exploreView(BuildContext context, List<BrowserItem> items, String? selected, ValueChanged<String> onTap, ValueChanged<String>? onOpen) => _Explore(items: items, selected: selected, onTap: onTap, onOpen: onOpen);
