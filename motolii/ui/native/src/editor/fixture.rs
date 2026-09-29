@@ -61,8 +61,9 @@ fn shape_fill_colors(
 
 /// 白紙の時のパレット。使われた色が出来たらそちらに譲る。
 pub(crate) fn default_palette() -> Vec<ColorSwatch> {
-    // a curated starter set: paper, ink and a grey, then earth and muted colour that sit together (not a rainbow)
-    ["#f4f1ea", "#161616", "#8a8a8a", "#d9c7a7", "#c8553d", "#e0a458", "#6b8f71", "#2f5d62", "#3c4f76", "#9a8fb3", "#d98e8e", "#f2d0a9"]
+    // a current starter set: electric cobalt, hot pink, acid lime, digital violet, tangerine, aquamarine, citric,
+    // sky, with jet black, chrome silver and white
+    ["#ffffff", "#0c0d10", "#c4ccd8", "#3155ff", "#ff4fa3", "#c7f000", "#7b3ff2", "#ff6a13", "#2ee6c8", "#ffe14d", "#00c2ff", "#ff2e63"]
         .into_iter()
         .map(|hex| {
             let b = |i: usize| u8::from_str_radix(&hex[i..i + 2], 16).unwrap_or(0);

@@ -5,8 +5,9 @@ import 'package:flutter/widgets.dart';
 import '../neutral.dart';
 import 'common.dart' show mono;
 
-/// Colours as a spec sheet: small squares of the colour itself in a tight grid (2 px), the hex under each in small
-/// mono; an edge only where a colour would vanish into the ground. Tap uses it, a secondary tap opens its menu.
+/// Colours as blocks: the colour itself in large squares, three across the default seat, 2 px apart, its hex set
+/// inside at the bottom left in an ink that reads on it (a swatch card, as current palettes are shown); an edge only
+/// where a colour would vanish into the ground. Tap uses it, a secondary tap opens its menu.
 class SwatchCards extends StatelessWidget {
   const SwatchCards(this.items, this.width, {super.key, this.onTap, this.onMenu});
   final List<(String, int, String)> items; // name, argb, class
@@ -16,27 +17,29 @@ class SwatchCards extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const gap = 2.0, label = 12.0;
-    final cols = math.max(3, ((width + gap) / 42).floor()); // six across the default seat
+    const gap = 2.0;
+    final cols = math.max(2, ((width + gap) / 80).floor());
     final cell = (width - gap * (cols - 1)) / cols;
     final ground = N.g10.computeLuminance();
-    return Wrap(spacing: gap, runSpacing: 4, children: [
+    return Wrap(spacing: gap, runSpacing: gap, children: [
       for (final v in items.take(300))
         GestureDetector(
           key: ValueKey('hf-color:${v.$1}'),
           behavior: HitTestBehavior.opaque,
           onTap: onTap == null ? null : () => onTap!(v),
           onSecondaryTapDown: onMenu == null ? null : (e) => onMenu!(v, e.globalPosition),
-          child: SizedBox(
-            width: cell,
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Container(
-                height: cell,
-                decoration: BoxDecoration(color: Color(v.$2), borderRadius: BorderRadius.circular(1), border: (Color(v.$2).computeLuminance() - ground).abs() < .08 ? Border.all(color: N.g20) : null),
-              ),
-              SizedBox(height: label, child: Align(alignment: Alignment.bottomLeft, child: Text((v.$2 & 0xFFFFFF).toRadixString(16).padLeft(6, '0').toUpperCase(), softWrap: false, overflow: TextOverflow.clip, style: mono(7, c: N.g56)))),
-            ]),
-          ),
+          child: Builder(builder: (context) {
+            final color = Color(v.$2);
+            final l = color.computeLuminance();
+            return Container(
+              width: cell,
+              height: cell * .78,
+              padding: const EdgeInsets.fromLTRB(7, 0, 6, 6),
+              alignment: Alignment.bottomLeft,
+              decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(2), border: (l - ground).abs() < .06 ? Border.all(color: N.g20) : null),
+              child: Text('#${(v.$2 & 0xFFFFFF).toRadixString(16).padLeft(6, '0').toUpperCase()}', softWrap: false, style: mono(9, c: l > .45 ? N.g07.withValues(alpha: .8) : N.g100.withValues(alpha: .9))),
+            );
+          }),
         ),
     ]);
   }
