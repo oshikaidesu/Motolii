@@ -120,3 +120,27 @@ fn presses_are_resolved_by_the_host(){
     rt.request(json!({"op":"moveEffect","layer":id.0,"id":first.0,"step":1})).unwrap();
     assert_eq!(effects(&rt)[1].id,first,"already last: stays");
 }
+
+/// A group's diamond and ↺ are one step each; a reset spread over the selection puts every layer to its own default.
+#[test]
+fn a_group_key_and_a_reset_are_one_step(){
+    let mut rt=EditorRuntime::open("").unwrap();
+    let mut made=Vec::new();
+    for x in [100.0,300.0]{rt.request(json!({"op":"create","kind":"rectangle"})).unwrap();let l=rt.viewer.selected().unwrap();
+        rt.request(json!({"op":"setProperty","layer":l.0,"property":"position","value":[x,40.0]})).unwrap();made.push(l);}
+    let depth=|rt:&EditorRuntime|rt.doc.history_depth().0;
+    let value=|rt:&EditorRuntime,l:LayerId,p:&str|rt.doc.view().value_at(l,&PropertyId::new(p).unwrap(),rt.time().unwrap()).unwrap();
+
+    let before=depth(&rt);
+    rt.request(json!({"op":"toggleKey","layer":made[0].0,"properties":["position","scale","rotation"]})).unwrap();
+    assert_eq!(depth(&rt),before+1,"three rows keyed in one step");
+    for p in ["position","scale","rotation"]{assert!(rt.doc.view().track(made[0],&PropertyId::new(p).unwrap()).unwrap().is_some_and(|t|!t.keys().is_empty()),"{p}");}
+    rt.request(json!({"op":"undo"})).unwrap();
+
+    rt.request(json!({"op":"select","ids":[made[0].0,made[1].0]})).unwrap();
+    let before=depth(&rt);
+    rt.request(json!({"op":"reset","layer":made[0].0,"properties":["position"],"spread":true})).unwrap();
+    assert_eq!(depth(&rt),before+1);
+    assert_eq!(value(&rt,made[0],"position"),Some(Value::Vec2([0.0,0.0])));
+    assert_eq!(value(&rt,made[1],"position"),Some(Value::Vec2([0.0,0.0])),"every chosen layer to its own default, both axes");
+}

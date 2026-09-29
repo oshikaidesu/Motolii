@@ -239,7 +239,7 @@ class ParamCell extends StatelessWidget {
             ),
           if (linkable) GestureDetector(key: ValueKey('link-$id'), behavior: HitTestBehavior.opaque, onTap: store.frozen ? null : () => store.toggleLink(id), child: Container(margin: const EdgeInsets.only(left: 6), padding: const EdgeInsets.symmetric(horizontal: 6), decoration: BoxDecoration(color: linked ? t : null, border: linked ? null : Border.all(color: N.g26), borderRadius: BorderRadius.circular(6)), child: Text('Link', style: sans(8.5, c: linked ? N.g10 : kMuted, w: FontWeight.w700)))),
           if (accessory != null) GestureDetector(key: ValueKey('route-acc-$id'), behavior: HitTestBehavior.opaque, onTap: () => store.route(accessory, id), child: Container(margin: const EdgeInsets.only(left: 6), padding: const EdgeInsets.symmetric(horizontal: 6), decoration: BoxDecoration(border: Border.all(color: t.withValues(alpha: .7)), borderRadius: BorderRadius.circular(6)), child: Text('$accessory →', style: sans(8.5, c: t, w: FontWeight.w700)))),
-          if (mod && !store.frozen) GestureDetector(key: ValueKey('reset-$id'), behavior: HitTestBehavior.opaque, onTap: () { for (final i in ids) { store.reset(i); } }, child: Padding(padding: const EdgeInsets.only(left: 8), child: Text('↺', style: sans(11, c: N.g33)))),
+          if (mod && !store.frozen) GestureDetector(key: ValueKey('reset-$id'), behavior: HitTestBehavior.opaque, onTap: () => store.resetMany(ids), child: Padding(padding: const EdgeInsets.only(left: 8), child: Text('↺', style: sans(11, c: N.g33)))),
         ]),
       ),
       const SizedBox(height: UiMetrics.labelGap),

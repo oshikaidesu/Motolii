@@ -101,6 +101,22 @@ class SessionCameraStore extends CameraStore {
     if (!keyable || frozen) return;
     c.command('toggleKey', {'layer': layer, 'property': id});
   }
+  @override
+  void toggleKeys(List<String> ids) {
+    if (frozen || !keyable) return;
+    c.command('toggleKey', {'layer': layer, 'properties': ids});
+  }
+
+  /// Back to the defaults the host knows: one step.
+  @override
+  void resetMany(List<String> ids) {
+    if (frozen || !c.supports('reset')) return;
+    c.command('reset', {'layer': layer, 'properties': [for (final i in ids) if (rows.any((r) => r['id'] == i)) i]});
+  }
+
+  @override
+  void reset(String id) => resetMany([id]);
+
 
   @override
   void route(String to, [String? from]) {

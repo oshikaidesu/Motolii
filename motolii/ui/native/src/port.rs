@@ -5,7 +5,7 @@ use crate::doc::store::*;
 use serde_json::{Value as J,json};
 use crate::viewer::{KeySel,ColorSlot};
 fn e(error:impl std::fmt::Display)->String{error.to_string()}
-pub(crate) const CAPABILITIES:&[&str]=&["status","preferences","notes","stageView","stageWindow","select","setProperty","previewProperties","commitPreview","cancelPreview","setText","previewText","styleText","setFont","setAttrs","create","duplicate","ghost","sequence","previewSequence","copy","cut","paste","delete","group","ungroup","reorder","split","setTiming","toggleKey","moveKeys","ease","setColor","previewColor","focusColor","applyPalette","applyEffect","removeEffect","expandEffect","moveEffect","enableEffect","animate","clip","addMarker","setMarker","deleteMarker","composition","import","placeAsset","removeAsset","replaceAsset","relinkAsset","save","new","undo","redo","seek","anchor","freeze","setFillMode","setGradient","previewBlend","applyBlend","relate","unrelate","setTimings","previewTimings","stageGesture","nudge","toggle","export","exportStatus","cancelExport","play","pause","tick","moveLayers","pickColor","historyGoto","reloadEffects","runScript","rerunScript","scopeEffect"];
+pub(crate) const CAPABILITIES:&[&str]=&["status","preferences","notes","stageView","stageWindow","select","setProperty","previewProperties","commitPreview","cancelPreview","setText","previewText","styleText","setFont","setAttrs","create","duplicate","ghost","sequence","previewSequence","copy","cut","paste","delete","group","ungroup","reorder","split","setTiming","toggleKey","moveKeys","ease","setColor","previewColor","focusColor","applyPalette","applyEffect","removeEffect","expandEffect","moveEffect","enableEffect","animate","clip","addMarker","setMarker","deleteMarker","composition","import","placeAsset","removeAsset","replaceAsset","relinkAsset","save","new","undo","redo","seek","anchor","freeze","setFillMode","setGradient","previewBlend","applyBlend","relate","unrelate","setTimings","previewTimings","stageGesture","nudge","toggle","reset","export","exportStatus","cancelExport","play","pause","tick","moveLayers","pickColor","historyGoto","reloadEffects","runScript","rerunScript","scopeEffect"];
 fn num(j:&J,key:&str)->Result<f64,String>{j[key].as_f64().filter(|v|v.is_finite()).ok_or_else(||format!("Missing finite {key}"))}
 fn integer(j:&J,key:&str)->Result<i64,String>{j[key].as_i64().ok_or_else(||format!("Missing integer {key}"))}
 fn layer(j:&J)->Result<LayerId,String>{j["layer"].as_u64().map(LayerId).ok_or("Missing layer".into())}
@@ -76,6 +76,14 @@ impl EditorRuntime{
         let mut v=decoded_value(&j["value"],current.as_ref().or(row.map(|r|&r.value)))?;
         if let Some(row)=row{if let(Value::F64(n),Some((min,max)))=(&mut v,row.range){*n=n.clamp(min,max);}}
         self.doc.place_checked(layer,&p,v,self.time()?,self.viewer.animate).map(|v|v.into_iter().collect()).map_err(e)
+    }
+    /// One row's key at the playhead: removed if there is one, else made with the value it shows and the Animate ease.
+    fn toggle_key_intents(&self,id:LayerId,name:&str,at:RationalTime)->Result<Vec<Intent>,String>{
+        let p=PropertyId::new(name).map_err(e)?;editor::functions::lens::require_local_source(&self.doc.view(),id,&p).map_err(e)?;let track=self.doc.view().track(id,&p).map_err(e)?.unwrap_or_default();
+        if track.keys().iter().any(|k|k.t.try_to_frame_round(editor::keyframe_edit::document_fps(&self.doc).unwrap()).ok()==Some(self.viewer.frame)){return editor::timeline_edit::delete_key_selection_intents(&self.doc,&[(id,Some(p),at.as_seconds_f64())],at).map_err(e)}
+        let data=editor::functions::read::inspector_data_from_doc(&self.doc.view(),id,at,&crate::render::engine::known_effects());let fallback=data.transform.iter().chain(data.text.iter()).chain(data.effects.iter().flat_map(|e|e.params.iter())).find(|r|r.property.as_deref()==Some(name)).map(|r|r.value.clone());
+        let value=self.doc.view().value_at(id,&p,at).map_err(e)?.or(crate::edit::document::edit::default_value(&self.doc.view(),id,&p).map_err(e)?).or(fallback).ok_or("No keyframe value")?;
+        let mut track=track;track.insert(Keyframe{t:at,value,interp:self.viewer.animate.interp(),spatial:None});Ok(vec![Intent::SetTrack{layer:id,property:p,track}])
     }
     fn apply_palette(&mut self,rgba:[f64;4])->Result<(),String>{
         if let Some(slot)=self.viewer.color_target.clone(){let mut q=json!({"slot":slot,"rgba":rgba});if let Some(id)=slot.layer(){q["layer"]=json!(id.0);}let edits=self.color_intent(&q)?;self.apply(edits)}
@@ -225,13 +233,18 @@ impl EditorRuntime{
                 let on=match flag{editor::functions::verb::LayerFlag::Hidden=>attrs.hidden,editor::functions::verb::LayerFlag::Solo=>attrs.solo,editor::functions::verb::LayerFlag::Locked=>attrs.locked};
                 let edits=editor::functions::verb::flag_intents(&self.doc,layer,flag,!on).map_err(e)?;self.apply(edits)?;}
             "setTiming"=>{let id=layer(&j)?;let old=self.doc.view().meta(id).map_err(e)?.ok_or("Layer metadata missing")?.timing;let mut next=old;next.start=integer(&j,"start")?;next.duration=integer(&j,"duration")?;next.source_in=integer(&j,"sourceIn")?;let move_keys=next.duration==old.duration&&next.source_in==old.source_in;let edits=editor::functions::verb::retime_layer(&self.doc,id,old,next,move_keys).map_err(e)?;self.apply(edits)?;}
-            "toggleKey"=>{let id=layer(&j)?;let name=string(&j,"property")?;let at=self.time()?;
-                if name=="content"{editor::text::toggle_content_key(&mut self.doc,id,at,String::new()).map_err(e)?;}
-                else{let p=PropertyId::new(name).map_err(e)?;editor::functions::lens::require_local_source(&self.doc.view(),id,&p).map_err(e)?;let track=self.doc.view().track(id,&p).map_err(e)?.unwrap_or_default();
-                    if track.keys().iter().any(|k|k.t.try_to_frame_round(editor::keyframe_edit::document_fps(&self.doc).unwrap()).ok()==Some(self.viewer.frame)){let edits=editor::timeline_edit::delete_key_selection_intents(&self.doc,&[(id,Some(p),at.as_seconds_f64())],at).map_err(e)?;self.apply(edits)?;}
-                    else{let data=editor::functions::read::inspector_data_from_doc(&self.doc.view(),id,at,&crate::render::engine::known_effects());let fallback=data.transform.iter().chain(data.text.iter()).chain(data.effects.iter().flat_map(|e|e.params.iter())).find(|r|r.property.as_deref()==Some(name)).map(|r|r.value.clone());let value=self.doc.view().value_at(id,&p,at).map_err(e)?.or(crate::edit::document::edit::default_value(&self.doc.view(),id,&p).map_err(e)?).or(fallback).ok_or("No keyframe value")?;let mut track=track;track.insert(Keyframe{t:at,value,interp:self.viewer.animate.interp(),spatial:None});self.apply([Intent::SetTrack{layer:id,property:p,track}])?;}
+            "toggleKey"=>{let id=layer(&j)?;let at=self.time()?;
+                if let Some(list)=j["properties"].as_array(){
+                    // a group's diamond: every row toggles as it would alone, in one step
+                    let mut intents=Vec::new();
+                    for name in list{intents.extend(self.toggle_key_intents(id,name.as_str().ok_or("Invalid property")?,at)?);}
+                    self.apply(intents)?;
+                }else{let name=string(&j,"property")?;
+                    if name=="content"{editor::text::toggle_content_key(&mut self.doc,id,at,String::new()).map_err(e)?;}
+                    else{let intents=self.toggle_key_intents(id,name,at)?;self.apply(intents)?;}
                 }
             }
+            "reset"=>{let intents=self.reset_edits(&j)?;self.apply(intents)?;}
             "moveKeys"=>{if self.viewer.selected_keys.is_empty(){return Err("Select keyframes".into())}let keys:Vec<_>=self.viewer.selected_keys.iter().map(|k|(k.layer,k.property.clone(),k.at_sec)).collect();let fps=editor::keyframe_edit::document_fps(&self.doc).map_err(e)?.as_f64();let delta=editor::keyframe_edit::clamped_key_delta(&keys,fps,integer(&j,"deltaFrames")?);let edits=editor::keyframe_edit::key_selection_move_intents(&self.doc,&keys,delta).map_err(e)?;self.apply(edits)?;for k in &mut self.viewer.selected_keys{k.at_sec+=delta as f64/fps;}}
             "ease"=>self.apply_ease(&j)?,
             "setColor"|"previewColor"=>{let intents=self.color_intent(&j)?;if op=="previewColor"{self.set_preview(intents)?;}else{self.apply(intents)?;}}

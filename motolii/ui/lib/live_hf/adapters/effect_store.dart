@@ -86,6 +86,22 @@ class SessionEffectStore extends ParamStore {
     if (frozen || !keyable) return;
     c.command('toggleKey', {'layer': layerId, 'property': id});
   }
+  @override
+  void toggleKeys(List<String> ids) {
+    if (frozen || !keyable) return;
+    c.command('toggleKey', {'layer': layerId, 'properties': ids});
+  }
+
+  /// Back to the defaults the host knows, on every chosen layer that has the row: one step.
+  @override
+  void resetMany(List<String> ids) {
+    if (frozen || !c.supports('reset')) return;
+    c.command('reset', {'layer': layerId, 'properties': [for (final i in ids) if (rows.any((r) => r['id'] == i)) i], 'spread': true});
+  }
+
+  @override
+  void reset(String id) => resetMany([id]);
+
 
   @override
   void menu(BuildContext context, String id, int? axis, Offset at) => keyMenu(context, this, id, at);

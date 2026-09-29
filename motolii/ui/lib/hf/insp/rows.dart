@@ -125,6 +125,20 @@ class ParamStore extends ChangeNotifier {
     commit(id);
   }
 
+  /// Several rows' keys at the playhead (a group's diamond): one edit where a host keeps the document.
+  void toggleKeys(List<String> ids) {
+    for (final i in ids) {
+      toggleKey(i);
+    }
+  }
+
+  /// Several rows back to their defaults (a group's ↺): one edit where a host keeps the document.
+  void resetMany(List<String> ids) {
+    for (final i in ids) {
+      if (rows.any((r) => r['id'] == i)) reset(i);
+    }
+  }
+
   void reset(String id) {
     final r = row(id);
     if (!r.containsKey('default')) return;

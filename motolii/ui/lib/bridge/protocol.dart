@@ -74,6 +74,7 @@ enum DocumentOperation {
   stageGesture('stageGesture'),
   nudge('nudge'),
   toggle('toggle'),
+  reset('reset'),
   exportDocument('export'),
   exportStatus('exportStatus'),
   cancelExport('cancelExport'),

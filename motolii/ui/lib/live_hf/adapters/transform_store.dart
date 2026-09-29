@@ -160,6 +160,23 @@ class SessionTransformStore extends TransformStore {
   }
 
   @override
+  void toggleKeys(List<String> ids) {
+    if (!canEdit || !c.supports('toggleKey')) return;
+    c.command('toggleKey', {'layer': activeId, 'properties': ids});
+  }
+
+  /// Back to the defaults the host knows, on every chosen layer that has the row: one step.
+  @override
+  void resetMany(List<String> ids) {
+    if (!canEdit || !c.supports('reset')) return;
+    c.command('reset', {'layer': activeId, 'properties': [for (final i in ids) if (rows.any((r) => r['id'] == i)) i], 'spread': true});
+  }
+
+  @override
+  void reset(String id) => resetMany([id]);
+
+
+  @override
   void setAnimate(bool on) {
     c.setAnimate(on);
   }

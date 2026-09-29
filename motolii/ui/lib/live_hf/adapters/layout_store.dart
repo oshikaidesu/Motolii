@@ -60,6 +60,12 @@ class SessionLayoutStore extends LayoutStore {
     if (frozen || !keyable) return;
     c.command('toggleKey', {'layer': layerId, 'property': id});
   }
+  @override
+  void toggleKeys(List<String> ids) {
+    if (frozen || !keyable) return;
+    c.command('toggleKey', {'layer': layerId, 'properties': ids});
+  }
+
 
   @override
   void menu(BuildContext context, String id, int? axis, Offset at) => keyMenu(context, this, id, at);
