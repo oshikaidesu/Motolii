@@ -4,6 +4,7 @@ import 'dart:ui' show Offset, Rect, Size;
 import 'package:flutter/foundation.dart';
 
 import '../session/editor_session.dart';
+import '../session/latency_probe.dart';
 import 'stage/geometry.dart';
 
 /// The Stage as a person works it, with no screen in it: where each view (the User stage, the Camera) is looking —
@@ -203,6 +204,7 @@ class StageSession extends ChangeNotifier {
 
   /// The pointer moved with the press held; [beyondSlop]: the skin says it has left its own dead zone.
   void drag(Offset comp, {required bool beyondSlop, required StMods mods, required double viewScale}) {
+    LatencyProbe.mark('pointer');
     switch (gesture) {
       case StGesture.marquee:
         marquee = Rect.fromPoints(_start!, comp);

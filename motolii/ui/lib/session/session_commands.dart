@@ -63,6 +63,7 @@ mixin SessionCommands on SessionCore {
 
   Future<void> command(String op, [Map<String, dynamic> args = const {}]) {
     if (_disposed) return Future<void>.value();
+    LatencyProbe.mark('cmd:$op');
     if (op == 'save') {
       return native('flushEditors').then((_) => _command(op, args));
     }
@@ -95,7 +96,9 @@ mixin SessionCommands on SessionCore {
     return _serial(() async {
       if (requiresPause && playing.value)
         throw StateError('Playback did not stop before $op');
+      LatencyProbe.mark('req:$op');
       final response = EditorSession.map(await _request(operation, args));
+      LatencyProbe.mark('reply:$op');
       final needsRender =
           response['needsRender'] as bool? ?? operation.requiresRender;
       // 状態を持たない返信は 2 つだけ — 繰り延べた {"needsRender":true} と
@@ -107,7 +110,9 @@ mixin SessionCommands on SessionCore {
       if (operation == DocumentOperation.select) {
         editingFocus.value = {'selection': true};
       }
+      LatencyProbe.mark('accepted:$op');
       if (needsRender) await _render();
+      LatencyProbe.mark('done:$op');
     });
   }
 

@@ -84,7 +84,11 @@ class _StagePanelState extends State<StagePanel>
         _StageTouch,
         _StageChrome {
   void _viewChanged() {
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    setState(() {});
+    // a pan or zoom is the person's hand: the window native draws is asked for in this same event, not after the next
+    // build (which would put a frame between the hand and the picture)
+    _syncWindowFromEvent();
   }
 
   @override

@@ -70,6 +70,17 @@ mixin _StageWindow on State<StagePanel>, _StageView {
     }
   }
 
+  /// The view changed inside an event (a pointer, a wheel, a key), where sending is allowed: send now instead of after the
+  /// frame the change builds. A change that only shows up while building (a resize, a tab coming into view) still goes
+  /// through [_queueWindowSync], because a command may not be sent from inside a build.
+  void _syncWindowFromEvent() {
+    if (SchedulerBinding.instance.schedulerPhase == SchedulerPhase.persistentCallbacks) return;
+    final key = (_origin, _scale, _viewport, _shown, c.supports('stageWindow'));
+    if (key == _windowKey) return;
+    _windowKey = key;
+    _syncWindow();
+  }
+
   /// The window the texture was drawn for in this very frame (same-frame
   /// path); null once the rendered status has caught up with it.
   Map<String, dynamic>? _drawnWindow;

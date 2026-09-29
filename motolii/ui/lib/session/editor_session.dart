@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import '../bridge/native_bridge.dart';
 import '../bridge/protocol.dart';
+import 'latency_probe.dart';
 
 part 'session_values.dart';
 part 'session_core.dart';

@@ -6,12 +6,16 @@ mixin SessionRender on SessionCore {
   void _clearSurfaces() {}
 
   Future<void> _render({bool notify = true, bool playback = false}) async {
+    LatencyProbe.mark('render-req');
     final response = await native('render', {
       'playing': playback,
       'knownSnapshotId': state['snapshotId'],
       'knownReferenceId': state['referenceId'],
     });
+    LatencyProbe.mark('render-reply');
     _accept(response, notify: notify);
+    LatencyProbe.mark('render-accepted');
+    LatencyProbe.markNextFrame('next-frame');
   }
 
   Future<void> refreshPreview() => _serial(() => _render(), displayBusy: false);

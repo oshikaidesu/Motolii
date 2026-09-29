@@ -231,7 +231,8 @@ class EditorSwitch extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               AnimatedContainer(
-                duration: const Duration(milliseconds: 120),
+                // a switch the hand just pressed shows its new state at once
+                duration: Duration.zero,
                 width: EditorMetrics.s22,
                 height: EditorMetrics.s12,
                 padding: const EdgeInsets.all(EditorMetrics.s2),
