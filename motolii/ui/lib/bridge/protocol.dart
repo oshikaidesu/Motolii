@@ -56,6 +56,7 @@ enum DocumentOperation {
   replaceAsset('replaceAsset'),
   relinkAsset('relinkAsset'),
   relinkFromCatalog('relinkFromCatalog'),
+  placeCatalogAsset('placeCatalogAsset'),
   save('save'),
   newDocument('new'),
   undo('undo'),

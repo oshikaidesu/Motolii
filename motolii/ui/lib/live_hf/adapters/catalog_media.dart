@@ -38,6 +38,8 @@ class CatalogMedia extends StatelessWidget {
             exploreRepaint: exploreRepaint,
             exploreNote: exploreNote,
             startColumn: startColumn,
+            onReveal: (item) => session.c.native('reveal', {'path': item.path}),
+            onPlace: session.c.supports('placeCatalogAsset') ? (item) => session.c.command('placeCatalogAsset', {'id': item.id}) : null,
             initial: initial,
             startOn: startOn,
             startOpen: startOpen,

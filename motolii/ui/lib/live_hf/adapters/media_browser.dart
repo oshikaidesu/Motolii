@@ -23,7 +23,7 @@ enum BrowserView { list, thumbnail, explore }
 typedef ExploreBuilder = Widget Function(BuildContext context, List<BrowserItem> items, String? selected, ValueChanged<String> onTap, ValueChanged<String>? onOpen);
 
 class MediaBrowser extends StatefulWidget {
-  const MediaBrowser({super.key, required this.source, this.controls, this.faces, this.explore, this.sort = 'name', this.descending = false, this.onSort, this.onReveal, this.initial = BrowserView.thumbnail, this.startOn, this.startOpen = false, this.exploreLayout, this.exploreRepaint, this.exploreNote, this.holding = const {}, this.startColumn = 60, this.fluidUpTo = 300});
+  const MediaBrowser({super.key, required this.source, this.controls, this.faces, this.explore, this.sort = 'name', this.descending = false, this.onSort, this.onReveal, this.onPlace, this.initial = BrowserView.thumbnail, this.startOn, this.startOpen = false, this.exploreLayout, this.exploreRepaint, this.exploreNote, this.holding = const {}, this.startColumn = 60, this.fluidUpTo = 300});
   final ResultSource source;
 
   /// Where Explore puts the faces (for the fluid board). Without it Explore is `explore` alone, and the views swap.
@@ -57,6 +57,9 @@ class MediaBrowser extends StatefulWidget {
   final bool descending;
   final ValueChanged<String>? onSort;
   final void Function(BrowserItem item)? onReveal;
+
+  /// Uses the asset in the work (only when the host can): the work admits it as its own then, and browsing alone never does.
+  final void Function(BrowserItem item)? onPlace;
   final BrowserView initial;
 
   @override
@@ -148,7 +151,7 @@ class MediaBrowserState extends State<MediaBrowser> {
               if (showPreview)
                 Expanded(
                   flex: 4,
-                  child: MediaPreview(item: chosen, faces: widget.faces, onClose: () => setState(() => preview = false), onReveal: widget.onReveal == null ? null : () => widget.onReveal!(chosen)),
+                  child: MediaPreview(item: chosen, faces: widget.faces, onClose: () => setState(() => preview = false), onReveal: widget.onReveal == null ? null : () => widget.onReveal!(chosen), onPlace: widget.onPlace == null ? null : () => widget.onPlace!(chosen)),
                 ),
             ]),
           );

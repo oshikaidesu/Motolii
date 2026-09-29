@@ -177,6 +177,11 @@ impl Query {
 
 impl Catalog {
     /// Entries by a raw condition over `a` (assets) and `s` (sources): the resolver's lookups.
+    /// One present asset by its id, when its source can be read now (what a work may take from the catalog).
+    pub(crate) fn entry(&self, uid: &str) -> Option<Entry> {
+        self.entries_where("a.uid = ? AND a.state = 0 AND s.available = 1", &[Value::Text(uid.to_owned())]).into_iter().next()
+    }
+
     pub(super) fn entries_where(&self, cond: &str, args: &[Value]) -> Vec<Entry> {
         let Ok(mut st) = self.db.prepare(&format!("{SELECT_ENTRY} WHERE {cond} ORDER BY a.id")) else { return Vec::new() };
         let Ok(rows) = st.query_map(params_from_iter(args.iter()), entry_from_row) else { return Vec::new() };

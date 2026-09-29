@@ -23,11 +23,12 @@ abstract class FaceService {
 /// The face is an instrument for what it is: an image zooms and pans, an environment is dragged round, a model is turned,
 /// a clip is scrubbed, a sound shows a position. Nothing here decodes media itself: frames and pictures come from the owner.
 class MediaPreview extends StatelessWidget {
-  const MediaPreview({super.key, required this.item, this.faces, required this.onClose, this.onReveal});
+  const MediaPreview({super.key, required this.item, this.faces, required this.onClose, this.onReveal, this.onPlace});
   final BrowserItem item;
   final FaceService? faces;
   final VoidCallback onClose;
   final VoidCallback? onReveal;
+  final VoidCallback? onPlace;
 
   @override
   Widget build(BuildContext context) => Container(
@@ -35,7 +36,7 @@ class MediaPreview extends StatelessWidget {
         child: LayoutBuilder(builder: (context, box) {
           final side = box.maxWidth >= 520;
           final face = ClipRect(child: _LiveFace(key: ValueKey(item.id), item: item, faces: faces));
-          final info = _Info(item: item, onClose: onClose, onReveal: onReveal);
+          final info = _Info(item: item, onClose: onClose, onReveal: onReveal, onPlace: onPlace);
           return side
               ? Row(children: [Expanded(flex: 3, child: face), SizedBox(width: 220, child: info)])
               : Column(children: [Expanded(child: face), SizedBox(height: 118, child: info)]);
@@ -44,10 +45,11 @@ class MediaPreview extends StatelessWidget {
 }
 
 class _Info extends StatelessWidget {
-  const _Info({required this.item, required this.onClose, this.onReveal});
+  const _Info({required this.item, required this.onClose, this.onReveal, this.onPlace});
   final BrowserItem item;
   final VoidCallback onClose;
   final VoidCallback? onReveal;
+  final VoidCallback? onPlace;
   @override
   Widget build(BuildContext context) {
     Widget chip(String text) => Container(margin: const EdgeInsets.only(right: 4, bottom: 3), padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5), decoration: BoxDecoration(color: N.g15, borderRadius: BorderRadius.circular(3)), child: Text(text, softWrap: false, style: Dn.label(N.g91, FontWeight.w500)));
@@ -76,6 +78,8 @@ class _Info extends StatelessWidget {
               fact('Source', item.source),
               fact('Path', item.rel.isEmpty ? item.path : item.rel),
               fact('Date', dateText(item.mtimeNs)),
+              if (onPlace != null)
+                GestureDetector(behavior: HitTestBehavior.opaque, onTap: onPlace, child: Padding(padding: const EdgeInsets.only(top: 6), child: Text('Place in project', style: Dn.label(N.g95, FontWeight.w600).copyWith(decoration: TextDecoration.underline)))),
               if (onReveal != null)
                 GestureDetector(behavior: HitTestBehavior.opaque, onTap: onReveal, child: Padding(padding: const EdgeInsets.only(top: 4), child: Text('Reveal in Finder', style: Dn.label(N.g82).copyWith(decoration: TextDecoration.underline)))),
             ]),
