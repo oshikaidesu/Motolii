@@ -12,8 +12,12 @@ import 'package:motolii_stage5/live_hf/adapters/graph_overlay.dart';
 import 'package:motolii_stage5/live_hf/adapters/media_fluid.dart';
 
 /// What the person chose for the graph: which relations to draw, and global or local (1 or 2 hops round the chosen one).
+const _all = {'folder', 'source', 'project', 'duplicate', 'type'};
+
 class GraphChoice extends ChangeNotifier {
-  GraphChoice({this.hops = 0, Set<String>? relations}) : relations = relations ?? {'folder', 'source', 'project', 'duplicate'};
+  /// [relations]: which kinds of relation are shown. The map itself is laid out from all of them and never re-packed by this:
+  /// a filter only changes what is visible.
+  GraphChoice({this.hops = 0, Set<String>? relations}) : relations = relations ?? {..._all};
 
   /// 0 = global (everything), 1 or 2 = local.
   int hops;
@@ -123,14 +127,15 @@ ExploreLayout graphLayout(GraphChoice choice, Set<String> Function() usedPaths) 
   String? lastKey;
   Frame? last;
   return (items, selected, viewport) {
-    final on = {...choice.relations};
+    final visible = {...choice.relations};
     final used = usedPaths();
-    final topology = '${items.map((i) => i.id).join(',')}|${on.toList()..sort()}|${used.length}|${items.map((i) => i.fingerprint).join(',').hashCode}';
+    final topology = '${items.map((i) => i.id).join(',')}|${used.length}|${items.map((i) => i.fingerprint).join(',').hashCode}';
+    final shown = (visible.toList()..sort()).join(',');
     // Global: the layout is a function of the graph alone, so choosing an asset (or resizing the seat) never asks for one.
     // Local is the explicit "look round this asset": it is rooted at the chosen one, so it follows the choice.
-    final key = choice.hops == 0 ? 'g|$topology' : 'l${choice.hops}|$selected|$topology';
+    final key = choice.hops == 0 ? 'g|$topology|$shown' : 'l${choice.hops}|$selected|$topology|$shown';
     if (key != lastKey || last == null) {
-      last = _build(choice, items, selected, choice.hops, on, used);
+      last = _build(choice, items, selected, choice.hops, visible, used);
       lastKey = key;
     }
     final frame = last!;
@@ -141,12 +146,14 @@ ExploreLayout graphLayout(GraphChoice choice, Set<String> Function() usedPaths) 
   };
 }
 
-Frame _build(GraphChoice choice, List<BrowserItem> items, String? selected, int hops, Set<String> on, Set<String> used) {
+Frame _build(GraphChoice choice, List<BrowserItem> items, String? selected, int hops, Set<String> visible, Set<String> used) {
   final focus = items.any((i) => i.id == selected) ? selected : (items.isEmpty ? null : items.first.id);
-  final rel = relationsOf(items, on, used);
+  // the whole graph of proven relations; which of them are shown is a visibility, not a different map
+  final rel = relationsOf(items, _all, used);
+  bool seen(GraphEdge e) => visible.contains(e.relation);
   // who is joined to whom, with how far each step is (an asset and its hub are half a hop: two assets in one folder are one)
   final adj = <String, List<(String, double)>>{};
-  for (final e in rel.edges) {
+  for (final e in rel.edges.where(seen)) {
     final hubEnds = (rel.hubLabel.containsKey(e.a) ? 1 : 0) + (rel.hubLabel.containsKey(e.b) ? 1 : 0);
     final cost = e.relation == 'duplicate' ? 1.0 : (hubEnds == 0 ? 1.0 : .5);
     adj.putIfAbsent(e.a, () => []).add((e.b, cost));
@@ -283,7 +290,7 @@ Frame _build(GraphChoice choice, List<BrowserItem> items, String? selected, int 
       hubs.add(GraphHub(id: node.id, label: rel.hubLabel[node.id]!, relation: rel.hubRelation[node.id]!, rect: rect));
     }
   }
-  return (faces: faces, labels: labels, links: const <String>[], graph: GraphOverlay(hubs: hubs, edges: [for (final e in rel.edges) if (idx.containsKey(e.a) && idx.containsKey(e.b)) e]), content: Size(w, h));
+  return (faces: faces, labels: labels, links: const <String>[], graph: GraphOverlay(hubs: [for (final h in hubs) if (visible.contains(h.relation)) h], edges: [for (final e in rel.edges) if (seen(e) && idx.containsKey(e.a) && idx.containsKey(e.b)) e]), content: Size(w, h));
 }
 
 /// Global / Local, and which relations are drawn (their colours are the lines').
@@ -299,7 +306,7 @@ class GraphBar extends StatelessWidget {
         builder: (context, _) => Padding(
           padding: const EdgeInsets.fromLTRB(9, 3, 9, 0),
           child: Wrap(spacing: 4, runSpacing: 3, crossAxisAlignment: WrapCrossAlignment.center, children: [
-            for (final (n, label) in const [(0, 'Global'), (1, 'Local 1'), (2, 'Local 2')]) _Chip(label, choice.hops == n, () => choice.setHops(n)),
+            for (final (n, label) in const [(0, 'Global'), (1, 'Local 1'), (2, 'Local 2'), (3, 'Local 3')]) _Chip(label, choice.hops == n, () => choice.setHops(n)),
             const SizedBox(width: 6),
             for (final (kind, label) in _kinds) _Chip(label, choice.relations.contains(kind), () => choice.toggle(kind), dot: relationColors[kind]),
           ]),

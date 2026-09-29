@@ -25,6 +25,26 @@ void main() {
     expect(layout(items, 'g', const Size(300, 900)).faces, first.faces, reason: 'nor does the seat changing size');
   });
 
+  test('a relation filter is a visibility: not one node moves, only lines and hubs come and go', () {
+    final choice = GraphChoice();
+    final layout = graphLayout(choice, () => {});
+    final all = layout(items, 'a', seat);
+    choice.toggle('folder');
+    choice.toggle('type');
+    final fewer = layout(items, 'a', seat);
+    expect(fewer.faces, all.faces, reason: 'the world stays as it was');
+    expect(fewer.graph!.edges.length, lessThan(all.graph!.edges.length));
+    expect(fewer.graph!.hubs.any((h) => h.relation == 'folder'), isFalse);
+    choice.toggle('folder');
+    expect(layout(items, 'a', seat).faces, all.faces);
+  });
+
+  test('membership is a hub, not a clique: many assets of one kind add one edge each', () {
+    final many = [for (var i = 0; i < 60; i++) item('m$i', 'z/m$i.png')];
+    final frame = graphLayout(GraphChoice(), () => {})(many, 'm0', seat);
+    expect(frame.graph!.edges.length, lessThan(many.length * 4), reason: '60 assets: a few edges each at most, never 60*59/2');
+  });
+
   test('a graph asked again from a fresh layout (Explore reopened) lands where it did', () {
     final choice = GraphChoice();
     final a = graphLayout(choice, () => {})(items, 'a', seat);
