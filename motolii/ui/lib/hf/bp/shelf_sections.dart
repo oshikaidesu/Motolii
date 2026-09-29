@@ -35,8 +35,8 @@ class SwissHeading extends StatelessWidget {
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           if (rule) ...[Container(height: 1, color: N.g15), const SizedBox(height: 5)],
           Row(children: [
-            Expanded(child: Text(text.toUpperCase(), softWrap: false, overflow: TextOverflow.ellipsis, style: sans(9, c: N.g56, w: FontWeight.w600, ls: .55))),
-            if (count != null) Text('$count', style: mono(9, c: N.g44)),
+            Expanded(child: Text(text.toUpperCase(), softWrap: false, overflow: TextOverflow.ellipsis, style: mono(8.5, c: N.g76, ls: .6))),
+            if (count != null) Text(count!.toString().padLeft(2, '0'), style: mono(8.5, c: N.g44)),
           ]),
         ]),
       );

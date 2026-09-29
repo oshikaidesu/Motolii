@@ -5,7 +5,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/widgets.dart';
 
-import '../../hf/bp/common.dart' show mono, sans;
+import '../../hf/bp/common.dart' show mono;
 import '../../hf/bp/seat.dart';
 import '../../hf/bp/shell.dart' show GlyphBox, kTile;
 import '../../hf/bp/shelf_sections.dart';
@@ -35,7 +35,7 @@ class MediaLibraryBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const margin = 10.0, gap = 4.0;
+    const margin = 10.0, gap = 2.0;
     final body = width - margin * 2;
     // cards of at least 70 px: three across the default seat, more as it widens
     final cols = math.max(1, ((body + gap) / (70 + gap)).floor());
@@ -79,7 +79,7 @@ class _Board extends StatelessWidget {
         if (heights[c] < heights[at] - 1) at = c;
       }
       heights[at] += h + gap;
-      columns[at].add(Padding(padding: EdgeInsets.only(bottom: gap), child: SizedBox(height: h, child: seated(context, t, MaterialCard(item: item, name: t.name)))));
+      columns[at].add(Padding(padding: EdgeInsets.only(bottom: gap), child: SizedBox(height: h, child: seated(context, t, MaterialCard(item: item, name: t.name, index: things.indexOf(t) + 1, roomy: colW >= 100)))));
     }
     return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
       for (var c = 0; c < cols; c++) ...[
@@ -90,38 +90,49 @@ class _Board extends StatelessWidget {
   }
 }
 
-const _captionHeight = 14.0;
+const _captionHeight = 0.0;
 
-/// One piece: its picture at its own proportions, and its name.
+/// One piece: its picture at its own proportions, and on a dark strip across its foot its index, its name and what it
+/// is (size or length), in small mono caps — no caption rows under the pictures, so the board stays tight.
 class MaterialCard extends StatelessWidget {
-  const MaterialCard({super.key, required this.item, required this.name});
+  const MaterialCard({super.key, required this.item, required this.name, this.index, this.roomy = true});
   final Map<String, dynamic> item;
   final String name;
+  final int? index;
+
+  /// Wide enough for the size or length beside the name (a narrow card keeps the name).
+  final bool roomy;
 
   @override
   Widget build(BuildContext context) {
     final missing = item['missing'] == true;
-    Widget face = ClipRRect(borderRadius: BorderRadius.circular(4), child: ColoredBox(color: N.g07, child: materialFace(item)));
+    final fact = roomy ? _fact(item) : '';
+    Widget face = ColoredBox(color: N.g07, child: materialFace(item));
     if (missing) face = Opacity(opacity: .4, child: face);
-    // placed in the work: a small light mark in the picture's corner
-    if (item['used'] == true && !missing) {
-      face = Stack(fit: StackFit.expand, children: [face, Positioned(left: 4, top: 4, child: Container(width: 5, height: 5, decoration: BoxDecoration(color: N.g95, shape: BoxShape.circle, border: Border.all(color: N.g07.withValues(alpha: .6)))))]);
-    }
-    final fact = _fact(item);
-    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      Expanded(child: face),
-      SizedBox(
-        height: _captionHeight,
-        // the name, and in the rest of the line what the piece is: its size, or its length
-        child: Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
-          Expanded(child: Text(missing ? 'Missing · $name' : name, maxLines: 1, softWrap: false, overflow: TextOverflow.ellipsis, style: sans(9, c: N.g82, w: FontWeight.w500))),
-          if (fact.isNotEmpty) Padding(padding: const EdgeInsets.only(left: 4), child: Text(fact, softWrap: false, style: mono(7.5, c: N.g44))),
-        ]),
-      ),
-    ]);
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(1),
+      child: Stack(fit: StackFit.expand, children: [
+        face,
+        Positioned(
+          left: 0,
+          right: 0,
+          bottom: 0,
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(4, 8, 4, 3),
+            decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [N.g00.withValues(alpha: 0), N.g00.withValues(alpha: .78)])),
+            child: Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+              if (index != null) Padding(padding: const EdgeInsets.only(right: 4), child: Text(index!.toString().padLeft(2, '0'), style: mono(7, c: N.g63))),
+              Expanded(child: Text((missing ? 'Missing · $name' : name).toUpperCase(), maxLines: 1, softWrap: false, overflow: TextOverflow.ellipsis, style: mono(7.5, c: N.g95))),
+              if (fact.isNotEmpty) Padding(padding: const EdgeInsets.only(left: 4), child: Text(fact, softWrap: false, style: mono(7, c: N.g69))),
+            ]),
+          ),
+        ),
+        // placed in the work: a small light mark in the corner
+        if (item['used'] == true && !missing) Positioned(right: 4, top: 4, child: Container(width: 5, height: 5, decoration: const BoxDecoration(color: N.g95, shape: BoxShape.circle))),
+      ]),
+    );
   }
 }
-
 
 /// What the material is, drawn as itself.
 Widget materialFace(Map<String, dynamic> item) => switch ('${item['family']}') {
@@ -139,6 +150,7 @@ String _fact(Map<String, dynamic> item) {
   if (facts is Map && facts['width'] is num && facts['height'] is num) return '${facts['width']}×${facts['height']}';
   return '${item['family'] ?? ''}' == 'HDR' ? '360°' : '';
 }
+
 
 double? _seconds(Map<String, dynamic> item) {
   final facts = item['facts'];
