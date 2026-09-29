@@ -30,11 +30,15 @@ class LiveUiScale {
   /// What the root viewport scales by: the base times the user's choice.
   final factor = ValueNotifier<double>(base);
 
+  /// Where a chosen size is kept (the shell gives the settings store once); every way of changing the size keeps it.
+  void Function(double percent)? persist;
+
   /// Sets the user's size (clamped, whole percent). True when it changed.
-  bool set(double next) {
+  bool set(double next, {bool keep = true}) {
     final v = (next.clamp(min, max) * 100).round() / 100;
     if (v == percent.value) return false;
     percent.value = v;
+    if (keep) persist?.call(v);
     return true;
   }
 
@@ -43,7 +47,7 @@ class LiveUiScale {
   bool reset() => set(1.0);
 
   /// A saved value read back at start (anything unreadable is 100 %).
-  void restore(Object? saved) => set(saved is num && saved.isFinite ? saved.toDouble() : 1.0);
+  void restore(Object? saved) => set(saved is num && saved.isFinite ? saved.toDouble() : 1.0, keep: false);
 }
 
 /// The size just chosen, said for a moment where the eye is (top centre), then gone: the change is otherwise silent.

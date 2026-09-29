@@ -89,11 +89,11 @@ class LiveKeys {
         c.importFiles();
       // the UI's size, a percent at a time (Option with the Stage's own zoom keys); the work is not scaled
       case LogicalKeyboardKey.equal when cmd && alt:
-        if (LiveUiScale.instance.bigger()) c.storeSetting(LiveUiScale.settingsKey, LiveUiScale.instance.percent.value);
+        LiveUiScale.instance.bigger();
       case LogicalKeyboardKey.minus when cmd && alt:
-        if (LiveUiScale.instance.smaller()) c.storeSetting(LiveUiScale.settingsKey, LiveUiScale.instance.percent.value);
+        LiveUiScale.instance.smaller();
       case LogicalKeyboardKey.digit0 when cmd && alt:
-        if (LiveUiScale.instance.reset()) c.storeSetting(LiveUiScale.settingsKey, LiveUiScale.instance.percent.value);
+        LiveUiScale.instance.reset();
       case LogicalKeyboardKey.digit0 when cmd:
         stageView(c, 'Fit');
       case LogicalKeyboardKey.digit1 when cmd:

@@ -67,6 +67,7 @@ class _LiveShellState extends State<LiveShell> {
     await c.initialize();
     if (!mounted) return;
     workspace = LiveWorkspace(c: c, scene: scene, console: console, onDetach: _detach);
+    LiveUiScale.instance.persist = (v) => c.storeSetting(LiveUiScale.settingsKey, v);
     try {
       final settings = EditorSession.map(await c.native('readSettings'));
       workspace!.dock.restore(settings['hfWorkspace']);

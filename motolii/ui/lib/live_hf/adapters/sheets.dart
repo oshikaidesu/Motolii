@@ -35,10 +35,35 @@ class _Export extends StatefulWidget {
   State<_Export> createState() => _ExportState();
 }
 
+/// An export as the document session holds it: which range is chosen, and the progress being fetched. The job
+/// outlives the sheet — closing the sheet while it runs keeps its progress coming.
+class ExportSession {
+  ExportSession._(this.c);
+  static final _all = Expando<ExportSession>();
+  static ExportSession of(EditorSession c) => _all[c] ??= ExportSession._(c);
+  final EditorSession c;
+
+  /// Marker to marker around the playhead, else the whole document.
+  bool markers = false;
+  Timer? _poll;
+
+  bool get running => const ['running', 'cancelling'].contains(EditorSession.map(c.state['export'])['phase']);
+
+  Future<void> start() async {
+    final (start, end) = exportRange(c, c.state, markers: markers);
+    if (await startExport(c, start, end)) {
+      _poll?.cancel();
+      // it stops itself when the job is done
+      _poll = pollExport(c);
+    }
+  }
+}
+
 class _ExportState extends State<_Export> {
   EditorSession get c => widget.c;
-  bool markers = false;
-  Timer? poll;
+  ExportSession get x => ExportSession.of(c);
+  bool get markers => x.markers;
+  set markers(bool v) => x.markers = v;
 
   @override
   void initState() {
@@ -49,24 +74,17 @@ class _ExportState extends State<_Export> {
   @override
   void dispose() {
     c.slice('liveExport', const ['export', 'markers', 'width', 'height', 'fps', 'durationFrames']).removeListener(_changed);
-    poll?.cancel();
     super.dispose();
   }
 
   void _changed() => setState(() {});
 
-  bool get _running => const ['running', 'cancelling'].contains(EditorSession.map(c.state['export'])['phase']);
+  bool get _running => x.running;
 
   /// The primary action while it can run (Enter uses it too).
   VoidCallback? get exportAction {
     if (_running || !c.supports('export')) return null;
-    final (start, end) = exportRange(c, c.state, markers: markers);
-    return () async {
-      if (await startExport(c, start, end)) {
-        poll?.cancel();
-        poll = pollExport(c);
-      }
-    };
+    return x.start;
   }
 
   @override
