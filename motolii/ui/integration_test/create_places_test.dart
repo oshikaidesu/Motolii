@@ -1,9 +1,9 @@
 // The real app (native host included) driven like a person: find controls by their accessible names, act, and check
 // what the work became. No coordinates, no drawn sizes.
-import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 
+import 'package:motolii_stage5/live_hf/adapters/timeline.dart';
 import 'package:motolii_stage5/live_hf/main.dart' as app;
 
 /// A few frames: the app never settles (the Stage keeps its clock), so wait by time, not by pumpAndSettle.
@@ -20,6 +20,9 @@ void main() {
     final semantics = t.ensureSemantics();
     app.main();
     await frames(t, 60);
+    // whatever layout the user keeps, the Create shelf is brought to the front first
+    t.widget<LiveTimeline>(find.byType(LiveTimeline)).c.placePanel('Create', 'show');
+    await frames(t, 20);
     final before = find.text('Rectangle').evaluate().length;
     await t.tap(find.bySemanticsLabel('Rectangle').first);
     await frames(t, 40);

@@ -88,13 +88,12 @@ class _RelationsPanelState extends State<RelationsPanel> {
   }
 
   // ---- the operations (the host's) --------------------------------------------------------------------------
-  Future<void> _relate(RelationSource src, double inMin, double inMax, Set<int> members, String property, double outMin, double outMax, {bool preview = false}) =>
+  Future<void> _relate(RelationSource src, double inMin, double inMax, Set<int> members, String property, double outMin, double outMax) =>
       c.command('relate', {
         'source': {'layer': src.layer, 'property': src.property, 'component': src.component},
         'inMin': inMin, 'inMax': inMax,
         'members': members.toList()..sort(),
         'property': property, 'outMin': outMin, 'outMax': outMax,
-        if (preview) 'preview': true,
       });
 
   Future<void> _create() async {
@@ -306,7 +305,7 @@ class _RelationsPanelState extends State<RelationsPanel> {
           GestureDetector(key: const ValueKey('relation-delete'), onTap: () async { for (final m in r.mappings) { await c.command('unrelate', {'layers': r.members, 'property': m.property}); } c.relationFocus.value = null; }, child: Text('✕', style: sans(12, c: kMuted))),
         ]),
         _label('SOURCE RANGE'),
-        _range('in', r.inMin, r.inMax, 'px', (lo, hi) => _reRange(r, inMin: lo, inMax: hi), onDone: () => c.command('commitPreview'), current: _sourceValue({'layer': r.source.layer, 'property': r.source.property, 'component': r.source.component})),
+        _range('in', _shown('in', r.inMin, r.inMax).$1, _shown('in', r.inMin, r.inMax).$2, 'px', (lo, hi) => setState(() => _draft['in'] = (lo, hi)), onDone: () => _write(r), current: _sourceValue({'layer': r.source.layer, 'property': r.source.property, 'component': r.source.component})),
         _label('MEMBERS'),
         Row(children: [
           Expanded(child: Text('${(picking ?? r.members.toSet()).length} things', key: const ValueKey('relations-count'), style: sans(11.5, c: kInk))),
@@ -320,8 +319,8 @@ class _RelationsPanelState extends State<RelationsPanel> {
               final gone = r.members.where((m) => !picking!.contains(m)).toList();
               for (final m in r.mappings) {
                 if (gone.isNotEmpty) await c.command('unrelate', {'layers': gone, 'property': m.property});
-                await _relate(r.source, r.inMin, r.inMax, picking!, m.property, m.outMin, m.outMax);
               }
+              await _write(r, members: picking!);
               setState(() => picking = null);
             },
             child: Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4), decoration: BoxDecoration(color: editing ? kRed : kRaised, borderRadius: BorderRadius.circular(4)), child: Text(editing ? 'Done' : 'Edit in graph', style: sans(11, c: editing ? N.g10 : kInk, w: FontWeight.w600))),
@@ -333,7 +332,7 @@ class _RelationsPanelState extends State<RelationsPanel> {
             Expanded(child: Text(labelOf(m.property), key: ValueKey('mapping-${m.property}'), style: sans(11.5, c: kInk, w: FontWeight.w600))),
             GestureDetector(key: ValueKey('mapping-remove-${m.property}'), onTap: () => c.command('unrelate', {'layers': r.members, 'property': m.property}), child: Text('✕', style: sans(11, c: kMuted))),
           ]),
-          _range('out-${m.property}', unitOf(m.property).fromDoc(m.outMin), unitOf(m.property).fromDoc(m.outMax), unitOf(m.property).suffix, (lo, hi) => _relate(r.source, r.inMin, r.inMax, r.members.toSet(), m.property, unitOf(m.property).toDoc(lo), unitOf(m.property).toDoc(hi), preview: true), onDone: () => c.command('commitPreview')),
+          _range('out-${m.property}', _shown('out-${m.property}', unitOf(m.property).fromDoc(m.outMin), unitOf(m.property).fromDoc(m.outMax)).$1, _shown('out-${m.property}', unitOf(m.property).fromDoc(m.outMin), unitOf(m.property).fromDoc(m.outMax)).$2, unitOf(m.property).suffix, (lo, hi) => setState(() => _draft['out-${m.property}'] = (lo, hi)), onDone: () => _write(r)),
           const SizedBox(height: 6),
         ],
         Wrap(spacing: 5, runSpacing: 5, children: [
@@ -348,10 +347,27 @@ class _RelationsPanelState extends State<RelationsPanel> {
     );
   }
 
-  Future<void> _reRange(Relation r, {required double inMin, required double inMax}) async {
-    for (final m in r.mappings) {
-      await _relate(r.source, inMin, inMax, r.members.toSet(), m.property, m.outMin, m.outMax, preview: true);
-    }
+  /// A range being scrubbed (by its key: 'in', or 'out-<property>'), shown until it is let go. A link has no preview,
+  /// so the relation is written once, on release, with every destination in one edit (one undo step).
+  final _draft = <String, (double, double)>{};
+  (double, double) _shown(String key, double lo, double hi) => _draft[key] ?? (lo, hi);
+
+  Future<void> _write(Relation r, {Set<int>? members}) async {
+    final (inMin, inMax) = _shown('in', r.inMin, r.inMax);
+    await c.command('relate', {
+      'source': {'layer': r.source.layer, 'property': r.source.property, 'component': r.source.component},
+      'inMin': inMin, 'inMax': inMax,
+      'members': (members ?? r.members.toSet()).toList()..sort(),
+      'mappings': [
+        for (final m in r.mappings)
+          () {
+            final u = unitOf(m.property);
+            final (lo, hi) = _draft.containsKey('out-${m.property}') ? (u.toDoc(_draft['out-${m.property}']!.$1), u.toDoc(_draft['out-${m.property}']!.$2)) : (m.outMin, m.outMax);
+            return {'property': m.property, 'outMin': lo, 'outMax': hi};
+          }(),
+      ],
+    });
+    if (mounted) setState(_draft.clear);
   }
 
   /// Two ends of a range, each scrubbed, with the value now marked between them.

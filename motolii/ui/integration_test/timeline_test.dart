@@ -1,7 +1,6 @@
 // The Timeline's meaning, on the real app and its native host, with no skin in the way: what a person does is told to
 // the TimelineSession in rows and frames, and the document is read back. Any skin that says the same things gets the
 // same results.
-import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 
