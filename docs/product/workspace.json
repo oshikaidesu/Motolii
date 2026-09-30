@@ -12,7 +12,7 @@
     "prototype": "motolii/ui/lib/proto_hf, motolii/ui/lib/proto (not a product path)"
   },
   "renderer": "motolii/crates/motolii-render",
-  "history": "docs/stage5/history/retired-source.md",
+  "history": "docs/product/history/retired-source.md",
   "checkpoint": {
     "id": "20260906T083405",
     "statePath": "motolii-stage5/checkpoints/20260906T083405",
@@ -47,10 +47,10 @@
   },
   "documents": {
     "concept": "docs/concept.md",
-    "interaction": "docs/stage5/product-contract.md",
-    "migration": "docs/stage5/README.md",
-    "recovery": "docs/stage5/document-map.md",
-    "technical": "docs/stage5/technical-boundaries.md"
+    "interaction": "docs/product/product-contract.md",
+    "migration": "docs/product/README.md",
+    "recovery": "docs/product/document-map.md",
+    "technical": "docs/product/technical-boundaries.md"
   },
   "entryDocuments": [
     "README.md",
@@ -77,7 +77,7 @@
     ],
     "remoteCiRun": "not performed"
   },
-  "modules": "docs/stage5/modules.json",
+  "modules": "docs/product/modules.json",
   "moduleValidation": {
     "dartAnalysis": "passed",
     "flutterTests": 9,

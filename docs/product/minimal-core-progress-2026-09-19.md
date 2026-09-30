@@ -239,7 +239,7 @@ Document::load(path)?.with_programs(doc::extensions::bundled())
 
 ### 構造で守る(検査)
 
-- coreに`thread_local!`・`static mut`・契約が名指ししない可変staticがあればFAIL(名指しは`docs/stage5/modules.json`の`coreProcessState`。今日の時点では文字の`SYSTEM`・`KNOWN`だけ)。
+- coreに`thread_local!`・`static mut`・契約が名指ししない可変staticがあればFAIL(名指しは`docs/product/modules.json`の`coreProcessState`。今日の時点では文字の`SYSTEM`・`KNOWN`だけ)。
 - taffyの名を`store/layout/flow.rs`以外が口にすればFAIL(`coreSolvers`)。文字のmeasureはtaffyの`Size`・`AvailableSpace`で話していたので、平の数へ直した。
 - どちらも偽の違反を入れてFAILすることを確認済み。
 
@@ -267,7 +267,7 @@ Document::load(path)?.with_programs(doc::extensions::bundled())
 軽い検査・対象別の入口：
 
 ```sh
-python3 scripts/check-stage5.py --self-test
+python3 scripts/check-workspace.py --self-test
 scripts/motolii-ui.sh check
 git diff --check
 cargo test -p motolii-doc --test placement_programs

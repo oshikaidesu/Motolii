@@ -1,6 +1,6 @@
 # 現在の入口 — Stage 5
 
-[コンセプト](concept.md)、[UIと操作](stage5/product-contract.md)、[Stage 5](stage5/README.md)を読む。根拠の対応は[救出・照合表](stage5/document-map.md)、構成は[workspace.json](stage5/workspace.json)。以下は過去世代の索引で、現行の技術選定・起動手順を上書きしない。
+[コンセプト](concept.md)、[UIと操作](product/product-contract.md)、[Stage 5](product/README.md)を読む。根拠の対応は[救出・照合表](product/document-map.md)、構成は[workspace.json](product/workspace.json)。以下は過去世代の索引で、現行の技術選定・起動手順を上書きしない。
 
 UIを「何を起動したか・どこまで結合したか」で報告する時の語は [ui-artifact-terminology.md](ui-artifact-terminology.md)(分類の仕方は有効。本文中の具体的なshell名は2026-08当時)。
 

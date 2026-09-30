@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # The independent police: Semgrep rules (semgrep/motolii.yml) over Rust, Dart and Swift, watching a few boundaries that
-# scripts/check-stage5.py and motolii/reference/owned-budget.tsv also watch. It adds no law; a rule that cannot be proven on a
+# scripts/check-workspace.py and motolii/reference/owned-budget.tsv also watch. It adds no law; a rule that cannot be proven on a
 # past bug (semgrep/history.tsv) does not belong here.
 #
 #   scripts/check-semgrep.sh             rule tests + the tree (raw-GPU rule: only what is new against $BASE)

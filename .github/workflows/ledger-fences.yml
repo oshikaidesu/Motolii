@@ -14,8 +14,8 @@ jobs:
           fetch-depth: 0
       - name: Current workspace and documentation entry points
         run: |
-          python3 scripts/check-stage5.py --self-test
-          python3 scripts/check-stage5.py
+          python3 scripts/check-workspace.py --self-test
+          python3 scripts/check-workspace.py
       - name: Architecture rules (the core does not know the picture)
         run: |
           cargo install cargo-arc --locked

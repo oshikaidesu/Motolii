@@ -680,7 +680,7 @@
 
 - [学マス・アイプラの公開技術から、次の反射実装へ](2026-09-09-qualiarts-rendering-next-plan.md)
 
-現行の判断は[Stage 5](../stage5/README.md)。以下は作成時点の調査・候補・決定の根拠。
+現行の判断は[Stage 5](../product/README.md)。以下は作成時点の調査・候補・決定の根拠。
 
 - [2026-09-03 コンセプトへの異議(コンセプトデザイナー: Ableton / Figma の人)](2026-09-03-concept-challenge.md)
 - [persona の違和感 backlog — しらみ潰し(2026-09-03 利用者: 最大公約数でなく全部)](2026-09-03-persona-backlog.md)

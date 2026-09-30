@@ -24,7 +24,7 @@
 | 文字除去 | 2.199 | 4.047 | 6.247 |
 | 図形除去 | 6.234 | 27.444 | 33.678 |
 
-生ログ: [素材比較](../stage5/evidence/frame-cost/ablation.log)、[効果比較](../stage5/evidence/frame-cost/effects.log)。測定器: `motolii/crates/motolii-render/examples/frame_cost.rs`。
+生ログ: [素材比較](../product/evidence/frame-cost/ablation.log)、[効果比較](../product/evidence/frame-cost/effects.log)。測定器: `motolii/crates/motolii-render/examples/frame_cost.rs`。
 
 ## CPUとGPUの実際の分担
 

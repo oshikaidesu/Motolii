@@ -1,6 +1,6 @@
 # UI視覚言語(M3)
 
-> Stage 5では[現行UI・操作](stage5/product-contract.md)と[技術境界](stage5/technical-boundaries.md)が入口。以下の「正本」「現行」は記載当時の世代を指す。既存の知見は参照するが、旧モック・旧framework・未実装UIの一律撤去規則を現在の指示へ適用しない。
+> Stage 5では[現行UI・操作](product/product-contract.md)と[技術境界](product/technical-boundaries.md)が入口。以下の「正本」「現行」は記載当時の世代を指す。既存の知見は参照するが、旧モック・旧framework・未実装UIの一律撤去規則を現在の指示へ適用しない。
 
 ステータス: **設計基準**(意味役割・情報密度・禁止事項は決定。具体token値とreference screenはM3視覚確定(G0-6)で確定)
 

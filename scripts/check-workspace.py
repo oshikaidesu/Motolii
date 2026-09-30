@@ -25,11 +25,11 @@ if '--self-test' in sys.argv:
  for source,expected in cases:
   if bool(read_only_document_dependency(source)) != expected:
    raise SystemExit(f'Read-only dependency self-test failed: {source}')
- print(f'Stage 5 dependency rules: {len(cases)} passed')
+ print(f'Workspace dependency rules: {len(cases)} passed')
  sys.exit(0)
 
 root=Path(__file__).resolve().parents[1]
-contract=json.loads((root/'docs/stage5/workspace.json').read_text())
+contract=json.loads((root/'docs/product/workspace.json').read_text())
 errors=[]
 for key in ['entry','ui','native','document','renderer','history']:
  if not (root/contract[key]).exists():errors.append(f'{key}: missing {contract[key]}')
@@ -64,7 +64,7 @@ if members_match and 'motolii' in re.findall(r'"([^"]+)"',members_match.group(1)
 if (root/'motolii/Cargo.toml').exists():errors.append('Legacy host manifest must stay in Git history')
 workflow=(root/'.github/workflows/ledger-fences.yml').read_text()
 if 'app/Cargo.toml' in workflow or 'workspaces: next' in workflow:errors.append('Active CI invokes a historical workspace')
-if 'scripts/check-stage5.py' not in workflow:errors.append('Active CI omits Stage 5 entry validation')
+if 'scripts/check-workspace.py' not in workflow:errors.append('Active CI omits workspace validation')
 document_entries=list(contract.get('documents',{}).items())+[(p,p) for p in contract.get('entryDocuments',[])]
 for role,relative in document_entries:
  path=root/relative
@@ -77,8 +77,8 @@ for role,relative in document_entries:
   local=target.split('#')[0]
   if local and not (path.parent/local).exists():errors.append(f'{relative}: missing link {local}')
 if set(contract.get('documents',{})) != {'concept','interaction','migration','recovery','technical'}:
- errors.append('Stage 5 must expose concept, interaction, migration, recovery and technical documents')
-modules=json.loads((root/'docs/stage5/modules.json').read_text())
+ errors.append('Workspace contract must expose concept, interaction, migration, recovery and technical documents')
+modules=json.loads((root/'docs/product/modules.json').read_text())
 for consumer in modules['readOnlyDocumentConsumers']:
  if not read_only_document_dependency((root/consumer/'Cargo.toml').read_text()):
   errors.append(f'{consumer}: production dependency must not enable document editing')
@@ -166,5 +166,5 @@ for path in (root/'motolii/ui/native/src').rglob('*.rs'):
  if 'crate::ui::' in path.read_text():errors.append(f'{path.relative_to(root)}: old UI namespace')
 if (root/'motolii/ui/native/src/ui').exists():errors.append('Native editor has an ambiguous UI duplicate')
 for error in errors:print(error,file=sys.stderr)
-print('Stage 5 workspace: '+('FAIL' if errors else 'PASS'))
+print('Workspace: '+('FAIL' if errors else 'PASS'))
 sys.exit(bool(errors))

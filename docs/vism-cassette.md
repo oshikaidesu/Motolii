@@ -4,7 +4,7 @@
 
 状態: **調査結果の固定／schema・container・runtime・製品UI未決**。Cassette を実装する文書ではない。probe で分かったこと、Motolii が既に持つもの、足りないもの、意図して先送りするものを、参加していない人が読めるように残す。
 
-関連: [Vism / Kitモデル](vism-kit-model.md)、[Vismコンセプト](vism-package-concept.md)、[スクリプトの口](reviews/2026-09-14-script-mouth.md)、[UI rebaseline brief](stage5/ui-rebaseline/brief.md)、Draft PR #533「docs: draft Vism cassette distribution and Host capability API」(branch `draft/vism-cassette-ts-host-api`。この repo の main には無い)。
+関連: [Vism / Kitモデル](vism-kit-model.md)、[Vismコンセプト](vism-package-concept.md)、[スクリプトの口](reviews/2026-09-14-script-mouth.md)、[UI rebaseline brief](product/ui-rebaseline/brief.md)、Draft PR #533「docs: draft Vism cassette distribution and Host capability API」(branch `draft/vism-cassette-ts-host-api`。この repo の main には無い)。
 
 ## 1. 結論
 

@@ -13,7 +13,7 @@ Motolii is built on two *what ifs* that were both nearly real:
 
 **What if a compositor never flattened meaning?** Motolii's stage is [Rerun](https://rerun.io) — a semantic data engine built for robotics and computer vision, where a point cloud stays a point cloud, a path stays a path, a time series stays a time series. Compositing on top of that store means you combine *meanings*, not rasters: the same scene can hold video, procedural shapes, spatial data, and audio-driven motion while every piece remains inspectable, animatable, and re-interpretable. That is a playground for expression nobody has planned yet — the interesting work happens in the combinations.
 
-**What if AviUtl's culture had met After Effects' grammar?** For two decades a free, local Japanese editor was bent by its extension community into shapes its author never imagined, and an entire MV/MAD culture grew in that gap. That crossing simply never happened — the freedom grew on one island, while AE's depth stayed sealed behind a vendor SDK, and no bridge was built between them. Motolii is the bridge that was never built: the AE-family editing grammar your hands already know (reverse-derived from AE, Godot, Blender, Unity, Unreal, and the Lottie-era editors — see [adopted UI behavior](docs/stage5/product-contract.md)), with extension freedom as a constitution — every stage of the pipeline is a deliberate seam, proven by running a datamosh effect through the same contract as a blur.
+**What if AviUtl's culture had met After Effects' grammar?** For two decades a free, local Japanese editor was bent by its extension community into shapes its author never imagined, and an entire MV/MAD culture grew in that gap. That crossing simply never happened — the freedom grew on one island, while AE's depth stayed sealed behind a vendor SDK, and no bridge was built between them. Motolii is the bridge that was never built: the AE-family editing grammar your hands already know (reverse-derived from AE, Godot, Blender, Unity, Unreal, and the Lottie-era editors — see [adopted UI behavior](docs/product/product-contract.md)), with extension freedom as a constitution — every stage of the pipeline is a deliberate seam, proven by running a datamosh effect through the same contract as a blur.
 
 Both futures were plausible. Neither happened. Motolii is being built so they can — and the whole build is public: every design decision is a numbered ruling, every capability a row in a [decision index you can grep](docs/decision-index.md).
 
@@ -177,7 +177,7 @@ Heavy asset creation, character rigging, simulation authoring, grading, and spec
 
 ## Current status
 
-Stage 5: a Flutter editor over a shared Rust core (document, evaluation, rendering, export), on a pinned fork of Rerun's renderer. The effect system is the part that is furthest along: one effect on every material (video, text outlines, meshes, point clouds), Shadertoy pasted as-is (single file or exported tabs), time references and host-owned feedback with the same picture however you scrub. Current state, unfinished work and how to run it live in [`docs/stage5/README.md`](docs/stage5/README.md); this README intentionally stays at project level.
+Stage 5: a Flutter editor over a shared Rust core (document, evaluation, rendering, export), on a pinned fork of Rerun's renderer. The effect system is the part that is furthest along: one effect on every material (video, text outlines, meshes, point clouds), Shadertoy pasted as-is (single file or exported tabs), time references and host-owned feedback with the same picture however you scrub. Current state, unfinished work and how to run it live in [`docs/product/README.md`](docs/product/README.md); this README intentionally stays at project level.
 
 ## Architecture and technology
 
@@ -223,7 +223,7 @@ scripts/motolii-ui.sh dev          # start an empty project
 
 Rust dependencies are pinned to public GitHub commits; no sibling checkouts are required. The development script discovers Homebrew FFmpeg and the active Xcode toolchain, while respecting explicit `FFMPEG_DIR` and `LIBCLANG_PATH` overrides. For direct Cargo commands, provide those variables yourself (or use the dependencies' standard pkg-config/libclang discovery). FFmpeg must include development headers and libraries, not just the executable.
 
-Details, the test lanes and the current unfinished list are in [`docs/stage5/README.md`](docs/stage5/README.md). Effects live in `motolii/crates/motolii-render/vism/` and reload on save; how to write one is in [the field model](docs/vism-field-model.md), [Shadertoy import](docs/vism-shadertoy-import.md) and [the laws of time](docs/plugin-resources.md).
+Details, the test lanes and the current unfinished list are in [`docs/product/README.md`](docs/product/README.md). Effects live in `motolii/crates/motolii-render/vism/` and reload on save; how to write one is in [the field model](docs/vism-field-model.md), [Shadertoy import](docs/vism-shadertoy-import.md) and [the laws of time](docs/plugin-resources.md).
 
 ## Contributing
 

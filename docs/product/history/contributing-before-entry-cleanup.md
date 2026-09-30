@@ -4,7 +4,7 @@ This snapshot contained mixed-generation instructions. It is retained for proven
 
 # Contributing to Motolii
 
-Current development entry: [Stage 5](../../../docs/stage5/README.md). Use `scripts/motolii-ui.sh`; the older build instructions below are retained for legacy components, not the Flutter host.
+Current development entry: [Stage 5](../../../docs/product/README.md). Use `scripts/motolii-ui.sh`; the older build instructions below are retained for legacy components, not the Flutter host.
 
 Motolii is a pre-1.0, specification-driven Rust compositor maintained by a single owner. Contributions are welcome in rendering, document semantics, tests, tooling, UI, plugins, documentation, and prior-art review.
 
@@ -16,7 +16,7 @@ This project keeps its design decisions in the repository rather than in convers
 |---|---|
 | [`README.md`](../../../README.md) | What Motolii is, its scope, and its non-goals |
 | [`docs/concept.md`](../../../docs/concept.md) | Current product concept; takes precedence over historical vision documents |
-| [`docs/stage5/product-contract.md`](../../../docs/stage5/product-contract.md) | Adopted UI and editing semantics; separate from implementation status |
+| [`docs/product/product-contract.md`](../../../docs/product/product-contract.md) | Adopted UI and editing semantics; separate from implementation status |
 | [`docs/README.md`](../../../docs/README.md) | Reading order, glossary, and the file map for `docs/` |
 | [`docs/decision-index.md`](../../../docs/decision-index.md) | Reverse index: search it by topic keyword before touching that topic |
 

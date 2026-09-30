@@ -691,7 +691,7 @@ Each entry: REFERENCE ARTIFACT to intended interpretation.
 
 ## 11. Annotated crops
 
-All in `docs/stage5/ui-rebaseline/handoff/`. Guides: cyan = boundaries, magenta = dimensions, yellow = text/glyph boxes, green = selected/active, orange = gutters or open questions.
+All in `docs/product/ui-rebaseline/handoff/`. Guides: cyan = boundaries, magenta = dimensions, yellow = text/glyph boxes, green = selected/active, orange = gutters or open questions.
 
 - `crop-1-topbar.png`
 - `crop-2-browser.png`

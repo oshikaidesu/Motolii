@@ -30,6 +30,6 @@
   "isolatedExtensions": {
     "motolii/crates/motolii-script": ["rquickjs", "serde_json"]
   },
-  "history": "docs/stage5/history/retired-source.md",
+  "history": "docs/product/history/retired-source.md",
   "legacyPolicy": "retired to pinned Git history; changes target nativeEditor"
 }
