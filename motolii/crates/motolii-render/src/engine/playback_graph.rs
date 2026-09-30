@@ -9,7 +9,7 @@ use crate::doc::store::{LayerId, StoreView};
 use crate::frame_graph::{BlobAnalysisRequestValue, BlobAnalysisValue, CompiledGraph, EvaluatedFrame, EvaluationContext, FrameQuality, Generation, GraphNode, GraphRevision, GraphTopology, MediaExtentValue, NodeExecutor, NodeIdentity, NodeInputs, NodeKey, NodeKind, NodeValue, OverlayAnalysisValue, OverlaySetValue, SceneProgram, SceneValue, SolverPlanValue, TimeDependency};
 use crate::picture::resolved::ResolvedLayer;
 
-use super::frame_graph_scene::GpuSceneValue;
+use super::gpu_scene::GpuSceneValue;
 use super::{Engine, EngineError};
 
 pub(super) struct EngineFrameGraph {

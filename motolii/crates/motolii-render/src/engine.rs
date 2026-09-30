@@ -23,8 +23,8 @@ mod translate;
 mod blocks;
 mod physics;
 mod frozen;
-mod frame_graph;
-mod frame_graph_scene;
+mod playback_graph;
+mod gpu_scene;
 
 use crate::doc::core::ResolvedCamera;
 use crate::render::compositor::{Compositor, CompositorError};
@@ -118,7 +118,7 @@ fn still_pixels() -> StillPixels {
 }
 
 pub struct Engine {
-    frame_graph: Option<frame_graph::EngineFrameGraph>,
+    frame_graph: Option<playback_graph::EngineFrameGraph>,
     /// 1 コマの解決を 2 度しない。描く側と status が同じ (版, 時刻) を続けて訊くので、
     /// 解析入力が無い時(= 両者が同じ物を解く時)だけ覚える。鍵が外れたら捨てる。
     /// 直前に**実際に解いた**拍の中身(相ごと・層の種類ごと)。memo に当たった面では空。

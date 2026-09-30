@@ -73,7 +73,7 @@
     },
     {
       "source_sha256": "06290c823ae33ad7084e0f76bd60f57885e19e2b832fde3844688c395e265ab9",
-      "current": "motolii/ui/native/src/editor/functions/mod.rs",
+      "current": "motolii/ui/native/src/editor/functions.rs",
       "owner": "editor",
       "historicalOrigin": "motolii/src/ui/functions/mod.rs",
       "historical_adapted_sha256": "f324f338d7c9670292f3287fab985da227552bc69a62e82f4d14e00d046c7802"
@@ -108,7 +108,7 @@
     },
     {
       "source_sha256": "420c1c9d725bb9324c3bc0ef36fdfe6b8de5642cfc8209eb3263851839c52237",
-      "current": "motolii/ui/native/src/editor/mod.rs",
+      "current": "motolii/ui/native/src/editor.rs",
       "owner": "editor",
       "historicalOrigin": "motolii/src/ui/mod.rs",
       "historical_adapted_sha256": "75ab0b1d14f9abb665ca7ca1f8d0940b039857324b15d353b529092d22e49f10"

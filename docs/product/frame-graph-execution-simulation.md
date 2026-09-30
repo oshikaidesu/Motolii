@@ -82,7 +82,7 @@ render_view(&EvaluatedFrame, projection, target) -> Submission
 S0の所有file:
 
 ```text
-motolii-render/src/frame_graph/mod.rs
+motolii-render/src/frame_graph.rs
 motolii-render/src/frame_graph/key.rs
 motolii-render/src/frame_graph/topology.rs
 motolii-render/src/frame_graph/value.rs
