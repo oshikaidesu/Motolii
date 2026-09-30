@@ -48,6 +48,7 @@ void main() {
         if (centre.dy > 800) continue;
         await frames(t, 4);
         LatencyProbe.events.clear();
+        final stageBefore = c.stagePublishedFrames;
         final boundsBefore = '${c.state['selectedBounds']}';
         final g = await t.startGesture(centre, kind: PointerDeviceKind.mouse);
         await t.pump(const Duration(milliseconds: 30));
@@ -55,11 +56,12 @@ void main() {
         await frames(t, 4);
         final sent = LatencyProbe.events.where((e) => e.name == 'cmd:previewProperties').length;
         final open = c.state['preview'] == true;
+        final stageFrames = c.stagePublishedFrames - stageBefore;
         final drawn = '${c.state['selectedBounds']}' != boundsBefore;
         // ignore: avoid_print
-        print('FIRST [$label] $key move=$dx -> previewProperties sent=$sent, host preview open=$open, first render drew it=$drawn, error=${c.error.value}');
+        print('FIRST [$label] $key move=$dx -> previewProperties sent=$sent, host preview open=$open, Stage texture frames published=$stageFrames, first render drew it=$drawn, error=${c.error.value}');
         // the camera's centre and target rows are locked while the camera aims at a layer (nothing moves, by design)
-        if ((sent < 1 || !open) && !(label == 'camera' && (key.contains('center') || key.contains('target')))) failures.add('[$label] $key@$dx sent=$sent open=$open');
+        if ((sent < 1 || !open || stageFrames < 1) && !(label == 'camera' && (key.contains('center') || key.contains('target')))) failures.add('[$label] $key@$dx sent=$sent open=$open');
         await g.up();
         await frames(t, 4);
         await c.command('undo');

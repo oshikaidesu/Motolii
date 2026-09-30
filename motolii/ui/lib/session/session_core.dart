@@ -68,6 +68,9 @@ abstract class SessionCore {
   /// whoever shows the catalog asks it again.
   final catalogTick = ValueNotifier<int>(0);
 
+  /// How many pictures the host has published to the Stage's own texture (a check, not something the UI draws from).
+  int stagePublishedFrames = 0;
+
   final error = ValueNotifier<String?>(null);
 
   /// 直前の取り込みで棚に入った asset の id。Browser が Media を開いて選ぶ。

@@ -63,6 +63,7 @@ mixin SessionNative on SessionCore {
       };
       if (!sameValue(ids, textureIds.value)) textureIds.value = ids;
     }
+    if (envelope['stagePublishedFrames'] is num) stagePublishedFrames = (envelope['stagePublishedFrames'] as num).toInt();
     if (envelope['frameReady'] == true) {
       if (next['frame'] is num) frame.value = (next['frame'] as num).toInt();
       rendered.value = next;

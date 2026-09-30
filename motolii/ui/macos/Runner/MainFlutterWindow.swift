@@ -763,6 +763,8 @@ final class ProbeHost: NSObject {
     if let width = status["width"] { reply["width"] = width }
     if let height = status["height"] { reply["height"] = height }
     if let texture = textures[ProbeHost.outputView] { reply.merge(texture.counters()) { _, new in new } }
+    // the Stage's own texture (the User view), for the checks that ask whether a picture reached it
+    if let stage = textures["User"] { reply["stagePublishedFrames"] = stage.counters()["publishedFrames"] }
     return reply
   }
 
