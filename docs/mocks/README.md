@@ -74,13 +74,11 @@
 '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' \
   --headless=new --disable-gpu --hide-scrollbars \
   --force-device-scale-factor=1 --window-size=1440,900 \
-  --screenshot=docs/mocks/m3-vism-host-boundary-all-surfaces-golden.png \
   'file://'"$PWD/docs/mocks/m3-vism-host-boundary.html#all-surfaces"
 
 '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' \
   --headless=new --disable-gpu --hide-scrollbars \
   --force-device-scale-factor=1 --window-size=1440,900 \
-  --screenshot=docs/mocks/m3-vism-host-boundary-settings-golden.png \
   'file://'"$PWD/docs/mocks/m3-vism-host-boundary.html#settings"
 ```
 
@@ -233,8 +231,6 @@
 ## 高密度メインUI v3 — monochrome構造試験
 
 - [monochrome表示](m3-main-ui-v3-monochrome.html) / [semantic color表示](m3-main-ui-v3-monochrome.html#color)（同じHTML・同じfixture）
-- [M3構造golden PNG](m3-main-ui-v3-monochrome-golden.png)（1440×900 / device scale 1）
-- [semantic color比較PNG](m3-main-ui-v3-semantic-color-golden.png)（1440×900 / device scale 1）
 - ステータス: **M3構造golden**。製品テーマとG0-6の具体token値を固定する色goldenではなく、同一fixtureの区画・密度・因果・Z/Group意味を固定する基準画像
 - UI色を黒〜無彩色へ限定し、種別・選択・接続・警告を位置、形、線種、pattern、明度で区別する。意味色が無い状態でも構造が成立するかを先に見る
 - v2の3-pane、高密度Timeline、右Inspector、status barを維持する。Soundtrackがある時は波形、BPMがある時は拍gridを同じ時間guideとして表示するが、未設定時に空の楽曲領域を常設しない
@@ -252,7 +248,6 @@ Timeline左端のconnection gutterは、共有`Effect Definition`の◇ `OUT`か
 
 「dark neutral」が「ほぼ黒一色」へ寄りすぎていないかを分離して見るため、構造・fixture・semantic colorを固定し、UI surfaceの明度と色温度だけを6段階へ写像する。StageとOutput Frame内の作品背景は全案で黒のまま固定し、UIを明るくすることと映像の黒を変えることを混同しない。
 
-![surface tone 6案](m3-main-ui-v3-tone-contact-sheet.png)
 
 1. [BLACK / baseline](m3-main-ui-v3-monochrome.html#tone-1) — 現行の黒基調。比較原点
 2. [CHARCOAL](m3-main-ui-v3-monochrome.html#tone-2) — 黒を残しつつpanel境界を持ち上げる
@@ -261,11 +256,9 @@ Timeline左端のconnection gutterは、共有`Effect Definition`の◇ `OUT`か
 5. [MID STONE](m3-main-ui-v3-monochrome.html#tone-5) — 明暗の中間。dark/light二択にしない比較点
 6. [ABLETON LIGHT](m3-main-ui-v3-monochrome.html#tone-6) — 明るいneutral surfaceと黒いStageを分離する
 
-各案の1440×900画像: [1](m3-main-ui-v3-tone-1-golden.png) / [2](m3-main-ui-v3-tone-2-golden.png) / [3](m3-main-ui-v3-tone-3-golden.png) / [4](m3-main-ui-v3-tone-4-golden.png) / [5](m3-main-ui-v3-tone-5-golden.png) / [6](m3-main-ui-v3-tone-6-golden.png)
 
 ### preview-first語彙試験
 
-- [インタラクティブ表示](m3-main-ui-v3-monochrome.html#preview-first) / [1440×900 PNG](m3-main-ui-v3-preview-first-golden.png)
 - Stageを主面積へ拡大し、常設の説明文、規則の文章、既定statusの長文を外す。説明は接続・invalid・drag等、現在操作している時だけContextとして出す
 - 空間に存在するものを`Object`、時間上の配置を`Clip`、再帰単位を`Group`として表示し、`Layer`を画面語彙から外す。順序が結果へ影響する箇所だけ`Stack`を使う
 - これはDocument型や公開契約の改名ではなく、G0-6で「AE由来の語彙を読ませずに対象を識別できるか」を比較するためのモック仮説
@@ -298,7 +291,6 @@ Timeline左端のconnection gutterは、共有`Effect Definition`の◇ `OUT`か
 
 ### Asset Explorer試験
 
-- [Explorerを開く](m3-main-ui-v3-monochrome.html#asset-explorer) / [1440×900 PNG](m3-main-ui-v3-asset-explorer-golden.png)
 - 左のProject内アセット一覧とは分け、ファイルシステムを視覚的に探す時だけStage上へ一時的なdrawerとして開く。StageとTimelineを全画面置換せず、drag/drop先を同時に残す
 - folder preview、thumbnail grid/list、subfolder検索、Labels、Collections、動画hover preview、音声waveform preview、素材内In/OutをExplorerの責務とする
 - `Drag → Stage / TL`または`Enter`で初めてProjectへimport+配置する。Explorerでの選択、hover preview、検索、Labels/Collections、素材内In/OutはDocument・Undoへ入れない
@@ -306,7 +298,6 @@ Timeline左端のconnection gutterは、共有`Effect Definition`の◇ `OUT`か
 
 ### User Color Book / Palette試験
 
-- [Color UIを試す](m3-main-ui-v3-monochrome.html#color-palette) / [Stroke popup fixture](m3-main-ui-v3-monochrome.html#color-palette-stroke) / [1440×900 PNG](m3-main-ui-v3-color-palette-golden.png)
 - 候補が増える選択棚は[UI操作言語§3.2](../ui-interaction-language.md#32-ユーザーが候補を選ぶ棚)に従い、Folder、横断Label、確定使用だけのHistoryを必須にする。星1〜5は採用しない。色は大きな色面を主役にし、名前・HEX・import形式を常時読むことを選択条件にしない
 - 色を新しく作る入口として色環+内側fieldを持ち、fieldの`Triangle / Square`は独立Settingsで切り替える。スポイトは独立icon、swatch寸法とColor Book幅は独立した可変設定とする。これらのpreview・表示設定はDocument・Undoへ入れず、double click／Enter／`Apply`だけを既存Color parameterへの1 Undoにする
 - 起動時にpopupや操作説明を先回りして出さない。ユーザーが`Fill`/`Stroke`の色面へpointer・focusを向けた時だけstatusへ短い可能動作を出し、クリック後に初めて色候補と取消方法を見せる。これは情報量の単純な削減ではなく、能動的な意図の直後へ情報を遅延する試験である
@@ -326,13 +317,11 @@ golden再生成:
 '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' \
   --headless=new --disable-gpu --hide-scrollbars \
   --force-device-scale-factor=1 --window-size=1440,900 \
-  --screenshot=docs/mocks/m3-main-ui-v3-monochrome-golden.png \
   file://"$PWD/docs/mocks/m3-main-ui-v3-monochrome.html"
 
 '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' \
   --headless=new --disable-gpu --hide-scrollbars \
   --force-device-scale-factor=1 --window-size=1440,900 \
-  --screenshot=docs/mocks/m3-main-ui-v3-semantic-color-golden.png \
   'file://'"$PWD/docs/mocks/m3-main-ui-v3-monochrome.html#color"
 
 for n in 1 2 3 4 5 6; do
@@ -358,8 +347,6 @@ done
 ## 高密度メインUI v4 — 生成境界の1画面収載
 
 - [monochrome表示](m3-main-ui-v4-generative.html) / [semantic color表示](m3-main-ui-v4-generative.html#color)（同じHTML・同じfixture）
-- [構造golden PNG](m3-main-ui-v4-generative-golden.png)（1440×900 / device scale 1）
-- [semantic color比較PNG](m3-main-ui-v4-generative-color-golden.png)（1440×900 / device scale 1）
 - ステータス: **生成境界の構造golden候補**。v3の区画・token・monochrome先行規約を維持したまま、[generative-user-boundary.md](../generative-user-boundary.md)の5経路(A Materialize / B Pure Live / C Temporal Window / D Bake / E External)を専用デモ画面へ分離せず、同じ制作画面の実物として1枚へ収載する
 - 「全機能が一覧で確認できる」高密度方針は、golden審判とも整合する: 1枚のPNG差分で時間guide・5経路badge・seed・preflight・bake進捗/dirty/checkpoint・診断区分を同時に人間審判でき、機能ごとの画面遷移スクリーンショットを廃せる。人のチェックが最大コストである現段階の審判時間をここで削る
 - Timelineへ経路の実物を1行ずつ並べる: Materialize済みGroup(seed badge・子は手編集可能な通常Shape)、Live `f(t)` overlay(入力宣言badge)、Temporal Window(−8f宣言のみの予約行)、Simulation Bake(進捗・dirty斜線・▲checkpoint)、External素材(glTF/動画)
@@ -372,13 +359,11 @@ golden再生成:
 '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' \
   --headless=new --disable-gpu --hide-scrollbars \
   --force-device-scale-factor=1 --window-size=1440,900 \
-  --screenshot=docs/mocks/m3-main-ui-v4-generative-golden.png \
   file://"$PWD/docs/mocks/m3-main-ui-v4-generative.html"
 
 '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' \
   --headless=new --disable-gpu --hide-scrollbars \
   --force-device-scale-factor=1 --window-size=1440,900 \
-  --screenshot=docs/mocks/m3-main-ui-v4-generative-color-golden.png \
   'file://'"$PWD/docs/mocks/m3-main-ui-v4-generative.html#color"
 ```
 
@@ -420,23 +405,11 @@ golden再生成:
 
 | 状態 | quiet | fill | 審判する力学 |
 |---|---|---|---|
-| select | [PNG](m3-main-ui-v5-quiet-select-golden.png) | [PNG](m3-main-ui-v5-fill-select-golden.png) | 選択同期(Inspect)。`accent.selection`がStage/Timeline/Inspectorで同一対象 |
-| target | [PNG](m3-main-ui-v5-quiet-target-golden.png) | [PNG](m3-main-ui-v5-fill-target-golden.png) | 接続HoverValid(Target)。outline+仮線+HUD、所有=Transient |
-| invalid | [PNG](m3-main-ui-v5-quiet-invalid-golden.png) | [PNG](m3-main-ui-v5-fill-invalid-golden.png) | 接続HoverInvalid。dim+×+expected/actual+回復方法 |
-| relative | [PNG](m3-main-ui-v5-quiet-relative-golden.png) | [PNG](m3-main-ui-v5-fill-relative-golden.png) | Relative Move(Preview)。ghost+Δ値、Escape=変更ゼロ |
-| ease | [PNG](m3-main-ui-v5-quiet-ease-golden.png) | [PNG](m3-main-ui-v5-fill-ease-golden.png) | 区間イージング(Commit)。選択区間だけ、意図名=Advanced実値 |
-| play | [PNG](m3-main-ui-v5-quiet-play-golden.png) | [PNG](m3-main-ui-v5-fill-play-golden.png) | 再生。動くのは作品とplayheadだけ(各goldenは静止で読める) |
 
 一次審査セット(静の代表=select / 力学+診断が最多=invalidの2状態)。勝ち残った候補は上と同じ全6状態セットへ昇格させる:
 
 | 候補 | select(静) | invalid(動+診断) |
 |---|---|---|
-| `stripe` | [PNG](m3-main-ui-v5-stripe-select-golden.png) | [PNG](m3-main-ui-v5-stripe-invalid-golden.png) |
-| `mono` | [PNG](m3-main-ui-v5-mono-select-golden.png) | [PNG](m3-main-ui-v5-mono-invalid-golden.png) |
-| `warm` | [PNG](m3-main-ui-v5-warm-select-golden.png) | [PNG](m3-main-ui-v5-warm-invalid-golden.png) |
-| `cvd` | [PNG](m3-main-ui-v5-cvd-select-golden.png) | [PNG](m3-main-ui-v5-cvd-invalid-golden.png) |
-| `trace` | [PNG](m3-main-ui-v5-trace-select-golden.png) | [PNG](m3-main-ui-v5-trace-invalid-golden.png) |
-| `paper` | [PNG](m3-main-ui-v5-paper-select-golden.png) | [PNG](m3-main-ui-v5-paper-invalid-golden.png) |
 
 golden再生成(本審査2候補は全6状態、一次審査6候補は2状態):
 
