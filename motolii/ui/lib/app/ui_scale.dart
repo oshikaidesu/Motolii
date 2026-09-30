@@ -6,7 +6,7 @@ import '../theme/neutral.dart';
 /// The live UI's size: one number scales every piece of chrome together (menus and sheets too, because the root
 /// viewport scales the overlay they live in), and nothing of the work: the document, the Stage's picture (its native
 /// window is asked for at the device's ratio times this factor, so it stays sharp), the camera, transforms, time zoom
-/// and export are untouched. Classic's UI Scale (foundation/panel_controls/scale.dart: EditorScale and
+/// and export are untouched. Classic's UI Scale (controls/panel/scale.dart: EditorScale and
 /// EditorScaledViewport) is the mechanism; this owns live's number.
 class LiveUiScale {
   LiveUiScale._() {

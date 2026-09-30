@@ -1,5 +1,5 @@
 // The reference frame's ruler: every seat of the 1536x1024 reference is placed in its own coordinates, by these.
-// proto_hf draws fixtures with them; the production faces draw Motolii Live with the same ones.
+// fixtures draw with them; the production faces draw Motolii Live with the same ones.
 import 'package:flutter/widgets.dart';
 import 'glyphs.dart';
 import 'neutral.dart';

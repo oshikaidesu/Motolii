@@ -1,5 +1,5 @@
 // The top seat of the reference, at its own coordinates. What it shows and what its keys do come from a [TopModel]:
-// proto_hf hands it fixed values, production hands it the session.
+// a test or fixture hands it fixed values, production hands it the session.
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import '../../theme/glyphs.dart';

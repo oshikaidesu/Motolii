@@ -1,6 +1,6 @@
 // The top bar as a flexible row: the reference's pieces (brand, transport, readouts, marker, EDIT·PLAY·EXPORT, window
 // keys, the motto) in its order, at the density owner's height, folding what can go when the window narrows instead
-// of clipping it. The reference face (top.dart) stays for proto_hf; production draws this one over the same TopModel.
+// of clipping it. The reference face (top.dart) stays as the reference face; production draws this one over the same TopModel.
 import 'package:flutter/widgets.dart';
 
 import '../../theme/glyphs.dart';

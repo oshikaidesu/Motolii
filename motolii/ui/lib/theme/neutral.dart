@@ -3,7 +3,7 @@ import 'dart:ui' show Color;
 /// Motolii's neutral ramp: every grey, black and white the hf faces draw, named by lightness (g10 = 10 %). The base
 /// is achromatic; colour is for identity (things, relations, modes) and lives with its owners, never in the ramp.
 /// Semantic tokens (H.window, H.rule, …) are steps of this ramp; a face asks for a role first and a step only when
-/// no role says what it is. Nothing else in hf / live_hf writes a grey as a hex.
+/// no role says what it is. Nothing else in the product window writes a grey as a hex.
 abstract final class N {
   static const g00 = Color(0xFF000000);
   static const g07 = Color(0xFF131313); // wells: darker than the ground

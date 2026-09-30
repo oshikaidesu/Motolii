@@ -3,7 +3,7 @@ import 'dart:async';
 import 'editor_session.dart';
 
 /// The range one export covers: the whole document, or marker to marker around the current frame. Shared by
-/// the Export sheets of Classic, New and live_hf (`live_hf/adapters/sheets.dart`) so "marker to marker" means the
+/// the Export sheets of Classic, New and live_hf (`app/sheets.dart`) so "marker to marker" means the
 /// same thing in all of them.
 (int, int) exportRange(EditorSession c, Map<String, dynamic> status, {required bool markers}) {
   final total = (status['durationFrames'] as num? ?? 1).toInt();

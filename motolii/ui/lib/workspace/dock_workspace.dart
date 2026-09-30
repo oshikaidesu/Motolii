@@ -143,7 +143,7 @@ class DockWorkspace {
     );
   }
 
-  /// The unit of the workspace is the seat, the Browser's own (`hf/bp/common.dart` Leaf): panels sharing a seat,
+  /// The unit of the workspace is the seat, the Browser's own (`browser/parts.dart` Leaf): panels sharing a seat,
   /// a strip only when there is more than one, the front tab keeps its word and the rest fold to their glyph, and
   /// a stacked panel's header drops the name its tab already shows. `docking` keeps layout, split, resize and drop
   /// only (its own tab strip is off in `hfDockTabs`). Every panel of a seat draws the seat's strip; only the front

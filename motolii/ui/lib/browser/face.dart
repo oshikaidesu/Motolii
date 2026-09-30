@@ -1,5 +1,5 @@
 // The Browser seat of the reference: four panels sharing one seat under a tab strip. What they list comes from a
-// [BrowserModel]: proto_hf hands it fixture catalogues, production hands it the session's shelves.
+// [BrowserModel]: a fixture hands it catalogues, production hands it the session's shelves.
 import 'package:flutter/widgets.dart';
 
 import '../colors/shelf.dart';
