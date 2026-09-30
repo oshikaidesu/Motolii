@@ -1,10 +1,13 @@
 pub mod apply;
 pub mod edit;
 pub mod group;
+pub mod intent;
 pub mod projection;
+mod undo;
 pub mod validate;
 
 pub use edit::Animate;
+pub use intent::Intent;
 use motolii_doc::store::ids::{LayerId, PropertyId};
 use motolii_doc::store::read::{DisplayRevision, Revision};
 
@@ -26,123 +29,6 @@ use motolii_doc::store::components::{descriptor_track, TrackJson};
 use motolii_doc::store::slot::{PropertyBase, PropertyLink, PropertySource};
 use motolii_doc::store::view::StoreView;
 use motolii_doc::store::{LayerAttrsPatch, Mask, Slot, SlotId, StoreError, EDIT_TIMELINE};
-
-#[derive(Clone, Debug)]
-pub enum Intent {
-    AddLayer(LayerId),
-    RemoveLayer(LayerId),
-    SetTrack {
-        layer: LayerId,
-        property: PropertyId,
-        track: motolii_doc::eval::KeyframeTrack,
-    },
-    /// **動かない値**を置く。キーは作らない —— 利用者が ◇ を押すまで
-    /// 時間の世界へ入れない(根底3)。
-    SetConstant {
-        layer: LayerId,
-        property: PropertyId,
-        value: motolii_doc::eval::Value,
-    },
-    SetPropertySlot {
-        layer: LayerId,
-        property: PropertyId,
-        slot: SlotId,
-    },
-    SetPropertyLink {
-        layer: LayerId,
-        property: PropertyId,
-        link: PropertyLink,
-    },
-    SetPropertyModulators {
-        layer: LayerId,
-        property: PropertyId,
-        modulators: Vec<PropertyLink>,
-    },
-    SetCameraPropertyModulators {
-        property: PropertyId,
-        modulators: Vec<PropertyLink>,
-    },
-    SetMeta {
-        layer: LayerId,
-        meta: motolii_doc::store::LayerMeta,
-    },
-    SetSource {
-        layer: LayerId,
-        source: motolii_doc::store::LayerSource,
-    },
-    SetOrder {
-        layer: LayerId,
-        order: i16,
-    },
-    SetMasks {
-        layer: LayerId,
-        masks: Vec<motolii_doc::store::Mask>,
-    },
-    AddMask {
-        layer: LayerId,
-        mask: Mask,
-        shape: motolii_doc::eval::KeyframeTrack,
-    },
-    SetTiming {
-        layer: LayerId,
-        timing: motolii_doc::store::LayerTiming,
-    },
-    SetAttrs {
-        layer: LayerId,
-        patch: LayerAttrsPatch,
-    },
-    SetEffects {
-        layer: LayerId,
-        effects: Vec<motolii_doc::store::EffectInstance>,
-    },
-    SetShapes {
-        layer: LayerId,
-        shapes: Vec<motolii_doc::store::ShapeNode>,
-    },
-    SetTextDocument {
-        layer: LayerId,
-        document: motolii_doc::store::TextDocument,
-    },
-    SetComposition(motolii_doc::store::Composition),
-    SetNotebook { notebook: motolii_doc::store::Notebook },
-    SetMarkers {
-        markers: Vec<motolii_doc::store::Marker>,
-    },
-    /// カメラの属性へ**素の値**を置く。層側の `SetConstant` と同じ意味で、
-    /// 置き場が composition なだけ。
-    SetCameraConstant {
-        property: PropertyId,
-        value: Value,
-    },
-    SetCameraTrack {
-        property: PropertyId,
-        track: motolii_doc::eval::KeyframeTrack,
-    },
-    SetCameraPropertySlot {
-        property: PropertyId,
-        slot: SlotId,
-    },
-    SetSlots {
-        slots: Vec<Slot>,
-    },
-    AdmitAsset {
-        draft: motolii_doc::store::AssetDraft,
-    },
-    RemoveAsset {
-        asset: motolii_doc::store::AssetId,
-    },
-    RelinkAsset {
-        asset: motolii_doc::store::AssetId,
-        path_absolute: String,
-        project_root: Option<String>,
-    },
-    Freeze {
-        group: LayerId,
-    },
-    Unfreeze {
-        group: LayerId,
-    },
-}
 
 pub struct Document {
     pub(crate) db: EntityDb,
@@ -260,46 +146,6 @@ impl Document {
         self.head = head;
         self.tip = head;
         self.floor = head;
-    }
-
-    pub fn mark_undo_floor(&mut self) {
-        self.floor = self.head;
-    }
-
-    pub fn can_undo(&self) -> bool {
-        self.head > self.floor
-    }
-
-    /// 戻れる段数と進める段数。履歴を一覧にする側はこれだけ読む。
-    pub fn history_depth(&self) -> (usize, usize) {
-        (
-            (self.head - self.floor).max(0) as usize,
-            (self.tip - self.head).max(0) as usize,
-        )
-    }
-
-    pub fn can_redo(&self) -> bool {
-        self.head < self.tip
-    }
-
-    pub fn undo(&mut self) -> bool {
-        if self.can_undo() {
-            self.head -= 1;
-            self.clear_all_transients();
-            true
-        } else {
-            false
-        }
-    }
-
-    pub fn redo(&mut self) -> bool {
-        if self.can_redo() {
-            self.head += 1;
-            self.clear_all_transients();
-            true
-        } else {
-            false
-        }
     }
 
     pub fn apply_all(
