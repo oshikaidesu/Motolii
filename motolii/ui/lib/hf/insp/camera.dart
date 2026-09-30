@@ -100,7 +100,7 @@ class CameraInstrument extends StatelessWidget {
         Text(t, style: sans(9.5, c: N.g51, w: FontWeight.w600, ls: 1.3)),
         Expanded(child: note == null ? const SizedBox.shrink() : Padding(padding: const EdgeInsets.only(left: 6), child: Text(note, softWrap: false, overflow: TextOverflow.clip, style: sans(9.5, c: N.g38)))),
         GestureDetector(key: ValueKey('key-$name'), behavior: HitTestBehavior.opaque, onTap: () => s.toggleKeys(ids), child: Padding(padding: const EdgeInsets.symmetric(horizontal: 4), child: SizedBox(width: 7, height: 7, child: CustomPaint(painter: _DiamondP(keyed, keyed || animated ? tone : N.g26))))),
-        if (_modified(ids) && !s.frozen) GestureDetector(key: ValueKey('reset-$name'), behavior: HitTestBehavior.opaque, onTap: () => s.resetMany(ids), child: Padding(padding: const EdgeInsets.only(left: 2), child: Text('↺', style: sans(11, c: N.g38)))) else const SizedBox(width: 10.5),
+        if (_modified(ids) && !s.frozen && !ids.every(s.held)) GestureDetector(key: ValueKey('reset-$name'), behavior: HitTestBehavior.opaque, onTap: () => s.resetMany(ids), child: Padding(padding: const EdgeInsets.only(left: 2), child: Text('↺', style: sans(11, c: N.g38)))) else const SizedBox(width: 10.5),
       ]),
     );
   }
