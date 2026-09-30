@@ -664,3 +664,8 @@ mod composite_at_another_time;
 /// Freeze(docs/freeze-and-flatten.md §2-6): 凍っても絵は変わらない、飛んでも辿っても同じ、Unfreeze で戻る。
 #[cfg(test)]
 mod freeze_keeps_the_picture;
+
+#[cfg(test)]
+mod placement_contract;
+#[cfg(test)]
+mod projection_contract;
