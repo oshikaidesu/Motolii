@@ -16,31 +16,31 @@ class EditorFieldFrame extends StatelessWidget {
     required this.child,
     this.focus,
     this.error = false,
-    this.height = Surface.workRow,
+    this.height,
     this.minHeight,
     this.maxHeight,
-    this.padding = const EdgeInsets.symmetric(horizontal: Step.s5),
+    this.padding,
     this.color,
   });
   final Widget child;
   final FocusNode? focus;
   final bool error;
   final double? height, minHeight, maxHeight;
-  final EdgeInsets padding;
+  final EdgeInsets? padding;
   final Color? color;
 
   Widget _box(BuildContext context, bool focused) => GestureDetector(
     behavior: HitTestBehavior.translucent,
     onTap: focus?.requestFocus,
     child: Container(
-      height: height,
+      height: height ?? Surface.workRow,
       constraints: minHeight == null && maxHeight == null
           ? null
           : BoxConstraints(
               minHeight: minHeight ?? 0,
               maxHeight: maxHeight ?? double.infinity,
             ),
-      padding: padding,
+      padding: padding ?? EdgeInsets.symmetric(horizontal: Surface.px(5)),
       decoration: BoxDecoration(
         color: color ?? EditorTheme.of(context).app,
         border: Border.all(

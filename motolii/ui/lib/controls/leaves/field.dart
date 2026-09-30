@@ -133,7 +133,7 @@ class _EditorTextFieldState extends State<EditorTextField>
       backgroundCursorColor: EditorTheme.of(context).muted,
       selectionColor: EditorTheme.of(context).selection,
       cursorWidth: widget.cursorWidth,
-      cursorRadius: const Radius.circular(Step.s2),
+      cursorRadius: Radius.circular(Surface.px(2)),
       cursorOffset: Offset(-2 / dpr, 0),
       paintCursorAboveText: true,
       cursorOpacityAnimates: false,

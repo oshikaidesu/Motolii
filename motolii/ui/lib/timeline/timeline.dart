@@ -108,7 +108,11 @@ class LiveTimeline extends StatefulWidget {
 
 class _LiveTimelineState extends State<LiveTimeline> {
   // the skin's geometry: its own, told to nobody
-  static const rowH = Surface.control, rulerH = 20.0, keySlop = 6.0, edgeSlop = 5.0, dragSlop = 4.0;
+  static double get rowH => Surface.control;
+  static double get rulerH => 20.0;
+  static double get keySlop => 6.0;
+  static double get edgeSlop => 5.0;
+  static double get dragSlop => 4.0;
 
   /// The name column: a share of the seat, so a narrow window keeps its time.
   double labelW = 180;
@@ -462,7 +466,7 @@ class _LiveTimelineState extends State<LiveTimeline> {
         child: Row(children: [
           // the chosen layer's own colour, a thin edge at the column's left
           Container(width: 2, height: rowH, color: !lane && c.selectedIds.contains(r.id) ? (r.isGroup ? N.g63 : _family(r.id).t) : null),
-          const SizedBox(width: Surface.inlineGap),
+          SizedBox(width: Surface.inlineGap),
           if (lane) ...[
             SizedBox(width: indent + 11 + 6),
             // which layer these lanes belong to: its own colour, a thin line where its chip stands
@@ -475,7 +479,7 @@ class _LiveTimelineState extends State<LiveTimeline> {
             SizedBox(width: indent),
             mark(_Twirl(open: group ? r.groupOpen : r.lanesOpen, strong: group), () => group ? s.toggleFold(i) : s.toggleLanes(i), w: 12),
             SizedBox(width: 15, child: Center(child: _Chip(r))),
-            const SizedBox(width: Surface.inlineGap),
+            SizedBox(width: Surface.inlineGap),
             name,
             if (group) mark(_Twirl(open: r.lanesOpen, strong: false), () => s.toggleLanes(i), w: 12),
             // switches in one quiet column at the right: always in the same place, lit only when on
@@ -571,7 +575,7 @@ class _RowsPainter extends CustomPainter {
   void paint(Canvas cv, Size size) {
     final s = t.s, c = t.c;
     final L = t.labelW;
-    const top = _LiveTimelineState.rulerH, rh = _LiveTimelineState.rowH;
+    final top = _LiveTimelineState.rulerH, rh = _LiveTimelineState.rowH;
     final fill = Paint();
     cv.drawRect(Offset.zero & size, fill..color = N.g10);
     // the ruler: the finest step whose labels keep ~70 px apart, minor ticks between; frames when close
@@ -743,7 +747,7 @@ class _HeadPainter extends CustomPainter {
     final fill = Paint()..color = H.playhead;
     cv.drawRect(Rect.fromLTWH(x - .5, 0, 1, size.height), fill);
     // the head lives in the ruler's lower band, under the time labels
-    const top = _LiveTimelineState.rulerH;
+    final top = _LiveTimelineState.rulerH;
     cv.drawPath(Path()..moveTo(x - 4, top - 9)..lineTo(x + 4, top - 9)..lineTo(x + 4, top - 4)..lineTo(x, top)..lineTo(x - 4, top - 4)..close(), fill);
   }
 

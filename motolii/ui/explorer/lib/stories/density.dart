@@ -150,10 +150,10 @@ Widget standardColumn(ThemeData theme) => MaterialApp(
 /// The controls Motolii draws now (the foundation's own widgets), for the eye.
 Widget motoliiColumn() => Container(
       color: const Color(0xFF1A1A1A),
-      padding: const EdgeInsets.all(Surface.panelInset),
+      padding: EdgeInsets.all(Surface.panelInset),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         const Padding(padding: EdgeInsets.only(bottom: 6), child: Text('Rounded Rectangle', style: TextStyle(fontSize: 11, color: Color(0xFFDDDDDD)))),
-        const SizedBox(height: Surface.workRow, child: Row(children: [Text('Position', style: TextStyle(fontSize: 11, color: Color(0xFFDDDDDD))), Spacer(), Text('960.00', style: TextStyle(fontSize: 11, color: Color(0xFFDDDDDD)))])),
+        SizedBox(height: Surface.workRow, child: Row(children: [Text('Position', style: TextStyle(fontSize: 11, color: Color(0xFFDDDDDD))), Spacer(), Text('960.00', style: TextStyle(fontSize: 11, color: Color(0xFFDDDDDD)))])),
         const SizedBox(height: 4),
         SizedBox(height: Surface.control, child: EditorSlider(value: .5, onChanged: (_) {})),
         const SizedBox(height: 6),

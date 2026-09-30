@@ -63,8 +63,7 @@ class _PickedState<T> extends State<Picked<T>> {
 /// On / off with the result drawn beside it, so the switch says what it does
 /// without a word.
 class EditorSwitch extends StatelessWidget {
-  static const minExpandedWidth =
-      Step.s22 + Step.s4 + Step.s14;
+  static double get minExpandedWidth => Surface.px(22) + Surface.px(4) + Surface.px(14);
   const EditorSwitch({
     super.key,
     required this.on,
@@ -102,7 +101,7 @@ class EditorSwitch extends StatelessWidget {
             dimension: Surface.workRow,
             child: Icon(
               glyph,
-              size: Step.s16,
+              size: Surface.px(16),
               color: !enabled
                   ? EditorTheme.of(context).disabledInk
                   : on
@@ -126,9 +125,9 @@ class EditorSwitch extends StatelessWidget {
               AnimatedContainer(
                 // a switch the hand just pressed shows its new state at once
                 duration: Duration.zero,
-                width: Step.s22,
-                height: Step.s12,
-                padding: const EdgeInsets.all(Step.s2),
+                width: Surface.px(22),
+                height: Surface.px(12),
+                padding: EdgeInsets.all(Surface.px(2)),
                 decoration: BoxDecoration(
                   color: on
                       ? tint ?? EditorTheme.of(context).accent
@@ -136,17 +135,17 @@ class EditorSwitch extends StatelessWidget {
                 ),
                 alignment: on ? Alignment.centerRight : Alignment.centerLeft,
                 child: Container(
-                  width: Step.s8,
-                  height: Step.s8,
+                  width: Surface.px(8),
+                  height: Surface.px(8),
                   color: on
                       ? EditorTheme.of(context).tabInk
                       : EditorTheme.of(context).ink,
                 ),
               ),
-              const SizedBox(width: Step.s4),
+              SizedBox(width: Surface.px(4)),
               Icon(
                 glyph,
-                size: Step.s14,
+                size: Surface.px(14),
                 color: !enabled
                     ? EditorTheme.of(context).disabledInk
                     : ink ??

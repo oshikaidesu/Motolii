@@ -125,7 +125,7 @@ class HfFormRow extends StatelessWidget {
   final double labelWidth;
   @override
   Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.only(bottom: Surface.sectionGap),
+        padding: EdgeInsets.only(bottom: Surface.sectionGap),
         child: Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
           SizedBox(width: labelWidth, child: Text(label, softWrap: false, style: H.s(Dn.nameSize, color: N.g63))),
           Flexible(child: Align(alignment: Alignment.centerLeft, child: child)),

@@ -38,7 +38,7 @@ class EditorChoice<T> extends StatelessWidget {
         onTap: enabled ? (menu.isOpen ? menu.close : menu.open) : null,
         child: Container(
           height: Surface.workRow,
-          padding: const EdgeInsets.only(left: Step.s4),
+          padding: EdgeInsets.only(left: Surface.px(4)),
           decoration: BoxDecoration(
             color: EditorTheme.of(context).app,
             border: Border.all(
@@ -64,7 +64,7 @@ class EditorChoice<T> extends StatelessWidget {
               ),
               Icon(
                 Glyph.arrow_drop_down,
-                size: Step.s16,
+                size: Surface.px(16),
                 color: EditorTheme.of(context).muted,
               ),
             ],

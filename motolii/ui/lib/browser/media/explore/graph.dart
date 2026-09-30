@@ -369,7 +369,7 @@ class ExploreBar extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(9, 3, 9, 0),
           child: Wrap(spacing: 4, runSpacing: 3, crossAxisAlignment: WrapCrossAlignment.center, children: [
             for (final (n, label) in const [(0, 'Global'), (1, 'Local 1'), (2, 'Local 2')]) _Chip(label, choice.hops == n, () => choice.setHops(n)),
-            const SizedBox(width: Surface.sectionGap),
+            SizedBox(width: Surface.sectionGap),
             _Chip('Type · Folder', choice.overlay, choice.toggleOverlay),
           ]),
         ),

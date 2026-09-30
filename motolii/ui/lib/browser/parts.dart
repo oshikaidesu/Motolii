@@ -141,7 +141,7 @@ class Leaf extends StatelessWidget {
                           ),
                         ),
                       ),
-                      if (trailing != null) Padding(padding: const EdgeInsets.only(right: Surface.inlineGap), child: trailing),
+                      if (trailing != null) Padding(padding: EdgeInsets.only(right: Surface.inlineGap), child: trailing),
                       // (no ✕ here: it was painted with no gesture; a seat's panel is closed from its tab's menu)
                     ],
                   ),
@@ -192,7 +192,7 @@ class _Tab extends StatelessWidget {
           ),
         ),
         if (!compact) ...[
-          const SizedBox(width: Surface.sectionGap),
+          SizedBox(width: Surface.sectionGap),
           Text(t.name, softWrap: false, style: Dn.name(selected ? N.g95 : N.g63)),
         ],
       ],

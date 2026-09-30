@@ -229,9 +229,9 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
         padding: EdgeInsets.fromLTRB(pad, 9, pad, 12),
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           SizedBox(height: math.max(56, h - 20), child: _plot(labels: false)),
-          const SizedBox(height: Surface.sectionGap),
+          SizedBox(height: Surface.sectionGap),
           _presetRow(),
-          const SizedBox(height: Surface.sectionGap),
+          SizedBox(height: Surface.sectionGap),
           _navigator(w),
           _secondary(w),
         ]),
@@ -244,7 +244,7 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
         SizedBox(height: plotH, child: _plot(labels: w >= 230 && plotH >= 150)),
         const SizedBox(height: 7.5),
         _presetRow(),
-        const SizedBox(height: Surface.sectionGap),
+        SizedBox(height: Surface.sectionGap),
         _navigator(w),
         Expanded(child: SingleChildScrollView(key: const ValueKey('ease-scroll'), padding: const EdgeInsets.only(bottom: 12), child: _secondary(w))),
       ]),
@@ -261,7 +261,7 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
         padding: const EdgeInsets.only(top: 12),
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           Text(t, style: sans(Dn.microSize, c: Surface.muted, w: FontWeight.w500, ls: 1.4)),
-          const SizedBox(height: Surface.sectionGap),
+          SizedBox(height: Surface.sectionGap),
           child,
         ]),
       );
@@ -530,7 +530,7 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
                   final label = !compact && sg.frames >= 8 && box.maxWidth >= 42;
                   return Row(children: [
                     if (label) Text('${sg.frames}f', style: sans(Dn.labelSize, c: N.g76, w: FontWeight.w700)),
-                    if (label) const SizedBox(width: Surface.inlineGap),
+                    if (label) SizedBox(width: Surface.inlineGap),
                     Expanded(child: CustomPaint(size: Size.infinite, painter: _Icon(sg.shape, _segColors[i % _segColors.length], 1.8))),
                   ]);
                 }),

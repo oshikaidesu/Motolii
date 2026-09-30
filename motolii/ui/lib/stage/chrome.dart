@@ -149,7 +149,7 @@ mixin _StageChrome
                     ),
                   ),
                   children: [
-                    const SizedBox(width: Step.s8),
+                    SizedBox(width: Surface.px(8)),
                     if (_userStage)
                       _button(
                         'Front',
@@ -277,19 +277,19 @@ mixin _StageChrome
               AnimatedBuilder(
               animation: _chrome,
               builder: (context, _) => EditorBar(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: Step.s8,
+                padding: EdgeInsets.symmetric(
+                  horizontal: Surface.px(8),
                 ),
                 children: [
                   Text(
                     '${_width.toInt()} × ${_height.toInt()}',
                     style: TextStyle(
-                      fontSize: Step.s9,
+                      fontSize: Surface.px(9),
                       color: EditorTheme.of(context).muted,
                     ),
                   ),
                   Padding(
-                    padding: const EdgeInsets.only(left: Step.s8),
+                    padding: EdgeInsets.only(left: Surface.px(8)),
                     child: EditorSwitch(
                       key: const ValueKey('stage:transparentGround'),
                       on: _transparentGround,
@@ -305,7 +305,7 @@ mixin _StageChrome
                   ),
                   if (_userStage)
                     Padding(
-                      padding: const EdgeInsets.only(left: Step.s8),
+                      padding: EdgeInsets.only(left: Surface.px(8)),
                       child: ValueListenableBuilder<Map<String, dynamic>>(
                         valueListenable: c.deskWork,
                         builder: (context, _, _) => _button(
@@ -320,18 +320,18 @@ mixin _StageChrome
                     builder: (context, frame, _) => Text(
                       'Frame $frame',
                       style: TextStyle(
-                        fontSize: Step.s9,
+                        fontSize: Surface.px(9),
                         color: EditorTheme.of(context).muted,
                       ),
                     ),
                   ),
                   if (!c.supports('stageGesture'))
                     Padding(
-                      padding: const EdgeInsets.only(left: Step.s8),
+                      padding: EdgeInsets.only(left: Surface.px(8)),
                       child: Text(
                         'Transform gestures unavailable',
                         style: TextStyle(
-                          fontSize: Step.s9,
+                          fontSize: Surface.px(9),
                           color: EditorTheme.of(context).muted,
                         ),
                       ),

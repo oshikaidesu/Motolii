@@ -196,7 +196,7 @@ class _LiveColorInstrumentState extends State<LiveColorInstrument> {
                     ),
                   ],
                 ),
-                const SizedBox(width: Surface.sectionGap),
+                SizedBox(width: Surface.sectionGap),
                 SizedBox(
                   height: wheel,
                   child: Row(
@@ -221,7 +221,7 @@ class _LiveColorInstrumentState extends State<LiveColorInstrument> {
                         ),
                         (p, {start = false}) => _bar('value', p, start: start),
                       ),
-                      const SizedBox(width: Surface.inlineGap),
+                      SizedBox(width: Surface.inlineGap),
                       Opacity(
                         opacity: alpha ? 1 : .4,
                         child: _drag(
@@ -278,7 +278,7 @@ class _LiveColorInstrumentState extends State<LiveColorInstrument> {
                         ),
                       ]),
                       // the same colour in the other numbers people ask for, in the space beside the wheel
-                      const SizedBox(height: Surface.sectionGap),
+                      SizedBox(height: Surface.sectionGap),
                       for (final (a, b) in [
                         ('R ${(color.r * 255).round()}', 'H ${hsv.hue.round()}°'),
                         ('G ${(color.g * 255).round()}', 'S ${(hsv.saturation * 100).round()}'),

@@ -48,7 +48,7 @@ Future<T?> showHfDialog<T>(BuildContext context, {required String title, require
             decoration: BoxDecoration(color: N.g13, border: Border.all(color: N.g26), borderRadius: BorderRadius.circular(2)),
             child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
               Text(title, style: H.s(Dn.nameSize, w: FontWeight.w600, color: Surface.ink)),
-              const SizedBox(height: Surface.sectionGap),
+              SizedBox(height: Surface.sectionGap),
               Text(body, style: H.s(Dn.nameSize, color: N.g82).copyWith(height: 1.4)),
               const SizedBox(height: 12),
               Row(children: [

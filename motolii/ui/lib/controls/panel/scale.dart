@@ -69,7 +69,7 @@ class _EditorPercentFieldState extends State<EditorPercentField> {
       ),
     );
     return SizedBox(
-      width: Step.s64,
+      width: Surface.px(64),
       child: EditorNumericField(
         value: widget.value,
         label: widget.label,

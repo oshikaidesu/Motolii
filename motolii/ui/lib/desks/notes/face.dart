@@ -358,7 +358,7 @@ class _NotesDeskState extends State<NotesDesk> {
           decoration: BoxDecoration(color: kViolet, borderRadius: BorderRadius.circular(10.5)),
           child: Row(children: [
             Container(width: 6, height: 6, decoration: const BoxDecoration(color: N.g10, shape: BoxShape.circle)),
-            const SizedBox(width: Surface.sectionGap),
+            SizedBox(width: Surface.sectionGap),
             Expanded(child: Text(b.text, softWrap: false, overflow: TextOverflow.clip, style: sans(Dn.nameSize, c: N.g10, w: FontWeight.w600))),
           ]),
         );

@@ -11,17 +11,17 @@ class EditorBar extends StatelessWidget {
   const EditorBar({
     super.key,
     required this.children,
-    this.height = Step.s22,
+    this.height,
     this.padding = EdgeInsets.zero,
     this.decoration,
   });
   final List<Widget> children;
-  final double height;
+  final double? height;
   final EdgeInsetsGeometry padding;
   final BoxDecoration? decoration;
   @override
   Widget build(BuildContext context) => Container(
-    height: height,
+    height: height ?? Surface.px(22),
     decoration:
         decoration ?? BoxDecoration(color: EditorTheme.of(context).panel),
     child: LayoutBuilder(

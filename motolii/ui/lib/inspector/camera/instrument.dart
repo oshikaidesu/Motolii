@@ -38,7 +38,7 @@ class CameraInstrument extends StatelessWidget {
             padding: EdgeInsets.fromLTRB(pad, 7.5, pad, 12),
             child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
               _header(),
-              const SizedBox(height: Surface.sectionGap),
+              SizedBox(height: Surface.sectionGap),
               CameraFace(s, size: Size(w, narrow ? 111 : 132)),
               const SizedBox(height: 7.5),
               // the target: one point, however many rows declare it; a Target layer overrides X, Y and Z

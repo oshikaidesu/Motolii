@@ -107,7 +107,7 @@ class _RightSeatState extends State<RightSeat> {
             ),
           if (effects.isNotEmpty)
             Padding(
-              padding: const EdgeInsets.only(top: Surface.sectionGap, bottom: Surface.panelInset),
+              padding: EdgeInsets.only(top: Surface.sectionGap, bottom: Surface.panelInset),
               // Drag a card by its header to apply it earlier or later (Classic's reorder grip, `moveEffect`).
               child: ReorderableList(
                 shrinkWrap: true,

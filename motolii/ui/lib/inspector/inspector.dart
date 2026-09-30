@@ -96,24 +96,24 @@ class _InspectorBodyState extends State<InspectorBody> {
           final entries = layoutOf(rows, advancedOpen: advancedOpen, flat: search.active, narrow: narrow);
           return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(Surface.panelInset, Surface.sectionGap, Surface.panelInset, Surface.inlineGap),
+              padding: EdgeInsets.fromLTRB(Surface.panelInset, Surface.sectionGap, Surface.panelInset, Surface.inlineGap),
               child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                 Row(children: [
                   Expanded(child: Text(widget.subject, softWrap: false, overflow: TextOverflow.clip, style: sans(Dn.nameSize, c: Surface.ink, w: FontWeight.w600))),
-                  if (widget.store.frozen) Container(margin: const EdgeInsets.only(right: Surface.sectionGap), padding: const EdgeInsets.symmetric(horizontal: Surface.sectionGap, vertical: Surface.hair), decoration: BoxDecoration(border: Border.all(color: Surface.selected), borderRadius: BorderRadius.circular(Surface.faceRadius)), child: Text('Frozen', style: sans(Dn.microSize, c: Surface.muted, w: FontWeight.w600))),
+                  if (widget.store.frozen) Container(margin: EdgeInsets.only(right: Surface.sectionGap), padding: EdgeInsets.symmetric(horizontal: Surface.sectionGap, vertical: Surface.hair), decoration: BoxDecoration(border: Border.all(color: Surface.selected), borderRadius: BorderRadius.circular(Surface.faceRadius)), child: Text('Frozen', style: sans(Dn.microSize, c: Surface.muted, w: FontWeight.w600))),
                   Text('${widget.store.rows.length}', key: const ValueKey('insp-count'), style: mono(Dn.labelSize, c: Surface.muted)),
                 ]),
-                const SizedBox(height: Surface.inlineGap),
+                SizedBox(height: Surface.inlineGap),
                 SearchField(search, 'Filter', height: Surface.control),
               ]),
             ),
             Expanded(
               child: entries.isEmpty
-                  ? Padding(padding: const EdgeInsets.all(Surface.panelInset), child: Text('No parameter matches', style: sans(Dn.nameSize, c: Surface.muted)))
+                  ? Padding(padding: EdgeInsets.all(Surface.panelInset), child: Text('No parameter matches', style: sans(Dn.nameSize, c: Surface.muted)))
                   : ListView.builder(
                       key: const ValueKey('insp-list'),
                       controller: scroll,
-                      padding: const EdgeInsets.fromLTRB(Surface.panelInset, 0, Surface.panelInset, Surface.panelInset),
+                      padding: EdgeInsets.fromLTRB(Surface.panelInset, 0, Surface.panelInset, Surface.panelInset),
                       itemCount: entries.length,
                       itemBuilder: (_, i) => _entry(entries[i]),
                     ),
@@ -126,19 +126,19 @@ class _InspectorBodyState extends State<InspectorBody> {
 }
 
 Widget paramEntry(PEntry e, ParamStore store, Tones tones, VoidCallback toggleAdvanced, {bool inline = false}) => switch (e) {
-        PSection(:final label) => Padding(padding: const EdgeInsets.only(top: Surface.sectionGap, bottom: Surface.inlineGap), child: Row(children: [Container(key: ValueKey('tone-$label'), width: Surface.focusStroke, height: Surface.mark, margin: const EdgeInsets.only(right: Surface.inlineGap), decoration: BoxDecoration(color: tones.ofGroup(label), borderRadius: BorderRadius.circular(Surface.hair))), Text(label.toUpperCase(), style: sans(Dn.microSize, c: N.g51, w: FontWeight.w600, ls: 1.3))])),
+        PSection(:final label) => Padding(padding: EdgeInsets.only(top: Surface.sectionGap, bottom: Surface.inlineGap), child: Row(children: [Container(key: ValueKey('tone-$label'), width: Surface.focusStroke, height: Surface.mark, margin: EdgeInsets.only(right: Surface.inlineGap), decoration: BoxDecoration(color: tones.ofGroup(label), borderRadius: BorderRadius.circular(Surface.hair))), Text(label.toUpperCase(), style: sans(Dn.microSize, c: N.g51, w: FontWeight.w600, ls: 1.3))])),
         PFold(:final count, :final open) => GestureDetector(
             key: const ValueKey('advanced-fold'),
             behavior: HitTestBehavior.opaque,
             onTap: () => toggleAdvanced(),
-            child: Padding(padding: const EdgeInsets.only(top: Surface.sectionGap, bottom: Surface.inlineGap), child: Row(children: [Container(width: Surface.focusStroke, height: Surface.mark, margin: const EdgeInsets.only(right: Surface.inlineGap), decoration: BoxDecoration(color: tones.advanced, borderRadius: BorderRadius.circular(Surface.hair))), Text(open ? '▾' : '▸', style: sans(Dn.labelSize, c: Surface.muted)), const SizedBox(width: Surface.inlineGap), Text('ADVANCED', style: sans(Dn.microSize, c: N.g51, w: FontWeight.w600, ls: 1.3)), const SizedBox(width: Surface.inlineGap), Text('$count', style: mono(Dn.microSize, c: N.g44))])),
+            child: Padding(padding: EdgeInsets.only(top: Surface.sectionGap, bottom: Surface.inlineGap), child: Row(children: [Container(width: Surface.focusStroke, height: Surface.mark, margin: EdgeInsets.only(right: Surface.inlineGap), decoration: BoxDecoration(color: tones.advanced, borderRadius: BorderRadius.circular(Surface.hair))), Text(open ? '▾' : '▸', style: sans(Dn.labelSize, c: Surface.muted)), SizedBox(width: Surface.inlineGap), Text('ADVANCED', style: sans(Dn.microSize, c: N.g51, w: FontWeight.w600, ls: 1.3)), SizedBox(width: Surface.inlineGap), Text('$count', style: mono(Dn.microSize, c: N.g44))])),
           ),
         PCells(:final rows, :final hero) => Padding(
             padding: EdgeInsets.only(bottom: inline ? 0 : Surface.cellGap),
             child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
               for (final (i, r) in rows.indexed) ...[
                 Expanded(child: ParamCell(store, r, hero: hero, tone: tones.of(r), inline: inline, alone: rows.length == 1)),
-                if (i < rows.length - 1) const SizedBox(width: Surface.inlineGap),
+                if (i < rows.length - 1) SizedBox(width: Surface.inlineGap),
               ],
             ]),
           ),
@@ -223,13 +223,13 @@ class ParamCell extends StatelessWidget {
           behavior: HitTestBehavior.opaque,
           onTap: store.keyable && !store.frozen ? () => store.toggleKey(id) : null,
           child: Padding(
-            padding: const EdgeInsets.only(right: Surface.inlineGap),
+            padding: EdgeInsets.only(right: Surface.inlineGap),
             child: SizedBox(key: ValueKey('anim-$id'), width: Surface.mark, height: Surface.mark, child: CustomPaint(painter: _Diamond(row['keyedNow'] == true, row['animated'] == true ? tone : dimTone(tone)))),
           ),
         ),
       Expanded(child: Row(children: [
         Flexible(child: Text(label, softWrap: false, overflow: TextOverflow.ellipsis, style: sans(Dn.nameSize, c: hero ? N.g86 : N.g69, w: hero ? FontWeight.w600 : FontWeight.w500))),
-        if (mod) Padding(padding: const EdgeInsets.only(left: Surface.inlineGap), child: Container(key: ValueKey('mod-$id'), width: Surface.mark, height: Surface.mark, decoration: BoxDecoration(color: t, shape: BoxShape.circle))),
+        if (mod) Padding(padding: EdgeInsets.only(left: Surface.inlineGap), child: Container(key: ValueKey('mod-$id'), width: Surface.mark, height: Surface.mark, decoration: BoxDecoration(color: t, shape: BoxShape.circle))),
       ])),
       // a relation: this value is driven by another (source), or drives others (how many)
       if (row['link'] is Map || (row['drives'] is int && row['drives'] > 0))
@@ -238,15 +238,15 @@ class ParamCell extends StatelessWidget {
           behavior: HitTestBehavior.opaque,
           onTap: () => store.focusRelation(id),
           child: Container(
-            margin: const EdgeInsets.only(left: Surface.inlineGap),
-            padding: const EdgeInsets.symmetric(horizontal: Surface.inlineGap),
+            margin: EdgeInsets.only(left: Surface.inlineGap),
+            padding: EdgeInsets.symmetric(horizontal: Surface.inlineGap),
             decoration: BoxDecoration(color: H.relation, borderRadius: BorderRadius.circular(Surface.controlRadius)),
             child: Text(row['link'] is Map ? '◉ ${(row['link'] as Map)['name'] ?? 'Relation'}' : '◉ ${row['drives']}', style: sans(Dn.microSize, c: N.g10, w: FontWeight.w700)),
           ),
         ),
-      if (linkable) GestureDetector(key: ValueKey('link-$id'), behavior: HitTestBehavior.opaque, onTap: store.frozen ? null : () => store.toggleLink(id), child: Container(margin: const EdgeInsets.only(left: Surface.inlineGap), padding: const EdgeInsets.symmetric(horizontal: Surface.inlineGap), decoration: BoxDecoration(color: linked ? t : null, border: linked ? null : Border.all(color: N.g26), borderRadius: BorderRadius.circular(Surface.controlRadius)), child: Text('Link', style: sans(Dn.microSize, c: linked ? N.g10 : Surface.muted, w: FontWeight.w700)))),
-      if (accessory != null) GestureDetector(key: ValueKey('route-acc-$id'), behavior: HitTestBehavior.opaque, onTap: () => store.route(accessory, id), child: Container(margin: const EdgeInsets.only(left: Surface.inlineGap), padding: const EdgeInsets.symmetric(horizontal: Surface.inlineGap), decoration: BoxDecoration(border: Border.all(color: t.withValues(alpha: .7)), borderRadius: BorderRadius.circular(Surface.controlRadius)), child: Text('$accessory →', style: sans(Dn.microSize, c: t, w: FontWeight.w700)))),
-      if (mod && !store.frozen) GestureDetector(key: ValueKey('reset-$id'), behavior: HitTestBehavior.opaque, onTap: () => store.resetMany(ids), child: Padding(padding: const EdgeInsets.only(left: Surface.sectionGap), child: Text('↺', style: sans(Dn.nameSize, c: N.g33)))),
+      if (linkable) GestureDetector(key: ValueKey('link-$id'), behavior: HitTestBehavior.opaque, onTap: store.frozen ? null : () => store.toggleLink(id), child: Container(margin: EdgeInsets.only(left: Surface.inlineGap), padding: EdgeInsets.symmetric(horizontal: Surface.inlineGap), decoration: BoxDecoration(color: linked ? t : null, border: linked ? null : Border.all(color: N.g26), borderRadius: BorderRadius.circular(Surface.controlRadius)), child: Text('Link', style: sans(Dn.microSize, c: linked ? N.g10 : Surface.muted, w: FontWeight.w700)))),
+      if (accessory != null) GestureDetector(key: ValueKey('route-acc-$id'), behavior: HitTestBehavior.opaque, onTap: () => store.route(accessory, id), child: Container(margin: EdgeInsets.only(left: Surface.inlineGap), padding: EdgeInsets.symmetric(horizontal: Surface.inlineGap), decoration: BoxDecoration(border: Border.all(color: t.withValues(alpha: .7)), borderRadius: BorderRadius.circular(Surface.controlRadius)), child: Text('$accessory →', style: sans(Dn.microSize, c: t, w: FontWeight.w700)))),
+      if (mod && !store.frozen) GestureDetector(key: ValueKey('reset-$id'), behavior: HitTestBehavior.opaque, onTap: () => store.resetMany(ids), child: Padding(padding: EdgeInsets.only(left: Surface.sectionGap), child: Text('↺', style: sans(Dn.nameSize, c: N.g33)))),
     ]);
     final chips = actions.isEmpty ? null : Wrap(spacing: Surface.inlineGap, children: [for (final a in actions) ActionChip(store, id, a, tone: tone)]);
     // Work density: the label is the row's left, the control its right (one line of the work), not a header over a gap over a control
@@ -256,18 +256,18 @@ class ParamCell extends StatelessWidget {
           height: Surface.workRow,
           child: Row(children: [
             Expanded(flex: _labelFlex, child: labelLine),
-            const SizedBox(width: Surface.inlineGap),
+            SizedBox(width: Surface.inlineGap),
             Expanded(flex: alone ? _labelFlex + 2 * _valueFlex : _valueFlex, child: Center(child: toy)),
           ]),
         ),
-        if (chips != null) Padding(padding: const EdgeInsets.only(bottom: Surface.inlineGap), child: chips),
+        if (chips != null) Padding(padding: EdgeInsets.only(bottom: Surface.inlineGap), child: chips),
       ]);
     }
     return Column(key: ValueKey('cell-$id'), crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       SizedBox(height: Surface.labelRow, child: labelLine),
-      const SizedBox(height: Surface.labelGap),
+      SizedBox(height: Surface.labelGap),
       toy,
-      if (chips != null) Padding(padding: const EdgeInsets.only(top: Surface.inlineGap), child: chips),
+      if (chips != null) Padding(padding: EdgeInsets.only(top: Surface.inlineGap), child: chips),
     ]);
   }
 }

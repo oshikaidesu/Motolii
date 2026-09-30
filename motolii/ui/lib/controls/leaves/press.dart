@@ -182,7 +182,7 @@ class EditorIconButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final enabled = onPressed != null;
     final size =
-        iconSize ?? IconTheme.of(context).size ?? Step.s24;
+        iconSize ?? IconTheme.of(context).size ?? Surface.px(24);
     final button = Semantics(
       button: true,
       enabled: enabled,
@@ -228,8 +228,8 @@ class EditorTextButton extends StatefulWidget {
     this.disabledBackground = EditorTheme.clear,
     this.border,
     this.radius = BorderRadius.zero,
-    this.padding = const EdgeInsets.symmetric(horizontal: Step.s4),
-    this.minimumSize = const Size(Step.s11, Step.s12),
+    this.padding,
+    this.minimumSize,
     this.textStyle,
   });
   final VoidCallback? onPressed;
@@ -238,8 +238,9 @@ class EditorTextButton extends StatefulWidget {
   final Color background, disabledBackground;
   final BorderSide? border;
   final BorderRadius radius;
-  final EdgeInsets padding;
-  final Size minimumSize;
+  /// Null: the canon's (4 wide, at the UI Scale).
+  final EdgeInsets? padding;
+  final Size? minimumSize;
   final TextStyle? textStyle;
   @override
   State<EditorTextButton> createState() => _EditorTextButtonState();
@@ -312,14 +313,14 @@ class _EditorTextButtonState extends State<EditorTextButton> {
                       : _WashPainter(wash, widget.radius),
                   child: ConstrainedBox(
                     constraints: BoxConstraints(
-                      minWidth: widget.minimumSize.width,
-                      minHeight: widget.minimumSize.height,
+                      minWidth: (widget.minimumSize ?? Size(Surface.px(11), Surface.px(12))).width,
+                      minHeight: (widget.minimumSize ?? Size(Surface.px(11), Surface.px(12))).height,
                     ),
                     child: Align(
                       widthFactor: 1,
                       heightFactor: 1,
                       child: Padding(
-                        padding: widget.padding,
+                        padding: widget.padding ?? EdgeInsets.symmetric(horizontal: Surface.px(4)),
                         child: DefaultTextStyle.merge(
                           style: TextStyle(
                             fontSize: Dn.labelSize,

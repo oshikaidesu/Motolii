@@ -25,7 +25,7 @@ class TopBar extends StatelessWidget {
         final motto = w >= 1000, tagline = w >= 820, duration = w >= 680;
         return Container(
           height: Surface.topBar,
-          padding: const EdgeInsets.symmetric(horizontal: Surface.panelInset),
+          padding: EdgeInsets.symmetric(horizontal: Surface.panelInset),
           decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: Surface.divider))),
           child: Row(children: [
             Text('Motolii', style: H.s(14, w: FontWeight.w600, ls: -0.1, color: N.g82)),

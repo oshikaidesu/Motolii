@@ -305,11 +305,11 @@ class _EditorNumericFieldState extends State<EditorNumericField>
   /// below ×0.01 (the Figma ladder). Changing rung mid-drag keeps the value.
   double _rung = 1;
   double _rungBase = 0, _rungStartX = 0;
-  double _rungFor(double dy) => dy < -Step.s32
+  double _rungFor(double dy) => dy < -Surface.px(32)
       ? 10
-      : dy < Step.s32
+      : dy < Surface.px(32)
       ? 1
-      : dy < Step.s70
+      : dy < Surface.px(70)
       ? .1
       : .01;
 
@@ -403,7 +403,7 @@ class _EditorNumericFieldState extends State<EditorNumericField>
             child: EditorFieldFrame(
               focus: _focus,
               error: _error != null,
-              padding: const EdgeInsets.symmetric(horizontal: Step.s2),
+              padding: EdgeInsets.symmetric(horizontal: Surface.px(2)),
               child: Row(
                 children: [
                   Expanded(
@@ -423,13 +423,13 @@ class _EditorNumericFieldState extends State<EditorNumericField>
                     ),
                   ),
                   if (widget.unit != null) ...[
-                    const SizedBox(width: Step.s2),
+                    SizedBox(width: Surface.px(2)),
                     ConstrainedBox(
-                      constraints: const BoxConstraints(minWidth: Step.s12),
+                      constraints: BoxConstraints(minWidth: Surface.px(12)),
                       child: Text(
                         widget.unit!,
                         style: TextStyle(
-                          fontSize: Step.s8,
+                          fontSize: Surface.px(8),
                           color: EditorTheme.of(context).muted,
                         ),
                       ),
@@ -469,7 +469,7 @@ class _EditorNumericFieldState extends State<EditorNumericField>
                         link: _well,
                         targetAnchor: Alignment.topCenter,
                         followerAnchor: Alignment.bottomCenter,
-                        offset: const Offset(0, -Step.s4),
+                        offset: Offset(0, -Surface.px(4)),
                         child: IgnorePointer(
                           child: Align(
                             alignment: Alignment.bottomCenter,
@@ -494,7 +494,7 @@ class _EditorNumericFieldState extends State<EditorNumericField>
                                 ? Border(
                                     left: BorderSide(
                                       color: widget.tint!,
-                                      width: Step.s3,
+                                      width: Surface.px(3),
                                     ),
                                     top: BorderSide(
                                       color: EditorTheme.of(context).line,
@@ -530,8 +530,8 @@ class _EditorNumericFieldState extends State<EditorNumericField>
                                   ),
                                 ),
                               Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: Step.s4,
+                                padding: EdgeInsets.symmetric(
+                                  horizontal: Surface.px(4),
                                 ),
                                 child: Row(
                                   mainAxisAlignment: MainAxisAlignment.end,
@@ -583,15 +583,15 @@ class _EditorNumericFieldState extends State<EditorNumericField>
                                     // The rider keeps its slot even when empty, so
                                     // digits line up down a column of wells.
                                     if (widget.unit != null) ...[
-                                      const SizedBox(width: Step.s2),
+                                      SizedBox(width: Surface.px(2)),
                                       ConstrainedBox(
-                                        constraints: const BoxConstraints(
-                                          minWidth: Step.s12,
+                                        constraints: BoxConstraints(
+                                          minWidth: Surface.px(12),
                                         ),
                                         child: Text(
                                           widget.unit!,
                                           style: TextStyle(
-                                            fontSize: Step.s8,
+                                            fontSize: Surface.px(8),
                                             color: EditorTheme.of(context)
                                                 .muted,
                                           ),

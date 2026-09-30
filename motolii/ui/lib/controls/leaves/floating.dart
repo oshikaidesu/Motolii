@@ -16,22 +16,22 @@ class EditorTooltipSheet extends StatelessWidget {
   final String message;
   @override
   Widget build(BuildContext context) => Container(
-    constraints: const BoxConstraints(minHeight: Step.s24),
-    padding: const EdgeInsets.symmetric(
-      horizontal: Step.s8,
-      vertical: Step.s4,
+    constraints: BoxConstraints(minHeight: Surface.chromeRow),
+    padding: EdgeInsets.symmetric(
+      horizontal: Surface.px(8),
+      vertical: Surface.px(4),
     ),
     decoration: BoxDecoration(
       color: EditorTheme.of(context).tooltip,
-      borderRadius: const BorderRadius.all(Radius.circular(Step.s4)),
+      borderRadius: BorderRadius.all(Radius.circular(Surface.px(4))),
     ),
     child: Center(
       widthFactor: 1,
       heightFactor: 1,
       child: Text(
         message,
-        style: const TextStyle(
-          fontSize: Step.s12,
+        style: TextStyle(
+          fontSize: Surface.px(12),
           color: EditorTheme.black,
         ),
       ),

@@ -139,10 +139,10 @@ class EditorTheme extends ThemeExtension<EditorTheme> {
     color: ink,
     textBaseline: TextBaseline.alphabetic,
   );
-  IconThemeData get icon => IconThemeData(size: Step.s14, color: ink);
-  static const menuPadding = EdgeInsets.symmetric(vertical: Step.s2);
+  IconThemeData get icon => IconThemeData(size: Surface.px(14), color: ink);
+  static EdgeInsets get menuPadding => EdgeInsets.symmetric(vertical: Surface.labelGap);
   static const menuMinWidth = 112.0;
-  static const menuRowPadding = EdgeInsets.symmetric(horizontal: Step.s8);
+  static EdgeInsets get menuRowPadding => EdgeInsets.symmetric(horizontal: Surface.px(8));
 
   Widget wrap(Widget child) => Theme(
     data: ThemeData(

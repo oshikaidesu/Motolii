@@ -106,8 +106,8 @@ class _StageOverlay extends CustomPainter {
       ..color = colors.accent
       ..strokeWidth = 1;
     if (anchorPreview case final at?) {
-      _cross(canvas, at, Step.s8, line);
-      canvas.drawCircle(at, Step.s3, line);
+      _cross(canvas, at, Surface.px(8), line);
+      canvas.drawCircle(at, Surface.px(3), line);
     }
     if (extent.length == 4) {
       canvas.drawPath(
@@ -136,8 +136,8 @@ class _StageOverlay extends CustomPainter {
       } else {
         final rect = Rect.fromCenter(
           center: entry.value,
-          width: Step.s6,
-          height: Step.s6,
+          width: Surface.px(6),
+          height: Surface.px(6),
         );
         canvas.drawRect(rect, Paint()..color = colors.app);
         canvas.drawRect(rect, cameraLine);
@@ -191,8 +191,8 @@ class _StageOverlay extends CustomPainter {
       } else {
         final rect = Rect.fromCenter(
           center: entry.value,
-          width: Step.s6,
-          height: Step.s6,
+          width: Surface.px(6),
+          height: Surface.px(6),
         );
         canvas.drawRect(rect, Paint()..color = colors.app);
         canvas.drawRect(rect, line);

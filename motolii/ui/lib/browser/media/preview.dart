@@ -70,7 +70,7 @@ class _Info extends StatelessWidget {
           if (item.seconds != null) chip(clockText(item.seconds)),
           if (item.width != null && item.height != null) chip('${item.width} × ${item.height}'),
         ]),
-        const SizedBox(height: Surface.inlineGap),
+        SizedBox(height: Surface.inlineGap),
         Expanded(
           child: SingleChildScrollView(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [

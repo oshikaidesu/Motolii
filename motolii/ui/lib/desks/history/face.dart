@@ -119,7 +119,7 @@ class _HistoryDeskState extends State<HistoryDesk> {
             decoration: const BoxDecoration(border: Border(top: BorderSide(color: Surface.dividerFine))),
             child: Row(children: [
               Expanded(child: widget.entries != null ? _btn('undo', 'Undo', '⌘Z', widget.onUndo != null, () => widget.onUndo?.call()) : _btn('undo', 'Undo', '⌘Z', at > 0, () => go(at - 1))),
-              const SizedBox(width: Surface.sectionGap),
+              SizedBox(width: Surface.sectionGap),
               Expanded(child: widget.entries != null ? _btn('redo', 'Redo', '⇧⌘Z', widget.onRedo != null, () => widget.onRedo?.call()) : _btn('redo', 'Redo', '⇧⌘Z', at < entries.length - 1, () => go(at + 1))),
             ]),
           ),

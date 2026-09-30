@@ -76,21 +76,21 @@ class NewEffectCard extends StatelessWidget {
     // Work density: an effect is a band on the raised level over a body on the base, separated by a hairline; not a card.
     return DecoratedBox(
       key: ValueKey('effect-card:${effect['id']}'),
-      decoration: const BoxDecoration(border: Border(top: BorderSide(color: Surface.divider, width: Surface.hair))),
+      decoration: BoxDecoration(border: Border(top: BorderSide(color: Surface.divider, width: Surface.hair))),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         _grip(GestureDetector(key: ValueKey('effect-head:${effect['id']}'), behavior: HitTestBehavior.opaque, onTap: onFold, child: Container(
           height: Surface.workRow,
-          padding: const EdgeInsets.symmetric(horizontal: Surface.sectionGap),
+          padding: EdgeInsets.symmetric(horizontal: Surface.sectionGap),
           color: Surface.raised,
           child: Row(children: [
             SizedBox(width: Surface.glyph, height: Surface.glyph, child: CustomPaint(painter: HgPainter(HG.list, Surface.muted, Surface.raised))),
-            const SizedBox(width: Surface.inlineGap),
+            SizedBox(width: Surface.inlineGap),
             Expanded(child: Text('${effect['name']}', maxLines: 1, overflow: TextOverflow.ellipsis, style: sans(Dn.nameSize, c: on ? N.g86 : Surface.muted, w: FontWeight.w600))),
             GestureDetector(
               key: ValueKey('effect-toggle:${effect['id']}'),
               behavior: HitTestBehavior.opaque,
               onTap: InspectorSession.of(c).canEnableEffects && !_held ? () => InspectorSession.of(c).flipEffect(layer['id'] as int, effect['id']) : null,
-              child: Padding(padding: const EdgeInsets.all(Surface.inlineGap), child: SizedBox(width: Surface.glyph, height: Surface.glyph, child: CustomPaint(painter: HgPainter(HG.power, on ? kAccent : Surface.muted, Surface.raised)))),
+              child: Padding(padding: EdgeInsets.all(Surface.inlineGap), child: SizedBox(width: Surface.glyph, height: Surface.glyph, child: CustomPaint(painter: HgPainter(HG.power, on ? kAccent : Surface.muted, Surface.raised)))),
             ),
             Builder(builder: (context) => GestureDetector(
               key: ValueKey('effect-menu:${effect['id']}'),
@@ -101,19 +101,19 @@ class NewEffectCard extends StatelessWidget {
                       final box = context.findRenderObject() as RenderBox?;
                       _menu(context, box == null ? Offset.zero : box.localToGlobal(box.size.bottomLeft(Offset.zero)));
                     },
-              child: Padding(padding: const EdgeInsets.all(Surface.inlineGap), child: SizedBox(width: Surface.glyph, height: Surface.glyph, child: CustomPaint(painter: HgPainter(HG.kebab, Surface.muted, Surface.raised)))),
+              child: Padding(padding: EdgeInsets.all(Surface.inlineGap), child: SizedBox(width: Surface.glyph, height: Surface.glyph, child: CustomPaint(painter: HgPainter(HG.kebab, Surface.muted, Surface.raised)))),
             )),
           ]),
         ))),
         if (!folded && layer['frozen'] == true)
           Padding(
-            padding: const EdgeInsets.fromLTRB(Surface.sectionGap, Surface.sectionGap, Surface.sectionGap, 0),
+            padding: EdgeInsets.fromLTRB(Surface.sectionGap, Surface.sectionGap, Surface.sectionGap, 0),
             child: Text('Frozen — effects are baked. Unfreeze to edit.', key: ValueKey('effect-frozen:${effect['id']}'), style: sans(Dn.labelSize, c: Surface.muted)),
           ),
         // a placement effect's parameters are its params like any other (its grid view is not drawn here yet)
         if (!folded)
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: Surface.sectionGap, vertical: Surface.inlineGap),
+          padding: EdgeInsets.symmetric(horizontal: Surface.sectionGap, vertical: Surface.inlineGap),
           child: NewEffectParams(key: ValueKey('new-effect-params:${layer['id']}:${effect['id']}'), controller: c, layerId: layer['id'] as int, effectId: effect['id'] as Object),
         ),
       ]),

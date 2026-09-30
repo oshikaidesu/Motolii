@@ -199,7 +199,7 @@ class _RelationsPanelState extends State<RelationsPanel> {
               decoration: BoxDecoration(color: Surface.raised, borderRadius: BorderRadius.circular(4)),
               child: Row(children: [
                 Container(width: 6, height: 6, decoration: const BoxDecoration(color: kRed, shape: BoxShape.circle)),
-                const SizedBox(width: Surface.sectionGap),
+                SizedBox(width: Surface.sectionGap),
                 Expanded(child: Text('${r.source.name(c)} → ${r.members.length} thing${r.members.length == 1 ? '' : 's'} · ${r.mappings.map((m) => labelOf(m.property)).join(', ')}', softWrap: false, overflow: TextOverflow.ellipsis, style: sans(Dn.nameSize, c: Surface.ink))),
               ]),
             ),
@@ -219,7 +219,7 @@ class _RelationsPanelState extends State<RelationsPanel> {
     return Padding(
       padding: const EdgeInsets.all(9),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        Row(children: [Container(width: 6, height: 6, decoration: const BoxDecoration(color: kRed, shape: BoxShape.circle)), const SizedBox(width: Surface.sectionGap), Expanded(child: Text('${src.name(c)}', softWrap: false, overflow: TextOverflow.ellipsis, style: sans(Dn.nameSize, c: Surface.ink, w: FontWeight.w600)))]),
+        Row(children: [Container(width: 6, height: 6, decoration: const BoxDecoration(color: kRed, shape: BoxShape.circle)), SizedBox(width: Surface.sectionGap), Expanded(child: Text('${src.name(c)}', softWrap: false, overflow: TextOverflow.ellipsis, style: sans(Dn.nameSize, c: Surface.ink, w: FontWeight.w600)))]),
         _label('SOURCE RANGE'),
         _range('in', d['inMin'], d['inMax'], 'px', (lo, hi) => setState(() { d['inMin'] = lo; d['inMax'] = hi; }), current: _sourceValue(d['source'] as Map<String, dynamic>)),
         _label('MEMBERS'),
@@ -262,7 +262,7 @@ class _RelationsPanelState extends State<RelationsPanel> {
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Row(children: [
           Container(width: 6, height: 6, decoration: const BoxDecoration(color: kRed, shape: BoxShape.circle)),
-          const SizedBox(width: Surface.sectionGap),
+          SizedBox(width: Surface.sectionGap),
           Expanded(child: Text(r.source.name(c), softWrap: false, overflow: TextOverflow.ellipsis, style: sans(Dn.nameSize, c: Surface.ink, w: FontWeight.w600))),
           GestureDetector(key: const ValueKey('relation-delete'), onTap: () => RelationsSession.of(c).remove(r), child: Text('✕', style: sans(Dn.nameSize, c: Surface.muted))),
         ]),
@@ -321,7 +321,7 @@ class _RelationsPanelState extends State<RelationsPanel> {
         if (current != null) ...[
           const SizedBox(width: 4.5),
           GestureDetector(key: ValueKey('$key-set-min'), onTap: () { change(current, hi); onDone?.call(); }, child: Text('⇤', style: sans(Dn.nameSize, c: Surface.muted))),
-          const SizedBox(width: Surface.inlineGap),
+          SizedBox(width: Surface.inlineGap),
           GestureDetector(key: ValueKey('$key-set-max'), onTap: () { change(lo, current); onDone?.call(); }, child: Text('⇥', style: sans(Dn.nameSize, c: Surface.muted))),
         ],
       ]);

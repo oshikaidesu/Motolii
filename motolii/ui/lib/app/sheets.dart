@@ -123,7 +123,7 @@ class _ExportState extends State<_Export> {
               _ => '$phase',
             }, color: failed ? H.record : N.g82),
           ),
-        const SizedBox(height: Surface.inlineGap),
+        SizedBox(height: Surface.inlineGap),
         Row(mainAxisAlignment: MainAxisAlignment.end, children: [
           HfAction(running ? 'Stop' : 'Cancel', onTap: running ? (c.supports('cancelExport') ? () => c.command('cancelExport') : null) : widget.close),
           HfAction('Export…', kind: HfActionKind.primary, onTap: exportAction),

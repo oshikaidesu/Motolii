@@ -72,9 +72,9 @@ class _TransformInstrumentState extends State<TransformInstrument> {
           ]);
           final strip = _modeStrip(narrow);
           final body = Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            if (widget.showHeader) ...[_header(), const SizedBox(height: Surface.sectionGap)],
+            if (widget.showHeader) ...[_header(), SizedBox(height: Surface.sectionGap)],
             if (narrow) ...[strip, const SizedBox(height: 4.5), gizmo, const SizedBox(height: 4.5), _spaceRow(), const SizedBox(height: 4.5), _parent(narrow)]
-            else Row(crossAxisAlignment: CrossAxisAlignment.start, children: [strip, const SizedBox(width: 4.5), gizmo, const SizedBox(width: 4.5), SizedBox(width: 58.5, child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [_spaceCol(), const SizedBox(height: Surface.sectionGap), _parent(narrow)]))]),
+            else Row(crossAxisAlignment: CrossAxisAlignment.start, children: [strip, const SizedBox(width: 4.5), gizmo, const SizedBox(width: 4.5), SizedBox(width: 58.5, child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [_spaceCol(), SizedBox(height: Surface.sectionGap), _parent(narrow)]))]),
             const SizedBox(height: 7.5),
             _rows(narrow),
             const SizedBox(height: 7.5),
@@ -286,7 +286,7 @@ class _TransformInstrumentState extends State<TransformInstrument> {
     final tone = m == null ? kViolet : modeColor[m]!;
     return Container(
       key: ValueKey('row-$id'),
-      margin: const EdgeInsets.only(bottom: Surface.cellGap),
+      margin: EdgeInsets.only(bottom: Surface.cellGap),
       child: Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
         GestureDetector(
           key: ValueKey('glyph-$id'),
@@ -333,7 +333,7 @@ class _TransformInstrumentState extends State<TransformInstrument> {
     final name = ax < 0 || ay < 0 ? 'Custom' : _anchorNames[ay][ax];
     return Container(
       key: const ValueKey('row-anchor'),
-      margin: const EdgeInsets.only(bottom: Surface.cellGap),
+      margin: EdgeInsets.only(bottom: Surface.cellGap),
       child: Row(children: [
         GestureDetector(key: const ValueKey('glyph-anchor'), behavior: HitTestBehavior.opaque, onTap: () => setState(() => mode = TMode.anchor), child: Container(width: 16.5, height: Surface.control, margin: const EdgeInsets.only(right: 4), alignment: Alignment.center, decoration: BoxDecoration(color: mode == TMode.anchor ? kViolet : null, borderRadius: BorderRadius.circular(4)), child: SizedBox(width: 10.5, height: 10.5, child: CustomPaint(painter: RoleGlyph(TMode.anchor, mode == TMode.anchor ? N.g10 : kViolet))))),
         // the nine places, always at hand: one click chooses, hovering shows the pivot on the Stage
@@ -357,7 +357,7 @@ class _TransformInstrumentState extends State<TransformInstrument> {
             ]),
           ),
         ),
-        const SizedBox(width: Surface.sectionGap),
+        SizedBox(width: Surface.sectionGap),
         Expanded(child: Text(name, key: const ValueKey('anchor-name'), softWrap: false, overflow: TextOverflow.clip, style: sans(Dn.nameSize, c: s.canEdit ? N.g69 : N.g33, w: FontWeight.w500))),
       ]),
     );

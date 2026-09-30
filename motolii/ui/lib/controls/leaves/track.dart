@@ -31,7 +31,7 @@ class EditorSlider extends StatefulWidget {
 
 class _EditorSliderState extends State<EditorSlider> {
   bool _down = false;
-  static const _thumb = Step.s5;
+  static double get _thumb => Surface.px(5);
 
   double _fraction(double dx, double width) {
     final span = width - 2 * _thumb;
@@ -124,14 +124,15 @@ class _SliderPainter extends CustomPainter {
   final bool enabled, pressed;
   final int? divisions;
   final String? label;
-  static const _thumb = Step.s5, _track = Step.s2;
+  static double get _thumb => Surface.px(5);
+  static double get _track => Surface.px(2);
   @override
   void paint(Canvas canvas, Size size) {
     final left = _thumb, right = size.width - _thumb;
     final cy = size.height / 2;
     final x = left + (right - left) * t;
     final track = Rect.fromLTRB(left, cy - _track / 2, right, cy + _track / 2);
-    const r = Radius.circular(_track / 2);
+    final r = Radius.circular(_track / 2);
     final active = Paint()..color = enabled ? colors.muted : colors.inkDisabled;
     final inactive = Paint()..color = colors.line;
     canvas.drawRRect(
@@ -152,7 +153,7 @@ class _SliderPainter extends CustomPainter {
     );
     if (divisions != null && divisions! > 0) {
       final adjusted = track.width - track.height;
-      const tick = _track / 2;
+      final tick = _track / 2;
       if (adjusted / divisions! >= 3 * tick) {
         for (var i = 0; i <= divisions!; i++) {
           final tx = left + (right - left) * i / divisions!;
@@ -184,20 +185,20 @@ class _SliderPainter extends CustomPainter {
         ),
         textDirection: TextDirection.ltr,
       )..layout();
-      final w = text.width + Step.s16,
-          h = text.height + Step.s8;
+      final w = text.width + Surface.px(16),
+          h = text.height + Surface.px(8);
       final box = Rect.fromCenter(
-        center: Offset(x, cy - _thumb - Step.s8 - h / 2),
+        center: Offset(x, cy - _thumb - Surface.px(8) - h / 2),
         width: w,
         height: h,
       );
       canvas.drawRRect(
-        RRect.fromRectAndRadius(box, const Radius.circular(Step.s4)),
+        RRect.fromRectAndRadius(box, Radius.circular(Surface.px(4))),
         Paint()..color = colors.accent,
       );
       text.paint(
         canvas,
-        box.topLeft + const Offset(Step.s8, Step.s4),
+        box.topLeft + Offset(Surface.px(8), Surface.px(4)),
       );
     }
   }

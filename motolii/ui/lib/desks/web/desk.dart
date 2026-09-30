@@ -49,7 +49,7 @@ class _NewWebState extends State<NewWeb> {
               onEditingComplete: () => c.storeDesk('webUrl', _field.text),
             ),
           ),
-          const SizedBox(height: Surface.sectionGap),
+          SizedBox(height: Surface.sectionGap),
           GestureDetector(
             key: const ValueKey('web-open'),
             behavior: HitTestBehavior.opaque,
