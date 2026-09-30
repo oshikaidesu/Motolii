@@ -11,15 +11,25 @@ class NativeBridge {
   /// The host hands a status over as the JSON bytes Rust wrote (`statusJson` in an envelope, or the reply itself when it is
   /// a status): it never rebuilds them as a tree. They are decoded here, once, into the same map a tree would have been.
   static dynamic unpack(dynamic reply) {
-    if (reply is Uint8List) return json.fuse(utf8).decode(reply);
+    if (reply is Uint8List) return _decode(reply);
     if (reply is Map && reply['statusJson'] is Uint8List) {
       return {
         for (final e in reply.entries)
           if (e.key != 'statusJson') e.key: e.value,
-        'status': json.fuse(utf8).decode(reply['statusJson'] as Uint8List),
+        'status': _decode(reply['statusJson'] as Uint8List),
       };
     }
     return reply;
+  }
+
+  /// A tree the JSON decoder made: maps are `Map<String, dynamic>` and lists `List<dynamic>` all the way down, so the
+  /// typed-tree check (`EditorSession.typed`) has nothing to fix and does not walk it.
+  static final decoded = Expando<bool>('decoded from JSON');
+
+  static dynamic _decode(Uint8List bytes) {
+    final tree = json.fuse(utf8).decode(bytes);
+    if (tree is Map) decoded[tree] = true;
+    return tree;
   }
 
   Future<dynamic> invoke(

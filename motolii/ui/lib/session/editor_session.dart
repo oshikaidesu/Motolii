@@ -86,7 +86,9 @@ class EditorSession extends SessionCore
   static final _mapsType = <Map<String, dynamic>>[].runtimeType;
   static final _listType = <dynamic>[].runtimeType;
   static bool _typedMap(Object? v) =>
-      v is Map && v.runtimeType == _mapType && v.values.every(_typedLeaf);
+      v is Map &&
+      v.runtimeType == _mapType &&
+      (NativeBridge.decoded[v] == true || v.values.every(_typedLeaf));
   static bool _typedLeaf(Object? v) {
     if (v is Map) return _typedMap(v);
     if (v is List) {

@@ -353,15 +353,14 @@ private final class ProbeRuntime {
   }
 
   /// One catalog request (JSON in, JSON out) on the catalog queue; the reply comes back on the main thread.
-  func catalog(_ command: String, completion: @escaping (Result<[String: Any], Error>) -> Void) {
+  /// The reply is Rust's JSON as it is: Dart decodes it once.
+  func catalog(_ command: String, completion: @escaping (Result<Data, Error>) -> Void) {
     let function = catalogFunction
     catalogQueue.async {
-      let outcome: Result<[String: Any], Error> = Result {
+      let outcome: Result<Data, Error> = Result {
         guard let function else { throw ProbeFailure.message("The catalog is not ready") }
         guard let pointer = command.withCString({ function($0) }) else { throw ProbeFailure.message("Catalog returned no reply") }
-        let data = Data(String(cString: pointer).utf8)
-        guard let reply = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw ProbeFailure.message("Catalog reply is not a JSON object") }
-        return reply
+        return Data(bytes: pointer, count: strlen(pointer))
       }
       DispatchQueue.main.async { completion(outcome) }
     }
@@ -978,7 +977,7 @@ final class ProbeHost: NSObject {
       guard let command = args["command"] as? String else { fail(result, "catalog requires a JSON command string"); return }
       session.runtime.catalog(command) { outcome in
         switch outcome {
-        case .success(let reply): result(reply)
+        case .success(let reply): result(FlutterStandardTypedData(bytes: reply))
         case .failure(let error): self.fail(result, String(describing: error))
         }
       }
