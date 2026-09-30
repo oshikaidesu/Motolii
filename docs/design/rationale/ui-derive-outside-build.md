@@ -37,14 +37,16 @@
 
 外部の定規: [FlutterのUI/Rasterの分担](https://docs.flutter.dev/tools/devtools/performance)、[描画までの段階](https://docs.flutter.dev/resources/architectural-overview)、[Flutter GPUの役割](https://api.flutter.dev/flutter/flutter_gpu/)。いずれも「GPU描画ならCPUでの準備も無償」「Rustなら反復しても速い」という保証ではない。
 
-## 実装(2026-09-12)
+## 実装(2026-09-12 の記録)
 
-- browser: [browser.dart](../../../motolii/ui/lib/browser/browser_panel.dart) `_derive` / `_publish` / `_Picked` / `Listener`、data: URI の復号は 1 回
+当時の内部名。ファイルは移動・改名され、private な名前は今のコードと一致しないことがある(原則が正本で、この一覧ではない)。
+
+- browser: [browser.dart](../../../motolii/ui/lib/browser/browser.dart) `_derive` / `_publish` / `_Picked` / `Listener`、data: URI の復号は 1 回
 - timeline: `_relane()` を `LayoutBuilder` から出す、painter 2 つの `shouldRepaint`、行ラベルの `TextPainter` と `summaryFrames` を使い回す
 - stage: `_state`(文書 + 描画フレーム)を (document, rendered) ごとに 1 回、`_layers` も
 - fonts: 並びは `fontFamilies` が変わった時だけ、標本キーは build ごと 1 回
 - panel_controls: 数値欄の全イベントで `/tmp` へ書いていた `DIAG(temp)` を撤去。`Picked<T>` をここへ(browser・notes・inspector の fold が共用)
-- dock: [workspace_view.dart](../../../motolii/ui/lib/legacy/workspace/workspace_view.dart) を `_Split` / `_Leaf` に。仕切りのドラッグとタブ切替はその node の状態、渡すパネルは同じ object(全体 layout 867 → 626、ring の押下 80 → 37 builds)
+- dock: [dock_workspace.dart](../../../motolii/ui/lib/workspace/dock_workspace.dart) で仕切りと seat を node に分ける。仕切りのドラッグとタブ切替はその node の状態、渡すパネルは同じ object(全体 layout 867 → 626、ring の押下 80 → 37 builds)
 - inspector: `deskWork` の `AnimatedBuilder` を「cell 幅と Animate 既定だけ比べる」listener に、`_targets` を (gesture, document, frame) ごと 1 回、行の平坦化と `_characterOf` は `Expando`、Advanced の fold は `Picked`
 - ease: `_segments` を (selectedKeys, layers) ごと 1 回、`_read` の指紋は中身比較、preset の `jsonEncode` は build ごと 1 回ずつ、ラベル高さは幅ごと 1 回、painter 3 つは `sameValue`
 - timeline 概観の押下は `Listener`、notes の card 選択は `Picked`、rich_text_editor は run ごとに 1 つの `TextStyle`、stage の overlay は `listEquals`/`mapEquals`、blend は文書をコピーしない
