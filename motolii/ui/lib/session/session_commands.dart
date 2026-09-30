@@ -53,14 +53,6 @@ mixin SessionCommands on SessionCore {
     await command('select', back);
   }
 
-  /// Flutter no longer has a renderer fast path. Keep this small UI-facing
-  /// convenience for callers which want to request a state change during a
-  /// build; native owns the serial command and render sequence.
-  bool commandNow(String op, [Map<String, dynamic> args = const {}]) {
-    command(op, args);
-    return false;
-  }
-
   Future<void> command(String op, [Map<String, dynamic> args = const {}]) {
     if (_disposed) return Future<void>.value();
     LatencyProbe.mark('cmd:$op');
