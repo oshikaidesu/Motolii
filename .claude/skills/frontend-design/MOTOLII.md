@@ -18,7 +18,7 @@ UX の合否は利用者の専権。この文書は「どこが効くか」だ�
 ## theme-first(標準の仕組みが先)
 「トンマナを構造で強制」は独自 lint や wrapper でなく、Flutter 本体の ThemeData component theme と
 ThemeExtension で(記憶 standard-mechanism-first、2026-09-08 に 2 度止められた)。
-token の正本は DTCG format v2025.10 の JSON、raw color を theme 外に書かない(git:912382f048:docs/ui-visual-language.md:147-148)。
+寸法・文字・余白・面・意味色の正本は `motolii/ui/lib/theme/metrics.dart`(言語は `docs/product/ui-rebaseline/visual-language.md`)。raw color・raw 寸法を theme 外に書かない。
 
 ## DESIGN.md(Google Labs open spec、2026-04-22)
 anthropics/skills issue #1008 の提案: skill が project root の DESIGN.md を読んでから作り、無ければ brief から蒸留して作る。
@@ -32,7 +32,7 @@ spec: https://github.com/google-labs-code/design.md(docs/spec.md、Apache 2.0、
 「tokens are the normative values; the prose provides context for how to apply them」。
 
 ## 一発の UI 変更 checklist
-1. DESIGN.md があれば読む。無ければ `motolii/ui/lib/theme/editor_theme.dart` と git:912382f048:docs/ui-visual-language.md を読む
+1. DESIGN.md があれば読む。無ければ `motolii/ui/lib/theme/metrics.dart` と `docs/product/ui-rebaseline/visual-language.md` を読む
 2. 変えるのは theme token / component theme。widget に色・寸法・文字を直書きしない。ラベルを足すなら「値が意味か」
 3. `scripts/motolii-ui.sh native` → `dev`(または `reload`)、スクショを自分で撮る
 4. SKILL.md の「生成物の型」表と照らして 1 個外す

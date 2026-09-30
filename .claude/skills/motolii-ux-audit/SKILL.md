@@ -16,7 +16,7 @@ description: Motolii の窓(Flutter, dark, 密)の違和感を、利用者が気
 
 ## 物差し(Motolii の裁定 = 破ったら所見)
 
-出典: `git:912382f048:docs/reviews/2026-09-19-design-craft-ledger.md`(50 規則)、`2026-09-19-gui-existing-devices.md`(守る順 5)、`2026-09-19-layout-panel-survey.md`(利用者との詰め)、`2026-09-19-daily.md`(決めた事)、`git:912382f048:docs/ui-visual-language.md`。
+出典: `git:912382f048:docs/reviews/2026-09-19-design-craft-ledger.md`(50 規則)、`2026-09-19-gui-existing-devices.md`(守る順 5)、`2026-09-19-layout-panel-survey.md`(利用者との詰め)、`2026-09-19-daily.md`(決めた事)、`docs/product/ui-rebaseline/visual-language.md`(言語)と `motolii/ui/lib/theme/metrics.dart`(寸法・色の正本)。
 
 | # | 規則 | 破りの見つけ方 |
 |---|---|---|

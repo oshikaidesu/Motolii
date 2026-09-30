@@ -12,9 +12,10 @@ Start here. Each row names the one document that plays that role today. History 
 | API notes for scripts, blocks, export | [design/skills/](design/skills/) |
 | Why a rule exists (still-cited rationale) | [design/rationale/](design/rationale/) |
 | User manual and what the window does not do yet | [wiki/index.md](wiki/index.md), [wiki/gap.md](wiki/gap.md) |
+| Visual law: typography, spacing, row and control metrics, surface and semantic colors | `motolii/ui/lib/theme/metrics.dart` (numbers and colors), [product/ui-rebaseline/visual-language.md](product/ui-rebaseline/visual-language.md) (the language) |
 | Run it, develop it | [product/README.md](product/README.md), [../motolii/ui/README.md](../motolii/ui/README.md) |
 | What was decided | [decision-index.md](decision-index.md) (grep by keyword) |
 
 Machine-read contract: [product/workspace.json](product/workspace.json), [product/modules.json](product/modules.json); checks: `scripts/check-workspace.py`, `scripts/check-docs.sh`.
 
-History is git. A source written as `git:<sha>:<path>` is read with `git show <sha>:<path>`; retired dated reviews, specs, mocks and spikes are all under `git:912382f048:docs/...` (tag `docs-pre-retire`).
+History is git. A source written as `git:<sha>:<path>` is read with `git show <sha>:<path>`; retired dated reviews, specs, mocks and spikes are all under `git:912382f048:docs/...`.
