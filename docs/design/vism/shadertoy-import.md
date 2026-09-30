@@ -1,0 +1,333 @@
+# Shadertoy の取り込み — 貼れば棚に出る
+
+作成日: 2026-09-12
+
+状態(2026-09-13 更新): **Shadertoy(`mainImage`)と複数タブ(Export の JSON、Buffer A..D + Common、§2-1)は実装済み。フレーム跨ぎの持ち越し(`PERSISTENT`、§6)、別の時刻の絵(`TIME_OFFSET` / `TIME_AT`、相手は `SOURCE` で自分・下・群・comp、§8)も実装済み。音・`iChannelResolution` / `iChannelTime`・keyboard / webcam / cubemap の入力は未対応。貼る窓(editor)は作らない(各自の editor で書く)。**
+
+関連正本: [場(Field)の取説](field-model.md)、[Vism コンセプト](package-concept.md)、プラグイン作者向け規約
+
+## 1. 一文で
+
+> **変換器は書いていない。** GLSL → WGSL は wgpu 本体の [naga](https://github.com/gfx-rs/wgpu/tree/trunk/naga)（`glsl-in` / `wgsl-out`）が決定的に行う。Motolii が足したのは**方言の前口上**だけ — Shadertoy の名前を ISF の名前へ結び直す 100 行。
+
+## 2. 使い方
+
+`vism/` に Shadertoy の file を `.frag`(または `.glsl` / `.fs`)で置く。manifest は要らない。
+
+```glsl
+void mainImage(out vec4 fragColor, in vec2 fragCoord) {
+    vec2 uv = fragCoord / iResolution.xy;
+    fragColor = texture(iChannel0, uv) * vec4(1.0, 0.8, 1.2, 1.0);
+}
+```
+
+file 名が効果の名前になり、ID は `import.<file 名>`。棚には同梱の効果と並ぶ。
+
+### 2-1. タブが複数ある shader(Buffer A..D + Common)— 2026-09-13
+
+Shadertoy の **Export**(JSON、`renderpass` の列)をそのまま `vism/<name>.json` に置く。1 file の ISF に写され、
+タブは `PASSINDEX` で並ぶ:
+
+| タブ | 写る先 |
+|---|---|
+| `Buffer A..D` | `PERSISTENT` な target `bufferA..D`(前のフレームを保つ。持ち主は host = feedback) |
+| `Image` | 最後の pass(出力) |
+| `Common` | 全部の前に 1 度 |
+| 各タブの `iChannelN` | 繋がっている buffer の名前、texture なら層の絵(`inputImage`)へ識別子を書き換え |
+
+断る物(名指し): keyboard / music / webcam / video / cubemap の入力、sound / cubemap のタブ、
+**同じ名前の関数が 2 つのタブに在る**(Shadertoy ではタブが別々の翻訳単位だが、ここでは 1 つに並ぶ)。
+同梱の見本は `trail_tabs.json`(Buffer A が自分を読んで残像、Image がそれを出す)。
+
+## 3. 名前の結び直し
+
+| Shadertoy | Motolii での姿 |
+|---|---|
+| `mainImage(out vec4, in vec2)` | ISF の `main()` から呼ばれる |
+| `fragCoord` | 画素の座標。**上下を裏返して**渡す(§5) |
+| `iResolution` | `vec3(RENDERSIZE, 1.0)` |
+| `iTime` | ホストの時計 `TIME`(comp の秒)。欄ではない |
+| `iChannel0..3` | **使われている物だけ** image 入力の欄になる |
+| `iMouse` | 使われていれば point2D の欄 |
+| `iFrame` / `iTimeDelta` / `iFrameRate` | ホストの時計 `FRAMEINDEX` / `TIMEDELTA` / `1/TIMEDELTA`(comp の fps) |
+| `iDate` | `DATE` = 0 固定。壁時計は使わない — 同じ時刻は何度描いても同じ絵 |
+| `iSampleRate` | 定数 44100 |
+
+写せない名前(`iChannelResolution`・`iChannelTime`)は、黙って壊れずに**名前を挙げて断る**。manifest の無い素の GLSL(`void main()` だけ)も、理由を添えて断る。
+
+実装は [`effects/isf/shadertoy.rs`](../../../motolii/crates/motolii-render/src/compositor/effects/isf/shadertoy.rs)、入口は [`effects/catalog.rs`](../../../motolii/crates/motolii-render/src/compositor/effects/catalog.rs) の `prepare`。
+
+## 4. 乗る先
+
+取り込んだ効果は `STAGE: pass` になる。[場の取説 §8](field-model.md) の通り、**Pass は素材を選ばない** — 板は層の絵へ焼かれ、網・点群は描いた後の窓で効く。つまり貼った Shadertoy は 3D にも乗る。
+
+## 5. 上下の向き(落とし穴)
+
+Shadertoy も ISF も**座標は下端が 0**(GL の作法)、wgpu の texture は**上端が 0**。座標をそのまま
+サンプリングに使うと、上下逆の位置を読む。**実写に当てて初めて分かる**(文字が裏返る。対称な
+効果では絶対に気づけない)。
+
+直し方は「座標を裏返す」ではなく「**読む時に裏返す**」。座標は各方言の作法のまま渡すので、
+手続き的な絵の向きも Shadertoy と揃う。
+
+- Shadertoy: `#define texture(smp, coord) texture(smp, vec2((coord).x, 1.0 - (coord).y))`
+  (macro は自分自身へ展開し直されないので、中の `texture` は組み込みのまま)
+- ISF: `IMG_THIS_PIXEL` / `IMG_NORM_PIXEL` が裏返す
+
+正しさの証明は**恒等**で取った — `fragColor = texture(iChannel0, uv)` の結果が元の絵と
+**完全一致**(PSNR ∞)。見張りは `shadertoy.rs` と `isf/mod.rs` の
+`the_picture_is_read_right_side_up`。
+
+## 6. 表現の天井(2026-09-12 実測)
+
+実写に当てて、書けるものと書けないものの線を引いた。
+
+| 書きたい物 | 状態 |
+|---|---|
+| 手続きの絵(`iTime` だけ) | **書ける** |
+| 画像フィルタ(`iChannel0`) | **書ける** |
+| 近傍を舐める(Sobel・ぼかし) | **書ける** |
+| **複数パス**(抽出 → 横 → 縦 → 合成) | **書ける**(ISF の `PASSES`。`PASSINDEX` と中間 buffer が shader から見える) |
+| 中間 buffer の寸法を変える(`$WIDTH/2`) | **書ける** |
+| **フレーム跨ぎの持ち越し**(`PERSISTENT`・Shadertoy の Buffer 帰還) | **書ける**(2026-09-13、下記。持ち主は host) |
+
+### 持ち越し(feedback)は host が持つ — 2026-09-13
+
+ISF の `PERSISTENT: true` を宣言した target は、前のフレームの中身を保ったまま次のフレームへ渡る。
+残像・軌跡・蓄積・反応拡散が、Shadertoy の Buffer の書き方のまま書ける。
+
+```json
+"PASSES": [ { "TARGET": "history", "PERSISTENT": true }, { } ]
+```
+
+```glsl
+if (PASSINDEX == 0) gl_FragColor = mix(IMG_THIS_PIXEL(history), IMG_THIS_PIXEL(inputImage), 0.2);
+else                 gl_FragColor = IMG_THIS_PIXEL(history);
+```
+
+**効果は覚えない。覚えるのは host。** 状態(前のフレームの texture)は層 × 効果ごとに compositor が持ち、
+時刻 t の絵は「**層の入点を初期条件とする漸化式**」で決まる([`plugin-resources.md` §6-3](../plugin-resources.md))。
+
+| 場面 | host がすること | 重さ |
+|---|---|---|
+| 順再生・書き出し | 1 歩進める(前の絵が今の絵になる) | 普通の pass と同じ |
+| 同じフレームをもう一度(2 つ目の窓) | 前の絵をもう一度読んで、同じ物を書く | 同上 |
+| スクラブ・seek | 直近の checkpoint(30 フレームごと)か入点から、その層だけを t の手前まで順に描く | 最大 29 歩 |
+| 書類を編集した | 状態を捨てて入点からやり直す(履歴は書類の関数) | 入点から t まで |
+
+だから**同じ時刻は何度描いても、どの順で描いても同じ絵**(審判は `feedback_is_a_recurrence_from_the_in_point`)。
+TouchDesigner / AviUtl の「スクラブすると変わる」型でも、AE の CC Time Blend でもない。
+コーデックの GOP(checkpoint + 再生)と同型。
+
+板に焼けない層(網・点群)と下の合成を読む列は**画面の道**で効くので、状態は窓ごと(Camera / Stage)に持ち、
+辿り直す時はその窓の寸法で**フレームを丸ごと**描く(板の道は「その層だけ」)。重さは歩数 × 1 フレーム。
+
+**合成の自己帰還**(comp の前フレームを自分込みで読み、回して縮めて重ねる — ビデオフィードバック)は、
+新しい口なしでこの組で書ける: 一番上に全面の層を置き、`BACKDROP_INPUT` と `PERSISTENT` を 1 本の効果に持たせる。
+層の出力 = history なので、前のフレームの「下 + 自分」が次の入力に戻る。
+
+```glsl
+if (PASSINDEX == 0) gl_FragColor = max(IMG_THIS_PIXEL(backdrop), IMG_NORM_PIXEL(history, warp(uv)) * 0.94);
+else                 gl_FragColor = IMG_THIS_PIXEL(history) * IMG_THIS_PIXEL(inputImage).a;
+```
+
+2026-09-13 にヘッドレスで確かめた(640×360、動く点 + 上の全面層、回転 0.04・縮小 1.04): 尾が回転を重ねて
+渦に巻き込まれ(1 回だけ読む lookbehind では巻かない)、40 フレーム目は飛んでも辿っても**完全一致**。
+全面の層は位置が左上基準なので `[0, 0]` に置く(中央に置くと右下 1/4 だけに効く)。
+合体後(下・群・comp)の別時刻は §8-1 の `SOURCE` で読める(非再帰、自分は除く)。
+
+datamosh はさらに別トラックで、codec 領域の台帳が
+[decision-index.md](../../decision-index.md)(`M5-DATAMOSH-P0` = `DONE / PRIVATE PROBE`・`BUILD FORBIDDEN`)にある。
+
+## 7. まだ無い物
+
+- **貼る窓**は作らない。各自の editor で書き、file を置く。
+- **音**(`iChannel` に音を入れる型)。keyboard / webcam / video / cubemap の入力、sound / cubemap のタブ(§2-1 で名指しで断る)。
+- `iChannelResolution` / `iChannelTime`(§3 で名指しで断る)。
+- naga の GLSL frontend が読めない書き方。通らなければ理由が出る。
+
+## 8. 別の時刻の絵を読む — `TIME_OFFSET`
+
+image の欄に `TIME_OFFSET` を書くと、**ホストがその時刻の層の絵を作って渡す**。効果は何も覚えない。
+値は**数値**(秒。負が過去。作者が固定)か、**float 欄の名前**(その欄が普段の仕組みで Inspector に出て、
+利用者が回す)。同梱の実例は [`vism/time_difference.fs`](../../../motolii/crates/motolii-render/vism/time_difference.fs)。
+
+```glsl
+/*{ "ID": "motolii.time_difference", "STAGE": "pass",
+    "INPUTS": [
+      { "NAME": "inputImage", "TYPE": "image" },
+      { "NAME": "past",   "TYPE": "image", "TIME_OFFSET": "offset" },
+      { "NAME": "offset", "TYPE": "float", "DEFAULT": -0.2, "MIN": -5.0, "MAX": 5.0 } ] }*/
+void main() {
+    gl_FragColor = abs(IMG_THIS_PIXEL(inputImage) - IMG_THIS_PIXEL(past));
+}
+```
+
+### 作法(ホスト側)
+
+- **「時刻 t′ の層の姿」を作るのは Document の resolve 1 箇所だけ。** ホストは `view.resolved_layers(t′)` で
+  層を引き直し、その姿で絵を作る(`engine/render.rs` の `sources_at_other_times`)。`source_time` だけを
+  手でずらすと、mask やキーフレームが t のままの継ぎ接ぎになる — やらない。
+- 別の時刻の読みは**別の流れ**(層の番号を変えて復号器の流れを分ける)。同じ流れで読むと、今の絵まで
+  巻き添えで上書きされる。
+- 読んだ絵は**写しを取る**。素材の texture は時刻ごとに同じ 1 枚へ上書きされるので、写した物だけが
+  「あの時刻の絵」でいられる。写しの命令は**即 submit しない** — 復号したコマの転送は frame 共通の
+  encoder に積まれ、流れるのは `before_submit` の中。先に打つと、届いていない texture を写す
+  (冷えていれば零、暖まっていれば前のコマ。**同じ時刻の絵が辿り方で変わる** — 2026-09-12 にこれで
+  1 度落ちた)。
+- 届かなかった時に**今の絵で代用しない**。理由を挙げて層の失敗にする。
+
+### 審判
+
+`engine/render.rs` の `time_reference_is_deterministic` — いきなり飛んだ時と、頭から辿った時で、同じ時刻の
+絵が**完全一致**すること(実 GPU、毎コマ変わる素材)。素の動画で同じ事を先に確かめる兄弟の test が並ぶ。
+
+### 限界
+
+- `SOURCE` が無ければ読めるのは**自分の層の絵**。下・群・comp の別時刻は §8-1。
+- 名指した欄が無い(または float でない)場合は、黙って 0 にせず名前を挙げて断る。
+- 費用は、ずれ 1 つにつき復号 1 回 + 写し 1 枚。cache はまだ効かない。
+- 速度を変えた層(time stretch)は、素材側のずれが comp の秒とは一致しない。
+
+### 8-0. コマ数で読む — `TIME_OFFSET_FRAMES`(2026-09-13)
+
+`TIME_OFFSET` の秒の代わりに、**t からのコマ数**で読む(数値か float の欄の名前、端数は丸める)。comp の fps で時刻に直すので、
+24fps でも 60fps でも「隣のコマ」に当たる。`TIME_OFFSET` / `TIME_AT` とは 1 つの image に 1 つだけ。
+同梱の **Pixel Motion Blur**(`pixel_motion_blur.fs`)がこれで、前のコマとの光学フロー(ピラミッド Lucas-Kanade、13 パス)を
+推定し、シャッター角ぶん動きに沿ってぼかす。審判は `engine/render.rs` の `pixel_motion_blur_follows_the_motion`
+(1 コマに 20 px / 10 px 動く四角の縁の傾きが、24fps / 48fps とも 1 コマの動き × 180/360 × 2 本)。
+
+別の時刻の絵は**板に焼かれる層**(動画・静止画など)だけが持つ。形・文字のように直に描かれる層では届かず、層の失敗になる。
+
+### 8-1. 相手を選ぶ — `SOURCE`(2026-09-13)
+
+`TIME_OFFSET` と組で、**誰の絵を**別の時刻で読むかを書ける(法の `CompLookbehind`、非再帰。再帰は feedback)。
+
+| `SOURCE` | 入る絵 | 自分は |
+|---|---|---|
+| 無し(既定) | 自分の層の t′ | — |
+| `"below"` | t′ に**自分より下の層たち**を合成した絵(背景色込み) | 含まない |
+| `"group"` | t′ に自分の群(自分が群ならその子、そうでなければ親の群)の子を合成した絵 | 含まない |
+| `"comp"` | t′ に comp 全体を合成した絵 | 含まない |
+
+```json
+{ "NAME": "below", "TYPE": "image", "SOURCE": "below", "TIME_OFFSET": "offset" }
+```
+
+同梱の **Background Delay**(`background_delay.fs`)がこれ: Background Copy の「少し前」版で、
+自分の形の中に t + offset の下の合成が入る(時間のずれた合成 = datamosh 風の遊び)。
+
+host は t′ の合成を**本番を組む前に**描いて写す(動画の復号の流れは層ごとに 1 本なので、後から t′ で
+復号すると t の絵が巻き添えになる。合成の間だけ流れの名前空間を分ける)。重さは t′ ごとに 1 回の合成。
+
+### 8-2. ある瞬間の絵 — `TIME_AT`(2026-09-13)
+
+`TIME_OFFSET` が「t からのずれ」なのに対し、`TIME_AT` は**層の入点からの秒**で「あの瞬間の絵」を指す。
+数値でも、float の欄の名前でもよい(欄なら Inspector で回せてキーフレームも打てる)。`SOURCE` と組める。
+
+```json
+{ "NAME": "shot", "TYPE": "image", "TIME_AT": "moment" },
+{ "NAME": "moment", "TYPE": "float", "DEFAULT": 0.0, "SUBTYPE": "TIME" }
+```
+
+いつの絵かは host(書類の関数、同じ時刻は同じ絵)、絵をどう料理するか(縁を引き伸ばす・ほどく)は shader。
+同梱の **Hold**(`hold.fs`)がこれで、AE の Freeze Frame(時間の hold)は効果の 1 枚として棚に載る。
+Freeze(cache)・Flatten(素材化)とは別物。
+
+## 9. shader へ届く欄と uniform(2026-09-12 に全部開けた)
+
+| 宣言 | 窓 | shader |
+|---|---|---|
+| `float` / `long` / `bool` | 数・選択・真偽 | `float` |
+| `point2D` | 点(pad + X/Y の枡) | `vec2`。2 成分とも届く |
+| `point3D` | 点(X/Y の枡。z は既定のまま — 窓に vec3 の部品が無い) | `vec3` |
+| `color` | hex の欄 | `vec4`。4 成分とも届く |
+| `image` | 層の絵 / `TIME_OFFSET` の別時刻 / `PASSES` の中間 buffer | `sampler2D` |
+| `RENDERSIZE` `PASSINDEX` | — | ホストの uniform |
+| **`TIME` `TIMEDELTA` `FRAMEINDEX` `DATE`** | — | ホストの時計(comp の秒・1/fps・コマ番号・0)。読む効果だけ時刻で焼き直す |
+
+多成分の欄は成分ごとに 1 つの f32 で運ぶ(`name`, `name.1`, `name.2`, `name.3` — `effects::component_key` が
+唯一の綴り)。`SUBTYPE: TIME` の欄は**利用者がキーフレームを打つただの float**で、時計は流れない(AE の
+Evolution と同じ)。時計が要るなら `TIME` を読む。
+
+まだ無い物: compute shader・storage buffer、音。別の層の絵は §12(`TYPE: layer`)。
+
+## 10. 下の合成を読む — `BACKDROP_INPUT`(pass)
+
+2 枚目の image に `BACKDROP_INPUT` で名指すと、**その層の下に合成された絵**が入る。層を指す欄は無い —
+北極星(アライトモーション)と同じで、「真下 1 枚」は `clip_to_below`、「下の全部」はこれ。同梱の
+**Background Copy**(`motolii.background_copy`)は自分の絵を下の合成にする 1 行:
+
+```glsl
+/*{ "ID": "motolii.background_copy", "STAGE": "pass", "BACKDROP_INPUT": "backdrop",
+    "INPUTS": [ { "NAME": "inputImage", "TYPE": "image" }, { "NAME": "backdrop", "TYPE": "image" } ] }*/
+void main() { gl_FragColor = IMG_THIS_PIXEL(backdrop) * IMG_THIS_PIXEL(inputImage).a; }
+```
+
+写すのは**自分の形(α)の中だけ**。層は形を持つので、形の外は触らない(窓ぶん全部を写すと、続く効果が
+画面全体に掛かる)。
+
+### 意図で読む
+
+| 型 | 意図 | 変わる側 | 決める側 | 自分の絵 |
+|---|---|---|---|---|
+| レンズ | 背後を、自分の形で乱す(Displacement を一番上に) | 下の合成 | 自分 | 出ない |
+| 切る／混ぜる | 自分を、相手で加工する(Set Matte・Calculations) | 自分 | 下 | 出る |
+
+レンズは「Background Copy → 歪ませる効果(自分の形は `inputImage` で読む)」の 2 段で書ける。
+実態は無く、変化だけが見える。
+
+### 作法と代償
+
+- 下の合成は合成の途中でしか決まらないので、この列は層の絵へ**焼かず、run の窓で効く**(§8 の Pass と同じ
+  代償: その層は平らな 1 枚になる)。
+- 2 枚目の image は 1 つだけ、`TIME_OFFSET` とは併用しない。
+- 下に何も無ければ透明が入る。
+- 審判は `render_effects.rs` の `background_copy_then_gain_brightens_what_is_below_and_hides_the_layer`。
+
+## 11. 色の規約 — 効果の列は乗算済み(2026-09-13)
+
+効果(pass・warp)が受け取る絵は**乗算済み線形**。累算器・rerun・Skia・Nuke と同じ、普通の方法。
+ぼかし・縮小・段の平均が透明の隣(rgb = 0)を混ぜて縁が黒く沈むのを、効果ごとの当て木ではなく
+規約で防ぐ(白の上で白をぼかして縁が沈んだのが発覚の場)。sRGB のまま乗算済みで平均しても足りない
+— over が線形でしか成り立たず、縁が 220/255 に沈む(実測)。だから線形。
+
+| 所 | 規約 |
+|---|---|
+| 層の素材(文字・形・静止画・動画) | 非乗算 sRGB(2026-09-03 の法のまま。置く時に shader が decode → 乗算) |
+| **効果の列(pass・warp)の入出力** | **乗算済み線形**(Rgba16Float)。素材は最初の効果の前で 1 度だけ写す |
+| 列の出口・置く時 | 乗算済み線形(rerun の `AlreadyPremultiplied`) |
+| 下の合成(`BACKDROP_INPUT`) | 累算器そのまま(乗算済み線形) |
+
+写し替えは `vism/material_encoding.wgsl` 1 箇所(入口の素性 = 符号化か・乗算済みか)。
+見た目に出る差: **色を掛ける効果は線形で掛かる**(gain 2 倍は sRGB の 100 → 139 であって 200 ではない)。
+閾値・輝度で判定する効果は線形の乗算済みの値で判定する。生成する効果(gradient・tri_led)の
+出力も線形として置かれる。不透明で色を掛けない効果(ぼかし・歪み)は違いが出ない。
+
+貼る shader(Shadertoy / ISF)も乗算済みで受ける。非乗算が要る演算(色相・レベル補正)は
+`rgb / max(a, 1e-5)` で戻してから掛け、`* a` で戻す — Nuke の unpremult / premult と同じ。
+
+審判: `render_effects.rs` の `a_blurred_layer_fades_at_its_edge_without_going_dark_on_the_baked_path` と
+`a_blurred_copy_fades_at_its_edge_without_going_dark`(白の上の白の縁が沈まない、実 GPU)。
+
+## 12. 層を指す — `TYPE: layer` と image の `LAYER`
+
+既定は「下」(§10)。それでも相手を名指ししたい時(Set Matte の相手が離れた所にある等)のために、
+**層を指す欄**がある。欄の TYPE は `layer`(Motolii の拡張。ISF には無い)、値は LayerId。
+image に `"LAYER": "<欄の名前>"` を書くと、その欄が指す層の**同じ時刻の絵**が入る。
+
+```glsl
+/*{ "ID": "motolii.set_matte", "STAGE": "pass",
+    "INPUTS": [ { "NAME": "inputImage", "TYPE": "image" },
+                { "NAME": "matte", "TYPE": "image", "LAYER": "layer" },
+                { "NAME": "layer", "TYPE": "layer" } ] }*/
+```
+
+- 窓は**カメラの target と同じ部品**(他の層の一覧、先頭に None)で描く。Dart はその部品を共有しただけ。
+- ホストは「別の時刻」「下の合成」と同じ道: `view.resolved_layers(t)` から相手を引き、写して 2 枚目に束ねる。
+- **自分自身と無い層は断る**(理由を挙げて層の失敗に)。黙って今の絵で代用しない。
+- 相手の絵は**相手の効果まで掛かった後**の絵(`clip_to_below` と同じ答え)。
+- 2 枚目の image は 1 つだけ。`TIME_OFFSET` / `BACKDROP_INPUT` / `LAYER` は併用しない。
+- 同梱: **Set Matte**(`motolii.set_matte` — Alpha / Luminance / 反転、Stretch)。
+
+審判: `render_effects.rs` の `set_matte_cuts_by_the_layer_the_user_picked`。
