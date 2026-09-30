@@ -110,6 +110,7 @@ void main() {
 
     // 1. dragging on the Stage
     LatencyProbe.enable();
+    LatencyProbe.counts.clear();
     final nativeMs = <double>[];
     c.rendered.addListener(() {
       final v = c.state['renderMs'];
@@ -127,6 +128,8 @@ void main() {
     await g.up();
     await frames(t, 12);
     report.write(summarize('stage drag (stageGesture)', 'stageGesture'));
+    report.writeln('LAT slices woken by the Stage drag: ${[for (final e in LatencyProbe.counts.entries) '${e.key.substring(6)}=${e.value}'].join(', ')}');
+    LatencyProbe.counts.clear();
     report.writeln('LAT   native render_into_surface (renderMs)  median ${_median(nativeMs).toStringAsFixed(1)}  p95 ${_p95(nativeMs).toStringAsFixed(1)}  (${nativeMs.length} renders, all three tests)');
     await c.command('undo');
     await frames(t, 6);
@@ -185,6 +188,7 @@ void main() {
 
     // 3. the playhead scrubbed
     LatencyProbe.events.clear();
+    LatencyProbe.counts.clear();
     for (var i = 0; i < 40; i++) {
       LatencyProbe.mark('pointer');
       c.command('seek', {'frame': 10 + i * 2});
@@ -192,6 +196,7 @@ void main() {
     }
     await frames(t, 12);
     report.write(summarize('playhead scrub (seek)', 'seek'));
+    report.writeln('LAT slices woken by the playhead scrub: ${[for (final e in LatencyProbe.counts.entries) '${e.key.substring(6)}=${e.value}'].join(', ')}');
 
     // 4. panning the Stage (what a hand-pan does: the view moves, the window native draws must follow)
     final session = StageSession.of(c, 'User');

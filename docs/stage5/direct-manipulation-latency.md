@@ -42,3 +42,15 @@ Hand-written copies of "one in flight, the newest waits": `EditorPreviewQueue` (
 - Render off the platform thread, or one-hop async replies: an ownership / threading change; the simple version was measured slower (above).
 - Renderer itself: a still render is one native call of ~5 ms (release) to ~15-20 ms (debug), plus the wait for the next frame.
 - Keyboard nudge sends one command per key repeat (each with a render); nudges add up, so they cannot be replaced by the newest one, and at OS key-repeat rates the chain does not build a backlog.
+
+## Panels that woke on every preview (third pass)
+Counting slice notifications (`LatencyProbe.count`) during a 60-step Inspector scrub showed **eight** slices waking on every step: browserSurface, liveColors, stage, rightSeat, inspectorSession, timelineSession, liveEase, depth. Most read `layers` or `documentRevision` (which change on every preview) but show no value.
+
+What each really reads, and what it listens to now:
+- **Browser** (all shelves): palette, font families, assets, environments, the selection; through getters, the fonts the layers use, the active layer's kind and font, and the colour being edited. Now those keys plus a `derived` of exactly those getters. `ThingFace` / `_Tile` / `FutureBuilder` / `NativeVisualSample` read only `BrowserSession`; a sample or a picture is cached by its request key (`_SampleShelf`, `_pictures[id] ??=`), so a parent rebuild never asked native again (checked in the code; nothing to fix there).
+- **Colors**: only the colour target (`colorTarget(c)`, which reads a layer's colour property when the host names none) -> `derived: colorTarget`.
+- **Timeline, right seat (which Inspector), Ease**: what the layers *are* (timing, flags, which properties have keys where), not values -> `EditorSession.layerShape()` (values, positions, bounds, key values stripped).
+- **Media seat**: `assets` and `backgrounds` only (was: the whole document).
+- Still woken per step, on purpose: Stage (draws the value), Inspector session (shows it), Depth desk (its `depthLayout` moves with position).
+
+Measured with the same Inspector scrub (debug Dart): slices woken per step 8 -> 3; widgets rebuilt over the same frames 1751 -> 359; Flutter build 11.6 -> 4.3 ms median; pointer-to-visible median 34 -> 25 ms (p95 51 -> 41 ms). A Stage drag and a playhead scrub wake the same three per step. Full real-app suite (15 files) passes.
