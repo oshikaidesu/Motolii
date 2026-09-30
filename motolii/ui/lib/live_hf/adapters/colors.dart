@@ -27,10 +27,8 @@ class LiveColorInstrument extends StatefulWidget {
 class _LiveColorInstrumentState extends State<LiveColorInstrument> {
   static const _watched = [
     'colorTarget',
-    'layers',
     'selectedIds',
     'capabilities',
-    'documentRevision',
   ];
   EditorSession get c => widget.c;
   late final ColorEdit edit = ColorEdit(c)
@@ -47,7 +45,7 @@ class _LiveColorInstrumentState extends State<LiveColorInstrument> {
   void initState() {
     super.initState();
     _absorb();
-    c.slice('liveColors', _watched).addListener(_absorb);
+    c.slice('liveColors', _watched, derived: () => colorReading(c)).addListener(_absorb);
     c.eyedropper.addListener(_redraw);
     c.deskWork.addListener(_redraw);
     edit.addListener(_redraw);
@@ -58,7 +56,7 @@ class _LiveColorInstrumentState extends State<LiveColorInstrument> {
 
   @override
   void dispose() {
-    c.slice('liveColors', _watched).removeListener(_absorb);
+    c.slice('liveColors', _watched, derived: () => colorReading(c)).removeListener(_absorb);
     c.eyedropper.removeListener(_redraw);
     c.deskWork.removeListener(_redraw);
     edit.dispose();

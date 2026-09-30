@@ -52,11 +52,22 @@ class BrowserSession extends ChangeNotifier {
   BrowserSession._(this.c) {
     _bind();
     c.slice('browserCatalog', const ['createKinds', 'catalog']).addListener(_rebind);
-    c.slice('browserSurface', const ['palette', 'fontFamilies', 'assets', 'backgrounds', 'layers', 'selectedId', 'selectedIds', 'documentRevision', 'colorTarget']).addListener(notifyListeners);
+    c.slice('browserSurface', const ['palette', 'fontFamilies', 'assets', 'backgrounds', 'selectedId', 'selectedIds', 'colorTarget'], derived: _reading).addListener(notifyListeners);
     c.deskWork.addListener(notifyListeners);
     c.importedAssets.addListener(_reveal);
     _loadFontFacts();
   }
+  /// What the shelves read of the layers, and nothing more: the colour target and its layer's name, the text layer a
+  /// font would dress, the families the text layers use, whether the active layer has a fill to save. A continuous
+  /// preview of Position, Scale, an effect parameter, a camera value changes none of it, so it wakes no tile.
+  Object? _reading() => [
+        colorReading(c),
+        dressing?['id'],
+        dressingFont,
+        (usedFonts.toList()..sort()),
+        EditorSession.map(c.activeLayer?['fill']).isNotEmpty,
+      ];
+
   static final _all = Expando<BrowserSession>();
   static BrowserSession of(EditorSession c) => _all[c] ??= BrowserSession._(c);
   final EditorSession c;

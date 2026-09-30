@@ -45,6 +45,16 @@ Map<String, dynamic>? colorTarget(EditorSession c) {
   return null;
 }
 
+/// Everything a colour surface shows of the colour target: the target itself (its colour is a value the surface draws)
+/// and the name of the layer it belongs to. A slice compares this instead of listening to every layer edit, so a
+/// Position scrub leaves the colour surfaces still.
+Object? colorReading(EditorSession c) {
+  final target = colorTarget(c);
+  if (target == null) return null;
+  final layer = c.layers.where((l) => l['id'] == target['layer']).firstOrNull;
+  return [target, layer?['name']];
+}
+
 /// What the wheel edits, in words: "Layer name · Fill" / "· Stroke" / "· Fill · stop", or the composition's ground.
 String colorTargetTitle(EditorSession c, Map<String, dynamic> target) {
   if (target['slot'] == 'Background') return 'Composition · Background';
