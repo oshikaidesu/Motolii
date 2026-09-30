@@ -241,18 +241,29 @@ impl<'a> StoreView<'a> {
         PropertyId::new(name).ok()
     }
 
+    /// The properties the layer has: the committed ones, and the ones only a preview holds (a property nobody has committed
+    /// yet is still something the Stage must show while it is being dragged).
     pub fn properties(&self, layer: LayerId) -> Vec<PropertyId> {
         let path = layer.entity_path();
         let engine = self.db.storage_engine();
-        let Some(components) = engine.store().schema().all_components_for_entity(&path) else {
-            return Vec::new();
-        };
-        let mut out: Vec<PropertyId> = components
-            .iter()
-            .copied()
-            .filter_map(|component| Self::property_id_for_component(&path, component))
+        let mut out: Vec<PropertyId> = engine
+            .store()
+            .schema()
+            .all_components_for_entity(&path)
+            .into_iter()
+            .flatten()
+            .filter_map(|component| Self::property_id_for_component(&path, *component))
             .collect();
+        if !self.ignore_transients {
+            let previewed = self.transient.keys().chain(self.preview_edits.sources.keys());
+            out.extend(previewed.filter_map(|key| match key {
+                TransientKey::Layer(owner, property) if *owner == layer => Some(property.clone()),
+                _ => None,
+            }));
+            out.dedup_by(|a, b| a == b);
+        }
         out.sort();
+        out.dedup();
         out
     }
 

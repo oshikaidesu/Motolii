@@ -74,6 +74,18 @@ private enum ProbeFailure: Error {
   case message(String)
 }
 
+/// What Rust said for a request, as bytes. The host does not read a status: it routes it (and Dart decodes it once).
+/// `hasError` is the one thing it asks Rust about it.
+private final class NativeStatus {
+  let data: Data
+  let hasError: Bool
+  init(data: Data, hasError: Bool) { self.data = data; self.hasError = hasError }
+  /// For the few places that look inside (a status is otherwise never parsed here).
+  var object: [String: Any] { (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:] }
+  /// What goes to Dart: the JSON bytes as they are (a typed-data message is copied, not rebuilt as a tree).
+  var payload: FlutterStandardTypedData { FlutterStandardTypedData(bytes: data) }
+}
+
 private final class ProbeRuntime {
   typealias Open = @convention(c) (UnsafePointer<CChar>) -> UnsafeMutableRawPointer?
   typealias Request = @convention(c) (UnsafeMutableRawPointer, UnsafePointer<CChar>) -> UnsafePointer<CChar>?
@@ -84,6 +96,7 @@ private final class ProbeRuntime {
   typealias Watch = @convention(c) (UnsafeMutableRawPointer, Wake, UnsafeMutableRawPointer?) -> Int32
   typealias FrameReady = @convention(c) (UnsafeMutableRawPointer?, UnsafePointer<CChar>?, UInt32) -> Void
   typealias SetFrameReady = @convention(c) (UnsafeMutableRawPointer, FrameReady?, UnsafeMutableRawPointer?) -> Int32
+  typealias ReplyHasError = @convention(c) (UnsafeMutableRawPointer) -> Int32
   typealias FinishFrames = @convention(c) (UnsafeMutableRawPointer) -> Int32
   typealias CatalogOnChange = @convention(c) (Wake?, UnsafeMutableRawPointer?) -> Void
   typealias CatalogRequest = @convention(c) (UnsafePointer<CChar>?) -> UnsafePointer<CChar>?
@@ -122,6 +135,7 @@ private final class ProbeRuntime {
   private var closeFunction: Close?
   /// 描き終わりを待つ同期の口。合図を使わない channel の道だけが使う。
   private var finishFunction: FinishFrames?
+  private var replyHasErrorFunction: ReplyHasError?
   private(set) var rendered = 0
 
   init() {
@@ -180,12 +194,12 @@ private final class ProbeRuntime {
     playbackGate.unlock()
   }
 
-  func open(path: String) throws -> [String: Any] {
+  func open(path: String) throws -> NativeStatus {
     try onRenderQueue { try openOnRenderQueue(path: path) }
   }
 
-  private func openOnRenderQueue(path: String) throws -> [String: Any] {
-    let previous = (library: library, context: context, request: requestFunction, render: renderFunction, tick: playbackTickFunction, close: closeFunction, finish: finishFunction, count: rendered)
+  private func openOnRenderQueue(path: String) throws -> NativeStatus {
+    let previous = (library: library, context: context, request: requestFunction, render: renderFunction, tick: playbackTickFunction, close: closeFunction, finish: finishFunction, hasError: replyHasErrorFunction, count: rendered)
     let location = ProcessInfo.processInfo.environment["MOTOLII_NATIVE_LIBRARY"] ?? URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("target/debug/libmotolii_ui.dylib").path
     guard let library = dlopen(location, RTLD_NOW | RTLD_LOCAL) else {
       throw ProbeFailure.message(dlerror().map { String(cString: $0) } ?? "dlopen failed")
@@ -198,6 +212,7 @@ private final class ProbeRuntime {
     playbackTickFunction = nil
     closeFunction = nil
     finishFunction = nil
+    replyHasErrorFunction = nil
     do {
       func symbol<T>(_ name: String, _: T.Type) throws -> T {
         guard let address = dlsym(library, name) else { throw ProbeFailure.message("Missing symbol: \(name)") }
@@ -210,6 +225,7 @@ private final class ProbeRuntime {
       playbackTickFunction = try symbol("motolii_probe_playback_tick", PlaybackTick.self)
       closeFunction = try symbol("motolii_probe_close", Close.self)
       finishFunction = try symbol("motolii_probe_finish_frames", FinishFrames.self)
+      replyHasErrorFunction = try symbol("motolii_probe_reply_has_error", ReplyHasError.self)
       let watch = try symbol("motolii_probe_watch_effects", Watch.self)
       // the catalog's own watcher found the index changed (a file came, moved or went): a bare "look again", from another thread
       let catalogOnChange = try symbol("motolii_catalog_on_change", CatalogOnChange.self)
@@ -239,6 +255,7 @@ private final class ProbeRuntime {
       playbackTickFunction = previous.tick
       closeFunction = previous.close
       finishFunction = previous.finish
+      replyHasErrorFunction = previous.hasError
       rendered = previous.count
       throw error
     }
@@ -312,17 +329,27 @@ private final class ProbeRuntime {
     try onRenderQueue { try requestOnRenderQueue(command) }
   }
 
-  private func requestOnRenderQueue(_ command: String) throws -> [String: Any] {
+  func requestStatus(_ command: String) throws -> NativeStatus {
+    try onRenderQueue { try requestStatusOnRenderQueue(command) }
+  }
+
+  private func requestStatusOnRenderQueue(_ command: String) throws -> NativeStatus {
     guard let context, let requestFunction else { throw ProbeFailure.message("Open a document first") }
     guard let pointer = command.withCString({ requestFunction(context, $0) }) else {
       throw ProbeFailure.message("Rust request returned no reply")
     }
     // Copy the reply before another FFI call can invalidate its pointer.
-    let data = Data(String(cString: pointer).utf8)
-    guard let reply = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+    let data = Data(bytes: pointer, count: strlen(pointer))
+    return NativeStatus(data: data, hasError: (replyHasErrorFunction?(context) ?? 1) != 0)
+  }
+
+  /// A small reply the host reads itself (the view list, an easing model).
+  private func requestOnRenderQueue(_ command: String) throws -> [String: Any] {
+    let reply = try requestStatusOnRenderQueue(command)
+    guard let object = try JSONSerialization.jsonObject(with: reply.data) as? [String: Any] else {
       throw ProbeFailure.message("Rust reply is not a JSON object")
     }
-    return reply
+    return object
   }
 
   /// One catalog request (JSON in, JSON out) on the catalog queue; the reply comes back on the main thread.
@@ -340,15 +367,15 @@ private final class ProbeRuntime {
     }
   }
 
-  func status() throws -> [String: Any] { try request("{\"op\":\"status\",\"bootstrap\":true}") }
+  func status() throws -> NativeStatus { try requestStatus("{\"op\":\"status\",\"bootstrap\":true}") }
 
   /// Every view Rust lists (Camera always; Stage while its tab holds a window) gets its own
   /// surface and one render. Two pictures of one world, both live.
-  func render(known: Any? = nil, references: Any? = nil) throws -> ([String: CVPixelBuffer], [String: Any], Int) {
+  func render(known: Any? = nil, references: Any? = nil) throws -> ([String: CVPixelBuffer], NativeStatus, Int) {
     try onRenderQueue { try renderOnRenderQueue(known: known, references: references) }
   }
 
-  private func renderOnRenderQueue(known: Any? = nil, references: Any? = nil) throws -> ([String: CVPixelBuffer], [String: Any], Int) {
+  private func renderOnRenderQueue(known: Any? = nil, references: Any? = nil) throws -> ([String: CVPixelBuffer], NativeStatus, Int) {
     let state = try request("{\"op\":\"renderInfo\"}")
     guard let views = state["views"] as? [[String: Any]], !views.isEmpty else {
       throw ProbeFailure.message("Document dimensions missing")
@@ -374,7 +401,7 @@ private final class ProbeRuntime {
     if let known { query["knownSnapshotId"] = known }
     if let references { query["knownReferenceId"] = references }
     let data = try JSONSerialization.data(withJSONObject: query)
-    return (buffers, try request(String(decoding: data, as: UTF8.self)), rendered)
+    return (buffers, try requestStatusOnRenderQueue(String(decoding: data, as: UTF8.self)), rendered)
   }
 
   /// Still-frame channel path. The host owns these surfaces too, so Flutter
@@ -382,7 +409,7 @@ private final class ProbeRuntime {
   /// exact scrub/stop may wait, unlike playback.
   fileprivate func renderInto(
     _ targets: [PlaybackTarget], known: Any? = nil, references: Any? = nil
-  ) throws -> ([String: Any], Int) {
+  ) throws -> (NativeStatus, Int) {
     try onRenderQueue {
       guard let context, let renderFunction else { throw ProbeFailure.message("Document is closed") }
       for target in targets {
@@ -402,7 +429,7 @@ private final class ProbeRuntime {
       if let known { query["knownSnapshotId"] = known }
       if let references { query["knownReferenceId"] = references }
       let data = try JSONSerialization.data(withJSONObject: query)
-      return (try requestOnRenderQueue(String(decoding: data, as: UTF8.self)), rendered)
+      return (try requestStatusOnRenderQueue(String(decoding: data, as: UTF8.self)), rendered)
     }
   }
 
@@ -492,7 +519,6 @@ final class ProbeSession {
   /// The surfaces Dart draws each view into: two per view, taken in turn, made
   /// once per size. The Rust callback names the one it just filled.
   fileprivate var surfaces: [String: (width: Int, height: Int, entries: [(id: UInt32, buffer: CVPixelBuffer)])] = [:]
-  fileprivate var state: [String: Any] = [:]
   fileprivate var windows: [String: PanelFlutterWindow] = [:]
   /// The native host, not Flutter's `Ticker`, owns playback cadence.  The
   /// Flutter side receives a texture availability signal and a small playhead
@@ -563,9 +589,8 @@ final class ProbeSession {
     }
   }
 
-  fileprivate func broadcast(_ state: [String: Any], buffers: [String: CVPixelBuffer] = [:], origin: ProbeHost? = nil, frameReady: Bool = false, frameOnly: Bool = false, effectsReloaded: Bool = false) {
+  fileprivate func broadcast(_ state: NativeStatus, buffers: [String: CVPixelBuffer] = [:], origin: ProbeHost? = nil, frameReady: Bool = false, frameOnly: Bool = false, effectsReloaded: Bool = false) {
     precondition(Thread.isMainThread)
-    self.state.merge(state) { _, next in next }
     latest.merge(buffers) { _, next in next }
     let fresh = frameReady ? latest : buffers
     for host in hosts.allObjects where !host.closed && host.attached {
@@ -655,8 +680,8 @@ final class ProbeSession {
     let group = DispatchGroup()
     for host in hosts.allObjects where !host.closed && host.attached { group.enter(); host.channel.invokeMethod("flushEditors", arguments: nil) { _ in group.leave() } }
     group.notify(queue: .main) {
-      if let status = try? self.runtime.status() { self.state = status }
-      guard self.state["dirty"] as? Bool == true else {
+      // a fresh status: a confirmation is asked only of a document that is open and unsaved
+      guard let status = try? self.runtime.status(), status.object["dirty"] as? Bool == true else {
         self.confirming = false; completion(true); return
       }
       guard let main = self.hosts.allObjects.first(where: { $0.isMain && !$0.closed && $0.attached }) else {
@@ -664,7 +689,7 @@ final class ProbeSession {
       }
       main.window?.deminiaturize(nil)
       main.window?.makeKeyAndOrderFront(nil)
-      main.channel.invokeMethod("documentChanged", arguments: main.envelope(self.state))
+      main.channel.invokeMethod("documentChanged", arguments: main.envelope(status))
       main.channel.invokeMethod("confirmClose", arguments: nil) { reply in
         self.confirming = false
         completion((reply as? Bool) == true)
@@ -678,7 +703,6 @@ final class ProbeSession {
     stopPlayback()
     epoch &+= 1
     clearFrames()
-    state = [:]
     runtime.close()
     for window in Array(windows.values) { window.close() }
     completion()
@@ -750,8 +774,8 @@ final class ProbeHost: NSObject {
     registry.textureFrameAvailable(textureID)
   }
 
-  fileprivate func envelope(_ status: [String: Any], frameReady: Bool = false) -> [String: Any] {
-    var reply: [String: Any] = ["status": status, "windowId": id, "frameReady": frameReady]
+  fileprivate func envelope(_ status: NativeStatus, frameReady: Bool = false) -> [String: Any] {
+    var reply: [String: Any] = ["statusJson": status.payload, "windowId": id, "frameReady": frameReady]
     reply["runtimeEpoch"] = session.epoch
     if let attachmentID = attachment.id { reply["attachmentId"] = attachmentID }
     if let context = session.runtime.context, let library = session.runtime.location {
@@ -760,8 +784,6 @@ final class ProbeHost: NSObject {
     }
     if let textureID = textureIDs[ProbeHost.outputView] { reply["textureId"] = textureID }
     reply["textureIds"] = textureIDs
-    if let width = status["width"] { reply["width"] = width }
-    if let height = status["height"] { reply["height"] = height }
     if let texture = textures[ProbeHost.outputView] { reply.merge(texture.counters()) { _, new in new } }
     // the Stage's own texture (the User view), for the checks that ask whether a picture reached it
     if let stage = textures["User"] { reply["stagePublishedFrames"] = stage.counters()["publishedFrames"] }
@@ -865,8 +887,8 @@ final class ProbeHost: NSObject {
     case "broadcast":
       // The main window drove the runtime itself; the other windows learn the outcome here.
       guard let text = args["status"] as? String, let data = text.data(using: .utf8),
-            let status = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { fail(result, "broadcast requires a status JSON string"); return }
-      session.broadcast(status, origin: self, frameReady: args["frameReady"] as? Bool == true, frameOnly: args["frameOnly"] as? Bool == true)
+            (try? JSONSerialization.jsonObject(with: data)) is [String: Any] else { fail(result, "broadcast requires a status JSON string"); return }
+      session.broadcast(NativeStatus(data: data, hasError: false), origin: self, frameReady: args["frameReady"] as? Bool == true, frameOnly: args["frameOnly"] as? Bool == true)
       result(true)
     case "focusWindow", "closeWindow":
       guard let requestedID = args["id"] as? String,
@@ -979,14 +1001,14 @@ final class ProbeHost: NSObject {
         command = String(decoding: data, as: UTF8.self)
       }
       perform(result, work: {
-        let status = try self.session.runtime.request(command)
+        let status = try self.session.runtime.requestStatus(command)
         return status
       }) { status in
         let operation = parsed?["op"] as? String
         if operation == "play" { self.session.startPlayback() }
         if operation == "pause" { self.session.stopPlayback() }
-        if !asked, status["error"] == nil { self.session.broadcast(status, origin: self) }
-        return status
+        if !asked, !status.hasError { self.session.broadcast(status, origin: self) }
+        return status.payload
       }
     case "render":
       guard !rendering else { fail(result, "This window already has a render pending"); return }
@@ -1026,7 +1048,6 @@ final class ProbeHost: NSObject {
       session.stopPlayback()
       rendering = false
       session.clearFrames()
-      session.state = [:]
       perform(result, work: { self.session.runtime.close(); return ["closed": true] }) { state in
         for host in self.session.hosts.allObjects where !host.closed && host.attached {
           host.channel.invokeMethod("documentClosed", arguments: nil)

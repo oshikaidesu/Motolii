@@ -36,6 +36,8 @@ pub struct EditorRuntime {
     render_count: u64,
     render_ms: f64,
     reply: CString,
+    /// Whether the last reply carries a top-level `error` key (the host decides on it whether to wake the other windows).
+    reply_has_error: bool,
     error: Option<String>,
     preview: Option<(u64, Vec<Intent>)>,
     preview_tag: Option<String>,
@@ -98,7 +100,7 @@ impl EditorRuntime {
             doc, engine, viewer, clipboard: Default::default(),
             path: if path.is_empty() { None } else { Some(path.into()) }, saved_signature,
             exporter: Default::default(), freezer: Default::default(), relink_report: None, device_id,
-            render_count: 0, render_ms: 0.0, reply: CString::new("{}").unwrap(), error: None,
+            render_count: 0, render_ms: 0.0, reply: CString::new("{}").unwrap(), reply_has_error: false, error: None,
             preview: None, preview_tag: None, stage_drag: None,
             snapshot_cache: Default::default(), full_status_revision: Default::default(),
             flat_projection: crate::doc::store::LayerProjection::TwoPointFiveD,
@@ -367,28 +369,39 @@ pub unsafe extern "C" fn motolii_probe_request(ctx: *mut EditorRuntime, request:
     }
     if let Some(model) = model_reply {
         let value = model.unwrap_or_else(|error| json!({"error":error}));
+        probe.reply_has_error = value.get("error").is_some();
         probe.reply = CString::new(value.to_string()).unwrap();
         return probe.reply.as_ptr();
     }
     if quiet && probe.error.is_none() {
         // 静かな tick/seek でも「絵が動いたか」は返す。動いていなければ窓は描かない。
         let moved = before_image != probe.image_key();
+        probe.reply_has_error = false;
         probe.reply = CString::new(format!("{{\"ok\":true,\"needsRender\":{moved}}}")).unwrap();
         return probe.reply.as_ptr();
     }
     let needs_render = before_image != probe.image_key();
     if defer_snapshot && needs_render && probe.error.is_none() {
+        probe.reply_has_error = false;
         probe.reply = CString::new("{\"needsRender\":true}").unwrap();
         return probe.reply.as_ptr();
     }
     let status = catch_unwind(AssertUnwindSafe(|| probe.status_text(known, known_references, needs_render)));
     let text = match status {
         Ok(Ok(text)) => text,
-        Ok(Err(e)) => json!({"error":e,"needsRender":needs_render}).to_string(),
-        Err(_) => json!({"error":"Rust status panic","needsRender":needs_render}).to_string(),
+        Ok(Err(e)) => { probe.reply_has_error = true; json!({"error":e,"needsRender":needs_render}).to_string() }
+        Err(_) => { probe.reply_has_error = true; json!({"error":"Rust status panic","needsRender":needs_render}).to_string() }
     };
     probe.reply = CString::new(text).unwrap_or_else(|_| CString::new("{\"error\":\"Invalid reply\"}").unwrap());
     probe.reply.as_ptr()
+}
+
+/// Whether the last reply of `motolii_probe_request` has a top-level `error` key: the one thing the host needs to know about a
+/// status without reading it (the reply itself travels to Dart as it is).
+#[no_mangle]
+pub unsafe extern "C" fn motolii_probe_reply_has_error(ctx: *const EditorRuntime) -> i32 {
+    if ctx.is_null() { return 1; }
+    i32::from(unsafe { &*ctx }.reply_has_error)
 }
 
 #[no_mangle]

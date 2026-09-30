@@ -215,10 +215,12 @@ impl EditorRuntime {
         match self.status_parts(known, known_references)? {
             StatusReply::Light(mut value) => {
                 value["needsRender"] = json!(needs_render);
+                self.reply_has_error = value.get("error").is_some();
                 Ok(value.to_string())
             }
             StatusReply::Snapshot { send_body, send_references, mut extras } => {
                 extras.insert("needsRender".to_owned(), json!(needs_render));
+                self.reply_has_error = extras.contains_key("error");
                 let cache = self.snapshot_cache.borrow();
                 serde_json::to_string(&reply_view(&cache, send_body, send_references, &extras)).map_err(|e| e.to_string())
             }
