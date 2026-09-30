@@ -5,8 +5,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
 import 'frame.dart';
-import 'layout.dart';
-import 'semantics.dart';
+import '../timeline/rows.dart';
+import '../timeline/semantics.dart';
 
 /// Timeline の掴み手 — 押す・選ぶ・動かす・詰める・滑らす・囲む、
 /// そして行と素材の落とし先。絵に出す途中の姿もここが持つ。

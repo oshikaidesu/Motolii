@@ -3,9 +3,9 @@ import 'package:flutter/widgets.dart';
 
 import '../session/editor_session.dart';
 import '../session/stage_actions.dart';
-import 'adapters/document.dart';
-import 'adapters/sheets.dart';
-import 'ui_scale.dart';
+import '../app/document_guard.dart';
+import '../app/sheets.dart';
+import '../app/ui_scale.dart';
 
 /// The window's keys, each one an existing host operation. A key typed into a text field is the field's.
 class LiveKeys {

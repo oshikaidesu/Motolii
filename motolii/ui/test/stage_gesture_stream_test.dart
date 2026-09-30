@@ -3,7 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter/painting.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:motolii_stage5/panels/stage_session.dart';
+import 'package:motolii_stage5/stage/session.dart';
 import 'package:motolii_stage5/session/editor_session.dart';
 
 void main() {

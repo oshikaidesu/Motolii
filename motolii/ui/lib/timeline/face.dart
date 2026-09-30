@@ -4,17 +4,17 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
-import '../../foundation/theme.dart';
-import '../../hf/glyphs.dart';
-import '../../hf/metrics.dart';
-import '../../hf/neutral.dart';
-import '../../hf/shell/menu.dart' show showHfMenu;
-import '../../hf/shell/place.dart' show H, Fam;
-import '../../input/viewport_motion.dart';
-import '../../session/editor_session.dart';
-import '../../timeline_core/layout.dart' show TrackRow;
-import '../../timeline_core/semantics.dart';
-import '../../timeline_core/session.dart';
+import '../foundation/theme.dart';
+import '../hf/glyphs.dart';
+import '../hf/metrics.dart';
+import '../hf/neutral.dart';
+import '../hf/shell/menu.dart' show showHfMenu;
+import '../hf/shell/place.dart' show H, Fam;
+import '../input/viewport_motion.dart';
+import '../session/editor_session.dart';
+import 'rows.dart' show TrackRow;
+import 'semantics.dart';
+import 'session.dart';
 
 /// The Timeline's tools at its seat strip's right end (the Dock asks the front panel for them): Split and Marker.
 class LiveTimelineTools extends StatelessWidget {

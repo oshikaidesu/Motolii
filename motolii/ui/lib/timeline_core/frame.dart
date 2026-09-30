@@ -5,8 +5,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
 import '../session/editor_session.dart';
-import 'geometry.dart';
-import 'layout.dart';
+import '../timeline/geometry.dart';
+import '../timeline/rows.dart';
 
 /// Timeline の骨格 — 書類の切片、行の組み立て、板の寸法、x とコマの読み替え、
 /// そして再生ヘッドの要求。他の三つ(掴み手・見る位置・献立)はここの上に乗る。

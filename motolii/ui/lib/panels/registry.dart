@@ -9,7 +9,7 @@ import 'browser.dart';
 import 'inspector.dart';
 import 'desk.dart';
 import 'timeline.dart';
-import 'stage.dart';
+import '../stage/panel.dart';
 import 'notes_desk.dart';
 import 'ease_desk.dart';
 import 'depth_desk.dart';

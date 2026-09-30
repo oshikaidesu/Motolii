@@ -1,6 +1,6 @@
 import 'dart:math' as math;
 
-import 'layout.dart';
+import 'rows.dart';
 
 /// What a skin found under its pointer, in the Timeline's own terms (rows by index in [TimelineSession.rows], time
 /// in frames). A skin decides this with its own geometry; the session never sees a pixel.

@@ -2,9 +2,9 @@
 // proto_hf hands it fixed values, production hands it the session.
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
-import '../glyphs.dart';
-import 'place.dart';
-import '../neutral.dart';
+import '../../hf/glyphs.dart';
+import '../../hf/shell/place.dart';
+import '../../hf/neutral.dart';
 
 /// The three modes of the top seat's track.
 enum TopMode { edit, play, export }

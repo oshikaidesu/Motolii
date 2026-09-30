@@ -5,7 +5,7 @@ import 'package:flutter/foundation.dart';
 
 import '../session/editor_session.dart';
 import '../session/latency_probe.dart';
-import 'stage/geometry.dart';
+import 'geometry.dart';
 
 /// The Stage as a person works it, with no screen in it: where each view (the User stage, the Camera) is looking —
 /// its zoom and the composition point at the middle of its tab — in composition coordinates. A skin brings its own

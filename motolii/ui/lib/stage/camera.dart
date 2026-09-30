@@ -1,4 +1,4 @@
-part of '../stage.dart';
+part of 'panel.dart';
 
 /// Where the camera box and the working area are on screen, and what a press on them takes (the skin's hit-testing);
 /// carrying them is the StageSession's.

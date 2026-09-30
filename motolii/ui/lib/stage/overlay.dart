@@ -1,4 +1,4 @@
-part of '../stage.dart';
+part of 'panel.dart';
 
 /// The rendered picture for one view. Listens to the texture table alone:
 /// a frame, a selection or a zoom leaves it standing.

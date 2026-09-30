@@ -2,24 +2,24 @@ import 'package:docking/docking.dart';
 import 'package:flutter/widgets.dart';
 
 import '../hf/bp/effects.dart' show EffectScene;
-import '../hf/dock/theme.dart';
+import 'dock_theme.dart';
 
 import '../hf/glyphs.dart' show HG;
-import '../panels/stage.dart' show StagePanel;
+import '../stage/panel.dart' show StagePanel;
 import '../session/editor_session.dart';
-import '../workspace/dock_workspace.dart';
-import 'adapters/browser.dart';
-import 'adapters/console.dart';
+import 'dock_workspace.dart';
+import '../live_hf/adapters/browser.dart';
+import '../app/console.dart';
 import '../session/console_log.dart';
-import 'adapters/blend.dart';
-import 'adapters/depth.dart';
-import 'adapters/ease.dart';
-import 'adapters/history.dart';
-import 'adapters/notes.dart';
-import 'adapters/relations.dart';
-import 'adapters/right_seat.dart';
-import 'adapters/timeline.dart';
-import 'adapters/web.dart';
+import '../live_hf/adapters/blend.dart';
+import '../live_hf/adapters/depth.dart';
+import '../live_hf/adapters/ease.dart';
+import '../live_hf/adapters/history.dart';
+import '../live_hf/adapters/notes.dart';
+import '../live_hf/adapters/relations.dart';
+import '../live_hf/adapters/right_seat.dart';
+import '../timeline/face.dart';
+import '../live_hf/adapters/web.dart';
 import '../hf/metrics.dart' show Surface;
 
 /// The product workspace for the hf client. Faces/tools own their content;

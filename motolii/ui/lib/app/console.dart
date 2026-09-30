@@ -1,8 +1,8 @@
 import 'package:flutter/widgets.dart';
 
-import '../../hf/shell/place.dart' show H;
-import '../../session/console_log.dart';
-import '../../hf/metrics.dart' show Dn;
+import '../hf/shell/place.dart' show H;
+import '../session/console_log.dart';
+import '../hf/metrics.dart' show Dn;
 
 /// The Console panel in the Timeline seat: every operation error and document notice the session surfaced (the
 /// log the New shell keeps, one owner), newest first, with Clear. It adds no message of its own.

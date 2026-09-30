@@ -12,8 +12,8 @@ import 'package:motolii_stage5/live_hf/adapters/depth.dart';
 import 'package:motolii_stage5/live_hf/adapters/ease.dart';
 import 'package:motolii_stage5/live_hf/adapters/notes.dart';
 import 'package:motolii_stage5/live_hf/adapters/right_seat.dart';
-import 'package:motolii_stage5/live_hf/adapters/top.dart';
-import 'package:motolii_stage5/panels/stage.dart' show StagePanel;
+import 'package:motolii_stage5/app/top/top_session.dart';
+import 'package:motolii_stage5/stage/panel.dart' show StagePanel;
 import 'package:motolii_stage5/session/editor_session.dart';
 import 'package:widgetbook/widgetbook.dart';
 

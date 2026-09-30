@@ -3,8 +3,8 @@
 import 'package:flutter/widgets.dart';
 import 'package:motolii_stage5/hf/bp/effects.dart' show EffectScene;
 import 'package:motolii_stage5/hf/neutral.dart';
-import 'package:motolii_stage5/live_hf/adapters/top.dart';
-import 'package:motolii_stage5/live_hf/workspace.dart';
+import 'package:motolii_stage5/app/top/top_session.dart';
+import 'package:motolii_stage5/workspace/seats.dart';
 import 'package:motolii_stage5/session/console_log.dart';
 import 'package:motolii_stage5/session/editor_session.dart';
 import 'package:motolii_stage5/session/status_notice.dart';

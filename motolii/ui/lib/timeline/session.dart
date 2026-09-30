@@ -4,7 +4,7 @@ import 'package:flutter/foundation.dart';
 
 import '../session/editor_session.dart';
 import 'geometry.dart';
-import 'layout.dart';
+import 'rows.dart';
 import 'semantics.dart';
 
 /// The Timeline as a person works it, with no screen in it: which rows show (lanes opened, groups folded), which span

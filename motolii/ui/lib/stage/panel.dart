@@ -13,16 +13,16 @@ import '../foundation/panel_controls.dart';
 import '../foundation/theme.dart';
 import '../foundation/metrics.dart';
 import '../foundation/glyphs.dart';
-import 'stage/geometry.dart';
-import 'stage_session.dart';
+import 'geometry.dart';
+import 'session.dart';
 
-part 'stage/overlay.dart';
-part 'stage/view.dart';
-part 'stage/window.dart';
-part 'stage/spatial.dart';
-part 'stage/camera.dart';
-part 'stage/touch.dart';
-part 'stage/chrome.dart';
+part 'overlay.dart';
+part 'view.dart';
+part 'window.dart';
+part 'spatial.dart';
+part 'camera.dart';
+part 'touch.dart';
+part 'chrome.dart';
 
 /// What a host's own toolbar needs from the Stage: the view/zoom operations the bars above and below the picture
 /// call (Classic's own `_button` row), and the values they show. Nothing about the picture itself, the gesture

@@ -11,11 +11,11 @@ import '../hf/shell/place.dart' show H;
 import '../session/console_log.dart';
 import '../session/editor_session.dart';
 import '../session/status_notice.dart';
-import 'adapters/document.dart';
-import 'adapters/top.dart';
-import 'keys.dart';
+import 'document_guard.dart';
+import 'top/top_session.dart';
+import '../input/window_keys.dart';
 import 'ui_scale.dart';
-import 'workspace.dart';
+import '../workspace/seats.dart';
 
 String _notice(String effects, String relink) => effects.isNotEmpty ? effects : relink;
 

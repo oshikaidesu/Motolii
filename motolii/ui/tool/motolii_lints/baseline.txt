@@ -1,6 +1,7 @@
 # Raw styling that predates the Surface Grammar, per file (raw_dimension + raw_color + material_import + card_housing).
 # A file may not exceed its line; a file not listed must be clean. Lower a line by fixing the file, then
 #   dart run bin/check.dart ../../lib --write-baseline=baseline.txt
+lib/app/console.dart 12
 lib/app/new/browser/shelf_panel.dart 2
 lib/app/new/browser/shelf_seat.dart 3
 lib/app/new/browser/tag_prompt.dart 1
@@ -9,6 +10,10 @@ lib/app/new/dock_theme.dart 2
 lib/app/new/inspector/new_inspector_panel.dart 10
 lib/app/new/stage/new_stage_chrome.dart 20
 lib/app/new/timeline/new_timeline_bar.dart 10
+lib/app/sheets.dart 13
+lib/app/top/top.dart 2
+lib/app/top/top_bar.dart 26
+lib/app/ui_scale.dart 5
 lib/foundation/color_field.dart 1
 lib/foundation/leaves/press.dart 1
 lib/hf/bp/classify.dart 17
@@ -46,12 +51,9 @@ lib/hf/shell/menu.dart 10
 lib/hf/shell/place.dart 4
 lib/hf/shell/sheet.dart 26
 lib/hf/shell/timeline_paint.dart 5
-lib/hf/shell/top.dart 2
-lib/hf/shell/top_bar.dart 26
 lib/live_hf/adapters/browser.dart 5
 lib/live_hf/adapters/catalog_media.dart 23
 lib/live_hf/adapters/colors.dart 10
-lib/live_hf/adapters/console.dart 12
 lib/live_hf/adapters/explore_graph.dart 15
 lib/live_hf/adapters/graph_overlay.dart 9
 lib/live_hf/adapters/media_browser.dart 14
@@ -63,11 +65,8 @@ lib/live_hf/adapters/notes.dart 6
 lib/live_hf/adapters/relations.dart 53
 lib/live_hf/adapters/relations_model.dart 1
 lib/live_hf/adapters/right_seat.dart 4
-lib/live_hf/adapters/sheets.dart 13
-lib/live_hf/adapters/timeline.dart 33
 lib/live_hf/adapters/transform.dart 1
 lib/live_hf/adapters/web.dart 10
-lib/live_hf/ui_scale.dart 5
 lib/panels/browser/fill_definitions.dart 1
 lib/panels/browser/filter_view.dart 1
 lib/panels/browser/fonts_shelf.dart 1
@@ -100,5 +99,6 @@ lib/proto_hf/main_states.dart 56
 lib/proto_hf/main_transform.dart 20
 lib/proto_hf/shell_face.dart 9
 lib/proto_hf/stage.dart 11
+lib/timeline/face.dart 33
 lib/workspace/dock_workspace.dart 2
 lib/workspace/workspace_view.dart 1

@@ -1,11 +1,11 @@
 import 'package:flutter/widgets.dart';
 
-import '../../hf/shell/top_bar.dart';
-import '../../hf/shell/top.dart';
+import 'top_bar.dart';
+import 'top.dart';
 import '../../session/editor_session.dart';
 import '../../session/stage_actions.dart';
-import 'document.dart';
-import 'sheets.dart';
+import '../document_guard.dart';
+import '../sheets.dart';
 
 /// The top face over the real session. The face is the reference's, unchanged; this only hands it values
 /// (fps, the document's length in frames, the playhead's clock, which of EDIT·PLAY·EXPORT is on) and operations.

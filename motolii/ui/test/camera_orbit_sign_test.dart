@@ -8,7 +8,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:motolii_stage5/hf/insp/camera_face.dart';
 import 'package:motolii_stage5/hf/insp/camera_model.dart';
-import 'package:motolii_stage5/panels/stage_session.dart';
+import 'package:motolii_stage5/stage/session.dart';
 import 'package:motolii_stage5/session/editor_session.dart';
 
 void main() {

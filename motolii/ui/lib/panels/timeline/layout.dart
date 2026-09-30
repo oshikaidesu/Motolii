@@ -1,6 +1,6 @@
-import '../../timeline_core/geometry.dart';
+import '../../timeline/geometry.dart';
 
-export '../../timeline_core/layout.dart'
+export '../../timeline/rows.dart'
     show LaneContainer, LaneLayout, TrackRow;
 
 /// Classic presentation's default ruler and row dimensions.

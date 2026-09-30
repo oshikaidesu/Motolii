@@ -1,7 +1,7 @@
 import 'package:flutter/widgets.dart';
 
-import '../../hf/shell/dialog.dart';
-import '../../session/editor_session.dart';
+import '../hf/shell/dialog.dart';
+import '../session/editor_session.dart';
 
 /// Whether the open document may be replaced or closed: playback stops, a saved document goes, an edited one asks —
 /// Save (and go only if it saved), Don't Save, or Cancel.

@@ -4,7 +4,7 @@ import '../../../hf/bp/common.dart';
 
 import '../../../hf/desk/common.dart' show kAccent;
 import '../../../hf/glyphs.dart';
-import '../../../panels/stage.dart' show StageToolbarApi;
+import '../../../stage/panel.dart' show StageToolbarApi;
 import '../../../hf/metrics.dart' show Surface;
 
 /// The Stage's own bars, hf-styled, over exactly the [StageToolbarApi] operations Classic's bars call. The picture,
