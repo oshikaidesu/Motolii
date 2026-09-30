@@ -92,6 +92,10 @@ class LiveKeys {
         LiveUiScale.instance.smaller();
       case LogicalKeyboardKey.digit0 when cmd && alt:
         LiveUiScale.instance.reset();
+      // Cmd+, is where a Mac window keeps its settings: the UI Scale's sheet
+      case LogicalKeyboardKey.comma when cmd:
+        final at = context();
+        if (at.mounted) showUiScaleSheet(at);
       case LogicalKeyboardKey.digit0 when cmd:
         stageView(c, 'Fit');
       case LogicalKeyboardKey.digit1 when cmd:

@@ -44,7 +44,7 @@ abstract final class UiScale {
   static int _percent = resetPercent;
   static double _dpr = 1;
 
-  /// Notifies when the percent or the display's pixel ratio changes (the root rebuilds the whole tree on it).
+  /// Notifies when the percent changes (the root rebuilds the whole tree on it).
   static final changes = ValueNotifier<int>(0);
 
   static int get percent => _percent;
@@ -62,10 +62,12 @@ abstract final class UiScale {
     return true;
   }
 
-  static void setDevicePixelRatio(double value) {
-    if (value <= 0 || value == _dpr) return;
+  /// The view's pixel ratio, read by SNAP tokens. True when it changed (the root then builds the tree again: no notification here,
+  /// it is called while building).
+  static bool adoptDevicePixelRatio(double value) {
+    if (value <= 0 || value == _dpr) return false;
     _dpr = value;
-    changes.value++;
+    return true;
   }
 
   /// [base] at 100 %, derived by [policy]. `floor` is MINIMUM's least; `lo` and `hi` are CLAMP's fractions and multiples of [base].

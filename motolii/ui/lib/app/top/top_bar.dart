@@ -60,6 +60,7 @@ class TopBar extends StatelessWidget {
             const Spacer(),
             for (final (g, f) in [(HG.fit, m.onFit), (HG.pin, m.onPin), (HG.folder, m.onOpen)])
               _Key(onTap: f, fill: Surface.raised, edge: Surface.divider, child: SizedBox(width: 13, height: 13, child: CustomPaint(painter: HgPainter(g, f != null ? N.g86 : N.g44, Surface.raised)))),
+            if (m.onScale != null) _TextKey('UI', onTap: m.onScale!),
             if (motto) ...[
               const SizedBox(width: 12),
               Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.end, children: [
@@ -93,6 +94,34 @@ class _Key extends StatelessWidget {
             alignment: Alignment.center,
             decoration: BoxDecoration(color: fill, border: Border.all(color: edge), borderRadius: BorderRadius.circular(Surface.controlRadius)),
             child: child,
+          ),
+        ),
+      );
+}
+
+/// The UI Scale key: the same key as the window's others, with its two letters.
+class _TextKey extends StatelessWidget {
+  const _TextKey(this.label, {required this.onTap});
+  final String label;
+  final void Function(Rect key) onTap;
+  @override
+  Widget build(BuildContext context) => Builder(
+        builder: (context) => MouseRegion(
+          cursor: SystemMouseCursors.click,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () {
+              final box = context.findRenderObject() as RenderBox?;
+              if (box != null) onTap(box.localToGlobal(Offset.zero) & box.size);
+            },
+            child: Container(
+              width: 26,
+              height: Surface.control + 2,
+              margin: const EdgeInsets.only(left: 4),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(color: Surface.raised, border: Border.all(color: Surface.divider), borderRadius: BorderRadius.circular(Surface.controlRadius)),
+              child: Text(label, style: Dn.label(N.g86, FontWeight.w600)),
+            ),
           ),
         ),
       );

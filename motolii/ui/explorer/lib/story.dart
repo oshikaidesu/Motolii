@@ -5,7 +5,6 @@
 import 'dart:io';
 
 import 'package:flutter/widgets.dart';
-import 'package:motolii_ui/controls/panel/scale.dart';
 import 'package:motolii_ui/theme/neutral.dart';
 import 'package:motolii_ui/theme/identity.dart' show H;
 import 'package:motolii_ui/theme/live_palette.dart';
@@ -51,17 +50,13 @@ WidgetbookUseCase useCase(Story s) => WidgetbookUseCase(
 
 /// The panel at [width] x [height], at a UI scale, with the live app's theme.
 Widget framed(Story s, double width, double height, double scale, {VoidCallback? onReady}) {
-  LiveUiScale.instance.set(scale, keep: false);
+  LiveUiScale.instance.set((scale * 100).round(), keep: false);
   return SizedBox(
     width: width,
     height: height,
     // production's default text style (the live main sets it on its WidgetsApp)
-    child: liveEditorTheme.wrap(DefaultTextStyle(style: H.s(12), child: EditorScale(
-      notifier: LiveUiScale.instance.factor,
-      child: ValueListenableBuilder<double>(
-        valueListenable: LiveUiScale.instance.factor,
-        builder: (context, f, _) => EditorScaledViewport(scale: f, child: StoryHost(key: ValueKey(s.scene), scene: s.scene, panel: s.panel, onReady: onReady)),
-      ),
+    child: liveEditorTheme.wrap(DefaultTextStyle(style: H.s(12), child: UiScaleScope(
+      child: StoryHost(key: ValueKey(s.scene), scene: s.scene, panel: s.panel, onReady: onReady),
     ))),
   );
 }

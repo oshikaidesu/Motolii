@@ -5,11 +5,13 @@ import 'package:flutter/widgets.dart';
 import '../inspector/inspector.dart';
 import '../inspector/rows.dart';
 import '../theme/identity.dart';
+import '../controls/panel/scale.dart' show EditorPercentField;
 import '../controls/sheet.dart';
 import '../session/editor_session.dart';
 import '../session/export_actions.dart';
 import '../theme/neutral.dart';
 import '../theme/metrics.dart';
+import 'ui_scale.dart';
 
 /// Export as a short task under its control: what will be written (read-only facts: the composition's size, rate and
 /// the format), which range (a choice: the whole document, or marker to marker around the playhead, with the frames
@@ -142,6 +144,38 @@ Future<void> showCompositionSheet(BuildContext context, EditorSession c, {Rect? 
         padding: const EdgeInsets.fromLTRB(9, 3, 9, 7.5),
         child: ParamSheet(store, thingId: 'composition'),
       )).whenComplete(store.dispose);
+}
+
+/// UI Scale, this application's own size of the interface (not the project's): [-], the percent (scrub or type it), [+], and Reset to
+/// 100 %. Each change is immediate and kept for every project; Cmd+Option +/-/0 does the same from the keyboard.
+Future<void> showUiScaleSheet(BuildContext context, {Rect? anchor}) {
+  final ui = LiveUiScale.instance;
+  return showHfPopover(context, anchor: anchor ?? _topRight(context), title: 'Interface', width: 225, body: (_, close) => Padding(
+        padding: EdgeInsets.fromLTRB(9, 7.5, 9, 9),
+        child: Builder(builder: (context) {
+          final percent = UiScale.percent;
+          return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            HfFormRow(
+              'UI Scale',
+              Row(mainAxisSize: MainAxisSize.min, children: [
+                HfAction('−', onTap: percent > UiScale.minPercent ? ui.smaller : null),
+                EditorPercentField(
+                  key: const ValueKey('ui-scale-field'),
+                  value: percent.toDouble(),
+                  min: UiScale.minPercent.toDouble(),
+                  max: UiScale.maxPercent.toDouble(),
+                  label: 'UI Scale',
+                  onChanged: (v) => ui.set(v.round()),
+                ),
+                HfAction('+', onTap: percent < UiScale.maxPercent ? ui.bigger : null),
+              ]),
+            ),
+            Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+              HfAction('Reset 100%', onTap: percent == UiScale.resetPercent ? null : ui.reset),
+            ]),
+          ]);
+        }),
+      ));
 }
 
 const _rates = [(24000, 1001), (24, 1), (25, 1), (30000, 1001), (30, 1), (50, 1), (60000, 1001), (60, 1)];

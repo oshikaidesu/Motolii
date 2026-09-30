@@ -5,7 +5,6 @@ import 'package:flutter/widgets.dart';
 
 import 'app/ui_scale.dart';
 import 'app/window.dart';
-import 'controls/panel/scale.dart';
 import 'theme/live_palette.dart';
 import 'theme/identity.dart' show H;
 import 'theme/metrics.dart';
@@ -15,17 +14,11 @@ void main() => runApp(WidgetsApp(
       debugShowCheckedModeBanner: false,
       textStyle: H.s(12),
       pageRouteBuilder: <T>(RouteSettings settings, WidgetBuilder builder) => PageRouteBuilder<T>(settings: settings, pageBuilder: (context, _, __) => builder(context)),
-      // the UI's size scales the whole root — the overlay with its menus and sheets included — and nothing of the work
-      // the foundation's widgets (the Stage's chrome) take the live app's colours
-      builder: (context, child) => liveEditorTheme.wrap(EditorScale(
-        notifier: LiveUiScale.instance.factor,
-        child: ValueListenableBuilder<double>(
-          valueListenable: LiveUiScale.instance.factor,
-          builder: (context, s, _) => Stack(children: [
-            Positioned.fill(child: EditorScaledViewport(scale: s, child: child!)),
-            const Positioned.fill(child: UiScaleReadout()),
-          ]),
-        ),
-      )),
+      // the foundation's widgets (the Stage's chrome) take the live app's colours; the UI Scale is tokens read at build time, and the
+      // root below builds the whole tree again when it changes (menus and sheets live in the overlay below it), keeping every State
+      builder: (context, child) => liveEditorTheme.wrap(Stack(children: [
+        Positioned.fill(child: UiScaleScope(child: child!)),
+        const Positioned.fill(child: UiScaleReadout()),
+      ])),
       home: const LiveShell(),
     ));

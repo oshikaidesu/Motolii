@@ -23,6 +23,7 @@ class TopModel {
     this.onFit,
     this.onPin,
     this.onOpen,
+    this.onScale,
   });
 
   /// The three readouts left to right; the only part that follows the playhead.
@@ -34,6 +35,9 @@ class TopModel {
 
   /// The keys on the right: Fit, Pin, Open. A key with no operation is shown but does nothing.
   final VoidCallback? onFit, onPin, onOpen;
+
+  /// The UI Scale key (production's top bar only): asks for the size of the interface, with its own rectangle in global coordinates.
+  final void Function(Rect key)? onScale;
 }
 
 RI _tap(double x, double y, double w, double h, VoidCallback? f) => Wd(

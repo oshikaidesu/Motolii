@@ -1,53 +1,119 @@
 import 'dart:async';
 
+import 'package:flutter/rendering.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
+
+import '../theme/metrics.dart';
 import '../theme/neutral.dart';
 
-/// The live UI's size: one number scales every piece of chrome together (menus and sheets too, because the root
-/// viewport scales the overlay they live in), and nothing of the work: the document, the Stage's picture (its native
-/// window is asked for at the device's ratio times this factor, so it stays sharp), the camera, transforms, time zoom
-/// and export are untouched. Classic's UI Scale (controls/panel/scale.dart: EditorScale and
-/// EditorScaledViewport) is the mechanism; this owns live's number.
+/// UI Scale as a user setting: a whole percent, one percent a step, for every project. It is an application preference kept next to
+/// the window's other saved settings (never in a project file); the tokens read it through [UiScale], and [UiScaleScope] makes the
+/// window follow it. Nothing of the work scales: the document, the Stage's picture (its native view is asked for at the logical size
+/// times the device's ratio), the camera, transforms, time zoom and export are untouched.
 class LiveUiScale {
-  LiveUiScale._() {
-    percent.addListener(() => factor.value = base * percent.value);
-  }
+  LiveUiScale._();
   static final instance = LiveUiScale._();
 
-  /// The user's size, in whole percent steps of the new 100 %.
-  static const min = .70, max = 1.30, step = .01;
+  /// The settings key: an integer percent.
+  static const settingsKey = 'uiScalePercent';
 
-  /// The settings key (Classic's own `scale` is a factor of Classic's sizes, a different number).
-  static const settingsKey = 'hfScale';
+  /// What an earlier window kept instead: a fraction of the same 100 % (`1.0` is 100 %). Read once when the new key is missing.
+  static const legacyKey = 'hfScale';
 
-  /// The new 100 %: the part of the reference-frame geometry (the 1536x1024 Product Home frame the hf faces are drawn
-  /// in) the UI is drawn at. Changing Motolii's density as a whole is this one number.
-  static const base = 1.0;
-
-  /// What the user chose: 1.0 is 100 %.
-  final percent = ValueNotifier<double>(1.0);
-
-  /// What the root viewport scales by: the base times the user's choice.
-  final factor = ValueNotifier<double>(base);
+  /// The user's size, in whole percent (the provisional range is [UiScale.minPercent]..[UiScale.maxPercent]).
+  int get percent => UiScale.percent;
 
   /// Where a chosen size is kept (the shell gives the settings store once); every way of changing the size keeps it.
-  void Function(double percent)? persist;
+  void Function(int percent)? persist;
 
-  /// Sets the user's size (clamped, whole percent). True when it changed.
-  bool set(double next, {bool keep = true}) {
-    final v = (next.clamp(min, max) * 100).round() / 100;
-    if (v == percent.value) return false;
-    percent.value = v;
-    if (keep) persist?.call(v);
-    return true;
+  /// Sets the user's size (clamped, whole). True when it changed.
+  bool set(int next, {bool keep = true}) {
+    final changed = UiScale.setPercent(next);
+    if (changed && keep) persist?.call(UiScale.percent);
+    return changed;
   }
 
-  bool bigger() => set(percent.value + step);
-  bool smaller() => set(percent.value - step);
-  bool reset() => set(1.0);
+  bool bigger() => set(percent + 1);
+  bool smaller() => set(percent - 1);
+  bool reset() => set(UiScale.resetPercent);
 
-  /// A saved value read back at start (anything unreadable is 100 %).
-  void restore(Object? saved) => set(saved is num && saved.isFinite ? saved.toDouble() : 1.0, keep: false);
+  /// The saved settings read back at start: the percent, else the old fraction (migrated: the new key is written once),
+  /// else 100 %. Anything unreadable is 100 %.
+  void restore(Map<String, dynamic> settings) {
+    final saved = settings[settingsKey], legacy = settings[legacyKey];
+    if (saved is num && saved.isFinite) {
+      set(saved.round(), keep: false);
+    } else if (legacy is num && legacy.isFinite) {
+      set((legacy * 100).round());
+    } else {
+      set(UiScale.resetPercent, keep: false);
+    }
+  }
+}
+
+/// The root of the window's UI Scale. Tokens are derived values read at build time, so when the scale (or the display's pixel ratio)
+/// changes every element below is marked dirty, like a hot reload does: each widget builds again with the new values and keeps its
+/// State (scroll positions, focus, text being typed), and every render object lays out and paints again. Menus, sheets and
+/// overlays live below this (they build from tokens too). No subtree is transformed and none is re-keyed.
+class UiScaleScope extends StatefulWidget {
+  const UiScaleScope({super.key, required this.child});
+  final Widget child;
+  @override
+  State<UiScaleScope> createState() => _UiScaleScopeState();
+}
+
+class _UiScaleScopeState extends State<UiScaleScope> {
+  bool _queued = false;
+
+  @override
+  void initState() {
+    super.initState();
+    UiScale.changes.addListener(_changed);
+  }
+
+  @override
+  void dispose() {
+    UiScale.changes.removeListener(_changed);
+    super.dispose();
+  }
+
+  void _changed() {
+    if (_queued) return;
+    if (SchedulerBinding.instance.schedulerPhase == SchedulerPhase.idle) {
+      _rebuildAll();
+      return;
+    }
+    _queued = true;
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      _queued = false;
+      if (mounted) _rebuildAll();
+    });
+  }
+
+  void _rebuildAll() {
+    void dirty(Element e) {
+      e.markNeedsBuild();
+      e.visitChildren(dirty);
+    }
+
+    (context as Element).visitChildren(dirty);
+    for (final view in RendererBinding.instance.renderViews) {
+      view.reassemble();
+    }
+    SchedulerBinding.instance.ensureVisualUpdate();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // the display this window is on: a SNAP token reads it, so a window dragged to another screen rebuilds once
+    if (UiScale.adoptDevicePixelRatio(MediaQuery.devicePixelRatioOf(context))) {
+      SchedulerBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _rebuildAll();
+      });
+    }
+    return widget.child;
+  }
 }
 
 /// The size just chosen, said for a moment where the eye is (top centre), then gone: the change is otherwise silent.
@@ -58,17 +124,19 @@ class UiScaleReadout extends StatefulWidget {
 }
 
 class _UiScaleReadoutState extends State<UiScaleReadout> {
-  final ui = LiveUiScale.instance;
   bool _shown = false;
+  int _last = UiScale.percent;
   Timer? _hide;
 
   @override
   void initState() {
     super.initState();
-    ui.percent.addListener(_changed);
+    UiScale.changes.addListener(_changed);
   }
 
   void _changed() {
+    if (_last == UiScale.percent) return; // a change of display, not of the size
+    _last = UiScale.percent;
     _hide?.cancel();
     setState(() => _shown = true);
     _hide = Timer(const Duration(milliseconds: 1100), () {
@@ -79,7 +147,7 @@ class _UiScaleReadoutState extends State<UiScaleReadout> {
   @override
   void dispose() {
     _hide?.cancel();
-    ui.percent.removeListener(_changed);
+    UiScale.changes.removeListener(_changed);
     super.dispose();
   }
 
@@ -92,9 +160,9 @@ class _UiScaleReadoutState extends State<UiScaleReadout> {
             alignment: const Alignment(0, -.82),
             child: Container(
               key: const ValueKey('ui-scale-readout'),
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              padding: EdgeInsets.symmetric(horizontal: 10, vertical: 5),
               decoration: BoxDecoration(color: N.veilHi, borderRadius: BorderRadius.circular(5), border: Border.all(color: N.g26)),
-              child: Text('UI ${(ui.percent.value * 100).round()}%', style: const TextStyle(fontFamily: 'Menlo', fontSize: 12, color: N.g95, decoration: TextDecoration.none)),
+              child: Text('UI ${UiScale.percent}%', style: TextStyle(fontFamily: 'Menlo', fontSize: 12, color: N.g95, decoration: TextDecoration.none)),
             ),
           ),
         ),

@@ -81,6 +81,7 @@ class _SessionTopState extends State<SessionTop> {
               onMode: mode,
               // Fit frames the Stage (the same operation as Cmd+0); Open replaces the document; Pin has no operation
               onFit: c.supports('stageView') ? () => stageView(c, 'Fit') : null,
+              onScale: (key) => showUiScaleSheet(context, anchor: key),
               onOpen: () async {
                 if (await mayReplace(context, c)) await c.chooseOpen();
               },

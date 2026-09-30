@@ -79,7 +79,7 @@ class _LiveShellState extends State<LiveShell> {
     try {
       final settings = EditorSession.map(await c.native('readSettings'));
       workspace!.dock.restore(settings['hfWorkspace']);
-      LiveUiScale.instance.restore(settings[LiveUiScale.settingsKey]);
+      LiveUiScale.instance.restore(settings);
     } catch (_) {}
     workspace!.dock.layout.addListener(_workspaceChanged);
     setState(() => ready = true);
