@@ -1,6 +1,6 @@
 import 'package:flutter/widgets.dart';
 
-import '../../theme/editor_metrics.dart';
+import '../../theme/metrics.dart';
 import '../../theme/editor_theme.dart';
 
 /// What the controls sit in: the panel bar.
@@ -11,7 +11,7 @@ class EditorBar extends StatelessWidget {
   const EditorBar({
     super.key,
     required this.children,
-    this.height = EditorMetrics.s22,
+    this.height = Step.s22,
     this.padding = EdgeInsets.zero,
     this.decoration,
   });

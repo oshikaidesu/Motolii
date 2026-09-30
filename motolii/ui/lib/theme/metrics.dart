@@ -83,3 +83,11 @@ abstract final class Dn {
   /// A badge, a mark, a section's small caps: 9.5, Medium, the loosest tracking.
   static TextStyle micro([Color c = N.g76]) => _t('Inter', microSize, c, FontWeight.w500, .15);
 }
+
+/// Value names with no role, for the shared controls and the Stage chrome (`controls/leaves`, `controls/panel`, `stage`): the
+/// rungs they were built on. Reach for [Surface] first; a rung is added here only when a shared control needs a value no
+/// [Surface] role has.
+abstract final class Step {
+  static const double s2 = 2, s3 = 3, s4 = 4, s5 = 5, s6 = 6, s8 = 8, s9 = 9, s11 = 11, s12 = 12, s14 = 14;
+  static const double s16 = 16, s22 = 22, s24 = 24, s32 = 32, s64 = 64, s70 = 70;
+}

@@ -8,7 +8,7 @@ import '../../browser/parts.dart';
 import '../../desks/parts.dart' show kMint, kBlue, kViolet, kPink;
 import 'model.dart';
 import '../../theme/neutral.dart';
-import '../../theme/surface.dart' show Dn;
+import '../../theme/metrics.dart' show Dn;
 
 const targetColor = kMint, orbitColor = kViolet, distanceColor = kBlue, rollColor = kPink;
 

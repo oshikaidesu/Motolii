@@ -11,8 +11,8 @@ import 'package:flutter/services.dart';
 import '../session/editor_session.dart';
 import '../controls/panel.dart';
 import '../theme/editor_theme.dart';
-import '../theme/editor_metrics.dart';
 import '../theme/material_icons.dart';
+import '../theme/metrics.dart';
 import 'geometry.dart';
 import 'session.dart';
 

@@ -7,7 +7,7 @@ import 'package:flutter/widgets.dart';
 
 import '../panel_chrome.dart' show GlyphBox;
 import '../../theme/glyphs.dart';
-import '../../theme/surface.dart';
+import '../../theme/metrics.dart';
 import '../../theme/neutral.dart';
 import '../item.dart';
 import 'library.dart' show materialFace;

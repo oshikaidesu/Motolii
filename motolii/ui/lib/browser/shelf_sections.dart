@@ -2,7 +2,7 @@ import 'dart:math' as math;
 import 'package:flutter/widgets.dart';
 import 'parts.dart';
 import '../theme/neutral.dart';
-import '../theme/surface.dart' show Dn;
+import '../theme/metrics.dart' show Dn;
 
 /// The housing Create and Media share (Swiss: one grid, a few sizes, hierarchy from type and space). What sits in a
 /// tile is each shelf's own face; only the section rhythm, the column rule and the picked ring live here.

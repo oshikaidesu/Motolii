@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:flutter/widgets.dart';
 
 import '../parts.dart' show sans;
-import '../../theme/surface.dart';
+import '../../theme/metrics.dart';
 import '../../theme/neutral.dart';
 import 'catalog_session.dart';
 import '../item.dart';

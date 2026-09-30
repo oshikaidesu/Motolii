@@ -7,10 +7,10 @@ import '../theme/glyphs.dart';
 import '../session/editor_session.dart';
 import '../session/effect_actions.dart';
 import 'params.dart';
-import '../theme/surface.dart';
+import '../theme/metrics.dart';
 import '../theme/neutral.dart';
 import '../inspector/session.dart';
-import '../theme/surface.dart' show Dn, Surface;
+import '../theme/metrics.dart' show Dn, Surface;
 
 /// One effect's whole card — head (grip, applied/bypassed, actions) and body — the New face for
 /// `InspectorInstruments.effectCard`. The body is the same generic params sheet [NewEffectParams] already draws;

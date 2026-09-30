@@ -5,7 +5,7 @@ import 'package:flutter/material.dart'
     show Theme, ThemeData, ThemeExtension, ColorScheme;
 
 import '../controls/leaves.dart';
-import 'editor_metrics.dart';
+import 'metrics.dart';
 
 /// Colours of what is drawn rather than laid out — lanes, grids, ticks,
 /// gizmos, the transparency grid, the ease desk's paper — carried by
@@ -424,16 +424,16 @@ class EditorTheme extends ThemeExtension<EditorTheme> {
   TextStyle get text => TextStyle(
     inherit: false,
     fontFamily: fontFamily,
-    fontSize: EditorMetrics.font,
+    fontSize: Dn.labelSize,
     fontWeight: FontWeight.w500,
     color: ink,
     textBaseline: TextBaseline.alphabetic,
   );
-  IconThemeData get icon => IconThemeData(size: EditorMetrics.s14, color: ink);
-  static const menuPadding = EdgeInsets.symmetric(vertical: EditorMetrics.s2);
+  IconThemeData get icon => IconThemeData(size: Step.s14, color: ink);
+  static const menuPadding = EdgeInsets.symmetric(vertical: Step.s2);
   static const menuMinWidth = 112.0;
   static const menuRowPadding = EdgeInsets.symmetric(
-    horizontal: EditorMetrics.s8,
+    horizontal: Step.s8,
   );
 
   factory EditorTheme.fromJson(Object? source) {
@@ -628,7 +628,7 @@ class EditorButton extends StatelessWidget {
     final button = Padding(
       padding: const EdgeInsets.symmetric(horizontal: 1, vertical: 1),
       child: SizedBox(
-        height: EditorMetrics.row - 2,
+        height: Surface.workRow - 2,
         child: EditorTextButton(
           onPressed: onPressed,
           background: selected

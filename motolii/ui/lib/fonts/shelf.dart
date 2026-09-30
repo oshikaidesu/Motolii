@@ -11,7 +11,7 @@ import '../browser/things.dart' show UserViews;
 import '../session/editor_session.dart';
 import '../browser/visual_sample.dart';
 import '../theme/neutral.dart';
-import '../theme/surface.dart' show Dn, Surface;
+import '../theme/metrics.dart' show Dn, Surface;
 
 class FontItem {
   const FontItem(

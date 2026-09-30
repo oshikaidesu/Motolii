@@ -1,6 +1,6 @@
 import 'package:flutter/widgets.dart';
 
-import '../../theme/editor_metrics.dart';
+import '../../theme/metrics.dart';
 import '../../theme/editor_theme.dart';
 
 /// The box typing happens in, and the field that holds a draft until it is
@@ -16,10 +16,10 @@ class EditorFieldFrame extends StatelessWidget {
     required this.child,
     this.focus,
     this.error = false,
-    this.height = EditorMetrics.row,
+    this.height = Surface.workRow,
     this.minHeight,
     this.maxHeight,
-    this.padding = const EdgeInsets.symmetric(horizontal: EditorMetrics.s5),
+    this.padding = const EdgeInsets.symmetric(horizontal: Step.s5),
     this.color,
   });
   final Widget child;

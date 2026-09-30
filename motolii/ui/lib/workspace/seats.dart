@@ -20,7 +20,7 @@ import '../desks/relations/desk.dart';
 import '../inspector/inspector_seat.dart';
 import '../timeline/timeline.dart';
 import '../desks/web/desk.dart';
-import '../theme/surface.dart' show Surface;
+import '../theme/metrics.dart' show Surface;
 
 /// The product workspace for the hf client. Faces/tools own their content;
 /// this layer owns only placement, tabs, split/resize and reopening.

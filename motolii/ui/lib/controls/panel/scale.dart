@@ -1,6 +1,6 @@
 import 'package:flutter/widgets.dart';
 
-import '../../theme/editor_metrics.dart';
+import '../../theme/metrics.dart';
 import '../../theme/editor_theme.dart';
 import 'numeric.dart';
 
@@ -69,7 +69,7 @@ class _EditorPercentFieldState extends State<EditorPercentField> {
       ),
     );
     return SizedBox(
-      width: EditorMetrics.s64,
+      width: Step.s64,
       child: EditorNumericField(
         value: widget.value,
         label: widget.label,

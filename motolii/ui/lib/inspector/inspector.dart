@@ -6,7 +6,7 @@ import '../browser/search.dart';
 import '../desks/parts.dart' show kBlue;
 import 'rows.dart';
 import 'value_controls.dart';
-import '../theme/surface.dart';
+import '../theme/metrics.dart';
 import 'tones.dart';
 import '../theme/neutral.dart';
 import '../theme/tokens.dart' show H;

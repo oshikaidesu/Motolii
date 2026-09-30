@@ -2,7 +2,7 @@
 // Only the dock's tab strip and two tiny controls are shared; every body decides its own folding.
 import 'package:flutter/widgets.dart';
 
-import '../theme/surface.dart';
+import '../theme/metrics.dart';
 import '../theme/glyphs.dart';
 import '../theme/neutral.dart';
 

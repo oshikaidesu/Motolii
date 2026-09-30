@@ -6,7 +6,7 @@ import 'package:flutter/widgets.dart';
 import '../theme/material_icons.dart' as legacy;
 import '../browser/parts.dart' as tab;
 import '../theme/glyphs.dart' show HG;
-import '../theme/surface.dart';
+import '../theme/metrics.dart';
 import '../controls/menu.dart' show showHfMenu;
 
 /// One panel the workspace can show: an id that stays the same, the words on its tab, its family icon

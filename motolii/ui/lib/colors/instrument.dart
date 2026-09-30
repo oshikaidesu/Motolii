@@ -12,7 +12,7 @@ import '../theme/glyphs.dart';
 import '../session/color_edit.dart';
 import '../session/editor_session.dart';
 import '../theme/neutral.dart';
-import '../theme/surface.dart' show Dn, Surface;
+import '../theme/metrics.dart' show Dn, Surface;
 
 /// The Colors instrument over the session: the reference's wheel, hex and two bars, editing the colour target (the
 /// Inspector's focused colour, else the selection's fill) through [ColorEdit] — the same preview, commit and cancel

@@ -5,7 +5,7 @@ import '../../browser/parts.dart';
 import '../parts.dart';
 import 'meaning.dart';
 import '../../theme/neutral.dart';
-import '../../theme/surface.dart' show Dn, Surface;
+import '../../theme/metrics.dart' show Dn, Surface;
 
 typedef Shape = double Function(double t);
 

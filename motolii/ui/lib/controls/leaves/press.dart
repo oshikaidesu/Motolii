@@ -2,7 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/widgets.dart';
 
-import '../../theme/editor_metrics.dart';
+import '../../theme/metrics.dart';
 import '../../theme/editor_theme.dart';
 
 /// The leaves a pointer presses: the hover-and-press surface itself, and the
@@ -182,7 +182,7 @@ class EditorIconButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final enabled = onPressed != null;
     final size =
-        iconSize ?? IconTheme.of(context).size ?? EditorMetrics.control;
+        iconSize ?? IconTheme.of(context).size ?? Step.s24;
     final button = Semantics(
       button: true,
       enabled: enabled,
@@ -194,7 +194,7 @@ class EditorIconButton extends StatelessWidget {
         pressColor: EditorTheme.of(context).hover,
         focusColor: EditorTheme.clear,
         child: SizedBox.square(
-          dimension: math.max(size, EditorMetrics.row),
+          dimension: math.max(size, Surface.workRow),
           child: IconTheme.merge(
             data: IconThemeData(
               size: size,
@@ -228,8 +228,8 @@ class EditorTextButton extends StatefulWidget {
     this.disabledBackground = EditorTheme.clear,
     this.border,
     this.radius = BorderRadius.zero,
-    this.padding = const EdgeInsets.symmetric(horizontal: EditorMetrics.s4),
-    this.minimumSize = const Size(EditorMetrics.s11, EditorMetrics.s12),
+    this.padding = const EdgeInsets.symmetric(horizontal: Step.s4),
+    this.minimumSize = const Size(Step.s11, Step.s12),
     this.textStyle,
   });
   final VoidCallback? onPressed;
@@ -322,7 +322,7 @@ class _EditorTextButtonState extends State<EditorTextButton> {
                         padding: widget.padding,
                         child: DefaultTextStyle.merge(
                           style: TextStyle(
-                            fontSize: EditorMetrics.font,
+                            fontSize: Dn.labelSize,
                             color: fg,
                           ).merge(widget.textStyle),
                           child: IconTheme.merge(

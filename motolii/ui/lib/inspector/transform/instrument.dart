@@ -4,7 +4,7 @@
 import 'package:flutter/widgets.dart';
 import '../../browser/parts.dart';
 import '../../desks/parts.dart' show kYellow, kBlue, kPink, kViolet, kAccentDim;
-import '../../theme/surface.dart';
+import '../../theme/metrics.dart';
 import '../rows.dart';
 import '../value_controls.dart';
 import 'gizmo.dart';

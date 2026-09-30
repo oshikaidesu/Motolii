@@ -4,7 +4,7 @@
 import 'package:flutter/widgets.dart';
 
 import '../../theme/glyphs.dart';
-import '../../theme/surface.dart';
+import '../../theme/metrics.dart';
 import '../../theme/tokens.dart';
 import 'top.dart';
 import '../../theme/neutral.dart';

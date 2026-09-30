@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/widgets.dart';
 
-import '../../theme/editor_metrics.dart';
+import '../../theme/metrics.dart';
 import '../../theme/editor_theme.dart';
 
 /// On and off, and the lamps that say how a value stands to time and to a
@@ -64,7 +64,7 @@ class _PickedState<T> extends State<Picked<T>> {
 /// without a word.
 class EditorSwitch extends StatelessWidget {
   static const minExpandedWidth =
-      EditorMetrics.s22 + EditorMetrics.s4 + EditorMetrics.s14;
+      Step.s22 + Step.s4 + Step.s14;
   const EditorSwitch({
     super.key,
     required this.on,
@@ -99,10 +99,10 @@ class EditorSwitch extends StatelessWidget {
           behavior: HitTestBehavior.opaque,
           onTap: enabled ? () => onChanged!(!on) : null,
           child: SizedBox.square(
-            dimension: EditorMetrics.row,
+            dimension: Surface.workRow,
             child: Icon(
               glyph,
-              size: EditorMetrics.s16,
+              size: Step.s16,
               color: !enabled
                   ? EditorTheme.of(context).disabledInk
                   : on
@@ -119,16 +119,16 @@ class EditorSwitch extends StatelessWidget {
         behavior: HitTestBehavior.opaque,
         onTap: enabled ? () => onChanged!(!on) : null,
         child: SizedBox(
-          height: EditorMetrics.row,
+          height: Surface.workRow,
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               AnimatedContainer(
                 // a switch the hand just pressed shows its new state at once
                 duration: Duration.zero,
-                width: EditorMetrics.s22,
-                height: EditorMetrics.s12,
-                padding: const EdgeInsets.all(EditorMetrics.s2),
+                width: Step.s22,
+                height: Step.s12,
+                padding: const EdgeInsets.all(Step.s2),
                 decoration: BoxDecoration(
                   color: on
                       ? tint ?? EditorTheme.of(context).accent
@@ -136,17 +136,17 @@ class EditorSwitch extends StatelessWidget {
                 ),
                 alignment: on ? Alignment.centerRight : Alignment.centerLeft,
                 child: Container(
-                  width: EditorMetrics.s8,
-                  height: EditorMetrics.s8,
+                  width: Step.s8,
+                  height: Step.s8,
                   color: on
                       ? EditorTheme.of(context).tabInk
                       : EditorTheme.of(context).ink,
                 ),
               ),
-              const SizedBox(width: EditorMetrics.s4),
+              const SizedBox(width: Step.s4),
               Icon(
                 glyph,
-                size: EditorMetrics.s14,
+                size: Step.s14,
                 color: !enabled
                     ? EditorTheme.of(context).disabledInk
                     : ink ??

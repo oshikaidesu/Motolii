@@ -3,7 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:motolii_ui/theme/editor_theme.dart' show EditorButton;
 import 'package:motolii_ui/controls/leaves/track.dart' show EditorSlider;
-import 'package:motolii_ui/theme/surface.dart';
+import 'package:motolii_ui/theme/metrics.dart';
 import 'package:motolii_ui/theme/neutral.dart' show N;
 
 import '../story.dart';

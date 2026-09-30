@@ -6,7 +6,7 @@ import '../../browser/parts.dart';
 import '../parts.dart';
 import '../../controls/menu.dart' show showHfMenu;
 import '../../theme/neutral.dart';
-import '../../theme/surface.dart' show Dn, Surface;
+import '../../theme/metrics.dart' show Dn, Surface;
 
 class NBlock {
   NBlock(this.kind, this.pos, this.size, this.text, [this.tint = 0, this.id, this.png]);

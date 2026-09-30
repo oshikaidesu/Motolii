@@ -6,6 +6,6 @@
 
 Rust編集層は`native/src/editor`。旧実装は[Git履歴](../../docs/product/history/retired-source.md)へ退役済み。内部runtimeはEditorRuntime。既存のC symbolと`motolii/probe`通信名はwire互換で残しており、別の検証用入口を意味しない。
 
-寸法・余白・文字サイズは`lib/theme/editor_metrics.dart`の`EditorMetrics`(製品の窓は`lib/theme/surface.dart`の`Surface`)から取る。生の数字は`tool/motolii_lints`(analyzer plugin)がIDEで止め、`scripts/motolii-ui.sh test`の`bin/check.dart`が一式で止める。quick fixは同じ値のtokenへ置き換える。Dockの側面幅は`legacy/foundation/panel_catalog.dart`の`Extent`。
+寸法・余白・文字サイズは`lib/theme/metrics.dart`の`Surface`・`Dn`(共有部品とStageの枠だけ値名の`Step`)から取る。生の数字は`tool/motolii_lints`(analyzer plugin)がIDEで止め、`scripts/motolii-ui.sh test`の`bin/check.dart`が一式で止める。quick fixは同じ値のtokenへ置き換える。
 
 [操作契約と検証](../../docs/product/inspector.md)。

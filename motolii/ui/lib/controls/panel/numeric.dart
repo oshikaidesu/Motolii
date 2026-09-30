@@ -6,7 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
 import '../leaves.dart';
-import '../../theme/editor_metrics.dart';
+import '../../theme/metrics.dart';
 import '../../theme/editor_theme.dart';
 import 'drag.dart';
 import 'fields.dart';
@@ -305,11 +305,11 @@ class _EditorNumericFieldState extends State<EditorNumericField>
   /// below ×0.01 (the Figma ladder). Changing rung mid-drag keeps the value.
   double _rung = 1;
   double _rungBase = 0, _rungStartX = 0;
-  double _rungFor(double dy) => dy < -EditorMetrics.s32
+  double _rungFor(double dy) => dy < -Step.s32
       ? 10
-      : dy < EditorMetrics.s32
+      : dy < Step.s32
       ? 1
-      : dy < EditorMetrics.s70
+      : dy < Step.s70
       ? .1
       : .01;
 
@@ -403,7 +403,7 @@ class _EditorNumericFieldState extends State<EditorNumericField>
             child: EditorFieldFrame(
               focus: _focus,
               error: _error != null,
-              padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s2),
+              padding: const EdgeInsets.symmetric(horizontal: Step.s2),
               child: Row(
                 children: [
                   Expanded(
@@ -413,7 +413,7 @@ class _EditorNumericFieldState extends State<EditorNumericField>
                       autofocus: true,
                       textAlign: TextAlign.right,
                       style: TextStyle(
-                        fontSize: EditorMetrics.font,
+                        fontSize: Dn.labelSize,
                         color: EditorTheme.of(context).ink,
                         fontFeatures: [FontFeature.tabularFigures()],
                       ),
@@ -423,15 +423,15 @@ class _EditorNumericFieldState extends State<EditorNumericField>
                     ),
                   ),
                   if (widget.unit != null) ...[
-                    const SizedBox(width: EditorMetrics.s2),
+                    const SizedBox(width: Step.s2),
                     ConstrainedBox(
                       constraints: const BoxConstraints(
-                        minWidth: EditorMetrics.s12,
+                        minWidth: Step.s12,
                       ),
                       child: Text(
                         widget.unit!,
                         style: TextStyle(
-                          fontSize: EditorMetrics.micro,
+                          fontSize: Step.s8,
                           color: EditorTheme.of(context).muted,
                         ),
                       ),
@@ -471,7 +471,7 @@ class _EditorNumericFieldState extends State<EditorNumericField>
                         link: _well,
                         targetAnchor: Alignment.topCenter,
                         followerAnchor: Alignment.bottomCenter,
-                        offset: const Offset(0, -EditorMetrics.s4),
+                        offset: const Offset(0, -Step.s4),
                         child: IgnorePointer(
                           child: Align(
                             alignment: Alignment.bottomCenter,
@@ -482,7 +482,7 @@ class _EditorNumericFieldState extends State<EditorNumericField>
                       child: CompositedTransformTarget(
                         link: _well,
                         child: Container(
-                          height: EditorMetrics.row,
+                          height: Surface.workRow,
                           decoration: EditorTheme.of(context).skin.flatWells
                               ? BoxDecoration(
                                   color: _flooded
@@ -496,7 +496,7 @@ class _EditorNumericFieldState extends State<EditorNumericField>
                                           ? widget.tint ??
                                                 EditorTheme.of(context).border
                                           : EditorTheme.of(context).line,
-                                      width: EditorMetrics.s2,
+                                      width: Step.s2,
                                     ),
                                     bottom: BorderSide(
                                       color: EditorTheme.of(context).border,
@@ -516,7 +516,7 @@ class _EditorNumericFieldState extends State<EditorNumericField>
                                       ? Border(
                                           left: BorderSide(
                                             color: widget.tint!,
-                                            width: EditorMetrics.s3,
+                                            width: Step.s3,
                                           ),
                                           top: BorderSide(
                                             color: EditorTheme.of(context).line,
@@ -542,7 +542,7 @@ class _EditorNumericFieldState extends State<EditorNumericField>
                                   Align(
                                     alignment: Alignment.bottomCenter,
                                     child: SizedBox(
-                                      height: EditorMetrics.s2,
+                                      height: Step.s2,
                                       width: double.infinity,
                                       child: CustomPaint(
                                         painter: _AmountLine(
@@ -572,7 +572,7 @@ class _EditorNumericFieldState extends State<EditorNumericField>
                                   ),
                               Padding(
                                 padding: const EdgeInsets.symmetric(
-                                  horizontal: EditorMetrics.s4,
+                                  horizontal: Step.s4,
                                 ),
                                 child: Row(
                                   mainAxisAlignment: MainAxisAlignment.end,
@@ -585,7 +585,7 @@ class _EditorNumericFieldState extends State<EditorNumericField>
                                         maxLines: 1,
                                         overflow: TextOverflow.clip,
                                         style: TextStyle(
-                                          fontSize: EditorMetrics.font,
+                                          fontSize: Dn.labelSize,
                                           fontFamily: EditorTheme.of(context)
                                               .skin
                                               .labelFamily,
@@ -630,15 +630,15 @@ class _EditorNumericFieldState extends State<EditorNumericField>
                                     // The rider keeps its slot even when empty, so
                                     // digits line up down a column of wells.
                                     if (widget.unit != null) ...[
-                                      const SizedBox(width: EditorMetrics.s2),
+                                      const SizedBox(width: Step.s2),
                                       ConstrainedBox(
                                         constraints: const BoxConstraints(
-                                          minWidth: EditorMetrics.s12,
+                                          minWidth: Step.s12,
                                         ),
                                         child: Text(
                                           widget.unit!,
                                           style: TextStyle(
-                                            fontSize: EditorMetrics.micro,
+                                            fontSize: Step.s8,
                                             color: EditorTheme.of(context)
                                                 .muted,
                                           ),

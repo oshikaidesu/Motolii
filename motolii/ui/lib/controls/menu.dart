@@ -3,7 +3,7 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
-import '../theme/surface.dart';
+import '../theme/metrics.dart';
 import '../theme/tokens.dart';
 import '../theme/neutral.dart';
 

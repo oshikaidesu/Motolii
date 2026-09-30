@@ -7,7 +7,7 @@ import '../../session/editor_session.dart';
 import 'model.dart';
 import '../../theme/neutral.dart';
 import 'session.dart';
-import '../../theme/surface.dart' show Dn, Surface;
+import '../../theme/metrics.dart' show Dn, Surface;
 
 /// Relations v0: the place to pick the things a source drives. The things at the current time are dots where they are
 /// on the Stage; a click, a Shift click or a lasso makes the member set. The relation itself is the links the document

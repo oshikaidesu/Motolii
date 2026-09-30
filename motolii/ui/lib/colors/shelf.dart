@@ -13,7 +13,7 @@ import '../browser/panel_chrome.dart';
 import '../session/editor_session.dart';
 import '../browser/visual_sample.dart';
 import '../theme/neutral.dart';
-import '../theme/surface.dart' show Dn, Surface;
+import '../theme/metrics.dart' show Dn, Surface;
 
 typedef Sw = (String, int, String); // name, argb, class
 

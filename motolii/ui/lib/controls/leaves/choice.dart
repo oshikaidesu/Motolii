@@ -1,7 +1,7 @@
 import 'package:flutter/widgets.dart';
 
 import '../../theme/material_icons.dart';
-import '../../theme/editor_metrics.dart';
+import '../../theme/metrics.dart';
 import '../../theme/editor_theme.dart';
 import 'floating.dart';
 
@@ -37,8 +37,8 @@ class EditorChoice<T> extends StatelessWidget {
       builder: (context, menu) => GestureDetector(
         onTap: enabled ? (menu.isOpen ? menu.close : menu.open) : null,
         child: Container(
-          height: EditorMetrics.row,
-          padding: const EdgeInsets.only(left: EditorMetrics.s4),
+          height: Surface.workRow,
+          padding: const EdgeInsets.only(left: Step.s4),
           decoration: BoxDecoration(
             color: EditorTheme.of(context).app,
             border: Border.all(
@@ -55,7 +55,7 @@ class EditorChoice<T> extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    fontSize: EditorMetrics.font,
+                    fontSize: Dn.labelSize,
                     color: enabled
                         ? EditorTheme.of(context).ink
                         : EditorTheme.of(context).muted,
@@ -64,7 +64,7 @@ class EditorChoice<T> extends StatelessWidget {
               ),
               Icon(
                 Glyph.arrow_drop_down,
-                size: EditorMetrics.s16,
+                size: Step.s16,
                 color: EditorTheme.of(context).muted,
               ),
             ],

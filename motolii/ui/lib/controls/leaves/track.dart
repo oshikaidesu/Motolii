@@ -1,6 +1,6 @@
 import 'package:flutter/widgets.dart';
 
-import '../../theme/editor_metrics.dart';
+import '../../theme/metrics.dart';
 import '../../theme/editor_theme.dart';
 
 /// The leaves laid along a line: the rule that marks one, the bar that
@@ -31,7 +31,7 @@ class EditorSlider extends StatefulWidget {
 
 class _EditorSliderState extends State<EditorSlider> {
   bool _down = false;
-  static const _thumb = EditorMetrics.s5;
+  static const _thumb = Step.s5;
 
   double _fraction(double dx, double width) {
     final span = width - 2 * _thumb;
@@ -90,7 +90,7 @@ class _EditorSliderState extends State<EditorSlider> {
           child: CustomPaint(
             size: Size(
               box.maxWidth,
-              box.hasBoundedHeight ? box.maxHeight : EditorMetrics.row,
+              box.hasBoundedHeight ? box.maxHeight : Surface.workRow,
             ),
             painter: _SliderPainter(
               colors: EditorTheme.of(context),
@@ -124,7 +124,7 @@ class _SliderPainter extends CustomPainter {
   final bool enabled, pressed;
   final int? divisions;
   final String? label;
-  static const _thumb = EditorMetrics.s5, _track = EditorMetrics.s2;
+  static const _thumb = Step.s5, _track = Step.s2;
   @override
   void paint(Canvas canvas, Size size) {
     final left = _thumb, right = size.width - _thumb;
@@ -178,26 +178,26 @@ class _SliderPainter extends CustomPainter {
           text: label,
           style: TextStyle(
             fontFamily: EditorTheme.fontFamily,
-            fontSize: EditorMetrics.font,
+            fontSize: Dn.labelSize,
             color: colors.tabInk,
           ),
         ),
         textDirection: TextDirection.ltr,
       )..layout();
-      final w = text.width + EditorMetrics.s16,
-          h = text.height + EditorMetrics.s8;
+      final w = text.width + Step.s16,
+          h = text.height + Step.s8;
       final box = Rect.fromCenter(
-        center: Offset(x, cy - _thumb - EditorMetrics.s8 - h / 2),
+        center: Offset(x, cy - _thumb - Step.s8 - h / 2),
         width: w,
         height: h,
       );
       canvas.drawRRect(
-        RRect.fromRectAndRadius(box, const Radius.circular(EditorMetrics.s4)),
+        RRect.fromRectAndRadius(box, const Radius.circular(Step.s4)),
         Paint()..color = colors.accent,
       );
       text.paint(
         canvas,
-        box.topLeft + const Offset(EditorMetrics.s8, EditorMetrics.s4),
+        box.topLeft + const Offset(Step.s8, Step.s4),
       );
     }
   }

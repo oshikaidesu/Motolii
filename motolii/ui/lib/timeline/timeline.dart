@@ -6,7 +6,7 @@ import 'package:flutter/widgets.dart';
 
 import '../theme/editor_theme.dart';
 import '../theme/glyphs.dart';
-import '../theme/surface.dart';
+import '../theme/metrics.dart';
 import '../theme/neutral.dart';
 import '../controls/menu.dart' show showHfMenu;
 import '../theme/tokens.dart' show H, Fam;

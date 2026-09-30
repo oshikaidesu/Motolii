@@ -11,7 +11,7 @@ import '../browser/seat.dart';
 import '../browser/panel_chrome.dart';
 import '../browser/things.dart';
 import '../theme/neutral.dart';
-import '../theme/surface.dart' show Dn;
+import '../theme/metrics.dart' show Dn;
 
 const _sw = 240, _sh = 150;
 

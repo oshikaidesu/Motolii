@@ -1,7 +1,7 @@
 // Desk panels: contextual instruments. A phenomenon first, precision second. Prototype only.
 import 'dart:math' as math;
 import 'package:flutter/widgets.dart';
-import '../theme/surface.dart';
+import '../theme/metrics.dart';
 import '../browser/parts.dart';
 import '../theme/neutral.dart';
 

@@ -9,7 +9,7 @@ import 'model.dart';
 import '../inspector.dart' show ParamCell;
 import '../value_controls.dart';
 import '../../theme/neutral.dart';
-import '../../theme/surface.dart' show Dn, Surface;
+import '../../theme/metrics.dart' show Dn, Surface;
 
 class LayoutInstrument extends StatefulWidget {
   const LayoutInstrument(this.store, {super.key, this.title = 'Group', this.advancedOpen = false, this.embedded = false});

@@ -12,7 +12,7 @@ import '../desks/parts.dart' show kYellow, kBlue, kViolet, kPink;
 import 'rows.dart';
 import 'slot.dart';
 export 'slot.dart';
-import '../theme/surface.dart';
+import '../theme/metrics.dart';
 import 'tones.dart';
 import '../theme/neutral.dart';
 

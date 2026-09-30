@@ -13,7 +13,7 @@ import '../session/editor_session.dart';
 import 'session.dart';
 import 'media/seat.dart';
 import '../colors/instrument.dart';
-import '../theme/surface.dart' show Dn, Surface;
+import '../theme/metrics.dart' show Dn, Surface;
 
 /// The Browser as a skin over [BrowserSession]: it lays out the reference faces (browserFace), dresses tiles with what
 /// they do, and hands every gesture to the session.

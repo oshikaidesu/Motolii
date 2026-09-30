@@ -18,14 +18,14 @@ class _RungPill extends StatelessWidget {
       : '×0.01';
   @override
   Widget build(BuildContext context) => Container(
-    constraints: const BoxConstraints(minHeight: EditorMetrics.control),
+    constraints: const BoxConstraints(minHeight: Step.s24),
     padding: const EdgeInsets.symmetric(
-      horizontal: EditorMetrics.s8,
-      vertical: EditorMetrics.s4,
+      horizontal: Step.s8,
+      vertical: Step.s4,
     ),
     decoration: BoxDecoration(
       color: EditorTheme.of(context).tooltip,
-      borderRadius: BorderRadius.all(Radius.circular(EditorMetrics.s4)),
+      borderRadius: BorderRadius.all(Radius.circular(Step.s4)),
     ),
     child: Text.rich(
       TextSpan(
@@ -45,7 +45,7 @@ class _RungPill extends StatelessWidget {
         ],
       ),
       style: const TextStyle(
-        fontSize: EditorMetrics.s12,
+        fontSize: Step.s12,
         fontFeatures: [FontFeature.tabularFigures()],
       ),
     ),

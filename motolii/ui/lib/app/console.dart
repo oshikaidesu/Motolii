@@ -2,7 +2,7 @@ import 'package:flutter/widgets.dart';
 
 import '../theme/tokens.dart' show H;
 import '../session/console_log.dart';
-import '../theme/surface.dart' show Dn;
+import '../theme/metrics.dart' show Dn;
 
 /// The Console panel in the Timeline seat: every operation error and document notice the session surfaced (the
 /// log the New shell keeps, one owner), newest first, with Clear. It adds no message of its own.
