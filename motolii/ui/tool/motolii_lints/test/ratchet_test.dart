@@ -19,7 +19,46 @@ void main() {
   });
 
   test('the baseline round-trips and drops clean files', () {
-    final text = formatBaseline({'lib/z.dart': 2, 'lib/a.dart': 1, 'lib/q.dart': 0});
-    expect(parseBaseline(text), {'lib/a.dart': 1, 'lib/z.dart': 2});
+    final text = formatBaseline({'lib/z.dart': 2, 'lib/a.dart': 1, 'lib/q.dart': 0}, {'lib/m.dart': (5, 2), 'lib/n.dart': (0, 0)});
+    final back = parseBaseline(text);
+    expect(back.raw, {'lib/a.dart': 1, 'lib/z.dart': 2});
+    expect(back.px, {'lib/m.dart': (5, 2)});
+  });
+
+  group('Surface.px exceptions', () {
+    final base = parseBaseline('px lib/a.dart 4 3\npx lib/b.dart 2 0\n');
+
+    test('holding, or going down, passes', () {
+      final r = ratchet({}, base, px: {'lib/a.dart': (4, 3), 'lib/b.dart': (1, 0)});
+      expect(r.ok, isTrue);
+      expect(r.pxBetter.keys, ['lib/b.dart']);
+    });
+
+    test('one more in a known file fails', () {
+      final r = ratchet({}, base, px: {'lib/a.dart': (5, 3)});
+      expect(r.ok, isFalse);
+      expect(r.pxOver.keys, ['lib/a.dart']);
+    });
+
+    test('a new exception without its reason fails even when the total fell', () {
+      final r = ratchet({}, base, px: {'lib/a.dart': (3, 4)});
+      expect(r.pxOver.keys, ['lib/a.dart']);
+    });
+
+    test('a file the baseline does not know may hold none', () {
+      final r = ratchet({}, base, px: {'lib/new.dart': (1, 0)});
+      expect(r.ok, isFalse);
+      expect(r.pxFresh.keys, ['lib/new.dart']);
+    });
+  });
+
+  test('a regenerated baseline may not raise any count', () {
+    final old = parseBaseline('lib/a.dart 3\npx lib/b.dart 2 1\n');
+    expect(risers({'lib/a.dart': 3}, {'lib/b.dart': (2, 1)}, old, hadPx: true), isEmpty);
+    expect(risers({'lib/a.dart': 4}, {'lib/b.dart': (2, 1)}, old, hadPx: true), hasLength(1));
+    expect(risers({'lib/a.dart': 3}, {'lib/b.dart': (3, 1)}, old, hadPx: true), hasLength(1));
+    expect(risers({'lib/a.dart': 3}, {'lib/c.dart': (1, 0)}, old, hadPx: true), hasLength(1));
+    // the first time the exception section exists it is taken as it is
+    expect(risers({'lib/a.dart': 3}, {'lib/c.dart': (9, 9)}, parseBaseline('lib/a.dart 3\n'), hadPx: false), isEmpty);
   });
 }

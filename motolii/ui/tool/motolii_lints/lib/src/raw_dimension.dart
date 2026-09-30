@@ -6,39 +6,20 @@ import 'package:analyzer/dart/ast/token.dart';
 import 'package:analyzer/dart/ast/visitor.dart';
 import 'package:analyzer/error/error.dart';
 
-/// Argument names whose numeric value is a layout measurement.
-const measuredNames = {
-  'width', 'height', 'minWidth', 'maxWidth', 'minHeight', 'maxHeight',
-  'fontSize', 'size', 'iconSize', 'dimension', 'radius', 'thickness',
-  'strokeWidth', 'indent', 'endIndent', 'spacing', 'runSpacing',
-  'mainAxisSpacing', 'crossAxisSpacing', 'horizontal', 'vertical',
-  'left', 'top', 'right', 'bottom', 'start', 'end',
-  'toolbarHeight', 'leadingWidth', 'itemExtent',
-};
-
-/// Constructors whose positional numbers are measurements, and the text helpers whose first argument is a font size
-/// (`sans(11, …)` is `fontSize: 11` by another name).
-const measuredTypes = {
-  'EdgeInsets', 'EdgeInsetsDirectional', 'BorderRadius', 'Radius', 'Size',
-  'sans', 'mono', 'caps',
-};
+import 'dimension_use.dart';
 
 /// Files that define the scale and may hold raw numbers.
 const scaleFiles = {
   'lib/theme/editor_theme.dart',
-  'lib/theme/metrics.dart', // Surface, Dn and Step: the visual canon
+  'lib/theme/metrics.dart', // Surface, Dn and UiScale: the visual canon
   'lib/theme/neutral.dart',
 };
 
-/// The scale a file's raw numbers should be taken from: the product window reads [Surface]; the Stage chrome and the shared panel controls read [Step] (value names, no role).
-({String uri, String cls}) scaleFor(String path) {
-  final unix = path.replaceAll('\\', '/');
-  const stepDirs = ['/lib/stage/', '/lib/controls/leaves', '/lib/controls/panel', '/lib/theme/editor_', '/lib/colors/hsv_triangle'];
-  if (stepDirs.any(unix.contains)) {
-    return (uri: 'package:motolii_ui/theme/metrics.dart', cls: 'Step');
-  }
-  return (uri: 'package:motolii_ui/theme/metrics.dart', cls: 'Surface');
-}
+/// The one file that holds the UI Scale mechanism (its setting, the root that rebuilds the tree, the readout): it may say `scale`.
+const scaleMechanismFile = 'lib/app/ui_scale.dart';
+
+/// The scale a file's raw numbers should be taken from: the canon is [Surface] (and [Dn] for text), one class for the whole window.
+({String uri, String cls}) scaleFor(String path) => (uri: 'package:motolii_ui/theme/metrics.dart', cls: 'Surface');
 
 /// The only raw numbers a measurement may carry: nothing, or a hairline.
 bool structural(num value) => value == 0 || value == .5 || value == 1;
@@ -46,8 +27,8 @@ bool structural(num value) => value == 0 || value == .5 || value == 1;
 class RawDimension extends AnalysisRule {
   static const LintCode code = LintCode(
     'raw_dimension',
-    'Raw number in a measurement; take it from Surface / Dn (lib/theme/metrics.dart)',
-    correctionMessage: 'Use a Surface, Dn or Step token (quick fix when one matches).',
+    'Raw number in a measurement; take it from Surface / Dn (lib/theme/metrics.dart), or Surface.px(n) with a reason',
+    correctionMessage: 'Use a canonical Surface / Dn token (quick fix when one matches).',
     severity: DiagnosticSeverity.WARNING,
   );
 
@@ -85,44 +66,8 @@ AstNode measured(Literal node) {
   return node;
 }
 
-/// Whether [node] sits where a measurement is expected. Branches of a
-/// conditional, parentheses and `+`/`-` operands inherit the position;
-/// `*` and `/` operands are ratios, not pixels.
-bool isMeasurement(AstNode node) {
-  var parent = node.parent;
-  while (parent is ParenthesizedExpression ||
-      (parent is ConditionalExpression && parent.condition != node) ||
-      (parent is BinaryExpression &&
-          (parent.operator.type == TokenType.PLUS ||
-              parent.operator.type == TokenType.MINUS))) {
-    node = parent!;
-    parent = node.parent;
-  }
-  if (parent is NamedArgument) {
-    final name = parent.name.lexeme;
-    if (!measuredNames.contains(name)) return false;
-    // TextStyle(height:) is a line-height multiplier, not pixels.
-    final call = parent.parent?.parent;
-    if (name == 'height' && _typeName(call) == 'TextStyle') return false;
-    return true;
-  }
-  if (parent is ArgumentList) {
-    return measuredTypes.contains(_typeName(parent.parent));
-  }
-  return false;
-}
-
-String? _typeName(AstNode? call) {
-  if (call is InstanceCreationExpression) {
-    return call.constructorName.type.name.lexeme;
-  }
-  if (call is MethodInvocation) {
-    final target = call.target;
-    if (target is SimpleIdentifier) return target.name;
-    if (target == null) return call.methodName.name; // a bare `sans(11, …)`
-  }
-  return null;
-}
+/// Whether [node] sits where a measurement is expected (see [dimensionUse]).
+bool isMeasurement(AstNode node) => dimensionUse(node).measured;
 
 /// The node to report for a numeric [node] of [value], or null when it is
 /// not a raw measurement. Shared by the plugin and `bin/check.dart`.
@@ -139,7 +84,7 @@ class _Visitor extends SimpleAstVisitor<void> {
 
   void _check(Literal node, num? value) {
     final target = rawMeasurement(node, value);
-    if (target != null && !excused(content, target.offset)) rule.reportAtNode(target);
+    if (target != null && !excusedNode(content, target)) rule.reportAtNode(target);
   }
 
   @override
@@ -162,6 +107,25 @@ bool excused(String content, int offset) {
   final prevStart = content.lastIndexOf('\n', lineStart - 2) + 1;
   return _excuse.hasMatch(content.substring(prevStart, lineStart - 1));
 }
+
+/// [excused] for a node: its line, or a declaration around it that says `// surface-block: <reason>` above itself (a painter, a
+/// canvas function: geometry that is drawn in its own pixels).
+bool excusedNode(String content, AstNode node) {
+  if (excused(content, node.offset)) return true;
+  for (AstNode? n = node.parent; n != null; n = n.parent) {
+    if (n is! Declaration) continue;
+    // the comments before a declaration hang on its first real token (after its documentation and annotations)
+    final first = n.metadata.isEmpty ? n.firstTokenAfterCommentAndMetadata : n.metadata.first.beginToken;
+    Token? c = first.precedingComments;
+    while (c != null) {
+      if (_excuseBlock.hasMatch(c.lexeme)) return true;
+      c = c.next;
+    }
+  }
+  return false;
+}
+
+final _excuseBlock = RegExp(r'//\s*surface-block:\s*\S.{7,}');
 
 /// A file that says, in its first lines, that it is a fixture of its own and not product UI: `// surface-file: <reason>`.
 final _excuseFile = RegExp(r'^//\s*surface-file:\s*\S.{7,}', multiLine: true);

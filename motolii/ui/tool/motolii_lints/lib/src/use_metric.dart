@@ -5,17 +5,17 @@ import 'package:analyzer_plugin/utilities/change_builder/change_builder_core.dar
 import 'package:analyzer_plugin/utilities/fixes/fixes.dart';
 import 'package:analyzer_plugin/utilities/range_factory.dart';
 
+import 'canon.dart';
+import 'dimension_use.dart';
 import 'raw_dimension.dart' show scaleFor;
 
-/// Where the scale lives is [scaleFor] (the product window reads Surface; the shared controls and Stage chrome read Step). The fix reads the
-/// class, so a new token needs no change here.
-
-/// Replaces a raw measurement with the token of exactly the same value.
+/// Replaces a raw measurement with the canonical Surface / Dn token of its value and role (the same table as `bin/check.dart --fix`),
+/// else with `Surface.px(n)`: a SCALE-policy custom dimension, an exception the lint counts (say why with `// surface: <reason>`).
 class UseMetric extends ResolvedCorrectionProducer {
   static const _kind = FixKind(
     'motolii.fix.useMetric',
     DartFixKindPriority.standard,
-    'Replace with the matching Surface / Step token',
+    'Replace with the canonical Surface token (or Surface.px)',
   );
 
   UseMetric({required super.context});
@@ -42,24 +42,11 @@ class UseMetric extends ResolvedCorrectionProducer {
       _ => null,
     };
     if (value == null) return;
-    final which = scaleFor(file);
-    final (metricsUri, metricsClass) = (which.uri, which.cls);
-    final scale = await sessionHelper.getClass(metricsUri, metricsClass);
-    if (scale == null) return;
-    for (final field in scale.fields) {
-      if (!field.isStatic || !field.isConst) continue;
-      final constant = field.computeConstantValue();
-      final px = constant?.toDoubleValue() ?? constant?.toIntValue()?.toDouble();
-      final name = field.name;
-      if (px != value || name == null) continue;
-      await builder.addDartFileEdit(file, (b) {
-        b.importLibrary(Uri.parse(metricsUri));
-        b.addSimpleReplacement(
-          range.node(target),
-          '${negative ? '-' : ''}$metricsClass.$name',
-        );
-      });
-      return;
-    }
+    final token = negative ? null : canonicalToken(dimensionUse(target), value, face: faceFile(file));
+    final text = token ?? '${negative ? '-' : ''}Surface.px(${literal!.toSource()})';
+    await builder.addDartFileEdit(file, (b) {
+      b.importLibrary(Uri.parse(scaleFor(file).uri));
+      b.addSimpleReplacement(range.node(target), text);
+    });
   }
 }

@@ -1,55 +1,95 @@
-# Raw styling that predates the Surface Grammar, per file (raw_dimension + raw_color + material_import + card_housing).
+# Raw styling that predates the Surface Grammar, per file (raw_dimension + raw_color + material_import + card_housing + scaling).
 # A file may not exceed its line; a file not listed must be clean. Lower a line by fixing the file, then
-#   dart run bin/check.dart ../../lib --write-baseline=baseline.txt
-lib/app/console.dart 12
-lib/app/sheets.dart 12
-lib/app/top/top.dart 2
-lib/app/top/top_bar.dart 22
-lib/app/ui_scale.dart 5
-lib/browser/browser.dart 5
-lib/browser/classify.dart 16
-lib/browser/create/board.dart 8
-lib/browser/create/faces.dart 4
-lib/browser/create/shelf.dart 7
-lib/browser/media/catalog_controls.dart 20
-lib/browser/media/explore/graph.dart 13
-lib/browser/media/explore/overlay.dart 9
-lib/browser/media/fluid.dart 54
-lib/browser/media/library.dart 2
-lib/browser/media/list.dart 7
-lib/browser/media/media_browser.dart 13
-lib/browser/media/preview.dart 25
-lib/browser/panel_chrome.dart 19
-lib/browser/parts.dart 6
-lib/browser/search.dart 15
-lib/browser/shelf_sections.dart 5
-lib/colors/cards.dart 5
-lib/colors/instrument.dart 7
-lib/colors/shelf.dart 36
+#   dart run bin/check.dart ../../lib --write-baseline=baseline.txt      (refuses when any count rises)
+lib/app/top/top_bar.dart 2
+lib/app/ui_scale.dart 1
+lib/browser/create/faces.dart 1
+lib/browser/media/catalog_controls.dart 1
+lib/browser/media/explore/graph.dart 6
+lib/browser/media/explore/overlay.dart 7
+lib/browser/media/fluid.dart 9
+lib/browser/parts.dart 1
+lib/browser/search.dart 2
+lib/colors/cards.dart 1
+lib/colors/shelf.dart 1
 lib/controls/leaves/press.dart 1
-lib/controls/menu.dart 10
-lib/controls/question_dialog.dart 9
-lib/controls/sheet.dart 15
-lib/desks/blend/face.dart 47
-lib/desks/depth/face.dart 27
-lib/desks/ease/face.dart 67
-lib/desks/history/face.dart 20
-lib/desks/notes/desk.dart 6
-lib/desks/notes/face.dart 67
-lib/desks/parts.dart 24
-lib/desks/relations/desk.dart 44
-lib/desks/web/desk.dart 9
-lib/effects/shelf.dart 18
-lib/fonts/shelf.dart 14
-lib/inspector/camera/face.dart 8
-lib/inspector/camera/instrument.dart 32
+lib/controls/menu.dart 1
+lib/controls/question_dialog.dart 1
+lib/controls/sheet.dart 3
+lib/desks/blend/face.dart 3
+lib/desks/ease/face.dart 3
+lib/desks/history/face.dart 2
+lib/desks/notes/face.dart 4
+lib/desks/parts.dart 2
+lib/desks/relations/desk.dart 3
+lib/effects/shelf.dart 10
+lib/inspector/camera/instrument.dart 1
 lib/inspector/inspector.dart 3
-lib/inspector/inspector_seat.dart 4
-lib/inspector/layout/diagram.dart 14
-lib/inspector/layout/instrument.dart 52
-lib/inspector/transform/card.dart 1
-lib/inspector/transform/gizmo.dart 3
-lib/inspector/transform/instrument.dart 99
-lib/inspector/value_controls.dart 55
-lib/timeline/timeline.dart 28
+lib/inspector/transform/instrument.dart 2
+lib/inspector/value_controls.dart 4
 lib/workspace/dock_workspace.dart 1
+# Surface.px(...) exceptions per file: `px <path> <total> <without a // surface: reason>`. Ratcheted down; a new file holds none.
+px lib/app/console.dart 9 9
+px lib/app/sheets.dart 8 8
+px lib/app/top/top.dart 13 13
+px lib/app/top/top_bar.dart 21 21
+px lib/app/ui_scale.dart 4 4
+px lib/browser/browser.dart 3 3
+px lib/browser/classify.dart 11 11
+px lib/browser/create/board.dart 8 8
+px lib/browser/create/faces.dart 3 3
+px lib/browser/create/shelf.dart 5 5
+px lib/browser/media/catalog_controls.dart 5 5
+px lib/browser/media/explore/graph.dart 1 1
+px lib/browser/media/explore/overlay.dart 1 1
+px lib/browser/media/fluid.dart 30 30
+px lib/browser/media/library.dart 2 2
+px lib/browser/media/list.dart 6 6
+px lib/browser/media/media_browser.dart 6 6
+px lib/browser/media/preview.dart 16 16
+px lib/browser/panel_chrome.dart 16 16
+px lib/browser/parts.dart 4 4
+px lib/browser/search.dart 12 12
+px lib/browser/shelf_sections.dart 5 5
+px lib/colors/cards.dart 4 4
+px lib/colors/instrument.dart 7 7
+px lib/colors/shelf.dart 31 31
+px lib/controls/leaves/choice.dart 2 2
+px lib/controls/leaves/field.dart 1 1
+px lib/controls/leaves/floating.dart 4 4
+px lib/controls/leaves/press.dart 6 6
+px lib/controls/leaves/track.dart 9 9
+px lib/controls/menu.dart 6 6
+px lib/controls/panel/fields.dart 1 1
+px lib/controls/panel/frames.dart 1 1
+px lib/controls/panel/numeric.dart 13 13
+px lib/controls/panel/numeric_paint.dart 4 4
+px lib/controls/panel/scale.dart 1 1
+px lib/controls/panel/toggles.dart 11 11
+px lib/controls/question_dialog.dart 8 8
+px lib/controls/sheet.dart 8 8
+px lib/desks/blend/face.dart 32 32
+px lib/desks/depth/face.dart 14 14
+px lib/desks/ease/face.dart 52 52
+px lib/desks/history/face.dart 12 12
+px lib/desks/notes/desk.dart 6 6
+px lib/desks/notes/face.dart 46 46
+px lib/desks/parts.dart 20 20
+px lib/desks/relations/desk.dart 29 29
+px lib/desks/web/desk.dart 6 6
+px lib/effects/shelf.dart 8 8
+px lib/fonts/shelf.dart 12 12
+px lib/inspector/camera/face.dart 4 4
+px lib/inspector/camera/instrument.dart 28 28
+px lib/inspector/inspector_seat.dart 1 1
+px lib/inspector/layout/diagram.dart 4 3
+px lib/inspector/layout/instrument.dart 51 51
+px lib/inspector/transform/card.dart 1 1
+px lib/inspector/transform/gizmo.dart 2 2
+px lib/inspector/transform/instrument.dart 87 87
+px lib/inspector/value_controls.dart 47 47
+px lib/main.dart 1 1
+px lib/stage/chrome.dart 8 8
+px lib/stage/overlay.dart 6 6
+px lib/theme/editor_theme.dart 2 2
+px lib/timeline/timeline.dart 22 22
