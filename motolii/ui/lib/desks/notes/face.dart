@@ -59,12 +59,12 @@ class NotesDesk extends StatefulWidget {
 
 class _NotesDeskState extends State<NotesDesk> {
   final _blocks = <NBlock>[
-    NBlock('note', const Offset(20, 24), const Size(120, 88), 'Anticipation\nbefore the move,\nthen a soft settle', 0),
-    NBlock('note', const Offset(160, 44), const Size(112, 76), 'Try a slower\nease here.', 1),
-    NBlock('image', const Offset(30, 136), const Size(122, 90), ''),
-    NBlock('ref', const Offset(174, 150), const Size(104, 28), 'Layer 2'),
-    NBlock('ref', const Offset(174, 186), const Size(104, 28), 'Camera 1'),
-    NBlock('hand', const Offset(36, 244), const Size(220, 46), 'motion is feeling'),
+    NBlock('note', const Offset(20, 24), Size(Surface.px(120), Surface.px(88)), 'Anticipation\nbefore the move,\nthen a soft settle', 0),
+    NBlock('note', const Offset(160, 44), Size(Surface.px(112), Surface.px(76)), 'Try a slower\nease here.', 1),
+    NBlock('image', const Offset(30, 136), Size(Surface.px(122), Surface.px(90)), ''),
+    NBlock('ref', const Offset(174, 150), Size(Surface.px(104), Surface.namedHeader), 'Layer 2'),
+    NBlock('ref', const Offset(174, 186), Size(Surface.px(104), Surface.namedHeader), 'Camera 1'),
+    NBlock('hand', const Offset(36, 244), Size(Surface.px(220), Surface.px(46)), 'motion is feeling'),
   ];
   int? selected = 0;
   int? editing;
@@ -143,15 +143,15 @@ class _NotesDeskState extends State<NotesDesk> {
           Expanded(child: LayoutBuilder(builder: (context, b) => _canvas(Size(b.maxWidth, b.maxHeight), false))),
           _zoomBar(),
         ]),
-        strip: (c, s) => Padding(padding: const EdgeInsets.fromLTRB(6, 1.5, 6, 6), child: LayoutBuilder(builder: (context, b) => _canvas(Size(b.maxWidth, b.maxHeight), true))),
-        tall: (c, s) => Padding(padding: const EdgeInsets.fromLTRB(6, 3, 6, 6), child: LayoutBuilder(builder: (context, b) => _canvas(Size(b.maxWidth, b.maxHeight), true))),
+        strip: (c, s) => Padding(padding: EdgeInsets.fromLTRB(Surface.sectionGap, Surface.px(1.5), Surface.sectionGap, Surface.sectionGap), child: LayoutBuilder(builder: (context, b) => _canvas(Size(b.maxWidth, b.maxHeight), true))),
+        tall: (c, s) => Padding(padding: EdgeInsets.fromLTRB(Surface.sectionGap, Surface.inlineGap, Surface.sectionGap, Surface.sectionGap), child: LayoutBuilder(builder: (context, b) => _canvas(Size(b.maxWidth, b.maxHeight), true))),
       );
 
   Widget _toolbar() => Container(
-        height: 33,
-        padding: const EdgeInsets.symmetric(horizontal: 7.5),
+        height: Surface.px(33),
+        padding: EdgeInsets.symmetric(horizontal: Surface.px(7.5)),
         child: Row(children: [
-          for (var i = 0; i < 5; i++) Padding(padding: const EdgeInsets.only(right: 3), child: _tool(i)),
+          for (var i = 0; i < 5; i++) Padding(padding: EdgeInsets.only(right: Surface.inlineGap), child: _tool(i)),
           const Spacer(),
           for (var p = 0; p < (widget.host?.pageCount ?? 3); p++)
             GestureDetector(
@@ -161,7 +161,7 @@ class _NotesDeskState extends State<NotesDesk> {
                 _absorb();
               },
               onSecondaryTapDown: widget.host == null ? null : (e) => _pageMenu(p, e.globalPosition),
-              child: Container(width: 19.5, height: 19.5, margin: const EdgeInsets.only(left: 3), alignment: Alignment.center, decoration: BoxDecoration(border: Border.all(color: p == page ? kAccent : Surface.dividerFine), borderRadius: BorderRadius.circular(2), color: p == page ? kAccentDim.withValues(alpha: .4) : null), child: Text('${p + 1}', style: sans(Dn.nameSize, c: p == page ? Surface.ink : Surface.muted))),
+              child: Container(width: Surface.px(19.5), height: Surface.px(19.5), margin: EdgeInsets.only(left: Surface.inlineGap), alignment: Alignment.center, decoration: BoxDecoration(border: Border.all(color: p == page ? kAccent : Surface.dividerFine), borderRadius: BorderRadius.circular(Surface.px(2)), color: p == page ? kAccentDim.withValues(alpha: .4) : null), child: Text('${p + 1}', style: sans(Dn.nameSize, c: p == page ? Surface.ink : Surface.muted))),
             ),
         ]),
       );
@@ -188,7 +188,7 @@ class _NotesDeskState extends State<NotesDesk> {
     if (h != null && !h.can(kind)) return;
     setState(() {
       final c = (const Offset(140, 160) - pan) / zoom - Offset(blocks.length * 3.0 % 24, blocks.length * 3.0 % 24);
-      final size = switch (kind) { 'note' => const Size(110, 74), 'image' => const Size(110, 80), _ => const Size(100, 28) };
+      final size = switch (kind) { 'note' => Size(Surface.px(110), Surface.px(74)), 'image' => Size(Surface.px(110), Surface.px(80)), _ => Size(Surface.px(100), Surface.namedHeader) };
       final b = NBlock(kind, c - Offset(size.width / 2, size.height / 2), size, kind == 'note' ? 'New note' : (kind == 'ref' ? 'Selection' : ''), blocks.length % 2);
       if (h == null) {
         _blocks.add(b);
@@ -209,9 +209,9 @@ class _NotesDeskState extends State<NotesDesk> {
           if (i == 3) _add('ref');
         },
         child: Container(
-          height: 22.5,
-          width: 22.5,
-          decoration: BoxDecoration(color: i == tool ? kAccentDim.withValues(alpha: .4) : null, border: Border.all(color: i == tool ? kAccent : Surface.dividerFine), borderRadius: BorderRadius.circular(2)),
+          height: Surface.px(22.5),
+          width: Surface.px(22.5),
+          decoration: BoxDecoration(color: i == tool ? kAccentDim.withValues(alpha: .4) : null, border: Border.all(color: i == tool ? kAccent : Surface.dividerFine), borderRadius: BorderRadius.circular(Surface.px(2))),
           child: CustomPaint(painter: _ToolP(i)),
         ),
       );
@@ -223,16 +223,16 @@ class _NotesDeskState extends State<NotesDesk> {
   }
 
   Widget _zoomBar() => Container(
-        height: 30,
-        padding: const EdgeInsets.symmetric(horizontal: 9),
+        height: Surface.px(30),
+        padding: EdgeInsets.symmetric(horizontal: Surface.panelInset),
         child: Row(children: [
           Text('Page ${page + 1}  ·  ${blocks.length} blocks', style: sans(Dn.nameSize, c: Surface.muted)),
           const Spacer(),
-          GestureDetector(key: const ValueKey('zoom-out'), onTap: () => setState(() => zoom = clampD(zoom - .25, .25, 3)), child: Padding(padding: const EdgeInsets.symmetric(horizontal: 4.5), child: Text('−', style: sans(13.5, c: N.g82)))),
-          SizedBox(width: 36, child: Text('${(zoom * 100).round()}%', key: const ValueKey('zoom-label'), textAlign: TextAlign.center, style: mono(Dn.nameSize, c: N.g82))),
-          GestureDetector(key: const ValueKey('zoom-in'), onTap: () => setState(() => zoom = clampD(zoom + .25, .25, 3)), child: Padding(padding: const EdgeInsets.symmetric(horizontal: 4.5), child: Text('+', style: sans(13.5, c: N.g82)))),
-          const SizedBox(width: 7.5),
-          GestureDetector(key: const ValueKey('zoom-fit'), onTap: () => setState(() => _fit(const Size(310, 490))), child: Text('Fit', style: sans(Dn.nameSize, c: kAccent))),
+          GestureDetector(key: const ValueKey('zoom-out'), onTap: () => setState(() => zoom = clampD(zoom - .25, .25, 3)), child: Padding(padding: EdgeInsets.symmetric(horizontal: Surface.px(4.5)), child: Text('−', style: sans(Surface.px(13.5), c: N.g82)))),
+          SizedBox(width: Surface.px(36), child: Text('${(zoom * 100).round()}%', key: const ValueKey('zoom-label'), textAlign: TextAlign.center, style: mono(Dn.nameSize, c: N.g82))),
+          GestureDetector(key: const ValueKey('zoom-in'), onTap: () => setState(() => zoom = clampD(zoom + .25, .25, 3)), child: Padding(padding: EdgeInsets.symmetric(horizontal: Surface.px(4.5)), child: Text('+', style: sans(Surface.px(13.5), c: N.g82)))),
+          SizedBox(width: Surface.px(7.5)),
+          GestureDetector(key: const ValueKey('zoom-fit'), onTap: () => setState(() => _fit(Size(Surface.px(310), Surface.px(490)))), child: Text('Fit', style: sans(Dn.nameSize, c: kAccent))),
         ]),
       );
 
@@ -281,7 +281,7 @@ class _NotesDeskState extends State<NotesDesk> {
             painter: _DotsP(p, z),
             child: OverflowBox(
               alignment: Alignment.topLeft,
-              minWidth: 2250, maxWidth: 2250, minHeight: 2250, maxHeight: 2250,
+              minWidth: Surface.px(2250), maxWidth: Surface.px(2250), minHeight: Surface.px(2250), maxHeight: Surface.px(2250),
               child: Transform(
                 transform: Matrix4.translationValues(p.dx, p.dy, 0)..scale(z, z, 1),
                 child: Stack(clipBehavior: Clip.none, children: [for (final (i, b) in blocks.indexed) _placed(i, b, z)]),
@@ -318,7 +318,7 @@ class _NotesDeskState extends State<NotesDesk> {
           child: Stack(clipBehavior: Clip.none, children: [
             Positioned.fill(child: _body(b, i)),
             if (selected == i) ...[
-              Positioned.fill(child: IgnorePointer(child: DecoratedBox(decoration: BoxDecoration(border: Border.all(color: kAccent, width: 1 / z), borderRadius: BorderRadius.circular(1.5))))),
+              Positioned.fill(child: IgnorePointer(child: DecoratedBox(decoration: BoxDecoration(border: Border.all(color: kAccent, width: 1 / z), borderRadius: BorderRadius.circular(Surface.px(1.5)))))),
               Positioned(
                 right: -6 / z,
                 bottom: -6 / z,
@@ -343,27 +343,27 @@ class _NotesDeskState extends State<NotesDesk> {
         final col = const [kYellow, kPink, kBlue, kMint][b.tint % 4];
         final ink = N.g10;
         return Container(
-          padding: const EdgeInsets.all(7.5),
-          decoration: BoxDecoration(color: col, borderRadius: BorderRadius.circular(2)),
+          padding: EdgeInsets.all(Surface.px(7.5)),
+          decoration: BoxDecoration(color: col, borderRadius: BorderRadius.circular(Surface.px(2))),
           child: editing == i
               ? EditableText(key: const ValueKey('note-edit'), controller: _ctl, focusNode: _focus, autofocus: true, maxLines: null, style: sans(Dn.nameSize, c: ink, w: FontWeight.w600), cursorColor: ink, backgroundCursorColor: ink, onChanged: (t) => b.text = t)
               : Text(b.text, style: sans(Dn.nameSize, c: ink, w: FontWeight.w600)),
         );
       case 'image':
         final png = b.png;
-        return ClipRRect(borderRadius: BorderRadius.circular(2), child: png == null ? CustomPaint(painter: _PicP()) : Image.memory(png, fit: BoxFit.cover, gaplessPlayback: true));
+        return ClipRRect(borderRadius: BorderRadius.circular(Surface.px(2)), child: png == null ? CustomPaint(painter: _PicP()) : Image.memory(png, fit: BoxFit.cover, gaplessPlayback: true));
       case 'ref':
         return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 7.5),
-          decoration: BoxDecoration(color: kViolet, borderRadius: BorderRadius.circular(10.5)),
+          padding: EdgeInsets.symmetric(horizontal: Surface.px(7.5)),
+          decoration: BoxDecoration(color: kViolet, borderRadius: BorderRadius.circular(Surface.px(10.5))),
           child: Row(children: [
-            Container(width: 6, height: 6, decoration: const BoxDecoration(color: N.g10, shape: BoxShape.circle)),
+            Container(width: Surface.px(6), height: Surface.px(6), decoration: const BoxDecoration(color: N.g10, shape: BoxShape.circle)),
             SizedBox(width: Surface.sectionGap),
             Expanded(child: Text(b.text, softWrap: false, overflow: TextOverflow.clip, style: sans(Dn.nameSize, c: N.g10, w: FontWeight.w600))),
           ]),
         );
       default:
-        return Align(alignment: Alignment.centerLeft, child: Text(b.text, softWrap: false, style: const TextStyle(fontFamily: 'Snell Roundhand', fontSize: 19.5, color: N.g95)));
+        return Align(alignment: Alignment.centerLeft, child: Text(b.text, softWrap: false, style: TextStyle(fontFamily: 'Snell Roundhand', fontSize: Surface.px(19.5), color: N.g95)));
     }
   }
 }
@@ -402,6 +402,7 @@ class _DotsP extends CustomPainter {
 class _ToolP extends CustomPainter {
   _ToolP(this.i);
   final int i;
+  // surface-block: painter geometry: drawn in the canvas's own pixels (method paint)
   @override
   void paint(Canvas c, Size s) {
     final p = Paint()..color = N.g82..style = PaintingStyle.stroke..strokeWidth = 1.4..strokeCap = StrokeCap.round..strokeJoin = StrokeJoin.round;

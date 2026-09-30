@@ -38,8 +38,8 @@ class MediaPreview extends StatelessWidget {
           final face = ClipRect(child: _LiveFace(key: ValueKey(item.id), item: item, faces: faces));
           final info = _Info(item: item, onClose: onClose, onReveal: onReveal, onPlace: onPlace);
           return side
-              ? Row(children: [Expanded(flex: 3, child: face), SizedBox(width: 220, child: info)])
-              : Column(children: [Expanded(child: face), SizedBox(height: 118, child: info)]);
+              ? Row(children: [Expanded(flex: 3, child: face), SizedBox(width: Surface.px(220), child: info)])
+              : Column(children: [Expanded(child: face), SizedBox(height: Surface.px(118), child: info)]);
         }),
       );
 }
@@ -52,18 +52,18 @@ class _Info extends StatelessWidget {
   final VoidCallback? onPlace;
   @override
   Widget build(BuildContext context) {
-    Widget chip(String text) => Container(margin: const EdgeInsets.only(right: 4, bottom: 3), padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5), decoration: BoxDecoration(color: N.g15, borderRadius: BorderRadius.circular(Surface.controlRadius)), child: Text(text, softWrap: false, style: Dn.label(N.g91, FontWeight.w500)));
+    Widget chip(String text) => Container(margin: EdgeInsets.only(right: Surface.px(4), bottom: Surface.inlineGap), padding: EdgeInsets.symmetric(horizontal: Surface.sectionGap, vertical: Surface.px(2.5)), decoration: BoxDecoration(color: N.g15, borderRadius: BorderRadius.circular(Surface.controlRadius)), child: Text(text, softWrap: false, style: Dn.label(N.g91, FontWeight.w500)));
     Widget fact(String label, String? value) => value == null || value.isEmpty
         ? const SizedBox.shrink()
-        : Padding(padding: const EdgeInsets.only(bottom: 3), child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [SizedBox(width: 48, child: Text(label, style: Dn.label(N.g56))), Expanded(child: Text(value, maxLines: 2, overflow: TextOverflow.ellipsis, style: Dn.value(N.g86)))]));
+        : Padding(padding: EdgeInsets.only(bottom: Surface.inlineGap), child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [SizedBox(width: Surface.px(48), child: Text(label, style: Dn.label(N.g56))), Expanded(child: Text(value, maxLines: 2, overflow: TextOverflow.ellipsis, style: Dn.value(N.g86)))]));
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 8, 6, 6),
+      padding: EdgeInsets.fromLTRB(Surface.px(12), Surface.px(8), Surface.sectionGap, Surface.sectionGap),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
-          Expanded(child: Text(item.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: Dn.name(N.g100, FontWeight.w600).copyWith(fontSize: 13.5))),
-          GestureDetector(key: const ValueKey('preview-close'), behavior: HitTestBehavior.opaque, onTap: onClose, child: const SizedBox(width: 28, height: 24, child: Center(child: GlyphBox(HG.cross, size: 11, color: N.g76)))),
+          Expanded(child: Text(item.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: Dn.name(N.g100, FontWeight.w600).copyWith(fontSize: Surface.px(13.5)))),
+          GestureDetector(key: const ValueKey('preview-close'), behavior: HitTestBehavior.opaque, onTap: onClose, child: SizedBox(width: Surface.px(28), height: Surface.chromeRow, child: Center(child: GlyphBox(HG.cross, size: Surface.px(11), color: N.g76)))),
         ]),
-        const SizedBox(height: 4),
+        SizedBox(height: Surface.px(4)),
         Wrap(children: [
           chip('${item.typeWord} · ${item.mime.split('/').last.toUpperCase()}'),
           if (item.size != null) chip(sizeText(item.size)),
@@ -79,9 +79,9 @@ class _Info extends StatelessWidget {
               fact('Path', item.rel.isEmpty ? item.path : item.rel),
               fact('Date', dateText(item.mtimeNs)),
               if (onPlace != null)
-                GestureDetector(behavior: HitTestBehavior.opaque, onTap: onPlace, child: Padding(padding: const EdgeInsets.only(top: 6), child: Text('Place in project', style: Dn.label(N.g95, FontWeight.w600).copyWith(decoration: TextDecoration.underline)))),
+                GestureDetector(behavior: HitTestBehavior.opaque, onTap: onPlace, child: Padding(padding: EdgeInsets.only(top: Surface.sectionGap), child: Text('Place in project', style: Dn.label(N.g95, FontWeight.w600).copyWith(decoration: TextDecoration.underline)))),
               if (onReveal != null)
-                GestureDetector(behavior: HitTestBehavior.opaque, onTap: onReveal, child: Padding(padding: const EdgeInsets.only(top: 4), child: Text('Reveal in Finder', style: Dn.label(N.g82).copyWith(decoration: TextDecoration.underline)))),
+                GestureDetector(behavior: HitTestBehavior.opaque, onTap: onReveal, child: Padding(padding: EdgeInsets.only(top: Surface.px(4)), child: Text('Reveal in Finder', style: Dn.label(N.g82).copyWith(decoration: TextDecoration.underline)))),
             ]),
           ),
         ),
@@ -206,8 +206,8 @@ class _Scrubber extends StatelessWidget {
   final ValueChanged<double> onChanged;
   @override
   Widget build(BuildContext context) => Container(
-        height: 22,
-        padding: const EdgeInsets.symmetric(horizontal: 10),
+        height: Surface.px(22),
+        padding: EdgeInsets.symmetric(horizontal: Surface.px(10)),
         child: Row(children: [
           Expanded(
             child: LayoutBuilder(builder: (context, box) {
@@ -217,11 +217,11 @@ class _Scrubber extends StatelessWidget {
                 behavior: HitTestBehavior.opaque,
                 onPanDown: (d) => set(d.localPosition),
                 onPanUpdate: (d) => set(d.localPosition),
-                child: CustomPaint(size: Size(box.maxWidth, 22), painter: _Bar(at, enabled)),
+                child: CustomPaint(size: Size(box.maxWidth, Surface.px(22)), painter: _Bar(at, enabled)),
               );
             }),
           ),
-          const SizedBox(width: 8),
+          SizedBox(width: Surface.px(8)),
           Text(label, style: Dn.value(N.g69).copyWith(fontSize: Dn.labelSize)),
         ]),
       );
@@ -231,6 +231,7 @@ class _Bar extends CustomPainter {
   const _Bar(this.at, this.enabled);
   final double at;
   final bool enabled;
+  // surface-block: painter geometry: drawn in the canvas's own pixels (method paint)
   @override
   void paint(Canvas c, Size s) {
     final y = s.height / 2;

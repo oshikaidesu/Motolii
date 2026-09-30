@@ -22,9 +22,11 @@ const exploreK = 3;
 
 /// The cheap features that join two assets, each 0..1 and weighted; one an asset lacks adds nothing.
 const _w = (name: 3.0, folder: 2.5, time: 1.0, shape: 1.0, kind: .5, size: .5, project: 1.5);
+// surface: feature weights of the similarity, not lengths
 const _wAll = 3.0 + 2.5 + 1.0 + 1.0 + .5 + .5 + 1.5;
 
 /// A neighbour must be at least this near to count: an asset with nothing near it stays alone rather than take a random one.
+// surface: a similarity threshold, not a length
 const _floor = .14;
 
 Set<String> _tokens(String name) {
@@ -190,6 +192,7 @@ class _Node {
 Frame _empty() => (faces: const <String, Rect>{}, labels: const <String, Rect>{}, links: const <String>[], graph: null, content: const Size(1, 1));
 
 /// The empty space kept round the map, so no island is pressed against the edge of the world.
+// surface: Explore's world coordinates, laid out once per graph
 const _margin = 64.0;
 
 /// Explore's places, as the Browser's Explore hook takes them. [workHashes] is the content hashes of what the work holds.
@@ -366,8 +369,8 @@ class ExploreBar extends StatelessWidget {
   Widget build(BuildContext context) => ListenableBuilder(
         listenable: choice,
         builder: (context, _) => Padding(
-          padding: const EdgeInsets.fromLTRB(9, 3, 9, 0),
-          child: Wrap(spacing: 4, runSpacing: 3, crossAxisAlignment: WrapCrossAlignment.center, children: [
+          padding: EdgeInsets.fromLTRB(Surface.panelInset, Surface.inlineGap, Surface.panelInset, 0),
+          child: Wrap(spacing: Surface.px(4), runSpacing: Surface.inlineGap, crossAxisAlignment: WrapCrossAlignment.center, children: [
             for (final (n, label) in const [(0, 'Global'), (1, 'Local 1'), (2, 'Local 2')]) _Chip(label, choice.hops == n, () => choice.setHops(n)),
             SizedBox(width: Surface.sectionGap),
             _Chip('Type · Folder', choice.overlay, choice.toggleOverlay),
@@ -386,7 +389,7 @@ class _Chip extends StatelessWidget {
         behavior: HitTestBehavior.opaque,
         onTap: tap,
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          padding: EdgeInsets.symmetric(horizontal: Surface.sectionGap, vertical: Surface.labelGap),
           decoration: BoxDecoration(color: on ? N.g20 : null, borderRadius: BorderRadius.circular(Surface.controlRadius)),
           child: Text(label, softWrap: false, style: Dn.label(on ? N.g95 : N.g63, on ? FontWeight.w600 : FontWeight.w500)),
         ),

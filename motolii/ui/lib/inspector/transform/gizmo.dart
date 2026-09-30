@@ -15,12 +15,13 @@ enum TMode { move, scale, rotate, anchor }
 const modeColor = {TMode.move: kMint, TMode.scale: kBlue, TMode.rotate: kPink, TMode.anchor: kViolet};
 
 class TransformGizmo extends StatefulWidget {
-  const TransformGizmo(this.store, {super.key, required this.mode, required this.onMode, this.rotAxis = 0, this.size = const Size(170, 132)});
+  const TransformGizmo(this.store, {super.key, required this.mode, required this.onMode, this.rotAxis = 0, Size? size}) : _size = size;
   final TransformStore store;
   final TMode mode;
   final ValueChanged<TMode> onMode;
   final int rotAxis; // 0 Z, 1 X, 2 Y
-  final Size size;
+  final Size? _size;
+  Size get size => _size ?? Size(Surface.px(170), Surface.px(132));
   @override
   State<TransformGizmo> createState() => _TransformGizmoState();
 }
@@ -256,6 +257,7 @@ class _GizmoPainter extends CustomPainter {
   final _TransformGizmoState g;
   final bool enabled;
 
+  // surface-block: painter geometry: drawn in the canvas's own pixels (method paint)
   @override
   void paint(Canvas cv, Size sz) {
     final s = g.s, l = s.active, mode = g.widget.mode;

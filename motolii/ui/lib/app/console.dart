@@ -25,10 +25,10 @@ class LiveConsole extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             SizedBox(
-              height: 24,
+              height: Surface.chromeRow,
               child: Row(
                 children: [
-                  const SizedBox(width: 10.5),
+                  SizedBox(width: Surface.px(10.5)),
                   Expanded(
                     child: Text(
                       '${shown.length} ${shown.length == 1 ? 'message' : 'messages'}',
@@ -40,7 +40,7 @@ class LiveConsole extends StatelessWidget {
                     behavior: HitTestBehavior.opaque,
                     onTap: shown.isEmpty ? null : log.clear,
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 10.5, vertical: 6),
+                      padding: EdgeInsets.symmetric(horizontal: Surface.px(10.5), vertical: Surface.sectionGap),
                       child: Text('Clear', style: H.s(Dn.nameSize, color: shown.isEmpty ? N.g63 : N.g82)),
                     ),
                   ),
@@ -53,24 +53,24 @@ class LiveConsole extends StatelessWidget {
                   ? Center(child: Text('No messages', style: H.s(Dn.nameSize, color: N.g63)))
                   : ListView.builder(
                       primary: false,
-                      padding: const EdgeInsets.symmetric(horizontal: 10.5, vertical: 4.5),
+                      padding: EdgeInsets.symmetric(horizontal: Surface.px(10.5), vertical: Surface.px(4.5)),
                       itemCount: shown.length,
                       itemBuilder: (context, i) {
                         final e = shown[i];
                         return Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 3),
+                          padding: EdgeInsets.symmetric(vertical: Surface.inlineGap),
                           child: Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(_clock(e.at), style: H.m(11, color: N.g63)),
-                              const SizedBox(width: 7.5),
+                              Text(_clock(e.at), style: H.m(Dn.nameSize, color: N.g63)),
+                              SizedBox(width: Surface.px(7.5)),
                               Container(
-                                width: 4.5,
-                                height: 4.5,
-                                margin: const EdgeInsets.only(top: 4),
+                                width: Surface.px(4.5),
+                                height: Surface.px(4.5),
+                                margin: EdgeInsets.only(top: Surface.px(4)),
                                 color: e.level == ConsoleLevel.error ? H.scatter.n : H.follow.b,
                               ),
-                              const SizedBox(width: 7.5),
+                              SizedBox(width: Surface.px(7.5)),
                               Expanded(child: Text(e.text, style: H.s(Dn.nameSize, color: Surface.ink))),
                             ],
                           ),

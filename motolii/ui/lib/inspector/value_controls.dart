@@ -150,7 +150,7 @@ class _ValueToyState extends State<ValueToy> {
     // colour mass follows importance, quietly: a thin edge; a touched value a wider edge and a tint; a hero a faint tint
     final active = dragging || hover || focus.hasFocus || editing;
     final tone = frozen ? dimTone(widget.tone) : widget.tone;
-    final edge = active ? 4.0 : 3.0;
+    final edge = active ? Surface.px(4.0) : Surface.px(3.0);
     final tint = widget.hero ? .07 : (active ? .09 : 0.0);
     return Focus(
       focusNode: focus,
@@ -226,26 +226,26 @@ class _ValueToyState extends State<ValueToy> {
             height: h,
             decoration: BoxDecoration(
               color: dragging || (hover && !frozen) ? Surface.hover : Surface.raised,
-              borderRadius: BorderRadius.circular(4),
-              border: editing && _bad ? Border.all(color: kPink, width: 1.4) : (focus.hasFocus || editing ? Border.all(color: Surface.ink.withValues(alpha: .85), width: 1.4) : null),
+              borderRadius: BorderRadius.circular(Surface.px(4)),
+              border: editing && _bad ? Border.all(color: kPink, width: Surface.px(1.4)) : (focus.hasFocus || editing ? Border.all(color: Surface.ink.withValues(alpha: .85), width: Surface.px(1.4)) : null),
             ),
             child: ClipRRect(
-              borderRadius: BorderRadius.circular(4),
+              borderRadius: BorderRadius.circular(Surface.px(4)),
               child: Stack(children: [
                 if (tint > 0) Positioned.fill(child: ColoredBox(color: tone.withValues(alpha: tint))),
-                if (track) Positioned.fill(key: ValueKey('track-${s.id}'), child: Align(alignment: Alignment.centerLeft, child: FractionallySizedBox(widthFactor: frac, heightFactor: 1, child: DecoratedBox(decoration: BoxDecoration(color: tone.withValues(alpha: frozen ? .08 : .16), border: Border(bottom: BorderSide(color: tone.withValues(alpha: frozen ? .3 : .75), width: 1.5))))))),
+                if (track) Positioned.fill(key: ValueKey('track-${s.id}'), child: Align(alignment: Alignment.centerLeft, child: FractionallySizedBox(widthFactor: frac, heightFactor: 1, child: DecoratedBox(decoration: BoxDecoration(color: tone.withValues(alpha: frozen ? .08 : .16), border: Border(bottom: BorderSide(color: tone.withValues(alpha: frozen ? .3 : .75), width: Surface.focusStroke))))))),
                 Positioned(left: 0, top: 0, bottom: 0, width: edge, child: ColoredBox(color: tone)),
                 Positioned.fill(child: Padding(
-                  padding: EdgeInsets.only(left: edge + 9, right: 7),
+                  padding: EdgeInsets.only(left: edge + Surface.panelInset, right: Surface.px(7)),
                   child: Row(children: [
-                    if (widget.tag != null) Padding(padding: const EdgeInsets.only(right: 5), child: Text(widget.tag!, style: sans(Dn.microSize, c: N.g44, w: FontWeight.w600))),
+                    if (widget.tag != null) Padding(padding: EdgeInsets.only(right: Surface.px(5)), child: Text(widget.tag!, style: sans(Dn.microSize, c: N.g44, w: FontWeight.w600))),
                     Expanded(
                       child: editing
-                          ? EditableText(controller: ctl, focusNode: editFocus, autofocus: true, style: sans(widget.hero ? 14 : 13, c: Surface.ink, w: FontWeight.w600), cursorColor: Surface.ink, backgroundCursorColor: Surface.muted, selectionColor: tone.withValues(alpha: .4), keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true), onSubmitted: _submit)
+                          ? EditableText(controller: ctl, focusNode: editFocus, autofocus: true, style: sans(widget.hero ? Surface.px(14) : Surface.px(13), c: Surface.ink, w: FontWeight.w600), cursorColor: Surface.ink, backgroundCursorColor: Surface.muted, selectionColor: tone.withValues(alpha: .4), keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true), onSubmitted: _submit)
                           : LayoutBuilder(builder: (context, box) {
                               // a number is never cut mid-digit ("10(" for 100): a narrow well first drops its decimals
                               // (the value is unchanged, only its display), and only a number still too wide is drawn smaller
-                              final style = sans(widget.hero ? 14 : 13, c: dragging ? Surface.ink : ink, w: FontWeight.w500);
+                              final style = sans(widget.hero ? Surface.px(14) : Surface.px(13), c: dragging ? Surface.ink : ink, w: FontWeight.w500);
                               var text = s.mixed ? '—' : s.format(s.value, decimals: widget.decimals);
                               bool fits(String t) {
                                 final p = TextPainter(text: TextSpan(text: t, style: style), textDirection: TextDirection.ltr, maxLines: 1)..layout();
@@ -295,7 +295,7 @@ class ValuesToy extends StatelessWidget {
     return Row(children: [
       for (var i = 0; i < axes; i++) ...[
         Expanded(child: ValueToy(slots[i], tag: const ['X', 'Y', 'Z'][i], hero: hero, tone: tone)),
-        if (i < axes - 1) const SizedBox(width: 2),
+        if (i < axes - 1) SizedBox(width: Surface.px(2)),
       ],
     ]);
   }
@@ -316,7 +316,7 @@ class PairToy extends StatelessWidget {
     return Row(children: [
       for (var i = 0; i < slots.length; i++) ...[
         Expanded(child: ValueToy(slots[i], tag: const ['X', 'Y'][i], hero: hero, tone: tone)),
-        if (i < slots.length - 1) const SizedBox(width: 2),
+        if (i < slots.length - 1) SizedBox(width: Surface.px(2)),
       ],
     ]);
   }
@@ -339,11 +339,11 @@ class ToggleToy extends StatelessWidget {
       onTap: frozen ? null : () => store.set(id, !on),
       child: Container(
         height: Surface.control,
-        padding: const EdgeInsets.symmetric(horizontal: 7.5),
-        decoration: BoxDecoration(color: on && hero ? tone.withValues(alpha: .26) : Surface.raised, borderRadius: BorderRadius.circular(4)),
+        padding: EdgeInsets.symmetric(horizontal: Surface.px(7.5)),
+        decoration: BoxDecoration(color: on && hero ? tone.withValues(alpha: .26) : Surface.raised, borderRadius: BorderRadius.circular(Surface.px(4))),
         child: Row(children: [
-          Container(width: 22.5, height: 13.5, padding: const EdgeInsets.all(1.5), alignment: on ? Alignment.centerRight : Alignment.centerLeft, decoration: BoxDecoration(color: on ? tone : N.g26, borderRadius: BorderRadius.circular(7)), child: Container(width: 10.5, height: 10.5, decoration: BoxDecoration(color: frozen ? N.g56 : Surface.ink, shape: BoxShape.circle))),
-          const SizedBox(width: 7.5),
+          Container(width: Surface.px(22.5), height: Surface.px(13.5), padding: EdgeInsets.all(Surface.px(1.5)), alignment: on ? Alignment.centerRight : Alignment.centerLeft, decoration: BoxDecoration(color: on ? tone : N.g26, borderRadius: BorderRadius.circular(Surface.px(7))), child: Container(width: Surface.px(10.5), height: Surface.px(10.5), decoration: BoxDecoration(color: frozen ? N.g56 : Surface.ink, shape: BoxShape.circle))),
+          SizedBox(width: Surface.px(7.5)),
           Text(on ? 'On' : 'Off', style: sans(Dn.nameSize, c: frozen ? N.g33 : (on ? _readout : Surface.muted), w: FontWeight.w500)),
         ]),
       ),
@@ -370,8 +370,8 @@ class ChoiceToy extends StatelessWidget {
       // one control: the options in a single track, the chosen one in the property's tone (a selection, not a chip)
       return Container(
         height: Surface.control,
-        padding: const EdgeInsets.all(1.5),
-        decoration: BoxDecoration(color: N.g07, border: Border.all(color: N.g20), borderRadius: BorderRadius.circular(4)),
+        padding: EdgeInsets.all(Surface.px(1.5)),
+        decoration: BoxDecoration(color: N.g07, border: Border.all(color: N.g20), borderRadius: BorderRadius.circular(Surface.px(4))),
         child: Row(children: [
         for (final (i, c) in choices.indexed) ...[
           Expanded(
@@ -379,20 +379,20 @@ class ChoiceToy extends StatelessWidget {
               key: ValueKey('choice-$id-$i'),
               behavior: HitTestBehavior.opaque,
               onTap: () => pick(i),
-              child: Container(alignment: Alignment.center, decoration: BoxDecoration(color: i == cur ? (frozen ? dimTone(tone) : tone) : null, borderRadius: BorderRadius.circular(2)), child: Text(c, softWrap: false, overflow: TextOverflow.clip, style: sans(Dn.nameSize, c: i == cur ? (frozen ? N.g56 : _dark) : (frozen ? N.g33 : N.g69), w: i == cur ? FontWeight.w700 : FontWeight.w500))),
+              child: Container(alignment: Alignment.center, decoration: BoxDecoration(color: i == cur ? (frozen ? dimTone(tone) : tone) : null, borderRadius: BorderRadius.circular(Surface.px(2))), child: Text(c, softWrap: false, overflow: TextOverflow.clip, style: sans(Dn.nameSize, c: i == cur ? (frozen ? N.g56 : _dark) : (frozen ? N.g33 : N.g69), w: i == cur ? FontWeight.w700 : FontWeight.w500))),
             ),
           ),
-          if (i < choices.length - 1) const SizedBox(width: 1.5),
+          if (i < choices.length - 1) SizedBox(width: Surface.px(1.5)),
         ],
       ]),
       );
     }
     // the stepper always names one choice: an out-of-range value reads as the nearest, as before
     final shown = raw.clamp(0, choices.length - 1);
-    Widget arrow(String k, String t, int d) => GestureDetector(key: ValueKey('choice-$id-$k'), behavior: HitTestBehavior.opaque, onTap: () => pick(shown + d), child: SizedBox(width: 18, height: Surface.control, child: Center(child: Text(t, style: sans(Dn.nameSize, c: Surface.muted)))));
+    Widget arrow(String k, String t, int d) => GestureDetector(key: ValueKey('choice-$id-$k'), behavior: HitTestBehavior.opaque, onTap: () => pick(shown + d), child: SizedBox(width: Surface.px(18), height: Surface.control, child: Center(child: Text(t, style: sans(Dn.nameSize, c: Surface.muted)))));
     return Container(
-      height: 22.5,
-      decoration: BoxDecoration(color: Surface.raised, borderRadius: BorderRadius.circular(4)),
+      height: Surface.px(22.5),
+      decoration: BoxDecoration(color: Surface.raised, borderRadius: BorderRadius.circular(Surface.px(4))),
       child: Row(children: [arrow('prev', '‹', -1), Expanded(child: Center(child: Text(choices[shown], key: ValueKey('choice-$id-name'), softWrap: false, overflow: TextOverflow.clip, style: sans(Dn.nameSize, c: frozen ? N.g33 : _readout, w: FontWeight.w500)))), arrow('next', '›', 1)]),
     );
   }
@@ -442,10 +442,10 @@ class _TextToyState extends State<TextToy> {
   Widget build(BuildContext context) {
     final frozen = widget.store.frozen;
     return Container(
-      height: 22.5,
-      padding: const EdgeInsets.symmetric(horizontal: 7),
+      height: Surface.px(22.5),
+      padding: EdgeInsets.symmetric(horizontal: Surface.px(7)),
       alignment: Alignment.centerLeft,
-      decoration: BoxDecoration(color: Surface.raised, borderRadius: BorderRadius.circular(4), border: focus.hasFocus ? Border.all(color: kYellow, width: 1) : null),
+      decoration: BoxDecoration(color: Surface.raised, borderRadius: BorderRadius.circular(Surface.px(4)), border: focus.hasFocus ? Border.all(color: kYellow, width: 1) : null),
       // Esc puts the value back and leaves (Classic IN-098)
       child: Focus(
         onKeyEvent: (_, e) {
@@ -482,10 +482,10 @@ class ReferenceToy extends StatelessWidget {
       },
       child: Container(
         height: Surface.control,
-        padding: const EdgeInsets.symmetric(horizontal: 7.5),
-        decoration: BoxDecoration(color: Surface.raised, borderRadius: BorderRadius.circular(4)),
+        padding: EdgeInsets.symmetric(horizontal: Surface.px(7.5)),
+        decoration: BoxDecoration(color: Surface.raised, borderRadius: BorderRadius.circular(Surface.px(4))),
         child: Row(children: [
-          Container(width: 10, height: 10, decoration: BoxDecoration(color: cur == null ? null : (store.frozen ? dimTone(tone) : tone), border: cur == null ? Border.all(color: Surface.muted, width: 1.4) : null, borderRadius: BorderRadius.circular(2))),
+          Container(width: Surface.px(10), height: Surface.px(10), decoration: BoxDecoration(color: cur == null ? null : (store.frozen ? dimTone(tone) : tone), border: cur == null ? Border.all(color: Surface.muted, width: Surface.px(1.4)) : null, borderRadius: BorderRadius.circular(Surface.px(2)))),
           SizedBox(width: Surface.sectionGap),
           Expanded(child: Text(cur ?? 'None', softWrap: false, overflow: TextOverflow.clip, style: sans(Dn.nameSize, c: cur == null ? Surface.muted : _readout, w: FontWeight.w500))),
           Text('⌄', style: sans(Dn.nameSize, c: Surface.muted)),
@@ -517,13 +517,13 @@ class RouteToy extends StatelessWidget {
       onTap: () => store.route(to, id),
       child: Container(
         height: Surface.control,
-        padding: const EdgeInsets.only(left: 7, right: 7.5),
-        decoration: BoxDecoration(color: Surface.raised, borderRadius: BorderRadius.circular(4)),
+        padding: EdgeInsets.only(left: Surface.px(7), right: Surface.px(7.5)),
+        decoration: BoxDecoration(color: Surface.raised, borderRadius: BorderRadius.circular(Surface.px(4))),
         child: Row(children: [
-          if (row['kind'] == 'color' && v is String) Container(width: 10.5, height: 10.5, decoration: BoxDecoration(color: hexColor(v), shape: BoxShape.circle)),
-          if (row['kind'] == 'color') const SizedBox(width: 7),
+          if (row['kind'] == 'color' && v is String) Container(width: Surface.px(10.5), height: Surface.px(10.5), decoration: BoxDecoration(color: hexColor(v), shape: BoxShape.circle)),
+          if (row['kind'] == 'color') SizedBox(width: Surface.px(7)),
           Expanded(child: Text('$v', softWrap: false, overflow: TextOverflow.clip, style: mono(Dn.nameSize, c: _readout))),
-          Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: store.frozen ? dimTone(tone) : tone, borderRadius: BorderRadius.circular(7)), child: Text('$to  →', style: sans(Dn.labelSize, c: _dark, w: FontWeight.w700))),
+          Container(padding: EdgeInsets.symmetric(horizontal: Surface.sectionGap, vertical: Surface.labelGap), decoration: BoxDecoration(color: store.frozen ? dimTone(tone) : tone, borderRadius: BorderRadius.circular(Surface.px(7))), child: Text('$to  →', style: sans(Dn.labelSize, c: _dark, w: FontWeight.w700))),
         ]),
       ),
     );
@@ -540,6 +540,6 @@ class ActionChip extends StatelessWidget {
         key: ValueKey('action-$id-$name'),
         behavior: HitTestBehavior.opaque,
         onTap: () => store.act(id, name),
-        child: Container(height: 18, padding: const EdgeInsets.symmetric(horizontal: 9), alignment: Alignment.center, decoration: BoxDecoration(color: store.frozen ? dimTone(tone) : tone, borderRadius: BorderRadius.circular(9)), child: Text(name, style: sans(Dn.labelSize, c: _dark, w: FontWeight.w700))),
+        child: Container(height: Surface.control, padding: EdgeInsets.symmetric(horizontal: Surface.panelInset), alignment: Alignment.center, decoration: BoxDecoration(color: store.frozen ? dimTone(tone) : tone, borderRadius: BorderRadius.circular(Surface.px(9))), child: Text(name, style: sans(Dn.labelSize, c: _dark, w: FontWeight.w700))),
       );
 }

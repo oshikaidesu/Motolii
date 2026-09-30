@@ -14,6 +14,7 @@ class Slot {
   Character get character => axis == null ? characterOf(row) : Character.none;
   bool get isAngle => character == Character.angle;
   bool get whole => const ['i32', 'u32', 'int'].contains('${row['kind']}') || ((character == Character.count || character == Character.seed) && value == value.roundToDouble());
+  // surface: a unit multiplier (percent), not a length
   double get displayScale => character == Character.opacity || row['percent'] == true ? 100 : 1;
   String? get unit => (row['unit'] as String?) ?? (isAngle ? '°' : (displayScale == 100 ? '%' : null));
   bool get mixed => store.mixed(id, axis);

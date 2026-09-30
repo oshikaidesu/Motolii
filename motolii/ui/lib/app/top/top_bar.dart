@@ -28,9 +28,9 @@ class TopBar extends StatelessWidget {
           padding: EdgeInsets.symmetric(horizontal: Surface.panelInset),
           decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: Surface.divider))),
           child: Row(children: [
-            Text('Motolii', style: H.s(14, w: FontWeight.w600, ls: -0.1, color: N.g82)),
+            Text('Motolii', style: H.s(Surface.px(14), w: FontWeight.w600, ls: -0.1, color: N.g82)),
             if (tagline) ...[
-              const SizedBox(width: 9),
+              SizedBox(width: Surface.px(9)),
               Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text('Motion', style: Dn.label(N.g76)),
                 const SizedBox(height: 1),
@@ -39,30 +39,30 @@ class TopBar extends StatelessWidget {
             ],
             const Spacer(flex: 2),
             _Key(onTap: m.onPlay, fill: H.play, edge: H.play, child: const _Play()),
-            _Key(onTap: m.onStop, fill: N.g10, edge: N.g20, child: Container(width: 7, height: 7, color: N.g56)),
-            _Key(onTap: m.onAnimate, fill: N.g13, edge: N.g26, child: Container(width: 9, height: 9, decoration: const BoxDecoration(color: H.record, shape: BoxShape.circle))),
-            const SizedBox(width: 10),
+            _Key(onTap: m.onStop, fill: N.g10, edge: N.g20, child: Container(width: Surface.px(7), height: Surface.px(7), color: N.g56)),
+            _Key(onTap: m.onAnimate, fill: N.g13, edge: N.g26, child: Container(width: Surface.px(9), height: Surface.px(9), decoration: const BoxDecoration(color: H.record, shape: BoxShape.circle))),
+            SizedBox(width: Surface.px(10)),
             ValueListenableBuilder<List<String>>(
               valueListenable: m.readouts,
               builder: (_, r, __) => Row(children: [
                 Text(r[0], style: Dn.value()),
                 if (duration) ...[
-                  Container(width: 1, height: 10, margin: const EdgeInsets.symmetric(horizontal: 7), color: N.g44),
+                  Container(width: 1, height: Surface.px(10), margin: EdgeInsets.symmetric(horizontal: Surface.px(7)), color: N.g44),
                   Text(r[1], style: Dn.value()),
                 ],
-                const SizedBox(width: 10),
+                SizedBox(width: Surface.px(10)),
                 Text(r[2], style: Dn.value()),
               ]),
             ),
-            _Glyph(HG.plus, size: 11, onTap: m.onMarker),
+            _Glyph(HG.plus, size: Surface.px(11), onTap: m.onMarker),
             const Spacer(flex: 2),
             _Modes(m, onModeAt),
             const Spacer(),
             for (final (g, f) in [(HG.fit, m.onFit), (HG.pin, m.onPin), (HG.folder, m.onOpen)])
-              _Key(onTap: f, fill: Surface.raised, edge: Surface.divider, child: SizedBox(width: 13, height: 13, child: CustomPaint(painter: HgPainter(g, f != null ? N.g86 : N.g44, Surface.raised)))),
+              _Key(onTap: f, fill: Surface.raised, edge: Surface.divider, child: SizedBox(width: Surface.px(13), height: Surface.px(13), child: CustomPaint(painter: HgPainter(g, f != null ? N.g86 : N.g44, Surface.raised)))),
             if (m.onScale != null) _TextKey('UI', onTap: m.onScale!),
             if (motto) ...[
-              const SizedBox(width: 12),
+              SizedBox(width: Surface.px(12)),
               Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.end, children: [
                 Text('Less numbers.', style: Dn.value(N.g82).copyWith(fontSize: Dn.labelSize)),
                 const SizedBox(height: 1),
@@ -88,9 +88,9 @@ class _Key extends StatelessWidget {
           behavior: HitTestBehavior.opaque,
           onTap: onTap,
           child: Container(
-            width: 26,
-            height: Surface.control + 2,
-            margin: const EdgeInsets.only(left: 4),
+            width: Surface.px(26),
+            height: Surface.control + Surface.px(2),
+            margin: EdgeInsets.only(left: Surface.px(4)),
             alignment: Alignment.center,
             decoration: BoxDecoration(color: fill, border: Border.all(color: edge), borderRadius: BorderRadius.circular(Surface.controlRadius)),
             child: child,
@@ -99,30 +99,21 @@ class _Key extends StatelessWidget {
       );
 }
 
-/// The UI Scale key: the same key as the window's others, with its two letters.
+/// The UI Scale key: the window's own key, with its two letters; it says where it is, for the sheet to open under it.
 class _TextKey extends StatelessWidget {
   const _TextKey(this.label, {required this.onTap});
   final String label;
   final void Function(Rect key) onTap;
   @override
   Widget build(BuildContext context) => Builder(
-        builder: (context) => MouseRegion(
-          cursor: SystemMouseCursors.click,
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: () {
-              final box = context.findRenderObject() as RenderBox?;
-              if (box != null) onTap(box.localToGlobal(Offset.zero) & box.size);
-            },
-            child: Container(
-              width: 26,
-              height: Surface.control + 2,
-              margin: const EdgeInsets.only(left: 4),
-              alignment: Alignment.center,
-              decoration: BoxDecoration(color: Surface.raised, border: Border.all(color: Surface.divider), borderRadius: BorderRadius.circular(Surface.controlRadius)),
-              child: Text(label, style: Dn.label(N.g86, FontWeight.w600)),
-            ),
-          ),
+        builder: (context) => _Key(
+          onTap: () {
+            final box = context.findRenderObject() as RenderBox?;
+            if (box != null) onTap(box.localToGlobal(Offset.zero) & box.size);
+          },
+          fill: Surface.raised,
+          edge: Surface.divider,
+          child: Text(label, style: Dn.label(N.g86, FontWeight.w600)),
         ),
       );
 }
@@ -130,7 +121,7 @@ class _TextKey extends StatelessWidget {
 class _Play extends StatelessWidget {
   const _Play();
   @override
-  Widget build(BuildContext context) => SizedBox(width: 9, height: 10, child: CustomPaint(painter: _PlayPainter()));
+  Widget build(BuildContext context) => SizedBox(width: Surface.px(9), height: Surface.px(10), child: CustomPaint(painter: _PlayPainter()));
 }
 
 class _PlayPainter extends CustomPainter {
@@ -163,7 +154,7 @@ class _Modes extends StatelessWidget {
   final void Function(TopMode mode, Rect key)? onModeAt;
   @override
   Widget build(BuildContext context) => Container(
-        height: Surface.control + 2,
+        height: Surface.control + Surface.px(2),
         decoration: BoxDecoration(color: Surface.raised, border: Border.all(color: Surface.divider), borderRadius: BorderRadius.circular(Surface.controlRadius)),
         child: Row(mainAxisSize: MainAxisSize.min, children: [
           for (final (mode, label) in const [(TopMode.edit, 'EDIT'), (TopMode.play, 'PLAY'), (TopMode.export, 'EXPORT')])
@@ -181,7 +172,7 @@ class _Modes extends StatelessWidget {
                     }
                   },
                   child: Container(
-                    width: 54,
+                    width: Surface.px(54),
                     alignment: Alignment.center,
                     color: m.mode == mode ? H.mode : null,
                     child: Text(label, style: Dn.label(m.mode == mode ? N.g100 : N.g82, FontWeight.w600).copyWith(letterSpacing: .7)),

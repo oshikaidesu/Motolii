@@ -201,14 +201,14 @@ class _CatalogMediaState extends State<CatalogMedia> {
               ]),
               if (session.folderSource != null) _Folders(session),
               Container(
-                height: Surface.control + 4,
-                margin: const EdgeInsets.fromLTRB(6, 3, 6, 3),
-                padding: const EdgeInsets.symmetric(horizontal: 6),
+                height: Surface.control + Surface.px(4),
+                margin: EdgeInsets.fromLTRB(Surface.sectionGap, Surface.inlineGap, Surface.sectionGap, Surface.inlineGap),
+                padding: EdgeInsets.symmetric(horizontal: Surface.sectionGap),
                 decoration: BoxDecoration(color: N.g07, borderRadius: BorderRadius.circular(Surface.controlRadius)),
                 alignment: Alignment.centerLeft,
                 child: _Search(session),
               ),
-              if (session.failure != null) Padding(padding: const EdgeInsets.all(9), child: Text('${session.failure}', style: Dn.label(N.g69))),
+              if (session.failure != null) Padding(padding: EdgeInsets.all(Surface.panelInset), child: Text('${session.failure}', style: Dn.label(N.g69))),
             ]),
             ),
             // while files are carried over the window the Browser says where they go; it takes no pointer
@@ -221,9 +221,9 @@ class _CatalogMediaState extends State<CatalogMedia> {
                     duration: const Duration(milliseconds: 120),
                     child: Container(
                       key: const ValueKey('media-drop-hint'),
-                      margin: const EdgeInsets.all(6),
+                      margin: EdgeInsets.all(Surface.sectionGap),
                       alignment: Alignment.center,
-                      decoration: BoxDecoration(color: N.veil, border: Border.all(color: N.g95, width: 1.4), borderRadius: BorderRadius.circular(Surface.faceRadius)),
+                      decoration: BoxDecoration(color: N.veil, border: Border.all(color: N.g95, width: Surface.px(1.4)), borderRadius: BorderRadius.circular(Surface.faceRadius)),
                       child: Text('Drop to import', style: sans(Dn.nameSize, c: N.g95)),
                     ),
                   ),
@@ -313,10 +313,10 @@ class _Row extends StatelessWidget {
   final List<Widget> children;
   @override
   Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.fromLTRB(6, 4, 6, 0),
+        padding: EdgeInsets.fromLTRB(Surface.sectionGap, Surface.px(4), Surface.sectionGap, 0),
         child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          SizedBox(width: 54, height: 20, child: Align(alignment: Alignment.centerLeft, child: Text(label.toUpperCase(), style: Dn.micro(N.g51)))),
-          Expanded(child: Wrap(spacing: 0, runSpacing: 3, children: [for (final c in children) SizedBox(height: 20, child: c)])),
+          SizedBox(width: Surface.px(54), height: Surface.workRow, child: Align(alignment: Alignment.centerLeft, child: Text(label.toUpperCase(), style: Dn.micro(N.g51)))),
+          Expanded(child: Wrap(spacing: 0, runSpacing: Surface.inlineGap, children: [for (final c in children) SizedBox(height: Surface.workRow, child: c)])),
         ]),
       );
 }
@@ -331,10 +331,10 @@ class _Chip extends StatelessWidget {
         behavior: HitTestBehavior.opaque,
         onTap: tap,
         child: Container(
-          margin: const EdgeInsets.only(right: 3),
-          padding: const EdgeInsets.symmetric(horizontal: 6),
+          margin: EdgeInsets.only(right: Surface.inlineGap),
+          padding: EdgeInsets.symmetric(horizontal: Surface.sectionGap),
           decoration: BoxDecoration(color: on ? N.g20 : null, borderRadius: BorderRadius.circular(Surface.controlRadius)),
-          child: Center(widthFactor: 1, child: Text(label, softWrap: false, style: sans(10.5, c: on ? N.g95 : (dim ? N.g44 : N.g63), w: on ? FontWeight.w600 : FontWeight.w500))),
+          child: Center(widthFactor: 1, child: Text(label, softWrap: false, style: sans(Surface.px(10.5), c: on ? N.g95 : (dim ? N.g44 : N.g63), w: on ? FontWeight.w600 : FontWeight.w500))),
         ),
       );
 }

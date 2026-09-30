@@ -220,13 +220,13 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
   // Primary loop (interval -> preset -> curve -> play) always shares one viewport.
   // Precision, saved curves and options are secondary and are the only thing that scrolls.
   Widget _body(double h, double w) {
-    final pad = w < 230 ? 8.0 : 12.0;
+    final pad = w < 230 ? Surface.px(8.0) : Surface.px(12.0);
     if (h < 200) {
       // a short strip: the face first, everything else one scroll away
       return SingleChildScrollView(
         key: const ValueKey('ease-scroll'),
         physics: drag != null ? const NeverScrollableScrollPhysics() : null,
-        padding: EdgeInsets.fromLTRB(pad, 9, pad, 12),
+        padding: EdgeInsets.fromLTRB(pad, Surface.panelInset, pad, Surface.px(12)),
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           SizedBox(height: math.max(56, h - 20), child: _plot(labels: false)),
           SizedBox(height: Surface.sectionGap),
@@ -239,14 +239,14 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
     }
     final plotH = (h * .46).clamp(110.0, 300.0);
     return Padding(
-      padding: EdgeInsets.fromLTRB(pad, 9, pad, 0),
+      padding: EdgeInsets.fromLTRB(pad, Surface.panelInset, pad, 0),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         SizedBox(height: plotH, child: _plot(labels: w >= 230 && plotH >= 150)),
-        const SizedBox(height: 7.5),
+        SizedBox(height: Surface.px(7.5)),
         _presetRow(),
         SizedBox(height: Surface.sectionGap),
         _navigator(w),
-        Expanded(child: SingleChildScrollView(key: const ValueKey('ease-scroll'), padding: const EdgeInsets.only(bottom: 12), child: _secondary(w))),
+        Expanded(child: SingleChildScrollView(key: const ValueKey('ease-scroll'), padding: EdgeInsets.only(bottom: Surface.px(12)), child: _secondary(w))),
       ]),
     );
   }
@@ -258,7 +258,7 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
       ]);
 
   Widget _section(String t, Widget child) => Padding(
-        padding: const EdgeInsets.only(top: 12),
+        padding: EdgeInsets.only(top: Surface.px(12)),
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           Text(t, style: sans(Dn.microSize, c: Surface.muted, w: FontWeight.w500, ls: 1.4)),
           SizedBox(height: Surface.sectionGap),
@@ -278,17 +278,17 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
           key: ValueKey(key),
           behavior: HitTestBehavior.opaque,
           onTap: () => _step(d),
-          child: SizedBox(width: 16.5, height: 27, child: Center(child: Text(t, style: sans(13.5, c: Surface.muted)))),
+          child: SizedBox(width: Surface.px(16.5), height: Surface.px(27), child: Center(child: Text(t, style: sans(Surface.px(13.5), c: Surface.muted)))),
         );
     return SizedBox(
-      height: 27,
+      height: Surface.px(27),
       child: Row(children: [
         GestureDetector(
           key: const ValueKey('ease-play'),
           onTap: () => _play.isAnimating ? _play.stop() : _play.forward(from: 0),
-          child: Container(width: 27, height: 27, decoration: const BoxDecoration(color: kMint, shape: BoxShape.circle), child: CustomPaint(painter: _PlayP(_play.isAnimating))),
+          child: Container(width: Surface.px(27), height: Surface.px(27), decoration: const BoxDecoration(color: kMint, shape: BoxShape.circle), child: CustomPaint(painter: _PlayP(_play.isAnimating))),
         ),
-        const SizedBox(width: 4.5),
+        SizedBox(width: Surface.px(4.5)),
         if (!narrow) arrow('ease-prev', '‹', -1),
         Expanded(child: _intervals(narrow)),
         if (!narrow) arrow('ease-next', '›', 1),
@@ -351,7 +351,7 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
           onHorizontalDragEnd: mixed ? null : (_) => _write(),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(l, softWrap: false, overflow: TextOverflow.clip, style: sans(Dn.microSize, c: mixed ? Surface.muted : N.inkSoft, w: FontWeight.w700, ls: .6)),
-            const SizedBox(height: 2),
+            SizedBox(height: Surface.px(2)),
             typing
                 ? Focus(
                     onKeyEvent: (_, e) {
@@ -364,7 +364,7 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
                     child: EditableText(
                       controller: _typed,
                       focusNode: _typedFocus,
-                      style: sans(16.5, c: N.g10, w: FontWeight.w600, ls: -.4),
+                      style: sans(Surface.px(16.5), c: N.g10, w: FontWeight.w600, ls: -.4),
                       cursorColor: N.g10,
                       backgroundCursorColor: Surface.muted,
                       onSubmitted: (t) {
@@ -377,13 +377,13 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
                       },
                     ),
                   )
-                : Text(_n(v), softWrap: false, style: sans(16.5, c: mixed ? Surface.muted : N.g10, w: FontWeight.w600, ls: -.4)),
+                : Text(_n(v), softWrap: false, style: sans(Surface.px(16.5), c: mixed ? Surface.muted : N.g10, w: FontWeight.w600, ls: -.4)),
           ]),
         ),
       );
     }
     Widget block(List<(String, double, void Function(double))> two) => Container(
-          padding: const EdgeInsets.fromLTRB(9, 7, 6, 7.5),
+          padding: EdgeInsets.fromLTRB(Surface.panelInset, Surface.px(7), Surface.sectionGap, Surface.px(7.5)),
           decoration: BoxDecoration(color: mixed ? Surface.raised : kYellow, borderRadius: BorderRadius.circular(Surface.faceRadius)),
           child: Row(children: [for (final p in two) cell(p), if (two.length == 1) const Expanded(child: SizedBox())]),
         );
@@ -391,12 +391,12 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
     if (w >= 230) {
       return Column(children: [
         for (var i = 0; i < blocks.length; i += 2) ...[
-          if (i > 0) const SizedBox(height: 4.5),
-          Row(children: [Expanded(child: blocks[i]), const SizedBox(width: 4.5), Expanded(child: i + 1 < blocks.length ? blocks[i + 1] : const SizedBox())]),
+          if (i > 0) SizedBox(height: Surface.px(4.5)),
+          Row(children: [Expanded(child: blocks[i]), SizedBox(width: Surface.px(4.5)), Expanded(child: i + 1 < blocks.length ? blocks[i + 1] : const SizedBox())]),
         ],
       ]);
     }
-    return Column(children: [for (final (i, b) in blocks.indexed) ...[if (i > 0) const SizedBox(height: 4.5), b]]);
+    return Column(children: [for (final (i, b) in blocks.indexed) ...[if (i > 0) SizedBox(height: Surface.px(4.5)), b]]);
   }
 
   // Presets: shape only. Hover or arrow keys peek the shape on the plot; Enter or click applies.
@@ -426,11 +426,11 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
                   key: ValueKey('ease-preset-$i'),
                   onTap: () { _presetFocus.requestFocus(); setState(() { keyFocus = i; _apply(i); }); },
                   child: Container(
-                    height: 31.5,
-                    margin: EdgeInsets.only(right: i == presets.length - 1 ? 0 : 5),
-                    padding: const EdgeInsets.all(6),
+                    height: Surface.px(31.5),
+                    margin: EdgeInsets.only(right: i == presets.length - 1 ? 0 : Surface.px(5)),
+                    padding: EdgeInsets.all(Surface.sectionGap),
                     // a quiet tile with the curve in its colour; the chosen one takes a tint and an edge of it
-                    decoration: BoxDecoration(color: !mixed && cur.p == i ? _presetColors[i % _presetColors.length].withValues(alpha: .18) : (peek == i ? N.g15 : N.g13), borderRadius: BorderRadius.circular(4), border: Border.all(color: !mixed && cur.p == i ? _presetColors[i % _presetColors.length] : N.g20, width: !mixed && cur.p == i ? 1.4 : 1)),
+                    decoration: BoxDecoration(color: !mixed && cur.p == i ? _presetColors[i % _presetColors.length].withValues(alpha: .18) : (peek == i ? N.g15 : N.g13), borderRadius: BorderRadius.circular(Surface.px(4)), border: Border.all(color: !mixed && cur.p == i ? _presetColors[i % _presetColors.length] : N.g20, width: !mixed && cur.p == i ? Surface.px(1.4) : 1)),
                     child: CustomPaint(size: Size.infinite, painter: _Icon(p.shape, _presetColors[i % _presetColors.length], 2)),
                   ),
                 ),
@@ -445,7 +445,7 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
     _write();
   }
 
-  Widget _savedRow() => widget.host != null ? _keptRow(widget.host!) : Wrap(spacing: 4, runSpacing: 4, children: [
+  Widget _savedRow() => widget.host != null ? _keptRow(widget.host!) : Wrap(spacing: Surface.px(4), runSpacing: Surface.px(4), children: [
         for (final (i, v) in saved.indexed)
           GestureDetector(
             key: ValueKey('ease-saved-$i'),
@@ -453,14 +453,14 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
               setState(() { if (mixed) { for (final s in segs) { s.setValues(v); } } else { cur.setValues(v); } });
               _write();
             },
-            child: Container(width: 34.5, height: 25.5, padding: const EdgeInsets.all(6), decoration: BoxDecoration(color: Surface.raised, borderRadius: BorderRadius.circular(Surface.controlRadius)), child: CustomPaint(size: Size.infinite, painter: _Icon(bezierShape(v[0], v[1], v[2], v[3]), kMint, 2))),
+            child: Container(width: Surface.px(34.5), height: Surface.px(25.5), padding: EdgeInsets.all(Surface.sectionGap), decoration: BoxDecoration(color: Surface.raised, borderRadius: BorderRadius.circular(Surface.controlRadius)), child: CustomPaint(size: Size.infinite, painter: _Icon(bezierShape(v[0], v[1], v[2], v[3]), kMint, 2))),
           ),
         _chip('ease-copy', 'Copy curve', () => setState(() => saved.add(List.of(cur.values)))),
         if (saved.isNotEmpty) _chip('ease-clear', 'Clear', () => setState(saved.clear)),
       ]);
 
   /// Hosted: the host's kept curves (not the demo ones) and what can be done with the current one.
-  Widget _keptRow(EaseHost h) => Wrap(spacing: 4, runSpacing: 4, children: [
+  Widget _keptRow(EaseHost h) => Wrap(spacing: Surface.px(4), runSpacing: Surface.px(4), children: [
         for (final (i, s) in h.saved.indexed)
           GestureDetector(
             key: ValueKey('ease-saved-$i'),
@@ -469,7 +469,7 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
               setState(() { if (mixed) { for (final t in segs) { take(t); } } else { take(cur); } });
               _write();
             },
-            child: Container(width: 34.5, height: 25.5, padding: const EdgeInsets.all(6), decoration: BoxDecoration(color: Surface.raised, borderRadius: BorderRadius.circular(Surface.controlRadius)), child: CustomPaint(size: Size.infinite, painter: _Icon(s.shape, kMint, 2))),
+            child: Container(width: Surface.px(34.5), height: Surface.px(25.5), padding: EdgeInsets.all(Surface.sectionGap), decoration: BoxDecoration(color: Surface.raised, borderRadius: BorderRadius.circular(Surface.controlRadius)), child: CustomPaint(size: Size.infinite, painter: _Icon(s.shape, kMint, 2))),
           ),
         _chip('ease-copy', 'Copy curve', () => h.copyCurve(cur)),
         _chip('ease-save', 'Save preset', () => h.savePreset(cur)),
@@ -480,7 +480,7 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
   Widget _chip(String key, String t, VoidCallback f) => GestureDetector(
         key: ValueKey(key),
         onTap: f,
-        child: Container(height: 25.5, padding: const EdgeInsets.symmetric(horizontal: 9), alignment: Alignment.center, decoration: BoxDecoration(border: Border.all(color: N.g26), borderRadius: BorderRadius.circular(Surface.controlRadius)), child: Text(t, style: sans(Dn.nameSize, c: N.g76))),
+        child: Container(height: Surface.px(25.5), padding: EdgeInsets.symmetric(horizontal: Surface.panelInset), alignment: Alignment.center, decoration: BoxDecoration(border: Border.all(color: N.g26), borderRadius: BorderRadius.circular(Surface.controlRadius)), child: Text(t, style: sans(Dn.nameSize, c: N.g76))),
       );
 
   /// Hosted, the switch says whether the desk is in its ghost mode (set by what is picked); unhosted it is a toy.
@@ -492,8 +492,8 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
           behavior: HitTestBehavior.opaque,
           onTap: widget.host == null ? () => setState(() => ghost = !ghost) : null,
           child: Row(children: [
-            Container(width: 25.5, height: 15, padding: const EdgeInsets.all(1.5), alignment: _ghost ? Alignment.centerRight : Alignment.centerLeft, decoration: BoxDecoration(color: _ghost ? kBlue : N.g20, borderRadius: BorderRadius.circular(7.5)), child: Container(width: 12, height: 12, decoration: const BoxDecoration(color: Surface.ink, shape: BoxShape.circle))),
-            const SizedBox(width: 7.5),
+            Container(width: Surface.px(25.5), height: Surface.px(15), padding: EdgeInsets.all(Surface.px(1.5)), alignment: _ghost ? Alignment.centerRight : Alignment.centerLeft, decoration: BoxDecoration(color: _ghost ? kBlue : N.g20, borderRadius: BorderRadius.circular(Surface.px(7.5))), child: Container(width: Surface.px(12), height: Surface.px(12), decoration: const BoxDecoration(color: Surface.ink, shape: BoxShape.circle))),
+            SizedBox(width: Surface.px(7.5)),
             Flexible(child: Text('Sequence ghosts', softWrap: false, overflow: TextOverflow.ellipsis, style: sans(Dn.nameSize, c: N.g76))),
           ]),
         )),
@@ -505,11 +505,11 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
           key: const ValueKey('ease-all'),
           onTap: () => setState(() => sel = -1),
           child: Container(
-            width: compact ? 24 : 34,
-            height: 27,
-            margin: const EdgeInsets.only(right: 3),
+            width: compact ? Surface.px(24) : Surface.px(34),
+            height: Surface.px(27),
+            margin: EdgeInsets.only(right: Surface.inlineGap),
             alignment: Alignment.center,
-            decoration: BoxDecoration(color: mixed ? kYellow : Surface.raised, borderRadius: BorderRadius.circular(4)),
+            decoration: BoxDecoration(color: mixed ? kYellow : Surface.raised, borderRadius: BorderRadius.circular(Surface.px(4))),
             child: Text(compact ? '≠' : 'All', style: sans(Dn.labelSize, c: mixed ? N.g10 : Surface.muted, w: FontWeight.w600)),
           ),
         ),
@@ -520,11 +520,11 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
               key: ValueKey('ease-seg-$i'),
               onTap: () => setState(() => sel = i),
               child: Container(
-                height: 27,
-                margin: EdgeInsets.only(right: i == segs.length - 1 ? 0 : 4),
-                padding: EdgeInsets.symmetric(horizontal: compact ? 2 : 5, vertical: 4.5),
+                height: Surface.px(27),
+                margin: EdgeInsets.only(right: i == segs.length - 1 ? 0 : Surface.px(4)),
+                padding: EdgeInsets.symmetric(horizontal: compact ? Surface.px(2) : Surface.px(5), vertical: Surface.px(4.5)),
                 // an interval: its colour as a wash and a line, stronger when it is the one being eased
-                decoration: BoxDecoration(color: _segColors[i % _segColors.length].withValues(alpha: sel == i ? .24 : .1), borderRadius: BorderRadius.circular(4), border: Border.all(color: _segColors[i % _segColors.length].withValues(alpha: sel == i ? 1 : .35), width: sel == i ? 1.4 : 1)),
+                decoration: BoxDecoration(color: _segColors[i % _segColors.length].withValues(alpha: sel == i ? .24 : .1), borderRadius: BorderRadius.circular(Surface.px(4)), border: Border.all(color: _segColors[i % _segColors.length].withValues(alpha: sel == i ? 1 : .35), width: sel == i ? Surface.px(1.4) : 1)),
                 // the frame count only where the interval is wide enough to carry it (a narrow seat keeps the shape)
                 child: LayoutBuilder(builder: (context, box) {
                   final label = !compact && sg.frames >= 8 && box.maxWidth >= 42;
@@ -648,6 +648,7 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
 class _PlayP extends CustomPainter {
   _PlayP(this.playing);
   final bool playing;
+  // surface-block: painter geometry: drawn in the canvas's own pixels (method paint)
   @override
   void paint(Canvas c, Size s) {
     final m = s.center(Offset.zero);
@@ -722,6 +723,7 @@ class _PlotP extends CustomPainter {
     return path;
   }
 
+  // surface-block: painter geometry: drawn in the canvas's own pixels (method paint)
   @override
   void paint(Canvas c, Size s) {
     final r = box(s);

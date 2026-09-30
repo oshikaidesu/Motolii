@@ -124,6 +124,7 @@ class DepthDesk extends StatefulWidget {
 class _DepthDeskState extends State<DepthDesk> {
   final _cam = depthDefaultCam();
   final _layers = depthDefaultLayers();
+  // surface: a field of view in degrees, not a length
   final double _fov = 46; // read from the camera; edited in the Inspector
   int _selected = 1;
   Offset? _from;
@@ -167,39 +168,39 @@ class _DepthDeskState extends State<DepthDesk> {
         title: 'Depth',
         subtitle: 'STAGE VIEW',
         trailing: host != null ? null : SizedBox(
-          width: 84,
-          child: Segmented(const ['Top', 'Front', 'Side'], view == DView.top ? 0 : (view == DView.front ? 1 : 2), height: 18, onChanged: (i) => setState(() => view = [DView.top, DView.front, DView.side][i])),
+          width: Surface.px(84),
+          child: Segmented(const ['Top', 'Front', 'Side'], view == DView.top ? 0 : (view == DView.front ? 1 : 2), height: Surface.control, onChanged: (i) => setState(() => view = [DView.top, DView.front, DView.side][i])),
         ),
         full: (c, s) => Padding(
-          padding: const EdgeInsets.fromLTRB(9, 9, 9, 9),
+          padding: EdgeInsets.fromLTRB(Surface.panelInset, Surface.panelInset, Surface.panelInset, Surface.panelInset),
           child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             Expanded(child: _diagram(view, true)),
-            const SizedBox(height: 9),
+            SizedBox(height: Surface.px(9)),
             Row(children: [
               Expanded(child: NumBox('Camera', '${camDist.round()}', compact: true)),
-              const SizedBox(width: 4.5),
+              SizedBox(width: Surface.px(4.5)),
               Expanded(child: NumBox('FOV', '${fov.round()}°', compact: true)),
-              const SizedBox(width: 4.5),
+              SizedBox(width: Surface.px(4.5)),
               Expanded(child: NumBox(selName, '${selDist.round()}', compact: true)),
             ]),
-            const SizedBox(height: 9),
-            Row(children: [_key(Surface.ink, 'Camera'), const SizedBox(width: 10.5), _key(kYellow, 'Selected'), const SizedBox(width: 10.5), _key(kBlue, 'Other layers')]),
-            const SizedBox(height: 7.5),
+            SizedBox(height: Surface.px(9)),
+            Row(children: [_key(Surface.ink, 'Camera'), SizedBox(width: Surface.px(10.5)), _key(kYellow, 'Selected'), SizedBox(width: Surface.px(10.5)), _key(kBlue, 'Other layers')]),
+            SizedBox(height: Surface.px(7.5)),
             Text(host?.targetName == null ? 'Drag layers or the camera to move them. Camera settings live in Inspector.' : 'Looking at ${host!.targetName}. Drag layers or the camera to move them. Camera settings live in Inspector.', style: sans(Dn.labelSize, c: Surface.muted)),
           ]),
         ),
-        strip: (c, s) => Padding(padding: const EdgeInsets.fromLTRB(6, 1.5, 6, 6), child: _diagram(DView.topWide, false)),
+        strip: (c, s) => Padding(padding: EdgeInsets.fromLTRB(Surface.sectionGap, Surface.px(1.5), Surface.sectionGap, Surface.sectionGap), child: _diagram(DView.topWide, false)),
         tall: (c, s) => Padding(
-          padding: const EdgeInsets.all(6),
+          padding: EdgeInsets.all(Surface.sectionGap),
           child: Column(children: [
             Expanded(child: _diagram(DView.top, false)),
-            const SizedBox(height: 4.5),
-            Row(children: [Expanded(child: NumBox('Dist', '${camDist.round()}', compact: true)), const SizedBox(width: 4), Expanded(child: NumBox('FOV', '${fov.round()}°', compact: true))]),
+            SizedBox(height: Surface.px(4.5)),
+            Row(children: [Expanded(child: NumBox('Dist', '${camDist.round()}', compact: true)), SizedBox(width: Surface.px(4)), Expanded(child: NumBox('FOV', '${fov.round()}°', compact: true))]),
           ]),
         ),
       );
 
-  Widget _key(Color c, String t) => Row(children: [Container(width: 7.5, height: 7.5, decoration: BoxDecoration(color: c, shape: BoxShape.circle)), const SizedBox(width: 4.5), Text(t, style: sans(Dn.labelSize, c: N.g69))]);
+  Widget _key(Color c, String t) => Row(children: [Container(width: Surface.px(7.5), height: Surface.px(7.5), decoration: BoxDecoration(color: c, shape: BoxShape.circle)), SizedBox(width: Surface.px(4.5)), Text(t, style: sans(Dn.labelSize, c: N.g69))]);
 
   Widget _diagram(DView v, bool detail) => LayoutBuilder(builder: (context, box) {
         final size = Size(box.maxWidth, box.maxHeight);
@@ -281,6 +282,7 @@ class DepthPainter extends CustomPainter {
     tp.paint(c, Offset(centre ? o.dx - tp.width / 2 : o.dx, o.dy - tp.height / 2));
   }
 
+  // surface-block: painter geometry: drawn in the canvas's own pixels (method paint)
   @override
   void paint(Canvas c, Size s) {
     final rr = RRect.fromRectAndRadius(Offset.zero & s, const Radius.circular(4.5));

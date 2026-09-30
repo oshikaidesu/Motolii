@@ -62,7 +62,7 @@ Widget? _thumbnail(Map<String, dynamic> item) {
   return null;
 }
 
-Widget _glyph(HG g) => Stack(fit: StackFit.expand, children: [const ColoredBox(color: Surface.raised), Center(child: GlyphBox(g, size: 26))]);
+Widget _glyph(HG g) => Stack(fit: StackFit.expand, children: [const ColoredBox(color: Surface.raised), Center(child: GlyphBox(g, size: Surface.px(26)))]);
 
 /// A clip: its picture, a play mark (it moves) and its length.
 class _MotionFace extends StatelessWidget {
@@ -93,7 +93,7 @@ class _WaveFace extends StatelessWidget {
     ];
     return Stack(fit: StackFit.expand, children: [
       const ColoredBox(color: _waveFloor),
-      if (columns.isEmpty) const Center(child: GlyphBox(HG.headphones, size: 24)) else CustomPaint(painter: _Wave(columns)),
+      if (columns.isEmpty) Center(child: GlyphBox(HG.headphones, size: Surface.px(24))) else CustomPaint(painter: _Wave(columns)),
     ]);
   }
 }
@@ -122,6 +122,7 @@ class _Wave extends CustomPainter {
 /// Behind a still: transparent pixels show as a checker, opaque ones cover it.
 class _Checker extends CustomPainter {
   const _Checker();
+  // surface-block: painter geometry: drawn in the canvas's own pixels (method paint)
   @override
   void paint(Canvas cv, Size s) {
     const cell = 6.0;

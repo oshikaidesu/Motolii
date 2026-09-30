@@ -93,11 +93,11 @@ class SearchField extends StatelessWidget {
         listenable: search,
         builder: (_, __) => Container(
           height: height,
-          padding: const EdgeInsets.only(left: 6, right: 4.5),
-          decoration: BoxDecoration(color: Surface.raised, border: Border.all(color: search.focus.hasFocus ? N.g44 : Surface.dividerFine), borderRadius: BorderRadius.circular(2)),
+          padding: EdgeInsets.only(left: Surface.sectionGap, right: Surface.px(4.5)),
+          decoration: BoxDecoration(color: Surface.raised, border: Border.all(color: search.focus.hasFocus ? N.g44 : Surface.dividerFine), borderRadius: BorderRadius.circular(Surface.px(2))),
           child: Row(children: [
-            SizedBox(width: 10, height: 10, child: CustomPaint(painter: magnifier(Surface.muted))),
-            const SizedBox(width: 5),
+            SizedBox(width: Surface.px(10), height: Surface.px(10), child: CustomPaint(painter: magnifier(Surface.muted))),
+            SizedBox(width: Surface.px(5)),
             Expanded(
               child: Stack(alignment: Alignment.centerLeft, children: [
                 if (!search.active) Text(hint, softWrap: false, overflow: TextOverflow.clip, style: sans(Dn.nameSize, c: Surface.muted)),
@@ -115,7 +115,7 @@ class SearchField extends StatelessWidget {
             if (search.active)
               GestureDetector(
                 onTap: search.clear,
-                child: SizedBox(width: 12, height: 12, child: CustomPaint(painter: _X())),
+                child: SizedBox(width: Surface.px(12), height: Surface.px(12), child: CustomPaint(painter: _X())),
               ),
             if (trailing != null) ...[SizedBox(width: Surface.inlineGap), trailing!],
           ]),
@@ -187,10 +187,10 @@ class _SearchKeyFaceState extends State<SearchKeyFace> {
               WidgetsBinding.instance.addPostFrameCallback((_) => widget.search.request());
             },
             child: Container(
-              width: 19.5,
-              height: 19.5,
-              decoration: BoxDecoration(color: Surface.raised, border: Border.all(color: Surface.dividerFine), borderRadius: BorderRadius.circular(2)),
-              child: Center(child: SizedBox(width: 10, height: 10, child: CustomPaint(painter: magnifier(Surface.muted)))),
+              width: Surface.px(19.5),
+              height: Surface.px(19.5),
+              decoration: BoxDecoration(color: Surface.raised, border: Border.all(color: Surface.dividerFine), borderRadius: BorderRadius.circular(Surface.px(2))),
+              child: Center(child: SizedBox(width: Surface.px(10), height: Surface.px(10), child: CustomPaint(painter: magnifier(Surface.muted)))),
             ),
           );
         },

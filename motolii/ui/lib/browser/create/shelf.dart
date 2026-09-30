@@ -46,7 +46,7 @@ class _CreatePanelState extends State<CreatePanel> with WithDiscovery<CreatePane
           }
           return PanelShell(
             title: 'Create',
-            icon: const GlyphBox(HG.plus, size: 22, color: N.g95),
+            icon: GlyphBox(HG.plus, size: Surface.px(22), color: N.g95),
             search: search,
             classify: classify,
             groups: views.groups(found),
@@ -71,9 +71,9 @@ class _CreatePanelState extends State<CreatePanel> with WithDiscovery<CreatePane
   Widget _strip(List<Thing> shown, double h) => ListView.builder(
         scrollDirection: Axis.horizontal,
         physics: const ClampingScrollPhysics(),
-        padding: const EdgeInsets.symmetric(horizontal: 7.5, vertical: 7.5),
+        padding: EdgeInsets.symmetric(horizontal: Surface.px(7.5), vertical: Surface.px(7.5)),
         itemCount: shown.length,
-        itemBuilder: (c, i) => Padding(padding: const EdgeInsets.only(right: 4), child: SizedBox(width: math.min(h - 20, 54), child: seated(c, shown[i], _Tile(shown[i], widget.scene, false)))),
+        itemBuilder: (c, i) => Padding(padding: EdgeInsets.only(right: Surface.px(4)), child: SizedBox(width: math.min(h - 20, 54), child: seated(c, shown[i], _Tile(shown[i], widget.scene, false)))),
       );
 }
 
@@ -94,14 +94,14 @@ class _TileState extends State<_Tile> {
         onEnter: (_) => setState(() => _hover = true),
         onExit: (_) => setState(() => _hover = false),
         child: DecoratedBox(
-          decoration: BoxDecoration(color: _hover ? Surface.hover : null, borderRadius: BorderRadius.circular(2)),
+          decoration: BoxDecoration(color: _hover ? Surface.hover : null, borderRadius: BorderRadius.circular(Surface.px(2))),
           child: LayoutBuilder(builder: (context, box) {
             final face = (box.maxWidth * .78).clamp(0.0, 40.0);
             return Column(mainAxisAlignment: MainAxisAlignment.center, children: [
               SizedBox(width: face, height: face, child: ThingFace(widget.thing, scene: widget.scene)),
               if (widget.caption)
                 Padding(
-                  padding: const EdgeInsets.only(top: 2),
+                  padding: EdgeInsets.only(top: Surface.labelGap),
                   child: Text(widget.thing.name, maxLines: 1, softWrap: false, overflow: TextOverflow.fade, textAlign: TextAlign.center, style: sans(Dn.microSize, c: N.g86, w: FontWeight.w500)),
                 ),
             ]);
@@ -114,6 +114,7 @@ class MarkPainter extends CustomPainter {
   MarkPainter(this.mk, this.color);
   final Mk mk;
   final Color color;
+  // surface-block: painter geometry: drawn in the canvas's own pixels (method paint)
   @override
   void paint(Canvas cv, Size sz) {
     final s = sz.shortestSide;

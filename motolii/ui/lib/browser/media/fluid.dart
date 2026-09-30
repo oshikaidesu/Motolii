@@ -27,7 +27,7 @@ typedef ExploreLayout = Frame Function(List<BrowserItem> items, String? selected
 /// change of projection moves the same faces (the selection, the identity and the scroll context stay). List lays them in
 /// rows with their facts beside, Thumbnail packs them at their own shapes with a name under each, Explore is the caller's.
 class FluidBoard extends StatefulWidget {
-  const FluidBoard({super.key, required this.items, required this.selected, required this.view, required this.onTap, this.onOpen, this.explore, this.faces, this.holding = const {}, this.minColumn = defaultColumn, this.revealOn = false, this.picked = const {}, this.carry, this.onMenu});
+  FluidBoard({super.key, required this.items, required this.selected, required this.view, required this.onTap, this.onOpen, this.explore, this.faces, this.holding = const {}, double? minColumn, this.revealOn = false, this.picked = const {}, this.carry, this.onMenu}) : minColumn = minColumn ?? defaultColumn;
   final List<BrowserItem> items;
 
   /// Everything picked (the chosen one, `selected`, is the last of them): each carries the ring.
@@ -56,10 +56,15 @@ class FluidBoard extends StatefulWidget {
   /// Pointers held over faces (asset id -> 0..1 within the face): a story's way to show what a passing pointer does.
   final Map<String, Offset> holding;
 
-  static const rowHeight = 32.0, caption = 14.0, margin = 6.0, gap = 3.0, defaultColumn = 44.0;
+  static double get rowHeight => Surface.faceRow;
+  static double get caption => Surface.px(14.0);
+  static double get margin => Surface.sectionGap;
+  static double get gap => Surface.inlineGap;
+  static double get defaultColumn => Surface.px(44.0);
 
   /// Thumbnail: the shelf's masonry (the kinds alternate, each face at its own shape, the shortest column next).
-  static Frame thumbnail(List<BrowserItem> items, double width, [double minColumn = defaultColumn]) {
+  static Frame thumbnail(List<BrowserItem> items, double width, [double? minColumn]) {
+    minColumn ??= defaultColumn;
     final byKind = <String, List<BrowserItem>>{};
     for (final i in items) {
       (byKind[i.kind] ??= []).add(i);
@@ -84,7 +89,7 @@ class FluidBoard extends StatefulWidget {
 
   /// List: a row each, a small face at its own shape, the facts beside it.
   static Frame list(List<BrowserItem> items, double width) {
-    const boxW = 46.0, boxH = 26.0;
+    final boxW = Surface.px(46.0), boxH = Surface.px(26.0);
     final faces = <String, Rect>{}, labels = <String, Rect>{};
     for (final (n, it) in items.indexed) {
       final a = it.aspect, fw = a >= boxW / boxH ? boxW : boxH * a, fh = a >= boxW / boxH ? boxW / a : boxH;
@@ -166,7 +171,7 @@ class _FluidBoardState extends State<FluidBoard> with TickerProviderStateMixin {
 
   /// The two projections that are built lazily, laid out once per (what is shown, how wide, how big the faces are).
   Frame _placed(String view, List<BrowserItem> items, double width, double minColumn) {
-    final key = (view, width, minColumn, items.length, items.isEmpty ? '' : items.first.id, items.isEmpty ? '' : items.last.id, items.fold<int>(0, (a, i) => a ^ i.id.hashCode));
+    final key = (view, width, minColumn, UiScale.percent, items.length, items.isEmpty ? '' : items.first.id, items.isEmpty ? '' : items.last.id, items.fold<int>(0, (a, i) => a ^ i.id.hashCode));
     if (_placedKey == key && _placedFrame != null) return _placedFrame!;
     _placedKey = key;
     return _placedFrame = view == 'list' ? FluidBoard.list(items, width) : FluidBoard.thumbnail(items, width, minColumn);
@@ -324,7 +329,7 @@ class _FluidBoardState extends State<FluidBoard> with TickerProviderStateMixin {
           }
         }
         return graph != null
-            ? InteractiveViewer(transformationController: _view, constrained: false, minScale: .2, maxScale: 3.5, boundaryMargin: const EdgeInsets.all(600), child: board)
+            ? InteractiveViewer(transformationController: _view, constrained: false, minScale: .2, maxScale: 3.5, boundaryMargin: EdgeInsets.all(Surface.px(600)), child: board)
             : SingleChildScrollView(controller: _scroll, physics: const ClampingScrollPhysics(), scrollDirection: Axis.vertical, child: board);
       });
 
@@ -428,7 +433,7 @@ class _FluidBoardState extends State<FluidBoard> with TickerProviderStateMixin {
       }, child: child);
 
   /// A face with a thin colour round it (metadata such as its type; the picture is untouched).
-  Widget _tinted(Color? tint, Widget face) => tint == null ? face : Stack(fit: StackFit.expand, children: [face, IgnorePointer(child: DecoratedBox(decoration: BoxDecoration(borderRadius: BorderRadius.circular(3), border: Border.all(color: tint, width: 1.5))))]);
+  Widget _tinted(Color? tint, Widget face) => tint == null ? face : Stack(fit: StackFit.expand, children: [face, IgnorePointer(child: DecoratedBox(decoration: BoxDecoration(borderRadius: BorderRadius.circular(Surface.controlRadius), border: Border.all(color: tint, width: Surface.focusStroke))))]);
 
   /// A face that can be carried (to the Timeline) is dragged as itself; one that cannot is only the face.
   Widget _carried(BrowserItem it, Rect rect, Widget face) {
@@ -437,7 +442,7 @@ class _FluidBoardState extends State<FluidBoard> with TickerProviderStateMixin {
     return Draggable<Map<String, dynamic>>(
       data: data,
       dragAnchorStrategy: pointerDragAnchorStrategy,
-      feedback: IgnorePointer(child: Opacity(opacity: .85, child: SizedBox(width: math.max(48.0, math.min(rect.width, 120.0)), height: math.max(32.0, math.min(rect.height, 90.0)), child: ClipRRect(borderRadius: BorderRadius.circular(3), child: materialFace(it.shelf))))),
+      feedback: IgnorePointer(child: Opacity(opacity: .85, child: SizedBox(width: math.max(48.0, math.min(rect.width, 120.0)), height: math.max(32.0, math.min(rect.height, 90.0)), child: ClipRRect(borderRadius: BorderRadius.circular(Surface.controlRadius), child: materialFace(it.shelf))))),
       childWhenDragging: Opacity(opacity: .4, child: face),
       child: face,
     );
@@ -449,12 +454,12 @@ class _FluidBoardState extends State<FluidBoard> with TickerProviderStateMixin {
       case 'list':
         return Row(children: [
           Expanded(child: Text(it.name, maxLines: 1, softWrap: false, overflow: TextOverflow.ellipsis, style: Dn.name(on ? N.g100 : N.g91))),
-          const SizedBox(width: 8),
-          SizedBox(width: 42, child: Text(it.typeWord, softWrap: false, style: Dn.label(N.g63))),
-          SizedBox(width: 40, child: Text(clockText(it.seconds), softWrap: false, style: Dn.value(N.g69).copyWith(fontSize: 10))),
-          if (MediaListHeader.wide(width + 62)) SizedBox(width: 54, child: Text(sizeText(it.size), softWrap: false, textAlign: TextAlign.right, style: Dn.value(N.g69).copyWith(fontSize: 10))),
-          if (MediaListHeader.roomy(width + 62)) SizedBox(width: 74, child: Text(dateText(it.mtimeNs), softWrap: false, textAlign: TextAlign.right, style: Dn.value(N.g56).copyWith(fontSize: 10))),
-          const SizedBox(width: 8),
+          SizedBox(width: Surface.px(8)),
+          SizedBox(width: Surface.px(42), child: Text(it.typeWord, softWrap: false, style: Dn.label(N.g63))),
+          SizedBox(width: Surface.px(40), child: Text(clockText(it.seconds), softWrap: false, style: Dn.value(N.g69).copyWith(fontSize: Dn.labelSize))),
+          if (MediaListHeader.wide(width + 62)) SizedBox(width: Surface.px(54), child: Text(sizeText(it.size), softWrap: false, textAlign: TextAlign.right, style: Dn.value(N.g69).copyWith(fontSize: Dn.labelSize))),
+          if (MediaListHeader.roomy(width + 62)) SizedBox(width: Surface.px(74), child: Text(dateText(it.mtimeNs), softWrap: false, textAlign: TextAlign.right, style: Dn.value(N.g56).copyWith(fontSize: Dn.labelSize))),
+          SizedBox(width: Surface.px(8)),
         ]);
       case 'thumbnail':
       case 'explore':
@@ -660,7 +665,7 @@ class _FaceState extends State<_Face> {
     return Stack(fit: StackFit.expand, children: [
       bytes == null ? base : Image.memory(bytes, fit: BoxFit.cover, gaplessPlayback: true),
       // the scrub track at rest (faint), and its position while a pointer is on it
-      Align(alignment: Alignment.bottomLeft, child: Container(height: at == null ? 2 : 4, color: at == null ? const Color(0x40FFFFFF) : const Color(0x99000000), alignment: Alignment.centerLeft, child: at == null ? null : FractionallySizedBox(widthFactor: at, child: Container(height: 3, color: N.g100)))),
+      Align(alignment: Alignment.bottomLeft, child: Container(height: at == null ? Surface.px(2) : Surface.px(4), color: at == null ? const Color(0x40FFFFFF) : const Color(0x99000000), alignment: Alignment.centerLeft, child: at == null ? null : FractionallySizedBox(widthFactor: at, child: Container(height: Surface.px(3), color: N.g100)))),
     ]);
   }
 
@@ -669,20 +674,20 @@ class _FaceState extends State<_Face> {
         onEnter: (_) => setState(() => hover = true),
         onExit: (_) => setState(() => hover = false),
         child: Stack(fit: StackFit.expand, children: [
-          ClipRRect(borderRadius: BorderRadius.circular(3), child: ColoredBox(color: N.g13, child: _content())),
-          if (widget.marked && item.mark.isNotEmpty && at == null) Positioned(left: 2.5, top: 2.5, child: Container(padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1.5), decoration: BoxDecoration(color: N.veil, borderRadius: BorderRadius.circular(2)), child: Text(widget.short ? item.mark.split(' ').first : item.mark, softWrap: false, style: Dn.micro(N.g95).copyWith(fontSize: 8.5)))),
-          if (item.used && !item.missing && box.maxWidth > 30) Positioned(right: 3, top: 3, child: Container(width: 5, height: 5, decoration: BoxDecoration(color: N.g95, shape: BoxShape.circle, border: Border.all(color: N.g07.withValues(alpha: .5))))),
-          if (item.favorite && box.maxWidth > 30) Positioned(left: 3, top: 3, child: Text('★', style: Dn.micro(N.g95).copyWith(fontSize: 10, height: 1, shadows: const [Shadow(color: Color(0xCC000000), blurRadius: 2)]))),
-          if (item.missing) Positioned(right: 3, top: 3, child: Container(padding: const EdgeInsets.symmetric(horizontal: 3), decoration: BoxDecoration(color: const Color(0xFFFFD166), borderRadius: BorderRadius.circular(2)), child: Text('!', style: Dn.micro(N.g00).copyWith(fontSize: 9, fontWeight: FontWeight.w700)))),
+          ClipRRect(borderRadius: BorderRadius.circular(Surface.controlRadius), child: ColoredBox(color: N.g13, child: _content())),
+          if (widget.marked && item.mark.isNotEmpty && at == null) Positioned(left: Surface.px(2.5), top: Surface.px(2.5), child: Container(padding: EdgeInsets.symmetric(horizontal: Surface.inlineGap, vertical: Surface.px(1.5)), decoration: BoxDecoration(color: N.veil, borderRadius: BorderRadius.circular(Surface.px(2))), child: Text(widget.short ? item.mark.split(' ').first : item.mark, softWrap: false, style: Dn.micro(N.g95).copyWith(fontSize: Surface.px(8.5))))),
+          if (item.used && !item.missing && box.maxWidth > 30) Positioned(right: Surface.inlineGap, top: Surface.inlineGap, child: Container(width: Surface.px(5), height: Surface.px(5), decoration: BoxDecoration(color: N.g95, shape: BoxShape.circle, border: Border.all(color: N.g07.withValues(alpha: .5))))),
+          if (item.favorite && box.maxWidth > 30) Positioned(left: Surface.inlineGap, top: Surface.inlineGap, child: Text('★', style: Dn.micro(N.g95).copyWith(fontSize: Dn.labelSize, height: 1, shadows: [Shadow(color: Color(0xCC000000), blurRadius: Surface.px(2))]))),
+          if (item.missing) Positioned(right: Surface.inlineGap, top: Surface.inlineGap, child: Container(padding: EdgeInsets.symmetric(horizontal: Surface.inlineGap), decoration: BoxDecoration(color: const Color(0xFFFFD166), borderRadius: BorderRadius.circular(Surface.px(2))), child: Text('!', style: Dn.micro(N.g00).copyWith(fontSize: Surface.px(9), fontWeight: FontWeight.w700)))),
           // hover: a hairline only (the picture is neither scaled nor cropped, and nothing moves)
-          if (hover && !widget.selected) IgnorePointer(child: DecoratedBox(decoration: BoxDecoration(borderRadius: BorderRadius.circular(3), border: Border.all(color: N.g69, width: 1)))),
+          if (hover && !widget.selected) IgnorePointer(child: DecoratedBox(decoration: BoxDecoration(borderRadius: BorderRadius.circular(Surface.controlRadius), border: Border.all(color: N.g69, width: 1)))),
           if (widget.selected) const IgnorePointer(child: _Ring()),
           if (item.kind == 'video' && box.maxWidth > 40 && box.maxHeight > 24)
             Positioned(
               left: 0,
               right: 0,
               bottom: 0,
-              height: 12,
+              height: Surface.px(12),
               child: Listener(
                 behavior: HitTestBehavior.opaque,
                 onPointerDown: (e) => _scrub(e.localPosition.dx / box.maxWidth),
@@ -702,8 +707,8 @@ class _Ring extends StatelessWidget {
   const _Ring();
   @override
   Widget build(BuildContext context) => Stack(clipBehavior: Clip.none, fit: StackFit.expand, children: [
-        Positioned(left: -1.5, top: -1.5, right: -1.5, bottom: -1.5, child: DecoratedBox(decoration: BoxDecoration(borderRadius: BorderRadius.circular(4.5), border: Border.all(color: const Color(0xB3000000), width: 1.5)))),
-        DecoratedBox(decoration: BoxDecoration(borderRadius: BorderRadius.circular(3), border: Border.all(color: N.g100, width: 2.5))),
+        Positioned(left: -Surface.px(1.5), top: -Surface.px(1.5), right: -Surface.px(1.5), bottom: -Surface.px(1.5), child: DecoratedBox(decoration: BoxDecoration(borderRadius: BorderRadius.circular(Surface.faceRadius), border: Border.all(color: const Color(0xB3000000), width: Surface.focusStroke)))),
+        DecoratedBox(decoration: BoxDecoration(borderRadius: BorderRadius.circular(Surface.controlRadius), border: Border.all(color: N.g100, width: Surface.px(2.5)))),
       ]);
 }
 

@@ -26,7 +26,7 @@ class LiveTimelineTools extends StatelessWidget {
         builder: (context, _) => Row(mainAxisSize: MainAxisSize.min, children: [
           _Tool('Split', _ToolGlyph.split, c.supports('split') ? () => c.command('split') : null),
           _Tool('Marker', _ToolGlyph.marker, c.supports('addMarker') ? () => c.command('addMarker') : null),
-          const SizedBox(width: 4),
+          SizedBox(width: Surface.px(4)),
         ]),
       );
 }
@@ -57,12 +57,12 @@ class _ToolState extends State<_Tool> {
         behavior: HitTestBehavior.opaque,
         onTap: widget.onTap,
         child: Container(
-          height: 20,
-          padding: const EdgeInsets.symmetric(horizontal: 6),
+          height: Surface.workRow,
+          padding: EdgeInsets.symmetric(horizontal: Surface.sectionGap),
           decoration: BoxDecoration(color: _over && live ? N.g15 : null, borderRadius: BorderRadius.circular(Surface.controlRadius)),
           child: Row(mainAxisSize: MainAxisSize.min, children: [
-            SizedBox.square(dimension: 9, child: CustomPaint(painter: _ToolPainter(widget.glyph, live ? (widget.glyph == _ToolGlyph.marker ? H.record : ink) : N.g33))),
-            const SizedBox(width: 5),
+            SizedBox.square(dimension: Surface.px(9), child: CustomPaint(painter: _ToolPainter(widget.glyph, live ? (widget.glyph == _ToolGlyph.marker ? H.record : ink) : N.g33))),
+            SizedBox(width: Surface.px(5)),
             Text(widget.label, style: Dn.name(ink)),
           ]),
         ),
@@ -109,10 +109,11 @@ class LiveTimeline extends StatefulWidget {
 class _LiveTimelineState extends State<LiveTimeline> {
   // the skin's geometry: its own, told to nobody
   static double get rowH => Surface.control;
-  static double get rulerH => 20.0;
-  static double get keySlop => 6.0;
-  static double get edgeSlop => 5.0;
-  static double get dragSlop => 4.0;
+  static double get rulerH => Surface.ruler;
+  // pointer tolerances: MINIMUM policy, never less than they were at 100 %
+  static double get keySlop => UiScale.derive(6, ScalePolicy.minimum, floor: 6);
+  static double get edgeSlop => UiScale.derive(5, ScalePolicy.minimum, floor: 5);
+  static double get dragSlop => UiScale.derive(4, ScalePolicy.minimum, floor: 4);
 
   /// The name column: a share of the seat, so a narrow window keeps its time.
   double labelW = 180;
@@ -136,7 +137,7 @@ class _LiveTimelineState extends State<LiveTimeline> {
 
   // ---- the skin's transforms -------------------------------------------------------------------------------------
   /// Frame 0 sits a little in from the name column, so the first bar and the playhead are not pressed against it.
-  static const inset = 9.0;
+  static double get inset => Surface.panelInset;
   double xOf(num frame) => labelW + inset + (frame - s.startFrame) * s.pixelsPerFrame;
   double frameAt(double x) => s.startFrame + (x - labelW - inset) / s.pixelsPerFrame;
   double yOf(int row) => rulerH + (row - s.firstRow) * rowH;
@@ -146,7 +147,7 @@ class _LiveTimelineState extends State<LiveTimeline> {
   /// [dx] from the bar's drawn left edge, for a bar [w] wide on screen. A thin bar is at least [minHit] to the pointer
   /// (visual size is not hit size); its ends take at most a third each, so there is always a middle to carry it by;
   /// an end is also taken from just outside the bar.
-  static const minHit = 12.0;
+  static double get minHit => UiScale.derive(12, ScalePolicy.minimum, floor: 12);
   TlBarPart? barGrab(double dx, double w) {
     final pad = math.max(0.0, (minHit - w) / 2);
     if (dx < -pad - edgeSlop || dx > w + pad + edgeSlop) return null;
@@ -395,9 +396,9 @@ class _LiveTimelineState extends State<LiveTimeline> {
     final x = xOf(carried);
     if (x < labelW - 6) return const SizedBox.shrink();
     return Positioned(
-      left: x - 6,
+      left: x - Surface.sectionGap,
       top: 0,
-      width: 12, // a pointer target: as wide as it was, however small the mark
+      width: Surface.px(12), // a pointer target: as wide as it was, however small the mark
       height: rulerH,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
@@ -420,17 +421,17 @@ class _LiveTimelineState extends State<LiveTimeline> {
       final r = s.rows[i];
       final lane = r.property != null, group = r.isGroup && !lane;
       final indent = r.depth * 9.0;
-      Widget mark(Widget child, VoidCallback? onTap, {double w = 14}) => SizedBox(
-            width: w,
+      Widget mark(Widget child, VoidCallback? onTap, {double? w}) => SizedBox(
+            width: w ?? Surface.px(14),
             height: rowH,
             child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: onTap, child: Center(child: child)),
           );
-      Widget glyph(HG g, Color color, {bool on = false, double size = 9}) => Container(
-            width: 12,
-            height: 12,
+      Widget glyph(HG g, Color color, {bool on = false, double? size}) => Container(
+            width: Surface.px(12),
+            height: Surface.px(12),
             decoration: on ? BoxDecoration(color: H.toggleOn, borderRadius: BorderRadius.circular(Surface.controlRadius)) : null,
             alignment: Alignment.center,
-            child: SizedBox.square(dimension: size, child: CustomPaint(painter: HgPainter(g, on ? N.g100 : color, on ? H.toggleOn : N.g10))),
+            child: SizedBox.square(dimension: size ?? Surface.px(9), child: CustomPaint(painter: HgPainter(g, on ? N.g100 : color, on ? H.toggleOn : N.g10))),
           );
       final quiet = hover == i || c.selectedIds.contains(r.id);
       final name = Expanded(
@@ -465,30 +466,30 @@ class _LiveTimelineState extends State<LiveTimeline> {
         height: rowH,
         child: Row(children: [
           // the chosen layer's own colour, a thin edge at the column's left
-          Container(width: 2, height: rowH, color: !lane && c.selectedIds.contains(r.id) ? (r.isGroup ? N.g63 : _family(r.id).t) : null),
+          Container(width: Surface.px(2), height: rowH, color: !lane && c.selectedIds.contains(r.id) ? (r.isGroup ? N.g63 : _family(r.id).t) : null),
           SizedBox(width: Surface.inlineGap),
           if (lane) ...[
-            SizedBox(width: indent + 11 + 6),
+            SizedBox(width: indent + Surface.px(11) + Surface.px(6)),
             // which layer these lanes belong to: its own colour, a thin line where its chip stands
-            Container(width: 1.5, height: rowH, color: (r.isGroup ? N.g51 : _family(r.id).t).withValues(alpha: .7)),
-            const SizedBox(width: 9),
+            Container(width: Surface.px(1.5), height: rowH, color: (r.isGroup ? N.g51 : _family(r.id).t).withValues(alpha: .7)),
+            SizedBox(width: Surface.px(9)),
             name,
             mark(_Diamond(keyed: r.keys.any((k) => (k['frame'] as num).round() == c.frame.value)), () => s.toggleKeyHere(i), w: 20),
-            const SizedBox(width: 18),
+            SizedBox(width: Surface.px(18)),
           ] else ...[
             SizedBox(width: indent),
             mark(_Twirl(open: group ? r.groupOpen : r.lanesOpen, strong: group), () => group ? s.toggleFold(i) : s.toggleLanes(i), w: 12),
-            SizedBox(width: 15, child: Center(child: _Chip(r))),
+            SizedBox(width: Surface.px(15), child: Center(child: _Chip(r))),
             SizedBox(width: Surface.inlineGap),
             name,
             if (group) mark(_Twirl(open: r.lanesOpen, strong: false), () => s.toggleLanes(i), w: 12),
             // switches in one quiet column at the right: always in the same place, lit only when on
             mark(r.layer['clipToBelow'] == true || quiet ? glyph(HG.crop, N.g38, on: r.layer['clipToBelow'] == true) : const SizedBox(), () => s.toggleSwitch(i, 'clipToBelow'), w: 15),
-            mark(glyph(r.layer['hidden'] == true ? HG.eyeOff : HG.eye, r.layer['hidden'] == true ? N.g76 : (quiet ? N.g56 : N.g38), size: 10), () => s.toggleSwitch(i, 'hidden')),
+            mark(glyph(r.layer['hidden'] == true ? HG.eyeOff : HG.eye, r.layer['hidden'] == true ? N.g76 : (quiet ? N.g56 : N.g38), size: Surface.glyph), () => s.toggleSwitch(i, 'hidden')),
             mark(glyph(HG.solo, quiet ? N.g44 : N.g26, on: r.layer['solo'] == true), () => s.toggleSwitch(i, 'solo')),
             mark(glyph(HG.lock, quiet ? N.g44 : N.g26, on: r.layer['locked'] == true), () => s.toggleSwitch(i, 'locked')),
           ],
-          const SizedBox(width: 2),
+          SizedBox(width: Surface.px(2)),
         ]),
       ));
     }
@@ -500,7 +501,7 @@ class _Twirl extends StatelessWidget {
   const _Twirl({required this.open, required this.strong});
   final bool open, strong;
   @override
-  Widget build(BuildContext context) => SizedBox(width: 7, height: 7, child: CustomPaint(painter: _TriPainter(open, strong ? N.g69 : N.g51)));
+  Widget build(BuildContext context) => SizedBox(width: Surface.px(7), height: Surface.px(7), child: CustomPaint(painter: _TriPainter(open, strong ? N.g69 : N.g51)));
 }
 
 class _TriPainter extends CustomPainter {
@@ -525,9 +526,9 @@ class _Chip extends StatelessWidget {
   Widget build(BuildContext context) {
     final kind = r.layer['kind'];
     if (kind == 'Camera' || r.isGroup) {
-      return SizedBox.square(dimension: 10, child: CustomPaint(painter: HgPainter(kind == 'Camera' ? HG.camera : HG.list, kind == 'Camera' ? (r.layer['hidden'] == true ? N.g33 : _family(r.id).n) : N.g69, N.g10)));
+      return SizedBox.square(dimension: Surface.glyph, child: CustomPaint(painter: HgPainter(kind == 'Camera' ? HG.camera : HG.list, kind == 'Camera' ? (r.layer['hidden'] == true ? N.g33 : _family(r.id).n) : N.g69, N.g10)));
     }
-    return Container(width: 8, height: 8, decoration: BoxDecoration(color: r.layer['hidden'] == true ? N.g33 : _family(r.id).n, borderRadius: BorderRadius.circular(2)));
+    return Container(width: Surface.px(8), height: Surface.px(8), decoration: BoxDecoration(color: r.layer['hidden'] == true ? N.g33 : _family(r.id).n, borderRadius: BorderRadius.circular(Surface.px(2))));
   }
 }
 
@@ -535,7 +536,7 @@ class _Diamond extends StatelessWidget {
   const _Diamond({required this.keyed});
   final bool keyed;
   @override
-  Widget build(BuildContext context) => SizedBox.square(dimension: 8, child: CustomPaint(painter: _DiamondPainter(keyed ? N.g95 : null, N.g56)));
+  Widget build(BuildContext context) => SizedBox.square(dimension: Surface.px(8), child: CustomPaint(painter: _DiamondPainter(keyed ? N.g95 : null, N.g56)));
 }
 
 class _DiamondPainter extends CustomPainter {
@@ -571,6 +572,7 @@ class _RowsPainter extends CustomPainter {
   final _LiveTimelineState t;
   final Color accent;
 
+  // surface-block: painter geometry: drawn in the canvas's own pixels (method paint)
   @override
   void paint(Canvas cv, Size size) {
     final s = t.s, c = t.c;

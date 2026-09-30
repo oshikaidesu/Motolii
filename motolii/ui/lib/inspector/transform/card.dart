@@ -4,6 +4,7 @@ import 'instrument.dart';
 import '../../session/editor_session.dart';
 import 'store.dart';
 import '../session.dart';
+import '../../theme/metrics.dart';
 
 /// The Transform Instrument on the real session, for the Inspector's Transform card.
 /// It follows the session's layers and selection; while nothing is selected there is nothing to show.
@@ -44,7 +45,7 @@ class _NewTransformState extends State<NewTransform> {
       builder: (context, box) {
         final instrument = TransformInstrument(s, showHeader: widget.showHeader);
         // Narrower than the Instrument's wide layout it scrolls inside a fixed height.
-        return box.maxWidth < 230 ? SizedBox(height: 345, child: instrument) : instrument;
+        return box.maxWidth < 230 ? SizedBox(height: Surface.px(345), child: instrument) : instrument;
       },
     );
   }

@@ -11,7 +11,7 @@ import '../browser/seat.dart';
 import '../browser/panel_chrome.dart';
 import '../browser/things.dart';
 import '../theme/neutral.dart';
-import '../theme/metrics.dart' show Dn;
+import '../theme/metrics.dart' show Dn, Surface;
 
 const _sw = 240, _sh = 150;
 
@@ -80,6 +80,7 @@ class FxPainter extends CustomPainter {
   FxPainter(this.base, this.scene);
   final String base;
   final EffectScene scene;
+  // surface-block: painter geometry: drawn in the canvas's own pixels (method paint)
   @override
   void paint(Canvas cv, Size s) {
     final src = Rect.fromLTWH(0, 0, _sw.toDouble(), _sh.toDouble());
@@ -217,7 +218,7 @@ class _EffectsPanelState extends State<EffectsPanel> with WithDiscovery<EffectsP
             // classes along the top, as Create and Media: the body keeps the seat's whole width
             classStrip: true,
             title: 'Effects',
-            icon: const GlyphBox(HG.pie, size: 22, color: N.g95),
+            icon: GlyphBox(HG.pie, size: Surface.px(22), color: N.g95),
             search: search,
             classify: classify,
             groups: views.groups(found),
@@ -228,16 +229,16 @@ class _EffectsPanelState extends State<EffectsPanel> with WithDiscovery<EffectsP
             strip: (c, s) => ListView.builder(
               scrollDirection: Axis.horizontal,
               physics: const ClampingScrollPhysics(),
-              padding: const EdgeInsets.all(7.5),
+              padding: EdgeInsets.all(Surface.px(7.5)),
               itemCount: shown.length,
-              itemBuilder: (_, i) => Padding(padding: const EdgeInsets.only(right: 4.5), child: AspectRatio(aspectRatio: 1.5, child: ThingFace(shown[i], scene: widget.scene))),
+              itemBuilder: (_, i) => Padding(padding: EdgeInsets.only(right: Surface.px(4.5)), child: AspectRatio(aspectRatio: 1.5, child: ThingFace(shown[i], scene: widget.scene))),
             ),
           );
         },
       );
 
   Widget _grid(List<Thing> shown, double w, int most) {
-    const pad = 12.0, gap = 6.0;
+    final pad = Surface.px(12.0), gap = Surface.px(6.0);
     // as many columns as keep a tile wide enough to carry its name under it (never more than asked for)
     final cols = ((w - pad * 2 + gap) / (72 + gap)).floor().clamp(1, most);
     final tileW = (w - pad * 2 - gap * (cols - 1)) / cols;
@@ -246,12 +247,12 @@ class _EffectsPanelState extends State<EffectsPanel> with WithDiscovery<EffectsP
     final showCaption = tileW >= 60;
     return GridView.builder(
       physics: const ClampingScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(pad, 10.5, pad, 9),
-      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: cols, mainAxisSpacing: 7, crossAxisSpacing: gap, childAspectRatio: tileW / (tileW * .84 + (showCaption ? 18 : 0))),
+      padding: EdgeInsets.fromLTRB(pad, Surface.px(10.5), pad, Surface.panelInset),
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: cols, mainAxisSpacing: Surface.px(7), crossAxisSpacing: gap, childAspectRatio: tileW / (tileW * .84 + (showCaption ? 18 : 0))),
       itemCount: shown.length,
       itemBuilder: (c, i) => seated(c, shown[i], Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         AspectRatio(aspectRatio: 1 / .84, child: ThingFace(shown[i], scene: widget.scene)),
-        if (showCaption) Padding(padding: const EdgeInsets.only(top: 4), child: Text(shown[i].name, softWrap: false, maxLines: 1, overflow: TextOverflow.ellipsis, style: sans(Dn.labelSize, c: N.g76))),
+        if (showCaption) Padding(padding: EdgeInsets.only(top: Surface.px(4)), child: Text(shown[i].name, softWrap: false, maxLines: 1, overflow: TextOverflow.ellipsis, style: sans(Dn.labelSize, c: N.g76))),
       ])),
     );
   }

@@ -30,14 +30,14 @@ class _NewWebState extends State<NewWeb> {
   @override
   Widget build(BuildContext context) => Container(
         color: Surface.base,
-        padding: const EdgeInsets.all(9),
+        padding: EdgeInsets.all(Surface.panelInset),
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          SizedBox(width: 30, height: 30, child: CustomPaint(painter: HgPainter(HG.search, Surface.muted, Surface.base))),
-          const SizedBox(height: 9),
-          Padding(padding: const EdgeInsets.only(bottom: 3), child: Text('WEBSITE', style: sans(Dn.microSize, c: N.g51, w: FontWeight.w600, ls: 1.2))),
+          SizedBox(width: Surface.px(30), height: Surface.px(30), child: CustomPaint(painter: HgPainter(HG.search, Surface.muted, Surface.base))),
+          SizedBox(height: Surface.px(9)),
+          Padding(padding: EdgeInsets.only(bottom: Surface.inlineGap), child: Text('WEBSITE', style: sans(Dn.microSize, c: N.g51, w: FontWeight.w600, ls: 1.2))),
           Container(
-            decoration: BoxDecoration(color: Surface.raised, borderRadius: BorderRadius.circular(4)),
-            padding: const EdgeInsets.symmetric(horizontal: 6),
+            decoration: BoxDecoration(color: Surface.raised, borderRadius: BorderRadius.circular(Surface.px(4))),
+            padding: EdgeInsets.symmetric(horizontal: Surface.sectionGap),
             child: EditableText(
               key: const ValueKey('web-url'),
               controller: _field,
@@ -58,9 +58,9 @@ class _NewWebState extends State<NewWeb> {
               await c.native('openWeb', {'url': _url});
             },
             child: Container(
-              height: 21,
+              height: Surface.px(21),
               alignment: Alignment.center,
-              decoration: BoxDecoration(color: Surface.raised, borderRadius: BorderRadius.circular(4)),
+              decoration: BoxDecoration(color: Surface.raised, borderRadius: BorderRadius.circular(Surface.px(4))),
               child: Text('Open in browser', style: sans(Dn.nameSize, c: Surface.ink, w: FontWeight.w500)),
             ),
           ),

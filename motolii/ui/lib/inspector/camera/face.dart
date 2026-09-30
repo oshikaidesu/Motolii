@@ -8,7 +8,7 @@ import '../../browser/parts.dart';
 import '../../desks/parts.dart' show kMint, kBlue, kViolet, kPink;
 import 'model.dart';
 import '../../theme/neutral.dart';
-import '../../theme/metrics.dart' show Dn;
+import '../../theme/metrics.dart' show Dn, Surface;
 
 const targetColor = kMint, orbitColor = kViolet, distanceColor = kBlue, rollColor = kPink;
 
@@ -17,7 +17,8 @@ class CameraGeom {
   CameraGeom(this.size, this.s);
   final Size size;
   final CameraStore s;
-  static const orbitR = 40.5, ringR = 52.5;
+  static double get orbitR => Surface.px(40.5);
+  static double get ringR => Surface.px(52.5);
 
   Offset get c => Offset(size.width / 2, size.height / 2);
 
@@ -52,9 +53,10 @@ class CameraGeom {
 enum _G { none, target, eye, distance, roll }
 
 class CameraFace extends StatefulWidget {
-  const CameraFace(this.store, {super.key, this.size = const Size(286, 176)});
+  const CameraFace(this.store, {super.key, Size? size}) : _size = size;
   final CameraStore store;
-  final Size size;
+  final Size? _size;
+  Size get size => _size ?? Size(Surface.px(286), Surface.px(176));
   @override
   State<CameraFace> createState() => _CameraFaceState();
 }
@@ -140,6 +142,7 @@ class _Painter extends CustomPainter {
   final CameraStore s;
   final _G grab;
 
+  // surface-block: painter geometry: drawn in the canvas's own pixels (method paint)
   @override
   void paint(Canvas c, Size sz) {
     final off = s.frozen;

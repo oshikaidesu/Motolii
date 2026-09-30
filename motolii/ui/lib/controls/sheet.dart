@@ -53,11 +53,11 @@ class _HfActionState extends State<HfAction> {
         onTap: widget.onTap,
         child: Container(
           height: Surface.control,
-          constraints: const BoxConstraints(minWidth: 42),
-          margin: const EdgeInsets.only(left: 6),
-          padding: const EdgeInsets.symmetric(horizontal: 9),
+          constraints: BoxConstraints(minWidth: Surface.px(42)),
+          margin: EdgeInsets.only(left: Surface.sectionGap),
+          padding: EdgeInsets.symmetric(horizontal: Surface.panelInset),
           alignment: Alignment.center,
-          decoration: BoxDecoration(color: ground, border: Border.all(color: edge), borderRadius: BorderRadius.circular(2)),
+          decoration: BoxDecoration(color: ground, border: Border.all(color: edge), borderRadius: BorderRadius.circular(Surface.px(2))),
           child: Text(widget.label, softWrap: false, style: H.s(Dn.nameSize, w: primary ? FontWeight.w600 : FontWeight.w500, color: ink)),
         ),
       ),
@@ -75,7 +75,7 @@ class HfChoice<T> extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(
         height: Surface.control,
-        padding: const EdgeInsets.all(1.5),
+        padding: EdgeInsets.all(Surface.px(1.5)),
         decoration: BoxDecoration(color: N.g07, border: Border.all(color: Surface.divider), borderRadius: BorderRadius.circular(Surface.controlRadius)),
         child: Row(mainAxisSize: MainAxisSize.min, children: [
           for (final (v, label, enabled) in options)
@@ -108,9 +108,9 @@ class _SegmentState extends State<_Segment> {
           behavior: HitTestBehavior.opaque,
           onTap: widget.onTap,
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 9),
+            padding: EdgeInsets.symmetric(horizontal: Surface.panelInset),
             alignment: Alignment.center,
-            decoration: BoxDecoration(color: widget.on ? N.g26 : (_over && widget.onTap != null ? Surface.raised : null), borderRadius: BorderRadius.circular(2)),
+            decoration: BoxDecoration(color: widget.on ? N.g26 : (_over && widget.onTap != null ? Surface.raised : null), borderRadius: BorderRadius.circular(Surface.px(2))),
             child: Text(widget.label, softWrap: false, style: H.s(Dn.nameSize, w: widget.on ? FontWeight.w600 : FontWeight.w400, color: !widget.enabled ? N.g44 : (widget.on ? Surface.ink : N.g82))),
           ),
         ),
@@ -139,13 +139,14 @@ class HfFact extends StatelessWidget {
   final String value;
   final Color color;
   @override
-  Widget build(BuildContext context) => Text(value, softWrap: false, overflow: TextOverflow.ellipsis, style: H.m(11, color: color));
+  Widget build(BuildContext context) => Text(value, softWrap: false, overflow: TextOverflow.ellipsis, style: H.m(Dn.nameSize, color: color));
 }
 
 /// A compact housing for a short task: anchored under the control that asked for it (its right edge on the
 /// control's), no dimmed backdrop and nothing over the Stage's middle; a press outside or Esc closes it, Enter runs its
 /// [primary] action when there is one.
-Future<void> showHfPopover(BuildContext context, {required Rect anchor, required String title, required Widget Function(BuildContext context, VoidCallback close) body, double width = 300, VoidCallback? Function()? primary}) {
+Future<void> showHfPopover(BuildContext context, {required Rect anchor, required String title, required Widget Function(BuildContext context, VoidCallback close) body, double? width, VoidCallback? Function()? primary}) {
+  final wide = width ?? Surface.px(300);
   final done = Completer<void>();
   final overlay = Overlay.of(context);
   final box = overlay.context.findRenderObject() as RenderBox?;
@@ -162,7 +163,7 @@ Future<void> showHfPopover(BuildContext context, {required Rect anchor, required
 
   entry = OverlayEntry(
     builder: (context) => LayoutBuilder(builder: (context, space) {
-      final left = (a.right - width).clamp(8.0, (space.maxWidth - width - 8).clamp(8.0, double.infinity));
+      final left = (a.right - wide).clamp(8.0, (space.maxWidth - wide - 8).clamp(8.0, double.infinity));
       return Focus(
         focusNode: focus,
         autofocus: true,
@@ -185,8 +186,8 @@ Future<void> showHfPopover(BuildContext context, {required Rect anchor, required
           Positioned.fill(child: GestureDetector(behavior: HitTestBehavior.translucent, onTap: close)),
           Positioned(
             left: left,
-            top: a.bottom + 6,
-            width: width,
+            top: a.bottom + Surface.sectionGap,
+            width: wide,
             child: Listener(
               onPointerDown: (_) => focus.requestFocus(),
               child: Container(
@@ -195,19 +196,19 @@ Future<void> showHfPopover(BuildContext context, {required Rect anchor, required
                 color: N.g13,
                 border: Border.all(color: N.g26),
                 borderRadius: BorderRadius.circular(Surface.controlRadius),
-                boxShadow: const [BoxShadow(color: N.shade40, blurRadius: 16, offset: Offset(0, 6))],
+                boxShadow: [BoxShadow(color: N.shade40, blurRadius: Surface.px(16), offset: Offset(0, 6))],
               ),
               child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                 Container(
                   height: Surface.chromeRow,
-                  padding: const EdgeInsets.only(left: 9, right: 3),
+                  padding: EdgeInsets.only(left: Surface.panelInset, right: Surface.inlineGap),
                   decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: Surface.dividerFine))),
                   child: Row(children: [
                     Expanded(child: Text(title, style: H.s(Dn.nameSize, w: FontWeight.w600, color: Surface.ink))),
                     GestureDetector(
                       behavior: HitTestBehavior.opaque,
                       onTap: close,
-                      child: MouseRegion(cursor: SystemMouseCursors.click, child: SizedBox(width: Surface.hit, height: Surface.hit, child: Center(child: SizedBox(width: 7.5, height: 7.5, child: CustomPaint(painter: HgPainter(HG.cross, N.g63, N.g13)))))),
+                      child: MouseRegion(cursor: SystemMouseCursors.click, child: SizedBox(width: Surface.hit, height: Surface.hit, child: Center(child: SizedBox(width: Surface.px(7.5), height: Surface.px(7.5), child: CustomPaint(painter: HgPainter(HG.cross, N.g63, N.g13)))))),
                     ),
                   ]),
                 ),

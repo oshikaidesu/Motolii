@@ -21,12 +21,12 @@ import 'ui_scale.dart';
 Future<void> showExportSheet(BuildContext context, EditorSession c, {Rect? anchor}) {
   final a = anchor ?? _topRight(context);
   final key = GlobalKey<_ExportState>();
-  return showHfPopover(context, anchor: a, title: 'Export', width: 240, primary: () => key.currentState?.exportAction, body: (_, close) => _Export(key: key, c: c, close: close));
+  return showHfPopover(context, anchor: a, title: 'Export', width: Surface.px(240), primary: () => key.currentState?.exportAction, body: (_, close) => _Export(key: key, c: c, close: close));
 }
 
 Rect _topRight(BuildContext context) {
   final box = context.findRenderObject() as RenderBox?;
-  final size = box?.size ?? const Size(1280, 44);
+  final size = box?.size ?? Size(Surface.px(1280), Surface.px(44));
   final at = box?.localToGlobal(Offset(size.width - 12, 0)) ?? Offset.zero;
   return Rect.fromLTWH(at.dx - 88, at.dy, 88, 40);
 }
@@ -102,7 +102,7 @@ class _ExportState extends State<_Export> {
     final phase = job['phase'];
     final failed = phase == 'failed' || phase == 'error';
     return Padding(
-      padding: const EdgeInsets.fromLTRB(9, 7.5, 9, 9),
+      padding: EdgeInsets.fromLTRB(Surface.panelInset, Surface.px(7.5), Surface.panelInset, Surface.panelInset),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         HfFormRow('Output', HfFact('${s['width']} × ${s['height']} · $rate fps · MP4')),
         HfFormRow(
@@ -140,8 +140,8 @@ class _ExportState extends State<_Export> {
 /// in view (the settings change what it shows) and Colors, where Background colour hands the ground, is not dimmed.
 Future<void> showCompositionSheet(BuildContext context, EditorSession c, {Rect? anchor}) {
   final store = CompositionStore(c);
-  return showHfPopover(context, anchor: anchor ?? _topRight(context), title: 'Composition', width: 225, body: (_, close) => Padding(
-        padding: const EdgeInsets.fromLTRB(9, 3, 9, 7.5),
+  return showHfPopover(context, anchor: anchor ?? _topRight(context), title: 'Composition', width: Surface.px(225), body: (_, close) => Padding(
+        padding: EdgeInsets.fromLTRB(Surface.panelInset, Surface.inlineGap, Surface.panelInset, Surface.px(7.5)),
         child: ParamSheet(store, thingId: 'composition'),
       )).whenComplete(store.dispose);
 }
@@ -150,8 +150,8 @@ Future<void> showCompositionSheet(BuildContext context, EditorSession c, {Rect? 
 /// 100 %. Each change is immediate and kept for every project; Cmd+Option +/-/0 does the same from the keyboard.
 Future<void> showUiScaleSheet(BuildContext context, {Rect? anchor}) {
   final ui = LiveUiScale.instance;
-  return showHfPopover(context, anchor: anchor ?? _topRight(context), title: 'Interface', width: 225, body: (_, close) => Padding(
-        padding: EdgeInsets.fromLTRB(9, 7.5, 9, 9),
+  return showHfPopover(context, anchor: anchor ?? _topRight(context), title: 'Interface', width: Surface.px(225), body: (_, close) => Padding(
+        padding: EdgeInsets.fromLTRB(Surface.panelInset, Surface.px(7.5), Surface.panelInset, Surface.panelInset),
         child: Builder(builder: (context) {
           final percent = UiScale.percent;
           return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [

@@ -97,8 +97,8 @@ class HubPill extends StatelessWidget {
       opacity: dim ? .3 : 1,
       child: Container(
         alignment: Alignment.center,
-        padding: const EdgeInsets.symmetric(horizontal: 6),
-        decoration: BoxDecoration(color: N.g10, borderRadius: BorderRadius.circular(9), border: Border.all(color: color, width: 1)),
+        padding: EdgeInsets.symmetric(horizontal: Surface.sectionGap),
+        decoration: BoxDecoration(color: N.g10, borderRadius: BorderRadius.circular(Surface.px(9)), border: Border.all(color: color, width: 1)),
         child: Text(hub.label, maxLines: 1, softWrap: false, overflow: TextOverflow.ellipsis, style: Dn.micro(N.g91)),
       ),
     );

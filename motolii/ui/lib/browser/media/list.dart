@@ -25,16 +25,16 @@ class MediaListHeader extends StatelessWidget {
     }
 
     return Container(
-      height: 20,
-      padding: const EdgeInsets.symmetric(horizontal: 8),
+      height: Surface.workRow,
+      padding: EdgeInsets.symmetric(horizontal: Surface.px(8)),
       decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: N.g15))),
       child: Row(children: [
-        const SizedBox(width: 54),
+        SizedBox(width: Surface.px(54)),
         header('NAME', 'name'),
-        header('TYPE', 'kind', width: 42),
-        header('LENGTH', null, width: 40),
-        if (wide(width)) header('SIZE', 'size', width: 54, align: TextAlign.right),
-        if (roomy(width)) header('DATE', 'modified', width: 74, align: TextAlign.right),
+        header('TYPE', 'kind', width: Surface.px(42)),
+        header('LENGTH', null, width: Surface.px(40)),
+        if (wide(width)) header('SIZE', 'size', width: Surface.px(54), align: TextAlign.right),
+        if (roomy(width)) header('DATE', 'modified', width: Surface.px(74), align: TextAlign.right),
       ]),
     );
   }

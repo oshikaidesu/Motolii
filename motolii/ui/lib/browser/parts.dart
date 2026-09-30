@@ -95,7 +95,7 @@ class Leaf extends StatelessWidget {
       decoration: BoxDecoration(
         color: Surface.base,
         border: Border.all(color: Surface.divider),
-        borderRadius: BorderRadius.circular(2),
+        borderRadius: BorderRadius.circular(Surface.px(2)),
       ),
       child: Column(
         children: [
@@ -173,7 +173,7 @@ class _Tab extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(
     height: Surface.chromeRow,
-    padding: EdgeInsets.symmetric(horizontal: compact ? 6 : 8),
+    padding: EdgeInsets.symmetric(horizontal: compact ? Surface.sectionGap : Surface.px(8)),
     decoration: BoxDecoration(
       color: (selected && !single) ? Surface.selected : null,
       border: const Border(right: BorderSide(color: Surface.dividerFine)),
@@ -182,8 +182,8 @@ class _Tab extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         SizedBox(
-          width: 12,
-          height: 12,
+          width: Surface.px(12),
+          height: Surface.px(12),
           child: CustomPaint(
             painter: HfTabGlyph(
               t.glyph,

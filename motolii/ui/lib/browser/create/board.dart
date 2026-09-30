@@ -21,7 +21,11 @@ class CreateTiles extends StatelessWidget {
   final EffectScene? scene;
 
   /// The grid: the least a tile is wide, its height, the gap between tiles, the mark inside, the panel's inset.
-  static const least = 44.0, height = 40.0, gap = 3.0, mark = 16.0, pad = 6.0;
+  static double get least => Surface.px(44.0);
+  static double get height => Surface.faceTile;
+  static double get gap => Surface.inlineGap;
+  static double get mark => Surface.px(16.0);
+  static double get pad => Surface.sectionGap;
 
   static int columns(double width) => ((width - pad * 2 + gap) / (least + gap)).floor().clamp(1, 99);
 
@@ -37,7 +41,7 @@ class CreateTiles extends StatelessWidget {
     BrowserSeatScope.of(context)?.shows([for (final e in sections.values) ...e], cols);
     return ListView(
       physics: const ClampingScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(pad, 4.5, pad, 6),
+      padding: EdgeInsets.fromLTRB(pad, Surface.px(4.5), pad, Surface.sectionGap),
       children: [
         for (final e in sections.entries) _section(context, e.key[0].toUpperCase() + e.key.substring(1).toLowerCase(), e.value, w),
         if (recent.isNotEmpty) _section(context, 'Recent', recent.take(cols).toList(), w),
@@ -47,7 +51,7 @@ class CreateTiles extends StatelessWidget {
 
   /// A section: its identifier on one short line, then its tiles on the grid.
   Widget _section(BuildContext context, String id, List<Thing> things, double w) => Padding(
-        padding: const EdgeInsets.only(top: 3, bottom: 4.5),
+        padding: EdgeInsets.only(top: Surface.inlineGap, bottom: Surface.px(4.5)),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           SwissHeading(id, rule: false),
           Wrap(
@@ -86,11 +90,11 @@ class _TileState extends State<_Tile> {
           child: Container(
             width: widget.width,
             height: CreateTiles.height,
-            padding: const EdgeInsets.fromLTRB(2, 5, 2, 0),
+            padding: EdgeInsets.fromLTRB(Surface.px(2), Surface.px(5), Surface.px(2), 0),
             decoration: BoxDecoration(color: _over ? Surface.hover : Surface.raised, borderRadius: BorderRadius.circular(Surface.controlRadius)),
             child: Column(children: [
               SizedBox.square(dimension: CreateTiles.mark, child: ThingFace(widget.thing, scene: widget.scene)),
-              const SizedBox(height: 4),
+              SizedBox(height: Surface.px(4)),
               Text(widget.thing.name, softWrap: false, maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center, style: sans(Dn.microSize, c: N.g82)),
             ]),
           ),

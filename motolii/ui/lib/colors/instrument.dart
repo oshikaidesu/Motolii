@@ -204,7 +204,7 @@ class _LiveColorInstrumentState extends State<LiveColorInstrument> {
                       _drag(
                         SizedBox(
                           key: const ValueKey('hf-color-value'),
-                          width: 7.5,
+                          width: Surface.px(7.5),
                           height: wheel,
                           child: CustomPaint(
                             painter: ColorBar(
@@ -227,7 +227,7 @@ class _LiveColorInstrumentState extends State<LiveColorInstrument> {
                         child: _drag(
                           SizedBox(
                             key: const ValueKey('hf-color-alpha'),
-                            width: 7.5,
+                            width: Surface.px(7.5),
                             height: wheel,
                             child: CustomPaint(
                               painter: ColorBar(1, color, 1.0 - edit.value[3]),
@@ -240,7 +240,7 @@ class _LiveColorInstrumentState extends State<LiveColorInstrument> {
                     ],
                   ),
                 ),
-                const SizedBox(width: 9),
+                SizedBox(width: Surface.px(9)),
                 // the readout (Swiss): what the wheel edits in small caps, then its value, both flush left
                 Expanded(
                   child: Column(
@@ -254,7 +254,7 @@ class _LiveColorInstrumentState extends State<LiveColorInstrument> {
                           overflow: TextOverflow.ellipsis,
                           style: sans(Dn.labelSize, c: N.g63, w: FontWeight.w500),
                         ),
-                      const SizedBox(height: 4.5),
+                      SizedBox(height: Surface.px(4.5)),
                       Row(children: [
                         Expanded(
                           child: EditableText(
@@ -274,7 +274,7 @@ class _LiveColorInstrumentState extends State<LiveColorInstrument> {
                             focus.requestFocus();
                             edit.toggleEyedropper();
                           },
-                          child: GlyphBox(HG.composite, size: 12, color: picking ? N.g95 : Surface.muted),
+                          child: GlyphBox(HG.composite, size: Surface.px(12), color: picking ? N.g95 : Surface.muted),
                         ),
                       ]),
                       // the same colour in the other numbers people ask for, in the space beside the wheel
@@ -288,14 +288,14 @@ class _LiveColorInstrumentState extends State<LiveColorInstrument> {
                         Padding(
                           padding: const EdgeInsets.only(top: 1),
                           child: Row(children: [
-                            SizedBox(width: 30, child: Text(a, softWrap: false, style: sans(Dn.labelSize, c: N.g56))),
+                            SizedBox(width: Surface.px(30), child: Text(a, softWrap: false, style: sans(Dn.labelSize, c: N.g56))),
                             Text(b, softWrap: false, style: sans(Dn.labelSize, c: N.g56)),
                           ]),
                         ),
                       // while armed, what to do next
                       if (picking)
                         Padding(
-                          padding: const EdgeInsets.only(top: 4.5),
+                          padding: EdgeInsets.only(top: Surface.px(4.5)),
                           child: Text('Click the Stage to pick · Esc cancels', key: const ValueKey('hf-eyedropper-hint'), maxLines: 2, style: sans(Dn.microSize, c: Surface.muted)),
                         ),
                     ],

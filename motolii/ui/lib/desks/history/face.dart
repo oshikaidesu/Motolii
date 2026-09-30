@@ -61,7 +61,7 @@ class _HistoryDeskState extends State<HistoryDesk> {
   List<Entry> get entries => widget.entries ?? historyEntries;
   int get at => widget.entries == null ? _at : widget.at;
   final _scroll = ScrollController();
-  static const _rowH = 38.0;
+  static double get _rowH => Surface.px(38.0);
 
   @override
   void initState() {
@@ -109,13 +109,13 @@ class _HistoryDeskState extends State<HistoryDesk> {
             child: ListView.builder(
               controller: _scroll,
               itemExtent: _rowH,
-              padding: const EdgeInsets.fromLTRB(0, 6, 0, 6),
+              padding: EdgeInsets.fromLTRB(0, Surface.sectionGap, 0, Surface.sectionGap),
               itemCount: entries.length,
               itemBuilder: (_, i) => GestureDetector(key: ValueKey(i == at ? 'row-current' : 'row-$i'), behavior: HitTestBehavior.opaque, onTap: () => go(i), child: _row(i, _rowH)),
             ),
           ),
           Container(
-            padding: const EdgeInsets.fromLTRB(10.5, 7.5, 10.5, 7.5),
+            padding: EdgeInsets.fromLTRB(Surface.px(10.5), Surface.px(7.5), Surface.px(10.5), Surface.px(7.5)),
             decoration: const BoxDecoration(border: Border(top: BorderSide(color: Surface.dividerFine))),
             child: Row(children: [
               Expanded(child: widget.entries != null ? _btn('undo', 'Undo', '⌘Z', widget.onUndo != null, () => widget.onUndo?.call()) : _btn('undo', 'Undo', '⌘Z', at > 0, () => go(at - 1))),
@@ -132,7 +132,7 @@ class _HistoryDeskState extends State<HistoryDesk> {
         tall: (c, s) {
           final h = ((s.height - 16) / entries.length).clamp(14.0, 34.0);
           return Padding(
-            padding: const EdgeInsets.symmetric(vertical: 6),
+            padding: EdgeInsets.symmetric(vertical: Surface.sectionGap),
             child: Column(children: [for (var i = 0; i < entries.length; i++) GestureDetector(key: ValueKey(i == at ? 'row-current' : 'row-$i'), behavior: HitTestBehavior.opaque, onTap: () => go(i), child: _row(i, h, labels: false, w: s.width))]),
           );
         },
@@ -142,14 +142,15 @@ class _HistoryDeskState extends State<HistoryDesk> {
         key: ValueKey('history-$id'),
         onTap: on ? f : null,
         child: Container(
-          height: 27,
-          decoration: BoxDecoration(color: Surface.well, border: Border.all(color: Surface.dividerFine), borderRadius: BorderRadius.circular(2)),
-          padding: const EdgeInsets.symmetric(horizontal: 9),
+          height: Surface.px(27),
+          decoration: BoxDecoration(color: Surface.well, border: Border.all(color: Surface.dividerFine), borderRadius: BorderRadius.circular(Surface.px(2))),
+          padding: EdgeInsets.symmetric(horizontal: Surface.panelInset),
           child: Row(children: [Text(l, style: sans(Dn.nameSize, c: on ? Surface.ink : N.g38)), const Spacer(), Text(k, style: sans(Dn.nameSize, c: Surface.muted))]),
         ),
       );
 
-  Widget _row(int i, double h, {bool labels = true, double w = 310}) {
+  Widget _row(int i, double h, {bool labels = true, double? w}) {
+    w ??= Surface.px(310);
     final e = entries[i];
     final cur = i == at, reached = i <= at;
     final marked = e.mark != Mark.none;
@@ -159,10 +160,10 @@ class _HistoryDeskState extends State<HistoryDesk> {
       height: h,
       color: cur ? kYellow.withValues(alpha: .10) : null,
       child: Row(children: [
-        SizedBox(width: labels ? 58 : w, height: h, child: CustomPaint(painter: _Node(i == 0, i == entries.length - 1, cur, reached, i < at, e.mark))),
+        SizedBox(width: labels ? Surface.px(58) : w, height: h, child: CustomPaint(painter: _Node(i == 0, i == entries.length - 1, cur, reached, i < at, e.mark))),
         if (labels) ...[
-          Expanded(child: Text(e.label, softWrap: false, overflow: TextOverflow.clip, style: sans(cur ? 13.5 : 12, c: ink, w: cur ? FontWeight.w600 : FontWeight.w400))),
-          Padding(padding: const EdgeInsets.only(right: 12), child: Text(e.time, style: mono(Dn.microSize, c: reached ? N.g44 : N.g26))),
+          Expanded(child: Text(e.label, softWrap: false, overflow: TextOverflow.clip, style: sans(cur ? Surface.px(13.5) : Surface.px(12), c: ink, w: cur ? FontWeight.w600 : FontWeight.w400))),
+          Padding(padding: EdgeInsets.only(right: Surface.px(12)), child: Text(e.time, style: mono(Dn.microSize, c: reached ? N.g44 : N.g26))),
         ],
       ]),
     );
@@ -173,6 +174,7 @@ void _dashV(Canvas c, double x, double y0, double y1, Paint p) {
   for (var y = y0; y < y1; y += 6) { c.drawLine(Offset(x, y), Offset(x, math.min(y + 3, y1)), p); }
 }
 
+// surface-block: painter geometry: drawn in the canvas's own pixels (function)
 void _drawMark(Canvas c, Offset o, Mark m, Color col) {
   final p = Paint()..color = col..style = PaintingStyle.stroke..strokeWidth = 1.7..strokeCap = StrokeCap.round..strokeJoin = StrokeJoin.round;
   switch (m) {

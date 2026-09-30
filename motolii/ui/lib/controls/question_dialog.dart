@@ -43,14 +43,14 @@ Future<T?> showHfDialog<T>(BuildContext context, {required String title, require
         Positioned.fill(child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: () => close(null), child: const ColoredBox(color: N.shade55))),
         Center(
           child: Container(
-            width: 285,
-            padding: const EdgeInsets.fromLTRB(12, 10.5, 12, 10.5),
-            decoration: BoxDecoration(color: N.g13, border: Border.all(color: N.g26), borderRadius: BorderRadius.circular(2)),
+            width: Surface.px(285),
+            padding: EdgeInsets.fromLTRB(Surface.px(12), Surface.px(10.5), Surface.px(12), Surface.px(10.5)),
+            decoration: BoxDecoration(color: N.g13, border: Border.all(color: N.g26), borderRadius: BorderRadius.circular(Surface.px(2))),
             child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
               Text(title, style: H.s(Dn.nameSize, w: FontWeight.w600, color: Surface.ink)),
               SizedBox(height: Surface.sectionGap),
-              Text(body, style: H.s(Dn.nameSize, color: N.g82).copyWith(height: 1.4)),
-              const SizedBox(height: 12),
+              Text(body, style: H.s(Dn.nameSize, color: N.g82).copyWith(height: Surface.px(1.4))),
+              SizedBox(height: Surface.px(12)),
               Row(children: [
                 for (final (v, label) in answers)
                   if (destructive.contains(v)) key(v, label, false),

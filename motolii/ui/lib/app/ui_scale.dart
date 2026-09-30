@@ -160,9 +160,9 @@ class _UiScaleReadoutState extends State<UiScaleReadout> {
             alignment: const Alignment(0, -.82),
             child: Container(
               key: const ValueKey('ui-scale-readout'),
-              padding: EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-              decoration: BoxDecoration(color: N.veilHi, borderRadius: BorderRadius.circular(5), border: Border.all(color: N.g26)),
-              child: Text('UI ${UiScale.percent}%', style: TextStyle(fontFamily: 'Menlo', fontSize: 12, color: N.g95, decoration: TextDecoration.none)),
+              padding: EdgeInsets.symmetric(horizontal: Surface.px(10), vertical: Surface.px(5)),
+              decoration: BoxDecoration(color: N.veilHi, borderRadius: BorderRadius.circular(Surface.px(5)), border: Border.all(color: N.g26)),
+              child: Text('UI ${UiScale.percent}%', style: TextStyle(fontFamily: 'Menlo', fontSize: Surface.px(12), color: N.g95, decoration: TextDecoration.none)),
             ),
           ),
         ),

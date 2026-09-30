@@ -1,3 +1,4 @@
+// surface-block: the Classic presentation's reference geometry (timeline reference coordinates, not UI size)
 /// Layout measurements shared by Timeline presentations.
 class TimelineGeometry {
   static const classicRowHeight = 20.0;

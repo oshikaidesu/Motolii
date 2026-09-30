@@ -33,26 +33,26 @@ class _LayoutInstrumentState extends State<LayoutInstrument> {
         builder: (context, _) => LayoutBuilder(builder: (context, box) {
           final narrow = box.maxWidth < 172;
           _narrow = narrow;
-          final pad = narrow ? 6.0 : 9.0;
+          final pad = narrow ? Surface.px(6.0) : Surface.px(9.0);
           final w = box.maxWidth - pad * 2;
           final body = Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             _header(),
             SizedBox(height: Surface.sectionGap),
             if (s.child) ..._childBody(narrow) else ..._groupBody(w, narrow),
           ]);
-          if (widget.embedded) return Padding(padding: EdgeInsets.fromLTRB(pad, 7.5, pad, 12), child: body);
+          if (widget.embedded) return Padding(padding: EdgeInsets.fromLTRB(pad, Surface.px(7.5), pad, Surface.px(12)), child: body);
           return narrow
-              ? SingleChildScrollView(key: const ValueKey('layout-scroll'), padding: EdgeInsets.fromLTRB(pad, 7.5, pad, 12), child: body)
-              : SingleChildScrollView(key: const ValueKey('layout-scroll'), padding: EdgeInsets.fromLTRB(pad, 7.5, pad, 12), child: body);
+              ? SingleChildScrollView(key: const ValueKey('layout-scroll'), padding: EdgeInsets.fromLTRB(pad, Surface.px(7.5), pad, Surface.px(12)), child: body)
+              : SingleChildScrollView(key: const ValueKey('layout-scroll'), padding: EdgeInsets.fromLTRB(pad, Surface.px(7.5), pad, Surface.px(12)), child: body);
         }),
       );
 
   Widget _header() => SizedBox(
-        height: 18,
+        height: Surface.control,
         child: Row(children: [
-          Container(width: 2, height: 10.5, margin: const EdgeInsets.only(right: 5), decoration: BoxDecoration(color: arrangeColor, borderRadius: BorderRadius.circular(1.5))),
+          Container(width: Surface.px(2), height: Surface.px(10.5), margin: EdgeInsets.only(right: Surface.px(5)), decoration: BoxDecoration(color: arrangeColor, borderRadius: BorderRadius.circular(Surface.px(1.5)))),
           Expanded(child: Text(s.child ? 'Child in layout' : widget.title, key: const ValueKey('layout-title'), softWrap: false, overflow: TextOverflow.clip, style: sans(Dn.nameSize, c: Surface.ink, w: FontWeight.w600))),
-          if (s.frozen) Padding(padding: const EdgeInsets.only(right: 6), child: Text('Locked', style: sans(Dn.microSize, c: Surface.muted, w: FontWeight.w600))),
+          if (s.frozen) Padding(padding: EdgeInsets.only(right: Surface.sectionGap), child: Text('Locked', style: sans(Dn.microSize, c: Surface.muted, w: FontWeight.w600))),
           if (!s.child) _switch('grid-switch', 'Grid', s.gridOn, () => s.setGrid(!s.gridOn), arrangeColor)
           else _switch('ignore-switch', 'Ignore layout', s.gi('layout.position_type') == 1, () => s.set('layout.position_type', s.gi('layout.position_type') == 1 ? 0 : 1), sizeColor),
         ]),
@@ -64,8 +64,8 @@ class _LayoutInstrumentState extends State<LayoutInstrument> {
         onTap: s.frozen ? null : f,
         child: Row(children: [
           Text(label, style: sans(Dn.labelSize, c: on ? tone : Surface.muted, w: FontWeight.w600)),
-          const SizedBox(width: 5),
-          Container(width: 22.5, height: 13, padding: const EdgeInsets.all(1.5), alignment: on ? Alignment.centerRight : Alignment.centerLeft, decoration: BoxDecoration(color: on ? (s.frozen ? dim(tone) : tone) : N.g26, borderRadius: BorderRadius.circular(7)), child: Container(width: 10, height: 10, decoration: const BoxDecoration(color: Surface.ink, shape: BoxShape.circle))),
+          SizedBox(width: Surface.px(5)),
+          Container(width: Surface.px(22.5), height: Surface.px(13), padding: EdgeInsets.all(Surface.px(1.5)), alignment: on ? Alignment.centerRight : Alignment.centerLeft, decoration: BoxDecoration(color: on ? (s.frozen ? dim(tone) : tone) : N.g26, borderRadius: BorderRadius.circular(Surface.px(7))), child: Container(width: Surface.px(10), height: Surface.px(10), decoration: const BoxDecoration(color: Surface.ink, shape: BoxShape.circle))),
         ]),
       );
 
@@ -84,15 +84,15 @@ class _LayoutInstrumentState extends State<LayoutInstrument> {
     final on = s.arranged;
     final adv = [for (final r in s.rows) if (r['advanced'] == true) r];
     return [
-      LayoutDiagram(s, size: Size(w, narrow ? 117 : 147)),
+      LayoutDiagram(s, size: Size(w, narrow ? Surface.px(117) : Surface.px(147))),
       SizedBox(height: Surface.sectionGap),
       // Columns and Rows stay with Grid off, as Classic's wells do; the rest is gated by Grid
       if (narrow) ...[
-        Row(children: [_val('layout.grid_columns', arrangeColor, tag: 'C'), const SizedBox(width: 2), _val('layout.grid_rows', arrangeColor, tag: 'R')]),
-        if (on) ...[const SizedBox(height: 2), Row(children: [_val('layout.gap', spaceColor, tag: 'Gap')]), const SizedBox(height: 2), Row(children: [_val('layout.padding', spaceColor, tag: 'X', axis: 0), const SizedBox(width: 2), _val('layout.padding', spaceColor, tag: 'Y', axis: 1)])],
+        Row(children: [_val('layout.grid_columns', arrangeColor, tag: 'C'), SizedBox(width: Surface.px(2)), _val('layout.grid_rows', arrangeColor, tag: 'R')]),
+        if (on) ...[SizedBox(height: Surface.px(2)), Row(children: [_val('layout.gap', spaceColor, tag: 'Gap')]), SizedBox(height: Surface.px(2)), Row(children: [_val('layout.padding', spaceColor, tag: 'X', axis: 0), SizedBox(width: Surface.px(2)), _val('layout.padding', spaceColor, tag: 'Y', axis: 1)])],
       ] else ...[
-        Row(children: [_val('layout.grid_columns', arrangeColor, tag: 'Col'), const SizedBox(width: 2), _val('layout.grid_rows', arrangeColor, tag: 'Row'), if (on) ...[const SizedBox(width: 2), _val('layout.gap', spaceColor, tag: 'Gap')]]),
-        if (on) ...[SizedBox(height: Surface.inlineGap), Row(children: [_val('layout.padding', spaceColor, tag: 'Pad X', axis: 0), const SizedBox(width: 2), _val('layout.padding', spaceColor, tag: 'Pad Y', axis: 1)])],
+        Row(children: [_val('layout.grid_columns', arrangeColor, tag: 'Col'), SizedBox(width: Surface.px(2)), _val('layout.grid_rows', arrangeColor, tag: 'Row'), if (on) ...[SizedBox(width: Surface.px(2)), _val('layout.gap', spaceColor, tag: 'Gap')]]),
+        if (on) ...[SizedBox(height: Surface.inlineGap), Row(children: [_val('layout.padding', spaceColor, tag: 'Pad X', axis: 0), SizedBox(width: Surface.px(2)), _val('layout.padding', spaceColor, tag: 'Pad Y', axis: 1)])],
       ],
       if (on) ...[
         SizedBox(height: Surface.sectionGap),
@@ -100,8 +100,8 @@ class _LayoutInstrumentState extends State<LayoutInstrument> {
         SizedBox(height: Surface.inlineGap),
         _sizeLine('h'),
         SizedBox(height: Surface.sectionGap),
-        if (narrow) ...[Row(children: [_val('layout.transition_duration', spaceColor, tag: 'Dur', whole: false)]), const SizedBox(height: 2), ChoiceToy(s, 'layout.transition_easing', tone: alignColor)]
-        else Row(children: [_val('layout.transition_duration', spaceColor, tag: 'Dur', units: true, whole: false), const SizedBox(width: 4.5), Expanded(flex: 2, child: ChoiceToy(s, 'layout.transition_easing', tone: alignColor))]),
+        if (narrow) ...[Row(children: [_val('layout.transition_duration', spaceColor, tag: 'Dur', whole: false)]), SizedBox(height: Surface.px(2)), ChoiceToy(s, 'layout.transition_easing', tone: alignColor)]
+        else Row(children: [_val('layout.transition_duration', spaceColor, tag: 'Dur', units: true, whole: false), SizedBox(width: Surface.px(4.5)), Expanded(flex: 2, child: ChoiceToy(s, 'layout.transition_easing', tone: alignColor))]),
         ..._advanced(adv),
       ],
     ];
@@ -115,9 +115,9 @@ class _LayoutInstrumentState extends State<LayoutInstrument> {
             key: const ValueKey('layout-advanced'),
             behavior: HitTestBehavior.opaque,
             onTap: () => setState(() => advancedOpen = !advancedOpen),
-            child: Padding(padding: const EdgeInsets.only(top: 10.5, bottom: 4.5), child: Row(children: [Text(advancedOpen ? '▾' : '▸', style: sans(Dn.labelSize, c: Surface.muted)), const SizedBox(width: 4.5), Text('ADVANCED', style: sans(Dn.microSize, c: N.g51, w: FontWeight.w600, ls: 1.3)), const SizedBox(width: 4.5), Text('${adv.length}', style: mono(Dn.microSize, c: N.g51))])),
+            child: Padding(padding: EdgeInsets.only(top: Surface.px(10.5), bottom: Surface.px(4.5)), child: Row(children: [Text(advancedOpen ? '▾' : '▸', style: sans(Dn.labelSize, c: Surface.muted)), SizedBox(width: Surface.px(4.5)), Text('ADVANCED', style: sans(Dn.microSize, c: N.g51, w: FontWeight.w600, ls: 1.3)), SizedBox(width: Surface.px(4.5)), Text('${adv.length}', style: mono(Dn.microSize, c: N.g51))])),
           ),
-          if (advancedOpen) for (final r in adv) Padding(padding: const EdgeInsets.only(bottom: 4.5), child: ParamCell(s, r, tone: Surface.muted)),
+          if (advancedOpen) for (final r in adv) Padding(padding: EdgeInsets.only(bottom: Surface.px(4.5)), child: ParamCell(s, r, tone: Surface.muted)),
         ],
       ];
 
@@ -127,20 +127,20 @@ class _LayoutInstrumentState extends State<LayoutInstrument> {
     final cur = s.gi(id);
     final fixed = cur == 2;
     final chips = [
-        SizedBox(width: 13.5, child: Text(axis.toUpperCase(), style: sans(Dn.labelSize, c: sizeColor, w: FontWeight.w700))),
+        SizedBox(width: Surface.px(13.5), child: Text(axis.toUpperCase(), style: sans(Dn.labelSize, c: sizeColor, w: FontWeight.w700))),
         for (var i = 0; i < 3; i++)
           GestureDetector(
             key: ValueKey('size-$axis-$i'),
             behavior: HitTestBehavior.opaque,
             onTap: s.frozen ? null : () => s.setSizing(axis, i),
-            child: Container(width: 19.5, height: 19.5, margin: const EdgeInsets.only(right: 2), decoration: BoxDecoration(color: cur == i ? (s.frozen ? dim(sizeColor) : sizeColor) : Surface.raised, borderRadius: BorderRadius.circular(4)), child: Center(child: SizedBox(width: 10.5, height: 9, child: CustomPaint(painter: SizingGlyph(i, cur == i ? N.g10 : Surface.muted))))),
+            child: Container(width: Surface.px(19.5), height: Surface.px(19.5), margin: EdgeInsets.only(right: Surface.px(2)), decoration: BoxDecoration(color: cur == i ? (s.frozen ? dim(sizeColor) : sizeColor) : Surface.raised, borderRadius: BorderRadius.circular(Surface.px(4))), child: Center(child: SizedBox(width: Surface.px(10.5), height: Surface.px(9), child: CustomPaint(painter: SizingGlyph(i, cur == i ? N.g10 : Surface.muted))))),
           ),
     ];
     final value = _val('layout.${axis == 'w' ? 'width' : 'height'}', sizeColor, gated: fixed, units: true);
     // narrow: the three relationships first, the number under them
     return _narrow
-        ? Column(children: [SizedBox(height: 22.5, child: Row(children: chips)), const SizedBox(height: 2), SizedBox(height: 22.5, child: Row(children: [value])), SizedBox(height: Surface.inlineGap)])
-        : SizedBox(height: 22.5, child: Row(children: [...chips, const SizedBox(width: 2), value]));
+        ? Column(children: [SizedBox(height: Surface.px(22.5), child: Row(children: chips)), SizedBox(height: Surface.px(2)), SizedBox(height: Surface.px(22.5), child: Row(children: [value])), SizedBox(height: Surface.inlineGap)])
+        : SizedBox(height: Surface.px(22.5), child: Row(children: [...chips, SizedBox(width: Surface.px(2)), value]));
   }
 
   List<Widget> _childBody(bool narrow) => [
@@ -148,10 +148,10 @@ class _LayoutInstrumentState extends State<LayoutInstrument> {
         SizedBox(height: Surface.inlineGap),
         _sizeLine('h'),
         if (s.rows.any((r) => r['id'] == 'layout.column_start')) ...[
-          Padding(padding: const EdgeInsets.only(top: 10.5, bottom: 4.5), child: Text('GRID AREA', style: sans(Dn.microSize, c: N.g51, w: FontWeight.w600, ls: 1.3))),
-          Row(children: [_val('layout.column_start', arrangeColor, tag: 'Col'), const SizedBox(width: 2), _val('layout.row_start', arrangeColor, tag: 'Row')]),
+          Padding(padding: EdgeInsets.only(top: Surface.px(10.5), bottom: Surface.px(4.5)), child: Text('GRID AREA', style: sans(Dn.microSize, c: N.g51, w: FontWeight.w600, ls: 1.3))),
+          Row(children: [_val('layout.column_start', arrangeColor, tag: 'Col'), SizedBox(width: Surface.px(2)), _val('layout.row_start', arrangeColor, tag: 'Row')]),
           SizedBox(height: Surface.inlineGap),
-          Row(children: [_val('layout.column_span', arrangeColor, tag: 'Cols'), const SizedBox(width: 2), _val('layout.row_span', arrangeColor, tag: 'Rows')]),
+          Row(children: [_val('layout.column_span', arrangeColor, tag: 'Cols'), SizedBox(width: Surface.px(2)), _val('layout.row_span', arrangeColor, tag: 'Rows')]),
         ],
         ..._advanced([for (final r in s.rows) if (r['advanced'] == true) r]),
       ];
@@ -162,6 +162,7 @@ class SizingGlyph extends CustomPainter {
   SizingGlyph(this.i, this.col);
   final int i;
   final Color col;
+  // surface-block: painter geometry: drawn in the canvas's own pixels (method paint)
   @override
   void paint(Canvas c, Size s) {
     final p = Paint()..color = col..style = PaintingStyle.stroke..strokeWidth = 1.5..strokeCap = StrokeCap.round..strokeJoin = StrokeJoin.round;

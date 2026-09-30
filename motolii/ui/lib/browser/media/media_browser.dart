@@ -333,7 +333,7 @@ class MediaBrowserState extends State<MediaBrowser> {
               _Header(view: view, count: items.length, hasExplore: widget.explore != null || widget.exploreLayout != null, onView: (v) => setState(() => view = v), size: view == BrowserView.thumbnail ? (thumbMin - 44) / 96 : null, onSize: (f) => setState(() => thumbMin = 44 + f * 96)),
               if (widget.controls != null) widget.controls!,
               if (view == BrowserView.explore && widget.exploreBar != null) widget.exploreBar!,
-              if (view == BrowserView.explore && widget.exploreBar == null && widget.exploreNote != null) Padding(padding: const EdgeInsets.fromLTRB(9, 3, 9, 0), child: Text(widget.exploreNote!, style: Dn.label(N.g51))),
+              if (view == BrowserView.explore && widget.exploreBar == null && widget.exploreNote != null) Padding(padding: EdgeInsets.fromLTRB(Surface.panelInset, Surface.inlineGap, Surface.panelInset, 0), child: Text(widget.exploreNote!, style: Dn.label(N.g51))),
               Expanded(
                 flex: 5,
                 child: ClipRect(child: _body(items)),
@@ -351,14 +351,14 @@ class MediaBrowserState extends State<MediaBrowser> {
       );
 
   Widget _body(List<BrowserItem> items) {
-    if (items.isEmpty) return Padding(padding: const EdgeInsets.all(9), child: Text('Nothing matches.', style: Dn.label(N.g56)));
+    if (items.isEmpty) return Padding(padding: EdgeInsets.all(Surface.panelInset), child: Text('Nothing matches.', style: Dn.label(N.g56)));
     final explore = view == BrowserView.explore;
     if (explore && widget.exploreLayout == null) {
       final build = widget.explore;
       return build == null ? const SizedBox.shrink() : build(context, items, selected, choose, open);
     }
     if (explore && items.length > widget.exploreUpTo) {
-      return Padding(padding: const EdgeInsets.all(9), child: Text('Explore cannot map this many assets yet (${items.length}). Narrow the result (a Source, a Type, a word), or use List or Thumbnail.', style: Dn.label(N.g56)));
+      return Padding(padding: EdgeInsets.all(Surface.panelInset), child: Text('Explore cannot map this many assets yet (${items.length}). Narrow the result (a Source, a Type, a word), or use List or Thumbnail.', style: Dn.label(N.g56)));
     }
     return LayoutBuilder(builder: (context, box) {
       _width = box.maxWidth;
@@ -391,7 +391,7 @@ class _Header extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(
         height: Surface.chromeRow,
-        padding: const EdgeInsets.symmetric(horizontal: 6),
+        padding: EdgeInsets.symmetric(horizontal: Surface.sectionGap),
         decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: N.g15))),
         child: Row(children: [
           for (final v in BrowserView.values)
@@ -401,14 +401,14 @@ class _Header extends StatelessWidget {
                 behavior: HitTestBehavior.opaque,
                 onTap: () => onView(v),
                 child: Container(
-                  margin: const EdgeInsets.only(right: 2),
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(color: v == view ? N.g20 : null, borderRadius: BorderRadius.circular(4)),
+                  margin: EdgeInsets.only(right: Surface.px(2)),
+                  padding: EdgeInsets.symmetric(horizontal: Surface.px(8), vertical: Surface.inlineGap),
+                  decoration: BoxDecoration(color: v == view ? N.g20 : null, borderRadius: BorderRadius.circular(Surface.px(4))),
                   child: Text(const {BrowserView.list: 'List', BrowserView.thumbnail: 'Thumbnail', BrowserView.explore: 'Explore'}[v]!, softWrap: false, style: Dn.name(v == view ? N.g95 : N.g63, v == view ? FontWeight.w600 : FontWeight.w500)),
                 ),
               ),
           const Spacer(),
-          if (size != null) Padding(padding: const EdgeInsets.only(right: 8), child: SizedBox(width: 74, child: _SizeSlider(value: size!, onChanged: onSize))),
+          if (size != null) Padding(padding: EdgeInsets.only(right: Surface.px(8)), child: SizedBox(width: Surface.px(74), child: _SizeSlider(value: size!, onChanged: onSize))),
           Text('$count', style: Dn.value(N.g51).copyWith(fontSize: Dn.labelSize)),
         ]),
       );
@@ -435,7 +435,7 @@ class _SizeSlider extends StatelessWidget {
           behavior: HitTestBehavior.opaque,
           onPanDown: (d) => set(d.localPosition),
           onPanUpdate: (d) => set(d.localPosition),
-          child: CustomPaint(size: Size(box.maxWidth, 22), painter: _SizePainter(value)),
+          child: CustomPaint(size: Size(box.maxWidth, Surface.px(22)), painter: _SizePainter(value)),
         );
       });
 }

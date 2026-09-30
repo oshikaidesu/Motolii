@@ -120,7 +120,7 @@ class _FontsPanelState extends State<FontsPanel>
             // classes along the top, as Create and Media: the body keeps the seat's whole width
             classStrip: true,
         title: 'Fonts',
-        icon: const GlyphBox(HG.text, size: 22, color: N.g95),
+        icon: GlyphBox(HG.text, size: Surface.px(22), color: N.g95),
         search: search,
         classify: classify,
         groups: widget.groups ?? fontGroups(),
@@ -137,10 +137,10 @@ class _FontsPanelState extends State<FontsPanel>
         strip: (c, s) => ListView.builder(
           scrollDirection: Axis.horizontal,
           physics: const ClampingScrollPhysics(),
-          padding: const EdgeInsets.all(7.5),
+          padding: EdgeInsets.all(Surface.px(7.5)),
           itemCount: shown.length,
           itemBuilder: (_, i) => Padding(
-            padding: const EdgeInsets.only(right: 4.5),
+            padding: EdgeInsets.only(right: Surface.px(4.5)),
             child: Container(
               width: math.min(72, s.height * 1.3),
               decoration: BoxDecoration(
@@ -242,12 +242,12 @@ class _Row extends StatelessWidget {
           border: Border(
             left: BorderSide(
               color: chosen ? N.g91 : N.clear,
-              width: 1.5,
+              width: Surface.focusStroke,
             ),
             bottom: const BorderSide(color: Surface.dividerFine),
           ),
         ),
-        padding: const EdgeInsets.only(left: 7.5, right: 6),
+        padding: EdgeInsets.only(left: Surface.px(7.5), right: Surface.sectionGap),
         child: w < 110
             ? Center(
                 child:
@@ -257,7 +257,7 @@ class _Row extends StatelessWidget {
                       softWrap: false,
                       style: TextStyle(
                         fontFamily: f.family,
-                        fontSize: 16.5,
+                        fontSize: Surface.px(16.5),
                         color: N.g95,
                         height: 1,
                       ),
@@ -266,7 +266,7 @@ class _Row extends StatelessWidget {
             : Row(
                 children: [
                   SizedBox(
-                    width: big ? 38 : 30,
+                    width: big ? Surface.px(38) : Surface.px(30),
                     child:
                         sample?.call() ??
                         Text(
@@ -274,7 +274,7 @@ class _Row extends StatelessWidget {
                           softWrap: false,
                           style: TextStyle(
                             fontFamily: f.family,
-                            fontSize: big ? 22 : 18,
+                            fontSize: big ? Surface.px(22) : Surface.px(18),
                             color: N.g95,
                             height: 1,
                           ),
@@ -298,7 +298,7 @@ class _Row extends StatelessWidget {
                           ),
                         ),
                         if (big) ...[
-                          const SizedBox(height: 2),
+                          SizedBox(height: Surface.px(2)),
                           Text(
                             '${f.meta}${f.facts.isEmpty ? '' : '  ·  ${f.facts.join('  ')}'}',
                             softWrap: false,
@@ -314,8 +314,8 @@ class _Row extends StatelessWidget {
                       behavior: HitTestBehavior.opaque,
                       onTap: onFavorite,
                       child: SizedBox(
-                        width: 15,
-                        height: 15,
+                        width: Surface.px(15),
+                        height: Surface.px(15),
                         child: CustomPaint(painter: _Star(f.favorite)),
                       ),
                     ),

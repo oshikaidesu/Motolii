@@ -90,14 +90,14 @@ class _ClassColumnState extends State<ClassColumn> {
           decoration: const BoxDecoration(border: Border(right: BorderSide(color: Surface.dividerFine))),
           child: ListView(
             controller: scroll,
-            padding: const EdgeInsets.fromLTRB(9, 7.5, 4.5, 7.5),
+            padding: EdgeInsets.fromLTRB(Surface.panelInset, Surface.px(7.5), Surface.px(4.5), Surface.px(7.5)),
             physics: const ClampingScrollPhysics(),
             children: [
               for (final (gi, g) in widget.groups.indexed) ...[
-                if (gi > 0) const SizedBox(height: 10.5),
+                if (gi > 0) SizedBox(height: Surface.px(10.5)),
                 for (final c in g) _Row(c, c == widget.classify.selected, () => widget.classify.select(c)),
               ],
-              if (widget.trailingPlus) Padding(padding: const EdgeInsets.only(top: 9), child: Text('+', style: sans(Dn.nameSize, c: Surface.muted))),
+              if (widget.trailingPlus) Padding(padding: EdgeInsets.only(top: Surface.panelInset), child: Text('+', style: sans(Dn.nameSize, c: Surface.muted))),
             ],
           ),
         ),
@@ -114,11 +114,11 @@ class _Row extends StatelessWidget {
         behavior: HitTestBehavior.opaque,
         onTap: tap,
         child: SizedBox(
-          height: 20,
+          height: Surface.workRow,
           child: Align(
             alignment: Alignment.centerLeft,
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              padding: EdgeInsets.symmetric(horizontal: Surface.sectionGap, vertical: Surface.labelGap),
               decoration: BoxDecoration(color: on ? N.g20 : null, borderRadius: BorderRadius.circular(Surface.faceRadius)),
               child: Text(label, softWrap: false, overflow: TextOverflow.clip, style: sans(Dn.nameSize, c: on ? N.g95 : N.g56, w: FontWeight.w500)),
             ),
@@ -177,7 +177,7 @@ class _ClassStripState extends State<ClassStrip> {
   Widget build(BuildContext context) => ListenableBuilder(
         listenable: widget.classify,
         builder: (_, __) => Container(
-          height: 21,
+          height: Surface.px(21),
           decoration: widget.bare ? null : const BoxDecoration(border: Border(bottom: BorderSide(color: Surface.dividerFine))),
           // an edge fades where more classes scroll that way: a cut-off name reads as "more", not as a clipped label
           child: NotificationListener<ScrollMetricsNotification>(
@@ -193,14 +193,14 @@ class _ClassStripState extends State<ClassStrip> {
                 child: SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
                   physics: const ClampingScrollPhysics(),
-                  padding: const EdgeInsets.symmetric(horizontal: 7.5),
+                  padding: EdgeInsets.symmetric(horizontal: Surface.px(7.5)),
                   child: Row(children: [
                     for (final (gi, g) in widget.groups.indexed) ...[
-                      if (gi > 0) const SizedBox(width: 7.5),
+                      if (gi > 0) SizedBox(width: Surface.px(7.5)),
                       for (final c in g)
                         Padding(
                           key: c == widget.classify.selected ? _chosen : null,
-                          padding: const EdgeInsets.only(right: 1.5),
+                          padding: EdgeInsets.only(right: Surface.px(1.5)),
                           child: _Row(c, c == widget.classify.selected, () => widget.classify.select(c)),
                         ),
                     ],
@@ -224,9 +224,9 @@ class ClassChip extends StatelessWidget {
             ? GestureDetector(
                 onTap: () => classify.select(classify.all),
                 child: Container(
-                  height: 15,
-                  padding: const EdgeInsets.symmetric(horizontal: 5),
-                  decoration: BoxDecoration(color: Surface.selected, borderRadius: BorderRadius.circular(2)),
+                  height: Surface.px(15),
+                  padding: EdgeInsets.symmetric(horizontal: Surface.px(5)),
+                  decoration: BoxDecoration(color: Surface.selected, borderRadius: BorderRadius.circular(Surface.px(2))),
                   child: Center(child: Text('${classify.selected}  ×', softWrap: false, style: sans(Dn.labelSize, c: N.g91))),
                 ),
               )

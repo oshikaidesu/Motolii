@@ -93,9 +93,9 @@ class _RightSeatState extends State<RightSeat> {
           transform,
           if (stage)
             Padding(
-              padding: const EdgeInsets.fromLTRB(9, 7.5, 9, 0),
+              padding: EdgeInsets.fromLTRB(Surface.panelInset, Surface.px(7.5), Surface.panelInset, 0),
               child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                Padding(padding: const EdgeInsets.only(bottom: 6), child: Text('Stage', key: const ValueKey('seat-stage'), style: sans(Dn.nameSize, c: Surface.muted))),
+                Padding(padding: EdgeInsets.only(bottom: Surface.sectionGap), child: Text('Stage', key: const ValueKey('seat-stage'), style: sans(Dn.nameSize, c: Surface.muted))),
                 LayerRowsSheet(key: ValueKey('seat-stage:${layer['id']}'), controller: c, layerId: layer['id'] as int, prefix: 'stage.'),
               ]),
             ),

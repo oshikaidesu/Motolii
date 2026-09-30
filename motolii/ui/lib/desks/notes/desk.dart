@@ -7,6 +7,7 @@ import 'package:flutter/widgets.dart';
 import 'face.dart';
 import '../../session/editor_session.dart';
 import '../hosts.dart';
+import '../../theme/metrics.dart';
 
 /// The Notes desk over the document's notebook (`notebook` in the status, `notes` to change it). Text, image and
 /// reference blocks are the host's; a kind it does not hold (a hand line) is not added. An image comes from the
@@ -83,7 +84,7 @@ class LiveNotesHost extends ChangeNotifier implements NotesHost {
       'action': 'images',
       'images': [
         for (var i = 0; i < paths.length; i++)
-          {'path': paths[i], 'block': {'id': 'b$stamp$i', ..._frame(NBlock('image', Offset(40.0 + i * 24, 40.0 + i * 24), const Size(110, 80), '', 0))}},
+          {'path': paths[i], 'block': {'id': 'b$stamp$i', ..._frame(NBlock('image', Offset(40.0 + i * 24, 40.0 + i * 24), Size(Surface.px(110), Surface.px(80)), '', 0))}},
       ],
     });
   }
@@ -94,10 +95,10 @@ class LiveNotesHost extends ChangeNotifier implements NotesHost {
     final id = 'b${DateTime.now().microsecondsSinceEpoch}';
     if (clip['png'] is String) {
       final pageId = await _page(page);
-      await c.command('notes', {'page': pageId, 'action': 'image', 'png': clip['png'], 'block': {'id': id, ..._frame(NBlock('image', at, const Size(110, 80), '', 0))}});
+      await c.command('notes', {'page': pageId, 'action': 'image', 'png': clip['png'], 'block': {'id': id, ..._frame(NBlock('image', at, Size(Surface.px(110), Surface.px(80)), '', 0))}});
     } else if ('${clip['text'] ?? ''}'.isNotEmpty) {
       final pageId = await _page(page);
-      await c.command('notes', {'page': pageId, 'action': 'putBlock', 'block': {'id': id, ..._frame(NBlock('note', at, const Size(110, 74), '', 0)), 'kind': 'text', 'text': '${clip['text']}'}});
+      await c.command('notes', {'page': pageId, 'action': 'putBlock', 'block': {'id': id, ..._frame(NBlock('note', at, Size(Surface.px(110), Surface.px(74)), '', 0)), 'kind': 'text', 'text': '${clip['text']}'}});
     }
   }
 

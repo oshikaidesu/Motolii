@@ -8,8 +8,9 @@ import '../theme/metrics.dart' show Dn, Surface;
 /// tile is each shelf's own face; only the section rhythm, the column rule and the picked ring live here.
 
 /// The grid's unit: paddings, gaps and heading space are multiples of it.
-const kShelfUnit = 4.0;
-const kShelfPad = 3 * kShelfUnit, kShelfGap = 2 * kShelfUnit;
+double get kShelfUnit => Surface.px(4.0);
+double get kShelfPad => 3 * kShelfUnit;
+double get kShelfGap => 2 * kShelfUnit;
 
 /// The Browser's one heading voice: the section's name in plain semibold, its count in a small quiet pill.
 class SwissHeading extends StatelessWidget {
@@ -19,13 +20,13 @@ class SwissHeading extends StatelessWidget {
   final bool rule; // kept for callers; a heading no longer draws a rule
   @override
   Widget build(BuildContext context) => Padding(
-        padding: EdgeInsets.only(top: rule ? 14 : 10, bottom: 6),
+        padding: EdgeInsets.only(top: rule ? Surface.px(14) : Surface.px(10), bottom: Surface.sectionGap),
         child: Row(children: [
           Flexible(child: Text(text, softWrap: false, overflow: TextOverflow.ellipsis, style: sans(Dn.nameSize, c: N.g91, w: FontWeight.w600))),
           if (count != null)
             Container(
-              margin: const EdgeInsets.only(left: 4.5),
-              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+              margin: EdgeInsets.only(left: Surface.px(4.5)),
+              padding: EdgeInsets.symmetric(horizontal: Surface.px(4), vertical: 1),
               decoration: BoxDecoration(color: N.g15, borderRadius: BorderRadius.circular(Surface.controlRadius)),
               child: Text('$count', style: sans(Dn.microSize, c: N.g63, w: FontWeight.w500)),
             ),
@@ -34,7 +35,9 @@ class SwissHeading extends StatelessWidget {
 }
 
 /// As many columns as fit at [min] wide (at least one), and the width each then takes.
-({int columns, double width}) shelfColumns(double width, double min, {double pad = kShelfPad, double gap = kShelfGap}) {
+({int columns, double width}) shelfColumns(double width, double min, {double? pad, double? gap}) {
+  pad ??= kShelfPad;
+  gap ??= kShelfGap;
   final columns = math.max(1, ((width - pad * 2 + gap) / (min + gap)).floor());
   return (columns: columns, width: (width - pad * 2 - gap * (columns - 1)) / columns);
 }

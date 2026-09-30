@@ -9,7 +9,7 @@ import '../../browser/parts.dart';
 import '../../desks/parts.dart' show kMint, kBlue, kViolet, kPink;
 import 'model.dart';
 import '../../theme/neutral.dart';
-import '../../theme/metrics.dart' show Dn;
+import '../../theme/metrics.dart' show Dn, Surface;
 
 const arrangeColor = kMint, spaceColor = kBlue, alignColor = kViolet, sizeColor = kPink;
 
@@ -18,7 +18,9 @@ class LayoutGeom {
   LayoutGeom(this.size, this.s);
   final Size size;
   final LayoutStore s;
-  static const k = .45, cw = 34.0, ch = 24.0;
+  static const k = .45; // surface: the diagram's share of the real size, a ratio
+  static double get cw => Surface.px(34);
+  static double get ch => Surface.px(24);
 
   Rect get avail => Rect.fromLTRB(10, 24, size.width - 10, size.height - 12); // the top margin holds the readout
   int get n => s.children;
@@ -88,9 +90,10 @@ class LayoutGeom {
 enum _G { none, gap, cols, rows, padL, padR, padT, padB, padBoth, sizeW, sizeH, align }
 
 class LayoutDiagram extends StatefulWidget {
-  const LayoutDiagram(this.store, {super.key, this.size = const Size(286, 190)});
+  const LayoutDiagram(this.store, {super.key, Size? size}) : _size = size;
   final LayoutStore store;
-  final Size size;
+  final Size? _size;
+  Size get size => _size ?? Size(Surface.px(286), Surface.px(190));
   @override
   State<LayoutDiagram> createState() => _LayoutDiagramState();
 }
@@ -231,6 +234,7 @@ class _Painter extends CustomPainter {
   final LayoutStore s;
   final _G grab;
 
+  // surface-block: painter geometry: drawn in the canvas's own pixels (method paint)
   @override
   void paint(Canvas c, Size sz) {
     final on = s.arranged, off = s.frozen;

@@ -214,7 +214,7 @@ class _ColorsPanelState extends State<ColorsPanel>
             // classes along the top, as Create and Media: the body keeps the seat's whole width
             classStrip: true,
         title: 'Colors',
-        icon: const GlyphBox(HG.color, size: 22, color: N.g95),
+        icon: GlyphBox(HG.color, size: Surface.px(22), color: N.g95),
         search: search,
         classify: classify,
         groups: groups,
@@ -251,13 +251,13 @@ class _ColorsPanelState extends State<ColorsPanel>
     bool filtering,
     bool hasGradients,
   ) {
-    const pad = 12.0;
+    final pad = Surface.px(12.0);
     // the wheel is a tool above the palette, not the page: about half the seat
     final wheel = math.min((s.width - pad * 2) * .5, 136.0);
     final full = !filtering || wheelOnly;
     return SingleChildScrollView(
       physics: const ClampingScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(pad, 10.5, pad, 10.5),
+      padding: EdgeInsets.fromLTRB(pad, Surface.px(10.5), pad, Surface.px(10.5)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -292,7 +292,7 @@ class _ColorsPanelState extends State<ColorsPanel>
     final wheel = (s.width - 24).clamp(70.0, 150.0);
     return SingleChildScrollView(
       physics: const ClampingScrollPhysics(),
-      padding: const EdgeInsets.all(9),
+      padding: EdgeInsets.all(Surface.panelInset),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -308,7 +308,7 @@ class _ColorsPanelState extends State<ColorsPanel>
             ),
           if ((!filtering || wheelOnly) && widget.editor == null)
             Padding(
-              padding: const EdgeInsets.only(top: 4.5, bottom: 3),
+              padding: EdgeInsets.only(top: Surface.px(4.5), bottom: Surface.inlineGap),
               child: Center(
                 child: Text(
                   '#E8508F',
@@ -332,22 +332,22 @@ class _ColorsPanelState extends State<ColorsPanel>
     return ListView.builder(
       scrollDirection: Axis.horizontal,
       physics: const ClampingScrollPhysics(),
-      padding: const EdgeInsets.all(7.5),
+      padding: EdgeInsets.all(Surface.px(7.5)),
       itemCount: shown.length + (addControl ? 1 : 0),
       itemBuilder: (_, i) => Padding(
-        padding: const EdgeInsets.only(right: 4.5),
+        padding: EdgeInsets.only(right: Surface.px(4.5)),
         child: addControl && i == shown.length
             ? SizedBox(
-                width: 22.5,
+                width: Surface.px(22.5),
                 child: Center(
-                  child: Text('+', style: sans(12, c: Surface.muted)),
+                  child: Text('+', style: sans(Surface.px(12), c: Surface.muted)),
                 ),
               )
             : Container(
                 width: math.min(h - 20, 38),
                 decoration: BoxDecoration(
                   color: Color(shown[i].$2),
-                  borderRadius: BorderRadius.circular(2),
+                  borderRadius: BorderRadius.circular(Surface.px(2)),
                 ),
               ),
       ),
@@ -377,25 +377,25 @@ class _Instrument extends StatelessWidget {
               children: [
                 Text('#E8508F', style: mono(Dn.nameSize, c: N.g82)),
                 SizedBox(width: Surface.sectionGap),
-                const GlyphBox(HG.composite, size: 13, color: Surface.muted),
+                GlyphBox(HG.composite, size: Surface.px(13), color: Surface.muted),
               ],
             ),
           ),
         ],
       ),
-      const SizedBox(width: 9),
+      SizedBox(width: Surface.px(9)),
       SizedBox(
         height: wheel,
         child: Row(
           children: [
             SizedBox(
-              width: 8,
+              width: Surface.px(8),
               height: wheel,
               child: CustomPaint(painter: ColorBar(0)),
             ),
-            const SizedBox(width: 7),
+            SizedBox(width: Surface.px(7)),
             SizedBox(
-              width: 8,
+              width: Surface.px(8),
               height: wheel,
               child: CustomPaint(painter: ColorBar(1)),
             ),
@@ -413,24 +413,24 @@ class _MiniInstrument extends StatelessWidget {
   Widget build(BuildContext context) => Row(
     children: [
       SizedBox(
-        width: 40.5,
-        height: 40.5,
+        width: Surface.px(40.5),
+        height: Surface.px(40.5),
         child: CustomPaint(
           painter: WheelPainter(
             color == null ? null : HSVColor.fromColor(color!),
           ),
         ),
       ),
-      const SizedBox(width: 9),
+      SizedBox(width: Surface.px(9)),
       Container(
-        width: 22.5,
-        height: 22.5,
+        width: Surface.px(22.5),
+        height: Surface.px(22.5),
         decoration: BoxDecoration(
           color: color ?? _firstSwatch,
-          borderRadius: BorderRadius.circular(2),
+          borderRadius: BorderRadius.circular(Surface.px(2)),
         ),
       ),
-      const SizedBox(width: 7.5),
+      SizedBox(width: Surface.px(7.5)),
       Text(
         color == null ? '#E8508F' : hexText(color!),
         style: mono(Dn.nameSize, c: N.g82),
@@ -447,6 +447,7 @@ class ColorBar extends CustomPainter {
   final int kind;
   final Color color;
   final double at;
+  // surface-block: painter geometry: drawn in the canvas's own pixels (method paint)
   @override
   void paint(Canvas c, Size s) {
     final r = RRect.fromRectAndRadius(
@@ -622,8 +623,8 @@ class _Swatches extends StatelessWidget {
   final void Function(Sw swatch, Offset at)? onMenu;
   @override
   Widget build(BuildContext context) => Wrap(
-    spacing: 4,
-    runSpacing: 4,
+    spacing: Surface.px(4),
+    runSpacing: Surface.px(4),
     children: [
       for (final v in items.take(600))
         GestureDetector(
@@ -636,7 +637,7 @@ class _Swatches extends StatelessWidget {
             height: size,
             decoration: BoxDecoration(
               color: Color(v.$2),
-              borderRadius: BorderRadius.circular(2),
+              borderRadius: BorderRadius.circular(Surface.px(2)),
             ),
           ),
         ),
@@ -672,10 +673,10 @@ class _Gradients extends StatelessWidget {
 
   Widget _tile(Map<String, dynamic> item) {
     final placeholder = Container(
-      width: 58.5,
-      height: 11,
+      width: Surface.px(58.5),
+      height: Surface.px(11),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(2),
+        borderRadius: BorderRadius.circular(Surface.px(2)),
         gradient: LinearGradient(
           colors: _colors(item['stops'] as List? ?? const []),
         ),
@@ -697,16 +698,16 @@ class _Gradients extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Wrap(
-    spacing: 6,
-    runSpacing: 6,
+    spacing: Surface.sectionGap,
+    runSpacing: Surface.sectionGap,
     children: [
       if (items == null)
         for (final g in _grads)
           Container(
-            width: 58.5,
-            height: 11,
+            width: Surface.px(58.5),
+            height: Surface.px(11),
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(2),
+              borderRadius: BorderRadius.circular(Surface.px(2)),
               gradient: LinearGradient(
                 colors: [for (final c in g.$2) Color(c)],
               ),
