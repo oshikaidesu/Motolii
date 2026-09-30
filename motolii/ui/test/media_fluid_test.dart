@@ -46,13 +46,14 @@ void main() {
     expect(inThumb.topLeft - origin, frame.faces['a3']!.topLeft);
   });
 
-  testWidgets('every asset stays one face across the change, the chosen one still ringed', (t) async {
+  testWidgets('an asset is one face across the change (never two, none lost from view), the chosen one still ringed', (t) async {
     await t.pumpWidget(board('list', selected: 'a2'));
     await t.pumpAndSettle();
     for (final view in ['thumbnail', 'list', 'thumbnail']) {
       await t.pumpWidget(board(view, selected: 'a2'));
       await t.pumpAndSettle();
       for (final i in items) {
+        // the seat shows all five, so each is one face; what is out of sight would be built where it lands, when it comes into view
         expect(find.byKey(ValueKey('face-${i.id}')), findsOneWidget, reason: '${i.id} in $view');
       }
     }
@@ -114,6 +115,63 @@ void main() {
     await mouse.moveTo(const Offset(319, 419));
     await t.pump();
   });
+  group('a large library (what is on screen is built, the rest where it lands)', () {
+    final many = [for (var i = 0; i < 1845; i++) item(i, i % 7 == 0 ? 'video' : 'image', w: 100 + (i % 5) * 40, h: 100 + (i % 3) * 30)];
+    Widget tall(String view, {String? selected, ScrollController? controller}) => Directionality(
+          textDirection: TextDirection.ltr,
+          child: Align(alignment: Alignment.topLeft, child: SizedBox(width: 420, height: 640, child: FluidBoard(items: many, selected: selected, view: view, onTap: (_) {}))),
+        );
+    int built() => find.byWidgetPredicate((w) => w.key is ValueKey<String> && (w.key as ValueKey<String>).value.startsWith('face-')).evaluate().length;
+
+    for (final view in ['thumbnail', 'list']) {
+      testWidgets('$view: the first frame builds what is on screen, not the library', (t) async {
+        await t.pumpWidget(tall(view, selected: 'a3'));
+        await t.pump(const Duration(milliseconds: 16));
+        expect(built(), greaterThan(0));
+        expect(built(), lessThan(200), reason: '${many.length} assets, built $built');
+      });
+    }
+
+    testWidgets('scrolling builds the assets that come into view, and they are the ones the layout put there', (t) async {
+      await t.pumpWidget(tall('thumbnail', selected: 'a3'));
+      await t.pump(const Duration(milliseconds: 16));
+      expect(find.byKey(const ValueKey('face-a1500')), findsNothing, reason: 'far below: not built');
+      final frame = FluidBoard.thumbnail(many, 420);
+      await t.drag(find.byType(CustomScrollView), Offset(0, -(frame.faces['a1500']!.top - 100)));
+      await t.pump(const Duration(milliseconds: 50));
+      expect(find.byKey(const ValueKey('face-a1500')), findsOneWidget);
+      final origin = t.getTopLeft(find.byType(FluidBoard));
+      final scrolled = t.getTopLeft(find.byKey(const ValueKey('face-a1500'))) - origin;
+      expect((scrolled.dy - (frame.faces['a1500']!.top - t.widget<CustomScrollView>(find.byType(CustomScrollView)).controller!.offset)).abs(), lessThan(1), reason: 'a built face stands where the projection places it, less the scroll');
+    });
+
+    testWidgets('the chosen asset keeps its ring when it scrolls out and back', (t) async {
+      await t.pumpWidget(tall('thumbnail', selected: 'a3'));
+      await t.pump(const Duration(milliseconds: 16));
+      expect(find.byKey(const ValueKey('face-a3')), findsOneWidget);
+      final frame = FluidBoard.thumbnail(many, 420);
+      final controller = t.widget<CustomScrollView>(find.byType(CustomScrollView)).controller!;
+      controller.jumpTo(frame.faces['a1500']!.top);
+      await t.pump(const Duration(milliseconds: 50));
+      expect(find.byKey(const ValueKey('face-a3')), findsNothing);
+      controller.jumpTo(0);
+      await t.pump(const Duration(milliseconds: 50));
+      expect(find.byKey(const ValueKey('face-a3')), findsOneWidget, reason: 'the choice belongs to the browser, not to a built widget');
+    });
+
+    testWidgets('a change of view carries what is in sight and never builds the library (an asset is never two faces)', (t) async {
+      await t.pumpWidget(tall('list', selected: 'a3'));
+      await t.pump(const Duration(milliseconds: 16));
+      await t.pumpWidget(tall('thumbnail', selected: 'a3'));
+      await t.pump(const Duration(milliseconds: 60));
+      expect(built(), lessThan(300), reason: 'mid-move: $built faces');
+      final ids = find.byWidgetPredicate((w) => w.key is ValueKey<String> && (w.key as ValueKey<String>).value.startsWith('face-')).evaluate().map((e) => (e.widget.key as ValueKey<String>).value).toList();
+      expect(ids.toSet().length, ids.length, reason: 'no asset is two faces while it moves');
+      await t.pumpAndSettle();
+      expect(built(), lessThan(200));
+      expect(find.byKey(const ValueKey('face-a3')), findsOneWidget);
+    });
+  });
 }
 
 class _Faces implements FaceService {
@@ -127,4 +185,5 @@ class _Faces implements FaceService {
 
   @override
   Future<String?> pictureOf(BrowserItem item) async => null;
+
 }

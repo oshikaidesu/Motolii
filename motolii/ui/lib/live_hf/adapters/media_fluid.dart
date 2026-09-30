@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:flutter/gestures.dart' show kPrimaryButton;
+import 'package:flutter/rendering.dart' show ScrollCacheExtent, SliverConstraints, SliverGridGeometry, SliverGridLayout;
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 
@@ -98,8 +99,9 @@ class FluidBoard extends StatefulWidget {
   State<FluidBoard> createState() => _FluidBoardState();
 }
 
-class _FluidBoardState extends State<FluidBoard> with SingleTickerProviderStateMixin {
-  final scroll = ScrollController();
+class _FluidBoardState extends State<FluidBoard> with TickerProviderStateMixin {
+  /// The scroll of the projection in view (List and Thumbnail build only what is on screen; each projection has its own).
+  ScrollController _scroll = ScrollController();
 
   /// Moving between projections: it starts on the input's own frame and only slows at the end (ease-out), and it is short.
   /// The same asset keeps its identity through it; a long, slow move would not make it any more continuous.
@@ -150,7 +152,8 @@ class _FluidBoardState extends State<FluidBoard> with SingleTickerProviderStateM
     _landed?.cancel();
     _fly.dispose();
     _view.dispose();
-    scroll.dispose();
+    _shiftAnim.dispose();
+    _scroll.dispose();
     super.dispose();
   }
 
@@ -160,6 +163,26 @@ class _FluidBoardState extends State<FluidBoard> with SingleTickerProviderStateM
         _ => FluidBoard.thumbnail(widget.items, viewport.width, widget.minColumn),
       };
 
+  static bool _lazy(String view) => view == 'list' || view == 'thumbnail';
+
+  /// The two projections that are built lazily, laid out once per (what is shown, how wide, how big the faces are).
+  Frame _placed(String view, List<BrowserItem> items, double width, double minColumn) {
+    final key = (view, width, minColumn, items.length, items.isEmpty ? '' : items.first.id, items.isEmpty ? '' : items.last.id, items.fold<int>(0, (a, i) => a ^ i.id.hashCode));
+    if (_placedKey == key && _placedFrame != null) return _placedFrame!;
+    _placedKey = key;
+    return _placedFrame = view == 'list' ? FluidBoard.list(items, width) : FluidBoard.thumbnail(items, width, minColumn);
+  }
+
+  Object? _placedKey;
+  Frame? _placedFrame;
+
+  /// Where the scroll should stand so that the chosen asset is in the middle of the seat (none chosen: the top).
+  double _offsetFor(Frame frame) {
+    final rect = frame.faces[widget.selected];
+    if (rect == null) return 0;
+    return (rect.center.dy - _viewport.height / 2).clamp(0.0, math.max(0.0, frame.content.height - _viewport.height)).toDouble();
+  }
+
   @override
   void didUpdateWidget(FluidBoard old) {
     super.didUpdateWidget(old);
@@ -168,27 +191,68 @@ class _FluidBoardState extends State<FluidBoard> with SingleTickerProviderStateM
     }
     // a size being dragged is direct manipulation: the faces follow it 1:1, nothing animates behind the pointer
     _instant = old.view == widget.view && old.minColumn != widget.minColumn;
-    if (old.view != widget.view) {
-      _hush();
-      // the same asset stays in view across the change: bring the chosen one to the middle of the new arrangement
-      SchedulerBinding.instance.addPostFrameCallback((_) => _reveal());
+    if (old.view == widget.view) return;
+    if (_lazy(old.view) && _lazy(widget.view) && _viewport != Size.zero && widget.items.isNotEmpty) {
+      _startShift(old);
+    } else {
+      if (widget.view == 'explore') _hush();
+      _newScroll(_lazy(widget.view) && _viewport != Size.zero ? _offsetFor(_placed(widget.view, widget.items, _viewport.width, widget.minColumn)) : 0);
     }
   }
 
   Size _viewport = Size.zero;
 
+  void _newScroll(double at) {
+    final old = _scroll;
+    _scroll = ScrollController(initialScrollOffset: at);
+    SchedulerBinding.instance.addPostFrameCallback((_) => old.dispose());
+  }
+
+  // ---- List <-> Thumbnail: the same assets carried from where they stood to where they stand now -------------------------
+  //
+  // Only what the person can see is carried (the seat and a little round it), by one controller and one overlay; the rest of the
+  // library is built where it lands, lazily, when the move is over. A thousand faces out of sight are not kept alive for a
+  // motion nobody sees.
+  late final AnimationController _shiftAnim = AnimationController(vsync: this, duration: _move)..addStatusListener((status) {
+    if (status == AnimationStatus.completed && mounted) setState(() => _shift = null);
+  });
+  ({Map<String, Rect> from, Map<String, Rect> to, List<BrowserItem> carried})? _shift;
+
+  void _startShift(FluidBoard old) {
+    final was = old.view == 'list' ? FluidBoard.list(old.items, _viewport.width) : FluidBoard.thumbnail(old.items, _viewport.width, old.minColumn);
+    final now = _placed(widget.view, widget.items, _viewport.width, widget.minColumn);
+    final from = _scroll.hasClients ? _scroll.offset : 0.0, to = _offsetFor(now);
+    final sight = Rect.fromLTWH(0, -160, _viewport.width, _viewport.height + 320);
+    final start = <String, Rect>{}, end = <String, Rect>{};
+    final carried = <BrowserItem>[];
+    for (final it in widget.items) {
+      final a = was.faces[it.id], b = now.faces[it.id];
+      if (a == null || b == null) continue;
+      final ra = a.shift(Offset(0, -from)), rb = b.shift(Offset(0, -to));
+      if (!sight.overlaps(ra) && !sight.overlaps(rb)) continue;
+      start[it.id] = ra;
+      end[it.id] = rb;
+      carried.add(it);
+    }
+    _newScroll(to);
+    _shift = (from: start, to: end, carried: carried);
+    _shiftAnim.forward(from: 0); // the first frame after the input already shows movement (ease-out starts fast)
+  }
+
   void _reveal() {
     final id = widget.selected;
-    if (id == null || !scroll.hasClients) return;
-    final rect = _frame(_viewport).faces[id];
+    if (id == null || !_scroll.hasClients) return;
+    final frame = _lazy(widget.view) ? _placed(widget.view, widget.items, _viewport.width, widget.minColumn) : _frame(_viewport);
+    final rect = frame.faces[id];
     if (rect == null) return;
-    final target = (rect.center.dy - _viewport.height / 2).clamp(0.0, math.max(0.0, scroll.position.maxScrollExtent)).toDouble();
-    scroll.animateTo(target, duration: _move, curve: _curve);
+    final target = (rect.center.dy - _viewport.height / 2).clamp(0.0, math.max(0.0, _scroll.position.maxScrollExtent)).toDouble();
+    _scroll.animateTo(target, duration: _move, curve: _curve);
   }
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(builder: (context, box) {
         _viewport = Size(box.maxWidth, box.maxHeight);
+        if (_lazy(widget.view)) return _lazyBody(box);
         final frame = _frame(_viewport);
         // Thumbnail and List lay out to the seat's width (responsive layout). Explore's graph is a world with its own size: the
         // seat is only the lens on it, so its size never enters the map.
@@ -235,55 +299,8 @@ class _FluidBoardState extends State<FluidBoard> with SingleTickerProviderStateM
                 if (graph != null)
                   for (final h in graph.hubs) _Glide(key: ValueKey('hub-${h.id}'), rect: h.rect, instant: _instant, child: MouseRegion(onEnter: (_) => setState(() => _hot = h.id), onExit: (_) => setState(() => _hot = null), child: HubPill(hub: h, dim: dim(h.id)))),
                 for (final it in widget.items) ...[
-                  if (frame.labels[it.id] != null)
-                    _Glide(
-                      key: ValueKey('label-${it.id}'),
-                      rect: frame.labels[it.id]!,
-                      instant: _instant,
-                      child: GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onDoubleTap: widget.onOpen == null ? null : () => widget.onOpen!(it.id),
-                        onSecondaryTapDown: widget.onMenu == null ? null : (d) => widget.onMenu!(it.id, d.globalPosition),
-                        // each label is laid out at the width it was made for (the box is still growing or shrinking, and an
-                        // outgoing label keeps its own): clipped, never squeezed
-                        child: _press(it.id, ClipRect(
-                          child: AnimatedSwitcher(
-                            duration: const Duration(milliseconds: 120),
-                            reverseDuration: Duration.zero,
-                            child: KeyedSubtree(
-                              key: ValueKey('${widget.view}-${it.id}'),
-                              child: OverflowBox(
-                                alignment: Alignment.topLeft,
-                                minWidth: frame.labels[it.id]!.width,
-                                maxWidth: frame.labels[it.id]!.width,
-                                minHeight: frame.labels[it.id]!.height,
-                                maxHeight: frame.labels[it.id]!.height,
-                                child: AnimatedOpacity(opacity: _moving ? 0 : 1, duration: Duration(milliseconds: _moving ? 0 : 120), child: _label(it, frame.labels[it.id]!.width)),
-                              ),
-                            ),
-                          ),
-                        )),
-                      ),
-                    ),
-                  if (frame.faces[it.id] != null)
-                    _Glide(
-                      key: ValueKey('face-${it.id}'),
-                      rect: frame.faces[it.id]!,
-                      instant: _instant,
-                      child: GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onDoubleTap: widget.onOpen == null ? null : () => widget.onOpen!(it.id),
-                        onSecondaryTapDown: widget.onMenu == null ? null : (d) => widget.onMenu!(it.id, d.globalPosition),
-                        child: _press(it.id, MouseRegion(
-                          onEnter: graph == null ? null : (_) => setState(() => _hot = it.id),
-                          onExit: graph == null ? null : (_) => setState(() => _hot = null),
-                          child: Opacity(
-                            opacity: dim(it.id) ? .28 : 1,
-                            child: _tinted(graph?.tints[it.id], _carried(it, frame.faces[it.id]!, _Face(it, selected: widget.picked.contains(it.id) || it.id == widget.selected, marked: widget.view != 'list', faces: widget.faces, held: widget.holding[it.id], short: widget.view == 'explore' && it.id != widget.selected))),
-                          ),
-                        )),
-                      ),
-                    ),
+                  if (frame.labels[it.id] != null) _Glide(key: ValueKey('label-${it.id}'), rect: frame.labels[it.id]!, instant: _instant, child: _labelWidget(it, frame.labels[it.id]!.width, hush: _moving)),
+                  if (frame.faces[it.id] != null) _Glide(key: ValueKey('face-${it.id}'), rect: frame.faces[it.id]!, instant: _instant, child: _faceWidget(it, frame.faces[it.id]!, dim: dim(it.id), tint: graph?.tints[it.id], onHover: graph == null ? null : (on) => setState(() => _hot = on ? it.id : null))),
                 ],
               ]),
             ),
@@ -309,8 +326,101 @@ class _FluidBoardState extends State<FluidBoard> with SingleTickerProviderStateM
         }
         return graph != null
             ? InteractiveViewer(transformationController: _view, constrained: false, minScale: .2, maxScale: 3.5, boundaryMargin: const EdgeInsets.all(600), child: board)
-            : SingleChildScrollView(controller: scroll, physics: const ClampingScrollPhysics(), scrollDirection: Axis.vertical, child: board);
+            : SingleChildScrollView(controller: _scroll, physics: const ClampingScrollPhysics(), scrollDirection: Axis.vertical, child: board);
       });
+
+  // ---- List and Thumbnail, built lazily -----------------------------------------------------------------------------
+
+  Widget _lazyBody(BoxConstraints box) {
+    final items = widget.items;
+    if (_shift case final shift?) {
+      // the move: the carried faces, one overlay, one controller; nothing else is built until they land
+      return AnimatedBuilder(
+        animation: _shiftAnim,
+        builder: (context, _) {
+          final t = _curve.transform(_shiftAnim.value);
+          return ClipRect(
+            child: Stack(clipBehavior: Clip.hardEdge, children: [
+              for (final it in shift.carried)
+                Positioned.fromRect(key: ValueKey('face-${it.id}'), rect: Rect.lerp(shift.from[it.id], shift.to[it.id], t)!, child: _faceWidget(it, shift.to[it.id]!)),
+            ]),
+          );
+        },
+      );
+    }
+    final frame = _placed(widget.view, items, box.maxWidth, widget.minColumn);
+    if (items.isEmpty) return const SizedBox.shrink();
+    if (widget.view == 'list') {
+      return ListView.builder(key: const ValueKey('list'), controller: _scroll, physics: const ClampingScrollPhysics(), itemExtent: FluidBoard.rowHeight, itemCount: items.length, scrollCacheExtent: const ScrollCacheExtent.pixels(240), addAutomaticKeepAlives: false, itemBuilder: (context, i) => _tile(items[i], frame));
+    }
+    return CustomScrollView(
+      key: const ValueKey('thumbnail'),
+      controller: _scroll,
+      physics: const ClampingScrollPhysics(),
+      scrollCacheExtent: const ScrollCacheExtent.pixels(320),
+      slivers: [
+        SliverGrid(
+          gridDelegate: _PlacedGrid([for (final it in items) _tileRect(it, frame)], frame.content.height),
+          delegate: SliverChildBuilderDelegate((context, i) => _tile(items[i], frame), childCount: items.length, addAutomaticKeepAlives: false),
+        ),
+      ],
+    );
+  }
+
+  /// The box an asset's face and its name stand in together (a row of the list, a card of the masonry).
+  Rect _tileRect(BrowserItem it, Frame frame) {
+    final face = frame.faces[it.id]!, label = frame.labels[it.id];
+    if (widget.view == 'list') return Rect.fromLTWH(0, label?.top ?? face.top, _viewport.width, FluidBoard.rowHeight);
+    return label == null ? face : face.expandToInclude(label);
+  }
+
+  Widget _tile(BrowserItem it, Frame frame) {
+    final box = _tileRect(it, frame), face = frame.faces[it.id]!, label = frame.labels[it.id];
+    return Stack(clipBehavior: Clip.none, children: [
+      if (label != null) Positioned.fromRect(key: ValueKey('label-${it.id}'), rect: label.shift(-box.topLeft), child: _labelWidget(it, label.width)),
+      Positioned.fromRect(key: ValueKey('face-${it.id}'), rect: face.shift(-box.topLeft), child: _faceWidget(it, face)),
+    ]);
+  }
+
+  /// A face: what a press chooses, a double click places, a right click asks, a drag carries, a pointer only draws a hairline on.
+  Widget _faceWidget(BrowserItem it, Rect rect, {bool dim = false, Color? tint, void Function(bool on)? onHover}) => GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onDoubleTap: widget.onOpen == null ? null : () => widget.onOpen!(it.id),
+        onSecondaryTapDown: widget.onMenu == null ? null : (d) => widget.onMenu!(it.id, d.globalPosition),
+        child: _press(it.id, MouseRegion(
+          onEnter: onHover == null ? null : (_) => onHover(true),
+          onExit: onHover == null ? null : (_) => onHover(false),
+          child: Opacity(
+            opacity: dim ? .28 : 1,
+            child: _tinted(tint, _carried(it, rect, _Face(it, selected: widget.picked.contains(it.id) || it.id == widget.selected, marked: widget.view != 'list', faces: widget.faces, held: widget.holding[it.id], short: widget.view == 'explore' && it.id != widget.selected))),
+          ),
+        )),
+      );
+
+  /// An asset's name beside or under its face. Each label is laid out at the width it was made for (the box may still be
+  /// growing or shrinking, and an outgoing label keeps its own): clipped, never squeezed.
+  Widget _labelWidget(BrowserItem it, double width, {bool hush = false}) => GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onDoubleTap: widget.onOpen == null ? null : () => widget.onOpen!(it.id),
+        onSecondaryTapDown: widget.onMenu == null ? null : (d) => widget.onMenu!(it.id, d.globalPosition),
+        child: _press(it.id, ClipRect(
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 120),
+            reverseDuration: Duration.zero,
+            child: KeyedSubtree(
+              key: ValueKey('${widget.view}-${it.id}'),
+              child: OverflowBox(
+                alignment: Alignment.topLeft,
+                minWidth: width,
+                maxWidth: width,
+                minHeight: 0,
+                maxHeight: double.infinity,
+                child: AnimatedOpacity(opacity: hush ? 0 : 1, duration: Duration(milliseconds: hush ? 0 : 120), child: _label(it, width)),
+              ),
+            ),
+          ),
+        )),
+      );
 
   /// Choosing happens on the press itself, whatever else the face answers to: a tap handler beside a double-tap one waits out
   /// the double-tap window, and a click that lands late feels like lag. Only the primary button chooses (the other opens a menu).
@@ -354,6 +464,84 @@ class _FluidBoardState extends State<FluidBoard> with SingleTickerProviderStateM
         return const SizedBox.shrink();
     }
   }
+}
+
+/// The rectangles the masonry already decided, given to Flutter's own SliverGrid: it builds only the children whose rectangles reach
+/// the viewport. The children are in the library's order, which is not quite top-to-bottom (the shortest column takes the next one), so
+/// the index bounds come from running maxima / minima, which are exact.
+class _PlacedGrid extends SliverGridDelegate {
+  _PlacedGrid(this.rects, this.height);
+  final List<Rect> rects;
+  final double height;
+
+  @override
+  SliverGridLayout getLayout(SliverConstraints constraints) => _PlacedLayout(rects, height);
+
+  @override
+  bool shouldRelayout(_PlacedGrid old) => !identical(old.rects, rects) && (old.rects.length != rects.length || old.height != height || !_same(old.rects, rects));
+
+  static bool _same(List<Rect> a, List<Rect> b) {
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
+  }
+}
+
+class _PlacedLayout extends SliverGridLayout {
+  _PlacedLayout(this.rects, this.height)
+      : _reach = _running(rects, (r) => r.bottom, math.max),
+        _start = _suffix(rects, (r) => r.top, math.min);
+  final List<Rect> rects;
+  final double height;
+
+  /// `_reach[i]`: how far down the first i+1 children go. `_start[i]`: how far up the children from i on begin.
+  final List<double> _reach, _start;
+
+  static List<double> _running(List<Rect> r, double Function(Rect) f, double Function(double, double) pick) {
+    final out = List<double>.filled(r.length, 0);
+    for (var i = 0; i < r.length; i++) {
+      out[i] = i == 0 ? f(r[i]) : pick(out[i - 1], f(r[i]));
+    }
+    return out;
+  }
+
+  static List<double> _suffix(List<Rect> r, double Function(Rect) f, double Function(double, double) pick) {
+    final out = List<double>.filled(r.length, 0);
+    for (var i = r.length - 1; i >= 0; i--) {
+      out[i] = i == r.length - 1 ? f(r[i]) : pick(out[i + 1], f(r[i]));
+    }
+    return out;
+  }
+
+  @override
+  int getMinChildIndexForScrollOffset(double scrollOffset) {
+    var lo = 0, hi = rects.length;
+    while (lo < hi) {
+      final mid = (lo + hi) ~/ 2;
+      _reach[mid] > scrollOffset ? hi = mid : lo = mid + 1;
+    }
+    return math.min(lo, math.max(0, rects.length - 1));
+  }
+
+  @override
+  int getMaxChildIndexForScrollOffset(double scrollOffset) {
+    var lo = 0, hi = rects.length;
+    while (lo < hi) {
+      final mid = (lo + hi) ~/ 2;
+      _start[mid] <= scrollOffset ? lo = mid + 1 : hi = mid;
+    }
+    return math.max(0, lo - 1);
+  }
+
+  @override
+  SliverGridGeometry getGeometryForChildIndex(int index) {
+    final r = rects[index];
+    return SliverGridGeometry(scrollOffset: r.top, crossAxisOffset: r.left, mainAxisExtent: r.height, crossAxisExtent: r.width);
+  }
+
+  @override
+  double computeMaxScrollOffset(int childCount) => height;
 }
 
 /// Moves a child from where it stood to a new rectangle, along one path (position and size together): at once, slowing

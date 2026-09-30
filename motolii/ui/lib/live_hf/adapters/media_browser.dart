@@ -3,13 +3,11 @@ import 'dart:math' as math;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
-import '../../hf/bp/things.dart';
 import '../../hf/metrics.dart';
 import '../../hf/shell/menu.dart' show showHfMenu;
 import '../../hf/neutral.dart';
 import 'browser_item.dart';
 import 'media_fluid.dart';
-import 'media_library.dart';
 import 'media_list.dart';
 import 'media_preview.dart';
 
@@ -26,7 +24,7 @@ enum BrowserView { list, thumbnail, explore }
 typedef ExploreBuilder = Widget Function(BuildContext context, List<BrowserItem> items, String? selected, ValueChanged<String> onTap, ValueChanged<String>? onOpen);
 
 class MediaBrowser extends StatefulWidget {
-  const MediaBrowser({super.key, required this.source, this.controls, this.faces, this.explore, this.sort = 'name', this.descending = false, this.onSort, this.onReveal, this.onPlace, this.menuOf, this.onMenu, this.onRemove, this.onFavorite, this.onSeen, this.carry, this.initial = BrowserView.thumbnail, this.startOn, this.startOpen = false, this.exploreLayout, this.exploreRepaint, this.exploreNote, this.exploreBar, this.holding = const {}, this.startColumn = 60, this.fluidUpTo = 300});
+  const MediaBrowser({super.key, required this.source, this.controls, this.faces, this.explore, this.sort = 'name', this.descending = false, this.onSort, this.onReveal, this.onPlace, this.menuOf, this.onMenu, this.onRemove, this.onFavorite, this.onSeen, this.carry, this.initial = BrowserView.thumbnail, this.startOn, this.startOpen = false, this.exploreLayout, this.exploreRepaint, this.exploreNote, this.exploreBar, this.holding = const {}, this.startColumn = 60, this.exploreUpTo = 300});
   final ResultSource source;
 
   /// Where Explore puts the faces (for the fluid board). Without it Explore is `explore` alone, and the views swap.
@@ -47,9 +45,10 @@ class MediaBrowser extends StatefulWidget {
   /// The narrowest a Thumbnail column starts at (the size slider moves it).
   final double startColumn;
 
-  /// The fluid board draws every face at once, so it serves result sets up to this size; larger ones use the views that
-  /// draw only what is on screen.
-  final int fluidUpTo;
+  /// CURRENT LIMITATION of the current Explore implementation (a force layout computed as a whole, on the UI thread): it maps up to
+  /// this many assets. It is not a product requirement and belongs to no contract; List and Thumbnail have no such bound (they build
+  /// only what is on screen).
+  final int exploreUpTo;
 
   /// A browser that starts with an asset (by name) chosen, and its preview open or not (a story, a restored session).
   final String? startOn;
@@ -219,72 +218,80 @@ class MediaBrowserState extends State<MediaBrowser> {
 
   bool get _typing => FocusManager.instance.primaryFocus?.context?.widget is EditableText;
 
-  KeyEventResult _key(List<BrowserItem> items, KeyEvent e) {
-    if (e is! KeyDownEvent || _typing) return KeyEventResult.ignored;
-    final k = e.logicalKey;
-    final kb = HardwareKeyboard.instance;
-    if (k == LogicalKeyboardKey.escape) {
-      if (preview) {
-        setState(() => preview = false);
-      } else if (picked.isNotEmpty) {
-        setState(() {
+  // Keys are Flutter's Shortcuts -> Actions -> Intent. An Action that is not enabled lets the key through, so a text field
+  // keeps its typing, and Esc is the framework's own DismissIntent.
+  static final _keys = <ShortcutActivator, Intent>{
+    const SingleActivator(LogicalKeyboardKey.escape): const DismissIntent(),
+    const SingleActivator(LogicalKeyboardKey.keyA, meta: true): const _Pick.all(),
+    const SingleActivator(LogicalKeyboardKey.keyA, control: true): const _Pick.all(),
+    const SingleActivator(LogicalKeyboardKey.space): const _Pick.preview(),
+    const SingleActivator(LogicalKeyboardKey.keyF): const _Pick.favorite(),
+    const SingleActivator(LogicalKeyboardKey.enter): const _Pick.place(),
+    const SingleActivator(LogicalKeyboardKey.numpadEnter): const _Pick.place(),
+    const SingleActivator(LogicalKeyboardKey.delete): const _Pick.remove(),
+    const SingleActivator(LogicalKeyboardKey.backspace): const _Pick.remove(),
+    const SingleActivator(LogicalKeyboardKey.home): const _Pick.edge(false),
+    const SingleActivator(LogicalKeyboardKey.end): const _Pick.edge(true),
+    const SingleActivator(LogicalKeyboardKey.arrowRight): const _Move(side: 1),
+    const SingleActivator(LogicalKeyboardKey.arrowLeft): const _Move(side: -1),
+    const SingleActivator(LogicalKeyboardKey.arrowDown): const _Move(down: 1),
+    const SingleActivator(LogicalKeyboardKey.arrowUp): const _Move(down: -1),
+  };
+
+  late final Map<Type, Action<Intent>> _actions = {
+    DismissIntent: _Do<DismissIntent>((_) => !_typing && (preview || picked.isNotEmpty), (_) {
+      setState(() {
+        if (preview) {
+          preview = false;
+        } else {
           picked.clear();
           selected = null;
-        });
-      } else {
-        return KeyEventResult.ignored;
-      }
-      return KeyEventResult.handled;
-    }
-    if (k == LogicalKeyboardKey.keyA && (kb.isMetaPressed || kb.isControlPressed)) {
-      setState(() {
-        picked
-          ..clear()
-          ..addAll(items.map((i) => i.id));
-        selected = items.isEmpty ? null : items.last.id;
+        }
       });
-      return KeyEventResult.handled;
-    }
-    if (k == LogicalKeyboardKey.space && selected != null) {
-      if (!preview) _seen(selected);
-      setState(() => preview = !preview);
-      return KeyEventResult.handled;
-    }
-    if (k == LogicalKeyboardKey.keyF && !kb.isMetaPressed && !kb.isControlPressed && picked.isNotEmpty && widget.onFavorite != null) {
-      widget.onFavorite!(_pickedItems(items));
-      return KeyEventResult.handled;
-    }
-    if ((k == LogicalKeyboardKey.enter || k == LogicalKeyboardKey.numpadEnter) && selected != null && widget.onPlace != null) {
-      widget.onPlace!(_item(items) ?? items.first);
-      return KeyEventResult.handled;
-    }
-    if ((k == LogicalKeyboardKey.delete || k == LogicalKeyboardKey.backspace) && picked.isNotEmpty && widget.onRemove != null) {
-      widget.onRemove!(_pickedItems(items));
-      return KeyEventResult.handled;
-    }
-    if (k == LogicalKeyboardKey.home && items.isNotEmpty) {
-      _to(items.first.id);
-      return KeyEventResult.handled;
-    }
-    if (k == LogicalKeyboardKey.end && items.isNotEmpty) {
-      _to(items.last.id);
-      return KeyEventResult.handled;
-    }
-    final side = k == LogicalKeyboardKey.arrowRight ? 1 : (k == LogicalKeyboardKey.arrowLeft ? -1 : 0);
-    final down = k == LogicalKeyboardKey.arrowDown ? 1 : (k == LogicalKeyboardKey.arrowUp ? -1 : 0);
-    if (view == BrowserView.list && down != 0) {
-      step(items, by: down);
-      return KeyEventResult.handled;
-    }
-    if (view != BrowserView.list && (side != 0 || down != 0)) {
-      if (view == BrowserView.thumbnail && side == 0) {
-        step(items, rows: down);
+    }),
+    _Pick: _Do<_Pick>((p) => !_typing && widget.source.items.isNotEmpty && _can(p), _pick),
+    _Move: _Do<_Move>((_) => !_typing && widget.source.items.isNotEmpty, (m) {
+      final items = widget.source.items;
+      if (view == BrowserView.list) {
+        if (m.down != 0) step(items, by: m.down);
+      } else if (view == BrowserView.thumbnail && m.side == 0) {
+        step(items, rows: m.down);
       } else {
-        step(items, by: side != 0 ? side : down);
+        step(items, by: m.side != 0 ? m.side : m.down);
       }
-      return KeyEventResult.handled;
+    }),
+  };
+
+  bool _can(_Pick p) => switch (p.kind) {
+        _Op.preview => selected != null,
+        _Op.favorite => picked.isNotEmpty && widget.onFavorite != null,
+        _Op.place => selected != null && widget.onPlace != null,
+        _Op.remove => picked.isNotEmpty && widget.onRemove != null,
+        _ => true,
+      };
+
+  void _pick(_Pick p) {
+    final items = widget.source.items;
+    switch (p.kind) {
+      case _Op.all:
+        setState(() {
+          picked
+            ..clear()
+            ..addAll(items.map((i) => i.id));
+          selected = items.last.id;
+        });
+      case _Op.preview:
+        if (!preview) _seen(selected);
+        setState(() => preview = !preview);
+      case _Op.favorite:
+        widget.onFavorite!(_pickedItems(items));
+      case _Op.place:
+        widget.onPlace!(_item(items) ?? items.first);
+      case _Op.remove:
+        widget.onRemove!(_pickedItems(items));
+      case _Op.edge:
+        _to(p.last ? items.last.id : items.first.id);
     }
-    return KeyEventResult.ignored;
   }
 
   Future<void> _menu(String id, Offset at) async {
@@ -316,9 +323,12 @@ class MediaBrowserState extends State<MediaBrowser> {
           picked.removeWhere((id) => !items.any((i) => i.id == id));
           final chosen = _item(items);
           final showPreview = preview && chosen != null;
-          return Focus(
+          return Shortcuts(
+            shortcuts: _keys,
+            child: Actions(
+              actions: _actions,
+              child: Focus(
             focusNode: focus,
-            onKeyEvent: (_, e) => _key(items, e),
             child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
               _Header(view: view, count: items.length, hasExplore: widget.explore != null || widget.exploreLayout != null, onView: (v) => setState(() => view = v), size: view == BrowserView.thumbnail ? (thumbMin - 44) / 96 : null, onSize: (f) => setState(() => thumbMin = 44 + f * 96)),
               if (widget.controls != null) widget.controls!,
@@ -334,45 +344,39 @@ class MediaBrowserState extends State<MediaBrowser> {
                   child: MediaPreview(item: chosen, faces: widget.faces, onClose: () => setState(() => preview = false), onReveal: widget.onReveal == null ? null : () => widget.onReveal!(chosen), onPlace: widget.onPlace == null ? null : () => widget.onPlace!(chosen)),
                 ),
             ]),
+          ),
+            ),
           );
         },
       );
 
   Widget _body(List<BrowserItem> items) {
     if (items.isEmpty) return Padding(padding: const EdgeInsets.all(9), child: Text('Nothing matches.', style: Dn.label(N.g56)));
-    final fluid = items.length <= widget.fluidUpTo && (view != BrowserView.explore || widget.exploreLayout != null);
-    if (fluid) {
-      return LayoutBuilder(builder: (context, box) {
-        _width = box.maxWidth;
-        return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            AnimatedSize(
-              duration: const Duration(milliseconds: 160),
-              curve: Curves.easeOutCubic,
-              alignment: Alignment.topCenter,
-              child: view == BrowserView.list ? MediaListHeader(width: box.maxWidth, sort: widget.sort, descending: widget.descending, onSort: widget.onSort ?? (_) {}) : const SizedBox(width: double.infinity),
-            ),
-            Expanded(
-              child: ListenableBuilder(
-                listenable: widget.exploreRepaint ?? const _Never(),
-                builder: (context, _) => FluidBoard(items: items, selected: selected, picked: picked, carry: widget.carry, onMenu: widget.menuOf == null ? null : _menu, view: view.name, onTap: choose, onOpen: useAsset, explore: widget.exploreLayout, faces: widget.faces, holding: widget.holding, minColumn: thumbMin, revealOn: preview),
-              ),
-            ),
-          ]);
-      });
+    final explore = view == BrowserView.explore;
+    if (explore && widget.exploreLayout == null) {
+      final build = widget.explore;
+      return build == null ? const SizedBox.shrink() : build(context, items, selected, choose, open);
     }
-    switch (view) {
-      case BrowserView.list:
-        return MediaListView(items: items, selected: selected, onTap: choose, onOpen: open, sort: widget.sort, descending: widget.descending, onSort: widget.onSort ?? (_) {});
-      case BrowserView.explore:
-        final build = widget.explore;
-        if (build != null) return build(context, items, selected, choose, open);
-        // the map is laid out as a whole: past this many it asks for a narrower result set rather than drawing a hairball
-        return Padding(padding: const EdgeInsets.all(9), child: Text('Explore maps up to ${widget.fluidUpTo} assets. Narrow the result (a Source, a Type, a word).', style: Dn.label(N.g56)));
-      case BrowserView.thumbnail:
-        final things = [for (final i in items) Thing.fromJson({'id': i.id, 'name': i.name, 'kind': 'item', 'family': 'catalog', 'source': 'catalog', 'face': const {'type': 'shelf'}})];
-        final shelf = {for (final i in items) i.id: i.shelf};
-        return LayoutBuilder(builder: (context, box) => MediaLibraryBody(sections: {'': things}, shown: things, items: shelf, width: box.maxWidth, selected: selected, onTap: choose, onOpen: open));
+    if (explore && items.length > widget.exploreUpTo) {
+      return Padding(padding: const EdgeInsets.all(9), child: Text('Explore cannot map this many assets yet (${items.length}). Narrow the result (a Source, a Type, a word), or use List or Thumbnail.', style: Dn.label(N.g56)));
     }
+    return LayoutBuilder(builder: (context, box) {
+      _width = box.maxWidth;
+      return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        AnimatedSize(
+          duration: const Duration(milliseconds: 160),
+          curve: Curves.easeOutCubic,
+          alignment: Alignment.topCenter,
+          child: view == BrowserView.list ? MediaListHeader(width: box.maxWidth, sort: widget.sort, descending: widget.descending, onSort: widget.onSort ?? (_) {}) : const SizedBox(width: double.infinity),
+        ),
+        Expanded(
+          child: ListenableBuilder(
+            listenable: widget.exploreRepaint ?? const _Never(),
+            builder: (context, _) => FluidBoard(items: items, selected: selected, picked: picked, carry: widget.carry, onMenu: widget.menuOf == null ? null : _menu, view: view.name, onTap: choose, onOpen: useAsset, explore: widget.exploreLayout, faces: widget.faces, holding: widget.holding, minColumn: thumbMin, revealOn: preview),
+          ),
+        ),
+      ]);
+    });
   }
 }
 
@@ -448,4 +452,36 @@ class _SizePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_SizePainter o) => o.value != value;
+}
+
+enum _Op { all, preview, favorite, place, remove, edge }
+
+class _Pick extends Intent {
+  const _Pick.all() : this._(_Op.all);
+  const _Pick.preview() : this._(_Op.preview);
+  const _Pick.favorite() : this._(_Op.favorite);
+  const _Pick.place() : this._(_Op.place);
+  const _Pick.remove() : this._(_Op.remove);
+  const _Pick.edge(bool last) : this._(_Op.edge, last);
+  const _Pick._(this.kind, [this.last = false]);
+  final _Op kind;
+  final bool last;
+}
+
+class _Move extends Intent {
+  const _Move({this.side = 0, this.down = 0});
+  final int side, down;
+}
+
+class _Do<T extends Intent> extends Action<T> {
+  _Do(this.when, this.run);
+  final bool Function(T) when;
+  final void Function(T) run;
+  @override
+  bool isEnabled(T intent) => when(intent);
+  @override
+  Object? invoke(T intent) {
+    run(intent);
+    return null;
+  }
 }

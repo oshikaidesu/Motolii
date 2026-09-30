@@ -115,9 +115,8 @@ Widget _catalogBrowser(EditorSession c) => _CatalogHost(c);
 
 
 class _CatalogHost extends StatefulWidget {
-  const _CatalogHost(this.c, {this.view = BrowserView.thumbnail, this.startOn, this.startOpen = false, this.startSource, this.startColumn = 60, this.startProject = false, this.graphHops, this.graphScale, this.graphOverlay = false});
+  const _CatalogHost(this.c, {this.view = BrowserView.thumbnail, this.startOn, this.startOpen = false, this.startSource, this.startColumn = 60, this.startProject = false, this.graphHops, this.graphOverlay = false});
   final bool graphOverlay;
-  final double? graphScale;
 
   /// Explore as the product draws it (the sparse nearest-neighbour map): 0 = global, 1 or 2 = local hops. Null: the old
   /// colour-nearness prototype.
@@ -135,7 +134,7 @@ class _CatalogHost extends StatefulWidget {
 
 class _CatalogHostState extends State<_CatalogHost> {
   late final CatalogSession session = CatalogSession(widget.c);
-  late final ExploreChoice choice = ExploreChoice(hops: widget.graphHops ?? 0, scale: widget.graphScale, overlay: widget.graphOverlay);
+  late final ExploreChoice choice = ExploreChoice(hops: widget.graphHops ?? 0, overlay: widget.graphOverlay);
   @override
   void initState() {
     super.initState();
