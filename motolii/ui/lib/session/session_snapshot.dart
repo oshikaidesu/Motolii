@@ -69,12 +69,7 @@ mixin SessionSnapshot on SessionCore {
   }
 
   void absorb(Map<String, dynamic> next) {
-    final keys = EditorSession.maps(state['selectedKeys']);
-    if (keys.isNotEmpty &&
-        next['selectedKeys'] is List &&
-        !sameValue(state['selectedKeys'], next['selectedKeys'])) {
-      previousKeys = {'ids': selectedIds, 'keys': keys};
-    }
+    rememberKeySelection(next);
     EditorSession.take(document, next);
   }
 
@@ -151,13 +146,5 @@ mixin SessionSnapshot on SessionCore {
       for (final r in base)
         if (byId[r['id']] case final o?) {...r, ...o} else r,
     ];
-  }
-
-  Map<String, dynamic>? get activeLayer {
-    if (selectedIds.isEmpty) return null;
-    for (final l in layers) {
-      if (l['id'] == selectedIds.last) return l;
-    }
-    return null;
   }
 }

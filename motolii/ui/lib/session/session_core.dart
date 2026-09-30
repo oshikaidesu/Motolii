@@ -27,10 +27,6 @@ abstract class SessionCore {
     return chosen.isEmpty ? Map.of(EditorSession.easyEase) : chosen;
   }
 
-  /// The key selection before the current one, with the layers it sits on,
-  /// so a shortcut can bring a motion back without a trip to the Timeline.
-  Map<String, dynamic>? previousKeys;
-
   /// The output picture (Camera view). Playback gates on it.
   final textureId = ValueNotifier<int?>(null);
 
@@ -101,11 +97,7 @@ abstract class SessionCore {
   int _panelWindows = 0;
 
   List<Map<String, dynamic>> get layers => EditorSession.maps(state['layers']);
-  List<int> get selectedIds =>
-      (state['selectedIds'] as List? ?? [state['selectedId']])
-          .whereType<num>()
-          .map((n) => n.toInt())
-          .toList();
+  List<int> get selectedIds;
 
   // 継ぎ目(口)。左が呼ぶ側の責任、右が答える責任。
   // native ↔ snapshot / render / commands / desk
@@ -133,4 +125,6 @@ abstract class SessionCore {
   Future<void> flushEditors();
   Future<void> placePanel(String name, String placement);
   void _syncPreferences();
+  // selection (SessionSelection): the snapshot tells it a reply is about to replace the key selection.
+  void rememberKeySelection(Map<String, dynamic> next);
 }
