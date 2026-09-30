@@ -141,7 +141,8 @@ class _LiveCameraState extends State<LiveCamera> {
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
-    listenable: widget.c.slice('liveCameraHead', const ['layers', 'animate']),
+    // the head draws the layer's name and the Animate switch; a camera value preview changes neither
+    listenable: widget.c.slice('liveCameraHead:${widget.layer}', const ['animate'], derived: () => widget.c.layers.where((l) => l['id'] == widget.layer).firstOrNull?['name']),
     builder: (context, _) => CameraInstrument(
       store,
       // the layer's own name, not the word "Camera" (Classic IN-002)

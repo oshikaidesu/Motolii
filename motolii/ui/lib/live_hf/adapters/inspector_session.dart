@@ -113,6 +113,26 @@ class InspectorSession extends ChangeNotifier {
     );
   }
 
+  /// What the Inspector *draws* of [subject], apart from the numbers the rows' stores hold: which subject, and for a
+  /// layer its id, name, kind, frozen / locked, which sections it has and each effect's id, name, bypass and
+  /// placement. A slice compares this, so a Position or effect-parameter preview leaves the seat's cards standing
+  /// (their rows redraw from the stores) and only a change in this list rebuilds the seat.
+  Object? get shape => switch (subject) {
+    InspectorEmpty(:final why) => ['empty', why],
+    InspectorCamera(:final layer) => ['camera', layer],
+    InspectorLayer(:final layer, :final stage, :final layout, :final effects) => [
+      'layer',
+      layer?['id'],
+      layer?['name'],
+      layer?['kind'],
+      layer?['frozen'],
+      layer?['locked'],
+      stage,
+      layout,
+      for (final e in effects) [e['id'], e['name'], e['enabled'], e['placement']],
+    ],
+  };
+
   // ---- a layer's effects -----------------------------------------------------------------------------------------
   bool get canMoveEffects => c.supports('moveEffect');
   void moveEffect(int layer, Object effect, int to) {

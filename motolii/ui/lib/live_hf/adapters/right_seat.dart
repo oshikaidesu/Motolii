@@ -22,24 +22,27 @@ class _RightSeatState extends State<RightSeat> {
   static const _watched = [
     'selectedId',
     'selectedIds',
-    'layers',
-    'documentRevision',
+    'capabilities',
   ];
   EditorSession get c => widget.c;
+
+  /// The seat is rebuilt by what it draws ([InspectorSession.shape]), not by every layers tick: the rows inside
+  /// listen to their own stores.
+  DocumentSlice get _slice => c.slice('rightSeat', _watched, derived: () => InspectorSession.of(c).shape);
 
   @override
   void initState() {
     super.initState();
     c.deskDrawer.addListener(_changed);
     c.editingFocus.addListener(_focus);
-    c.slice('rightSeat', _watched).addListener(_changed);
+    _slice.addListener(_changed);
   }
 
   @override
   void dispose() {
     c.deskDrawer.removeListener(_changed);
     c.editingFocus.removeListener(_focus);
-    c.slice('rightSeat', _watched).removeListener(_changed);
+    _slice.removeListener(_changed);
     super.dispose();
   }
 
