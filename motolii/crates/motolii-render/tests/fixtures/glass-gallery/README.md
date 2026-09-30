@@ -8,8 +8,8 @@
 - The torus uses the Glass surface as chrome; the large sphere uses transmission 0.94 / IOR 1.45. The rounded 2D sheet uses the same surface with transmission 0.9.
 
 ```sh
-python3 docs/reviews/assets/2026-09-09-glass-gallery/create.py
-cargo run -p motolii-render --example surface_frame -- docs/reviews/assets/2026-09-09-glass-gallery/light-in-form.rrd docs/reviews/assets/2026-09-09-glass-gallery/light-in-form.png
+python3 motolii/crates/motolii-render/tests/fixtures/glass-gallery/create.py
+cargo run -p motolii-render --example surface_frame -- motolii/crates/motolii-render/tests/fixtures/glass-gallery/light-in-form.rrd motolii/crates/motolii-render/tests/fixtures/glass-gallery/light-in-form.png
 ```
 
 This is authored scene content. No renderer or application code was changed for the image.

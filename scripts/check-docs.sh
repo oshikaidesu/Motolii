@@ -18,7 +18,7 @@ err() { echo "NG: $1"; FAIL=1; }
 # 2. 履歴は git の仕事。docs/ に reviews/・archive/ など歴史置き場を作らない。
 #    decision-index の出典は `git:<sha>:<path>` で、その blob が実在すること。
 for d in reviews archive specs spikes mocks mocks-ui samples; do
-  [ -n "$(git -C "$ROOT" ls-files "docs/$d" | grep -v "^docs/reviews/assets/2026-09-09-glass-gallery/")" ] && err "docs/$d が復活している(歴史は git 履歴へ)"
+  [ -n "$(git -C "$ROOT" ls-files "docs/$d")" ] && err "docs/$d が復活している(歴史は git 履歴へ)"
 done
 while IFS= read -r ref; do
   git -C "$ROOT" cat-file -e "${ref#git:}" 2>/dev/null || err "decision-index の出典が解決しない: $ref"

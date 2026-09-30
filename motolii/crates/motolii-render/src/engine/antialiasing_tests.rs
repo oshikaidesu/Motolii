@@ -95,7 +95,7 @@ fn upstream_msaa_smooths_mesh_and_rectangle_coverage_without_blurring_interiors(
 #[ignore = "paired rendering benchmark; run explicitly without other GPU work"]
 fn antialiasing_cost_comparison() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
-    let source = root.join("git:912382f048:docs/reviews/assets/2026-09-09-glass-gallery/light-in-form.rrd");
+    let source = root.join("motolii/crates/motolii-render/tests/fixtures/glass-gallery/light-in-form.rrd");
     let mut doc = Document::load(&source).unwrap().with_programs(crate::extensions::bundled());
     let ring = crate::picture::resolve::resolved_layers(&doc.view(), RationalTime::ZERO)
         .unwrap()
@@ -165,7 +165,7 @@ fn lightweight_antialiasing_comparison() {
     use re_renderer::{RenderConfig, SurfaceSampling};
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
     let mut doc =
-        Document::load(root.join("git:912382f048:docs/reviews/assets/2026-09-09-glass-gallery/light-in-form.rrd"))
+        Document::load(root.join("motolii/crates/motolii-render/tests/fixtures/glass-gallery/light-in-form.rrd"))
             .unwrap().with_programs(crate::extensions::bundled());
     let out = std::path::PathBuf::from(std::env::var("MOTOLII_LIGHTWEIGHT_AA_DIR").unwrap());
     std::fs::create_dir_all(&out).unwrap();
