@@ -27,17 +27,14 @@ const measuredTypes = {
 const scaleFiles = {
   'lib/theme/editor_metrics.dart',
   'lib/theme/editor_theme.dart',
-  'lib/legacy/foundation/panel_catalog.dart',
-  'lib/legacy/foundation/shell_tokens.dart',
   'lib/theme/surface.dart', // Surface and Dn: the product window's grammar
   'lib/theme/neutral.dart',
 };
 
-/// The scale a file's raw numbers should be taken from: the product window reads [Surface]; the Classic and New windows (`legacy/`),
-/// the Stage chrome and the shared panel controls read [EditorMetrics] until they are retired.
+/// The scale a file's raw numbers should be taken from: the product window reads [Surface]; the Stage chrome and the shared panel controls read [EditorMetrics] until they are retired.
 ({String uri, String cls}) scaleFor(String path) {
   final unix = path.replaceAll('\\', '/');
-  const editorMetricsDirs = ['/lib/legacy/', '/lib/stage/', '/lib/controls/leaves', '/lib/controls/panel', '/lib/theme/editor_', '/lib/colors/color_field', '/lib/colors/hsv_triangle'];
+  const editorMetricsDirs = ['/lib/stage/', '/lib/controls/leaves', '/lib/controls/panel', '/lib/theme/editor_', '/lib/colors/color_field', '/lib/colors/hsv_triangle'];
   if (editorMetricsDirs.any(unix.contains)) {
     return (uri: 'package:motolii_ui/theme/editor_metrics.dart', cls: 'EditorMetrics');
   }

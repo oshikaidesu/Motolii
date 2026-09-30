@@ -6,7 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 
 import 'package:motolii_ui/timeline/timeline_view.dart';
-import 'package:motolii_ui/app/main.dart' as app;
+import 'package:motolii_ui/main.dart' as app;
 import 'package:motolii_ui/session/latency_probe.dart';
 
 Future<void> frames(WidgetTester t, [int n = 20]) async {
