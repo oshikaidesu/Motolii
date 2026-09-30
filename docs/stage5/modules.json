@@ -11,7 +11,7 @@
   },
   "nativeEditor": "motolii/ui/native/src/editor",
   "readOnlyPlayback": "motolii/crates/motolii-render/src/playback.rs",
-  "readOnlyDocumentConsumers": ["motolii/crates/motolii-render", "motolii/ui/extensions/jobs"],
+  "readOnlyDocumentConsumers": ["motolii/crates/motolii-render", "motolii/crates/motolii-jobs"],
   "readOnlyModels": [
     "motolii/crates/motolii-doc/src/store/view.rs",
     "motolii/crates/motolii-doc/src/store/layout.rs",
@@ -21,14 +21,14 @@
     "motolii/crates/motolii-render/src/extensions",
     "motolii/crates/motolii-doc/src/store/ids.rs",
     "motolii/ui/native/src/viewer.rs",
-    "motolii/ui/extensions/jobs/src"
+    "motolii/crates/motolii-jobs/src"
   ],
   "coreProcessState": {"root": "motolii/crates/motolii-doc/src", "owners": {"vector/text.rs": ["SYSTEM", "KNOWN"]}},
-  "editingHouse": "motolii/ui/extensions/edit",
+  "editingHouse": "motolii/crates/motolii-edit",
   "effectRegistration": {"root": "motolii/ui/native/src", "owner": "lib.rs", "calls": ["blank_project", "Document::load"]},
   "coreSolvers": {"root": "motolii/crates/motolii-render/src", "owners": {"taffy": "picture/flow.rs"}},
   "isolatedExtensions": {
-    "motolii/ui/extensions/script": ["rquickjs", "serde_json"]
+    "motolii/crates/motolii-script": ["rquickjs", "serde_json"]
   },
   "history": "docs/stage5/history/retired-source.md",
   "legacyPolicy": "retired to pinned Git history; changes target nativeEditor"

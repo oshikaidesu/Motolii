@@ -357,7 +357,7 @@ pub fn build() -> Fixture {
 
     for file in FIXTURE_MEDIA {
         let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../../../engine/motolii-engine/tests/golden")
+            .join("../../../engine/motolii-engine/tests/golden")
             .join(file);
         let Ok(reader) = std::fs::File::open(&path) else {
             continue;

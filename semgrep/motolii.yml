@@ -37,7 +37,7 @@ rules:
     severity: ERROR
     message: wait_indefinitely has no timeout; wait through compositor::wait_for_gpu.
     paths:
-      include: ["motolii/crates/**/src/**", "motolii/ui/native/src/**", "motolii/ui/extensions/**"]
+      include: ["motolii/crates/**/src/**", "motolii/ui/native/src/**"]
       exclude: ["**/tests/**", "**/examples/**", "**/*tests.rs", "**/*_test.rs", "**/*probe*.rs"]
     patterns:
       - pattern: wgpu::PollType::wait_indefinitely()
@@ -52,7 +52,7 @@ rules:
     message: >-
       `$D.$CALL` builds GPU machinery Motolii does not own (owned-budget.tsv: ceiling 0). Ask re_renderer's pools.
     paths:
-      include: ["motolii/crates/**/src/**", "motolii/ui/native/src/**", "motolii/ui/extensions/**"]
+      include: ["motolii/crates/**/src/**", "motolii/ui/native/src/**"]
       exclude: ["**/tests/**", "**/examples/**", "**/*tests.rs"]
     patterns:
       - pattern: $D.$CALL(...)

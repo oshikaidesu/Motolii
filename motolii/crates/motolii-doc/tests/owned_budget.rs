@@ -36,8 +36,7 @@ fn the_machinery_we_own_matches_its_ceiling() {
     let mut sources = Vec::new();
     rust_sources(&root.join("crates"), &mut sources);
     rust_sources(&root.join("ui/native/src"), &mut sources);
-    rust_sources(&root.join("ui/extensions"), &mut sources);
-    assert!(!sources.is_empty(), "crates・ui/native を読めていない");
+    assert!(!sources.is_empty(), "crates・ui/native/src を読めていない");
 
     let mut off = Vec::new();
     for line in table.lines() {

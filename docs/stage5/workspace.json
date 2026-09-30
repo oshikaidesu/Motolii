@@ -5,7 +5,7 @@
   "ui": "motolii/ui",
   "native": "motolii/ui/native",
   "document": "motolii/crates/motolii-doc",
-  "documentEditing": "motolii/ui/extensions/edit",
+  "documentEditing": "motolii/crates/motolii-edit",
   "entries": {
     "product": "motolii/ui/lib/live_hf/main.dart (dev, profile, live; lib/main.dart defaults here)",
     "migrationSources": "motolii/ui/lib/app (MOTOLII_SHELL=classic | new)",
