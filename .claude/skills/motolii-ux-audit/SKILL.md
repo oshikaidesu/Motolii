@@ -43,7 +43,7 @@ description: Motolii の窓(Flutter, dark, 密)の違和感を、利用者が気
    窓の起動・再起動・写真は**利用者の手**を借りる場合がある(実窓操作は拒否される事がある)。
 2. **写真**: panel ごとに 1 枚 —— Stage / Camera / Inspector の Layout / Timeline / Browser / Desk。
    状態も撮る: 何も選んでいない時、1 つ選んだ時、drag の途中、空(empty)の棚、error の行。
-   写真は `docs/reviews/<date>-ux-audit/assets/` へ。
+   写真は作業用の一時 dir へ(repo の `docs/` に歴史置き場は作らない。残す価値があるなら利用者に見せて捨てる)。
 3. **静の照合(写真の前でも後でも)**:
    `cd motolii/ui/tool/motolii_lints && dart run bin/check.dart ../../lib` →
    `raw_dimension` / `raw_color` / `material_import` が clean か。clean でない行は R7 / R9 / R10 の所見にそのまま乗せる。
@@ -61,7 +61,7 @@ description: Motolii の窓(Flutter, dark, 密)の違和感を、利用者が気
 
 | 度 | # | panel | 破った規則 | 見えた物(写真) | 場所 |
 |---|---|---|---|---|---|
-| blocker | B-01 | Inspector/Layout | R3 言葉を出さない | 「Direction」の選択が行に出ている | motolii/ui/lib/legacy/panels/inspector.dart:412 |
+| blocker | B-01 | Inspector/Layout | R3 言葉を出さない | 「Direction」の選択が行に出ている | motolii/ui/lib/inspector/inspector.dart |
 | major | M-01 | … | … | … | … |
 | minor | N-01 | … | … | … | … |
 

@@ -145,7 +145,7 @@ Cassette は可能な限り通常の Motolii の意味へ開けるまま保つ�
 
 ## 13. Draft PR #533 との関係
 
-PR #533 の draft(`docs/reviews/2026-09-26-vism-cassette-ts-host-api-draft.md`)は、この調査の前の仮説である。履歴は書き換えず、次を読み替える。
+PR #533 の draft(ts-host-api-draft。今の木には無い)は、この調査の前の仮説である。履歴は書き換えず、次を読み替える。
 
 - 「small live package」「retained cassette semantics が要る」: 保つべきは**構造の retained 性**(PropertyLink と公開パラメータの宣言)で、JS の live 実行ではない。
 - 「main.js が最初の実行形」: 構築時にだけ走る。再生時に常駐させる根拠は、今回の probe では出なかった。

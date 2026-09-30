@@ -70,7 +70,7 @@ Rules for contributors and coding agents: [CONTRIBUTING.md](CONTRIBUTING.md) and
 |---|---|
 | `motolii/crates/` | Rust crates: `motolii-doc`, `-edit`, `-render`, `-jobs`, `-script` |
 | `motolii/ui/` | the Flutter app (`lib/`, `test/`, `macos/`) and its Rust host `native/` |
-| `motolii/ui/lib/` | `app` (launcher), `workspace` (dock), panels (`stage` `timeline` `inspector` `browser` `effects` `colors` `fonts` `desks`), `controls`, `theme` (`metrics.dart` is the one visual-metrics canon), `input`, `session`, `bridge`, `legacy` (older shells kept until their capabilities are in the product UI) |
+| `motolii/ui/lib/` | `main.dart` (the one app entry), `app` (window, top bar, sheets), `workspace` (dock), panels (`stage` `timeline` `inspector` `browser` `desks`; `effects` `colors` `fonts` are Browser shelves), `controls`, `theme` (`metrics.dart` is the one visual-metrics canon), `input`, `session`, `bridge` |
 | `plugins/` | example plugin crates |
 | `samples/` | sample projects |
 | `skills/` | agent skills used by the repository |
