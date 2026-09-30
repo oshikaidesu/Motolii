@@ -143,7 +143,8 @@ impl EditorRuntime{
         if self.freezer.running().is_some(){self.engine.refresh_frozen();}
         if op=="status"||op=="exportStatus"||op=="reloadEffects"{return Ok(())}
         if op=="stageView" {
-            self.cancel_preview();
+            // the observer is the viewer's, not the document's: it ends a Stage drag (the drag's geometry moves under the hand), not a value preview
+            if self.stage_drag.is_some(){self.cancel_preview();}
             if let Some(orbit)=j["orbit"].as_array() {
                 if orbit.len()!=2 { return Err("Expected two orbit angles".into()); }
                 self.viewer.user_camera.orbit_degrees=[orbit[0].as_f64().filter(|v|v.is_finite()).ok_or("Invalid orbit")? as f32,orbit[1].as_f64().filter(|v|v.is_finite()).ok_or("Invalid orbit")? as f32];
@@ -171,7 +172,9 @@ impl EditorRuntime{
             if self.preview_tag.as_deref() != Some(tag) { self.cancel_preview(); }
             self.preview_tag = Some(tag.to_owned());
         }
-        if !matches!(op,"previewText"|"styleText"|"setGradient"|"previewProperties"|"relate"|"previewColor"|"previewBlend"|"previewX"|"commitPreview"|"commitX"|"previewTimings"|"previewSequence"|"stageGesture"){self.cancel_preview();}
+        // What does not touch the document or the time the preview was made at leaves it alone: a preference, a pause when nothing plays.
+        let leaves_preview=op=="preferences"||(op=="pause"&&!self.viewer.clock.playing());
+        if !leaves_preview&&!matches!(op,"previewText"|"styleText"|"setGradient"|"previewProperties"|"relate"|"previewColor"|"previewBlend"|"previewX"|"commitPreview"|"commitX"|"previewTimings"|"previewSequence"|"stageGesture"){self.cancel_preview();}
         match op{
             "notes"=>self.edit_notes(&j)?,
             "select"=>{
@@ -479,6 +482,9 @@ mod ease_intervals;
 pub(crate) mod relate;
 #[cfg(test)]
 mod members;
+
+#[cfg(test)]
+mod preview_survival;
 
 
 #[cfg(test)]
