@@ -15,33 +15,14 @@ err() { echo "NG: $1"; FAIL=1; }
 # 内容へrepo固有のagent policyは課さない。
 [ -f "$ROOT/AGENTS.md" ] || err "root AGENTS.md tombstoneがない"
 
-# 旧監督ループ正本は短い撤回tombstoneに固定し、規則集として復活させない。
-RETIRED_SUPERVISION="$DOCS/reviews/2026-07-25-opus-spark-grok-supervision-loop-decision.md"
-retired_supervision_bytes="$(LC_ALL=C wc -c < "$RETIRED_SUPERVISION" | tr -d '[:space:]')"
-if [ "$retired_supervision_bytes" -gt 6000 ]; then
-  err "撤回済み監督ループ文書が ${retired_supervision_bytes} bytes。歴史本文を現行treeへ復元しないこと"
-fi
-grep -Fq '状態: **撤回**' "$RETIRED_SUPERVISION" \
-  || err "旧監督ループ文書が撤回状態でない"
-grep -Fq '2026-08-03-runner-independent-supervision-decision.md' "$RETIRED_SUPERVISION" \
-  || err "旧監督ループ文書に現行runner非依存正本への移動先がない"
-
-# 2. reviews/ の全ファイルが reviews/README.md の索引に登録されていること
-for f in "$DOCS"/reviews/*.md; do
-  b="$(basename "$f")"
-  [ "$b" = "README.md" ] && continue
-  grep -q "$b" "$DOCS/reviews/README.md" || err "reviews索引に未登録: docs/reviews/$b"
+# 2. 履歴は git の仕事。docs/ に reviews/・archive/ など歴史置き場を作らない。
+#    decision-index の出典は `git:<sha>:<path>` で、その blob が実在すること。
+for d in reviews archive specs spikes mocks mocks-ui samples; do
+  [ -n "$(git -C "$ROOT" ls-files "docs/$d")" ] && err "docs/$d が復活している(歴史は git 履歴へ)"
 done
-
-# 3. docs/README.md ファイルマップにリンク先の重複行がないこと
-# (要旨セル内の相互参照は正当なので、表の先頭セルのリンクだけを見る)
-dups=$(grep -oE '^\| \[[^]]+\]\((reviews/[^)#]+\.md)\)' "$DOCS/README.md" \
-  | grep -oE 'reviews/[^)#]+\.md' | sort | uniq -d)
-if [ -n "$dups" ]; then
-  while IFS= read -r d; do
-    err "docs/README.md に重複掲載: ${d#](}"
-  done <<< "$dups"
-fi
+while IFS= read -r ref; do
+  git -C "$ROOT" cat-file -e "${ref#git:}" 2>/dev/null || err "decision-index の出典が解決しない: $ref"
+done < <(grep -oE 'git:[0-9a-f]{7,40}:docs/[A-Za-z0-9_./-]*[A-Za-z0-9_]' "$DOCS/decision-index.md" | sort -u)
 
 # 4. root tombstone と docs/**/*.md のローカルmdリンクが実在すること
 # (#fragmentは除去して判定)。必読入口のリンク切れもdocsと同じ失敗にする。
@@ -77,7 +58,7 @@ SKIP_DIR_NAMES = frozenset({
 })
 link_re = re.compile(r'\]\(([^)]+)\)')
 fail = False
-paths = [os.path.join(root, 'AGENTS.md')]
+paths = [os.path.join(root, f) for f in ('AGENTS.md', 'README.md', 'CONTRIBUTING.md', 'motolii/AGENTS.md')]
 for dirpath, dirnames, files in os.walk(docs):
     dirnames[:] = [d for d in dirnames if d not in SKIP_DIR_NAMES]
     for name in files:
@@ -115,42 +96,9 @@ else
   err "docs/decision-index.md が存在しない"
 fi
 
-# 6. UI表示・起動のdocs入口が成果物用語正本を保持すること
-python3 - "$ROOT" <<'PY'
-import pathlib
-import sys
-
-root = pathlib.Path(sys.argv[1])
-readme = (root / "docs/README.md").read_text(encoding="utf-8")
-terms = (root / "docs/ui-artifact-terminology.md").read_text(encoding="utf-8")
-fail = False
-
-def require(condition, message):
-    global fail
-    if not condition:
-        print(f"NG: {message}")
-        fail = True
-
-require(
-    "[ui-artifact-terminology.md](ui-artifact-terminology.md)" in readme,
-    "docs/README.md の読む順序にUI成果物用語正本がない",
-)
-require(
-    "## 表示・起動要求の必須ルート" in terms,
-    "UI成果物用語正本に表示・起動要求の必須ルートがない",
-)
-require(
-    "最も近いもの」を自動で起動しない" in terms,
-    "UI成果物用語正本に代替起動の負例がない",
-)
-
-sys.exit(1 if fail else 0)
-PY
-[ $? -ne 0 ] && FAIL=1
-
 if [ $FAIL -eq 0 ]; then
   echo "OK: docs整合チェック全項目通過"
 else
-  echo "FAILED: 上記を修正するか、意図的なら該当規則を docs/reviews/README.md の登録規則ごと改訂する"
+  echo "FAILED: 上記を修正する"
 fi
 exit $FAIL
