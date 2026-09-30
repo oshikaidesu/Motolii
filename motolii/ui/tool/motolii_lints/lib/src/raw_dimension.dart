@@ -33,8 +33,8 @@ const scaleFiles = {
 /// The scale a file's raw numbers should be taken from: the product window reads [Surface]; the Stage chrome and the shared panel controls read [Step] (value names, no role).
 ({String uri, String cls}) scaleFor(String path) {
   final unix = path.replaceAll('\\', '/');
-  const editorMetricsDirs = ['/lib/stage/', '/lib/controls/leaves', '/lib/controls/panel', '/lib/theme/editor_', '/lib/colors/hsv_triangle'];
-  if (editorMetricsDirs.any(unix.contains)) {
+  const stepDirs = ['/lib/stage/', '/lib/controls/leaves', '/lib/controls/panel', '/lib/theme/editor_', '/lib/colors/hsv_triangle'];
+  if (stepDirs.any(unix.contains)) {
     return (uri: 'package:motolii_ui/theme/metrics.dart', cls: 'Step');
   }
   return (uri: 'package:motolii_ui/theme/metrics.dart', cls: 'Surface');
