@@ -37,9 +37,6 @@ Flutter比較検証ではUI変更160msと、Document・選択・再生位置・T
 | 記録 | 範囲 |
 |---|---|
 | [workspaceの検証欄](workspace.json) | Stage 5移管時のbuild、23 document unit / 10 transaction / 16 bridge / 5 Flutter操作テスト、実窓。後の変更全ての保証ではない |
-| [親子削除](evidence/comparison/validation-parent-ownership.json) | 比較版の実保存データ：28レイヤー一括削除・Undo／Redo、他レイヤー維持 |
-| [行移動](evidence/comparison/validation-layer-move.json) | 比較版のnative APIでinside・outdent・Undo・cycle拒否 |
-| [アニメ親への移動](evidence/comparison/validation-animated-group-drop.json) | 比較版の実Groupへstatic／animated childを移動し、キー時刻・補間とUndoを確認 |
 
 比較版の記録は原本hash付きで保存し、Stage 5での新規再計測とは区別する。Flutterのpointer-eventテストと人間のトラックパッドの感触も別。見た目の採否・実制作の検収は実画面で行う。
 

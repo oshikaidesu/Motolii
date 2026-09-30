@@ -4,9 +4,10 @@
 2026-09-20 ui-product-feel の
 「新しいレイアウトを作る話ではない」はこの指示で上書きされた(利用者裁定)。
 
-Concept Art: [concept/north-star-dark.png](concept/north-star-dark.png)(第一案)・
-[concept/north-star-light.png](concept/north-star-light.png)・
-[concept/relation-gadgets.png](concept/relation-gadgets.png)。
+> 2026-10 注記: Classic / New の二つの shell はこの移行を終えて退役し、窓は `motolii/ui/lib/main.dart` の 1 つになった。
+> 以下の Phase・shell の語は移行当時の指示で、原則(capability が正本・layout は自由)だけが現行。
+
+Concept Art(`git:912382f048:docs/product/ui-rebaseline/concept/north-star-dark.png` が第一案、同 `north-star-light.png`・`relation-gadgets.png`)。
 pixel-perfect target ではなく visual grammar の参照。
 
 ---

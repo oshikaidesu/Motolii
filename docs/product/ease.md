@@ -20,8 +20,7 @@
 
 ## 検証
 
-- `ui/test/ease_interaction_test.dart`: nativeサンプルのHold／Overshoot、hover時の書き込み0、元の曲線への復帰、releaseで1回、Escape／focus loss取消、240px幅での到達性、サムネイルの大きさ・名前の折返し、Reduce Motion、帯が示す区間が再生位置に追従し区間外でも落ちないこと、一覧をスクロールしてもグラフの矩形が動かないこと。
-- `ui/test/desk_workspace_test.dart`: 対象なしの保存と道具の切替後の保持。
+- `ui/integration_test/ease_test.dart`(旧 `ease_interaction_test.dart` を実窓テストへ): nativeサンプルのHold／Overshoot、hover時の書き込み0、元の曲線への復帰、releaseで1回、Escape／focus loss取消、240px幅での到達性、サムネイルの大きさ・名前の折返し、Reduce Motion、帯が示す区間が再生位置に追従し区間外でも落ちないこと、一覧をスクロールしてもグラフの矩形が動かないこと。
 - 実窓の検収記録は確認後に追記する。
 
-実装は`motolii/ui/lib/legacy/panels/ease_desk.dart`。既存のカーブ型・パラメータ・評価器を増減しない。
+実装は`motolii/ui/lib/desks/ease/`(`desk.dart`・`face.dart`・`meaning.dart`)。既存のカーブ型・パラメータ・評価器を増減しない。

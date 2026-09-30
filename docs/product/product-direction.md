@@ -77,10 +77,9 @@ Asking happens once, when the meaning is decided; consolidation, migration and t
 
 ## Product UI authority (decided 2026-09-28, D1)
 
-- **The product UI** (`motolii/ui/lib/app` and the panel directories beside it; `scripts/motolii-ui.sh dev`) is the product UI and the presentation authority, with Product Home.
-- **Classic and New** (`MOTOLII_SHELL=classic|new`) are **capability migration sources**, not candidates. What is recovered from them is capability, input vocabulary, semantic behaviour and proven mechanisms — never their presentation.
-- The earlier prototypes (`lib/proto`, `lib/proto_hf`, `lib/hf`, `lib/live_hf`) were retired; git history keeps them. Classic/New live on under `lib/legacy`.
-- Authority flows forward: Classic/New capability → shared semantic/mechanism owner → product UI presentation. No dependency points backwards (the product UI never imports `lib/legacy` except the `lib/main.dart` shell selector and `app`'s launcher path).
+- **The product UI** (`motolii/ui/lib/main.dart`, the panel directories `timeline/`, `stage/`, `browser/`, `inspector/`, `desks/` beside `app/`; `scripts/motolii-ui.sh dev`) is the product UI and the presentation authority, with Product Home.
+- **Classic and New** (the two migration shells, `MOTOLII_SHELL`) are **retired**: the window is one. They were capability migration sources, never candidates; what was recovered from them is capability, input vocabulary, semantic behaviour and proven mechanisms, never their presentation. The earlier prototypes (`lib/proto`, `lib/proto_hf`, `lib/hf`, `lib/live_hf`) are retired too. Git history keeps all of them (`lib/legacy` has 0 files).
+- Authority flows one way: capability → shared semantic/mechanism owner → product UI presentation.
 
 Migration status per capability: PRESENT · LIVE_BETTER · MISSING_IN_LIVE · PARTIAL_IN_LIVE · OBSOLETE · DECISION_REQUIRED. A widget that exists is not PRESENT; a user trajectory that works is. A Classic widget absent from the product UI is not MISSING if the same user capability works there another way.
 
