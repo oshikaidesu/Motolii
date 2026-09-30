@@ -1,6 +1,7 @@
 // Where the time goes between a hand and a pixel, per boundary, for the operations a person holds: dragging on the Stage,
 // scrubbing an Inspector number, scrubbing the playhead (the real app and its host; results are printed as LAT lines).
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'dart:ui' show FrameTiming;
@@ -107,6 +108,15 @@ void main() {
     await frames(t, 80);
     final c = t.widget<LiveTimeline>(find.byType(LiveTimeline)).c;
     final report = StringBuffer();
+    // a larger document: LATENCY_LAYERS more rectangles, to see what grows with the document
+    const extra = int.fromEnvironment('LATENCY_LAYERS', defaultValue: 0);
+    for (var i = 0; i < extra; i++) {
+      await c.command('create', {'kind': 'rectangle'});
+    }
+    if (extra > 0) {
+      await frames(t, 10);
+      report.writeln('LAT document: ${c.layers.length} layers, layers JSON ${(jsonEncode(c.state['layers']).length / 1024).toStringAsFixed(0)} KB');
+    }
 
     // 1. dragging on the Stage
     LatencyProbe.enable();
