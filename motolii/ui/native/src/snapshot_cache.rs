@@ -124,7 +124,10 @@ impl EditorRuntime {
 
     pub(crate) fn status(&mut self) -> Result<Value, String> { self.status_response(None, None) }
 
-    pub(crate) fn status_response(&mut self, known: Option<u64>, known_references: Option<u64>) -> Result<Value, String> {
+    /// What a status reply is made of: a light live status as it is, or the cached snapshot (sent or not, by what the asker already
+    /// knows) under a few small fields that are current each time. The snapshot stays in the cache: it is written to the wire
+    /// from there, never copied.
+    fn status_parts(&mut self, known: Option<u64>, known_references: Option<u64>) -> Result<StatusReply, String> {
         // 描画後は読み戻した選択範囲でgeometryを更新する。文書の行と参照データは再利用する。
         // 音の健康と波形は Document 版と無関係に動くので、鍵に入れて古い body を残さない。
         // 棚で断った理由は世代を動かさずに変わる(壊れた保存)。鍵に指紋を入れて古い body を残さない。
@@ -137,7 +140,7 @@ impl EditorRuntime {
             let mut built = self.build_status()?;
             if built.get("liveLayers").is_some() {
                 built["contentRevision"] = json!(self.content_key());
-                return Ok(built);
+                return Ok(StatusReply::Light(built));
             }
             let mut references = json!({});
             for name in REFERENCES {
@@ -157,37 +160,97 @@ impl EditorRuntime {
             cache.body = built;
         }
         let cache = self.snapshot_cache.borrow();
-        let mut reply = if known == Some(cache.id) { json!({}) } else { cache.body.clone() };
-        if known_references != Some(cache.reference_id) {
-            reply.as_object_mut().unwrap().extend(cache.references.as_object().cloned().unwrap_or_default());
-        }
+        let send_body = known != Some(cache.id);
+        let send_references = known_references != Some(cache.reference_id);
+        let mut extras = serde_json::Map::new();
+        let mut put = |key: &str, value: Value| { extras.insert(key.to_owned(), value); };
         let selected = cache.body["layers"].as_array().and_then(|layers| layers.iter().find(|l| l["id"].as_u64() == self.viewer.selected().map(|id|id.0)));
-        reply["selectedBounds"] = selected.map(|l| l["bounds"].clone()).unwrap_or(Value::Null);
-        reply["selectedStageBounds"] = selected.map(|l| l["stageBounds"].clone()).unwrap_or(Value::Null);
-        for axis in ["x", "y"] { reply[axis] = selected.map(|l|l[axis].clone()).unwrap_or(json!(0.0)); }
-        for field in ["width", "height", "fps", "durationFrames", "documentRevision", "deviceId"] { reply[field] = cache.body[field].clone(); }
-        reply["contentRevision"] = json!(self.content_key());
-        reply["snapshotId"] = json!(cache.id);
-        reply["referenceId"] = json!(cache.reference_id);
+        put("selectedBounds", selected.map(|l| l["bounds"].clone()).unwrap_or(Value::Null));
+        put("selectedStageBounds", selected.map(|l| l["stageBounds"].clone()).unwrap_or(Value::Null));
+        for axis in ["x", "y"] { put(axis, selected.map(|l|l[axis].clone()).unwrap_or(json!(0.0))); }
+        for field in ["width", "height", "fps", "durationFrames", "documentRevision", "deviceId"] { put(field, cache.body[field].clone()); }
+        put("contentRevision", json!(self.content_key()));
+        put("snapshotId", json!(cache.id));
+        put("referenceId", json!(cache.reference_id));
         drop(cache);
         let (undo, redo) = self.doc.history_depth();
-        reply["selectedId"] = json!(self.viewer.selected().map(|id|id.0));
-        reply["selectedIds"] = json!(self.viewer.selected_ids.iter().map(|id|id.0).collect::<Vec<_>>());
-        reply["easeIntervals"] = json!(self.ease_intervals());
-        reply["blendTargets"] = json!(self.blend_targets().iter().map(|id|id.0).collect::<Vec<_>>());
+        put("selectedId", json!(self.viewer.selected().map(|id|id.0)));
+        put("selectedIds", json!(self.viewer.selected_ids.iter().map(|id|id.0).collect::<Vec<_>>()));
+        put("easeIntervals", json!(self.ease_intervals()));
+        put("blendTargets", json!(self.blend_targets().iter().map(|id|id.0).collect::<Vec<_>>()));
         let fps = self.doc.view().composition().map_err(|e|e.to_string())?.ok_or("No composition")?.fps.as_f64();
-        reply["selectedKeys"] = json!(self.viewer.selected_keys.iter().map(|k|json!({"layer":k.layer.0,"property":k.property.as_ref().map(|p|p.name()),"frame":(k.at_sec*fps).round()as i64})).collect::<Vec<_>>());
-        reply["colorTarget"] = self.viewer.color_target.as_ref().and_then(|slot| crate::editor::color::read_color(&self.doc,slot,self.time().ok()?).map(|rgba|json!({"layer":slot.layer().map(|l|l.0),"slot":slot,"label":"Color","rgba":rgba,"alpha":crate::editor::color::has_alpha(slot)}))).unwrap_or(Value::Null);
-        reply["undo"] = json!(undo); reply["redo"] = json!(redo);
-        reply["path"] = json!(self.path); reply["dirty"] = json!(self.is_dirty()?);
-        reply["frame"] = json!(self.viewer.frame); reply["playing"] = json!(playing);
-        reply["animate"] = json!(self.viewer.animate != Animate::Off); reply["error"] = json!(self.error);
-        reply["preview"] = json!(self.preview.is_some()); reply["previewOwner"] = json!(self.preview.as_ref().map(|p|p.0));
-        reply["renderCount"] = json!(self.render_count); reply["renderMs"] = json!(self.render_ms);
-        reply["framesSkipped"] = json!(self.frames.skipped());
-        reply["pickedColor"] = json!(self.viewer.picked_color); reply["pickSerial"] = json!(self.viewer.pick_serial);
-        reply["export"] = self.exporter.status();
-        Ok(reply)
+        put("selectedKeys", json!(self.viewer.selected_keys.iter().map(|k|json!({"layer":k.layer.0,"property":k.property.as_ref().map(|p|p.name()),"frame":(k.at_sec*fps).round()as i64})).collect::<Vec<_>>()));
+        put("colorTarget", self.viewer.color_target.as_ref().and_then(|slot| crate::editor::color::read_color(&self.doc,slot,self.time().ok()?).map(|rgba|json!({"layer":slot.layer().map(|l|l.0),"slot":slot,"label":"Color","rgba":rgba,"alpha":crate::editor::color::has_alpha(slot)}))).unwrap_or(Value::Null));
+        put("undo", json!(undo)); put("redo", json!(redo));
+        put("path", json!(self.path)); put("dirty", json!(self.is_dirty()?));
+        put("frame", json!(self.viewer.frame)); put("playing", json!(playing));
+        put("animate", json!(self.viewer.animate != Animate::Off)); put("error", json!(self.error));
+        put("preview", json!(self.preview.is_some())); put("previewOwner", json!(self.preview.as_ref().map(|p|p.0)));
+        put("renderCount", json!(self.render_count)); put("renderMs", json!(self.render_ms));
+        put("framesSkipped", json!(self.frames.skipped()));
+        put("pickedColor", json!(self.viewer.picked_color)); put("pickSerial", json!(self.viewer.pick_serial));
+        put("export", self.exporter.status());
+        Ok(StatusReply::Snapshot { send_body, send_references, extras })
+    }
+
+    /// The reply as a value (tests and the few callers that read it); the host's request path uses [`Self::status_text`].
+    pub(crate) fn status_response(&mut self, known: Option<u64>, known_references: Option<u64>) -> Result<Value, String> {
+        match self.status_parts(known, known_references)? {
+            StatusReply::Light(value) => Ok(value),
+            StatusReply::Snapshot { send_body, send_references, extras } => {
+                let cache = self.snapshot_cache.borrow();
+                serde_json::to_value(reply_view(&cache, send_body, send_references, &extras)).map_err(|e| e.to_string())
+            }
+        }
+    }
+
+    /// The reply written straight to text: the cached snapshot is serialized where it lies, with the small current fields
+    /// beside it (they win over a snapshot field of the same name, as they did when the reply was a copy of it).
+    pub(crate) fn status_text(&mut self, known: Option<u64>, known_references: Option<u64>, needs_render: bool) -> Result<String, String> {
+        match self.status_parts(known, known_references)? {
+            StatusReply::Light(mut value) => {
+                value["needsRender"] = json!(needs_render);
+                Ok(value.to_string())
+            }
+            StatusReply::Snapshot { send_body, send_references, mut extras } => {
+                extras.insert("needsRender".to_owned(), json!(needs_render));
+                let cache = self.snapshot_cache.borrow();
+                serde_json::to_string(&reply_view(&cache, send_body, send_references, &extras)).map_err(|e| e.to_string())
+            }
+        }
+    }
+}
+
+enum StatusReply {
+    Light(Value),
+    Snapshot { send_body: bool, send_references: bool, extras: serde_json::Map<String, Value> },
+}
+
+struct ReplyView<'a> {
+    body: Option<&'a serde_json::Map<String, Value>>,
+    references: Option<&'a serde_json::Map<String, Value>>,
+    extras: &'a serde_json::Map<String, Value>,
+}
+
+fn reply_view<'a>(cache: &'a SnapshotCache, send_body: bool, send_references: bool, extras: &'a serde_json::Map<String, Value>) -> ReplyView<'a> {
+    ReplyView {
+        body: if send_body { cache.body.as_object() } else { None },
+        references: if send_references { cache.references.as_object() } else { None },
+        extras,
+    }
+}
+
+impl serde::Serialize for ReplyView<'_> {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeMap;
+        let mut map = serializer.serialize_map(None)?;
+        for part in [self.body, self.references].into_iter().flatten() {
+            for (key, value) in part {
+                if !self.extras.contains_key(key) { map.serialize_entry(key, value)?; }
+            }
+        }
+        for (key, value) in self.extras { map.serialize_entry(key, value)?; }
+        map.end()
     }
 }
 
@@ -407,5 +470,33 @@ mod tests {
         assert_eq!(after["snapshotId"],before);
         assert_eq!(after["renderCount"],1);
         assert!(after.get("layers").is_none(),"{after}");
+    }
+
+    /// The reply written from the cache says exactly what the reply as a value says: the snapshot under the small current
+    /// fields, the snapshot and the references left out when the asker already knows them, and the current fields winning.
+    #[test]
+    fn the_reply_written_from_the_cache_is_the_reply_as_a_value() {
+        let mut rt = EditorRuntime::open("").unwrap();
+        rt.request(json!({"op":"create","kind":"rectangle"})).unwrap();
+        rt.request(json!({"op":"create","kind":"ellipse"})).unwrap();
+        let first = rt.status_response(None, None).unwrap();
+        let as_text: Value = serde_json::from_str(&rt.status_text(None, None, true).unwrap()).unwrap();
+        let mut as_value = rt.status_response(None, None).unwrap();
+        as_value["needsRender"] = json!(true);
+        // through the same text, so a float's last digit is not what is compared
+        let as_value: Value = serde_json::from_str(&serde_json::to_string(&as_value).unwrap()).unwrap();
+        assert_eq!(as_text, as_value, "nothing known: everything, and needsRender");
+        assert!(as_text["layers"].as_array().unwrap().len() == 2 && as_text["backgrounds"].is_array());
+
+        let known: Value = serde_json::from_str(&rt.status_text(first["snapshotId"].as_u64(), first["referenceId"].as_u64(), false).unwrap()).unwrap();
+        assert!(known.get("layers").is_none() && known.get("backgrounds").is_none(), "the snapshot and the references are known: neither is sent");
+        assert_eq!(known["snapshotId"], first["snapshotId"]);
+        assert_eq!(known["needsRender"], false);
+        for field in ["selectedId", "selectedIds", "frame", "renderCount", "documentRevision", "width"] {
+            assert_eq!(known[field], first[field], "{field} is current whether or not the snapshot is sent");
+        }
+        // only the snapshot known, the references not: the references come, the layers do not
+        let refs_only: Value = serde_json::from_str(&rt.status_text(first["snapshotId"].as_u64(), None, false).unwrap()).unwrap();
+        assert!(refs_only.get("layers").is_none() && refs_only["backgrounds"].is_array());
     }
 }

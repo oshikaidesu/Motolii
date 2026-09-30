@@ -374,10 +374,13 @@ pub unsafe extern "C" fn motolii_probe_request(ctx: *mut EditorRuntime, request:
         probe.reply = CString::new("{\"needsRender\":true}").unwrap();
         return probe.reply.as_ptr();
     }
-    let status = catch_unwind(AssertUnwindSafe(|| probe.status_response(known, known_references)));
-    let mut value = match status { Ok(Ok(v)) => v, Ok(Err(e)) => json!({"error":e}), Err(_) => json!({"error":"Rust status panic"}) };
-    value["needsRender"] = json!(needs_render);
-    probe.reply = CString::new(value.to_string()).unwrap_or_else(|_| CString::new("{\"error\":\"Invalid reply\"}").unwrap());
+    let status = catch_unwind(AssertUnwindSafe(|| probe.status_text(known, known_references, needs_render)));
+    let text = match status {
+        Ok(Ok(text)) => text,
+        Ok(Err(e)) => json!({"error":e,"needsRender":needs_render}).to_string(),
+        Err(_) => json!({"error":"Rust status panic","needsRender":needs_render}).to_string(),
+    };
+    probe.reply = CString::new(text).unwrap_or_else(|_| CString::new("{\"error\":\"Invalid reply\"}").unwrap());
     probe.reply.as_ptr()
 }
 
