@@ -6,11 +6,12 @@ import 'package:flutter/widgets.dart';
 import '../hf/bp/common.dart';
 import '../hf/insp/layout.dart';
 import '../hf/insp/layout_model.dart';
+import '../hf/metrics.dart' show Surface;
 
 const _shot = String.fromEnvironment('PROTO_SHOT');
 final _root = GlobalKey();
 
-Widget housed(Widget child, {double w = 310, double h = 660}) => Container(width: w, height: h, decoration: BoxDecoration(color: kGround, border: Border.all(color: kRule2)), child: child);
+Widget housed(Widget child, {double w = 310, double h = 660}) => Container(width: w, height: h, decoration: BoxDecoration(color: Surface.base, border: Border.all(color: Surface.dividerFine)), child: child);
 Widget label(String t) => Padding(padding: const EdgeInsets.only(bottom: 8, top: 22), child: Text(t, style: mono(11, c: const Color(0xFF8A8A8E), ls: 1)));
 
 void main() {
@@ -30,7 +31,7 @@ void main() {
     ..set('layout.grid_columns', 3)
     ..set('layout.grid_rows', 2);
   runApp(WidgetsApp(
-    color: kGround,
+    color: Surface.base,
     debugShowCheckedModeBanner: false,
     builder: (_, __) => Align(
       alignment: Alignment.topLeft,

@@ -4,6 +4,7 @@ import '../bp/common.dart';
 import '../bp/shell.dart' show emptyBody;
 import 'common.dart';
 import '../neutral.dart';
+import '../metrics.dart' show Dn, Surface;
 
 enum Mark { none, save, open, warn, error, end }
 
@@ -114,7 +115,7 @@ class _HistoryDeskState extends State<HistoryDesk> {
           ),
           Container(
             padding: const EdgeInsets.fromLTRB(10.5, 7.5, 10.5, 7.5),
-            decoration: const BoxDecoration(border: Border(top: BorderSide(color: kRule2))),
+            decoration: const BoxDecoration(border: Border(top: BorderSide(color: Surface.dividerFine))),
             child: Row(children: [
               Expanded(child: widget.entries != null ? _btn('undo', 'Undo', '⌘Z', widget.onUndo != null, () => widget.onUndo?.call()) : _btn('undo', 'Undo', '⌘Z', at > 0, () => go(at - 1))),
               const SizedBox(width: 6),
@@ -141,9 +142,9 @@ class _HistoryDeskState extends State<HistoryDesk> {
         onTap: on ? f : null,
         child: Container(
           height: 27,
-          decoration: BoxDecoration(color: kWell, border: Border.all(color: kRule2), borderRadius: BorderRadius.circular(2)),
+          decoration: BoxDecoration(color: Surface.well, border: Border.all(color: Surface.dividerFine), borderRadius: BorderRadius.circular(2)),
           padding: const EdgeInsets.symmetric(horizontal: 9),
-          child: Row(children: [Text(l, style: sans(11, c: on ? kInk : N.g38)), const Spacer(), Text(k, style: sans(11, c: kMuted))]),
+          child: Row(children: [Text(l, style: sans(Dn.nameSize, c: on ? Surface.ink : N.g38)), const Spacer(), Text(k, style: sans(Dn.nameSize, c: Surface.muted))]),
         ),
       );
 
@@ -152,7 +153,7 @@ class _HistoryDeskState extends State<HistoryDesk> {
     final cur = i == at, reached = i <= at;
     final marked = e.mark != Mark.none;
     // Text is annotation: quiet by default; the current step and marked records speak.
-    final ink = cur ? kInk : (reached ? (marked ? N.g76 : N.g56) : N.g33);
+    final ink = cur ? Surface.ink : (reached ? (marked ? N.g76 : N.g56) : N.g33);
     return Container(
       height: h,
       color: cur ? kYellow.withValues(alpha: .10) : null,
@@ -160,7 +161,7 @@ class _HistoryDeskState extends State<HistoryDesk> {
         SizedBox(width: labels ? 58 : w, height: h, child: CustomPaint(painter: _Node(i == 0, i == entries.length - 1, cur, reached, i < at, e.mark))),
         if (labels) ...[
           Expanded(child: Text(e.label, softWrap: false, overflow: TextOverflow.clip, style: sans(cur ? 13.5 : 12, c: ink, w: cur ? FontWeight.w600 : FontWeight.w400))),
-          Padding(padding: const EdgeInsets.only(right: 12), child: Text(e.time, style: mono(9.5, c: reached ? N.g44 : N.g26))),
+          Padding(padding: const EdgeInsets.only(right: 12), child: Text(e.time, style: mono(Dn.microSize, c: reached ? N.g44 : N.g26))),
         ],
       ]),
     );
@@ -182,8 +183,8 @@ void _drawMark(Canvas c, Offset o, Mark m, Color col) {
       c.drawPath(Path()..moveTo(o.dx, o.dy - 6)..lineTo(o.dx + 6, o.dy + 5)..lineTo(o.dx - 6, o.dy + 5)..close(), Paint()..color = col);
     case Mark.error:
       c.drawCircle(o, 6.5, Paint()..color = col);
-      c.drawLine(o + const Offset(-2.6, -2.6), o + const Offset(2.6, 2.6), Paint()..color = kWell..style = PaintingStyle.stroke..strokeWidth = 1.7..strokeCap = StrokeCap.round);
-      c.drawLine(o + const Offset(2.6, -2.6), o + const Offset(-2.6, 2.6), Paint()..color = kWell..style = PaintingStyle.stroke..strokeWidth = 1.7..strokeCap = StrokeCap.round);
+      c.drawLine(o + const Offset(-2.6, -2.6), o + const Offset(2.6, 2.6), Paint()..color = Surface.well..style = PaintingStyle.stroke..strokeWidth = 1.7..strokeCap = StrokeCap.round);
+      c.drawLine(o + const Offset(2.6, -2.6), o + const Offset(-2.6, 2.6), Paint()..color = Surface.well..style = PaintingStyle.stroke..strokeWidth = 1.7..strokeCap = StrokeCap.round);
     case Mark.end:
       c.drawRect(Rect.fromCenter(center: o, width: 7.5, height: 7.5), p);
     case Mark.none:
@@ -194,16 +195,16 @@ void _drawMark(Canvas c, Offset o, Mark m, Color col) {
 void _dot(Canvas c, Offset o, Mark mark, bool cur, bool reached, double r) {
   if (cur) {
     c.drawCircle(o, r + 7, Paint()..color = kYellow.withValues(alpha: .25));
-    c.drawCircle(o, r + 2, Paint()..color = kWell);
+    c.drawCircle(o, r + 2, Paint()..color = Surface.well);
     c.drawCircle(o, r + 2, Paint()..color = kYellow..style = PaintingStyle.stroke..strokeWidth = 3.4);
-    if (mark == Mark.none) { c.drawCircle(o, r - 2.5, Paint()..color = kInk); } else { _drawMark(c, o, mark, _markColor(mark)); }
+    if (mark == Mark.none) { c.drawCircle(o, r - 2.5, Paint()..color = Surface.ink); } else { _drawMark(c, o, mark, _markColor(mark)); }
   } else if (mark != Mark.none) {
-    c.drawCircle(o, 12, Paint()..color = kWell);
+    c.drawCircle(o, 12, Paint()..color = Surface.well);
     _drawMark(c, o, mark, reached ? _markColor(mark) : _markColor(mark).withValues(alpha: .32));
   } else if (reached) {
     c.drawCircle(o, 5.4, Paint()..color = kBlue);
   } else {
-    c.drawCircle(o, 3.4, Paint()..color = kWell);
+    c.drawCircle(o, 3.4, Paint()..color = Surface.well);
     c.drawCircle(o, 3.4, Paint()..color = N.g33..style = PaintingStyle.stroke..strokeWidth = 1.3);
   }
 }

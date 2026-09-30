@@ -1,6 +1,6 @@
 import 'package:flutter/widgets.dart';
 
-import '../hf/bp/common.dart' show kGround, kRule;
+import '../hf/metrics.dart' show Surface;
 
 /// The Shell's own visible tree — the same one `proto_hf/main_shell.dart::Shell` draws, pulled out so both proto_hf
 /// (fixtures in every slot) and production (Motolii Live in every slot) build the identical widget tree. This is
@@ -19,7 +19,7 @@ class ShellFace extends StatelessWidget {
 
   Widget _seat(double x, double y, double w, double h, Widget child) => Positioned(
         left: x, top: y, width: w, height: h,
-        child: DecoratedBox(decoration: BoxDecoration(color: kGround, border: Border.all(color: kRule)), child: child),
+        child: DecoratedBox(decoration: BoxDecoration(color: Surface.base, border: Border.all(color: Surface.divider)), child: child),
       );
 
   @override
@@ -27,7 +27,7 @@ class ShellFace extends StatelessWidget {
         width: width,
         height: height,
         child: Stack(children: [
-          const Positioned.fill(child: ColoredBox(color: kGround)),
+          const Positioned.fill(child: ColoredBox(color: Surface.base)),
           Positioned(left: 0, top: 0, width: width, height: 62, child: top),
           _seat(10, 62, 324, 953, browser),
           Positioned(left: 344, top: 62, width: 779, height: 632, child: stage),

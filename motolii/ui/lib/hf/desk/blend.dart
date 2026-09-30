@@ -4,6 +4,7 @@ import 'package:flutter/widgets.dart';
 import '../bp/common.dart';
 import 'common.dart';
 import '../neutral.dart';
+import '../metrics.dart' show Dn, Surface;
 
 /// A blend mode is shown as what it does to one fixed pair of flat shapes: A (base, yellow) and B (top, blue).
 /// Every symbol is the same two shapes through a different operator, so what differs is the overlap, nothing else.
@@ -188,7 +189,7 @@ class _BlendDeskState extends State<BlendDesk> {
                     child: Row(children: [
                       Container(width: 13.5, height: 13.5, decoration: BoxDecoration(color: previewOnStage ? kBlue : null, border: previewOnStage ? null : Border.all(color: N.g38, width: 1), borderRadius: BorderRadius.circular(2)), child: previewOnStage ? CustomPaint(painter: _TickP()) : null),
                       const SizedBox(width: 7.5),
-                      Text('Preview on Stage', style: sans(11, c: N.g76)),
+                      Text('Preview on Stage', style: sans(Dn.nameSize, c: N.g76)),
                     ]),
                   ),
                 ]),
@@ -213,16 +214,16 @@ class _BlendDeskState extends State<BlendDesk> {
       Column(mainAxisSize: MainAxisSize.min, children: [
         Container(width: 30, height: 30, decoration: const BoxDecoration(color: kYellow, shape: BoxShape.circle)),
         const SizedBox(height: 3),
-        Text('A', style: sans(10, c: kMuted, w: FontWeight.w600)),
+        Text('A', style: sans(Dn.labelSize, c: Surface.muted, w: FontWeight.w600)),
         const SizedBox(height: 7.5),
         Container(width: 30, height: 30, decoration: const BoxDecoration(color: kBlue, shape: BoxShape.circle)),
         const SizedBox(height: 3),
-        Text('B', style: sans(10, c: kMuted, w: FontWeight.w600)),
+        Text('B', style: sans(Dn.labelSize, c: Surface.muted, w: FontWeight.w600)),
       ]),
-      SizedBox(width: 19.5, child: Center(child: Text('→', style: sans(16.5, c: kMuted)))),
+      SizedBox(width: 19.5, child: Center(child: Text('→', style: sans(16.5, c: Surface.muted)))),
       Expanded(
         child: Column(children: [
-          SizedBox(key: const ValueKey('blend-result'), height: 81, width: double.infinity, child: m == null ? Center(child: Text(host != null && host!.names.isEmpty ? 'Nothing' : 'Mixed', style: sans(13.5, c: kMuted))) : CustomPaint(painter: ResultPainter(m))),
+          SizedBox(key: const ValueKey('blend-result'), height: 81, width: double.infinity, child: m == null ? Center(child: Text(host != null && host!.names.isEmpty ? 'Nothing' : 'Mixed', style: sans(13.5, c: Surface.muted))) : CustomPaint(painter: ResultPainter(m))),
           const SizedBox(height: 6),
           // The runtime's own specimen of this mode on the layer: its colour over the beds the runtime draws.
           if (m != null && host != null && host!.beds(blendModes[m].key).isNotEmpty)
@@ -230,26 +231,26 @@ class _BlendDeskState extends State<BlendDesk> {
               padding: const EdgeInsets.only(bottom: 6),
               child: SizedBox(key: const ValueKey('blend-beds'), height: 7.5, child: Row(children: [for (final c in host!.beds(blendModes[m].key)) Expanded(child: ColoredBox(color: c))])),
             ),
-          Text(m == null ? (host != null && host!.names.isEmpty ? 'No layer' : 'Targets differ') : blendModes[m].name, style: sans(13, c: kInk, w: FontWeight.w600)),
+          Text(m == null ? (host != null && host!.names.isEmpty ? 'No layer' : 'Targets differ') : blendModes[m].name, style: sans(13, c: Surface.ink, w: FontWeight.w600)),
         ]),
       ),
     ]);
   }
 
   Widget _targets() => Row(children: [
-        Text('TARGETS', style: sans(9.5, c: kMuted, w: FontWeight.w500, ls: 1.4)),
+        Text('TARGETS', style: sans(Dn.microSize, c: Surface.muted, w: FontWeight.w500, ls: 1.4)),
         const SizedBox(width: 9),
         // With a host the selection decides the targets; the chips only say who they are.
         if (host != null) ...[
-          for (final n in host!.names.take(2)) Padding(padding: const EdgeInsets.only(right: 4.5), child: Container(height: 19.5, padding: const EdgeInsets.symmetric(horizontal: 7.5), alignment: Alignment.center, decoration: BoxDecoration(color: kYellow, borderRadius: BorderRadius.circular(10)), child: Text(n, softWrap: false, overflow: TextOverflow.clip, style: sans(11, c: N.g10, w: FontWeight.w600)))),
-          if (host!.names.length > 2) Text('+${host!.names.length - 2}', style: sans(11, c: kMuted)),
+          for (final n in host!.names.take(2)) Padding(padding: const EdgeInsets.only(right: 4.5), child: Container(height: 19.5, padding: const EdgeInsets.symmetric(horizontal: 7.5), alignment: Alignment.center, decoration: BoxDecoration(color: kYellow, borderRadius: BorderRadius.circular(10)), child: Text(n, softWrap: false, overflow: TextOverflow.clip, style: sans(Dn.nameSize, c: N.g10, w: FontWeight.w600)))),
+          if (host!.names.length > 2) Text('+${host!.names.length - 2}', style: sans(Dn.nameSize, c: Surface.muted)),
         ] else
         for (final i in [0, 1]) Padding(
           padding: const EdgeInsets.only(right: 4.5),
           child: GestureDetector(
             key: ValueKey('blend-target-$i'),
             onTap: () => setState(() { if (targeted.contains(i)) { if (targeted.length > 1) targeted.remove(i); } else { targeted.add(i); } }),
-            child: Container(height: 19.5, padding: const EdgeInsets.symmetric(horizontal: 7.5), alignment: Alignment.center, decoration: BoxDecoration(color: targeted.contains(i) ? kYellow : null, border: targeted.contains(i) ? null : Border.all(color: N.g26), borderRadius: BorderRadius.circular(10)), child: Text('Layer ${i + 2}', style: sans(11, c: targeted.contains(i) ? N.g10 : N.g76, w: FontWeight.w600))),
+            child: Container(height: 19.5, padding: const EdgeInsets.symmetric(horizontal: 7.5), alignment: Alignment.center, decoration: BoxDecoration(color: targeted.contains(i) ? kYellow : null, border: targeted.contains(i) ? null : Border.all(color: N.g26), borderRadius: BorderRadius.circular(10)), child: Text('Layer ${i + 2}', style: sans(Dn.nameSize, c: targeted.contains(i) ? N.g10 : N.g76, w: FontWeight.w600))),
           ),
         ),
       ]);
@@ -269,7 +270,7 @@ class _BlendDeskState extends State<BlendDesk> {
           child: Container(
             width: w < 0 ? 0 : w,
             height: h < 0 ? 0 : h,
-            decoration: BoxDecoration(color: i == sel ? kRaisedHi : null, border: i == sel ? Border.all(color: kYellow, width: 1.5) : null, borderRadius: BorderRadius.circular(4.5)),
+            decoration: BoxDecoration(color: i == sel ? Surface.hover : null, border: i == sel ? Border.all(color: kYellow, width: 1.5) : null, borderRadius: BorderRadius.circular(4.5)),
             padding: const EdgeInsets.all(3),
             child: CustomPaint(painter: ResultPainter(i)),
           ),
@@ -281,14 +282,14 @@ class _BlendDeskState extends State<BlendDesk> {
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           _mark(i, w, 40),
           const SizedBox(height: 3),
-          Text(blendModes[i].name, softWrap: false, overflow: TextOverflow.clip, textAlign: TextAlign.center, style: sans(9.5, c: i == sel ? kInk : N.g63, w: i == sel ? FontWeight.w600 : FontWeight.w400)),
+          Text(blendModes[i].name, softWrap: false, overflow: TextOverflow.clip, textAlign: TextAlign.center, style: sans(Dn.microSize, c: i == sel ? Surface.ink : N.g63, w: i == sel ? FontWeight.w600 : FontWeight.w400)),
         ]),
       );
 }
 
 class _TickP extends CustomPainter {
   @override
-  void paint(Canvas c, Size s) => c.drawPath(Path()..moveTo(4.5, 9.5)..lineTo(7.8, 12.8)..lineTo(13.5, 5.5), Paint()..color = kInk..style = PaintingStyle.stroke..strokeWidth = 2..strokeCap = StrokeCap.round..strokeJoin = StrokeJoin.round);
+  void paint(Canvas c, Size s) => c.drawPath(Path()..moveTo(4.5, 9.5)..lineTo(7.8, 12.8)..lineTo(13.5, 5.5), Paint()..color = Surface.ink..style = PaintingStyle.stroke..strokeWidth = 2..strokeCap = StrokeCap.round..strokeJoin = StrokeJoin.round);
   @override
   bool shouldRepaint(_TickP o) => false;
 }

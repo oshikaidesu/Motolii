@@ -7,6 +7,7 @@ import 'faces.dart';
 import 'seat.dart';
 import 'things.dart';
 import '../neutral.dart';
+import '../metrics.dart' show Dn, Surface;
 
 /// Create as a board of named tiles: each thing its mark over its name on a quiet ground, on a grid that fills the
 /// seat's width, the section as a row identifier, Recent last. Small marks and short names keep it dense; the name is
@@ -86,11 +87,11 @@ class _TileState extends State<_Tile> {
             width: widget.width,
             height: CreateTiles.height,
             padding: const EdgeInsets.fromLTRB(2, 5, 2, 0),
-            decoration: BoxDecoration(color: _over ? kRaisedHi : kRaised, borderRadius: BorderRadius.circular(3)),
+            decoration: BoxDecoration(color: _over ? Surface.hover : Surface.raised, borderRadius: BorderRadius.circular(3)),
             child: Column(children: [
               SizedBox.square(dimension: CreateTiles.mark, child: ThingFace(widget.thing, scene: widget.scene)),
               const SizedBox(height: 4),
-              Text(widget.thing.name, softWrap: false, maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center, style: sans(9.5, c: N.g82)),
+              Text(widget.thing.name, softWrap: false, maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center, style: sans(Dn.microSize, c: N.g82)),
             ]),
           ),
         ),

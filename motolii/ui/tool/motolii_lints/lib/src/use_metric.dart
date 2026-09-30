@@ -5,17 +5,17 @@ import 'package:analyzer_plugin/utilities/change_builder/change_builder_core.dar
 import 'package:analyzer_plugin/utilities/fixes/fixes.dart';
 import 'package:analyzer_plugin/utilities/range_factory.dart';
 
-/// Where the scale lives. The fix reads the class, so a new token needs no
-/// change here.
-const metricsUri = 'package:motolii_stage5/foundation/metrics.dart';
-const metricsClass = 'EditorMetrics';
+import 'raw_dimension.dart' show scaleFor;
+
+/// Where the scale lives is [scaleFor] (the product window reads Surface, Classic and New read EditorMetrics). The fix reads the
+/// class, so a new token needs no change here.
 
 /// Replaces a raw measurement with the token of exactly the same value.
 class UseMetric extends ResolvedCorrectionProducer {
   static const _kind = FixKind(
     'motolii.fix.useMetric',
     DartFixKindPriority.standard,
-    'Replace with the matching EditorMetrics token',
+    'Replace with the matching Surface / EditorMetrics token',
   );
 
   UseMetric({required super.context});
@@ -42,6 +42,8 @@ class UseMetric extends ResolvedCorrectionProducer {
       _ => null,
     };
     if (value == null) return;
+    final which = scaleFor(file);
+    final (metricsUri, metricsClass) = (which.uri, which.cls);
     final scale = await sessionHelper.getClass(metricsUri, metricsClass);
     if (scale == null) return;
     for (final field in scale.fields) {

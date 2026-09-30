@@ -12,6 +12,7 @@ import '../../hf/glyphs.dart';
 import '../../session/color_edit.dart';
 import '../../session/editor_session.dart';
 import '../../hf/neutral.dart';
+import '../../hf/metrics.dart' show Dn, Surface;
 
 /// The Colors instrument over the session: the reference's wheel, hex and two bars, editing the colour target (the
 /// Inspector's focused colour, else the selection's fill) through [ColorEdit] — the same preview, commit and cancel
@@ -251,7 +252,7 @@ class _LiveColorInstrumentState extends State<LiveColorInstrument> {
                           key: const ValueKey('hf-color-target'),
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: sans(10, c: N.g63, w: FontWeight.w500),
+                          style: sans(Dn.labelSize, c: N.g63, w: FontWeight.w500),
                         ),
                       const SizedBox(height: 4.5),
                       Row(children: [
@@ -260,7 +261,7 @@ class _LiveColorInstrumentState extends State<LiveColorInstrument> {
                             key: const ValueKey('hf-color-hex'),
                             controller: hex,
                             focusNode: hexFocus,
-                            style: sans(11, c: N.g95, w: FontWeight.w600),
+                            style: sans(Dn.nameSize, c: N.g95, w: FontWeight.w600),
                             cursorColor: N.g82,
                             backgroundCursorColor: N.g00,
                             onSubmitted: _typed,
@@ -273,7 +274,7 @@ class _LiveColorInstrumentState extends State<LiveColorInstrument> {
                             focus.requestFocus();
                             edit.toggleEyedropper();
                           },
-                          child: GlyphBox(HG.composite, size: 12, color: picking ? N.g95 : kMuted),
+                          child: GlyphBox(HG.composite, size: 12, color: picking ? N.g95 : Surface.muted),
                         ),
                       ]),
                       // the same colour in the other numbers people ask for, in the space beside the wheel
@@ -287,15 +288,15 @@ class _LiveColorInstrumentState extends State<LiveColorInstrument> {
                         Padding(
                           padding: const EdgeInsets.only(top: 1),
                           child: Row(children: [
-                            SizedBox(width: 30, child: Text(a, softWrap: false, style: sans(10, c: N.g56))),
-                            Text(b, softWrap: false, style: sans(10, c: N.g56)),
+                            SizedBox(width: 30, child: Text(a, softWrap: false, style: sans(Dn.labelSize, c: N.g56))),
+                            Text(b, softWrap: false, style: sans(Dn.labelSize, c: N.g56)),
                           ]),
                         ),
                       // while armed, what to do next
                       if (picking)
                         Padding(
                           padding: const EdgeInsets.only(top: 4.5),
-                          child: Text('Click the Stage to pick · Esc cancels', key: const ValueKey('hf-eyedropper-hint'), maxLines: 2, style: sans(9.5, c: kMuted)),
+                          child: Text('Click the Stage to pick · Esc cancels', key: const ValueKey('hf-eyedropper-hint'), maxLines: 2, style: sans(Dn.microSize, c: Surface.muted)),
                         ),
                     ],
                   ),

@@ -23,3 +23,6 @@
 - 決定は `../docs/decision-index.md` を grep。コードの現状・理由はコードに書かない — 腐る
 
 窓: `ui/build/macos/Build/Products/Debug/motolii_stage5.app`。旧実装は[Git履歴](../docs/stage5/history/retired-source.md)へ退役済み。
+
+## Surface Grammar(製品 UI の見た目の正本)
+製品窓(`ui/lib/hf`・`live_hf`)の寸法・文字・余白・radius・面の段は `ui/lib/hf/metrics.dart` の `Surface` / `Dn` と `hf/neutral.dart` だけ。パネルは token を名指す(`Surface.workRow`・`inlineGap`・`sectionGap`・`Dn.nameSize`・`Surface.divider`)。生の `fontSize`/`EdgeInsets`/`SizedBox` 寸法/`BorderRadius`/色、`Card`、枠+丸角の箱で section を括ることは `ui/tool/motolii_lints`(`dart run bin/check.dart lib --ratchet=baseline.txt`)が止める。baseline は下がるだけ。token で言えない時だけ `// surface: <理由>` を書く。詳細 [docs/reviews/2026-09-30-surface-grammar.md](../docs/reviews/2026-09-30-surface-grammar.md)。

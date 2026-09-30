@@ -7,6 +7,7 @@ import '../../../session/read_model.dart';
 import '../../../live_hf/adapters/effects_card.dart';
 import '../../../live_hf/adapters/layout.dart';
 import '../../../live_hf/adapters/transform.dart';
+import '../../../hf/metrics.dart' show Surface;
 
 /// The Inspector's own host: identity header, and the card list (Transform — World inside it, Layout, Effects) —
 /// the New face for the header/scroll/card chrome Classic's `InspectorPanel` draws itself. Text, Fill and Matte
@@ -80,14 +81,14 @@ class _NewInspectorPanelState extends State<NewInspectorPanel> {
   Widget build(BuildContext context) {
     final layer = _active;
     if (layer == null) {
-      return DecoratedBox(decoration: const BoxDecoration(color: kGround), child: Center(child: Text('Nothing selected', style: sans(11, c: kMuted))));
+      return DecoratedBox(decoration: const BoxDecoration(color: Surface.base), child: Center(child: Text('Nothing selected', style: sans(11, c: Surface.muted))));
     }
     // A kind with no New face yet keeps the full Classic host, with the same New instruments underneath.
     if (!_multiple && (layer['kind'] == 'Camera' || layer['kind'] == 'Stage' || _hasContent(layer))) {
       return InspectorPanel(controller: c, instruments: _instruments);
     }
     return DecoratedBox(
-      decoration: const BoxDecoration(color: kGround),
+      decoration: const BoxDecoration(color: Surface.base),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Expanded(
           child: SingleChildScrollView(

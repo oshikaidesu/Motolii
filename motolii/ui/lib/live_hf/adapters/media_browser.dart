@@ -390,7 +390,7 @@ class _Header extends StatelessWidget {
   final ValueChanged<BrowserView> onView;
   @override
   Widget build(BuildContext context) => Container(
-        height: UiMetrics.chromeRow,
+        height: Surface.chromeRow,
         padding: const EdgeInsets.symmetric(horizontal: 6),
         decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: N.g15))),
         child: Row(children: [

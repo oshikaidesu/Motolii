@@ -21,6 +21,7 @@ import '../hf/insp/transform_model.dart';
 import 'main_browser.dart' as br;
 import 'main_transform.dart' as tf;
 import 'ref.dart' show H, RF;
+import '../hf/metrics.dart' show Surface;
 
 const _shot = String.fromEnvironment('PROTO_SHOT');
 const _thingsDir = String.fromEnvironment('PROTO_THINGS', defaultValue: 'lib/hf/data/things');
@@ -76,19 +77,19 @@ TabbedViewThemeData motoliiTabs() {
   final t = TabbedViewThemeData.dark();
   t.tabsArea
     ..color = const Color(0xFF141414)
-    ..border = const Border(bottom: BorderSide(color: kRule))
+    ..border = const Border(bottom: BorderSide(color: Surface.divider))
     ..initialGap = 0
     ..middleGap = 0
     ..gapBottomBorder = BorderSide.none;
   t.tab
     ..padding = const EdgeInsets.symmetric(horizontal: 12, vertical: 8)
-    ..textStyle = sans(12.5, c: kMuted)
+    ..textStyle = sans(12.5, c: Surface.muted)
     ..decoration = const BoxDecoration(color: Color(0xFF141414))
     ..selectedStatus = (TabStatusThemeData()
-      ..decoration = const BoxDecoration(color: kSel)
+      ..decoration = const BoxDecoration(color: Surface.selected)
       ..fontColor = const Color(0xFFF5F5F5));
   t.contentArea
-    ..decoration = const BoxDecoration(color: kGround)
+    ..decoration = const BoxDecoration(color: Surface.base)
     ..padding = EdgeInsets.zero;
   return t;
 }
@@ -121,7 +122,7 @@ void main() async {
   br.grownCatalog = loadCatalog(_thingsDir, sets: const ['builtin', 'stress']);
   final ws = buildWorkspace(scene);
   runApp(WidgetsApp(
-    color: kGround,
+    color: Surface.base,
     debugShowCheckedModeBanner: false,
     builder: (_, __) => _shot.isEmpty
         ? DefaultTextStyle(style: sans(12), child: DockProbe(workspace: ws))

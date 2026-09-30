@@ -35,7 +35,7 @@ Future<T?> showHfMenu<T>(BuildContext context, Rect at, List<(T, String)> items,
   final space = box?.size ?? Size.infinite;
   final origin = box == null ? Offset.zero : box.globalToLocal(Offset.zero);
   final local = at.shift(origin);
-  final full = items.length * UiMetrics.menuRow + 8 + 9.0 * items.where((i) => dividers.contains(i.$1) && i != items.last).length;
+  final full = items.length * Surface.menuRow + 8 + 9.0 * items.where((i) => dividers.contains(i.$1) && i != items.last).length;
   // a menu taller than the window scrolls inside it
   final height = math.min(full, math.max(40.0, space.height - 8));
   final top = local.bottom + 2 + height <= space.height
@@ -88,10 +88,10 @@ Future<T?> showHfMenu<T>(BuildContext context, Rect at, List<(T, String)> items,
             for (final (i, (v, label)) in items.indexed) ...[
               if (info.contains(v))
                 Container(
-                  height: UiMetrics.menuRow - 4,
+                  height: Surface.menuRow - 4,
                   padding: const EdgeInsets.symmetric(horizontal: 7.5),
                   alignment: Alignment.centerLeft,
-                  child: Text(label, softWrap: false, overflow: TextOverflow.ellipsis, style: i == 0 ? H.s(11, w: FontWeight.w600, color: H.text2) : H.m(11, color: H.text3)),
+                  child: Text(label, softWrap: false, overflow: TextOverflow.ellipsis, style: i == 0 ? H.s(Dn.nameSize, w: FontWeight.w600, color: H.text2) : H.m(11, color: H.text3)),
                 )
               else
               MouseRegion(
@@ -106,14 +106,14 @@ Future<T?> showHfMenu<T>(BuildContext context, Rect at, List<(T, String)> items,
                   behavior: HitTestBehavior.opaque,
                   onTap: disabled.contains(v) ? null : () => close(v),
                   child: Container(
-                    height: UiMetrics.menuRow,
+                    height: Surface.menuRow,
                     padding: const EdgeInsets.only(left: 3, right: 7.5),
                     alignment: Alignment.centerLeft,
                     color: hot.value == i ? H.selHi : null,
                     child: Row(children: [
-                      SizedBox(width: 12, child: v == selected ? Text('✓', textAlign: TextAlign.center, style: H.s(11, color: H.text2)) : null),
-                      Expanded(child: Text(label, softWrap: false, overflow: TextOverflow.ellipsis, style: H.s(11, color: disabled.contains(v) ? N.g44 : H.text))),
-                      if (shortcuts[v] case final key?) Padding(padding: const EdgeInsets.only(left: 12), child: Text(key, style: H.s(11, color: H.text3))),
+                      SizedBox(width: 12, child: v == selected ? Text('✓', textAlign: TextAlign.center, style: H.s(Dn.nameSize, color: H.text2)) : null),
+                      Expanded(child: Text(label, softWrap: false, overflow: TextOverflow.ellipsis, style: H.s(Dn.nameSize, color: disabled.contains(v) ? N.g44 : H.text))),
+                      if (shortcuts[v] case final key?) Padding(padding: const EdgeInsets.only(left: 12), child: Text(key, style: H.s(Dn.nameSize, color: H.text3))),
                     ]),
                   ),
                 ),

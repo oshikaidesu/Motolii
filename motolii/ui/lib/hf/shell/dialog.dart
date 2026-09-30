@@ -6,6 +6,7 @@ import 'package:flutter/widgets.dart';
 import 'place.dart';
 import 'sheet.dart' show HfAction, HfActionKind;
 import '../neutral.dart';
+import '../metrics.dart' show Dn;
 
 /// [destructive] answers (discarding work) are drawn in the record red and set apart on the left; the last answer is
 /// the primary (and Enter's).
@@ -46,9 +47,9 @@ Future<T?> showHfDialog<T>(BuildContext context, {required String title, require
             padding: const EdgeInsets.fromLTRB(12, 10.5, 12, 10.5),
             decoration: BoxDecoration(color: N.g13, border: Border.all(color: N.g26), borderRadius: BorderRadius.circular(2)),
             child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-              Text(title, style: H.s(11, w: FontWeight.w600, color: H.text)),
+              Text(title, style: H.s(Dn.nameSize, w: FontWeight.w600, color: H.text)),
               const SizedBox(height: 6),
-              Text(body, style: H.s(11, color: H.text2).copyWith(height: 1.4)),
+              Text(body, style: H.s(Dn.nameSize, color: H.text2).copyWith(height: 1.4)),
               const SizedBox(height: 12),
               Row(children: [
                 for (final (v, label) in answers)

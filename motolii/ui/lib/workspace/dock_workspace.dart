@@ -96,7 +96,7 @@ class DockWorkspace {
               left: r.left - origin.dx,
               top: r.top - origin.dy,
               width: r.width,
-              height: UiMetrics.chromeRow,
+              height: Surface.chromeRow,
               child: DragTarget<DraggableData>(
                 onWillAcceptWithDetails: (d) => d.data.tabData.value is DockingItem && (d.data.tabData.value as DockingItem).id != id,
                 onAcceptWithDetails: (d) => _join(d.data.tabData.value as DockingItem, id),

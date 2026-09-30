@@ -6,13 +6,14 @@ import 'package:flutter/widgets.dart';
 import '../hf/bp/common.dart';
 import '../hf/insp/camera.dart';
 import '../hf/insp/camera_model.dart';
+import '../hf/metrics.dart' show Surface;
 
 const _shot = String.fromEnvironment('PROTO_SHOT');
 final _root = GlobalKey();
 
 const layers = [CamLayer(1, 'Logo', 960, 540, 0), CamLayer(2, 'Title', 400, 300, 60), CamLayer(3, 'Backdrop', 1500, 800, -200)];
 
-Widget housed(Widget child, {double w = 310, double h = 640}) => Container(width: w, height: h, decoration: BoxDecoration(color: kGround, border: Border.all(color: kRule2)), child: child);
+Widget housed(Widget child, {double w = 310, double h = 640}) => Container(width: w, height: h, decoration: BoxDecoration(color: Surface.base, border: Border.all(color: Surface.dividerFine)), child: child);
 Widget label(String t) => Padding(padding: const EdgeInsets.only(bottom: 8, top: 22), child: Text(t, style: mono(11, c: const Color(0xFF8A8A8E), ls: 1)));
 
 void main() {
@@ -27,7 +28,7 @@ void main() {
     ..set('camera.distance', .5)
     ..set('camera.zoom', 2.0);
   runApp(WidgetsApp(
-    color: kGround,
+    color: Surface.base,
     debugShowCheckedModeBanner: false,
     builder: (_, __) => Align(
       alignment: Alignment.topLeft,

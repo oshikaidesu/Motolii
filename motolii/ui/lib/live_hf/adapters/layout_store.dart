@@ -66,7 +66,6 @@ class SessionLayoutStore extends LayoutStore {
     c.command('toggleKey', {'layer': layerId, 'properties': ids});
   }
 
-
   @override
   void menu(BuildContext context, String id, int? axis, Offset at) => keyMenu(context, this, id, at);
 

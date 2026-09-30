@@ -24,8 +24,8 @@ class TopBar extends StatelessWidget {
         // what folds, first to last, as the window narrows: the motto, the brand's line, the duration readout
         final motto = w >= 1000, tagline = w >= 820, duration = w >= 680;
         return Container(
-          height: UiMetrics.topBar,
-          padding: const EdgeInsets.symmetric(horizontal: UiMetrics.pad),
+          height: Surface.topBar,
+          padding: const EdgeInsets.symmetric(horizontal: Surface.panelInset),
           decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: H.rule))),
           child: Row(children: [
             Text('Motolii', style: H.s(14, w: FontWeight.w600, ls: -0.1, color: H.text2)),
@@ -73,7 +73,7 @@ class TopBar extends StatelessWidget {
       });
 }
 
-/// A transport or window key: [UiMetrics.control] tall, a pointer target at least [UiMetrics.hit]; quiet without an
+/// A transport or window key: [Surface.control] tall, a pointer target at least [Surface.hit]; quiet without an
 /// operation.
 class _Key extends StatelessWidget {
   const _Key({required this.onTap, required this.fill, required this.edge, required this.child});
@@ -88,7 +88,7 @@ class _Key extends StatelessWidget {
           onTap: onTap,
           child: Container(
             width: 26,
-            height: UiMetrics.control + 2,
+            height: Surface.control + 2,
             margin: const EdgeInsets.only(left: 4),
             alignment: Alignment.center,
             decoration: BoxDecoration(color: fill, border: Border.all(color: edge), borderRadius: BorderRadius.circular(3)),
@@ -122,7 +122,7 @@ class _Glyph extends StatelessWidget {
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: onTap,
-          child: SizedBox(width: UiMetrics.hit, height: UiMetrics.hit, child: Center(child: SizedBox(width: size, height: size, child: CustomPaint(painter: HgPainter(g, N.g82, H.window))))),
+          child: SizedBox(width: Surface.hit, height: Surface.hit, child: Center(child: SizedBox(width: size, height: size, child: CustomPaint(painter: HgPainter(g, N.g82, H.window))))),
         ),
       );
 }
@@ -134,7 +134,7 @@ class _Modes extends StatelessWidget {
   final void Function(TopMode mode, Rect key)? onModeAt;
   @override
   Widget build(BuildContext context) => Container(
-        height: UiMetrics.control + 2,
+        height: Surface.control + 2,
         decoration: BoxDecoration(color: H.raised, border: Border.all(color: H.rule), borderRadius: BorderRadius.circular(3)),
         child: Row(mainAxisSize: MainAxisSize.min, children: [
           for (final (mode, label) in const [(TopMode.edit, 'EDIT'), (TopMode.play, 'PLAY'), (TopMode.export, 'EXPORT')])

@@ -140,7 +140,6 @@ class SessionCameraStore extends CameraStore {
   @override
   void reset(String id) => resetMany([id]);
 
-
   @override
   void route(String to, [String? from]) {
     super.route(to, from);

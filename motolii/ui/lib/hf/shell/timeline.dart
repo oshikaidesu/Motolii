@@ -17,6 +17,7 @@ import 'package:flutter/widgets.dart';
 import '../glyphs.dart';
 import 'place.dart';
 import '../neutral.dart';
+import '../metrics.dart' show Dn;
 
 part 'timeline_paint.dart';
 
@@ -230,7 +231,7 @@ List<RI> timeline(TimelineModel m) {
         behavior: HitTestBehavior.opaque,
         onTap: m.onSplit,
         child: Center(
-          child: Text('Split', style: H.s(11, color: H.text2)),
+          child: Text('Split', style: H.s(Dn.nameSize, color: H.text2)),
         ),
       ),
     ),
@@ -243,7 +244,7 @@ List<RI> timeline(TimelineModel m) {
         behavior: HitTestBehavior.opaque,
         onTap: m.onAddMarker,
         child: Center(
-          child: Text('Marker', style: H.s(11, color: H.text2)),
+          child: Text('Marker', style: H.s(Dn.nameSize, color: H.text2)),
         ),
       ),
     ),

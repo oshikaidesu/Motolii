@@ -126,7 +126,6 @@ class SessionEffectStore extends ParamStore {
   @override
   void reset(String id) => resetMany([id]);
 
-
   @override
   void menu(BuildContext context, String id, int? axis, Offset at) => keyMenu(context, this, id, at);
 

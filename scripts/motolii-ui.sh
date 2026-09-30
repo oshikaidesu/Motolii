@@ -61,7 +61,7 @@ case "${1:-dev}" in
     "$repo/scripts/motolii-ui.sh" test-window
     cd "$repo"; cargo test -p motolii-script; cargo test -p motolii-doc; cargo test -p motolii-edit; cargo test -p motolii-jobs; cargo test -p motolii-ui --lib; cargo test -p motolii-render --no-fail-fast --test '*'; cargo test -p motolii-render --lib
     dart_bin="$(dirname "$flutter_bin")/dart"
-    (cd "$ui/tool/motolii_lints" && "$dart_bin" test && "$dart_bin" run bin/check.dart "$ui/lib")
+    (cd "$ui/tool/motolii_lints" && "$dart_bin" test && "$dart_bin" run bin/check.dart "$ui/lib" --ratchet=baseline.txt)
     cd "$ui"; "$flutter_bin" analyze; exec "$flutter_bin" test ;;
   # Why the loop is slow, in 30 ms, without going and looking. rustc enumerates
   # every -L dependency directory once per crate: 10.9 s at 611k entries, 0.12 s

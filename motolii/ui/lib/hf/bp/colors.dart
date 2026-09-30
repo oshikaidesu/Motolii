@@ -13,6 +13,7 @@ import 'shell.dart';
 import '../../session/editor_session.dart';
 import 'native_visual_sample.dart';
 import '../neutral.dart';
+import '../metrics.dart' show Dn, Surface;
 
 typedef Sw = (String, int, String); // name, argb, class
 
@@ -183,7 +184,6 @@ List<List<String>> colorGroups(List<Sw> items) {
   ];
 }
 
-
 /// the colour a new swatch or bar starts from
 const _firstSwatch = Color(0xFFE8508F);
 class ColorsPanel extends StatefulWidget {
@@ -351,7 +351,7 @@ class _ColorsPanelState extends State<ColorsPanel>
               child: Center(
                 child: Text(
                   '#E8508F',
-                  style: mono(10, c: N.g76),
+                  style: mono(Dn.labelSize, c: N.g76),
                 ),
               ),
             ),
@@ -379,7 +379,7 @@ class _ColorsPanelState extends State<ColorsPanel>
             ? SizedBox(
                 width: 22.5,
                 child: Center(
-                  child: Text('+', style: sans(12, c: kMuted)),
+                  child: Text('+', style: sans(12, c: Surface.muted)),
                 ),
               )
             : Container(
@@ -414,9 +414,9 @@ class _Instrument extends StatelessWidget {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text('#E8508F', style: mono(11, c: N.g82)),
+                Text('#E8508F', style: mono(Dn.nameSize, c: N.g82)),
                 const SizedBox(width: 6),
-                const GlyphBox(HG.composite, size: 13, color: kMuted),
+                const GlyphBox(HG.composite, size: 13, color: Surface.muted),
               ],
             ),
           ),
@@ -472,7 +472,7 @@ class _MiniInstrument extends StatelessWidget {
       const SizedBox(width: 7.5),
       Text(
         color == null ? '#E8508F' : hexText(color!),
-        style: mono(11, c: N.g82),
+        style: mono(Dn.nameSize, c: N.g82),
       ),
     ],
   );
@@ -683,7 +683,7 @@ class _Swatches extends StatelessWidget {
         SizedBox(
           width: size * 2,
           height: size,
-          child: Center(child: Text('+${items.length - 600}', style: mono(10))),
+          child: Center(child: Text('+${items.length - 600}', style: mono(Dn.labelSize))),
         ),
     ],
   );

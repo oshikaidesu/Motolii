@@ -5,6 +5,7 @@ import 'package:flutter/widgets.dart';
 import 'common.dart';
 import '../neutral.dart';
 import '../shell/place.dart' show H;
+import '../metrics.dart' show Dn, Surface;
 
 class SearchCapability extends ChangeNotifier {
   SearchCapability({String query = ''}) : controller = TextEditingController(text: query) {
@@ -103,19 +104,19 @@ class SearchField extends StatelessWidget {
         builder: (_, __) => Container(
           height: height,
           padding: const EdgeInsets.only(left: 6, right: 4.5),
-          decoration: BoxDecoration(color: kRaised, border: Border.all(color: search.focus.hasFocus ? N.g44 : kRule2), borderRadius: BorderRadius.circular(2)),
+          decoration: BoxDecoration(color: Surface.raised, border: Border.all(color: search.focus.hasFocus ? N.g44 : Surface.dividerFine), borderRadius: BorderRadius.circular(2)),
           child: Row(children: [
-            SizedBox(width: 10, height: 10, child: CustomPaint(painter: magnifier(kMuted))),
+            SizedBox(width: 10, height: 10, child: CustomPaint(painter: magnifier(Surface.muted))),
             const SizedBox(width: 5),
             Expanded(
               child: Stack(alignment: Alignment.centerLeft, children: [
-                if (!search.active) Text(hint, softWrap: false, overflow: TextOverflow.clip, style: sans(11, c: kMuted)),
+                if (!search.active) Text(hint, softWrap: false, overflow: TextOverflow.clip, style: sans(Dn.nameSize, c: Surface.muted)),
                 EditableText(
                   controller: search.controller,
                   focusNode: search.focus,
-                  style: sans(11, c: N.g91),
+                  style: sans(Dn.nameSize, c: N.g91),
                   cursorColor: N.g91,
-                  backgroundCursorColor: kMuted,
+                  backgroundCursorColor: Surface.muted,
                   selectionColor: H.textSelection,
                   maxLines: 1,
                 ),
@@ -150,7 +151,7 @@ class _Mag extends CustomPainter {
 class _X extends CustomPainter {
   @override
   void paint(Canvas cv, Size s) {
-    final p = Paint()..color = kMuted..strokeWidth = 1.4..strokeCap = StrokeCap.round;
+    final p = Paint()..color = Surface.muted..strokeWidth = 1.4..strokeCap = StrokeCap.round;
     cv.drawLine(Offset(s.width * .3, s.height * .3), Offset(s.width * .7, s.height * .7), p);
     cv.drawLine(Offset(s.width * .7, s.height * .3), Offset(s.width * .3, s.height * .7), p);
   }
@@ -198,8 +199,8 @@ class _SearchKeyFaceState extends State<SearchKeyFace> {
             child: Container(
               width: 19.5,
               height: 19.5,
-              decoration: BoxDecoration(color: kRaised, border: Border.all(color: kRule2), borderRadius: BorderRadius.circular(2)),
-              child: Center(child: SizedBox(width: 10, height: 10, child: CustomPaint(painter: magnifier(kMuted)))),
+              decoration: BoxDecoration(color: Surface.raised, border: Border.all(color: Surface.dividerFine), borderRadius: BorderRadius.circular(2)),
+              child: Center(child: SizedBox(width: 10, height: 10, child: CustomPaint(painter: magnifier(Surface.muted)))),
             ),
           );
         },
@@ -207,4 +208,4 @@ class _SearchKeyFaceState extends State<SearchKeyFace> {
 }
 
 /// Every presentation words its own empty state.
-Widget emptyNote(String text) => Padding(padding: const EdgeInsets.fromLTRB(3, 10.5, 3, 3), child: Text(text, softWrap: true, style: sans(11, c: kMuted)));
+Widget emptyNote(String text) => Padding(padding: const EdgeInsets.fromLTRB(3, 10.5, 3, 3), child: Text(text, softWrap: true, style: sans(Dn.nameSize, c: Surface.muted)));

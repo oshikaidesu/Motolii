@@ -9,17 +9,18 @@ import '../hf/bp/search.dart';
 import 'fixtures.dart';
 import '../hf/insp/panel.dart';
 import '../hf/insp/rows.dart';
+import '../hf/metrics.dart' show Surface;
 
 const _shot = String.fromEnvironment('PROTO_SHOT');
 const _phase = String.fromEnvironment('PROTO_PHASE', defaultValue: '1');
 final _root = GlobalKey();
 
-Widget housed(Widget child, {double w = 310, double h = 640}) => Container(width: w, height: h, decoration: BoxDecoration(color: kGround, border: Border.all(color: kRule2)), child: child);
+Widget housed(Widget child, {double w = 310, double h = 640}) => Container(width: w, height: h, decoration: BoxDecoration(color: Surface.base, border: Border.all(color: Surface.dividerFine)), child: child);
 Widget label(String t) => Padding(padding: const EdgeInsets.only(bottom: 8, top: 22), child: Text(t, style: mono(11, c: const Color(0xFF8A8A8E), ls: 1)));
 
 void main() {
   runApp(WidgetsApp(
-    color: kGround,
+    color: Surface.base,
     debugShowCheckedModeBanner: false,
     builder: (_, __) => Align(
       alignment: Alignment.topLeft,

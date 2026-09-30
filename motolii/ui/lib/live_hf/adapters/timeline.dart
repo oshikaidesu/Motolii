@@ -108,7 +108,7 @@ class LiveTimeline extends StatefulWidget {
 
 class _LiveTimelineState extends State<LiveTimeline> {
   // the skin's geometry: its own, told to nobody
-  static const rowH = UiMetrics.rowTight, rulerH = 20.0, keySlop = 6.0, edgeSlop = 5.0, dragSlop = 4.0;
+  static const rowH = Surface.control, rulerH = 20.0, keySlop = 6.0, edgeSlop = 5.0, dragSlop = 4.0;
 
   /// The name column: a share of the seat, so a narrow window keeps its time.
   double labelW = 180;

@@ -7,8 +7,10 @@ import '../../hf/glyphs.dart';
 import '../../session/editor_session.dart';
 import '../../session/effect_actions.dart';
 import 'effect.dart';
+import '../../hf/metrics.dart';
 import '../../hf/neutral.dart';
 import 'inspector_session.dart';
+import '../../hf/metrics.dart' show Dn, Surface;
 
 /// One effect's whole card — head (grip, applied/bypassed, actions) and body — the New face for
 /// `InspectorInstruments.effectCard`. The body is the same generic params sheet [NewEffectParams] already draws;
@@ -71,24 +73,24 @@ class NewEffectCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final on = effect['enabled'] != false;
-    return Container(
+    // Work density: an effect is a band on the raised level over a body on the base, separated by a hairline; not a card.
+    return DecoratedBox(
       key: ValueKey('effect-card:${effect['id']}'),
-      margin: const EdgeInsets.only(bottom: 6),
-      decoration: BoxDecoration(color: kRaised, borderRadius: BorderRadius.circular(4.5), border: Border.all(color: kRule)),
+      decoration: const BoxDecoration(border: Border(top: BorderSide(color: Surface.divider, width: Surface.hair))),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         _grip(GestureDetector(key: ValueKey('effect-head:${effect['id']}'), behavior: HitTestBehavior.opaque, onTap: onFold, child: Container(
-          height: 22.5,
-          padding: const EdgeInsets.symmetric(horizontal: 6),
-          decoration: BoxDecoration(border: Border(bottom: BorderSide(color: kRule2)), borderRadius: const BorderRadius.vertical(top: Radius.circular(4.5))),
+          height: Surface.workRow,
+          padding: const EdgeInsets.symmetric(horizontal: Surface.sectionGap),
+          color: Surface.raised,
           child: Row(children: [
-            SizedBox(width: 9, height: 9, child: CustomPaint(painter: HgPainter(HG.list, kMuted, kRaised))),
-            const SizedBox(width: 4.5),
-            Expanded(child: Text('${effect['name']}', maxLines: 1, overflow: TextOverflow.ellipsis, style: sans(11, c: on ? N.g86 : kMuted, w: FontWeight.w600))),
+            SizedBox(width: Surface.glyph, height: Surface.glyph, child: CustomPaint(painter: HgPainter(HG.list, Surface.muted, Surface.raised))),
+            const SizedBox(width: Surface.inlineGap),
+            Expanded(child: Text('${effect['name']}', maxLines: 1, overflow: TextOverflow.ellipsis, style: sans(Dn.nameSize, c: on ? N.g86 : Surface.muted, w: FontWeight.w600))),
             GestureDetector(
               key: ValueKey('effect-toggle:${effect['id']}'),
               behavior: HitTestBehavior.opaque,
               onTap: InspectorSession.of(c).canEnableEffects && !_held ? () => InspectorSession.of(c).flipEffect(layer['id'] as int, effect['id']) : null,
-              child: Padding(padding: const EdgeInsets.all(3), child: SizedBox(width: 10, height: 10, child: CustomPaint(painter: HgPainter(HG.power, on ? kAccent : kMuted, kRaised)))),
+              child: Padding(padding: const EdgeInsets.all(Surface.inlineGap), child: SizedBox(width: Surface.glyph, height: Surface.glyph, child: CustomPaint(painter: HgPainter(HG.power, on ? kAccent : Surface.muted, Surface.raised)))),
             ),
             Builder(builder: (context) => GestureDetector(
               key: ValueKey('effect-menu:${effect['id']}'),
@@ -99,19 +101,19 @@ class NewEffectCard extends StatelessWidget {
                       final box = context.findRenderObject() as RenderBox?;
                       _menu(context, box == null ? Offset.zero : box.localToGlobal(box.size.bottomLeft(Offset.zero)));
                     },
-              child: Padding(padding: const EdgeInsets.all(3), child: SizedBox(width: 10, height: 10, child: CustomPaint(painter: HgPainter(HG.kebab, kMuted, kRaised)))),
+              child: Padding(padding: const EdgeInsets.all(Surface.inlineGap), child: SizedBox(width: Surface.glyph, height: Surface.glyph, child: CustomPaint(painter: HgPainter(HG.kebab, Surface.muted, Surface.raised)))),
             )),
           ]),
         ))),
         if (!folded && layer['frozen'] == true)
           Padding(
-            padding: const EdgeInsets.fromLTRB(6, 6, 6, 0),
-            child: Text('Frozen — effects are baked. Unfreeze to edit.', key: ValueKey('effect-frozen:${effect['id']}'), style: sans(10, c: kMuted)),
+            padding: const EdgeInsets.fromLTRB(Surface.sectionGap, Surface.sectionGap, Surface.sectionGap, 0),
+            child: Text('Frozen — effects are baked. Unfreeze to edit.', key: ValueKey('effect-frozen:${effect['id']}'), style: sans(Dn.labelSize, c: Surface.muted)),
           ),
         // a placement effect's parameters are its params like any other (its grid view is not drawn here yet)
         if (!folded)
         Padding(
-          padding: const EdgeInsets.all(6),
+          padding: const EdgeInsets.symmetric(horizontal: Surface.sectionGap, vertical: Surface.inlineGap),
           child: NewEffectParams(key: ValueKey('new-effect-params:${layer['id']}:${effect['id']}'), controller: c, layerId: layer['id'] as int, effectId: effect['id'] as Object),
         ),
       ]),

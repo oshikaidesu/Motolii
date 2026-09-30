@@ -5,6 +5,7 @@ import '../../foundation/panel_controls.dart' show EditorNumericField;
 import '../bp/common.dart';
 import 'common.dart';
 import '../neutral.dart';
+import '../metrics.dart' show Dn, Surface;
 
 const _tileColors = [kBlue, kViolet, kPink, kMint, kYellow];
 const _segColors = [kViolet, kMint, kPink];
@@ -66,15 +67,15 @@ class _EaseSkinState extends State<EaseSkin> {
 
   Widget _head() => Row(children: [
         if (v.leading != null) Padding(padding: const EdgeInsets.only(right: 6), child: v.leading!),
-        Expanded(child: Text(v.title, key: const ValueKey('ease-title'), softWrap: false, overflow: TextOverflow.ellipsis, style: sans(11, c: kInk, w: FontWeight.w600))),
-        if (v.sequence > 0) Container(margin: const EdgeInsets.only(left: 4.5), padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: kBlue, borderRadius: BorderRadius.circular(7)), child: Text('ghosts', style: sans(10, c: kInk, w: FontWeight.w700))),
-        if (!v.canApply) Padding(padding: const EdgeInsets.only(left: 4.5), child: Text('read only', style: sans(10, c: kMuted))),
+        Expanded(child: Text(v.title, key: const ValueKey('ease-title'), softWrap: false, overflow: TextOverflow.ellipsis, style: sans(Dn.nameSize, c: Surface.ink, w: FontWeight.w600))),
+        if (v.sequence > 0) Container(margin: const EdgeInsets.only(left: 4.5), padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: kBlue, borderRadius: BorderRadius.circular(7)), child: Text('ghosts', style: sans(Dn.labelSize, c: Surface.ink, w: FontWeight.w700))),
+        if (!v.canApply) Padding(padding: const EdgeInsets.only(left: 4.5), child: Text('read only', style: sans(Dn.labelSize, c: Surface.muted))),
       ]);
 
   Widget _section(String t, Widget child) => Padding(
         padding: const EdgeInsets.only(top: 12),
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          Text(t, style: sans(9.5, c: kMuted, w: FontWeight.w500, ls: 1.4)),
+          Text(t, style: sans(Dn.microSize, c: Surface.muted, w: FontWeight.w500, ls: 1.4)),
           const SizedBox(height: 6),
           child,
         ]),
@@ -83,9 +84,9 @@ class _EaseSkinState extends State<EaseSkin> {
   // The intervals between the selected keys, width = duration, the active one ringed; or the layers a Sequence spreads over.
   Widget _segments() {
     if (v.sequence > 0) {
-      return Text('${v.sequence} layers · the curve spreads their delay', style: sans(11, c: kMuted));
+      return Text('${v.sequence} layers · the curve spreads their delay', style: sans(Dn.nameSize, c: Surface.muted));
     }
-    if (v.segments.isEmpty) return Text('Select keys to shape the curve between them.', style: sans(11, c: kMuted));
+    if (v.segments.isEmpty) return Text('Select keys to shape the curve between them.', style: sans(Dn.nameSize, c: Surface.muted));
     return SizedBox(
       height: 22.5,
       child: Row(children: [
@@ -97,8 +98,8 @@ class _EaseSkinState extends State<EaseSkin> {
               margin: EdgeInsets.only(right: i == v.segments.length - 1 ? 0 : 4),
               padding: const EdgeInsets.symmetric(horizontal: 4),
               alignment: Alignment.centerLeft,
-              decoration: BoxDecoration(color: _segColors[i % 3], borderRadius: BorderRadius.circular(4), border: s.active ? Border.all(color: kInk, width: 2) : null),
-              child: Text('${s.end - s.frame}f', softWrap: false, overflow: TextOverflow.clip, style: sans(10, c: _dark, w: FontWeight.w700)),
+              decoration: BoxDecoration(color: _segColors[i % 3], borderRadius: BorderRadius.circular(4), border: s.active ? Border.all(color: Surface.ink, width: 2) : null),
+              child: Text('${s.end - s.frame}f', softWrap: false, overflow: TextOverflow.clip, style: sans(Dn.labelSize, c: _dark, w: FontWeight.w700)),
             ),
           ),
       ]),
@@ -154,11 +155,11 @@ class _EaseSkinState extends State<EaseSkin> {
                 width: tile,
                 height: 46.5,
                 padding: const EdgeInsets.fromLTRB(6, 5, 6, 4),
-                decoration: BoxDecoration(color: _tileColors[i % 5], borderRadius: BorderRadius.circular(4), border: p.selected ? Border.all(color: kInk, width: 2) : (_presetFocus.hasFocus && _key == i ? Border.all(color: kInk.withValues(alpha: .6), width: 1.4) : null)),
+                decoration: BoxDecoration(color: _tileColors[i % 5], borderRadius: BorderRadius.circular(4), border: p.selected ? Border.all(color: Surface.ink, width: 2) : (_presetFocus.hasFocus && _key == i ? Border.all(color: Surface.ink.withValues(alpha: .6), width: 1.4) : null)),
                 child: Column(children: [
                   Expanded(child: CustomPaint(size: Size.infinite, painter: _Icon(p.shape))),
                   const SizedBox(height: 2),
-                  Text(_name(p.kind), softWrap: false, overflow: TextOverflow.clip, style: sans(9.5, c: _dark, w: FontWeight.w600)),
+                  Text(_name(p.kind), softWrap: false, overflow: TextOverflow.clip, style: sans(Dn.microSize, c: _dark, w: FontWeight.w600)),
                 ]),
               ),
             ),
@@ -179,7 +180,7 @@ class _EaseSkinState extends State<EaseSkin> {
             padding: const EdgeInsets.fromLTRB(7.5, 4, 4.5, 4),
             decoration: BoxDecoration(color: kYellow, borderRadius: BorderRadius.circular(4.5)),
             child: Row(children: [
-              Expanded(child: Text(p.name.replaceAll('_', ' ').toUpperCase(), softWrap: false, overflow: TextOverflow.clip, style: sans(9.5, c: N.inkSoft, w: FontWeight.w700, ls: .6))),
+              Expanded(child: Text(p.name.replaceAll('_', ' ').toUpperCase(), softWrap: false, overflow: TextOverflow.clip, style: sans(Dn.microSize, c: N.inkSoft, w: FontWeight.w700, ls: .6))),
               SizedBox(
                 width: 39,
                 child: EditorNumericField(value: p.value, label: p.name, enabled: v.canApply || true, speed: .005, onPreview: p.preview, onCommit: p.commit, onFinish: p.finish, onCancel: p.cancel),
@@ -191,7 +192,7 @@ class _EaseSkinState extends State<EaseSkin> {
   Widget _chip(String key, String t, VoidCallback f) => GestureDetector(
         key: ValueKey(key),
         onTap: f,
-        child: Container(height: 25.5, padding: const EdgeInsets.symmetric(horizontal: 9), alignment: Alignment.center, decoration: BoxDecoration(border: Border.all(color: N.g26), borderRadius: BorderRadius.circular(3)), child: Text(t, style: sans(11, c: N.g76))),
+        child: Container(height: 25.5, padding: const EdgeInsets.symmetric(horizontal: 9), alignment: Alignment.center, decoration: BoxDecoration(border: Border.all(color: N.g26), borderRadius: BorderRadius.circular(3)), child: Text(t, style: sans(Dn.nameSize, c: N.g76))),
       );
 
   Widget _keep() => Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -201,7 +202,7 @@ class _EaseSkinState extends State<EaseSkin> {
           _chip('ease-new', 'New keys: ${v.newKeyKind}', v.useForNew),
           if (v.hasSaved) _chip('ease-clear', 'Clear saved', v.clearSaved),
         ]),
-        if (v.notice != null) Padding(padding: const EdgeInsets.only(top: 6), child: Text(v.notice!, style: sans(10, c: kMuted))),
+        if (v.notice != null) Padding(padding: const EdgeInsets.only(top: 6), child: Text(v.notice!, style: sans(Dn.labelSize, c: Surface.muted))),
       ]);
 
   Widget _apply() => Row(children: [
@@ -211,16 +212,16 @@ class _EaseSkinState extends State<EaseSkin> {
             behavior: HitTestBehavior.opaque,
             onTap: () => v.setFree(!v.free),
             child: Row(children: [
-              Container(width: 25.5, height: 15, padding: const EdgeInsets.all(1.5), alignment: v.free ? Alignment.centerRight : Alignment.centerLeft, decoration: BoxDecoration(color: v.free ? kBlue : N.g20, borderRadius: BorderRadius.circular(7.5)), child: Container(width: 12, height: 12, decoration: const BoxDecoration(color: kInk, shape: BoxShape.circle))),
+              Container(width: 25.5, height: 15, padding: const EdgeInsets.all(1.5), alignment: v.free ? Alignment.centerRight : Alignment.centerLeft, decoration: BoxDecoration(color: v.free ? kBlue : N.g20, borderRadius: BorderRadius.circular(7.5)), child: Container(width: 12, height: 12, decoration: const BoxDecoration(color: Surface.ink, shape: BoxShape.circle))),
               const SizedBox(width: 7.5),
-              Flexible(child: Text('Overshoot', softWrap: false, overflow: TextOverflow.ellipsis, style: sans(11, c: N.g76))),
+              Flexible(child: Text('Overshoot', softWrap: false, overflow: TextOverflow.ellipsis, style: sans(Dn.nameSize, c: N.g76))),
             ]),
           ),
         ),
         GestureDetector(
           key: const ValueKey('ease-apply'),
           onTap: v.canApply ? v.apply : null,
-          child: Container(height: 25.5, padding: const EdgeInsets.symmetric(horizontal: 10.5), margin: const EdgeInsets.only(left: 6), alignment: Alignment.center, decoration: BoxDecoration(color: v.canApply ? kMint : kRaised, borderRadius: BorderRadius.circular(4)), child: Text('Apply', style: sans(11, c: v.canApply ? _dark : kMuted, w: FontWeight.w700))),
+          child: Container(height: 25.5, padding: const EdgeInsets.symmetric(horizontal: 10.5), margin: const EdgeInsets.only(left: 6), alignment: Alignment.center, decoration: BoxDecoration(color: v.canApply ? kMint : Surface.raised, borderRadius: BorderRadius.circular(4)), child: Text('Apply', style: sans(Dn.nameSize, c: v.canApply ? _dark : Surface.muted, w: FontWeight.w700))),
         ),
       ]);
 
@@ -343,7 +344,7 @@ class _PlotP extends CustomPainter {
     c.clipRect(Offset.zero & s);
     // the silhouette of the curve is the object: a flat colour field under it
     c.drawPath(Path.from(shown)..lineTo(p(1, 0).dx, p(0, 0).dy)..lineTo(p(0, 0).dx, p(0, 0).dy)..close(), Paint()..shader = LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [kPink.withAlpha(0x66), kViolet.withAlpha(0x66), kBlue.withAlpha(0x66)]).createShader(Offset.zero & s));
-    c.drawPath(shown, Paint()..color = kInk..style = PaintingStyle.stroke..strokeWidth = 3.4..strokeCap = StrokeCap.round..strokeJoin = StrokeJoin.round);
+    c.drawPath(shown, Paint()..color = Surface.ink..style = PaintingStyle.stroke..strokeWidth = 3.4..strokeCap = StrokeCap.round..strokeJoin = StrokeJoin.round);
     if (v.sequence > 1) {
       for (var i = 0; i < v.sequence; i++) {
         final x = i / (v.sequence - 1);
@@ -354,7 +355,7 @@ class _PlotP extends CustomPainter {
     if (head != null) {
       final x = head.clamp(0.0, 1.0);
       final inside = head >= 0 && head <= 1;
-      c.drawLine(p(x, v.lo), p(x, v.hi), Paint()..color = kInk.withValues(alpha: inside ? 1 : .4)..strokeWidth = 1.6);
+      c.drawLine(p(x, v.lo), p(x, v.hi), Paint()..color = Surface.ink.withValues(alpha: inside ? 1 : .4)..strokeWidth = 1.6);
       if (inside) {
         final o = p(x, _valueAt(v.shown, x));
         c.drawCircle(o, 6, Paint()..color = kMint);
@@ -381,10 +382,10 @@ class _PlotP extends CustomPainter {
       }
     }
     for (final o in [p(0, 0), p(1, 1)]) {
-      c.drawCircle(o, 6, Paint()..color = kInk);
+      c.drawCircle(o, 6, Paint()..color = Surface.ink);
     }
     if (labels) {
-      final tp = TextPainter(text: TextSpan(text: _EaseSkinState._name('${v.shown['kind']}'), style: sans(11, c: kInk, w: FontWeight.w600)), textDirection: TextDirection.ltr)..layout();
+      final tp = TextPainter(text: TextSpan(text: _EaseSkinState._name('${v.shown['kind']}'), style: sans(Dn.nameSize, c: Surface.ink, w: FontWeight.w600)), textDirection: TextDirection.ltr)..layout();
       tp.paint(c, const Offset(20, 6));
     }
   }

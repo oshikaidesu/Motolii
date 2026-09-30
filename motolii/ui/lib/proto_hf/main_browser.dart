@@ -14,6 +14,7 @@ import '../hf/bp/fonts.dart';
 import 'future.dart';
 import '../hf/bp/search.dart';
 import '../hf/bp/things.dart';
+import '../hf/metrics.dart' show Surface;
 
 const _shot = String.fromEnvironment('PROTO_SHOT');
 const _thingsDir = String.fromEnvironment('PROTO_THINGS', defaultValue: 'lib/hf/data/things');
@@ -65,7 +66,7 @@ void main() async {
   if (issues.isNotEmpty) stdout.writeln('CAP catalog issues: ${issues.length}');
   const w = 370.0;
   runApp(WidgetsApp(
-    color: kGround,
+    color: Surface.base,
     debugShowCheckedModeBanner: false,
     builder: (_, __) => Align(
       alignment: Alignment.topLeft,

@@ -33,6 +33,7 @@ import '../hf/insp/transform_model.dart';
 import 'main_browser.dart' as br;
 import 'main_camera.dart' as cam;
 import 'main_transform.dart' as tf;
+import '../hf/metrics.dart' show Surface;
 
 const _shot = String.fromEnvironment('PROTO_SHOT');
 const _thingsDir = String.fromEnvironment('PROTO_THINGS', defaultValue: 'lib/hf/data/things');
@@ -41,13 +42,12 @@ const _inspector = int.fromEnvironment('PROTO_INSPECTOR', defaultValue: 1);
 const _desk = int.fromEnvironment('PROTO_DESK', defaultValue: -1); // -1: the right seat shows an Inspector view
 final _root = GlobalKey();
 
-
 void main() async {
   final scene = await EffectScene.build();
   br.baseCatalog = loadCatalog(_thingsDir);
   br.grownCatalog = loadCatalog(_thingsDir, sets: const ['builtin', 'stress']);
   runApp(WidgetsApp(
-    color: kGround,
+    color: Surface.base,
     debugShowCheckedModeBanner: false,
     builder: (_, __) => _shot.isEmpty
         ? DefaultTextStyle(style: sans(12), child: Shell(scene: scene))
@@ -124,7 +124,7 @@ class _ShellState extends State<Shell> {
   Widget build(BuildContext context) => !widget.strip
       ? _canvas()
       : ColoredBox(
-          color: kGround,
+          color: Surface.base,
           child: Column(children: [
             Expanded(child: Center(child: FittedBox(fit: BoxFit.scaleDown, child: _canvas()))),
             _FixtureStrip(
@@ -159,7 +159,7 @@ class _FixtureStrip extends StatelessWidget {
   Widget build(BuildContext context) => Container(
         height: 22,
         padding: const EdgeInsets.symmetric(horizontal: 10),
-        decoration: const BoxDecoration(color: Color(0xFF111112), border: Border(top: BorderSide(color: kRule))),
+        decoration: const BoxDecoration(color: Color(0xFF111112), border: Border(top: BorderSide(color: Surface.divider))),
         child: Row(children: [
           Text('FIXTURE', style: mono(9.5, c: const Color(0xFF55565A), ls: 1.4)),
           const SizedBox(width: 18),

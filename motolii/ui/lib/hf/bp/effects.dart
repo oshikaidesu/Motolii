@@ -11,6 +11,7 @@ import 'seat.dart';
 import 'shell.dart';
 import 'things.dart';
 import '../neutral.dart';
+import '../metrics.dart' show Dn;
 
 const _sw = 240, _sh = 150;
 
@@ -250,7 +251,7 @@ class _EffectsPanelState extends State<EffectsPanel> with WithDiscovery<EffectsP
       itemCount: shown.length,
       itemBuilder: (c, i) => seated(c, shown[i], Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         AspectRatio(aspectRatio: 1 / .84, child: ThingFace(shown[i], scene: widget.scene)),
-        if (showCaption) Padding(padding: const EdgeInsets.only(top: 4), child: Text(shown[i].name, softWrap: false, maxLines: 1, overflow: TextOverflow.ellipsis, style: sans(10, c: N.g76))),
+        if (showCaption) Padding(padding: const EdgeInsets.only(top: 4), child: Text(shown[i].name, softWrap: false, maxLines: 1, overflow: TextOverflow.ellipsis, style: sans(Dn.labelSize, c: N.g76))),
       ])),
     );
   }

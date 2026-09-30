@@ -4,6 +4,7 @@ import 'package:flutter/widgets.dart';
 
 import '../neutral.dart';
 import 'common.dart' show sans;
+import '../metrics.dart' show Dn;
 
 /// Colours as blocks: the colour itself in large squares, three across the default seat, 2 px apart, its hex set
 /// inside at the bottom left in an ink that reads on it (a swatch card, as current palettes are shown); an edge only
@@ -37,7 +38,7 @@ class SwatchCards extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(6, 0, 4.5, 5),
               alignment: Alignment.bottomLeft,
               decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(6), border: Border.all(color: (l - ground).abs() < .06 ? N.g20 : N.glaze9)),
-              child: Text('#${(v.$2 & 0xFFFFFF).toRadixString(16).padLeft(6, '0').toUpperCase()}', softWrap: false, style: sans(10, c: l > .45 ? N.g07.withValues(alpha: .8) : N.g100.withValues(alpha: .92), w: FontWeight.w500)),
+              child: Text('#${(v.$2 & 0xFFFFFF).toRadixString(16).padLeft(6, '0').toUpperCase()}', softWrap: false, style: sans(Dn.labelSize, c: l > .45 ? N.g07.withValues(alpha: .8) : N.g100.withValues(alpha: .92), w: FontWeight.w500)),
             );
           }),
         ),

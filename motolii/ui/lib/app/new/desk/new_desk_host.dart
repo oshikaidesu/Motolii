@@ -6,6 +6,7 @@ import '../../../hf/glyphs.dart';
 import '../../../session/editor_session.dart';
 import 'desk_faces.dart';
 import 'desk_host_controller.dart';
+import '../../../hf/metrics.dart' show Surface;
 
 /// The Desk's own host, New-owned: which drawer is shown (Classic's own follow-the-selection rule, in
 /// [DeskHostController]), and the empty "Tools" catalog when none is. Every drawer it can show — Depth, Ease,
@@ -43,7 +44,7 @@ class _NewDeskHostState extends State<NewDeskHost> {
                   margin: const EdgeInsets.only(bottom: 2),
                   padding: const EdgeInsets.symmetric(horizontal: 6),
                   child: Row(children: [
-                    Icon(spec.icon, size: 14, color: kMuted),
+                    Icon(spec.icon, size: 14, color: Surface.muted),
                     const SizedBox(width: 8),
                     Expanded(child: Text(spec.name, style: sans(11, c: const Color(0xFFD0D1D5)))),
                     GestureDetector(
@@ -52,7 +53,7 @@ class _NewDeskHostState extends State<NewDeskHost> {
                       onTap: () => host.star(spec.name),
                       child: Padding(
                         padding: const EdgeInsets.all(4),
-                        child: SizedBox(width: 12, height: 12, child: CustomPaint(painter: HgPainter(HG.star, host.starred == spec.name ? kAccent : kMuted, kGround))),
+                        child: SizedBox(width: 12, height: 12, child: CustomPaint(painter: HgPainter(HG.star, host.starred == spec.name ? kAccent : Surface.muted, Surface.base))),
                       ),
                     ),
                   ]),
@@ -69,7 +70,7 @@ class _NewDeskHostState extends State<NewDeskHost> {
           final shown = host.shown;
           final live = shown != 'Tools';
           return Container(
-            color: kGround,
+            color: Surface.base,
             child: Column(children: [
               SizedBox(
                 height: 26,
@@ -78,7 +79,7 @@ class _NewDeskHostState extends State<NewDeskHost> {
                     key: const ValueKey('desk-tools'),
                     behavior: HitTestBehavior.opaque,
                     onTap: host.toolsCatalog,
-                    child: Padding(padding: const EdgeInsets.all(6), child: SizedBox(width: 14, height: 14, child: CustomPaint(painter: HgPainter(HG.grid4, kMuted, kGround)))),
+                    child: Padding(padding: const EdgeInsets.all(6), child: SizedBox(width: 14, height: 14, child: CustomPaint(painter: HgPainter(HG.grid4, Surface.muted, Surface.base)))),
                   ),
                   Text(live ? shown : 'Tools', style: sans(11, c: const Color(0xFFD0D1D5), w: FontWeight.w600)),
                 ]),

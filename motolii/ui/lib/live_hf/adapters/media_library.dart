@@ -4,11 +4,12 @@ import 'dart:typed_data';
 
 import 'package:flutter/widgets.dart';
 
-import '../../hf/bp/shell.dart' show GlyphBox, kTile;
+import '../../hf/bp/shell.dart' show GlyphBox;
 import '../../hf/glyphs.dart';
 import '../../hf/neutral.dart';
 import '../../hf/shell/place.dart' show H;
 import 'model_face.dart';
+import '../../hf/metrics.dart' show Surface;
 
 /// What the material is, drawn as itself.
 Widget materialFace(Map<String, dynamic> item) => switch (mediaKind(item)) {
@@ -61,7 +62,7 @@ Widget? _thumbnail(Map<String, dynamic> item) {
   return null;
 }
 
-Widget _glyph(HG g) => Stack(fit: StackFit.expand, children: [const ColoredBox(color: kTile), Center(child: GlyphBox(g, size: 26))]);
+Widget _glyph(HG g) => Stack(fit: StackFit.expand, children: [const ColoredBox(color: Surface.raised), Center(child: GlyphBox(g, size: 26))]);
 
 /// A clip: its picture, a play mark (it moves) and its length.
 class _MotionFace extends StatelessWidget {

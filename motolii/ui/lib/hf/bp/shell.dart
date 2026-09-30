@@ -11,15 +11,13 @@ import 'seat.dart';
 import 'shelf_sections.dart' show SwissHeading;
 import '../neutral.dart';
 
-const kTile = N.g13;
-
 class GlyphBox extends StatelessWidget {
   const GlyphBox(this.g, {super.key, this.size = 17, this.color = N.g82});
   final HG g;
   final double size;
   final Color color;
   @override
-  Widget build(BuildContext context) => SizedBox(width: size, height: size, child: CustomPaint(painter: HgPainter(g, color, kGround)));
+  Widget build(BuildContext context) => SizedBox(width: size, height: size, child: CustomPaint(painter: HgPainter(g, color, Surface.base)));
 }
 
 class HeaderKey extends StatelessWidget {
@@ -54,7 +52,7 @@ class PanelHeader extends StatefulWidget {
   final double? height;
 
   /// A header's height by its mode: one chrome row, a little more when it names its panel.
-  static double heightOf(HeadMode mode) => mode == HeadMode.full ? UiMetrics.namedHeader : UiMetrics.chromeRow;
+  static double heightOf(HeadMode mode) => mode == HeadMode.full ? Surface.namedHeader : Surface.chromeRow;
   @override
   State<PanelHeader> createState() => _PanelHeaderState();
 }
@@ -95,10 +93,10 @@ class _PanelHeaderState extends State<PanelHeader> {
         return Container(
           height: h,
           padding: EdgeInsets.only(left: widget.lead == null ? 12 : 0, right: 3),
-          decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: kRule2))),
+          decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: Surface.dividerFine))),
           child: searching
               ? Row(children: [
-                  Expanded(child: SearchField(widget.search, widget.hint, height: 21, trailing: widget.count == null || !widget.search.active ? null : Text(widget.count!, style: mono(10)))),
+                  Expanded(child: SearchField(widget.search, widget.hint, height: 21, trailing: widget.count == null || !widget.search.active ? null : Text(widget.count!, style: mono(Dn.labelSize)))),
                   Builder(builder: (context) => HeaderKey(HG.kebab, onTap: () {
                     final seat = BrowserSeatScope.of(context);
                     final box = context.findRenderObject() as RenderBox?;
@@ -111,7 +109,7 @@ class _PanelHeaderState extends State<PanelHeader> {
                       widget.search.focus.unfocus();
                       setState(() => open = false);
                     },
-                    child: const SizedBox(width: 22.5, height: 22.5, child: Center(child: GlyphBox(HG.cross, size: 14, color: kMuted))),
+                    child: const SizedBox(width: 22.5, height: 22.5, child: Center(child: GlyphBox(HG.cross, size: 14, color: Surface.muted))),
                   ),
                 ])
               : Row(children: [
@@ -124,7 +122,7 @@ class _PanelHeaderState extends State<PanelHeader> {
                   ] else
                     const Spacer(),
                   if (widget.extra != null) widget.extra!,
-                  if (widget.count != null && widget.mode == HeadMode.full) Padding(padding: const EdgeInsets.only(left: 6, right: 4.5), child: Text(widget.count!, style: mono(9.5, c: N.g44))),
+                  if (widget.count != null && widget.mode == HeadMode.full) Padding(padding: const EdgeInsets.only(left: 6, right: 4.5), child: Text(widget.count!, style: mono(Dn.microSize, c: N.g44))),
                   HeaderKey(HG.search, onTap: () {
                     setState(() => open = true);
                     WidgetsBinding.instance.addPostFrameCallback((_) => widget.search.request());
@@ -188,12 +186,12 @@ class PanelShell extends StatelessWidget {
       final header = PanelHeader(
         title: title, icon: icon, search: search, hint: hint, mode: mode, count: count,
         lead: stripped ? ClassStrip(classify, groups, bare: true) : null,
-        height: stripped ? UiMetrics.chromeRow : null,
+        height: stripped ? Surface.chromeRow : null,
         extra: tools == null && (isWide || stripped) ? null : Row(mainAxisSize: MainAxisSize.min, children: [if (tools != null) tools, if (!isWide && !stripped) ClassChip(classify)]),
       );
       final under = seat?.header(context);
       final hh = PanelHeader.heightOf(mode);
-      final bodySize = Size(isWide ? w - columnWidth : w, h - (stripped ? UiMetrics.chromeRow : hh));
+      final bodySize = Size(isWide ? w - columnWidth : w, h - (stripped ? Surface.chromeRow : hh));
       final shell = search.keys(Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         header,
         if (under != null) under,
@@ -232,4 +230,4 @@ class SectionLabel extends StatelessWidget {
   Widget build(BuildContext context) => SwissHeading(text);
 }
 
-Widget emptyBody(String text) => Padding(padding: const EdgeInsets.fromLTRB(10.5, 13.5, 10.5, 3), child: Text(text, style: sans(11, c: kMuted)));
+Widget emptyBody(String text) => Padding(padding: const EdgeInsets.fromLTRB(10.5, 13.5, 10.5, 3), child: Text(text, style: sans(Dn.nameSize, c: Surface.muted)));

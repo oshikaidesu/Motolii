@@ -201,7 +201,7 @@ class _CatalogMediaState extends State<CatalogMedia> {
               ]),
               if (session.folderSource != null) _Folders(session),
               Container(
-                height: UiMetrics.control + 4,
+                height: Surface.control + 4,
                 margin: const EdgeInsets.fromLTRB(6, 3, 6, 3),
                 padding: const EdgeInsets.symmetric(horizontal: 6),
                 decoration: BoxDecoration(color: N.g07, borderRadius: BorderRadius.circular(3)),
@@ -224,7 +224,7 @@ class _CatalogMediaState extends State<CatalogMedia> {
                       margin: const EdgeInsets.all(6),
                       alignment: Alignment.center,
                       decoration: BoxDecoration(color: N.veil, border: Border.all(color: N.g95, width: 1.4), borderRadius: BorderRadius.circular(4.5)),
-                      child: Text('Drop to import', style: sans(11, c: N.g95)),
+                      child: Text('Drop to import', style: sans(Dn.nameSize, c: N.g95)),
                     ),
                   ),
                 ),

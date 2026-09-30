@@ -3,7 +3,7 @@ import 'package:flutter/widgets.dart';
 
 import '../hf/bp/effects.dart' show EffectScene;
 import '../hf/dock/theme.dart';
-import '../hf/bp/common.dart' show kGround;
+
 import '../hf/glyphs.dart' show HG;
 import '../panels/stage.dart' show StagePanel;
 import '../session/editor_session.dart';
@@ -20,6 +20,7 @@ import 'adapters/relations.dart';
 import 'adapters/right_seat.dart';
 import 'adapters/timeline.dart';
 import 'adapters/web.dart';
+import '../hf/metrics.dart' show Surface;
 
 /// The product workspace for the hf client. Faces/tools own their content;
 /// this layer owns only placement, tabs, split/resize and reopening.
@@ -71,7 +72,7 @@ class LiveWorkspace {
           minSize: 180,
         ),
         // Graph and Console are Timeline-seat panels (Product Home); what they show is not built yet.
-        'Graph': PanelDef('Graph', 'Graph', () => const ColoredBox(color: kGround), glyph: HG.alongPath, minSize: 180),
+        'Graph': PanelDef('Graph', 'Graph', () => const ColoredBox(color: Surface.base), glyph: HG.alongPath, minSize: 180),
         'Console': PanelDef('Console', 'Console', () => LiveConsole(log: console), glyph: HG.type, minSize: 180),
         'Blend': PanelDef('Blend', 'Blend', () => NewBlend(controller: c), glyph: HG.composite, minSize: 220),
         'Depth': PanelDef('Depth', 'Depth', () => NewDepth(controller: c), glyph: HG.diamond, minSize: 220),

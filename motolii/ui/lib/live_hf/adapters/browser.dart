@@ -3,7 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/widgets.dart';
 
 import '../../hf/bp/browser_face.dart';
-import '../../hf/bp/common.dart' show sans, kMuted;
+import '../../hf/bp/common.dart' show sans;
 import '../../hf/bp/effects.dart';
 import '../../hf/bp/faces.dart' show QuietFace;
 import '../../hf/shell/menu.dart' show showHfMenu;
@@ -13,6 +13,7 @@ import '../../session/editor_session.dart';
 import 'browser_session.dart';
 import 'media_seat.dart';
 import 'colors.dart';
+import '../../hf/metrics.dart' show Dn, Surface;
 
 /// The Browser as a skin over [BrowserSession]: it lays out the reference faces (browserFace), dresses tiles with what
 /// they do, and hands every gesture to the session.
@@ -169,7 +170,7 @@ class _LiveSeat extends ChangeNotifier implements BrowserSeat {
         : '${t['name'] ?? 'Text'} · ${EditorSession.map(t['text'])['content'] ?? ''}'.trim();
     return Padding(
       padding: const EdgeInsets.fromLTRB(9, 4.5, 9, 1.5),
-      child: Text(line, key: const ValueKey('fonts-header'), maxLines: 1, overflow: TextOverflow.ellipsis, style: sans(11, c: kMuted)),
+      child: Text(line, key: const ValueKey('fonts-header'), maxLines: 1, overflow: TextOverflow.ellipsis, style: sans(Dn.nameSize, c: Surface.muted)),
     );
   }
   @override

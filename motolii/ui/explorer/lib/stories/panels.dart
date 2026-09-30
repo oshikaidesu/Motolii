@@ -42,6 +42,8 @@ final inspectorStories = <Story>[
   Story('Transform (shape)', Scene('night-sky.rrd', inputs: (s) => _choose(s, 2)), _inspector, width: 387, height: 640),
   Story('Transform (text)', Scene('night-sky.rrd', inputs: (s) => _choose(s, 1)), _inspector, width: 387, height: 640),
   Story('Effects, long parameter list', Scene('effects.js', inputs: (s) => _choose(s, 0)), _inspector, width: 387, height: 1100),
+  Story('Inspector 500x700 (surface oracle)', Scene('night-sky.rrd', inputs: (s) => _choose(s, 2)), _inspector, width: 500, height: 700),
+  Story('Inspector effects 500x700 (surface oracle)', Scene('effects.js', inputs: (s) => _choose(s, 0)), _inspector, width: 500, height: 700),
   Story('Inspector narrow', Scene('night-sky.rrd', inputs: (s) => _choose(s, 2)), _inspector, width: 260, height: 640),
   Story('Nothing chosen', Scene('night-sky.rrd', inputs: (s) => s.command('select', {'ids': []})), _inspector, width: 387, height: 400),
 ];
@@ -112,7 +114,6 @@ Future<void> _reconcileSources(EditorSession c, List<(String, String)> wanted) a
 }
 
 Widget _catalogBrowser(EditorSession c) => _CatalogHost(c);
-
 
 class _CatalogHost extends StatefulWidget {
   const _CatalogHost(this.c, {this.view = BrowserView.thumbnail, this.startOn, this.startOpen = false, this.startSource, this.startColumn = 60, this.startProject = false, this.graphHops, this.graphOverlay = false});

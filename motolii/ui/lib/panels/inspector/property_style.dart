@@ -28,7 +28,6 @@ _Kind _kindOf(Map<String, dynamic> row) {
   return _Kind.scalar;
 }
 
-
 /// One hue per family, so a glance sorts the numbers before a word is read.
 Color? _tintOf(Map<String, dynamic> row, EditorTheme colors) =>
     switch (_characterOf(row)) {
@@ -55,7 +54,6 @@ TrackStyle _trackOf(Map<String, dynamic> row) => switch (_characterOf(row)) {
   _Character.size || _Character.soft => TrackStyle.ruler,
   _ => TrackStyle.fill,
 };
-
 
 String? _unitOf(Map<String, dynamic> row) {
   final id = '${row['id']}';

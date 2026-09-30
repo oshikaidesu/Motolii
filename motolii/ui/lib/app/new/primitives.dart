@@ -8,7 +8,6 @@ import '../../foundation/theme.dart';
 /// The New face's own parts. Each is drawn whole here; the behaviour it
 /// drives comes from the caller.
 
-
 /// A search line: a glyph, the text, and a rule under it, nothing boxed.
 class NewSearch extends StatelessWidget {
   const NewSearch({

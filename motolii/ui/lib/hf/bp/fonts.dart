@@ -11,6 +11,7 @@ import 'things.dart' show UserViews;
 import '../../session/editor_session.dart';
 import 'native_visual_sample.dart';
 import '../neutral.dart';
+import '../metrics.dart' show Dn, Surface;
 
 class FontItem {
   const FontItem(
@@ -161,7 +162,7 @@ class _FontsPanelState extends State<FontsPanel>
             child: Container(
               width: math.min(72, s.height * 1.3),
               decoration: BoxDecoration(
-                color: kTile,
+                color: Surface.raised,
                 borderRadius: BorderRadius.circular(3),
               ),
               child: Center(child: _sample(shown[i], 24)),
@@ -255,13 +256,13 @@ class _Row extends StatelessWidget {
       onDoubleTap: onDoubleTap,
       child: Container(
         decoration: BoxDecoration(
-          color: chosen ? kRaisedHi : null,
+          color: chosen ? Surface.hover : null,
           border: Border(
             left: BorderSide(
               color: chosen ? N.g91 : N.clear,
               width: 1.5,
             ),
-            bottom: const BorderSide(color: kRule2),
+            bottom: const BorderSide(color: Surface.dividerFine),
           ),
         ),
         padding: const EdgeInsets.only(left: 7.5, right: 6),
@@ -320,7 +321,7 @@ class _Row extends StatelessWidget {
                             '${f.meta}${f.facts.isEmpty ? '' : '  ·  ${f.facts.join('  ')}'}',
                             softWrap: false,
                             overflow: TextOverflow.ellipsis,
-                            style: sans(9.5, c: kMuted),
+                            style: sans(Dn.microSize, c: Surface.muted),
                           ),
                         ],
                       ],

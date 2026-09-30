@@ -10,6 +10,7 @@ import '../hf/desk/depth.dart';
 import '../hf/desk/ease.dart';
 import '../hf/desk/history.dart';
 import '../hf/desk/notes.dart';
+import '../hf/metrics.dart' show Surface;
 
 const _shot = String.fromEnvironment('PROTO_SHOT');
 const _rows = String.fromEnvironment('PROTO_ROWS', defaultValue: 'all');
@@ -18,7 +19,7 @@ final _root = GlobalKey();
 Widget housed(Widget child, double w, double h) => Container(
       width: w,
       height: h,
-      decoration: BoxDecoration(color: kGround, border: Border.all(color: kRule2)),
+      decoration: BoxDecoration(color: Surface.base, border: Border.all(color: Surface.dividerFine)),
       child: child,
     );
 
@@ -28,7 +29,7 @@ void main() {
   const wide = 310.0;
   final desks = <Widget Function()>[() => const EaseDesk(), () => const DepthDesk(), () => const BlendDesk(), () => const HistoryDesk(), () => const NotesDesk()];
   runApp(WidgetsApp(
-    color: kGround,
+    color: Surface.base,
     debugShowCheckedModeBanner: false,
     builder: (_, __) => Align(
       alignment: Alignment.topLeft,

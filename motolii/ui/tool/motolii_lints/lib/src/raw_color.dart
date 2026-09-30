@@ -5,7 +5,14 @@ import 'package:analyzer/dart/ast/ast.dart';
 import 'package:analyzer/dart/ast/visitor.dart';
 import 'package:analyzer/error/error.dart';
 
-import 'raw_dimension.dart' show scaleFiles;
+import 'raw_dimension.dart' show excused, excusedFile, scaleFiles;
+
+/// Where a palette may be written out: the product window's neutral ramp and the files that name its identity / semantic colours.
+const paletteFiles = {
+  'lib/hf/shell/place.dart',
+  'lib/hf/desk/common.dart',
+  'lib/hf/insp/tones.dart',
+};
 
 class RawColor extends AnalysisRule {
   static const LintCode code = LintCode(
@@ -33,8 +40,8 @@ class RawColor extends AnalysisRule {
     RuleContext context,
   ) {
     final path = context.definingUnit.file.path.replaceAll('\\', '/');
-    if (context.isInTestDirectory || scaleFiles.any(path.endsWith)) return;
-    registry.addInstanceCreationExpression(this, _Visitor(this));
+    if (context.isInTestDirectory || scaleFiles.any(path.endsWith) || paletteFiles.any(path.endsWith) || excusedFile(context.definingUnit.content)) return;
+    registry.addInstanceCreationExpression(this, _Visitor(this, context.definingUnit.content));
   }
 }
 
@@ -50,12 +57,13 @@ AstNode? rawColor(InstanceCreationExpression node) {
 }
 
 class _Visitor extends SimpleAstVisitor<void> {
-  _Visitor(this.rule);
+  _Visitor(this.rule, this.content);
   final AnalysisRule rule;
+  final String content;
 
   @override
   void visitInstanceCreationExpression(InstanceCreationExpression node) {
     final target = rawColor(node);
-    if (target != null) rule.reportAtNode(target);
+    if (target != null && !excused(content, target.offset)) rule.reportAtNode(target);
   }
 }

@@ -3,12 +3,13 @@
 // Zoom is a different tool from Distance and is shown as one: they meet only in the magnification at the target plane.
 import 'package:flutter/widgets.dart';
 import '../bp/common.dart';
-import '../desk/common.dart' show kYellow, kInk;
+import '../desk/common.dart' show kYellow;
 import 'camera_face.dart';
 import 'camera_model.dart';
 import 'rows.dart';
 import 'toys.dart';
 import '../neutral.dart';
+import '../metrics.dart' show Dn, Surface;
 
 class CameraInstrument extends StatelessWidget {
   const CameraInstrument(this.store, {super.key, this.title = 'Camera', this.animating, this.onAnimate});
@@ -54,7 +55,7 @@ class CameraInstrument extends StatelessWidget {
               Row(children: [val('camera.distance', distanceColor, tag: narrow ? 'D' : 'Distance', units: false), gap, val('camera.zoom', kYellow, tag: narrow ? 'Z' : 'Zoom', units: false)]),
               Padding(
                 padding: const EdgeInsets.only(top: 3),
-                child: Text('Frames the target at ×${s.magnification.toStringAsFixed(2)}', key: const ValueKey('magnification'), style: sans(9.5, c: kMuted)),
+                child: Text('Frames the target at ×${s.magnification.toStringAsFixed(2)}', key: const ValueKey('magnification'), style: sans(Dn.microSize, c: Surface.muted)),
               ),
               _label('ROLL', rollColor, null, 'roll', ['camera.roll']),
               Row(children: [val('camera.roll', rollColor, decimals: null)]),
@@ -67,8 +68,8 @@ class CameraInstrument extends StatelessWidget {
         height: 18,
         child: Row(children: [
           Container(width: 2, height: 10.5, margin: const EdgeInsets.only(right: 5), decoration: BoxDecoration(color: orbitColor, borderRadius: BorderRadius.circular(1.5))),
-          Expanded(child: Text(title, key: const ValueKey('camera-title'), softWrap: false, overflow: TextOverflow.clip, style: sans(11, c: kInk, w: FontWeight.w600))),
-          if (s.frozen) Padding(padding: const EdgeInsets.only(right: 6), child: Text('Locked', style: sans(9.5, c: kMuted, w: FontWeight.w600))),
+          Expanded(child: Text(title, key: const ValueKey('camera-title'), softWrap: false, overflow: TextOverflow.clip, style: sans(Dn.nameSize, c: Surface.ink, w: FontWeight.w600))),
+          if (s.frozen) Padding(padding: const EdgeInsets.only(right: 6), child: Text('Locked', style: sans(Dn.microSize, c: Surface.muted, w: FontWeight.w600))),
           if (animating != null)
             GestureDetector(
               key: const ValueKey('camera-animate'),
@@ -76,14 +77,14 @@ class CameraInstrument extends StatelessWidget {
               onTap: onAnimate,
               child: Padding(
                 padding: const EdgeInsets.only(right: 7.5),
-                child: Text('Animate', style: sans(10, c: animating! ? kYellow : kMuted, w: FontWeight.w600)),
+                child: Text('Animate', style: sans(Dn.labelSize, c: animating! ? kYellow : Surface.muted, w: FontWeight.w600)),
               ),
             ),
           GestureDetector(
             key: const ValueKey('route-depth'),
             behavior: HitTestBehavior.opaque,
             onTap: () => s.route('Depth', 'camera'),
-            child: Container(height: 16.5, padding: const EdgeInsets.symmetric(horizontal: 7), alignment: Alignment.center, decoration: BoxDecoration(border: Border.all(color: orbitColor.withValues(alpha: .7)), borderRadius: BorderRadius.circular(8)), child: Text('Depth →', style: sans(9.5, c: orbitColor, w: FontWeight.w700))),
+            child: Container(height: 16.5, padding: const EdgeInsets.symmetric(horizontal: 7), alignment: Alignment.center, decoration: BoxDecoration(border: Border.all(color: orbitColor.withValues(alpha: .7)), borderRadius: BorderRadius.circular(8)), child: Text('Depth →', style: sans(Dn.microSize, c: orbitColor, w: FontWeight.w700))),
           ),
         ]),
       );
@@ -97,10 +98,10 @@ class CameraInstrument extends StatelessWidget {
       padding: const EdgeInsets.only(top: 9, bottom: 4),
       child: Row(children: [
         Container(width: 2, height: 7, margin: const EdgeInsets.only(right: 4.5), decoration: BoxDecoration(color: tone, borderRadius: BorderRadius.circular(1.5))),
-        Text(t, style: sans(9.5, c: N.g51, w: FontWeight.w600, ls: 1.3)),
-        Expanded(child: note == null ? const SizedBox.shrink() : Padding(padding: const EdgeInsets.only(left: 6), child: Text(note, softWrap: false, overflow: TextOverflow.clip, style: sans(9.5, c: N.g38)))),
+        Text(t, style: sans(Dn.microSize, c: N.g51, w: FontWeight.w600, ls: 1.3)),
+        Expanded(child: note == null ? const SizedBox.shrink() : Padding(padding: const EdgeInsets.only(left: 6), child: Text(note, softWrap: false, overflow: TextOverflow.clip, style: sans(Dn.microSize, c: N.g38)))),
         GestureDetector(key: ValueKey('key-$name'), behavior: HitTestBehavior.opaque, onTap: () => s.toggleKeys(ids), child: Padding(padding: const EdgeInsets.symmetric(horizontal: 4), child: SizedBox(width: 7, height: 7, child: CustomPaint(painter: _DiamondP(keyed, keyed || animated ? tone : N.g26))))),
-        if (_modified(ids) && !s.frozen && !ids.every(s.held)) GestureDetector(key: ValueKey('reset-$name'), behavior: HitTestBehavior.opaque, onTap: () => s.resetMany(ids), child: Padding(padding: const EdgeInsets.only(left: 2), child: Text('↺', style: sans(11, c: N.g38)))) else const SizedBox(width: 10.5),
+        if (_modified(ids) && !s.frozen && !ids.every(s.held)) GestureDetector(key: ValueKey('reset-$name'), behavior: HitTestBehavior.opaque, onTap: () => s.resetMany(ids), child: Padding(padding: const EdgeInsets.only(left: 2), child: Text('↺', style: sans(Dn.nameSize, c: N.g38)))) else const SizedBox(width: 10.5),
       ]),
     );
   }

@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
 import '../../../foundation/theme.dart';
-import '../../../hf/desk/common.dart' show kInk;
+
 import '../../../hf/bp/search.dart';
 import '../../../hf/bp/seat.dart';
 import '../../../hf/bp/things.dart';
@@ -16,6 +16,7 @@ import 'shelf_host.dart';
 import 'tag_prompt.dart';
 import 'shelf_user.dart';
 import 'shelf_things.dart';
+import '../../../hf/metrics.dart' show Surface;
 
 /// The finished Browser's seat over one production shelf: a tile is picked, applied, menued and dragged the way the
 /// shelf says, a picture is the shelf's own when the design has none, and the keys act on what the shelf lists.
@@ -107,7 +108,7 @@ class ShelfSeat extends ChangeNotifier implements BrowserSeat {
           Positioned.fill(
             child: IgnorePointer(
               child: DecoratedBox(
-                decoration: BoxDecoration(border: Border.all(color: kInk.withValues(alpha: .85), width: 1.4), borderRadius: BorderRadius.circular(4)),
+                decoration: BoxDecoration(border: Border.all(color: Surface.ink.withValues(alpha: .85), width: 1.4), borderRadius: BorderRadius.circular(4)),
               ),
             ),
           ),

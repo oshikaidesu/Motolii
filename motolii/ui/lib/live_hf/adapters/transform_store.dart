@@ -175,14 +175,12 @@ class SessionTransformStore extends TransformStore {
   @override
   void reset(String id) => resetMany([id]);
 
-
   @override
   void setAnimate(bool on) {
     c.setAnimate(on);
   }
   @override
   void toggleAnimate() => c.toggleAnimate();
-
 
   @override
   void setAnchor(double x, double y) {

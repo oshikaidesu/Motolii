@@ -219,7 +219,6 @@ Widget byShape(double w) {
   ]);
 }
 
-
 // 1b. The grid, each category at its own shape: stills square three across, 360° plates 2:1 two across.
 Widget gridB(double w) => ListView(padding: const EdgeInsets.symmetric(horizontal: 10), children: [
       for (final e in sections.entries) ...[

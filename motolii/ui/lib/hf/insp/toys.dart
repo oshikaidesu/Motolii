@@ -8,7 +8,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import '../bp/common.dart';
-import '../desk/common.dart' show kYellow, kBlue, kViolet, kPink, kInk;
+import '../desk/common.dart' show kYellow, kBlue, kViolet, kPink;
 import 'rows.dart';
 import 'slot.dart';
 export 'slot.dart';
@@ -16,8 +16,6 @@ import '../metrics.dart';
 import 'tones.dart';
 import '../neutral.dart';
 
-const kTile = N.g13;
-const kTileHi = N.g15;
 const _readout = N.g82; // the number is a readout: present, not loud
 const _dark = N.g10;
 
@@ -146,7 +144,7 @@ class _ValueToyState extends State<ValueToy> {
     final row = s.row;
     final track = s.axis == null && tight(row);
     final frac = track ? ((s.value - (row['min'] as num)) / span(row)).clamp(0.0, 1.0) : 0.0;
-    final h = widget.hero ? UiMetrics.controlHero : UiMetrics.control;
+    final h = widget.hero ? Surface.controlHero : Surface.control;
     final ink = frozen ? N.g33 : _readout;
     final unit = widget.showUnit ? s.unit : null;
     // colour mass follows importance, quietly: a thin edge; a touched value a wider edge and a tint; a hero a faint tint
@@ -227,9 +225,9 @@ class _ValueToyState extends State<ValueToy> {
           child: Container(
             height: h,
             decoration: BoxDecoration(
-              color: dragging || (hover && !frozen) ? kTileHi : kTile,
+              color: dragging || (hover && !frozen) ? Surface.hover : Surface.raised,
               borderRadius: BorderRadius.circular(4),
-              border: editing && _bad ? Border.all(color: kPink, width: 1.4) : (focus.hasFocus || editing ? Border.all(color: kInk.withValues(alpha: .85), width: 1.4) : null),
+              border: editing && _bad ? Border.all(color: kPink, width: 1.4) : (focus.hasFocus || editing ? Border.all(color: Surface.ink.withValues(alpha: .85), width: 1.4) : null),
             ),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(4),
@@ -240,14 +238,14 @@ class _ValueToyState extends State<ValueToy> {
                 Positioned.fill(child: Padding(
                   padding: EdgeInsets.only(left: edge + 9, right: 7),
                   child: Row(children: [
-                    if (widget.tag != null) Padding(padding: const EdgeInsets.only(right: 5), child: Text(widget.tag!, style: sans(9.5, c: N.g44, w: FontWeight.w600))),
+                    if (widget.tag != null) Padding(padding: const EdgeInsets.only(right: 5), child: Text(widget.tag!, style: sans(Dn.microSize, c: N.g44, w: FontWeight.w600))),
                     Expanded(
                       child: editing
-                          ? EditableText(controller: ctl, focusNode: editFocus, autofocus: true, style: sans(widget.hero ? 14 : 13, c: kInk, w: FontWeight.w600), cursorColor: kInk, backgroundCursorColor: kMuted, selectionColor: tone.withValues(alpha: .4), keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true), onSubmitted: _submit)
+                          ? EditableText(controller: ctl, focusNode: editFocus, autofocus: true, style: sans(widget.hero ? 14 : 13, c: Surface.ink, w: FontWeight.w600), cursorColor: Surface.ink, backgroundCursorColor: Surface.muted, selectionColor: tone.withValues(alpha: .4), keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true), onSubmitted: _submit)
                           : LayoutBuilder(builder: (context, box) {
                               // a number is never cut mid-digit ("10(" for 100): a narrow well first drops its decimals
                               // (the value is unchanged, only its display), and only a number still too wide is drawn smaller
-                              final style = sans(widget.hero ? 14 : 13, c: dragging ? kInk : ink, w: FontWeight.w500);
+                              final style = sans(widget.hero ? 14 : 13, c: dragging ? Surface.ink : ink, w: FontWeight.w500);
                               var text = s.mixed ? '—' : s.format(s.value, decimals: widget.decimals);
                               bool fits(String t) {
                                 final p = TextPainter(text: TextSpan(text: t, style: style), textDirection: TextDirection.ltr, maxLines: 1)..layout();
@@ -266,10 +264,10 @@ class _ValueToyState extends State<ValueToy> {
                               return FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerLeft, child: Text(text, softWrap: false, style: style));
                             }),
                     ),
-                    if (editing && _bad) Text('Number required', key: ValueKey('bad-${s.id}'), style: sans(10, c: kPink))
-                    else if (unit != null) Text(unit, style: sans(10, c: kMuted)),
+                    if (editing && _bad) Text('Number required', key: ValueKey('bad-${s.id}'), style: sans(Dn.labelSize, c: kPink))
+                    else if (unit != null) Text(unit, style: sans(Dn.labelSize, c: Surface.muted)),
                     // the way to grab it, shown when the pointer is near
-                    if (unit == null && hover && !editing && !frozen && !dragging) Text('‹ ›', style: sans(11, c: N.g44, w: FontWeight.w600)),
+                    if (unit == null && hover && !editing && !frozen && !dragging) Text('‹ ›', style: sans(Dn.nameSize, c: N.g44, w: FontWeight.w600)),
                   ]),
                 )),
               ]),
@@ -340,13 +338,13 @@ class ToggleToy extends StatelessWidget {
       behavior: HitTestBehavior.opaque,
       onTap: frozen ? null : () => store.set(id, !on),
       child: Container(
-        height: UiMetrics.control,
+        height: Surface.control,
         padding: const EdgeInsets.symmetric(horizontal: 7.5),
-        decoration: BoxDecoration(color: on && hero ? tone.withValues(alpha: .26) : kTile, borderRadius: BorderRadius.circular(4)),
+        decoration: BoxDecoration(color: on && hero ? tone.withValues(alpha: .26) : Surface.raised, borderRadius: BorderRadius.circular(4)),
         child: Row(children: [
-          Container(width: 22.5, height: 13.5, padding: const EdgeInsets.all(1.5), alignment: on ? Alignment.centerRight : Alignment.centerLeft, decoration: BoxDecoration(color: on ? tone : N.g26, borderRadius: BorderRadius.circular(7)), child: Container(width: 10.5, height: 10.5, decoration: BoxDecoration(color: frozen ? N.g56 : kInk, shape: BoxShape.circle))),
+          Container(width: 22.5, height: 13.5, padding: const EdgeInsets.all(1.5), alignment: on ? Alignment.centerRight : Alignment.centerLeft, decoration: BoxDecoration(color: on ? tone : N.g26, borderRadius: BorderRadius.circular(7)), child: Container(width: 10.5, height: 10.5, decoration: BoxDecoration(color: frozen ? N.g56 : Surface.ink, shape: BoxShape.circle))),
           const SizedBox(width: 7.5),
-          Text(on ? 'On' : 'Off', style: sans(11, c: frozen ? N.g33 : (on ? _readout : kMuted), w: FontWeight.w500)),
+          Text(on ? 'On' : 'Off', style: sans(Dn.nameSize, c: frozen ? N.g33 : (on ? _readout : Surface.muted), w: FontWeight.w500)),
         ]),
       ),
     );
@@ -371,7 +369,7 @@ class ChoiceToy extends StatelessWidget {
     if (choices.length <= 4) {
       // one control: the options in a single track, the chosen one in the property's tone (a selection, not a chip)
       return Container(
-        height: UiMetrics.control,
+        height: Surface.control,
         padding: const EdgeInsets.all(1.5),
         decoration: BoxDecoration(color: N.g07, border: Border.all(color: N.g20), borderRadius: BorderRadius.circular(4)),
         child: Row(children: [
@@ -381,7 +379,7 @@ class ChoiceToy extends StatelessWidget {
               key: ValueKey('choice-$id-$i'),
               behavior: HitTestBehavior.opaque,
               onTap: () => pick(i),
-              child: Container(alignment: Alignment.center, decoration: BoxDecoration(color: i == cur ? (frozen ? dimTone(tone) : tone) : null, borderRadius: BorderRadius.circular(2)), child: Text(c, softWrap: false, overflow: TextOverflow.clip, style: sans(11, c: i == cur ? (frozen ? N.g56 : _dark) : (frozen ? N.g33 : N.g69), w: i == cur ? FontWeight.w700 : FontWeight.w500))),
+              child: Container(alignment: Alignment.center, decoration: BoxDecoration(color: i == cur ? (frozen ? dimTone(tone) : tone) : null, borderRadius: BorderRadius.circular(2)), child: Text(c, softWrap: false, overflow: TextOverflow.clip, style: sans(Dn.nameSize, c: i == cur ? (frozen ? N.g56 : _dark) : (frozen ? N.g33 : N.g69), w: i == cur ? FontWeight.w700 : FontWeight.w500))),
             ),
           ),
           if (i < choices.length - 1) const SizedBox(width: 1.5),
@@ -391,11 +389,11 @@ class ChoiceToy extends StatelessWidget {
     }
     // the stepper always names one choice: an out-of-range value reads as the nearest, as before
     final shown = raw.clamp(0, choices.length - 1);
-    Widget arrow(String k, String t, int d) => GestureDetector(key: ValueKey('choice-$id-$k'), behavior: HitTestBehavior.opaque, onTap: () => pick(shown + d), child: SizedBox(width: 18, height: UiMetrics.control, child: Center(child: Text(t, style: sans(11, c: kMuted)))));
+    Widget arrow(String k, String t, int d) => GestureDetector(key: ValueKey('choice-$id-$k'), behavior: HitTestBehavior.opaque, onTap: () => pick(shown + d), child: SizedBox(width: 18, height: Surface.control, child: Center(child: Text(t, style: sans(Dn.nameSize, c: Surface.muted)))));
     return Container(
       height: 22.5,
-      decoration: BoxDecoration(color: kTile, borderRadius: BorderRadius.circular(4)),
-      child: Row(children: [arrow('prev', '‹', -1), Expanded(child: Center(child: Text(choices[shown], key: ValueKey('choice-$id-name'), softWrap: false, overflow: TextOverflow.clip, style: sans(11, c: frozen ? N.g33 : _readout, w: FontWeight.w500)))), arrow('next', '›', 1)]),
+      decoration: BoxDecoration(color: Surface.raised, borderRadius: BorderRadius.circular(4)),
+      child: Row(children: [arrow('prev', '‹', -1), Expanded(child: Center(child: Text(choices[shown], key: ValueKey('choice-$id-name'), softWrap: false, overflow: TextOverflow.clip, style: sans(Dn.nameSize, c: frozen ? N.g33 : _readout, w: FontWeight.w500)))), arrow('next', '›', 1)]),
     );
   }
 }
@@ -447,7 +445,7 @@ class _TextToyState extends State<TextToy> {
       height: 22.5,
       padding: const EdgeInsets.symmetric(horizontal: 7),
       alignment: Alignment.centerLeft,
-      decoration: BoxDecoration(color: kTile, borderRadius: BorderRadius.circular(4), border: focus.hasFocus ? Border.all(color: kYellow, width: 1) : null),
+      decoration: BoxDecoration(color: Surface.raised, borderRadius: BorderRadius.circular(4), border: focus.hasFocus ? Border.all(color: kYellow, width: 1) : null),
       // Esc puts the value back and leaves (Classic IN-098)
       child: Focus(
         onKeyEvent: (_, e) {
@@ -458,7 +456,7 @@ class _TextToyState extends State<TextToy> {
           }
           return KeyEventResult.ignored;
         },
-        child: EditableText(key: ValueKey('text-${widget.id}'), controller: ctl, focusNode: focus, readOnly: frozen, maxLines: 1, style: widget.rawJson ? mono(11, c: frozen ? N.g33 : _readout) : sans(11, c: frozen ? N.g33 : _readout), cursorColor: kYellow, backgroundCursorColor: kMuted, onSubmitted: (_) => _apply()),
+        child: EditableText(key: ValueKey('text-${widget.id}'), controller: ctl, focusNode: focus, readOnly: frozen, maxLines: 1, style: widget.rawJson ? mono(Dn.nameSize, c: frozen ? N.g33 : _readout) : sans(Dn.nameSize, c: frozen ? N.g33 : _readout), cursorColor: kYellow, backgroundCursorColor: Surface.muted, onSubmitted: (_) => _apply()),
       ),
     );
   }
@@ -483,14 +481,14 @@ class ReferenceToy extends StatelessWidget {
         store.set(id, i + 1 >= refs.length ? null : refs[i + 1]);
       },
       child: Container(
-        height: UiMetrics.control,
+        height: Surface.control,
         padding: const EdgeInsets.symmetric(horizontal: 7.5),
-        decoration: BoxDecoration(color: kTile, borderRadius: BorderRadius.circular(4)),
+        decoration: BoxDecoration(color: Surface.raised, borderRadius: BorderRadius.circular(4)),
         child: Row(children: [
-          Container(width: 10, height: 10, decoration: BoxDecoration(color: cur == null ? null : (store.frozen ? dimTone(tone) : tone), border: cur == null ? Border.all(color: kMuted, width: 1.4) : null, borderRadius: BorderRadius.circular(2))),
+          Container(width: 10, height: 10, decoration: BoxDecoration(color: cur == null ? null : (store.frozen ? dimTone(tone) : tone), border: cur == null ? Border.all(color: Surface.muted, width: 1.4) : null, borderRadius: BorderRadius.circular(2))),
           const SizedBox(width: 6),
-          Expanded(child: Text(cur ?? 'None', softWrap: false, overflow: TextOverflow.clip, style: sans(11, c: cur == null ? kMuted : _readout, w: FontWeight.w500))),
-          Text('⌄', style: sans(11, c: kMuted)),
+          Expanded(child: Text(cur ?? 'None', softWrap: false, overflow: TextOverflow.clip, style: sans(Dn.nameSize, c: cur == null ? Surface.muted : _readout, w: FontWeight.w500))),
+          Text('⌄', style: sans(Dn.nameSize, c: Surface.muted)),
         ]),
       ),
     );
@@ -518,14 +516,14 @@ class RouteToy extends StatelessWidget {
       behavior: HitTestBehavior.opaque,
       onTap: () => store.route(to, id),
       child: Container(
-        height: UiMetrics.control,
+        height: Surface.control,
         padding: const EdgeInsets.only(left: 7, right: 7.5),
-        decoration: BoxDecoration(color: kTile, borderRadius: BorderRadius.circular(4)),
+        decoration: BoxDecoration(color: Surface.raised, borderRadius: BorderRadius.circular(4)),
         child: Row(children: [
           if (row['kind'] == 'color' && v is String) Container(width: 10.5, height: 10.5, decoration: BoxDecoration(color: hexColor(v), shape: BoxShape.circle)),
           if (row['kind'] == 'color') const SizedBox(width: 7),
-          Expanded(child: Text('$v', softWrap: false, overflow: TextOverflow.clip, style: mono(11, c: _readout))),
-          Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: store.frozen ? dimTone(tone) : tone, borderRadius: BorderRadius.circular(7)), child: Text('$to  →', style: sans(10, c: _dark, w: FontWeight.w700))),
+          Expanded(child: Text('$v', softWrap: false, overflow: TextOverflow.clip, style: mono(Dn.nameSize, c: _readout))),
+          Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: store.frozen ? dimTone(tone) : tone, borderRadius: BorderRadius.circular(7)), child: Text('$to  →', style: sans(Dn.labelSize, c: _dark, w: FontWeight.w700))),
         ]),
       ),
     );
@@ -542,6 +540,6 @@ class ActionChip extends StatelessWidget {
         key: ValueKey('action-$id-$name'),
         behavior: HitTestBehavior.opaque,
         onTap: () => store.act(id, name),
-        child: Container(height: 18, padding: const EdgeInsets.symmetric(horizontal: 9), alignment: Alignment.center, decoration: BoxDecoration(color: store.frozen ? dimTone(tone) : tone, borderRadius: BorderRadius.circular(9)), child: Text(name, style: sans(10, c: _dark, w: FontWeight.w700))),
+        child: Container(height: 18, padding: const EdgeInsets.symmetric(horizontal: 9), alignment: Alignment.center, decoration: BoxDecoration(color: store.frozen ? dimTone(tone) : tone, borderRadius: BorderRadius.circular(9)), child: Text(name, style: sans(Dn.labelSize, c: _dark, w: FontWeight.w700))),
       );
 }

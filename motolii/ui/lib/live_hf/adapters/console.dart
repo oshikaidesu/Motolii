@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 
 import '../../hf/shell/place.dart' show H;
 import '../../session/console_log.dart';
+import '../../hf/metrics.dart' show Dn;
 
 /// The Console panel in the Timeline seat: every operation error and document notice the session surfaced (the
 /// log the New shell keeps, one owner), newest first, with Clear. It adds no message of its own.
@@ -30,7 +31,7 @@ class LiveConsole extends StatelessWidget {
                   Expanded(
                     child: Text(
                       '${shown.length} ${shown.length == 1 ? 'message' : 'messages'}',
-                      style: H.s(11, color: H.text2),
+                      style: H.s(Dn.nameSize, color: H.text2),
                     ),
                   ),
                   GestureDetector(
@@ -39,7 +40,7 @@ class LiveConsole extends StatelessWidget {
                     onTap: shown.isEmpty ? null : log.clear,
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 10.5, vertical: 6),
-                      child: Text('Clear', style: H.s(11, color: shown.isEmpty ? H.text3 : H.text2)),
+                      child: Text('Clear', style: H.s(Dn.nameSize, color: shown.isEmpty ? H.text3 : H.text2)),
                     ),
                   ),
                 ],
@@ -48,7 +49,7 @@ class LiveConsole extends StatelessWidget {
             Container(height: 1, color: H.rule),
             Expanded(
               child: shown.isEmpty
-                  ? Center(child: Text('No messages', style: H.s(11, color: H.text3)))
+                  ? Center(child: Text('No messages', style: H.s(Dn.nameSize, color: H.text3)))
                   : ListView.builder(
                       primary: false,
                       padding: const EdgeInsets.symmetric(horizontal: 10.5, vertical: 4.5),
@@ -69,7 +70,7 @@ class LiveConsole extends StatelessWidget {
                                 color: e.level == ConsoleLevel.error ? H.scatter.n : H.follow.b,
                               ),
                               const SizedBox(width: 7.5),
-                              Expanded(child: Text(e.text, style: H.s(11, color: H.text))),
+                              Expanded(child: Text(e.text, style: H.s(Dn.nameSize, color: H.text))),
                             ],
                           ),
                         );

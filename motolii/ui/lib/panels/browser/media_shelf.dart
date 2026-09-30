@@ -250,8 +250,6 @@ class MediaShelf extends BrowserShelf {
   /// keep the asset; only the file behind it changes.
 }
 
-
-
 final _dataUriCache = <String, Uint8List>{};
 
 /// The item's picture, else an icon of its family; a mesh draws the body its
@@ -311,7 +309,4 @@ Widget mediaThumbnail(Map<String, dynamic> item, double tileScale) => Builder(
     }
   },
 );
-
-
-
 

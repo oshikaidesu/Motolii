@@ -11,6 +11,7 @@ import 'seat.dart';
 import 'shell.dart';
 import 'things.dart';
 import '../neutral.dart';
+import '../metrics.dart' show Dn, Surface;
 
 enum Mk { text, rect, rounded, ellipse, star, polygon, line, arrow, path, blob, pen, pencil, spray, eraser, nul, camera, light, particles, stage, cube, sphere, torus, cylinder, cone, pyramid, plane }
 
@@ -93,7 +94,7 @@ class _TileState extends State<_Tile> {
         onEnter: (_) => setState(() => _hover = true),
         onExit: (_) => setState(() => _hover = false),
         child: DecoratedBox(
-          decoration: BoxDecoration(color: _hover ? kRaisedHi : null, borderRadius: BorderRadius.circular(2)),
+          decoration: BoxDecoration(color: _hover ? Surface.hover : null, borderRadius: BorderRadius.circular(2)),
           child: LayoutBuilder(builder: (context, box) {
             final face = (box.maxWidth * .78).clamp(0.0, 40.0);
             return Column(mainAxisAlignment: MainAxisAlignment.center, children: [
@@ -101,7 +102,7 @@ class _TileState extends State<_Tile> {
               if (widget.caption)
                 Padding(
                   padding: const EdgeInsets.only(top: 2),
-                  child: Text(widget.thing.name, maxLines: 1, softWrap: false, overflow: TextOverflow.fade, textAlign: TextAlign.center, style: sans(9.5, c: N.g86, w: FontWeight.w500)),
+                  child: Text(widget.thing.name, maxLines: 1, softWrap: false, overflow: TextOverflow.fade, textAlign: TextAlign.center, style: sans(Dn.microSize, c: N.g86, w: FontWeight.w500)),
                 ),
             ]);
           }),
@@ -173,7 +174,7 @@ class MarkPainter extends CustomPainter {
         final p = Path()..moveTo(c.dx, c.dy - s * .46)..cubicTo(c.dx + s * .3, c.dy - s * .1, c.dx + s * .3, c.dy + s * .2, c.dx, c.dy + s * .3)..cubicTo(c.dx - s * .3, c.dy + s * .2, c.dx - s * .3, c.dy - s * .1, c.dx, c.dy - s * .46)..close();
         cv.drawPath(p, fill);
         cv.drawLine(c + Offset(0, s * .3), c + Offset(0, s * .47), stroke(s * .07, tone(.1)));
-        cv.drawCircle(c.translate(0, -s * .08), s * .05, Paint()..color = kTile);
+        cv.drawCircle(c.translate(0, -s * .08), s * .05, Paint()..color = Surface.raised);
       case Mk.pencil:
         cv.save();
         cv.translate(c.dx, c.dy);
@@ -202,7 +203,7 @@ class MarkPainter extends CustomPainter {
       case Mk.camera:
         cv.drawRRect(RRect.fromRectAndRadius(Rect.fromCenter(center: c.translate(0, s * .06), width: s * .9, height: s * .58), Radius.circular(s * .1)), fill);
         cv.drawRect(Rect.fromCenter(center: c.translate(0, -s * .28), width: s * .32, height: s * .14), fill);
-        cv.drawCircle(c.translate(0, s * .06), s * .17, Paint()..color = kTile);
+        cv.drawCircle(c.translate(0, s * .06), s * .17, Paint()..color = Surface.raised);
         cv.drawCircle(c.translate(0, s * .06), s * .17, stroke(s * .06));
       case Mk.light:
         cv.drawCircle(c, s * .2, fill);

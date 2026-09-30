@@ -4,6 +4,7 @@ import 'package:flutter/widgets.dart';
 import 'common.dart';
 import 'search.dart';
 import '../neutral.dart';
+import '../metrics.dart' show Dn, Surface;
 
 class ClassifyCapability extends ChangeNotifier {
   ClassifyCapability({this.all = 'All', String? selected}) : _selected = selected ?? all;
@@ -86,7 +87,7 @@ class _ClassColumnState extends State<ClassColumn> {
         listenable: widget.classify,
         builder: (_, __) => Container(
           width: widget.width,
-          decoration: const BoxDecoration(border: Border(right: BorderSide(color: kRule2))),
+          decoration: const BoxDecoration(border: Border(right: BorderSide(color: Surface.dividerFine))),
           child: ListView(
             controller: scroll,
             padding: const EdgeInsets.fromLTRB(9, 7.5, 4.5, 7.5),
@@ -96,7 +97,7 @@ class _ClassColumnState extends State<ClassColumn> {
                 if (gi > 0) const SizedBox(height: 10.5),
                 for (final c in g) _Row(c, c == widget.classify.selected, () => widget.classify.select(c)),
               ],
-              if (widget.trailingPlus) Padding(padding: const EdgeInsets.only(top: 9), child: Text('+', style: sans(11, c: kMuted))),
+              if (widget.trailingPlus) Padding(padding: const EdgeInsets.only(top: 9), child: Text('+', style: sans(Dn.nameSize, c: Surface.muted))),
             ],
           ),
         ),
@@ -119,7 +120,7 @@ class _Row extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               decoration: BoxDecoration(color: on ? N.g20 : null, borderRadius: BorderRadius.circular(4.5)),
-              child: Text(label, softWrap: false, overflow: TextOverflow.clip, style: sans(11, c: on ? N.g95 : N.g56, w: FontWeight.w500)),
+              child: Text(label, softWrap: false, overflow: TextOverflow.clip, style: sans(Dn.nameSize, c: on ? N.g95 : N.g56, w: FontWeight.w500)),
             ),
           ),
         ),
@@ -177,7 +178,7 @@ class _ClassStripState extends State<ClassStrip> {
         listenable: widget.classify,
         builder: (_, __) => Container(
           height: 21,
-          decoration: widget.bare ? null : const BoxDecoration(border: Border(bottom: BorderSide(color: kRule2))),
+          decoration: widget.bare ? null : const BoxDecoration(border: Border(bottom: BorderSide(color: Surface.dividerFine))),
           // an edge fades where more classes scroll that way: a cut-off name reads as "more", not as a clipped label
           child: NotificationListener<ScrollMetricsNotification>(
             onNotification: (n) => _edges(n.metrics),
@@ -225,8 +226,8 @@ class ClassChip extends StatelessWidget {
                 child: Container(
                   height: 15,
                   padding: const EdgeInsets.symmetric(horizontal: 5),
-                  decoration: BoxDecoration(color: kSel, borderRadius: BorderRadius.circular(2)),
-                  child: Center(child: Text('${classify.selected}  ×', softWrap: false, style: sans(10, c: N.g91))),
+                  decoration: BoxDecoration(color: Surface.selected, borderRadius: BorderRadius.circular(2)),
+                  child: Center(child: Text('${classify.selected}  ×', softWrap: false, style: sans(Dn.labelSize, c: N.g91))),
                 ),
               )
             : const SizedBox.shrink(),

@@ -5,9 +5,10 @@ import 'dart:math' as math;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import '../bp/common.dart';
-import '../desk/common.dart' show kInk, kMint, kBlue, kPink, kViolet;
+import '../desk/common.dart' show kMint, kBlue, kPink, kViolet;
 import 'transform_model.dart';
 import '../neutral.dart';
+import '../metrics.dart' show Dn, Surface;
 
 enum TMode { move, scale, rotate, anchor }
 
@@ -300,7 +301,7 @@ class _GizmoPainter extends CustomPainter {
         void arrow(Offset to, String t) {
           cv.drawLine(c, to, Paint()..color = role..strokeWidth = 2);
           handle(to, r: 5);
-          final tp = TextPainter(text: TextSpan(text: t, style: sans(9.5, c: N.g07, w: FontWeight.w800)), textDirection: TextDirection.ltr)..layout();
+          final tp = TextPainter(text: TextSpan(text: t, style: sans(Dn.microSize, c: N.g07, w: FontWeight.w800)), textDirection: TextDirection.ltr)..layout();
           tp.paint(cv, to - Offset(tp.width / 2, tp.height / 2));
         }
         arrow(c + Offset(g.ringR, 0), 'X');
@@ -308,9 +309,9 @@ class _GizmoPainter extends CustomPainter {
         if (l.projection != '2D') arrow(c + Offset(-g.ringR, -g.ringR * .5), 'Z');
       case TMode.scale:
         for (final o in cs) { handle(o); }
-        for (final (sx, sy) in [(-1, 0), (1, 0), (0, -1), (0, 1)]) { handle(g.toScreen(Offset(sx * g.half.dx, sy * g.half.dy)), r: 4, col: kInk); }
+        for (final (sx, sy) in [(-1, 0), (1, 0), (0, -1), (0, 1)]) { handle(g.toScreen(Offset(sx * g.half.dx, sy * g.half.dy)), r: 4, col: Surface.ink); }
         if (s.linked.contains('scale')) {
-          final tp = TextPainter(text: TextSpan(text: 'LINKED', style: sans(9.5, c: role, w: FontWeight.w700, ls: 1)), textDirection: TextDirection.ltr)..layout();
+          final tp = TextPainter(text: TextSpan(text: 'LINKED', style: sans(Dn.microSize, c: role, w: FontWeight.w700, ls: 1)), textDirection: TextDirection.ltr)..layout();
           tp.paint(cv, Offset(sz.width - tp.width - 8, sz.height - tp.height - 6));
         }
       case TMode.rotate:
@@ -321,7 +322,7 @@ class _GizmoPainter extends CustomPainter {
         cv.drawLine(c, tip, Paint()..color = role.withValues(alpha: .6)..strokeWidth = 1.2);
         handle(tip, r: 6);
         if (g.widget.rotAxis != 0) {
-          final tp = TextPainter(text: TextSpan(text: g.widget.rotAxis == 1 ? 'X AXIS' : 'Y AXIS', style: sans(9.5, c: role, w: FontWeight.w700, ls: 1)), textDirection: TextDirection.ltr)..layout();
+          final tp = TextPainter(text: TextSpan(text: g.widget.rotAxis == 1 ? 'X AXIS' : 'Y AXIS', style: sans(Dn.microSize, c: role, w: FontWeight.w700, ls: 1)), textDirection: TextDirection.ltr)..layout();
           tp.paint(cv, const Offset(8, 8));
         }
       case TMode.anchor:
@@ -332,7 +333,7 @@ class _GizmoPainter extends CustomPainter {
             final cur = (l.anchor[0] - fx).abs() < .01 && (l.anchor[1] - fy).abs() < .01;
             final hov = g.hoverCell == iy * 3 + ix;
             cv.drawCircle(o, cur ? 6.5 : (hov ? 6 : 4), Paint()..color = cur ? kViolet : (hov ? kViolet.withValues(alpha: .7) : N.g51));
-            if (cur) cv.drawCircle(o, 6.5, Paint()..color = kInk..style = PaintingStyle.stroke..strokeWidth = 1.5);
+            if (cur) cv.drawCircle(o, 6.5, Paint()..color = Surface.ink..style = PaintingStyle.stroke..strokeWidth = 1.5);
           }
         }
     }
@@ -343,7 +344,7 @@ class _GizmoPainter extends CustomPainter {
       TMode.rotate => '${(g.widget.rotAxis == 1 ? l.rotX : (g.widget.rotAxis == 2 ? l.rotY : l.rotation)).toStringAsFixed(1)}°',
       TMode.anchor => '${l.anchor[0]}, ${l.anchor[1]}',
     };
-    final tp = TextPainter(text: TextSpan(text: mode == TMode.anchor ? '' : t, style: mono(9.5, c: N.g63)), textDirection: TextDirection.ltr)..layout();
+    final tp = TextPainter(text: TextSpan(text: mode == TMode.anchor ? '' : t, style: mono(Dn.microSize, c: N.g63)), textDirection: TextDirection.ltr)..layout();
     tp.paint(cv, const Offset(8, 8));
   }
 

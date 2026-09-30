@@ -78,7 +78,6 @@ class ParamStore extends ChangeNotifier {
     notifyListeners();
   }
 
-
   Map<String, dynamic> row(String id) => rows.firstWhere((r) => r['id'] == id);
 
   /// Hard min / max are a storage guard: clamp silently, and round whole numbers.

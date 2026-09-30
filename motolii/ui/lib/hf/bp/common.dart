@@ -6,14 +6,6 @@ import '../metrics.dart';
 import '../glyphs.dart';
 import '../neutral.dart';
 
-const kRule = N.g20;
-const kRule2 = N.g15;
-const kGround = N.g10;
-const kRaised = N.g13;
-const kRaisedHi = N.g15;
-const kSel = N.g20;
-const kMuted = N.g56;
-
 TextStyle sans(
   double s, {
   Color c = N.g86,
@@ -27,14 +19,14 @@ TextStyle sans(
   letterSpacing: ls,
   height: 1.1,
 );
-TextStyle mono(double s, {Color c = kMuted, double ls = 0}) => TextStyle(
+TextStyle mono(double s, {Color c = Surface.muted, double ls = 0}) => TextStyle(
   fontFamily: 'Menlo',
   fontSize: s,
   color: c,
   letterSpacing: ls,
   height: 1.1,
 );
-TextStyle caps(double s, {Color c = kMuted}) =>
+TextStyle caps(double s, {Color c = Surface.muted}) =>
     sans(s, c: c, w: FontWeight.w500, ls: 0.8);
 
 /// Present above a panel body that sits in a dock tab: the tab already names the panel,
@@ -101,8 +93,8 @@ class Leaf extends StatelessWidget {
     final stacked = tabs.length > 1;
     return Container(
       decoration: BoxDecoration(
-        color: kGround,
-        border: Border.all(color: kRule),
+        color: Surface.base,
+        border: Border.all(color: Surface.divider),
         borderRadius: BorderRadius.circular(2),
       ),
       child: Column(
@@ -116,9 +108,9 @@ class Leaf extends StatelessWidget {
                 );
                 final fits = need <= c.maxWidth - 30 && c.maxWidth >= 110;
                 return Container(
-                  height: UiMetrics.chromeRow,
+                  height: Surface.chromeRow,
                   decoration: const BoxDecoration(
-                    border: Border(bottom: BorderSide(color: kRule)),
+                    border: Border(bottom: BorderSide(color: Surface.divider)),
                   ),
                   child: Row(
                     children: [
@@ -149,7 +141,7 @@ class Leaf extends StatelessWidget {
                           ),
                         ),
                       ),
-                      if (trailing != null) Padding(padding: const EdgeInsets.only(right: UiMetrics.tight), child: trailing),
+                      if (trailing != null) Padding(padding: const EdgeInsets.only(right: Surface.inlineGap), child: trailing),
                       // (no ✕ here: it was painted with no gesture; a seat's panel is closed from its tab's menu)
                     ],
                   ),
@@ -180,11 +172,11 @@ class _Tab extends StatelessWidget {
   final bool compact;
   @override
   Widget build(BuildContext context) => Container(
-    height: UiMetrics.chromeRow,
+    height: Surface.chromeRow,
     padding: EdgeInsets.symmetric(horizontal: compact ? 6 : 8),
     decoration: BoxDecoration(
-      color: (selected && !single) ? kSel : null,
-      border: const Border(right: BorderSide(color: kRule2)),
+      color: (selected && !single) ? Surface.selected : null,
+      border: const Border(right: BorderSide(color: Surface.dividerFine)),
     ),
     child: Row(
       mainAxisSize: MainAxisSize.min,
@@ -195,7 +187,7 @@ class _Tab extends StatelessWidget {
           child: CustomPaint(
             painter: HfTabGlyph(
               t.glyph,
-              selected ? N.g95 : kMuted,
+              selected ? N.g95 : Surface.muted,
             ),
           ),
         ),
@@ -213,7 +205,7 @@ class HfTabGlyph extends CustomPainter {
   final HG g;
   final Color c;
   @override
-  void paint(Canvas canvas, Size s) => drawHg(canvas, s, g, c, kGround);
+  void paint(Canvas canvas, Size s) => drawHg(canvas, s, g, c, Surface.base);
   @override
   bool shouldRepaint(HfTabGlyph o) => o.g != g || o.c != c;
 }
@@ -223,11 +215,11 @@ class SearchBox extends StatelessWidget {
   final String hint;
   @override
   Widget build(BuildContext context) => Container(
-    height: UiMetrics.control,
+    height: Surface.control,
     padding: const EdgeInsets.symmetric(horizontal: 6),
     decoration: BoxDecoration(
-      color: kRaised,
-      border: Border.all(color: kRule2),
+      color: Surface.raised,
+      border: Border.all(color: Surface.dividerFine),
       borderRadius: BorderRadius.circular(3),
     ),
     child: Row(
@@ -235,7 +227,7 @@ class SearchBox extends StatelessWidget {
         SizedBox(
           width: 11,
           height: 11,
-          child: CustomPaint(painter: HfTabGlyph(HG.search, kMuted)),
+          child: CustomPaint(painter: HfTabGlyph(HG.search, Surface.muted)),
         ),
         const SizedBox(width: 5),
         Expanded(
@@ -255,18 +247,18 @@ class SearchKey extends StatelessWidget {
   const SearchKey({super.key});
   @override
   Widget build(BuildContext context) => Container(
-    width: UiMetrics.control,
-    height: UiMetrics.control,
+    width: Surface.control,
+    height: Surface.control,
     decoration: BoxDecoration(
-      color: kRaised,
-      border: Border.all(color: kRule2),
+      color: Surface.raised,
+      border: Border.all(color: Surface.dividerFine),
       borderRadius: BorderRadius.circular(3),
     ),
     child: Center(
       child: SizedBox(
         width: 11,
         height: 11,
-        child: CustomPaint(painter: HfTabGlyph(HG.search, kMuted)),
+        child: CustomPaint(painter: HfTabGlyph(HG.search, Surface.muted)),
       ),
     ),
   );
@@ -300,8 +292,8 @@ class Chips extends StatelessWidget {
                 items[i],
                 softWrap: false,
                 style: caps(
-                  10,
-                  c: i == active ? N.g95 : kMuted,
+                  Dn.labelSize,
+                  c: i == active ? N.g95 : Surface.muted,
                 ),
               ),
             ),
@@ -330,7 +322,7 @@ class Section extends StatelessWidget {
         ),
         const SizedBox(width: 5),
         const Expanded(
-          child: SizedBox(height: 1, child: ColoredBox(color: kRule2)),
+          child: SizedBox(height: 1, child: ColoredBox(color: Surface.dividerFine)),
         ),
       ],
     ),

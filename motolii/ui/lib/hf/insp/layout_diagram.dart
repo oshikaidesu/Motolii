@@ -9,6 +9,7 @@ import '../bp/common.dart';
 import '../desk/common.dart' show kMint, kBlue, kViolet, kPink;
 import 'layout_model.dart';
 import '../neutral.dart';
+import '../metrics.dart' show Dn;
 
 const arrangeColor = kMint, spaceColor = kBlue, alignColor = kViolet, sizeColor = kPink;
 
@@ -282,7 +283,7 @@ class _Painter extends CustomPainter {
     final t = on
         ? '${g.cols} × ${s.gi('layout.grid_rows') == 0 ? 'auto' : s.gi('layout.grid_rows')}   gap ${s.gd('layout.gap').round()}   pad ${s.padX.round()}·${s.padY.round()}   ${justifyNames[s.gi('layout.justify_content').clamp(0, 5)]} / ${alignNames[s.gi('layout.align_items').clamp(0, 3)]}'
         : 'Grid off';
-    final tp = TextPainter(text: TextSpan(text: t, style: mono(9.5, c: N.g51)), textDirection: TextDirection.ltr, maxLines: 1, ellipsis: '…')..layout(maxWidth: sz.width - 20);
+    final tp = TextPainter(text: TextSpan(text: t, style: mono(Dn.microSize, c: N.g51)), textDirection: TextDirection.ltr, maxLines: 1, ellipsis: '…')..layout(maxWidth: sz.width - 20);
     tp.paint(c, const Offset(10, 7));
   }
 

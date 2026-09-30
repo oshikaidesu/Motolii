@@ -3,11 +3,12 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
 import '../../hf/bp/common.dart';
-import '../../hf/desk/common.dart' show kInk, kWell;
+
 import '../../session/editor_session.dart';
 import 'relations_model.dart';
 import '../../hf/neutral.dart';
 import 'relations_session.dart';
+import '../../hf/metrics.dart' show Dn, Surface;
 
 /// Relations v0: the place to pick the things a source drives. The things at the current time are dots where they are
 /// on the Stage; a click, a Shift click or a lasso makes the member set. The relation itself is the links the document
@@ -188,7 +189,7 @@ class _RelationsPanelState extends State<RelationsPanel> {
     return Padding(
       padding: const EdgeInsets.all(9),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        if (all.isEmpty) Text('No relation yet. In the Inspector, right-click a value and choose Relation…', style: sans(11, c: kMuted)),
+        if (all.isEmpty) Text('No relation yet. In the Inspector, right-click a value and choose Relation…', style: sans(Dn.nameSize, c: Surface.muted)),
         for (final r in all)
           GestureDetector(
             key: ValueKey('relation-row-${r.source.layer}-${r.source.property}-${r.source.component}'),
@@ -196,11 +197,11 @@ class _RelationsPanelState extends State<RelationsPanel> {
             child: Container(
               margin: const EdgeInsets.only(bottom: 4.5),
               padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(color: kRaised, borderRadius: BorderRadius.circular(4)),
+              decoration: BoxDecoration(color: Surface.raised, borderRadius: BorderRadius.circular(4)),
               child: Row(children: [
                 Container(width: 6, height: 6, decoration: const BoxDecoration(color: kRed, shape: BoxShape.circle)),
                 const SizedBox(width: 6),
-                Expanded(child: Text('${r.source.name(c)} → ${r.members.length} thing${r.members.length == 1 ? '' : 's'} · ${r.mappings.map((m) => labelOf(m.property)).join(', ')}', softWrap: false, overflow: TextOverflow.ellipsis, style: sans(11, c: kInk))),
+                Expanded(child: Text('${r.source.name(c)} → ${r.members.length} thing${r.members.length == 1 ? '' : 's'} · ${r.mappings.map((m) => labelOf(m.property)).join(', ')}', softWrap: false, overflow: TextOverflow.ellipsis, style: sans(Dn.nameSize, c: Surface.ink))),
               ]),
             ),
           ),
@@ -208,7 +209,7 @@ class _RelationsPanelState extends State<RelationsPanel> {
     );
   }
 
-  Widget _label(String t) => Padding(padding: const EdgeInsets.only(top: 9, bottom: 4), child: Text(t, style: sans(9.5, c: kMuted, w: FontWeight.w600, ls: 1.3)));
+  Widget _label(String t) => Padding(padding: const EdgeInsets.only(top: 9, bottom: 4), child: Text(t, style: sans(Dn.microSize, c: Surface.muted, w: FontWeight.w600, ls: 1.3)));
 
   Widget _draftCard() {
     final d = draft!;
@@ -219,11 +220,11 @@ class _RelationsPanelState extends State<RelationsPanel> {
     return Padding(
       padding: const EdgeInsets.all(9),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        Row(children: [Container(width: 6, height: 6, decoration: const BoxDecoration(color: kRed, shape: BoxShape.circle)), const SizedBox(width: 6), Expanded(child: Text('${src.name(c)}', softWrap: false, overflow: TextOverflow.ellipsis, style: sans(11, c: kInk, w: FontWeight.w600)))]),
+        Row(children: [Container(width: 6, height: 6, decoration: const BoxDecoration(color: kRed, shape: BoxShape.circle)), const SizedBox(width: 6), Expanded(child: Text('${src.name(c)}', softWrap: false, overflow: TextOverflow.ellipsis, style: sans(Dn.nameSize, c: Surface.ink, w: FontWeight.w600)))]),
         _label('SOURCE RANGE'),
         _range('in', d['inMin'], d['inMax'], 'px', (lo, hi) => setState(() { d['inMin'] = lo; d['inMax'] = hi; }), current: _sourceValue(d['source'] as Map<String, dynamic>)),
         _label('MEMBERS'),
-        Text(n == 0 ? 'Click or lasso things in the graph.' : '$n thing${n == 1 ? '' : 's'} selected', key: const ValueKey('relations-count'), style: sans(11, c: n == 0 ? kMuted : kInk)),
+        Text(n == 0 ? 'Click or lasso things in the graph.' : '$n thing${n == 1 ? '' : 's'} selected', key: const ValueKey('relations-count'), style: sans(Dn.nameSize, c: n == 0 ? Surface.muted : Surface.ink)),
         _label('DESTINATION'),
         Wrap(spacing: 4, runSpacing: 4, children: [
           for (final p in destinations)
@@ -232,8 +233,8 @@ class _RelationsPanelState extends State<RelationsPanel> {
               onTap: n == 0 ? null : () => setState(() { d['destination'] = p; final u = unitOf(p); d['outMin'] = u.defaultRange.$1; d['outMax'] = u.defaultRange.$2; }),
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 7.5, vertical: 4),
-                decoration: BoxDecoration(color: dest == p ? kRed : kRaised, borderRadius: BorderRadius.circular(3), border: Border.all(color: dest == p ? kRed : kRule2)),
-                child: Text(labelOf(p), style: sans(11, c: dest == p ? N.g10 : (n == 0 ? kMuted : kInk), w: FontWeight.w600)),
+                decoration: BoxDecoration(color: dest == p ? kRed : Surface.raised, borderRadius: BorderRadius.circular(3), border: Border.all(color: dest == p ? kRed : Surface.dividerFine)),
+                child: Text(labelOf(p), style: sans(Dn.nameSize, c: dest == p ? N.g10 : (n == 0 ? Surface.muted : Surface.ink), w: FontWeight.w600)),
               ),
             ),
         ]),
@@ -243,12 +244,12 @@ class _RelationsPanelState extends State<RelationsPanel> {
         ],
         const SizedBox(height: 10.5),
         Row(children: [
-          GestureDetector(key: const ValueKey('relations-cancel'), onTap: _cancel, child: Container(padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4.5), decoration: BoxDecoration(border: Border.all(color: kRule2), borderRadius: BorderRadius.circular(3)), child: Text('Cancel', style: sans(11, c: kMuted)))),
+          GestureDetector(key: const ValueKey('relations-cancel'), onTap: _cancel, child: Container(padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4.5), decoration: BoxDecoration(border: Border.all(color: Surface.dividerFine), borderRadius: BorderRadius.circular(3)), child: Text('Cancel', style: sans(Dn.nameSize, c: Surface.muted)))),
           const Spacer(),
           GestureDetector(
             key: const ValueKey('relations-create'),
             onTap: n > 0 && dest != null ? _create : null,
-            child: Container(padding: const EdgeInsets.symmetric(horizontal: 10.5, vertical: 4.5), decoration: BoxDecoration(color: n > 0 && dest != null ? kRed : kRaised, borderRadius: BorderRadius.circular(3)), child: Text('Create', style: sans(11, c: n > 0 && dest != null ? N.g10 : kMuted, w: FontWeight.w700))),
+            child: Container(padding: const EdgeInsets.symmetric(horizontal: 10.5, vertical: 4.5), decoration: BoxDecoration(color: n > 0 && dest != null ? kRed : Surface.raised, borderRadius: BorderRadius.circular(3)), child: Text('Create', style: sans(Dn.nameSize, c: n > 0 && dest != null ? N.g10 : Surface.muted, w: FontWeight.w700))),
           ),
         ]),
       ]),
@@ -263,14 +264,14 @@ class _RelationsPanelState extends State<RelationsPanel> {
         Row(children: [
           Container(width: 6, height: 6, decoration: const BoxDecoration(color: kRed, shape: BoxShape.circle)),
           const SizedBox(width: 6),
-          Expanded(child: Text(r.source.name(c), softWrap: false, overflow: TextOverflow.ellipsis, style: sans(11, c: kInk, w: FontWeight.w600))),
-          GestureDetector(key: const ValueKey('relation-delete'), onTap: () => RelationsSession.of(c).remove(r), child: Text('✕', style: sans(11, c: kMuted))),
+          Expanded(child: Text(r.source.name(c), softWrap: false, overflow: TextOverflow.ellipsis, style: sans(Dn.nameSize, c: Surface.ink, w: FontWeight.w600))),
+          GestureDetector(key: const ValueKey('relation-delete'), onTap: () => RelationsSession.of(c).remove(r), child: Text('✕', style: sans(Dn.nameSize, c: Surface.muted))),
         ]),
         _label('SOURCE RANGE'),
         _range('in', _shown('in', r.inMin, r.inMax).$1, _shown('in', r.inMin, r.inMax).$2, 'px', (lo, hi) => s.scrubRange('in', lo, hi), onDone: () => _write(r), current: _sourceValue({'layer': r.source.layer, 'property': r.source.property, 'component': r.source.component})),
         _label('MEMBERS'),
         Row(children: [
-          Expanded(child: Text('${(picking ?? r.members.toSet()).length} things', key: const ValueKey('relations-count'), style: sans(11, c: kInk))),
+          Expanded(child: Text('${(picking ?? r.members.toSet()).length} things', key: const ValueKey('relations-count'), style: sans(Dn.nameSize, c: Surface.ink))),
           GestureDetector(
             key: const ValueKey('relations-edit-members'),
             onTap: () async {
@@ -281,14 +282,14 @@ class _RelationsPanelState extends State<RelationsPanel> {
               await _write(r, members: picking!);
               setState(() => picking = null);
             },
-            child: Container(padding: const EdgeInsets.symmetric(horizontal: 7.5, vertical: 3), decoration: BoxDecoration(color: editing ? kRed : kRaised, borderRadius: BorderRadius.circular(3)), child: Text(editing ? 'Done' : 'Edit in graph', style: sans(11, c: editing ? N.g10 : kInk, w: FontWeight.w600))),
+            child: Container(padding: const EdgeInsets.symmetric(horizontal: 7.5, vertical: 3), decoration: BoxDecoration(color: editing ? kRed : Surface.raised, borderRadius: BorderRadius.circular(3)), child: Text(editing ? 'Done' : 'Edit in graph', style: sans(Dn.nameSize, c: editing ? N.g10 : Surface.ink, w: FontWeight.w600))),
           ),
         ]),
         _label('MAPPINGS'),
         for (final m in r.mappings) ...[
           Row(children: [
-            Expanded(child: Text(labelOf(m.property), key: ValueKey('mapping-${m.property}'), style: sans(11, c: kInk, w: FontWeight.w600))),
-            GestureDetector(key: ValueKey('mapping-remove-${m.property}'), onTap: () => c.command('unrelate', {'layers': r.members, 'property': m.property}), child: Text('✕', style: sans(11, c: kMuted))),
+            Expanded(child: Text(labelOf(m.property), key: ValueKey('mapping-${m.property}'), style: sans(Dn.nameSize, c: Surface.ink, w: FontWeight.w600))),
+            GestureDetector(key: ValueKey('mapping-remove-${m.property}'), onTap: () => c.command('unrelate', {'layers': r.members, 'property': m.property}), child: Text('✕', style: sans(Dn.nameSize, c: Surface.muted))),
           ]),
           _range('out-${m.property}', _shown('out-${m.property}', unitOf(m.property).fromDoc(m.outMin), unitOf(m.property).fromDoc(m.outMax)).$1, _shown('out-${m.property}', unitOf(m.property).fromDoc(m.outMin), unitOf(m.property).fromDoc(m.outMax)).$2, unitOf(m.property).suffix, (lo, hi) => s.scrubRange('out-${m.property}', lo, hi), onDone: () => _write(r)),
           const SizedBox(height: 4.5),
@@ -298,7 +299,7 @@ class _RelationsPanelState extends State<RelationsPanel> {
             GestureDetector(
               key: ValueKey('add-mapping-$p'),
               onTap: () { final u = unitOf(p); _relate(r.source, r.inMin, r.inMax, r.members.toSet(), p, u.toDoc(u.defaultRange.$1), u.toDoc(u.defaultRange.$2)); },
-              child: Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3), decoration: BoxDecoration(border: Border.all(color: kRule2), borderRadius: BorderRadius.circular(3)), child: Text('+ ${labelOf(p)}', style: sans(11, c: kInk2))),
+              child: Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3), decoration: BoxDecoration(border: Border.all(color: Surface.dividerFine), borderRadius: BorderRadius.circular(3)), child: Text('+ ${labelOf(p)}', style: sans(Dn.nameSize, c: kInk2))),
             ),
         ]),
       ]),
@@ -320,9 +321,9 @@ class _RelationsPanelState extends State<RelationsPanel> {
         _End('$key-max', hi, suffix, (v) => change(lo, v), onDone),
         if (current != null) ...[
           const SizedBox(width: 4.5),
-          GestureDetector(key: ValueKey('$key-set-min'), onTap: () { change(current, hi); onDone?.call(); }, child: Text('⇤', style: sans(11, c: kMuted))),
+          GestureDetector(key: ValueKey('$key-set-min'), onTap: () { change(current, hi); onDone?.call(); }, child: Text('⇤', style: sans(Dn.nameSize, c: Surface.muted))),
           const SizedBox(width: 3),
-          GestureDetector(key: ValueKey('$key-set-max'), onTap: () { change(lo, current); onDone?.call(); }, child: Text('⇥', style: sans(11, c: kMuted))),
+          GestureDetector(key: ValueKey('$key-set-max'), onTap: () { change(lo, current); onDone?.call(); }, child: Text('⇥', style: sans(Dn.nameSize, c: Surface.muted))),
         ],
       ]);
 
@@ -330,20 +331,20 @@ class _RelationsPanelState extends State<RelationsPanel> {
   Widget build(BuildContext context) => LayoutBuilder(builder: (context, box) {
         final wide = box.maxWidth >= 520;
         final side = SizedBox(width: wide ? 250 : double.infinity, child: SingleChildScrollView(child: _side()));
-        final graph = ColoredBox(color: kWell, child: _graph());
+        final graph = ColoredBox(color: Surface.well, child: _graph());
         return DockedPanel(
           child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             Container(
               height: 25.5,
               padding: const EdgeInsets.symmetric(horizontal: 9),
-              decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: kRule2))),
+              decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: Surface.dividerFine))),
               child: Row(children: [
-                Text(draft != null ? 'CHOOSE THE THINGS IT DRIVES' : (picking != null ? 'EDIT THE MEMBERS' : 'RELATIONS'), style: sans(9.5, c: kMuted, w: FontWeight.w600, ls: 1.3)),
+                Text(draft != null ? 'CHOOSE THE THINGS IT DRIVES' : (picking != null ? 'EDIT THE MEMBERS' : 'RELATIONS'), style: sans(Dn.microSize, c: Surface.muted, w: FontWeight.w600, ls: 1.3)),
                 const Spacer(),
-                Text('${present.length} things now', style: mono(10, c: kMuted)),
+                Text('${present.length} things now', style: mono(Dn.labelSize, c: Surface.muted)),
               ]),
             ),
-            Expanded(child: wide ? Row(children: [Expanded(child: graph), Container(width: 1, color: kRule2), side]) : Column(children: [Expanded(child: graph), Container(height: 1, color: kRule2), SizedBox(height: 165, child: side)])),
+            Expanded(child: wide ? Row(children: [Expanded(child: graph), Container(width: 1, color: Surface.dividerFine), side]) : Column(children: [Expanded(child: graph), Container(height: 1, color: Surface.dividerFine), SizedBox(height: 165, child: side)])),
           ]),
         );
       });
@@ -370,8 +371,8 @@ class _EndState extends State<_End> {
         child: Container(
           key: ValueKey(widget.keyName),
           padding: const EdgeInsets.symmetric(horizontal: 4.5, vertical: 2),
-          decoration: BoxDecoration(color: kWell, borderRadius: BorderRadius.circular(2)),
-          child: Text('${widget.value.round()}${widget.suffix}', style: mono(11, c: kInk)),
+          decoration: BoxDecoration(color: Surface.well, borderRadius: BorderRadius.circular(2)),
+          child: Text('${widget.value.round()}${widget.suffix}', style: mono(Dn.nameSize, c: Surface.ink)),
         ),
       );
 }
@@ -383,7 +384,7 @@ class _RangePainter extends CustomPainter {
   void paint(Canvas c, Size s) {
     final y = s.height / 2;
     c.drawLine(Offset(0, y), Offset(s.width, y), Paint()..color = N.g26..strokeWidth = 2);
-    for (final x in [0.0, s.width]) c.drawLine(Offset(x, y - 5), Offset(x, y + 5), Paint()..color = kMuted..strokeWidth = 2);
+    for (final x in [0.0, s.width]) c.drawLine(Offset(x, y - 5), Offset(x, y + 5), Paint()..color = Surface.muted..strokeWidth = 2);
     if (at != null) c.drawCircle(Offset(at! * s.width, y), 4, Paint()..color = kRed);
   }
   @override
@@ -417,7 +418,7 @@ class _GraphPainter extends CustomPainter {
         c.drawLine(to, p, Paint()..color = kRed.withValues(alpha: .25)..strokeWidth = 1);
       }
       if (mappings > 0) {
-        final tp = TextPainter(text: TextSpan(text: '$mappings mapping${mappings == 1 ? '' : 's'}', style: sans(10, c: kRed)), textDirection: TextDirection.ltr)..layout();
+        final tp = TextPainter(text: TextSpan(text: '$mappings mapping${mappings == 1 ? '' : 's'}', style: sans(Dn.labelSize, c: kRed)), textDirection: TextDirection.ltr)..layout();
         final mid = Offset.lerp(from, to, .5)!;
         tp.paint(c, mid - Offset(tp.width / 2, tp.height + 4));
       }
@@ -425,12 +426,12 @@ class _GraphPainter extends CustomPainter {
     for (final l in things) {
       final id = l['id'] as int; final p = dots[id]!;
       final isSrc = id == source, isMem = members.contains(id);
-      final color = isSrc ? kRed : (isMem ? kInk : N.g44);
+      final color = isSrc ? kRed : (isMem ? Surface.ink : N.g44);
       if (isSrc) c.drawCircle(p, 13, Paint()..color = kRed.withValues(alpha: .25));
       c.drawCircle(p, isSrc ? 7 : 6, Paint()..color = color);
       if (isMem && !isSrc) c.drawCircle(p, 10, Paint()..color = kRed..style = PaintingStyle.stroke..strokeWidth = 1.6);
       if (picking && !isSrc && !isMem) c.drawCircle(p, 10, Paint()..color = N.g26..style = PaintingStyle.stroke..strokeWidth = 1);
-      final tp = TextPainter(text: TextSpan(text: '${l['name']}', style: sans(10, c: isSrc || isMem ? kInk : kMuted)), textDirection: TextDirection.ltr)..layout(maxWidth: 67.5);
+      final tp = TextPainter(text: TextSpan(text: '${l['name']}', style: sans(Dn.labelSize, c: isSrc || isMem ? Surface.ink : Surface.muted)), textDirection: TextDirection.ltr)..layout(maxWidth: 67.5);
       tp.paint(c, p + Offset(-tp.width / 2, 12));
     }
     if (lasso != null && lasso!.length > 1) {

@@ -1,16 +1,17 @@
 import 'package:flutter/widgets.dart';
 
 import '../../../hf/bp/common.dart';
-import '../../../hf/bp/shell.dart' show kTile;
+
 import '../../../hf/desk/common.dart' show kAccent;
 import '../../../hf/glyphs.dart';
 import '../../../panels/stage.dart' show StageToolbarApi;
+import '../../../hf/metrics.dart' show Surface;
 
 /// The Stage's own bars, hf-styled, over exactly the [StageToolbarApi] operations Classic's bars call. The picture,
 /// the gesture surface and the gizmos underneath are unchanged — this only redraws the strip above and below them.
 Widget _scrollingBar({required double height, required List<Widget> children}) => Container(
       height: height,
-      color: kRaised,
+      color: Surface.raised,
       child: LayoutBuilder(
         builder: (context, box) => SingleChildScrollView(
           scrollDirection: Axis.horizontal,
@@ -32,19 +33,19 @@ Widget newStageTopBar(BuildContext context, StageToolbarApi api) => _scrollingBa
       _btn('−', api.zoomOut),
       SizedBox(
         width: 46,
-        child: Text('${api.zoomPercent.round()}%', textAlign: TextAlign.center, style: sans(11, c: kMuted)),
+        child: Text('${api.zoomPercent.round()}%', textAlign: TextAlign.center, style: sans(11, c: Surface.muted)),
       ),
       _btn('+', api.zoomIn),
     ]);
 
 Widget newStageBottomBar(BuildContext context, StageToolbarApi api) => _scrollingBar(height: 24, children: [
-      Text('${api.width.round()} × ${api.height.round()}', style: sans(10, c: kMuted)),
+      Text('${api.width.round()} × ${api.height.round()}', style: sans(10, c: Surface.muted)),
       const SizedBox(width: 8),
       GestureDetector(
         key: const ValueKey('stage:transparentGround'),
         behavior: HitTestBehavior.opaque,
         onTap: api.canToggleGround ? api.toggleGround : null,
-        child: SizedBox(width: 20, height: 12, child: CustomPaint(painter: HgPainter(HG.grid, api.transparentGround ? kAccent : kMuted, kRaised))),
+        child: SizedBox(width: 20, height: 12, child: CustomPaint(painter: HgPainter(HG.grid, api.transparentGround ? kAccent : Surface.muted, Surface.raised))),
       ),
       if (api.userStage) ...[
         const SizedBox(width: 8),
@@ -52,10 +53,10 @@ Widget newStageBottomBar(BuildContext context, StageToolbarApi api) => _scrollin
       ],
       const Spacer(),
       if (!api.gesturesAvailable) ...[
-        Text('Transform gestures unavailable', style: sans(10, c: kMuted)),
+        Text('Transform gestures unavailable', style: sans(10, c: Surface.muted)),
         const SizedBox(width: 8),
       ],
-      Text('Frame ${api.frame}', style: sans(10, c: kMuted)),
+      Text('Frame ${api.frame}', style: sans(10, c: Surface.muted)),
     ]);
 
 Widget _btn(String label, VoidCallback? onTap) => GestureDetector(
@@ -66,7 +67,7 @@ Widget _btn(String label, VoidCallback? onTap) => GestureDetector(
         margin: const EdgeInsets.symmetric(horizontal: 2),
         padding: const EdgeInsets.symmetric(horizontal: 8),
         alignment: Alignment.center,
-        decoration: BoxDecoration(color: kTile, borderRadius: BorderRadius.circular(4)),
+        decoration: BoxDecoration(color: Surface.raised, borderRadius: BorderRadius.circular(4)),
         child: Text(label, style: sans(10.5, c: onTap == null ? const Color(0xFF55565C) : const Color(0xFFD0D1D5))),
       ),
     );

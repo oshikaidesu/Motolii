@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import 'package:flutter/widgets.dart';
 import '../hf/bp/common.dart';
 import '../hf/bp/shell.dart';
+import '../hf/metrics.dart' show Surface;
 
 /// Identity tiles for panels that do not exist yet. They only test that the same shell can hold them.
 const futureNames = ['Media', 'Audio', 'Music', 'Physics', 'Materials', 'Environments', 'AI', 'Templates', 'Plugins'];
@@ -13,7 +14,7 @@ class FutureTile extends StatelessWidget {
   Widget build(BuildContext context) => Container(
         width: 88,
         height: 70,
-        decoration: BoxDecoration(color: kTile, borderRadius: BorderRadius.circular(4), border: Border.all(color: kRule2)),
+        decoration: BoxDecoration(color: Surface.raised, borderRadius: BorderRadius.circular(4), border: Border.all(color: Surface.dividerFine)),
         child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
           SizedBox(width: 24, height: 24, child: CustomPaint(painter: _Icon(name))),
           const SizedBox(height: 8),

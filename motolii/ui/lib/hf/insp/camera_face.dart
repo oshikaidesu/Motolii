@@ -8,6 +8,7 @@ import '../bp/common.dart';
 import '../desk/common.dart' show kMint, kBlue, kViolet, kPink;
 import 'camera_model.dart';
 import '../neutral.dart';
+import '../metrics.dart' show Dn;
 
 const targetColor = kMint, orbitColor = kViolet, distanceColor = kBlue, rollColor = kPink;
 
@@ -195,10 +196,10 @@ class _Painter extends CustomPainter {
     c.drawCircle(rh, 4.6, Paint()..color = rollColor.withValues(alpha: a));
     c.drawCircle(rh, 4.6, Paint()..color = N.g07..style = PaintingStyle.stroke..strokeWidth = 1.3);
     final t = 'pitch ${s.pitch.toStringAsFixed(0)}°  yaw ${s.yaw.toStringAsFixed(0)}°   ×${s.distance.toStringAsFixed(2)}   roll ${s.roll.toStringAsFixed(0)}°';
-    final tp = TextPainter(text: TextSpan(text: t, style: mono(9.5, c: N.g51)), textDirection: TextDirection.ltr, maxLines: 1, ellipsis: '…')..layout(maxWidth: sz.width - 16);
+    final tp = TextPainter(text: TextSpan(text: t, style: mono(Dn.microSize, c: N.g51)), textDirection: TextDirection.ltr, maxLines: 1, ellipsis: '…')..layout(maxWidth: sz.width - 16);
     tp.paint(c, const Offset(8, 7));
     if (locked) {
-      final lp = TextPainter(text: TextSpan(text: 'TARGET LAYER', style: sans(9.5, c: targetColor, w: FontWeight.w700, ls: 1)), textDirection: TextDirection.ltr)..layout();
+      final lp = TextPainter(text: TextSpan(text: 'TARGET LAYER', style: sans(Dn.microSize, c: targetColor, w: FontWeight.w700, ls: 1)), textDirection: TextDirection.ltr)..layout();
       lp.paint(c, Offset(sz.width - lp.width - 8, sz.height - lp.height - 6));
     }
   }

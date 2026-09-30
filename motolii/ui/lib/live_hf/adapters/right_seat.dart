@@ -1,6 +1,7 @@
 import 'package:flutter/widgets.dart';
 
-import '../../hf/bp/common.dart' show sans, kMuted;
+import '../../hf/bp/common.dart' show sans;
+import '../../hf/metrics.dart' show Surface;
 import '../../session/editor_session.dart';
 import 'camera.dart';
 import 'effect.dart';
@@ -8,6 +9,7 @@ import 'effects_card.dart';
 import 'layout.dart';
 import 'transform.dart';
 import 'inspector_session.dart';
+import '../../hf/metrics.dart' show Dn, Surface;
 
 /// The Inspector seat. Specialist editing requests open the corresponding real Dock panel; the Inspector itself
 /// stays an Inspector instead of turning into a drawer.
@@ -94,7 +96,7 @@ class _RightSeatState extends State<RightSeat> {
             Padding(
               padding: const EdgeInsets.fromLTRB(9, 7.5, 9, 0),
               child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                Padding(padding: const EdgeInsets.only(bottom: 6), child: Text('Stage', key: const ValueKey('seat-stage'), style: sans(11, c: kMuted))),
+                Padding(padding: const EdgeInsets.only(bottom: 6), child: Text('Stage', key: const ValueKey('seat-stage'), style: sans(Dn.nameSize, c: Surface.muted))),
                 LayerRowsSheet(key: ValueKey('seat-stage:${layer['id']}'), controller: c, layerId: layer['id'] as int, prefix: 'stage.'),
               ]),
             ),
@@ -106,7 +108,7 @@ class _RightSeatState extends State<RightSeat> {
             ),
           if (effects.isNotEmpty)
             Padding(
-              padding: const EdgeInsets.fromLTRB(9, 7.5, 9, 12),
+              padding: const EdgeInsets.only(top: Surface.sectionGap, bottom: Surface.panelInset),
               // Drag a card by its header to apply it earlier or later (Classic's reorder grip, `moveEffect`).
               child: ReorderableList(
                 shrinkWrap: true,
@@ -142,6 +144,6 @@ class _Empty extends StatelessWidget {
   final String text;
   @override
   Widget build(BuildContext context) => Center(
-    child: Text(text, key: const ValueKey('seat-empty'), style: sans(11, c: kMuted)),
+    child: Text(text, key: const ValueKey('seat-empty'), style: sans(Dn.nameSize, c: Surface.muted)),
   );
 }

@@ -146,7 +146,6 @@ class _FluidBoardState extends State<FluidBoard> with TickerProviderStateMixin {
     });
   }
 
-
   @override
   void dispose() {
     _landed?.cancel();

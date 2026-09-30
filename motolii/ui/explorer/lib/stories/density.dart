@@ -34,7 +34,6 @@ ThemeData compactMaterialTheme({double row = 20}) {
   );
 }
 
-
 /// Motolii's two marks that Material has no slot for, carried by Theme itself: the lamp of a keyed property and the colour of an
 /// identity (a layer, an accent). They are read as `Theme.of(context).extension<MotoliiMarks>()`.
 @immutable
@@ -151,12 +150,12 @@ Widget standardColumn(ThemeData theme) => MaterialApp(
 /// The controls Motolii draws now (the foundation's own widgets), for the eye.
 Widget motoliiColumn() => Container(
       color: const Color(0xFF1A1A1A),
-      padding: const EdgeInsets.all(UiMetrics.pad),
+      padding: const EdgeInsets.all(Surface.panelInset),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         const Padding(padding: EdgeInsets.only(bottom: 6), child: Text('Rounded Rectangle', style: TextStyle(fontSize: 11, color: Color(0xFFDDDDDD)))),
-        SizedBox(height: UiMetrics.rowStd, child: Row(children: const [Text('Position', style: TextStyle(fontSize: 11, color: Color(0xFFDDDDDD))), Spacer(), Text('960.00', style: TextStyle(fontSize: 11, color: Color(0xFFDDDDDD)))])),
+        SizedBox(height: Surface.workRow, child: Row(children: const [Text('Position', style: TextStyle(fontSize: 11, color: Color(0xFFDDDDDD))), Spacer(), Text('960.00', style: TextStyle(fontSize: 11, color: Color(0xFFDDDDDD)))])),
         const SizedBox(height: 4),
-        SizedBox(height: UiMetrics.control, child: EditorSlider(value: .5, onChanged: (_) {})),
+        SizedBox(height: Surface.control, child: EditorSlider(value: .5, onChanged: (_) {})),
         const SizedBox(height: 6),
         Row(children: [EditorButton('Apply', () {}), const SizedBox(width: 6), EditorButton('Reset', () {})]),
       ]),

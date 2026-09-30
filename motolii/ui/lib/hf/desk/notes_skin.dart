@@ -4,16 +4,17 @@ import '../../foundation/panel_controls.dart' show EditorDraftField;
 import '../bp/common.dart';
 import 'common.dart';
 import '../neutral.dart';
+import '../metrics.dart' show Dn, Surface;
 
 /// The cards' look in the finished Notes: flat colour, a violet pill for a reference, a dotted ground.
 const hfNoteLook = NoteLook(
-  ground: kGround,
+  ground: Surface.base,
   dots: N.g15,
   tints: [kYellow, kPink, kBlue, kMint],
   reference: kViolet,
   ink: N.g10,
   accent: kAccent,
-  raised: kInk,
+  raised: Surface.ink,
 );
 
 /// The finished Notes desk placing what the desk gives it (pages, canvas, actions): a row of tools, the pages as
@@ -41,7 +42,7 @@ class NotesSkin extends StatelessWidget {
           height: 22.5,
           width: 22.5,
           margin: const EdgeInsets.only(right: 3),
-          decoration: BoxDecoration(border: Border.all(color: kRule2), borderRadius: BorderRadius.circular(2)),
+          decoration: BoxDecoration(border: Border.all(color: Surface.dividerFine), borderRadius: BorderRadius.circular(2)),
           child: CustomPaint(painter: _ToolP(icon)),
         ),
       );
@@ -70,14 +71,14 @@ class NotesSkin extends StatelessWidget {
                       margin: const EdgeInsets.only(left: 3),
                       padding: const EdgeInsets.symmetric(horizontal: 5),
                       alignment: Alignment.center,
-                      decoration: BoxDecoration(border: Border.all(color: p.active ? kAccent : kRule2), borderRadius: BorderRadius.circular(2), color: p.active ? kAccentDim.withValues(alpha: .4) : null),
-                      child: Text(p.title.isEmpty ? '${i + 1}' : p.title, softWrap: false, overflow: TextOverflow.clip, style: sans(11, c: p.active ? kInk : kMuted)),
+                      decoration: BoxDecoration(border: Border.all(color: p.active ? kAccent : Surface.dividerFine), borderRadius: BorderRadius.circular(2), color: p.active ? kAccentDim.withValues(alpha: .4) : null),
+                      child: Text(p.title.isEmpty ? '${i + 1}' : p.title, softWrap: false, overflow: TextOverflow.clip, style: sans(Dn.nameSize, c: p.active ? Surface.ink : Surface.muted)),
                     ),
                   ),
                 GestureDetector(
                   key: const ValueKey('notes-new-page'),
                   onTap: view.newPage,
-                  child: Container(width: 19.5, height: 19.5, margin: const EdgeInsets.only(left: 3), alignment: Alignment.center, decoration: BoxDecoration(border: Border.all(color: kRule2), borderRadius: BorderRadius.circular(2)), child: Text('+', style: sans(11, c: kMuted))),
+                  child: Container(width: 19.5, height: 19.5, margin: const EdgeInsets.only(left: 3), alignment: Alignment.center, decoration: BoxDecoration(border: Border.all(color: Surface.dividerFine), borderRadius: BorderRadius.circular(2)), child: Text('+', style: sans(Dn.nameSize, c: Surface.muted))),
                 ),
               ]),
             ),
@@ -89,12 +90,12 @@ class NotesSkin extends StatelessWidget {
       ? Padding(
           padding: const EdgeInsets.fromLTRB(9, 3, 9, 6),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('Click anywhere to write', style: sans(11, c: kMuted)),
+            Text('Click anywhere to write', style: sans(Dn.nameSize, c: Surface.muted)),
             if (view.legacy)
               GestureDetector(
                 key: const ValueKey('notes-legacy'),
                 onTap: view.importLegacy,
-                child: Padding(padding: const EdgeInsets.only(top: 4.5), child: Text('Import previous text / references', style: sans(11, c: kAccent))),
+                child: Padding(padding: const EdgeInsets.only(top: 4.5), child: Text('Import previous text / references', style: sans(Dn.nameSize, c: kAccent))),
               ),
           ]),
         )
@@ -113,12 +114,12 @@ class NotesSkin extends StatelessWidget {
             height: 30,
             padding: const EdgeInsets.symmetric(horizontal: 9),
             child: Row(children: [
-              Expanded(child: Text('${view.blocks} blocks', softWrap: false, overflow: TextOverflow.clip, style: sans(11, c: kMuted))),
+              Expanded(child: Text('${view.blocks} blocks', softWrap: false, overflow: TextOverflow.clip, style: sans(Dn.nameSize, c: Surface.muted))),
               step('zoom-out', '−', z - .25),
-              SizedBox(width: 36, child: Text('${(z * 100).round()}%', key: const ValueKey('zoom-label'), textAlign: TextAlign.center, style: mono(11, c: N.g82))),
+              SizedBox(width: 36, child: Text('${(z * 100).round()}%', key: const ValueKey('zoom-label'), textAlign: TextAlign.center, style: mono(Dn.nameSize, c: N.g82))),
               step('zoom-in', '+', z + .25),
               const SizedBox(width: 7.5),
-              GestureDetector(key: const ValueKey('zoom-fit'), onTap: view.resetView, child: Text('Reset', style: sans(11, c: kAccent))),
+              GestureDetector(key: const ValueKey('zoom-fit'), onTap: view.resetView, child: Text('Reset', style: sans(Dn.nameSize, c: kAccent))),
             ]),
           );
         },

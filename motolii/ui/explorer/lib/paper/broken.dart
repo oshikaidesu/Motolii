@@ -290,7 +290,6 @@ Widget sideways(double w) => ListView(scrollDirection: Axis.horizontal, padding:
         ]))),
     ]);
 
-
 /// Rows of whole frames touching, filling [w] (every picture uncut, at its own shape), each row's names printed under
 /// its frames like a film's edge print.
 List<Widget> _rebate(List<P> ps, double w, double target, {double most = 160, bool names = true}) {

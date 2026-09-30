@@ -6,6 +6,7 @@ import '../bp/common.dart';
 import 'common.dart';
 import '../shell/menu.dart' show showHfMenu;
 import '../neutral.dart';
+import '../metrics.dart' show Dn, Surface;
 
 class NBlock {
   NBlock(this.kind, this.pos, this.size, this.text, [this.tint = 0, this.id, this.png]);
@@ -160,7 +161,7 @@ class _NotesDeskState extends State<NotesDesk> {
                 _absorb();
               },
               onSecondaryTapDown: widget.host == null ? null : (e) => _pageMenu(p, e.globalPosition),
-              child: Container(width: 19.5, height: 19.5, margin: const EdgeInsets.only(left: 3), alignment: Alignment.center, decoration: BoxDecoration(border: Border.all(color: p == page ? kAccent : kRule2), borderRadius: BorderRadius.circular(2), color: p == page ? kAccentDim.withValues(alpha: .4) : null), child: Text('${p + 1}', style: sans(11, c: p == page ? kInk : kMuted))),
+              child: Container(width: 19.5, height: 19.5, margin: const EdgeInsets.only(left: 3), alignment: Alignment.center, decoration: BoxDecoration(border: Border.all(color: p == page ? kAccent : Surface.dividerFine), borderRadius: BorderRadius.circular(2), color: p == page ? kAccentDim.withValues(alpha: .4) : null), child: Text('${p + 1}', style: sans(Dn.nameSize, c: p == page ? Surface.ink : Surface.muted))),
             ),
         ]),
       );
@@ -210,7 +211,7 @@ class _NotesDeskState extends State<NotesDesk> {
         child: Container(
           height: 22.5,
           width: 22.5,
-          decoration: BoxDecoration(color: i == tool ? kAccentDim.withValues(alpha: .4) : null, border: Border.all(color: i == tool ? kAccent : kRule2), borderRadius: BorderRadius.circular(2)),
+          decoration: BoxDecoration(color: i == tool ? kAccentDim.withValues(alpha: .4) : null, border: Border.all(color: i == tool ? kAccent : Surface.dividerFine), borderRadius: BorderRadius.circular(2)),
           child: CustomPaint(painter: _ToolP(i)),
         ),
       );
@@ -225,13 +226,13 @@ class _NotesDeskState extends State<NotesDesk> {
         height: 30,
         padding: const EdgeInsets.symmetric(horizontal: 9),
         child: Row(children: [
-          Text('Page ${page + 1}  ·  ${blocks.length} blocks', style: sans(11, c: kMuted)),
+          Text('Page ${page + 1}  ·  ${blocks.length} blocks', style: sans(Dn.nameSize, c: Surface.muted)),
           const Spacer(),
           GestureDetector(key: const ValueKey('zoom-out'), onTap: () => setState(() => zoom = clampD(zoom - .25, .25, 3)), child: Padding(padding: const EdgeInsets.symmetric(horizontal: 4.5), child: Text('−', style: sans(13.5, c: N.g82)))),
-          SizedBox(width: 36, child: Text('${(zoom * 100).round()}%', key: const ValueKey('zoom-label'), textAlign: TextAlign.center, style: mono(11, c: N.g82))),
+          SizedBox(width: 36, child: Text('${(zoom * 100).round()}%', key: const ValueKey('zoom-label'), textAlign: TextAlign.center, style: mono(Dn.nameSize, c: N.g82))),
           GestureDetector(key: const ValueKey('zoom-in'), onTap: () => setState(() => zoom = clampD(zoom + .25, .25, 3)), child: Padding(padding: const EdgeInsets.symmetric(horizontal: 4.5), child: Text('+', style: sans(13.5, c: N.g82)))),
           const SizedBox(width: 7.5),
-          GestureDetector(key: const ValueKey('zoom-fit'), onTap: () => setState(() => _fit(const Size(310, 490))), child: Text('Fit', style: sans(11, c: kAccent))),
+          GestureDetector(key: const ValueKey('zoom-fit'), onTap: () => setState(() => _fit(const Size(310, 490))), child: Text('Fit', style: sans(Dn.nameSize, c: kAccent))),
         ]),
       );
 
@@ -328,7 +329,7 @@ class _NotesDeskState extends State<NotesDesk> {
                   dragStartBehavior: DragStartBehavior.down,
                   onPanUpdate: (d) => setState(() => b.size = Size(math.max(56, b.size.width + d.delta.dx), math.max(28, b.size.height + d.delta.dy))),
                   onPanEnd: (_) => widget.host?.patch(page, b, {'width': b.size.width, 'height': b.size.height}),
-                  child: DecoratedBox(decoration: BoxDecoration(color: kInk, border: Border.all(color: kAccent, width: 1.4 / z), borderRadius: BorderRadius.circular(2 / z))),
+                  child: DecoratedBox(decoration: BoxDecoration(color: Surface.ink, border: Border.all(color: kAccent, width: 1.4 / z), borderRadius: BorderRadius.circular(2 / z))),
                 ),
               ),
             ],
@@ -345,8 +346,8 @@ class _NotesDeskState extends State<NotesDesk> {
           padding: const EdgeInsets.all(7.5),
           decoration: BoxDecoration(color: col, borderRadius: BorderRadius.circular(2)),
           child: editing == i
-              ? EditableText(key: const ValueKey('note-edit'), controller: _ctl, focusNode: _focus, autofocus: true, maxLines: null, style: sans(11, c: ink, w: FontWeight.w600), cursorColor: ink, backgroundCursorColor: ink, onChanged: (t) => b.text = t)
-              : Text(b.text, style: sans(11, c: ink, w: FontWeight.w600)),
+              ? EditableText(key: const ValueKey('note-edit'), controller: _ctl, focusNode: _focus, autofocus: true, maxLines: null, style: sans(Dn.nameSize, c: ink, w: FontWeight.w600), cursorColor: ink, backgroundCursorColor: ink, onChanged: (t) => b.text = t)
+              : Text(b.text, style: sans(Dn.nameSize, c: ink, w: FontWeight.w600)),
         );
       case 'image':
         final png = b.png;
@@ -358,7 +359,7 @@ class _NotesDeskState extends State<NotesDesk> {
           child: Row(children: [
             Container(width: 6, height: 6, decoration: const BoxDecoration(color: N.g10, shape: BoxShape.circle)),
             const SizedBox(width: 6),
-            Expanded(child: Text(b.text, softWrap: false, overflow: TextOverflow.clip, style: sans(11, c: N.g10, w: FontWeight.w600))),
+            Expanded(child: Text(b.text, softWrap: false, overflow: TextOverflow.clip, style: sans(Dn.nameSize, c: N.g10, w: FontWeight.w600))),
           ]),
         );
       default:
@@ -385,7 +386,7 @@ class _DotsP extends CustomPainter {
   final double z;
   @override
   void paint(Canvas c, Size s) {
-    c.drawRect(Offset.zero & s, Paint()..color = kGround);
+    c.drawRect(Offset.zero & s, Paint()..color = Surface.base);
     final p = Paint()..color = N.g15;
     final step = 16 * z;
     if (step < 5) return;
