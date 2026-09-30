@@ -3,7 +3,7 @@ import 'package:flutter/widgets.dart';
 import '../../../theme/editor_metrics.dart';
 import '../../../theme/editor_theme.dart';
 import '../../timeline_core/menu.dart';
-import 'frame.dart';
+import '../../timeline_core/frame.dart';
 
 export '../../timeline_core/menu.dart';
 

@@ -9,13 +9,13 @@ import '../../controls/panel.dart';
 import '../../theme/editor_theme.dart';
 import '../../controls/leaves.dart';
 import '../../session/editor_session.dart';
-import 'timeline/frame.dart';
-import 'timeline/grip.dart';
+import '../timeline_core/frame.dart';
+import '../timeline_core/grip.dart';
 import 'timeline/layout.dart';
 import 'timeline/menu.dart';
 import 'timeline/overview.dart';
 import 'timeline/paint.dart';
-import 'timeline/view.dart';
+import '../timeline_core/view.dart';
 
 /// What a host's own toolbar needs from the Timeline: play/pause and the zoom operations Classic's own bar's
 /// buttons call. Nothing about the ruler, the tracks, the keyframes or the overview strip below them — those,

@@ -4,7 +4,7 @@ import '../../../controls/leaves.dart';
 import '../../../theme/editor_metrics.dart';
 import '../../../theme/editor_theme.dart';
 import '../../../session/editor_session.dart';
-import '../native_visual_sample.dart';
+import '../../../browser/visual_sample.dart';
 import 'color_values.dart';
 
 /// The fill's definitions, written hard into the document: its kind and how

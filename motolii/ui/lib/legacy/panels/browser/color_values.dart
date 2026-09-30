@@ -4,7 +4,7 @@ import '../../../session/editor_session.dart';
 
 import '../../../session/color_edit.dart' show colorOf;
 export '../../../session/color_edit.dart' show rgbaOf, colorOf;
-import '../native_visual_sample.dart';
+import '../../../browser/visual_sample.dart';
 
 /// What a swatch is made of: the four numbers a stored colour carries, the
 /// Color they make, and the strip that draws one — solid or gradient.

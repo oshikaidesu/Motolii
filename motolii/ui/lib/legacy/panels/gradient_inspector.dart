@@ -5,7 +5,7 @@ import '../../theme/editor_metrics.dart';
 import '../../theme/editor_theme.dart';
 import '../../controls/panel.dart';
 import '../../session/editor_session.dart';
-import 'native_visual_sample.dart';
+import '../../browser/visual_sample.dart';
 
 /// The fill's value on the sheet: one bar, its stops as handles. A handle is
 /// the stop's swatch — press it and the Browser's wheel turns to it, drag it

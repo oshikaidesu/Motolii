@@ -3,7 +3,7 @@ import 'package:flutter/widgets.dart';
 import '../../../theme/editor_metrics.dart';
 import '../../../theme/editor_theme.dart';
 import '../../../session/editor_session.dart';
-import '../native_visual_sample.dart';
+import '../../../browser/visual_sample.dart';
 import 'shelf.dart';
 import '../../../theme/material_icons.dart';
 import '../../../controls/leaves.dart';
