@@ -10,6 +10,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Current workspace and documentation entry points
         run: |
           python3 scripts/check-stage5.py --self-test
@@ -20,3 +22,8 @@ jobs:
           cargo arc check
       - name: Documentation index and link consistency
         run: bash scripts/check-docs.sh
+      - name: Independent police (Semgrep rules, cargo-deny sources)
+        run: |
+          pip install semgrep
+          cargo install cargo-deny --locked
+          BASE="${{ github.event.before }}" bash scripts/validate.sh police

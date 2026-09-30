@@ -1,0 +1,10 @@
+# The independent guard on where code comes from. Only `sources` is enforced (scripts/check-deny.sh): Motolii builds on two
+# forks it owns, pinned by rev in Cargo.lock; any other git source or registry is a new supply chain and must be added here on purpose.
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = [
+    "https://github.com/oshikaidesu/rerun",
+    "https://github.com/oshikaidesu/re_mp4",
+]

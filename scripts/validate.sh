@@ -14,7 +14,7 @@ usage:
   scripts/validate.sh <lane> [lane-argument]
 
 lanes:
-  docs policy tooling rust web-build web-contract web-visual
+  docs policy tooling rust police web-build web-contract web-visual
 
 profiles:
 EOF
@@ -81,6 +81,14 @@ run_lane() {
       cargo fmt --all --check
       cargo clippy --workspace --all-targets -- -D warnings
       cargo test --locked --workspace
+      ;;
+    police)
+      # the independent police, in addition to check-stage5.py / owned-budget: Semgrep rules + cargo-deny sources
+      require_no_args "$lane" "$@"
+      require_command semgrep
+      require_command cargo-deny
+      "$ROOT_DIR/scripts/check-semgrep.sh"
+      "$ROOT_DIR/scripts/check-deny.sh"
       ;;
     web-build)
       require_no_args "$lane" "$@"

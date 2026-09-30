@@ -1,0 +1,6 @@
+# rule	mode	red	green	what happened
+# mode "all": findings at `red` > 0 and at `green` == 0.  mode "new": findings at `red` that `green` (its parent) did not have.
+motolii-swift-status-as-dictionary	all	27680b29e	d51f1a59e	Swift parsed every status/render/catalog reply into a Dictionary (~6 ms at 94 layers); now the bytes Rust wrote go to Dart
+motolii-native-host-never-waits-the-gpu	all	726d4f480^	726d4f480	the Flutter host waited for the GPU inside render (ledger row 11); now it submits and asks for the submission next beat
+motolii-rust-unbounded-gpu-wait	all	46a5ee34b^	46a5ee34b	readback/export/test waits had no timeout; now they go through wait_for_gpu
+motolii-rust-raw-gpu-infrastructure	new	39146f7fe	39146f7fe^	a commit added compute pipeline + shader module + bind-group layout against a ceiling of 0 (owned-budget.tsv)

@@ -1,0 +1,61 @@
+rules:
+  # A status, a render reply and a catalog reply are the biggest things that cross the host (~1 MB at 94 layers).
+  # They travel as the bytes Rust wrote; the host never rebuilds them as a Dictionary (docs/stage5/direct-manipulation-latency.md).
+  # Small replies (renderInfo, easeModel) are parsed by `request(_:)`, which is not on this list.
+  - id: motolii-swift-status-as-dictionary
+    languages: [swift]
+    severity: ERROR
+    message: >-
+      `$F` hands a parsed [String: Any] up. A status / render / catalog reply crosses the host as NativeStatus (bytes);
+      only small replies go through request(_:).
+    paths:
+      include: ["motolii/ui/macos/**"]
+    # Matched as text on the signature: Semgrep's Swift AST does not bind `[String: Any]` reliably (measured: the typed pattern
+    # matches the real file and misses the same function alone), and the law is about what a hot function's signature hands up.
+    pattern-regex: 'func\s+(?:status|open|openOnRenderQueue|render|renderOnRenderQueue|renderInto|catalog)\s*\((?:[^{}]|\n)*?\[String:\s*Any\]'
+
+  # A blocking GPU wait on the live path put the GPU on the UI thread's critical path (ledger row 11; 726d4f480 moved it to
+  # "submit now, ask for the submission on the next beat", ui/native/src/frames.rs). The host waits only in Drop.
+  - id: motolii-native-host-never-waits-the-gpu
+    languages: [rust]
+    severity: ERROR
+    message: The Flutter host must not block on the GPU; submit and poll the submission later (frames.rs).
+    paths:
+      include: ["motolii/ui/native/src/**"]
+      exclude: ["**/*tests.rs", "**/*_test.rs", "**/*probe*.rs"]
+    patterns:
+      - pattern-either:
+          - pattern: wgpu::PollType::wait_indefinitely()
+          - pattern: wait_for_gpu(...)
+      - pattern-not-inside: |
+          fn drop(&mut self) { ... }
+
+  # An unbounded wait hangs on a lost device. Readback and export wait through compositor::wait_for_gpu, which has a timeout
+  # (46a5ee34b bounded the last unbounded ones).
+  - id: motolii-rust-unbounded-gpu-wait
+    languages: [rust]
+    severity: ERROR
+    message: wait_indefinitely has no timeout; wait through compositor::wait_for_gpu.
+    paths:
+      include: ["motolii/crates/**/src/**", "motolii/ui/native/src/**", "motolii/ui/extensions/**"]
+      exclude: ["**/tests/**", "**/examples/**", "**/*tests.rs", "**/*_test.rs", "**/*probe*.rs"]
+    patterns:
+      - pattern: wgpu::PollType::wait_indefinitely()
+      - pattern-not-inside: |
+          fn drop(&mut self) { ... }
+
+  # The ceiling in motolii/reference/owned-budget.tsv: Motolii holds no raw GPU pipeline machinery; pipelines, shader modules and
+  # bind-group layouts come from re_renderer's pools (RenderPipelineDesc / ShaderModuleDesc / BindGroupLayoutDesc).
+  - id: motolii-rust-raw-gpu-infrastructure
+    languages: [rust]
+    severity: ERROR
+    message: >-
+      `$D.$CALL` builds GPU machinery Motolii does not own (owned-budget.tsv: ceiling 0). Ask re_renderer's pools.
+    paths:
+      include: ["motolii/crates/**/src/**", "motolii/ui/native/src/**", "motolii/ui/extensions/**"]
+      exclude: ["**/tests/**", "**/examples/**", "**/*tests.rs"]
+    patterns:
+      - pattern: $D.$CALL(...)
+      - metavariable-regex:
+          metavariable: $CALL
+          regex: ^(create_render_pipeline|create_compute_pipeline|create_shader_module|create_bind_group_layout)$
