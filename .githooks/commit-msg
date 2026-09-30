@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# A new piece of code says how it was acquired (Reuse / Wrap / Adapt / Extend / Semantics / Build). See scripts/check-acquisition.sh.
+exec "$(dirname "$0")/../scripts/check-acquisition.sh" --msg "$1"

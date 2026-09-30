@@ -927,3 +927,4 @@
 - [ソフト音源・エフェクト(VST/AU)の UI 言語はどう育ったか — timeline + layers + shader 棚の道具へ何が写せるか](2026-09-19-vst-ui-evolution.md)
 - [窓を一台の機械にする — 色と形の文法、専用部品(2026-09-20、利用者の UI 検討 memo を実物へ束ねた物)](2026-09-20-ui-product-feel.md)
 - [外部の警察(Semgrep・cargo-deny)— 過去の事故で赤緑を取って採用(2026-09-30)](2026-09-30-external-police-spike.md)
+- [技術の取得ゲートと再発明候補の監査 — Motolii owns meaning, not technology(2026-09-30)](2026-09-30-technology-acquisition-audit.md)

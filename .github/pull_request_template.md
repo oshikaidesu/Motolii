@@ -11,7 +11,7 @@
 
 ## Adoption and state
 
-- Known implementation / thin Motolii seam:
+- Technology Acquisition Gate (Capability / Existing technology / Decision Reuse→Wrap→Adapt→Extend→Build / Motolii-owned semantics / Why-build if Build / Replaceability) and thin Motolii seam:
 - Product state (`WORKING_DRAFT / PROBE / PRODUCT_SOURCE / MAIN_ROUTE`):
 - Known limits:
 - Expected mechanical conflicts:

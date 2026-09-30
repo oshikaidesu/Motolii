@@ -22,6 +22,10 @@ jobs:
           cargo arc check
       - name: Documentation index and link consistency
         run: bash scripts/check-docs.sh
+      - name: Technology Acquisition Gate (new code says how it was acquired)
+        run: |
+          before="${{ github.event.before }}"
+          if [ -n "$before" ] && [ "$before" != "0000000000000000000000000000000000000000" ]; then bash scripts/check-acquisition.sh --range "$before..${{ github.sha }}"; fi
       - name: Independent police (Semgrep rules, cargo-deny sources)
         run: |
           pip install semgrep

@@ -2,6 +2,31 @@
 
 状態: **確定運用／非凍結の横断開発原則／M3〜M5と将来phaseへ適用**（2026-08-02、2026-08-04 outcome spine追補）
 
+## 0. 入口の短票 — Technology Acquisition Gate（2026-09-30）
+
+**Motolii owns meaning, not technology.** 一般技術を、機能が必要になった瞬間にMotolii内で再実装し始める癖を、実装の最上流で止める。
+通常の実装はこの短票だけを使い、§3.1の10欄は機構classを新設・置換する採択地図（§4）の作成時に使う。
+
+```text
+Capability:            利用者が何をできる必要があるか（実装方法は書かない）
+Existing technology:   調べた先と見つけた物（現行dependency tree / rerun・re_renderer / Flutter・OS / FFmpeg / crates.io・OSS /
+                       標準仕様 / 確立したalgorithm / GPU定番）。repo内に無い≠存在しない
+Decision:              Reuse → Wrap → Adapt → Extend → Build（この順。Buildは最後）
+Motolii-owned semantics: 作品意味・stable identity・時間・parameter接続・scope・Undo・persistence・依存/無効化・
+                       preview/exportの意味・provider契約のうち、本当にMotoliiが持つ物だけ
+Why-build:             Buildのみ。既存技術では製品要求を満たせない具体的理由
+Replaceability:        下の技術を別実装へ替えても、Documentと作品の意味は生き残るか（Noなら実装詳細が意味へ漏れている）
+```
+
+- **Buildの理由にならない物**: 自分で書く方が簡単／dependencyを増やしたくない／小さい処理だから／既存コードと形が違う／投入工数。
+- **Buildに至ったら通常施工を止める**: 探した先・候補・不適合の具体理由・残る責任（保守・OS差・試験・撤去）を利用者へ返し、認可まで書かない。
+- **commitでの強制**: 新しい150行以上のソースfile（crates・ui/native・ui/extensions・ui/libの本体。test・fixtureを除く）を加えるcommitは、
+  メッセージに `Acquisition: Reuse|Wrap|Adapt|Extend|Semantics|Build — <見つけた技術 / Motoliiの意味>` を持つ。`Semantics`は一般技術を
+  作らずMotoliiの意味だけを書く時、`Build`は `Why-build:`（30字以上、上の近道を理由にしない）も要る。
+  `.githooks/commit-msg`と、push時のCI（`scripts/check-acquisition.sh --range`）が見る。
+- **要件定義の順**: `Feature → Implementation` ではなく `Product Capability → Existing Technology → Motolii-owned Semantics → Integration`。
+- 監査: 現行codeの再発明候補は[2026-09-30 監査](reviews/2026-09-30-technology-acquisition-audit.md)。
+
 ## 1. 決めること
 
 Motoliiは、一般機構を第一原理から設計する**発明工程を通常workflowに持たない**。

@@ -10,8 +10,8 @@
 
 **この文書と記憶は、足すとき同じ行数を消す。** テストは native との約束(`ui/test`)と実アプリの動き(`ui/integration_test`、`../scripts/motolii-ui.sh it`)だけ。見た目は assert しない。
 
-作ってよいのは**編集の意味**と**エフェクトのデータ**だけ。描画は rerun、UI は Flutter の部品。**意味・機構(見た目ではない)の新規コードと検証の前に、同じ意味・機構の参考文献・既存実装・外部の定規を必ず探す**(現行repo・既決 → 依存／上流の取説・`reference/`・ソース・oracle → 公式規格・一次資料・製品先例)。無ければ検索範囲を残し、自作testは借りた定規の写像だけにする。
-自前の天井は `reference/owned-budget.tsv`。**家は5つ — doc・render・ui・vism・tests。足すなら消す。** `crates/motolii-doc` が契約、`crates/motolii-render` が描く側、`ui/` がFlutter UI、`ui/native` がRust接続。Cargoの入口はrepo rootだけ。
+**Motolii owns meaning, not technology.** 作るのは**編集の意味**(作品が何を意味するか・stable identity・時間・parameter接続・scope・Undo・persistence・依存/無効化・preview/exportの意味・providerを替えても作品が生きる契約)と**エフェクトのデータ**だけ。codec・font shaping・layout/physics solver・CV/tracking・画像処理・音のresample・GPU API・shader・color science・tessellation・graph layout・cache・長い一覧の仮想化・thumbnail などの一般技術は借りる(描画は rerun、UI は Flutter の部品)。自前の天井は `reference/owned-budget.tsv`、**家は5つ — doc・render・ui・vism・tests。足すなら消す。** `crates/motolii-doc` が契約、`crates/motolii-render` が描く側、`ui/` がFlutter UI、`ui/native` がRust接続。Cargoの入口はrepo rootだけ。
+**新しい能力は実装前に Technology Acquisition Gate を通す**: Capability(利用者が何をできるか。方法は書かない) → Existing technology investigated(dependency tree・rerun・Flutter/OS・FFmpeg・crates.io/OSS・標準・確立した algorithm。repo に無い≠無い) → Decision `Reuse→Wrap→Adapt→Extend→Build`(この順、Build は最後で止めて利用者へ) → Motolii-owned semantics → Why-build(Build のみ。「簡単」「小さい」「依存を増やしたくない」「形が違う」は理由にならない) → Replaceability(下の技術を替えても Document と作品の意味は生きるか。No なら実装詳細が意味へ漏れている)。書式と例外は[既知実装採択モデル §0](../docs/known-implementation-adoption-model.md)、commit には `Acquisition:` 行(`scripts/check-acquisition.sh`)。
 
 - **手段は、明示された目的と確認済みの意向で測る**。指示された手段より明確に良い道が見えるなら、黙って従わず、実行前に案・根拠・代償を短く出す。ただし「相談」を許可取りに使わない — 判断材料を持っているのはこちら、決めるのはあなた。推した「真意」で明示の制約や権限は動かさない。目的・範囲・重要な制約を変えるなら確認、依頼の中の軽微で戻せる改善は止めずに進める
 - **長い作業を黙って進めない**。着手前に「何を・どの順で・どこまで」を 1〜2 行、区切りごとに結果を 1 行。build・計測・多 file の編集など数分かかる物は始めと終わりを必ず出し、詰まったら詰まったと言う。無言は利用者からは「止まっている」と同じに見える
