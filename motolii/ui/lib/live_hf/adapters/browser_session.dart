@@ -52,7 +52,20 @@ class BrowserSession extends ChangeNotifier {
   BrowserSession._(this.c) {
     _bind();
     c.slice('browserCatalog', const ['createKinds', 'catalog']).addListener(_rebind);
-    c.slice('browserSurface', const ['palette', 'fontFamilies', 'assets', 'backgrounds', 'layers', 'selectedId', 'selectedIds', 'documentRevision', 'colorTarget']).addListener(notifyListeners);
+    // What the shelves read of the document, and nothing else: the palette, fonts, assets and environments, the selection,
+    // and (through getters) the fonts the layers use, the active layer's kind and font, and the colour being edited. A
+    // preview of Position or an effect parameter changes none of them, so it does not wake the Browser.
+    c.slice(
+      'browserSurface',
+      const ['palette', 'fontFamilies', 'assets', 'backgrounds', 'selectedId', 'selectedIds'],
+      derived: () => [
+        (usedFonts.toList()..sort()),
+        c.activeLayer?['id'],
+        c.activeLayer?['kind'],
+        EditorSession.map(c.activeLayer?['text'])['fontFamily'],
+        colorTarget(c),
+      ],
+    ).addListener(notifyListeners);
     c.deskWork.addListener(notifyListeners);
     c.importedAssets.addListener(_reveal);
     _loadFontFacts();

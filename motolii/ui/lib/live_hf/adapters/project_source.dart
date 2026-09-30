@@ -9,7 +9,7 @@ import 'browser_item.dart';
 /// An item's id is `project:<asset id>`, so a catalog asset and a work's asset are never taken for each other.
 class ProjectSource extends ChangeNotifier implements ResultSource {
   ProjectSource(this.c, {required this.kinds, required this.text}) {
-    c.document.addListener(notifyListeners);
+    c.slice('mediaAssets', const ['assets', 'backgrounds']).addListener(notifyListeners);
   }
   final EditorSession c;
   /// The types and words the person chose (read when asked, so this can be kept for as long as the Browser is).
@@ -20,7 +20,7 @@ class ProjectSource extends ChangeNotifier implements ResultSource {
 
   @override
   void dispose() {
-    c.document.removeListener(notifyListeners);
+    c.slice('mediaAssets', const ['assets', 'backgrounds']).removeListener(notifyListeners);
     super.dispose();
   }
 
@@ -83,7 +83,7 @@ class ProjectSource extends ChangeNotifier implements ResultSource {
 /// placed (`create`). They were part of the old Media library, so they stay one Source of the Browser.
 class BundledSource extends ChangeNotifier implements ResultSource {
   BundledSource(this.c, {required this.kinds, required this.text}) {
-    c.document.addListener(notifyListeners);
+    c.slice('mediaAssets', const ['assets', 'backgrounds']).addListener(notifyListeners);
   }
   final EditorSession c;
   final Set<String> Function() kinds;
@@ -93,7 +93,7 @@ class BundledSource extends ChangeNotifier implements ResultSource {
 
   @override
   void dispose() {
-    c.document.removeListener(notifyListeners);
+    c.slice('mediaAssets', const ['assets', 'backgrounds']).removeListener(notifyListeners);
     super.dispose();
   }
 

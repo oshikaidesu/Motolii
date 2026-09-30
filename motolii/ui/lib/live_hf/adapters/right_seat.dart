@@ -19,12 +19,9 @@ class RightSeat extends StatefulWidget {
 }
 
 class _RightSeatState extends State<RightSeat> {
-  static const _watched = [
-    'selectedId',
-    'selectedIds',
-    'layers',
-    'documentRevision',
-  ];
+  // which Inspector is shown (a camera's, a layer's, its effect cards) follows what the layers are, not their values: the
+  // number rows read the values through their own stores
+  static const _watched = ['selectedId', 'selectedIds'];
   EditorSession get c => widget.c;
 
   @override
@@ -32,14 +29,14 @@ class _RightSeatState extends State<RightSeat> {
     super.initState();
     c.deskDrawer.addListener(_changed);
     c.editingFocus.addListener(_focus);
-    c.slice('rightSeat', _watched).addListener(_changed);
+    c.slice('rightSeat', _watched, derived: c.layerShape).addListener(_changed);
   }
 
   @override
   void dispose() {
     c.deskDrawer.removeListener(_changed);
     c.editingFocus.removeListener(_focus);
-    c.slice('rightSeat', _watched).removeListener(_changed);
+    c.slice('rightSeat', _watched, derived: c.layerShape).removeListener(_changed);
     super.dispose();
   }
 

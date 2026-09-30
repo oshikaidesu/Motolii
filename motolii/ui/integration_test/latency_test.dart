@@ -166,6 +166,7 @@ void main() {
       }
 
       SchedulerBinding.instance.addTimingsCallback(onTimings);
+      LatencyProbe.counts.clear();
       for (var i = 0; i < 60; i++) {
         c.commandDirect('previewProperties', {
           'edits': [
@@ -177,6 +178,8 @@ void main() {
       await frames(t, 6);
       SchedulerBinding.instance.removeTimingsCallback(onTimings);
       await c.commandDirect('cancelPreview');
+      final woken = LatencyProbe.counts.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+      report.writeln('LAT slices woken by a 60-step Inspector scrub: ${[for (final e in woken) '${e.key.substring(6)}=${e.value}'].join(', ')}');
       report.writeln('LAT Flutter frame cost while scrubbing (debug Dart): build median ${_median(builds).toStringAsFixed(1)} p95 ${_p95(builds).toStringAsFixed(1)} ms; raster median ${_median(rasters).toStringAsFixed(1)} p95 ${_p95(rasters).toStringAsFixed(1)} ms; ${builds.length} frames');
     }
 

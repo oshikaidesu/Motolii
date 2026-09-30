@@ -14,10 +14,11 @@ String effectsNotice(Map<String, dynamic> status) {
 /// key; it is compared by value.
 class DocumentSlice extends ChangeNotifier
     implements ValueListenable<Map<String, dynamic>> {
-  DocumentSlice._(this._session, this._keys, this._derived) {
+  DocumentSlice._(this._session, this._keys, this._derived, this.name) {
     _last = _derived?.call();
   }
   final SessionCore _session;
+  final String name;
   final Set<String> _keys;
   final Object? Function()? _derived;
   Object? _last;
@@ -27,7 +28,10 @@ class DocumentSlice extends ChangeNotifier
     final now = _derived?.call();
     final moved = !sameValue(_last, now);
     _last = now;
-    if (moved || _keys.any(changed.contains)) notifyListeners();
+    if (moved || _keys.any(changed.contains)) {
+      LatencyProbe.count('slice:$name');
+      notifyListeners();
+    }
   }
 }
 

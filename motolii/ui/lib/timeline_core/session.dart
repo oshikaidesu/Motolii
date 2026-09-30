@@ -14,7 +14,9 @@ import 'semantics.dart';
 /// detached or swapped and the Timeline stays where it was.
 class TimelineSession extends ChangeNotifier {
   TimelineSession._(this.c) {
-    c.slice('timelineSession', _watched).addListener(relane);
+    // rows, bars and lanes are laid out from what the layers are (timing, flags, which properties have keys where), not
+    // from the values a hand is moving: `layerShape` stands in for `layers`
+    c.slice('timelineSession', _watched, derived: c.layerShape).addListener(relane);
     relane();
   }
 
@@ -22,7 +24,7 @@ class TimelineSession extends ChangeNotifier {
   static TimelineSession of(EditorSession c) => _all[c] ??= TimelineSession._(c);
 
   final EditorSession c;
-  static const _watched = ['layers', 'selectedId', 'selectedIds', 'selectedKeys', 'durationFrames', 'fps', 'fpsNum', 'fpsDen', 'markers', 'capabilities'];
+  static const _watched = ['selectedId', 'selectedIds', 'selectedKeys', 'durationFrames', 'fps', 'fpsNum', 'fpsDen', 'markers', 'capabilities'];
 
   bool has(String op) => c.supports(op);
   int get fps => (c.state['fps'] as num? ?? 30).round().clamp(1, 1000);

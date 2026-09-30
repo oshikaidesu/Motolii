@@ -12,7 +12,44 @@ mixin SessionSnapshot on SessionCore {
     String name,
     List<String> keys, {
     Object? Function()? derived,
-  }) => _slices[name] ??= DocumentSlice._(this, keys.toSet(), derived);
+  }) => _slices[name] ??= DocumentSlice._(this, keys.toSet(), derived, name);
+
+  /// What a layer *is*, without the values a hand is moving: names, kinds, timing, flags, which properties and effects it
+  /// has and where their keys sit. A preview of Position, an effect parameter or a colour changes values only, so this
+  /// stays equal, and a panel that lays out layers (the Timeline rows, which Inspector is shown) listens to it instead of
+  /// to `layers`. A panel that shows a value listens to `layers`.
+  List<Object?> layerShape() {
+    final source = state['layers'];
+    if (identical(source, _shapeSource) && _shapeCache != null) return _shapeCache!;
+    _shapeSource = source;
+    Map<String, dynamic> property(Map<String, dynamic> p) => {
+          for (final e in p.entries)
+            if (e.key != 'value' && e.key != 'keys') e.key: e.value,
+          'keys': [
+            for (final k in EditorSession.maps(p['keys'])) {'frame': k['frame'], 'interp': k['interp']},
+          ],
+        };
+    const values = {'properties', 'effects', 'x', 'y', 'bounds', 'stageBounds', 'corners', 'anchorFraction'};
+    return _shapeCache = [
+      for (final l in EditorSession.maps(source))
+        {
+          for (final e in l.entries)
+            if (!values.contains(e.key)) e.key: e.value,
+          'properties': [for (final p in EditorSession.maps(l['properties'])) property(p)],
+          'effects': [
+            for (final fx in EditorSession.maps(l['effects']))
+              {
+                for (final e in fx.entries)
+                  if (e.key != 'params') e.key: e.value,
+                'params': [for (final p in EditorSession.maps(fx['params'])) property(p)],
+              },
+          ],
+        },
+    ];
+  }
+
+  Object? _shapeSource;
+  List<Object?>? _shapeCache;
 
   void _spreadDocument() {
     final was = _spread, now = state;

@@ -76,7 +76,7 @@ class _CatalogMediaState extends State<CatalogMedia> {
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
-        listenable: Listenable.merge([session, session.c.document]),
+        listenable: Listenable.merge([session, session.c.slice('mediaAssets', const ['assets', 'backgrounds'])]),
         builder: (context, _) {
           final chosen = session.chosenSources;
           return Stack(fit: StackFit.passthrough, children: [

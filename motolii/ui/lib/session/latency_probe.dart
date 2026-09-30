@@ -24,6 +24,12 @@ class LatencyProbe {
   }
 
   /// The next frame that is built after now.
+  /// How many times something happened (a slice told its listeners): for finding what a hand wakes up.
+  static final counts = <String, int>{};
+  static void count(String name) {
+    if (on) counts[name] = (counts[name] ?? 0) + 1;
+  }
+
   static void markNextFrame(String name) {
     if (!on) return;
     SchedulerBinding.instance.addPostFrameCallback((_) => mark(name));
