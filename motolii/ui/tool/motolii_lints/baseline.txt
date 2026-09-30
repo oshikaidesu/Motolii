@@ -18,7 +18,7 @@ lib/browser/media/library.dart 2
 lib/browser/media/list.dart 7
 lib/browser/media/preview.dart 28
 lib/browser/media/views.dart 14
-lib/browser/panel.dart 5
+lib/browser/browser_panel.dart 5
 lib/browser/panel_chrome.dart 19
 lib/browser/parts.dart 26
 lib/browser/search.dart 16
@@ -47,8 +47,8 @@ lib/inspector/camera/face.dart 8
 lib/inspector/camera/instrument.dart 33
 lib/inspector/layout/diagram.dart 14
 lib/inspector/layout/instrument.dart 61
-lib/inspector/panel.dart 3
-lib/inspector/seat.dart 4
+lib/inspector/inspector_panel.dart 3
+lib/inspector/inspector_seat.dart 4
 lib/inspector/transform/card.dart 1
 lib/inspector/transform/gizmo.dart 3
 lib/inspector/transform/instrument.dart 104
@@ -75,5 +75,5 @@ lib/legacy/panels/notes_desk/card.dart 26
 lib/legacy/workspace/workspace_view.dart 1
 lib/theme/glyphs.dart 11
 lib/theme/tokens.dart 4
-lib/timeline/face.dart 33
+lib/timeline/timeline_view.dart 33
 lib/workspace/dock_workspace.dart 2

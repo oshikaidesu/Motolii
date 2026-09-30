@@ -5,10 +5,10 @@ import '../effects/shelf.dart' show EffectScene;
 import 'dock_theme.dart';
 
 import '../theme/glyphs.dart' show HG;
-import '../stage/panel.dart' show StagePanel;
+import '../stage/stage_panel.dart' show StagePanel;
 import '../session/editor_session.dart';
 import 'dock_workspace.dart';
-import '../browser/panel.dart';
+import '../browser/browser_panel.dart';
 import '../app/console.dart';
 import '../session/console_log.dart';
 import '../desks/blend/desk.dart';
@@ -17,8 +17,8 @@ import '../desks/ease/desk.dart';
 import '../desks/history/desk.dart';
 import '../desks/notes/desk.dart';
 import '../desks/relations/desk.dart';
-import '../inspector/seat.dart';
-import '../timeline/face.dart';
+import '../inspector/inspector_seat.dart';
+import '../timeline/timeline_view.dart';
 import '../desks/web/desk.dart';
 import '../theme/surface.dart' show Surface;
 

@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/widgets.dart';
 
-import '../inspector/panel.dart';
+import '../inspector/inspector_panel.dart';
 import '../inspector/rows.dart';
 import '../theme/tokens.dart';
 import '../controls/sheet.dart';

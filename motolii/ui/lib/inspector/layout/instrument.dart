@@ -6,7 +6,7 @@ import '../../browser/parts.dart';
 
 import 'diagram.dart';
 import 'model.dart';
-import '../panel.dart' show ParamCell;
+import '../inspector_panel.dart' show ParamCell;
 import '../value_controls.dart';
 import '../../theme/neutral.dart';
 import '../../theme/surface.dart' show Dn, Surface;

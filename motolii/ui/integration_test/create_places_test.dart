@@ -3,7 +3,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 
-import 'package:motolii_ui/timeline/face.dart';
+import 'package:motolii_ui/timeline/timeline_view.dart';
 import 'package:motolii_ui/app/main.dart' as app;
 
 /// A few frames: the app never settles (the Stage keeps its clock), so wait by time, not by pumpAndSettle.

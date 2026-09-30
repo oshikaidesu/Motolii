@@ -7,7 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 
 import 'package:motolii_ui/browser/media/catalog_session.dart';
-import 'package:motolii_ui/timeline/face.dart';
+import 'package:motolii_ui/timeline/timeline_view.dart';
 import 'package:motolii_ui/app/main.dart' as app;
 
 const heavy = String.fromEnvironment('HEAVY_DIR');

@@ -1,4 +1,4 @@
-part of 'panel.dart';
+part of 'stage_panel.dart';
 
 /// Whether a press lands on the 3D gizmo. Native hands over the very
 /// triangles it hit-tests against, so grabbing and drawing cannot drift;

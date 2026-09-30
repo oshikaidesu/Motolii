@@ -6,7 +6,7 @@ import '../../../hf/desk/ease_skin.dart';
 import '../../../hf/desk/notes_skin.dart';
 import '../../../panels/notes_desk.dart';
 import '../../../panels/ease_desk.dart';
-import '../../../../stage/panel.dart';
+import '../../../../stage/stage_panel.dart';
 import '../../../panels/timeline.dart';
 import '../stage/new_stage_chrome.dart';
 import '../timeline/new_timeline_bar.dart';
