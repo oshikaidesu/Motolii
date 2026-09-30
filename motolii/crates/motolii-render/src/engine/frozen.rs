@@ -1,5 +1,5 @@
 //! Freeze の cache: 層の「投影の前」の絵(効果の列の出口、乗算済み線形の half float)を、層の時刻ごとに
-//! 書類の隣へ置く。法は docs/freeze-and-flatten.md。cache は使い捨てで書類の真実ではない。
+//! 書類の隣へ置く。法は docs/design/freeze-and-flatten.md。cache は使い捨てで書類の真実ではない。
 //!
 //! 置き場: `<root>/<layer id>/<layer frame>.rgba16f` + `.json`(寸法・余白・枠)。
 use std::collections::HashMap;

@@ -19,7 +19,7 @@ fork の 1 式にして板・点群・網が同じ式で切れるようにした
 輝く物を取る」裁定で採らない。
 
 一次の調査・変形の全記録は
-[vgpuとVism構想](../../docs/reviews/2026-08-29-vgpu-vism-viability.md)。
+[vgpuとVism構想](../../docs/design/rationale/vgpu-vism-viability.md)。
 
 ## vgpu から残す体系
 

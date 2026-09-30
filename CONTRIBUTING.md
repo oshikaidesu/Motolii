@@ -57,7 +57,7 @@ Add regression cases at the owning boundary. Do not require a full application o
 
 `motolii-doc` enables `editing` by default for editor compatibility. Read-only consumers use `default-features = false` and `Recording::load().view()`; production `motolii-render` uses this configuration. Its test fixtures opt into editing only as a dev-dependency. Cargo features are additive, so an editor workspace build still includes editing; this is a dependency boundary, not a sandbox. Keep UI-only work on hot reload, and use focused checks instead of rebuilding every feature configuration after every change. Build-time improvement has not yet been measured.
 
-`scripts/check-docs.sh` remains the wider historical documentation audit. Its old inventories and historical links are distinct from the Stage 5 entry check; do not use a successful local check to claim the entire historical tree has been audited.
+`scripts/check-docs.sh` audits the docs tree: no history folders, every markdown link resolves, every `git:<sha>:<path>` provenance token resolves, decision-index status vocabulary.
 
 ## Issues and pull requests
 
@@ -65,7 +65,7 @@ Describe the concrete problem, how to reproduce it, the owner of the change, and
 
 Update affected current documents when meaning changes. Preserve unrelated local edits. Do not use old paths from historical documents as current targets, duplicate core ownership, hide incomplete features behind completion claims, or add a second rendering implementation to imitate the current result.
 
-The [previous contributor guide](docs/product/history/contributing-before-entry-cleanup.md) is retained for history. Current agent policy comes from `motolii/AGENTS.md`, not old guide text.
+The previous contributor guide (`git:912382f048:docs/product/history/contributing-before-entry-cleanup.md`) is retained for history. Current agent policy comes from `motolii/AGENTS.md`, not old guide text.
 
 ## License
 

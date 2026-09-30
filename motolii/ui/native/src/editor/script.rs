@@ -1,4 +1,4 @@
-//! スクリプトの口 — JS が窓の操作(port の op)を並べる。名前は窓の名前だけ([スクリプトの口](../../../../docs/reviews/2026-09-14-script-mouth.md))。
+//! スクリプトの口 — JS が窓の操作(port の op)を並べる。名前は窓の名前だけ([スクリプトの口](../../../../docs/design/rationale/script-mouth.md))。
 use serde_json::json;
 use crate::doc::store::LayerId;
 use crate::EditorRuntime;

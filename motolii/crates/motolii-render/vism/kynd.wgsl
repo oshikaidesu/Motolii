@@ -1,5 +1,5 @@
 // 関数の棚(module `package::kynd`): kynd の MotionToolKit(The Book of Shaders のギャラリー、GLSL 13 本)の芯。
-// 時刻の窓 → ease → mix、行きと帰りの引き算、拍の矩形。名前は出典のまま。出典: docs/reviews/2026-09-18-motion-code-survey.md
+// 時刻の窓 → ease → mix、行きと帰りの引き算、拍の矩形。名前は出典のまま。出典: git:912382f048:docs/reviews/2026-09-18-motion-code-survey.md
 
 /// 時刻 t が begin..end のどこか(0..1、外は 0 か 1)。smoothstep の直線版。
 fn linearstep(begin: f32, end: f32, t: f32) -> f32 {

@@ -7,7 +7,7 @@ Pre-1.0, under active development. The desktop editor (macOS) runs and is in dai
 [日本語: なぜ、もう一つ映像制作ソフトを作るのか](MANIFESTO.ja.md)
 
 <p align="center">
-  <img src="docs/assets/current-product.png" alt="The Motolii editor: Create browser on the left, Stage in the middle, Inspector on the right, Timeline and Ease below" width="960">
+  <img src="docs/product/assets/current-product.png" alt="The Motolii editor: Create browser on the left, Stage in the middle, Inspector on the right, Timeline and Ease below" width="960">
 </p>
 
 ## What it is
@@ -70,12 +70,12 @@ Rules for contributors and coding agents: [CONTRIBUTING.md](CONTRIBUTING.md) and
 |---|---|
 | `motolii/crates/` | Rust crates: `motolii-doc`, `-edit`, `-render`, `-jobs`, `-script` |
 | `motolii/ui/` | the Flutter app (`lib/`, `test/`, `macos/`) and its Rust host `native/` |
-| `motolii/ui/lib/` | `app` (launcher), `workspace` (dock), panels (`stage` `timeline` `inspector` `browser` `effects` `colors` `fonts` `desks`), `controls`, `theme`, `input`, `session`, `bridge`, `legacy` (older shells kept until their capabilities are in the product UI) |
+| `motolii/ui/lib/` | `app` (launcher), `workspace` (dock), panels (`stage` `timeline` `inspector` `browser` `effects` `colors` `fonts` `desks`), `controls`, `theme` (`metrics.dart` is the one visual-metrics canon), `input`, `session`, `bridge`, `legacy` (older shells kept until their capabilities are in the product UI) |
 | `plugins/` | example plugin crates |
 | `samples/` | sample projects |
-| `skills/` | agent skills used by the repository (historical recovery) |
+| `skills/` | agent skills used by the repository |
 | `scripts/` | the dev entry `motolii-ui.sh` and the check scripts |
-| `docs/` | concept, product docs, decisions, history; start at [docs/README.md](docs/README.md) |
+| `docs/` | concept, product, design, wiki, decisions; start at [docs/README.md](docs/README.md) |
 | `semgrep/`, `deny.toml`, `arc-*.toml` | static-analysis and dependency policy |
 
 ## Docs
@@ -88,4 +88,4 @@ Rules for contributors and coding agents: [CONTRIBUTING.md](CONTRIBUTING.md) and
 
 ## License
 
-Licensed under either [Apache License 2.0](LICENSE-APACHE) or [MIT](LICENSE-MIT), at your option. Contributions are dual-licensed under the same terms. Third-party dependencies keep their own licenses; Flutter, the Rerun fork and ffmpeg have separate distribution considerations, see [docs/references.md](docs/references.md).
+Licensed under either [Apache License 2.0](LICENSE-APACHE) or [MIT](LICENSE-MIT), at your option. Contributions are dual-licensed under the same terms. Third-party dependencies keep their own licenses; Flutter, the Rerun fork and ffmpeg have separate distribution considerations, see [docs/design/references.md](docs/design/references.md).

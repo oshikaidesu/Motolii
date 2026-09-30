@@ -21,7 +21,7 @@ assert_status() {
 }
 
 list_output="$("$VALIDATE" --list)"
-grep -Fqx "  docs policy tooling rust web-build web-contract web-visual" \
+grep -Fqx "  docs policy tooling rust police" \
   <<<"$list_output" || fail "lane closed set is missing or reordered"
 grep -Fqx "  local: docs rust" \
   <<<"$list_output" || fail "local profile is missing or reordered"
@@ -39,23 +39,8 @@ assert_status 2 "$VALIDATE" policy --files-from
 assert_status 2 "$VALIDATE" policy one two
 assert_status 1 "$VALIDATE" policy refs/heads/motolii-validation-missing-base
 
-for lane in docs tooling rust web-build web-contract web-visual; do
+for lane in docs tooling rust police; do
   assert_status 2 "$VALIDATE" "$lane" unexpected
 done
-
-temp_dir="$(mktemp -d "${TMPDIR:-/tmp}/motolii-validate.XXXXXX")"
-trap 'rm -rf "$temp_dir"' EXIT
-mkdir -p "$temp_dir/bin"
-cat >"$temp_dir/bin/npm" <<'EOF'
-#!/usr/bin/env bash
-exit 23
-EOF
-chmod +x "$temp_dir/bin/npm"
-assert_status 23 env PATH="$temp_dir/bin:$PATH" "$VALIDATE" web-build
-
-mkdir -p "$temp_dir/no-command-bin"
-ln -s "$(command -v bash)" "$temp_dir/no-command-bin/bash"
-ln -s "$(command -v dirname)" "$temp_dir/no-command-bin/dirname"
-assert_status 127 env PATH="$temp_dir/no-command-bin" "$VALIDATE" web-build
 
 echo "test-validate: PASS"

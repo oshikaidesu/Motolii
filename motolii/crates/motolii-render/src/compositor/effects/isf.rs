@@ -125,7 +125,7 @@ pub struct IsfInput {
     pub hero: bool,
     /// image の欄だけ: 層の絵を**別の時刻**で読む(`TIME_OFFSET`)。
     /// ホストが供給するので、2 枚目以降でもこれを宣言していれば繋がる。
-    /// 効果が自分で覚えるのではなく渡されるだけなので、純関数のまま(`plugin-resources.md` §6)。
+    /// 効果が自分で覚えるのではなく渡されるだけなので、純関数のまま(`docs/design/plugin-resources.md` §6)。
     pub time_offset: Option<TimeOffset>,
     /// `time_offset` の読み方。
     pub time_base: TimeBase,
@@ -145,7 +145,7 @@ pub enum TimeBase {
     Frames,
 }
 
-/// 別の時刻に読む相手(`SOURCE`)。`CompLookbehind`(plugin-resources.md §6-1)の target: 自分の層 /
+/// 別の時刻に読む相手(`SOURCE`)。`CompLookbehind`(docs/design/plugin-resources.md §6-1)の target: 自分の層 /
 /// 下の合成 / 自分の群 / comp 全体(自分を除く = 非再帰)。再帰は feedback(PERSISTENT)が受け持つ。
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
 pub enum TimeSource {
@@ -181,7 +181,7 @@ pub struct IsfPass {
     pub float: bool,
     pub channels: u8,
     /// 前のフレームの中身を保つ(ISF の PERSISTENT)。持ち主は効果ではなく host: 層 × 効果ごとの
-    /// 状態として compositor が持ち、時刻 t は入点からの漸化式で決まる(plugin-resources.md §6-3)。
+    /// 状態として compositor が持ち、時刻 t は入点からの漸化式で決まる(docs/design/plugin-resources.md §6-3)。
     pub persistent: bool,
 }
 

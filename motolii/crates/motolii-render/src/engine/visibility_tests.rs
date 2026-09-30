@@ -18,7 +18,7 @@ fn capture_visibility_diagnosis() {
         &mut doc,
         6,
         6,
-        &root.join("docs/reviews/assets/2026-09-09-glass-gallery/card.png"),
+        &root.join("git:912382f048:docs/reviews/assets/2026-09-09-glass-gallery/card.png"),
     );
     doc.apply(Intent::SetTiming {
         layer: card,

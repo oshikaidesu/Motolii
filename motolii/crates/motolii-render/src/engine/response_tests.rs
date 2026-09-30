@@ -116,7 +116,7 @@ fn gallery_probe_response_comparison() {
 fn gallery_scene() -> (Document, LayerId) {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
     let doc =
-        Document::load(root.join("docs/reviews/assets/2026-09-09-glass-gallery/light-in-form.rrd"))
+        Document::load(root.join("git:912382f048:docs/reviews/assets/2026-09-09-glass-gallery/light-in-form.rrd"))
             .unwrap().with_programs(crate::extensions::bundled());
     let ball = crate::picture::resolve::resolved_layers(&doc.view(), RationalTime::ZERO)
         .unwrap()

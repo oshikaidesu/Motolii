@@ -14,4 +14,4 @@ cargo run -p motolii-render --example surface_frame -- docs/reviews/assets/2026-
 
 This is authored scene content. No renderer or application code was changed for the image.
 
-The main PNG now uses 4x MSAA with per-sample mesh shading. `light-in-form-no-aa.png` preserves the original output; `-msaa` and `-aa` preserve the MSAA-only and centroid comparisons; `-sampled` matches the final image. See [the rendering change](../../2026-09-09-surface-antialiasing.md).
+The main PNG now uses 4x MSAA with per-sample mesh shading. `light-in-form-no-aa.png` preserves the original output; `-msaa` and `-aa` preserve the MSAA-only and centroid comparisons; `-sampled` matches the final image.

@@ -25,7 +25,7 @@ r7 は `motolii-shell` を引かない(裁定254)。
 
 製品 UI は Makepad のみ。iced / `motolii-shell` を引かない。UI 作成は [Makepad 技能の割り振り](../../docs/reviews/2026-08-26-makepad-skills-assignment.md) の技能を読んでから書く。ディスク上の `~/.codex/skills/makepad-2.0-*/SKILL.md` を当て、該当技能を読んでから書く。
 
-Stage ゼロコピーの受入面は mac / win / linux(裁定255)。継ぎ目は共有面(IOSurface / DXGI / dma-buf)。wasm は契約外。compositor は共有面へ直接書く。blit しない。切り方の正本は `docs/reviews/2026-08-26-stage-zero-copy-makepad-fork-seam.md`(裁定256)。
+Stage ゼロコピーの受入面は mac / win / linux(裁定255)。継ぎ目は共有面(IOSurface / DXGI / dma-buf)。wasm は契約外。compositor は共有面へ直接書く。blit しない。切り方の正本は `git:912382f048:docs/reviews/2026-08-26-stage-zero-copy-makepad-fork-seam.md`(裁定256)。
 
 Chrome / splash: `ScrollYView` 禁止（eval 白紙）。未登録 `Chrome*` を splash に書くな（葉が落ちる）。
 Chrome の実験は `--hot`。登録してから葉へ `ChromeGallery{}` だけ。未登録 kind を splash に足すな。

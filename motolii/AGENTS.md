@@ -5,7 +5,7 @@
 - Current canon: `docs/README.md`, `docs/concept.md`, `docs/product/*` (modules, technical-boundaries, product-direction, product-contract), `docs/decision-index.md` (grep it).
 - Tests: native contract `motolii/ui/test`, real-app motion `motolii/ui/integration_test` (`scripts/motolii-ui.sh it`), Rust `motolii/crates/*/tests`.
 - Checks: `scripts/motolii-ui.sh check|test`, `bash scripts/check-docs.sh`.
-- `docs/reviews`, `docs/archive`, `docs/mocks*`, `docs/product/history`, `docs/product/evidence` and generated dirs are history: read them ONLY when a historical investigation is explicitly requested.
+- History is git: `git log -- <path>`; `git:<sha>:<path>` tokens in docs resolve with `git show`. There is no history folder.
 
 ## PRODUCT ORACLE
 
@@ -18,16 +18,16 @@
 **この文書は、足すとき同じ行数を消す。** テストは native との約束(`ui/test`)と実アプリの動き(`ui/integration_test`)だけ。見た目は assert しない。
 
 **Motolii owns meaning, not technology.** 作るのは**編集の意味**(作品が何を意味するか・stable identity・時間・parameter接続・scope・Undo・persistence・依存/無効化・preview/exportの意味・providerを替えても作品が生きる契約)と**エフェクトのデータ**だけ。codec・font shaping・layout/physics solver・CV/tracking・画像処理・音のresample・GPU API・shader・color science・tessellation・graph layout・cache・長い一覧の仮想化・thumbnail などの一般技術は借りる(描画は rerun、UI は Flutter の部品)。自前の天井は `reference/owned-budget.tsv`、**家は5つ — doc・render・ui・vism・tests。足すなら消す。** `motolii/crates/motolii-doc` が契約、`motolii-render` が描く側、`ui/` がFlutter UI、`ui/native` がRust接続。Cargoの入口はrepo rootだけ。
-**新しい能力は実装前に Technology Acquisition Gate を通す**: Capability(利用者が何をできるか。方法は書かない) → Existing technology investigated(dependency tree・rerun・Flutter/OS・FFmpeg・crates.io/OSS・標準・確立した algorithm。repo に無い≠無い) → Decision `Reuse→Wrap→Adapt→Extend→Build`(この順、Build は最後で止めて利用者へ) → Motolii-owned semantics → Why-build(Build のみ。「簡単」「小さい」「依存を増やしたくない」「形が違う」は理由にならない) → Replaceability(下の技術を替えても Document と作品の意味は生きるか。No なら実装詳細が意味へ漏れている)。書式と例外は[既知実装採択モデル §0](../docs/known-implementation-adoption-model.md)、commit には `Acquisition:` 行(`scripts/check-acquisition.sh`)。
+**新しい能力は実装前に Technology Acquisition Gate を通す**: Capability(利用者が何をできるか。方法は書かない) → Existing technology investigated(dependency tree・rerun・Flutter/OS・FFmpeg・crates.io/OSS・標準・確立した algorithm。repo に無い≠無い) → Decision `Reuse→Wrap→Adapt→Extend→Build`(この順、Build は最後で止めて利用者へ) → Motolii-owned semantics → Why-build(Build のみ。「簡単」「小さい」「依存を増やしたくない」「形が違う」は理由にならない) → Replaceability(下の技術を替えても Document と作品の意味は生きるか。No なら実装詳細が意味へ漏れている)。書式と例外は[既知実装採択モデル §0](../docs/design/known-implementation-adoption-model.md)、commit には `Acquisition:` 行(`scripts/check-acquisition.sh`)。
 
 - **手段は、明示された目的と確認済みの意向で測る**。指示された手段より明確に良い道が見えるなら、黙って従わず、実行前に案・根拠・代償を短く出す。ただし「相談」を許可取りに使わない — 判断材料を持っているのはこちら、決めるのはあなた。推した「真意」で明示の制約や権限は動かさない。目的・範囲・重要な制約を変えるなら確認、依頼の中の軽微で戻せる改善は止めずに進める
 - **長い作業を黙って進めない**。着手前に「何を・どの順で・どこまで」を 1〜2 行、区切りごとに結果を 1 行。build・計測・多 file の編集など数分かかる物は始めと終わりを必ず出し、詰まったら詰まったと言う。無言は利用者からは「止まっている」と同じに見える
 - 編集状態は Document が持つ。書き込みは Intent 経由のみ。同じ編集の意味を2箇所へ書いたら未完(presentation の重複は探索中なら可)
 - 責任は入口→意味→評価→結果→試験→**production UIでの検収**まで完結。**並列の lane が同じ file を触る時点で失敗**(責任が集まっている印)。worktree で逃がさず、先にその file を data／manifest の口にして、以後は行を足すだけで載る形にする
-- **CPU の常時反復を既定にしない。** 不変入力の再計算・全体再構築・状態を知るだけの定期pollは禁止。描画・時間変化は既存GPU/engineの仕組みを先に使い、CPUは変更入力に対する必要な差分だけ。毎秒・毎フレームのCPU仕事を足すなら、変更入力・発火/停止条件・GPU/イベントで代替できない根拠・同条件の実測を先に示す。違反は採用不可、該当差分を直して再検証するまで完了扱い禁止。罰則と検収は [UIの重さの法](../docs/reviews/2026-09-12-ui-derive-outside-build.md)「CPU反復」節。
+- **CPU の常時反復を既定にしない。** 不変入力の再計算・全体再構築・状態を知るだけの定期pollは禁止。描画・時間変化は既存GPU/engineの仕組みを先に使い、CPUは変更入力に対する必要な差分だけ。毎秒・毎フレームのCPU仕事を足すなら、変更入力・発火/停止条件・GPU/イベントで代替できない根拠・同条件の実測を先に示す。違反は採用不可、該当差分を直して再検証するまで完了扱い禁止。罰則と検収は [UIの重さの法](../docs/design/rationale/ui-derive-outside-build.md)「CPU反復」節。
 - 開発入口は `../scripts/motolii-ui.sh`。`dev`でFlutterを常駐し、通常のUI変更は`reload`または`r`でDocument・GPU資源を保持して反映する。Rust変更だけ`native`でbuildし、保存後にアプリを再起動する。初回・依存・型変更のbuildは途中で時間切れにせず完走させる。cacheを保ち、確認目的だけの全buildを増やさない。hot reloadとhot restartは区別し、初期化で失うUI状態を明示する。**UI作業はproduction windowが一次環境**：操作→問題発見→修正→hot reload→同じdocumentで同じ操作を再試行→制作続行のループを基本とし、fixtureやtest documentへ逃げない。unit testが緑でも元の操作が直るまで修理完了ではない。現在地と未完は`../docs/product/workspace.json`と`../docs/product/README.md`。
 - **窓に出る文字は英語**。値が意味の物だけ文字、あとは形で見せる
 - 決定は `../docs/decision-index.md` を grep。コードの現状・理由はコードに書かない — 腐る
 
 ## Surface Grammar(製品 UI の見た目の正本)
-製品窓(`motolii/ui/lib`)の寸法・文字・余白・radius・面の段は `motolii/ui/lib/theme/surface.dart` の `Surface` / `Dn` と `theme/neutral.dart` だけ。パネルは token を名指す(`Surface.workRow`・`inlineGap`・`sectionGap`・`Dn.nameSize`・`Surface.divider`)。生の `fontSize`/`EdgeInsets`/`SizedBox` 寸法/`BorderRadius`/色、`Card`、枠+丸角の箱で section を括ることは `motolii/ui/tool/motolii_lints`(`dart run bin/check.dart lib --ratchet=baseline.txt`)が止める。baseline は下がるだけ。token で言えない時だけ `// surface: <理由>` を書く。詳細 [docs/reviews/2026-09-30-surface-grammar.md](../docs/reviews/2026-09-30-surface-grammar.md)。
+製品窓(`motolii/ui/lib`)の寸法・文字・余白・radius・面の段・意味色の正本は **`motolii/ui/lib/theme/metrics.dart` ひとつ**(`Surface` / `Dn` / `N` は `lib/theme/metrics.dart` と `theme/neutral.dart`。EditorMetrics / EditorTheme は並列の系ではない)。パネルは token を名指す(`Surface.workRow`・`inlineGap`・`sectionGap`・`Dn.nameSize`・`Surface.divider`)。生の `fontSize`/`EdgeInsets`/`SizedBox` 寸法/`BorderRadius`/色、`Card`、枠+丸角の箱で section を括ることは `motolii/ui/tool/motolii_lints`(`dart run bin/check.dart lib --ratchet=baseline.txt`)が止める。baseline は下がるだけ。token で言えない時だけ `// surface: <理由>` を書く。詳細 [docs/design/rationale/surface-grammar.md](../docs/design/rationale/surface-grammar.md)。

@@ -1,2 +1,0 @@
-import "./mock-candidates.css";
-

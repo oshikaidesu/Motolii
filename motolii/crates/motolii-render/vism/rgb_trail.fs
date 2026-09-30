@@ -15,7 +15,7 @@
 }*/
 
 // 前のフレームの残像(history)を drift だけ流し、色ごとに減衰させ、今の絵と max で重ねる。
-// history の持ち主は host(docs/plugin-resources.md §6-3): 効果は何も覚えない。
+// history の持ち主は host(docs/design/plugin-resources.md §6-3): 効果は何も覚えない。
 void main() {
     if (PASSINDEX == 0) {
         vec4 now = IMG_THIS_PIXEL(inputImage);

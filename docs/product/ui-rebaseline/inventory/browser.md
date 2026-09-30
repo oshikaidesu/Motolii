@@ -1,6 +1,6 @@
 # Capability inventory — Browser (Create / Media / Effects / Fonts / Colors / Files)
 
-Source: full read of `motolii/ui/lib/legacy/panels/browser.dart` and every file in `motolii/ui/lib/panels/browser/` (23 files, 6074 lines), plus call sites in `panels/registry.dart`, `session/session_commands.dart`, `session/session_files.dart`, `session/session_native.dart`, `panels/panel_settings.dart`, `panels/inspector/content_cards.dart`, `panels/gradient_inspector.dart`, `panels/stage/touch.dart`, `app/editor_window.dart`. Intent from `docs/product/product-contract.md` (§ Browser row, l.9/14/16/92) and `docs/product/browser-rebuild.md` (Phase 4 = REJECTED; AEViewer look, no invented capabilities).
+Source: full read of `motolii/ui/lib/legacy/panels/browser.dart` and every file in `motolii/ui/lib/panels/browser/` (23 files, 6074 lines), plus call sites in `panels/registry.dart`, `session/session_commands.dart`, `session/session_files.dart`, `session/session_native.dart`, `panels/panel_settings.dart`, `panels/inspector/content_cards.dart`, `panels/gradient_inspector.dart`, `panels/stage/touch.dart`, `app/editor_window.dart`. Intent from `docs/product/product-contract.md` (§ Browser row, l.9/14/16/92) and `git:912382f048:docs/product/browser-rebuild.md` (Phase 4 = REJECTED; AEViewer look, no invented capabilities).
 
 Path prefixes used in the Code column: `B/` = `motolii/ui/lib/panels/browser/`, `BR` = `motolii/ui/lib/legacy/panels/browser.dart`.
 

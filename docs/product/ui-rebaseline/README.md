@@ -10,9 +10,9 @@ Phase B 以降はここを入口にする。
 | 置き場所 | 中身 |
 |---|---|
 | [concept/](concept/) | Concept Art 3 枚(dark が第一案)。visual grammar の参照で、pixel target ではない |
-| [classic/](classic/) | 現行窓の写真 18 枚(下の索引) |
+| classic/ (`git:912382f048:docs/product/ui-rebaseline/classic`) | 現行窓の写真 18 枚(下の索引) |
 | [inventory/](inventory/) | Capability Inventory 本体 5 本、計 **約 640 行**。各行に trigger・条件・file:line・送る命令・disposition |
-| [audit-visual.md](audit-visual.md) | theme 構造・直書きの数・共通部品・色の意味・font・token 案 |
+| audit-visual.md (`git:912382f048:docs/product/ui-rebaseline/audit-visual.md`) | theme 構造・直書きの数・共通部品・色の意味・font・token 案 |
 
 目録はコードを全部読んで作り、実窓で照合した(メニュー・popover・全 panel を開いて撮影)。
 右クリックメニューは窓を前面に出さないと開けないため、コードからの列挙だけで実窓では未照合。
@@ -106,7 +106,7 @@ New UI が同じ事をするなら、**写さず、振る舞いを変えずに w
 
 ## 5. 見た目の監査(要点)
 
-詳細は [audit-visual.md](audit-visual.md)。
+詳細は audit-visual.md (`git:912382f048:docs/product/ui-rebaseline/audit-visual.md`)。
 
 - **直書きは少ない。** lint 2 本(`raw_color`・`raw_dimension`)が効いている。theme 外の `Color(...)` は 3 か所で、全部 data 由来。
   散らばっているのは「どの token を選ぶか」の方で、inline `TextStyle` が約 123、場当たりの alpha が 43、角丸が 31。

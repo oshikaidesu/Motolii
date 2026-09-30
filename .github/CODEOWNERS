@@ -26,7 +26,7 @@ crates/motolii-testkit/golden_policy/** @oshikaidesu
 crates/motolii-testkit/src/cpu_reference/** @oshikaidesu
 crates/motolii-testkit/src/tol/** @oshikaidesu
 
-# The Technology Acquisition Gate and the ceilings it stands on: weakening them needs the owner (docs/known-implementation-adoption-model.md §0).
+# The Technology Acquisition Gate and the ceilings it stands on: weakening them needs the owner (docs/design/known-implementation-adoption-model.md §0).
 /scripts/check-acquisition.sh @oshikaidesu
 /.githooks/commit-msg @oshikaidesu
 /motolii/reference/owned-budget.tsv @oshikaidesu

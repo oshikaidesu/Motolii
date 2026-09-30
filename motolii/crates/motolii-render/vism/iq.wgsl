@@ -1,5 +1,5 @@
 // 関数の棚(module `package::iq`): Inigo Quilez の 1 行の形の関数(iquilezles.org/articles/functions)と Golan Levin のつまみ 1 個の ease。
-// 名前は出典のまま(gain と parabola は lygia の math と同名)。出典: docs/reviews/2026-09-18-motion-code-survey.md
+// 名前は出典のまま(gain と parabola は lygia の math と同名)。出典: git:912382f048:docs/reviews/2026-09-18-motion-code-survey.md
 
 /// 急に立ち上がって k で減る。x = 1/k で山。
 fn expImpulse(x: f32, k: f32) -> f32 { return k * x * exp(1.0 - k * x); }

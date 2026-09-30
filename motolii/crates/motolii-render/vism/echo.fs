@@ -15,7 +15,7 @@
 
 // AE の Echo を feedback で: 前のコマの history を Hold コマで 1% まで落ちる率で減衰させ、今の絵と重ねる。
 // 枚数を数えない — 尾の長さは減衰率で、費用は毎コマ 1 パスのまま(RGB Trail と同じ形)。
-// history の持ち主は host(docs/plugin-resources.md §6-3): 効果は何も覚えない。
+// history の持ち主は host(docs/design/plugin-resources.md §6-3): 効果は何も覚えない。
 
 vec4 stacked(vec4 now, vec4 past) {
     int how = int(stack + 0.5);

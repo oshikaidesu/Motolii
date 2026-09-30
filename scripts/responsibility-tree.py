@@ -119,7 +119,7 @@ def esc(s):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--commits", type=int, default=400)
-    ap.add_argument("--out", default="docs/reviews/2026-09-20-responsibility-tree.svg")
+    ap.add_argument("--out", default="responsibility-tree.svg")
     args = ap.parse_args()
 
     changed, partners = spread(args.commits)
