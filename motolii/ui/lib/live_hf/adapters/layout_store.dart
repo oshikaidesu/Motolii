@@ -75,9 +75,18 @@ class SessionLayoutStore extends LayoutStore {
     if (_gesture) return;
     final layer = c.liveLayers().where((l) => l['id'] == layerId).firstOrNull;
     if (layer == null) return;
+    // what [_load] reads: the layer's layout rows and whether it is locked
+    final now = [
+      [for (final r in panelRows(layer['properties'])) if ('${r['id']}'.startsWith('layout.')) r],
+      layer['locked'],
+    ];
+    if (sameValue(now, _seen)) return;
+    _seen = now;
     _load(layer);
     notifyListeners();
   }
+
+  Object? _seen;
 
   @override
   void preview(String id, Object? v) {
@@ -109,6 +118,7 @@ class SessionLayoutStore extends LayoutStore {
   @override
   void cancelled(String id) {
     _gesture = false;
+    _seen = null;
     c.commandDirect('cancelPreview');
   }
 
@@ -117,6 +127,7 @@ class SessionLayoutStore extends LayoutStore {
     if (frozen) return;
     super.commit(id);
     _gesture = false;
+    _seen = null;
     c.commandDirect('commitPreview');
   }
 }

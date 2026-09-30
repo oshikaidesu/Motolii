@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'package:flutter/widgets.dart';
 
 import '../../hf/insp/transform_model.dart';
@@ -102,8 +100,10 @@ class SessionTransformStore extends TransformStore {
     ];
   }
 
-  /// What the last absorb read: the same document gives the same Instrument, so nothing is rebuilt or told.
-  int? _read_;
+  /// What the last absorb read: the same document gives the same Instrument, so nothing is rebuilt or told. The layers
+  /// are kept as they were read (the session never edits a map in place, it replaces the list) and compared by value:
+  /// no string is built, and the walk stops at the first difference.
+  Object? _read_;
 
   bool _gesture = false;
 
@@ -114,8 +114,8 @@ class SessionTransformStore extends TransformStore {
   /// Instrument owns its values, and the last commit reads the document again.
   void absorb() {
     if (_gesture || c.layers.isEmpty) return;
-    final read = Object.hash(jsonEncode(c.liveLayers()), Object.hashAll(c.selectedIds), c.activeLayer?['id'], c.animating);
-    if (read == _read_) return;
+    final read = [c.liveLayers(), c.selectedIds, c.activeLayer?['id'], c.animating];
+    if (sameValue(read, _read_)) return;
     _read_ = read;
     layers
       ..clear()

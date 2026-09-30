@@ -1,6 +1,6 @@
 import 'package:flutter/widgets.dart';
 
-import '../../hf/insp/rows.dart';
+import '../../hf/insp/rows.dart' hide sameValue;
 import '../../session/editor_session.dart';
 import '../../session/read_model.dart';
 import 'key_menu.dart';
@@ -71,9 +71,33 @@ class SessionEffectStore extends ParamStore {
     frozen = layer?['locked'] == true || layer?['frozen'] == true || !c.supports('previewProperties') || !c.supports('commitPreview');
   }
 
+  /// What [_load] reads, and nothing else: the rows it shows, whether the layer is locked or frozen, the capabilities, and
+  /// (only when a row picks a layer) the other layers' names. A change to something else (another row of the layer, another
+  /// layer's position) leaves the sheet as it stands.
+  Object? _reading() {
+    final layer = _layer();
+    final effect = layer == null || effectId == null ? null : _effect(layer);
+    final source = prefix != null
+        ? [for (final r in panelRows(layer?['properties'])) if ('${r['id']}'.startsWith(prefix!)) r]
+        : (effect == null ? const <Map<String, dynamic>>[] : panelRows(effect['params']));
+    return [
+      source,
+      layer?['locked'],
+      layer?['frozen'],
+      c.supports('previewProperties'),
+      c.supports('commitPreview'),
+      if (source.any(_picksLayer)) [for (final l in _others) [l['id'], l['name']]],
+    ];
+  }
+
+  Object? _seen;
+
   /// The document changed under the sheet (undo, another edit). A running gesture keeps its own values.
   void absorb() {
     if (_gesture) return;
+    final now = _reading();
+    if (sameValue(now, _seen)) return;
+    _seen = now;
     _load();
     notifyListeners();
   }
@@ -124,12 +148,14 @@ class SessionEffectStore extends ParamStore {
     if (frozen) return;
     super.commit(id);
     _gesture = false;
+    _seen = null;
     c.commandDirect('commitPreview');
   }
 
   @override
   void cancelled(String id) {
     _gesture = false;
+    _seen = null;
     c.commandDirect('cancelPreview');
   }
 

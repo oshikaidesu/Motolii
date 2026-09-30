@@ -28,8 +28,21 @@ class SessionCameraStore extends CameraStore {
     return {for (final r in panelRows(l?['properties'])) '${r['id']}': r};
   }
 
+  Object? _seen;
+
   void absorb() {
     if (_gesture) return;
+    // what this reads: the camera layer itself, the layers a Target may name (name and place), the comp's size and the
+    // host's resolved centre; a change elsewhere in the document leaves the instrument as it stands
+    final now = [
+      c.layers.where((l) => l['id'] == layer).firstOrNull,
+      for (final l in c.layers) if (l['id'] != layer && l['kind'] != 'Camera') [l['id'], l['name'], l['x'], l['y']],
+      c.state['width'],
+      c.state['height'],
+      EditorSession.maps(c.state['cameraGizmos']).where((g) => g['id'] == layer).firstOrNull?['center'],
+    ];
+    if (sameValue(now, _seen)) return;
+    _seen = now;
     // a locked camera shows its values and refuses changes, as every locked layer does
     frozen = c.layers.where((l) => l['id'] == layer).firstOrNull?['locked'] == true;
     // the layers a Target may name and the comp it sits in are the document's now, not as they were when this store began
@@ -79,12 +92,14 @@ class SessionCameraStore extends CameraStore {
     super.commit(id);
     if (!_gesture) return;
     _gesture = false;
+    _seen = null;
     c.commandDirect('commitPreview');
   }
 
   @override
   void cancelled(String id) {
     _gesture = false;
+    _seen = null;
     c.commandDirect('cancelPreview');
   }
 
