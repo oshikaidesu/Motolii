@@ -1,10 +1,10 @@
 # Capability inventory — Browser (Create / Media / Effects / Fonts / Colors / Files)
 
-Source: full read of `motolii/ui/lib/panels/browser.dart` and every file in `motolii/ui/lib/panels/browser/` (23 files, 6074 lines), plus call sites in `panels/registry.dart`, `session/session_commands.dart`, `session/session_files.dart`, `session/session_native.dart`, `panels/panel_settings.dart`, `panels/inspector/content_cards.dart`, `panels/gradient_inspector.dart`, `panels/stage/touch.dart`, `app/editor_window.dart`. Intent from `docs/product/product-contract.md` (§ Browser row, l.9/14/16/92) and `docs/product/browser-rebuild.md` (Phase 4 = REJECTED; AEViewer look, no invented capabilities).
+Source: full read of `motolii/ui/lib/legacy/panels/browser.dart` and every file in `motolii/ui/lib/panels/browser/` (23 files, 6074 lines), plus call sites in `panels/registry.dart`, `session/session_commands.dart`, `session/session_files.dart`, `session/session_native.dart`, `panels/panel_settings.dart`, `panels/inspector/content_cards.dart`, `panels/gradient_inspector.dart`, `panels/stage/touch.dart`, `app/editor_window.dart`. Intent from `docs/product/product-contract.md` (§ Browser row, l.9/14/16/92) and `docs/product/browser-rebuild.md` (Phase 4 = REJECTED; AEViewer look, no invented capabilities).
 
-Path prefixes used in the Code column: `B/` = `motolii/ui/lib/panels/browser/`, `BR` = `motolii/ui/lib/panels/browser.dart`.
+Path prefixes used in the Code column: `B/` = `motolii/ui/lib/panels/browser/`, `BR` = `motolii/ui/lib/legacy/panels/browser.dart`.
 
-**Important structural fact:** in production every shelf is its **own dock panel** (`motolii/ui/lib/panels/registry.dart:42-48` builds `BrowserPanel(fixedTab: name, showTabs: false)` for Create/Media/Effects/Fonts/Colors/Files; catalog group "Browse", `motolii/ui/lib/foundation/panel_catalog.dart:82-87`). The in-panel tab strip and the `browserTab` listener are therefore **unreachable in the shipped app** (only tests construct `BrowserPanel` without `fixedTab`). Rows for them are kept (marked "dormant") so the capability is not lost.
+**Important structural fact:** in production every shelf is its **own dock panel** (`motolii/ui/lib/legacy/panels/registry.dart:42-48` builds `BrowserPanel(fixedTab: name, showTabs: false)` for Create/Media/Effects/Fonts/Colors/Files; catalog group "Browse", `motolii/ui/lib/legacy/foundation/panel_catalog.dart:82-87`). The in-panel tab strip and the `browserTab` listener are therefore **unreachable in the shipped app** (only tests construct `BrowserPanel` without `fixedTab`). Rows for them are kept (marked "dormant") so the capability is not lost.
 
 "Effect path" names: `command:<op>` = `EditorSession.command(op)` → Rust `DocumentOperation`; `native:<m>` = method-channel call (Swift `macos/Runner/MainFlutterWindow.swift` for `reveal`/`openFile`/`pickImport`; Rust `motolii/ui/native/src/lib.rs` for `request{op:fontFacts}`); `desk:<key>` = `controller.storeDesk(key)` (persisted user/workspace settings, not document).
 
@@ -17,7 +17,7 @@ Path prefixes used in the Code column: `B/` = `motolii/ui/lib/panels/browser/`, 
 | ID | Capability | Trigger | Condition | Code | Effect path | Proposed disposition | Reason |
 |---|---|---|---|---|---|---|---|
 | BR-001 | Switch shelf via in-panel tab strip (Create/Media/Effects/Fonts/Colors/Files) | click tab button | dormant: only when `showTabs && fixedTab==null` (no production caller) | BR:360-375, BR:301-308 | UI-local (`changeTab`) | PRESERVE + MOVE | Shelf switching is today done by dock tabs; new shell must still let every shelf be reached |
-| BR-002 | Each shelf opens as its own dockable panel (tab / window / hidden per Settings) | Settings panel placement / dock | always | `motolii/ui/lib/panels/registry.dart:42-48` | panel placement | PRESERVE + MOVE | Reachability of all 6 shelves is the capability; location may change |
+| BR-002 | Each shelf opens as its own dockable panel (tab / window / hidden per Settings) | Settings panel placement / dock | always | `motolii/ui/lib/legacy/panels/registry.dart:42-48` | panel placement | PRESERVE + MOVE | Reachability of all 6 shelves is the capability; location may change |
 | BR-003 | Search current shelf by name (substring, case-insensitive) | type in "Search <Shelf>" field | always | B/frame_bars.dart:40-68; BR:242-254 | UI-local | PRESERVE | Core filtering |
 | BR-004 | Search text remembered per shelf when switching shelves | switch tab | dormant with tab strip (per-panel instance otherwise) | BR:303-305, BR:70 | UI-local | PRESERVE | Keeps each shelf's context |
 | BR-005 | Focus + select-all search text | Cmd/Ctrl+F while panel focused | panel focused, not typing in a field | B/frame_keys.dart:17-24 | UI-local | PRESERVE | Standard find shortcut |
@@ -93,7 +93,7 @@ Path prefixes used in the Code column: `B/` = `motolii/ui/lib/panels/browser/`, 
 | BR-060a | Quick-tags band: see picked item name / "N rows", its built-in tags (read-only, intersection across picked), user tags | automatic | selection non-empty | B/frame_filters.dart:102-130; B/quick_tags.dart:50-65, 94-128 | UI-local | PRESERVE + CONTEXTUALIZE | Already contextual |
 | BR-061 | Add a user tag to all picked items | type in "Add…" → Enter | selection non-empty | B/quick_tags.dart:67-92; B/frame_filters.dart:127 | desk:`tags` | PRESERVE | — |
 | BR-062 | Remove a user tag from all picked items | click × on user tag chip | selection has user tags | B/quick_tags.dart:56-61, 156-167 | desk:`tags` | PRESERVE | — |
-| BR-063 | Tile size − / + (10 % steps) | click − or + | always | `motolii/ui/lib/foundation/panel_controls/scale.dart:131-142,160,174`; B/frame_grid.dart:81-90 | desk:`browserTile` (72–240 px) | PRESERVE | — |
+| BR-063 | Tile size − / + (10 % steps) | click − or + | always | `motolii/ui/lib/controls/panel/scale.dart:131-142,160,174`; B/frame_grid.dart:81-90 | desk:`browserTile` (72–240 px) | PRESERVE | — |
 | BR-064 | Tile size slider | drag slider | bar wide enough (`sliderRoom`) | scale.dart:161-171 | desk:`browserTile` | PRESERVE | — |
 | BR-065 | Tile size exact percent | type/scrub in percent field | always | scale.dart:150-157 | desk:`browserTile` | PRESERVE | Exact value |
 | BR-066 | Count label: "N of M selected" / "N of M shown" / "M items"; tooltip with all three numbers; compact to bare number when narrow | read / hover | always | B/frame_grid.dart:47-73, 94-105 | UI-local | PRESERVE | — |
@@ -173,7 +173,7 @@ Path prefixes used in the Code column: `B/` = `motolii/ui/lib/panels/browser/`, 
 | BR-125 | Pick saturation/value in inner square or triangle (hue kept for greys) | drag / click inner area | has('setColor') | B/color_picker.dart:97-128; B/color_wheel.dart:79-96 | same as BR-124 | PRESERVE + VISUALIZE | — |
 | BR-126 | Switch wheel inner shape Square ↔ Triangle | click "Square/Triangle" label | — | B/color_picker.dart:304-329 | desk:`colorShape` | PRESERVE | — |
 | BR-127 | Enter hex colour (3 or 6 digits, validated) | type in hex field, commit | has('setColor') | B/color_picker.dart:246-270 | command:`setColor` (or local `picked` if no target) | PRESERVE | Exact numeric entry |
-| BR-128 | Eyedropper: pick colour from Stage | click pipette toggle, then click Stage; Esc cancels | — | B/color_picker.dart:273-303, 333-350; `motolii/ui/lib/panels/stage/touch.dart:217-229` | `eyedropper` flag → Stage → command:`applyPalette` | PRESERVE | — |
+| BR-128 | Eyedropper: pick colour from Stage | click pipette toggle, then click Stage; Esc cancels | — | B/color_picker.dart:273-303, 333-350; `motolii/ui/lib/stage/touch.dart:217-229` | `eyedropper` flag → Stage → command:`applyPalette` | PRESERVE | — |
 | BR-129 | Alpha slider | drag slider | target carries alpha (text, params) | B/color_picker.dart:352-387 | command:`previewColor` → commit | PRESERVE + VISUALIZE | — |
 | BR-130 | Cancel an in-progress wheel drag (reverts preview) | Esc (picker focused), app backgrounded, window loses focus, target changes | drag in progress | B/color_picker.dart:58-65, 80-86, 161-180, 190-195 | command:`cancelPreview` | PRESERVE | Safety |
 | BR-131 | Unbound wheel (no target): wheel/hex just set a scratch colour | wheel / hex | no colour target | B/color_picker.dart:118-119, 259-261; B/colors_shelf.dart:196-197 | UI-local (`picked`) | PRESERVE | Scratch colour (not persisted) |
@@ -204,7 +204,7 @@ Path prefixes used in the Code column: `B/` = `motolii/ui/lib/panels/browser/`, 
 
 | ID | Capability | Trigger | Condition | Code | Effect path | Proposed disposition | Reason |
 |---|---|---|---|---|---|---|---|
-| BR-150 | Browser tile size slider in Settings | Settings panel | — | `motolii/ui/lib/panels/panel_settings.dart:36-41` | desk:`browserTile` | PRESERVE + MERGE | Same value as BR-063–065 |
+| BR-150 | Browser tile size slider in Settings | Settings panel | — | `motolii/ui/lib/legacy/panels/panel_settings.dart:36-41` | desk:`browserTile` | PRESERVE + MERGE | Same value as BR-063–065 |
 
 ---
 

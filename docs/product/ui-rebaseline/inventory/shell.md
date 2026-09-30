@@ -1,6 +1,6 @@
 # Inventory — window shell, menus, shortcuts, workspace, settings (Phase A, read-only)
 
-Scope: `motolii/ui/lib/{main.dart, app/*, workspace/*, foundation/panel_catalog.dart, panels/registry.dart, panels/panel_settings.dart, input/editor_shortcuts.dart, session/*, bridge/*}`, `ui/native/src/{lib.rs, port.rs, viewer.rs, editor/keymap.rs, editor/clipboard.rs, editor/history.rs}`, `ui/macos/Runner/*`.
+Scope: `motolii/ui/lib/{main.dart, app/*, workspace/*, foundation/panel_catalog.dart, panels/registry.dart, panels/panel_settings.dart, input/editor_shortcuts.dart, session/*, bridge/*}`, `motolii/ui/native/src/{lib.rs, port.rs, viewer.rs, editor/keymap.rs, editor/clipboard.rs, editor/history.rs}`, `ui/macos/Runner/*`.
 All paths below are relative to `motolii/ui/`. "cmd" in Dart = Meta **or** Control (`editor_shortcuts.dart:29`).
 
 Disposition vocabulary: PRESERVE / MOVE / MERGE / CONTEXTUALIZE / VISUALIZE (no DELETE).
@@ -11,7 +11,7 @@ Disposition vocabulary: PRESERVE / MOVE / MERGE / CONTEXTUALIZE / VISUALIZE (no 
 
 | ID | Capability | Trigger | Condition | Code (file:line) | Effect path | Proposed disposition | Reason |
 |---|---|---|---|---|---|---|---|
-| SH-01 | New document | File ▸ New; Cmd+N | Save-changes dialog first when dirty (SH-26) | `lib/app/editor_window.dart:382-384`, `:479`; `lib/input/editor_shortcuts.dart:87-90` | `c.command('new')` → Rust `port.rs:246` "new" (requiresPause) | PRESERVE + MOVE | Core file verb. Can live in a compact File menu / app menu; must keep the confirm step |
+| SH-01 | New document | File ▸ New; Cmd+N | Save-changes dialog first when dirty (SH-26) | `lib/legacy/app/editor_window.dart:382-384`, `:479`; `lib/legacy/input/editor_shortcuts.dart:87-90` | `c.command('new')` → Rust `port.rs:246` "new" (requiresPause) | PRESERVE + MOVE | Core file verb. Can live in a compact File menu / app menu; must keep the confirm step |
 | SH-02 | Open document (.rrd) | File ▸ Open; Cmd+O | Confirm dirty first | `editor_window.dart:385-387`; `session_files.dart:62-65` | `native('pickOpen')` (NSOpenPanel, .rrd) → `native('open',{path})` → Swift `runtime.open` → broadcast to all windows | PRESERVE + MOVE | Same |
 | SH-03 | Save | File ▸ Save; Cmd+S | Untitled → falls to Save panel | `editor_window.dart:388-390`; `session_files.dart:67-71`; `session_commands.dart:57-63` | `native('flushEditors')` then `command('save',{path})` → `port.rs:242` | PRESERVE | Flushes pending field edits in all windows before saving — New shell's fields must register in `pendingEditors` too |
 | SH-04 | Save as | File ▸ Save as; Cmd+Shift+S | — | `editor_window.dart:391-393`; `editor_shortcuts.dart:79-82` | `native('pickSave',{name:'Untitled.rrd'})` → `save` | PRESERVE | |
@@ -51,7 +51,7 @@ Disposition vocabulary: PRESERVE / MOVE / MERGE / CONTEXTUALIZE / VISUALIZE (no 
 
 ### KB — keyboard shortcuts (global handler)
 
-All handled in `EditorShortcuts.handle` (`lib/input/editor_shortcuts.dart:26-186`), attached to the root `Focus(autofocus:true)` (`editor_window.dart:461-463`). Ignored while an `EditableText` has focus (`:19-27`). Only KeyDown. `ui/native/src/editor/keymap.rs` contains no keymap (just `enum EaseSide {Both,In,Out}`); **all bindings live in Dart**.
+All handled in `EditorShortcuts.handle` (`lib/legacy/input/editor_shortcuts.dart:26-186`), attached to the root `Focus(autofocus:true)` (`editor_window.dart:461-463`). Ignored while an `EditableText` has focus (`:19-27`). Only KeyDown. `motolii/ui/native/src/editor/keymap.rs` contains no keymap (just `enum EaseSide {Both,In,Out}`); **all bindings live in Dart**.
 
 | ID | Capability | Trigger | Condition | Code (file:line) | Effect path | Proposed disposition | Reason |
 |---|---|---|---|---|---|---|---|

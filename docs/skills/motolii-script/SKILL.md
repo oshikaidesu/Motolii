@@ -6,7 +6,7 @@ description: Write a Motolii script — a JS file that builds a document with th
 # Motolii script (2026-09-19)
 
 A script is JS run once by `run_script` (`motolii/ui/native/src/editor/script.rs:18`) on QuickJS with the prelude
-(`motolii/ui/extensions/script/src/prelude.js`). Every call is a window op (`__op`), every name is a name the
+(`motolii/crates/motolii-script/src/prelude.js`). Every call is a window op (`__op`), every name is a name the
 window shows. A refused script leaves nothing behind (script.rs:26-28). Budget 20 s (script.rs:10), memory 512 MB.
 
 ## The whole contract
@@ -35,7 +35,7 @@ line({ name: "Ring" }).fill("#7FE7D8").set("Connect From", box).set("Trace", "Ci
 - Layer labels (`motolii/crates/motolii-doc/src/store/names.rs:10-51`): `Anchor`, `Position`, `Position X/Y/Z`, `Scale` (a pair,
   fraction of the created size), `Rotation`, `Tilt X/Y`, `Opacity`, `Depth`, `Skew`, `Size` (shape: `[w, h]` px, names.rs:40 / text
   style: font px, names.rs:67), `Stroke Width`, `Fill`, `Alignment`, `Split`, `Content`.
-  A new shape is a square of `round(min(comp w, h) × 0.25)` px (`ui/native/src/editor/create.rs:199-201`) — 270 only for a 1080 short
+  A new shape is a square of `round(min(comp w, h) × 0.25)` px (`motolii/ui/native/src/editor/create.rs:199-201`) — 270 only for a 1080 short
   side; that is where `Scale = px / 270` comes from. `.set("Size", [w, h])` on a rectangle/ellipse sets pixels directly.
 - Group / layout labels (`motolii-doc/src/store/layout.rs:150-208`): `Display` (None / Flex / Grid), `Flex Direction`, `Flex Wrap`,
   `Justify Content`, `Align Items`, `Grid Columns/Rows`, `Gap`, `Padding`, `Horizontal Sizing` / `Vertical Sizing` (Hug / Fill / Fixed),

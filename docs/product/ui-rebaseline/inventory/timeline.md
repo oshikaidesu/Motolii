@@ -1,7 +1,7 @@
 # Capability inventory — Timeline / Transport / Desk tools / Export
 
 Audited from code (read-only) at `db7d68118` (branch `claude/ui-rebaseline`). Paths are repo-relative.
-Abbreviations: `TL = motolii/ui/lib/panels/timeline`, `P = motolii/ui/native/src/port.rs`, `SC = motolii/ui/lib/input/editor_shortcuts.dart`.
+Abbreviations: `TL = motolii/ui/lib/panels/timeline`, `P = motolii/ui/native/src/port.rs`, `SC = motolii/ui/lib/legacy/input/editor_shortcuts.dart`.
 "has(op)" = `EditorSession.supports(op)` (the native capability list at `P:8`); a control whose op is missing is disabled or does nothing.
 Primary modifier = Cmd **or** Ctrl (`TL/frame.dart:58`).
 
@@ -11,7 +11,7 @@ Primary modifier = Cmd **or** Ctrl (`TL/frame.dart:58`).
 
 | ID | Capability | Trigger | Condition | Code | Effect path | Proposed disposition | Reason |
 |---|---|---|---|---|---|---|---|
-| TL-001 | Play or pause | Timeline bar button `▶` / `Ⅱ` (highlighted while playing, tooltip "Play / Pause · Space") | Needs `play`/`pause`, a texture, duration ≥ 2 frames (`session_render.dart:44-45`) | `motolii/ui/lib/panels/timeline.dart:253-261` | `EditorSession.togglePlayback` → native `play` / `pause` (`P:257-258`) | PRESERVE | Primary transport. It must stay reachable with one click |
+| TL-001 | Play or pause | Timeline bar button `▶` / `Ⅱ` (highlighted while playing, tooltip "Play / Pause · Space") | Needs `play`/`pause`, a texture, duration ≥ 2 frames (`session_render.dart:44-45`) | `motolii/ui/lib/legacy/panels/timeline.dart:253-261` | `EditorSession.togglePlayback` → native `play` / `pause` (`P:257-258`) | PRESERVE | Primary transport. It must stay reachable with one click |
 | TL-002 | Play or pause from the keyboard | `Space` (global) | Not while a text field has focus | `SC:44-47` | `togglePlayback` | PRESERVE | Standard NLE key |
 | TL-003 | Keep playing while scrubbing | A seek during playback does not stop playback (Ableton-style) | Playing | `TL/frame.dart:38-43` | native `seek` (`P:260`) | PRESERVE | Behaviour contract, not a control |
 | TL-004 | Play past the duration (no wall, no loop) | Playback continues past `durationFrames`. The duration is only a mark | — | `motolii/crates/motolii-render/src/playback.rs:415-417` | native clock | PRESERVE (note) | **There is no Loop or work-area control anywhere in the current UI.** Record this as absent, not as lost |
@@ -26,7 +26,7 @@ Primary modifier = Cmd **or** Ctrl (`TL/frame.dart:58`).
 
 | ID | Capability | Trigger | Condition | Code | Effect path | Proposed disposition | Reason |
 |---|---|---|---|---|---|---|---|
-| TL-020 | Click the ruler to seek | Tap-down on the ruler, right of the name column | x ≥ labelWidth | `motolii/ui/lib/panels/timeline.dart:52-55` | `requestSeek` → serialized native `seek` (latest request wins) | PRESERVE | Core scrub |
+| TL-020 | Click the ruler to seek | Tap-down on the ruler, right of the name column | x ≥ labelWidth | `motolii/ui/lib/legacy/panels/timeline.dart:52-55` | `requestSeek` → serialized native `seek` (latest request wins) | PRESERVE | Core scrub |
 | TL-021 | Drag the ruler to scrub | Horizontal drag on the ruler | x ≥ labelWidth | `timeline.dart:56-59`, `TL/frame.dart:38-56` | `seek` pump. The head is drawn from `scrubFrame` before native replies | PRESERVE | Core scrub with optimistic draw |
 | TL-022 | Ruler time labels | Seconds (`1s` / `0.50s`) and frames (`30f`) at grid steps, with sub-ticks | Always | `TL/paint.dart:129-183` | UI-local | PRESERVE | Dual time units |
 | TL-023 | Playhead line and head across the ruler, lanes and overview | Painted | Always | `TL/paint.dart:385-399`, `TL/overview.dart:68-73` | UI-local | PRESERVE | Now-indicator |
@@ -37,7 +37,7 @@ Primary modifier = Cmd **or** Ctrl (`TL/frame.dart:58`).
 
 | ID | Capability | Trigger | Condition | Code | Effect path | Proposed disposition | Reason |
 |---|---|---|---|---|---|---|---|
-| TL-030 | Add a marker at the playhead | Timeline bar button `Marker` | `has('addMarker')`, otherwise disabled | `motolii/ui/lib/panels/timeline.dart:371-379` | native `addMarker` → `edit_marker` (named by frame number, no duplicate at the same time) `P:344-349` | PRESERVE / MERGE with TL-032 | Only marker authoring control |
+| TL-030 | Add a marker at the playhead | Timeline bar button `Marker` | `has('addMarker')`, otherwise disabled | `motolii/ui/lib/legacy/panels/timeline.dart:371-379` | native `addMarker` → `edit_marker` (named by frame number, no duplicate at the same time) `P:344-349` | PRESERVE / MERGE with TL-032 | Only marker authoring control |
 | TL-031 | Rename, edit the body of, delete, or move a marker | **Not reachable in UI.** Native `setMarker` / `deleteMarker` exist (`P:232, 347`) and appear in `protocol.dart:50-51`, but no Dart caller | — | — | native only | (gap) PRESERVE-in-native, expose in new UI | Capability exists underneath but no surface reaches it. Do not count it as a Classic UI capability |
 | TL-032 | Add a marker from the keyboard | `M` (global) | Not typing and no modifier | `SC:158` | `addMarker` | PRESERVE | Shortcut |
 
@@ -45,8 +45,8 @@ Primary modifier = Cmd **or** Ctrl (`TL/frame.dart:58`).
 
 | ID | Capability | Trigger | Condition | Code | Effect path | Proposed disposition | Reason |
 |---|---|---|---|---|---|---|---|
-| TL-040 | Zoom out one step | Bar button `−`: −1 % around the view centre (range 3–1000 %; 100 % = 4 px/frame) | — | `motolii/ui/lib/panels/timeline.dart:262-269`, `TL/view.dart:88-91` | UI-local `zoom()` | MERGE | Three controls for one zoom value (D-1) |
-| TL-041 | Type or drag the zoom % | `EditorPercentField` "Timeline zoom": drag-scrub (speed 1) or type. `Esc` restores the value from before the drag | — | `timeline.dart:270-276`, `motolii/ui/lib/foundation/panel_controls/scale.dart:50-97` | UI-local | MERGE / VISUALIZE | Numeric zoom |
+| TL-040 | Zoom out one step | Bar button `−`: −1 % around the view centre (range 3–1000 %; 100 % = 4 px/frame) | — | `motolii/ui/lib/legacy/panels/timeline.dart:262-269`, `TL/view.dart:88-91` | UI-local `zoom()` | MERGE | Three controls for one zoom value (D-1) |
+| TL-041 | Type or drag the zoom % | `EditorPercentField` "Timeline zoom": drag-scrub (speed 1) or type. `Esc` restores the value from before the drag | — | `timeline.dart:270-276`, `motolii/ui/lib/controls/panel/scale.dart:50-97` | UI-local | MERGE / VISUALIZE | Numeric zoom |
 | TL-042 | Zoom in one step | Bar button `+`: +1 % | — | `timeline.dart:277-282` | UI-local | MERGE | See TL-040 |
 | TL-043 | Fit everything | Bar button `Fit`: fits content extent (layers + ghosts + duration) to the view width | — | `timeline.dart:283-291` | UI-local | MERGE with TL-046 | Same action as double-clicking the overview |
 | TL-044 | Overview lens: jump the view | Primary press on the overview strip centres the view on that x | Scroll clients exist | `timeline.dart:299-321` | UI-local | PRESERVE / VISUALIZE | Mini-map navigation |
@@ -59,7 +59,7 @@ Primary modifier = Cmd **or** Ctrl (`TL/frame.dart:58`).
 | TL-051 | Trackpad pan with inertia | Two-finger pan in the lanes. Momentum stops on the next pointer down | Trackpad | `TL/view.dart:103-131`, `motolii/ui/lib/input/viewport_motion.dart` | UI-local | PRESERVE | Contract (input and inertia) |
 | TL-052 | Trackpad pinch zoom | Pinch in the lanes | Trackpad | `TL/view.dart:105-124` | UI-local | PRESERVE | Contract |
 | TL-053 | Trackpad scrub-zoom on the ruler | Two-finger gesture that starts over the ruler: vertical motion zooms around the time under the pointer | Trackpad, starts on ruler | `TL/view.dart:111-113`, `viewport_motion.dart:62` | UI-local | PRESERVE | Contract |
-| TL-054 | Horizontal scrollbar | Scrollbar strip under the lanes (always shows its thumb) | — | `motolii/ui/lib/panels/timeline.dart:385-428` | UI-local | PRESERVE | Mouse users |
+| TL-054 | Horizontal scrollbar | Scrollbar strip under the lanes (always shows its thumb) | — | `motolii/ui/lib/legacy/panels/timeline.dart:385-428` | UI-local | PRESERVE | Mouse users |
 | TL-055 | Vertical scrollbar for rows | `EditorScrollbar` on the rows | Rows taller than the view | `timeline.dart:99-105` | UI-local | PRESERVE | Mouse users |
 | TL-056 | Tell the session how many frames are visible | Automatic. `visibleFrames` is passed to `create` / `placeAsset` so new layers are sized to what is visible | Always | `TL/frame.dart:183-190`, `motolii/ui/lib/session/session_commands.dart:66-69` | session `visibleFrames` → native args | PRESERVE (hidden coupling) | **The new UI must still publish this or new layer lengths change** |
 
@@ -67,7 +67,7 @@ Primary modifier = Cmd **or** Ctrl (`TL/frame.dart:58`).
 
 | ID | Capability | Trigger | Condition | Code | Effect path | Proposed disposition | Reason |
 |---|---|---|---|---|---|---|---|
-| TL-060 | Resize the name column | Drag the grip between names and lanes (resize cursor). Clamp 114…162 + nesting indentation | — | `motolii/ui/lib/panels/timeline.dart:217-236, 430-466` | UI-local | PRESERVE | Contract (deep hierarchies) |
+| TL-060 | Resize the name column | Drag the grip between names and lanes (resize cursor). Clamp 114…162 + nesting indentation | — | `motolii/ui/lib/legacy/panels/timeline.dart:217-236, 430-466` | UI-local | PRESERVE | Contract (deep hierarchies) |
 | TL-061 | Reset the name column width | Double-click the grip → 138 | — | `timeline.dart:232-235` | UI-local | PRESERVE | — |
 | TL-062 | Cancel a column resize | Drag cancel restores the start width | — | `timeline.dart:228-231` | UI-local | PRESERVE | — |
 | TL-063 | Nested group containers | Groups draw as recursive boxes. Children are indented 8 px per level. The column widens with depth | Group layers | `TL/layout.dart:55-167`, `TL/paint.dart:414-426` | UI-local | PRESERVE / VISUALIZE | Contract: "group is a recursive container" |
@@ -98,7 +98,7 @@ Primary modifier = Cmd **or** Ctrl (`TL/frame.dart:58`).
 | TL-086 | Put layers into a group | Drag onto the middle of a group row (more than 5 px from its top and bottom). The drop outline boxes the group | Target is a Group | `TL/grip.dart:349-363` | `moveLayers{placement:'inside'}` | PRESERVE | Parent/child by drag |
 | TL-087 | Move layers to the root end | Drop below the last row | — | `TL/grip.dart:338-344` | `moveLayers{target:null, placement:'rootEnd'}` | PRESERVE | Take a layer out of its parent |
 | TL-088 | Refuse a drop into self or a descendant | Silently no drop target | Target is a moved row or its descendant | `TL/grip.dart:347-348` | UI-local guard (native also validates) | PRESERVE | Contract |
-| TL-089 | Group the selection | Context menu "Group" (⌘G), `Cmd+G`, Edit ▸ Group | `has('group')` | `TL/menu.dart:29`, `SC:74`, `motolii/ui/lib/app/editor_window.dart:487-498` | native `group` (`P:200`) | PRESERVE / MERGE (menu ↔ shortcut) | Nesting creation |
+| TL-089 | Group the selection | Context menu "Group" (⌘G), `Cmd+G`, Edit ▸ Group | `has('group')` | `TL/menu.dart:29`, `SC:74`, `motolii/ui/lib/legacy/app/editor_window.dart:487-498` | native `group` (`P:200`) | PRESERVE / MERGE (menu ↔ shortcut) | Nesting creation |
 | TL-090 | Ungroup | Context menu "Ungroup" (⇧⌘G), `Cmd+Shift+G`, Edit ▸ Ungroup | `has('ungroup')`. Errors "Select a Group" otherwise | `TL/menu.dart:30`, `SC:74` | native `ungroup` (`P:201`) | PRESERVE | Children reparent (contract) |
 
 ### Layer rows: expand, collapse and lanes
@@ -138,11 +138,11 @@ The switch cluster is four 14 px boxes at x = labelWidth−65 + 16·i (`TL/grip.
 | TL-119 | Trim the out point | Drag within 6 px of the right edge. Duration ≥ 1 | Unlocked | `TL/grip.dart:281-282, 414-420` | same | PRESERVE | Standard trim |
 | TL-120 | Slip the source | `Alt` + drag anywhere on the bar. Changes sourceIn ≥ 0; start and duration stay | Unlocked | `TL/grip.dart:277-278, 421-427` | same | PRESERVE / CONTEXTUALIZE | Hidden modifier. Worth a visible affordance |
 | TL-121 | Cancel a timing drag | `Esc` while dragging (Timeline focus), pointer cancel, or dispose | Preview active | `TL/view.dart:24-28`, `TL/grip.dart:535-542` | `cancelPreview` | PRESERVE | Undo-free abort |
-| TL-122 | Live bar drawing while dragging | Bars follow the pointer from their press-time timing + delta, before native replies | During a drag | `motolii/ui/lib/panels/timeline.dart:177-194` | UI-local | PRESERVE | Feel |
+| TL-122 | Live bar drawing while dragging | Bars follow the pointer from their press-time timing + delta, before native replies | During a drag | `motolii/ui/lib/legacy/panels/timeline.dart:177-194` | UI-local | PRESERVE | Feel |
 | TL-123 | Split at the playhead | Context menu "Split" (⌘K), `Cmd+K`, Edit ▸ Split | `has('split')`. Playhead must be strictly inside the layer, otherwise the error "Playhead must be inside a layer" | `TL/menu.dart:31`, `SC:91-96` | native `split` → `split_layers` (`P:204`) | PRESERVE | Standard. Selects the new copies |
 | TL-124 | Ghost extension display | The grey bar extension for a layer's ghost delay (drawn outside the real bar). A notch at frame 0 when it starts earlier. The ghost itself cannot be grabbed | `layer.ghost` set | `TL/paint.dart:222-261` | UI-local (edited in Inspector / Ease Sequence) | PRESERVE / VISUALIZE | Shows the result of DK-Ease sequence |
 | TL-125 | Group bar drag | A group row's bar area is hit-tested against the group layer's own start and duration, so move and trim apply to the group | Group row | `TL/grip.dart:253-286` | timing path | PRESERVE (verify) | Behaviour exists implicitly. Confirm in the window |
-| TL-126 | Drop a Media asset onto the Timeline | Drag an asset from Media over the rows. The drop line or box shows before/after/inside/rootEnd. Dropping over the lanes also sets the start frame from x | `data.asset` present and `has('placeAsset')` | `motolii/ui/lib/panels/timeline.dart:106-116`, `TL/grip.dart:374-399` | native `placeAsset{id,target,placement,start?}` (+ `visibleFrames`) | PRESERVE | Cross-panel drop |
+| TL-126 | Drop a Media asset onto the Timeline | Drag an asset from Media over the rows. The drop line or box shows before/after/inside/rootEnd. Dropping over the lanes also sets the start frame from x | `data.asset` present and `has('placeAsset')` | `motolii/ui/lib/legacy/panels/timeline.dart:106-116`, `TL/grip.dart:374-399` | native `placeAsset{id,target,placement,start?}` (+ `visibleFrames`) | PRESERVE | Cross-panel drop |
 
 ### Keyframes
 
@@ -170,7 +170,7 @@ The switch cluster is four 14 px boxes at x = labelWidth−65 + 16·i (`TL/grip.
 
 | ID | Capability | Trigger | Condition | Code | Effect path | Proposed disposition | Reason |
 |---|---|---|---|---|---|---|---|
-| TL-150 | Timeline right-click menu | Secondary tap in the rows area. First selects the row under the pointer if it is not already selected | — | `TL/menu.dart:11-107`, `motolii/ui/lib/panels/timeline.dart:117` | — | PRESERVE / CONTEXTUALIZE | Row items appear only over a row. Commands are disabled per capability |
+| TL-150 | Timeline right-click menu | Secondary tap in the rows area. First selects the row under the pointer if it is not already selected | — | `TL/menu.dart:11-107`, `motolii/ui/lib/legacy/panels/timeline.dart:117` | — | PRESERVE / CONTEXTUALIZE | Row items appear only over a row. Commands are disabled per capability |
 | TL-151 | Copy layers | Menu "Copy ⌘C", `Cmd+C`, Edit ▸ Copy | No keys selected, layers selected | `TL/menu.dart:24`, `SC:63` | native `copy` → `copy_layers` (includes nested grandchildren) | PRESERVE / MERGE | — |
 | TL-152 | Cut layers | Menu "Cut ⌘X", `Cmd+X`, Edit | — | `TL/menu.dart:25` | `cut` | PRESERVE / MERGE | — |
 | TL-153 | Paste layers | Menu "Paste ⌘V", `Cmd+V`, Edit | Layer payload | `TL/menu.dart:26` | `paste` → `paste_layers` | PRESERVE / MERGE | Also works over empty space (menu without row items) |
@@ -182,20 +182,20 @@ The switch cluster is four 14 px boxes at x = labelWidth−65 + 16·i (`TL/grip.
 
 | ID | Capability | Trigger | Condition | Code | Effect path | Proposed disposition | Reason |
 |---|---|---|---|---|---|---|---|
-| DK-001 | Open the Desk tools catalog | Desk header button (inbox icon, "Desk tools"). Lists the drawer tools (Depth, Ease, Blend, History) that live in the drawer | — | `motolii/ui/lib/panels/desk.dart:183-190, 129-175` | session `deskDrawer='Tools'` | PRESERVE / MOVE | Contract: Desk holds Depth, Ease, Blend and History |
+| DK-001 | Open the Desk tools catalog | Desk header button (inbox icon, "Desk tools"). Lists the drawer tools (Depth, Ease, Blend, History) that live in the drawer | — | `motolii/ui/lib/legacy/panels/desk.dart:183-190, 129-175` | session `deskDrawer='Tools'` | PRESERVE / MOVE | Contract: Desk holds Depth, Ease, Blend and History |
 | DK-002 | Open a tool from the catalog | Click a tool row. A tool promoted to a pane opens with `placePanel(name,'show')` instead | — | `desk.dart:120-126, 136-137` | `deskDrawer=name` or `placePanel` | PRESERVE | — |
 | DK-003 | Set the idle-default tool | Star button per row ("Use X when idle"). Toggles between this tool and Tools | — | `desk.dart:151-167` | session `deskDefault` (persisted) | PRESERVE / CONTEXTUALIZE | Personalization |
 | DK-004 | Desk follows the selection | Automatic: selected keys → Ease; ≥ 2 selected layers → Ease (Sequence); active Camera → Depth. Frozen while the user is interacting inside the Desk | — | `desk.dart:49-57, 88-98` | UI-local | PRESERVE | Contextual tool (core UX of Desk) |
 | DK-005 | Desk follows an editing focus | `editingFocus` keyframes → Ease, Camera → Depth, blendMode → Blend (for example F9 sets keyframes) | Layer selected | `desk.dart:100-118` | UI-local | PRESERVE | Cross-panel handoff |
 | DK-006 | Close a manually opened tool | `Esc` (global) clears `deskDrawer` when no sheet is open | — | `SC:38-39` | UI-local | PRESERVE | — |
 | DK-007 | Desk header shows the current tool icon and name | Header row. For Ease, the Tools button is inlined into the Ease header instead | — | `desk.dart:182-222` | UI-local | PRESERVE | — |
-| DK-008 | Promote a Desk tool to a permanent pane | Settings ▸ panel placement (outside this area). The Desk then skips tools placed elsewhere | — | `desk.dart:47-48`, `motolii/ui/lib/foundation/panel_catalog.dart:89-130` | `panePlaces` | PRESERVE | Contract (panel-placement) |
+| DK-008 | Promote a Desk tool to a permanent pane | Settings ▸ panel placement (outside this area). The Desk then skips tools placed elsewhere | — | `desk.dart:47-48`, `motolii/ui/lib/legacy/foundation/panel_catalog.dart:89-130` | `panePlaces` | PRESERVE | Contract (panel-placement) |
 
 ### Ease desk
 
 | ID | Capability | Trigger | Condition | Code | Effect path | Proposed disposition | Reason |
 |---|---|---|---|---|---|---|---|
-| DK-010 | Target line | Shows `layer · property · from–to f` (+ interval count, Mixed, Read only), or "Sequence · N layers" or "Workspace". The current frame shows `· before`/`· after` when outside the interval | — | `motolii/ui/lib/panels/ease_desk.dart:51-55, 398-407`, `ease_desk/parts.dart:265-322` | UI-local | PRESERVE | docs/product/ease.md layout |
+| DK-010 | Target line | Shows `layer · property · from–to f` (+ interval count, Mixed, Read only), or "Sequence · N layers" or "Workspace". The current frame shows `· before`/`· after` when outside the interval | — | `motolii/ui/lib/legacy/panels/ease_desk.dart:51-55, 398-407`, `ease_desk/parts.dart:265-322` | UI-local | PRESERVE | docs/product/ease.md layout |
 | DK-011 | Interval rail | Strip of the selected key intervals on the time axis. The active one is filled; the playhead is pinned on it. The rail stays empty (not hidden) with no target | — | `ease_desk.dart:409-420`, `parts.dart:325-363` | UI-local | PRESERVE / VISUALIZE | ease.md |
 | DK-012 | Active interval follows the playhead | The interval under or before the playhead becomes the shown shape | Several intervals selected | `ease_desk/state.dart:233-243, 247-281` | UI-local | PRESERVE | — |
 | DK-013 | Drag curve handles | Pointer-down within 12 px of a handle on the square graph. Handles per kind: Bezier 2, Bounce 1, Elastic 2, Cyclic 4, Random 4, Steps 2, ElasticSteps 2, none for Hold and Linear | Primary button | `ease_desk.dart:135-170`, `motolii/ui/native/src/editor/ease_kinds.rs:50-262` | each move: native `easeModel{shape,overshoot,handle,point}` (latest wins). Release: `_commit` → `ease{…, selection}` or `sequence` | PRESERVE / VISUALIZE | Graph first, numbers second |
@@ -223,7 +223,7 @@ The switch cluster is four 14 px boxes at x = labelWidth−65 + 16·i (`TL/grip.
 
 | ID | Capability | Trigger | Condition | Code | Effect path | Proposed disposition | Reason |
 |---|---|---|---|---|---|---|---|
-| DK-040 | Top-down depth map | Plan view (x across, z up) centred on the camera's look-at target. Rings at ¼, ½, ¾ and 1 of range, axes, the camera eye with FOV lines and a direction glyph. Auto-fits so every layer and the camera fit | `depthLayout` from native | `motolii/ui/lib/panels/depth_desk.dart:20-24, 62-135, 310-386` | read `state.depthLayout` | PRESERVE / VISUALIZE | Only overhead view of the 2.5D scene |
+| DK-040 | Top-down depth map | Plan view (x across, z up) centred on the camera's look-at target. Rings at ¼, ½, ¾ and 1 of range, axes, the camera eye with FOV lines and a direction glyph. Auto-fits so every layer and the camera fit | `depthLayout` from native | `motolii/ui/lib/legacy/panels/depth_desk.dart:20-24, 62-135, 310-386` | read `state.depthLayout` | PRESERVE / VISUALIZE | Only overhead view of the 2.5D scene |
 | DK-041 | Header: camera and target | Camera icon, then a target icon and the look-at layer's name | Target set | `depth_desk.dart:86-117` | UI-local | PRESERVE | — |
 | DK-042 | Layer dots | One coloured dot per layer (`layerColor`). Tooltip shows the name. Selected dots get a heavier ring and a name label | — | `depth_desk.dart:242-296` | UI-local | PRESERVE | — |
 | DK-043 | Select a layer in the depth map | Click a dot (13 px) | — | `depth_desk.dart:150-163` | native `select{ids:[id]}` | PRESERVE | — |
@@ -236,7 +236,7 @@ The switch cluster is four 14 px boxes at x = labelWidth−65 + 16·i (`TL/grip.
 
 | ID | Capability | Trigger | Condition | Code | Effect path | Proposed disposition | Reason |
 |---|---|---|---|---|---|---|---|
-| DK-050 | Page tabs | Horizontal list of page titles. Click switches page and resets selection and view. The current page is accent | Pages exist | `motolii/ui/lib/panels/notes_desk.dart:245-272` | UI-local `_pageId` (flushes editors first) | PRESERVE | — |
+| DK-050 | Page tabs | Horizontal list of page titles. Click switches page and resets selection and view. The current page is accent | Pages exist | `motolii/ui/lib/legacy/panels/notes_desk.dart:245-272` | UI-local `_pageId` (flushes editors first) | PRESERVE | — |
 | DK-051 | New page | `+` "New page" | — | `notes_desk.dart:72-82, 273-280` | native `notes{action:addPage}` (`motolii/ui/native/src/editor/notes.rs:12-14`) | PRESERVE | — |
 | DK-052 | Rename the page | "Page title" draft field (commits on submit or blur) | Page exists | `notes_desk.dart:284-297` | `notes{renamePage}` | PRESERVE | — |
 | DK-053 | Delete the page | "Delete page" button (no confirm; undoable through Document) | Page exists | `notes_desk.dart:345-360` | `notes{deletePage}` | PRESERVE | — |
@@ -259,7 +259,7 @@ The switch cluster is four 14 px boxes at x = labelWidth−65 + 16·i (`TL/grip.
 
 | ID | Capability | Trigger | Condition | Code | Effect path | Proposed disposition | Reason |
 |---|---|---|---|---|---|---|---|
-| DK-070 | History timeline list | Vertical rail with every edit and record, oldest first. Filled dots are reached, outlined dots are the redo tail, the current point is ringed | History exists; otherwise "No history" | `motolii/ui/lib/panels/history_records.dart:68-122, 204-277` | read `state.history` (`motolii/ui/native/src/editor/history.rs`, cap 200) | PRESERVE / VISUALIZE | — |
+| DK-070 | History timeline list | Vertical rail with every edit and record, oldest first. Filled dots are reached, outlined dots are the redo tail, the current point is ringed | History exists; otherwise "No history" | `motolii/ui/lib/legacy/panels/history_records.dart:68-122, 204-277` | read `state.history` (`motolii/ui/native/src/editor/history.rs`, cap 200) | PRESERVE / VISUALIZE | — |
 | DK-071 | Jump to a history point | Tap an entry: undoes or redoes up to that step | `has('historyGoto')`, the entry has a `head` (not from a previous run), not the current entry | `history_records.dart:93, 104, 115-117` | native `historyGoto{head}` (`P:250-256`), errors if unreachable | PRESERVE | Multi-step undo |
 | DK-072 | Record markers | Save, Open, End (crash/quit), Warning and Error entries show an icon and a square point. Entries from earlier runs cannot be jumped to | — | `history_records.dart:39-46, 161-170` | read-only | PRESERVE | Session log |
 | DK-073 | Timestamps | HH:MM:SS per entry | Panel width ≥ 160 | `history_records.dart:30-37, 186-196` | UI-local | PRESERVE / CONTEXTUALIZE | — |
@@ -269,8 +269,8 @@ The switch cluster is four 14 px boxes at x = labelWidth−65 + 16·i (`TL/grip.
 
 | ID | Capability | Trigger | Condition | Code | Effect path | Proposed disposition | Reason |
 |---|---|---|---|---|---|---|---|
-| EX-001 | Open the Export sheet | Top bar button "Export" (toggle). Tap outside closes it; `Esc` closes the sheet | — | `motolii/ui/lib/app/editor_window.dart:500-510, 557, 578-580`, `SC:36-37` | UI-local `sheet` | PRESERVE / MOVE | — |
-| EX-002 | Range: All | "All" button: 0 → durationFrames | Default | `motolii/ui/lib/panels/export_controls.dart:58-62` | UI-local (not persisted) | PRESERVE | — |
+| EX-001 | Open the Export sheet | Top bar button "Export" (toggle). Tap outside closes it; `Esc` closes the sheet | — | `motolii/ui/lib/legacy/app/editor_window.dart:500-510, 557, 578-580`, `SC:36-37` | UI-local `sheet` | PRESERVE / MOVE | — |
+| EX-002 | Range: All | "All" button: 0 → durationFrames | Default | `motolii/ui/lib/legacy/panels/export_controls.dart:58-62` | UI-local (not persisted) | PRESERVE | — |
 | EX-003 | Range: marker to marker | "Marker to marker": from the last marker at or before the playhead to the next marker after it (0 or duration when missing) | Markers exist (works without them too) | `export_controls.dart:33-46, 63-67` | UI-local | PRESERVE / VISUALIZE | Only way to export part of the timeline. Could be drawn on the Timeline |
 | EX-004 | Summary line | `W × H · fps` and `start–end · MP4 H.264 + AAC` | — | `export_controls.dart:70-72` | read state | PRESERVE | **The format is fixed. There is no format, codec or quality choice** |
 | EX-005 | Export… | Button → native save dialog (default `Untitled.mp4`), then starts the export | Range not empty, otherwise the error "Choose a non-empty range" | `export_controls.dart:75-101` | native `pickExport{name}` → `export{path,start,end}` (`P:238`) | PRESERVE | — |

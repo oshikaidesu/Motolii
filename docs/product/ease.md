@@ -24,4 +24,4 @@
 - `ui/test/desk_workspace_test.dart`: 対象なしの保存と道具の切替後の保持。
 - 実窓の検収記録は確認後に追記する。
 
-実装は`motolii/ui/lib/panels/ease_desk.dart`。既存のカーブ型・パラメータ・評価器を増減しない。
+実装は`motolii/ui/lib/legacy/panels/ease_desk.dart`。既存のカーブ型・パラメータ・評価器を増減しない。

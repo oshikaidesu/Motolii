@@ -77,11 +77,11 @@ Asking happens once, when the meaning is decided; consolidation, migration and t
 
 ## Product UI authority (decided 2026-09-28, D1)
 
-- **live_hf** (`lib/live_hf`, `scripts/motolii-ui.sh dev`) is the product UI and the presentation authority, with Product Home.
+- **The product UI** (`motolii/ui/lib/app` and the panel directories beside it; `scripts/motolii-ui.sh dev`) is the product UI and the presentation authority, with Product Home.
 - **Classic and New** (`MOTOLII_SHELL=classic|new`) are **capability migration sources**, not candidates. What is recovered from them is capability, input vocabulary, semantic behaviour and proven mechanisms — never their presentation.
-- **proto_hf** (and `lib/proto`) is prototype / reference. Nothing in production depends on it.
-- Authority flows forward: Classic/New capability → shared semantic/mechanism owner → live_hf presentation. No dependency points backwards (live_hf never imports Classic/New; New does not import live_hf; production does not import proto).
+- The earlier prototypes (`lib/proto`, `lib/proto_hf`, `lib/hf`, `lib/live_hf`) were retired; git history keeps them. Classic/New live on under `lib/legacy`.
+- Authority flows forward: Classic/New capability → shared semantic/mechanism owner → product UI presentation. No dependency points backwards (the product UI never imports `lib/legacy` except the `lib/main.dart` shell selector and `app`'s launcher path).
 
-Migration status per capability: PRESENT · LIVE_BETTER · MISSING_IN_LIVE · PARTIAL_IN_LIVE · OBSOLETE · DECISION_REQUIRED. A widget that exists is not PRESENT; a user trajectory that works is. A Classic widget absent from live_hf is not MISSING if the same user capability works there another way.
+Migration status per capability: PRESENT · LIVE_BETTER · MISSING_IN_LIVE · PARTIAL_IN_LIVE · OBSOLETE · DECISION_REQUIRED. A widget that exists is not PRESENT; a user trajectory that works is. A Classic widget absent from the product UI is not MISSING if the same user capability works there another way.
 
-**Legacy deletion gate**: a Classic/New file, widget or adapter may be deleted only when every capability it provided is PRESENT, LIVE_BETTER or OBSOLETE — verified in live_hf, not asserted. Any MISSING, PARTIAL, UNVERIFIED or DECISION_REQUIRED keeps it.
+**Legacy deletion gate**: a Classic/New file, widget or adapter may be deleted only when every capability it provided is PRESENT, LIVE_BETTER or OBSOLETE — verified in the product UI, not asserted. Any MISSING, PARTIAL, UNVERIFIED or DECISION_REQUIRED keeps it.

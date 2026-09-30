@@ -1,4 +1,4 @@
-# Stage 5 — Flutter UIへの正式移行
+# Flutter UI — 開発入口
 
 現在の入口はこの文書と `workspace.json`。2026-09-06の利用者承認によりFlutterを本格採用し、通常のUI・開発・検証の経路をここへ統一した。これは製品の全機能・配布品質の完成宣言ではない。
 
@@ -8,13 +8,12 @@ UIの方向(何を完成と呼ぶか・seatの意味・Dock)の正本は [Produc
 
 ## 起動入口(現在)
 
-同じnative host(`motolii/ui/native` → `motolii_ui` dylib)に、Flutterの入口が3つある。
+同じnative host(`motolii/ui/native` → `motolii_ui` dylib)に、Flutterの入口が2つある(試作 `proto*` は退役済み)。
 
 | 入口 | Dartのmain | 画面 |
 |---|---|---|
-| `scripts/motolii-ui.sh dev` / `profile` / `live`、窓のapp(既定) | `lib/main.dart` → `lib/live_hf/main.dart` | **製品UI**: live_hf(`live_hf/shell.dart`)。Product Home / Product Direction の正本(2026-09-28 D1) |
-| `MOTOLII_SHELL=classic` または `new` を付けた `dev` / `profile` | `lib/main.dart` → `app/editor_app.dart` | 移行元: Classic(`app/editor_window.dart`)・New(`app/new_shell.dart`)。能力を回収し終えるまで残す(Product Direction の legacy deletion gate) |
-| `flutter run -t lib/proto_hf/main_*.dart` など | `lib/proto_hf/`、`lib/proto/` | 試作・fixture。製品の経路ではない(製品側はここを何も読まない。カタログは `lib/hf/data/things` — `builtin` が製品、`stress` は試験・試作用)。`lib/hf/` は製品のface、proto専用だった shell_face・stage・fixtures・future は `lib/proto_hf/` にある |
+| `scripts/motolii-ui.sh dev` / `profile` / `live`、窓のapp(既定) | `lib/main.dart` → `lib/app/main.dart` | **製品UI**: `lib/app`(`app/main.dart`)。Product Home / Product Direction の正本(2026-09-28 D1) |
+| `MOTOLII_SHELL=classic` または `new` を付けた `dev` / `profile` | `lib/main.dart` → `legacy/app/editor_app.dart` | 移行元: Classic(`legacy/app/editor_window.dart`)・New(`legacy/app/new_shell.dart`)。能力を回収し終えるまで残す(Product Direction の legacy deletion gate) |
 
 ## コンセプトと採用事項
 
@@ -25,8 +24,8 @@ UIの方向(何を完成と呼ぶか・seatの意味・Dock)の正本は [Produc
 | 責任 | 場所 |
 |---|---|
 | 作品の読み取りモデル(`StoreView`・`Recording`)・値・時刻 | `motolii/crates/motolii-doc` |
-| 作品の書き込み・親子・キー・Undo(`Document`・`Intent`・保存) | `motolii/ui/extensions/edit`(crate `motolii-edit`) |
-| 書き出しjob・スクリプト | `motolii/ui/extensions/jobs`(`motolii-jobs`)・`motolii/ui/extensions/script`(`motolii-script`) |
+| 作品の書き込み・親子・キー・Undo(`Document`・`Intent`・保存) | `motolii/crates/motolii-edit`(crate `motolii-edit`) |
+| 書き出しjob・スクリプト | `motolii/crates/motolii-jobs`(`motolii-jobs`)・`motolii/crates/motolii-script`(`motolii-script`) |
 | 評価・GPU描画・書き出し | `motolii/crates/motolii-render` |
 | Flutter UI | `motolii/ui/lib` |
 | 編集命令・スナップショットの接続 | `motolii/ui/native` |
@@ -75,7 +74,7 @@ ffprobe -version
 
 ## 現在の限界
 
-- nativeの現役編集層は`ui/native/src/editor`。旧Dioxus helperは履歴参照であり、二重に保守しない。由来は適応資産のmanifestに残す。
+- nativeの現役編集層は`motolii/ui/native/src/editor`。旧Dioxus helperは履歴参照であり、二重に保守しない。由来は適応資産のmanifestに残す。
 - 起動・workspace・入力・共通部品・session・通信を[モジュール](modules.md)へ分離済み。個別panel内部、payload/snapshotの完全な型付け、UI session永続化は未完。
 - BGRA出力は`shared-bgra-output` featureでFlutter hostだけが選ぶ。旧host既定は維持し、両hostを一括feature統合するbuildを通常路にしない。
 - macOS共有GPU経路を検証済み。Windows/Linux、配布bundle・署名の成立を意味しない。

@@ -119,8 +119,8 @@ motolii-render/src/engine.rs
 motolii-render/src/engine/render.rs
 motolii-render/src/engine/analysis.rs
 motolii-render/src/picture/resolve.rs
-ui/native/src/lib.rs
-ui/native/src/port.rs
+motolii/ui/native/src/lib.rs
+motolii/ui/native/src/port.rs
 ui/macos/Runner/MainFlutterWindow.swift
 ```
 
@@ -130,7 +130,7 @@ ui/macos/Runner/MainFlutterWindow.swift
 
 | lane | 所有file | 成果 |
 |---|---|---|
-| native coordinator | 新規`ui/native/src/frame_coordinator.rs`、既存`frames.rs` | clock、generation、surface提出 |
+| native coordinator | 新規`motolii/ui/native/src/frame_coordinator.rs`、既存`frames.rs` | clock、generation、surface提出 |
 | 読み手移行 | `snapshot.rs`、`snapshot_cache.rs`、`editor/stage.rs` | status、Inspector、cageが再resolveせずframeを読む |
 | 非playback | export、warm-up、analysisの専用file | still、export、analysisを同じGraph意味へ寄せる |
 

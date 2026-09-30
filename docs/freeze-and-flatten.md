@@ -112,7 +112,7 @@ Hold(`TIME_AT`)は「ある瞬間の絵を読む効果」で、固めるので�
 
 ## 6. 現在地(2026-09-13)
 
-**板の Freeze を実装**(§5 の 1)。層にも群にも `Intent::Freeze`。裏の thread(`ui/native/src/freeze_job.rs`、export と同じ型)が
+**板の Freeze を実装**(§5 の 1)。層にも群にも `Intent::Freeze`。裏の thread(`motolii/ui/native/src/freeze_job.rs`、export と同じ型)が
 入点〜出点を順に焼き(`Engine::freeze_bake_frame`)、書類の隣 `<name>.motolii-cache/<layer>/<frame>.rgba16f` + `.json`
 (乗算済み線形 half float、余白・枠込み)へ置く。本番の engine は焼けたコマから cache の絵で層を組み、素材の復号も
 効果の列も走らない(`engine/frozen.rs`、`frozen_layer`)。場・面の hook と配置・不透明度・blend・マット・時間は生きたまま。

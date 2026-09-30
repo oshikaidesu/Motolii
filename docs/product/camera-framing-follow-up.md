@@ -11,7 +11,7 @@ Not part of the direct-manipulation PR. Recorded so it is decided once, on its o
 The existing parity test says the divergence is *observed, not desired*, but neither side is named as the truth. Choosing changes what the picture shows for any document that already has Framing > 0.
 
 ## What the user sees
-- The live_hf Camera instrument has no Framing Size or Near Fade row (`CameraStore.rows` has seven). Framing cannot be set, seen or cleared from the product UI; a document that carries it silently overrides Distance for the resolver and the Stage box.
+- The product UI Camera instrument has no Framing Size or Near Fade row (`CameraStore.rows` has seven). Framing cannot be set, seen or cleared from the product UI; a document that carries it silently overrides Distance for the resolver and the Stage box.
 - Distance stays editable while Framing overrides it, and the "Frames the target at ×zoom/distance" line is then wrong.
 
 ## To bring Framing into the production render

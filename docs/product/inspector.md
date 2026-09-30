@@ -1,6 +1,6 @@
 # Inspector — 2026-09-09 adoption
 
-利用者の「Testを正本にする」「即時フィードバック」「サイズ連動を直す」に基づき、Testの部品版を `motolii/ui/lib/panels/inspector.dart` のInspector(Classic shellのInspector。New shellは `app/new/inspector/new_inspector_panel.dart`、live_hfは `live_hf/adapters/right_seat.dart`)へ移した。旧表版とTestタブは撤去。プロパティの表示分類だけを `inspector_property_style.dart` に置く。保存DockのTestはInspectorへ読み替える。
+利用者の「Testを正本にする」「即時フィードバック」「サイズ連動を直す」に基づき、Testの部品版を `motolii/ui/lib/legacy/panels/inspector.dart` のInspector(Classic shellのInspector。New shellは `app/new/inspector/new_inspector_panel.dart`、live_hfは `live_hf/adapters/right_seat.dart`)へ移した。旧表版とTestタブは撤去。プロパティの表示分類だけを `inspector_property_style.dart` に置く。保存DockのTestはInspectorへ読み替える。
 
 ## 操作の契約と修正
 
