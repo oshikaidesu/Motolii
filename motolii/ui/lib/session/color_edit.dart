@@ -1,6 +1,5 @@
 import 'package:flutter/widgets.dart';
 
-import '../foundation/panel_controls/drag.dart' show EditorPreviewQueue;
 import 'editor_session.dart';
 
 /// The four numbers a stored colour carries, 0…1 (0…255 input is scaled).
@@ -88,9 +87,6 @@ class ColorEdit extends ChangeNotifier {
   double? _hue;
   bool _previewUsed = false, _ending = false, _cancelled = false;
   bool _disposed = false;
-  late final _queue = EditorPreviewQueue<Map<String, dynamic>>(
-    (patch) => c.command('previewColor', patch),
-  );
 
   List<double> get value =>
       _draft ?? (_target == null ? unbound : rgbaOf(_target!['rgba']));
@@ -136,11 +132,11 @@ class ColorEdit extends ChangeNotifier {
       onPick?.call(next);
     } else if (canPreview) {
       _previewUsed = true;
-      _queue.add({
+      c.commandDirect('previewColor', {
         if (_target!['layer'] != null) 'layer': _target!['layer'],
         'slot': _target!['slot'],
         'rgba': next,
-      });
+      }, 'color');
     }
   }
 
@@ -155,10 +151,7 @@ class ColorEdit extends ChangeNotifier {
     }
     _ending = true;
     try {
-      await _queue.finish(
-        false,
-        () => used ? c.command('commitPreview') : _set(target, next),
-      );
+      await (used ? c.command('commitPreview') : _set(target, next));
     } finally {
       _ending = false;
       _changed();
@@ -175,7 +168,7 @@ class ColorEdit extends ChangeNotifier {
     if (!used) return;
     _ending = true;
     try {
-      await _queue.finish(true, () => c.command('cancelPreview'));
+      await c.command('cancelPreview');
     } finally {
       _ending = false;
     }
@@ -207,8 +200,7 @@ class ColorEdit extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
-    if (_previewUsed && !_ending)
-      _queue.finish(true, () => c.command('cancelPreview'));
+    if (_previewUsed && !_ending) c.command('cancelPreview');
     super.dispose();
   }
 }

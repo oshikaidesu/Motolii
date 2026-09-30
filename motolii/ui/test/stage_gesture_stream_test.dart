@@ -27,6 +27,8 @@ void main() {
     };
     final stage = StageSession.of(c, 'User');
     const mods = StMods();
+    // a hover is still in flight when the press comes: begin must not fall behind the updates that follow it
+    stage.hover(const Offset(9, 9), 1);
     stage.press(const StHandle('se'), const Offset(10, 10), mods);
     for (var i = 1; i <= 40; i++) {
       stage.drag(Offset(10.0 + i, 10), beyondSlop: true, mods: mods, viewScale: 1);
@@ -34,7 +36,8 @@ void main() {
     stage.release(const Offset(50, 10), mods, 1);
     await tester.pump(const Duration(milliseconds: 500));
     final phases = [for (final m in sent) m['phase']];
-    expect(phases.first, 'begin');
+    expect(phases.indexOf('begin'), lessThan(phases.indexOf('update')), reason: '$phases');
+    expect(phases.first, 'hover');
     expect(phases.last, 'commit');
     final updates = sent.where((m) => m['phase'] == 'update').toList();
     expect(updates.length, lessThan(10), reason: 'not one native request per pointer event');

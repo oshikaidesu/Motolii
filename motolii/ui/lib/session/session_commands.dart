@@ -64,22 +64,19 @@ mixin SessionCommands on SessionCore {
   Future<void> command(String op, [Map<String, dynamic> args = const {}]) {
     if (_disposed) return Future<void>.value();
     LatencyProbe.mark('cmd:$op');
-    Future<void> run() {
-      if (op == 'save') {
-        return native('flushEditors').then((_) => _command(op, args));
-      }
-      return _command(op, args);
-    }
-
-    // An edit that comes while continuous previews are still queued follows them: it never overtakes the last preview.
-    if (_directFlying || _direct.isNotEmpty) return _directDrained.then((_) => run());
-    return run();
+    // An edit that comes while continuous previews are queued takes its place in that queue: after the previews before
+    // it, before the ones that come later (a gesture's begin is never overtaken by its own updates).
+    if (_directFlying || _direct.isNotEmpty) return _enqueueDirect(_DirectItem(op, args, null));
+    return _run(op, args);
   }
+
+  Future<void> _run(String op, Map<String, dynamic> args) => op == 'save'
+      ? native('flushEditors').then((_) => _command(op, args))
+      : _command(op, args);
 
   // ---- direct manipulation: the newest preview wins, order is kept --------------------------------------------------
   final _direct = <_DirectItem>[];
   bool _directFlying = false;
-  Future<void> _directDrained = Future<void>.value();
 
   /// A command sent while a hand is holding something (a preview, and the commit or cancel that ends it). Nothing waits for
   /// the previous preview's render: while one is in flight, a newer preview *replaces* the one waiting behind it (only the
@@ -92,11 +89,15 @@ mixin SessionCommands on SessionCore {
       _direct.last.args = args;
       return _direct.last.done.future;
     }
-    final item = _DirectItem(op, args, key);
+    // a preview nobody awaits must not report its failure as unhandled; a caller that awaits still gets it
+    return _enqueueDirect(_DirectItem(op, args, key))..ignore();
+  }
+
+  Future<void> _enqueueDirect(_DirectItem item) {
     _direct.add(item);
     if (!_directFlying) {
       _directFlying = true;
-      _directDrained = _flyDirect();
+      _flyDirect();
     }
     return item.done.future;
   }
@@ -106,9 +107,10 @@ mixin SessionCommands on SessionCore {
       while (_direct.isNotEmpty) {
         final item = _direct.removeAt(0);
         try {
-          await _command(item.op, item.args);
-        } finally {
+          await _run(item.op, item.args);
           item.done.complete();
+        } catch (e, st) {
+          item.done.completeError(e, st);
         }
       }
     } finally {

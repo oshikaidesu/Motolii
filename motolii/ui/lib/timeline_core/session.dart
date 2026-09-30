@@ -145,24 +145,14 @@ class TimelineSession extends ChangeNotifier {
   // ---- time ------------------------------------------------------------------------------------------------------
   /// While scrubbing, the head is drawn where it was asked to be before the host's reply lands.
   final scrub = ValueNotifier<int?>(null);
-  int? _pendingSeek;
-  Future<void>? _seekFlight;
+  Future<void>? _seeking;
   void seek(int frame) {
     frame = math.max(0, frame);
-    _pendingSeek = frame;
     scrub.value = frame;
-    _seekFlight ??= () async {
-      try {
-        while (_pendingSeek != null) {
-          final f = _pendingSeek!;
-          _pendingSeek = null;
-          await c.command('seek', {'frame': f});
-        }
-      } finally {
-        _seekFlight = null;
-        scrub.value = null;
-      }
-    }();
+    final flight = _seeking = c.commandDirect('seek', {'frame': frame}, 'timeline-seek');
+    flight.whenComplete(() {
+      if (identical(_seeking, flight)) scrub.value = null;
+    });
   }
 
   /// A marker carried along the ruler (its frame while carried), landing on release.
@@ -302,9 +292,8 @@ class TimelineSession extends ChangeNotifier {
         // the Timeline and the Stage both show its preview while the bar is held
         deltaFrames = (frame - _fromFrame).round();
         if (has('previewTimings')) {
-          _queued = _retime(gesture!);
           _previewUsed = true;
-          _previewFlight ??= _pumpPreview();
+          c.commandDirect('previewTimings', {'changes': _retime(gesture!)}, 'timeline-timings');
         }
     }
     notifyListeners();
@@ -341,7 +330,6 @@ class TimelineSession extends ChangeNotifier {
         break;
     }
     if (_previewUsed && !const {TlGesture.move, TlGesture.trimIn, TlGesture.trimOut, TlGesture.slip}.contains(g)) {
-      _queued = null;
       _previewUsed = false;
       c.cancelPreview();
     }
@@ -349,7 +337,6 @@ class TimelineSession extends ChangeNotifier {
   }
 
   void cancel() {
-    _queued = null;
     if (_previewUsed) {
       _previewUsed = false;
       c.cancelPreview();
@@ -368,26 +355,12 @@ class TimelineSession extends ChangeNotifier {
     notifyListeners();
   }
 
-  // the host's preview of timings while a bar is held, one request in flight, the latest waiting
-  List<Map<String, dynamic>>? _queued;
+  // the host's preview of timings while a bar is held goes through commandDirect: the newest wins, the commit keeps its place
   bool _previewUsed = false;
-  Future<void>? _previewFlight;
-  Future<void> _pumpPreview() async {
-    try {
-      while (_queued != null) {
-        final changes = _queued!;
-        _queued = null;
-        await c.command('previewTimings', {'changes': changes});
-      }
-    } finally {
-      _previewFlight = null;
-    }
-  }
 
   Future<void> _finishTiming(List<Map<String, dynamic>> changes) async {
     final used = _previewUsed;
     _previewUsed = false;
-    await _previewFlight;
     if (used) {
       await c.command('commitPreview');
     } else if (has('setTimings')) {
