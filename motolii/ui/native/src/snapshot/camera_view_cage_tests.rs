@@ -350,3 +350,66 @@ fn a_sphere_keeps_its_roundness_in_a_tall_stage_window(){
         eprintln!("ASPECT 2.5D sphere: output {ow}x{oh} ratio {:.2}; stage {ww}x{wh} at 13%: {sw}x{sh} ratio {:.2}",ow/oh,sw/sh);
     }
 }
+/// 箱(Boxcam)の取っ手と作業範囲の辺は、Stage の手と同じ stageGesture で掴む: 画面の動きを値にするのは native の 1 か所。
+/// 離すまでは preview、離して 1 手(Undo 一発)、取り消しは元の値。選択は変えない。
+#[test]
+fn the_camera_box_and_the_working_area_are_carried_by_the_stage_gesture(){
+    let mut rt=EditorRuntime::open("").unwrap();
+    request(&mut rt,json!({"op":"create","kind":"camera"}));
+    let camera=rt.viewer.selected().unwrap();
+    request(&mut rt,json!({"op":"create","kind":"stage"}));
+    let stage=rt.viewer.selected().unwrap();
+    request(&mut rt,json!({"op":"select","ids":[]}));
+    let at=|rt:&EditorRuntime,layer:LayerId,name:&str|rt.doc.view().value_at(layer,&PropertyId::new(name).unwrap(),rt.time().unwrap()).unwrap();
+    let gesture=|rt:&mut EditorRuntime,phase:&str,mode:&str,handle:&str,start:[f64;2],point:[f64;2]|{
+        request(rt,json!({"op":"stageGesture","phase":phase,"view":"Stage","mode":mode,"ids":[camera.0],"handle":handle,"start":start,"point":point}));
+    };
+    rt.camera_gizmos().unwrap();
+    let (_,corners)=rt.camera_box(camera).unwrap();
+    let corners=corners.expect("the default camera's box is in view");
+    let middle=[corners.iter().map(|c|c[0] as f64).sum::<f64>()/4.0,corners.iter().map(|c|c[1] as f64).sum::<f64>()/4.0];
+    let corner=[corners[2][0] as f64,corners[2][1] as f64];
+
+    // 中心: 動かした分だけ camera.center が動き、離すまでは preview
+    let before=at(&rt,camera,property::CAMERA_CENTER);
+    gesture(&mut rt,"begin","camera","center",middle,middle);
+    gesture(&mut rt,"update","camera","center",middle,[middle[0]+40.0,middle[1]-10.0]);
+    assert!(rt.preview.is_some(),"carried, not yet written");
+    gesture(&mut rt,"commit","camera","center",middle,[middle[0]+40.0,middle[1]-10.0]);
+    let Some(Value::Vec2(moved))=at(&rt,camera,property::CAMERA_CENTER) else{panic!("camera.center is a pair")};
+    let Some(Value::Vec2(was))=before.clone() else{panic!()};
+    assert!((moved[0]-was[0]-40.0).abs()<1e-6&&(moved[1]-was[1]+10.0).abs()<1e-6,"{was:?} -> {moved:?}");
+    assert!(rt.viewer.selected_ids.is_empty(),"carrying the box does not pick it");
+    request(&mut rt,json!({"op":"undo"}));
+    assert_eq!(at(&rt,camera,property::CAMERA_CENTER),before,"one undo takes the whole carry back");
+
+    // 角: 箱の中心から倍の遠さへ引けば、拡大は半分(箱が大きくなる = 寄りが引く)
+    rt.camera_gizmos().unwrap();
+    let Some(Value::F64(zoom))=at(&rt,camera,property::CAMERA_ZOOM).or(Some(Value::F64(1.0))) else{panic!()};
+    let far=[middle[0]+(corner[0]-middle[0])*2.0,middle[1]+(corner[1]-middle[1])*2.0];
+    gesture(&mut rt,"begin","camera","zoom",corner,corner);
+    gesture(&mut rt,"update","camera","zoom",corner,far);
+    gesture(&mut rt,"commit","camera","zoom",corner,far);
+    let Some(Value::F64(z))=at(&rt,camera,property::CAMERA_ZOOM) else{panic!("camera.zoom is written")};
+    assert!((z-zoom/2.0).abs()<1e-3,"{zoom} -> {z}");
+
+    // 取り消し: 何も書かない
+    let kept=at(&rt,camera,property::CAMERA_ROLL);
+    gesture(&mut rt,"begin","camera","roll",corner,corner);
+    gesture(&mut rt,"update","camera","roll",corner,[middle[0],corner[1]+200.0]);
+    gesture(&mut rt,"cancel","camera","roll",corner,corner);
+    assert_eq!(at(&rt,camera,property::CAMERA_ROLL),kept,"a canceled roll leaves the camera");
+    assert!(rt.preview.is_none());
+
+    // 作業範囲の右辺: 右へ 30 引けば右の余白が 30 増える、内へ押しても 0 より下がらない
+    let margin=|rt:&EditorRuntime|match at(rt,stage,"stage.right"){Some(Value::F64(v))=>v,_=>0.0};
+    let right=margin(&rt);
+    request(&mut rt,json!({"op":"stageGesture","phase":"begin","view":"Stage","mode":"extent","handle":"right","start":[100.0,100.0],"point":[100.0,100.0]}));
+    request(&mut rt,json!({"op":"stageGesture","phase":"update","view":"Stage","mode":"extent","handle":"right","point":[130.0,100.0]}));
+    request(&mut rt,json!({"op":"stageGesture","phase":"commit","view":"Stage","mode":"extent","handle":"right","point":[130.0,100.0]}));
+    assert!((margin(&rt)-right-30.0).abs()<1e-6,"{right} -> {}",margin(&rt));
+    request(&mut rt,json!({"op":"stageGesture","phase":"begin","view":"Stage","mode":"extent","handle":"right","start":[100.0,100.0],"point":[100.0,100.0]}));
+    request(&mut rt,json!({"op":"stageGesture","phase":"update","view":"Stage","mode":"extent","handle":"right","point":[-5000.0,100.0]}));
+    request(&mut rt,json!({"op":"stageGesture","phase":"commit","view":"Stage","mode":"extent","handle":"right","point":[-5000.0,100.0]}));
+    assert_eq!(margin(&rt),0.0,"the working area never turns inside out");
+}

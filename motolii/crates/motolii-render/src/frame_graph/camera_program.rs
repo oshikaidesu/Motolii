@@ -12,7 +12,7 @@ const ROWS: [&str; 9] = [property::CAMERA_CENTER, property::CAMERA_TARGET_Z, pro
 struct CameraPlan { order: i16, timing: LayerTiming, hidden: bool, solo: bool, props: [Option<usize>; 9] }
 
 #[derive(Clone)]
-struct Recipe { cameras: Vec<CameraPlan>, worlds: BTreeMap<u64, usize>, fps: Fps, comp: CompSpec }
+struct Recipe { cameras: Vec<CameraPlan>, worlds: BTreeMap<u64, usize>, anchors: BTreeMap<u64, usize>, fps: Fps, comp: CompSpec }
 
 #[derive(Debug)]
 pub enum CameraProgramError { Store(StoreError), InvalidInput(NodeKind) }
@@ -38,12 +38,16 @@ impl CameraProgram {
             for (row, name) in ROWS.iter().enumerate() { props[row] = properties.node_for(layer, &PropertyId::new(name).expect("known camera property")).map(&mut input); }
             cameras.push(CameraPlan { order: meta.order, timing: meta.timing, hidden: attrs.hidden, solo: attrs.solo, props });
         }
-        let mut worlds = BTreeMap::new();
-        for binding in transforms.bindings() { worlds.insert(binding.layer.0, input(binding.world)); }
+        let (mut worlds, mut anchors) = (BTreeMap::new(), BTreeMap::new());
+        let anchor = PropertyId::new(property::ANCHOR).expect("known property");
+        for binding in transforms.bindings() {
+            worlds.insert(binding.layer.0, input(binding.world));
+            if let Some(key) = properties.node_for(binding.layer, &anchor) { anchors.insert(binding.layer.0, input(key)); }
+        }
         let mut identity = NodeIdentity::new(NodeKind::Camera, inputs);
         identity.parameters = cameras.iter().flat_map(|camera| camera.order.to_be_bytes().into_iter().chain(camera.timing.start.to_be_bytes()).chain(camera.timing.duration.to_be_bytes()).chain([u8::from(camera.hidden), u8::from(camera.solo)])).collect();
         identity.time_dependency = TimeDependency::Exact;
-        Ok(Self { node: GraphNode::new(identity), recipe: Recipe { cameras, worlds, fps, comp } })
+        Ok(Self { node: GraphNode::new(identity), recipe: Recipe { cameras, worlds, anchors, fps, comp } })
     }
 
     pub fn node(&self) -> GraphNode { self.node.clone() }
@@ -65,7 +69,13 @@ fn evaluate(recipe: &Recipe, inputs: &NodeInputs, context: &EvaluationContext) -
     if let Some(Value::LayerId(target)) = evaluated(camera, 2, inputs) {
         if let Some(index) = recipe.worlds.get(target).copied() {
             if let Some(world) = inputs.at(index).and_then(|value| value.downcast_ref::<TransformValue>()) {
-                let point = world.spatial.transform_point3(glam::Vec3::ZERO);
+                // the target's position in the world: its anchor (the pivot the graph's transform places at its position),
+                // not its local origin (a text's origin is the comp corner)
+                let anchor = match recipe.anchors.get(target).and_then(|&index| inputs.at(index)).and_then(|value| value.downcast_ref::<Value>()) {
+                    Some(Value::Vec2(a)) => glam::vec3(a[0] as f32, a[1] as f32, 0.0),
+                    _ => glam::Vec3::ZERO,
+                };
+                let point = world.spatial.transform_point3(anchor);
                 resolved = resolved.aimed_at(recipe.comp, point);
             }
         }
@@ -85,6 +95,30 @@ mod tests {
     impl NodeExecutor for Executor<'_> {
         type Error = SceneProgramError;
         fn execute(&mut self, node: &GraphNode, inputs: NodeInputs, context: EvaluationContext) -> Result<NodeValue, Self::Error> { self.0.execute(node, &inputs, &context) }
+    }
+
+    /// The graph camera aimed at a layer looks at where the layer stands (its anchor in the world), as the legacy resolver does.
+    #[test]
+    fn a_camera_aimed_at_an_anchored_layer_looks_at_its_position() {
+        let mut doc = Document::new();
+        let target = crate::doc::store::LayerId(1); let camera = crate::doc::store::LayerId(2);
+        let comp = CompSpec { width: 1920, height: 1080 };
+        doc.apply_all([
+            Intent::SetComposition(Composition { width: 1920, height: 1080, fps: Fps::try_new(30, 1).unwrap(), duration_frames: 90, background: [0.0; 4] }),
+            Intent::AddLayer(target), Intent::SetMeta { layer: target, meta: LayerMeta { source: LayerSource::Null, order: 0, timing: LayerTiming::place(0, None, 90) } },
+            Intent::SetConstant { layer: target, property: PropertyId::new(property::ANCHOR).unwrap(), value: Value::Vec2([960.0, 540.0]) },
+            Intent::SetConstant { layer: target, property: PropertyId::new(property::POSITION).unwrap(), value: Value::Vec2([700.0, 300.0]) },
+            Intent::AddLayer(camera), Intent::SetMeta { layer: camera, meta: LayerMeta { source: LayerSource::Camera, order: 1, timing: LayerTiming::place(0, None, 90) } },
+            Intent::SetConstant { layer: camera, property: PropertyId::new(property::CAMERA_TARGET).unwrap(), value: Value::LayerId(target.0) },
+        ]).unwrap();
+        let program = SceneProgram::compile(&doc.view()).unwrap();
+        let root = program.camera();
+        let topology = GraphTopology::try_new(program.nodes(), vec![root]).unwrap();
+        let mut graph = CompiledGraph::with_topology(GraphRevision::new(1), topology);
+        let mut executor = Executor(&program);
+        let frame = graph.evaluate(&mut executor, crate::doc::core::RationalTime::ZERO, FrameQuality::Export, Generation::new(1)).unwrap();
+        let actual = frame.value(root).and_then(|value| value.downcast_ref::<ResolvedCamera>()).unwrap();
+        assert!(actual.target(comp).distance(glam::vec3(700.0, 300.0, 0.0)) < 1e-3, "{:?}", actual.target(comp));
     }
 
     #[test]

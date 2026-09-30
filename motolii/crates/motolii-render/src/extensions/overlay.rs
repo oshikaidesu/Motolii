@@ -1,6 +1,6 @@
 //! Track Overlay — 下の合成から塊を拾い、その上に FUI(箱・印)を描く出力の効果(2026-09-14 利用者「Tracery 2 の仕様を移す」)。
 //! 先例は Dragoy の Tracery 2(調整層に掛ける、Keying / Box / Marker / Grid / Connection Lines / Labels)。欄の名前と並びは
-//! 製品ページの画面から写した(docs/reviews/2026-09-14-tracery2-port-spec.md)。名前とコードは写さない。
+//! 製品ページの画面から写した(docs/design/rationale/tracery2-port-spec.md)。名前とコードは写さない。
 
 use crate::doc::eval::Value;
 use crate::doc::store::kind::{Param, ParamKind};

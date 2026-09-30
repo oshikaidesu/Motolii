@@ -1,6 +1,20 @@
 use super::*;
 
 impl EditorRuntime {
+    /// The layers an attribute edit reaches: `layers` as named, or the shown `layer` — with `spread`, also every other
+    /// selected layer that can be edited (the same rule a property edit spreads by).
+    pub(crate) fn attrs_targets(&self, j: &J) -> Result<Vec<LayerId>, String> {
+        if j.get("layers").is_some() { return ids(&j["layers"]); }
+        let shown = layer(j)?;
+        let mut targets = vec![shown];
+        if j["spread"] == true {
+            let view = self.doc.view().without_transients();
+            targets.extend(self.viewer.selected_ids.iter().copied()
+                .filter(|&l| l != shown && editor::functions::lens::edit_rejection(&view, l).ok().flatten().is_none()));
+        }
+        Ok(targets)
+    }
+
     /// The layers a blend mode applies to: the selected layers that can be edited (not locked, not gone) and are not a
     /// camera. Every frontend asks the host, so a desk, a script and a shortcut mean the same layers.
     pub(crate) fn blend_targets(&self) -> Vec<LayerId> {

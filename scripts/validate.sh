@@ -14,7 +14,7 @@ usage:
   scripts/validate.sh <lane> [lane-argument]
 
 lanes:
-  docs policy tooling rust web-build web-contract web-visual
+  docs policy tooling rust police
 
 profiles:
 EOF
@@ -73,7 +73,6 @@ run_lane() {
       require_command python3
       "$ROOT_DIR/scripts/check-ui-toolkit-deps.sh"
       python3 -m unittest scripts/test_check_evidence_envelope.py scripts/test_run_observed_cli.py scripts/test_supervision_failure_containment.py
-      "$ROOT_DIR/scripts/test-delegate-cursor-supervised.sh"
       ;;
     rust)
       require_no_args "$lane" "$@"
@@ -82,48 +81,13 @@ run_lane() {
       cargo clippy --workspace --all-targets -- -D warnings
       cargo test --locked --workspace
       ;;
-    web-build)
+    police)
+      # the independent police, in addition to check-workspace.py / owned-budget: Semgrep rules + cargo-deny sources
       require_no_args "$lane" "$@"
-      require_command npm
-      (
-        cd "$ROOT_DIR/ui/motolii-web"
-        npm ci
-        npm run check:host
-        npm run build:host
-        npm run check:host
-      )
-      git diff --exit-code -- ui/motolii-web/generated-host
-      generated_status="$(git status --porcelain --untracked-files=all -- ui/motolii-web/generated-host)"
-      if [[ -n "$generated_status" ]]; then
-        echo "validate: generated Host bundle contains uncommitted paths" >&2
-        printf '%s\n' "$generated_status" >&2
-        exit 1
-      fi
-      (
-        cd "$ROOT_DIR/docs/mocks-ui"
-        npm ci
-        npm run build
-      )
-      ;;
-    web-contract)
-      require_no_args "$lane" "$@"
-      require_command npm
-      (
-        cd "$ROOT_DIR/docs/mocks-ui"
-        npm ci
-        npm run test:reference-guard
-        npm run check-reference
-        npm run check-current-route
-      )
-      ;;
-    web-visual)
-      require_no_args "$lane" "$@"
-      require_command npm
-      (
-        cd "$ROOT_DIR/docs/mocks-ui"
-        npm ci
-        npm run test:visual
-      )
+      require_command semgrep
+      require_command cargo-deny
+      "$ROOT_DIR/scripts/check-semgrep.sh"
+      "$ROOT_DIR/scripts/check-deny.sh"
       ;;
     *)
       echo "validate: unknown lane: $lane" >&2

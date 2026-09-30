@@ -1,9 +1,14 @@
+//! The native host the Flutter UI talks to through FFI. `EditorRuntime` owns one `Document`
+//! (motolii-edit), one render `Engine` (motolii-render) and the ephemeral viewing state
+//! (`viewer.rs`: selection, clock, stage); `port.rs` turns UI requests into `Intent`s,
+//! `snapshot*.rs` publishes the status JSON the UI reads, `frames.rs` hands frames to the viewport.
 #![recursion_limit = "256"]
 pub use motolii_doc as doc;
 pub use motolii_edit as edit;
 pub use motolii_render as render;
 #[allow(unused_imports)]
 use crate::edit::{Animate, Document, Intent};
+mod catalog;
 mod editor;
 mod frames;
 mod owners;
@@ -35,6 +40,8 @@ pub struct EditorRuntime {
     render_count: u64,
     render_ms: f64,
     reply: CString,
+    /// Whether the last reply carries a top-level `error` key (the host decides on it whether to wake the other windows).
+    reply_has_error: bool,
     error: Option<String>,
     preview: Option<(u64, Vec<Intent>)>,
     preview_tag: Option<String>,
@@ -55,6 +62,8 @@ pub struct EditorRuntime {
     /// host の再生 pulse が既に提出した時刻。Flutter の vsync ではなく native
     /// の時計がこれを進め、同じ作中コマを二度 CPU で解かない。
     playback_rendered_frame: Option<i64>,
+    /// What the last look through the catalog found for the missing media of this work (see `port/relink.rs`).
+    relink_report: Option<serde_json::Value>,
 }
 
 pub use frames::FrameReady;
@@ -94,8 +103,8 @@ impl EditorRuntime {
         Ok(Self {
             doc, engine, viewer, clipboard: Default::default(),
             path: if path.is_empty() { None } else { Some(path.into()) }, saved_signature,
-            exporter: Default::default(), freezer: Default::default(), device_id,
-            render_count: 0, render_ms: 0.0, reply: CString::new("{}").unwrap(), error: None,
+            exporter: Default::default(), freezer: Default::default(), relink_report: None, device_id,
+            render_count: 0, render_ms: 0.0, reply: CString::new("{}").unwrap(), reply_has_error: false, error: None,
             preview: None, preview_tag: None, stage_drag: None,
             snapshot_cache: Default::default(), full_status_revision: Default::default(),
             flat_projection: crate::doc::store::LayerProjection::TwoPointFiveD,
@@ -258,6 +267,27 @@ impl EditorRuntime {
     }
 }
 
+/// The media catalog (`catalog/`): one JSON request in, one JSON reply out, for the host's catalog queue. The reply is held
+/// in a buffer that stays valid until the next call (calls are serialised by the host), so the caller copies it at once.
+#[no_mangle]
+pub unsafe extern "C" fn motolii_catalog_request(request: *const c_char) -> *const c_char {
+    use std::sync::Mutex;
+    static REPLY: Mutex<Option<std::ffi::CString>> = Mutex::new(None);
+    let text = if request.is_null() { String::new() } else { unsafe { CStr::from_ptr(request) }.to_string_lossy().into_owned() };
+    let reply = std::ffi::CString::new(catalog::request(&text)).unwrap_or_else(|_| std::ffi::CString::new("{\"error\":\"bad reply\"}").unwrap());
+    let mut held = REPLY.lock().unwrap_or_else(|e| e.into_inner());
+    *held = Some(reply);
+    held.as_ref().map_or(std::ptr::null(), |r| r.as_ptr())
+}
+
+/// `wake(user)` is called, from another thread, after the catalog's own watcher changed the index (a file added, moved or
+/// gone under a source). It carries nothing: the caller goes back to the main thread and asks the catalog again.
+/// `None` removes it. The catalog is the app's, so this is per process, not per document.
+#[no_mangle]
+pub unsafe extern "C" fn motolii_catalog_on_change(wake: Option<unsafe extern "C" fn(*mut std::ffi::c_void)>, user: *mut std::ffi::c_void) {
+    catalog::set_listener(wake, user);
+}
+
 #[no_mangle]
 pub unsafe extern "C" fn motolii_probe_open(path: *const c_char) -> *mut EditorRuntime {
     match catch_unwind(AssertUnwindSafe(|| {
@@ -296,10 +326,17 @@ pub unsafe extern "C" fn motolii_probe_request(ctx: *mut EditorRuntime, request:
             model_reply = Some(probe.doc.view().composition().map_err(|e|e.to_string()).and_then(|comp| {
                 let c = comp.ok_or("No composition")?;
                 // 描く窓の一覧。Camera は出力そのもの、Stage はタブが窓を置いている間だけ。
-                let mut views = vec![json!({"view":View::Camera.name(),"width":c.width,"height":c.height})];
+                // A hidden Camera tab is not drawn; if the Stage is not there either, something still has to be.
+                let mut views = Vec::new();
+                if !probe.viewer.camera_hidden || probe.viewer.stage_window.is_none() { views.push(json!({"view":View::Camera.name(),"width":c.width,"height":c.height})); }
                 if let Some(w) = probe.viewer.stage_window { views.push(json!({"view":View::User.name(),"width":w.width,"height":w.height})); }
                 Ok(json!({"width":c.width,"height":c.height,"views":views}))
             }));
+            return Ok(());
+        }
+        if value["op"] == "cameraShown" {
+            let hidden = value["shown"] == false;
+            model_reply = Some(Ok(json!({"needsRender": std::mem::replace(&mut probe.viewer.camera_hidden, hidden) != hidden})));
             return Ok(());
         }
         if value["op"] == "stageWindow" {
@@ -336,25 +373,39 @@ pub unsafe extern "C" fn motolii_probe_request(ctx: *mut EditorRuntime, request:
     }
     if let Some(model) = model_reply {
         let value = model.unwrap_or_else(|error| json!({"error":error}));
+        probe.reply_has_error = value.get("error").is_some();
         probe.reply = CString::new(value.to_string()).unwrap();
         return probe.reply.as_ptr();
     }
     if quiet && probe.error.is_none() {
         // 静かな tick/seek でも「絵が動いたか」は返す。動いていなければ窓は描かない。
         let moved = before_image != probe.image_key();
+        probe.reply_has_error = false;
         probe.reply = CString::new(format!("{{\"ok\":true,\"needsRender\":{moved}}}")).unwrap();
         return probe.reply.as_ptr();
     }
     let needs_render = before_image != probe.image_key();
     if defer_snapshot && needs_render && probe.error.is_none() {
+        probe.reply_has_error = false;
         probe.reply = CString::new("{\"needsRender\":true}").unwrap();
         return probe.reply.as_ptr();
     }
-    let status = catch_unwind(AssertUnwindSafe(|| probe.status_response(known, known_references)));
-    let mut value = match status { Ok(Ok(v)) => v, Ok(Err(e)) => json!({"error":e}), Err(_) => json!({"error":"Rust status panic"}) };
-    value["needsRender"] = json!(needs_render);
-    probe.reply = CString::new(value.to_string()).unwrap_or_else(|_| CString::new("{\"error\":\"Invalid reply\"}").unwrap());
+    let status = catch_unwind(AssertUnwindSafe(|| probe.status_text(known, known_references, needs_render)));
+    let text = match status {
+        Ok(Ok(text)) => text,
+        Ok(Err(e)) => { probe.reply_has_error = true; json!({"error":e,"needsRender":needs_render}).to_string() }
+        Err(_) => { probe.reply_has_error = true; json!({"error":"Rust status panic","needsRender":needs_render}).to_string() }
+    };
+    probe.reply = CString::new(text).unwrap_or_else(|_| CString::new("{\"error\":\"Invalid reply\"}").unwrap());
     probe.reply.as_ptr()
+}
+
+/// Whether the last reply of `motolii_probe_request` has a top-level `error` key: the one thing the host needs to know about a
+/// status without reading it (the reply itself travels to Dart as it is).
+#[no_mangle]
+pub unsafe extern "C" fn motolii_probe_reply_has_error(ctx: *const EditorRuntime) -> i32 {
+    if ctx.is_null() { return 1; }
+    i32::from(unsafe { &*ctx }.reply_has_error)
 }
 
 #[no_mangle]

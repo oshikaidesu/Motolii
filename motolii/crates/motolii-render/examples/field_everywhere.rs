@@ -3,7 +3,7 @@
 //! `cargo run -p motolii-render --example field_everywhere -- <flag.png> <out_dir>`
 //!
 //! 旗は Wikimedia Commons の公共領域の国旗 PNG を想定(縁がどう動いたか輪郭で判る素材)。
-//! 取説: docs/vism-field-model.md
+//! 取説: docs/design/vism/field-model.md
 use motolii_edit::{Document, Intent};
 use motolii_render::{doc::store::*, engine::Engine};
 

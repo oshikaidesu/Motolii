@@ -10,12 +10,12 @@ crate-type = ["cdylib"]
 
 [dependencies]
 motolii-doc = { path = "../../crates/motolii-doc" }
-motolii-edit = { path = "../extensions/edit" }
+motolii-edit = { path = "../../crates/motolii-edit" }
 motolii-render = { path = "../../crates/motolii-render", features = ["shared-bgra-output"] }
 wgpu = { workspace = true }
 serde_json = { workspace = true }
-motolii-script = { path = "../extensions/script" }
-motolii-jobs = { path = "../extensions/jobs" }
+motolii-script = { path = "../../crates/motolii-script" }
+motolii-jobs = { path = "../../crates/motolii-jobs" }
 serde = { workspace = true }
 peniko = { workspace = true }
 image = { workspace = true }
@@ -26,6 +26,11 @@ transform-gizmo = { workspace = true }
 objc2 = "0.6.4"
 objc2-metal = { version = "0.3.2", features = ["objc2-io-surface"] }
 objc2-io-surface = "0.3.2"
+rusqlite = { version = "0.40.2", features = ["bundled"] }
+walkdir = "2.5.0"
+file-id = "0.2.3"
+notify = "=8.2.0"
 
 [dev-dependencies]
 objc2-core-foundation = "0.3.2"
+tempfile.workspace = true

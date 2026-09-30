@@ -1,0 +1,283 @@
+#[allow(unused_imports)]
+use crate::document::{Document, Intent};
+use motolii_doc::store::{LayerId, PropertyId};
+use motolii_doc::store::names;
+use motolii_doc::store::{
+    property, Interp, Keyframe, PropertyBase, RationalTime, StoreError, Value,
+};
+
+/// How a touched value lands. `Off`: keyed properties keep their shape and move as a
+/// whole. `Now`: the value becomes a key at the playhead (the first key if none).
+/// `From`: as `Now`, but a property without keys also gets its untouched value
+/// keyed at `origin`, so one edit records both ends of the motion. `interp` is
+/// the shape a newborn key is given.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Animate {
+    Off,
+    Now { interp: Interp },
+    From { origin: RationalTime, interp: Interp },
+}
+
+impl Animate {
+    pub fn now() -> Self {
+        Animate::Now { interp: Interp::Linear }
+    }
+    pub fn from(origin: RationalTime) -> Self {
+        Animate::From { origin, interp: Interp::Linear }
+    }
+    /// The ease a key made now takes: the chosen one while animating, Linear otherwise.
+    pub fn interp(self) -> Interp {
+        match self {
+            Animate::Off => Interp::Linear,
+            Animate::Now { interp } | Animate::From { interp, .. } => interp,
+        }
+    }
+}
+
+impl Document {
+    pub fn place_checked(
+        &self,
+        layer: LayerId,
+        property: &PropertyId,
+        value: Value,
+        at: RationalTime,
+        animate: Animate,
+    ) -> Result<Option<Intent>, StoreError> {
+        let view = self.view().without_transients();
+        if !view.has_layer(layer) {
+            return Err(StoreError::Property(format!(
+                "Layer {} no longer exists",
+                layer.0
+            )));
+        }
+        crate::document::validate::check_not_locked(&view, layer)?;
+        crate::document::validate::check_not_frozen(&view, layer)?;
+        let source = view.property_source(layer, property)?;
+        if let Some(reason) = crate::document::edit::property_write_rejection(&view, layer, property)? {
+            return Err(StoreError::Property(reason.into()));
+        }
+        let current = view
+            .value_at(layer, property, at)?
+            .or(crate::document::edit::default_value(&view, layer, property)?);
+        if let Some(current) = &current {
+            if std::mem::discriminant(current) != std::mem::discriminant(&value) {
+                return Err(StoreError::Property(format!(
+                    "Value type differs for {}",
+                    property.name()
+                )));
+            }
+        }
+        match source.and_then(|source| source.base) {
+            Some(PropertyBase::Slot(_)) => Err(StoreError::Property(
+                "Edit the shared slot explicitly".into(),
+            )),
+            Some(PropertyBase::Track(mut track)) => {
+                if animate == Animate::Off {
+                    let Some(from) = current else {
+                        return Err(StoreError::Property(format!("{} has no value to move", property.name())));
+                    };
+                    if from == value {
+                        return Ok(None);
+                    }
+                    let mut moved = motolii_doc::eval::KeyframeTrack::new();
+                    for key in track.keys() {
+                        moved.insert(Keyframe { value: shifted(&key.value, &from, &value), ..key.clone() });
+                    }
+                    return Ok(Some(Intent::SetTrack { layer, property: property.clone(), track: moved }));
+                }
+                if let Some(key) = track.keys().iter().find(|key| key.t == at) {
+                    if key.value == value {
+                        return Ok(None);
+                    }
+                    track.insert(Keyframe {
+                        value,
+                        ..key.clone()
+                    });
+                } else {
+                    // Adding a key is a state change even when its evaluated value is unchanged.
+                    track.insert(Keyframe {
+                        t: at,
+                        value,
+                        interp: animate.interp(),
+                        spatial: None,
+                    });
+                }
+                Ok(Some(Intent::SetTrack {
+                    layer,
+                    property: property.clone(),
+                    track,
+                }))
+            }
+            Some(PropertyBase::Constant(_)) | None => {
+                if animate != Animate::Off {
+                    let mut track = motolii_doc::eval::KeyframeTrack::new();
+                    if let (Animate::From { origin, interp }, Some(from)) = (animate, &current) {
+                        if origin != at {
+                            track.insert(Keyframe { t: origin, value: from.clone(), interp, spatial: None });
+                        }
+                    }
+                    track.insert(Keyframe { t: at, value, interp: animate.interp(), spatial: None });
+                    return Ok(Some(Intent::SetTrack { layer, property: property.clone(), track }));
+                }
+                if current.as_ref() == Some(&value) {
+                    return Ok(None);
+                }
+                Ok(Some(Intent::SetConstant {
+                    layer,
+                    property: property.clone(),
+                    value,
+                }))
+            }
+        }
+    }
+
+    pub fn begin_preview(&mut self) -> u64 {
+        self.clear_all_transients();
+        self.preview_owner
+    }
+
+    pub fn preview_is_current(&self, owner: u64) -> bool {
+        owner != 0 && self.preview_owner == owner
+    }
+
+    pub fn preview_edits(&mut self, owner: u64, edits: &[Intent]) -> Result<(), StoreError> {
+        if !self.preview_is_current(owner) {
+            return Err(StoreError::Property(
+                "This interaction has been superseded".into(),
+            ));
+        }
+        let view = self.view().without_transients();
+        for edit in edits {
+            if let Intent::SetCameraConstant { .. } = edit {
+                continue;
+            }
+            if let Intent::SetCameraTrack { track, .. } = edit {
+                track
+                    .validate()
+                    .map_err(|e| StoreError::Property(e.to_string()))?;
+                continue;
+            }
+            let layer = match edit {
+                Intent::SetTiming { layer, timing } => {
+                    if timing.duration <= 0 {
+                        return Err(StoreError::Property(
+                            "A clip must keep a positive duration".into(),
+                        ));
+                    }
+                    *layer
+                }
+                Intent::SetTrack { layer, track, .. } => {
+                    track
+                        .validate()
+                        .map_err(|e| StoreError::Property(e.to_string()))?;
+                    *layer
+                }
+                Intent::SetTextDocument { layer, document } => {
+                    motolii_doc::store::text::validate(document)?;
+                    *layer
+                }
+                Intent::SetConstant { layer, .. } | Intent::SetShapes { layer, .. } => *layer,
+                // 層属性の下書き(Sequence のゴーストの遅れ等)。attrs() が patch を重ねて読む。
+                Intent::SetAttrs { layer, .. } => *layer,
+                _ => {
+                    return Err(StoreError::Property(
+                        "This edit has no preview projection".into(),
+                    ))
+                }
+            };
+            if !view.has_layer(layer) {
+                return Err(StoreError::Property(format!(
+                    "Layer {} no longer exists",
+                    layer.0
+                )));
+            }
+            crate::document::validate::check_not_locked(&view, layer)?;
+            crate::document::validate::check_not_frozen(&view, layer)?;
+        }
+        let mut projected = motolii_doc::store::ReadOverlay::default();
+        for edit in edits {
+            use motolii_doc::store::TransientKey;
+            use motolii_doc::store::PropertySource;
+            match edit {
+                Intent::SetTrack { layer, property, track } => { projected.sources.insert(TransientKey::Layer(*layer, property.clone()), PropertySource::track(track.clone())); }
+                Intent::SetConstant { layer, property, value } => { projected.sources.insert(TransientKey::Layer(*layer, property.clone()), PropertySource::constant(value.clone())); }
+                Intent::SetCameraTrack { property, track } => { projected.sources.insert(TransientKey::Camera(property.clone()), PropertySource::track(track.clone())); }
+                Intent::SetCameraConstant { property, value } => { projected.sources.insert(TransientKey::Camera(property.clone()), PropertySource::constant(value.clone())); }
+                Intent::SetTiming { layer, timing } => { projected.timings.insert(*layer, *timing); }
+                Intent::SetAttrs { layer, patch } => {
+                    let base = match projected.attrs.remove(layer) {
+                        Some(attrs) => attrs,
+                        None => view.attrs(*layer)?.unwrap_or_default(),
+                    };
+                    projected.attrs.insert(*layer, patch.clone().apply_to(base));
+                }
+                Intent::SetShapes { layer, shapes } => { projected.shapes.insert(*layer, shapes.clone()); }
+                Intent::SetTextDocument { layer, document } => { projected.texts.insert(*layer, document.clone()); }
+                _ => unreachable!("preview edits were validated above"),
+            }
+        }
+        self.bump_transient_generation();
+        projected.count = edits.len();
+        projected.generation = self.transient_generation;
+        self.preview_edits = projected;
+        Ok(())
+    }
+
+    pub fn clear_preview_edits(&mut self, owner: u64) -> bool {
+        if !self.preview_is_current(owner) {
+            return false;
+        }
+        self.clear_all_transients();
+        true
+    }
+}
+
+pub fn property_write_rejection(view: &motolii_doc::store::StoreView<'_>, layer: LayerId, id: &PropertyId) -> Result<Option<&'static str>, StoreError> {
+    let source = view.clone().without_transients().property_source(layer, id)?;
+    Ok(match source {
+        Some(source) if !source.modulators.is_empty() => Some("Edit the driver before changing a driven value"),
+        Some(source) if matches!(source.base, Some(PropertyBase::Slot(_))) => Some("Edit the shared slot explicitly"),
+        _ => None,
+    })
+}
+
+pub fn default_value(
+    view: &motolii_doc::store::StoreView<'_>,
+    _layer: LayerId,
+    id: &PropertyId,
+) -> Result<Option<Value>, StoreError> {
+    Ok(match id.name() {
+        property::POSITION | property::ANCHOR => Some(Value::Vec2([0.0, 0.0])),
+        property::SCALE => Some(Value::Vec2([1.0, 1.0])),
+        property::SCALE_Z => Some(Value::F64(1.0)),
+        property::OPACITY => Some(Value::F64(1.0)),
+        property::ROTATION
+        | property::ROTATION_X
+        | property::ROTATION_Y
+        | property::POSITION_X
+        | property::POSITION_Y
+        | property::POSITION_Z
+        | property::DEPTH
+        | property::SKEW
+        | property::SKEW_AXIS
+        | property::PAN
+        | property::FADE_IN
+        | property::FADE_OUT => Some(Value::F64(0.0)),
+        // 段落の選択肢(文字組みの 3 法)。既定は CSS の初期値 = 選択肢の 0 番。
+        names::TEXT_AUTOSPACE | names::TEXT_SPACING_TRIM | names::HANGING_PUNCTUATION | names::TEXT_SPLIT => Some(Value::Enum(0)),
+        name => property::CAMERA_ROWS.iter().find(|row| row.0 == name).map(|row| row.2.clone())
+            .or_else(|| motolii_doc::store::particles::default_of(name)),
+    })
+}
+
+/// `from` を `to` へ動かした差を `key` に足す。足せない型は `to` に置き換える。
+fn shifted(key: &Value, from: &Value, to: &Value) -> Value {
+    match (key, from, to) {
+        (Value::F64(k), Value::F64(a), Value::F64(b)) => Value::F64(k + (b - a)),
+        (Value::Vec2(k), Value::Vec2(a), Value::Vec2(b)) => Value::Vec2([k[0] + (b[0] - a[0]), k[1] + (b[1] - a[1])]),
+        (Value::Color(k), Value::Color(a), Value::Color(b)) => {
+            Value::Color(std::array::from_fn(|i| (k[i] + (b[i] - a[i])).clamp(0.0, 1.0)))
+        }
+        _ => to.clone(),
+    }
+}

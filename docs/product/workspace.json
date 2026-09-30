@@ -1,0 +1,111 @@
+{
+  "stage": 5,
+  "status": "flutter-primary",
+  "entry": "scripts/motolii-ui.sh",
+  "ui": "motolii/ui",
+  "native": "motolii/ui/native",
+  "document": "motolii/crates/motolii-doc",
+  "documentEditing": "motolii/crates/motolii-edit",
+  "entries": {
+    "product": "motolii/ui/lib/main.dart (dev, profile, live)"
+  },
+  "renderer": "motolii/crates/motolii-render",
+  "history": "docs/product/history/retired-source.md",
+  "checkpoint": {
+    "id": "20260906T083405",
+    "statePath": "motolii-stage5/checkpoints/20260906T083405",
+    "baseHead": "429c7a5a125b335d3740e54e1cdd208fa958de35",
+    "archiveSha256": "9f2ec288d6551d8dd7578c886f6421b7457fb7a26c1580df69a1b6b75269179f"
+  },
+  "pending": [
+    "Freeze for meshes and point clouds (vertex cache) and Bounce to Media (Flatten, ProRes 4444) — docs/design/freeze-and-flatten.md §5",
+    "Typed operation payloads and snapshot models",
+    "Panel-internal refinement",
+    "Release dylib packaging and signing",
+    "Persistent UI session restoration",
+    "Full feature and actual-window acceptance",
+    "Rendered-frame cache per layer: reverse playback, backward scrubbing and post-edit redisplay of feedback effects should return pictures, not replays (docs/design/plugin-resources.md §6-5 has the measured cost)",
+    "Discard feedback state only for layers the edit touched (today: all)",
+    "Build on another machine: public dependency pins and toolchain discovery are configured; a second-machine build remains unverified",
+    "scripts/motolii-ui.sh test should pass --test-threads=2 to the GPU suites (fully parallel runs flake)",
+    "Retire the unused Warp effect stage (turbulent_warp.wgsl is kept only as its contract); decide whether the import.ceil_* evidence effects stay on the shelf",
+    "Verify the timeline speed field accepts negative values (the document's Speed already allows them)",
+    "Pre-existing failure: the_cage_follows_the_drawn_text_under_an_orbited_camera (window work)"
+  ],
+  "validation": {
+    "workspaceCheck": "passed",
+    "nativeBuild": "passed",
+    "documentUnitTests": 23,
+    "documentTransactionTests": 10,
+    "bridgeTests": 16,
+    "flutterInteractionTests": 5,
+    "actualWindow": "motolii_stage5 displayed edited Rectangle via canonical Renderer",
+    "reloadCommand": "passed; 161ms reassemble, no source delta",
+    "rootCargoMetadata": "passed; current native default and existing target directory"
+  },
+  "documents": {
+    "concept": "docs/concept.md",
+    "interaction": "docs/product/product-contract.md",
+    "migration": "docs/product/README.md",
+    "recovery": "docs/product/document-map.md",
+    "technical": "docs/product/technical-boundaries.md"
+  },
+  "entryDocuments": [
+    "README.md",
+    "CONTRIBUTING.md",
+    "motolii/ui/README.md",
+    "docs/README.md"
+  ],
+  "cargoWorkspace": "Cargo.toml",
+  "cargoDefaultMember": "motolii/ui/native",
+  "cargoTarget": "motolii/target",
+  "entryReview": {
+    "date": "2026-09-06",
+    "perspectives": [
+      "new contributor",
+      "UI implementer",
+      "tooling maintainer"
+    ],
+    "scope": "light read-only entry review; not full implementation audit",
+    "findingsResolved": [
+      "root Cargo routing",
+      "active CI legacy invocation",
+      "PR template undefined role",
+      "legacy Cargo header"
+    ],
+    "remoteCiRun": "not performed"
+  },
+  "modules": "docs/product/modules.json",
+  "moduleValidation": {
+    "dartAnalysis": "passed",
+    "flutterTests": 9,
+    "nativeEditorTests": 16,
+    "nativeBuild": "passed",
+    "forbiddenDependencyNegativeChecks": "passed",
+    "uiReconnect": "Rectangle selection, values, image and frame 27 retained",
+    "remaining": "typed payload/snapshot models and panel-internal refinements"
+  },
+  "adoption": {
+    "date": "2026-09-06",
+    "scope": "primary macOS UI and development route",
+    "legacyHost": "excluded from current Cargo workspace; source retained as history",
+    "productComplete": false,
+    "releaseReady": false,
+    "reviewers": [
+      "contributor",
+      "runtime implementer",
+      "operations maintainer"
+    ],
+    "validation": {
+      "workspaceAndDocs": "passed",
+      "nativeBuild": "passed",
+      "documentUnitTests": 23,
+      "documentTransactionTests": 10,
+      "editorTests": 16,
+      "flutterTests": 10,
+      "playbackReconnect": "real window continued at frame 1749 after UI restart; paused and restored to frame27",
+      "remoteCi": "not run",
+      "distribution": "not validated"
+    }
+  }
+}

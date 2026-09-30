@@ -95,7 +95,7 @@ impl EditorRuntime{
         self.viewer.stage_window=next;
         Ok(changed)
     }
-    fn depth_layout(&self,scene:&crate::render::frame_graph::SceneValue)->Result<Json,String>{
+    pub(crate) fn depth_layout(&self,scene:&crate::render::frame_graph::SceneValue)->Result<Json,String>{
         let view=self.doc.view();let time=self.time()?;let comp=view.composition().map_err(e)?.ok_or("No composition")?.spec();
         // 原点は注視点。カメラは eye の位置に置き、drag で orbit と距離を author する。
         let seen=self.engine.resolve_camera(&view,time).map_err(e)?;
@@ -163,7 +163,7 @@ impl EditorRuntime{
         }) else{return Ok(Json::Null)};
         let pointer=self.viewer.stage_pointer.filter(|_|self.viewer.stage_view==seen);
         let camera=if seen==View::User{self.viewer.user_camera}else{self.engine.resolve_camera(&view,time).map_err(e)?};
-        let Some(data)=editor::gizmo3d::draw_data(comp.spec(),camera,&targets,pointer,self.viewer.stage_view_scale,self.viewer.stage_held.as_deref()) else{return Ok(Json::Null)};
+        let Some(data)=editor::gizmo3d::draw_data(comp.spec(),camera,&targets,pointer,self.viewer.view_scale(seen),self.viewer.stage_held.as_deref()) else{return Ok(Json::Null)};
         Ok(json!({"vertices":data.vertices,"colors":data.colors,"indices":data.indices}))
     }
     /// Stage に置いた箱(Boxcam): Camera 層ごとの frustum と取っ手。Stage の comp 画像 px。
@@ -178,15 +178,8 @@ impl EditorRuntime{
             let camera=self.engine.camera_of_scene_layer_in(&view,&scene.layers,id,time).map_err(e)?;
             let projection=crate::doc::core::camera_projection(comp,camera);
             let rotation=projection.rotation.inverse();
-            let depth=crate::doc::core::distance_from_camera(comp,0.0)*camera.distance_scale;
-            let height=depth*(projection.vertical_fov_radians*0.5).tan();let width=height*projection.aspect_ratio;
-            let corners=[glam::vec3(-width,-height,-depth),glam::vec3(width,-height,-depth),glam::vec3(width,height,-depth),glam::vec3(-width,height,-depth)];
+            let corners=box_corners(comp,camera,&screen);
             let eye=projection.eye;
-            let corners:Vec<_>=corners.into_iter().map(|p|{
-                let ray=rotation*p;
-                let t=if ray.z.abs()>1e-6{-eye.z/ray.z}else{-1.0};
-                screen(if t>0.0{eye+ray*t}else{eye+ray})
-            }).collect();
             let display=crate::doc::core::distance_from_camera(comp,0.0)*0.15;
             let fh=display*(projection.vertical_fov_radians*0.5).tan();let fw=fh*projection.aspect_ratio;
             let frustum:Vec<_>=[(-fw,-fh),(fw,-fh),(fw,fh),(-fw,fh)].into_iter().map(|(x,y)|screen(eye+rotation*glam::vec3(x,y,-display))).collect();
@@ -198,6 +191,15 @@ impl EditorRuntime{
             if seen>=2||pyramid{gizmos.push(json!({"id":id.0,"points":corners,"eye":eye,"frustum":frustum,"up":up,"target":screen(camera.target(comp)),"authorable":authorable&&seen==4,"center":camera.center,"zoom":camera.zoom,"roll":camera.roll_degrees}));}
         }
         Ok(json!(gizmos))
+    }
+
+    /// 掴んだ箱: 解決済みのカメラと、4 角(Stage の comp 画像 px、全部見えている時だけ)。
+    pub(crate) fn camera_box(&self,id:LayerId)->Result<(crate::doc::core::ResolvedCamera,Option<[[f32;2];4]>),String>{
+        let view=self.doc.view();let time=self.time()?;let comp=view.composition().map_err(e)?.ok_or("No composition")?.spec();
+        let scene=self.engine.frame_graph_cached_scene(&view,time).ok_or("FrameGraph editor scene is not prepared")?;
+        let camera=self.engine.camera_of_scene_layer_in(&view,&scene.layers,id,time).map_err(e)?;
+        let corners=box_corners(comp,camera,&self.observer_screen()?);
+        Ok((camera,corners.iter().copied().collect::<Option<Vec<_>>>().and_then(|c|c.try_into().ok())))
     }
 
     /// 出力(Camera)で見た枠。anchor など view を問わない用途。
@@ -262,9 +264,7 @@ impl EditorRuntime{
         let revision=format!("{:?}",self.doc.revision());
         let live=self.viewer.clock.playing()&&self.full_status_revision.borrow().as_deref()==Some(revision.as_str());
         // 並べ替えの鍵も 1 層 1 回。sort_by_key は比較のたびに鍵を引くので、store を O(n log n) 回叩いていた。
-        let mut ids=view.layers();
-        let order:std::collections::HashMap<LayerId,i16>=ids.iter().map(|id|(*id,view.meta(*id).ok().flatten().map_or(0,|m|m.order))).collect();
-        ids.sort_by_key(|id|std::cmp::Reverse((order.get(id).copied().unwrap_or(0),id.0)));
+        let ids=stacking_order(&view);
         let mut layers=Vec::new();
         let keys=self.layer_keys(&view,at,&scene,&clipping,live)?;
         // 軽い status で行(値・効果)を持つのは選択中の層だけ —— Inspector と Stage の枠が読む物。
@@ -300,17 +300,25 @@ impl EditorRuntime{
             let point=self.viewer.selected().map(|id|self.position(id)).transpose()?.unwrap_or([0.0,0.0]);
             let live_layers=layers;
             // 寸法は Swift の render が毎コマ読む。軽い status でも落とさない(落とすと再生 2 コマ目で render が失敗し、再生が止まる)。
-            return Ok(json!({"frame":self.viewer.frame,"playing":self.viewer.clock.playing(),"documentRevision":revision,"preview":self.preview.is_some(),"previewOwner":self.preview.as_ref().map(|p|p.0),"previewInteraction":self.preview_tag,"undo":undo,"redo":redo,"width":comp.width,"height":comp.height,"stageWindow":self.viewer.stage_window.map(|w|json!({"width":w.width,"height":w.height,"roi":w.roi})),"fps":comp.fps.as_f64(),"durationFrames":comp.duration_frames,
+            let mut reply=json!({"frame":self.viewer.frame,"playing":self.viewer.clock.playing(),"documentRevision":revision,"preview":self.preview.is_some(),"previewOwner":self.preview.as_ref().map(|p|p.0),"previewInteraction":self.preview_tag,"undo":undo,"redo":redo,"width":comp.width,"height":comp.height,"stageWindow":self.viewer.stage_window.map(|w|json!({"width":w.width,"height":w.height,"roi":w.roi})),"fps":comp.fps.as_f64(),"durationFrames":comp.duration_frames,
                 "selectedId":self.viewer.selected().map(|s|s.0),"selectedIds":self.viewer.selected_ids.iter().map(|s|s.0).collect::<Vec<_>>(),"easeIntervals":self.ease_intervals(),"blendTargets":self.blend_targets().iter().map(|s|s.0).collect::<Vec<_>>(),"selectedKeys":selected_keys,"x":point[0],"y":point[1],
-                "animate":self.viewer.animate!=Animate::Off,"renderCount":self.render_count,"framesSkipped":self.frames.skipped(),"pickedColor":self.viewer.picked_color,"pickSerial":self.viewer.pick_serial,"renderMs":self.render_ms,"liveLayers":live_layers}));
+                "animate":self.viewer.animate!=Animate::Off,"renderCount":self.render_count,"framesSkipped":self.frames.skipped(),"pickedColor":self.viewer.picked_color,"pickSerial":self.viewer.pick_serial,"renderMs":self.render_ms,"liveLayers":Json::Null});
+            reply["liveLayers"]=Json::Array(live_layers);
+            return Ok(reply);
         }
         *self.full_status_revision.borrow_mut()=Some(revision);
-        let assets:Result<Vec<_>,String>=view.assets().map_err(e)?.into_iter().map(|a|{
+        // The reference fields (assets with their thumbnails, catalog rows, fonts, backgrounds, ...) change with the document,
+        // the shelf, an asset file appearing or vanishing, or playing; not with a preview step. Build them only when that key moves.
+        let asset_list=view.assets().map_err(e)?;
+        let reference_key=crate::snapshot_cache::digest((self.doc.identity(),format!("{:?}",self.doc.revision()),crate::render::engine::catalog_generation(),crate::render::engine::catalog_errors(),self.viewer.clock.playing(),
+            asset_list.iter().map(|a|a.path_absolute.as_ref().is_some_and(|p|std::path::Path::new(p).exists())).collect::<Vec<_>>()));
+        let stale=self.snapshot_cache.borrow().reference_key!=Some(reference_key);
+        let assets:Result<Vec<_>,String>=if !stale{Ok(Vec::new())}else{asset_list.into_iter().map(|a|{
             let used=self.asset_used(a.id)?;
             let path=a.path_absolute.clone();let missing=path.as_ref().is_none_or(|p|!std::path::Path::new(p).exists());
-            Ok(json!({"id":a.id.to_string(),"name":a.name,"path":path,"mime":a.asset_type,"used":used,"missing":missing,"thumbnail":path.as_ref().and_then(|p|if a.asset_type.starts_with("image/"){editor::thumbnail::image_data_uri(p)}else if a.asset_type.starts_with("video/"){editor::thumbnail::video_data_uri(p)}else{None}),"role":match a.role{AssetRole::Reference=>"reference",_=>"material"},"facts":path.as_ref().filter(|_|!missing).and_then(|p|editor::thumbnail::facts(p,&a.asset_type)),"seconds":a.duration.map(|d|d.as_seconds_f64())}))
-        }).collect();
-        let used=editor::fixture::used_colors_from_doc(&self.doc);let authored=!used.is_empty();
+            Ok(json!({"id":a.id.to_string(),"name":a.name,"path":path,"contentHash":a.content_hash,"mime":a.asset_type,"used":used,"missing":missing,"thumbnail":path.as_ref().and_then(|p|if a.asset_type.starts_with("image/"){editor::thumbnail::image_data_uri(p)}else if a.asset_type.starts_with("video/"){editor::thumbnail::video_data_uri(p)}else{None}),"role":match a.role{AssetRole::Reference=>"reference",_=>"material"},"facts":path.as_ref().filter(|_|!missing).and_then(|p|editor::thumbnail::facts(p,&a.asset_type)),"seconds":a.duration.map(|d|d.as_seconds_f64()),"peaks":path.as_ref().filter(|_|!missing&&a.asset_type.starts_with("audio/")).and_then(|p|editor::thumbnail::audio_peaks(p))}))
+        }).collect()};
+        let used=editor::fixture::used_colors_from_doc(&self.doc,self.time()?);let authored=!used.is_empty();
         let swatches=if authored{used}else{editor::fixture::default_palette()};
         let palette:Vec<_>=swatches.iter().map(|s|json!({"rgba":s.rgba.map(|x|x as f64/255.0),"hex":s.hex,"used":authored})).collect();
         let markers:Result<Vec<_>,String>=view.markers().map_err(e)?.into_iter().map(|m|Ok(json!({"id":format!("{}/{}",m.time.num(),m.time.den()),"frame":m.time.try_to_frame_round(comp.fps).map_err(e)?,"name":m.name,"body":m.body}))).collect();
@@ -327,25 +335,29 @@ impl EditorRuntime{
         let color_target=self.viewer.color_target.as_ref().and_then(|slot|editor::color::read_color(&self.doc,slot,self.time().ok()?).map(|rgba|json!({"layer":slot.layer().map(|l|l.0),"slot":slot,"label":"Color","rgba":rgba,"alpha":editor::color::has_alpha(slot)})));
         let selected_keys:Vec<_>=self.viewer.selected_keys.iter().map(|k|json!({"layer":k.layer.0,"property":k.property.as_ref().map(|p|p.name()),"frame":(k.at_sec*comp.fps.as_f64()).round()as i64})).collect();
         let generation=crate::render::engine::catalog_generation();
-        let catalog_rows=catalog.iter().map(|e|json!({"id":e.plugin_id,"name":e.label,"stage":format!("{:?}",e.stage),"owner":editor::create::owner_of(&format!("{:?}",e.stage)),"generation":generation,"usesClock":e.uses_clock,"persistent":e.persistent,"readsBackdrop":e.reads_backdrop,"layerInputs":e.image_layer_fields.len()+e.params.iter().filter(|p|p.layer).count(),"paramCount":e.params.len()})).collect::<Vec<_>>();
-        let mut status=json!({"observer":self.observer_status()?,"cameraGizmos":self.camera_gizmos()?,"width":comp.width,"height":comp.height,"stageWindow":self.viewer.stage_window.map(|w|json!({"width":w.width,"height":w.height,"roi":w.roi})),"fps":comp.fps.as_f64(),"fpsNum":comp.fps.num(),"fpsDen":comp.fps.den(),"durationFrames":comp.duration_frames,"background":comp.background,"frame":self.viewer.frame,"playing":self.viewer.clock.playing(),"playbackHealth":playback_health,"waveforms":waveforms,"undo":undo,"redo":redo,"path":self.path,"dirty":self.is_dirty()?,"layers":layers,"selectedId":self.viewer.selected().map(|id|id.0),"selectedIds":self.viewer.selected_ids.iter().map(|id|id.0).collect::<Vec<_>>(),"selectedKeys":selected_keys,"selectedBounds":self.viewer.selected().and_then(|id|self.bounds(id)),"x":point[0],"y":point[1],"assets":assets?,"catalog":catalog_rows,"catalogErrors":crate::render::engine::catalog_errors(),"palette":palette,"markers":markers?,"colorTarget":color_target,"capabilities":crate::port::CAPABILITIES,"easeKinds":if self.viewer.clock.playing(){Json::Null}else{json!(editor::ease_kinds::KINDS.iter().copied().map(interp).collect::<Vec<_>>())},"documentRevision":format!("{:?}",self.doc.revision()),"deviceId":self.device_id.to_string(),"renderCount":self.render_count,"framesSkipped":self.frames.skipped(),"renderMs":self.render_ms,"interopCopies":0,"readbacks":0,"error":self.error,"preview":self.preview.is_some(),"export":self.exporter.status(),"freeze":self.freezer.status()});
+        let catalog_rows=if !stale{Vec::new()}else{catalog.iter().map(|e|json!({"id":e.plugin_id,"name":e.label,"stage":format!("{:?}",e.stage),"owner":editor::create::owner_of(&format!("{:?}",e.stage)),"generation":generation,"usesClock":e.uses_clock,"persistent":e.persistent,"readsBackdrop":e.reads_backdrop,"layerInputs":e.image_layer_fields.len()+e.params.iter().filter(|p|p.layer).count(),"paramCount":e.params.len()})).collect::<Vec<_>>()};
+        let mut status=json!({"observer":self.observer_status()?,"cameraGizmos":self.camera_gizmos()?,"width":comp.width,"height":comp.height,"stageWindow":self.viewer.stage_window.map(|w|json!({"width":w.width,"height":w.height,"roi":w.roi})),"fps":comp.fps.as_f64(),"fpsNum":comp.fps.num(),"fpsDen":comp.fps.den(),"durationFrames":comp.duration_frames,"background":comp.background,"frame":self.viewer.frame,"playing":self.viewer.clock.playing(),"playbackHealth":playback_health,"waveforms":waveforms,"undo":undo,"redo":redo,"path":self.path,"dirty":self.is_dirty()?,"layers":Json::Null,"selectedId":self.viewer.selected().map(|id|id.0),"selectedIds":self.viewer.selected_ids.iter().map(|id|id.0).collect::<Vec<_>>(),"selectedKeys":selected_keys,"selectedBounds":self.viewer.selected().and_then(|id|self.bounds(id)),"x":point[0],"y":point[1],"assets":assets?,"catalog":catalog_rows,"catalogErrors":crate::render::engine::catalog_errors(),"palette":palette,"markers":markers?,"colorTarget":color_target,"capabilities":crate::port::CAPABILITIES,"easeKinds":if self.viewer.clock.playing(){Json::Null}else{json!(editor::ease_kinds::KINDS.iter().copied().map(interp).collect::<Vec<_>>())},"documentRevision":format!("{:?}",self.doc.revision()),"deviceId":self.device_id.to_string(),"renderCount":self.render_count,"framesSkipped":self.frames.skipped(),"renderMs":self.render_ms,"interopCopies":0,"readbacks":0,"error":self.error,"preview":self.preview.is_some(),"export":self.exporter.status(),"freeze":self.freezer.status(),"relink":self.relink_report});
+        // `json!` would copy every row (to_value re-serializes a Value); the rows move in.
+        status["layers"]=Json::Array(layers);
         status["previewOwner"] = json!(self.preview.as_ref().map(|p|p.0));
         status["previewInteraction"] = json!(self.preview_tag);
         status["visualSamples"]=json!(true);
-        status["fontFamilies"]=json!(crate::render::picture::shaping::font_families());
+        if stale{status["fontFamilies"]=json!(crate::render::picture::shaping::font_families());}
         status["history"]=self.history.snapshot(self.doc.edit_head());
         status["spatialGizmo"]=self.spatial_gizmo(View::Camera)?;
         status["stageSpatialGizmo"]=self.spatial_gizmo(View::User)?;
         status["notebook"]=serde_json::to_value(view.notebook().map_err(e)?).map_err(e)?;
         status["depthLayout"]=self.depth_layout(&scene)?;
-        status["backgrounds"]=json!(editor::create::backgrounds().iter().map(|b|json!({"id":b.id,"name":b.name,"thumbnail":editor::thumbnail::image_data_uri(&b.path)})).collect::<Vec<_>>());
+        if stale{status["backgrounds"]=json!(editor::create::backgrounds().iter().map(|b|json!({"id":b.id,"name":b.name,"thumbnail":editor::thumbnail::image_data_uri(&b.path)})).collect::<Vec<_>>());}
         status["createKinds"]=editor::create::kinds_json();
         status["hostCapabilities"]=editor::create::host_capabilities(&catalog);
-        status["primitives"]=json!(editor::create::primitives().iter().map(|p|json!({"id":p.id,"name":p.name})).collect::<Vec<_>>());
+        if stale{status["primitives"]=json!(editor::create::primitives().iter().map(|p|json!({"id":p.id,"name":p.name})).collect::<Vec<_>>());}
         status["animate"]=json!(self.viewer.animate!=Animate::Off);
         if status["easeKinds"].is_null(){status.as_object_mut().unwrap().remove("easeKinds");}
-        status["importExtensions"]=json!(crate::render::media::import_extensions());
+        if stale{status["importExtensions"]=json!(crate::render::media::import_extensions());}
         status["names"]=json!(names::fixed().collect::<std::collections::BTreeMap<_,_>>());
+        if !stale{let object=status.as_object_mut().unwrap();for name in crate::snapshot_cache::REFERENCES{object.remove(*name);}}
+        self.snapshot_cache.borrow_mut().reference_key=Some(reference_key);
         Ok(status)
     }
     #[allow(clippy::too_many_arguments)]
@@ -589,3 +601,25 @@ mod camera_target_tests {
 
 #[cfg(test)]
 mod camera_view_cage_tests;
+
+/// 箱(Boxcam)の 4 角: カメラの画角が comp 面(z = 0)に落ちる所を、観測者の画面へ。描く所と掴む所が同じ写像を使う。
+fn box_corners(comp:crate::doc::core::CompSpec,camera:crate::doc::core::ResolvedCamera,screen:&impl Fn(glam::Vec3)->Option<[f32;2]>)->Vec<Option<[f32;2]>>{
+    let projection=crate::doc::core::camera_projection(comp,camera);
+    let rotation=projection.rotation.inverse();
+    let depth=crate::doc::core::distance_from_camera(comp,0.0)*camera.distance_scale;
+    let height=depth*(projection.vertical_fov_radians*0.5).tan();let width=height*projection.aspect_ratio;
+    let eye=projection.eye;
+    [glam::vec3(-width,-height,-depth),glam::vec3(width,-height,-depth),glam::vec3(width,height,-depth),glam::vec3(-width,height,-depth)].into_iter().map(|p|{
+        let ray=rotation*p;
+        let t=if ray.z.abs()>1e-6{-eye.z/ray.z}else{-1.0};
+        screen(if t>0.0{eye+ray*t}else{eye+ray})
+    }).collect()
+}
+
+/// The layers top first, as the status lists them (and as stepping through them with the arrow keys goes).
+pub(crate) fn stacking_order(view:&crate::doc::store::StoreView<'_>)->Vec<LayerId>{
+    let mut ids=view.layers();
+    let order:std::collections::HashMap<LayerId,i16>=ids.iter().map(|id|(*id,view.meta(*id).ok().flatten().map_or(0,|m|m.order))).collect();
+    ids.sort_by_key(|id|std::cmp::Reverse((order.get(id).copied().unwrap_or(0),id.0)));
+    ids
+}

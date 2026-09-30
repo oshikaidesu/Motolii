@@ -1,4 +1,4 @@
-name: motolii_stage5
+name: motolii_ui
 description: Motolii Stage 5 Flutter UI
 publish_to: none
 version: 0.1.0+1
@@ -7,7 +7,9 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  docking: ^1.16.2 # dock probe (proto_hf/main_dock.dart); not used by production code yet
+  docking: ^1.16.2 # the workspace dock
+  flutter_scene: ^0.23.0
+  vector_math: any
 flutter:
   uses-material-design: true
   fonts:
@@ -18,7 +20,12 @@ flutter:
           weight: 500
         - asset: assets/fonts/Inter-SemiBold.ttf
           weight: 600
+  assets:
+    - flutter_scene_generated/
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  integration_test:
+    sdk: flutter
+  hooks: any

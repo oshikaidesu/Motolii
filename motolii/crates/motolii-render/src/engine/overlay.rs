@@ -1,5 +1,5 @@
 //! Track Overlay を描く: このコマの塊から箱・印の形を組み、comp と同じ大きさの画布に描く(描くのは形の道 = fork の re_renderer)。
-//! 欄は docs/reviews/2026-09-14-tracery2-port-spec.md の Box / Marker。
+//! 欄は docs/design/rationale/tracery2-port-spec.md の Box / Marker。
 
 use crate::doc::core::CompSpec;
 use crate::doc::store::analysis::BlobMark;

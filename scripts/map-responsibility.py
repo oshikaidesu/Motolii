@@ -19,9 +19,9 @@ CRATES = {
     "motolii-render": "motolii/crates/motolii-render/src",
     "motolii-doc":    "motolii/crates/motolii-doc/src",
     "motolii-ui":     "motolii/ui/native/src",
-    "motolii-edit":   "motolii/ui/extensions/edit/src",
-    "motolii-jobs":   "motolii/ui/extensions/jobs/src",
-    "motolii-script": "motolii/ui/extensions/script/src",
+    "motolii-edit":   "motolii/crates/motolii-edit/src",
+    "motolii-jobs":   "motolii/crates/motolii-jobs/src",
+    "motolii-script": "motolii/crates/motolii-script/src",
 }
 # **外の定義。** 依存グラフに実在する package 名だけを「外」と認める
 # (`property::` のような内部 module や `f64::` を外と数えないため)。

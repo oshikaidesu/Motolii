@@ -1,0 +1,16 @@
+[package]
+name = "motolii-jobs"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+motolii-doc = { path = "../motolii-doc", default-features = false }
+motolii-render = { path = "../motolii-render" }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+motolii-edit = { path = "../motolii-edit" }
+
+[lints]
+workspace = true

@@ -1,0 +1,559 @@
+{
+ "things": [
+  {
+   "id": "motolii.text",
+   "name": "Text",
+   "kind": "primitive",
+   "family": "text",
+   "tags": [
+    "glyph",
+    "basic"
+   ],
+   "capabilities": [
+    "apply"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "text"
+   ],
+   "face": {
+    "type": "mark",
+    "mark": "text",
+    "color": "#EEF0F4"
+   }
+  },
+  {
+   "id": "motolii.rect",
+   "name": "Rectangle",
+   "kind": "primitive",
+   "family": "shapes",
+   "tags": [
+    "basic",
+    "vector"
+   ],
+   "capabilities": [
+    "apply"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "rectangle"
+   ],
+   "face": {
+    "type": "mark",
+    "mark": "rect",
+    "color": "#2F8CFF"
+   }
+  },
+  {
+   "id": "motolii.rounded",
+   "name": "Rounded",
+   "kind": "primitive",
+   "family": "shapes",
+   "tags": [
+    "basic",
+    "vector"
+   ],
+   "capabilities": [
+    "apply"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "rounded"
+   ],
+   "face": {
+    "type": "mark",
+    "mark": "rounded",
+    "color": "#FF6FA5"
+   }
+  },
+  {
+   "id": "motolii.ellipse",
+   "name": "Ellipse",
+   "kind": "primitive",
+   "family": "shapes",
+   "tags": [
+    "basic",
+    "vector"
+   ],
+   "capabilities": [
+    "apply"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "ellipse"
+   ],
+   "face": {
+    "type": "mark",
+    "mark": "ellipse",
+    "color": "#FF7A9E"
+   }
+  },
+  {
+   "id": "motolii.star",
+   "name": "Star",
+   "kind": "primitive",
+   "family": "shapes",
+   "tags": [
+    "basic",
+    "vector"
+   ],
+   "capabilities": [
+    "apply"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "star"
+   ],
+   "face": {
+    "type": "mark",
+    "mark": "star",
+    "color": "#FFC83A"
+   }
+  },
+  {
+   "id": "motolii.polygon",
+   "name": "Polygon",
+   "kind": "primitive",
+   "family": "shapes",
+   "tags": [
+    "basic",
+    "vector"
+   ],
+   "capabilities": [
+    "apply"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "polygon"
+   ],
+   "face": {
+    "type": "mark",
+    "mark": "polygon",
+    "color": "#7A55FF"
+   }
+  },
+  {
+   "id": "motolii.line",
+   "name": "Line",
+   "kind": "path",
+   "family": "paths",
+   "tags": [
+    "vector"
+   ],
+   "capabilities": [
+    "apply"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "line"
+   ],
+   "face": {
+    "type": "mark",
+    "mark": "line",
+    "color": "#D9DBE1"
+   }
+  },
+  {
+   "id": "motolii.arrow",
+   "name": "Arrow",
+   "kind": "path",
+   "family": "paths",
+   "tags": [
+    "vector"
+   ],
+   "capabilities": [
+    "apply"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "arrow"
+   ],
+   "face": {
+    "type": "mark",
+    "mark": "arrow",
+    "color": "#D9DBE1"
+   }
+  },
+  {
+   "id": "motolii.path",
+   "name": "Path",
+   "kind": "path",
+   "family": "paths",
+   "tags": [
+    "vector"
+   ],
+   "capabilities": [
+    "apply"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "path"
+   ],
+   "face": {
+    "type": "mark",
+    "mark": "path",
+    "color": "#8C8DFF"
+   }
+  },
+  {
+   "id": "motolii.blob",
+   "name": "Blob",
+   "kind": "path",
+   "family": "paths",
+   "tags": [
+    "vector",
+    "generative"
+   ],
+   "capabilities": [
+    "apply"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "blob"
+   ],
+   "face": {
+    "type": "mark",
+    "mark": "blob",
+    "color": "#3FD2B4"
+   }
+  },
+  {
+   "id": "motolii.pen",
+   "name": "Pen",
+   "kind": "tool",
+   "family": "tools",
+   "tags": [
+    "vector",
+    "brush"
+   ],
+   "capabilities": [
+    "apply"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "pen"
+   ],
+   "face": {
+    "type": "mark",
+    "mark": "pen",
+    "color": "#E6E8EC"
+   }
+  },
+  {
+   "id": "motolii.pencil",
+   "name": "Pencil",
+   "kind": "tool",
+   "family": "tools",
+   "tags": [
+    "brush"
+   ],
+   "capabilities": [
+    "apply"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "pencil"
+   ],
+   "face": {
+    "type": "mark",
+    "mark": "pencil",
+    "color": "#E6E8EC"
+   }
+  },
+  {
+   "id": "motolii.spray",
+   "name": "Spray",
+   "kind": "tool",
+   "family": "tools",
+   "tags": [
+    "brush",
+    "particles"
+   ],
+   "capabilities": [
+    "apply"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "spray"
+   ],
+   "face": {
+    "type": "mark",
+    "mark": "spray",
+    "color": "#8C8DFF"
+   }
+  },
+  {
+   "id": "motolii.eraser",
+   "name": "Eraser",
+   "kind": "tool",
+   "family": "tools",
+   "tags": [
+    "brush"
+   ],
+   "capabilities": [
+    "apply"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "eraser"
+   ],
+   "face": {
+    "type": "mark",
+    "mark": "eraser",
+    "color": "#E6E8EC"
+   }
+  },
+  {
+   "id": "motolii.cube",
+   "name": "Cube",
+   "kind": "body",
+   "family": "3d",
+   "tags": [
+    "solid"
+   ],
+   "capabilities": [
+    "apply"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "cube"
+   ],
+   "face": {
+    "type": "mark",
+    "mark": "cube",
+    "color": "#35B4F5"
+   }
+  },
+  {
+   "id": "motolii.sphere",
+   "name": "Sphere",
+   "kind": "body",
+   "family": "3d",
+   "tags": [
+    "solid"
+   ],
+   "capabilities": [
+    "apply"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "sphere"
+   ],
+   "face": {
+    "type": "mark",
+    "mark": "sphere",
+    "color": "#6A55FF"
+   }
+  },
+  {
+   "id": "motolii.torus",
+   "name": "Torus",
+   "kind": "body",
+   "family": "3d",
+   "tags": [
+    "solid"
+   ],
+   "capabilities": [
+    "apply"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "torus"
+   ],
+   "face": {
+    "type": "mark",
+    "mark": "torus",
+    "color": "#2ED3C0"
+   }
+  },
+  {
+   "id": "motolii.cylinder",
+   "name": "Cylinder",
+   "kind": "body",
+   "family": "3d",
+   "tags": [
+    "solid"
+   ],
+   "capabilities": [
+    "apply"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "cylinder"
+   ],
+   "face": {
+    "type": "mark",
+    "mark": "cylinder",
+    "color": "#F77FA6"
+   }
+  },
+  {
+   "id": "motolii.cone",
+   "name": "Cone",
+   "kind": "body",
+   "family": "3d",
+   "tags": [
+    "solid"
+   ],
+   "capabilities": [
+    "apply"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "cone"
+   ],
+   "face": {
+    "type": "mark",
+    "mark": "cone",
+    "color": "#FF7A3A"
+   }
+  },
+  {
+   "id": "motolii.pyramid",
+   "name": "Pyramid",
+   "kind": "body",
+   "family": "3d",
+   "tags": [
+    "solid"
+   ],
+   "capabilities": [
+    "apply"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "pyramid"
+   ],
+   "face": {
+    "type": "mark",
+    "mark": "pyramid",
+    "color": "#FFB02E"
+   }
+  },
+  {
+   "id": "motolii.plane",
+   "name": "Plane",
+   "kind": "body",
+   "family": "3d",
+   "tags": [
+    "solid"
+   ],
+   "capabilities": [
+    "apply"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "plane"
+   ],
+   "face": {
+    "type": "mark",
+    "mark": "plane",
+    "color": "#4C7DFF"
+   }
+  },
+  {
+   "id": "motolii.nul",
+   "name": "Null",
+   "kind": "helper",
+   "family": "helpers",
+   "tags": [
+    "basic"
+   ],
+   "capabilities": [
+    "apply"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "null"
+   ],
+   "face": {
+    "type": "mark",
+    "mark": "nul",
+    "color": "#D9DBE1"
+   }
+  },
+  {
+   "id": "motolii.camera",
+   "name": "Camera",
+   "kind": "helper",
+   "family": "helpers",
+   "tags": [
+    "camera"
+   ],
+   "capabilities": [
+    "apply"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "camera"
+   ],
+   "face": {
+    "type": "mark",
+    "mark": "camera",
+    "color": "#D9DBE1"
+   }
+  },
+  {
+   "id": "motolii.light",
+   "name": "Light",
+   "kind": "helper",
+   "family": "helpers",
+   "tags": [
+    "light"
+   ],
+   "capabilities": [
+    "apply"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "light"
+   ],
+   "face": {
+    "type": "mark",
+    "mark": "light",
+    "color": "#FFC83A"
+   }
+  },
+  {
+   "id": "motolii.particles",
+   "name": "Particles",
+   "kind": "helper",
+   "family": "helpers",
+   "tags": [
+    "particles"
+   ],
+   "capabilities": [
+    "apply"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "particles"
+   ],
+   "face": {
+    "type": "mark",
+    "mark": "particles",
+    "color": "#6E8CFF"
+   }
+  },
+  {
+   "id": "motolii.stage",
+   "name": "Stage",
+   "kind": "helper",
+   "family": "helpers",
+   "tags": [
+    "basic"
+   ],
+   "capabilities": [
+    "apply"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "stage"
+   ],
+   "face": {
+    "type": "mark",
+    "mark": "stage",
+    "color": "#D9DBE1"
+   }
+  }
+ ]
+}

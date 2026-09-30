@@ -161,7 +161,7 @@ impl Engine {
                 self.stamp_feedback(&mut after, layer.id, layer.copy, 1, screen);
                 (plate, after)
             } else if layer.after_effects.is_empty() && layer.averaged == 0 {
-              // 凍った層は cache の絵で差し替え、素材の復号も効果の列も走らない(docs/freeze-and-flatten.md §2)。
+              // 凍った層は cache の絵で差し替え、素材の復号も効果の列も走らない(docs/design/freeze-and-flatten.md §2)。
               if let Some((built, padding)) = self.frozen_layer(view, layer, t, projection_camera, blend_mode)? {
                 frozen_padding = padding;
                 (built, Vec::new())

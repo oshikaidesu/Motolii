@@ -5,7 +5,7 @@ use crate::doc::store::*;
 use serde_json::{Value as J,json};
 use crate::viewer::{KeySel,ColorSlot};
 fn e(error:impl std::fmt::Display)->String{error.to_string()}
-pub(crate) const CAPABILITIES:&[&str]=&["status","preferences","notes","stageView","stageWindow","select","setProperty","previewProperties","commitPreview","cancelPreview","setText","previewText","styleText","setFont","setAttrs","create","duplicate","ghost","sequence","previewSequence","copy","cut","paste","delete","group","ungroup","reorder","split","setTiming","toggleKey","moveKeys","ease","setColor","previewColor","focusColor","applyPalette","applyEffect","removeEffect","expandEffect","moveEffect","enableEffect","animate","clip","addMarker","setMarker","deleteMarker","composition","import","placeAsset","removeAsset","replaceAsset","relinkAsset","save","new","undo","redo","seek","anchor","freeze","setFillMode","setGradient","previewBlend","applyBlend","relate","unrelate","setTimings","previewTimings","stageGesture","export","exportStatus","cancelExport","play","pause","tick","moveLayers","pickColor","historyGoto","reloadEffects","runScript","rerunScript","scopeEffect"];
+pub(crate) const CAPABILITIES:&[&str]=&["status","preferences","notes","stageView","stageWindow","cameraShown","select","setProperty","previewProperties","commitPreview","cancelPreview","setText","previewText","styleText","setFont","setAttrs","create","duplicate","ghost","sequence","previewSequence","copy","cut","paste","delete","group","ungroup","reorder","split","setTiming","toggleKey","moveKeys","ease","setColor","previewColor","focusColor","applyPalette","applyEffect","removeEffect","expandEffect","moveEffect","enableEffect","animate","clip","addMarker","setMarker","deleteMarker","composition","import","placeAsset","removeAsset","replaceAsset","relinkAsset","relinkFromCatalog","placeCatalogAsset","save","new","undo","redo","seek","anchor","freeze","setFillMode","setGradient","previewBlend","applyBlend","relate","unrelate","setTimings","previewTimings","stageGesture","nudge","toggle","reset","export","exportStatus","cancelExport","play","pause","tick","moveLayers","pickColor","historyGoto","reloadEffects","runScript","rerunScript","scopeEffect"];
 fn num(j:&J,key:&str)->Result<f64,String>{j[key].as_f64().filter(|v|v.is_finite()).ok_or_else(||format!("Missing finite {key}"))}
 fn integer(j:&J,key:&str)->Result<i64,String>{j[key].as_i64().ok_or_else(||format!("Missing integer {key}"))}
 fn layer(j:&J)->Result<LayerId,String>{j["layer"].as_u64().map(LayerId).ok_or("Missing layer".into())}
@@ -77,6 +77,18 @@ impl EditorRuntime{
         if let Some(row)=row{if let(Value::F64(n),Some((min,max)))=(&mut v,row.range){*n=n.clamp(min,max);}}
         self.doc.place_checked(layer,&p,v,self.time()?,self.viewer.animate).map(|v|v.into_iter().collect()).map_err(e)
     }
+    /// One row's key at the playhead: removed if there is one, else made with the value it shows and the Animate ease.
+    fn toggle_key_intents(&self,id:LayerId,name:&str,at:RationalTime)->Result<Vec<Intent>,String>{
+        let p=PropertyId::new(name).map_err(e)?;editor::functions::lens::require_local_source(&self.doc.view(),id,&p).map_err(e)?;let track=self.doc.view().track(id,&p).map_err(e)?.unwrap_or_default();
+        if track.keys().iter().any(|k|k.t.try_to_frame_round(editor::keyframe_edit::document_fps(&self.doc).unwrap()).ok()==Some(self.viewer.frame)){return editor::timeline_edit::delete_key_selection_intents(&self.doc,&[(id,Some(p),at.as_seconds_f64())],at).map_err(e)}
+        let data=editor::functions::read::inspector_data_from_doc(&self.doc.view(),id,at,&crate::render::engine::known_effects());let fallback=data.transform.iter().chain(data.text.iter()).chain(data.effects.iter().flat_map(|e|e.params.iter())).find(|r|r.property.as_deref()==Some(name)).map(|r|r.value.clone());
+        let value=self.doc.view().value_at(id,&p,at).map_err(e)?.or(crate::edit::document::edit::default_value(&self.doc.view(),id,&p).map_err(e)?).or(fallback).ok_or("No keyframe value")?;
+        let mut track=track;track.insert(Keyframe{t:at,value,interp:self.viewer.animate.interp(),spatial:None});Ok(vec![Intent::SetTrack{layer:id,property:p,track}])
+    }
+    fn apply_palette(&mut self,rgba:[f64;4])->Result<(),String>{
+        if let Some(slot)=self.viewer.color_target.clone(){let mut q=json!({"slot":slot,"rgba":rgba});if let Some(id)=slot.layer(){q["layer"]=json!(id.0);}let edits=self.color_intent(&q)?;self.apply(edits)}
+        else{let color=rgba.map(|v|(v*255.0).round()as u8);let mut intents=Vec::new();for id in self.selected_required()?{intents.extend(editor::functions::verb::color_intents(&self.doc,*id,color).map_err(e)?);}self.apply(intents)}
+    }
     fn color_intent(&self,j:&J)->Result<Vec<Intent>,String>{
         let slot:ColorSlot=serde_json::from_value(j["slot"].clone()).map_err(e)?;
         if j.get("layer").is_some()&&slot.layer()!=Some(layer(j)?){return Err("Color target layer mismatch".into())}
@@ -91,12 +103,15 @@ impl EditorRuntime{
     fn create_layer(&mut self,kind:editor::create::NewKind,visible:Option<i64>,family:Option<&str>)->Result<(),String>{self.place_layer(kind,self.viewer.frame,None,visible,family)}
     /// 置く場所を指す作成。drop 先は moveLayers と同じ語彙(target/placement)、開始コマは落とした x。作る→並べるを 1 手(Undo 一発)に。
     /// `family` は文字の層をその書体で作る(Fonts 棚の行を押した時): 作る→着せるを 1 手に。
-    fn place_layer(&mut self,kind:editor::create::NewKind,start:i64,landing:Option<(Option<LayerId>,String)>,visible:Option<i64>,family:Option<&str>)->Result<(),String>{
+    fn place_layer(&mut self,kind:editor::create::NewKind,start:i64,landing:Option<(Option<LayerId>,String)>,visible:Option<i64>,family:Option<&str>)->Result<(),String>{self.place_layer_with(Vec::new(),kind,start,landing,visible,family)}
+    /// `prelude` is written in the same step as the layer (a file admitted as an asset as it is first used: one undo).
+    fn place_layer_with(&mut self,prelude:Vec<Intent>,kind:editor::create::NewKind,start:i64,landing:Option<(Option<LayerId>,String)>,visible:Option<i64>,family:Option<&str>)->Result<(),String>{
         let view=self.doc.view();let comp=view.composition().map_err(e)?.ok_or("No composition")?;
         let id=LayerId(view.next_layer_id());let order=view.layers().iter().filter_map(|l|view.meta(*l).ok().flatten().map(|m|m.order)).max().unwrap_or(-1).checked_add(1).ok_or("Layer order full")?;
         let taken:Vec<_>=view.layers().iter().filter_map(|l|view.attrs(*l).ok().flatten().map(|a|a.name)).collect();
         let mut intents=editor::create::new_layer_intents(id,order,start,comp.duration_frames,comp.fps,(comp.width as f64,comp.height as f64),kind,editor::create::unbounded_frames(visible));
         editor::create::prefer_projection(&mut intents,self.flat_projection);
+        intents.splice(0..0,prelude);
         if let Some(family)=family{
             if !crate::render::picture::shaping::font_families().iter().any(|name|name==family){return Err("Font family is not installed".into())}
             for i in &mut intents{if let Intent::SetTextDocument{document,..}=i{for style in &mut document.styles{style.font=crate::doc::store::FontRef{family:family.into(),..Default::default()};}}}
@@ -128,7 +143,8 @@ impl EditorRuntime{
         if self.freezer.running().is_some(){self.engine.refresh_frozen();}
         if op=="status"||op=="exportStatus"||op=="reloadEffects"{return Ok(())}
         if op=="stageView" {
-            self.cancel_preview();
+            // the observer is the viewer's, not the document's: it ends a Stage drag (the drag's geometry moves under the hand), not a value preview
+            if self.stage_drag.is_some(){self.cancel_preview();}
             if let Some(orbit)=j["orbit"].as_array() {
                 if orbit.len()!=2 { return Err("Expected two orbit angles".into()); }
                 self.viewer.user_camera.orbit_degrees=[orbit[0].as_f64().filter(|v|v.is_finite()).ok_or("Invalid orbit")? as f32,orbit[1].as_f64().filter(|v|v.is_finite()).ok_or("Invalid orbit")? as f32];
@@ -156,11 +172,23 @@ impl EditorRuntime{
             if self.preview_tag.as_deref() != Some(tag) { self.cancel_preview(); }
             self.preview_tag = Some(tag.to_owned());
         }
-        if !matches!(op,"previewText"|"styleText"|"setGradient"|"previewProperties"|"relate"|"previewColor"|"previewBlend"|"previewX"|"commitPreview"|"commitX"|"previewTimings"|"previewSequence"|"stageGesture"){self.cancel_preview();}
+        // What does not touch the document or the time the preview was made at leaves it alone: a preference, a pause when nothing plays.
+        let leaves_preview=op=="preferences"||(op=="pause"&&!self.viewer.clock.playing());
+        if !leaves_preview&&!matches!(op,"previewText"|"styleText"|"setGradient"|"previewProperties"|"relate"|"previewColor"|"previewBlend"|"previewX"|"commitPreview"|"commitX"|"previewTimings"|"previewSequence"|"stageGesture"){self.cancel_preview();}
         match op{
             "notes"=>self.edit_notes(&j)?,
             "select"=>{
-                let chosen=if let Some(a)=j.get("ids"){ids(a)?}else{j["id"].as_u64().map(LayerId).into_iter().collect()};
+                // "step": the layer that many rows below (above, negative) the last chosen one, kept in the list.
+                let chosen=if let Some(step)=j["step"].as_i64(){
+                    let order=crate::snapshot::stacking_order(&self.doc.view());
+                    let at=self.viewer.selected_ids.last().and_then(|l|order.iter().position(|o|o==l)).map_or(-1,|i|i as i64);
+                    order.get((at+step).clamp(0,order.len() as i64-1).max(0) as usize).copied().into_iter().collect()
+                }else if let Some(id)=j["toggle"].as_u64().map(LayerId){
+                    // Cmd-click: in or out of what is chosen now
+                    let mut chosen=self.viewer.selected_ids.clone();
+                    if let Some(i)=chosen.iter().position(|l|*l==id){chosen.remove(i);}else{chosen.push(id);}chosen
+                }else if j["all"]==true{crate::snapshot::stacking_order(&self.doc.view())
+                }else if let Some(a)=j.get("ids"){ids(a)?}else{j["id"].as_u64().map(LayerId).into_iter().collect()};
                 if chosen.iter().any(|id|!self.doc.view().has_layer(*id)){return Err("Unknown layer".into())}
                 self.pick(chosen);self.viewer.selected_keys.clear();
                 if let Some(keys)=j["keys"].as_array(){let fps=editor::keyframe_edit::document_fps(&self.doc).map_err(e)?.as_f64();
@@ -178,7 +206,7 @@ impl EditorRuntime{
             "setFont" if j["scope"].is_string()=>{let edits=editor::text_format::edits(&self.doc,layer(&j)?,self.time()?,&j)?;self.apply(edits)?;}
             "setFont"=>{let intent=editor::text::font_intent(&self.doc,layer(&j)?,string(&j,"family")?)?;if j["preview"].as_bool()==Some(true){self.set_preview(vec![intent])?}else{self.apply([intent])?}}
             "setText"=>{let id=layer(&j)?;if self.doc.view().text_document(id).map_err(e)?.is_none(){return Err("Select a Text layer".into())}let at=self.time()?;editor::text::write_content(&mut self.doc,id,at,string(&j,"content")?.into()).map_err(e)?;}
-            "setAttrs"=>{let patch=attrs_patch(&j["patch"])?;let layers=ids(&j["layers"])?;
+            "setAttrs"=>{let patch=attrs_patch(&j["patch"])?;let layers=self.attrs_targets(&j)?;
                 if patch.ghost.is_some_and(|g|g.is_some()){if let Some(l)=layers.iter().find(|&&l|!editor::timeline_edit::ghostable(&self.doc.view(),l)){return Err(format!("Layer {} cannot carry a ghost",l.0))}}
                 if patch.projection.is_some(){
                     let at=self.time()?;
@@ -196,6 +224,8 @@ impl EditorRuntime{
                 if self.viewer.selected_keys.is_empty(){let ids=self.selected_required()?.to_vec();let copies=editor::timeline_edit::duplicate_layers(&mut self.doc,&ids).map_err(e)?;self.pick(copies);}
                 else{let c=editor::clipboard::Clipboard::default();c.copy_keys(&self.doc,&self.viewer.selected_keys).map_err(e)?;let fps=editor::keyframe_edit::document_fps(&self.doc).map_err(e)?.as_f64();let at=self.viewer.selected_keys.iter().map(|k|(k.at_sec*fps).round()as i64).max().unwrap_or(self.viewer.frame).saturating_add(1);let result=c.paste(&mut self.doc,None,at).map_err(e)?;self.accept_paste(result);}
             }
+            // `layers`: the layer row's Delete means the chosen layers, even with keys chosen too
+            "delete" if j["layers"]==true=>{self.viewer.selected_keys.clear();self.delete_selection()?;}
             "delete"=>self.delete_selection()?,
             "group"=>{let ids=self.selected_required()?.to_vec();let group=self.doc.group_layers(&ids).map_err(e)?.ok_or("No group created")?;self.pick(vec![group]);self.viewer.selected_keys.clear();}
             "ungroup"=>{let ids=self.selected_required()?.to_vec();let children=self.doc.ungroup_layers(&ids).map_err(e)?;if children.is_empty(){return Err("Select a Group".into())}self.pick(children);self.viewer.selected_keys.clear();}
@@ -204,39 +234,60 @@ impl EditorRuntime{
             "split"=>{let ids=self.selected_required()?.to_vec();let copies=editor::timeline_edit::split_layers(&mut self.doc,&ids,self.viewer.frame).map_err(e)?;if copies.is_empty(){return Err("Playhead must be inside a layer".into())}self.pick(copies);}
             "setTimings"|"previewTimings"=>{let mut edits=Vec::new();for change in j["changes"].as_array().ok_or("Missing timing changes")?{edits.extend(self.timing_edits(change)?);}if op=="previewTimings"{self.set_preview(edits)?;}else{self.apply(edits)?;}}
             "stageGesture"=>self.stage_gesture(&j)?,
+            "nudge"=>self.nudge(&j)?,
+            // 層のスイッチ(目・solo・鍵): 今の値は host が読む。UI の写しが古くても、押した数だけ切り替わる。
+            "toggle"=>{let layer=layer(&j)?;let flag=match string(&j,"flag")?{"hidden"=>editor::functions::verb::LayerFlag::Hidden,"solo"=>editor::functions::verb::LayerFlag::Solo,"locked"=>editor::functions::verb::LayerFlag::Locked,_=>return Err("Unknown layer switch".into())};
+                let attrs=self.doc.view().attrs(layer).map_err(e)?.ok_or("Layer not found")?;
+                let on=match flag{editor::functions::verb::LayerFlag::Hidden=>attrs.hidden,editor::functions::verb::LayerFlag::Solo=>attrs.solo,editor::functions::verb::LayerFlag::Locked=>attrs.locked};
+                let edits=editor::functions::verb::flag_intents(&self.doc,layer,flag,!on).map_err(e)?;self.apply(edits)?;}
             "setTiming"=>{let id=layer(&j)?;let old=self.doc.view().meta(id).map_err(e)?.ok_or("Layer metadata missing")?.timing;let mut next=old;next.start=integer(&j,"start")?;next.duration=integer(&j,"duration")?;next.source_in=integer(&j,"sourceIn")?;let move_keys=next.duration==old.duration&&next.source_in==old.source_in;let edits=editor::functions::verb::retime_layer(&self.doc,id,old,next,move_keys).map_err(e)?;self.apply(edits)?;}
-            "toggleKey"=>{let id=layer(&j)?;let name=string(&j,"property")?;let at=self.time()?;
-                if name=="content"{editor::text::toggle_content_key(&mut self.doc,id,at,String::new()).map_err(e)?;}
-                else{let p=PropertyId::new(name).map_err(e)?;editor::functions::lens::require_local_source(&self.doc.view(),id,&p).map_err(e)?;let track=self.doc.view().track(id,&p).map_err(e)?.unwrap_or_default();
-                    if track.keys().iter().any(|k|k.t.try_to_frame_round(editor::keyframe_edit::document_fps(&self.doc).unwrap()).ok()==Some(self.viewer.frame)){let edits=editor::timeline_edit::delete_key_selection_intents(&self.doc,&[(id,Some(p),at.as_seconds_f64())],at).map_err(e)?;self.apply(edits)?;}
-                    else{let data=editor::functions::read::inspector_data_from_doc(&self.doc.view(),id,at,&crate::render::engine::known_effects());let fallback=data.transform.iter().chain(data.text.iter()).chain(data.effects.iter().flat_map(|e|e.params.iter())).find(|r|r.property.as_deref()==Some(name)).map(|r|r.value.clone());let value=self.doc.view().value_at(id,&p,at).map_err(e)?.or(crate::edit::document::edit::default_value(&self.doc.view(),id,&p).map_err(e)?).or(fallback).ok_or("No keyframe value")?;let mut track=track;track.insert(Keyframe{t:at,value,interp:Interp::Linear,spatial:None});self.apply([Intent::SetTrack{layer:id,property:p,track}])?;}
+            "toggleKey"=>{let id=layer(&j)?;let at=self.time()?;
+                if let Some(list)=j["properties"].as_array(){
+                    // a group's diamond: every row toggles as it would alone, in one step
+                    let mut intents=Vec::new();
+                    for name in list{intents.extend(self.toggle_key_intents(id,name.as_str().ok_or("Invalid property")?,at)?);}
+                    self.apply(intents)?;
+                }else{let name=string(&j,"property")?;
+                    if name=="content"{editor::text::toggle_content_key(&mut self.doc,id,at,String::new()).map_err(e)?;}
+                    else{let intents=self.toggle_key_intents(id,name,at)?;self.apply(intents)?;}
                 }
             }
+            "reset"=>{let intents=self.reset_edits(&j)?;self.apply(intents)?;}
             "moveKeys"=>{if self.viewer.selected_keys.is_empty(){return Err("Select keyframes".into())}let keys:Vec<_>=self.viewer.selected_keys.iter().map(|k|(k.layer,k.property.clone(),k.at_sec)).collect();let fps=editor::keyframe_edit::document_fps(&self.doc).map_err(e)?.as_f64();let delta=editor::keyframe_edit::clamped_key_delta(&keys,fps,integer(&j,"deltaFrames")?);let edits=editor::keyframe_edit::key_selection_move_intents(&self.doc,&keys,delta).map_err(e)?;self.apply(edits)?;for k in &mut self.viewer.selected_keys{k.at_sec+=delta as f64/fps;}}
             "ease"=>self.apply_ease(&j)?,
             "setColor"|"previewColor"=>{let intents=self.color_intent(&j)?;if op=="previewColor"{self.set_preview(intents)?;}else{self.apply(intents)?;}}
             "focusColor"=>{let slot:ColorSlot=if let Some(name)=j["property"].as_str(){editor::color::slot_of(&self.doc,layer(&j)?,name).ok_or("Not a color property")?}else{serde_json::from_value(j["slot"].clone()).map_err(e)?};if j.get("layer").is_some()&&slot.layer()!=Some(layer(&j)?){return Err("Color target mismatch".into())}self.viewer.color_target=Some(slot);}
-            "applyPalette"=>{if let Some(slot)=self.viewer.color_target.clone(){let mut q=json!({"slot":slot,"rgba":rgba(&j)?});if let Some(id)=slot.layer(){q["layer"]=json!(id.0);}let edits=self.color_intent(&q)?;self.apply(edits)?;}else{let color=rgba(&j)?.map(|v|(v*255.0).round()as u8);let mut intents=Vec::new();for id in self.selected_required()?{intents.extend(editor::functions::verb::color_intents(&self.doc,*id,color).map_err(e)?);}self.apply(intents)?;}}
+            "applyPalette"=>self.apply_palette(rgba(&j)?)?,
             "applyEffect"=>{let plugins:Vec<String>=if let Some(a)=j["pluginIds"].as_array(){a.iter().map(|p|p.as_str().map(str::to_owned).ok_or("Invalid plugin".into())).collect::<Result<_,String>>()?}else{vec![string(&j,"pluginId")?.into()]};let catalog=crate::render::engine::known_effects();if plugins.iter().any(|p|!catalog.iter().any(|c|c.plugin_id==*p)){return Err("Unknown effect".into())}let warp=plugins.iter().any(|p|catalog.iter().any(|d|d.plugin_id==*p&&d.stage==crate::render::compositor::EffectStage::Warp));if warp { for id in self.selected_required()? { let meta=self.doc.view().meta(*id).map_err(e)?.ok_or("Layer missing")?;let planar=match meta.source { LayerSource::Text|LayerSource::Shape=>true,LayerSource::File{path,..}=>!crate::render::media::is_mesh_path(&path)&&!crate::render::media::is_point_cloud_path(&path),_=>false };if !planar||self.doc.view().attrs(*id).map_err(e)?.is_some_and(|a|a.environment){return Err("2D warp requires a planar material".into())} } }let mut intents=Vec::new();let path_only=plugins.iter().any(|p|catalog.iter().any(|d|d.plugin_id==*p&&d.stage==crate::render::compositor::EffectStage::Path));let text_only=plugins.iter().any(|p|catalog.iter().any(|d|d.plugin_id==*p&&d.stage==crate::render::compositor::EffectStage::Text));for id in self.selected_required()?{if path_only&&self.doc.view().meta(*id).map_err(e)?.is_none_or(|m|m.source!=crate::doc::store::LayerSource::Shape){return Err("Path effects apply to shape layers".into())}if text_only&&self.doc.view().meta(*id).map_err(e)?.is_none_or(|m|m.source!=crate::doc::store::LayerSource::Text){return Err("Text effects apply to text layers".into())}intents.extend(editor::functions::verb::effect_batch_intents(&self.doc,*id,&plugins).map_err(e)?);}self.apply(intents)?;}
             "preferences"=>{if j.get("flatProjection").is_some(){self.flat_projection=serde_json::from_value(j["flatProjection"].clone()).map_err(e)?;}}
-            "animate"=>{let on=j["enabled"].as_bool().ok_or("Missing enabled")?;let interp=if j["shape"].is_object(){editor::ease_kinds::decode(&j["shape"])?}else{Interp::Linear};self.viewer.animate=if !on{Animate::Off}else if j["from"].as_bool().unwrap_or(false){Animate::From{origin:self.time()?,interp}}else{Animate::Now{interp}};}
+            "animate"=>{let on=if j["toggle"]==true{matches!(self.viewer.animate,Animate::Off)}else{j["enabled"].as_bool().ok_or("Missing enabled")?};let interp=if j["shape"].is_object(){editor::ease_kinds::decode(&j["shape"])?}else{Interp::Linear};self.viewer.animate=if !on{Animate::Off}else if j["from"].as_bool().unwrap_or(false){Animate::From{origin:self.time()?,interp}}else{Animate::Now{interp}};}
             "expandEffect"=>{let id=layer(&j)?;let effect=EffectId(integer(&j,"id")?as u32);let at=self.time()?;let (intents,copies)=editor::placement_edit::expand_intents(&self.doc,id,effect,at).map_err(e)?;self.apply(intents)?;self.pick(copies);}
             "scopeEffect"=>{let id=layer(&j)?;let effect=EffectId(integer(&j,"id")?as u32);let whole=j["whole"].as_bool().ok_or("Expected bool")?;if !self.doc.view().effects(id).map_err(e)?.iter().any(|x|x.id==effect){return Err("Effect missing".into())}let at=self.time()?;let scope=if whole{crate::doc::store::EffectScope::Whole}else{crate::doc::store::EffectScope::Each};let edits=self.doc.place_checked(id,&PropertyId::effect_scope(effect),Value::Enum(scope.enum_value()),at,Animate::Off).map_err(e)?;self.apply(edits)?;}
-            "enableEffect"=>{let id=layer(&j)?;let effect=EffectId(integer(&j,"id")?as u32);let on=j["enabled"].as_bool().ok_or("Expected bool")?;if !self.doc.view().effects(id).map_err(e)?.iter().any(|x|x.id==effect){return Err("Effect missing".into())}let at=self.time()?;let edits=self.doc.place_checked(id,&PropertyId::effect_enabled(effect),Value::Bool(on),at,Animate::Off).map_err(e)?;self.apply(edits)?;}
-            "moveEffect"=>{let id=layer(&j)?;let effect=integer(&j,"id")?as u32;let to=integer(&j,"to")?;let mut effects=self.doc.view().effects(id).map_err(e)?;let from=effects.iter().position(|e|e.id.0==effect).ok_or("Effect missing")?;let to=(to.max(0) as usize).min(effects.len().saturating_sub(1));let moved=effects.remove(from);effects.insert(to,moved);let catalog=crate::render::engine::known_effects();let mut spatial=false;for effect in &effects {match catalog.iter().find(|d|d.plugin_id==effect.plugin_id).map(|d|d.stage){Some(crate::render::compositor::EffectStage::Placement)=>spatial=false,Some(crate::render::compositor::EffectStage::Field|crate::render::compositor::EffectStage::Surface)=>spatial=true,Some(crate::render::compositor::EffectStage::Warp) if spatial=>return Err("2D warps run before spatial effects in the same material".into()),_=>{}}}self.apply([Intent::SetEffects{layer:id,effects}])?;}
+            "enableEffect"=>{let id=layer(&j)?;let effect=EffectId(integer(&j,"id")?as u32);if !self.doc.view().effects(id).map_err(e)?.iter().any(|x|x.id==effect){return Err("Effect missing".into())}let at=self.time()?;
+                // no `enabled`: the bypass switch flips what the document holds
+                let on=match j["enabled"].as_bool(){Some(on)=>on,None=>matches!(self.doc.view().value_at(id,&PropertyId::effect_enabled(effect),at).map_err(e)?,Some(Value::Bool(false)))};let edits=self.doc.place_checked(id,&PropertyId::effect_enabled(effect),Value::Bool(on),at,Animate::Off).map_err(e)?;self.apply(edits)?;}
+            "moveEffect"=>{let id=layer(&j)?;let effect=integer(&j,"id")?as u32;let mut effects=self.doc.view().effects(id).map_err(e)?;let from=effects.iter().position(|e|e.id.0==effect).ok_or("Effect missing")?;
+                // `step`: earlier (-1) / later (+1) from where it is now; `to`: a place in the stack
+                let to=match j["step"].as_i64(){Some(step)=>from as i64+step,None=>integer(&j,"to")?};let to=(to.max(0) as usize).min(effects.len().saturating_sub(1));let moved=effects.remove(from);effects.insert(to,moved);let catalog=crate::render::engine::known_effects();let mut spatial=false;for effect in &effects {match catalog.iter().find(|d|d.plugin_id==effect.plugin_id).map(|d|d.stage){Some(crate::render::compositor::EffectStage::Placement)=>spatial=false,Some(crate::render::compositor::EffectStage::Field|crate::render::compositor::EffectStage::Surface)=>spatial=true,Some(crate::render::compositor::EffectStage::Warp) if spatial=>return Err("2D warps run before spatial effects in the same material".into()),_=>{}}}self.apply([Intent::SetEffects{layer:id,effects}])?;}
             "removeEffect"=>{let id=layer(&j)?;let effect=integer(&j,"id")?as u32;let mut effects=self.doc.view().effects(id).map_err(e)?;if !effects.iter().any(|e|e.id.0==effect){return Err("Effect missing".into())}effects.retain(|e|e.id.0!=effect);self.apply([Intent::SetEffects{layer:id,effects}])?;}
-            "ghost"=>{let ids:Vec<LayerId>=self.selected_required()?.iter().copied().filter(|&l|editor::timeline_edit::ghostable(&self.doc.view(),l)).collect();if ids.is_empty(){return Err("Nothing here can carry a ghost".into())}let on=j["enabled"].as_bool().unwrap_or(true);let intents:Vec<Intent>=ids.iter().map(|&layer|Intent::SetAttrs{layer,patch:LayerAttrsPatch{ghost:Some(on.then_some(editor::timeline_edit::GHOST_DEFAULT_DELAY)),..Default::default()}}).collect();self.apply(intents)?;}
-            "sequence"|"previewSequence"=>{let layers=ids(&j["layers"])?;let delays:Vec<serde_json::Value>=if let Some(given)=j["ghosts"].as_array(){given.clone()}else{editor::sequence_delays::spread(&self.doc.view(),&layers,&j["shape"])?};if delays.len()!=layers.len(){return Err("layers and ghosts differ in length".into())}let intents:Vec<Intent>=layers.iter().zip(delays).filter(|(&layer,_)|editor::timeline_edit::ghostable(&self.doc.view(),layer)).map(|(&layer,d)|Intent::SetAttrs{layer,patch:LayerAttrsPatch{ghost:Some(d.as_i64().filter(|d|*d!=0)),..Default::default()}}).collect();if op=="previewSequence"{self.set_preview(intents)?;}else{self.apply(intents)?;}}
+            "ghost"=>{let ids:Vec<LayerId>=self.selected_required()?.iter().copied().filter(|&l|editor::timeline_edit::ghostable(&self.doc.view(),l)&&editor::functions::lens::edit_rejection(&self.doc.view(),l).ok().flatten().is_none()).collect();if ids.is_empty(){return Err("Nothing here can carry a ghost".into())}let on=j["enabled"].as_bool().unwrap_or(true);let intents:Vec<Intent>=ids.iter().map(|&layer|Intent::SetAttrs{layer,patch:LayerAttrsPatch{ghost:Some(on.then_some(editor::timeline_edit::GHOST_DEFAULT_DELAY)),..Default::default()}}).collect();self.apply(intents)?;}
+            "sequence"|"previewSequence"=>{let layers=ids(&j["layers"])?;let delays:Vec<serde_json::Value>=if let Some(given)=j["ghosts"].as_array(){given.clone()}else{editor::sequence_delays::spread(&self.doc.view(),&layers,&j["shape"])?};if delays.len()!=layers.len(){return Err("layers and ghosts differ in length".into())}let intents:Vec<Intent>=layers.iter().zip(delays).filter(|(&layer,_)|editor::timeline_edit::ghostable(&self.doc.view(),layer)&&editor::functions::lens::edit_rejection(&self.doc.view(),layer).ok().flatten().is_none()).map(|(&layer,d)|Intent::SetAttrs{layer,patch:LayerAttrsPatch{ghost:Some(d.as_i64().filter(|d|*d!=0)),..Default::default()}}).collect();if op=="previewSequence"{self.set_preview(intents)?;}else{self.apply(intents)?;}}
             "clip"=>{let id=layer(&j)?;let clipped=self.doc.view().attrs(id).map_err(e)?.unwrap_or_default().clip_to_below;self.apply([Intent::SetAttrs{layer:id,patch:LayerAttrsPatch{clip_to_below:Some(!clipped),..Default::default()}}])?;}
             "applyBlend"=>{self.apply_blend(&j)?;}
             "relate"=>{self.relate(&j)?;}
             "unrelate"=>{self.unrelate(&j)?;}
             "previewBlend"=>{let layers=if j["layers"].is_array(){ids(&j["layers"])?}else if j.get("layer").is_some(){vec![layer(&j)?]}else{self.blend_targets().into_iter().last().into_iter().collect()};let mode:BlendMode=serde_json::from_value(j["mode"].clone()).map_err(e)?;self.set_preview(layers.into_iter().map(|layer|Intent::SetAttrs{layer,patch:LayerAttrsPatch{blend_mode:Some(mode),..Default::default()}}).collect())?;}
             "addMarker"|"setMarker"|"deleteMarker"=>self.edit_marker(op,&j)?,
-            "composition"=>{let current=self.doc.view().composition().map_err(e)?.ok_or("No composition")?;let or=|key:&str,fallback:i64|j[key].as_i64().unwrap_or(fallback);let width:u32=or("width",current.width as i64).try_into().map_err(e)?;let height:u32=or("height",current.height as i64).try_into().map_err(e)?;let fps=Fps::try_new(or("fpsNum",current.fps.num()),or("fpsDen",current.fps.den())).map_err(e)?;let duration_frames=or("durationFrames",current.duration_frames);let background=if j.get("background").is_some(){serde_json::from_value(j["background"].clone()).map_err(e)?}else{current.background};self.apply([Intent::SetComposition(Composition{width,height,fps,duration_frames,background})])?;}
+            "composition"=>{let current=self.doc.view().composition().map_err(e)?.ok_or("No composition")?;let or=|key:&str,fallback:i64|j[key].as_i64().unwrap_or(fallback);let width:u32=or("width",current.width as i64).try_into().map_err(e)?;let height:u32=or("height",current.height as i64).try_into().map_err(e)?;let fps=Fps::try_new(or("fpsNum",current.fps.num()),or("fpsDen",current.fps.den())).map_err(e)?;let duration_frames=or("durationFrames",current.duration_frames);let background=if j.get("background").is_some(){serde_json::from_value(j["background"].clone()).map_err(e)?}else if !j["transparent"].is_null(){
+                    // the ground switch: `transparent` true / false, or "toggle" (a button flips what the document holds); the colour stays
+                    let mut bg=current.background;let clear=j["transparent"].as_bool().unwrap_or(bg[3]>=1.0);bg[3]=if clear{0.0}else{1.0};bg}else{current.background};self.apply([Intent::SetComposition(Composition{width,height,fps,duration_frames,background})])?;}
             "import"=>{let paths:Vec<std::path::PathBuf>=j["paths"].as_array().ok_or("Expected paths")?.iter().map(|p|p.as_str().map(std::path::PathBuf::from).ok_or("Invalid path".into())).collect::<Result<_,String>>()?;let paths=editor::fixture::expand_folders(&paths);if paths.is_empty(){return Err("No files to import".into())}let mut intents=Vec::new();let mut known:std::collections::HashSet<_>=self.doc.view().assets().map_err(e)?.iter().map(|a|a.content_hash.clone()).collect();for path in paths{let draft=editor::fixture::prepare_path(&path,if j["role"]=="reference"{AssetRole::Reference}else{AssetRole::Material})?;if known.insert(draft.content_hash.clone()){intents.push(Intent::AdmitAsset{draft});}}self.apply(intents)?;}
             "placeAsset"|"replaceAsset"=>{let a=self.doc.view().asset(asset_id(&j)?).map_err(e)?.ok_or("Asset missing")?;let path=a.path_absolute.ok_or("Asset path missing")?;if !std::path::Path::new(&path).exists(){return Err("Asset file missing".into())}if op=="placeAsset"{let start=j["start"].as_i64().unwrap_or(self.viewer.frame);let landing=j["placement"].as_str().map(|p|(j["target"].as_u64().map(LayerId),p.to_owned()));self.place_layer(editor::create::NewKind::Media{path,name:a.name},start,landing,j["visibleFrames"].as_i64(),None)?;}else{let layer=self.viewer.selected().ok_or("Select layer to replace")?;self.apply([Intent::SetSource{layer,source:LayerSource::File{path,fingerprint:None}}])?;}}
+            "relinkFromCatalog"=>{self.relink_from_catalog()?;}
+            "placeCatalogAsset"=>{self.place_catalog_asset(&j)?;}
             "relinkAsset"=>{let id=asset_id(&j)?;let path=j["path"].as_str().ok_or("Missing path")?.to_owned();if !std::path::Path::new(&path).exists(){return Err("No file at that path".into())}let a=self.doc.view().asset(id).map_err(e)?.ok_or("Asset missing")?;let kind=std::path::Path::new(&path).extension().and_then(|x|x.to_str()).and_then(crate::render::media::asset_type_for_extension).ok_or("Unsupported file type")?;let same_family=kind.split('/').next()==a.asset_type.split('/').next();if !same_family{return Err(format!("Pick a {} file",a.asset_type.split('/').next().unwrap_or("matching")))}self.apply([Intent::RelinkAsset{asset:id,path_absolute:path,project_root:None}])?;}
+            // `ids`: several chosen in the library go in one step; the ones still in use stay
+            "removeAsset" if j["ids"].is_array()=>{let mut intents=Vec::new();for raw in j["ids"].as_array().unwrap(){let id=asset_id(&json!({"id":raw}))?;if !self.asset_used(id)?{intents.push(Intent::RemoveAsset{asset:id});}}if intents.is_empty(){return Err("Every chosen asset is still in use".into())}self.apply(intents)?;}
             "removeAsset"=>{let id=asset_id(&j)?;if self.asset_used(id)?{return Err("Asset is still in use".into())}self.apply([Intent::RemoveAsset{asset:id}])?;}
             "export"=>self.exporter.start(&self.doc.view(),||self.doc.flattened().map(|doc|doc.into_recording()).map_err(e),std::path::PathBuf::from(string(&j,"path")?),integer(&j,"start")?,integer(&j,"end")?)?,
             "cancelExport"=>self.exporter.cancel(),
@@ -259,13 +310,15 @@ impl EditorRuntime{
             }
             "play"=>{if !self.viewer.clock.playing(){self.viewer.clock.toggle();}self.playback_rendered_frame=None;self.owners.clear(self.frames.skipped());self.clock_frame();}
             "pause"=>{if self.viewer.clock.playing(){self.viewer.clock.toggle();}self.playback_rendered_frame=None;self.report_owners();self.clock_frame();}
-            "pickColor"=>{let comp=self.doc.view().composition().map_err(e)?.ok_or("No composition")?;let (w,h)=(comp.width as i64,comp.height as i64);let (x,y)=(num(&j,"x")?.floor() as i64,num(&j,"y")?.floor() as i64);if x<0||y<0||x>=w||y>=h{return Err("Point is outside the composition".into())}let time=self.time()?;let rgba=self.engine.render_frame(&self.doc.view(),time).map_err(e)?;let at=((y*w+x)*4) as usize;let px=rgba.get(at..at+4).ok_or("Frame is smaller than the composition")?;self.viewer.picked_color=Some([px[0],px[1],px[2],px[3]].map(|v|v as f64/255.0));self.viewer.pick_serial+=1;}
+            "pickColor"=>{let comp=self.doc.view().composition().map_err(e)?.ok_or("No composition")?;let (w,h)=(comp.width as i64,comp.height as i64);let (x,y)=(num(&j,"x")?.floor() as i64,num(&j,"y")?.floor() as i64);if x<0||y<0||x>=w||y>=h{return Err("Point is outside the composition".into())}let time=self.time()?;let rgba=self.engine.render_frame(&self.doc.view(),time).map_err(e)?;let at=((y*w+x)*4) as usize;let px=rgba.get(at..at+4).ok_or("Frame is smaller than the composition")?;let picked=[px[0],px[1],px[2],px[3]].map(|v|v as f64/255.0);self.viewer.picked_color=Some(picked);self.viewer.pick_serial+=1;
+                // the eyedropper: what was picked goes on in the same request, so a pick that fails applies nothing
+                if j["apply"]==true{self.apply_palette(picked)?;}}
             "seek"=>{self.viewer.frame=integer(&j,"frame")?.max(0);self.viewer.clock.seek_frame(self.viewer.frame);self.playback_rendered_frame=None;}
             "anchor"=>{let id=layer(&j)?;let b=self.bounds(id).ok_or("Bounds unavailable until rendered")?;let min:[f64;3]=serde_json::from_value(b["localMin"].clone()).map_err(e)?;let max:[f64;3]=serde_json::from_value(b["localMax"].clone()).map_err(e)?;let point=[min[0]+(max[0]-min[0])*num(&j,"xFraction")?,min[1]+(max[1]-min[1])*num(&j,"yFraction")?];let at=self.time()?;let local={let view=self.doc.view();self.engine.frame_graph_editor_scene(&view,at).map_err(e)?;self.engine.frame_graph_cached_transform(&view,at,id).map(|(local,_)|local.spatial).ok_or("FrameGraph transform is unavailable")?};let intents=editor::functions::placement::anchor_point_plan(&self.doc,id,at,point,local).map_err(e)?;self.apply(intents)?;}
             "freeze"=>{
                 let id=layer(&j)?;
                 if j["enabled"].as_bool().ok_or("Missing enabled")? {
-                    // 法 docs/freeze-and-flatten.md §2: 旗を立て、入点〜出点を裏で焼く。焼けたコマから cache の絵になる。
+                    // 法 docs/design/freeze-and-flatten.md §2: 旗を立て、入点〜出点を裏で焼く。焼けたコマから cache の絵になる。
                     let meta=self.doc.view().meta(id).map_err(e)?.ok_or("Layer has no timing")?;
                     self.apply([Intent::Freeze{group:id}])?;
                     let root=Self::cache_root_for(self.path.as_deref());
@@ -296,27 +349,39 @@ impl EditorRuntime{
     }
     fn timing_edits(&self,j:&J)->Result<Vec<Intent>,String>{
         let id=layer(j)?;let old=self.doc.view().without_transients().meta(id).map_err(e)?.ok_or("Layer metadata missing")?.timing;
+        // A gesture says what it did (move, trim either end, slip) and by how many frames: the timing and its limits
+        // are worked out here, once, and whether the keys go with the layer is the gesture's kind, not a guess.
+        if let Some(mode)=j["mode"].as_str(){
+            use editor::functions::verb::TimingMode;
+            let mode=match mode{"move"=>TimingMode::Move,"trimStart"=>TimingMode::TrimStart,"trimEnd"=>TimingMode::TrimEnd,"slip"=>TimingMode::Slip,other=>return Err(format!("Unknown timing mode {other}"))};
+            let next=editor::functions::verb::timing_delta(old,mode,integer(j,"delta")?).map_err(e)?;
+            return editor::functions::verb::retime_layer(&self.doc,id,old,next,mode==TimingMode::Move).map_err(e);
+        }
         let mut next=old;next.start=integer(j,"start")?;next.duration=integer(j,"duration")?;next.source_in=integer(j,"sourceIn")?;
         editor::functions::verb::retime_layer(&self.doc,id,old,next,next.duration==old.duration&&next.source_in==old.source_in).map_err(e)
     }
     fn stage_gesture(&mut self,j:&J)->Result<(),String>{
-        if let Some(scale)=j["viewScale"].as_f64().filter(|s|s.is_finite()&&*s>0.0){self.viewer.stage_view_scale=scale;}
-        if let Some(held)=j.get("held"){self.viewer.stage_held=held.as_str().map(str::to_owned);}
-        // どの絵で掴んだか。Stage と Camera は投影が違う。
+        // どの絵で掴んだか。Stage と Camera は投影も縮尺も違う。
         let seen=crate::viewer::View::parse(j["view"].as_str().unwrap_or("Camera"))?;
+        if let Some(scale)=j["viewScale"].as_f64().filter(|s|s.is_finite()&&*s>0.0){self.viewer.stage_view_scale.insert(seen,scale);}
+        if let Some(held)=j.get("held"){self.viewer.stage_held=held.as_str().map(str::to_owned);}
         match string(j,"phase")?{
             // hover。掴まないので Document には触らず、ギズモの絵だけが変わる。
             "hover"=>{self.viewer.stage_pointer=serde_json::from_value(j["point"].clone()).ok();self.viewer.stage_view=seen;}
-            "begin"=>{let interaction=self.preview_tag.take();self.cancel_preview();self.preview_tag=interaction;let ids=ids(&j["ids"])?;let start=serde_json::from_value(j["start"].clone()).map_err(e)?;
-                let at=self.time()?;
-                let projection=ids.last().and_then(|id|self.doc.view().attrs(*id).ok().flatten()).map_or(LayerProjection::ThreeD,|a|a.projection);
-                let observer=self.view_camera(seen)?;
-                let projection_camera=self.projection_camera(seen,projection)?;
-                let drag=editor::stage::DragSession::begin(&self.doc,&mut self.engine,&ids,string(j,"mode")?,j["handle"].as_str().unwrap_or("body"),start,at,observer,projection_camera,self.viewer.stage_view_scale,self.viewer.stage_held.as_deref())?;
+            "begin" if matches!(j["mode"].as_str(),Some("camera"|"extent"))=>{let interaction=self.preview_tag.take();self.cancel_preview();self.preview_tag=interaction;
+                let drag=self.boxcam_drag(j,seen)?;self.stage_drag=Some(editor::stage::DragSession::Boxcam(drag));
+            }
+            "begin" if j["mode"]=="depth"=>{let interaction=self.preview_tag.take();self.cancel_preview();self.preview_tag=interaction;
+                let drag=self.depth_drag(j)?;self.stage_drag=Some(editor::stage::DragSession::Depth(drag));
+            }
+            "begin"=>{let interaction=self.preview_tag.take();self.cancel_preview();self.preview_tag=interaction;
+                // the layers carried: as named, or what is chosen now (a click's `select` has already arrived)
+                let ids=if j["ids"].is_array(){ids(&j["ids"])?}else{self.viewer.selected_ids.clone()};let start=serde_json::from_value(j["start"].clone()).map_err(e)?;
+                let drag=self.stage_drag_begin(seen,&ids,string(j,"mode")?,j["handle"].as_str().unwrap_or("body"),start)?;
                 self.pick(ids);self.stage_drag=Some(drag);
             }
             "update"=>{let drag=self.stage_drag.as_ref().ok_or("No Stage gesture")?;let point=serde_json::from_value(j["point"].clone()).map_err(e)?;
-                let (point,guides)=drag.snap(point,j["snap"].as_bool().unwrap_or(false),self.viewer.stage_view_scale);self.viewer.stage_snap=guides;
+                let (point,guides)=drag.snap(point,j["snap"].as_bool().unwrap_or(false),self.viewer.view_scale(seen));self.viewer.stage_snap=guides;
                 let edits=drag.edits(&self.doc,point,j["shift"].as_bool().unwrap_or(false),j["alt"].as_bool().unwrap_or(false),self.viewer.animate)?;self.set_preview(edits)?;
             }
             "commit"=>{self.stage_drag=None;self.viewer.stage_snap=[None,None];if let Some((owner,edits))=self.preview.take(){self.doc.clear_preview_edits(owner);self.apply(edits)?;}}
@@ -334,20 +399,25 @@ impl EditorRuntime{
             let current:Vec<_>=self.viewer.selected_keys.iter().map(|key|json!({"layer":key.layer.0,"property":key.property.as_ref().map(|p|p.name()),"frame":(key.at_sec*fps).round()as i64})).collect();
             if *expected!=json!(current){return Err("Easing selection changed".into())}
         }
-        if self.viewer.selected_keys.is_empty(){return Err("Select keyframes".into())}
+        // The keys to ease: the ones named ("keys": a desk easing one interval says which), else the selection.
+        let keys:Vec<crate::viewer::KeySel>=match j["keys"].as_array(){
+            Some(list)=>{let fps=editor::keyframe_edit::document_fps(&self.doc).map_err(e)?.as_f64();list.iter().map(|k|Ok(crate::viewer::KeySel{layer:LayerId(k["layer"].as_u64().ok_or("Missing key layer")?),property:k["property"].as_str().map(PropertyId::new).transpose().map_err(e)?,at_sec:k["frame"].as_f64().ok_or("Missing key frame")?/fps})).collect::<Result<_,String>>()?}
+            None=>self.viewer.selected_keys.clone(),
+        };
+        if keys.is_empty(){return Err("Select keyframes".into())}
         let kind=string(j,"kind")?;
         if kind.starts_with("EasyEase"){
             let side=match kind{"EasyEase"=>editor::keymap::EaseSide::Both,"EasyEaseIn"=>editor::keymap::EaseSide::In,"EasyEaseOut"=>editor::keymap::EaseSide::Out,_=>return Err("Unknown easing".into())};
-            editor::ease::apply_easy(&mut self.doc,&self.viewer.selected_keys,side)?;
+            editor::ease::apply_easy(&mut self.doc,&keys,side)?;
         }else{
             let shape=editor::ease_kinds::decode(j)?;
-            let starts=editor::ease::segments(&self.viewer.selected_keys);editor::ease::apply(&mut self.doc,&starts,shape)?;
+            let starts=editor::ease::segments(&keys);editor::ease::apply(&mut self.doc,&starts,shape)?;
         }Ok(())
     }
     fn edit_marker(&mut self,op:&str,j:&J)->Result<(),String>{
         let mut markers=self.doc.view().markers().map_err(e)?;
         if op=="addMarker"{let at=self.time()?;if !markers.iter().any(|m|m.time==at){markers.push(Marker{name:format!("{}",self.viewer.frame),time:at,duration:RationalTime::ZERO,body:String::new()});}}
-        else{let id=string(j,"id")?;let index=markers.iter().position(|m|format!("{}/{}",m.time.num(),m.time.den())==id).ok_or("Marker no longer exists")?;if op=="deleteMarker"{markers.remove(index);}else{if let Some(s)=j["name"].as_str(){markers[index].name=s.into()}if let Some(s)=j["body"].as_str(){markers[index].body=s.into()}}}
+        else{let id=string(j,"id")?;let index=markers.iter().position(|m|format!("{}/{}",m.time.num(),m.time.den())==id).ok_or("Marker no longer exists")?;if op=="deleteMarker"{markers.remove(index);}else{if let Some(s)=j["name"].as_str(){markers[index].name=s.into()}if let Some(s)=j["body"].as_str(){markers[index].body=s.into()}if let Some(f)=j["frame"].as_i64(){let comp=self.doc.view().composition().map_err(e)?.ok_or("No composition")?;let at=RationalTime::try_from_frame(f.max(0),comp.fps).map_err(e)?;if markers.iter().enumerate().any(|(i,m)|i!=index&&m.time==at){return Err("A marker is already at that frame".into())}markers[index].time=at;}}}
         markers.sort_by_key(|m|m.time);self.apply([Intent::SetMarkers{markers}])
     }
 }
@@ -403,11 +473,18 @@ mod freeze_op {
 #[cfg(test)]
 mod sequence_preview;
 mod spread;
+mod stage_grabs;
+mod relink;
+mod catalog_place;
 mod blend_targets;
+mod markers;
 mod ease_intervals;
 pub(crate) mod relate;
 #[cfg(test)]
 mod members;
+
+#[cfg(test)]
+mod preview_survival;
 
 
 #[cfg(test)]
@@ -441,6 +518,8 @@ mod blend_interaction_tests {
 
 #[cfg(test)]
 mod timing_drag_tests;
+#[cfg(test)]
+mod switch_tests;
 
 #[cfg(test)]
 mod path_effect_tests {

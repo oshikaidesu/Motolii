@@ -1,6 +1,6 @@
 //! 粒子の層 — 効果ではなく形(2026-09-13 効果の法: PointCloud の billboard)。取っ手は AE の Furikake を参考にした
 //! (出す元の大きさ・率・寿命・向き・速さ・寿命に沿う大きさ / 不透明度 / 色・重力・風・跳ね返り・乱流・種)。
-//! 動きは閉じた式(simulation-model.md §8 の L0: `(seed, 番号, 生まれた時刻, t)`)。状態を持たないので、
+//! 動きは閉じた式(docs/design/simulation-model.md §8 の L0: `(seed, 番号, 生まれた時刻, t)`)。状態を持たないので、
 //! 飛んでも辿っても同じ絵。率だけは入点からコマごとに積む(率のキーで数が増減する)。
 
 use crate::doc::core::{Fps, RationalTime};

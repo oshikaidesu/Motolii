@@ -22,7 +22,9 @@ HOUSES = [
     ("render — 描く側", "motolii/crates/motolii-render/src", "#e8a87c"),
     ("ui/lib — 窓", "motolii/ui/lib", "#85c1a1"),
     ("ui/native — 接続", "motolii/ui/native/src", "#c39bd3"),
-    ("extensions — 拡張", "motolii/ui/extensions", "#d98880"),
+    ("edit — 書き込み", "motolii/crates/motolii-edit/src", "#d98880"),
+    ("jobs — 書き出し", "motolii/crates/motolii-jobs/src", "#d98880"),
+    ("script — QuickJS", "motolii/crates/motolii-script/src", "#d98880"),
     ("vism — 棚(WGSL)", "motolii/crates/motolii-render/vism", "#d4b483"),
 ]
 WARN, SOFT = 600, 800
@@ -117,7 +119,7 @@ def esc(s):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--commits", type=int, default=400)
-    ap.add_argument("--out", default="docs/reviews/2026-09-20-responsibility-tree.svg")
+    ap.add_argument("--out", default="responsibility-tree.svg")
     args = ap.parse_args()
 
     changed, partners = spread(args.commits)

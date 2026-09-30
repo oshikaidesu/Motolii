@@ -16,7 +16,7 @@ description: Motolii の窓(Flutter, dark, 密)の違和感を、利用者が気
 
 ## 物差し(Motolii の裁定 = 破ったら所見)
 
-出典: `docs/reviews/2026-09-19-design-craft-ledger.md`(50 規則)、`2026-09-19-gui-existing-devices.md`(守る順 5)、`2026-09-19-layout-panel-survey.md`(利用者との詰め)、`2026-09-19-daily.md`(決めた事)、`docs/ui-visual-language.md`。
+出典: `git:912382f048:docs/reviews/2026-09-19-design-craft-ledger.md`(50 規則)、`2026-09-19-gui-existing-devices.md`(守る順 5)、`2026-09-19-layout-panel-survey.md`(利用者との詰め)、`2026-09-19-daily.md`(決めた事)、`docs/product/ui-rebaseline/visual-language.md`(言語)と `motolii/ui/lib/theme/metrics.dart`(寸法・色の正本)。
 
 | # | 規則 | 破りの見つけ方 |
 |---|---|---|
@@ -29,7 +29,7 @@ description: Motolii の窓(Flutter, dark, 密)の違和感を、利用者が気
 | R7 | **色は theme の token だけ** — `EditorTheme` / `EditorInk`。`Color(0x…)` を panel に直書きしない | `dart run bin/check.dart lib` の `raw_color` が clean でない |
 | R8 | **1 画面・page を切り替えない** — 所在は一覧で示す。panel は幅可変・全隠し可、ステージが主 | 全画面を覆う page・modal・wizard、戻らないと前が見えない造り |
 | R9 | **Material の語彙を使わない** — Material の操作部品を lib で import しない。標準テーマの `show Theme, ThemeData, ThemeExtension, ColorScheme` のみ許可。`Icons.*` / `Colors.*` は `Glyph` / theme へ | `material_import` が clean でない。Material の形(FAB・Snackbar・Card の影)が見える |
-| R10 | **EditorMetrics の密度** — row 20 / control 24 / section 26 / bar 28、font 10(micro 8 / dense 9 / title 13)。裸の数は `raw_dimension` が拒む | 行が 20 を越えて緩い、本文が 10 より大きい、`raw_dimension` が clean でない |
+| R10 | **theme/metrics.dart の密度** — row 20 / control 24 / section 26 / bar 28、font 10(micro 8 / dense 9 / title 13)。裸の数は `raw_dimension` が拒む | 行が 20 を越えて緩い、本文が 10 より大きい、`raw_dimension` が clean でない |
 | R11 | **drag→preview→commit の契約** — 掴んでいる間の絵が確定値。Esc と focus 外れで取り消し、undo は 1 回で戻る | Esc が効かない、panel の外を押しても値が残る、1 つの drag で undo が 2 回要る |
 | R12 | **重なりは影でなく白 8〜16% の overlay**、純黒 #000 の地を使わない、文字は 4.5:1 | 影で浮かせた panel、真っ黒の地、読めない灰色の文字 |
 | R13 | **hover は色 1 段だけ** — 拡大・影・ばねを付けない。値の吹き出しは遅延 0 で出し、離れたら即消す | hover で部品が膨らむ、値に 500 ms の tooltip 待ちが掛かる |
@@ -43,7 +43,7 @@ description: Motolii の窓(Flutter, dark, 密)の違和感を、利用者が気
    窓の起動・再起動・写真は**利用者の手**を借りる場合がある(実窓操作は拒否される事がある)。
 2. **写真**: panel ごとに 1 枚 —— Stage / Camera / Inspector の Layout / Timeline / Browser / Desk。
    状態も撮る: 何も選んでいない時、1 つ選んだ時、drag の途中、空(empty)の棚、error の行。
-   写真は `docs/reviews/<date>-ux-audit/assets/` へ。
+   写真は作業用の一時 dir へ(repo の `docs/` に歴史置き場は作らない。残す価値があるなら利用者に見せて捨てる)。
 3. **静の照合(写真の前でも後でも)**:
    `cd motolii/ui/tool/motolii_lints && dart run bin/check.dart ../../lib` →
    `raw_dimension` / `raw_color` / `material_import` が clean か。clean でない行は R7 / R9 / R10 の所見にそのまま乗せる。
@@ -61,7 +61,7 @@ description: Motolii の窓(Flutter, dark, 密)の違和感を、利用者が気
 
 | 度 | # | panel | 破った規則 | 見えた物(写真) | 場所 |
 |---|---|---|---|---|---|
-| blocker | B-01 | Inspector/Layout | R3 言葉を出さない | 「Direction」の選択が行に出ている | motolii/ui/lib/panels/inspector.dart:412 |
+| blocker | B-01 | Inspector/Layout | R3 言葉を出さない | 「Direction」の選択が行に出ている | motolii/ui/lib/inspector/inspector.dart |
 | major | M-01 | … | … | … | … |
 | minor | N-01 | … | … | … | … |
 

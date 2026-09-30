@@ -1,5 +1,5 @@
 // 関数の棚の 3 段目(module `package::effectors`): Effector(Notch の Clone Effector / Unreal Motion Design の Effector / MASH・MoGraph の Effector)。
-// 調査 2026-09-18(docs/reviews/2026-09-18-gpu-mograph-survey.md): 3 社とも「法 × 形の重み」で、法の中身は Notch だけが text(HLSL)。
+// 調査 2026-09-18(git:912382f048:docs/reviews/2026-09-18-gpu-mograph-survey.md): 3 社とも「法 × 形の重み」で、法の中身は Notch だけが text(HLSL)。
 // ここでは重み(形)だけを関数にし、法はどの札でも書ける。使い方: `return ef_apply(law, ef_box(centre, box_lo, box_hi, soft) * strength);`
 // 引用のルール: 札はここの関数を import して呼ぶだけ。ここを直せば引いた札全部に届く。
 import package::motolii::{ Offset, now_lo, now_hi, objects, NO_OBJECT };

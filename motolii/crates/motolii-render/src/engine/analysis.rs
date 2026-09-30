@@ -368,7 +368,7 @@ impl Engine {
         self.resolve_tally.clear();
         self.resolve_worst.clear();
         let (scene, _camera, _comp, fps) = self.evaluate_frame_graph_semantics(view, t)?;
-        Ok(super::frame_graph::resolved_layers_from_scene(&scene, t, fps))
+        Ok(super::playback_graph::resolved_layers_from_scene(&scene, t, fps))
     }
 
     /// 連続性の物差しの標本。作品意味は FrameGraph で一度だけ評価し、

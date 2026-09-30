@@ -7,7 +7,7 @@ import 'package:analyzer/error/error.dart';
 
 /// The libraries the window does not build on: Material and Cupertino bring
 /// their own metrics, ripples and motion, which the leaves in
-/// foundation/leaves.dart replaced on `flutter/widgets` alone.
+/// controls/leaves.dart replaced on `flutter/widgets` alone.
 const foreignImports = {
   'package:flutter/material.dart',
   'package:flutter/cupertino.dart',
@@ -19,8 +19,8 @@ class MaterialImport extends AnalysisRule {
     'Material import in the window; build on flutter/widgets and the leaves',
     correctionMessage:
         'Import package:flutter/widgets.dart and take the control from '
-        'foundation/leaves.dart (EditorPress, EditorIconButton, '
-        'EditorTextField, …) or the glyph from foundation/glyphs.dart.',
+        'controls/leaves.dart (EditorPress, EditorIconButton, '
+        'EditorTextField, …) or the glyph from theme/material_icons.dart.',
     severity: DiagnosticSeverity.WARNING,
   );
 

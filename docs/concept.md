@@ -1,6 +1,6 @@
 # Motoliiのコンセプト — Stage 5
 
-2026-09-06時点の現行コンセプト。利用者の最新の意図を優先する。旧段階の制約、検証用コード、LLMが補った仮定を、そのまま製品仕様にしない。[Stage 5](stage5/README.md)は技術と移行手順、[UIと操作の決定](stage5/product-contract.md)は具体的な制作体験を扱う。
+2026-09-06時点の現行コンセプト。利用者の最新の意図を優先する。旧段階の制約、検証用コード、LLMが補った仮定を、そのまま製品仕様にしない。[Stage 5](product/README.md)は技術と移行手順、[UIと操作の決定](product/product-contract.md)は具体的な制作体験を扱う。
 
 ## 何を作るか
 
@@ -36,22 +36,22 @@
 
 | 層 | 語彙の出どころ | Motolii |
 |---|---|---|
-| 骨格 | CSS — 箱、Flex / Grid、`zoom` と `transform`、`object-fit` | Document の法([箱と流し込みの法](reviews/2026-09-14-layout-law.md)) |
+| 骨格 | CSS — 箱、Flex / Grid、`zoom` と `transform`、`object-fit` | Document の法([箱と流し込みの法](design/rationale/layout-law.md)) |
 | 肌 | 合成 — マット、ブレンド、光、ブラー、カメラ | re_renderer と効果の棚 |
 | 魂 | 時間 — キーとイージング、溜め・重なり・ばらつき | Timeline、Each / Random、駆動 |
 
-CSS から取るのはレイアウトと箱の語彙だけ。カスケード・詳細度・継承・inline の癖は取らない(AE を篩にかけるのと同じ)。語彙を CSS に写すと、LLM が最も流暢に話す言葉で作品を組める([スクリプトの口](reviews/2026-09-14-script-mouth.md))。
+CSS から取るのはレイアウトと箱の語彙だけ。カスケード・詳細度・継承・inline の癖は取らない(AE を篩にかけるのと同じ)。語彙を CSS に写すと、LLM が最も流暢に話す言葉で作品を組める([スクリプトの口](design/rationale/script-mouth.md))。
 
 ## 現行と履歴を混ぜない
 
-この本文と利用者の最新指示が現在の判断基準。詳細の出所は[救出・照合表](stage5/document-map.md)。過去のVism構想、目的の優先順位、技術選定は根拠として残すが、現在の依頼への禁止事項にはしない。Lottie基幹モデルの訂正は[2026-09-05の照合](reviews/2026-09-05-concept-alignment.md)に由来する。
+この本文と利用者の最新指示が現在の判断基準。詳細の出所は[救出・照合表](product/document-map.md)。過去のVism構想、目的の優先順位、技術選定は根拠として残すが、現在の依頼への禁止事項にはしない。Lottie基幹モデルの訂正は2026-09-05の照合に由来する。
 
 <details>
 <summary>Stage 4以前の本文（履歴・既存リンクの保存。現行の制約ではない）</summary>
 
 # コンセプト定義
 
-2026-09-05の利用者による補足・訂正は[根本コンセプトの照合](reviews/2026-09-05-concept-alignment.md)。Lottieを基幹モデル、Rerunをビューとする境界、および今回の改善ゴールはこちらも参照する。
+2026-09-05の利用者による補足・訂正は根本コンセプトの照合。Lottieを基幹モデル、Rerunをビューとする境界、および今回の改善ゴールはこちらも参照する。
 
 **この節が現行。** 下の「大義側(2026-07 まで)」は裁定273で目的から降ろされた物で、
 リンク先として残してあるが、実装の判断には使わない。
@@ -101,7 +101,7 @@ AE 自体がガラパゴスなので、土台に据えると孤島を継承す�
 
 ## 迷った時に引く順
 
-1. [理想の定義](ideal.md) の5つを当てる。形・順序・見せる段・触る段・入れ子
+1. [理想の定義](design/ideal.md) の5つを当てる。形・順序・見せる段・触る段・入れ子
 2. `motolii/AGENTS.md`(15行)
 3. [decision-index](decision-index.md) を主題で grep
 
@@ -123,11 +123,11 @@ AE 自体がガラパゴスなので、土台に据えると孤島を継承す�
 
 Motoliiは完成条件としてはMV制作ツールだが、長期的には**映像表現の共通実行環境と、その最初のリファレンスHost**を目指す。映像表現を特定project内の手順や巨大なtemplateへ閉じ込めず、時刻・入力・型付きparameterから結果を返す、小さく再利用可能な実行単位として扱う。制作者はそれをtimeline上で配置し、keyframe・ParamDriver・DataTrackで変調し、組み合わせて一本の作品にする。開発者は編集アプリ全体を作らず、ひとつの新しい表現へ集中できる。
 
-MV向けのSoundtrack、BPM、拍grid、音声同期は重要な具体機能だが、Motolii全体、Vism、plugin、UIを音楽で定義しない。「演奏」「譜面台」「楽曲が背骨」は撤回済みの説明比喩であり、現行の製品意味には使わない。詳細は[UIの音楽メタファー撤回](reviews/2026-07-22-ui-music-metaphor-retirement.md)を正本とする。
+MV向けのSoundtrack、BPM、拍grid、音声同期は重要な具体機能だが、Motolii全体、Vism、plugin、UIを音楽で定義しない。「演奏」「譜面台」「楽曲が背骨」は撤回済みの説明比喩であり、現行の製品意味には使わない。詳細はUIの音楽メタファー撤回を正本とする。
 
-この持ち運べる映像表現の配布単位を**Vism（ヴィズム）**、拡張子を**`.vism`**とする。VismはProject、Preset、内部plugin kindの別名ではない。Vismは必要な型付きinputを宣言し、複数Vismのprovider選択・接続・初期値は**Kit**が目的単位へまとめ、Projectへ安全にmaterializeする。Motoliiは最初のHostとしてその境界を実証し、公開契約を継ぐ互換forkが同じ制作資産を扱える余地を残す。他製品共通規格は完成条件にしない。意味、package、Host integrationの分離は[Vismコンセプト](vism-package-concept.md)、Core/Vism/Kit/Projectの責任は[Vism / Kitモデル](vism-kit-model.md)を正本とする。
+この持ち運べる映像表現の配布単位を**Vism（ヴィズム）**、拡張子を**`.vism`**とする。VismはProject、Preset、内部plugin kindの別名ではない。Vismは必要な型付きinputを宣言し、複数Vismのprovider選択・接続・初期値は**Kit**が目的単位へまとめ、Projectへ安全にmaterializeする。Motoliiは最初のHostとしてその境界を実証し、公開契約を継ぐ互換forkが同じ制作資産を扱える余地を残す。他製品共通規格は完成条件にしない。意味、package、Host integrationの分離は[Vismコンセプト](design/vism/package-concept.md)、Core/Vism/Kit/Projectの責任は[Vism / Kitモデル](design/vism/kit-model.md)を正本とする。
 
-Motoliiは、制作者と開発者を固定された別集団として扱わない。作品を作る人が、調整、接続、inspection、fork、Vism／Kit／UI componentの公開へ必要な分だけ連続して進めるようにする。Reactは広く使われるUI作者面、Vismは持ち運べる表現作者面、first-party pluginは第三者と同じ公開境界で作る参照実装として、この連続性を支える。多数のcreator-authorが独立して新しい表現を作れることを、基礎機能の列挙速度より強い成長戦略とする。ただし、誰でも作者になれることと、誰のcodeでも無確認に実行することは別であり、trust、sandbox、権限、単一writer、作品の持続性はHostが守る。正本は[Creator / Developer連続体](reviews/2026-07-22-creator-developer-continuum-decision.md)とする。
+Motoliiは、制作者と開発者を固定された別集団として扱わない。作品を作る人が、調整、接続、inspection、fork、Vism／Kit／UI componentの公開へ必要な分だけ連続して進めるようにする。Reactは広く使われるUI作者面、Vismは持ち運べる表現作者面、first-party pluginは第三者と同じ公開境界で作る参照実装として、この連続性を支える。多数のcreator-authorが独立して新しい表現を作れることを、基礎機能の列挙速度より強い成長戦略とする。ただし、誰でも作者になれることと、誰のcodeでも無確認に実行することは別であり、trust、sandbox、権限、単一writer、作品の持続性はHostが守る。正本はCreator / Developer連続体とする。
 
 これは**「映像制作におけるVST」**という比喩で捉えられる。VSTバイナリ互換、DAW化、音声プラグインの読み込みを目標にするという意味ではない。VSTから継承するのは、Hostと表現実装を分離し、時間・parameter・automation・保存互換を共通言語にすることで、小さな作者と制作資産の生態系を成立させた構造である。AEのプラグインAPIやproject構造を再現することも目的にしない。
 
@@ -150,7 +150,7 @@ Motoliiは、持ち運べる映像表現Vismを実行・編集する最初のHos
 
 Draft Previewは知覚可能な品質差を許して即時性と試行回数を守る。公約はDraftとExportの画素一致ではなく、同じ`render_frame(t, Quality)`、同じ時間解釈、同じ作品意味を通り、必要時にFinal品質Previewで確認できることである。
 
-要約は**「意味は厳密に、計算は大胆に近似し、品質は目的に応じて落とし、最後は画で裁く」**とする。Rerunは開発用観測器へ縮小せず、時間、view、selection、density、GPU scene、高密度viewer shellを映像制作言語へ再翻訳する主要な製品先例として扱う。詳細、非目標、実装審判は[知覚表現の翻訳決定](reviews/2026-07-20-perceptual-expression-translation-decision.md)を正本とする。
+要約は**「意味は厳密に、計算は大胆に近似し、品質は目的に応じて落とし、最後は画で裁く」**とする。Rerunは開発用観測器へ縮小せず、時間、view、selection、density、GPU scene、高密度viewer shellを映像制作言語へ再翻訳する主要な製品先例として扱う。詳細、非目標、実装審判は知覚表現の翻訳決定を正本とする。
 
 ### 理論を通す叩き台をmainへ現像する
 
@@ -160,15 +160,15 @@ RN、Rerun、Skiaが共存する`ui/motolii-rn/`を唯一の製品sourceとし�
 
 開発は、一発で完成形を当てることではなく、この薄い翻訳を一つずつ実物にする。PRは一つの利用者成果を運ぶlanding envelopeとして使え、承認待ちのgateにはしない。
 
-事前にconflictを完全排除することは開始条件にしない。Git上の機械的conflictは統合担当が解消し、stable identity、Document意味、single writer、GPU owner、公開／永続contractのsemantic conflictだけを止める。共有seatは直列、そのseatへ接続するStage、Timeline、panel、Vism表現等の縦sliceは並列に進める。叩き台、probe、main統合、通常製品route、完成の状態は混同しない。詳細は[クリエイター翻訳機構・叩き台PR統合決定](reviews/2026-08-10-creator-translation-working-draft-pr-integration-decision.md)を正本とする。
+事前にconflictを完全排除することは開始条件にしない。Git上の機械的conflictは統合担当が解消し、stable identity、Document意味、single writer、GPU owner、公開／永続contractのsemantic conflictだけを止める。共有seatは直列、そのseatへ接続するStage、Timeline、panel、Vism表現等の縦sliceは並列に進める。叩き台、probe、main統合、通常製品route、完成の状態は混同しない。詳細はクリエイター翻訳機構・叩き台PR統合決定を正本とする。
 
 ### コンセプトが課すこと
 
 - **作品の主役は手順ではなく表現の意図**: ユーザーに原子nodeの配線、隠れNull、文字列expression、再現不能な操作列を組ませない。「グロー」「反復」「追従」「歌詞組版」のような意図を、検査・保存・再利用できる単位として見せる。
 - **時間は共通言語**: 映像、parameter、解析値、生成、preview、exportが同じ時刻`t`とTimeMapを使う。pluginごとの独自clock、再生順依存、前frameの隠れ状態を許さない。
 - **Hostは創作上のインフラを引き受ける**: lifecycle、GPU resource、cache、Undo、保存、欠落plugin診断、version、UI metadata、座標、色、品質、error recoveryはHost責務とする。ここでいうHost責務はauthorityと不変条件の所有であり、全具体実装を一枚岩のCoreへ置く意味ではない。極小Coreがtyped contract、revision、atomic commit、authority多重度を制御し、製品buildへ明示的にadmitされたHost capability moduleが具体実装を供給できる。plugin作者や制作者へ基礎責任を再実装させない。
-- **背骨はprotocolまで細くし、締結後の実装を並列化する**: Document reducer、journal、Undo、評価、cache、resource、Preview、Export、asset、UI、package等の具体実装は、他moduleのprivate型へ依存しないHost capability module候補とする。意味・排他authority・公開contractの裁定だけを直列に保ち、締結済みseat上のprovider、consumer、表現pluginは製品全体の完成を待たず並列化する。正本は[制御されたMicrokernelとHost capability module並列化決定](reviews/2026-07-25-controlled-microkernel-host-module-parallelism-decision.md)。
-- **意味の席は固定し、実装は換装可能にする**: stable identity、寿命、参照、選択、Undo、typed outputを持つsemantic seatはHostが所有し、具体評価はfirst-party／third-party共通のProvider境界へ開く。既に得られた値や像だけを変え、scene参加・sampling・identityを変えず、通常のeffect stack／render graph順で表現できる処理はEffect／Filterを第一選択とする。Timeline表示だけでObjectへ昇格させず、同じ機能名でも意味が違えば別分類する。正本は[換装可能な意味の席／Provider／Effect分類](reviews/2026-07-24-replaceable-semantic-seat-decision.md)。
+- **背骨はprotocolまで細くし、締結後の実装を並列化する**: Document reducer、journal、Undo、評価、cache、resource、Preview、Export、asset、UI、package等の具体実装は、他moduleのprivate型へ依存しないHost capability module候補とする。意味・排他authority・公開contractの裁定だけを直列に保ち、締結済みseat上のprovider、consumer、表現pluginは製品全体の完成を待たず並列化する。正本は制御されたMicrokernelとHost capability module並列化決定。
+- **意味の席は固定し、実装は換装可能にする**: stable identity、寿命、参照、選択、Undo、typed outputを持つsemantic seatはHostが所有し、具体評価はfirst-party／third-party共通のProvider境界へ開く。既に得られた値や像だけを変え、scene参加・sampling・identityを変えず、通常のeffect stack／render graph順で表現できる処理はEffect／Filterを第一選択とする。Timeline表示だけでObjectへ昇格させず、同じ機能名でも意味が違えば別分類する。正本は換装可能な意味の席／Provider／Effect分類。
 - **専門性は開き、基礎責任は投棄しない**: 未知の表現はpluginで試せる一方、頻出して意味が安定したものはHostの型付きprimitive/toolへの昇格候補にする。標準制作体験を第三者pluginの購入や自作だけに依存させない。
 - **使い手から作者までを一つの経路にする**: Simple、Advanced、recipe、Kit、Vism、component authoringを別世界にせず、現在の対象、型、結果を保ったまま段階的に進める。参加資格の境界は薄くするが、provenance、permission、sandbox、互換責任は明示する。
 
@@ -201,7 +201,7 @@ RN、Rerun、Skiaが共存する`ui/motolii-rn/`を唯一の製品sourceとし�
 2. **プラグインで拡張できる解析駆動のジェネレーティブ合成**: 映像の色解析・トラッキング結果(DataTrack)がパラメータを駆動する“解析→生成”は、このツールの長期的な強み。ただしコア本体の初期完成条件ではなく、解析プラグイン/ParamDriverプラグインとして差し込める設計にする(Traceryライクな挙動)。**優先度=最終フェーズ(2026-07-09決定)**: 初期スコープにはオーバーなので、コア(M1〜M5)完成後の最後に回す。DataTrack/ParamDriverの評価機構自体はキーフレーム駆動でコアに必須なので残すが、**“映像解析からDataTrackを生成するプロデューサ”(色解析・オプティカルフロー・トラッキング)は最終フェーズへ移す**
 3. **2.5D/3D合成**: 動画テクスチャ平面とglTFメッシュを同一シーンで合成(合成順序はレイヤー順、Zはカメラ投影のみ)  
    - 点群(Cloud Points)も同じ「レイヤー」の一種として扱う。プラグインがXYZ点群をカメラ投影し、最終的にpremultiplied RGBAの2Dテクスチャへラスタライズして出力するため、以降の重ね合わせは通常の合成(Composite)で行える。  
-   - **カメラ文脈はコンポ全体で共有し、具体実装は換装可能にする**: M2の`CompCameraDoc::PlanarOrthographic`(center/roll radians/height)と既存pixelは互換baselineとして常在し、出力aspectはCompositionだけが所有する。M5以降の空間cameraは、タイムライン上のCamera Object、first-party／第三者を分けないCamera Provider、representation非依存のtyped Observation Contractで追加する。Hostは単一active cameraの席と観測配布を所有するが、Spatial／Perspective等をHost enumへ足し続けない。position+target+暗黙world-upをpose保存へ焼かず、点群／mesh等のrendererはHostが配る評価済み観測だけを消費する。[Camera Object / Provider決定](reviews/2026-07-24-camera-object-provider-decision.md)
+   - **カメラ文脈はコンポ全体で共有し、具体実装は換装可能にする**: M2の`CompCameraDoc::PlanarOrthographic`(center/roll radians/height)と既存pixelは互換baselineとして常在し、出力aspectはCompositionだけが所有する。M5以降の空間cameraは、タイムライン上のCamera Object、first-party／第三者を分けないCamera Provider、representation非依存のtyped Observation Contractで追加する。Hostは単一active cameraの席と観測配布を所有するが、Spatial／Perspective等をHost enumへ足し続けない。position+target+暗黙world-upをpose保存へ焼かず、点群／mesh等のrendererはHostが配る評価済み観測だけを消費する。Camera Object / Provider決定
    - **ユーザー体験の制約**: レイヤ側は“3D素材としての配置/2D-ishなtransform”だけを持つ。Cameraは換装可能なタイムライン実体にするが、v1では単一active bindingを維持し、camera cut、レイヤ／グループ固有camera、複数active viewを同時に持ち込まない。
    - したがって「点群レイヤが2Dレイヤと重なると面白い」は設計上そのまま成立する。一方で、レイヤ間で“深度による相互遮蔽”を厳密にやりたい場合は、v1の範囲を超える(深度バッファ/順序付きラスタライズ等が必要)ため、後続の拡張領域として扱う。
    - 通常UIの`Z Occlusion` OFF / ONは、従来C-4のレイヤー順`Layer Order` / 同じ座標の共有depth bufferを使う`Group Depth`へ対応する。Advancedでは明示参加レイヤーの連続範囲をdepth binにする`AE-style Bins`も選べる。どの方式でもタイムライン子順や座標解釈を変えない。
@@ -219,10 +219,10 @@ RN、Rerun、Skiaが共存する`ui/motolii-rn/`を唯一の製品sourceとし�
 - **待たない**: 起動から編集可能になるまで、操作からpreviewへ反映されるまで、scrubして結果を確認するまでを短くする。平均fpsだけでなく、制作動線上の個々の待ちを測る。
 - **迷わない**: 目的へ到達するクリック、判断、記憶、画面往復を減らす。機能を隠して簡単に見せるのではなく、所在・因果・戻し方を一貫させる。
 - **抱えない**: 使わない機能、常駐処理、依存、設定、互換性責任を本体にも制作者にも背負わせない。小さなコアは薄いコアではなく、作品の持続性に必要な責任だけをHostが厳格に持つ。
-- **発明工程を持たない**: Motoliiが直接所有するのは作品意味、製品policy、admission、acceptance oracle、絶対規律のenforcement pointであり、「Motolii固有」という呼称は一般機構を発明する権限にならない。identity、Undo、layout、scheduler、codec等は解決済みのOSS、標準、実装patternを採択し、薄いtranslation／admission adapter、製品policy、fixtureだけを製品固有codeとして持つ。採択routeは正本と`decision-index.md`で一度裁定して後続粒が継承し、必須oracle、license、platform、security、maintenanceの具体的反証がある時だけ再裁定する。新機構の`BUILD`はmodelが認可せず利用者例外へ返す。既完了や投入工数を維持理由にせず、独自機構は同じ意味・oracleへ通した縦slice置換で単一ownerを切り替え、旧routeを`FROZEN → RETIRE`する。M3〜M5の施工順は[既知実装採択・置換開発モデル](known-implementation-adoption-model.md)、候補比較・再裁定・置換票は[依存優先・責任最小化ゲート](reviews/2026-07-24-dependency-first-responsibility-gate.md)を正本とする。
+- **発明工程を持たない**: Motoliiが直接所有するのは作品意味、製品policy、admission、acceptance oracle、絶対規律のenforcement pointであり、「Motolii固有」という呼称は一般機構を発明する権限にならない。identity、Undo、layout、scheduler、codec等は解決済みのOSS、標準、実装patternを採択し、薄いtranslation／admission adapter、製品policy、fixtureだけを製品固有codeとして持つ。採択routeは正本と`decision-index.md`で一度裁定して後続粒が継承し、必須oracle、license、platform、security、maintenanceの具体的反証がある時だけ再裁定する。新機構の`BUILD`はmodelが認可せず利用者例外へ返す。既完了や投入工数を維持理由にせず、独自機構は同じ意味・oracleへ通した縦slice置換で単一ownerを切り替え、旧routeを`FROZEN → RETIRE`する。M3〜M5の施工順は[既知実装採択・置換開発モデル](design/known-implementation-adoption-model.md)、候補比較・再裁定・置換票は依存優先・責任最小化ゲートを正本とする。
 - **閉じ込めない**: 必要になった専門性はpluginで追加できる。ただし導入・更新・欠落診断・version・再現性の管理を属人的な手順へ投棄せず、拡張後も身軽さを失わない。
 
-この原則は「低機能な軽量版」を目指すものではない。AE級の表現力を一度に抱え込む巨大な操作面ではなく、型付きの小さな意味を合成し、必要な専門性だけを探索・追加できる構造で実現する。評価では機能一覧だけでなく、起動から最初の結果までの時間、操作反映遅延、目的達成までの判断数、一定時間内の試行回数、拡張後の常駐負荷と管理負荷を見る。体験側の審判は[UIコンセプト](ui-concept.md#柱5-軽さは機能)、拡張側の責任分界は[小さなコアと探索可能な拡張](extensible-core-model.md)を正本とする。
+この原則は「低機能な軽量版」を目指すものではない。AE級の表現力を一度に抱え込む巨大な操作面ではなく、型付きの小さな意味を合成し、必要な専門性だけを探索・追加できる構造で実現する。評価では機能一覧だけでなく、起動から最初の結果までの時間、操作反映遅延、目的達成までの判断数、一定時間内の試行回数、拡張後の常駐負荷と管理負荷を見る。体験側の審判はUIコンセプト、拡張側の責任分界は[小さなコアと探索可能な拡張](design/extensible-core-model.md)を正本とする。
 
 - **高度な表現は制限せず、頻出手順を高度なまま放置しない**: 相対移動、追従、反復、遅延、ランダム化、奥行き展開、範囲選択等には、目的の名前を持つ直接操作または標準toolを用意する。内部プリミティブを手で配線することを通常手順にしない。
 - **同じ意味に3段の入口を持つ**: `Direct`(Canvas操作・shortcut) / `Tool`(目的単位の標準機能) / `Advanced`(評価列・明示scope等)は、別機能や別Document形式を作らず、同じ型付き意味へ正規化する。簡易UIで作った状態をAdvancedで検査・編集でき、Advancedへ移った時に作り直させない。隠れNull、隠れlayer、文字列expressionをUI糖衣の裏で生成しない。
@@ -230,11 +230,11 @@ RN、Rerun、Skiaが共存する`ui/motolii-rn/`を唯一の製品sourceとし�
 - **ユーザープラグインは責任の投棄先ではなく、安全な実験場**: 未知の表現と専門用途はpluginへ開く一方、型、純関数、明示依存、version、error、UI metadataの枠をHostが持つ。pluginがDocumentを任意変更し、他layerを名前検索し、隠れ状態・隠れcontroller・属人的な導入手順を作る設計にしない。編集基礎、project可読性、欠落plugin診断、配布整合はHost責務に残す。
 - **意味は厳格に、表現は自由にする**: 極端な値、逆転、発散、画面外、奇妙な組合せを安全の名で禁止しない。拒否するのは、因果を追えず局所回復できない仕組みである。失敗はCommit前に型付きで説明し、操作はCancel/Undo可能、画面外の対象も回収可能にする。UIは最初の実行可能なドキュメントとして働き、基本成果に外部manualを要求せず、疑問が生じた場所から現在の対象を引き継いでdocsへ進める。
 - **pluginは責任寿命で分ける**: 一回限りの編集はread-only snapshotからtyped command batchを提案するAuthoring Tool、継続する関係は入力・出力・scope・時間依存を宣言するBehavior、独自recipeが正本ならGenerator、画素・生成・simulation評価はRender系として扱う。これは将来境界の審判語彙であり、未凍結traitの実装許可ではない。自由なscript panelへDocument mutation、独自Undo、名前検索、隠れcontrollerをまとめて渡さない。
-- **ジェネラティブ表現はコンポジット境界へ翻訳する**: Motoliiは白紙から素材世界を作るCreative Coding環境ではない。基本Shapeは合成語彙としてHostが持ち、複雑な素材はSVG/glTF/画像/動画等で持ち込む。未知の表現は`編集時Materialize / tの純関数 / 宣言的時間窓 / Host所有Feedback・Simulation Bake / 外部素材`のいずれかへ置き、キャッシュ・状態復元・Undo・書き出し再現性の例外処理をユーザーへ渡さない。Shape/SVG/p5.js型入力の分界、実装懸念、審判は[ジェネラティブユーザー境界](generative-user-boundary.md)を正本とする。
+- **ジェネラティブ表現はコンポジット境界へ翻訳する**: Motoliiは白紙から素材世界を作るCreative Coding環境ではない。基本Shapeは合成語彙としてHostが持ち、複雑な素材はSVG/glTF/画像/動画等で持ち込む。未知の表現は`編集時Materialize / tの純関数 / 宣言的時間窓 / Host所有Feedback・Simulation Bake / 外部素材`のいずれかへ置き、キャッシュ・状態復元・Undo・書き出し再現性の例外処理をユーザーへ渡さない。Shape/SVG/p5.js型入力の分界、実装懸念、審判は[ジェネラティブユーザー境界](design/generative-user-boundary.md)を正本とする。
 - **製品意味も発明せず、先例の収束点から採択する**: selection／focus、dragのcapture・release・Cancel、snap、trim／move、transport、Undo、Export等、成熟した動画編集ソフトで反復実証されている利用者向け意味と状態遷移は、一般機構と同じく既知の供給候補である。Motoliiの現行authorityとcode factを先に確認したうえで、複数の商用製品、OSS editor、公開仕様、失敗例を比較し、収束する意味を`REUSE / ADOPT / WRAP / PORT / PATTERN`として既存Document／owner／typed intentへ翻訳する。「製品意味だから未調査のまま独自仕様化する」ことも、「内部targetが無いから先例を調べず無期限WAITにする」ことも許さない。先例間で結論が割れる場合はMotoliiの利用者成果と既決に最も整合する案を推奨し、不可逆な公開契約、新しい利用者権限、作品互換性を左右する選択だけを利用者へ返す。意味論の参照と、コード・asset・商標・固有UIの複製は分け、licenseと出典規律を守り、最終合否はMotolii fixtureとnegative oracleで裁く。
 - **改善可能性を互換性破壊の免罪符にしない**: 後から直せることは強みだが、公開Documentへ一度焼いた意味は利用者の制作資産になる。未決はplugin/preset/非永続UIで試し、意味が安定してから追加的schemaとして昇格する。既存fieldの再解釈ではなく、migrationと意味論goldenを伴う。
 
-フェーズ別の責務・代表操作・審判は[操作単純化モデル](interaction-simplicity-model.md)、既知の制作ソフト外殻・説明付き接続・共通component・操作互換性は[UI操作言語](ui-interaction-language.md)、利用者/開発者の学習曲線と編集pluginの責任境界は[小さなコアと探索可能な拡張](extensible-core-model.md)を正本とする。具体的な先例と未決事項は、[反復再発明の標準化監査](reviews/2026-07-14-repeated-wheel-standardization-audit.md)および[4ツールの称賛・日曜大工・根本ギャップ監査](reviews/2026-07-14-motion-tools-praise-diy-gap-audit.md)を参照する。特にAutograph型の`Generator → Modifier[] → Result`は相対補正と評価順を一般化する有力な先例だが、現行`ParamSource`の凍結面に触れるため、独立した反対側レビュー前には仕様化しない。
+フェーズ別の責務・代表操作・審判は操作単純化モデル、既知の制作ソフト外殻・説明付き接続・共通component・操作互換性はUI操作言語、利用者/開発者の学習曲線と編集pluginの責任境界は[小さなコアと探索可能な拡張](design/extensible-core-model.md)を正本とする。具体的な先例と未決事項は、反復再発明の標準化監査および4ツールの称賛・日曜大工・根本ギャップ監査を参照する。特にAutograph型の`Generator → Modifier[] → Result`は相対補正と評価順を一般化する有力な先例だが、現行`ParamSource`の凍結面に触れるため、独立した反対側レビュー前には仕様化しない。
 
 ## このツールが「ではない」もの
 
@@ -254,7 +254,7 @@ RN、Rerun、Skiaが共存する`ui/motolii-rn/`を唯一の製品sourceとし�
 | アプリ内フリーハンド描画 | Alight Motion/Cavalry | コアは標準シェイプ+SVG読み込み+パス変形まで。直接描画はプラグイン領域(決定済み) |
 | パスブーリアン等の高度なベクター演算 | Cavalry | ベクターはSVG素材+プロシージャル生成の範囲に留める |
 | ロトスコープ・キーイング・deep compositing | AE/Nuke | 基本Z遮蔽を越えるVFXコンポジタ領域は扱わない |
-| 高度な音声編集・DAW機能 | AE/NLE/DAW全般 | v1コアは楽曲1本。音付き動画と最小mixは[一般音声設計](reviews/2026-07-14-audio-generalization-design.md)でv1.xへ。録音・MIDI・VST・高度busは対象外 |
+| 高度な音声編集・DAW機能 | AE/NLE/DAW全般 | v1コアは楽曲1本。音付き動画と最小mixは一般音声設計でv1.xへ。録音・MIDI・VST・高度busは対象外 |
 
 ### プラグイン(古典的エフェクトスタック)で賄う
 
@@ -265,7 +265,7 @@ RN、Rerun、Skiaが共存する`ui/motolii-rn/`を唯一の製品sourceとし�
 | Cavalry的なジェネレータ/デュプリケータ/配列 | Cavalry | プロシージャルオーバーレイ生成の拡張として同様にプラグインで。**評価モデル上の口(インスタンスインデックス)は凍結ゲートで予約する(F-7)** |
 | エクスプレッション(パラメータ間スクリプト) | AE | **v1ではやらない**。シェイプ間相互作用は型付きリンク(下記)で表す。汎用スクリプトはWASMパラメータプラグイン(v2)の逃げ道のみ |
 
-ただし、これは毎frameの評価経路へscriptを置かないという決定であり、**編集時one-shot Generator**は別である。Paper.js型object/path/group思想をMotolii正準座標で再構成したMTS-1 TypeScript Host SDKと、LLM向けSVG materialize adapterが型付きD2 command batchを生成し、通常のGroup/vector layerとして1 Undoで実体化する口をv1.xに置く。旧称ShapeScriptを独自言語・syntax・runtimeとしては作らない。生成後のDocument・preview・exportはscript/SVG engine非依存で、runtime固有型やsourceを必須schemaへ焼かない。p5.js型の非clear canvas蓄積はscriptの隠し状態にせず、有限shape履歴へ畳めるものはmaterializeし、真に前出力が必要なものはF-11 Feedbackのホスト所有チェックポイントBakeへ送る。正本は[作者言語境界](reviews/2026-08-01-vism-authoring-language-boundary-decision.md)、[M3-U9a〜U9c](specs/M3-ui-integration.md#編集時generator-hookone-shot)、[plugin-resources §6](plugin-resources.md#6-時間参照-lookbehind--フィードバックf-11口の予約のみ)。
+ただし、これは毎frameの評価経路へscriptを置かないという決定であり、**編集時one-shot Generator**は別である。Paper.js型object/path/group思想をMotolii正準座標で再構成したMTS-1 TypeScript Host SDKと、LLM向けSVG materialize adapterが型付きD2 command batchを生成し、通常のGroup/vector layerとして1 Undoで実体化する口をv1.xに置く。旧称ShapeScriptを独自言語・syntax・runtimeとしては作らない。生成後のDocument・preview・exportはscript/SVG engine非依存で、runtime固有型やsourceを必須schemaへ焼かない。p5.js型の非clear canvas蓄積はscriptの隠し状態にせず、有限shape履歴へ畳めるものはmaterializeし、真に前出力が必要なものはF-11 Feedbackのホスト所有チェックポイントBakeへ送る。正本は作者言語境界、M3-U9a〜U9c、[plugin-resources §6](design/plugin-resources.md#6-時間参照-lookbehind--フィードバックf-11口の予約のみ)。
 
 ### 構造に関わる3項目(2026-07-07 決定済み → 上の決定事項参照)
 
@@ -288,16 +288,16 @@ RN、Rerun、Skiaが共存する`ui/motolii-rn/`を唯一の製品sourceとし�
 ## 決定事項(2026-07-07 確認)
 
 - **馬鹿正直にシミュレートしない(2026-07-10決定、根本コンセプト)**: 「物理に見える動き」を、前フレーム状態を積む正直なシミュレーション(逐次積分)では作らない。閉形式(弾道)・パラメトリック補間・ノイズ変位(乱流)・解析反射(バウンス)など、**時刻tの純関数 f(t) に畳める「安い力」だけを選定**して表現する。これは個別機能の最適化ではなく、`render_frame(t)`=純関数(B-4)の上に成る軽さの全て(フレーム並列・スクラブ・区間キャッシュ・並列書き出し)を守るための、全設計判断に共通する規律。
-  - 既存の決定はすべてこの原則の現れ: 3D動的シミュレーション不採用([M5](specs/M5-3d-and-post.md))、AM式イージング型(Bounce/Elastic を物理シミュでなく補間型に畳む)、spring/inertia系をドライバのスコープから外す
+  - 既存の決定はすべてこの原則の現れ: 3D動的シミュレーション不採用(M5)、AM式イージング型(Bounce/Elastic を物理シミュでなく補間型に畳む)、spring/inertia系をドライバのスコープから外す
   - 先人の実証: **Alight Motion**(バウンス/バネを補間型に畳んでAEの`valueAtTime`物理式を不要化)と **Furikake**(重力/風=閉形式、乱流=ノイズ変位、バウンス=解析反射という f(t) に畳める力だけを選定し、粒子間相互作用を持たない → O(N)・完全並列・MFR対応で"バカ軽い"を成立させたAE粒子プラグイン)。反面教師は AE の `valueAtTime` 再帰式(毎フレーム全履歴を再評価)と Blender 系の状態積み物理(並列もキャッシュも効かない)
-  - 将来パーティクル/物理風の機能・プラグインを設計する際も、**機能選定の第一基準は「f(t) に畳めるか」**。「見た目は物理、中身は安い純関数」がこのツールの流儀。f(t)に畳めない本物のシミュレーションだけが、レンダ外のベイク境界(下記SimulationPlugin決定=時間軸5段はしごのレベル3)か、ベイク済みシーケンスのインポート(M5原則2)で入る — レベル0/1で書ける表現をレベル3で書くPRは却下([simulation-model.md](simulation-model.md)§2)
+  - 将来パーティクル/物理風の機能・プラグインを設計する際も、**機能選定の第一基準は「f(t) に畳めるか」**。「見た目は物理、中身は安い純関数」がこのツールの流儀。f(t)に畳めない本物のシミュレーションだけが、レンダ外のベイク境界(下記SimulationPlugin決定=時間軸5段はしごのレベル3)か、ベイク済みシーケンスのインポート(M5原則2)で入る — レベル0/1で書ける表現をレベル3で書くPRは却下([simulation-model.md](design/simulation-model.md)§2)
 - **エフェクトモデルはAE式の積み重ねスタック**: レイヤー(クリップ)に順序付きでエフェクトを積む古典的モデル。ノードグラフをユーザーに見せるUIは作らない(「ノードベースで無限の拡張」はやらない)。内部エンジンの依存グラフ+ダーティフラグは実装詳細として維持し、レイヤーのエフェクトスタックはレンダ時に線形チェーンとして展開される
 - **エフェクトは古典的プラグイン形式**: 「入力テクスチャ+パラメータ→出力テクスチャ」の単純な境界。拡張性はノードの組み合わせではなく、プラグインを書くことで得る(LLMでプラグインを自作できる時代なので、境界のシンプルさ=書きやすさを最優先)
 - **エフェクトの粒度と発見可能性(2026-07-09決定、Cavalryの教訓=F-8)**: ユーザーに露出するエフェクトは「意図単位」(グロー・シェイク等の完成形)の粒度とし、原子的プリミティブの組み立てを強いない(Cavalryが「技術者すぎる」根因の逆張り)。プラグイン契約には表示名・カテゴリ・タグ(+将来サムネイルの口)を必須メタデータとして最初から含める。タグ/フォルダ/サムネイルのブラウザGUIはM3以降のフィニッシュ領域
-  - **実装追記(2026-07-10)**: `motolii-plugin::NodeDesc`に`version` / `category` / `tags`を追加済み。作者向けの禁止事項・型紙は[plugin-authoring.md](plugin-authoring.md)
+  - **実装追記(2026-07-10)**: `motolii-plugin::NodeDesc`に`version` / `category` / `tags`を追加済み。作者向けの禁止事項・型紙はplugin-authoring.md
 - **解析駆動は最終フェーズに回す(2026-07-09決定)**: 「映像解析→DataTrack→パラメータ駆動」(色解析・オプティカルフロー・トラッキング等の解析プロデューサ)は、初期スコープにはオーバー。**コア(M1〜M5: モーショングラフィック+3D+エフェクト+音声+書き出し)を完成させた後の最終フェーズ**に位置づける。ただし後付けで詰まないよう、DataTrack/ParamDriverの評価機構・プラグイン種別(ParamDriver)・解析結果の区間キャッシュの“口”は凍結ゲートで予約したまま(スキーマ互換を保つ)。v1コアの完成条件からは外す(M1-T5で既に色解析を必須経路から除外済み)
 - **プロジェクト文書とキャッシュを分離する(2026-07-09決定)**: プロジェクトJSON(Document)には**「レシピ」= 素材への参照・変形・キーフレーム・プラグインインスタンスとパラメータ**のみを入れる。**ピクセル/焼いた結果(ベイク)・解析DataTrack・プロキシ・各種キャッシュは文書に入れず、再生成可能な別サイドカー/キャッシュ**に置く。理由: AEの`.aep`が奇妙に小さいのと同じ原理で、文書サイズは編集の複雑さのみに比例し(動画尺・解像度に非依存)、小さく・diff可能・可搬に保てる。素材はパス/ID参照、ヌル/親子は参照(コピーしない)。**"文書に何でも詰めて肥大化"がこの分離を破る唯一の禁じ手**。ベイク(グループ仮出力)や解析結果の永続化はキャッシュ層(M4)/サイドカーの責務であり、Documentのスキーマには入れない
-- **区間イージング（2026-07-10決定）**: Flow/Alight Motion式に、2キーフレーム間の正規化補間をpreset・Bezier handle・Overshootで編集する。実時間×実値のmulti-key Graph Viewは[React比較記録](reviews/2026-07-19-graph-view-reference-decision.md)に留まり、製品採択・M3 task化は未決である。
+- **区間イージング（2026-07-10決定）**: Flow/Alight Motion式に、2キーフレーム間の正規化補間をpreset・Bezier handle・Overshootで編集する。実時間×実値のmulti-key Graph ViewはReact比較記録に留まり、製品採択・M3 task化は未決である。
   - **データモデルは既に一致**: `motolii-eval`の`Interp::Bezier{x1,y1,x2,y2}`は「区間の正規化位置 u∈[0,1) に対する連続イージング」= CSS `cubic-bezier()` = Flow = AMと同一表現。**fps・解像度に非依存**(fpsが変わっても曲線は不変、サンプルするフレームが違うだけ)。UIはこの4値を編集する薄いポップアップで足り、スキーマ変更は不要。
   - **オーバーシュート/バウンスは y の [0,1] 外を許容**して表現する(`cubic_bezier_ease`は x のみ[0,1]拘束・y自由で実装済み。yを非クランプで維持すること)。
   - **AM式の高度イージング型を採用(2026-07-10決定)**: 動きの"性格"(バウンス・バネ・段階移動)は式やParamDriverではなく**区間の補間タイプ**として持つ。アライトモーションが実証済み — Cubic Bezierに加え **Bounce / Elastic / Steps / Elastic Steps** をパラメトリックな補間型として提供し、オーバーシュートはトグルで解禁する(参考: [AM Animation Easing Curves](https://support.alightmotion.com/hc/en-us/articles/10536934703889-Animation-Easing-Curves))。実装は`Interp`へのvariant追加(`Elastic{amplitude,period}` / `Bounce{bounces,decay}` / `Steps{count,..}`)で、どれも「u∈[0,1]→値」の純関数=評価器の約束を崩さない**追加的スキーマ変更**。AEでは`valueAtTime`物理シミュ式が必須だった領域をGUIの選択肢に畳み込むのが狙い。これによりspring/inertia系はドライバのスコープからも外れ、ドライバは時間非有界なもの(wiggle/無限ループ/time比例)、DataTrack配線はデータ駆動(音量連動等)だけに縮む — 式(汎用スクリプト)の出番をさらに削る。
@@ -305,16 +305,16 @@ RN、Rerun、Skiaが共存する`ui/motolii-rn/`を唯一の製品sourceとし�
 - **プラグイン隔離方式(2026-07-06決定、2026-07-25信頼境界改訂)**: provenanceとruntime trustを分離し、**公開plugin境界を通るcodeはfirst-party／third-partyを問わず非信頼**とする。first-partyはsource、同梱、保守責任、参照実装を示すだけで、同一process実行やHost authorityへの特権を与えない。Controlled Microkernelと製品buildへ明示的にadmitされたHost capability moduleだけをTCBとし、「core plugin」という例外分類は作らない。
   - **構造化data／parameter code**: WASM sandboxを長期候補とする。`PluginKind::ScriptWasm`は現状予約だけであり、engine、ABI、permission、quota、version negotiationは未決。
   - **GPU workload**: VRAM常駐とzero-copyを壊さずprocess障害を局所化するworker境界を長期候補とする。共有texture、OS handle、device-lost、latencyは未実証であり、公開契約へ先行焼き込みしない。契約に露出するGPUはwgpu／WGSL抽象だけとし、CUDA／Metal／DX等のvendor／OS固有APIを出さない。
-  - **現行v1**: first-party pluginを同一binary／同一processへ静的に組み立てる。これは公開façadeの実証であって安全境界ではない。現在存在する防御層はrender worker境界の`catch_unwind`(panic後は該当workerを停止)と、device-lost／uncaptured errorのvariant単位の型付き検知までである。error payload taxonomyは[GAP-27](backlog.md)が未解決。plugin dispatch単位のpanic隔離、wgpu error scope、device復帰、instance再生成は未実装。これらを追加してもmemory corruptionやabortを封じるprocess隔離の代替にしない。任意のnative dylibをeditor processへloadしない。
-- **クラッシュ隔離を階層化する(2026-07-09決定、2026-07-25改訂、参考候補: Bitwig)**: 「一つのplugin異常で本体、Document、他pluginを巻き込まない」を完成条件とする。Hostはrecipe、identity、revision、cache key、resource admissionを保持し、停止したruntimeだけを破棄・再生成・再投影できる構造を目指す。隔離強度をworkloadと障害半径で段階化する思想はBitwigを比較候補とするが、同製品の具体mode、自動reload、GPU workloadへの転用は一次資料とMotolii fixtureで再審判する。開発時差し替えと障害復旧は同じinstance交換lifecycleへ畳む([開発体験 §3.1](dev-experience.md#31-hot-reloadとcrash-recoveryを同じ交換路へ畳む))。正本は[Controlled Microkernel決定 §6](reviews/2026-07-25-controlled-microkernel-host-module-parallelism-decision.md#6-pluginという語と信頼境界の分離)。
+  - **現行v1**: first-party pluginを同一binary／同一processへ静的に組み立てる。これは公開façadeの実証であって安全境界ではない。現在存在する防御層はrender worker境界の`catch_unwind`(panic後は該当workerを停止)と、device-lost／uncaptured errorのvariant単位の型付き検知までである。error payload taxonomyはGAP-27が未解決。plugin dispatch単位のpanic隔離、wgpu error scope、device復帰、instance再生成は未実装。これらを追加してもmemory corruptionやabortを封じるprocess隔離の代替にしない。任意のnative dylibをeditor processへloadしない。
+- **クラッシュ隔離を階層化する(2026-07-09決定、2026-07-25改訂、参考候補: Bitwig)**: 「一つのplugin異常で本体、Document、他pluginを巻き込まない」を完成条件とする。Hostはrecipe、identity、revision、cache key、resource admissionを保持し、停止したruntimeだけを破棄・再生成・再投影できる構造を目指す。隔離強度をworkloadと障害半径で段階化する思想はBitwigを比較候補とするが、同製品の具体mode、自動reload、GPU workloadへの転用は一次資料とMotolii fixtureで再審判する。開発時差し替えと障害復旧は同じinstance交換lifecycleへ畳む(開発体験 §3.1)。正本はControlled Microkernel決定 §6。
 - **プラグインファーストの"範囲"(2026-07-09決定)**: 「大部分をプラグインで設計できる」(AviUtlの実例)を **v1から全面採用**する。ただしこれは**"配布/マーケットの仕組み"ではなく"境界の設計"**を指す。切り分け:
   - **今やる(基盤)**: v1コアの実機能(図形・合成ブレンド・色調整等)を**プラグイン境界を通して実装(ドッグフード)**し、「境界が実機能を担える」ことをコードで実証する(=凍結ゲートを安全化。G-1)。コアは最小に保つ。
   - **ヒーロー誕生後/v2に回す(配布)**: 動的ロード・レジストリ・マーケット・サンドボックス実行基盤は、**Reddit公開のヒーロー(M1出口デモ)が生まれてから**着手する。未検証の境界の上に重基盤を作る早すぎ投資(Olive/Natron型)を避け、"動く形が正義"を優先する。
   - 並列実装の安全化に必要なのは配布基盤ではなく、**境界の約束の固定**(凍結ゲートの型シグネチャ + AGENTS.mdの絶対規律 + 下記paramバージョニング)。ここが揃えば複数エージェントが並列にエフェクトを足しても壊れない。
 - **フレーム記述子(2026-07-06決定、`motolii-core`の`FrameDesc`として実装済み)**: プラグイン間で受け渡すフレームは `{width, height, stride, pixel format, color space, premultiplied alpha flag}` を必ず明示する。根拠となる前例: three.jsはr152で色空間指定を明示必須のAPIに刷新(暗黙にすると事故る教訓)、FFmpegのAVFrameはpixel format/stride/color_range/color_trcまで構造体で明示、OCIOはさらにパイプライン全体の変換ルールを一元管理
 - **ベクター描画(直接描画)はプラグイン領域**: コアは「標準シェイプ+SVG読み込み+パスの変形(デフォーマ。中身は次項のパス演算子ファミリー。テキスト由来のパスも同様に歪ませられる)」まで。フリーハンドの直接描画ツールはUIをごちゃつかせるためコアに入れない
-- **パス演算子(パス→パス)ファミリーはコア要件(2026-07-10決定)**: 上記「パスの変形」の中身を具体化する。AEシェイプレイヤーの演算子スタック相当 — **パンク・膨張 / ジグザグ / パスのオフセット(拡張・収縮) / 角を丸くする / トリムパス / ツイスト / パスのウィグル / リピーター(F-7)** — を、標準シェイプ・SVG・テキスト由来のアウトラインに共通で積める「順序付きパス演算子スタック」としてv1コアの完成条件に含める。根拠: このプロシージャルなパス変形は、主要オーサリングツールの中で実質Adobe圏(AE/Illustrator)の独占であり、UX北極星のAlight Motionにも無い。**「AMの体験 × AEのパス演算子」が乗り換えの決め手**であり、AEキラーを名乗る最低条件(2026-07-10ユーザー明言: 絶対に必要)。設計上の性質: 全演算子は `(パス, パラメータ, t) → パス` の純関数(ウィグルはシード付きノイズ)で「馬鹿正直にシミュレートしない」原則と無矛盾、ラスタライズ(Vello)の上流で完結する。パスブーリアン(パスの結合/中マド)は既存決定どおり対象外のまま。先人: 意味論とシリアライズはLottie形式(`pb`/`zz`/`op`/`rd`/`tm`/`tw`/`rp`)が公開文書化済み、数学はlottie-web(MIT)が参照実装([references.md](references.md))— 「Adobe独占」はオーサリングUIの話であって数学ではないため、パッチワークで作れる。評価モデル上の居場所(パス→パスの語彙が現行契約に無い)は[F-13](pitfalls-and-roadmap.md)に台帳化
-  - **意味論【決定】(2026-07-13)**: Lottie/AE準拠で採択。Wiggle乱数はPCG32 value noise+u64 seedを仕様名付き固定。正本は[決定パック採択](reviews/2026-07-13-decision-pack-adoption.md)と[M2 PathOp表](specs/M2-document-model.md)
+- **パス演算子(パス→パス)ファミリーはコア要件(2026-07-10決定)**: 上記「パスの変形」の中身を具体化する。AEシェイプレイヤーの演算子スタック相当 — **パンク・膨張 / ジグザグ / パスのオフセット(拡張・収縮) / 角を丸くする / トリムパス / ツイスト / パスのウィグル / リピーター(F-7)** — を、標準シェイプ・SVG・テキスト由来のアウトラインに共通で積める「順序付きパス演算子スタック」としてv1コアの完成条件に含める。根拠: このプロシージャルなパス変形は、主要オーサリングツールの中で実質Adobe圏(AE/Illustrator)の独占であり、UX北極星のAlight Motionにも無い。**「AMの体験 × AEのパス演算子」が乗り換えの決め手**であり、AEキラーを名乗る最低条件(2026-07-10ユーザー明言: 絶対に必要)。設計上の性質: 全演算子は `(パス, パラメータ, t) → パス` の純関数(ウィグルはシード付きノイズ)で「馬鹿正直にシミュレートしない」原則と無矛盾、ラスタライズ(Vello)の上流で完結する。パスブーリアン(パスの結合/中マド)は既存決定どおり対象外のまま。先人: 意味論とシリアライズはLottie形式(`pb`/`zz`/`op`/`rd`/`tm`/`tw`/`rp`)が公開文書化済み、数学はlottie-web(MIT)が参照実装([references.md](design/references.md))— 「Adobe独占」はオーサリングUIの話であって数学ではないため、パッチワークで作れる。評価モデル上の居場所(パス→パスの語彙が現行契約に無い)はF-13に台帳化
+  - **意味論【決定】(2026-07-13)**: Lottie/AE準拠で採択。Wiggle乱数はPCG32 value noise+u64 seedを仕様名付き固定。正本は決定パック採択とM2 PathOp表
 - **D2/D3着手前の未決は既存規約の採択で閉じた(2026-07-13)**: 重なり禁止(OTIO)・Tempo/Meter独立(DAW)・安定ID・Keyframe一意(AE)・visible/solo/lock三軸(AE)・未知BlendMode拒否(閉集合)・Composition fps役割・離散Hold(Lottie)・コマンド粒度(Qt Undo)。以後は原則コード依頼+受入。正本は同上採択文書
 - **マスクはクリッピングマスク方式(お絵描きソフト・クリスタをリスペクト)**: AEのマスクパス方式ではなく「下のレイヤーにクリップする」方式を採用。視覚的な分かりやすさ優先。マスクモード(アルファ/ルミナンス/反転)は選択式。マスク形状が欲しければシェイプ/SVGレイヤーを下に置いてクリップすればよい(専用マスクパス編集機能が不要になる)
 - **プリコンポは作らない。「グループ化+仮出力」で置き換える**: AEのプリコンポ(別タイムラインへの分離)はやらず、レイヤーの単純なグループ化(再帰可)にする。重さ対策は「グループを選択して仮出力(ベイク)」— グループの出力を時間範囲でキャッシュし、編集したら自動で無効化。プリレンダの直観的な代替
@@ -322,31 +322,31 @@ RN、Rerun、Skiaが共存する`ui/motolii-rn/`を唯一の製品sourceとし�
   - **AEプリコンポの悪の本体を構造で排除する**: (1)「まとめてエフェクトを掛ける」ためだけに別タイムラインへの構造変更を強制=編集文脈の破壊 → グループはタイムライン内の再帰項目のまま、エフェクトは項目エンベロープ標準装備で構造変更不要。(2)固定解像度・固定尺の中間コンポがcollapse transformations/タイムリマップ/モーションブラーと壊れ合う → **グループにサイズ・解像度・尺を持たせない**。中間テクスチャは「エフェクト/マスクを持つ時だけレンダ解像度で生成」される実装詳細であり、スキーマに出さない(文書/キャッシュ分離の決定と同根)
   - **派生決定**: 調整レイヤーは作らない — 「下をグループ化してエフェクトを積む」と同義であり、必要になったらグループ化操作のUI糖衣(ショートカット)として足す(スキーマ追加なし)。Photoshop/クリスタの「通過(pass through)」グループブレンドは不採用 — グループは常に分離合成(F-3ステップ5)。エフェクト付きグループで通過は定義不能になるため、二重意味論を持ち込まない。仮出力(ベイク)の既定ベイク点は**子合成直後=グループスタック適用前** — グループ側エフェクトのパラメータ調整が高価な子のベイクを無効化しないため
 - **モーションブラーはプラグイン領域**: コアのレンダラには入れない(使用頻度が低い)。品質パラメータにサンプル数の口だけ確保しておく
-  - **実装手段の追記(2026-07-10)**: サンプル数の口の実体は、`NodeDesc`の**宣言的時間フットプリント**(前後フレーム/サブフレームサンプルの静的宣言)として凍結ゲートで予約する。AE式の任意時刻アクセスAPIは採らない。[simulation-model.md](simulation-model.md)§6
-- **パーティクルシステムはファーストパーティ標準搭載(2026-07-10決定)**: AEが実用パーティクルをParticular/Stardust等の高価な外部プラグインに任せている構造(標準のCC Particle Worldは化石)を繰り返さない。歌詞プラグイン第1号(テキスト基盤の実力テスト)と対をなす**第2号=Simulation境界の実力テスト**として自分たちで作り同梱する。「ネイティブ」=コアレンダラへの焼き込みではなく標準搭載 — 実装は他の実機能と同じくプラグイン境界の上(ドッグフード、G-1)。既定は閉形式L0(ベイク不要・スクラブ自由)、衝突等を有効にするとL3(StateTrackベイク)へ自動昇格。**音楽同期エミッション(BPMグリッド/DataTrack駆動)を一級要件**とする。設計は[simulation-model.md](simulation-model.md)§8
-- **物理シミュレーション(布・液体・パーティクル)は「ホスト管理のベイク境界」を持つ一級プラグイン種別として設計に含める(2026-07-10決定、M5の2026-07-07決定の縮小改訂)**: レンダ経路(`render_frame(t)`・全render系trait)の純関数契約は不変のまま、逐次状態シミュレーションを`SimulationPlugin`(固定シード・固定タイムステップ・状態はホストが所有)+StateTrack(チェックポイント列の区間キャッシュ、キーはM4-K1と同一の枠)で扱う。根拠: 決定論とフレーム独立性は別物であり、固定シード+固定dtの逐次シムは完全に決定論的 — 失われるランダムアクセス性はベイクで回収できる。隠れ状態ハック(AviUtl/AE圏の定番)はキャッシュ/並列/シークでサイレントに壊れるため恒久禁止のまま。作者には時間軸自由度の5段はしご(閉形式tの純関数 / build_track内逐次 / 宣言的時間窓 / SimulationPlugin / 禁止)を提供する。**他シェイプとの相互作用(粒がロゴで跳ねる・布がシェイプに掛かる)はコライダー入力として一級対応**: シムノードが他レイヤーを参照し、ホストがSDF+解析プリミティブへ正規化して渡す(コライダーはキーフレーム駆動=tの純関数なので決定論は無傷。[simulation-model.md](simulation-model.md)§3.7)。ノード間の双方向結合(シムグラフ)のみv2。凍結ゲートでは口の予約のみ(`PluginKind::Simulation`は予約済み)、参照実装によるコード実証はv1.x。映画級の重いシミュレーションはBlender等でのベイク済みインポートを引き続き推奨。全設計は[simulation-model.md](simulation-model.md)
-- **Host UIとコミュニティUIのcomponent／test語彙を不必要に二重化しない(2026-07-21決定、2026-08-07再基線)**: product-owned Host panelはReact Nativeの通常component語彙を使える。ただしproduct-owned Host moduleと公開plugin kitは同義ではなく、同じprocess、権限、native module、network、配布を要求しない。`NodeDesc`自動生成panelは全保存paramを操作できる必須fallbackとして維持し、自由UIのruntime、sandbox、権限、互換、配布はG0-3 / GAP-13の決定まで公開契約にしない。根拠は[UI runtime再基線決定](reviews/2026-08-07-m3-react-native-rust-skia-runtime-rebaseline.md)と[plugin UIモデル](plugin-ui-model.md)
-- **UI runtime責任境界をReact Native + Rust/rust-skia + wgpuへ固定する(2026-08-07再基線)**: React Nativeはshell、Browser、Inspector、parameter/form、panel、toolbar、dialog、検索、設定を、Rust/rust-skiaはTimelineとCurve Editor、wgpu + dirty rust-skia overlayはStageを所有する。Document、D2 single writer、Undo、projection、playback、renderはRust coreに残す。native canvasは汎用widget toolkitを再実装せず、renderer非依存のheadless interactionとMotolii固有のsnap/selection/transient preview/D2 commitだけを所有する。RN/nativeはrevision付きsnapshotとterminal typed intentを交換し、per-frame／per-object bridgeを作らない。旧WebView islands、direct-wgpu/Vello UI、eguiは新規製品実装を凍結し、移行oracleとして保持する。正本は[UI runtime責任境界](ui-runtime-architecture.md)と[再基線決定](reviews/2026-08-07-m3-react-native-rust-skia-runtime-rebaseline.md)
-- **UI操作言語は「既知の外殻、可視の因果、裏切らない共通部品」(2026-07-16決定)**: Browser / Stage / Inspector / Timeline等の学習済み制作ソフト語彙と基本gestureを維持し、独自性はtarget、scope、評価順、所有/共有、失敗理由の可視化へ使う。操作中の説明とpreviewは十分な面積へ昇格し、Simple / Advanced / pluginを同じDomain Intentと共通componentへ正規化する。共通componentから漏れ、選択・focus・Cancel・Undo・error・scale等を独自実装するUIは完成扱いしない。正本は[UI操作言語](ui-interaction-language.md)
-- **UIの視覚言語は「意味色で読む前に分かる、既存語彙へ馴染む」(2026-07-14決定)**: 操作動線はOpenCut、Flow/Alight Motion、一般的なトラック型UI。外観はAbletonのTimeline ViewとAppleの抑制された階層を参照するが、Ableton Arrangement Viewの構成とDAW操作モデルは採らない。AEのように無彩色と文字だけへ識別を寄せず、位置・形・icon・意味色を併用する。装飾gradient/glass/neon/card乱用は禁止。具体tokenと審判は[UI視覚言語](ui-visual-language.md)とM3 G0-6が正本
-- **UIは高密度一覧を隠さない(2026-07-14決定)**: 操作動線はOpenCut、Flow/Alight Motion、一般的なtrack型UI。色語彙はAbletonを参照し、位置・形・icon・意味色で文字を読む前に識別できるようにする。asset、effect、driver、timeline、transportの所在を大きな余白や深いnavigationへ隠さず、Blender型のcontext説明を右下/status領域へ置ける構造にする。正本は[UI視覚言語](ui-visual-language.md)と[高密度メインUIモック](mocks/README.md)
-- **プレビューは品質を落とし、最終レンダのみ厳密**: プレビューでは多少の色の違い・解像度低下に目をつぶる(Draft品質: 半解像度・fp16・色変換ショートカット・エフェクトのdraftサンプル数)。最終レンダリング(Final品質)だけが正しさの基準。UIのモード切替で「最終品質プレビュー」も可能。両者は同一の`render_frame(t, Quality)`を通るため見た目の分岐は起きない。根拠と詳細は[performance-model.md](performance-model.md)(重さの正体はメモリ帯域×往復回数であり、解像度そのものではない)
+  - **実装手段の追記(2026-07-10)**: サンプル数の口の実体は、`NodeDesc`の**宣言的時間フットプリント**(前後フレーム/サブフレームサンプルの静的宣言)として凍結ゲートで予約する。AE式の任意時刻アクセスAPIは採らない。[simulation-model.md](design/simulation-model.md)§6
+- **パーティクルシステムはファーストパーティ標準搭載(2026-07-10決定)**: AEが実用パーティクルをParticular/Stardust等の高価な外部プラグインに任せている構造(標準のCC Particle Worldは化石)を繰り返さない。歌詞プラグイン第1号(テキスト基盤の実力テスト)と対をなす**第2号=Simulation境界の実力テスト**として自分たちで作り同梱する。「ネイティブ」=コアレンダラへの焼き込みではなく標準搭載 — 実装は他の実機能と同じくプラグイン境界の上(ドッグフード、G-1)。既定は閉形式L0(ベイク不要・スクラブ自由)、衝突等を有効にするとL3(StateTrackベイク)へ自動昇格。**音楽同期エミッション(BPMグリッド/DataTrack駆動)を一級要件**とする。設計は[simulation-model.md](design/simulation-model.md)§8
+- **物理シミュレーション(布・液体・パーティクル)は「ホスト管理のベイク境界」を持つ一級プラグイン種別として設計に含める(2026-07-10決定、M5の2026-07-07決定の縮小改訂)**: レンダ経路(`render_frame(t)`・全render系trait)の純関数契約は不変のまま、逐次状態シミュレーションを`SimulationPlugin`(固定シード・固定タイムステップ・状態はホストが所有)+StateTrack(チェックポイント列の区間キャッシュ、キーはM4-K1と同一の枠)で扱う。根拠: 決定論とフレーム独立性は別物であり、固定シード+固定dtの逐次シムは完全に決定論的 — 失われるランダムアクセス性はベイクで回収できる。隠れ状態ハック(AviUtl/AE圏の定番)はキャッシュ/並列/シークでサイレントに壊れるため恒久禁止のまま。作者には時間軸自由度の5段はしご(閉形式tの純関数 / build_track内逐次 / 宣言的時間窓 / SimulationPlugin / 禁止)を提供する。**他シェイプとの相互作用(粒がロゴで跳ねる・布がシェイプに掛かる)はコライダー入力として一級対応**: シムノードが他レイヤーを参照し、ホストがSDF+解析プリミティブへ正規化して渡す(コライダーはキーフレーム駆動=tの純関数なので決定論は無傷。[simulation-model.md](design/simulation-model.md)§3.7)。ノード間の双方向結合(シムグラフ)のみv2。凍結ゲートでは口の予約のみ(`PluginKind::Simulation`は予約済み)、参照実装によるコード実証はv1.x。映画級の重いシミュレーションはBlender等でのベイク済みインポートを引き続き推奨。全設計は[simulation-model.md](design/simulation-model.md)
+- **Host UIとコミュニティUIのcomponent／test語彙を不必要に二重化しない(2026-07-21決定、2026-08-07再基線)**: product-owned Host panelはReact Nativeの通常component語彙を使える。ただしproduct-owned Host moduleと公開plugin kitは同義ではなく、同じprocess、権限、native module、network、配布を要求しない。`NodeDesc`自動生成panelは全保存paramを操作できる必須fallbackとして維持し、自由UIのruntime、sandbox、権限、互換、配布はG0-3 / GAP-13の決定まで公開契約にしない。根拠はUI runtime再基線決定とplugin UIモデル
+- **UI runtime責任境界をReact Native + Rust/rust-skia + wgpuへ固定する(2026-08-07再基線)**: React Nativeはshell、Browser、Inspector、parameter/form、panel、toolbar、dialog、検索、設定を、Rust/rust-skiaはTimelineとCurve Editor、wgpu + dirty rust-skia overlayはStageを所有する。Document、D2 single writer、Undo、projection、playback、renderはRust coreに残す。native canvasは汎用widget toolkitを再実装せず、renderer非依存のheadless interactionとMotolii固有のsnap/selection/transient preview/D2 commitだけを所有する。RN/nativeはrevision付きsnapshotとterminal typed intentを交換し、per-frame／per-object bridgeを作らない。旧WebView islands、direct-wgpu/Vello UI、eguiは新規製品実装を凍結し、移行oracleとして保持する。正本はUI runtime責任境界と再基線決定
+- **UI操作言語は「既知の外殻、可視の因果、裏切らない共通部品」(2026-07-16決定)**: Browser / Stage / Inspector / Timeline等の学習済み制作ソフト語彙と基本gestureを維持し、独自性はtarget、scope、評価順、所有/共有、失敗理由の可視化へ使う。操作中の説明とpreviewは十分な面積へ昇格し、Simple / Advanced / pluginを同じDomain Intentと共通componentへ正規化する。共通componentから漏れ、選択・focus・Cancel・Undo・error・scale等を独自実装するUIは完成扱いしない。正本はUI操作言語
+- **UIの視覚言語は「意味色で読む前に分かる、既存語彙へ馴染む」(2026-07-14決定)**: 操作動線はOpenCut、Flow/Alight Motion、一般的なトラック型UI。外観はAbletonのTimeline ViewとAppleの抑制された階層を参照するが、Ableton Arrangement Viewの構成とDAW操作モデルは採らない。AEのように無彩色と文字だけへ識別を寄せず、位置・形・icon・意味色を併用する。装飾gradient/glass/neon/card乱用は禁止。具体tokenと審判はUI視覚言語とM3 G0-6が正本
+- **UIは高密度一覧を隠さない(2026-07-14決定)**: 操作動線はOpenCut、Flow/Alight Motion、一般的なtrack型UI。色語彙はAbletonを参照し、位置・形・icon・意味色で文字を読む前に識別できるようにする。asset、effect、driver、timeline、transportの所在を大きな余白や深いnavigationへ隠さず、Blender型のcontext説明を右下/status領域へ置ける構造にする。正本はUI視覚言語と高密度メインUIモック
+- **プレビューは品質を落とし、最終レンダのみ厳密**: プレビューでは多少の色の違い・解像度低下に目をつぶる(Draft品質: 半解像度・fp16・色変換ショートカット・エフェクトのdraftサンプル数)。最終レンダリング(Final品質)だけが正しさの基準。UIのモード切替で「最終品質プレビュー」も可能。両者は同一の`render_frame(t, Quality)`を通るため見た目の分岐は起きない。根拠と詳細は[performance-model.md](design/performance-model.md)(重さの正体はメモリ帯域×往復回数であり、解像度そのものではない)
 
 - **歌詞テキスト/タイポグラフィ**: プラグイン領域。v1コアには入れない(最小コア+プラグインベースの方針通り)。ただしレビュー指摘の通り**日本語MVでは歌詞組版は主用途に近く、サードパーティ任せでは取りこぼす**ため、v1完成後の**ファーストパーティプラグイン第1号**として自分たちで作る計画とする(縦書き・ルビ等の日本語組版は非自明なため、プラグインAPIの実力テストを兼ねる)
   - **分界の追記(2026-07-08、落とし穴F-6)**: 「シェーピングまではコア、組版はプラグイン」。フォント列挙・フォールバック・日本語シェーピング・Velloへのグリフ描画は共有基盤としてコア(motolii-text、M5-P6)に置く。縦書き・ルビ・行組・歌詞タイミングがプラグインの領分。コアにテキスト基盤が無いと第1号プラグインがテキストスタックまるごと自作になるため
-  - **スタック決定(2026-07-10)**: シェーパ=[harfrust](https://github.com/harfbuzz/harfrust)(rustybuzz後継・skrifa系でVelloと一本化)、列挙+フォールバック=[fontique](https://github.com/linebender/parley/tree/main/fontique)(fontdbはフォールバック無しのため不採用)、描画=Vello `draw_glyphs`(自前パス変換不要)。Parley丸ごとは横書き前提・縦書き未対応のためコアに入れない([references.md](references.md))
-  - **コアAPIの切り方(2026-07-10)**: 一発`draw_text`禁止。**itemize → shape(軸座標込み・クラスタ対応表付き) → draw** のラン単位純関数3点のみ公開。バリアブルフォント軸はシェーピング入力とVello `normalized_coords`の両方を貫通させ、軸値は既存キー/DataTrackのf32パラメータとしてアニメ可能。詳細は[M5-P6 API契約](specs/M5-3d-and-post.md)
+  - **スタック決定(2026-07-10)**: シェーパ=[harfrust](https://github.com/harfbuzz/harfrust)(rustybuzz後継・skrifa系でVelloと一本化)、列挙+フォールバック=[fontique](https://github.com/linebender/parley/tree/main/fontique)(fontdbはフォールバック無しのため不採用)、描画=Vello `draw_glyphs`(自前パス変換不要)。Parley丸ごとは横書き前提・縦書き未対応のためコアに入れない([references.md](design/references.md))
+  - **コアAPIの切り方(2026-07-10)**: 一発`draw_text`禁止。**itemize → shape(軸座標込み・クラスタ対応表付き) → draw** のラン単位純関数3点のみ公開。バリアブルフォント軸はシェーピング入力とVello `normalized_coords`の両方を貫通させ、軸値は既存キー/DataTrackのf32パラメータとしてアニメ可能。詳細はM5-P6 API契約
 - **正準座標系(2026-07-08、落とし穴F-1)**: 合成空間は**単位なし・原点=コンポ中央・Y-up・高さ基準正規化(高さ=1.0)**。全空間パラメータ(位置・アンカー・ブラー半径・マスク位置)は正準空間の値で持ち、px変換はレンダ直前の1箇所のみ。これがDraft(半解像度)とFinalの見た目一致の前提であり、glTF(Y-up)との2.5D同居の前提。グループは変形コンテナ、ペアレンティング(親参照)はスキーマ予約
-- **逐次依存シミュレーションをレンダ経路に持ち込まない(2026-07-10、横断決定)**: 評価の正は**単一world/cameraから時刻`t`で決まるobject出力**で、最終的にpremultiplied RGBAへ合流する。`Layer Order`は既存LayerSource→RGBAを使い、共有depthが必要なobjectはHostのworld/depth参加境界を使う。glTFを別3Dエンジンにせず、逆に全objectをRGBA化後だけで扱うとも限らない。布・液体・パーティクル・2D剛体・オプティカルフロー等、**フレームN-1の内部状態に依存する計算**は2D/3Dの区別なく[B-5](pitfalls-and-roadmap.md)と同型で、レンダ経路に入るとキャッシュとフレーム並列を破る。したがって`render_frame(t)`と全render系traitはランタイムの物理シミュレーションを持たない。逐次状態が本当に要る表現の唯一の正規ルートは**レンダ外のホスト管理ベイク境界**(SimulationPlugin+StateTrack)。映画級の重いシミュレーションは外部のベイク済みシーケンスとして持ち込み、`t`だけで出力が決まる純関数として再生する。world/depth分界は[M5](specs/M5-3d-and-post.md)、未反映監査は[全層反映監査](reviews/2026-07-14-recent-concept-propagation-audit.md)
-- **シェイプ間相互作用は型付きリンクで表す(2026-07-10、横断決定)**: ユーザーが言う「物理の本質」は**シェイプ同士の関係**(追従・ターゲットに向ける・親子で一緒に動く)であり、ランタイム物理エンジンとは別物。例: 矢印を動くターゲットに向ける = `rotation(t) = look_at(arrow.center, target.center(t))` — **`t`だけで決まる参照**なのでキャッシュ・並列と両立する。**AE式エクスプレッション(JavaScript文字列)は採用しない**。`thisComp.layer("Target").position` のような式はタイポで壊れ・補完が効かず・diff不能で、モーショングラフィックの主戦場をテキストエディタにしない。代わりに **宣言的な型付きリンク**を`ParamSource`/ドキュメントスキーマの第一級市民にする(例: `LookAt { target: LayerId, axis }` / `Follow { target, offset }` / 親子`ParentRef`)。UIは式入力ではなく**レイヤーをクリックしてターゲット指定**(M3)。汎用スクリプトが必要なら v2 のWASMパラメータプラグインに隔離(concept表・[ae-pain-points.md](ae-pain-points.md))
+- **逐次依存シミュレーションをレンダ経路に持ち込まない(2026-07-10、横断決定)**: 評価の正は**単一world/cameraから時刻`t`で決まるobject出力**で、最終的にpremultiplied RGBAへ合流する。`Layer Order`は既存LayerSource→RGBAを使い、共有depthが必要なobjectはHostのworld/depth参加境界を使う。glTFを別3Dエンジンにせず、逆に全objectをRGBA化後だけで扱うとも限らない。布・液体・パーティクル・2D剛体・オプティカルフロー等、**フレームN-1の内部状態に依存する計算**は2D/3Dの区別なくB-5と同型で、レンダ経路に入るとキャッシュとフレーム並列を破る。したがって`render_frame(t)`と全render系traitはランタイムの物理シミュレーションを持たない。逐次状態が本当に要る表現の唯一の正規ルートは**レンダ外のホスト管理ベイク境界**(SimulationPlugin+StateTrack)。映画級の重いシミュレーションは外部のベイク済みシーケンスとして持ち込み、`t`だけで出力が決まる純関数として再生する。world/depth分界はM5、未反映監査は全層反映監査
+- **シェイプ間相互作用は型付きリンクで表す(2026-07-10、横断決定)**: ユーザーが言う「物理の本質」は**シェイプ同士の関係**(追従・ターゲットに向ける・親子で一緒に動く)であり、ランタイム物理エンジンとは別物。例: 矢印を動くターゲットに向ける = `rotation(t) = look_at(arrow.center, target.center(t))` — **`t`だけで決まる参照**なのでキャッシュ・並列と両立する。**AE式エクスプレッション(JavaScript文字列)は採用しない**。`thisComp.layer("Target").position` のような式はタイポで壊れ・補完が効かず・diff不能で、モーショングラフィックの主戦場をテキストエディタにしない。代わりに **宣言的な型付きリンク**を`ParamSource`/ドキュメントスキーマの第一級市民にする(例: `LookAt { target: LayerId, axis }` / `Follow { target, offset }` / 親子`ParentRef`)。UIは式入力ではなく**レイヤーをクリックしてターゲット指定**(M3)。汎用スクリプトが必要なら v2 のWASMパラメータプラグインに隔離(concept表・ae-pain-points.md)
   - **M横断の締結状況(2026-07-14更新)**: M2 schema/validateには`LayerId`、LookAt/Follow、`Transform2D.parent`が入り、文字列参照の回避までは完了した。一方、D3の参照順評価、M3-U2eのCanvas target picker、M4-K2の参照先変更時invalidationが揃うまで製品機能としては未締結である。どれかをlayer名検索、手打ちkey、全cache破棄で代用しない
 - **並行性・所有権(2026-07-08、落とし穴F-2)**: 単一writer(コマンド適用の編集スレッド)+不変スナップショット(`Arc<Document>`)。レンダ・書き出し・解析・プロキシ生成は読み手。Natronの死因(race/deadlock/キャッシュデッドロック)の構造的排除
 - **クリップは時間写像(TimeMap)を持つ(2026-07-08、落とし穴F-4)**: v1は恒等+定数速度のみ実装だが、ソース時刻アクセスは初日からTimeMapを通す。速度ランプ・逆再生(MV必須)へスキーマ互換のまま拡張可能にする
-- **SVG読み込み**: コア機能。モーショングラフィック素材(ロゴ・図形)の入口として根本に関わるため、ベクター描画基盤は**Vello + usvgを採用**(R8/S3、2026-07-10)。統合条件は[spikes/s3-vello.md](spikes/s3-vello.md)。M1のOverlayNode(T7/R7)は自前シェーダで完走し、Vello本番統合は凍結ゲート後
+- **SVG読み込み**: コア機能。モーショングラフィック素材(ロゴ・図形)の入口として根本に関わるため、ベクター描画基盤は**Vello + usvgを採用**(R8/S3、2026-07-10)。統合条件はspikes/s3-vello.md。M1のOverlayNode(T7/R7)は自前シェーダで完走し、Vello本番統合は凍結ゲート後
 - **アプリ内エクスプローラー(アセットブラウザ)**: コアUI。素材(動画・SVG・音声)の管理はドキュメントモデルのAsset実体(M2)+ブラウザUI(M3)として設計する
 - **BPM／拍リズムはVism**: 作り手が既知のBPMを手入力する最短導線は維持するが、その値から拍、位相、bar等を供給する製品責任はBPM Rhythm Vismに置く。Timelineのビートグリッド／スナップはtyped rhythm dataのHost projectionであり、Core固有の音楽意味にしない。現行`Document.bpm`は互換入力として当面保持し、仕様改訂とmigration前に削除・再解釈しない。音声からの自動ビート検出はv1で行わず、将来の別provider Vism／Analysisとして接続する
-- **M2/v1コアの音声は1プロジェクトに1本(楽曲)**: MV制作の最短導線は完成済み楽曲1本であり、タイムラインは楽曲を基準線(波形+BPMグリッド)として編集し、書き出し時は可能ならstream copyする。ただし「動画クリップ内蔵音声は常にmute」はM2実装範囲であって恒久制約ではない。将来は1 Clipがvideo/audio componentの時刻を共有し、音付き動画・audio-only素材・最小mixへ追加的に広げる。意味論・互換・実装順は[一般音声設計](reviews/2026-07-14-audio-generalization-design.md)を正本とする
+- **M2/v1コアの音声は1プロジェクトに1本(楽曲)**: MV制作の最短導線は完成済み楽曲1本であり、タイムラインは楽曲を基準線(波形+BPMグリッド)として編集し、書き出し時は可能ならstream copyする。ただし「動画クリップ内蔵音声は常にmute」はM2実装範囲であって恒久制約ではない。将来は1 Clipがvideo/audio componentの時刻を共有し、音付き動画・audio-only素材・最小mixへ追加的に広げる。意味論・互換・実装順は一般音声設計を正本とする
 - **音声バーをメインUIの主役にしない(2026-07-16決定)**: 上記「楽曲1本」は**ドキュメントモデルの決定であり、UIの視覚的主張ではない**。UI上はタイムライン内の標準的な1レーン(波形+BPMグリッド基準線)として表現し、1本の巨大な音声バーをメインUIの主役に据えるような表層の尖りは作らない。Motoliiは大きなプロジェクトを目指しつつ差別化は**コアの境界設計**(小さなコア・plugin契約・recipeとしてのDocument)に置く方針であり、UI表層は業界標準の操作に寄せてAviUtl/AE層の移行コストを下げる(M3ガード「タイムラインの革新的挙動は必ずオプトイン」と同根)。モデル上の面白い制約を、そのままUIの派手さへ翻訳しないこと
-- **音声の根本設計**: 音ズレ・途切れ・「重い時に映像だけ遅れる」問題は後付け修正ではなく、トランスポート(再生ヘッド)のクロック設計で構造的に排除する。方式は[M2仕様の「音声トランスポート設計」](specs/M2-document-model.md)に規定(要旨: 再生ヘッドの所有者は常に1つ=音声デバイスクロック。映像はフレームドロップで追従し、間に合わない時は適応解像度降格で実時間を回復。自動で音声を低速化しない — AEの悪評を避ける。[2026-07-14先例調査【採択】](reviews/2026-07-14-d5-transport-prior-art.md))
+- **音声の根本設計**: 音ズレ・途切れ・「重い時に映像だけ遅れる」問題は後付け修正ではなく、トランスポート(再生ヘッド)のクロック設計で構造的に排除する。方式はM2仕様の「音声トランスポート設計」に規定(要旨: 再生ヘッドの所有者は常に1つ=音声デバイスクロック。映像はフレームドロップで追従し、間に合わない時は適応解像度降格で実時間を回復。自動で音声を低速化しない — AEの悪評を避ける。2026-07-14先例調査【採択】)
 
 </details>

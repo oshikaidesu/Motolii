@@ -66,6 +66,18 @@ pub fn local_placement_transform_sampled(
     ))
 }
 
+/// The point of the layer that its transform places at its position (the pivot): a laid-out slot's anchor, else the free
+/// anchor (Transform Origin, else Anchor); a connector has none. A camera aimed at the layer looks at this point.
+pub fn layer_pivot(view: &StoreView<'_>, layer: LayerId, t: RationalTime) -> Result<[f32; 2], StoreError> {
+    if crate::picture::connect::connector_position(view, layer, t)?.is_some() {
+        return Ok([0.0, 0.0]);
+    }
+    match crate::picture::frame::laid_out(view, layer, t)? {
+        Some(slot) => Ok(slot.anchor),
+        None => crate::picture::boxes::free_anchor(view, layer, t),
+    }
+}
+
 pub fn local_transform(view: &StoreView<'_>, layer: LayerId, t: RationalTime) -> Result<glam::Affine2, StoreError> {
     local_placement_transform(view, layer, t)
 }

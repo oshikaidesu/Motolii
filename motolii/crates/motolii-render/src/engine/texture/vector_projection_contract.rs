@@ -188,3 +188,42 @@ fn enlarging_a_path_matches_drawing_the_large_contour_even_at_an_image_effect_bo
         assert!(bad < 300, "magnifying a contour introduced {bad} differing pixels (image effect={pass})");
     }
 }
+
+/// 描かれる形は `shapes_at`: 色の輪が書く `shape.fill_color` は書類の筆より勝つ。frame graph も同じ形を描く。
+#[test]
+fn the_fill_colour_property_is_the_colour_drawn() {
+    let mut doc = circle(320.0, 1.0, false);
+    doc.apply(Intent::SetConstant { layer: LayerId(1), property: PropertyId::new(property::SHAPE_FILL_COLOR).unwrap(), value: Value::Color([0.0, 1.0, 0.0, 1.0]) }).unwrap();
+    let pixels = Engine::new().unwrap().render_frame(&doc.view(), RationalTime::ZERO).unwrap();
+    let c = &pixels[(256*512+256)*4..(256*512+256)*4+3];
+    assert!(c[1] > 150 && c[0] < 8 && c[2] < 8, "the circle is drawn in the property's green, not the document's black: {c:?}");
+}
+
+/// Path operations shape the drawn outline: Rounded Corners cuts the square's corner, the middle stays filled.
+#[test]
+fn rounded_corners_round_the_drawn_square() {
+    let shapes = vec![ShapeNode::Leaf(Shape {
+        source: PathSource::Rectangle { size: Point { x: 320.0, y: 320.0 } },
+        ops: Vec::new(), stroke: None,
+        fill: Some(Fill { brush: Brush::Solid(Rgb { r: 0.0, g: 0.0, b: 0.0 }), ..Default::default() }),
+    })];
+    let canvas = content_canvas(&shapes).unwrap().unwrap();
+    let mut doc = blank_project();
+    let mut comp = doc.view().composition().unwrap().unwrap();
+    comp.width = 512; comp.height = 512; comp.background = [1.0; 4];
+    let id = LayerId(1);
+    doc.apply_all([
+        Intent::SetComposition(comp), Intent::AddLayer(id),
+        Intent::SetMeta { layer: id, meta: LayerMeta { source: LayerSource::Shape, order: 0, timing: LayerTiming::place(0, None, 60) } },
+        Intent::SetShapes { layer: id, shapes },
+        Intent::SetAttrs { layer: id, patch: LayerAttrsPatch { projection: Some(LayerProjection::TwoD), ..Default::default() } },
+        Intent::SetConstant { layer: id, property: PropertyId::new(property::POSITION).unwrap(), value: Value::Vec2([256.0, 256.0]) },
+        Intent::SetConstant { layer: id, property: PropertyId::new(property::ANCHOR).unwrap(), value: Value::Vec2([canvas.origin_x as f64, canvas.origin_y as f64]) },
+        Intent::SetEffects { layer: id, effects: vec![EffectInstance { id: EffectId(0), plugin_id: crate::extensions::pathop::ROUNDED_CORNERS.into() }] },
+        Intent::SetConstant { layer: id, property: PropertyId::new("effect.0.param.radius").unwrap(), value: Value::F64(80.0) },
+    ]).unwrap();
+    let pixels = Engine::new().unwrap().render_frame(&doc.view(), RationalTime::ZERO).unwrap();
+    let at = |x: usize, y: usize| pixels[(y * 512 + x) * 4];
+    assert!(at(256, 256) < 40, "the middle is filled: {}", at(256, 256));
+    assert!(at(256 - 160 + 6, 256 - 160 + 6) > 200, "the corner is cut away: {}", at(256 - 160 + 6, 256 - 160 + 6));
+}

@@ -39,7 +39,10 @@ pub enum ColorSpace {
     Rec601Limited,
 }
 
+/// A frame's six meanings (frozen: freeze gate #1). Built by [`FrameDesc::try_packed`] / [`FrameDesc::try_yuv`];
+/// a deserialized one is checked by [`FrameDesc::validate`] too, so no descriptor skips the invariants.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(try_from = "FrameDescFields")]
 pub struct FrameDesc {
     pub width: u32,
     pub height: u32,
@@ -49,28 +52,57 @@ pub struct FrameDesc {
     pub premultiplied: bool,
 }
 
+/// The same six fields, unchecked: only what serde reads before [`FrameDesc::validate`] accepts it.
+#[derive(Deserialize)]
+struct FrameDescFields {
+    width: u32,
+    height: u32,
+    stride: u32,
+    format: PixelFormat,
+    color_space: ColorSpace,
+    premultiplied: bool,
+}
+
+impl TryFrom<FrameDescFields> for FrameDesc {
+    type Error = FrameDescError;
+    fn try_from(f: FrameDescFields) -> Result<Self, FrameDescError> {
+        let desc = FrameDesc {
+            width: f.width,
+            height: f.height,
+            stride: f.stride,
+            format: f.format,
+            color_space: f.color_space,
+            premultiplied: f.premultiplied,
+        };
+        desc.validate()?;
+        Ok(desc)
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum FrameDescError {
-    #[error("FrameDesc::packed: packed format required")]
+    #[error("FrameDesc: packed format required")]
     PackedFormatRequired,
-    #[error("FrameDesc::yuv: yuv format required")]
+    #[error("FrameDesc: yuv format required")]
     YuvFormatRequired,
-    #[error("FrameDesc::yuv: 4:2:0 requires even dimensions")]
+    #[error("FrameDesc: 4:2:0 requires even dimensions")]
     OddDimensions,
+    #[error("FrameDesc: zero dimension")]
+    ZeroDimension,
+    #[error("FrameDesc: width {width} * {bytes_per_pixel} bytes overflows the stride")]
+    StrideOverflow { width: u32, bytes_per_pixel: u32 },
+    #[error("FrameDesc: stride {stride} < width {width} * {bytes_per_pixel} bytes")]
+    StrideTooSmall {
+        stride: u32,
+        width: u32,
+        bytes_per_pixel: u32,
+    },
+    #[error("FrameDesc: 4:2:0 stride {stride} < width {width}")]
+    YuvStrideTooSmall { stride: u32, width: u32 },
 }
 
 impl FrameDesc {
-    pub fn packed(
-        width: u32,
-        height: u32,
-        format: PixelFormat,
-        color_space: ColorSpace,
-        premultiplied: bool,
-    ) -> Self {
-        Self::try_packed(width, height, format, color_space, premultiplied)
-            .expect("FrameDesc::packed: invalid arguments")
-    }
-
+    /// A packed frame with the tightest stride. Rejects a YUV format, a zero dimension, and a row that overflows.
     pub fn try_packed(
         width: u32,
         height: u32,
@@ -81,21 +113,26 @@ impl FrameDesc {
         let bpp = format
             .bytes_per_pixel()
             .ok_or(FrameDescError::PackedFormatRequired)?;
+        if width == 0 || height == 0 {
+            return Err(FrameDescError::ZeroDimension);
+        }
+        let stride = width
+            .checked_mul(bpp)
+            .ok_or(FrameDescError::StrideOverflow {
+                width,
+                bytes_per_pixel: bpp,
+            })?;
         Ok(Self {
             width,
             height,
-            stride: width * bpp,
+            stride,
             format,
             color_space,
             premultiplied,
         })
     }
 
-    pub fn yuv(width: u32, height: u32, format: PixelFormat, color_space: ColorSpace) -> Self {
-        Self::try_yuv(width, height, format, color_space)
-            .expect("FrameDesc::yuv: invalid arguments")
-    }
-
+    /// A 4:2:0 frame (luma stride = width). Rejects a packed format, a zero or odd dimension.
     pub fn try_yuv(
         width: u32,
         height: u32,
@@ -104,6 +141,9 @@ impl FrameDesc {
     ) -> Result<Self, FrameDescError> {
         if !format.is_yuv() {
             return Err(FrameDescError::YuvFormatRequired);
+        }
+        if width == 0 || height == 0 {
+            return Err(FrameDescError::ZeroDimension);
         }
         if !width.is_multiple_of(2) || !height.is_multiple_of(2) {
             return Err(FrameDescError::OddDimensions);
@@ -127,21 +167,36 @@ impl FrameDesc {
         }
     }
 
-    pub fn validate(&self) -> Result<(), String> {
+    /// The invariants every descriptor keeps, however it was made (built, deserialized, or edited field by field).
+    pub fn validate(&self) -> Result<(), FrameDescError> {
         if self.width == 0 || self.height == 0 {
-            return Err("zero dimension".into());
+            return Err(FrameDescError::ZeroDimension);
         }
         if let Some(bpp) = self.format.bytes_per_pixel() {
-            if self.stride < self.width * bpp {
-                return Err(format!(
-                    "stride {} < width {} * bpp {}",
-                    self.stride, self.width, bpp
-                ));
+            let row = self
+                .width
+                .checked_mul(bpp)
+                .ok_or(FrameDescError::StrideOverflow {
+                    width: self.width,
+                    bytes_per_pixel: bpp,
+                })?;
+            if self.stride < row {
+                return Err(FrameDescError::StrideTooSmall {
+                    stride: self.stride,
+                    width: self.width,
+                    bytes_per_pixel: bpp,
+                });
             }
-        }
-        if self.format.is_yuv() && (!self.width.is_multiple_of(2) || !self.height.is_multiple_of(2))
-        {
-            return Err("4:2:0 requires even dimensions".into());
+        } else {
+            if !self.width.is_multiple_of(2) || !self.height.is_multiple_of(2) {
+                return Err(FrameDescError::OddDimensions);
+            }
+            if self.stride < self.width {
+                return Err(FrameDescError::YuvStrideTooSmall {
+                    stride: self.stride,
+                    width: self.width,
+                });
+            }
         }
         Ok(())
     }
@@ -301,5 +356,65 @@ impl LayerPlacement {
                     * Quat::from_rotation_y(rotation_y_degrees.to_radians()),
             )
             * anchored
+    }
+}
+
+#[cfg(test)]
+mod frame_desc_tests {
+    use super::*;
+
+    const RGBA: PixelFormat = PixelFormat::Rgba8Unorm;
+    const SRGB: ColorSpace = ColorSpace::Srgb;
+
+    #[test]
+    fn packed_rejects_what_the_invariants_forbid() {
+        assert_eq!(FrameDesc::try_packed(0, 4, RGBA, SRGB, false), Err(FrameDescError::ZeroDimension));
+        assert_eq!(
+            FrameDesc::try_packed(u32::MAX / 2, 4, RGBA, SRGB, false),
+            Err(FrameDescError::StrideOverflow { width: u32::MAX / 2, bytes_per_pixel: 4 })
+        );
+        assert_eq!(
+            FrameDesc::try_packed(4, 4, PixelFormat::Nv12, SRGB, false),
+            Err(FrameDescError::PackedFormatRequired)
+        );
+        let d = FrameDesc::try_packed(3, 2, PixelFormat::Rgba16Float, SRGB, true).unwrap();
+        assert_eq!((d.stride, d.data_size()), (24, 48));
+    }
+
+    #[test]
+    fn yuv_rejects_odd_zero_and_packed() {
+        assert_eq!(FrameDesc::try_yuv(3, 4, PixelFormat::Yuv420p, SRGB), Err(FrameDescError::OddDimensions));
+        assert_eq!(FrameDesc::try_yuv(0, 4, PixelFormat::Yuv420p, SRGB), Err(FrameDescError::ZeroDimension));
+        assert_eq!(FrameDesc::try_yuv(4, 4, RGBA, SRGB), Err(FrameDescError::YuvFormatRequired));
+        assert_eq!(FrameDesc::try_yuv(4, 2, PixelFormat::Nv12, SRGB).unwrap().data_size(), 12);
+    }
+
+    #[test]
+    fn a_field_edited_descriptor_is_caught_by_validate() {
+        let mut d = FrameDesc::try_packed(8, 8, RGBA, SRGB, false).unwrap();
+        d.stride = 16;
+        assert_eq!(
+            d.validate(),
+            Err(FrameDescError::StrideTooSmall { stride: 16, width: 8, bytes_per_pixel: 4 })
+        );
+        d.width = u32::MAX;
+        assert!(matches!(d.validate(), Err(FrameDescError::StrideOverflow { .. })));
+        let mut y = FrameDesc::try_yuv(4, 4, PixelFormat::Yuv420p, SRGB).unwrap();
+        y.stride = 2;
+        assert_eq!(y.validate(), Err(FrameDescError::YuvStrideTooSmall { stride: 2, width: 4 }));
+    }
+
+    #[test]
+    fn serde_roundtrips_a_valid_descriptor_and_refuses_a_bypass() {
+        let d = FrameDesc::try_packed(1920, 1080, RGBA, SRGB, true).unwrap();
+        let text = serde_json::to_string(&d).unwrap();
+        assert_eq!(serde_json::from_str::<FrameDesc>(&text).unwrap(), d);
+        for bad in [
+            r#"{"width":0,"height":2,"stride":0,"format":"Rgba8Unorm","color_space":"Srgb","premultiplied":false}"#,
+            r#"{"width":8,"height":2,"stride":4,"format":"Rgba8Unorm","color_space":"Srgb","premultiplied":false}"#,
+            r#"{"width":3,"height":2,"stride":3,"format":"Yuv420p","color_space":"Srgb","premultiplied":false}"#,
+        ] {
+            assert!(serde_json::from_str::<FrameDesc>(bad).is_err(), "{bad}");
+        }
     }
 }

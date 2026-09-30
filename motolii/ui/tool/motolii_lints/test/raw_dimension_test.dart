@@ -74,11 +74,34 @@ void f() {
   }
 
   void test_scale_files_may_hold_numbers() async {
-    final path = '$testPackageLibPath/foundation/metrics.dart';
+    final path = '$testPackageLibPath/theme/metrics.dart';
     newFile(path, r'''
 void box({double? width}) {}
 void f() => box(width: 300);
 ''');
     await assertNoDiagnosticsInFile(path);
+  }
+
+  void test_text_helper_first_argument_is_a_font_size() async {
+    await assertDiagnostics(
+      r'''
+Object sans(double size, {int? w}) => size;
+void f() {
+  sans(11, w: 5);
+  sans(12);
+}
+''',
+      [lint(62, 2), lint(80, 2)],
+    );
+  }
+
+  void test_a_reason_excuses_a_measurement() async {
+    await assertNoDiagnostics(r'''
+void box({double? width}) {}
+void f() {
+  // surface: the Stage frame is video geometry, not UI chrome
+  box(width: 300);
+}
+''');
   }
 }

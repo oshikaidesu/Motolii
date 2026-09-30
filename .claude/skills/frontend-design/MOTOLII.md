@@ -9,7 +9,7 @@ UX の合否は利用者の専権。この文書は「どこが効くか」だ�
 | SKILL.md の節 | Motolii では |
 |---|---|
 | 題材に根ざす・生成物の型(cream+serif、SaaS カード、ALL CAPS の eyebrow、`→`、`·` 連結) | 効く。窓の文字は英語、**値が意味の物だけ文字、あとは形で見せる**(motolii/AGENTS.md:14、docs/wiki/window.md)。ラベル文字を足す前に「値か?」を問う |
-| 2 段の手順(token 案 → 素案を brief と照合 → 実装) | 効く。token 案は `motolii/ui/lib/foundation/theme.dart` の語彙で書く |
+| 2 段の手順(token 案 → 素案を brief と照合 → 実装) | 効く。token 案は `motolii/ui/lib/theme/editor_theme.dart` の語彙で書く |
 | 大胆さは 1 箇所、Chanel の 1 個外す、スクショで自己批評 | 効く。スクショは自分で撮る、判定は利用者 |
 | CSS の specificity、hero、行長 80 字、Google Fonts | 効かない(窓はページでない)。Flutter では ThemeData の component theme / ThemeExtension が同じ役 |
 | 非操作起因の motion は控える | 効く。Flutter の Animation を層ごとに足さない |
@@ -18,7 +18,7 @@ UX の合否は利用者の専権。この文書は「どこが効くか」だ�
 ## theme-first(標準の仕組みが先)
 「トンマナを構造で強制」は独自 lint や wrapper でなく、Flutter 本体の ThemeData component theme と
 ThemeExtension で(記憶 standard-mechanism-first、2026-09-08 に 2 度止められた)。
-token の正本は DTCG format v2025.10 の JSON、raw color を theme 外に書かない(docs/ui-visual-language.md:147-148)。
+寸法・文字・余白・面・意味色の正本は `motolii/ui/lib/theme/metrics.dart`(言語は `docs/product/ui-rebaseline/visual-language.md`)。raw color・raw 寸法を theme 外に書かない。
 
 ## DESIGN.md(Google Labs open spec、2026-04-22)
 anthropics/skills issue #1008 の提案: skill が project root の DESIGN.md を読んでから作り、無ければ brief から蒸留して作る。
@@ -32,7 +32,7 @@ spec: https://github.com/google-labs-code/design.md(docs/spec.md、Apache 2.0、
 「tokens are the normative values; the prose provides context for how to apply them」。
 
 ## 一発の UI 変更 checklist
-1. DESIGN.md があれば読む。無ければ `motolii/ui/lib/foundation/theme.dart` と docs/ui-visual-language.md を読む
+1. DESIGN.md があれば読む。無ければ `motolii/ui/lib/theme/metrics.dart` と `docs/product/ui-rebaseline/visual-language.md` を読む
 2. 変えるのは theme token / component theme。widget に色・寸法・文字を直書きしない。ラベルを足すなら「値が意味か」
 3. `scripts/motolii-ui.sh native` → `dev`(または `reload`)、スクショを自分で撮る
 4. SKILL.md の「生成物の型」表と照らして 1 個外す

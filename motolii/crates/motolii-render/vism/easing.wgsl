@@ -1,5 +1,5 @@
 // 関数の棚(WESL の module `package::easing`): Penner の ease 全種。名前は lygia / glsl-easings(MIT)と同じ、式は Penner の原式から。
-// t は 0..1。cv_ease(cavalry.wgsl)は Cavalry の Interpolation の 6 種、こちらは全種を名前で呼ぶ。出典: docs/reviews/2026-09-18-motion-code-survey.md
+// t は 0..1。cv_ease(cavalry.wgsl)は Cavalry の Interpolation の 6 種、こちらは全種を名前で呼ぶ。出典: git:912382f048:docs/reviews/2026-09-18-motion-code-survey.md
 
 const PI_E: f32 = 3.1415926;
 const C1: f32 = 1.70158;

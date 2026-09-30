@@ -20,7 +20,7 @@ case "${1:-dev}" in
     ;;
 esac
 case "${1:-dev}" in
-  check) exec python3 "$repo/scripts/check-stage5.py" ;;
+  check) exec python3 "$repo/scripts/check-workspace.py" ;;
   native) cd "$repo"; exec cargo build -p motolii-ui ;;
   check-read-only)
     cd "$repo"
@@ -33,12 +33,35 @@ case "${1:-dev}" in
     xcrun swiftc "$ui/macos/Runner/WindowAttachment.swift" "$ui/tool/window_attachment_check.swift" -o "$window_check_dir/check"
     "$window_check_dir/check"
     ;;
+  # The real app driven like a person (integration_test): controls found by accessible name, outcomes read from the
+  # work. It opens a scratch copy of the document, never the document itself, and keeps its own layout and history.
+  it)
+    [[ -n "$flutter_bin" ]] || { echo 'Install Flutter and set FLUTTER_BIN or add it to PATH.'; exit 1; }
+    export MOTOLII_NATIVE_LIBRARY="$workspace/target/debug/libmotolii_ui.dylib"
+    [[ -f "$MOTOLII_NATIVE_LIBRARY" ]] || { echo 'Run scripts/motolii-ui.sh native once, then it.'; exit 1; }
+    it_defines=()
+    it_dir=$(mktemp -d /tmp/motolii-it.XXXXXX)
+    trap 'rm -rf -- "$it_dir"' EXIT
+    if [[ -n "${2:-}" ]]; then
+      cp -- "$2" "$it_dir/document.rrd"
+      it_defines+=(--dart-define="MOTOLII_DOCUMENT=$it_dir/document.rrd")
+    fi
+    # one launch per file: a second app launch inside one `flutter test` run loses its debug connection on macOS
+    cd "$ui"; it_failed=0
+    for it_file in integration_test/*_test.dart; do
+      [[ -n "${2:-}" ]] && cp -- "$2" "$it_dir/document.rrd"
+      # each file starts from no saved layout and no history, and never writes the person's own
+      rm -rf -- "$it_dir/state"; mkdir -p "$it_dir/state"; export MOTOLII_STATE_DIR="$it_dir/state"
+      "$flutter_bin" test "$it_file" -d macos "${it_defines[@]}" || it_failed=1
+    done
+    exit $it_failed
+    ;;
   test)
     "$repo/scripts/motolii-ui.sh" why-slow
     "$repo/scripts/motolii-ui.sh" test-window
-    cd "$repo"; cargo test -p motolii-script; cargo test -p motolii-doc; cargo test -p motolii-edit; cargo test -p motolii-jobs; cargo test -p motolii-ui --lib; cargo test -p motolii-render --lib
+    cd "$repo"; cargo test -p motolii-script; cargo test -p motolii-doc; cargo test -p motolii-edit; cargo test -p motolii-jobs; cargo test -p motolii-ui --lib; cargo test -p motolii-render --no-fail-fast --test '*'; cargo test -p motolii-render --lib
     dart_bin="$(dirname "$flutter_bin")/dart"
-    (cd "$ui/tool/motolii_lints" && "$dart_bin" test && "$dart_bin" run bin/check.dart "$ui/lib")
+    (cd "$ui/tool/motolii_lints" && "$dart_bin" test && "$dart_bin" run bin/check.dart "$ui/lib" --ratchet=baseline.txt)
     cd "$ui"; "$flutter_bin" analyze; exec "$flutter_bin" test ;;
   # Why the loop is slow, in 30 ms, without going and looking. rustc enumerates
   # every -L dependency directory once per crate: 10.9 s at 611k entries, 0.12 s
@@ -63,21 +86,23 @@ case "${1:-dev}" in
     export MOTOLII_NATIVE_LIBRARY="$workspace/target/release/libmotolii_ui.dylib"
     cd "$ui"
     if [[ $# -gt 1 ]]; then
-      exec "$flutter_bin" run --profile -d macos --dart-define="MOTOLII_SHELL=${MOTOLII_SHELL:-classic}" --dart-define="MOTOLII_DOCUMENT=$2"
+      exec "$flutter_bin" run --profile -d macos --dart-define="MOTOLII_DOCUMENT=$2"
     fi
-    exec "$flutter_bin" run --profile -d macos --dart-define="MOTOLII_SHELL=${MOTOLII_SHELL:-classic}"
+    exec "$flutter_bin" run --profile -d macos
     ;;
   dev)
     [[ -n "$flutter_bin" ]] || { echo 'Install Flutter and set FLUTTER_BIN or add it to PATH.'; exit 1; }
     export MOTOLII_NATIVE_LIBRARY="$workspace/target/debug/libmotolii_ui.dylib"
     [[ -f "$MOTOLII_NATIVE_LIBRARY" ]] || { echo 'Run scripts/motolii-ui.sh native once, then dev.'; exit 1; }
-    cd "$ui"
     if [[ $# -gt 1 ]]; then
-      exec "$flutter_bin" run -d macos --pid-file "$state/flutter.pid" --dart-define="MOTOLII_SHELL=${MOTOLII_SHELL:-classic}" --dart-define="MOTOLII_DOCUMENT=$2"
+      document="$(cd "$(dirname "$2")" && pwd)/$(basename "$2")"
+      cd "$ui"
+      exec "$flutter_bin" run -d macos --pid-file "$state/flutter.pid" --dart-define="MOTOLII_DOCUMENT=$document"
     fi
-    exec "$flutter_bin" run -d macos --pid-file "$state/flutter.pid" --dart-define="MOTOLII_SHELL=${MOTOLII_SHELL:-classic}"
+    cd "$ui"
+    exec "$flutter_bin" run -d macos --pid-file "$state/flutter.pid"
     ;;
-  # The hf GUI, its own client of Motolii Live (lib/live_hf).
+  # Same as dev (the product UI), kept for scripts that name it.
   live)
     [[ -n "$flutter_bin" ]] || { echo 'Install Flutter and set FLUTTER_BIN or add it to PATH.'; exit 1; }
     export MOTOLII_NATIVE_LIBRARY="$workspace/target/debug/libmotolii_ui.dylib"
@@ -85,10 +110,10 @@ case "${1:-dev}" in
     if [[ $# -gt 1 ]]; then
       document="$(cd "$(dirname "$2")" && pwd)/$(basename "$2")"
       cd "$ui"
-      exec "$flutter_bin" run -d macos -t lib/live_hf/main.dart --pid-file "$state/flutter.pid" --dart-define="MOTOLII_DOCUMENT=$document"
+      exec "$flutter_bin" run -d macos --pid-file "$state/flutter.pid" --dart-define="MOTOLII_DOCUMENT=$document"
     fi
     cd "$ui"
-    exec "$flutter_bin" run -d macos -t lib/live_hf/main.dart --pid-file "$state/flutter.pid"
+    exec "$flutter_bin" run -d macos --pid-file "$state/flutter.pid"
     ;;
   *) echo 'Usage: scripts/motolii-ui.sh {check|check-read-only|native|test|test-window|why-slow|dev [document.rrd|script.js]|live [document.rrd|script.js]|profile [document.rrd|script.js]|reload|restart-ui}'; exit 1 ;;
 esac

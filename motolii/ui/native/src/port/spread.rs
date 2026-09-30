@@ -17,9 +17,10 @@ impl EditorRuntime {
         let property = PropertyId::new(name).map_err(e)?;
         let view = self.doc.view().without_transients();
         let at = self.time()?;
+        let declared = |l: LayerId| declared_default(&view, l, name).map(|v| crate::snapshot::value(&v));
         let committed = |l: LayerId| -> Option<Json> {
             let value = view.value_at(l, &property, at).ok().flatten().or_else(|| motolii_edit::document::edit::default_value(&view, l, &property).ok().flatten());
-            value.map(|v| crate::snapshot::value(&v))
+            value.map(|v| crate::snapshot::value(&v)).or_else(|| declared(l))
         };
         let base = committed(shown);
         let mut targets: Vec<LayerId> = self
@@ -31,6 +32,12 @@ impl EditorRuntime {
             .collect();
         if !targets.contains(&shown) {
             targets = vec![shown];
+        }
+        // An effect's parameters are named by the layer's own effect id: on another layer the same name can belong to
+        // a different effect. Only layers where it is the same kind of effect take the edit.
+        if name.starts_with(property::EFFECT_PREFIX) {
+            let own = effect_kind(&view, shown, name);
+            targets.retain(|&l| l == shown || (own.is_some() && effect_kind(&view, l, name) == own));
         }
         let mut out = Vec::new();
         for target in targets {
@@ -45,6 +52,50 @@ impl EditorRuntime {
                 }
             };
             out.extend(self.property_edits(&json!({"layer": target.0, "property": name, "value": value}))?);
+        }
+        Ok(out)
+    }
+}
+
+/// The plugin in the effect slot a property names (`effect.<id>.…`) on this layer.
+fn effect_kind(view: &StoreView<'_>, layer: LayerId, name: &str) -> Option<String> {
+    let slot = name.strip_prefix(property::EFFECT_PREFIX)?.split('.').next()?;
+    view.effects(layer).ok()?.into_iter().find(|fx| fx.id.to_string() == slot).map(|fx| fx.plugin_id)
+}
+
+/// An effect parameter's declared default (what the Inspector shows for one never set), from the catalog.
+fn declared_default(view: &StoreView<'_>, layer: LayerId, name: &str) -> Option<Value> {
+    let plugin = effect_kind(view, layer, name)?;
+    let param = name.split_once(".param.")?.1;
+    let catalog = crate::render::engine::known_effects();
+    let p = catalog.iter().find(|d| d.plugin_id == plugin)?.params.iter().find(|p| p.name == param)?.clone();
+    Some(p.color.map(Value::Color).or(p.point.map(Value::Vec2)).unwrap_or(Value::F64(p.default)))
+}
+
+impl EditorRuntime {
+    /// Rows back to their defaults, in one step: the shown layer's, and with `spread` every other selected layer that
+    /// can be edited and has the row (an effect's row: the same effect), each to its own default.
+    pub(super) fn reset_edits(&self, j: &J) -> Result<Vec<Intent>, String> {
+        let shown = layer(j)?;
+        let names: Vec<&str> = j["properties"].as_array().ok_or("Expected properties")?.iter().map(|p| p.as_str().ok_or("Invalid property")).collect::<Result<_, _>>()?;
+        let view = self.doc.view().without_transients();
+        let at = self.time()?;
+        let mut targets = vec![shown];
+        if j["spread"] == true {
+            targets.extend(self.viewer.selected_ids.iter().copied().filter(|&l| l != shown && editor::functions::lens::edit_rejection(&view, l).ok().flatten().is_none()));
+        }
+        let mut out = Vec::new();
+        for name in names {
+            let property = PropertyId::new(name).map_err(e)?;
+            for &l in &targets {
+                if l != shown && name.starts_with(property::EFFECT_PREFIX) && effect_kind(&view, l, name) != effect_kind(&view, shown, name) { continue }
+                let default = motolii_edit::document::edit::default_value(&view, l, &property).map_err(e)?.or_else(|| declared_default(&view, l, name));
+                let Some(default) = default else {
+                    if l == shown { return Err(format!("{name} has no default")) }
+                    continue;
+                };
+                out.extend(self.doc.place_checked(l, &property, default, at, self.viewer.animate).map_err(e)?);
+            }
         }
         Ok(out)
     }
@@ -141,5 +192,43 @@ mod tests {
         rt.request(json!({"op": "commitPreview"})).unwrap();
         assert_eq!(position(&rt, a), vec![10.0, 20.0]);
         assert_eq!(position(&rt, c), vec![500.0, 50.0], "still locked");
+    }
+}
+
+#[cfg(test)]
+mod effect_spread {
+    use super::*;
+    /// Effect parameters are named by each layer's own effect slot: dragging one layer's effect reaches another
+    /// selected layer only where that slot holds the same effect, never a different effect that shares the name.
+    #[test]
+    fn an_effect_drag_reaches_only_the_same_effect() {
+        // two different effects that share a numeric parameter name
+        let catalog = crate::render::engine::known_effects();
+        let numeric = |d: &crate::render::engine::EffectDescriptor| d.params.iter().map(|p| p.name.clone()).collect::<Vec<_>>();
+        let (first, second, shared) = catalog.iter().flat_map(|a| catalog.iter().map(move |b| (a, b)))
+            .filter(|(a, b)| a.plugin_id != b.plugin_id)
+            .find_map(|(a, b)| numeric(a).into_iter().find(|n| numeric(b).contains(n)).map(|n| (a.plugin_id.clone(), b.plugin_id.clone(), n)))
+            .expect("two effects share a parameter name");
+        let mut rt = EditorRuntime::open("").unwrap();
+        let mut layers = Vec::new();
+        for plugin in [&first, &second, &first] {
+            rt.request(json!({"op": "create", "kind": "rectangle"})).unwrap();
+            let l = rt.viewer.selected().unwrap();
+            rt.request(json!({"op": "applyEffect", "pluginId": plugin})).unwrap();
+            layers.push(l);
+        }
+        let slot = |rt: &EditorRuntime, l: LayerId| rt.doc.view().effects(l).unwrap()[0].id;
+        let name = |rt: &EditorRuntime, l: LayerId| PropertyId::effect_param(slot(rt, l), &shared).unwrap();
+        let value = |rt: &EditorRuntime, l: LayerId| rt.doc.view().value_at(l, &name(rt, l), rt.time().unwrap()).unwrap();
+        let before: Vec<_> = layers.iter().map(|&l| value(&rt, l)).collect();
+        rt.request(json!({"op": "select", "ids": layers.iter().map(|l| l.0).collect::<Vec<_>>()})).unwrap();
+        let shown = name(&rt, layers[0]).name().to_owned();
+        let default = catalog.iter().find(|d| d.plugin_id == first).unwrap().params.iter().find(|p| p.name == shared).unwrap().default;
+        let next = json!(default + 0.25);
+        rt.request(json!({"op": "previewProperties", "edits": [{"layer": layers[0].0, "property": shown, "value": next, "spread": "typed"}]})).unwrap();
+        rt.request(json!({"op": "commitPreview"})).unwrap();
+        assert_ne!(value(&rt, layers[0]), before[0], "the shown layer took the edit");
+        assert_eq!(value(&rt, layers[1]), before[1], "a different effect in the same slot is left alone");
+        assert_ne!(value(&rt, layers[2]), before[2], "the same effect in the same slot follows");
     }
 }

@@ -1,6 +1,7 @@
 import 'package:analysis_server_plugin/plugin.dart';
 import 'package:analysis_server_plugin/registry.dart';
 
+import 'src/card_housing.dart';
 import 'src/material_import.dart';
 import 'src/raw_color.dart';
 import 'src/raw_dimension.dart';
@@ -17,6 +18,7 @@ class MotoliiLints extends Plugin {
     registry.registerWarningRule(RawDimension());
     registry.registerWarningRule(RawColor());
     registry.registerWarningRule(MaterialImport());
+    registry.registerWarningRule(CardHousing());
     registry.registerFixForRule(RawDimension.code, UseMetric.new);
   }
 }

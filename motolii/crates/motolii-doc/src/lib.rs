@@ -1,5 +1,10 @@
-// 家: 意味と保存。編集状態(Document)と、その直列化。
-// 書き込みは Intent 経由のみ。export は独立した工程ではなく doc の保存関数。
+//! The read side of a Motolii work: values, time, evaluation and the stored-work model.
+//!
+//! This crate opens a saved work and answers "what is the value of this property at
+//! this time?". It defines the types (`core`), the evaluator for keyframes, curves and
+//! expressions (`eval`), the entity store and its read-only views (`store`: `StoreView`,
+//! `Recording`) and path geometry (`vector`). It never changes a work and never draws:
+//! changing is `motolii-edit`, drawing is `motolii-render`.
 pub mod core;
 pub mod eval;
 pub mod store;

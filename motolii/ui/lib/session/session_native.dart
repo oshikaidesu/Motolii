@@ -63,6 +63,7 @@ mixin SessionNative on SessionCore {
       };
       if (!sameValue(ids, textureIds.value)) textureIds.value = ids;
     }
+    if (envelope['stagePublishedFrames'] is num) stagePublishedFrames = (envelope['stagePublishedFrames'] as num).toInt();
     if (envelope['frameReady'] == true) {
       if (next['frame'] is num) frame.value = (next['frame'] as num).toInt();
       rendered.value = next;
@@ -143,13 +144,6 @@ mixin SessionNative on SessionCore {
         final state = EditorSession.map(call.arguments);
         panePlaces.value = EditorSession.map(state['places']);
         deskDrawer.value = state['drawer'] as String?;
-        if (state.containsKey('theme') &&
-            !sameValue(deskWork.value['theme'], state['theme'])) {
-          deskWork.value = {
-            ...deskWork.value,
-            'theme': EditorSession.typed(state['theme']),
-          };
-        }
       }
       if (call.method == 'documentChanged') {
         final envelope = EditorSession.map(call.arguments);
@@ -173,6 +167,7 @@ mixin SessionNative on SessionCore {
       if (call.method == 'effectsChanged' && windowInfo['main'] != false) {
         command('reloadEffects');
       }
+      if (call.method == 'catalogChanged') catalogTick.value++;
       if (call.method == 'documentClosed') {
         _cancelCadence();
         playing.value = false;

@@ -22,7 +22,6 @@ mod measurement;
 pub use measurement::FrameMeasurement;
 mod point_cloud;
 mod presentable;
-mod render_basic;
 mod render_effects;
 pub(crate) mod paths;
 mod sequential;
@@ -355,19 +354,6 @@ pub enum CompositorError {
     PresentableSize { got: [u32; 2], expected: [u32; 2] },
     #[error("共有面に RENDER_ATTACHMENT が無い")]
     PresentableUsage,
-}
-
-#[derive(Clone, Copy, Debug, Default)]
-pub struct RenderTiming {
-    pub build_us: u128,
-    pub gpu_us: u128,
-    pub readback_us: u128,
-}
-
-impl RenderTiming {
-    pub fn total_us(&self) -> u128 {
-        self.build_us + self.gpu_us + self.readback_us
-    }
 }
 
 #[derive(Clone, Copy, Debug, Default)]

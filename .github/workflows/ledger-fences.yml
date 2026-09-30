@@ -10,13 +10,24 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Current workspace and documentation entry points
         run: |
-          python3 scripts/check-stage5.py --self-test
-          python3 scripts/check-stage5.py
+          python3 scripts/check-workspace.py --self-test
+          python3 scripts/check-workspace.py
       - name: Architecture rules (the core does not know the picture)
         run: |
           cargo install cargo-arc --locked
           cargo arc check
       - name: Documentation index and link consistency
         run: bash scripts/check-docs.sh
+      - name: Technology Acquisition Gate (new code says how it was acquired)
+        run: |
+          before="${{ github.event.before }}"
+          if [ -n "$before" ] && [ "$before" != "0000000000000000000000000000000000000000" ]; then bash scripts/check-acquisition.sh --range "$before..${{ github.sha }}"; fi
+      - name: Independent police (Semgrep rules, cargo-deny sources)
+        run: |
+          pip install semgrep
+          cargo install cargo-deny --locked
+          BASE="${{ github.event.before }}" bash scripts/validate.sh police

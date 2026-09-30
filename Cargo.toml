@@ -1,7 +1,7 @@
 # Stage 5 workspace. Default build target is the Flutter native bridge.
 [workspace]
 resolver = "2"
-members = ["motolii/crates/motolii-doc", "motolii/crates/motolii-render", "motolii/ui/native", "motolii/ui/extensions/script", "motolii/ui/extensions/jobs", "motolii/ui/extensions/edit"]
+members = ["motolii/crates/motolii-doc", "motolii/crates/motolii-render", "motolii/crates/motolii-script", "motolii/crates/motolii-jobs", "motolii/crates/motolii-edit", "motolii/ui/native"]
 default-members = ["motolii/ui/native"]
 
 [workspace.dependencies]
@@ -55,7 +55,7 @@ cpal = "0.18"
 rtrb = "0.4"
 waveform-data = "=0.1.1"
 serde_json = "1"
-# スクリプトの口(docs/reviews/2026-09-14-script-mouth.md): 中断の口と memory 上限を持つ小さな JS。
+# スクリプトの口(docs/design/rationale/script-mouth.md): 中断の口と memory 上限を持つ小さな JS。
 rquickjs = "0.13"
 thiserror = "2"
 quick_cache = "0.7.0"

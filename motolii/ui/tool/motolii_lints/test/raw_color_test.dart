@@ -43,7 +43,7 @@ void f(int n) {
   }
 
   void test_theme_file_may_hold_colours() async {
-    final path = '$testPackageLibPath/foundation/theme.dart';
+    final path = '$testPackageLibPath/theme/editor_theme.dart';
     newFile(path, r'''
 class Color { const Color(int v); }
 const ink = Color(0xffdddddd);

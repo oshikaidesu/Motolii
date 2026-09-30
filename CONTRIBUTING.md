@@ -4,12 +4,14 @@ Current development is **Stage 5**, in `motolii/`. Flutter UI work belongs in `m
 
 ## Find the owner before editing
 
-1. Read [the concept](docs/concept.md) and [adopted UI behavior](docs/stage5/product-contract.md).
-2. Use the [module responsibility table](docs/stage5/modules.md) to find the code that owns your change.
+1. Read [the concept](docs/concept.md) and [adopted UI behavior](docs/product/product-contract.md).
+2. Use the [module responsibility table](docs/product/modules.md) to find the code that owns your change.
 3. Search [decision-index](docs/decision-index.md) for relevant prior decisions. Historical entries are evidence, not a reason to override newer user decisions.
 4. Agent instructions are in [motolii/AGENTS.md](motolii/AGENTS.md).
 
-Document/Intent owns authored changes and Undo. Native ViewerState owns selection, viewing time and observer state; Flutter owns widget presentation, focus and layout. Neither is a second owner of the work. Reuse the canonical doc/render crates rather than copying them into UI. The current Rust editor layer is `motolii/ui/native/src/editor`; old Dioxus helpers are historical references, not a second maintenance target. [Module boundaries](docs/stage5/modules.md) and [provenance](docs/stage5/imported-edit-helpers.json) identify the owners.
+Document/Intent owns authored changes and Undo. Native ViewerState owns selection, viewing time and observer state; Flutter owns widget presentation, focus and layout. Neither is a second owner of the work. Reuse the canonical doc/render crates rather than copying them into UI. The current Rust editor layer is `motolii/ui/native/src/editor`; old Dioxus helpers are historical references, not a second maintenance target. [Module boundaries](docs/product/modules.md) and [provenance](docs/product/imported-edit-helpers.json) identify the owners.
+
+Presentation may choose what the user intends; it may not decide what that intent means. Flutter owns gestures, hit-testing, hover and focus, layout and paint, and the state of an interaction in progress. Computing the next value from the current one (`!current`, value + delta), converting between property, time, world and local spaces, clamping, snapping or trimming, choosing which layers an edit reaches, splitting one action into several writes, deciding where an Undo step ends, and computing a preview differently from its commit all belong to the owner. The core, in turn, does not decide product meaning from pixels or widget geometry. A new UI action should read as: UI action → one operation → its owner → one transaction. `ui/test/boundary_test.dart` checks the part of this that the source shows unambiguously.
 
 ## Development loop
 
@@ -36,7 +38,7 @@ git diff --check
 scripts/motolii-ui.sh test
 ```
 
-Individual Rust targets run from the repository root with an explicit `-p` package; Flutter tests run from `motolii/ui/`. The [technical evidence](docs/stage5/technical-boundaries.md) separates component tests, comparison-port observations, and real-window acceptance. Report commands and results honestly; a skipped test is not a pass, and a test pass is not a visual review.
+Individual Rust targets run from the repository root with an explicit `-p` package; Flutter tests run from `motolii/ui/`. The [technical evidence](docs/product/technical-boundaries.md) separates component tests, comparison-port observations, and real-window acceptance. Report commands and results honestly; a skipped test is not a pass, and a test pass is not a visual review.
 
 For a focused change, start with its owner's tests (use the README's native dependency environment for Cargo):
 
@@ -49,13 +51,13 @@ For a focused change, start with its owner's tests (use the README's native depe
 | Native window attachment lifecycle | `scripts/motolii-ui.sh test-window` |
 | Script execution without the editor or GPU | `cargo test -p motolii-script` |
 
-From `motolii/ui`, `flutter test test/window_attachment_test.dart test/session_reconnect_test.dart test/workspace_host_contract_test.dart` checks UI detach/reconnect and the dock's actual WidgetsApp host contract.
+The UI is tested two ways. `motolii/ui/test` keeps only the contracts between Flutter and the native host (snapshot deltas, document operation names, reconnect during playback, the theme file). Behaviour is tested on the real app with `integration_test`: `scripts/motolii-ui.sh it [document]` launches the live shell with its native host on a scratch copy and drives it like a person, finding controls by accessible name and reading the outcome from the work. Appearance is not asserted in tests; it is reviewed on screen.
 
 Add regression cases at the owning boundary. Do not require a full application or unrelated services to test a pure contract; use actual-window acceptance when behavior depends on window interaction.
 
 `motolii-doc` enables `editing` by default for editor compatibility. Read-only consumers use `default-features = false` and `Recording::load().view()`; production `motolii-render` uses this configuration. Its test fixtures opt into editing only as a dev-dependency. Cargo features are additive, so an editor workspace build still includes editing; this is a dependency boundary, not a sandbox. Keep UI-only work on hot reload, and use focused checks instead of rebuilding every feature configuration after every change. Build-time improvement has not yet been measured.
 
-`scripts/check-docs.sh` remains the wider historical documentation audit. Its old inventories and historical links are distinct from the Stage 5 entry check; do not use a successful local check to claim the entire historical tree has been audited.
+`scripts/check-docs.sh` audits the docs tree: no history folders, every markdown link resolves, every `git:<sha>:<path>` provenance token resolves, decision-index status vocabulary.
 
 ## Issues and pull requests
 
@@ -63,7 +65,7 @@ Describe the concrete problem, how to reproduce it, the owner of the change, and
 
 Update affected current documents when meaning changes. Preserve unrelated local edits. Do not use old paths from historical documents as current targets, duplicate core ownership, hide incomplete features behind completion claims, or add a second rendering implementation to imitate the current result.
 
-The [previous contributor guide](docs/stage5/history/contributing-before-entry-cleanup.md) is retained for history. Current agent policy comes from `motolii/AGENTS.md`, not old guide text.
+The previous contributor guide (`git:912382f048:docs/product/history/contributing-before-entry-cleanup.md`) is retained for history. Current agent policy comes from `motolii/AGENTS.md`, not old guide text.
 
 ## License
 

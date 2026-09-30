@@ -38,7 +38,7 @@ impl Engine {
 
     /// 効果が宣言した時刻のずれごとに、**その時刻の層の絵**を用意する。
     ///
-    /// 効果が自分で前フレームを覚えるのは恒久禁止(`docs/plugin-resources.md` §6) — 追跡できなくなり、
+    /// 効果が自分で前フレームを覚えるのは恒久禁止(`docs/design/plugin-resources.md` §6) — 追跡できなくなり、
     /// 純関数契約・フレーム並列・スクラブが壊れるため。ここは逆で、ホストが時刻を決めて渡すので
     /// `render_frame(t)` は純関数のまま。
     ///
@@ -306,7 +306,7 @@ impl Engine {
 
     /// 層の組み立て + feedback の辿り直し。
     ///
-    /// feedback は「入点を初期条件とする漸化式」(`docs/plugin-resources.md` §6-3)。組んだ後で、
+    /// feedback は「入点を初期条件とする漸化式」(`docs/design/plugin-resources.md` §6-3)。組んだ後で、
     /// 初期条件から描かれてしまった状態(飛んで来た)があれば、直近の checkpoint(無ければ入点)から
     /// t の手前まで順に描いてから、t をもう一度組む。順再生と書き出しは 1 歩ずつなので何もしない。
     ///
@@ -473,14 +473,6 @@ impl Engine {
             .render_to_texture(comp, camera, &layers, background)?)
     }
 
-    pub fn render_frame_to_texture(
-        &mut self,
-        view: &StoreView<'_>,
-        t: RationalTime,
-    ) -> Result<(wgpu::Texture, wgpu::TextureView), EngineError> {
-        self.render_frame_graph_to_texture_output(view, t, true)
-    }
-
     pub fn render_frame_into(
         &mut self,
         view: &StoreView<'_>,
@@ -578,7 +570,12 @@ pub(super) fn collect_shape_documents(view: &StoreView<'_>, resolved: &[Resolved
 }
 
 pub(crate) fn shown_shapes(shapes: &[ShapeNode], layer: &ResolvedLayer) -> Vec<ShapeNode> {
-    let effects: Vec<_> = layer.effects.iter().chain(&layer.after_effects).cloned().collect();
+    shown_shapes_of(shapes, &layer.effects, &layer.after_effects)
+}
+
+/// The outline as drawn: the layer's path operations applied in stack order.
+pub(crate) fn shown_shapes_of(shapes: &[ShapeNode], effects: &[crate::picture::resolved::ResolvedEffect], after: &[crate::picture::resolved::ResolvedEffect]) -> Vec<ShapeNode> {
+    let effects: Vec<_> = effects.iter().chain(after).cloned().collect();
     crate::extensions::pathop::with_effects(shapes, &effects)
 }
 
@@ -647,12 +644,12 @@ fn lookbehind_layer_id(layer: LayerId, key: i64) -> LayerId {
 
 /// 別の時刻を読む効果は、**たどり着き方で絵が変わってはいけない**(実 GPU)。
 ///
-/// 効果が自分で前フレームを覚える道を恒久禁止している理由がここ(`docs/plugin-resources.md` §6)。
+/// 効果が自分で前フレームを覚える道を恒久禁止している理由がここ(`docs/design/plugin-resources.md` §6)。
 /// ホストが時刻を渡す形なら、同じ時刻は何度描いても、どの順で描いても同じ絵になる。
 #[cfg(test)]
 mod time_reference_is_deterministic;
 
-/// feedback(前のフレームを保つ効果)は**入点を初期条件とする漸化式**(`docs/plugin-resources.md` §6-3)。
+/// feedback(前のフレームを保つ効果)は**入点を初期条件とする漸化式**(`docs/design/plugin-resources.md` §6-3)。
 /// 効果は覚えない — host が状態を持ち、飛んで来ても入点(か checkpoint)から辿り直すので、
 /// 同じ時刻は何度描いても、どの順で描いても同じ絵(実 GPU)。
 #[cfg(test)]
@@ -660,10 +657,15 @@ mod feedback_is_a_recurrence_from_the_in_point;
 
 /// 合体後の別時刻(`SOURCE: below / comp`)。下の合成を t′ で読む効果は、ホストが t′ の下の層たちを
 /// 描いて渡す。だから「下の合成の 0.5 秒前」は、下の層だけの書類を 0.5 秒前に描いた絵と同じで、
-/// 飛んでも辿っても同じ(`docs/plugin-resources.md` §6-1 CompLookbehind、非再帰)。
+/// 飛んでも辿っても同じ(`docs/design/plugin-resources.md` §6-1 CompLookbehind、非再帰)。
 #[cfg(test)]
 mod composite_at_another_time;
 
-/// Freeze(docs/freeze-and-flatten.md §2-6): 凍っても絵は変わらない、飛んでも辿っても同じ、Unfreeze で戻る。
+/// Freeze(docs/design/freeze-and-flatten.md §2-6): 凍っても絵は変わらない、飛んでも辿っても同じ、Unfreeze で戻る。
 #[cfg(test)]
 mod freeze_keeps_the_picture;
+
+#[cfg(test)]
+mod placement_contract;
+#[cfg(test)]
+mod projection_contract;

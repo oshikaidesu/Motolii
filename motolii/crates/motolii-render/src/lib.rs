@@ -1,5 +1,11 @@
-// 家: rerun への接ぎ木。Document の意味を re_renderer の口へ写す所だけ。
-// GPU・デコード・描画・色は上流の部品 — ここで作らない。
+//! Turns a work into pictures and sound: the bridge from `motolii-doc` to the GPU.
+//!
+//! `frame_graph` compiles one revision of a work into a graph of nodes and evaluates it
+//! once per time; `engine` and `compositor` run that graph's GPU work on the rerun
+//! renderer (`re_renderer`); `picture` resolves layers into drawable form; `media`,
+//! `audio` and `playback` decode and keep time; `export` writes files; `extensions`
+//! holds the bundled effects, placement programs and text. GPU, decoding and colour
+//! come from upstream crates; this crate only maps the work onto them.
 pub mod picture;
 pub mod audio;
 pub mod compositor;

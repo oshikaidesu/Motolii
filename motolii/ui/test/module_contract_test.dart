@@ -7,9 +7,10 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../lib/bridge/protocol.dart';
 import '../lib/session/editor_session.dart';
-import '../lib/workspace/layout.dart';
-import '../lib/workspace/panel_ids.dart';
-import '../lib/input/editor_shortcuts.dart';
+import 'package:docking/docking.dart';
+
+import '../lib/input/window_keys.dart';
+import '../lib/workspace/dock_workspace.dart';
 
 void main() {
   test(
@@ -38,38 +39,56 @@ void main() {
       );
     },
   );
-  test(
-    'workspace move keeps one panel instance and survives serialization',
-    () {
-      final layout = WorkspaceLayout();
-      for (final name in paneNames) {
-        layout.show(name);
+  group('workspace keeps one instance of each panel and survives a save', () {
+    DockWorkspace make() => DockWorkspace(
+      {
+        for (final id in const ['Stage', 'Inspector', 'Timeline', 'Colors'])
+          id: PanelDef(id, id, () => const SizedBox()),
+      },
+      (item) => DockingRow([
+        item('Stage'),
+        DockingTabs([item('Inspector'), item('Timeline'), item('Colors')]),
+      ]),
+    );
+    List<String> tabs(DockWorkspace w) {
+      final ids = <String>[];
+      void walk(DockingArea? a) {
+        if (a is DockingItem) ids.add('${a.id}');
+        if (a is DockingParentArea) a.forEach(walk);
       }
-      final target = layout.root.leaves.firstWhere(
-        (n) => n.tabs.contains('Stage'),
-      );
-      layout.move('Colors', target, 'right');
-      var tabs = layout.root.leaves.expand((n) => n.tabs).toList();
-      expect(tabs.toSet(), paneNames.toSet());
-      expect(tabs.length, paneNames.length);
-      layout.root = DockNode.read(jsonDecode(jsonEncode(layout.root.json())));
-      layout.close('Colors');
-      layout.show('Colors');
-      tabs = layout.root.leaves.expand((n) => n.tabs).toList();
-      expect(tabs.where((n) => n == 'Colors').length, 1);
-      expect(tabs.toSet(), paneNames.toSet());
-    },
-  );
-  test('saved dock never mounts one pane twice', () {
-    final dock = DockNode.read({
-      'axis': 'horizontal',
-      'ratio': .5,
-      'first': {'id': 'left', 'tabs': ['Stage', 'Inspector'], 'active': 'Stage'},
-      'second': {'id': 'right', 'tabs': ['Inspector', 'Timeline'], 'active': 'Inspector'},
+      walk(w.layout.root);
+      return ids;
+    }
+
+    test('close then show puts a panel back exactly once', () {
+      final w = make();
+      w.close('Colors');
+      expect(w.isOpen('Colors'), isFalse);
+      w.activate('Colors');
+      w.activate('Colors');
+      expect(tabs(w).where((id) => id == 'Colors'), hasLength(1));
+      expect(tabs(w).toSet(), {'Stage', 'Inspector', 'Timeline', 'Colors'});
     });
-    final tabs = dock.leaves.expand((leaf) => leaf.tabs).toList();
-    expect(tabs.where((name) => name == 'Inspector'), hasLength(1));
-    expect(dock.second!.active, 'Timeline');
+    test('a saved workspace round-trips through JSON, front tab included', () {
+      final w = make();
+      w.activate('Timeline');
+      final saved = jsonDecode(jsonEncode(w.snapshot()));
+      final again = make();
+      expect(again.restore(saved), isTrue);
+      expect(again.snapshot(), w.snapshot());
+      expect(again.isShown('Timeline'), isTrue);
+      expect(tabs(again)..sort(), tabs(w)..sort());
+    });
+    test('an unreadable saved workspace leaves the current one alone', () {
+      final w = make();
+      final before = w.snapshot();
+      final good = w.snapshot();
+      expect(w.restore(null), isFalse);
+      expect(w.restore({...good, 'version': 99}), isFalse);
+      expect(w.restore({...good, 'layout': 'not a layout'}), isFalse);
+      expect(w.restore({...good, 'layout': (good['layout'] as String).replaceAll('Stage', 'Gone')}), isFalse);
+      expect(w.snapshot(), before);
+    });
   });
   testWidgets(
     'text input keeps keyboard ownership and repeated view commands notify',
@@ -77,24 +96,19 @@ void main() {
       final c = EditorSession();
       final root = FocusNode();
       final text = FocusNode();
-      var menuCalls = 0, viewCalls = 0;
-      final shortcuts = EditorShortcuts(
-        c,
-        onMenu: (_) => menuCalls++,
-        hasSheet: () => false,
-        closeSheet: () {},
-        showComposition: () {},
-        showInspector: () {},
-      );
+      final home = GlobalKey();
+      var viewCalls = 0;
+      final keys = LiveKeys(c, () => home.currentContext!);
       c.viewCommand.addListener(() {
         if (c.viewCommand.value != null) viewCalls++;
       });
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
+            key: home,
             body: Focus(
               focusNode: root,
-              onKeyEvent: shortcuts.handle,
+              onKeyEvent: keys.handle,
               child: TextField(focusNode: text),
             ),
           ),
@@ -103,9 +117,9 @@ void main() {
       text.requestFocus();
       await tester.pump();
       await tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
-      await tester.sendKeyEvent(LogicalKeyboardKey.keyS);
+      await tester.sendKeyEvent(LogicalKeyboardKey.digit0);
       await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
-      expect(menuCalls, 0);
+      expect(viewCalls, 0);
       root.requestFocus();
       await tester.pump();
       await tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);

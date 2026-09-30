@@ -1,10 +1,12 @@
 # Exit demo (M1 hero)
 
+> **Historical (not runnable at HEAD):** `motolii-cli` and `crates/motolii-cli/tests/exit_demo.rs` no longer exist (retired with the pre-Stage-5 trees). Kept as the record of the M1 exit demo.
+
 The M1 "exit demo": a **2-layer composite** — a real video background + a rectangle
 sliding right with **easing (cubic-bezier ease-in-out)** — rendered to an mp4 from the CLI.
 No UI involved; this is the headless pipeline (decode → canonical-space overlay → composite → encode).
 
-A preview GIF for the README lives at [`docs/assets/exit_demo.gif`](../../docs/assets/exit_demo.gif)
+A preview GIF for the README lives at [`docs/product/assets/exit_demo.gif`](../../docs/product/assets/exit_demo.gif)
 (regenerate from a local render with ffmpeg if you change the demo).
 
 `project.json` is a versioned project file: `input` (background video), `output` (mp4),
