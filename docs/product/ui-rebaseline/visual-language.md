@@ -2,7 +2,7 @@
 
 **Swiss housing. Toybox contents. Things have faces. Identity travels; bodies change.**
 
-This is a language for deriving new UI, not a parts list. It contains no sizes, colours or radii. Those belong to the current golden (`visual-golden-observations.md`, `design-handoff-v1.md`) and may change without this language changing.
+This is a language for deriving new UI, not a parts list. It contains no sizes, colours or radii. Those live in `motolii/ui/lib/theme/metrics.dart` (the one visual-metrics canon) and may change without this language changing.
 
 The housing is quiet and disciplined. What it holds is not. Create holds toys for shapes, Relations hold toys for relationships, Colour holds colour itself, Effects hold toys for phenomena. Colour is not reserved for one category.
 

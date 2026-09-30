@@ -65,7 +65,7 @@ Describe the concrete problem, how to reproduce it, the owner of the change, and
 
 Update affected current documents when meaning changes. Preserve unrelated local edits. Do not use old paths from historical documents as current targets, duplicate core ownership, hide incomplete features behind completion claims, or add a second rendering implementation to imitate the current result.
 
-The [previous contributor guide](docs/product/history/contributing-before-entry-cleanup.md) is retained for history. Current agent policy comes from `motolii/AGENTS.md`, not old guide text.
+The previous contributor guide (`git:912382f048:docs/product/history/contributing-before-entry-cleanup.md`) is retained for history. Current agent policy comes from `motolii/AGENTS.md`, not old guide text.
 
 ## License
 

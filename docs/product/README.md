@@ -4,7 +4,7 @@
 
 UIの方向(何を完成と呼ぶか・seatの意味・Dock)の正本は [Product Direction](product-direction.md) と [Product Home](product-home.png)(`motolii/AGENTS.md` の PRODUCT ORACLE から参照)。[UI rebaseline](ui-rebaseline/README.md) は2026-09-25のshell移行計画で、Classic/Newの境界の説明として読む(そこに書かれた `ClassicShell`・`SessionHost` はまだ存在しない)。
 
-記録(その日付時点の状態。現在地として読まない): [2026-09-11作業表](claude-handoff-2026-09-11.md)、[2026-09-19最小コア進捗](minimal-core-progress-2026-09-19.md)。
+記録(その日付時点の状態。現在地として読まない): 2026-09-11作業表 (`git:912382f048:docs/product/claude-handoff-2026-09-11.md`)、2026-09-19最小コア進捗 (`git:912382f048:docs/product/minimal-core-progress-2026-09-19.md`)。
 
 ## 起動入口(現在)
 
