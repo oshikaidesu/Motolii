@@ -11,17 +11,17 @@
 | 所有者 | 実装 | 接続する口 |
 |---|---|---|
 | 再生時計・音声transport | `motolii-render/src/playback.rs` | `StoreView`の読み取りだけ。編集Document/Intent、Flutter、パネルを受け取らない |
-| 作品の保存・編集 | `motolii/ui/extensions/edit`(`motolii-edit`: `document.rs`・`Intent`・`persist.rs`) | Document/Intent、共通の値・効果宣言型 |
-| 保存作品・処理用の読み取り所有 | `motolii-doc/src/store/recording.rs` | `Recording::load`と`view`(実行中の製品は`Document::view()`の`StoreView`で読む。`Recording::load`の呼び手は今は試験 `ui/extensions/edit/tests/recording_read.rs` だけ)。編集・Undoを公開せず、RRD decoderはDocumentと共有。Documentからの変換は確定した編集位置を保持し、一時編集を含めない |
+| 作品の保存・編集 | `motolii/crates/motolii-edit`(`motolii-edit`: `document.rs`・`Intent`・`persist.rs`) | Document/Intent、共通の値・効果宣言型 |
+| 保存作品・処理用の読み取り所有 | `motolii-doc/src/store/recording.rs` | `Recording::load`と`view`(実行中の製品は`Document::view()`の`StoreView`で読む。`Recording::load`の呼び手は今は試験 `motolii/crates/motolii-edit/tests/recording_read.rs` だけ)。編集・Undoを公開せず、RRD decoderはDocumentと共有。Documentからの変換は確定した編集位置を保持し、一時編集を含めない |
 | 作品の読み取り・読取cache | `motolii-doc/src/store/view.rs`、`read.rs` | 編集命令を解釈せず、記録と読み取り用のプレビュー値を参照する。命令から値への変換・検証は編集側の責任 |
 | 共通ID・版情報 | `motolii-doc/src/store/ids.rs`、`read.rs` | 読む側と書く側が共有する値の型。編集実装の子モジュールには置かない |
 | 閲覧状態 | `ui/native/src/viewer.rs` | 選択・閲覧時刻・再生時計・観測カメラ・表示範囲・ポインタなど。作品を所有せず、読み取りViewから初期化する。主選択は一覧の末尾から導出し二重保存しない |
-| JS実行器・作者用関数 | `motolii/ui/extensions/script` (`motolii-script`) | `Host::command` と読み取り専用 `Host::query`。doc/render/Flutterへの依存なし |
+| JS実行器・作者用関数 | `motolii/crates/motolii-script` (`motolii-script`) | `Host::command` と読み取り専用 `Host::query`。doc/render/Flutterへの依存なし |
 | スクリプトと編集の接続 | `ui/native/src/editor/script.rs` | 操作の検証・Document/Undo・ファイルの再実行。JS VMは所有しない |
-| 書き出し・Freezeの仕事 | `motolii/ui/extensions/jobs` (`motolii-jobs`) | 受付条件を検証後、呼出し側の一回限りの関数からRecordingを受け取る。作品コピーの作成はnative editorが所有し、jobsはDocument/Intentに依存しない。状態とキャンセルを提供する |
+| 書き出し・Freezeの仕事 | `motolii/crates/motolii-jobs` (`motolii-jobs`) | 受付条件を検証後、呼出し側の一回限りの関数からRecordingを受け取る。作品コピーの作成はnative editorが所有し、jobsはDocument/Intentに依存しない。状態とキャンセルを提供する |
 | 同梱効果の組み立て | `motolii-render/src/extensions/mod.rs` | 共通 `Kind` 宣言を既存の描画catalogへ渡す |
 | 配置計算の差し込み | `store/kind.rs`の`PlacementProgram`、`StoreView::with_placement_programs` | 値・時刻・読み取り専用の解析入力→配置と輪郭の伸び。Document/Undoを受け取らない。位置を必要とするprogramだけが位置の解決を要求し、同梱の評価関数は拡張側で組み立てる |
-| Motion Blurのサンプル方針 | `extensions/motion.rs`の`Sampling` | 変換を読む関数だけを受け、端点・移動量・枚数・時刻を決める。Document/StoreView/GPUを所有しない。読み取りと平均合成への適用はcoreに残す |
+| Motion Blurのサンプル方針 | `motolii-render/src/extensions/motion.rs`の`Sampling` | 変換を読む関数だけを受け、端点・移動量・枚数・時刻を決める。Document/StoreView/GPUを所有しない。読み取りと平均合成への適用はcoreに残す |
 | Text Morph | `motolii-render/src/extensions/text.rs` と `text/morph.rs` | 効果パラメータと輪郭を受け、変形後の輪郭を返す。保存コアは実装を知らない |
 | WGSL効果 | `motolii-render/vism/` | 既存manifestとstageの入出力 |
 
@@ -58,14 +58,15 @@ UI接続の寿命は `macos/Runner/WindowAttachment.swift` が識別する。`Ed
 | `app` | 起動、窓のライフサイクル、保存確認、OS窓との接続 | Dock内部、個別キーの判定、作品データ |
 | `workspace` | パネル配置、タブ、幅、パネルフォーカス | Document編集、OS操作、具体的パネル実装 |
 | `input` | 共通ショートカット、入力の所有、ナビゲーションと慣性 | ファイル操作の実装、描画エンジン |
-| `foundation` | 色・寸法、ボタン、メニュー、文字/数値の下書き入力 | Session、Document、個別パネル |
-| `panels` | 結果の表示、対象固有の操作入口 | Native transportの直接呼出し、第二の作品状態 |
+| `controls` / `theme` | 共有の部品(ボタン、メニュー、ダイアログ、シート)と色・寸法・字形 | Session、Document、個別パネル |
+| `stage` / `timeline` / `inspector` / `browser` / `effects` / `colors` / `fonts` / `desks` | 各パネルの表示と対象固有の操作入口 | Native transportの直接呼出し、第二の作品状態 |
+| `legacy` | 退役予定のClassic/New shellとその部品(機能の移行元。能力ゲートは product-direction.md) | 新しい機能の置き場 |
 | `session` | snapshot受信、命令queue、再生要求の調停 | ウィジェットやDockの形 |
 | `bridge` | MethodChannel、型付きoperationとwire codec | UI判断、作品の編集意味 |
 | Rust `editor` | 選択/clipboard/gestureをDocument/Intentへ変換する編集層 | Flutter widget、作品の第二の保存先 |
 | Rust `doc` | 不変条件、親子・キー、transaction、Undo | OS/Flutterの状態 |
 
-`main.dart`はアプリの起動だけ。パネル実体の組み立ては`panels/registry.dart`、一覧の名前は`workspace/panel_ids.dart`。nativeへの命令はEditorSessionを通し、bridge以外でMethodChannelを生成しない。
+`lib/main.dart`は起動するshellの選択だけ(製品は`app/main.dart`)。パネル座席の組み立ては`workspace/seats.dart`。nativeへの命令はEditorSessionを通し、bridge以外でMethodChannelを生成しない。
 
 共通編集helperは`motolii/ui/native/src/editor`が現役。旧Dioxus側は履歴参照であり、修正を両側へ複製しない。由来は[imported-edit-helpers.json](imported-edit-helpers.json)。`keyframe_edit.rs`はキー編集の意味を持ち、widgetではない。
 

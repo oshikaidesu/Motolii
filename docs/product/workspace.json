@@ -7,9 +7,8 @@
   "document": "motolii/crates/motolii-doc",
   "documentEditing": "motolii/crates/motolii-edit",
   "entries": {
-    "product": "motolii/ui/lib/live_hf/main.dart (dev, profile, live; lib/main.dart defaults here)",
-    "migrationSources": "motolii/ui/lib/app (MOTOLII_SHELL=classic | new)",
-    "prototype": "motolii/ui/lib/proto_hf, motolii/ui/lib/proto (not a product path)"
+    "product": "motolii/ui/lib/app/main.dart (dev, profile, live; lib/main.dart selects the shell)",
+    "migrationSources": "motolii/ui/lib/legacy (MOTOLII_SHELL=classic | new), kept until the capability gate in docs/product/product-direction.md"
   },
   "renderer": "motolii/crates/motolii-render",
   "history": "docs/product/history/retired-source.md",
