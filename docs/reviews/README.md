@@ -680,7 +680,7 @@
 
 - [学マス・アイプラの公開技術から、次の反射実装へ](2026-09-09-qualiarts-rendering-next-plan.md)
 
-現行の判断は[Stage 5](../stage5/README.md)。以下は作成時点の調査・候補・決定の根拠。
+現行の判断は[Stage 5](../product/README.md)。以下は作成時点の調査・候補・決定の根拠。
 
 - [2026-09-03 コンセプトへの異議(コンセプトデザイナー: Ableton / Figma の人)](2026-09-03-concept-challenge.md)
 - [persona の違和感 backlog — しらみ潰し(2026-09-03 利用者: 最大公約数でなく全部)](2026-09-03-persona-backlog.md)
@@ -838,3 +838,6 @@
 - [外部の警察(Semgrep・cargo-deny)— 過去の事故で赤緑を取って採用(2026-09-30)](2026-09-30-external-police-spike.md)
 - [技術の取得ゲートと再発明候補の監査 — Motolii owns meaning, not technology(2026-09-30)](2026-09-30-technology-acquisition-audit.md)
 - [UI の Technology Acquisition Audit — Flutter標準へ戻す物・借りる物・Motoliiが持つ物(2026-09-30)](2026-09-30-ui-technology-acquisition-audit.md)
+- [GAP-30 cold pipeline: どの pipeline を誰がどの thread で作り、冷えた初コマが何 ms か(2026-09-28)](2026-09-28-gap30-cold-pipeline-inventory.md)
+- [Surface Grammar — 製品窓の見た目を 1 つの token 源にする(2026-09-30)](2026-09-30-surface-grammar.md)
+- [UI vertical slice — UI の枠組みに Flutter を使う(2026-09-30)](2026-09-30-ui-vertical-slice.md)

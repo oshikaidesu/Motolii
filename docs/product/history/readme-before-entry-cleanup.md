@@ -29,7 +29,7 @@ Motolii is an open, inspectable, plugin-extensible compositor focused on making 
 
 The project does not depend on a new compositing invention. Keyframes, easing, typed parameter links, render graphs, GPU textures, command-based editing, selective caches, 2D/3D projection, and plugins are all known techniques. The work is to compose them into a small, explicit, replaceable system without making historical workarounds part of the product model.
 
-Pre-1.0, under active development. Stage 5 moves the UI to Flutter in `motolii/ui`, sharing the canonical Rust Document and Rerun renderer in `motolii/crates`. The macOS GPU view uses a shared texture surface. Migration and UI restructuring are in progress; this is not a full feature-parity or cross-platform release claim. Start at [the current concept](../../../docs/concept.md), [Stage 5](../../../docs/stage5/README.md) and [motolii/AGENTS.md](../../../motolii/AGENTS.md). Earlier UI implementations remain as historical/reference code.
+Pre-1.0, under active development. Stage 5 moves the UI to Flutter in `motolii/ui`, sharing the canonical Rust Document and Rerun renderer in `motolii/crates`. The macOS GPU view uses a shared texture surface. Migration and UI restructuring are in progress; this is not a full feature-parity or cross-platform release claim. Start at [the current concept](../../../docs/concept.md), [Stage 5](../../../docs/product/README.md) and [motolii/AGENTS.md](../../../motolii/AGENTS.md). Earlier UI implementations remain as historical/reference code.
 
 ## Why Motolii
 

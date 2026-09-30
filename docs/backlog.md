@@ -11,7 +11,7 @@
 |---|---|---|---|---|
 | GAP-12 パス演算 | CLOSED | `motolii-render/src/extensions/pathop.rs` 15種、`engine/render.rs`・Lottie書き出しで評価、UIから適用(`port.rs:454-461` テスト) | — | — |
 | GAP-1 文字 | CLOSED(別スタック) | cosmic-text+fontdb(`picture/shaping.rs`) | fontique/harfrustではない | — |
-| GAP-4 ドラッグ=1 Undo | CLOSED | `previewTimings`→`commitPreview`(`ui/native/src/port/timing_drag_tests.rs`) | — | — |
+| GAP-4 ドラッグ=1 Undo | CLOSED | `previewTimings`→`commitPreview`(`motolii/ui/native/src/port/timing_drag_tests.rs`) | — | — |
 | GAP-15 図形 | CLOSED | `vector.rs`(Ellipse/Fill/Stroke/LineCap/StarType)、`vector/geom.rs` polystar | — | — |
 | GAP-28 / AG-2 再生時計=音 | CLOSED(構造) | `Clock = PlaybackController`(`playback.rs:122`)が `AudioProgram` から `PlaybackSession`/`MixProducer` を作る | 10分ドリフトの実証はUNVERIFIED | — |
 | GAP-11 README hero | CLOSED | `docs/assets/rgb-trail.gif`、`examples/rgb_trail_demo.rs` | 1コマンド再生成はUNVERIFIED | — |
@@ -22,11 +22,11 @@
 | GAP-19 速度 | PARTIAL | `SPEED`/`TIME_REMAP` とキー追従 | 速度編集UIが無い | MEDIUM |
 | GAP-26 ffmpeg信頼性 | PARTIAL | 一時ファイル→atomic rename、`-v error`、drop時kill、encode の stderr 常時 drain(書き出し中も)、音の decode も同様、書き出しは ffprobe で照合してから install(frame 数・寸法・音)、ffmpeg の尾の flush 中も Cancel が効く | 起動時の tool probe は無い(書き出し時に「ffmpeg was not found」を出す)。flush の timeout 値は選ばない(長い flush は正当) | MEDIUM |
 | GAP-27 GPU障害 | PARTIAL | poisonの `expect` は解消(`engine.rs` `into_inner`) | 型付き分類・device-lost callbackなし | MEDIUM |
-| INF-6 保存と復旧 | PARTIAL | atomic `save` は `save` opから届く。kill→復旧の oracle `ui/extensions/edit/tests/kill_recovery.rs`(SIGKILL を 12 通りの時刻で、本体と最新 auto-save 世代が常に完結した以前の保存。書き込みを in-place に変える mutation で落ちることを確認) | `Document::auto_save` は製品から呼ばれない(周期・保存先・起動時の復旧提示は利用者の裁定待ち) | HIGH(接続) / MEDIUM(復旧UX) |
+| INF-6 保存と復旧 | PARTIAL | atomic `save` は `save` opから届く。kill→復旧の oracle `motolii/crates/motolii-edit/tests/kill_recovery.rs`(SIGKILL を 12 通りの時刻で、本体と最新 auto-save 世代が常に完結した以前の保存。書き込みを in-place に変える mutation で落ちることを確認) | `Document::auto_save` は製品から呼ばれない(周期・保存先・起動時の復旧提示は利用者の裁定待ち) | HIGH(接続) / MEDIUM(復旧UX) |
 | INF-8 再読込 | PARTIAL | effectのhot reload(最後の成功を保持)、Flutter hot reload | 復旧時間はINF-6待ち | HIGH [M] |
 | INF-2 性能計測 | PARTIAL | `examples/frame_cost.rs`、`tests/staying_realtime.rs` | CIに閾値なし | MEDIUM [M] |
 | SCR-1 スクリプト | PARTIAL | rquickjsの口、失敗時rollback | 成功時に1 UndoでなくN Undo | HIGH |
-| AG-3 音量・パン | PARTIAL | `LEVEL`/`PAN`(`store.rs`)、live_hfのtimeline波形 | 音声分離なし | MEDIUM |
+| AG-3 音量・パン | PARTIAL | `LEVEL`/`PAN`(`store.rs`)、product UIのtimeline波形 | 音声分離なし | MEDIUM |
 | AG-4 音声書き出し | PARTIAL | ミックスPCMをaacで書き出し | stream copyの近道なし | HIGH |
 | AG-5 音声処理 | PARTIAL | pan・fade | bus・pitch・音声エフェクトなし | LOW |
 | SIM-5 / SIM-6 パーティクル・剛体 | PARTIAL | 閉形式パーティクル、Rapierのbox/wall | beat同期の発生、パーティクル↔図形衝突、SDF塗りなし | MEDIUM |

@@ -9,7 +9,7 @@ UX の合否は利用者の専権。この文書は「どこが効くか」だ�
 | SKILL.md の節 | Motolii では |
 |---|---|
 | 題材に根ざす・生成物の型(cream+serif、SaaS カード、ALL CAPS の eyebrow、`→`、`·` 連結) | 効く。窓の文字は英語、**値が意味の物だけ文字、あとは形で見せる**(motolii/AGENTS.md:14、docs/wiki/window.md)。ラベル文字を足す前に「値か?」を問う |
-| 2 段の手順(token 案 → 素案を brief と照合 → 実装) | 効く。token 案は `motolii/ui/lib/foundation/theme.dart` の語彙で書く |
+| 2 段の手順(token 案 → 素案を brief と照合 → 実装) | 効く。token 案は `motolii/ui/lib/theme/editor_theme.dart` の語彙で書く |
 | 大胆さは 1 箇所、Chanel の 1 個外す、スクショで自己批評 | 効く。スクショは自分で撮る、判定は利用者 |
 | CSS の specificity、hero、行長 80 字、Google Fonts | 効かない(窓はページでない)。Flutter では ThemeData の component theme / ThemeExtension が同じ役 |
 | 非操作起因の motion は控える | 効く。Flutter の Animation を層ごとに足さない |
@@ -32,7 +32,7 @@ spec: https://github.com/google-labs-code/design.md(docs/spec.md、Apache 2.0、
 「tokens are the normative values; the prose provides context for how to apply them」。
 
 ## 一発の UI 変更 checklist
-1. DESIGN.md があれば読む。無ければ `motolii/ui/lib/foundation/theme.dart` と docs/ui-visual-language.md を読む
+1. DESIGN.md があれば読む。無ければ `motolii/ui/lib/theme/editor_theme.dart` と docs/ui-visual-language.md を読む
 2. 変えるのは theme token / component theme。widget に色・寸法・文字を直書きしない。ラベルを足すなら「値が意味か」
 3. `scripts/motolii-ui.sh native` → `dev`(または `reload`)、スクショを自分で撮る
 4. SKILL.md の「生成物の型」表と照らして 1 個外す

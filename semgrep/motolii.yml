@@ -1,6 +1,6 @@
 rules:
   # A status, a render reply and a catalog reply are the biggest things that cross the host (~1 MB at 94 layers).
-  # They travel as the bytes Rust wrote; the host never rebuilds them as a Dictionary (docs/stage5/direct-manipulation-latency.md).
+  # They travel as the bytes Rust wrote; the host never rebuilds them as a Dictionary (docs/product/direct-manipulation-latency.md).
   # Small replies (renderInfo, easeModel) are parsed by `request(_:)`, which is not on this list.
   - id: motolii-swift-status-as-dictionary
     languages: [swift]

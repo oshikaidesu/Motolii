@@ -33,12 +33,12 @@
 | 作品の編集・Undo・保存 | `crates/motolii-doc/src/store/document.rs`、Intent、persist | 唯一の書き込み経路を維持。読み取りから編集命令の解釈を除去 |
 | 保存作品の読み取り | `store/recording.rs` のRecording | RRD decoderはDocumentと共有。編集・Undoを公開せず、確定した編集位置を保持。一時編集は含めない |
 | プレビュー投影・読取cache | 編集側projection → StoreView/read | 入力変更時に読み取り値へ投影。同件数の異なるプレビューも区別。一時値を除くViewでのlayout cache混入を修正 |
-| 選択・閲覧時刻・観測・ポインタ | `ui/native/src/viewer.rs` | Documentから分離。製品ではまだ一つの連動ViewerStateを使用 |
+| 選択・閲覧時刻・観測・ポインタ | `motolii/ui/native/src/viewer.rs` | Documentから分離。製品ではまだ一つの連動ViewerStateを使用 |
 | 再生時計・音声transport | `crates/motolii-render/src/playback.rs` | StoreViewを読み、編集Document・Flutter・パネルに依存しない |
 | 窓・UIの接続寿命 | Swift WindowAttachment、Dart EditorSession | 古いdetachが後継接続を壊さない。UI破棄で共有作品をclose/pauseしない。共有描画の駆動は主窓 |
 | 新しいランタイムへの表示接続 | runtimeEpoch、Stage | 同寸法の作品を開き直した際の描画欠落を修正。接続IDと作品の版は別物 |
-| JS実行 | `ui/extensions/script` | Hostのcommand/query経由。JS VMを編集本体から分離 |
-| 書き出し・Freeze | `ui/extensions/jobs` | 受付検証後に編集側からRecordingを受け取る。入口・workerともDocument/Intentを直接受け取らない |
+| JS実行 | `motolii/crates/motolii-script` | Hostのcommand/query経由。JS VMを編集本体から分離 |
+| 書き出し・Freeze | `motolii/crates/motolii-jobs` | 受付検証後に編集側からRecordingを受け取る。入口・workerともDocument/Intentを直接受け取らない |
 | 配置効果 | PlacementProgram／PlacementInput／PlacementOutput | 静的なRust関数をViewへ渡せる。同梱のRepeater・Mirror・Blobも同じ口を使用 |
 | Blob Track | 画像解析はrender、配置計算は`extensions/blob.rs` | 解析データを借りて配置を返す。飛び番IDと配列順序を分離。グループの余分な子の表示・無効化時の隠蔽を修正 |
 | Motion Blur | `extensions/motion.rs` のSampling | サンプル選択方針を分離。コアは変換を読み、平均合成用の結果へ適用。汎用的な外部Motion登録は未実装 |
@@ -189,7 +189,7 @@ Document::load(path)?.with_programs(doc::extensions::bundled())
 | 同梱の効果(移設前 = コアの中) | **doc** → render → jobs → ui | 31.4s |
 | 同梱の効果(移設後 = render の中) | render → jobs → ui | **24.9s** |
 | コア(`store/layout/flow.rs`) | doc → render → jobs → ui | 29.2s |
-| 拡張 crate(`ui/extensions/jobs`) | jobs → ui | 14.6s |
+| 拡張 crate(`motolii/crates/motolii-jobs`) | jobs → ui | 14.6s |
 
 **効果を触ってもコアは再 build されない。** これは移設の前は成り立っていなかった。ただし render が太いので時間は 31.4 → 24.9s にしか縮んでいない — 「コアを触らない」は達成したが、「速くなった」はまだ小さい。次に効くのは render 側の分割で、そこは今回の範囲外。
 
@@ -239,7 +239,7 @@ Document::load(path)?.with_programs(doc::extensions::bundled())
 
 ### 構造で守る(検査)
 
-- coreに`thread_local!`・`static mut`・契約が名指ししない可変staticがあればFAIL(名指しは`docs/stage5/modules.json`の`coreProcessState`。今日の時点では文字の`SYSTEM`・`KNOWN`だけ)。
+- coreに`thread_local!`・`static mut`・契約が名指ししない可変staticがあればFAIL(名指しは`docs/product/modules.json`の`coreProcessState`。今日の時点では文字の`SYSTEM`・`KNOWN`だけ)。
 - taffyの名を`store/layout/flow.rs`以外が口にすればFAIL(`coreSolvers`)。文字のmeasureはtaffyの`Size`・`AvailableSpace`で話していたので、平の数へ直した。
 - どちらも偽の違反を入れてFAILすることを確認済み。
 
@@ -267,7 +267,7 @@ Document::load(path)?.with_programs(doc::extensions::bundled())
 軽い検査・対象別の入口：
 
 ```sh
-python3 scripts/check-stage5.py --self-test
+python3 scripts/check-workspace.py --self-test
 scripts/motolii-ui.sh check
 git diff --check
 cargo test -p motolii-doc --test placement_programs

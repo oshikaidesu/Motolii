@@ -25,7 +25,7 @@ The render crate reads `StoreView`; the UI writes through `Intent` only.
   (2.5D/3D only, via `affine3` 174), `opacity`, `time_offset` (a copy shows `t − time_offset`), `stretch` (Blob Track / Mirror).
   `picks` (281) hands a group's children out per placement (Random by `share.<id>` weight, or Iterate).
   Registration is automatic: `motolii-render::extensions::all()` chains `placement::KINDS` into the shelf; `resolve.rs:896-920` expands the
-  first placement effect on a layer; `resolve.rs:1120-1128` hides a placed group's children; `ui/native/src/snapshot.rs:456` builds the
+  first placement effect on a layer; `resolve.rs:1120-1128` hides a placed group's children; `motolii/ui/native/src/snapshot.rs:456` builds the
   grid rows from `PlacementKind::grid`.
 - **Connecting and tracing lines** (`src/store/connect.rs`): a shape layer with `Connect From` + `Connect To` has its outline replaced by a
   route solved each frame from the two boxes (`connect_shapes` 60); `connection` (27) and `tracing` (43) are the two questions. `route_at`
@@ -54,7 +54,7 @@ The render crate reads `StoreView`; the UI writes through `Intent` only.
    `shown(mode)` for shape-only params, assert `mirror(&[]) == mirror(&[])` (pure). Use `affine2(pivot)` / `affine3` for geometry.
 4. Nothing to add in render for offset/rotation/scale/stretch/opacity/offset_z — `resolve.rs` already maps them. A new `Placement` field
    would need `resolve.rs:907-960` and the render `placement.z`/flat checks (`compositor.rs:143`, `blocks.rs:523`).
-5. Script: `layer.effect("Yours", { "Axis": "Radial", "Segments": 8 })` (labels). `expandEffect` (`ui/native/src/editor/placement_edit.rs`)
+5. Script: `layer.effect("Yours", { "Axis": "Radial", "Segments": 8 })` (labels). `expandEffect` (`motolii/ui/native/src/editor/placement_edit.rs`)
    does not read `stretch` — baking a flipped copy drops the flip (known, UI side).
 
 ## Gotchas

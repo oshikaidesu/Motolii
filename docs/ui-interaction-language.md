@@ -1,6 +1,6 @@
 # UI操作言語 — 既知の外殻、可視の因果、裏切らない共通部品
 
-> Stage 5では[現行UI・操作](stage5/product-contract.md)と[技術境界](stage5/technical-boundaries.md)が入口。以下の「正本」「現行」は記載当時の世代を指す。既存の知見は参照するが、旧モック・旧framework・未実装UIの一律撤去規則を現在の指示へ適用しない。
+> Stage 5では[現行UI・操作](product/product-contract.md)と[技術境界](product/technical-boundaries.md)が入口。以下の「正本」「現行」は記載当時の世代を指す。既存の知見は参照するが、旧モック・旧framework・未実装UIの一律撤去規則を現在の指示へ適用しない。
 
 日付: 2026-07-16
 

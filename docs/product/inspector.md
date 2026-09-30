@@ -1,6 +1,6 @@
 # Inspector — 2026-09-09 adoption
 
-利用者の「Testを正本にする」「即時フィードバック」「サイズ連動を直す」に基づき、Testの部品版を `motolii/ui/lib/panels/inspector.dart` のInspector(Classic shellのInspector。New shellは `app/new/inspector/new_inspector_panel.dart`、live_hfは `live_hf/adapters/right_seat.dart`)へ移した。旧表版とTestタブは撤去。プロパティの表示分類だけを `inspector_property_style.dart` に置く。保存DockのTestはInspectorへ読み替える。
+利用者の「Testを正本にする」「即時フィードバック」「サイズ連動を直す」に基づき、Testの部品版を `motolii/ui/lib/legacy/panels/inspector.dart` のInspector(Classic shellのInspector。New shellは `app/new/inspector/new_inspector_panel.dart`、live_hfは `live_hf/adapters/right_seat.dart`)へ移した。旧表版とTestタブは撤去。プロパティの表示分類だけを `inspector_property_style.dart` に置く。保存DockのTestはInspectorへ読み替える。
 
 ## 操作の契約と修正
 
@@ -17,7 +17,7 @@
 ## 検証
 
 - 対象6ファイルのFlutter回帰テスト14件成功。連動/解除、RGBA alpha、文字、保存Dock移行、遅いpreview中の間引き、cancel、パッド破棄、既存数値drag、Desk連携、operation契約を含む。
-- `flutter analyze`、`scripts/check-stage5.py` 成功。
+- `flutter analyze`、`scripts/check-workspace.py` 成功。
 - 実窓でInspectorが一つになったことを確認。torusのScale 245→260でX/Yとも260、Edit→Undo一回で245/245へ戻った。ダイヤルでRotation -18→142.5、Edit→Undo一回で-18へ戻った。検証で変えた値は戻した。
 - 全体テストの実行時は52件中51件成功。並行変更中のEaseで `desk_workspace_test.dart` の旧 `Save preset` 文字検索が失敗。raw_dimension検査の指摘24件もEase側のみだった。全体緑という主張には使わない。
 - Cmd+Zの実窓検収は未確定。ウィンドウの並行操作もあり、今回の確実なUndo証拠はアプリのEditメニュー。入力遅延のms計測はしていない。

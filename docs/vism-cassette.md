@@ -4,7 +4,7 @@
 
 状態: **調査結果の固定／schema・container・runtime・製品UI未決**。Cassette を実装する文書ではない。probe で分かったこと、Motolii が既に持つもの、足りないもの、意図して先送りするものを、参加していない人が読めるように残す。
 
-関連: [Vism / Kitモデル](vism-kit-model.md)、[Vismコンセプト](vism-package-concept.md)、[スクリプトの口](reviews/2026-09-14-script-mouth.md)、[UI rebaseline brief](stage5/ui-rebaseline/brief.md)、Draft PR #533「docs: draft Vism cassette distribution and Host capability API」(branch `draft/vism-cassette-ts-host-api`。この repo の main には無い)。
+関連: [Vism / Kitモデル](vism-kit-model.md)、[Vismコンセプト](vism-package-concept.md)、[スクリプトの口](reviews/2026-09-14-script-mouth.md)、[UI rebaseline brief](product/ui-rebaseline/brief.md)、Draft PR #533「docs: draft Vism cassette distribution and Host capability API」(branch `draft/vism-cassette-ts-host-api`。この repo の main には無い)。
 
 ## 1. 結論
 
@@ -48,7 +48,7 @@ Cassette instance
 - **番地**: 読み元も書き先も `(LayerId, PropertyId)`。effect の param(`effect.0.param.count`)、text の style 行(`text_style.0.size`)、layout 行(`layout.stagger`)、通常の layer 行のどれも同じ形で指せる。
 - **Intent**: `SetPropertyLink`、`SetPropertyModulators`(base は保つ)、`SetCameraPropertyModulators`。
 - **Copy / Paste / Split**: コピー集合の内側にある読み元は複製側へ付け替える。外側なら元を指したまま。
-- **窓の側の guard**: 駆動されている行への手編集は「Edit the driver before changing a driven value」で断る(`ui/extensions/edit/src/document/edit.rs`)。
+- **窓の側の guard**: 駆動されている行への手編集は「Edit the driver before changing a driven value」で断る(`motolii/crates/motolii-edit/src/document/edit.rs`)。
 - **無い物**: 現行の窓と Script API に link を**作る**口が見当たらない(Intent としては在る)。式、2 つ以上の source を掛ける translator、スカラーから 2 成分への配り、曲線は無い。
 
 ## 4. 公開パラメータは既に property として置ける
@@ -184,6 +184,6 @@ Cassette    通常の Host の意味の組み合わせの上に、小さな操�
 
 ## 証拠
 
-- 試験と probe: `ui/native/src/editor/script/probes.rs`、`ui/extensions/script/probes/`(`camera.js`、`shatter.js`)。
+- 試験と probe: `motolii/ui/native/src/editor/script/probes.rs`、`motolii/crates/motolii-script/probes/`(`camera.js`、`shatter.js`)。
 - ローカル commit(push していない): `51bbad184`(Camera の共通 math と evaluator の差の固定)、`0bbd2c43a`(Script probe と native build の修理)、`4eb1dd014`(retained mapping の probe)。
 - 別件として記録: Script の時間 budget は host の時間も数える。dev build の shader hot-reload watcher が最初の mesh 生成を 70〜90 秒止める(Script API の問題ではない)。

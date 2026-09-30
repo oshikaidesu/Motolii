@@ -61,7 +61,7 @@ description: Motolii の窓(Flutter, dark, 密)の違和感を、利用者が気
 
 | 度 | # | panel | 破った規則 | 見えた物(写真) | 場所 |
 |---|---|---|---|---|---|
-| blocker | B-01 | Inspector/Layout | R3 言葉を出さない | 「Direction」の選択が行に出ている | motolii/ui/lib/panels/inspector.dart:412 |
+| blocker | B-01 | Inspector/Layout | R3 言葉を出さない | 「Direction」の選択が行に出ている | motolii/ui/lib/legacy/panels/inspector.dart:412 |
 | major | M-01 | … | … | … | … |
 | minor | N-01 | … | … | … | … |
 

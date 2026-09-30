@@ -16,7 +16,7 @@ Sources: the Phase A inventory in `inventory/`, `routing.md`, and the code. Evid
 | Shell | Composition, Export, Settings sheets (SH-20/21, ST8-01..03) | A | workflow test |
 | Shell | UI scale (ST8-07) | A | read, applied, set in Settings, saved beside Classic's keys; workflow test |
 | Shell | theme JSON (ST8-05), Outside dim (ST8-06) | E | New has fixed tokens; Outside dim never took effect in Classic |
-| Relations | one property drives one property of several things over a range (v0): Inspector menu, Relations panel with lasso, badges, add or remove mappings, unrelate | A | host `relate`/`unrelate` over the document's PropertyLink; `new_shell_relations_test`, `port/relate.rs`; note `docs/stage5/relations-v0.md` |
+| Relations | one property drives one property of several things over a range (v0): Inspector menu, Relations panel with lasso, badges, add or remove mappings, unrelate | A | host `relate`/`unrelate` over the document's PropertyLink; `new_shell_relations_test`, `port/relate.rs`; note `docs/product/relations-v0.md` |
 | Console | log of errors and notices with search and Clear | A | `NewConsole`; no Classic Console existed, so it shows what the status line already said |
 | Stage | all Stage and Camera view capabilities (ST-*) | A | same production panel; `stage_in_dock_test` for pointer mapping through dock moves; `new_shell_workspace_test` for the surface protocol |
 | Stage | surface withdrawn when hidden, re-asked on resize and move | A | dock supplies `Visibility` |

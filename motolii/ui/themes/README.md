@@ -40,4 +40,4 @@ These are **editor appearance** colors. They do not change artwork fills, source
 
 Choose foreground/background pairs together. Check the actual window, menus, selected/unselected rows, disabled controls and all panels you use. Import validation checks the file format; it does not certify the contrast or aesthetic quality of a third-party palette.
 
-Implementation: [EditorTheme](../lib/foundation/theme.dart) is a Flutter `ThemeExtension`; widgets depend on the inherited theme and painters receive a theme snapshot. Theme switches redraw the existing widget tree without recreating the editing session.
+Implementation: [EditorTheme](../lib/theme/editor_theme.dart) is a Flutter `ThemeExtension`; widgets depend on the inherited theme and painters receive a theme snapshot. Theme switches redraw the existing widget tree without recreating the editing session.

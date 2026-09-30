@@ -20,7 +20,7 @@ case "${1:-dev}" in
     ;;
 esac
 case "${1:-dev}" in
-  check) exec python3 "$repo/scripts/check-stage5.py" ;;
+  check) exec python3 "$repo/scripts/check-workspace.py" ;;
   native) cd "$repo"; exec cargo build -p motolii-ui ;;
   check-read-only)
     cd "$repo"

@@ -83,7 +83,7 @@ run_lane() {
       cargo test --locked --workspace
       ;;
     police)
-      # the independent police, in addition to check-stage5.py / owned-budget: Semgrep rules + cargo-deny sources
+      # the independent police, in addition to check-workspace.py / owned-budget: Semgrep rules + cargo-deny sources
       require_no_args "$lane" "$@"
       require_command semgrep
       require_command cargo-deny
