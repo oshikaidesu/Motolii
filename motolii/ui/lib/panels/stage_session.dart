@@ -115,8 +115,28 @@ class StageSession extends ChangeNotifier {
     ];
   }
 
-  List<Offset> corners(Map<String, dynamic> layer) => hull(rawCorners(layer));
-  List<Map<String, dynamic>> get visible => layers.where((l) => l['hidden'] != true).toList();
+  /// A layer's outline and the visible layers are read by every hover move and press; they change only with the document
+  /// the Stage reads, so they are worked out once per [state], not once per pointer event.
+  final _hulls = Map<Map<String, dynamic>, List<Offset>>.identity();
+  Map<String, dynamic>? _hullsFrom;
+  List<Map<String, dynamic>>? _visible;
+  void _sameState() {
+    final st = state;
+    if (identical(st, _hullsFrom)) return;
+    _hullsFrom = st;
+    _hulls.clear();
+    _visible = null;
+  }
+
+  List<Offset> corners(Map<String, dynamic> layer) {
+    _sameState();
+    return _hulls[layer] ??= hull(rawCorners(layer));
+  }
+
+  List<Map<String, dynamic>> get visible {
+    _sameState();
+    return _visible ??= layers.where((l) => l['hidden'] != true).toList();
+  }
 
   /// What a hand can take on the picture: a Group is reached from the layer lists alone (2026-09-19, user).
   static bool grabbable(Map<String, dynamic> layer) => layer['locked'] != true && layer['kind'] != 'Group';

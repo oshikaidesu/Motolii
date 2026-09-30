@@ -164,8 +164,17 @@ mixin SessionCommands on SessionCore {
     });
   }
 
-  void seek(int value) {
-    command('seek', {'frame': value});
+  /// Where the playhead was last asked to go, until the host has answered: repeated steps (a held arrow) add to this,
+  /// not to the frame the last reply reported, so none is lost; the newest wish is the only seek that waits.
+  int? _seekTarget;
+  int get frameTarget => _seekTarget ?? frame.value;
+  Future<void> seek(int value) {
+    _seekTarget = value;
+    final flight = commandDirect('seek', {'frame': value}, 'seek');
+    flight.whenComplete(() {
+      if (_seekTarget == value) _seekTarget = null;
+    });
+    return flight;
   }
 
   void cancelPreview() {

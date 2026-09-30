@@ -153,7 +153,7 @@ class TimelineSession extends ChangeNotifier {
     if (frame == _seekWanted && _seeking != null) return;
     _seekWanted = frame;
     scrub.value = frame;
-    final flight = _seeking = c.commandDirect('seek', {'frame': frame}, 'timeline-seek');
+    final flight = _seeking = c.seek(frame);
     flight.whenComplete(() {
       if (identical(_seeking, flight)) {
         _seeking = null;
