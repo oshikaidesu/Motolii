@@ -36,3 +36,9 @@ The render itself (a few ms release, ~15-20 ms debug), `frames.finish()` waiting
 
 ## Latest-wins loops in the code
 Hand-written copies of "one in flight, the newest waits": `EditorPreviewQueue` (Classic fields, colour, text, ease handles), `StageSession._update`, hover and orbit, the timeline's `pumpSeek` / `_pumpPreview` / `pumpPreview`, the Ease desk's `_flight`, the Depth desk's `_drain`. They differ only in what they send. `EditorSession.commandDirect` is the session-level version that also keeps a commit or cancel *after* the previews before it. Folding the copies onto `EditorPreviewQueue` is mechanical and was not done: it changes no latency.
+
+## What is left (and why it was not done)
+- Flutter's own frame while scrubbing: build ~10 ms median in a debug Dart build (about 110 widgets rebuilt per frame). About half is the Browser panel: `BrowserSession` listens to the `layers` / `documentRevision` slice, so every preview of a transient document rebuilds the Create shelf tiles. Cutting it means deciding which document facts the Browser shelves really read (selection kinds, the selected layer's colour, fonts in use); a wrong list leaves a stale shelf, so it is a semantics review, not a mechanical change.
+- Render off the platform thread, or one-hop async replies: an ownership / threading change; the simple version was measured slower (above).
+- Renderer itself: a still render is one native call of ~5 ms (release) to ~15-20 ms (debug), plus the wait for the next frame.
+- Keyboard nudge sends one command per key repeat (each with a render); nudges add up, so they cannot be replaced by the newest one, and at OS key-repeat rates the chain does not build a backlog.

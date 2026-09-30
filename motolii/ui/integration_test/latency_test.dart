@@ -3,7 +3,10 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'dart:ui' show FrameTiming;
+
 import 'package:flutter/gestures.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
@@ -151,6 +154,31 @@ void main() {
     report.write(summarize('inspector scrub (previewProperties)', 'previewProperties'));
     await c.command('cancelPreview');
     await frames(t, 4);
+
+    // frame cost while an Inspector number is scrubbed: how long the Flutter side itself spends per frame
+    {
+      final builds = <double>[], rasters = <double>[];
+      void onTimings(List<FrameTiming> ts) {
+        for (final f in ts) {
+          builds.add(f.buildDuration.inMicroseconds / 1000);
+          rasters.add(f.rasterDuration.inMicroseconds / 1000);
+        }
+      }
+
+      SchedulerBinding.instance.addTimingsCallback(onTimings);
+      for (var i = 0; i < 60; i++) {
+        c.commandDirect('previewProperties', {
+          'edits': [
+            {'layer': layers.first['id'], 'property': 'position', 'value': [900.0 + i * 3, 500.0 + i], 'spread': 'offset'}
+          ]
+        }, 'x');
+        await t.pump(const Duration(milliseconds: 16));
+      }
+      await frames(t, 6);
+      SchedulerBinding.instance.removeTimingsCallback(onTimings);
+      await c.commandDirect('cancelPreview');
+      report.writeln('LAT Flutter frame cost while scrubbing (debug Dart): build median ${_median(builds).toStringAsFixed(1)} p95 ${_p95(builds).toStringAsFixed(1)} ms; raster median ${_median(rasters).toStringAsFixed(1)} p95 ${_p95(rasters).toStringAsFixed(1)} ms; ${builds.length} frames');
+    }
 
     // 3. the playhead scrubbed
     LatencyProbe.events.clear();
