@@ -7,9 +7,9 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../lib/bridge/protocol.dart';
 import '../lib/session/editor_session.dart';
-import '../lib/workspace/layout.dart';
-import '../lib/workspace/panel_ids.dart';
-import '../lib/input/editor_shortcuts.dart';
+import '../lib/legacy/workspace/layout.dart';
+import '../lib/legacy/workspace/panel_ids.dart';
+import '../lib/legacy/input/editor_shortcuts.dart';
 
 void main() {
   test(

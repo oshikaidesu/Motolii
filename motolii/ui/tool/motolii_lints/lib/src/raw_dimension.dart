@@ -27,8 +27,8 @@ const measuredTypes = {
 const scaleFiles = {
   'lib/theme/editor_metrics.dart',
   'lib/theme/editor_theme.dart',
-  'lib/foundation/panel_catalog.dart',
-  'lib/foundation/shell_tokens.dart',
+  'lib/legacy/foundation/panel_catalog.dart',
+  'lib/legacy/foundation/shell_tokens.dart',
   'lib/theme/surface.dart', // Surface and Dn: the product window's grammar
   'lib/theme/neutral.dart',
 };

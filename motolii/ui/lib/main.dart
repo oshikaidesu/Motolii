@@ -1,6 +1,6 @@
 import 'package:flutter/widgets.dart';
 
-import 'app/editor_app.dart';
+import 'legacy/app/editor_app.dart';
 import 'app/main.dart' as live;
 
 /// The window opens the product UI, live_hf (docs/stage5/product-direction.md). The earlier shells stay reachable

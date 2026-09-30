@@ -2,14 +2,6 @@
 # A file may not exceed its line; a file not listed must be clean. Lower a line by fixing the file, then
 #   dart run bin/check.dart ../../lib --write-baseline=baseline.txt
 lib/app/console.dart 12
-lib/app/new/browser/shelf_panel.dart 2
-lib/app/new/browser/shelf_seat.dart 3
-lib/app/new/browser/tag_prompt.dart 1
-lib/app/new/desk/new_desk_host.dart 17
-lib/app/new/dock_theme.dart 2
-lib/app/new/inspector/new_inspector_panel.dart 10
-lib/app/new/stage/new_stage_chrome.dart 20
-lib/app/new/timeline/new_timeline_bar.dart 10
 lib/app/sheets.dart 13
 lib/app/top/top.dart 2
 lib/app/top/top_bar.dart 26
@@ -51,9 +43,6 @@ lib/desks/relations/model.dart 1
 lib/desks/web/desk.dart 10
 lib/effects/shelf.dart 18
 lib/fonts/shelf.dart 16
-lib/hf/bp/shelf_grid.dart 7
-lib/hf/desk/ease_skin.dart 59
-lib/hf/desk/notes_skin.dart 46
 lib/hf/shell/timeline_paint.dart 5
 lib/inspector/camera/face.dart 8
 lib/inspector/camera/instrument.dart 33
@@ -65,14 +54,26 @@ lib/inspector/transform/card.dart 1
 lib/inspector/transform/gizmo.dart 3
 lib/inspector/transform/instrument.dart 104
 lib/inspector/value_controls.dart 56
-lib/panels/browser/fill_definitions.dart 1
-lib/panels/browser/filter_view.dart 1
-lib/panels/browser/fonts_shelf.dart 1
-lib/panels/browser/quick_tags.dart 1
-lib/panels/ease_desk/parts.dart 1
-lib/panels/gradient_inspector.dart 2
-lib/panels/notes_desk.dart 1
-lib/panels/notes_desk/card.dart 26
+lib/legacy/app/new/browser/shelf_panel.dart 2
+lib/legacy/app/new/browser/shelf_seat.dart 3
+lib/legacy/app/new/browser/tag_prompt.dart 1
+lib/legacy/app/new/desk/new_desk_host.dart 17
+lib/legacy/app/new/dock_theme.dart 2
+lib/legacy/app/new/inspector/new_inspector_panel.dart 10
+lib/legacy/app/new/stage/new_stage_chrome.dart 20
+lib/legacy/app/new/timeline/new_timeline_bar.dart 10
+lib/legacy/hf/bp/shelf_grid.dart 7
+lib/legacy/hf/desk/ease_skin.dart 59
+lib/legacy/hf/desk/notes_skin.dart 46
+lib/legacy/panels/browser/fill_definitions.dart 1
+lib/legacy/panels/browser/filter_view.dart 1
+lib/legacy/panels/browser/fonts_shelf.dart 1
+lib/legacy/panels/browser/quick_tags.dart 1
+lib/legacy/panels/ease_desk/parts.dart 1
+lib/legacy/panels/gradient_inspector.dart 2
+lib/legacy/panels/notes_desk.dart 1
+lib/legacy/panels/notes_desk/card.dart 26
+lib/legacy/workspace/workspace_view.dart 1
 lib/proto/browser.dart 40
 lib/proto/icons.dart 3
 lib/proto/inspector.dart 98
@@ -101,4 +102,3 @@ lib/theme/glyphs.dart 11
 lib/theme/tokens.dart 4
 lib/timeline/face.dart 33
 lib/workspace/dock_workspace.dart 2
-lib/workspace/workspace_view.dart 1
