@@ -507,7 +507,6 @@ M2 prerequisite、Vism spec laneを同じ待ち列へ入れない。P0I fixture�
 | CU-105R | `DONE` | [CU-105 dense Timeline責任再確認](reviews/2026-07-27-cu-105-dense-timeline-responsibility-recheck.md)でlayout/cull/hit-test、capacity、semantic zoom、selection-familyを`PASS / REDUCE / STOP`へ分割 |
 | CU-106S | `DONE` | [CU-106 selection consumer分割決定](reviews/2026-07-27-cu-106-selection-consumer-split-decision.md)でCU-106P/Fを分離し、production caller 0のままproducerを実装しない入場条件を固定 |
 | U3a-2S | `DONE` | [U3a-2S windowed native Timeline readiness分割決定](reviews/2026-07-27-u3a-2s-windowed-timeline-readiness-split-decision.md)でG0-9依存を(A)〜(D)に分割し、次PRODUCT-ASSET判断を`U3a-2R` `DO`へ送った |
-| U3a-2S-R2 | `DONE` | 本変更でimplementation-ledger M3行、[docs/README](README.md)現況、[縦slice実行方針](reviews/2026-07-24-m3-vertical-slice-execution-decision.md)のcurrent表を`U3a-2S` `DONE`／次判断`U3a-2R` `DO`へ同期した。意味・順序・code変更0 |
 | U3a-2S-R3 | `DONE` | 本変更で[CU-106 selection consumer分割決定](reviews/2026-07-27-cu-106-selection-consumer-split-decision.md) §5と[U2h-1P selection入力到達性決定](reviews/2026-07-27-u2h-1p-selection-input-reachability-decision.md) §6の現行handoffを`U3a-2S` `DONE`／次判断`U3a-2R` `DO`へ同期した。意味・順序・code変更0 |
 | U3a-2R | `DONE` | [U3a-2R renderer採択範囲決定](reviews/2026-07-27-u3a-2r-renderer-adoption-scope-decision.md)で区分(D)のcandidate閉集合・証拠admissibility・owner・entry gateを閉じ、次PRODUCT-ASSET判断を`U3a-2Z` `DO`へ送った |
 | U3a-2Z | `DONE` | [U3a-2Z semantic zoom責任所在決定](reviews/2026-07-27-u3a-2z-semantic-zoom-responsibility-decision.md)で段階の中身を決めず責任所在だけを閉じ、次PRODUCT-ASSET判断を`U3a-2A` `DO`へ送った |
@@ -710,7 +709,6 @@ U0a(egui骨格+依存方向CI)は本入場で完了。M2基盤再締結は解除
 
 ## 詳細への入口
 
-- 全マイルストーン仕様: [specs/README.md](specs/README.md)
 - M2: [M2-document-model.md](specs/M2-document-model.md)
 - M3: [M3-ui-integration.md](specs/M3-ui-integration.md)
 - M4: [M4-cache-and-analysis.md](specs/M4-cache-and-analysis.md)

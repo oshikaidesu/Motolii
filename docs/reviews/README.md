@@ -174,7 +174,6 @@
 | [2026-08-02-m5-c0-observation-contract-decision.md](2026-08-02-m5-c0-observation-contract-decision.md) | M5-C0 — 初期projective Observationの意味、Host／Provider責任、拒否・換装oracle、schema/runtime分割 |
 | [2026-08-02-m5-c0-schema-preflight.md](2026-08-02-m5-c0-schema-preflight.md) | M5-C0 — 公開型・serde／wire・Document version・provider identityの実在target再照合と仕様化停止線 |
 | [2026-08-02-m5-pause-until-m3-semantic-release.md](2026-08-02-m5-pause-until-m3-semantic-release.md) | M5をM3意味開放まで全面休止した旧契約。2026-08-10に循環を確認して撤回し、第二writer／別world／別Preview・Export禁止の負例だけを継承 |
-| [M5-C0 private Observation semantics receipt](evidence/m5-known-implementation/M5-C0/README.md) | M5-C0 — `glam` private semantic fixtureの射影、typed refusal、provider換装oracle（5/5） |
 | [2026-07-09-R1-export-review.md](2026-07-09-R1-export-review.md) | コードレビュー所見 2026-07-09 (R1/Quality・export・cli周辺) |
 | [2026-07-09-R3-datatrack-review.md](2026-07-09-R3-datatrack-review.md) | コードレビュー所見 2026-07-09 (R3/DataTrack統合) |
 | [2026-07-10-M1-plugin-boundary-review.md](2026-07-10-M1-plugin-boundary-review.md) | 設計レビュー所見 2026-07-10 (M1完了後・プラグイン境界の凍結前監査) |

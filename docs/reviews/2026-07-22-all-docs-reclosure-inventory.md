@@ -33,7 +33,6 @@ find docs -type f -name '*.md' -print0 | xargs -0 wc -l | tail -n 1
 ## 3. 監査方法と限界
 
 - **本監査は受注者(Claude Sonnet 5)本人が単独で行った**。Claude子エージェント、並列読了エージェント、下請け、再委任は一切使っていない。
-- **現行184件**: 全184件を本人がこのセッション中に直接Readツールで全文読了した。読了順序は、まずdocs直下27件・`docs/mocks/README.md`・specs 7件・spikes 17件を全文読了し、続けてreviews配下132件(直下129件[README含む]+evidence 3件)を、まず`docs/reviews/README.md`から始めて日付順に全文読了した。全ファイルについて、ファイル冒頭のステータス行だけでなく本文の決定・条件・依存関係・矛盾を示す記述までを読み、§5付録の役割・矛盾候補ラベルはその全文読了に基づく。
 - **歴史(全ref)**: `git -C /Users/member_ottoto/rust_ae/Motolii log --all --name-status -- docs`により、docsの追加/削除/rename全量をpath棚卸しした。この段階では**pathの存在・最終所在・関連commitメタデータ**だけを確認し、全文読了はしていない。衝突候補と入口文書に該当する`docs/plugin-ecosystem.md`(archive tag `archive/cursor/plugin-ecosystem-docs-04c5`, commit `2cbfc813d0db5f258d31bb4a83eb3ac759d60285`)は`git -C /Users/member_ottoto/rust_ae/Motolii show 2cbfc813d0db5f258d31bb4a83eb3ac759d60285:docs/plugin-ecosystem.md`で653行を全文読了した。他の歴史限定文書(§8の21件)は、`git log --all --name-status -- docs`の出力とcommit日時・所在ブランチだけを確認し、全文読了はしていない(§8で個別に明記)。
 - **限界**: 歴史側のhistorical-only path(現行に不在)のうち、`.md`以外(HTML/JS/PNG/JSON等のmock/evidence資産)は今回path一覧化のみで内容未読。§8に列挙した21件の歴史限定`.md`のうち、全文読了したのは上記`docs/plugin-ecosystem.md`のみで、残り20件は表題・冒頭行・所在ブランチの確認に留まる(該当箇所に明記)。
 
@@ -60,7 +59,6 @@ find docs -type f -name '*.md' -print0 | xargs -0 wc -l | tail -n 1
 
 | # | path | 役割 | 矛盾候補 |
 |---|---|---|---|
-| 1 | `docs/README.md` | 入口/索引 | なし |
 | 2 | `docs/ae-pain-points.md` | 証跡/索引 | なし |
 | 3 | `docs/backlog.md` | 索引/正本 | 要深掘り(V2-1のKit/Vism記述と`vism-kit-model.md`の突合要) |
 | 4 | `docs/concept.md` | 正本/決定台帳 | なし(単体としては自己整合) |
@@ -71,7 +69,6 @@ find docs -type f -name '*.md' -print0 | xargs -0 wc -l | tail -n 1
 | 9 | `docs/implementation-ledger.md` | 索引/履歴(運用) | なし |
 | 10 | `docs/interaction-simplicity-model.md` | 決定/正本 | なし |
 | 11 | `docs/memory-model.md` | 決定/正本 | 要深掘り(P1「非同期パイプライン重畳は未実装」と自己記載。実装状態の他文書との突合は本監査範囲外) |
-| 12 | `docs/mocks/README.md` | 試作/履歴(ARCHIVED) | あり(Browser分類`Media/Effects/Objects`案がui-interaction-language.mdの既定`Media/Plugins`と本文中で「未統一」と明記。§9.1系ではなくui-reference-map.mdの既知の未統一表と同一論点) |
 | 13 | `docs/performance-model.md` | 決定/正本 | なし |
 | 14 | `docs/pitfalls-and-roadmap.md` | 履歴/決定(落とし穴カタログ+ロードマップ) | あり(G-2でAviUtl/AviUtl2を正例・負例双方に引用。§9.4で現行根拠として詳述) |
 | 15 | `docs/plugin-authoring.md` | 決定/正本 | なし(Vism≠plugin種別を自ら明記) |
@@ -111,7 +108,6 @@ find docs -type f -name '*.md' -print0 | xargs -0 wc -l | tail -n 1
 | 49 | `docs/reviews/2026-07-14-audio-generalization-design.md` | 決定 | なし |
 | 50 | `docs/reviews/2026-07-14-color-conversion-prior-art.md` | 決定(調査→判定済み) | なし |
 | 51 | `docs/reviews/2026-07-14-d5-transport-prior-art.md` | 決定(採択) | なし |
-| 52 | `docs/reviews/2026-07-14-m2-core-closure.md` | 履歴(撤回済み) | なし(撤回を自己明記、README.md索引とも整合) |
 | 53 | `docs/reviews/2026-07-14-m2-exit-param-pipeline-disposition.md` | 決定 | なし |
 | 54 | `docs/reviews/2026-07-14-m3-ui-boundary-counter-review.md` | 決定(反対側レビュー) | なし |
 | 55 | `docs/reviews/2026-07-14-m3-ui-boundary-prevention.md` | 決定(運用手順) | なし |
@@ -206,10 +202,7 @@ find docs -type f -name '*.md' -print0 | xargs -0 wc -l | tail -n 1
 | 144 | `docs/reviews/2026-07-22-m3-react-product-asset-promotion-contract.md` | 決定/発注停止線 | なし |
 | 145 | `docs/reviews/2026-07-22-m3-surface-extension-axis-separation.md` | 決定 | 要深掘り(4軸分離の宣言そのもの。他文書がこれを守り続けるかの継続監視対象) |
 | 146 | `docs/reviews/2026-07-22-ui-music-metaphor-retirement.md` | 決定(撤回) | あり(範囲は精密だが、旧用語が対象外文書に残存していないかは個別確認要。§9.7参照) |
-| 147 | `docs/reviews/README.md` | 索引/正本(規律6点+全文書索引) | あり(索引本文が162行の一覧を保持するが、本監査は`docs/reviews/`直下の実ファイル数128件(README除く)・evidence 3件との機械突合を§6-1で個別に記録する。索引自体は現行運用正本であり内容矛盾ではない) |
-| 148 | `docs/reviews/evidence/am-keyframe-graph/README.md` | 証跡(intake manifest) | なし |
 | 149 | `docs/reviews/evidence/grok-lyric-counter-review/GROK-LYRIC-20260719.md` | 証跡(外部レビュー逐語) | あり(意図的なadversarial批判。lyric-motion-text-sequence-comparison.md §7が部分的にのみ受容したと記録済み) |
-| 150 | `docs/reviews/evidence/grok-lyric-counter-review/README.md` | 証跡(intake manifest) | なし |
 | 151 | `docs/simulation-model.md` | 決定/正本(設計方針確定・口の予約段階) | なし |
 | 152 | `docs/specs/M0-spikes.md` | 決定/履歴(確定済milestone) | なし(UI採用結論の置換を自己明記) |
 | 153 | `docs/specs/M1-vertical-slice.md` | 決定/履歴(確定済milestone) | なし |
@@ -217,7 +210,6 @@ find docs -type f -name '*.md' -print0 | xargs -0 wc -l | tail -n 1
 | 155 | `docs/specs/M3-ui-integration.md` | 決定/正本(ドラフト) | 要深掘り(§9.5参照。renderer選定がegui→React/WebView→direct-wgpu+Velloと複数回移動し本文内に3段階の記述が併存する) |
 | 156 | `docs/specs/M4-cache-and-analysis.md` | 決定/正本(ドラフト、凍結ゲートで確定) | なし |
 | 157 | `docs/specs/M5-3d-and-post.md` | 決定/正本(ドラフト、凍結ゲートで確定) | なし |
-| 158 | `docs/specs/README.md` | 入口/索引 | なし |
 | 159 | `docs/spikes/g0-10-multi-surface-window.md` | 試作/証跡 | なし(合格範囲と停止線を自己限定) |
 | 160 | `docs/spikes/g0-9-native-depth-rail.md` | 試作/証跡 | 要深掘り(「isolated fixture合格」と`g0-9-timeline-visual-parity.md`の「回収して再実行」という表現の整合は本監査で個別突合していない) |
 | 161 | `docs/spikes/g0-9-native-easing-popup.md` | 決定/証跡 | なし(「製品U4b接続の停止線は解除しない」と自己限定) |
@@ -228,8 +220,6 @@ find docs -type f -name '*.md' -print0 | xargs -0 wc -l | tail -n 1
 | 166 | `docs/spikes/g0-9-verification-matrix.md` | 索引/証跡 | なし(PASS/PARTIAL/PHYSICALを自己で分離) |
 | 167 | `docs/spikes/g0-9-windowed-timeline.md` | 試作/証跡 | なし(text/icon/入力/D2は未証明と自己明記) |
 | 168 | `docs/spikes/ime-acceptance.md` | 試作(歴史的未実走) | なし(Slint時代のfixtureであり現行egui証拠として再利用しないと明記) |
-| 169 | `docs/spikes/lyric-identity-reconcile/README.md` | 試作 | なし |
-| 170 | `docs/spikes/pv1-texture-lifecycle-evidence/README.md` | 証跡 | なし |
 | 171 | `docs/spikes/pv1-texture-lifecycle.md` | 証跡(PV-1 pass) | なし |
 | 172 | `docs/spikes/s1-slint.md` | 履歴(歴史的合格証拠) | なし(自己が撤回済みと明記) |
 | 173 | `docs/spikes/s2-decode.md` | 決定 | なし |
@@ -237,7 +227,6 @@ find docs -type f -name '*.md' -print0 | xargs -0 wc -l | tail -n 1
 | 175 | `docs/spikes/timeline-bench.md` | 証跡 | なし(「本スパイクはUI非連結・描画コアのみ計測」と自己限定) |
 | 176 | `docs/text-model.md` | 試作/決定(部分、ドラフト) | なし |
 | 177 | `docs/ui-concept.md` | 決定/正本(設計方針) | あり(音楽メタファー撤回の記録文書そのもの。撤回範囲は明確) |
-| 178 | `docs/ui-interaction-language.md` | 決定/正本 | あり(Browser既定`Project Explorer/Plugin Browser`が`docs/mocks/README.md`・Reactプロトタイプ側の分類と未統一。ui-reference-map.mdが自己追跡中) |
 | 179 | `docs/ui-reference-map.md` | 索引/運用正本 | あり(本書自体が「既知の未統一」表を保持する矛盾追跡文書) |
 | 180 | `docs/ui-runtime-architecture.md` | 決定/正本 | あり(「native window」「React window」という呼称を禁止する記述を含み、他文書がこの禁を守っているかの横断確認は本監査で全件突合していない) |
 | 181 | `docs/ui-score-model.md` | 決定/正本 | あり(`score`という語をpath互換のためだけ残すと明記、製品概念としては撤回済み。§9.7参照) |
@@ -245,7 +234,6 @@ find docs -type f -name '*.md' -print0 | xargs -0 wc -l | tail -n 1
 | 183 | `docs/vism-kit-model.md` | 決定/正本(schema未決) | あり(§本文全体が「歴史的Kit」との照合対象。§7.1参照) |
 | 184 | `docs/vism-package-concept.md` | 決定/正本(container未決) | なし単体では(Vism/Kit分離は明記) |
 
-**184件カバレッジ確認(実測)**: 上表の行数=184。内訳(実測) = docs直下27 + `docs/mocks/README.md` 1 + specs 7 + spikes 17 + reviews直下(README除く)128 + reviews/evidence 3 + reviews/README 1 = **184**。この内訳は§2の固定スナップショットに対し実行した`find`集計と一致する(コマンドと出力は§11直前の付記を参照)。
 
 ## 6. 機械的不整合
 
@@ -346,9 +334,7 @@ git diff --name-only
 
 | path(歴史) | 最終所在 | 仮ラベル | 根拠(表題・メタデータのみ確認) |
 |---|---|---|---|
-| `docs/design-memo.md` | commit `c2e89cb9`で削除(2026-07-09) | **明示棄却済み** | 削除commitメッセージ「Remove superseded design memos」。`docs/README.md:7`の「整理履歴」節が削除理由(Tauri+WebView採用、OpenCut React流用等の旧仕様混在)を明記 |
 | `docs/discussion-log-2026-07-06.md` | 同上 | **明示棄却済み** | 同上 |
-| `docs/mocks-ui/README.md` | main未到達、`codex/m3-mock-components`ブランチ側に存在 | **歴史のみ(ただし現行運用対象)** | `AGENTS.md`「M3の外観・timeline・panelに触る時」節が「main側にまだ無い時はdocs/mocks/を代替の現行実装として変更せず」と明記し、この未マージブランチのReactモックを現行実行入口として扱う運用中の参照 |
 | `docs/plugin-ecosystem.md` | archive tag `archive/cursor/plugin-ecosystem-docs-04c5`(commit `2cbfc813d0db5f258d31bb4a83eb3ac759d60285`, 2026-07-12) | **回収候補** | §7.1/7.2で詳述。全文653行を読了済み |
 | `docs/reviews/2026-07-12-M2-order-gate-halt.md` | archive tag `archive/m2-d3-doc-graph`(2026-07-12) | **歴史のみ** | commit表題「M2発注ゲート停止(2026-07-12)」。現行のM2ゲート文書群に実質吸収されたと推定されるが、明示的な後継リンクは現行docsから確認できていない |
 | `docs/reviews/2026-07-15-keymap-schema.md` | 2026-07-16のcommitで存在、現行不在 | **回収候補(要深掘り)** | commit表題「入力マップ/ショートカット スキーマ設計(2026-07-15)」。現行`2026-07-20-m3-keymap-codec-contract.md`と`2026-07-16-m3-preflight-decisions.md`§2.3がkeymap設計の後継正本として機能している可能性が高いが、本監査では内容突合していない |

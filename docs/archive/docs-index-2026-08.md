@@ -113,16 +113,12 @@
 | [ui-runtime-architecture.md](../ui-runtime-architecture.md) | React Native shell、rust-skia Timeline／Curve、wgpu + rust-skia Stage、headless interaction、platform adapterの責任境界 | **2026-08-07再基線化／製品移行未完了** |
 | [reviews/2026-08-07-m3-react-native-rust-skia-runtime-rebaseline.md](../reviews/2026-08-07-m3-react-native-rust-skia-runtime-rebaseline.md) | UI選定、隔離probe、旧route処分、macOS先行／Windows gate、M3-R0〜R4への再基線決定 | **決定／R0未統合候補あり、main未到達** |
 | [ui-artifact-terminology.md](../ui-artifact-terminology.md) | Motolii Studio / Mock / Preview、baseline、spike、source assetと製品結合段階を分離するUI成果物の命名正本 | **運用正本**(Previewは結合済みnative desktop実行物だけ。現時点では未実装) |
-| [mocks/](../mocks/README.md) | M3高密度メインUI(基準)+timeline/interaction/UI力学の比較モック台帳 | 視覚構成の基準モック |
-| [mocks-ui/](../mocks-ui/README.md) | React/Viteで動く固定source asset。hash fixture、Storybook、Playwright、component map | **現行prototype / 製品直接移管のsource**（一部surfaceはlegacy bridge） |
 | [ui-reference-map.md](../ui-reference-map.md) | M3 UI参照地図: 規範/prototype/採否台帳/移行互換/証拠/履歴の参照順位と、React移行の実状態・既知の未統一 | **運用正本**(2026-07-19。`codex/m3-mock-components`側から回収) |
 | [ui-concept.md](../ui-concept.md) | UIコンセプト: 表現をすぐ画にする制作面、最初の結果、五本柱 | **設計方針**(2026-07-22に音楽メタファーを撤回。契約・M3ステータス変更なし) |
 | [implementation-ledger.md](../implementation-ledger.md) | 現場向け実装進行台帳: M0〜M5のNOW/NEXT/WAIT、依存、Issue昇格順 | **日々の発注入口**(意味・完了条件は各specが正本。M3は段階発注可) |
 | [m3-parallel-implementation-map.md](../m3-parallel-implementation-map.md) | 旧M3 routeの既知技術供給、owner、oracle、gap | **履歴化した実装検索地図**(新runtimeの実装waveはM3仕様を正とする) |
 | [m3-executable-dispatch-map.md](../m3-executable-dispatch-map.md) | 旧route 33子のtyped state、exact target、利用者出口 | **履歴化したdispatch snapshot**(未閉鎖gapとoracle検索用。新規dispatch authorityではない) |
 | [backlog.md](../backlog.md) | イシュー候補台帳(現在地サマリ+横断/新規ギャップ/v2バックログ) | 現行 |
-| [specs/](../specs/README.md) | マイルストーン仕様書(エージェントへの発注書)。確定/ドラフトのステータスはspecs/README.md参照 | M0/M1確定、M2基盤再締結済み(D5は別レーン)、M3はG0-9中でtoolkit非依存とReact asset直接移管R0〜R6だけ段階実装可、M4/M5ドラフト |
-| [reviews/](../reviews/README.md) | レビュー規律+**全review文書の索引**(この表は現役参照の抜粋。全量はreviews/README.md側が正本で、`scripts/check-docs.sh`が抜けを検証) | 運用正本 |
 | [reviews/2026-07-31-repository-validation-topology-decision.md](../reviews/2026-07-31-repository-validation-topology-decision.md) | `cargo test`をRust laneへ限定し、task oracle、repository lane、外部審判を分離 | **決定** |
 | [spikes/](../spikes/) | スパイク結果報告(S1: Slint統合、S2: デコード、[S3(R8): Vello採否](../spikes/s3-vello.md)、[G0-9: UI runtime部分比較](../spikes/g0-9-ui-runtime.md)、[wgpu 29 surface host](../spikes/g0-9-surface-host.md)、[native Timeline外観first pass](../spikes/g0-9-timeline-visual-parity.md)、[native Easing popup](../spikes/g0-9-native-easing-popup.md)、[native Graph View](../spikes/g0-9-native-graph-view.md)、[native Depth Rail](../spikes/g0-9-native-depth-rail.md)、[multi-Surface window](../spikes/g0-10-multi-surface-window.md)、[M4-K0領域契約凍結](../spikes/m4-k0-region-contract.md)) | 個別文書の状態に従う |
 | [reviews/2026-07-12-m2-permanence-prevention.md](../reviews/2026-07-12-m2-permanence-prevention.md) | M2恒久焼き込みの**予防手順**(やること5手)。運用正本 | 現行 |
