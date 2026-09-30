@@ -2,7 +2,7 @@
 mod camera {
     use crate::doc::store::*;
 
-    const PROBE: &str = include_str!("../../../../extensions/script/probes/camera.js");
+    const PROBE: &str = include_str!("../../../../../crates/motolii-script/probes/camera.js");
 
     fn keys(rt: &crate::EditorRuntime, name: &str, row: &str) -> Vec<(i64, Value)> {
         let view = rt.doc.view();
@@ -54,7 +54,7 @@ mod camera {
 
 #[cfg(test)]
 mod shatter {
-    const PROBE: &str = include_str!("../../../../extensions/script/probes/shatter.js");
+    const PROBE: &str = include_str!("../../../../../crates/motolii-script/probes/shatter.js");
 
     fn copies(rt: &mut crate::EditorRuntime) -> usize {
         rt.request(serde_json::json!({"op":"seek","frame":60})).unwrap();

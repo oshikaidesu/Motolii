@@ -11,7 +11,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-HOUSES='^motolii/(crates/[^/]+/src|ui/native/src|ui/extensions|ui/lib)/.*\.(rs|dart|swift|wgsl)$'
+HOUSES='^motolii/(crates/[^/]+/src|ui/native/src|ui/lib)/.*\.(rs|dart|swift|wgsl)$'
 NOT_CODE='(^|/)(tests?|fixtures|examples|generated)/|_tests?\.(rs|dart)$|tests\.rs$'
 MIN_LINES=150
 # reasons that are not reasons (model §0): easier, smaller, one more dependency, a different shape

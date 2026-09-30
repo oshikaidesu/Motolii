@@ -41,7 +41,7 @@ fi
 if [ "${1-}" = --history ]; then
     count() { # count <rev> <rule>: findings of <rule> in the motolii/ tree of <rev>
         local d; d=$(mktemp -d "${TMPDIR:-/tmp}/sgh.XXXXXX")
-        git archive "$1" motolii | tar -x -C "$d" --include='motolii/crates/*' --include='motolii/ui/lib/*' --include='motolii/ui/macos/*' --include='motolii/ui/native/src/*' --include='motolii/ui/extensions/*' 2>/dev/null
+        git archive "$1" motolii | tar -x -C "$d" --include='motolii/crates/*' --include='motolii/ui/lib/*' --include='motolii/ui/macos/*' --include='motolii/ui/native/src/*' 2>/dev/null
         (cd "$d" && sg --no-git-ignore --config "$OLDPWD/semgrep/motolii.yml" --json . 2>/dev/null) | hits "$2"
         rm -rf "$d"
     }
