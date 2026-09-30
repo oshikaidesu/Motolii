@@ -18,7 +18,7 @@ Superflat Pop と Nintendo は後から足した趣味ではなく、最初か�
 
 ## 今の窓が既に持っている物
 
-memo の中心(色 = 意味 = 操作)は、**名指しで実装済み**。[foundation/theme.dart:203](../../motolii/ui/lib/foundation/theme.dart)：
+memo の中心(色 = 意味 = 操作)は、**名指しで実装済み**。[foundation/theme.dart:203](../../motolii/ui/lib/theme/editor_theme.dart)：
 
 ```dart
 // Character families: what a number is for, told by hue (the OP-1 rule:

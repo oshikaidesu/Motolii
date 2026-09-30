@@ -838,3 +838,6 @@
 - [外部の警察(Semgrep・cargo-deny)— 過去の事故で赤緑を取って採用(2026-09-30)](2026-09-30-external-police-spike.md)
 - [技術の取得ゲートと再発明候補の監査 — Motolii owns meaning, not technology(2026-09-30)](2026-09-30-technology-acquisition-audit.md)
 - [UI の Technology Acquisition Audit — Flutter標準へ戻す物・借りる物・Motoliiが持つ物(2026-09-30)](2026-09-30-ui-technology-acquisition-audit.md)
+- [GAP-30 cold pipeline: どの pipeline を誰がどの thread で作り、冷えた初コマが何 ms か(2026-09-28)](2026-09-28-gap30-cold-pipeline-inventory.md)
+- [Surface Grammar — 製品窓の見た目を 1 つの token 源にする(2026-09-30)](2026-09-30-surface-grammar.md)
+- [UI vertical slice — UI の枠組みに Flutter を使う(2026-09-30)](2026-09-30-ui-vertical-slice.md)

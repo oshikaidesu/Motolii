@@ -17,7 +17,7 @@
    比較は `identical` → 駄目なら `sameValue`(割り当て無しの深い比較)。`jsonEncode` や `toString()` で比べない。
    **導出した入れ物の identity は指紋にならない**: 入力が動けば導出は新しい list を返すが中身は同じことがある(層を動かしても選んだキーは空のまま)。描き直すか決める指紋は導出の中身で比べる(ease の `_read` で 0 → 417 builds に跳ねて定規が止めた)。
 5. **UI thread のイベント経路に同期 IO を置かない。** 診断ログ(`DIAG(temp)`)は commit しない。フォルダの `listSync` は押した時の 1 回に限る。
-6. **定規が先。** [panel_layout_cost_test.dart](../../motolii/ui/test/panel_layout_cost_test.dart): 状態更新 1 回・全体 layout 1 回・選択変化 1 回・**素材 500 で 1 クリック**(押したその frame に枠が出る、builds ≤ 100 / layouts ≤ 20)。予算は測った数で置き、上げるときは理由を予算のコメントに。全パネルを印字してから判定する(1 回の走行で赤が全部並ぶ)。
+6. **定規が先。** `panel_layout_cost_test.dart`(retired): 状態更新 1 回・全体 layout 1 回・選択変化 1 回・**素材 500 で 1 クリック**(押したその frame に枠が出る、builds ≤ 100 / layouts ≤ 20)。予算は測った数で置き、上げるときは理由を予算のコメントに。全パネルを印字してから判定する(1 回の走行で赤が全部並ぶ)。
 7. **理由をコードのコメントで正当化しない。** 「数百なら速い」「temp」は定規で示す。示せないなら書かない。
 
 ## CPU反復を増やさない(2026-09-19)
@@ -39,12 +39,12 @@
 
 ## 実装(2026-09-12)
 
-- browser: [browser.dart](../../motolii/ui/lib/panels/browser.dart) `_derive` / `_publish` / `_Picked` / `Listener`、data: URI の復号は 1 回
+- browser: [browser.dart](../../motolii/ui/lib/browser/panel.dart) `_derive` / `_publish` / `_Picked` / `Listener`、data: URI の復号は 1 回
 - timeline: `_relane()` を `LayoutBuilder` から出す、painter 2 つの `shouldRepaint`、行ラベルの `TextPainter` と `summaryFrames` を使い回す
 - stage: `_state`(文書 + 描画フレーム)を (document, rendered) ごとに 1 回、`_layers` も
 - fonts: 並びは `fontFamilies` が変わった時だけ、標本キーは build ごと 1 回
 - panel_controls: 数値欄の全イベントで `/tmp` へ書いていた `DIAG(temp)` を撤去。`Picked<T>` をここへ(browser・notes・inspector の fold が共用)
-- dock: [workspace_view.dart](../../motolii/ui/lib/workspace/workspace_view.dart) を `_Split` / `_Leaf` に。仕切りのドラッグとタブ切替はその node の状態、渡すパネルは同じ object(全体 layout 867 → 626、ring の押下 80 → 37 builds)
+- dock: [workspace_view.dart](../../motolii/ui/lib/legacy/workspace/workspace_view.dart) を `_Split` / `_Leaf` に。仕切りのドラッグとタブ切替はその node の状態、渡すパネルは同じ object(全体 layout 867 → 626、ring の押下 80 → 37 builds)
 - inspector: `deskWork` の `AnimatedBuilder` を「cell 幅と Animate 既定だけ比べる」listener に、`_targets` を (gesture, document, frame) ごと 1 回、行の平坦化と `_characterOf` は `Expando`、Advanced の fold は `Picked`
 - ease: `_segments` を (selectedKeys, layers) ごと 1 回、`_read` の指紋は中身比較、preset の `jsonEncode` は build ごと 1 回ずつ、ラベル高さは幅ごと 1 回、painter 3 つは `sameValue`
 - timeline 概観の押下は `Listener`、notes の card 選択は `Picked`、rich_text_editor は run ごとに 1 つの `TextStyle`、stage の overlay は `listEquals`/`mapEquals`、blend は文書をコピーしない
