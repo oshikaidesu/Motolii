@@ -31,15 +31,15 @@ class _HfActionState extends State<HfAction> {
     final primary = widget.kind == HfActionKind.primary && live;
     final ground = primary
         ? (_over ? Color.lerp(H.mode, N.g100, .1)! : H.mode)
-        : (widget.chosen ? H.selHi : (_over && live ? H.raisedHi : H.raised));
-    final edge = primary ? H.mode : (widget.chosen ? N.g44 : H.rule);
+        : (widget.chosen ? N.g26 : (_over && live ? Surface.hover : Surface.raised));
+    final edge = primary ? H.mode : (widget.chosen ? N.g44 : Surface.divider);
     final ink = !live
-        ? H.text3
+        ? N.g63
         : primary
             ? N.g100
             : widget.kind == HfActionKind.destructive
                 ? H.record
-                : H.text2;
+                : N.g82;
     return MouseRegion(
       cursor: live ? SystemMouseCursors.click : SystemMouseCursors.basic,
       onEnter: (_) {
@@ -76,7 +76,7 @@ class HfChoice<T> extends StatelessWidget {
   Widget build(BuildContext context) => Container(
         height: Surface.control,
         padding: const EdgeInsets.all(1.5),
-        decoration: BoxDecoration(color: N.g07, border: Border.all(color: H.rule), borderRadius: BorderRadius.circular(3)),
+        decoration: BoxDecoration(color: N.g07, border: Border.all(color: Surface.divider), borderRadius: BorderRadius.circular(3)),
         child: Row(mainAxisSize: MainAxisSize.min, children: [
           for (final (v, label, enabled) in options)
             _Segment(label, on: v == value, onTap: enabled && onChanged != null && v != value ? () => onChanged!(v) : null, enabled: enabled),
@@ -110,8 +110,8 @@ class _SegmentState extends State<_Segment> {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 9),
             alignment: Alignment.center,
-            decoration: BoxDecoration(color: widget.on ? H.selHi : (_over && widget.onTap != null ? H.raised : null), borderRadius: BorderRadius.circular(2)),
-            child: Text(widget.label, softWrap: false, style: H.s(Dn.nameSize, w: widget.on ? FontWeight.w600 : FontWeight.w400, color: !widget.enabled ? N.g44 : (widget.on ? H.text : H.text2))),
+            decoration: BoxDecoration(color: widget.on ? N.g26 : (_over && widget.onTap != null ? Surface.raised : null), borderRadius: BorderRadius.circular(2)),
+            child: Text(widget.label, softWrap: false, style: H.s(Dn.nameSize, w: widget.on ? FontWeight.w600 : FontWeight.w400, color: !widget.enabled ? N.g44 : (widget.on ? Surface.ink : N.g82))),
           ),
         ),
       );
@@ -127,7 +127,7 @@ class HfFormRow extends StatelessWidget {
   Widget build(BuildContext context) => Padding(
         padding: const EdgeInsets.only(bottom: Surface.sectionGap),
         child: Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
-          SizedBox(width: labelWidth, child: Text(label, softWrap: false, style: H.s(Dn.nameSize, color: H.text3))),
+          SizedBox(width: labelWidth, child: Text(label, softWrap: false, style: H.s(Dn.nameSize, color: N.g63))),
           Flexible(child: Align(alignment: Alignment.centerLeft, child: child)),
         ]),
       );
@@ -135,7 +135,7 @@ class HfFormRow extends StatelessWidget {
 
 /// A read-only value: the same monospace as the readouts, no box (a box would say "edit me").
 class HfFact extends StatelessWidget {
-  const HfFact(this.value, {super.key, this.color = H.text2});
+  const HfFact(this.value, {super.key, this.color = N.g82});
   final String value;
   final Color color;
   @override
@@ -201,13 +201,13 @@ Future<void> showHfPopover(BuildContext context, {required Rect anchor, required
                 Container(
                   height: Surface.chromeRow,
                   padding: const EdgeInsets.only(left: 9, right: 3),
-                  decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: H.rule2))),
+                  decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: Surface.dividerFine))),
                   child: Row(children: [
-                    Expanded(child: Text(title, style: H.s(Dn.nameSize, w: FontWeight.w600, color: H.text))),
+                    Expanded(child: Text(title, style: H.s(Dn.nameSize, w: FontWeight.w600, color: Surface.ink))),
                     GestureDetector(
                       behavior: HitTestBehavior.opaque,
                       onTap: close,
-                      child: MouseRegion(cursor: SystemMouseCursors.click, child: SizedBox(width: Surface.hit, height: Surface.hit, child: Center(child: SizedBox(width: 7.5, height: 7.5, child: CustomPaint(painter: HgPainter(HG.cross, H.text3, N.g13)))))),
+                      child: MouseRegion(cursor: SystemMouseCursors.click, child: SizedBox(width: Surface.hit, height: Surface.hit, child: Center(child: SizedBox(width: 7.5, height: 7.5, child: CustomPaint(painter: HgPainter(HG.cross, N.g63, N.g13)))))),
                     ),
                   ]),
                 ),

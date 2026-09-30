@@ -26,9 +26,9 @@ class TopBar extends StatelessWidget {
         return Container(
           height: Surface.topBar,
           padding: const EdgeInsets.symmetric(horizontal: Surface.panelInset),
-          decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: H.rule))),
+          decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: Surface.divider))),
           child: Row(children: [
-            Text('Motolii', style: H.s(14, w: FontWeight.w600, ls: -0.1, color: H.text2)),
+            Text('Motolii', style: H.s(14, w: FontWeight.w600, ls: -0.1, color: N.g82)),
             if (tagline) ...[
               const SizedBox(width: 9),
               Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -59,13 +59,13 @@ class TopBar extends StatelessWidget {
             _Modes(m, onModeAt),
             const Spacer(),
             for (final (g, f) in [(HG.fit, m.onFit), (HG.pin, m.onPin), (HG.folder, m.onOpen)])
-              _Key(onTap: f, fill: H.raised, edge: H.rule, child: SizedBox(width: 13, height: 13, child: CustomPaint(painter: HgPainter(g, f != null ? N.g86 : N.g44, H.raised)))),
+              _Key(onTap: f, fill: Surface.raised, edge: Surface.divider, child: SizedBox(width: 13, height: 13, child: CustomPaint(painter: HgPainter(g, f != null ? N.g86 : N.g44, Surface.raised)))),
             if (motto) ...[
               const SizedBox(width: 12),
               Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.end, children: [
-                Text('Less numbers.', style: Dn.value(H.text2).copyWith(fontSize: 10)),
+                Text('Less numbers.', style: Dn.value(N.g82).copyWith(fontSize: 10)),
                 const SizedBox(height: 1),
-                Text('More motion.', style: Dn.value(H.text2).copyWith(fontSize: 10)),
+                Text('More motion.', style: Dn.value(N.g82).copyWith(fontSize: 10)),
               ]),
             ],
           ]),
@@ -122,7 +122,7 @@ class _Glyph extends StatelessWidget {
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: onTap,
-          child: SizedBox(width: Surface.hit, height: Surface.hit, child: Center(child: SizedBox(width: size, height: size, child: CustomPaint(painter: HgPainter(g, N.g82, H.window))))),
+          child: SizedBox(width: Surface.hit, height: Surface.hit, child: Center(child: SizedBox(width: size, height: size, child: CustomPaint(painter: HgPainter(g, N.g82, Surface.base))))),
         ),
       );
 }
@@ -135,7 +135,7 @@ class _Modes extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(
         height: Surface.control + 2,
-        decoration: BoxDecoration(color: H.raised, border: Border.all(color: H.rule), borderRadius: BorderRadius.circular(3)),
+        decoration: BoxDecoration(color: Surface.raised, border: Border.all(color: Surface.divider), borderRadius: BorderRadius.circular(3)),
         child: Row(mainAxisSize: MainAxisSize.min, children: [
           for (final (mode, label) in const [(TopMode.edit, 'EDIT'), (TopMode.play, 'PLAY'), (TopMode.export, 'EXPORT')])
             Builder(
@@ -155,7 +155,7 @@ class _Modes extends StatelessWidget {
                     width: 54,
                     alignment: Alignment.center,
                     color: m.mode == mode ? H.mode : null,
-                    child: Text(label, style: Dn.label(m.mode == mode ? N.g100 : H.text2, FontWeight.w600).copyWith(letterSpacing: .7)),
+                    child: Text(label, style: Dn.label(m.mode == mode ? N.g100 : N.g82, FontWeight.w600).copyWith(letterSpacing: .7)),
                   ),
                 ),
               ),

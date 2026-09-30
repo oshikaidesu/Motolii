@@ -17,8 +17,8 @@ lib/browser/media/explore/overlay.dart 9
 lib/browser/media/fluid.dart 54
 lib/browser/media/library.dart 2
 lib/browser/media/list.dart 7
-lib/browser/media/preview.dart 28
 lib/browser/media/media_browser.dart 14
+lib/browser/media/preview.dart 28
 lib/browser/panel_chrome.dart 19
 lib/browser/parts.dart 7
 lib/browser/search.dart 16

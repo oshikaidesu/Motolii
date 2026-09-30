@@ -7,7 +7,6 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 
 import '../effects/shelf.dart' show EffectScene;
-import '../theme/tokens.dart' show H;
 import '../session/console_log.dart';
 import '../session/editor_session.dart';
 import '../session/status_notice.dart';
@@ -16,6 +15,7 @@ import 'top/top_session.dart';
 import '../input/window_keys.dart';
 import 'ui_scale.dart';
 import '../workspace/seats.dart';
+import '../theme/metrics.dart';
 
 String _notice(String effects, String relink) => effects.isNotEmpty ? effects : relink;
 
@@ -140,7 +140,7 @@ class _LiveShellState extends State<LiveShell> {
       final name = names.isEmpty ? null : names.first;
       final panel = name == null ? null : workspace?.dock.defs[name];
       return ColoredBox(
-        color: H.window,
+        color: Surface.base,
         child: panel?.build() ?? const SizedBox.expand(),
       );
     }
@@ -148,7 +148,7 @@ class _LiveShellState extends State<LiveShell> {
     autofocus: true,
     onKeyEvent: keys.handle,
     child: ColoredBox(
-      color: H.window,
+      color: Surface.base,
       child: !ready
           ? const SizedBox.expand()
           : RepaintBoundary(

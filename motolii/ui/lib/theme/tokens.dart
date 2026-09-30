@@ -5,22 +5,6 @@ import 'glyphs.dart';
 import 'neutral.dart';
 
 abstract final class H {
-  // ---- Neutral palette: normalised from the reference (see handoff section 15).
-  static const window = N.g10; // ground: window, panels, gutters
-  static const raised = N.g13; // tiles, keys, inputs, rows, cards, row ground A
-  static const raisedHi = N.g15; // hover, value wells, row ground B
-  static const sel = N.g20; // selected tab / preset / open tab
-  static const selHi = N.g26; // selected inside a bar (subtab, tool)
-  static const rule = N.g20; // outlines: panel edges, control borders
-  static const rule2 = N.g15; // inner dividers
-  static const track = N.g15; // slider track
-  static const text = N.g95; // primary: names, active labels
-  static const text2 = N.g82; // secondary: items, inactive tabs
-  static const text3 = N.g63; // tertiary: annotation, sub-labels
-  static const ink = N.g10; // glyph and label on identity surfaces
-  static const gutter = window;
-  static Color selAt() => sel;
-
   // ---- Semantic families: one hue, area-dependent variants.
   static const scatter = Fam(Color(0xFFF27AB6), t: Color(0xFFE974AB), n: Color(0xFFDD6F9F));
   static const stagger = Fam(Color(0xFF5596E9), t: Color(0xFF4781E5), n: Color(0xFF4880E5));
@@ -28,17 +12,15 @@ abstract final class H {
   static const face = Fam(Color(0xFFF0D455), t: Color(0xFFEFCB4E), n: Color(0xFFE3C748));
   static const follow = Fam(Color(0xFFF69260));
   static const attach = Fam(Color(0xFFA282E8), t: Color(0xFFA889E9), n: Color(0xFFA086E2));
-  // Transform is a sibling operation with a neutral, subdued identity (not a property, not pink).
-  static const neutralT = Color(0xFF8C7A88), neutralN = Color(0xFF77717C);
   // Operational
-  static const relation = Color(0xFFFF4D3D), wave = Color(0xFF3B6D5F), textSelection = Color(0x552F6BFF), marquee = Color(0xFFFFBC53), guide = Color(0xFFB0E3EF);
-  static const play = Color(0xFF7BCC9E), record = Color(0xFFF03C8A), mode = Color(0xFF7A87E3), toggleOn = Color(0xFF6982D1), toggleOff = N.g63, playhead = Color(0xFF6EA6DB);
+  static const relation = Color(0xFFFF4D3D), wave = Color(0xFF3B6D5F), textSelection = Color(0x552F6BFF), guide = Color(0xFFB0E3EF);
+  static const play = Color(0xFF7BCC9E), record = Color(0xFFF03C8A), mode = Color(0xFF7A87E3), toggleOn = Color(0xFF6982D1), playhead = Color(0xFF6EA6DB);
 
   static const sans = 'Inter';
   static const mono = 'Menlo';
-  static TextStyle s(double size, {Color color = text, FontWeight w = FontWeight.w400, double ls = 0}) =>
+  static TextStyle s(double size, {Color color = N.g95, FontWeight w = FontWeight.w400, double ls = 0}) =>
       TextStyle(fontFamily: sans, fontSize: size, color: color, fontWeight: w, letterSpacing: ls, height: 1);
-  static TextStyle m(double size, {Color color = text, double ls = 0}) =>
+  static TextStyle m(double size, {Color color = N.g95, double ls = 0}) =>
       TextStyle(fontFamily: mono, fontSize: size, color: color, letterSpacing: ls, height: 1);
 }
 
@@ -49,7 +31,7 @@ class Fam {
   Color get i => _v(b, 1.16, .96); // Inspector: small accents may be stronger
   Color get t => _t ?? b; // Timeline body: sampled from the reference, not derived
   Color get n => _n ?? b; // Timeline name icon: sampled
-  Color get dim => Color.lerp(H.raised, b, .30)!; // off / dim
+  Color get dim => Color.lerp(N.g13, b, .30)!; // off / dim
   static Color _v(Color c, double sat, double lit) {
     final h = HSLColor.fromColor(c);
     return h.withSaturation((h.saturation * sat).clamp(0, 1)).withLightness((h.lightness * lit).clamp(0, 1)).toColor();

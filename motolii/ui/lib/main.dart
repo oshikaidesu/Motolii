@@ -8,9 +8,10 @@ import 'app/window.dart';
 import 'controls/panel/scale.dart';
 import 'theme/live_palette.dart';
 import 'theme/tokens.dart' show H;
+import 'theme/metrics.dart';
 
 void main() => runApp(WidgetsApp(
-      color: H.window,
+      color: Surface.base,
       debugShowCheckedModeBanner: false,
       textStyle: H.s(12),
       pageRouteBuilder: <T>(RouteSettings settings, WidgetBuilder builder) => PageRouteBuilder<T>(settings: settings, pageBuilder: (context, _, __) => builder(context)),

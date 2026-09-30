@@ -425,9 +425,7 @@ class _EditorNumericFieldState extends State<EditorNumericField>
                   if (widget.unit != null) ...[
                     const SizedBox(width: Step.s2),
                     ConstrainedBox(
-                      constraints: const BoxConstraints(
-                        minWidth: Step.s12,
-                      ),
+                      constraints: const BoxConstraints(minWidth: Step.s12),
                       child: Text(
                         widget.unit!,
                         style: TextStyle(
@@ -483,93 +481,54 @@ class _EditorNumericFieldState extends State<EditorNumericField>
                         link: _well,
                         child: Container(
                           height: Surface.workRow,
-                          decoration: EditorTheme.of(context).skin.flatWells
-                              ? BoxDecoration(
-                                  color: _flooded
-                                      ? widget.tint
-                                      : dragging
-                                      ? EditorTheme.of(context).hover
-                                      : EditorTheme.clear,
-                                  border: Border(
+                          decoration: BoxDecoration(
+                            color: _flooded
+                                ? widget.tint
+                                : dragging
+                                ? EditorTheme.of(context).hover
+                                : EditorTheme.of(context).app,
+                            // The family's rule down the left edge: a flat
+                            // colour the eye can follow down a column of wells,
+                            // drawn by the well's own border.
+                            border: widget.tint != null && widget.enabled
+                                ? Border(
                                     left: BorderSide(
-                                      color: widget.enabled
-                                          ? widget.tint ??
-                                                EditorTheme.of(context).border
-                                          : EditorTheme.of(context).line,
-                                      width: Step.s2,
+                                      color: widget.tint!,
+                                      width: Step.s3,
+                                    ),
+                                    top: BorderSide(
+                                      color: EditorTheme.of(context).line,
+                                    ),
+                                    right: BorderSide(
+                                      color: EditorTheme.of(context).line,
                                     ),
                                     bottom: BorderSide(
-                                      color: EditorTheme.of(context).border,
+                                      color: EditorTheme.of(context).line,
                                     ),
+                                  )
+                                : Border.all(
+                                    color: EditorTheme.of(context).line,
                                   ),
-                                )
-                              : BoxDecoration(
-                                  color: _flooded
-                                      ? widget.tint
-                                      : dragging
-                                      ? EditorTheme.of(context).hover
-                                      : EditorTheme.of(context).app,
-                                  // The family's rule down the left edge: a flat
-                                  // colour the eye can follow down a column of wells,
-                                  // drawn by the well's own border.
-                                  border: widget.tint != null && widget.enabled
-                                      ? Border(
-                                          left: BorderSide(
-                                            color: widget.tint!,
-                                            width: Step.s3,
-                                          ),
-                                          top: BorderSide(
-                                            color: EditorTheme.of(context).line,
-                                          ),
-                                          right: BorderSide(
-                                            color: EditorTheme.of(context).line,
-                                          ),
-                                          bottom: BorderSide(
-                                            color: EditorTheme.of(context).line,
-                                          ),
-                                        )
-                                      : Border.all(
-                                          color: EditorTheme.of(context).line,
-                                        ),
-                                ),
+                          ),
                           child: Stack(
                             fit: StackFit.expand,
                             children: [
                               if (widget.fill &&
                                   widget.min != null &&
                                   widget.max != null)
-                                if (EditorTheme.of(context).skin.newFace)
-                                  Align(
-                                    alignment: Alignment.bottomCenter,
-                                    child: SizedBox(
-                                      height: Step.s2,
-                                      width: double.infinity,
-                                      child: CustomPaint(
-                                        painter: _AmountLine(
-                                          value: _shown ?? widget.value,
-                                          min: widget.min!,
-                                          max: widget.max!,
-                                          tint:
-                                              widget.tint ??
-                                              EditorTheme.of(context).ink,
-                                        ),
-                                      ),
-                                    ),
-                                  )
-                                else
-                                  CustomPaint(
-                                    painter: _TrackPainter(
-                                      colors: EditorTheme.of(context),
-                                      value: _shown ?? widget.value,
-                                      min: widget.min!,
-                                      max: widget.max!,
-                                      rest: widget.defaultValue,
-                                      tint:
-                                          widget.tint ??
-                                          EditorTheme.of(context).raised,
-                                      style: widget.track,
-                                    ),
+                                CustomPaint(
+                                  painter: _TrackPainter(
+                                    colors: EditorTheme.of(context),
+                                    value: _shown ?? widget.value,
+                                    min: widget.min!,
+                                    max: widget.max!,
+                                    rest: widget.defaultValue,
+                                    tint:
+                                        widget.tint ??
+                                        EditorTheme.of(context).raised,
+                                    style: widget.track,
                                   ),
+                                ),
                               Padding(
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: Step.s4,
@@ -586,9 +545,6 @@ class _EditorNumericFieldState extends State<EditorNumericField>
                                         overflow: TextOverflow.clip,
                                         style: TextStyle(
                                           fontSize: Dn.labelSize,
-                                          fontFamily: EditorTheme.of(context)
-                                              .skin
-                                              .labelFamily,
                                           fontFeatures: const [
                                             FontFeature.tabularFigures(),
                                           ],
@@ -611,9 +567,6 @@ class _EditorNumericFieldState extends State<EditorNumericField>
                                           // so; a read-only one never does.
                                           decoration:
                                               widget.enabled &&
-                                                  !EditorTheme.of(context)
-                                                      .skin
-                                                      .flatWells &&
                                                   !(widget.fill &&
                                                       widget.min != null &&
                                                       widget.max != null)

@@ -144,13 +144,6 @@ mixin SessionNative on SessionCore {
         final state = EditorSession.map(call.arguments);
         panePlaces.value = EditorSession.map(state['places']);
         deskDrawer.value = state['drawer'] as String?;
-        if (state.containsKey('theme') &&
-            !sameValue(deskWork.value['theme'], state['theme'])) {
-          deskWork.value = {
-            ...deskWork.value,
-            'theme': EditorSession.typed(state['theme']),
-          };
-        }
       }
       if (call.method == 'documentChanged') {
         final envelope = EditorSession.map(call.arguments);
