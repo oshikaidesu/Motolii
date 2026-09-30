@@ -5,6 +5,7 @@ enum DocumentOperation {
   notes('notes'),
   stageView('stageView'),
   stageWindow('stageWindow'),
+  cameraShown('cameraShown'),
   select('select'),
   setProperty('setProperty'),
   previewProperties('previewProperties'),

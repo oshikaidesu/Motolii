@@ -307,11 +307,17 @@ impl EditorRuntime{
             return Ok(reply);
         }
         *self.full_status_revision.borrow_mut()=Some(revision);
-        let assets:Result<Vec<_>,String>=view.assets().map_err(e)?.into_iter().map(|a|{
+        // The reference fields (assets with their thumbnails, catalog rows, fonts, backgrounds, ...) change with the document,
+        // the shelf, an asset file appearing or vanishing, or playing; not with a preview step. Build them only when that key moves.
+        let asset_list=view.assets().map_err(e)?;
+        let reference_key=crate::snapshot_cache::digest((self.doc.identity(),format!("{:?}",self.doc.revision()),crate::render::engine::catalog_generation(),crate::render::engine::catalog_errors(),self.viewer.clock.playing(),
+            asset_list.iter().map(|a|a.path_absolute.as_ref().is_some_and(|p|std::path::Path::new(p).exists())).collect::<Vec<_>>()));
+        let stale=self.snapshot_cache.borrow().reference_key!=Some(reference_key);
+        let assets:Result<Vec<_>,String>=if !stale{Ok(Vec::new())}else{asset_list.into_iter().map(|a|{
             let used=self.asset_used(a.id)?;
             let path=a.path_absolute.clone();let missing=path.as_ref().is_none_or(|p|!std::path::Path::new(p).exists());
             Ok(json!({"id":a.id.to_string(),"name":a.name,"path":path,"mime":a.asset_type,"used":used,"missing":missing,"thumbnail":path.as_ref().and_then(|p|if a.asset_type.starts_with("image/"){editor::thumbnail::image_data_uri(p)}else if a.asset_type.starts_with("video/"){editor::thumbnail::video_data_uri(p)}else{None}),"role":match a.role{AssetRole::Reference=>"reference",_=>"material"},"facts":path.as_ref().filter(|_|!missing).and_then(|p|editor::thumbnail::facts(p,&a.asset_type)),"seconds":a.duration.map(|d|d.as_seconds_f64()),"peaks":path.as_ref().filter(|_|!missing&&a.asset_type.starts_with("audio/")).and_then(|p|editor::thumbnail::audio_peaks(p))}))
-        }).collect();
+        }).collect()};
         let used=editor::fixture::used_colors_from_doc(&self.doc,self.time()?);let authored=!used.is_empty();
         let swatches=if authored{used}else{editor::fixture::default_palette()};
         let palette:Vec<_>=swatches.iter().map(|s|json!({"rgba":s.rgba.map(|x|x as f64/255.0),"hex":s.hex,"used":authored})).collect();
@@ -329,27 +335,29 @@ impl EditorRuntime{
         let color_target=self.viewer.color_target.as_ref().and_then(|slot|editor::color::read_color(&self.doc,slot,self.time().ok()?).map(|rgba|json!({"layer":slot.layer().map(|l|l.0),"slot":slot,"label":"Color","rgba":rgba,"alpha":editor::color::has_alpha(slot)})));
         let selected_keys:Vec<_>=self.viewer.selected_keys.iter().map(|k|json!({"layer":k.layer.0,"property":k.property.as_ref().map(|p|p.name()),"frame":(k.at_sec*comp.fps.as_f64()).round()as i64})).collect();
         let generation=crate::render::engine::catalog_generation();
-        let catalog_rows=catalog.iter().map(|e|json!({"id":e.plugin_id,"name":e.label,"stage":format!("{:?}",e.stage),"owner":editor::create::owner_of(&format!("{:?}",e.stage)),"generation":generation,"usesClock":e.uses_clock,"persistent":e.persistent,"readsBackdrop":e.reads_backdrop,"layerInputs":e.image_layer_fields.len()+e.params.iter().filter(|p|p.layer).count(),"paramCount":e.params.len()})).collect::<Vec<_>>();
+        let catalog_rows=if !stale{Vec::new()}else{catalog.iter().map(|e|json!({"id":e.plugin_id,"name":e.label,"stage":format!("{:?}",e.stage),"owner":editor::create::owner_of(&format!("{:?}",e.stage)),"generation":generation,"usesClock":e.uses_clock,"persistent":e.persistent,"readsBackdrop":e.reads_backdrop,"layerInputs":e.image_layer_fields.len()+e.params.iter().filter(|p|p.layer).count(),"paramCount":e.params.len()})).collect::<Vec<_>>()};
         let mut status=json!({"observer":self.observer_status()?,"cameraGizmos":self.camera_gizmos()?,"width":comp.width,"height":comp.height,"stageWindow":self.viewer.stage_window.map(|w|json!({"width":w.width,"height":w.height,"roi":w.roi})),"fps":comp.fps.as_f64(),"fpsNum":comp.fps.num(),"fpsDen":comp.fps.den(),"durationFrames":comp.duration_frames,"background":comp.background,"frame":self.viewer.frame,"playing":self.viewer.clock.playing(),"playbackHealth":playback_health,"waveforms":waveforms,"undo":undo,"redo":redo,"path":self.path,"dirty":self.is_dirty()?,"layers":Json::Null,"selectedId":self.viewer.selected().map(|id|id.0),"selectedIds":self.viewer.selected_ids.iter().map(|id|id.0).collect::<Vec<_>>(),"selectedKeys":selected_keys,"selectedBounds":self.viewer.selected().and_then(|id|self.bounds(id)),"x":point[0],"y":point[1],"assets":assets?,"catalog":catalog_rows,"catalogErrors":crate::render::engine::catalog_errors(),"palette":palette,"markers":markers?,"colorTarget":color_target,"capabilities":crate::port::CAPABILITIES,"easeKinds":if self.viewer.clock.playing(){Json::Null}else{json!(editor::ease_kinds::KINDS.iter().copied().map(interp).collect::<Vec<_>>())},"documentRevision":format!("{:?}",self.doc.revision()),"deviceId":self.device_id.to_string(),"renderCount":self.render_count,"framesSkipped":self.frames.skipped(),"renderMs":self.render_ms,"interopCopies":0,"readbacks":0,"error":self.error,"preview":self.preview.is_some(),"export":self.exporter.status(),"freeze":self.freezer.status(),"relink":self.relink_report});
         // `json!` would copy every row (to_value re-serializes a Value); the rows move in.
         status["layers"]=Json::Array(layers);
         status["previewOwner"] = json!(self.preview.as_ref().map(|p|p.0));
         status["previewInteraction"] = json!(self.preview_tag);
         status["visualSamples"]=json!(true);
-        status["fontFamilies"]=json!(crate::render::picture::shaping::font_families());
+        if stale{status["fontFamilies"]=json!(crate::render::picture::shaping::font_families());}
         status["history"]=self.history.snapshot(self.doc.edit_head());
         status["spatialGizmo"]=self.spatial_gizmo(View::Camera)?;
         status["stageSpatialGizmo"]=self.spatial_gizmo(View::User)?;
         status["notebook"]=serde_json::to_value(view.notebook().map_err(e)?).map_err(e)?;
         status["depthLayout"]=self.depth_layout(&scene)?;
-        status["backgrounds"]=json!(editor::create::backgrounds().iter().map(|b|json!({"id":b.id,"name":b.name,"thumbnail":editor::thumbnail::image_data_uri(&b.path)})).collect::<Vec<_>>());
+        if stale{status["backgrounds"]=json!(editor::create::backgrounds().iter().map(|b|json!({"id":b.id,"name":b.name,"thumbnail":editor::thumbnail::image_data_uri(&b.path)})).collect::<Vec<_>>());}
         status["createKinds"]=editor::create::kinds_json();
         status["hostCapabilities"]=editor::create::host_capabilities(&catalog);
-        status["primitives"]=json!(editor::create::primitives().iter().map(|p|json!({"id":p.id,"name":p.name})).collect::<Vec<_>>());
+        if stale{status["primitives"]=json!(editor::create::primitives().iter().map(|p|json!({"id":p.id,"name":p.name})).collect::<Vec<_>>());}
         status["animate"]=json!(self.viewer.animate!=Animate::Off);
         if status["easeKinds"].is_null(){status.as_object_mut().unwrap().remove("easeKinds");}
-        status["importExtensions"]=json!(crate::render::media::import_extensions());
+        if stale{status["importExtensions"]=json!(crate::render::media::import_extensions());}
         status["names"]=json!(names::fixed().collect::<std::collections::BTreeMap<_,_>>());
+        if !stale{let object=status.as_object_mut().unwrap();for name in crate::snapshot_cache::REFERENCES{object.remove(*name);}}
+        self.snapshot_cache.borrow_mut().reference_key=Some(reference_key);
         Ok(status)
     }
     #[allow(clippy::too_many_arguments)]

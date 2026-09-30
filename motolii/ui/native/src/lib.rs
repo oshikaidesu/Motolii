@@ -320,10 +320,17 @@ pub unsafe extern "C" fn motolii_probe_request(ctx: *mut EditorRuntime, request:
             model_reply = Some(probe.doc.view().composition().map_err(|e|e.to_string()).and_then(|comp| {
                 let c = comp.ok_or("No composition")?;
                 // 描く窓の一覧。Camera は出力そのもの、Stage はタブが窓を置いている間だけ。
-                let mut views = vec![json!({"view":View::Camera.name(),"width":c.width,"height":c.height})];
+                // A hidden Camera tab is not drawn; if the Stage is not there either, something still has to be.
+                let mut views = Vec::new();
+                if !probe.viewer.camera_hidden || probe.viewer.stage_window.is_none() { views.push(json!({"view":View::Camera.name(),"width":c.width,"height":c.height})); }
                 if let Some(w) = probe.viewer.stage_window { views.push(json!({"view":View::User.name(),"width":w.width,"height":w.height})); }
                 Ok(json!({"width":c.width,"height":c.height,"views":views}))
             }));
+            return Ok(());
+        }
+        if value["op"] == "cameraShown" {
+            let hidden = value["shown"] == false;
+            model_reply = Some(Ok(json!({"needsRender": std::mem::replace(&mut probe.viewer.camera_hidden, hidden) != hidden})));
             return Ok(());
         }
         if value["op"] == "stageWindow" {

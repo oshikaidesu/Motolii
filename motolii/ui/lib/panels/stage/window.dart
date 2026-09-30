@@ -25,8 +25,10 @@ mixin _StageWindow on State<StagePanel>, _StageView {
   /// The dock keeps every tab built. A tab that comes into view takes its own
   /// texture; the Stage tab also places its window, and withdraws it when hidden
   /// so native draws only the pictures somebody is looking at.
-  bool _shown = false;
+  bool? _shown;
   void _runtimeChanged() {
+    // a new runtime has not been told whether the Camera tab is hidden
+    if (!_userStage && _shown == false) _reportCamera(false);
     _windowKey = null;
     _sentWindow = null;
     _drawnWindow = null;
@@ -38,17 +40,25 @@ mixin _StageWindow on State<StagePanel>, _StageView {
     _windowKey = null;
     final shown = Visibility.of(context);
     if (shown == _shown) return;
+    final wasShown = _shown == true;
     _shown = shown;
+    _reportCamera(shown);
     if (shown) {
       c.attachView(widget.view);
       return;
     }
     c.detachView(widget.view);
-    if (_userStage) {
+    if (_userStage && wasShown) {
       _sentWindow = null;
       if (c.supports('stageWindow'))
         c.command('stageWindow', {'width': 0, 'height': 0});
     }
+  }
+
+  /// The Camera tab says whether it is looked at, so native draws its picture only then (the Stage tab says the same
+  /// with its window).
+  void _reportCamera(bool shown) {
+    if (!_userStage && c.supports('cameraShown')) c.command('cameraShown', {'shown': shown});
   }
 
   /// What the Stage tab asks native to draw: its own pixel size and the part of
@@ -58,7 +68,7 @@ mixin _StageWindow on State<StagePanel>, _StageView {
   /// Everything [_syncWindow] reads; a build that leaves these alone schedules nothing.
   (Offset, double, Size, bool, bool)? _windowKey;
   void _queueWindowSync() {
-    final key = (_origin, _scale, _viewport, _shown, c.supports('stageWindow'));
+    final key = (_origin, _scale, _viewport, _shown == true, c.supports('stageWindow'));
     if (key == _windowKey) return;
     _windowKey = key;
     // Same frame when the runtime answers in it; the channel path waits for
@@ -75,7 +85,7 @@ mixin _StageWindow on State<StagePanel>, _StageView {
   /// through [_queueWindowSync], because a command may not be sent from inside a build.
   void _syncWindowFromEvent() {
     if (SchedulerBinding.instance.schedulerPhase == SchedulerPhase.persistentCallbacks) return;
-    final key = (_origin, _scale, _viewport, _shown, c.supports('stageWindow'));
+    final key = (_origin, _scale, _viewport, _shown == true, c.supports('stageWindow'));
     if (key == _windowKey) return;
     _windowKey = key;
     _syncWindow();
@@ -122,7 +132,7 @@ mixin _StageWindow on State<StagePanel>, _StageView {
   }
 
   void _syncWindow() {
-    if (!_userStage || !_shown || !mounted || !c.supports('stageWindow'))
+    if (!_userStage || _shown != true || !mounted || !c.supports('stageWindow'))
       return;
     if (_viewport.isEmpty) return;
     // the window is asked for in device pixels: the screen's ratio times the UI's own scale (a scaled UI draws this

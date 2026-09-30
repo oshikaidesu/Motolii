@@ -43,6 +43,8 @@ pub(crate) struct ViewerState {
     pub stage_view_scale: HashMap<View, f64>,
     pub stage_held: Option<String>,
     pub stage_window: Option<Window>,
+    /// The Camera tab says it is hidden: its picture is not drawn (unless nothing else is).
+    pub camera_hidden: bool,
     pub stage_view: View,
     pub user_camera: ResolvedCamera,
     pub animate: Animate,
@@ -68,6 +70,7 @@ impl ViewerState {
             stage_view_scale: HashMap::new(),
             stage_held: None,
             stage_window: None,
+            camera_hidden: false,
             stage_view: View::User,
             user_camera: Default::default(),
             animate: Animate::Off,

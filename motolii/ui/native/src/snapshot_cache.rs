@@ -8,7 +8,7 @@ use crate::EditorRuntime;
 use serde_json::{json, Value};
 
 static NEXT_ID: AtomicU64 = AtomicU64::new(1);
-const REFERENCES: &[&str] = &["backgrounds", "primitives", "assets", "fontFamilies", "easeKinds", "catalog", "capabilities", "importExtensions", "visualSamples", "blendSamples"];
+pub(crate) const REFERENCES: &[&str] = &["backgrounds", "primitives", "assets", "fontFamilies", "easeKinds", "catalog", "capabilities", "importExtensions", "visualSamples", "blendSamples"];
 
 #[derive(Default)]
 pub(crate) struct SnapshotCache {
@@ -17,12 +17,14 @@ pub(crate) struct SnapshotCache {
     id: u64,
     references: Value,
     reference_id: u64,
+    /// What the reference fields were last built from (see `build_status`).
+    pub(crate) reference_key: Option<u64>,
     signature: Option<(String, Revision, String)>,
     /// 層ごとの status 行と、その行を作った入力の指紋。
     pub(crate) rows: HashMap<LayerId, (u64, Value)>,
 }
 
-fn digest(parts: impl Hash) -> u64 {
+pub(crate) fn digest(parts: impl Hash) -> u64 {
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
     parts.hash(&mut hasher);
     hasher.finish()
@@ -148,12 +150,15 @@ impl EditorRuntime {
             }
             let mut cache = self.snapshot_cache.borrow_mut();
             // A full snapshot produced while playing can omit unchanged reference fields.
-            let mut merged = cache.references.as_object().cloned().unwrap_or_default();
-            merged.extend(references.as_object().unwrap().clone());
-            let references = Value::Object(merged);
-            if cache.reference_id == 0 || cache.references != references {
-                cache.reference_id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
-                cache.references = references;
+            // Nothing was rebuilt (its key did not move): the cached references stand, not even compared.
+            if !references.as_object().unwrap().is_empty() {
+                let mut merged = cache.references.as_object().cloned().unwrap_or_default();
+                merged.extend(references.as_object().unwrap().clone());
+                let references = Value::Object(merged);
+                if cache.reference_id == 0 || cache.references != references {
+                    cache.reference_id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
+                    cache.references = references;
+                }
             }
             cache.id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
             cache.key = (!playing).then_some(key);
