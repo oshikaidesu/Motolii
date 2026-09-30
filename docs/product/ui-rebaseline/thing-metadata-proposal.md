@@ -1,6 +1,6 @@
 # Thing metadata: precedents, proposal, and evidence
 
-Scope: prototype only (`motolii/ui/lib/proto_hf/`). Nothing here decides a Vism manifest field. The docs say manifest fields, `look`/`primitive` tags, a `related` field and default filters are undecided, and forbid adding provisional ones to `NodeDesc` or the manifest (`docs/design/vism/community-distribution-model.md`, `docs/design/vism/package-concept.md`). This is a fixture-level test of whether the idea holds, not a schema for production.
+Scope: proposal with a working data layer in `motolii/ui/lib/browser/things.dart` and `lib/browser/data/things/` (first written in the retired `lib/proto_hf/` prototype; measurements below are from that run). Nothing here decides a Vism manifest field. The docs say manifest fields, `look`/`primitive` tags, a `related` field and default filters are undecided, and forbid adding provisional ones to `NodeDesc` or the manifest (`docs/design/vism/community-distribution-model.md`, `docs/design/vism/package-concept.md`). This is a fixture-level test of whether the idea holds, not a schema for production.
 
 ## 1. Precedents
 
@@ -22,7 +22,7 @@ Not verified by this search: prefix search such as `e:` or `p:` in After Effects
 ## 2. What the repo already says
 
 - The engine already gives effects facts: an id, a stage, and flags (`persistent`, `usesClock`, `readsBackdrop`, `layerInputs`, `placement`, a parameter count). Tags and capabilities should be derived from these where possible, not typed twice.
-- The old Effects shelf keeps a hand-written map from effect id to family in Dart (`effects_shelf.dart`), and Create keeps a switch by id (`create_shelf.dart`). That is exactly the drift a registry prevents.
+- The old Effects shelf keeps a hand-written map from effect id to family in Dart (the old `effects_shelf.dart`), and Create keeps a switch by id (the old `create_shelf.dart`). That is exactly the drift a registry prevents.
 - `docs/design/extensible-core-model.md` asks that a second thing pass through the same path with only manifest, data or composition. This work is a test of that at the UI edge.
 
 ## 3. Proposal (prototype scope)
@@ -37,7 +37,7 @@ Not verified by this search: prefix search such as `e:` or `p:` in After Effects
 
 **Faces.** A thing declares an existing face type with parameters: `mark`, `fx` or `curve`. A new type is added once in one file; a new thing never adds drawing code.
 
-**Static validation** (`tool/validate_things.dart`, also run by the tests; exit code 1 on any issue):
+**Static validation** (`motolii/ui/tool/validate_things.dart`, also run by the tests; exit code 1 on any issue):
 
 | Rule | Catches |
 |---|---|
@@ -65,11 +65,9 @@ The Create and Effects panels were changed once to read descriptors. The Dart so
 
 One defect was found and fixed along the way: a local variable named `base` shadowed the field of the same name in the effect painter, so every effect thumbnail rendered blank with no error. That was a code bug in the painter, unrelated to the metadata idea, and a regression test now checks pixels. That fix happened after the "0 files changed" comparison.
 
-Captures: `handoff/browser-panels-things.png`.
-
 ## 5. Limits and open points
 
-- A new **face type** (as opposed to a new thing) still needs one Dart addition in `faces.dart`. That is presentation code, added once.
+- A new **face type** (as opposed to a new thing) still needs one Dart addition in `browser/create/faces.dart`. That is presentation code, added once.
 - A new **kind** needs a registry entry and a panel binding, both data. It needs no panel code.
 - Families are two levels here (a parent and its children); the class column shows only the top level. Nested display (Premiere-style bins, Blender paths) is not built.
 - Colors and Fonts still read their own lists; they are not moved to descriptors yet.
