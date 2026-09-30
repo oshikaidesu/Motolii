@@ -60,7 +60,7 @@ final easePresets = <Preset>[
   const Preset('Ease', [.42, 0, .58, 1], null),
   const Preset('Bezier', [.25, .1, .78, .92], null),
   Preset('Spring', null, (t) => 1 - math.exp(-6 * t) * math.cos(t * math.pi * 5)),
-  Preset('Bounce', null, _bounce),
+  const Preset('Bounce', null, _bounce),
 ];
 
 class Seg {
@@ -229,9 +229,9 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
         padding: EdgeInsets.fromLTRB(pad, 9, pad, 12),
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           SizedBox(height: math.max(56, h - 20), child: _plot(labels: false)),
-          const SizedBox(height: 6),
+          const SizedBox(height: Surface.sectionGap),
           _presetRow(),
-          const SizedBox(height: 6),
+          const SizedBox(height: Surface.sectionGap),
           _navigator(w),
           _secondary(w),
         ]),
@@ -244,7 +244,7 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
         SizedBox(height: plotH, child: _plot(labels: w >= 230 && plotH >= 150)),
         const SizedBox(height: 7.5),
         _presetRow(),
-        const SizedBox(height: 6),
+        const SizedBox(height: Surface.sectionGap),
         _navigator(w),
         Expanded(child: SingleChildScrollView(key: const ValueKey('ease-scroll'), padding: const EdgeInsets.only(bottom: 12), child: _secondary(w))),
       ]),
@@ -261,7 +261,7 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
         padding: const EdgeInsets.only(top: 12),
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           Text(t, style: sans(Dn.microSize, c: Surface.muted, w: FontWeight.w500, ls: 1.4)),
-          const SizedBox(height: 6),
+          const SizedBox(height: Surface.sectionGap),
           child,
         ]),
       );
@@ -384,7 +384,7 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
     }
     Widget block(List<(String, double, void Function(double))> two) => Container(
           padding: const EdgeInsets.fromLTRB(9, 7, 6, 7.5),
-          decoration: BoxDecoration(color: mixed ? Surface.raised : kYellow, borderRadius: BorderRadius.circular(4.5)),
+          decoration: BoxDecoration(color: mixed ? Surface.raised : kYellow, borderRadius: BorderRadius.circular(Surface.faceRadius)),
           child: Row(children: [for (final p in two) cell(p), if (two.length == 1) const Expanded(child: SizedBox())]),
         );
     final blocks = [for (var i = 0; i < params.length; i += 2) block(params.sublist(i, math.min(i + 2, params.length)))];
@@ -453,7 +453,7 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
               setState(() { if (mixed) { for (final s in segs) { s.setValues(v); } } else { cur.setValues(v); } });
               _write();
             },
-            child: Container(width: 34.5, height: 25.5, padding: const EdgeInsets.all(6), decoration: BoxDecoration(color: Surface.raised, borderRadius: BorderRadius.circular(3)), child: CustomPaint(size: Size.infinite, painter: _Icon(bezierShape(v[0], v[1], v[2], v[3]), kMint, 2))),
+            child: Container(width: 34.5, height: 25.5, padding: const EdgeInsets.all(6), decoration: BoxDecoration(color: Surface.raised, borderRadius: BorderRadius.circular(Surface.controlRadius)), child: CustomPaint(size: Size.infinite, painter: _Icon(bezierShape(v[0], v[1], v[2], v[3]), kMint, 2))),
           ),
         _chip('ease-copy', 'Copy curve', () => setState(() => saved.add(List.of(cur.values)))),
         if (saved.isNotEmpty) _chip('ease-clear', 'Clear', () => setState(saved.clear)),
@@ -469,7 +469,7 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
               setState(() { if (mixed) { for (final t in segs) { take(t); } } else { take(cur); } });
               _write();
             },
-            child: Container(width: 34.5, height: 25.5, padding: const EdgeInsets.all(6), decoration: BoxDecoration(color: Surface.raised, borderRadius: BorderRadius.circular(3)), child: CustomPaint(size: Size.infinite, painter: _Icon(s.shape, kMint, 2))),
+            child: Container(width: 34.5, height: 25.5, padding: const EdgeInsets.all(6), decoration: BoxDecoration(color: Surface.raised, borderRadius: BorderRadius.circular(Surface.controlRadius)), child: CustomPaint(size: Size.infinite, painter: _Icon(s.shape, kMint, 2))),
           ),
         _chip('ease-copy', 'Copy curve', () => h.copyCurve(cur)),
         _chip('ease-save', 'Save preset', () => h.savePreset(cur)),
@@ -480,7 +480,7 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
   Widget _chip(String key, String t, VoidCallback f) => GestureDetector(
         key: ValueKey(key),
         onTap: f,
-        child: Container(height: 25.5, padding: const EdgeInsets.symmetric(horizontal: 9), alignment: Alignment.center, decoration: BoxDecoration(border: Border.all(color: N.g26), borderRadius: BorderRadius.circular(3)), child: Text(t, style: sans(Dn.nameSize, c: N.g76))),
+        child: Container(height: 25.5, padding: const EdgeInsets.symmetric(horizontal: 9), alignment: Alignment.center, decoration: BoxDecoration(border: Border.all(color: N.g26), borderRadius: BorderRadius.circular(Surface.controlRadius)), child: Text(t, style: sans(Dn.nameSize, c: N.g76))),
       );
 
   /// Hosted, the switch says whether the desk is in its ghost mode (set by what is picked); unhosted it is a toy.
@@ -530,7 +530,7 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
                   final label = !compact && sg.frames >= 8 && box.maxWidth >= 42;
                   return Row(children: [
                     if (label) Text('${sg.frames}f', style: sans(Dn.labelSize, c: N.g76, w: FontWeight.w700)),
-                    if (label) const SizedBox(width: 3),
+                    if (label) const SizedBox(width: Surface.inlineGap),
                     Expanded(child: CustomPaint(size: Size.infinite, painter: _Icon(sg.shape, _segColors[i % _segColors.length], 1.8))),
                   ]);
                 }),
@@ -733,7 +733,7 @@ class _PlotP extends CustomPainter {
     // the silhouette of the curve is the object: a flat colour field under it
     if (!mixed) {
       final area = _curve(s, f)..lineTo(at(s, 1, 0).dx, base)..lineTo(at(s, 0, 0).dx, base)..close();
-      c.drawPath(area, Paint()..shader = LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: const [kPink, kViolet, kBlue], stops: const [0, .5, 1]).createShader(Rect.fromLTRB(r.left, top, r.right, base)));
+      c.drawPath(area, Paint()..shader = const LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [kPink, kViolet, kBlue], stops: [0, .5, 1]).createShader(Rect.fromLTRB(r.left, top, r.right, base)));
     }
     if (layers > 1 && !mixed) {
       for (var i = 0; i < layers; i++) {

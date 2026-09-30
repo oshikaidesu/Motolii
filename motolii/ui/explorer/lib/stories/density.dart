@@ -76,7 +76,7 @@ ThemeData motoliiMaterialTheme({double row = 20}) {
   return base.copyWith(
     scaffoldBackgroundColor: N.g10,
     hoverColor: N.g15,
-    colorScheme: ColorScheme.dark(primary: accent, surface: N.g10, onSurface: N.g95, secondary: accent),
+    colorScheme: const ColorScheme.dark(primary: accent, surface: N.g10, onSurface: N.g95, secondary: accent),
     inputDecorationTheme: field,
     dropdownMenuTheme: DropdownMenuThemeData(textStyle: base.textTheme.bodyMedium, inputDecorationTheme: field),
     filledButtonTheme: FilledButtonThemeData(style: skin(base.filledButtonTheme.style!)),
@@ -134,9 +134,9 @@ Widget standardColumn(ThemeData theme) => MaterialApp(
           padding: const EdgeInsets.all(9),
           child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             const Padding(padding: EdgeInsets.only(bottom: 6), child: Text('Rounded Rectangle')),
-            ListTile(title: const Text('Position'), trailing: const Text('960.00')),
+            const ListTile(title: Text('Position'), trailing: Text('960.00')),
             const TextField(decoration: InputDecoration(hintText: 'Name')),
-            DropdownMenu<int>(dropdownMenuEntries: const [DropdownMenuEntry(value: 1, label: 'Normal')], initialSelection: 1, expandedInsets: EdgeInsets.zero),
+            const DropdownMenu<int>(dropdownMenuEntries: [DropdownMenuEntry(value: 1, label: 'Normal')], initialSelection: 1, expandedInsets: EdgeInsets.zero),
             Slider(value: .5, onChanged: (_) {}),
             Row(children: [Checkbox(value: true, onChanged: (_) {}), const Text('Ghost'), const Spacer(), Checkbox(value: false, onChanged: (_) {}), const Text('Clip to below')]),
             SegmentedButton<int>(segments: const [ButtonSegment(value: 1, label: Text('2D')), ButtonSegment(value: 2, label: Text('2.5D')), ButtonSegment(value: 3, label: Text('3D'))], selected: const {2}, onSelectionChanged: (_) {}),
@@ -153,7 +153,7 @@ Widget motoliiColumn() => Container(
       padding: const EdgeInsets.all(Surface.panelInset),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         const Padding(padding: EdgeInsets.only(bottom: 6), child: Text('Rounded Rectangle', style: TextStyle(fontSize: 11, color: Color(0xFFDDDDDD)))),
-        SizedBox(height: Surface.workRow, child: Row(children: const [Text('Position', style: TextStyle(fontSize: 11, color: Color(0xFFDDDDDD))), Spacer(), Text('960.00', style: TextStyle(fontSize: 11, color: Color(0xFFDDDDDD)))])),
+        const SizedBox(height: Surface.workRow, child: Row(children: [Text('Position', style: TextStyle(fontSize: 11, color: Color(0xFFDDDDDD))), Spacer(), Text('960.00', style: TextStyle(fontSize: 11, color: Color(0xFFDDDDDD)))])),
         const SizedBox(height: 4),
         SizedBox(height: Surface.control, child: EditorSlider(value: .5, onChanged: (_) {})),
         const SizedBox(height: 6),

@@ -192,7 +192,7 @@ class _Tab extends StatelessWidget {
           ),
         ),
         if (!compact) ...[
-          const SizedBox(width: 6),
+          const SizedBox(width: Surface.sectionGap),
           Text(t.name, softWrap: false, style: Dn.name(selected ? N.g95 : N.g63)),
         ],
       ],

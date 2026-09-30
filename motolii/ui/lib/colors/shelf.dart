@@ -266,7 +266,7 @@ class _ColorsPanelState extends State<ColorsPanel>
           else
             _MiniInstrument(color: widget.current),
           if (!wheelOnly && (n > 0 || gradients || !filtering))
-            const SizedBox(height: 3),
+            const SizedBox(height: Surface.inlineGap),
           if (n == 0 && !gradients && !wheelOnly)
             emptyBody('No colour matches "${search.query}".'),
           for (final e in sections.entries) ...[
@@ -319,7 +319,7 @@ class _ColorsPanelState extends State<ColorsPanel>
           if (shown.isEmpty && filtering && !wheelOnly)
             emptyBody('No colour matches.'),
           if (!wheelOnly) ...[
-            const SizedBox(height: 3),
+            const SizedBox(height: Surface.inlineGap),
             _Swatches(shown, 20, onTap: widget.onSwatch, onMenu: widget.onSwatchMenu),
           ],
         ],
@@ -369,14 +369,14 @@ class _Instrument extends StatelessWidget {
             height: wheel,
             child: CustomPaint(painter: WheelPainter()),
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: Surface.sectionGap),
           SizedBox(
             width: wheel,
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Text('#E8508F', style: mono(Dn.nameSize, c: N.g82)),
-                const SizedBox(width: 6),
+                const SizedBox(width: Surface.sectionGap),
                 const GlyphBox(HG.composite, size: 13, color: Surface.muted),
               ],
             ),

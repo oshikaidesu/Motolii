@@ -87,7 +87,7 @@ class _TileState extends State<_Tile> {
             width: widget.width,
             height: CreateTiles.height,
             padding: const EdgeInsets.fromLTRB(2, 5, 2, 0),
-            decoration: BoxDecoration(color: _over ? Surface.hover : Surface.raised, borderRadius: BorderRadius.circular(3)),
+            decoration: BoxDecoration(color: _over ? Surface.hover : Surface.raised, borderRadius: BorderRadius.circular(Surface.controlRadius)),
             child: Column(children: [
               SizedBox.square(dimension: CreateTiles.mark, child: ThingFace(widget.thing, scene: widget.scene)),
               const SizedBox(height: 4),

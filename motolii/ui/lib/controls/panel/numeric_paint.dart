@@ -22,7 +22,7 @@ class _RungPill extends StatelessWidget {
     padding: const EdgeInsets.symmetric(horizontal: Step.s8, vertical: Step.s4),
     decoration: BoxDecoration(
       color: EditorTheme.of(context).tooltip,
-      borderRadius: BorderRadius.all(Radius.circular(Step.s4)),
+      borderRadius: const BorderRadius.all(Radius.circular(Step.s4)),
     ),
     child: Text.rich(
       TextSpan(

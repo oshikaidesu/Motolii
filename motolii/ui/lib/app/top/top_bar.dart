@@ -63,9 +63,9 @@ class TopBar extends StatelessWidget {
             if (motto) ...[
               const SizedBox(width: 12),
               Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.end, children: [
-                Text('Less numbers.', style: Dn.value(N.g82).copyWith(fontSize: 10)),
+                Text('Less numbers.', style: Dn.value(N.g82).copyWith(fontSize: Dn.labelSize)),
                 const SizedBox(height: 1),
-                Text('More motion.', style: Dn.value(N.g82).copyWith(fontSize: 10)),
+                Text('More motion.', style: Dn.value(N.g82).copyWith(fontSize: Dn.labelSize)),
               ]),
             ],
           ]),
@@ -91,7 +91,7 @@ class _Key extends StatelessWidget {
             height: Surface.control + 2,
             margin: const EdgeInsets.only(left: 4),
             alignment: Alignment.center,
-            decoration: BoxDecoration(color: fill, border: Border.all(color: edge), borderRadius: BorderRadius.circular(3)),
+            decoration: BoxDecoration(color: fill, border: Border.all(color: edge), borderRadius: BorderRadius.circular(Surface.controlRadius)),
             child: child,
           ),
         ),
@@ -135,7 +135,7 @@ class _Modes extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(
         height: Surface.control + 2,
-        decoration: BoxDecoration(color: Surface.raised, border: Border.all(color: Surface.divider), borderRadius: BorderRadius.circular(3)),
+        decoration: BoxDecoration(color: Surface.raised, border: Border.all(color: Surface.divider), borderRadius: BorderRadius.circular(Surface.controlRadius)),
         child: Row(mainAxisSize: MainAxisSize.min, children: [
           for (final (mode, label) in const [(TopMode.edit, 'EDIT'), (TopMode.play, 'PLAY'), (TopMode.export, 'EXPORT')])
             Builder(

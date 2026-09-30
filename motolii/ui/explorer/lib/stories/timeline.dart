@@ -16,7 +16,7 @@ Future<void> _choose(EditorSession c, [int n = 0]) async {
 }
 
 final timelineStories = <Story>[
-  Story('Empty', const Scene('empty.js'), _timeline),
+  const Story('Empty', Scene('empty.js'), _timeline),
   Story('Normal (4 layers)', Scene('night-sky.rrd', inputs: (s) => _choose(s, 2)), _timeline),
   Story('Dense (40 layers)', Scene('dense40.js', inputs: (s) => _choose(s, 3)), _timeline, height: 900),
   Story('Long names (English, Japanese)', Scene('long_names.js', inputs: (s) => _choose(s, 1)), _timeline),
@@ -30,7 +30,7 @@ final timelineStories = <Story>[
         if (i < t.rows.length) t.toggleLanes(i);
       }
     }), _timeline, height: 520),
-  Story('Short bars', const Scene('short_bars.js'), _timeline),
+  const Story('Short bars', Scene('short_bars.js'), _timeline),
   Story('Narrow panel', Scene('dense40.js', inputs: (s) => _choose(s, 3)), _timeline, width: 420, height: 600),
   Story(
     'Playing',

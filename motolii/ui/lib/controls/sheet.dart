@@ -76,7 +76,7 @@ class HfChoice<T> extends StatelessWidget {
   Widget build(BuildContext context) => Container(
         height: Surface.control,
         padding: const EdgeInsets.all(1.5),
-        decoration: BoxDecoration(color: N.g07, border: Border.all(color: Surface.divider), borderRadius: BorderRadius.circular(3)),
+        decoration: BoxDecoration(color: N.g07, border: Border.all(color: Surface.divider), borderRadius: BorderRadius.circular(Surface.controlRadius)),
         child: Row(mainAxisSize: MainAxisSize.min, children: [
           for (final (v, label, enabled) in options)
             _Segment(label, on: v == value, onTap: enabled && onChanged != null && v != value ? () => onChanged!(v) : null, enabled: enabled),
@@ -194,7 +194,7 @@ Future<void> showHfPopover(BuildContext context, {required Rect anchor, required
               decoration: BoxDecoration(
                 color: N.g13,
                 border: Border.all(color: N.g26),
-                borderRadius: BorderRadius.circular(3),
+                borderRadius: BorderRadius.circular(Surface.controlRadius),
                 boxShadow: const [BoxShadow(color: N.shade40, blurRadius: 16, offset: Offset(0, 6))],
               ),
               child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [

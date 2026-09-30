@@ -59,7 +59,7 @@ class _ToolState extends State<_Tool> {
         child: Container(
           height: 20,
           padding: const EdgeInsets.symmetric(horizontal: 6),
-          decoration: BoxDecoration(color: _over && live ? N.g15 : null, borderRadius: BorderRadius.circular(3)),
+          decoration: BoxDecoration(color: _over && live ? N.g15 : null, borderRadius: BorderRadius.circular(Surface.controlRadius)),
           child: Row(mainAxisSize: MainAxisSize.min, children: [
             SizedBox.square(dimension: 9, child: CustomPaint(painter: _ToolPainter(widget.glyph, live ? (widget.glyph == _ToolGlyph.marker ? H.record : ink) : N.g33))),
             const SizedBox(width: 5),
@@ -424,7 +424,7 @@ class _LiveTimelineState extends State<LiveTimeline> {
       Widget glyph(HG g, Color color, {bool on = false, double size = 9}) => Container(
             width: 12,
             height: 12,
-            decoration: on ? BoxDecoration(color: H.toggleOn, borderRadius: BorderRadius.circular(3)) : null,
+            decoration: on ? BoxDecoration(color: H.toggleOn, borderRadius: BorderRadius.circular(Surface.controlRadius)) : null,
             alignment: Alignment.center,
             child: SizedBox.square(dimension: size, child: CustomPaint(painter: HgPainter(g, on ? N.g100 : color, on ? H.toggleOn : N.g10))),
           );
@@ -462,7 +462,7 @@ class _LiveTimelineState extends State<LiveTimeline> {
         child: Row(children: [
           // the chosen layer's own colour, a thin edge at the column's left
           Container(width: 2, height: rowH, color: !lane && c.selectedIds.contains(r.id) ? (r.isGroup ? N.g63 : _family(r.id).t) : null),
-          const SizedBox(width: 3),
+          const SizedBox(width: Surface.inlineGap),
           if (lane) ...[
             SizedBox(width: indent + 11 + 6),
             // which layer these lanes belong to: its own colour, a thin line where its chip stands
@@ -475,7 +475,7 @@ class _LiveTimelineState extends State<LiveTimeline> {
             SizedBox(width: indent),
             mark(_Twirl(open: group ? r.groupOpen : r.lanesOpen, strong: group), () => group ? s.toggleFold(i) : s.toggleLanes(i), w: 12),
             SizedBox(width: 15, child: Center(child: _Chip(r))),
-            const SizedBox(width: 3),
+            const SizedBox(width: Surface.inlineGap),
             name,
             if (group) mark(_Twirl(open: r.lanesOpen, strong: false), () => s.toggleLanes(i), w: 12),
             // switches in one quiet column at the right: always in the same place, lit only when on
@@ -592,7 +592,7 @@ class _RowsPainter extends CustomPainter {
       if (isMajor) {
         final m = f ~/ (rate * 60), sec = (f ~/ rate) % 60, ff = f % rate;
         final label = major < rate ? '${sec.toString().padLeft(2, '0')}:${ff.toString().padLeft(2, '0')}' : '${m.toString().padLeft(2, '0')}:${sec.toString().padLeft(2, '0')}';
-        final tp = TextPainter(text: TextSpan(text: label, style: Dn.value(N.g63).copyWith(fontSize: 9.5)), textDirection: TextDirection.ltr)..layout();
+        final tp = TextPainter(text: TextSpan(text: label, style: Dn.value(N.g63).copyWith(fontSize: Dn.microSize)), textDirection: TextDirection.ltr)..layout();
         tp.paint(cv, Offset(x + 3, 3));
         tp.dispose();
       }

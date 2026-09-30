@@ -327,7 +327,7 @@ mixin _StageChrome
                   ),
                   if (!c.supports('stageGesture'))
                     Padding(
-                      padding: EdgeInsets.only(left: Step.s8),
+                      padding: const EdgeInsets.only(left: Step.s8),
                       child: Text(
                         'Transform gestures unavailable',
                         style: TextStyle(

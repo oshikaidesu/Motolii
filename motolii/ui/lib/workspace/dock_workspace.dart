@@ -8,6 +8,7 @@ import '../browser/parts.dart' as tab;
 import '../theme/glyphs.dart' show HG;
 import '../theme/metrics.dart';
 import '../controls/menu.dart' show showHfMenu;
+import '../theme/neutral.dart';
 
 /// One panel the workspace can show: an id that stays the same, the words on its tab, its family icon
 /// (the same glyph a Browser tab would use), and how to build its body.
@@ -101,7 +102,7 @@ class DockWorkspace {
                 onWillAcceptWithDetails: (d) => d.data.tabData.value is DockingItem && (d.data.tabData.value as DockingItem).id != id,
                 onAcceptWithDetails: (d) => _join(d.data.tabData.value as DockingItem, id),
                 builder: (context, over, _) => DecoratedBox(
-                  decoration: BoxDecoration(color: over.isEmpty ? const Color(0x00000000) : const Color(0x33F0F0F0)),
+                  decoration: BoxDecoration(color: over.isEmpty ? N.clear : const Color(0x33F0F0F0)),
                 ),
               ),
             ),

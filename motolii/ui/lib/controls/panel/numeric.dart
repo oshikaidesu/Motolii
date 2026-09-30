@@ -415,7 +415,7 @@ class _EditorNumericFieldState extends State<EditorNumericField>
                       style: TextStyle(
                         fontSize: Dn.labelSize,
                         color: EditorTheme.of(context).ink,
-                        fontFeatures: [FontFeature.tabularFigures()],
+                        fontFeatures: [const FontFeature.tabularFigures()],
                       ),
                       cursorWidth: 1,
                       cursorColor: EditorTheme.of(context).ink,

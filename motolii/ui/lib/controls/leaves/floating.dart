@@ -23,7 +23,7 @@ class EditorTooltipSheet extends StatelessWidget {
     ),
     decoration: BoxDecoration(
       color: EditorTheme.of(context).tooltip,
-      borderRadius: BorderRadius.all(Radius.circular(Step.s4)),
+      borderRadius: const BorderRadius.all(Radius.circular(Step.s4)),
     ),
     child: Center(
       widthFactor: 1,

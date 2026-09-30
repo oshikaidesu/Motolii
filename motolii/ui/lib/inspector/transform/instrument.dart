@@ -67,14 +67,14 @@ class _TransformInstrumentState extends State<TransformInstrument> {
             if (mode == TMode.rotate && l.projection != '2D')
               Positioned(right: 4.5, bottom: 4.5, child: Row(children: [
                 for (final (i, t) in ['Z', 'X', 'Y'].indexed)
-                  GestureDetector(key: ValueKey('rot-axis-$i'), onTap: () => setState(() => rotAxis = i), child: Container(margin: const EdgeInsets.only(left: 2), width: 15, height: 13.5, alignment: Alignment.center, decoration: BoxDecoration(color: rotAxis == i ? kPink : N.g15, borderRadius: BorderRadius.circular(3)), child: Text(t, style: sans(Dn.microSize, c: rotAxis == i ? N.g10 : Surface.muted, w: FontWeight.w700)))),
+                  GestureDetector(key: ValueKey('rot-axis-$i'), onTap: () => setState(() => rotAxis = i), child: Container(margin: const EdgeInsets.only(left: 2), width: 15, height: 13.5, alignment: Alignment.center, decoration: BoxDecoration(color: rotAxis == i ? kPink : N.g15, borderRadius: BorderRadius.circular(Surface.controlRadius)), child: Text(t, style: sans(Dn.microSize, c: rotAxis == i ? N.g10 : Surface.muted, w: FontWeight.w700)))),
               ])),
           ]);
           final strip = _modeStrip(narrow);
           final body = Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            if (widget.showHeader) ...[_header(), const SizedBox(height: 6)],
+            if (widget.showHeader) ...[_header(), const SizedBox(height: Surface.sectionGap)],
             if (narrow) ...[strip, const SizedBox(height: 4.5), gizmo, const SizedBox(height: 4.5), _spaceRow(), const SizedBox(height: 4.5), _parent(narrow)]
-            else Row(crossAxisAlignment: CrossAxisAlignment.start, children: [strip, const SizedBox(width: 4.5), gizmo, const SizedBox(width: 4.5), SizedBox(width: 58.5, child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [_spaceCol(), const SizedBox(height: 6), _parent(narrow)]))]),
+            else Row(crossAxisAlignment: CrossAxisAlignment.start, children: [strip, const SizedBox(width: 4.5), gizmo, const SizedBox(width: 4.5), SizedBox(width: 58.5, child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [_spaceCol(), const SizedBox(height: Surface.sectionGap), _parent(narrow)]))]),
             const SizedBox(height: 7.5),
             _rows(narrow),
             const SizedBox(height: 7.5),
@@ -318,7 +318,7 @@ class _TransformInstrumentState extends State<TransformInstrument> {
         child: Container(
           margin: const EdgeInsets.only(left: 4.5),
           padding: const EdgeInsets.symmetric(horizontal: 4.5, vertical: 1.5),
-          decoration: BoxDecoration(color: H.relation, borderRadius: BorderRadius.circular(4.5)),
+          decoration: BoxDecoration(color: H.relation, borderRadius: BorderRadius.circular(Surface.faceRadius)),
           child: Text(driven != null ? '◉ ${(driven['link'] as Map)['name'] ?? 'Relation'}' : '◉ $drives', style: sans(Dn.microSize, c: N.g10, w: FontWeight.w700)),
         ),
       ),
@@ -357,7 +357,7 @@ class _TransformInstrumentState extends State<TransformInstrument> {
             ]),
           ),
         ),
-        const SizedBox(width: 6),
+        const SizedBox(width: Surface.sectionGap),
         Expanded(child: Text(name, key: const ValueKey('anchor-name'), softWrap: false, overflow: TextOverflow.clip, style: sans(Dn.nameSize, c: s.canEdit ? N.g69 : N.g33, w: FontWeight.w500))),
       ]),
     );
@@ -380,7 +380,7 @@ class RoleGlyph extends CustomPainter {
         c.drawLine(Offset(1, cy), Offset(w - 1, cy), p);
         for (final (dx, dy) in [(0, -1), (0, 1), (-1, 0), (1, 0)]) {
           final tip = Offset(cx + dx * (w / 2 - 1), cy + dy * (h / 2 - 1));
-          final back = dx == 0 ? Offset(2.4, 0) : Offset(0, 2.4);
+          final back = dx == 0 ? const Offset(2.4, 0) : const Offset(0, 2.4);
           final ax = Offset(-dx * 2.6, -dy * 2.6);
           c.drawPath(Path()..moveTo(tip.dx, tip.dy)..lineTo(tip.dx + ax.dx + back.dx, tip.dy + ax.dy + back.dy)..lineTo(tip.dx + ax.dx - back.dx, tip.dy + ax.dy - back.dy)..close(), f);
         }
@@ -424,8 +424,8 @@ class _DepP extends CustomPainter {
   @override
   void paint(Canvas c, Size s) {
     final p = Paint()..color = kViolet..style = PaintingStyle.stroke..strokeWidth = 1.4;
-    c.drawRect(Rect.fromLTWH(1, 5, 8, 8), p);
-    c.drawRect(Rect.fromLTWH(5, 1, 8, 8), p);
+    c.drawRect(const Rect.fromLTWH(1, 5, 8, 8), p);
+    c.drawRect(const Rect.fromLTWH(5, 1, 8, 8), p);
   }
   @override
   bool shouldRepaint(_DepP o) => false;
@@ -451,8 +451,8 @@ class _LinkP extends CustomPainter {
   @override
   void paint(Canvas c, Size s) {
     final p = Paint()..color = col..style = PaintingStyle.stroke..strokeWidth = 1.6..strokeCap = StrokeCap.round;
-    c.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(0.5, 4.5, 7, 5), const Radius.circular(2)), p);
-    c.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(6.5, 4.5, 7, 5), const Radius.circular(2)), p);
+    c.drawRRect(RRect.fromRectAndRadius(const Rect.fromLTWH(0.5, 4.5, 7, 5), const Radius.circular(2)), p);
+    c.drawRRect(RRect.fromRectAndRadius(const Rect.fromLTWH(6.5, 4.5, 7, 5), const Radius.circular(2)), p);
     if (!on) c.drawLine(const Offset(2, 12.5), const Offset(12, 1.5), Paint()..color = col..strokeWidth = 1.4);
   }
   @override

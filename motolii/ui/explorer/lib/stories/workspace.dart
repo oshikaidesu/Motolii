@@ -54,7 +54,7 @@ Future<void> _pick(EditorSession c) async {
 const workspaceScales = [.90, 1.0, 1.15];
 final workspaceStories = <Story>[
   for (final s in workspaceScales)
-    Story('Workspace ${(s * 100).round()}%', Scene('night-sky.rrd', inputs: _pick), (c) => WorkspaceFace(c), width: 1440, height: 900, scale: s),
+    Story('Workspace ${(s * 100).round()}%', const Scene('night-sky.rrd', inputs: _pick), (c) => WorkspaceFace(c), width: 1440, height: 900, scale: s),
 ];
 
 final workspaceComponent = WidgetbookComponent(name: 'Workspace density', useCases: [for (final s in workspaceStories) useCase(s)]);

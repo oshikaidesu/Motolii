@@ -143,7 +143,7 @@ class FxPainter extends CustomPainter {
           cv.drawImageRect(scene.image, Rect.fromLTWH(0, sy, _sw.toDouble(), strip / s.height * _sh + .5), Rect.fromLTWH(dx, y, s.width, strip + .5), plain);
         }
       case 'Pixelate':
-        cv.drawImageRect(scene.small, Rect.fromLTWH(0, 0, 24, 15), dst, Paint()..filterQuality = FilterQuality.none);
+        cv.drawImageRect(scene.small, const Rect.fromLTWH(0, 0, 24, 15), dst, Paint()..filterQuality = FilterQuality.none);
       case 'Halftone':
         cv.drawRect(dst, Paint()..color = _Scene.night);
         final step = 6.5 * k * 2;

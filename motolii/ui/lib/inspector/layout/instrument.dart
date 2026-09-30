@@ -37,7 +37,7 @@ class _LayoutInstrumentState extends State<LayoutInstrument> {
           final w = box.maxWidth - pad * 2;
           final body = Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             _header(),
-            const SizedBox(height: 6),
+            const SizedBox(height: Surface.sectionGap),
             if (s.child) ..._childBody(narrow) else ..._groupBody(w, narrow),
           ]);
           if (widget.embedded) return Padding(padding: EdgeInsets.fromLTRB(pad, 7.5, pad, 12), child: body);
@@ -85,21 +85,21 @@ class _LayoutInstrumentState extends State<LayoutInstrument> {
     final adv = [for (final r in s.rows) if (r['advanced'] == true) r];
     return [
       LayoutDiagram(s, size: Size(w, narrow ? 117 : 147)),
-      const SizedBox(height: 6),
+      const SizedBox(height: Surface.sectionGap),
       // Columns and Rows stay with Grid off, as Classic's wells do; the rest is gated by Grid
       if (narrow) ...[
         Row(children: [_val('layout.grid_columns', arrangeColor, tag: 'C'), const SizedBox(width: 2), _val('layout.grid_rows', arrangeColor, tag: 'R')]),
         if (on) ...[const SizedBox(height: 2), Row(children: [_val('layout.gap', spaceColor, tag: 'Gap')]), const SizedBox(height: 2), Row(children: [_val('layout.padding', spaceColor, tag: 'X', axis: 0), const SizedBox(width: 2), _val('layout.padding', spaceColor, tag: 'Y', axis: 1)])],
       ] else ...[
         Row(children: [_val('layout.grid_columns', arrangeColor, tag: 'Col'), const SizedBox(width: 2), _val('layout.grid_rows', arrangeColor, tag: 'Row'), if (on) ...[const SizedBox(width: 2), _val('layout.gap', spaceColor, tag: 'Gap')]]),
-        if (on) ...[const SizedBox(height: 3), Row(children: [_val('layout.padding', spaceColor, tag: 'Pad X', axis: 0), const SizedBox(width: 2), _val('layout.padding', spaceColor, tag: 'Pad Y', axis: 1)])],
+        if (on) ...[const SizedBox(height: Surface.inlineGap), Row(children: [_val('layout.padding', spaceColor, tag: 'Pad X', axis: 0), const SizedBox(width: 2), _val('layout.padding', spaceColor, tag: 'Pad Y', axis: 1)])],
       ],
       if (on) ...[
-        const SizedBox(height: 6),
+        const SizedBox(height: Surface.sectionGap),
         _sizeLine('w'),
-        const SizedBox(height: 3),
+        const SizedBox(height: Surface.inlineGap),
         _sizeLine('h'),
-        const SizedBox(height: 6),
+        const SizedBox(height: Surface.sectionGap),
         if (narrow) ...[Row(children: [_val('layout.transition_duration', spaceColor, tag: 'Dur', whole: false)]), const SizedBox(height: 2), ChoiceToy(s, 'layout.transition_easing', tone: alignColor)]
         else Row(children: [_val('layout.transition_duration', spaceColor, tag: 'Dur', units: true, whole: false), const SizedBox(width: 4.5), Expanded(flex: 2, child: ChoiceToy(s, 'layout.transition_easing', tone: alignColor))]),
         ..._advanced(adv),
@@ -139,18 +139,18 @@ class _LayoutInstrumentState extends State<LayoutInstrument> {
     final value = _val('layout.${axis == 'w' ? 'width' : 'height'}', sizeColor, gated: fixed, units: true);
     // narrow: the three relationships first, the number under them
     return _narrow
-        ? Column(children: [SizedBox(height: 22.5, child: Row(children: chips)), const SizedBox(height: 2), SizedBox(height: 22.5, child: Row(children: [value])), const SizedBox(height: 3)])
+        ? Column(children: [SizedBox(height: 22.5, child: Row(children: chips)), const SizedBox(height: 2), SizedBox(height: 22.5, child: Row(children: [value])), const SizedBox(height: Surface.inlineGap)])
         : SizedBox(height: 22.5, child: Row(children: [...chips, const SizedBox(width: 2), value]));
   }
 
   List<Widget> _childBody(bool narrow) => [
         _sizeLine('w'),
-        const SizedBox(height: 3),
+        const SizedBox(height: Surface.inlineGap),
         _sizeLine('h'),
         if (s.rows.any((r) => r['id'] == 'layout.column_start')) ...[
           Padding(padding: const EdgeInsets.only(top: 10.5, bottom: 4.5), child: Text('GRID AREA', style: sans(Dn.microSize, c: N.g51, w: FontWeight.w600, ls: 1.3))),
           Row(children: [_val('layout.column_start', arrangeColor, tag: 'Col'), const SizedBox(width: 2), _val('layout.row_start', arrangeColor, tag: 'Row')]),
-          const SizedBox(height: 3),
+          const SizedBox(height: Surface.inlineGap),
           Row(children: [_val('layout.column_span', arrangeColor, tag: 'Cols'), const SizedBox(width: 2), _val('layout.row_span', arrangeColor, tag: 'Rows')]),
         ],
         ..._advanced([for (final r in s.rows) if (r['advanced'] == true) r]),

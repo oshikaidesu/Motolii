@@ -409,7 +409,7 @@ class _Header extends StatelessWidget {
               ),
           const Spacer(),
           if (size != null) Padding(padding: const EdgeInsets.only(right: 8), child: SizedBox(width: 74, child: _SizeSlider(value: size!, onChanged: onSize))),
-          Text('$count', style: Dn.value(N.g51).copyWith(fontSize: 10)),
+          Text('$count', style: Dn.value(N.g51).copyWith(fontSize: Dn.labelSize)),
         ]),
       );
 }

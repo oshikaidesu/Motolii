@@ -9,6 +9,7 @@ import '../controls/sheet.dart';
 import '../session/editor_session.dart';
 import '../session/export_actions.dart';
 import '../theme/neutral.dart';
+import '../theme/metrics.dart';
 
 /// Export as a short task under its control: what will be written (read-only facts: the composition's size, rate and
 /// the format), which range (a choice: the whole document, or marker to marker around the playhead, with the frames
@@ -122,7 +123,7 @@ class _ExportState extends State<_Export> {
               _ => '$phase',
             }, color: failed ? H.record : N.g82),
           ),
-        const SizedBox(height: 3),
+        const SizedBox(height: Surface.inlineGap),
         Row(mainAxisAlignment: MainAxisAlignment.end, children: [
           HfAction(running ? 'Stop' : 'Cancel', onTap: running ? (c.supports('cancelExport') ? () => c.command('cancelExport') : null) : widget.close),
           HfAction('Export…', kind: HfActionKind.primary, onTap: exportAction),

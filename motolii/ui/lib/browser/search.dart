@@ -117,7 +117,7 @@ class SearchField extends StatelessWidget {
                 onTap: search.clear,
                 child: SizedBox(width: 12, height: 12, child: CustomPaint(painter: _X())),
               ),
-            if (trailing != null) ...[const SizedBox(width: 3), trailing!],
+            if (trailing != null) ...[const SizedBox(width: Surface.inlineGap), trailing!],
           ]),
         ),
       );

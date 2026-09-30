@@ -15,7 +15,7 @@ void main() {
             width: 300,
             child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
               const TextField(key: Key('field')),
-              DropdownMenu<int>(key: const Key('dropdown'), dropdownMenuEntries: const [DropdownMenuEntry(value: 1, label: 'Normal')], initialSelection: 1, width: 300),
+              const DropdownMenu<int>(key: Key('dropdown'), dropdownMenuEntries: [DropdownMenuEntry(value: 1, label: 'Normal')], initialSelection: 1, width: 300),
               FilledButton(key: const Key('button'), onPressed: () {}, child: const Text('Apply')),
               TextButton(key: const Key('textbutton'), onPressed: () {}, child: const Text('Reset')),
               Slider(key: const Key('slider'), value: .5, onChanged: (_) {}),

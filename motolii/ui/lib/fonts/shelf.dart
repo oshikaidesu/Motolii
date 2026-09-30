@@ -145,7 +145,7 @@ class _FontsPanelState extends State<FontsPanel>
               width: math.min(72, s.height * 1.3),
               decoration: BoxDecoration(
                 color: Surface.raised,
-                borderRadius: BorderRadius.circular(3),
+                borderRadius: BorderRadius.circular(Surface.controlRadius),
               ),
               child: Center(child: _sample(shown[i], 24)),
             ),
@@ -292,7 +292,7 @@ class _Row extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                             fontFamily: f.family,
-                            fontSize: 11,
+                            fontSize: Dn.nameSize,
                             color: N.g91,
                             height: 1.1,
                           ),

@@ -2,7 +2,7 @@ import 'dart:math' as math;
 import 'package:flutter/widgets.dart';
 import 'parts.dart';
 import '../theme/neutral.dart';
-import '../theme/metrics.dart' show Dn;
+import '../theme/metrics.dart' show Dn, Surface;
 
 /// The housing Create and Media share (Swiss: one grid, a few sizes, hierarchy from type and space). What sits in a
 /// tile is each shelf's own face; only the section rhythm, the column rule and the picked ring live here.
@@ -26,7 +26,7 @@ class SwissHeading extends StatelessWidget {
             Container(
               margin: const EdgeInsets.only(left: 4.5),
               padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-              decoration: BoxDecoration(color: N.g15, borderRadius: BorderRadius.circular(3)),
+              decoration: BoxDecoration(color: N.g15, borderRadius: BorderRadius.circular(Surface.controlRadius)),
               child: Text('$count', style: sans(Dn.microSize, c: N.g63, w: FontWeight.w500)),
             ),
         ]),
