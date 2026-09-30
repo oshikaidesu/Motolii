@@ -23,7 +23,8 @@ Replaceability:        下の技術を別実装へ替えても、Documentと作�
 - **commitでの強制**: 新しい150行以上のソースfile（crates・ui/native・ui/extensions・ui/libの本体。test・fixtureを除く）を加えるcommitは、
   メッセージに `Acquisition: Reuse|Wrap|Adapt|Extend|Semantics|Build — <見つけた技術 / Motoliiの意味>` を持つ。`Semantics`は一般技術を
   作らずMotoliiの意味だけを書く時、`Build`は `Why-build:`（30字以上、上の近道を理由にしない）も要る。
-  `.githooks/commit-msg`と、push時のCI（`scripts/check-acquisition.sh --range`）が見る。
+  trailerの解釈はgit標準（`git interpret-trailers`）、hookは`core.hooksPath`の`.githooks/commit-msg`、CIは既存jobの1 step（`scripts/check-acquisition.sh --range`）。
+  ゲート自身の改変は`CODEOWNERS`で守る。この仕組み自体も同じゲートを通した結果（[監査 §1](reviews/2026-09-30-technology-acquisition-audit.md)）。
 - **要件定義の順**: `Feature → Implementation` ではなく `Product Capability → Existing Technology → Motolii-owned Semantics → Integration`。
 - 監査: 現行codeの再発明候補は[2026-09-30 監査](reviews/2026-09-30-technology-acquisition-audit.md)。
 

@@ -5,7 +5,7 @@
 #   scripts/check-acquisition.sh --msg FILE     .githooks/commit-msg: the staged diff against the message being written
 #   scripts/check-acquisition.sh --range A..B   every commit in the range (CI)
 #
-# A new file needs one line in the message:
+# A new file needs one trailer (git's own format, parsed by git interpret-trailers) in the message:
 #   Acquisition: Reuse|Wrap|Adapt|Extend|Semantics|Build — <what was found / the owned meaning>
 # and Build, which is the last resort, also:  Why-build: <the concrete requirement no existing technology meets>
 set -euo pipefail
@@ -28,18 +28,20 @@ check() { # check <label> <message> <numstat of added files>
         big+="    $path ($plus lines)"$'\n'
     done <<<"$added"
     [ -n "$big" ] || return 0
-    local line
-    line=$(grep -E '^Acquisition: (Reuse|Wrap|Adapt|Extend|Semantics|Build) (—|-) .{12,}' <<<"$message" | head -1 || true)
-    if [ -z "$line" ]; then
-        printf '%s: new code without an Acquisition line.\n%s' "$label" "$big"
-        echo "  Add to the commit message:  Acquisition: Reuse|Wrap|Adapt|Extend|Semantics|Build — <existing technology found / owned meaning>"
+    # trailers are git's own (git interpret-trailers); only what they must say is ours
+    local trailers line
+    trailers=$(git stripspace --strip-comments <<<"$message" | git interpret-trailers --parse --unfold)
+    line=$(grep -E '^Acquisition: (Reuse|Wrap|Adapt|Extend|Semantics|Build)( |$)' <<<"$trailers" | head -1 || true)
+    if [ -z "$line" ] || [ "${#line}" -lt 34 ]; then
+        printf '%s: new code without an Acquisition trailer.\n%s' "$label" "$big"
+        echo "  Add a trailer:  Acquisition: Reuse|Wrap|Adapt|Extend|Semantics|Build — <existing technology found / owned meaning>"
         echo "  Motolii owns meaning, not technology: search first (docs/known-implementation-adoption-model.md §0)."
         fail=1
         return 0
     fi
     if [[ "$line" =~ ^Acquisition:\ Build ]]; then
         local why
-        why=$(grep -E '^Why-build: .{30,}' <<<"$message" | head -1 || true)
+        why=$(grep -E '^Why-build: .{30,}' <<<"$trailers" | head -1 || true)
         if [ -z "$why" ]; then
             printf '%s: Build is the last resort and needs a Why-build line (the concrete requirement no existing technology meets).\n%s' "$label" "$big"
             fail=1
