@@ -1,0 +1,211 @@
+import 'package:flutter/widgets.dart';
+
+import '../../../theme/editor_metrics.dart';
+import '../../../theme/editor_theme.dart';
+import '../../../session/editor_session.dart';
+import '../native_visual_sample.dart';
+import 'shelf.dart';
+import '../../../theme/material_icons.dart';
+import '../../../controls/leaves.dart';
+
+/// Effects: the shelf of effects the engine knows. A tile is the effect's
+/// snapshot picture (VST3's plug-in snapshot); the glyph stays when it ships
+/// none. Applying puts the picked effects on the selected layers.
+class EffectsShelf extends BrowserShelf {
+  @override
+  String get name => 'Effects';
+  @override
+  bool get multiSelect => true;
+
+  @override
+  List<String> rails(BrowserHost host) => const [
+    'All',
+    'Blur',
+    'Light',
+    'Color',
+    'Stylize',
+    'Distort',
+    '3D',
+    'Path',
+    'Place',
+    'Other',
+  ];
+
+  @override
+  /// The effects are what turns a picture into another. What the host has to understand (Repeater, Mirror: members and
+  /// their order) is a Create capability and lives on that shelf; the host says which (`owner`).
+  List<Map<String, dynamic>> items(BrowserHost host) => [
+    for (final e in EditorSession.maps(host.controller.state['catalog']))
+      if (e['owner'] != 'host') e,
+  ];
+
+  /// 棚の頭の理由は世代を動かさずに変わる(壊れた保存)。理由が変われば描き直す。
+  @override
+  List<Object?> derived(EditorSession c) => [effectsNotice(c.state)];
+
+  /// 棚を読み直す口と、断った効果の理由。保存すれば見張りが読み直すが、
+  /// 手でも押せる(ISF Editor の Reload)。理由は 1 行、全文は tooltip。
+  @override
+  Widget? header(BrowserHost host) {
+    if (!host.has('reloadEffects')) return null;
+    final notice = effectsNotice(host.controller.state);
+    return Container(
+      key: const ValueKey('browser:effects:header'),
+      height: EditorMetrics.control,
+      padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s4),
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(color: EditorTheme.of(host.context).line),
+        ),
+      ),
+      child: Row(
+        children: [
+          EditorTooltip(
+            message: 'Reload effects',
+            child: EditorIconButton(
+              key: const ValueKey('browser:effects:reload'),
+              iconSize: EditorMetrics.s14,
+              color: EditorTheme.of(host.context).muted,
+              onPressed: () => host.controller.command('reloadEffects'),
+              icon: const Icon(Glyph.refresh),
+            ),
+          ),
+          const SizedBox(width: EditorMetrics.s4),
+          Expanded(
+            child: EditorTooltip(
+              message: notice,
+              child: Text(
+                notice,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: EditorTheme.of(host.context).error),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  String classification(BrowserHost host, Map<String, dynamic> item) =>
+      const <String, String>{
+        'motolii.blur': 'Blur',
+        'motolii.isf_bloom': 'Light',
+        'motolii.glow': 'Light',
+        'motolii.radiance': 'Light',
+        'motolii.gain': 'Color',
+        'motolii.gradient': 'Color',
+        'motolii.tri_led': 'Stylize',
+        'motolii.repeat': 'Place',
+        'motolii.cast_shadow': 'Light',
+      }[host.id(item)] ??
+      // shader を持たない棚の札は native の stage が族(Path = 形の層の輪郭)。
+      switch (item['stage']) {
+        'Warp' => 'Distort',
+        'Field' || 'Surface' || 'Clip' || 'Solid' => '3D',
+        'Path' => 'Path',
+        _ => 'Other',
+      };
+
+  /// What the effect is, from its declaration alone: its seat, what it can
+  /// sit on, whether it reads the clock or keeps a frame, what it takes in,
+  /// how many fields it shows, and whether it shipped with Motolii.
+  @override
+  List<FilterGroup> groups(BrowserHost host) => const [
+    FilterGroup('Seat', [
+      'Pass',
+      'Warp',
+      'Surface',
+      'Field',
+      'Clip',
+      'Shadow',
+      'Path',
+      'Placement',
+      'Solid',
+      'Text',
+      'Output',
+    ]),
+    FilterGroup('Applies to', ['Image', 'Shape', 'Text', '3D', 'Any']),
+    FilterGroup('Time', ['Static', 'Uses time', 'Feedback']),
+    FilterGroup('Inputs', ['Single', 'Reads below', 'Takes a layer']),
+    FilterGroup('Parameters', [], kind: FilterKind.actual),
+    FilterGroup('Origin', ['Built-in', 'Imported']),
+  ];
+
+  @override
+  Set<String> tagsOf(BrowserHost host, Map<String, dynamic> item) {
+    final stage = '${item['stage']}';
+    return {
+      stage,
+      switch (stage) {
+        'Path' => 'Shape',
+        'Text' => 'Text',
+        'Field' || 'Surface' || 'Solid' => '3D',
+        'Pass' || 'Warp' => 'Image',
+        _ => 'Any',
+      },
+      if (item['persistent'] == true)
+        'Feedback'
+      else if (item['usesClock'] == true)
+        'Uses time'
+      else
+        'Static',
+      if (item['readsBackdrop'] == true) 'Reads below',
+      if ((item['layerInputs'] as num? ?? 0) > 0) 'Takes a layer',
+      if (item['readsBackdrop'] != true &&
+          (item['layerInputs'] as num? ?? 0) == 0)
+        'Single',
+      host.id(item).startsWith('motolii.') ? 'Built-in' : 'Imported',
+    };
+  }
+
+  @override
+  String? valueOf(BrowserHost host, Map<String, dynamic> item, String group) =>
+      group == 'Parameters'
+      ? '${(item['paramCount'] as num? ?? 0).toInt()}'
+      : null;
+
+  @override
+  bool supported(BrowserHost host, Map<String, dynamic> item) =>
+      host.has('applyEffect') &&
+      host.controller.selectedIds.isNotEmpty &&
+      (item['stage'] != 'Path' || _shapeSelected(host.controller.state));
+
+  static bool _shapeSelected(Map<String, dynamic> state) {
+    final ids = (state['selectedIds'] as List? ?? const []).toSet();
+    return EditorSession.maps(state['layers'])
+        .any((l) => ids.contains(l['id']) && l['kind'] == 'Shape');
+  }
+
+  @override
+  Widget preview(BrowserHost host, Map<String, dynamic> item, Color identity) =>
+      NativeVisualSample(
+        key: ValueKey('browser:effect:${item['id']}'),
+        controller: host.controller,
+        request: {
+          'kind': 'effect',
+          'id': item['id'],
+          'generation': item['generation'],
+        },
+        fit: BoxFit.cover,
+        placeholder: Center(
+          child: Text(
+            '${item['glyph'] ?? 'ƒ'}',
+            style: TextStyle(fontSize: EditorMetrics.s23, color: identity),
+          ),
+        ),
+      );
+
+  @override
+  Future<void> apply(BrowserHost host, Map<String, dynamic> item) async {
+    if (!host.has('applyEffect')) return;
+    final chosen = host.visible
+        .where((row) => host.selectedIds.contains(host.id(row)))
+        .map((row) => row['id'])
+        .toList();
+    await host.controller.command('applyEffect', {
+      'pluginIds': chosen.isEmpty ? [item['id']] : chosen,
+    });
+  }
+}

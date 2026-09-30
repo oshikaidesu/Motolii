@@ -12,12 +12,12 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 
-import 'package:motolii_stage5/foundation/panel_controls/drag.dart' show EditorPreviewQueue;
-import 'package:motolii_stage5/live_hf/adapters/timeline.dart';
-import 'package:motolii_stage5/live_hf/main.dart' as app;
-import 'package:motolii_stage5/panels/stage.dart' show StagePanel;
-import 'package:motolii_stage5/panels/stage_session.dart' show StageSession;
-import 'package:motolii_stage5/session/latency_probe.dart';
+import 'package:motolii_ui/controls/panel/drag.dart' show EditorPreviewQueue;
+import 'package:motolii_ui/timeline/face.dart';
+import 'package:motolii_ui/app/main.dart' as app;
+import 'package:motolii_ui/stage/panel.dart' show StagePanel;
+import 'package:motolii_ui/stage/session.dart' show StageSession;
+import 'package:motolii_ui/session/latency_probe.dart';
 
 Future<void> frames(WidgetTester t, [int n = 20]) async {
   for (var i = 0; i < n; i++) {

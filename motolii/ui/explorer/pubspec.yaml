@@ -35,7 +35,7 @@ dependencies:
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
   widgetbook: ^3.25.0
-  motolii_stage5:
+  motolii_ui:
     path: ..
   ffi: ^2.2.0
   flutter_scene: ^0.23.0

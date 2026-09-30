@@ -1,13 +1,13 @@
 // The whole product workspace (top bar, Create/Effects/…, Stage, Inspector, Timeline) as the live shell builds it, over a
 // real document, at one window size and several UI scales, to compare densities side by side.
 import 'package:flutter/widgets.dart';
-import 'package:motolii_stage5/hf/bp/effects.dart' show EffectScene;
-import 'package:motolii_stage5/hf/neutral.dart';
-import 'package:motolii_stage5/live_hf/adapters/top.dart';
-import 'package:motolii_stage5/live_hf/workspace.dart';
-import 'package:motolii_stage5/session/console_log.dart';
-import 'package:motolii_stage5/session/editor_session.dart';
-import 'package:motolii_stage5/session/status_notice.dart';
+import 'package:motolii_ui/effects/shelf.dart' show EffectScene;
+import 'package:motolii_ui/theme/neutral.dart';
+import 'package:motolii_ui/app/top/top_session.dart';
+import 'package:motolii_ui/workspace/seats.dart';
+import 'package:motolii_ui/session/console_log.dart';
+import 'package:motolii_ui/session/editor_session.dart';
+import 'package:motolii_ui/session/status_notice.dart';
 import 'package:widgetbook/widgetbook.dart';
 
 import '../story.dart';

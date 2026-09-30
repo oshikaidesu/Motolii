@@ -1,7 +1,7 @@
 // Paper: one type scale (four roles) and one row rhythm (three heights) applied across the Timeline, Inspector, Browser and
 // top bar, drawn at real pixels, to see whether they read as one tool at a 75 % density. Icons are stand-ins.
 import 'package:flutter/widgets.dart';
-import 'package:motolii_stage5/hf/neutral.dart';
+import 'package:motolii_ui/theme/neutral.dart';
 
 // ---- the roles (px at the new 100 %) and the rhythm
 const rowStd = 20.0, rowTight = 18.0, rowHead = 24.0;

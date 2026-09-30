@@ -1,8 +1,8 @@
 // Explore is a map of nearness: sparse, stable under selection, with room round it, and what the work holds is told by content.
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:motolii_stage5/live_hf/adapters/browser_item.dart';
-import 'package:motolii_stage5/live_hf/adapters/explore_graph.dart';
+import 'package:motolii_ui/browser/item.dart';
+import 'package:motolii_ui/browser/media/explore/graph.dart';
 
 BrowserItem item(String id, String rel, {String source = 'S', String kind = 'image', String? fp, String path = '', int? mtime, bool used = false}) =>
     BrowserItem(id: id, name: rel.split('/').last, path: path.isEmpty ? '/r/$rel' : path, kind: kind, mime: 'x/y', source: source, rel: rel, fingerprint: fp, mtimeNs: mtime, used: used);

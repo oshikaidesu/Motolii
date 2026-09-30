@@ -9,9 +9,9 @@ import 'raw_dimension.dart' show excused, excusedFile, scaleFiles;
 
 /// Where a palette may be written out: the product window's neutral ramp and the files that name its identity / semantic colours.
 const paletteFiles = {
-  'lib/hf/shell/place.dart',
-  'lib/hf/desk/common.dart',
-  'lib/hf/insp/tones.dart',
+  'lib/theme/tokens.dart',
+  'lib/desks/parts.dart',
+  'lib/inspector/tones.dart',
 };
 
 class RawColor extends AnalysisRule {
@@ -19,7 +19,7 @@ class RawColor extends AnalysisRule {
     'raw_color',
     'Raw colour outside the theme; take it from EditorTheme or EditorInk',
     correctionMessage:
-        'Name the colour as a token in foundation/theme.dart and read that.',
+        'Name the colour as a token in theme/editor_theme.dart and read that.',
     severity: DiagnosticSeverity.WARNING,
   );
 

@@ -3,11 +3,11 @@ import 'dart:math' as math;
 import 'package:docking/docking.dart';
 import 'package:flutter/widgets.dart';
 
-import '../foundation/glyphs.dart' as legacy;
-import '../hf/bp/common.dart' as tab;
-import '../hf/glyphs.dart' show HG;
-import '../hf/metrics.dart';
-import '../hf/shell/menu.dart' show showHfMenu;
+import '../theme/material_icons.dart' as legacy;
+import '../browser/parts.dart' as tab;
+import '../theme/glyphs.dart' show HG;
+import '../theme/surface.dart';
+import '../controls/menu.dart' show showHfMenu;
 
 /// One panel the workspace can show: an id that stays the same, the words on its tab, its family icon
 /// (the same glyph a Browser tab would use), and how to build its body.
@@ -143,7 +143,7 @@ class DockWorkspace {
     );
   }
 
-  /// The unit of the workspace is the seat, the Browser's own (`hf/bp/common.dart` Leaf): panels sharing a seat,
+  /// The unit of the workspace is the seat, the Browser's own (`browser/parts.dart` Leaf): panels sharing a seat,
   /// a strip only when there is more than one, the front tab keeps its word and the rest fold to their glyph, and
   /// a stacked panel's header drops the name its tab already shows. `docking` keeps layout, split, resize and drop
   /// only (its own tab strip is off in `hfDockTabs`). Every panel of a seat draws the seat's strip; only the front

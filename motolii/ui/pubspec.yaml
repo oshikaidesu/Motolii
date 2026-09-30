@@ -1,4 +1,4 @@
-name: motolii_stage5
+name: motolii_ui
 description: Motolii Stage 5 Flutter UI
 publish_to: none
 version: 0.1.0+1
@@ -7,7 +7,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  docking: ^1.16.2 # production hf workspace + proto_hf dock probe
+  docking: ^1.16.2 # the workspace dock
   flutter_scene: ^0.23.0
 flutter:
   uses-material-design: true

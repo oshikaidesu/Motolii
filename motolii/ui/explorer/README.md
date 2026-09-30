@@ -1,6 +1,6 @@
 # Motolii component explorer
 
-Production panels (`motolii_stage5/lib`) over real documents in the real host, many states at once, hot reload.
+Production panels (`motolii_ui/lib`) over real documents in the real host, many states at once, hot reload.
 Built on [Widgetbook](https://pub.dev/packages/widgetbook). Production does not depend on it; deleting `explorer/`
 changes nothing.
 

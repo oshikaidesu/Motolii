@@ -1,10 +1,10 @@
-// The Motolii component explorer: production panels (lib/ of motolii_stage5) over real documents in the real host,
+// The Motolii component explorer: production panels (lib/ of motolii_ui) over real documents in the real host,
 // many states at once, with hot reload. Production does not know this exists; deleting explorer/ changes nothing.
 import 'dart:io';
 
 import 'package:flutter/material.dart' show ThemeMode;
 import 'package:flutter/widgets.dart';
-import 'package:motolii_stage5/hf/shell/place.dart' show H;
+import 'package:motolii_ui/theme/tokens.dart' show H;
 import 'package:widgetbook/widgetbook.dart';
 
 import 'binding.dart';

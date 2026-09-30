@@ -5,8 +5,8 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:motolii_stage5/live_hf/adapters/browser_item.dart';
-import 'package:motolii_stage5/live_hf/adapters/media_browser.dart';
+import 'package:motolii_ui/browser/item.dart';
+import 'package:motolii_ui/browser/media/views.dart';
 
 class _Source extends ChangeNotifier implements ResultSource {
   _Source(this.items);

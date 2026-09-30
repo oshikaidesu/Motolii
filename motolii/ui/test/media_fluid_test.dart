@@ -5,9 +5,9 @@ import 'dart:ui' show PointerDeviceKind;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:motolii_stage5/live_hf/adapters/browser_item.dart';
-import 'package:motolii_stage5/live_hf/adapters/media_fluid.dart';
-import 'package:motolii_stage5/live_hf/adapters/media_preview.dart' show FaceService;
+import 'package:motolii_ui/browser/item.dart';
+import 'package:motolii_ui/browser/media/fluid.dart';
+import 'package:motolii_ui/browser/media/preview.dart' show FaceService;
 
 BrowserItem item(int i, String kind, {int? w, int? h}) => BrowserItem(id: 'a$i', name: 'asset$i', path: '/nowhere/asset$i', kind: kind, mime: 'x/y', width: w, height: h, size: 1000 * (i + 1));
 
