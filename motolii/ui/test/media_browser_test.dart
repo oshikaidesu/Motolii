@@ -5,7 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:motolii_ui/browser/item.dart';
-import 'package:motolii_ui/browser/media/views.dart';
+import 'package:motolii_ui/browser/media/media_browser.dart';
 
 class _Source extends ChangeNotifier implements ResultSource {
   _Source(this.items);

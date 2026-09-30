@@ -1,6 +1,6 @@
 import 'package:flutter/widgets.dart';
 
-import '../inspector/inspector_panel.dart';
+import '../inspector/inspector.dart';
 import '../session/editor_session.dart';
 import 'store.dart';
 import '../inspector/session.dart';

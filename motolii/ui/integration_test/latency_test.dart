@@ -11,9 +11,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 
 import 'package:motolii_ui/controls/panel/drag.dart' show EditorPreviewQueue;
-import 'package:motolii_ui/timeline/timeline_view.dart';
+import 'package:motolii_ui/timeline/timeline.dart';
 import 'package:motolii_ui/main.dart' as app;
-import 'package:motolii_ui/stage/stage_panel.dart' show StagePanel;
+import 'package:motolii_ui/stage/stage.dart' show StagePanel;
 import 'package:motolii_ui/stage/session.dart' show StageSession;
 import 'package:motolii_ui/session/latency_probe.dart';
 

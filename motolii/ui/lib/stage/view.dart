@@ -1,4 +1,4 @@
-part of 'stage_panel.dart';
+part of 'stage.dart';
 
 /// Where the Stage is looking: the document it reads, the size of the comp,
 /// and the zoom and pan that carry comp coordinates onto the tab. Everything

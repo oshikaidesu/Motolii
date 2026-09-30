@@ -1,5 +1,5 @@
 // Timeline stories: the states the first visual round actually needed.
-import 'package:motolii_ui/timeline/timeline_view.dart';
+import 'package:motolii_ui/timeline/timeline.dart';
 import 'package:motolii_ui/session/editor_session.dart';
 import 'package:motolii_ui/timeline/semantics.dart';
 import 'package:motolii_ui/timeline/session.dart';

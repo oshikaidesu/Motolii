@@ -1,4 +1,4 @@
-part of 'stage_panel.dart';
+part of 'stage.dart';
 
 /// Frames between a window request and the first status that carries it
 /// (kDebugMode). 0 = the picture built in the frame that asked.

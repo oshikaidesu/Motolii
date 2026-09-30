@@ -4,9 +4,9 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 
-import 'package:motolii_ui/timeline/timeline_view.dart';
+import 'package:motolii_ui/timeline/timeline.dart';
 import 'package:motolii_ui/main.dart' as app;
-import 'package:motolii_ui/stage/stage_panel.dart' show StagePanel;
+import 'package:motolii_ui/stage/stage.dart' show StagePanel;
 import 'package:motolii_ui/stage/session.dart' show StageSession;
 
 Future<void> frames(WidgetTester t, [int n = 20]) async {

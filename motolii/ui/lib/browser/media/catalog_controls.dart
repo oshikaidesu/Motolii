@@ -9,7 +9,7 @@ import 'catalog_session.dart';
 import '../item.dart';
 import '../user_state.dart';
 import 'explore/graph.dart';
-import 'views.dart';
+import 'media_browser.dart';
 import 'fluid.dart';
 import 'preview.dart';
 import '../../session/editor_session.dart' show EditorSession;

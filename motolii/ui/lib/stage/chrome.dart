@@ -1,4 +1,4 @@
-part of 'stage_panel.dart';
+part of 'stage.dart';
 
 /// Putting the tab together: the bar above, the picture with everything
 /// drawn over it, and the bar below. This is the only place that builds
