@@ -146,12 +146,20 @@ class TimelineSession extends ChangeNotifier {
   /// While scrubbing, the head is drawn where it was asked to be before the host's reply lands.
   final scrub = ValueNotifier<int?>(null);
   Future<void>? _seeking;
+  int? _seekWanted;
   void seek(int frame) {
     frame = math.max(0, frame);
+    // a pointer that moved within one frame asks for nothing new
+    if (frame == _seekWanted && _seeking != null) return;
+    _seekWanted = frame;
     scrub.value = frame;
     final flight = _seeking = c.commandDirect('seek', {'frame': frame}, 'timeline-seek');
     flight.whenComplete(() {
-      if (identical(_seeking, flight)) scrub.value = null;
+      if (identical(_seeking, flight)) {
+        _seeking = null;
+        _seekWanted = null;
+        scrub.value = null;
+      }
     });
   }
 
@@ -292,8 +300,13 @@ class TimelineSession extends ChangeNotifier {
         // the Timeline and the Stage both show its preview while the bar is held
         deltaFrames = (frame - _fromFrame).round();
         if (has('previewTimings')) {
-          _previewUsed = true;
-          c.commandDirect('previewTimings', {'changes': _retime(gesture!)}, 'timeline-timings');
+          // the host works in whole frames: a pointer that stayed within the same delta asks for nothing new
+          final changes = _retime(gesture!);
+          if (!sameValue(changes, _lastTimings)) {
+            _lastTimings = changes;
+            _previewUsed = true;
+            c.commandDirect('previewTimings', {'changes': changes}, 'timeline-timings');
+          }
         }
     }
     notifyListeners();
@@ -345,6 +358,7 @@ class TimelineSession extends ChangeNotifier {
   }
 
   void _reset() {
+    _lastTimings = null;
     gesture = null;
     drop = null;
     marquee = null;
@@ -357,6 +371,7 @@ class TimelineSession extends ChangeNotifier {
 
   // the host's preview of timings while a bar is held goes through commandDirect: the newest wins, the commit keeps its place
   bool _previewUsed = false;
+  List<Map<String, dynamic>>? _lastTimings;
 
   Future<void> _finishTiming(List<Map<String, dynamic>> changes) async {
     final used = _previewUsed;

@@ -357,10 +357,12 @@ class _LiveTimelineState extends State<LiveTimeline> {
                               top: 0,
                               right: 0,
                               height: rulerH,
-                              child: GestureDetector(
+                              // a Listener, not a tap + drag recognizer pair: the head is at the pointer on the press itself
+                              // (a tap's down waits for its deadline; a drag waits for its slop)
+                              child: Listener(
                                 behavior: HitTestBehavior.opaque,
-                                onTapDown: (e) => s.seek(frameAt(labelW + e.localPosition.dx).round()),
-                                onHorizontalDragUpdate: (e) => s.seek(frameAt(labelW + e.localPosition.dx).round()),
+                                onPointerDown: (e) { if (e.buttons == kPrimaryButton) s.seek(frameAt(labelW + e.localPosition.dx).round()); },
+                                onPointerMove: (e) { if (e.buttons == kPrimaryButton) s.seek(frameAt(labelW + e.localPosition.dx).round()); },
                                 child: const SizedBox.expand(),
                               ),
                             ),
