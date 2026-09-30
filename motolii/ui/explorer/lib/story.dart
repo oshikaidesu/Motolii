@@ -5,12 +5,12 @@
 import 'dart:io';
 
 import 'package:flutter/widgets.dart';
-import 'package:motolii_stage5/controls/panel/scale.dart';
-import 'package:motolii_stage5/theme/neutral.dart';
-import 'package:motolii_stage5/theme/tokens.dart' show H;
-import 'package:motolii_stage5/theme/live_palette.dart';
-import 'package:motolii_stage5/app/ui_scale.dart';
-import 'package:motolii_stage5/session/editor_session.dart';
+import 'package:motolii_ui/controls/panel/scale.dart';
+import 'package:motolii_ui/theme/neutral.dart';
+import 'package:motolii_ui/theme/tokens.dart' show H;
+import 'package:motolii_ui/theme/live_palette.dart';
+import 'package:motolii_ui/app/ui_scale.dart';
+import 'package:motolii_ui/session/editor_session.dart';
 import 'package:widgetbook/widgetbook.dart';
 
 import 'binding.dart';

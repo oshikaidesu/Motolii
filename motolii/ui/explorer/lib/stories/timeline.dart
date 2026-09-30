@@ -1,8 +1,8 @@
 // Timeline stories: the states the first visual round actually needed.
-import 'package:motolii_stage5/timeline/face.dart';
-import 'package:motolii_stage5/session/editor_session.dart';
-import 'package:motolii_stage5/timeline/semantics.dart';
-import 'package:motolii_stage5/timeline/session.dart';
+import 'package:motolii_ui/timeline/face.dart';
+import 'package:motolii_ui/session/editor_session.dart';
+import 'package:motolii_ui/timeline/semantics.dart';
+import 'package:motolii_ui/timeline/session.dart';
 import 'package:widgetbook/widgetbook.dart';
 
 import '../story.dart';

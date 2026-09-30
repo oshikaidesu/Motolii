@@ -2,24 +2,24 @@
 import 'dart:io';
 
 import 'package:flutter/widgets.dart';
-import 'package:motolii_stage5/effects/shelf.dart' show EffectScene;
-import 'package:motolii_stage5/theme/neutral.dart';
-import 'package:motolii_stage5/browser/panel.dart';
-import 'package:motolii_stage5/browser/media/catalog_controls.dart';
-import 'package:motolii_stage5/browser/media/catalog_session.dart';
-import 'package:motolii_stage5/browser/media/views.dart' show BrowserView;
-import 'package:motolii_stage5/desks/depth/desk.dart';
-import 'package:motolii_stage5/desks/ease/desk.dart';
-import 'package:motolii_stage5/desks/notes/desk.dart';
-import 'package:motolii_stage5/inspector/seat.dart';
-import 'package:motolii_stage5/app/top/top_session.dart';
-import 'package:motolii_stage5/stage/panel.dart' show StagePanel;
-import 'package:motolii_stage5/session/editor_session.dart';
+import 'package:motolii_ui/effects/shelf.dart' show EffectScene;
+import 'package:motolii_ui/theme/neutral.dart';
+import 'package:motolii_ui/browser/panel.dart';
+import 'package:motolii_ui/browser/media/catalog_controls.dart';
+import 'package:motolii_ui/browser/media/catalog_session.dart';
+import 'package:motolii_ui/browser/media/views.dart' show BrowserView;
+import 'package:motolii_ui/desks/depth/desk.dart';
+import 'package:motolii_ui/desks/ease/desk.dart';
+import 'package:motolii_ui/desks/notes/desk.dart';
+import 'package:motolii_ui/inspector/seat.dart';
+import 'package:motolii_ui/app/top/top_session.dart';
+import 'package:motolii_ui/stage/panel.dart' show StagePanel;
+import 'package:motolii_ui/session/editor_session.dart';
 import 'package:widgetbook/widgetbook.dart';
 
 import '../paper/explore_view.dart';
 import '../paper/filmstrip.dart';
-import 'package:motolii_stage5/browser/media/explore/graph.dart' show ExploreChoice;
+import 'package:motolii_ui/browser/media/explore/graph.dart' show ExploreChoice;
 import '../paper/live_tiles.dart';
 
 import '../story.dart';

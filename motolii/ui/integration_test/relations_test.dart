@@ -2,10 +2,10 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 
-import 'package:motolii_stage5/desks/relations/model.dart';
-import 'package:motolii_stage5/desks/relations/session.dart';
-import 'package:motolii_stage5/timeline/face.dart';
-import 'package:motolii_stage5/app/main.dart' as app;
+import 'package:motolii_ui/desks/relations/model.dart';
+import 'package:motolii_ui/desks/relations/session.dart';
+import 'package:motolii_ui/timeline/face.dart';
+import 'package:motolii_ui/app/main.dart' as app;
 
 Future<void> frames(WidgetTester t, [int n = 20]) async {
   for (var i = 0; i < n; i++) {

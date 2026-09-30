@@ -10,11 +10,11 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/widgets.dart';
-import 'package:motolii_stage5/theme/surface.dart';
-import 'package:motolii_stage5/theme/neutral.dart';
-import 'package:motolii_stage5/browser/item.dart';
-import 'package:motolii_stage5/browser/media/fluid.dart' show Frame;
-import 'package:motolii_stage5/browser/media/library.dart' show materialFace;
+import 'package:motolii_ui/theme/surface.dart';
+import 'package:motolii_ui/theme/neutral.dart';
+import 'package:motolii_ui/browser/item.dart';
+import 'package:motolii_ui/browser/media/fluid.dart' show Frame;
+import 'package:motolii_ui/browser/media/library.dart' show materialFace;
 
 final _colours = <String, HSLColor?>{};
 final _asked = <String>{};

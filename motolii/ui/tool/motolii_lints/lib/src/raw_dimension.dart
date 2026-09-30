@@ -39,9 +39,9 @@ const scaleFiles = {
   final unix = path.replaceAll('\\', '/');
   const editorMetricsDirs = ['/lib/legacy/', '/lib/stage/', '/lib/controls/leaves', '/lib/controls/panel', '/lib/theme/editor_', '/lib/colors/color_field', '/lib/colors/hsv_triangle'];
   if (editorMetricsDirs.any(unix.contains)) {
-    return (uri: 'package:motolii_stage5/theme/editor_metrics.dart', cls: 'EditorMetrics');
+    return (uri: 'package:motolii_ui/theme/editor_metrics.dart', cls: 'EditorMetrics');
   }
-  return (uri: 'package:motolii_stage5/theme/surface.dart', cls: 'Surface');
+  return (uri: 'package:motolii_ui/theme/surface.dart', cls: 'Surface');
 }
 
 /// The only raw numbers a measurement may carry: nothing, or a hairline.

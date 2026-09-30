@@ -6,11 +6,11 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
-import 'package:motolii_stage5/theme/surface.dart';
-import 'package:motolii_stage5/theme/neutral.dart';
-import 'package:motolii_stage5/browser/media/catalog_session.dart';
-import 'package:motolii_stage5/browser/media/fluid.dart';
-import 'package:motolii_stage5/session/editor_session.dart';
+import 'package:motolii_ui/theme/surface.dart';
+import 'package:motolii_ui/theme/neutral.dart';
+import 'package:motolii_ui/browser/media/catalog_session.dart';
+import 'package:motolii_ui/browser/media/fluid.dart';
+import 'package:motolii_ui/session/editor_session.dart';
 
 import 'explore_view.dart';
 

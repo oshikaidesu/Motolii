@@ -1,10 +1,10 @@
 // Density: the same controls as Motolii draws them now, as Flutter's Material draws them by default, and as the very same standard
 // widgets draw under a desktop-compact Theme (no widget of ours). A fixture for looking, and for the contract in test/density_compact_theme_test.dart.
 import 'package:flutter/material.dart';
-import 'package:motolii_stage5/theme/editor_theme.dart' show EditorButton;
-import 'package:motolii_stage5/controls/leaves/track.dart' show EditorSlider;
-import 'package:motolii_stage5/theme/surface.dart';
-import 'package:motolii_stage5/theme/neutral.dart' show N;
+import 'package:motolii_ui/theme/editor_theme.dart' show EditorButton;
+import 'package:motolii_ui/controls/leaves/track.dart' show EditorSlider;
+import 'package:motolii_ui/theme/surface.dart';
+import 'package:motolii_ui/theme/neutral.dart' show N;
 
 import '../story.dart';
 
