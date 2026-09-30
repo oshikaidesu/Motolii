@@ -7,7 +7,7 @@ import 'package:flutter/widgets.dart';
 import '../panel_chrome.dart' show GlyphBox;
 import '../../theme/glyphs.dart';
 import '../../theme/neutral.dart';
-import '../../theme/tokens.dart' show H;
+import '../../theme/identity.dart' show H;
 import 'model_face.dart';
 import '../../theme/metrics.dart' show Surface;
 

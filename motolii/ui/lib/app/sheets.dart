@@ -4,7 +4,7 @@ import 'package:flutter/widgets.dart';
 
 import '../inspector/inspector.dart';
 import '../inspector/rows.dart';
-import '../theme/tokens.dart';
+import '../theme/identity.dart';
 import '../controls/sheet.dart';
 import '../session/editor_session.dart';
 import '../session/export_actions.dart';

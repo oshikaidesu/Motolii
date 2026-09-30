@@ -9,7 +9,7 @@ import '../theme/glyphs.dart';
 import '../theme/metrics.dart';
 import '../theme/neutral.dart';
 import '../controls/menu.dart' show showHfMenu;
-import '../theme/tokens.dart' show H, Fam;
+import '../theme/identity.dart' show H, Fam;
 import '../input/viewport_motion.dart';
 import '../session/editor_session.dart';
 import 'rows.dart' show TrackRow;

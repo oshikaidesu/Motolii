@@ -4,7 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'parts.dart';
 import '../theme/neutral.dart';
-import '../theme/tokens.dart' show H;
+import '../theme/identity.dart' show H;
 import '../theme/metrics.dart' show Dn, Surface;
 
 class SearchCapability extends ChangeNotifier {

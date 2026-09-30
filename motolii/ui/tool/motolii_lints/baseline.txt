@@ -33,12 +33,11 @@ lib/controls/sheet.dart 17
 lib/desks/blend/face.dart 52
 lib/desks/depth/face.dart 27
 lib/desks/ease/face.dart 76
-lib/desks/history/face.dart 22
+lib/desks/history/face.dart 21
 lib/desks/notes/desk.dart 6
 lib/desks/notes/face.dart 68
 lib/desks/parts.dart 24
 lib/desks/relations/desk.dart 53
-lib/desks/relations/model.dart 1
 lib/desks/web/desk.dart 10
 lib/effects/shelf.dart 18
 lib/fonts/shelf.dart 16
@@ -52,7 +51,5 @@ lib/inspector/transform/card.dart 1
 lib/inspector/transform/gizmo.dart 3
 lib/inspector/transform/instrument.dart 104
 lib/inspector/value_controls.dart 56
-lib/theme/glyphs.dart 11
-lib/theme/tokens.dart 4
 lib/timeline/timeline.dart 33
 lib/workspace/dock_workspace.dart 2

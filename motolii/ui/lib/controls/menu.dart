@@ -4,7 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import '../theme/metrics.dart';
-import '../theme/tokens.dart';
+import '../theme/identity.dart';
 import '../theme/neutral.dart';
 
 /// [shortcuts] names the key for a line (shown at its right, as menus do); [dividers] ends a group after a line.

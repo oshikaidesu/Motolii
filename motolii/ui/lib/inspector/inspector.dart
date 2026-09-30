@@ -9,7 +9,7 @@ import 'value_controls.dart';
 import '../theme/metrics.dart';
 import 'tones.dart';
 import '../theme/neutral.dart';
-import '../theme/tokens.dart' show H;
+import '../theme/identity.dart' show H;
 
 /// Heroes: the declared ones, else the first four that are not advanced (four in front, the rest behind).
 /// A front projection, not a limit: everything else is reached through sections, the fold and the filter.

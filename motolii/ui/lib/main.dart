@@ -7,7 +7,7 @@ import 'app/ui_scale.dart';
 import 'app/window.dart';
 import 'controls/panel/scale.dart';
 import 'theme/live_palette.dart';
-import 'theme/tokens.dart' show H;
+import 'theme/identity.dart' show H;
 import 'theme/metrics.dart';
 
 void main() => runApp(WidgetsApp(

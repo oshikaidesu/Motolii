@@ -1,3 +1,15 @@
+// THE visual canon of the product window: every size, gap, radius, text size and grey is named, and a panel names a token; it never
+// picks a number. Where each lives:
+//   typography       Dn (this file: name 11, value 11 mono, label 10, micro 9.5); H.s / H.m (identity.dart) for the window root and the ruler
+//   spacing, shape   Surface.inlineGap 3, sectionGap 6, panelInset 9; controlRadius 3, faceRadius 4.5 (this file)
+//   rows, controls   Surface.topBar/namedHeader/chromeRow/workRow/control/controlHero/hit/menuRow (this file)
+//   surface colours  Surface.base/raised/hover/selected/divider/well/ink/muted/disabled (this file), steps of the grey ramp N (neutral.dart)
+//   semantic colours H (identity.dart: a property's hue, play, record, relation, guide), desks/parts.dart and inspector/tones.dart palettes
+//   shared controls  EditorTheme (editor_theme.dart) is the ThemeExtension the controls read; liveEditorTheme (live_palette.dart) is this window's instance;
+//                    Step (this file) names the rungs those controls and the Stage chrome are built on
+// Reach in this order: Surface role, Dn role, N step or Surface level, Step (shared controls only; do not add), a new token HERE after
+// asking the owner. Geometry that belongs to the work (Stage, frames, thumbnails, painter and timeline reference coordinates, animation)
+// is not a token: say so with `// surface: <reason>` (tool/motolii_lints). Retune here, not in panels.
 import 'package:flutter/widgets.dart';
 
 import 'neutral.dart';

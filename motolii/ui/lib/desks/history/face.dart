@@ -4,6 +4,7 @@ import '../../browser/parts.dart';
 import '../../browser/panel_chrome.dart' show emptyBody;
 import '../parts.dart';
 import '../../theme/neutral.dart';
+import '../../theme/identity.dart' show H;
 import '../../theme/metrics.dart' show Dn, Surface;
 
 enum Mark { none, save, open, warn, error, end }
@@ -31,7 +32,7 @@ const historyEntries = <Entry>[
 
 const _bright = N.g86;
 const _redo = N.g26;
-const _amber = Color(0xFFF08A3C);
+const _amber = H.warn;
 const _red = Color(0xFFE2554F);
 
 Color _markColor(Mark m) => switch (m) { Mark.warn => _amber, Mark.error => _red, Mark.save => kMint, Mark.open => kViolet, Mark.end => kBlue, _ => _bright };

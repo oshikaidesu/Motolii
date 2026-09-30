@@ -4,8 +4,9 @@
 import 'package:flutter/painting.dart';
 import '../desks/parts.dart' show kYellow, kMint, kBlue, kPink, kViolet;
 import '../theme/neutral.dart';
+import '../theme/identity.dart' show H;
 
-const kOrange = Color(0xFFF08A3C);
+const kOrange = H.warn;
 const kTonePalette = [kYellow, kMint, kBlue, kPink, kViolet, kOrange];
 
 int _fnv(String s) {

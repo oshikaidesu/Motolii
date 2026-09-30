@@ -10,7 +10,7 @@ import '../value_controls.dart';
 import 'gizmo.dart';
 import 'model.dart';
 import '../../theme/neutral.dart';
-import '../../theme/tokens.dart' show H;
+import '../../theme/identity.dart' show H;
 
 class TransformInstrument extends StatefulWidget {
   const TransformInstrument(this.store, {super.key, this.initialMode = TMode.move, this.showHeader = true});
