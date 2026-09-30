@@ -43,11 +43,13 @@ preview/exportの意味・provider契約）で、一般技術は借りる。`Sem
 
 ## 3. 検証: 今後、LLMが新機能を実装しようとしたらどう止まるか
 
-例「Motion Tracking」。LLMが `motolii/crates/motolii-render/src/tracking.rs`（220行）を足そうとして commit する。
+例「Motion Tracking」。LLMが `motolii/crates/motolii-render/src/tracking.rs`（221行）を足して commit する。一時worktreeで、commit-msg hook を有効にして実行した結果:
 
-1. `Acquisition:` 行なし → hook が止める。（`new code without an Acquisition line`）
-2. `Acquisition: Build — simpler than adding a dependency` と `Why-build: simpler, small code, avoid a dependency` → 止める。（`that Why-build is not a reason`）
-3. `Acquisition: Reuse — ffmpeg-sidecar で得た動き解析（または OpenCV 等の既存 tracker）をWrapし、結果を Track として Document に持つ` → 通る。
-   この時点で LLM は Capability・既存技術・Motolii の意味（Track 結果の identity / 時間 / parameter 接続 / Undo / persistence）を書いている。
+| commit メッセージ | 結果 |
+|---|---|
+| `Add motion tracking`（`Acquisition:` なし） | **止まる** — `new code without an Acquisition line.`（対象fileと行数、書くべき形、§0への指示） |
+| `Acquisition: Build — write our own block matcher` + `Why-build: simpler than adding a dependency, and it is small code` | **止まる** — `that Why-build is not a reason (easier / smaller / no new dependency / a different shape)` |
+| `Acquisition: Build — …`（`Why-build:` なし） | **止まる** — `Build is the last resort and needs a Why-build line` |
+| `Acquisition: Reuse — 既存のCVライブラリのtrackerをWrapし、結果は Track として Document が持つ。identity・時間・parameter接続・Undoは Motolii` | **通る**（この時点でCapability・既存技術・Motoliiの意味が書かれている） |
 
-実際の出力は同日のcommitメッセージと検証ログを参照（scripts/check-acquisition.sh を一時worktreeで実行）。
+検証中に hook の正規表現が多バイトの `—` を通さない不具合を見つけて直した（`(—|-)`）。

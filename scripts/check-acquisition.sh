@@ -29,7 +29,7 @@ check() { # check <label> <message> <numstat of added files>
     done <<<"$added"
     [ -n "$big" ] || return 0
     local line
-    line=$(grep -E '^Acquisition: (Reuse|Wrap|Adapt|Extend|Semantics|Build) [—-] .{12,}' <<<"$message" | head -1 || true)
+    line=$(grep -E '^Acquisition: (Reuse|Wrap|Adapt|Extend|Semantics|Build) (—|-) .{12,}' <<<"$message" | head -1 || true)
     if [ -z "$line" ]; then
         printf '%s: new code without an Acquisition line.\n%s' "$label" "$big"
         echo "  Add to the commit message:  Acquisition: Reuse|Wrap|Adapt|Extend|Semantics|Build — <existing technology found / owned meaning>"
