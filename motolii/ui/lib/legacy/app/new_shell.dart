@@ -31,7 +31,7 @@ import '../../session/status_notice.dart' show freezeNotice;
 /// off-the-shelf dock (Browser, Stage, Inspector, Timeline, Desk), and the
 /// panels Classic docks hosted as they are. The default preset is the layout
 /// the design started from; the user can resize, tab, split and move it. Capabilities it cannot reach yet
-/// are listed as NOT YET ROUTED in docs/stage5/ui-rebaseline/routing.md.
+/// are listed as NOT YET ROUTED in docs/product/ui-rebaseline/routing.md.
 class NewShell extends StatefulWidget {
   const NewShell({super.key});
   @override
