@@ -1,6 +1,5 @@
 // The Browser keeps the old Media shelf's operations: pick one, pick several (Cmd / Shift), select all, walk with the arrows,
 // Enter places, Delete removes what the caller lets it, Escape lets go, and a right click offers the caller's menu.
-import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';

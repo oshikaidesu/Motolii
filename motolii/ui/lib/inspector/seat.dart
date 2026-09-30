@@ -1,7 +1,6 @@
 import 'package:flutter/widgets.dart';
 
 import '../browser/parts.dart' show sans;
-import '../theme/surface.dart' show Surface;
 import '../session/editor_session.dart';
 import 'camera/card.dart';
 import '../effects/params.dart';

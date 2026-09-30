@@ -1,7 +1,6 @@
 // Two fingers on a trackpad over the Stage carry the picture and a pinch zooms it (the real app).
 
 import 'package:flutter/gestures.dart';
-import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 

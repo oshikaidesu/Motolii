@@ -1,6 +1,5 @@
 // The fluid board moves the same faces between projections: the selection and the identity stay, and a face is between its
 // two places part-way through the change (motion, not a swap).
-import 'dart:ui' show PointerDeviceKind;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';

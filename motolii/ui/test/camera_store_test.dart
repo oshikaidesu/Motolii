@@ -1,7 +1,6 @@
 // The Inspector Camera store shows the document; refreshing it must never write the document back.
 import 'dart:convert';
 
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:motolii_ui/inspector/camera/card.dart';
 import 'package:motolii_ui/session/editor_session.dart';

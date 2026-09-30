@@ -1,5 +1,4 @@
 // Favorites and Recents are kept by the asset's catalog id in the user library, and come back when the app is opened again.
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:motolii_ui/browser/item.dart';
 import 'package:motolii_ui/browser/user_state.dart';

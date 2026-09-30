@@ -3,7 +3,6 @@
 // second input. (The Stage pixels themselves need the real window: integration_test/first_preview_test.dart.)
 import 'dart:convert';
 
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:motolii_ui/inspector/camera/card.dart';
 import 'package:motolii_ui/session/editor_session.dart';

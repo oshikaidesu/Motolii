@@ -4,11 +4,9 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'dart:ui' show FrameTiming;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/scheduler.dart';
-import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 
@@ -266,7 +264,6 @@ void main() {
       await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 1500)));
       hand2.cancel();
       final stopped = LatencyProbe.events.where((e) => e.name == 'pointer').last.us;
-      final sw = Stopwatch()..start();
       await c.commandDirect('commitPreview');
       final settle = (LatencyProbe.events.where((e) => e.name == 'render-accepted').last.us - stopped) / 1000;
       await frames(t, 8);

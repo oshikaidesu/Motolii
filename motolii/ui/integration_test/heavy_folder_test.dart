@@ -1,7 +1,6 @@
 // A person drops a big, untidy folder (a Downloads folder: thousands of files, duplicates, every kind) onto the Browser.
 // The window must stay alive: no frame of the real app may take more than a moment, in any view, while it is indexed and drawn.
 // HEAVY_DIR names the folder (the test is skipped without it).
-import 'dart:io';
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';

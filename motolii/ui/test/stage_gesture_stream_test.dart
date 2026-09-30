@@ -1,7 +1,6 @@
 // A Stage drag streams to native as: begin, then only the newest positions, then commit last (never overtaken).
 import 'dart:convert';
 
-import 'package:flutter/painting.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:motolii_ui/stage/session.dart';
 import 'package:motolii_ui/session/editor_session.dart';

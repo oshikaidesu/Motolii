@@ -8,7 +8,7 @@ import 'package:flutter/widgets.dart';
 
 import '../story.dart' show fixture;
 import 'library_data.dart';
-import 'media.dart' show ground, ink, quiet, faint, rule, t, header, sheet;
+import 'media.dart' show ground, ink, quiet, faint, rule, t;
 import 'models3d.dart';
 
 double aspectOf(L l) => switch (l.kind) { 'Audio' => 1.8, '3D' => 1.0, 'HDR' => 2.0, _ => (l.w / l.h).clamp(.5, 2.4).toDouble() };

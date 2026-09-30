@@ -1,7 +1,6 @@
 // The seam between the finished Browser bodies and a host that owns real items and actions.
 // The bodies draw; the seat says what is picked, what a tile does, how it is drawn when the host has a better
 // picture, and what the panel's keys do. With no seat in scope the bodies behave as they always did (fixtures).
-import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'things.dart';
 
