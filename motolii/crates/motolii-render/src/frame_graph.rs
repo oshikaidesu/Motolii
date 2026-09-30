@@ -1,6 +1,12 @@
-//! The single scheduling boundary between authored document state and views.
-//! S0 deliberately contains no renderer adapter: later lanes supply node
-//! evaluators and GPU submissions without changing these ownership rules.
+//! The frame graph: compiles one revision of a work into a graph of small evaluation
+//! nodes (layer properties, media, effects, layout, camera, masks, text, analysis,
+//! particles, solvers, scene), then evaluates that graph once per exact composition time.
+//! Each node has a key made from its inputs, so an unchanged node is never computed twice.
+//! The graph produces values only; preparing GPU resources and drawing happen in
+//! `engine` (see `engine/playback_graph.rs`) and `compositor`.
+//!
+//! Start here: `GraphBuilder` / `build_initial_topology` (compile), `CompiledGraph`,
+//! `NodeExecutor`, `EvaluationContext` (evaluate), `SceneProgram` (the assembled scene).
 
 mod analysis_program;
 mod cache;

@@ -1,3 +1,7 @@
+//! Ephemeral viewing state, not part of the work: which layers and keys are SELECTED
+//! (`selected_ids`, `selected_keys`; `selected()` is the last one), the clock, the Stage or
+//! Camera view and its scale. It is written by `port.rs` and published to Dart in the status
+//! JSON by `snapshot_cache.rs` (`selectedId(s)`, `selectedKeys`). Dropping it edits nothing.
 use crate::edit::Animate;
 use crate::doc::core::ResolvedCamera;
 use crate::doc::store::{Revision, StoreView};

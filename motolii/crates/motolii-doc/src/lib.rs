@@ -1,5 +1,10 @@
-// 家: 作品の意味を読む側 — 値・時刻・評価の型と、読み取りモデル(StoreView・Recording)。
-// 書き込み(Document・Intent・Undo・保存)は motolii-edit(crates/motolii-edit)、書き出しは motolii-render::export と motolii-jobs。
+//! The read side of a Motolii work: values, time, evaluation and the stored-work model.
+//!
+//! This crate opens a saved work and answers "what is the value of this property at
+//! this time?". It defines the types (`core`), the evaluator for keyframes, curves and
+//! expressions (`eval`), the entity store and its read-only views (`store`: `StoreView`,
+//! `Recording`) and path geometry (`vector`). It never changes a work and never draws:
+//! changing is `motolii-edit`, drawing is `motolii-render`.
 pub mod core;
 pub mod eval;
 pub mod store;

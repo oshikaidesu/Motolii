@@ -1,3 +1,7 @@
+//! The native host the Flutter UI talks to through FFI. `EditorRuntime` owns one `Document`
+//! (motolii-edit), one render `Engine` (motolii-render) and the ephemeral viewing state
+//! (`viewer.rs`: selection, clock, stage); `port.rs` turns UI requests into `Intent`s,
+//! `snapshot*.rs` publishes the status JSON the UI reads, `frames.rs` hands frames to the viewport.
 #![recursion_limit = "256"]
 pub use motolii_doc as doc;
 pub use motolii_edit as edit;

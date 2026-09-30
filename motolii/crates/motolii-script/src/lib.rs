@@ -1,4 +1,6 @@
 //! Script execution knows only commands and read-only queries, never the editor or GPU.
+//! A QuickJS runtime runs a user script under a time budget (`DEFAULT_BUDGET`); the script
+//! asks the work questions (`Query`) and answers with commands the host turns into Intents.
 use rquickjs::{CatchResultExt, CaughtError, Context, Ctx, Exception, Function, Runtime};
 use serde_json::Value;
 use std::time::{Duration, Instant};

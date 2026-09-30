@@ -1,10 +1,10 @@
-//! 作品を変える側 — Intent・Undo・保存。
+//! The write side of a Motolii work: edits, undo and saving.
 //!
-//! コアは「保存された作品を開いて、ある時刻の値を答える」所までで(2026-09-20 利用者裁定)、
-//! 変えるのは編集機の仕事。Flash が player と authoring を分けていたのと同じ形で、
-//! 読む側はこの家を知らない。
-//!
-//! 依存は一方向: edit → doc。逆は `cargo arc check` が落とす。
+//! `Document` owns a work; every change is an `Intent` passed to `Document::apply`
+//! (`apply_all` / `apply_then` group several into one undo step), and `undo` / `redo`
+//! move along the recorded steps. `persist` saves and reopens; `stagger` and
+//! `text_edit` build Intents for multi-layer and text edits. Reading is `motolii-doc`,
+//! which does not know this crate; the dependency runs edit -> doc only.
 
 pub mod document;
 pub mod persist;
