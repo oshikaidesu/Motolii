@@ -24,7 +24,8 @@ class CameraGeom {
   Offset get eye {
     final e = s.eyeDirection;
     // the one direction that lands on the target itself is behind it, where a camera rarely stands
-    var v = Offset(e[0] - .62 * e[2], -e[1] + .46 * e[2]);
+    // the composition's y points down, as on the Stage: +pitch puts the eye below the target there and here
+    var v = Offset(e[0] - .62 * e[2], e[1] + .46 * e[2]);
     // keep the camera clear of the target dot: a direction that would land near it is pushed out along the same line
     if (v.distance < .6) v = v.distance < 1e-3 ? const Offset(.6, -.0) : v / v.distance * .6;
     return c + v * (orbitR * .95);
@@ -94,7 +95,7 @@ class _CameraFaceState extends State<CameraFace> {
         s.preview('camera.center', [_center0[0] + d.dx * 4, _center0[1] + d.dy * 4]);
       case _G.eye:
         // the camera follows the pointer around the target: pitch from the vertical, yaw from the horizontal
-        s.preview('camera.orbit', [_orbit0[0] - d.dy * .8, _orbit0[1] - d.dx * .8]);
+        s.preview('camera.orbit', [_orbit0[0] + d.dy * .8, _orbit0[1] - d.dx * .8]);
       case _G.distance:
         final along = d.dx * _ray0.dx + d.dy * _ray0.dy; // outward along the ray is farther
         s.preview('camera.distance', _dist0 * math.exp(along * .02));

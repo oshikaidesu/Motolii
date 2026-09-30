@@ -11,12 +11,17 @@ import 'desk_session.dart';
 /// picked first, since `ease` shapes the intervals that start at the picked keys.
 class LiveEaseHost extends ChangeNotifier implements EaseHost {
   LiveEaseHost(this.c) {
-    c.slice('liveEase', _watched, derived: c.layerShape).addListener(_read);
+    _slice.addListener(_read);
     c.deskWork.addListener(_read);
     c.frame.addListener(_frame);
     _read();
   }
   static const _watched = ['easeKinds', 'easeIntervals', 'selectedIds', 'selectedKeys'];
+
+  /// What the desk reads of the layers: who can carry a ghost and the names / locks it prints. Values are the
+  /// intervals' business (`easeIntervals`), not the layers'.
+  Object? _reading() => [for (final l in c.layers) [l['id'], l['name'], l['locked'], l['ghostable']]];
+  DocumentSlice get _slice => c.slice('liveEase', _watched, derived: _reading);
   final EditorSession c;
 
   List<Preset> _kinds = const [];
@@ -212,31 +217,17 @@ class LiveEaseHost extends ChangeNotifier implements EaseHost {
         'shape': _shape(curve),
       };
 
-  Map<String, dynamic>? _pending;
-  Future<void>? _flight;
   bool _previewed = false;
 
   @override
   void preview(int? interval, Seg curve) {
     if (_layers.isEmpty || !_canSequence || !c.supports('previewSequence')) return;
-    _pending = _payload(curve);
     _previewed = true;
-    _flight ??= () async {
-      try {
-        while (_pending != null) {
-          final next = _pending!;
-          _pending = null;
-          await c.command('previewSequence', next);
-        }
-      } finally {
-        _flight = null;
-      }
-    }();
+    c.commandDirect('previewSequence', _payload(curve), 'ease-sequence');
   }
 
   @override
   void cancel() {
-    _pending = null;
     if (_previewed) c.cancelPreview();
     _previewed = false;
   }
@@ -261,8 +252,6 @@ class LiveEaseHost extends ChangeNotifier implements EaseHost {
     }
     if (_layers.isNotEmpty) {
       // One step on release (one undo); the preview in flight lands first.
-      _pending = null;
-      await _flight;
       _previewed = false;
       final payload = _payload(curve);
       await c.storeDesk('ease', payload['shape'] as Map<String, dynamic>);
@@ -280,7 +269,7 @@ class LiveEaseHost extends ChangeNotifier implements EaseHost {
 
   @override
   void dispose() {
-    c.slice('liveEase', _watched, derived: c.layerShape).removeListener(_read);
+    _slice.removeListener(_read);
     c.deskWork.removeListener(_read);
     c.frame.removeListener(_frame);
     super.dispose();

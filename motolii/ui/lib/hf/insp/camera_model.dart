@@ -27,8 +27,27 @@ class CameraStore extends ParamStore {
     _derive();
   }
 
-  final List<CamLayer> layers;
-  static const compW = 1920.0, compH = 1080.0;
+  List<CamLayer> layers;
+  double compW = 1920.0, compH = 1080.0;
+
+  /// The centre the host resolved for this camera (a Target layer's anchor / bounds / pivot, in 3D, as it renders); null
+  /// when the host has not said, and the layer's position stands in.
+  List<double>? resolvedCenter;
+
+  /// The layers a Target may name, refreshed when the document adds or drops one (the choices follow).
+  void useLayers(List<CamLayer> next) {
+    layers = next;
+    row('camera.target')['choices'] = ['None', for (final l in next) l.name];
+  }
+
+  /// Show again what the values derive (after the host's numbers were taken in).
+  void reveal() {
+    _derive();
+    notifyListeners();
+  }
+
+  /// Centre X/Y and Target Z belong to the Target layer while one is set: they show it and are not written.
+  bool held(String id) => targetLocked && (id == 'camera.center' || id == 'camera.target.z');
   final animated = <String>{}, keyedNow = <String>{};
   // what the document stores for Center and Target Z; a Target layer overrides them for display and drawing, never overwrites them
   List<double> authoredCenter = [0, 0];
@@ -44,7 +63,7 @@ class CameraStore extends ParamStore {
 
   void _derive() {
     final l = targetLayer;
-    row('camera.center')['value'] = l != null ? [l.x - compW / 2, l.y - compH / 2] : List<double>.of(authoredCenter);
+    row('camera.center')['value'] = l != null ? List<double>.of(resolvedCenter ?? [l.x - compW / 2, l.y - compH / 2]) : List<double>.of(authoredCenter);
     row('camera.target.z')['value'] = l != null ? l.z : authoredZ;
     for (final r in rows) {
       r['animated'] = animated.contains(r['id']) ? true : null;

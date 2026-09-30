@@ -115,8 +115,28 @@ class StageSession extends ChangeNotifier {
     ];
   }
 
-  List<Offset> corners(Map<String, dynamic> layer) => hull(rawCorners(layer));
-  List<Map<String, dynamic>> get visible => layers.where((l) => l['hidden'] != true).toList();
+  /// A layer's outline and the visible layers are read by every hover move and press; they change only with the document
+  /// the Stage reads, so they are worked out once per [state], not once per pointer event.
+  final _hulls = Map<Map<String, dynamic>, List<Offset>>.identity();
+  Map<String, dynamic>? _hullsFrom;
+  List<Map<String, dynamic>>? _visible;
+  void _sameState() {
+    final st = state;
+    if (identical(st, _hullsFrom)) return;
+    _hullsFrom = st;
+    _hulls.clear();
+    _visible = null;
+  }
+
+  List<Offset> corners(Map<String, dynamic> layer) {
+    _sameState();
+    return _hulls[layer] ??= hull(rawCorners(layer));
+  }
+
+  List<Map<String, dynamic>> get visible {
+    _sameState();
+    return _visible ??= layers.where((l) => l['hidden'] != true).toList();
+  }
 
   /// What a hand can take on the picture: a Group is reached from the layer lists alone (2026-09-19, user).
   static bool grabbable(Map<String, dynamic> layer) => layer['locked'] != true && layer['kind'] != 'Group';
@@ -224,8 +244,7 @@ class StageSession extends ChangeNotifier {
   void orbitBy(double pitch, double yaw) {
     final base = _orbit ?? (observer['orbit'] as List?)?.map((v) => (v as num).toDouble()).toList() ?? [0, 0];
     _orbit = [(base[0] + pitch).clamp(-85.0, 85.0), base[1] + yaw];
-    _orbitPending = List.of(_orbit!);
-    _sendOrbit();
+    c.commandDirect('stageView', {'orbit': List.of(_orbit!)}, 'stage-orbit');
   }
 
   void release(Offset comp, StMods mods, double viewScale) {
@@ -253,16 +272,12 @@ class StageSession extends ChangeNotifier {
   }
 
   // ---- the layer gesture, streamed to the host ---------------------------------------------------------------------
-  Map<String, dynamic>? _pending;
-  Future<void> _drained = Future<void>.value();
-  bool _sending = false;
-
   void _begin(Offset comp, List<int> ids, String handle, StMods mods, {double viewScale = 1}) {
     gesture = StGesture.layer;
     _ids = List.of(ids);
     _handle = handle;
     _mode = handle == 'spatial' ? 'spatial' : handle == 'body' ? 'move' : handle == 'rotation' ? 'rotate' : 'scale';
-    _drained = c.command('stageGesture', _gestureArgs('begin', comp, mods, viewScale));
+    c.command('stageGesture', _gestureArgs('begin', comp, mods, viewScale));
   }
 
   /// A camera box handle or a working-area edge, carried by the host like any Stage gesture: the host turns the
@@ -273,7 +288,7 @@ class StageSession extends ChangeNotifier {
     _ids = ids;
     _handle = handle;
     _mode = mode;
-    _drained = c.command('stageGesture', _gestureArgs('begin', comp, mods, null));
+    c.command('stageGesture', _gestureArgs('begin', comp, mods, null));
   }
 
   Map<String, dynamic> _gestureArgs(String phase, Offset point, StMods mods, double? viewScale) => {
@@ -293,33 +308,16 @@ class StageSession extends ChangeNotifier {
         'held': held,
       };
 
-  void _update(Offset comp, StMods mods, double viewScale) {
-    _pending = _gestureArgs('update', comp, mods, viewScale);
-    if (_sending) return;
-    _sending = true;
-    final previous = _drained;
-    _drained = () async {
-      try {
-        await previous;
-        while (_pending != null) {
-          final args = _pending!;
-          _pending = null;
-          await c.command('stageGesture', args);
-        }
-      } finally {
-        _sending = false;
-      }
-    }();
-  }
+  /// The newest pointer position wins; begin before it and commit / cancel after it keep their place (`commandDirect`).
+  void _update(Offset comp, StMods mods, double viewScale) =>
+      c.commandDirect('stageGesture', _gestureArgs('update', comp, mods, viewScale), 'stage-gesture');
 
   Future<void> _finish(bool cancel, Offset comp, StMods mods, double viewScale) async {
     if (_finishing) return;
     _finishing = true;
     final wasDragging = gesture == StGesture.layer || gesture == StGesture.camera || gesture == StGesture.extent;
-    if (cancel) _pending = null;
     try {
       if (wasDragging) {
-        await _drained;
         await c.command('stageGesture', _gestureArgs(cancel ? 'cancel' : 'commit', comp, mods, viewScale));
       }
     } finally {
@@ -333,42 +331,13 @@ class StageSession extends ChangeNotifier {
 
   /// The 3D gizmo lights the part under the pointer: the host hears the pointer while it is on the mesh, and once when
   /// it leaves. One in flight at a time.
-  Map<String, dynamic>? _hoverPending;
-  bool _hoverSending = false;
-  void hover(Offset? comp, double viewScale) {
-    _hoverPending = {'phase': 'hover', 'view': view, 'point': comp == null ? null : [comp.dx, comp.dy], 'viewScale': viewScale, 'held': held};
-    if (_hoverSending) return;
-    _hoverSending = true;
-    () async {
-      try {
-        while (_hoverPending != null) {
-          final args = _hoverPending!;
-          _hoverPending = null;
-          await c.command('stageGesture', args);
-        }
-      } finally {
-        _hoverSending = false;
-      }
-    }();
-  }
+  void hover(Offset? comp, double viewScale) => c.commandDirect(
+    'stageGesture',
+    {'phase': 'hover', 'view': view, 'point': comp == null ? null : [comp.dx, comp.dy], 'viewScale': viewScale, 'held': held},
+    'stage-hover',
+  );
 
   // ---- the observer's orbit ----------------------------------------------------------------------------------------
-  List<double>? _orbitPending;
-  bool _orbitSending = false;
-  Future<void> _sendOrbit() async {
-    if (_orbitSending) return;
-    _orbitSending = true;
-    try {
-      while (_orbitPending != null) {
-        final angles = _orbitPending!;
-        _orbitPending = null;
-        await c.command('stageView', {'orbit': angles});
-      }
-    } finally {
-      _orbitSending = false;
-    }
-  }
-
   /// The working area switched on (a Stage layer is made when there is none) or off.
   Future<void> toggleExtend() async {
     final on = !extending;

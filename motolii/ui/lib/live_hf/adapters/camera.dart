@@ -32,6 +32,12 @@ class SessionCameraStore extends CameraStore {
     if (_gesture) return;
     // a locked camera shows its values and refuses changes, as every locked layer does
     frozen = c.layers.where((l) => l['id'] == layer).firstOrNull?['locked'] == true;
+    // the layers a Target may name and the comp it sits in are the document's now, not as they were when this store began
+    useLayers(_others(c, layer));
+    compW = (c.state['width'] as num?)?.toDouble() ?? compW;
+    compH = (c.state['height'] as num?)?.toDouble() ?? compH;
+    final seen = EditorSession.maps(c.state['cameraGizmos']).where((g) => g['id'] == layer).firstOrNull?['center'];
+    resolvedCenter = seen is List && seen.length == 2 && seen.every((v) => v is num) ? [for (final v in seen) (v as num).toDouble()] : null;
     final rows = _rows;
     animated.clear();
     keyedNow.clear();
@@ -49,9 +55,8 @@ class SessionCameraStore extends CameraStore {
       if ((live['keys'] as List?)?.isNotEmpty ?? false) animated.add(id);
       if (live['keyedNow'] == true) keyedNow.add(id);
     }
-    // the instrument derives what a Target layer overrides from these values
-    set('camera.target', row('camera.target')['value']);
-    commits--;
+    // the instrument derives what a Target layer overrides from these values (shown, never written back)
+    reveal();
   }
 
   @override
@@ -103,15 +108,18 @@ class SessionCameraStore extends CameraStore {
   }
   @override
   void toggleKeys(List<String> ids) {
-    if (frozen || !keyable) return;
-    c.command('toggleKey', {'layer': layer, 'properties': ids});
+    // a Target layer's point is not the camera's to key or reset: the authored Center / Target Z stay as they are
+    final own = [for (final i in ids) if (!held(i)) i];
+    if (frozen || !keyable || own.isEmpty) return;
+    c.command('toggleKey', {'layer': layer, 'properties': own});
   }
 
   /// Back to the defaults the host knows: one step.
   @override
   void resetMany(List<String> ids) {
-    if (frozen || !c.supports('reset')) return;
-    c.command('reset', {'layer': layer, 'properties': [for (final i in ids) if (rows.any((r) => r['id'] == i)) i]});
+    final own = [for (final i in ids) if (!held(i) && rows.any((r) => r['id'] == i)) i];
+    if (frozen || !c.supports('reset') || own.isEmpty) return;
+    c.command('reset', {'layer': layer, 'properties': own});
   }
 
   @override
@@ -141,7 +149,8 @@ class _LiveCameraState extends State<LiveCamera> {
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
-    listenable: widget.c.slice('liveCameraHead', const ['layers', 'animate']),
+    // the head draws the layer's name and the Animate switch; a camera value preview changes neither
+    listenable: widget.c.slice('liveCameraHead:${widget.layer}', const ['animate'], derived: () => widget.c.layers.where((l) => l['id'] == widget.layer).firstOrNull?['name']),
     builder: (context, _) => CameraInstrument(
       store,
       // the layer's own name, not the word "Camera" (Classic IN-002)

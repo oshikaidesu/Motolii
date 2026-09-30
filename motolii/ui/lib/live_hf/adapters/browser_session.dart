@@ -52,24 +52,22 @@ class BrowserSession extends ChangeNotifier {
   BrowserSession._(this.c) {
     _bind();
     c.slice('browserCatalog', const ['createKinds', 'catalog']).addListener(_rebind);
-    // What the shelves read of the document, and nothing else: the palette, fonts, assets and environments, the selection,
-    // and (through getters) the fonts the layers use, the active layer's kind and font, and the colour being edited. A
-    // preview of Position or an effect parameter changes none of them, so it does not wake the Browser.
-    c.slice(
-      'browserSurface',
-      const ['palette', 'fontFamilies', 'assets', 'backgrounds', 'selectedId', 'selectedIds'],
-      derived: () => [
-        (usedFonts.toList()..sort()),
-        c.activeLayer?['id'],
-        c.activeLayer?['kind'],
-        EditorSession.map(c.activeLayer?['text'])['fontFamily'],
-        colorTarget(c),
-      ],
-    ).addListener(notifyListeners);
+    c.slice('browserSurface', const ['palette', 'fontFamilies', 'assets', 'backgrounds', 'selectedId', 'selectedIds', 'colorTarget'], derived: _reading).addListener(notifyListeners);
     c.deskWork.addListener(notifyListeners);
     c.importedAssets.addListener(_reveal);
     _loadFontFacts();
   }
+  /// What the shelves read of the layers, and nothing more: the colour target and its layer's name, the text layer a
+  /// font would dress, the families the text layers use, whether the active layer has a fill to save. A continuous
+  /// preview of Position, Scale, an effect parameter, a camera value changes none of it, so it wakes no tile.
+  Object? _reading() => [
+        colorReading(c),
+        dressing?['id'],
+        dressingFont,
+        (usedFonts.toList()..sort()),
+        EditorSession.map(c.activeLayer?['fill']).isNotEmpty,
+      ];
+
   static final _all = Expando<BrowserSession>();
   static BrowserSession of(EditorSession c) => _all[c] ??= BrowserSession._(c);
   final EditorSession c;

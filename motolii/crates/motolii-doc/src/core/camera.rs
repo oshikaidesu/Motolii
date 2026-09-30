@@ -310,6 +310,20 @@ mod projection_tests {
         glam::vec2((q.x / q.w + 1.0) * comp.width as f32 / 2.0, (1.0 - q.y / q.w) * comp.height as f32 / 2.0)
     }
 
+    /// Orbit pitch has one meaning everywhere (Stage observer, Inspector face, render): the composition's y points down,
+    /// so +pitch puts the eye BELOW the target on the picture, and +yaw puts it to the LEFT.
+    #[test]
+    fn positive_pitch_puts_the_eye_below_the_target_and_positive_yaw_to_the_left() {
+        let comp = CompSpec { width: 1920, height: 1080 };
+        let front = camera_projection(comp, ResolvedCamera::default());
+        let pitched = camera_projection(comp, ResolvedCamera { orbit_degrees: [30.0, 0.0], ..Default::default() });
+        let yawed = camera_projection(comp, ResolvedCamera { orbit_degrees: [0.0, 30.0], ..Default::default() });
+        // the picture: a point on the comp plane lower down has the larger pixel y
+        assert!(pixel(comp, ResolvedCamera::default(), glam::vec3(960.0, 700.0, 0.0)).y > pixel(comp, ResolvedCamera::default(), glam::vec3(960.0, 300.0, 0.0)).y);
+        assert!(pitched.eye.y > front.eye.y, "+pitch: eye below the target");
+        assert!(yawed.eye.x < front.eye.x, "+yaw: eye to the left");
+    }
+
     #[test]
     fn planar_affine_matches_direct_perspective_projection_across_the_image() {
         let comp = CompSpec { width: 1920, height: 1080 };

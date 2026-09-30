@@ -21,7 +21,17 @@ class RelationsPanel extends StatefulWidget {
 
 class _RelationsPanelState extends State<RelationsPanel> {
   EditorSession get c => widget.controller;
-  static const _watched = ['layers', 'selectedIds', 'frame', 'capabilities', 'documentRevision', 'width', 'height'];
+  static const _watched = ['selectedIds', 'frame', 'capabilities', 'width', 'height'];
+
+  /// What the panel draws of the layers: each dot (name, place, when it exists), every link, and the value of each
+  /// link's source. Opacity, an effect parameter or a camera value moving changes none of it; Position moves the dots.
+  Object? _reading() => [
+        for (final l in c.layers) [l['id'], l['name'], l['kind'], l['x'], l['y'], l['start'], l['duration']],
+        for (final r in relationsOf(c))
+          [r.source.layer, r.source.property, r.source.component, r.inMin, r.inMax, r.members, [for (final m in r.mappings) [m.property, m.outMin, m.outMax]], s.sourceValue({'layer': r.source.layer, 'property': r.source.property, 'component': r.source.component})],
+        if (s.draft != null) s.sourceValue(EditorSession.map(s.draft!['source'])),
+      ];
+  DocumentSlice get _slice => c.slice('relations', _watched, derived: _reading);
 
   /// What the Relations desk is doing lives in the RelationsSession (it outlives this panel); the panel keeps only
   /// its picture: the dots and the lasso being drawn.
@@ -35,7 +45,7 @@ class _RelationsPanelState extends State<RelationsPanel> {
   @override
   void initState() {
     super.initState();
-    c.slice('relations', _watched).addListener(_redraw);
+    _slice.addListener(_redraw);
     c.relationFocus.addListener(_redraw);
     s.addListener(_redraw);
     s.arrived.addListener(_arrived);
@@ -43,7 +53,7 @@ class _RelationsPanelState extends State<RelationsPanel> {
 
   @override
   void dispose() {
-    c.slice('relations', _watched).removeListener(_redraw);
+    _slice.removeListener(_redraw);
     c.relationFocus.removeListener(_redraw);
     s.removeListener(_redraw);
     s.arrived.removeListener(_arrived);

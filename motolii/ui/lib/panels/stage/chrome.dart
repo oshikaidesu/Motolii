@@ -229,6 +229,8 @@ mixin _StageChrome
                         onPointerUp: _up,
                         onPointerHover: _hover,
                         onPointerCancel: (_) => _finish(true),
+                        onPointerPanZoomStart: (_) => _pinch = 1,
+                        onPointerPanZoomUpdate: _panZoom,
                         onPointerSignal: (event) {
                           if (event is PointerScrollEvent) {
                             GestureBinding.instance.pointerSignalResolver

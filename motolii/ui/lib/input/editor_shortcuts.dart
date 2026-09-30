@@ -132,7 +132,7 @@ class EditorShortcuts {
           else
             nudgeSelection(c, d.toDouble(), 0);
         } else
-          c.seek(c.frame.value + d);
+          c.seek(c.frameTarget + d);
         return KeyEventResult.handled;
       }
       if (k == LogicalKeyboardKey.arrowUp ||

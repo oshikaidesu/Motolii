@@ -1,6 +1,5 @@
 import 'package:flutter/widgets.dart';
 
-import '../foundation/panel_controls/drag.dart' show EditorPreviewQueue;
 import 'editor_session.dart';
 
 /// The four numbers a stored colour carries, 0…1 (0…255 input is scaled).
@@ -45,6 +44,16 @@ Map<String, dynamic>? colorTarget(EditorSession c) {
   return null;
 }
 
+/// Everything a colour surface shows of the colour target: the target itself (its colour is a value the surface draws)
+/// and the name of the layer it belongs to. A slice compares this instead of listening to every layer edit, so a
+/// Position scrub leaves the colour surfaces still.
+Object? colorReading(EditorSession c) {
+  final target = colorTarget(c);
+  if (target == null) return null;
+  final layer = c.layers.where((l) => l['id'] == target['layer']).firstOrNull;
+  return [target, layer?['name']];
+}
+
 /// What the wheel edits, in words: "Layer name · Fill" / "· Stroke" / "· Fill · stop", or the composition's ground.
 String colorTargetTitle(EditorSession c, Map<String, dynamic> target) {
   if (target['slot'] == 'Background') return 'Composition · Background';
@@ -78,9 +87,6 @@ class ColorEdit extends ChangeNotifier {
   double? _hue;
   bool _previewUsed = false, _ending = false, _cancelled = false;
   bool _disposed = false;
-  late final _queue = EditorPreviewQueue<Map<String, dynamic>>(
-    (patch) => c.command('previewColor', patch),
-  );
 
   List<double> get value =>
       _draft ?? (_target == null ? unbound : rgbaOf(_target!['rgba']));
@@ -126,11 +132,11 @@ class ColorEdit extends ChangeNotifier {
       onPick?.call(next);
     } else if (canPreview) {
       _previewUsed = true;
-      _queue.add({
+      c.commandDirect('previewColor', {
         if (_target!['layer'] != null) 'layer': _target!['layer'],
         'slot': _target!['slot'],
         'rgba': next,
-      });
+      }, 'color');
     }
   }
 
@@ -145,10 +151,7 @@ class ColorEdit extends ChangeNotifier {
     }
     _ending = true;
     try {
-      await _queue.finish(
-        false,
-        () => used ? c.command('commitPreview') : _set(target, next),
-      );
+      await (used ? c.command('commitPreview') : _set(target, next));
     } finally {
       _ending = false;
       _changed();
@@ -165,7 +168,7 @@ class ColorEdit extends ChangeNotifier {
     if (!used) return;
     _ending = true;
     try {
-      await _queue.finish(true, () => c.command('cancelPreview'));
+      await c.command('cancelPreview');
     } finally {
       _ending = false;
     }
@@ -197,8 +200,7 @@ class ColorEdit extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
-    if (_previewUsed && !_ending)
-      _queue.finish(true, () => c.command('cancelPreview'));
+    if (_previewUsed && !_ending) c.command('cancelPreview');
     super.dispose();
   }
 }

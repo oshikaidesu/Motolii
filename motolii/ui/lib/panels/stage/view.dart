@@ -45,6 +45,15 @@ mixin _StageView on State<StagePanel> {
 
   void _fit() => _session.fit();
 
+  /// A trackpad's two fingers: they carry the picture, and a pinch zooms about the fingers (the wheel zooms too).
+  double _pinch = 1;
+  void _panZoom(PointerPanZoomUpdateEvent event) {
+    if (event.panDelta != Offset.zero) _session.panBy(event.panDelta, _viewport);
+    final step = event.scale / _pinch;
+    _pinch = event.scale;
+    if (step != 1) _zoomAt(_scale * step, event.localPosition);
+  }
+
   void _zoomAt(double next, Offset anchor) => _session.zoomAt(next, anchor, _viewport);
 
   void _viewCommand() {

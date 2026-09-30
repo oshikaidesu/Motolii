@@ -25,9 +25,11 @@ class LiveColorInstrument extends StatefulWidget {
 }
 
 class _LiveColorInstrumentState extends State<LiveColorInstrument> {
-  // the colour being edited is all it reads of the document (`colorTarget` looks at the active layer's colour only when the
-  // host names none), so a preview of anything else leaves the wheel alone
-  static const _watched = ['colorTarget', 'selectedIds', 'capabilities'];
+  static const _watched = [
+    'colorTarget',
+    'selectedIds',
+    'capabilities',
+  ];
   EditorSession get c => widget.c;
   late final ColorEdit edit = ColorEdit(c)
     ..onPick = (rgba) => setState(() => edit.unbound = rgba);
@@ -43,7 +45,7 @@ class _LiveColorInstrumentState extends State<LiveColorInstrument> {
   void initState() {
     super.initState();
     _absorb();
-    c.slice('liveColors', _watched, derived: () => colorTarget(c)).addListener(_absorb);
+    c.slice('liveColors', _watched, derived: () => colorReading(c)).addListener(_absorb);
     c.eyedropper.addListener(_redraw);
     c.deskWork.addListener(_redraw);
     edit.addListener(_redraw);
@@ -54,7 +56,7 @@ class _LiveColorInstrumentState extends State<LiveColorInstrument> {
 
   @override
   void dispose() {
-    c.slice('liveColors', _watched, derived: () => colorTarget(c)).removeListener(_absorb);
+    c.slice('liveColors', _watched, derived: () => colorReading(c)).removeListener(_absorb);
     c.eyedropper.removeListener(_redraw);
     c.deskWork.removeListener(_redraw);
     edit.dispose();

@@ -16,9 +16,7 @@ class DepthController extends ChangeNotifier implements DepthHost {
   final EditorSession c;
   late final DocumentSlice _slice;
   Map<String, dynamic>? _grab;
-  Future<void> _tail = Future.value();
-  Map<String, dynamic>? _pending;
-  bool _sending = false, _finishing = false, _gone = false;
+  bool _finishing = false, _gone = false;
 
   Map<String, dynamic> get _data => EditorSession.map(c.state['depthLayout']);
   List<Map<String, dynamic>> get _rows => EditorSession.maps(_data['items']);
@@ -79,7 +77,7 @@ class DepthController extends ChangeNotifier implements DepthHost {
   void _begin(Map<String, dynamic> grab) {
     if (!c.supports('stageGesture')) return;
     _grab = {'phase': 'begin', 'mode': 'depth', 'start': const [0.0, 0.0], 'point': const [0.0, 0.0], ...grab};
-    _tail = c.command('stageGesture', _grab!);
+    c.command('stageGesture', _grab!);
   }
 
   /// [wx], [wz]: for a layer, how far it has moved on the plan; for the camera, where the eye is around the target.
@@ -87,23 +85,7 @@ class DepthController extends ChangeNotifier implements DepthHost {
   void drag(int hit, double wx, double wz) {
     final grab = _grab;
     if (grab == null) return;
-    _pending = {...grab, 'phase': 'update', 'point': [wx, wz]};
-    if (!_sending) _tail = _drain(_tail);
-  }
-
-  Future<void> _drain(Future<void> previous) async {
-    if (_sending) return;
-    _sending = true;
-    try {
-      await previous;
-      while (_pending != null) {
-        final args = _pending!;
-        _pending = null;
-        await c.command('stageGesture', args);
-      }
-    } finally {
-      _sending = false;
-    }
+    c.commandDirect('stageGesture', {...grab, 'phase': 'update', 'point': [wx, wz]}, 'depth-gesture');
   }
 
   @override
@@ -114,9 +96,7 @@ class DepthController extends ChangeNotifier implements DepthHost {
     if (grab == null) return;
     _grab = null;
     _finishing = true;
-    if (cancel) _pending = null;
     try {
-      await _tail;
       await c.command('stageGesture', {...grab, 'phase': cancel ? 'cancel' : 'commit'});
     } finally {
       _finishing = false;

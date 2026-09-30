@@ -115,7 +115,7 @@ class LiveKeys {
         } else if (alt) {
           nudgeSelection(c, d.toDouble(), 0);
         } else {
-          _seek(c.frame.value + d);
+          _seek(c.frameTarget + d);
         }
       case LogicalKeyboardKey.arrowUp || LogicalKeyboardKey.arrowDown
           when !cmd && alt:
