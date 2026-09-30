@@ -98,7 +98,7 @@ class FluidBoard extends StatefulWidget {
   State<FluidBoard> createState() => _FluidBoardState();
 }
 
-class _FluidBoardState extends State<FluidBoard> {
+class _FluidBoardState extends State<FluidBoard> with SingleTickerProviderStateMixin {
   final scroll = ScrollController();
 
   /// Moving between projections: it starts on the input's own frame and only slows at the end (ease-out), and it is short.
@@ -111,6 +111,27 @@ class _FluidBoardState extends State<FluidBoard> {
   String? _hot;
   final _view = TransformationController();
   Object? _fitted;
+
+  /// The camera moving to a new fit (another graph, Global to Local): it starts at once and only slows as it arrives.
+  late final AnimationController _fly = AnimationController(vsync: this, duration: const Duration(milliseconds: 260))..addListener(_flyStep);
+  Matrix4? _flyFrom, _flyTo;
+  void _flyStep() {
+    final from = _flyFrom, to = _flyTo;
+    if (from == null || to == null) return;
+    final t = Curves.easeOutCubic.transform(_fly.value);
+    _view.value = Matrix4.fromList([for (var i = 0; i < 16; i++) from.storage[i] + (to.storage[i] - from.storage[i]) * t]);
+  }
+
+  void _flyTo_(Matrix4 to, {required bool animate}) {
+    if (!animate) {
+      _fly.stop();
+      _view.value = to;
+      return;
+    }
+    _flyFrom = _view.value.clone();
+    _flyTo = to;
+    _fly.forward(from: 0);
+  }
 
   /// While the faces are on their way the labels stay out (they would run into one another); they return when the faces land.
   bool _moving = false;
@@ -127,6 +148,7 @@ class _FluidBoardState extends State<FluidBoard> {
   @override
   void dispose() {
     _landed?.cancel();
+    _fly.dispose();
     _view.dispose();
     scroll.dispose();
     super.dispose();
@@ -272,9 +294,17 @@ class _FluidBoardState extends State<FluidBoard> {
           // Browser only changes how much of the same map is seen, and the person's own pan and zoom are never taken back
           final fit = (frame.content.width, frame.content.height, graph.edges.length, graph.hubs.length);
           if (_fitted != fit) {
+            final first = _fitted == null;
             _fitted = fit;
             final scale = graph.initialScale ?? math.min(1.0, math.min(box.maxWidth / content.width, box.maxHeight / content.height));
-            _view.value = Matrix4.identity()..scale(scale, scale, 1);
+            // the whole map in view, centred in the seat (what the lens shows beyond the map is empty space, evenly)
+            final dx = math.max(0.0, (box.maxWidth - content.width * scale) / 2), dy = math.max(0.0, (box.maxHeight - content.height * scale) / 2);
+            final to = Matrix4.identity()..translate(dx, dy)..scale(scale, scale, 1);
+            if (first) {
+              _view.value = to; // the first picture of a map already has its camera
+            } else {
+              WidgetsBinding.instance.addPostFrameCallback((_) => mounted ? _flyTo_(to, animate: true) : null);
+            }
           }
         }
         return graph != null
@@ -455,6 +485,7 @@ class _FaceState extends State<_Face> {
           ClipRRect(borderRadius: BorderRadius.circular(3), child: ColoredBox(color: N.g13, child: _content())),
           if (widget.marked && item.mark.isNotEmpty && at == null) Positioned(left: 2.5, top: 2.5, child: Container(padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1.5), decoration: BoxDecoration(color: N.veil, borderRadius: BorderRadius.circular(2)), child: Text(widget.short ? item.mark.split(' ').first : item.mark, softWrap: false, style: Dn.micro(N.g95).copyWith(fontSize: 8.5)))),
           if (item.used && !item.missing && box.maxWidth > 30) Positioned(right: 3, top: 3, child: Container(width: 5, height: 5, decoration: BoxDecoration(color: N.g95, shape: BoxShape.circle, border: Border.all(color: N.g07.withValues(alpha: .5))))),
+          if (item.favorite && box.maxWidth > 30) Positioned(left: 3, top: 3, child: Text('★', style: Dn.micro(N.g95).copyWith(fontSize: 10, height: 1, shadows: const [Shadow(color: Color(0xCC000000), blurRadius: 2)]))),
           if (item.missing) Positioned(right: 3, top: 3, child: Container(padding: const EdgeInsets.symmetric(horizontal: 3), decoration: BoxDecoration(color: const Color(0xFFFFD166), borderRadius: BorderRadius.circular(2)), child: Text('!', style: Dn.micro(N.g00).copyWith(fontSize: 9, fontWeight: FontWeight.w700)))),
           // hover: a hairline only (the picture is neither scaled nor cropped, and nothing moves)
           if (hover && !widget.selected) IgnorePointer(child: DecoratedBox(decoration: BoxDecoration(borderRadius: BorderRadius.circular(3), border: Border.all(color: N.g69, width: 1)))),

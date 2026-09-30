@@ -122,6 +122,11 @@ fn several_roots_are_indexed_recursively_and_queried_together() {
     // several words all have to match
     assert_eq!(c.query(&Query { text: Some("deep model".into()), ..Default::default() }).unwrap().total, 1);
     assert_eq!(c.query(&Query { text: Some("deep same".into()), ..Default::default() }).unwrap().total, 0);
+    // the assets a person keeps are asked for by id, and only those come back (an empty set is an empty result)
+    let kept = vec![same.entries[0].id.clone(), "no-such-asset".to_owned()];
+    let asked = c.query(&Query { ids: Some(kept.clone()), ..Default::default() }).unwrap();
+    assert_eq!(asked.entries.iter().map(|e| e.id.clone()).collect::<Vec<_>>(), vec![kept[0].clone()]);
+    assert_eq!(c.query(&Query { ids: Some(vec![]), ..Default::default() }).unwrap().total, 0);
     assert_eq!((a.snapshot(), b.snapshot()), before, "no source file changed");
 }
 

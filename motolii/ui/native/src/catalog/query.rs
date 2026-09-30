@@ -39,6 +39,8 @@ impl Sort {
 pub(crate) struct Query {
     /// Which sources (ids); None = every enabled source.
     pub sources: Option<Vec<String>>,
+    /// Only these assets (their ids): what the person keeps (Favorites) or came back to (Recents).
+    pub ids: Option<Vec<String>>,
     /// A folder inside one source: (source id, path under its root; "" = the whole source).
     pub folder: Option<(String, String)>,
     /// With a folder: only what stands directly in it (folder browsing), not everything below (the library view).
@@ -136,6 +138,14 @@ impl Query {
                 sql.push_str(" AND 0");
             } else {
                 sql.push_str(&format!(" AND s.uid IN ({})", vec!["?"; ids.len()].join(",")));
+                args.extend(ids.iter().cloned().map(Value::Text));
+            }
+        }
+        if let Some(ids) = &self.ids {
+            if ids.is_empty() {
+                sql.push_str(" AND 0");
+            } else {
+                sql.push_str(&format!(" AND a.uid IN ({})", vec!["?"; ids.len()].join(",")));
                 args.extend(ids.iter().cloned().map(Value::Text));
             }
         }

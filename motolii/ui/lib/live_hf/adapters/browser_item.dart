@@ -24,6 +24,7 @@ class BrowserItem {
     this.fingerprint,
     this.missing = false,
     this.used = false,
+    this.favorite = false,
     this.thumbnail,
     this.peaks,
   });
@@ -42,9 +43,17 @@ class BrowserItem {
   /// A layer of the work uses this asset (only a work's own asset can be used; the host then keeps it in the library).
   final bool used;
 
+  /// The person keeps this asset (Favorites).
+  final bool favorite;
+
   /// A picture for a clip or an environment: a data URI (an image is drawn from its own file).
   final String? thumbnail;
   final Object? peaks;
+
+  /// The same asset with what the work and the person's library say about it (a mark, never a change of identity).
+  BrowserItem marked({required bool used, required bool favorite}) => used == this.used && favorite == this.favorite
+      ? this
+      : BrowserItem(id: id, name: name, path: path, kind: kind, mime: mime, source: source, rel: rel, size: size, mtimeNs: mtimeNs, width: width, height: height, seconds: seconds, sampleRate: sampleRate, channels: channels, faceKey: faceKey, fingerprint: fingerprint, missing: missing, used: used, favorite: favorite, thumbnail: thumbnail, peaks: peaks);
 
   /// The library's own family word, which the shelf's faces switch on.
   String get family => const {'image': '2D', 'video': 'Video', 'audio': 'Audio', 'model': '3D', 'environment': 'HDR'}[kind] ?? '2D';

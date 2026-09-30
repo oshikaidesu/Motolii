@@ -19,7 +19,7 @@ import 'package:widgetbook/widgetbook.dart';
 
 import '../paper/explore_view.dart';
 import '../paper/filmstrip.dart';
-import '../paper/graph_explore.dart';
+import 'package:motolii_stage5/live_hf/adapters/explore_graph.dart' show ExploreChoice;
 import '../paper/live_tiles.dart';
 
 import '../story.dart';
@@ -115,13 +115,12 @@ Widget _catalogBrowser(EditorSession c) => _CatalogHost(c);
 
 
 class _CatalogHost extends StatefulWidget {
-  const _CatalogHost(this.c, {this.view = BrowserView.thumbnail, this.startOn, this.startOpen = false, this.startSource, this.startColumn = 60, this.startProject = false, this.graphHops, this.graphRelations, this.graphScale, this.graphKnn, this.graphOverlay = false});
-  final int? graphKnn;
+  const _CatalogHost(this.c, {this.view = BrowserView.thumbnail, this.startOn, this.startOpen = false, this.startSource, this.startColumn = 60, this.startProject = false, this.graphHops, this.graphScale, this.graphOverlay = false});
   final bool graphOverlay;
-  final Set<String>? graphRelations;
   final double? graphScale;
 
-  /// Explore B (the relation graph) instead of A (colour nearness): 0 = global, 1 or 2 = local hops.
+  /// Explore as the product draws it (the sparse nearest-neighbour map): 0 = global, 1 or 2 = local hops. Null: the old
+  /// colour-nearness prototype.
   final int? graphHops;
   final double startColumn;
   final bool startProject;
@@ -136,8 +135,7 @@ class _CatalogHost extends StatefulWidget {
 
 class _CatalogHostState extends State<_CatalogHost> {
   late final CatalogSession session = CatalogSession(widget.c);
-  late final GraphChoice choice = GraphChoice(hops: widget.graphHops ?? 0, relations: widget.graphRelations, scale: widget.graphScale, knn: widget.graphKnn, overlay: widget.graphOverlay);
-  Set<String> _used() => {for (final a in EditorSession.maps(widget.c.state['assets'])) '${a['path']}'};
+  late final ExploreChoice choice = ExploreChoice(hops: widget.graphHops ?? 0, scale: widget.graphScale, overlay: widget.graphOverlay);
   @override
   void initState() {
     super.initState();
@@ -154,29 +152,22 @@ class _CatalogHostState extends State<_CatalogHost> {
   }
 
   @override
-  Widget build(BuildContext context) => CatalogMedia(session: session, explore: exploreView, exploreLayout: widget.graphHops == null ? exploreLayout : graphLayout(choice, _used), exploreRepaint: widget.graphHops == null ? exploreChanged : choice, exploreBar: widget.graphHops == null ? null : GraphBar(choice: choice), exploreNote: 'Nearest by colour · prototype (no similarity source yet) · lines join the nearest five; sounds and models have no colour and stand outermost', initial: widget.view, startOn: widget.startOn, startOpen: widget.startOpen, startColumn: widget.startColumn, startProject: widget.startProject);
+  Widget build(BuildContext context) => widget.graphHops == null
+      ? CatalogMedia(session: session, explore: exploreView, exploreLayout: exploreLayout, exploreRepaint: exploreChanged, exploreNote: 'Nearest by colour · prototype (no similarity source yet) · lines join the nearest five; sounds and models have no colour and stand outermost', initial: widget.view, startOn: widget.startOn, startOpen: widget.startOpen, startColumn: widget.startColumn, startProject: widget.startProject)
+      : CatalogMedia(session: session, exploreChoice: choice, initial: widget.view, startOn: widget.startOn, startOpen: widget.startOpen, startColumn: widget.startColumn, startProject: widget.startProject);
 }
 
 final catalogStories = <Story>[
   Story('Browser catalog, real sources', Scene('night-sky.rrd', inputs: _registerFixtureSources), _catalogBrowser, width: 288, height: 900),
   Story('Browser catalog, this project', Scene('night-sky.rrd', inputs: _projectHoldsSome), (c) => _CatalogHost(c, startProject: true), width: 420, height: 700),
-  Story('Browser catalog, explore B sheet 01 global wide', Scene('night-sky.rrd', inputs: _graphWorld), (c) => _CatalogHost(c, view: BrowserView.explore, graphHops: 0, graphScale: .7), width: 760, height: 640),
-  Story('Browser catalog, explore B sheet 02 global narrow', Scene('night-sky.rrd', inputs: _graphWorld), (c) => _CatalogHost(c, view: BrowserView.explore, graphHops: 0, graphScale: .7), width: 320, height: 640),
-  Story('Browser catalog, explore B sheet 03 global selected A', Scene('night-sky.rrd', inputs: _graphWorld), (c) => _CatalogHost(c, view: BrowserView.explore, startOn: 'afterglow.jpg', graphHops: 0, graphScale: .7), width: 760, height: 640),
-  Story('Browser catalog, explore B sheet 04 global selected B', Scene('night-sky.rrd', inputs: _graphWorld), (c) => _CatalogHost(c, view: BrowserView.explore, startOn: 'ArmChair_01.glb', graphHops: 0, graphScale: .7), width: 760, height: 640),
-  Story('Browser catalog, explore B sheet 05 local 1', Scene('night-sky.rrd', inputs: _graphWorld), (c) => _CatalogHost(c, view: BrowserView.explore, startOn: 'coast-drift.mp4', graphHops: 1, graphScale: .7), width: 760, height: 640),
-  Story('Browser catalog, explore B sheet 06 local 2', Scene('night-sky.rrd', inputs: _graphWorld), (c) => _CatalogHost(c, view: BrowserView.explore, startOn: 'coast-drift.mp4', graphHops: 2, graphScale: .7), width: 760, height: 640),
-  Story('Browser catalog, explore B sheet 07 local 3', Scene('night-sky.rrd', inputs: _graphWorld), (c) => _CatalogHost(c, view: BrowserView.explore, startOn: 'coast-drift.mp4', graphHops: 3, graphScale: .7), width: 760, height: 640),
-  Story('Browser catalog, explore B sheet 08 only source', Scene('night-sky.rrd', inputs: _graphWorld), (c) => _CatalogHost(c, view: BrowserView.explore, graphHops: 0, graphScale: .7, graphRelations: {'source'}), width: 760, height: 640),
-  Story('Browser catalog, explore B sheet 09 only folder', Scene('night-sky.rrd', inputs: _graphWorld), (c) => _CatalogHost(c, view: BrowserView.explore, graphHops: 0, graphScale: .7, graphRelations: {'folder'}), width: 760, height: 640),
-  Story('Browser catalog, explore B sheet 10 only project', Scene('night-sky.rrd', inputs: _graphWorld), (c) => _CatalogHost(c, view: BrowserView.explore, graphHops: 0, graphScale: .7, graphRelations: {'project'}), width: 760, height: 640),
-  Story('Browser catalog, explore B sheet 11 only type', Scene('night-sky.rrd', inputs: _graphWorld), (c) => _CatalogHost(c, view: BrowserView.explore, graphHops: 0, graphScale: .7, graphRelations: {'type'}), width: 760, height: 640),
-  Story('Browser catalog, explore B topology 1 hubs (current)', Scene('night-sky.rrd', inputs: _graphWorld), (c) => _CatalogHost(c, view: BrowserView.explore, graphHops: 0, graphScale: .7), width: 760, height: 640),
-  Story('Browser catalog, explore B topology 2 knn k3', Scene('night-sky.rrd', inputs: _graphWorld), (c) => _CatalogHost(c, view: BrowserView.explore, graphHops: 0, graphScale: .7, graphKnn: 3), width: 760, height: 640),
-  Story('Browser catalog, explore B topology 3 knn k5', Scene('night-sky.rrd', inputs: _graphWorld), (c) => _CatalogHost(c, view: BrowserView.explore, graphHops: 0, graphScale: .7, graphKnn: 5), width: 760, height: 640),
-  Story('Browser catalog, explore B topology 4 knn k4 with overlay', Scene('night-sky.rrd', inputs: _graphWorld), (c) => _CatalogHost(c, view: BrowserView.explore, graphHops: 0, graphScale: .7, graphKnn: 4, graphOverlay: true), width: 760, height: 640),
-  Story('Browser catalog, explore B topology 5 knn k4 local 1', Scene('night-sky.rrd', inputs: _graphWorld), (c) => _CatalogHost(c, view: BrowserView.explore, startOn: 'coast-drift.mp4', graphHops: 1, graphScale: .7, graphKnn: 4, graphOverlay: true), width: 760, height: 640),
-  Story('Browser catalog, explore B topology 6 knn k4 local 2', Scene('night-sky.rrd', inputs: _graphWorld), (c) => _CatalogHost(c, view: BrowserView.explore, startOn: 'coast-drift.mp4', graphHops: 2, graphScale: .7, graphKnn: 4, graphOverlay: true), width: 760, height: 640),
+  Story('Explore 01 global wide', Scene('night-sky.rrd', inputs: _graphWorld), (c) => _CatalogHost(c, view: BrowserView.explore, graphHops: 0), width: 760, height: 640),
+  Story('Explore 02 global narrow', Scene('night-sky.rrd', inputs: _graphWorld), (c) => _CatalogHost(c, view: BrowserView.explore, graphHops: 0), width: 320, height: 640),
+  Story('Explore 03 global overlay', Scene('night-sky.rrd', inputs: _graphWorld), (c) => _CatalogHost(c, view: BrowserView.explore, graphHops: 0, graphOverlay: true), width: 760, height: 640),
+  Story('Explore 04 global selected image', Scene('night-sky.rrd', inputs: _graphWorld), (c) => _CatalogHost(c, view: BrowserView.explore, startOn: 'afterglow.jpg', graphHops: 0), width: 760, height: 640),
+  Story('Explore 05 global selected model', Scene('night-sky.rrd', inputs: _graphWorld), (c) => _CatalogHost(c, view: BrowserView.explore, startOn: 'ArmChair_01.glb', graphHops: 0), width: 760, height: 640),
+  Story('Explore 06 local 1', Scene('night-sky.rrd', inputs: _graphWorld), (c) => _CatalogHost(c, view: BrowserView.explore, startOn: 'coast-drift.mp4', graphHops: 1), width: 760, height: 640),
+  Story('Explore 07 local 2', Scene('night-sky.rrd', inputs: _graphWorld), (c) => _CatalogHost(c, view: BrowserView.explore, startOn: 'coast-drift.mp4', graphHops: 2), width: 760, height: 640),
+  Story('Explore 08 local 2 overlay', Scene('night-sky.rrd', inputs: _graphWorld), (c) => _CatalogHost(c, view: BrowserView.explore, startOn: 'coast-drift.mp4', graphHops: 2, graphOverlay: true), width: 760, height: 640),
   Story('Browser catalog, big faces', Scene('night-sky.rrd', inputs: _registerFixtureSources), (c) => _CatalogHost(c, startColumn: 104, startOn: 'coast-drift.mp4'), width: 288, height: 900),
   Story('Browser catalog, real sources, wide', Scene('night-sky.rrd', inputs: _registerFixtureSources), _catalogBrowser, width: 560, height: 900),
   Story('Browser catalog, preview clip', Scene('night-sky.rrd', inputs: _registerFixtureSources), (c) => _CatalogHost(c, startOn: 'coast-drift.mp4', startOpen: true), width: 420, height: 800),

@@ -48,6 +48,10 @@ class CatalogSession extends ChangeNotifier implements ResultSource {
 
   // what the person chose (a query's inputs)
   Set<String>? chosenSources; // null = every enabled source
+
+  /// Only these assets, in this order when [keepOrdered] (Favorites, Recents): what the person keeps or came back to.
+  List<String>? keep;
+  bool keepOrdered = false;
   Set<String> kinds = {}; // empty = every type
   String text = '';
   ({String source, String prefix})? folder;
@@ -137,10 +141,12 @@ class CatalogSession extends ChangeNotifier implements ResultSource {
         _took(await _call({'op': 'enrich', 'limit': 200}));
       }, requery: false);
 
-  Future<void> choose({Set<String>? Function()? sources, Set<String>? kinds, String? text, ({String source, String prefix})? Function()? folder, String? sort, bool? descending}) => _guard(() async {
+  Future<void> choose({List<String>? Function()? keep, bool? keepOrdered, Set<String>? Function()? sources, Set<String>? kinds, String? text, ({String source, String prefix})? Function()? folder, String? sort, bool? descending}) => _guard(() async {
         if (sort != null) this.sort = sort;
         if (descending != null) this.descending = descending;
         if (sources != null) chosenSources = sources();
+        if (keep != null) this.keep = keep();
+        if (keepOrdered != null) this.keepOrdered = keepOrdered;
         if (kinds != null) this.kinds = kinds;
         if (text != null) this.text = text;
         if (folder != null) this.folder = folder();
@@ -162,6 +168,7 @@ class CatalogSession extends ChangeNotifier implements ResultSource {
     final reply = await _call({
       'op': 'query',
       if (chosenSources != null) 'sources': chosenSources!.toList(),
+      if (keep != null) 'ids': keep,
       if (folder != null) 'folder': {'source': folder!.source, 'prefix': folder!.prefix},
       if (kinds.isNotEmpty) 'kinds': kinds.toList(),
       if (text.trim().isNotEmpty) 'text': text.trim(),
@@ -215,7 +222,15 @@ class CatalogSession extends ChangeNotifier implements ResultSource {
   }
 
   @override
-  List<BrowserItem> get items => [for (final e in entries) itemFor(e)];
+  List<BrowserItem> get items {
+    final list = [for (final e in entries) itemFor(e)];
+    final order = keep;
+    if (keepOrdered && order != null) {
+      // Recents: the way back, latest first, not the catalog's own order
+      list.sort((a, b) => order.indexOf(a.id).compareTo(order.indexOf(b.id)));
+    }
+    return list;
+  }
 
   BrowserItem itemFor(CatalogEntry e) {
     final face = faces[e.faceKey] ?? const {};

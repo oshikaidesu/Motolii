@@ -38,6 +38,7 @@ fn strings(j: &J) -> Option<Vec<String>> {
 fn query_of(j: &J) -> Query {
     Query {
         sources: strings(&j["sources"]),
+        ids: strings(&j["ids"]),
         folder: j["folder"]["source"].as_str().map(|s| (s.to_owned(), j["folder"]["prefix"].as_str().unwrap_or("").to_owned())),
         direct: j["direct"].as_bool().unwrap_or(false),
         kinds: strings(&j["kinds"]).map(|k| k.iter().filter_map(|k| MediaKind::parse(k)).collect()),

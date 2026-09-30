@@ -68,6 +68,7 @@ class ProjectSource extends ChangeNotifier implements ResultSource {
         sampleRate: n(facts['sampleRate'])?.toInt(),
         channels: n(facts['channels'])?.toInt(),
         faceKey: '$prefix${a['id']}',
+        fingerprint: a['contentHash'] as String?,
         missing: a['missing'] == true,
         used: a['used'] == true,
         thumbnail: a['thumbnail'] as String?,

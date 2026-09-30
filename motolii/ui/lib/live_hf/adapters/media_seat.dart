@@ -29,5 +29,6 @@ class _MediaSeatState extends State<MediaSeat> {
   }
 
   @override
-  Widget build(BuildContext context) => CatalogMedia(session: session, startProject: true);
+  // A work that holds nothing has nothing to show under "This project": the first look is at everything the person has.
+  Widget build(BuildContext context) => CatalogMedia(session: session, startProject: EditorSession.maps(widget.c.state['assets']).isNotEmpty);
 }

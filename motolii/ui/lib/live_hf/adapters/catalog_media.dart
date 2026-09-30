@@ -7,6 +7,8 @@ import '../../hf/metrics.dart';
 import '../../hf/neutral.dart';
 import 'catalog_session.dart';
 import 'browser_item.dart';
+import 'browser_user.dart';
+import 'explore_graph.dart';
 import 'media_browser.dart';
 import 'media_fluid.dart';
 import 'media_preview.dart';
@@ -17,12 +19,15 @@ import 'project_source.dart';
 /// The catalog's controls over the Thumbnail view: SOURCES (which folders), TYPES (what), a search (which). Where, What
 /// and Which are separate; the view (How) is the shelf's own masonry, unchanged. A skin over [CatalogSession].
 class CatalogMedia extends StatefulWidget {
-  const CatalogMedia({super.key, required this.session, this.explore, this.initial = BrowserView.thumbnail, this.startOn, this.startOpen = false, this.exploreLayout, this.exploreRepaint, this.exploreNote, this.exploreBar, this.startColumn = 60, this.startProject = false});
+  const CatalogMedia({super.key, required this.session, this.explore, this.initial = BrowserView.thumbnail, this.startOn, this.startOpen = false, this.exploreLayout, this.exploreRepaint, this.exploreNote, this.exploreBar, this.exploreChoice, this.startColumn = 60, this.startProject = false});
   final CatalogSession session;
   final ExploreLayout? exploreLayout;
   final Listenable? exploreRepaint;
   final String? exploreNote;
   final Widget? exploreBar;
+
+  /// Explore's own choices (global or local, the overlay, a first zoom) when the caller holds them (a story).
+  final ExploreChoice? exploreChoice;
   final double startColumn;
 
   /// Starts on the work's own assets (a story, a restored choice).
@@ -44,10 +49,49 @@ class _CatalogMediaState extends State<CatalogMedia> {
   final _browser = GlobalKey<MediaBrowserState>();
   List<String> _seenImport = const [];
 
+  /// What the person keeps and came back to, in the same user library the other Browsers use (saved with the settings, so it is
+  /// still there when the app is opened again). An asset is named by its catalog id: it stays the same asset when its file is
+  /// moved or renamed. Only catalog assets are kept: the work's own assets and the bundled ones belong to other owners.
+  late final LiveBrowserUser _user = LiveBrowserUser(session.c, 'catalog');
+  late final _Marked _marked = _Marked(session, _user, _hashes);
+
+  /// Which kept set the result shows: '' (none), 'favorites' or 'recent'.
+  String _keep = '';
+
+  Set<String> _hashes() => {
+        for (final a in EditorSession.maps(_c.state['assets']))
+          if (a['contentHash'] != null) '${a['contentHash']}',
+      };
+
+  List<String> _keepIds() => _keep == 'recent' ? List.of(_user.views.recent) : _user.views.favorites.toList();
+
+  Future<void> _showKept(String which) {
+    setState(() {
+      project = false;
+      bundled = false;
+      _keep = which;
+    });
+    return session.choose(sources: () => null, keep: which.isEmpty ? () => null : _keepIds, keepOrdered: which == 'recent');
+  }
+
+  void _userChanged() {
+    if (_keep.isNotEmpty) session.choose(keep: _keepIds);
+  }
+
+  bool _catalog(BrowserItem i) => !i.id.startsWith(ProjectSource.prefix) && !i.id.startsWith(BundledSource.prefix);
+
+  /// `F` or the menu: keep the picked catalog assets, or let them go when they are all kept already.
+  void _favorite(List<BrowserItem> picked) {
+    final ids = [for (final i in picked) if (_catalog(i)) i.id];
+    if (ids.isEmpty) return;
+    _user.collect(ids, ids.every(_user.views.favorites.contains) ? 0 : 1);
+  }
+
   @override
   void initState() {
     super.initState();
     session.c.importedAssets.addListener(_imported);
+    _user.addListener(_userChanged);
   }
 
   /// Something was just imported (a button, a drop): the work's own assets are shown and the new ones picked, as the old
@@ -64,11 +108,23 @@ class _CatalogMediaState extends State<CatalogMedia> {
 
   late final ProjectSource _project = ProjectSource(session.c, kinds: () => session.kinds, text: () => session.text);
 
+  /// Explore is the sparse nearest-neighbour map over what the Browser shows; what the work holds (by content hash) is one of the
+  /// cheap things that make two assets near. A caller (a story) may bring its own.
+  late final _explore = widget.exploreChoice ?? ExploreChoice();
+  late final ExploreLayout _layout = exploreLayout(_explore, () => {
+        for (final a in EditorSession.maps(_c.state['assets']))
+          if (a['contentHash'] != null) '${a['contentHash']}',
+      });
+
   @override
   void dispose() {
     session.c.importedAssets.removeListener(_imported);
+    _user.removeListener(_userChanged);
+    _user.dispose();
+    _marked.dispose();
     _project.dispose();
     _bundled.dispose();
+    if (widget.exploreChoice == null) _explore.dispose();
     super.dispose();
   }
 
@@ -76,19 +132,19 @@ class _CatalogMediaState extends State<CatalogMedia> {
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
-        listenable: Listenable.merge([session, session.c.slice('mediaAssets', const ['assets', 'backgrounds'])]),
+        listenable: Listenable.merge([session, _user, session.c.slice('mediaAssets', const ['assets', 'backgrounds'])]),
         builder: (context, _) {
           final chosen = session.chosenSources;
           return Stack(fit: StackFit.passthrough, children: [
             MediaBrowser(
             key: _browser,
-            source: project ? _project : (bundled ? _bundled : session),
+            source: project ? _project : (bundled ? _bundled : _marked),
             faces: _Faces(session),
             explore: widget.explore,
-            exploreLayout: widget.exploreLayout,
-            exploreRepaint: widget.exploreRepaint,
+            exploreLayout: widget.exploreLayout ?? _layout,
+            exploreRepaint: widget.exploreRepaint ?? _explore,
             exploreNote: widget.exploreNote,
-            exploreBar: widget.exploreBar,
+            exploreBar: widget.exploreBar ?? (widget.exploreLayout == null ? ExploreBar(choice: _explore) : null),
             startColumn: widget.startColumn,
             onReveal: (item) {
               if (item.path.isNotEmpty) session.c.native('reveal', {'path': item.path});
@@ -96,6 +152,10 @@ class _CatalogMediaState extends State<CatalogMedia> {
             menuOf: _menuOf,
             onMenu: _onMenu,
             onRemove: _onRemove,
+            onFavorite: _favorite,
+            onSeen: (item) {
+              if (_catalog(item)) _user.used(item.id);
+            },
             carry: _carry,
             onPlace: _place,
             initial: widget.initial,
@@ -114,20 +174,24 @@ class _CatalogMediaState extends State<CatalogMedia> {
                   bundled = true;
                   project = false;
                 })),
-                _Chip('All', !project && !bundled && chosen == null, () {
+                _Chip('All', !project && !bundled && _keep.isEmpty && chosen == null, () {
                   setState(() {
                     project = false;
                     bundled = false;
+                    _keep = '';
                   });
-                  session.choose(sources: () => null);
+                  session.choose(sources: () => null, keep: () => null, keepOrdered: false);
                 }),
+                _Chip('★ Favorites', !project && !bundled && _keep == 'favorites', () => _showKept('favorites'), dim: _user.views.favorites.isEmpty),
+                _Chip('Recent', !project && !bundled && _keep == 'recent', () => _showKept('recent'), dim: _user.views.recent.isEmpty),
                 for (final s in session.sources)
-                  _Chip(s.name + (s.available ? '' : ' ·off'), !project && !bundled && (chosen?.contains(s.id) ?? false), () {
+                  _Chip(s.name + (s.available ? '' : ' ·off'), !project && !bundled && _keep.isEmpty && (chosen?.contains(s.id) ?? false), () {
                     setState(() {
                       project = false;
                       bundled = false;
+                      _keep = '';
                     });
-                    session.choose(sources: () => {s.id});
+                    session.choose(sources: () => {s.id}, keep: () => null, keepOrdered: false);
                   }, dim: !s.enabled || !s.available),
                 _Chip('＋ Folder…', false, _addFolder),
                 if (session.c.supports('import')) _Chip('＋ Import…', false, () => session.c.importFiles()),
@@ -190,6 +254,7 @@ class _CatalogMediaState extends State<CatalogMedia> {
       _c.command('placeAsset', {'id': item.id.substring(ProjectSource.prefix.length)});
     } else if (_c.supports('placeCatalogAsset')) {
       _c.command('placeCatalogAsset', {'id': item.id});
+      _user.used(item.id); // the way back to what was used
     }
   }
 
@@ -202,6 +267,7 @@ class _CatalogMediaState extends State<CatalogMedia> {
     final has = item.path.isNotEmpty && !item.missing;
     return [
       place,
+      (value: 'favorite', label: _user.views.favorites.contains(item.id) ? 'Remove from Favorites' : 'Add to Favorites', enabled: true),
       if (has) (value: 'reveal', label: revealLabel, enabled: true),
       if (has) (value: 'open', label: 'Open with default app', enabled: true),
       if (has && item.mime.startsWith('image/')) (value: 'palette', label: 'Extract palette', enabled: true),
@@ -211,6 +277,7 @@ class _CatalogMediaState extends State<CatalogMedia> {
 
   void _onMenu(String action, BrowserItem item, List<BrowserItem> picked) {
     if (action == 'place') return _place(item);
+    if (action == 'favorite') return _favorite(picked.isEmpty ? [item] : picked);
     final raw = _project.raw(item.id);
     mediaAct(_c, action, raw ?? {'path': item.path, 'mime': item.mime, 'name': item.name}, id: raw?['id']);
   }
@@ -320,5 +387,30 @@ class _Folders extends StatelessWidget {
       for (final (i, part) in path.indexed) _Chip('/ $part', i == path.length - 1, () => go(path.sublist(0, i + 1))),
       for (final f in session.subfolders) _Chip('${f.name} ${f.assets}', false, () => go([...path, f.name]), dim: true),
     ]);
+  }
+}
+
+/// The catalog's result set with what the work and the person's library say about each asset: the work holds it (by content
+/// hash) and the person keeps it (Favorites). The asset is the same; only its marks differ.
+class _Marked extends ChangeNotifier implements ResultSource {
+  _Marked(this.session, this.user, this.hashes) {
+    session.addListener(notifyListeners);
+    user.addListener(notifyListeners);
+  }
+  final CatalogSession session;
+  final LiveBrowserUser user;
+  final Set<String> Function() hashes;
+
+  @override
+  List<BrowserItem> get items {
+    final held = hashes(), kept = user.views.favorites;
+    return [for (final i in session.items) i.marked(used: inWork(i, held), favorite: kept.contains(i.id))];
+  }
+
+  @override
+  void dispose() {
+    session.removeListener(notifyListeners);
+    user.removeListener(notifyListeners);
+    super.dispose();
   }
 }

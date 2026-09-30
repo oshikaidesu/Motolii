@@ -26,7 +26,7 @@ enum BrowserView { list, thumbnail, explore }
 typedef ExploreBuilder = Widget Function(BuildContext context, List<BrowserItem> items, String? selected, ValueChanged<String> onTap, ValueChanged<String>? onOpen);
 
 class MediaBrowser extends StatefulWidget {
-  const MediaBrowser({super.key, required this.source, this.controls, this.faces, this.explore, this.sort = 'name', this.descending = false, this.onSort, this.onReveal, this.onPlace, this.menuOf, this.onMenu, this.onRemove, this.carry, this.initial = BrowserView.thumbnail, this.startOn, this.startOpen = false, this.exploreLayout, this.exploreRepaint, this.exploreNote, this.exploreBar, this.holding = const {}, this.startColumn = 60, this.fluidUpTo = 300});
+  const MediaBrowser({super.key, required this.source, this.controls, this.faces, this.explore, this.sort = 'name', this.descending = false, this.onSort, this.onReveal, this.onPlace, this.menuOf, this.onMenu, this.onRemove, this.onFavorite, this.onSeen, this.carry, this.initial = BrowserView.thumbnail, this.startOn, this.startOpen = false, this.exploreLayout, this.exploreRepaint, this.exploreNote, this.exploreBar, this.holding = const {}, this.startColumn = 60, this.fluidUpTo = 300});
   final ResultSource source;
 
   /// Where Explore puts the faces (for the fluid board). Without it Explore is `explore` alone, and the views swap.
@@ -74,6 +74,12 @@ class MediaBrowser extends StatefulWidget {
 
   /// Delete / Backspace over the picked items (the caller decides what it may remove: never a source file).
   final void Function(List<BrowserItem> picked)? onRemove;
+
+  /// `F` over the picked items: keep them (or let them go). The caller owns what keeping means.
+  final void Function(List<BrowserItem> picked)? onFavorite;
+
+  /// An asset's preview opened: the caller may remember it (Recents).
+  final ValueChanged<BrowserItem>? onSeen;
 
   /// What dragging an item carries to a drop target such as the Timeline, or null when it cannot be carried.
   final Map<String, dynamic>? Function(BrowserItem item)? carry;
@@ -159,7 +165,17 @@ class MediaBrowserState extends State<MediaBrowser> {
     }
   }
 
-  void open(String id) => setState(() {
+  void _seen(String? id) {
+    final item = id == null ? null : widget.source.items.where((i) => i.id == id).firstOrNull;
+    if (item != null) widget.onSeen?.call(item);
+  }
+
+  void open(String id) {
+    _seen(id);
+    _open(id);
+  }
+
+  void _open(String id) => setState(() {
         picked
           ..clear()
           ..add(id);
@@ -230,7 +246,12 @@ class MediaBrowserState extends State<MediaBrowser> {
       return KeyEventResult.handled;
     }
     if (k == LogicalKeyboardKey.space && selected != null) {
+      if (!preview) _seen(selected);
       setState(() => preview = !preview);
+      return KeyEventResult.handled;
+    }
+    if (k == LogicalKeyboardKey.keyF && !kb.isMetaPressed && !kb.isControlPressed && picked.isNotEmpty && widget.onFavorite != null) {
+      widget.onFavorite!(_pickedItems(items));
       return KeyEventResult.handled;
     }
     if ((k == LogicalKeyboardKey.enter || k == LogicalKeyboardKey.numpadEnter) && selected != null && widget.onPlace != null) {
@@ -344,7 +365,9 @@ class MediaBrowserState extends State<MediaBrowser> {
         return MediaListView(items: items, selected: selected, onTap: choose, onOpen: open, sort: widget.sort, descending: widget.descending, onSort: widget.onSort ?? (_) {});
       case BrowserView.explore:
         final build = widget.explore;
-        return build == null ? const SizedBox.shrink() : build(context, items, selected, choose, open);
+        if (build != null) return build(context, items, selected, choose, open);
+        // the map is laid out as a whole: past this many it asks for a narrower result set rather than drawing a hairball
+        return Padding(padding: const EdgeInsets.all(9), child: Text('Explore maps up to ${widget.fluidUpTo} assets. Narrow the result (a Source, a Type, a word).', style: Dn.label(N.g56)));
       case BrowserView.thumbnail:
         final things = [for (final i in items) Thing.fromJson({'id': i.id, 'name': i.name, 'kind': 'item', 'family': 'catalog', 'source': 'catalog', 'face': const {'type': 'shelf'}})];
         final shelf = {for (final i in items) i.id: i.shelf};

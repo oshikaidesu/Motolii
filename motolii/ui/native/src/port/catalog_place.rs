@@ -51,6 +51,13 @@ mod tests {
         assert_eq!((assets(&rt), layers(&rt)), (a0, l0));
         rt.request(json!({"op":"placeCatalogAsset","id":uid})).unwrap();
         assert_eq!((assets(&rt), layers(&rt)), (a0 + 1, l0 + 1), "the first use admits the asset and places a layer");
+        // the work says what it holds by the catalog's own identity: its content hash is the catalog's fingerprint text, so a
+        // catalog asset is known to be in the work whatever path either calls the file (Explore's "the work holds it")
+        crate::catalog::with(|c| c.enrich(10)).unwrap();
+        let fingerprint = crate::catalog::with(|c| c.entry(&uid)).unwrap().unwrap().fingerprint.expect("enriched");
+        let status = rt.status().unwrap();
+        let held: Vec<&str> = status["assets"].as_array().unwrap().iter().filter_map(|a| a["contentHash"].as_str()).collect();
+        assert!(held.contains(&fingerprint.as_str()), "work hashes {held:?} vs catalog {fingerprint}");
         rt.request(json!({"op":"placeCatalogAsset","id":uid})).unwrap();
         assert_eq!((assets(&rt), layers(&rt)), (a0 + 1, l0 + 2), "the second use places again without admitting twice");
         rt.request(json!({"op":"undo"})).unwrap();
