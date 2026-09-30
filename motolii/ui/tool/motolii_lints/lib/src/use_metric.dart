@@ -7,7 +7,7 @@ import 'package:analyzer_plugin/utilities/range_factory.dart';
 
 import 'raw_dimension.dart' show scaleFor;
 
-/// Where the scale lives is [scaleFor] (the product window reads Surface, Classic and New read EditorMetrics). The fix reads the
+/// Where the scale lives is [scaleFor] (the product window reads Surface; the shared controls and Stage chrome read Step). The fix reads the
 /// class, so a new token needs no change here.
 
 /// Replaces a raw measurement with the token of exactly the same value.
@@ -15,7 +15,7 @@ class UseMetric extends ResolvedCorrectionProducer {
   static const _kind = FixKind(
     'motolii.fix.useMetric',
     DartFixKindPriority.standard,
-    'Replace with the matching Surface / EditorMetrics token',
+    'Replace with the matching Surface / Step token',
   );
 
   UseMetric({required super.context});

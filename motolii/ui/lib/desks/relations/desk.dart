@@ -7,7 +7,7 @@ import '../../session/editor_session.dart';
 import 'model.dart';
 import '../../theme/neutral.dart';
 import 'session.dart';
-import '../../theme/surface.dart' show Dn, Surface;
+import '../../theme/metrics.dart' show Dn, Surface;
 
 /// Relations v0: the place to pick the things a source drives. The things at the current time are dots where they are
 /// on the Stage; a click, a Shift click or a lasso makes the member set. The relation itself is the links the document
@@ -199,7 +199,7 @@ class _RelationsPanelState extends State<RelationsPanel> {
               decoration: BoxDecoration(color: Surface.raised, borderRadius: BorderRadius.circular(4)),
               child: Row(children: [
                 Container(width: 6, height: 6, decoration: const BoxDecoration(color: kRed, shape: BoxShape.circle)),
-                const SizedBox(width: 6),
+                const SizedBox(width: Surface.sectionGap),
                 Expanded(child: Text('${r.source.name(c)} → ${r.members.length} thing${r.members.length == 1 ? '' : 's'} · ${r.mappings.map((m) => labelOf(m.property)).join(', ')}', softWrap: false, overflow: TextOverflow.ellipsis, style: sans(Dn.nameSize, c: Surface.ink))),
               ]),
             ),
@@ -219,7 +219,7 @@ class _RelationsPanelState extends State<RelationsPanel> {
     return Padding(
       padding: const EdgeInsets.all(9),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        Row(children: [Container(width: 6, height: 6, decoration: const BoxDecoration(color: kRed, shape: BoxShape.circle)), const SizedBox(width: 6), Expanded(child: Text('${src.name(c)}', softWrap: false, overflow: TextOverflow.ellipsis, style: sans(Dn.nameSize, c: Surface.ink, w: FontWeight.w600)))]),
+        Row(children: [Container(width: 6, height: 6, decoration: const BoxDecoration(color: kRed, shape: BoxShape.circle)), const SizedBox(width: Surface.sectionGap), Expanded(child: Text('${src.name(c)}', softWrap: false, overflow: TextOverflow.ellipsis, style: sans(Dn.nameSize, c: Surface.ink, w: FontWeight.w600)))]),
         _label('SOURCE RANGE'),
         _range('in', d['inMin'], d['inMax'], 'px', (lo, hi) => setState(() { d['inMin'] = lo; d['inMax'] = hi; }), current: _sourceValue(d['source'] as Map<String, dynamic>)),
         _label('MEMBERS'),
@@ -232,7 +232,7 @@ class _RelationsPanelState extends State<RelationsPanel> {
               onTap: n == 0 ? null : () => setState(() { d['destination'] = p; final u = unitOf(p); d['outMin'] = u.defaultRange.$1; d['outMax'] = u.defaultRange.$2; }),
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 7.5, vertical: 4),
-                decoration: BoxDecoration(color: dest == p ? kRed : Surface.raised, borderRadius: BorderRadius.circular(3), border: Border.all(color: dest == p ? kRed : Surface.dividerFine)),
+                decoration: BoxDecoration(color: dest == p ? kRed : Surface.raised, borderRadius: BorderRadius.circular(Surface.controlRadius), border: Border.all(color: dest == p ? kRed : Surface.dividerFine)),
                 child: Text(labelOf(p), style: sans(Dn.nameSize, c: dest == p ? N.g10 : (n == 0 ? Surface.muted : Surface.ink), w: FontWeight.w600)),
               ),
             ),
@@ -243,12 +243,12 @@ class _RelationsPanelState extends State<RelationsPanel> {
         ],
         const SizedBox(height: 10.5),
         Row(children: [
-          GestureDetector(key: const ValueKey('relations-cancel'), onTap: _cancel, child: Container(padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4.5), decoration: BoxDecoration(border: Border.all(color: Surface.dividerFine), borderRadius: BorderRadius.circular(3)), child: Text('Cancel', style: sans(Dn.nameSize, c: Surface.muted)))),
+          GestureDetector(key: const ValueKey('relations-cancel'), onTap: _cancel, child: Container(padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4.5), decoration: BoxDecoration(border: Border.all(color: Surface.dividerFine), borderRadius: BorderRadius.circular(Surface.controlRadius)), child: Text('Cancel', style: sans(Dn.nameSize, c: Surface.muted)))),
           const Spacer(),
           GestureDetector(
             key: const ValueKey('relations-create'),
             onTap: n > 0 && dest != null ? _create : null,
-            child: Container(padding: const EdgeInsets.symmetric(horizontal: 10.5, vertical: 4.5), decoration: BoxDecoration(color: n > 0 && dest != null ? kRed : Surface.raised, borderRadius: BorderRadius.circular(3)), child: Text('Create', style: sans(Dn.nameSize, c: n > 0 && dest != null ? N.g10 : Surface.muted, w: FontWeight.w700))),
+            child: Container(padding: const EdgeInsets.symmetric(horizontal: 10.5, vertical: 4.5), decoration: BoxDecoration(color: n > 0 && dest != null ? kRed : Surface.raised, borderRadius: BorderRadius.circular(Surface.controlRadius)), child: Text('Create', style: sans(Dn.nameSize, c: n > 0 && dest != null ? N.g10 : Surface.muted, w: FontWeight.w700))),
           ),
         ]),
       ]),
@@ -262,7 +262,7 @@ class _RelationsPanelState extends State<RelationsPanel> {
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Row(children: [
           Container(width: 6, height: 6, decoration: const BoxDecoration(color: kRed, shape: BoxShape.circle)),
-          const SizedBox(width: 6),
+          const SizedBox(width: Surface.sectionGap),
           Expanded(child: Text(r.source.name(c), softWrap: false, overflow: TextOverflow.ellipsis, style: sans(Dn.nameSize, c: Surface.ink, w: FontWeight.w600))),
           GestureDetector(key: const ValueKey('relation-delete'), onTap: () => RelationsSession.of(c).remove(r), child: Text('✕', style: sans(Dn.nameSize, c: Surface.muted))),
         ]),
@@ -281,7 +281,7 @@ class _RelationsPanelState extends State<RelationsPanel> {
               await _write(r, members: picking!);
               setState(() => picking = null);
             },
-            child: Container(padding: const EdgeInsets.symmetric(horizontal: 7.5, vertical: 3), decoration: BoxDecoration(color: editing ? kRed : Surface.raised, borderRadius: BorderRadius.circular(3)), child: Text(editing ? 'Done' : 'Edit in graph', style: sans(Dn.nameSize, c: editing ? N.g10 : Surface.ink, w: FontWeight.w600))),
+            child: Container(padding: const EdgeInsets.symmetric(horizontal: 7.5, vertical: 3), decoration: BoxDecoration(color: editing ? kRed : Surface.raised, borderRadius: BorderRadius.circular(Surface.controlRadius)), child: Text(editing ? 'Done' : 'Edit in graph', style: sans(Dn.nameSize, c: editing ? N.g10 : Surface.ink, w: FontWeight.w600))),
           ),
         ]),
         _label('MAPPINGS'),
@@ -298,7 +298,7 @@ class _RelationsPanelState extends State<RelationsPanel> {
             GestureDetector(
               key: ValueKey('add-mapping-$p'),
               onTap: () { final u = unitOf(p); _relate(r.source, r.inMin, r.inMax, r.members.toSet(), p, u.toDoc(u.defaultRange.$1), u.toDoc(u.defaultRange.$2)); },
-              child: Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3), decoration: BoxDecoration(border: Border.all(color: Surface.dividerFine), borderRadius: BorderRadius.circular(3)), child: Text('+ ${labelOf(p)}', style: sans(Dn.nameSize, c: kInk2))),
+              child: Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3), decoration: BoxDecoration(border: Border.all(color: Surface.dividerFine), borderRadius: BorderRadius.circular(Surface.controlRadius)), child: Text('+ ${labelOf(p)}', style: sans(Dn.nameSize, c: kInk2))),
             ),
         ]),
       ]),
@@ -321,7 +321,7 @@ class _RelationsPanelState extends State<RelationsPanel> {
         if (current != null) ...[
           const SizedBox(width: 4.5),
           GestureDetector(key: ValueKey('$key-set-min'), onTap: () { change(current, hi); onDone?.call(); }, child: Text('⇤', style: sans(Dn.nameSize, c: Surface.muted))),
-          const SizedBox(width: 3),
+          const SizedBox(width: Surface.inlineGap),
           GestureDetector(key: ValueKey('$key-set-max'), onTap: () { change(lo, current); onDone?.call(); }, child: Text('⇥', style: sans(Dn.nameSize, c: Surface.muted))),
         ],
       ]);

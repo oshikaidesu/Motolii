@@ -9,7 +9,7 @@ import 'raw_dimension.dart' show excused, excusedFile, scaleFiles;
 
 /// Where a palette may be written out: the product window's neutral ramp and the files that name its identity / semantic colours.
 const paletteFiles = {
-  'lib/theme/tokens.dart',
+  'lib/theme/identity.dart',
   'lib/desks/parts.dart',
   'lib/inspector/tones.dart',
 };

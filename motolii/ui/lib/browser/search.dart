@@ -4,8 +4,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'parts.dart';
 import '../theme/neutral.dart';
-import '../theme/tokens.dart' show H;
-import '../theme/surface.dart' show Dn, Surface;
+import '../theme/identity.dart' show H;
+import '../theme/metrics.dart' show Dn, Surface;
 
 class SearchCapability extends ChangeNotifier {
   SearchCapability({String query = ''}) : controller = TextEditingController(text: query) {
@@ -117,7 +117,7 @@ class SearchField extends StatelessWidget {
                 onTap: search.clear,
                 child: SizedBox(width: 12, height: 12, child: CustomPaint(painter: _X())),
               ),
-            if (trailing != null) ...[const SizedBox(width: 3), trailing!],
+            if (trailing != null) ...[const SizedBox(width: Surface.inlineGap), trailing!],
           ]),
         ),
       );

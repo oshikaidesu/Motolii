@@ -1,7 +1,7 @@
 import 'package:docking/docking.dart';
 import 'package:flutter/widgets.dart';
 
-import '../theme/surface.dart' show Surface;
+import '../theme/metrics.dart' show Surface;
 
 /// Dock chrome for the hf client. `docking` owns only layout, split, resize and drop: its own tab strip is off,
 /// because every seat draws the Browser's seat strip (`Leaf`) itself — see `DockWorkspace._seat`.

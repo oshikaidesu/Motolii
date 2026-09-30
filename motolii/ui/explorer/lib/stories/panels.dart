@@ -4,16 +4,16 @@ import 'dart:io';
 import 'package:flutter/widgets.dart';
 import 'package:motolii_ui/effects/shelf.dart' show EffectScene;
 import 'package:motolii_ui/theme/neutral.dart';
-import 'package:motolii_ui/browser/browser_panel.dart';
+import 'package:motolii_ui/browser/browser.dart';
 import 'package:motolii_ui/browser/media/catalog_controls.dart';
 import 'package:motolii_ui/browser/media/catalog_session.dart';
-import 'package:motolii_ui/browser/media/views.dart' show BrowserView;
+import 'package:motolii_ui/browser/media/media_browser.dart' show BrowserView;
 import 'package:motolii_ui/desks/depth/desk.dart';
 import 'package:motolii_ui/desks/ease/desk.dart';
 import 'package:motolii_ui/desks/notes/desk.dart';
 import 'package:motolii_ui/inspector/inspector_seat.dart';
 import 'package:motolii_ui/app/top/top_session.dart';
-import 'package:motolii_ui/stage/stage_panel.dart' show StagePanel;
+import 'package:motolii_ui/stage/stage.dart' show StagePanel;
 import 'package:motolii_ui/session/editor_session.dart';
 import 'package:widgetbook/widgetbook.dart';
 
@@ -67,8 +67,8 @@ Future<void> _importMedia(EditorSession c) async {
 }
 
 final browserStories = <Story>[
-  Story('Browser Media, a real library', Scene('night-sky.rrd', inputs: _importMedia), (c) => _browser(c, 4), width: 288, height: 900),
-  Story('Browser Media, a real library, wide', Scene('night-sky.rrd', inputs: _importMedia), (c) => _browser(c, 4), width: 560, height: 900),
+  Story('Browser Media, a real library', const Scene('night-sky.rrd', inputs: _importMedia), (c) => _browser(c, 4), width: 288, height: 900),
+  Story('Browser Media, a real library, wide', const Scene('night-sky.rrd', inputs: _importMedia), (c) => _browser(c, 4), width: 560, height: 900),
   Story('Browser Colors, a real palette', Scene('palette.js', inputs: (s) => _choose(s, 1)), (c) => _browser(c, 2), width: 288, height: 800),
   for (final (i, name) in const ['Create', 'Effects', 'Colors', 'Fonts', 'Media'].indexed) ...[
     Story('Browser $name', Scene('night-sky.rrd', inputs: (s) => _choose(s, 2)), (c) => _browser(c, i), width: 288, height: 800),
@@ -158,26 +158,26 @@ class _CatalogHostState extends State<_CatalogHost> {
 }
 
 final catalogStories = <Story>[
-  Story('Browser catalog, real sources', Scene('night-sky.rrd', inputs: _registerFixtureSources), _catalogBrowser, width: 288, height: 900),
-  Story('Browser catalog, this project', Scene('night-sky.rrd', inputs: _projectHoldsSome), (c) => _CatalogHost(c, startProject: true), width: 420, height: 700),
-  Story('Explore 01 global wide', Scene('night-sky.rrd', inputs: _graphWorld), (c) => _CatalogHost(c, view: BrowserView.explore, graphHops: 0), width: 760, height: 640),
-  Story('Explore 02 global narrow', Scene('night-sky.rrd', inputs: _graphWorld), (c) => _CatalogHost(c, view: BrowserView.explore, graphHops: 0), width: 320, height: 640),
-  Story('Explore 03 global overlay', Scene('night-sky.rrd', inputs: _graphWorld), (c) => _CatalogHost(c, view: BrowserView.explore, graphHops: 0, graphOverlay: true), width: 760, height: 640),
-  Story('Explore 04 global selected image', Scene('night-sky.rrd', inputs: _graphWorld), (c) => _CatalogHost(c, view: BrowserView.explore, startOn: 'afterglow.jpg', graphHops: 0), width: 760, height: 640),
-  Story('Explore 05 global selected model', Scene('night-sky.rrd', inputs: _graphWorld), (c) => _CatalogHost(c, view: BrowserView.explore, startOn: 'ArmChair_01.glb', graphHops: 0), width: 760, height: 640),
-  Story('Explore 06 local 1', Scene('night-sky.rrd', inputs: _graphWorld), (c) => _CatalogHost(c, view: BrowserView.explore, startOn: 'coast-drift.mp4', graphHops: 1), width: 760, height: 640),
-  Story('Explore 07 local 2', Scene('night-sky.rrd', inputs: _graphWorld), (c) => _CatalogHost(c, view: BrowserView.explore, startOn: 'coast-drift.mp4', graphHops: 2), width: 760, height: 640),
-  Story('Explore 08 local 2 overlay', Scene('night-sky.rrd', inputs: _graphWorld), (c) => _CatalogHost(c, view: BrowserView.explore, startOn: 'coast-drift.mp4', graphHops: 2, graphOverlay: true), width: 760, height: 640),
-  Story('Browser catalog, big faces', Scene('night-sky.rrd', inputs: _registerFixtureSources), (c) => _CatalogHost(c, startColumn: 104, startOn: 'coast-drift.mp4'), width: 288, height: 900),
-  Story('Browser catalog, real sources, wide', Scene('night-sky.rrd', inputs: _registerFixtureSources), _catalogBrowser, width: 560, height: 900),
-  Story('Browser catalog, preview clip', Scene('night-sky.rrd', inputs: _registerFixtureSources), (c) => _CatalogHost(c, startOn: 'coast-drift.mp4', startOpen: true), width: 420, height: 800),
-  Story('Browser catalog, preview model', Scene('night-sky.rrd', inputs: _registerFixtureSources), (c) => _CatalogHost(c, startOn: 'Camera_01.glb', startOpen: true), width: 420, height: 800),
-  Story('Browser catalog, preview sound wide', Scene('night-sky.rrd', inputs: _registerFixtureSources), (c) => _CatalogHost(c, startOn: 'drum-loop.wav', startOpen: true), width: 640, height: 500),
-  Story('Browser catalog, fluid filmstrip', Scene('night-sky.rrd', inputs: _registerFixtureSources), (c) => FluidFilmstrip(c), width: 1020, height: 860),
-  Story('Browser catalog, live tiles', Scene('night-sky.rrd', inputs: _registerFixtureSources), (c) => LiveTiles(c), width: 360, height: 460),
-  Story('Browser catalog, folders', Scene('night-sky.rrd', inputs: _registerNestedSources), (c) => _CatalogHost(c, view: BrowserView.list, startSource: 'Models'), width: 420, height: 700),
-  Story('Browser catalog, list', Scene('night-sky.rrd', inputs: _registerFixtureSources), (c) => _CatalogHost(c, view: BrowserView.list, startOn: 'afterglow.jpg'), width: 420, height: 700),
-  Story('Browser catalog, explore', Scene('night-sky.rrd', inputs: _registerFixtureSources), (c) => _CatalogHost(c, view: BrowserView.explore, startOn: 'afterglow.jpg'), width: 420, height: 700),
+  const Story('Browser catalog, real sources', Scene('night-sky.rrd', inputs: _registerFixtureSources), _catalogBrowser, width: 288, height: 900),
+  Story('Browser catalog, this project', const Scene('night-sky.rrd', inputs: _projectHoldsSome), (c) => _CatalogHost(c, startProject: true), width: 420, height: 700),
+  Story('Explore 01 global wide', const Scene('night-sky.rrd', inputs: _graphWorld), (c) => _CatalogHost(c, view: BrowserView.explore, graphHops: 0), width: 760, height: 640),
+  Story('Explore 02 global narrow', const Scene('night-sky.rrd', inputs: _graphWorld), (c) => _CatalogHost(c, view: BrowserView.explore, graphHops: 0), width: 320, height: 640),
+  Story('Explore 03 global overlay', const Scene('night-sky.rrd', inputs: _graphWorld), (c) => _CatalogHost(c, view: BrowserView.explore, graphHops: 0, graphOverlay: true), width: 760, height: 640),
+  Story('Explore 04 global selected image', const Scene('night-sky.rrd', inputs: _graphWorld), (c) => _CatalogHost(c, view: BrowserView.explore, startOn: 'afterglow.jpg', graphHops: 0), width: 760, height: 640),
+  Story('Explore 05 global selected model', const Scene('night-sky.rrd', inputs: _graphWorld), (c) => _CatalogHost(c, view: BrowserView.explore, startOn: 'ArmChair_01.glb', graphHops: 0), width: 760, height: 640),
+  Story('Explore 06 local 1', const Scene('night-sky.rrd', inputs: _graphWorld), (c) => _CatalogHost(c, view: BrowserView.explore, startOn: 'coast-drift.mp4', graphHops: 1), width: 760, height: 640),
+  Story('Explore 07 local 2', const Scene('night-sky.rrd', inputs: _graphWorld), (c) => _CatalogHost(c, view: BrowserView.explore, startOn: 'coast-drift.mp4', graphHops: 2), width: 760, height: 640),
+  Story('Explore 08 local 2 overlay', const Scene('night-sky.rrd', inputs: _graphWorld), (c) => _CatalogHost(c, view: BrowserView.explore, startOn: 'coast-drift.mp4', graphHops: 2, graphOverlay: true), width: 760, height: 640),
+  Story('Browser catalog, big faces', const Scene('night-sky.rrd', inputs: _registerFixtureSources), (c) => _CatalogHost(c, startColumn: 104, startOn: 'coast-drift.mp4'), width: 288, height: 900),
+  const Story('Browser catalog, real sources, wide', Scene('night-sky.rrd', inputs: _registerFixtureSources), _catalogBrowser, width: 560, height: 900),
+  Story('Browser catalog, preview clip', const Scene('night-sky.rrd', inputs: _registerFixtureSources), (c) => _CatalogHost(c, startOn: 'coast-drift.mp4', startOpen: true), width: 420, height: 800),
+  Story('Browser catalog, preview model', const Scene('night-sky.rrd', inputs: _registerFixtureSources), (c) => _CatalogHost(c, startOn: 'Camera_01.glb', startOpen: true), width: 420, height: 800),
+  Story('Browser catalog, preview sound wide', const Scene('night-sky.rrd', inputs: _registerFixtureSources), (c) => _CatalogHost(c, startOn: 'drum-loop.wav', startOpen: true), width: 640, height: 500),
+  Story('Browser catalog, fluid filmstrip', const Scene('night-sky.rrd', inputs: _registerFixtureSources), (c) => FluidFilmstrip(c), width: 1020, height: 860),
+  Story('Browser catalog, live tiles', const Scene('night-sky.rrd', inputs: _registerFixtureSources), (c) => LiveTiles(c), width: 360, height: 460),
+  Story('Browser catalog, folders', const Scene('night-sky.rrd', inputs: _registerNestedSources), (c) => _CatalogHost(c, view: BrowserView.list, startSource: 'Models'), width: 420, height: 700),
+  Story('Browser catalog, list', const Scene('night-sky.rrd', inputs: _registerFixtureSources), (c) => _CatalogHost(c, view: BrowserView.list, startOn: 'afterglow.jpg'), width: 420, height: 700),
+  Story('Browser catalog, explore', const Scene('night-sky.rrd', inputs: _registerFixtureSources), (c) => _CatalogHost(c, view: BrowserView.explore, startOn: 'afterglow.jpg'), width: 420, height: 700),
 ];
 
 final otherStories = <Story>[

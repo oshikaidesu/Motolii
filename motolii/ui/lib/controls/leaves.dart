@@ -7,12 +7,11 @@
 /// One family to a file, so the catalogue reads as a shelf:
 /// [leaves/press.dart] what a pointer presses, [leaves/track.dart] what runs
 /// along a line, [leaves/field.dart] what takes typing,
-/// [leaves/floating.dart] what floats in the overlay, [leaves/dialog.dart]
-/// what comes in front and holds, [leaves/choice.dart] what picks one value.
+/// [leaves/floating.dart] what floats in the overlay,
+/// [leaves/choice.dart] what picks one value.
 library;
 
 export 'leaves/choice.dart';
-export 'leaves/dialog.dart';
 export 'leaves/field.dart';
 export 'leaves/floating.dart';
 export 'leaves/press.dart';

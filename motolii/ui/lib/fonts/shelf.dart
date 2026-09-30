@@ -11,7 +11,7 @@ import '../browser/things.dart' show UserViews;
 import '../session/editor_session.dart';
 import '../browser/visual_sample.dart';
 import '../theme/neutral.dart';
-import '../theme/surface.dart' show Dn, Surface;
+import '../theme/metrics.dart' show Dn, Surface;
 
 class FontItem {
   const FontItem(
@@ -52,24 +52,6 @@ const fontsBase = <FontItem>[
   FontItem('Hiragino Mincho ProN', 'JP', 2, sample: '永'),
   FontItem('Apple SD Gothic Neo', 'KR', 9, sample: '가'),
 ];
-
-/// Growth fixture: two thousand typefaces. Names are set in real installed faces, cycled.
-List<FontItem> fontsStress() {
-  final out = <FontItem>[...fontsBase];
-  for (var i = 0; i < 2000; i++) {
-    final b = fontsBase[i % fontsBase.length];
-    out.add(
-      FontItem(
-        b.family,
-        b.cls,
-        1 + (i * 3) % 14,
-        sample: b.sample,
-        label: '${b.family} ${String.fromCharCode(65 + i % 26)}${1 + i ~/ 26}',
-      ),
-    );
-  }
-  return out;
-}
 
 List<List<String>> fontGroups() => const [
   ['All', 'Sans', 'Serif', 'Display', 'Mono', 'Hand', 'JP', 'KR'],
@@ -163,7 +145,7 @@ class _FontsPanelState extends State<FontsPanel>
               width: math.min(72, s.height * 1.3),
               decoration: BoxDecoration(
                 color: Surface.raised,
-                borderRadius: BorderRadius.circular(3),
+                borderRadius: BorderRadius.circular(Surface.controlRadius),
               ),
               child: Center(child: _sample(shown[i], 24)),
             ),
@@ -310,7 +292,7 @@ class _Row extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                             fontFamily: f.family,
-                            fontSize: 11,
+                            fontSize: Dn.nameSize,
                             color: N.g91,
                             height: 1.1,
                           ),

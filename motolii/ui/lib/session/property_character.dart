@@ -1,4 +1,3 @@
-import 'dart:math' as math;
 
 /// What a parameter is *for*, read off its declared name. One table, so a new Vism gets its glyph, unit and control
 /// the moment it is declared. Shared by every face that reads a property row: Classic's Inspector derives a track
@@ -74,12 +73,3 @@ PropertyCharacter _deriveCharacter(Map<String, dynamic> row) {
   return PropertyCharacter.none;
 }
 
-double spanOf(Map<String, dynamic> row) => ((row['max'] as num?)?.toDouble() ?? 0) - ((row['min'] as num?)?.toDouble() ?? 0);
-
-/// A range that is a real reach (opacity 0..1, octaves 1..8), not a guard (amount 0..100000): only a real reach
-/// earns a track.
-bool tightRange(Map<String, dynamic> row) {
-  final v = (row['value'] as num?)?.toDouble() ?? 0;
-  final d = (row['default'] as num?)?.toDouble() ?? v;
-  return spanOf(row) <= 20 * math.max(d.abs(), 1);
-}

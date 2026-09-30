@@ -9,7 +9,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/widgets.dart';
 
-import '../../../theme/surface.dart';
+import '../../../theme/metrics.dart';
 import '../../../theme/neutral.dart';
 import '../../item.dart';
 import 'overlay.dart';
@@ -369,7 +369,7 @@ class ExploreBar extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(9, 3, 9, 0),
           child: Wrap(spacing: 4, runSpacing: 3, crossAxisAlignment: WrapCrossAlignment.center, children: [
             for (final (n, label) in const [(0, 'Global'), (1, 'Local 1'), (2, 'Local 2')]) _Chip(label, choice.hops == n, () => choice.setHops(n)),
-            const SizedBox(width: 6),
+            const SizedBox(width: Surface.sectionGap),
             _Chip('Type · Folder', choice.overlay, choice.toggleOverlay),
           ]),
         ),
@@ -387,7 +387,7 @@ class _Chip extends StatelessWidget {
         onTap: tap,
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-          decoration: BoxDecoration(color: on ? N.g20 : null, borderRadius: BorderRadius.circular(3)),
+          decoration: BoxDecoration(color: on ? N.g20 : null, borderRadius: BorderRadius.circular(Surface.controlRadius)),
           child: Text(label, softWrap: false, style: Dn.label(on ? N.g95 : N.g63, on ? FontWeight.w600 : FontWeight.w500)),
         ),
       );

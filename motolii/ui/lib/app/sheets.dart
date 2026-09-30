@@ -2,12 +2,14 @@ import 'dart:async';
 
 import 'package:flutter/widgets.dart';
 
-import '../inspector/inspector_panel.dart';
+import '../inspector/inspector.dart';
 import '../inspector/rows.dart';
-import '../theme/tokens.dart';
+import '../theme/identity.dart';
 import '../controls/sheet.dart';
 import '../session/editor_session.dart';
 import '../session/export_actions.dart';
+import '../theme/neutral.dart';
+import '../theme/metrics.dart';
 
 /// Export as a short task under its control: what will be written (read-only facts: the composition's size, rate and
 /// the format), which range (a choice: the whole document, or marker to marker around the playhead, with the frames
@@ -109,7 +111,7 @@ class _ExportState extends State<_Export> {
             onChanged: running ? null : (v) => setState(() => markers = v),
           ),
         ),
-        HfFormRow('Frames', HfFact('$start – $end · ${((end - start) / fps).toStringAsFixed(2)} s', color: H.text3)),
+        HfFormRow('Frames', HfFact('$start – $end · ${((end - start) / fps).toStringAsFixed(2)} s', color: N.g63)),
         if (phase != null && phase != 'idle')
           HfFormRow(
             'Status',
@@ -119,9 +121,9 @@ class _ExportState extends State<_Export> {
               'done' || 'complete' => 'Written ${job['path'] ?? ''}',
               _ when failed => 'Failed: ${job['error'] ?? ''}',
               _ => '$phase',
-            }, color: failed ? H.record : H.text2),
+            }, color: failed ? H.record : N.g82),
           ),
-        const SizedBox(height: 3),
+        const SizedBox(height: Surface.inlineGap),
         Row(mainAxisAlignment: MainAxisAlignment.end, children: [
           HfAction(running ? 'Stop' : 'Cancel', onTap: running ? (c.supports('cancelExport') ? () => c.command('cancelExport') : null) : widget.close),
           HfAction('Export…', kind: HfActionKind.primary, onTap: exportAction),

@@ -74,7 +74,7 @@ void f() {
   }
 
   void test_scale_files_may_hold_numbers() async {
-    final path = '$testPackageLibPath/theme/editor_metrics.dart';
+    final path = '$testPackageLibPath/theme/metrics.dart';
     newFile(path, r'''
 void box({double? width}) {}
 void f() => box(width: 300);

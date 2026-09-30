@@ -11,7 +11,7 @@ import '../seat.dart';
 import '../panel_chrome.dart';
 import '../things.dart';
 import '../../theme/neutral.dart';
-import '../../theme/surface.dart' show Dn, Surface;
+import '../../theme/metrics.dart' show Dn, Surface;
 
 enum Mk { text, rect, rounded, ellipse, star, polygon, line, arrow, path, blob, pen, pencil, spray, eraser, nul, camera, light, particles, stage, cube, sphere, torus, cylinder, cone, pyramid, plane }
 

@@ -1,10 +1,31 @@
+// The app: Motolii's window as its own client of Motolii Live — the faces over the session.
+//   MOTOLII_NATIVE_LIBRARY=.../libmotolii_ui.dylib flutter run -d macos \
+//     --dart-define=MOTOLII_DOCUMENT=/path.rrd [--dart-define=MOTOLII_SHOT=/path.png]
 import 'package:flutter/widgets.dart';
 
-import 'legacy/app/editor_app.dart';
-import 'app/main.dart' as live;
+import 'app/ui_scale.dart';
+import 'app/window.dart';
+import 'controls/panel/scale.dart';
+import 'theme/live_palette.dart';
+import 'theme/identity.dart' show H;
+import 'theme/metrics.dart';
 
-/// The window opens the product UI, lib/app (docs/product/product-direction.md). The earlier shells stay reachable
-/// as capability migration sources until their capabilities are in the product UI: MOTOLII_SHELL=classic or new.
-const shell = String.fromEnvironment('MOTOLII_SHELL', defaultValue: 'live');
-
-void main() => shell == 'live' ? live.main() : runApp(const EditorApp());
+void main() => runApp(WidgetsApp(
+      color: Surface.base,
+      debugShowCheckedModeBanner: false,
+      textStyle: H.s(12),
+      pageRouteBuilder: <T>(RouteSettings settings, WidgetBuilder builder) => PageRouteBuilder<T>(settings: settings, pageBuilder: (context, _, __) => builder(context)),
+      // the UI's size scales the whole root — the overlay with its menus and sheets included — and nothing of the work
+      // the foundation's widgets (the Stage's chrome) take the live app's colours
+      builder: (context, child) => liveEditorTheme.wrap(EditorScale(
+        notifier: LiveUiScale.instance.factor,
+        child: ValueListenableBuilder<double>(
+          valueListenable: LiveUiScale.instance.factor,
+          builder: (context, s, _) => Stack(children: [
+            Positioned.fill(child: EditorScaledViewport(scale: s, child: child!)),
+            const Positioned.fill(child: UiScaleReadout()),
+          ]),
+        ),
+      )),
+      home: const LiveShell(),
+    ));

@@ -12,7 +12,7 @@ import '../desks/parts.dart' show kYellow, kBlue, kViolet, kPink;
 import 'rows.dart';
 import 'slot.dart';
 export 'slot.dart';
-import '../theme/surface.dart';
+import '../theme/metrics.dart';
 import 'tones.dart';
 import '../theme/neutral.dart';
 
@@ -486,7 +486,7 @@ class ReferenceToy extends StatelessWidget {
         decoration: BoxDecoration(color: Surface.raised, borderRadius: BorderRadius.circular(4)),
         child: Row(children: [
           Container(width: 10, height: 10, decoration: BoxDecoration(color: cur == null ? null : (store.frozen ? dimTone(tone) : tone), border: cur == null ? Border.all(color: Surface.muted, width: 1.4) : null, borderRadius: BorderRadius.circular(2))),
-          const SizedBox(width: 6),
+          const SizedBox(width: Surface.sectionGap),
           Expanded(child: Text(cur ?? 'None', softWrap: false, overflow: TextOverflow.clip, style: sans(Dn.nameSize, c: cur == null ? Surface.muted : _readout, w: FontWeight.w500))),
           Text('⌄', style: sans(Dn.nameSize, c: Surface.muted)),
         ]),

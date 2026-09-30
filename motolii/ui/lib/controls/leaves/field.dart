@@ -2,7 +2,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
-import '../../theme/editor_metrics.dart';
+import '../../theme/metrics.dart';
 import '../../theme/editor_theme.dart';
 import 'floating.dart';
 
@@ -133,7 +133,7 @@ class _EditorTextFieldState extends State<EditorTextField>
       backgroundCursorColor: EditorTheme.of(context).muted,
       selectionColor: EditorTheme.of(context).selection,
       cursorWidth: widget.cursorWidth,
-      cursorRadius: const Radius.circular(EditorMetrics.s2),
+      cursorRadius: const Radius.circular(Step.s2),
       cursorOffset: Offset(-2 / dpr, 0),
       paintCursorAboveText: true,
       cursorOpacityAnimates: false,

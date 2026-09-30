@@ -6,7 +6,7 @@ import '../theme/glyphs.dart';
 import 'classify.dart';
 import 'parts.dart';
 import 'search.dart';
-import '../theme/surface.dart';
+import '../theme/metrics.dart';
 import 'seat.dart';
 import 'shelf_sections.dart' show SwissHeading;
 import '../theme/neutral.dart';

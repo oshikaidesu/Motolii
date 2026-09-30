@@ -4,7 +4,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart' show ThemeMode;
 import 'package:flutter/widgets.dart';
-import 'package:motolii_ui/theme/tokens.dart' show H;
+import 'package:motolii_ui/theme/identity.dart' show H;
 import 'package:widgetbook/widgetbook.dart';
 
 import 'binding.dart';
@@ -14,6 +14,7 @@ import 'stories/panels.dart';
 import 'stories/paper.dart';
 import 'stories/timeline.dart';
 import 'stories/workspace.dart';
+import 'package:motolii_ui/theme/metrics.dart';
 
 /// Every story, in the order the explorer lists them.
 final allStories = [...timelineStories, ...inspectorStories, ...browserStories, ...catalogStories, ...otherStories, ...paperStories, ...workspaceStories, ...densityStories];
@@ -28,7 +29,7 @@ void main() {
       ? const Explorer()
       // the same kind of root production's live main builds (overlay, text style), with the shots instead of the shell
       : WidgetsApp(
-          color: H.window,
+          color: Surface.base,
           debugShowCheckedModeBanner: false,
           textStyle: H.s(12),
           pageRouteBuilder: <T>(RouteSettings settings, WidgetBuilder builder) => PageRouteBuilder<T>(settings: settings, pageBuilder: (context, _, __) => builder(context)),

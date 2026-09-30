@@ -4,7 +4,7 @@ import 'package:flutter/widgets.dart';
 import '../../browser/parts.dart';
 import '../parts.dart';
 import '../../theme/neutral.dart';
-import '../../theme/surface.dart' show Dn, Surface;
+import '../../theme/metrics.dart' show Dn, Surface;
 
 /// A blend mode is shown as what it does to one fixed pair of flat shapes: A (base, yellow) and B (top, blue).
 /// Every symbol is the same two shapes through a different operator, so what differs is the overlap, nothing else.
@@ -213,18 +213,18 @@ class _BlendDeskState extends State<BlendDesk> {
     return Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
       Column(mainAxisSize: MainAxisSize.min, children: [
         Container(width: 30, height: 30, decoration: const BoxDecoration(color: kYellow, shape: BoxShape.circle)),
-        const SizedBox(height: 3),
+        const SizedBox(height: Surface.inlineGap),
         Text('A', style: sans(Dn.labelSize, c: Surface.muted, w: FontWeight.w600)),
         const SizedBox(height: 7.5),
         Container(width: 30, height: 30, decoration: const BoxDecoration(color: kBlue, shape: BoxShape.circle)),
-        const SizedBox(height: 3),
+        const SizedBox(height: Surface.inlineGap),
         Text('B', style: sans(Dn.labelSize, c: Surface.muted, w: FontWeight.w600)),
       ]),
       SizedBox(width: 19.5, child: Center(child: Text('→', style: sans(16.5, c: Surface.muted)))),
       Expanded(
         child: Column(children: [
           SizedBox(key: const ValueKey('blend-result'), height: 81, width: double.infinity, child: m == null ? Center(child: Text(host != null && host!.names.isEmpty ? 'Nothing' : 'Mixed', style: sans(13.5, c: Surface.muted))) : CustomPaint(painter: ResultPainter(m))),
-          const SizedBox(height: 6),
+          const SizedBox(height: Surface.sectionGap),
           // The runtime's own specimen of this mode on the layer: its colour over the beds the runtime draws.
           if (m != null && host != null && host!.beds(blendModes[m].key).isNotEmpty)
             Padding(
@@ -270,7 +270,7 @@ class _BlendDeskState extends State<BlendDesk> {
           child: Container(
             width: w < 0 ? 0 : w,
             height: h < 0 ? 0 : h,
-            decoration: BoxDecoration(color: i == sel ? Surface.hover : null, border: i == sel ? Border.all(color: kYellow, width: 1.5) : null, borderRadius: BorderRadius.circular(4.5)),
+            decoration: BoxDecoration(color: i == sel ? Surface.hover : null, border: i == sel ? Border.all(color: kYellow, width: 1.5) : null, borderRadius: BorderRadius.circular(Surface.faceRadius)),
             padding: const EdgeInsets.all(3),
             child: CustomPaint(painter: ResultPainter(i)),
           ),
@@ -281,7 +281,7 @@ class _BlendDeskState extends State<BlendDesk> {
         width: w,
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           _mark(i, w, 40),
-          const SizedBox(height: 3),
+          const SizedBox(height: Surface.inlineGap),
           Text(blendModes[i].name, softWrap: false, overflow: TextOverflow.clip, textAlign: TextAlign.center, style: sans(Dn.microSize, c: i == sel ? Surface.ink : N.g63, w: i == sel ? FontWeight.w600 : FontWeight.w400)),
         ]),
       );

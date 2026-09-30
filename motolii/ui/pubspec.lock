@@ -163,7 +163,7 @@ packages:
     source: sdk
     version: "0.0.0"
   hooks:
-    dependency: transitive
+    dependency: "direct dev"
     description:
       name: hooks
       sha256: "9a62a50b50b769a737bc0a8ff381f333529df3ab746b2f6b02e83760231455ba"
@@ -381,7 +381,7 @@ packages:
     source: hosted
     version: "1.4.0"
   vector_math:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: vector_math
       sha256: "1d774bbdf6b72a0b12122fc1560c9c2d2a67db5a4a4cc2bd8a5c990ab20e3188"

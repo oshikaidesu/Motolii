@@ -1,13 +1,8 @@
 import 'package:flutter/widgets.dart';
 
-import '../../theme/material_icons.dart';
-import '../leaves.dart';
-import '../../theme/editor_metrics.dart';
+import '../../theme/metrics.dart';
 import '../../theme/editor_theme.dart';
 import 'numeric.dart';
-
-/// The editor's one scale, what it is set by, and the greys behind what is
-/// see-through.
 
 /// The editor's one scale, set above the Navigator so pages and their menus,
 /// dialogs and drawers all grow together.
@@ -74,7 +69,7 @@ class _EditorPercentFieldState extends State<EditorPercentField> {
       ),
     );
     return SizedBox(
-      width: EditorMetrics.s64,
+      width: Step.s64,
       child: EditorNumericField(
         value: widget.value,
         label: widget.label,
@@ -92,88 +87,6 @@ class _EditorPercentFieldState extends State<EditorPercentField> {
         onCancel: () async {
           if (_start != null) widget.onChanged(_start!);
           _start = null;
-        },
-      ),
-    );
-  }
-}
-
-/// Sizes are percentages of the panel's default size.
-class EditorZoomBar extends StatelessWidget {
-  const EditorZoomBar({
-    super.key,
-    required this.value,
-    required this.min,
-    required this.max,
-    required this.onChanged,
-    required this.keyPrefix,
-    required this.base,
-    this.step = 1,
-  });
-  final double value, min, max, base;
-  final ValueChanged<double> onChanged;
-  final String keyPrefix;
-
-  /// Percent moved by one press of − or +.
-  final int step;
-
-  /// The width at which the bar shows its slider: both presses, the percent
-  /// field, and a slider long enough to grab. Narrower, the field stands alone.
-  static const sliderRoom =
-      EditorMetrics.row * 2 + EditorMetrics.field + EditorMetrics.s48;
-  @override
-  Widget build(BuildContext context) {
-    final low = (min / base * 100).ceilToDouble();
-    final high = (max / base * 100).floorToDouble();
-    final percent = value / base * 100;
-    void change(double n) =>
-        onChanged(n.roundToDouble().clamp(low, high) * base / 100);
-    Widget step(IconData icon, int delta, String suffix) => EditorPress(
-      key: ValueKey('$keyPrefix-$suffix'),
-      onTap: () => change(percent.roundToDouble() + delta),
-      child: SizedBox.square(
-        dimension: EditorMetrics.row,
-        child: Icon(
-          icon,
-          size: EditorMetrics.s14,
-          color: EditorTheme.of(context).muted,
-        ),
-      ),
-    );
-    return Container(
-      height: EditorMetrics.row,
-      foregroundDecoration: BoxDecoration(
-        border: Border(top: BorderSide(color: EditorTheme.of(context).line)),
-      ),
-      child: LayoutBuilder(
-        builder: (context, box) {
-          final field = EditorPercentField(
-            key: ValueKey('$keyPrefix-percent'),
-            value: percent,
-            min: low,
-            max: high,
-            onChanged: change,
-            label: 'Size',
-          );
-          return Row(
-            children: [
-              step(Glyph.remove, -this.step, 'smaller'),
-              if (box.maxWidth >= sliderRoom) ...[
-                Expanded(
-                  child: EditorSlider(
-                    min: low,
-                    max: high,
-                    divisions: (high - low).round(),
-                    value: percent.clamp(low, high),
-                    onChanged: change,
-                  ),
-                ),
-                field,
-              ] else
-                Expanded(child: field),
-              step(Glyph.add, this.step, 'larger'),
-            ],
-          );
         },
       ),
     );

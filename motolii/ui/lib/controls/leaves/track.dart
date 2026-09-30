@@ -1,87 +1,12 @@
 import 'package:flutter/widgets.dart';
 
-import '../../theme/editor_metrics.dart';
+import '../../theme/metrics.dart';
 import '../../theme/editor_theme.dart';
 
 /// The leaves laid along a line: the rule that marks one, the bar that
 /// scrolls one, and the thumb that runs one.
 
-/// A horizontal rule in [EditorTheme.of(context).line], [thickness] thick (0 = a
-/// hairline) centred in [height] — what Material's Divider drew here.
-class EditorRule extends StatelessWidget {
-  const EditorRule({
-    super.key,
-    this.height = EditorMetrics.s16,
-    this.thickness = 0,
-    this.color,
-  });
-  final double height, thickness;
-  final Color? color;
-  @override
-  Widget build(BuildContext context) => SizedBox(
-    height: height,
-    child: Center(
-      child: Container(
-        height: thickness,
-        decoration: BoxDecoration(
-          border: Border(
-            bottom: BorderSide(
-              color: color ?? EditorTheme.of(context).line,
-              width: thickness,
-            ),
-          ),
-        ),
-      ),
-    ),
-  );
-}
 
-/// The desktop scrollbar: a flat [EditorMetrics.s6] bar, no radius, white at
-/// 30% (65% under the pointer, 75% while dragged), shown while scrolling,
-/// hovered or dragged and fading 600 ms after; a thumb no shorter than 48.
-class EditorScrollbar extends StatefulWidget {
-  const EditorScrollbar({
-    super.key,
-    required this.child,
-    this.controller,
-    this.thumbVisibility,
-  });
-  final Widget child;
-  final ScrollController? controller;
-  final bool? thumbVisibility;
-  @override
-  State<EditorScrollbar> createState() => _EditorScrollbarState();
-}
-
-class _EditorScrollbarState extends State<EditorScrollbar> {
-  bool _hover = false, _drag = false;
-  @override
-  Widget build(BuildContext context) => Listener(
-    onPointerDown: (_) => _drag = true,
-    onPointerUp: (_) => _drag = false,
-    onPointerCancel: (_) => _drag = false,
-    child: RawScrollbar(
-      controller: widget.controller,
-      thumbVisibility: widget.thumbVisibility,
-      thickness: EditorMetrics.s6,
-      radius: Radius.zero,
-      crossAxisMargin: EditorMetrics.s2,
-      minThumbLength: EditorMetrics.s48,
-      interactive: true,
-      thumbColor: _drag && _hover
-          ? EditorTheme.of(context).scrollThumbDragged
-          : _hover
-          ? EditorTheme.of(context).scrollThumbHovered
-          : EditorTheme.of(context).scrollThumb,
-      child: MouseRegion(
-        opaque: false,
-        onEnter: (_) => setState(() => _hover = true),
-        onExit: (_) => setState(() => _hover = false),
-        child: widget.child,
-      ),
-    ),
-  );
-}
 
 /// A value on a flat 2 px track between [min] and [max]: [EditorTheme.of(context).muted]
 /// up to the thumb, [EditorTheme.of(context).line] after, a 5 px ink thumb with a 1 dp
@@ -106,7 +31,7 @@ class EditorSlider extends StatefulWidget {
 
 class _EditorSliderState extends State<EditorSlider> {
   bool _down = false;
-  static const _thumb = EditorMetrics.s5;
+  static const _thumb = Step.s5;
 
   double _fraction(double dx, double width) {
     final span = width - 2 * _thumb;
@@ -165,7 +90,7 @@ class _EditorSliderState extends State<EditorSlider> {
           child: CustomPaint(
             size: Size(
               box.maxWidth,
-              box.hasBoundedHeight ? box.maxHeight : EditorMetrics.row,
+              box.hasBoundedHeight ? box.maxHeight : Surface.workRow,
             ),
             painter: _SliderPainter(
               colors: EditorTheme.of(context),
@@ -199,7 +124,7 @@ class _SliderPainter extends CustomPainter {
   final bool enabled, pressed;
   final int? divisions;
   final String? label;
-  static const _thumb = EditorMetrics.s5, _track = EditorMetrics.s2;
+  static const _thumb = Step.s5, _track = Step.s2;
   @override
   void paint(Canvas canvas, Size size) {
     final left = _thumb, right = size.width - _thumb;
@@ -253,26 +178,26 @@ class _SliderPainter extends CustomPainter {
           text: label,
           style: TextStyle(
             fontFamily: EditorTheme.fontFamily,
-            fontSize: EditorMetrics.font,
+            fontSize: Dn.labelSize,
             color: colors.tabInk,
           ),
         ),
         textDirection: TextDirection.ltr,
       )..layout();
-      final w = text.width + EditorMetrics.s16,
-          h = text.height + EditorMetrics.s8;
+      final w = text.width + Step.s16,
+          h = text.height + Step.s8;
       final box = Rect.fromCenter(
-        center: Offset(x, cy - _thumb - EditorMetrics.s8 - h / 2),
+        center: Offset(x, cy - _thumb - Step.s8 - h / 2),
         width: w,
         height: h,
       );
       canvas.drawRRect(
-        RRect.fromRectAndRadius(box, const Radius.circular(EditorMetrics.s4)),
+        RRect.fromRectAndRadius(box, const Radius.circular(Step.s4)),
         Paint()..color = colors.accent,
       );
       text.paint(
         canvas,
-        box.topLeft + const Offset(EditorMetrics.s8, EditorMetrics.s4),
+        box.topLeft + const Offset(Step.s8, Step.s4),
       );
     }
   }

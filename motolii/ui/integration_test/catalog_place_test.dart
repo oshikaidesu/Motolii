@@ -6,8 +6,8 @@ import 'package:integration_test/integration_test.dart';
 
 import 'package:motolii_ui/browser/media/catalog_session.dart';
 import 'package:motolii_ui/browser/media/project_source.dart';
-import 'package:motolii_ui/timeline/timeline_view.dart';
-import 'package:motolii_ui/app/main.dart' as app;
+import 'package:motolii_ui/timeline/timeline.dart';
+import 'package:motolii_ui/main.dart' as app;
 import 'package:motolii_ui/session/editor_session.dart';
 
 Future<void> frames(WidgetTester t, [int n = 20]) async {

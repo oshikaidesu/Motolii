@@ -3,7 +3,7 @@
 ///
 ///   dart run bin/check.dart <dir>          list raw measurements, exit 1 if any
 ///   dart run bin/check.dart <dir> --fix    replace those matching an
-///                                          EditorMetrics token, then list the rest
+///                                          Surface/Step token, then list the rest
 import 'dart:io';
 
 import 'package:analyzer/dart/analysis/analysis_context_collection.dart';

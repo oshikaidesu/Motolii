@@ -8,7 +8,7 @@ import '../effects/card.dart';
 import 'layout/card.dart';
 import 'transform/card.dart';
 import 'session.dart';
-import '../theme/surface.dart' show Dn, Surface;
+import '../theme/metrics.dart' show Dn, Surface;
 
 /// The Inspector seat. Specialist editing requests open the corresponding real Dock panel; the Inspector itself
 /// stays an Inspector instead of turning into a drawer.

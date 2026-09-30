@@ -7,12 +7,11 @@
         "effects",
         "input",
         "inspector",
-        "legacy",
         "session",
         "theme",
         "workspace"
       ],
-      "owns": "Application and window lifecycle, launcher (lib/main.dart selects shells), top bar, sheets"
+      "owns": "Application and window lifecycle, app entry (lib/main.dart), top bar, sheets"
     },
     "browser": {
       "dependsOn": [
@@ -133,24 +132,6 @@
         "timeline"
       ],
       "owns": "Dock layout, tabs, resize, panel focus and panel seats"
-    },
-    "legacy": {
-      "dependsOn": [
-        "bridge",
-        "browser",
-        "colors",
-        "controls",
-        "desks",
-        "effects",
-        "input",
-        "inspector",
-        "session",
-        "stage",
-        "theme",
-        "timeline",
-        "workspace"
-      ],
-      "owns": "Retired-later Classic/New shells and their private parts; may import any module, nothing imports it except app (see docs/product/product-direction.md capability gate)"
     }
   },
   "nativeEditor": "motolii/ui/native/src/editor",

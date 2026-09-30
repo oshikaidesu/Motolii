@@ -10,17 +10,19 @@ import 'latency_probe.dart';
 part 'session_values.dart';
 part 'session_core.dart';
 part 'session_native.dart';
+part 'session_selection.dart';
 part 'session_snapshot.dart';
 part 'session_render.dart';
 part 'session_commands.dart';
 part 'session_files.dart';
 
-/// 一つの窓が持つ編集の座。責任は 5 つ、それぞれが mixin で、共通の状態と
+/// 一つの窓が持つ編集の座。責任は 6 つ、それぞれが mixin で、共通の状態と
 /// 継ぎ目は [SessionCore] にある。ここに残るのは返信を型付ける道具と、
 /// 生まれ際・終わり際だけ。
 class EditorSession extends SessionCore
     with
         SessionNative,
+        SessionSelection,
         SessionSnapshot,
         SessionRender,
         SessionCommands,

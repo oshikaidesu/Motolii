@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/widgets.dart';
 
-import '../../theme/editor_metrics.dart';
+import '../../theme/metrics.dart';
 import '../../theme/editor_theme.dart';
 
 /// On and off, and the lamps that say how a value stands to time and to a
@@ -57,121 +57,14 @@ class _PickedState<T> extends State<Picked<T>> {
   Widget build(BuildContext context) => widget.builder(on);
 }
 
-/// How a value stands to time, shown as a lamp in the control's corner
-/// (the Ableton convention): unlit = no keys, lit = keys, bright = a key at
-/// this frame, ember = keys exist but the value was touched without Animate.
-enum KeyLamp { none, keyed, now, draft }
 
-KeyLamp keyLampOf(Map<String, dynamic>? row, {bool draft = false}) {
-  if (row == null) return KeyLamp.none;
-  final keys = row['keys'] as List? ?? const [];
-  if (keys.isEmpty) return KeyLamp.none;
-  if (draft) return KeyLamp.draft;
-  return row['keyedNow'] == true ? KeyLamp.now : KeyLamp.keyed;
-}
 
-class EditorLamp extends StatefulWidget {
-  const EditorLamp({
-    super.key,
-    required this.state,
-    required this.child,
-    this.onTap,
-  });
-  final KeyLamp state;
-  final Widget child;
-
-  /// Press the lamp to key the value at this frame, or take that key away.
-  final VoidCallback? onTap;
-  @override
-  State<EditorLamp> createState() => _EditorLampState();
-}
-
-class _EditorLampState extends State<EditorLamp> {
-  bool _hover = false;
-  @override
-  Widget build(BuildContext context) {
-    final state = widget.state;
-    final color = switch (state) {
-      KeyLamp.none => null,
-      KeyLamp.keyed => EditorTheme.of(context).keyAccent.withValues(alpha: .55),
-      KeyLamp.now => EditorTheme.of(context).keyAccent,
-      KeyLamp.draft => EditorTheme.of(context).keyAccent.withValues(alpha: .3),
-    };
-    // Unlit lamps show as a hollow ring only while the pointer is near, so
-    // the corner stays quiet until it is wanted.
-    final shown = color != null || (_hover && widget.onTap != null);
-    final hit = widget.onTap != null;
-    return MouseRegion(
-      onEnter: (_) => setState(() => _hover = true),
-      onExit: (_) => setState(() => _hover = false),
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          widget.child,
-          if (shown || hit)
-            Positioned(
-              left: 0,
-              top: 0,
-              child: EditorTooltip(
-                message: switch (state) {
-                  KeyLamp.now => 'Key at this frame (press to remove)',
-                  KeyLamp.draft => 'Keys exist; this change is not a key',
-                  KeyLamp.keyed => 'Animated (press to key this frame)',
-                  KeyLamp.none => 'Press to key this frame',
-                },
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: widget.onTap,
-                  child: Container(
-                    width: EditorMetrics.s8,
-                    height: EditorMetrics.s8,
-                    alignment: Alignment.center,
-                    child: shown && EditorTheme.of(context).skin.newFace
-                        ? Transform.rotate(
-                            angle: .785398,
-                            child: Container(
-                              width: EditorMetrics.s5,
-                              height: EditorMetrics.s5,
-                              decoration: BoxDecoration(
-                                color: color,
-                                border: color == null
-                                    ? Border.all(
-                                        color: EditorTheme.of(context).muted,
-                                      )
-                                    : null,
-                              ),
-                            ),
-                          )
-                        : shown
-                        ? Container(
-                            width: EditorMetrics.s5,
-                            height: EditorMetrics.s5,
-                            decoration: BoxDecoration(
-                              color: color,
-                              shape: BoxShape.circle,
-                              border: color == null
-                                  ? Border.all(
-                                      color: EditorTheme.of(context).muted,
-                                    )
-                                  : null,
-                            ),
-                          )
-                        : null,
-                  ),
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-}
 
 /// On / off with the result drawn beside it, so the switch says what it does
 /// without a word.
 class EditorSwitch extends StatelessWidget {
   static const minExpandedWidth =
-      EditorMetrics.s22 + EditorMetrics.s4 + EditorMetrics.s14;
+      Step.s22 + Step.s4 + Step.s14;
   const EditorSwitch({
     super.key,
     required this.on,
@@ -206,10 +99,10 @@ class EditorSwitch extends StatelessWidget {
           behavior: HitTestBehavior.opaque,
           onTap: enabled ? () => onChanged!(!on) : null,
           child: SizedBox.square(
-            dimension: EditorMetrics.row,
+            dimension: Surface.workRow,
             child: Icon(
               glyph,
-              size: EditorMetrics.s16,
+              size: Step.s16,
               color: !enabled
                   ? EditorTheme.of(context).disabledInk
                   : on
@@ -226,16 +119,16 @@ class EditorSwitch extends StatelessWidget {
         behavior: HitTestBehavior.opaque,
         onTap: enabled ? () => onChanged!(!on) : null,
         child: SizedBox(
-          height: EditorMetrics.row,
+          height: Surface.workRow,
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               AnimatedContainer(
                 // a switch the hand just pressed shows its new state at once
                 duration: Duration.zero,
-                width: EditorMetrics.s22,
-                height: EditorMetrics.s12,
-                padding: const EdgeInsets.all(EditorMetrics.s2),
+                width: Step.s22,
+                height: Step.s12,
+                padding: const EdgeInsets.all(Step.s2),
                 decoration: BoxDecoration(
                   color: on
                       ? tint ?? EditorTheme.of(context).accent
@@ -243,17 +136,17 @@ class EditorSwitch extends StatelessWidget {
                 ),
                 alignment: on ? Alignment.centerRight : Alignment.centerLeft,
                 child: Container(
-                  width: EditorMetrics.s8,
-                  height: EditorMetrics.s8,
+                  width: Step.s8,
+                  height: Step.s8,
                   color: on
                       ? EditorTheme.of(context).tabInk
                       : EditorTheme.of(context).ink,
                 ),
               ),
-              const SizedBox(width: EditorMetrics.s4),
+              const SizedBox(width: Step.s4),
               Icon(
                 glyph,
-                size: EditorMetrics.s14,
+                size: Step.s14,
                 color: !enabled
                     ? EditorTheme.of(context).disabledInk
                     : ink ??

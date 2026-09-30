@@ -8,7 +8,7 @@ import '../../browser/parts.dart';
 import '../../desks/parts.dart' show kMint, kBlue, kPink, kViolet;
 import 'model.dart';
 import '../../theme/neutral.dart';
-import '../../theme/surface.dart' show Dn, Surface;
+import '../../theme/metrics.dart' show Dn, Surface;
 
 enum TMode { move, scale, rotate, anchor }
 

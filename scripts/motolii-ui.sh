@@ -39,7 +39,7 @@ case "${1:-dev}" in
     [[ -n "$flutter_bin" ]] || { echo 'Install Flutter and set FLUTTER_BIN or add it to PATH.'; exit 1; }
     export MOTOLII_NATIVE_LIBRARY="$workspace/target/debug/libmotolii_ui.dylib"
     [[ -f "$MOTOLII_NATIVE_LIBRARY" ]] || { echo 'Run scripts/motolii-ui.sh native once, then it.'; exit 1; }
-    it_defines=(--dart-define=MOTOLII_SHELL=live)
+    it_defines=()
     it_dir=$(mktemp -d /tmp/motolii-it.XXXXXX)
     trap 'rm -rf -- "$it_dir"' EXIT
     if [[ -n "${2:-}" ]]; then
@@ -86,9 +86,9 @@ case "${1:-dev}" in
     export MOTOLII_NATIVE_LIBRARY="$workspace/target/release/libmotolii_ui.dylib"
     cd "$ui"
     if [[ $# -gt 1 ]]; then
-      exec "$flutter_bin" run --profile -d macos --dart-define="MOTOLII_SHELL=${MOTOLII_SHELL:-live}" --dart-define="MOTOLII_DOCUMENT=$2"
+      exec "$flutter_bin" run --profile -d macos --dart-define="MOTOLII_DOCUMENT=$2"
     fi
-    exec "$flutter_bin" run --profile -d macos --dart-define="MOTOLII_SHELL=${MOTOLII_SHELL:-live}"
+    exec "$flutter_bin" run --profile -d macos
     ;;
   dev)
     [[ -n "$flutter_bin" ]] || { echo 'Install Flutter and set FLUTTER_BIN or add it to PATH.'; exit 1; }
@@ -97,10 +97,10 @@ case "${1:-dev}" in
     if [[ $# -gt 1 ]]; then
       document="$(cd "$(dirname "$2")" && pwd)/$(basename "$2")"
       cd "$ui"
-      exec "$flutter_bin" run -d macos --pid-file "$state/flutter.pid" --dart-define="MOTOLII_SHELL=${MOTOLII_SHELL:-live}" --dart-define="MOTOLII_DOCUMENT=$document"
+      exec "$flutter_bin" run -d macos --pid-file "$state/flutter.pid" --dart-define="MOTOLII_DOCUMENT=$document"
     fi
     cd "$ui"
-    exec "$flutter_bin" run -d macos --pid-file "$state/flutter.pid" --dart-define="MOTOLII_SHELL=${MOTOLII_SHELL:-live}"
+    exec "$flutter_bin" run -d macos --pid-file "$state/flutter.pid"
     ;;
   # Same as dev (the product UI), kept for scripts that name it.
   live)
@@ -110,10 +110,10 @@ case "${1:-dev}" in
     if [[ $# -gt 1 ]]; then
       document="$(cd "$(dirname "$2")" && pwd)/$(basename "$2")"
       cd "$ui"
-      exec "$flutter_bin" run -d macos -t lib/app/main.dart --pid-file "$state/flutter.pid" --dart-define="MOTOLII_DOCUMENT=$document"
+      exec "$flutter_bin" run -d macos --pid-file "$state/flutter.pid" --dart-define="MOTOLII_DOCUMENT=$document"
     fi
     cd "$ui"
-    exec "$flutter_bin" run -d macos -t lib/app/main.dart --pid-file "$state/flutter.pid"
+    exec "$flutter_bin" run -d macos --pid-file "$state/flutter.pid"
     ;;
-  *) echo 'Usage: scripts/motolii-ui.sh {check|check-read-only|native|test|test-window|why-slow|dev [document.rrd|script.js]|live [document.rrd|script.js]|profile [document.rrd|script.js]|reload|restart-ui}  (MOTOLII_SHELL=classic|new dev: the migration-source shells)'; exit 1 ;;
+  *) echo 'Usage: scripts/motolii-ui.sh {check|check-read-only|native|test|test-window|why-slow|dev [document.rrd|script.js]|live [document.rrd|script.js]|profile [document.rrd|script.js]|reload|restart-ui}'; exit 1 ;;
 esac

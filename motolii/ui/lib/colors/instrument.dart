@@ -12,7 +12,7 @@ import '../theme/glyphs.dart';
 import '../session/color_edit.dart';
 import '../session/editor_session.dart';
 import '../theme/neutral.dart';
-import '../theme/surface.dart' show Dn, Surface;
+import '../theme/metrics.dart' show Dn, Surface;
 
 /// The Colors instrument over the session: the reference's wheel, hex and two bars, editing the colour target (the
 /// Inspector's focused colour, else the selection's fill) through [ColorEdit] — the same preview, commit and cancel
@@ -196,7 +196,7 @@ class _LiveColorInstrumentState extends State<LiveColorInstrument> {
                     ),
                   ],
                 ),
-                const SizedBox(width: 6),
+                const SizedBox(width: Surface.sectionGap),
                 SizedBox(
                   height: wheel,
                   child: Row(
@@ -221,7 +221,7 @@ class _LiveColorInstrumentState extends State<LiveColorInstrument> {
                         ),
                         (p, {start = false}) => _bar('value', p, start: start),
                       ),
-                      const SizedBox(width: 3),
+                      const SizedBox(width: Surface.inlineGap),
                       Opacity(
                         opacity: alpha ? 1 : .4,
                         child: _drag(
@@ -278,7 +278,7 @@ class _LiveColorInstrumentState extends State<LiveColorInstrument> {
                         ),
                       ]),
                       // the same colour in the other numbers people ask for, in the space beside the wheel
-                      const SizedBox(height: 6),
+                      const SizedBox(height: Surface.sectionGap),
                       for (final (a, b) in [
                         ('R ${(color.r * 255).round()}', 'H ${hsv.hue.round()}°'),
                         ('G ${(color.g * 255).round()}', 'S ${(hsv.saturation * 100).round()}'),

@@ -60,13 +60,12 @@ UI接続の寿命は `macos/Runner/WindowAttachment.swift` が識別する。`Ed
 | `input` | 共通ショートカット、入力の所有、ナビゲーションと慣性 | ファイル操作の実装、描画エンジン |
 | `controls` / `theme` | 共有の部品(ボタン、メニュー、ダイアログ、シート)と色・寸法・字形 | Session、Document、個別パネル |
 | `stage` / `timeline` / `inspector` / `browser` / `effects` / `colors` / `fonts` / `desks` | 各パネルの表示と対象固有の操作入口 | Native transportの直接呼出し、第二の作品状態 |
-| `legacy` | 退役予定のClassic/New shellとその部品(機能の移行元。能力ゲートは product-direction.md) | 新しい機能の置き場 |
 | `session` | snapshot受信、命令queue、再生要求の調停 | ウィジェットやDockの形 |
 | `bridge` | MethodChannel、型付きoperationとwire codec | UI判断、作品の編集意味 |
 | Rust `editor` | 選択/clipboard/gestureをDocument/Intentへ変換する編集層 | Flutter widget、作品の第二の保存先 |
 | Rust `doc` | 不変条件、親子・キー、transaction、Undo | OS/Flutterの状態 |
 
-`lib/main.dart`は起動するshellの選択だけ(製品は`app/main.dart`)。パネル座席の組み立ては`workspace/seats.dart`。nativeへの命令はEditorSessionを通し、bridge以外でMethodChannelを生成しない。
+`lib/main.dart`がアプリの入口(製品の窓)。パネル座席の組み立ては`workspace/seats.dart`。nativeへの命令はEditorSessionを通し、bridge以外でMethodChannelを生成しない。
 
 共通編集helperは`motolii/ui/native/src/editor`が現役。旧Dioxus側は履歴参照であり、修正を両側へ複製しない。由来は[imported-edit-helpers.json](imported-edit-helpers.json)。`keyframe_edit.rs`はキー編集の意味を持ち、widgetではない。
 

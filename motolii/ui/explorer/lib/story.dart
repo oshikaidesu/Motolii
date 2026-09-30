@@ -7,7 +7,7 @@ import 'dart:io';
 import 'package:flutter/widgets.dart';
 import 'package:motolii_ui/controls/panel/scale.dart';
 import 'package:motolii_ui/theme/neutral.dart';
-import 'package:motolii_ui/theme/tokens.dart' show H;
+import 'package:motolii_ui/theme/identity.dart' show H;
 import 'package:motolii_ui/theme/live_palette.dart';
 import 'package:motolii_ui/app/ui_scale.dart';
 import 'package:motolii_ui/session/editor_session.dart';

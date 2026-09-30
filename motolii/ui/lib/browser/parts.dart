@@ -2,7 +2,7 @@
 // Only the dock's tab strip and two tiny controls are shared; every body decides its own folding.
 import 'package:flutter/widgets.dart';
 
-import '../theme/surface.dart';
+import '../theme/metrics.dart';
 import '../theme/glyphs.dart';
 import '../theme/neutral.dart';
 
@@ -192,7 +192,7 @@ class _Tab extends StatelessWidget {
           ),
         ),
         if (!compact) ...[
-          const SizedBox(width: 6),
+          const SizedBox(width: Surface.sectionGap),
           Text(t.name, softWrap: false, style: Dn.name(selected ? N.g95 : N.g63)),
         ],
       ],
@@ -208,125 +208,6 @@ class HfTabGlyph extends CustomPainter {
   void paint(Canvas canvas, Size s) => drawHg(canvas, s, g, c, Surface.base);
   @override
   bool shouldRepaint(HfTabGlyph o) => o.g != g || o.c != c;
-}
-
-class SearchBox extends StatelessWidget {
-  const SearchBox(this.hint, {super.key});
-  final String hint;
-  @override
-  Widget build(BuildContext context) => Container(
-    height: Surface.control,
-    padding: const EdgeInsets.symmetric(horizontal: 6),
-    decoration: BoxDecoration(
-      color: Surface.raised,
-      border: Border.all(color: Surface.dividerFine),
-      borderRadius: BorderRadius.circular(3),
-    ),
-    child: Row(
-      children: [
-        SizedBox(
-          width: 11,
-          height: 11,
-          child: CustomPaint(painter: HfTabGlyph(HG.search, Surface.muted)),
-        ),
-        const SizedBox(width: 5),
-        Expanded(
-          child: Text(
-            hint,
-            softWrap: false,
-            overflow: TextOverflow.clip,
-            style: Dn.label(N.g63),
-          ),
-        ),
-      ],
-    ),
-  );
-}
-
-class SearchKey extends StatelessWidget {
-  const SearchKey({super.key});
-  @override
-  Widget build(BuildContext context) => Container(
-    width: Surface.control,
-    height: Surface.control,
-    decoration: BoxDecoration(
-      color: Surface.raised,
-      border: Border.all(color: Surface.dividerFine),
-      borderRadius: BorderRadius.circular(3),
-    ),
-    child: Center(
-      child: SizedBox(
-        width: 11,
-        height: 11,
-        child: CustomPaint(painter: HfTabGlyph(HG.search, Surface.muted)),
-      ),
-    ),
-  );
-}
-
-/// Small text tabs with an underline: quiet housing for categories.
-class Chips extends StatelessWidget {
-  const Chips(this.items, this.active, {super.key});
-  final List<String> items;
-  final int active;
-  @override
-  Widget build(BuildContext context) => SizedBox(
-    height: 18,
-    child: Row(
-      children: [
-        for (var i = 0; i < items.length; i++)
-          Container(
-            margin: const EdgeInsets.only(right: 9),
-            decoration: BoxDecoration(
-              border: Border(
-                bottom: BorderSide(
-                  color: i == active
-                      ? N.g91
-                      : N.clear,
-                  width: 1.5,
-                ),
-              ),
-            ),
-            child: Center(
-              child: Text(
-                items[i],
-                softWrap: false,
-                style: caps(
-                  Dn.labelSize,
-                  c: i == active ? N.g95 : Surface.muted,
-                ),
-              ),
-            ),
-          ),
-      ],
-    ),
-  );
-}
-
-class Section extends StatelessWidget {
-  const Section(this.label, {super.key, this.compact = false});
-  final String label;
-  final bool compact;
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: EdgeInsets.only(top: compact ? 6 : 9, bottom: 5),
-    child: Row(
-      children: [
-        Flexible(
-          child: Text(
-            label.toUpperCase(),
-            softWrap: false,
-            overflow: TextOverflow.clip,
-            style: caps(compact ? 9.5 : 10),
-          ),
-        ),
-        const SizedBox(width: 5),
-        const Expanded(
-          child: SizedBox(height: 1, child: ColoredBox(color: Surface.dividerFine)),
-        ),
-      ],
-    ),
-  );
 }
 
 void drawHg(Canvas c, Size s, HG g, Color col, Color bg) {

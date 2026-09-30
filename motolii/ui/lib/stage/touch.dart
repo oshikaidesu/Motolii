@@ -1,4 +1,4 @@
-part of 'stage_panel.dart';
+part of 'stage.dart';
 
 /// AE's P / R / S, held: the gizmo narrows to position, rotation or scale
 /// for as long as the key is down. The same key still reveals the same

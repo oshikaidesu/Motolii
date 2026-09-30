@@ -72,7 +72,7 @@ void main() {
 
   testWidgets('a pointer merely over a clip changes nothing but a hairline; pressing its scrub track asks for the frame', (t) async {
     final asked = <double>[];
-    final clip = BrowserItem(id: 'clip', name: 'clip.mp4', path: '/nowhere/clip.mp4', kind: 'video', mime: 'video/mp4', width: 1280, height: 720, seconds: 8);
+    final clip = const BrowserItem(id: 'clip', name: 'clip.mp4', path: '/nowhere/clip.mp4', kind: 'video', mime: 'video/mp4', width: 1280, height: 720, seconds: 8);
     final faces = _Faces(asked);
     await t.pumpWidget(Directionality(
       textDirection: TextDirection.ltr,

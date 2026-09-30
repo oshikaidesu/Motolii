@@ -5,7 +5,7 @@ import '../../browser/parts.dart';
 import '../../theme/glyphs.dart';
 import '../../session/editor_session.dart';
 import '../../theme/neutral.dart';
-import '../../theme/surface.dart' show Dn, Surface;
+import '../../theme/metrics.dart' show Dn, Surface;
 
 /// The Web desk's New face: one URL, kept as the document's own desk setting (`storeDesk('webUrl', ...)`, the same
 /// operation Classic's WebPanel uses), and a button that asks the host to open it (`native('openWeb', ...)`).
@@ -49,7 +49,7 @@ class _NewWebState extends State<NewWeb> {
               onEditingComplete: () => c.storeDesk('webUrl', _field.text),
             ),
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: Surface.sectionGap),
           GestureDetector(
             key: const ValueKey('web-open'),
             behavior: HitTestBehavior.opaque,

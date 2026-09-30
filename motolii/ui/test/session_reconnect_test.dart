@@ -50,7 +50,7 @@ void main() {
           .handlePlatformMessage(
             EditorSession.channel.name,
             const StandardMethodCodec().encodeMethodCall(
-              MethodCall('playbackFrame', {'frame': 41}),
+              const MethodCall('playbackFrame', {'frame': 41}),
             ),
             null,
           );

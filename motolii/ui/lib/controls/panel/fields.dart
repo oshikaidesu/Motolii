@@ -1,8 +1,6 @@
-import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
-import '../leaves.dart';
-import '../../theme/editor_metrics.dart';
+import '../../theme/metrics.dart';
 import '../../theme/editor_theme.dart';
 
 /// The box typing happens in, and the field that holds a draft until it is
@@ -18,10 +16,10 @@ class EditorFieldFrame extends StatelessWidget {
     required this.child,
     this.focus,
     this.error = false,
-    this.height = EditorMetrics.row,
+    this.height = Surface.workRow,
     this.minHeight,
     this.maxHeight,
-    this.padding = const EdgeInsets.symmetric(horizontal: EditorMetrics.s5),
+    this.padding = const EdgeInsets.symmetric(horizontal: Step.s5),
     this.color,
   });
   final Widget child;
@@ -66,101 +64,4 @@ class EditorFieldFrame extends StatelessWidget {
         );
 }
 
-class EditorDraftField extends StatefulWidget {
-  const EditorDraftField({
-    super.key,
-    required this.value,
-    required this.label,
-    required this.onCommit,
-    this.multiline = false,
-    this.enabled = true,
-    this.validator,
-  });
-  final String value, label;
-  final bool multiline, enabled;
-  final String? Function(String)? validator;
-  final Future<void> Function(String) onCommit;
-  @override
-  State<EditorDraftField> createState() => _EditorDraftFieldState();
-}
 
-class _EditorDraftFieldState extends State<EditorDraftField> {
-  late final TextEditingController _text = TextEditingController(
-    text: widget.value,
-  );
-  late final FocusNode _focus = FocusNode(
-    onKeyEvent: (_, event) {
-      if (event is KeyDownEvent &&
-          event.logicalKey == LogicalKeyboardKey.escape &&
-          !_text.value.composing.isValid) {
-        _cancelled = true;
-        _text.text = widget.value;
-        setState(() => _error = null);
-        _focus.unfocus();
-        return KeyEventResult.handled;
-      }
-      return KeyEventResult.ignored;
-    },
-  )..addListener(_focusChanged);
-  String? _error;
-  bool _cancelled = false, _committing = false;
-  void _focusChanged() {
-    if (!_focus.hasFocus && !_cancelled) _commit();
-    _cancelled = false;
-  }
-
-  void _commit() {
-    final error = widget.validator?.call(_text.text);
-    setState(() => _error = error);
-    if (error != null) {
-      _focus.requestFocus();
-      return;
-    }
-    if (_text.text != widget.value && !_committing) {
-      _committing = true;
-      widget.onCommit(_text.text).whenComplete(() => _committing = false);
-    }
-  }
-
-  @override
-  void didUpdateWidget(covariant EditorDraftField old) {
-    super.didUpdateWidget(old);
-    if (!_focus.hasFocus && old.value != widget.value)
-      _text.text = widget.value;
-  }
-
-  @override
-  void dispose() {
-    _focus.removeListener(_focusChanged);
-    _focus.dispose();
-    _text.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => EditorTooltip(
-    message: _error ?? widget.label,
-    child: EditorFieldFrame(
-      focus: _focus,
-      error: _error != null,
-      height: widget.multiline ? null : EditorMetrics.row,
-      minHeight: widget.multiline ? EditorMetrics.row : null,
-      child: EditorTextField(
-        controller: _text,
-        focusNode: _focus,
-        enabled: widget.enabled,
-        minLines: 1,
-        maxLines: widget.multiline ? 4 : 1,
-        style: TextStyle(
-          fontSize: EditorMetrics.font,
-          color: EditorTheme.of(context).ink,
-        ),
-        hint: widget.label,
-        onSubmitted: (_) => _commit(),
-        onChanged: (_) {
-          if (_error != null) setState(() => _error = null);
-        },
-      ),
-    ),
-  );
-}

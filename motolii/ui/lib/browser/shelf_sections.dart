@@ -2,7 +2,7 @@ import 'dart:math' as math;
 import 'package:flutter/widgets.dart';
 import 'parts.dart';
 import '../theme/neutral.dart';
-import '../theme/surface.dart' show Dn;
+import '../theme/metrics.dart' show Dn, Surface;
 
 /// The housing Create and Media share (Swiss: one grid, a few sizes, hierarchy from type and space). What sits in a
 /// tile is each shelf's own face; only the section rhythm, the column rule and the picked ring live here.
@@ -10,18 +10,6 @@ import '../theme/surface.dart' show Dn;
 /// The grid's unit: paddings, gaps and heading space are multiples of it.
 const kShelfUnit = 4.0;
 const kShelfPad = 3 * kShelfUnit, kShelfGap = 2 * kShelfUnit;
-
-/// A section's heading: the class read at a glance (sentence weight, not tiny caps) and how many it holds.
-class ShelfHeading extends StatelessWidget {
-  const ShelfHeading(this.text, {super.key, this.count, this.first = false});
-  final String text;
-  final int? count;
-
-  /// The first section under the strip: the strip's own rule is enough.
-  final bool first;
-  @override
-  Widget build(BuildContext context) => SwissHeading(text, count: count, rule: !first);
-}
 
 /// The Browser's one heading voice: the section's name in plain semibold, its count in a small quiet pill.
 class SwissHeading extends StatelessWidget {
@@ -38,7 +26,7 @@ class SwissHeading extends StatelessWidget {
             Container(
               margin: const EdgeInsets.only(left: 4.5),
               padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-              decoration: BoxDecoration(color: N.g15, borderRadius: BorderRadius.circular(3)),
+              decoration: BoxDecoration(color: N.g15, borderRadius: BorderRadius.circular(Surface.controlRadius)),
               child: Text('$count', style: sans(Dn.microSize, c: N.g63, w: FontWeight.w500)),
             ),
         ]),
@@ -51,17 +39,3 @@ class SwissHeading extends StatelessWidget {
   return (columns: columns, width: (width - pad * 2 - gap * (columns - 1)) / columns);
 }
 
-/// The picked tile: a light ring inside its corner, thick enough to find in a small screenshot.
-class PickedRing extends StatelessWidget {
-  const PickedRing({super.key, this.radius = 3});
-  final double radius;
-  @override
-  Widget build(BuildContext context) => IgnorePointer(
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            border: Border.all(color: N.g95, width: 1.5),
-            borderRadius: BorderRadius.circular(radius),
-          ),
-        ),
-      );
-}

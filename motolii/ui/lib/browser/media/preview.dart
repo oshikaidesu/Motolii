@@ -7,7 +7,7 @@ import 'package:flutter/widgets.dart';
 
 import '../panel_chrome.dart' show GlyphBox;
 import '../../theme/glyphs.dart';
-import '../../theme/surface.dart';
+import '../../theme/metrics.dart';
 import '../../theme/neutral.dart';
 import '../item.dart';
 import 'library.dart' show materialFace;
@@ -52,7 +52,7 @@ class _Info extends StatelessWidget {
   final VoidCallback? onPlace;
   @override
   Widget build(BuildContext context) {
-    Widget chip(String text) => Container(margin: const EdgeInsets.only(right: 4, bottom: 3), padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5), decoration: BoxDecoration(color: N.g15, borderRadius: BorderRadius.circular(3)), child: Text(text, softWrap: false, style: Dn.label(N.g91, FontWeight.w500)));
+    Widget chip(String text) => Container(margin: const EdgeInsets.only(right: 4, bottom: 3), padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5), decoration: BoxDecoration(color: N.g15, borderRadius: BorderRadius.circular(Surface.controlRadius)), child: Text(text, softWrap: false, style: Dn.label(N.g91, FontWeight.w500)));
     Widget fact(String label, String? value) => value == null || value.isEmpty
         ? const SizedBox.shrink()
         : Padding(padding: const EdgeInsets.only(bottom: 3), child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [SizedBox(width: 48, child: Text(label, style: Dn.label(N.g56))), Expanded(child: Text(value, maxLines: 2, overflow: TextOverflow.ellipsis, style: Dn.value(N.g86)))]));
@@ -70,7 +70,7 @@ class _Info extends StatelessWidget {
           if (item.seconds != null) chip(clockText(item.seconds)),
           if (item.width != null && item.height != null) chip('${item.width} × ${item.height}'),
         ]),
-        const SizedBox(height: 3),
+        const SizedBox(height: Surface.inlineGap),
         Expanded(
           child: SingleChildScrollView(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -222,7 +222,7 @@ class _Scrubber extends StatelessWidget {
             }),
           ),
           const SizedBox(width: 8),
-          Text(label, style: Dn.value(N.g69).copyWith(fontSize: 10)),
+          Text(label, style: Dn.value(N.g69).copyWith(fontSize: Dn.labelSize)),
         ]),
       );
 }

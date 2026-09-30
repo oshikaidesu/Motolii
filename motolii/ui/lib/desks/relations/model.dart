@@ -1,10 +1,10 @@
-import 'package:flutter/widgets.dart';
 
 import '../../session/editor_session.dart';
 import '../../session/read_model.dart';
 import '../../theme/neutral.dart';
+import '../../theme/identity.dart' show H;
 
-const kRed = Color(0xFFFF4D3D);
+const kRed = H.relation;
 const kInk2 = N.g76;
 
 /// The source of a relation: one component of one property of one thing.

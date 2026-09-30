@@ -13,7 +13,7 @@ import '../browser/panel_chrome.dart';
 import '../session/editor_session.dart';
 import '../browser/visual_sample.dart';
 import '../theme/neutral.dart';
-import '../theme/surface.dart' show Dn, Surface;
+import '../theme/metrics.dart' show Dn, Surface;
 
 typedef Sw = (String, int, String); // name, argb, class
 
@@ -121,45 +121,6 @@ List<Sw> colorsBase() => [
   for (final e in _pal.entries)
     for (final s in e.value) (s.$1, s.$2, e.key),
 ];
-
-/// Growth fixture: a thousand named swatches across many palettes. Not real content.
-List<Sw> colorsStress() {
-  final out = <Sw>[...colorsBase()];
-  const names = [
-    'Studio',
-    'Retro',
-    'Ocean',
-    'Forest',
-    'Desert',
-    'City',
-    'Candy',
-    'Metal',
-    'Ink',
-    'Aurora',
-    'Ember',
-    'Glacier',
-    'Orchard',
-    'Circuit',
-    'Velvet',
-    'Paper',
-  ];
-  for (var p = 0; p < names.length; p++) {
-    for (var k = 0; k < 40; k++) {
-      final h = (p * 41 + k * 9) % 360.0;
-      out.add((
-        '${names[p]} ${k + 1}',
-        HSLColor.fromAHSL(
-          1,
-          h,
-          .35 + (k % 5) * .13,
-          .3 + (k % 7) * .08,
-        ).toColor().toARGB32(),
-        names[p],
-      ));
-    }
-  }
-  return out;
-}
 
 String _hex(int v) =>
     '#${(v & 0xFFFFFF).toRadixString(16).padLeft(6, '0').toUpperCase()}';
@@ -305,7 +266,7 @@ class _ColorsPanelState extends State<ColorsPanel>
           else
             _MiniInstrument(color: widget.current),
           if (!wheelOnly && (n > 0 || gradients || !filtering))
-            const SizedBox(height: 3),
+            const SizedBox(height: Surface.inlineGap),
           if (n == 0 && !gradients && !wheelOnly)
             emptyBody('No colour matches "${search.query}".'),
           for (final e in sections.entries) ...[
@@ -358,7 +319,7 @@ class _ColorsPanelState extends State<ColorsPanel>
           if (shown.isEmpty && filtering && !wheelOnly)
             emptyBody('No colour matches.'),
           if (!wheelOnly) ...[
-            const SizedBox(height: 3),
+            const SizedBox(height: Surface.inlineGap),
             _Swatches(shown, 20, onTap: widget.onSwatch, onMenu: widget.onSwatchMenu),
           ],
         ],
@@ -408,14 +369,14 @@ class _Instrument extends StatelessWidget {
             height: wheel,
             child: CustomPaint(painter: WheelPainter()),
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: Surface.sectionGap),
           SizedBox(
             width: wheel,
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Text('#E8508F', style: mono(Dn.nameSize, c: N.g82)),
-                const SizedBox(width: 6),
+                const SizedBox(width: Surface.sectionGap),
                 const GlyphBox(HG.composite, size: 13, color: Surface.muted),
               ],
             ),

@@ -3,7 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
-import '../../theme/editor_metrics.dart';
+import '../../theme/metrics.dart';
 import '../../theme/editor_theme.dart';
 
 /// The leaves that float over the panels in the overlay: the tooltip's sheet,
@@ -16,14 +16,14 @@ class EditorTooltipSheet extends StatelessWidget {
   final String message;
   @override
   Widget build(BuildContext context) => Container(
-    constraints: const BoxConstraints(minHeight: EditorMetrics.control),
+    constraints: const BoxConstraints(minHeight: Step.s24),
     padding: const EdgeInsets.symmetric(
-      horizontal: EditorMetrics.s8,
-      vertical: EditorMetrics.s4,
+      horizontal: Step.s8,
+      vertical: Step.s4,
     ),
     decoration: BoxDecoration(
       color: EditorTheme.of(context).tooltip,
-      borderRadius: BorderRadius.all(Radius.circular(EditorMetrics.s4)),
+      borderRadius: const BorderRadius.all(Radius.circular(Step.s4)),
     ),
     child: Center(
       widthFactor: 1,
@@ -31,7 +31,7 @@ class EditorTooltipSheet extends StatelessWidget {
       child: Text(
         message,
         style: const TextStyle(
-          fontSize: EditorMetrics.s12,
+          fontSize: Step.s12,
           color: EditorTheme.black,
         ),
       ),
@@ -184,7 +184,7 @@ class _MenuLayout extends SingleChildLayoutDelegate {
   bool shouldRelayout(_MenuLayout old) => old.anchor != anchor;
 }
 
-/// One row of a menu: [EditorMetrics.row] high, [EditorTheme.menuRowPadding]
+/// One row of a menu: [Surface.workRow] high, [EditorTheme.menuRowPadding]
 /// across, ink on the sheet, [EditorTheme.of(context).selectInk] on [EditorTheme.of(context).select]
 /// while hovered or focused, [EditorTheme.of(context).disabledInk] when it cannot be
 /// pressed.
@@ -232,13 +232,13 @@ class _EditorMenuRowState extends State<EditorMenuRow> {
               excludeFromSemantics: true,
               onTap: widget.onPressed,
               child: Container(
-                height: EditorMetrics.row,
+                height: Surface.workRow,
                 padding: EditorTheme.menuRowPadding,
                 color: lit ? EditorTheme.of(context).select : EditorTheme.clear,
                 alignment: Alignment.centerLeft,
                 child: DefaultTextStyle.merge(
                   style: TextStyle(
-                    fontSize: EditorMetrics.font,
+                    fontSize: Dn.labelSize,
                     color: !enabled
                         ? EditorTheme.of(context).disabledInk
                         : lit

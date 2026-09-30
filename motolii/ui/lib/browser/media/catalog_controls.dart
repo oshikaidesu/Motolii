@@ -3,13 +3,13 @@ import 'dart:io';
 import 'package:flutter/widgets.dart';
 
 import '../parts.dart' show sans;
-import '../../theme/surface.dart';
+import '../../theme/metrics.dart';
 import '../../theme/neutral.dart';
 import 'catalog_session.dart';
 import '../item.dart';
 import '../user_state.dart';
 import 'explore/graph.dart';
-import 'views.dart';
+import 'media_browser.dart';
 import 'fluid.dart';
 import 'preview.dart';
 import '../../session/editor_session.dart' show EditorSession;
@@ -204,7 +204,7 @@ class _CatalogMediaState extends State<CatalogMedia> {
                 height: Surface.control + 4,
                 margin: const EdgeInsets.fromLTRB(6, 3, 6, 3),
                 padding: const EdgeInsets.symmetric(horizontal: 6),
-                decoration: BoxDecoration(color: N.g07, borderRadius: BorderRadius.circular(3)),
+                decoration: BoxDecoration(color: N.g07, borderRadius: BorderRadius.circular(Surface.controlRadius)),
                 alignment: Alignment.centerLeft,
                 child: _Search(session),
               ),
@@ -223,7 +223,7 @@ class _CatalogMediaState extends State<CatalogMedia> {
                       key: const ValueKey('media-drop-hint'),
                       margin: const EdgeInsets.all(6),
                       alignment: Alignment.center,
-                      decoration: BoxDecoration(color: N.veil, border: Border.all(color: N.g95, width: 1.4), borderRadius: BorderRadius.circular(4.5)),
+                      decoration: BoxDecoration(color: N.veil, border: Border.all(color: N.g95, width: 1.4), borderRadius: BorderRadius.circular(Surface.faceRadius)),
                       child: Text('Drop to import', style: sans(Dn.nameSize, c: N.g95)),
                     ),
                   ),
@@ -333,7 +333,7 @@ class _Chip extends StatelessWidget {
         child: Container(
           margin: const EdgeInsets.only(right: 3),
           padding: const EdgeInsets.symmetric(horizontal: 6),
-          decoration: BoxDecoration(color: on ? N.g20 : null, borderRadius: BorderRadius.circular(3)),
+          decoration: BoxDecoration(color: on ? N.g20 : null, borderRadius: BorderRadius.circular(Surface.controlRadius)),
           child: Center(widthFactor: 1, child: Text(label, softWrap: false, style: sans(10.5, c: on ? N.g95 : (dim ? N.g44 : N.g63), w: on ? FontWeight.w600 : FontWeight.w500))),
         ),
       );

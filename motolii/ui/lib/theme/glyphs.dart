@@ -1,3 +1,4 @@
+// surface-file: glyphs drawn in a 24-unit design box, geometry not chrome spacing
 // Glyphs drawn to the reference forms (handoff 1.6 icon boxes). 24-unit design box.
 // Weights are deliberately unequal: outline glyphs 1.4-1.7, filled masses, small dots.
 import 'dart:math' as math;

@@ -10,7 +10,7 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/widgets.dart';
-import 'package:motolii_ui/theme/surface.dart';
+import 'package:motolii_ui/theme/metrics.dart';
 import 'package:motolii_ui/theme/neutral.dart';
 import 'package:motolii_ui/browser/item.dart';
 import 'package:motolii_ui/browser/media/fluid.dart' show Frame;

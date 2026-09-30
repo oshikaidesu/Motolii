@@ -47,12 +47,6 @@ mixin SessionCommands on SessionCore {
     await placePanel('Colors', 'show');
   }
 
-  Future<void> reselectKeys() async {
-    final back = previousKeys;
-    if (back == null) return;
-    await command('select', back);
-  }
-
   Future<void> command(String op, [Map<String, dynamic> args = const {}]) {
     if (_disposed) return Future<void>.value();
     LatencyProbe.mark('cmd:$op');

@@ -6,7 +6,7 @@ import '../../browser/parts.dart';
 import '../parts.dart';
 import '../../controls/menu.dart' show showHfMenu;
 import '../../theme/neutral.dart';
-import '../../theme/surface.dart' show Dn, Surface;
+import '../../theme/metrics.dart' show Dn, Surface;
 
 class NBlock {
   NBlock(this.kind, this.pos, this.size, this.text, [this.tint = 0, this.id, this.png]);
@@ -187,7 +187,7 @@ class _NotesDeskState extends State<NotesDesk> {
     final h = widget.host;
     if (h != null && !h.can(kind)) return;
     setState(() {
-      final c = (Offset(140, 160) - pan) / zoom - Offset(blocks.length * 3.0 % 24, blocks.length * 3.0 % 24);
+      final c = (const Offset(140, 160) - pan) / zoom - Offset(blocks.length * 3.0 % 24, blocks.length * 3.0 % 24);
       final size = switch (kind) { 'note' => const Size(110, 74), 'image' => const Size(110, 80), _ => const Size(100, 28) };
       final b = NBlock(kind, c - Offset(size.width / 2, size.height / 2), size, kind == 'note' ? 'New note' : (kind == 'ref' ? 'Selection' : ''), blocks.length % 2);
       if (h == null) {
@@ -358,7 +358,7 @@ class _NotesDeskState extends State<NotesDesk> {
           decoration: BoxDecoration(color: kViolet, borderRadius: BorderRadius.circular(10.5)),
           child: Row(children: [
             Container(width: 6, height: 6, decoration: const BoxDecoration(color: N.g10, shape: BoxShape.circle)),
-            const SizedBox(width: 6),
+            const SizedBox(width: Surface.sectionGap),
             Expanded(child: Text(b.text, softWrap: false, overflow: TextOverflow.clip, style: sans(Dn.nameSize, c: N.g10, w: FontWeight.w600))),
           ]),
         );

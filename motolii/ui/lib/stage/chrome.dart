@@ -1,4 +1,4 @@
-part of 'stage_panel.dart';
+part of 'stage.dart';
 
 /// Putting the tab together: the bar above, the picture with everything
 /// drawn over it, and the bar below. This is the only place that builds
@@ -149,7 +149,7 @@ mixin _StageChrome
                     ),
                   ),
                   children: [
-                    const SizedBox(width: EditorMetrics.s8),
+                    const SizedBox(width: Step.s8),
                     if (_userStage)
                       _button(
                         'Front',
@@ -278,18 +278,18 @@ mixin _StageChrome
               animation: _chrome,
               builder: (context, _) => EditorBar(
                 padding: const EdgeInsets.symmetric(
-                  horizontal: EditorMetrics.s8,
+                  horizontal: Step.s8,
                 ),
                 children: [
                   Text(
                     '${_width.toInt()} × ${_height.toInt()}',
                     style: TextStyle(
-                      fontSize: EditorMetrics.dense,
+                      fontSize: Step.s9,
                       color: EditorTheme.of(context).muted,
                     ),
                   ),
                   Padding(
-                    padding: const EdgeInsets.only(left: EditorMetrics.s8),
+                    padding: const EdgeInsets.only(left: Step.s8),
                     child: EditorSwitch(
                       key: const ValueKey('stage:transparentGround'),
                       on: _transparentGround,
@@ -305,7 +305,7 @@ mixin _StageChrome
                   ),
                   if (_userStage)
                     Padding(
-                      padding: const EdgeInsets.only(left: EditorMetrics.s8),
+                      padding: const EdgeInsets.only(left: Step.s8),
                       child: ValueListenableBuilder<Map<String, dynamic>>(
                         valueListenable: c.deskWork,
                         builder: (context, _, _) => _button(
@@ -320,18 +320,18 @@ mixin _StageChrome
                     builder: (context, frame, _) => Text(
                       'Frame $frame',
                       style: TextStyle(
-                        fontSize: EditorMetrics.dense,
+                        fontSize: Step.s9,
                         color: EditorTheme.of(context).muted,
                       ),
                     ),
                   ),
                   if (!c.supports('stageGesture'))
                     Padding(
-                      padding: EdgeInsets.only(left: EditorMetrics.s8),
+                      padding: const EdgeInsets.only(left: Step.s8),
                       child: Text(
                         'Transform gestures unavailable',
                         style: TextStyle(
-                          fontSize: EditorMetrics.dense,
+                          fontSize: Step.s9,
                           color: EditorTheme.of(context).muted,
                         ),
                       ),

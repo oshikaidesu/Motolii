@@ -18,14 +18,11 @@ class _RungPill extends StatelessWidget {
       : '×0.01';
   @override
   Widget build(BuildContext context) => Container(
-    constraints: const BoxConstraints(minHeight: EditorMetrics.control),
-    padding: const EdgeInsets.symmetric(
-      horizontal: EditorMetrics.s8,
-      vertical: EditorMetrics.s4,
-    ),
+    constraints: const BoxConstraints(minHeight: Step.s24),
+    padding: const EdgeInsets.symmetric(horizontal: Step.s8, vertical: Step.s4),
     decoration: BoxDecoration(
       color: EditorTheme.of(context).tooltip,
-      borderRadius: BorderRadius.all(Radius.circular(EditorMetrics.s4)),
+      borderRadius: const BorderRadius.all(Radius.circular(Step.s4)),
     ),
     child: Text.rich(
       TextSpan(
@@ -45,7 +42,7 @@ class _RungPill extends StatelessWidget {
         ],
       ),
       style: const TextStyle(
-        fontSize: EditorMetrics.s12,
+        fontSize: Step.s12,
         fontFeatures: [FontFeature.tabularFigures()],
       ),
     ),
@@ -157,36 +154,4 @@ class _TrackPainter extends CustomPainter {
       old.rest != rest ||
       old.tint != tint ||
       old.style != style;
-}
-
-/// The New face's amount: a hairline under the number, lit as far as the
-/// value reaches.
-class _AmountLine extends CustomPainter {
-  const _AmountLine({
-    required this.value,
-    required this.min,
-    required this.max,
-    required this.tint,
-  });
-  final double value, min, max;
-  final Color tint;
-  @override
-  void paint(Canvas canvas, Size size) {
-    final t = max == min ? 0.0 : ((value - min) / (max - min)).clamp(0.0, 1.0);
-    canvas.drawRect(
-      Offset.zero & size,
-      Paint()..color = tint.withValues(alpha: .18),
-    );
-    canvas.drawRect(
-      Rect.fromLTWH(0, 0, size.width * t, size.height),
-      Paint()..color = tint,
-    );
-  }
-
-  @override
-  bool shouldRepaint(_AmountLine old) =>
-      old.value != value ||
-      old.min != min ||
-      old.max != max ||
-      old.tint != tint;
 }
