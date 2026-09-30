@@ -1,9 +1,9 @@
 import 'package:flutter/widgets.dart';
 
-import '../hf/insp/panel.dart';
+import '../inspector/panel.dart';
 import '../session/editor_session.dart';
 import 'store.dart';
-import '../live_hf/adapters/inspector_session.dart';
+import '../inspector/session.dart';
 
 /// One effect's parameters for the Inspector's effect card: the generic Toys over the effect's declared rows.
 class NewEffectParams extends StatefulWidget {

@@ -2,8 +2,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 
-import 'package:motolii_stage5/live_hf/adapters/relations_model.dart';
-import 'package:motolii_stage5/live_hf/adapters/relations_session.dart';
+import 'package:motolii_stage5/desks/relations/model.dart';
+import 'package:motolii_stage5/desks/relations/session.dart';
 import 'package:motolii_stage5/timeline/face.dart';
 import 'package:motolii_stage5/app/main.dart' as app;
 

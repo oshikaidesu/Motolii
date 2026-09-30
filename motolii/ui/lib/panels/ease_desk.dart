@@ -7,7 +7,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter/services.dart';
 
 import '../session/editor_session.dart';
-import '../foundation/ease_meaning.dart';
+import '../desks/ease/meaning.dart';
 import '../foundation/ease_view.dart';
 import '../foundation/panel_controls.dart';
 import '../foundation/theme.dart';

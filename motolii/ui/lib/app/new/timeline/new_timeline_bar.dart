@@ -2,7 +2,7 @@ import 'package:flutter/widgets.dart';
 
 import '../../../browser/parts.dart';
 
-import '../../../hf/desk/common.dart' show kAccentDim;
+import '../../../desks/parts.dart' show kAccentDim;
 import '../../../panels/timeline.dart' show TimelineToolbarApi;
 import '../../../hf/metrics.dart' show Surface;
 

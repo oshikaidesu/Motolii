@@ -2,14 +2,14 @@ import 'package:flutter/widgets.dart';
 
 import '../hf/shell/menu.dart';
 import '../browser/parts.dart';
-import '../hf/desk/common.dart' show kAccent;
+import '../desks/parts.dart' show kAccent;
 import '../hf/glyphs.dart';
 import '../session/editor_session.dart';
 import '../session/effect_actions.dart';
 import 'params.dart';
 import '../hf/metrics.dart';
 import '../hf/neutral.dart';
-import '../live_hf/adapters/inspector_session.dart';
+import '../inspector/session.dart';
 import '../hf/metrics.dart' show Dn, Surface;
 
 /// One effect's whole card — head (grip, applied/bypassed, actions) and body — the New face for

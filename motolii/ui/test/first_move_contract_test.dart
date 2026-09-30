@@ -5,7 +5,7 @@ import 'dart:convert';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:motolii_stage5/live_hf/adapters/camera.dart';
+import 'package:motolii_stage5/inspector/camera/card.dart';
 import 'package:motolii_stage5/session/editor_session.dart';
 
 void main() {

@@ -6,8 +6,8 @@ import 'dart:math' as math;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:motolii_stage5/hf/insp/camera_face.dart';
-import 'package:motolii_stage5/hf/insp/camera_model.dart';
+import 'package:motolii_stage5/inspector/camera/face.dart';
+import 'package:motolii_stage5/inspector/camera/model.dart';
 import 'package:motolii_stage5/stage/session.dart';
 import 'package:motolii_stage5/session/editor_session.dart';
 

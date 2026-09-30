@@ -5,8 +5,8 @@ import '../../../panels/inspector.dart' show InspectorPanel, InspectorInstrument
 import '../../../session/editor_session.dart';
 import '../../../session/read_model.dart';
 import '../../../effects/card.dart';
-import '../../../live_hf/adapters/layout.dart';
-import '../../../live_hf/adapters/transform.dart';
+import '../../../inspector/layout/card.dart';
+import '../../../inspector/transform/card.dart';
 import '../../../hf/metrics.dart' show Surface;
 
 /// The Inspector's own host: identity header, and the card list (Transform — World inside it, Layout, Effects) —

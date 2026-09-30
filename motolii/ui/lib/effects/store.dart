@@ -1,9 +1,9 @@
 import 'package:flutter/widgets.dart';
 
-import '../hf/insp/rows.dart' hide sameValue;
+import '../inspector/rows.dart' hide sameValue;
 import '../session/editor_session.dart';
 import '../session/read_model.dart';
-import '../live_hf/adapters/key_menu.dart';
+import '../inspector/key_menu.dart';
 
 /// One effect's parameters, as rows of a ParamStore over the real session. The rows are the effect's declared params
 /// as the document sends them; an edit reaches every selected, unlocked layer that has the same row, a drag relative

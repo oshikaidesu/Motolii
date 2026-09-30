@@ -2,7 +2,7 @@ import 'package:flutter/widgets.dart';
 import '../../foundation/notes_view.dart';
 import '../../foundation/panel_controls.dart' show EditorDraftField;
 import '../../browser/parts.dart';
-import 'common.dart';
+import '../../desks/parts.dart';
 import '../neutral.dart';
 import '../metrics.dart' show Dn, Surface;
 

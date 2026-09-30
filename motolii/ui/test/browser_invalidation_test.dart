@@ -2,7 +2,7 @@
 // `documentRevision` on every tick, and the Browser (and the Colors instrument) must stay still through it.
 import 'package:flutter_test/flutter_test.dart';
 import 'package:motolii_stage5/browser/session.dart';
-import 'package:motolii_stage5/live_hf/adapters/inspector_session.dart';
+import 'package:motolii_stage5/inspector/session.dart';
 import 'package:motolii_stage5/session/editor_session.dart';
 
 Map<String, dynamic> doc({double x = 0, String family = 'Inter', List fill = const [0.5, 0.5, 0.5, 1], int rev = 1}) => {

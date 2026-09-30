@@ -3,7 +3,7 @@ import 'package:flutter/widgets.dart';
 import '../../foundation/ease_view.dart';
 import '../../foundation/panel_controls.dart' show EditorNumericField;
 import '../../browser/parts.dart';
-import 'common.dart';
+import '../../desks/parts.dart';
 import '../neutral.dart';
 import '../metrics.dart' show Dn, Surface;
 

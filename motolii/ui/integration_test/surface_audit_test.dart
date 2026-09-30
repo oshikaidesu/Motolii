@@ -9,8 +9,8 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 
-import 'package:motolii_stage5/hf/insp/panel.dart' show ParamCell;
-import 'package:motolii_stage5/live_hf/adapters/right_seat.dart';
+import 'package:motolii_stage5/inspector/panel.dart' show ParamCell;
+import 'package:motolii_stage5/inspector/seat.dart';
 import 'package:motolii_stage5/timeline/face.dart';
 import 'package:motolii_stage5/app/main.dart' as app;
 

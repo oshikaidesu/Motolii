@@ -10,8 +10,8 @@ import 'raw_dimension.dart' show excused, excusedFile, scaleFiles;
 /// Where a palette may be written out: the product window's neutral ramp and the files that name its identity / semantic colours.
 const paletteFiles = {
   'lib/hf/shell/place.dart',
-  'lib/hf/desk/common.dart',
-  'lib/hf/insp/tones.dart',
+  'lib/desks/parts.dart',
+  'lib/inspector/tones.dart',
 };
 
 class RawColor extends AnalysisRule {

@@ -10,10 +10,10 @@ import '../../../stage/panel.dart';
 import '../../../panels/timeline.dart';
 import '../stage/new_stage_chrome.dart';
 import '../timeline/new_timeline_bar.dart';
-import '../../../live_hf/adapters/blend.dart';
-import '../../../live_hf/adapters/depth.dart';
-import '../../../live_hf/adapters/history.dart';
-import '../../../live_hf/adapters/web.dart';
+import '../../../desks/blend/desk.dart';
+import '../../../desks/depth/desk.dart';
+import '../../../desks/history/desk.dart';
+import '../../../desks/web/desk.dart';
 
 /// The Desk's panels drawn by the finished Desk instruments over the session's own state. A name not here keeps the
 /// production panel, so a panel is promoted by adding one line.

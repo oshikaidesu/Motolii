@@ -3,7 +3,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 
-import 'package:motolii_stage5/live_hf/adapters/inspector_session.dart';
+import 'package:motolii_stage5/inspector/session.dart';
 import 'package:motolii_stage5/timeline/face.dart';
 import 'package:motolii_stage5/app/main.dart' as app;
 import 'package:motolii_stage5/session/editor_session.dart';

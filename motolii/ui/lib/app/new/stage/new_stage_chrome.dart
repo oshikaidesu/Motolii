@@ -2,7 +2,7 @@ import 'package:flutter/widgets.dart';
 
 import '../../../browser/parts.dart';
 
-import '../../../hf/desk/common.dart' show kAccent;
+import '../../../desks/parts.dart' show kAccent;
 import '../../../hf/glyphs.dart';
 import '../../../stage/panel.dart' show StageToolbarApi;
 import '../../../hf/metrics.dart' show Surface;
