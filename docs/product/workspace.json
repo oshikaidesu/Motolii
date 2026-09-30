@@ -19,13 +19,13 @@
     "archiveSha256": "9f2ec288d6551d8dd7578c886f6421b7457fb7a26c1580df69a1b6b75269179f"
   },
   "pending": [
-    "Freeze for meshes and point clouds (vertex cache) and Bounce to Media (Flatten, ProRes 4444) — docs/freeze-and-flatten.md §5",
+    "Freeze for meshes and point clouds (vertex cache) and Bounce to Media (Flatten, ProRes 4444) — docs/design/freeze-and-flatten.md §5",
     "Typed operation payloads and snapshot models",
     "Panel-internal refinement",
     "Release dylib packaging and signing",
     "Persistent UI session restoration",
     "Full feature and actual-window acceptance",
-    "Rendered-frame cache per layer: reverse playback, backward scrubbing and post-edit redisplay of feedback effects should return pictures, not replays (docs/plugin-resources.md §6-5 has the measured cost)",
+    "Rendered-frame cache per layer: reverse playback, backward scrubbing and post-edit redisplay of feedback effects should return pictures, not replays (docs/design/plugin-resources.md §6-5 has the measured cost)",
     "Discard feedback state only for layers the edit touched (today: all)",
     "Build on another machine: public dependency pins and toolchain discovery are configured; a second-machine build remains unverified",
     "scripts/motolii-ui.sh test should pass --test-threads=2 to the GPU suites (fully parallel runs flake)",

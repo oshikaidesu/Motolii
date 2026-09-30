@@ -4,16 +4,16 @@
 
 | 対象 | 現行の読み先 | 救出元・扱い |
 |---|---|---|
-| 製品の目的・ユーザー意図優先 | [concept](../concept.md) | 2026-09-05の利用者訂正。[照合資料](../reviews/2026-09-05-concept-alignment.md)。旧「自分用」等の禁止を履歴へ分離 |
+| 製品の目的・ユーザー意図優先 | [concept](../concept.md) | 2026-09-05の利用者訂正。照合資料。旧「自分用」等の禁止を履歴へ分離 |
 | Lottie基幹モデル／Rerunビュー | [concept](../concept.md) | 「RerunにAEのガワ」後の明示訂正。旧「Lottieは審判だけ」と競合させない |
-| 同じ空間・直接操作・段の開示 | [根底](../ideal.md) | 設計原則として継承。現在の明示操作を一律禁止する文書にしない |
-| Vism / vgpu | [concept](../concept.md)、[既存体系](../../motolii/reference/vgpu-vism.md) | [Vism構想](../vism-package-concept.md)は資料として保持。全配布構想をStage 5の完了条件に追加しない |
-| Browser・Inspector・Desk | [UIと操作](product-contract.md) | [Inspectorと机](../reviews/2026-09-02-inspector-and-desk.md)、利用者の四領域・分類保持・色常設の指示 |
-| マスク・クリッピング | [クリッピング裁定](../reviews/2026-09-05-timeline-clipping.md) | エフェクトではなくレイヤー関係としての入口 |
+| 同じ空間・直接操作・段の開示 | [根底](../design/ideal.md) | 設計原則として継承。現在の明示操作を一律禁止する文書にしない |
+| Vism / vgpu | [concept](../concept.md)、[既存体系](../../motolii/reference/vgpu-vism.md) | [Vism構想](../design/vism/package-concept.md)は資料として保持。全配布構想をStage 5の完了条件に追加しない |
+| Browser・Inspector・Desk | [UIと操作](product-contract.md) | Inspectorと机、利用者の四領域・分類保持・色常設の指示 |
+| マスク・クリッピング | クリッピング裁定 | エフェクトではなくレイヤー関係としての入口 |
 | 見た目・グループ・キー・ジェスチャ | [UIと操作](product-contract.md) | 2026-09-05〜06の画像と実操作による訂正。初期の仮実装を採用済みとしない |
 | 検証版の持ち戻し | [workspace.json](workspace.json)、[適応helper一覧](imported-edit-helpers.json) | 外部checkpointと元ソースのhash。doc/renderの正本は本体一つ |
 | 技術移行・開発入口・未完 | [Stage 5](README.md) | Dioxus/Blitzの通常路をFlutterへ変更。旧コードは回帰参照 |
-| 候補・未採用案 | [パネルレビュー候補](../reviews/2026-09-05-panel-review-candidates.md) | 候補の存在を仕様承認と見なさない |
+| 候補・未採用案 | パネルレビュー候補 | 候補の存在を仕様承認と見なさない |
 
 ## 追加で救出した境界
 

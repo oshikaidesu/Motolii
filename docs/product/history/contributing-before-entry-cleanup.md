@@ -44,7 +44,7 @@ For the macOS desktop application bundle, use [`scripts/build-macos-app.sh`](../
 
 ## Verify — there is no CI
 
-**This repository has no continuous integration.** The GitHub Actions connection was retired on 2026-08-09 by an explicit decision ([`docs/reviews/2026-07-31-repository-validation-topology-decision.md`](../../../docs/reviews/2026-07-31-repository-validation-topology-decision.md), section 5). No check runs on your pull request, and no remote result is accepted as completion evidence.
+**This repository has no continuous integration.** The GitHub Actions connection was retired on 2026-08-09 by an explicit decision (`git:912382f048:docs/reviews/2026-07-31-repository-validation-topology-decision.md`, section 5). No check runs on your pull request, and no remote result is accepted as completion evidence.
 
 Verification is your responsibility and runs locally. Run the commands below, then paste the **exact commands and their actual results** into the PR body.
 

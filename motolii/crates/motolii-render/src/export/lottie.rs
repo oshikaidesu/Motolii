@@ -45,7 +45,7 @@ pub enum LottieExportError {
     TypeMismatch(String, Value),
     #[error(
         "補間型 `{0}` は Lottie に写せない(ベジェへ焼くか拡張として持つかが未決 —\
-         `docs/reviews/2026-08-28-current-position.md` の裁定待ち)"
+         `git:912382f048:docs/reviews/2026-08-28-current-position.md` の裁定待ち)"
     )]
     UnrepresentableEasing(&'static str),
 }

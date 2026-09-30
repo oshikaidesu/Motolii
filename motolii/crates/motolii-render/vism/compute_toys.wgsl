@@ -1,6 +1,6 @@
 // 関数の棚(module `package::compute_toys`): compute.toys の公開倉庫から、番号 × 時刻の純関数の動き 3 本。
 // #3081 Camaradas(saruga): 拍で止めて動く。#2374 Revision 2025(0b5vr): 止めて跳ぶ movefuck。#2752 Kamoshika: 滑らかな矩形波。
-// 名前は出典のまま。出典: docs/reviews/2026-09-18-motion-code-survey.md
+// 名前は出典のまま。出典: git:912382f048:docs/reviews/2026-09-18-motion-code-survey.md
 import package::processing::random;
 
 /// 秒 → 拍。

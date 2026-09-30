@@ -318,7 +318,7 @@ impl EditorRuntime{
             "freeze"=>{
                 let id=layer(&j)?;
                 if j["enabled"].as_bool().ok_or("Missing enabled")? {
-                    // 法 docs/freeze-and-flatten.md §2: 旗を立て、入点〜出点を裏で焼く。焼けたコマから cache の絵になる。
+                    // 法 docs/design/freeze-and-flatten.md §2: 旗を立て、入点〜出点を裏で焼く。焼けたコマから cache の絵になる。
                     let meta=self.doc.view().meta(id).map_err(e)?.ok_or("Layer has no timing")?;
                     self.apply([Intent::Freeze{group:id}])?;
                     let root=Self::cache_root_for(self.path.as_deref());

@@ -57,7 +57,7 @@ Add regression cases at the owning boundary. Do not require a full application o
 
 `motolii-doc` enables `editing` by default for editor compatibility. Read-only consumers use `default-features = false` and `Recording::load().view()`; production `motolii-render` uses this configuration. Its test fixtures opt into editing only as a dev-dependency. Cargo features are additive, so an editor workspace build still includes editing; this is a dependency boundary, not a sandbox. Keep UI-only work on hot reload, and use focused checks instead of rebuilding every feature configuration after every change. Build-time improvement has not yet been measured.
 
-`scripts/check-docs.sh` remains the wider historical documentation audit. Its old inventories and historical links are distinct from the Stage 5 entry check; do not use a successful local check to claim the entire historical tree has been audited.
+`scripts/check-docs.sh` audits the docs tree: no history folders, every markdown link resolves, every `git:<sha>:<path>` provenance token resolves, decision-index status vocabulary.
 
 ## Issues and pull requests
 

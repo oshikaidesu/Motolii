@@ -1,7 +1,7 @@
 # UI rebaseline — brief(正本)
 
 2026-09-25、利用者から受けた指示そのまま。以後の UI 移行はこの文書を正本とし、
-[2026-09-20 ui-product-feel](../../reviews/2026-09-20-ui-product-feel.md) の
+2026-09-20 ui-product-feel の
 「新しいレイアウトを作る話ではない」はこの指示で上書きされた(利用者裁定)。
 
 Concept Art: [concept/north-star-dark.png](concept/north-star-dark.png)(第一案)・

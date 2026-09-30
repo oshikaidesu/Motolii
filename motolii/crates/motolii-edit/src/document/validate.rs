@@ -121,7 +121,7 @@ pub(super) fn check_not_frozen(view: &StoreView, layer: LayerId) -> Result<(), S
 }
 
 /// 凍った層の**中**(素材・効果・欄・キーフレーム・マスク・形・文字)は触れない。配置・不透明度・重ね順・時間は
-/// 触れる(docs/freeze-and-flatten.md §2-2, §2-3)。群の部分木は従来通り丸ごと。
+/// 触れる(docs/design/freeze-and-flatten.md §2-2, §2-3)。群の部分木は従来通り丸ごと。
 pub(super) fn check_not_frozen_inside(view: &StoreView, layer: LayerId, what: &str) -> Result<(), StoreError> {
     check_not_frozen(view, layer)?;
     if view.attrs(layer)?.unwrap_or_default().frozen {
@@ -158,7 +158,7 @@ pub(super) fn freeze_attrs_batch(
             group.0
         )));
     }
-    // Freeze は層にも群にも(DAW のトラック単位。docs/freeze-and-flatten.md、2026-09-13)。
+    // Freeze は層にも群にも(DAW のトラック単位。docs/design/freeze-and-flatten.md、2026-09-13)。
     let mut attrs = view.attrs(group)?.unwrap_or_default();
     attrs.frozen = frozen;
     let json = serde_json::to_string(&attrs)?;

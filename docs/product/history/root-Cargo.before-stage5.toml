@@ -70,7 +70,7 @@ motolii-input = { path = "crates/motolii-input" }
 # path = "~/rust_ae/iced-motolii-20260818" へ向け、commit する前に rev pin へ戻す。
 #
 # fork の中身(上流との乖離2件・再適用手順・上流 PR 候補である旨)は
-# docs/reviews/2026-08-18-iced-fork-seam-ledger.md。
+# git:912382f048:docs/reviews/2026-08-18-iced-fork-seam-ledger.md。
 # branch = `motolii/host-seams`、上流 pin = `3de451447bd28217bb535632867550908e29d5d0`。
 iced = { git = "https://github.com/oshikaidesu/iced", rev = "73e686ee05efd7d1b61cfea2647186b336d9ab9c", features = ["wgpu", "advanced"] }
 # 運転席(headless Simulator)。dev-dependencies 専用。
@@ -136,7 +136,7 @@ wgpu = "29"
 # Rerun fork(Spatial Viewer)。2026-08-11裁定でMotoliiはこのViewerのwrapperであり、
 # direct `re_renderer` sceneや第二runtimeを作らない。
 # 現rev = `motolii/stage-camera-seat`(カメラseam。上流乖離の台帳と再適用手順は
-# docs/reviews/2026-08-18-rerun-fork-seam-ledger.md)。rev更新の検収は
+# git:912382f048:docs/reviews/2026-08-18-rerun-fork-seam-ledger.md)。rev更新の検収は
 # `spikes/rerun-e0-composition-probe` の常設oracleを回す。
 # (旧注記の `ui/motolii-rn/native-renderer` は2026-08-16のRN畳み込みで消滅済み)
 re_log_types = { git = "https://github.com/oshikaidesu/rerun", rev = "483b855961c0ccab7ef3f3854a8f1b040422572c" }
@@ -176,7 +176,7 @@ proptest = "1"
 # (Rust Performance Book の目安で 20〜40% のコンパイル時間差)。
 # `line-tables-only` は **backtrace の行番号を残したまま**その大半を落とす
 # (Zed の `debug = "limited"` と同じ狙い。出典と比較は
-# docs/reviews/2026-08-19-build-speed-investigation.md)。
+# git:912382f048:docs/reviews/2026-08-19-build-speed-investigation.md)。
 # 完全な debug 情報が要る時は `--profile dbg` を使う。
 [profile.dev]
 debug = "line-tables-only"

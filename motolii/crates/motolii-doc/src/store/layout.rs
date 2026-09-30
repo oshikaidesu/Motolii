@@ -1,5 +1,5 @@
 //! 箱と流し込み — Group の Display が Flex / Grid なら、直下の子を CSS の規則で並べる。計算は taffy
-//! ([箱と流し込みの法](../../../../../docs/reviews/2026-09-14-layout-law.md))。
+//! ([箱と流し込みの法](../../../../../docs/design/rationale/layout-law.md))。
 //! 並べた結果は書類に書かない: その時刻の子の位置・大きさ・輪郭の伸びを解くだけ。
 //! 子の Position は並べた位置からのずれ(`position: relative`)、Scale は `zoom`(箱ごと大きくなり隣を押す)。
 

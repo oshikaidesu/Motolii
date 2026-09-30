@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "contract_document": "docs/reviews/2026-09-04-function-group-contract.md",
+  "contract_document": "git:912382f048:docs/reviews/2026-09-04-function-group-contract.md",
   "design_status": "DECIDED",
   "implementation_status": "DELIVERED",
   "manifest_role": "DESIGN_OWNERSHIP_AND_EVIDENCE_NOT_RUNTIME_DISPATCH",
@@ -1044,7 +1044,7 @@
     }
   ],
   "development_goal": {
-    "document": "docs/reviews/2026-09-04-dioxus-reload-goal.md",
+    "document": "git:912382f048:docs/reviews/2026-09-04-dioxus-reload-goal.md",
     "objective": "Ordinary feature additions and corrections finish through state-preserving reload/hotpatch; full build/restart remains a visible, justified exception with a repair owner",
     "status": "COMPLETE",
     "ordinary_changes": [

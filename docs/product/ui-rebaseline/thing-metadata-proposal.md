@@ -1,6 +1,6 @@
 # Thing metadata: precedents, proposal, and evidence
 
-Scope: prototype only (`motolii/ui/lib/proto_hf/`). Nothing here decides a Vism manifest field. The docs say manifest fields, `look`/`primitive` tags, a `related` field and default filters are undecided, and forbid adding provisional ones to `NodeDesc` or the manifest (`docs/community-distribution-model.md`, `docs/vism-package-concept.md`). This is a fixture-level test of whether the idea holds, not a schema for production.
+Scope: prototype only (`motolii/ui/lib/proto_hf/`). Nothing here decides a Vism manifest field. The docs say manifest fields, `look`/`primitive` tags, a `related` field and default filters are undecided, and forbid adding provisional ones to `NodeDesc` or the manifest (`docs/design/vism/community-distribution-model.md`, `docs/design/vism/package-concept.md`). This is a fixture-level test of whether the idea holds, not a schema for production.
 
 ## 1. Precedents
 
@@ -23,7 +23,7 @@ Not verified by this search: prefix search such as `e:` or `p:` in After Effects
 
 - The engine already gives effects facts: an id, a stage, and flags (`persistent`, `usesClock`, `readsBackdrop`, `layerInputs`, `placement`, a parameter count). Tags and capabilities should be derived from these where possible, not typed twice.
 - The old Effects shelf keeps a hand-written map from effect id to family in Dart (`effects_shelf.dart`), and Create keeps a switch by id (`create_shelf.dart`). That is exactly the drift a registry prevents.
-- `docs/extensible-core-model.md` asks that a second thing pass through the same path with only manifest, data or composition. This work is a test of that at the UI edge.
+- `docs/design/extensible-core-model.md` asks that a second thing pass through the same path with only manifest, data or composition. This work is a test of that at the UI edge.
 
 ## 3. Proposal (prototype scope)
 

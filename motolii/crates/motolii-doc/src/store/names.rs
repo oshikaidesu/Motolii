@@ -1,4 +1,4 @@
-//! 層の属性の英語名 — 窓の欄と、スクリプトが書ける名前は同じこの表から([スクリプトの口](../../../../../docs/reviews/2026-09-14-script-mouth.md))。
+//! 層の属性の英語名 — 窓の欄と、スクリプトが書ける名前は同じこの表から([スクリプトの口](../../../../../docs/design/rationale/script-mouth.md))。
 //! 名前は窓が既に出している語が先、無ければ AE の語(Mask Path・Tracking Amount)、字の軸は OpenType の登録名。
 //! 効果の欄の名前は効果の表(`kind.rs` の `Param`・ISF manifest)が持つので、ここには無い。
 

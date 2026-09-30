@@ -39,7 +39,7 @@
 
 ## 実装(2026-09-12)
 
-- browser: [browser.dart](../../motolii/ui/lib/browser/panel.dart) `_derive` / `_publish` / `_Picked` / `Listener`、data: URI の復号は 1 回
+- browser: [browser.dart](../../../motolii/ui/lib/browser/browser_panel.dart) `_derive` / `_publish` / `_Picked` / `Listener`、data: URI の復号は 1 回
 - timeline: `_relane()` を `LayoutBuilder` から出す、painter 2 つの `shouldRepaint`、行ラベルの `TextPainter` と `summaryFrames` を使い回す
 - stage: `_state`(文書 + 描画フレーム)を (document, rendered) ごとに 1 回、`_layers` も
 - fonts: 並びは `fontFamilies` が変わった時だけ、標本キーは build ごと 1 回

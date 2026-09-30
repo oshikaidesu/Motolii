@@ -1,5 +1,5 @@
 //! Freeze の裏仕事: 別 thread の engine が層のコマを順に焼き、書類の隣の cache へ置く(export と同じ型)。
-//! 本番の engine は disk に増えたコマをそのまま読む。法は docs/freeze-and-flatten.md。
+//! 本番の engine は disk に増えたコマをそのまま読む。法は docs/design/freeze-and-flatten.md。
 use crate::doc::store::{Recording, LayerId};
 use crate::render::{engine::Engine, export::Cancel};
 use serde_json::{json, Value};

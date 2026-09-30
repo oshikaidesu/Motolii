@@ -7,7 +7,7 @@ This snapshot contained mixed-generation instructions. It is retained for proven
 **[日本語: なぜ、もう一つ映像制作ソフトを作るのか](../../../MANIFESTO.ja.md)** — After Effectsの重さ、AviUtlからの移行、ソフトごとのエフェクト再発明、そして「映像制作におけるVST」について。問題設定と長期方針の要約は[VISION.ja.md](../../../VISION.ja.md)。
 
 <p align="center">
-  <img src="../../../docs/assets/exit_demo.gif" alt="Motolii M1 exit demo: a video background with a shape animated by cubic-bezier easing and exported to mp4" width="960">
+  <img src="../../../docs/product/assets/exit_demo.gif" alt="Motolii M1 exit demo: a video background with a shape animated by cubic-bezier easing and exported to mp4" width="960">
 </p>
 <p align="center"><em>M1 exit demo — a typed project recipe rendered headlessly to mp4</em></p>
 
@@ -37,9 +37,9 @@ After Effects established much of the language of modern motion graphics. Cavalr
 
 Motolii does not treat proprietary software as a failed choice. It chooses open source because it favors a future that does not have to converge on one universal host. Code, project semantics, tests, and design decisions remain inspectable and forkable, so different communities can continue the work, disagree with it, or build compatible hosts without asking one owner to define the future for everyone.
 
-That choice does not make [Vism](../../../docs/vism-package-concept.md) a universal plugin format. A Vism cannot currently be loaded into unrelated products such as After Effects or AviUtl. Motolii is its first host; the defined portability target is compatible hosts and forks that adopt the public contract. Adapters to other products may emerge later, but a universal cross-application standard is not a completion condition.
+That choice does not make [Vism](../../design/vism/package-concept.md) a universal plugin format. A Vism cannot currently be loaded into unrelated products such as After Effects or AviUtl. Motolii is its first host; the defined portability target is compatible hosts and forks that adopt the public contract. Adapters to other products may emerge later, but a universal cross-application standard is not a completion condition.
 
-Motolii's practical answer is a permissively licensed, local, forkable core that collects proven ideas, turns recurring workflows into explicit capabilities, and keeps both common operations and advanced meanings explicit. The detailed evidence and design responses live in [`docs/ae-pain-points.md`](../../../docs/ae-pain-points.md) and the [prior-art reviews](../../../docs/reviews/); the README stays focused on the resulting tool.
+Motolii's practical answer is a permissively licensed, local, forkable core that collects proven ideas, turns recurring workflows into explicit capabilities, and keeps both common operations and advanced meanings explicit. The detailed evidence and design responses live in `git:912382f048:docs/ae-pain-points.md` and the prior-art reviews; the README stays focused on the resulting tool.
 
 ## Simple is not the same as beginner-only
 
@@ -186,13 +186,13 @@ Heavy asset creation, character rigging, simulation authoring, grading, and spec
 | M0 | Complete | GPU/UI, decode, and rational-time risks measured |
 | M1 | Complete and internally frozen | Video → typed animation → GPU composite → mp4 vertical slice |
 | M2 | Foundation reclosed; narrow follow-ups pending | Document model, validation, commands/Undo, audio transport/mux, masks, portability |
-| M3 | `app/` Makepad host active; editing verbs relanding seam by seam | The product host is `app/motolii` (Makepad): Browser shelf with double-click placement, Timeline with selection/move/trim and locators, Inspector with drag-to-scrub and selection following, layer deletion, view/render camera split. The back end is largely complete and the remaining work is connecting its seams (`docs/reviews/2026-08-28-seams-remaining.md`); the "normal video editor" capability ledger (`next/reference/normal-map.tsv`) remains the meaning canon |
+| M3 | `app/` Makepad host active; editing verbs relanding seam by seam | The product host is `app/motolii` (Makepad): Browser shelf with double-click placement, Timeline with selection/move/trim and locators, Inspector with drag-to-scrub and selection following, layer deletion, view/render camera split. The back end is largely complete and the remaining work is connecting its seams (`git:912382f048:docs/reviews/2026-08-28-seams-remaining.md`); the "normal video editor" capability ledger (`next/reference/normal-map.tsv`) remains the meaning canon |
 | M4 | Partial foundations on main | Test-only K0 contract, ResourceLedger, and canonical recipe/artifact codec are present; cache, proxy, and bake runtime remain incomplete |
 | M5 | Stage island + first effect + camera split live | Rerun Spatial Viewer remains the adopted spatial subsystem. The effect seam is open end-to-end — the first built-in effect (`motolii.glow`, an AE-style halo) travels store → engine → GPU → picture under golden tests — and observation (viewport) and render cameras are separated with export structurally isolated from the view camera |
 
-The M1 demo above is generated through the real export path and protected by automated tests. Current product work lives in the `app/` workspace (a 2026-08-27 partition: what is alive lives in `app/`, history stays out of the build): `app/motolii` is the Makepad product host, backed by a single-writer Document store (`app/core/motolii-store`) whose vocabulary is machine-checked against the Lottie schema (`app/reference/`, zero unjudged rows), an evaluation core, and an engine that renders every layer kind into one `re_renderer` scene. `next/` holds the meaning canon (the Lottie-derived semantic map and the operation-grammar canon `next/reference/timeline-grammar.md`, reverse-derived from AE/Godot/Blender/Unity/Unreal and the Lottie-era editors) plus the retired iced host; everything under `crates/` is earlier history. None of this is proof of product completeness: the front end is reconnecting to a mostly-finished back end, and the open seams are counted one by one in `docs/reviews/2026-08-28-seams-remaining.md`.
+The M1 demo above is generated through the real export path and protected by automated tests. Current product work lives in the `app/` workspace (a 2026-08-27 partition: what is alive lives in `app/`, history stays out of the build): `app/motolii` is the Makepad product host, backed by a single-writer Document store (`app/core/motolii-store`) whose vocabulary is machine-checked against the Lottie schema (`app/reference/`, zero unjudged rows), an evaluation core, and an engine that renders every layer kind into one `re_renderer` scene. `next/` holds the meaning canon (the Lottie-derived semantic map and the operation-grammar canon `next/reference/timeline-grammar.md`, reverse-derived from AE/Godot/Blender/Unity/Unreal and the Lottie-era editors) plus the retired iced host; everything under `crates/` is earlier history. None of this is proof of product completeness: the front end is reconnecting to a mostly-finished back end, and the open seams are counted one by one in `git:912382f048:docs/reviews/2026-08-28-seams-remaining.md`.
 
-Current milestone truth and task dependencies live in the [`implementation ledger`](../../../docs/implementation-ledger.md) and under [`docs/specs/`](../../../docs/specs/); this README intentionally stays at project level and does not assign a speculative completion percentage.
+Current milestone truth and task dependencies live in the `implementation ledger` and under `docs/specs/`; this README intentionally stays at project level and does not assign a speculative completion percentage.
 
 ## Architecture and technology
 
@@ -208,7 +208,7 @@ Current milestone truth and task dependencies live in the [`implementation ledge
 | Verification | Rust tests, property tests, semantic and image goldens |
 | Structure | Cargo workspace (`app/`) |
 
-See [`docs/performance-model.md`](../../../docs/performance-model.md) for the memory-bandwidth model, [`docs/concept.md`](../../../docs/concept.md) for the project definition and current decision ledger, and [`docs/interaction-simplicity-model.md`](../../../docs/interaction-simplicity-model.md) for how direct, tool, and advanced interactions converge on the same meaning.
+See [`docs/design/performance-model.md`](../../design/performance-model.md) for the memory-bandwidth model, [`docs/concept.md`](../../../docs/concept.md) for the project definition and current decision ledger, and `git:912382f048:docs/interaction-simplicity-model.md` for how direct, tool, and advanced interactions converge on the same meaning.
 
 ## Design and development model
 
@@ -224,9 +224,9 @@ Start here:
 
 - [`docs/README.md`](../../../docs/README.md) — reading order and glossary
 - [`docs/concept.md`](../../../docs/concept.md) — project definition and decision ledger
-- [`docs/interaction-simplicity-model.md`](../../../docs/interaction-simplicity-model.md) — simplicity as user and implementation performance
-- [`docs/pitfalls-and-roadmap.md`](../../../docs/pitfalls-and-roadmap.md) — failure catalog and roadmap
-- [`docs/specs/`](../../../docs/specs/) — milestone specifications and task contracts
+- `git:912382f048:docs/interaction-simplicity-model.md` — simplicity as user and implementation performance
+- `git:912382f048:docs/pitfalls-and-roadmap.md` — failure catalog and roadmap
+- `docs/specs/` — milestone specifications and task contracts
 
 ## Build and run
 
@@ -279,4 +279,4 @@ at your option.
 
 Unless explicitly stated otherwise, contributions submitted for inclusion are dual-licensed under the same terms.
 
-Third-party dependencies retain their own licenses. ffmpeg has separate distribution considerations; see [`docs/references.md`](../../../docs/references.md) and verify applicable terms before release.
+Third-party dependencies retain their own licenses. ffmpeg has separate distribution considerations; see [`docs/design/references.md`](../../design/references.md) and verify applicable terms before release.

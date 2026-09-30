@@ -25,7 +25,7 @@ DAWでは、VSTなどの境界によって楽器やエフェクトをHostから�
 
 Motoliiでは、この考え方を便宜的に「映像制作におけるVST」と呼んでいます。VST互換、DAW化、既存映像ソフトのplugin API互換を意味するものではありません。
 
-この持ち運べる一つの映像表現を**Vism（ヴィズム）**、拡張子を**`.vism`**とします。VismはMotolii projectや内部plugin kindの別名ではありません。Vismは必要な型付きinputを宣言し、複数Vismのprovider選択・接続・初期値は**Kit**として目的単位にまとめます。Motoliiを最初のHostとして実証し、その公開契約を継ぐ互換forkが同じ制作資産を扱える余地を残します。他製品共通規格は完成条件にしません。containerやmanifest、Kit形式はまだ決定していません。詳細は[docs/vism-package-concept.md](docs/vism-package-concept.md)と[docs/vism-kit-model.md](docs/vism-kit-model.md)を参照してください。
+この持ち運べる一つの映像表現を**Vism（ヴィズム）**、拡張子を**`.vism`**とします。VismはMotolii projectや内部plugin kindの別名ではありません。Vismは必要な型付きinputを宣言し、複数Vismのprovider選択・接続・初期値は**Kit**として目的単位にまとめます。Motoliiを最初のHostとして実証し、その公開契約を継ぐ互換forkが同じ制作資産を扱える余地を残します。他製品共通規格は完成条件にしません。containerやmanifest、Kit形式はまだ決定していません。詳細は[docs/design/vism/package-concept.md](docs/design/vism/package-concept.md)と[docs/design/vism/kit-model.md](docs/design/vism/kit-model.md)を参照してください。
 
 ## Motoliiで検証すること
 

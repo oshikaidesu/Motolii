@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Technology Acquisition Gate, at the commit: new code of any size that is a whole new piece (a new source file of 150+ lines in
-# the houses) says how it came to be. docs/known-implementation-adoption-model.md §0 is the form and the reasons.
+# the houses) says how it came to be. docs/design/known-implementation-adoption-model.md §0 is the form and the reasons.
 #
 #   scripts/check-acquisition.sh --msg FILE     .githooks/commit-msg: the staged diff against the message being written
 #   scripts/check-acquisition.sh --range A..B   every commit in the range (CI)
@@ -35,7 +35,7 @@ check() { # check <label> <message> <numstat of added files>
     if [ -z "$line" ] || [ "${#line}" -lt 34 ]; then
         printf '%s: new code without an Acquisition trailer.\n%s' "$label" "$big"
         echo "  Add a trailer:  Acquisition: Reuse|Wrap|Adapt|Extend|Semantics|Build — <existing technology found / owned meaning>"
-        echo "  Motolii owns meaning, not technology: search first (docs/known-implementation-adoption-model.md §0)."
+        echo "  Motolii owns meaning, not technology: search first (docs/design/known-implementation-adoption-model.md §0)."
         fail=1
         return 0
     fi

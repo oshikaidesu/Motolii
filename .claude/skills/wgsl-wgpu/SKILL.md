@@ -74,7 +74,7 @@ Motolii effect targets: `Rgba16Float` (vism.rs:60), `Rgba8Unorm`, `Rgba8UnormSrg
 
 ## 罠 (Motolii already hit these)
 
-- **Reserved words**: `from`, `catch`, `of`, `do`, `new`, `class`, `self`, `this`, `yield`, `super`, `where`, … (naga 29 `keywords/wgsl.rs:11`; `to` and `in` are NOT reserved there — docs/skills/motolii-block says `to`, unverified). One reserved
+- **Reserved words**: `from`, `catch`, `of`, `do`, `new`, `class`, `self`, `this`, `yield`, `super`, `where`, … (naga 29 `keywords/wgsl.rs:11`; `to` and `in` are NOT reserved there — docs/design/skills/motolii-block says `to`, unverified). One reserved
   name breaks every block (the shelf prepends modules, 2026-09-18). Rename: `from` → `origin`, `catch` → `contagion`.
 - **`Offset.rotate` is degrees**, added; `radians()`/`degrees()` are builtins — write `degrees(angle)` when the law is in radians (hang.wgsl:27,33).
 - **`Offset.tint` multiplies**: `vec4f(1.0)` = unchanged, >1 brightens, `a` is opacity factor (block_program.rs:7, 200).
@@ -106,4 +106,4 @@ Motolii effect targets: `Rgba16Float` (vism.rs:60), `Rgba8Unorm`, `Rgba8UnormSrg
 - gfx-rs/wgpu `.claude/skills/webgpu-specs` (MIT OR Apache-2.0): copied verbatim to `references/gfx-rs-webgpu-specs/` with LICENSE.MIT + NOTICE. The mcpmarket
   "WebGPU Specification Reference" and lobehub "gfx-rs-wgpu-webgpu-specs" listings are re-hostings of this same two-file skill.
 - naga 29.0.4 sources (`~/.cargo/registry`): `front/wgsl/parse/directive/{enable_extension,language_extension}.rs`, `keywords/wgsl.rs`, `front/wgsl/error.rs`.
-- Motolii: `docs/skills/motolii-block/SKILL.md` (the block contract itself), `docs/reviews/2026-09-18-daily.md:69,120,127`.
+- Motolii: `docs/design/skills/motolii-block/SKILL.md` (the block contract itself), `git:912382f048:docs/reviews/2026-09-18-daily.md:69,120,127`.

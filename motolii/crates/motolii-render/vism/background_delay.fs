@@ -11,7 +11,7 @@
 }*/
 
 // 下の合成の「少し前」を、自分の形(α)の中に写す。ホストがその時刻の下の層たちを描いて渡すので、
-// 効果は何も覚えない(docs/plugin-resources.md §6)。
+// 効果は何も覚えない(docs/design/plugin-resources.md §6)。
 void main() {
     vec4 past = IMG_THIS_PIXEL(below);
     float shape = IMG_THIS_PIXEL(inputImage).a;
