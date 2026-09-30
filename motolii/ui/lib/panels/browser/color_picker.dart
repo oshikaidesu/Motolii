@@ -3,7 +3,7 @@ import 'dart:ui' as ui show ViewFocusEvent, ViewFocusState;
 import 'package:flutter/widgets.dart';
 import 'package:flutter/services.dart';
 
-import '../../foundation/color_field.dart';
+import '../../colors/color_field.dart';
 import '../../foundation/glyphs.dart';
 import '../../foundation/leaves.dart';
 import '../../foundation/metrics.dart';

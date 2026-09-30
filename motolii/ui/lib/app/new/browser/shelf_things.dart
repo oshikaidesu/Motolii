@@ -1,4 +1,4 @@
-import '../../../hf/bp/things.dart';
+import '../../../browser/things.dart';
 import '../../../panels/browser/files_shelf.dart' show FilesShelf;
 import '../../../panels/browser/shelf.dart' show FilterKind;
 import 'shelf_host.dart';

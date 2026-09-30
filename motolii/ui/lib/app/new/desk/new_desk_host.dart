@@ -1,6 +1,6 @@
 import 'package:flutter/widgets.dart';
 
-import '../../../hf/bp/common.dart';
+import '../../../browser/parts.dart';
 import '../../../hf/desk/common.dart' show kAccent;
 import '../../../hf/glyphs.dart';
 import '../../../session/editor_session.dart';

@@ -2,7 +2,7 @@ import 'dart:math' as math;
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
-import '../bp/common.dart';
+import '../../browser/parts.dart';
 import 'common.dart';
 import '../../foundation/ease_meaning.dart';
 import '../neutral.dart';

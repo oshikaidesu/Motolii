@@ -1,8 +1,8 @@
 // The Inspector body: declaration rows in, controls out. Hero in front, sections, advanced behind a fold,
 // a filter for very long lists. Structure is the Classic Inspector's; only the body of each control is new.
 import 'package:flutter/widgets.dart';
-import '../bp/common.dart';
-import '../bp/search.dart';
+import '../../browser/parts.dart';
+import '../../browser/search.dart';
 import '../desk/common.dart' show kBlue;
 import 'rows.dart';
 import 'toys.dart';

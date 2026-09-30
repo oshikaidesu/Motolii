@@ -4,9 +4,9 @@ import 'package:flutter/widgets.dart';
 
 import '../../../foundation/theme.dart';
 
-import '../../../hf/bp/search.dart';
-import '../../../hf/bp/seat.dart';
-import '../../../hf/bp/things.dart';
+import '../../../browser/search.dart';
+import '../../../browser/seat.dart';
+import '../../../browser/things.dart';
 import '../../../panels/browser/filter_library.dart';
 import '../../../panels/browser/shelf.dart' show FilterGroup, FilterKind;
 import '../../../panels/browser.dart' show BrowserSize;

@@ -2,7 +2,7 @@
 // Position, Scale, Rotation and Anchor are four ways of touching the same body, not four property cards.
 // Space, Parent and Depth sit around it. Precision is the Phase 1 Value; the instrument adds gesture, not a second system.
 import 'package:flutter/widgets.dart';
-import '../bp/common.dart';
+import '../../browser/parts.dart';
 import '../desk/common.dart' show kYellow, kBlue, kPink, kViolet, kAccentDim;
 import '../metrics.dart';
 import 'rows.dart';

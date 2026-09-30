@@ -1,6 +1,6 @@
 import 'package:flutter/widgets.dart';
 
-import '../../../hf/bp/common.dart';
+import '../../../browser/parts.dart';
 
 import '../../../hf/desk/common.dart' show kAccentDim;
 import '../../../panels/timeline.dart' show TimelineToolbarApi;

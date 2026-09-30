@@ -6,7 +6,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 
-import '../hf/bp/effects.dart' show EffectScene;
+import '../effects/shelf.dart' show EffectScene;
 import '../hf/shell/place.dart' show H;
 import '../session/console_log.dart';
 import '../session/editor_session.dart';

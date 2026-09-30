@@ -1,14 +1,14 @@
 import 'package:docking/docking.dart';
 import 'package:flutter/widgets.dart';
 
-import '../hf/bp/effects.dart' show EffectScene;
+import '../effects/shelf.dart' show EffectScene;
 import 'dock_theme.dart';
 
 import '../hf/glyphs.dart' show HG;
 import '../stage/panel.dart' show StagePanel;
 import '../session/editor_session.dart';
 import 'dock_workspace.dart';
-import '../live_hf/adapters/browser.dart';
+import '../browser/panel.dart';
 import '../app/console.dart';
 import '../session/console_log.dart';
 import '../live_hf/adapters/blend.dart';

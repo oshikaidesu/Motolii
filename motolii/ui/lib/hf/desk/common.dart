@@ -2,7 +2,7 @@
 import 'dart:math' as math;
 import 'package:flutter/widgets.dart';
 import '../metrics.dart';
-import '../bp/common.dart';
+import '../../browser/parts.dart';
 import '../neutral.dart';
 
 // Housing is quiet and dark; the instruments inside are flat colour. Colour separates roles, it names nothing.

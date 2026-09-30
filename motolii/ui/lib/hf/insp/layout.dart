@@ -2,7 +2,7 @@
 // Classic gating is kept: Grid enables the rest, Fixed enables its size number, Hug / Fill / Fixed stay distinct,
 // the child's own lines and the Advanced rows stay reachable.
 import 'package:flutter/widgets.dart';
-import '../bp/common.dart';
+import '../../browser/parts.dart';
 
 import 'layout_diagram.dart';
 import 'layout_model.dart';

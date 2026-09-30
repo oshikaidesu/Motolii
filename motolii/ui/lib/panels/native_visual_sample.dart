@@ -1,1 +1,1 @@
-export '../hf/bp/native_visual_sample.dart';
+export '../browser/visual_sample.dart';

@@ -1,6 +1,6 @@
 import 'package:flutter/widgets.dart';
 
-import '../../hf/bp/common.dart';
+import '../../browser/parts.dart';
 
 import '../../hf/glyphs.dart';
 import '../../session/editor_session.dart';

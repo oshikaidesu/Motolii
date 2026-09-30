@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart';
 
-import '../../../hf/bp/things.dart';
+import '../../../browser/things.dart';
 import '../../../panels/browser/filter_library.dart';
 import '../../../session/editor_session.dart';
 

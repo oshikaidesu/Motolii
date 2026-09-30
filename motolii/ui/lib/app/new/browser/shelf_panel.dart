@@ -1,14 +1,14 @@
 import 'package:flutter/widgets.dart';
 
-import '../../../hf/bp/classify.dart';
-import '../../../hf/bp/common.dart' show DockedPanel;
-import '../../../hf/bp/create.dart';
-import '../../../hf/bp/effects.dart';
-import '../../../hf/bp/search.dart';
+import '../../../browser/classify.dart';
+import '../../../browser/parts.dart' show DockedPanel;
+import '../../../browser/create/shelf.dart';
+import '../../../effects/shelf.dart';
+import '../../../browser/search.dart';
 import '../../../hf/bp/shelf_grid.dart';
-import '../../../hf/bp/shell.dart' show GlyphBox;
+import '../../../browser/panel_chrome.dart' show GlyphBox;
 import '../../../hf/glyphs.dart';
-import '../../../hf/bp/seat.dart';
+import '../../../browser/seat.dart';
 import '../../../session/editor_session.dart';
 import '../../../panels/browser.dart' show BrowserSize;
 import 'shelf_host.dart';

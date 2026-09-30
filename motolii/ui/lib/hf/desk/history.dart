@@ -1,7 +1,7 @@
 import 'dart:math' as math;
 import 'package:flutter/widgets.dart';
-import '../bp/common.dart';
-import '../bp/shell.dart' show emptyBody;
+import '../../browser/parts.dart';
+import '../../browser/panel_chrome.dart' show emptyBody;
 import 'common.dart';
 import '../neutral.dart';
 import '../metrics.dart' show Dn, Surface;

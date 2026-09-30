@@ -1,6 +1,6 @@
 import 'package:flutter/widgets.dart';
 
-import '../../../hf/bp/common.dart' show DockedPanel;
+import '../../../browser/parts.dart' show DockedPanel;
 import '../../../session/editor_session.dart';
 import '../../../hf/desk/ease_skin.dart';
 import '../../../hf/desk/notes_skin.dart';

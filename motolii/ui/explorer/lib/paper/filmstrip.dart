@@ -8,8 +8,8 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 import 'package:motolii_stage5/hf/metrics.dart';
 import 'package:motolii_stage5/hf/neutral.dart';
-import 'package:motolii_stage5/live_hf/adapters/catalog_session.dart';
-import 'package:motolii_stage5/live_hf/adapters/media_fluid.dart';
+import 'package:motolii_stage5/browser/media/catalog_session.dart';
+import 'package:motolii_stage5/browser/media/fluid.dart';
 import 'package:motolii_stage5/session/editor_session.dart';
 
 import 'explore_view.dart';

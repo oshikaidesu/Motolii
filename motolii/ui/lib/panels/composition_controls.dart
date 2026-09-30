@@ -3,7 +3,7 @@ import 'package:flutter/widgets.dart';
 import '../session/editor_session.dart';
 import '../foundation/theme.dart';
 import '../foundation/panel_controls.dart';
-import '../foundation/color_field.dart';
+import '../colors/color_field.dart';
 import '../foundation/metrics.dart';
 
 class CompositionControls extends StatelessWidget {

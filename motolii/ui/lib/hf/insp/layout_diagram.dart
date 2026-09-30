@@ -5,7 +5,7 @@
 import 'dart:math' as math;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
-import '../bp/common.dart';
+import '../../browser/parts.dart';
 import '../desk/common.dart' show kMint, kBlue, kViolet, kPink;
 import 'layout_model.dart';
 import '../neutral.dart';

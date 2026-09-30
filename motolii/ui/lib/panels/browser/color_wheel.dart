@@ -3,7 +3,7 @@ import 'dart:ui' as ui show Vertices, VertexMode;
 
 import 'package:flutter/widgets.dart';
 
-import '../../foundation/hsv_triangle.dart';
+import '../../colors/hsv_triangle.dart';
 import '../../foundation/metrics.dart';
 import '../../foundation/theme.dart';
 

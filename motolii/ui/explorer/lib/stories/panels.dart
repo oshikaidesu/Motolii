@@ -2,12 +2,12 @@
 import 'dart:io';
 
 import 'package:flutter/widgets.dart';
-import 'package:motolii_stage5/hf/bp/effects.dart' show EffectScene;
+import 'package:motolii_stage5/effects/shelf.dart' show EffectScene;
 import 'package:motolii_stage5/hf/neutral.dart';
-import 'package:motolii_stage5/live_hf/adapters/browser.dart';
-import 'package:motolii_stage5/live_hf/adapters/catalog_media.dart';
-import 'package:motolii_stage5/live_hf/adapters/catalog_session.dart';
-import 'package:motolii_stage5/live_hf/adapters/media_browser.dart' show BrowserView;
+import 'package:motolii_stage5/browser/panel.dart';
+import 'package:motolii_stage5/browser/media/catalog_controls.dart';
+import 'package:motolii_stage5/browser/media/catalog_session.dart';
+import 'package:motolii_stage5/browser/media/views.dart' show BrowserView;
 import 'package:motolii_stage5/live_hf/adapters/depth.dart';
 import 'package:motolii_stage5/live_hf/adapters/ease.dart';
 import 'package:motolii_stage5/live_hf/adapters/notes.dart';
@@ -19,7 +19,7 @@ import 'package:widgetbook/widgetbook.dart';
 
 import '../paper/explore_view.dart';
 import '../paper/filmstrip.dart';
-import 'package:motolii_stage5/live_hf/adapters/explore_graph.dart' show ExploreChoice;
+import 'package:motolii_stage5/browser/media/explore/graph.dart' show ExploreChoice;
 import '../paper/live_tiles.dart';
 
 import '../story.dart';

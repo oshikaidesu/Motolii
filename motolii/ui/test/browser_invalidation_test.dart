@@ -1,7 +1,7 @@
 // A Stage preview must wake only the UI whose visible meaning changed: a Position scrub rewrites `layers` and
 // `documentRevision` on every tick, and the Browser (and the Colors instrument) must stay still through it.
 import 'package:flutter_test/flutter_test.dart';
-import 'package:motolii_stage5/live_hf/adapters/browser_session.dart';
+import 'package:motolii_stage5/browser/session.dart';
 import 'package:motolii_stage5/live_hf/adapters/inspector_session.dart';
 import 'package:motolii_stage5/session/editor_session.dart';
 

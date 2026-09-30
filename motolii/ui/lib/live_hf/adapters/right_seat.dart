@@ -1,11 +1,11 @@
 import 'package:flutter/widgets.dart';
 
-import '../../hf/bp/common.dart' show sans;
+import '../../browser/parts.dart' show sans;
 import '../../hf/metrics.dart' show Surface;
 import '../../session/editor_session.dart';
 import 'camera.dart';
-import 'effect.dart';
-import 'effects_card.dart';
+import '../../effects/params.dart';
+import '../../effects/card.dart';
 import 'layout.dart';
 import 'transform.dart';
 import 'inspector_session.dart';

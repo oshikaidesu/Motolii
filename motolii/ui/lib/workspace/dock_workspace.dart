@@ -4,7 +4,7 @@ import 'package:docking/docking.dart';
 import 'package:flutter/widgets.dart';
 
 import '../foundation/glyphs.dart' as legacy;
-import '../hf/bp/common.dart' as tab;
+import '../browser/parts.dart' as tab;
 import '../hf/glyphs.dart' show HG;
 import '../hf/metrics.dart';
 import '../hf/shell/menu.dart' show showHfMenu;

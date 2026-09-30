@@ -3,7 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/widgets.dart';
 
 import '../foundation/metrics.dart';
-import '../foundation/color_field.dart';
+import '../colors/color_field.dart';
 import '../foundation/panel_controls.dart';
 import '../foundation/theme.dart';
 import '../session/editor_session.dart';

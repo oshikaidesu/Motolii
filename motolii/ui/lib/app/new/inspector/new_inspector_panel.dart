@@ -1,10 +1,10 @@
 import 'package:flutter/widgets.dart';
 
-import '../../../hf/bp/common.dart';
+import '../../../browser/parts.dart';
 import '../../../panels/inspector.dart' show InspectorPanel, InspectorInstruments;
 import '../../../session/editor_session.dart';
 import '../../../session/read_model.dart';
-import '../../../live_hf/adapters/effects_card.dart';
+import '../../../effects/card.dart';
 import '../../../live_hf/adapters/layout.dart';
 import '../../../live_hf/adapters/transform.dart';
 import '../../../hf/metrics.dart' show Surface;

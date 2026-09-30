@@ -1,12 +1,12 @@
 import 'dart:math' as math;
 import 'package:flutter/widgets.dart';
-import 'classify.dart';
-import 'common.dart';
-import 'faces.dart';
-import 'search.dart';
-import 'seat.dart';
-import 'shell.dart';
-import 'things.dart';
+import '../../browser/classify.dart';
+import '../../browser/parts.dart';
+import '../../browser/create/faces.dart';
+import '../../browser/search.dart';
+import '../../browser/seat.dart';
+import '../../browser/panel_chrome.dart';
+import '../../browser/things.dart';
 import '../neutral.dart';
 import '../metrics.dart' show Dn;
 

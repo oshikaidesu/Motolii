@@ -2,7 +2,7 @@ import '../../session/editor_session.dart';
 import 'package:flutter/foundation.dart';
 
 import 'camera.dart' show SessionCameraStore;
-import 'effect_store.dart';
+import '../../effects/store.dart';
 import 'layout_store.dart' show SessionLayoutStore;
 import 'transform_store.dart';
 

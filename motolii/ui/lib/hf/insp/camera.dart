@@ -2,7 +2,7 @@
 // Face: target point, eye on its orbit, ray with a distance handle, roll ring, all live at once (no modes).
 // Zoom is a different tool from Distance and is shown as one: they meet only in the magnification at the target plane.
 import 'package:flutter/widgets.dart';
-import '../bp/common.dart';
+import '../../browser/parts.dart';
 import '../desk/common.dart' show kYellow;
 import 'camera_face.dart';
 import 'camera_model.dart';

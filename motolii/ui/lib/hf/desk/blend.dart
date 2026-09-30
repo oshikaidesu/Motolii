@@ -1,7 +1,7 @@
 import 'dart:ui' as ui;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
-import '../bp/common.dart';
+import '../../browser/parts.dart';
 import 'common.dart';
 import '../neutral.dart';
 import '../metrics.dart' show Dn, Surface;

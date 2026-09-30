@@ -1,7 +1,7 @@
 import 'dart:math' as math;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
-import '../bp/common.dart';
+import '../../browser/parts.dart';
 import 'common.dart';
 import '../neutral.dart';
 import '../metrics.dart' show Dn, Surface;

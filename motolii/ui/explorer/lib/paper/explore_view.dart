@@ -12,9 +12,9 @@ import 'dart:ui' as ui;
 import 'package:flutter/widgets.dart';
 import 'package:motolii_stage5/hf/metrics.dart';
 import 'package:motolii_stage5/hf/neutral.dart';
-import 'package:motolii_stage5/live_hf/adapters/browser_item.dart';
-import 'package:motolii_stage5/live_hf/adapters/media_fluid.dart' show Frame;
-import 'package:motolii_stage5/live_hf/adapters/media_library.dart' show materialFace;
+import 'package:motolii_stage5/browser/item.dart';
+import 'package:motolii_stage5/browser/media/fluid.dart' show Frame;
+import 'package:motolii_stage5/browser/media/library.dart' show materialFace;
 
 final _colours = <String, HSLColor?>{};
 final _asked = <String>{};

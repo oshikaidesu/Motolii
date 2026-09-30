@@ -7,7 +7,7 @@ import 'dart:math' as math;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
-import '../bp/common.dart';
+import '../../browser/parts.dart';
 import '../desk/common.dart' show kYellow, kBlue, kViolet, kPink;
 import 'rows.dart';
 import 'slot.dart';
