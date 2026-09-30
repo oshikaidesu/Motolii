@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/widgets.dart';
@@ -589,16 +588,6 @@ class EditorTheme extends ThemeExtension<EditorTheme> {
   }
 }
 
-class EditorAppearance extends InheritedNotifier<ValueNotifier<EditorTheme>> {
-  const EditorAppearance({
-    super.key,
-    required super.notifier,
-    required super.child,
-  });
-  static ValueNotifier<EditorTheme>? of(BuildContext context) =>
-      context.getInheritedWidgetOfExactType<EditorAppearance>()?.notifier;
-}
-
 /// A tooltip where tooltips are shown, and nothing at all where they are not.
 /// [EditorLook.tooltips] turns the window off but leaves the widget standing,
 /// and each one that stands costs a hover region, a long-press detector and a
@@ -658,108 +647,3 @@ class EditorButton extends StatelessWidget {
   }
 }
 
-class EditorSection extends StatelessWidget {
-  const EditorSection(this.title, this.child, {super.key});
-  final String title;
-  final Widget child;
-  @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      Container(
-        height: EditorMetrics.section,
-        decoration: BoxDecoration(
-          color: EditorTheme.of(context).raised,
-          border: Border(
-            bottom: BorderSide(color: EditorTheme.of(context).line),
-          ),
-        ),
-        alignment: Alignment.centerLeft,
-        padding: const EdgeInsets.symmetric(horizontal: 8),
-        child: Text(
-          title.toUpperCase(),
-          style: TextStyle(
-            fontSize: 10,
-            fontWeight: FontWeight.w600,
-            letterSpacing: .5,
-            color: EditorTheme.of(context).ink,
-          ),
-        ),
-      ),
-      child,
-    ],
-  );
-}
-
-/// A context menu at a pointer's screen position. Needs nothing set up
-/// ahead of it — it drops itself into the nearest [Overlay] (the app's
-/// Navigator has one) and removes itself when it closes. No animation; as
-/// wide as its widest row. The rows are [EditorMenuItem]s and
-/// [EditorMenuDivider]s.
-Future<T?> showEditorMenu<T>(
-  BuildContext context,
-  Offset at,
-  List<Widget> items,
-) {
-  final overlay = Overlay.of(context);
-  final overlayBox = overlay.context.findRenderObject() as RenderBox;
-  final position = overlayBox.globalToLocal(at);
-  final completer = Completer<T?>();
-  late final OverlayEntry entry;
-  void settle(Object? value) {
-    if (completer.isCompleted) return;
-    completer.complete(value as T?);
-    entry.remove();
-  }
-
-  entry = OverlayEntry(
-    builder: (context) => EditorMenuSheet(
-      anchor: Rect.fromLTWH(position.dx, position.dy, 0, 0),
-      minWidth: 0,
-      consumeOutsideTap: true,
-      onClose: () => settle(null),
-      child: _EditorMenuScope(
-        pick: settle,
-        child: Column(mainAxisSize: MainAxisSize.min, children: items),
-      ),
-    ),
-  );
-  overlay.insert(entry);
-  return completer.future;
-}
-
-/// Threads a row's pick back out to the [showEditorMenu] call that opened it.
-class _EditorMenuScope extends InheritedWidget {
-  const _EditorMenuScope({required this.pick, required super.child});
-  final ValueChanged<Object?> pick;
-  @override
-  bool updateShouldNotify(_EditorMenuScope old) => false;
-  static void pickFrom(BuildContext context, Object? value) => context
-      .dependOnInheritedWidgetOfExactType<_EditorMenuScope>()!
-      .pick(value);
-}
-
-class EditorMenuItem<T> extends StatelessWidget {
-  const EditorMenuItem({
-    super.key,
-    this.value,
-    this.enabled = true,
-    required this.child,
-  });
-  final T? value;
-  final bool enabled;
-  final Widget child;
-  @override
-  Widget build(BuildContext context) => EditorMenuRow(
-    onPressed: enabled ? () => _EditorMenuScope.pickFrom(context, value) : null,
-    child: child,
-  );
-}
-
-class EditorMenuDivider extends StatelessWidget {
-  const EditorMenuDivider({super.key});
-  @override
-  Widget build(BuildContext context) =>
-      const EditorRule(height: EditorMetrics.s8, thickness: 1);
-}

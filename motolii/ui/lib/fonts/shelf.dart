@@ -53,24 +53,6 @@ const fontsBase = <FontItem>[
   FontItem('Apple SD Gothic Neo', 'KR', 9, sample: '가'),
 ];
 
-/// Growth fixture: two thousand typefaces. Names are set in real installed faces, cycled.
-List<FontItem> fontsStress() {
-  final out = <FontItem>[...fontsBase];
-  for (var i = 0; i < 2000; i++) {
-    final b = fontsBase[i % fontsBase.length];
-    out.add(
-      FontItem(
-        b.family,
-        b.cls,
-        1 + (i * 3) % 14,
-        sample: b.sample,
-        label: '${b.family} ${String.fromCharCode(65 + i % 26)}${1 + i ~/ 26}',
-      ),
-    );
-  }
-  return out;
-}
-
 List<List<String>> fontGroups() => const [
   ['All', 'Sans', 'Serif', 'Display', 'Mono', 'Hand', 'JP', 'KR'],
   ['Favorites', 'Installed'],

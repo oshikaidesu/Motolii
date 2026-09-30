@@ -122,45 +122,6 @@ List<Sw> colorsBase() => [
     for (final s in e.value) (s.$1, s.$2, e.key),
 ];
 
-/// Growth fixture: a thousand named swatches across many palettes. Not real content.
-List<Sw> colorsStress() {
-  final out = <Sw>[...colorsBase()];
-  const names = [
-    'Studio',
-    'Retro',
-    'Ocean',
-    'Forest',
-    'Desert',
-    'City',
-    'Candy',
-    'Metal',
-    'Ink',
-    'Aurora',
-    'Ember',
-    'Glacier',
-    'Orchard',
-    'Circuit',
-    'Velvet',
-    'Paper',
-  ];
-  for (var p = 0; p < names.length; p++) {
-    for (var k = 0; k < 40; k++) {
-      final h = (p * 41 + k * 9) % 360.0;
-      out.add((
-        '${names[p]} ${k + 1}',
-        HSLColor.fromAHSL(
-          1,
-          h,
-          .35 + (k % 5) * .13,
-          .3 + (k % 7) * .08,
-        ).toColor().toARGB32(),
-        names[p],
-      ));
-    }
-  }
-  return out;
-}
-
 String _hex(int v) =>
     '#${(v & 0xFFFFFF).toRadixString(16).padLeft(6, '0').toUpperCase()}';
 

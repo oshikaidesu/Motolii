@@ -8,18 +8,6 @@ import '../theme/surface.dart';
 import '../theme/tokens.dart';
 import '../theme/neutral.dart';
 
-/// A key of a dialog or sheet. [main] is the one primary action (the mode colour); [on] marks the chosen one of a
-/// set — drawn as a selection (a lighter ground and edge), never in the action's colour; no [onTap] draws it quiet.
-/// New surfaces use [HfAction] and [HfChoice]; this stays for the ones not yet moved.
-class HfKey extends StatelessWidget {
-  const HfKey(this.label, {super.key, this.onTap, this.main = false, this.on = false});
-  final String label;
-  final VoidCallback? onTap;
-  final bool main, on;
-  @override
-  Widget build(BuildContext context) => HfAction(label, onTap: onTap, kind: main ? HfActionKind.primary : HfActionKind.secondary, chosen: on && !main);
-}
-
 enum HfActionKind { primary, secondary, destructive }
 
 /// An action: the one primary of a surface (filled in the mode colour), a secondary (a raised key), or a destructive

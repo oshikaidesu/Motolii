@@ -1,4 +1,3 @@
-import 'dart:math' as math;
 
 import 'rows.dart';
 
@@ -120,17 +119,3 @@ List<Map<String, dynamic>> tlPick(List<Map<String, dynamic>> current, List<Map<S
   return (keys: outKeys, ids: outIds.toList());
 }
 
-/// Where a gripped bar is drawn under the pointer before the document answers: only a picture. What the timing
-/// becomes is the host's (`timing_delta`, from the mode and the frames sent).
-Map<String, dynamic> tlDrawnTiming(int id, Map<String, dynamic> layer, TlGesture g, int delta) {
-  final s = (layer['start'] as num? ?? 0).toInt(), d = (layer['duration'] as num? ?? 1).toInt(), i = (layer['sourceIn'] as num? ?? 0).toInt();
-  return switch (g) {
-    TlGesture.trimIn => () {
-        final t = delta.clamp(-math.min(s, i), d - 1);
-        return {'layer': id, 'start': s + t, 'duration': d - t, 'sourceIn': i + t};
-      }(),
-    TlGesture.trimOut => {'layer': id, 'start': s, 'duration': math.max(1, d + delta), 'sourceIn': i},
-    TlGesture.slip => {'layer': id, 'start': s, 'duration': d, 'sourceIn': math.max(0, i - delta)},
-    _ => {'layer': id, 'start': math.max(0, s + delta), 'duration': d, 'sourceIn': i},
-  };
-}

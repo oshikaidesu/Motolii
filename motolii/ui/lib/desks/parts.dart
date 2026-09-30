@@ -58,22 +58,6 @@ class _IconP extends CustomPainter {
   bool shouldRepaint(_IconP o) => o.k != k;
 }
 
-class Dots3 extends StatelessWidget {
-  const Dots3({super.key});
-  @override
-  Widget build(BuildContext context) => SizedBox(width: 22.5, height: 22.5, child: CustomPaint(painter: _D3()));
-}
-
-class _D3 extends CustomPainter {
-  @override
-  void paint(Canvas c, Size s) {
-    final p = Paint()..color = N.g69;
-    for (final x in [-6.0, 0.0, 6.0]) { c.drawCircle(Offset(s.width / 2 + x, s.height / 2), 1.6, p); }
-  }
-  @override
-  bool shouldRepaint(_D3 o) => false;
-}
-
 /// Header and body placement for a Desk. Each Desk supplies its own body for each morphology.
 class DeskShell extends StatelessWidget {
   const DeskShell({super.key, required this.kind, required this.title, required this.subtitle, required this.full, required this.strip, required this.tall, this.trailing});
@@ -132,50 +116,6 @@ class NumBox extends StatelessWidget {
       );
 }
 
-/// A labelled slider: label left, track, value right. The track is a thin line with a round thumb.
-class SliderRow extends StatelessWidget {
-  const SliderRow(this.label, this.t, this.value, {super.key, this.labelWidth = 104, this.onChanged});
-  final String label, value;
-  final double t, labelWidth;
-  final ValueChanged<double>? onChanged;
-  @override
-  Widget build(BuildContext context) => SizedBox(
-        height: 21,
-        child: Row(children: [
-          SizedBox(width: labelWidth, child: Text(label, softWrap: false, overflow: TextOverflow.clip, style: sans(Dn.nameSize, c: N.g82))),
-          Expanded(
-            child: LayoutBuilder(builder: (context, b) {
-              void at(double x) => onChanged?.call(clampD((x - 6) / (b.maxWidth - 12), 0, 1));
-              return GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTapDown: (d) => at(d.localPosition.dx),
-                onPanUpdate: (d) => at(d.localPosition.dx),
-                child: SizedBox(height: 21, child: CustomPaint(painter: _Track(t))),
-              );
-            }),
-          ),
-          const SizedBox(width: 7.5),
-          SizedBox(width: 28.5, child: Text(value, textAlign: TextAlign.right, softWrap: false, style: sans(Dn.nameSize, c: N.g82))),
-        ]),
-      );
-}
-
-class _Track extends CustomPainter {
-  _Track(this.t);
-  final double t;
-  @override
-  void paint(Canvas c, Size s) {
-    final y = s.height / 2;
-    c.drawLine(Offset(0, y), Offset(s.width, y), Paint()..color = N.g26..strokeWidth = 2..strokeCap = StrokeCap.round);
-    final x = 6 + (s.width - 12) * t;
-    c.drawLine(Offset(0, y), Offset(x, y), Paint()..color = kAccent..strokeWidth = 2..strokeCap = StrokeCap.round);
-    c.drawCircle(Offset(x, y), 5.5, Paint()..color = Surface.ink);
-    c.drawCircle(Offset(x, y), 5.5, Paint()..color = N.g07..style = PaintingStyle.stroke..strokeWidth = 1.2);
-  }
-  @override
-  bool shouldRepaint(_Track o) => o.t != t;
-}
-
 class Segmented extends StatelessWidget {
   const Segmented(this.items, this.active, {super.key, this.height = 34, this.onChanged});
   final List<String> items;
@@ -198,39 +138,6 @@ class Segmented extends StatelessWidget {
             ),
           ),
       ]);
-}
-
-class DropRow extends StatelessWidget {
-  const DropRow(this.label, this.value, {super.key, this.labelWidth = 104, this.onTap});
-  final String label, value;
-  final double labelWidth;
-  final VoidCallback? onTap;
-  @override
-  Widget build(BuildContext context) => SizedBox(
-        height: 25.5,
-        child: Row(children: [
-          SizedBox(width: labelWidth, child: Text(label, softWrap: false, style: sans(Dn.nameSize, c: N.g82))),
-          Expanded(
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: onTap,
-              child: Container(
-                height: 22.5,
-                padding: const EdgeInsets.symmetric(horizontal: 7.5),
-                decoration: BoxDecoration(color: Surface.well, border: Border.all(color: Surface.dividerFine), borderRadius: BorderRadius.circular(2)),
-                child: Row(children: [Text(value, style: sans(Dn.nameSize, c: Surface.ink)), const Spacer(), SizedBox(width: 9, height: 6, child: CustomPaint(painter: _Chev()))]),
-              ),
-            ),
-          ),
-        ]),
-      );
-}
-
-class _Chev extends CustomPainter {
-  @override
-  void paint(Canvas c, Size s) => c.drawPath(Path()..moveTo(1, 1.5)..lineTo(s.width / 2, s.height - 1.5)..lineTo(s.width - 1, 1.5), Paint()..color = N.g69..style = PaintingStyle.stroke..strokeWidth = 1.5..strokeCap = StrokeCap.round..strokeJoin = StrokeJoin.round);
-  @override
-  bool shouldRepaint(_Chev o) => false;
 }
 
 double clampD(double v, double a, double b) => math.max(a, math.min(b, v));

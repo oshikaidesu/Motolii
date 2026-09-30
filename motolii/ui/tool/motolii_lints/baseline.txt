@@ -6,6 +6,7 @@ lib/app/sheets.dart 13
 lib/app/top/top.dart 2
 lib/app/top/top_bar.dart 26
 lib/app/ui_scale.dart 5
+lib/browser/browser_panel.dart 5
 lib/browser/classify.dart 17
 lib/browser/create/board.dart 9
 lib/browser/create/faces.dart 4
@@ -18,13 +19,11 @@ lib/browser/media/library.dart 2
 lib/browser/media/list.dart 7
 lib/browser/media/preview.dart 28
 lib/browser/media/views.dart 14
-lib/browser/browser_panel.dart 5
 lib/browser/panel_chrome.dart 19
-lib/browser/parts.dart 26
+lib/browser/parts.dart 7
 lib/browser/search.dart 16
-lib/browser/shelf_sections.dart 8
+lib/browser/shelf_sections.dart 6
 lib/colors/cards.dart 5
-lib/colors/color_field.dart 1
 lib/colors/instrument.dart 10
 lib/colors/shelf.dart 40
 lib/controls/leaves/press.dart 1
@@ -37,7 +36,7 @@ lib/desks/ease/face.dart 76
 lib/desks/history/face.dart 22
 lib/desks/notes/desk.dart 6
 lib/desks/notes/face.dart 68
-lib/desks/parts.dart 37
+lib/desks/parts.dart 24
 lib/desks/relations/desk.dart 53
 lib/desks/relations/model.dart 1
 lib/desks/web/desk.dart 10
@@ -45,10 +44,10 @@ lib/effects/shelf.dart 18
 lib/fonts/shelf.dart 16
 lib/inspector/camera/face.dart 8
 lib/inspector/camera/instrument.dart 33
-lib/inspector/layout/diagram.dart 14
-lib/inspector/layout/instrument.dart 61
 lib/inspector/inspector_panel.dart 3
 lib/inspector/inspector_seat.dart 4
+lib/inspector/layout/diagram.dart 14
+lib/inspector/layout/instrument.dart 61
 lib/inspector/transform/card.dart 1
 lib/inspector/transform/gizmo.dart 3
 lib/inspector/transform/instrument.dart 104
