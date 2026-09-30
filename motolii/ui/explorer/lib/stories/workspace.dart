@@ -2,7 +2,7 @@
 // real document, at one window size and several UI scales, to compare densities side by side.
 import 'package:flutter/widgets.dart';
 import 'package:motolii_stage5/effects/shelf.dart' show EffectScene;
-import 'package:motolii_stage5/hf/neutral.dart';
+import 'package:motolii_stage5/theme/neutral.dart';
 import 'package:motolii_stage5/app/top/top_session.dart';
 import 'package:motolii_stage5/workspace/seats.dart';
 import 'package:motolii_stage5/session/console_log.dart';

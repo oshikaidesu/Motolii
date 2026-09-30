@@ -4,8 +4,8 @@ import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
-import '../metrics.dart';
-import '../theme.dart';
+import '../../theme/editor_metrics.dart';
+import '../../theme/editor_theme.dart';
 import 'drag.dart';
 
 /// The faces a pointer turns and pushes: an angle in a ring, a pair on a

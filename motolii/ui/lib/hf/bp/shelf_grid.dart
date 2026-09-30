@@ -7,8 +7,8 @@ import '../../browser/search.dart';
 import '../../browser/seat.dart';
 import '../../browser/panel_chrome.dart';
 import '../../browser/things.dart';
-import '../neutral.dart';
-import '../metrics.dart' show Dn;
+import '../../theme/neutral.dart';
+import '../../theme/surface.dart' show Dn;
 
 /// How a host's shelf sets its tiles when it has its own idea of the size: one column's width and a row's height.
 typedef Tiling = ({double column, double extent, double gap, double padding});

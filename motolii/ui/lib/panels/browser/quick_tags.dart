@@ -1,11 +1,11 @@
 import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/widgets.dart';
 
-import '../../foundation/glyphs.dart';
-import '../../foundation/leaves.dart';
-import '../../foundation/metrics.dart';
-import '../../foundation/panel_controls.dart';
-import '../../foundation/theme.dart';
+import '../../theme/material_icons.dart';
+import '../../controls/leaves.dart';
+import '../../theme/editor_metrics.dart';
+import '../../controls/panel.dart';
+import '../../theme/editor_theme.dart';
 
 /// The band above the zoom bar while rows are picked: the picked items' own
 /// tags (quiet, not removable), the user's tags with an ×, and an Add… field.

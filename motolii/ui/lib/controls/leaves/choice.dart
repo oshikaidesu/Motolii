@@ -1,8 +1,8 @@
 import 'package:flutter/widgets.dart';
 
-import '../glyphs.dart';
-import '../metrics.dart';
-import '../theme.dart';
+import '../../theme/material_icons.dart';
+import '../../theme/editor_metrics.dart';
+import '../../theme/editor_theme.dart';
 import 'floating.dart';
 
 /// The leaf that picks one value out of a short list.

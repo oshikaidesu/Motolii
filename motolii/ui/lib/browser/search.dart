@@ -3,9 +3,9 @@
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'parts.dart';
-import '../hf/neutral.dart';
-import '../hf/shell/place.dart' show H;
-import '../hf/metrics.dart' show Dn, Surface;
+import '../theme/neutral.dart';
+import '../theme/tokens.dart' show H;
+import '../theme/surface.dart' show Dn, Surface;
 
 class SearchCapability extends ChangeNotifier {
   SearchCapability({String query = ''}) : controller = TextEditingController(text: query) {

@@ -2,11 +2,11 @@ import 'dart:math' as math;
 
 import 'package:flutter/widgets.dart';
 
-import '../../foundation/theme.dart';
-import '../../foundation/metrics.dart';
+import '../../theme/editor_theme.dart';
+import '../../theme/editor_metrics.dart';
 import '../../session/editor_session.dart';
-import '../../foundation/glyphs.dart';
-import '../../foundation/leaves.dart';
+import '../../theme/material_icons.dart';
+import '../../controls/leaves.dart';
 
 /// A bordered action beside the search field.
 Widget shelfAction(String label, VoidCallback? press) => Builder(

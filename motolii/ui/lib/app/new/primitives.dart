@@ -1,9 +1,9 @@
 import 'package:flutter/widgets.dart';
 
-import '../../foundation/leaves.dart';
-import '../../foundation/metrics.dart';
+import '../../controls/leaves.dart';
+import '../../theme/editor_metrics.dart';
 import '../../foundation/shell_tokens.dart';
-import '../../foundation/theme.dart';
+import '../../theme/editor_theme.dart';
 
 /// The New face's own parts. Each is drawn whole here; the behaviour it
 /// drives comes from the caller.

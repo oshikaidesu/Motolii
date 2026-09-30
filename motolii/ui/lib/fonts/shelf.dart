@@ -2,7 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/widgets.dart';
 
-import '../hf/glyphs.dart';
+import '../theme/glyphs.dart';
 import '../browser/classify.dart';
 import '../browser/parts.dart';
 import '../browser/search.dart';
@@ -10,8 +10,8 @@ import '../browser/panel_chrome.dart';
 import '../browser/things.dart' show UserViews;
 import '../session/editor_session.dart';
 import '../browser/visual_sample.dart';
-import '../hf/neutral.dart';
-import '../hf/metrics.dart' show Dn, Surface;
+import '../theme/neutral.dart';
+import '../theme/surface.dart' show Dn, Surface;
 
 class FontItem {
   const FontItem(

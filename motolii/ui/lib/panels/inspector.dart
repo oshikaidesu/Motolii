@@ -2,18 +2,18 @@ import 'dart:math' as math;
 
 import 'package:flutter/widgets.dart';
 
-import '../foundation/metrics.dart';
+import '../theme/editor_metrics.dart';
 import '../colors/color_field.dart';
-import '../foundation/panel_controls.dart';
-import '../foundation/theme.dart';
+import '../controls/panel.dart';
+import '../theme/editor_theme.dart';
 import '../session/editor_session.dart';
 import '../session/read_model.dart';
 import '../session/effect_actions.dart' as shared_effects;
 import '../session/property_character.dart';
 import 'rich_text_editor.dart';
 import 'gradient_inspector.dart';
-import '../foundation/glyphs.dart';
-import '../foundation/leaves.dart';
+import '../theme/material_icons.dart';
+import '../controls/leaves.dart';
 
 part 'inspector/property_style.dart';
 part 'inspector/parts.dart';

@@ -3,11 +3,11 @@ import 'package:flutter/widgets.dart';
 import '../session/editor_session.dart';
 import '../foundation/panel_catalog.dart';
 import 'browser.dart';
-import '../foundation/panel_controls.dart';
-import '../foundation/theme.dart';
-import '../foundation/metrics.dart';
-import '../foundation/glyphs.dart';
-import '../foundation/leaves.dart';
+import '../controls/panel.dart';
+import '../theme/editor_theme.dart';
+import '../theme/editor_metrics.dart';
+import '../theme/material_icons.dart';
+import '../controls/leaves.dart';
 
 class PanelSettings extends StatelessWidget {
   const PanelSettings({super.key, required this.controller});

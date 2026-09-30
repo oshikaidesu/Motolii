@@ -6,9 +6,9 @@ import 'dart:typed_data';
 import 'package:flutter/widgets.dart';
 
 import '../panel_chrome.dart' show GlyphBox;
-import '../../hf/glyphs.dart';
-import '../../hf/metrics.dart';
-import '../../hf/neutral.dart';
+import '../../theme/glyphs.dart';
+import '../../theme/surface.dart';
+import '../../theme/neutral.dart';
 import '../item.dart';
 import 'library.dart' show materialFace;
 import 'model_face.dart';

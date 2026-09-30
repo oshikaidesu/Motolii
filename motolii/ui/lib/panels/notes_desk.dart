@@ -8,11 +8,11 @@ import 'package:flutter/services.dart';
 
 import '../session/editor_session.dart';
 import '../foundation/notes_view.dart';
-import '../foundation/theme.dart';
-import '../foundation/panel_controls.dart';
-import '../foundation/metrics.dart';
-import '../foundation/glyphs.dart';
-import '../foundation/leaves.dart';
+import '../theme/editor_theme.dart';
+import '../controls/panel.dart';
+import '../theme/editor_metrics.dart';
+import '../theme/material_icons.dart';
+import '../controls/leaves.dart';
 
 part 'notes_desk/card.dart';
 

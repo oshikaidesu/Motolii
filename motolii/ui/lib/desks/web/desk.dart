@@ -2,10 +2,10 @@ import 'package:flutter/widgets.dart';
 
 import '../../browser/parts.dart';
 
-import '../../hf/glyphs.dart';
+import '../../theme/glyphs.dart';
 import '../../session/editor_session.dart';
-import '../../hf/neutral.dart';
-import '../../hf/metrics.dart' show Dn, Surface;
+import '../../theme/neutral.dart';
+import '../../theme/surface.dart' show Dn, Surface;
 
 /// The Web desk's New face: one URL, kept as the document's own desk setting (`storeDesk('webUrl', ...)`, the same
 /// operation Classic's WebPanel uses), and a button that asks the host to open it (`native('openWeb', ...)`).

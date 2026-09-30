@@ -12,10 +12,10 @@
 library;
 
 export 'leaves.dart' show EditorChoice;
-export 'panel_controls/dials.dart';
-export 'panel_controls/drag.dart';
-export 'panel_controls/fields.dart';
-export 'panel_controls/frames.dart';
-export 'panel_controls/numeric.dart';
-export 'panel_controls/scale.dart';
-export 'panel_controls/toggles.dart';
+export 'panel/dials.dart';
+export 'panel/drag.dart';
+export 'panel/fields.dart';
+export 'panel/frames.dart';
+export 'panel/numeric.dart';
+export 'panel/scale.dart';
+export 'panel/toggles.dart';

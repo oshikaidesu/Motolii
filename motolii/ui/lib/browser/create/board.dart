@@ -6,8 +6,8 @@ import '../../effects/shelf.dart';
 import 'faces.dart';
 import '../seat.dart';
 import '../things.dart';
-import '../../hf/neutral.dart';
-import '../../hf/metrics.dart' show Dn, Surface;
+import '../../theme/neutral.dart';
+import '../../theme/surface.dart' show Dn, Surface;
 
 /// Create as a board of named tiles: each thing its mark over its name on a quiet ground, on a grid that fills the
 /// seat's width, the section as a row identifier, Recent last. Small marks and short names keep it dense; the name is

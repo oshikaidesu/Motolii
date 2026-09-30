@@ -3,11 +3,11 @@ import 'dart:math' as math;
 import 'package:docking/docking.dart';
 import 'package:flutter/widgets.dart';
 
-import '../foundation/glyphs.dart' as legacy;
+import '../theme/material_icons.dart' as legacy;
 import '../browser/parts.dart' as tab;
-import '../hf/glyphs.dart' show HG;
-import '../hf/metrics.dart';
-import '../hf/shell/menu.dart' show showHfMenu;
+import '../theme/glyphs.dart' show HG;
+import '../theme/surface.dart';
+import '../controls/menu.dart' show showHfMenu;
 
 /// One panel the workspace can show: an id that stays the same, the words on its tab, its family icon
 /// (the same glyph a Browser tab would use), and how to build its body.

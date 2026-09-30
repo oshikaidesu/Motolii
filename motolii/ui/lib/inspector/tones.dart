@@ -3,7 +3,7 @@
 // so the same effect opens with the same colours and neighbouring groups never share one.
 import 'package:flutter/painting.dart';
 import '../desks/parts.dart' show kYellow, kMint, kBlue, kPink, kViolet;
-import '../hf/neutral.dart';
+import '../theme/neutral.dart';
 
 const kOrange = Color(0xFFF08A3C);
 const kTonePalette = [kYellow, kMint, kBlue, kPink, kViolet, kOrange];

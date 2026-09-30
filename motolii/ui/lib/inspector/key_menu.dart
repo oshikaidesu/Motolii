@@ -1,7 +1,7 @@
 import 'package:flutter/widgets.dart';
 
 import 'rows.dart';
-import '../hf/shell/menu.dart' show showHfMenu;
+import '../controls/menu.dart' show showHfMenu;
 
 /// The key lines of every Inspector value's right-click (Classic IN-038): "Key this frame" where no key is at the
 /// playhead, "Remove key" where one is. [extra] lines follow (a store's own, such as relations); the chosen extra is

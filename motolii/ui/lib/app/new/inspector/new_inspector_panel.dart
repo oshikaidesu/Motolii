@@ -7,7 +7,7 @@ import '../../../session/read_model.dart';
 import '../../../effects/card.dart';
 import '../../../inspector/layout/card.dart';
 import '../../../inspector/transform/card.dart';
-import '../../../hf/metrics.dart' show Surface;
+import '../../../theme/surface.dart' show Surface;
 
 /// The Inspector's own host: identity header, and the card list (Transform — World inside it, Layout, Effects) —
 /// the New face for the header/scroll/card chrome Classic's `InspectorPanel` draws itself. Text, Fill and Matte

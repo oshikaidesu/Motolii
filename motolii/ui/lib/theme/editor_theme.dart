@@ -5,8 +5,8 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter/material.dart'
     show Theme, ThemeData, ThemeExtension, ColorScheme;
 
-import 'leaves.dart';
-import 'metrics.dart';
+import '../controls/leaves.dart';
+import 'editor_metrics.dart';
 
 /// Colours of what is drawn rather than laid out — lanes, grids, ticks,
 /// gizmos, the transparency grid, the ease desk's paper — carried by

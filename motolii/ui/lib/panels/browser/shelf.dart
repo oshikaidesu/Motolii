@@ -1,6 +1,6 @@
 import 'package:flutter/widgets.dart';
 
-import '../../foundation/theme.dart';
+import '../../theme/editor_theme.dart';
 import '../../session/editor_session.dart';
 
 /// What a shelf may ask of the Browser panel that holds it. The panel owns

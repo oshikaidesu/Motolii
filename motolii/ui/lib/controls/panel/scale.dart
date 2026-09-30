@@ -1,9 +1,9 @@
 import 'package:flutter/widgets.dart';
 
-import '../glyphs.dart';
+import '../../theme/material_icons.dart';
 import '../leaves.dart';
-import '../metrics.dart';
-import '../theme.dart';
+import '../../theme/editor_metrics.dart';
+import '../../theme/editor_theme.dart';
 import 'numeric.dart';
 
 /// The editor's one scale, what it is set by, and the greys behind what is

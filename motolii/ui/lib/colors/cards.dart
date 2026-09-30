@@ -2,9 +2,9 @@ import 'dart:math' as math;
 
 import 'package:flutter/widgets.dart';
 
-import '../hf/neutral.dart';
+import '../theme/neutral.dart';
 import '../browser/parts.dart' show sans;
-import '../hf/metrics.dart' show Dn;
+import '../theme/surface.dart' show Dn;
 
 /// Colours as blocks: the colour itself in large squares, three across the default seat, 2 px apart, its hex set
 /// inside at the bottom left in an ink that reads on it (a swatch card, as current palettes are shown); an edge only

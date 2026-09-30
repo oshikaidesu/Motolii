@@ -2,8 +2,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
 import '../leaves.dart';
-import '../metrics.dart';
-import '../theme.dart';
+import '../../theme/editor_metrics.dart';
+import '../../theme/editor_theme.dart';
 
 /// The box typing happens in, and the field that holds a draft until it is
 /// committed or refused.

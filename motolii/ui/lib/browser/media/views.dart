@@ -3,9 +3,9 @@ import 'dart:math' as math;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
-import '../../hf/metrics.dart';
-import '../../hf/shell/menu.dart' show showHfMenu;
-import '../../hf/neutral.dart';
+import '../../theme/surface.dart';
+import '../../controls/menu.dart' show showHfMenu;
+import '../../theme/neutral.dart';
 import '../item.dart';
 import 'fluid.dart';
 import 'list.dart';

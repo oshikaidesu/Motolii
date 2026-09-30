@@ -1,8 +1,8 @@
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/widgets.dart';
 
-import '../metrics.dart';
-import '../theme.dart';
+import '../../theme/editor_metrics.dart';
+import '../../theme/editor_theme.dart';
 
 /// On and off, and the lamps that say how a value stands to time and to a
 /// selection.

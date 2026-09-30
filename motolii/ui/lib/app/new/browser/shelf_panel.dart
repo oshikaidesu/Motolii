@@ -7,7 +7,7 @@ import '../../../effects/shelf.dart';
 import '../../../browser/search.dart';
 import '../../../hf/bp/shelf_grid.dart';
 import '../../../browser/panel_chrome.dart' show GlyphBox;
-import '../../../hf/glyphs.dart';
+import '../../../theme/glyphs.dart';
 import '../../../browser/seat.dart';
 import '../../../session/editor_session.dart';
 import '../../../panels/browser.dart' show BrowserSize;

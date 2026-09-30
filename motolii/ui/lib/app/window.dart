@@ -7,7 +7,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 
 import '../effects/shelf.dart' show EffectScene;
-import '../hf/shell/place.dart' show H;
+import '../theme/tokens.dart' show H;
 import '../session/console_log.dart';
 import '../session/editor_session.dart';
 import '../session/status_notice.dart';

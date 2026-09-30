@@ -4,8 +4,8 @@ import 'package:flutter/widgets.dart';
 
 import '../inspector/panel.dart';
 import '../inspector/rows.dart';
-import '../hf/shell/place.dart';
-import '../hf/shell/sheet.dart';
+import '../theme/tokens.dart';
+import '../controls/sheet.dart';
 import '../session/editor_session.dart';
 import '../session/export_actions.dart';
 

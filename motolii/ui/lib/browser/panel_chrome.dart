@@ -2,14 +2,14 @@
 // morphologies (wide / narrow / strip). Bodies are the panels' own; this only places them.
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
-import '../hf/glyphs.dart';
+import '../theme/glyphs.dart';
 import 'classify.dart';
 import 'parts.dart';
 import 'search.dart';
-import '../hf/metrics.dart';
+import '../theme/surface.dart';
 import 'seat.dart';
 import 'shelf_sections.dart' show SwissHeading;
-import '../hf/neutral.dart';
+import '../theme/neutral.dart';
 
 class GlyphBox extends StatelessWidget {
   const GlyphBox(this.g, {super.key, this.size = 17, this.color = N.g82});

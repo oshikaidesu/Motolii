@@ -3,9 +3,9 @@ import 'dart:math' as math;
 import 'package:flutter/widgets.dart';
 
 import '../session/editor_session.dart';
-import '../foundation/theme.dart';
-import '../foundation/metrics.dart';
-import '../foundation/glyphs.dart';
+import '../theme/editor_theme.dart';
+import '../theme/editor_metrics.dart';
+import '../theme/material_icons.dart';
 
 class DepthDesk extends StatefulWidget {
   const DepthDesk({super.key, required this.controller});

@@ -1,10 +1,10 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter/services.dart';
 
-import '../../foundation/glyphs.dart';
-import '../../foundation/leaves.dart';
-import '../../foundation/metrics.dart';
-import '../../foundation/theme.dart';
+import '../../theme/material_icons.dart';
+import '../../controls/leaves.dart';
+import '../../theme/editor_metrics.dart';
+import '../../theme/editor_theme.dart';
 import 'filter_library.dart';
 import 'shelf.dart';
 

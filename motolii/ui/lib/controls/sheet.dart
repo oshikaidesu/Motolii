@@ -3,10 +3,10 @@
 import 'dart:async';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
-import '../glyphs.dart';
-import '../metrics.dart';
-import 'place.dart';
-import '../neutral.dart';
+import '../theme/glyphs.dart';
+import '../theme/surface.dart';
+import '../theme/tokens.dart';
+import '../theme/neutral.dart';
 
 /// A key of a dialog or sheet. [main] is the one primary action (the mode colour); [on] marks the chosen one of a
 /// set — drawn as a selection (a lighter ground and edge), never in the action's colour; no [onTap] draws it quiet.

@@ -1,7 +1,7 @@
 import 'package:flutter/widgets.dart';
 
-import '../metrics.dart';
-import '../theme.dart';
+import '../../theme/editor_metrics.dart';
+import '../../theme/editor_theme.dart';
 
 /// The leaves laid along a line: the rule that marks one, the bar that
 /// scrolls one, and the thumb that runs one.

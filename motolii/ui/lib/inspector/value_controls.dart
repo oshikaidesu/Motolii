@@ -12,9 +12,9 @@ import '../desks/parts.dart' show kYellow, kBlue, kViolet, kPink;
 import 'rows.dart';
 import 'slot.dart';
 export 'slot.dart';
-import '../hf/metrics.dart';
+import '../theme/surface.dart';
 import 'tones.dart';
-import '../hf/neutral.dart';
+import '../theme/neutral.dart';
 
 const _readout = N.g82; // the number is a readout: present, not loud
 const _dark = N.g10;

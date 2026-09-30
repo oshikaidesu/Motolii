@@ -3,8 +3,8 @@ import 'package:flutter/widgets.dart';
 import '../../browser/parts.dart';
 import '../../browser/panel_chrome.dart' show emptyBody;
 import '../parts.dart';
-import '../../hf/neutral.dart';
-import '../../hf/metrics.dart' show Dn, Surface;
+import '../../theme/neutral.dart';
+import '../../theme/surface.dart' show Dn, Surface;
 
 enum Mark { none, save, open, warn, error, end }
 

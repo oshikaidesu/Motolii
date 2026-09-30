@@ -7,8 +7,8 @@ import 'package:flutter/widgets.dart';
 import '../../browser/parts.dart';
 import '../../desks/parts.dart' show kMint, kBlue, kPink, kViolet;
 import 'model.dart';
-import '../../hf/neutral.dart';
-import '../../hf/metrics.dart' show Dn, Surface;
+import '../../theme/neutral.dart';
+import '../../theme/surface.dart' show Dn, Surface;
 
 enum TMode { move, scale, rotate, anchor }
 

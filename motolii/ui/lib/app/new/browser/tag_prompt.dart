@@ -3,9 +3,9 @@ import 'dart:async';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
-import '../../../foundation/leaves.dart';
-import '../../../foundation/metrics.dart';
-import '../../../foundation/theme.dart';
+import '../../../controls/leaves.dart';
+import '../../../theme/editor_metrics.dart';
+import '../../../theme/editor_theme.dart';
 
 /// A one-line question asked where the pointer is: Enter keeps the answer, Escape or leaving drops it.
 Future<String?> promptText(BuildContext context, Offset at, String title) {

@@ -2,8 +2,8 @@
 // a new type is added here once, never per thing.
 import 'dart:math' as math;
 import 'package:flutter/widgets.dart';
-import '../../hf/glyphs.dart';
-import '../../hf/neutral.dart';
+import '../../theme/glyphs.dart';
+import '../../theme/neutral.dart';
 import 'shelf.dart';
 import '../../effects/shelf.dart';
 import '../seat.dart';

@@ -4,9 +4,9 @@
 //     --dart-define=MOTOLII_DOCUMENT=/path.rrd [--dart-define=MOTOLII_SHOT=/path.png]
 import 'package:flutter/widgets.dart';
 
-import '../foundation/panel_controls/scale.dart';
-import '../hf/shell/place.dart' show H;
-import '../live_hf/editor_theme.dart';
+import '../controls/panel/scale.dart';
+import '../theme/tokens.dart' show H;
+import '../theme/live_palette.dart';
 import 'window.dart';
 import 'ui_scale.dart';
 

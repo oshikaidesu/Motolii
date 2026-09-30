@@ -6,14 +6,14 @@ import 'face.dart';
 import 'parts.dart' show sans;
 import '../effects/shelf.dart';
 import 'create/faces.dart' show QuietFace;
-import '../hf/shell/menu.dart' show showHfMenu;
+import '../controls/menu.dart' show showHfMenu;
 import 'seat.dart';
 import 'things.dart';
 import '../session/editor_session.dart';
 import 'session.dart';
 import 'media/seat.dart';
 import '../colors/instrument.dart';
-import '../hf/metrics.dart' show Dn, Surface;
+import '../theme/surface.dart' show Dn, Surface;
 
 /// The Browser as a skin over [BrowserSession]: it lays out the reference faces (browserFace), dresses tiles with what
 /// they do, and hands every gesture to the session.

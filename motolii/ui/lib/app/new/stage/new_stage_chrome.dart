@@ -3,9 +3,9 @@ import 'package:flutter/widgets.dart';
 import '../../../browser/parts.dart';
 
 import '../../../desks/parts.dart' show kAccent;
-import '../../../hf/glyphs.dart';
+import '../../../theme/glyphs.dart';
 import '../../../stage/panel.dart' show StageToolbarApi;
-import '../../../hf/metrics.dart' show Surface;
+import '../../../theme/surface.dart' show Surface;
 
 /// The Stage's own bars, hf-styled, over exactly the [StageToolbarApi] operations Classic's bars call. The picture,
 /// the gesture surface and the gizmos underneath are unchanged — this only redraws the strip above and below them.

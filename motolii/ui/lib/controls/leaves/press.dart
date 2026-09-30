@@ -2,8 +2,8 @@ import 'dart:math' as math;
 
 import 'package:flutter/widgets.dart';
 
-import '../metrics.dart';
-import '../theme.dart';
+import '../../theme/editor_metrics.dart';
+import '../../theme/editor_theme.dart';
 
 /// The leaves a pointer presses: the hover-and-press surface itself, and the
 /// two buttons built on it — the icon and the label.

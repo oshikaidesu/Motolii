@@ -4,12 +4,12 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
-import '../foundation/theme.dart';
-import '../hf/glyphs.dart';
-import '../hf/metrics.dart';
-import '../hf/neutral.dart';
-import '../hf/shell/menu.dart' show showHfMenu;
-import '../hf/shell/place.dart' show H, Fam;
+import '../theme/editor_theme.dart';
+import '../theme/glyphs.dart';
+import '../theme/surface.dart';
+import '../theme/neutral.dart';
+import '../controls/menu.dart' show showHfMenu;
+import '../theme/tokens.dart' show H, Fam;
 import '../input/viewport_motion.dart';
 import '../session/editor_session.dart';
 import 'rows.dart' show TrackRow;

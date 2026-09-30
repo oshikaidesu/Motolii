@@ -2,9 +2,9 @@
 // Only the dock's tab strip and two tiny controls are shared; every body decides its own folding.
 import 'package:flutter/widgets.dart';
 
-import '../hf/metrics.dart';
-import '../hf/glyphs.dart';
-import '../hf/neutral.dart';
+import '../theme/surface.dart';
+import '../theme/glyphs.dart';
+import '../theme/neutral.dart';
 
 TextStyle sans(
   double s, {

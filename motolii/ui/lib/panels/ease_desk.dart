@@ -9,11 +9,11 @@ import 'package:flutter/services.dart';
 import '../session/editor_session.dart';
 import '../desks/ease/meaning.dart';
 import '../foundation/ease_view.dart';
-import '../foundation/panel_controls.dart';
-import '../foundation/theme.dart';
-import '../foundation/metrics.dart';
-import '../foundation/glyphs.dart';
-import '../foundation/leaves.dart';
+import '../controls/panel.dart';
+import '../theme/editor_theme.dart';
+import '../theme/editor_metrics.dart';
+import '../theme/material_icons.dart';
+import '../controls/leaves.dart';
 
 part 'ease_desk/values.dart';
 part 'ease_desk/state.dart';

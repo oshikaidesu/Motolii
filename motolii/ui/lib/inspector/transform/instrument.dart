@@ -4,13 +4,13 @@
 import 'package:flutter/widgets.dart';
 import '../../browser/parts.dart';
 import '../../desks/parts.dart' show kYellow, kBlue, kPink, kViolet, kAccentDim;
-import '../../hf/metrics.dart';
+import '../../theme/surface.dart';
 import '../rows.dart';
 import '../value_controls.dart';
 import 'gizmo.dart';
 import 'model.dart';
-import '../../hf/neutral.dart';
-import '../../hf/shell/place.dart' show H;
+import '../../theme/neutral.dart';
+import '../../theme/tokens.dart' show H;
 
 class TransformInstrument extends StatefulWidget {
   const TransformInstrument(this.store, {super.key, this.initialMode = TMode.move, this.showHeader = true});

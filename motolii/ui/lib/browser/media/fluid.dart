@@ -8,8 +8,8 @@ import 'package:flutter/rendering.dart' show ScrollCacheExtent, SliverConstraint
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 
-import '../../hf/metrics.dart';
-import '../../hf/neutral.dart';
+import '../../theme/surface.dart';
+import '../../theme/neutral.dart';
 import '../item.dart';
 import 'explore/overlay.dart';
 import 'library.dart' show materialFace;

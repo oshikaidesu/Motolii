@@ -3,9 +3,9 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
-import '../metrics.dart';
-import 'place.dart';
-import '../neutral.dart';
+import '../theme/surface.dart';
+import '../theme/tokens.dart';
+import '../theme/neutral.dart';
 
 /// [shortcuts] names the key for a line (shown at its right, as menus do); [dividers] ends a group after a line.
 /// [info] lines tell rather than do (a title, a fact): drawn as information, never lit, never greyed like an action

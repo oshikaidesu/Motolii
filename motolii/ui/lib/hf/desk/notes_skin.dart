@@ -1,10 +1,10 @@
 import 'package:flutter/widgets.dart';
 import '../../foundation/notes_view.dart';
-import '../../foundation/panel_controls.dart' show EditorDraftField;
+import '../../controls/panel.dart' show EditorDraftField;
 import '../../browser/parts.dart';
 import '../../desks/parts.dart';
-import '../neutral.dart';
-import '../metrics.dart' show Dn, Surface;
+import '../../theme/neutral.dart';
+import '../../theme/surface.dart' show Dn, Surface;
 
 /// The cards' look in the finished Notes: flat colour, a violet pill for a reference, a dotted ground.
 const hfNoteLook = NoteLook(

@@ -6,7 +6,7 @@ import 'theme_settings.dart';
 import 'package:flutter/widgets.dart';
 
 import '../session/editor_session.dart';
-import '../foundation/theme.dart';
+import '../theme/editor_theme.dart';
 import '../foundation/panel_catalog.dart';
 import '../workspace/layout.dart';
 import '../workspace/panel_ids.dart';
@@ -16,9 +16,9 @@ import '../panels/registry.dart';
 import '../panels/panel_settings.dart';
 import '../panels/composition_controls.dart';
 import '../panels/export_controls.dart';
-import '../foundation/metrics.dart';
-import '../foundation/panel_controls.dart';
-import '../foundation/leaves.dart';
+import '../theme/editor_metrics.dart';
+import '../controls/panel.dart';
+import '../controls/leaves.dart';
 import '../session/status_notice.dart';
 
 /// 窓の下の 1 行。文だけを受け取るので、文が同じ間は建て直らない。

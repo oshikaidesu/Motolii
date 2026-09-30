@@ -3,8 +3,8 @@
 import 'package:flutter/widgets.dart';
 import 'parts.dart';
 import 'search.dart';
-import '../hf/neutral.dart';
-import '../hf/metrics.dart' show Dn, Surface;
+import '../theme/neutral.dart';
+import '../theme/surface.dart' show Dn, Surface;
 
 class ClassifyCapability extends ChangeNotifier {
   ClassifyCapability({this.all = 'All', String? selected}) : _selected = selected ?? all;

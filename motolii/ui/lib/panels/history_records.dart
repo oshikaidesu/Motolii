@@ -1,11 +1,11 @@
 import 'package:flutter/widgets.dart';
 
-import '../foundation/metrics.dart';
-import '../foundation/theme.dart';
+import '../theme/editor_metrics.dart';
+import '../theme/editor_theme.dart';
 import '../session/editor_session.dart';
 import '../session/read_model.dart';
-import '../foundation/glyphs.dart';
-import '../foundation/leaves.dart';
+import '../theme/material_icons.dart';
+import '../controls/leaves.dart';
 
 /// The history column: every edit and every record on one vertical line,
 /// oldest at the top, with the current position marked. Tapping a point

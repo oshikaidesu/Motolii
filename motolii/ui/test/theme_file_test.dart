@@ -6,8 +6,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../lib/app/theme_settings.dart';
-import '../lib/foundation/leaves.dart';
-import '../lib/foundation/theme.dart';
+import '../lib/controls/leaves.dart';
+import '../lib/theme/editor_theme.dart';
 import '../lib/session/editor_session.dart';
 
 void main() {

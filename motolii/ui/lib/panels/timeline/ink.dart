@@ -2,7 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/widgets.dart';
 
-import '../../foundation/theme.dart';
+import '../../theme/editor_theme.dart';
 import 'layout.dart';
 
 /// Timeline の絵の道具 — 使い回す塗り・線・縁取りと、組んだ文字の版。

@@ -2,7 +2,7 @@ import 'package:flutter/gestures.dart' show kPrimaryButton;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
-import '../../../foundation/theme.dart';
+import '../../../theme/editor_theme.dart';
 
 import '../../../browser/search.dart';
 import '../../../browser/seat.dart';
@@ -16,7 +16,7 @@ import 'shelf_host.dart';
 import 'tag_prompt.dart';
 import 'shelf_user.dart';
 import 'shelf_things.dart';
-import '../../../hf/metrics.dart' show Surface;
+import '../../../theme/surface.dart' show Surface;
 
 /// The finished Browser's seat over one production shelf: a tile is picked, applied, menued and dragged the way the
 /// shelf says, a picture is the shelf's own when the design has none, and the keys act on what the shelf lists.

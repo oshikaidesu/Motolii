@@ -1,6 +1,6 @@
 import 'package:flutter/widgets.dart';
 
-import 'glyphs.dart';
+import '../theme/material_icons.dart';
 
 /// How much of a dock axis a panel asks for: a fixed number of pixels, all
 /// that is left (`fill`), or whatever its neighbours decide (`any`).

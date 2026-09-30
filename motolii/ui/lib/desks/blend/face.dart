@@ -3,8 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import '../../browser/parts.dart';
 import '../parts.dart';
-import '../../hf/neutral.dart';
-import '../../hf/metrics.dart' show Dn, Surface;
+import '../../theme/neutral.dart';
+import '../../theme/surface.dart' show Dn, Surface;
 
 /// A blend mode is shown as what it does to one fixed pair of flat shapes: A (base, yellow) and B (top, blue).
 /// Every symbol is the same two shapes through a different operator, so what differs is the overlap, nothing else.

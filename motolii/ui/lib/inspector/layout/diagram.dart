@@ -8,8 +8,8 @@ import 'package:flutter/widgets.dart';
 import '../../browser/parts.dart';
 import '../../desks/parts.dart' show kMint, kBlue, kViolet, kPink;
 import 'model.dart';
-import '../../hf/neutral.dart';
-import '../../hf/metrics.dart' show Dn;
+import '../../theme/neutral.dart';
+import '../../theme/surface.dart' show Dn;
 
 const arrangeColor = kMint, spaceColor = kBlue, alignColor = kViolet, sizeColor = kPink;
 

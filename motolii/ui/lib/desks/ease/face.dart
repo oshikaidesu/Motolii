@@ -5,8 +5,8 @@ import 'package:flutter/widgets.dart';
 import '../../browser/parts.dart';
 import '../parts.dart';
 import 'meaning.dart';
-import '../../hf/neutral.dart';
-import '../../hf/metrics.dart' show Dn, Surface;
+import '../../theme/neutral.dart';
+import '../../theme/surface.dart' show Dn, Surface;
 
 typedef Shape = double Function(double t);
 

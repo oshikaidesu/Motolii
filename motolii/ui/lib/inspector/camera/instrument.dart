@@ -8,8 +8,8 @@ import 'face.dart';
 import 'model.dart';
 import '../rows.dart';
 import '../value_controls.dart';
-import '../../hf/neutral.dart';
-import '../../hf/metrics.dart' show Dn, Surface;
+import '../../theme/neutral.dart';
+import '../../theme/surface.dart' show Dn, Surface;
 
 class CameraInstrument extends StatelessWidget {
   const CameraInstrument(this.store, {super.key, this.title = 'Camera', this.animating, this.onAnimate});

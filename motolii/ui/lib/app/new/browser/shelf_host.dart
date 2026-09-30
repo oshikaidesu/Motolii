@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
-import '../../../foundation/theme.dart';
+import '../../../theme/editor_theme.dart';
 import '../../../panels/browser.dart' show browserDocumentKeys;
 import '../../../panels/browser/colors_shelf.dart';
 import '../../../panels/browser/create_shelf.dart';

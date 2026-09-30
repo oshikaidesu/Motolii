@@ -1,7 +1,7 @@
 import 'package:flutter/widgets.dart';
 
 import '../browser/parts.dart' show sans;
-import '../hf/metrics.dart' show Surface;
+import '../theme/surface.dart' show Surface;
 import '../session/editor_session.dart';
 import 'camera/card.dart';
 import '../effects/params.dart';
@@ -9,7 +9,7 @@ import '../effects/card.dart';
 import 'layout/card.dart';
 import 'transform/card.dart';
 import 'session.dart';
-import '../hf/metrics.dart' show Dn, Surface;
+import '../theme/surface.dart' show Dn, Surface;
 
 /// The Inspector seat. Specialist editing requests open the corresponding real Dock panel; the Inspector itself
 /// stays an Inspector instead of turning into a drawer.

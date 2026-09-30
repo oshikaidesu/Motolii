@@ -1,6 +1,6 @@
 import 'package:flutter/widgets.dart';
 
-import '../../foundation/theme.dart';
+import '../../theme/editor_theme.dart';
 import '../../session/editor_session.dart';
 
 /// Tags and collections the way Live 12's browser keeps them (manual 4.4,

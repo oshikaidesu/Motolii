@@ -1,9 +1,9 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
 
-import '../foundation/leaves.dart';
-import '../foundation/panel_controls.dart';
-import '../foundation/theme.dart';
+import '../controls/leaves.dart';
+import '../controls/panel.dart';
+import '../theme/editor_theme.dart';
 import 'editor_window.dart';
 import 'new_shell.dart';
 

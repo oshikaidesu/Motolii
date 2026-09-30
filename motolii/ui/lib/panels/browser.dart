@@ -5,9 +5,9 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter/services.dart';
 
 import '../session/editor_session.dart';
-import '../foundation/panel_controls.dart';
-import '../foundation/theme.dart';
-import '../foundation/metrics.dart';
+import '../controls/panel.dart';
+import '../theme/editor_theme.dart';
+import '../theme/editor_metrics.dart';
 import 'browser/colors_shelf.dart';
 import 'browser/create_shelf.dart';
 import 'browser/effects_shelf.dart';
@@ -18,8 +18,8 @@ import 'browser/media_shelf.dart';
 import 'browser/parts.dart';
 import 'browser/shelf.dart';
 import 'browser/tile.dart';
-import '../foundation/glyphs.dart';
-import '../foundation/leaves.dart';
+import '../theme/material_icons.dart';
+import '../controls/leaves.dart';
 
 export 'browser/colors_shelf.dart' show paletteOf;
 

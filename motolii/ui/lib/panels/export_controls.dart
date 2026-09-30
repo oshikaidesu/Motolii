@@ -4,8 +4,8 @@ import 'package:flutter/widgets.dart';
 
 import '../session/editor_session.dart';
 import '../session/export_actions.dart' as shared_export;
-import '../foundation/theme.dart';
-import '../foundation/metrics.dart';
+import '../theme/editor_theme.dart';
+import '../theme/editor_metrics.dart';
 
 class ExportControls extends StatefulWidget {
   const ExportControls({super.key, required this.controller});

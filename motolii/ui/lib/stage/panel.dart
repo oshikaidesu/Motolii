@@ -9,10 +9,10 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter/services.dart';
 
 import '../session/editor_session.dart';
-import '../foundation/panel_controls.dart';
-import '../foundation/theme.dart';
-import '../foundation/metrics.dart';
-import '../foundation/glyphs.dart';
+import '../controls/panel.dart';
+import '../theme/editor_theme.dart';
+import '../theme/editor_metrics.dart';
+import '../theme/material_icons.dart';
 import 'geometry.dart';
 import 'session.dart';
 

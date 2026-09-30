@@ -1,9 +1,9 @@
 import 'package:flutter/widgets.dart';
 
-import '../glyphs.dart';
+import '../../theme/material_icons.dart';
 import '../leaves.dart';
-import '../metrics.dart';
-import '../theme.dart';
+import '../../theme/editor_metrics.dart';
+import '../../theme/editor_theme.dart';
 
 /// What the controls sit in: bars, cards, heads, folds and the anchor's grid.
 

@@ -4,12 +4,12 @@ import 'package:flutter/gestures.dart' show kPrimaryButton;
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/widgets.dart';
 
-import '../../foundation/metrics.dart';
-import '../../foundation/theme.dart';
+import '../../theme/editor_metrics.dart';
+import '../../theme/editor_theme.dart';
 import 'parts.dart';
 import 'shelf.dart';
-import '../../foundation/glyphs.dart';
-import '../../foundation/panel_controls.dart' show Picked;
+import '../../theme/material_icons.dart';
+import '../../controls/panel.dart' show Picked;
 
 /// One tile of the grid: the shelf's preview in the frame's caption, badge,
 /// marks and selection, laid out for the view in force.

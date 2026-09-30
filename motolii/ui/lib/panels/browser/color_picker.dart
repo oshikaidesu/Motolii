@@ -4,11 +4,11 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter/services.dart';
 
 import '../../colors/color_field.dart';
-import '../../foundation/glyphs.dart';
-import '../../foundation/leaves.dart';
-import '../../foundation/metrics.dart';
-import '../../foundation/panel_controls.dart';
-import '../../foundation/theme.dart';
+import '../../theme/material_icons.dart';
+import '../../controls/leaves.dart';
+import '../../theme/editor_metrics.dart';
+import '../../controls/panel.dart';
+import '../../theme/editor_theme.dart';
 import '../../session/editor_session.dart';
 import '../../session/color_edit.dart';
 import 'color_wheel.dart';

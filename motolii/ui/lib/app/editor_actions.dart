@@ -1,6 +1,6 @@
 import 'package:flutter/widgets.dart';
 
-import '../foundation/leaves.dart';
+import '../controls/leaves.dart';
 import '../session/editor_session.dart';
 
 /// Stop playback, and ask before a dirty document is replaced or closed.

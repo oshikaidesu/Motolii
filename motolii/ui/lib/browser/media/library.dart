@@ -5,11 +5,11 @@ import 'dart:typed_data';
 import 'package:flutter/widgets.dart';
 
 import '../panel_chrome.dart' show GlyphBox;
-import '../../hf/glyphs.dart';
-import '../../hf/neutral.dart';
-import '../../hf/shell/place.dart' show H;
+import '../../theme/glyphs.dart';
+import '../../theme/neutral.dart';
+import '../../theme/tokens.dart' show H;
 import 'model_face.dart';
-import '../../hf/metrics.dart' show Surface;
+import '../../theme/surface.dart' show Surface;
 
 /// What the material is, drawn as itself.
 Widget materialFace(Map<String, dynamic> item) => switch (mediaKind(item)) {

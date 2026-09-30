@@ -1,9 +1,9 @@
 // Desk panels: contextual instruments. A phenomenon first, precision second. Prototype only.
 import 'dart:math' as math;
 import 'package:flutter/widgets.dart';
-import '../hf/metrics.dart';
+import '../theme/surface.dart';
 import '../browser/parts.dart';
-import '../hf/neutral.dart';
+import '../theme/neutral.dart';
 
 // Housing is quiet and dark; the instruments inside are flat colour. Colour separates roles, it names nothing.
 const kYellow = Color(0xFFF5C94A);

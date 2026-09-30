@@ -3,8 +3,8 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
 import '../../browser/parts.dart';
 import '../parts.dart';
-import '../../hf/neutral.dart';
-import '../../hf/metrics.dart' show Dn, Surface;
+import '../../theme/neutral.dart';
+import '../../theme/surface.dart' show Dn, Surface;
 
 /// A layer in the scene: centre and size in world units. The target is the origin.
 class DLayer {

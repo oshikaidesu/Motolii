@@ -1,8 +1,8 @@
 // The live tiles as they look while a pointer is over them: a clip at the frame under the pointer with a progress line, a
 // sound with a position, a model turned, a panorama panned in, a still zoomed. Each tile is shown twice, at rest and held.
 import 'package:flutter/widgets.dart';
-import 'package:motolii_stage5/hf/metrics.dart';
-import 'package:motolii_stage5/hf/neutral.dart';
+import 'package:motolii_stage5/theme/surface.dart';
+import 'package:motolii_stage5/theme/neutral.dart';
 import 'package:motolii_stage5/browser/item.dart';
 import 'package:motolii_stage5/browser/media/catalog_session.dart';
 import 'package:motolii_stage5/browser/media/fluid.dart';

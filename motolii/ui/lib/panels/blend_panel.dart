@@ -6,11 +6,11 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter/services.dart';
 
-import '../foundation/metrics.dart';
-import '../foundation/theme.dart';
+import '../theme/editor_metrics.dart';
+import '../theme/editor_theme.dart';
 import '../session/editor_session.dart';
 import '../session/read_model.dart';
-import '../foundation/leaves.dart';
+import '../controls/leaves.dart';
 
 /// Blend desk. One tile per mode; the tile *is* the sample — the selected
 /// layer's own colour laid over the beds of `blend_preview.rs` (black → white

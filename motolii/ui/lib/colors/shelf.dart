@@ -4,7 +4,7 @@ import 'dart:ui' as ui show Vertices, VertexMode;
 import 'package:flutter/widgets.dart';
 
 import 'hsv_triangle.dart';
-import '../hf/glyphs.dart';
+import '../theme/glyphs.dart';
 import '../browser/classify.dart';
 import 'cards.dart';
 import '../browser/parts.dart';
@@ -12,8 +12,8 @@ import '../browser/search.dart';
 import '../browser/panel_chrome.dart';
 import '../session/editor_session.dart';
 import '../browser/visual_sample.dart';
-import '../hf/neutral.dart';
-import '../hf/metrics.dart' show Dn, Surface;
+import '../theme/neutral.dart';
+import '../theme/surface.dart' show Dn, Surface;
 
 typedef Sw = (String, int, String); // name, argb, class
 

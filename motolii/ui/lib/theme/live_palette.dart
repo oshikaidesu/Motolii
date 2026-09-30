@@ -1,7 +1,7 @@
 // The live app's colours for the widgets it keeps from the foundation (the Stage's chrome, menus): the same neutral
 // ramp as the hf faces, through the foundation's own theme (EditorTheme), so those widgets follow the app.
-import '../foundation/theme.dart';
-import '../hf/neutral.dart';
+import 'editor_theme.dart';
+import 'neutral.dart';
 
 final liveEditorTheme = EditorTheme.chromatic.copyWith(
   name: 'Live',

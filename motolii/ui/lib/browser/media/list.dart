@@ -1,7 +1,7 @@
 import 'package:flutter/widgets.dart';
 
-import '../../hf/metrics.dart';
-import '../../hf/neutral.dart';
+import '../../theme/surface.dart';
+import '../../theme/neutral.dart';
 
 /// The columns' titles: a click asks the owner for that order (an arrow shows the one in force).
 class MediaListHeader extends StatelessWidget {

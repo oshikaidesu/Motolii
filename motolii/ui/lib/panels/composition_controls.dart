@@ -1,10 +1,10 @@
 import 'package:flutter/widgets.dart';
 
 import '../session/editor_session.dart';
-import '../foundation/theme.dart';
-import '../foundation/panel_controls.dart';
+import '../theme/editor_theme.dart';
+import '../controls/panel.dart';
 import '../colors/color_field.dart';
-import '../foundation/metrics.dart';
+import '../theme/editor_metrics.dart';
 
 class CompositionControls extends StatelessWidget {
   const CompositionControls({super.key, required this.controller});

@@ -2,7 +2,7 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter/widgets.dart';
-import '../hf/glyphs.dart';
+import '../theme/glyphs.dart';
 import '../browser/classify.dart';
 import '../browser/parts.dart';
 import '../browser/create/faces.dart';
@@ -10,8 +10,8 @@ import '../browser/search.dart';
 import '../browser/seat.dart';
 import '../browser/panel_chrome.dart';
 import '../browser/things.dart';
-import '../hf/neutral.dart';
-import '../hf/metrics.dart' show Dn;
+import '../theme/neutral.dart';
+import '../theme/surface.dart' show Dn;
 
 const _sw = 240, _sh = 150;
 

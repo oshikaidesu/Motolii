@@ -1,8 +1,8 @@
 import 'package:flutter/widgets.dart';
 
-import '../../foundation/leaves.dart';
-import '../../foundation/metrics.dart';
-import '../../foundation/theme.dart';
+import '../../controls/leaves.dart';
+import '../../theme/editor_metrics.dart';
+import '../../theme/editor_theme.dart';
 import '../../session/editor_session.dart';
 import '../native_visual_sample.dart';
 import 'color_values.dart';

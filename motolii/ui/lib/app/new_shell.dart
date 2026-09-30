@@ -4,12 +4,12 @@ import 'dart:convert';
 import 'package:docking/docking.dart';
 import 'package:flutter/widgets.dart';
 
-import '../foundation/leaves.dart';
-import '../foundation/metrics.dart';
+import '../controls/leaves.dart';
+import '../theme/editor_metrics.dart';
 import '../foundation/panel_catalog.dart';
-import '../foundation/panel_controls.dart' show EditorScale;
+import '../controls/panel.dart' show EditorScale;
 import '../foundation/shell_tokens.dart';
-import '../foundation/theme.dart';
+import '../theme/editor_theme.dart';
 import '../input/editor_shortcuts.dart';
 import '../panels/composition_controls.dart';
 import '../panels/export_controls.dart';

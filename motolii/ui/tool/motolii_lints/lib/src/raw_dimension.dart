@@ -25,22 +25,23 @@ const measuredTypes = {
 
 /// Files that define the scale and may hold raw numbers.
 const scaleFiles = {
-  'lib/foundation/metrics.dart',
-  'lib/foundation/theme.dart',
+  'lib/theme/editor_metrics.dart',
+  'lib/theme/editor_theme.dart',
   'lib/foundation/panel_catalog.dart',
   'lib/foundation/shell_tokens.dart',
-  'lib/hf/metrics.dart', // Surface and Dn: the product window's grammar
-  'lib/hf/neutral.dart',
+  'lib/theme/surface.dart', // Surface and Dn: the product window's grammar
+  'lib/theme/neutral.dart',
 };
 
-/// The scale a file's raw numbers should be taken from: the product window (`hf/`, `live_hf/`) reads [Surface]; the Classic and
-/// New windows read [EditorMetrics] until they are retired.
+/// The scale a file's raw numbers should be taken from: the product window reads [Surface]; the Classic and New windows (`legacy/`),
+/// the Stage chrome and the shared panel controls read [EditorMetrics] until they are retired.
 ({String uri, String cls}) scaleFor(String path) {
   final unix = path.replaceAll('\\', '/');
-  if (unix.contains('/lib/hf/') || unix.contains('/lib/live_hf/')) {
-    return (uri: 'package:motolii_stage5/hf/metrics.dart', cls: 'Surface');
+  const editorMetricsDirs = ['/lib/legacy/', '/lib/stage/', '/lib/controls/leaves', '/lib/controls/panel', '/lib/theme/editor_', '/lib/colors/color_field', '/lib/colors/hsv_triangle'];
+  if (editorMetricsDirs.any(unix.contains)) {
+    return (uri: 'package:motolii_stage5/theme/editor_metrics.dart', cls: 'EditorMetrics');
   }
-  return (uri: 'package:motolii_stage5/foundation/metrics.dart', cls: 'EditorMetrics');
+  return (uri: 'package:motolii_stage5/theme/surface.dart', cls: 'Surface');
 }
 
 /// The only raw numbers a measurement may carry: nothing, or a hairline.

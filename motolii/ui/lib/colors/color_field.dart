@@ -1,9 +1,9 @@
 import 'package:flutter/widgets.dart';
 
-import '../foundation/leaves.dart';
-import '../foundation/metrics.dart';
-import '../foundation/theme.dart';
-import '../foundation/panel_controls.dart';
+import '../controls/leaves.dart';
+import '../theme/editor_metrics.dart';
+import '../theme/editor_theme.dart';
+import '../controls/panel.dart';
 
 /// The colour atom: one swatch that is the value. It types nothing and
 /// opens nothing — pressing it hands the focus to the Browser's wheel, which

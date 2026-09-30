@@ -1,12 +1,12 @@
 import 'package:flutter/widgets.dart';
 
-import '../../foundation/metrics.dart';
-import '../../foundation/theme.dart';
+import '../../theme/editor_metrics.dart';
+import '../../theme/editor_theme.dart';
 import '../../session/editor_session.dart';
 import '../native_visual_sample.dart';
 import 'shelf.dart';
-import '../../foundation/glyphs.dart';
-import '../../foundation/leaves.dart';
+import '../../theme/material_icons.dart';
+import '../../controls/leaves.dart';
 
 /// Effects: the shelf of effects the engine knows. A tile is the effect's
 /// snapshot picture (VST3's plug-in snapshot); the glyph stays when it ships

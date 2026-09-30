@@ -1,15 +1,15 @@
 import 'dart:math' as math;
 
-import '../foundation/glyphs.dart';
+import '../theme/material_icons.dart';
 
 import 'package:flutter/widgets.dart';
 
-import '../foundation/theme.dart';
+import '../theme/editor_theme.dart';
 import '../foundation/panel_catalog.dart';
 import 'layout.dart';
 import 'panel_ids.dart';
-import '../foundation/metrics.dart';
-import '../foundation/leaves.dart';
+import '../theme/editor_metrics.dart';
+import '../controls/leaves.dart';
 
 class WorkspaceView extends StatefulWidget {
   const WorkspaceView({

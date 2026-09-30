@@ -2,11 +2,11 @@ import 'package:flutter/widgets.dart';
 
 import '../../../browser/parts.dart';
 import '../../../desks/parts.dart' show kAccent;
-import '../../../hf/glyphs.dart';
+import '../../../theme/glyphs.dart';
 import '../../../session/editor_session.dart';
 import 'desk_faces.dart';
 import 'desk_host_controller.dart';
-import '../../../hf/metrics.dart' show Surface;
+import '../../../theme/surface.dart' show Surface;
 
 /// The Desk's own host, New-owned: which drawer is shown (Classic's own follow-the-selection rule, in
 /// [DeskHostController]), and the empty "Tools" catalog when none is. Every drawer it can show — Depth, Ease,

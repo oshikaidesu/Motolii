@@ -1,11 +1,11 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
-import '../../foundation/glyphs.dart';
-import '../../foundation/metrics.dart';
-import '../../foundation/panel_controls.dart';
+import '../../theme/material_icons.dart';
+import '../../theme/editor_metrics.dart';
+import '../../controls/panel.dart';
 import '../../foundation/shell_tokens.dart';
-import '../../foundation/theme.dart';
+import '../../theme/editor_theme.dart';
 import '../../session/editor_session.dart';
 import '../../panels/browser.dart' show BrowserSize;
 import '../editor_actions.dart';

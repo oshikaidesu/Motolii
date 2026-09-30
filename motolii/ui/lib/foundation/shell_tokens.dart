@@ -1,6 +1,6 @@
 import 'package:flutter/widgets.dart';
 
-import 'theme.dart';
+import '../theme/editor_theme.dart';
 
 /// The New shell's look: near-black ground, thin rules, and six Flat Pop
 /// accents that only ever mean something (on-state, a layer's identity, a

@@ -4,7 +4,7 @@ import 'package:flutter/widgets.dart';
 import '../effects/shelf.dart' show EffectScene;
 import 'dock_theme.dart';
 
-import '../hf/glyphs.dart' show HG;
+import '../theme/glyphs.dart' show HG;
 import '../stage/panel.dart' show StagePanel;
 import '../session/editor_session.dart';
 import 'dock_workspace.dart';
@@ -20,7 +20,7 @@ import '../desks/relations/desk.dart';
 import '../inspector/seat.dart';
 import '../timeline/face.dart';
 import '../desks/web/desk.dart';
-import '../hf/metrics.dart' show Surface;
+import '../theme/surface.dart' show Surface;
 
 /// The product workspace for the hf client. Faces/tools own their content;
 /// this layer owns only placement, tabs, split/resize and reopening.

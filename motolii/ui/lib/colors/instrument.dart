@@ -8,11 +8,11 @@ import 'hsv_triangle.dart';
 import 'shelf.dart';
 import '../browser/parts.dart';
 import '../browser/panel_chrome.dart' show GlyphBox;
-import '../hf/glyphs.dart';
+import '../theme/glyphs.dart';
 import '../session/color_edit.dart';
 import '../session/editor_session.dart';
-import '../hf/neutral.dart';
-import '../hf/metrics.dart' show Dn, Surface;
+import '../theme/neutral.dart';
+import '../theme/surface.dart' show Dn, Surface;
 
 /// The Colors instrument over the session: the reference's wheel, hex and two bars, editing the colour target (the
 /// Inspector's focused colour, else the selection's fill) through [ColorEdit] — the same preview, commit and cancel

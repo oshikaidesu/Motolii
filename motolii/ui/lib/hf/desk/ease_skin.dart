@@ -1,11 +1,11 @@
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import '../../foundation/ease_view.dart';
-import '../../foundation/panel_controls.dart' show EditorNumericField;
+import '../../controls/panel.dart' show EditorNumericField;
 import '../../browser/parts.dart';
 import '../../desks/parts.dart';
-import '../neutral.dart';
-import '../metrics.dart' show Dn, Surface;
+import '../../theme/neutral.dart';
+import '../../theme/surface.dart' show Dn, Surface;
 
 const _tileColors = [kBlue, kViolet, kPink, kMint, kYellow];
 const _segColors = [kViolet, kMint, kPink];

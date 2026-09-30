@@ -1,8 +1,8 @@
 import 'package:flutter/widgets.dart';
 
-import '../../foundation/metrics.dart';
+import '../../theme/editor_metrics.dart';
 import '../../foundation/shell_tokens.dart';
-import '../../foundation/theme.dart';
+import '../../theme/editor_theme.dart';
 import '../../session/console_log.dart';
 
 export '../../session/console_log.dart';

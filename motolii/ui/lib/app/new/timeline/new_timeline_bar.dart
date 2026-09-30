@@ -4,7 +4,7 @@ import '../../../browser/parts.dart';
 
 import '../../../desks/parts.dart' show kAccentDim;
 import '../../../panels/timeline.dart' show TimelineToolbarApi;
-import '../../../hf/metrics.dart' show Surface;
+import '../../../theme/surface.dart' show Surface;
 
 /// The Timeline's own play/zoom buttons, hf-styled, over the same [TimelineToolbarApi] operations Classic's
 /// bar calls. The overview strip beside them, the ruler, the tracks and the keyframes below are unchanged.

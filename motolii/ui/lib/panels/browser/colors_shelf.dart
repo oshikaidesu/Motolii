@@ -3,8 +3,8 @@ import 'dart:math' as math;
 import 'package:flutter/widgets.dart';
 import 'package:flutter/services.dart';
 
-import '../../foundation/metrics.dart';
-import '../../foundation/theme.dart';
+import '../../theme/editor_metrics.dart';
+import '../../theme/editor_theme.dart';
 import '../../session/editor_session.dart';
 import '../../session/media_actions.dart' as media show savePalette;
 import 'color_picker.dart';

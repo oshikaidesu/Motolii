@@ -4,10 +4,10 @@ import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
 
-import '../foundation/metrics.dart';
-import '../foundation/panel_controls.dart';
-import '../foundation/theme.dart';
-import '../foundation/leaves.dart';
+import '../theme/editor_metrics.dart';
+import '../controls/panel.dart';
+import '../theme/editor_theme.dart';
+import '../controls/leaves.dart';
 import '../session/editor_session.dart';
 import 'timeline/frame.dart';
 import 'timeline/grip.dart';

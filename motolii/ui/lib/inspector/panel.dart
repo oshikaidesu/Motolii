@@ -6,10 +6,10 @@ import '../browser/search.dart';
 import '../desks/parts.dart' show kBlue;
 import 'rows.dart';
 import 'value_controls.dart';
-import '../hf/metrics.dart';
+import '../theme/surface.dart';
 import 'tones.dart';
-import '../hf/neutral.dart';
-import '../hf/shell/place.dart' show H;
+import '../theme/neutral.dart';
+import '../theme/tokens.dart' show H;
 
 /// Heroes: the declared ones, else the first four that are not advanced (four in front, the rest behind).
 /// A front projection, not a limit: everything else is reached through sections, the fold and the filter.

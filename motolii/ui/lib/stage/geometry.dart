@@ -4,7 +4,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/widgets.dart';
 
-import '../foundation/theme.dart';
+import '../theme/editor_theme.dart';
 
 /// The arithmetic of shapes on the Stage: what native's numbers mean as
 /// points, which polygon a press is inside, and the gizmo mesh it hit-tests

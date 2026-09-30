@@ -3,8 +3,8 @@ import 'dart:math' as math;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
-import '../metrics.dart';
-import '../theme.dart';
+import '../../theme/editor_metrics.dart';
+import '../../theme/editor_theme.dart';
 
 /// The leaves that float over the panels in the overlay: the tooltip's sheet,
 /// the menu's sheet, where it hangs and the rows inside it.

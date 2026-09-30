@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/widgets.dart';
 import 'package:motolii_stage5/effects/shelf.dart' show EffectScene;
-import 'package:motolii_stage5/hf/neutral.dart';
+import 'package:motolii_stage5/theme/neutral.dart';
 import 'package:motolii_stage5/browser/panel.dart';
 import 'package:motolii_stage5/browser/media/catalog_controls.dart';
 import 'package:motolii_stage5/browser/media/catalog_session.dart';

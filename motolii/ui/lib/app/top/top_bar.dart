@@ -3,11 +3,11 @@
 // of clipping it. The reference face (top.dart) stays for proto_hf; production draws this one over the same TopModel.
 import 'package:flutter/widgets.dart';
 
-import '../../hf/glyphs.dart';
-import '../../hf/metrics.dart';
-import '../../hf/shell/place.dart';
+import '../../theme/glyphs.dart';
+import '../../theme/surface.dart';
+import '../../theme/tokens.dart';
 import 'top.dart';
-import '../../hf/neutral.dart';
+import '../../theme/neutral.dart';
 
 class TopBar extends StatelessWidget {
   const TopBar(this.m, {super.key, this.onModeAt});

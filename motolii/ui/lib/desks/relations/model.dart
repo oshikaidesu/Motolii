@@ -2,7 +2,7 @@ import 'package:flutter/widgets.dart';
 
 import '../../session/editor_session.dart';
 import '../../session/read_model.dart';
-import '../../hf/neutral.dart';
+import '../../theme/neutral.dart';
 
 const kRed = Color(0xFFFF4D3D);
 const kInk2 = N.g76;

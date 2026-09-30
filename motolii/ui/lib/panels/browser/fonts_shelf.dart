@@ -2,13 +2,13 @@ import 'dart:convert';
 
 import 'package:flutter/widgets.dart';
 
-import '../../foundation/metrics.dart';
-import '../../foundation/panel_controls.dart';
-import '../../foundation/theme.dart';
+import '../../theme/editor_metrics.dart';
+import '../../controls/panel.dart';
+import '../../theme/editor_theme.dart';
 import '../../session/editor_session.dart';
 import 'shelf.dart';
-import '../../foundation/glyphs.dart';
-import '../../foundation/leaves.dart';
+import '../../theme/material_icons.dart';
+import '../../controls/leaves.dart';
 
 /// Fonts: the editor at the top says which characters of the selected text
 /// layer are being dressed (a script, a case, or all of it) and how they sit

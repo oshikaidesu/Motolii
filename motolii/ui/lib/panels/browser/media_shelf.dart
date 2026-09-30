@@ -3,8 +3,8 @@ import 'dart:io';
 import 'package:flutter/widgets.dart';
 import 'package:flutter/services.dart';
 
-import '../../foundation/metrics.dart';
-import '../../foundation/theme.dart';
+import '../../theme/editor_metrics.dart';
+import '../../theme/editor_theme.dart';
 import '../../session/editor_session.dart';
 import '../../session/media_actions.dart';
 
@@ -13,7 +13,7 @@ export '../../session/media_actions.dart'
 import 'create_shelf.dart';
 import 'parts.dart';
 import 'shelf.dart';
-import '../../foundation/glyphs.dart';
+import '../../theme/material_icons.dart';
 
 /// Media: what the document has taken in, plus the bundled HDRIs. A
 /// double-click places one; a card drags onto the Timeline.
