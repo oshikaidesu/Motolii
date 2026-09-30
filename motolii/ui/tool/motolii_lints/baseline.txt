@@ -21,7 +21,7 @@ lib/browser/media/views.dart 14
 lib/browser/panel.dart 5
 lib/browser/panel_chrome.dart 19
 lib/browser/parts.dart 26
-lib/browser/search.dart 20
+lib/browser/search.dart 16
 lib/browser/shelf_sections.dart 8
 lib/colors/cards.dart 5
 lib/colors/color_field.dart 1
@@ -30,7 +30,7 @@ lib/colors/shelf.dart 40
 lib/controls/leaves/press.dart 1
 lib/controls/menu.dart 10
 lib/controls/question_dialog.dart 10
-lib/controls/sheet.dart 26
+lib/controls/sheet.dart 17
 lib/desks/blend/face.dart 52
 lib/desks/depth/face.dart 27
 lib/desks/ease/face.dart 76

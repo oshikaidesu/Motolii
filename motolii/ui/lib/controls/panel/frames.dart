@@ -7,31 +7,6 @@ import '../../theme/editor_theme.dart';
 
 /// What the controls sit in: bars, cards, heads, folds and the anchor's grid.
 
-Widget panelButton(
-  String label,
-  VoidCallback? action, {
-  String? tooltip,
-  bool selected = false,
-}) =>
-    EditorButton(label, action, tooltip: tooltip ?? label, selected: selected);
-Widget panelTitle(String title) => Builder(
-  builder: (context) => Container(
-    height: EditorMetrics.s22,
-    alignment: Alignment.centerLeft,
-    padding: const EdgeInsets.symmetric(horizontal: EditorMetrics.s8),
-    decoration: BoxDecoration(
-      color: EditorTheme.of(context).raised,
-      border: Border(bottom: BorderSide(color: EditorTheme.of(context).line)),
-    ),
-    child: Text(
-      title,
-      style: TextStyle(
-        fontSize: EditorMetrics.font,
-        color: EditorTheme.of(context).ink,
-      ),
-    ),
-  ),
-);
 
 /// A panel bar. Its Row keeps Spacer alignment while the content fits and
 /// slides sideways when it does not, instead of overflowing the pane.

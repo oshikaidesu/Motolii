@@ -10,9 +10,6 @@ import '../../../browser/things.dart';
 import '../../../theme/neutral.dart';
 import '../../../theme/surface.dart' show Dn;
 
-/// How a host's shelf sets its tiles when it has its own idea of the size: one column's width and a row's height.
-typedef Tiling = ({double column, double extent, double gap, double padding});
-
 /// The finished Browser's body for a shelf whose things the host draws itself (pictures, swatches, specimens, files).
 /// The chassis is the same as Create and Effects: header, class column, search, sections, keyboard through the seat.
 /// The host's editor (a colour wheel, a font scope) sits above the tiles and scrolls with them.

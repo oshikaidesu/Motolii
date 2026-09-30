@@ -13,7 +13,6 @@ const kMint = Color(0xFF4FD1A5);
 const kViolet = Color(0xFF9A7BEA);
 const kAccent = kYellow; // the current thing: selected, being touched
 const kAccentDim = Color(0xFF4A3E1C);
-const kPalette = [kYellow, kBlue, kPink, kMint, kViolet];
 
 enum DeskKind { ease, depth, blend, history, notes }
 

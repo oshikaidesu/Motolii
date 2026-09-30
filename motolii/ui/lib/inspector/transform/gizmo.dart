@@ -13,7 +13,6 @@ import '../../theme/surface.dart' show Dn, Surface;
 enum TMode { move, scale, rotate, anchor }
 
 const modeColor = {TMode.move: kMint, TMode.scale: kBlue, TMode.rotate: kPink, TMode.anchor: kViolet};
-const modeLabel = {TMode.move: 'Move', TMode.scale: 'Scale', TMode.rotate: 'Rotate', TMode.anchor: 'Anchor'};
 
 class TransformGizmo extends StatefulWidget {
   const TransformGizmo(this.store, {super.key, required this.mode, required this.onMode, this.rotAxis = 0, this.size = const Size(170, 132)});

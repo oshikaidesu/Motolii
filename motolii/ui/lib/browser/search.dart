@@ -80,16 +80,6 @@ class SearchCapability extends ChangeNotifier {
   }
 }
 
-/// Provides a capability to a panel. An injected one (a fixture, a host) is not disposed here.
-mixin WithSearch<W extends StatefulWidget> on State<W> {
-  SearchCapability? get injectedSearch;
-  late final SearchCapability search = injectedSearch ?? SearchCapability();
-  @override
-  void dispose() {
-    if (injectedSearch == null) search.dispose();
-    super.dispose();
-  }
-}
 
 /// A face for the capability: a text field. One of several possible faces.
 class SearchField extends StatelessWidget {
@@ -207,5 +197,3 @@ class _SearchKeyFaceState extends State<SearchKeyFace> {
       );
 }
 
-/// Every presentation words its own empty state.
-Widget emptyNote(String text) => Padding(padding: const EdgeInsets.fromLTRB(3, 10.5, 3, 3), child: Text(text, softWrap: true, style: sans(Dn.nameSize, c: Surface.muted)));
