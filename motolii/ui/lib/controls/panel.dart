@@ -7,7 +7,7 @@
 /// [panel_controls/toggles.dart] on / off and the lamps,
 /// [panel_controls/fields.dart] the box typing happens in,
 /// [panel_controls/frames.dart] the bar that holds rows,
-/// [panel_controls/scale.dart] the editor's scale and what sets it.
+/// [panel_controls/scale.dart] the percent field and the transparency grid.
 library;
 
 export 'leaves.dart' show EditorChoice;

@@ -4,44 +4,6 @@ import '../../theme/metrics.dart';
 import '../../theme/editor_theme.dart';
 import 'numeric.dart';
 
-/// The editor's one scale, set above the Navigator so pages and their menus,
-/// dialogs and drawers all grow together.
-class EditorScale extends InheritedNotifier<ValueNotifier<double>> {
-  const EditorScale({
-    super.key,
-    required ValueNotifier<double> super.notifier,
-    required super.child,
-  });
-  static ValueNotifier<double>? of(BuildContext context) =>
-      context.getInheritedWidgetOfExactType<EditorScale>()?.notifier;
-}
-
-/// A logical viewport whose painted and hit-tested bounds fill its parent.
-class EditorScaledViewport extends StatelessWidget {
-  const EditorScaledViewport({
-    super.key,
-    required this.scale,
-    required this.child,
-  });
-  final double scale;
-  final Widget child;
-  @override
-  Widget build(BuildContext context) => LayoutBuilder(
-    builder: (context, box) => OverflowBox(
-      alignment: Alignment.topLeft,
-      minWidth: box.maxWidth / scale,
-      maxWidth: box.maxWidth / scale,
-      minHeight: box.maxHeight / scale,
-      maxHeight: box.maxHeight / scale,
-      child: Transform.scale(
-        scale: scale,
-        alignment: Alignment.topLeft,
-        child: child,
-      ),
-    ),
-  );
-}
-
 class EditorPercentField extends StatefulWidget {
   const EditorPercentField({
     super.key,
