@@ -1,15 +1,21 @@
 // The app: Motolii's window as its own client of Motolii Live — the faces over the session.
 //   MOTOLII_NATIVE_LIBRARY=.../libmotolii_ui.dylib flutter run -d macos \
 //     --dart-define=MOTOLII_DOCUMENT=/path.rrd [--dart-define=MOTOLII_SHOT=/path.png]
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/widgets.dart';
 
 import 'app/ui_scale.dart';
 import 'app/window.dart';
+import 'dev/design_mode.dart';
 import 'theme/live_palette.dart';
 import 'theme/identity.dart' show H;
 import 'theme/metrics.dart';
 
-void main() => runApp(WidgetsApp(
+// Design Mode (docs/design/ui-debugging.md) wraps the window in a debug build only; a release build has no trace of it
+void main() => runApp(_window());
+
+Widget _window() {
+  final app = WidgetsApp(
       color: Surface.base,
       debugShowCheckedModeBanner: false,
       textStyle: H.s(Surface.px(12)),
@@ -21,4 +27,6 @@ void main() => runApp(WidgetsApp(
         const Positioned.fill(child: UiScaleReadout()),
       ])),
       home: const LiveShell(),
-    ));
+    );
+  return kDebugMode ? DesignMode(child: app) : app;
+}

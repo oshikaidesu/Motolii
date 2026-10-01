@@ -7,6 +7,9 @@ state="${XDG_STATE_HOME:-$HOME/.local/state}/motolii-stage5"
 flutter_bin="${FLUTTER_BIN:-$repo/.tools/flutter/bin/flutter}"
 if [[ ! -x "$flutter_bin" ]]; then flutter_bin=$(command -v flutter || true); fi
 mkdir -p "$state"
+# `design` is `dev` with Design Mode on from the first frame (docs/design/ui-debugging.md)
+design_define=()
+if [[ "${1:-}" == design ]]; then set -- dev "${@:2}"; design_define=(--dart-define=MOTOLII_DESIGN=true); fi
 case "${1:-dev}" in
   native|test|profile|check-read-only)
     if [[ -z "${FFMPEG_DIR:-}" ]] && command -v brew >/dev/null; then
@@ -104,10 +107,10 @@ case "${1:-dev}" in
     if [[ $# -gt 1 ]]; then
       document="$(cd "$(dirname "$2")" && pwd)/$(basename "$2")"
       cd "$ui"
-      exec "$flutter_bin" run -d macos --pid-file "$state/flutter.pid" --vmservice-out-file "$state/vmservice" --dart-define="MOTOLII_DOCUMENT=$document"
+      exec "$flutter_bin" run -d macos --pid-file "$state/flutter.pid" --vmservice-out-file "$state/vmservice" ${design_define[@]+"${design_define[@]}"} --dart-define="MOTOLII_DOCUMENT=$document"
     fi
     cd "$ui"
-    exec "$flutter_bin" run -d macos --pid-file "$state/flutter.pid" --vmservice-out-file "$state/vmservice"
+    exec "$flutter_bin" run -d macos --pid-file "$state/flutter.pid" --vmservice-out-file "$state/vmservice" ${design_define[@]+"${design_define[@]}"}
     ;;
   # Same as dev (the product UI), kept for scripts that name it.
   live)
@@ -117,10 +120,10 @@ case "${1:-dev}" in
     if [[ $# -gt 1 ]]; then
       document="$(cd "$(dirname "$2")" && pwd)/$(basename "$2")"
       cd "$ui"
-      exec "$flutter_bin" run -d macos --pid-file "$state/flutter.pid" --vmservice-out-file "$state/vmservice" --dart-define="MOTOLII_DOCUMENT=$document"
+      exec "$flutter_bin" run -d macos --pid-file "$state/flutter.pid" --vmservice-out-file "$state/vmservice" ${design_define[@]+"${design_define[@]}"} --dart-define="MOTOLII_DOCUMENT=$document"
     fi
     cd "$ui"
-    exec "$flutter_bin" run -d macos --pid-file "$state/flutter.pid" --vmservice-out-file "$state/vmservice"
+    exec "$flutter_bin" run -d macos --pid-file "$state/flutter.pid" --vmservice-out-file "$state/vmservice" ${design_define[@]+"${design_define[@]}"}
     ;;
-  *) echo 'Usage: scripts/motolii-ui.sh {check|check-read-only|native|test|test-window|why-slow|dev [document.rrd|script.js]|live [document.rrd|script.js]|profile [document.rrd|script.js]|reload|restart-ui|inspect [pick|watch|show|tokens|set|edit|changed|reset|scale]}'; exit 1 ;;
+  *) echo 'Usage: scripts/motolii-ui.sh {check|check-read-only|native|test|test-window|why-slow|dev [document.rrd|script.js]|live [document.rrd|script.js]|profile [document.rrd|script.js]|design [document.rrd]|reload|restart-ui|inspect [pick|watch|show|tokens|set|edit|changed|reset|scale]}'; exit 1 ;;
 esac
