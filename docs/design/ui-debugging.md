@@ -21,6 +21,15 @@ the nearest ancestors that set geometry:
 | `DERIVED` | what Flutter computed (size, constraints, `flex 3 of 3 : 2` in a Row): not editable, change what causes it |
 | `NAMED` / `CONST` | a colour or style; a `static const` (needs a hot restart, so read-only here) |
 
+Every property is edited by its type, not only numbers: numbers (width, height, padding, margin, gap, radius, border width,
+opacity, fontSize, lineHeight, letterSpacing, flex) by wheel / `↑` `↓` / typing; bools by toggle; enums (Alignment, TextAlign,
+FontWeight, Axis, Main/CrossAxisAlignment, MainAxisSize, FlexFit, TextOverflow, TextBaseline, …) by `↑` `↓` or `Enter` for the
+list; colours by the canonical token list or a hex literal; `EdgeInsets` and `BorderRadius` per side. A property the source does not
+set yet is listed too; editing it inserts the named argument (or a `.copyWith(...)` on a style). The `TOKEN` / `HERE` chip says
+whether an edit changes the shared declaration or only this call (the chip, or `T`); it never converts one into
+the other silently. A local variable, parameter default or named constant is followed to its one declaration; when there is none
+(a computed or passed-in value) the row is `READ-ONLY` and says why.
+
 The active value is marked `▸`, an edited one `●`. The orange box in the window is the active row's widget; for a `padding` row the
 padding area is tinted.
 
@@ -31,10 +40,11 @@ padding area is tinted.
 | `A` | BEFORE (the session's start) ↔ CURRENT |
 | `Z` or `Cmd+Z`, `Shift+Z` | undo, redo |
 | `R` | this value back as it was at the session's start |
+| `Enter` | type a value / open the choices of an enum or colour (`Enter` applies, `Esc` cancels) |
 | `Esc` | cancel what was just done to this value |
 | `C` | the session's changes (`24 → 19`, per line) |
 | `[` `]` | UI Scale −1 / +1 (`Shift` 10; not saved) |
-| `F2` or `Cmd+Option+D` | Design Mode off (and on again); with changes it asks `KEEP` (Enter) or `DISCARD` (Esc) first |
+| `F2` or `Cmd+Option+D` | Design Mode off (and on again); with changes it asks `KEEP` (Enter) or `DISCARD` (Esc, or the chips) first; `F2` again goes back to work |
 
 The HUD's buttons (`A/B`, `UNDO`, `REDO`, `RESET`, `CHANGES`, `DONE`) do the same with the mouse. While Design Mode is on, a click
 selects instead of acting and the keys above are the HUD's; off, Motolii is itself again.
@@ -48,12 +58,13 @@ somewhere), the last change is put back, the HUD says so and Design Mode goes on
 
 The same ground without the window, for scripts and for a DevTools session (`scripts/motolii-ui.sh inspect`; `pick` waits for one
 click, `watch` for each, `show` prints what is selected, `tokens [text]`, `set Surface.chromeRow 19`, `edit lib/x.dart:174 8=4`,
-`changed`, `reset`, `scale 78`). Flutter DevTools works on the same session (the link `flutter run` prints; Select Widget mode there
+`changed`, `reset`, `scale 78`, `census [Widget.arg]`: how many visual/layout arguments in `lib/` are editable, read-only or unsupported). Flutter DevTools works on the same session (the link `flutter run` prints; Select Widget mode there
 selects in the same window).
 
 ## Not covered
 
 - Flutter's Property Editor edits constructor arguments from the IDE (VS Code, Android Studio); it is not used here: the HUD does the
   same for the numbers in Motolii's own widgets.
+- Source rewrite is by expression span, never a regex over a file; anything it cannot place uniquely is read-only.
 - Dragging the box's edges or the gap between widgets: values are changed by wheel and keys.
 - Computed layout is not re-derived: what Flutter reports is shown, the rest is not.

@@ -304,6 +304,48 @@ class DesignSession {
     return start.keys.toList();
   }
 
+  /// For line [nowLine] of [file] as it is now, the line it was at when the session began: an edit can add a line (an argument put on its
+  /// own line), so numbers shift. Null for a line written in this session.
+  int? startLine(String file, int nowLine) {
+    final s = start[file];
+    if (s == null) return nowLine;
+    final a = s.split('\n'), b = read(file).split('\n');
+    if (a.length == b.length) return nowLine;
+    // longest common subsequence of the two files' lines: the matched ones keep their place, a changed line sits between two matches
+    final n = a.length, m = b.length;
+    final dp = List.generate(n + 1, (_) => List<int>.filled(m + 1, 0));
+    for (var i = n - 1; i >= 0; i--) {
+      for (var j = m - 1; j >= 0; j--) {
+        dp[i][j] = a[i] == b[j] ? dp[i + 1][j + 1] + 1 : (dp[i + 1][j] >= dp[i][j + 1] ? dp[i + 1][j] : dp[i][j + 1]);
+      }
+    }
+    final map = List<int?>.filled(m, null);
+    var i = 0, j = 0;
+    while (i < n && j < m) {
+      if (a[i] == b[j]) {
+        map[j] = i;
+        i++;
+        j++;
+      } else if (dp[i + 1][j] >= dp[i][j + 1]) {
+        i++;
+      } else {
+        j++;
+      }
+    }
+    final k = nowLine - 1;
+    if (k < 0 || k >= m) return null;
+    if (map[k] != null) return map[k]! + 1;
+    var p = k - 1, q = k + 1;
+    while (p >= 0 && map[p] == null) {
+      p--;
+    }
+    while (q < m && map[q] == null) {
+      q++;
+    }
+    if (p >= 0 && q < m && map[q]! - map[p]! == q - p) return map[p]! + (k - p) + 1;
+    return null;
+  }
+
   /// Puts one line of [file] back as it was at the session start (an edit never changes the line count). Recorded, so undo works.
   List<String> resetLine(String file, int line) {
     final s = start[file];

@@ -17,6 +17,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:motolii_ui/dev/design_core.dart';
+import 'package:motolii_ui/dev/design_props.dart';
 
 // ---------------------------------------------------------------------------------------------------------------- the running app
 
@@ -258,6 +259,51 @@ Future<void> main(List<String> a) async {
       for (final t in _tokens().values.where((t) => t.name.toLowerCase().contains(q))) {
         final (c, f) = usage(t.name);
         stdout.writeln('${t.name.padRight(26)} ${fmt(t.value).padLeft(6)}   $c uses in $f files   ${t.file}:${t.line}');
+      }
+    case 'census':
+      final files = [
+        for (final f in Directory('$_root/lib').listSync(recursive: true).whereType<File>())
+          if (f.path.endsWith('.dart') && !f.path.contains('/lib/dev/')) f.path.substring(_root.length + 1),
+      ];
+      String read(String f) => File('$_root/$f').readAsStringSync();
+      final reg = Registry(
+        tokens: _tokens(),
+        colors: parseColorTokens(
+          neutral: read('lib/theme/neutral.dart'),
+          identity: read('lib/theme/identity.dart'),
+          metrics: read('lib/theme/metrics.dart'),
+          others: files.map(read),
+        ),
+      );
+      final want = a.length > 1 ? a[1] : null;
+      final rows = census(
+        Analyzer(read, reg),
+        files,
+        sample: want == null
+            ? null
+            : (w, arg, where, what) {
+                if ('$w.$arg' == want && what != 'ok') stdout.writeln('$where  $what');
+              },
+      );
+      if (want != null) exit(0);
+      var uses = 0, edit = 0, ro = 0, un = 0;
+      for (final r in rows) {
+        uses += r.uses;
+        edit += r.editable;
+        ro += r.readOnly;
+        un += r.unsupported;
+      }
+      String pct(int n) => '${(100 * n / (uses == 0 ? 1 : uses)).toStringAsFixed(1)} %';
+      stdout.writeln(
+        'visual / layout arguments written in lib/: $uses   EDITABLE $edit (${pct(edit)})   READ-ONLY $ro (${pct(ro)})   UNSUPPORTED $un (${pct(un)})',
+      );
+      stdout.writeln('\nTOP UNSUPPORTED');
+      for (final r in (rows.where((r) => r.unsupported > 0).toList()..sort((a, b) => b.unsupported.compareTo(a.unsupported))).take(30)) {
+        stdout.writeln('  ${r.unsupported.toString().padLeft(4)}  ${r.widget}.${r.arg}   (${r.uses} uses, ${r.editable} editable)');
+      }
+      stdout.writeln('\nTOP READ-ONLY');
+      for (final r in (rows.where((r) => r.readOnly > 0).toList()..sort((a, b) => b.readOnly.compareTo(a.readOnly))).take(15)) {
+        stdout.writeln('  ${r.readOnly.toString().padLeft(4)}  ${r.widget}.${r.arg}   (${r.uses} uses)');
       }
     case 'show':
       final vm = await _vm();
