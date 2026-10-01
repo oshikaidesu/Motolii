@@ -1,38 +1,7 @@
-# **ビルド生成物はどこに出来ても無視する。** 以前はここが path の列挙だったので、
-# workspace が増えるたびに漏れた — 2026-08-10 の移管 probe(下にその記録がある)、
-# そして 2026-08-27 に `app/` を建てた時に 17,615 個の生成物が commit へ入った。
-# 列挙は「新しい場所」を知らないので、同じ事故を場所の数だけ繰り返す。
-# 規則を1本にして、場所ではなく**名前**で切る。
 target/
-
-# 以下は上の1本に吸収済み。歴史の記録として残す(何がどこにあったかが読める)。
-/target
-# リセット後の workspace(2026-08-20)。旧 workspace とは target を共有しない。
-next/target
 **/*.rs.bk
-spikes/s1-slint/target
-spikes/vello-eval/target
-spikes/r9-preview/target
-spikes/ime-acceptance/target
-spikes/timeline-bench/target
-spikes/g0-9-surface-host/target
-spikes/g0-9-timeline-visual-parity/target
-spikes/g0-9-windowed-timeline/target
-spikes/g0-9-graph-view/target
-spikes/g0-10-multi-surface-window/target
-# 2026-08-10にリポ外から移管したprobe(移管時はtarget除外だったがignore規則が未追加だった)
-spikes/skia-timeline-probe/target
-spikes/blitz-probe/target
-ui/motolii-rn/native-renderer/target
-/.tools
-# Claude Codeの個人設定と隔離worktreeを誤コミットしない
-/.claude/settings.local.json
-/.claude/worktrees/
-# Rustワークスペースと無関係のNode実験(p5等)を誤コミットしない
-node_modules/
-/package-lock.json
-/package.json
-# exit-demo のローカル生成物(input/出力mp4)はコミットしない
-samples/exit-demo/*.mp4
-
-out/
+.dart_tool/
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+.DS_Store

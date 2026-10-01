@@ -3,13 +3,13 @@ name: UI Gallery
 on:
   pull_request:
     paths:
-      - 'motolii/ui/**'
+      - 'app/ui/**'
       - '.github/workflows/ui-gallery-pages.yml'
   push:
     branches:
       - main
     paths:
-      - 'motolii/ui/**'
+      - 'app/ui/**'
       - '.github/workflows/ui-gallery-pages.yml'
   workflow_dispatch:
 
@@ -37,11 +37,11 @@ jobs:
           cache: true
 
       - name: Get packages
-        working-directory: motolii/ui
+        working-directory: app/ui
         run: flutter pub get
 
       - name: Check gallery formatting
-        working-directory: motolii/ui
+        working-directory: app/ui
         run: >
           dart format --output=none --set-exit-if-changed
           lib/gallery_main.dart
@@ -50,13 +50,13 @@ jobs:
           lib/session/editor_session.dart
 
       - name: Prepare CI build directory
-        working-directory: motolii/ui
+        working-directory: app/ui
         run: |
           rm -f build
           mkdir -p build
 
       - name: Enforce gallery boundary
-        working-directory: motolii/ui
+        working-directory: app/ui
         run: |
           if grep -E "^import '.*(foundation|panels|workspace)/" lib/gallery_main.dart; then
             echo "gallery_main.dart must render EditorApp, not compose product UI"
@@ -64,15 +64,15 @@ jobs:
           fi
 
       - name: Analyze gallery
-        working-directory: motolii/ui
+        working-directory: app/ui
         run: flutter analyze lib/gallery_main.dart
 
       - name: Check workspace host
-        working-directory: motolii/ui
+        working-directory: app/ui
         run: flutter test test/workspace_host_contract_test.dart
 
       - name: Build gallery
-        working-directory: motolii/ui
+        working-directory: app/ui
         run: flutter build web --release --target lib/gallery_main.dart --base-href "/Motolii/"
 
       - name: Configure Pages
@@ -83,7 +83,7 @@ jobs:
         if: github.event_name != 'pull_request'
         uses: actions/upload-pages-artifact@v4
         with:
-          path: motolii/ui/build/web
+          path: app/ui/build/web
 
   deploy:
     if: github.event_name != 'pull_request'

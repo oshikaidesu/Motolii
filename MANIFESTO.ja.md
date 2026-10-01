@@ -1,9 +1,9 @@
 # なぜ、もう一つ映像制作ソフトを作るのか
 
-> Stage 5の現行コンセプトは[docs/concept.md](docs/concept.md)。以下は背景・長期構想の資料で、最新の利用者指示や採用したUI操作を上書きしない。
+> Stage 5の現行コンセプトは[docs/current/concept.md](docs/current/concept.md)。以下は背景・長期構想の資料で、最新の利用者指示や採用したUI操作を上書きしない。
 
 > **大義側の文書。** 裁定273(2026-08-27)で、これは目的ではなく大義と決まった。
-> 目的は「自分の MV を1本作ること」。現行は [docs/concept.md](docs/concept.md) の冒頭。
+> 目的は「自分の MV を1本作ること」。現行は [docs/current/concept.md](docs/current/concept.md) の冒頭。
 
 Motoliiは、After Effectsの代替を名乗るためだけに作っているのではない。
 

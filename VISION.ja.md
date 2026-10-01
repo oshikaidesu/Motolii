@@ -1,9 +1,9 @@
 # Motoliiの問題設定と長期方針
 
-> Stage 5の現行コンセプトは[docs/concept.md](docs/concept.md)。以下は背景・長期構想の資料で、最新の利用者指示や採用したUI操作を上書きしない。
+> Stage 5の現行コンセプトは[docs/current/concept.md](docs/current/concept.md)。以下は背景・長期構想の資料で、最新の利用者指示や採用したUI操作を上書きしない。
 
 > **大義側の文書。** 裁定273(2026-08-27)で、これは目的ではなく大義と決まった。
-> 現行のコンセプトは [docs/concept.md](docs/concept.md) の冒頭。
+> 現行のコンセプトは [docs/current/concept.md](docs/current/concept.md) の冒頭。
 
 Motoliiは、3〜5分のミュージックビデオ制作に特化した、OSSのモーショングラフィック・コンポジットツールです。After Effectsの動作や操作上の重さに対し、RustとGPU常駐レンダリングを使った別の実装を検証しています。
 

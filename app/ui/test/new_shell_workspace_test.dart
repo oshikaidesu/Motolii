@@ -1,0 +1,293 @@
+// The New shell's workspace: what it saves and restores, and that the Stage follows the dock.
+import 'dart:convert';
+
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+import '../lib/app/new_shell.dart';
+import '../lib/session/editor_session.dart';
+import 'support/editor_test_theme.dart';
+import 'support/dock_test_utils.dart';
+import 'support/native_channel.dart';
+
+Future<dynamic> open(WidgetTester tester) async {
+  ignoreSqueezedTabChips();
+  await tester.pumpWidget(MaterialApp(theme: editorTestTheme, home: const NewShell()));
+  await tester.pumpAndSettle();
+  return tester.state(find.byType(NewShell));
+}
+
+Future<void> close(WidgetTester tester) async {
+  await tester.pumpWidget(const SizedBox());
+  await tester.pumpAndSettle();
+}
+
+Future<void> drag(WidgetTester tester, Offset from, Offset to) async {
+  final g = await tester.startGesture(from);
+  await g.moveBy(const Offset(0, -24));
+  await tester.pump(const Duration(milliseconds: 50));
+  for (var k = 1; k <= 14; k++) {
+    await g.moveTo(Offset.lerp(from, to, k / 14)!);
+    await tester.pump(const Duration(milliseconds: 16));
+  }
+  await g.up();
+  await tester.pumpAndSettle();
+}
+
+void main() {
+  void size(WidgetTester tester, [Size s = const Size(1600, 1000)]) {
+    tester.view.physicalSize = s;
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+  }
+
+  testWidgets('a layout change is written beside the keys already there, and read back', (tester) async {
+    size(tester);
+    final native = Native()..settings = {'deskWork': {'animateFrom': false}, 'dock': {'classic': 'layout'}};
+    native.install();
+    dynamic shell = await open(tester);
+    expect(native.writes, isEmpty, reason: 'opening writes nothing');
+
+    // A tab in front, a panel closed, and a divider dragged.
+    await tester.tap(find.text('CAMERA'));
+    await tester.pumpAndSettle();
+    shell.dock.close('Notes');
+    await tester.pumpAndSettle();
+    final browser = shell.dock.rectOf('Create')!;
+    await drag(tester, Offset(browser.right + 2, 400), Offset(browser.right + 122, 400));
+    await tester.pump(const Duration(seconds: 1));
+    final stageLeft = shell.dock.rectOf('Stage') ?? shell.dock.rectOf('Camera');
+    print('WS writes=${native.writes.length}');
+    expect(native.writes, isNotEmpty);
+    final saved = native.settings;
+    expect(saved['deskWork'], {'animateFrom': false}, reason: "Classic's keys are kept");
+    expect(saved['dock'], {'classic': 'layout'});
+    final ws = saved['newWorkspace'] as Map;
+    expect(ws['version'], 1);
+    expect((ws['shown'] as List), contains('Camera'));
+
+    await close(tester);
+    final again = native.writes.length;
+    shell = await open(tester);
+    expect(native.writes.length, again, reason: 'reading it back writes nothing');
+    expect(shell.dock.isOpen('Notes'), isFalse);
+    expect(shell.dock.isShown('Camera'), isTrue);
+    final restored = shell.dock.rectOf('Camera')!;
+    print('WS camera left before ${stageLeft?.left} after restart ${restored.left}');
+    expect((restored.left - (stageLeft?.left ?? 0)).abs(), lessThan(3), reason: 'the dragged width came back');
+    await close(tester);
+  });
+
+  testWidgets('a state this build cannot read leaves the default layout', (tester) async {
+    size(tester);
+    for (final bad in <Object?>[
+      {'version': 99, 'layout': 'x', 'shown': []},
+      {'version': 1, 'layout': 'V1:2:1(R;0;;;2,3),2(I;1;NoSuchPanel;0.5;F),3(I;1;Timeline;0.5;F)', 'shown': []},
+      {'version': 1, 'layout': 'garbage', 'shown': []},
+      'not a map',
+    ]) {
+      final native = Native()..settings = {'newWorkspace': bad};
+      native.install();
+      final shell = await open(tester);
+      for (final id in ['Create', 'Stage', 'Inspector', 'Timeline', 'Desk']) {
+        expect(shell.dock.isOpen(id), isTrue, reason: '$id with $bad');
+      }
+      await close(tester);
+    }
+  });
+
+  testWidgets('every panel can be named back onto the face, and showing one never rearranges the others', (tester) async {
+    size(tester);
+    Native().install();
+    ignoreSqueezedTabChips();
+    final shell = await open(tester);
+    final ids = (shell.dock.defs as Map<String, dynamic>).keys.toList();
+    String structure() => (shell.dock.snapshot() as Map)['layout'] as String;
+    // Showing a docked panel picks its tab and changes no split, size or membership.
+    final before = structure();
+    for (final id in ids) {
+      await (shell.c as EditorSession).panelPlacementRequested!(id, 'show');
+      await tester.pumpAndSettle();
+      expect(shell.dock.isShown(id), isTrue, reason: id);
+      expect(structure(), before, reason: 'showing $id rearranged the workspace');
+    }
+    // A closed one comes back, and the panels that stayed are where they were.
+    for (final id in ['Inspector', 'Timeline', 'Desk', 'Fonts', 'Web']) {
+      shell.dock.close(id);
+      await tester.pumpAndSettle();
+      expect(shell.dock.isOpen(id), isFalse, reason: id);
+      await (shell.c as EditorSession).panelPlacementRequested!(id, 'show');
+      await tester.pumpAndSettle();
+      expect(shell.dock.isShown(id), isTrue, reason: '$id reopened in front');
+    }
+    expect(tester.takeException(), isNull);
+    await close(tester);
+  });
+
+  testWidgets('Reset layout brings the default arrangement back, and the View menu names every panel', (tester) async {
+    size(tester);
+    final native = Native()..settings = {};
+    native.install();
+    final shell = await open(tester);
+    String structure() => (shell.dock.snapshot() as Map)['layout'] as String;
+    final fresh = structure();
+    shell.dock.close('Timeline');
+    shell.dock.close('Desk');
+    await tester.pumpAndSettle();
+    final browser = shell.dock.rectOf('Create')!;
+    await drag(tester, Offset(browser.right + 2, 400), Offset(browser.right + 122, 400));
+    expect(structure(), isNot(fresh));
+    await shell.menu('Reset layout');
+    await tester.pumpAndSettle();
+    expect(structure(), fresh, reason: 'the default arrangement, sizes included');
+    for (final id in ['Create', 'Stage', 'Inspector', 'Timeline', 'Desk']) {
+      expect(shell.dock.isOpen(id), isTrue, reason: id);
+    }
+    await tester.pump(const Duration(seconds: 1));
+    expect((native.settings['newWorkspace'] as Map)['layout'], fresh, reason: 'and it is what is saved');
+    await close(tester);
+  });
+
+  testWidgets('the Console keeps what the status line said, and survives closing the panel', (tester) async {
+    size(tester);
+    Native().install();
+    ignoreSqueezedTabChips();
+    final shell = await open(tester);
+    final c = shell.c as EditorSession;
+    c.error.value = 'Import failed: nothing there';
+    await tester.pump();
+    c.error.value = null;
+    c.error.value = 'Second problem';
+    await tester.pump();
+    expect((shell.console.entries as List).map((e) => e.text), ['Import failed: nothing there', 'Second problem']);
+
+    // Not in front yet (it is a tab behind Desk): name it, and both are there, newest first.
+    await c.panelPlacementRequested!('Console', 'show');
+    await tester.pumpAndSettle();
+    expect(find.text('Second problem'), findsOneWidget);
+    expect(find.text('Import failed: nothing there'), findsOneWidget);
+    expect(tester.getTopLeft(find.text('Second problem')).dy, lessThan(tester.getTopLeft(find.text('Import failed: nothing there')).dy));
+
+    await tester.enterText(find.byType(EditableText).last, 'second');
+    await tester.pump();
+    expect(find.text('Import failed: nothing there'), findsNothing);
+
+    // Closing the panel keeps the log; reopening shows it; Clear empties it.
+    shell.dock.close('Console');
+    await tester.pumpAndSettle();
+    c.error.value = null;
+    c.error.value = 'While it was closed';
+    await c.panelPlacementRequested!('Console', 'show');
+    await tester.pumpAndSettle();
+    expect((shell.console.entries as List).length, 3);
+    await tester.tap(find.text('Clear'));
+    await tester.pumpAndSettle();
+    expect((shell.console.entries as List), isEmpty);
+    expect(find.text('No messages'), findsOneWidget);
+    await close(tester);
+  });
+
+  testWidgets('a panel can be detached into its own window and comes back when that window closes', (tester) async {
+    size(tester);
+    final native = Native();
+    native.install();
+    ignoreSqueezedTabChips();
+    final shell = await open(tester);
+    final c = shell.c as EditorSession;
+    expect(shell.dock.isOpen('Inspector'), isTrue);
+    await c.panelPlacementRequested!('Inspector', 'window');
+    await tester.pumpAndSettle();
+    final opened = native.calls.where((v) => v.$1 == 'openPanelWindow').toList();
+    expect(opened.single.$2['panels'], ['Inspector']);
+    expect(shell.dock.isOpen('Inspector'), isFalse, reason: 'it left the workspace');
+    // A panel that is not in the workspace cannot be detached twice.
+    await c.panelPlacementRequested!('Inspector', 'window');
+    expect(native.calls.where((v) => v.$1 == 'openPanelWindow').length, 1);
+    // Native tells the main window the panel window is gone.
+    c.windowClosed!({'id': 'w1', 'panels': ['Inspector']});
+    await tester.pumpAndSettle();
+    expect(shell.dock.isShown('Inspector'), isTrue, reason: 'back in the workspace');
+    await close(tester);
+  });
+
+  testWidgets('a window opened for a panel shows that panel alone and saves nothing', (tester) async {
+    size(tester);
+    final native = Native()..windowInfo = {'id': 'w1', 'main': false, 'panels': ['Console']};
+    native.install();
+    await open(tester);
+    expect(find.text('No messages'), findsOneWidget);
+    expect(find.text('FILE'), findsNothing, reason: 'no menu bar in a panel window');
+    await tester.pump(const Duration(seconds: 1));
+    expect(native.writes, isEmpty);
+    await close(tester);
+  });
+
+  testWidgets('the Stage asks native for the surface it is showing, and only that one', (tester) async {
+    size(tester);
+    final native = Native();
+    native.install();
+    final shell = await open(tester);
+    var seen = 0;
+    // What the session asked native since the last look: which view was attached, and the last Stage window size.
+    ({List<String> attached, List<(int, int, String)> windows}) look() {
+      final fresh = native.calls.skip(seen).toList();
+      seen = native.calls.length;
+      final attached = [for (final c in fresh) if (c.$1 == 'attach') '${c.$2['view']}'];
+      final windows = <(int, int, String)>[];
+      for (final c in fresh) {
+        if (c.$1 != 'request' || c.$2['command'] is! String) continue;
+        final op = jsonDecode(c.$2['command'] as String) as Map;
+        if (op['op'] == 'stageWindow') windows.add((op['width'] as int, op['height'] as int, jsonEncode(op['roi'])));
+      }
+      return (attached: attached, windows: windows);
+    }
+
+    var now = look();
+    expect(now.attached, contains('User'));
+    expect(now.windows, isNotEmpty);
+    var (w0, h0, roi0) = now.windows.last;
+    expect(w0 > 0 && h0 > 0, isTrue, reason: 'the Stage on the face asks for a real window');
+
+    // Another tab in front of the Stage: the Stage withdraws its window and the Camera takes its own view.
+    await tester.tap(find.text('CAMERA'));
+    await tester.pumpAndSettle();
+    now = look();
+    expect(now.attached, contains('Camera'));
+    expect((now.windows.last.$1, now.windows.last.$2), (0, 0), reason: 'a hidden Stage hands its window back');
+
+    // Back: it asks again, at the same size.
+    await tester.tap(find.text('STAGE'));
+    await tester.pumpAndSettle();
+    now = look();
+    expect(now.attached, contains('User'));
+    expect(now.windows.last, (w0, h0, roi0));
+
+    // The dock resizes it: it asks for the part of the picture it now shows.
+    final browser = shell.dock.rectOf('Create')!;
+    final wide = shell.dock.rectOf('Stage')!;
+    await drag(tester, Offset(browser.right + 2, 400), Offset(browser.right + 122, 400));
+    now = look();
+    final narrow = shell.dock.rectOf('Stage')!;
+    print('SURF resize: rect ${wide.size} -> ${narrow.size}; window $w0 x $h0 ${roi0.substring(0, 12)}.. -> ${now.windows.isEmpty ? 'no request' : now.windows.last}');
+    expect(narrow.width, lessThan(wide.width - 60));
+    expect(now.windows, isNotEmpty, reason: 'a resized Stage says so');
+    expect(now.windows.last.$3, isNot(roi0), reason: 'and the region it shows changed');
+    expect(now.windows.last.$1 > 0 && now.windows.last.$2 > 0, isTrue);
+    roi0 = now.windows.last.$3;
+
+    // The dock moves it above the Timeline: smaller and lower, still in front, still asking for its picture.
+    final tl = shell.dock.rectOf('Timeline')!;
+    await drag(tester, tester.getCenter(find.text('STAGE').first), Offset(tl.center.dx, tl.top + tl.height * .12));
+    now = look();
+    final after = shell.dock.rectOf('Stage')!;
+    print('SURF move: rect ${narrow.size} -> ${after.size}; windows ${now.windows.length}, last ${now.windows.isEmpty ? '-' : '${now.windows.last.$1}x${now.windows.last.$2}'}; attached ${now.attached}');
+    expect(after.height, lessThan(narrow.height));
+    expect(shell.dock.isShown('Stage'), isTrue);
+    expect(now.windows, isNotEmpty);
+    expect(now.windows.last.$3, isNot(roi0), reason: 'the new shape changes what it shows');
+    expect(now.windows.where((w) => w.$1 == 0 && w.$2 == 0), isEmpty, reason: 'no withdrawal while it is in front');
+    expect(now.windows.last.$1 > 0 && now.windows.last.$2 > 0, isTrue);
+    expect(tester.takeException(), isNull);
+    await close(tester);
+  });
+}

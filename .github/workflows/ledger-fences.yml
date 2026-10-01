@@ -12,11 +12,11 @@ jobs:
       - uses: actions/checkout@v4
       - name: Current workspace and documentation entry points
         run: |
-          python3 scripts/check-stage5.py --self-test
-          python3 scripts/check-stage5.py
+          python3 tools/check-stage5.py --self-test
+          python3 tools/check-stage5.py
       - name: Architecture rules (the core does not know the picture)
         run: |
           cargo install cargo-arc --locked
           cargo arc check
       - name: Documentation index and link consistency
-        run: bash scripts/check-docs.sh
+        run: bash tools/check-docs.sh
