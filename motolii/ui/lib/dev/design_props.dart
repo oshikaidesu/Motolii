@@ -116,6 +116,7 @@ const knownEnums = <String, List<String>>{
   'WrapCrossAlignment': ['start', 'end', 'center'],
   'BorderStyle': ['none', 'solid'],
   'FilterQuality': ['none', 'low', 'medium', 'high'],
+  'TileMode': ['clamp', 'repeated', 'mirror', 'decal'],
 };
 
 /// The colour tokens of the product: `N` (neutral.dart) and `H` (identity.dart) declare colours, `Surface` aliases them.
@@ -393,6 +394,8 @@ const _colorNames = {
   'trackColor',
 };
 const _numberNames = {
+  'weight',
+  'radius',
   'widthFactor',
   'heightFactor',
   'itemExtent',
@@ -426,12 +429,15 @@ const _numberNames = {
   'blurRadius',
   'spreadRadius',
   'fontSize',
+  'cursorWidth',
+  'cursorHeight',
   'letterSpacing',
   'maxLines',
   'elevation',
   'opacity',
 };
 const _optionNames = {
+  'tileMode',
   'textAlign',
   'overflow',
   'mainAxisAlignment',
@@ -1238,6 +1244,54 @@ const _valueTypes = {
   'UniqueKey',
   'ObjectKey',
   'Key',
+};
+
+/// Arguments that configure behaviour, data or accessibility, not how something looks or is laid out: counted by the census, but
+/// reported apart from VISUAL / LAYOUT coverage.
+const nonVisualArgs = {
+  'itemCount',
+  'gaplessPlayback',
+  'dragStartBehavior',
+  'enabled',
+  'button',
+  'selected',
+  'actions',
+  'ignoring',
+  'errorBuilder',
+  'maximizableItem',
+  'maximizableTab',
+  'maximizableTabsArea',
+  'layout',
+  'supportedDevices',
+  'overlayChildBuilder',
+  'baseOffset',
+  'extentOffset',
+  'initialScrollOffset',
+  'alignmentPolicy',
+  'constrained',
+  'keyboardType',
+  'cacheWidth',
+  'cacheHeight',
+  'readOnly',
+  'obscureText',
+  'textInputAction',
+  'inputFormatters',
+  'selectionControls',
+  'onGenerateRoute',
+  'hitTestBehavior',
+  'behavior',
+  'excludeSemantics',
+  'container',
+  'header',
+  'liveRegion',
+  'checked',
+  'toggled',
+  'focusable',
+  'focused',
+  'textStyle',
+  'scrollDirection',
+  'reverse',
+  'primary',
 };
 
 /// The visual / layout arguments written in [files] (file -> text), by widget and name, and what Design Mode can do with each.

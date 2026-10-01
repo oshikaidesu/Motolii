@@ -284,4 +284,29 @@ Widget b() => Container(
     expect(s.startLine('a.dart', 4), 3);
     expect(s.startLine('a.dart', 5), 4, reason: 'a changed line between two matches keeps its place');
   });
+
+  test('Axis, TextBaseline and TileMode are enums edited in place', () {
+    const src = '''
+Widget build() => Row(
+  crossAxisAlignment: CrossAxisAlignment.baseline,
+  textBaseline: TextBaseline.alphabetic,
+  children: [SingleChildScrollView(scrollDirection: Axis.horizontal, child: x), LinearGradient(tileMode: TileMode.clamp, colors: c)],
+);
+''';
+    final files = {'a.dart': src};
+    final an = analyzerFor(files);
+    final (rl, rc) = at(src, 'Row(');
+    final row = an.analyze('a.dart', rl, rc);
+    final base = row.firstWhere((p) => p.name == 'textBaseline');
+    expect(base.kind, PropKind.option);
+    expect(base.options, containsAll(['TextBaseline.alphabetic', 'TextBaseline.ideographic']));
+    expect(applied(an, files, base, 'TextBaseline.ideographic'), contains('textBaseline: TextBaseline.ideographic'));
+    final (l, c) = at(src, 'SingleChildScrollView(');
+    final axis = an.analyze('a.dart', l, c).firstWhere((p) => p.name == 'scrollDirection');
+    expect(axis.options, ['Axis.horizontal', 'Axis.vertical']);
+    expect(applied(an, files, axis, 'Axis.vertical'), contains('scrollDirection: Axis.vertical'));
+    final (l2, c2) = at(src, 'LinearGradient(');
+    final tile = an.analyze('a.dart', l2, c2).firstWhere((p) => p.name == 'tileMode');
+    expect(applied(an, files, tile, 'TileMode.mirror'), contains('tileMode: TileMode.mirror'));
+  });
 }

@@ -154,5 +154,21 @@ Widget build() => Container(
       expect(disk['b.dart'], 'x(3);\n');
       expect(s.history, isEmpty);
     });
+
+    test('a drag is one undo: its edits are coalesced into one', () {
+      s.apply('a.dart', 'one(5);\ntwo(8);\n', 'W.width 4 → 5');
+      s.apply('a.dart', 'one(6);\ntwo(8);\n', 'W.width 5 → 6');
+      s.apply('a.dart', 'one(7);\ntwo(8);\n', 'W.width 6 → 7');
+      s.coalesce(0);
+      expect(s.history.length, 1);
+      expect(s.history.single.label, 'W.width 4 → 7');
+      s.undo();
+      expect(disk['a.dart'], 'one(4);\ntwo(8);\n');
+    });
+
+    test('an added line shifts the rest but is the only change listed', () {
+      s.apply('a.dart', 'one(4);\nflex: 2,\ntwo(8);\n', 'insert');
+      expect(s.changes(), [('a.dart', 2, '', 'flex: 2,')]);
+    });
   });
 }

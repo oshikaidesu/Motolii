@@ -257,6 +257,53 @@ class DesignSession {
   final Map<String, String> _current = {};
 
   List<Edit> get history => List.unmodifiable(_done);
+
+  /// One drag is one undo: the edits made from history position [from] on, all of one file, become a single edit.
+  void coalesce(int from) {
+    if (from < 0 || _done.length - from < 2) return;
+    final part = _done.sublist(from);
+    if (part.any((e) => e.file != part.first.file)) return;
+    String head(String l) => l.contains(' → ') ? l.substring(0, l.lastIndexOf(' → ')) : l;
+    String tail(String l) => l.contains(' → ') ? l.substring(l.lastIndexOf(' → ') + 3) : l;
+    final first = head(part.first.label), last = tail(part.last.label);
+    _done.removeRange(from, _done.length);
+    _done.add(Edit(part.first.file, part.first.before, part.last.after, first.contains(' → ') ? first : '$first → $last'));
+  }
+
+  /// The whole session as data, for a hot restart (which starts the app, and so this object, again).
+  Map<String, Object?> toJson() => {
+    'start': start,
+    'current': _current,
+    'before': showingBefore,
+    'done': [
+      for (final e in _done) [e.file, e.before, e.after, e.label],
+    ],
+    'undone': [
+      for (final e in _undone) [e.file, e.before, e.after, e.label],
+    ],
+  };
+
+  void restore(Map<String, Object?> j) {
+    Edit edit(Object? x) {
+      final l = (x as List).cast<String>();
+      return Edit(l[0], l[1], l[2], l[3]);
+    }
+
+    start
+      ..clear()
+      ..addAll((j['start'] as Map).cast<String, String>());
+    _current
+      ..clear()
+      ..addAll((j['current'] as Map).cast<String, String>());
+    showingBefore = j['before'] == true;
+    _done
+      ..clear()
+      ..addAll((j['done'] as List).map(edit));
+    _undone
+      ..clear()
+      ..addAll((j['undone'] as List).map(edit));
+  }
+
   bool get canUndo => _done.isNotEmpty && !showingBefore;
   bool get canRedo => _undone.isNotEmpty && !showingBefore;
   bool get changed => start.entries.any((e) => read(e.key) != e.value) || showingBefore;
@@ -356,14 +403,50 @@ class DesignSession {
     return apply(file, now.join('\n'), 'reset $file:$line');
   }
 
-  /// The session's lines that differ from its start: file, line, before, after.
+  /// The session's lines that differ from its start: file, line (now), before, after. A line added or removed shifts the rest, so the
+  /// lines are matched (longest common subsequence) and only the ones that really changed are listed; an added line has no "before".
   List<(String, int, String, String)> changes() {
     final out = <(String, int, String, String)>[];
     start.forEach((file, s) {
       final a = s.split('\n'), b = read(file).split('\n');
-      for (var i = 0; i < a.length && i < b.length; i++) {
-        if (a[i] != b[i]) out.add((file, i + 1, a[i].trim(), b[i].trim()));
+      final n = a.length, m = b.length;
+      final dp = List.generate(n + 1, (_) => List<int>.filled(m + 1, 0));
+      for (var i = n - 1; i >= 0; i--) {
+        for (var j = m - 1; j >= 0; j--) {
+          dp[i][j] = a[i] == b[j] ? dp[i + 1][j + 1] + 1 : (dp[i + 1][j] >= dp[i][j + 1] ? dp[i + 1][j] : dp[i][j + 1]);
+        }
       }
+      var i = 0, j = 0;
+      final gone = <String>[], came = <String>[];
+      var at = 0;
+      void flush() {
+        for (var k = 0; k < gone.length || k < came.length; k++) {
+          out.add((
+            file,
+            at + 1 + (k < came.length ? k : came.length - 1).clamp(0, m),
+            k < gone.length ? gone[k].trim() : '',
+            k < came.length ? came[k].trim() : '',
+          ));
+        }
+        gone.clear();
+        came.clear();
+      }
+
+      while (i < n || j < m) {
+        if (i < n && j < m && a[i] == b[j]) {
+          flush();
+          i++;
+          j++;
+        } else {
+          if (gone.isEmpty && came.isEmpty) at = j;
+          if (j >= m || (i < n && dp[i + 1][j] >= dp[i][j + 1])) {
+            gone.add(a[i++]);
+          } else {
+            came.add(b[j++]);
+          }
+        }
+      }
+      flush();
     });
     return out;
   }

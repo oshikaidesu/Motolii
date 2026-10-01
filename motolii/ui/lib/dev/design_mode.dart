@@ -27,21 +27,24 @@ const _startOn = bool.fromEnvironment('MOTOLII_DESIGN');
 
 /// Wraps the app in debug builds: the HUD above it, the keys and the wheel while Design Mode is on.
 class DesignMode extends StatefulWidget {
-  const DesignMode({super.key, required this.child});
+  const DesignMode({super.key, required this.child, this.controller});
   final Widget child;
+
+  /// A session's controller made by a test (its own source root and state directory); the app makes its own.
+  final DesignController? controller;
 
   @override
   State<DesignMode> createState() => _DesignModeState();
 }
 
 class _DesignModeState extends State<DesignMode> {
-  final c = DesignController();
+  late final c = widget.controller ?? DesignController();
 
   @override
   void initState() {
     super.initState();
     c.addListener(() => setState(() {}));
-    if (_startOn) WidgetsBinding.instance.addPostFrameCallback((_) => c.toggle());
+    if (c.restore() || _startOn) WidgetsBinding.instance.addPostFrameCallback((_) => c.toggle());
   }
 
   /// Runs on every hot reload: the reload the tool was waiting for has landed.
@@ -71,6 +74,7 @@ class _DesignModeState extends State<DesignMode> {
             fit: StackFit.expand,
             children: [
               IgnorePointer(child: CustomPaint(painter: _BoundsPainter(c))),
+              _Grip(c),
               _Hud(c),
             ],
           ),
@@ -118,7 +122,7 @@ RenderBox? boxOf(Element? e) {
 }
 
 class DesignController extends ChangeNotifier {
-  DesignController() {
+  DesignController({String root = '', Directory? state}) : _root = root, _state = state {
     session = DesignSession(_read, _write);
     FocusManager.instance.addEarlyKeyEventHandler(_early);
     GestureBinding.instance.pointerRouter.addGlobalRoute(_pointer);
@@ -132,7 +136,8 @@ class DesignController extends ChangeNotifier {
   int active = 0;
   String? note;
   String title = '';
-  String _root = '';
+  String _root;
+  final Directory? _state;
   Map<String, String> _colors = {};
   List<String> _libFiles = [];
   int _opsSinceAck = 0, _historyAtActivation = 0;
@@ -244,6 +249,22 @@ class DesignController extends ChangeNotifier {
     'TextSpan',
     'Icon',
     'Image',
+    'SingleChildScrollView',
+    'GridView',
+    'FittedBox',
+    'AspectRatio',
+    'FractionallySizedBox',
+    'OverflowBox',
+    'LimitedBox',
+    'IntrinsicWidth',
+    'IntrinsicHeight',
+    'ClipRect',
+    'Transform',
+    'AnimatedContainer',
+    'AnimatedOpacity',
+    'AnimatedPositioned',
+    'Baseline',
+    'Scrollbar',
   };
 
   /// What Flutter's Inspector selected: the clicked widget and the nearest ancestors that set geometry, each as a place in the source.
@@ -270,7 +291,7 @@ class DesignController extends ChangeNotifier {
       ...chain
           .skip(1)
           .where((n) => projectPath((n['creationLocation'] as Map?)?['file'] as String?) != null && _geometry.contains(_typeOf(n)))
-          .take(8),
+          .take(12),
     ];
     if (_root.isEmpty) {
       for (final n in shown) {
@@ -591,15 +612,77 @@ class DesignController extends ChangeNotifier {
     _set(r, v);
   }
 
-  void startTyping() {
+  /// Enter opens the list of choices when there is one; the TYPE chip always types (a colour as a hex literal).
+  // ------------------------------------------------------------------------------------------------------- direct manipulation
+
+  /// The grip on the selected box for the active number: the edge it moves (a width at the right edge, a padding at the inner edge of the
+  /// padding area), and which way a drag along [axis] makes it larger. Null when the active row is not such a number.
+  ({Offset at, Axis axis, double sign})? get grip {
+    final r = current;
+    final p = r?.prop;
+    if (!on || exiting || typing || choosing || session.showingBefore || r == null || p == null || !p.editable || p.kind != PropKind.number)
+      return null;
+    final ro = boxOf(r.node.element);
+    if (ro == null) return null;
+    final box = ro.localToGlobal(Offset.zero) & ro.size;
+    final f = UiScale.factor, n = (p.number ?? 0) * f;
+    return switch (p.name) {
+      'width' || 'dimension' || 'minWidth' || 'maxWidth' => (at: Offset(box.right, box.center.dy), axis: Axis.horizontal, sign: 1.0),
+      'height' || 'minHeight' || 'maxHeight' => (at: Offset(box.center.dx, box.bottom), axis: Axis.vertical, sign: 1.0),
+      'padding.left' ||
+      'padding.horizontal' ||
+      'margin.left' => (at: Offset(box.left + n, box.center.dy), axis: Axis.horizontal, sign: 1.0),
+      'padding.right' || 'margin.right' => (at: Offset(box.right - n, box.center.dy), axis: Axis.horizontal, sign: -1.0),
+      'padding.top' || 'padding.vertical' || 'margin.top' => (at: Offset(box.center.dx, box.top + n), axis: Axis.vertical, sign: 1.0),
+      'padding.bottom' || 'margin.bottom' => (at: Offset(box.center.dx, box.bottom - n), axis: Axis.vertical, sign: -1.0),
+      _ => null,
+    };
+  }
+
+  /// How far the grip has been pulled so far (logical pixels along its axis), while a drag is on.
+  double? dragged;
+  double _dragStart = 0, _dragSign = 1;
+  int _dragHistory = 0;
+
+  void dragStart() {
+    final g = grip, p = current?.prop;
+    if (g == null || p == null) return;
+    _dragStart = p.number ?? 0;
+    _dragSign = g.sign;
+    _dragHistory = session.history.length;
+    dragged = 0;
+    notifyListeners();
+  }
+
+  /// The grip moved by [delta] (along its axis): the number follows in steps of half a unit, written and hot-reloaded as it goes.
+  void dragUpdate(double delta) {
+    if (dragged == null) return;
+    dragged = dragged! + delta;
+    final r = current;
+    if (r?.prop != null && r!.prop!.editable) {
+      final v = math.max(0.0, ((_dragStart + _dragSign * dragged! / UiScale.factor) * 2).roundToDouble() / 2);
+      if ((r.prop!.number ?? 0) != v) _set(r, fmt(v));
+    }
+    notifyListeners();
+  }
+
+  void dragEnd() {
+    if (dragged == null) return;
+    dragged = null;
+    session.coalesce(_dragHistory);
+    notifyListeners();
+  }
+
+  void startTyping({bool list = true}) {
     final r = current;
     if (r == null || !r.editable) return;
     final p = r.prop!;
-    if (p.kind == PropKind.option || p.kind == PropKind.boolean || (p.kind == PropKind.color && p.options.isNotEmpty)) {
+    if (p.kind == PropKind.option || p.kind == PropKind.boolean || (list && p.kind == PropKind.color && p.options.isNotEmpty)) {
       choosing = !choosing;
       notifyListeners();
       return;
     }
+    choosing = false;
     typing = true;
     final c = colorOf(p.text);
     input.text = p.kind == PropKind.color ? (c == null ? '' : '#${c.toARGB32().toRadixString(16).substring(2).toUpperCase()}') : p.text;
@@ -694,17 +777,62 @@ class DesignController extends ChangeNotifier {
   void _afterWrite(List<String> files) {
     if (files.isEmpty) return;
     _an?.forget();
+    // a changed `const` is compiled into its users: only a hot restart brings it to the screen
+    for (final f in files) {
+      final now = _read(f), was = _seen[f] ?? session.start[f] ?? now;
+      _seen[f] = now;
+      if (_changesConst(was, now)) _restart = true;
+    }
     _reloadTimer?.cancel();
     _reloadTimer = Timer(const Duration(milliseconds: 140), _sendReload);
     notifyListeners();
   }
 
-  File get _pidFile =>
-      File('${Platform.environment['XDG_STATE_HOME'] ?? '${Platform.environment['HOME']}/.local/state'}/motolii-stage5/flutter.pid');
+  final Map<String, String> _seen = {};
+  bool _restart = false;
+
+  static bool _changesConst(String a, String b) {
+    final x = a.split('\n'), y = b.split('\n');
+    if (x.length != y.length) return false;
+    for (var i = 0; i < x.length; i++) {
+      if (x[i] != y[i] && RegExp(r'\bconst\b').hasMatch(x[i]) && RegExp(r'^\s*(static\s+)?(final|const)\s').hasMatch(x[i])) return true;
+    }
+    return false;
+  }
+
+  File get _sessionFile => File('${_pidFile.parent.path}/design-session.json');
+
+  /// After a hot restart: the session (history, BEFORE / CURRENT) comes back from the file written just before it.
+  bool restore() {
+    try {
+      final f = _sessionFile;
+      if (!f.existsSync() || DateTime.now().difference(f.lastModifiedSync()).inSeconds > 120) return false;
+      final j = jsonDecode(f.readAsStringSync()) as Map<String, Object?>;
+      f.deleteSync();
+      _root = j['root'] as String;
+      session.restore((j['session'] as Map).cast<String, Object?>());
+      note = 'restarted: a changed const needs it. Your session is back';
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  File get _pidFile => File(
+    '${_state?.path ?? '${Platform.environment['XDG_STATE_HOME'] ?? '${Platform.environment['HOME']}/.local/state'}/motolii-stage5'}/flutter.pid',
+  );
 
   void _sendReload() {
     if (!_pidFile.existsSync()) {
       note = 'no dev session pid: written, press r in the flutter terminal';
+      notifyListeners();
+      return;
+    }
+    if (_restart) {
+      _restart = false;
+      _sessionFile.writeAsStringSync(jsonEncode({'root': _root, 'session': session.toJson()}));
+      Process.runSync('kill', ['-USR2', _pidFile.readAsStringSync().trim()]);
+      note = 'hot restart (a const changed)…';
       notifyListeners();
       return;
     }
@@ -819,6 +947,67 @@ class DesignController extends ChangeNotifier {
 
 // ---------------------------------------------------------------------------------------------------------------- what is drawn
 
+/// The handle on the selected box for the active number: pull it and the number follows (width, height, padding).
+class _Grip extends StatelessWidget {
+  const _Grip(this.c);
+  final DesignController c;
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: c,
+    builder: (context, _) {
+      final g = c.grip;
+      if (g == null) return const SizedBox.shrink();
+      final horizontal = g.axis == Axis.horizontal;
+      final pull = c.dragged ?? 0;
+      final at = g.at + (horizontal ? Offset(pull, 0) : Offset(0, pull));
+      return Stack(
+        fit: StackFit.expand,
+        children: [
+          Positioned(
+            left: at.dx - 12,
+            top: at.dy - 12,
+            width: 24,
+            height: 24,
+            child: MouseRegion(
+              cursor: horizontal ? SystemMouseCursors.resizeColumn : SystemMouseCursors.resizeRow,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onPanStart: (_) => c.dragStart(),
+                onPanUpdate: (d) => c.dragUpdate(horizontal ? d.delta.dx : d.delta.dy),
+                onPanEnd: (_) => c.dragEnd(),
+                onPanCancel: c.dragEnd,
+                child: Center(
+                  child: Container(
+                    width: horizontal ? 6 : 22,
+                    height: horizontal ? 22 : 6,
+                    decoration: BoxDecoration(
+                      color: _Hud.hot,
+                      borderRadius: BorderRadius.circular(3),
+                      border: Border.all(color: const Color(0xFF000000)),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      );
+    },
+  );
+}
+
+RenderPadding? _paddingBelow(RenderObject from) {
+  RenderObject? at = from;
+  for (var i = 0; i < 8 && at != null; i++) {
+    if (at is RenderPadding) return at;
+    RenderObject? next;
+    at.visitChildren((c) => next ??= c);
+    at = next;
+  }
+  return null;
+}
+
 class _BoundsPainter extends CustomPainter {
   _BoundsPainter(this.c) : super(repaint: c);
   final DesignController c;
@@ -829,11 +1018,14 @@ class _BoundsPainter extends CustomPainter {
     final ro = boxOf(r?.node.element);
     if (r == null || r.node.element!.debugIsDefunct || ro is! RenderBox || !ro.attached || !ro.hasSize) return;
     final box = ro.localToGlobal(Offset.zero) & ro.size;
-    if (ro is RenderPadding && (r.prop?.name.startsWith('padding') ?? false)) {
-      final p = ro.padding.resolve(TextDirection.ltr);
-      final inner = Rect.fromLTRB(box.left + p.left, box.top + p.top, box.right - p.right, box.bottom - p.bottom);
+    // the padding of the selected widget: a Container's lies a few render objects down (its Padding child), so look for it there
+    final pad = (r.prop?.name.startsWith('padding') ?? false) ? _paddingBelow(ro) : null;
+    if (pad != null && pad.attached && pad.hasSize) {
+      final pb = pad.localToGlobal(Offset.zero) & pad.size;
+      final p = pad.padding.resolve(TextDirection.ltr);
+      final inner = Rect.fromLTRB(pb.left + p.left, pb.top + p.top, pb.right - p.right, pb.bottom - p.bottom);
       canvas.drawPath(
-        Path.combine(PathOperation.difference, Path()..addRect(box), Path()..addRect(inner)),
+        Path.combine(PathOperation.difference, Path()..addRect(pb), Path()..addRect(inner)),
         Paint()..color = const Color(0x66FFB347),
       );
       canvas.drawRect(
@@ -1017,7 +1209,7 @@ class _HudState extends State<_Hud> {
                   _Chip('REDO', c.redo),
                   _Chip('RESET', c.resetActive),
                   _Chip('TOKEN/HERE', c.toggleScope),
-                  _Chip('TYPE', c.startTyping),
+                  _Chip('TYPE', () => c.startTyping(list: false)),
                   _Chip('CHANGES', c.toggleChanges),
                   _Chip('DONE', c.toggle),
                 ],

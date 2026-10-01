@@ -297,8 +297,24 @@ Future<void> main(List<String> a) async {
       stdout.writeln(
         'visual / layout arguments written in lib/: $uses   EDITABLE $edit (${pct(edit)})   READ-ONLY $ro (${pct(ro)})   UNSUPPORTED $un (${pct(un)})',
       );
-      stdout.writeln('\nTOP UNSUPPORTED');
-      for (final r in (rows.where((r) => r.unsupported > 0).toList()..sort((a, b) => b.unsupported.compareTo(a.unsupported))).take(30)) {
+      // behaviour / data / accessibility arguments are not the look or the layout: report the visual share on its own
+      var vUses = 0, vEdit = 0, vRo = 0, vUn = 0;
+      for (final r in rows) {
+        if (nonVisualArgs.contains(r.arg)) continue;
+        vUses += r.uses;
+        vEdit += r.editable;
+        vRo += r.readOnly;
+        vUn += r.unsupported;
+      }
+      String vp(int n) => '${(100 * n / (vUses == 0 ? 1 : vUses)).toStringAsFixed(1)} %';
+      stdout.writeln(
+        'VISUAL/LAYOUT EDITABLE COVERAGE: $vUses arguments   EDITABLE $vEdit (${vp(vEdit)})   READ-ONLY $vRo (${vp(vRo)})   UNSUPPORTED $vUn (${vp(vUn)})',
+      );
+      stdout.writeln('\nTOP UNSUPPORTED (visual / layout first)');
+      for (final r
+          in (rows.where((r) => r.unsupported > 0 && !nonVisualArgs.contains(r.arg)).toList()
+                ..sort((a, b) => b.unsupported.compareTo(a.unsupported)))
+              .take(30)) {
         stdout.writeln('  ${r.unsupported.toString().padLeft(4)}  ${r.widget}.${r.arg}   (${r.uses} uses, ${r.editable} editable)');
       }
       stdout.writeln('\nTOP READ-ONLY');
