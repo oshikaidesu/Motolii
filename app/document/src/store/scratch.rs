@@ -56,6 +56,8 @@ pub struct Scratch {
     pub routing: std::collections::HashSet<(u64, i64, i64)>,
     /// 箱の子の順。版ごとに覚える。
     pub kids: HashMap<(u64, LayerId), std::sync::Arc<Vec<LayerId>>>,
+    /// 層の時計。版ごとに覚える(この view の一時の値も含めて、view と同じ寿命)。
+    pub clocks: HashMap<(u64, LayerId), std::sync::Arc<super::layout::LayerClock>>,
 }
 
 impl Scratch {

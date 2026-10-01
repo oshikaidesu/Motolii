@@ -24,7 +24,7 @@ class EditorSession extends SessionCore
         SessionRender,
         SessionCommands,
         SessionFiles {
-  EditorSession({NativeBridge? bridge}) : super(bridge: bridge) {
+  EditorSession() {
     document.addListener(_spreadDocument);
     deskWork.addListener(_syncPreferences);
     _listenToHost();

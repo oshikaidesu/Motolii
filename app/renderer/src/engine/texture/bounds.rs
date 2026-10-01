@@ -200,9 +200,7 @@ impl Engine {
         ) else { return Ok(camera) };
         let point = target_layer.transform.spatial.transform_point3(glam::Vec3::from(bounds.center()));
         let comp = comp.spec();
-        camera.center = [point.x - comp.width as f32 * 0.5, point.y - comp.height as f32 * 0.5];
-        camera.target_z = point.z;
-        Ok(camera)
+        Ok(camera.aimed_at(comp, point))
     }
 
     fn scene_leaf_local_bounds(
@@ -287,9 +285,7 @@ impl Engine {
         let comp = comp.spec();
         let Some(world) = resolved.iter().find(|layer| layer.id == target && !layer.ghost).and_then(|layer| layer.placement.world_transform) else { return Ok(camera) };
         let point = world.transform_point3(glam::Vec3::from(bounds.center()));
-        camera.center = [point.x - comp.width as f32 * 0.5, point.y - comp.height as f32 * 0.5];
-        camera.target_z = point.z;
-        Ok(camera)
+        Ok(camera.aimed_at(comp, point))
     }
 
     /// 作中カメラ。描画・Stage・Depth はすべてこれを通す。

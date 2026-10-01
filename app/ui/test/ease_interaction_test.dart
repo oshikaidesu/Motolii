@@ -1,3 +1,4 @@
+import 'support/ease_intervals.dart';
 import 'dart:convert';
 import 'dart:ui' show PointerDeviceKind;
 
@@ -105,7 +106,7 @@ void main() {
       final c = EditorSession();
       final commands = <Map<String, dynamic>>[];
       var current = shape(.2);
-      Map<String, dynamic> snapshot() => {
+      Map<String, dynamic> snapshot() => withEaseIntervals({
         'selectedIds': [1],
         'selectedKeys': [
           {'layer': 1, 'property': 'opacity', 'frame': 0},
@@ -131,7 +132,7 @@ void main() {
           },
         ],
         'easeKinds': [shape(.2), shape(.4)],
-      };
+      });
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(EditorSession.channel, (call) async {
             final args = Map<String, dynamic>.from(
@@ -254,7 +255,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(commands.length, 2);
       expect(commands.last['dip'], .4);
-      c.document.value = {...snapshot(), 'selectedKeys': [], 'selectedIds': []};
+      c.document.value = withEaseIntervals({...snapshot(), 'selectedKeys': [], 'selectedIds': []});
       await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('Bounce').first);
       await tester.pumpAndSettle();
@@ -424,7 +425,7 @@ void main() {
   testWidgets('the rail names the key interval the curve is running', (
     tester,
   ) async {
-    Map<String, dynamic> snapshot({List<Map<String, dynamic>>? keys}) => {
+    Map<String, dynamic> snapshot({List<Map<String, dynamic>>? keys}) => withEaseIntervals({
       'selectedIds': [1],
       'selectedKeys':
           keys ??
@@ -455,7 +456,7 @@ void main() {
       'easeKinds': [
         {'kind': 'Linear'},
       ],
-    };
+    });
     final c = EditorSession();
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(EditorSession.channel, (call) async {
@@ -521,7 +522,7 @@ void main() {
     expect(rail.hitTestable(), findsOneWidget);
 
     // 対象が無い時は帯が空になるだけで、消えない。
-    c.document.value = {...snapshot(), 'selectedKeys': [], 'selectedIds': []};
+    c.document.value = withEaseIntervals({...snapshot(), 'selectedKeys': [], 'selectedIds': []});
     await tester.pumpAndSettle();
     expect(painter().segments, isEmpty);
     expect(painter().active, -1);

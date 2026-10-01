@@ -262,8 +262,14 @@ pub fn translate_link(
             let out_min = find_f64("out_min", 0.0)?;
             let out_max = find_f64("out_max", 1.0)?;
             let clamp = find_bool("clamp", false)?;
-            let Value::F64(v) = value else {
-                return None;
+            // `in_component`: which component of a vector source is read (a source of `position` read as X is 0).
+            // `out_components`: 2 gives the mapped number to both components of a vector destination (Scale).
+            let in_component = find_f64("in_component", 0.0)? as usize;
+            let out_components = find_f64("out_components", 1.0)? as usize;
+            let v = match value {
+                Value::F64(v) => v,
+                Value::Vec2(v) => *v.get(in_component)?,
+                _ => return None,
             };
             if in_max == in_min {
                 return None; // 区間の長さ0は写像が定義できない。
@@ -272,7 +278,8 @@ pub fn translate_link(
             if clamp {
                 u = u.clamp(0.0, 1.0);
             }
-            Some(Value::F64(out_min + u * (out_max - out_min)))
+            let out = out_min + u * (out_max - out_min);
+            Some(if out_components == 2 { Value::Vec2([out, out]) } else { Value::F64(out) })
         }
         _ => None,
     }

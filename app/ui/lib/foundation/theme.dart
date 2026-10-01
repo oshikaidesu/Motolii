@@ -197,6 +197,63 @@ class EditorLook extends InheritedWidget {
   bool updateShouldNotify(EditorLook old) => old.tooltips != tooltips;
 }
 
+/// How the controls are cut, apart from their colours: corner radius, the
+/// face labels and numbers are set in, and how a layer's identity colour is
+/// worn. [classic] is the window as it has always been drawn; a shell that
+/// wants another cut installs its own through [EditorTheme.copyWith]. Not
+/// part of the theme file: a colour theme cannot change geometry.
+@immutable
+class EditorSkin {
+  const EditorSkin({
+    required this.radius,
+    required this.tileRadius,
+    this.labelFamily,
+    this.uppercaseLabels = false,
+    this.identityChip = false,
+    this.clipInset = 2,
+    this.tabular = false,
+    this.outlinedTiles = false,
+    this.flatWells = false,
+    this.newFace = false,
+  });
+
+  /// Wells, fields, menus and slider thumbs.
+  final double radius;
+
+  /// A shelf tile's kind mark, per unit of its scale.
+  final double tileRadius;
+
+  /// The face of short labels and readouts; null keeps the body face.
+  final String? labelFamily;
+  final bool uppercaseLabels;
+
+  /// A layer's colour as a small chip beside a neutral name, instead of
+  /// the whole name cell or header painted in it.
+  final bool identityChip;
+
+  /// How far a clip bar stands in from its lane, top and bottom.
+  final double clipInset;
+
+  /// Numbers keep their width, so a value that changes does not jitter.
+  final bool tabular;
+
+  /// Shelf tiles are drawn as ruled cells rather than filled blocks.
+  final bool outlinedTiles;
+
+  /// A number well is a ruled line on the panel, not a sunken box.
+  final bool flatWells;
+
+  /// The New shell's parts: section heads as bands, key lamps as diamonds,
+  /// an amount as a line under its number.
+  final bool newFace;
+
+  static const classic = EditorSkin(radius: 4, tileRadius: 3);
+
+  List<FontFeature>? get figures =>
+      tabular ? const [FontFeature.tabularFigures()] : null;
+  String label(String text) => uppercaseLabels ? text.toUpperCase() : text;
+}
+
 @immutable
 class EditorTheme extends ThemeExtension<EditorTheme> {
   const EditorTheme._({
@@ -204,11 +261,13 @@ class EditorTheme extends ThemeExtension<EditorTheme> {
     required this.colors,
     required this.identityColors,
     required this.drawing,
+    this.skin = EditorSkin.classic,
   });
   final String name;
   final Map<String, Color> colors;
   final List<Color> identityColors;
   final EditorInk drawing;
+  final EditorSkin skin;
 
   static const chromatic = EditorTheme._(
     name: 'Chromatic Workshop',
@@ -501,11 +560,13 @@ class EditorTheme extends ThemeExtension<EditorTheme> {
     Map<String, Color>? colors,
     List<Color>? identityColors,
     EditorInk? drawing,
+    EditorSkin? skin,
   }) => EditorTheme._(
     name: name ?? this.name,
     colors: Map.unmodifiable({...this.colors, ...?colors}),
     identityColors: List.unmodifiable(identityColors ?? this.identityColors),
     drawing: drawing ?? this.drawing,
+    skin: skin ?? this.skin,
   );
   @override
   EditorTheme lerp(covariant EditorTheme? other, double t) {
@@ -523,6 +584,7 @@ class EditorTheme extends ThemeExtension<EditorTheme> {
             ]
           : (t < .5 ? identityColors : other.identityColors),
       drawing: drawing.lerp(other.drawing, t),
+      skin: t < .5 ? skin : other.skin,
     );
   }
 }

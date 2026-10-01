@@ -3,6 +3,8 @@ use crate::edit::{Animate, Document, Intent};
 use crate::doc::store::*;
 use crate::doc::vector::{Brush,Contour,Fill,FillRule,Rgb,Vertex};
 use crate::editor::fixture;
+mod catalog;
+pub(crate) use catalog::{host_capabilities, kind_named, kinds_json, owner_of};
 #[derive(Clone)]
 pub(crate) enum NewKind {
     Text,

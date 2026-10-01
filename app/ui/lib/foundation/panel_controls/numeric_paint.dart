@@ -158,3 +158,35 @@ class _TrackPainter extends CustomPainter {
       old.tint != tint ||
       old.style != style;
 }
+
+/// The New face's amount: a hairline under the number, lit as far as the
+/// value reaches.
+class _AmountLine extends CustomPainter {
+  const _AmountLine({
+    required this.value,
+    required this.min,
+    required this.max,
+    required this.tint,
+  });
+  final double value, min, max;
+  final Color tint;
+  @override
+  void paint(Canvas canvas, Size size) {
+    final t = max == min ? 0.0 : ((value - min) / (max - min)).clamp(0.0, 1.0);
+    canvas.drawRect(
+      Offset.zero & size,
+      Paint()..color = tint.withValues(alpha: .18),
+    );
+    canvas.drawRect(
+      Rect.fromLTWH(0, 0, size.width * t, size.height),
+      Paint()..color = tint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_AmountLine old) =>
+      old.value != value ||
+      old.min != min ||
+      old.max != max ||
+      old.tint != tint;
+}

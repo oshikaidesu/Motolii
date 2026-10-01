@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'editor_actions.dart';
 import 'theme_settings.dart';
 
 import 'package:flutter/widgets.dart';
@@ -18,24 +19,8 @@ import '../panels/export_controls.dart';
 import '../foundation/metrics.dart';
 import '../foundation/panel_controls.dart';
 import '../foundation/leaves.dart';
+import 'status_notice.dart';
 
-/// Freeze の裏仕事の進み。走っていなければ null。失敗はその理由。
-String? freezeNotice(Map<String, dynamic> status) {
-  final job = status['freeze'];
-  if (job is! Map) return null;
-  final phase = '${job['phase']}';
-  if (phase != 'running' && phase != 'cancelling' && phase != 'failed')
-    return null;
-  final layers = (status['layers'] as List? ?? const []).whereType<Map>();
-  final name =
-      layers
-          .where((l) => l['id'] == job['layer'])
-          .map((l) => '${l['name']}')
-          .firstOrNull ??
-      'layer';
-  if (phase == 'failed') return 'Freeze failed: ${job['error']}';
-  return 'Freezing $name ${job['done']}/${job['total']}';
-}
 
 /// 窓の下の 1 行。文だけを受け取るので、文が同じ間は建て直らない。
 class _StatusLine extends StatelessWidget {
@@ -52,16 +37,13 @@ class _StatusLine extends StatelessWidget {
 }
 
 class EditorWindow extends StatefulWidget {
-  const EditorWindow({super.key, this.controller, this.initialize = true});
-  final EditorSession? controller;
-  final bool initialize;
+  const EditorWindow({super.key});
   @override
   State<EditorWindow> createState() => _EditorWindowState();
 }
 
 class _EditorWindowState extends State<EditorWindow> {
-  late final EditorSession c;
-  late final bool _ownsController;
+  final c = EditorSession();
   late final shortcuts = EditorShortcuts(
     c,
     onMenu: menu,
@@ -95,14 +77,12 @@ class _EditorWindowState extends State<EditorWindow> {
   @override
   void initState() {
     super.initState();
-    c = widget.controller ?? EditorSession();
-    _ownsController = widget.controller == null;
     c
         .slice('animationAppearance', const ['animate'])
         .addListener(_syncAnimationAppearance);
     c.deskDefault.addListener(persist);
     c.deskWork.addListener(_syncAppearance);
-    c.confirmClose = confirmReplacement;
+    c.confirmClose = () => confirmReplacement(context, c);
     c.panelPlacementRequested = _placePanel;
     c.windowClosed = (info) {
       final panes = (info['panels'] as List? ?? []).whereType<String>();
@@ -117,12 +97,7 @@ class _EditorWindowState extends State<EditorWindow> {
     c.filesDropped = (paths) {
       if (paths.isNotEmpty) c.importPaths(paths);
     };
-    if (widget.initialize) {
-      _initialize();
-    } else {
-      c.windowInfo = const {'id': 'preview', 'main': true};
-      ready = true;
-    }
+    _initialize();
   }
 
   @override
@@ -191,7 +166,7 @@ class _EditorWindowState extends State<EditorWindow> {
     c.deskWork.removeListener(_syncAppearance);
     workspace.dispose();
     saveTimer?.cancel();
-    if (_ownsController) c.dispose();
+    c.dispose();
     super.dispose();
   }
 
@@ -354,62 +329,9 @@ class _EditorWindowState extends State<EditorWindow> {
     }
   }
 
-  Future<bool> confirmReplacement() async {
-    c.stopPlayback();
-    if (c.state['dirty'] != true) return true;
-    if (!mounted) return false;
-    final result = await showEditorDialog<String>(
-      context: context,
-      builder: (context) => EditorDialog(
-        title: const Text('Save changes?'),
-        content: const Text('Save the current document before closing it.'),
-        actions: [
-          EditorTextButton(
-            onPressed: () => Navigator.pop(context, 'cancel'),
-            child: const Text('Cancel'),
-          ),
-          EditorTextButton(
-            onPressed: () => Navigator.pop(context, 'discard'),
-            child: const Text("Don't Save"),
-          ),
-          EditorTextButton(
-            onPressed: () => Navigator.pop(context, 'save'),
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
-    if (result == 'save') {
-      await c.save();
-      return c.state['dirty'] != true;
-    }
-    return result == 'discard';
-  }
-
   Future<void> menu(String action) async {
     setState(() => sheet = null);
     switch (action) {
-      case 'New':
-        if (await confirmReplacement()) await c.command('new');
-        break;
-      case 'Open':
-        if (await confirmReplacement()) await c.chooseOpen();
-        break;
-      case 'Save':
-        await c.save();
-        break;
-      case 'Save as':
-        await c.save(as: true);
-        break;
-      case 'Import':
-        await c.importFiles();
-        break;
-      case 'Run Script…':
-        await c.runScript();
-        break;
-      case 'Rerun Script':
-        await c.rerunScript();
-        break;
       case 'Reset layout':
         setState(() {
           dock = initialDock();
@@ -424,19 +346,7 @@ class _EditorWindowState extends State<EditorWindow> {
         if (paneNames.contains(action)) {
           await c.placePanel(action, 'show');
         } else {
-          final commands = {
-            'Undo': 'undo',
-            'Redo': 'redo',
-            'Cut': 'cut',
-            'Copy': 'copy',
-            'Paste': 'paste',
-            'Duplicate': 'duplicate',
-            'Delete': 'delete',
-            'Group': 'group',
-            'Ungroup': 'ungroup',
-            'Split': 'split',
-          };
-          if (commands.containsKey(action)) await c.command(commands[action]!);
+          await documentAction(context, c, action);
         }
     }
   }
@@ -485,27 +395,8 @@ class _EditorWindowState extends State<EditorWindow> {
                     color: EditorTheme.of(context).app,
                     child: Row(
                       children: [
-                        topMenu('File', [
-                          'New',
-                          'Open',
-                          'Save',
-                          'Save as',
-                          'Import',
-                          'Run Script…',
-                          'Rerun Script',
-                        ]),
-                        topMenu('Edit', [
-                          'Undo',
-                          'Redo',
-                          'Cut',
-                          'Copy',
-                          'Paste',
-                          'Duplicate',
-                          'Split',
-                          'Delete',
-                          'Group',
-                          'Ungroup',
-                        ]),
+                        topMenu('File', fileActions),
+                        topMenu('Edit', editActions.keys.toList()),
                         topMenu('View', [...paneNames, 'Reset layout']),
                         for (final name in [
                           'Composition',
@@ -554,9 +445,7 @@ class _EditorWindowState extends State<EditorWindow> {
                         builder: (_, doc, __) => _StatusLine(
                           // 操作の誤りが先。無ければ、棚(vism/)で断った効果の理由。
                           text:
-                              message ??
-                              freezeNotice(doc) ??
-                              effectsNotice(doc),
+                              message ?? freezeNotice(doc) ?? effectsNotice(doc),
                         ),
                       ),
                 ),

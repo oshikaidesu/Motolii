@@ -271,6 +271,48 @@ mod tests {
         assert_eq!(copies(&doc).len(), 1, "Lines: one line is not split");
     }
 
+    /// Members, one law of order to time: three copies of a shape (Repeater) under the shape's own Stagger read their keys
+    /// at the same shifted times as three words of a text (above) and three children of a container. With no Stagger the
+    /// copies are as they always were; the Repeater's own Delay Each still adds to the shift.
+    #[test]
+    fn copies_take_the_same_order_to_time_law_as_split_units_and_children() {
+        use motolii_render::extensions::placement;
+        let mut doc = blank_project().with_programs(motolii_render::extensions::bundled());
+        let fps = doc.view().composition().unwrap().unwrap().fps;
+        let at = |f: i64| RationalTime::try_from_frame(f, fps).unwrap();
+        let shape = add(&mut doc, 2, LayerSource::Shape, None);
+        doc.apply(Intent::SetShapes { layer: shape, shapes: vec![rect_shape([255; 4], [40.0, 40.0])] }).unwrap();
+        let repeat = EffectId(0);
+        doc.apply_all([
+            Intent::SetEffects { layer: shape, effects: vec![EffectInstance { id: repeat, plugin_id: placement::REPEAT.to_owned() }] },
+            Intent::SetConstant { layer: shape, property: PropertyId::effect_param(repeat, "count").unwrap(), value: Value::F64(3.0) },
+            Intent::SetConstant { layer: shape, property: PropertyId::effect_param(repeat, "position_each").unwrap(), value: Value::Vec2([60.0, 0.0]) },
+        ]).unwrap();
+        let mut track = motolii_doc::eval::KeyframeTrack::new();
+        track.insert(motolii_doc::eval::Keyframe { t: at(0), value: Value::F64(0.0), interp: motolii_doc::eval::Interp::Linear, spatial: Default::default() });
+        track.insert(motolii_doc::eval::Keyframe { t: at(30), value: Value::F64(1.0), interp: motolii_doc::eval::Interp::Linear, spatial: Default::default() });
+        doc.apply(Intent::SetTrack { layer: shape, property: PropertyId::new(property::OPACITY).unwrap(), track }).unwrap();
+        let copies = |doc: &Document| -> Vec<f32> {
+            let mut out: Vec<(u32, f32)> = motolii_render::picture::resolve::resolved_layers(&doc.view(), at(15)).unwrap().into_iter()
+                .filter(|l| l.id == shape).map(|l| (l.copy, l.placement.opacity)).collect();
+            out.sort_by_key(|c| c.0);
+            out.into_iter().map(|c| c.1).collect()
+        };
+        let still = copies(&doc);
+        assert_eq!(still.len(), 3);
+        assert!(still.iter().all(|o| (o - 0.5).abs() < 0.02), "no Stagger: every copy at 0.5 s, as before: {still:?}");
+        put(&mut doc, shape, STAGGER, Value::F64(0.2));
+        let c = copies(&doc);
+        assert!((c[0] - 0.5).abs() < 0.02 && (c[1] - 0.4).abs() < 0.02 && (c[2] - 0.3).abs() < 0.02, "the words' law: 0.5 / 0.4 / 0.3 s: {c:?}");
+        put(&mut doc, shape, STAGGER_FROM, Value::Enum(2));
+        let c = copies(&doc);
+        assert!((c[0] - 0.3).abs() < 0.02 && (c[2] - 0.5).abs() < 0.02, "From End: the last copy leads: {c:?}");
+        put(&mut doc, shape, STAGGER_FROM, Value::Enum(0));
+        doc.apply(Intent::SetConstant { layer: shape, property: PropertyId::effect_param(repeat, "delay_each").unwrap(), value: Value::F64(0.1) }).unwrap();
+        let c = copies(&doc);
+        assert!((c[1] - 0.3).abs() < 0.02 && (c[2] - 0.1).abs() < 0.02, "Delay Each adds to the shared shift: {c:?}");
+    }
+
     /// Loop: 鍵 0 → 1 s、Loop Duration 1 なら t = 2.5 は 0.5 として読む。Alternate は奇数回目が逆向き(t = 1.5 → 0.5、1.2 → 0.8)。
     #[test]
     fn loop_folds_the_layers_time_like_css_animation_direction() {

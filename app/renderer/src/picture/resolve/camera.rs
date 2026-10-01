@@ -53,8 +53,7 @@ pub fn camera_of_layer(view: &StoreView<'_>, id: LayerId, t: RationalTime) -> Re
             let present = view.layers().into_iter().collect();
             if let Some(world) = crate::picture::resolve::transform::world_transform3d_chain(view, target, t, &present)?.get(&target) {
                 let point = world.transform_point3(glam::Vec3::ZERO);
-                camera.center = [point.x - comp.width as f32 * 0.5, point.y - comp.height as f32 * 0.5];
-                camera.target_z = point.z;
+                camera = camera.aimed_at(comp, point);
             }
         }
     }

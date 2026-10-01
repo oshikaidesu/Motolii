@@ -46,7 +46,9 @@ void main() {
         },
       ],
       'selectedIds': selection,
-      'capabilities': ['setAttrs', 'previewBlend', 'cancelPreview'],
+      // What the host says (Rust: a_blend_reaches_the_selected_layers_that_can_take_it): not the camera, not the locked layer.
+      'blendTargets': selection.contains(1) ? [1] : [],
+      'capabilities': ['applyBlend', 'previewBlend', 'cancelPreview'],
     };
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(EditorSession.channel, (call) async {
@@ -55,8 +57,7 @@ void main() {
               jsonDecode(call.arguments['command']),
             );
             sent.add(command);
-            if (command['op'] == 'setAttrs')
-              mode = command['patch']['blendMode'];
+            if (command['op'] == 'applyBlend') mode = command['mode'];
           }
           return snapshot();
         });
@@ -116,8 +117,8 @@ void main() {
     // and never the locked layer.
     await mouse.moveTo(tester.getCenter(screen));
     await tester.pumpAndSettle();
-    expect(sent.last, {'op': 'previewBlend', 'layer': 1, 'mode': 'Screen'});
-    expect(sent.where((s) => s['op'] == 'setAttrs'), isEmpty);
+    expect(sent.last, {'op': 'previewBlend', 'mode': 'Screen'});
+    expect(sent.where((s) => s['op'] == 'applyBlend'), isEmpty);
 
     // Leaving puts the document back.
     await mouse.moveTo(const Offset(700, 400));
@@ -127,9 +128,9 @@ void main() {
     // One click, one setAttrs; clicking the mode it already has adds nothing.
     await tester.tap(screen);
     await tester.pumpAndSettle();
-    final applied = sent.where((s) => s['op'] == 'setAttrs').toList();
-    expect(applied.single['layers'], [1]);
-    expect(applied.single['patch'], {'blendMode': 'Screen'});
+    debugPrint(sent.map((s) => s['op']).join(','));
+    final applied = sent.where((s) => s['op'] == 'applyBlend').toList();
+    expect(applied.single, {'op': 'applyBlend', 'mode': 'Screen'});
     // Clicking the mode the layer already has records nothing, and still
     // hands the document back instead of leaving the preview standing.
     await mouse.moveTo(tester.getCenter(screen));
@@ -137,7 +138,7 @@ void main() {
     expect(sent.last['op'], 'previewBlend');
     await tester.tap(screen);
     await tester.pumpAndSettle();
-    expect(sent.where((s) => s['op'] == 'setAttrs').length, 1);
+    expect(sent.where((s) => s['op'] == 'applyBlend').length, 1);
     expect(sent.last['op'], 'cancelPreview');
     await mouse.moveTo(const Offset(700, 400));
     await tester.pumpAndSettle();
@@ -151,7 +152,7 @@ void main() {
     expect(sent.last['op'], 'cancelPreview');
     await tester.tap(screen);
     await tester.pumpAndSettle();
-    expect(sent.where((s) => s['op'] == 'setAttrs').length, 1);
+    expect(sent.where((s) => s['op'] == 'applyBlend').length, 1);
 
     expect(tester.takeException(), isNull);
     await mouse.removePointer();

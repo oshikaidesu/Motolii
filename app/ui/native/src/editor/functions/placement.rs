@@ -74,6 +74,7 @@ pub(crate) fn anchor_position_plan(
     size: [f32; 2],
     at: RationalTime,
     fractions: [f64; 2],
+    evaluated_local: glam::Affine3A,
 ) -> Result<Vec<Intent>, StoreError> {
     if size.iter().any(|value| !value.is_finite() || *value < 0.0) {
         return Err(StoreError::Property(
@@ -88,11 +89,15 @@ pub(crate) fn anchor_position_plan(
             ));
         }
     }
-    anchor_point_plan(doc, layer, at, atom::scale_about(fractions, [0.0, 0.0], size.map(f64::from)))
+    anchor_point_plan(doc, layer, at, atom::scale_about(fractions, [0.0, 0.0], size.map(f64::from)), evaluated_local)
 }
 
 pub(crate) fn anchor_point_plan(
-    doc: &Document, layer: LayerId, at: RationalTime, next: [f64; 2],
+    doc: &Document,
+    layer: LayerId,
+    at: RationalTime,
+    next: [f64; 2],
+    evaluated_local: glam::Affine3A,
 ) -> Result<Vec<Intent>, StoreError> {
     for value in next { atom::bounded(value, None).map_err(|reason| StoreError::Property(reason.into()))?; }
     let view = doc.view().without_transients();
@@ -105,7 +110,7 @@ pub(crate) fn anchor_point_plan(
     let original_position = position(&view, layer, &position_property, at)?;
     let delta = glam::Vec2::from_array(next.map(|value| value as f32))
         - glam::Vec2::from_array(anchor.map(|value| value as f32));
-    let compensation = motolii_render::picture::resolve::transform::local_transform3d(&view, layer, at)?.transform_vector3(delta.extend(0.0));
+    let compensation = evaluated_local.transform_vector3(delta.extend(0.0));
     if !compensation.is_finite() {
         return Err(StoreError::Property(
             "The anchor transform must be finite".into(),

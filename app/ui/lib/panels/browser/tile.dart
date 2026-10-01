@@ -95,7 +95,9 @@ class ShelfTile extends StatelessWidget {
             alignment: Alignment.center,
             decoration: BoxDecoration(
               color: identityColor,
-              borderRadius: BorderRadius.circular(EditorMetrics.s3 * markScale),
+              borderRadius: BorderRadius.circular(
+                EditorTheme.of(context).skin.tileRadius * markScale,
+              ),
             ),
             child: Text(
               format,
@@ -170,14 +172,25 @@ class ShelfTile extends StatelessWidget {
                   ? () => host.apply(item)
                   : null,
               child: Container(
-                decoration: BoxDecoration(
-                  color: EditorTheme.of(context).panel,
-                  border: Border.all(
-                    color: isSelected
-                        ? EditorTheme.of(context).spatial
-                        : EditorTheme.clear,
-                  ),
-                ),
+                decoration: EditorTheme.of(context).skin.outlinedTiles
+                    ? BoxDecoration(
+                        color: hovered
+                            ? EditorTheme.of(context).hover
+                            : EditorTheme.of(context).raised,
+                        border: Border.all(
+                          color: isSelected
+                              ? EditorTheme.of(context).ink
+                              : EditorTheme.of(context).line,
+                        ),
+                      )
+                    : BoxDecoration(
+                        color: EditorTheme.of(context).panel,
+                        border: Border.all(
+                          color: isSelected
+                              ? EditorTheme.of(context).spatial
+                              : EditorTheme.clear,
+                        ),
+                      ),
                 child: Stack(
                   children: [
                     Positioned.fill(

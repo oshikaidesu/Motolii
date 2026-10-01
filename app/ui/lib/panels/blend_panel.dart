@@ -162,10 +162,7 @@ class BlendPanelState extends State<BlendPanel> {
           await c.command('cancelPreview');
         } else {
           _previewing = mode;
-          await c.command('previewBlend', {
-            'layer': targets.last['id'],
-            'mode': mode,
-          });
+          await c.command('previewBlend', {'mode': mode});
         }
       }
     } finally {
@@ -201,7 +198,7 @@ class BlendPanelState extends State<BlendPanel> {
   /// port before it applies, so the preview never lands in history.
   Future<void> _apply(String mode) async {
     _hoverTimer?.cancel();
-    if (_applying || !panelCan(c, 'setAttrs')) return;
+    if (_applying || !panelCan(c, 'applyBlend')) return;
     final mark = _mark;
     final ids = _targets
         .where((l) => '${l['blendMode'] ?? 'Normal'}' != mode)
@@ -222,10 +219,7 @@ class BlendPanelState extends State<BlendPanel> {
         _previewing = null;
         await _flight;
         if (mounted && mark == _mark)
-          await c.command('setAttrs', {
-            'layers': ids,
-            'patch': {'blendMode': mode},
-          });
+          await c.command('applyBlend', {'mode': mode});
       }
     } finally {
       if (mounted) {
@@ -410,20 +404,3 @@ class _BlendTile extends StatelessWidget {
   );
 }
 
-/// The unlocked, non-camera layers a blend applies to.
-List<Map<String, dynamic>> blendTargets(EditorSession c) {
-  final ids = c.selectedIds;
-  return [
-    for (final l in (c.state['layers'] as List? ?? const []).whereType<Map>())
-      if (ids.contains(l['id']) && l['locked'] != true && l['kind'] != 'Camera')
-        Map<String, dynamic>.from(l),
-  ];
-}
-
-/// Everything the tiles show: the mode in force and the specimens for it.
-Object blendReading(EditorSession c) => [
-  c.selectedIds,
-  for (final l in blendTargets(c))
-    [l['id'], l['blendMode'], l['blendPreviews']],
-  c.activeLayer?['blendPreviews'],
-];

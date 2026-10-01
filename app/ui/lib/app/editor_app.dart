@@ -4,13 +4,15 @@ import 'package:flutter/widgets.dart';
 import '../foundation/leaves.dart';
 import '../foundation/panel_controls.dart';
 import '../foundation/theme.dart';
-import '../session/editor_session.dart';
 import 'editor_window.dart';
+import 'new_shell.dart';
+
+/// Which projection of the session the window opens: `classic` (default) or
+/// `new`. One shell is mounted per launch; both drive the same Document.
+const shell = String.fromEnvironment('MOTOLII_SHELL', defaultValue: 'classic');
 
 class EditorApp extends StatefulWidget {
-  const EditorApp({super.key, this.controller, this.initialize = true});
-  final EditorSession? controller;
-  final bool initialize;
+  const EditorApp({super.key});
 
   /// Hovering a control shows nothing: every [EditorTooltip] below is off.
   static Widget noHover(BuildContext context, Widget? child) =>
@@ -65,10 +67,10 @@ class _EditorAppState extends State<EditorApp> {
                   ),
                 ),
               ),
-              home: EditorWindow(
-                controller: widget.controller,
-                initialize: widget.initialize,
-              ),
+              home: switch (shell) {
+                'new' => const NewShell(),
+                _ => const EditorWindow(),
+              },
             ),
           ),
         ),

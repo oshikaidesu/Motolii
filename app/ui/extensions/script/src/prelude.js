@@ -95,6 +95,10 @@ class Effect {
 class Layer {
   constructor(id) { this.id = id; }
   json() { return JSON.parse(__layer(this.id)); }
+  /** The parts this layer is made of, as the window reads them: { kind: "copies" | "children" | "chars" | "words" | "lines", count }, or null. */
+  members() { return this.json().members ?? null; }
+  /** Stagger over the members (seconds across them all), from "Start", "Center", "End" or "Edges": the one law for copies, children and text units. */
+  stagger(seconds, from = "Start") { return this.set("Stagger", seconds).set("Stagger From", from); }
   label() { return `${this.json().kind} layer ${JSON.stringify(this.json().name)}`; }
   property(name) {
     const rows = this.json().properties;

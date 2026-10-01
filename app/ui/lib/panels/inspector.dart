@@ -8,6 +8,8 @@ import '../foundation/panel_controls.dart';
 import '../foundation/theme.dart';
 import '../session/editor_session.dart';
 import '../session/read_model.dart';
+import '../session/effect_actions.dart' as shared_effects;
+import '../session/property_character.dart';
 import 'rich_text_editor.dart';
 import 'gradient_inspector.dart';
 import '../foundation/glyphs.dart';
@@ -33,9 +35,34 @@ part 'inspector/effects_card.dart';
 /// Routes are the Inspector's own: previewProperties / commitPreview for
 /// values, setAttrs / anchor / ghost / clip for the layer, focusEditing for
 /// Blend (the Desk owns the picker). Nothing is re-implemented.
+/// Cards a host may draw itself. The Inspector keeps everything else: the header, the World, Layout, Text,
+/// Fill and Matte cards and the effects, and the way every edit reaches the document.
+class InspectorInstruments {
+  const InspectorInstruments({this.transform, this.layout, this.effectParams, this.worldInTransform = false, this.effectCard});
+
+  /// The body of the Transform card (Position, Scale, Rotation, Anchor, Space, Parent, Opacity).
+  final Widget Function(BuildContext context, EditorSession controller)? transform;
+
+  /// [transform] already shows World (Blend, and an Image's flags) itself, so the Inspector's own World card is left
+  /// out rather than shown twice.
+  final bool worldInTransform;
+
+  /// The body of the Layout card for one layer: a Group's grid and sizing, or a child's own lines.
+  final Widget Function(BuildContext context, EditorSession controller, Map<String, dynamic> layer)? layout;
+
+  /// The parameters of one effect (its card keeps the head: the grip, the eye and the menu). An effect that lays out
+  /// copies with a grid of Each / Random columns keeps the Inspector's own body until an Instrument owns that grid.
+  final Widget Function(BuildContext context, EditorSession controller, int layerId, Map<String, dynamic> effect)? effectParams;
+
+  /// The whole card for one effect (head — grip, eye, menu — and body). Takes over from [effectParams] when an
+  /// effect has no grid layout; a placement's grid still falls back to the Inspector's own card.
+  final Widget Function(BuildContext context, EditorSession controller, Map<String, dynamic> layer, Map<String, dynamic> effect, int index, int count)? effectCard;
+}
+
 class InspectorPanel extends StatefulWidget {
-  const InspectorPanel({super.key, required this.controller});
+  const InspectorPanel({super.key, required this.controller, this.instruments});
   final EditorSession controller;
+  final InspectorInstruments? instruments;
   @override
   State<InspectorPanel> createState() => _InspectorPanelState();
 }
@@ -171,80 +198,98 @@ class _InspectorPanelState extends State<InspectorPanel>
 
   // ---- Identity ----------------------------------------------------------
 
-  Widget _identity(Map<String, dynamic> layer) => Container(
-    height: EditorMetrics.bar,
-    padding: const EdgeInsets.only(right: EditorMetrics.s6),
-    // The layer's own colour as a flat block, as its bar wears it in the
-    // Timeline: what the panel edits is told by the panel's head.
-    decoration: BoxDecoration(
-      color: EditorTheme.of(context).layerColor(layer['id']),
-      border: Border(bottom: BorderSide(color: EditorTheme.of(context).line)),
-    ),
-    child: Row(
-      children: [
-        const SizedBox(width: EditorMetrics.s6),
-        Icon(
-          switch ('${layer['kind']}') {
-            'Text' => Glyph.text_fields,
-            'Shape' => Glyph.pentagon_outlined,
-            'Camera' => Glyph.videocam_outlined,
-            'Video' => Glyph.movie_outlined,
-            'Audio' => Glyph.graphic_eq,
-            'Group' => Glyph.folder_outlined,
-            _ => Glyph.image_outlined,
-          },
-          size: EditorMetrics.s14,
-          color: EditorTheme.of(context).tabInk,
-        ),
-        const SizedBox(width: EditorMetrics.s6),
-        Expanded(
-          child: EditorTooltip(
-            message: '${layer['name']}',
-            child: Text(
-              _multiple ? '${c.selectedIds.length} layers' : '${layer['name']}',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: EditorMetrics.title,
-                fontWeight: FontWeight.w600,
-                color: EditorTheme.of(context).tabInk,
+  Widget _identity(Map<String, dynamic> layer) {
+    final chip = EditorTheme.of(context).skin.identityChip;
+    final ink = chip
+        ? EditorTheme.of(context).ink
+        : EditorTheme.of(context).tabInk;
+    return Container(
+      height: chip ? EditorMetrics.s36 : EditorMetrics.bar,
+      padding: const EdgeInsets.only(right: EditorMetrics.s6),
+      // The layer's own colour as a flat block, as its bar wears it in the
+      // Timeline: what the panel edits is told by the panel's head.
+      decoration: BoxDecoration(
+        color: chip
+            ? EditorTheme.of(context).panel
+            : EditorTheme.of(context).layerColor(layer['id']),
+        border: Border(bottom: BorderSide(color: EditorTheme.of(context).line)),
+      ),
+      child: Row(
+        children: [
+          const SizedBox(width: EditorMetrics.s6),
+          if (chip) ...[
+            Container(
+              width: EditorMetrics.s18,
+              height: EditorMetrics.s18,
+              color: EditorTheme.of(context).layerColor(layer['id']),
+            ),
+            const SizedBox(width: EditorMetrics.s8),
+          ],
+          Icon(
+            switch ('${layer['kind']}') {
+              'Text' => Glyph.text_fields,
+              'Shape' => Glyph.pentagon_outlined,
+              'Camera' => Glyph.videocam_outlined,
+              'Video' => Glyph.movie_outlined,
+              'Audio' => Glyph.graphic_eq,
+              'Group' => Glyph.folder_outlined,
+              _ => Glyph.image_outlined,
+            },
+            size: EditorMetrics.s14,
+            color: ink,
+          ),
+          const SizedBox(width: EditorMetrics.s6),
+          Expanded(
+            child: EditorTooltip(
+              message: '${layer['name']}',
+              child: Text(
+                _multiple
+                    ? '${c.selectedIds.length} layers'
+                    : '${layer['name']}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: EditorMetrics.title,
+                  fontWeight: FontWeight.w600,
+                  color: ink,
+                ),
               ),
             ),
           ),
-        ),
-        if (!_multiple && panelRows(layer['effects']).isNotEmpty)
-          _headGlyph(
-            _effectsClosed(layer) ? Glyph.unfold_more : Glyph.unfold_less,
-            _effectsClosed(layer) ? 'Expand effects' : 'Collapse effects',
-            () {
-              final closed = _effectsClosed(layer);
-              setState(() {
-                for (final effect in panelRows(layer['effects'])) {
-                  final id = _effectSection(layer, effect['id']);
-                  if (closed) {
-                    _closed.remove(id);
-                  } else {
-                    _closed.add(id);
+          if (!_multiple && panelRows(layer['effects']).isNotEmpty)
+            _headGlyph(
+              _effectsClosed(layer) ? Glyph.unfold_more : Glyph.unfold_less,
+              _effectsClosed(layer) ? 'Expand effects' : 'Collapse effects',
+              () {
+                final closed = _effectsClosed(layer);
+                setState(() {
+                  for (final effect in panelRows(layer['effects'])) {
+                    final id = _effectSection(layer, effect['id']);
+                    if (closed) {
+                      _closed.remove(id);
+                    } else {
+                      _closed.add(id);
+                    }
                   }
-                }
-              });
-            },
-            ink: EditorTheme.of(context).tabInk,
+                });
+              },
+              ink: ink,
+            ),
+          EditorSwitch(
+            on: c.animating,
+            glyph: Glyph.diamond_outlined,
+            tint: EditorTheme.of(context).keyAccent,
+            ink: chip ? null : EditorTheme.of(context).tabInk,
+            label: c.animateFrom
+                ? 'Animate (A): values you touch become keys at this frame, '
+                      'and at the frame Animate was turned on'
+                : 'Animate (A): values you touch become keys at this frame',
+            onChanged: panelCan(c, 'animate') ? c.setAnimate : null,
           ),
-        EditorSwitch(
-          on: c.animating,
-          glyph: Glyph.diamond_outlined,
-          tint: EditorTheme.of(context).keyAccent,
-          ink: EditorTheme.of(context).tabInk,
-          label: c.animateFrom
-              ? 'Animate (A): values you touch become keys at this frame, '
-                    'and at the frame Animate was turned on'
-              : 'Animate (A): values you touch become keys at this frame',
-          onChanged: panelCan(c, 'animate') ? c.setAnimate : null,
-        ),
-      ],
-    ),
-  );
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -302,12 +347,19 @@ class _InspectorPanelState extends State<InspectorPanel>
                         else
                           _card(
                             title: 'Transform',
-                            children: _transform(layer),
+                            children: widget.instruments?.transform == null
+                                ? _transform(layer)
+                                : [widget.instruments!.transform!(context, c)],
                           ),
-                        if (layer['kind'] != 'Camera')
+                        if (layer['kind'] != 'Camera' && !(widget.instruments?.worldInTransform ?? false))
                           _card(title: 'World', children: _world(layer)),
                         if (_hasLayout(layer))
-                          _card(title: 'Layout', children: _layout(layer)),
+                          _card(
+                            title: 'Layout',
+                            children: widget.instruments?.layout == null
+                                ? _layout(layer)
+                                : [widget.instruments!.layout!(context, c, layer)],
+                          ),
                         if (!_multiple && text.isNotEmpty)
                           _card(title: 'Text', children: _text(layer, text)),
                         if (!_multiple &&

@@ -4,9 +4,7 @@ part of 'editor_session.dart';
 /// never calls another mixin's member directly: it calls one of the members
 /// declared abstract here, so the traffic across a boundary is countable.
 abstract class SessionCore {
-  SessionCore({NativeBridge? bridge}) : _bridge = bridge ?? NativeBridge();
-
-  final NativeBridge _bridge;
+  final _bridge = NativeBridge();
   int? _attachmentId;
   final _runtimeEpoch = ValueNotifier<int>(0);
   ValueListenable<int> get runtimeEpoch => _runtimeEpoch;
@@ -49,6 +47,10 @@ abstract class SessionCore {
   final editingFocus = ValueNotifier<Map<String, dynamic>>({});
   final textStyleTarget = ValueNotifier<Map<String, dynamic>?>(null);
   final focusProperty = ValueNotifier<String?>(null);
+
+  /// A relation being made from a property (its source), and a relation the Inspector points at.
+  final relationDraft = ValueNotifier<Map<String, dynamic>?>(null);
+  final relationFocus = ValueNotifier<Map<String, dynamic>?>(null);
 
   /// An anchor the pointer hovers in the Inspector, as a fraction of the
   /// layer's bounds; the Stage marks where the pivot would land.

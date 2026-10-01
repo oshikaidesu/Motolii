@@ -10,8 +10,54 @@ mixin _StageChrome
         _StageWindow,
         _StageSpatial,
         _StageCamera,
-        _StageTouch {
+        _StageTouch
+    implements StageToolbarApi {
   bool _initialFrameRequested = false;
+
+  // ---- StageToolbarApi: exactly what a host's own bars call, nothing about the picture or the gestures ---------
+  @override
+  void addListener(VoidCallback listener) => _chrome.addListener(listener);
+  @override
+  void removeListener(VoidCallback listener) => _chrome.removeListener(listener);
+  @override
+  bool get userStage => _userStage;
+  @override
+  bool get canGoHome => !_home;
+  @override
+  void goHome() => c.command('stageView', {'reset': true});
+  @override
+  void fit() => _fit();
+  @override
+  void resetZoom() => setState(() {
+        _zoom = 1;
+        _pan = Offset.zero;
+      });
+  @override
+  void zoomOut() => _zoomAt(((_scale * 100).round() - 1) / 100, _viewport.center(Offset.zero));
+  @override
+  void zoomIn() => _zoomAt(((_scale * 100).round() + 1) / 100, _viewport.center(Offset.zero));
+  @override
+  double get zoomPercent => _scale * 100;
+  @override
+  void setZoomPercent(double percent) => _zoomAt(percent / 100, _viewport.center(Offset.zero));
+  @override
+  double get width => _width;
+  @override
+  double get height => _height;
+  @override
+  bool get transparentGround => _transparentGround;
+  @override
+  bool get canToggleGround => c.supports('composition');
+  @override
+  void toggleGround() => _toggleGround();
+  @override
+  bool get extending => _extend;
+  @override
+  void toggleExtend() => _toggleExtend();
+  @override
+  int get frame => c.frame.value;
+  @override
+  bool get gesturesAvailable => c.supports('stageGesture');
 
   /// 地が透明か。alpha が 1 未満なら書き出しは alpha を持ち、Stage は市松で見せる。
   bool get _transparentGround {
@@ -101,58 +147,61 @@ mixin _StageChrome
       ? const SizedBox.shrink()
       : Column(
           children: [
-            AnimatedBuilder(
-              animation: _chrome,
-              builder: (context, _) => EditorBar(
-                decoration: BoxDecoration(
-                  color: EditorTheme.of(context).panel,
-                  border: Border(
-                    bottom: BorderSide(color: EditorTheme.of(context).line),
+            if (widget.topBar != null)
+              AnimatedBuilder(animation: this, builder: (context, _) => widget.topBar!(context, this))
+            else
+              AnimatedBuilder(
+                animation: _chrome,
+                builder: (context, _) => EditorBar(
+                  decoration: BoxDecoration(
+                    color: EditorTheme.of(context).panel,
+                    border: Border(
+                      bottom: BorderSide(color: EditorTheme.of(context).line),
+                    ),
                   ),
-                ),
-                children: [
-                  const SizedBox(width: EditorMetrics.s8),
-                  if (_userStage)
+                  children: [
+                    const SizedBox(width: EditorMetrics.s8),
+                    if (_userStage)
+                      _button(
+                        'Front',
+                        _home
+                            ? null
+                            : () => c.command('stageView', {'reset': true}),
+                      ),
+                    const Spacer(),
+                    _button('Fit', _fit),
                     _button(
-                      'Front',
-                      _home
-                          ? null
-                          : () => c.command('stageView', {'reset': true}),
+                      '100%',
+                      () => setState(() {
+                        _zoom = 1;
+                        _pan = Offset.zero;
+                      }),
                     ),
-                  const Spacer(),
-                  _button('Fit', _fit),
-                  _button(
-                    '100%',
-                    () => setState(() {
-                      _zoom = 1;
-                      _pan = Offset.zero;
-                    }),
-                  ),
-                  _button(
-                    '−',
-                    () => _zoomAt(
-                      ((_scale * 100).round() - 1) / 100,
-                      _viewport.center(Offset.zero),
+                    _button(
+                      '−',
+                      () => _zoomAt(
+                        ((_scale * 100).round() - 1) / 100,
+                        _viewport.center(Offset.zero),
+                      ),
                     ),
-                  ),
-                  EditorPercentField(
-                    value: _scale * 100,
-                    min: 2,
-                    max: 1600,
-                    label: 'Stage zoom',
-                    onChanged: (v) =>
-                        _zoomAt(v / 100, _viewport.center(Offset.zero)),
-                  ),
-                  _button(
-                    '+',
-                    () => _zoomAt(
-                      ((_scale * 100).round() + 1) / 100,
-                      _viewport.center(Offset.zero),
+                    EditorPercentField(
+                      value: _scale * 100,
+                      min: 2,
+                      max: 1600,
+                      label: 'Stage zoom',
+                      onChanged: (v) =>
+                          _zoomAt(v / 100, _viewport.center(Offset.zero)),
                     ),
-                  ),
-                ],
+                    _button(
+                      '+',
+                      () => _zoomAt(
+                        ((_scale * 100).round() + 1) / 100,
+                        _viewport.center(Offset.zero),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
             Expanded(
               child: LayoutBuilder(
                 builder: (context, box) {
@@ -234,7 +283,10 @@ mixin _StageChrome
                 },
               ),
             ),
-            AnimatedBuilder(
+            if (widget.bottomBar != null)
+              AnimatedBuilder(animation: this, builder: (context, _) => widget.bottomBar!(context, this))
+            else
+              AnimatedBuilder(
               animation: _chrome,
               builder: (context, _) => EditorBar(
                 padding: const EdgeInsets.symmetric(

@@ -36,15 +36,15 @@ impl ResolvedCamera {
         )
     }
 
+    /// `target` の逆: 注視点が `point` になる center / target_z(他の行は保つ)。
+    pub fn aimed_at(self, comp: CompSpec, point: glam::Vec3) -> Self {
+        Self { center: [point.x - comp.width as f32 * 0.5, point.y - comp.height as f32 * 0.5], target_z: point.z, ..self }
+    }
+
     /// rerun `focus_entity`: look_target = the object's centre, eye = target − fwd × 1.5 × bounding-sphere radius.
     pub fn looking_at(self, comp: CompSpec, target: glam::Vec3, radius: f32) -> Self {
         let distance = (radius * 1.5).max(base_distance(comp) * 0.01);
-        Self {
-            center: [target.x - comp.width as f32 * 0.5, target.y - comp.height as f32 * 0.5],
-            target_z: target.z,
-            distance_scale: distance / base_distance(comp),
-            ..self
-        }
+        Self { distance_scale: distance / base_distance(comp), ..self.aimed_at(comp, target) }
     }
 }
 

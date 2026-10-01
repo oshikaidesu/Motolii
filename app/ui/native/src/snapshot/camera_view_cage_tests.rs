@@ -1,3 +1,28 @@
+
+#[test]
+fn editor_geometry_has_no_legacy_resolver_backdoor() {
+    let files = [
+        ("snapshot.rs", include_str!("../snapshot.rs")),
+        ("port.rs", include_str!("../port.rs")),
+        ("editor/stage.rs", include_str!("../editor/stage.rs")),
+        ("editor/gizmo3d.rs", include_str!("../editor/gizmo3d.rs")),
+        ("editor/functions/placement.rs", include_str!("../editor/functions/placement.rs")),
+    ];
+    let banned = [
+        "frame_graph_editor_layers",
+        "resolved_for(",
+        "picture::resolve::resolved_layers",
+        "picture::resolve::transform::world_transform3d",
+        "picture::resolve::transform::world_transforms3d",
+        "picture::resolve::transform::local_transform3d",
+    ];
+    for (name, source) in files {
+        for symbol in banned {
+            assert!(!source.contains(symbol), "{name} reintroduced legacy editor scene evaluation through {symbol}");
+        }
+    }
+}
+
 use super::*;
 use crate::EditorRuntime;
 use std::ffi::{CStr,CString};

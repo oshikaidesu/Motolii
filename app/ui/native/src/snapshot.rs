@@ -42,7 +42,8 @@ fn prop(view:&StoreView<'_>,layer:LayerId,id:&str,label:&str,fallback:&Value,ran
     let mut keys=Vec::new();
     if let Some(track)=view.track(layer,&p).map_err(e)?{for key in track.keys(){keys.push(json!({"frame":key.t.try_to_frame_round(fps).map_err(e)?,"value":value(&key.value),"interp":interp(key.interp)}));}}
     let here=at.try_to_frame_round(fps).map_err(e)?;
-    Ok(json!({"id":id,"label":label,"kind":match current{Value::F64(_)=>"number",Value::Vec2(_)=>"vec2",Value::Color(_)=>"color",Value::Bool(_)|Value::Enum(_)|Value::LayerId(_)=>"enum",Value::Path(_)=>"text"},"value":value(&current),"min":range.map(|r|r.0),"max":range.map(|r|r.1),"keyedNow":keys.iter().any(|k|k["frame"]==here),"keys":keys}))
+    let link=view.property_source(layer,&p).map_err(e)?.and_then(|s|s.as_link_only().map(crate::port::relate::link_json));
+    Ok(json!({"id":id,"label":label,"link":link,"kind":match current{Value::F64(_)=>"number",Value::Vec2(_)=>"vec2",Value::Color(_)=>"color",Value::Bool(_)|Value::Enum(_)|Value::LayerId(_)=>"enum",Value::Path(_)=>"text"},"value":value(&current),"min":range.map(|r|r.0),"max":range.map(|r|r.1),"keyedNow":keys.iter().any(|k|k["frame"]==here),"keys":keys}))
 }
 fn source_kind(source:&LayerSource)->&'static str{match source{
     LayerSource::Camera=>"Camera",LayerSource::Stage=>"Stage",LayerSource::Text=>"Text",LayerSource::Shape=>"Shape",LayerSource::Group=>"Group",LayerSource::Null=>"Null",LayerSource::Particles=>"Particles",
@@ -223,7 +224,7 @@ impl EditorRuntime{
     }
     fn bounds_from(&self,view:&crate::doc::store::StoreView<'_>,eye:&Eye,scene:&crate::render::frame_graph::SceneValue,layer:LayerId,seen:View)->Option<Json>{
         let Eye{time,comp,camera,observer,document}=*eye;
-        let r=scene_layer(scene,layer)?;
+        let r=scene.layer(layer)?;
         let camera=if r.projection==LayerProjection::TwoD{document}else{camera};
         let b=self.engine.selected_scene_layer_bounds_in(view,&scene.layers,layer,time)?;
         let world=crate::doc::core::depth_scaled(r.transform.spatial);
@@ -300,7 +301,7 @@ impl EditorRuntime{
             let live_layers=layers;
             // 寸法は Swift の render が毎コマ読む。軽い status でも落とさない(落とすと再生 2 コマ目で render が失敗し、再生が止まる)。
             return Ok(json!({"frame":self.viewer.frame,"playing":self.viewer.clock.playing(),"documentRevision":revision,"preview":self.preview.is_some(),"previewOwner":self.preview.as_ref().map(|p|p.0),"previewInteraction":self.preview_tag,"undo":undo,"redo":redo,"width":comp.width,"height":comp.height,"stageWindow":self.viewer.stage_window.map(|w|json!({"width":w.width,"height":w.height,"roi":w.roi})),"fps":comp.fps.as_f64(),"durationFrames":comp.duration_frames,
-                "selectedId":self.viewer.selected().map(|s|s.0),"selectedIds":self.viewer.selected_ids.iter().map(|s|s.0).collect::<Vec<_>>(),"selectedKeys":selected_keys,"x":point[0],"y":point[1],
+                "selectedId":self.viewer.selected().map(|s|s.0),"selectedIds":self.viewer.selected_ids.iter().map(|s|s.0).collect::<Vec<_>>(),"easeIntervals":self.ease_intervals(),"blendTargets":self.blend_targets().iter().map(|s|s.0).collect::<Vec<_>>(),"selectedKeys":selected_keys,"x":point[0],"y":point[1],
                 "animate":self.viewer.animate!=Animate::Off,"renderCount":self.render_count,"framesSkipped":self.frames.skipped(),"pickedColor":self.viewer.picked_color,"pickSerial":self.viewer.pick_serial,"renderMs":self.render_ms,"liveLayers":live_layers}));
         }
         *self.full_status_revision.borrow_mut()=Some(revision);
@@ -326,7 +327,7 @@ impl EditorRuntime{
         let color_target=self.viewer.color_target.as_ref().and_then(|slot|editor::color::read_color(&self.doc,slot,self.time().ok()?).map(|rgba|json!({"layer":slot.layer().map(|l|l.0),"slot":slot,"label":"Color","rgba":rgba,"alpha":editor::color::has_alpha(slot)})));
         let selected_keys:Vec<_>=self.viewer.selected_keys.iter().map(|k|json!({"layer":k.layer.0,"property":k.property.as_ref().map(|p|p.name()),"frame":(k.at_sec*comp.fps.as_f64()).round()as i64})).collect();
         let generation=crate::render::engine::catalog_generation();
-        let catalog_rows=catalog.iter().map(|e|json!({"id":e.plugin_id,"name":e.label,"stage":format!("{:?}",e.stage),"generation":generation,"usesClock":e.uses_clock,"persistent":e.persistent,"readsBackdrop":e.reads_backdrop,"layerInputs":e.image_layer_fields.len()+e.params.iter().filter(|p|p.layer).count(),"paramCount":e.params.len()})).collect::<Vec<_>>();
+        let catalog_rows=catalog.iter().map(|e|json!({"id":e.plugin_id,"name":e.label,"stage":format!("{:?}",e.stage),"owner":editor::create::owner_of(&format!("{:?}",e.stage)),"generation":generation,"usesClock":e.uses_clock,"persistent":e.persistent,"readsBackdrop":e.reads_backdrop,"layerInputs":e.image_layer_fields.len()+e.params.iter().filter(|p|p.layer).count(),"paramCount":e.params.len()})).collect::<Vec<_>>();
         let mut status=json!({"observer":self.observer_status()?,"cameraGizmos":self.camera_gizmos()?,"width":comp.width,"height":comp.height,"stageWindow":self.viewer.stage_window.map(|w|json!({"width":w.width,"height":w.height,"roi":w.roi})),"fps":comp.fps.as_f64(),"fpsNum":comp.fps.num(),"fpsDen":comp.fps.den(),"durationFrames":comp.duration_frames,"background":comp.background,"frame":self.viewer.frame,"playing":self.viewer.clock.playing(),"playbackHealth":playback_health,"waveforms":waveforms,"undo":undo,"redo":redo,"path":self.path,"dirty":self.is_dirty()?,"layers":layers,"selectedId":self.viewer.selected().map(|id|id.0),"selectedIds":self.viewer.selected_ids.iter().map(|id|id.0).collect::<Vec<_>>(),"selectedKeys":selected_keys,"selectedBounds":self.viewer.selected().and_then(|id|self.bounds(id)),"x":point[0],"y":point[1],"assets":assets?,"catalog":catalog_rows,"catalogErrors":crate::render::engine::catalog_errors(),"palette":palette,"markers":markers?,"colorTarget":color_target,"capabilities":crate::port::CAPABILITIES,"easeKinds":if self.viewer.clock.playing(){Json::Null}else{json!(editor::ease_kinds::KINDS.iter().copied().map(interp).collect::<Vec<_>>())},"documentRevision":format!("{:?}",self.doc.revision()),"deviceId":self.device_id.to_string(),"renderCount":self.render_count,"framesSkipped":self.frames.skipped(),"renderMs":self.render_ms,"interopCopies":0,"readbacks":0,"error":self.error,"preview":self.preview.is_some(),"export":self.exporter.status(),"freeze":self.freezer.status()});
         status["previewOwner"] = json!(self.preview.as_ref().map(|p|p.0));
         status["previewInteraction"] = json!(self.preview_tag);
@@ -338,6 +339,8 @@ impl EditorRuntime{
         status["notebook"]=serde_json::to_value(view.notebook().map_err(e)?).map_err(e)?;
         status["depthLayout"]=self.depth_layout(&scene)?;
         status["backgrounds"]=json!(editor::create::backgrounds().iter().map(|b|json!({"id":b.id,"name":b.name,"thumbnail":editor::thumbnail::image_data_uri(&b.path)})).collect::<Vec<_>>());
+        status["createKinds"]=editor::create::kinds_json();
+        status["hostCapabilities"]=editor::create::host_capabilities(&catalog);
         status["primitives"]=json!(editor::create::primitives().iter().map(|p|json!({"id":p.id,"name":p.name})).collect::<Vec<_>>());
         status["animate"]=json!(self.viewer.animate!=Animate::Off);
         if status["easeKinds"].is_null(){status.as_object_mut().unwrap().remove("easeKinds");}
@@ -387,6 +390,11 @@ impl EditorRuntime{
                     let grid = matches!(row.0, layout::GRID_COLUMNS | layout::GRID_ROWS);
                     if row.0 == layout::DISPLAY || (display == 1 && !grid) || (display == 2 && !flex) { push(&mut properties, id, row)?; }
                 }
+                // A group's children are members in order whatever its Display: the order law (`layer_time`) shifts them
+                // either way, so the three order rows are offered either way.
+                if display == 0 {
+                    for row in layout::GROUP_ROWS.iter().filter(|r| layout::is_schedule_row(r.0)) { push(&mut properties, id, row)?; }
+                }
                 if display == 2 {
                     for (count, prefix, default) in [(layout::GRID_COLUMNS, layout::COLUMN_PREFIX, 2.0), (layout::GRID_ROWS, layout::ROW_PREFIX, 0.0)] {
                         let n = match view.value_at(id, &PropertyId::new(count).map_err(e)?, at).map_err(e)? { Some(Value::F64(v)) => v, _ => default }.round().clamp(0.0, 64.0) as u32;
@@ -404,6 +412,12 @@ impl EditorRuntime{
             // Camera は移り方だけ(Framing Size で箱から箱へ移る時)。
             if meta.source == LayerSource::Camera {
                 for row in layout::SPACE_ROWS.iter().filter(|r| matches!(r.0, layout::TRANSITION_DURATION | layout::TRANSITION_EASING)) { push(&mut properties, id, row)?; }
+            }
+            // Copies of a Repeater are members in order: their layer is offered the same three order rows as a text's
+            // units and a container's children (a group already has them, a text below).
+            let copies=!matches!(meta.source,LayerSource::Group|LayerSource::Text)&&view.effects(id).map_err(e)?.iter().any(|fx|view.placement_program(&fx.plugin_id).is_some());
+            if copies {
+                for row in layout::GROUP_ROWS.iter().filter(|r| layout::is_schedule_row(r.0)) { push(&mut properties, id, row)?; }
             }
             if meta.source == LayerSource::Text {
                 for row in layout::READOUT_ROWS { push(&mut properties, id, row)?; }
@@ -507,6 +521,7 @@ impl EditorRuntime{
         let content_keys:Vec<_>=properties.iter().find(|p|p["id"]=="content").and_then(|p|p["keys"].as_array()).into_iter().flatten().map(|k|json!({"frame":k["frame"],"content":k["value"]})).collect();
         let mut row=json!({"id":id.0,"name":attrs.name,"kind":source_kind(&meta.source),"ghost":attrs.ghost,"ghostable":crate::editor::timeline_edit::ghostable(view,id),"parent":attrs.parent.map(|p|p.0),"order":meta.order,"hidden":attrs.hidden,"solo":attrs.solo,"locked":attrs.locked,"clipToBelow":attrs.clip_to_below,"clipBase":clipping.get(&id).copied().flatten().map(|b|b.0),"projection":match attrs.projection{LayerProjection::TwoD=>"2D",LayerProjection::TwoPointFiveD=>"2.5D",LayerProjection::ThreeD=>"3D"},"flatten":attrs.flatten,"environment":attrs.environment,"frozen":attrs.frozen,"blendMode":attrs.blend_mode,"matte":attrs.matte,"start":meta.timing.start,"duration":meta.timing.duration,"sourceIn":meta.timing.source_in,"properties":properties,"text":text,"effects":effects?,"contentKeys":content_keys});
         if let Some(slot)=&fill_slot{row["fill"]=editor::gradient::model(&self.doc,slot,at).unwrap_or(Json::Null);}
+        row["members"]=editor::members::members(view,id,at).map_err(e)?.unwrap_or(Json::Null);
         Ok(Some(row))
     }
 }

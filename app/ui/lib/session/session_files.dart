@@ -139,6 +139,15 @@ mixin SessionFiles on SessionCore {
     });
   }
 
+  /// One key of the saved settings, written through the same chain as [storeDesk] so two writers never
+  /// read the file at the same time and drop each other's key.
+  Future<void> storeSetting(String key, dynamic value) {
+    return _deskSave = _deskSave.catchError((_) {}).then((_) async {
+      final settings = EditorSession.map(await native('readSettings'));
+      await native('writeSettings', {...settings, key: value});
+    });
+  }
+
   Future<void> placePanel(String name, String placement) async {
     await native('placePanel', {'name': name, 'placement': placement});
   }

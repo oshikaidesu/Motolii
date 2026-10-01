@@ -15,7 +15,7 @@ pub(crate) fn reply(j: &J) -> Result<J, String> {
 
 /// 同梱の札を吐く道具: `cargo test -p motolii-ui snapshots -- --ignored`。
 /// 席ごとに 1 つの小さな書類(写真・星・球)を組み、Stage と同じ Engine で t=0.5s を描いて
-/// `crates/motolii-render/vism/<id>_snapshot{,_2.0x}.png` に書く。作者の絵を置いた効果は触らない側の道具ではなく、
+/// `app/renderer/vism/<id>_snapshot{,_2.0x}.png` に書く。作者の絵を置いた効果は触らない側の道具ではなく、
 /// 同梱効果の絵の出所。
 #[cfg(test)]
 mod snapshots {
@@ -187,7 +187,7 @@ mod snapshots {
     #[test]
     #[ignore = "writes the bundled snapshots; run on purpose"]
     fn write_bundled_snapshots() {
-        let dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../crates/motolii-render/vism");
+        let dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../renderer/vism");
         let mut engine = Engine::new().unwrap();
         for effect in crate::render::engine::known_effects().iter() {
             let frame = image::DynamicImage::ImageRgba8(render(&mut engine, effect).unwrap());

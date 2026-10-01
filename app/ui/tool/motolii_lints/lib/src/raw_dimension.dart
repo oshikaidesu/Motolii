@@ -26,6 +26,7 @@ const scaleFiles = {
   'lib/foundation/metrics.dart',
   'lib/foundation/theme.dart',
   'lib/foundation/panel_catalog.dart',
+  'lib/foundation/shell_tokens.dart',
 };
 
 /// The only raw numbers a measurement may carry: nothing, or a hairline.

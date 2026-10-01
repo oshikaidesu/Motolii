@@ -243,49 +243,71 @@ class _SectionHead extends StatelessWidget {
   final bool expanded;
   final VoidCallback? onToggle;
   @override
-  Widget build(BuildContext context) => SizedBox(
-    height: EditorMetrics.row,
-    child: Row(
-      children: [
-        if (leading != null) leading!,
-        Expanded(
-          child: Semantics(
-            expanded: expanded,
-            child: EditorPress(
-              onTap: onToggle,
-              child: SizedBox(
-                height: EditorMetrics.row,
-                child: Row(
-                  children: [
-                    if (onToggle != null)
-                      Transform.translate(
-                        offset: const Offset(-1.5, 0),
-                        child: Icon(
-                          expanded ? Glyph.expand_more : Glyph.chevron_right,
-                          size: EditorMetrics.s14,
-                          color: EditorTheme.of(context).muted,
+  Widget build(BuildContext context) {
+    final band = EditorTheme.of(context).skin.newFace;
+    return Container(
+      height: band ? EditorMetrics.section : EditorMetrics.row,
+      padding: band
+          ? const EdgeInsets.symmetric(horizontal: EditorCard.contentInset)
+          : null,
+      decoration: band
+          ? BoxDecoration(
+              color: EditorTheme.of(context).app,
+              border: Border(
+                bottom: BorderSide(color: EditorTheme.of(context).line),
+              ),
+            )
+          : null,
+      child: Row(
+        children: [
+          if (leading != null) leading!,
+          Expanded(
+            child: Semantics(
+              expanded: expanded,
+              child: EditorPress(
+                onTap: onToggle,
+                child: SizedBox(
+                  height: EditorMetrics.row,
+                  child: Row(
+                    children: [
+                      if (onToggle != null)
+                        Transform.translate(
+                          offset: const Offset(-1.5, 0),
+                          child: Icon(
+                            expanded ? Glyph.expand_more : Glyph.chevron_right,
+                            size: EditorMetrics.s14,
+                            color: EditorTheme.of(context).muted,
+                          ),
+                        ),
+                      Expanded(
+                        child: Text(
+                          title.toUpperCase(),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: band
+                                ? EditorMetrics.font
+                                : EditorMetrics.micro,
+                            fontFamily: EditorTheme.of(context)
+                                .skin
+                                .labelFamily,
+                            fontWeight: band ? FontWeight.w600 : null,
+                            letterSpacing: 1,
+                            color: band
+                                ? EditorTheme.of(context).ink
+                                : EditorTheme.of(context).muted,
+                          ),
                         ),
                       ),
-                    Expanded(
-                      child: Text(
-                        title.toUpperCase(),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: EditorMetrics.micro,
-                          letterSpacing: 1,
-                          color: EditorTheme.of(context).muted,
-                        ),
-                      ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
           ),
-        ),
-        if (trailing != null) trailing!,
-      ],
-    ),
-  );
+          if (trailing != null) trailing!,
+        ],
+      ),
+    );
+  }
 }

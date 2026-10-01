@@ -121,7 +121,7 @@ fn radiance_preaverage_preserves_reference_pixels() {
         doc
     };
     let fps = doc.view().composition().unwrap().unwrap().fps;
-    let old = include_str!("../../../../../reference/radiance-before-2026-09-12.wgsl");
+    let old = include_str!("../../../../reference/radiance-before-2026-09-12.wgsl");
     let mut reference = Engine::new().unwrap();
     let mut definition = reference.compositor.catalog.definitions.iter().find(|d| d.plugin_id() == "motolii.radiance").unwrap().clone();
     let (manifest, body) = effects::isf::parse_isf_source(old).unwrap();

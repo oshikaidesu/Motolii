@@ -20,7 +20,7 @@ fn await_wake(flag: &AtomicBool) -> bool {
 #[ignore]
 fn saving_a_vism_file_reaches_the_window() {
     assert!(crate::render::engine::catalog_reads_disk(), "焼き込み build: .cargo/config.toml の IS_IN_RERUN_WORKSPACE が無い");
-    let dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../crates/motolii-render/vism");
+    let dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../renderer/vism");
     let file = Probe(dir.join("zz_hot_probe.fs"));
     let _ = std::fs::remove_file(&file.0);
     let mut rt = crate::EditorRuntime::open("").unwrap();

@@ -66,7 +66,7 @@ fn evaluate(recipe: &Recipe, inputs: &NodeInputs, context: &EvaluationContext) -
         if let Some(index) = recipe.worlds.get(target).copied() {
             if let Some(world) = inputs.at(index).and_then(|value| value.downcast_ref::<TransformValue>()) {
                 let point = world.spatial.transform_point3(glam::Vec3::ZERO);
-                resolved.center = [point.x - recipe.comp.width as f32 * 0.5, point.y - recipe.comp.height as f32 * 0.5]; resolved.target_z = point.z;
+                resolved = resolved.aimed_at(recipe.comp, point);
             }
         }
     }

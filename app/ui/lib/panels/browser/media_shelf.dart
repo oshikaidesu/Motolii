@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/widgets.dart';
 import 'package:flutter/services.dart';
 
@@ -230,8 +229,7 @@ class MediaShelf extends BrowserShelf {
       case 'relink':
         await _relink(host, item);
       case 'palette':
-        if (!kIsWeb)
-          await ColorsShelf.savePalette(host, File('$path').readAsBytesSync());
+        await ColorsShelf.savePalette(host, File('$path').readAsBytesSync());
       case 'remove':
         await c.command('removeAsset', {'id': item['id']});
     }
@@ -432,7 +430,7 @@ Widget mediaThumbnail(Map<String, dynamic> item, double tileScale) => Builder(
               color: EditorTheme.of(context).muted,
             ),
     );
-    if (path == null || path.isEmpty || kIsWeb) return fallback;
+    if (path == null || path.isEmpty) return fallback;
     try {
       if (path.startsWith('data:'))
         return Image.memory(
@@ -466,7 +464,6 @@ String? filePath(Map<String, dynamic> item) {
 
 /// The file's size, for the menu's facts.
 String fileFact(String path) {
-  if (kIsWeb) return 'Unavailable in browser';
   final file = File(path);
   final bytes = file.existsSync() ? file.lengthSync() : 0;
   return bytes >= 1 << 20
@@ -476,7 +473,6 @@ String fileFact(String path) {
 
 /// A path the way a person reads it: the home folder as ~.
 String homely(String path) {
-  if (kIsWeb) return path;
   final home = Platform.environment['HOME'];
   return home != null && path.startsWith(home)
       ? '~${path.substring(home.length)}'
@@ -484,13 +480,8 @@ String homely(String path) {
 }
 
 /// The system's own name for showing a file where it lives.
-String fileParent(String path) => kIsWeb ? path : File(path).parent.path;
-
-String get revealLabel {
-  if (kIsWeb) return 'Show file';
-  return Platform.isMacOS
-      ? 'Reveal in Finder'
-      : Platform.isWindows
-      ? 'Show in Explorer'
-      : 'Show in file manager';
-}
+String get revealLabel => Platform.isMacOS
+    ? 'Reveal in Finder'
+    : Platform.isWindows
+    ? 'Show in Explorer'
+    : 'Show in file manager';

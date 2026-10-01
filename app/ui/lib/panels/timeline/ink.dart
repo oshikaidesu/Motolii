@@ -28,7 +28,8 @@ Paint strokePaint(Color color, [double width = 0]) => _strokePaint
 
 /// Laid-out labels kept across paints: a row's name is the same text at the
 /// same width on every frame of playback.
-final _labels = <(String, Color, double, double, FontWeight), TextPainter>{};
+final _labels =
+    <(String, Color, double, double, FontWeight, String?), TextPainter>{};
 
 /// 組み上げた文字の版を跨いで持つ: 行の名前は再生のどのコマでも同じ幅の同じ文字。
 /// [rowAligned] の時は行の高さの真ん中へ寄せる(定規はそのまま置く)。
@@ -42,16 +43,20 @@ void paintText(
   bool centered = false,
   FontWeight weight = FontWeight.w500,
   bool rowAligned = true,
+  String? family,
 }) {
   if (_labels.length >= 512) _labels.clear();
-  final p = _labels[(text, color, width, size, weight)] ??= TextPainter(
+  final p = _labels[(text, color, width, size, weight, family)] ??= TextPainter(
     text: TextSpan(
       text: text,
       style: TextStyle(
         color: color,
         fontSize: size,
-        fontFamily: EditorTheme.fontFamily,
+        fontFamily: family ?? EditorTheme.fontFamily,
         fontWeight: weight,
+        fontFeatures: family == null
+            ? null
+            : const [FontFeature.tabularFigures()],
       ),
     ),
     textDirection: TextDirection.ltr,

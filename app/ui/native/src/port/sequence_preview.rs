@@ -61,3 +61,27 @@ fn layers_without_a_look_cannot_carry_a_ghost() {
     assert_eq!(rt.doc.view().attrs(LayerId(21)).unwrap().unwrap().ghost, None);
     assert!(rt.request(serde_json::json!({"op":"setAttrs","layers":[21],"patch":{"ghost":5}})).is_err());
 }
+
+/// 遅れの配り方は書類の側が決める: 机は曲線(shape)だけを送り、層ごとの遅れは host が i/(N-1) を曲線に通して出す。
+/// 既にゴーストがあればその最大が全体、無ければ 1 段 6 フレーム。
+#[test]
+fn a_sequence_given_only_a_curve_spreads_the_delay_itself() {
+    let mut rt = crate::EditorRuntime::open("").unwrap();
+    for id in [31u64, 32, 33] {
+        rt.doc.apply_all([
+            Intent::AddLayer(LayerId(id)),
+            Intent::SetMeta { layer: LayerId(id), meta: LayerMeta { source: LayerSource::Shape, order: id as i16, timing: LayerTiming::place(0, None, 60) } },
+        ]).unwrap();
+    }
+    let ghosts = |rt: &crate::EditorRuntime| -> Vec<Option<i64>> { [31u64, 32, 33].iter().map(|&id| rt.doc.view().attrs(LayerId(id)).unwrap().unwrap_or_default().ghost).collect() };
+    let linear = serde_json::json!({"kind": "Linear"});
+    rt.request(serde_json::json!({"op":"sequence","layers":[31,32,33],"shape":linear})).unwrap();
+    assert_eq!(ghosts(&rt), vec![None, Some(6), Some(12)], "2 steps of 6 frames, straight through a line");
+    // With a delay already there, its largest is the whole spread.
+    rt.request(serde_json::json!({"op":"sequence","layers":[31,32,33],"shape":{"kind":"Hold"}})).unwrap();
+    assert_eq!(ghosts(&rt), vec![None, None, Some(12)], "Hold: nothing until the last layer, then the whole spread");
+    rt.request(serde_json::json!({"op":"previewSequence","layers":[31,32,33],"shape":linear})).unwrap();
+    assert_eq!(rt.doc.view().attrs(LayerId(32)).unwrap().unwrap().ghost, Some(6));
+    rt.request(serde_json::json!({"op":"cancelPreview"})).unwrap();
+    assert_eq!(rt.doc.view().attrs(LayerId(32)).unwrap().unwrap_or_default().ghost, None);
+}
