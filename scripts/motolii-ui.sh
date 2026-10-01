@@ -75,6 +75,13 @@ case "${1:-dev}" in
     swap=$(sysctl -n vm.swapusage | sed -n 's/.*free = \([0-9]*\).*/\1/p')
     [[ ${swap:-9999} -gt 2048 ]] || echo "slow: swap has ${swap}M free; rustc stalls before it computes anything."
     ;;
+  # Click a widget in the running dev window and read where its size comes from; change the value and see it at once.
+  # Flutter's own Inspector does the picking and the layout numbers; this adds the Surface token behind each value.
+  # `inspect` alone waits for clicks. See docs/design/ui-debugging.md.
+  inspect)
+    dart_bin="$(dirname "$flutter_bin")/dart"
+    cd "$ui"; exec "$dart_bin" tool/ui_inspect.dart "${@:2}"
+    ;;
   restart-ui) [[ -f "$state/flutter.pid" ]] || { echo 'No Stage 5 dev session.'; exit 1; }; kill -USR2 "$(cat "$state/flutter.pid")" ;;
   reload) [[ -f "$state/flutter.pid" ]] || { echo 'No Stage 5 dev session.'; exit 1; }; kill -USR1 "$(cat "$state/flutter.pid")" ;;
   # The real speed: Dart AOT and Rust --release. No hot reload (Flutter's
@@ -97,10 +104,10 @@ case "${1:-dev}" in
     if [[ $# -gt 1 ]]; then
       document="$(cd "$(dirname "$2")" && pwd)/$(basename "$2")"
       cd "$ui"
-      exec "$flutter_bin" run -d macos --pid-file "$state/flutter.pid" --dart-define="MOTOLII_DOCUMENT=$document"
+      exec "$flutter_bin" run -d macos --pid-file "$state/flutter.pid" --vmservice-out-file "$state/vmservice" --dart-define="MOTOLII_DOCUMENT=$document"
     fi
     cd "$ui"
-    exec "$flutter_bin" run -d macos --pid-file "$state/flutter.pid"
+    exec "$flutter_bin" run -d macos --pid-file "$state/flutter.pid" --vmservice-out-file "$state/vmservice"
     ;;
   # Same as dev (the product UI), kept for scripts that name it.
   live)
@@ -110,10 +117,10 @@ case "${1:-dev}" in
     if [[ $# -gt 1 ]]; then
       document="$(cd "$(dirname "$2")" && pwd)/$(basename "$2")"
       cd "$ui"
-      exec "$flutter_bin" run -d macos --pid-file "$state/flutter.pid" --dart-define="MOTOLII_DOCUMENT=$document"
+      exec "$flutter_bin" run -d macos --pid-file "$state/flutter.pid" --vmservice-out-file "$state/vmservice" --dart-define="MOTOLII_DOCUMENT=$document"
     fi
     cd "$ui"
-    exec "$flutter_bin" run -d macos --pid-file "$state/flutter.pid"
+    exec "$flutter_bin" run -d macos --pid-file "$state/flutter.pid" --vmservice-out-file "$state/vmservice"
     ;;
-  *) echo 'Usage: scripts/motolii-ui.sh {check|check-read-only|native|test|test-window|why-slow|dev [document.rrd|script.js]|live [document.rrd|script.js]|profile [document.rrd|script.js]|reload|restart-ui}'; exit 1 ;;
+  *) echo 'Usage: scripts/motolii-ui.sh {check|check-read-only|native|test|test-window|why-slow|dev [document.rrd|script.js]|live [document.rrd|script.js]|profile [document.rrd|script.js]|reload|restart-ui|inspect [pick|watch|show|tokens|set|edit|changed|reset|scale]}'; exit 1 ;;
 esac
