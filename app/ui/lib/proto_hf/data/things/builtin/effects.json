@@ -1,0 +1,338 @@
+{
+ "things": [
+  {
+   "id": "motolii.blur",
+   "name": "Blur",
+   "kind": "effect",
+   "family": "blur",
+   "tags": [
+    "blur",
+    "gpu"
+   ],
+   "capabilities": [
+    "apply",
+    "reads-backdrop"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "blur"
+   ],
+   "face": {
+    "type": "fx",
+    "base": "Blur",
+    "hue": 0
+   }
+  },
+  {
+   "id": "motolii.bokeh",
+   "name": "Bokeh",
+   "kind": "effect",
+   "family": "blur",
+   "tags": [
+    "blur",
+    "bokeh"
+   ],
+   "capabilities": [
+    "apply",
+    "reads-backdrop"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "bokeh"
+   ],
+   "face": {
+    "type": "fx",
+    "base": "Bokeh",
+    "hue": 0
+   }
+  },
+  {
+   "id": "motolii.glow",
+   "name": "Glow",
+   "kind": "effect",
+   "family": "light",
+   "tags": [
+    "glow",
+    "bloom"
+   ],
+   "capabilities": [
+    "apply",
+    "reads-backdrop"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "glow"
+   ],
+   "face": {
+    "type": "fx",
+    "base": "Glow",
+    "hue": 0
+   }
+  },
+  {
+   "id": "motolii.vignette",
+   "name": "Vignette",
+   "kind": "effect",
+   "family": "light",
+   "tags": [
+    "vignette",
+    "film"
+   ],
+   "capabilities": [
+    "apply"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "vignette"
+   ],
+   "face": {
+    "type": "fx",
+    "base": "Vignette",
+    "hue": 0
+   }
+  },
+  {
+   "id": "motolii.color_shift",
+   "name": "Color Shift",
+   "kind": "effect",
+   "family": "color",
+   "tags": [
+    "color",
+    "tint"
+   ],
+   "capabilities": [
+    "apply"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "color shift"
+   ],
+   "face": {
+    "type": "fx",
+    "base": "Color Shift",
+    "hue": 0
+   }
+  },
+  {
+   "id": "motolii.duotone",
+   "name": "Duotone",
+   "kind": "effect",
+   "family": "color",
+   "tags": [
+    "duotone",
+    "grade"
+   ],
+   "capabilities": [
+    "apply"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "duotone"
+   ],
+   "face": {
+    "type": "fx",
+    "base": "Duotone",
+    "hue": 0
+   }
+  },
+  {
+   "id": "motolii.invert",
+   "name": "Invert",
+   "kind": "effect",
+   "family": "color",
+   "tags": [
+    "invert",
+    "color"
+   ],
+   "capabilities": [
+    "apply"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "invert"
+   ],
+   "face": {
+    "type": "fx",
+    "base": "Invert",
+    "hue": 0
+   }
+  },
+  {
+   "id": "motolii.chromatic",
+   "name": "Chromatic",
+   "kind": "effect",
+   "family": "distort",
+   "tags": [
+    "chromatic",
+    "lens"
+   ],
+   "capabilities": [
+    "apply"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "chromatic"
+   ],
+   "face": {
+    "type": "fx",
+    "base": "Chromatic",
+    "hue": 0
+   }
+  },
+  {
+   "id": "motolii.displace",
+   "name": "Displace",
+   "kind": "effect",
+   "family": "distort",
+   "tags": [
+    "warp",
+    "distort"
+   ],
+   "capabilities": [
+    "apply"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "displace"
+   ],
+   "face": {
+    "type": "fx",
+    "base": "Displace",
+    "hue": 0
+   }
+  },
+  {
+   "id": "motolii.pixelate",
+   "name": "Pixelate",
+   "kind": "effect",
+   "family": "stylize",
+   "tags": [
+    "pixel",
+    "stylize"
+   ],
+   "capabilities": [
+    "apply"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "pixelate"
+   ],
+   "face": {
+    "type": "fx",
+    "base": "Pixelate",
+    "hue": 0
+   }
+  },
+  {
+   "id": "motolii.halftone",
+   "name": "Halftone",
+   "kind": "effect",
+   "family": "stylize",
+   "tags": [
+    "halftone",
+    "stylize"
+   ],
+   "capabilities": [
+    "apply"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "halftone"
+   ],
+   "face": {
+    "type": "fx",
+    "base": "Halftone",
+    "hue": 0
+   }
+  },
+  {
+   "id": "motolii.threshold",
+   "name": "Threshold",
+   "kind": "effect",
+   "family": "stylize",
+   "tags": [
+    "threshold",
+    "stylize"
+   ],
+   "capabilities": [
+    "apply"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "threshold"
+   ],
+   "face": {
+    "type": "fx",
+    "base": "Threshold",
+    "hue": 0
+   }
+  },
+  {
+   "id": "motolii.sharpen",
+   "name": "Sharpen",
+   "kind": "effect",
+   "family": "stylize",
+   "tags": [
+    "sharpen"
+   ],
+   "capabilities": [
+    "apply"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "sharpen"
+   ],
+   "face": {
+    "type": "fx",
+    "base": "Sharpen",
+    "hue": 0
+   }
+  },
+  {
+   "id": "motolii.noise",
+   "name": "Noise",
+   "kind": "effect",
+   "family": "noise",
+   "tags": [
+    "noise",
+    "grain"
+   ],
+   "capabilities": [
+    "apply",
+    "uses-time"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "noise"
+   ],
+   "face": {
+    "type": "fx",
+    "base": "Noise",
+    "hue": 0
+   }
+  },
+  {
+   "id": "motolii.film_grain",
+   "name": "Film Grain",
+   "kind": "effect",
+   "family": "noise",
+   "tags": [
+    "grain",
+    "film"
+   ],
+   "capabilities": [
+    "apply",
+    "uses-time"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "film grain"
+   ],
+   "face": {
+    "type": "fx",
+    "base": "Film Grain",
+    "hue": 0
+   }
+  }
+ ]
+}

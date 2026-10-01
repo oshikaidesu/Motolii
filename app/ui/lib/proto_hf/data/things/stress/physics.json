@@ -1,0 +1,968 @@
+{
+ "things": [
+  {
+   "id": "motolii.phys_spring",
+   "name": "Spring",
+   "kind": "relation",
+   "family": "physics",
+   "tags": [
+    "spring",
+    "force"
+   ],
+   "capabilities": [
+    "apply",
+    "uses-time"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "spring",
+    "physics"
+   ],
+   "face": {
+    "type": "curve",
+    "fn": "spring",
+    "hue": 0
+   }
+  },
+  {
+   "id": "motolii.phys_gravity",
+   "name": "Gravity",
+   "kind": "relation",
+   "family": "physics",
+   "tags": [
+    "gravity",
+    "force"
+   ],
+   "capabilities": [
+    "apply",
+    "uses-time"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "gravity",
+    "physics"
+   ],
+   "face": {
+    "type": "curve",
+    "fn": "decay",
+    "hue": 29
+   }
+  },
+  {
+   "id": "motolii.phys_collision",
+   "name": "Collision",
+   "kind": "relation",
+   "family": "physics/rigid",
+   "tags": [
+    "collision",
+    "rigid"
+   ],
+   "capabilities": [
+    "apply",
+    "uses-time",
+    "place"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "collision",
+    "physics"
+   ],
+   "face": {
+    "type": "curve",
+    "fn": "bounce",
+    "hue": 58
+   }
+  },
+  {
+   "id": "motolii.phys_turbulence",
+   "name": "Turbulence",
+   "kind": "relation",
+   "family": "physics/fluid",
+   "tags": [
+    "turbulence",
+    "fluid"
+   ],
+   "capabilities": [
+    "apply",
+    "uses-time",
+    "place"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "turbulence",
+    "physics"
+   ],
+   "face": {
+    "type": "curve",
+    "fn": "noise",
+    "hue": 87
+   }
+  },
+  {
+   "id": "motolii.phys_wind",
+   "name": "Wind",
+   "kind": "relation",
+   "family": "physics",
+   "tags": [
+    "force",
+    "motion"
+   ],
+   "capabilities": [
+    "apply",
+    "uses-time",
+    "place"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "wind",
+    "physics"
+   ],
+   "face": {
+    "type": "curve",
+    "fn": "noise",
+    "hue": 116
+   }
+  },
+  {
+   "id": "motolii.phys_magnet",
+   "name": "Magnet",
+   "kind": "relation",
+   "family": "physics",
+   "tags": [
+    "force"
+   ],
+   "capabilities": [
+    "apply",
+    "uses-time"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "magnet",
+    "physics"
+   ],
+   "face": {
+    "type": "curve",
+    "fn": "orbit",
+    "hue": 145
+   }
+  },
+  {
+   "id": "motolii.phys_friction",
+   "name": "Friction",
+   "kind": "relation",
+   "family": "physics",
+   "tags": [
+    "force"
+   ],
+   "capabilities": [
+    "apply",
+    "uses-time"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "friction",
+    "physics"
+   ],
+   "face": {
+    "type": "curve",
+    "fn": "decay",
+    "hue": 174
+   }
+  },
+  {
+   "id": "motolii.phys_buoyancy",
+   "name": "Buoyancy",
+   "kind": "relation",
+   "family": "physics/fluid",
+   "tags": [
+    "fluid",
+    "force"
+   ],
+   "capabilities": [
+    "apply",
+    "uses-time"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "buoyancy",
+    "physics"
+   ],
+   "face": {
+    "type": "curve",
+    "fn": "sine",
+    "hue": 203
+   }
+  },
+  {
+   "id": "motolii.phys_vortex",
+   "name": "Vortex",
+   "kind": "relation",
+   "family": "physics/fluid",
+   "tags": [
+    "fluid",
+    "turbulence"
+   ],
+   "capabilities": [
+    "apply",
+    "uses-time"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "vortex",
+    "physics"
+   ],
+   "face": {
+    "type": "curve",
+    "fn": "orbit",
+    "hue": 232
+   }
+  },
+  {
+   "id": "motolii.phys_attractor",
+   "name": "Attractor",
+   "kind": "relation",
+   "family": "physics",
+   "tags": [
+    "force",
+    "gravity"
+   ],
+   "capabilities": [
+    "apply",
+    "uses-time"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "attractor",
+    "physics"
+   ],
+   "face": {
+    "type": "curve",
+    "fn": "orbit",
+    "hue": 261
+   }
+  },
+  {
+   "id": "motolii.phys_repeller",
+   "name": "Repeller",
+   "kind": "relation",
+   "family": "physics",
+   "tags": [
+    "force"
+   ],
+   "capabilities": [
+    "apply",
+    "uses-time"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "repeller",
+    "physics"
+   ],
+   "face": {
+    "type": "curve",
+    "fn": "orbit",
+    "hue": 290
+   }
+  },
+  {
+   "id": "motolii.phys_pendulum",
+   "name": "Pendulum",
+   "kind": "relation",
+   "family": "physics/rigid",
+   "tags": [
+    "rigid",
+    "motion"
+   ],
+   "capabilities": [
+    "apply",
+    "uses-time"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "pendulum",
+    "physics"
+   ],
+   "face": {
+    "type": "curve",
+    "fn": "sine",
+    "hue": 319
+   }
+  },
+  {
+   "id": "motolii.phys_cloth",
+   "name": "Cloth",
+   "kind": "relation",
+   "family": "physics/soft",
+   "tags": [
+    "cloth",
+    "softbody"
+   ],
+   "capabilities": [
+    "apply",
+    "uses-time"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "cloth",
+    "physics"
+   ],
+   "face": {
+    "type": "curve",
+    "fn": "sine",
+    "hue": 348
+   }
+  },
+  {
+   "id": "motolii.phys_rope",
+   "name": "Rope",
+   "kind": "relation",
+   "family": "physics/soft",
+   "tags": [
+    "softbody",
+    "constraint"
+   ],
+   "capabilities": [
+    "apply",
+    "uses-time"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "rope",
+    "physics"
+   ],
+   "face": {
+    "type": "curve",
+    "fn": "spring",
+    "hue": 17
+   }
+  },
+  {
+   "id": "motolii.phys_softbody",
+   "name": "Softbody",
+   "kind": "relation",
+   "family": "physics/soft",
+   "tags": [
+    "softbody"
+   ],
+   "capabilities": [
+    "apply",
+    "uses-time"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "softbody",
+    "physics"
+   ],
+   "face": {
+    "type": "curve",
+    "fn": "spring",
+    "hue": 46
+   }
+  },
+  {
+   "id": "motolii.phys_fluid",
+   "name": "Fluid",
+   "kind": "relation",
+   "family": "physics/fluid",
+   "tags": [
+    "fluid",
+    "simulation"
+   ],
+   "capabilities": [
+    "apply",
+    "uses-time"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "fluid",
+    "physics"
+   ],
+   "face": {
+    "type": "curve",
+    "fn": "sine",
+    "hue": 75
+   }
+  },
+  {
+   "id": "motolii.phys_smoke",
+   "name": "Smoke",
+   "kind": "relation",
+   "family": "physics/fluid",
+   "tags": [
+    "fluid",
+    "particles"
+   ],
+   "capabilities": [
+    "apply",
+    "uses-time",
+    "place"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "smoke",
+    "physics"
+   ],
+   "face": {
+    "type": "curve",
+    "fn": "noise",
+    "hue": 104
+   }
+  },
+  {
+   "id": "motolii.phys_fire",
+   "name": "Fire",
+   "kind": "relation",
+   "family": "physics/fluid",
+   "tags": [
+    "fluid",
+    "particles"
+   ],
+   "capabilities": [
+    "apply",
+    "uses-time",
+    "place"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "fire",
+    "physics"
+   ],
+   "face": {
+    "type": "curve",
+    "fn": "noise",
+    "hue": 133
+   }
+  },
+  {
+   "id": "motolii.phys_dust",
+   "name": "Dust",
+   "kind": "relation",
+   "family": "physics",
+   "tags": [
+    "particles"
+   ],
+   "capabilities": [
+    "apply",
+    "uses-time",
+    "place"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "dust",
+    "physics"
+   ],
+   "face": {
+    "type": "curve",
+    "fn": "noise",
+    "hue": 162
+   }
+  },
+  {
+   "id": "motolii.phys_sparks",
+   "name": "Sparks",
+   "kind": "relation",
+   "family": "physics",
+   "tags": [
+    "particles"
+   ],
+   "capabilities": [
+    "apply",
+    "uses-time",
+    "place"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "sparks",
+    "physics"
+   ],
+   "face": {
+    "type": "curve",
+    "fn": "bounce",
+    "hue": 191
+   }
+  },
+  {
+   "id": "motolii.phys_boids",
+   "name": "Boids",
+   "kind": "relation",
+   "family": "physics",
+   "tags": [
+    "simulation",
+    "generative"
+   ],
+   "capabilities": [
+    "apply",
+    "uses-time",
+    "place"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "boids",
+    "physics"
+   ],
+   "face": {
+    "type": "curve",
+    "fn": "noise",
+    "hue": 220
+   }
+  },
+  {
+   "id": "motolii.phys_flocking",
+   "name": "Flocking",
+   "kind": "relation",
+   "family": "physics",
+   "tags": [
+    "simulation",
+    "generative"
+   ],
+   "capabilities": [
+    "apply",
+    "uses-time"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "flocking",
+    "physics"
+   ],
+   "face": {
+    "type": "curve",
+    "fn": "orbit",
+    "hue": 249
+   }
+  },
+  {
+   "id": "motolii.phys_orbit",
+   "name": "Orbit",
+   "kind": "relation",
+   "family": "physics",
+   "tags": [
+    "motion",
+    "gravity"
+   ],
+   "capabilities": [
+    "apply",
+    "uses-time"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "orbit",
+    "physics"
+   ],
+   "face": {
+    "type": "curve",
+    "fn": "orbit",
+    "hue": 278
+   }
+  },
+  {
+   "id": "motolii.phys_bounce",
+   "name": "Bounce",
+   "kind": "relation",
+   "family": "physics/rigid",
+   "tags": [
+    "rigid",
+    "motion"
+   ],
+   "capabilities": [
+    "apply",
+    "uses-time",
+    "place"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "bounce",
+    "physics"
+   ],
+   "face": {
+    "type": "curve",
+    "fn": "bounce",
+    "hue": 307
+   }
+  },
+  {
+   "id": "motolii.phys_break",
+   "name": "Break",
+   "kind": "relation",
+   "family": "physics/rigid",
+   "tags": [
+    "rigid",
+    "collision"
+   ],
+   "capabilities": [
+    "apply",
+    "uses-time"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "break",
+    "physics"
+   ],
+   "face": {
+    "type": "curve",
+    "fn": "decay",
+    "hue": 336
+   }
+  },
+  {
+   "id": "motolii.phys_shatter",
+   "name": "Shatter",
+   "kind": "relation",
+   "family": "physics/rigid",
+   "tags": [
+    "rigid",
+    "collision"
+   ],
+   "capabilities": [
+    "apply",
+    "uses-time",
+    "place"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "shatter",
+    "physics"
+   ],
+   "face": {
+    "type": "curve",
+    "fn": "bounce",
+    "hue": 5
+   }
+  },
+  {
+   "id": "motolii.phys_melt",
+   "name": "Melt",
+   "kind": "relation",
+   "family": "physics/soft",
+   "tags": [
+    "softbody",
+    "fluid"
+   ],
+   "capabilities": [
+    "apply",
+    "uses-time"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "melt",
+    "physics"
+   ],
+   "face": {
+    "type": "curve",
+    "fn": "decay",
+    "hue": 34
+   }
+  },
+  {
+   "id": "motolii.phys_wobble",
+   "name": "Wobble",
+   "kind": "relation",
+   "family": "physics/soft",
+   "tags": [
+    "softbody",
+    "motion"
+   ],
+   "capabilities": [
+    "apply",
+    "uses-time"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "wobble",
+    "physics"
+   ],
+   "face": {
+    "type": "curve",
+    "fn": "spring",
+    "hue": 63
+   }
+  },
+  {
+   "id": "motolii.phys_jiggle",
+   "name": "Jiggle",
+   "kind": "relation",
+   "family": "physics/soft",
+   "tags": [
+    "softbody"
+   ],
+   "capabilities": [
+    "apply",
+    "uses-time"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "jiggle",
+    "physics"
+   ],
+   "face": {
+    "type": "curve",
+    "fn": "spring",
+    "hue": 92
+   }
+  },
+  {
+   "id": "motolii.phys_follow_through",
+   "name": "Follow Through",
+   "kind": "relation",
+   "family": "physics",
+   "tags": [
+    "motion",
+    "spring"
+   ],
+   "capabilities": [
+    "apply",
+    "uses-time"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "follow through",
+    "physics"
+   ],
+   "face": {
+    "type": "curve",
+    "fn": "spring",
+    "hue": 121
+   }
+  },
+  {
+   "id": "motolii.phys_elastic",
+   "name": "Elastic",
+   "kind": "relation",
+   "family": "physics/soft",
+   "tags": [
+    "spring",
+    "softbody"
+   ],
+   "capabilities": [
+    "apply",
+    "uses-time"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "elastic",
+    "physics"
+   ],
+   "face": {
+    "type": "curve",
+    "fn": "spring",
+    "hue": 150
+   }
+  },
+  {
+   "id": "motolii.phys_damper",
+   "name": "Damper",
+   "kind": "relation",
+   "family": "physics",
+   "tags": [
+    "force",
+    "spring"
+   ],
+   "capabilities": [
+    "apply",
+    "uses-time"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "damper",
+    "physics"
+   ],
+   "face": {
+    "type": "curve",
+    "fn": "decay",
+    "hue": 179
+   }
+  },
+  {
+   "id": "motolii.phys_inertia",
+   "name": "Inertia",
+   "kind": "relation",
+   "family": "physics",
+   "tags": [
+    "motion",
+    "force"
+   ],
+   "capabilities": [
+    "apply",
+    "uses-time"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "inertia",
+    "physics"
+   ],
+   "face": {
+    "type": "curve",
+    "fn": "decay",
+    "hue": 208
+   }
+  },
+  {
+   "id": "motolii.phys_drag",
+   "name": "Drag",
+   "kind": "relation",
+   "family": "physics",
+   "tags": [
+    "force",
+    "fluid"
+   ],
+   "capabilities": [
+    "apply",
+    "uses-time"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "drag",
+    "physics"
+   ],
+   "face": {
+    "type": "curve",
+    "fn": "decay",
+    "hue": 237
+   }
+  },
+  {
+   "id": "motolii.phys_swarm",
+   "name": "Swarm",
+   "kind": "relation",
+   "family": "physics",
+   "tags": [
+    "simulation",
+    "generative"
+   ],
+   "capabilities": [
+    "apply",
+    "uses-time",
+    "place"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "swarm",
+    "physics"
+   ],
+   "face": {
+    "type": "curve",
+    "fn": "noise",
+    "hue": 266
+   }
+  },
+  {
+   "id": "motolii.phys_lattice",
+   "name": "Lattice",
+   "kind": "relation",
+   "family": "physics/soft",
+   "tags": [
+    "softbody",
+    "constraint"
+   ],
+   "capabilities": [
+    "apply",
+    "uses-time"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "lattice",
+    "physics"
+   ],
+   "face": {
+    "type": "curve",
+    "fn": "sine",
+    "hue": 295
+   }
+  },
+  {
+   "id": "motolii.phys_chain",
+   "name": "Chain",
+   "kind": "relation",
+   "family": "physics/rigid",
+   "tags": [
+    "rigid",
+    "constraint"
+   ],
+   "capabilities": [
+    "apply",
+    "uses-time"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "chain",
+    "physics"
+   ],
+   "face": {
+    "type": "curve",
+    "fn": "sine",
+    "hue": 324
+   }
+  },
+  {
+   "id": "motolii.phys_hinge",
+   "name": "Hinge",
+   "kind": "relation",
+   "family": "physics/rigid",
+   "tags": [
+    "rigid",
+    "constraint"
+   ],
+   "capabilities": [
+    "apply",
+    "uses-time"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "hinge",
+    "physics"
+   ],
+   "face": {
+    "type": "curve",
+    "fn": "sine",
+    "hue": 353
+   }
+  },
+  {
+   "id": "motolii.phys_motor",
+   "name": "Motor",
+   "kind": "relation",
+   "family": "physics/rigid",
+   "tags": [
+    "rigid",
+    "motion"
+   ],
+   "capabilities": [
+    "apply",
+    "uses-time"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "motor",
+    "physics"
+   ],
+   "face": {
+    "type": "curve",
+    "fn": "orbit",
+    "hue": 22
+   }
+  },
+  {
+   "id": "motolii.phys_constraint",
+   "name": "Constraint",
+   "kind": "relation",
+   "family": "physics",
+   "tags": [
+    "constraint",
+    "simulation"
+   ],
+   "capabilities": [
+    "apply",
+    "uses-time"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "constraint",
+    "physics"
+   ],
+   "face": {
+    "type": "curve",
+    "fn": "sine",
+    "hue": 51
+   }
+  }
+ ]
+}

@@ -1,0 +1,87 @@
+// The Browser seat of the reference: four panels sharing one seat under a tab strip. What they list comes from a
+// [BrowserModel]: proto_hf hands it fixture catalogues, production hands it the session's shelves.
+import 'package:flutter/widgets.dart';
+
+import 'colors.dart';
+import 'common.dart';
+import 'create.dart';
+import 'effects.dart';
+import 'fonts.dart';
+import 'things.dart';
+import '../../session/editor_session.dart';
+
+const browserTabs = [tabCreate, tabEffects, tabColors, tabFonts, tabMedia];
+
+class BrowserModel {
+  const BrowserModel({
+    required this.catalog,
+    required this.tab,
+    this.user,
+    this.scene,
+    this.colors,
+    this.gradients,
+    this.onColor,
+    this.onGradient,
+    this.colorEditor,
+    this.fonts = fontsBase,
+    this.fontGroups,
+    this.selectedFont,
+    this.onFont,
+    this.onFontCreate,
+    this.onFontFavorite,
+    this.fontController,
+    this.media,
+    this.onTab,
+  });
+  final Catalog catalog;
+  final int tab;
+  final UserViews? user;
+  final EffectScene? scene;
+
+  /// Null: the panel's own palette.
+  final List<Sw>? colors;
+  final List<Map<String, dynamic>>? gradients;
+  final ValueChanged<Sw>? onColor;
+  final ValueChanged<Map<String, dynamic>>? onGradient;
+  final Widget? colorEditor;
+  final List<FontItem> fonts;
+  final List<List<String>>? fontGroups;
+  final String? selectedFont;
+  final ValueChanged<FontItem>? onFont, onFontCreate;
+  final ValueChanged<FontItem>? onFontFavorite;
+  final EditorSession? fontController;
+  final Widget? media;
+  final ValueChanged<int>? onTab;
+}
+
+Widget browserFace(BrowserModel m) => Leaf(
+  tabs: browserTabs,
+  active: m.tab,
+  onTab: m.onTab,
+  body: KeyedSubtree(
+    key: ValueKey('browser-tab-${m.tab}'),
+    child: switch (m.tab) {
+      0 => CreatePanel(catalog: m.catalog, user: m.user, scene: m.scene),
+      1 => EffectsPanel(m.scene, catalog: m.catalog, user: m.user),
+      2 => ColorsPanel(
+        items: m.colors,
+        gradients: m.gradients,
+        onSwatch: m.onColor,
+        onGradient: m.onGradient,
+        editor: m.colorEditor,
+        controller: m.fontController,
+      ),
+      3 => FontsPanel(
+        items: m.fonts,
+        groups: m.fontGroups,
+        user: m.user,
+        selectedFamily: m.selectedFont,
+        onSelect: m.onFont,
+        onCreate: m.onFontCreate,
+        onFavorite: m.onFontFavorite,
+        controller: m.fontController,
+      ),
+      _ => m.media ?? const SizedBox.shrink(),
+    },
+  ),
+);

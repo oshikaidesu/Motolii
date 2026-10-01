@@ -1,0 +1,668 @@
+{
+ "things": [
+  {
+   "id": "motolii.fx_echo",
+   "name": "Echo",
+   "kind": "effect",
+   "family": "time",
+   "tags": [
+    "echo",
+    "time"
+   ],
+   "capabilities": [
+    "apply",
+    "uses-time"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "echo"
+   ],
+   "face": {
+    "type": "fx",
+    "base": "Blur",
+    "hue": 0
+   }
+  },
+  {
+   "id": "motolii.fx_trails",
+   "name": "Trails",
+   "kind": "effect",
+   "family": "feedback",
+   "tags": [
+    "feedback",
+    "time"
+   ],
+   "capabilities": [
+    "apply",
+    "uses-time",
+    "feedback"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "trails"
+   ],
+   "face": {
+    "type": "fx",
+    "base": "Glow",
+    "hue": 13
+   }
+  },
+  {
+   "id": "motolii.fx_posterize_time",
+   "name": "Posterize Time",
+   "kind": "effect",
+   "family": "time",
+   "tags": [
+    "time"
+   ],
+   "capabilities": [
+    "apply",
+    "uses-time"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "posterize time"
+   ],
+   "face": {
+    "type": "fx",
+    "base": "Pixelate",
+    "hue": 26
+   }
+  },
+  {
+   "id": "motolii.fx_slit_scan",
+   "name": "Slit Scan",
+   "kind": "effect",
+   "family": "time",
+   "tags": [
+    "scan",
+    "time"
+   ],
+   "capabilities": [
+    "apply",
+    "uses-time"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "slit scan"
+   ],
+   "face": {
+    "type": "fx",
+    "base": "Displace",
+    "hue": 39
+   }
+  },
+  {
+   "id": "motolii.fx_frame_blend",
+   "name": "Frame Blend",
+   "kind": "effect",
+   "family": "time",
+   "tags": [
+    "time"
+   ],
+   "capabilities": [
+    "apply",
+    "uses-time"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "frame blend"
+   ],
+   "face": {
+    "type": "fx",
+    "base": "Blur",
+    "hue": 52
+   }
+  },
+  {
+   "id": "motolii.fx_feedback_zoom",
+   "name": "Feedback Zoom",
+   "kind": "effect",
+   "family": "feedback",
+   "tags": [
+    "feedback"
+   ],
+   "capabilities": [
+    "apply",
+    "uses-time",
+    "feedback"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "feedback zoom"
+   ],
+   "face": {
+    "type": "fx",
+    "base": "Glow",
+    "hue": 65
+   }
+  },
+  {
+   "id": "motolii.fx_feedback_rotate",
+   "name": "Feedback Rotate",
+   "kind": "effect",
+   "family": "feedback",
+   "tags": [
+    "feedback"
+   ],
+   "capabilities": [
+    "apply",
+    "uses-time",
+    "feedback"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "feedback rotate"
+   ],
+   "face": {
+    "type": "fx",
+    "base": "Chromatic",
+    "hue": 78
+   }
+  },
+  {
+   "id": "motolii.fx_video_feedback",
+   "name": "Video Feedback",
+   "kind": "effect",
+   "family": "feedback",
+   "tags": [
+    "feedback",
+    "glitch"
+   ],
+   "capabilities": [
+    "apply",
+    "uses-time",
+    "feedback"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "video feedback"
+   ],
+   "face": {
+    "type": "fx",
+    "base": "Displace",
+    "hue": 91
+   }
+  },
+  {
+   "id": "motolii.fx_smear",
+   "name": "Smear",
+   "kind": "effect",
+   "family": "feedback",
+   "tags": [
+    "feedback",
+    "motion"
+   ],
+   "capabilities": [
+    "apply",
+    "uses-time",
+    "feedback"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "smear"
+   ],
+   "face": {
+    "type": "fx",
+    "base": "Blur",
+    "hue": 104
+   }
+  },
+  {
+   "id": "motolii.fx_ghost",
+   "name": "Ghost",
+   "kind": "effect",
+   "family": "feedback",
+   "tags": [
+    "echo",
+    "feedback"
+   ],
+   "capabilities": [
+    "apply",
+    "uses-time",
+    "feedback"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "ghost"
+   ],
+   "face": {
+    "type": "fx",
+    "base": "Glow",
+    "hue": 117
+   }
+  },
+  {
+   "id": "motolii.fx_static",
+   "name": "Static",
+   "kind": "effect",
+   "family": "noise",
+   "tags": [
+    "noise",
+    "grain"
+   ],
+   "capabilities": [
+    "apply"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "static"
+   ],
+   "face": {
+    "type": "fx",
+    "base": "Noise",
+    "hue": 130
+   }
+  },
+  {
+   "id": "motolii.fx_perlin_warp",
+   "name": "Perlin Warp",
+   "kind": "effect",
+   "family": "noise",
+   "tags": [
+    "noise",
+    "warp"
+   ],
+   "capabilities": [
+    "apply"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "perlin warp"
+   ],
+   "face": {
+    "type": "fx",
+    "base": "Displace",
+    "hue": 143
+   }
+  },
+  {
+   "id": "motolii.fx_cell_noise",
+   "name": "Cell Noise",
+   "kind": "effect",
+   "family": "noise",
+   "tags": [
+    "noise"
+   ],
+   "capabilities": [
+    "apply"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "cell noise"
+   ],
+   "face": {
+    "type": "fx",
+    "base": "Halftone",
+    "hue": 156
+   }
+  },
+  {
+   "id": "motolii.fx_dither",
+   "name": "Dither",
+   "kind": "effect",
+   "family": "noise",
+   "tags": [
+    "noise",
+    "pixel"
+   ],
+   "capabilities": [
+    "apply"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "dither"
+   ],
+   "face": {
+    "type": "fx",
+    "base": "Pixelate",
+    "hue": 169
+   }
+  },
+  {
+   "id": "motolii.fx_speckle",
+   "name": "Speckle",
+   "kind": "effect",
+   "family": "noise",
+   "tags": [
+    "noise",
+    "grain"
+   ],
+   "capabilities": [
+    "apply"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "speckle"
+   ],
+   "face": {
+    "type": "fx",
+    "base": "Noise",
+    "hue": 182
+   }
+  },
+  {
+   "id": "motolii.fx_tint",
+   "name": "Tint",
+   "kind": "effect",
+   "family": "color",
+   "tags": [
+    "color",
+    "tint"
+   ],
+   "capabilities": [
+    "apply"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "tint"
+   ],
+   "face": {
+    "type": "fx",
+    "base": "Duotone",
+    "hue": 195
+   }
+  },
+  {
+   "id": "motolii.fx_curves",
+   "name": "Curves",
+   "kind": "effect",
+   "family": "color",
+   "tags": [
+    "color",
+    "grade"
+   ],
+   "capabilities": [
+    "apply"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "curves"
+   ],
+   "face": {
+    "type": "fx",
+    "base": "Color Shift",
+    "hue": 208
+   }
+  },
+  {
+   "id": "motolii.fx_levels",
+   "name": "Levels",
+   "kind": "effect",
+   "family": "color",
+   "tags": [
+    "color",
+    "grade"
+   ],
+   "capabilities": [
+    "apply"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "levels"
+   ],
+   "face": {
+    "type": "fx",
+    "base": "Sharpen",
+    "hue": 221
+   }
+  },
+  {
+   "id": "motolii.fx_hue_rotate",
+   "name": "Hue Rotate",
+   "kind": "effect",
+   "family": "color",
+   "tags": [
+    "color"
+   ],
+   "capabilities": [
+    "apply"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "hue rotate"
+   ],
+   "face": {
+    "type": "fx",
+    "base": "Color Shift",
+    "hue": 234
+   }
+  },
+  {
+   "id": "motolii.fx_solarize",
+   "name": "Solarize",
+   "kind": "effect",
+   "family": "color",
+   "tags": [
+    "color",
+    "invert"
+   ],
+   "capabilities": [
+    "apply"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "solarize"
+   ],
+   "face": {
+    "type": "fx",
+    "base": "Invert",
+    "hue": 247
+   }
+  },
+  {
+   "id": "motolii.fx_gradient_map",
+   "name": "Gradient Map",
+   "kind": "effect",
+   "family": "color",
+   "tags": [
+    "color",
+    "grade"
+   ],
+   "capabilities": [
+    "apply"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "gradient map"
+   ],
+   "face": {
+    "type": "fx",
+    "base": "Duotone",
+    "hue": 260
+   }
+  },
+  {
+   "id": "motolii.fx_vibrance",
+   "name": "Vibrance",
+   "kind": "effect",
+   "family": "color",
+   "tags": [
+    "color"
+   ],
+   "capabilities": [
+    "apply"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "vibrance"
+   ],
+   "face": {
+    "type": "fx",
+    "base": "Color Shift",
+    "hue": 273
+   }
+  },
+  {
+   "id": "motolii.fx_contrast",
+   "name": "Contrast",
+   "kind": "effect",
+   "family": "color",
+   "tags": [
+    "color"
+   ],
+   "capabilities": [
+    "apply"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "contrast"
+   ],
+   "face": {
+    "type": "fx",
+    "base": "Sharpen",
+    "hue": 286
+   }
+  },
+  {
+   "id": "motolii.fx_edge",
+   "name": "Edge",
+   "kind": "effect",
+   "family": "stylize",
+   "tags": [
+    "stylize"
+   ],
+   "capabilities": [
+    "apply"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "edge"
+   ],
+   "face": {
+    "type": "fx",
+    "base": "Threshold",
+    "hue": 299
+   }
+  },
+  {
+   "id": "motolii.fx_emboss",
+   "name": "Emboss",
+   "kind": "effect",
+   "family": "stylize",
+   "tags": [
+    "stylize"
+   ],
+   "capabilities": [
+    "apply"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "emboss"
+   ],
+   "face": {
+    "type": "fx",
+    "base": "Sharpen",
+    "hue": 312
+   }
+  },
+  {
+   "id": "motolii.fx_posterize",
+   "name": "Posterize",
+   "kind": "effect",
+   "family": "stylize",
+   "tags": [
+    "stylize"
+   ],
+   "capabilities": [
+    "apply"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "posterize"
+   ],
+   "face": {
+    "type": "fx",
+    "base": "Threshold",
+    "hue": 325
+   }
+  },
+  {
+   "id": "motolii.fx_mosaic",
+   "name": "Mosaic",
+   "kind": "effect",
+   "family": "stylize",
+   "tags": [
+    "stylize",
+    "pixel"
+   ],
+   "capabilities": [
+    "apply"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "mosaic"
+   ],
+   "face": {
+    "type": "fx",
+    "base": "Pixelate",
+    "hue": 338
+   }
+  },
+  {
+   "id": "motolii.fx_dots",
+   "name": "Dots",
+   "kind": "effect",
+   "family": "stylize",
+   "tags": [
+    "halftone",
+    "stylize"
+   ],
+   "capabilities": [
+    "apply"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "dots"
+   ],
+   "face": {
+    "type": "fx",
+    "base": "Halftone",
+    "hue": 351
+   }
+  },
+  {
+   "id": "motolii.fx_lines",
+   "name": "Lines",
+   "kind": "effect",
+   "family": "stylize",
+   "tags": [
+    "halftone",
+    "stylize"
+   ],
+   "capabilities": [
+    "apply"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "lines"
+   ],
+   "face": {
+    "type": "fx",
+    "base": "Halftone",
+    "hue": 4
+   }
+  },
+  {
+   "id": "motolii.fx_woodcut",
+   "name": "Woodcut",
+   "kind": "effect",
+   "family": "stylize",
+   "tags": [
+    "stylize"
+   ],
+   "capabilities": [
+    "apply"
+   ],
+   "source": "builtin",
+   "searchTerms": [
+    "woodcut"
+   ],
+   "face": {
+    "type": "fx",
+    "base": "Threshold",
+    "hue": 17
+   }
+  }
+ ]
+}
