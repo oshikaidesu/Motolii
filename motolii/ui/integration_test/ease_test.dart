@@ -1,6 +1,7 @@
 // Easing one interval names its key: the curve lands there and the selection is left as it was (the real app).
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
+import 'oracle_fixture.dart';
 
 import 'package:motolii_ui/timeline/timeline.dart';
 import 'package:motolii_ui/main.dart' as app;
@@ -16,9 +17,7 @@ void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets('an eased interval is its key, not the selection', (t) async {
-    app.main();
-    await frames(t, 60);
-    final c = t.widget<LiveTimeline>(find.byType(LiveTimeline)).c;
+    final c = await bootOracleApp(t, settleFrames: 60);
     // a layer with a keyed property: its first key
     late int layer;
     late String property;

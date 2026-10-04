@@ -58,9 +58,17 @@ case "${1:-dev}" in
       [[ -n "${2:-}" ]] && cp -- "$2" "$it_dir/document.rrd"
       # each file starts from no saved layout and no history, and never writes the person's own
       rm -rf -- "$it_dir/state"; mkdir -p "$it_dir/state"; export MOTOLII_STATE_DIR="$it_dir/state"
-      "$flutter_bin" test "$it_file" -d macos "${it_defines[@]}" || it_failed=1
+      if ((${#it_defines[@]})); then
+        "$flutter_bin" test "$it_file" -d macos "${it_defines[@]}" || it_failed=1
+      else
+        "$flutter_bin" test "$it_file" -d macos || it_failed=1
+      fi
     done
     exit $it_failed
+    ;;
+  # Production UI oracle: integration_test on macOS (same as `it`; see docs/product/ui-oracle-audit-2026-10-04.md).
+  it-oracle)
+    exec "$repo/scripts/motolii-ui.sh" it "${@:2}"
     ;;
   test)
     "$repo/scripts/motolii-ui.sh" why-slow

@@ -2,6 +2,7 @@
 // diamond keys its rows in one step (the real app and its host).
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
+import 'oracle_fixture.dart';
 
 import 'package:motolii_ui/inspector/session.dart';
 import 'package:motolii_ui/timeline/timeline.dart';
@@ -18,9 +19,7 @@ void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets('reset and a group key are one step each over the selection', (t) async {
-    app.main();
-    await frames(t, 60);
-    final c = t.widget<LiveTimeline>(find.byType(LiveTimeline)).c;
+    final c = await bootOracleApp(t, settleFrames: 60);
     final plain = [for (final l in c.layers) if (l['kind'] != 'Camera' && l['kind'] != 'Group' && l['locked'] != true) l['id'] as int];
     final (a, b) = (plain[0], plain[1]);
     await c.command('setProperty', {'layer': a, 'property': 'position', 'value': [120.0, 40.0]});

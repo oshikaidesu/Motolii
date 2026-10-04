@@ -3,6 +3,7 @@
 // same results.
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
+import 'oracle_fixture.dart';
 
 import 'package:motolii_ui/timeline/timeline.dart';
 import 'package:motolii_ui/main.dart' as app;
@@ -20,9 +21,7 @@ void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets('a bar carried along time moves its layer; lanes open; the head seeks; a marquee picks', (t) async {
-    app.main();
-    await frames(t, 60);
-    final c = t.widget<LiveTimeline>(find.byType(LiveTimeline)).c;
+    final c = await bootOracleApp(t, settleFrames: 60);
     final s = TimelineSession.of(c);
     expect(s.rows, isNotEmpty, reason: 'the document has layers');
 

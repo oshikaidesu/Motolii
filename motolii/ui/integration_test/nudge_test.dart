@@ -2,6 +2,7 @@
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
+import 'oracle_fixture.dart';
 
 import 'package:motolii_ui/timeline/timeline.dart';
 import 'package:motolii_ui/main.dart' as app;
@@ -17,9 +18,7 @@ void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets('Alt+Shift+Right nudges the chosen layer, and one undo takes it back', (t) async {
-    app.main();
-    await frames(t, 60);
-    final c = t.widget<LiveTimeline>(find.byType(LiveTimeline)).c;
+    final c = await bootOracleApp(t, settleFrames: 60);
     final layer = c.layers.firstWhere((l) => l['kind'] != 'Camera' && l['kind'] != 'Group' && l['locked'] != true);
     final id = layer['id'] as int;
     await c.command('select', {'ids': [id]});

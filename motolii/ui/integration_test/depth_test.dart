@@ -2,6 +2,7 @@
 // (the real app and its host).
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
+import 'oracle_fixture.dart';
 
 import 'package:motolii_ui/desks/hosts.dart';
 import 'package:motolii_ui/timeline/timeline.dart';
@@ -18,9 +19,7 @@ void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets('dragging a layer on the Depth plan moves it, and one undo takes it back', (t) async {
-    app.main();
-    await frames(t, 60);
-    final c = t.widget<LiveTimeline>(find.byType(LiveTimeline)).c;
+    final c = await bootOracleApp(t, settleFrames: 60);
     final depth = DeskSession.of(c).depth;
     final plan = EditorSession.maps(EditorSession.map(c.state['depthLayout'])['items']);
     final hit = plan.indexWhere((i) => i['locked'] != true);

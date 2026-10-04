@@ -9,6 +9,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
+import 'oracle_fixture.dart';
 
 import 'package:motolii_ui/controls/panel/drag.dart' show EditorPreviewQueue;
 import 'package:motolii_ui/timeline/timeline.dart';
@@ -102,9 +103,7 @@ void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets('latency per boundary', (t) async {
-    app.main();
-    await frames(t, 80);
-    final c = t.widget<LiveTimeline>(find.byType(LiveTimeline)).c;
+    final c = await bootOracleApp(t, settleFrames: 80);
     final report = StringBuffer();
     // a larger document: LATENCY_LAYERS more rectangles, to see what grows with the document
     const extra = int.fromEnvironment('LATENCY_LAYERS', defaultValue: 0);

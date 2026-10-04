@@ -2,6 +2,7 @@
 // (the real app and its host).
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
+import 'oracle_fixture.dart';
 
 import 'package:motolii_ui/timeline/timeline.dart';
 import 'package:motolii_ui/main.dart' as app;
@@ -18,9 +19,7 @@ void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets('a Cmd-click adds a layer, and a drag carries both', (t) async {
-    app.main();
-    await frames(t, 60);
-    final c = t.widget<LiveTimeline>(find.byType(LiveTimeline)).c;
+    final c = await bootOracleApp(t, settleFrames: 60);
     final s = StageSession.of(c, 'Camera');
     final hands = [for (final l in s.visible) if (StageSession.grabbable(l) && s.corners(l).length >= 3) l];
     expect(hands.length, greaterThanOrEqualTo(2), reason: 'two layers to take on the Stage');

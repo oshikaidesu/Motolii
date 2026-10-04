@@ -57,6 +57,7 @@ class _LiveShellState extends State<LiveShell> {
         workspace?.dock.activate(name, near: 'Inspector', side: DropPosition.bottom);
       }
     };
+    c.detachPanelRequested = _detach;
     c.windowClosed = _windowClosed;
     c.filesDropped = (paths) {
       if (paths.isNotEmpty) c.importPaths(paths);

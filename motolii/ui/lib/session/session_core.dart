@@ -80,6 +80,9 @@ abstract class SessionCore {
   final deskWork = ValueNotifier<Map<String, dynamic>>({});
   final panePlaces = ValueNotifier<Map<String, dynamic>>({});
   Future<void> Function(String, String)? panelPlacementRequested;
+
+  /// Detach a dock panel into its own window (LiveShell wires this).
+  Future<void> Function(String panel)? detachPanelRequested;
   final deskDefault = ValueNotifier<String>('Tools');
   final deskDrawer = ValueNotifier<String?>(null);
   final browserTab = ValueNotifier<String>('Create');

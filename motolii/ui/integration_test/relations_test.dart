@@ -1,6 +1,7 @@
 // A relation's source range, changed once, reaches every destination it drives (the real app and its host).
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
+import 'oracle_fixture.dart';
 
 import 'package:motolii_ui/desks/relations/model.dart';
 import 'package:motolii_ui/desks/relations/session.dart';
@@ -17,9 +18,7 @@ void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets('re-ranging a relation with two destinations keeps both', (t) async {
-    app.main();
-    await frames(t, 60);
-    final c = t.widget<LiveTimeline>(find.byType(LiveTimeline)).c;
+    final c = await bootOracleApp(t, settleFrames: 60);
     final plain = [for (final l in c.layers) if (l['kind'] != 'Camera' && l['kind'] != 'Group') l['id'] as int];
     final src = plain[0], member = plain[1];
     Map<String, dynamic> relate(String property, double outMax, {double inMin = 0, double inMax = 100, bool preview = false}) => {
