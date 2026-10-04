@@ -1,7 +1,7 @@
 # Motolii — rerun を AE にするソフト
 
 ## Where to look first
-- Current source: `motolii/crates/` (motolii-doc, -edit, -render, -jobs, -script), `motolii/ui/native` (Rust host), `motolii/ui/lib` (Flutter).
+- 作品の窓は `motolii/ui/lib/main.dart` の 1 つ(`scripts/motolii-ui.sh dev`)。Stage の席だけが rerun の絵。ほかの席は Document を読み、書き込みは Intent だけ。`design-lab/` は見た目の見本で作品を持たない(Stage の絵は代用)。見本を製品の窓として開かない。見本の席を製品へ移すときは、その席で保存と Undo が通ってから次へ。ソースは `motolii/crates/`(motolii-doc, -edit, -render, -jobs, -script)、`motolii/ui/native`、`motolii/ui/lib`。
 - Current canon: `docs/README.md`, `docs/concept.md`, `docs/product/*` (modules, technical-boundaries, product-direction, product-contract), `docs/decision-index.md` (grep it).
 - Tests: native contract `motolii/ui/test`, real-app motion `motolii/ui/integration_test` (`scripts/motolii-ui.sh it`), Rust `motolii/crates/*/tests`.
 - Checks: `scripts/motolii-ui.sh check|test`, `bash scripts/check-docs.sh`.

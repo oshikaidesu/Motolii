@@ -2,21 +2,21 @@
 
 design-sense-lab の Widgetbook。
 
-- **正本は Workspace の窓**: [`lib/workspace/README.md`](lib/workspace/README.md)(開き方、ファイルの地図、共有の状態、決まっていること)。
+- **見本は Workspace の窓**(製品ではない): [`lib/workspace/README.md`](lib/workspace/README.md)。製品の窓は Motolii の `scripts/motolii-ui.sh dev`。
 
 ## Widgetbook の棚(`lib/main.dart`)
 | 棚 | 中身 |
 |---|---|
-| `Workspace` | 正本の窓 |
+| `Workspace` | 今の見本の窓(製品ではない) |
 | `Parts` | Workspace が使っている席ごとの部品(Inspector は `Parts › Inspector › Inspector Pop`、Timeline / Stage / Media / Transport / Relation の部品) |
 | `Foundations` | トークンと基礎部品(Controls / Inputs / Navigation / Feedback) |
 | `Workflows` | 操作の通し(Workflow / Dose) |
-| `Archive` | 見返す用。Workspace に置き換わった最初の草案(`First drafts`)と、検討の研究(`Studies`: OP / Pop / Browser / Inspector / Worlds / Phenomena)。正本ではない。棚は `lib/archive.dart` |
+| `Archive` | 見返す用。見本に置き換わった最初の草案(`First drafts`)と、検討の研究(`Studies`: OP / Pop / Browser / Inspector / Worlds / Phenomena)。棚は `lib/archive.dart` |
 
 ## ファイルの地図
 | 場所 | 中身 |
 |---|---|
-| `lib/workspace/` | 正本の窓(地図は [`lib/workspace/README.md`](lib/workspace/README.md)) |
+| `lib/workspace/` | 見本の窓(地図は [`lib/workspace/README.md`](lib/workspace/README.md)) |
 | `lib/sets/inspector/` | Inspector(`inspector_parts.dart` が入口、`InspHost` と Pop のトークン)と `param_infer.dart` |
 | `lib/sets/panels/` | Timeline / Stage / Media / Transport / Relation の部品 |
 | `lib/sets/foundations/` | Inputs / Navigation / Feedback |

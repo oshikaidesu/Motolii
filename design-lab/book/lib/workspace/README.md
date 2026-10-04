@@ -1,7 +1,8 @@
-# Workspace — Motolii の窓の正本(2026-10-04)
+# Workspace — 見た目の見本(2026-10-04)
 
-Widgetbook の `Workspace › Workspace › Window`。lab の部品を 1 枚の窓に集めた、**今の正本**。
-迷ったら、この窓とこの文書に合わせる。`Archive` の棚(`sets/studies/` と `parts/` の草案)は検討の記録で、正本ではない。
+Widgetbook の `Workspace › Workspace › Window`。lab の部品を 1 枚の窓に集めた、**今の見本**。Motolii の製品の窓ではない。
+製品の窓は Motolii の `scripts/motolii-ui.sh dev`。Stage の席だけが rerun の絵で、ほかの席は Document を見るだけ。ここはその見た目を並べる場所で、Stage の絵は代用、作品は保存されない。
+見本の中で迷ったら、この窓とこの文書に合わせる。`Archive` の棚(`sets/studies/` と `parts/` の草案)は、さらに古い検討。
 
 ```
 ┌ Top bar ─────────────────────────────────────────────────────────────┐
