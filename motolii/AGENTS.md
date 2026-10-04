@@ -5,7 +5,7 @@
 - Current canon: `docs/README.md`, `docs/concept.md`, `docs/product/*` (modules, technical-boundaries, product-direction, product-contract), `docs/decision-index.md` (grep it).
 - Tests: native contract `motolii/ui/test`, real-app motion `motolii/ui/integration_test` (`scripts/motolii-ui.sh it`), Rust `motolii/crates/*/tests`.
 - Checks: `scripts/motolii-ui.sh check|test`, `bash scripts/check-docs.sh`.
-- History is git: `git log -- <path>`; `git:<sha>:<path>` tokens in docs resolve with `git show`. There is no history folder.
+- History is git: `git log -- <path>`; `git:<sha>:<path>` tokens in docs resolve with `git show`. There is no history folder. **作業は `main` に直接 commit する。** branch・worktree は利用者が並列の LLM を頼んだ時だけ作り、終わったら `main` へ統合して消す。退避は branch でなく `archive/<name>` tag。
 
 ## PRODUCT ORACLE
 
