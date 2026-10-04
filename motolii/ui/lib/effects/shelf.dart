@@ -204,7 +204,7 @@ class _EffectsPanelState extends State<EffectsPanel> with WithDiscovery<EffectsP
   SearchCapability? get injectedSearch => widget.search;
   @override
   ClassifyCapability? get injectedClassify => widget.classify;
-  late final views = ThingViews(widget.catalog.registry, widget.catalog.things, widget.catalog.registry.panels['effects']!, widget.user ?? UserViews());
+  ThingViews get views => ThingViews(widget.catalog.registry, widget.catalog.things, widget.catalog.registry.panels['effects']!, widget.user ?? UserViews());
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
@@ -231,7 +231,15 @@ class _EffectsPanelState extends State<EffectsPanel> with WithDiscovery<EffectsP
               physics: const ClampingScrollPhysics(),
               padding: EdgeInsets.all(Surface.px(7.5)),
               itemCount: shown.length,
-              itemBuilder: (_, i) => Padding(padding: EdgeInsets.only(right: Surface.px(4.5)), child: AspectRatio(aspectRatio: 1.5, child: ThingFace(shown[i], scene: widget.scene))),
+              itemBuilder: (_, i) => Semantics(
+                label: shown[i].name,
+                button: true,
+                excludeSemantics: true,
+                child: Padding(
+                  padding: EdgeInsets.only(right: Surface.px(4.5)),
+                  child: AspectRatio(aspectRatio: 1.5, child: ThingFace(shown[i], scene: widget.scene)),
+                ),
+              ),
             ),
           );
         },
@@ -250,10 +258,15 @@ class _EffectsPanelState extends State<EffectsPanel> with WithDiscovery<EffectsP
       padding: EdgeInsets.fromLTRB(pad, Surface.px(10.5), pad, Surface.panelInset),
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: cols, mainAxisSpacing: Surface.px(7), crossAxisSpacing: gap, childAspectRatio: tileW / (tileW * .84 + (showCaption ? 18 : 0))),
       itemCount: shown.length,
-      itemBuilder: (c, i) => seated(c, shown[i], Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        AspectRatio(aspectRatio: 1 / .84, child: ThingFace(shown[i], scene: widget.scene)),
-        if (showCaption) Padding(padding: EdgeInsets.only(top: Surface.px(4)), child: Text(shown[i].name, softWrap: false, maxLines: 1, overflow: TextOverflow.ellipsis, style: sans(Dn.labelSize, c: N.g76))),
-      ])),
+      itemBuilder: (c, i) => Semantics(
+        label: shown[i].name,
+        button: true,
+        excludeSemantics: true,
+        child: seated(c, shown[i], Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          AspectRatio(aspectRatio: 1 / .84, child: ThingFace(shown[i], scene: widget.scene)),
+          if (showCaption) Padding(padding: EdgeInsets.only(top: Surface.px(4)), child: Text(shown[i].name, softWrap: false, maxLines: 1, overflow: TextOverflow.ellipsis, style: sans(Dn.labelSize, c: N.g76))),
+        ])),
+      ),
     );
   }
 }

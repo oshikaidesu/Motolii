@@ -32,3 +32,28 @@ Future<EditorSession> bootOracleApp(WidgetTester t, {int settleFrames = 60}) asy
   }
   return c;
 }
+
+bool layerHasRepeater(EditorSession c, int layerId) {
+  final layer = c.layers.cast<Map<String, dynamic>?>().firstWhere(
+        (l) => l!['id'] == layerId,
+        orElse: () => null,
+      );
+  if (layer == null) return false;
+  return EditorSession.maps(layer['effects']).any((e) => '${e['pluginId']}' == 'motolii.repeat');
+}
+
+/// Same `export` / `exportStatus` path the Export sheet uses, without a save panel.
+Future<void> runExport(EditorSession c, WidgetTester t, String path, {int start = 0, int end = 6}) async {
+  await c.command('export', {'path': path, 'start': start, 'end': end});
+  for (var i = 0; i < 400; i++) {
+    await c.command('exportStatus');
+    final phase = '${EditorSession.map(c.state['export'])['phase'] ?? ''}';
+    if (phase == 'done') return;
+    if (phase == 'failed') {
+      fail('export failed: ${c.state['export']}');
+    }
+    if (!['running', 'cancelling', 'starting', ''].contains(phase)) return;
+    await oracleFrames(t, 10);
+  }
+  fail('export timed out: ${c.state['export']}');
+}

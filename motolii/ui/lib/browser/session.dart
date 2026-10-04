@@ -50,7 +50,7 @@ typedef LiveBinding = (String op, Map<String, dynamic> args);
 class BrowserSession extends ChangeNotifier {
   BrowserSession._(this.c) {
     _bind();
-    c.slice('browserCatalog', const ['createKinds', 'catalog']).addListener(_rebind);
+    c.slice('browserCatalog', const ['createKinds', 'catalog', 'hostCapabilities']).addListener(_rebind);
     c.slice('browserSurface', const ['palette', 'fontFamilies', 'assets', 'backgrounds', 'selectedId', 'selectedIds', 'colorTarget'], derived: _reading).addListener(notifyListeners);
     c.deskWork.addListener(notifyListeners);
     c.importedAssets.addListener(_reveal);
@@ -96,18 +96,38 @@ class BrowserSession extends ChangeNotifier {
     final byId = {for (final (_, t) in _reference.files) if (t['kind'] == 'effect') '${t['id']}': '${t['id']}'};
     final byName = {for (final (_, t) in _reference.files) if (t['kind'] == 'effect') '${t['name']}'.toLowerCase(): '${t['id']}'};
     final extra = <(String, Map<String, dynamic>)>[];
-    for (final e in EditorSession.maps(c.state['catalog'])) {
+    void wireEffect(Map<String, dynamic> e) {
       final id = '${e['id']}', name = '${e['name'] ?? id}';
+      if (out.containsKey(id)) return;
       final tile = byId[id] ?? byName[name.toLowerCase()];
       if (tile != null) {
         out[tile] = ('applyEffect', {'pluginIds': [id]});
         snapshots.add(id);
         fixtureFallback.add(tile);
-        continue;
+        return;
       }
       out[id] = ('applyEffect', {'pluginIds': [id]});
       snapshots.add(id);
-      extra.add(('host', {'id': id, 'name': name, 'kind': 'effect', 'family': 'host', 'source': 'host', 'face': {'type': 'fx', 'base': name, 'hue': 0}}));
+      extra.add((
+        'host',
+        {
+          'id': id,
+          'name': name,
+          'kind': 'effect',
+          'family': 'host',
+          'tags': ['x-host'],
+          'capabilities': ['apply'],
+          'source': 'builtin',
+          'searchTerms': [name.toLowerCase()],
+          'face': {'type': 'fx', 'base': name, 'hue': 0},
+        },
+      ));
+    }
+    for (final e in EditorSession.maps(c.state['catalog'])) {
+      wireEffect(e);
+    }
+    for (final e in EditorSession.maps(c.state['hostCapabilities'])) {
+      wireEffect(e);
     }
     bindings = out;
     catalog = extra.isEmpty ? _reference : Catalog(_registryWithHostFamily(), [...extra, ..._reference.files]);

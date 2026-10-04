@@ -17,7 +17,8 @@ Bootstrap: integration tests seed `motolii/ui/integration_test/fixtures/oracle_s
 | P1-E | Detached Inspector | Property change | — | PARTIAL | No automated detach+inspector test yet |
 | P1-F | Main | Undo / edit | Undo works | PASS | `history_test.dart`, desk tests |
 | P1-G | Detach close | Redock panel | — | PARTIAL | `windowClosed` redock not in integration_test |
-| P1-H | Restart | Open saved `.rrd` | — | PARTIAL | Not in integration_test (manual oracle) |
+| P1-H | Restart | Open saved `.rrd` | Same layers | PASS | `load_repeater_export_test.dart` (save → open) |
+| P1-I | Effects + export | Repeater → MP4 | File on disk | PASS | `load_repeater_export_test.dart` (tile tap or `BrowserSession.use` → `export`) |
 
 ## Phase 2 — integration_test (2026-10-04 run)
 
@@ -41,6 +42,7 @@ Bootstrap: integration tests seed `motolii/ui/integration_test/fixtures/oracle_s
 | media_explore_test.dart | Media explore | PASS |
 | latency_test.dart | Latency | PASS |
 | detached_panel_test.dart | Multi-window | PASS |
+| load_repeater_export_test.dart | Save/reopen, Repeater, export | PASS |
 | heavy_folder_test.dart | Browser folder | SKIP (env) |
 | surface_audit_test.dart | Surface tokens | SKIP (env) |
 
@@ -50,12 +52,13 @@ Bootstrap: integration tests seed `motolii/ui/integration_test/fixtures/oracle_s
 |------|--------|
 | Graph seat content | PARTIAL — placeholder surface only (`seats.dart`) |
 | Pin top-bar key | PARTIAL — drawn, no operation |
-| Save → restart → open | Manual oracle |
+| Save → open (same session) | PASS in `load_repeater_export_test.dart`; cold restart still manual |
 | Detached Inspector + redock on close | Add integration_test when needed |
-| Export end-to-end | Not in this suite |
+| Export end-to-end | PASS `load_repeater_export_test.dart` (`export` + `exportStatus`, ffmpeg on PATH) |
 
 ## Convenience added this pass
 
 - `oracle_seed.js` + `bootOracleApp()` for integration tests on empty documents
 - `EditorSession.detachPanelRequested` (wired from LiveShell) for detach without menu scraping
 - `scripts/motolii-ui.sh it-oracle` alias; `it` fixed for empty `it_defines` under `set -u`
+- `hostCapabilities` wired in `BrowserSession._bind`; host Repeater/Mirror tiles on Effects shelf; Effects grid/strip semantics for IT

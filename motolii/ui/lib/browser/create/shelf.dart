@@ -31,7 +31,7 @@ class _CreatePanelState extends State<CreatePanel> with WithDiscovery<CreatePane
   SearchCapability? get injectedSearch => widget.search;
   @override
   ClassifyCapability? get injectedClassify => widget.classify;
-  late final views = ThingViews(widget.catalog.registry, widget.catalog.things, widget.catalog.registry.panels['create']!, widget.user ?? UserViews());
+  ThingViews get views => ThingViews(widget.catalog.registry, widget.catalog.things, widget.catalog.registry.panels['create']!, widget.user ?? UserViews());
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(

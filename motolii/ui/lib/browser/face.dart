@@ -7,6 +7,8 @@ import 'parts.dart';
 import 'create/shelf.dart';
 import '../effects/shelf.dart';
 import '../fonts/shelf.dart';
+import 'classify.dart';
+import 'search.dart';
 import 'things.dart';
 import '../session/editor_session.dart';
 
@@ -37,8 +39,12 @@ class BrowserModel {
     this.media,
     this.tabs = browserTabs,
     this.onTab,
+    this.search,
+    this.classify,
   });
   final Catalog catalog;
+  final SearchCapability? search;
+  final ClassifyCapability? classify;
   final int tab;
   final UserViews? user;
   final EffectScene? scene;
@@ -71,8 +77,8 @@ Widget browserFace(BrowserModel m) => m.tabs.length == 1 ? _body(m) : Leaf(tabs:
 Widget _body(BrowserModel m) => KeyedSubtree(
     key: ValueKey('browser-tab-${m.tab}'),
     child: switch (m.tab) {
-      0 => CreatePanel(catalog: m.catalog, user: m.user, scene: m.scene),
-      1 => EffectsPanel(m.scene, catalog: m.catalog, user: m.user),
+      0 => CreatePanel(catalog: m.catalog, user: m.user, scene: m.scene, search: m.search, classify: m.classify),
+      1 => EffectsPanel(m.scene, catalog: m.catalog, user: m.user, search: m.search, classify: m.classify),
       2 => ColorsPanel(
         items: m.colors,
         gradients: m.gradients,

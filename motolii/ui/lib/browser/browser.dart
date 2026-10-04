@@ -60,6 +60,8 @@ class _LiveBrowserState extends State<LiveBrowser> {
       child: browserFace(
         BrowserModel(
           catalog: s.catalog,
+          search: s.search(name),
+          classify: s.classify(name),
           tab: tab,
           tabs: widget.fixedTab == null ? browserTabs : [browserTabs[tab]],
           user: s.user(name).views,
