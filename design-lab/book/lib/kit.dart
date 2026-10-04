@@ -15,3 +15,6 @@ Look lookKnob(BuildContext c) => c.knobs.object.dropdown<Look>(label: 'Look', op
 /// One use case with a ready-made ground.
 WidgetbookUseCase uc(String name, Widget Function(BuildContext) build, {double? width, double? height}) =>
     WidgetbookUseCase(name: name, builder: (c) => onGround(build(c), width: width, height: height));
+
+/// The global Dose knob (0 = today's tone, 1-3 = more seasoning).
+Dose doseKnob(BuildContext c) => Dose.at(c.knobs.int.slider(label: 'Dose', initialValue: 1, min: 0, max: 3, divisions: 3));

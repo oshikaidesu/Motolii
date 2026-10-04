@@ -2,6 +2,9 @@
 
 Motolii とは別の、隔離した作業場。デザインの知識を LLM が読める形にして、実画面で試すための場所。
 
+> **正本(2026-10-04〜): Widgetbook の `Workspace › Window`。** 説明は [`book/lib/workspace/README.md`](book/lib/workspace/README.md)。
+> 下の起動手順・部品数・`OVERVIEW.md` は古い記録を含む。食い違ったら Workspace の README を正とする。
+
 ## 中身
 - `DESIGN.md` — Motolii の Timeline から始めたデザインシステム(awesome-design-md の 9 節書式)。値に出所の印(`[code]` `[concept]` `[decided]` `[open]`)。選択状態の決まり(部品の種類ごと)も入っている。
 - `preview-dark.html` — DESIGN.md の値だけで描いた Timeline の静的な見本。

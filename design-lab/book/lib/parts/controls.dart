@@ -63,20 +63,20 @@ class PillSwitch extends StatelessWidget {
           padding: const EdgeInsets.all(2),
           alignment: on ? Alignment.centerRight : Alignment.centerLeft,
           decoration: BoxDecoration(
-            color: on ? C.mode.withValues(alpha: .30) : N.g20,
+            color: on ? Role.of(C.mode.withValues(alpha: .30), N.g20) : N.g20,
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: on ? C.mode.withValues(alpha: .85) : N.g26, width: 1),
+            border: Border.all(color: on ? Role.of(Role.selected.withValues(alpha: .85), Role.mode) : N.g26, width: 1),
           ),
-          child: Container(width: 10, height: 10, decoration: BoxDecoration(color: on ? N.g95 : N.g56, shape: BoxShape.circle)),
+          child: Container(width: 10, height: 10, decoration: BoxDecoration(color: on ? Role.of(N.g95, Role.mode) : N.g56, shape: BoxShape.circle)),
         ),
       );
 }
 
 class Segmented extends StatelessWidget {
-  const Segmented({super.key, required this.items, required this.index, this.onChanged, this.accent = C.mode, this.expand = false});
+  const Segmented({super.key, required this.items, required this.index, this.onChanged, this.accent, this.expand = false});
   final List<String> items;
   final int index;
-  final Color accent;
+  final Color? accent;
   final bool expand;
   final ValueChanged<int>? onChanged;
 
@@ -93,7 +93,7 @@ class Segmented extends StatelessWidget {
             decoration: BoxDecoration(
               color: i == index ? N.g20 : null,
               borderRadius: BorderRadius.circular(5),
-              border: Border(bottom: BorderSide(color: i == index ? accent : const Color(0x00000000), width: 1)),
+              border: Border(bottom: BorderSide(color: i == index ? (accent ?? Role.selected) : const Color(0x00000000), width: 1)),
             ),
             child: FittedBox(fit: BoxFit.scaleDown, child: Text(items[i].toUpperCase(), maxLines: 1, softWrap: false, style: T.micro(i == index ? N.g95 : N.g63).copyWith(letterSpacing: .4))),
           ),
