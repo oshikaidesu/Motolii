@@ -7,6 +7,7 @@ class AppDelegate: FlutterAppDelegate {
   override func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
   override func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool { true }
   override func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+    if ProcessInfo.processInfo.environment["MOTOLII_A1"] != nil { return .terminateNow }
     if ProbeSession.shared.terminationApproved { return .terminateNow }
     if terminationPending { return .terminateLater }
     terminationPending = true

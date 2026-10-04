@@ -1,9 +1,12 @@
 // The app: Motolii's window as its own client of Motolii Live — the faces over the session.
 //   MOTOLII_NATIVE_LIBRARY=.../libmotolii_ui.dylib flutter run -d macos \
 //     --dart-define=MOTOLII_DOCUMENT=/path.rrd [--dart-define=MOTOLII_SHOT=/path.png]
+import 'dart:io';
+
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/widgets.dart';
 
+import 'a1.dart';
 import 'app/ui_scale.dart';
 import 'app/window.dart';
 import 'dev/design_mode.dart';
@@ -12,7 +15,21 @@ import 'theme/identity.dart' show H;
 import 'theme/metrics.dart';
 
 // Design Mode (docs/design/ui-debugging.md) wraps the window in a debug build only; a release build has no trace of it
-void main() => runApp(_window());
+// MOTOLII_A1=<clip> shows the glue renderer's IOSurface alone (docs/design/one-day.md); nothing else of the window is built
+void main() {
+  final clip = Platform.environment['MOTOLII_A1'];
+  if (clip != null && clip.isNotEmpty) {
+    runApp(WidgetsApp(
+      color: const Color(0xFF000000),
+      debugShowCheckedModeBanner: false,
+      pageRouteBuilder: <T>(RouteSettings settings, WidgetBuilder builder) =>
+          PageRouteBuilder<T>(settings: settings, pageBuilder: (context, _, __) => builder(context)),
+      home: A1Window(path: clip),
+    ));
+    return;
+  }
+  runApp(_window());
+}
 
 Widget _window() {
   final app = WidgetsApp(

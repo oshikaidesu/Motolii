@@ -1,0 +1,21 @@
+[package]
+name = "motolii-salsa-spike"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[[bin]]
+name = "salsa-spike"
+path = "src/main.rs"
+required-features = ["salsa"]
+
+[[bin]]
+name = "salsa-bare"
+path = "src/bare.rs"
+
+[dependencies]
+salsa = { version = "=0.28.5", optional = true }
+
+[features]
+default = ["salsa"]
+salsa = ["dep:salsa"]

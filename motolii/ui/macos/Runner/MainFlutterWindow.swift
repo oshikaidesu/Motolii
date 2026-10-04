@@ -14,7 +14,11 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate, NSDraggingDestination {
     contentViewController = controller
     setFrame(originalFrame, display: true)
     RegisterGeneratedPlugins(registry: controller)
-    probeHost = ProbeHost.install(controller: controller, window: self)
+    if let clip = ProcessInfo.processInfo.environment["MOTOLII_A1"], !clip.isEmpty {
+      GluePreview.install(controller: controller)
+    } else {
+      probeHost = ProbeHost.install(controller: controller, window: self)
+    }
     setContentSize(NSSize(width: 1280, height: 768))
     minSize = NSSize(width: 1000, height: 620)
     delegate = self
@@ -1125,5 +1129,88 @@ final class PanelFlutterWindow: NSWindow, NSWindowDelegate, NSDraggingDestinatio
     host?.detachWindow()
     host = nil
     ProbeSession.shared.windows.removeValue(forKey: panelID)
+  }
+}
+
+private func gluePublish(_ user: UnsafeMutableRawPointer?, _ buffer: UnsafeMutableRawPointer?) {
+  guard let user, let buffer else { return }
+  let preview = Unmanaged<GluePreview>.fromOpaque(user).takeUnretainedValue()
+  let pixel = Unmanaged<CVPixelBuffer>.fromOpaque(buffer).takeUnretainedValue()
+  preview.accept(pixel)
+}
+
+private final class GlueTexture: NSObject, FlutterTexture {
+  private let lock = NSLock()
+  private var latest: CVPixelBuffer?
+  func publish(_ buffer: CVPixelBuffer) {
+    lock.lock()
+    latest = buffer
+    lock.unlock()
+  }
+  func copyPixelBuffer() -> Unmanaged<CVPixelBuffer>? {
+    lock.lock()
+    defer { lock.unlock() }
+    guard let latest else { return nil }
+    return Unmanaged.passRetained(latest)
+  }
+}
+
+private final class GluePreview: NSObject {
+  private static var held: GluePreview?
+  private let registry: FlutterTextureRegistry
+  private let texture = GlueTexture()
+  private var textureId: Int64?
+  private var library: UnsafeMutableRawPointer?
+
+  static func install(controller: FlutterViewController) {
+    let registrar = controller.registrar(forPlugin: "GluePreview")
+    let preview = GluePreview(registry: registrar.textures)
+    held = preview
+    let channel = FlutterMethodChannel(name: "motolii/a1", binaryMessenger: registrar.messenger)
+    channel.setMethodCallHandler { call, result in
+      guard call.method == "start" else {
+        result(FlutterMethodNotImplemented)
+        return
+      }
+      let view = controller.view
+      let scale = view.window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2
+      let width = UInt32((view.bounds.width * scale).rounded())
+      let height = UInt32((view.bounds.height * scale).rounded())
+      result(preview.start(width: width, height: height))
+    }
+  }
+
+  init(registry: FlutterTextureRegistry) { self.registry = registry }
+
+  func accept(_ pixel: CVPixelBuffer) {
+    let kept = pixel
+    DispatchQueue.main.async { [weak self] in
+      guard let self, let textureId = self.textureId else { return }
+      self.texture.publish(kept)
+      self.registry.textureFrameAvailable(textureId)
+    }
+  }
+
+  func start(width: UInt32, height: UInt32) -> Int64 {
+    if textureId == nil { textureId = registry.register(texture) }
+    let path = ProcessInfo.processInfo.environment["MOTOLII_GLUE_LIB"]
+      ?? "/Users/member_ottoto/rust_ae/Motolii/motolii/target/debug/libmotolii_glue.dylib"
+    let clip = ProcessInfo.processInfo.environment["MOTOLII_A1"] ?? ""
+    library = dlopen(path, RTLD_NOW)
+    guard let library, let symbol = dlsym(library, "motolii_a1_start") else {
+      NSLog("A1: dylib missing at \(path) \(String(cString: dlerror()))")
+      return textureId ?? -1
+    }
+    typealias Start = @convention(c) (
+      UnsafePointer<CChar>,
+      UInt32,
+      UInt32,
+      @convention(c) (UnsafeMutableRawPointer?, UnsafeMutableRawPointer?) -> Void,
+      UnsafeMutableRawPointer?
+    ) -> Int32
+    let start = unsafeBitCast(symbol, to: Start.self)
+    let code = clip.withCString { start($0, width, height, gluePublish, Unmanaged.passUnretained(self).toOpaque()) }
+    if code != 0 { NSLog("A1: motolii_a1_start \(code)") }
+    return textureId ?? -1
   }
 }

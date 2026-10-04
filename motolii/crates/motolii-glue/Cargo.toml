@@ -1,0 +1,42 @@
+[package]
+name = "motolii-glue"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[lib]
+name = "motolii_glue"
+crate-type = ["cdylib", "rlib"]
+
+[[bin]]
+name = "a0"
+path = "src/main.rs"
+
+[dependencies]
+pollster = { workspace = true }
+
+[build-dependencies]
+cc = "1"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+glam = { workspace = true }
+glam32 = { package = "glam", version = "0.32", features = ["bytemuck"] }
+wgpu = { workspace = true }
+wgpu-3dgs-viewer = "=0.7.0"
+flate2 = "1"
+h264-reader = "0.9"
+wgpu-hal = { version = "=29.0.4", features = ["metal"] }
+objc2 = "=0.6.4"
+block2 = "=0.6.2"
+objc2-metal = { version = "=0.3.2", features = ["objc2-io-surface"] }
+objc2-io-surface = "=0.3.2"
+objc2-foundation = "=0.3.2"
+objc2-app-kit = "=0.3.2"
+objc2-quartz-core = "=0.3.2"
+objc2-core-foundation = "=0.3.2"
+objc2-core-video = { version = "=0.3.2", features = ["objc2-io-surface"] }
+objc2-core-media = "=0.3.2"
+objc2-av-foundation = { version = "=0.3.2", features = ["objc2-core-media"] }
+
+[lints]
+workspace = true
