@@ -5,7 +5,10 @@ import '../../../panels/inspector.dart' show InspectorPanel, InspectorInstrument
 import '../../../session/editor_session.dart';
 import '../../../session/read_model.dart';
 import '../../../live_hf/adapters/effects_card.dart';
+import 'new_fill.dart';
 import '../../../live_hf/adapters/layout.dart';
+import 'new_matte.dart';
+import 'new_text.dart';
 import '../../../live_hf/adapters/transform.dart';
 
 /// The Inspector's own host: identity header, and the card list (Transform — World inside it, Layout, Effects) —
@@ -64,12 +67,6 @@ class _NewInspectorPanelState extends State<NewInspectorPanel> {
 
   bool get _multiple => c.selectedIds.length > 1;
 
-  bool _hasContent(Map<String, dynamic> layer) {
-    final text = panelMap(layer['text']);
-    final matte = panelMap(layer['matte']);
-    return text.isNotEmpty || matte.isNotEmpty || (layer['kind'] == 'Shape' && layer['fill'] is Map);
-  }
-
   bool _hasLayout(Map<String, dynamic> layer) {
     if (_multiple) return false;
     if (layer['kind'] == 'Group') return true;
@@ -82,10 +79,13 @@ class _NewInspectorPanelState extends State<NewInspectorPanel> {
     if (layer == null) {
       return DecoratedBox(decoration: const BoxDecoration(color: kGround), child: Center(child: Text('Nothing selected', style: sans(11, c: kMuted))));
     }
-    // A kind with no New face yet keeps the full Classic host, with the same New instruments underneath.
-    if (!_multiple && (layer['kind'] == 'Camera' || layer['kind'] == 'Stage' || _hasContent(layer))) {
+    // Camera and Stage have their own Classic card (a different property list, not Transform); no New face yet.
+    if (!_multiple && (layer['kind'] == 'Camera' || layer['kind'] == 'Stage')) {
       return InspectorPanel(controller: c, instruments: _instruments);
     }
+    final text = panelMap(layer['text']);
+    final matte = panelMap(layer['matte']);
+    final fill = layer['kind'] == 'Shape' && layer['fill'] is Map;
     return DecoratedBox(
       decoration: const BoxDecoration(color: kGround),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -99,6 +99,18 @@ class _NewInspectorPanelState extends State<NewInspectorPanel> {
                 const SizedBox(height: 10),
                 Padding(padding: const EdgeInsets.only(bottom: 4), child: Text('LAYOUT', style: sans(9, c: const Color(0xFF7E7F86), w: FontWeight.w600, ls: 1.2))),
                 NewLayout(controller: c, layer: layer),
+              ],
+              if (!_multiple && text.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                NewText(controller: c, layer: layer),
+              ],
+              if (!_multiple && fill) ...[
+                const SizedBox(height: 10),
+                NewFill(controller: c, layer: layer),
+              ],
+              if (!_multiple && matte.isNotEmpty && layer['clipToBelow'] != true) ...[
+                const SizedBox(height: 10),
+                NewMatte(controller: c, layer: layer, matte: matte),
               ],
               if (panelRows(layer['effects']).isNotEmpty) ...[
                 const SizedBox(height: 10),

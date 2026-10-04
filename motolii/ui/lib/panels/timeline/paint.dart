@@ -8,6 +8,17 @@ import '../../foundation/theme.dart';
 import 'ink.dart';
 import 'layout.dart';
 
+/// A row's small M/S/L/link/keyframe toggle: a hard square under Classic's own skin, the same soft-cornered pill
+/// every other New face uses (Depth/Blend/Inspector's toggles) once `identityChip` says this is a New face.
+/// Same rect, same hit zone — only the paint call's shape changes.
+void _toggleBox(Canvas canvas, Rect rect, Paint paint, {required bool round}) {
+  if (round) {
+    canvas.drawRRect(RRect.fromRectAndRadius(rect, const Radius.circular(3)), paint);
+  } else {
+    canvas.drawRect(rect, paint);
+  }
+}
+
 /// Timeline のレーンと定規の絵 — 帯・鍵・ease の区間・名前の欄・落とし先の案内。
 /// 絵を描くだけ: 書類も操作も知らず、渡された値だけを読む。
 class TimelinePainter extends CustomPainter {
@@ -505,7 +516,8 @@ class TimelinePainter extends CustomPainter {
             weight: FontWeight.w500,
           );
           final keysOpen = row.lanesOpen;
-          canvas.drawRect(
+          _toggleBox(
+            canvas,
             Rect.fromLTWH(label - 81, y + 2, 14, h - 4),
             fillPaint(
               keysOpen
@@ -514,6 +526,7 @@ class TimelinePainter extends CustomPainter {
                   ? colors.raised
                   : colors.line,
             ),
+            round: colors.skin.identityChip,
           );
           text(
             canvas,
@@ -534,7 +547,8 @@ class TimelinePainter extends CustomPainter {
           for (var column = 0; column < 4; column++) {
             final x = label - 65 + 16 * column;
             final on = states[column];
-            canvas.drawRect(
+            _toggleBox(
+              canvas,
               Rect.fromLTWH(x, y + 2, 14, h - 4),
               fillPaint(
                 on
@@ -543,6 +557,7 @@ class TimelinePainter extends CustomPainter {
                     ? colors.raised
                     : colors.line,
               ),
+              round: colors.skin.identityChip,
             );
             text(
               canvas,
