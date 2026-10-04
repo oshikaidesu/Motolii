@@ -1,0 +1,21 @@
+name: lab_book
+description: "A new Flutter project."
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.13.2
+
+dependencies:
+  docking: ^1.16.2
+  flutter:
+    sdk: flutter
+  widgetbook: ^3.25.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true

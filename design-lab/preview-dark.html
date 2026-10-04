@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Motolii Timeline preview (DESIGN.md draft v0)</title>
+<style>
+  /* every value comes from DESIGN.md; nothing is picked here */
+  :root{
+    --ground:#191919; --band-a:#1E1E1E; --band-b:#2A2A2A; --row-line:#161616; --well:#131313;
+    --ink:#F2F2F2; --muted:#8E8E8E; --playhead:#6EA6DB;
+    --row:23px; --bar:calc(var(--row) * .87); --radius:calc(var(--row) * .09); --key:calc(var(--row) * .33);
+    --grid-major:rgba(255,255,255,.16); --grid-fine:rgba(255,255,255,.09);
+    --scatter:#E974AB; --stagger:#4781E5; --along:#7DD5B1; --face:#EFCB4E; --follow:#F69260; --attach:#A889E9;
+    --label:180px; --ppf:6px; /* px per frame */
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:#0d0d0d;color:var(--ink);font:11px/1 Inter,system-ui,sans-serif;padding:24px}
+  h1{font-size:12px;font-weight:500;margin:0 0 4px}
+  p{color:var(--muted);margin:0 0 16px;font-size:10px}
+  .tl{width:960px;background:var(--ground);position:relative;overflow:hidden}
+  .ruler{height:20px;background:var(--well);position:relative;margin-left:var(--label)}
+  .ruler span{position:absolute;top:3px;font:9.5px Menlo,monospace;color:#A1A1A1}
+  .row{height:var(--row);display:flex;position:relative;border-bottom:1px solid var(--row-line)}
+  .row:nth-child(even){background:var(--band-a)} .row:nth-child(odd){background:var(--band-b)}
+  .name{width:var(--label);padding:0 8px;display:flex;align-items:center;gap:6px;font-weight:500;flex:none}
+  .name i{width:8px;height:8px;border-radius:2px;background:var(--c)}
+  .lane{position:relative;flex:1;
+    background-image:
+      linear-gradient(to right,var(--grid-major) 1px,transparent 1px),
+      linear-gradient(to right,var(--grid-fine) 1px,transparent 1px);
+    background-size:calc(30 * var(--ppf)) 100%, calc(10 * var(--ppf)) 100%;}
+  .bar{position:absolute;top:calc((var(--row) - var(--bar)) / 2);height:var(--bar);border-radius:var(--radius);
+    background:var(--c);filter:saturate(.85) brightness(.93);
+    box-shadow:inset 0 1px rgba(255,255,255,.16), inset 0 -1px rgba(255,255,255,.16)}
+  .link{position:absolute;top:50%;height:1px;background:rgba(255,255,255,.7)}
+  .sel .link{background:rgba(255,255,255,.9)}
+  .sel .bar{filter:none}
+  .key{position:absolute;top:50%;width:var(--key);height:var(--key);transform:translate(-50%,-50%) rotate(45deg);
+    background:rgba(242,242,242,.9);outline:.75px solid rgba(255,255,255,.6)}
+  .key.head{background:var(--playhead);outline:1.5px solid #fff;transform:translate(-50%,-50%) rotate(45deg) scale(1.2)}
+  .playhead{position:absolute;top:0;bottom:0;width:1px;background:var(--playhead);left:calc(var(--label) + 2 * 30 * var(--ppf))}
+</style>
+</head>
+<body>
+<h1>Motolii Timeline — DESIGN.md draft v0</h1>
+<p>Same scale as the concept art: row 23 px, bar .87, key .33. Row 3 is selected; the playhead is at 00:02 (frame 60).</p>
+<div class="tl">
+  <div class="ruler">
+    <span style="left:3px">00:00</span><span style="left:183px">00:01</span><span style="left:363px">00:02</span><span style="left:543px">00:03</span><span style="left:723px">00:04</span>
+  </div>
+  <div class="row"><div class="name"><i style="--c:var(--scatter)"></i>Scatter</div><div class="lane">
+    <div class="bar" style="--c:var(--scatter);left:60px;width:560px"></div>
+    <div class="link" style="left:66px;width:240px"></div>
+    <div class="key" style="left:66px"></div><div class="key" style="left:186px"></div><div class="key" style="left:306px"></div>
+  </div></div>
+  <div class="row"><div class="name"><i style="--c:var(--stagger)"></i>Stagger</div><div class="lane">
+    <div class="bar" style="--c:var(--stagger);left:20px;width:700px"></div>
+    <div class="link" style="left:26px;width:330px"></div>
+    <div class="key" style="left:26px"></div><div class="key" style="left:216px"></div><div class="key" style="left:356px"></div>
+  </div></div>
+  <div class="row sel"><div class="name"><i style="--c:var(--along)"></i>Along Path</div><div class="lane">
+    <div class="bar" style="--c:var(--along);left:80px;width:640px"></div>
+    <div class="link" style="left:86px;width:274px"></div>
+    <div class="key" style="left:86px"></div><div class="key" style="left:200px"></div><div class="key head" style="left:360px"></div>
+  </div></div>
+  <div class="row"><div class="name"><i style="--c:var(--face)"></i>Face</div><div class="lane">
+    <div class="bar" style="--c:var(--face);left:0;width:460px"></div>
+    <div class="link" style="left:6px;width:200px"></div>
+    <div class="key" style="left:6px"></div><div class="key" style="left:206px"></div>
+  </div></div>
+  <div class="row"><div class="name"><i style="--c:var(--follow)"></i>Follow</div><div class="lane">
+    <div class="bar" style="--c:var(--follow);left:140px;width:500px"></div>
+  </div></div>
+  <div class="row"><div class="name"><i style="--c:var(--attach)"></i>Attach</div><div class="lane">
+    <div class="bar" style="--c:var(--attach);left:110px;width:610px"></div>
+    <div class="link" style="left:116px;width:380px"></div>
+    <div class="key" style="left:116px"></div><div class="key" style="left:496px"></div>
+  </div></div>
+  <div class="playhead"></div>
+</div>
+</body>
+</html>
