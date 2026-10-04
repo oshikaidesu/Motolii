@@ -7,6 +7,8 @@ Start here. Each row names the one document that plays that role today. History 
 | What Motolii is and why | [concept.md](concept.md), [design/ideal.md](design/ideal.md) |
 | Screens and operations as adopted | [product/product-contract.md](product/product-contract.md), [product/product-direction.md](product/product-direction.md) |
 | Architecture: core, renderer, host boundaries | [product/technical-boundaries.md](product/technical-boundaries.md), [product/modules.md](product/modules.md), [product/frame-graph.md](product/frame-graph.md) |
+| Ideal shape of that machine, before an audit | [design/composition.md](design/composition.md) |
+| One-day GPU plan, for review | [design/one-day.md](design/one-day.md) |
 | Design principles behind the code | [design/](design/): extensible-core-model, memory-model, performance-model, simulation-model, freeze-and-flatten, plugin-resources, generative-user-boundary, known-implementation-adoption-model |
 | Vism (portable expressions), shelf, sources | [design/vism/](design/vism/) |
 | API notes for scripts, blocks, export | [design/skills/](design/skills/) |
