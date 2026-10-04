@@ -236,7 +236,7 @@ mod spatial_tests {
     #[test]
     fn local_pose_matches_pinned_lottie_web_reference() {
         let oracle: serde_json::Value = serde_json::from_str(include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"), "/../../reference/lottie-transform-oracle.json"
+            env!("CARGO_MANIFEST_DIR"), "/../reference/lottie-transform-oracle.json"
         ))).unwrap();
         for case in oracle["cases"].as_array().unwrap() {
             let mut doc = Document::new();

@@ -173,7 +173,7 @@ fn picture_bytes(file: &str) -> Option<Arc<[u8]>> {
 fn snapshot(plugin_id: &str) -> Option<Arc<[u8]>> {
     picture_bytes(&format!("{plugin_id}_snapshot_2.0x.png")).or_else(|| picture_bytes(&format!("{plugin_id}_snapshot.png")))
 }
-fn prelude_path() -> PathBuf { PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../reference/vello-blend.wgsl") }
+fn prelude_path() -> PathBuf { PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../reference/vello-blend.wgsl") }
 
 pub fn catalog_source_roots() -> Vec<PathBuf> { vec![directory(), prelude_path()].into_iter().map(|p| p.canonicalize().unwrap_or(p)).collect() }
 
