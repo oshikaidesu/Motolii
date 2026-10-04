@@ -108,7 +108,7 @@ class LiveTimeline extends StatefulWidget {
 
 class _LiveTimelineState extends State<LiveTimeline> {
   // the skin's geometry: its own, told to nobody
-  static double get rowH => Surface.control;
+  static double get rowH => Surface.px(23); // surface: the concept art's timeline row, taller than a work row
   static double get rulerH => Surface.ruler;
   // pointer tolerances: MINIMUM policy, never less than they were at 100 %
   static double get keySlop => UiScale.derive(6, ScalePolicy.minimum, floor: 6);
@@ -452,7 +452,7 @@ class _LiveTimelineState extends State<LiveTimeline> {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: lane
-                    ? Dn.label(N.g69)
+                    ? Dn.name(N.g69)
                     : Dn.name(r.layer['hidden'] == true ? N.g56 : (c.selectedIds.contains(r.id) ? N.g100 : N.g86), group || c.selectedIds.contains(r.id) ? FontWeight.w600 : FontWeight.w500),
               ),
             ),
@@ -467,20 +467,21 @@ class _LiveTimelineState extends State<LiveTimeline> {
         child: Row(children: [
           // the chosen layer's own colour, a thin edge at the column's left
           Container(width: Surface.px(2), height: rowH, color: !lane && c.selectedIds.contains(r.id) ? (r.isGroup ? N.g63 : _family(r.id).t) : null),
-          SizedBox(width: Surface.inlineGap),
+          SizedBox(width: Surface.labelGap),
           if (lane) ...[
             SizedBox(width: indent + Surface.px(11) + Surface.px(6)),
             // which layer these lanes belong to: its own colour, a thin line where its chip stands
             Container(width: Surface.px(1.5), height: rowH, color: (r.isGroup ? N.g51 : _family(r.id).t).withValues(alpha: .7)),
             SizedBox(width: Surface.px(9)),
             name,
+            SizedBox(width: Surface.labelGap),
             mark(_Diamond(keyed: r.keys.any((k) => (k['frame'] as num).round() == c.frame.value)), () => s.toggleKeyHere(i), w: 20),
             SizedBox(width: Surface.px(18)),
           ] else ...[
             SizedBox(width: indent),
             mark(_Twirl(open: group ? r.groupOpen : r.lanesOpen, strong: group), () => group ? s.toggleFold(i) : s.toggleLanes(i), w: 12),
             SizedBox(width: Surface.px(15), child: Center(child: _Chip(r))),
-            SizedBox(width: Surface.inlineGap),
+            SizedBox(width: Surface.labelGap),
             name,
             if (group) mark(_Twirl(open: r.lanesOpen, strong: false), () => s.toggleLanes(i), w: 12),
             // switches in one quiet column at the right: always in the same place, lit only when on
@@ -489,7 +490,7 @@ class _LiveTimelineState extends State<LiveTimeline> {
             mark(glyph(HG.solo, quiet ? N.g44 : N.g26, on: r.layer['solo'] == true), () => s.toggleSwitch(i, 'solo')),
             mark(glyph(HG.lock, quiet ? N.g44 : N.g26, on: r.layer['locked'] == true), () => s.toggleSwitch(i, 'locked')),
           ],
-          SizedBox(width: Surface.px(2)),
+          SizedBox(width: Surface.labelGap),
         ]),
       ));
     }
@@ -548,16 +549,34 @@ class _DiamondPainter extends CustomPainter {
   bool shouldRepaint(_DiamondPainter o) => o.fill != fill || o.edge != edge;
 }
 
-/// A key's half-size from how close the keys on its row sit: roomy rows get the full mark, crowded rows smaller ones.
-double _keySize(List<double> xs) {
-  if (xs.length < 2) return 3.2;
-  final sorted = [...xs]..sort();
-  var gap = double.infinity;
-  for (var i = 1; i < sorted.length; i++) {
-    final d = sorted[i] - sorted[i - 1];
-    if (d > .5 && d < gap) gap = d;
+
+
+/// A key on a row, as the concept art draws it: a small near-white filled diamond with a fine edge;
+/// the key under the playhead is filled with the playhead's blue and a little larger; a picked key takes the accent.
+void _keyMark(Canvas cv, Offset c, double r, {bool picked = false, bool atHead = false, required Color accent}) {
+  if (atHead) {
+    _diamond(cv, c, r * 1.2, H.playhead, null);
+    _edge(cv, c, r * 1.2, N.g100, 1.5);
+    return;
   }
-  return gap.isFinite ? (gap / 3.6).clamp(2.0, 3.2) : 3.2;
+  _diamond(cv, c, r, picked ? accent : N.g95.withValues(alpha: .9), null);
+  _edge(cv, c, r, picked ? N.g100 : N.g100.withValues(alpha: .6), .75);
+}
+
+void _edge(Canvas cv, Offset c, double r, Color colour, double width) {
+  final p = Path()..moveTo(c.dx, c.dy - r)..lineTo(c.dx + r, c.dy)..lineTo(c.dx, c.dy + r)..lineTo(c.dx - r, c.dy)..close();
+  cv.drawPath(p, Paint()..style = PaintingStyle.stroke..strokeWidth = width..strokeJoin = StrokeJoin.miter..color = colour);
+}
+
+/// The time grid: a light 1 px line at each labelled tick, a fainter one between them. One style throughout.
+void _grid(Canvas cv, List<double> major, List<double> fine, double top, double height) {
+  final p = Paint();
+  for (final x in fine) {
+    cv.drawRect(Rect.fromLTWH(x, top, 1, height), p..color = N.glaze9);
+  }
+  for (final x in major) {
+    cv.drawRect(Rect.fromLTWH(x, top, 1, height), p..color = N.glaze15);
+  }
 }
 
 void _diamond(Canvas cv, Offset c, double r, Color? fill, Color? edge) {
@@ -588,6 +607,14 @@ class _RowsPainter extends CustomPainter {
     final minor = steps.lastWhere((f) => f < major && major % f == 0 && f * s.pixelsPerFrame >= 8, orElse: () => major);
     final last = t.frameAt(size.width).ceil();
     final grid = <double>[];
+    // the concept art's grid between the ticks: a faint light line about every 30 px, a step the major one divides
+    final fine = steps
+        .where((f) => f < major && major % f == 0 && f * s.pixelsPerFrame >= 12)
+        .fold<int>(major, (best, f) => (f * s.pixelsPerFrame - 30).abs() < (best * s.pixelsPerFrame - 30).abs() ? f : best);
+    final fineGrid = <double>[
+      for (var f = math.max(0, s.startFrame.floor() ~/ fine * fine); f <= last; f += fine)
+        if (f % major != 0 && t.xOf(f) >= L) t.xOf(f).roundToDouble(),
+    ];
     final end = t.xOf((c.state['durationFrames'] as num? ?? 1 << 30).toDouble());
     for (var f = math.max(0, s.startFrame.floor() ~/ minor * minor); f <= last; f += minor) {
       final x = t.xOf(f);
@@ -605,6 +632,7 @@ class _RowsPainter extends CustomPainter {
     }
     cv.drawRect(Rect.fromLTWH(L, top - 1, size.width - L, 1), fill..color = N.g15);
     final picked = s.selectedKeys;
+    final head = c.frame.value;
     final moving = s.gesture == TlGesture.keys ? s.initialKeys : s.settlingKeys;
     final shift = s.gesture == TlGesture.keys ? s.deltaFrames : s.settlingDelta;
     final waves = {for (final w in EditorSession.maps(c.state['waveforms'])) w['layer']: EditorSession.maps(w['columns'])};
@@ -613,16 +641,21 @@ class _RowsPainter extends CustomPainter {
       if (y > size.height) break;
       final r = s.rows[i];
       final cy = y + rh / 2;
+      // the concept art's proportions: a bar is .87 of its row (bars nearly touch), its corners about 2 px
+      final barHalf = rh * .435;
+      final barRadius = rh * .09;
+      // a key is about half the bar's height across, as in the concept art
+      final keyR = rh * .165;
       final selected = c.selectedIds.contains(r.id) && r.property == null;
-      cv.drawRect(Rect.fromLTWH(0, y, size.width, rh), fill..color = selected ? N.g15 : (t.hover == i ? N.g13 : (r.property != null ? N.g07 : N.g10)));
-      cv.drawRect(Rect.fromLTWH(0, y + rh - 1, size.width, 1), fill..color = N.g13);
+      // as in the concept art: light grey grounds, a step apart row to row, cut by dark lines (not light lines laid on dark)
+      final ground = i.isEven ? const Color(0xFF1E1E1E) : const Color(0xFF2A2A2A); // surface: the concept art's two bands
+      cv.drawRect(Rect.fromLTWH(0, y, size.width, rh), fill..color = selected ? N.g20 : (t.hover == i ? N.g15 : ground));
+      cv.drawRect(Rect.fromLTWH(0, y + rh - 1, size.width, 1), fill..color = const Color(0xFF161616)); // surface: the concept's row line
       cv.save();
       cv.clipRect(Rect.fromLTWH(L, y, size.width - L, rh));
       // under the bars: past the composition's end is darker, and each second has a faint line
       if (end < size.width) cv.drawRect(Rect.fromLTRB(end, y, size.width, y + rh - 1), fill..color = N.g00.withValues(alpha: .22));
-      for (final gx in grid) {
-        cv.drawRect(Rect.fromLTWH(gx, y, 1, rh - 1), fill..color = N.glaze4);
-      }
+      _grid(cv, grid, fineGrid, y, rh - 1);
       double keyX(Map<String, dynamic> k) {
         final f = (k['frame'] as num).toInt();
         final carried = moving.any((m) => tlSameKey(m, k) || (m['layer'] == k['layer'] && m['frame'] == k['frame'] && r.property == null));
@@ -638,19 +671,26 @@ class _RowsPainter extends CustomPainter {
         // layer takes its full colour and a light edge
         final tone = r.isGroup ? N.g38 : _family(r.id).t;
         final hsl = HSLColor.fromColor(tone);
-        final calm = hsl.withSaturation(hsl.saturation * (t.hover == i ? .8 : .62)).withLightness(hsl.lightness * .86).toColor();
+        final calm = hsl.withSaturation(hsl.saturation * (t.hover == i ? .95 : .85)).withLightness(hsl.lightness * .93).toColor();
         final colour = r.layer['hidden'] == true ? N.g20 : (selected ? tone : calm);
         final ghost = r.layer['ghost'];
         if (ghost is num && ghost != 0) {
           final a = ghost > 0 ? end : math.max(0.0, start + ghost), b = ghost > 0 ? end + ghost : start;
-          cv.drawRRect(RRect.fromRectAndRadius(Rect.fromLTRB(t.xOf(a), cy - 7.5, t.xOf(b), cy + 7.5), const Radius.circular(2.5)), fill..color = colour.withValues(alpha: .28));
+          cv.drawRRect(RRect.fromRectAndRadius(Rect.fromLTRB(t.xOf(a), cy - barHalf, t.xOf(b), cy + barHalf), Radius.circular(barRadius)), fill..color = colour.withValues(alpha: .28));
         }
         {
           // however short in time, a bar is drawn at least 3 px, so it can be seen where it is grabbed; a camera is a
           // layer like the others (its own colour, its span): the one in force at a moment is the core's rule
-          final bar = Rect.fromLTRB(t.xOf(start), cy - 7.5, math.max(t.xOf(end), t.xOf(start) + 3), cy + 7.5);
-          cv.drawRRect(RRect.fromRectAndRadius(bar, const Radius.circular(2.5)), fill..color = colour);
-          if (selected) cv.drawRRect(RRect.fromRectAndRadius(bar.deflate(.5), const Radius.circular(2.5)), Paint()..style = PaintingStyle.stroke..color = N.g100.withValues(alpha: .55));
+          final bar = Rect.fromLTRB(t.xOf(start), cy - barHalf, math.max(t.xOf(end), t.xOf(start) + 3), cy + barHalf);
+          final rr = RRect.fromRectAndRadius(bar, Radius.circular(barRadius));
+          // as the concept art draws its bars: a faint light line on both the top and the bottom edge, no shadow
+          cv.drawRRect(rr, fill..color = colour);
+          cv.save();
+          cv.clipRRect(rr);
+          cv.drawRect(Rect.fromLTWH(bar.left, bar.top, bar.width, 1), fill..color = N.g100.withValues(alpha: .16));
+          cv.drawRect(Rect.fromLTWH(bar.left, bar.bottom - 1, bar.width, 1), fill..color = N.g100.withValues(alpha: .16));
+          cv.restore();
+          if (selected) cv.drawRRect(RRect.fromRectAndRadius(bar.deflate(.5), Radius.circular(barRadius)), Paint()..style = PaintingStyle.stroke..color = N.g100.withValues(alpha: .55));
         }
         final wave = waves[r.id];
         if (wave != null && wave.isNotEmpty) {
@@ -668,13 +708,12 @@ class _RowsPainter extends CustomPainter {
           // where it moves: a faint line from its first key to its last
           if (byFrame.length > 1) {
             final xs = [for (final k in byFrame.values) keyX(k)]..sort();
-            cv.drawRect(Rect.fromLTRB(xs.first, cy - .5, xs.last, cy + .5), fill..color = N.g100.withValues(alpha: selected ? .45 : .28));
+            cv.drawRect(Rect.fromLTRB(xs.first, cy - .5, xs.last, cy + .5), fill..color = N.g100.withValues(alpha: selected ? .9 : .7));
           }
-          // keys close together are drawn smaller, so a busy bar stays a bar with marks on it, not a string of beads
-          final size = _keySize([for (final k in byFrame.values) keyX(k)]);
+          // keep every key the same mark size so dense rows do not read as uneven
           for (final k in byFrame.values) {
             final on = r.allKeys.where((a) => a['frame'] == k['frame']).any(isPicked);
-            _diamond(cv, Offset(keyX(k), cy), on ? size + 1 : size, on ? accent : N.g95, on ? N.g100 : N.g07);
+            _keyMark(cv, Offset(keyX(k), cy), keyR, picked: on, atHead: (k['frame'] as num).round() == head, accent: accent);
           }
         }
       } else {
@@ -693,10 +732,10 @@ class _RowsPainter extends CustomPainter {
             cv.drawLine(Offset(a, cy), Offset(b, cy), line);
           }
         }
-        final size = _keySize([for (final k in keys) keyX(tlKeyOf(r, k))]) + .2;
+        // keep property-lane keys the same mark size as layer keys
         for (final k in keys) {
           final key = tlKeyOf(r, k), on = isPicked(key);
-          _diamond(cv, Offset(keyX(key), cy), on ? size + .8 : size, on ? accent : N.g86, on ? N.g100 : null);
+          _keyMark(cv, Offset(keyX(key), cy), keyR, picked: on, atHead: (k['frame'] as num).round() == head, accent: accent);
         }
       }
       cv.restore();
@@ -704,9 +743,7 @@ class _RowsPainter extends CustomPainter {
     final below = t.yOf(s.rows.length);
     if (below < size.height) {
       if (end < size.width) cv.drawRect(Rect.fromLTRB(end, below, size.width, size.height), fill..color = N.g00.withValues(alpha: .22));
-      for (final gx in grid) {
-        cv.drawRect(Rect.fromLTWH(gx, below, 1, size.height - below), fill..color = N.glaze4);
-      }
+      _grid(cv, grid, fineGrid, below, size.height - below);
     }
     if (end > L && end < size.width) cv.drawRect(Rect.fromLTWH(end, top, 1, size.height - top), fill..color = N.g26);
     // markers

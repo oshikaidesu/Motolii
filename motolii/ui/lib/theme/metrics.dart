@@ -145,7 +145,7 @@ abstract final class Surface {
 
   // ---- Spacing: between a label and its control, between neighbours in a row, between groups, and inside a panel.
   static double get labelGap => px(2);
-  static double get inlineGap => px(3);
+  static double get inlineGap => px(0);
   static double get sectionGap => px(6);
   static double get panelInset => px(9);
 
@@ -167,7 +167,7 @@ abstract final class Surface {
 /// with the UI; the line box follows it (a constant [leading] ratio), so the baseline and the paddings stay in their measured relation.
 abstract final class Dn {
   /// The sizes, for the helpers that take one (`sans(Dn.nameSize, …)`): body 11, label 10, tiny 9.5, numeric 11.
-  static double get nameSize => Surface.px(11);
+  static double get nameSize => Surface.px(9);
   static double get labelSize => Surface.px(10);
   static double get microSize => Surface.px(9.5);
   static double get numericSize => Surface.px(11);

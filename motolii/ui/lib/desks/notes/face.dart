@@ -148,7 +148,7 @@ class _NotesDeskState extends State<NotesDesk> {
       );
 
   Widget _toolbar() => Container(
-        height: Surface.px(33),
+        height: Surface.px(30),
         padding: EdgeInsets.symmetric(horizontal: Surface.px(7.5)),
         child: Row(children: [
           for (var i = 0; i < 5; i++) Padding(padding: EdgeInsets.only(right: Surface.inlineGap), child: _tool(i)),
@@ -161,7 +161,7 @@ class _NotesDeskState extends State<NotesDesk> {
                 _absorb();
               },
               onSecondaryTapDown: widget.host == null ? null : (e) => _pageMenu(p, e.globalPosition),
-              child: Container(width: Surface.px(19.5), height: Surface.px(19.5), margin: EdgeInsets.only(left: Surface.inlineGap), alignment: Alignment.center, decoration: BoxDecoration(border: Border.all(color: p == page ? kAccent : Surface.dividerFine), borderRadius: BorderRadius.circular(Surface.px(2)), color: p == page ? kAccentDim.withValues(alpha: .4) : null), child: Text('${p + 1}', style: sans(Dn.nameSize, c: p == page ? Surface.ink : Surface.muted))),
+              child: Container(width: Surface.control, height: Surface.control, margin: EdgeInsets.only(left: Surface.px(3)), alignment: Alignment.center, decoration: BoxDecoration(border: Border.all(color: p == page ? kAccent : Surface.dividerFine), borderRadius: BorderRadius.circular(Surface.px(2)), color: p == page ? kAccentDim.withValues(alpha: .4) : null), child: Text('${p + 1}', style: sans(Dn.nameSize, c: p == page ? Surface.ink : Surface.muted))),
             ),
         ]),
       );
@@ -209,8 +209,8 @@ class _NotesDeskState extends State<NotesDesk> {
           if (i == 3) _add('ref');
         },
         child: Container(
-          height: Surface.px(22.5),
-          width: Surface.px(22.5),
+          height: Surface.workRow,
+          width: Surface.workRow,
           decoration: BoxDecoration(color: i == tool ? kAccentDim.withValues(alpha: .4) : null, border: Border.all(color: i == tool ? kAccent : Surface.dividerFine), borderRadius: BorderRadius.circular(Surface.px(2))),
           child: CustomPaint(painter: _ToolP(i)),
         ),
@@ -223,14 +223,14 @@ class _NotesDeskState extends State<NotesDesk> {
   }
 
   Widget _zoomBar() => Container(
-        height: Surface.px(30),
+        height: Surface.px(26),
         padding: EdgeInsets.symmetric(horizontal: Surface.panelInset),
         child: Row(children: [
           Text('Page ${page + 1}  ·  ${blocks.length} blocks', style: sans(Dn.nameSize, c: Surface.muted)),
           const Spacer(),
-          GestureDetector(key: const ValueKey('zoom-out'), onTap: () => setState(() => zoom = clampD(zoom - .25, .25, 3)), child: Padding(padding: EdgeInsets.symmetric(horizontal: Surface.px(4.5)), child: Text('−', style: sans(Surface.px(13.5), c: N.g82)))),
+          GestureDetector(key: const ValueKey('zoom-out'), onTap: () => setState(() => zoom = clampD(zoom - .25, .25, 3)), child: Padding(padding: EdgeInsets.symmetric(horizontal: Surface.px(4.5)), child: Text('−', style: sans(Dn.labelSize, c: N.g82)))),
           SizedBox(width: Surface.px(36), child: Text('${(zoom * 100).round()}%', key: const ValueKey('zoom-label'), textAlign: TextAlign.center, style: mono(Dn.nameSize, c: N.g82))),
-          GestureDetector(key: const ValueKey('zoom-in'), onTap: () => setState(() => zoom = clampD(zoom + .25, .25, 3)), child: Padding(padding: EdgeInsets.symmetric(horizontal: Surface.px(4.5)), child: Text('+', style: sans(Surface.px(13.5), c: N.g82)))),
+          GestureDetector(key: const ValueKey('zoom-in'), onTap: () => setState(() => zoom = clampD(zoom + .25, .25, 3)), child: Padding(padding: EdgeInsets.symmetric(horizontal: Surface.px(4.5)), child: Text('+', style: sans(Dn.labelSize, c: N.g82)))),
           SizedBox(width: Surface.px(7.5)),
           GestureDetector(key: const ValueKey('zoom-fit'), onTap: () => setState(() => _fit(Size(Surface.px(310), Surface.px(490)))), child: Text('Fit', style: sans(Dn.nameSize, c: kAccent))),
         ]),

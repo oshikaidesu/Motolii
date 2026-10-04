@@ -394,6 +394,10 @@ const _colorNames = {
   'trackColor',
 };
 const _numberNames = {
+  'dividerThickness',
+  'childAspectRatio',
+  'crossAxisSpacing',
+  'mainAxisSpacing',
   'weight',
   'radius',
   'widthFactor',
@@ -920,6 +924,22 @@ class Analyzer {
           out.add(p(Origin.literal, PropKind.color, a, b, text));
           return;
         }
+        // the editor theme's colour (`EditorTheme.of(context).muted`): which theme answers is decided when it runs (the app's own or the
+        // live palette), so only this place is edited here, to a colour token
+        if (RegExp(r'^EditorTheme\.of\(\w+\)\.\w+$').hasMatch(text)) {
+          out.add(
+            p(
+              Origin.literal,
+              PropKind.color,
+              a,
+              b,
+              text,
+              note: 'a theme colour: this place only (the theme itself is lib/theme/editor_theme.dart)',
+              options: _colorOptions(),
+            ),
+          );
+          return;
+        }
         final wv = RegExp(r'^(.*)\.(withValues|withOpacity|withAlpha)\(').firstMatch(s.blank.substring(a, b));
         if (wv != null) {
           final baseEnd = a + wv.group(1)!.length;
@@ -1249,6 +1269,57 @@ const _valueTypes = {
 /// Arguments that configure behaviour, data or accessibility, not how something looks or is laid out: counted by the census, but
 /// reported apart from VISUAL / LAYOUT coverage.
 const nonVisualArgs = {
+  'closable',
+  'widget',
+  'keepAlive',
+  'buttons',
+  'link',
+  'toolTip',
+  'menuBuilder',
+  'delegate',
+  'node',
+  'visible',
+  'cursorOffset',
+  'paintCursorAboveText',
+  'cursorOpacityAnimates',
+  'minLines',
+  'expands',
+  'rendererIgnoresPointer',
+  'contextMenuBuilder',
+  'showSelectionHandles',
+  'mouseCursor',
+  'index',
+  'position',
+  'velocity',
+  'shaderCallback',
+  'colorFilter',
+  'dividerPainter',
+  'highlightedColor',
+  'defaultValue',
+  'transformationController',
+  'scrollCacheExtent',
+  'addAutomaticKeepAlives',
+  'slivers',
+  'gridDelegate',
+  'childCount',
+  'reverseDuration',
+  'debugShowCheckedModeBanner',
+  'resolveUri',
+  'camera',
+  'target',
+  'fovRadiansY',
+  'fovNear',
+  'fovFar',
+  'meta',
+  'root',
+  'decimal',
+  'signed',
+  'scrollOffset',
+  'crossAxisOffset',
+  'mainAxisExtent',
+  'crossAxisExtent',
+  'minimalSize',
+  'boundaryMargin',
   'itemCount',
   'gaplessPlayback',
   'dragStartBehavior',
@@ -1293,6 +1364,81 @@ const nonVisualArgs = {
   'reverse',
   'primary',
 };
+
+/// The kind of property an argument is, for the census by kind.
+String propertyKind(String arg) {
+  const kinds = <String, Set<String>>{
+    'size': {
+      'width',
+      'height',
+      'size',
+      'dimension',
+      'minWidth',
+      'maxWidth',
+      'minHeight',
+      'maxHeight',
+      'widthFactor',
+      'heightFactor',
+      'itemExtent',
+      'aspectRatio',
+      'constraints',
+      'cacheExtent',
+    },
+    'position': {'top', 'left', 'right', 'bottom', 'rect', 'offset', 'origin'},
+    'padding / margin': {'padding', 'margin', 'inset'},
+    'gap': {'spacing', 'runSpacing', 'gap'},
+    'radius / border': {'borderRadius', 'radius', 'border', 'thickness', 'strokeWidth', 'shape'},
+    'colour': {
+      'color',
+      'colors',
+      'stops',
+      'gradient',
+      'backgroundColor',
+      'foregroundColor',
+      'borderColor',
+      'shadowColor',
+      'iconColor',
+      'cursorColor',
+      'hoverColor',
+      'focusColor',
+      'fillColor',
+      'thumbColor',
+      'trackColor',
+      'selectionColor',
+      'backgroundCursorColor',
+    },
+    'alignment / axis / fit': {
+      'alignment',
+      'mainAxisAlignment',
+      'crossAxisAlignment',
+      'mainAxisSize',
+      'textAlign',
+      'direction',
+      'scrollDirection',
+      'fit',
+      'overflow',
+      'clipBehavior',
+      'verticalDirection',
+      'textDirection',
+      'textBaseline',
+      'wrapAlignment',
+      'runAlignment',
+      'wrapCrossAlignment',
+      'tileMode',
+      'filterQuality',
+      'behavior',
+    },
+    'flex': {'flex', 'weight'},
+    'text style': {'style', 'fontSize', 'letterSpacing', 'fontWeight', 'height'},
+    'decoration / shadow': {'decoration', 'boxShadow', 'shadows'},
+    'opacity / blur': {'opacity', 'sigmaX', 'sigmaY', 'elevation', 'blurRadius', 'spreadRadius'},
+    'scale / transform': {'scale', 'minScale', 'maxScale', 'transform'},
+  };
+  for (final e in kinds.entries) {
+    if (e.value.contains(arg)) return e.key;
+  }
+  return 'other';
+}
 
 /// The visual / layout arguments written in [files] (file -> text), by widget and name, and what Design Mode can do with each.
 List<CoverageRow> census(

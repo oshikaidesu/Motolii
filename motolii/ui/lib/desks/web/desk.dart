@@ -32,7 +32,7 @@ class _NewWebState extends State<NewWeb> {
         color: Surface.base,
         padding: EdgeInsets.all(Surface.panelInset),
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          SizedBox(width: Surface.px(30), height: Surface.px(30), child: CustomPaint(painter: HgPainter(HG.search, Surface.muted, Surface.base))),
+          SizedBox(width: Surface.px(22), height: Surface.px(22), child: CustomPaint(painter: HgPainter(HG.search, Surface.muted, Surface.base))),
           SizedBox(height: Surface.px(9)),
           Padding(padding: EdgeInsets.only(bottom: Surface.inlineGap), child: Text('WEBSITE', style: sans(Dn.microSize, c: N.g51, w: FontWeight.w600, ls: 1.2))),
           Container(
@@ -58,7 +58,7 @@ class _NewWebState extends State<NewWeb> {
               await c.native('openWeb', {'url': _url});
             },
             child: Container(
-              height: Surface.px(21),
+              height: Surface.control,
               alignment: Alignment.center,
               decoration: BoxDecoration(color: Surface.raised, borderRadius: BorderRadius.circular(Surface.px(4))),
               child: Text('Open in browser', style: sans(Dn.nameSize, c: Surface.ink, w: FontWeight.w500)),

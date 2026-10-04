@@ -1,6 +1,8 @@
 // Design Mode's property model: from a widget call's source, every number, switch, named choice and colour it holds (where it is
 // written, whether it is a token, an exception or a literal, which declaration a name leads to), the properties the widget could be given,
 // and the one-place text edit that changes each.
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:motolii_ui/dev/design_core.dart';
 import 'package:motolii_ui/dev/design_props.dart';
@@ -308,5 +310,21 @@ Widget build() => Row(
     final (l2, c2) = at(src, 'LinearGradient(');
     final tile = an.analyze('a.dart', l2, c2).firstWhere((p) => p.name == 'tileMode');
     expect(applied(an, files, tile, 'TileMode.mirror'), contains('tileMode: TileMode.mirror'));
+  });
+
+  test('the product\'s one TextBaseline (lib/app/top/ruler.dart) is a choice that is rewritten in place', () {
+    final src = File('lib/app/top/ruler.dart').readAsStringSync();
+    final files = {'a.dart': src};
+    final an = analyzerFor(files);
+    final (l, c) = at(
+      src,
+      'Baseline(baseline: base - oy, baselineType: TextBaseline.alphabetic, child: Text(text, softWrap: false, style: st))',
+    );
+    final p = an.analyze('a.dart', l, c).firstWhere((p) => p.name == 'baselineType');
+    expect(p.kind, PropKind.option);
+    expect(p.options, containsAll(['TextBaseline.alphabetic', 'TextBaseline.ideographic']));
+    final after = applied(an, files, p, 'TextBaseline.ideographic')!;
+    expect(after, contains('baselineType: TextBaseline.ideographic, child: Text(text, softWrap: false, style: st))'));
+    expect(after.length - src.length, 'TextBaseline.ideographic'.length - 'TextBaseline.alphabetic'.length);
   });
 }

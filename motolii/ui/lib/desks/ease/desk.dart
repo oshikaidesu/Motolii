@@ -50,11 +50,20 @@ class LiveEaseHost extends ChangeNotifier implements EaseHost {
 
   void _read() {
     final kinds = EditorSession.maps(c.state['easeKinds']);
-    if (kinds.isNotEmpty) _kinds = [for (final k in kinds) _preset(k)];
+    _kinds = [
+      for (final k in kinds)
+        if (_preset(k) case final p when !_isFlat0(p)) p,
+    ];
+    if (!_kinds.any((p) => p.name == 'Linear')) {
+      _kinds = [const Preset('Linear', [0, 0, 1, 1], null), ..._kinds];
+    }
     _rows = EditorSession.maps(c.state['easeIntervals']);
     _layers = _sequenceLayers();
     notifyListeners();
   }
+
+  static bool _isFlat0(Preset p) =>
+      const [0.0, .25, .5, .75, 1.0].every((t) => p.shape(t).abs() <= .05);
 
   /// The ghost mode (2026-09-07 ruling, Classic's Ease desk): no keys picked and two or more picked layers that can
   /// carry a ghost — the curve spreads their delays, in the order they were picked.
@@ -127,7 +136,8 @@ class LiveEaseHost extends ChangeNotifier implements EaseHost {
 
   Seg _seg(Map<String, dynamic> shape, {int frames = 1}) {
     final i = kinds.indexWhere((k) => k.name == shape['kind']);
-    final seg = Seg(i < 0 ? 0 : i, frames, kinds);
+    final seg = Seg(i < 0 ? kinds.indexWhere((k) => k.name == 'Linear') : i, frames, kinds);
+    if (i < 0) return seg;
     if (shape['kind'] == 'Bezier') {
       seg.setValues([for (final n in ['x1', 'y1', 'x2', 'y2']) (shape[n] as num? ?? 0).toDouble()]);
     } else if (shape['samples'] is List) {

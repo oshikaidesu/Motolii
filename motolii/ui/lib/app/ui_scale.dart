@@ -85,8 +85,14 @@ class _UiScaleScopeState extends State<UiScaleScope> {
       return;
     }
     _queued = true;
-    SchedulerBinding.instance.addPostFrameCallback((_) {
-      _queued = false;
+    _nextFrame(() => _queued = false);
+  }
+
+  // At the start of the next frame, not after this one: reassembling marks every render object for layout, and the mouse
+  // tracker's own post-frame hit test must never meet that dirty tree (its assert leaves every later pointer event failing)
+  void _nextFrame([VoidCallback? before]) {
+    SchedulerBinding.instance.scheduleFrameCallback((_) {
+      before?.call();
       if (mounted) _rebuildAll();
     });
   }
@@ -108,9 +114,7 @@ class _UiScaleScopeState extends State<UiScaleScope> {
   Widget build(BuildContext context) {
     // the display this window is on: a SNAP token reads it, so a window dragged to another screen rebuilds once
     if (UiScale.adoptDevicePixelRatio(MediaQuery.devicePixelRatioOf(context))) {
-      SchedulerBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _rebuildAll();
-      });
+      _nextFrame();
     }
     return widget.child;
   }

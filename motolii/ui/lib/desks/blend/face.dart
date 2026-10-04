@@ -203,7 +203,7 @@ class _BlendDeskState extends State<BlendDesk> {
         ),
         tall: (c, s) => Padding(
           padding: EdgeInsets.all(Surface.sectionGap),
-          child: SingleChildScrollView(child: Wrap(spacing: Surface.inlineGap, runSpacing: Surface.inlineGap, children: [for (var i = 0; i < blendModes.length; i++) _mark(i, s.width - 16, 58)])),
+          child: SingleChildScrollView(child: Wrap(spacing: Surface.sectionGap, runSpacing: Surface.sectionGap, children: [for (var i = 0; i < blendModes.length; i++) _mark(i, s.width - 16, 58)])),
         ),
       );
 
@@ -212,18 +212,18 @@ class _BlendDeskState extends State<BlendDesk> {
     final m = shown;
     return Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
       Column(mainAxisSize: MainAxisSize.min, children: [
-        Container(width: Surface.px(30), height: Surface.px(30), decoration: const BoxDecoration(color: kYellow, shape: BoxShape.circle)),
+        Container(width: Surface.px(24), height: Surface.px(24), decoration: const BoxDecoration(color: kYellow, shape: BoxShape.circle)),
         SizedBox(height: Surface.inlineGap),
         Text('A', style: sans(Dn.labelSize, c: Surface.muted, w: FontWeight.w600)),
         SizedBox(height: Surface.px(7.5)),
-        Container(width: Surface.px(30), height: Surface.px(30), decoration: const BoxDecoration(color: kBlue, shape: BoxShape.circle)),
+        Container(width: Surface.px(24), height: Surface.px(24), decoration: const BoxDecoration(color: kBlue, shape: BoxShape.circle)),
         SizedBox(height: Surface.inlineGap),
         Text('B', style: sans(Dn.labelSize, c: Surface.muted, w: FontWeight.w600)),
       ]),
-      SizedBox(width: Surface.px(19.5), child: Center(child: Text('→', style: sans(Surface.px(16.5), c: Surface.muted)))),
+      SizedBox(width: Surface.px(16), child: Center(child: Text('→', style: sans(Dn.labelSize, c: Surface.muted)))),
       Expanded(
         child: Column(children: [
-          SizedBox(key: const ValueKey('blend-result'), height: Surface.px(81), width: double.infinity, child: m == null ? Center(child: Text(host != null && host!.names.isEmpty ? 'Nothing' : 'Mixed', style: sans(Surface.px(13.5), c: Surface.muted))) : CustomPaint(painter: ResultPainter(m))),
+          SizedBox(key: const ValueKey('blend-result'), height: Surface.px(81), width: double.infinity, child: m == null ? Center(child: Text(host != null && host!.names.isEmpty ? 'Nothing' : 'Mixed', style: sans(Dn.labelSize, c: Surface.muted))) : CustomPaint(painter: ResultPainter(m))),
           SizedBox(height: Surface.sectionGap),
           // The runtime's own specimen of this mode on the layer: its colour over the beds the runtime draws.
           if (m != null && host != null && host!.beds(blendModes[m].key).isNotEmpty)
@@ -231,7 +231,7 @@ class _BlendDeskState extends State<BlendDesk> {
               padding: EdgeInsets.only(bottom: Surface.sectionGap),
               child: SizedBox(key: const ValueKey('blend-beds'), height: Surface.px(7.5), child: Row(children: [for (final c in host!.beds(blendModes[m].key)) Expanded(child: ColoredBox(color: c))])),
             ),
-          Text(m == null ? (host != null && host!.names.isEmpty ? 'No layer' : 'Targets differ') : blendModes[m].name, style: sans(Surface.px(13), c: Surface.ink, w: FontWeight.w600)),
+          Text(m == null ? (host != null && host!.names.isEmpty ? 'No layer' : 'Targets differ') : blendModes[m].name, style: sans(Dn.labelSize, c: Surface.ink, w: FontWeight.w600)),
         ]),
       ),
     ]);
@@ -242,7 +242,7 @@ class _BlendDeskState extends State<BlendDesk> {
         SizedBox(width: Surface.px(9)),
         // With a host the selection decides the targets; the chips only say who they are.
         if (host != null) ...[
-          for (final n in host!.names.take(2)) Padding(padding: EdgeInsets.only(right: Surface.px(4.5)), child: Container(height: Surface.px(19.5), padding: EdgeInsets.symmetric(horizontal: Surface.px(7.5)), alignment: Alignment.center, decoration: BoxDecoration(color: kYellow, borderRadius: BorderRadius.circular(Surface.px(10))), child: Text(n, softWrap: false, overflow: TextOverflow.clip, style: sans(Dn.nameSize, c: N.g10, w: FontWeight.w600)))),
+          for (final n in host!.names.take(2)) Padding(padding: EdgeInsets.only(right: Surface.px(4.5)), child: Container(height: Surface.control, padding: EdgeInsets.symmetric(horizontal: Surface.px(7.5)), alignment: Alignment.center, decoration: BoxDecoration(color: kYellow, borderRadius: BorderRadius.circular(Surface.px(10))), child: Text(n, softWrap: false, overflow: TextOverflow.clip, style: sans(Dn.nameSize, c: N.g10, w: FontWeight.w600)))),
           if (host!.names.length > 2) Text('+${host!.names.length - 2}', style: sans(Dn.nameSize, c: Surface.muted)),
         ] else
         for (final i in [0, 1]) Padding(
@@ -250,7 +250,7 @@ class _BlendDeskState extends State<BlendDesk> {
           child: GestureDetector(
             key: ValueKey('blend-target-$i'),
             onTap: () => setState(() { if (targeted.contains(i)) { if (targeted.length > 1) targeted.remove(i); } else { targeted.add(i); } }),
-            child: Container(height: Surface.px(19.5), padding: EdgeInsets.symmetric(horizontal: Surface.px(7.5)), alignment: Alignment.center, decoration: BoxDecoration(color: targeted.contains(i) ? kYellow : null, border: targeted.contains(i) ? null : Border.all(color: N.g26), borderRadius: BorderRadius.circular(Surface.px(10))), child: Text('Layer ${i + 2}', style: sans(Dn.nameSize, c: targeted.contains(i) ? N.g10 : N.g76, w: FontWeight.w600))),
+            child: Container(height: Surface.control, padding: EdgeInsets.symmetric(horizontal: Surface.px(7.5)), alignment: Alignment.center, decoration: BoxDecoration(color: targeted.contains(i) ? kYellow : null, border: targeted.contains(i) ? null : Border.all(color: N.g26), borderRadius: BorderRadius.circular(Surface.px(10))), child: Text('Layer ${i + 2}', style: sans(Dn.nameSize, c: targeted.contains(i) ? N.g10 : N.g76, w: FontWeight.w600))),
           ),
         ),
       ]);

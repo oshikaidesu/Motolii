@@ -1,6 +1,6 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter/material.dart'
-    show Theme, ThemeData, ThemeExtension, ColorScheme;
+    show Theme, ThemeData, ThemeExtension, ColorScheme, TooltipThemeData;
 
 import '../controls/leaves.dart';
 import 'metrics.dart';
@@ -156,6 +156,18 @@ class EditorTheme extends ThemeExtension<EditorTheme> {
         error: error,
       ),
       extensions: [this],
+      tooltipTheme: TooltipThemeData(
+        constraints: BoxConstraints(minHeight: Surface.workRow),
+        padding: EdgeInsets.symmetric(
+          horizontal: Surface.sectionGap,
+          vertical: Surface.labelGap,
+        ),
+        textStyle: Dn.label(EditorTheme.black),
+        decoration: BoxDecoration(
+          color: tooltip,
+          borderRadius: BorderRadius.circular(Surface.controlRadius),
+        ),
+      ),
     ),
     child: child,
   );

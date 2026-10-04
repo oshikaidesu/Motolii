@@ -60,7 +60,8 @@ class _IconP extends CustomPainter {
 
 /// Header and body placement for a Desk. Each Desk supplies its own body for each morphology.
 class DeskShell extends StatelessWidget {
-  const DeskShell({super.key, required this.kind, required this.title, required this.subtitle, required this.full, required this.strip, required this.tall, this.trailing});
+   const DeskShell({super.key, required this.kind, required this.title, required this.subtitle, required this.full, required this.strip, required this.tall, this.trailing, this.alwaysShowTrailing = false});
+   final bool alwaysShowTrailing;
   final Widget? trailing;
   final DeskKind kind;
   final String title, subtitle;
@@ -72,7 +73,7 @@ class DeskShell extends StatelessWidget {
         final isTall = !isStrip && w < 230;
         final showSub = !isStrip && !isTall;
         final docked = DockedPanel.of(context);
-        final hh = docked ? Surface.chromeRow : (showSub ? Surface.namedHeader + 8 : Surface.namedHeader);
+        final hh = docked ? Surface.chromeRow : Surface.namedHeader;
         final body = Size(w, h - hh);
         return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           Container(
@@ -80,15 +81,15 @@ class DeskShell extends StatelessWidget {
             padding: EdgeInsets.only(left: showSub ? Surface.px(16) : Surface.px(12), right: Surface.px(4.5)),
             decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: Surface.dividerFine))),
             child: Row(children: [
-              if (!docked) ...[DeskIcon(kind, size: showSub ? Surface.px(20) : Surface.px(18)), SizedBox(width: showSub ? Surface.px(10) : Surface.px(8))],
+              if (!docked) ...[DeskIcon(kind, size: showSub ? Surface.px(16) : Surface.px(14)), SizedBox(width: showSub ? Surface.px(8) : Surface.px(6))],
               // In a dock tab the tab names the desk; what stays is the line that says what it edits.
               if (docked) Expanded(child: Text(subtitle, softWrap: false, overflow: TextOverflow.clip, style: sans(Dn.microSize, c: Surface.muted, w: FontWeight.w500, ls: 1.1))) else Expanded(
                 child: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(title, softWrap: false, overflow: TextOverflow.clip, style: sans(showSub ? Surface.px(14) : Surface.px(13), c: Surface.ink, w: FontWeight.w600, ls: -0.2)),
+                  Text(title, softWrap: false, overflow: TextOverflow.clip, style: sans(Dn.labelSize, c: Surface.ink, w: FontWeight.w600, ls: -0.2)),
                   if (showSub) ...[SizedBox(height: Surface.px(1.5)), Text(subtitle, softWrap: false, overflow: TextOverflow.clip, style: sans(Dn.microSize, c: Surface.muted, w: FontWeight.w500, ls: 1.1))],
                 ]),
               ),
-              if (trailing != null && showSub) trailing!,
+               if (trailing != null && (showSub || alwaysShowTrailing)) trailing!,
             ]),
           ),
           Expanded(child: ClipRect(child: isStrip ? strip(context, body) : (isTall ? tall(context, body) : full(context, body)))),
@@ -105,19 +106,19 @@ class NumBox extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(
         width: width,
-        height: compact ? Surface.px(38) : Surface.px(52),
+        height: compact ? Surface.px(30) : Surface.px(40),
         padding: EdgeInsets.fromLTRB(Surface.px(7), compact ? Surface.px(5) : Surface.px(7), Surface.sectionGap, Surface.px(4.5)),
         decoration: BoxDecoration(color: Surface.well, border: Border.all(color: Surface.dividerFine), borderRadius: BorderRadius.circular(Surface.px(2))),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(label, style: sans(Dn.microSize, c: Surface.muted)),
           const Spacer(),
-          Text(value, softWrap: false, style: sans(compact ? Surface.px(13) : Surface.px(17), c: Surface.ink, w: FontWeight.w400)),
+          Text(value, softWrap: false, style: sans(Dn.numericSize, c: Surface.ink, w: FontWeight.w400)),
         ]),
       );
 }
 
 class Segmented extends StatelessWidget {
-  const Segmented(this.items, this.active, {super.key, this.height = 34, this.onChanged});
+  const Segmented(this.items, this.active, {super.key, this.height = 18, this.onChanged}); // surface: Surface.control — a getter, so the default cannot take the token
   final List<String> items;
   final int active;
   final double height;

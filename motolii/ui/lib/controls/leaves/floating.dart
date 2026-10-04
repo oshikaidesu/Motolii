@@ -9,31 +9,27 @@ import '../../theme/editor_theme.dart';
 /// The leaves that float over the panels in the overlay: the tooltip's sheet,
 /// the menu's sheet, where it hangs and the rows inside it.
 
-/// The tooltip's sheet: white at 90%, black 12 px text, a 4 px corner, at
-/// least 24 tall — the desktop tooltip of the dark theme.
+/// The tooltip's sheet shares the desktop density of the editor's labels.
 class EditorTooltipSheet extends StatelessWidget {
   const EditorTooltipSheet({super.key, required this.message});
   final String message;
   @override
   Widget build(BuildContext context) => Container(
-    constraints: BoxConstraints(minHeight: Surface.chromeRow),
+    constraints: BoxConstraints(minHeight: Surface.workRow),
     padding: EdgeInsets.symmetric(
-      horizontal: Surface.px(8),
-      vertical: Surface.px(4),
+      horizontal: Surface.sectionGap,
+      vertical: Surface.labelGap,
     ),
     decoration: BoxDecoration(
       color: EditorTheme.of(context).tooltip,
-      borderRadius: BorderRadius.all(Radius.circular(Surface.px(4))),
+      borderRadius: BorderRadius.all(Radius.circular(Surface.controlRadius)),
     ),
     child: Center(
       widthFactor: 1,
       heightFactor: 1,
       child: Text(
         message,
-        style: TextStyle(
-          fontSize: Surface.px(12),
-          color: EditorTheme.black,
-        ),
+        style: Dn.label(EditorTheme.black),
       ),
     ),
   );

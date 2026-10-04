@@ -285,6 +285,10 @@ class DepthPainter extends CustomPainter {
   // surface-block: painter geometry: drawn in the canvas's own pixels (method paint)
   @override
   void paint(Canvas c, Size s) {
+    // surface: diagram marks follow the viewport density, independently of world geometry and hit targets.
+    final density = (s.shortestSide / Surface.px(240)).clamp(.55, 1.0).toDouble();
+    // surface: camera and selection marks share the same bounded diagram scale.
+    double mark(double base) => Surface.px(base) * density;
     final rr = RRect.fromRectAndRadius(Offset.zero & s, const Radius.circular(4.5));
     c.drawRRect(rr, Paint()..color = N.g07);
     c.save();
@@ -314,8 +318,8 @@ class DepthPainter extends CustomPainter {
         if (i == selected) c.drawRRect(RRect.fromRectAndRadius(r.inflate(3), const Radius.circular(4)), Paint()..color = Surface.ink..style = PaintingStyle.stroke..strokeWidth = 2);
         if (detail) _text(c, '${i + 1}', r.center, sans(Dn.nameSize, c: N.g10, w: FontWeight.w700), centre: true);
       }
-      c.drawCircle(cp, 9, Paint()..color = Surface.ink);
-      c.drawCircle(cp, 4, Paint()..color = N.g07);
+       c.drawCircle(cp, mark(7), Paint()..color = Surface.ink);
+       c.drawCircle(cp, mark(3), Paint()..color = N.g07);
     } else {
       final fwdU = g.fwdIsU;
       final half2 = v == DView.side ? vhalf : half;
@@ -343,24 +347,25 @@ class DepthPainter extends CustomPainter {
         final a = fwdU ? Offset(p.dx, p.dy - ext) : Offset(p.dx - ext, p.dy);
         final b = fwdU ? Offset(p.dx, p.dy + ext) : Offset(p.dx + ext, p.dy);
         final hot = i == selected;
-        final thick = hot ? 16.0 : 12.0;
-        if (hot) c.drawLine(a, b, Paint()..color = Surface.ink..strokeWidth = thick + 4..strokeCap = StrokeCap.round);
+       final thick = mark(hot ? 8 : 6);
+       if (hot) c.drawLine(a, b, Paint()..color = Surface.ink..strokeWidth = thick + mark(2)..strokeCap = StrokeCap.round);
         c.drawLine(a, b, Paint()..color = depthLayerColor(i, selected)..strokeWidth = thick..strokeCap = StrokeCap.round);
         if (detail) _text(c, '${i + 1}', fwdU ? Offset(p.dx + 14, p.dy - ext - 8) : Offset(p.dx + ext + 14, p.dy), sans(Dn.nameSize, c: hot ? Surface.ink : N.g69, w: hot ? FontWeight.w700 : FontWeight.w400), centre: true);
       }
       // camera: a big white body with its lens toward the view
       c.save();
-      c.translate(cp.dx, cp.dy);
-      c.rotate(fwdU ? math.pi / 2 : 0);
+       c.translate(cp.dx, cp.dy);
+       c.rotate(fwdU ? math.pi / 2 : 0);
+       c.scale(mark(1) * .75);
       final body = RRect.fromRectAndRadius(const Rect.fromLTRB(-13, -3, 13, 17), const Radius.circular(2));
       c.drawPath(Path()..moveTo(-13, -3)..lineTo(-7, -15)..lineTo(7, -15)..lineTo(13, -3)..close(), Paint()..color = Surface.ink);
       c.drawRRect(body, Paint()..color = Surface.ink);
       c.restore();
     }
     // target: a plain cross
-    final cross = Paint()..color = Surface.ink..strokeWidth = 2.4..strokeCap = StrokeCap.round;
-    c.drawLine(o + const Offset(-9, 0), o + const Offset(9, 0), cross);
-    c.drawLine(o + const Offset(0, -9), o + const Offset(0, 9), cross);
+     final cross = Paint()..color = Surface.ink..strokeWidth = mark(1.5)..strokeCap = StrokeCap.round;
+     c.drawLine(o + Offset(-mark(6), 0), o + Offset(mark(6), 0), cross);
+     c.drawLine(o + Offset(0, -mark(6)), o + Offset(0, mark(6)), cross);
     if (detail) {
       _text(c, 'TARGET', o + const Offset(30, 18), sans(Dn.microSize, c: Surface.muted, ls: 1.2), centre: true);
       _text(c, switch (v) { DView.top => 'TOP', DView.front => 'FRONT', DView.side => 'SIDE', DView.topWide => 'TOP' }, const Offset(12, 14), sans(Dn.labelSize, c: Surface.muted, w: FontWeight.w600, ls: 1.4));

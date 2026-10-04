@@ -142,7 +142,7 @@ class _HistoryDeskState extends State<HistoryDesk> {
         key: ValueKey('history-$id'),
         onTap: on ? f : null,
         child: Container(
-          height: Surface.px(27),
+          height: Surface.control,
           decoration: BoxDecoration(color: Surface.well, border: Border.all(color: Surface.dividerFine), borderRadius: BorderRadius.circular(Surface.px(2))),
           padding: EdgeInsets.symmetric(horizontal: Surface.panelInset),
           child: Row(children: [Text(l, style: sans(Dn.nameSize, c: on ? Surface.ink : N.g38)), const Spacer(), Text(k, style: sans(Dn.nameSize, c: Surface.muted))]),
@@ -162,7 +162,7 @@ class _HistoryDeskState extends State<HistoryDesk> {
       child: Row(children: [
         SizedBox(width: labels ? Surface.px(58) : w, height: h, child: CustomPaint(painter: _Node(i == 0, i == entries.length - 1, cur, reached, i < at, e.mark))),
         if (labels) ...[
-          Expanded(child: Text(e.label, softWrap: false, overflow: TextOverflow.clip, style: sans(cur ? Surface.px(13.5) : Surface.px(12), c: ink, w: cur ? FontWeight.w600 : FontWeight.w400))),
+          Expanded(child: Text(e.label, softWrap: false, overflow: TextOverflow.clip, style: sans(cur ? Dn.labelSize : Dn.nameSize, c: ink, w: cur ? FontWeight.w600 : FontWeight.w400))),
           Padding(padding: EdgeInsets.only(right: Surface.px(12)), child: Text(e.time, style: mono(Dn.microSize, c: reached ? N.g44 : N.g26))),
         ],
       ]),

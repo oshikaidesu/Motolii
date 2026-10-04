@@ -92,6 +92,20 @@ class _Node {
   String get head => '$widget  ${file.split('/').last}:$line';
 }
 
+/// What identifies the selected element across a remount, from what Flutter already knows: its widget type, the project widgets it sits in
+/// (root first; the inspector's own notion of "local", not the framework's internals) and which of the elements with that identity, in
+/// tree order, it is.
+class _Anchor {
+  _Anchor(this.type, this.sig, this.ordinal, this.file);
+  final String type, file;
+  final List<String> sig;
+  final int ordinal;
+
+  Map<String, Object?> toJson() => {'type': type, 'sig': sig, 'ordinal': ordinal, 'file': file};
+  static _Anchor fromJson(Map<String, Object?> j) =>
+      _Anchor(j['type'] as String, (j['sig'] as List).cast<String>(), j['ordinal'] as int, j['file'] as String);
+}
+
 /// One line of the HUD: a property of a node, or something Flutter decided (derived).
 class _Row {
   _Row(this.node, {this.prop, this.derivedName, this.derivedText, this.scope = Scope.instance, this.usage});
@@ -184,6 +198,7 @@ class DesignController extends ChangeNotifier {
     WidgetsBinding.instance.debugShowWidgetInspectorOverride = on;
     if (on) {
       _selected();
+      if (_anchor != null) Timer(const Duration(milliseconds: 300), _reselect);
     } else {
       showChanges = false;
     }
@@ -217,9 +232,79 @@ class DesignController extends ChangeNotifier {
 
   // ------------------------------------------------------------------------------------------------------------ selection
 
+  bool _keepNext = false;
+
   void _selected() {
     if (!on) return;
-    scheduleMicrotask(select);
+    scheduleMicrotask(() {
+      final keep = _keepNext;
+      _keepNext = false;
+      select(keep: keep);
+    });
+  }
+
+  // ------------------------------------------------------------------------------------------ the selection survives a remount
+
+  _Anchor? _anchor;
+
+  static List<String> _localChain(Element e) {
+    final out = <String>[];
+    e.visitAncestorElements((a) {
+      if (debugIsLocalCreationLocation(a.widget)) out.add(a.widget.runtimeType.toString());
+      return true;
+    });
+    return out.reversed.toList();
+  }
+
+  static bool _same(List<String> a, List<String> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
+  }
+
+  /// The elements of the live tree with [type] and [sig], in tree order.
+  static List<Element> _likes(String type, List<String> sig) {
+    final root = WidgetsBinding.instance.rootElement;
+    final out = <Element>[];
+    if (root == null) return out;
+    final stack = <Element>[root];
+    while (stack.isNotEmpty) {
+      final e = stack.removeLast();
+      if (e.widget.runtimeType.toString() == type && _same(_localChain(e), sig)) out.add(e);
+      final kids = <Element>[];
+      e.visitChildren(kids.add);
+      stack.addAll(kids.reversed);
+    }
+    return out;
+  }
+
+  void _remember(Element e, String file) {
+    final type = e.widget.runtimeType.toString(), sig = _localChain(e);
+    final i = _likes(type, sig).indexOf(e);
+    if (i >= 0) _anchor = _Anchor(type, sig, i, file);
+  }
+
+  /// After a hot reload (or restart): the same selection when its element lives on, else the element that is the same one now.
+  void _reselect([int tries = 0]) {
+    if (!on) return;
+    final svc = WidgetInspectorService.instance;
+    if (svc.selection.currentElement != null) {
+      select(keep: true);
+      return;
+    }
+    final a = _anchor;
+    if (a == null) return;
+    final found = _likes(a.type, a.sig);
+    if (found.isNotEmpty) {
+      _keepNext = true;
+      if (_restoredActive >= 0) active = _restoredActive;
+      _restoredActive = -1;
+      svc.selection.currentElement = found[a.ordinal < found.length ? a.ordinal : found.length - 1];
+      return;
+    }
+    if (tries < 10) Timer(const Duration(milliseconds: 200), () => _reselect(tries + 1));
   }
 
   static const _geometry = {
@@ -313,6 +398,8 @@ class DesignController extends ChangeNotifier {
       _nodes.add(_Node(_typeOf(n), path, loc['line'] as int, loc['column'] as int, obj is Element ? obj : null));
     }
     title = _nodes.isEmpty ? '' : _nodes.first.head;
+    final picked = svc.selection.currentElement;
+    if (picked != null && _nodes.isNotEmpty) _remember(picked, _nodes.first.file);
     if (!keep) active = -1;
     _reanalyze();
   }
@@ -803,6 +890,8 @@ class DesignController extends ChangeNotifier {
   File get _sessionFile => File('${_pidFile.parent.path}/design-session.json');
 
   /// After a hot restart: the session (history, BEFORE / CURRENT) comes back from the file written just before it.
+  int _restoredActive = -1;
+
   bool restore() {
     try {
       final f = _sessionFile;
@@ -811,6 +900,8 @@ class DesignController extends ChangeNotifier {
       f.deleteSync();
       _root = j['root'] as String;
       session.restore((j['session'] as Map).cast<String, Object?>());
+      if (j['anchor'] != null) _anchor = _Anchor.fromJson((j['anchor'] as Map).cast<String, Object?>());
+      _restoredActive = j['active'] as int? ?? -1;
       note = 'restarted: a changed const needs it. Your session is back';
       return true;
     } catch (_) {
@@ -830,7 +921,9 @@ class DesignController extends ChangeNotifier {
     }
     if (_restart) {
       _restart = false;
-      _sessionFile.writeAsStringSync(jsonEncode({'root': _root, 'session': session.toJson()}));
+      _sessionFile.writeAsStringSync(
+        jsonEncode({'root': _root, 'session': session.toJson(), 'anchor': _anchor?.toJson(), 'active': active}),
+      );
       Process.runSync('kill', ['-USR2', _pidFile.readAsStringSync().trim()]);
       note = 'hot restart (a const changed)…';
       notifyListeners();
@@ -848,7 +941,7 @@ class DesignController extends ChangeNotifier {
     _ackTimer?.cancel();
     _opsSinceAck = 0;
     note = session.showingBefore ? 'BEFORE' : null;
-    if (on) Timer(const Duration(milliseconds: 60), () => select(keep: true));
+    if (on) Timer(const Duration(milliseconds: 60), _reselect);
   }
 
   /// The reload did not land (a compile error): put the last edits back and reload again, so one wrong input cannot end the session.
@@ -1042,6 +1135,46 @@ class _BoundsPainter extends CustomPainter {
         ..strokeWidth = 1.5
         ..color = const Color(0xFFFFB347),
     );
+    // a GestureDetector's hit bounds, as the render object says them: opaque and translucent listen over their whole box (translucent
+    // also lets what is behind it hear); deferToChild listens only where its child is hit, which is not a rectangle of its own
+    if (r.node.widget == 'GestureDetector') {
+      final hit = _hitListener(ro);
+      if (hit != null && hit.attached && hit.hasSize) {
+        final hb = hit.localToGlobal(Offset.zero) & hit.size;
+        final green = const Color(0xFF4FD1A5);
+        if (hit.behavior == HitTestBehavior.opaque) {
+          canvas.drawRect(hb.deflate(2), Paint()..color = green.withValues(alpha: 0.18));
+        }
+        if (hit.behavior != HitTestBehavior.deferToChild) {
+          canvas.drawRect(
+            hb.deflate(2),
+            Paint()
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = 1.5
+              ..color = green,
+          );
+        }
+        final tp = TextPainter(
+          text: TextSpan(
+            text: 'hit: ${hit.behavior.name}${hit.behavior == HitTestBehavior.deferToChild ? ' (where its child is hit)' : ''}',
+            style: const TextStyle(color: Color(0xFF4FD1A5), fontSize: 9, fontFamily: 'Menlo', backgroundColor: Color(0xCC000000)),
+          ),
+          textDirection: TextDirection.ltr,
+        )..layout();
+        tp.paint(canvas, hb.bottomLeft + const Offset(0, -12));
+      }
+    }
+  }
+
+  static RenderProxyBoxWithHitTestBehavior? _hitListener(RenderObject from) {
+    RenderObject? at = from;
+    for (var i = 0; i < 8 && at != null; i++) {
+      if (at is RenderProxyBoxWithHitTestBehavior) return at;
+      RenderObject? next;
+      at.visitChildren((c) => next ??= c);
+      at = next;
+    }
+    return null;
   }
 
   @override

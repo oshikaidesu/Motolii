@@ -310,6 +310,28 @@ Future<void> main(List<String> a) async {
       stdout.writeln(
         'VISUAL/LAYOUT EDITABLE COVERAGE: $vUses arguments   EDITABLE $vEdit (${vp(vEdit)})   READ-ONLY $vRo (${vp(vRo)})   UNSUPPORTED $vUn (${vp(vUn)})',
       );
+      // by kind of property: how the product's visual / layout arguments split, so a big kind that is not editable cannot hide
+      final byKind = <String, List<int>>{};
+      for (final r in rows) {
+        if (nonVisualArgs.contains(r.arg)) continue;
+        final k = byKind.putIfAbsent(propertyKind(r.arg), () => [0, 0, 0, 0]);
+        k[0] += r.uses;
+        k[1] += r.editable;
+        k[2] += r.readOnly;
+        k[3] += r.unsupported;
+      }
+      stdout.writeln('\nBY KIND                     uses  EDITABLE  READ-ONLY  UNSUPPORTED');
+      for (final e in byKind.entries.toList()..sort((a, b) => b.value[0].compareTo(a.value[0]))) {
+        final v = e.value;
+        String q(int n) => '${(100 * n / (v[0] == 0 ? 1 : v[0])).toStringAsFixed(0)}%'.padLeft(4);
+        stdout.writeln(
+          '${e.key.padRight(26)} ${v[0].toString().padLeft(5)}  ${v[1].toString().padLeft(5)} ${q(v[1])}  ${v[2].toString().padLeft(5)} ${q(v[2])}  ${v[3].toString().padLeft(6)} ${q(v[3])}',
+        );
+      }
+      stdout.writeln('\nUNSUPPORTED IN "other"');
+      for (final r in rows.where((r) => r.unsupported > 0 && propertyKind(r.arg) == 'other' && !nonVisualArgs.contains(r.arg)).take(60)) {
+        stdout.writeln('  ${r.unsupported}  ${r.widget}.${r.arg}');
+      }
       stdout.writeln('\nTOP UNSUPPORTED (visual / layout first)');
       for (final r
           in (rows.where((r) => r.unsupported > 0 && !nonVisualArgs.contains(r.arg)).toList()

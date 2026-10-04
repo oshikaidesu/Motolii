@@ -1,11 +1,14 @@
 import 'dart:math' as math;
+import 'package:flutter/animation.dart' show AnimationController;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
+import '../../controls/panel/toggles.dart' show EditorSwitch;
 import '../../browser/parts.dart';
 import '../parts.dart';
 import 'meaning.dart';
 import '../../theme/neutral.dart';
 import '../../theme/metrics.dart' show Dn, Surface;
+import '../../theme/material_icons.dart' show Glyph;
 
 typedef Shape = double Function(double t);
 
@@ -143,7 +146,7 @@ Offset easeAt(Size s, double x, double y) {
   return Offset(r.left + r.width * x, r.bottom - r.height * (y + .15) / 1.3);
 }
 
-const _segColors = [kViolet, kMint, kPink];
+
 const _presetColors = [kBlue, kViolet, kPink, kMint, kYellow];
 
 class EaseDesk extends StatefulWidget {
@@ -185,17 +188,29 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
   final saved = <List<double>>[[.7, 0, .3, 1], [.2, .9, .6, 1.2]];
   int sel = 0; // -1 = all intervals (mixed)
   bool ghost = false;
+  bool _overOK = true;
   int? drag;
   bool _moved = false;
   int? peek; // preset under the pointer or the keyboard: shown on the plot until it leaves
   int keyFocus = 2;
   final _presetFocus = FocusNode();
-  late final AnimationController _play = AnimationController(vsync: this, duration: const Duration(milliseconds: 1400))..addListener(() => setState(() {}));
+  /// Local preview: while pressed, the plot's playhead slides 0→1 across the current curve.
+  late final AnimationController _play = AnimationController(vsync: this, duration: const Duration(milliseconds: 1400));
+
+  void _togglePlay() {
+    final p = _play;
+    setState(() {
+      if (p.isAnimating) p.stop();
+      else p.forward(from: 0);
+    });
+  }
+  
 
   @override
   void dispose() {
     widget.host?.removeListener(_absorb);
     _play.dispose();
+    
     _presetFocus.dispose();
     _plotKeys.dispose();
     _typed.dispose();
@@ -211,7 +226,19 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
   Widget build(BuildContext context) => DeskShell(
         kind: DeskKind.ease,
         title: 'Ease',
+        alwaysShowTrailing: true,
         subtitle: widget.host?.target ?? 'KEYFRAMES · MOTION',
+        trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+          EditorSwitch(
+            on: _overOK,
+            glyph: _overOK ? Glyph.check_box_outlined : Glyph.check_box_outline_blank,
+            label: 'Allow values outside 0–1',
+            compact: true,
+            tint: kBlue,
+            onChanged: (v) => setState(() => _overOK = v),
+          ),
+          Text('Over OK', style: sans(Dn.microSize, c: Surface.muted)),
+        ]),
         full: (c, s) => _body(s.height, s.width),
         strip: (c, s) => _body(s.height, s.width),
         tall: (c, s) => _body(s.height, s.width),
@@ -231,8 +258,6 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
           SizedBox(height: math.max(56, h - 20), child: _plot(labels: false)),
           SizedBox(height: Surface.sectionGap),
           _presetRow(),
-          SizedBox(height: Surface.sectionGap),
-          _navigator(w),
           _secondary(w),
         ]),
       );
@@ -244,8 +269,6 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
         SizedBox(height: plotH, child: _plot(labels: w >= 230 && plotH >= 150)),
         SizedBox(height: Surface.px(7.5)),
         _presetRow(),
-        SizedBox(height: Surface.sectionGap),
-        _navigator(w),
         Expanded(child: SingleChildScrollView(key: const ValueKey('ease-scroll'), padding: EdgeInsets.only(bottom: Surface.px(12)), child: _secondary(w))),
       ]),
     );
@@ -266,44 +289,16 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
         ]),
       );
 
-  void _step(int d) => setState(() {
-        final n = segs.length;
-        sel = sel < 0 ? (d > 0 ? 0 : n - 1) : (sel + d + n) % n;
-      });
-
-  // Play, previous / next interval, and the intervals themselves, in one strip under the presets.
-  Widget _navigator(double w) {
-    final narrow = w < 230;
-    Widget arrow(String key, String t, int d) => GestureDetector(
-          key: ValueKey(key),
-          behavior: HitTestBehavior.opaque,
-          onTap: () => _step(d),
-          child: SizedBox(width: Surface.px(16.5), height: Surface.px(27), child: Center(child: Text(t, style: sans(Surface.px(13.5), c: Surface.muted)))),
-        );
-    return SizedBox(
-      height: Surface.px(27),
-      child: Row(children: [
-        GestureDetector(
-          key: const ValueKey('ease-play'),
-          onTap: () => _play.isAnimating ? _play.stop() : _play.forward(from: 0),
-          child: Container(width: Surface.px(27), height: Surface.px(27), decoration: const BoxDecoration(color: kMint, shape: BoxShape.circle), child: CustomPaint(painter: _PlayP(_play.isAnimating))),
-        ),
-        SizedBox(width: Surface.px(4.5)),
-        if (!narrow) arrow('ease-prev', '‹', -1),
-        Expanded(child: _intervals(narrow)),
-        if (!narrow) arrow('ease-next', '›', 1),
-      ]),
-    );
-  }
+  
 
   /// The curve's numbers (Classic DK-018): a Bezier's four, another kind's own parameters (re-described by the host).
   List<(String, double, void Function(double))> _params() {
     if (cur.bez || widget.host == null) {
       return [
         ('X1', cur.x1, (v) => cur.x1 = clampD(v, 0, 1)),
-        ('Y1', cur.y1, (v) => cur.y1 = v),
+        ('Y1', cur.y1, (v) => cur.y1 = _overOK ? v : clampD(v, 0, 1)),
         ('X2', cur.x2, (v) => cur.x2 = clampD(v, 0, 1)),
-        ('Y2', cur.y2, (v) => cur.y2 = v),
+        ('Y2', cur.y2, (v) => cur.y2 = _overOK ? v : clampD(v, 0, 1)),
       ].map((e) => (e.$1, e.$2, (double v) { e.$3(v); cur.p = cur.kinds.indexWhere((k) => k.bez != null && k.name == 'Bezier').clamp(0, cur.kinds.length - 1); })).toList();
     }
     final m = cur.model ?? const <String, dynamic>{};
@@ -364,7 +359,7 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
                     child: EditableText(
                       controller: _typed,
                       focusNode: _typedFocus,
-                      style: sans(Surface.px(16.5), c: N.g10, w: FontWeight.w600, ls: -.4),
+                      style: sans(Dn.numericSize, c: N.g10, w: FontWeight.w600, ls: -.4),
                       cursorColor: N.g10,
                       backgroundCursorColor: Surface.muted,
                       onSubmitted: (t) {
@@ -377,7 +372,7 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
                       },
                     ),
                   )
-                : Text(_n(v), softWrap: false, style: sans(Surface.px(16.5), c: mixed ? Surface.muted : N.g10, w: FontWeight.w600, ls: -.4)),
+                : Text(_n(v), softWrap: false, style: sans(Dn.numericSize, c: mixed ? Surface.muted : N.g10, w: FontWeight.w600, ls: -.4)),
           ]),
         ),
       );
@@ -399,35 +394,46 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
     return Column(children: [for (final (i, b) in blocks.indexed) ...[if (i > 0) SizedBox(height: Surface.px(4.5)), b]]);
   }
 
-  // Presets: shape only. Hover or arrow keys peek the shape on the plot; Enter or click applies.
+  List<int> get _shown => [for (final (i, _) in presets.indexed) i];
+
+  // Presets: shape only. Arrow keys peek the shape on the plot; Enter or click applies.
   Widget _presetRow() => Focus(
         focusNode: _presetFocus,
         onFocusChange: (f) { if (!f) setState(() => peek = null); },
         onKeyEvent: (_, e) {
           if (e is! KeyDownEvent) return KeyEventResult.ignored;
+          final s = _shown;
+          if (s.isEmpty) return KeyEventResult.ignored;
+          final at = (int dir) {
+            var i = s.indexOf(keyFocus);
+            if (i < 0) i = 0;
+            return s[(i + dir) % s.length];
+          };
           final k = e.logicalKey;
-          final n = presets.length;
-          if (k == LogicalKeyboardKey.arrowRight || k == LogicalKeyboardKey.arrowDown) { setState(() { keyFocus = (keyFocus + 1) % n; peek = keyFocus; }); }
-          else if (k == LogicalKeyboardKey.arrowLeft || k == LogicalKeyboardKey.arrowUp) { setState(() { keyFocus = (keyFocus + n - 1) % n; peek = keyFocus; }); }
-          else if (k == LogicalKeyboardKey.home) { setState(() { keyFocus = 0; peek = 0; }); }
-          else if (k == LogicalKeyboardKey.end) { setState(() { keyFocus = n - 1; peek = n - 1; }); }
+          if (k == LogicalKeyboardKey.arrowRight || k == LogicalKeyboardKey.arrowDown) { final f = at(1); setState(() { keyFocus = f; peek = f; }); }
+          else if (k == LogicalKeyboardKey.arrowLeft || k == LogicalKeyboardKey.arrowUp) { final f = at(-1); setState(() { keyFocus = f; peek = f; }); }
+          else if (k == LogicalKeyboardKey.home) { final f = s.first; setState(() { keyFocus = f; peek = f; }); }
+          else if (k == LogicalKeyboardKey.end) { final f = s.last; setState(() { keyFocus = f; peek = f; }); }
           else if (k == LogicalKeyboardKey.enter) { setState(() { _apply(keyFocus); peek = null; }); }
           else if (k == LogicalKeyboardKey.escape) { setState(() => peek = null); }
           else { return KeyEventResult.ignored; }
           return KeyEventResult.handled;
         },
         child: Row(children: [
-          for (final (i, p) in presets.indexed) ...[
-            Expanded(
-              child: MouseRegion(
-                onEnter: (_) => setState(() => peek = i),
-                onExit: (_) => setState(() { if (peek == i) peek = null; }),
+          _playButton(-1),
+          Expanded(child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(children: [
+          for (final (i, p) in presets.indexed)
+            ...[
+              SizedBox(
+                width: Surface.faceTile + Surface.sectionGap,
                 child: GestureDetector(
                   key: ValueKey('ease-preset-$i'),
                   onTap: () { _presetFocus.requestFocus(); setState(() { keyFocus = i; _apply(i); }); },
                   child: Container(
-                    height: Surface.px(31.5),
-                    margin: EdgeInsets.only(right: i == presets.length - 1 ? 0 : Surface.px(5)),
+                    height: Surface.faceTile,
+                    margin: EdgeInsets.only(right: Surface.sectionGap),
                     padding: EdgeInsets.all(Surface.sectionGap),
                     // a quiet tile with the curve in its colour; the chosen one takes a tint and an edge of it
                     decoration: BoxDecoration(color: !mixed && cur.p == i ? _presetColors[i % _presetColors.length].withValues(alpha: .18) : (peek == i ? N.g15 : N.g13), borderRadius: BorderRadius.circular(Surface.px(4)), border: Border.all(color: !mixed && cur.p == i ? _presetColors[i % _presetColors.length] : N.g20, width: !mixed && cur.p == i ? Surface.px(1.4) : 1)),
@@ -435,9 +441,32 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
                   ),
                 ),
               ),
-            ),
-          ],
+            ],
+            ]),
+          )),
         ]),
+      );
+
+  /// Previews the current curve (its playhead runs 0→1).
+  Widget _playButton(int i) => SizedBox(
+        width: Surface.faceTile + Surface.sectionGap,
+        child: ListenableBuilder(
+          listenable: _play,
+          builder: (context, _) {
+            final on = _play.isAnimating;
+            return GestureDetector(
+              key: const ValueKey('ease-play'),
+              onTap: _togglePlay,
+              child: Container(
+                height: Surface.faceTile,
+                margin: EdgeInsets.only(right: Surface.sectionGap),
+                padding: EdgeInsets.all(Surface.sectionGap),
+                decoration: BoxDecoration(color: on ? kBlue : N.g13, borderRadius: BorderRadius.circular(Surface.px(4)), border: Border.all(color: on ? kBlue : N.g20, width: on ? Surface.px(1.4) : 1)),
+                child: Icon(Glyph.play_arrow_outlined, color: on ? N.g10 : N.g76, size: Surface.px(18)),
+              ),
+            );
+          },
+        ),
       );
 
   void _apply(int i) {
@@ -453,7 +482,7 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
               setState(() { if (mixed) { for (final s in segs) { s.setValues(v); } } else { cur.setValues(v); } });
               _write();
             },
-            child: Container(width: Surface.px(34.5), height: Surface.px(25.5), padding: EdgeInsets.all(Surface.sectionGap), decoration: BoxDecoration(color: Surface.raised, borderRadius: BorderRadius.circular(Surface.controlRadius)), child: CustomPaint(size: Size.infinite, painter: _Icon(bezierShape(v[0], v[1], v[2], v[3]), kMint, 2))),
+            child: Container(width: Surface.px(30), height: Surface.controlHero, padding: EdgeInsets.all(Surface.sectionGap), decoration: BoxDecoration(color: Surface.raised, borderRadius: BorderRadius.circular(Surface.controlRadius)), child: CustomPaint(size: Size.infinite, painter: _Icon(bezierShape(v[0], v[1], v[2], v[3]), kMint, 2))),
           ),
         _chip('ease-copy', 'Copy curve', () => setState(() => saved.add(List.of(cur.values)))),
         if (saved.isNotEmpty) _chip('ease-clear', 'Clear', () => setState(saved.clear)),
@@ -469,7 +498,7 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
               setState(() { if (mixed) { for (final t in segs) { take(t); } } else { take(cur); } });
               _write();
             },
-            child: Container(width: Surface.px(34.5), height: Surface.px(25.5), padding: EdgeInsets.all(Surface.sectionGap), decoration: BoxDecoration(color: Surface.raised, borderRadius: BorderRadius.circular(Surface.controlRadius)), child: CustomPaint(size: Size.infinite, painter: _Icon(s.shape, kMint, 2))),
+            child: Container(width: Surface.px(30), height: Surface.controlHero, padding: EdgeInsets.all(Surface.sectionGap), decoration: BoxDecoration(color: Surface.raised, borderRadius: BorderRadius.circular(Surface.controlRadius)), child: CustomPaint(size: Size.infinite, painter: _Icon(s.shape, kMint, 2))),
           ),
         _chip('ease-copy', 'Copy curve', () => h.copyCurve(cur)),
         _chip('ease-save', 'Save preset', () => h.savePreset(cur)),
@@ -480,7 +509,7 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
   Widget _chip(String key, String t, VoidCallback f) => GestureDetector(
         key: ValueKey(key),
         onTap: f,
-        child: Container(height: Surface.px(25.5), padding: EdgeInsets.symmetric(horizontal: Surface.panelInset), alignment: Alignment.center, decoration: BoxDecoration(border: Border.all(color: N.g26), borderRadius: BorderRadius.circular(Surface.controlRadius)), child: Text(t, style: sans(Dn.nameSize, c: N.g76))),
+        child: Container(height: Surface.control, padding: EdgeInsets.symmetric(horizontal: Surface.panelInset), alignment: Alignment.center, decoration: BoxDecoration(border: Border.all(color: N.g26), borderRadius: BorderRadius.circular(Surface.controlRadius)), child: Text(t, style: sans(Dn.nameSize, c: N.g76))),
       );
 
   /// Hosted, the switch says whether the desk is in its ghost mode (set by what is picked); unhosted it is a toy.
@@ -492,55 +521,23 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
           behavior: HitTestBehavior.opaque,
           onTap: widget.host == null ? () => setState(() => ghost = !ghost) : null,
           child: Row(children: [
-            Container(width: Surface.px(25.5), height: Surface.px(15), padding: EdgeInsets.all(Surface.px(1.5)), alignment: _ghost ? Alignment.centerRight : Alignment.centerLeft, decoration: BoxDecoration(color: _ghost ? kBlue : N.g20, borderRadius: BorderRadius.circular(Surface.px(7.5))), child: Container(width: Surface.px(12), height: Surface.px(12), decoration: const BoxDecoration(color: Surface.ink, shape: BoxShape.circle))),
+            Container(width: Surface.px(22), height: Surface.px(13), padding: EdgeInsets.all(Surface.px(1.5)), alignment: _ghost ? Alignment.centerRight : Alignment.centerLeft, decoration: BoxDecoration(color: _ghost ? kBlue : N.g20, borderRadius: BorderRadius.circular(Surface.px(6.5))), child: Container(width: Surface.px(10), height: Surface.px(10), decoration: const BoxDecoration(color: Surface.ink, shape: BoxShape.circle))),
             SizedBox(width: Surface.px(7.5)),
             Flexible(child: Text('Sequence ghosts', softWrap: false, overflow: TextOverflow.ellipsis, style: sans(Dn.nameSize, c: N.g76))),
           ]),
         )),
       ]);
 
-  // Intervals between the selected keyframes: width = duration, each its own colour.
-  Widget _intervals(bool compact) => Row(children: [
-        GestureDetector(
-          key: const ValueKey('ease-all'),
-          onTap: () => setState(() => sel = -1),
-          child: Container(
-            width: compact ? Surface.px(24) : Surface.px(34),
-            height: Surface.px(27),
-            margin: EdgeInsets.only(right: Surface.inlineGap),
-            alignment: Alignment.center,
-            decoration: BoxDecoration(color: mixed ? kYellow : Surface.raised, borderRadius: BorderRadius.circular(Surface.px(4))),
-            child: Text(compact ? '≠' : 'All', style: sans(Dn.labelSize, c: mixed ? N.g10 : Surface.muted, w: FontWeight.w600)),
-          ),
-        ),
-        for (final (i, sg) in segs.indexed)
-          Expanded(
-            flex: sg.frames,
-            child: GestureDetector(
-              key: ValueKey('ease-seg-$i'),
-              onTap: () => setState(() => sel = i),
-              child: Container(
-                height: Surface.px(27),
-                margin: EdgeInsets.only(right: i == segs.length - 1 ? 0 : Surface.px(4)),
-                padding: EdgeInsets.symmetric(horizontal: compact ? Surface.px(2) : Surface.px(5), vertical: Surface.px(4.5)),
-                // an interval: its colour as a wash and a line, stronger when it is the one being eased
-                decoration: BoxDecoration(color: _segColors[i % _segColors.length].withValues(alpha: sel == i ? .24 : .1), borderRadius: BorderRadius.circular(Surface.px(4)), border: Border.all(color: _segColors[i % _segColors.length].withValues(alpha: sel == i ? 1 : .35), width: sel == i ? Surface.px(1.4) : 1)),
-                // the frame count only where the interval is wide enough to carry it (a narrow seat keeps the shape)
-                child: LayoutBuilder(builder: (context, box) {
-                  final label = !compact && sg.frames >= 8 && box.maxWidth >= 42;
-                  return Row(children: [
-                    if (label) Text('${sg.frames}f', style: sans(Dn.labelSize, c: N.g76, w: FontWeight.w700)),
-                    if (label) SizedBox(width: Surface.inlineGap),
-                    Expanded(child: CustomPaint(size: Size.infinite, painter: _Icon(sg.shape, _segColors[i % _segColors.length], 1.8))),
-                  ]);
-                }),
-              ),
-            ),
-          ),
-      ]);
+  
 
   // Only the plot follows the playhead (its line), frame by frame; the rest of the desk is not rebuilt.
-  Widget _plot({required bool labels}) => ListenableBuilder(listenable: widget.host?.frame ?? Listenable.merge(const []), builder: (context, _) => _plotBody(labels: labels));
+  Widget _plot({required bool labels}) {
+    final listens = <Listenable>[
+      if (widget.host?.frame != null) widget.host!.frame,
+      _play,
+    ];
+    return ListenableBuilder(listenable: Listenable.merge(listens), builder: (context, _) => _plotBody(labels: labels));
+  }
 
   Widget _plotBody({required bool labels}) => LayoutBuilder(builder: (context, box) {
         final size = Size(box.maxWidth, box.maxHeight);
@@ -550,8 +547,8 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
           shown, mixed && peek == null ? segs.map((e) => e.shape).toList() : const [], cur.x1, cur.y1, cur.x2, cur.y2,
           peek == null && !mixed && cur.bez, labels, peek == null ? presets[cur.p].name : '${presets[peek!].name}  ·  peek', mixed && peek == null, startFrame,
           mixed ? segs.fold<int>(0, (a, b) => a + b.frames) : cur.frames, widget.host == null && ghost,
-          // the preview's motion while it plays; otherwise, hosted, where the document playhead stands in the interval
-          _play.isAnimating || _play.value > 0 ? _play.value : (widget.host?.playhead(mixed ? null : sel) ?? .5),
+          // local preview: the playhead we just pressed; else the document's (static centre when unhosted)
+          _play.isAnimating ? _play.value : (widget.host?.playhead(mixed ? null : sel) ?? .5),
           layers: widget.host?.sequence ?? 0,
           caption: widget.host?.caption,
           meaning: widget.host == null || peek != null ? null : curveMeaning(presets[cur.p].name),
@@ -577,7 +574,7 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
           if (drag == null) return;
           final r = easePlotBox(size);
           final x = clampD((p.dx - r.left) / r.width, 0, 1);
-          final y = clampD((r.bottom - p.dy) / r.height * 1.3 - .15, -.3, 1.3);
+          final y = clampD((r.bottom - p.dy) / r.height * 1.3 - .15, _overOK ? -.3 : 0, _overOK ? 1.3 : 1);
           if (!cur.bez) {
             // another kind: the host moves its handle and describes the curve again (latest answer wins)
             final seg = cur, handle = drag!, ask = ++_asks;
@@ -645,24 +642,7 @@ class _EaseDeskState extends State<EaseDesk> with SingleTickerProviderStateMixin
   int _asks = 0;
 }
 
-class _PlayP extends CustomPainter {
-  _PlayP(this.playing);
-  final bool playing;
-  // surface-block: painter geometry: drawn in the canvas's own pixels (method paint)
-  @override
-  void paint(Canvas c, Size s) {
-    final m = s.center(Offset.zero);
-    final p = Paint()..color = N.g10;
-    if (playing) {
-      c.drawRect(Rect.fromCenter(center: m + const Offset(-3.5, 0), width: 2.5, height: 8), p);
-      c.drawRect(Rect.fromCenter(center: m + const Offset(3.5, 0), width: 2.5, height: 8), p);
-    } else {
-      c.drawPath(Path()..moveTo(m.dx - 4, m.dy - 6)..lineTo(m.dx + 6, m.dy)..lineTo(m.dx - 4, m.dy + 6)..close(), p);
-    }
-  }
-  @override
-  bool shouldRepaint(_PlayP o) => o.playing != playing;
-}
+
 
 class _Icon extends CustomPainter {
   _Icon(this.f, this.col, this.w);
@@ -678,7 +658,9 @@ class _Icon extends CustomPainter {
       final o = Offset(s.width * t, s.height - s.height * (v + .15) / 1.3);
       k == 0 ? path.moveTo(o.dx, o.dy) : path.lineTo(o.dx, o.dy);
     }
-    c.drawPath(path, Paint()..color = col..style = PaintingStyle.stroke..strokeWidth = w..strokeCap = StrokeCap.round..strokeJoin = StrokeJoin.round);
+    // surface: scale curve strokes with the tile, with a readable floor and a cap against crowding.
+    final stroke = (w * s.shortestSide / 28).clamp(Surface.px(1), Surface.px(3)).toDouble();
+    c.drawPath(path, Paint()..color = col..style = PaintingStyle.stroke..strokeWidth = stroke..strokeCap = StrokeCap.round..strokeJoin = StrokeJoin.round);
   }
   @override
   bool shouldRepaint(_Icon o) => true;
@@ -728,6 +710,10 @@ class _PlotP extends CustomPainter {
   void paint(Canvas c, Size s) {
     final r = box(s);
     c.drawRRect(RRect.fromRectAndRadius(Offset.zero & s, const Radius.circular(4.5)), Paint()..color = N.g07);
+    // surface: plot markers shrink in compact plots without shrinking their gesture targets.
+    final markerScale = (r.shortestSide / Surface.px(180)).clamp(.55, 1.3).toDouble();
+    // surface: preserve the relative sizes of endpoints, handles and preview dots.
+    double radius(double base) => Surface.px(base) * markerScale;
     final base = at(s, 0, 0).dy, top = at(s, 0, 1).dy;
     // only the two rails the curve travels between; no grid
     c.drawLine(Offset(r.left, base), Offset(r.right, base), Paint()..color = N.g20..strokeWidth = 1.2);
@@ -740,19 +726,19 @@ class _PlotP extends CustomPainter {
     if (layers > 1 && !mixed) {
       for (var i = 0; i < layers; i++) {
         final x = i / (layers - 1);
-        c.drawCircle(at(s, x, f(x)), 4, Paint()..color = Surface.ink);
+        c.drawCircle(at(s, x, f(x)), radius(4), Paint()..color = Surface.ink);
       }
     }
     if (ghost && !mixed) {
       for (var k = 3; k >= 1; k--) {
-        c.drawPath(_curve(s, f, dx: .06 * k, squeeze: 1 - .06 * k), Paint()..color = Surface.ink.withValues(alpha: .40 - .09 * k)..style = PaintingStyle.stroke..strokeWidth = 2);
+        c.drawPath(_curve(s, f, dx: .06 * k, squeeze: 1 - .06 * k), Paint()..color = Surface.ink.withValues(alpha: .40 - .09 * k)..style = PaintingStyle.stroke..strokeWidth = 1.4);
       }
     }
     if (mixed) {
       final cols = [kViolet, kMint, kPink];
       for (final (i, fn) in all.indexed) {
         final p = _curve(s, fn);
-        c.drawPath(p, Paint()..color = cols[i]..style = PaintingStyle.stroke..strokeWidth = 3.4..strokeCap = StrokeCap.round..strokeJoin = StrokeJoin.round);
+        c.drawPath(p, Paint()..color = cols[i]..style = PaintingStyle.stroke..strokeWidth = 2..strokeCap = StrokeCap.round..strokeJoin = StrokeJoin.round);
       }
     }
     // playhead: white line, flag on top
@@ -765,28 +751,28 @@ class _PlotP extends CustomPainter {
       c.drawLine(at(s, 0, 0), at(s, x1, y1), h);
       c.drawLine(at(s, 1, 1), at(s, x2, y2), h);
       for (final o in [at(s, x1, y1), at(s, x2, y2)]) {
-        c.drawCircle(o, 12, Paint()..color = kYellow.withValues(alpha: .22));
-        c.drawCircle(o, 7, Paint()..color = kYellow);
-        c.drawCircle(o, 7, Paint()..color = N.g07..style = PaintingStyle.stroke..strokeWidth = 2);
+        c.drawCircle(o, radius(12), Paint()..color = kYellow.withValues(alpha: .22));
+        c.drawCircle(o, radius(7), Paint()..color = kYellow);
+        c.drawCircle(o, radius(7), Paint()..color = N.g07..style = PaintingStyle.stroke..strokeWidth = radius(2));
       }
     }
-    if (!mixed) c.drawPath(_curve(s, f), Paint()..color = Surface.ink..style = PaintingStyle.stroke..strokeWidth = 3.4..strokeCap = StrokeCap.round..strokeJoin = StrokeJoin.round);
+    if (!mixed) c.drawPath(_curve(s, f), Paint()..color = Surface.ink..style = PaintingStyle.stroke..strokeWidth = 2..strokeCap = StrokeCap.round..strokeJoin = StrokeJoin.round);
     for (final o in [for (final q in points) at(s, q.dx, q.dy)]) {
-      c.drawCircle(o, 12, Paint()..color = kYellow.withValues(alpha: .22));
-      c.drawCircle(o, 7, Paint()..color = kYellow);
-      c.drawCircle(o, 7, Paint()..color = N.g07..style = PaintingStyle.stroke..strokeWidth = 2);
+      c.drawCircle(o, radius(12), Paint()..color = kYellow.withValues(alpha: .22));
+      c.drawCircle(o, radius(7), Paint()..color = kYellow);
+      c.drawCircle(o, radius(7), Paint()..color = N.g07..style = PaintingStyle.stroke..strokeWidth = radius(2));
     }
     for (final o in [at(s, 0, 0), at(s, 1, 1)]) {
-      c.drawCircle(o, 7, Paint()..color = Surface.ink);
+      c.drawCircle(o, radius(7), Paint()..color = Surface.ink);
     }
     final v = f(head);
     final pt = at(s, head, v);
     // motion strip: where the value lands at even steps, read off the right edge
     final cx = r.right + 16;
-    for (var i = 0; i <= 8; i++) { c.drawCircle(Offset(cx, at(s, 0, f(i / 8)).dy), 2.8, Paint()..color = Surface.ink.withValues(alpha: .55)); }
+    for (var i = 0; i <= 8; i++) { c.drawCircle(Offset(cx, at(s, 0, f(i / 8)).dy), radius(2.8), Paint()..color = Surface.ink.withValues(alpha: .55)); }
     c.drawLine(pt, Offset(cx, pt.dy), Paint()..color = kMint..strokeWidth = 1.6);
-    c.drawCircle(Offset(cx, pt.dy), 5.4, Paint()..color = kMint);
-    if (!mixed) { c.drawCircle(pt, 6, Paint()..color = kMint); c.drawCircle(pt, 6, Paint()..color = N.g07..style = PaintingStyle.stroke..strokeWidth = 2); }
+    c.drawCircle(Offset(cx, pt.dy), radius(5.4), Paint()..color = kMint);
+    if (!mixed) { c.drawCircle(pt, radius(6), Paint()..color = kMint); c.drawCircle(pt, radius(6), Paint()..color = N.g07..style = PaintingStyle.stroke..strokeWidth = radius(2)); }
     if (labels) {
       _text(c, mixed ? 'Mixed' : name, Offset(r.left, 9), sans(Dn.nameSize, c: Surface.ink, w: FontWeight.w600));
       _text(c, caption ?? (layers > 1 ? '$layers layers' : (mixed ? '3 intervals · $frames f' : '$frames f')), Offset(s.width - 14, 12), sans(Dn.nameSize, c: N.g69), right: true);

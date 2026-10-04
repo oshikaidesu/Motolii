@@ -334,7 +334,7 @@ class _RelationsPanelState extends State<RelationsPanel> {
         return DockedPanel(
           child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             Container(
-              height: Surface.px(25.5),
+              height: Surface.chromeRow,
               padding: EdgeInsets.symmetric(horizontal: Surface.panelInset),
               decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: Surface.dividerFine))),
               child: Row(children: [

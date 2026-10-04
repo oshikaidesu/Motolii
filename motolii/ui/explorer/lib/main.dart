@@ -13,6 +13,7 @@ import 'stories/density.dart';
 import 'stories/panels.dart';
 import 'stories/paper.dart';
 import 'stories/timeline.dart';
+import 'stories/toys.dart';
 import 'stories/workspace.dart';
 import 'package:motolii_ui/theme/metrics.dart';
 
@@ -42,6 +43,6 @@ class Explorer extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Widgetbook.material(
         themeMode: ThemeMode.dark,
-        directories: [timelineComponent, ...panelComponents, paperComponent, workspaceComponent],
+        directories: [timelineComponent, ...panelComponents, paperComponent, toyComponent, workspaceComponent],
       );
 }
