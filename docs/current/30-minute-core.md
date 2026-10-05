@@ -51,6 +51,7 @@ Rerun world
 ├─ MaterialX / OpenPBR document
 ├─ video/media
 ├─ mesh/glTF
+├─ USD / BasisCurves when authored curve/time-sampled geometry is the native document
 ├─ Tracktion Edit
 ├─ text document
 └─ camera
@@ -91,10 +92,11 @@ These are not invitations to recreate equivalent Motolii layers.
 - **Slang autodiff + existing local-AD patterns (including Falcor's material/scene-gradient work)** — selected extension path for parameter↔image gradients. Motolii does not own an AD engine or inverse renderer; expose only the gradient paths the artwork needs.
 - **ThorVG** — vector/SVG rendering; use GPU integration rather than inventing a vector renderer.
 - **Tracktion Engine** — authoritative audio edit/playback/sequencing responsibility. Do not continue the custom Motolii audio engine.
-- **GStreamer** — realtime media transport/clock/A-V synchronization owner; use its clock/timestamp/segment semantics rather than making Rerun the playback clock.
+- **BestSource / FFmpeg territory** — preferred direction for exact random-access video, frame/sample-accurate seek, reverse/scrub and codec access. GStreamer remains a candidate only where its transport/clock model is actually needed; it is no longer mandatory.
 - **FFmpeg** — codec/mux/export responsibility; not the interactive composition document.
-- **OCIO / ACES / libplacebo** — existing color/HDR/video-finishing territory; do not equate RGBA16F with a color pipeline.
-- **wgpu-graft / native external-image mechanisms** — known route for GPU-image interop when applicable; do not invent a Motolii interop framework first.
+- **USD / BasisCurves** — authoritative time-sampled curves/geometry when that is the native authored representation; do not create a Motolii curve/geometry authority.
+- **OCIO / ACES** — color authority. libplacebo is optional finishing/display technology, not a required layer.
+- **native external-image mechanisms / wgpu interop / irondash_texture territory** — platform-specific GPU-image and Flutter presentation routes to verify concretely; do not invent a Motolii resource manager merely because multiple APIs meet.
 
 ## Existing designs used as evidence, not automatically as dependencies
 
@@ -102,7 +104,8 @@ These are not invitations to recreate equivalent Motolii layers.
 - **Lumit** — evidence for a WGSL effect asset contract, parameters, mattes, blends, temporal/effect graph responsibilities.
 - **OpenRV** — evidence for image-processing graphs, dependency/cache, multi-input/multi-frame shader processing.
 - **Natron / OpenFX** — evidence for ROI and temporal frame-dependency contracts such as “frames needed”.
-- **Hydra 2 Scene Index** — evidence for evaluated visual projection, filtering, merging and dirty propagation; use locally only when a selected projection/renderer benefits from it. It is not a required Motolii core layer.
+- **Hydra 2 Scene Index** — existing ownership for evaluated visual projection, filtering, merging, dirty propagation and renderer synchronization where a selected renderer benefits from it. It remains optional rather than a mandatory Motolii core layer.
+- **OpenExec** — candidate owner for demand-driven procedural evaluation, caching and invalidation where its actual public model fits the document boundary; verify with a concrete cross-document fixture before adoption.
 - **Aurora / Filament / Falcor / other completed renderers** — local projection/rendering capability sources, not a canonical Motolii renderer. Falcor is additionally evidence/source for existing local differentiable-rendering paths.
 
 Do not turn an evidence source into the new Motolii foundation by default.
@@ -202,14 +205,33 @@ It must ultimately support direct seek, reverse/scrub, deterministic frame evalu
 
 The point is to test a real heterogeneous artwork, not prove that individual APIs can be called.
 
-## No architecture question marks remain in this freeze
+
+## Adversarial review result: no proven Motolii-owned subsystem
+
+The architecture was reviewed from the opposite direction: for every apparent missing responsibility, first search for a mature owner, then change the technology combination if necessary, and only then ask whether Motolii must own anything.
+
+**Proven Motolii-owned technical responsibilities: 0.**
+
+This is not a claim that every integration is implemented or benchmarked. It means no reviewed fixture has demonstrated a need for a Motolii-owned renderer, evaluator, temporal cache, dependency graph, GPU resource manager, geometry engine, or equivalent subsystem.
+
+A responsibility existing somewhere in the pipeline is not evidence that Motolii should own it. Before introducing Motolii state, cache, scheduling, dependency tracking, resource lifetime, evaluation semantics, or rendering algorithms, the burden of proof is to show: (1) a minimal artwork fixture; (2) the narrowly stated responsibility; (3) the mature upstream owners actually investigated; (4) why those owners and a change of technology combination all fail; and (5) the persistent state or algorithm that would unavoidably remain Motolii-owned. Without all five, the gap is an **unproven integration/technology-selection question**, not an architecture vacancy.
+
+The review also refined the technology selection without creating a new subsystem: exact random-access video/reverse/scrub moves toward BestSource/FFmpeg rather than mandatory GStreamer; USD/BasisCurves is available for authoritative curve/time-sampled geometry; Hydra can own incremental scene-to-renderer synchronization where applicable; OpenExec is a concrete evaluation candidate; OCIO/ACES remains color authority while libplacebo becomes optional; Falcor remains evidence for Slang/local-AD patterns rather than a canonical renderer.
+
+For physical rendering, prefer **one renderer per physical world/shot**. Different renderers may be sequenced across image boundaries (`World A -> renderer A -> Image -> effects -> World B -> renderer B`), but do not create renderer federation (`renderer A <-> renderer B`).
+
+### Unproven integration questions
+
+These are technology verification/selection questions, not permission to add Motolii infrastructure: Apple-Silicon physical renderer for the real glass/transmission artwork; OpenPBR-to-renderer plus local-AD path; platform-native renderer/image-effect/renderer/Flutter GPU round trip; Windows/Linux presentation lifetime; runtime images as renderer material inputs; cross-document procedural evaluation; and cross-document undo. Failure means replace/reselect the technology before creating a Motolii subsystem.
+
+## No Motolii architecture vacancies remain in this freeze
 
 The previously listed renderer/effect/Hydra/clock/projection questions are no longer architecture vacancies that Motolii may fill with new subsystems.
 
 - There is no canonical Motolii renderer. Use completed renderers or local rendering solutions at projection boundaries according to the artwork.
 - Effects/compositing are exposed through existing contracts and local solutions (OpenFX semantics, WGSL community effects, mature image/video processing runtimes); do not create a Motolii EffectGraph/TemporalGraph runtime.
 - Hydra 2 is optional local evaluated-scene infrastructure, not a mandatory core layer.
-- Media time is owned by mature media/audio timing systems; Rerun is queried world state, not the master playback clock.
+- Media/audio time is owned by the selected mature media/audio systems. In the current random-access direction, Tracktion may own audio transport while video is requested explicitly through BestSource/FFmpeg territory. Rerun is queried world state, not the master playback clock.
 - Renderer-specific projection stays local and concrete; no generic Motolii renderer abstraction is required.
 - Differentiable/inverse operations use Slang autodiff and existing local derivative patterns only where gradients are needed; the rest of the renderer need not become differentiable.
 
