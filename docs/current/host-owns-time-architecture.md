@@ -133,3 +133,71 @@ If a fixture exposes one new local contract, add that contract. Return to archit
 External adversarial review moved the architecture from C (unowned large responsibilities) to B: remaining gaps were reducible to local contracts/algorithms rather than a mandatory integrated world-owning renderer.
 
 That is sufficient to proceed to implementation. The next source of truth is the fixture, not another round of framework search.
+
+## One-hour build rule: connect completed systems, do not re-solve them
+
+The one-hour target is literal for the first complete host proof. Feature reduction is not the strategy. Parallel agents are allowed. The target is a host that no longer needs native modification or rebuild for ordinary creation of new work.
+
+After the host is frozen, adding media, SVG/text, materials, WGSL effects, effect ordering, animation/effect parameters and project content must happen outside the native host.
+
+A code agent must not both choose the subsystem boundary and implement its replacement in the same local loop. Before implementing infrastructure, name the mature external owner of that responsibility and state why direct connection is insufficient.
+
+A locally invented test suite is not evidence that replacing a mature subsystem is justified. Such tests only prove the implementation satisfies the cases the same agent chose to test.
+
+### Preselected responsibility owners
+
+These are the default owners to connect unless a concrete fixture demonstrates an incompatibility:
+
+| Responsibility | Default owner | Motolii responsibility |
+| --- | --- | --- |
+| Video/audio decode and encode | FFmpeg / libavcodec | request input samples at host-owned time; submit finished audio/video for encode |
+| Container mux/demux and media protocols | FFmpeg / libavformat | connection and project/export policy only |
+| Managed asset reference resolution/publishing | OpenAssetIO | store/pass entity references and resolution context; do not invent an asset database |
+| Editorial interchange | OpenTimelineIO | import/export editorial cut information only; do not use OTIO as Motolii's animation evaluator |
+| Large image file access/cache and texture lookup | OpenImageIO ImageCache / TextureSystem | connect resolved resources to image/texture consumers |
+| HDR scene-linear interchange / multipart image storage | OpenEXR | use the standard representation where an image interchange/cache artifact is actually required |
+| Color management / ACES transforms | OpenColorIO | select/configure transforms and connect them to frame processing; do not invent a color pipeline |
+| Vector / SVG / text rendering region | ThorVG | connect its native representation/output to the shared GPU frame |
+| Path tessellation when geometry is required | lyon | promotion connection only |
+| Material description and shader generation | MaterialX / OpenPBR | resource bindings and execution connection; do not invent MotoliiMaterial semantics first |
+| GPU execution and shader language | wgpu / WGSL | shared device/resources/frame boundaries |
+| Evaluated entity/component state and history/query | Rerun | thin boundary; host still owns temporal evaluation semantics |
+| 3D asset interchange | glTF | load/connect native data; do not invent a proprietary exchange format |
+
+OpenAssetIO is specifically a boundary technology: its host design stores entity references where paths would otherwise be stored and resolves them just before use. That is the preferred model for managed assets rather than a new MotoliiAssetManager.
+
+OpenTimelineIO is deliberately narrower: it owns editorial interchange (clips, tracks, transitions, markers, media references), not arbitrary motion-graphics behavior.
+
+OpenImageIO is preferred over a Motolii image cache when the requirement is large image-file access, tile/file-handle caching, texture/environment lookup, or similar established image infrastructure.
+
+OpenColorIO owns color-management transforms/configuration. OpenEXR owns professional scene-linear HDR image interchange. These are not tasks for a custom Motolii color or HDR file system.
+
+MaterialX shader generation is source generation rather than a runtime. Motolii connects generated WGSL and the required bindings to wgpu; this does not justify a new Motolii renderer.
+
+### Infrastructure replacement gate
+
+Before adding a Motolii-owned subsystem such as Encoder, Decoder, AssetManager, ImageCache, ColorManager, TimelineInterchange, MaterialSystem, Renderer, SceneGraph, or equivalent, the implementing agent must answer:
+
+1. What exact responsibility is missing?
+2. Which mature project above normally owns it?
+3. What concrete fixture fails when that project is connected directly?
+4. Can the failure be solved by a bounded adapter/resource contract?
+5. Why would a Motolii-owned subsystem remain smaller than that adapter?
+
+If these questions are unanswered, stop implementation and connect the existing owner instead.
+
+### One-hour acceptance condition
+
+The first build is successful only if, after the native host is frozen, a separate agent can create or change a real work without modifying or rebuilding the host:
+
+- add/replace video or audio;
+- add/replace SVG/text/image resources;
+- add or edit WGSL;
+- change MaterialX/OpenPBR material data;
+- add/reorder supported effects;
+- animate/evaluate through host-owned time;
+- seek directly and render deterministically;
+- export through FFmpeg;
+- save/reopen the work.
+
+If any item requires a host rebuild, report the exact missing connection. Do not hide the missing connection by implementing a reduced substitute.
