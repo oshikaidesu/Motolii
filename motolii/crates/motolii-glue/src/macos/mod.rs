@@ -5,6 +5,8 @@ mod decode;
 mod draw;
 mod mosh;
 mod import;
+mod isf;
+mod post;
 mod shelf;
 mod space;
 mod thor;

@@ -10,10 +10,10 @@
 # 行数では数えない — 圧縮する力が働くだけで、自前が減らないから。
 #
 # pattern	budget	note
-create_render_pipeline	3	3 = glue: a0 の nv12・over(draw.rs 2)と棚の recipe(shelf.rs 1、6 slot を 1 本で焼く)。本線(rerun 側)は 0 のまま: パイプラインは上流の RenderPipelineDesc プールから貰う
+create_render_pipeline	4	4 = glue: a0 の nv12・over(draw.rs 2)と棚の recipe(shelf.rs 1、6 slot を 1 本で焼く)と post の recipe(post.rs 1、札の全 pass を target 形式ごとに 1 本)。本線(rerun 側)は 0 のまま: パイプラインは上流の RenderPipelineDesc プールから貰う
 create_compute_pipeline	2	2 = block_program/passes.rs と selection_bounds.rs(天井 0 は古かった)。増やす前に上流を探すこと
-create_shader_module	5	5 = 本線 2(block passes・selection_bounds)+ glue 3(draw.rs 2・shelf.rs 1)。glue の棚は error scope で compile し、失敗は最後の良い pipeline を保つ
-device.create_bind_group_layout	5	5 = 本線 2 + glue 3。glue の layout は slot の契約(shelf.rs recipe)で、ファイルは決めない
-begin_render_pass	10	10 = 本線 4(vism 2・render_effects・finalize)+ glue 6(draw.rs 2・space.rs 4: world・splats・glass・blit)。上流の Renderer trait はパスを渡される。glue は wgpu を直接持つ接着で、一つのカメラの絵を自分で開く
+create_shader_module	6	6 = 本線 2(block passes・selection_bounds)+ glue 4(draw.rs 2・shelf.rs 1・post.rs 1 = vism の札を glass の後に掛ける)。glue の棚も post も error scope で compile し、失敗は最後の良い pipeline を保つ
+device.create_bind_group_layout	6	6 = 本線 2 + glue 4。glue の layout は slot の契約(shelf.rs recipe)で、ファイルは決めない。post.rs の 1 は札の頭(ISF の INPUTS/PASSES)から group 0・1 を同じ 1 箇所で組む
+begin_render_pass	11	11 = 本線 4(vism 2・render_effects・finalize)+ glue 7(draw.rs 2・space.rs 4: world・splats・glass・blit、post.rs 1: 札の全 pass を 1 つの loop で)。上流の Renderer trait はパスを渡される。glue は wgpu を直接持つ接着で、一つのカメラの絵を自分で開く
 poll(wgpu::PollType::wait_indefinitely	10	10 = 本線 examples 3 + ui/native 5(試験と probe)+ glue 2(a1.rs の frame 完了待ち = IOSurface を Flutter へ渡す前、thor.rs の起動時の読み戻し probe)。Flutter 経路(ui/native/src/frames.rs)は submission_index の問い合わせで待たない
 naga::front	4	4 = Vism(WGSL)の検証 1・block の検証 1・ISF(GLSL)の入口 2。glue は naga を直接呼ばず wgpu の error scope に任せる

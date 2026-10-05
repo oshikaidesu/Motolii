@@ -48,7 +48,7 @@ pub(super) struct Pipe {
     pub layout: wgpu::BindGroupLayout,
 }
 
-type Stamp = Option<(Option<SystemTime>, u64)>;
+pub(super) type Stamp = Option<(Option<SystemTime>, u64)>;
 
 pub(super) struct Shelf {
     dir: PathBuf,
@@ -88,6 +88,10 @@ impl Shelf {
         shelf
     }
 
+    pub(super) fn dir(&self) -> &Path {
+        &self.dir
+    }
+
     pub(super) fn path(&self, kind: Kind) -> PathBuf {
         self.dir.join(format!("{}.wgsl", kind.name()))
     }
@@ -115,7 +119,7 @@ impl Shelf {
     }
 }
 
-fn stamp(path: &Path) -> Stamp {
+pub(super) fn stamp(path: &Path) -> Stamp {
     let meta = std::fs::metadata(path).ok()?;
     Some((meta.modified().ok(), meta.len()))
 }
@@ -226,7 +230,7 @@ fn recipe(device: &wgpu::Device, kind: Kind, source: &str) -> Pipe {
     Pipe { pipeline, layout }
 }
 
-fn uniform_entry(binding: u32, visibility: wgpu::ShaderStages) -> wgpu::BindGroupLayoutEntry {
+pub(super) fn uniform_entry(binding: u32, visibility: wgpu::ShaderStages) -> wgpu::BindGroupLayoutEntry {
     wgpu::BindGroupLayoutEntry {
         binding,
         visibility,
@@ -239,7 +243,7 @@ fn uniform_entry(binding: u32, visibility: wgpu::ShaderStages) -> wgpu::BindGrou
     }
 }
 
-fn texture_entry(binding: u32) -> wgpu::BindGroupLayoutEntry {
+pub(super) fn texture_entry(binding: u32) -> wgpu::BindGroupLayoutEntry {
     wgpu::BindGroupLayoutEntry {
         binding,
         visibility: wgpu::ShaderStages::FRAGMENT,
@@ -252,7 +256,7 @@ fn texture_entry(binding: u32) -> wgpu::BindGroupLayoutEntry {
     }
 }
 
-fn sampler_entry(binding: u32) -> wgpu::BindGroupLayoutEntry {
+pub(super) fn sampler_entry(binding: u32) -> wgpu::BindGroupLayoutEntry {
     wgpu::BindGroupLayoutEntry {
         binding,
         visibility: wgpu::ShaderStages::FRAGMENT,

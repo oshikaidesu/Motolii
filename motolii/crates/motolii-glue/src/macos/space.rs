@@ -7,6 +7,7 @@ use std::collections::BTreeMap;
 use glam::Mat4;
 use wgpu_3dgs_viewer::core::IterGaussian;
 
+use super::post::Post;
 use super::shelf::{self, Kind, Pipe, Shelf};
 use super::thor::Thor;
 
@@ -30,6 +31,7 @@ pub(super) struct World {
     last_t: Option<u32>,
     shelf: Shelf,
     pipes: BTreeMap<Kind, Pipe>,
+    post: Post,
     mesh_buf: wgpu::Buffer,
     card_buf: wgpu::Buffer,
     mark_buf: wgpu::Buffer,
@@ -94,6 +96,7 @@ impl World {
         for kind in Kind::ALL {
             pipes.insert(kind, first_pipe(device, &shelf, kind)?);
         }
+        let post = Post::new(device, shelf.dir(), width, height);
         let cloud = cloud(width, height);
         let (translation, scale) = place(&cloud);
         let mut splats = wgpu_3dgs_viewer::Viewer::new(device, wgpu::TextureFormat::Bgra8Unorm, &cloud)
@@ -122,6 +125,7 @@ impl World {
             last_t: None,
             shelf,
             pipes,
+            post,
             mesh_buf: upload(device, &cubes(), "cubes"),
             card_buf: upload(device, &video_card(), "card"),
             mark_buf: upload(device, &text_card(), "text"),
@@ -156,7 +160,7 @@ impl World {
         t: u32,
         frames: &[At<'_>],
     ) -> Result<(), String> {
-        self.reload(device);
+        self.reload(device, queue);
         if let Some(prev) = self.last_t {
             if t != prev.wrapping_add(1) {
                 eprintln!("A1: echo scrub {prev} -> {t}");
@@ -185,7 +189,8 @@ impl World {
 
     /// Files saved since the last frame become pipelines now, before any pass of this frame
     /// reads them. The GPU is idle here: the loop drained it before publishing the last frame.
-    fn reload(&mut self, device: &wgpu::Device) {
+    fn reload(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) {
+        self.post.reload(device, queue, &self.shown);
         for kind in self.shelf.changed() {
             let (source, origin) = self.shelf.read(kind);
             match shelf::build(device, kind, &source) {
@@ -337,6 +342,7 @@ impl World {
             pass.set_bind_group(0, &self.glass_bind(device), &[]);
             pass.draw(0..3, 0..1);
         }
+        self.post.encode(&mut encoder);
         {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("blit"),
@@ -368,7 +374,7 @@ impl World {
     }
 
     fn blit_bind(&self, device: &wgpu::Device) -> wgpu::BindGroup {
-        let view = self.shown.create_view(&Default::default());
+        let view = self.post.output().unwrap_or(&self.shown).create_view(&Default::default());
         device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("blit"),
             layout: &self.pipe(Kind::Blit).layout,

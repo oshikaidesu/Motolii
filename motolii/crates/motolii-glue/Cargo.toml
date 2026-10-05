@@ -14,6 +14,7 @@ path = "src/main.rs"
 
 [dependencies]
 pollster = { workspace = true }
+serde_json = { workspace = true }
 
 [build-dependencies]
 cc = "1"

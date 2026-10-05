@@ -1,0 +1,3 @@
+# Looks over the finished picture, one per line, in order: <card stem> [name=value ...]
+# A stem is <vism dir>/<stem>.wgsl; a name not given takes the card's DEFAULT.
+glow threshold=0.55 intensity=1.6 radius=96
