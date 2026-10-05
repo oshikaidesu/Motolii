@@ -504,3 +504,43 @@ Do not optimize for the number of tests written or local test pass percentage. O
 If you are about to spend a significant fraction of the one-hour budget implementing and iterating on tests for a new subsystem, stop before implementing it and search for the mature system that already owns that responsibility.
 
 Do not reduce the required fixture to make the one-hour target pass. Reduce Motolii.
+
+
+## Foundation maturity and adoption rule
+
+The one-hour rule must not turn Motolii into an experiment in obscure infrastructure.
+
+For foundational paths, prefer technology owned, maintained, or demonstrably used in production by an OS/platform vendor, a major foundation, or a major production project. A convenient small crate is not automatically an acceptable foundation merely because it removes adapter code.
+
+Selection order for foundational infrastructure:
+
+1. platform/vendor-supported API or interoperability path;
+2. mature major foundation/project implementation with substantial production adoption;
+3. implementation already used by a major production application;
+4. small third-party wrapper/crate only as a reference implementation or temporary spike;
+5. Motolii-owned implementation only after a concrete fixture proves the previous levels insufficient.
+
+Evaluate not only API fit but maintenance history, institutional backing, production adoption, platform coverage, failure/lifetime semantics, and whether the project is likely to remain viable.
+
+Do not add a young wrapper to the frozen foundation simply because its API exactly matches Motolii's desired boundary. First determine which mature underlying APIs it connects and whether Motolii can use an established implementation/path directly.
+
+In particular, experimental helpers such as small crates for importing IOSurface/D3D shared resources into wgpu are **reference implementations, not frozen dependencies**, until production adoption and maintenance confidence are established.
+
+### Media ownership clarification
+
+Keep codec/export ownership explicit:
+
+- **FFmpeg/libav** remains the mature codec/container foundation and the final encoding/muxing owner. Do not remove FFmpeg from export when evaluating interactive playback technologies.
+- On Apple platforms, **VideoToolbox** is the platform-owned hardware video decode/encode facility. FFmpeg's supported VideoToolbox bridge is preferred over inventing codecs or hardware-session machinery.
+- Interactive seek/scrub/reverse/A-V behavior may use a mature media framework such as GStreamer only within a bounded media-access role. It must not become Motolii's Stage, World, composition model, or Host Time authority.
+- Platform GPU-frame interop must prefer established vendor/foundation/major-production paths. Young convenience wrappers may teach the implementation but do not qualify by themselves as architecture foundations.
+
+The target remains zero unnecessary CPU round-trips for decoded GPU frames, but zero-copy claims must be demonstrated on a concrete fixture for each supported platform/backend.
+
+### Forty-stream media fixture
+
+The architecture acceptance fixture must include a stressful multi-source media case, not only a single easy clip. Exercise many simultaneous MP4 sources (target: 40), aggressive random scrubbing, arbitrary seek, reverse playback, audio synchronization, cancellation of obsolete requests, and preview/final representation changes.
+
+This fixture does not justify creating a Motolii Media Engine. Its purpose is to expose which mature media/platform path actually satisfies the workload and where a genuinely irreducible boundary remains.
+
+If the fixture fails, first investigate hardware decode limits, proxy/editing representations, mature media-framework scheduling, platform GPU sharing, and resource budgets. Do not respond by immediately implementing a DecoderPool, GOP cache, reverse decoder, A/V synchronization engine, or custom codec layer in Motolii.
