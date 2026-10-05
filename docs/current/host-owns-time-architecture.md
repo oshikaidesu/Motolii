@@ -288,3 +288,134 @@ After this audit, the Host should be treated suspiciously if it grows much beyon
 - dynamic load/reload boundary.
 
 Anything else must pass the infrastructure replacement gate above.
+
+
+## Architecture Freeze v0: resolve the remaining implementation choices before coding
+
+The following choices are intentionally decided now so implementation agents do not invent local infrastructure merely because a decision was left open. Revisit one only when a concrete fixture proves the frozen choice cannot satisfy the product.
+
+### Ownership firewall
+
+No dependency may acquire ownership of Motolii Host Time, the Stage/composition, or the Motolii world merely because it offers convenient NLE, scene, renderer, or game-engine features.
+
+Specialists may own their completed local responsibility and return data/resources/results across a narrow boundary.
+
+Do not adopt MLT, GStreamer Editing Services, a game engine, a second scene graph, or a second world-owning renderer as the composition/timeline authority.
+
+Ordinary NLE editing gestures such as trim, split, ripple, snap, markers, duplicate, delete, copy/paste, mute/solo and in/out are authoring-state transformations/UI interactions, not justification for another timeline/composition engine.
+
+### 1. Undo/Redo: command journal over authoring edits
+
+Freeze the user-visible edit model as reversible authoring commands/transactions.
+
+Each UI edit produces one logical transaction with enough before/after data to invert it. Undo applies the inverse transaction; redo reapplies the transaction. Group continuous gestures such as dragging or scrubbing a value into one transaction.
+
+Rerun stores/evaluates resulting world state; it is not the Undo manager. Do not derive Undo by rewinding playback time or by treating Rerun Clear as authoring Undo.
+
+Do not introduce SQLite solely for Undo in the first host. SQLite Session remains a future replacement candidate only if authoring state is later intentionally stored in SQLite.
+
+### 2. Autosave and crash recovery: append journal + atomic checkpoint
+
+Freeze recovery semantics as:
+
+authoring transaction -> append recovery journal -> periodically write an atomic project checkpoint -> truncate/rotate journal only after the checkpoint is durable.
+
+On startup, load the last valid checkpoint and replay later journal entries.
+
+Use operating-system atomic replace/rename semantics for checkpoint publication. Do not build a background autosave engine or database solely for this.
+
+Undo transactions and recovery journal entries should share the same edit transaction representation rather than forming two unrelated systems.
+
+### 3. Project format: small manifest/document + external/native resources; RRD is data, not the whole project container
+
+Freeze the project as a directory/package with a small versioned human-inspectable manifest/document describing authoring structure and references.
+
+Large media remains external or managed through OpenAssetIO references unless explicitly embedded. MaterialX, WGSL, glTF, SVG and similar native resources remain native files. Rerun/RRD may persist evaluated/time-aware data and caches where useful, but .rrd is not the sole opaque Motolii project format.
+
+The project format must not duplicate codec, material, vector, 3D, or asset-manager formats already owned by specialist systems.
+
+### 4. Evaluation cache: disposable content-addressed derived cache
+
+Freeze evaluation cache identity as a deterministic key derived from:
+
+operation identity/version + normalized parameters + requested output time/sample request + identities/hashes/versions of required inputs + relevant quality/render settings.
+
+The cached value is derived and disposable. It is never authoritative project state and may be deleted completely without changing the work.
+
+Rerun query caches remain Rerun's concern. Motolii's evaluation cache only covers expensive evaluated results that do not yet exist merely by querying Rerun.
+
+Start with memory cache and optional disk-backed blobs; do not create a cache database/schema unless measured requirements force one.
+
+### 5. Stateful simulation: deterministic checkpoints owned by Host time resolution
+
+Freeze the correctness model for stateful operations:
+
+- an operation declares fixed-step/sample requirements and serializable/restorable state capability;
+- the Host chooses/owns checkpoint times and checkpoint cache;
+- arbitrary seek restores the nearest valid checkpoint at or before the required time and deterministically advances to the requested time;
+- checkpoints are derived/disposable cache, not authoring truth;
+- an operation must not require that playback happened immediately before the requested frame.
+
+Feedback that semantically reads previous rendered results uses the same host-owned temporal requirement/checkpoint rule rather than a hidden playback-only history buffer.
+
+### 6. Dynamic operation/effect contract: data manifest + WGSL first, external process/WASM only when required
+
+Freeze the first extension boundary as files discovered at runtime, not native host code:
+
+- manifest: stable id, display metadata, parameters, input/output resource kinds, temporal requirements/capabilities, required GPU features and shader entry points;
+- WGSL/resources: loaded and hot-reloaded at runtime;
+- Inspector controls are generated from manifest parameter metadata;
+- adding/editing an effect must not require Flutter/Rust/native host rebuild.
+
+Do not design a universal plugin SDK before a fixture requires executable CPU-side extension logic.
+
+If CPU-side third-party execution becomes necessary, prefer a sandboxed WASM boundary before native dynamic libraries. Native plugins are a last resort for capabilities that cannot be expressed through existing specialists, data, WGSL, or WASM.
+
+### 7. MaterialX runtime boundary: generate/cache WGSL outside playback, execute only wgpu resources during playback
+
+Freeze MaterialX/OpenPBR responsibility as material description plus shader generation.
+
+MaterialX documents remain native source assets. Shader generation/translation occurs on material change/load/build time, never in the hot playback path. Generated WGSL and pipeline/resource-layout metadata are cached as derived artifacts.
+
+During playback the Stage sees only the generated shader/pipeline bindings and frame resources required to evaluate the material. It does not run MaterialX graph interpretation per frame.
+
+A MotoliiMaterial class hierarchy or proprietary material graph is forbidden unless a concrete fixture proves MaterialX/OpenPBR plus bounded bindings cannot represent the required work.
+
+### 8. Stage transparency and advanced visual interaction: explicit frame-resource contracts, starting with weighted blended OIT
+
+Freeze the Stage rule: advanced interactions are solved by explicit GPU resources/passes, never by installing another renderer/world.
+
+Baseline transparency for overlapping ordinary transparent contributors uses weighted blended order-independent transparency when simple opaque/depth composition is insufficient.
+
+Refractive/behind-color materials may request an explicit resolved behind-color/scene-color resource and depth/normal resources. Effects/materials must declare these resource needs rather than reaching into hidden renderer state.
+
+If a fixture such as intersecting translucent lyric walls proves weighted blended OIT insufficient, the next escalation is a bounded per-pixel fragment-list/depth-peeling style resource contract for that fixture, not a replacement renderer.
+
+Shared lighting/shadow/environment/emissive inputs likewise become explicit frame resources. Their existence does not create a second scene/world owner.
+
+### 9. Authoring document: versioned declarative edit document; evaluated state is published to Rerun
+
+Freeze the separation:
+
+Authoring Document = what the user meant/edited.
+Rerun = evaluated time-aware world/state/history/query.
+Stage = visual execution of evaluated/native contributions.
+
+The Authoring Document stores stable ids, hierarchy/grouping, source/resource references, placement/time mapping, operation/effect declarations, parameters/animation authoring data, and presentation/editor metadata required to reopen the work.
+
+It must not duplicate evaluated per-frame component history already suitable for Rerun, decoded media, generated shader binaries, proxy media, thumbnails, or other derived caches.
+
+Authoring edits are pure document transactions. The Temporal Resolver evaluates the document at requested time(s) and publishes resulting state/components/references to the Rerun backplane.
+
+### Frozen decision hierarchy for agents
+
+When implementing a feature, choose in this order:
+
+1. connect a frozen specialist owner;
+2. express it as authoring data/edit transaction;
+3. express it as Rerun data/query/transform;
+4. express it as runtime WGSL/frame-resource contribution;
+5. add a bounded adapter between those owners;
+6. only then report a missing Motolii-owned primitive.
+
+Do not silently proceed to step 6. A new Motolii-owned primitive requires a failing concrete fixture and an architecture review.
