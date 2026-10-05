@@ -201,3 +201,90 @@ The first build is successful only if, after the native host is frozen, a separa
 - save/reopen the work.
 
 If any item requires a host rebuild, report the exact missing connection. Do not hide the missing connection by implementing a reduced substitute.
+
+
+## Rerun reuse audit: make it the data backplane, not the behavior engine
+
+A fresh audit of current Rerun architecture shows that Motolii can reuse substantially more than only a basic ChunkStore.
+
+Prefer the existing Rerun crates directly, behind one thin version-sensitive boundary:
+
+| Motolii need | Rerun owner/capability | Decision |
+| --- | --- | --- |
+| Entity identity/path | re_log_types / EntityPath | reuse |
+| Component-oriented world data | re_types_core / re_sdk_types + custom Arrow components | reuse |
+| Time-indexed component storage | re_chunk / re_chunk_store | reuse |
+| Entity-oriented in-memory database | re_entity_db | reuse |
+| Latest-at and range queries | re_query / storage-engine query cache | reuse |
+| Higher-level dataframe queries | re_dataframe / re_datafusion | reuse where useful |
+| Spatial transform processing | re_tf + Transform3D semantics | reuse before inventing Motolii transform resolution |
+| Chunk indexing | re_chunk_index | reuse if/when indexed project data needs it |
+| Chunk layout optimization | re_chunk_optimizer | reuse rather than inventing storage compaction |
+| RRD persistence encoding | re_log_encoding / re_log_msg | reuse for Rerun-native persisted data where appropriate |
+| Entity paths, timelines, store ids | re_log_types | reuse |
+| URI parsing for Rerun resources | re_uri | reuse in its domain |
+| Arbitrary project/plugin data | custom components / AnyValues / Arrow | reuse; adding custom data does not require rebuilding Rerun |
+| Data reshaping/remapping | re_lenses / re_lenses_core | reuse when the problem is data transformation, not behavior evaluation |
+| MP4-to-Rerun ingestion | re_mp4_reader | optional ingestion helper only; FFmpeg remains media codec/container owner |
+
+This makes Rerun a strong candidate for Motolii's **data backplane**: entity/component identity, evaluated values, timelines, history, queries, transforms, and Rerun-native persistence/transport.
+
+### Important boundary: observation is not evaluation
+
+Rerun's core temporal query semantics are latest-at and range queries over values that already exist in the store.
+
+Do not reinterpret those queries as Motolii's animation/behavior evaluator.
+
+For example:
+
+output@10s -> Echo asks for 8..10s -> upstream time-remap asks for 7.5..9.5s
+
+still requires a Motolii Host temporal resolver because some requested values may not have been evaluated yet. Rerun can store/query the resulting evaluated values and may serve cached observations, but it does not define how Bezier, Spring, Echo, simulation, or arbitrary third-party behavior produces them.
+
+Therefore the likely irreducible Motolii-owned temporal responsibility is deliberately narrow:
+
+**output time -> recursively resolve declared input-time requirements -> evaluate missing values -> publish/cache evaluated state**
+
+Do not build a second entity database, history database, transform hierarchy, dataframe/query layer, or generic component system around this resolver.
+
+### Custom vocabulary after host freeze
+
+Rerun explicitly supports user-defined/custom data backed by Arrow without rebuilding Rerun. This is important to the one-hour acceptance condition.
+
+New Motolii/plugin vocabulary should first attempt to exist as data/components supplied from user/plugin code rather than requiring a native Rerun fork or a new Motolii world schema.
+
+This does not imply that the Rerun Viewer must understand or render every custom component. Motolii's own operations may consume those components directly.
+
+### Video boundary
+
+Rerun already provides AssetVideo, VideoFrameReference, VideoStream and re_mp4_reader. Reuse its useful **time/reference representation** where appropriate.
+
+Do not move codec/container ownership from FFmpeg to Rerun:
+
+- AssetVideo is currently MP4-oriented.
+- VideoStream is marked unstable.
+- Rerun itself uses FFmpeg in some MP4 ingestion/transcode paths.
+
+The clean split remains:
+
+FFmpeg = media decode/encode/container authority.
+Rerun = time-indexed entity/component/reference data.
+Motolii Host = temporal request resolution connecting them.
+
+### Do not automatically reuse Viewer ownership
+
+Viewer capabilities are not automatically Host capabilities. Rerun Viewer layout, Blueprint UI, egui application state, and Rerun's own renderer are not adopted merely because they exist.
+
+The audit target is reusable data/store/query/transform infrastructure. Flutter remains Motolii UI, and Motolii visual execution remains the native-contributor -> shared GPU-frame direction.
+
+### Revised minimal host hypothesis
+
+After this audit, the Host should be treated suspiciously if it grows much beyond connections among:
+
+- temporal requirement resolution;
+- Rerun data backplane;
+- external asset/media/material/vector owners;
+- shared GPU frame/resources;
+- dynamic load/reload boundary.
+
+Anything else must pass the infrastructure replacement gate above.
