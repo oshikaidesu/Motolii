@@ -3,7 +3,7 @@
 Status: **current architecture direction, frozen before implementation**
 Date: 2026-10-06
 
-This document records why Motolii is leaving the scratch-built application model. It is intentionally written before resolving the remaining runtime questions. Do not silently fill those gaps by inventing Motolii subsystems.
+This document records why Motolii is leaving the scratch-built application model and freezes the responsibility boundaries that have now been resolved. Do not reopen a settled responsibility by inventing a Motolii subsystem.
 
 ## Core thesis
 
@@ -87,9 +87,11 @@ These are not invitations to recreate equivalent Motolii layers.
 
 - **Rerun** — time-aware world memory/query/relationships.
 - **MaterialX + OpenPBR** — authoritative material/look document.
+- **Slang** — portable shader generation/execution target and differentiable computation. MaterialX 1.39.5+ Slang generation is part of the selected path.
+- **Slang autodiff + existing local-AD patterns (including Falcor's material/scene-gradient work)** — selected extension path for parameter↔image gradients. Motolii does not own an AD engine or inverse renderer; expose only the gradient paths the artwork needs.
 - **ThorVG** — vector/SVG rendering; use GPU integration rather than inventing a vector renderer.
 - **Tracktion Engine** — authoritative audio edit/playback/sequencing responsibility. Do not continue the custom Motolii audio engine.
-- **GStreamer** — realtime media transport/clock/A-V synchronization candidate family; use its clock/timestamp/segment semantics rather than making Rerun the playback clock.
+- **GStreamer** — realtime media transport/clock/A-V synchronization owner; use its clock/timestamp/segment semantics rather than making Rerun the playback clock.
 - **FFmpeg** — codec/mux/export responsibility; not the interactive composition document.
 - **OCIO / ACES / libplacebo** — existing color/HDR/video-finishing territory; do not equate RGBA16F with a color pipeline.
 - **wgpu-graft / native external-image mechanisms** — known route for GPU-image interop when applicable; do not invent a Motolii interop framework first.
@@ -100,8 +102,8 @@ These are not invitations to recreate equivalent Motolii layers.
 - **Lumit** — evidence for a WGSL effect asset contract, parameters, mattes, blends, temporal/effect graph responsibilities.
 - **OpenRV** — evidence for image-processing graphs, dependency/cache, multi-input/multi-frame shader processing.
 - **Natron / OpenFX** — evidence for ROI and temporal frame-dependency contracts such as “frames needed”.
-- **Hydra 2 Scene Index** — evidence for evaluated visual projection, filtering, merging and dirty propagation. Whether it belongs in the actual 30-minute path remains unresolved.
-- **Aurora / Filament / Falcor / other completed renderers** — renderer candidates/evidence only until the remaining visual-runtime question is resolved.
+- **Hydra 2 Scene Index** — evidence for evaluated visual projection, filtering, merging and dirty propagation; use locally only when a selected projection/renderer benefits from it. It is not a required Motolii core layer.
+- **Aurora / Filament / Falcor / other completed renderers** — local projection/rendering capability sources, not a canonical Motolii renderer. Falcor is additionally evidence/source for existing local differentiable-rendering paths.
 
 Do not turn an evidence source into the new Motolii foundation by default.
 
@@ -120,6 +122,29 @@ effects/foo.wgsl
 ```
 
 Lumit/OpenRV/OpenFX are evidence for the shape of this responsibility. Do not respond by building a Motolii EffectGraph, TemporalGraph or shader translation framework.
+
+## World <-> Image is a round trip
+
+Physical projection is not the terminal stage. Motolii must allow an authoritative document to project into a world object or an image, allow a world render to become an image-processing input, and allow an image result to be projected back into the world when the artwork requires it.
+
+```text
+authoritative documents / Rerun @ t
+        |                     |
+        v                     v
+   physical world         image source
+        |                     |
+        +------> IMAGE <------+ 
+                  |
+        WGSL / OpenFX / matte / merge /
+        retime / multi-frame / adjustment
+                  |
+             image result
+              /       \
+          output    world input
+                   (texture/emission/etc.)
+```
+
+This is an artistic composition relationship, not permission to recreate the old Motolii GPU FrameGraph. Resource scheduling, barriers, residency and renderer-internal execution remain the responsibility of the selected mature runtimes.
 
 ## Old Motolii ownership is not the new foundation
 
@@ -177,21 +202,22 @@ It must ultimately support direct seek, reverse/scrub, deterministic frame evalu
 
 The point is to test a real heterogeneous artwork, not prove that individual APIs can be called.
 
-## Intentionally unresolved after this freeze
+## No architecture question marks remain in this freeze
 
-Do **not** solve these by inventing local infrastructure. They are the next investigation/implementation decisions:
+The previously listed renderer/effect/Hydra/clock/projection questions are no longer architecture vacancies that Motolii may fill with new subsystems.
 
-1. The completed realtime visual runtime/renderer that can own the coupled beauty-rendering responsibility while accepting the required projections.
-2. The concrete effect/compositing runtime path for masks, mattes, adjustment/effect stacks, temporal/history processing and the WGSL community contract.
-3. Whether Hydra 2 Scene Index is actually needed in the execution path or is only a useful model/evidence source.
-4. The exact playback-clock boundary between GStreamer/media time and Tracktion audio, while keeping Rerun as queried world state rather than the master clock.
-5. The thinnest renderer-specific projection boundary; do not pre-emptively solve this with a generic renderer abstraction.
+- There is no canonical Motolii renderer. Use completed renderers or local rendering solutions at projection boundaries according to the artwork.
+- Effects/compositing are exposed through existing contracts and local solutions (OpenFX semantics, WGSL community effects, mature image/video processing runtimes); do not create a Motolii EffectGraph/TemporalGraph runtime.
+- Hydra 2 is optional local evaluated-scene infrastructure, not a mandatory core layer.
+- Media time is owned by mature media/audio timing systems; Rerun is queried world state, not the master playback clock.
+- Renderer-specific projection stays local and concrete; no generic Motolii renderer abstraction is required.
+- Differentiable/inverse operations use Slang autodiff and existing local derivative patterns only where gradients are needed; the rest of the renderer need not become differentiable.
 
-These unresolved items are deliberate. Resolve them explicitly in follow-up work and update this document/decision record. Do not let an implementation silently decide them.
+A future implementation may discover a concrete incompatibility. That is a technology-selection/replacement event, not an invitation to add a new Motolii-owned architecture layer.
 
 ## 30-minute rule
 
-The 30-minute core experiment is allowed to connect mature systems and produce artwork. It is not allowed to make missing systems.
+The first 30 minutes are the baseline architecture lint: connect mature systems and produce artwork, but do not make missing systems. The budget may extend to 60 minutes when a currently verifiable extension materially expands the creative model (for example parameter -> image becoming parameter <-> image through existing Slang autodiff/local-AD paths). The extra time may only expose capabilities that already exist in the selected technologies; it may not fund a new Motolii subsystem.
 
 A structural need for a large adapter, fork, custom renderer feature, custom graph, custom cache/history architecture or duplicate document model is a rejection signal, not an implementation backlog.
 
