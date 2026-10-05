@@ -419,3 +419,88 @@ When implementing a feature, choose in this order:
 6. only then report a missing Motolii-owned primitive.
 
 Do not silently proceed to step 6. A new Motolii-owned primitive requires a failing concrete fixture and an architecture review.
+
+
+## The one-hour rule is an architecture acceptance test
+
+The one-hour target is not a delivery deadline and must never justify cutting technologies, fixtures, or product requirements. It is a forcing function for architectural clarity.
+
+A mature-technology-aware developer or set of parallel agents should be able to connect the complete host from an empty repository in roughly one hour because Motolii owns very little code and very little behavior. If the build cannot fit that shape, first suspect duplicated ownership, an unnecessary abstraction, or a missed mature owner rather than reducing scope.
+
+The desired result is not "a small demo built quickly." It is a complete thin host whose source tree and ownership can be understood almost immediately.
+
+### One hour is also a test-iteration constraint
+
+The one-hour target assumes that Motolii does not repeatedly re-prove behavior already owned and tested by mature dependencies.
+
+When Motolii connects FFmpeg decoding to a GPU resource, Motolii does not write codec correctness tests. When it connects ThorVG output to the Stage, it does not re-test SVG parsing. When it executes generated MaterialX/WGSL, it does not reproduce the upstream material system's test suite.
+
+Motolii tests its boundaries and its own irreducible semantics, not the internals of its dependencies.
+
+Therefore a large new Motolii unit-test suite is an architecture smell as well as a time cost. It often indicates that Motolii has silently acquired semantics that should belong to an existing specialist.
+
+This is especially important for code agents: an agent must not justify a new subsystem merely by writing a local implementation and then a test suite whose cases it chose itself. Passing self-authored tests proves only that the implementation matches those selected cases; it does not prove that Motolii should own the responsibility.
+
+### Prefer fixture-based electrical continuity tests
+
+The primary tests for the one-hour host are a very small number of real end-to-end fixtures:
+
+- **Smoke:** one work contains decoded video, ThorVG text/SVG, 3D/spatial data, an OpenPBR/MaterialX material, a runtime WGSL effect, temporal Echo, and final frame output.
+- **Arbitrary seek:** render times in a non-sequential order such as 0, 10, 3, 8 and obtain the same results as sequential evaluation.
+- **Save/reload:** edit, save/checkpoint, terminate, reopen, and reproduce the same work/frame.
+- **Runtime extension:** while the native host is unchanged, add or modify a WGSL effect plus its manifest and observe the result without rebuilding the host.
+- **Export:** the same evaluated work reaches FFmpeg output without introducing a second composition/time authority.
+
+These are closer to electrical continuity checks than subsystem reimplementations: they prove that completed boxes actually communicate across Motolii's thin lines.
+
+A host rebuild required by the runtime-extension fixture is a failure.
+
+### Unit tests are reserved for irreducible Motolii behavior
+
+Small focused unit/property tests are appropriate only for behavior Motolii genuinely owns, especially the Host-Time temporal resolver and other proven bounded adapters with non-trivial semantics.
+
+Do not create broad test suites for codecs, vector parsing, material semantics, asset management, color transforms, image formats, editorial interchange, or other behavior already owned upstream.
+
+A useful warning heuristic is:
+
+large Motolii unit-test surface
+-> large Motolii-owned semantic surface
+-> likely duplicated ownership or reinvention.
+
+This is a warning, not a numerical ban: a concrete Motolii-owned invariant may deserve extensive testing if a fixture proves that invariant is truly ours.
+
+### Failure protocol during the hour
+
+If an implementation is taking too long, do not remove MaterialX, ThorVG, Rerun, FFmpeg, temporal effects, persistence, seeking, export, or other required capabilities merely to meet the clock.
+
+Instead stop and classify the obstruction:
+
+1. the direct connection/API is not yet understood;
+2. the selected dependency is the wrong owner;
+3. Motolii has accidentally taken ownership of behavior already implemented elsewhere;
+4. a genuinely missing Motolii primitive has been exposed.
+
+For cases 1-3, simplify or replace the connection. Case 4 requires a concrete failing fixture and architecture review before implementation.
+
+### One-hour readability criterion
+
+At the end of the hour, success includes architectural legibility:
+
+- the source tree can be explained in about a minute;
+- every Motolii source file has an obvious reason to exist;
+- ownership fits on one diagram;
+- the same semantic type is not redefined at multiple boundaries;
+- Manager/System/Registry abstractions have not proliferated;
+- custom schemas/components are exceptional rather than the default;
+- adapters primarily translate or pass resources between mature owners;
+- adding ordinary visual work does not require rebuilding the native host.
+
+The target feeling when opening the Motolii core is: "is that really all of it?"
+
+### Agent instruction
+
+Do not optimize for the number of tests written or local test pass percentage. Optimize for deleting Motolii-owned behavior by connecting mature owners directly.
+
+If you are about to spend a significant fraction of the one-hour budget implementing and iterating on tests for a new subsystem, stop before implementing it and search for the mature system that already owns that responsibility.
+
+Do not reduce the required fixture to make the one-hour target pass. Reduce Motolii.
