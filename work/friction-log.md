@@ -38,3 +38,8 @@ start 07:15:32
 - rerun-world (work/rerun-world, standalone cargo, same Rerun fork rev, store/query crates only): logs camera/focus Transform3D and a VideoFrameReference per frame, queries latest_at, prints CSV; the renderer reads numbers.
 - ThorVG: the repo's libthorvg is GPU-only (tvg_swcanvas_create returns NULL, and it links wgpu-native). Used Homebrew thorvg 1.1.2 (software raster) via dlopen + C API. SVG stays a document; its raster is the sheet texture.
 - Forge FSL translator rejects overloaded functions (Adobe OpenPBR is full of them): the header is included from includes/metal.h after FSL translation.
+
+## Stage (Flutter), serve mode, export button (2026-10-06)
+- The Forge sample has a serve mode: `seek N` on stdin renders frame N (video frame decoded by ffmpeg into the board texture, camera from the world's row N, 24 spp), prints `ready N`. post.sh then OIDN + glow. A separate minimal Flutter app (work/stage-skin) shows the result, scrubs and exports. Flutter macOS sandbox had to be switched off to spawn the renderer (dev build).
+- NOT connected: Tracktion (audio is the source clip's audio, muxed by ffmpeg at the same time range), a mesh asset, temporal effect (frames t-k into the effect), the existing motolii/ui app (Stage here is its own window), GPU-image handoff (the Stage reads a PNG; the renderer opens its own window), BestSource (ffmpeg -ss per frame is used).
+- Boundary facts: the Forge converter/loader disagree on index width below 65536 vertices; the converter ignores glTF node transforms; the Forge captures screenshots only under AUTOMATED_TESTING; FSL rejects overloads; repo ThorVG build has no software canvas.

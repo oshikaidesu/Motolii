@@ -23,20 +23,21 @@ index 5c2438d..6bc047e 100644
 +
  #endif // _METAL_H
 diff --git a/Examples_3/Unit_Tests/src/16_Raytracing/16_Raytracing.cpp b/Examples_3/Unit_Tests/src/16_Raytracing/16_Raytracing.cpp
-index 1bf66b1..5df8f33 100644
+index 1bf66b1..482cf36 100644
 --- a/Examples_3/Unit_Tests/src/16_Raytracing/16_Raytracing.cpp
 +++ b/Examples_3/Unit_Tests/src/16_Raytracing/16_Raytracing.cpp
-@@ -62,7 +62,8 @@
+@@ -62,7 +62,9 @@
  #define USE_DENOISER  0
  #define USE_RAY_QUERY 1
  
 -#define SCENE_SCALE   10.0f
 +#include <dlfcn.h>
++#include <pthread.h>
 +#define SCENE_SCALE   1.0f
  
  bool gUseUavRwFallback = false;
  
-@@ -88,6 +89,268 @@ struct PropData
+@@ -88,6 +90,301 @@ struct PropData
      mat4      mWorldMatrix;
  };
  
@@ -108,8 +109,30 @@ index 1bf66b1..5df8f33 100644
 +    };
 +    Row*     rows = NULL;
 +    int      rowCount = 0;
++    bool     serve = false;   // stay up; `seek N` on stdin renders frame N, `ready N` on stdout says it is in Screenshots/
++    bool     shotDone = true;
 +};
 +static MotoliiDriver gMD;
++static volatile int gServeSeek = -1;
++static volatile int gServeQuit = 0;
++
++static void* motoliiServeReader(void*)
++{
++    char line[256];
++    while (fgets(line, sizeof(line), stdin))
++    {
++        int n = 0;
++        if (sscanf(line, "seek %d", &n) == 1)
++            __atomic_store_n(&gServeSeek, n, __ATOMIC_SEQ_CST);
++        else if (strncmp(line, "quit", 4) == 0)
++        {
++            __atomic_store_n(&gServeQuit, 1, __ATOMIC_SEQ_CST);
++            break;
++        }
++    }
++    __atomic_store_n(&gServeQuit, 1, __ATOMIC_SEQ_CST);
++    return NULL;
++}
 +
 +static const MotoliiDriver::Row* motoliiRow(int frame)
 +{
@@ -162,6 +185,17 @@ index 1bf66b1..5df8f33 100644
 +            fclose(f);
 +            LOGF(eINFO, "MOTOLII params: %d rows from %s", gMD.rowCount, pf);
 +        }
++    }
++    if (getenv("MOTOLII_SERVE"))
++    {
++        gMD.serve = true;
++        const char* sp = getenv("MOTOLII_SPP");
++        gMD.spp = sp ? atoi(sp) : 32;
++        const char* ff = getenv("MOTOLII_FPS");
++        gMD.fps = ff ? (float)atof(ff) : 30.0f;
++        pthread_t th;
++        pthread_create(&th, NULL, motoliiServeReader, NULL);
++        pthread_detach(th);
 +    }
 +    const char* b = getenv("MOTOLII_BATCH"); // "start,end,fps,spp"
 +    if (b)
@@ -305,7 +339,7 @@ index 1bf66b1..5df8f33 100644
  PropData SanMiguelProp;
  Scene*   pScene;
  
-@@ -255,8 +518,11 @@ public:
+@@ -255,8 +552,11 @@ public:
              GeometryLoadDesc loadDesc = {};
              loadDesc.pVertexLayout = &vertexLayout;
              loadDesc.mFlags = GEOMETRY_LOAD_FLAG_RAYTRACING_INPUT;
@@ -318,7 +352,7 @@ index 1bf66b1..5df8f33 100644
              SanMiguelProp.mMaterialCount = pScene->geom->mDrawArgCount;
              SanMiguelProp.pGeom = pScene->geom;
  
-@@ -293,6 +559,43 @@ public:
+@@ -293,6 +593,43 @@ public:
  
              waitForAllResourceLoads();
  
@@ -362,7 +396,7 @@ index 1bf66b1..5df8f33 100644
              /************************************************************************/
              // 02 Creation Acceleration Structure
              /************************************************************************/
-@@ -328,7 +631,7 @@ public:
+@@ -328,7 +665,7 @@ public:
  
              // Construct descriptions for Acceleration Structures Instances
              AccelerationStructureInstanceDesc instanceDesc = {};
@@ -371,7 +405,7 @@ index 1bf66b1..5df8f33 100644
              instanceDesc.mInstanceContributionToHitGroupIndex = 0;
              instanceDesc.mInstanceID = 0;
              instanceDesc.mInstanceMask = 1;
-@@ -388,9 +691,9 @@ public:
+@@ -388,9 +725,9 @@ public:
  #endif
          }
  
@@ -384,7 +418,7 @@ index 1bf66b1..5df8f33 100644
  
          pCameraController = initFpsCameraController(camPos, lookAt);
          pCameraController->setMotionParameters(cmp);
-@@ -676,6 +979,12 @@ public:
+@@ -676,6 +1013,12 @@ public:
              {
                  toggleFullscreen(pWindow);
              }
@@ -397,7 +431,7 @@ index 1bf66b1..5df8f33 100644
              if (inputGetValue(0, CUSTOM_TOGGLE_UI))
              {
                  uiToggleActive();
-@@ -701,10 +1010,47 @@ public:
+@@ -701,10 +1044,80 @@ public:
              updateUIVisibility();
          }
  
@@ -425,8 +459,41 @@ index 1bf66b1..5df8f33 100644
 +            gMD.accum++;
 +        }
 +
++        if (gMD.serve)
++        {
++            if (__atomic_load_n(&gServeQuit, __ATOMIC_SEQ_CST))
++                requestShutdown();
++            int want = __atomic_exchange_n(&gServeSeek, -1, __ATOMIC_SEQ_CST);
++            if (want >= 0)
++            {
++                gMD.frame = want;
++                gMD.accum = 0;
++                gMD.shotDone = false;
++            }
++            if (!gMD.shotDone)
++            {
++                if (gMD.accum == 0)
++                {
++                    motoliiUploadVideoFrame(gMD.frame);
++                    mPathTracingData.mFrameIndex = 0;
++                    mPathTracingData.mHaltonIndex = 0;
++                }
++                else if (gMD.accum == gMD.spp)
++                {
++                    requestScreenshotCapture("stage");
++                }
++                else if (gMD.accum == gMD.spp + 1)
++                {
++                    printf("ready %d\n", gMD.frame);
++                    fflush(stdout);
++                    gMD.shotDone = true;
++                }
++                gMD.accum++;
++            }
++        }
++
          mat4 viewMat = pCameraController->getViewMatrix().mCamera;
-+        if (gMD.batch)
++        if (gMD.batch || gMD.serve)
 +        {
 +            if (const MotoliiDriver::Row* r = motoliiRow(gMD.frame))
 +            {
@@ -446,7 +513,7 @@ index 1bf66b1..5df8f33 100644
          const float nearPlane = 0.1f;
          const float farPlane = 1000.f;
          mat4        projMat = mat4::perspectiveLH_ReverseZ(horizontalFOV, aspectInverse, nearPlane, farPlane);
-@@ -976,6 +1322,18 @@ public:
+@@ -976,6 +1389,18 @@ public:
          submitDesc.ppWaitSemaphores = waitSemaphores;
          submitDesc.pSignalFence = elem.pFence;
          queueSubmit(pQueue, &submitDesc);
