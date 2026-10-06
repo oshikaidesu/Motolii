@@ -27,3 +27,9 @@ start 07:15:32
 - RESULT: ray-query path loop renders SanMiguel (grey, fallback textures) on Metal. Not our scene.
 10:47:21 AssetPipelineCmd bug: output path truncated to input-path length -> wrote Art/Meshe/...; moved file by hand (upstream tool bug, no code change)
 11:13:32 Forge: loader assumes uint16 indices when vertexCount<=65535 but --meshlets writes uint32 -> garbled geometry; fix = tessellate past 65535 verts and drop --meshlets (no code change). Also converter ignores glTF node transforms (bake in Blender), flag name --meshlets vs help --meshlet.
+
+## Time-driven render + export (2026-10-06)
+- Driver in the sample: frame index in -> camera, ffmpeg decodes that frame into the board texture, accumulate N spp, capture PNG, next. Deterministic (md5 of the same frame identical across runs).
+- The Forge captures screenshots only under AUTOMATED_TESTING (in queuePresent); the sample now calls captureScreenshot itself. Output goes next to the .app (Screenshots/), not cwd.
+- OIDN (brew bottle 2.5.1, CPU only; the Metal device is not in the bottle): 0.1 s/frame at 960x540 turns 24-32 spp into a clean frame.
+- 60 frames, 960x540, 32 spp + OIDN + audio mux: 57 s wall on M4.

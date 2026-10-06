@@ -23,7 +23,7 @@ index 5c2438d..6bc047e 100644
 +
  #endif // _METAL_H
 diff --git a/Examples_3/Unit_Tests/src/16_Raytracing/16_Raytracing.cpp b/Examples_3/Unit_Tests/src/16_Raytracing/16_Raytracing.cpp
-index 1bf66b1..6b23554 100644
+index 1bf66b1..24a793b 100644
 --- a/Examples_3/Unit_Tests/src/16_Raytracing/16_Raytracing.cpp
 +++ b/Examples_3/Unit_Tests/src/16_Raytracing/16_Raytracing.cpp
 @@ -62,7 +62,7 @@
@@ -35,7 +35,7 @@ index 1bf66b1..6b23554 100644
  
  bool gUseUavRwFallback = false;
  
-@@ -88,6 +88,51 @@ struct PropData
+@@ -88,6 +88,132 @@ struct PropData
      mat4      mWorldMatrix;
  };
  
@@ -84,10 +84,91 @@ index 1bf66b1..6b23554 100644
 +    return scene;
 +}
 +
++
++// ---- Motolii driver: a frame index in, a PNG out. Values only; the renderer is The Forge's, the decoder is ffmpeg. ----
++struct MotoliiDriver
++{
++    bool     batch = false;
++    int      start = 0;
++    int      end = 0;
++    int      spp = 64;
++    int      frame = 0;
++    int      accum = 0;
++    float    fps = 30.0f;
++    float    videoOffset = 0.0f;
++    char     video[1024] = {};
++    Texture* pBoard = NULL;
++};
++static MotoliiDriver gMD;
++static const uint32_t MOTOLII_BOARD_W = 1920;
++static const uint32_t MOTOLII_BOARD_H = 1080;
++
++static void motoliiInitDriver()
++{
++    const char* v = getenv("MOTOLII_VIDEO");
++    if (v)
++        strncpy(gMD.video, v, sizeof(gMD.video) - 1);
++    if (getenv("MOTOLII_VIDEO_AT"))
++        gMD.videoOffset = (float)atof(getenv("MOTOLII_VIDEO_AT"));
++    const char* b = getenv("MOTOLII_BATCH"); // "start,end,fps,spp"
++    if (b)
++    {
++        int   s = 0, e = 0, sp = 0;
++        float f = 0.0f;
++        if (sscanf(b, "%d,%d,%f,%d", &s, &e, &f, &sp) == 4)
++        {
++            gMD.batch = true;
++            gMD.start = s;
++            gMD.end = e;
++            gMD.fps = f;
++            gMD.spp = sp;
++            gMD.frame = s;
++        }
++    }
++}
++
++static void motoliiUploadVideoFrame(int frame)
++{
++    if (!gMD.pBoard || !gMD.video[0])
++        return;
++    const size_t bytes = (size_t)MOTOLII_BOARD_W * MOTOLII_BOARD_H * 4;
++    char         cmd[2048];
++    snprintf(cmd, sizeof(cmd),
++             "/opt/homebrew/bin/ffmpeg -v error -ss %.6f -i \"%s\" -frames:v 1 -vf scale=%u:%u -f rawvideo -pix_fmt rgba -",
++             gMD.videoOffset + frame / gMD.fps, gMD.video, MOTOLII_BOARD_W, MOTOLII_BOARD_H);
++    FILE* p = popen(cmd, "r");
++    if (!p)
++        return;
++    uint8_t* px = (uint8_t*)tf_malloc(bytes);
++    size_t   got = 0;
++    while (got < bytes)
++    {
++        size_t n = fread(px + got, 1, bytes - got, p);
++        if (n == 0)
++            break;
++        got += n;
++    }
++    pclose(p);
++    if (got != bytes)
++    {
++        LOGF(eERROR, "MOTOLII video frame %d: ffmpeg gave %u of %u bytes", frame, (uint32_t)got, (uint32_t)bytes);
++        tf_free(px);
++        return;
++    }
++    TextureUpdateDesc u = { gMD.pBoard };
++    u.mCurrentState = RESOURCE_STATE_SHADER_RESOURCE;
++    beginUpdateResource(&u);
++    TextureSubresourceUpdate sub = u.getSubresourceUpdateDesc(0, 0);
++    for (uint32_t r = 0; r < MOTOLII_BOARD_H; ++r)
++        memcpy((uint8_t*)sub.pMappedData + (size_t)r * sub.mDstRowStride, px + (size_t)r * MOTOLII_BOARD_W * 4, (size_t)MOTOLII_BOARD_W * 4);
++    endUpdateResource(&u);
++    tf_free(px);
++}
++
  PropData SanMiguelProp;
  Scene*   pScene;
  
-@@ -255,8 +300,11 @@ public:
+@@ -255,8 +381,11 @@ public:
              GeometryLoadDesc loadDesc = {};
              loadDesc.pVertexLayout = &vertexLayout;
              loadDesc.mFlags = GEOMETRY_LOAD_FLAG_RAYTRACING_INPUT;
@@ -100,7 +181,7 @@ index 1bf66b1..6b23554 100644
              SanMiguelProp.mMaterialCount = pScene->geom->mDrawArgCount;
              SanMiguelProp.pGeom = pScene->geom;
  
-@@ -293,6 +341,21 @@ public:
+@@ -293,6 +422,44 @@ public:
  
              waitForAllResourceLoads();
  
@@ -119,10 +200,33 @@ index 1bf66b1..6b23554 100644
 +                }
 +            }
 +
++            motoliiInitDriver();
++            if (gMD.video[0])
++            {
++                TextureDesc bd = {};
++                bd.mWidth = MOTOLII_BOARD_W;
++                bd.mHeight = MOTOLII_BOARD_H;
++                bd.mDepth = 1;
++                bd.mArraySize = 1;
++                bd.mMipLevels = 1;
++                bd.mSampleCount = SAMPLE_COUNT_1;
++                bd.mFormat = TinyImageFormat_R8G8B8A8_SRGB;
++                bd.mStartState = RESOURCE_STATE_SHADER_RESOURCE;
++                bd.mDescriptors = DESCRIPTOR_TYPE_TEXTURE;
++                bd.pName = "video board";
++                TextureLoadDesc bl = {};
++                bl.pDesc = &bd;
++                bl.ppTexture = &gMD.pBoard;
++                addResource(&bl, NULL);
++                waitForAllResourceLoads();
++                SanMiguelProp.pTextureStorage[2] = gMD.pBoard;
++                motoliiUploadVideoFrame(gMD.frame);
++            }
++
              /************************************************************************/
              // 02 Creation Acceleration Structure
              /************************************************************************/
-@@ -328,7 +391,7 @@ public:
+@@ -328,7 +495,7 @@ public:
  
              // Construct descriptions for Acceleration Structures Instances
              AccelerationStructureInstanceDesc instanceDesc = {};
@@ -131,7 +235,7 @@ index 1bf66b1..6b23554 100644
              instanceDesc.mInstanceContributionToHitGroupIndex = 0;
              instanceDesc.mInstanceID = 0;
              instanceDesc.mInstanceMask = 1;
-@@ -388,9 +451,9 @@ public:
+@@ -388,9 +555,9 @@ public:
  #endif
          }
  
@@ -144,7 +248,7 @@ index 1bf66b1..6b23554 100644
  
          pCameraController = initFpsCameraController(camPos, lookAt);
          pCameraController->setMotionParameters(cmp);
-@@ -676,6 +739,12 @@ public:
+@@ -676,6 +843,12 @@ public:
              {
                  toggleFullscreen(pWindow);
              }
@@ -157,8 +261,41 @@ index 1bf66b1..6b23554 100644
              if (inputGetValue(0, CUSTOM_TOGGLE_UI))
              {
                  uiToggleActive();
-@@ -704,7 +773,7 @@ public:
+@@ -701,10 +874,40 @@ public:
+             updateUIVisibility();
+         }
+ 
++        if (gMD.batch)
++        {
++            if (gMD.accum == gMD.spp + 1)
++            {
++                gMD.frame++;
++                gMD.accum = 0;
++                if (gMD.frame > gMD.end)
++                    requestShutdown();
++            }
++            if (gMD.accum == 0)
++            {
++                motoliiUploadVideoFrame(gMD.frame);
++                mPathTracingData.mFrameIndex = 0;
++                mPathTracingData.mHaltonIndex = 0;
++            }
++            else if (gMD.accum == gMD.spp)
++            {
++                char name[64];
++                snprintf(name, sizeof(name), "f%06d", gMD.frame);
++                requestScreenshotCapture(name);
++            }
++            gMD.accum++;
++        }
++
          mat4 viewMat = pCameraController->getViewMatrix().mCamera;
++        if (gMD.batch)
++        {
++            const float t = gMD.frame / gMD.fps;
++            const Point3 eye(-0.5f + 1.4f * sinf(t * 0.9f), 1.6f + 0.35f * sinf(t * 0.7f), -11.5f + 0.8f * cosf(t * 0.6f));
++            viewMat = mat4::lookAtLH(eye, Point3(0.0f, 0.2f, 0.0f), vec3(0.0f, 1.0f, 0.0f));
++        }
  
          const float aspectInverse = (float)mSettings.mHeight / (float)mSettings.mWidth;
 -        const float horizontalFOV = PI / 2.0f;
@@ -166,6 +303,25 @@ index 1bf66b1..6b23554 100644
          const float nearPlane = 0.1f;
          const float farPlane = 1000.f;
          mat4        projMat = mat4::perspectiveLH_ReverseZ(horizontalFOV, aspectInverse, nearPlane, farPlane);
+@@ -976,6 +1179,18 @@ public:
+         submitDesc.ppWaitSemaphores = waitSemaphores;
+         submitDesc.pSignalFence = elem.pFence;
+         queueSubmit(pQueue, &submitDesc);
++        if (isScreenshotCaptureRequested())
++        {
++            // The Forge only captures inside queuePresent under AUTOMATED_TESTING; ask for it here instead.
++            ScreenshotDesc shot = {};
++            shot.pRenderTarget = pSwapChain->ppRenderTargets[swapchainImageIndex];
++            shot.mColorSpace = pSwapChain->mColorSpace;
++            shot.ppWaitSemaphores = &elem.pSemaphore;
++            shot.mWaitSemaphoresCount = 1;
++            shot.flipRedBlue = false;
++            shot.discardAlpha = true;
++            captureScreenshot(&shot);
++        }
+         QueuePresentDesc presentDesc = {};
+         presentDesc.mIndex = (uint8_t)swapchainImageIndex;
+         presentDesc.mWaitSemaphoreCount = 1;
 diff --git a/Examples_3/Unit_Tests/src/16_Raytracing/Shaders/FSL/RayQuery.comp.fsl b/Examples_3/Unit_Tests/src/16_Raytracing/Shaders/FSL/RayQuery.comp.fsl
 index e0dddef..cc445bf 100644
 --- a/Examples_3/Unit_Tests/src/16_Raytracing/Shaders/FSL/RayQuery.comp.fsl
