@@ -7,10 +7,14 @@ AT=${MOTOLII_VIDEO_AT:-12}
 REL=/Users/member_ottoto/rust_ae/_ext/The-Forge/Examples_3/Unit_Tests/macOS_Xcode/16_Raytracing/Bin/Release
 WORK=/Users/member_ottoto/rust_ae/_ext/render_out
 pkill -x 16_Raytracing; sleep 1
+WORLD=/Users/member_ottoto/rust_ae/_ext/rerun-world-target/release/rerun-world
+SVG=/Users/member_ottoto/rust_ae/Motolii/work/forge_scene/assets/sunface.svg
 rm -rf $WORK; mkdir -p $WORK; cd $WORK
+# the world (Rerun) answers per frame: camera, focus, which video time
+$WORLD $((END+1)) $FPS $AT > $WORK/params.csv
 SHOTS=$REL/Screenshots   # the Forge writes captures next to the .app
 rm -rf $SHOTS; mkdir -p $SHOTS
-MOTOLII_NOUI=1 MOTOLII_VIDEO="$SRC" MOTOLII_VIDEO_AT=$AT MOTOLII_BATCH="$START,$END,$FPS,$SPP" \
+MOTOLII_NOUI=1 MOTOLII_PARAMS=$WORK/params.csv MOTOLII_SVG=$SVG MOTOLII_VIDEO="$SRC" MOTOLII_VIDEO_AT=$AT MOTOLII_BATCH="$START,$END,$FPS,$SPP" \
   $REL/16_Raytracing.app/Contents/MacOS/16_Raytracing -ApplePersistenceIgnoreState YES -w $W -h $H > $WORK/run.out 2>&1
 N=$(ls $SHOTS/*.png 2>/dev/null | wc -l | tr -d ' ')
 echo "frames written: $N"
@@ -26,4 +30,4 @@ for f in $SHOTS/16_Raytracing_f*.png; do
   ffmpeg -v error -y -i $DN/$b.out.pfm -pix_fmt rgb24 $DN/$b.png
   rm -f $DN/$b.in.pfm $DN/$b.out.pfm
 done
-ffmpeg -v error -y -framerate $FPS -i $DN/16_Raytracing_f%06d.png -ss $T0 -t $DUR -i "$SRC" -map 0:v -map "1:a?" -c:v libx264 -crf 14 -pix_fmt yuv420p -c:a aac -b:a 192k -shortest -movflags +faststart "$OUT" && ls -la "$OUT" | awk '{print $5, $9}'
+ffmpeg -v error -y -framerate $FPS -start_number $START -i $DN/16_Raytracing_f%06d.png -ss $T0 -t $DUR -i "$SRC" -map 0:v -map "1:a?" -c:v libx264 -crf 14 -pix_fmt yuv420p -c:a aac -b:a 192k -shortest -movflags +faststart "$OUT" && ls -la "$OUT" | awk '{print $5, $9}'

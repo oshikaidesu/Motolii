@@ -23,19 +23,20 @@ index 5c2438d..6bc047e 100644
 +
  #endif // _METAL_H
 diff --git a/Examples_3/Unit_Tests/src/16_Raytracing/16_Raytracing.cpp b/Examples_3/Unit_Tests/src/16_Raytracing/16_Raytracing.cpp
-index 1bf66b1..24a793b 100644
+index 1bf66b1..5df8f33 100644
 --- a/Examples_3/Unit_Tests/src/16_Raytracing/16_Raytracing.cpp
 +++ b/Examples_3/Unit_Tests/src/16_Raytracing/16_Raytracing.cpp
-@@ -62,7 +62,7 @@
+@@ -62,7 +62,8 @@
  #define USE_DENOISER  0
  #define USE_RAY_QUERY 1
  
 -#define SCENE_SCALE   10.0f
++#include <dlfcn.h>
 +#define SCENE_SCALE   1.0f
  
  bool gUseUavRwFallback = false;
  
-@@ -88,6 +88,132 @@ struct PropData
+@@ -88,6 +89,268 @@ struct PropData
      mat4      mWorldMatrix;
  };
  
@@ -98,8 +99,24 @@ index 1bf66b1..24a793b 100644
 +    float    videoOffset = 0.0f;
 +    char     video[1024] = {};
 +    Texture* pBoard = NULL;
++    // Per-frame values handed over by the world (Rerun): eye, look-at, video time. Nothing is derived here.
++    struct Row
++    {
++        float eye[3];
++        float at[3];
++        float videoSec;
++    };
++    Row*     rows = NULL;
++    int      rowCount = 0;
 +};
 +static MotoliiDriver gMD;
++
++static const MotoliiDriver::Row* motoliiRow(int frame)
++{
++    if (!gMD.rows || gMD.rowCount == 0)
++        return NULL;
++    return &gMD.rows[frame < 0 ? 0 : (frame >= gMD.rowCount ? gMD.rowCount - 1 : frame)];
++}
 +static const uint32_t MOTOLII_BOARD_W = 1920;
 +static const uint32_t MOTOLII_BOARD_H = 1080;
 +
@@ -110,6 +127,42 @@ index 1bf66b1..24a793b 100644
 +        strncpy(gMD.video, v, sizeof(gMD.video) - 1);
 +    if (getenv("MOTOLII_VIDEO_AT"))
 +        gMD.videoOffset = (float)atof(getenv("MOTOLII_VIDEO_AT"));
++    if (const char* pf = getenv("MOTOLII_PARAMS")) // csv from the world: frame,ex,ey,ez,ax,ay,az,video_sec
++    {
++        if (FILE* f = fopen(pf, "r"))
++        {
++            char line[512];
++            int  cap = 0;
++            fgets(line, sizeof(line), f); // header
++            while (fgets(line, sizeof(line), f))
++            {
++                int   fr = 0;
++                float v[7] = {};
++                if (sscanf(line, "%d,%f,%f,%f,%f,%f,%f,%f", &fr, &v[0], &v[1], &v[2], &v[3], &v[4], &v[5], &v[6]) != 8)
++                    continue;
++                if (fr >= cap)
++                {
++                    int newCap = fr + 256;
++                    MotoliiDriver::Row* nr = (MotoliiDriver::Row*)tf_calloc(newCap, sizeof(MotoliiDriver::Row));
++                    if (gMD.rows)
++                    {
++                        memcpy(nr, gMD.rows, cap * sizeof(MotoliiDriver::Row));
++                        tf_free(gMD.rows);
++                    }
++                    gMD.rows = nr;
++                    cap = newCap;
++                }
++                MotoliiDriver::Row& r = gMD.rows[fr];
++                r.eye[0] = v[0]; r.eye[1] = v[1]; r.eye[2] = v[2];
++                r.at[0] = v[3]; r.at[1] = v[4]; r.at[2] = v[5];
++                r.videoSec = v[6];
++                if (fr + 1 > gMD.rowCount)
++                    gMD.rowCount = fr + 1;
++            }
++            fclose(f);
++            LOGF(eINFO, "MOTOLII params: %d rows from %s", gMD.rowCount, pf);
++        }
++    }
 +    const char* b = getenv("MOTOLII_BATCH"); // "start,end,fps,spp"
 +    if (b)
 +    {
@@ -127,6 +180,96 @@ index 1bf66b1..24a793b 100644
 +    }
 +}
 +
++
++static Texture* motoliiMakeTexture(uint32_t w, uint32_t h, const char* name)
++{
++    TextureDesc bd = {};
++    bd.mWidth = w;
++    bd.mHeight = h;
++    bd.mDepth = 1;
++    bd.mArraySize = 1;
++    bd.mMipLevels = 1;
++    bd.mSampleCount = SAMPLE_COUNT_1;
++    bd.mFormat = TinyImageFormat_R8G8B8A8_SRGB;
++    bd.mStartState = RESOURCE_STATE_SHADER_RESOURCE;
++    bd.mDescriptors = DESCRIPTOR_TYPE_TEXTURE;
++    bd.pName = name;
++    Texture*        tex = NULL;
++    TextureLoadDesc bl = {};
++    bl.pDesc = &bd;
++    bl.ppTexture = &tex;
++    addResource(&bl, NULL);
++    waitForAllResourceLoads();
++    return tex;
++}
++
++static void motoliiUploadRGBA(Texture* tex, const uint8_t* rgba, uint32_t w, uint32_t h)
++{
++    TextureUpdateDesc u = { tex };
++    u.mCurrentState = RESOURCE_STATE_SHADER_RESOURCE;
++    beginUpdateResource(&u);
++    TextureSubresourceUpdate sub = u.getSubresourceUpdateDesc(0, 0);
++    for (uint32_t r = 0; r < h; ++r)
++        memcpy((uint8_t*)sub.pMappedData + (size_t)r * sub.mDstRowStride, rgba + (size_t)r * w * 4, (size_t)w * 4);
++    endUpdateResource(&u);
++}
++
++// ThorVG (the existing owner of SVG) through its C API, loaded at run time: the SVG stays a document, only its raster is a texture.
++static bool motoliiRasterizeSvg(const char* svgPath, uint32_t w, uint32_t h, uint8_t* rgba)
++{
++    // ThorVG 1.1.2 from Homebrew: software raster engine (the repo's own build is GPU-only and has no sw canvas)
++    void* lib = dlopen("/opt/homebrew/opt/thorvg/lib/libthorvg-1.dylib", RTLD_NOW);
++    if (!lib)
++    {
++        LOGF(eERROR, "MOTOLII thorvg: %s", dlerror());
++        return false;
++    }
++    typedef int (*FnInit)(unsigned);
++    typedef void* (*FnCanvas)(int);
++    typedef int (*FnTarget)(void*, uint32_t*, uint32_t, uint32_t, uint32_t, int);
++    typedef void* (*FnPic)(void);
++    typedef int (*FnLoad)(void*, const char*);
++    typedef int (*FnSize)(void*, float, float);
++    typedef int (*FnAdd)(void*, void*);
++    typedef int (*FnDraw)(void*, bool);
++    typedef int (*FnSync)(void*);
++    FnInit   engineInit = (FnInit)dlsym(lib, "tvg_engine_init");
++    FnCanvas canvasCreate = (FnCanvas)dlsym(lib, "tvg_swcanvas_create");
++    FnTarget setTarget = (FnTarget)dlsym(lib, "tvg_swcanvas_set_target");
++    FnPic    picNew = (FnPic)dlsym(lib, "tvg_picture_new");
++    FnLoad   picLoad = (FnLoad)dlsym(lib, "tvg_picture_load");
++    FnSize   picSize = (FnSize)dlsym(lib, "tvg_picture_set_size");
++    FnAdd    canvasAdd = (FnAdd)dlsym(lib, "tvg_canvas_add");
++    FnDraw   canvasDraw = (FnDraw)dlsym(lib, "tvg_canvas_draw");
++    FnSync   canvasSync = (FnSync)dlsym(lib, "tvg_canvas_sync");
++    if (!engineInit || !canvasCreate || !setTarget || !picNew || !picLoad || !picSize || !canvasAdd || !canvasDraw || !canvasSync)
++    {
++        LOGF(eERROR, "MOTOLII thorvg: missing symbols");
++        return false;
++    }
++    memset(rgba, 0, (size_t)w * h * 4);
++    int er = engineInit(0);
++    void* canvas = canvasCreate(1 /* TVG_ENGINE_OPTION_DEFAULT */);
++    int tr = canvas ? setTarget(canvas, (uint32_t*)rgba, w, w, h, 2 /* TVG_COLORSPACE_ABGR8888S: bytes are r,g,b,a, straight alpha */) : -1;
++    LOGF(eINFO, "MOTOLII thorvg: init=%d canvas=%p target=%d", er, canvas, tr);
++    if (tr != 0)
++        return false;
++    void* pic = picNew();
++    int   lr = picLoad(pic, svgPath);
++    if (lr != 0)
++    {
++        LOGF(eERROR, "MOTOLII thorvg: load %s failed (%d)", svgPath, lr);
++        return false;
++    }
++    int sr = picSize(pic, (float)w, (float)h);
++    int ar = canvasAdd(canvas, pic);
++    int dr = canvasDraw(canvas, true);
++    int yr = canvasSync(canvas);
++    LOGF(eINFO, "MOTOLII thorvg: size=%d add=%d draw=%d sync=%d px0=%02x%02x%02x%02x pxC=%02x%02x%02x%02x", sr, ar, dr, yr, rgba[0], rgba[1], rgba[2], rgba[3],
++         rgba[((h / 2) * w + w / 2) * 4], rgba[((h / 2) * w + w / 2) * 4 + 1], rgba[((h / 2) * w + w / 2) * 4 + 2], rgba[((h / 2) * w + w / 2) * 4 + 3]);
++    return true;
++}
++
 +static void motoliiUploadVideoFrame(int frame)
 +{
 +    if (!gMD.pBoard || !gMD.video[0])
@@ -135,7 +278,7 @@ index 1bf66b1..24a793b 100644
 +    char         cmd[2048];
 +    snprintf(cmd, sizeof(cmd),
 +             "/opt/homebrew/bin/ffmpeg -v error -ss %.6f -i \"%s\" -frames:v 1 -vf scale=%u:%u -f rawvideo -pix_fmt rgba -",
-+             gMD.videoOffset + frame / gMD.fps, gMD.video, MOTOLII_BOARD_W, MOTOLII_BOARD_H);
++             motoliiRow(frame) ? motoliiRow(frame)->videoSec : gMD.videoOffset + frame / gMD.fps, gMD.video, MOTOLII_BOARD_W, MOTOLII_BOARD_H);
 +    FILE* p = popen(cmd, "r");
 +    if (!p)
 +        return;
@@ -155,20 +298,14 @@ index 1bf66b1..24a793b 100644
 +        tf_free(px);
 +        return;
 +    }
-+    TextureUpdateDesc u = { gMD.pBoard };
-+    u.mCurrentState = RESOURCE_STATE_SHADER_RESOURCE;
-+    beginUpdateResource(&u);
-+    TextureSubresourceUpdate sub = u.getSubresourceUpdateDesc(0, 0);
-+    for (uint32_t r = 0; r < MOTOLII_BOARD_H; ++r)
-+        memcpy((uint8_t*)sub.pMappedData + (size_t)r * sub.mDstRowStride, px + (size_t)r * MOTOLII_BOARD_W * 4, (size_t)MOTOLII_BOARD_W * 4);
-+    endUpdateResource(&u);
++    motoliiUploadRGBA(gMD.pBoard, px, MOTOLII_BOARD_W, MOTOLII_BOARD_H);
 +    tf_free(px);
 +}
 +
  PropData SanMiguelProp;
  Scene*   pScene;
  
-@@ -255,8 +381,11 @@ public:
+@@ -255,8 +518,11 @@ public:
              GeometryLoadDesc loadDesc = {};
              loadDesc.pVertexLayout = &vertexLayout;
              loadDesc.mFlags = GEOMETRY_LOAD_FLAG_RAYTRACING_INPUT;
@@ -181,7 +318,7 @@ index 1bf66b1..24a793b 100644
              SanMiguelProp.mMaterialCount = pScene->geom->mDrawArgCount;
              SanMiguelProp.pGeom = pScene->geom;
  
-@@ -293,6 +422,44 @@ public:
+@@ -293,6 +559,43 @@ public:
  
              waitForAllResourceLoads();
  
@@ -203,30 +340,29 @@ index 1bf66b1..24a793b 100644
 +            motoliiInitDriver();
 +            if (gMD.video[0])
 +            {
-+                TextureDesc bd = {};
-+                bd.mWidth = MOTOLII_BOARD_W;
-+                bd.mHeight = MOTOLII_BOARD_H;
-+                bd.mDepth = 1;
-+                bd.mArraySize = 1;
-+                bd.mMipLevels = 1;
-+                bd.mSampleCount = SAMPLE_COUNT_1;
-+                bd.mFormat = TinyImageFormat_R8G8B8A8_SRGB;
-+                bd.mStartState = RESOURCE_STATE_SHADER_RESOURCE;
-+                bd.mDescriptors = DESCRIPTOR_TYPE_TEXTURE;
-+                bd.pName = "video board";
-+                TextureLoadDesc bl = {};
-+                bl.pDesc = &bd;
-+                bl.ppTexture = &gMD.pBoard;
-+                addResource(&bl, NULL);
-+                waitForAllResourceLoads();
++                gMD.pBoard = motoliiMakeTexture(MOTOLII_BOARD_W, MOTOLII_BOARD_H, "video board");
 +                SanMiguelProp.pTextureStorage[2] = gMD.pBoard;
 +                motoliiUploadVideoFrame(gMD.frame);
++            }
++            if (const char* svg = getenv("MOTOLII_SVG"))
++            {
++                const uint32_t sw = 1024, sh = 1024;
++                uint8_t*       px = (uint8_t*)tf_malloc((size_t)sw * sh * 4);
++                Texture*       tex = motoliiMakeTexture(sw, sh, "svg sheet");
++                LOGF(eINFO, "MOTOLII svg: px=%p tex=%p materials=%u", px, tex, SanMiguelProp.mMaterialCount);
++                if (px && tex && motoliiRasterizeSvg(svg, sw, sh, px) && SanMiguelProp.mMaterialCount > 3)
++                {
++                    motoliiUploadRGBA(tex, px, sw, sh);
++                    SanMiguelProp.pTextureStorage[3] = tex;
++                    LOGF(eINFO, "MOTOLII svg sheet rasterized by ThorVG from %s", svg);
++                }
++                tf_free(px);
 +            }
 +
              /************************************************************************/
              // 02 Creation Acceleration Structure
              /************************************************************************/
-@@ -328,7 +495,7 @@ public:
+@@ -328,7 +631,7 @@ public:
  
              // Construct descriptions for Acceleration Structures Instances
              AccelerationStructureInstanceDesc instanceDesc = {};
@@ -235,7 +371,7 @@ index 1bf66b1..24a793b 100644
              instanceDesc.mInstanceContributionToHitGroupIndex = 0;
              instanceDesc.mInstanceID = 0;
              instanceDesc.mInstanceMask = 1;
-@@ -388,9 +555,9 @@ public:
+@@ -388,9 +691,9 @@ public:
  #endif
          }
  
@@ -248,7 +384,7 @@ index 1bf66b1..24a793b 100644
  
          pCameraController = initFpsCameraController(camPos, lookAt);
          pCameraController->setMotionParameters(cmp);
-@@ -676,6 +843,12 @@ public:
+@@ -676,6 +979,12 @@ public:
              {
                  toggleFullscreen(pWindow);
              }
@@ -261,7 +397,7 @@ index 1bf66b1..24a793b 100644
              if (inputGetValue(0, CUSTOM_TOGGLE_UI))
              {
                  uiToggleActive();
-@@ -701,10 +874,40 @@ public:
+@@ -701,10 +1010,47 @@ public:
              updateUIVisibility();
          }
  
@@ -292,9 +428,16 @@ index 1bf66b1..24a793b 100644
          mat4 viewMat = pCameraController->getViewMatrix().mCamera;
 +        if (gMD.batch)
 +        {
-+            const float t = gMD.frame / gMD.fps;
-+            const Point3 eye(-0.5f + 1.4f * sinf(t * 0.9f), 1.6f + 0.35f * sinf(t * 0.7f), -11.5f + 0.8f * cosf(t * 0.6f));
-+            viewMat = mat4::lookAtLH(eye, Point3(0.0f, 0.2f, 0.0f), vec3(0.0f, 1.0f, 0.0f));
++            if (const MotoliiDriver::Row* r = motoliiRow(gMD.frame))
++            {
++                viewMat = mat4::lookAtLH(Point3(r->eye[0], r->eye[1], r->eye[2]), Point3(r->at[0], r->at[1], r->at[2]), vec3(0.0f, 1.0f, 0.0f));
++            }
++            else
++            {
++                const float t = gMD.frame / gMD.fps;
++                const Point3 eye(-0.5f + 1.4f * sinf(t * 0.9f), 1.6f + 0.35f * sinf(t * 0.7f), -11.5f + 0.8f * cosf(t * 0.6f));
++                viewMat = mat4::lookAtLH(eye, Point3(0.0f, 0.2f, 0.0f), vec3(0.0f, 1.0f, 0.0f));
++            }
 +        }
  
          const float aspectInverse = (float)mSettings.mHeight / (float)mSettings.mWidth;
@@ -303,7 +446,7 @@ index 1bf66b1..24a793b 100644
          const float nearPlane = 0.1f;
          const float farPlane = 1000.f;
          mat4        projMat = mat4::perspectiveLH_ReverseZ(horizontalFOV, aspectInverse, nearPlane, farPlane);
-@@ -976,6 +1179,18 @@ public:
+@@ -976,6 +1322,18 @@ public:
          submitDesc.ppWaitSemaphores = waitSemaphores;
          submitDesc.pSignalFence = elem.pFence;
          queueSubmit(pQueue, &submitDesc);
@@ -323,7 +466,7 @@ index 1bf66b1..24a793b 100644
          presentDesc.mIndex = (uint8_t)swapchainImageIndex;
          presentDesc.mWaitSemaphoreCount = 1;
 diff --git a/Examples_3/Unit_Tests/src/16_Raytracing/Shaders/FSL/RayQuery.comp.fsl b/Examples_3/Unit_Tests/src/16_Raytracing/Shaders/FSL/RayQuery.comp.fsl
-index e0dddef..cc445bf 100644
+index e0dddef..fd27b3f 100644
 --- a/Examples_3/Unit_Tests/src/16_Raytracing/Shaders/FSL/RayQuery.comp.fsl
 +++ b/Examples_3/Unit_Tests/src/16_Raytracing/Shaders/FSL/RayQuery.comp.fsl
 @@ -129,6 +129,24 @@ float2 uniformNoiseToTriangular(float2 n) {
@@ -513,7 +656,7 @@ index e0dddef..cc445bf 100644
  		{
  			asfloat(LoadByte4(gVertexPositionBuffer, ((i0 * 3) << 2))),
  			asfloat(LoadByte4(gVertexPositionBuffer, ((i1 * 3) << 2))),
-@@ -290,94 +249,77 @@ void CS_MAIN(SV_DispatchThreadID(uint2) tid)
+@@ -290,94 +249,101 @@ void CS_MAIN(SV_DispatchThreadID(uint2) tid)
  			decodeDir(unpackUnorm2x16(LoadByte(gVertexNormalBuffer, i2 << 2)))
  		};
  
@@ -526,9 +669,23 @@ index e0dddef..cc445bf 100644
 +		normal = normalize(uvw.x * normal012[0].xyz + uvw.y * normal012[1].xyz + uvw.z * normal012[2].xyz);
  
 -		float3 rayOrigin = position + normal * 0.001;
+-
+-		// Shadow ray
 +#if DEBUG_NORMALS
 +		if (bounce == 0)
-+		{
+ 		{
+-			float3 lightDir = gSettings.mLightDirection;
+-
+-			RayDesc shadowRay;
+-			shadowRay.Origin = rayOrigin;
+-			shadowRay.Direction = lightDir;
+-			shadowRay.TMin = 0.001;
+-			shadowRay.TMax = 10000;
+-
+-			RayQueryAnyHit(gRtScene,
+-				traversalFlags,
+-				RAY_FLAG_SKIP_AABB | RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH,
+-				shadowRay, 0xFF, shadowHit);
 +			float shade = saturate(dot(normal, normalize(float3(0.3f, 0.8f, -0.5f)))) * 0.7f + 0.3f;
 +			radiance = (geometryIndex == 0u ? float3(1.0f, 0.2f, 0.2f) : (geometryIndex == 1u ? float3(0.2f, 1.0f, 0.2f) : float3(0.2f, 0.4f, 1.0f))) * shade;
 +			break;
@@ -553,34 +710,24 @@ index e0dddef..cc445bf 100644
 +			break;
 +		}
  
--		// Shadow ray
-+		if (inside)
- 		{
--			float3 lightDir = gSettings.mLightDirection;
-+			throughput *= pbr_transmittance(glassExtinction, length(position - ray.Origin));
-+		}
- 
--			RayDesc shadowRay;
--			shadowRay.Origin = rayOrigin;
--			shadowRay.Direction = lightDir;
--			shadowRay.TMin = 0.001;
--			shadowRay.TMax = 10000;
-+		float3 V = -ray.Direction;
-+		float3 xi = float3(pbr_rng(pixelSeed, bounce, 0u), pbr_rng(pixelSeed, bounce, 1u), pbr_rng(pixelSeed, bounce, 2u));
-+		PbrSampleOut s = pbr_sample(geometryIndex, normal, V, xi);
- 
--			RayQueryAnyHit(gRtScene,
--				traversalFlags,
--				RAY_FLAG_SKIP_AABB | RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH,
--				shadowRay, 0xFF, shadowHit);
-+		if (bounce == 0)
-+		{
-+			firstAlbedo = (geometryIndex == 0u) ? float3(0.25f, 0.62f, 1.0f) : float3(0.55f, 0.56f, 0.6f);
-+		}
- 
 -			LOOP
 -			RayQueryBeginForEachCandidate(shadowHit)
--			{
++		if (geometryIndex == 3u)
++		{
++			// the SVG sheet: transparent where the vector has nothing, a bright sticker where it does.
++			float2 uv012[3] = {
++				unpack2Floats(LoadByte(gVertexTexCoordBuffer, i0 << 2)),
++				unpack2Floats(LoadByte(gVertexTexCoordBuffer, i1 << 2)),
++				unpack2Floats(LoadByte(gVertexTexCoordBuffer, i2 << 2))
++			};
++			float2 sheetUV = uvw.x * uv012[0] + uvw.y * uv012[1] + uvw.z * uv012[2];
++			sheetUV.y = 1.0f - sheetUV.y;
++			float4 sheetColor;
++			BeginNonUniformResourceIndex(geometryIndex, TOTAL_IMGS);
++			sheetColor = SampleLvlTex2D(gMaterialTextures[geometryIndex], gSamplerTrilinearWrap, sheetUV, 0);
++			EndNonUniformResourceIndex();
++			if (sheetColor.a < 0.5f)
+ 			{
 -				if (RayQueryIsHitNonOpaqueTriangle(shadowHit))
 -				{
 -					uint triangleIndex = RayQueryCandidatePrimitiveIndex(shadowHit);
@@ -618,8 +765,45 @@ index e0dddef..cc445bf 100644
 -				}
 -
 -				RayQueryProceed(shadowHit);
--			}
++				ray.Origin = position + ray.Direction * 0.003f;
++				continue;
+ 			}
 -			RayQueryEndForEachCandidate(shadowHit)
++			radiance += throughput * sheetColor.rgb * 1.5f;
++			if (bounce == 0) { firstAlbedo = sheetColor.rgb; }
++			break;
++		}
+ 
+-			if (!RayQueryIsHit(shadowHit))
+-			{
+-				float3 lightSample = 5.0f * saturate(dot(lightDir, normal)) * surfaceAlbedo[bounce] * M_1_PI_F;
+-				bounceRadiance[bounce] += lightSample;
+-			}
++		if (inside)
++		{
++			throughput *= pbr_transmittance(glassExtinction, length(position - ray.Origin));
+ 		}
+ 
+-		float2 pixelUV = (float2(tid) + f2(0.5)) / float2(launchDim.xy);
+-		float2 sampleVal = uniformNoiseToTriangular(PDnrand2(pixelUV.xy + gSettings.mRandomSeed + bounce)) * 0.5 + 0.5;
+-		float3 sampleDirLocal = sampleCosineWeightedHemisphere(sampleVal);
+-		float3 sampleDir = alignHemisphereWithNormal(sampleDirLocal, normal);
++		float3 V = -ray.Direction;
++		float3 xi = float3(pbr_rng(pixelSeed, bounce, 0u), pbr_rng(pixelSeed, bounce, 1u), pbr_rng(pixelSeed, bounce, 2u));
++		PbrSampleOut s = pbr_sample(geometryIndex, normal, V, xi);
+ 
+-		ray.Origin = rayOrigin;
+-		ray.Direction = sampleDir;
+-	}
++		if (bounce == 0)
++		{
++			firstAlbedo = (geometryIndex == 0u) ? float3(0.25f, 0.62f, 1.0f) : float3(0.55f, 0.56f, 0.6f);
++		}
+ 
+-	UNROLL
+-	for (int i = int(maxBounce) - 2; i >= 0; --i)
+-	{
+-		bounceRadiance[i] += bounceRadiance[i + 1] * surfaceAlbedo[i];
 +		radiance += throughput * s.emission;
 +		if (s.pdf <= 0.0f)
 +		{
@@ -631,33 +815,16 @@ index e0dddef..cc445bf 100644
 +
 +		ray.Origin = position + normal * (0.0015f * side);
 +		ray.Direction = s.L;
- 
--			if (!RayQueryIsHit(shadowHit))
++
 +		if (bounce >= 10)
 +		{
 +			float p = clamp(max(throughput.x, max(throughput.y, throughput.z)), 0.05f, 0.95f);
 +			if (pbr_rng(pixelSeed, bounce, 7u) > p)
- 			{
--				float3 lightSample = 5.0f * saturate(dot(lightDir, normal)) * surfaceAlbedo[bounce] * M_1_PI_F;
--				bounceRadiance[bounce] += lightSample;
++			{
 +				break;
- 			}
++			}
 +			throughput /= p;
- 		}
--
--		float2 pixelUV = (float2(tid) + f2(0.5)) / float2(launchDim.xy);
--		float2 sampleVal = uniformNoiseToTriangular(PDnrand2(pixelUV.xy + gSettings.mRandomSeed + bounce)) * 0.5 + 0.5;
--		float3 sampleDirLocal = sampleCosineWeightedHemisphere(sampleVal);
--		float3 sampleDir = alignHemisphereWithNormal(sampleDirLocal, normal);
--
--		ray.Origin = rayOrigin;
--		ray.Direction = sampleDir;
--	}
--
--	UNROLL
--	for (int i = int(maxBounce) - 2; i >= 0; --i)
--	{
--		bounceRadiance[i] += bounceRadiance[i + 1] * surfaceAlbedo[i];
++		}
  	}
  
 -	float3 payloadRadiance = bounceRadiance[0];
@@ -667,7 +834,7 @@ index e0dddef..cc445bf 100644
  
  	float4 accumulatedRadiance = f4(0.0f);
  	if (gSettings.mFrameIndex == 0)
-@@ -401,7 +343,7 @@ void CS_MAIN(SV_DispatchThreadID(uint2) tid)
+@@ -401,7 +367,7 @@ void CS_MAIN(SV_DispatchThreadID(uint2) tid)
  	float3 accumulatedAlbedo = f3(0.0f);
  	if (gSettings.mFramesSinceCameraMove == 0)
  	{
@@ -676,7 +843,7 @@ index e0dddef..cc445bf 100644
  	}
  	else
  	{
-@@ -411,7 +353,7 @@ void CS_MAIN(SV_DispatchThreadID(uint2) tid)
+@@ -411,7 +377,7 @@ void CS_MAIN(SV_DispatchThreadID(uint2) tid)
  #else
  		accumulatedAlbedo = LoadRWTex2D(gAlbedoOutput, tid).rgb;
  #endif

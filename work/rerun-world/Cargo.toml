@@ -1,0 +1,17 @@
+[package]
+name = "rerun-world"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+# Rerun is the time-aware world memory. Same fork rev the repo already pins; only the store/query crates, no renderer.
+[dependencies]
+re_chunk = { git = "https://github.com/oshikaidesu/rerun", rev = "d046cd96cc1bd8ab1eef2bcc3bcd536e76aef2cf" }
+re_chunk_store = { git = "https://github.com/oshikaidesu/rerun", rev = "d046cd96cc1bd8ab1eef2bcc3bcd536e76aef2cf" }
+re_entity_db = { git = "https://github.com/oshikaidesu/rerun", rev = "d046cd96cc1bd8ab1eef2bcc3bcd536e76aef2cf" }
+re_log_types = { git = "https://github.com/oshikaidesu/rerun", rev = "d046cd96cc1bd8ab1eef2bcc3bcd536e76aef2cf" }
+re_sdk_types = { git = "https://github.com/oshikaidesu/rerun", rev = "d046cd96cc1bd8ab1eef2bcc3bcd536e76aef2cf", default-features = false }
+re_types_core = { git = "https://github.com/oshikaidesu/rerun", rev = "d046cd96cc1bd8ab1eef2bcc3bcd536e76aef2cf" }
+
+# standalone: not a member of the repo workspace
+[workspace]

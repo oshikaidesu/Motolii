@@ -36,8 +36,16 @@ board.name = "video"
 board.scale = (16, 9, 1)
 board.rotation_euler = (math.radians(-90), 0, 0)
 board.data.materials.append(bpy.data.materials.new("video"))
+# The SVG sheet: a plane between the video board and the tube, so the glass bends both.
+bpy.ops.mesh.primitive_plane_add(size=1, location=(1.0, -3.0, 1.4))
+sheet = bpy.context.active_object
+sheet.name = "svg"
+sheet.scale = (3.0, 3.0, 1)
+sheet.rotation_euler = (math.radians(-90), 0, 0)
+sheet.data.materials.append(bpy.data.materials.new("svg"))
+
 # Planes are single-sided; give the floor and the video board thickness so both faces exist (modifier applied at export).
-for name, thickness in (("floor", 0.2), ("video", 0.1)):
+for name, thickness in (("floor", 0.2), ("video", 0.1), ("svg", 0.05)):
     o = bpy.data.objects[name]
     m = o.modifiers.new("SOLIDIFY", "SOLIDIFY")
     m.thickness = thickness

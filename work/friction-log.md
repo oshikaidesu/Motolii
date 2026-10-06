@@ -33,3 +33,8 @@ start 07:15:32
 - The Forge captures screenshots only under AUTOMATED_TESTING (in queuePresent); the sample now calls captureScreenshot itself. Output goes next to the .app (Screenshots/), not cwd.
 - OIDN (brew bottle 2.5.1, CPU only; the Metal device is not in the bottle): 0.1 s/frame at 960x540 turns 24-32 spp into a clean frame.
 - 60 frames, 960x540, 32 spp + OIDN + audio mux: 57 s wall on M4.
+
+## Rerun world + SVG (2026-10-06)
+- rerun-world (work/rerun-world, standalone cargo, same Rerun fork rev, store/query crates only): logs camera/focus Transform3D and a VideoFrameReference per frame, queries latest_at, prints CSV; the renderer reads numbers.
+- ThorVG: the repo's libthorvg is GPU-only (tvg_swcanvas_create returns NULL, and it links wgpu-native). Used Homebrew thorvg 1.1.2 (software raster) via dlopen + C API. SVG stays a document; its raster is the sheet texture.
+- Forge FSL translator rejects overloaded functions (Adobe OpenPBR is full of them): the header is included from includes/metal.h after FSL translation.
