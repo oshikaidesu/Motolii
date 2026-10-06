@@ -1,0 +1,611 @@
+diff --git a/Common_3/OS/Darwin/apple_gpu.data b/Common_3/OS/Darwin/apple_gpu.data
+index d6284f7..61ae1a2 100644
+--- a/Common_3/OS/Darwin/apple_gpu.data
++++ b/Common_3/OS/Darwin/apple_gpu.data
+@@ -323,6 +323,7 @@ BEGIN_GPU_LIST;
+ 0x106B; 0x0009; high; Apple; Apple M3
+ 0x106B; 0x000A; ultra; Apple; Apple M3 Pro
+ 0x106B; 0x000B; ultra; Apple; Apple M3 Max
++0x106B; 0x000C; ultra; Apple; Apple M4
+ 0x106B; 0x1011; low; Apple; Apple M1 GPU
+ 0x106B; 0x1012; medium; Apple; Apple M2 GPU
+ 0x106B; 0x1013; high; Apple; Apple M4 GPU
+diff --git a/Common_3/Tools/ForgeShadingLanguage/includes/metal.h b/Common_3/Tools/ForgeShadingLanguage/includes/metal.h
+index 5c2438d..6bc047e 100644
+--- a/Common_3/Tools/ForgeShadingLanguage/includes/metal.h
++++ b/Common_3/Tools/ForgeShadingLanguage/includes/metal.h
+@@ -695,4 +695,7 @@ void cmdDrawIndexed(command_buffer cmdbuf, uint slot, PRIMITIVE_TYPE prim, T ind
+ 
+ #endif
+ 
++// Motolii 30-minute test: raw-MSL OpenPBR wrapper, only active in ray-tracing shaders.
++#include "/Users/member_ottoto/rust_ae/_ext/The-Forge/Examples_3/Unit_Tests/src/16_Raytracing/Shaders/FSL/openpbr_forge_msl.h"
++
+ #endif // _METAL_H
+diff --git a/Examples_3/Unit_Tests/src/16_Raytracing/16_Raytracing.cpp b/Examples_3/Unit_Tests/src/16_Raytracing/16_Raytracing.cpp
+index 1bf66b1..6b23554 100644
+--- a/Examples_3/Unit_Tests/src/16_Raytracing/16_Raytracing.cpp
++++ b/Examples_3/Unit_Tests/src/16_Raytracing/16_Raytracing.cpp
+@@ -62,7 +62,7 @@
+ #define USE_DENOISER  0
+ #define USE_RAY_QUERY 1
+ 
+-#define SCENE_SCALE   10.0f
++#define SCENE_SCALE   1.0f
+ 
+ bool gUseUavRwFallback = false;
+ 
+@@ -88,6 +88,51 @@ struct PropData
+     mat4      mWorldMatrix;
+ };
+ 
++
++// Motolii fixture: the scene is a glTF from Blender (curve->tube) converted by The Forge's own AssetPipelineCmd.
++static Scene* initTubeScene(const GeometryLoadDesc* pTemplate, SyncToken& token)
++{
++    Scene* scene = (Scene*)tf_calloc(1, sizeof(Scene));
++    GeometryLoadDesc loadDesc = *pTemplate;
++    loadDesc.mFlags |= GEOMETRY_LOAD_FLAG_SHADOWED;
++    loadDesc.pFileName = "tube_scene/scene.bin";
++    loadDesc.ppGeometryData = &scene->geomData;
++    loadDesc.ppGeometry = &scene->geom;
++    addResource(&loadDesc, &token);
++    waitForToken(&token);
++    const uint32_t n = scene->geom->mDrawArgCount;
++    {
++        GeometryData* gd = scene->geomData;
++        if (gd && gd->pShadow)
++        {
++            const float*    pos = (const float*)gd->pShadow->pAttributes[SEMANTIC_POSITION];
++            const uint32_t* idx = (const uint32_t*)gd->pShadow->pIndices;
++            const uint32_t  vc = (uint32_t)scene->geom->mVertexCount;
++            for (uint32_t v = (vc > 8 ? vc - 8 : 0); v < vc; ++v)
++                LOGF(eINFO, "TUBE vtx %u: %.2f %.2f %.2f", v, pos[v * 3 + 0], pos[v * 3 + 1], pos[v * 3 + 2]);
++            for (uint32_t d = 1; d < n; ++d)
++            {
++                uint32_t st = scene->geom->pDrawArgs[d].mStartIndex;
++                LOGF(eINFO, "TUBE idx draw %u: %u %u %u %u %u %u", d, idx[st], idx[st + 1], idx[st + 2], idx[st + 3], idx[st + 4], idx[st + 5]);
++            }
++            LOGF(eINFO, "TUBE vtx 0: %.2f %.2f %.2f", pos[0], pos[1], pos[2]);
++        }
++        else
++            LOGF(eINFO, "TUBE no shadow data");
++    }
++    scene->materialCount = n;
++    scene->materialFlags = (MaterialFlags*)tf_calloc(n, sizeof(MaterialFlags));
++    scene->textures = (char**)tf_calloc(n, sizeof(char*));
++    scene->normalMaps = (char**)tf_calloc(n, sizeof(char*));
++    scene->specularMaps = (char**)tf_calloc(n, sizeof(char*));
++    for (uint32_t i = 0; i < n; ++i)
++    {
++        scene->textures[i] = (char*)tf_calloc(32, sizeof(char));
++        strcpy(scene->textures[i], (i == 2) ? "video_0012.tex" : "Palette_Sky.tex");
++    }
++    return scene;
++}
++
+ PropData SanMiguelProp;
+ Scene*   pScene;
+ 
+@@ -255,8 +300,11 @@ public:
+             GeometryLoadDesc loadDesc = {};
+             loadDesc.pVertexLayout = &vertexLayout;
+             loadDesc.mFlags = GEOMETRY_LOAD_FLAG_RAYTRACING_INPUT;
+-            pScene = initSanMiguel(&loadDesc, token, false);
++            pScene = initTubeScene(&loadDesc, token);
+ 
++            LOGF(eINFO, "TUBE geom: draws=%u vertices=%u indices=%u", pScene->geom->mDrawArgCount, (uint32_t)pScene->geom->mVertexCount, (uint32_t)pScene->geom->mIndexCount);
++            for (uint32_t d = 0; d < pScene->geom->mDrawArgCount; ++d)
++                LOGF(eINFO, "TUBE draw %u: indexCount=%u startIndex=%u", d, pScene->geom->pDrawArgs[d].mIndexCount, pScene->geom->pDrawArgs[d].mStartIndex);
+             SanMiguelProp.mMaterialCount = pScene->geom->mDrawArgCount;
+             SanMiguelProp.pGeom = pScene->geom;
+ 
+@@ -293,6 +341,21 @@ public:
+ 
+             waitForAllResourceLoads();
+ 
++            // Motolii 30-minute test: SanMiguel textures are not in Art.zip; use one palette texture for any that failed.
++            {
++                Texture*        pFallbackTexture = NULL;
++                TextureLoadDesc fallbackDesc = {};
++                fallbackDesc.pFileName = "Palette_Sky.tex";
++                fallbackDesc.ppTexture = &pFallbackTexture;
++                addResource(&fallbackDesc, NULL);
++                waitForAllResourceLoads();
++                for (uint32_t i = 0; i < SanMiguelProp.mMaterialCount; ++i)
++                {
++                    if (!SanMiguelProp.pTextureStorage[i])
++                        SanMiguelProp.pTextureStorage[i] = pFallbackTexture;
++                }
++            }
++
+             /************************************************************************/
+             // 02 Creation Acceleration Structure
+             /************************************************************************/
+@@ -328,7 +391,7 @@ public:
+ 
+             // Construct descriptions for Acceleration Structures Instances
+             AccelerationStructureInstanceDesc instanceDesc = {};
+-            instanceDesc.mFlags = ACCELERATION_STRUCTURE_INSTANCE_FLAG_NONE;
++            instanceDesc.mFlags = ACCELERATION_STRUCTURE_INSTANCE_FLAG_TRIANGLE_CULL_DISABLE; // glass needs both faces; glTF winding is RH, the Forge is LH
+             instanceDesc.mInstanceContributionToHitGroupIndex = 0;
+             instanceDesc.mInstanceID = 0;
+             instanceDesc.mInstanceMask = 1;
+@@ -388,9 +451,9 @@ public:
+ #endif
+         }
+ 
+-        CameraMotionParameters cmp{ 200.0f, 250.0f, 300.0f };
+-        vec3                   camPos{ 80.0f, 60.0f, 50.0f };
+-        vec3                   lookAt{ 1.0f, 0.5f, 0.0f };
++        CameraMotionParameters cmp{ 20.0f, 25.0f, 30.0f };
++        vec3                   camPos{ -0.5f, 1.6f, -11.5f };
++        vec3                   lookAt{ 0.0f, 0.2f, 0.0f };
+ 
+         pCameraController = initFpsCameraController(camPos, lookAt);
+         pCameraController->setMotionParameters(cmp);
+@@ -676,6 +739,12 @@ public:
+             {
+                 toggleFullscreen(pWindow);
+             }
++            static bool sUiHiddenByEnv = false;
++            if (!sUiHiddenByEnv && getenv("MOTOLII_NOUI"))
++            {
++                uiToggleActive(); // the picture, not the sample's panels (captures)
++                sUiHiddenByEnv = true;
++            }
+             if (inputGetValue(0, CUSTOM_TOGGLE_UI))
+             {
+                 uiToggleActive();
+@@ -704,7 +773,7 @@ public:
+         mat4 viewMat = pCameraController->getViewMatrix().mCamera;
+ 
+         const float aspectInverse = (float)mSettings.mHeight / (float)mSettings.mWidth;
+-        const float horizontalFOV = PI / 2.0f;
++        const float horizontalFOV = PI / 3.4f;
+         const float nearPlane = 0.1f;
+         const float farPlane = 1000.f;
+         mat4        projMat = mat4::perspectiveLH_ReverseZ(horizontalFOV, aspectInverse, nearPlane, farPlane);
+diff --git a/Examples_3/Unit_Tests/src/16_Raytracing/Shaders/FSL/RayQuery.comp.fsl b/Examples_3/Unit_Tests/src/16_Raytracing/Shaders/FSL/RayQuery.comp.fsl
+index e0dddef..cc445bf 100644
+--- a/Examples_3/Unit_Tests/src/16_Raytracing/Shaders/FSL/RayQuery.comp.fsl
++++ b/Examples_3/Unit_Tests/src/16_Raytracing/Shaders/FSL/RayQuery.comp.fsl
+@@ -129,6 +129,24 @@ float2 uniformNoiseToTriangular(float2 n) {
+ 	n = n-float2(sign(orig));
+ 	return n;
+ }
++
++#define DEBUG_NORMALS 0
++// Studio environment: big overhead softbox, two side strips, a faint card behind the camera. These are what the glass reflects.
++float3 envRadiance(float3 d)
++{
++	d = normalize(d);
++	float3 sky = lerp(float3(0.015f, 0.02f, 0.035f), float3(0.07f, 0.11f, 0.2f), saturate(d.y * 0.5f + 0.5f));
++	// overhead softbox
++	sky += float3(3.6f, 3.7f, 4.0f) * smoothstep(0.58f, 0.80f, d.y);
++	// side strips
++	float side = smoothstep(0.50f, 0.78f, abs(d.x)) * smoothstep(0.02f, 0.22f, d.y) * smoothstep(0.62f, 0.38f, d.y);
++	float3 sideColor = (d.x > 0.0f) ? float3(9.0f, 7.0f, 5.0f) : float3(4.5f, 6.5f, 10.0f);
++	sky += sideColor * side;
++	// faint card behind the camera
++	sky += float3(2.5f, 2.7f, 3.0f) * smoothstep(0.70f, 0.92f, -d.z) * smoothstep(0.0f, 0.25f, d.y) * smoothstep(0.65f, 0.30f, d.y);
++	return sky;
++}
++
+ ROOT_SIGNATURE(ComputeRootSignature)
+ NUM_THREADS(8, 8, 1)
+ void CS_MAIN(SV_DispatchThreadID(uint2) tid)
+@@ -156,28 +174,21 @@ void CS_MAIN(SV_DispatchThreadID(uint2) tid)
+ 	ray.Direction = directionWS;
+ 	ray.Origin = getCol(gSettings.mCameraToWorld, 3).xyz + directionWS * gSettings.mProjNear;
+ 
+-	const uint maxBounce = 2;
+-	float3 surfaceAlbedo[maxBounce];
+-	float3 bounceRadiance[maxBounce];
+-
+-	UNROLL
+-	for (uint b = 0; b < maxBounce; ++b)
+-	{
+-		bounceRadiance[b] = f3(0.0f);
+-		surfaceAlbedo[b] = f3(0.0f);
+-	}
++	const uint maxBounce = 32;
++	float3 radiance = f3(0.0f);
++	float3 throughput = f3(1.0f);
++	float3 firstAlbedo = f3(0.0f);
++	bool inside = false;
++	float3 glassExtinction = pbr_glass_extinction();
++	uint pixelSeed = tid.x + tid.y * gSettings.mWidth + uint(gSettings.mFrameIndex) * 9781u;
+ 
+ 	const RayTraversalFlags traversalFlags = RAY_TRAVERSAL_FLAG_USE_SHARED_STACK | RAY_TRAVERSAL_FLAG_NO_AABB_GEOMETRY | RAY_TRAVERSAL_FLAG_NO_AABB_INSTANCE;
+ 
+ 	float4x4 worldMatrix = gSettings.mWorldMatrix;
+ 
+-	UNROLL
+ 	for (uint bounce = 0; bounce < maxBounce; ++bounce)
+ 	{
+-		surfaceAlbedo[bounce] = f3(0.0f);
+-		bounceRadiance[bounce] = f3(0.0f);
+-
+-        float3 uvw;
++		float3 uvw;
+ 		float3 position;
+ 		float3 normal;
+ 		float2 uv;
+@@ -185,15 +196,13 @@ void CS_MAIN(SV_DispatchThreadID(uint2) tid)
+ 		uint geometryIndex;
+ 		uint triangleIndex;
+ 		uint indexOffset;
+-        float2 barycentricCoords;
++		float2 barycentricCoords;
+ 
+ 		uint i0;
+-        uint i1;
+-        uint i2;
+-
+-		float4 matColor;
++		uint i1;
++		uint i2;
+ 
+-        RayQueryClosestHit(gRtScene,
++		RayQueryClosestHit(gRtScene,
+ 				traversalFlags,
+ 				RAY_FLAG_SKIP_AABB,
+ 				ray, 0xFF, hit);
+@@ -202,83 +211,33 @@ void CS_MAIN(SV_DispatchThreadID(uint2) tid)
+ 		RayQueryBeginForEachCandidate(hit)
+ 		{
+ 			if (RayQueryIsHitNonOpaqueTriangle(hit))
+-            {
+-				geometryIndex = RayQueryCandidateGeometryIndex(hit);
+-                triangleIndex = RayQueryCandidatePrimitiveIndex(hit);
+-                barycentricCoords = RayQueryCandidateBarycentrics(hit);
+-				indexOffset = LoadByte(gIndexOffsets, geometryIndex << 2);
+-
+-                // Barycentric coordinates sum to one
+-                uvw.yz = barycentricCoords;
+-                uvw.x = 1.0f - uvw.y - uvw.z;
+-
+-                uint4 i012 = LoadByte4(gIndexDataBuffer, ((3 * triangleIndex + indexOffset) << 2));
+-                i0 = i012[0];
+-                i1 = i012[1];
+-                i2 = i012[2];
+-
+-                float2 uv012[3] = {
+-					unpack2Floats(LoadByte(gVertexTexCoordBuffer, i0 << 2)),
+-					unpack2Floats(LoadByte(gVertexTexCoordBuffer, i1 << 2)),
+-					unpack2Floats(LoadByte(gVertexTexCoordBuffer, i2 << 2))
+-				};
+-
+-                uv = uvw.x * uv012[0] + uvw.y * uv012[1] + uvw.z * uv012[2];
+-
+-                BeginNonUniformResourceIndex(geometryIndex, TOTAL_IMGS);
+-                matColor = SampleLvlTex2D(gMaterialTextures[geometryIndex], gSamplerTrilinearWrap, uv, 0).rgba;
+-                EndNonUniformResourceIndex();
+-
+-                if (matColor.a > 0.5)
+-                {
+-                    RayQueryCommitCandidate(hit);
+-                }
+-            }
+-
++			{
++				RayQueryCommitCandidate(hit);
++			}
+ 			RayQueryProceed(hit);
+-        }
++		}
+ 		RayQueryEndForEachCandidate(hit);
+ 
+-        if (!RayQueryIsHit(hit))
+-        {
+-			float3 skyColor = float3(0.3f, 0.6f, 1.2f);
+-            surfaceAlbedo[bounce] = f3(1.0f);
+-            bounceRadiance[bounce] = skyColor;
+-            break;
+-        }
+-
+-		uint hitGeometryIndex = RayQueryGeometryIndex(hit);
+-		uint hitTriangleIndex = RayQueryPrimitiveIndex(hit);
+-		float2 hitBarycentricCoords = RayQueryBarycentrics(hit);
+-		if (hitGeometryIndex != geometryIndex || hitTriangleIndex != triangleIndex || hitBarycentricCoords.x != barycentricCoords.x || hitBarycentricCoords.y != barycentricCoords.y)
++		if (!RayQueryIsHit(hit))
+ 		{
+-			triangleIndex = hitTriangleIndex;
+-			barycentricCoords = hitBarycentricCoords;
+-			geometryIndex = hitGeometryIndex;
+-			indexOffset = LoadByte(gIndexOffsets, geometryIndex << 2);
+-
+-		    uvw.yz = barycentricCoords;
+-            uvw.x = 1.0f - uvw.y - uvw.z;
+-            
+-            uint4 i012 = LoadByte4(gIndexDataBuffer, ((3 * triangleIndex + indexOffset) << 2));
+-            i0 = i012[0];
+-            i1 = i012[1];
+-            i2 = i012[2];
+-
+-            float2 uv012[3] = {
+-				unpack2Floats(LoadByte(gVertexTexCoordBuffer, i0 << 2)),
+-				unpack2Floats(LoadByte(gVertexTexCoordBuffer, i1 << 2)),
+-				unpack2Floats(LoadByte(gVertexTexCoordBuffer, i2 << 2))
+-			};
+-
+-            uv = uvw.x * uv012[0] + uvw.y * uv012[1] + uvw.z * uv012[2];
+-                
+-            BeginNonUniformResourceIndex(geometryIndex, TOTAL_IMGS);
+-            matColor = SampleLvlTex2D(gMaterialTextures[geometryIndex], gSamplerTrilinearWrap, uv, 0).rgba;
+-            EndNonUniformResourceIndex();
++			radiance += throughput * envRadiance(ray.Direction);
++			break;
+ 		}
+ 
+-        float4 position012[3] =
++		geometryIndex = RayQueryGeometryIndex(hit);
++		triangleIndex = RayQueryPrimitiveIndex(hit);
++		barycentricCoords = RayQueryBarycentrics(hit);
++		indexOffset = LoadByte(gIndexOffsets, geometryIndex << 2);
++
++		uvw.yz = barycentricCoords;
++		uvw.x = 1.0f - uvw.y - uvw.z;
++
++		uint4 i012 = LoadByte4(gIndexDataBuffer, ((3 * triangleIndex + indexOffset) << 2));
++		i0 = i012[0];
++		i1 = i012[1];
++		i2 = i012[2];
++
++		float4 position012[3] =
+ 		{
+ 			asfloat(LoadByte4(gVertexPositionBuffer, ((i0 * 3) << 2))),
+ 			asfloat(LoadByte4(gVertexPositionBuffer, ((i1 * 3) << 2))),
+@@ -290,94 +249,77 @@ void CS_MAIN(SV_DispatchThreadID(uint2) tid)
+ 			decodeDir(unpackUnorm2x16(LoadByte(gVertexNormalBuffer, i2 << 2)))
+ 		};
+ 
+-        position = uvw.x * position012[0].xyz + uvw.y * position012[1].xyz + uvw.z * position012[2].xyz;
+-        position = mul(worldMatrix, float4(position, 1.0f)).xyz;
+-        normal = normalize(uvw.x * normal012[0].xyz + uvw.y * normal012[1].xyz + uvw.z * normal012[2].xyz);
+-        surfaceAlbedo[bounce] = matColor.rgb;
++		position = uvw.x * position012[0].xyz + uvw.y * position012[1].xyz + uvw.z * position012[2].xyz;
++		position = mul(worldMatrix, float4(position, 1.0f)).xyz;
++		normal = normalize(uvw.x * normal012[0].xyz + uvw.y * normal012[1].xyz + uvw.z * normal012[2].xyz);
+ 
+-		float3 rayOrigin = position + normal * 0.001;
++#if DEBUG_NORMALS
++		if (bounce == 0)
++		{
++			float shade = saturate(dot(normal, normalize(float3(0.3f, 0.8f, -0.5f)))) * 0.7f + 0.3f;
++			radiance = (geometryIndex == 0u ? float3(1.0f, 0.2f, 0.2f) : (geometryIndex == 1u ? float3(0.2f, 1.0f, 0.2f) : float3(0.2f, 0.4f, 1.0f))) * shade;
++			break;
++		}
++#endif
++		if (geometryIndex == 2u)
++		{
++			// the video board: a screen. Its texel is the light; the path ends here.
++			float2 uv012[3] = {
++				unpack2Floats(LoadByte(gVertexTexCoordBuffer, i0 << 2)),
++				unpack2Floats(LoadByte(gVertexTexCoordBuffer, i1 << 2)),
++				unpack2Floats(LoadByte(gVertexTexCoordBuffer, i2 << 2))
++			};
++			float2 boardUV = uvw.x * uv012[0] + uvw.y * uv012[1] + uvw.z * uv012[2];
++			boardUV.y = 1.0f - boardUV.y;
++			float4 boardColor;
++			BeginNonUniformResourceIndex(geometryIndex, TOTAL_IMGS);
++			boardColor = SampleLvlTex2D(gMaterialTextures[geometryIndex], gSamplerTrilinearWrap, boardUV, 0);
++			EndNonUniformResourceIndex();
++			radiance += throughput * boardColor.rgb * 1.6f;
++			if (bounce == 0) { firstAlbedo = boardColor.rgb; }
++			break;
++		}
+ 
+-		// Shadow ray
++		if (inside)
+ 		{
+-			float3 lightDir = gSettings.mLightDirection;
++			throughput *= pbr_transmittance(glassExtinction, length(position - ray.Origin));
++		}
+ 
+-			RayDesc shadowRay;
+-			shadowRay.Origin = rayOrigin;
+-			shadowRay.Direction = lightDir;
+-			shadowRay.TMin = 0.001;
+-			shadowRay.TMax = 10000;
++		float3 V = -ray.Direction;
++		float3 xi = float3(pbr_rng(pixelSeed, bounce, 0u), pbr_rng(pixelSeed, bounce, 1u), pbr_rng(pixelSeed, bounce, 2u));
++		PbrSampleOut s = pbr_sample(geometryIndex, normal, V, xi);
+ 
+-			RayQueryAnyHit(gRtScene,
+-				traversalFlags,
+-				RAY_FLAG_SKIP_AABB | RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH,
+-				shadowRay, 0xFF, shadowHit);
++		if (bounce == 0)
++		{
++			firstAlbedo = (geometryIndex == 0u) ? float3(0.25f, 0.62f, 1.0f) : float3(0.55f, 0.56f, 0.6f);
++		}
+ 
+-			LOOP
+-			RayQueryBeginForEachCandidate(shadowHit)
+-			{
+-				if (RayQueryIsHitNonOpaqueTriangle(shadowHit))
+-				{
+-					uint triangleIndex = RayQueryCandidatePrimitiveIndex(shadowHit);
+-					float2 barycentricCoords = RayQueryCandidateBarycentrics(shadowHit);
+-					uint geometryIndex = RayQueryCandidateGeometryIndex(shadowHit);
+-					uint indexOffset = LoadByte(gIndexOffsets, geometryIndex << 2);
+-
+-					// Barycentric coordinates sum to one
+-					float3 uvw;
+-					uvw.yz = barycentricCoords;
+-					uvw.x = 1.0f - uvw.y - uvw.z;
+-
+-					uint4 i012 = LoadByte4(gIndexDataBuffer, ((3 * triangleIndex + indexOffset) << 2));
+-					uint i0 = i012[0];
+-					uint i1 = i012[1];
+-					uint i2 = i012[2];
+-
+-					float2 uv012[3] = {
+-						unpack2Floats(LoadByte(gVertexTexCoordBuffer, i0 << 2)),
+-						unpack2Floats(LoadByte(gVertexTexCoordBuffer, i1 << 2)),
+-						unpack2Floats(LoadByte(gVertexTexCoordBuffer, i2 << 2))
+-					};
+-
+-					float2 uv = uvw.x * uv012[0] + uvw.y * uv012[1] + uvw.z * uv012[2];
+-
+-					float alpha;
+-					BeginNonUniformResourceIndex(geometryIndex, TOTAL_IMGS);
+-					alpha = SampleLvlTex2D(gMaterialTextures[geometryIndex], gSamplerTrilinearWrap, uv, 0).a;
+-					EndNonUniformResourceIndex();
+-
+-					if (alpha > 0.5)
+-					{
+-						RayQueryCommitCandidate(shadowHit);
+-					}
+-				}
+-
+-				RayQueryProceed(shadowHit);
+-			}
+-			RayQueryEndForEachCandidate(shadowHit)
++		radiance += throughput * s.emission;
++		if (s.pdf <= 0.0f)
++		{
++			break;
++		}
++		throughput *= s.W;
++		float side = (dot(s.L, normal) > 0.0f) ? 1.0f : -1.0f;
++		inside = (geometryIndex == 0u) && (side < 0.0f);
++
++		ray.Origin = position + normal * (0.0015f * side);
++		ray.Direction = s.L;
+ 
+-			if (!RayQueryIsHit(shadowHit))
++		if (bounce >= 10)
++		{
++			float p = clamp(max(throughput.x, max(throughput.y, throughput.z)), 0.05f, 0.95f);
++			if (pbr_rng(pixelSeed, bounce, 7u) > p)
+ 			{
+-				float3 lightSample = 5.0f * saturate(dot(lightDir, normal)) * surfaceAlbedo[bounce] * M_1_PI_F;
+-				bounceRadiance[bounce] += lightSample;
++				break;
+ 			}
++			throughput /= p;
+ 		}
+-
+-		float2 pixelUV = (float2(tid) + f2(0.5)) / float2(launchDim.xy);
+-		float2 sampleVal = uniformNoiseToTriangular(PDnrand2(pixelUV.xy + gSettings.mRandomSeed + bounce)) * 0.5 + 0.5;
+-		float3 sampleDirLocal = sampleCosineWeightedHemisphere(sampleVal);
+-		float3 sampleDir = alignHemisphereWithNormal(sampleDirLocal, normal);
+-
+-		ray.Origin = rayOrigin;
+-		ray.Direction = sampleDir;
+-	}
+-
+-	UNROLL
+-	for (int i = int(maxBounce) - 2; i >= 0; --i)
+-	{
+-		bounceRadiance[i] += bounceRadiance[i + 1] * surfaceAlbedo[i];
+ 	}
+ 
+-	float3 payloadRadiance = bounceRadiance[0];
++	float3 payloadRadiance = radiance;
++	// clamp fireflies from the strip lights seen through the glass
++	payloadRadiance = min(payloadRadiance, f3(24.0f));
+ 
+ 	float4 accumulatedRadiance = f4(0.0f);
+ 	if (gSettings.mFrameIndex == 0)
+@@ -401,7 +343,7 @@ void CS_MAIN(SV_DispatchThreadID(uint2) tid)
+ 	float3 accumulatedAlbedo = f3(0.0f);
+ 	if (gSettings.mFramesSinceCameraMove == 0)
+ 	{
+-		accumulatedAlbedo = surfaceAlbedo[0];
++		accumulatedAlbedo = firstAlbedo;
+ 	}
+ 	else
+ 	{
+@@ -411,7 +353,7 @@ void CS_MAIN(SV_DispatchThreadID(uint2) tid)
+ #else
+ 		accumulatedAlbedo = LoadRWTex2D(gAlbedoOutput, tid).rgb;
+ #endif
+-		accumulatedAlbedo += (surfaceAlbedo[0] - accumulatedAlbedo) / invWeight;
++		accumulatedAlbedo += (firstAlbedo - accumulatedAlbedo) / invWeight;
+ 	}
+ 
+ 	Write2D(gAlbedoOutput, tid, float4(accumulatedAlbedo, 1.0));
+diff --git a/Examples_3/Unit_Tests/src/16_Raytracing/Shaders/FSL/openpbr_forge_msl.h b/Examples_3/Unit_Tests/src/16_Raytracing/Shaders/FSL/openpbr_forge_msl.h
+new file mode 100644
+index 0000000..e2bc158
+--- /dev/null
++++ b/Examples_3/Unit_Tests/src/16_Raytracing/Shaders/FSL/openpbr_forge_msl.h
+@@ -0,0 +1,74 @@
++// Raw MSL. Adobe's OpenPBR BSDF (as-is, from github.com/adobe/openpbr-bsdf) behind three value-passing calls.
++// Included from includes/metal.h (after FSL translation): FSL's function table rejects overloaded functions, so the header must not pass through it.
++#pragma once
++#if defined(__METAL_RAYTRACING)
++#define OPENPBR_LANGUAGE_TARGET_MSL 1
++#include "/Users/member_ottoto/rust_ae/_ext/openpbr-bsdf/openpbr.h"
++
++struct PbrSampleOut
++{
++    float3 L;
++    float3 W;
++    float  pdf;
++    float3 emission;
++};
++
++inline PbrSampleOut pbr_sample(uint matId, float3 N, float3 V, float3 xi)
++{
++    OpenPBR_ResolvedInputs inputs = openpbr_make_default_resolved_inputs();
++    float3 T = normalize(abs(N.y) < 0.99f ? cross(float3(0.0f, 1.0f, 0.0f), N) : cross(float3(1.0f, 0.0f, 0.0f), N));
++    float3 B = cross(N, T);
++    inputs.geometry_basis = OPENPBR_MAKE_STRUCT_3(OpenPBR_Basis, T, B, N);
++    inputs.geometry_coat_basis = inputs.geometry_basis;
++    if (matId == 0u)
++    {
++        inputs.base_color = float3(0.0f);
++        inputs.specular_roughness = 0.02f;
++        inputs.specular_ior = 1.5f;
++        inputs.transmission_weight = 1.0f;
++        inputs.transmission_color = float3(0.06f, 0.30f, 1.0f);
++        inputs.transmission_depth = 0.9f;
++    }
++    else
++    {
++        inputs.base_color = float3(0.02f, 0.025f, 0.03f);
++        inputs.specular_roughness = 0.12f;
++    }
++    OpenPBR_PreparedBsdf prepared =
++        openpbr_prepare(inputs, float3(1.0f), OpenPBR_BaseRgbWavelengths_nm, OpenPBR_VacuumIor, V);
++    PbrSampleOut o;
++    OpenPBR_DiffuseSpecular w;
++    OpenPBR_BsdfLobeType lt;
++    openpbr_sample(prepared, xi, o.L, w, o.pdf, lt);
++    o.W = openpbr_get_sum_of_diffuse_specular(w);
++    o.emission = prepared.emission;
++    return o;
++}
++
++// Beer-Lambert extinction of the glass interior (the material's own volume), as OpenPBR derives it.
++inline float3 pbr_glass_extinction()
++{
++    OpenPBR_ResolvedInputs inputs = openpbr_make_default_resolved_inputs();
++    inputs.base_color = float3(0.0f);
++    inputs.transmission_weight = 1.0f;
++    inputs.transmission_color = float3(0.06f, 0.30f, 1.0f);
++    inputs.transmission_depth = 0.9f;
++    OpenPBR_PreparedBsdf prepared =
++        openpbr_prepare(inputs, float3(1.0f), OpenPBR_BaseRgbWavelengths_nm, OpenPBR_VacuumIor, float3(0.0f, 0.0f, 1.0f));
++    return prepared.volume.extinction_coefficient;
++}
++
++inline float3 pbr_transmittance(float3 extinction, float distance)
++{
++    return openpbr_calculate_transmittance_at_distance(extinction, distance);
++}
++
++// Stateless PCG-style hash -> [0,1). Not a renderer: three numbers per bounce for the BSDF's sampler.
++inline float pbr_rng(uint a, uint b, uint c)
++{
++    uint v = a * 747796405u + b * 2891336453u + c * 277803737u + 1013904223u;
++    v = ((v >> ((v >> 28u) + 4u)) ^ v) * 277803737u;
++    v = (v >> 22u) ^ v;
++    return float(v) * (1.0f / 4294967296.0f);
++}
++#endif
