@@ -54,7 +54,7 @@ class _S extends State<Motolii> with SingleTickerProviderStateMixin {
     Timer.periodic(const Duration(seconds: 2), (_) async {
       final s = await _ch.invokeMapMethod<String, dynamic>('stats');
       if (s == null || !mounted) return;
-      final line = 'stage ${((s['frames'] as int) / (s['secs'] as double)).toStringAsFixed(1)} fps   set->frame ${(s['setToFrameMs'] as double).toStringAsFixed(1)} ms   video ${((s['videoFrames'] as int) / (s['secs'] as double)).toStringAsFixed(1)} f/s   svg ${(s['svgMs'] as double).toStringAsFixed(2)} ms';
+      final line = 'stage ${((s['frames'] as int) / (s['secs'] as double)).toStringAsFixed(1)} fps   set->frame ${(s['setToFrameMs'] as double).toStringAsFixed(1)} ms   video ${((s['videoFrames'] as int) / (s['secs'] as double)).toStringAsFixed(1)} f/s   svg ${(s['svgMs'] as double).toStringAsFixed(2)} ms   cpu frame max ${(s['frameMsMax'] as double).toStringAsFixed(2)} ms';
       debugPrint('MOTOLII $line');
       setState(() => stats = line);
     });

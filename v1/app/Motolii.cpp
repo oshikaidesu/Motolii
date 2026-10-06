@@ -98,7 +98,15 @@ static uint64_t               gStageFrames = 0;
 static double                 gStageT0 = 0;
 static double                 gLastSetAt = 0, gLastSetToFrameMs = 0;
 static RenderTarget*          pStageRT = NULL;
-static uint64_t               gVideoFrames = 0;
+static uint64_t               gVideoFrames = 0, gStatFrames = 0, gStatVideo = 0;
+static double                 gStatAt = 0, gFrameMsMax = 0, gFrameBegan = 0;
+static dispatch_semaphore_t   gVsync;
+static CVDisplayLinkRef       gLink;
+static CVReturn onVsync(CVDisplayLinkRef, const CVTimeStamp*, const CVTimeStamp*, CVOptionFlags, CVOptionFlags*, void*)
+{
+    dispatch_semaphore_signal(gVsync);
+    return kCVReturnSuccess;
+}
 static double                 gSvgMs = 0;
 
 static void skinStart(id<MTLDevice> dev, uint32_t w, uint32_t h, bool srgb)
@@ -128,7 +136,11 @@ static void skinStart(id<MTLDevice> dev, uint32_t w, uint32_t h, bool srgb)
     [win setContentSize:NSMakeSize(1280, 900)];
     [win makeKeyAndOrderFront:nil];
     gStageId = [gSkin.engine registerTexture:gStage];
-    gStageT0 = CACurrentMediaTime();
+    gStageT0 = gStatAt = CACurrentMediaTime();
+    gVsync = dispatch_semaphore_create(0);
+    CVDisplayLinkCreateWithActiveCGDisplays(&gLink);
+    CVDisplayLinkSetOutputCallback(gLink, onVsync, NULL);
+    CVDisplayLinkStart(gLink);
     FlutterMethodChannel* ch = [FlutterMethodChannel methodChannelWithName:@"motolii" binaryMessenger:gSkin.engine.binaryMessenger];
     [ch setMethodCallHandler:^(FlutterMethodCall* call, FlutterResult result) {
         if ([call.method isEqualToString:@"stage"])
@@ -145,11 +157,18 @@ static void skinStart(id<MTLDevice> dev, uint32_t w, uint32_t h, bool srgb)
         else if ([call.method isEqualToString:@"playhead"])
         {
             gPlayhead = [call.arguments longLongValue];
+            gLastSetAt = CACurrentMediaTime();
             result(nil);
         }
         else if ([call.method isEqualToString:@"stats"])
         {
-            result(@{ @"frames" : @(gStageFrames), @"secs" : @(CACurrentMediaTime() - gStageT0), @"setToFrameMs" : @(gLastSetToFrameMs), @"videoFrames" : @(gVideoFrames), @"svgMs" : @(gSvgMs) });
+            const double now = CACurrentMediaTime();
+            result(@{ @"frames" : @(gStageFrames - gStatFrames), @"secs" : @(now - gStatAt), @"setToFrameMs" : @(gLastSetToFrameMs),
+                      @"videoFrames" : @(gVideoFrames - gStatVideo), @"svgMs" : @(gSvgMs), @"frameMsMax" : @(gFrameMsMax) });
+            gStatFrames = gStageFrames;
+            gStatVideo = gVideoFrames;
+            gStatAt = now;
+            gFrameMsMax = 0;
         }
         else
         {
@@ -217,10 +236,17 @@ static void videoFrame(id<MTLDevice> dev, double seconds)
 {
     if (!gPlayer)
         return;
-    if (seconds != gVideoAsked)
+    static volatile bool seeking = false;
+    if (seconds != gVideoAsked && !seeking)
     {
         gVideoAsked = seconds;
-        [gPlayer seekToTime:CMTimeMakeWithSeconds(seconds, 600) toleranceBefore:kCMTimeZero toleranceAfter:kCMTimeZero];
+        seeking = true;
+        [gPlayer seekToTime:CMTimeMakeWithSeconds(seconds, 600)
+            toleranceBefore:kCMTimeZero
+             toleranceAfter:kCMTimeZero
+          completionHandler:^(BOOL) {
+              seeking = false;
+          }];
     }
     CMTime now = gPlayer.currentItem.currentTime;
     if (![gVideoOut hasNewPixelBufferForItemTime:now])
@@ -1132,6 +1158,9 @@ public:
             ::toggleVSync(pRenderer, &pSwapChain);
         }
 
+        if (gVsync)
+            dispatch_semaphore_wait(gVsync, dispatch_time(DISPATCH_TIME_NOW, 100 * NSEC_PER_MSEC));
+        gFrameBegan = CACurrentMediaTime();
         {
             // values from the Core decide what the capabilities hand over this frame
             const int64_t f = gPlayhead;
@@ -1329,6 +1358,9 @@ public:
         {
             [gSkin.engine textureFrameAvailable:gStageId];
             ++gStageFrames;
+            const double frameMs = (CACurrentMediaTime() - gFrameBegan) * 1000.0;
+            if (frameMs > gFrameMsMax)
+                gFrameMsMax = frameMs;
             if (gLastSetAt > 0)
             {
                 gLastSetToFrameMs = (CACurrentMediaTime() - gLastSetAt) * 1000.0;
