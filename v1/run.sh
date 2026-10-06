@@ -2,6 +2,7 @@
 pkill -f Motolii.app; sleep 0.5
 export MOTOLII_SKIN=/Users/member_ottoto/rust_ae/Motolii/v1/skin/build/macos/Build/Products/Debug/stage_skin.app/Contents/Frameworks/App.framework
 export MOTOLII_SVG=/Users/member_ottoto/rust_ae/Motolii/work/forge_scene/assets/sunface.svg
+export MOTOLII_GLASS=/Users/member_ottoto/rust_ae/Motolii/v1/capabilities/materialx/glass.metallib
 export MOTOLII_VIDEO=/private/tmp/claude-501/-Users-member-ottoto-rust-ae-Motolii/39997739-b037-4310-b366-cc28b56b68f1/scratchpad/probe/avf/intra.mov
 (/Users/member_ottoto/rust_ae/_ext/The-Forge/Examples_3/Unit_Tests/macOS_Xcode/Motolii/Bin/Release/Motolii.app/Contents/MacOS/Motolii -ApplePersistenceIgnoreState YES > /private/tmp/claude-501/-Users-member-ottoto-rust-ae-Motolii/39997739-b037-4310-b366-cc28b56b68f1/scratchpad/run.log 2>&1 &)
 sleep ${1:-9}

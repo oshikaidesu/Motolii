@@ -7,6 +7,7 @@
 #import <QuartzCore/QuartzCore.h>
 #import <FlutterMacOS/FlutterMacOS.h>
 #import <AVFoundation/AVFoundation.h>
+#include "glass_uniforms.h"
 /*
  * Copyright (c) 2017-2025 The Forge Interactive Inc.
  *
@@ -229,6 +230,38 @@ static void capabilitiesStart()
         [item addOutput:gVideoOut];
         gPlayer = [AVPlayer playerWithPlayerItem:item];
     }
+}
+
+// CAPABILITY: material = MaterialX + OpenPBR. The shader is MaterialX's own generated MSL (glass.metallib); The Forge gets it as a
+// binary shader and a pipeline. The uniform blocks are MaterialX's declarations (glass_uniforms.h).
+static Shader*             pGlassShader = NULL;
+static Pipeline*           pGlassPipeline = NULL;
+static NSData*             gGlassLib = nil;
+static id<MTLSamplerState> gEnvSampler = nil;
+static void glassStart(Renderer* renderer)
+{
+    if (!getenv("MOTOLII_GLASS"))
+        return;
+    gGlassLib = [NSData dataWithContentsOfFile:[NSString stringWithUTF8String:getenv("MOTOLII_GLASS")]];
+    if (!gGlassLib)
+        return;
+    BinaryShaderDesc d = {};
+    d.mStages = (ShaderStage)(SHADER_STAGE_VERT | SHADER_STAGE_FRAG);
+    d.mVert.pName = "glass.vert";
+    d.mVert.pByteCode = (void*)gGlassLib.bytes;
+    d.mVert.mByteCodeSize = (uint32_t)gGlassLib.length;
+    d.mVert.pEntryPoint = "VertexMain";
+    d.mFrag.pName = "glass.frag";
+    d.mFrag.pByteCode = (void*)gGlassLib.bytes;
+    d.mFrag.mByteCodeSize = (uint32_t)gGlassLib.length;
+    d.mFrag.pEntryPoint = "FragmentMain";
+    addShaderBinary(renderer, &d, &pGlassShader);
+    MTLSamplerDescriptor* sd = [[MTLSamplerDescriptor alloc] init];
+    sd.minFilter = MTLSamplerMinMagFilterLinear;
+    sd.magFilter = MTLSamplerMinMagFilterLinear;
+    sd.sAddressMode = MTLSamplerAddressModeRepeat;
+    sd.tAddressMode = MTLSamplerAddressModeRepeat;
+    gEnvSampler = [renderer->pDevice newSamplerStateWithDescriptor:sd];
 }
 
 // the video frame the Core asks for at this playhead, as a texture
@@ -977,7 +1010,10 @@ public:
 
             // the Stage: The Forge draws into an IOSurface the Skin shows. No copy, no readback.
             if (!gSkin)
+            {
                 capabilitiesStart();
+                glassStart(pRenderer);
+            }
             if (!gSkin)
                 skinStart(pRenderer->pDevice, mSettings.mWidth, mSettings.mHeight,
                           pSwapChain->ppRenderTargets[0]->mFormat == TinyImageFormat_B8G8R8A8_SRGB);
@@ -1283,6 +1319,43 @@ public:
         cmdBindVertexBuffer(cmd, 1, &pSphereVertexBuffer, &gSphereVertexLayout.mBindings[0].mStride, nullptr);
         cmdBindIndexBuffer(cmd, pSphereIndexBuffer, INDEX_TYPE_UINT16, 0);
         cmdDrawIndexedInstanced(cmd, gSphereIndexCount, 0, gNumPlanets, 0, 0);
+        if (pGlassPipeline && pVideoTex)
+        {
+            // the glass object: MaterialX's shader, values from the Core, environment = the video texture
+            const int64_t f = gPlayhead;
+            cmdBindPipeline(cmd, pGlassPipeline);
+            cmdBindVertexBuffer(cmd, 1, &pSphereVertexBuffer, &gSphereVertexLayout.mBindings[0].mStride, nullptr);
+            const float              size = (float)core_get("/world/glass/size", f, 9.0);
+            mat4                     world = mat4::translation(vec3(0.0f, (float)core_get("/world/glass/height", f, 6.0), 0.0f)) * mat4::scale(vec3(size));
+            mat4                     worldIT = transpose(inverse(world));
+            mtlx::PrivateUniformsVert vu;
+            memcpy(&vu.u_worldMatrix, &world, sizeof(mat4));
+            memcpy(&vu.u_viewProjectionMatrix, &gUniformData.mProjectView.mCamera, sizeof(mat4));
+            memcpy(&vu.u_worldInverseTransposeMatrix, &worldIT, sizeof(mat4));
+            mtlx::PublicUniforms pub;
+            mtlx::glass_defaults(pub);
+            mtlx::PrivateUniformsFrag fu;
+            memset(&fu, 0, sizeof(fu));
+            fu.u_envMatrix = matrix_identity_float4x4;
+            fu.u_envLightIntensity = 1.0f;
+            fu.u_envRadianceMips = 1;
+            fu.u_envRadianceSamples = 16;
+            fu.u_refractionTwoSided = false;
+            const vec3 eye = pCameraController->getViewPosition();
+            fu.u_viewPosition = simd_make_float3(eye.getX(), eye.getY(), eye.getZ());
+            mtlx::LightData_pixel lights;
+            memset(&lights, 0, sizeof(lights));
+            id<MTLRenderCommandEncoder> enc = cmd->pRenderEncoder;
+            [enc setVertexBytes:&vu length:sizeof(vu) atIndex:3];
+            [enc setFragmentBytes:&pub length:sizeof(pub) atIndex:0];
+            [enc setFragmentBytes:&lights length:sizeof(lights) atIndex:1];
+            [enc setFragmentBytes:&fu length:sizeof(fu) atIndex:2];
+            [enc setFragmentTexture:pVideoTex->pTexture atIndex:0];
+            [enc setFragmentTexture:pVideoTex->pTexture atIndex:1];
+            [enc setFragmentSamplerState:gEnvSampler atIndex:0];
+            [enc setFragmentSamplerState:gEnvSampler atIndex:1];
+            cmdDrawIndexedInstanced(cmd, gSphereIndexCount, 0, 1, 0, 0);
+        }
         cmdEndGpuTimestampQuery(cmd, gGpuProfileToken);
 
         cmdEndGpuTimestampQuery(cmd, gGpuProfileToken); // Draw Skybox/Planets
@@ -1478,6 +1551,14 @@ public:
         pipelineSettings.pRasterizerState = &sphereRasterizerStateDesc;
         pipelineSettings.mVRFoveatedRendering = true;
         addPipeline(pRenderer, &desc, &pSpherePipeline);
+        if (pGlassShader)
+        {
+            pipelineSettings.pShaderProgram = pGlassShader;
+            pipelineSettings.pRasterizerState = &rasterizerStateDesc;
+            addPipeline(pRenderer, &desc, &pGlassPipeline);
+            pipelineSettings.pShaderProgram = pSphereShader;
+            pipelineSettings.pRasterizerState = &sphereRasterizerStateDesc;
+        }
 
         // layout and pipeline for skybox draw
         VertexLayout vertexLayout = {};
@@ -1501,6 +1582,11 @@ public:
     {
         removePipeline(pRenderer, pSkyBoxDrawPipeline);
         removePipeline(pRenderer, pSpherePipeline);
+        if (pGlassPipeline)
+        {
+            removePipeline(pRenderer, pGlassPipeline);
+            pGlassPipeline = NULL;
+        }
     }
 
     void prepareDescriptorSets()
