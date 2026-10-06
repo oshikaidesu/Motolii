@@ -43,3 +43,8 @@ start 07:15:32
 - The Forge sample has a serve mode: `seek N` on stdin renders frame N (video frame decoded by ffmpeg into the board texture, camera from the world's row N, 24 spp), prints `ready N`. post.sh then OIDN + glow. A separate minimal Flutter app (work/stage-skin) shows the result, scrubs and exports. Flutter macOS sandbox had to be switched off to spawn the renderer (dev build).
 - NOT connected: Tracktion (audio is the source clip's audio, muxed by ffmpeg at the same time range), a mesh asset, temporal effect (frames t-k into the effect), the existing motolii/ui app (Stage here is its own window), GPU-image handoff (the Stage reads a PNG; the renderer opens its own window), BestSource (ffmpeg -ss per frame is used).
 - Boundary facts: the Forge converter/loader disagree on index width below 65536 vertices; the converter ignores glTF node transforms; the Forge captures screenshots only under AUTOMATED_TESTING; FSL rejects overloads; repo ThorVG build has no software canvas.
+
+## RESULT: FAIL (2026-10-06, after audit)
+The "30-minute AE" prototype fails: see work/forge_scene/README.md for the ten reasons. Kept as reference only.
+Decision: the next exploration condition is a path where one frame stays on the GPU from decoded video to Flutter presentation (readback 0, files 0, per-frame subprocess 0, PNG/PFM 0), with 16.67 ms as the starting budget. Preview and final render are separate. A technology without a native GPU-image-in / GPU-image-out API on M4/Metal is out of the interactive path.
+Proposed top-level line (not applied; AGENTS.md has the user's uncommitted edits): "Interactive path is a continuous GPU path. No readback, no files, no per-frame process boundary. 16.67 ms is an architectural constraint, not an optimization target."
