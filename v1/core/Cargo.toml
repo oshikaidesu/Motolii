@@ -1,0 +1,20 @@
+[package]
+name = "motolii-core"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+# CORE = Rerun. This crate only exposes the Rerun store over a C ABI (values in, latest-at out). No model of its own.
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+re_chunk = { git = "https://github.com/oshikaidesu/rerun", rev = "d046cd96cc1bd8ab1eef2bcc3bcd536e76aef2cf" }
+re_chunk_store = { git = "https://github.com/oshikaidesu/rerun", rev = "d046cd96cc1bd8ab1eef2bcc3bcd536e76aef2cf" }
+re_entity_db = { git = "https://github.com/oshikaidesu/rerun", rev = "d046cd96cc1bd8ab1eef2bcc3bcd536e76aef2cf" }
+re_log_types = { git = "https://github.com/oshikaidesu/rerun", rev = "d046cd96cc1bd8ab1eef2bcc3bcd536e76aef2cf" }
+re_sdk_types = { git = "https://github.com/oshikaidesu/rerun", rev = "d046cd96cc1bd8ab1eef2bcc3bcd536e76aef2cf", default-features = false }
+re_types_core = { git = "https://github.com/oshikaidesu/rerun", rev = "d046cd96cc1bd8ab1eef2bcc3bcd536e76aef2cf" }
+
+# standalone: not a member of the repo workspace
+[workspace]

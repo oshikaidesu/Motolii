@@ -1,0 +1,5 @@
+build/
+skin/build/
+skin/.dart_tool/
+skin/macos/Flutter/ephemeral/
+core/target/

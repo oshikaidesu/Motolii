@@ -1,0 +1,5 @@
+#!/bin/zsh
+S=/private/tmp/claude-501/-Users-member-ottoto-rust-ae-Motolii/39997739-b037-4310-b366-cc28b56b68f1/scratchpad; SK=/Users/member_ottoto/rust_ae/Motolii/work/stage-skin/build/macos/Build/Products/Debug; CORE=/Users/member_ottoto/rust_ae/_ext/rerun-world-target/release; E=/Users/member_ottoto/rust_ae/_ext/The-Forge/Examples_3/Unit_Tests
+cd $E/macOS_Xcode/Motolii && xcodebuild -project Motolii.xcodeproj -scheme Motolii -configuration Release -arch arm64 build FRAMEWORK_SEARCH_PATHS="\$(inherited) $SK" OTHER_LDFLAGS="\$(inherited) -framework FlutterMacOS -framework IOSurface -framework CoreVideo -framework AVFoundation -framework CoreMedia -framework OpenGL -L$CORE -lmotolii_core $EXTRA_LD" LD_RUNPATH_SEARCH_PATHS="\$(inherited) $SK $CORE $EXTRA_RPATH" OTHER_CFLAGS="\$(inherited) -Wno-nonportable-include-path $EXTRA_C" OTHER_CPLUSPLUSFLAGS="\$(inherited) -Wno-nonportable-include-path $EXTRA_C" > $S/app_build.log 2>&1
+grep -h "Motolii.cpp:[0-9]*:[0-9]*: error\|BUILD \|ld: \|Undefined" -A1 $S/app_build.log | cut -c60-300 | sort -u | head -14
+echo "elapsed: $(( ($(date +%s) - $(date -j -f %H:%M:%S 16:09:54 +%s)) / 60 )) min of 30"
