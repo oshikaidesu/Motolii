@@ -1,0 +1,13 @@
+material {
+    name : ext,
+    parameters : [ { type : samplerExternal, name : tex } ],
+    requires : [ uv0 ],
+    shadingModel : unlit,
+    culling : none
+}
+fragment {
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        material.baseColor = texture(materialParams_tex, getUV0());
+    }
+}
