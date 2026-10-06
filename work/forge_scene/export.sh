@@ -8,10 +8,13 @@ REL=/Users/member_ottoto/rust_ae/_ext/The-Forge/Examples_3/Unit_Tests/macOS_Xcod
 WORK=/Users/member_ottoto/rust_ae/_ext/render_out
 pkill -x 16_Raytracing; sleep 1
 WORLD=/Users/member_ottoto/rust_ae/_ext/rerun-world-target/release/rerun-world
+FXHOST=/Users/member_ottoto/rust_ae/_ext/wgsl-fx-target/release/wgsl-fx
+EFFECT=/Users/member_ottoto/rust_ae/Motolii/work/forge_scene/fx/glow.wgsl
 SVG=/Users/member_ottoto/rust_ae/Motolii/work/forge_scene/assets/sunface.svg
 rm -rf $WORK; mkdir -p $WORK; cd $WORK
 # the world (Rerun) answers per frame: camera, focus, which video time
 $WORLD $((END+1)) $FPS $AT > $WORK/params.csv
+$WORLD $((END+1)) $FPS $AT fx > $WORK/fx.csv
 SHOTS=$REL/Screenshots   # the Forge writes captures next to the .app
 rm -rf $SHOTS; mkdir -p $SHOTS
 MOTOLII_NOUI=1 MOTOLII_PARAMS=$WORK/params.csv MOTOLII_SVG=$SVG MOTOLII_VIDEO="$SRC" MOTOLII_VIDEO_AT=$AT MOTOLII_BATCH="$START,$END,$FPS,$SPP" \
@@ -30,4 +33,11 @@ for f in $SHOTS/16_Raytracing_f*.png; do
   ffmpeg -v error -y -i $DN/$b.out.pfm -pix_fmt rgb24 $DN/$b.png
   rm -f $DN/$b.in.pfm $DN/$b.out.pfm
 done
-ffmpeg -v error -y -framerate $FPS -start_number $START -i $DN/16_Raytracing_f%06d.png -ss $T0 -t $DUR -i "$SRC" -map 0:v -map "1:a?" -c:v libx264 -crf 14 -pix_fmt yuv420p -c:a aac -b:a 192k -shortest -movflags +faststart "$OUT" && ls -la "$OUT" | awk '{print $5, $9}'
+# the community effect (effect.wgsl) over each denoised frame; its parameters come from the world, by name
+FXD=$WORK/fx; mkdir -p $FXD
+for f in $DN/16_Raytracing_f*.png; do
+  b=$(basename $f .png); n=$((10#${b##*_f}))
+  set -- $(awk -F, -v n=$n '$1==n{print $2, $3, $4}' $WORK/fx.csv)
+  $FXHOST $EFFECT $f $FXD/$b.png threshold=$1 intensity=$2 radius=$3
+done
+ffmpeg -v error -y -framerate $FPS -start_number $START -i $FXD/16_Raytracing_f%06d.png -ss $T0 -t $DUR -i "$SRC" -map 0:v -map "1:a?" -c:v libx264 -crf 14 -pix_fmt yuv420p -c:a aac -b:a 192k -shortest -movflags +faststart "$OUT" && ls -la "$OUT" | awk '{print $5, $9}'

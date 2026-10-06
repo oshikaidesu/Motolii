@@ -1,0 +1,15 @@
+[package]
+name = "wgsl-fx"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+# Runs a community effect.wgsl over one image. wgpu is the existing owner of WGSL execution; naga reads the parameter names.
+[dependencies]
+wgpu = "29"
+naga = { version = "29", features = ["wgsl-in"] }
+pollster = "0.4"
+image = { version = "0.25", default-features = false, features = ["png"] }
+bytemuck = "1"
+
+[workspace]
