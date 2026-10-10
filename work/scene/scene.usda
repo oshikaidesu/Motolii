@@ -1,0 +1,118 @@
+#usda 1.0
+(
+    defaultPrim = "World"
+    upAxis = "Y"
+    metersPerUnit = 1
+    startTimeCode = 0
+    endTimeCode = 250
+    timeCodesPerSecond = 25
+)
+
+def Xform "World"
+{
+    def Camera "cam"
+    {
+        float focalLength = 35
+        float horizontalAperture = 36
+        float verticalAperture = 20.25
+        float2 clippingRange = (0.1, 100)
+        double3 xformOp:translate = (0, 0.3, 4.2)
+        uniform token[] xformOpOrder = ["xformOp:translate"]
+    }
+
+    def DomeLight "env"
+    {
+        float inputs:intensity = 0.6
+        color3f inputs:color = (0.9, 0.95, 1.0)
+    }
+
+    def DistantLight "key"
+    {
+        float inputs:intensity = 3
+        double3 xformOp:rotateXYZ = (-35, 30, 0)
+        uniform token[] xformOpOrder = ["xformOp:rotateXYZ"]
+    }
+
+    def Mesh "video"
+    {
+        int[] faceVertexCounts = [4]
+        int[] faceVertexIndices = [0, 1, 2, 3]
+        point3f[] points = [(-3.2, -1.8, -1.5), (3.2, -1.8, -1.5), (3.2, 1.8, -1.5), (-3.2, 1.8, -1.5)]
+        texCoord2f[] primvars:st = [(0, 0), (1, 0), (1, 1), (0, 1)] (interpolation = "vertex")
+        rel material:binding = </World/Looks/Video>
+    }
+
+    def Mesh "glass"
+    {
+        int[] faceVertexCounts = [4, 4, 4, 4, 4, 4]
+        int[] faceVertexIndices = [0,3,2,1, 4,5,6,7, 0,1,5,4, 1,2,6,5, 2,3,7,6, 3,0,4,7]
+        point3f[] points = [(-0.9,-1.0,-0.15),(0.9,-1.0,-0.15),(0.9,1.0,-0.15),(-0.9,1.0,-0.15),
+                            (-0.9,-1.0, 0.15),(0.9,-1.0, 0.15),(0.9,1.0, 0.15),(-0.9,1.0, 0.15)]
+        double3 xformOp:translate = (-0.6, 0, 0.8)
+        double xformOp:rotateY = 18
+        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateY"]
+        rel material:binding = </World/Looks/Glass>
+    }
+
+    def Sphere "ball"
+    {
+        double radius = 0.45
+        double3 xformOp:translate = (1.1, -0.55, 0.6)
+        uniform token[] xformOpOrder = ["xformOp:translate"]
+        color3f[] primvars:displayColor = [(0.95, 0.35, 0.2)]
+    }
+
+    def Scope "Looks"
+    {
+        def Material "Glass"
+        {
+            token outputs:surface.connect = </World/Looks/Glass/surf.outputs:surface>
+            def Shader "surf"
+            {
+                uniform token info:id = "UsdPreviewSurface"
+                color3f inputs:diffuseColor = (0.35, 0.75, 1.0)
+                float inputs:opacity = 0.15
+                float inputs:roughness = 0.03
+                float inputs:ior = 1.5
+                token outputs:surface
+            }
+        }
+
+        def Material "Video"
+        {
+            token outputs:surface.connect = </World/Looks/Video/surf.outputs:surface>
+            def Shader "surf"
+            {
+                uniform token info:id = "UsdPreviewSurface"
+                color3f inputs:diffuseColor.connect = </World/Looks/Video/tex.outputs:rgb>
+                float inputs:roughness = 0.9
+                token outputs:surface
+            }
+            def Shader "st"
+            {
+                uniform token info:id = "UsdPrimvarReader_float2"
+                token inputs:varname = "st"
+                float2 outputs:result
+            }
+            def Shader "tex"
+            {
+                uniform token info:id = "UsdUVTexture"
+                asset inputs:file = @./frames/video_0012.png@
+                float2 inputs:st.connect = </World/Looks/Video/st.outputs:result>
+                token inputs:sourceColorSpace = "sRGB"
+                float3 outputs:rgb
+            }
+        }
+    }
+}
+
+def Scope "Render"
+{
+    def RenderSettings "settings"
+    {
+        custom int aurora:max_samples = 4
+        custom int aurora:trace_depth = 6
+        rel camera = </World/cam>
+        uniform int2 resolution = (960, 540)
+    }
+}
