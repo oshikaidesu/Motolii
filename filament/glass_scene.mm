@@ -16,13 +16,10 @@
 // Balls are drawn from one shared shape on the GPU (ball_light.mat); BALLCPU=1 works the same light out on the CPU, to compare.
 // Solids with dents and holes (star, washer, letters: beam_extrude.h) likewise have their light and their shadow worked
 // out on the GPU (extrude_find/walk/strip/cap.mat); EXTRUDECPU=1 draws the CPU's copy of the same instead, to compare.
-// SWEEPS=n adds n bars pushed along a path in space and turned as they go (a knot, a ring that rises and falls; beam_sweep.h),
-// floating over the rest: sweep_glass.mat is their body, sweep_light.mat their light and shadow. SWEEPSIZE, SWEEPY, SWEEPTURNS.
 // Light on things other than the floor: WALLS=1|2 (a wall behind the solids, or two meeting in a corner; WALLGAP, WALLTOP,
 // WALLYAW), PROPS=1..4 (matte blocks among the solids; or PROPAT="x z halfx halfy halfz yaw; ..."), STAGE=1 (the same
 // machinery with neither, to compare with the plain picture). See "the stage" below and "Receivers" in beam_glass.h.
 #include "beam_glass.h"
-#include "beam_sweep.h"
 
 #include <filament/Camera.h>
 #include <filament/ColorGrading.h>
@@ -1212,125 +1209,6 @@ int main(int argc, char** argv) {
         sCells->addEntity(renderable(sqVB, sqIB, cellsMi, false, false));
     }
 
-    // ---- bars pushed along a path in space and turned as they go (beam_sweep.h): SWEEPS=n. Built once: a mesh each.
-    // Per frame the CPU says where each stands (`pose`), and the three materials do the rest.
-    struct SweepObj {
-        beam::Sweep sw;
-        MaterialInstance* body = nullptr;
-        MaterialInstance* light = nullptr;
-        MaterialInstance* shade = nullptr;
-        float x = 0, y = 0, z = 0, size = 1, spin = 0.5f, phase = 0;
-        beam::V3 axis{0, 1, 0};
-    };
-    static std::vector<SweepObj> sweeps;
-    const int sweepWant = std::max(0, (int)env_f("SWEEPS", 0.f));
-    const int sweepSteps = 12;
-    if (sweepWant > 0) {
-        Material* sweepGlassMat = mat("sweep_glass.filamat");
-        Material* sweepLightMat = mat("sweep_light.filamat");
-        if (!sweepGlassMat || !sweepLightMat) return fail("sweep materials");
-        const float sz = env_f("SWEEPSIZE", 1.f), high = env_f("SWEEPY", 0.95f), turns = env_f("SWEEPTURNS", 2.f);
-        sweeps.resize((size_t)sweepWant);
-        for (int q = 0; q < sweepWant; ++q) {
-            SweepObj& so = sweeps[(size_t)q];
-            // by turns: a knot of three-sided bar (a prism all the way round: the most colour), a rising and falling ring
-            // of four-sided bar, a knot of six-sided bar
-            const int kind = q % 3;
-            if (kind == 0) so.sw = beam::sweep_closed([](double u) { return beam::knot_point(u, 1.0); }, 3, 0.085, turns, 360, 3);
-            else if (kind == 1) so.sw = beam::sweep_closed([](double u) { return beam::wave_ring_point(u, 0.95, 0.10, 3); }, 4, 0.075, turns + 1.0, 300, 3);
-            else so.sw = beam::sweep_closed([](double u) { return beam::knot_point(u, 0.8); }, 6, 0.06, turns, 360, 2);
-            const float ring = 6.2831853f * (float)q / (float)sweepWant;
-            so.x = sweepWant > 1 ? 0.95f * std::cos(ring + 0.6f) : 0.05f;
-            so.z = sweepWant > 1 ? 0.75f * std::sin(ring + 0.6f) : 0.0f;
-            so.y = high + 0.12f * (float)(q % 2);
-            so.size = sz * (kind == 1 ? 0.9f : 1.f);
-            so.spin = (q & 1) ? -0.45f : 0.6f;
-            so.phase = 1.3f * (float)q + 0.4f;
-            so.axis = beam::normalize(beam::V3{std::sin(1.9 * q + 0.7), 0.9, std::cos(2.3 * q + 0.2)});
-
-            VertexBuffer* vb = VertexBuffer::Builder().vertexCount((uint32_t)(so.sw.v.size() / 13)).bufferCount(1)
-                                   .attribute(VertexAttribute::POSITION, 0, VertexBuffer::AttributeType::FLOAT3, 0, 52)
-                                   .attribute(VertexAttribute::CUSTOM0, 0, VertexBuffer::AttributeType::FLOAT3, 12, 52)
-                                   .attribute(VertexAttribute::CUSTOM1, 0, VertexBuffer::AttributeType::FLOAT3, 24, 52)
-                                   .attribute(VertexAttribute::UV0, 0, VertexBuffer::AttributeType::FLOAT2, 36, 52)
-                                   .attribute(VertexAttribute::UV1, 0, VertexBuffer::AttributeType::FLOAT2, 44, 52).build(*engine);
-            vb->setBufferAt(*engine, 0, VertexBuffer::BufferDescriptor(so.sw.v.data(), so.sw.v.size() * sizeof(float)));
-            IndexBuffer* ib = IndexBuffer::Builder().indexCount((uint32_t)so.sw.idx.size()).bufferType(IndexBuffer::IndexType::UINT).build(*engine);
-            ib->setBuffer(*engine, IndexBuffer::BufferDescriptor(so.sw.idx.data(), so.sw.idx.size() * sizeof(uint32_t)));
-            float4 prof[8] = {};
-            for (int k = 0; k < 8; ++k) prof[k] = float4{so.sw.profile[k][0], so.sw.profile[k][1], so.sw.profile[k][2], 0.f};
-
-            // its light and its shadow are drawn triangle by triangle: every corner is told the three corners of its
-            // triangle (their numbers) and which of them it is; what a corner is, the materials read from a table
-            const size_t corners = so.sw.v.size() / 13;
-            const uint32_t wide = 1024;
-            const uint32_t lines = (uint32_t)((corners + wide - 1) / wide);
-            auto* tab = new std::vector<float>((size_t)wide * 4 * lines * 4, 0.f);
-            for (size_t c = 0; c < corners; ++c) {
-                const float* f = &so.sw.v[c * 13];
-                float* o = &(*tab)[c * 16];
-                const float texels[16] = {f[0], f[1], f[2], 0, f[3], f[4], f[5], 0, f[6], f[7], f[8], 0, f[9], f[10], f[11], f[12]};
-                std::copy(texels, texels + 16, o);
-            }
-            Texture* table = Texture::Builder().width(wide * 4).height(lines).levels(1).format(Texture::InternalFormat::RGBA32F).build(*engine);
-            table->setImage(*engine, 0, Texture::PixelBufferDescriptor(tab->data(), tab->size() * sizeof(float), backend::PixelDataFormat::RGBA, backend::PixelDataType::FLOAT,
-                                                                       [](void*, size_t, void* u) { delete (std::vector<float>*)u; }, tab));
-            auto* soup = new std::vector<float>();
-            for (size_t i = 0; i + 2 < so.sw.idx.size(); i += 3)
-                for (int k = 0; k < 3; ++k) soup->insert(soup->end(), {(float)so.sw.idx[i], (float)so.sw.idx[i + 1], (float)so.sw.idx[i + 2], (float)k, 0.f});
-            const uint32_t soupCount = (uint32_t)(soup->size() / 5);
-            VertexBuffer* svb = VertexBuffer::Builder().vertexCount(soupCount).bufferCount(1)
-                                    .attribute(VertexAttribute::POSITION, 0, VertexBuffer::AttributeType::FLOAT3, 0, 20)
-                                    .attribute(VertexAttribute::UV0, 0, VertexBuffer::AttributeType::FLOAT2, 12, 20).build(*engine);
-            svb->setBufferAt(*engine, 0, VertexBuffer::BufferDescriptor(soup->data(), soup->size() * sizeof(float), [](void*, size_t, void* u) { delete (std::vector<float>*)u; }, soup));
-            auto* soupI = new std::vector<uint32_t>(soupCount);
-            for (uint32_t i = 0; i < soupCount; ++i) (*soupI)[i] = i;
-            IndexBuffer* sib = IndexBuffer::Builder().indexCount(soupCount).bufferType(IndexBuffer::IndexType::UINT).build(*engine);
-            sib->setBuffer(*engine, IndexBuffer::BufferDescriptor(soupI->data(), soupI->size() * sizeof(uint32_t), [](void*, size_t, void* u) { delete (std::vector<uint32_t>*)u; }, soupI));
-            for (int part = 0; part < 2; ++part) {  // its light, its shadow
-                MaterialInstance* mi = sweepLightMat->createInstance();
-                on_stage(mi, true);
-                mi->setParameter("table", table, nearest);
-                mi->setParameter("tableWide", (float)wide);
-                mi->setParameter("profile", prof, 8);
-                mi->setParameter("sides", (float)so.sw.sides);
-                mi->setParameter("stepCount", (float)sweepSteps);
-                mi->setParameter("shadow", (float)part);
-                mi->setParameter("cap", env_f("SWEEPCAP", 8.f));
-                mi->setParameter("reach", env_f("SWEEPREACH", 7.f));
-                mi->setParameter("floorY", 0.f);
-                utils::Entity e = em.create();
-                RenderableManager::Builder(1).boundingBox({{0, 0, 0}, {100.f, 100.f, 100.f}})
-                    .geometry(0, RenderableManager::PrimitiveType::TRIANGLES, svb, sib)
-                    .instances((part == 0 ? (size_t)sweepSteps : 1) * recvKinds)
-                    .material(0, mi).culling(false).castShadows(false).receiveShadows(false)
-                    .layerMask(0xFF, (part == 0 && std::getenv("NOLIGHT")) ? 0x00 : 0x01).build(*engine, e);
-                (part == 0 ? sLight : sShade)->addEntity(e);
-                (part == 0 ? so.light : so.shade) = mi;
-            }
-            so.body = sweepGlassMat->createInstance();
-            so.body->setParameter("profile", prof, 8);
-            so.body->setParameter("sides", (float)so.sw.sides);
-            so.body->setParameter("ior", nd);
-            so.body->setParameter("abbe", 64.17f / disp);
-            so.body->setParameter("spread", env_f("SPREAD", 2.f));
-            so.body->setParameter("floorY", 0.f);
-            so.body->setParameter("absorption", float3{0.9f, 0.35f, 0.5f} * env_f("ABSORB", 0.15f));
-            so.body->setParameter("backdrop", backdrop.color, lin);
-            if (stageOn) {
-                so.body->setParameter("room", roomT, 6);
-                so.body->setParameter("roomCount", (float)stage.room.size());
-                so.body->setParameter("blocks", blocksT, 16);
-                so.body->setParameter("blockCount", (float)blocks.size());
-            }
-            utils::Entity e = em.create();
-            RenderableManager::Builder(1).boundingBox({{0, 0, 0}, {100.f, 100.f, 100.f}})
-                .geometry(0, RenderableManager::PrimitiveType::TRIANGLES, vb, ib)
-                .material(0, so.body).culling(false).castShadows(false).receiveShadows(false).layerMask(0xFF, 0x02).build(*engine, e);
-            if (!std::getenv("NOGLASS")) scene->addEntity(e);
-        }
-    }
-
     utils::Entity sunE = em.create();
     LightManager::ShadowOptions shopt;
     shopt.mapSize = 2048;
@@ -1368,11 +1246,6 @@ int main(int argc, char** argv) {
                 it.cheap->setParameter("envGain", iblLux * env_f("ENVGAIN", 0.f));
                 it.cheap->setParameter("sky", float3{0.95f, 0.97f, 1.0f} * env_f("SKY", 1800.f));
             }
-        }
-        for (auto& so : sweeps) {
-            so.body->setParameter("env", ibl, cubeS);
-            so.body->setParameter("envGain", iblLux * env_f("ENVGAIN", 0.f));
-            so.body->setParameter("sky", float3{0.95f, 0.97f, 1.0f} * env_f("SKY", 1800.f));
         }
     }
 
@@ -1649,20 +1522,6 @@ int main(int argc, char** argv) {
                 it.cheap->setParameter("sunCos", std::cos(env_f("GLINTDEG", 2.0f) * 3.14159265f / 180.f));
             }
         }
-        for (auto& so : sweeps) {  // the swept bars: where each stands, and the sun
-            const double ang = so.phase + so.spin * t, cs = std::cos(ang), sn = std::sin(ang);
-            beam::V3 R[3] = {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}};
-            for (beam::V3& v : R) v = v * cs + beam::cross(so.axis, v) * sn + so.axis * (beam::dot(so.axis, v) * (1.0 - cs));
-            const float lift = so.y + 0.08f * std::sin(1.3f * t + so.phase);
-            const float4 pose[4] = {{(float)R[0].x, (float)R[0].y, (float)R[0].z, so.size}, {(float)R[1].x, (float)R[1].y, (float)R[1].z, 0.f},
-                                    {(float)R[2].x, (float)R[2].y, (float)R[2].z, 0.f}, {so.x, lift, so.z, 0.f}};
-            for (MaterialInstance* mi : {so.body, so.light, so.shade}) mi->setParameter("pose", pose, 4);
-            so.light->setParameter("sunDir", sunDir);
-            so.shade->setParameter("sunDir", sunDir);
-            so.body->setParameter("sunTo", -sunDir);
-            so.body->setParameter("sunGlint", sunColor * env_f("GLINT", 4.0e5f));
-            so.body->setParameter("sunCos", std::cos(env_f("GLINTDEG", 2.0f) * 3.14159265f / 180.f));
-        }
         if (stageOn) {  // (all the stage costs the CPU in a frame: these few numbers, and switching its sets on and off below)
             for (MaterialInstance* mi : landers) mi->setParameter("recvSun", sunDir);
             for (MaterialInstance* mi : recvSurfaces) mi->setParameter("sunTo", -sunDir);
@@ -1737,12 +1596,6 @@ int main(int argc, char** argv) {
         par.threads = threads;
         par.coneSteps = coneStepCount;
         par.sunTan = std::tan(sunRadiusDeg * 3.14159265 / 180.0);
-        if (!sweeps.empty()) {  // the swept bars' colour steps
-            const std::vector<beam::BallStep> ss = beam::ball_steps(par, sweepSteps);
-            float4 table[16] = {};
-            for (int i = 0; i < sweepSteps && i < (int)ss.size(); ++i) table[i] = float4{(float)ss[(size_t)i].rgb.x, (float)ss[(size_t)i].rgb.y, (float)ss[(size_t)i].rgb.z, (float)ss[(size_t)i].n};
-            for (auto& so : sweeps) so.light->setParameter("steps", table, 16);
-        }
         std::vector<int> alike;  // the balls and cones: drawn from their shared shapes
         if (exact) {
             par.minFlux = 30.0 * detail[0] * detail[0];
