@@ -1373,9 +1373,14 @@ int main(int argc, char** argv) {
     // ---- EXPERIMENT, STREAK=1: the bright lines of the solids with an outline, drawn from the outline itself with no
     // table pass (edge_streak.mat): one four-cornered piece per straight bit of the outline, per solid and colour step.
     std::vector<MaterialInstance*> streakMis;
-    if (std::getenv("STREAK")) {
+    // EXNEW=1: all the light and shadow of those solids drawn this way (window and shadow of the caps: edge_fill.mat),
+    // the old table passes and their drawing switched off.
+    const bool exNew = std::getenv("EXNEW") != nullptr;
+    std::vector<MaterialInstance*> fillMis;
+    if (std::getenv("STREAK") || exNew) {
         Material* streakMat = mat("edge_streak.filamat");
-        if (!streakMat) return fail("edge_streak.filamat");
+        Material* fillMat = mat("edge_fill.filamat");
+        if (!streakMat || !fillMat) return fail("edge_streak.filamat / edge_fill.filamat");
         for (const ExShapeUse& sh : exShapes) {
             auto* v = new std::vector<float>();   // a.x, a.y, corner; b.x, b.y; the way out of the glass at a, at b
             auto* ix = new std::vector<uint32_t>();
@@ -1408,13 +1413,39 @@ int main(int argc, char** argv) {
             int n = 0;
             for (size_t k = 0; k < items.size() && n < 64; ++k)
                 if (items[k].local.kind == beam::Solid::EXTRUDE && items[k].local.shape.get() == sh.ol) { which[n / 4][n % 4] = (float)k; ++n; }
-            for (int mode = 0; mode < 2; ++mode) {   // mirrored by the wall; out through the cut on the rim (the colours)
-                const float strength = env_f(mode == 0 ? "STREAK" : "STREAKRAINBOW", 1.f);
+            if (exNew) {   // the caps: window, shadow of the near cap, shadow of the far cap
+                auto* cv = new std::vector<float>();
+                for (const beam::V2& q : sh.ol->pts) cv->insert(cv->end(), {(float)q.x, (float)q.y, 0.f});
+                auto* ci = new std::vector<uint32_t>(sh.ol->tris.begin(), sh.ol->tris.end());
+                VertexBuffer* cvb = VertexBuffer::Builder().vertexCount((uint32_t)(cv->size() / 3)).bufferCount(1)
+                                        .attribute(VertexAttribute::POSITION, 0, VertexBuffer::AttributeType::FLOAT3, 0, 12).build(*engine);
+                cvb->setBufferAt(*engine, 0, VertexBuffer::BufferDescriptor(cv->data(), cv->size() * sizeof(float)));
+                IndexBuffer* cib = IndexBuffer::Builder().indexCount((uint32_t)ci->size()).bufferType(IndexBuffer::IndexType::UINT).build(*engine);
+                cib->setBuffer(*engine, IndexBuffer::BufferDescriptor(ci->data(), ci->size() * sizeof(uint32_t)));
+                for (int mode = 0; mode < 3; ++mode) {
+                    MaterialInstance* mi = fillMat->createInstance();
+                    mi->setParameter("pose", poseTex, nearest);
+                    mi->setParameter("solids", which, 16);
+                    mi->setParameter("halfThick", (float)sh.ol->h);
+                    mi->setParameter("index", nd);
+                    mi->setParameter("mode", (float)mode);
+                    mi->setParameter("floorY", 0.f);
+                    utils::Entity e = em.create();
+                    RenderableManager::Builder(1).boundingBox({{0, 0, 0}, {100.f, 100.f, 100.f}})
+                        .geometry(0, RenderableManager::PrimitiveType::TRIANGLES, cvb, cib).instances((size_t)n)
+                        .material(0, mi).culling(false).castShadows(false).receiveShadows(false).build(*engine, e);
+                    (mode == 0 ? sLight : sShade)->addEntity(e);
+                    fillMis.push_back(mi);
+                }
+            }
+            for (int mode = 0; mode < (exNew ? 4 : 2); ++mode) {   // mirrored by the wall; out through the cut on the rim (the colours);
+                                                                   // EXNEW: the rim the window lacks; the walls' shadow
+                const float strength = mode >= 2 ? 1.f : env_f(mode == 0 ? "STREAK" : "STREAKRAINBOW", 1.f);
                 if (strength <= 0.f) continue;
                 MaterialInstance* mi = streakMat->createInstance();
                 mi->setParameter("pose", poseTex, nearest);
                 mi->setParameter("solids", which, 16);
-                mi->setParameter("stepCount", (float)beam::EXT_STEPS);
+                mi->setParameter("stepCount", (float)(mode >= 2 ? 1 : beam::EXT_STEPS));
                 mi->setParameter("halfThick", (float)sh.ol->h);
                 mi->setParameter("mode", (float)mode);
                 mi->setParameter("chamfer", (float)sh.ol->chamfer);
@@ -1423,9 +1454,9 @@ int main(int argc, char** argv) {
                 mi->setParameter("floorY", 0.f);
                 utils::Entity e = em.create();
                 RenderableManager::Builder(1).boundingBox({{0, 0, 0}, {100.f, 100.f, 100.f}})
-                    .geometry(0, RenderableManager::PrimitiveType::TRIANGLES, vb, ib).instances((size_t)n * (size_t)beam::EXT_STEPS)
+                    .geometry(0, RenderableManager::PrimitiveType::TRIANGLES, vb, ib).instances((size_t)n * (size_t)(mode >= 2 ? 1 : beam::EXT_STEPS))
                     .material(0, mi).culling(false).castShadows(false).receiveShadows(false).build(*engine, e);
-                sLight->addEntity(e);
+                (mode == 3 ? sShade : sLight)->addEntity(e);
                 streakMis.push_back(mi);
             }
         }
@@ -1783,7 +1814,8 @@ int main(int argc, char** argv) {
                 mi->setParameter("steps", wall, 8);
                 mi->setParameter("sunDir", sunDir);
             }
-            const bool on = !exOnCpu && !std::getenv("NOLIGHT");
+            for (MaterialInstance* mi : fillMis) mi->setParameter("sunDir", sunDir);
+            const bool on = !exOnCpu && !exNew && !std::getenv("NOLIGHT");
             for (size_t i = 0; i < exEntities.size(); ++i) rm.setLayerMask(rm.getInstance(exEntities[i]), 0xFF, on && (exEntityBit[i] & exShow) ? 0x01 : 0x00);
         }
         // the balls: middle and radius into their table, and as many instances switched on
@@ -1901,7 +1933,7 @@ int main(int argc, char** argv) {
         static const bool xF = xw && (std::strchr(xw, '1') || std::strchr(xw, 'f')), xE = xw && (std::strchr(xw, '1') || std::strchr(xw, 'e')),
                           xW = xw && (std::strchr(xw, '1') || std::strchr(xw, 'w')), xC = xw && (std::strchr(xw, '1') || std::strchr(xw, 'c'));
         if (!xF && !flatOnCpu && !flatKinds.empty()) renderer->render(vFlatWalk);
-        if (exCount && !exOnCpu) {
+        if (exCount && !exOnCpu && !exNew) {
             if (!xE) renderer->render(vExFind);
             if (!xW) renderer->render(vExWalk);
         }

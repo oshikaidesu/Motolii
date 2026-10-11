@@ -1,0 +1,67 @@
+// EXPERIMENT (EXNEW=1), with edge_streak.mat: the caps of a solid with an outline (letters, stars, rings), dropped on the
+// floor along the sun. No table pass.
+// Mesh: the outline cut into triangles, position = (x, y, 0) in the outline's own frame. Instance = solid of this shape.
+//   mode 0: the window. Light that came in by the cap facing the sun leaves by the far cap in the sun's own direction
+//           (the caps are parallel), so the far cap dropped along the sun is where it lands; as bright as the sun less
+//           what the two faces mirror away. The rim that gets no such light is taken out again by edge_streak.mat (mode 2).
+//   mode 1, 2: the shadow of the near and of the far cap (with the walls, edge_streak.mat mode 3, the whole outline
+//           against the sun; where they overlap the softening pass counts the sun as cut off once).
+// Output as beam_light.mat / outline.mat: rgb = the light (or 1 for shadow), a = that * distance flown.
+material {
+    name : edge_fill,
+    shadingModel : unlit,
+    blending : add,
+    depthWrite : false,
+    depthCulling : false,
+    culling : none,
+    doubleSided : true,
+    instanced : true,
+    variables : [ light ],
+    parameters : [
+        { type : sampler2d, name : pose, precision : high, format : float },   // per solid (column): axis x + size; axis y; axis z; place
+        { type : float4[16], name : solids },                                   // which solids have this shape, 4 per entry
+        { type : float3, name : sunDir },                                       // the way the sunlight travels
+        { type : float,  name : halfThick },
+        { type : float,  name : index },                                        // of refraction, middle of the spectrum
+        { type : float,  name : mode },
+        { type : float,  name : floorY }
+    ]
+}
+
+vertex {
+    // unpolarised Fresnel reflectance going into glass of index n
+    float mirrored(float ci, float n) {
+        float ct = sqrt(max(0.0, 1.0 - (1.0 - ci * ci) / (n * n)));
+        float rs = (ci - n * ct) / (ci + n * ct), rp = (ct - n * ci) / (ct + n * ci);
+        return 0.5 * (rs * rs + rp * rp);
+    }
+    void materialVertex(inout MaterialVertexInputs material) {
+        int which = getInstanceIndex();
+        int solid = int(materialParams.solids[which / 4][which - (which / 4) * 4] + 0.5);
+        vec4 ax = texelFetch(materialParams_pose, ivec2(solid, 0), 0);
+        vec3 ay = texelFetch(materialParams_pose, ivec2(solid, 1), 0).xyz;
+        vec3 az = texelFetch(materialParams_pose, ivec2(solid, 2), 0).xyz;
+        vec3 at = texelFetch(materialParams_pose, ivec2(solid, 3), 0).xyz;
+        vec3 sun = materialParams.sunDir;
+        float along = dot(sun, az);                     // the sun along the thickness
+        float far = along > 0.0 ? 1.0 : -1.0;           // which cap the light leaves by
+        float side = materialParams.mode > 0.5 && materialParams.mode < 1.5 ? -far : far;
+        vec3 pW = (ax.xyz * mesh_position.x + ay * mesh_position.y + az * (side * materialParams.halfThick)) * ax.w + at;
+        float t = max(0.0, (materialParams.floorY - pW.y) / min(sun.y, -1e-4));
+        vec3 X = pW + sun * t;
+        float through = 1.0 - mirrored(abs(along), materialParams.index);
+        // (the light buffer is in units of the sun met square on: on the floor the sun itself is worth -sun.y)
+        vec3 rgb = materialParams.mode < 0.5 ? vec3(through * through * max(-sun.y, 0.0)) : vec3(1.0);
+        if (materialParams.mode < 0.5 && abs(along) < 0.05) rgb = vec3(0.0);   // (edge on to the sun: no window)
+        material.light = vec4(rgb, t);
+        material.worldPosition = mulMat4x4Float3(getWorldFromModelMatrix(), X);
+    }
+}
+
+fragment {
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        vec4 c = variable_light;
+        material.baseColor = vec4(c.rgb, (c.r + c.g + c.b) / 3.0 * c.a);
+    }
+}

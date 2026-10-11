@@ -10,6 +10,8 @@
 // on the floor along the mirrored direction. Instance = (solid of this shape, colour step).
 // mode 1 is a second path of the same kind: out through the cut between that wall and the far cap, the only pair of
 // faces here that is not square to each other, so the only place where the colours part.
+// mode 2 and 3 serve edge_fill.mat (the window and the shadow of the caps): the rim of the far cap that gets no light
+// straight through, as light of the opposite sign, and each wall's own shadow.
 // Left out on purpose: whatever stands in the way of that light (other walls of the same solid, other solids), every
 // other path. Output as beam_light.mat: rgb = the light, a = light * distance flown.
 material {
@@ -53,7 +55,19 @@ vertex {
         vec3 din = refract(sL, vec3(0.0, 0.0, -far), 1.0 / n);
         float drift = dot(din.xy, nrm) / max(abs(din.z), 1e-4);   // sideways towards the wall, per unit of thickness crossed
         vec3 p0, p1, r0, r1;
-        if (materialParams.mode < 0.5) {
+        if (materialParams.mode > 2.5) {                // 3: the wall's own shadow, from its near edge to its far edge
+            w = 1.0;
+            r0 = materialParams.sunDir;
+            r1 = r0;
+            p0 = vec3(p, -far * h);
+            p1 = vec3(p, far * h);
+        } else if (materialParams.mode > 1.5) {         // 2: the rim of the far cap that no light reaches straight through
+            w = clamp(-2.0 * h * drift, 0.0, 6.0 * h);  //    (it drifts away from this wall as it crosses the thickness)
+            r0 = materialParams.sunDir;
+            r1 = r0;
+            p0 = vec3(p, far * h);
+            p1 = vec3(p - nrm * w, far * h);
+        } else if (materialParams.mode < 0.5) {
             w = clamp(2.0 * h * drift, 0.0, 6.0 * h);
             vec3 rL = sL - vec3(nrm * (2.0 * dot(sL.xy, nrm)), 0.0);   // the sun mirrored in the wall
             r0 = toWorld(rL, ax, ay, az);
@@ -72,7 +86,7 @@ vertex {
             p0 = vec3(p, far * (h - c));
             p1 = vec3(p - nrm * c, far * h);
         }
-        if (abs(sL.z) < 0.05 || r0.y > -0.02 || r1.y > -0.02) w = 0.0;
+        if ((abs(sL.z) < 0.05 && materialParams.mode < 2.5) || r0.y > -0.02 || r1.y > -0.02) w = 0.0;
         vec3 w0 = toWorld(p0, ax, ay, az) * ax.w + at, w1 = toWorld(p1, ax, ay, az) * ax.w + at;
         t = clamp((materialParams.floorY - w0.y) / min(r0.y, -0.02), 0.0, 8.0);
         X0 = w0 + r0 * t;
@@ -93,7 +107,8 @@ vertex {
         int corner = int(mesh_position.z + 0.5);
         vec3 sun = materialParams.sunDir;
         vec3 sL = vec3(dot(sun, ax.xyz), dot(sun, ay), dot(sun, az));   // the sun in the outline's own frame (z: the thickness)
-        float n = materialParams.steps[stepAt].w;
+        bool plain = materialParams.mode > 1.5;         // modes 2 and 3: one draw, no colours
+        float n = materialParams.steps[plain ? 4 : stepAt].w;
         // the next colour's index (past the last step: as far again as from the one before)
         float n2 = stepAt + 1 < stepsAll ? materialParams.steps[stepAt + 1].w : 2.0 * n - materialParams.steps[max(stepAt - 1, 0)].w;
         vec3 A0, A1, B0, B1;
@@ -104,12 +119,20 @@ vertex {
         // over the four-cornered patch on the floor. Light that fans out gets dimmer, light that is gathered brighter.
         float strip = 0.5 * (wa + wb) * length(b - a) * ax.w * ax.w * abs(sL.z);
         vec2 d1 = (B1 - A0).xz, d2 = (A1 - B0).xz;
-        float landed = 0.5 * abs(d1.x * d2.y - d1.y * d2.x) * max(-sun.y, 1e-3);
+        float landed = 0.5 * abs(d1.x * d2.y - d1.y * d2.x);   // (the light buffer is in units of the sun met square on)
         float gain = min(materialParams.gain * strip / max(landed, 1e-9), materialParams.cap);
         bool atA = corner == 0 || corner == 3;
         float lit = (atA ? wa : wb) > 0.0 ? 1.0 : 0.0;
         vec3 X = corner == 0 ? A0 : (corner == 1 ? B0 : (corner == 2 ? B1 : A1));
-        material.light = vec4(materialParams.steps[stepAt].rgb * (gain * lit), atA ? ta : tb);
+        vec3 rgb = materialParams.steps[stepAt].rgb * (gain * lit);
+        if (plain) {
+            // mode 2 takes out of the window what edge_fill.mat (mode 0) put there; mode 3 is shadow
+            float ci = abs(sL.z), ct = sqrt(max(0.0, 1.0 - (1.0 - ci * ci) / (n * n)));
+            float rs = (ci - n * ct) / (ci + n * ct), rp = (ct - n * ci) / (ct + n * ci);
+            float through = 1.0 - 0.5 * (rs * rs + rp * rp);
+            rgb = materialParams.mode > 2.5 ? vec3(1.0) : vec3(-through * through * lit * max(-sun.y, 0.0));
+        }
+        material.light = vec4(rgb, atA ? ta : tb);
         material.worldPosition = mulMat4x4Float3(getWorldFromModelMatrix(), X);   // (a corner with no light stays in place, dark)
     }
 }
