@@ -8,6 +8,8 @@
 // way out of the glass at a and at b (on an arc these differ, so the pieces of an arc join into one curved band); the piece
 // runs from the wall (corners 0, 1) inwards to the width of that rim (corners 2, 3), lies on the far cap, and is dropped
 // on the floor along the mirrored direction. Instance = (solid of this shape, colour step).
+// mode 1 is a second path of the same kind: out through the cut between that wall and the far cap, the only pair of
+// faces here that is not square to each other, so the only place where the colours part.
 // Left out on purpose: whatever stands in the way of that light (other walls of the same solid, other solids), every
 // other path. Output as beam_light.mat: rgb = the light, a = light * distance flown.
 material {
@@ -29,6 +31,8 @@ material {
         { type : float,  name : stepCount },
         { type : float3, name : sunDir },                                       // the way the sunlight travels
         { type : float,  name : halfThick },                                    // half the thickness, in the outline's own units
+        { type : float,  name : mode },                                         // 0: mirrored by the wall, 1: out through the cut on the rim
+        { type : float,  name : chamfer },                                      // flat width of that cut, in the outline's own units
         { type : float,  name : gain },
         { type : float,  name : cap },                                          // brightest a piece may get (where a curved wall gathers its light to a line)
         { type : float,  name : floorY }
@@ -36,23 +40,43 @@ material {
 }
 
 vertex {
-    // One end of a bit of wall (p on the outline, nrm the way out of the glass there): where on the floor the light of the
-    // wall's own line lands (X0) and the light of the inner edge of the rim (X1), and the rim's width there (0: no light).
-    void wallEnd(vec2 p, vec2 nrm, vec3 sL, float n, vec4 ax, vec3 ay, vec3 az, vec3 at, out vec3 X0, out vec3 X1, out float w, out float t) {
+    vec3 toWorld(vec3 v, vec4 ax, vec3 ay, vec3 az) { return ax.xyz * v.x + ay * v.y + az * v.z; }
+    // One end of a bit of wall (p on the outline, nrm the way out of the glass there), for light of index n (and, for the
+    // far edge of a coloured band, n2): where on the floor its two edges land (X0, X1), how wide a strip of the near cap
+    // sends its light there (w; 0: none), and how far the light flew (t).
+    // mode 0: mirrored once by the inside of the wall, out by the far cap. X0: the wall's own line, X1: the inner edge of the rim.
+    // mode 1: out through the cut (chamfer) between the wall and the far cap, where the colours part. X0: the cut's edge
+    //         on the wall for index n, X1: its edge on the cap for index n2, so that one colour's band reaches the next.
+    void wallEnd(vec2 p, vec2 nrm, vec3 sL, float n, float n2, vec4 ax, vec3 ay, vec3 az, vec3 at, out vec3 X0, out vec3 X1, out float w, out float t) {
         float h = materialParams.halfThick;
         float far = sL.z > 0.0 ? 1.0 : -1.0;            // which cap the light leaves by
         vec3 din = refract(sL, vec3(0.0, 0.0, -far), 1.0 / n);
-        // across the thickness the light drifts this far towards the wall: the rim of the cap that sends its light to it
-        w = clamp(2.0 * h * dot(din.xy, nrm) / max(abs(din.z), 1e-4), 0.0, 6.0 * h);
-        vec3 rL = sL - vec3(nrm * (2.0 * dot(sL.xy, nrm)), 0.0);       // the sun mirrored in the wall
-        vec3 rW = ax.xyz * rL.x + ay * rL.y + az * rL.z;
-        if (abs(sL.z) < 0.05 || rW.y > -0.02) w = 0.0;
-        vec3 p0 = vec3(p, far * h), p1 = vec3(p - nrm * w, far * h);
-        vec3 w0 = (ax.xyz * p0.x + ay * p0.y + az * p0.z) * ax.w + at, w1 = (ax.xyz * p1.x + ay * p1.y + az * p1.z) * ax.w + at;
-        float down = min(rW.y, -0.02);
-        t = clamp((materialParams.floorY - w0.y) / down, 0.0, 8.0);
-        X0 = w0 + rW * t;
-        X1 = w1 + rW * clamp((materialParams.floorY - w1.y) / down, 0.0, 8.0);
+        float drift = dot(din.xy, nrm) / max(abs(din.z), 1e-4);   // sideways towards the wall, per unit of thickness crossed
+        vec3 p0, p1, r0, r1;
+        if (materialParams.mode < 0.5) {
+            w = clamp(2.0 * h * drift, 0.0, 6.0 * h);
+            vec3 rL = sL - vec3(nrm * (2.0 * dot(sL.xy, nrm)), 0.0);   // the sun mirrored in the wall
+            r0 = toWorld(rL, ax, ay, az);
+            r1 = r0;
+            p0 = vec3(p, far * h);
+            p1 = vec3(p - nrm * w, far * h);
+        } else {
+            float c = materialParams.chamfer;
+            vec3 nc = normalize(vec3(nrm, far));        // out of the glass through the cut
+            vec3 din2 = refract(sL, vec3(0.0, 0.0, -far), 1.0 / n2);
+            vec3 o0 = refract(din, -nc, n), o1 = refract(din2, -nc, n2);
+            w = max(0.0, c * (1.0 + drift));
+            if (dot(o0, o0) < 0.5 || dot(o1, o1) < 0.5 || dot(din, nc) < 0.02) w = 0.0;   // (the glass lets nothing out here)
+            r0 = toWorld(o0, ax, ay, az);
+            r1 = toWorld(o1, ax, ay, az);
+            p0 = vec3(p, far * (h - c));
+            p1 = vec3(p - nrm * c, far * h);
+        }
+        if (abs(sL.z) < 0.05 || r0.y > -0.02 || r1.y > -0.02) w = 0.0;
+        vec3 w0 = toWorld(p0, ax, ay, az) * ax.w + at, w1 = toWorld(p1, ax, ay, az) * ax.w + at;
+        t = clamp((materialParams.floorY - w0.y) / min(r0.y, -0.02), 0.0, 8.0);
+        X0 = w0 + r0 * t;
+        X1 = w1 + r1 * clamp((materialParams.floorY - w1.y) / min(r1.y, -0.02), 0.0, 8.0);
     }
     void materialVertex(inout MaterialVertexInputs material) {
         int stepsAll = int(materialParams.stepCount);
@@ -70,16 +94,18 @@ vertex {
         vec3 sun = materialParams.sunDir;
         vec3 sL = vec3(dot(sun, ax.xyz), dot(sun, ay), dot(sun, az));   // the sun in the outline's own frame (z: the thickness)
         float n = materialParams.steps[stepAt].w;
+        // the next colour's index (past the last step: as far again as from the one before)
+        float n2 = stepAt + 1 < stepsAll ? materialParams.steps[stepAt + 1].w : 2.0 * n - materialParams.steps[max(stepAt - 1, 0)].w;
         vec3 A0, A1, B0, B1;
         float wa, wb, ta, tb;
-        wallEnd(a, normalize(getCustom0().xy), sL, n, ax, ay, az, at, A0, A1, wa, ta);
-        wallEnd(b, normalize(getCustom0().zw), sL, n, ax, ay, az, at, B0, B1, wb, tb);
-        // As bright as the light it carries over the floor it lands on: the rim's piece of the cap as the sun sees it,
-        // over the four-cornered patch on the floor. Light a curved wall fans out gets dimmer, light it gathers brighter.
-        float rim = 0.5 * (wa + wb) * length(b - a) * ax.w * ax.w * abs(sL.z);
+        wallEnd(a, normalize(getCustom0().xy), sL, n, n2, ax, ay, az, at, A0, A1, wa, ta);
+        wallEnd(b, normalize(getCustom0().zw), sL, n, n2, ax, ay, az, at, B0, B1, wb, tb);
+        // As bright as the light it carries over the floor it lands on: the strip of the near cap as the sun sees it,
+        // over the four-cornered patch on the floor. Light that fans out gets dimmer, light that is gathered brighter.
+        float strip = 0.5 * (wa + wb) * length(b - a) * ax.w * ax.w * abs(sL.z);
         vec2 d1 = (B1 - A0).xz, d2 = (A1 - B0).xz;
         float landed = 0.5 * abs(d1.x * d2.y - d1.y * d2.x) * max(-sun.y, 1e-3);
-        float gain = min(materialParams.gain * rim / max(landed, 1e-9), materialParams.cap);
+        float gain = min(materialParams.gain * strip / max(landed, 1e-9), materialParams.cap);
         bool atA = corner == 0 || corner == 3;
         float lit = (atA ? wa : wb) > 0.0 ? 1.0 : 0.0;
         vec3 X = corner == 0 ? A0 : (corner == 1 ? B0 : (corner == 2 ? B1 : A1));
