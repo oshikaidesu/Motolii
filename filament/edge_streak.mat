@@ -1,0 +1,97 @@
+// EXPERIMENT (STREAK=1): the bright lines a solid with an outline (letters, stars, rings) throws on the floor, drawn from
+// the outline itself with no table pass.
+// One path of light only: in through the cap that faces the sun, mirrored once by the inside of a wall, out through the
+// other cap. The two caps are parallel, so what comes out travels exactly along the sun's direction mirrored in the wall,
+// whatever the colour; only how wide a rim of the cap sends its light to that wall depends on the colour (the bend at the
+// cap), which is where the coloured edge of each line comes from.
+// Mesh: one four-cornered piece per straight bit of the outline: position = (a.x, a.y, corner 0..3), uv0 = b, custom0 = the
+// way out of the glass at a and at b (on an arc these differ, so the pieces of an arc join into one curved band); the piece
+// runs from the wall (corners 0, 1) inwards to the width of that rim (corners 2, 3), lies on the far cap, and is dropped
+// on the floor along the mirrored direction. Instance = (solid of this shape, colour step).
+// Left out on purpose: whatever stands in the way of that light (other walls of the same solid, other solids), every
+// other path. Output as beam_light.mat: rgb = the light, a = light * distance flown.
+material {
+    name : edge_streak,
+    shadingModel : unlit,
+    blending : add,
+    depthWrite : false,
+    depthCulling : false,
+    culling : none,
+    doubleSided : true,
+    instanced : true,
+    flipUV : false,
+    requires : [ uv0, custom0 ],
+    variables : [ light ],
+    parameters : [
+        { type : sampler2d, name : pose, precision : high, format : float },   // per solid (column): axis x + size; axis y; axis z; place
+        { type : float4[16], name : solids },                                   // which solids have this shape, 4 per entry
+        { type : float4[16], name : steps },                                    // rgb, index of refraction
+        { type : float,  name : stepCount },
+        { type : float3, name : sunDir },                                       // the way the sunlight travels
+        { type : float,  name : halfThick },                                    // half the thickness, in the outline's own units
+        { type : float,  name : gain },
+        { type : float,  name : cap },                                          // brightest a piece may get (where a curved wall gathers its light to a line)
+        { type : float,  name : floorY }
+    ]
+}
+
+vertex {
+    // One end of a bit of wall (p on the outline, nrm the way out of the glass there): where on the floor the light of the
+    // wall's own line lands (X0) and the light of the inner edge of the rim (X1), and the rim's width there (0: no light).
+    void wallEnd(vec2 p, vec2 nrm, vec3 sL, float n, vec4 ax, vec3 ay, vec3 az, vec3 at, out vec3 X0, out vec3 X1, out float w, out float t) {
+        float h = materialParams.halfThick;
+        float far = sL.z > 0.0 ? 1.0 : -1.0;            // which cap the light leaves by
+        vec3 din = refract(sL, vec3(0.0, 0.0, -far), 1.0 / n);
+        // across the thickness the light drifts this far towards the wall: the rim of the cap that sends its light to it
+        w = clamp(2.0 * h * dot(din.xy, nrm) / max(abs(din.z), 1e-4), 0.0, 6.0 * h);
+        vec3 rL = sL - vec3(nrm * (2.0 * dot(sL.xy, nrm)), 0.0);       // the sun mirrored in the wall
+        vec3 rW = ax.xyz * rL.x + ay * rL.y + az * rL.z;
+        if (abs(sL.z) < 0.05 || rW.y > -0.02) w = 0.0;
+        vec3 p0 = vec3(p, far * h), p1 = vec3(p - nrm * w, far * h);
+        vec3 w0 = (ax.xyz * p0.x + ay * p0.y + az * p0.z) * ax.w + at, w1 = (ax.xyz * p1.x + ay * p1.y + az * p1.z) * ax.w + at;
+        float down = min(rW.y, -0.02);
+        t = clamp((materialParams.floorY - w0.y) / down, 0.0, 8.0);
+        X0 = w0 + rW * t;
+        X1 = w1 + rW * clamp((materialParams.floorY - w1.y) / down, 0.0, 8.0);
+    }
+    void materialVertex(inout MaterialVertexInputs material) {
+        int stepsAll = int(materialParams.stepCount);
+        int inst = getInstanceIndex();
+        int which = inst / stepsAll;
+        int stepAt = inst - which * stepsAll;
+        int solid = int(materialParams.solids[which / 4][which - (which / 4) * 4] + 0.5);
+        vec4 ax = texelFetch(materialParams_pose, ivec2(solid, 0), 0);
+        vec3 ay = texelFetch(materialParams_pose, ivec2(solid, 1), 0).xyz;
+        vec3 az = texelFetch(materialParams_pose, ivec2(solid, 2), 0).xyz;
+        vec3 at = texelFetch(materialParams_pose, ivec2(solid, 3), 0).xyz;
+
+        vec2 a = mesh_position.xy, b = mesh_uv0;
+        int corner = int(mesh_position.z + 0.5);
+        vec3 sun = materialParams.sunDir;
+        vec3 sL = vec3(dot(sun, ax.xyz), dot(sun, ay), dot(sun, az));   // the sun in the outline's own frame (z: the thickness)
+        float n = materialParams.steps[stepAt].w;
+        vec3 A0, A1, B0, B1;
+        float wa, wb, ta, tb;
+        wallEnd(a, normalize(getCustom0().xy), sL, n, ax, ay, az, at, A0, A1, wa, ta);
+        wallEnd(b, normalize(getCustom0().zw), sL, n, ax, ay, az, at, B0, B1, wb, tb);
+        // As bright as the light it carries over the floor it lands on: the rim's piece of the cap as the sun sees it,
+        // over the four-cornered patch on the floor. Light a curved wall fans out gets dimmer, light it gathers brighter.
+        float rim = 0.5 * (wa + wb) * length(b - a) * ax.w * ax.w * abs(sL.z);
+        vec2 d1 = (B1 - A0).xz, d2 = (A1 - B0).xz;
+        float landed = 0.5 * abs(d1.x * d2.y - d1.y * d2.x) * max(-sun.y, 1e-3);
+        float gain = min(materialParams.gain * rim / max(landed, 1e-9), materialParams.cap);
+        bool atA = corner == 0 || corner == 3;
+        float lit = (atA ? wa : wb) > 0.0 ? 1.0 : 0.0;
+        vec3 X = corner == 0 ? A0 : (corner == 1 ? B0 : (corner == 2 ? B1 : A1));
+        material.light = vec4(materialParams.steps[stepAt].rgb * (gain * lit), atA ? ta : tb);
+        material.worldPosition = mulMat4x4Float3(getWorldFromModelMatrix(), X);   // (a corner with no light stays in place, dark)
+    }
+}
+
+fragment {
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        vec4 c = variable_light;
+        material.baseColor = vec4(c.rgb, (c.r + c.g + c.b) / 3.0 * c.a);
+    }
+}

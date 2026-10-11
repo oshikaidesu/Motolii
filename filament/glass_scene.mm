@@ -1370,6 +1370,61 @@ int main(int argc, char** argv) {
         sShade->addEntity(e);
     }
 
+    // ---- EXPERIMENT, STREAK=1: the bright lines of the solids with an outline, drawn from the outline itself with no
+    // table pass (edge_streak.mat): one four-cornered piece per straight bit of the outline, per solid and colour step.
+    std::vector<MaterialInstance*> streakMis;
+    if (std::getenv("STREAK")) {
+        Material* streakMat = mat("edge_streak.filamat");
+        if (!streakMat) return fail("edge_streak.filamat");
+        for (const ExShapeUse& sh : exShapes) {
+            auto* v = new std::vector<float>();   // a.x, a.y, corner; b.x, b.y; the way out of the glass at a, at b
+            auto* ix = new std::vector<uint32_t>();
+            for (const std::vector<int>& loop : sh.ol->loops)
+                for (size_t i = 0; i < loop.size(); ++i) {
+                    const int ja = loop[i];
+                    const beam::V2 a = sh.ol->pts[(size_t)ja], b = sh.ol->pts[(size_t)loop[(i + 1) % loop.size()]];
+                    // straight: the same way out all along; on an arc: away from (or towards) the middle of its circle
+                    beam::V2 na{b.y - a.y, a.x - b.x}, nb = na;
+                    for (const beam::OutlineEdge& e : sh.ol->edges)
+                        if (e.r != 0 && ja >= e.first && ja < e.first + e.chords) {
+                            const double sg = e.r > 0 ? 1.0 : -1.0;
+                            na = (a - e.c) * sg;
+                            nb = (b - e.c) * sg;
+                        }
+                    na = na * (1.0 / beam::length(na));
+                    nb = nb * (1.0 / beam::length(nb));
+                    const uint32_t base = (uint32_t)(v->size() / 9);
+                    for (int c = 0; c < 4; ++c) v->insert(v->end(), {(float)a.x, (float)a.y, (float)c, (float)b.x, (float)b.y, (float)na.x, (float)na.y, (float)nb.x, (float)nb.y});
+                    ix->insert(ix->end(), {base, base + 1, base + 2, base, base + 2, base + 3});
+                }
+            VertexBuffer* vb = VertexBuffer::Builder().vertexCount((uint32_t)(v->size() / 9)).bufferCount(1)
+                                   .attribute(VertexAttribute::POSITION, 0, VertexBuffer::AttributeType::FLOAT3, 0, 36)
+                                   .attribute(VertexAttribute::UV0, 0, VertexBuffer::AttributeType::FLOAT2, 12, 36)
+                                   .attribute(VertexAttribute::CUSTOM0, 0, VertexBuffer::AttributeType::FLOAT4, 20, 36).build(*engine);
+            vb->setBufferAt(*engine, 0, VertexBuffer::BufferDescriptor(v->data(), v->size() * sizeof(float)));
+            IndexBuffer* ib = IndexBuffer::Builder().indexCount((uint32_t)ix->size()).bufferType(IndexBuffer::IndexType::UINT).build(*engine);
+            ib->setBuffer(*engine, IndexBuffer::BufferDescriptor(ix->data(), ix->size() * sizeof(uint32_t)));
+            MaterialInstance* mi = streakMat->createInstance();
+            float4 which[16] = {};
+            int n = 0;
+            for (size_t k = 0; k < items.size() && n < 64; ++k)
+                if (items[k].local.kind == beam::Solid::EXTRUDE && items[k].local.shape.get() == sh.ol) { which[n / 4][n % 4] = (float)k; ++n; }
+            mi->setParameter("pose", poseTex, nearest);
+            mi->setParameter("solids", which, 16);
+            mi->setParameter("stepCount", (float)beam::EXT_STEPS);
+            mi->setParameter("halfThick", (float)sh.ol->h);
+            mi->setParameter("gain", env_f("STREAK", 1.f));
+            mi->setParameter("cap", env_f("STREAKCAP", 3.f));
+            mi->setParameter("floorY", 0.f);
+            utils::Entity e = em.create();
+            RenderableManager::Builder(1).boundingBox({{0, 0, 0}, {100.f, 100.f, 100.f}})
+                .geometry(0, RenderableManager::PrimitiveType::TRIANGLES, vb, ib).instances((size_t)n * (size_t)beam::EXT_STEPS)
+                .material(0, mi).culling(false).castShadows(false).receiveShadows(false).build(*engine, e);
+            sLight->addEntity(e);
+            streakMis.push_back(mi);
+        }
+    }
+
     View* vFlatWalk = engine->createView();
     vFlatWalk->setScene(sFlatWalk);
     vFlatWalk->setCamera(camera);
@@ -1716,6 +1771,10 @@ int main(int argc, char** argv) {
             for (MaterialInstance* mi : exMis) {
                 mi->setParameter("steps", wall, 8);
                 mi->setParameter("capSteps", cap, 4);
+                mi->setParameter("sunDir", sunDir);
+            }
+            for (MaterialInstance* mi : streakMis) {
+                mi->setParameter("steps", wall, 8);
                 mi->setParameter("sunDir", sunDir);
             }
             const bool on = !exOnCpu && !std::getenv("NOLIGHT");
