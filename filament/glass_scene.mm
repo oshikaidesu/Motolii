@@ -72,11 +72,9 @@ using namespace filament::math;
 
 // As a library (-DGLASS_LIB, see glass_live.h) the files it loads are looked for in the host's folder; on its own, here.
 #ifdef GLASS_LIB
+#include "glass_door.h"
 #include "glass_live.h"
-#include <backend/CallbackHandler.h>
 #include <atomic>
-#include <pthread.h>
-#import <CoreVideo/CoreVideo.h>
 #define GLASS_PATH(p) (g_live.base + (p))
 #else
 #define GLASS_PATH(p) std::string(p)
@@ -244,7 +242,11 @@ int main(int argc, char** argv) {
         stageLights.push_back(mi);
     };
 
+#ifdef GLASS_LIB
+    Engine* engine = glass_door_engine();
+#else
     Engine* engine = Engine::Builder().backend(Engine::Backend::METAL).featureLevel(Engine::FeatureLevel::FEATURE_LEVEL_3).build();
+#endif
     if (!engine) return fail("engine");
     Renderer* renderer = engine->createRenderer();
     SwapChain* swap = engine->createSwapChain((uint32_t)W, (uint32_t)H, 0);
@@ -1997,41 +1999,27 @@ int main(int argc, char** argv) {
         return write_png(path, W, H, frame.data());
     };
 #ifdef GLASS_LIB
-    // ---- live, for a host that shows the picture itself (glass_live.h): every frame is drawn straight into a pixel
-    // buffer the host can show without a copy (Filament's own swap chain on a CVPixelBuffer). Nothing is waited for:
-    // Filament says when the GPU has finished a frame (setFrameCompletedCallback), and only then is that buffer handed
-    // out. Three buffers; a frame is drawn into one that is neither handed out nor still being drawn, or skipped.
+    // ---- live, for a host that shows the picture itself (glass_live.h): every frame is drawn straight into a buffer
+    // the host can show without a copy. What those buffers are is the one thing that differs per OS (glass_door.h).
+    // Nothing is waited for: only when the GPU has finished a frame is its buffer handed out. Three buffers; a frame is
+    // drawn into one that is neither handed out nor still being drawn, or skipped.
     // The sun, the camera and the pace come from the host. Stopping is a pause: the thread and the engine stay.
     {
-        struct Now : backend::CallbackHandler {   // the completion callback as it comes, on Metal's own thread
-            void post(void* user, Callback callback) override { callback(user); }
-        };
-        static Now now;
         struct Slot {
-            CVPixelBufferRef pb = nullptr;
-            SwapChain* chain = nullptr;
             std::atomic<int> busy{0};
             std::chrono::steady_clock::time_point begun;
         };
-        static Slot slot[3];
-        NSDictionary* attrs = @{(id)kCVPixelBufferIOSurfacePropertiesKey : @{}, (id)kCVPixelBufferMetalCompatibilityKey : @YES};
-        for (Slot& s : slot) {
-            if (CVPixelBufferCreate(kCFAllocatorDefault, (size_t)W, (size_t)H, kCVPixelFormatType_32BGRA, (__bridge CFDictionaryRef)attrs, &s.pb) != kCVReturnSuccess)
-                return fail("pixel buffer");
-            s.chain = engine->createSwapChain((void*)s.pb, SwapChain::CONFIG_APPLE_CVPIXELBUFFER);
-            Slot* self = &s;
-            s.chain->setFrameCompletedCallback(&now, [self](SwapChain*) {
-                g_live.frameMs = std::chrono::duration<float, std::milli>(std::chrono::steady_clock::now() - self->begun).count();
-                g_live.front = (void*)self->pb;
+        static Slot slot[GLASS_DOOR_BUFFERS];
+        if (!glass_door_open(engine, W, H, [](int i) {
+                g_live.frameMs = std::chrono::duration<float, std::milli>(std::chrono::steady_clock::now() - slot[i].begun).count();
+                g_live.front = i;
                 g_live.frames.fetch_add(1);
-                self->busy = 0;
-            });
-        }
+                slot[i].busy = 0;
+            }))
+            return fail("pixel buffer");
         vBeauty->setRenderTarget(nullptr);   // the picture goes to the swap chain, i.e. into the pixel buffer
         const float focal = (float)(LH / (2.0 * std::tan(cam[6] * 0.5 * 3.14159265 / 180.0)));
         const float3 target{cam[3], cam[4], cam[5]};
-        // (a thread of default priority is woken late: asked for 16.7 ms it slept about 22)
-        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
         auto last = std::chrono::steady_clock::now();
         auto due = last;   // when the next frame is to start: one sixtieth of a second after the one before, whatever that one took
         float t = env_f("T", 0.f);
@@ -2044,10 +2032,10 @@ int main(int argc, char** argv) {
             }
             t += std::chrono::duration<float>(begin - last).count() * g_live.speed.load();
             last = begin;
-            Slot* into = nullptr;
-            for (Slot& s : slot)
-                if (!s.busy.load() && g_live.front.load() != (void*)s.pb) { into = &s; break; }
-            if (into) {
+            int into = -1;
+            for (int i = 0; i < GLASS_DOOR_BUFFERS && into < 0; ++i)
+                if (!slot[i].busy.load() && g_live.front.load() != i) into = i;
+            if (into >= 0) {
                 const float sa = g_live.sunAz.load(), se = std::min(1.5f, std::max(0.05f, g_live.sunEl.load()));
                 sunDir = float3{std::cos(se) * std::cos(sa), -std::sin(se), std::cos(se) * std::sin(sa)};
                 const float ca = g_live.camAz.load(), ce = std::min(1.5f, std::max(0.03f, g_live.camEl.load())), cd = std::min(12.f, std::max(0.5f, g_live.camDist.load()));
@@ -2060,11 +2048,11 @@ int main(int argc, char** argv) {
                 auto c0 = std::chrono::steady_clock::now();
                 update(t);
                 auto c1 = std::chrono::steady_clock::now();
-                const bool go = renderer->beginFrame(into->chain);
+                const bool go = renderer->beginFrame(glass_door_chain(into));
                 auto c2 = std::chrono::steady_clock::now();
                 if (go) {
-                    into->begun = begin;
-                    into->busy = 1;
+                    slot[into].begun = begin;
+                    slot[into].busy = 1;
                     draw_light();
                     if (!noBackdrop) renderer->render(vBackdrop);
                     renderer->render(vBeauty);

@@ -1,8 +1,7 @@
 // The C face of the live glass (see glass_live.h): start the drawing thread, set a number, hand out the last frame.
 // Everything here may be called from any thread of the host.
+#include "glass_door.h"
 #include "glass_live.h"
-
-#import <CoreVideo/CoreVideo.h>
 
 #include <cstdlib>
 #include <thread>
@@ -28,7 +27,7 @@ __attribute__((visibility("default"))) int glass_start(const char* base, int w, 
         char name[] = "live";
         char* argv[] = {name, name, nullptr};
         glass_scene_main(2, argv);
-        g_live.front = nullptr;
+        g_live.front = -1;
         g_live.alive = 0;
     }).detach();
     return 0;
@@ -49,10 +48,8 @@ __attribute__((visibility("default"))) float glass_get(int what) {
 }
 __attribute__((visibility("default"))) unsigned long long glass_frames(void) { return g_live.frames; }
 
-// The last finished frame, retained for the caller (who releases it), or NULL before the first one.
-__attribute__((visibility("default"))) void* glass_front(void) {
-    CVPixelBufferRef pb = (CVPixelBufferRef)g_live.front.load();
-    return pb ? (void*)CVPixelBufferRetain(pb) : nullptr;
-}
+// The last finished frame as the host takes it (glass_door.h; macOS: a CVPixelBufferRef, retained for the caller, who
+// releases it), or NULL before the first one.
+__attribute__((visibility("default"))) void* glass_front(void) { return glass_door_hand(g_live.front.load()); }
 
 }  // extern "C"

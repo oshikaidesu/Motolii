@@ -10,7 +10,7 @@ struct GlassLive {
     int w = 1280, h = 720;                  // size of the picture, fixed at start
     std::atomic<int> run{0};                // 1 while the thread should draw (0: paused; the thread and the engine stay)
     std::atomic<int> alive{0};              // 1 while the thread exists
-    std::atomic<void*> front{nullptr};      // CVPixelBufferRef of the last finished frame (owned by the thread)
+    std::atomic<int> front{-1};             // which buffer holds the last finished frame (glass_door.h; -1: none yet)
     std::atomic<uint64_t> frames{0};        // finished frames
     std::atomic<float> frameMs{0};          // the last finished frame: from the start of its CPU part to the GPU having finished it
     std::atomic<uint64_t> skipped{0};       // ticks on which no frame was drawn (no free buffer, or Filament asked to skip)

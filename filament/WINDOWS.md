@@ -40,20 +40,26 @@ Mac で動いている形(`glass_live.h`、`build_live.sh`、`skin/book/lib/sets
 
 - 公式の配布物 `filament-v1.77.2-windows.tgz` を `third_party/filament` と同じ並びで置く。Vulkan が入っているかは未確認(手順の最初に確かめる)。
 - 材質(`.mat` 64枚)を Vulkan 向けに作り直す。`matc -a vulkan -p desktop`。中身は書き換えない。
-- `Engine::Builder().backend(...)` を Windows では `VULKAN` にして、下の自前プラットフォームを `.platform(&p)` で渡す(`glass_scene.mm` 247行)。
 
 ### 2. 絵を描く本体の持ち運び
 
-`glass_scene.mm` は拡張子が `.mm` だが、Apple 専用なのは次だけ。
+OS で違う部分は `glass_door.h` の関数4つに切り出してある(2026-10-12、Mac で確認済み: 切り出しの前後で止め絵が1バイトも変わらず、60 fps)。
 
-| 場所 | 中身 | Windows では |
+| 関数 | 役目 | Mac(`glass_door_mac.mm`、46行) |
 |---|---|---|
-| 2001〜2095行あたり(LIVE の輪) | CVPixelBuffer を3枚作る、スワップチェーン3本、描き終わり通知 | 下の「3. 扉」に置き換え |
-| 2034行 | スレッドの優先度(QoS) | `SetThreadPriority` と高精度タイマー |
-| 2097行、2121行 | `std::system("mkdir -p …")` | ライブラリ版では通らない道。そのまま |
-| `glass_live.mm` 54行 | `glass_front()` が CVPixelBuffer を返す | 共有ハンドルを返す |
+| `glass_door_engine()` | その OS の方式でエンジンを作る | Metal |
+| `glass_door_open(engine, w, h, finished)` | バッファを3枚作る。描き終わるたびに `finished(番号)` を呼ぶ。描画スレッドを時間どおり起こす設定もここ | CVPixelBuffer 3枚、スワップチェーン3本、Filament の描き終わり通知、QoS |
+| `glass_door_chain(番号)` | その1枚に描くために `beginFrame` に渡すもの | その1枚のスワップチェーン |
+| `glass_door_hand(番号)` | ホストに渡す形にする | 保持した CVPixelBuffer |
 
-Mac のうちにやれる下ごしらえ: LIVE の輪から「バッファを作る・空きを選ぶ・描き終わりを受ける」を小さな関数4つに切り出して、Mac 版と Windows 版を別ファイルにする。Mac の絵が1バイトも変わらないことで確かめられる。
+**Windows でやることは、この4つを `glass_door_win.cpp` に書くことだけ。** `glass_scene.mm` と `glass_live.mm` は Objective-C を使っていない(`clang++ -x c++ -fsyntax-only -DGLASS_LIB` でエラー 0 を確認)。拡張子は `.mm` のままなので、Windows では `-x c++` を付けてコンパイルする。
+
+残る Apple 寄りの書き方(どれも1行ずつ):
+
+- `glass_live.mm` の `setenv` → Windows は `_putenv_s`。
+- `glass_live.mm` の `__attribute__((visibility("default")))` → `__declspec(dllexport)`。
+- `glass_scene.mm` 1016行の `(const int[]){0, 0}` という書き方(GNU 拡張。clang-cl なら通るはず、MSVC は通らない)。
+- `std::system("mkdir -p …")`(ライブラリ版では通らない道)。
 
 コンパイラは clang-cl を第一候補にする(今のコードは clang でしか通していない)。
 
@@ -69,7 +75,9 @@ Mac のうちにやれる下ごしらえ: LIVE の輪から「バッファを作
 - `present`: 渡されたセマフォを待つ空の提出を1回出して、フェンスを付ける。別スレッドがフェンスを待って、立ったらその1枚を「表」にして `frames` を1つ進める。
 - `hasResized` は常に偽。`destroy` で片付け。
 
-Mac との違いが1つある。Mac はスワップチェーンを3本持った。Windows は1本で絵が3枚。こっちのほうが Vulkan の普通の形。
+Mac との違いが1つある。Mac はスワップチェーンを3本持った。Windows は1本で絵が3枚。こっちのほうが Vulkan の普通の形。`glass_door_chain(番号)` は「次の `acquire` はこの番号」と覚えてから、その1本を返せばよい。
+
+4つの関数との対応: `glass_door_engine` がこのクラスを `Engine::Builder().backend(VULKAN).platform(...)` に渡す。`glass_door_open` は `engine->createSwapChain(自前の構造体, 0)` を1回呼ぶ。`present` の先のスレッドが `finished(番号)` を呼ぶ。`glass_door_hand` が共有ハンドルを返す。
 
 `present` は Filament の描画スレッドから呼ばれる。そこで提出するので、Filament とキューを取り合わない。Thermion が入れていた「キューに鍵をかける細工」は要らないはず(未確認)。
 
