@@ -70,6 +70,18 @@
 using namespace filament;
 using namespace filament::math;
 
+// As a library (-DGLASS_LIB, see glass_live.h) the files it loads are looked for in the host's folder; on its own, here.
+#ifdef GLASS_LIB
+#include "glass_live.h"
+#include <backend/CallbackHandler.h>
+#include <atomic>
+#include <pthread.h>
+#import <CoreVideo/CoreVideo.h>
+#define GLASS_PATH(p) (g_live.base + (p))
+#else
+#define GLASS_PATH(p) std::string(p)
+#endif
+
 static int W = 1920, H = 1080;   // RES=2 / RES=4: 3840x2160 / 7680x4320 (set first thing in main)
 static const uint32_t MAX_LIGHT_VERTS = 1500000;
 
@@ -162,12 +174,20 @@ static void item_axes(const Item& it, float yaw, beam::V3 R[3]) {
     for (int k = 0; k < 3; ++k) R[k] = {c * e[k].x + s * e[k].z, e[k].y, -s * e[k].x + c * e[k].z};
 }
 
+#ifdef GLASS_LIB
+int glass_scene_main(int argc, char** argv) {
+#else
 int main(int argc, char** argv) {
+#endif
     if (const char* res = std::getenv("RES")) {
         const double k = std::min(4.0, std::max(0.25, std::atof(res)));
         W = (int)std::lround(1920 * k);
         H = (int)std::lround(1080 * k);
     }
+#ifdef GLASS_LIB
+    W = g_live.w;
+    H = g_live.h;
+#endif
     const std::string name = argc > 1 ? argv[1] : "first";
     const float nd = 1.5168f;
     const float chamfer = env_f("CHAMFER", 0.03f);   // flat width as a fraction of the edge (real optical cubes: about 0.012)
@@ -233,7 +253,7 @@ int main(int argc, char** argv) {
     auto& rm = engine->getRenderableManager();
 
     auto mat = [&](const char* path) -> Material* {
-        auto b = load_file(path);
+        auto b = load_file(GLASS_PATH(path).c_str());
         return b.empty() ? nullptr : Material::Builder().package(b.data(), b.size()).build(*engine);
     };
     Material* lightMat = mat("beam_light.filamat");
@@ -1222,8 +1242,8 @@ int main(int argc, char** argv) {
     scene->setSkybox(Skybox::Builder().color({0.72f, 0.74f, 0.78f, 1}).build(*engine));
     {
         // Studio environment (out/studio): gives the block something to mirror and keeps the shadow from being black.
-        auto ib = load_file("out/studio/_ibl.ktx");
-        std::ifstream shf("out/studio/sh.txt");
+        auto ib = load_file(GLASS_PATH("out/studio/_ibl.ktx").c_str());
+        std::ifstream shf(GLASS_PATH("out/studio/sh.txt"));
         std::vector<float3> shv;
         std::string line;
         while (std::getline(shf, line)) {
@@ -1976,6 +1996,104 @@ int main(int argc, char** argv) {
             }
         return write_png(path, W, H, frame.data());
     };
+#ifdef GLASS_LIB
+    // ---- live, for a host that shows the picture itself (glass_live.h): every frame is drawn straight into a pixel
+    // buffer the host can show without a copy (Filament's own swap chain on a CVPixelBuffer). Nothing is waited for:
+    // Filament says when the GPU has finished a frame (setFrameCompletedCallback), and only then is that buffer handed
+    // out. Three buffers; a frame is drawn into one that is neither handed out nor still being drawn, or skipped.
+    // The sun, the camera and the pace come from the host. Stopping is a pause: the thread and the engine stay.
+    {
+        struct Now : backend::CallbackHandler {   // the completion callback as it comes, on Metal's own thread
+            void post(void* user, Callback callback) override { callback(user); }
+        };
+        static Now now;
+        struct Slot {
+            CVPixelBufferRef pb = nullptr;
+            SwapChain* chain = nullptr;
+            std::atomic<int> busy{0};
+            std::chrono::steady_clock::time_point begun;
+        };
+        static Slot slot[3];
+        NSDictionary* attrs = @{(id)kCVPixelBufferIOSurfacePropertiesKey : @{}, (id)kCVPixelBufferMetalCompatibilityKey : @YES};
+        for (Slot& s : slot) {
+            if (CVPixelBufferCreate(kCFAllocatorDefault, (size_t)W, (size_t)H, kCVPixelFormatType_32BGRA, (__bridge CFDictionaryRef)attrs, &s.pb) != kCVReturnSuccess)
+                return fail("pixel buffer");
+            s.chain = engine->createSwapChain((void*)s.pb, SwapChain::CONFIG_APPLE_CVPIXELBUFFER);
+            Slot* self = &s;
+            s.chain->setFrameCompletedCallback(&now, [self](SwapChain*) {
+                g_live.frameMs = std::chrono::duration<float, std::milli>(std::chrono::steady_clock::now() - self->begun).count();
+                g_live.front = (void*)self->pb;
+                g_live.frames.fetch_add(1);
+                self->busy = 0;
+            });
+        }
+        vBeauty->setRenderTarget(nullptr);   // the picture goes to the swap chain, i.e. into the pixel buffer
+        const float focal = (float)(LH / (2.0 * std::tan(cam[6] * 0.5 * 3.14159265 / 180.0)));
+        const float3 target{cam[3], cam[4], cam[5]};
+        // (a thread of default priority is woken late: asked for 16.7 ms it slept about 22)
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+        auto last = std::chrono::steady_clock::now();
+        auto due = last;   // when the next frame is to start: one sixtieth of a second after the one before, whatever that one took
+        float t = env_f("T", 0.f);
+        for (;;) {
+            auto begin = std::chrono::steady_clock::now();
+            if (!g_live.run.load()) {   // paused
+                last = due = begin;
+                std::this_thread::sleep_for(std::chrono::milliseconds(30));
+                continue;
+            }
+            t += std::chrono::duration<float>(begin - last).count() * g_live.speed.load();
+            last = begin;
+            Slot* into = nullptr;
+            for (Slot& s : slot)
+                if (!s.busy.load() && g_live.front.load() != (void*)s.pb) { into = &s; break; }
+            if (into) {
+                const float sa = g_live.sunAz.load(), se = std::min(1.5f, std::max(0.05f, g_live.sunEl.load()));
+                sunDir = float3{std::cos(se) * std::cos(sa), -std::sin(se), std::cos(se) * std::sin(sa)};
+                const float ca = g_live.camAz.load(), ce = std::min(1.5f, std::max(0.03f, g_live.camEl.load())), cd = std::min(12.f, std::max(0.5f, g_live.camDist.load()));
+                const float3 eye = target + float3{std::cos(ce) * std::sin(ca), std::sin(ce), std::cos(ce) * std::cos(ca)} * cd;
+                cam[0] = eye.x; cam[1] = eye.y; cam[2] = eye.z;
+                camera->lookAt(eye, target, float3{0, 1, 0});
+                softenMi->setParameter("worldFromClip", mat4f(inverse(camera->getProjectionMatrix() * camera->getViewMatrix())));
+                softenMi->setParameter("eye", eye);
+                softenMi->setParameter("focal", focal);
+                auto c0 = std::chrono::steady_clock::now();
+                update(t);
+                auto c1 = std::chrono::steady_clock::now();
+                const bool go = renderer->beginFrame(into->chain);
+                auto c2 = std::chrono::steady_clock::now();
+                if (go) {
+                    into->begun = begin;
+                    into->busy = 1;
+                    draw_light();
+                    if (!noBackdrop) renderer->render(vBackdrop);
+                    renderer->render(vBeauty);
+                    auto c3 = std::chrono::steady_clock::now();
+                    renderer->endFrame();
+                    auto c4 = std::chrono::steady_clock::now();
+                    if (std::getenv("GLASS_TIMING")) {   // where a turn of this loop spends its time (CPU side)
+                        static double acc[4] = {};
+                        static int count = 0;
+                        auto ms = [](auto a, auto b) { return std::chrono::duration<double, std::milli>(b - a).count(); };
+                        acc[0] += ms(c0, c1); acc[1] += ms(c1, c2); acc[2] += ms(c2, c3); acc[3] += ms(c3, c4);
+                        if (++count == 120) {
+                            std::fprintf(stderr, "LIVE cpu per frame: update %.2f  beginFrame %.2f  views %.2f  endFrame %.2f ms\n", acc[0] / 120, acc[1] / 120, acc[2] / 120, acc[3] / 120);
+                            count = 0;
+                            acc[0] = acc[1] = acc[2] = acc[3] = 0;
+                        }
+                    }
+                } else {
+                    g_live.skipped.fetch_add(1);
+                }
+            } else {
+                g_live.skipped.fetch_add(1);
+            }
+            due += std::chrono::microseconds(16667);
+            if (due < begin) due = begin;   // fell behind: do not try to catch up
+            std::this_thread::sleep_until(due);
+        }
+    }
+#endif
     std::system("mkdir -p out");
     const float t0 = env_f("T", 0.f);
     update(t0);
