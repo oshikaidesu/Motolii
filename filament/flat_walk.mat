@@ -27,6 +27,14 @@ material {
         { type : float,  name : stepCount },                                    // colour steps + 1
         { type : float4, name : strip },                                        // the sun through a slit (as beam_soften.mat): a band on the floor; w = 0: sun everywhere
         { type : float2, name : stripSoft },                                    // x: how soft the edges; y: 0, or a blind: the band again and again this far apart
+        // EDGES (glass_scene.mm). clip 0: as described above. 1: four texels per piece; the three corners also say how
+        // much room they have before their own ray would go another way than the middle one (the fourth number;
+        // below 0: it does), and the fourth texel holds how bright and which way. flat_light.mat cuts the piece
+        // along the line where that room runs out, so its edge is the true one whatever the size of the pieces.
+        // 2: the same once more for the part of the piece on the other side of that line, started from the corner
+        // with the least room in the table of the first time (`first`); nothing where the whole piece goes one way.
+        { type : float,  name : clip },
+        { type : sampler2d, name : first, precision : high, format : float },
         { type : float4[4], name : filmBand },                                  // colour films: film f mirrors light of an index between x and y
         { type : float3, name : sunDir },                                       // the way the sunlight travels
         { type : float,  name : floorY }
@@ -257,11 +265,43 @@ fragment {
         return t;
     }
 
+    // How much further the carried point `ref` could go, along d, than to the face (or film) the middle ray met, before
+    // any other face or film of solid k that the middle ray did not meet first: `before` is where the middle ray set
+    // out, tb how far it went, tr how far `ref` has to that same face. Less than 0: `ref` itself meets another first.
+    float roomLeft(int k, vec3 before, vec3 ref, vec3 d, float n, float tb, float tr) {
+        vec4 info = sceneAt(1, k);
+        if (info.y > 0.5) return 1e3;
+        int cnt = int(info.x + 0.5), films = int(info.z + 0.5);
+        float room = 1e3;
+        for (int j = 0; j < MAXP; j++) {
+            if (j >= cnt) break;
+            vec4 pl = sceneAt(3 + j, k);
+            float den = dot(pl.xyz, d);
+            if (den > 1e-6 && (pl.w - dot(pl.xyz, before)) / den > tb + 1e-5) room = min(room, (pl.w - dot(pl.xyz, ref)) / den - tr);
+        }
+        for (int f = 0; f < 4; f++) {
+            if (f >= films) break;
+            if (!(n > materialParams.filmBand[f].x && n < materialParams.filmBand[f].y)) continue;
+            vec4 pl = sceneAt(3 + cnt + f, k);
+            float den = dot(pl.xyz, d);
+            if (abs(den) < 1e-6) continue;
+            float tm = (pl.w - dot(pl.xyz, before)) / den;
+            if ((tm > -1e-5 && tm < 1e-4) || abs(tm - tb) < 1e-5) continue;   // the middle ray is on this film now, or this is the one it met
+            // the middle ray does not meet this film on this stretch: it lies behind it, or beyond the face it meets
+            // first. `ref` goes the same way as long as one of the two holds for it too.
+            float trf = (pl.w - dot(pl.xyz, ref)) / den;
+            room = min(room, max(-trf, trf - tr));
+        }
+        return room;
+    }
+
     // Light entering solid A at `start` (outward normal nStart): its way to the floor. `ref` is carried along that
     // way (in: a point of the same flat piece; out: x, distance flown, z where it lands). Returns how bright the
     // piece lands, as a multiple of the sun; 0: no light.
-    float route(int A, vec3 start, vec3 nStart, float n, bool mirrored, inout vec3 ref, out float way) {
+    // `edge`: the least room `ref` had on that way (roomLeft; only worked out if clip is on).
+    float route(int A, vec3 start, vec3 nStart, float n, bool mirrored, inout vec3 ref, out float way, out float edge) {
         way = 1.0;
+        edge = 1e3;
         vec3 L = materialParams.sunDir;
         vec3 p = start, d = L;
         float ci = -dot(nStart, d);
@@ -279,8 +319,17 @@ fragment {
             float off = dot(materialParams.strip.xy, X.xz) - materialParams.strip.z;
             if (materialParams.stripSoft.y > 0.0) off -= materialParams.stripSoft.y * floor(off / materialParams.stripSoft.y + 0.5);
             off = abs(off);
-            irr *= 1.0 - smoothstep(materialParams.strip.w - materialParams.stripSoft.x, materialParams.strip.w + materialParams.stripSoft.x, off);
-            if (!(irr > 1e-5)) return 0.0;
+            if (materialParams.clip > 0.5) {
+                // (the edge of the band of sun is one more line to cut the piece along)
+                vec3 Xr = ref + L * ((materialParams.floorY - ref.y) / min(L.y, -1e-6));
+                float offr = dot(materialParams.strip.xy, Xr.xz) - materialParams.strip.z;
+                if (materialParams.stripSoft.y > 0.0) offr -= materialParams.stripSoft.y * floor(offr / materialParams.stripSoft.y + 0.5);
+                edge = min(edge, materialParams.strip.w - abs(offr));
+                if (off > materialParams.strip.w) return 0.0;
+            } else {
+                irr *= 1.0 - smoothstep(materialParams.strip.w - materialParams.stripSoft.x, materialParams.strip.w + materialParams.stripSoft.x, off);
+                if (!(irr > 1e-5)) return 0.0;
+            }
         }
         int S = A, entries = 0;
         vec3 ng = nStart;
@@ -309,9 +358,11 @@ fragment {
                         bool film = tfilm < tb;
                         if (film) { tb = tfilm; nj = nfilm; }
                         else if (++faces > 5) break;
+                        vec3 before = p;
                         p += d * tb;
                         float db = dot(nj, d);
                         if (!(db > 1e-6)) return 0.0;
+                        if (materialParams.clip > 0.5) edge = min(edge, roomLeft(S, before, ref, d, n, tb, dot(nj, p - ref) / db));
                         ref += d * (dot(nj, p - ref) / db);
                         way = way * 1.37 + dot(nj, vec3(1.0, 2.0, 4.0)) + float(S);
                         irr *= db / cosOn;
@@ -356,8 +407,10 @@ fragment {
     void material(inout MaterialInputs material) {
         prepareMaterial(material);
         ivec2 px = ivec2(gl_FragCoord.xy);
-        int piece = px.x / 3;
-        int part = px.x - piece * 3;
+        bool clip = materialParams.clip > 0.5;
+        int per = clip ? 4 : 3;
+        int piece = px.x / per;
+        int part = px.x - piece * per;
         int stepsAll = int(materialParams.stepCount);
         int solid = px.y / stepsAll;
         int stepAt = px.y - solid * stepsAll;
@@ -371,15 +424,50 @@ fragment {
             if (shape >= 0 && piece < int(az.w + 0.5)) {
                 vec3 mid = texelFetch(materialParams_pieces, ivec2(piece * 5, shape), 0).xyz;
                 vec3 nf = texelFetch(materialParams_pieces, ivec2(piece * 5 + 1, shape), 0).xyz;
-                vec3 corner = texelFetch(materialParams_pieces, ivec2(piece * 5 + 2 + part, shape), 0).xyz;
-                vec3 start = (ax.xyz * mid.x + ay.xyz * mid.y + az.xyz * mid.z) * ax.w + at;
-                vec3 ref = (ax.xyz * corner.x + ay.xyz * corner.y + az.xyz * corner.z) * ax.w + at;
-                vec3 nw = ax.xyz * nf.x + ay.xyz * nf.y + az.xyz * nf.z;
+                vec3 corner = part < 3 ? texelFetch(materialParams_pieces, ivec2(piece * 5 + 2 + part, shape), 0).xyz : mid;
                 bool mirrored = stepAt == stepsAll - 1;
-                float n = materialParams.steps[mirrored ? (stepsAll - 1) / 2 : stepAt].w;
-                float way;
-                float gain = route(solid, start, nw, n, mirrored, ref, way);
-                if (gain > 0.0) result = vec4(ref.x, ref.z, ref.y, part == 0 ? gain : (part == 1 ? way : 0.0));
+                bool go = true;
+                if (materialParams.clip > 1.5) {
+                    // the second time: only for a piece with a corner that goes another way, and from near that corner
+                    go = false;
+                    if (!mirrored) {
+                        vec3 c0 = texelFetch(materialParams_pieces, ivec2(piece * 5 + 2, shape), 0).xyz;
+                        vec3 c1 = texelFetch(materialParams_pieces, ivec2(piece * 5 + 3, shape), 0).xyz;
+                        vec3 c2 = texelFetch(materialParams_pieces, ivec2(piece * 5 + 4, shape), 0).xyz;
+                        float g0 = texelFetch(materialParams_first, ivec2(piece * 4, px.y), 0).w;
+                        float g1 = texelFetch(materialParams_first, ivec2(piece * 4 + 1, px.y), 0).w;
+                        float g2 = texelFetch(materialParams_first, ivec2(piece * 4 + 2, px.y), 0).w;
+                        float least = -1e-5;
+                        for (int k = 0; k < 4; k++) {
+                            vec2 ab = vec2((k & 1) != 0 ? 0.92 : 0.08, k > 1 ? 0.92 : 0.08);
+                            float g = g0 + (g1 - g0) * ab.x + (g2 - g0) * ab.y;
+                            if (!(g < least)) continue;
+                            vec3 at2 = c0 + (c1 - c0) * ab.x + (c2 - c0) * ab.y;   // (a piece at the rim of its face is not a whole square)
+                            vec3 w = (ax.xyz * at2.x + ay.xyz * at2.y + az.xyz * at2.z) * ax.w + at;
+                            vec4 info = sceneAt(1, solid);
+                            bool inside = true;
+                            for (int j = 0; j < MAXP; j++) {
+                                if (j >= int(info.x + 0.5)) break;
+                                vec4 pl = sceneAt(3 + j, solid);
+                                if (dot(pl.xyz, w) > pl.w + 1e-4) { inside = false; break; }
+                            }
+                            if (!inside) continue;
+                            least = g;
+                            mid = at2;
+                            go = true;
+                        }
+                    }
+                }
+                if (go) {
+                    vec3 start = (ax.xyz * mid.x + ay.xyz * mid.y + az.xyz * mid.z) * ax.w + at;
+                    vec3 ref = (ax.xyz * corner.x + ay.xyz * corner.y + az.xyz * corner.z) * ax.w + at;
+                    vec3 nw = ax.xyz * nf.x + ay.xyz * nf.y + az.xyz * nf.z;
+                    float n = materialParams.steps[mirrored ? (stepsAll - 1) / 2 : stepAt].w;
+                    float way, edge;
+                    float gain = route(solid, start, nw, n, mirrored, ref, way, edge);
+                    if (clip) result = part < 3 ? vec4(ref.x, ref.z, ref.y, edge) : vec4(gain, way, 0.0, 0.0);
+                    else if (gain > 0.0) result = vec4(ref.x, ref.z, ref.y, part == 0 ? gain : (part == 1 ? way : 0.0));
+                }
             }
         }
         material.baseColor = result;

@@ -182,7 +182,7 @@ int main(int argc, char** argv) {
     // the bright window for the glass to show, the solids strewn about. Meant for solids with colour films (xcut, xcube).
     if (std::getenv("DARKROOM")) {
         static const char* dark[][2] = {{"ROOM", "0.012"}, {"FLOORGREY", "0.3"}, {"FLOOR_REFL", "0.1"}, {"APERTURE", "1.6"}, {"BLOOM", "0.35"},
-                                        {"SKY", "30000"}, {"GLINT", "30000"}, {"GLINTDEG", "25"}, {"STRIP", "0.2 35 0 0.95"}, {"PIECES", "12"},
+                                        {"SKY", "30000"}, {"GLINT", "30000"}, {"GLINTDEG", "25"}, {"STRIP", "0.2 35 0 0.95"}, {"PIECES", "8"}, {"EDGES", "1"},
                                         {"SCATTER", "1"}};
         for (const auto& kv : dark) setenv(kv[0], kv[1], 0);
     }
@@ -981,6 +981,7 @@ int main(int argc, char** argv) {
         beam::FlatShape shape;
         std::vector<int> solids;  // the items of this shape
         MaterialInstance* mi = nullptr;
+        MaterialInstance* mi2 = nullptr;   // EDGES: the pieces of the walk's second turn
         utils::Entity entity;
     };
     static std::vector<FlatKind> flatKinds;
@@ -1016,17 +1017,37 @@ int main(int argc, char** argv) {
         flatHull->setImage(*engine, 0, Texture::PixelBufferDescriptor(texels.data(), texels.size() * sizeof(float), backend::PixelDataFormat::RGBA, backend::PixelDataType::FLOAT));
     }
     Texture* poseTex = Texture::Builder().width(SCENE_H).height(4).levels(1).format(Texture::InternalFormat::RGBA32F).build(*engine);
-    Target flatWalk = make_rt(flatMostPieces * 3, (int)items.size() * flatLines, Texture::InternalFormat::RGBA32F);
+    // EDGES=1: the pieces of light are cut where their light starts to go another way (flat_walk.mat, clip), so their
+    // edges are true lines however coarse the pieces; the walk is then done twice (the second time for the far side
+    // of such a line), into two tables of four texels per piece.
+    const bool flatClip = env_f("EDGES", 0.f) > 0.5f && !rainbowOnce;
+    const int flatPer = flatClip ? 4 : 3;
+    if (flatMostPieces * flatPer > 16384) return fail("too many pieces for one line of the walk table (PIECES is too high)");
+    Target flatWalk = make_rt(flatMostPieces * flatPer, (int)items.size() * flatLines, Texture::InternalFormat::RGBA32F);
+    Target flatWalk2 = flatClip ? make_rt(flatMostPieces * flatPer, (int)items.size() * flatLines, Texture::InternalFormat::RGBA32F) : Target{nullptr, nullptr};
     const TextureSampler nearest(TextureSampler::MinFilter::NEAREST, TextureSampler::MagFilter::NEAREST);
     MaterialInstance* flatWalkMi = flatWalkMat->createInstance();
-    flatWalkMi->setParameter("pose", poseTex, nearest);
-    flatWalkMi->setParameter("pieces", flatPieces, nearest);
-    flatWalkMi->setParameter("scene", sceneTex, nearest);
-    flatWalkMi->setParameter("solidCount", (int32_t)items.size());
-    flatWalkMi->setParameter("stepCount", (float)flatLines);
-    flatWalkMi->setParameter("floorY", 0.f);
+    MaterialInstance* flatWalk2Mi = flatClip ? flatWalkMat->createInstance() : nullptr;
+// what the walk is told goes to both of its turns
+#define FLAT_WALK_SET(...) do { flatWalkMi->setParameter(__VA_ARGS__); if (flatWalk2Mi) flatWalk2Mi->setParameter(__VA_ARGS__); } while (0)
+    if (!rainbowOnce) {
+        flatWalkMi->setParameter("clip", flatClip ? 1.f : 0.f);
+        flatWalkMi->setParameter("first", flatPieces, nearest);   // (not read on the first turn)
+        if (flatWalk2Mi) {
+            flatWalk2Mi->setParameter("clip", 2.f);
+            flatWalk2Mi->setParameter("first", flatWalk.color, nearest);
+        }
+    }
+    FLAT_WALK_SET("pose", poseTex, nearest);
+    FLAT_WALK_SET("pieces", flatPieces, nearest);
+    FLAT_WALK_SET("scene", sceneTex, nearest);
+    FLAT_WALK_SET("solidCount", (int32_t)items.size());
+    FLAT_WALK_SET("stepCount", (float)flatLines);
+    FLAT_WALK_SET("floorY", 0.f);
     Scene* sFlatWalk = engine->createScene();
     sFlatWalk->addEntity(renderable(sqVB, sqIB, flatWalkMi, false, false));
+    Scene* sFlatWalk2 = engine->createScene();
+    if (flatWalk2Mi) sFlatWalk2->addEntity(renderable(sqVB, sqIB, flatWalk2Mi, false, false));
     for (FlatKind& fk : flatKinds) {
         VertexBuffer* vb = VertexBuffer::Builder().vertexCount((uint32_t)(fk.shape.corners.size() / 5)).bufferCount(1)
                                .attribute(VertexAttribute::POSITION, 0, VertexBuffer::AttributeType::FLOAT3, 0, 20)
@@ -1034,23 +1055,29 @@ int main(int argc, char** argv) {
         vb->setBufferAt(*engine, 0, VertexBuffer::BufferDescriptor(fk.shape.corners.data(), fk.shape.corners.size() * sizeof(float)));
         IndexBuffer* ib = IndexBuffer::Builder().indexCount((uint32_t)fk.shape.idx.size()).bufferType(IndexBuffer::IndexType::UINT).build(*engine);
         ib->setBuffer(*engine, IndexBuffer::BufferDescriptor(fk.shape.idx.data(), fk.shape.idx.size() * sizeof(uint32_t)));
-        fk.mi = flatMat->createInstance();
-        on_stage(fk.mi, true);
-        fk.mi->setParameter("walk", flatWalk.color, nearest);
-        fk.mi->setParameter("stepCount", (float)flatLines);
-        fk.mi->setParameter("hull", flatHull, nearest);
-        fk.mi->setParameter("shape", (float)(&fk - flatKinds.data()));
-        fk.mi->setParameter("floorY", 0.f);
         float4 which[16] = {};
         for (size_t i = 0; i < fk.solids.size() && i < 64; ++i) which[i / 4][i % 4] = (float)fk.solids[i];
-        fk.mi->setParameter("solids", which, 16);
-        fk.entity = em.create();
-        RenderableManager::Builder(1).boundingBox({{0, 0, 0}, {100.f, 100.f, 100.f}})
-            .geometry(0, RenderableManager::PrimitiveType::TRIANGLES, vb, ib)
-            .instances(fk.solids.size() * (size_t)flatDraws * recvKinds)
-            .material(0, fk.mi).culling(false).castShadows(false).receiveShadows(false)
-            .layerMask(0xFF, (flatOnCpu || std::getenv("NOLIGHT")) ? 0x00 : 0x01).build(*engine, fk.entity);
-        sLight->addEntity(fk.entity);
+        for (int turn = 0; turn < (flatClip ? 2 : 1); ++turn) {   // (EDGES: once more, from the walk's second table)
+            MaterialInstance* mi = flatMat->createInstance();
+            on_stage(mi, true);
+            mi->setParameter("walk", turn == 0 ? flatWalk.color : flatWalk2.color, nearest);
+            mi->setParameter("stepCount", (float)flatLines);
+            mi->setParameter("hull", flatHull, nearest);
+            mi->setParameter("shape", (float)(&fk - flatKinds.data()));
+            mi->setParameter("floorY", 0.f);
+            if (!rainbowOnce) mi->setParameter("clip", flatClip ? 1.f : 0.f);
+            mi->setParameter("solids", which, 16);
+            const utils::Entity e = em.create();
+            RenderableManager::Builder(1).boundingBox({{0, 0, 0}, {100.f, 100.f, 100.f}})
+                .geometry(0, RenderableManager::PrimitiveType::TRIANGLES, vb, ib)
+                .instances(fk.solids.size() * (size_t)flatDraws * recvKinds)
+                .material(0, mi).culling(false).castShadows(false).receiveShadows(false)
+                .layerMask(0xFF, (flatOnCpu || std::getenv("NOLIGHT")) ? 0x00 : 0x01).build(*engine, e);
+            sLight->addEntity(e);
+            if (turn == 0) { fk.mi = mi; fk.entity = e; } else fk.mi2 = mi;
+            if (turn == 1 && std::getenv("XDRAW2")) rm.setLayerMask(rm.getInstance(e), 0xFF, 0x00);   // (XDRAW2: timing only, its pieces not drawn)
+            if (turn == 0 && std::getenv("XDRAW1")) rm.setLayerMask(rm.getInstance(e), 0xFF, 0x00);   // (XDRAW1: to look at the second turn alone)
+        }
     }
     static std::vector<std::vector<float>> mesh_v(items.size());
     static std::vector<std::vector<uint32_t>> mesh_i(items.size());
@@ -1563,10 +1590,20 @@ int main(int argc, char** argv) {
     vFlatWalk->setScene(sFlatWalk);
     vFlatWalk->setCamera(camera);
     vFlatWalk->setRenderTarget(flatWalk.rt);
-    vFlatWalk->setViewport({0, 0, (uint32_t)flatMostPieces * 3, (uint32_t)(items.size() * (size_t)flatLines)});
+    vFlatWalk->setViewport({0, 0, (uint32_t)(flatMostPieces * flatPer), (uint32_t)(items.size() * (size_t)flatLines)});
     vFlatWalk->setDithering(View::Dithering::NONE);
     vFlatWalk->setPostProcessingEnabled(false);
     vFlatWalk->setShadowingEnabled(false);
+    View* vFlatWalk2 = engine->createView();
+    if (flatClip) {
+        vFlatWalk2->setScene(sFlatWalk2);
+        vFlatWalk2->setCamera(camera);
+        vFlatWalk2->setRenderTarget(flatWalk2.rt);
+        vFlatWalk2->setViewport({0, 0, (uint32_t)(flatMostPieces * flatPer), (uint32_t)(items.size() * (size_t)flatLines)});
+        vFlatWalk2->setDithering(View::Dithering::NONE);
+        vFlatWalk2->setPostProcessingEnabled(false);
+        vFlatWalk2->setShadowingEnabled(false);
+    }
     View* vNodes = engine->createView();
     vNodes->setScene(sNodes);
     vNodes->setCamera(camera);
@@ -1825,8 +1862,8 @@ int main(int argc, char** argv) {
                         for (int i = 0; i < 32; ++i)
                             if ((double)i >= sAt) rainbow[i] += float4{(float)b.rgb.x, (float)b.rgb.y, (float)b.rgb.z, 0.f};
                     }
-                    flatWalkMi->setParameter("ends", float4{(float)(0.5 * (nRed + nBlue)), (float)nRed, (float)nBlue, 0.f});
-                    flatWalkMi->setParameter("sunDir", sunDir);
+                    FLAT_WALK_SET("ends", float4{(float)(0.5 * (nRed + nBlue)), (float)nRed, (float)nBlue, 0.f});
+                    FLAT_WALK_SET("sunDir", sunDir);
                     for (FlatKind& fk : flatKinds) fk.mi->setParameter("rainbow", rainbow, 32);
                 } else {
                     const std::vector<beam::BallStep> fsteps = beam::ball_steps(par, flatSteps - 1);
@@ -1834,14 +1871,17 @@ int main(int argc, char** argv) {
                     for (int i = 0; i + 1 < flatSteps && i < (int)fsteps.size(); ++i)
                         table[i] = float4{(float)fsteps[(size_t)i].rgb.x, (float)fsteps[(size_t)i].rgb.y, (float)fsteps[(size_t)i].rgb.z, (float)fsteps[(size_t)i].n};
                     table[flatSteps - 1] = table[(flatSteps - 1) / 2];
-                    flatWalkMi->setParameter("steps", table, 16);
-                    flatWalkMi->setParameter("sunDir", sunDir);
+                    FLAT_WALK_SET("steps", table, 16);
+                    FLAT_WALK_SET("sunDir", sunDir);
                     {   // which colours each film mirrors, as indices of refraction (red has the lowest)
                         float4 band[4] = {};
                         for (int f = 0; f < 4; ++f) band[f] = float4{(float)par.glass.n(filmNm[f].y), (float)par.glass.n(filmNm[f].x), 0.f, 0.f};
-                        flatWalkMi->setParameter("filmBand", band, 4);
+                        FLAT_WALK_SET("filmBand", band, 4);
                     }
-                    for (FlatKind& fk : flatKinds) fk.mi->setParameter("steps", table, 16);
+                    for (FlatKind& fk : flatKinds) {
+                        fk.mi->setParameter("steps", table, 16);
+                        if (fk.mi2) fk.mi2->setParameter("steps", table, 16);
+                    }
                 }
             }
             alike.swap(balls);
@@ -1969,8 +2009,8 @@ int main(int argc, char** argv) {
                 const float4 strip{std::cos(a), std::sin(a), std::cos(a) * down.x + std::sin(a) * down.z + side, half};
                 softenMi->setParameter("strip", strip);
                 softenMi->setParameter("stripSoft", float2{env_f("STRIPSOFT", 0.02f), every});
-                flatWalkMi->setParameter("strip", strip);
-                flatWalkMi->setParameter("stripSoft", float2{env_f("STRIPSOFT", 0.02f), every});
+                FLAT_WALK_SET("strip", strip);
+                FLAT_WALK_SET("stripSoft", float2{env_f("STRIPSOFT", 0.02f), every});
             }
             int count = 0;
             row[5] = (float)world.solids[k].kind; row[6] = (float)world.solids[k].r; row[7] = (float)world.solids[k].h;
@@ -2008,7 +2048,7 @@ int main(int argc, char** argv) {
             float4 spheres[64] = {};
             for (size_t k = 0; k < items.size() && k < 64; ++k)
                 spheres[k] = float4{(float)world.centre[k].x, (float)world.centre[k].y, (float)world.centre[k].z, (float)world.radius[k]};
-            flatWalkMi->setParameter("spheres", spheres, 64);
+            FLAT_WALK_SET("spheres", spheres, 64);
             if (nodesMi) nodesMi->setParameter("spheres", spheres, 64);
             for (Item& it : items) it.glass->setParameter("spheres", spheres, 64);
         }
@@ -2057,7 +2097,10 @@ int main(int argc, char** argv) {
         static const char* xw = std::getenv("XWALK");
         static const bool xF = xw && (std::strchr(xw, '1') || std::strchr(xw, 'f')), xE = xw && (std::strchr(xw, '1') || std::strchr(xw, 'e')),
                           xW = xw && (std::strchr(xw, '1') || std::strchr(xw, 'w')), xC = xw && (std::strchr(xw, '1') || std::strchr(xw, 'c'));
-        if (!xF && !flatOnCpu && !flatKinds.empty()) renderer->render(vFlatWalk);
+        if (!xF && !flatOnCpu && !flatKinds.empty()) {
+            renderer->render(vFlatWalk);
+            if (flatClip && !std::getenv("XWALK2")) renderer->render(vFlatWalk2);   // (XWALK2: timing only, the second turn left out)
+        }
         if (exCount && !exOnCpu && !exNew) {
             if (!xE) renderer->render(vExFind);
             if (!xW) renderer->render(vExWalk);

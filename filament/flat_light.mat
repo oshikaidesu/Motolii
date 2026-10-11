@@ -20,13 +20,14 @@ material {
     instanced : true,
     flipUV : false,
     requires : [ uv0 ],
-    variables : [ light, where, slide, land ],
+    variables : [ light, where, slide, land, edge ],
     parameters : [
         { type : sampler2d, name : walk, precision : high, format : float },    // written by flat_walk.mat
         { type : sampler2d, name : hull, precision : high, format : float },    // beam::FlatShape::hull, one line per shape
         { type : float,  name : shape },                                        // which line of `hull`
         { type : float4[16], name : steps },                                    // rgb, index of refraction
         { type : float,  name : stepCount },                                    // colour steps + 1 (the last: mirrored off the outside, white)
+        { type : float,  name : clip },                                         // 1: the walk has four texels per piece and says where to cut it (flat_walk.mat, clip)
         { type : float4[16], name : solids },                                   // which solids have this shape (their columns in the pose table), 4 per entry
         { type : float4[6], name : room, precision : high },                    // the stage: see recv_drop.glsl
         { type : float,  name : roomCount },
@@ -43,13 +44,22 @@ material {
 vertex {
 #include "recv_drop.glsl"
     // the three carried corners of a piece on one line of the walk: where they land (x, z, distance flown), how bright, which way
-    void carried(int piece, int line, out vec3 l0, out vec3 l1, out vec3 l2, out float gain, out float way) {
-        vec4 t0 = texelFetch(materialParams_walk, ivec2(piece * 3, line), 0);
-        vec4 t1 = texelFetch(materialParams_walk, ivec2(piece * 3 + 1, line), 0);
-        vec4 t2 = texelFetch(materialParams_walk, ivec2(piece * 3 + 2, line), 0);
+    // (room: with clip, how much room each of the three has before its own ray goes another way; below 0: it does)
+    void carried(int piece, int line, out vec3 l0, out vec3 l1, out vec3 l2, out float gain, out float way, out vec3 room) {
+        int per = materialParams.clip > 0.5 ? 4 : 3;
+        vec4 t0 = texelFetch(materialParams_walk, ivec2(piece * per, line), 0);
+        vec4 t1 = texelFetch(materialParams_walk, ivec2(piece * per + 1, line), 0);
+        vec4 t2 = texelFetch(materialParams_walk, ivec2(piece * per + 2, line), 0);
         l0 = t0.xyz; l1 = t1.xyz; l2 = t2.xyz;
         gain = t0.w;
         way = t1.w;
+        room = vec3(1.0);
+        if (per == 4) {
+            vec4 t3 = texelFetch(materialParams_walk, ivec2(piece * per + 3, line), 0);
+            gain = t3.x;
+            way = t3.y;
+            room = vec3(t0.w, t1.w, t2.w);
+        }
     }
     void materialVertex(inout MaterialVertexInputs material) {
         int stepsAll = int(materialParams.stepCount);
@@ -65,9 +75,30 @@ vertex {
         vec2 ab = mesh_position.yz;
         bool mirrored = stepAt == stepsAll - 1;
 
-        vec3 l0, l1, l2;
+        vec3 l0, l1, l2, room, roomN;
         float gain, way;
-        carried(piece, line, l0, l1, l2, gain, way);
+        carried(piece, line, l0, l1, l2, gain, way, room);
+        if (materialParams.clip > 0.5) {
+            // Only the part of the piece that keeps its light is drawn: nothing at all if no corner has room, and
+            // otherwise (a whole square piece) no more of it than the box round the part that has.
+            float r3 = room.y + room.z - room.x;
+            if (max(max(room.x, room.y), max(room.z, r3)) <= 0.0) gain = 0.0;
+            else if (texelFetch(materialParams_hull, ivec2(piece * 5 + 4, int(materialParams.shape + 0.5)), 0).z > 0.5) {
+                vec2 lo = vec2(1.0), hi = vec2(0.0);
+                float r[4] = float[4](room.x, room.y, r3, room.z);                       // round the square: (0,0) (1,0) (1,1) (0,1)
+                vec2 c[4] = vec2[4](vec2(0.0, 0.0), vec2(1.0, 0.0), vec2(1.0, 1.0), vec2(0.0, 1.0));
+                for (int i = 0; i < 4; i++) {
+                    int j = (i + 1) & 3;
+                    if (r[i] >= 0.0) { lo = min(lo, c[i]); hi = max(hi, c[i]); }
+                    if ((r[i] < 0.0) != (r[j] < 0.0)) {
+                        vec2 x = mix(c[i], c[j], r[i] / (r[i] - r[j]));
+                        lo = min(lo, x); hi = max(hi, x);
+                    }
+                }
+                ab = clamp(ab, lo - 0.02, hi + 0.02);
+            }
+            if (gain <= 0.0) ab = vec2(0.0);
+        }
         vec2 toNext = vec2(0.0), toPrev = vec2(0.0);   // half way to where the next / the previous colour puts the piece, in (a, b)
         if (gain > 0.0 && !mirrored) {
             int shape = int(materialParams.shape + 0.5);
@@ -78,14 +109,14 @@ vertex {
             vec3 n0, n1, n2;
             float gainN = 0.0, wayN = 0.0;
             if (abs(det) > 1e-12 && stepAt + 2 < stepsAll) {
-                carried(piece, line + 1, n0, n1, n2, gainN, wayN);
+                carried(piece, line + 1, n0, n1, n2, gainN, wayN, roomN);
                 if (gainN > 0.0 && abs(wayN - way) < 1e-3 * (1.0 + abs(way))) {   // (not if that colour goes another way altogether)
                     vec2 gap = 0.5 * ((n0 + (n1 - n0) * middle.x + (n2 - n0) * middle.y).xy - mid);
                     toNext = vec2(gap.x * e2.y - gap.y * e2.x, e1.x * gap.y - e1.y * gap.x) / det;
                 }
             }
             if (abs(det) > 1e-12 && stepAt > 0) {
-                carried(piece, line - 1, n0, n1, n2, gainN, wayN);
+                carried(piece, line - 1, n0, n1, n2, gainN, wayN, roomN);
                 if (gainN > 0.0 && abs(wayN - way) < 1e-3 * (1.0 + abs(way))) {
                     vec2 gap = 0.5 * ((n0 + (n1 - n0) * middle.x + (n2 - n0) * middle.y).xy - mid);
                     toPrev = vec2(gap.x * e2.y - gap.y * e2.x, e1.x * gap.y - e1.y * gap.x) / det;
@@ -107,6 +138,7 @@ vertex {
         material.where = vec4(ab, float(piece), ok);
         material.slide = vec4(toNext, toPrev);
         material.land = vec4(start, owner);
+        material.edge = vec4(room.x + (room.y - room.x) * ab.x + (room.z - room.x) * ab.y, 0.0, 0.0, 0.0);
         material.worldPosition = recvNearer(mulMat4x4Float3(getWorldFromModelMatrix(), X), owner);
     }
 }
@@ -159,6 +191,13 @@ fragment {
             int shape = int(materialParams.shape + 0.5);
             bool square = texelFetch(materialParams_hull, ivec2(piece * 5 + 4, shape), 0).z > 0.5;
             c.rgb *= 0.5 * (covered(variable_where.xy, slide.xy, square, piece) + covered(variable_where.xy, slide.zw, square, piece));
+        }
+        if (materialParams.clip > 0.5) {
+            // cut along the line where the piece's light starts to go another way (an edge as fine as the picture)
+            float room = variable_edge.x;
+            float keep = clamp(room / max(fwidth(room), 1e-9) + 0.5, 0.0, 1.0);
+            if (keep <= 0.0) discard;
+            c.rgb *= keep;
         }
         material.baseColor = recvFinish(c, variable_where.w, floor(variable_land.w + 0.5), variable_land.xyz, false);
     }
