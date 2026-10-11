@@ -1471,6 +1471,7 @@ int main(int argc, char** argv) {
                 mi->setParameter("halfThick", (float)sh.ol->h);
                 mi->setParameter("mode", (float)mode);
                 mi->setParameter("chamfer", (float)sh.ol->chamfer);
+                mi->setParameter("wide", env_f("STREAKWIDE", 0.5f));   // least width of a colour's band (edge_streak.mat)
                 mi->setParameter("gain", strength);
                 mi->setParameter("cap", env_f("STREAKCAP", 3.f));
                 mi->setParameter("floorY", 0.f);

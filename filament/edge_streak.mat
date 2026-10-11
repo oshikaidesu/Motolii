@@ -35,6 +35,7 @@ material {
         { type : float,  name : halfThick },                                    // half the thickness, in the outline's own units
         { type : float,  name : mode },                                         // 0: mirrored by the wall, 1: out through the cut on the rim
         { type : float,  name : chamfer },                                      // flat width of that cut, in the outline's own units
+        { type : float,  name : wide },                                         // least width of a colour's band on the floor, in half thicknesses
         { type : float,  name : gain },
         { type : float,  name : cap },                                          // brightest a piece may get (where a curved wall gathers its light to a line)
         { type : float,  name : floorY }
@@ -120,6 +121,13 @@ vertex {
             if (s10 > hi) { hi = s10; X1 = X10; }
             if (s01 > hi) { hi = s01; X1 = X01; next.y = 1.0; }
             if (s11 > hi) { hi = s11; X1 = X11; next.y = 1.0; }
+            // The bands are given some width of their own (the cut alone is thin, and its light would be a spectrum
+            // from the first): near the glass the colours then lie on one another, white, and part as they fly.
+            vec2 v = (X1 - X0).xz, out2 = normalize(toWorld(vec3(nrm, 0.0), ax, ay, az).xz + vec2(1e-5, 0.0));
+            vec2 dir = normalize(v + out2 * (dot(v, out2) < 0.0 ? -1e-4 : 1e-4));
+            float more = max(0.0, 0.5 * (materialParams.wide * h * ax.w - length(u)));
+            X0.xz -= dir * more;
+            X1.xz += dir * more;
         }
     }
     void materialVertex(inout MaterialVertexInputs material) {
