@@ -1,0 +1,54 @@
+// EXPERIMENT (VBODY=1): which cells of a face's net pass, worked out once per cell from the table of glass_nodes.mat
+// so that the corners of glass_vert.mat need not each read the table many times over. One line per (solid, face);
+// texels 0 to 15: the 4 x 4 large cells (x: 1 passes); texels 16 to 79: the 8 x 8 small cells (x: 1 the large cell it
+// is a quarter of passes, y: 1 it passes itself). A cell passes if its four corners, the middles of its sides and
+// its own middle all went the same way and the middles look within `tol` pixels (of 1920 x 1080) of where drawing
+// from the corners puts them (a cell is two triangles: its middle is drawn half way along the side they share).
+material {
+    name : glass_cells,
+    shadingModel : unlit,
+    vertexDomain : device,
+    blending : add,
+    depthWrite : false,
+    depthCulling : false,
+    culling : none,
+    doubleSided : true,
+    flipUV : false,
+    parameters : [
+        { type : sampler2d, name : nodes, precision : high, format : float },
+        { type : float, name : tol }
+    ]
+}
+
+fragment {
+    vec4 nodeAt(int row, int i, int j) { return texelFetch(materialParams_nodes, ivec2(i + j * 17, row), 0); }
+    bool good(int row, int i0, int j0, int h) {
+        vec4 a = nodeAt(row, i0, j0), b = nodeAt(row, i0 + 2 * h, j0), c = nodeAt(row, i0, j0 + 2 * h), d = nodeAt(row, i0 + 2 * h, j0 + 2 * h);
+        vec4 ab = nodeAt(row, i0 + h, j0), cd = nodeAt(row, i0 + h, j0 + 2 * h), ac = nodeAt(row, i0, j0 + h), bd = nodeAt(row, i0 + 2 * h, j0 + h);
+        vec4 m = nodeAt(row, i0 + h, j0 + h);
+        if (min(min(min(a.w, b.w), min(c.w, d.w)), min(min(ab.w, cd.w), min(min(ac.w, bd.w), m.w))) < 0.0) return false;
+        float w = a.z;
+        if (b.z != w || c.z != w || d.z != w || ab.z != w || cd.z != w || ac.z != w || bd.z != w || m.z != w) return false;
+        vec2 s = vec2(1920.0, 1080.0);
+        float e = max(max(length((ab.xy - 0.5 * (a.xy + b.xy)) * s), length((cd.xy - 0.5 * (c.xy + d.xy)) * s)),
+                      max(length((ac.xy - 0.5 * (a.xy + c.xy)) * s), length((bd.xy - 0.5 * (b.xy + d.xy)) * s)));
+        e = max(e, length((m.xy - 0.5 * (a.xy + d.xy)) * s));
+        return e < materialParams.tol;
+    }
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        ivec2 px = ivec2(gl_FragCoord.xy);
+        vec4 r = vec4(0.0);
+        if (px.x < 16) {
+            int cj = px.x / 4, ci = px.x - cj * 4;
+            r.x = good(px.y, ci * 4, cj * 4, 2) ? 1.0 : 0.0;
+        } else if (px.x < 80) {
+            int cell = px.x - 16;
+            int cj = cell / 8, ci = cell - cj * 8;
+            bool whole = good(px.y, (ci / 2) * 4, (cj / 2) * 4, 2);
+            r.x = whole ? 1.0 : 0.0;
+            r.y = !whole && good(px.y, ci * 2, cj * 2, 1) ? 1.0 : 0.0;
+        }
+        material.baseColor = r;
+    }
+}

@@ -1,0 +1,90 @@
+// Step one of the light of solids with dents and holes (beam_extrude.h): where along each stretch of wall the light
+// changes its way (a corner of the outline comes in between), found by halving, up to two places per stretch.
+// One texel per stretch across, EX_FIND_ROWS lines per solid down:
+//   line 0: the walls' own shadows   1: light from the cap that the walls mirror   2 + k: light through the walls, colour step k
+// Each texel: (ua, ub or -ub if there is a change) for the two places: the last place found with the way before
+// the change and the first with the way after it. This is beam::detail::ex_find / ex_find_texel; change them together.
+// Drawn as one rectangle over the lines in use, added onto a cleared target.
+material {
+    name : extrude_find,
+    shadingModel : unlit,
+    vertexDomain : device,
+    blending : add,
+    depthWrite : false,
+    depthCulling : false,
+    culling : none,
+    doubleSided : true,
+    flipUV : false,
+    parameters : [
+        { type : sampler2d, name : shapes, precision : high, format : float },
+        { type : sampler2d, name : poses, precision : high, format : float },
+        { type : float4[8], name : steps },        // rgb, index of refraction
+        { type : float4[4], name : capSteps },
+        { type : float3, name : sunDir },
+        { type : float,  name : floorY }
+    ]
+}
+
+fragment {
+#define EX_WITH_POSES
+#include "extrude_common.glsl"
+
+    // a number that is the same for all light that takes the same way
+    int keyAt(ExCtx c, ExEdge ed, float u, int line, float n, float longest) {
+        if (line == 0) return int(exShadowAt(c, ed, u).y + 0.5);
+        if (line == 1) return exMirrorAt(c, ed, u, longest).key;
+        return exWallAt(c, ed, u, n).key;
+    }
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        ivec2 px = ivec2(gl_FragCoord.xy);
+        int column = px.x, solid = px.y / EX_FIND_ROWS, line = px.y - solid * EX_FIND_ROWS;
+        ExCtx c = exCtx(solid, materialParams.sunDir, materialParams.floorY);
+        material.baseColor = vec4(0.0);
+        if (column >= c.s.stretches || !(c.lat > 1e-6)) return;
+        vec3 st = exStretch(c.s, column);
+        ExEdge ed = exEdge(c.s, int(st.x + 0.5));
+        float u0 = st.y, u1 = st.z;
+        float side = ed.r == 0.0 ? exCross(c.sh, ed.b - ed.a) : 0.0;   // > 0: a straight wall that looks away from the sun
+        float third = (u1 - u0) / 3.0;
+        vec4 f = vec4(u0 + third, u0 + third, u0 + 2.0 * third, u0 + 2.0 * third);
+        bool wanted = line < 2 ? !(side < 0.0) : !(side > 0.0);
+        if (wanted && u1 > u0) {
+            float n = line >= 2 ? materialParams.steps[line - 2].w : 1.5, longest = 0.0;
+            for (int k = 0; k < EX_CAP_STEPS; k++) longest = max(longest, exCapStep(c, materialParams.capSteps[k].w));
+            int ka = keyAt(c, ed, u0, line, n, longest), kb = keyAt(c, ed, u1, line, n, longest);
+            if (ka != kb) {
+                float lo = u0, hi = u1;
+                int khi = kb;
+                for (int it = 0; it < EX_HALVINGS; it++) {
+                    float um = 0.5 * (lo + hi);
+                    int km = keyAt(c, ed, um, line, n, longest);
+                    if (km == ka) {
+                        lo = um;
+                    } else {
+                        hi = um;
+                        khi = km;
+                    }
+                }
+                f.x = lo;
+                f.y = -hi;
+                if (khi == kb) {
+                    f.z = 0.5 * (hi + u1);
+                    f.w = f.z;
+                } else {
+                    lo = hi;
+                    hi = u1;
+                    for (int it = 0; it < EX_HALVINGS; it++) {
+                        float um = 0.5 * (lo + hi);
+                        if (keyAt(c, ed, um, line, n, longest) == khi) lo = um;
+                        else hi = um;
+                    }
+                    f.z = lo;
+                    f.w = -hi;
+                }
+            }
+        }
+        if (!(u1 > u0)) f = vec4(u0);
+        material.baseColor = f;
+    }
+}

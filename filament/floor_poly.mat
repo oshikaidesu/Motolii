@@ -1,0 +1,49 @@
+// EXPERIMENT (POLYTEST=n in glass_scene): floor_beam.mat, and on top of it every floor pixel works out n soft-edged
+// four-sided patches of light analytically, read from a small float table (2 texels each), with no picture in
+// between. To measure what "keep the light as parameters and evaluate it at the final pixel" costs per pixel and
+// patch. The patches are made-up ones (fixed places round the middle of the floor), not the glass's light.
+material {
+    name : floor_poly,
+    shadingModel : lit,
+    culling : none,
+    doubleSided : true,
+    specularAntiAliasing : true,
+    parameters : [
+        { type : float4, name : color },
+        { type : float, name : roughness },
+        { type : float, name : reflectance },
+        { type : float3, name : gain },
+        { type : sampler2d, name : light, format : float },
+        { type : sampler2d, name : polys, precision : high, format : float },   // per patch: (middle x, z, first half side x, z), (second half side x, z, soft edge width, brightness)
+        { type : int, name : polyCount }
+    ]
+}
+
+fragment {
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        material.baseColor = materialParams.color;
+        material.roughness = materialParams.roughness;
+        material.metallic = 0.0;
+        material.reflectance = materialParams.reflectance;
+        vec2 uv = uvToRenderTargetUV(getNormalizedViewportCoord().xy);
+        vec3 c = textureLod(materialParams_light, uv, 0.0).rgb;
+        highp vec2 at = getUserWorldPosition().xz;
+        float extra = 0.0;
+        for (int i = 0; i < 64; i++) {
+            if (i >= materialParams.polyCount) break;
+            highp vec4 a = texelFetch(materialParams_polys, ivec2(2 * i, 0), 0);
+            highp vec4 b = texelFetch(materialParams_polys, ivec2(2 * i + 1, 0), 0);
+            highp vec2 rel = at - a.xy, u = a.zw, v = b.xy;
+            // where the pixel is in the patch's own two directions (-1 .. 1 inside), and how far from each pair of sides
+            highp float det = u.x * v.y - u.y * v.x;
+            highp vec2 ab = vec2(rel.x * v.y - rel.y * v.x, u.x * rel.y - u.y * rel.x) / det;
+            highp vec2 away = (1.0 - abs(ab)) * vec2(abs(det) / length(v), abs(det) / length(u));   // distance to the nearer side, world units
+            vec2 cover = clamp(away / b.z + 0.5, 0.0, 1.0);
+            cover = cover * cover * (3.0 - 2.0 * cover);
+            extra += b.w * cover.x * cover.y;
+        }
+        c += vec3(extra);
+        material.emissive = vec4(materialParams.color.rgb * c * materialParams.gain, 1.0);
+    }
+}

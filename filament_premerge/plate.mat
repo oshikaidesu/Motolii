@@ -1,0 +1,18 @@
+material {
+    name : plate,
+    shadingModel : unlit,
+    blending : opaque,
+    culling : none,
+    doubleSided : true,
+    parameters : [
+        { type : sampler2d, name : color }
+    ],
+    requires : [ uv0 ]
+}
+
+fragment {
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        material.baseColor = texture(materialParams_color, getUV0());
+    }
+}

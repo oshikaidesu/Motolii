@@ -1,0 +1,49 @@
+// Floor for the caustic_all picture: the light map (CIE XYZ, 1.0 = sun without glass) and the footprint map are read by
+// world x/z. Sunlit floor = 1 - footprint + caustic; the shadow is the missing light plus a fill light, as in glass_scene.
+// The floor's own diffuse is black: its brightness is this emissive (nits), so the sun light adds only a little sheen.
+material {
+    name : floor_caustic,
+    shadingModel : lit,
+    culling : none,
+    doubleSided : true,
+    specularAntiAliasing : true,
+    parameters : [
+        { type : float4, name : color },
+        { type : float, name : roughness },
+        { type : float2, name : mapCenter },
+        { type : float, name : mapSize },
+        { type : float, name : lightNits },
+        { type : float, name : fill },
+        { type : float, name : causticGain },
+        { type : float, name : blurLod },
+        { type : float, name : sharpMix },
+        { type : float, name : coverLod },
+        { type : sampler2d, name : caustic, format : float },
+        { type : sampler2d, name : cover, format : float }
+    ]
+}
+
+fragment {
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        material.baseColor = vec4(0.0, 0.0, 0.0, 1.0);
+        material.roughness = materialParams.roughness;
+        material.metallic = 0.0;
+        material.reflectance = 0.35;
+        // the map is rendered with row 0 = top and v = z / size + 0.5 (see tri.mat / grid.mat), so no flip here
+        vec2 uv = (getUserWorldPosition().xz - materialParams.mapCenter) / materialParams.mapSize + 0.5;
+        vec2 e = min(uv, 1.0 - uv);
+        float inside = step(0.0, min(e.x, e.y));
+        // softened light: a mip level of the map (made by Filament every frame), plus a share of the sharp map
+        vec2 cuv = clamp(uv, 0.0, 1.0);
+        vec4 c = mix(textureLod(materialParams_caustic, cuv, materialParams.blurLod), textureLod(materialParams_caustic, cuv, 0.0), materialParams.sharpMix);
+        float cv = clamp(textureLod(materialParams_cover, cuv, materialParams.coverLod).r, 0.0, 1.0);
+        vec3 rgb = vec3(3.2409699 * c.x - 1.5373832 * c.y - 0.4986108 * c.z,
+                        -0.9692436 * c.x + 1.8759675 * c.y + 0.0415551 * c.z,
+                        0.0556301 * c.x - 0.2039770 * c.y + 1.0569715 * c.z);
+        vec3 sunTerm = vec3(1.0 - cv) + max(rgb, vec3(0.0)) * materialParams.causticGain;
+        sunTerm = mix(vec3(1.0), sunTerm, inside);
+        vec3 v = vec3(materialParams.fill) + (1.0 - materialParams.fill) * sunTerm;
+        material.emissive = vec4(materialParams.color.rgb * materialParams.lightNits * v, 1.0);
+    }
+}

@@ -1,0 +1,168 @@
+// The floor light of every ball, from ONE mesh (beam::ball_disc: rings around the middle of the sunlit side),
+// copied. A ball is the same from every side and every ball is the same ball at another size, so nothing is worked
+// out per ball on the CPU: one instance = (ball, colour step). What a ray does inside a ball depends on its ring
+// alone and is read from a small table that is the same for every ball (beam::ball_table); here it is only turned
+// about the sun's axis, scaled by the ball's radius and dropped on the floor. This is beam::ball_fade / ball_land /
+// ball_around / ball_squeeze / ball_corner of beam_glass.h, line for line; change them together.
+// Output as beam_light.mat: rgb = the light, a = light * distance flown.
+material {
+    name : ball_light,
+    shadingModel : unlit,
+    blending : add,
+    depthWrite : false,
+    depthCulling : false,
+    culling : none,
+    doubleSided : true,
+    instanced : true,
+    variables : [ light, good, land ],
+    parameters : [
+        { type : sampler2d, name : balls, precision : high, format : float },   // one texel per ball: middle, radius
+        { type : sampler2d, name : rows, precision : high, format : float },    // beam::ball_table
+        { type : float4[12], name : steps },                                    // rgb of each step
+        { type : float,  name : stepCount },
+        { type : float,  name : first },                                        // the first ball of this renderable
+        { type : float3, name : sunTo },
+        { type : float3, name : e1 },
+        { type : float3, name : e2 },
+        { type : float4[6], name : room, precision : high },                    // the stage: see recv_drop.glsl
+        { type : float,  name : roomCount },
+        { type : float4[16], name : blocks, precision : high },
+        { type : float,  name : blockCount },
+        { type : float,  name : recvCount },
+        { type : float,  name : recvChooses },
+        { type : float3, name : recvSun },
+        { type : float,  name : pxScale },
+        { type : float,  name : floorY },
+        { type : float,  name : flatter },                                      // beam::BALL_FLAT
+        { type : float,  name : reach },                                        // beam::BALL_REACH
+        { type : float,  name : cap }                                           // beam::BALL_CAP
+    ]
+}
+
+vertex {
+#include "recv_drop.glsl"
+    const float RINGS = 14.0;
+    const float SECTORS = 56.0;
+    float smooth01(float x) {
+        x = clamp(x, 0.0, 1.0);
+        return x * x * (3.0 - 2.0 * x);
+    }
+    // corner (ring, sector): where its light lands (x, distance flown, z), where it is in the sunbeam's
+    // cross-section, how much of the light is left, and how much of that is still drawn (beam::ball_fade)
+    bool land(vec4 ball, float ring, float sector, int stepAt, out vec3 q, out vec2 s, out float weight, out float fade) {
+        q = vec3(ball.x, 0.0, ball.z);
+        s = vec2(0.0);
+        weight = 0.0;
+        fade = 0.0;
+        if (ring > RINGS + 0.5) return false;
+        vec4 way = texelFetch(materialParams_rows, ivec2(int(ring + 0.5), stepAt * 2), 0);
+        vec4 more = texelFetch(materialParams_rows, ivec2(int(ring + 0.5), stepAt * 2 + 1), 0);
+        float ph = 6.28318530718 * sector / SECTORS;
+        vec2 a = vec2(cos(ph), sin(ph));
+        s = a * more.z;
+        weight = more.x;
+        if (more.y < 0.5) return false;
+        vec3 across = materialParams.e1 * a.x + materialParams.e2 * a.y;
+        vec3 D = materialParams.sunTo * way.z + across * way.w;
+        if (!(D.y < -materialParams.flatter)) return false;
+        vec3 E = ball.xyz + (materialParams.sunTo * way.x + across * way.y) * ball.w;
+        float t = max(0.0, (materialParams.floorY - E.y) / D.y);
+        if (t > materialParams.reach * ball.w) return false;
+        q = vec3(E.x + D.x * t, t, E.z + D.z * t);
+        fade = smooth01((materialParams.reach - t / ball.w) / (0.5 * materialParams.reach)) * smooth01((-D.y - materialParams.flatter) / (4.0 * materialParams.flatter));
+        return true;
+    }
+    void materialVertex(inout MaterialVertexInputs material) {
+        int count = int(materialParams.stepCount);
+        int per = recvPer();
+        int recv = getInstanceIndex() - (getInstanceIndex() / per) * per;   // which receiver this instance draws on (recv_drop.glsl)
+        int inst = getInstanceIndex() / per;
+        int which = inst / count;
+        int stepAt = inst - which * count;
+        vec4 ball = texelFetch(materialParams_balls, ivec2(int(materialParams.first) + which, 0), 0);
+        float ring = mesh_position.x, sector = mesh_position.y;
+        vec3 q;
+        vec2 s;
+        float weight, fade;
+        bool ok = land(ball, ring, sector, stepAt, q, s, weight, fade);
+        float e = 0.0;
+        if (ok) {
+            // the corners around this one (beam::ball_around): each with the next makes a triangle of the mesh
+            float fr[8];
+            float fs[8];
+            int around = 6;
+            if (ring < 0.5) {
+                around = 8;
+                for (int k = 0; k < 8; ++k) {
+                    fr[k] = 1.0;
+                    fs[k] = float(k) * SECTORS / 8.0;
+                }
+            } else {
+                float next = sector + 1.0 < SECTORS - 0.5 ? sector + 1.0 : 0.0;
+                float prev = sector > 0.5 ? sector - 1.0 : SECTORS - 1.0;
+                fr[0] = ring + 1.0; fs[0] = sector;
+                fr[1] = ring + 1.0; fs[1] = next;
+                fr[2] = ring;       fs[2] = next;
+                fr[3] = ring - 1.0; fs[3] = sector;
+                fr[4] = ring - 1.0; fs[4] = prev;
+                fr[5] = ring;       fs[5] = prev;
+                fr[6] = ring;       fs[6] = sector;
+                fr[7] = ring;       fs[7] = sector;
+            }
+            vec3 p[8];
+            vec2 sp[8];
+            bool there[8];
+            float fades[8];
+            float wk;
+            for (int k = 0; k < 8; ++k) {
+                there[k] = false;
+                fades[k] = 0.0;
+                if (k < around) there[k] = land(ball, fr[k], fs[k], stepAt, p[k], sp[k], wk, fades[k]);
+            }
+            // the sunbeam those triangles catch over the floor they land on; and the least `fade` around here, so
+            // that a triangle that is about to be left out is already dark at all three corners
+            float before = 0.0, after = 0.0;
+            for (int k = 0; k < 8; ++k) {
+                if (k >= around) break;
+                if (fr[k] < RINGS + 0.5) fade = min(fade, fades[k]);
+                int m = k + 1 < around ? k + 1 : 0;
+                if (!there[k] || !there[m]) continue;
+                vec2 a = sp[k] - s, b = sp[m] - s;
+                before += abs(a.x * b.y - a.y * b.x);
+                after += abs((p[k].x - q.x) * (p[m].z - q.z) - (p[k].z - q.z) * (p[m].x - q.x));
+            }
+            before *= ball.w * ball.w;
+            if (before > 0.0) e = weight * fade * (after * materialParams.cap > before ? before / after : materialParams.cap);
+        } else {
+            // A corner whose light does not come down takes its triangles with it (see the fragment part). So that
+            // those triangles cover no pixels on the way, it sits on the nearest corner of its own sector that does land.
+            vec3 q2;
+            vec2 s2;
+            float w2, f2;
+            for (int d = 1; d <= 14; ++d) {
+                float inner = ring - float(d), outer = ring + float(d);
+                if (inner > -0.5 && land(ball, inner, sector, stepAt, q2, s2, w2, f2)) { q = q2; break; }
+                if (outer < RINGS + 0.5 && land(ball, outer, sector, stepAt, q2, s2, w2, f2)) { q = q2; break; }
+            }
+        }
+        vec3 rgb = materialParams.steps[stepAt].rgb * e;
+        float t, okThere, owner;
+        highp vec3 start;
+        highp vec3 X = recvDrop(recv, q.xz, q.y, true, rgb, t, okThere, owner, start);
+        material.light = vec4(rgb, t);
+        material.good = vec4(ok ? 1.0 : 0.0, okThere, owner, 0.0);
+        material.land = vec4(start, 0.0);
+        material.worldPosition = recvNearer(mulMat4x4Float3(getWorldFromModelMatrix(), X), owner);
+    }
+}
+
+fragment {
+#include "recv_lands.glsl"
+#include "recv_finish.glsl"
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        // a triangle with a corner whose light does not come down is not drawn at all
+        vec4 c = variable_light * step(0.9995, variable_good.x);
+        material.baseColor = recvFinish(c, variable_good.y, floor(variable_good.z + 0.5), variable_land.xyz, false);
+    }
+}

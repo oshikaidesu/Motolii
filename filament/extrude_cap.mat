@@ -1,0 +1,118 @@
+// The outline's own triangles of solids with dents and holes (beam_extrude.h): ONE mesh for all shapes
+// (beam::ex_cap_mesh; the corners are read from the table of shapes), drawn once per (solid, role).
+// role 0: the shadow of the cap. 1: the window (light in through one cap and out through the other): the outline as
+// it lies on the cap the light leaves through, and every pixel asks whether the glass goes on behind it, against the
+// light, for as far as the light steps sideways inside, colour by colour (beam::detail::ex_window). 2: the sun
+// mirrored off the cap. This is beam::detail::ex_cap_vertex / ex_window; change them together.
+// Output as beam_light.mat: rgb = the light, a = light * distance flown.
+material {
+    name : extrude_cap,
+    shadingModel : unlit,
+    blending : add,
+    depthWrite : false,
+    depthCulling : false,
+    culling : none,
+    doubleSided : true,
+    instanced : true,
+    variables : [ light, place, land, there ],
+    parameters : [
+        { type : sampler2d, name : shapes, precision : high, format : float },
+        { type : sampler2d, name : poses, precision : high, format : float },
+        { type : float4[8], name : steps },
+        { type : float4[4], name : capSteps },
+        { type : float3, name : sunDir },
+        { type : float4[6], name : room, precision : high },                    // the stage: see recv_drop.glsl
+        { type : float,  name : roomCount },
+        { type : float4[16], name : blocks, precision : high },
+        { type : float,  name : blockCount },
+        { type : float,  name : recvCount },
+        { type : float,  name : recvChooses },
+        { type : float3, name : recvSun },
+        { type : float,  name : pxScale },
+        { type : float,  name : floorY },
+        { type : float,  name : first },           // the first solid of this renderable
+        { type : float,  name : per },             // instances per solid
+        { type : float,  name : roleBase }         // the role of the first instance of each solid
+    ]
+}
+
+vertex {
+#include "recv_drop.glsl"
+#define EX_WITH_POSES
+#include "extrude_common.glsl"
+
+    void materialVertex(inout MaterialVertexInputs material) {
+        int receivers = recvPer();
+        int recv = getInstanceIndex() - (getInstanceIndex() / receivers) * receivers;   // which receiver this instance draws on (recv_drop.glsl)
+        int per = int(materialParams.per + 0.5), inst = getInstanceIndex() / receivers;
+        int which = inst / per;
+        int role = int(materialParams.roleBase + 0.5) + inst - which * per;
+        ExCtx c = exCtx(int(materialParams.first + 0.5) + which, materialParams.sunDir, materialParams.floorY);
+        int tri = int(mesh_position.x + 0.5), corner = int(mesh_position.y + 0.5);
+        vec3 q = vec3(c.O.x, 0.0, c.O.z), rgb = vec3(0.0);
+        vec4 place = vec4(0.0);
+        if (tri < c.s.tris && c.Lw.y < -1e-6) {
+            vec4 t0 = texelFetch(materialParams_shapes, ivec2(2 * tri, c.s.row + 2), 0), t1 = texelFetch(materialParams_shapes, ivec2(2 * tri + 1, c.s.row + 2), 0);
+            vec2 p = corner == 0 ? t0.xy : (corner == 1 ? t0.zw : t1.xy);
+            float ze = -c.top * c.s.h, cosCap = abs(c.L.z), down = -c.Lw.y;
+            if (role == 0) {
+                q = exLand(c, exWorld(c, p, ze), c.Lw);
+                rgb = vec3(1.0);
+            } else if (role == 1) {
+                if (cosCap > 1e-6) {
+                    q = exLand(c, exWorld(c, p, ze), c.Lw);
+                    rgb = vec3(1.0);   // (the fragment works the light out)
+                }
+            } else {
+                vec3 D = exDir(c, vec3(c.L.xy, -c.L.z));
+                if (cosCap > 1e-6 && D.y < -1e-6) {
+                    // (faded as a whole, by where the middle of the outline lands: either all of it is drawn or none)
+                    float f = exFade(c, exLand(c, exWorld(c, vec2(0.0), c.top * c.s.h), D).y, -D.y) * exFresnel(cosCap, 1.0, materialParams.steps[EX_STEPS / 2].w) * -D.y;
+                    if (f > 0.0) {
+                        q = exLand(c, exWorld(c, p, c.top * c.s.h), D);
+                        rgb = vec3(f);
+                    }
+                }
+            }
+            place = vec4(p, float(int(materialParams.first + 0.5) + which), float(role));
+        }
+        float t, ok, owner;
+        highp vec3 start;
+        highp vec3 X = recvDrop(recv, q.xz, q.y, role != 0, rgb, t, ok, owner, start);
+        material.light = vec4(rgb, t);
+        material.place = place;
+        material.land = vec4(start, owner);
+        material.there = vec4(ok);
+        material.worldPosition = recvNearer(mulMat4x4Float3(getWorldFromModelMatrix(), X), owner);
+    }
+}
+
+fragment {
+#define EX_WITH_POSES
+#include "extrude_common.glsl"
+#include "recv_lands.glsl"
+#include "recv_finish.glsl"
+
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        vec4 c = variable_light;
+        if (variable_place.w > 0.5 && variable_place.w < 1.5) {
+            // the window (beam::detail::ex_window)
+            ExCtx x = exCtx(int(variable_place.z + 0.5), materialParams.sunDir, materialParams.floorY);
+            vec2 q = variable_place.xy;
+            float cosCap = abs(x.L.z), down = -x.Lw.y, behind = EX_BIG;
+            if (x.lat > 1e-6) {
+                ExHit hit = exCast(x.s, q, -x.sh, 0.0, 0);
+                if (hit.is) behind = hit.t;
+            }
+            float width = max(fwidth(dot(q, x.sh)), 1e-6);
+            vec3 rgb = vec3(0.0);
+            for (int k = 0; k < EX_CAP_STEPS; k++) {
+                float n = materialParams.capSteps[k].w, T = 1.0 - exFresnel(cosCap, 1.0, n);
+                rgb += materialParams.capSteps[k].rgb * (T * T * down * clamp((behind - exCapStep(x, n)) / width + 0.5, 0.0, 1.0));
+            }
+            c.rgb = rgb * c.r;
+        }
+        material.baseColor = recvFinish(c, variable_there.x, floor(variable_land.w + 0.5), variable_land.xyz, variable_place.w < 0.5);
+    }
+}

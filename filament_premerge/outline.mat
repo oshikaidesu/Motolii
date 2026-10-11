@@ -1,0 +1,112 @@
+// The shadow outline of every solid, drawn as "missing light" (see beam_soften.mat), without any work on the CPU:
+// a mesh of the solid's surface in its own space, built once per shape, of which the vertex shader slides the
+// sunlit part along the sun onto the floor (the sunlit faces of a convex solid tile its outline exactly once).
+// One instance per solid of that shape; where the solid stands comes from the pose table.
+//   kind 0 (flat faces): position = a corner, colour = its face's outward normal, both in the shape's own space
+//   kind 1 (ball):  position = (cos, sin, 0) on the rim of the disc that faces the sun, or 0 for its middle
+//   kind 2 (rod):   position = (along 0..1, round -1..1, 0) on the side, or (x, y, 1 / 2) on the end at +axis / -axis
+//   kind 3 (cone):  position = (0 tip / 1 rim, round 0..1, 0) on the side, or (0 middle / 1 rim, round 0..1, 1) on the base
+// As beam::silhouette_triangles of beam_glass.h. Output as beam_light.mat: rgb = 1, a = distance to the floor.
+material {
+    name : outline,
+    shadingModel : unlit,
+    blending : add,
+    depthWrite : false,
+    depthCulling : false,
+    culling : none,
+    doubleSided : true,
+    instanced : true,
+    requires : [ color ],
+    variables : [ light ],
+    parameters : [
+        { type : sampler2d, name : pose, precision : high, format : float },    // per solid (column): axis x + size; axis y; axis z; place
+        { type : float4[16], name : solids },                                   // which solids have this shape (their columns in the pose table)
+        { type : float,  name : kind },
+        { type : float4, name : dims },                                         // the shape's own radius, (half) length / height
+        { type : float3, name : sunDir },                                       // the way the sunlight travels
+        { type : float,  name : floorY }
+    ]
+}
+
+vertex {
+    void frameOf(vec3 w, out vec3 e1, out vec3 e2) {
+        vec3 up = abs(w.y) < 0.9 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
+        e1 = normalize(cross(up, w));
+        e2 = cross(w, e1);
+    }
+    void materialVertex(inout MaterialVertexInputs material) {
+        int which = getInstanceIndex();
+        int solid = int(materialParams.solids[which / 4][which - (which / 4) * 4] + 0.5);
+        vec4 ax = texelFetch(materialParams_pose, ivec2(solid, 0), 0);
+        vec3 ay = texelFetch(materialParams_pose, ivec2(solid, 1), 0).xyz;
+        vec3 az = texelFetch(materialParams_pose, ivec2(solid, 2), 0).xyz;
+        vec3 at = texelFetch(materialParams_pose, ivec2(solid, 3), 0).xyz;
+        float size = ax.w, r = materialParams.dims.x * size, h = materialParams.dims.y * size;
+        vec3 L = materialParams.sunDir;
+        int kind = int(materialParams.kind + 0.5);
+        vec3 m = mesh_position.xyz;
+        vec3 P = at;
+        bool lit = false;
+        if (kind == 0) {
+            P = (ax.xyz * m.x + ay * m.y + az * m.z) * size + at;
+            vec3 n = ax.xyz * mesh_color.x + ay * mesh_color.y + az * mesh_color.z;
+            lit = dot(n, L) < -1e-6;
+        } else if (kind == 1) {
+            vec3 e1, e2;
+            frameOf(-L, e1, e2);
+            P = at + (e1 * m.x + e2 * m.y) * r;
+            lit = true;
+        } else if (kind == 2) {
+            vec3 a = ay;
+            if (m.z < 0.5) {
+                vec3 wp = -L - a * dot(-L, a);
+                if (length(wp) > 1e-5) {
+                    vec3 u = normalize(wp), v = cross(a, u);
+                    float ps = m.y * 0.497 * PI;
+                    P = at + a * (h * (2.0 * m.x - 1.0)) + (u * cos(ps) + v * sin(ps)) * r;
+                    lit = true;
+                }
+            } else {
+                vec3 nn = m.z < 1.5 ? a : -a;
+                vec3 e1, e2;
+                frameOf(nn, e1, e2);
+                P = at + nn * h + (e1 * m.x + e2 * m.y) * r;
+                lit = dot(nn, L) < -1e-6;
+            }
+        } else {
+            // the cone: its sunlit side lies between the two lines where the sun grazes it (beam::cone_frame)
+            vec3 a = ay;
+            vec3 c = at - a * (0.5 * h);
+            float La = dot(L, a), k = r / h;
+            vec3 Lp = L - a * La;
+            float Lr = length(Lp);
+            vec3 e1, e2;
+            if (Lr > 1e-6) e1 = Lp / Lr;
+            else frameOf(a, e2, e1);
+            e2 = cross(a, e1);
+            if (m.z < 0.5) {
+                float q = Lr > 1e-6 ? -k * La / Lr : (La < 0.0 ? 2.0 : -2.0);
+                float lobe = q >= 1.0 ? PI : (q <= -1.0 ? 0.0 : PI - acos(q));
+                float ph = PI + (2.0 * m.y - 1.0) * lobe;
+                P = m.x < 0.5 ? c + a * h : c + (e1 * cos(ph) + e2 * sin(ph)) * r;
+                lit = lobe > 0.0;
+            } else {
+                float ph = 2.0 * PI * m.y;
+                P = m.x < 0.5 ? c : c + (e1 * cos(ph) + e2 * sin(ph)) * r;
+                lit = La > 1e-6;
+            }
+        }
+        float tt = lit ? max(0.0, (materialParams.floorY - P.y) / min(L.y, -1e-6)) : 0.0;
+        vec3 q = lit ? P + L * tt : at;   // (what is not sunlit: all on one spot, covering nothing)
+        material.light = vec4(lit ? 1.0 : 0.0, lit ? 1.0 : 0.0, lit ? 1.0 : 0.0, tt);
+        material.worldPosition = mulMat4x4Float3(getWorldFromModelMatrix(), vec3(q.x, materialParams.floorY, q.z));
+    }
+}
+
+fragment {
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        vec4 c = variable_light;
+        material.baseColor = vec4(c.rgb, (c.r + c.g + c.b) / 3.0 * c.a);
+    }
+}

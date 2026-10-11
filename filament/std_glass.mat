@@ -1,0 +1,31 @@
+// MEASURING ONLY (STDGLASS=1 in glass_scene): the same glass solids drawn by Filament's OWN refraction instead of
+// glass_solid.mat: screen-space refraction of a solid of the given thickness, with Filament's dispersion and
+// absorption. To see what the official features cost and what picture they give.
+material {
+    name : std_glass,
+    shadingModel : lit,
+    blending : fade,
+    refractionMode : screenspace,
+    refractionType : solid,
+    doubleSided : false,
+    parameters : [
+        { type : float, name : ior },
+        { type : float, name : thickness },
+        { type : float, name : dispersion }
+    ]
+}
+
+fragment {
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        material.baseColor = vec4(1.0);
+        material.roughness = 0.0;
+        material.metallic = 0.0;
+        material.reflectance = 0.5;
+        material.absorption = vec3(0.02, 0.01, 0.015);
+        material.transmission = 1.0;
+        material.ior = materialParams.ior;
+        material.thickness = materialParams.thickness;
+        material.dispersion = materialParams.dispersion;
+    }
+}

@@ -1,0 +1,26 @@
+material {
+    name : floor_recv,
+    shadingModel : lit,
+    culling : none,
+    doubleSided : true,
+    coloredPenumbra : true,
+    specularAntiAliasing : true,
+    parameters : [
+        { type : float4, name : color },
+        { type : float, name : roughness },
+        { type : sampler2d, name : caustic, format : float }
+    ],
+    requires : [ uv0 ]
+}
+
+fragment {
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        material.baseColor = materialParams.color;
+        material.roughness = materialParams.roughness;
+        material.metallic = 0.0;
+        material.reflectance = 0.35;
+        vec3 c = texture(materialParams_caustic, getUV0()).rgb;
+        material.emissive = vec4(c, 1.0);
+    }
+}

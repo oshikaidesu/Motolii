@@ -1,0 +1,19 @@
+material {
+    name : emissive,
+    shadingModel : lit,
+    doubleSided : true,
+    culling : none,
+    parameters : [
+        { type : float4, name : color }
+    ]
+}
+
+fragment {
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        material.baseColor = vec4(0.0, 0.0, 0.0, 1.0);
+        material.roughness = 1.0;
+        material.metallic = 0.0;
+        material.emissive = vec4(materialParams.color.rgb, 1.0);
+    }
+}

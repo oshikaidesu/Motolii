@@ -1,0 +1,34 @@
+// Light-space capture of a closed refractor, nearest BACK face: (octahedral normal, distance along the light, 1).
+// Unlit on purpose: the colour channels are data, so nothing may touch them (no lights, no exposure).
+material {
+    name : cap_back,
+    shadingModel : unlit,
+    culling : front,
+    blending : opaque,
+    requires : [ custom0 ],
+    variables : [ nrm ],
+    parameters : [
+        { type : float3, name : origin },
+        { type : float3, name : dir }
+    ]
+}
+
+vertex {
+    void materialVertex(inout MaterialVertexInputs material) {
+        material.nrm = vec4(getCustom0().xyz, 0.0);
+    }
+}
+
+fragment {
+    vec2 octEncode(vec3 n) {
+        n /= abs(n.x) + abs(n.y) + abs(n.z);
+        if (n.z < 0.0) n.xy = (vec2(1.0) - abs(n.yx)) * sign(n.xy);
+        return n.xy * 0.5 + 0.5;
+    }
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        vec3 n = normalize(variable_nrm.xyz);
+        float d = dot(getUserWorldPosition() - materialParams.origin, materialParams.dir) + 8.0;
+        material.baseColor = vec4(octEncode(n), d, 1.0);
+    }
+}

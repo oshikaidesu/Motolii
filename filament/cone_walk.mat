@@ -1,0 +1,288 @@
+// Step one of the light of the cones and rods (see "A cone, and a rod, by formula" in beam_glass.h; a rod is a cone
+// with its tip cut off so far down that both ends are as wide): what becomes of every corner of the mesh, for every
+// (solid, colour step, way), worked out ONCE and written into a small float texture. One texel
+// pair per corner across, one line per instance down. cone_light.mat then draws the mesh from this texture; each of
+// its corners needs its six neighbours as well, and reads them here instead of working them out again.
+//   texel 2c     : where corner c is put on the floor: x, z; distance flown; how much of the light takes this way and is drawn
+//   texel 2c + 1 : where the corner is on the cone (xyz); (faces met inside) + fade towards a tear, or 0 if it has no way through
+// This is beam::taper_crossings / cone_split / cone_entry / cone_walk of beam_glass.h, line for line; change them together.
+// Drawn as one rectangle over the lines in use, added onto a cleared target (so that all four numbers arrive as they are).
+material {
+    name : cone_walk,
+    shadingModel : unlit,
+    vertexDomain : device,
+    blending : add,
+    depthWrite : false,
+    depthCulling : false,
+    culling : none,
+    doubleSided : true,
+    flipUV : false,
+    parameters : [
+        { type : sampler2d, name : cones, precision : high, format : float },   // per solid (column): base xyz + radius; axis + height; e1 + half; radius of the top
+        { type : float4[32], name : steps },                                    // rgb, index of refraction
+        { type : float,  name : stepCount },
+        { type : float,  name : wayCount },
+        { type : float4, name : rows },                                         // beam::CONE_ROWS
+        { type : float4, name : cols },                                         // beam::CONE_COLS
+        { type : float3, name : sunDir },                                       // the way the sunlight travels
+        { type : float,  name : floorY },
+        { type : float,  name : tip },                                          // beam::CONE_TIP
+        { type : float,  name : inset },                                        // beam::CONE_INSET
+        { type : float,  name : edge },                                         // beam::CONE_EDGE
+        { type : float,  name : flatter },                                      // beam::BALL_FLAT
+        { type : float,  name : reach }                                         // beam::BALL_REACH
+    ]
+}
+
+fragment {
+    struct Cone {
+        vec3 c;      // middle of the base
+        float r;
+        vec3 a;      // axis, towards the top
+        float h;
+        vec3 e1;
+        vec3 e2;
+        float lit;   // beam::ConeFrame::half
+        float rt;    // radius of the top (0: a cone with its tip)
+    };
+    float rowsOf(int pch) { return pch == 0 ? materialParams.rows.x : (pch == 1 ? materialParams.rows.y : (pch == 2 ? materialParams.rows.z : materialParams.rows.w)); }
+    float colsOf(int pch) { return pch == 0 ? materialParams.cols.x : (pch == 1 ? materialParams.cols.y : (pch == 2 ? materialParams.cols.z : materialParams.cols.w)); }
+    float smooth01(float x) {
+        x = clamp(x, 0.0, 1.0);
+        return x * x * (3.0 - 2.0 * x);
+    }
+    float mirrorShare(float ci, float n1, float n2) {
+        float s2 = (n1 / n2) * (n1 / n2) * (1.0 - ci * ci);
+        if (s2 >= 1.0) return 1.0;
+        float ct = sqrt(1.0 - s2);
+        float rs = (n1 * ci - n2 * ct) / (n1 * ci + n2 * ct);
+        float rp = (n1 * ct - n2 * ci) / (n1 * ct + n2 * ci);
+        return 0.5 * (rs * rs + rp * rp);
+    }
+    float ballFade(float flown, float down) {
+        return smooth01((materialParams.reach - flown) / (0.5 * materialParams.reach)) * smooth01((down - materialParams.flatter) / (4.0 * materialParams.flatter));
+    }
+    // beam::taper_crossings (face: 0 side, 1 base, 2 top)
+    int coneCross(Cone k, vec3 o, vec3 d, out float t0, out vec3 n0, out int f0, out float t1, out vec3 n1, out int f1) {
+        t0 = 0.0; t1 = 0.0;
+        n0 = k.a; n1 = k.a;
+        f0 = 0; f1 = 0;
+        vec3 w = o - k.c;
+        float s = (k.r - k.rt) / k.h, y0 = dot(w, k.a), da = dot(d, k.a);
+        vec3 wp = w - k.a * y0, dp = d - k.a * da;
+        float A = dot(dp, dp) - s * s * da * da, B = dot(wp, dp) + s * da * (k.r - s * y0), C = dot(wp, wp) - (k.r - s * y0) * (k.r - s * y0);
+        float root0 = 0.0, root1 = 0.0;
+        int roots = 0;
+        if (abs(A) > 1e-7) {
+            float disc = B * B - A * C;
+            if (disc > 0.0) {
+                float sq = sqrt(disc);
+                root0 = (-B - sq) / A;
+                root1 = (-B + sq) / A;
+                roots = 2;
+            }
+        } else if (abs(B) > 1e-7) {
+            root0 = -C / (2.0 * B);
+            roots = 1;
+        }
+        float slope = inversesqrt(1.0 + s * s);
+        int count = 0;
+        for (int i = 0; i < 2; i++) {
+            if (i >= roots) break;
+            float tt = i == 0 ? root0 : root1;
+            float y = y0 + tt * da;
+            if (y < 0.0 || y > k.h) continue;
+            vec3 q = wp + dp * tt;
+            float ql = length(q);
+            vec3 nn = ql > 1e-6 * k.r ? (q / ql + k.a * s) * slope : k.a;
+            if (count == 0) { t0 = tt; n0 = nn; f0 = 0; } else { t1 = tt; n1 = nn; f1 = 0; }
+            count++;
+        }
+        if (abs(da) > 1e-7) {
+            float tb = -y0 / da;
+            vec3 q = wp + dp * tb;
+            if (count < 2 && dot(q, q) <= k.r * k.r) {
+                if (count == 0) { t0 = tb; n0 = -k.a; f0 = 1; } else { t1 = tb; n1 = -k.a; f1 = 1; }
+                count++;
+            }
+            if (count < 2 && k.rt > 0.0) {
+                float tu = (k.h - y0) / da;
+                vec3 qu = wp + dp * tu;
+                if (dot(qu, qu) <= k.rt * k.rt) {
+                    if (count == 0) { t0 = tu; n0 = k.a; f0 = 2; } else { t1 = tu; n1 = k.a; f1 = 2; }
+                    count++;
+                }
+            }
+        }
+        if (count == 2 && t1 < t0) {
+            float ts = t0; t0 = t1; t1 = ts;
+            vec3 ns = n0; n0 = n1; n1 = ns;
+            int fs = f0; f0 = f1; f1 = fs;
+        }
+        return count;
+    }
+    float coneLo(Cone k) { return k.rt > 0.0 ? 1.0 - materialParams.inset : materialParams.tip; }
+    // beam::cone_split
+    float coneSplit(Cone k, vec3 across, float n) {
+        vec3 L = materialParams.sunDir;
+        float s = (k.r - k.rt) / k.h, lo = coneLo(k), hi = materialParams.inset;
+        vec3 N = (across + k.a * s) * inversesqrt(1.0 + s * s);
+        if (!(-dot(L, N) > 1e-5)) return hi;
+        vec3 d = refract(L, N, 1.0 / n);
+        float da = dot(d, k.a);
+        if (da < -1e-6) {
+            vec3 g = (d - k.a * da) / -da - across * s;
+            float gg = dot(g, g);
+            if (!(gg > 1e-12)) return hi;
+            float y = -2.0 * k.r * dot(across, g) / gg;
+            return min(hi, max(lo, 1.0 - y / k.h));
+        }
+        if (da > 1e-6 && k.rt > 0.0) {
+            vec3 g = (d - k.a * da) / da + across * s;
+            float gg = dot(g, g);
+            if (!(gg > 1e-12)) return lo;
+            float u = -2.0 * k.rt * dot(across, g) / gg;
+            return min(hi, max(lo, u / k.h));
+        }
+        return da > 0.0 ? lo : hi;
+    }
+    // beam::cone_entry
+    void coneEntry(Cone k, float n, int pch, float i, float j, out vec3 P, out vec3 N) {
+        if (pch >= 2) {
+            float ph = 2.0 * PI * j / colsOf(pch);
+            float rad = (pch == 2 ? k.r : k.rt) * materialParams.inset * i / rowsOf(pch);
+            P = k.c + (pch == 2 ? vec3(0.0) : k.a * k.h) + (k.e1 * cos(ph) + k.e2 * sin(ph)) * rad;
+            N = pch == 2 ? -k.a : k.a;
+            return;
+        }
+        float ph = PI + (2.0 * j / colsOf(pch) - 1.0) * k.lit, s = (k.r - k.rt) / k.h;
+        vec3 across = k.e1 * cos(ph) + k.e2 * sin(ph);
+        float split = coneSplit(k, across, n), part = i / rowsOf(pch), lo = coneLo(k);
+        float down = pch == 0 ? lo + (split - lo) * part : split + (materialParams.inset - split) * part;
+        P = k.c + k.a * (k.h * (1.0 - down)) + across * (k.rt + (k.r - k.rt) * down);
+        N = (across + k.a * s) * inversesqrt(1.0 + s * s);
+    }
+    // beam::cone_walk. faces < 0.5: not ok.
+    void coneWalk(Cone k, vec3 P, vec3 N, int pch, float n, int way, out vec3 q, out float weight, out float fade, out float faces) {
+        vec3 L = materialParams.sunDir;
+        float size = max(k.r, k.h), s = (k.r - k.rt) / k.h;
+        q = vec3(k.c.x, 0.0, k.c.z);   // a corner without light: all of them on one spot, so that their triangles cover no pixels
+        weight = 0.0;
+        fade = 0.0;
+        faces = 0.0;
+        float ci = -dot(L, N);
+        if (!(ci > 1e-5)) return;
+        float wgt = 1.0 - mirrorShare(ci, 1.0, n), fd = 1.0, fc = 1.0;
+        vec3 d = refract(L, N, 1.0 / n), D = vec3(0.0), p = P;
+        for (int b = 0; b < 3; b++) {
+            if (b > way) break;
+            float t = 0.0;
+            vec3 nj = k.a;
+            int face = 0;
+            float da = dot(d, k.a), y0 = dot(p - k.c, k.a);
+            // the two parts of the side are told what they meet first: 1 the base, 2 the top, 0 the far side
+            int told = (b > 0 || pch >= 2) ? -1 : (pch == 0 ? ((da > 1e-6 && k.rt > 0.0) ? 2 : 0) : (da < -1e-6 ? 1 : 0));
+            if (told == 1) {
+                t = y0 / -da;
+                nj = -k.a;
+                face = 1;
+            } else if (told == 2) {
+                t = (k.h - y0) / da;
+                nj = k.a;
+                face = 2;
+            } else {
+                float t0, t1;
+                vec3 n0, n1;
+                int f0, f1;
+                int count = coneCross(k, p, d, t0, n0, f0, t1, n1, f1);
+                bool found = false;
+                if (count >= 1 && t0 > 1e-5 * size && dot(n0, d) > 0.0 && (told < 0 || f0 == 0)) { t = t0; nj = n0; face = f0; found = true; }
+                else if (count >= 2 && t1 > 1e-5 * size && dot(n1, d) > 0.0 && (told < 0 || f1 == 0)) { t = t1; nj = n1; face = f1; found = true; }
+                if (!found) {
+                    if (told < 0) return;
+                    // on the tear itself the far side is met at a rim, where the search may just miss it
+                    if (da < -1e-6) t = y0 / -da;
+                    else if (da > 1e-6) t = (k.h - y0) / da;
+                    else return;
+                    vec3 w = p + d * t - k.c;
+                    vec3 outward = normalize(w - k.a * dot(w, k.a));
+                    nj = (outward + k.a * s) * inversesqrt(1.0 + s * s);
+                    face = 0;
+                }
+            }
+            p += d * t;
+            if (b > 0) {
+                vec3 w = p - k.c;
+                float y = dot(w, k.a), rho = length(w - k.a * y);
+                float margin = face == 1 ? 1.0 - rho / k.r : (face == 2 ? 1.0 - rho / k.rt : min(y, k.h - y) / k.h);
+                fd *= smooth01(margin / materialParams.edge);
+            }
+            fc = fc * 3.0 + float(face);
+            float co = dot(d, nj), mirrored = mirrorShare(co, n, 1.0);
+            if (b < way) {
+                wgt *= mirrored;
+                d = d - nj * (2.0 * co);
+            } else {
+                wgt *= 1.0 - mirrored;
+                float s2 = n * n * (1.0 - co * co), most = 0.98;
+                if (s2 < most) {
+                    D = refract(d, -nj, n);
+                } else {
+                    vec3 along = d - nj * co;
+                    float al = length(along);
+                    if (!(al > 1e-6)) return;
+                    D = along * (sqrt(most) / al) + nj * sqrt(1.0 - most);
+                }
+            }
+        }
+        faces = fc;
+        fade = fd;
+        float t = D.y < -1e-6 ? max(0.0, (materialParams.floorY - p.y) / D.y) : 1e30;
+        float far = min(t, materialParams.reach * size);
+        q = vec3(p.x + D.x * far, far, p.z + D.z * far);
+        weight = wgt * (D.y < -materialParams.flatter ? ballFade(t / size, -D.y) : 0.0);
+    }
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        ivec2 px = ivec2(gl_FragCoord.xy);
+        int corner = px.x / 2;
+        int inst = px.y;   // (cone_light.mat reads the lines back the same way, whichever way up the target is)
+        int stepCount = int(materialParams.stepCount), wayCount = int(materialParams.wayCount);
+        int per = stepCount * wayCount;
+        int which = inst / per;
+        int rest = inst - which * per;
+        int stepAt = rest / wayCount;
+        int way = rest - stepAt * wayCount;
+        vec4 ta = texelFetch(materialParams_cones, ivec2(which, 0), 0);
+        vec4 tb = texelFetch(materialParams_cones, ivec2(which, 1), 0);
+        vec4 tc = texelFetch(materialParams_cones, ivec2(which, 2), 0);
+        Cone k;
+        k.c = ta.xyz; k.r = ta.w;
+        k.a = tb.xyz; k.h = tb.w;
+        k.e1 = tc.xyz; k.lit = tc.w;
+        k.e2 = cross(k.a, k.e1);
+        k.rt = texelFetch(materialParams_cones, ivec2(which, 3), 0).x;
+        // which corner of which patch (beam::cone_corner_index)
+        int pch = 0;
+        int inPatch = corner;
+        for (int m = 0; m < 3; m++) {
+            int size = int(rowsOf(m) + 1.5) * int(colsOf(m) + 1.5);
+            if (pch == m && inPatch >= size) { inPatch -= size; pch = m + 1; }
+        }
+        int across = int(colsOf(pch) + 1.5);
+        int row = inPatch / across;
+        float i = float(row), j = float(inPatch - row * across);
+        float n = materialParams.steps[stepAt].w;
+        vec3 P, N, q;
+        float weight, fade, faces;
+        P = k.c;
+        q = vec3(k.c.x, 0.0, k.c.z);
+        weight = 0.0; fade = 0.0; faces = 0.0;
+        if (k.r > 0.0 && i < rowsOf(pch) + 0.5) {
+            coneEntry(k, n, pch, i, j, P, N);
+            coneWalk(k, P, N, pch, n, way, q, weight, fade, faces);
+        }
+        if ((px.x & 1) == 0) material.baseColor = vec4(q.x, q.z, q.y, weight);
+        else material.baseColor = vec4(P, faces > 0.5 ? faces + min(fade, 0.999) : 0.0);
+    }
+}

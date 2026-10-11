@@ -1,0 +1,78 @@
+// A gem, not physics: high index, strong dispersion, thin-film rainbow, a clear coat for hard highlights, and a
+// per-facet "fire" glow whose hue follows the facet normal so every face lights up in a different spectral colour.
+material {
+    name : gem,
+    shadingModel : lit,
+    blending : fade,
+    refractionMode : screenspace,
+    refractionType : solid,
+    doubleSided : false,
+    specularAntiAliasing : true,
+    parameters : [
+        { type : float, name : ior },
+        { type : float, name : transmission },
+        { type : float, name : thickness },
+        { type : float, name : dispersion },
+        { type : float, name : fire },
+        { type : float, name : film },
+        { type : float, name : tint },
+        { type : float, name : glint },
+        { type : float, name : cells }
+    ],
+    requires : [ tangents ]
+}
+
+fragment {
+    vec3 spectrum(float t) {
+        return clamp(abs(fract(t + vec3(0.0, 2.0 / 3.0, 1.0 / 3.0)) * 6.0 - 3.0) - 1.0, 0.0, 1.0);
+    }
+    vec3 hash3(vec3 p) {
+        p = vec3(dot(p, vec3(127.1, 311.7, 74.7)), dot(p, vec3(269.5, 183.3, 246.1)), dot(p, vec3(113.5, 271.9, 124.6)));
+        return fract(sin(p) * 43758.5453);
+    }
+    // 3-D Voronoi: x = nearest feature distance, y = second nearest, z = id of the nearest cell as a hue
+    vec3 crystal(vec3 q) {
+        vec3 b = floor(q), f = fract(q);
+        float d1 = 8.0, d2 = 8.0, id = 0.0;
+        for (int k = -1; k <= 1; k++)
+            for (int j = -1; j <= 1; j++)
+                for (int i = -1; i <= 1; i++) {
+                    vec3 g = vec3(float(i), float(j), float(k));
+                    vec3 o = hash3(b + g);
+                    float d = length(g + o - f);
+                    if (d < d1) { d2 = d1; d1 = d; id = o.x + o.y * 0.37 + o.z * 0.11; }
+                    else if (d < d2) { d2 = d; }
+                }
+        return vec3(d1, d2, fract(id * 3.1));
+    }
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        vec3 n = normalize(getWorldNormalVector());
+        float hue = fract(dot(n, vec3(0.61, 1.37, 0.83)) * 1.9 + 0.08);
+        float rim = pow(1.0 - clamp(abs(dot(n, normalize(getWorldViewVector()))), 0.0, 1.0), 2.0);
+        material.baseColor = vec4(mix(vec3(0.96, 0.98, 1.0), spectrum(hue + 0.5) * 0.85 + 0.08, clamp(materialParams.tint / 6.0, 0.0, 1.0)), 1.0);
+        material.roughness = 0.0;
+        material.metallic = 0.0;
+        material.reflectance = 1.0;
+        material.clearCoat = 1.0;
+        material.clearCoatRoughness = 0.0;
+        material.iridescence = materialParams.film;
+        material.iridescenceIor = 1.45;
+        material.iridescenceThickness = 420.0;
+        material.absorption = (vec3(1.0) - spectrum(hue + 0.5)) * materialParams.tint + vec3(0.01, 0.03, 0.08);
+        material.transmission = materialParams.transmission;
+        material.ior = materialParams.ior;
+        material.thickness = materialParams.thickness;
+        material.dispersion = materialParams.dispersion;
+        // a fixed fake light: a facet whose mirror direction lines up with it flashes white
+        vec3 refl = reflect(-normalize(getWorldViewVector()), n);
+        float flash = smoothstep(0.972, 0.996, dot(refl, normalize(vec3(0.35, 0.85, 0.40))));
+        // the inside: a fake crystal. The refracted view direction + position pick cells; cell colour = spectrum, cell edges flash
+        vec3 refr = refract(-normalize(getWorldViewVector()), n, 0.45);
+        vec3 cry = crystal(refr * 2.3 + getUserWorldPosition() * 7.0);
+        float edge = smoothstep(0.03, 0.0, cry.y - cry.x);
+        vec3 inner = spectrum(cry.z + hue * 0.35) * (0.10 + 1.1 * pow(1.0 - cry.x, 2.0)) * materialParams.fire * materialParams.cells;
+        vec3 sparkle = vec3(edge * materialParams.glint * 0.5 * materialParams.cells);
+        material.emissive = vec4(spectrum(hue) * materialParams.fire * (0.35 + 0.65 * rim) * (1.0 - 0.6 * materialParams.cells) + inner + sparkle + vec3(flash * materialParams.glint), 1.0);
+    }
+}

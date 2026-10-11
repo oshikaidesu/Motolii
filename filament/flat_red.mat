@@ -1,0 +1,13 @@
+// VSHOW (glass_scene, VBODY): the solid drawn the old way painted red, to count the pixels left to it.
+material {
+    name : flat_red,
+    shadingModel : unlit,
+    blending : opaque,
+    culling : back
+}
+fragment {
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        material.baseColor = vec4(1.0, 0.0, 0.0, 1.0);
+    }
+}

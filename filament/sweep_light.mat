@@ -1,0 +1,183 @@
+// The floor light and the shadow of a profile pushed along a path and turned as it goes (beam_sweep.h), with nothing
+// worked out on the CPU. The mesh is the bar's own surface, drawn triangle by triangle: every corner here knows the
+// three corners of its triangle (their numbers; what each is lies in `table`) and follows ONE ray of sunlight from
+// each through the bar as if the bar were straight there (the profile's sides as they stand at that corner): bent
+// in, mirrored inside while the glass cannot let it out, bent out, down to the floor. The triangle is drawn where its
+// corners land, as bright as the sunbeam it catches is to the floor it lands on.
+// A triangle whose corners went different ways (out through different sides, or one not at all) would be stretched
+// over half the floor for next to no light: it is put on one spot instead and never drawn. (Drawn and cut away per
+// pixel, three bars cost 60 ms a frame.)
+// One instance = one colour step (each with its own index of refraction: that is where the colours come from).
+// Left out on purpose: that the path bends and the profile turns while the light is inside; light that leaves the
+// bar and meets it again; other solids in the way.
+// With `shadow` 1 the same mesh is the bar's shadow instead: the sunlit side slid along the sun onto the floor,
+// drawn as missing light (where the bar lies over itself the shadow is counted twice; beam_soften.mat caps it).
+// Output as ball_light.mat / outline.mat.
+material {
+    name : sweep_light,
+    shadingModel : unlit,
+    blending : add,
+    depthWrite : false,
+    depthCulling : false,
+    culling : none,
+    doubleSided : true,
+    instanced : true,
+    requires : [ uv0 ],
+    variables : [ light, land, good ],
+    parameters : [
+        { type : sampler2d, name : table, precision : high, format : float },   // per corner of the mesh 4 texels: the path's point, the profile's
+                                                                                // x axis, its y axis, (the corner in the profile, its side's normal)
+        { type : float,  name : tableWide },                                    // corners per line of the table
+        { type : float4[4], name : pose, precision : high },                    // where the bar stands: axis x + size; axis y; axis z; place
+        { type : float4[8], name : profile },                                   // beam::Sweep::profile
+        { type : float,  name : sides },
+        { type : float4[16], name : steps },                                    // rgb, index of refraction
+        { type : float,  name : stepCount },
+        { type : float,  name : shadow },
+        { type : float3, name : sunDir },                                       // the way the sunlight travels
+        { type : float,  name : cap },                                          // the brightest a spot may get, as a multiple of the sun
+        { type : float,  name : reach },                                        // light that has flown this far has faded to nothing
+        { type : float4[6], name : room, precision : high },                    // the stage: see recv_drop.glsl
+        { type : float,  name : roomCount },
+        { type : float4[16], name : blocks, precision : high },
+        { type : float,  name : blockCount },
+        { type : float,  name : recvCount },
+        { type : float,  name : recvChooses },
+        { type : float3, name : recvSun },
+        { type : float,  name : pxScale },
+        { type : float,  name : floorY }
+    ]
+}
+
+vertex {
+#include "recv_drop.glsl"
+    // unpolarised Fresnel reflectance, n1 -> n2, 1 on total reflection
+    float fresnel(float ci, float n1, float n2) {
+        float s2 = (n1 / n2) * (n1 / n2) * (1.0 - ci * ci);
+        if (s2 >= 1.0) return 1.0;
+        float ct = sqrt(1.0 - s2);
+        float rs = (n1 * ci - n2 * ct) / (n1 * ci + n2 * ct);
+        float rp = (n1 * ct - n2 * ci) / (n1 * ct + n2 * ci);
+        return 0.5 * (rs * rs + rp * rp);
+    }
+    float smooth01(float x) {
+        x = clamp(x, 0.0, 1.0);
+        return x * x * (3.0 - 2.0 * x);
+    }
+    // corner v of the mesh: where it is (P), how much sunbeam its side catches (ci), and where its light lands
+    // (x, distance flown, z), how much of the light is left, and which way it went (the same way: the same number)
+    bool follow(int v, int stepAt, bool shadow, out vec3 P, out vec3 q, out float weight, out float way) {
+        int wide = int(materialParams.tableWide + 0.5);
+        ivec2 at0 = ivec2((v - (v / wide) * wide) * 4, v / wide);
+        vec3 c0 = texelFetch(materialParams_table, at0, 0).xyz;
+        vec3 u0 = texelFetch(materialParams_table, at0 + ivec2(1, 0), 0).xyz;
+        vec3 v0 = texelFetch(materialParams_table, at0 + ivec2(2, 0), 0).xyz;
+        vec4 pn = texelFetch(materialParams_table, at0 + ivec2(3, 0), 0);
+        vec3 ax = materialParams.pose[0].xyz, ay = materialParams.pose[1].xyz, az = materialParams.pose[2].xyz, at = materialParams.pose[3].xyz;
+        float size = materialParams.pose[0].w;
+        vec3 ctr = (ax * c0.x + ay * c0.y + az * c0.z) * size + at;
+        vec3 U = ax * u0.x + ay * u0.y + az * u0.z, V = ax * v0.x + ay * v0.y + az * v0.z;
+        P = ctr + (U * pn.x + V * pn.y) * size;
+        vec3 nl = U * pn.z + V * pn.w;
+        vec3 L = materialParams.sunDir;
+        float ci = -dot(nl, L);
+        q = vec3(at.x, 0.0, at.z);
+        weight = 0.0;
+        way = 0.0;
+        if (!(ci > 0.03)) return false;
+        if (shadow) {
+            float tt = max(0.0, (materialParams.floorY - P.y) / min(L.y, -1e-6));
+            q = vec3(P.x + L.x * tt, tt, P.z + L.z * tt);
+            weight = 1.0;
+            return true;
+        }
+        float n = materialParams.steps[stepAt].w;
+        weight = 1.0 - fresnel(ci, 1.0, n);
+        vec3 d = refract(L, nl, 1.0 / n), p = P;
+        int K = int(materialParams.sides + 0.5);
+        bool left = false;
+        for (int b = 0; b < 5; b++) {
+            // out of the straight bar that stands here: the nearest of the profile's sides ahead
+            float t = 1e9;
+            vec3 nj = nl;
+            float side = 0.0;
+            for (int k = 0; k < 8; k++) {
+                if (k >= K) break;
+                vec4 pr = materialParams.profile[k];
+                vec3 nk = U * pr.x + V * pr.y;
+                float den = dot(nk, d);
+                if (den > 1e-5) {
+                    float tk = (pr.z * size - dot(nk, p - ctr)) / den;
+                    if (tk < t) { t = tk; nj = nk; side = float(k + 1); }
+                }
+            }
+            if (t > 1e8) break;
+            t = clamp(t, 0.0, 12.0 * size * materialParams.profile[0].z);   // (a ray running along the bar: let it out before the bar has bent away)
+            p += d * t;
+            way = way * 9.0 + side;
+            float db = dot(nj, d);
+            float Ri = fresnel(db, n, 1.0);
+            if (Ri < 1.0) {
+                weight *= 1.0 - Ri;
+                d = refract(d, -nj, n);
+                left = true;
+                break;
+            }
+            d = d - nj * (2.0 * db);
+        }
+        if (!left || !(d.y < -0.03)) return false;
+        float tf = (materialParams.floorY - p.y) / d.y;
+        if (!(tf >= 0.0 && tf < materialParams.reach)) return false;
+        q = vec3(p.x + d.x * tf, tf, p.z + d.z * tf);
+        weight *= smooth01((materialParams.reach - tf) / (0.5 * materialParams.reach)) * smooth01((-d.y - 0.03) / 0.12);
+        return true;
+    }
+    void materialVertex(inout MaterialVertexInputs material) {
+        int per = recvPer();
+        int recv = getInstanceIndex() - (getInstanceIndex() / per) * per;   // which receiver this instance draws on (recv_drop.glsl)
+        int stepAt = getInstanceIndex() / per;
+        bool shadow = materialParams.shadow > 0.5;
+        // the three corners of this corner's triangle; this one is number `mine` of them
+        ivec3 tri = ivec3(mesh_position.xyz + 0.5);
+        int mine = int(mesh_uv0.x + 0.5);
+        vec3 P[3];
+        vec3 q[3];
+        float w[3];
+        float way[3];
+        bool ok = true;
+        for (int i = 0; i < 3; i++) ok = follow(tri[i], stepAt, shadow, P[i], q[i], w[i], way[i]) && ok;
+        ok = ok && way[0] == way[1] && way[1] == way[2];
+        float gain = 1.0;
+        if (ok && !shadow) {
+            // the sunbeam the triangle catches, over the floor it lands on
+            float before = abs(dot(cross(P[1] - P[0], P[2] - P[0]), materialParams.sunDir));
+            float after = abs((q[1].x - q[0].x) * (q[2].z - q[0].z) - (q[1].z - q[0].z) * (q[2].x - q[0].x));
+            gain = after * materialParams.cap > before ? before / max(after, 1e-20) : materialParams.cap;
+            ok = gain > 0.004;   // (stretched so far that nearly nothing is left)
+            gain *= smooth01((gain - 0.004) / 0.016);
+        }
+        vec3 rgb = (shadow ? vec3(1.0) : materialParams.steps[stepAt].rgb * (w[mine] * gain)) * (ok ? 1.0 : 0.0);
+        float t, okThere, owner;
+        highp vec3 start;
+        highp vec3 X = recvDrop(recv, q[mine].xz, q[mine].y, !shadow, rgb, t, okThere, owner, start);
+        if (!ok) {
+            // a triangle that is not drawn: all its corners on one spot, covering nothing
+            X = materialParams.pose[3].xyz * vec3(1.0, 0.0, 1.0) + vec3(0.0, materialParams.floorY, 0.0);
+            okThere = -1000.0;
+        }
+        material.light = vec4(rgb, t);
+        material.land = vec4(start, owner);
+        material.good = vec4(okThere, ok ? 1.0 : 0.0, 0.0, 0.0);
+        material.worldPosition = recvNearer(mulMat4x4Float3(getWorldFromModelMatrix(), X), owner);
+    }
+}
+
+fragment {
+#include "recv_lands.glsl"
+#include "recv_finish.glsl"
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        vec4 c = variable_light * step(0.9995, variable_good.y);
+        material.baseColor = recvFinish(c, variable_good.x, floor(variable_land.w + 0.5), variable_land.xyz, materialParams.shadow > 0.5);
+    }
+}

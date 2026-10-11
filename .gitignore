@@ -1,0 +1,17 @@
+# build products and render output
+out/
+third_party/
+target/
+build/
+node_modules/
+*.filamat
+*.o
+*.dSYM/
+.DS_Store
+# these have their own git history
+/bridge/
+/melt/
+# compiled test program without an extension
+/filament*/prism
+# collected reference pictures and clips (280 MB, not source); add later if wanted
+/research_notes/

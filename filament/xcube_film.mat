@@ -1,0 +1,21 @@
+// Flat colored plane. Lit shading inside the cube went black, because the
+// sun does not reach the face. Unlit keeps the dichroic color in the
+// refraction snapshot without becoming a light source.
+material {
+    name : xcube_film,
+    shadingModel : unlit,
+    blending : fade,
+    culling : none,
+    doubleSided : true,
+    parameters : [
+        { type : float4, name : color },
+        { type : float4, name : glow }
+    ]
+}
+
+fragment {
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        material.baseColor = materialParams.color;
+    }
+}

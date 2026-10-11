@@ -1,0 +1,19 @@
+material {
+    name : floor_lit,
+    shadingModel : lit,
+    specularAntiAliasing : true,
+    parameters : [
+        { type : float4, name : color },
+        { type : float, name : roughness }
+    ]
+}
+
+fragment {
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        material.baseColor = materialParams.color;
+        material.roughness = materialParams.roughness;
+        material.metallic = 0.08;
+        material.reflectance = 0.5;
+    }
+}

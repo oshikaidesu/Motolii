@@ -1,0 +1,139 @@
+// Optical loop from pmndrs/drei MeshRefractionMaterial (MIT, Copyright 2020 react-spring,
+// author N8Programs). Triangle test from three-mesh-bvh intersectsTriangle (MIT, Garrett Johnson).
+// The BVH walk is not here: Filament materials have no usampler2D, which that walk requires.
+// This mesh is convex, so the first hit is the closest triangle.
+material {
+    name : xcube_drei,
+    shadingModel : unlit,
+    culling : back,
+    parameters : [
+        { type : sampler2d, name : tris, format : float, filter : nearest },
+        { type : samplerCubemap, name : env },
+        { type : float3, name : eye },
+        { type : float, name : triCount },
+        { type : float, name : bounces },
+        { type : float, name : ior },
+        { type : float, name : dispersion },
+        { type : float, name : aberration },
+        { type : float, name : chroma },
+        { type : float, name : fresnel },
+        { type : float, name : grad },
+        { type : float, name : envScale }
+    ]
+}
+
+fragment {
+    bool first_hit(vec3 ro, vec3 rd, inout float dist, inout vec3 faceN) {
+        int count = int(materialParams.triCount + 0.5);
+        bool found = false;
+        float best = 1e9;
+        vec3 bestN = vec3(0.0, 1.0, 0.0);
+        for (int i = 0; i < 64; i++) {
+            if (i >= count) break;
+            float u0 = (float(i * 3) + 0.5) / (materialParams.triCount * 3.0);
+            float u1 = (float(i * 3 + 1) + 0.5) / (materialParams.triCount * 3.0);
+            float u2 = (float(i * 3 + 2) + 0.5) / (materialParams.triCount * 3.0);
+            vec3 a = textureLod(materialParams_tris, vec2(u0, 0.5), 0.0).xyz;
+            vec3 b = textureLod(materialParams_tris, vec2(u1, 0.5), 0.0).xyz;
+            vec3 c = textureLod(materialParams_tris, vec2(u2, 0.5), 0.0).xyz;
+            vec3 e1 = b - a;
+            vec3 e2 = c - a;
+            vec3 ng = cross(e1, e2);
+            float det = -dot(rd, ng);
+            float inv = 1.0 / det;
+            vec3 AO = ro - a;
+            vec3 DAO = cross(AO, rd);
+            vec4 uvt;
+            uvt.x = dot(e2, DAO) * inv;
+            uvt.y = -dot(e1, DAO) * inv;
+            uvt.z = dot(AO, ng) * inv;
+            uvt.w = 1.0 - uvt.x - uvt.y;
+            vec4 test = uvt + vec4(1e-5);
+            if (all(greaterThanEqual(test, vec4(0.0))) && uvt.z < best && uvt.z > 1e-4) {
+                best = uvt.z;
+                bestN = sign(det) * normalize(ng);
+                found = true;
+            }
+        }
+        dist = best;
+        faceN = bestN;
+        return found;
+    }
+
+    vec3 bounce(vec3 rd, float eta) {
+        float entryDist;
+        vec3 entryN;
+        if (!first_hit(materialParams.eye, rd, entryDist, entryN)) return rd;
+        vec3 inside = refract(rd, entryN, 1.0 / eta);
+        if (dot(inside, inside) == 0.0) inside = reflect(rd, entryN);
+        vec3 ro = materialParams.eye + rd * entryDist + inside * 0.001;
+        rd = inside;
+        int maxB = int(materialParams.bounces + 0.5);
+        for (int i = 0; i < 5; i++) {
+            if (i >= maxB) break;
+            float dist;
+            vec3 faceN;
+            if (!first_hit(ro, rd, dist, faceN)) break;
+            vec3 hit = ro + rd * max(dist - 0.001, 0.0);
+            vec3 outDir = refract(rd, faceN, eta);
+            if (dot(outDir, outDir) != 0.0) {
+                rd = outDir;
+                break;
+            }
+            rd = reflect(rd, faceN);
+            ro = hit + rd * 0.01;
+        }
+        return normalize(rd);
+    }
+
+    float n_of(float nm) {
+        float offset = 0.70795215 + (nm - 486.1) / (656.3 - 486.1) * (-0.29204785 - 0.70795215);
+        float P = materialParams.dispersion / 20.0;
+        return max(1.05, materialParams.ior + P * (materialParams.ior - 1.0) * offset);
+    }
+
+    vec3 env_at(vec3 dir, vec3 mipRay) {
+        if (materialParams.grad > 0.5) {
+            return textureGrad(materialParams_env, dir, dFdx(mipRay), dFdy(mipRay)).rgb;
+        }
+        return texture(materialParams_env, dir).rgb;
+    }
+
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        vec3 rd0 = normalize(getWorldPosition() - materialParams.eye);
+        float eta = max(materialParams.ior + materialParams.aberration * 0.0, 1.01);
+        vec3 rgb;
+        if (materialParams.chroma < 0.5) {
+            rgb = env_at(bounce(rd0, eta), rd0);
+        } else if (materialParams.chroma < 1.5) {
+            rgb = vec3(
+                env_at(bounce(rd0, n_of(650.0)), rd0).r,
+                env_at(bounce(rd0, n_of(550.0)), rd0).g,
+                env_at(bounce(rd0, n_of(450.0)), rd0).b);
+        } else if (materialParams.chroma < 2.5) {
+            vec3 dirG = bounce(rd0, eta);
+            float shift = materialParams.aberration * 0.5;
+            rgb = vec3(
+                env_at(normalize(dirG + vec3(shift)), rd0).r,
+                env_at(dirG, rd0).g,
+                env_at(normalize(dirG - vec3(shift)), rd0).b);
+        } else {
+            float a = materialParams.aberration;
+            rgb = vec3(
+                env_at(bounce(rd0, max(eta * (1.0 - a), 1.01)), rd0).r,
+                env_at(bounce(rd0, eta), rd0).g,
+                env_at(bounce(rd0, max(eta * (1.0 + a), 1.01)), rd0).b);
+        }
+        float entryDist;
+        vec3 entryN;
+        if (materialParams.fresnel > 0.0 && first_hit(materialParams.eye, rd0, entryDist, entryN)) {
+            vec3 spec = texture(materialParams_env, reflect(rd0, entryN)).rgb;
+            float ndv = clamp(-dot(rd0, entryN), 0.0, 1.0);
+            float f0 = pow((eta - 1.0) / (eta + 1.0), 2.0);
+            float F = f0 + (1.0 - f0) * pow(1.0 - ndv, 5.0);
+            rgb = mix(rgb, spec, F * clamp(materialParams.fresnel, 0.0, 1.0));
+        }
+        material.baseColor = vec4(rgb * materialParams.envScale, 1.0);
+    }
+}

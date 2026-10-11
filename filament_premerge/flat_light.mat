@@ -1,0 +1,148 @@
+// Step two of the light of the flat-faced solids: the pieces of one shape (beam::FlatShape: every corner is given as
+// "this far from the first towards the second and towards the third of three corners of its piece", (a, b)), drawn
+// once per (solid of that shape, colour step). Where those three corners land was written by flat_walk.mat; a piece
+// goes where its middle ray goes by one affine map, so every other corner lies between them.
+// Colour: each step is drawn not just where its colour lands but smeared half way to where the next and the previous
+// colour land: a pixel gets as much of it as the share of that stretch for which the piece, sliding along it, covers
+// the pixel (worked out per pixel in (a, b), where the piece is a small polygon, usually the unit square).
+// Neighbouring steps cross-fade exactly, so colours join up without gaps and without blur, and edges that the
+// colours do not move across stay as sharp as the piece. The strip along every edge of the piece is pulled out
+// to cover the smear.
+// Output as beam_light.mat: rgb = the light, a = light * distance flown (for the softening pass).
+material {
+    name : flat_light,
+    shadingModel : unlit,
+    blending : add,
+    depthWrite : false,
+    depthCulling : false,
+    culling : none,
+    doubleSided : true,
+    instanced : true,
+    flipUV : false,
+    requires : [ uv0 ],
+    variables : [ light, where, slide ],
+    parameters : [
+        { type : sampler2d, name : walk, precision : high, format : float },    // written by flat_walk.mat
+        { type : sampler2d, name : hull, precision : high, format : float },    // beam::FlatShape::hull, one line per shape
+        { type : float,  name : shape },                                        // which line of `hull`
+        { type : float4[16], name : steps },                                    // rgb, index of refraction
+        { type : float,  name : stepCount },                                    // colour steps + 1 (the last: mirrored off the outside, white)
+        { type : float4[16], name : solids },                                   // which solids have this shape (their columns in the pose table), 4 per entry
+        { type : float,  name : floorY }
+    ]
+}
+
+vertex {
+    // the three carried corners of a piece on one line of the walk: where they land (x, z, distance flown), how bright, which way
+    void carried(int piece, int line, out vec3 l0, out vec3 l1, out vec3 l2, out float gain, out float way) {
+        vec4 t0 = texelFetch(materialParams_walk, ivec2(piece * 3, line), 0);
+        vec4 t1 = texelFetch(materialParams_walk, ivec2(piece * 3 + 1, line), 0);
+        vec4 t2 = texelFetch(materialParams_walk, ivec2(piece * 3 + 2, line), 0);
+        l0 = t0.xyz; l1 = t1.xyz; l2 = t2.xyz;
+        gain = t0.w;
+        way = t1.w;
+    }
+    void materialVertex(inout MaterialVertexInputs material) {
+        int stepsAll = int(materialParams.stepCount);
+        int inst = getInstanceIndex();
+        int which = inst / stepsAll;
+        int stepAt = inst - which * stepsAll;
+        int solid = int(materialParams.solids[which / 4][which - (which / 4) * 4] + 0.5);
+        int line = solid * stepsAll + stepAt;
+        int piece = int(floor(mesh_position.x + 0.25));
+        bool outer = mesh_position.x - float(piece) > 0.25;
+        vec2 ab = mesh_position.yz;
+        bool mirrored = stepAt == stepsAll - 1;
+
+        vec3 l0, l1, l2;
+        float gain, way;
+        carried(piece, line, l0, l1, l2, gain, way);
+        vec2 toNext = vec2(0.0), toPrev = vec2(0.0);   // half way to where the next / the previous colour puts the piece, in (a, b)
+        if (gain > 0.0 && !mirrored) {
+            int shape = int(materialParams.shape + 0.5);
+            vec2 middle = texelFetch(materialParams_hull, ivec2(piece * 5 + 4, shape), 0).xy;
+            vec2 mid = (l0 + (l1 - l0) * middle.x + (l2 - l0) * middle.y).xy;
+            vec2 e1 = (l1 - l0).xy, e2 = (l2 - l0).xy;
+            float det = e1.x * e2.y - e1.y * e2.x;
+            vec3 n0, n1, n2;
+            float gainN = 0.0, wayN = 0.0;
+            if (abs(det) > 1e-12 && stepAt + 2 < stepsAll) {
+                carried(piece, line + 1, n0, n1, n2, gainN, wayN);
+                if (gainN > 0.0 && abs(wayN - way) < 1e-3 * (1.0 + abs(way))) {   // (not if that colour goes another way altogether)
+                    vec2 gap = 0.5 * ((n0 + (n1 - n0) * middle.x + (n2 - n0) * middle.y).xy - mid);
+                    toNext = vec2(gap.x * e2.y - gap.y * e2.x, e1.x * gap.y - e1.y * gap.x) / det;
+                }
+            }
+            if (abs(det) > 1e-12 && stepAt > 0) {
+                carried(piece, line - 1, n0, n1, n2, gainN, wayN);
+                if (gainN > 0.0 && abs(wayN - way) < 1e-3 * (1.0 + abs(way))) {
+                    vec2 gap = 0.5 * ((n0 + (n1 - n0) * middle.x + (n2 - n0) * middle.y).xy - mid);
+                    toPrev = vec2(gap.x * e2.y - gap.y * e2.x, e1.x * gap.y - e1.y * gap.x) / det;
+                }
+            }
+            if (outer) {
+                // the outer side of the strip along an edge: pulled out as far as the smear goes on that side
+                vec2 facing = mesh_uv0;
+                if (dot(facing, toNext) > 0.0) ab += toNext;
+                else if (dot(facing, toPrev) > 0.0) ab += toPrev;
+            }
+        }
+        vec3 q = l0 + (l1 - l0) * ab.x + (l2 - l0) * ab.y;   // x, z, distance flown
+        vec3 rgb = (mirrored ? vec3(1.0) : materialParams.steps[stepAt].rgb) * gain;
+        material.light = vec4(rgb, q.z);
+        material.where = vec4(ab, float(piece), 0.0);
+        material.slide = vec4(toNext, toPrev);
+        material.worldPosition = mulMat4x4Float3(getWorldFromModelMatrix(), vec3(q.x, materialParams.floorY, q.y));
+    }
+}
+
+fragment {
+    // for how much of the stretch from p to p - d the point is inside the half plane left of the edge a -> b: narrows [lo, hi]
+    void keep(vec2 a, vec2 b, vec2 p, vec2 d, inout float lo, inout float hi) {
+        vec2 e = b - a;
+        float h = e.x * (p.y - a.y) - e.y * (p.x - a.x);   // > 0 inside
+        float s = e.x * d.y - e.y * d.x;                    // inside-ness falls by this much over the whole stretch
+        if (abs(s) < 1e-9) {
+            if (h < 0.0) hi = -1.0;
+        } else if (s > 0.0) hi = min(hi, h / s);
+        else lo = max(lo, h / s);
+    }
+    // the share of the stretch along d (from the piece where it is to the piece moved by d) for which the piece covers p
+    float covered(vec2 p, vec2 d, bool square, int piece) {
+        if (dot(d, d) < 1e-14) return 1.0;   // nothing to smear on this side: the piece as it is (and p is on it)
+        float lo = 0.0, hi = 1.0;
+        if (square) {
+            keep(vec2(0.0, 0.0), vec2(1.0, 0.0), p, d, lo, hi);
+            keep(vec2(1.0, 0.0), vec2(1.0, 1.0), p, d, lo, hi);
+            keep(vec2(1.0, 1.0), vec2(0.0, 1.0), p, d, lo, hi);
+            keep(vec2(0.0, 1.0), vec2(0.0, 0.0), p, d, lo, hi);
+        } else {
+            int shape = int(materialParams.shape + 0.5);
+            vec4 c0 = texelFetch(materialParams_hull, ivec2(piece * 5, shape), 0);
+            vec4 c1 = texelFetch(materialParams_hull, ivec2(piece * 5 + 1, shape), 0);
+            vec4 c2 = texelFetch(materialParams_hull, ivec2(piece * 5 + 2, shape), 0);
+            vec4 c3 = texelFetch(materialParams_hull, ivec2(piece * 5 + 3, shape), 0);
+            keep(c0.xy, c0.zw, p, d, lo, hi);
+            keep(c0.zw, c1.xy, p, d, lo, hi);
+            keep(c1.xy, c1.zw, p, d, lo, hi);
+            keep(c1.zw, c2.xy, p, d, lo, hi);
+            keep(c2.xy, c2.zw, p, d, lo, hi);
+            keep(c2.zw, c3.xy, p, d, lo, hi);
+            keep(c3.xy, c3.zw, p, d, lo, hi);
+            keep(c3.zw, c0.xy, p, d, lo, hi);
+        }
+        return max(0.0, hi - lo);
+    }
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        vec4 c = variable_light;
+        vec4 slide = variable_slide;
+        if (dot(slide, slide) > 1e-14) {
+            int piece = int(variable_where.z + 0.5);
+            int shape = int(materialParams.shape + 0.5);
+            bool square = texelFetch(materialParams_hull, ivec2(piece * 5 + 4, shape), 0).z > 0.5;
+            c.rgb *= 0.5 * (covered(variable_where.xy, slide.xy, square, piece) + covered(variable_where.xy, slide.zw, square, piece));
+        }
+        material.baseColor = vec4(c.rgb, (c.r + c.g + c.b) / 3.0 * c.a);
+    }
+}

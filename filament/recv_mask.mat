@@ -1,0 +1,21 @@
+// A block drawn flat into the picture of shade on a stage (see glass_scene.mm, "the stage's own drawing"), with
+// `mark` = (0, (i + 1) / 8, 0, 0): it marks in that picture's green which block a pixel shows. beam_soften.mat
+// softens a pixel only with pixels of the same mark, so that light on a block and the floor seen behind the block do
+// not run into each other. (Opaque, with depth: of two blocks the nearer one's mark stays. The outlines are added
+// on top in red and alpha.)
+material {
+    name : recv_mask,
+    shadingModel : unlit,
+    culling : none,
+    doubleSided : true,
+    parameters : [
+        { type : float4, name : mark }
+    ]
+}
+
+fragment {
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        material.baseColor = materialParams.mark;
+    }
+}

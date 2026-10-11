@@ -1,0 +1,92 @@
+// Caustic as an indexed grid mesh (the Wallace / drei way): one vertex per light-view texel and band, the vertex is moved to
+// where its refracted ray lands, and the fragment works out oldArea/newArea from screen derivatives of the unrefracted
+// position (exact on a single triangle). Instance = band (bandBase + instance); band 6 = footprint of the unrefracted glass.
+// A triangle with any vertex that found no exit is dropped: the bad vertex stays at its unrefracted place (so the triangle
+// stays small) and the fragments are discarded through `info.w`.
+// Replaces tri.mat: 1 hit fetch per vertex instead of 3, indices shared between 6 triangles.
+material {
+    name : grid,
+    shadingModel : unlit,
+    culling : none,
+    blending : add,
+    depthWrite : false,
+    depthCulling : false,
+    variables : [
+        { name : info, type : float4, precision : high },
+        { name : bandv, type : float4, precision : high }
+    ],
+    parameters : [
+        { type : sampler2d, name : hitTex, precision : high, format : float, filter : nearest },
+        { type : float3, name : origin },
+        { type : float3, name : dir },
+        { type : float3, name : right },
+        { type : float3, name : up },
+        { type : float,  name : extent },
+        { type : float,  name : captureSize },
+        { type : float3, name : rOrigin },
+        { type : float3, name : rNormal },
+        { type : float3, name : rTangent },
+        { type : float3, name : rBitangent },
+        { type : float,  name : rSize },
+        { type : float,  name : intensity },
+        { type : float,  name : ratioCap },
+        { type : float,  name : bandBase },
+        { type : float,  name : mapSize }
+    ]
+}
+
+vertex {
+    vec3 hitAt(float px, float py, float band) {
+        float n = materialParams.captureSize;
+        return textureLod(materialParams_hitTex, (vec2(px * 7.0 + band, py) + 0.5) / vec2(7.0 * n, n), 0.0).xyz;
+    }
+    vec2 oldUv(float px, float py) {
+        float n = materialParams.captureSize;
+        vec2 uv = (vec2(px, py) + 0.5) / n;
+        vec3 o = materialParams.origin
+               + materialParams.right * ((uv.x * 2.0 - 1.0) * materialParams.extent)
+               + materialParams.up    * ((1.0 - uv.y * 2.0) * materialParams.extent);
+        float t = dot(materialParams.rOrigin - o, materialParams.rNormal) / dot(materialParams.dir, materialParams.rNormal);
+        vec3 rel = o + materialParams.dir * t - materialParams.rOrigin;
+        return vec2(dot(rel, materialParams.rTangent), dot(rel, materialParams.rBitangent)) / materialParams.rSize + 0.5;
+    }
+    void materialVertex(inout MaterialVertexInputs material) {
+        int n = int(materialParams.captureSize);
+        int vi = getVertexIndex();
+        int iy = vi / n;
+        int ix = vi - iy * n;
+#if defined(TARGET_METAL_ENVIRONMENT) || defined(TARGET_VULKAN_ENVIRONMENT) || defined(TARGET_WEBGPU_ENVIRONMENT)
+        float band = float(gl_InstanceIndex) + materialParams.bandBase;
+#else
+        float band = float(gl_InstanceID) + materialParams.bandBase;
+#endif
+        vec3 h = hitAt(float(ix), float(iy), band);
+        vec2 o = oldUv(float(ix), float(iy));
+        bool foot = band > 5.5;
+        bool ok = foot ? (h.x > 0.5) : (h.z > 0.0);
+        vec2 pos = (ok && !foot) ? h.xy : o;
+        material.info = vec4(o, foot ? 1.0 : h.z, ok ? 0.0 : 1.0);
+        material.bandv = vec4(band, 0.0, 0.0, 0.0);
+        material.worldPosition = vec4(pos.x * 2.0 - 1.0, 1.0 - pos.y * 2.0, -1.0, 1.0);
+    }
+}
+
+fragment {
+    const vec3 XYZ[6] = vec3[6](
+        vec3(0.03671527, 0.01357357, 0.00000000), vec3(0.30218842, 0.14160332, 0.00008598),
+        vec3(0.36062779, 0.40239216, 0.00124922), vec3(0.07092146, 0.36745709, 0.04500246),
+        vec3(0.08806719, 0.06954351, 0.58510595), vec3(0.09195043, 0.00543034, 0.45738513));
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        vec4 v = variable_info;
+        if (v.w > 1e-4) discard;
+        float band = variable_bandv.x;
+        if (band > 5.5) {
+            material.baseColor = vec4(1.0, 0.0, 0.0, 1.0);
+            return;
+        }
+        vec2 dx = dFdx(v.xy), dy = dFdy(v.xy);
+        float ratio = min(abs(dx.x * dy.y - dx.y * dy.x) * materialParams.mapSize * materialParams.mapSize, materialParams.ratioCap);
+        material.baseColor = vec4(XYZ[int(band + 0.5)] * (materialParams.intensity * v.z * ratio), 1.0);
+    }
+}

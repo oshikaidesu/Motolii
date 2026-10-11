@@ -1,0 +1,23 @@
+// Mirror facet. Roughness 0 samples the IBL reflection in the facet normal.
+// Unlit films ignore IndirectLight; this one does not.
+material {
+    name : xcube_film_lit,
+    shadingModel : lit,
+    blending : fade,
+    culling : none,
+    doubleSided : true,
+    parameters : [
+        { type : float4, name : color },
+        { type : float4, name : glow }
+    ]
+}
+
+fragment {
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        material.baseColor = materialParams.color;
+        material.roughness = 0.0;
+        material.metallic = 1.0;
+        material.reflectance = 0.5;
+    }
+}

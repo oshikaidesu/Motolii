@@ -1,0 +1,32 @@
+material {
+    name : glass_pop,
+    shadingModel : lit,
+    blending : fade,
+    refractionMode : screenspace,
+    refractionType : solid,
+    doubleSided : false,
+    specularAntiAliasing : true,
+    parameters : [
+        { type : float, name : ior },
+        { type : float, name : transmission },
+        { type : float, name : thickness },
+        { type : float, name : dispersion }
+    ]
+}
+
+fragment {
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        material.baseColor = vec4(0.72, 0.86, 1.0, 1.0);
+        material.roughness = 0.0;
+        material.metallic = 0.0;
+        material.reflectance = 0.8;
+        material.clearCoat = 1.0;
+        material.clearCoatRoughness = 0.0;
+        material.absorption = vec3(0.62, 0.14, 0.02);
+        material.transmission = materialParams.transmission;
+        material.ior = materialParams.ior;
+        material.thickness = materialParams.thickness;
+        material.dispersion = materialParams.dispersion;
+    }
+}

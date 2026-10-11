@@ -1,0 +1,11 @@
+[package]
+name = "filmask"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+png = "0.17"
+
+[build-dependencies]
+cc = "1"
