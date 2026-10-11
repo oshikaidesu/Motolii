@@ -145,6 +145,8 @@ fragment {
             return;
         }
         vec3 light = soften(materialParams_light, uv, max(spread(materialParams_light, uv, pxPerUnit), materialParams.least));
+        // (light drawn as a patch less its dark parts, edge_streak.mat mode 2, must not come out darker than no light)
+        light = max(light, vec3(0.0));
         // several blocks may shade the same spot: the sun cannot be cut off more than once
         float shade = min(soften(materialParams_shade, uv, max(spread(materialParams_shade, uv, pxPerUnit), materialParams.least)).r, 1.0);
         material.baseColor = vec4(light - vec3(shade * materialParams.sunDown), 1.0);

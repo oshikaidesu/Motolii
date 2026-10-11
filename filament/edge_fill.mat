@@ -52,7 +52,7 @@ vertex {
         float through = 1.0 - mirrored(abs(along), materialParams.index);
         // (the light buffer is in units of the sun met square on: on the floor the sun itself is worth -sun.y)
         vec3 rgb = materialParams.mode < 0.5 ? vec3(through * through * max(-sun.y, 0.0)) : vec3(1.0);
-        if (materialParams.mode < 0.5 && abs(along) < 0.05) rgb = vec3(0.0);   // (edge on to the sun: no window)
+        if (materialParams.mode < 0.5) rgb *= smoothstep(0.04, 0.22, abs(along));   // (edge on to the sun: no window; edge_streak.mat fades its rim alike)
         material.light = vec4(rgb, t);
         material.worldPosition = mulMat4x4Float3(getWorldFromModelMatrix(), X);
     }

@@ -49,31 +49,38 @@ vertex {
     // mode 0: mirrored once by the inside of the wall, out by the far cap. X0: the wall's own line, X1: the inner edge of the rim.
     // mode 1: out through the cut (chamfer) between the wall and the far cap, where the colours part. X0: the cut's edge
     //         on the wall for index n, X1: its edge on the cap for index n2, so that one colour's band reaches the next.
-    void wallEnd(vec2 p, vec2 nrm, vec3 sL, float n, float n2, vec4 ax, vec3 ay, vec3 az, vec3 at, out vec3 X0, out vec3 X1, out float w, out float t) {
+    // fade: 1, falling to 0 towards the angles at which this light is no more (nothing here switches on or off at once).
+    void wallEnd(vec2 p, vec2 nrm, vec3 sL, float n, float n2, vec4 ax, vec3 ay, vec3 az, vec3 at, out vec3 X0, out vec3 X1, out float w, out float t, out float fade) {
         float h = materialParams.halfThick;
         float far = sL.z > 0.0 ? 1.0 : -1.0;            // which cap the light leaves by
         vec3 din = refract(sL, vec3(0.0, 0.0, -far), 1.0 / n);
+        vec2 across = din.xy * (2.0 * h / max(abs(din.z), 1e-4));   // how far sideways the light gets while it crosses the thickness
+        across *= min(1.0, 6.0 * h / max(length(across), 1e-6));
         float drift = dot(din.xy, nrm) / max(abs(din.z), 1e-4);   // sideways towards the wall, per unit of thickness crossed
         vec3 p0, p1, r0, r1;
+        fade = smoothstep(0.04, 0.22, abs(sL.z));       // (edge on to the sun the two caps change places)
         if (materialParams.mode > 2.5) {                // 3: the wall's own shadow, from its near edge to its far edge
             w = 1.0;
+            fade = 1.0;
             r0 = materialParams.sunDir;
             r1 = r0;
             p0 = vec3(p, -far * h);
             p1 = vec3(p, far * h);
         } else if (materialParams.mode > 1.5) {         // 2: the rim of the far cap that no light reaches straight through
-            w = clamp(-2.0 * h * drift, 0.0, 6.0 * h);  //    (it drifts away from this wall as it crosses the thickness)
-            r0 = materialParams.sunDir;
-            r1 = r0;
+            w = clamp(-2.0 * h * drift, 0.0, 6.0 * h);  //    (it drifts away from this wall as it crosses the thickness):
+            r0 = materialParams.sunDir;                 //    the wall's line moved by that drift, so that the pieces of
+            r1 = r0;                                    //    neighbouring walls lie side by side
             p0 = vec3(p, far * h);
-            p1 = vec3(p - nrm * w, far * h);
+            p1 = vec3(p + across * step(1e-6, w), far * h);
         } else if (materialParams.mode < 0.5) {
             w = clamp(2.0 * h * drift, 0.0, 6.0 * h);
             vec3 rL = sL - vec3(nrm * (2.0 * dot(sL.xy, nrm)), 0.0);   // the sun mirrored in the wall
             r0 = toWorld(rL, ax, ay, az);
             r1 = r0;
             p0 = vec3(p, far * h);
-            p1 = vec3(p - nrm * w, far * h);
+            // (the wall's line moved by the drift as the wall mirrors it: slanted, as the light slants along the wall)
+            p1 = vec3(p + (across - nrm * (2.0 * dot(across, nrm))) * step(1e-6, w), far * h);
+            fade *= smoothstep(0.02, 0.2, -r0.y);
         } else {
             float c = materialParams.chamfer;
             vec3 nc = normalize(vec3(nrm, far));        // out of the glass through the cut
@@ -83,6 +90,8 @@ vertex {
             if (dot(o0, o0) < 0.5 || dot(o1, o1) < 0.5 || dot(din, nc) < 0.02) w = 0.0;   // (the glass lets nothing out here)
             r0 = toWorld(o0, ax, ay, az);
             r1 = toWorld(o1, ax, ay, az);
+            // less and less gets out as the light meets the cut more and more aslant, none where the glass mirrors it all
+            fade *= smoothstep(0.0, 0.4, min(dot(o0, nc), dot(o1, nc))) * smoothstep(0.02, 0.25, dot(din, nc)) * smoothstep(0.02, 0.2, -max(r0.y, r1.y));
             p0 = vec3(p, far * (h - c));
             p1 = vec3(p - nrm * c, far * h);
         }
@@ -112,25 +121,33 @@ vertex {
         // the next colour's index (past the last step: as far again as from the one before)
         float n2 = stepAt + 1 < stepsAll ? materialParams.steps[stepAt + 1].w : 2.0 * n - materialParams.steps[max(stepAt - 1, 0)].w;
         vec3 A0, A1, B0, B1;
-        float wa, wb, ta, tb;
-        wallEnd(a, normalize(getCustom0().xy), sL, n, n2, ax, ay, az, at, A0, A1, wa, ta);
-        wallEnd(b, normalize(getCustom0().zw), sL, n, n2, ax, ay, az, at, B0, B1, wb, tb);
+        float wa, wb, ta, tb, fa, fb;
+        wallEnd(a, normalize(getCustom0().xy), sL, n, n2, ax, ay, az, at, A0, A1, wa, ta, fa);
+        wallEnd(b, normalize(getCustom0().zw), sL, n, n2, ax, ay, az, at, B0, B1, wb, tb, fb);
         // As bright as the light it carries over the floor it lands on: the strip of the near cap as the sun sees it,
         // over the four-cornered patch on the floor. Light that fans out gets dimmer, light that is gathered brighter.
         float strip = 0.5 * (wa + wb) * length(b - a) * ax.w * ax.w * abs(sL.z);
         vec2 d1 = (B1 - A0).xz, d2 = (A1 - B0).xz;
         float landed = 0.5 * abs(d1.x * d2.y - d1.y * d2.x);   // (the light buffer is in units of the sun met square on)
-        float gain = min(materialParams.gain * strip / max(landed, 1e-9), materialParams.cap);
+        // (gathered light gets brighter up to `cap`, and nears it gently)
+        float gain = materialParams.cap * (1.0 - exp(-materialParams.gain * strip / (max(landed, 1e-9) * materialParams.cap)));
         bool atA = corner == 0 || corner == 3;
-        float lit = (atA ? wa : wb) > 0.0 ? 1.0 : 0.0;
+        float lit = ((atA ? wa : wb) > 0.0 ? 1.0 : 0.0) * (atA ? fa : fb);
         vec3 X = corner == 0 ? A0 : (corner == 1 ? B0 : (corner == 2 ? B1 : A1));
-        vec3 rgb = materialParams.steps[stepAt].rgb * (gain * lit);
+        vec3 rgb = materialParams.steps[stepAt].rgb;
+        // out through the cut: this colour at the near edge of its band, the next colour at the far edge, so that the
+        // bands run into each other as one spectrum
+        if (materialParams.mode > 0.5 && corner >= 2) rgb = stepAt + 1 < stepsAll ? materialParams.steps[stepAt + 1].rgb : vec3(0.0);
+        rgb *= gain * lit;
         if (plain) {
             // mode 2 takes out of the window what edge_fill.mat (mode 0) put there; mode 3 is shadow
             float ci = abs(sL.z), ct = sqrt(max(0.0, 1.0 - (1.0 - ci * ci) / (n * n)));
             float rs = (ci - n * ct) / (ci + n * ct), rp = (ct - n * ci) / (ct + n * ci);
             float through = 1.0 - 0.5 * (rs * rs + rp * rp);
-            rgb = materialParams.mode > 2.5 ? vec3(1.0) : vec3(-through * through * lit * max(-sun.y, 0.0));
+            // The rim: darkest along the wall, none where the drift ends. (Square on it would be dark all over; but light
+            // that came in by the walls, which is not drawn here, lands about there too, more of it the further in.)
+            float rim = max(wa, wb) > 0.0 && corner < 2 ? smoothstep(0.04, 0.22, abs(sL.z)) : 0.0;
+            rgb = materialParams.mode > 2.5 ? vec3(1.0) : vec3(-through * through * rim * max(-sun.y, 0.0));
         }
         material.light = vec4(rgb, atA ? ta : tb);
         material.worldPosition = mulMat4x4Float3(getWorldFromModelMatrix(), X);   // (a corner with no light stays in place, dark)
