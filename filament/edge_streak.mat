@@ -50,7 +50,9 @@ vertex {
     // mode 1: out through the cut (chamfer) between the wall and the far cap, where the colours part. X0: the cut's edge
     //         on the wall for index n, X1: its edge on the cap for index n2, so that one colour's band reaches the next.
     // fade: 1, falling to 0 towards the angles at which this light is no more (nothing here switches on or off at once).
-    void wallEnd(vec2 p, vec2 nrm, vec3 sL, float n, float n2, vec4 ax, vec3 ay, vec3 az, vec3 at, out vec3 X0, out vec3 X1, out float w, out float t, out float fade) {
+    // next: whether X0 and X1 are where the next colour lands (1) or this one (0); see mode 1 below.
+    float flown(vec3 from, vec3 dir) { return clamp((materialParams.floorY - from.y) / min(dir.y, -0.02), 0.0, 8.0); }
+    void wallEnd(vec2 p, vec2 nrm, vec3 sL, float n, float n2, vec4 ax, vec3 ay, vec3 az, vec3 at, out vec3 X0, out vec3 X1, out float w, out float t, out float fade, out vec2 next) {
         float h = materialParams.halfThick;
         float far = sL.z > 0.0 ? 1.0 : -1.0;            // which cap the light leaves by
         vec3 din = refract(sL, vec3(0.0, 0.0, -far), 1.0 / n);
@@ -97,9 +99,28 @@ vertex {
         }
         if ((abs(sL.z) < 0.05 && materialParams.mode < 2.5) || r0.y > -0.02 || r1.y > -0.02) w = 0.0;
         vec3 w0 = toWorld(p0, ax, ay, az) * ax.w + at, w1 = toWorld(p1, ax, ay, az) * ax.w + at;
-        t = clamp((materialParams.floorY - w0.y) / min(r0.y, -0.02), 0.0, 8.0);
+        t = flown(w0, r0);
         X0 = w0 + r0 * t;
-        X1 = w1 + r1 * clamp((materialParams.floorY - w1.y) / min(r1.y, -0.02), 0.0, 8.0);
+        X1 = w1 + r1 * flown(w1, r1);
+        next = vec2(0.0);
+        if (materialParams.mode > 0.5 && materialParams.mode < 1.5) {
+            // Out through the cut, the light of one colour lands as a band as wide as the cut is seen from the floor, and
+            // each colour's band lies a little further on. This piece carries the colours from this step to the next, so
+            // it reaches over both their bands: where the bands are wide and the shift small they lie on one another
+            // and add up to white, with colour at the two edges only; far from the glass they part into a spectrum.
+            vec3 X00 = X0, X10 = w1 + r0 * flown(w1, r0), X01 = w0 + r1 * flown(w0, r1), X11 = X1;
+            vec2 u = (X10 - X00).xz, d = (X01 - X00).xz;
+            vec2 axis = dot(u, u) > dot(d, d) ? u : d;
+            float s10 = dot(u, axis), s01 = dot(d, axis), s11 = dot((X11 - X00).xz, axis);
+            float lo = 0.0, hi = 0.0;
+            X1 = X00;
+            if (s10 < lo) { lo = s10; X0 = X10; }
+            if (s01 < lo) { lo = s01; X0 = X01; next.x = 1.0; }
+            if (s11 < lo) { lo = s11; X0 = X11; next.x = 1.0; }
+            if (s10 > hi) { hi = s10; X1 = X10; }
+            if (s01 > hi) { hi = s01; X1 = X01; next.y = 1.0; }
+            if (s11 > hi) { hi = s11; X1 = X11; next.y = 1.0; }
+        }
     }
     void materialVertex(inout MaterialVertexInputs material) {
         int stepsAll = int(materialParams.stepCount);
@@ -122,22 +143,24 @@ vertex {
         float n2 = stepAt + 1 < stepsAll ? materialParams.steps[stepAt + 1].w : 2.0 * n - materialParams.steps[max(stepAt - 1, 0)].w;
         vec3 A0, A1, B0, B1;
         float wa, wb, ta, tb, fa, fb;
-        wallEnd(a, normalize(getCustom0().xy), sL, n, n2, ax, ay, az, at, A0, A1, wa, ta, fa);
-        wallEnd(b, normalize(getCustom0().zw), sL, n, n2, ax, ay, az, at, B0, B1, wb, tb, fb);
+        vec2 ka, kb;
+        wallEnd(a, normalize(getCustom0().xy), sL, n, n2, ax, ay, az, at, A0, A1, wa, ta, fa, ka);
+        wallEnd(b, normalize(getCustom0().zw), sL, n, n2, ax, ay, az, at, B0, B1, wb, tb, fb, kb);
         // As bright as the light it carries over the floor it lands on: the strip of the near cap as the sun sees it,
-        // over the four-cornered patch on the floor. Light that fans out gets dimmer, light that is gathered brighter.
-        float strip = 0.5 * (wa + wb) * length(b - a) * ax.w * ax.w * abs(sL.z);
-        vec2 d1 = (B1 - A0).xz, d2 = (A1 - B0).xz;
-        float landed = 0.5 * abs(d1.x * d2.y - d1.y * d2.x);   // (the light buffer is in units of the sun met square on)
-        // (gathered light gets brighter up to `cap`, and nears it gently)
-        float gain = materialParams.cap * (1.0 - exp(-materialParams.gain * strip / (max(landed, 1e-9) * materialParams.cap)));
+        // over the patch on the floor, worked out at either end of the piece. Where the piece is narrow the light is
+        // gathered and bright, where it fans out it thins away. (The light buffer is in units of the sun met square on.)
         bool atA = corner == 0 || corner == 3;
+        float carried = (atA ? wa : wb) * length(b - a) * ax.w * ax.w * abs(sL.z) * materialParams.gain;
+        vec2 along = 0.5 * ((B0 - A0).xz + (B1 - A1).xz), wide = atA ? (A1 - A0).xz : (B1 - B0).xz;
+        float landed = abs(along.x * wide.y - along.y * wide.x);
+        // (gathered light gets brighter up to `cap`, and nears it gently)
+        float gain = materialParams.cap * (1.0 - exp(-carried / (max(landed, 1e-9) * materialParams.cap)));
         float lit = ((atA ? wa : wb) > 0.0 ? 1.0 : 0.0) * (atA ? fa : fb);
         vec3 X = corner == 0 ? A0 : (corner == 1 ? B0 : (corner == 2 ? B1 : A1));
-        vec3 rgb = materialParams.steps[stepAt].rgb;
-        // out through the cut: this colour at the near edge of its band, the next colour at the far edge, so that the
-        // bands run into each other as one spectrum
-        if (materialParams.mode > 0.5 && corner >= 2) rgb = stepAt + 1 < stepsAll ? materialParams.steps[stepAt + 1].rgb : vec3(0.0);
+        // (an edge of the piece that is where the next colour lands has that colour: the steps run into each other)
+        vec2 k = atA ? ka : kb;
+        bool following = (corner < 2 ? k.x : k.y) > 0.5;
+        vec3 rgb = !following ? materialParams.steps[stepAt].rgb : (stepAt + 1 < stepsAll ? materialParams.steps[stepAt + 1].rgb : vec3(0.0));
         rgb *= gain * lit;
         if (plain) {
             // mode 2 takes out of the window what edge_fill.mat (mode 0) put there; mode 3 is shadow
