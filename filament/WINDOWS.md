@@ -45,7 +45,7 @@ Mac で動いている形(`glass_live.h`、`build_live.sh`、`skin/book/lib/sets
 
 OS で違う部分は `glass_door.h` の関数4つに切り出してある(2026-10-12、Mac で確認済み: 切り出しの前後で止め絵が1バイトも変わらず、60 fps)。
 
-| 関数 | 役目 | Mac(`glass_door_mac.mm`、46行) |
+| 関数 | 役目 | Mac(`glass_door_mac.mm`、44行) |
 |---|---|---|
 | `glass_door_engine()` | その OS の方式でエンジンを作る | Metal |
 | `glass_door_open(engine, w, h, finished)` | バッファを3枚作る。描き終わるたびに `finished(番号)` を呼ぶ。描画スレッドを時間どおり起こす設定もここ | CVPixelBuffer 3枚、スワップチェーン3本、Filament の描き終わり通知、QoS |
