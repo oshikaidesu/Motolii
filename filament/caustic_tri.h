@@ -168,11 +168,6 @@ struct Params {
     // opaque oriented box that blocks sunlight before and after the glass (boxHalf <= 0 disables it)
     float3 boxCenter{0.f}, boxAxis0{1, 0, 0}, boxAxis1{0, 1, 0}, boxAxis2{0, 0, 1};
     float boxHalf = 0.f;
-    // > 0: one fixed capture window (half size, centre) for every mesh instead of each mesh's own bounds.
-    // Needed when many posed solids share one capture (cap_*.mat from caustic_all/ follow the entity transform).
-    bool mips = false;           // caustic and footprint maps get a mip chain every frame (for a softened lookup)
-    float extentOverride = 0.f;
-    float3 originOverride{0.f};
 };
 struct RT {
     Texture* color = nullptr;
@@ -181,7 +176,6 @@ struct RT {
 };
 struct Materials {
     Material *front = nullptr, *back = nullptr, *hits = nullptr, *tri = nullptr;
-    Material* grid = nullptr;  // optional: indexed-grid splatting (caustic_all/grid.mat) replaces tri
 };
 inline std::vector<uint8_t> load_file(const char* path) {
     std::ifstream in(path, std::ios::binary);
@@ -199,12 +193,11 @@ inline bool load_materials(Engine* e, const std::string& dir, Materials& m) {
     m.tri = load_material(e, dir + "/tri.filamat");
     return m.front && m.back && m.hits && m.tri;
 }
-inline RT make_rt(Engine* e, int w, int h, Texture::InternalFormat fmt, bool depth, bool mips = false) {
+inline RT make_rt(Engine* e, int w, int h, Texture::InternalFormat fmt, bool depth) {
     RT r;
-    auto usage = Texture::Usage::COLOR_ATTACHMENT | Texture::Usage::SAMPLEABLE | Texture::Usage::BLIT_SRC;
-    if (mips) usage |= Texture::Usage::BLIT_DST | Texture::Usage::GEN_MIPMAPPABLE;
-    r.color = Texture::Builder().width(w).height(h).levels(mips ? (uint8_t)(1 + (int)std::floor(std::log2((float)std::max(w, h)))) : 1)
-                  .usage(usage).format(fmt).build(*e);
+    r.color = Texture::Builder().width(w).height(h).levels(1)
+                  .usage(Texture::Usage::COLOR_ATTACHMENT | Texture::Usage::SAMPLEABLE | Texture::Usage::BLIT_SRC)
+                  .format(fmt).build(*e);
     RenderTarget::Builder b;
     b.texture(RenderTarget::AttachmentPoint::COLOR, r.color);
     if (depth) {
@@ -238,13 +231,9 @@ public:
         RT front, back, hits;
         Scene *sf, *sb, *sh;
         View *vf, *vb_, *vh;
-        std::vector<utils::Entity> ents;  // front copies first, then back copies
-        std::vector<MaterialInstance*> capMis, sunMis;  // instances told (origin, dir) / (origin, dir, right, up)
     };
 
-    // copies[i] = how many posed instances of meshes[i] (default 1); poses are set with setPose().
-    CausticPass(Engine* e, const Materials& M, std::vector<Mesh> meshes, float3 sunDir, const Params& params,
-                std::vector<int> copies = {}) : e_(e), P(params) {
+    CausticPass(Engine* e, const Materials& M, std::vector<Mesh> meshes, float3 sunDir, const Params& params) : e_(e), P(params) {
         const int n = P.cap;
         float3 sun = normalize(sunDir);
         float3 upHint = std::fabs(sun.y) > 0.99f ? float3{1, 0, 0} : float3{0, 1, 0};
@@ -294,25 +283,8 @@ public:
         VertexBuffer* tvb6 = dummy_vb(6);
         IndexBuffer* tib6 = seq_ib(6);
 
-        // grid.mat path: one vertex per light-view texel, six indices per cell, shared by every object
-        VertexBuffer* gvb = nullptr;
-        IndexBuffer* gib = nullptr;
-        if (M.grid) {
-            gvb = dummy_vb(n * n);
-            const uint32_t cells1 = (uint32_t)(n - 1);
-            gib = IndexBuffer::Builder().indexCount(cells1 * cells1 * 6).bufferType(IndexBuffer::IndexType::UINT).build(*e);
-            uint32_t* gi = new uint32_t[(size_t)cells1 * cells1 * 6];
-            size_t w = 0;
-            for (uint32_t y = 0; y < cells1; ++y)
-                for (uint32_t x = 0; x < cells1; ++x) {
-                    uint32_t a = y * n + x, b = a + 1, c = a + n, d = c + 1;
-                    for (uint32_t v : {a, b, c, b, d, c}) gi[w++] = v;
-                }
-            gib->setBuffer(*e, IndexBuffer::BufferDescriptor(gi, (size_t)cells1 * cells1 * 24, [](void* p, size_t, void*) { delete[] (uint32_t*)p; }));
-        }
-
-        mapC_ = make_rt(e, P.map, P.map, Texture::InternalFormat::RGBA16F, false, P.mips);
-        mapF_ = make_rt(e, P.map, P.map, Texture::InternalFormat::RGBA16F, false, P.mips);
+        mapC_ = make_rt(e, P.map, P.map, Texture::InternalFormat::RGBA16F, false);
+        mapF_ = make_rt(e, P.map, P.map, Texture::InternalFormat::RGBA16F, false);
         sC_ = e->createScene();
         sF_ = e->createScene();
         vC_ = e->createView();
@@ -336,12 +308,6 @@ public:
             float3 c = (lo + hi) * 0.5f;
             o.origin = o.right * c.x + o.up * c.y + f * c.z;
             o.extent = std::max(hi.x - lo.x, hi.y - lo.y) * 0.5f + 0.02f;
-            if (P.extentOverride > 0.f) {
-                o.origin = P.originOverride;
-                o.extent = P.extentOverride;
-            }
-            const size_t objIndex = objs_.size();
-            const int nCopies = objIndex < copies.size() ? copies[objIndex] : 1;
 
             size_t nv = o.mesh.pos.size();  // mesh buffers: POSITION + CUSTOM0 (normal)
             o.vb = VertexBuffer::Builder().vertexCount((uint32_t)nv).bufferCount(1)
@@ -371,15 +337,11 @@ public:
                 MaterialInstance* mi = mat->createInstance();
                 mi->setParameter("origin", o.origin);
                 mi->setParameter("dir", f);
-                o.capMis.push_back(mi);
-                for (int k = 0; k < nCopies; ++k) {
-                    utils::Entity ent = em.create();
-                    RenderableManager::Builder(1).boundingBox({{-5, -5, -5}, {5, 5, 5}})
-                        .geometry(0, RenderableManager::PrimitiveType::TRIANGLES, o.vb, o.ib)
-                        .material(0, mi).culling(false).castShadows(false).receiveShadows(false).build(*e, ent);
-                    s->addEntity(ent);
-                    o.ents.push_back(ent);
-                }
+                utils::Entity ent = em.create();
+                RenderableManager::Builder(1).boundingBox({{-5, -5, -5}, {5, 5, 5}})
+                    .geometry(0, RenderableManager::PrimitiveType::TRIANGLES, o.vb, o.ib)
+                    .material(0, mi).culling(false).castShadows(false).receiveShadows(false).build(*e, ent);
+                s->addEntity(ent);
             };
             o.sf = e->createScene();
             o.sb = e->createScene();
@@ -394,7 +356,6 @@ public:
             setup_view(o.vh, o.sh, qcam_, o.hits.rt, n * 7, n);
 
             auto common = [&](MaterialInstance* mi) {
-                o.sunMis.push_back(mi);
                 mi->setParameter("origin", o.origin);
                 mi->setParameter("dir", f);
                 mi->setParameter("right", o.right);
@@ -427,23 +388,7 @@ public:
 
             const int cells = (n - 1) * (n - 1);
             const int chunk = 32000;  // Filament: at most 32767 instances per renderable
-            for (int mode = 0; mode < (P.footprint ? 2 : 1); ++mode) {
-                if (M.grid) {  // bands 0..5 as 6 instances into the caustic map, band 6 (footprint) into the footprint map
-                    MaterialInstance* gmi = M.grid->createInstance();
-                    common(gmi);
-                    gmi->setParameter("hitTex", o.hits.color, nearest);
-                    gmi->setParameter("intensity", P.intensity);
-                    gmi->setParameter("ratioCap", P.ratioCap);
-                    gmi->setParameter("bandBase", mode ? 6.f : 0.f);
-                    gmi->setParameter("mapSize", (float)P.map);
-                    utils::Entity ge = em.create();
-                    RenderableManager::Builder(1).boundingBox({{-2, -2, -2}, {2, 2, 2}})
-                        .geometry(0, RenderableManager::PrimitiveType::TRIANGLES, gvb, gib)
-                        .instances(mode ? 1 : 6)
-                        .material(0, gmi).culling(false).castShadows(false).receiveShadows(false).build(*e, ge);
-                    (mode ? sF_ : sC_)->addEntity(ge);
-                    continue;
-                }
+            for (int mode = 0; mode < (P.footprint ? 2 : 1); ++mode)
                 for (int base = 0; base < cells; base += chunk) {
                     MaterialInstance* tmi = M.tri->createInstance();
                     common(tmi);
@@ -460,7 +405,6 @@ public:
                         .material(0, tmi).culling(false).castShadows(false).receiveShadows(false).build(*e, te);
                     (mode ? sF_ : sC_)->addEntity(te);
                 }
-            }
             objs_.push_back(std::move(o));
         }
     }
@@ -468,34 +412,13 @@ public:
     // Call between beginFrame and endFrame. Sets the renderer's clear options (every pass clears its own target).
     void draw(Renderer* r) {
         r->setClearOptions({.clearColor = {0, 0, 0, 0}, .clear = true, .discard = true});
-        for (Obj& o : objs_) {  // skipMask (measuring only): 1 front, 2 back, 4 hits, 8 caustic map, 16 footprint map
-            if (!(skipMask & 1)) r->render(o.vf);
-            if (!(skipMask & 2)) r->render(o.vb_);
-            if (!(skipMask & 4)) r->render(o.vh);
-        }
-        if (!(skipMask & 8)) r->render(vC_);
-        if (P.footprint && !(skipMask & 16)) r->render(vF_);
-        if (P.mips) {
-            mapC_.color->generateMipmaps(*e_);
-            if (P.footprint) mapF_.color->generateMipmaps(*e_);
-        }
-    }
-    // Turn the sun (direction the light travels). Only for a pass built with extentOverride: the capture window keeps
-    // its centre and size, so the size must cover the solids from every side.
-    void setSun(float3 sunDir) {
-        float3 f = normalize(sunDir);
-        float3 upHint = std::fabs(f.y) > 0.99f ? float3{1, 0, 0} : float3{0, 1, 0};
         for (Obj& o : objs_) {
-            o.right = normalize(cross(f, upHint));
-            o.up = cross(o.right, f);
-            o.cam->lookAt(o.origin - f * 10.f, o.origin, upHint);
-            for (MaterialInstance* mi : o.capMis) mi->setParameter("dir", f);
-            for (MaterialInstance* mi : o.sunMis) {
-                mi->setParameter("dir", f);
-                mi->setParameter("right", o.right);
-                mi->setParameter("up", o.up);
-            }
+            r->render(o.vf);
+            r->render(o.vb_);
+            r->render(o.vh);
         }
+        r->render(vC_);
+        if (P.footprint) r->render(vF_);
     }
     Texture* caustic() const { return mapC_.color; }
     Texture* footprint() const { return mapF_.color; }
@@ -503,7 +426,6 @@ public:
     RenderTarget* footprintTarget() const { return mapF_.rt; }
     const std::vector<Obj>& objects() const { return objs_; }
     const Params& params() const { return P; }
-    int skipMask = 0;
 
 private:
     Engine* e_;
