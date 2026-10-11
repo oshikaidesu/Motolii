@@ -96,6 +96,11 @@ struct Solid {
     // kind FLAT: a convex solid with flat faces
     std::vector<Plane> planes;
     std::vector<Poly> faces;  // faces[i] lies on planes[i]; may be empty (n == 0) if the plane cuts nothing
+    // Colour films inside the glass (kind FLAT only, at most 4): a film passes some colours straight on and mirrors
+    // the rest, as the crossed films of a colour-splitting cube do. Which colours a film mirrors goes by its place
+    // in this list (glass_scene.mm, FILMBANDS). Known to the light on the GPU (flat_walk.mat) and to the body
+    // (glass_solid.mat).
+    std::vector<Plane> films;
     // round kinds (only the cheap trace and the renderer know them; the exact beam trace is for flat faces)
     enum Kind { FLAT = 0, BALL = 1, ROD = 2, CONE = 3, EXTRUDE = 4 };
     int kind = FLAT;
@@ -270,6 +275,10 @@ inline Solid placed(const Solid& in, const V3 R[3], double scale, V3 at) {
     for (const Plane& pl : in.planes) {
         V3 n = R[0] * pl.n.x + R[1] * pl.n.y + R[2] * pl.n.z;
         s.planes.push_back({n, pl.o * scale + dot(n, at)});
+    }
+    for (const Plane& pl : in.films) {
+        V3 n = R[0] * pl.n.x + R[1] * pl.n.y + R[2] * pl.n.z;
+        s.films.push_back({n, pl.o * scale + dot(n, at)});
     }
     s.faces.resize(in.faces.size());
     for (size_t f = 0; f < in.faces.size(); ++f) {

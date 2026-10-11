@@ -41,6 +41,9 @@ material {
         { type : float, name : floorY },
         { type : float, name : sunTan },
         { type : float, name : sunDown },
+        { type : float4, name : strip },     // the sun comes through a slit: on the floor a band across (x, y) [a unit way on the floor, x and z], its
+                                             // middle at z along that way, w half wide (0: sun everywhere), with edges this soft:
+        { type : float, name : stripSoft },
         { type : float, name : focal },
         { type : float2, name : texel },
         { type : float, name : least },      // spread at least this many pixels (of the light's picture): when that picture is smaller than the final one, its
@@ -149,6 +152,15 @@ fragment {
         light = max(light, vec3(0.0));
         // several blocks may shade the same spot: the sun cannot be cut off more than once
         float shade = min(soften(materialParams_shade, uv, max(spread(materialParams_shade, uv, pxPerUnit), materialParams.least)).r, 1.0);
+        if (materialParams.strip.w > 0.0) {
+            // outside the band the floor has no sun to begin with (and so nothing there can shade it)
+            highp vec4 far = materialParams.worldFromClip * vec4(getUV0() * 2.0 - 1.0, 0.5, 1.0);
+            highp vec3 d = far.xyz / far.w - materialParams.eye;
+            highp vec3 X = materialParams.eye + d * ((materialParams.floorY - materialParams.eye.y) / min(d.y, -1e-6));
+            float off = abs(dot(materialParams.strip.xy, X.xz) - materialParams.strip.z);
+            float sun = 1.0 - smoothstep(materialParams.strip.w - materialParams.stripSoft, materialParams.strip.w + materialParams.stripSoft, off);
+            shade = 1.0 - sun * (1.0 - shade);
+        }
         material.baseColor = vec4(light - vec3(shade * materialParams.sunDown), 1.0);
     }
 }

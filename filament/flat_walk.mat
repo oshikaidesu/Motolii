@@ -25,6 +25,9 @@ material {
         { type : float4[64], name : spheres },                                  // every solid's bounding ball (as texel 0 of `scene`)
         { type : float4[16], name : steps },                                    // rgb, index of refraction
         { type : float,  name : stepCount },                                    // colour steps + 1
+        { type : float4, name : strip },                                        // the sun through a slit (as beam_soften.mat): a band on the floor; w = 0: sun everywhere
+        { type : float,  name : stripSoft },
+        { type : float4[4], name : filmBand },                                  // colour films: film f mirrors light of an index between x and y
         { type : float3, name : sunDir },                                       // the way the sunlight travels
         { type : float,  name : floorY }
     ]
@@ -234,6 +237,26 @@ fragment {
     }
 
 
+    // A colour film inside solid k (beam::Solid::films) that mirrors light of index n, met from o along d before `reach`:
+    // how far, and the film's normal turned the way the light goes. `reach` if there is none.
+    float filmAhead(int k, vec3 o, vec3 d, float n, float reach, out vec3 nf) {
+        nf = vec3(0.0, 1.0, 0.0);
+        vec4 info = sceneAt(1, k);
+        if (info.y > 0.5) return reach;
+        int cnt = int(info.x + 0.5), films = int(info.z + 0.5);
+        float t = reach;
+        for (int f = 0; f < 4; f++) {
+            if (f >= films) break;
+            if (!(n > materialParams.filmBand[f].x && n < materialParams.filmBand[f].y)) continue;
+            vec4 pl = sceneAt(3 + cnt + f, k);
+            float den = dot(pl.xyz, d);
+            if (abs(den) < 1e-6) continue;
+            float tf = (pl.w - dot(pl.xyz, o)) / den;
+            if (tf > 1e-4 && tf < t) { t = tf; nf = den > 0.0 ? pl.xyz : -pl.xyz; }
+        }
+        return t;
+    }
+
     // Light entering solid A at `start` (outward normal nStart): its way to the floor. `ref` is carried along that
     // way (in: a point of the same flat piece; out: x, distance flown, z where it lands). Returns how bright the
     // piece lands, as a multiple of the sun; 0: no light.
@@ -251,6 +274,12 @@ fragment {
             if (nextSolid(start - L * 100.0, L, -1, S0, t0, n0) && (S0 != A || abs(t0 - 100.0) > 2e-3)) return 0.0;
         }
         float irr = ci, cosOn = ci;
+        if (materialParams.strip.w > 0.0) {   // only what stands in the band of sun gets any
+            vec3 X = start + L * ((materialParams.floorY - start.y) / min(L.y, -1e-6));
+            float off = abs(dot(materialParams.strip.xy, X.xz) - materialParams.strip.z);
+            irr *= 1.0 - smoothstep(materialParams.strip.w - materialParams.stripSoft, materialParams.strip.w + materialParams.stripSoft, off);
+            if (!(irr > 1e-5)) return 0.0;
+        }
         int S = A, entries = 0;
         vec3 ng = nStart;
         bool outside = true;
@@ -269,17 +298,22 @@ fragment {
                     d = refract(d, ng, 1.0 / n);
                     cosOn = abs(dot(ng, d));
                     bool left = false;
-                    for (int b = 0; b < 5; b++) {
-                        vec3 nj;
+                    int faces = 0;   // (five faces of the solid at most, as ever; films met on the way come on top)
+                    for (int b = 0; b < 10; b++) {
+                        vec3 nj, nfilm;
                         float tb = exitWorld(S, p, d, nj);
                         if (tb > 1e8) return 0.0;
+                        float tfilm = filmAhead(S, p, d, n, tb, nfilm);   // (a film is one more face, one that mirrors)
+                        bool film = tfilm < tb;
+                        if (film) { tb = tfilm; nj = nfilm; }
+                        else if (++faces > 5) break;
                         p += d * tb;
                         float db = dot(nj, d);
                         if (!(db > 1e-6)) return 0.0;
                         ref += d * (dot(nj, p - ref) / db);
                         way = way * 1.37 + dot(nj, vec3(1.0, 2.0, 4.0)) + float(S);
                         irr *= db / cosOn;
-                        float Ri = fresnel(db, n, 1.0);
+                        float Ri = film ? 1.0 : fresnel(db, n, 1.0);
                         if (Ri < 1.0) {
                             irr *= 1.0 - Ri;
                             d = refract(d, -nj, n);

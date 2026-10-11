@@ -426,7 +426,9 @@ int main(int argc, char** argv) {
     // ---- the picture
     Scene* scene = engine->createScene();
     MaterialInstance* floorMi = floorMat->createInstance();
-    floorMi->setParameter("color", float4{0.86f, 0.85f, 0.84f, 1});
+    // ROOM (1: the pale studio; towards 0: a dark room, sky and fill light go down together), FLOORGREY (how light the floor is)
+    const float roomLight = env_f("ROOM", 1.f), floorGrey = env_f("FLOORGREY", 1.f);
+    floorMi->setParameter("color", float4{0.86f * floorGrey, 0.85f * floorGrey, 0.84f * floorGrey, 1});
     floorMi->setParameter("roughness", env_f("FLOOR_ROUGH", 0.42f));
     floorMi->setParameter("reflectance", env_f("FLOOR_REFL", 0.35f));
     floorMi->setParameter("gain", sunColor * (lux / 3.14159265f));
@@ -467,6 +469,10 @@ int main(int argc, char** argv) {
     scene->addEntity(renderable(floorVB, floorIB, stageOn ? recv_surface(float4{0.86f, 0.85f, 0.84f, 1}, env_f("FLOOR_ROUGH", 0.42f), soft.color) : floorMi, false, true, 8.f));
 
     // ---- the solids
+    // FILMBANDS: the colours (nanometres, from-to) that the films inside a solid mirror, in the order of beam::Solid::films
+    static float4 filmNm[4] = {{600, 720, 0, 0}, {380, 490, 0, 0}, {500, 590, 0, 0}, {0, 0, 0, 0}};
+    if (const char* fb = std::getenv("FILMBANDS"))
+        std::sscanf(fb, "%f-%f,%f-%f,%f-%f,%f-%f", &filmNm[0].x, &filmNm[0].y, &filmNm[1].x, &filmNm[1].y, &filmNm[2].x, &filmNm[2].y, &filmNm[3].x, &filmNm[3].y);
     std::vector<Item> items;
     {
         using namespace beam;
@@ -488,6 +494,28 @@ int main(int argc, char** argv) {
         add("bar", chamfered(box(0.95, 0.20, 0.20), c), {0, -1, 0}, 0.30f);
         add("pyramid", chamfered(pyramid(4, 0.62, 0.70), c), {0, -1, 0}, 0.30f);
         add("wedge", chamfered(prism(3, 0.50, 0.30), c), {0, -1, 0}, 0.30f);  // a standing triangular prism
+        {   // glass with colour films inside (beam::Solid::films): the colour-splitting cube, and the same with its corners cut
+            const double q = std::sqrt(0.5), t = std::sqrt(1.0 / 3.0);
+            const std::vector<Plane> cross = {{{q, 0, q}, 0}, {{q, 0, -q}, 0}};
+            Solid xc = chamfered(box(0.5, 0.5, 0.5), c);
+            xc.films = cross;
+            add("xcube", xc, {0, -1, 0}, 0.30f);
+            std::vector<Plane> cut = box(0.5, 0.5, 0.5).planes;
+            for (int i = 0; i < 8; ++i) cut.push_back({{(i & 1 ? t : -t), (i & 2 ? t : -t), (i & 4 ? t : -t)}, (double)env_f("XCUT", 0.62f)});
+            Solid xk = from_planes(cut, 4.0);
+            xk.films = cross;
+            xk.films.push_back({{0, 1, 0}, 0.0});   // a third film, lying flat
+            if (const char* xf = std::getenv("XFILMS")) {   // XFILMS="nx,ny,nz,o nx,ny,nz,o ...": other films for this solid (up to 4)
+                xk.films.clear();
+                float a, b, d, o;
+                int used = 0;
+                while (xk.films.size() < 4 && std::sscanf(xf, " %f,%f,%f,%f%n", &a, &b, &d, &o, &used) == 4) {
+                    xk.films.push_back({normalize(V3{a, b, d}), o});
+                    xf += used;
+                }
+            }
+            add("xcut", xk, {0, -1, 0}, 0.30f);
+        }
         Solid oct = chamfered(octahedron(0.62), c);
         add("octahedron", oct, oct.planes[0].n, 0.30f);
         add("ball", ball(0.5), {0, -1, 0}, 0.30f);
@@ -1141,6 +1169,14 @@ int main(int argc, char** argv) {
         planes.resize(40, float4{0, 1, 0, 1e6f});
         it.glass->setParameter("planes", planes.data(), 40);
         it.glass->setParameter("planeCount", count);
+        {
+            float4 films[4] = {};
+            const int nf = it.local.kind == beam::Solid::FLAT ? (int)std::min<size_t>(4, it.local.films.size()) : 0;
+            for (int f = 0; f < nf; ++f) films[f] = float4{(float)it.local.films[(size_t)f].n.x, (float)it.local.films[(size_t)f].n.y, (float)it.local.films[(size_t)f].n.z, (float)it.local.films[(size_t)f].o};
+            it.glass->setParameter("films", films, 4);
+            it.glass->setParameter("filmNm", filmNm, 4);
+            it.glass->setParameter("filmCount", (int32_t)nf);
+        }
         it.glass->setParameter("kind", (int32_t)unit.kind);
         it.glass->setParameter("dims", float4{(float)unit.r, (float)unit.h, 0, 0});
         it.glass->setParameter("scene", sceneTex, TextureSampler(TextureSampler::MinFilter::NEAREST, TextureSampler::MagFilter::NEAREST));
@@ -1241,7 +1277,7 @@ int main(int argc, char** argv) {
     LightManager::Builder(LightManager::Type::SUN).color(sunColor).intensity(lux).direction(float3{0, -1, 0})
         .sunAngularRadius(sunRadiusDeg).sunHaloSize(1.2f).castShadows(true).shadowOptions(shopt).build(*engine, sunE);
     scene->addEntity(sunE);
-    scene->setSkybox(Skybox::Builder().color({0.72f, 0.74f, 0.78f, 1}).build(*engine));
+    scene->setSkybox(Skybox::Builder().color({0.72f * roomLight, 0.74f * roomLight, 0.78f * roomLight, 1}).build(*engine));
     {
         // Studio environment (out/studio): gives the block something to mirror and keeps the shadow from being black.
         auto ib = load_file(GLASS_PATH("out/studio/_ibl.ktx").c_str());
@@ -1256,17 +1292,17 @@ int main(int argc, char** argv) {
         }
         if (ib.empty() || shv.size() < 9) return fail("studio environment (out/studio)");
         Texture* ibl = ktxreader::Ktx1Reader::createTexture(engine, new image::Ktx1Bundle(ib.data(), (uint32_t)ib.size()), false);
-        const float iblLux = env_f("IBL", 900.f);
+        const float iblLux = env_f("IBL", 900.f) * roomLight;
         scene->setIndirectLight(IndirectLight::Builder().reflections(ibl).irradiance(3, shv.data()).intensity(iblLux).build(*engine));
         TextureSampler cubeS(TextureSampler::MinFilter::LINEAR_MIPMAP_LINEAR, TextureSampler::MagFilter::LINEAR, TextureSampler::WrapMode::CLAMP_TO_EDGE);
         for (Item& it : items) {
             it.glass->setParameter("env", ibl, cubeS);
             it.glass->setParameter("envGain", iblLux * env_f("ENVGAIN", 0.f));
-            it.glass->setParameter("sky", float3{0.95f, 0.97f, 1.0f} * env_f("SKY", 1800.f));
+            it.glass->setParameter("sky", float3{0.95f, 0.97f, 1.0f} * (env_f("SKY", 1800.f) * roomLight));
             if (it.cheap) {
                 it.cheap->setParameter("env", ibl, cubeS);
                 it.cheap->setParameter("envGain", iblLux * env_f("ENVGAIN", 0.f));
-                it.cheap->setParameter("sky", float3{0.95f, 0.97f, 1.0f} * env_f("SKY", 1800.f));
+                it.cheap->setParameter("sky", float3{0.95f, 0.97f, 1.0f} * (env_f("SKY", 1800.f) * roomLight));
             }
         }
     }
@@ -1762,6 +1798,11 @@ int main(int argc, char** argv) {
                     table[flatSteps - 1] = table[(flatSteps - 1) / 2];
                     flatWalkMi->setParameter("steps", table, 16);
                     flatWalkMi->setParameter("sunDir", sunDir);
+                    {   // which colours each film mirrors, as indices of refraction (red has the lowest)
+                        float4 band[4] = {};
+                        for (int f = 0; f < 4; ++f) band[f] = float4{(float)par.glass.n(filmNm[f].y), (float)par.glass.n(filmNm[f].x), 0.f, 0.f};
+                        flatWalkMi->setParameter("filmBand", band, 4);
+                    }
                     for (FlatKind& fk : flatKinds) fk.mi->setParameter("steps", table, 16);
                 }
             }
@@ -1880,6 +1921,19 @@ int main(int argc, char** argv) {
         for (size_t k = 0; k < items.size(); ++k) {
             float* row = table->data() + k * SCENE_W * 4;
             row[0] = (float)world.centre[k].x; row[1] = (float)world.centre[k].y; row[2] = (float)world.centre[k].z; row[3] = (float)world.radius[k];
+            if (k == 0 && std::getenv("STRIP")) {
+                // STRIP="half width [degrees round [off to the side]]": the sun comes through a slit and lights a band of the floor
+                // only, which passes under the first solid (beam_soften.mat, flat_walk.mat)
+                float half = 0.3f, deg = 35.f, side = 0.f;
+                std::sscanf(std::getenv("STRIP"), "%f %f %f", &half, &deg, &side);
+                const float a = deg * 3.14159265f / 180.f;
+                const float3 down = float3{(float)world.centre[0].x, (float)world.centre[0].y, (float)world.centre[0].z} + sunDir * ((float)world.centre[0].y / -sunDir.y);
+                const float4 strip{std::cos(a), std::sin(a), std::cos(a) * down.x + std::sin(a) * down.z + side, half};
+                softenMi->setParameter("strip", strip);
+                softenMi->setParameter("stripSoft", env_f("STRIPSOFT", 0.02f));
+                flatWalkMi->setParameter("strip", strip);
+                flatWalkMi->setParameter("stripSoft", env_f("STRIPSOFT", 0.02f));
+            }
             int count = 0;
             row[5] = (float)world.solids[k].kind; row[6] = (float)world.solids[k].r; row[7] = (float)world.solids[k].h;
             row[8] = (float)world.solids[k].ax.x; row[9] = (float)world.solids[k].ax.y; row[10] = (float)world.solids[k].ax.z;
@@ -1901,6 +1955,16 @@ int main(int argc, char** argv) {
                 ++count;
             }
             row[4] = (float)count;
+            if (world.solids[k].kind == beam::Solid::FLAT) {   // its colour films, after its faces
+                int films = 0;
+                for (const beam::Plane& fl : world.solids[k].films) {
+                    if (films >= 4 || 3 + count + films >= SCENE_W) break;
+                    float* o = row + (3 + count + films) * 4;
+                    o[0] = (float)fl.n.x; o[1] = (float)fl.n.y; o[2] = (float)fl.n.z; o[3] = (float)fl.o;
+                    ++films;
+                }
+                row[6] = (float)films;
+            }
         }
         {
             float4 spheres[64] = {};

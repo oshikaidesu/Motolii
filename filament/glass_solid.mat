@@ -42,6 +42,9 @@ material {
         { type : float, name : abbe },
         { type : float4[40], name : planes },
         { type : int, name : planeCount },
+        { type : float4[4], name : films },      // colour films inside (beam::Solid::films), as `planes`
+        { type : float4[4], name : filmNm },     // film f mirrors light between x and y nanometres
+        { type : int, name : filmCount },
         { type : int, name : kind },
         { type : float4, name : dims },
         { type : sampler2d, name : scene, precision : high },
@@ -578,6 +581,56 @@ fragment {
                 }
                 if (!left) { outOk = false; break; }
             }
+        }
+        if (materialParams.filmCount > 0) {
+            // Colour films inside: a film is one more face, one that mirrors its colours and is not there for the
+            // rest. So the sight line is followed once for the colours each film mirrors and once for those no film
+            // does (it does not go on through other glass).
+            vec3 sum = vec3(0.0), wall = vec3(0.0);
+            for (int g = 0; g <= materialParams.filmCount; g++) {
+                vec3 qo = pl, qd = refract(dl, nl, 1.0 / n0);
+                float len = 0.0;
+                bool out1 = false;
+                vec3 fn = nl;
+                for (int b = 0; b < BOUNCES + 4; b++) {
+                    float t = exitAt(qo, qd, fn);
+                    if (g < materialParams.filmCount) {
+                        vec4 fp = materialParams.films[g];
+                        float den = dot(fp.xyz, qd);
+                        float tf = abs(den) > 1e-6 ? (fp.w - dot(fp.xyz, qo)) / den : -1.0;
+                        if (tf > 1e-4 && tf < t) {
+                            qo += qd * tf;
+                            len += tf * e;
+                            qd = reflect(qd, fp.xyz);
+                            continue;
+                        }
+                    }
+                    qo += qd * t;
+                    len += t * e;
+                    vec3 o1 = refract(qd, -fn, n0);
+                    if (dot(o1, o1) > 0.0) { out1 = true; break; }
+                    qd = reflect(qd, fn);
+                }
+                vec3 from = c + R * (qo * e), wIn = R * qd, wN = R * fn;
+                vec3 keep = exp(-materialParams.absorption * len) * (out1 ? 1.0 - fresnel(dot(wIn, wN), n0, 1.0) : 1.0);
+                for (int i = 0; i < WAVES; i++) {
+                    float nm = mix(430.0, 670.0, (float(i) + 0.5) / float(WAVES));
+                    int mine = materialParams.filmCount;
+                    for (int f = materialParams.filmCount - 1; f >= 0; f--)
+                        if (nm > materialParams.filmNm[f].x && nm < materialParams.filmNm[f].y) mine = f;
+                    if (mine != g) continue;
+                    vec3 w = max(waveRgb(nm), vec3(0.0));
+                    wall += w;
+                    vec3 outDir = wIn;
+                    if (out1) {
+                        outDir = refract(wIn, -wN, n0 + (iorAt(nm) - n0) * materialParams.spread);
+                        if (dot(outDir, outDir) <= 0.0) outDir = refract(wIn, -wN, n0);
+                    }
+                    sum += w * lookup(from, outDir, floorY) * keep;
+                }
+            }
+            material.baseColor = vec4(sum / max(wall, vec3(1e-5)) * (1.0 - F) + mirrored * F, 1.0);
+            return;
         }
         vec3 acc = vec3(0.0), wsum = vec3(0.0);
         // a sight line still caught inside after the allowed mirrors would get out a little later anyway:
