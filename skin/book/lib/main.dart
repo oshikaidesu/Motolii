@@ -10,6 +10,7 @@ import 'colour_addon.dart';
 import 'parts/controls.dart';
 import 'sets/workflows/dose_set.dart';
 import 'sets/foundations/feedback.dart';
+import 'sets/glass_live.dart';
 import 'sets/inspector_gui_set.dart';
 import 'sets/inspector/inspector_set.dart';
 import 'sets/foundations/inputs.dart';
@@ -26,6 +27,9 @@ import 'workspace/workspace.dart';
 
 void main() => runApp(const LabBook());
 
+/// The page the window opens on. Another one: --dart-define=LAB_ROUTE=/?path=glass/glass/live
+const _route = String.fromEnvironment('LAB_ROUTE', defaultValue: '/?path=workspace/workspace/window');
+
 Widget _onGround(Widget child, {double? width, double? height}) => ColoredBox(
   color: N.g07,
   child: Center(
@@ -37,7 +41,7 @@ class LabBook extends StatelessWidget {
   const LabBook({super.key});
   @override
   Widget build(BuildContext context) => Widgetbook.material(
-    initialRoute: '/?path=workspace/workspace/window',
+    initialRoute: _route,
     addons: [ColourAddon(), WordsAddon(), A11yAddon()],
     themeMode: ThemeMode.dark,
     darkTheme: ThemeData(brightness: Brightness.dark, fontFamily: 'Inter'),
@@ -51,6 +55,7 @@ class LabBook extends StatelessWidget {
           ),
         ],
       ),
+      WidgetbookCategory(name: 'Glass', children: [glassLiveSet()]),
       WidgetbookCategory(
         name: 'Parts',
         children: [
