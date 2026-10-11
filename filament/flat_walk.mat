@@ -26,7 +26,7 @@ material {
         { type : float4[16], name : steps },                                    // rgb, index of refraction
         { type : float,  name : stepCount },                                    // colour steps + 1
         { type : float4, name : strip },                                        // the sun through a slit (as beam_soften.mat): a band on the floor; w = 0: sun everywhere
-        { type : float,  name : stripSoft },
+        { type : float2, name : stripSoft },                                    // x: how soft the edges; y: 0, or a blind: the band again and again this far apart
         { type : float4[4], name : filmBand },                                  // colour films: film f mirrors light of an index between x and y
         { type : float3, name : sunDir },                                       // the way the sunlight travels
         { type : float,  name : floorY }
@@ -276,8 +276,10 @@ fragment {
         float irr = ci, cosOn = ci;
         if (materialParams.strip.w > 0.0) {   // only what stands in the band of sun gets any
             vec3 X = start + L * ((materialParams.floorY - start.y) / min(L.y, -1e-6));
-            float off = abs(dot(materialParams.strip.xy, X.xz) - materialParams.strip.z);
-            irr *= 1.0 - smoothstep(materialParams.strip.w - materialParams.stripSoft, materialParams.strip.w + materialParams.stripSoft, off);
+            float off = dot(materialParams.strip.xy, X.xz) - materialParams.strip.z;
+            if (materialParams.stripSoft.y > 0.0) off -= materialParams.stripSoft.y * floor(off / materialParams.stripSoft.y + 0.5);
+            off = abs(off);
+            irr *= 1.0 - smoothstep(materialParams.strip.w - materialParams.stripSoft.x, materialParams.strip.w + materialParams.stripSoft.x, off);
             if (!(irr > 1e-5)) return 0.0;
         }
         int S = A, entries = 0;

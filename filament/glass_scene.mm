@@ -177,6 +177,15 @@ int glass_scene_main(int argc, char** argv) {
 #else
 int main(int argc, char** argv) {
 #endif
+    // DARKROOM=1: the dark room in one switch (each of these can still be set on its own): a dark matte table, sun
+    // through a blind (bands of sun across the floor), the exposure opened until those bands burn out, a dim sky and
+    // the bright window for the glass to show, the solids strewn about. Meant for solids with colour films (xcut, xcube).
+    if (std::getenv("DARKROOM")) {
+        static const char* dark[][2] = {{"ROOM", "0.012"}, {"FLOORGREY", "0.3"}, {"FLOOR_REFL", "0.1"}, {"APERTURE", "1.6"}, {"BLOOM", "0.35"},
+                                        {"SKY", "30000"}, {"GLINT", "30000"}, {"GLINTDEG", "25"}, {"STRIP", "0.2 35 0 0.95"}, {"PIECES", "12"},
+                                        {"SCATTER", "1"}};
+        for (const auto& kv : dark) setenv(kv[0], kv[1], 0);
+    }
     if (const char* res = std::getenv("RES")) {
         const double k = std::min(4.0, std::max(0.25, std::atof(res)));
         W = (int)std::lround(1920 * k);
@@ -470,7 +479,7 @@ int main(int argc, char** argv) {
 
     // ---- the solids
     // FILMBANDS: the colours (nanometres, from-to) that the films inside a solid mirror, in the order of beam::Solid::films
-    static float4 filmNm[4] = {{600, 720, 0, 0}, {380, 490, 0, 0}, {500, 590, 0, 0}, {0, 0, 0, 0}};
+    static float4 filmNm[4] = {{380, 490, 0, 0}, {500, 590, 0, 0}, {600, 720, 0, 0}, {380, 490, 0, 0}};
     if (const char* fb = std::getenv("FILMBANDS"))
         std::sscanf(fb, "%f-%f,%f-%f,%f-%f,%f-%f", &filmNm[0].x, &filmNm[0].y, &filmNm[1].x, &filmNm[1].y, &filmNm[2].x, &filmNm[2].y, &filmNm[3].x, &filmNm[3].y);
     std::vector<Item> items;
@@ -503,8 +512,9 @@ int main(int argc, char** argv) {
             std::vector<Plane> cut = box(0.5, 0.5, 0.5).planes;
             for (int i = 0; i < 8; ++i) cut.push_back({{(i & 1 ? t : -t), (i & 2 ? t : -t), (i & 4 ? t : -t)}, (double)env_f("XCUT", 0.62f)});
             Solid xk = from_planes(cut, 4.0);
-            xk.films = cross;
-            xk.films.push_back({{0, 1, 0}, 0.0});   // a third film, lying flat
+            // four films, each aslant and none through the middle: much of the light then meets one film only and
+            // comes out as white less one colour (yellow, pink, pale blue) instead of as red, green or blue
+            xk.films = {{{q, 0, q}, 0.2}, {{q, 0, -q}, 0.2}, {{q, q, 0}, -0.2}, {{0, q, q}, 0.25}};
             if (const char* xf = std::getenv("XFILMS")) {   // XFILMS="nx,ny,nz,o nx,ny,nz,o ...": other films for this solid (up to 4)
                 xk.films.clear();
                 float a, b, d, o;
@@ -580,6 +590,30 @@ int main(int argc, char** argv) {
             it.spin = (i & 1) ? 1.0f : -0.7f;
             it.drift = 0.05f;
             it.phase = 1.7f * (float)i;
+        }
+        if (std::getenv("SCATTER")) {
+            // strewn about like dice instead of the grid: anywhere in a patch of floor that grows with their number, not
+            // touching, each of its own size and turn, flat-faced ones on any of their faces (the same every run; SEED: another throw)
+            uint32_t seed = 0x9E3779B9u * (uint32_t)(1 + (int)env_f("SEED", 0.f));
+            auto rnd = [&seed]() { seed = seed * 1664525u + 1013904223u; return (float)(seed >> 8) / 16777216.f; };
+            const float side = 0.85f * std::sqrt((float)items.size());
+            for (int i = 0; i < (int)items.size(); ++i) {
+                Item& it = items[(size_t)i];
+                it.size = 0.22f + 0.14f * rnd();
+                it.yaw = 6.2832f * rnd();
+                if (it.local.kind == beam::Solid::FLAT && !it.local.planes.empty()) {
+                    const beam::V3 nrm = it.local.planes[(size_t)(rnd() * (float)it.local.planes.size()) % it.local.planes.size()].n;
+                    it.down = nrm;
+                }
+                for (int tries = 0; tries < 200; ++tries) {
+                    it.x = (rnd() - 0.5f) * side;
+                    it.z = (rnd() - 0.5f) * side;
+                    bool clear = true;
+                    for (int j = 0; j < i && clear; ++j)
+                        clear = std::hypot(it.x - items[(size_t)j].x, it.z - items[(size_t)j].z) > 1.25f * (it.size + items[(size_t)j].size);
+                    if (clear) break;
+                }
+            }
         }
     }
     // ---- the stage (see the top): the room's planes and the blocks. They stand still for the whole run.
@@ -1315,6 +1349,10 @@ int main(int argc, char** argv) {
         const float room[7] = {1.9f, 1.55f, 2.5f, -0.3f, 0.3f, -0.5f, 36.f};
         std::memcpy(cam, room, sizeof(cam));
     }
+    if (std::getenv("SCATTER")) {   // strewn solids take more floor than the grid: stand back as far as it takes to see them all
+        const float back = std::max(1.f, 0.85f * std::sqrt((float)items.size()) / 1.25f);
+        for (int i = 0; i < 3; ++i) cam[i] = cam[3 + i] + (cam[i] - cam[3 + i]) * back;
+    }
     if (const char* c = std::getenv("CAM")) std::sscanf(c, "%f %f %f %f %f %f %f", &cam[0], &cam[1], &cam[2], &cam[3], &cam[4], &cam[5], &cam[6]);
     camera->lookAt(float3{cam[0], cam[1], cam[2]}, float3{cam[3], cam[4], cam[5]}, float3{0, 1, 0});
     camera->setProjection((double)cam[6], double(W) / double(H), 0.05, 40.0, Camera::Fov::VERTICAL);
@@ -1924,15 +1962,15 @@ int main(int argc, char** argv) {
             if (k == 0 && std::getenv("STRIP")) {
                 // STRIP="half width [degrees round [off to the side]]": the sun comes through a slit and lights a band of the floor
                 // only, which passes under the first solid (beam_soften.mat, flat_walk.mat)
-                float half = 0.3f, deg = 35.f, side = 0.f;
-                std::sscanf(std::getenv("STRIP"), "%f %f %f", &half, &deg, &side);
+                float half = 0.3f, deg = 35.f, side = 0.f, every = 0.f;   // (every: a blind, the band again and again this far apart)
+                std::sscanf(std::getenv("STRIP"), "%f %f %f %f", &half, &deg, &side, &every);
                 const float a = deg * 3.14159265f / 180.f;
                 const float3 down = float3{(float)world.centre[0].x, (float)world.centre[0].y, (float)world.centre[0].z} + sunDir * ((float)world.centre[0].y / -sunDir.y);
                 const float4 strip{std::cos(a), std::sin(a), std::cos(a) * down.x + std::sin(a) * down.z + side, half};
                 softenMi->setParameter("strip", strip);
-                softenMi->setParameter("stripSoft", env_f("STRIPSOFT", 0.02f));
+                softenMi->setParameter("stripSoft", float2{env_f("STRIPSOFT", 0.02f), every});
                 flatWalkMi->setParameter("strip", strip);
-                flatWalkMi->setParameter("stripSoft", env_f("STRIPSOFT", 0.02f));
+                flatWalkMi->setParameter("stripSoft", float2{env_f("STRIPSOFT", 0.02f), every});
             }
             int count = 0;
             row[5] = (float)world.solids[k].kind; row[6] = (float)world.solids[k].r; row[7] = (float)world.solids[k].h;
