@@ -9,24 +9,24 @@ static const int H = 1080;
 
 int main() {
     Stage s = open_stage(W, H);
-    s.camera->lookAt({2.4f, 4.4f, 3.8f}, {0.f, 0.35f, 0.f}, {0, 1, 0});
+    s.camera->lookAt({2.0f, 3.9f, 3.3f}, {-0.1f, 0.25f, 0.05f}, {0, 1, 0});
     s.camera->setProjection(30.0, double(W) / double(H), 0.05, 60.0, Camera::Fov::VERTICAL);
     static FilmicToneMapper filmic;
-    s.view->setColorGrading(ColorGrading::Builder().toneMapper(&filmic).contrast(1.2f).build(*s.engine));
+    s.view->setColorGrading(ColorGrading::Builder().toneMapper(&filmic).contrast(1.4f).saturation(1.15f).build(*s.engine));
 
     // light: a hard sun from the far right, and Filament's bright studio as the sky that fills the shadows
-    if (!room(s, "out/lightroom/lightroom_ibl.ktx", 22000.f)) return fail("out/lightroom/lightroom_ibl.ktx");
+    if (!room(s, "out/lightroom/lightroom_ibl.ktx", 7000.f)) return fail("out/lightroom/lightroom_ibl.ktx");
     const float3 sunWay = normalize(float3{-0.34f, -0.75f, 0.67f});
     const float sunLux = 100000.f;
     LightManager::ShadowOptions shadow;
-    shadow.mapSize = 2048;
+    shadow.mapSize = 4096;
     utils::Entity sun = utils::EntityManager::get().create();
     LightManager::Builder(LightManager::Type::SUN).color({1.0f, 0.98f, 0.95f}).intensity(sunLux).direction(sunWay)
         .castShadows(true).shadowOptions(shadow).build(*s.engine, sun);
     s.scene->addEntity(sun);
 
     // the paper
-    const float3 paper{0.78f, 0.82f, 0.85f};
+    const float3 paper{0.70f, 0.77f, 0.82f};
     Mesh* floor = new Mesh;
     for (float2 c : {float2{-1, -1}, float2{1, -1}, float2{1, 1}, float2{-1, 1}}) {
         floor->pos.push_back({30.f * c.x, 0.f, -30.f * c.y});
@@ -58,7 +58,10 @@ int main() {
     MaterialInstance* blocks_mi = glass_blocks(s, places, 0.03f, true);
     if (!blocks_mi) return fail("glassbox.filamat");
     blocks_mi->setParameter("abbe", 8.f);
-    blocks_mi->setParameter("envGain", 0.4f);    // (on pale paper the blocks want glassbox's own studio brighter than on black)
+    blocks_mi->setParameter("plainSky", 1.f);
+    blocks_mi->setParameter("envGain", 0.9f);
+    blocks_mi->setParameter("reach", 0.02f);     // (how far behind a block the scene is taken to lie: these stand on the paper)
+    blocks_mi->setParameter("absorption", float3{0.30f, 0.10f, 0.06f});   // (a breath of blue)
     blocks_mi->setParameter("lean", 0.02f);
 
     // the light the blocks throw: every ordered pair of faces (in by A, out by B) as B's four corners, 8 colours a block

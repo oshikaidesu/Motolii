@@ -27,6 +27,7 @@ material {
         { type : float3, name : absorption },
         { type : float, name : round },      // the edges' rounding, as a part of half the edge (0: sharp; the mesh has the same)
         { type : float, name : lean },       // how far the faces lean from flat, slowly, this way and that (0: dead flat)
+        { type : float, name : plainSky },   // 1: the built-in studio is a plain bright sky over a pale ground (no lamps, no black flags)
         { type : float, name : bySize }      // 1: work as hard as the block shows large (see `across` below); 0: always 8 colours, 4 mirrorings
     ]
 }
@@ -60,6 +61,7 @@ fragment {
         return 1.0 - smoothstep(halfWidth, halfWidth + soft, d);
     }
     vec3 studio(vec3 d) {
+        if (materialParams.plainSky > 0.5) return vec3(d.y < 0.0 ? mix(0.62, 0.45, smoothstep(0.0, -0.6, d.y)) : mix(1.0, 0.6, smoothstep(0.0, 0.9, d.y)));   // bright at the horizon, dimmer overhead and on the ground
         float el = asin(clamp(d.y, -1.0, 1.0));
         float az = atan(d.z, d.x) + 3.14159265;
         float wall = mix(0.62, 0.30, smoothstep(0.0, 1.25, el));           // pale near the horizon, grey overhead
