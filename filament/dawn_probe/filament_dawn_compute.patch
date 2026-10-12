@@ -12,19 +12,25 @@ index 32479e06..ce4e1db7 100644
 +    add_subdirectory(${MOTOLII_PROBE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/motolii_probe)
 +endif()
 diff --git a/filament/backend/src/webgpu/WebGPUBufferObject.cpp b/filament/backend/src/webgpu/WebGPUBufferObject.cpp
-index eb5afbd7..403955c9 100644
+index eb5afbd7..e6ca5e99 100644
 --- a/filament/backend/src/webgpu/WebGPUBufferObject.cpp
 +++ b/filament/backend/src/webgpu/WebGPUBufferObject.cpp
-@@ -32,7 +32,8 @@ namespace {
+@@ -32,9 +32,13 @@ namespace {
  [[nodiscard]] constexpr wgpu::BufferUsage getBufferObjectUsage(
          const BufferObjectBinding bindingType) noexcept {
      switch (bindingType) {
 -        case BufferObjectBinding::VERTEX:         return wgpu::BufferUsage::Vertex;
++        // (CopySrc: readBufferSubData)
 +        case BufferObjectBinding::VERTEX:
-+            return wgpu::BufferUsage::Vertex | wgpu::BufferUsage::Storage;
++            return wgpu::BufferUsage::Vertex | wgpu::BufferUsage::Storage |
++                   wgpu::BufferUsage::CopySrc;
          case BufferObjectBinding::UNIFORM:        return wgpu::BufferUsage::Uniform;
-         case BufferObjectBinding::SHADER_STORAGE: return wgpu::BufferUsage::Storage;
+-        case BufferObjectBinding::SHADER_STORAGE: return wgpu::BufferUsage::Storage;
++        case BufferObjectBinding::SHADER_STORAGE:
++            return wgpu::BufferUsage::Storage | wgpu::BufferUsage::CopySrc;
      }
+ }
+ 
 diff --git a/filament/backend/src/webgpu/WebGPUDescriptorSet.cpp b/filament/backend/src/webgpu/WebGPUDescriptorSet.cpp
 index ce0a20a6..598e45fe 100644
 --- a/filament/backend/src/webgpu/WebGPUDescriptorSet.cpp
@@ -68,10 +74,60 @@ index 5a67cb41..db2316a9 100644
              }
              case DescriptorType::SAMPLER_EXTERNAL: {
 diff --git a/filament/backend/src/webgpu/WebGPUDriver.cpp b/filament/backend/src/webgpu/WebGPUDriver.cpp
-index ad409d39..2c332e87 100644
+index ad409d39..b13d0fdc 100644
 --- a/filament/backend/src/webgpu/WebGPUDriver.cpp
 +++ b/filament/backend/src/webgpu/WebGPUDriver.cpp
-@@ -2145,8 +2145,49 @@ void WebGPUDriver::draw(PipelineState pipelineState,
+@@ -1820,8 +1820,47 @@ void WebGPUDriver::readTextureToBuffer(wgpu::Texture srcTexture, uint32_t level,
+ 
+ void WebGPUDriver::readBufferSubData(Handle<HwBufferObject> bufferObjectHandle,
+         const uint32_t offset, const uint32_t size, backend::BufferDescriptor&& bufferDescriptor) {
+-    // todo
+-    scheduleDestroy(std::move(bufferDescriptor));
++    // The same way readPixels does it: copy to a mappable buffer, submit, map, copy out.
++    const auto bufferObject{ handleCast<WebGPUBufferObject>(bufferObjectHandle) };
++    const uint32_t paddedSize{ (size + 3u) & ~3u };
++    const wgpu::BufferDescriptor stagingDescriptor{
++        .label = "read_buffer_staging",
++        .usage = wgpu::BufferUsage::MapRead | wgpu::BufferUsage::CopyDst,
++        .size = paddedSize,
++    };
++    wgpu::Buffer stagingBuffer{ mDevice.CreateBuffer(&stagingDescriptor) };
++    mQueueManager.getCommandEncoder().CopyBufferToBuffer(bufferObject->getBuffer(), offset,
++            stagingBuffer, 0, paddedSize);
++    struct UserData final {
++        BufferDescriptor bufferDescriptor;
++        wgpu::Buffer buffer;
++        uint32_t size;
++        WebGPUDriver* driver;
++    };
++    auto userData = std::make_unique<UserData>(UserData{
++            .bufferDescriptor = std::move(bufferDescriptor),
++            .buffer = std::move(stagingBuffer),
++            .size = size,
++            .driver = this,
++    });
++    mReadPixelMapsCounter.startTask();
++    mQueueManager.flush();
++    userData->buffer.MapAsync(
++            wgpu::MapMode::Read, 0, paddedSize, wgpu::CallbackMode::AllowProcessEvents,
++            [](wgpu::MapAsyncStatus status, wgpu::StringView message, UserData* userdata) {
++                std::unique_ptr<UserData> data(static_cast<UserData*>(userdata));
++                if (UTILS_LIKELY(status == wgpu::MapAsyncStatus::Success)) {
++                    memcpy(data->bufferDescriptor.buffer,
++                            data->buffer.GetConstMappedRange(0, data->buffer.GetSize()),
++                            std::min<size_t>(data->size, data->bufferDescriptor.size));
++                    data->buffer.Unmap();
++                } else {
++                    FWGPU_LOGE << "Failed to map staging buffer: " << std::string_view(message);
++                }
++                data->driver->scheduleDestroy(std::move(data->bufferDescriptor));
++                data->driver->mReadPixelMapsCounter.finishTask();
++            },
++            userData.release());
+ }
+ 
+ void WebGPUDriver::readTexture(Handle<HwTexture> src, uint8_t level, uint16_t layer, uint32_t x,
+@@ -2145,8 +2184,49 @@ void WebGPUDriver::draw(PipelineState pipelineState,
      draw2(indexOffset, indexCount, instanceCount);
  }
  
@@ -123,7 +179,7 @@ index ad409d39..2c332e87 100644
  }
  
  void WebGPUDriver::scissor(Viewport scissor) {
-@@ -2251,10 +2292,12 @@ void WebGPUDriver::bindDescriptorSet(Handle<HwDescriptorSet> descriptorSetHandle
+@@ -2251,10 +2331,12 @@ void WebGPUDriver::bindDescriptorSet(Handle<HwDescriptorSet> descriptorSetHandle
          return;
      }
      const auto bindGroup = handleCast<WebGPUDescriptorSet>(descriptorSetHandle);
@@ -161,10 +217,19 @@ index 675a6cc4..f8fd0c27 100644
  
  } // namespace filament::backend
 diff --git a/filament/backend/src/webgpu/platform/WebGPUPlatform.cpp b/filament/backend/src/webgpu/platform/WebGPUPlatform.cpp
-index 04c92ae7..b416b2e3 100644
+index 04c92ae7..172a75aa 100644
 --- a/filament/backend/src/webgpu/platform/WebGPUPlatform.cpp
 +++ b/filament/backend/src/webgpu/platform/WebGPUPlatform.cpp
-@@ -76,6 +76,8 @@ constexpr std::array OPTIONAL_FEATURES = {
+@@ -28,6 +28,8 @@
+ #include <dawn/webgpu_cpp_print.h>
+ #include <webgpu/webgpu_cpp.h>
+ 
++#include <cstdlib>
++
+ #include <utils/Mutex.h>
+ 
+ #include <algorithm>
+@@ -76,6 +78,8 @@ constexpr std::array OPTIONAL_FEATURES = {
      wgpu::FeatureName::CoreFeaturesAndLimits,
      wgpu::FeatureName::DepthClipControl,
      wgpu::FeatureName::Depth32FloatStencil8,
@@ -173,3 +238,19 @@ index 04c92ae7..b416b2e3 100644
  
      // Unsupported on WASM
  #if !defined(__EMSCRIPTEN__)
+@@ -274,6 +278,15 @@ void printInstanceDetails(wgpu::Instance const& instance) {
+      */
+     toggles.push_back("enable_immediate_error_handling");
+ #endif
++    // FILAMENT_DAWN_TOGGLES=a,b,...: more Dawn toggles to turn on (experiments: disable_robustness, ...)
++    static std::vector<std::string> extraToggles;
++    if (const char* extra = std::getenv("FILAMENT_DAWN_TOGGLES")) {
++        std::stringstream stream{ extra };
++        for (std::string name; std::getline(stream, name, ',');) {
++            if (!name.empty()) extraToggles.push_back(name);
++        }
++        for (std::string const& name: extraToggles) toggles.push_back(name.c_str());
++    }
+     dawnTogglesDescriptor.enabledToggleCount = toggles.size();
+     dawnTogglesDescriptor.enabledToggles = toggles.data();
+ 

@@ -22,12 +22,16 @@ for f in *.mat; do
         $MATC -g -a webgpu -a metal -p desktop -o out/wgpu_mat/$n.filamat $f > out/wgpu_mat/$n.log 2>&1 ||
         echo "no WebGPU material: $n"
 done
-clang++ -std=c++20 -fobjc-arc -O2 -I "$SDK/include" -I "$TVG/include/thorvg-1" glass_scene.mm \
+(cd $SRC/out/wgpu && ninja motolii_door > /dev/null)
+ln -sfn ../../cbeam.wgsl out/wgpu_mat/cbeam.wgsl
+clang++ -std=c++20 -fobjc-arc -O2 -DGLASS_COMPUTE_DOOR -I "$SDK/include" -I "$TVG/include/thorvg-1" glass_scene.mm \
+    $SRC/out/wgpu/filament/motolii_probe/libmotolii_door.a \
     -L "$SDK/lib/arm64" -L "$TVG/lib" -Wl,-rpath,"$PWD/$TVG/lib" \
     -lthorvg-1 -lfilament -lbackend -lwebgpu_dawn -lbluegl -lbluevk -lfilabridge -lfilaflat \
     -lutils -lgeometry -lsmol-v -libl -lktxreader -lstb -luberzlib -lzstd \
     -lshaders -lperfetto -labseil -lmeshoptimizer -lcamutils -limage -lbasis_transcoder -luberarchive \
     -framework Cocoa -framework Metal -framework CoreVideo -framework QuartzCore -framework IOSurface -framework IOKit \
     -lz -o out/glass_scene_wgpu
+[ -n "$BUILDONLY" ] && exit 0
 cd out/wgpu_mat
 BACKEND="${BACKEND:-webgpu}" ../glass_scene_wgpu "${1:-dawn}" 2>&1 | grep -v "FrameInfo's circular queue\|libvulkan\|BackendVk"

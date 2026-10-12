@@ -21,6 +21,10 @@
 // machinery with neither, to compare with the plain picture). See "the stage" below and "Receivers" in beam_glass.h.
 #include "beam_glass.h"
 #include "beam_split.h"
+#ifdef GLASS_COMPUTE_DOOR
+#include "cbeam.h"   // CBEAMS=1: the beams as compute (needs Filament's WebGPU backend; dawn_probe/glass_wgpu.sh builds with it)
+#include <filament/BufferObject.h>
+#endif
 
 #include <filament/Camera.h>
 #include <filament/ColorGrading.h>
@@ -65,6 +69,7 @@
 #include <cstring>
 #include <fstream>
 #include <string>
+#include <unordered_map>
 #include <thread>
 #include <vector>
 
@@ -255,13 +260,13 @@ int main(int argc, char** argv) {
         stageLights.push_back(mi);
     };
 
-#ifdef GLASS_LIB
-    Engine* engine = glass_door_engine();
-#else
     // BACKEND=webgpu (trial): Filament's WebGPU backend (Dawn). Needs a Filament built with it and materials compiled
     // for it (dawn_probe/build.sh, dawn_probe/glass_wgpu.sh); the prebuilt SDK has neither.
     const char* via = std::getenv("BACKEND");
     const bool viaDawn = via && std::string(via) == "webgpu";
+#ifdef GLASS_LIB
+    Engine* engine = glass_door_engine();
+#else
     Engine* engine = Engine::Builder().backend(viaDawn ? Engine::Backend::WEBGPU : Engine::Backend::METAL).featureLevel(Engine::FeatureLevel::FEATURE_LEVEL_3).build();
 #endif
     if (!engine) return fail("engine");
@@ -1042,7 +1047,16 @@ int main(int argc, char** argv) {
     // keeps 11 corners. It is NOT exact; it is here to measure what one fragment per beam costs (gbm.glsl).
     const bool gbMrt = flatGBeams && env_f("GBEAMS", 0.f) > 1.5f;
     static std::vector<MaterialInstance*> gbmCommit;   // post-process material instances: to be committed by hand each frame
-    const bool flatBeams = env_f("BEAMS", 0.f) > 0.5f && !flatGBeams;
+    // CBEAMS=1 (BACKEND=webgpu): the same splitting as BEAMS=1, as compute on the GPU (cbeam.wgsl); the CPU hands over
+    // poses only and reads nothing back. CBEAMCHECK=1 (tests): the CPU's splitting is run beside it and the two
+    // sets of triangles are compared, which reads the GPU's back.
+#ifdef GLASS_COMPUTE_DOOR
+    const bool cBeams = viaDawn && env_f("CBEAMS", 0.f) > 0.5f && !rainbowOnce && !flatGBeams;
+#else
+    const bool cBeams = false;
+#endif
+    const bool cCheck = cBeams && env_f("CBEAMCHECK", 0.f) > 0.5f;
+    const bool flatBeams = (env_f("BEAMS", 0.f) > 0.5f || cBeams) && !flatGBeams;
     static std::vector<std::array<beam::SplitShape, 16>> beamShapes;   // per shape, per set of films
     struct BeamPose {
         beam::V3 R[3], at;
@@ -1127,6 +1141,33 @@ int main(int argc, char** argv) {
         }
         beamPose.resize(items.size());
     }
+#ifdef GLASS_COMPUTE_DOOR
+    cbeam::Run* cRun = nullptr;
+    uint32_t cSolids = 0, cStepsAll = 0;
+    static std::vector<std::vector<float>> cCpuTris;   // CBEAMCHECK: what the CPU's splitting gave this frame, per solid
+    if (cBeams) {
+        if (stageOn) return fail("CBEAMS: not on a stage yet (the stage draws the light once per receiver)");
+        cbeam::Table tb;
+        if (!cbeam::table(beamShapes, tb)) return fail("CBEAMS: a face has more than 16 corners, or the table is too long");
+        const uint32_t vertCap = (uint32_t)env_f("CBEAMVERTS", 393216.f) / 3 * 3, beamCap = (uint32_t)env_f("CBEAMCAP", 65536.f);
+        if (beamCap & (beamCap - 1)) return fail("CBEAMCAP must be a power of two (cbeam.wgsl: place)");
+        const std::vector<uint8_t> text = load_file(GLASS_PATH("cbeam.wgsl").c_str());
+        if (text.empty()) return fail("cbeam.wgsl");
+        BufferObject* bo = BufferObject::Builder().size(vertCap * 28).bindingType(BufferObject::BindingType::VERTEX).build(*engine);
+        VertexBuffer* vb = VertexBuffer::Builder().vertexCount(vertCap).bufferCount(1).enableBufferObjects()
+                               .attribute(VertexAttribute::POSITION, 0, VertexBuffer::AttributeType::FLOAT3, 0, 28)
+                               .attribute(VertexAttribute::COLOR, 0, VertexBuffer::AttributeType::FLOAT4, 12, 28).build(*engine);
+        vb->setBufferObjectAt(*engine, 0, bo);
+        cRun = cbeam::open(engine, std::string(text.begin(), text.end()), tb, bo, vertCap, beamCap, (uint32_t)env_f("CBEAMLEVELS", 31.f), (uint32_t)items.size());
+        if (!cRun) return fail("cbeam.wgsl: a pass is missing");
+        const utils::Entity e = renderable(vb, lightIB, lightMi, false, false, 100.f);
+        rm.setGeometryAt(rm.getInstance(e), 0, RenderableManager::PrimitiveType::TRIANGLES, vb, lightIB, 0, vertCap);
+        if (std::getenv("NOLIGHT") || std::getenv("XCDRAW")) rm.setLayerMask(rm.getInstance(e), 0xFF, 0x00);   // (XCDRAW: timing only, computed but not drawn)
+        sLight->addEntity(e);
+        std::printf("  cbeams: compute on the GPU, table of %zu vec4s, %u levels of %u beams, room for %u triangles, most seeds to a shape %u\n", tb.t.size() / 4,
+                    cRun->levels, beamCap, vertCap / 3, tb.seedMost);
+    }
+#endif
     if (gbMrt) {
         Material* nodeMat = mat("gbm_node.filamat");
         Material* indexMat = mat("gbm_index.filamat");
@@ -2316,12 +2357,41 @@ int main(int argc, char** argv) {
             stats.assign(items.size(), beam::SplitStats{});
             const double least = env_f("BEAMCUT", 2e-5f);
             const int mostFaces = (int)env_f("BEAMFACES", 8.f);
-            beam::parallel_for(items.size(), threads, [&](size_t k) {
+#ifdef GLASS_COMPUTE_DOOR
+            if (cBeams) {
+                cbeam::Frame f{};
+                const beam::V3 sn = normalize(par.sun);
+                f.sun[0] = (float)sn.x; f.sun[1] = (float)sn.y; f.sun[2] = (float)sn.z; f.sun[3] = 0.f;
+                f.band[0] = (float)band.ux; f.band[1] = (float)band.uz; f.band[2] = (float)band.c; f.band[3] = (float)band.half;
+                f.misc[0] = (float)band.every; f.misc[1] = (float)least; f.misc[2] = (float)mostFaces; f.misc[3] = 1.f;
+                f.counts[1] = (uint32_t)bsteps.size();
+                for (size_t i = 0; i < bsteps.size() && i < 16; ++i) {
+                    f.steps[i][0] = (float)bsteps[i].rgb.x; f.steps[i][1] = (float)bsteps[i].rgb.y; f.steps[i][2] = (float)bsteps[i].rgb.z; f.steps[i][3] = (float)bsteps[i].n;
+                }
+                for (int i = 0; i < 4; ++i) { f.films[i][0] = (float)filmN[i][0]; f.films[i][1] = (float)filmN[i][1]; }
+                static std::vector<float> poses;
+                poses.clear();
+                for (size_t k = 0; k < items.size(); ++k) {
+                    if (flatKindOf[k] < 0) continue;
+                    const BeamPose& bp = beamPose[k];
+                    const float row[16] = {(float)bp.R[0].x, (float)bp.R[0].y, (float)bp.R[0].z, (float)bp.s, (float)bp.R[1].x, (float)bp.R[1].y, (float)bp.R[1].z, (float)flatKindOf[k],
+                                           (float)bp.R[2].x, (float)bp.R[2].y, (float)bp.R[2].z, 0.f,          (float)bp.at.x,   (float)bp.at.y,   (float)bp.at.z,   0.f};
+                    poses.insert(poses.end(), row, row + 16);
+                }
+                cSolids = (uint32_t)(poses.size() / 16);
+                cStepsAll = (uint32_t)bsteps.size() + 1;
+                cbeam::send(cRun, f, poses.data(), cSolids);
+            }
+#endif
+            if (!cBeams || cCheck) beam::parallel_for(items.size(), threads, [&](size_t k) {
                 each[k].clear();
                 if (flatKindOf[k] < 0) return;
                 beam::split_light(beamShapes[(size_t)flatKindOf[k]].data(), beamPose[k].R, beamPose[k].s, beamPose[k].at, par.sun, bsteps, filmN, band, 0.0, least, mostFaces, true, each[k], &stats[k]);
             });
-            for (const std::vector<float>& e : each) tri.insert(tri.end(), e.begin(), e.end());
+            if (!cBeams) for (const std::vector<float>& e : each) tri.insert(tri.end(), e.begin(), e.end());
+#ifdef GLASS_COMPUTE_DOOR
+            if (cCheck) cCpuTris = each;
+#endif
             static double msSum = 0;
             static int frames = 0;
             msSum += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - b0).count();
@@ -2633,7 +2703,83 @@ int main(int argc, char** argv) {
         }
     };
 
+#ifdef GLASS_COMPUTE_DOOR
+    // CBEAMCHECK (tests): the GPU's triangles read back and set against the CPU's of the same frame. A triangle is
+    // "the same" when its three corners (in order), its light and its distance flown agree within CBEAMTOL.
+    auto cbeam_check = [&]() {
+        static int frame = 0;
+        if (++frame != 1 && frame % 300 != 0) return;
+        cbeam::Counters c{};
+        door::read(engine, cRun->counters, 0, sizeof(c), &c);
+        const uint32_t nv = std::min(c.verts, cRun->vertCap);
+        std::vector<float> g((size_t)std::max<uint32_t>(nv, 1) * 7);
+        if (nv) door::read(engine, cRun->verts, 0, nv * 28, g.data());
+        long beams = 0;
+        std::printf("  CBEAMCHECK frame %d: beams by level:", frame);
+        for (int i = 0; i < 32; ++i) { beams += c.level[i]; if (c.level[i]) std::printf(" %u", c.level[i]); }
+        std::printf("\n    GPU: %ld beams followed, %u triangles; found no room: %u beams, %u vertices, %u corners, %u bands\n", beams, nv / 3, c.lost[0], c.lost[1], c.lost[2], c.lost[3]);
+        struct T { float v[3][6]; double light; bool used; };   // per corner: x, z, r, g, b, travel
+        auto light_of = [](const T& t) {
+            const double a = 0.5 * std::fabs((double)(t.v[1][0] - t.v[0][0]) * (t.v[2][1] - t.v[0][1]) - (double)(t.v[2][0] - t.v[0][0]) * (t.v[1][1] - t.v[0][1]));
+            return a * ((double)t.v[0][2] + t.v[0][3] + t.v[0][4]) / 3.0;
+        };
+        std::vector<T> cpu, gpu;
+        for (const std::vector<float>& e : cCpuTris)
+            for (size_t i = 0; i + 18 <= e.size(); i += 18) {
+                T t{};
+                std::memcpy(t.v, e.data() + i, sizeof(t.v));
+                t.light = light_of(t);
+                cpu.push_back(t);
+            }
+        for (size_t i = 0; i + 21 <= (size_t)nv * 7; i += 21) {
+            T t{};
+            for (int k = 0; k < 3; ++k) {
+                const float* q = g.data() + i + (size_t)k * 7;
+                const float row[6] = {q[0], q[2], q[3], q[4], q[5], q[6]};
+                std::memcpy(t.v[k], row, sizeof(row));
+            }
+            t.light = light_of(t);
+            gpu.push_back(t);
+        }
+        const double tol = env_f("CBEAMTOL", 1e-3f), cellSize = 0.05;
+        std::unordered_map<long long, std::vector<size_t>> grid;
+        auto key = [&](float x, float z) { return ((long long)std::floor(x / cellSize) << 32) ^ (long long)(uint32_t)(int)std::floor(z / cellSize); };
+        for (size_t i = 0; i < gpu.size(); ++i) grid[key(gpu[i].v[0][0], gpu[i].v[0][1])].push_back(i);
+        double cpuLight = 0, gpuLight = 0, lostLight = 0, worst = 0;
+        size_t matched = 0;
+        for (const T& t : cpu) {
+            cpuLight += t.light;
+            double best = 1e30;
+            size_t bi = (size_t)-1;
+            for (int dx = -1; dx <= 1; ++dx)
+                for (int dz = -1; dz <= 1; ++dz) {
+                    auto it = grid.find(key(t.v[0][0] + (float)(dx * cellSize), t.v[0][1] + (float)(dz * cellSize)));
+                    if (it == grid.end()) continue;
+                    for (size_t i : it->second) {
+                        if (gpu[i].used) continue;
+                        double d = 0;
+                        for (int k = 0; k < 3; ++k)
+                            for (int q = 0; q < 6; ++q) d = std::max(d, std::fabs((double)gpu[i].v[k][q] - t.v[k][q]) / (q == 5 ? std::max(1.0, std::fabs((double)t.v[k][q])) : 1.0));
+                        if (d < best) { best = d; bi = i; }
+                    }
+                }
+            if (bi != (size_t)-1 && best <= tol) { gpu[bi].used = true; ++matched; worst = std::max(worst, best); }
+            else lostLight += t.light;
+        }
+        double extraLight = 0;
+        for (const T& t : gpu) { gpuLight += t.light; if (!t.used) extraLight += t.light; }
+        std::printf("    CPU: %zu triangles. The same on both: %zu (%.3f%%), furthest apart among them %.2e; light only the CPU has %.4f%%, only the GPU has %.4f%%; all light GPU / CPU = %.6f\n",
+                    cpu.size(), matched, cpu.empty() ? 0.0 : 100.0 * (double)matched / (double)cpu.size(), worst, 100.0 * lostLight / std::max(cpuLight, 1e-30),
+                    100.0 * extraLight / std::max(cpuLight, 1e-30), gpuLight / std::max(cpuLight, 1e-30));
+    };
+#endif
     auto draw_light = [&]() {
+#ifdef GLASS_COMPUTE_DOOR
+        if (cBeams && !std::getenv("XCRUN")) {   // (XCRUN: timing only, the compute passes left out)
+            if (cCheck) cbeam::run(cRun, cSolids, cStepsAll, cbeam_check);
+            else cbeam::run(cRun, cSolids, cStepsAll);
+        }
+#endif
         if (vbodyOn && !std::getenv("VNODESOFF")) {
             renderer->render(vNodes);
             renderer->render(vCells);
@@ -2853,6 +2999,25 @@ int main(int argc, char** argv) {
     // traced again and uploaded again each frame. beginFrame() returning false is Filament saying it is behind.
     // ---- BENCH=n: n frames one after another, each waited for to the end: what one frame really costs (CPU + GPU),
     // with no waiting for a slot and no frames queued behind one another in the number
+#ifdef GLASS_COMPUTE_DOOR
+    // CBEAMBENCH=n: the compute passes of one frame, n times one after another with nothing drawn, then one wait: what
+    // the beams cost the GPU on their own. (The poses are sent once; the scene does not move.)
+    if (cBeams && std::getenv("CBEAMBENCH")) {
+        const int n = (int)env_f("CBEAMBENCH", 1000.f);
+        update(env_f("T", 1.3f));
+        for (int i = 0; i < 50; ++i) cbeam::run(cRun, cSolids, cStepsAll);
+        engine->flushAndWait();
+        const auto b0 = std::chrono::steady_clock::now();
+        for (int i = 0; i < n; ++i) {
+            cbeam::run(cRun, cSolids, cStepsAll);
+            if (i % 20 == 19) engine->flush();
+        }
+        engine->flushAndWait();
+        const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - b0).count();
+        std::printf("CBEAMBENCH: %.3f ms a frame of compute alone (%d frames, %u solids, %u levels)\n", ms / n, n, cSolids, cRun->levels);
+        return 0;
+    }
+#endif
     if (std::getenv("BENCH")) {
         const int n = (int)env_f("BENCH", 200.f);
         const float3 sun0 = sunDir;
