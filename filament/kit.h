@@ -155,10 +155,11 @@ static MaterialInstance* add(Stage& s, Mesh* m, const char* filamat, std::vector
 // One glass block, edge 1, as real ones are: the edges a little round (a tenth of half the edge), the faces flat.
 // glassbox.mat draws it: the sight line goes in, through the block's real far faces, mirrors inside where it cannot
 // leave, and shows what lies behind where it comes out.
-static Mesh* cube(float ROUND) {
+static Mesh* cube(float ROUND, int flat = 1) {   // flat: how many times a flat is cut across (boxlight.mat wants it fine)
     Mesh* m = new Mesh;
     std::vector<float> line;   // (where a face is cut: finely across the rounding, once across the flat)
     for (int k = 0; k <= 4; ++k) line.push_back(-1.f + ROUND * (float)k / 4.f);
+    for (int k = 1; k < flat; ++k) line.push_back(-(1.f - ROUND) + 2.f * (1.f - ROUND) * (float)k / (float)flat);
     for (int k = 4; k >= 0; --k) line.push_back(1.f - ROUND * (float)k / 4.f);
     const int n = (int)line.size();
     const float3 ax[3] = {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}};

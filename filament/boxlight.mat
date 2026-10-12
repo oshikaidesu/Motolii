@@ -1,14 +1,15 @@
-// boxlight.mat: the light a glass box throws on the floor in the sun. Nothing follows light about and nothing is cut
-// by us (the way of pair_light.mat, here for plain boxes only):
-// light that goes in by face A and out by face B leaves through B itself, less the part of B that the light from A
-// does not reach. That light is a straight tube with A as its cross-section, so: draw B where its light lands on the
-// floor, and hand the GPU's own clipper the four walls of the tube. A pair that carries no light (A not in the sun,
-// B not ahead, the light mirrored back in at B) is clipped away whole; nobody has to know which pairs carry light.
-// Every colour is its own copy, bent by the plain formula for that colour: where the colours part, a rainbow rim.
-// Not here: light mirrored inside before it leaves, light that goes on through another box, light on anything but
-// the floor.
-// Mesh: for every ordered pair of faces (A, B): B's four corners, position = (A, B, corner).
-// Copy (instance) = box * 8 + colour. The boxes' poses come as arrays (64 boxes at most).
+// boxlight.mat: the light a glass box throws on the floor in the sun, the way the makers of such pictures do it
+// (a finely cut surface, every corner's light bent and landed, brightness from how the cut is squeezed):
+// the mesh is the box's own round-edged surface, cut fine. Each corner in the sun takes its ray into the box, through
+// it (mirrored inside where it cannot leave), out, and down to the floor: the corner is drawn THERE. Where the landed
+// cuts are squeezed together the light is gathered and bright, where they are pulled apart it is thin: that ratio is
+// read off per pixel from how fast the two positions change across the screen. Every colour is its own copy, bent by
+// its own index, and the indices are set far apart on purpose: the round edges are thin prisms and throw rainbows,
+// the faces lean a little and gather their light into bright lines. Nothing here follows light exactly; nothing is
+// worked out on the CPU.
+// Not here: light that goes on through another box, light on anything but the floor, a box in another's shadow
+// (it throws its light all the same).
+// Mesh: kit.h's cube, cut fine (positions +-0.5). Copy (instance) = box * colours + colour. 64 boxes at most.
 material {
     name : boxlight,
     shadingModel : unlit,
@@ -16,7 +17,7 @@ material {
     depthWrite : false,
     culling : none,
     instanced : true,
-    variables : [ light ],
+    variables : [ { name : tint, precision : high }, { name : where, precision : high }, { name : more, precision : high } ],
     parameters : [
         { type : float4[64], name : poseX, precision : high },   // per box: axis x, half size along it
         { type : float4[64], name : poseY, precision : high },
@@ -24,90 +25,10 @@ material {
         { type : float4[64], name : poseAt, precision : high },  // its middle
         { type : float3, name : sunWay },                        // the way the sunlight travels
         { type : float3, name : sunOnFloor },                    // what the sun adds to the bare floor at noon: floor colour * lux / pi
+        { type : float,  name : colours },                       // copies per box
         { type : float,  name : ior },
-        { type : float,  name : abbe },
-        { type : float,  name : gain },                          // the thrown light this many times what it is
-        { type : float,  name : floorY }
-    ]
-}
-
-vertex {
-#include "spectrum.glsl"
-    // The GPU's own clip distances. matc first checks a material's code as ES, where the built-in does not exist, so
-    // the lines are kept from that check; the real compile for desktop has them (clip_probe.mat).
-#ifndef GL_ES
-#define CLIP(k, value) gl_ClipDistance[k] = (value)
-#else
-#define CLIP(k, value)
-#endif
-    const int COLOURS = 8;
-    float fres(float ci, float n1, float n2) {   // how much is mirrored at a face
-        float s2 = (n1 / n2) * (n1 / n2) * (1.0 - ci * ci);
-        if (s2 >= 1.0) return 1.0;
-        float ct = sqrt(1.0 - s2);
-        float rs = (n1 * ci - n2 * ct) / (n1 * ci + n2 * ct), rp = (n1 * ct - n2 * ci) / (n1 * ct + n2 * ci);
-        return 0.5 * (rs * rs + rp * rp);
-    }
-    void materialVertex(inout MaterialVertexInputs material) {
-        int A = int(mesh_position.x + 0.5), B = int(mesh_position.y + 0.5), corner = int(mesh_position.z + 0.5);
-        int inst = getInstanceIndex();
-        int box = inst / COLOURS, colour = inst - box * COLOURS;
-        vec3 ax = materialParams.poseX[box].xyz, ay = materialParams.poseY[box].xyz, az = materialParams.poseZ[box].xyz;
-        vec3 h = vec3(materialParams.poseX[box].w, materialParams.poseY[box].w, materialParams.poseZ[box].w);
-        vec3 sun = normalize(vec3(dot(materialParams.sunWay, ax), dot(materialParams.sunWay, ay), dot(materialParams.sunWay, az)));
-
-        // faces 0..5: +x +y +z -x -y -z, in the box's own frame
-        int kA = A - (A / 3) * 3, kB = B - (B / 3) * 3;
-        vec3 nA = vec3(0.0), nB = vec3(0.0);
-        nA[kA] = A < 3 ? 1.0 : -1.0;
-        nB[kB] = B < 3 ? 1.0 : -1.0;
-        int uB = kB == 2 ? 0 : kB + 1, vB = uB == 2 ? 0 : uB + 1;
-        vec3 p = vec3(0.0);                                   // this corner of B
-        p[kB] = nB[kB] * h[kB];
-        p[uB] = (corner == 0 || corner == 3 ? -1.0 : 1.0) * h[uB];
-        p[vB] = (corner < 2 ? -1.0 : 1.0) * h[vB];
-
-        float lambda = mix(400.0, 700.0, (float(colour) + 0.5) / float(COLOURS));
-        float n = cauchyIor(lambda, materialParams.ior, materialParams.abbe);
-        bool ok = A != B;
-        float ci = -dot(nA, sun);
-        if (!(ci > 1e-6)) ok = false;                         // A is not in the sun
-        vec3 d1 = refract(sun, nA, 1.0 / n);
-        float db = dot(nB, d1);
-        if (!(db > 1e-6)) ok = false;                         // B is not ahead
-        float back = ok ? fres(db, n, 1.0) : 1.0;
-        if (!(back < 1.0)) ok = false;                        // mirrored back in at B
-        vec3 d2 = ok ? refract(d1, -nB, n) : sun;
-        vec3 Pw = ax * p.x + ay * p.y + az * p.z + materialParams.poseAt[box].xyz;
-        vec3 dW = ax * d2.x + ay * d2.y + az * d2.z;
-        if (!(dW.y < -1e-6)) ok = false;                      // it does not come down
-        float side[4];
-        vec3 rgb = vec3(0.0);
-        vec3 X = vec3(0.0);
-        if (ok) {
-            // the walls of the tube of light that came in through A: where this corner's light crossed A, against A's edges
-            vec3 q = p - d1 * ((dot(nA, p) - h[kA]) / dot(nA, d1));
-            int uA = kA == 2 ? 0 : kA + 1, vA = uA == 2 ? 0 : uA + 1;
-            side[0] = h[uA] - q[uA]; side[1] = h[uA] + q[uA]; side[2] = h[vA] - q[vA]; side[3] = h[vA] + q[vA];
-            X = Pw + dW * ((materialParams.floorY - Pw.y) / dW.y);
-            // how bright against the bare sunlit floor: what gets in, how the tube is squeezed, what gets out, how steeply it lands
-            float bright = ci * (1.0 - fres(ci, 1.0, n)) * db / abs(dot(nA, d1)) * (1.0 - back) / abs(dot(nB, d2)) * -dW.y;
-            vec3 all = vec3(0.0);
-            for (int i = 0; i < COLOURS; i++) all += max(xyzToSrgb(cieXyz(mix(400.0, 700.0, (float(i) + 0.5) / float(COLOURS)))), vec3(0.0));
-            rgb = max(xyzToSrgb(cieXyz(lambda)), vec3(0.0)) / all * (bright * materialParams.gain);
-        } else {
-            side[0] = -1.0; side[1] = -1.0; side[2] = -1.0; side[3] = -1.0;
-        }
-        CLIP(0, side[0]); CLIP(1, side[1]); CLIP(2, side[2]); CLIP(3, side[3]);
-        material.light = vec4(rgb, 0.0);
-        // (the renderable stands at the origin unturned, so its own matrix is Filament's way from the scene's coordinates to its own)
-        material.worldPosition = mulMat4x4Float3(getWorldFromModelMatrix(), vec3(X.x, materialParams.floorY + 0.002, X.z));
-    }
-}
-
-fragment {
-    void material(inout MaterialInputs material) {
-        prepareMaterial(material);
-        material.baseColor = vec4(variable_light.rgb * materialParams.sunOnFloor * getExposure(), 1.0);
+        { type : float,  name : abbe },                          // how far apart the colours' indices lie (small: far)
+        { type : float,  name : round },                         // the edges' rounding, as a part of half the edge (the mesh has the same)
+        { type : float,  name : lean },                          // how far the faces lean from flat (glassbox.mat's, here often more)
     }
 }

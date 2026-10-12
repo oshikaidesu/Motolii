@@ -1,11 +1,12 @@
 // blocks.mm: clear glass blocks standing on pale paper in hard sun, seen from above.
 // The blocks are kit.h's; their shadows are Filament's own sun shadow; the paper is Filament's lit material; the light
-// the blocks throw on the paper is boxlight.mat (each pair of a block's faces drawn once per colour, cut by the GPU).
+// the blocks throw on the paper is boxlight.mat (the block's surface drawn where its light lands, once per colour).
 // One picture, no switches.   ./blocks.sh  ->  out/blocks.png
 #include "kit.h"
 
 static const int W = 1920;
 static const int H = 1080;
+static const float ROUND = 0.06f;   // the blocks' edges, for the glass and for its light alike
 
 int main() {
     Stage s = open_stage(W, H);
@@ -55,7 +56,7 @@ int main() {
         poseZ[count] = {turn[2].xyz, p.half.z};
         poseAt[count++] = {p.at.x, p.half.y, p.at.y, 0.f};
     }
-    MaterialInstance* blocks_mi = glass_blocks(s, places, 0.03f, true);
+    MaterialInstance* blocks_mi = glass_blocks(s, places, ROUND, true);
     if (!blocks_mi) return fail("glassbox.filamat");
     blocks_mi->setParameter("abbe", 8.f);
     blocks_mi->setParameter("plainSky", 1.f);
@@ -64,20 +65,10 @@ int main() {
     blocks_mi->setParameter("absorption", float3{0.30f, 0.10f, 0.06f});   // (a breath of blue)
     blocks_mi->setParameter("lean", 0.02f);
 
-    // the light the blocks throw: every ordered pair of faces (in by A, out by B) as B's four corners, 8 colours a block
-    Mesh* pairs = new Mesh;
-    for (int A = 0; A < 6; ++A)
-        for (int B = 0; B < 6; ++B) {
-            if (A == B) continue;
-            const uint32_t base = (uint32_t)pairs->pos.size();
-            for (int corner = 0; corner < 4; ++corner) {
-                pairs->pos.push_back({(float)A, (float)B, (float)corner});
-                pairs->nrm.push_back({0, 1, 0});
-                pairs->uv.push_back({0, 0});
-            }
-            pairs->idx.insert(pairs->idx.end(), {base, base + 1, base + 2, base, base + 2, base + 3});
-        }
-    MaterialInstance* light_mi = add(s, pairs, "boxlight.filamat", {mat4f{}}, 1, false, count * 8);
+    // the light the blocks throw: the block's own surface cut fine, drawn once a block and colour where its light lands.
+    // Exaggerated apart from the look of the glass: the colours' indices far apart, the faces leaning more.
+    const int colours = 20;
+    MaterialInstance* light_mi = add(s, cube(ROUND, 16), "boxlight.filamat", {mat4f{}}, 1, false, count * colours);
     if (!light_mi) return fail("boxlight.filamat");
     light_mi->setParameter("poseX", poseX, 64);
     light_mi->setParameter("poseY", poseY, 64);
@@ -85,8 +76,12 @@ int main() {
     light_mi->setParameter("poseAt", poseAt, 64);
     light_mi->setParameter("sunWay", sunWay);
     light_mi->setParameter("sunOnFloor", paper * (sunLux / 3.14159265f));
+    light_mi->setParameter("colours", (float)colours);
     light_mi->setParameter("ior", 1.5f);
-    light_mi->setParameter("abbe", 8.f);
+    light_mi->setParameter("abbe", 2.f);
+    light_mi->setParameter("round", ROUND);
+    light_mi->setParameter("lean", 0.03f);
+    light_mi->setParameter("most", 6.f);
     light_mi->setParameter("gain", 1.f);
     light_mi->setParameter("floorY", 0.f);
 

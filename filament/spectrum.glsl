@@ -21,3 +21,7 @@ vec3 xyzToSrgb(vec3 c) {
     return mat3(3.2404542, -0.9692660, 0.0556434, -1.5371385, 1.8760108, -0.2040259,
                 -0.4985314, 0.0415560, 1.0572252) * c;
 }
+// the mean of xyzToSrgb(cieXyz(l)), cut off at 0, over 400..700 nm: n evenly spaced colours add up to n times this
+// (within a hundredth from 16 colours up, three hundredths at 8), so a colour's share of white light is its own
+// value over n times this
+const vec3 SPECTRUM_MEAN = vec3(0.58695, 0.38445, 0.36265);
