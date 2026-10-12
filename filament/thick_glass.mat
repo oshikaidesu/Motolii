@@ -1,0 +1,58 @@
+// thick_glass.mat: clear glass of any shape that reads as THICK: what lies behind is seen bent twice, by the far side
+// and by the near side, and the colours part on the way. No light is followed; the recipe is the one real-time glass
+// is made by everywhere (three.js drei's MeshTransmissionMaterial with `backside`, by N8Programs, MIT; the same in
+// Maxime Heckel's write-up and in TouchDesigner GLSL materials):
+//   1. the scene without the glass is a picture (kit.h: `behind`);
+//   2. the glass's FAR faces are drawn over it, each pixel reading that picture at its bent place: a second picture
+//      (kit.h: `through`);
+//   3. the glass's NEAR faces read the second picture at their bent place.
+// A pixel reads its picture `samples` times, red, green and blue each with its own index, the indices drawn further
+// apart from sample to sample: a smooth smear of colour instead of three stripes.
+// What the glass mirrors (the room, the sun) is Filament's own lit surface on top.
+// Draw the mesh twice with this: far faces (culling FRONT, `behind` = the first picture, mirror 0) and near faces
+// (culling BACK, `behind` = the second picture).
+material {
+    name : thick_glass,
+    shadingModel : lit,
+    blending : opaque,
+    doubleSided : true,
+    parameters : [
+        { type : sampler2d, name : behind, precision : medium },
+        { type : float, name : ior },
+        { type : float, name : thickness },   // how far along the bent way the picture is read, in the scene's units
+        { type : float, name : split },       // how far the colours' indices part (drei's chromaticAberration)
+        { type : float, name : samples },     // readings per colour, 16 at most
+        { type : float, name : vivid },       // saturation of what is seen through (1: as it is)
+        { type : float, name : mirror }       // Filament's reflectance (0.5: plain glass; 0: none)
+    ]
+}
+
+fragment {
+    float red(highp vec3 at)   { highp vec4 c = getClipFromWorldMatrix() * vec4(at, 1.0); return textureLod(materialParams_behind, uvToRenderTargetUV(c.xy / c.w * 0.5 + 0.5), 0.0).r; }
+    float green(highp vec3 at) { highp vec4 c = getClipFromWorldMatrix() * vec4(at, 1.0); return textureLod(materialParams_behind, uvToRenderTargetUV(c.xy / c.w * 0.5 + 0.5), 0.0).g; }
+    float blue(highp vec3 at)  { highp vec4 c = getClipFromWorldMatrix() * vec4(at, 1.0); return textureLod(materialParams_behind, uvToRenderTargetUV(c.xy / c.w * 0.5 + 0.5), 0.0).b; }
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        highp vec3 P = getWorldPosition();
+        vec3 v = -getWorldViewVector();     // from the eye to here
+        vec3 n = getWorldNormalVector();    // (two-sided: it faces the eye on the far faces too)
+        // a fixed grain per pixel, so the readings of neighbouring pixels interleave (no noise in time)
+        float grain = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
+        int count = int(clamp(materialParams.samples, 1.0, 16.0) + 0.5);
+        vec3 seen = vec3(0.0);
+        for (int i = 0; i < 16; i++) {
+            if (i >= count) break;
+            float apart = materialParams.split * (float(i) + grain) / float(count);
+            seen.r += red(P + refract(v, n, 1.0 / materialParams.ior) * materialParams.thickness);
+            seen.g += green(P + refract(v, n, 1.0 / (materialParams.ior * (1.0 + apart))) * materialParams.thickness);
+            seen.b += blue(P + refract(v, n, 1.0 / (materialParams.ior * (1.0 + 2.0 * apart))) * materialParams.thickness);
+        }
+        seen /= float(count);
+        seen = max(mix(vec3(dot(seen, vec3(0.2125, 0.7154, 0.0721))), seen, materialParams.vivid), vec3(0.0));
+        material.baseColor = vec4(0.0, 0.0, 0.0, 1.0);
+        material.emissive = vec4(seen, 0.0);   // (as it is: the pictures hold light as the screen does)
+        material.roughness = 0.0;
+        material.metallic = 0.0;
+        material.reflectance = materialParams.mirror;
+    }
+}

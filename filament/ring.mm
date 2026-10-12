@@ -1,7 +1,8 @@
 // ring.mm: a twisted ring of clear glass standing on pale paper, and a glass bead beside it; after a photograph.
-// Everything is kit.h's and Filament's: the glass is Filament's own, twice (poster_glass.mat shows the paper behind,
-// room_glass.mat the room on its rims and folds, near side and far side); the paper, its shade and the light the glass
-// throws are kit.h's. One picture, no switches.   ./ring.sh -> out/ring.png
+// Everything is kit.h's and Filament's: the glass is thick_glass.mat (what is behind, bent by its far side and by its
+// near side, the colours parting) with room_glass.mat over it (the room, on its rims and folds); the paper, its shade
+// and the light the glass throws are kit.h's.
+// One picture, no switches.   ./ring.sh -> out/ring.png
 #include "kit.h"
 
 static const int W = 1080;
@@ -69,14 +70,16 @@ int main() {
         {ball(48, 32), mat4f::translation(float3{1.10f, 0.045f, 0.95f}) * mat4f::scaling(float3{0.045f}), 0.09f},   // the bead
     };
     for (const Thing& t : things) {
-        MaterialInstance* glass = add(s, t.mesh, "poster_glass.filamat", {t.place}, 2);
-        if (!glass) return fail("poster_glass.filamat");
-        glass->setParameter("thickness", t.thick);
-        glass->setParameter("lean", 0.f);
-        glass->setParameter("film", 1.f);
-        glass->setParameter("split", 2.f);
-        // over it: the room, on the rims and folds; first on the thing's FAR side (its inside faces), then on its near
-        // side, so the far rims show through the glass and the bar reads as thick
+        MaterialInstance* far = nullptr;
+        MaterialInstance* glass = thick_glass(s, t.mesh, {t.place}, &far);
+        if (!glass) return fail("thick_glass.filamat");
+        for (MaterialInstance* mi : {glass, far}) {
+            mi->setParameter("thickness", t.thick);
+            mi->setParameter("split", 0.10f);
+            mi->setParameter("vivid", 1.3f);
+        }
+        // over it, the room: on a plain ground glass shows nothing but what is around it, so the room (not on the
+        // screen) is laid on the rims and folds, first on the far side's faces, then on the near side's
         for (int side = 0; side < 2; ++side) {
             MaterialInstance* rims = add(s, t.mesh, "room_glass.filamat", {t.place}, 2, false, 1, 5 + side);
             if (!rims) return fail("room_glass.filamat");

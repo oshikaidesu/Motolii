@@ -72,6 +72,8 @@ struct Stage {
     Camera* camera;
     View* view_behind;   // the same scene without the glass (layer 2), drawn first into `behind`: what a block shows
     Texture* behind;
+    View* view_through = nullptr; // the scene and the glass's far faces (layer 8), drawn second into `through` (far_faces): what thick_glass.mat's near faces show
+    Texture* through = nullptr;
     View* view_floor = nullptr;   // the floor from straight above (layer 4 only), drawn before all into `sunlight` (paper_and_sun)
     Texture* sunlight = nullptr;
 };
@@ -123,7 +125,7 @@ static bool room(Stage& s, const char* ktx, float intensity) {
 }
 
 // A mesh on the stage, once per place. layer 2: left out of the picture of what is behind (all the glass);
-// layer 4: only in the floor's picture of sunlight. order: among things of a kind, lower is drawn first.
+// layer 4: only in the floor's picture of sunlight; layer 8: only in the picture of the glass's far faces. order: among things of a kind, lower is drawn first.
 // copies: how many times each is drawn in one go (a material that asks for its instance index tells them apart).
 static MaterialInstance* add(Stage& s, Mesh* m, const char* filamat, std::vector<mat4f> places = {mat4f{}}, uint8_t layer = 1,
                              bool shadows = false, int copies = 1, int order = 4) {
@@ -447,6 +449,43 @@ static bool bubbles(Stage& s, std::vector<mat4f> places, int each) {
     return true;
 }
 
+// Glass that reads as thick (thick_glass.mat): the mesh at its places, drawn twice. Its far faces go into a picture of
+// their own over the scene (`through`), bending what is behind; its near faces, on the screen, bend that picture.
+// The first call makes the picture. What it returns is the near faces' material, for the caller to set the look on;
+// `far` gets the far faces'.
+static MaterialInstance* thick_glass(Stage& s, Mesh* m, std::vector<mat4f> places, MaterialInstance** far = nullptr) {
+    const TextureSampler smooth(TextureSampler::MinFilter::LINEAR, TextureSampler::MagFilter::LINEAR, TextureSampler::WrapMode::CLAMP_TO_EDGE);
+    if (!s.view_through) {
+        s.through = Texture::Builder().width(s.w).height(s.h).levels(1).usage(Texture::Usage::COLOR_ATTACHMENT | Texture::Usage::SAMPLEABLE)
+                        .format(Texture::InternalFormat::RGBA16F).build(*s.engine);
+        Texture* depth = Texture::Builder().width(s.w).height(s.h).levels(1).usage(Texture::Usage::DEPTH_ATTACHMENT).format(Texture::InternalFormat::DEPTH24).build(*s.engine);
+        s.view_through = s.engine->createView();
+        s.view_through->setScene(s.scene);
+        s.view_through->setCamera(s.camera);
+        s.view_through->setViewport({0, 0, (uint32_t)s.w, (uint32_t)s.h});
+        s.view_through->setRenderTarget(RenderTarget::Builder().texture(RenderTarget::AttachmentPoint::COLOR, s.through).texture(RenderTarget::AttachmentPoint::DEPTH, depth).build(*s.engine));
+        s.view_through->setPostProcessingEnabled(false);
+        s.view_through->setVisibleLayers(0xFF, 0x09);
+    }
+    MaterialInstance* back = add(s, m, "thick_glass.filamat", places, 8);
+    MaterialInstance* front = add(s, m, "thick_glass.filamat", places, 2);
+    if (!back || !front) return nullptr;
+    back->setCullingMode(backend::CullingMode::FRONT);
+    front->setCullingMode(backend::CullingMode::BACK);
+    back->setParameter("behind", s.behind, smooth);
+    front->setParameter("behind", s.through, smooth);
+    for (MaterialInstance* mi : {back, front}) {
+        mi->setParameter("ior", 1.5f);
+        mi->setParameter("thickness", 0.2f);
+        mi->setParameter("split", 0.06f);
+        mi->setParameter("samples", 10.f);
+        mi->setParameter("vivid", 1.f);
+        mi->setParameter("mirror", mi == front ? 0.5f : 0.f);
+    }
+    if (far) *far = back;
+    return front;
+}
+
 // Three frames, the last one read back and written as a .png.
 static bool shoot(Stage& s, const char* path) {
     static std::vector<uint8_t> pic;
@@ -455,6 +494,7 @@ static bool shoot(Stage& s, const char* path) {
         while (!s.renderer->beginFrame(s.swap)) {}
         if (s.view_floor) s.renderer->render(s.view_floor);
         s.renderer->render(s.view_behind);
+        if (s.view_through) s.renderer->render(s.view_through);
         s.renderer->render(s.view);
         if (i == 2)
             s.renderer->readPixels(0, 0, (uint32_t)s.w, (uint32_t)s.h,
