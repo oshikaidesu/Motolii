@@ -1,0 +1,16 @@
+// dawn_probe: draws whatever is in the vertex buffer, colour per vertex. Nothing else.
+material {
+    name : dawn_probe,
+    shadingModel : unlit,
+    requires : [ color ],
+    culling : none,
+    depthWrite : false,
+    depthCulling : false
+}
+
+fragment {
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        material.baseColor = getColor();
+    }
+}

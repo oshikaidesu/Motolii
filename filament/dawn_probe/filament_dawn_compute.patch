@@ -1,0 +1,162 @@
+diff --git a/filament/CMakeLists.txt b/filament/CMakeLists.txt
+index 32479e06..ce4e1db7 100644
+--- a/filament/CMakeLists.txt
++++ b/filament/CMakeLists.txt
+@@ -840,3 +840,8 @@ install(FILES "../LICENSE" DESTINATION .)
+ add_subdirectory(backend)
+ add_subdirectory(test)
+ add_subdirectory(benchmark)
++
++# motolii: a probe that needs the engine's private headers is built here (see motolii/filament/dawn_probe)
++if (MOTOLII_PROBE_DIR)
++    add_subdirectory(${MOTOLII_PROBE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/motolii_probe)
++endif()
+diff --git a/filament/backend/src/webgpu/WebGPUBufferObject.cpp b/filament/backend/src/webgpu/WebGPUBufferObject.cpp
+index eb5afbd7..403955c9 100644
+--- a/filament/backend/src/webgpu/WebGPUBufferObject.cpp
++++ b/filament/backend/src/webgpu/WebGPUBufferObject.cpp
+@@ -32,7 +32,8 @@ namespace {
+ [[nodiscard]] constexpr wgpu::BufferUsage getBufferObjectUsage(
+         const BufferObjectBinding bindingType) noexcept {
+     switch (bindingType) {
+-        case BufferObjectBinding::VERTEX:         return wgpu::BufferUsage::Vertex;
++        case BufferObjectBinding::VERTEX:
++            return wgpu::BufferUsage::Vertex | wgpu::BufferUsage::Storage;
+         case BufferObjectBinding::UNIFORM:        return wgpu::BufferUsage::Uniform;
+         case BufferObjectBinding::SHADER_STORAGE: return wgpu::BufferUsage::Storage;
+     }
+diff --git a/filament/backend/src/webgpu/WebGPUDescriptorSet.cpp b/filament/backend/src/webgpu/WebGPUDescriptorSet.cpp
+index ce0a20a6..598e45fe 100644
+--- a/filament/backend/src/webgpu/WebGPUDescriptorSet.cpp
++++ b/filament/backend/src/webgpu/WebGPUDescriptorSet.cpp
+@@ -123,7 +123,6 @@ wgpu::BindGroup WebGPUDescriptorSet::lockAndReturn(wgpu::Device const& device) {
+         }
+     }
+ #endif
+-    mLayout = nullptr;
+     mEntries.clear();
+     mEntries.shrink_to_fit();
+     return mBindGroup;
+diff --git a/filament/backend/src/webgpu/WebGPUDescriptorSet.h b/filament/backend/src/webgpu/WebGPUDescriptorSet.h
+index facdcbfa..03753547 100644
+--- a/filament/backend/src/webgpu/WebGPUDescriptorSet.h
++++ b/filament/backend/src/webgpu/WebGPUDescriptorSet.h
+@@ -75,9 +75,7 @@ public:
+      */
+     [[nodiscard]] wgpu::BindGroup const& getBindGroup() const { return mBindGroup; }
+ 
+-#if FWGPU_ENABLED(FWGPU_DEBUG_BIND_GROUPS)
+     [[nodiscard]] wgpu::BindGroupLayout const& getLayout() const { return mLayout; }
+-#endif
+ 
+ private:
+     wgpu::BindGroupLayout mLayout = nullptr;
+diff --git a/filament/backend/src/webgpu/WebGPUDescriptorSetLayout.cpp b/filament/backend/src/webgpu/WebGPUDescriptorSetLayout.cpp
+index 5a67cb41..db2316a9 100644
+--- a/filament/backend/src/webgpu/WebGPUDescriptorSetLayout.cpp
++++ b/filament/backend/src/webgpu/WebGPUDescriptorSetLayout.cpp
+@@ -151,7 +151,10 @@ WebGPUDescriptorSetLayout::WebGPUDescriptorSetLayout(DescriptorSetLayout const&
+                 break;
+             }
+             case DescriptorType::SHADER_STORAGE_BUFFER: {
+-                PANIC_POSTCONDITION("Shader storage is not supported");
++                // Compute may write it; WebGPU lets the other stages only read.
++                wEntry.buffer.type = fEntry.stageFlags == ShaderStageFlags::COMPUTE
++                        ? wgpu::BufferBindingType::Storage
++                        : wgpu::BufferBindingType::ReadOnlyStorage;
+                 break;
+             }
+             case DescriptorType::SAMPLER_EXTERNAL: {
+diff --git a/filament/backend/src/webgpu/WebGPUDriver.cpp b/filament/backend/src/webgpu/WebGPUDriver.cpp
+index ad409d39..2c332e87 100644
+--- a/filament/backend/src/webgpu/WebGPUDriver.cpp
++++ b/filament/backend/src/webgpu/WebGPUDriver.cpp
+@@ -2145,8 +2145,49 @@ void WebGPUDriver::draw(PipelineState pipelineState,
+     draw2(indexOffset, indexCount, instanceCount);
+ }
+ 
+-void WebGPUDriver::dispatchCompute(Handle<HwProgram> program, math::uint3 workGroupCount) {
+-    //todo
++// Runs the program's compute shader with the currently bound descriptor sets, as one compute pass
++// on the frame's command encoder: it is ordered with the render passes encoded before and after
++// it, and submitted with them. Must be called outside a render pass.
++void WebGPUDriver::dispatchCompute(Handle<HwProgram> programHandle, math::uint3 workGroupCount) {
++    FWGPU_SYSTRACE_SCOPE();
++    FILAMENT_CHECK_PRECONDITION(!mRenderPassEncoder)
++            << "dispatchCompute must be called outside a render pass";
++    const auto program{ handleCast<WebGPUProgram>(programHandle) };
++    FILAMENT_CHECK_PRECONDITION(program->computeShaderModule)
++            << "dispatchCompute called with a program that has no compute shader";
++    if (!program->computePipeline) {
++        std::array<wgpu::BindGroupLayout, MAX_DESCRIPTOR_SET_COUNT> bindGroupLayouts{};
++        size_t bindGroupLayoutCount{ 0 };
++        for (size_t i{ 0 }; i < MAX_DESCRIPTOR_SET_COUNT; i++) {
++            if (mCurrentDescriptorSets[i].bindGroup) {
++                bindGroupLayouts[i] = mCurrentDescriptorSets[i].layout;
++                bindGroupLayoutCount = i + 1;
++            }
++        }
++        const WebGPUPipelineLayoutCache::PipelineLayoutRequest pipelineLayoutRequest{
++            .label = program->name,
++            .bindGroupLayouts = bindGroupLayouts,
++            .bindGroupLayoutCount = bindGroupLayoutCount,
++        };
++        const wgpu::ComputePipelineDescriptor descriptor{
++            .label = wgpu::StringView(program->name.c_str_safe()),
++            .layout = mPipelineLayoutCache.getOrCreatePipelineLayout(pipelineLayoutRequest),
++            .compute = { .module = program->computeShaderModule },
++        };
++        program->computePipeline = mDevice.CreateComputePipeline(&descriptor);
++        FILAMENT_CHECK_POSTCONDITION(program->computePipeline)
++                << "Failed to create compute pipeline for " << descriptor.label;
++    }
++    const wgpu::ComputePassEncoder pass{ mQueueManager.getCommandEncoder().BeginComputePass() };
++    pass.SetPipeline(program->computePipeline);
++    for (size_t i{ 0 }; i < MAX_DESCRIPTOR_SET_COUNT; i++) {
++        auto& binding{ mCurrentDescriptorSets[i] };
++        if (binding.bindGroup) {
++            pass.SetBindGroup(i, binding.bindGroup, binding.offsetCount, binding.offsets.data());
++        }
++    }
++    pass.DispatchWorkgroups(workGroupCount.x, workGroupCount.y, workGroupCount.z);
++    pass.End();
+ }
+ 
+ void WebGPUDriver::scissor(Viewport scissor) {
+@@ -2251,10 +2292,12 @@ void WebGPUDriver::bindDescriptorSet(Handle<HwDescriptorSet> descriptorSetHandle
+         return;
+     }
+     const auto bindGroup = handleCast<WebGPUDescriptorSet>(descriptorSetHandle);
++    const wgpu::BindGroupLayout layout = bindGroup->getLayout();
+     const auto wbg = bindGroup->lockAndReturn(mDevice);
+ 
+     mCurrentDescriptorSets[setIndex] = {
+         .bindGroup = wbg,
++        .layout = layout,
+         .offsetCount = bindGroup->getEntitiesWithDynamicOffsetsCount(),
+         .offsets = std::move(offsets) };
+ }
+diff --git a/filament/backend/src/webgpu/WebGPUDriver.h b/filament/backend/src/webgpu/WebGPUDriver.h
+index 06c380e1..3bdb3465 100644
+--- a/filament/backend/src/webgpu/WebGPUDriver.h
++++ b/filament/backend/src/webgpu/WebGPUDriver.h
+@@ -110,6 +110,7 @@ private:
+ 
+     struct DescriptorSetBindingInfo{
+         wgpu::BindGroup bindGroup;
++        wgpu::BindGroupLayout layout;
+         size_t offsetCount;
+         backend::DescriptorSetOffsetArray offsets;
+     };
+diff --git a/filament/backend/src/webgpu/WebGPUProgram.h b/filament/backend/src/webgpu/WebGPUProgram.h
+index 675a6cc4..f8fd0c27 100644
+--- a/filament/backend/src/webgpu/WebGPUProgram.h
++++ b/filament/backend/src/webgpu/WebGPUProgram.h
+@@ -39,6 +39,7 @@ public:
+     wgpu::ShaderModule vertexShaderModule = nullptr;
+     wgpu::ShaderModule fragmentShaderModule = nullptr;
+     wgpu::ShaderModule computeShaderModule = nullptr;
++    wgpu::ComputePipeline computePipeline = nullptr; // made at the first dispatchCompute
+ };
+ 
+ } // namespace filament::backend
