@@ -41,8 +41,11 @@ fn smooth_at(i: u32) -> vec3<f32> { return vec3<f32>(nrm[3u * i], nrm[3u * i + 1
 
 fn meet(start: vec3<f32>, along: vec3<f32>, least: f32) -> RayIntersection {
     var rq: ray_query;
-    rayQueryInitialize(&rq, acc, RayDesc(0u, 0xFFu, least, 1.0e30, start, along));
-    while (rayQueryProceed(&rq)) {}
+    rayQueryInitialize(&rq, acc, RayDesc(RAY_FLAG_FORCE_OPAQUE, 0xFFu, least, 1.0e30, start, along));
+    // Not `while (rayQueryProceed(&rq)) {}`: on Metal, wgpu 29 never takes back the "more to do" it answers (naga,
+    // back/msl/writer.rs, RAY_QUERY_MODERN_SUPPORT = false), so that loop has no end there; it only seemed to work
+    // while Metal's compiler threw the empty loop away. All triangles here are solid, so one step is the whole search.
+    for (var step = 0; step < 2; step++) { if (!rayQueryProceed(&rq)) { break; } }
     return rayQueryGetCommittedIntersection(&rq);
 }
 

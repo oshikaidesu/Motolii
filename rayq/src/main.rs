@@ -2,23 +2,27 @@
 // lines of sight through the glass band, and how fast? Not a renderer: one compute pass, numbers out.
 //
 //   rayq one                         one triangle, two lines (does the query work at all?)
+//   rayq shapes <studio.ktx> <out.png>   simple glass solids (a torus, a box with round edges), three models of the
+//                                    optics by MODEL=0|1|2 (src/shapes.rs, src/glass.wgsl)
 //   rayq band <mesh.bin> [check|time|pace]   the band's mesh (written by filament/band.mm MODEL=D), band.mm's "ref" camera,
 //                                    the same rule as model D (band_bvh.mat). check: against a CPU trace that tries
 //                                    every triangle. time: GPU time of the pass alone.
 //
 // mesh.bin: u32 vertices, u32 indices, f32 xyz per vertex, u32 per index, then f32 xyz per vertex (smooth normals).
+mod shapes;
+
 use std::time::Instant;
 use wgpu::util::DeviceExt;
 
 const W: u32 = 1080;
 const H: u32 = 1920;
 
-struct Gpu {
-    device: wgpu::Device,
-    queue: wgpu::Queue,
+pub struct Gpu {
+    pub device: wgpu::Device,
+    pub queue: wgpu::Queue,
 }
 
-fn open() -> Gpu {
+pub fn open() -> Gpu {
     let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
     let adapter = pollster::block_on(instance.request_adapter(&Default::default())).expect("adapter");
     let info = adapter.get_info();
@@ -35,7 +39,7 @@ fn open() -> Gpu {
 }
 
 /// The mesh as the GPU's own acceleration structure: one bottom level, one instance of it (unmoved) in the top level.
-fn structure(g: &Gpu, pos: &[f32], idx: &[u32]) -> (wgpu::Tlas, f64) {
+pub fn structure(g: &Gpu, pos: &[f32], idx: &[u32]) -> (wgpu::Tlas, f64) {
     let vb = g.device.create_buffer_init(&wgpu::util::BufferInitDescriptor { label: None, contents: bytemuck::cast_slice(pos), usage: wgpu::BufferUsages::BLAS_INPUT });
     let ib = g.device.create_buffer_init(&wgpu::util::BufferInitDescriptor { label: None, contents: bytemuck::cast_slice(idx), usage: wgpu::BufferUsages::BLAS_INPUT });
     let size = wgpu::BlasTriangleGeometrySizeDescriptor {
@@ -228,7 +232,7 @@ fn band_open(m: &Mesh) -> Band {
     let g = open();
     let (tlas, ms) = structure(&g, &m.pos, &m.idx);
     println!("acceleration structure of {} triangles built in {:.1} ms (submitted and waited for)", m.idx.len() / 3, ms);
-    let module = g.device.create_shader_module(wgpu::ShaderModuleDescriptor { label: None, source: wgpu::ShaderSource::Wgsl(include_str!("band.wgsl").into()) });
+    let module = g.device.create_shader_module(wgpu::ShaderModuleDescriptor { label: None, source: wgpu::ShaderSource::Wgsl(std::env::var("SHADER").map(|p| std::fs::read_to_string(p).expect("shader file")).unwrap_or(include_str!("band.wgsl").to_string()).into()) });   // (SHADER: tests)
     let pipe = |entry: &str| g.device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor { label: None, layout: None, module: &module, entry_point: Some(entry), compilation_options: Default::default(), cache: None });
     let (pipe_check, pipe_draw) = (pipe("check"), pipe("draw"));
     let store = |data: &[u8]| g.device.create_buffer_init(&wgpu::util::BufferInitDescriptor { label: None, contents: data, usage: wgpu::BufferUsages::STORAGE });
@@ -431,17 +435,15 @@ fn pace(m: &Mesh, frames: usize) {
     }
 }
 
-/// The lines as a picture (see band.wgsl, paint). studio: Filament's skybox file of the studio (KTX 1, a cube of
-/// R11G11B10 floats, one level), handed to the GPU as it is.
-fn picture(m: &Mesh, studio_path: &str, out_path: &str) {
-    let b = band_open(m);
+/// Filament's skybox file of the studio (KTX 1, a cube of R11G11B10 floats, one level), handed to the GPU as it is.
+pub fn studio_cube(g: &Gpu, studio_path: &str) -> wgpu::Texture {
     let raw = std::fs::read(studio_path).expect("studio file");
     let word = |at: usize| u32::from_le_bytes(raw[at..at + 4].try_into().unwrap());
     assert!(&raw[1..7] == b"KTX 11" && word(28) == 0x8C3A && word(52) == 6 && word(56) == 1, "not a one-level cube of R11G11B10 floats");
     let (side, from) = (word(36), 64 + word(60) as usize);
     let face = word(from) as usize;
-    let cube = b.g.device.create_texture_with_data(
-        &b.g.queue,
+    g.device.create_texture_with_data(
+        &g.queue,
         &wgpu::TextureDescriptor {
             label: None,
             size: wgpu::Extent3d { width: side, height: side, depth_or_array_layers: 6 },
@@ -454,7 +456,47 @@ fn picture(m: &Mesh, studio_path: &str, out_path: &str) {
         },
         wgpu::util::TextureDataOrder::LayerMajor,
         &raw[from + 4..from + 4 + face * 6],
+    )
+}
+/// Waits for what was handed to the GPU, but not for ever: wgpu's Metal wait only looks for "completed", so work the
+/// GPU gave up on (an error, a time limit) would be waited for without end.
+pub fn wait_some(g: &Gpu) {
+    let limit = std::time::Duration::from_secs(20);
+    match g.device.poll(wgpu::PollType::Wait { submission_index: None, timeout: Some(limit) }) {
+        Ok(status) if !status.is_queue_empty() => { println!("GAVE UP: the GPU did not finish within 20 s"); std::process::exit(2); }
+        Err(e) => { println!("GAVE UP: {e:?}"); std::process::exit(2); }
+        _ => {}
+    }
+}
+/// An RGBA8 texture read back (tests and still pictures only).
+pub fn pixels_of(g: &Gpu, t: &wgpu::Texture, w: u32, h: u32) -> Vec<u8> {
+    let row = (w * 4).div_ceil(256) * 256;   // (a row in a copy must be a multiple of 256 bytes)
+    let back = g.device.create_buffer(&wgpu::BufferDescriptor { label: None, size: (row * h) as u64, usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ, mapped_at_creation: false });
+    let mut enc = g.device.create_command_encoder(&Default::default());
+    enc.copy_texture_to_buffer(
+        t.as_image_copy(),
+        wgpu::TexelCopyBufferInfo { buffer: &back, layout: wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(row), rows_per_image: Some(h) } },
+        wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
     );
+    g.queue.submit(Some(enc.finish()));
+    back.slice(..).map_async(wgpu::MapMode::Read, |r| r.unwrap());
+    wait_some(g);
+    let padded = back.slice(..).get_mapped_range();
+    padded.chunks(row as usize).flat_map(|r| r[..(w * 4) as usize].iter().copied()).collect()
+}
+pub fn save_png(path: &str, w: u32, h: u32, pixels: &[u8]) {
+    let mut e = png::Encoder::new(std::io::BufWriter::new(std::fs::File::create(path).expect("picture file")), w, h);
+    e.set_color(png::ColorType::Rgba);
+    e.set_depth(png::BitDepth::Eight);
+    e.write_header().unwrap().write_image_data(pixels).unwrap();
+    println!("wrote {path}");
+}
+
+/// The lines as a picture (see band.wgsl, paint). studio: Filament's skybox file of the studio (KTX 1, a cube of
+/// R11G11B10 floats, one level), handed to the GPU as it is.
+fn picture(m: &Mesh, studio_path: &str, out_path: &str) {
+    let b = band_open(m);
+    let cube = studio_cube(&b.g, studio_path);
     let cube_view = cube.create_view(&wgpu::TextureViewDescriptor { dimension: Some(wgpu::TextureViewDimension::Cube), ..Default::default() });
     let how = b.g.device.create_sampler(&wgpu::SamplerDescriptor { mag_filter: wgpu::FilterMode::Linear, min_filter: wgpu::FilterMode::Linear, ..Default::default() });
     let painted = b.g.device.create_texture(&wgpu::TextureDescriptor {
@@ -485,8 +527,6 @@ fn picture(m: &Mesh, studio_path: &str, out_path: &str) {
     let env = |name: &str, d: f32| std::env::var(name).ok().and_then(|s| s.parse().ok()).unwrap_or(d);
     // (the brightness band.mm gives the studio: 60000 at f/16, 1/125 s, ISO 100; the turn: the scene's light is turned 2.2 about the up axis)
     set_look(&b, env("MOST", 8.0), [60000.0 / (1.2 * 256.0 * 125.0), env("TURN", -2.2), env("SMOOTH", 0.0), 0.0]);
-    let row = (W * 4).div_ceil(256) * 256;   // (a row in a copy must be a multiple of 256 bytes)
-    let back = b.g.device.create_buffer(&wgpu::BufferDescriptor { label: None, size: (row * H) as u64, usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ, mapped_at_creation: false });
     let mut enc = b.g.device.create_command_encoder(&Default::default());
     {
         let mut p = enc.begin_compute_pass(&Default::default());
@@ -494,27 +534,15 @@ fn picture(m: &Mesh, studio_path: &str, out_path: &str) {
         p.set_bind_group(0, &bind, &[]);
         p.dispatch_workgroups(W.div_ceil(8), H.div_ceil(8), 1);
     }
-    enc.copy_texture_to_buffer(
-        painted.as_image_copy(),
-        wgpu::TexelCopyBufferInfo { buffer: &back, layout: wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(row), rows_per_image: Some(H) } },
-        wgpu::Extent3d { width: W, height: H, depth_or_array_layers: 1 },
-    );
     b.g.queue.submit(Some(enc.finish()));
-    back.slice(..).map_async(wgpu::MapMode::Read, |r| r.unwrap());
-    wait(&b);
-    let mut w = png::Encoder::new(std::io::BufWriter::new(std::fs::File::create(out_path).expect("picture file")), W, H);
-    w.set_color(png::ColorType::Rgba);
-    w.set_depth(png::BitDepth::Eight);
-    let padded = back.slice(..).get_mapped_range();
-    let pixels: Vec<u8> = padded.chunks(row as usize).flat_map(|r| r[..(W * 4) as usize].iter().copied()).collect();
-    w.write_header().unwrap().write_image_data(&pixels).unwrap();
-    println!("wrote {out_path}");
+    save_png(out_path, W, H, &pixels_of(&b.g, &painted, W, H));
 }
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     match args.get(1).map(String::as_str) {
         Some("one") => one(),
+        Some("shapes") => shapes::run(args.get(2).expect("studio .ktx"), args.get(3).expect("picture .png")),
         Some("band") => {
             let m = load(args.get(2).expect("mesh file"));
             match args.get(3).map(String::as_str) {

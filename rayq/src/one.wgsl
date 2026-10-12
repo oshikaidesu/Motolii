@@ -6,8 +6,11 @@ enable wgpu_ray_query;
 
 fn ask(start: vec3<f32>, along: vec3<f32>) -> vec4<f32> {
     var rq: ray_query;
-    rayQueryInitialize(&rq, acc, RayDesc(0u, 0xFFu, 0.0, 1000.0, start, along));
-    while (rayQueryProceed(&rq)) {}
+    rayQueryInitialize(&rq, acc, RayDesc(RAY_FLAG_FORCE_OPAQUE, 0xFFu, 0.0, 1000.0, start, along));
+    // Not `while (rayQueryProceed(&rq)) {}`: on Metal, wgpu 29 never takes back the "more to do" it answers (naga,
+    // back/msl/writer.rs, RAY_QUERY_MODERN_SUPPORT = false), so that loop has no end there; it only seemed to work
+    // while Metal's compiler threw the empty loop away. All triangles here are solid, so one step is the whole search.
+    for (var step = 0; step < 2; step++) { if (!rayQueryProceed(&rq)) { break; } }
     let hit = rayQueryGetCommittedIntersection(&rq);
     return vec4<f32>(f32(hit.kind), hit.t, hit.barycentrics);
 }
