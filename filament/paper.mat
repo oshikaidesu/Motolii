@@ -49,15 +49,17 @@ fragment {
     vec3 surfaceShading(const MaterialInputs materialInputs, const ShadingData shadingData, const LightData lightData) {
         highp vec4 c = materialParams.pictureFromScene * vec4(getUserWorldPosition(), 1.0);
         highp vec2 uv = uvToRenderTargetUV(c.xy * 0.5 + 0.5);
-        // how far the shade about here flew: the most of it within the widest reach (a ring and the place itself)
+        // how far the shade about here flew: its mean within the widest reach, over the part that is shade at all
+        // (a mean, not the most: the most jumps as a lookup crosses a shade's edge, and the jumps showed as blocks)
         float widest = materialParams.sunWide * materialParams.furthest * materialParams.perUnit;
-        float flown = textureLod(materialParams_sunlight, uv, 0.0).a;
-        for (int i = 0; i < 8; i++) {
-            float a = float(i) * 0.785398;
-            flown = max(flown, textureLod(materialParams_sunlight, uv + widest * vec2(cos(a), sin(a)), 0.0).a);
-            flown = max(flown, textureLod(materialParams_sunlight, uv + 0.5 * widest * vec2(cos(a + 0.39), sin(a + 0.39)), 0.0).a);
+        float flown = textureLod(materialParams_sunlight, uv, 0.0).a, shaded = step(1e-4, flown);
+        for (int i = 0; i < 24; i++) {
+            float r = sqrt((float(i) + 0.5) / 24.0) * widest, a = float(i) * 2.39996;
+            float f = textureLod(materialParams_sunlight, uv + r * vec2(cos(a), sin(a)), 0.0).a;
+            flown += f;
+            shaded += smoothstep(0.0, 0.02, f);
         }
-        float reach = materialParams.sunWide * flown * materialParams.perUnit;
+        float reach = materialParams.sunWide * (flown / max(shaded, 1.0)) * smoothstep(0.0, 3.0, shaded) * materialParams.perUnit;
         // a fixed spiral of lookups: the same every frame, no noise
         vec3 sun = vec3(0.0);
         for (int i = 0; i < 24; i++) {

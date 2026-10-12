@@ -7,15 +7,15 @@
 static const int W = 1080;
 static const int H = 1920;
 
-// The ring: a ribbon of glass of one width with round edges (three times as wide as thick), bent round a tall upright
+// The ring: a ribbon of glass of one width, a flat band with small round edges (twice as wide as thick), bent round a tall upright
 // loop. It turns over twice on the way round, half a turn each time, at its upper left and at its lower right.
 static float3 ring_point(float u, float ang) {
     auto centre = [](float a) { return float3{0.86f * std::cos(a) + 0.08f * std::sin(2.f * a), 1.42f * std::sin(a), 0.14f * std::sin(a + 0.8f)}; };
-    auto turn_over = [](float a, float at) {   // half a turn, made between 0.55 before `at` and 0.55 after it
-        const float t = std::min(std::max((a - at + 0.55f) / 1.1f, 0.f), 1.f);
+    auto turn_over = [](float a, float at) {   // half a turn, made between 0.45 before `at` and 0.45 after it
+        const float t = std::min(std::max((a - at + 0.45f) / 0.9f, 0.f), 1.f);
         return 0.5f * TAU * t * t * (3.f - 2.f * t);
     };
-    const float a = u * TAU, round = 2.4f, wide = 0.25f, thick = 0.085f;
+    const float a = u * TAU, round = 3.6f, wide = 0.21f, thick = 0.08f;
     const float3 T = normalize(centre(a + 1e-3f) - centre(a - 1e-3f));
     const float3 N = normalize(cross(float3{0, 0, 1}, T)), B = cross(T, N);
     const float twist = 0.25f + turn_over(a, 2.55f) + turn_over(a, 5.45f);
@@ -54,25 +54,25 @@ int main(int argc, char** argv) {
         s.camera->lookAt({-0.2f, 1.1f, 3.2f}, {-0.75f, 1.15f, 0.f}, {0, 1, 0});
         s.camera->setProjection(16.0, double(W) / double(H), 0.1, 60.0, Camera::Fov::VERTICAL);
     } else {
-        const float3 aim{0.22f, 1.55f, 0.f};   // seen from a little above, as the photograph is: nothing but paper behind
-        s.camera->lookAt(aim + normalize(float3{0.0f, 0.34f, 0.94f}) * 9.8f, aim, {0, 1, 0});
+        const float3 aim{0.40f, 1.42f, 0.f};   // seen from a little above, as the photograph is: nothing but paper behind
+        s.camera->lookAt(aim + normalize(float3{0.0f, 0.34f, 0.94f}) * 8.3f, aim, {0, 1, 0});
         s.camera->setProjection(23.0, double(W) / double(H), 0.5, 80.0, Camera::Fov::VERTICAL);
     }
     static FilmicToneMapper filmic;
-    s.view->setColorGrading(ColorGrading::Builder().toneMapper(&filmic).contrast(1.1f).saturation(1.4f).build(*s.engine));
+    s.view->setColorGrading(ColorGrading::Builder().toneMapper(&filmic).contrast(1.1f).saturation(1.5f).build(*s.engine));
     Sunlit lit;
-    lit.paper = {0.60f, 0.63f, 0.66f};                        // pale warm grey
+    lit.paper = {0.67f, 0.63f, 0.58f};                        // pale warm grey
     lit.sunWay = normalize(float3{0.42f, -0.86f, -0.28f});    // from high on the left in front: a short shadow to the right and behind
     lit.sunWide = 0.08f;                                      // a broad soft lamp
     lit.sunLux = 42000.f;
-    lit.sky = 12000.f;
-    lit.studio = "out/graffiti_shelter_2k/graffiti_shelter_2k_ibl.ktx";   // a room full of light and dark and colour (it comes with Filament): glass shows only what is around it
+    lit.sky = 8000.f;
+    lit.studio = "out/small_studio/small_studio_ibl.ktx";   // a dark studio with soft lamps (it comes with Filament): glass shows only what is around it, and here that is dark with a few lights
     if (!paper_and_sun(s, lit)) return fail("paper and sun (paper.filamat, floor_shade.filamat, out/lightroom)");
 
     struct Thing { Mesh* mesh; mat4f place; float thick; };
     const Thing things[] = {
         {ring(), mat4f::rotation(0.75f, float3{0, 1, 0}) * mat4f::rotation(-0.28f, float3{0, 0, 1}), 0.17f},   // turned three quarters to the eye, leaning to the right
-        {ball(48, 32), mat4f::translation(float3{0.70f, 0.045f, 0.95f}) * mat4f::scaling(float3{0.045f}), 0.09f},   // the bead
+        {ball(48, 32), mat4f::translation(float3{0.78f, 0.045f, 0.55f}) * mat4f::scaling(float3{0.045f}), 0.09f},   // the bead
     };
     for (const Thing& t : things) {
         MaterialInstance* glass = add(s, t.mesh, "poster_glass.filamat", {t.place}, 2);
@@ -84,12 +84,12 @@ int main(int argc, char** argv) {
         MaterialInstance* rims = add(s, t.mesh, "room_glass.filamat", {t.place}, 2, false, 1, 6);   // over it: the room, on the rims and folds
         if (!rims) return fail("room_glass.filamat");
         rims->setParameter("thickness", t.thick);
-        rims->setParameter("film", 1.f);
-        rims->setParameter("filmIor", 2.4f);
+        rims->setParameter("film", 0.4f);
+        rims->setParameter("filmIor", 2.0f);
         rims->setParameter("filmThick", float2{250.f, 800.f});
-        rims->setParameter("mirror", 1.0f);
+        rims->setParameter("mirror", 0.5f);
         rims->setParameter("split", 20.f);
-        rims->setParameter("rim", 1.0f);
+        rims->setParameter("rim", 3.0f);
         rims->setParameter("strength", 1.f);
         if (!shadow_of(s, lit, t.mesh, {t.place})) return fail("floor_shade.filamat");
         if (!glass_light(s, lit, t.mesh, {t.place})) return fail("glasslight.filamat");
