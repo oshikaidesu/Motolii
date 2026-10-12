@@ -687,6 +687,7 @@ int main(int argc, char** argv) {
             std::fwrite(head, 4, 2, f);
             std::fwrite(allPos.data(), sizeof(V3), allPos.size(), f);
             std::fwrite(allIdx.data(), 4, allIdx.size(), f);
+            for (const Built& m : cpuNear) std::fwrite(m.nrm.data(), sizeof(V3), m.nrm.size(), f);   // (smooth normals, after what three-mesh-bvh reads: for ../rayq)
             std::fclose(f);
         }
         if (std::system("node bvh_probe/build_bvh.mjs out/band-mesh.bin out/band-bvh.bin bvh_probe/three_mesh_bvh.glsl") != 0) return fail("bvh_probe/build_bvh.mjs (node, three-mesh-bvh)");
