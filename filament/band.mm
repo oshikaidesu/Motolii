@@ -886,6 +886,54 @@ int main(int argc, char** argv) {
                             flip ? "picture upside down" : "picture as is", tried, bothHit, 100.0 * (double)bothHit / (double)std::max(1L, tried), gpuMissed, 100.f * q(lenErr, 0.5), 100.f * q(lenErr, 0.9),
                             q(angErr, 0.5), q(angErr, 0.9));
             }
+            // 4. (CPU only, geometry only) a sight line mirrored inside at the far side: how many mirrorings until it meets
+            //    a surface it can leave through? Nothing here is drawn; it says what a method would have to follow.
+            {
+                const int MOST = 32;
+                std::vector<long> after((size_t)MOST + 2, 0);
+                std::vector<float> way;
+                long lines = 0;
+                for (int y = 12; y < H; y += 24)
+                    for (int x = 12; x < W; x += 24) {
+                        const float ndx = ((float)x + 0.5f) / (float)W * 2.f - 1.f, ndy = ((float)y + 0.5f) / (float)H * 2.f - 1.f;
+                        const V3 d = norm(F + Rr * (ndx * th * asp) + U * (ndy * th));
+                        const Hit h1 = first_hit(E, d, 1e-4f);
+                        if (h1.t > 1e29f) continue;
+                        V3 N = h1.n;
+                        if (dot(N, d) > 0) N = N * -1.f;
+                        const float ci = -dot(N, d), k = 1.f - (1.f - ci * ci) / (n * n);
+                        V3 T = norm(d * (1.f / n) + N * (ci / n - std::sqrt(std::max(k, 0.f))));
+                        V3 P = E + d * h1.t;
+                        int b = 0;
+                        float len = 0;
+                        bool lost = false;
+                        for (; b <= MOST; ++b) {
+                            const Hit h = first_hit(P, T, 1e-3f);
+                            if (h.t > 1e29f) { lost = true; break; }
+                            len += h.t;
+                            V3 M = h.n;
+                            if (dot(M, T) < 0) M = M * -1.f;   // (M: out of the glass, along the line)
+                            const float co = dot(M, T);
+                            if (1.f - n * n * (1.f - co * co) >= 0) break;   // can leave here
+                            P = P + T * h.t;
+                            T = norm(T - M * (2.f * co));
+                        }
+                        ++lines;
+                        ++after[(size_t)(lost ? MOST + 1 : std::min(b, MOST))];
+                        if (!lost && b < MOST) way.push_back(len);
+                    }
+                std::sort(way.begin(), way.end());
+                std::printf("CHECK 4 (CPU, geometry only): %ld sight lines into the glass. Mirrorings inside before a surface lets the line out:\n   ", lines);
+                long sum = 0;
+                for (int b = 0; b <= MOST + 1; ++b) {
+                    if (!after[(size_t)b]) continue;
+                    sum += after[(size_t)b];
+                    if (b == MOST + 1) std::printf("  lost (no surface ahead): %.1f%%", 100.0 * (double)after[(size_t)b] / (double)lines);
+                    else std::printf("  %d%s: %.1f%% (up to here %.1f%%)", b, b == MOST ? " or more" : "", 100.0 * (double)after[(size_t)b] / (double)lines, 100.0 * (double)sum / (double)lines);
+                }
+                std::printf("\n    way inside the glass: %.2f (median), %.2f (9 in 10 within), %.2f (longest)\n", way.empty() ? 0.f : way[way.size() / 2],
+                            way.empty() ? 0.f : way[(size_t)(0.9 * (double)(way.size() - 1))], way.empty() ? 0.f : way.back());
+            }
         }
 
         // 3. where the line that left is looked up: `beyond` units along it, against the true floor and backdrop
