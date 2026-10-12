@@ -1,0 +1,85 @@
+// glasslight.mat: the light a glass thing throws on the floor in the sun. For ANY mesh: it asks only where the
+// surface is and which way it faces. The way the makers of such pictures do it in real time (a finely cut surface,
+// every corner's light bent and landed, brightness from how the cut is squeezed), with one more thing left out: what
+// the light does INSIDE the glass. A corner in the sun bends its ray once, by its own facing, and that ray is taken
+// straight down to the floor; the corner is drawn THERE. Where the landed cuts are squeezed together the light is
+// gathered and bright, where they are pulled apart it is thin (read off per pixel from how fast the two positions
+// change across the screen). Every colour is its own copy with its own index, the indices set far apart on purpose:
+// round edges and facets throw rainbows, curved and uneven faces gather light into bright lines.
+// A picture lie, cheap and steady; nothing here follows light, nothing is worked out on the CPU.
+// Not here: light on anything but the floor; a thing in another's shadow throws its light all the same.
+// Draw the thing's own mesh with this, `colours` copies (instances) of it; its place and turn are the renderable's.
+material {
+    name : glasslight,
+    shadingModel : unlit,
+    blending : add,
+    depthWrite : false,
+    culling : none,
+    instanced : true,
+    requires : [ tangents ],
+    variables : [ { name : tint, precision : high }, { name : where, precision : high } ],
+    parameters : [
+        { type : float3, name : sunWay },       // the way the sunlight travels
+        { type : float3, name : sunOnFloor },   // what the sun adds to the bare floor at noon: floor colour * lux / pi
+        { type : float,  name : colours },      // copies drawn
+        { type : float,  name : ior },
+        { type : float,  name : abbe },         // how far apart the colours' indices lie (small: far)
+        { type : float,  name : lean },         // how far the surface leans from its own facing, slowly, this way and that (real glass is not dead flat)
+        { type : float,  name : leanSize },     // the size of that unevenness, in the mesh's own units
+        { type : float2, name : facing },       // a face throws its light by how squarely it meets the sun: none below the first (cosine), all above the second
+        { type : float,  name : most },         // gathered light is no brighter than this many times the bare floor
+        { type : float,  name : gain },
+        { type : float,  name : floorY }
+    ]
+}
+
+vertex {
+#include "spectrum.glsl"
+    void materialVertex(inout MaterialVertexInputs material) {
+        int all = int(materialParams.colours + 0.5);
+        int colour = getInstanceIndex();
+        // the scene's own coordinates (Filament's are moved and turned)
+        highp mat4 toScene = getUserWorldFromWorldMatrix();
+        highp vec3 P = mulMat4x4Float3(toScene, material.worldPosition.xyz).xyz;
+        vec3 s = 6.2832 * mesh_position.xyz / materialParams.leanSize;
+        vec3 n = normalize(mat3(toScene) * (material.worldNormal + getWorldFromModelNormalMatrix() * (materialParams.lean
+                 * vec3(sin(0.6 * s.y + 1.0) + sin(0.45 * s.z), sin(0.6 * s.z + 2.0) + sin(0.45 * s.x), sin(0.6 * s.x + 3.0) + sin(0.45 * s.y)))));
+        vec3 sun = materialParams.sunWay;
+
+        float lambda = mix(400.0, 700.0, (float(colour) + 0.5) / float(all));
+        float index = cauchyIor(lambda, materialParams.ior, materialParams.abbe);
+        float ci = -dot(n, sun);
+        bool ok = ci > 1e-3;                                   // in the sun
+        vec3 d = ok ? refract(sun, n, 1.0 / index) : sun;      // bent once, by this corner's facing
+        if (!(d.y < -0.03)) ok = false;                        // it does not come down
+        // how much gets in (the rest is mirrored away)
+        float s2 = (1.0 - ci * ci) / (index * index), ct = sqrt(max(1.0 - s2, 0.0));
+        float rs = (ci - index * ct) / (ci + index * ct), rp = (ct - index * ci) / (ct + index * ci);
+        // (a face the sun only grazes sends its light about inside the glass in truth; here it throws none, and its shadow stays dark)
+        float through = ok ? (1.0 - 0.5 * (rs * rs + rp * rp)) * smoothstep(materialParams.facing.x, materialParams.facing.y, ci) : 0.0;
+        if (!(through > 0.0)) ok = false;
+        // (a corner that throws nothing is not drawn: all such corners go to one place, the thing's own middle, so cuts that throw nothing cost no screen)
+        highp vec3 X = ok ? P + d * ((materialParams.floorY - P.y) / d.y) : mulMat4x4Float3(toScene, getWorldFromModelMatrix()[3].xyz).xyz;
+        vec3 share = max(xyzToSrgb(cieXyz(lambda)), vec3(0.0)) / (SPECTRUM_MEAN * float(all));   // the colour's share of white light
+
+        // the corner across the sunlight (two numbers), for the squeeze
+        vec3 u = normalize(cross(sun, abs(sun.y) < 0.99 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0)));
+        vec3 v = cross(sun, u);
+        material.tint = vec4(share * through, ok ? 1.0 : 0.0);
+        material.where = vec4(dot(P, u), dot(P, v), X.x, X.z);
+        X.y += 0.002;
+        material.worldPosition = vec4(transpose(mat3(toScene)) * (X - toScene[3].xyz), 1.0);
+    }
+}
+
+fragment {
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        if (variable_tint.a < 0.999) discard;   // a cut with a corner out of the sun: not drawn
+        highp vec4 w = variable_where;
+        highp float before = abs(dFdx(w.x) * dFdy(w.y) - dFdx(w.y) * dFdy(w.x));   // the cut's size across the sunlight ...
+        highp float after = abs(dFdx(w.z) * dFdy(w.w) - dFdx(w.w) * dFdy(w.z));    // ... and on the floor
+        float squeeze = min(before / max(after, 1e-12) / -materialParams.sunWay.y, materialParams.most);   // against the bare sunlit floor
+        material.baseColor = vec4(variable_tint.rgb * (squeeze * materialParams.gain) * materialParams.sunOnFloor * getExposure(), 1.0);
+    }
+}

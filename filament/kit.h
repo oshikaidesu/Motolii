@@ -30,6 +30,9 @@
 #include <utils/EntityManager.h>
 
 #import <Cocoa/Cocoa.h>
+#import <SceneKit/SceneKit.h>
+#import <ModelIO/ModelIO.h>
+#import <SceneKit/ModelIO.h>
 
 #include <cmath>
 #include <cstdint>
@@ -198,6 +201,125 @@ static MaterialInstance* glass_blocks(Stage& s, std::vector<mat4f> places, float
     mi->setParameter("round", round);
     mi->setParameter("bySize", 1.f);
     return mi;
+}
+
+// A ring of round section, lying in the plane of x and y.
+static Mesh* torus(float R, float r, int around = 128, int about = 40) {
+    Mesh* m = new Mesh;
+    for (int i = 0; i < around; ++i)
+        for (int k = 0; k < about; ++k) {
+            const float a = TAU * (float)i / around, b = TAU * (float)k / about;
+            const float3 out{std::cos(a) * std::cos(b), std::sin(a) * std::cos(b), std::sin(b)};
+            m->pos.push_back(float3{std::cos(a), std::sin(a), 0.f} * R + out * r);
+            m->nrm.push_back(out);
+            m->uv.push_back({(float)i / around, (float)k / about});
+            const uint32_t i1 = (uint32_t)((i + 1) % around), k1 = (uint32_t)((k + 1) % about);
+            const uint32_t p = (uint32_t)(i * about + k), q = (uint32_t)(i * about) + k1, s = i1 * about + (uint32_t)k, t = i1 * about + k1;
+            m->idx.insert(m->idx.end(), {p, s, q, q, s, t});
+        }
+    return m;
+}
+
+// A solid of twenty flat faces (an icosahedron), each face its own three corners: hard edges.
+static Mesh* gem(float size) {
+    const float f = (1.f + std::sqrt(5.f)) * 0.5f;
+    const float3 v[12] = {{-1, f, 0}, {1, f, 0}, {-1, -f, 0}, {1, -f, 0}, {0, -1, f}, {0, 1, f}, {0, -1, -f}, {0, 1, -f}, {f, 0, -1}, {f, 0, 1}, {-f, 0, -1}, {-f, 0, 1}};
+    const int faces[20][3] = {{0, 11, 5}, {0, 5, 1}, {0, 1, 7}, {0, 7, 10}, {0, 10, 11}, {1, 5, 9}, {5, 11, 4}, {11, 10, 2}, {10, 7, 6}, {7, 1, 8},
+                              {3, 9, 4}, {3, 4, 2}, {3, 2, 6}, {3, 6, 8}, {3, 8, 9}, {4, 9, 5}, {2, 4, 11}, {6, 2, 10}, {8, 6, 7}, {9, 8, 1}};
+    Mesh* m = new Mesh;
+    for (const auto& t : faces) {
+        const float3 n = normalize(cross(v[t[1]] - v[t[0]], v[t[2]] - v[t[0]]));
+        for (int k = 0; k < 3; ++k) {
+            m->idx.push_back((uint32_t)m->pos.size());
+            m->pos.push_back(normalize(v[t[k]]) * size);
+            m->nrm.push_back(n);
+            m->uv.push_back({0, 0});
+        }
+    }
+    return m;
+}
+
+// Letters as a solid, by the system's own solid text (SceneKit makes it, ModelIO hands over the mesh): `deep`
+// through, the edges cut off by `chamfer`; a capital is about 0.7 high. The letters' lower left is at the origin,
+// they run along x and stand up along y, the middle of their depth is at z = 0.
+static Mesh* letters(const char* text, float deep, float chamfer) {
+    const float size = 10.f;   // (SceneKit cuts curves by a fixed fineness: asked large, then made small)
+    SCNText* solid = [SCNText textWithString:@(text) extrusionDepth:deep * size];
+    solid.font = [NSFont fontWithName:@"Helvetica-Bold" size:size];
+    solid.chamferRadius = chamfer * size;
+    solid.flatness = 0.02;
+    MDLMesh* made = [MDLMesh meshWithSCNGeometry:solid];
+    MDLVertexAttributeData* ps = [made vertexAttributeDataForAttributeNamed:MDLVertexAttributePosition asFormat:MDLVertexFormatFloat3];
+    MDLVertexAttributeData* ns = [made vertexAttributeDataForAttributeNamed:MDLVertexAttributeNormal asFormat:MDLVertexFormatFloat3];
+    if (!made.vertexCount || !ps || !ns) return nullptr;
+    Mesh* m = new Mesh;
+    float3 low{1e9f};
+    for (NSUInteger i = 0; i < made.vertexCount; ++i) {
+        const float* p = (const float*)((const uint8_t*)ps.dataStart + i * ps.stride);
+        const float* n = (const float*)((const uint8_t*)ns.dataStart + i * ns.stride);
+        m->pos.push_back(float3{p[0], p[1], p[2]} / size);
+        m->nrm.push_back(normalize(float3{n[0], n[1], n[2]}));
+        m->uv.push_back({0, 0});
+        low = min(low, m->pos.back());
+    }
+    for (float3& p : m->pos) p = p - float3{low.x, low.y, 0.f};
+    for (MDLSubmesh* part in made.submeshes) {
+        if (part.geometryType != MDLGeometryTypeTriangles) continue;
+        const void* b = [part.indexBuffer map].bytes;
+        for (NSUInteger i = 0; i < part.indexCount; ++i)
+            m->idx.push_back(part.indexType == MDLIndexBitDepthUInt32 ? ((const uint32_t*)b)[i] : part.indexType == MDLIndexBitDepthUInt16 ? (uint32_t)((const uint16_t*)b)[i] : (uint32_t)((const uint8_t*)b)[i]);
+    }
+    return m->idx.empty() ? nullptr : m;
+}
+
+// Pale paper under a hard sun, with one of Filament's studios as the sky that fills the shadows (kept low, so the
+// shadows stay dark). What the glass things stand on in blocks.mm and shapes.mm.
+struct Sunlit {
+    float3 paper, sunWay;
+    float sunLux;
+};
+static bool paper_and_sun(Stage& s, Sunlit& lit) {
+    lit = {{0.70f, 0.77f, 0.82f}, normalize(float3{-0.34f, -0.75f, 0.67f}), 100000.f};
+    if (!room(s, "out/lightroom/lightroom_ibl.ktx", 7000.f)) return false;
+    LightManager::ShadowOptions shadow;
+    shadow.mapSize = 4096;
+    utils::Entity sun = utils::EntityManager::get().create();
+    LightManager::Builder(LightManager::Type::SUN).color({1.0f, 0.98f, 0.95f}).intensity(lit.sunLux).direction(lit.sunWay)
+        .castShadows(true).shadowOptions(shadow).build(*s.engine, sun);
+    s.scene->addEntity(sun);
+    Mesh* floor = new Mesh;
+    for (float2 c : {float2{-1, -1}, float2{1, -1}, float2{1, 1}, float2{-1, 1}}) {
+        floor->pos.push_back({30.f * c.x, 0.f, -30.f * c.y});
+        floor->nrm.push_back({0, 1, 0});
+        floor->uv.push_back(c * 0.5f + 0.5f);
+    }
+    floor->idx = {0, 1, 2, 0, 2, 3};
+    MaterialInstance* floor_mi = add(s, floor, "floor_lit.filamat", {mat4f{}}, 1, true);
+    if (!floor_mi) return false;
+    floor_mi->setParameter("color", float4{lit.paper, 1.f});
+    floor_mi->setParameter("roughness", 0.9f);
+    return true;
+}
+
+// The light a glass thing throws on the paper (glasslight.mat): the thing's own mesh at its places, once a colour.
+// Exaggerated apart from the look of the glass: the colours' indices far apart, the light a little stronger than true.
+// uneven: how far its faces lean from their own facing (0 for a mesh that is uneven itself), over `unevenSize` of the mesh's units.
+static bool glass_light(Stage& s, const Sunlit& lit, Mesh* m, std::vector<mat4f> places, float uneven = 0.f, float unevenSize = 1.f) {
+    const int colours = 20;
+    MaterialInstance* mi = add(s, m, "glasslight.filamat", places, 1, false, colours);
+    if (!mi) return false;
+    mi->setParameter("sunWay", lit.sunWay);
+    mi->setParameter("sunOnFloor", lit.paper * (lit.sunLux / 3.14159265f));
+    mi->setParameter("colours", (float)colours);
+    mi->setParameter("ior", 1.5f);
+    mi->setParameter("abbe", 2.f);
+    mi->setParameter("lean", uneven);
+    mi->setParameter("leanSize", unevenSize);
+    mi->setParameter("facing", float2{0.6f, 0.74f});
+    mi->setParameter("most", 6.f);
+    mi->setParameter("gain", 1.4f);
+    mi->setParameter("floorY", 0.f);
+    return true;
 }
 
 // Three frames, the last one read back and written as a .png.

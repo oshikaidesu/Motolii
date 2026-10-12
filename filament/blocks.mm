@@ -1,7 +1,6 @@
 // blocks.mm: clear glass blocks standing on pale paper in hard sun, seen from above.
-// The blocks are kit.h's; their shadows are Filament's own sun shadow; the paper is Filament's lit material; the light
-// the blocks throw on the paper is boxlight.mat (the block's surface drawn where its light lands, once per colour).
-// One picture, no switches.   ./blocks.sh  ->  out/blocks.png
+// Everything is kit.h's: the blocks (glassbox.mat), the paper and the sun with Filament's own shadow, and the light the
+// blocks throw on the paper (glasslight.mat). One picture, no switches.   ./blocks.sh  ->  out/blocks.png
 #include "kit.h"
 
 static const int W = 1920;
@@ -14,31 +13,8 @@ int main() {
     s.camera->setProjection(30.0, double(W) / double(H), 0.05, 60.0, Camera::Fov::VERTICAL);
     static FilmicToneMapper filmic;
     s.view->setColorGrading(ColorGrading::Builder().toneMapper(&filmic).contrast(1.4f).saturation(1.15f).build(*s.engine));
-
-    // light: a hard sun from the far right, and Filament's bright studio as the sky that fills the shadows
-    if (!room(s, "out/lightroom/lightroom_ibl.ktx", 7000.f)) return fail("out/lightroom/lightroom_ibl.ktx");
-    const float3 sunWay = normalize(float3{-0.34f, -0.75f, 0.67f});
-    const float sunLux = 100000.f;
-    LightManager::ShadowOptions shadow;
-    shadow.mapSize = 4096;
-    utils::Entity sun = utils::EntityManager::get().create();
-    LightManager::Builder(LightManager::Type::SUN).color({1.0f, 0.98f, 0.95f}).intensity(sunLux).direction(sunWay)
-        .castShadows(true).shadowOptions(shadow).build(*s.engine, sun);
-    s.scene->addEntity(sun);
-
-    // the paper
-    const float3 paper{0.70f, 0.77f, 0.82f};
-    Mesh* floor = new Mesh;
-    for (float2 c : {float2{-1, -1}, float2{1, -1}, float2{1, 1}, float2{-1, 1}}) {
-        floor->pos.push_back({30.f * c.x, 0.f, -30.f * c.y});
-        floor->nrm.push_back({0, 1, 0});
-        floor->uv.push_back(c * 0.5f + 0.5f);
-    }
-    floor->idx = {0, 1, 2, 0, 2, 3};
-    MaterialInstance* floor_mi = add(s, floor, "floor_lit.filamat", {mat4f{}}, 1, true);
-    if (!floor_mi) return fail("floor_lit.filamat");
-    floor_mi->setParameter("color", float4{paper, 1.f});
-    floor_mi->setParameter("roughness", 0.9f);
+    Sunlit lit;
+    if (!paper_and_sun(s, lit)) return fail("paper and sun (floor_lit.filamat, out/lightroom)");
 
     // the blocks: {middle on the floor}, {half sizes}, turned about the upright by
     struct Placed { float2 at; float3 half; float turn; };
@@ -46,16 +22,8 @@ int main() {
                           {{1.05f, 0.45f}, {0.36f, 0.36f, 0.36f}, 0.50f}, {{0.55f, -1.10f}, {0.75f, 0.45f, 0.45f}, 0.10f},
                           {{-0.80f, -0.95f}, {0.30f, 0.30f, 0.30f}, 0.80f}};
     std::vector<mat4f> places;
-    static float4 poseX[64], poseY[64], poseZ[64], poseAt[64];   // (boxlight.mat: axes with half sizes, middle)
-    int count = 0;
-    for (const Placed& p : all) {
-        const mat4f turn = mat4f::rotation(p.turn, float3{0, 1, 0});
-        places.push_back(mat4f::translation(float3{p.at.x, p.half.y, p.at.y}) * turn * mat4f::scaling(p.half * 2.f));
-        poseX[count] = {turn[0].xyz, p.half.x};
-        poseY[count] = {turn[1].xyz, p.half.y};
-        poseZ[count] = {turn[2].xyz, p.half.z};
-        poseAt[count++] = {p.at.x, p.half.y, p.at.y, 0.f};
-    }
+    for (const Placed& p : all)
+        places.push_back(mat4f::translation(float3{p.at.x, p.half.y, p.at.y}) * mat4f::rotation(p.turn, float3{0, 1, 0}) * mat4f::scaling(p.half * 2.f));
     MaterialInstance* blocks_mi = glass_blocks(s, places, ROUND, true);
     if (!blocks_mi) return fail("glassbox.filamat");
     blocks_mi->setParameter("abbe", 8.f);
@@ -64,26 +32,7 @@ int main() {
     blocks_mi->setParameter("reach", 0.02f);     // (how far behind a block the scene is taken to lie: these stand on the paper)
     blocks_mi->setParameter("absorption", float3{0.30f, 0.10f, 0.06f});   // (a breath of blue)
     blocks_mi->setParameter("lean", 0.02f);
-
-    // the light the blocks throw: the block's own surface cut fine, drawn once a block and colour where its light lands.
-    // Exaggerated apart from the look of the glass: the colours' indices far apart, the faces leaning more.
-    const int colours = 20;
-    MaterialInstance* light_mi = add(s, cube(ROUND, 16), "boxlight.filamat", {mat4f{}}, 1, false, count * colours);
-    if (!light_mi) return fail("boxlight.filamat");
-    light_mi->setParameter("poseX", poseX, 64);
-    light_mi->setParameter("poseY", poseY, 64);
-    light_mi->setParameter("poseZ", poseZ, 64);
-    light_mi->setParameter("poseAt", poseAt, 64);
-    light_mi->setParameter("sunWay", sunWay);
-    light_mi->setParameter("sunOnFloor", paper * (sunLux / 3.14159265f));
-    light_mi->setParameter("colours", (float)colours);
-    light_mi->setParameter("ior", 1.5f);
-    light_mi->setParameter("abbe", 2.f);
-    light_mi->setParameter("round", ROUND);
-    light_mi->setParameter("lean", 0.03f);
-    light_mi->setParameter("most", 6.f);
-    light_mi->setParameter("gain", 1.f);
-    light_mi->setParameter("floorY", 0.f);
+    if (!glass_light(s, lit, cube(ROUND, 16), places, 0.03f, 0.5f)) return fail("glasslight.filamat");
 
     if (!shoot(s, "out/blocks.png")) return fail("png");
     std::printf("wrote out/blocks.png\n");
