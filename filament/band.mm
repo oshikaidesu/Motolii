@@ -767,7 +767,7 @@ int main(int argc, char** argv) {
         MaterialInstance* mi = mat->createInstance();
         mi->setParameter("color", tex, TextureSampler(TextureSampler::MinFilter::LINEAR, TextureSampler::MagFilter::LINEAR));
         mi->setParameter("gain", envf("POSTER", 1.1f));
-        const float dist = 7.2f, hh = dist * std::tan(0.5f * fov * PI / 180.f), hw = hh * ((float)W / (float)H);
+        const float dist = envf("PDIST", 7.2f), hh = dist * std::tan(0.5f * fov * PI / 180.f), hw = hh * ((float)W / (float)H);
         opaque.push_back(add(quad_uv({eye.x, eye.y, eye.z - dist}, {1, 0, 0}, {0, 1, 0}, hw, hh), mi, true));
     } else if (!bare) {
         opaque.push_back(add(quad({0, 0, 0}, {1, 0, 0}, {0, 0, -1}, 40.f, 40.f), floor_mi, false));

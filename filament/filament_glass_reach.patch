@@ -1,8 +1,8 @@
 diff --git a/shaders/src/surface_light_indirect.fs b/shaders/src/surface_light_indirect.fs
-index 31de0620..c2906894 100644
+index 31de0620..cd1e700b 100644
 --- a/shaders/src/surface_light_indirect.fs
 +++ b/shaders/src/surface_light_indirect.fs
-@@ -520,6 +520,85 @@ void refractionThinSphere(float etaIR, float uThickness,
+@@ -520,6 +520,80 @@ void refractionThinSphere(float etaIR, float uThickness,
      ray.d = d;
  }
  
@@ -62,9 +62,8 @@ index 31de0620..c2906894 100644
 +    vec3 q = motoliiPlace(p);
 +    float dz = motoliiPlace(p + d).z - q.z;   // view depth gained per unit of length
 +    float zs = textureLod(materialParams_sceneBehind, q.xy, 0.0).z;
-+    none = 1.0;
-+    if (dz <= 1e-3 || zs <= 0.0) return 1.0;
-+    none = 0.0;
++    none = zs <= 0.0 ? 1.0 : 1.0 - smoothstep(0.0, 0.25, dz);   // (heading back: the room, little by little)
++    if (none >= 1.0) return 1.0;
 +    float reach = (zs - q.z) / dz;
 +    float z1 = textureLod(materialParams_sceneBehind, motoliiPlace(p + d * reach).xy, 0.0).z;
 +    if (z1 > 0.0) reach = (z1 - q.z) / dz;
@@ -76,11 +75,7 @@ index 31de0620..c2906894 100644
 +    highp vec4 p = mulMat4x4Float3(clipFromWorld, ray.position + ray.direction * reach);
 +    vec2 ndc = p.xy / max(p.w, 1e-4);
 +    vec3 t = textureLod(sampler0_ssr, vec3(uvToRenderTargetUV(ndc * 0.5 + 0.5), 0.0), lod).rgb;
-+    if (reach > 0.0 || none > 0.0) {
-+        float off = max(abs(ndc.x), abs(ndc.y));
-+        float out_ = max(none, p.w <= 0.0 ? 1.0 : smoothstep(0.9, 1.0, off));
-+        if (out_ > 0.0) t = mix(t, prefilteredRadiance(ray.direction, 0.0) * frameUniforms.iblLuminance, out_);
-+    }
++    if (none > 0.0) t = mix(t, prefilteredRadiance(ray.direction, 0.0) * frameUniforms.iblLuminance, none);
 +    return t;
 +}
 +#endif
@@ -88,7 +83,7 @@ index 31de0620..c2906894 100644
  vec3 evaluateRefraction(const PixelParams pixel, const vec3 n0, const float lod,
      const float etaIR, const float etaRI) {
  
-@@ -540,9 +619,7 @@ vec3 evaluateRefraction(const PixelParams pixel, const vec3 n0, const float lod,
+@@ -540,9 +614,7 @@ vec3 evaluateRefraction(const PixelParams pixel, const vec3 n0, const float lod,
      vec3 t = prefilteredRadiance(ray.direction, lod) * frameUniforms.iblLuminance;
  #else
      // compute the point where the ray exits the medium, if needed
@@ -99,7 +94,7 @@ index 31de0620..c2906894 100644
  #endif
  
      // apply absorption
-@@ -557,113 +634,74 @@ vec3 evaluateRefraction(const PixelParams pixel, const vec3 n0, const float lod,
+@@ -557,113 +629,75 @@ vec3 evaluateRefraction(const PixelParams pixel, const vec3 n0, const float lod,
  
  #if defined(MATERIAL_HAS_DISPERSION) && (REFRACTION_TYPE == REFRACTION_TYPE_SOLID)
  
@@ -203,6 +198,7 @@ index 31de0620..c2906894 100644
 +    float none;
 +    float behind = motoliiBehind(leave, found < 0.5 ? rrMid : (dot(t2Mid, t2Mid) > 0.0 ? t2Mid : reflect(rrMid, -n2)), none);
 +#endif
++    if (found > 0.5 && dot(t2Mid, t2Mid) == 0.0) none = 1.0;   // (it cannot leave: the room, mirrored)
 +    for (int i = 0; i < 8; i++) {
 +        float nd = n_base + dispFactor * offsets[i] + jitter;
 +        Refraction ray;
