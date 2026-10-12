@@ -1,5 +1,5 @@
 // poster.mm: a band and a heap of blocks of clear glass in front of a black poster with white letters, seen straight on.
-// The band is Filament's own glass (screen-space refraction, dispersion, thin film); the blocks are kit.h's.
+// The band is kit.h's thick glass (the letters bent twice, the colours parting); the blocks are kit.h's too.
 // One picture, no switches.   ./poster.sh  ->  out/poster.png
 #include "kit.h"
 
@@ -127,15 +127,16 @@ int main() {
     tex->setImage(*s.engine, 0, Texture::PixelBufferDescriptor(px.data(), px.size(), Texture::Format::RGBA, Texture::Type::UBYTE));
     sheet_mi->setParameter("color", tex, TextureSampler(TextureSampler::MinFilter::LINEAR, TextureSampler::MagFilter::LINEAR));
 
-    // the band: on layer 2 with the blocks, so a block does not show the band through itself. (With the band in the
-    // picture of what is behind, Filament made its copy of the screen and its seven blurred steps twice a frame; a
-    // music video wants the lavish picture, not the exact one.)
-    MaterialInstance* band_mi = add(s, band(), "poster_glass.filamat", {mat4f{}}, 2);
-    if (!band_mi) return fail("poster_glass.filamat");
-    band_mi->setParameter("thickness", 0.6f);
-    band_mi->setParameter("lean", 0.f);
-    band_mi->setParameter("film", 1.f);
-    band_mi->setParameter("split", 2.f);
+    // the band: thick glass. The letters behind are bent by its far side and again by its near side, and the colours
+    // part on the way (at 0.2 they turn to blocks of colour). A block does not show the band through itself.
+    MaterialInstance* band_far = nullptr;
+    MaterialInstance* band_mi = thick_glass(s, band(), {mat4f{}}, &band_far);
+    if (!band_mi) return fail("thick_glass.filamat");
+    for (MaterialInstance* mi : {band_mi, band_far}) {
+        mi->setParameter("thickness", 0.5f);
+        mi->setParameter("split", 0.10f);
+        mi->setParameter("vivid", 1.4f);
+    }
 
     MaterialInstance* blocks_mi = glass_blocks(s, heap(), 0.1f);
     if (!blocks_mi) return fail("glassbox.filamat");
