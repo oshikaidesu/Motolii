@@ -1,0 +1,4 @@
+#!/bin/zsh
+# The first take of the glass band picture (band.mm), as shown to the user on 2026-10-12.
+cd "$(dirname "$0")"
+env WIDE=0.22 SLAB=0.09 ROUND=5 TWIST=-0.6 EYEX=0.9 EYEY=0.55 EYEZ=2.0 ATX=1.25 ATY=0.75 ATZ=0 FOV=30 SHUTTER=30000 BACK=1.6 BACKLOW=0.42 BACKBEND=1.4 THICK=0.9 DISP=45 REFL=1.0 ABS=0.25 IOR=1.7 FILMWAVE=3.5 SAT=1.4 SUN=400000 IBL=420000 FLOORCOL=0.18 BLOOM=0.7 SUNX=0.35 SUNY=-0.6 SUNZ=-0.7 IBLTURN=2.2 NAME="${1:-take1}" DOF="${DOF:-0}" ./out/band
