@@ -1,18 +1,17 @@
-// band.mm (scene "poster"): a flat picture behind the glass (white letters on black), unlit, times a gain.
+// poster.mm: the flat picture behind the glass (white letters on black), unlit.
 material {
     name : poster,
     shadingModel : unlit,
     requires : [ uv0 ],
     culling : none,
     parameters : [
-        { type : sampler2d, name : color },
-        { type : float, name : gain }
+        { type : sampler2d, name : color }
     ]
 }
 
 fragment {
     void material(inout MaterialInputs material) {
         prepareMaterial(material);
-        material.baseColor = vec4(texture(materialParams_color, getUV0()).rgb * materialParams.gain, 1.0);
+        material.baseColor = vec4(texture(materialParams_color, getUV0()).rgb * 1.1, 1.0);
     }
 }

@@ -1,0 +1,23 @@
+// poster.mm: clear glass by Filament's own screen-space refraction and dispersion, nothing added.
+material {
+    name : poster_glass,
+    shadingModel : lit,
+    blending : fade,
+    refractionMode : screenspace,
+    refractionType : solid
+}
+
+fragment {
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        material.baseColor = vec4(1.0);
+        material.metallic = 0.0;
+        material.roughness = 0.0;
+        material.reflectance = 0.5;
+        material.absorption = vec3(0.048, 0.027, 0.015);
+        material.transmission = 1.0;
+        material.ior = 1.5;
+        material.thickness = 0.6;
+        material.dispersion = 2.0;
+    }
+}
