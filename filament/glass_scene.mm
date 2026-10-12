@@ -182,7 +182,7 @@ int main(int argc, char** argv) {
     // the bright window for the glass to show, the solids strewn about. Meant for solids with colour films (xcut, xcube).
     if (std::getenv("DARKROOM")) {
         static const char* dark[][2] = {{"ROOM", "0.012"}, {"FLOORGREY", "0.3"}, {"FLOOR_REFL", "0.1"}, {"APERTURE", "1.6"}, {"BLOOM", "0.35"},
-                                        {"SKY", "30000"}, {"GLINT", "30000"}, {"GLINTDEG", "25"}, {"STRIP", "0.2 35 0 0.95"}, {"PIECES", "8"}, {"EDGES", "1"},
+                                        {"SKY", "30000"}, {"GLINT", "30000"}, {"GLINTDEG", "25"}, {"STRIP", "0.2 35 0 0.95"}, {"PIECES", "4"}, {"ROUTES", "1"},
                                         {"SCATTER", "1"}};
         for (const auto& kv : dark) setenv(kv[0], kv[1], 0);
     }
@@ -1020,8 +1020,12 @@ int main(int argc, char** argv) {
     // EDGES=1: the pieces of light are cut where their light starts to go another way (flat_walk.mat, clip), so their
     // edges are true lines however coarse the pieces; the walk is then done twice (the second time for the far side
     // of such a line), into two tables of four texels per piece.
-    const bool flatClip = env_f("EDGES", 0.f) > 0.5f && !rainbowOnce;
-    const int flatPer = flatClip ? 4 : 3;
+    // ROUTES=1 (experiment, route_light.mat): one shape per way the light goes. The pieces only serve to find the ways
+    // (a few per face are enough: PIECES=4); nothing is cut along their grid, so EDGES has no part in it.
+    const bool flatRoutes = env_f("ROUTES", 0.f) > 0.5f && !rainbowOnce;
+    const bool flatClip = env_f("EDGES", 0.f) > 0.5f && !rainbowOnce && !flatRoutes;
+    const int flatPer = (flatClip || flatRoutes) ? 4 : 3;
+    std::vector<MaterialInstance*> routeMis;
     if (flatMostPieces * flatPer > 16384) return fail("too many pieces for one line of the walk table (PIECES is too high)");
     Target flatWalk = make_rt(flatMostPieces * flatPer, (int)items.size() * flatLines, Texture::InternalFormat::RGBA32F);
     Target flatWalk2 = flatClip ? make_rt(flatMostPieces * flatPer, (int)items.size() * flatLines, Texture::InternalFormat::RGBA32F) : Target{nullptr, nullptr};
@@ -1031,7 +1035,7 @@ int main(int argc, char** argv) {
 // what the walk is told goes to both of its turns
 #define FLAT_WALK_SET(...) do { flatWalkMi->setParameter(__VA_ARGS__); if (flatWalk2Mi) flatWalk2Mi->setParameter(__VA_ARGS__); } while (0)
     if (!rainbowOnce) {
-        flatWalkMi->setParameter("clip", flatClip ? 1.f : 0.f);
+        flatWalkMi->setParameter("clip", flatRoutes ? 3.f : (flatClip ? 1.f : 0.f));
         flatWalkMi->setParameter("first", flatPieces, nearest);   // (not read on the first turn)
         if (flatWalk2Mi) {
             flatWalk2Mi->setParameter("clip", 2.f);
@@ -1072,11 +1076,89 @@ int main(int argc, char** argv) {
                 .geometry(0, RenderableManager::PrimitiveType::TRIANGLES, vb, ib)
                 .instances(fk.solids.size() * (size_t)flatDraws * recvKinds)
                 .material(0, mi).culling(false).castShadows(false).receiveShadows(false)
-                .layerMask(0xFF, (flatOnCpu || std::getenv("NOLIGHT")) ? 0x00 : 0x01).build(*engine, e);
+                .layerMask(0xFF, (flatOnCpu || flatRoutes || std::getenv("NOLIGHT")) ? 0x00 : 0x01).build(*engine, e);
             sLight->addEntity(e);
             if (turn == 0) { fk.mi = mi; fk.entity = e; } else fk.mi2 = mi;
             if (turn == 1 && std::getenv("XDRAW2")) rm.setLayerMask(rm.getInstance(e), 0xFF, 0x00);   // (XDRAW2: timing only, its pieces not drawn)
             if (turn == 0 && std::getenv("XDRAW1")) rm.setLayerMask(rm.getInstance(e), 0xFF, 0x00);   // (XDRAW1: to look at the second turn alone)
+        }
+    }
+    if (flatRoutes) {
+        Material* routeMat = mat("route_light.filamat");
+        if (!routeMat) return fail("route_light.filamat");
+        for (FlatKind& fk : flatKinds) {
+            using beam::V3;
+            const beam::Solid& loc = items[(size_t)fk.solids[0]].local;
+            float4 planes[40] = {}, films[4] = {};
+            int planeCount = 0;
+            for (size_t f = 0; f < loc.planes.size() && planeCount < 40; ++f)   // (the order of the table of faces)
+                if (loc.faces[f].n >= 3) planes[planeCount++] = float4{(float)loc.planes[f].n.x, (float)loc.planes[f].n.y, (float)loc.planes[f].n.z, (float)loc.planes[f].o};
+            const int filmCount = (int)std::min<size_t>(4, loc.films.size());
+            for (int f = 0; f < filmCount; ++f) films[f] = float4{(float)loc.films[(size_t)f].n.x, (float)loc.films[(size_t)f].n.y, (float)loc.films[(size_t)f].n.z, (float)loc.films[(size_t)f].o};
+            // the corners of every face, for route_light.mat
+            std::vector<int> tableOf(loc.planes.size(), -1);
+            auto* cornerTexels = new std::vector<float>((size_t)8 * 40 * 4, 0.f);
+            for (size_t f = 0, row = 0; f < loc.planes.size() && row < 40; ++f) {
+                if (loc.faces[f].n < 3) continue;
+                tableOf[f] = (int)row;
+                const int cn = std::min(8, loc.faces[f].n);
+                for (int k = 0; k < cn; ++k) {
+                    float* o = cornerTexels->data() + (row * 8 + (size_t)k) * 4;
+                    o[0] = (float)loc.faces[f].p[(size_t)k].x; o[1] = (float)loc.faces[f].p[(size_t)k].y; o[2] = (float)loc.faces[f].p[(size_t)k].z;
+                    o[3] = (float)cn;
+                }
+                ++row;
+            }
+            Texture* cornerTex = Texture::Builder().width(8).height(40).levels(1).format(Texture::InternalFormat::RGBA32F).build(*engine);
+            cornerTex->setImage(*engine, 0, Texture::PixelBufferDescriptor(cornerTexels->data(), cornerTexels->size() * sizeof(float), backend::PixelDataFormat::RGBA, backend::PixelDataType::FLOAT,
+                                                                           [](void*, size_t, void* u) { delete (std::vector<float>*)u; }, cornerTexels));
+            // per piece four corners (the material puts them round the light of the way that piece finds)
+            auto* v = new std::vector<float>();
+            auto* ix = new std::vector<uint32_t>();
+            int firstOfFace = 0, lastFace = -2;
+            for (int i = 0; i < fk.shape.pieces; ++i) {
+                const float* tb = fk.shape.table.data() + (size_t)i * 20;
+                const V3 nf{tb[4], tb[5], tb[6]}, c0{tb[8], tb[9], tb[10]};
+                int face = -1;
+                for (size_t f = 0; f < loc.planes.size(); ++f)
+                    if (loc.faces[f].n >= 3 && beam::dot(loc.planes[f].n, nf) > 0.99999 && std::fabs(beam::dot(loc.planes[f].n, c0) - loc.planes[f].o) < 1e-5) face = (int)f;
+                if (face != lastFace) { firstOfFace = i; lastFace = face; }
+                if (face < 0) continue;
+                const uint32_t base = (uint32_t)(v->size() / 5);
+                for (int k = 0; k < 4; ++k) v->insert(v->end(), {(float)i, (float)(k & 1), (float)(k >> 1), (float)firstOfFace, (float)tableOf[(size_t)face]});
+                ix->insert(ix->end(), {base, base + 1, base + 3, base, base + 3, base + 2});
+            }
+            VertexBuffer* vb = VertexBuffer::Builder().vertexCount((uint32_t)(v->size() / 5)).bufferCount(1)
+                                   .attribute(VertexAttribute::POSITION, 0, VertexBuffer::AttributeType::FLOAT3, 0, 20)
+                                   .attribute(VertexAttribute::UV0, 0, VertexBuffer::AttributeType::FLOAT2, 12, 20).build(*engine);
+            vb->setBufferAt(*engine, 0, VertexBuffer::BufferDescriptor(v->data(), v->size() * sizeof(float)));
+            IndexBuffer* ib = IndexBuffer::Builder().indexCount((uint32_t)ix->size()).bufferType(IndexBuffer::IndexType::UINT).build(*engine);
+            ib->setBuffer(*engine, IndexBuffer::BufferDescriptor(ix->data(), ix->size() * sizeof(uint32_t)));
+            MaterialInstance* mi = routeMat->createInstance();
+            mi->setParameter("walk", flatWalk.color, nearest);
+            mi->setParameter("pieces", flatPieces, nearest);
+            mi->setParameter("pose", poseTex, nearest);
+            mi->setParameter("corners", cornerTex, nearest);
+            mi->setParameter("loose", env_f("ROUTELOOSE", 0.f));
+            mi->setParameter("shape", (float)(&fk - flatKinds.data()));
+            mi->setParameter("stepCount", (float)flatLines);
+            mi->setParameter("planes", planes, 40);
+            mi->setParameter("planeCount", (int32_t)planeCount);
+            mi->setParameter("films", films, 4);
+            mi->setParameter("filmCount", (int32_t)filmCount);
+            mi->setParameter("floorY", 0.f);
+            float4 which[16] = {};
+            for (size_t i = 0; i < fk.solids.size() && i < 64; ++i) which[i / 4][i % 4] = (float)fk.solids[i];
+            mi->setParameter("solids", which, 16);
+            const utils::Entity e = em.create();
+            RenderableManager::Builder(1).boundingBox({{0, 0, 0}, {100.f, 100.f, 100.f}})
+                .geometry(0, RenderableManager::PrimitiveType::TRIANGLES, vb, ib)
+                .instances(fk.solids.size() * (size_t)flatLines)
+                .material(0, mi).culling(false).castShadows(false).receiveShadows(false)
+                .layerMask(0xFF, std::getenv("NOLIGHT") ? 0x00 : 0x01).build(*engine, e);
+            sLight->addEntity(e);
+            routeMis.push_back(mi);
+            std::printf("  routes: %s, %d pieces to find the ways, %zu corners in the mesh\n", fk.name.c_str(), fk.shape.pieces, v->size() / 5);
         }
     }
     static std::vector<std::vector<float>> mesh_v(items.size());
@@ -1877,10 +1959,15 @@ int main(int argc, char** argv) {
                         float4 band[4] = {};
                         for (int f = 0; f < 4; ++f) band[f] = float4{(float)par.glass.n(filmNm[f].y), (float)par.glass.n(filmNm[f].x), 0.f, 0.f};
                         FLAT_WALK_SET("filmBand", band, 4);
+                        for (MaterialInstance* mi : routeMis) mi->setParameter("filmBand", band, 4);
                     }
                     for (FlatKind& fk : flatKinds) {
                         fk.mi->setParameter("steps", table, 16);
                         if (fk.mi2) fk.mi2->setParameter("steps", table, 16);
+                    }
+                    for (MaterialInstance* mi : routeMis) {
+                        mi->setParameter("steps", table, 16);
+                        mi->setParameter("sunDir", sunDir);
                     }
                 }
             }
@@ -2011,6 +2098,10 @@ int main(int argc, char** argv) {
                 softenMi->setParameter("stripSoft", float2{env_f("STRIPSOFT", 0.02f), every});
                 FLAT_WALK_SET("strip", strip);
                 FLAT_WALK_SET("stripSoft", float2{env_f("STRIPSOFT", 0.02f), every});
+                for (MaterialInstance* mi : routeMis) {
+                    mi->setParameter("strip", strip);
+                    mi->setParameter("stripSoft", float2{env_f("STRIPSOFT", 0.02f), every});
+                }
             }
             int count = 0;
             row[5] = (float)world.solids[k].kind; row[6] = (float)world.solids[k].r; row[7] = (float)world.solids[k].h;

@@ -1,0 +1,224 @@
+// ROUTES=1 (experiment): the light of the flat-faced solids, one shape per way the light goes instead of one per piece.
+//
+// The sun's rays are parallel and the faces flat, so all the light of a face that meets the same faces and films in the
+// same order lands as ONE flat shape: the face, carried to the floor by one affine map, less the parts whose rays do
+// not go that way. flat_walk.mat (clip 3) still sends one ray from each of a few pieces per face, but only to FIND the
+// ways: where that ray lands, and which faces and films it met. This material draws, for every such piece, the WHOLE
+// face carried the way its ray went; a piece whose way an earlier piece of the same face has found already draws
+// nothing. Every pixel then checks its own ray against that list of faces and films (in the solid's own frame, plain
+// arithmetic on the planes, no table): does it meet each of them inside the solid, and no mirroring film in between?
+// Where it does not, nothing is drawn. So an edge is the true line however few the pieces; what is lost is a way that
+// no piece's ray happens to take (a sliver of light narrower than the gaps between the pieces).
+// Left out: other solids (they neither shade this light nor bend it), receivers other than the floor, and the smear
+// between colour steps (each step lands where its own colour goes).
+// What is drawn for a way is not the whole face but the box, in the piece's own (a, b), that all the faces met on that
+// way fit into when carried back to the face the light came in by: the light of that way cannot lie outside it, and
+// the pixels to check are far fewer.
+// Mesh (glass_scene.mm): per piece four corners, position = (piece, u, v) with u, v = 0 or 1 across that box; a point
+// (a, b) is at c0 + a (c1 - c0) + b (c2 - c0) of that piece's three corners. uv0 = the first piece of the same face,
+// the face's place in the table of faces.
+// Instance = (solid of this shape, colour step). Output as beam_light.mat: rgb = the light, a = light * distance flown.
+material {
+    name : route_light,
+    shadingModel : unlit,
+    blending : add,
+    depthWrite : false,
+    depthCulling : false,
+    culling : none,
+    doubleSided : true,
+    instanced : true,
+    flipUV : false,
+    requires : [ uv0 ],
+    variables : [ light, from, way, sun, face ],
+    parameters : [
+        { type : sampler2d, name : walk, precision : high, format : float },    // flat_walk.mat, clip 3: four texels per piece
+        { type : sampler2d, name : pieces, precision : high, format : float },  // beam::FlatShape::table
+        { type : sampler2d, name : corners, precision : high, format : float }, // per face (line, in the order of the table of faces): its corners in the
+                                                                                // shape's own frame, up to 8, and in w of the first how many
+        { type : sampler2d, name : pose, precision : high, format : float },    // per solid (column): axis x + size; axis y; axis z; place
+        { type : float,  name : shape },                                        // which line of `pieces`
+        { type : float4[16], name : steps },                                    // rgb, index of refraction
+        { type : float,  name : stepCount },                                    // colour steps + 1 (the last: mirrored off the outside, white)
+        { type : float4[16], name : solids },                                   // which solids have this shape, 4 per entry
+        { type : float4[40], name : planes, precision : high },                 // the shape's faces in its own frame, in the order of the table of faces
+        { type : int,    name : planeCount },
+        { type : float4[4], name : films, precision : high },                   // its colour films, the same way
+        { type : int,    name : filmCount },
+        { type : float4[4], name : filmBand },                                  // film f mirrors light of an index between x and y
+        { type : float3, name : sunDir },
+        { type : float4, name : strip },                                        // the sun through a slit (beam_soften.mat)
+        { type : float2, name : stripSoft },
+        { type : float,  name : loose },                                        // 1: draw the whole box of the face the light came in by (to check the tighter box against)
+        { type : float,  name : floorY }
+    ]
+}
+
+vertex {
+    // (a, b) of a point of the face's plane, with the piece's corner c0 and its two edges
+    vec2 inPiece(vec3 p, vec3 c0, vec3 e1, vec3 e2) {
+        vec3 w = p - c0;
+        float g11 = dot(e1, e1), g12 = dot(e1, e2), g22 = dot(e2, e2), r1 = dot(w, e1), r2 = dot(w, e2);
+        float det = max(g11 * g22 - g12 * g12, 1e-20);
+        return vec2(r1 * g22 - r2 * g12, r2 * g11 - r1 * g12) / det;
+    }
+    void materialVertex(inout MaterialVertexInputs material) {
+        int stepsAll = int(materialParams.stepCount);
+        int inst = getInstanceIndex();
+        int which = inst / stepsAll;
+        int stepAt = inst - which * stepsAll;
+        int solid = int(materialParams.solids[which / 4][which - (which / 4) * 4] + 0.5);
+        int line = solid * stepsAll + stepAt;
+        int piece = int(mesh_position.x + 0.5);
+        int shape = int(materialParams.shape + 0.5);
+        bool mirrored = stepAt == stepsAll - 1;
+
+        vec4 t0 = texelFetch(materialParams_walk, ivec2(piece * 4, line), 0);
+        vec4 t1 = texelFetch(materialParams_walk, ivec2(piece * 4 + 1, line), 0);
+        vec4 t2 = texelFetch(materialParams_walk, ivec2(piece * 4 + 2, line), 0);
+        vec4 info = texelFetch(materialParams_walk, ivec2(piece * 4 + 3, line), 0);   // how bright, which way (a number), the way itself
+        float gain = info.x;
+        // has an earlier piece of this face found the same way? then the shape is drawn from that one
+        int first = int(mesh_uv0.x + 0.5), entry = int(mesh_uv0.y + 0.5);
+        for (int q = first; q < piece; q++) {
+            vec4 other = texelFetch(materialParams_walk, ivec2(q * 4 + 3, line), 0);
+            if (other.x > 0.0 && abs(other.y - info.y) < 1e-3 * (1.0 + abs(info.y))) gain = 0.0;
+        }
+
+        vec3 nf = texelFetch(materialParams_pieces, ivec2(piece * 5 + 1, shape), 0).xyz;
+        vec3 c0 = texelFetch(materialParams_pieces, ivec2(piece * 5 + 2, shape), 0).xyz;
+        vec3 e1 = texelFetch(materialParams_pieces, ivec2(piece * 5 + 3, shape), 0).xyz - c0;
+        vec3 e2 = texelFetch(materialParams_pieces, ivec2(piece * 5 + 4, shape), 0).xyz - c0;
+        vec4 ax = texelFetch(materialParams_pose, ivec2(solid, 0), 0);
+        vec3 ay = texelFetch(materialParams_pose, ivec2(solid, 1), 0).xyz;
+        vec3 az = texelFetch(materialParams_pose, ivec2(solid, 2), 0).xyz;
+        vec3 at = texelFetch(materialParams_pose, ivec2(solid, 3), 0).xyz;
+        vec3 L = materialParams.sunDir;
+        vec3 sunL = vec3(dot(L, ax.xyz), dot(L, ay), dot(L, az));
+        float n = materialParams.steps[mirrored ? (stepsAll - 1) / 2 : stepAt].w;
+
+        // The box: the face the light came in by, and every face met on the way carried back to it along the way.
+        vec2 lo = vec2(1e9), hi = vec2(-1e9);
+        int cnt = int(texelFetch(materialParams_corners, ivec2(0, entry), 0).w + 0.5);
+        for (int k = 0; k < 8; k++) {
+            if (k >= cnt) break;
+            vec2 q2 = inPiece(texelFetch(materialParams_corners, ivec2(k, entry), 0).xyz, c0, e1, e2);
+            lo = min(lo, q2); hi = max(hi, q2);
+        }
+        if (gain > 0.0 && !mirrored && materialParams.loose < 0.5) {
+            int seqLo = int(info.z + 0.5), seqHi = int(info.w + 0.5);
+            vec3 dir[9];
+            vec4 met[8];
+            int ids[8];
+            int events = 0;
+            dir[0] = refract(normalize(sunL), nf, 1.0 / n);
+            for (int e = 0; e < 8; e++) {
+                int id = (e < 4 ? (seqLo >> (6 * e)) : (seqHi >> (6 * (e - 4)))) & 63;
+                if (id == 0) break;
+                id -= 1;
+                ids[e] = id;
+                met[e] = id >= 40 ? materialParams.films[id - 40] : materialParams.planes[id];
+                dir[e + 1] = reflect(dir[e], met[e].xyz);
+                events = e + 1;
+            }
+            float entryAt = dot(nf, c0);
+            for (int e = 0; e < 8; e++) {
+                if (e >= events) break;
+                if (ids[e] >= 40) continue;   // (a film reaches from face to face: it narrows nothing here)
+                vec2 l2 = vec2(1e9), h2 = vec2(-1e9);
+                int cn = int(texelFetch(materialParams_corners, ivec2(0, ids[e]), 0).w + 0.5);
+                for (int k = 0; k < 8; k++) {
+                    if (k >= cn) break;
+                    vec3 p = texelFetch(materialParams_corners, ivec2(k, ids[e]), 0).xyz;
+                    for (int j = e - 1; j >= 0; j--) p -= dir[j + 1] * ((dot(met[j].xyz, p) - met[j].w) / dot(met[j].xyz, dir[j + 1]));
+                    p -= dir[0] * ((dot(nf, p) - entryAt) / dot(nf, dir[0]));
+                    vec2 q2 = inPiece(p, c0, e1, e2);
+                    l2 = min(l2, q2); h2 = max(h2, q2);
+                }
+                lo = max(lo, l2); hi = min(hi, h2);
+            }
+        }
+        vec2 pad = 0.01 * (hi - lo) + 1e-4;
+        vec2 ab = mix(lo - pad, hi + pad, mesh_position.yz);
+        if (!(gain > 0.0) || lo.x >= hi.x || lo.y >= hi.y) { gain = 0.0; ab = vec2(0.0); }
+
+        vec3 P = c0 + e1 * ab.x + e2 * ab.y;                                     // on the face's plane, in the solid's own frame
+        vec3 Pw = (ax.xyz * P.x + ay * P.y + az * P.z) * ax.w + at;
+        vec3 down = Pw + L * ((materialParams.floorY - Pw.y) / min(L.y, -1e-6));   // where the sun would put this point on the floor
+
+        vec3 q = t0.xyz + (t1.xyz - t0.xyz) * ab.x + (t2.xyz - t0.xyz) * ab.y;     // x, z, distance flown: one affine map for the whole way
+        vec3 rgb = (mirrored ? vec3(1.0) : materialParams.steps[stepAt].rgb) * gain;
+        material.light = vec4(rgb, q.z);
+        material.from = vec4(P, n);
+        material.way = vec4(info.z, info.w, mirrored ? 1.0 : 0.0, down.x);
+        material.sun = vec4(sunL, down.z);
+        material.face = vec4(nf, float(entry));
+        material.worldPosition = mulMat4x4Float3(getWorldFromModelMatrix(), vec3(q.x, materialParams.floorY, q.y));
+    }
+}
+
+fragment {
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        vec4 c = variable_light;
+        // A pixel on the face, in the solid's own measure: the soft step at an edge is that wide. (How much room is left
+        // jumps where a ray is no longer followed, so its own change from pixel to pixel would be no measure.)
+        float pixel = length(dFdx(variable_from.xyz)) + length(dFdy(variable_from.xyz));
+        float room = 1e3;
+        {   // what is drawn is a box round the light: first of all the pixel has to be on the face the light came in by
+            int entry = int(variable_face.w + 0.5);
+            for (int j = 0; j < 40; j++) {
+                if (j >= materialParams.planeCount) break;
+                if (j == entry) continue;
+                room = min(room, materialParams.planes[j].w - dot(materialParams.planes[j].xyz, variable_from.xyz));
+            }
+        }
+        if (variable_way.z < 0.5 && room > -pixel) {
+            // this pixel's own ray, along the way named: through the face, then each face or film in turn
+            highp vec3 p = variable_from.xyz;
+            float n = variable_from.w;
+            highp vec3 d = refract(normalize(variable_sun.xyz), normalize(variable_face.xyz), 1.0 / n);
+            int lo = int(variable_way.x + 0.5), hi = int(variable_way.y + 0.5);
+            int on = -1;   // the film the ray stands on (it was just mirrored by it)
+            for (int e = 0; e < 8; e++) {
+                int id = (e < 4 ? (lo >> (6 * e)) : (hi >> (6 * (e - 4)))) & 63;
+                if (id == 0) break;
+                id -= 1;
+                bool film = id >= 40;
+                highp vec4 pl = film ? materialParams.films[id - 40] : materialParams.planes[id];
+                highp float den = dot(pl.xyz, d);
+                if (abs(den) < 1e-7) { room = -1.0; break; }
+                highp float t = (pl.w - dot(pl.xyz, p)) / den;
+                if (t < -1e-4) { room = -1.0; break; }
+                // no film that mirrors this colour may lie between here and there
+                for (int f = 0; f < 4; f++) {
+                    if (f >= materialParams.filmCount) break;
+                    if (f == on || (film && f == id - 40)) continue;
+                    if (!(n > materialParams.filmBand[f].x && n < materialParams.filmBand[f].y)) continue;
+                    highp vec4 fp = materialParams.films[f];
+                    highp float s0 = fp.w - dot(fp.xyz, p), s1 = fp.w - dot(fp.xyz, p + d * t);
+                    room = min(room, s0 * s1 > 0.0 ? min(abs(s0), abs(s1)) : -min(abs(s0), abs(s1)));
+                }
+                p += d * t;
+                // and it has to get there inside the solid
+                for (int j = 0; j < 40; j++) {
+                    if (j >= materialParams.planeCount) break;
+                    if (!film && j == id) continue;
+                    room = min(room, materialParams.planes[j].w - dot(materialParams.planes[j].xyz, p));
+                }
+                if (room < -pixel) break;   // (this ray clearly does not go this way: no need to follow it further)
+                d = reflect(d, pl.xyz);   // (at the last face the light leaves instead; where it then goes the walk has said)
+                on = film ? id - 40 : -1;
+            }
+        }
+        float keep = clamp(room / max(pixel, 1e-9) + 0.5, 0.0, 1.0);
+        if (materialParams.strip.w > 0.0) {   // only what the band of sun falls on gets any
+            float off = dot(materialParams.strip.xy, vec2(variable_way.w, variable_sun.w)) - materialParams.strip.z;
+            if (materialParams.stripSoft.y > 0.0) off -= materialParams.stripSoft.y * floor(off / materialParams.stripSoft.y + 0.5);
+            float band = materialParams.strip.w - abs(off);
+            keep *= clamp(band / max(fwidth(band), 1e-9) + 0.5, 0.0, 1.0);
+        }
+        if (keep <= 0.0) discard;
+        c.rgb *= keep;
+        material.baseColor = vec4(c.rgb, (c.r + c.g + c.b) / 3.0 * c.a);
+    }
+}

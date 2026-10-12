@@ -33,6 +33,9 @@ material {
         // along the line where that room runs out, so its edge is the true one whatever the size of the pieces.
         // 2: the same once more for the part of the piece on the other side of that line, started from the corner
         // with the least room in the table of the first time (`first`); nothing where the whole piece goes one way.
+        // 3 (ROUTES): a piece only serves to find one way the light of its face goes. Four texels per piece again; the
+        // fourth also names that way: the faces and films met inside the solid, in order (route_light.mat draws the
+        // whole of the face's light that goes that way from it). Other solids are not looked at, nor the band of sun.
         { type : float,  name : clip },
         { type : sampler2d, name : first, precision : high, format : float },
         { type : float4[4], name : filmBand },                                  // colour films: film f mirrors light of an index between x and y
@@ -247,8 +250,9 @@ fragment {
 
     // A colour film inside solid k (beam::Solid::films) that mirrors light of index n, met from o along d before `reach`:
     // how far, and the film's normal turned the way the light goes. `reach` if there is none.
-    float filmAhead(int k, vec3 o, vec3 d, float n, float reach, out vec3 nf) {
+    float filmAhead(int k, vec3 o, vec3 d, float n, float reach, out vec3 nf, out int which) {
         nf = vec3(0.0, 1.0, 0.0);
+        which = 0;
         vec4 info = sceneAt(1, k);
         if (info.y > 0.5) return reach;
         int cnt = int(info.x + 0.5), films = int(info.z + 0.5);
@@ -260,9 +264,20 @@ fragment {
             float den = dot(pl.xyz, d);
             if (abs(den) < 1e-6) continue;
             float tf = (pl.w - dot(pl.xyz, o)) / den;
-            if (tf > 1e-4 && tf < t) { t = tf; nf = den > 0.0 ? pl.xyz : -pl.xyz; }
+            if (tf > 1e-4 && tf < t) { t = tf; nf = den > 0.0 ? pl.xyz : -pl.xyz; which = f; }
         }
         return t;
+    }
+
+    // which face of flat solid k has the outward normal n and holds the point p (its place in the table of faces)
+    int faceIndex(int k, vec3 p, vec3 n) {
+        int cnt = int(sceneAt(1, k).x + 0.5);
+        for (int j = 0; j < MAXP; j++) {
+            if (j >= cnt) break;
+            vec4 pl = sceneAt(3 + j, k);
+            if (dot(pl.xyz, n) > 0.99999 && abs(pl.w - dot(pl.xyz, p)) < 1e-4) return j;
+        }
+        return 0;
     }
 
     // How much further the carried point `ref` could go, along d, than to the face (or film) the middle ray met, before
@@ -299,14 +314,19 @@ fragment {
     // way (in: a point of the same flat piece; out: x, distance flown, z where it lands). Returns how bright the
     // piece lands, as a multiple of the sun; 0: no light.
     // `edge`: the least room `ref` had on that way (roomLeft; only worked out if clip is on).
-    float route(int A, vec3 start, vec3 nStart, float n, bool mirrored, inout vec3 ref, out float way, out float edge) {
+    // `seq` (clip 3 only): the faces and films met inside solid A, in order, each as its place in the table of faces + 1
+    // (films: 41 and up), six bits each, the first four in x and the next four in y.
+    float route(int A, vec3 start, vec3 nStart, float n, bool mirrored, inout vec3 ref, out float way, out float edge, out vec2 seq) {
         way = 1.0;
         edge = 1e3;
+        seq = vec2(0.0);
+        bool routes = materialParams.clip > 2.5;
+        int met = 0;
         vec3 L = materialParams.sunDir;
         vec3 p = start, d = L;
         float ci = -dot(nStart, d);
         if (!(ci > 1e-6)) return 0.0;
-        if (materialParams.solidCount > 1) {
+        if (materialParams.solidCount > 1 && !routes) {
             // does another solid take the sun before it gets here?
             int S0;
             float t0;
@@ -314,7 +334,7 @@ fragment {
             if (nextSolid(start - L * 100.0, L, -1, S0, t0, n0) && (S0 != A || abs(t0 - 100.0) > 2e-3)) return 0.0;
         }
         float irr = ci, cosOn = ci;
-        if (materialParams.strip.w > 0.0) {   // only what stands in the band of sun gets any
+        if (materialParams.strip.w > 0.0 && !routes) {   // only what stands in the band of sun gets any
             vec3 X = start + L * ((materialParams.floorY - start.y) / min(L.y, -1e-6));
             float off = dot(materialParams.strip.xy, X.xz) - materialParams.strip.z;
             if (materialParams.stripSoft.y > 0.0) off -= materialParams.stripSoft.y * floor(off / materialParams.stripSoft.y + 0.5);
@@ -352,9 +372,10 @@ fragment {
                     int faces = 0;   // (five faces of the solid at most, as ever; films met on the way come on top)
                     for (int b = 0; b < 10; b++) {
                         vec3 nj, nfilm;
+                        int whichFilm;
                         float tb = exitWorld(S, p, d, nj);
                         if (tb > 1e8) return 0.0;
-                        float tfilm = filmAhead(S, p, d, n, tb, nfilm);   // (a film is one more face, one that mirrors)
+                        float tfilm = filmAhead(S, p, d, n, tb, nfilm, whichFilm);   // (a film is one more face, one that mirrors)
                         bool film = tfilm < tb;
                         if (film) { tb = tfilm; nj = nfilm; }
                         else if (++faces > 5) break;
@@ -362,7 +383,14 @@ fragment {
                         p += d * tb;
                         float db = dot(nj, d);
                         if (!(db > 1e-6)) return 0.0;
-                        if (materialParams.clip > 0.5) edge = min(edge, roomLeft(S, before, ref, d, n, tb, dot(nj, p - ref) / db));
+                        if (materialParams.clip > 0.5 && !routes) edge = min(edge, roomLeft(S, before, ref, d, n, tb, dot(nj, p - ref) / db));
+                        if (routes) {
+                            if (met >= 8) return 0.0;
+                            float id = float((film ? 40 + whichFilm : faceIndex(S, p, nj)) + 1);
+                            if (met < 4) seq.x += id * pow(64.0, float(met));
+                            else seq.y += id * pow(64.0, float(met - 4));
+                            met++;
+                        }
                         ref += d * (dot(nj, p - ref) / db);
                         way = way * 1.37 + dot(nj, vec3(1.0, 2.0, 4.0)) + float(S);
                         irr *= db / cosOn;
@@ -384,7 +412,7 @@ fragment {
             int S2;
             float t2;
             vec3 n2;
-            if (materialParams.solidCount > 1 && nextSolid(p, d, S, S2, t2, n2)) {
+            if (materialParams.solidCount > 1 && !routes && nextSolid(p, d, S, S2, t2, n2)) {
                 p += d * t2;
                 float dn = dot(n2, d);
                 if (!(dn < -1e-6)) return 0.0;
@@ -427,7 +455,7 @@ fragment {
                 vec3 corner = part < 3 ? texelFetch(materialParams_pieces, ivec2(piece * 5 + 2 + part, shape), 0).xyz : mid;
                 bool mirrored = stepAt == stepsAll - 1;
                 bool go = true;
-                if (materialParams.clip > 1.5) {
+                if (materialParams.clip > 1.5 && materialParams.clip < 2.5) {
                     // the second time: only for a piece with a corner that goes another way, and from near that corner
                     go = false;
                     if (!mirrored) {
@@ -464,8 +492,9 @@ fragment {
                     vec3 nw = ax.xyz * nf.x + ay.xyz * nf.y + az.xyz * nf.z;
                     float n = materialParams.steps[mirrored ? (stepsAll - 1) / 2 : stepAt].w;
                     float way, edge;
-                    float gain = route(solid, start, nw, n, mirrored, ref, way, edge);
-                    if (clip) result = part < 3 ? vec4(ref.x, ref.z, ref.y, edge) : vec4(gain, way, 0.0, 0.0);
+                    vec2 seq;
+                    float gain = route(solid, start, nw, n, mirrored, ref, way, edge, seq);
+                    if (clip) result = part < 3 ? vec4(ref.x, ref.z, ref.y, edge) : vec4(gain, way, seq);
                     else if (gain > 0.0) result = vec4(ref.x, ref.z, ref.y, part == 0 ? gain : (part == 1 ? way : 0.0));
                 }
             }
