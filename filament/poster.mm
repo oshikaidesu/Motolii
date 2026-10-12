@@ -1,4 +1,4 @@
-// poster.mm: a band and a heap of cubes of clear glass in front of a black poster with white letters, seen straight on.
+// poster.mm: a band and a heap of blocks of clear glass in front of a black poster with white letters, seen straight on.
 // Everything that draws is Filament as it is: screen-space refraction with dispersion, its small studio as the
 // room the glass mirrors, a sun, tone mapping. One render, no switches.
 // ./poster.sh  ->  out/poster.png
@@ -12,11 +12,13 @@
 #include <filament/MaterialInstance.h>
 #include <filament/RenderableManager.h>
 #include <filament/Renderer.h>
+#include <filament/RenderTarget.h>
 #include <filament/Scene.h>
 #include <filament/SwapChain.h>
 #include <filament/Texture.h>
 #include <filament/TextureSampler.h>
 #include <filament/ToneMapper.h>
+#include <filament/TransformManager.h>
 #include <filament/VertexBuffer.h>
 #include <filament/View.h>
 #include <filament/Viewport.h>
@@ -24,7 +26,7 @@
 #include <geometry/SurfaceOrientation.h>
 #include <image/Ktx1Bundle.h>
 #include <ktxreader/Ktx1Reader.h>
-#include <math/mat3.h>
+#include <math/mat4.h>
 #include <utils/EntityManager.h>
 
 #import <Cocoa/Cocoa.h>
@@ -99,54 +101,48 @@ static Mesh* band() {
     return m;
 }
 
-// A heap of cubes beside the band, as real glass blocks are: the edges a little round (a tenth of half the edge),
-// the faces flat. uv: the face's own square, small, plus a shift per cube and face (the glass's film and the slow
-// lean of its faces go by uv, so they differ from face to face and stay on the cube).
-static Mesh* cubes() {
+// One glass block, edge 1, as real ones are: the edges a little round (a tenth of half the edge), the faces flat.
+// glassbox.mat draws it: the sight line goes in, through the block's real far faces, mirrors inside where it cannot
+// leave, and shows what lies behind where it comes out.
+static const float ROUND = 0.1f;
+static Mesh* cube() {
     Mesh* m = new Mesh;
-    const float round = 0.1f;
-    uint32_t seed = 7u;
-    auto rnd = [&]() { seed = seed * 1664525u + 1013904223u; return (float)(seed >> 8) / 16777216.f; };
     std::vector<float> line;   // (where a face is cut: finely across the rounding, once across the flat)
-    for (int k = 0; k <= 4; ++k) line.push_back(-1.f + round * (float)k / 4.f);
-    for (int k = 4; k >= 0; --k) line.push_back(1.f - round * (float)k / 4.f);
+    for (int k = 0; k <= 4; ++k) line.push_back(-1.f + ROUND * (float)k / 4.f);
+    for (int k = 4; k >= 0; --k) line.push_back(1.f - ROUND * (float)k / 4.f);
     const int n = (int)line.size();
-    struct Placed { float3 c; float h; };
-    std::vector<Placed> placed;
-    for (int tries = 0; tries < 4000 && placed.size() < 14; ++tries) {
-        Placed p{{-0.95f + 1.9f * rnd(), 0.0f + 2.8f * rnd(), -0.2f + 1.4f * rnd()}, 0.12f + 0.16f * rnd()};
-        bool clear = true;
-        for (const Placed& q : placed) clear = clear && length(p.c - q.c) > (p.h + q.h) * 1.75f;
-        for (int i = 0; i < 96; ++i) {   // (not before or behind the band as seen: Filament's glass does not show glass through glass)
-            const float3 mid = (band_point((float)i / 96.f, 0.f) + band_point((float)i / 96.f, 0.5f * TAU)) * 0.5f;
-            clear = clear && length(p.c.xy - mid.xy) > 0.55f + p.h * 1.5f;
-        }
-        if (!clear) continue;
-        placed.push_back(p);
-        mat3f R = mat3f::rotation(TAU * rnd(), normalize(float3{rnd() - 0.5f, rnd() - 0.5f, rnd() - 0.5f}));
-        const float shift = rnd() * 10.f;
-        const float3 ax[3] = {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}};
-        for (int f = 0; f < 6; ++f) {
-            const float sgn = f < 3 ? 1.f : -1.f;
-            const float3 nf = ax[f % 3] * sgn, a = ax[(f + 1) % 3], b = ax[(f + 2) % 3] * sgn;
-            const uint32_t base = (uint32_t)m->pos.size();
-            for (int j = 0; j < n; ++j)
-                for (int i = 0; i < n; ++i) {
-                    const float3 q = nf + a * line[i] + b * line[j];
-                    const float3 core = clamp(q, float3{-(1.f - round)}, float3{1.f - round});
-                    const float3 out = normalize(q - core);
-                    m->pos.push_back(p.c + R * ((core + out * round) * p.h));
-                    m->nrm.push_back(R * out);
-                    m->uv.push_back(float2{line[i], line[j]} * 0.075f + float2{shift + (float)f, shift});
-                }
-            for (int j = 0; j + 1 < n; ++j)
-                for (int i = 0; i + 1 < n; ++i) {
-                    const uint32_t p0 = base + (uint32_t)(j * n + i), p1 = p0 + 1, p2 = p0 + (uint32_t)n + 1, p3 = p0 + (uint32_t)n;
-                    m->idx.insert(m->idx.end(), {p0, p1, p2, p0, p2, p3});
-                }
-        }
+    const float3 ax[3] = {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}};
+    for (int f = 0; f < 6; ++f) {
+        const float sgn = f < 3 ? 1.f : -1.f;
+        const float3 nf = ax[f % 3] * sgn, a = ax[(f + 1) % 3], b = ax[(f + 2) % 3] * sgn;
+        const uint32_t base = (uint32_t)m->pos.size();
+        for (int j = 0; j < n; ++j)
+            for (int i = 0; i < n; ++i) {
+                const float3 q = nf + a * line[i] + b * line[j];
+                const float3 core = clamp(q, float3{-(1.f - ROUND)}, float3{1.f - ROUND}), out = normalize(q - core);
+                m->pos.push_back((core + out * ROUND) * 0.5f);
+                m->nrm.push_back(out);
+                m->uv.push_back({0, 0});
+            }
+        for (int j = 0; j + 1 < n; ++j)
+            for (int i = 0; i + 1 < n; ++i) {
+                const uint32_t p0 = base + (uint32_t)(j * n + i), p1 = p0 + 1, p2 = p0 + (uint32_t)n + 1, p3 = p0 + (uint32_t)n;
+                m->idx.insert(m->idx.end(), {p0, p1, p2, p0, p2, p3});
+            }
     }
     return m;
+}
+// The heap, placed by hand: on the letters (over plain black a block shows little), clear of one another as seen
+// (a block does not show another block through itself), one large with a corner towards the eye.
+// {middle}, half the edge, {the axis it is turned about}, how far
+static std::vector<mat4f> heap() {
+    struct Placed { float3 c; float h; float3 axis; float turn; };
+    const Placed all[] = {{{0.22f, 2.30f, 0.5f}, 0.15f, {0.3f, 1.f, 0.2f}, 0.7f},  {{0.62f, 1.70f, 0.6f}, 0.20f, {1.f, -0.6f, 0.3f}, 0.85f},
+                          {{0.10f, 1.02f, 0.2f}, 0.10f, {0.5f, 1.f, -0.4f}, 1.1f}, {{0.60f, 0.66f, 0.7f}, 0.15f, {-0.4f, 1.f, 0.6f}, 0.6f},
+                          {{0.84f, 1.21f, 0.3f}, 0.06f, {1.f, 0.3f, 0.5f}, 0.9f}};
+    std::vector<mat4f> out;
+    for (const Placed& p : all) out.push_back(mat4f::translation(p.c) * mat4f::rotation(p.turn, normalize(p.axis)) * mat4f::scaling(float3{2.f * p.h}));
+    return out;
 }
 
 // White letters on black, drawn by the system's own text drawing.
@@ -225,7 +221,8 @@ int main() {
         .castShadows(false).build(*engine, sun);
     scene->addEntity(sun);
 
-    auto add = [&](Mesh* m, const char* filamat) -> MaterialInstance* {
+    // layer 2: left out of the picture of what is behind (the glass blocks themselves)
+    auto add = [&](Mesh* m, const char* filamat, std::vector<mat4f> places = {mat4f{}}, uint8_t layer = 1) -> MaterialInstance* {
         static std::vector<std::vector<uint8_t>> pkgs;
         pkgs.push_back(load_file(filamat));
         Material* mat = pkgs.back().empty() ? nullptr : Material::Builder().package(pkgs.back().data(), pkgs.back().size()).build(*engine);
@@ -244,11 +241,14 @@ int main() {
         vb->setBufferAt(*engine, 2, VertexBuffer::BufferDescriptor(m->uv.data(), n * sizeof(float2)));
         IndexBuffer* ib = IndexBuffer::Builder().indexCount((uint32_t)m->idx.size()).bufferType(IndexBuffer::IndexType::UINT).build(*engine);
         ib->setBuffer(*engine, IndexBuffer::BufferDescriptor(m->idx.data(), m->idx.size() * sizeof(uint32_t)));
-        utils::Entity e = utils::EntityManager::get().create();
         MaterialInstance* mi = mat->createInstance();
-        RenderableManager::Builder(1).geometry(0, RenderableManager::PrimitiveType::TRIANGLES, vb, ib).material(0, mi)
-            .culling(false).castShadows(false).receiveShadows(false).build(*engine, e);
-        scene->addEntity(e);
+        for (const mat4f& place : places) {
+            utils::Entity e = utils::EntityManager::get().create();
+            engine->getTransformManager().create(e, {}, place);
+            RenderableManager::Builder(1).geometry(0, RenderableManager::PrimitiveType::TRIANGLES, vb, ib).material(0, mi)
+                .culling(false).castShadows(false).receiveShadows(false).layerMask(0xFF, layer).build(*engine, e);
+            scene->addEntity(e);
+        }
         return mi;
     };
 
@@ -268,16 +268,38 @@ int main() {
     tex->setImage(*engine, 0, Texture::PixelBufferDescriptor(px.data(), px.size(), Texture::Format::RGBA, Texture::Type::UBYTE));
     sheet_mi->setParameter("color", tex, TextureSampler(TextureSampler::MinFilter::LINEAR, TextureSampler::MagFilter::LINEAR));
     MaterialInstance* band_mi = add(band(), "poster_glass.filamat");
-    MaterialInstance* cubes_mi = add(cubes(), "poster_glass.filamat");
-    if (!band_mi || !cubes_mi) return fail("poster_glass.filamat");
+    if (!band_mi) return fail("poster_glass.filamat");
     band_mi->setParameter("thickness", 0.6f);
     band_mi->setParameter("lean", 0.f);
-    cubes_mi->setParameter("thickness", 0.4f);
-    cubes_mi->setParameter("lean", 0.03f);
+
+    // what is behind the blocks: the same scene without them, drawn first into a picture of its own
+    Texture* behind = Texture::Builder().width(W).height(H).levels(1).usage(Texture::Usage::COLOR_ATTACHMENT | Texture::Usage::SAMPLEABLE)
+                          .format(Texture::InternalFormat::RGBA16F).build(*engine);
+    Texture* behind_depth = Texture::Builder().width(W).height(H).levels(1).usage(Texture::Usage::DEPTH_ATTACHMENT).format(Texture::InternalFormat::DEPTH24).build(*engine);
+    View* view_behind = engine->createView();
+    view_behind->setScene(scene);
+    view_behind->setCamera(camera);
+    view_behind->setViewport({0, 0, (uint32_t)W, (uint32_t)H});
+    view_behind->setRenderTarget(RenderTarget::Builder().texture(RenderTarget::AttachmentPoint::COLOR, behind).texture(RenderTarget::AttachmentPoint::DEPTH, behind_depth).build(*engine));
+    view_behind->setPostProcessingEnabled(false);
+    view_behind->setScreenSpaceRefractionEnabled(true);
+    view->setVisibleLayers(0x03, 0x03);
+    MaterialInstance* blocks_mi = add(cube(), "glassbox.filamat", heap(), 2);
+    if (!blocks_mi) return fail("glassbox.filamat");
+    blocks_mi->setParameter("backdrop", behind, TextureSampler(TextureSampler::MinFilter::LINEAR, TextureSampler::MagFilter::LINEAR, TextureSampler::WrapMode::CLAMP_TO_EDGE));
+    blocks_mi->setParameter("ior", 1.5f);
+    blocks_mi->setParameter("abbe", 2.5f);       // (the colours split wide: below 2 the eight steps show as stripes)
+    blocks_mi->setParameter("reach", 0.5f);
+    blocks_mi->setParameter("envGain", 0.05f);   // (glassbox's own studio, nearly off: at 1 the blocks go milky, at 0 they sink into black)
+    blocks_mi->setParameter("sceneMix", 1.f);
+    blocks_mi->setParameter("absorption", float3{0.10f, 0.04f, 0.06f});
+    blocks_mi->setParameter("round", ROUND);
+    blocks_mi->setParameter("lean", 0.08f);      // (the letters inside run like water; at 0.15 they break up)
 
     static std::vector<uint8_t> pic((size_t)W * H * 4);
     for (int i = 0; i < 3; ++i) {
         while (!renderer->beginFrame(swap)) {}
+        renderer->render(view_behind);
         renderer->render(view);
         if (i == 2)
             renderer->readPixels(0, 0, (uint32_t)W, (uint32_t)H,
