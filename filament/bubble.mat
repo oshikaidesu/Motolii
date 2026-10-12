@@ -1,0 +1,19 @@
+// bubble.mat: a bubble of air caught in glass: nearly nothing in its middle, a bright rim where the glass around it
+// mirrors the light. Filament's lit surface with a see-through middle; kit.h strews small balls of it inside the blocks.
+material {
+    name : bubble,
+    shadingModel : lit,
+    blending : fade,
+    parameters : [ { type : float, name : strength } ]
+}
+
+fragment {
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        float rim = 1.0 - abs(dot(getWorldNormalVector(), getWorldViewVector()));
+        material.baseColor = vec4(vec3(1.0), saturate(materialParams.strength * (0.03 + rim * rim * rim * 1.8)));
+        material.roughness = 0.08;
+        material.metallic = 0.0;
+        material.reflectance = 1.0;
+    }
+}

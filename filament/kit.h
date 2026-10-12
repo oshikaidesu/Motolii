@@ -398,6 +398,47 @@ static bool box_light(Stage& s, const Sunlit& lit, std::vector<mat4f> places, fl
     return true;
 }
 
+// A ball of radius 1.
+static Mesh* ball(int around = 20, int up = 12) {
+    Mesh* m = new Mesh;
+    for (int j = 0; j <= up; ++j)
+        for (int i = 0; i <= around; ++i) {
+            const float a = TAU * (float)i / around, b = 0.5f * TAU * ((float)j / up - 0.5f);
+            const float3 out{std::cos(a) * std::cos(b), std::sin(b), std::sin(a) * std::cos(b)};
+            m->pos.push_back(out);
+            m->nrm.push_back(out);
+            m->uv.push_back({(float)i / around, (float)j / up});
+        }
+    for (int j = 0; j < up; ++j)
+        for (int i = 0; i < around; ++i) {
+            const uint32_t p = (uint32_t)(j * (around + 1) + i), q = p + 1, r = p + (uint32_t)around + 1, t = r + 1;
+            m->idx.insert(m->idx.end(), {p, r, q, q, r, t});
+        }
+    return m;
+}
+
+// Bubbles of air caught in the glass blocks, as cast blocks have: small balls strewn inside each (most tiny, a few
+// larger, some in a rising string), drawn into the picture of what is behind, so a block shows them the way it shows
+// everything else: bent, and mirrored inside. each: how many a block. The same every run.
+static bool bubbles(Stage& s, std::vector<mat4f> places, int each) {
+    uint32_t seed = 11u;
+    auto rnd = [&]() { seed = seed * 1664525u + 1013904223u; return (float)(seed >> 8) / 16777216.f; };
+    std::vector<mat4f> all;
+    for (const mat4f& block : places) {
+        float3 at{0.f};
+        for (int i = 0; i < each; ++i) {
+            if (i % 6 == 0) at = float3{rnd() - 0.5f, rnd() - 0.5f, rnd() - 0.5f} * 0.8f;   // a new string starts
+            else at = clamp(at + float3{(rnd() - 0.5f) * 0.06f, 0.03f + rnd() * 0.08f, (rnd() - 0.5f) * 0.06f}, float3{-0.44f}, float3{0.44f});
+            const float size = rnd() < 0.15f ? 0.012f + 0.014f * rnd() : 0.003f + 0.006f * rnd();   // (as a part of the block's edge)
+            all.push_back(block * mat4f::translation(at) * mat4f::scaling(float3{size} / float3{length(block[0].xyz), length(block[1].xyz), length(block[2].xyz)} * length(block[0].xyz)));
+        }
+    }
+    MaterialInstance* mi = add(s, ball(), "bubble.filamat", all);
+    if (!mi) return false;
+    mi->setParameter("strength", 1.f);
+    return true;
+}
+
 // Three frames, the last one read back and written as a .png.
 static bool shoot(Stage& s, const char* path) {
     static std::vector<uint8_t> pic;

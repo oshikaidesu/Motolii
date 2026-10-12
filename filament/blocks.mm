@@ -33,6 +33,7 @@ int main() {
     blocks_mi->setParameter("reach", 0.02f);     // (how far behind a block the scene is taken to lie: these stand on the paper)
     blocks_mi->setParameter("absorption", float3{0.10f, 0.06f, 0.05f});
     blocks_mi->setParameter("lean", 0.f);       // (and their lines ruler-straight)
+    if (!bubbles(s, places, 30)) return fail("bubble.filamat");
     if (!shadow_of(s, lit, cube(ROUND), places)) return fail("floor_shade.filamat");
     if (!box_light(s, lit, places, ROUND)) return fail("boxlight.filamat");
 
