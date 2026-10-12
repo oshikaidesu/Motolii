@@ -279,7 +279,7 @@ struct Sunlit {
     float sunLux;
 };
 static bool paper_and_sun(Stage& s, Sunlit& lit) {
-    lit = {{0.70f, 0.77f, 0.82f}, normalize(float3{-0.34f, -0.75f, 0.67f}), 100000.f};
+    lit = {{0.52f, 0.60f, 0.65f}, normalize(float3{-0.55f, -0.50f, 0.67f}), 100000.f};   // (a middle blue-grey: the light the glass throws must be able to be brighter than the paper; the sun low, the shadows long)
     if (!room(s, "out/lightroom/lightroom_ibl.ktx", 7000.f)) return false;
     LightManager::ShadowOptions shadow;
     shadow.mapSize = 4096;
@@ -289,7 +289,7 @@ static bool paper_and_sun(Stage& s, Sunlit& lit) {
     s.scene->addEntity(sun);
     Mesh* floor = new Mesh;
     for (float2 c : {float2{-1, -1}, float2{1, -1}, float2{1, 1}, float2{-1, 1}}) {
-        floor->pos.push_back({30.f * c.x, 0.f, -30.f * c.y});
+        floor->pos.push_back({8.f * c.x, 0.f, -8.f * c.y});   // (no larger than the picture needs: the sun's shadow map is spread over all of it)
         floor->nrm.push_back({0, 1, 0});
         floor->uv.push_back(c * 0.5f + 0.5f);
     }
@@ -299,6 +299,13 @@ static bool paper_and_sun(Stage& s, Sunlit& lit) {
     floor_mi->setParameter("color", float4{lit.paper, 1.f});
     floor_mi->setParameter("roughness", 0.9f);
     return true;
+}
+
+// A glass thing's shadow: the same mesh again, drawn as nothing, casting. (The glass itself is on layer 2, left out
+// of the picture of what is behind, and a thing left out of a view casts no shadow in it; so the paper seen THROUGH
+// the glass would lie in full sun.)
+static bool shadow_of(Stage& s, Mesh* m, std::vector<mat4f> places) {
+    return add(s, m, "shadow_only.filamat", places, 1, true) != nullptr;
 }
 
 // The light a glass thing throws on the paper (glasslight.mat): the thing's own mesh at its places, once a colour.
@@ -315,12 +322,12 @@ static bool glass_light(Stage& s, const Sunlit& lit, Mesh* m, std::vector<mat4f>
     for (const float3& p : m->pos) size = std::max(size, std::max(std::fabs(p.x), std::max(std::fabs(p.y), std::fabs(p.z))));
     mi->setParameter("size", size);
     mi->setParameter("ior", 1.5f);
-    mi->setParameter("abbe", 2.f);
+    mi->setParameter("abbe", 6.f);
     mi->setParameter("lean", uneven);
     mi->setParameter("leanSize", unevenSize);
     mi->setParameter("facing", float2{0.6f, 0.74f});
     mi->setParameter("most", 6.f);
-    mi->setParameter("gain", 1.4f);
+    mi->setParameter("gain", 0.9f);
     mi->setParameter("floorY", 0.f);
     return true;
 }

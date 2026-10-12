@@ -25,10 +25,11 @@ int main() {
         {word, mat4f::translation(float3{-1.75f, 0.0f, -1.15f}) * mat4f::rotation(0.12f, float3{0, 1, 0}), 0.25f},                     // letters, standing
     };
     for (const Thing& t : things) {
-        MaterialInstance* glass = add(s, t.mesh, "poster_glass.filamat", {t.place}, 2, true);
+        MaterialInstance* glass = add(s, t.mesh, "poster_glass.filamat", {t.place}, 2);
         if (!glass) return fail("poster_glass.filamat");
         glass->setParameter("thickness", t.thick);
         glass->setParameter("lean", 0.f);
+        if (!shadow_of(s, t.mesh, {t.place})) return fail("shadow_only.filamat");
         if (!glass_light(s, lit, t.mesh, {t.place})) return fail("glasslight.filamat");
     }
 
