@@ -30,5 +30,105 @@ material {
         { type : float,  name : abbe },                          // how far apart the colours' indices lie (small: far)
         { type : float,  name : round },                         // the edges' rounding, as a part of half the edge (the mesh has the same)
         { type : float,  name : lean },                          // how far the faces lean from flat (glassbox.mat's, here often more)
+        { type : float,  name : most },                          // gathered light is no brighter than this many times the bare floor
+        { type : float,  name : gain },
+        { type : float,  name : floorY }
+    ]
+}
+
+vertex {
+#include "spectrum.glsl"
+    const int MIRRORINGS = 3;
+    float fres(float ci, float n1, float n2) {   // how much is mirrored at a face
+        float s2 = (n1 / n2) * (n1 / n2) * (1.0 - ci * ci);
+        if (s2 >= 1.0) return 1.0;
+        float ct = sqrt(1.0 - s2);
+        float rs = (n1 * ci - n2 * ct) / (n1 * ci + n2 * ct), rp = (n1 * ct - n2 * ci) / (n1 * ct + n2 * ci);
+        return 0.5 * (rs * rs + rp * rp);
+    }
+    // the box's outward direction at a point of its surface: round at the edges, leaning slowly on the faces (as glassbox.mat)
+    vec3 outward(vec3 q, vec3 h) {
+        vec3 core = clamp(q, -h * (1.0 - materialParams.round), h * (1.0 - materialParams.round));
+        vec3 s = 6.2832 * q / h;
+        return normalize(normalize(q - core) + materialParams.lean * vec3(sin(0.6 * s.y + 1.0) + sin(0.45 * s.z), sin(0.6 * s.z + 2.0) + sin(0.45 * s.x), sin(0.6 * s.x + 3.0) + sin(0.45 * s.y)));
+    }
+    void materialVertex(inout MaterialVertexInputs material) {
+        int all = int(materialParams.colours + 0.5);
+        int inst = getInstanceIndex();
+        int box = inst / all, colour = inst - box * all;
+        vec3 ax = materialParams.poseX[box].xyz, ay = materialParams.poseY[box].xyz, az = materialParams.poseZ[box].xyz;
+        vec3 at = materialParams.poseAt[box].xyz;
+        vec3 h = vec3(materialParams.poseX[box].w, materialParams.poseY[box].w, materialParams.poseZ[box].w);
+        vec3 sunW = materialParams.sunWay;
+        vec3 sun = normalize(vec3(dot(sunW, ax), dot(sunW, ay), dot(sunW, az)));
+
+        vec3 p = mesh_position.xyz * 2.0 * h;              // this corner, in the box's own frame
+        vec3 n = outward(p, h);
+        float lambda = mix(400.0, 700.0, (float(colour) + 0.5) / float(all));
+        float index = cauchyIor(lambda, materialParams.ior, materialParams.abbe);
+        float ci = -dot(n, sun);
+        bool ok = ci > 1e-3;                               // in the sun
+        float through = 0.0, mirrored = 0.0;
+        vec3 ro = p, rd = sun;
+        if (ok) {
+            through = 1.0 - fres(ci, 1.0, index);
+            rd = refract(sun, n, 1.0 / index);
+            bool left = false;
+            for (int b = 0; b <= MIRRORINGS; b++) {
+                // where the plain box is left, from inside (glassbox.mat's)
+                vec3 inv = 1.0 / rd;
+                vec3 tHi = (h - ro) * inv, tLo = (-h - ro) * inv;
+                vec3 tA = max(tHi, tLo);
+                float t;
+                vec3 fn;
+                if (tA.x <= tA.y && tA.x <= tA.z) { t = tA.x; fn = vec3(tHi.x >= tLo.x ? 1.0 : -1.0, 0.0, 0.0); }
+                else if (tA.y <= tA.z)            { t = tA.y; fn = vec3(0.0, tHi.y >= tLo.y ? 1.0 : -1.0, 0.0); }
+                else                              { t = tA.z; fn = vec3(0.0, 0.0, tHi.z >= tLo.z ? 1.0 : -1.0); }
+                ro = clamp(ro + rd * max(t, 0.0), -h, h);
+                vec3 fo = outward(ro, h);                  // (round at the edges here too: a thin prism)
+                float co = dot(fo, rd);
+                if (!(co > 1e-3)) { fo = fn; co = dot(fn, rd); }
+                vec3 gone = refract(rd, -fo, index);
+                if (dot(gone, gone) > 0.0) {
+                    through *= 1.0 - fres(co, index, 1.0);
+                    rd = gone;
+                    left = true;
+                    break;
+                }
+                rd = reflect(rd, fn);
+                mirrored += 1.0;
+            }
+            ok = left;
+        }
+        vec3 Pin = ax * p.x + ay * p.y + az * p.z + at;
+        vec3 Pw = ax * ro.x + ay * ro.y + az * ro.z + at;
+        vec3 dW = ax * rd.x + ay * rd.y + az * rd.z;
+        if (!(dW.y < -0.03)) ok = false;                   // it does not come down
+        vec3 X = ok ? Pw + dW * ((materialParams.floorY - Pw.y) / dW.y) : at;   // (not drawn: all such corners at one place, so cuts wholly out of the light cost no screen)
+        float far = max(h.x, max(h.y, h.z));
+        float fade = ok ? 1.0 - smoothstep(6.0 * far, 12.0 * far, length(X - Pw)) : 0.0;
+        vec3 share = max(xyzToSrgb(cieXyz(lambda)), vec3(0.0)) / (SPECTRUM_MEAN * float(all));   // the colour's share of white light
+
+        // the corner across the sunlight (two numbers), for the squeeze
+        vec3 u = normalize(cross(sunW, abs(sunW.y) < 0.99 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0)));
+        vec3 v = cross(sunW, u);
+        material.tint = vec4(share * through, ok ? 1.0 : 0.0);
+        material.where = vec4(dot(Pin, u), dot(Pin, v), X.x, X.z);
+        material.more = vec4(mirrored, fade, 0.0, 0.0);
+        // (the renderable stands at the origin unturned, so its own matrix is Filament's way from the scene's coordinates to its own)
+        material.worldPosition = mulMat4x4Float3(getWorldFromModelMatrix(), vec3(X.x, materialParams.floorY + 0.002, X.z));
+    }
+}
+
+fragment {
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        // a cut with a corner out of the sun, or with corners that were mirrored a different number of times, is a tear: not drawn
+        if (variable_tint.a < 0.999 || fwidth(variable_more.x) > 1e-3) discard;
+        highp vec4 w = variable_where;
+        highp float before = abs(dFdx(w.x) * dFdy(w.y) - dFdx(w.y) * dFdy(w.x));   // the cut's size across the sunlight ...
+        highp float after = abs(dFdx(w.z) * dFdy(w.w) - dFdx(w.w) * dFdy(w.z));    // ... and on the floor
+        float squeeze = min(before / max(after, 1e-12) / -materialParams.sunWay.y, materialParams.most);   // against the bare sunlit floor
+        material.baseColor = vec4(variable_tint.rgb * (squeeze * variable_more.y * materialParams.gain) * materialParams.sunOnFloor * getExposure(), 1.0);
     }
 }
