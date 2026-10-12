@@ -11,6 +11,7 @@ material {
     customSurfaceShading : true,
     parameters : [
         { type : float3, name : color },
+        { type : float, name : grain },                               // how strong the paper's tooth is (0: none)
         { type : sampler2d, name : sunlight, precision : medium },
         { type : mat4, name : pictureFromScene, precision : high },   // the scene's coordinates -> the picture's (-1..1)
         { type : float, name : sunWide },                             // the sun's width: how far shade spreads for every unit it flew (a tangent)
@@ -20,9 +21,27 @@ material {
 }
 
 fragment {
+    float speck(highp vec2 p) {   // a number 0..1 per cell
+        highp vec3 q = fract(vec3(p.xyx) * 0.1031);
+        q += dot(q, q.yzx + 33.33);
+        return fract((q.x + q.y) * q.z);
+    }
+    float tooth(highp vec2 p) {   // smooth between the cells' numbers
+        highp vec2 i = floor(p), f = fract(p);
+        f = f * f * (3.0 - 2.0 * f);
+        return mix(mix(speck(i), speck(i + vec2(1.0, 0.0)), f.x), mix(speck(i + vec2(0.0, 1.0)), speck(i + vec2(1.0, 1.0)), f.x), f.y);
+    }
     void material(inout MaterialInputs material) {
         prepareMaterial(material);
-        material.baseColor = vec4(materialParams.color, 1.0);
+        // the paper's tooth: flecks fixed to the paper (they move with the floor, not with the camera), always about two
+        // pixels across: two sizes a doubling apart are mixed by how large a pixel is on the paper here, so the tooth
+        // neither shimmers far away nor turns to blobs close by; and a slower mottling under it
+        highp vec2 at = getUserWorldPosition().xz;
+        float pixel = max(max(length(dFdx(at)), length(dFdy(at))), 1e-6);
+        float level = log2(0.45 / pixel), lower = floor(level);
+        float flecks = mix(tooth(at * exp2(lower)), tooth(at * exp2(lower + 1.0)), level - lower) - 0.5;
+        flecks += (tooth(at * 34.0 + 5.0) - 0.5) * 0.3;
+        material.baseColor = vec4(materialParams.color * (1.0 + materialParams.grain * flecks), 1.0);
         material.roughness = 0.9;
         material.metallic = 0.0;
         material.reflectance = 0.3;

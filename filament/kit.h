@@ -326,6 +326,7 @@ static bool paper_and_sun(Stage& s, Sunlit& lit) {
     MaterialInstance* paper = add(s, floor, "paper.filamat");
     if (!paper) return false;
     paper->setParameter("color", lit.paper);
+    paper->setParameter("grain", 0.12f);
     paper->setParameter("sunlight", s.sunlight, TextureSampler(TextureSampler::MinFilter::LINEAR, TextureSampler::MagFilter::LINEAR, TextureSampler::WrapMode::CLAMP_TO_EDGE));
     paper->setParameter("pictureFromScene", mat4f(above->getProjectionMatrix() * above->getViewMatrix()));
     paper->setParameter("sunWide", 0.022f);   // (a sun some 4.5 degrees wide: far wider than the true one, for the softness)
