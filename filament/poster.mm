@@ -1,4 +1,4 @@
-// poster.mm: one band of clear glass in front of a black poster with white letters, seen straight on.
+// poster.mm: a band and a heap of cubes of clear glass in front of a black poster with white letters, seen straight on.
 // Everything that draws is Filament as it is: screen-space refraction with dispersion, its small studio as the
 // room the glass mirrors, a sun, tone mapping. One render, no switches.
 // ./poster.sh  ->  out/poster.png
@@ -24,6 +24,7 @@
 #include <geometry/SurfaceOrientation.h>
 #include <image/Ktx1Bundle.h>
 #include <ktxreader/Ktx1Reader.h>
+#include <math/mat3.h>
 #include <utils/EntityManager.h>
 
 #import <Cocoa/Cocoa.h>
@@ -95,6 +96,56 @@ static Mesh* band() {
             const uint32_t p = (uint32_t)(i * sides + k), q = (uint32_t)(i * sides) + k1, r = i1 * sides + (uint32_t)k, t = i1 * sides + k1;
             m->idx.insert(m->idx.end(), {p, q, r, q, t, r});
         }
+    return m;
+}
+
+// A heap of cubes beside the band, as real glass blocks are: the edges a little round (a tenth of half the edge),
+// the faces flat. uv: the face's own square, small, plus a shift per cube and face (the glass's film and the slow
+// lean of its faces go by uv, so they differ from face to face and stay on the cube).
+static Mesh* cubes() {
+    Mesh* m = new Mesh;
+    const float round = 0.1f;
+    uint32_t seed = 7u;
+    auto rnd = [&]() { seed = seed * 1664525u + 1013904223u; return (float)(seed >> 8) / 16777216.f; };
+    std::vector<float> line;   // (where a face is cut: finely across the rounding, once across the flat)
+    for (int k = 0; k <= 4; ++k) line.push_back(-1.f + round * (float)k / 4.f);
+    for (int k = 4; k >= 0; --k) line.push_back(1.f - round * (float)k / 4.f);
+    const int n = (int)line.size();
+    struct Placed { float3 c; float h; };
+    std::vector<Placed> placed;
+    for (int tries = 0; tries < 4000 && placed.size() < 14; ++tries) {
+        Placed p{{-0.95f + 1.9f * rnd(), 0.0f + 2.8f * rnd(), -0.2f + 1.4f * rnd()}, 0.12f + 0.16f * rnd()};
+        bool clear = true;
+        for (const Placed& q : placed) clear = clear && length(p.c - q.c) > (p.h + q.h) * 1.75f;
+        for (int i = 0; i < 96; ++i) {   // (not before or behind the band as seen: Filament's glass does not show glass through glass)
+            const float3 mid = (band_point((float)i / 96.f, 0.f) + band_point((float)i / 96.f, 0.5f * TAU)) * 0.5f;
+            clear = clear && length(p.c.xy - mid.xy) > 0.55f + p.h * 1.5f;
+        }
+        if (!clear) continue;
+        placed.push_back(p);
+        mat3f R = mat3f::rotation(TAU * rnd(), normalize(float3{rnd() - 0.5f, rnd() - 0.5f, rnd() - 0.5f}));
+        const float shift = rnd() * 10.f;
+        const float3 ax[3] = {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}};
+        for (int f = 0; f < 6; ++f) {
+            const float sgn = f < 3 ? 1.f : -1.f;
+            const float3 nf = ax[f % 3] * sgn, a = ax[(f + 1) % 3], b = ax[(f + 2) % 3] * sgn;
+            const uint32_t base = (uint32_t)m->pos.size();
+            for (int j = 0; j < n; ++j)
+                for (int i = 0; i < n; ++i) {
+                    const float3 q = nf + a * line[i] + b * line[j];
+                    const float3 core = clamp(q, float3{-(1.f - round)}, float3{1.f - round});
+                    const float3 out = normalize(q - core);
+                    m->pos.push_back(p.c + R * ((core + out * round) * p.h));
+                    m->nrm.push_back(R * out);
+                    m->uv.push_back(float2{line[i], line[j]} * 0.075f + float2{shift + (float)f, shift});
+                }
+            for (int j = 0; j + 1 < n; ++j)
+                for (int i = 0; i + 1 < n; ++i) {
+                    const uint32_t p0 = base + (uint32_t)(j * n + i), p1 = p0 + 1, p2 = p0 + (uint32_t)n + 1, p3 = p0 + (uint32_t)n;
+                    m->idx.insert(m->idx.end(), {p0, p1, p2, p0, p2, p3});
+                }
+        }
+    }
     return m;
 }
 
@@ -216,7 +267,13 @@ int main() {
     Texture* tex = Texture::Builder().width(W).height(H).levels(1).format(Texture::InternalFormat::SRGB8_A8).build(*engine);
     tex->setImage(*engine, 0, Texture::PixelBufferDescriptor(px.data(), px.size(), Texture::Format::RGBA, Texture::Type::UBYTE));
     sheet_mi->setParameter("color", tex, TextureSampler(TextureSampler::MinFilter::LINEAR, TextureSampler::MagFilter::LINEAR));
-    if (!add(band(), "poster_glass.filamat")) return fail("poster_glass.filamat");
+    MaterialInstance* band_mi = add(band(), "poster_glass.filamat");
+    MaterialInstance* cubes_mi = add(cubes(), "poster_glass.filamat");
+    if (!band_mi || !cubes_mi) return fail("poster_glass.filamat");
+    band_mi->setParameter("thickness", 0.6f);
+    band_mi->setParameter("lean", 0.f);
+    cubes_mi->setParameter("thickness", 0.4f);
+    cubes_mi->setParameter("lean", 0.03f);
 
     static std::vector<uint8_t> pic((size_t)W * H * 4);
     for (int i = 0; i < 3; ++i) {
