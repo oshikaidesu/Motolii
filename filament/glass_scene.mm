@@ -20,6 +20,7 @@
 // WALLYAW), PROPS=1..4 (matte blocks among the solids; or PROPAT="x z halfx halfy halfz yaw; ..."), STAGE=1 (the same
 // machinery with neither, to compare with the plain picture). See "the stage" below and "Receivers" in beam_glass.h.
 #include "beam_glass.h"
+#include "beam_split.h"
 
 #include <filament/Camera.h>
 #include <filament/ColorGrading.h>
@@ -182,7 +183,7 @@ int main(int argc, char** argv) {
     // the bright window for the glass to show, the solids strewn about. Meant for solids with colour films (xcut, xcube).
     if (std::getenv("DARKROOM")) {
         static const char* dark[][2] = {{"ROOM", "0.012"}, {"FLOORGREY", "0.3"}, {"FLOOR_REFL", "0.1"}, {"APERTURE", "1.6"}, {"BLOOM", "0.35"},
-                                        {"SKY", "30000"}, {"GLINT", "30000"}, {"GLINTDEG", "25"}, {"STRIP", "0.2 35 0 0.95"}, {"PIECES", "4"}, {"ROUTES", "1"},
+                                        {"SKY", "30000"}, {"GLINT", "30000"}, {"GLINTDEG", "25"}, {"STRIP", "0.2 35 0 0.95"}, {"PIECES", "4"}, {"BEAMS", "1"},
                                         {"SCATTER", "1"}};
         for (const auto& kv : dark) setenv(kv[0], kv[1], 0);
     }
@@ -1022,7 +1023,16 @@ int main(int argc, char** argv) {
     // of such a line), into two tables of four texels per piece.
     // ROUTES=1 (experiment, route_light.mat): one shape per way the light goes. The pieces only serve to find the ways
     // (a few per face are enough: PIECES=4); nothing is cut along their grid, so EDGES has no part in it.
-    const bool flatRoutes = env_f("ROUTES", 0.f) > 0.5f && !rainbowOnce;
+    // BEAMS=1: the light of the flat-faced solids by splitting beams exactly, on the CPU (beam_split.h). Every patch
+    // comes out as its own outline; nothing is found by rays and nothing is checked per pixel. BEAMSTAT=1 counts.
+    const bool flatBeams = env_f("BEAMS", 0.f) > 0.5f;
+    static std::vector<std::array<beam::SplitShape, 16>> beamShapes;   // per shape, per set of films
+    struct BeamPose {
+        beam::V3 R[3], at;
+        double s;
+    };
+    static std::vector<BeamPose> beamPose;
+    const bool flatRoutes = env_f("ROUTES", 0.f) > 0.5f && !rainbowOnce && !flatBeams;
     const bool flatClip = env_f("EDGES", 0.f) > 0.5f && !rainbowOnce && !flatRoutes;
     const int flatPer = (flatClip || flatRoutes) ? 4 : 3;
     std::vector<MaterialInstance*> routeMis;
@@ -1085,12 +1095,20 @@ int main(int argc, char** argv) {
                 .geometry(0, RenderableManager::PrimitiveType::TRIANGLES, vb, ib)
                 .instances(fk.solids.size() * (size_t)flatDraws * recvKinds)
                 .material(0, mi).culling(false).castShadows(false).receiveShadows(false)
-                .layerMask(0xFF, (flatOnCpu || flatRoutes || std::getenv("NOLIGHT")) ? 0x00 : 0x01).build(*engine, e);
+                .layerMask(0xFF, (flatOnCpu || flatRoutes || flatBeams || std::getenv("NOLIGHT")) ? 0x00 : 0x01).build(*engine, e);
             sLight->addEntity(e);
             if (turn == 0) { fk.mi = mi; fk.entity = e; } else fk.mi2 = mi;
             if (turn == 1 && std::getenv("XDRAW2")) rm.setLayerMask(rm.getInstance(e), 0xFF, 0x00);   // (XDRAW2: timing only, its pieces not drawn)
             if (turn == 0 && std::getenv("XDRAW1")) rm.setLayerMask(rm.getInstance(e), 0xFF, 0x00);   // (XDRAW1: to look at the second turn alone)
         }
+    }
+    if (flatBeams) {
+        for (FlatKind& fk : flatKinds) {
+            beamShapes.emplace_back();
+            for (int use = 0; use < 16; ++use) beamShapes.back()[(size_t)use] = beam::split_shape(items[(size_t)fk.solids[0]].local, use);
+            std::printf("  beams: %s, all its films together cut it into %zu cells\n", fk.name.c_str(), beamShapes.back()[15].cells.size());
+        }
+        beamPose.resize(items.size());
     }
     if (routeTree) {
         Material* treeMat = mat("route_tree.filamat");
@@ -1971,6 +1989,7 @@ int main(int argc, char** argv) {
             }
             const beam::V3 at{x, -low + 0.0005 + lift, z};
             world.solids[k] = beam::placed(it.local, R, it.size, at);
+            if (flatBeams) beamPose[k] = BeamPose{{R[0], R[1], R[2]}, at, (double)it.size};
             const float s = it.size;
             tm.setTransform(tm.getInstance(it.entity),
                             mat4f(float4{(float)R[0].x * s, (float)R[0].y * s, (float)R[0].z * s, 0}, float4{(float)R[1].x * s, (float)R[1].y * s, (float)R[1].z * s, 0},
@@ -2013,6 +2032,51 @@ int main(int argc, char** argv) {
             const unsigned leave = (1u << beam::Solid::BALL) | (1u << beam::Solid::CONE) | (1u << beam::Solid::ROD) | (1u << beam::Solid::EXTRUDE) |
                                    (flatOnCpu ? 0u : 1u << beam::Solid::FLAT);
             beam::trace_cheap(world, par, detail, pieces, tri, nullptr, ballsOnCpu ? nullptr : &alike, leave);
+        }
+        if (flatBeams && !std::getenv("NOLIGHT")) {
+            const auto b0 = std::chrono::steady_clock::now();
+            const std::vector<beam::BallStep> bsteps = beam::ball_steps(par, flatSteps - 1);
+            double filmN[4][2];
+            for (int f = 0; f < 4; ++f) { filmN[f][0] = par.glass.n(filmNm[f].y); filmN[f][1] = par.glass.n(filmNm[f].x); }
+            beam::SplitBand band;
+            if (const char* sv = std::getenv("STRIP")) {   // (the same band of sun the floor gets: beam_soften.mat)
+                float half = 0.3f, deg = 35.f, side = 0.f, every = 0.f;
+                std::sscanf(sv, "%f %f %f %f", &half, &deg, &side, &every);
+                const float a = deg * 3.14159265f / 180.f;
+                const float3 down = float3{(float)world.centre[0].x, (float)world.centre[0].y, (float)world.centre[0].z} + sunDir * ((float)world.centre[0].y / -sunDir.y);
+                band = beam::SplitBand{std::cos(a), std::sin(a), std::cos(a) * down.x + std::sin(a) * down.z + side, half, every};
+            }
+            static std::vector<std::vector<float>> each;
+            static std::vector<beam::SplitStats> stats;
+            each.resize(items.size());
+            stats.assign(items.size(), beam::SplitStats{});
+            const double least = env_f("BEAMCUT", 2e-5f);
+            const int mostFaces = (int)env_f("BEAMFACES", 8.f);
+            beam::parallel_for(items.size(), threads, [&](size_t k) {
+                each[k].clear();
+                if (flatKindOf[k] < 0) return;
+                beam::split_light(beamShapes[(size_t)flatKindOf[k]].data(), beamPose[k].R, beamPose[k].s, beamPose[k].at, par.sun, bsteps, filmN, band, 0.0, least, mostFaces, true, each[k], &stats[k]);
+            });
+            for (const std::vector<float>& e : each) tri.insert(tri.end(), e.begin(), e.end());
+            static double msSum = 0;
+            static int frames = 0;
+            msSum += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - b0).count();
+            if (std::getenv("BEAMSTAT") && (++frames == 1 || frames % 300 == 0)) {
+                beam::SplitStats all;
+                for (const beam::SplitStats& st : stats) {
+                    all.beams += st.beams; all.leaves += st.leaves; all.corners += st.corners;
+                    all.deepest = std::max(all.deepest, st.deepest);
+                    for (int i = 0; i < 12; ++i) all.light[i] += st.light[i];
+                }
+                double sum = 0;
+                for (double l : all.light) sum += l;
+                std::printf("  BEAMSTAT frame %d: %.2f ms a frame on %u threads (mean so far), %ld beams followed, %ld patches drawn (%ld corners), deepest %d steps\n", frames,
+                            msSum / frames, threads, all.beams, all.leaves, all.corners, all.deepest);
+                std::printf("    light by how many faces it met inside:");
+                for (int i = 1; i < 12; ++i)
+                    if (all.light[i] > 0) std::printf("  %d: %.1f%%", i, 100.0 * all.light[i] / sum);
+                std::printf("\n");
+            } else if (!std::getenv("BEAMSTAT")) ++frames;
         }
         outline.clear();
         for (const beam::Solid& so : world.solids)  // (on the CPU only to compare: solids with dents and holes have their own switch)
@@ -2291,7 +2355,7 @@ int main(int argc, char** argv) {
                           xW = xw && (std::strchr(xw, '1') || std::strchr(xw, 'w')), xC = xw && (std::strchr(xw, '1') || std::strchr(xw, 'c'));
         if (routeTree) {
             for (const RouteLevel& rl : routeLevels) renderer->render(rl.view);
-        } else if (!xF && !flatOnCpu && !flatKinds.empty()) {
+        } else if (!xF && !flatOnCpu && !flatBeams && !flatKinds.empty()) {
             renderer->render(vFlatWalk);
             if (flatClip && !std::getenv("XWALK2")) renderer->render(vFlatWalk2);   // (XWALK2: timing only, the second turn left out)
         }
