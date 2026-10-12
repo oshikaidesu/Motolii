@@ -1,9 +1,16 @@
-// band.mm: one thick band of clear glass along a closed 3D path, close up, in a pale high-key studio.
-// (A picture test after a reference the user gave on 2026-10-12: pale grey ground, a broad curved glass band, soft
-// rainbow inside, bright glints.) Everything that draws is Filament as it is: its own screen-space refraction with
-// dispersion (glass_layer.mat), the bundled studio light, bloom, depth of field, tone mapping. The path helpers and
-// the tube are hero.mm's; the tube here takes a flattened cross-section instead of a circle.
-// ./build_one.sh band && ./out/band        -> out/band.png        (knobs: see the getenv lines in main)
+// band.mm: bands of clear glass along closed 3D paths, to be DROPPED IN: a path and a width are all a band is given.
+// (After a reference the user gave on 2026-10-12: pale ground, a broad curved glass band, pale rainbow sheen, sharp
+// colour at the edges, lines of light inside.) The look is the glass's own (GlassLook, one set of numbers for every
+// band and every scene); a scene only says where the path is, what stands behind it, and where the camera is.
+// Everything that draws is Filament as it is: screen-space refraction with dispersion, thin-film iridescence
+// (band_glass.mat), the bundled studio light, bloom, tone mapping. Nothing follows light.
+// The frame, for any number of bands (hero.mm's way of letting glass see glass):
+//   1. the scene without glass                      -> a picture
+//   2. that picture + the bands' FAR sides          -> a picture   (the far surface mirrors the studio, bends once)
+//   3. that picture + the bands' NEAR sides         -> a picture   (bends again; the colours split at what 2 drew)
+//   4. that picture, bloom, tone mapping            -> the screen
+// ./build_one.sh band && ./out/band [scene]     scene: ref (default), loops, dark    -> out/band-<scene>.png
+// TIME=n: n frames one after another, then the mean time of a frame.
 #include <filament/Camera.h>
 #include <filament/ColorGrading.h>
 #include <filament/Engine.h>
@@ -37,6 +44,7 @@
 #include <zlib.h>
 
 #include <algorithm>
+#include <chrono>
 #include <clocale>
 #include <cmath>
 #include <cstdint>
@@ -246,20 +254,29 @@ static void pack(std::vector<float>& v, V3 p, V3 T, V3 normal) {
     v.insert(v.end(), packf, packf + 7);
 }
 
-// A band: the cross-section is a rounded slab, `wide` across (along B) and `thick` through (along N); `round`: 2 is an
-// ellipse, more is flatter faces with tighter edges.
-static Built tube(const std::vector<Sample>& s, int sides, float wide, float thick, float round) {
+// A band of glass along a path. The cross-section is a rounded slab, `wide` across (along B) and `thick` through
+// (along N), `round`: 2 is an ellipse, more is flatter faces with tighter edges; `rib` swells the middle of the two
+// flat faces (0: none), which gives a third line of light along the band besides the two edges.
+// inside: the same surface seen from within (triangles turned round, normals inward): the band's far side.
+static Built tube(const std::vector<Sample>& s, int sides, float wide, float thick, float round, float rib, bool inside) {
     Built m;
     int rings = (int)s.size();
+    auto at = [&](float ang, float& x, float& y) {
+        float c = std::cos(ang), sn = std::sin(ang);
+        y = (sn < 0 ? -1.f : 1.f) * std::pow(std::fabs(sn), 2.f / round);
+        x = (c < 0 ? -1.f : 1.f) * std::pow(std::fabs(c), 2.f / round) * (1.f + rib * std::exp(-(y * y) / 0.10f));
+        x *= thick;
+        y *= wide;
+    };
     for (int i = 0; i < rings; ++i) {
         for (int k = 0; k < sides; ++k) {
-            float ang = (float)k / (float)sides * TAU;
-            float c = std::cos(ang), sn = std::sin(ang);
-            float x = (c < 0 ? -1.f : 1.f) * std::pow(std::fabs(c), 2.f / round), y = (sn < 0 ? -1.f : 1.f) * std::pow(std::fabs(sn), 2.f / round);
-            V3 off = s[i].N * (x * thick) + s[i].B * (y * wide);
-            V3 nrm = s[i].N * ((x < 0 ? -1.f : 1.f) * std::pow(std::fabs(x), round - 1.f) / thick) +
-                     s[i].B * ((y < 0 ? -1.f : 1.f) * std::pow(std::fabs(y), round - 1.f) / wide);
-            pack(m.v, s[i].p + off, s[i].T, norm(nrm));
+            float ang = (float)k / (float)sides * TAU, x, y, x0, y0, x1, y1;
+            at(ang, x, y);
+            at(ang - 0.002f, x0, y0);
+            at(ang + 0.002f, x1, y1);
+            V3 off = s[i].N * x + s[i].B * y;
+            V3 nrm = norm(s[i].N * (y1 - y0) - s[i].B * (x1 - x0));   // the outline's tangent turned a quarter, outward
+            pack(m.v, s[i].p + off, s[i].T, inside ? nrm * -1.f : nrm);
         }
     }
     for (int i = 0; i < rings; ++i) {
@@ -268,7 +285,8 @@ static Built tube(const std::vector<Sample>& s, int sides, float wide, float thi
             int k1 = (k + 1) % sides;
             uint32_t a = (uint32_t)(i * sides + k), b = (uint32_t)(i * sides + k1);
             uint32_t c = (uint32_t)(i1 * sides + k), d = (uint32_t)(i1 * sides + k1);
-            m.idx.insert(m.idx.end(), {a, b, c, b, d, c});
+            if (inside) m.idx.insert(m.idx.end(), {a, c, b, b, c, d});
+            else m.idx.insert(m.idx.end(), {a, b, c, b, d, c});
         }
     }
     return m;
@@ -387,21 +405,56 @@ static int fail(const char* msg) {
 
 static float envf(const char* name, float d) { return std::getenv(name) ? (float)std::atof(std::getenv(name)) : d; }
 
-int main() {
+// The look of the glass. Not per scene, not per band.
+struct GlassLook {
+    float ior = 1.7f, thickness = 0.9f, dispersion = 45.f, reflectance = 1.0f;
+    float absorb = 0.25f;                       // (x 1.6, 0.9, 0.5 for red, green, blue: a breath of blue)
+    float sheen = 1.0f, film0 = 280.f, film1 = 620.f, filmWave = 3.5f;   // the thin film: how much, thickness from..to (nm), drift
+    float farReflectance = 1.0f, farSheen = 1.0f, farThickness = 0.35f;   // the far side: mirrors more than it bends
+    float slab = 0.41f;                         // how thick the band is, as a part of its half width
+    float round = 5.f, rib = 0.10f;
+};
+
+int main(int argc, char** argv) {
+    const std::string which = argc > 1 ? argv[1] : "ref";
+    const GlassLook look;
     const int per = 96, sides = 96;
-    // the path: one big loop, standing a little tilted; the picture looks at one stretch of it from close by
-    const float R = envf("LOOP", 1.6f);
-    std::vector<V3> pts;
-    for (int i = 0; i < 8; ++i) {
-        float a = (float)i / 8.f * TAU;
-        pts.push_back(V3{R * std::cos(a), R * 0.92f * std::sin(a) + R * 0.86f, 0.22f * std::sin(2.f * a + 0.6f)});
-    }
-    std::vector<Sample> path = close_frames(catmull(pts), per);
-    const float twist = envf("TWIST", 1.05f);   // the band's flat side turned about the path (radians)
-    for (Sample& q : path) {
-        q.N = norm(rot_about(q.N, q.T, twist));
-        q.B = norm(cross(q.T, q.N));
-    }
+
+    // ---- a scene: paths (points of a closed loop, half width), what is behind, the camera
+    struct Band { std::vector<V3> pts; float wide; float twist; };
+    std::vector<Band> bands;
+    float3 eye, target;
+    float fov = 30.f;
+    float backLow = 0.62f, backHigh = 1.25f, floorCol = 0.055f, floorRough = 0.6f;   // (the floor is the scene's: a glossy one mirrors the studio and goes white)
+    auto loop = [](float R, V3 c, float tiltX, float wob) {
+        std::vector<V3> p;
+        for (int i = 0; i < 8; ++i) {
+            float a = (float)i / 8.f * TAU;
+            V3 q{R * std::cos(a), R * 0.92f * std::sin(a), wob * std::sin(2.f * a + 0.6f)};
+            rotX(q, std::cos(tiltX), std::sin(tiltX));
+            p.push_back(q + c);
+        }
+        return p;
+    };
+    if (which == "ref") {            // the reference: one big standing loop, seen from close by
+        bands.push_back({loop(1.6f, {0, 1.376f, 0}, 0.f, 0.22f), 0.22f, -0.6f});
+        eye = {0.9f, 0.55f, 2.0f};
+        target = {1.25f, 0.75f, 0.f};
+    } else if (which == "loops") {   // three loops of different sizes leaning on each other, seen whole
+        bands.push_back({loop(1.0f, {0, 0.95f, 0}, 0.25f, 0.15f), 0.16f, 0.4f});
+        bands.push_back({loop(0.62f, {0.75f, 0.60f, 0.45f}, -0.5f, 0.10f), 0.11f, 1.2f});
+        bands.push_back({loop(0.45f, {-0.85f, 0.44f, 0.55f}, 0.9f, 0.06f), 0.08f, -0.3f});
+        eye = {0.4f, 1.1f, 4.2f};
+        target = {0.f, 0.75f, 0.f};
+        fov = 34.f;
+    } else if (which == "dark") {    // the same loops on a dark ground
+        bands.push_back({loop(1.0f, {0, 0.95f, 0}, 0.25f, 0.15f), 0.16f, 0.4f});
+        bands.push_back({loop(0.62f, {0.75f, 0.60f, 0.45f}, -0.5f, 0.10f), 0.11f, 1.2f});
+        eye = {-0.9f, 0.8f, 3.4f};
+        target = {0.1f, 0.8f, 0.f};
+        fov = 34.f;
+        backLow = 0.012f; backHigh = 0.05f; floorCol = 0.02f; floorRough = 0.45f;
+    } else return fail("scene: ref, loops or dark");
 
     Engine* engine = Engine::Builder().backend(Engine::Backend::METAL).featureLevel(Engine::FeatureLevel::FEATURE_LEVEL_3).build();
     if (!engine) return fail("engine");
@@ -411,102 +464,82 @@ int main() {
     SwapChain* swap = engine->createSwapChain((uint32_t)W, (uint32_t)H, 0);
     utils::Entity cam_e = utils::EntityManager::get().create();
     Camera* camera = engine->createCamera(cam_e);
-    camera->setExposure(envf("FSTOP", 2.8f), 1.0f / envf("SHUTTER", 2200.f), 100.0f);
-    const float3 eye{envf("EYEX", -0.35f), envf("EYEY", 0.62f), envf("EYEZ", 1.55f)};
-    const float3 target{envf("ATX", -0.62f), envf("ATY", 0.30f), envf("ATZ", 0.0f)};
+    camera->setExposure(16.0f, 1.0f / 125.0f, 100.0f);   // a plain sunny-day exposure: nothing here is tuned to the look
     camera->lookAt(eye, target, {0, 1, 0});
-    camera->setProjection(envf("FOV", 26.f), double(W) / double(H), 0.05, 60.0, Camera::Fov::VERTICAL);
-    camera->setFocusDistance(envf("FOCUS", length(target - eye)));
+    camera->setProjection(fov, double(W) / double(H), 0.05, 60.0, Camera::Fov::VERTICAL);
 
     static AgxToneMapper agx(AgxToneMapper::AgxLook::NONE);
-    ColorGrading* grading = ColorGrading::Builder().toneMapper(&agx).contrast(envf("CONTRAST", 1.0f)).saturation(envf("SAT", 1.15f)).build(*engine);
+    ColorGrading* grading = ColorGrading::Builder().toneMapper(&agx).saturation(1.4f).build(*engine);
     view->setScene(scene);
     view->setCamera(camera);
     view->setViewport({0, 0, (uint32_t)W, (uint32_t)H});
     view->setColorGrading(grading);
-    view->setPostProcessingEnabled(true);
-    view->setScreenSpaceRefractionEnabled(true);
-    view->setAntiAliasing(View::AntiAliasing::FXAA);
     view->setDithering(View::Dithering::NONE);
-    MultiSampleAntiAliasingOptions msaa{};
-    msaa.enabled = true;
-    msaa.sampleCount = 4;
-    view->setMultiSampleAntiAliasingOptions(msaa);
-    BloomOptions bloom{};
-    bloom.enabled = true;
-    bloom.strength = envf("BLOOM", 0.22f);
-    bloom.levels = 8;
-    bloom.resolution = 1080;
-    bloom.threshold = true;
-    bloom.highlight = 20.0f;
-    bloom.starburst = true;
-    bloom.blendMode = BloomOptions::BlendMode::ADD;
-    view->setBloomOptions(bloom);
-    DepthOfFieldOptions dof{};
-    dof.enabled = envf("DOF", 1.f) > 0.5f;
-    dof.cocScale = envf("COC", 6.0f);
-    view->setDepthOfFieldOptions(dof);
     Renderer::ClearOptions clear{};
-    clear.clearColor = {0.8f, 0.8f, 0.82f, 1};
+    clear.clearColor = {0, 0, 0, 1};
     clear.clear = true;
     renderer->setClearOptions(clear);
 
-    auto [color8, rt8] = std::tuple<Texture*, RenderTarget*>{nullptr, nullptr};
-    {
+    auto make_target = [&](Texture::InternalFormat format) {
         Texture* color = Texture::Builder().width(W).height(H).levels(1)
-                             .usage(Texture::Usage::COLOR_ATTACHMENT | Texture::Usage::SAMPLEABLE | Texture::Usage::BLIT_SRC)
-                             .format(Texture::InternalFormat::RGBA8).build(*engine);
+                             .usage(Texture::Usage::COLOR_ATTACHMENT | Texture::Usage::SAMPLEABLE | Texture::Usage::BLIT_SRC).format(format).build(*engine);
         Texture* depth = Texture::Builder().width(W).height(H).levels(1).usage(Texture::Usage::DEPTH_ATTACHMENT)
                              .format(Texture::InternalFormat::DEPTH24).build(*engine);
-        color8 = color;
-        rt8 = RenderTarget::Builder().texture(RenderTarget::AttachmentPoint::COLOR, color).texture(RenderTarget::AttachmentPoint::DEPTH, depth).build(*engine);
-    }
-    if (!color8 || !rt8) return fail("target");
+        RenderTarget* rt = RenderTarget::Builder().texture(RenderTarget::AttachmentPoint::COLOR, color).texture(RenderTarget::AttachmentPoint::DEPTH, depth).build(*engine);
+        return std::tuple<Texture*, RenderTarget*>{color, rt};
+    };
+    auto [colorA, rtA] = make_target(Texture::InternalFormat::RGBA16F);
+    auto [colorB, rtB] = make_target(Texture::InternalFormat::RGBA16F);
+    auto [color8, rt8] = make_target(Texture::InternalFormat::RGBA8);
+    if (!rtA || !rtB || !rt8) return fail("target");
+    Texture* colorF[2] = {colorA, colorB};
+    RenderTarget* rtF[2] = {rtA, rtB};
 
-    // the bundled studio (the one glass_scene.mm uses): its light and its reflections; it is not shown as a background
+    // the bundled studio (the one glass_scene.mm uses): the glass's light and what it mirrors; never shown as a background
     auto ibl_bytes = load_file("out/studio/_ibl.ktx");
     if (ibl_bytes.empty()) return fail("out/studio/_ibl.ktx");
     Texture* ibl_tex = ktxreader::Ktx1Reader::createTexture(engine, new image::Ktx1Bundle(ibl_bytes.data(), (uint32_t)ibl_bytes.size()), false);
     float3 sh[9];
     if (!ibl_tex || !load_sh("out/studio/sh.txt", sh)) return fail("studio");
-    IndirectLight* ibl = IndirectLight::Builder().reflections(ibl_tex).irradiance(3, sh).intensity(envf("IBL", 42000.f))
-                             .rotation(mat3f::rotation(envf("IBLTURN", 0.6f), float3{0, 1, 0})).build(*engine);
+    IndirectLight* ibl = IndirectLight::Builder().reflections(ibl_tex).irradiance(3, sh).intensity(60000.f)
+                             .rotation(mat3f::rotation(2.2f, float3{0, 1, 0})).build(*engine);
     scene->setIndirectLight(ibl);
 
-    auto layer_pkg = load_file("band_glass.filamat");
+    auto glass_pkg = load_file("band_glass.filamat");
     auto floor_pkg = load_file("floor_lit.filamat");
     auto back_pkg = load_file("backdrop_grad.filamat");
-    auto emit_pkg = load_file("emissive.filamat");
-    if (layer_pkg.empty() || floor_pkg.empty() || back_pkg.empty() || emit_pkg.empty()) return fail("filamat");
-    Material* layer_mat = Material::Builder().package(layer_pkg.data(), layer_pkg.size()).build(*engine);
+    auto plate_pkg = load_file("plate.filamat");
+    if (glass_pkg.empty() || floor_pkg.empty() || back_pkg.empty() || plate_pkg.empty()) return fail("filamat");
+    Material* glass_mat = Material::Builder().package(glass_pkg.data(), glass_pkg.size()).build(*engine);
     Material* floor_mat = Material::Builder().package(floor_pkg.data(), floor_pkg.size()).build(*engine);
     Material* back_mat = Material::Builder().package(back_pkg.data(), back_pkg.size()).build(*engine);
-    Material* emit_mat = Material::Builder().package(emit_pkg.data(), emit_pkg.size()).build(*engine);
-    if (!layer_mat || !floor_mat || !back_mat || !emit_mat) return fail("material");
+    Material* plate_mat = Material::Builder().package(plate_pkg.data(), plate_pkg.size()).build(*engine);
+    if (!glass_mat || !floor_mat || !back_mat || !plate_mat) return fail("material");
 
-    MaterialInstance* glass_mi = layer_mat->createInstance();
-    glass_mi->setParameter("ior", envf("IOR", 1.52f));
-    glass_mi->setParameter("transmission", 1.0f);
-    glass_mi->setParameter("thickness", envf("THICK", 0.22f));
-    glass_mi->setParameter("dispersion", envf("DISP", 6.f));
-    glass_mi->setParameter("reflectance", envf("REFL", 0.5f));
-    glass_mi->setParameter("sheen", envf("SHEEN", 1.0f));
-    glass_mi->setParameter("film", float2{envf("FILM0", 280.f), envf("FILM1", 620.f)});
-    glass_mi->setParameter("filmWave", envf("FILMWAVE", 2.2f));
-    glass_mi->setParameter("absorption", float3{envf("ABS", 0.02f) * 1.6f, envf("ABS", 0.02f) * 0.9f, envf("ABS", 0.02f) * 0.5f});
+    auto glass_of = [&](bool farSide) {
+        MaterialInstance* mi = glass_mat->createInstance();
+        mi->setParameter("ior", look.ior);
+        mi->setParameter("transmission", 1.0f);
+        mi->setParameter("thickness", farSide ? look.farThickness : look.thickness);
+        mi->setParameter("dispersion", look.dispersion);
+        mi->setParameter("reflectance", farSide ? look.farReflectance : look.reflectance);
+        mi->setParameter("absorption", float3{look.absorb * 1.6f, look.absorb * 0.9f, look.absorb * 0.5f});
+        mi->setParameter("sheen", farSide ? look.farSheen : look.sheen);
+        mi->setParameter("film", float2{look.film0, look.film1});
+        mi->setParameter("filmWave", look.filmWave);
+        return mi;
+    };
+    MaterialInstance* near_mi = glass_of(false);
+    MaterialInstance* far_mi = glass_of(true);
     MaterialInstance* floor_mi = floor_mat->createInstance();
-    const float fl = envf("FLOORCOL", 0.78f);
-    floor_mi->setParameter("color", float4{fl, fl + 0.01f, fl + 0.04f, 1});
-    floor_mi->setParameter("roughness", envf("FLOORROUGH", 0.22f));
+    floor_mi->setParameter("color", float4{floorCol, floorCol + 0.003f, floorCol + 0.012f, 1});
+    floor_mi->setParameter("roughness", floorRough);
     MaterialInstance* back_mi = back_mat->createInstance();
-    const float lift = envf("BACK", 26000.f);
-    const float lowK = envf("BACKLOW", 0.52f);
-    back_mi->setParameter("low", float4{lowK * lift, (lowK + 0.01f) * lift, (lowK + 0.04f) * lift, 1});
-    back_mi->setParameter("high", float4{1.0f * lift, 1.0f * lift, 1.0f * lift, 1});
-    back_mi->setParameter("bend", envf("BACKBEND", 0.8f));
+    back_mi->setParameter("low", float4{backLow, backLow * 1.01f, backLow * 1.05f, 1});
+    back_mi->setParameter("high", float4{backHigh, backHigh, backHigh, 1});
+    back_mi->setParameter("bend", 1.2f);
 
     struct Held { Built mesh; VertexBuffer* vb; IndexBuffer* ib; utils::Entity e; };
-    std::vector<Held*> held;
     auto add = [&](Built mesh, MaterialInstance* mi, bool uv) {
         Held* h = new Held{std::move(mesh), nullptr, nullptr, {}};
         const uint32_t stride = uv ? 36 : 28, nv = (uint32_t)(h->mesh.v.size() * 4 / stride);
@@ -521,13 +554,10 @@ int main() {
         h->e = utils::EntityManager::get().create();
         RenderableManager::Builder(1).boundingBox({{-60, -60, -60}, {60, 60, 60}})
             .geometry(0, RenderableManager::PrimitiveType::TRIANGLES, h->vb, h->ib).material(0, mi)
-            .culling(false).castShadows(false).receiveShadows(false).build(*engine, h->e);
-        scene->addEntity(h->e);
-        held.push_back(h);
-        return h;
+            .culling(true).castShadows(false).receiveShadows(false).build(*engine, h->e);
+        return h->e;
     };
-    // a quad with uv (0..1 across and up), for the backdrop
-    auto quad_uv = [&](V3 center, V3 right, V3 up, float hw, float hh) {
+    auto quad_uv = [&](V3 center, V3 right, V3 up, float hw, float hh) {   // (uv 0..1 across and up)
         Built m;
         V3 n = norm(cross(right, up));
         const float c[4][2] = {{-1, -1}, {1, -1}, {1, 1}, {-1, 1}};
@@ -540,37 +570,116 @@ int main() {
         m.idx = {0, 1, 2, 0, 2, 3};
         return m;
     };
-    add(quad({0, 0, 0}, {1, 0, 0}, {0, 0, -1}, 40.f, 40.f), floor_mi, false);
-    add(quad_uv({0, 6.f, -9.f}, {1, 0, 0}, {0, 1, 0}, 40.f, 9.f), back_mi, true);
-    MaterialInstance* clay_mi = floor_mat->createInstance();   // SOLID=1: the band as grey clay, to look at shape and framing
-    clay_mi->setParameter("color", float4{0.25f, 0.27f, 0.32f, 1});
-    clay_mi->setParameter("roughness", 0.35f);
-    add(tube(path, sides, envf("WIDE", 0.34f), envf("SLAB", 0.085f), envf("ROUND", 3.2f)), envf("SOLID", 0.f) > 0.5f ? clay_mi : glass_mi, false);
 
-    auto lamp = [&](float3 color, float lux, float3 dir) {
-        utils::Entity e = utils::EntityManager::get().create();
-        LightManager::Builder(LightManager::Type::SUN).color(color).intensity(lux).direction(normalize(dir)).castShadows(false)
-            .sunAngularRadius(0.6f).sunHaloSize(2.0f).build(*engine, e);
-        scene->addEntity(e);
+    // what is behind (the scene's own business)
+    std::vector<utils::Entity> opaque;
+    opaque.push_back(add(quad({0, 0, 0}, {1, 0, 0}, {0, 0, -1}, 40.f, 40.f), floor_mi, false));
+    opaque.push_back(add(quad_uv({0, 6.f, -9.f}, {1, 0, 0}, {0, 1, 0}, 40.f, 9.f), back_mi, true));
+
+    // DROPPING A BAND IN: its path and its half width; everything else is the glass's own
+    std::vector<utils::Entity> farSides, nearSides;
+    for (const Band& b : bands) {
+        std::vector<Sample> path = close_frames(catmull(b.pts), per);
+        for (Sample& q : path) {
+            q.N = norm(rot_about(q.N, q.T, b.twist));
+            q.B = norm(cross(q.T, q.N));
+        }
+        farSides.push_back(add(tube(path, sides, b.wide, b.wide * look.slab, look.round, look.rib, true), far_mi, false));
+        nearSides.push_back(add(tube(path, sides, b.wide, b.wide * look.slab, look.round, look.rib, false), near_mi, false));
+    }
+
+    // the picture so far, held up in front of the camera for the next pass to bend (hero.mm's plate)
+    TextureSampler plate_sampler(TextureSampler::MinFilter::LINEAR, TextureSampler::MagFilter::LINEAR);
+    plate_sampler.setWrapModeS(TextureSampler::WrapMode::CLAMP_TO_EDGE);
+    plate_sampler.setWrapModeT(TextureSampler::WrapMode::CLAMP_TO_EDGE);
+    MaterialInstance* plate_mi[2] = {plate_mat->createInstance(), plate_mat->createInstance()};
+    plate_mi[0]->setParameter("color", colorF[0], plate_sampler);
+    plate_mi[1]->setParameter("color", colorF[1], plate_sampler);
+    utils::Entity plate;
+    {
+        float3 f = normalize(target - eye), r = normalize(cross(f, float3{0, 1, 0})), u = cross(r, f);
+        const float dist = 30.0f, hh = dist * std::tan(0.5f * fov * PI / 180.f), hw = hh * ((float)W / (float)H);
+        float3 c = eye + f * dist;
+        plate = add(quad_uv(V3{c.x, c.y, c.z}, V3{r.x, r.y, r.z}, V3{u.x, u.y, u.z}, hw, hh), plate_mi[0], true);
+    }
+    auto& rm = engine->getRenderableManager();
+    rm.setCulling(rm.getInstance(plate), false);
+
+    utils::Entity sun = utils::EntityManager::get().create();
+    LightManager::Builder(LightManager::Type::SUN).color({1.0f, 0.98f, 0.95f}).intensity(57000.f).direction(normalize(float3{0.35f, -0.6f, -0.7f}))
+        .castShadows(false).sunAngularRadius(0.6f).sunHaloSize(2.0f).build(*engine, sun);
+    scene->addEntity(sun);
+
+    std::vector<utils::Entity> shown;
+    auto show = [&](const std::vector<utils::Entity>& a, const std::vector<utils::Entity>& b) {
+        for (utils::Entity e : shown) scene->remove(e);
+        shown = a;
+        shown.insert(shown.end(), b.begin(), b.end());
+        for (utils::Entity e : shown) scene->addEntity(e);
     };
-    lamp({1.0f, 0.98f, 0.95f}, envf("SUN", 110000.f), {envf("SUNX", -0.55f), envf("SUNY", -0.70f), envf("SUNZ", -0.45f)});
-
+    BloomOptions bloom{};
+    bloom.strength = 0.7f;
+    bloom.levels = 8;
+    bloom.resolution = 1080;
+    bloom.threshold = true;
+    bloom.highlight = 20.0f;
+    bloom.blendMode = BloomOptions::BlendMode::ADD;
     std::vector<uint8_t> pic((size_t)W * H * 4);
-    for (int frame = 0; frame < 3; ++frame) {
+    auto frame = [&](bool read) {
         bool ok = false;
         for (int spin = 0; spin < 4000 && !ok; ++spin) ok = renderer->beginFrame(swap);
-        if (!ok) return fail("begin");
+        if (!ok) return false;
+        bloom.enabled = false;
+        view->setBloomOptions(bloom);
+        view->setPostProcessingEnabled(false);
+        view->setAntiAliasing(View::AntiAliasing::NONE);
+        view->setScreenSpaceRefractionEnabled(false);
+        show(opaque, {});                                  // 1. the scene without glass
+        view->setRenderTarget(rtF[0]);
+        renderer->render(view);
+        view->setScreenSpaceRefractionEnabled(true);
+        rm.setMaterialInstanceAt(rm.getInstance(plate), 0, plate_mi[0]);
+        show({plate}, farSides);                           // 2. + the far sides
+        view->setRenderTarget(rtF[1]);
+        renderer->render(view);
+        rm.setMaterialInstanceAt(rm.getInstance(plate), 0, plate_mi[1]);
+        show({plate}, nearSides);                          // 3. + the near sides
+        view->setRenderTarget(rtF[0]);
+        renderer->render(view);
+        bloom.enabled = true;
+        view->setBloomOptions(bloom);
+        view->setPostProcessingEnabled(true);
+        view->setAntiAliasing(View::AntiAliasing::FXAA);
+        view->setScreenSpaceRefractionEnabled(false);
+        rm.setMaterialInstanceAt(rm.getInstance(plate), 0, plate_mi[0]);
+        show({plate}, {});                                 // 4. bloom, tone mapping
         view->setRenderTarget(rt8);
         renderer->render(view);
-        if (frame == 2)
+        if (read)
             renderer->readPixels(rt8, 0, 0, (uint32_t)W, (uint32_t)H,
                                  backend::PixelBufferDescriptor(pic.data(), pic.size(), backend::PixelDataFormat::RGBA, backend::PixelDataType::UBYTE));
         renderer->endFrame();
-        engine->flushAndWait();   // (or the next beginFrame may say "still busy" for longer than we ask)
+        return true;
+    };
+    for (int i = 0; i < 3; ++i) {
+        if (!frame(i == 2)) return fail("begin");
+        engine->flushAndWait();
     }
-    const char* name = std::getenv("NAME");
-    std::string out = std::string("out/band") + (name ? std::string("-") + name : std::string()) + ".png";
+    const std::string out = "out/band-" + which + ".png";
     if (!write_png(out.c_str(), W, H, pic.data())) return fail("png");
-    std::printf("wrote %s\n", out.c_str());
+    std::printf("wrote %s  (%zu band(s))\n", out.c_str(), bands.size());
+
+    if (const char* t = std::getenv("TIME")) {   // n frames, each waited for to its end
+        const int n = std::atoi(t);
+        int drawn = 0;
+        const auto t0 = std::chrono::steady_clock::now();
+        for (int i = 0; i < n; ++i) {
+            if (frame(false)) ++drawn;
+            engine->flushAndWait();   // (every frame waited for to its end: CPU and GPU together, nothing queued behind)
+        }
+        engine->flushAndWait();
+        const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+        std::printf("TIME: %.2f ms a frame (%d frames, %dx%d, %zu bands, 4 passes)\n", ms / std::max(1, drawn), drawn, W, H, bands.size());
+    }
     return 0;
 }
