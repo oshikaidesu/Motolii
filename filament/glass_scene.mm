@@ -21,6 +21,7 @@
 // machinery with neither, to compare with the plain picture). See "the stage" below and "Receivers" in beam_glass.h.
 #include "beam_glass.h"
 #include "beam_split.h"
+#include "beam_spectrum.h"   // SPEC=1
 #ifdef GLASS_COMPUTE_DOOR
 #include "cbeam.h"   // CBEAMS=1: the beams as compute (needs Filament's WebGPU backend; dawn_probe/glass_wgpu.sh builds with it)
 #include <filament/BufferObject.h>
@@ -2383,6 +2384,25 @@ int main(int argc, char** argv) {
                 cbeam::send(cRun, f, poses.data(), cSolids);
             }
 #endif
+            // SPEC=1 (with BEAMS=1): the colours spread as Sikachev et al. 2008 do it (beam_spectrum.h): one walk per
+            // stretch of the spectrum, every corner kept at three colours, in-between polygons drawn. SPECSTEP: how far
+            // apart on the floor the in-between polygons lie; SPECCOPIES: at most so many. SPECSTAT=1 counts.
+            // SPECWALK=n: a walk covers at most n of the fine bands (1: every band on its own = the exact light).
+            // SPECGAIN: the coloured light that many times brighter than it is (for show).
+            static const bool spec = env_f("SPEC", 0.f) > 0.5f && !cBeams;
+            static std::vector<beam::SpecStats> specStats;
+            if (spec) {
+                static const std::vector<beam::Band> fine = beam::make_bands(par.bands, par.nmMin, par.nmMax);
+                const double step = env_f("SPECSTEP", 0.01f);
+                const int copies = (int)env_f("SPECCOPIES", 48.f);
+                specStats.assign(items.size(), beam::SpecStats{});
+                beam::parallel_for(items.size(), threads, [&](size_t k) {
+                    each[k].clear();
+                    if (flatKindOf[k] < 0) return;
+                    beam::split_light_spectrum(beamShapes[(size_t)flatKindOf[k]].data(), beamPose[k].R, beamPose[k].s, beamPose[k].at, par.sun, fine, par.glass, filmN, band, 0.0, least,
+                                               mostFaces, step, copies, (int)env_f("SPECWALK", 0.f), (int)std::min<size_t>(4, items[k].local.films.size()), env_f("SPECGAIN", 1.f), true, each[k], &specStats[k]);
+                });
+            } else
             if (!cBeams || cCheck) beam::parallel_for(items.size(), threads, [&](size_t k) {
                 each[k].clear();
                 if (flatKindOf[k] < 0) return;
@@ -2395,6 +2415,19 @@ int main(int argc, char** argv) {
             static double msSum = 0;
             static int frames = 0;
             msSum += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - b0).count();
+            if (spec && std::getenv("SPECSTAT") && (frames == 0 || (frames + 1) % 300 == 0)) {
+                beam::SpecStats a;
+                for (const beam::SpecStats& q : specStats) {
+                    a.walks += q.walks; a.beams += q.beams; a.leaves += q.leaves; a.polygons += q.polygons; a.apart += q.apart; a.light += q.light; a.lightApart += q.lightApart;
+                    a.cornerApart += q.cornerApart; a.faceApart += q.faceApart; a.leaveApart += q.leaveApart; a.mostCopies = std::max(a.mostCopies, q.mostCopies);
+                }
+                size_t corners = 0;
+                for (const std::vector<float>& e : each) corners += e.size() / 6;
+                std::printf("  SPECSTAT frame %d: %.2f ms a frame on %u threads (mean so far, with this frame), %ld walks, %ld beams followed, %ld pieces left the glass, drawn as %ld polygons (%zu triangles, most copies of one piece %ld)\n",
+                            frames + 1, (msSum) / (frames + 1), threads, a.walks, a.beams, a.leaves, a.polygons, corners / 3, a.mostCopies);
+                std::printf("    where an end colour would have gone another way than the middle one: %ld of %ld pieces (%.2f%%), carrying %.2f%% of the light; first cause: other corners kept by a cut %ld, face not ahead %ld, mirrored against let out %ld\n",
+                            a.apart, a.leaves, 100.0 * (double)a.apart / std::max(1L, a.leaves), 100.0 * a.lightApart / std::max(a.light, 1e-30), a.cornerApart, a.faceApart, a.leaveApart);
+            }
             if (std::getenv("BEAMSTAT") && (++frames == 1 || frames % 300 == 0)) {
                 beam::SplitStats all;
                 for (const beam::SplitStats& st : stats) {
