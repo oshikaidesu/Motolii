@@ -20,8 +20,9 @@ fragment {
     void material(inout MaterialInputs material) {
         prepareMaterial(material);
         vec3 n = normalize(getWorldGeometricNormalVector()) * materialParams.flip;
-        vec3 p = getWorldPosition() + getWorldOffset();
-        float z = -mulMat4x4Float3(getViewFromWorldMatrix(), p).z;
+        // (Filament's "world" in material code is measured from near the camera, and its matrices take it as it is:
+        //  adding getWorldOffset() here put every number in the wrong place. Caught by band.mm's CHECK 2.)
+        float z = -mulMat4x4Float3(getViewFromWorldMatrix(), getWorldPosition()).z;
         material.baseColor = vec4(oct(n), z, 1.0);
     }
 }

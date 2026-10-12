@@ -91,6 +91,7 @@ struct Sample {
 struct Built {
     std::vector<float> v;
     std::vector<uint32_t> idx;
+    std::vector<V3> pos, nrm;   // (band.mm's checks: the same corners and normals, kept for the CPU)
 };
 
 static V3 bezier(const Cubic& c, float t) {
@@ -261,33 +262,53 @@ static void pack(std::vector<float>& v, V3 p, V3 T, V3 normal) {
 // (along N), `round`: 2 is an ellipse, more is flatter faces with tighter edges; `rib` swells the middle of the two
 // flat faces (0: none), which gives a third line of light along the band besides the two edges.
 // inside: the same surface seen from within (triangles turned round, normals inward): the band's far side.
-static Built tube(const std::vector<Sample>& s, int sides, float wide, float thick, float round, float rib, bool inside) {
+// Experiments on the shape (band.mm, PROFILE): facets > 0: the outline is that many flat faces with sharp creases;
+// grooves > 0: that many furrows run along the band (the outline waves in and out by `deep`).
+static Built tube(const std::vector<Sample>& s, int sides, float wide, float thick, float round, float rib, bool inside,
+                  int facets = 0, int grooves = 0, float deep = 0.f) {
     Built m;
     int rings = (int)s.size();
     auto at = [&](float ang, float& x, float& y) {
         float c = std::cos(ang), sn = std::sin(ang);
         y = (sn < 0 ? -1.f : 1.f) * std::pow(std::fabs(sn), 2.f / round);
         x = (c < 0 ? -1.f : 1.f) * std::pow(std::fabs(c), 2.f / round) * (1.f + rib * std::exp(-(y * y) / 0.10f));
-        x *= thick;
-        y *= wide;
+        float wave = grooves > 0 ? 1.f + deep * std::cos((float)grooves * ang) : 1.f;
+        x *= thick * wave;
+        y *= wide * wave;
     };
+    const int per = facets > 0 ? 2 * facets : sides;   // corners in a ring (a facet has its own two)
     for (int i = 0; i < rings; ++i) {
-        for (int k = 0; k < sides; ++k) {
-            float ang = (float)k / (float)sides * TAU, x, y, x0, y0, x1, y1;
-            at(ang, x, y);
-            at(ang - 0.002f, x0, y0);
-            at(ang + 0.002f, x1, y1);
-            V3 off = s[i].N * x + s[i].B * y;
-            V3 nrm = norm(s[i].N * (y1 - y0) - s[i].B * (x1 - x0));   // the outline's tangent turned a quarter, outward
-            pack(m.v, s[i].p + off, s[i].T, inside ? nrm * -1.f : nrm);
+        for (int k = 0; k < per; ++k) {
+            float x, y;
+            V3 nrm;
+            if (facets > 0) {
+                int face = k / 2, end = k % 2;
+                float a0 = (float)face / (float)facets * TAU, a1 = (float)(face + 1) / (float)facets * TAU, x0, y0, x1, y1;
+                at(a0, x0, y0);
+                at(a1, x1, y1);
+                x = end ? x1 : x0;
+                y = end ? y1 : y0;
+                nrm = norm(s[i].N * (y1 - y0) - s[i].B * (x1 - x0));
+            } else {
+                float ang = (float)k / (float)sides * TAU, x0, y0, x1, y1;
+                at(ang, x, y);
+                at(ang - 0.002f, x0, y0);
+                at(ang + 0.002f, x1, y1);
+                nrm = norm(s[i].N * (y1 - y0) - s[i].B * (x1 - x0));   // the outline's tangent turned a quarter, outward
+            }
+            V3 p = s[i].p + s[i].N * x + s[i].B * y;
+            pack(m.v, p, s[i].T, inside ? nrm * -1.f : nrm);
+            m.pos.push_back(p);
+            m.nrm.push_back(nrm);
         }
     }
     for (int i = 0; i < rings; ++i) {
         int i1 = (i + 1) % rings;
-        for (int k = 0; k < sides; ++k) {
-            int k1 = (k + 1) % sides;
-            uint32_t a = (uint32_t)(i * sides + k), b = (uint32_t)(i * sides + k1);
-            uint32_t c = (uint32_t)(i1 * sides + k), d = (uint32_t)(i1 * sides + k1);
+        for (int k = 0; k < per; ++k) {
+            if (facets > 0 && k % 2 == 1) continue;          // (a facet: its two corners here and in the next ring)
+            int k1 = facets > 0 ? k + 1 : (k + 1) % per;
+            uint32_t a = (uint32_t)(i * per + k), b = (uint32_t)(i * per + k1);
+            uint32_t c = (uint32_t)(i1 * per + k), d = (uint32_t)(i1 * per + k1);
             if (inside) m.idx.insert(m.idx.end(), {a, c, b, b, c, d});
             else m.idx.insert(m.idx.end(), {a, b, c, b, d, c});
         }
@@ -566,7 +587,7 @@ int main(int argc, char** argv) {
         two_mi->setParameter("studio", studio_tex, TextureSampler(TextureSampler::MinFilter::LINEAR, TextureSampler::MagFilter::LINEAR));
         const float exposure = 1.0f / (1.2f * 256.f * 125.f);   // (f/16, 1/125 s, ISO 100)
         two_mi->setParameter("studioGain", 60000.f * exposure * envf("STUDIO", 1.0f));
-        two_mi->setParameter("studioTurn", 2.2f);
+        two_mi->setParameter("studioTurn", envf("STUDIOTURN", 0.f));   // (0: the studio as the scene is lit by it)
         two_mi->setParameter("sunTo", normalize(float3{-0.35f, 0.6f, 0.7f}));
         two_mi->setParameter("sunGain", envf("SUNGLINT", 60.f));
         two_mi->setParameter("ior", envf("IOR", 1.5f));
@@ -575,6 +596,10 @@ int main(int argc, char** argv) {
         two_mi->setParameter("reach", widest * envf("REACH", 3.0f));
         two_mi->setParameter("beyond", envf("BEYOND", 3.0f));
         two_mi->setParameter("inner", model == "C" ? 1.0f : 0.0f);
+        two_mi->setParameter("show", 0.0f);
+        two_mi->setParameter("exact", envf("EXACT", 0.f));
+        two_mi->setParameter("plain", envf("PLAIN", 0.f));
+        two_mi->setParameter("turned", envf("TURNED", 1.f));   // (1 is right; 0 kept to show the mistake)
     }
     MaterialInstance* near_mi = glass_of(false);
     MaterialInstance* far_mi = glass_of(true);
@@ -625,14 +650,22 @@ int main(int argc, char** argv) {
 
     // DROPPING A BAND IN: its path and its half width; everything else is the glass's own
     std::vector<utils::Entity> farSides, nearSides;
+    std::vector<Built> cpuNear;   // (checks)
+    // PROFILE (experiments on the shape, not part of the look): facet<n> or groove<n>, e.g. facet10, groove12
+    const std::string profile = std::getenv("PROFILE") ? std::getenv("PROFILE") : "";
+    const int facets = profile.rfind("facet", 0) == 0 ? std::atoi(profile.c_str() + 5) : 0;
+    const int grooves = profile.rfind("groove", 0) == 0 ? std::atoi(profile.c_str() + 6) : 0;
+    const float deep = envf("DEEP", 0.06f);
     for (const Band& b : bands) {
         std::vector<Sample> path = close_frames(catmull(b.pts), per);
         for (Sample& q : path) {
             q.N = norm(rot_about(q.N, q.T, b.twist));
             q.B = norm(cross(q.T, q.N));
         }
-        farSides.push_back(add(tube(path, sides, b.wide, b.wide * look.slab, look.round, look.rib, true), far_mi, false));
-        nearSides.push_back(add(tube(path, sides, b.wide, b.wide * look.slab, look.round, look.rib, false), near_mi, false));
+        farSides.push_back(add(tube(path, sides, b.wide, b.wide * look.slab, look.round, look.rib, true, facets, grooves, deep), far_mi, false));
+        Built nearMesh = tube(path, sides, b.wide, b.wide * look.slab, look.round, look.rib, false, facets, grooves, deep);
+        cpuNear.push_back(Built{{}, nearMesh.idx, nearMesh.pos, nearMesh.nrm});
+        nearSides.push_back(add(std::move(nearMesh), near_mi, false));
     }
 
     // the picture so far, held up in front of the camera for the next pass to bend (hero.mm's plate)
@@ -672,6 +705,8 @@ int main(int argc, char** argv) {
     bloom.highlight = 20.0f;
     bloom.blendMode = BloomOptions::BlendMode::ADD;
     std::vector<uint8_t> pic((size_t)W * H * 4);
+    std::vector<uint16_t> half((size_t)W * H * 4);
+    bool readGlass = false;   // (checks: the glass pass's own numbers)
     auto frame = [&](bool read) {
         bool ok = false;
         for (int spin = 0; spin < 4000 && !ok; ++spin) ok = renderer->beginFrame(swap);
@@ -715,6 +750,9 @@ int main(int argc, char** argv) {
             show({plate}, nearSides);                          // 3. the glass: every pixel follows its line through the solid
             view->setRenderTarget(rtF[1]);
             renderer->render(view);
+            if (readGlass)
+                renderer->readPixels(rtF[1], 0, 0, (uint32_t)W, (uint32_t)H,
+                                     backend::PixelBufferDescriptor(half.data(), half.size() * sizeof(uint16_t), backend::PixelDataFormat::RGBA, backend::PixelDataType::HALF));
         }
         bloom.enabled = true;
         view->setBloomOptions(bloom);
@@ -735,9 +773,139 @@ int main(int argc, char** argv) {
         if (!frame(i == 2)) return fail("begin");
         engine->flushAndWait();
     }
-    const std::string out = "out/band-" + which + (model == "A" ? "" : "-" + model) + ".png";
+    const char* tag = std::getenv("NAME");
+    const std::string out = "out/band-" + which + (model == "A" ? "" : "-" + model) + (tag ? std::string("-") + tag : std::string()) + ".png";
     if (!write_png(out.c_str(), W, H, pic.data())) return fail("png");
     std::printf("wrote %s  (%zu band(s))\n", out.c_str(), bands.size());
+
+    // ---- CHECK=1 (models B, C): is the way through the glass the right one?
+    if (std::getenv("CHECK") && model != "A") {
+        auto glass_numbers = [&](float showMode, float exactMode, std::vector<float>& outv) {
+            two_mi->setParameter("show", showMode);
+            two_mi->setParameter("exact", exactMode);
+            readGlass = true;
+            for (int i = 0; i < 2; ++i) { frame(false); engine->flushAndWait(); }
+            readGlass = false;
+            outv.resize((size_t)W * H * 3);
+            for (size_t i = 0; i < (size_t)W * H; ++i)
+                for (int c = 0; c < 3; ++c) outv[i * 3 + c] = half_to_float(half[i * 4 + c]);
+        };
+        std::vector<float> cls, num, uvNear, uvExact;
+        std::vector<uint8_t> leaves((size_t)W * H, 0);   // glass pixels whose line leaves through the far side
+        glass_numbers(1.f, envf("EXACT", 0.f), cls);
+        glass_numbers(2.f, 0.f, num);
+        glass_numbers(4.f, 0.f, uvNear);
+        glass_numbers(4.f, 1.f, uvExact);
+        two_mi->setParameter("show", 0.0f);
+        two_mi->setParameter("exact", envf("EXACT", 0.f));
+
+        // 1. why each glass pixel shows what it shows (the green colour step), as a picture and as shares
+        {
+            std::vector<uint8_t> img((size_t)W * H * 4, 255);
+            const char* names[8] = {"left through the far side, sees the scene's picture, bright", "... dark there", "left, off the screen: sees the studio, bright", "... dark there",
+                                    "mirrored at the far side (past the critical angle), then bright", "... then dark", "far side NOT found: the line left that side's picture (the solid's outline)",
+                                    "far side NOT found: it lay under the line but was never crossed"};
+            const float key[8][3] = {{0, 0.9f, 0}, {0, 0.35f, 0}, {0, 0.85f, 1}, {0, 0, 0.8f}, {1, 0.9f, 0}, {0.45f, 0.3f, 0}, {0.45f, 0, 0}, {1, 0, 0}};
+            long count[8] = {}, glass = 0;
+            for (size_t i = 0; i < (size_t)W * H; ++i) {
+                const float* c = &cls[i * 3];
+                for (int k = 0; k < 3; ++k) img[i * 4 + k] = (uint8_t)std::lround(std::clamp(c[k], 0.f, 1.f) * 255.f);
+                int best = -1;
+                for (int k = 0; k < 8; ++k)
+                    if (std::fabs(c[0] - key[k][0]) + std::fabs(c[1] - key[k][1]) + std::fabs(c[2] - key[k][2]) < 0.06f) best = k;
+                if (best >= 0) { ++count[best]; ++glass; }
+                if (best >= 0 && best < 4) leaves[i] = 1;
+            }
+            const std::string cp = "out/band-" + which + "-" + model + (tag ? std::string("-") + tag : std::string()) + "-why.png";
+            write_png(cp.c_str(), W, H, img.data());
+            std::printf("CHECK 1: %ld glass pixels (%s). Wrote %s\n", glass, profile.empty() ? "smooth outline" : profile.c_str(), cp.c_str());
+            for (int k = 0; k < 8; ++k) std::printf("    %5.1f%%  %s\n", 100.0 * (double)count[k] / (double)std::max(1L, glass), names[k]);
+        }
+
+        // 2. the way to the far side against the same way worked out on the CPU from the mesh itself
+        {
+            struct Hit { float t; V3 n; };
+            auto first_hit = [&](V3 o, V3 d, float tMin) {
+                Hit best{1e30f, {0, 0, 0}};
+                for (const Built& m : cpuNear)
+                    for (size_t i = 0; i + 2 < m.idx.size(); i += 3) {
+                        const V3 a = m.pos[m.idx[i]], e1 = m.pos[m.idx[i + 1]] - a, e2 = m.pos[m.idx[i + 2]] - a;
+                        const V3 pv = cross(d, e2);
+                        const float det = dot(e1, pv);
+                        if (std::fabs(det) < 1e-12f) continue;
+                        const V3 tv = o - a;
+                        const float u = dot(tv, pv) / det;
+                        if (u < 0 || u > 1) continue;
+                        const V3 qv = cross(tv, e1);
+                        const float v = dot(d, qv) / det;
+                        if (v < 0 || u + v > 1) continue;
+                        const float t = dot(e2, qv) / det;
+                        if (t > tMin && t < best.t)
+                            best = Hit{t, norm(m.nrm[m.idx[i]] * (1 - u - v) + m.nrm[m.idx[i + 1]] * u + m.nrm[m.idx[i + 2]] * v)};
+                    }
+                return best;
+            };
+            const float3 f3 = normalize(target - eye), r3 = normalize(cross(f3, float3{0, 1, 0})), u3 = cross(r3, f3);
+            const V3 F{f3.x, f3.y, f3.z}, Rr{r3.x, r3.y, r3.z}, U{u3.x, u3.y, u3.z}, E{eye.x, eye.y, eye.z};
+            const float th = std::tan(0.5f * fov * PI / 180.f), asp = (float)W / (float)H;
+            const float n = envf("IOR", 1.5f) + envf("SPREAD", 0.04f) * (2.f / 5.f - 0.5f);
+            for (int flip = 0; flip < 2; ++flip) {   // (the picture may come back upside down: the way with the more agreement is the right one)
+                long tried = 0, bothHit = 0, gpuMissed = 0;
+                std::vector<float> lenErr, angErr;
+                for (int y = 12; y < H; y += 24)
+                    for (int x = 12; x < W; x += 24) {
+                        const float ndx = ((float)x + 0.5f) / (float)W * 2.f - 1.f, ndy = ((float)y + 0.5f) / (float)H * 2.f - 1.f;
+                        const V3 d = norm(F + Rr * (ndx * th * asp) + U * (ndy * th));
+                        const Hit h1 = first_hit(E, d, 1e-4f);
+                        if (h1.t > 1e29f) continue;
+                        V3 N = h1.n;
+                        if (dot(N, d) > 0) N = N * -1.f;
+                        const float ci = -dot(N, d), k = 1.f - (1.f - ci * ci) / (n * n);
+                        const V3 T1 = norm(d * (1.f / n) + N * (ci / n - std::sqrt(std::max(k, 0.f))));
+                        const V3 P1 = E + d * h1.t;
+                        const Hit h2 = first_hit(P1, T1, 1e-3f);
+                        if (h2.t > 1e29f) continue;
+                        ++tried;
+                        const float* g = &num[((size_t)(flip ? H - 1 - y : y) * W + x) * 3];
+                        if (!(g[0] > 0)) { ++gpuMissed; continue; }
+                        ++bothHit;
+                        float gx = g[1], gy = g[2], sz = 1.f;
+                        if (gx > 2.f) { gx -= 4.f; sz = -1.f; }
+                        V3 gn{gx, gy, sz * std::sqrt(std::max(0.f, 1.f - gx * gx - gy * gy))};
+                        V3 tn = h2.n;
+                        if (dot(tn, T1) < 0) tn = tn * -1.f;
+                        if (flip == 1 && std::getenv("CHECKDUMP") && lenErr.size() < 8)
+                            std::printf("      sample: gpu normal %.2f %.2f %.2f | cpu normal %.2f %.2f %.2f | raw %.3f %.3f %.3f | T1 %.2f %.2f %.2f\n", gn.x, gn.y, gn.z, tn.x, tn.y, tn.z, g[0], g[1], g[2], T1.x, T1.y, T1.z);
+                        lenErr.push_back(std::fabs(g[0] - h2.t) / h2.t);
+                        angErr.push_back(std::acos(std::clamp(dot(norm(gn), tn), -1.f, 1.f)) * 180.f / PI);
+                    }
+                std::sort(lenErr.begin(), lenErr.end());
+                std::sort(angErr.begin(), angErr.end());
+                auto q = [](const std::vector<float>& v, double at) { return v.empty() ? 0.f : v[(size_t)(at * (double)(v.size() - 1))]; };
+                std::printf("CHECK 2 (%s): %ld sight lines that truly cross the solid; the picture's search found the far side for %ld (%.1f%%), missed %ld. Where found: length off by %.1f%% (median), %.1f%% (9 in 10 within); far side's normal off by %.1f deg (median), %.1f deg (9 in 10 within)\n",
+                            flip ? "picture upside down" : "picture as is", tried, bothHit, 100.0 * (double)bothHit / (double)std::max(1L, tried), gpuMissed, 100.f * q(lenErr, 0.5), 100.f * q(lenErr, 0.9),
+                            q(angErr, 0.5), q(angErr, 0.9));
+            }
+        }
+
+        // 3. where the line that left is looked up: `beyond` units along it, against the true floor and backdrop
+        {
+            long both = 0, nearOn = 0, exactOn = 0;
+            std::vector<float> px;
+            for (size_t i = 0; i < (size_t)W * H; ++i) {
+                const float *a = &uvNear[i * 3], *b = &uvExact[i * 3];
+                if (!leaves[i]) continue;
+                ++both;
+                const bool an = std::fmod(a[2], 2.f) > 0.5f, bn = std::fmod(b[2], 2.f) > 0.5f;
+                nearOn += an; exactOn += bn;
+                if (an && bn) px.push_back(std::hypot((a[0] - b[0]) * (float)W, (a[1] - b[1]) * (float)H));
+            }
+            std::sort(px.begin(), px.end());
+            auto q = [&](double at) { return px.empty() ? 0.f : px[(size_t)(at * (double)(px.size() - 1))]; };
+            std::printf("CHECK 3: of %ld glass pixels whose line leaves through the far side, it is looked up on screen for %.1f%% (taken %.1f units away) and %.1f%% (true floor and backdrop). Where both are on screen (%zu): the two places are %.0f pixels apart (median), %.0f (9 in 10 within), %.0f (worst)\n",
+                        both, 100.0 * (double)nearOn / (double)std::max(1L, both), envf("BEYOND", 3.0f), 100.0 * (double)exactOn / (double)std::max(1L, both), px.size(), q(0.5), q(0.9), q(1.0));
+        }
+    }
 
     if (const char* t = std::getenv("TIME")) {   // n frames, each waited for to its end
         const int n = std::atoi(t);
