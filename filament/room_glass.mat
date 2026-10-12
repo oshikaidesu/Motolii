@@ -13,6 +13,9 @@ material {
     parameters : [
         { type : float, name : thickness },
         { type : float, name : film },       // thin film on the glass (0..1)
+        { type : float, name : filmIor },    // the film's own index: near the glass's (1.3) a breath of colour, far from it (2 and more) strong colour
+        { type : float2, name : filmThick }, // the film's thickness, from..to in nm: it wanders between them over the thing, and the hue with it
+        { type : float, name : mirror },     // how strongly the glass mirrors, Filament's reflectance (0.5: plain glass)
         { type : float, name : split },      // how far the colours part (Filament's dispersion)
         { type : float, name : rim },        // how sharply this part keeps to the rims (a power: 1 broad, 4 a thin line)
         { type : float, name : strength }    // how much of it shows at the very rim (0..1)
@@ -27,14 +30,14 @@ fragment {
         material.baseColor = vec4(vec3(a), a);
         material.metallic = 0.0;
         material.roughness = 0.0;
-        material.reflectance = 0.5;
+        material.reflectance = materialParams.mirror;
         material.transmission = 1.0;
         material.ior = 1.5;
         material.thickness = materialParams.thickness;
         material.dispersion = materialParams.split;
         vec2 uv = getUV0();
         material.iridescence = materialParams.film;
-        material.iridescenceIor = 1.3;
-        material.iridescenceThickness = 450.0 + 250.0 * sin(6.2832 * (3.0 * uv.x + uv.y)) * sin(6.2832 * (7.0 * uv.x - 2.0 * uv.y) + 1.0);
+        material.iridescenceIor = materialParams.filmIor;
+        material.iridescenceThickness = mix(materialParams.filmThick.x, materialParams.filmThick.y, 0.5 + 0.5 * sin(6.2832 * (3.0 * uv.x + uv.y)) * sin(6.2832 * (7.0 * uv.x - 2.0 * uv.y) + 1.0));
     }
 }

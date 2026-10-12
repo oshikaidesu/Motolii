@@ -70,6 +70,7 @@ vertex {
         float rs = (ci - index * ct) / (ci + index * ct), rp = (ct - index * ci) / (ct + index * ci);
         // (a face the sun only grazes sends its light about inside the glass in truth; here it throws none, and its shadow stays dark)
         float through = ok ? (1.0 - 0.5 * (rs * rs + rp * rp)) * smoothstep(materialParams.facing.x, materialParams.facing.y, ci) : 0.0;
+        through *= smoothstep(0.03, 0.35, -d.y);   // (light that leaves nearly level fades out before it is cut off: no torn edge far from the thing)
         if (!(through > 0.0)) ok = false;
         // (a corner that throws nothing is not drawn: all such corners go to one place, the thing's own middle, so cuts that throw nothing cost no screen)
         highp vec3 X = ok ? P + d * ((materialParams.floorY - P.y) / d.y) : mulMat4x4Float3(toScene, own[3].xyz).xyz;
