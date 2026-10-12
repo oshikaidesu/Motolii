@@ -220,9 +220,9 @@ fn cpu_line(m: &Mesh, x: u32, y: u32) -> Option<(f32, f32, f32, u32, u32)> {
 
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
-struct Params { eye: [f32; 4], fwd: [f32; 4], right: [f32; 4], up: [f32; 4], size: [u32; 2], ior: f32, most: f32 }
+struct Params { eye: [f32; 4], fwd: [f32; 4], right: [f32; 4], up: [f32; 4], size: [u32; 2], ior: f32, most: f32, look: [f32; 4] }
 
-struct Band { g: Gpu, pipe_check: wgpu::ComputePipeline, pipe_draw: wgpu::ComputePipeline, bind_check: wgpu::BindGroup, bind_draw: wgpu::BindGroup, params: wgpu::Buffer, numbers: wgpu::Buffer }
+struct Band { g: Gpu, module: wgpu::ShaderModule, tlas: wgpu::Tlas, pos: wgpu::Buffer, idx: wgpu::Buffer, nrm: wgpu::Buffer, pipe_check: wgpu::ComputePipeline, pipe_draw: wgpu::ComputePipeline, bind_check: wgpu::BindGroup, bind_draw: wgpu::BindGroup, params: wgpu::Buffer, numbers: wgpu::Buffer }
 
 fn band_open(m: &Mesh) -> Band {
     let g = open();
@@ -263,12 +263,13 @@ fn band_open(m: &Mesh) -> Band {
     let bind_check = common(&pipe_check, 5, wgpu::BindingResource::Buffer(numbers.as_entire_buffer_binding()));
     let bind_draw = common(&pipe_draw, 6, wgpu::BindingResource::TextureView(&view));
     // (the bind groups hold the binding numbers 5 and 6 apart: see band.wgsl)
-    Band { g, pipe_check, pipe_draw, bind_check, bind_draw, params, numbers }
+    Band { g, module, tlas, pos, idx, nrm, pipe_check, pipe_draw, bind_check, bind_draw, params, numbers }
 }
-fn set(b: &Band, most: f32) {
+fn set(b: &Band, most: f32) { set_look(b, most, [0.0; 4]); }
+fn set_look(b: &Band, most: f32, look: [f32; 4]) {
     let (f, r, u) = camera();
     let v4 = |a: V3| [a[0], a[1], a[2], 0.0];
-    b.g.queue.write_buffer(&b.params, 0, bytemuck::bytes_of(&Params { eye: v4(EYE), fwd: v4(f), right: v4(r), up: v4(u), size: [W, H], ior: IOR, most }));
+    b.g.queue.write_buffer(&b.params, 0, bytemuck::bytes_of(&Params { eye: v4(EYE), fwd: v4(f), right: v4(r), up: v4(u), size: [W, H], ior: IOR, most, look }));
 }
 
 fn check(m: &Mesh, every: u32) {
@@ -430,6 +431,86 @@ fn pace(m: &Mesh, frames: usize) {
     }
 }
 
+/// The lines as a picture (see band.wgsl, paint). studio: Filament's skybox file of the studio (KTX 1, a cube of
+/// R11G11B10 floats, one level), handed to the GPU as it is.
+fn picture(m: &Mesh, studio_path: &str, out_path: &str) {
+    let b = band_open(m);
+    let raw = std::fs::read(studio_path).expect("studio file");
+    let word = |at: usize| u32::from_le_bytes(raw[at..at + 4].try_into().unwrap());
+    assert!(&raw[1..7] == b"KTX 11" && word(28) == 0x8C3A && word(52) == 6 && word(56) == 1, "not a one-level cube of R11G11B10 floats");
+    let (side, from) = (word(36), 64 + word(60) as usize);
+    let face = word(from) as usize;
+    let cube = b.g.device.create_texture_with_data(
+        &b.g.queue,
+        &wgpu::TextureDescriptor {
+            label: None,
+            size: wgpu::Extent3d { width: side, height: side, depth_or_array_layers: 6 },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rg11b10Ufloat,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        },
+        wgpu::util::TextureDataOrder::LayerMajor,
+        &raw[from + 4..from + 4 + face * 6],
+    );
+    let cube_view = cube.create_view(&wgpu::TextureViewDescriptor { dimension: Some(wgpu::TextureViewDimension::Cube), ..Default::default() });
+    let how = b.g.device.create_sampler(&wgpu::SamplerDescriptor { mag_filter: wgpu::FilterMode::Linear, min_filter: wgpu::FilterMode::Linear, ..Default::default() });
+    let painted = b.g.device.create_texture(&wgpu::TextureDescriptor {
+        label: None,
+        size: wgpu::Extent3d { width: W, height: H, depth_or_array_layers: 1 },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::Rgba8Unorm,
+        usage: wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::COPY_SRC,
+        view_formats: &[],
+    });
+    let pipeline = b.g.device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor { label: None, layout: None, module: &b.module, entry_point: Some("paint"), compilation_options: Default::default(), cache: None });
+    let bind = b.g.device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: None,
+        layout: &pipeline.get_bind_group_layout(0),
+        entries: &[
+            wgpu::BindGroupEntry { binding: 0, resource: b.tlas.as_binding() },
+            wgpu::BindGroupEntry { binding: 1, resource: b.params.as_entire_binding() },
+            wgpu::BindGroupEntry { binding: 2, resource: b.pos.as_entire_binding() },
+            wgpu::BindGroupEntry { binding: 3, resource: b.idx.as_entire_binding() },
+            wgpu::BindGroupEntry { binding: 4, resource: b.nrm.as_entire_binding() },
+            wgpu::BindGroupEntry { binding: 7, resource: wgpu::BindingResource::TextureView(&cube_view) },
+            wgpu::BindGroupEntry { binding: 8, resource: wgpu::BindingResource::Sampler(&how) },
+            wgpu::BindGroupEntry { binding: 9, resource: wgpu::BindingResource::TextureView(&painted.create_view(&Default::default())) },
+        ],
+    });
+    let env = |name: &str, d: f32| std::env::var(name).ok().and_then(|s| s.parse().ok()).unwrap_or(d);
+    // (the brightness band.mm gives the studio: 60000 at f/16, 1/125 s, ISO 100; the turn: the scene's light is turned 2.2 about the up axis)
+    set_look(&b, env("MOST", 8.0), [60000.0 / (1.2 * 256.0 * 125.0), env("TURN", -2.2), env("SMOOTH", 0.0), 0.0]);
+    let row = (W * 4).div_ceil(256) * 256;   // (a row in a copy must be a multiple of 256 bytes)
+    let back = b.g.device.create_buffer(&wgpu::BufferDescriptor { label: None, size: (row * H) as u64, usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ, mapped_at_creation: false });
+    let mut enc = b.g.device.create_command_encoder(&Default::default());
+    {
+        let mut p = enc.begin_compute_pass(&Default::default());
+        p.set_pipeline(&pipeline);
+        p.set_bind_group(0, &bind, &[]);
+        p.dispatch_workgroups(W.div_ceil(8), H.div_ceil(8), 1);
+    }
+    enc.copy_texture_to_buffer(
+        painted.as_image_copy(),
+        wgpu::TexelCopyBufferInfo { buffer: &back, layout: wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(row), rows_per_image: Some(H) } },
+        wgpu::Extent3d { width: W, height: H, depth_or_array_layers: 1 },
+    );
+    b.g.queue.submit(Some(enc.finish()));
+    back.slice(..).map_async(wgpu::MapMode::Read, |r| r.unwrap());
+    wait(&b);
+    let mut w = png::Encoder::new(std::io::BufWriter::new(std::fs::File::create(out_path).expect("picture file")), W, H);
+    w.set_color(png::ColorType::Rgba);
+    w.set_depth(png::BitDepth::Eight);
+    let padded = back.slice(..).get_mapped_range();
+    let pixels: Vec<u8> = padded.chunks(row as usize).flat_map(|r| r[..(W * 4) as usize].iter().copied()).collect();
+    w.write_header().unwrap().write_image_data(&pixels).unwrap();
+    println!("wrote {out_path}");
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     match args.get(1).map(String::as_str) {
@@ -438,10 +519,11 @@ fn main() {
             let m = load(args.get(2).expect("mesh file"));
             match args.get(3).map(String::as_str) {
                 Some("time") => time(&m, args.get(4).and_then(|s| s.parse().ok()).unwrap_or(200)),
+                Some("picture") => picture(&m, args.get(4).expect("studio .ktx"), args.get(5).expect("picture .png")),
                 Some("pace") => pace(&m, args.get(4).and_then(|s| s.parse().ok()).unwrap_or(600)),
                 _ => check(&m, args.get(4).and_then(|s| s.parse().ok()).unwrap_or(8)),
             }
         }
-        _ => println!("rayq one | rayq band <mesh.bin> [check [every] | time [frames] | pace [frames]]"),
+        _ => println!("rayq one | rayq band <mesh.bin> [check [every] | time [frames] | pace [frames] | picture <studio.ktx> <out.png>]"),
     }
 }

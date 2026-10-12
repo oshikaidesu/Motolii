@@ -8,6 +8,7 @@ publish = false
 wgpu = "29"
 pollster = "0.4"
 bytemuck = "1"
+png = "0.17"
 
 [profile.release]
 debug = false

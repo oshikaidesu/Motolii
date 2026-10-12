@@ -79,7 +79,8 @@ fragment {
         else if (materialParams.show > 0.5) c = vec3(firstDist, firstNormal.x, firstNormal.y);
         else if (count < -0.5) c = vec3(1.0, 0.0, 0.0);
         else if (count > 98.0) c = vec3(1.0, 0.0, 1.0);
-        else c = textureLod(materialParams_studio, rayDirection * transpose(toScene), 0.0).rgb * materialParams.studioGain;
+        // (back into Filament's own axes, which are the studio's: the matrix turned over)
+        else c = textureLod(materialParams_studio, rayDirection * toScene, 0.0).rgb * materialParams.studioGain;
         material.baseColor = vec4(c, 1.0);
     }
 }

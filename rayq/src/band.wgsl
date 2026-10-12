@@ -12,6 +12,7 @@ struct Params {
     size: vec2<u32>,
     ior: f32,
     most: f32,          // mirrorings inside a line may have; below 0: only the way in is asked
+    look: vec4<f32>,    // paint only: the studio's brightness; the studio turned about the up axis (radians); 1: smooth normals inside too
 }
 
 @group(0) @binding(0) var acc: acceleration_structure;
@@ -21,6 +22,9 @@ struct Params {
 @group(0) @binding(4) var<storage, read> nrm: array<f32>;
 @group(0) @binding(5) var<storage, read_write> numbers: array<vec4<f32>>;          // check: two a pixel
 @group(0) @binding(6) var picture: texture_storage_2d<rgba16float, write>;         // draw
+@group(0) @binding(7) var studio: texture_cube<f32>;                               // paint
+@group(0) @binding(8) var studio_how: sampler;
+@group(0) @binding(9) var painted: texture_storage_2d<rgba8unorm, write>;
 
 struct Line {
     count: f32,      // mirrorings before leaving; 99: still inside after `most`; -1: no surface ahead
@@ -42,9 +46,11 @@ fn meet(start: vec3<f32>, along: vec3<f32>, least: f32) -> RayIntersection {
     return rayQueryGetCommittedIntersection(&rq);
 }
 
-fn follow(px: vec2<u32>) -> Line {
+fn follow(px: vec2<u32>) -> Line { return follow_at(vec2<f32>(px) + 0.5); }
+
+fn follow_at(at_px: vec2<f32>) -> Line {
     var line = Line(99.0, 0.0, -1.0, 0.0, 0.0, 0.0, vec3<f32>(0.0));
-    let ndc = (vec2<f32>(px) + 0.5) / vec2<f32>(params.size) * 2.0 - 1.0;
+    let ndc = at_px / vec2<f32>(params.size) * 2.0 - 1.0;
     let d = normalize(params.fwd.xyz + params.right.xyz * ndc.x + params.up.xyz * ndc.y);
     let h1 = meet(params.eye.xyz, d, 1.0e-4);
     if (h1.kind == RAY_QUERY_INTERSECTION_NONE) { return line; }
@@ -65,6 +71,10 @@ fn follow(px: vec2<u32>) -> Line {
         let j = 3u * h.primitive_index;
         let a = corner(idx[j]);
         var flat = normalize(cross(corner(idx[j + 1u]) - a, corner(idx[j + 2u]) - a));
+        if (params.look.z > 0.5) {   // (paint, when asked: where the line meets is still the triangle's; the normal there is the smooth one)
+            let c = h.barycentrics;
+            flat = normalize(smooth_at(idx[j]) * (1.0 - c.x - c.y) + smooth_at(idx[j + 1u]) * c.x + smooth_at(idx[j + 2u]) * c.y);
+        }
         if (dot(flat, dir) > 0.0) { flat = -flat; }   // (facing the line)
         let leaving = refract(dir, flat, params.ior);   // (zero: past the critical angle)
         if (dot(leaving, leaving) > 0.0) { dir = leaving; line.count = f32(k); break; }
@@ -91,4 +101,28 @@ fn draw(@builtin(global_invocation_id) id: vec3<u32>) {
     let line = follow(id.xy);
     // (what a renderer would keep for the next step: where the line leaves to, and whether it left)
     textureStore(picture, vec2<i32>(id.xy), vec4<f32>(line.out, line.count));
+}
+
+// paint: the same lines as a picture, the way model D's picture is made: where a line leaves, the studio that way;
+// magenta: still inside after `most`; red: no surface ahead; the ground is one flat grey (no scene here).
+// Four lines a pixel (a still picture's edges), and a plain film curve: this is not Filament's own tone mapping.
+fn seen(at_px: vec2<f32>) -> vec3<f32> {
+    let line = follow_at(at_px);
+    if (line.glass < 0.5) { return vec3<f32>(0.60); }
+    if (line.count < -0.5) { return vec3<f32>(4.0, 0.0, 0.0); }
+    if (line.count > 98.0) { return vec3<f32>(4.0, 0.0, 4.0); }
+    let c = cos(params.look.y);
+    let s = sin(params.look.y);
+    let d = vec3<f32>(line.out.x * c + line.out.z * s, line.out.y, -line.out.x * s + line.out.z * c);
+    return textureSampleLevel(studio, studio_how, d, 0.0).rgb * params.look.x;
+}
+
+@compute @workgroup_size(8, 8)
+fn paint(@builtin(global_invocation_id) id: vec3<u32>) {
+    if (id.x >= params.size.x || id.y >= params.size.y) { return; }
+    let p = vec2<f32>(id.xy);
+    var c = seen(p + vec2<f32>(0.25, 0.25)) + seen(p + vec2<f32>(0.75, 0.25)) + seen(p + vec2<f32>(0.25, 0.75)) + seen(p + vec2<f32>(0.75, 0.75));
+    c = c * 0.25;
+    c = clamp((c * (2.51 * c + 0.03)) / (c * (2.43 * c + 0.59) + 0.14), vec3<f32>(0.0), vec3<f32>(1.0));   // (Narkowicz's fit of the ACES film curve)
+    textureStore(painted, vec2<i32>(i32(id.x), i32(params.size.y - 1u - id.y)), vec4<f32>(pow(c, vec3<f32>(1.0 / 2.2)), 1.0));
 }
