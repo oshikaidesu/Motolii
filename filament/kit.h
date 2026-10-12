@@ -20,6 +20,7 @@
 #include <filament/TransformManager.h>
 #include <filament/VertexBuffer.h>
 #include <filament/View.h>
+#include <filament/Box.h>
 #include <filament/Viewport.h>
 
 #include <geometry/SurfaceOrientation.h>
@@ -139,11 +140,13 @@ static MaterialInstance* add(Stage& s, Mesh* m, const char* filamat, std::vector
     IndexBuffer* ib = IndexBuffer::Builder().indexCount((uint32_t)m->idx.size()).bufferType(IndexBuffer::IndexType::UINT).build(*s.engine);
     ib->setBuffer(*s.engine, IndexBuffer::BufferDescriptor(m->idx.data(), m->idx.size() * sizeof(uint32_t)));
     MaterialInstance* mi = mat->createInstance();
+    float3 low = m->pos[0], high = m->pos[0];   // (Filament wants a thing's rough size if it casts or takes shadows)
+    for (const float3& p : m->pos) { low = min(low, p); high = max(high, p); }
     for (const mat4f& place : places) {
         utils::Entity e = utils::EntityManager::get().create();
         s.engine->getTransformManager().create(e, {}, place);
         RenderableManager::Builder(1).geometry(0, RenderableManager::PrimitiveType::TRIANGLES, vb, ib).material(0, mi)
-            .culling(false).castShadows(shadows).receiveShadows(shadows).layerMask(0xFF, layer).instances((size_t)copies).build(*s.engine, e);
+            .boundingBox({(low + high) * 0.5f, max((high - low) * 0.5f, float3{1e-3f})}).culling(false).castShadows(shadows).receiveShadows(shadows).layerMask(0xFF, layer).instances((size_t)copies).build(*s.engine, e);
         s.scene->addEntity(e);
     }
     return mi;
