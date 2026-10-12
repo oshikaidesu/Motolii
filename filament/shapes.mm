@@ -29,6 +29,8 @@ int main() {
         if (!glass) return fail("poster_glass.filamat");
         glass->setParameter("thickness", t.thick);
         glass->setParameter("lean", 0.f);
+        glass->setParameter("film", 1.f);
+        glass->setParameter("split", 2.f);
         if (!shadow_of(s, lit, t.mesh, {t.place})) return fail("floor_shade.filamat");
         if (!glass_light(s, lit, t.mesh, {t.place})) return fail("glasslight.filamat");
     }

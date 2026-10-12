@@ -1,0 +1,40 @@
+// room_glass.mat: the part of clear glass that shows the ROOM. Filament's own glass again, but bending the room
+// (its studio picture) instead of the screen, and drawn only where the surface turns away from the eye: on the rims
+// and folds. Laid over poster_glass.mat (which shows what is behind, clear in the middle) it gives glass on a plain
+// ground its dark rim lines, bright streaks and, where the colours part, rainbow bands. (The way real-time glass is
+// made to read in Blender's EEVEE: a clear middle and a glassy rim, mixed by how the surface faces the eye.)
+material {
+    name : room_glass,
+    shadingModel : lit,
+    blending : fade,
+    refractionMode : cubemap,
+    refractionType : solid,
+    requires : [ uv0 ],
+    parameters : [
+        { type : float, name : thickness },
+        { type : float, name : film },       // thin film on the glass (0..1)
+        { type : float, name : split },      // how far the colours part (Filament's dispersion)
+        { type : float, name : rim },        // how sharply this part keeps to the rims (a power: 1 broad, 4 a thin line)
+        { type : float, name : strength }    // how much of it shows at the very rim (0..1)
+    ]
+}
+
+fragment {
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        float away = 1.0 - abs(dot(getWorldNormalVector(), getWorldViewVector()));
+        float a = saturate(materialParams.strength * pow(away, materialParams.rim));
+        material.baseColor = vec4(vec3(a), a);
+        material.metallic = 0.0;
+        material.roughness = 0.0;
+        material.reflectance = 0.5;
+        material.transmission = 1.0;
+        material.ior = 1.5;
+        material.thickness = materialParams.thickness;
+        material.dispersion = materialParams.split;
+        vec2 uv = getUV0();
+        material.iridescence = materialParams.film;
+        material.iridescenceIor = 1.3;
+        material.iridescenceThickness = 450.0 + 250.0 * sin(6.2832 * (3.0 * uv.x + uv.y)) * sin(6.2832 * (7.0 * uv.x - 2.0 * uv.y) + 1.0);
+    }
+}

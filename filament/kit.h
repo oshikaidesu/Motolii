@@ -282,12 +282,15 @@ static Mesh* letters(const char* text, float deep, float chamfer) {
 // and turns it into light, so shade and thrown light are equally soft and of one piece. (Filament's own sun shadow is
 // not used: it is shade or no shade, and knows nothing of thrown light.)
 struct Sunlit {
-    float3 paper, sunWay;
-    float sunLux;
+    float3 paper{0.52f, 0.60f, 0.65f};   // (a middle blue-grey: the light the glass throws must be able to be brighter than the paper)
+    float3 sunWay = normalize(float3{-0.55f, -0.50f, 0.67f});   // (the sun low, the shadows long)
+    float sunLux = 100000.f;
+    float sky = 7000.f;                  // (the studio's light, which fills the shadows: low, so they stay dark)
+    const char* studio = "out/lightroom/lightroom_ibl.ktx";   // (the room: it lights the shadows and is what Filament's glass mirrors)
+    float sunWide = 0.022f;              // (the sun's width: how far shade spreads for every unit it flew; far wider than the true sun, for the softness)
 };
-static bool paper_and_sun(Stage& s, Sunlit& lit) {
-    lit = {{0.52f, 0.60f, 0.65f}, normalize(float3{-0.55f, -0.50f, 0.67f}), 100000.f};   // (a middle blue-grey: the light the glass throws must be able to be brighter than the paper; the sun low, the shadows long)
-    if (!room(s, "out/lightroom/lightroom_ibl.ktx", 7000.f)) return false;
+static bool paper_and_sun(Stage& s, const Sunlit& lit) {
+    if (!room(s, lit.studio, lit.sky)) return false;
     utils::Entity sun = utils::EntityManager::get().create();
     LightManager::Builder(LightManager::Type::SUN).color({1.0f, 0.98f, 0.95f}).intensity(lit.sunLux).direction(lit.sunWay)
         .castShadows(false).build(*s.engine, sun);
@@ -323,13 +326,15 @@ static bool paper_and_sun(Stage& s, Sunlit& lit) {
     bare->setParameter("sunWay", lit.sunWay);
     bare->setParameter("value", 1.f);
     bare->setParameter("floorY", 0.f);
-    MaterialInstance* paper = add(s, floor, "paper.filamat");
+    Mesh* sheet = new Mesh(*floor);   // (the paper itself reaches further than its picture of sunlight: beyond it the sun is bare)
+    for (float3& p : sheet->pos) p = p * 4.f;
+    MaterialInstance* paper = add(s, sheet, "paper.filamat");
     if (!paper) return false;
     paper->setParameter("color", lit.paper);
     paper->setParameter("grain", 0.12f);
     paper->setParameter("sunlight", s.sunlight, TextureSampler(TextureSampler::MinFilter::LINEAR, TextureSampler::MagFilter::LINEAR, TextureSampler::WrapMode::CLAMP_TO_EDGE));
     paper->setParameter("pictureFromScene", mat4f(above->getProjectionMatrix() * above->getViewMatrix()));
-    paper->setParameter("sunWide", 0.022f);   // (a sun some 4.5 degrees wide: far wider than the true one, for the softness)
+    paper->setParameter("sunWide", lit.sunWide);   // (a sun some 4.5 degrees wide: far wider than the true one, for the softness)
     paper->setParameter("perUnit", 1.f / (2.f * half));
     paper->setParameter("furthest", 2.5f);   // (softened over 0.02 of the floor's units)
     return true;

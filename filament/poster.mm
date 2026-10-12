@@ -134,6 +134,8 @@ int main() {
     if (!band_mi) return fail("poster_glass.filamat");
     band_mi->setParameter("thickness", 0.6f);
     band_mi->setParameter("lean", 0.f);
+    band_mi->setParameter("film", 1.f);
+    band_mi->setParameter("split", 2.f);
 
     MaterialInstance* blocks_mi = glass_blocks(s, heap(), 0.1f);
     if (!blocks_mi) return fail("glassbox.filamat");
