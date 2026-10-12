@@ -1057,7 +1057,12 @@ int main(int argc, char** argv) {
     const bool cBeams = false;
 #endif
     const bool cCheck = cBeams && env_f("CBEAMCHECK", 0.f) > 0.5f;
-    const bool flatBeams = (env_f("BEAMS", 0.f) > 0.5f || cBeams) && !flatGBeams;
+    // PAIRS=1 (first proof; one kind of solid, no films): the light that goes in by one face and out by another, and
+    // the light mirrored off the outside, drawn with no cutting of ours: pair_light.mat draws the face the light leaves
+    // by and hands the GPU's own clipper the edges of the face it came in by. Nothing that bounced inside.
+    // PAIRSTEPS: colour steps (64: every fine band on its own).
+    const bool pairsOn = env_f("PAIRS", 0.f) > 0.5f && !rainbowOnce && !flatGBeams && !cBeams;
+    const bool flatBeams = (env_f("BEAMS", 0.f) > 0.5f || cBeams || pairsOn) && !flatGBeams;
     static std::vector<std::array<beam::SplitShape, 16>> beamShapes;   // per shape, per set of films
     struct BeamPose {
         beam::V3 R[3], at;
@@ -1141,6 +1146,70 @@ int main(int argc, char** argv) {
             std::printf("  beams: %s, all its films together cut it into %zu cells\n", fk.name.c_str(), beamShapes.back()[15].cells.size());
         }
         beamPose.resize(items.size());
+    }
+    MaterialInstance* pairMi = nullptr;
+    int pairSteps = 0;
+    if (pairsOn) {
+        if (flatKinds.size() != 1 || stageOn) return fail("PAIRS: one kind of flat-faced solid, and no stage (first proof)");
+        const FlatKind& fk = flatKinds[0];
+        const beam::Solid& so = items[(size_t)fk.solids[0]].local;
+        if (!so.films.empty()) return fail("PAIRS: a solid with films is not for this proof");
+        if (fk.solids.size() > 64) return fail("PAIRS: 64 solids at most");
+        std::vector<int> face;   // the faces that are there
+        for (size_t f = 0; f < so.faces.size(); ++f)
+            if (so.faces[f].n >= 3) face.push_back((int)f);
+        int mostCorners = 0;
+        auto* tab = new std::vector<float>(face.size() * 9 * 4, 0.f);
+        for (size_t i = 0; i < face.size(); ++i) {
+            const beam::Poly& F = so.faces[(size_t)face[i]];
+            mostCorners = std::max(mostCorners, F.n);
+            for (int c = 0; c < std::min(F.n, 8); ++c) {
+                float* o = tab->data() + (i * 9 + (size_t)c) * 4;
+                o[0] = (float)F.p[(size_t)c].x; o[1] = (float)F.p[(size_t)c].y; o[2] = (float)F.p[(size_t)c].z; o[3] = c == 0 ? (float)F.n : 0.f;
+            }
+            float* o = tab->data() + (i * 9 + 8) * 4;
+            const beam::Plane& pl = so.planes[(size_t)face[i]];
+            o[0] = (float)pl.n.x; o[1] = (float)pl.n.y; o[2] = (float)pl.n.z; o[3] = (float)pl.o;
+        }
+        if (mostCorners > 8) return fail("PAIRS: a face has more than 8 corners (the GPU clips by 8 planes a draw)");
+        Texture* faceTex = Texture::Builder().width(9).height((uint32_t)face.size()).levels(1).format(Texture::InternalFormat::RGBA32F).build(*engine);
+        faceTex->setImage(*engine, 0, Texture::PixelBufferDescriptor(tab->data(), tab->size() * sizeof(float), backend::PixelDataFormat::RGBA, backend::PixelDataType::FLOAT,
+                                                                     [](void*, size_t, void* u) { delete (std::vector<float>*)u; }, tab));
+        static std::vector<float> pv;        // (A, B, corner of B) per vertex
+        static std::vector<uint32_t> pi;
+        for (size_t a = 0; a < face.size(); ++a)
+            for (size_t b = 0; b < face.size(); ++b) {
+                const int nb = so.faces[(size_t)face[b]].n;
+                for (int c = 1; c + 1 < nb; ++c)
+                    for (int q : {0, c, c + 1}) {
+                        pi.push_back((uint32_t)(pv.size() / 3));
+                        pv.insert(pv.end(), {(float)a, (float)b, (float)q});
+                    }
+            }
+        VertexBuffer* vb = VertexBuffer::Builder().vertexCount((uint32_t)(pv.size() / 3)).bufferCount(1)
+                               .attribute(VertexAttribute::POSITION, 0, VertexBuffer::AttributeType::FLOAT3, 0, 12).build(*engine);
+        vb->setBufferAt(*engine, 0, VertexBuffer::BufferDescriptor(pv.data(), pv.size() * sizeof(float)));
+        IndexBuffer* ib = IndexBuffer::Builder().indexCount((uint32_t)pi.size()).bufferType(IndexBuffer::IndexType::UINT).build(*engine);
+        ib->setBuffer(*engine, IndexBuffer::BufferDescriptor(pi.data(), pi.size() * sizeof(uint32_t)));
+        Material* pairMat = mat("pair_light.filamat");
+        if (!pairMat) return fail("pair_light.filamat");
+        pairSteps = std::min(64, std::max(1, (int)env_f("PAIRSTEPS", 64.f)));
+        pairMi = pairMat->createInstance();
+        pairMi->setParameter("faces", faceTex, nearest);
+        pairMi->setParameter("stepCount", (float)pairSteps);
+        pairMi->setParameter("gain", env_f("SPECGAIN", 1.f));
+        pairMi->setParameter("floorY", 0.f);
+        pairMi->setParameter("probe", env_f("PAIRPROBE", 0.f));   // (timing only: pair_light.mat)
+        const utils::Entity e = em.create();
+        RenderableManager::Builder(1).boundingBox({{0, 0, 0}, {100.f, 100.f, 100.f}})
+            .geometry(0, RenderableManager::PrimitiveType::TRIANGLES, vb, ib)
+            .instances(fk.solids.size() * (size_t)pairSteps)
+            .material(0, pairMi).culling(false).castShadows(false).receiveShadows(false)
+            .layerMask(0xFF, std::getenv("NOLIGHT") ? 0x00 : 0x01).build(*engine, e);
+        sLight->addEntity(e);
+        std::printf("  pairs: %s, %zu faces (most corners %d), %zu pairs of faces as %zu triangles, drawn %zu times a frame (%zu solids x %d colour steps): %zu triangles handed to the clipper\n",
+                    fk.name.c_str(), face.size(), mostCorners, face.size() * face.size(), pi.size() / 3, fk.solids.size() * (size_t)pairSteps, fk.solids.size(), pairSteps,
+                    pi.size() / 3 * fk.solids.size() * (size_t)pairSteps);
     }
 #ifdef GLASS_COMPUTE_DOOR
     cbeam::Run* cRun = nullptr;
@@ -2389,7 +2458,31 @@ int main(int argc, char** argv) {
             // apart on the floor the in-between polygons lie; SPECCOPIES: at most so many. SPECSTAT=1 counts.
             // SPECWALK=n: a walk covers at most n of the fine bands (1: every band on its own = the exact light).
             // SPECGAIN: the coloured light that many times brighter than it is (for show).
-            static const bool spec = env_f("SPEC", 0.f) > 0.5f && !cBeams;
+            if (pairsOn) {
+                static math::float4 px[64], py[64], pz[64], pa[64], st[64];
+                size_t q = 0;
+                for (size_t k = 0; k < items.size() && q < 64; ++k) {
+                    if (flatKindOf[k] < 0) continue;
+                    const BeamPose& bp = beamPose[k];
+                    px[q] = {(float)bp.R[0].x, (float)bp.R[0].y, (float)bp.R[0].z, (float)bp.s};
+                    py[q] = {(float)bp.R[1].x, (float)bp.R[1].y, (float)bp.R[1].z, 0.f};
+                    pz[q] = {(float)bp.R[2].x, (float)bp.R[2].y, (float)bp.R[2].z, 0.f};
+                    pa[q] = {(float)bp.at.x, (float)bp.at.y, (float)bp.at.z, 0.f};
+                    ++q;
+                }
+                const std::vector<beam::BallStep> ps = beam::ball_steps(par, pairSteps);
+                for (size_t i = 0; i < ps.size() && i < 64; ++i) st[i] = {(float)ps[i].rgb.x, (float)ps[i].rgb.y, (float)ps[i].rgb.z, (float)ps[i].n};
+                const beam::V3 sn = normalize(par.sun);
+                pairMi->setParameter("poseX", px, 64);
+                pairMi->setParameter("poseY", py, 64);
+                pairMi->setParameter("poseZ", pz, 64);
+                pairMi->setParameter("poseAt", pa, 64);
+                pairMi->setParameter("steps", st, 64);
+                pairMi->setParameter("sunDir", math::float3{(float)sn.x, (float)sn.y, (float)sn.z});
+                pairMi->setParameter("strip", math::float4{(float)band.ux, (float)band.uz, (float)band.c, (float)band.half});
+                pairMi->setParameter("stripEvery", (float)band.every);
+            }
+            static const bool spec = env_f("SPEC", 0.f) > 0.5f && !cBeams && !pairsOn;
             static std::vector<beam::SpecStats> specStats;
             if (spec) {
                 static const std::vector<beam::Band> fine = beam::make_bands(par.bands, par.nmMin, par.nmMax);
@@ -2402,6 +2495,9 @@ int main(int argc, char** argv) {
                     beam::split_light_spectrum(beamShapes[(size_t)flatKindOf[k]].data(), beamPose[k].R, beamPose[k].s, beamPose[k].at, par.sun, fine, par.glass, filmN, band, 0.0, least,
                                                mostFaces, step, copies, (int)env_f("SPECWALK", 0.f), (int)std::min<size_t>(4, items[k].local.films.size()), env_f("SPECGAIN", 1.f), true, each[k], &specStats[k]);
                 });
+            } else
+            if (pairsOn) {
+                for (std::vector<float>& e : each) e.clear();   // (the GPU draws it: nothing from the CPU)
             } else
             if (!cBeams || cCheck) beam::parallel_for(items.size(), threads, [&](size_t k) {
                 each[k].clear();

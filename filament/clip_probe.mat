@@ -1,0 +1,46 @@
+// Clip-distance probe (see clip_probe.mm): can a Filament material hand the GPU's own clipper up to 8 half-planes?
+// (Yes, with matc and the runtime as shipped: checked on Metal.)
+// One triangle covers the whole picture; the vertex stage gives 8 clip distances that together are an octagon.
+// Nothing is tested in the fragment stage: whatever cuts the triangle down to the octagon is the hardware.
+material {
+    name : clip_probe,
+    shadingModel : unlit,
+    blending : opaque,
+    depthWrite : false,
+    depthCulling : false,
+    culling : none,
+    doubleSided : true,
+    parameters : [
+        { type : float, name : planes }    // how many of the 8 are in use
+    ]
+}
+
+vertex {
+    // The GPU's own clip distances (the built-in gl_ClipDistance of desktop GLSL, [[clip_distance]] on Metal,
+    // ClipDistance on Vulkan). matc first checks a material's code as ES, where the built-in does not exist, so the
+    // lines are kept from that check; the real compile for desktop has them. Indices must be written out (the
+    // built-in's size is taken from the largest one used).
+#ifndef GL_ES
+#define CLIP(k, value) gl_ClipDistance[k] = (value)
+#else
+#define CLIP(k, value)
+#endif
+    float side(int k, vec2 p) {
+        float a = 6.2831853 * (float(k) + 0.5) / 8.0;
+        return float(k) < materialParams.planes ? 0.6 - dot(vec2(cos(a), sin(a)), p) : 1.0;
+    }
+    void materialVertex(inout MaterialVertexInputs material) {
+        int v = getVertexIndex();
+        vec2 p = vec2(v == 1 ? 3.0 : -1.0, v == 2 ? 3.0 : -1.0);
+        CLIP(0, side(0, p)); CLIP(1, side(1, p)); CLIP(2, side(2, p)); CLIP(3, side(3, p));
+        CLIP(4, side(4, p)); CLIP(5, side(5, p)); CLIP(6, side(6, p)); CLIP(7, side(7, p));
+        material.worldPosition = mulMat4x4Float3(getWorldFromModelMatrix(), vec3(p, 0.0));
+    }
+}
+
+fragment {
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        material.baseColor = vec4(1.0, 0.5, 0.25, 1.0);
+    }
+}
