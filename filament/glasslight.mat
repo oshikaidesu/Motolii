@@ -1,4 +1,4 @@
-// glasslight.mat: the light a glass thing throws on the floor in the sun. For ANY mesh: it asks only where the
+// glasslight.mat: the light a glass thing throws on the floor in the sun (drawn into the floor's picture of sunlight, kit.h). For ANY mesh: it asks only where the
 // surface is and which way it faces. The way the makers of such pictures do it in real time (a finely cut surface,
 // every corner's light bent and landed, brightness from how the cut is squeezed), with one more thing left out: what
 // the light does INSIDE the glass. A corner in the sun bends its ray once, by its own facing, and that ray is taken
@@ -14,13 +14,13 @@ material {
     shadingModel : unlit,
     blending : add,
     depthWrite : false,
+    depthCulling : false,
     culling : none,
     instanced : true,
     requires : [ tangents ],
     variables : [ { name : tint, precision : high }, { name : where, precision : high } ],
     parameters : [
         { type : float3, name : sunWay },       // the way the sunlight travels
-        { type : float3, name : sunOnFloor },   // what the sun adds to the bare floor at noon: floor colour * lux / pi
         { type : float,  name : colours },      // copies drawn (the most colours)
         { type : float,  name : size },         // the mesh's size (its bounds' longest half), in its own units
         { type : float,  name : ior },
@@ -93,6 +93,6 @@ fragment {
         highp float before = abs(dFdx(w.x) * dFdy(w.y) - dFdx(w.y) * dFdy(w.x));   // the cut's size across the sunlight ...
         highp float after = abs(dFdx(w.z) * dFdy(w.w) - dFdx(w.w) * dFdy(w.z));    // ... and on the floor
         float squeeze = min(before / max(after, 1e-12) / -materialParams.sunWay.y, materialParams.most);   // against the bare sunlit floor
-        material.baseColor = vec4(variable_tint.rgb * (squeeze * materialParams.gain) * materialParams.sunOnFloor * getExposure(), 1.0);
+        material.baseColor = vec4(variable_tint.rgb * (squeeze * materialParams.gain), 1.0);   // (in bare suns: the paper turns it into light)
     }
 }

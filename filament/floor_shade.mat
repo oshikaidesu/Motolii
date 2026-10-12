@@ -1,0 +1,31 @@
+// floor_shade.mat: a mesh laid flat on the floor along the sun's way, in one plain value. kit.h draws the floor's
+// picture of sunlight with it: the whole floor in 1 (bare sun), then every thing's shade in 0 on top.
+material {
+    name : floor_shade,
+    shadingModel : unlit,
+    blending : opaque,
+    depthCulling : false,
+    depthWrite : false,
+    culling : none,
+    parameters : [
+        { type : float3, name : sunWay },
+        { type : float,  name : value },
+        { type : float,  name : floorY }
+    ]
+}
+
+vertex {
+    void materialVertex(inout MaterialVertexInputs material) {
+        highp mat4 toScene = getUserWorldFromWorldMatrix();
+        highp vec3 P = mulMat4x4Float3(toScene, material.worldPosition.xyz).xyz;
+        highp vec3 X = P + materialParams.sunWay * (max(P.y - materialParams.floorY, 0.0) / -materialParams.sunWay.y);
+        material.worldPosition = vec4(transpose(mat3(toScene)) * (X - toScene[3].xyz), 1.0);
+    }
+}
+
+fragment {
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        material.baseColor = vec4(vec3(materialParams.value), 1.0);
+    }
+}

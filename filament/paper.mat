@@ -1,0 +1,39 @@
+// paper.mat: the paper the glass things stand on. Lit by Filament as any lit surface, but how much of the SUN reaches
+// a place is not Filament's shadow: it is read from `sunlight`, a picture of the floor from straight above
+// (kit.h draws it): 1 where the sun falls bare, 0 in a thing's shade, more than 1 where glass throws light.
+// Shade and thrown light lie in the one picture and are softened here together, by the same amount, so they
+// belong to each other; the hook is Filament's own (customSurfaceShading: the material says what a light does).
+material {
+    name : paper,
+    shadingModel : lit,
+    customSurfaceShading : true,
+    parameters : [
+        { type : float3, name : color },
+        { type : sampler2d, name : sunlight, precision : medium },
+        { type : mat4, name : pictureFromScene, precision : high },   // the scene's coordinates -> the picture's (-1..1)
+        { type : float, name : soft }                                 // how far the softening reaches, in the picture's own 0..1
+    ]
+}
+
+fragment {
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        material.baseColor = vec4(materialParams.color, 1.0);
+        material.roughness = 0.9;
+        material.metallic = 0.0;
+        material.reflectance = 0.3;
+    }
+    vec3 surfaceShading(const MaterialInputs materialInputs, const ShadingData shadingData, const LightData lightData) {
+        highp vec4 c = materialParams.pictureFromScene * vec4(getUserWorldPosition(), 1.0);
+        highp vec2 uv = uvToRenderTargetUV(c.xy * 0.5 + 0.5);
+        // a fixed spiral of lookups: the same every frame, no noise
+        vec3 sun = vec3(0.0);
+        for (int i = 0; i < 16; i++) {
+            float r = sqrt((float(i) + 0.5) / 16.0) * materialParams.soft, a = float(i) * 2.39996;
+            sun += textureLod(materialParams_sunlight, uv + r * vec2(cos(a), sin(a)), 0.0).rgb;
+        }
+        sun *= 1.0 / 16.0;
+        return shadingData.diffuseColor * (1.0 / PI) * lightData.colorIntensity.rgb
+               * (lightData.colorIntensity.w * lightData.attenuation * lightData.NdotL) * sun;
+    }
+}

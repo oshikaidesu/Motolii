@@ -1,4 +1,4 @@
-// boxlight.mat: the light a glass box throws on the floor in the sun, the way the makers of such pictures do it
+// boxlight.mat: the light a glass box throws on the floor in the sun (drawn into the floor's picture of sunlight, kit.h), the way the makers of such pictures do it
 // (a finely cut surface, every corner's light bent and landed, brightness from how the cut is squeezed):
 // the mesh is the box's own round-edged surface, cut fine. Each corner in the sun takes its ray into the box, through
 // it (mirrored inside where it cannot leave), out, and down to the floor: the corner is drawn THERE. Where the landed
@@ -15,6 +15,7 @@ material {
     shadingModel : unlit,
     blending : add,
     depthWrite : false,
+    depthCulling : false,
     culling : none,
     instanced : true,
     variables : [ { name : tint, precision : high }, { name : where, precision : high }, { name : more, precision : high } ],
@@ -24,7 +25,6 @@ material {
         { type : float4[64], name : poseZ, precision : high },
         { type : float4[64], name : poseAt, precision : high },  // its middle
         { type : float3, name : sunWay },                        // the way the sunlight travels
-        { type : float3, name : sunOnFloor },                    // what the sun adds to the bare floor at noon: floor colour * lux / pi
         { type : float,  name : colours },                       // copies per box
         { type : float,  name : ior },
         { type : float,  name : abbe },                          // how far apart the colours' indices lie (small: far)
@@ -129,6 +129,6 @@ fragment {
         highp float before = abs(dFdx(w.x) * dFdy(w.y) - dFdx(w.y) * dFdy(w.x));   // the cut's size across the sunlight ...
         highp float after = abs(dFdx(w.z) * dFdy(w.w) - dFdx(w.w) * dFdy(w.z));    // ... and on the floor
         float squeeze = min(before / max(after, 1e-12) / -materialParams.sunWay.y, materialParams.most);   // against the bare sunlit floor
-        material.baseColor = vec4(variable_tint.rgb * (squeeze * variable_more.y * materialParams.gain) * materialParams.sunOnFloor * getExposure(), 1.0);
+        material.baseColor = vec4(variable_tint.rgb * (squeeze * variable_more.y * materialParams.gain), 1.0);   // (in bare suns: the paper turns it into light)
     }
 }

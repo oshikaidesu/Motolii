@@ -14,7 +14,7 @@ int main() {
     static FilmicToneMapper filmic;
     s.view->setColorGrading(ColorGrading::Builder().toneMapper(&filmic).contrast(1.4f).saturation(1.15f).build(*s.engine));
     Sunlit lit;
-    if (!paper_and_sun(s, lit)) return fail("paper and sun (floor_lit.filamat, out/lightroom)");
+    if (!paper_and_sun(s, lit)) return fail("paper and sun (paper.filamat, floor_shade.filamat, out/lightroom)");
 
     struct Thing { Mesh* mesh; mat4f place; float thick; };
     Mesh* word = letters("GLASS", 0.25f, 0.02f);
@@ -29,7 +29,7 @@ int main() {
         if (!glass) return fail("poster_glass.filamat");
         glass->setParameter("thickness", t.thick);
         glass->setParameter("lean", 0.f);
-        if (!shadow_of(s, t.mesh, {t.place})) return fail("shadow_only.filamat");
+        if (!shadow_of(s, lit, t.mesh, {t.place})) return fail("floor_shade.filamat");
         if (!glass_light(s, lit, t.mesh, {t.place})) return fail("glasslight.filamat");
     }
 

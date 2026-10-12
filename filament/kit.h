@@ -72,6 +72,8 @@ struct Stage {
     Camera* camera;
     View* view_behind;   // the same scene without the glass (layer 2), drawn first into `behind`: what a block shows
     Texture* behind;
+    View* view_floor = nullptr;   // the floor from straight above (layer 4 only), drawn before all into `sunlight` (paper_and_sun)
+    Texture* sunlight = nullptr;
 };
 
 static Stage open_stage(int w, int h) {
@@ -120,10 +122,11 @@ static bool room(Stage& s, const char* ktx, float intensity) {
     return true;
 }
 
-// A mesh on the stage, once per place. layer 2: left out of the picture of what is behind (all the glass).
+// A mesh on the stage, once per place. layer 2: left out of the picture of what is behind (all the glass);
+// layer 4: only in the floor's picture of sunlight. order: among things of a kind, lower is drawn first.
 // copies: how many times each is drawn in one go (a material that asks for its instance index tells them apart).
 static MaterialInstance* add(Stage& s, Mesh* m, const char* filamat, std::vector<mat4f> places = {mat4f{}}, uint8_t layer = 1,
-                             bool shadows = false, int copies = 1) {
+                             bool shadows = false, int copies = 1, int order = 4) {
     static std::vector<std::vector<uint8_t>> pkgs;
     pkgs.push_back(load_file(filamat));
     Material* mat = pkgs.back().empty() ? nullptr : Material::Builder().package(pkgs.back().data(), pkgs.back().size()).build(*s.engine);
@@ -149,7 +152,7 @@ static MaterialInstance* add(Stage& s, Mesh* m, const char* filamat, std::vector
         utils::Entity e = utils::EntityManager::get().create();
         s.engine->getTransformManager().create(e, {}, place);
         RenderableManager::Builder(1).geometry(0, RenderableManager::PrimitiveType::TRIANGLES, vb, ib).material(0, mi)
-            .boundingBox({(low + high) * 0.5f, max((high - low) * 0.5f, float3{1e-3f})}).culling(false).castShadows(shadows).receiveShadows(shadows).layerMask(0xFF, layer).instances((size_t)copies).build(*s.engine, e);
+            .boundingBox({(low + high) * 0.5f, max((high - low) * 0.5f, float3{1e-3f})}).culling(false).castShadows(shadows).receiveShadows(shadows).layerMask(0xFF, layer).instances((size_t)copies).priority((uint8_t)order).build(*s.engine, e);
         s.scene->addEntity(e);
     }
     return mi;
@@ -272,8 +275,12 @@ static Mesh* letters(const char* text, float deep, float chamfer) {
     return m->idx.empty() ? nullptr : m;
 }
 
-// Pale paper under a hard sun, with one of Filament's studios as the sky that fills the shadows (kept low, so the
-// shadows stay dark). What the glass things stand on in blocks.mm and shapes.mm.
+// Paper under a hard sun, with one of Filament's studios as the sky that fills the shadows (kept low, so the shadows
+// stay dark). What the glass things stand on in blocks.mm and shapes.mm.
+// How much sun reaches the paper is one picture, `sunlight`: the floor from straight above, 1 where the sun is bare,
+// 0 in a thing's shade (shadow_of), more where glass throws its light (glass_light, box_light). paper.mat softens it
+// and turns it into light, so shade and thrown light are equally soft and of one piece. (Filament's own sun shadow is
+// not used: it is shade or no shade, and knows nothing of thrown light.)
 struct Sunlit {
     float3 paper, sunWay;
     float sunLux;
@@ -281,31 +288,58 @@ struct Sunlit {
 static bool paper_and_sun(Stage& s, Sunlit& lit) {
     lit = {{0.52f, 0.60f, 0.65f}, normalize(float3{-0.55f, -0.50f, 0.67f}), 100000.f};   // (a middle blue-grey: the light the glass throws must be able to be brighter than the paper; the sun low, the shadows long)
     if (!room(s, "out/lightroom/lightroom_ibl.ktx", 7000.f)) return false;
-    LightManager::ShadowOptions shadow;
-    shadow.mapSize = 4096;
     utils::Entity sun = utils::EntityManager::get().create();
     LightManager::Builder(LightManager::Type::SUN).color({1.0f, 0.98f, 0.95f}).intensity(lit.sunLux).direction(lit.sunWay)
-        .castShadows(true).shadowOptions(shadow).build(*s.engine, sun);
+        .castShadows(false).build(*s.engine, sun);
     s.scene->addEntity(sun);
+
+    // the picture of sunlight: 8 units of floor about the middle, seen from above
+    const float half = 4.f;
+    const uint32_t size = 2048;
+    s.sunlight = Texture::Builder().width(size).height(size).levels(1).usage(Texture::Usage::COLOR_ATTACHMENT | Texture::Usage::SAMPLEABLE)
+                     .format(Texture::InternalFormat::RGBA16F).build(*s.engine);
+    Texture* depth = Texture::Builder().width(size).height(size).levels(1).usage(Texture::Usage::DEPTH_ATTACHMENT).format(Texture::InternalFormat::DEPTH24).build(*s.engine);
+    Camera* above = s.engine->createCamera(utils::EntityManager::get().create());
+    above->setProjection(Camera::Projection::ORTHO, -half, half, -half, half, 0.1, 40.0);
+    above->lookAt({0, 20, 0}, {0, 0, 0}, {0, 0, -1});
+    s.view_floor = s.engine->createView();
+    s.view_floor->setScene(s.scene);
+    s.view_floor->setCamera(above);
+    s.view_floor->setViewport({0, 0, size, size});
+    s.view_floor->setRenderTarget(RenderTarget::Builder().texture(RenderTarget::AttachmentPoint::COLOR, s.sunlight).texture(RenderTarget::AttachmentPoint::DEPTH, depth).build(*s.engine));
+    s.view_floor->setPostProcessingEnabled(false);
+    s.view_floor->setShadowingEnabled(false);
+    s.view_floor->setVisibleLayers(0xFF, 0x04);
+
     Mesh* floor = new Mesh;
     for (float2 c : {float2{-1, -1}, float2{1, -1}, float2{1, 1}, float2{-1, 1}}) {
-        floor->pos.push_back({8.f * c.x, 0.f, -8.f * c.y});   // (no larger than the picture needs: the sun's shadow map is spread over all of it)
+        floor->pos.push_back({2.f * half * c.x, 0.f, -2.f * half * c.y});
         floor->nrm.push_back({0, 1, 0});
         floor->uv.push_back(c * 0.5f + 0.5f);
     }
     floor->idx = {0, 1, 2, 0, 2, 3};
-    MaterialInstance* floor_mi = add(s, floor, "floor_lit.filamat", {mat4f{}}, 1, true);
-    if (!floor_mi) return false;
-    floor_mi->setParameter("color", float4{lit.paper, 1.f});
-    floor_mi->setParameter("roughness", 0.9f);
+    MaterialInstance* bare = add(s, floor, "floor_shade.filamat", {mat4f{}}, 4, false, 1, 0);   // the bare sun, everywhere, first
+    if (!bare) return false;
+    bare->setParameter("sunWay", lit.sunWay);
+    bare->setParameter("value", 1.f);
+    bare->setParameter("floorY", 0.f);
+    MaterialInstance* paper = add(s, floor, "paper.filamat");
+    if (!paper) return false;
+    paper->setParameter("color", lit.paper);
+    paper->setParameter("sunlight", s.sunlight, TextureSampler(TextureSampler::MinFilter::LINEAR, TextureSampler::MagFilter::LINEAR, TextureSampler::WrapMode::CLAMP_TO_EDGE));
+    paper->setParameter("pictureFromScene", mat4f(above->getProjectionMatrix() * above->getViewMatrix()));
+    paper->setParameter("soft", 0.03f / (2.f * half));   // (softened over 0.02 of the floor's units)
     return true;
 }
 
-// A glass thing's shadow: the same mesh again, drawn as nothing, casting. (The glass itself is on layer 2, left out
-// of the picture of what is behind, and a thing left out of a view casts no shadow in it; so the paper seen THROUGH
-// the glass would lie in full sun.)
-static bool shadow_of(Stage& s, Mesh* m, std::vector<mat4f> places) {
-    return add(s, m, "shadow_only.filamat", places, 1, true) != nullptr;
+// A glass thing's shade on the paper: its mesh laid flat along the sun's way, in 0, into the picture of sunlight.
+static bool shadow_of(Stage& s, const Sunlit& lit, Mesh* m, std::vector<mat4f> places) {
+    MaterialInstance* mi = add(s, m, "floor_shade.filamat", places, 4, false, 1, 1);
+    if (!mi) return false;
+    mi->setParameter("sunWay", lit.sunWay);
+    mi->setParameter("value", 0.f);
+    mi->setParameter("floorY", 0.f);
+    return true;
 }
 
 // The light a glass thing throws on the paper (glasslight.mat): the thing's own mesh at its places, once a colour.
@@ -313,10 +347,9 @@ static bool shadow_of(Stage& s, Mesh* m, std::vector<mat4f> places) {
 // uneven: how far its faces lean from their own facing (0 for a mesh that is uneven itself), over `unevenSize` of the mesh's units.
 static bool glass_light(Stage& s, const Sunlit& lit, Mesh* m, std::vector<mat4f> places, float uneven = 0.f, float unevenSize = 1.f) {
     const int colours = 20;
-    MaterialInstance* mi = add(s, m, "glasslight.filamat", places, 1, false, colours);
+    MaterialInstance* mi = add(s, m, "glasslight.filamat", places, 4, false, colours);
     if (!mi) return false;
     mi->setParameter("sunWay", lit.sunWay);
-    mi->setParameter("sunOnFloor", lit.paper * (lit.sunLux / 3.14159265f));
     mi->setParameter("colours", (float)colours);
     float size = 0.f;
     for (const float3& p : m->pos) size = std::max(size, std::max(std::fabs(p.x), std::max(std::fabs(p.y), std::fabs(p.z))));
@@ -347,19 +380,18 @@ static bool box_light(Stage& s, const Sunlit& lit, std::vector<mat4f> places, fl
         poseZ[i] = {normalize(p[2].xyz), length(p[2].xyz) * 0.5f};
         poseAt[i] = {p[3].xyz, 0.f};
     }
-    MaterialInstance* mi = add(s, cube(round, 16), "boxlight.filamat", {mat4f{}}, 1, false, (int)places.size() * colours);
+    MaterialInstance* mi = add(s, cube(round, 16), "boxlight.filamat", {mat4f{}}, 4, false, (int)places.size() * colours);
     if (!mi) return false;
     mi->setParameter("poseX", poseX, 64);
     mi->setParameter("poseY", poseY, 64);
     mi->setParameter("poseZ", poseZ, 64);
     mi->setParameter("poseAt", poseAt, 64);
     mi->setParameter("sunWay", lit.sunWay);
-    mi->setParameter("sunOnFloor", lit.paper * (lit.sunLux / 3.14159265f));
     mi->setParameter("colours", (float)colours);
     mi->setParameter("ior", 1.5f);
     mi->setParameter("abbe", 6.f);
     mi->setParameter("round", round);
-    mi->setParameter("lean", 0.01f);
+    mi->setParameter("lean", 0.f);
     mi->setParameter("most", 6.f);
     mi->setParameter("gain", 1.f);
     mi->setParameter("floorY", 0.f);
@@ -372,6 +404,7 @@ static bool shoot(Stage& s, const char* path) {
     pic.resize((size_t)s.w * s.h * 4);
     for (int i = 0; i < 3; ++i) {
         while (!s.renderer->beginFrame(s.swap)) {}
+        if (s.view_floor) s.renderer->render(s.view_floor);
         s.renderer->render(s.view_behind);
         s.renderer->render(s.view);
         if (i == 2)
