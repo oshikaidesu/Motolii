@@ -2327,8 +2327,16 @@ int main(int argc, char** argv) {
                     all.beams += st.beams; all.leaves += st.leaves; all.corners += st.corners;
                     all.deepest = std::max(all.deepest, st.deepest);
                     for (int i = 0; i < 12; ++i) all.light[i] += st.light[i];
-                    for (int i = 0; i < 20; ++i) all.byCorners[i] += st.byCorners[i];
+                    for (int i = 0; i < 20; ++i) { all.byCorners[i] += st.byCorners[i]; all.leavesCorners[i] += st.leavesCorners[i]; }
+                    all.cuts += st.cuts; all.cutsBefore += st.cutsBefore; all.steps += st.steps;
+                    all.mostLeaves = std::max(all.mostLeaves, st.mostLeaves);
+                    all.mostCuts = std::max(all.mostCuts, st.mostCuts);
                 }
+                static long everLeaves = 0, everCuts = 0, everCorners = 0;
+                everLeaves = std::max(everLeaves, all.mostLeaves);
+                everCuts = std::max(everCuts, all.mostCuts);
+                for (int i = 3; i < 20; ++i)
+                    if (all.leavesCorners[i] > 0) everCorners = std::max(everCorners, (long)i);
                 double sum = 0;
                 for (double l : all.light) sum += l;
                 std::printf("  BEAMSTAT frame %d: %.2f ms a frame on %u threads (mean so far), %ld beams followed, %ld patches drawn (%ld corners), deepest %d steps\n", frames,
@@ -2336,6 +2344,20 @@ int main(int argc, char** argv) {
                 std::printf("    light by how many faces it met inside:");
                 for (int i = 1; i < 12; ++i)
                     if (all.light[i] > 0) std::printf("  %d: %.1f%%", i, 100.0 * all.light[i] / sum);
+                {
+                    // what a version with no table in between would have to do: a place for every patch a colour
+                    // step may give, a fan of triangles for the most corners a patch may have, and every corner of
+                    // every place working the splitting out again, as far as its own patch (to the end if its place
+                    // is empty)
+                    const long places = everLeaves, tris = std::max(1L, everCorners - 2), perPlace = 3 * tris;
+                    const double runs = (double)all.steps * (double)places * (double)perPlace;
+                    const double filled = all.cutsBefore * (double)perPlace;
+                    const double empty = ((double)all.steps * (double)places - (double)all.leaves) * ((double)all.cuts / std::max(1L, all.steps)) * (double)perPlace;
+                    std::printf("\n    cuts made here (once each): %ld in %ld colour steps (most in one: %ld); most patches from one colour step so far: %ld, most corners: %ld", all.cuts,
+                                all.steps, everCuts, everLeaves, everCorners);
+                    std::printf("\n    with nothing kept in between: %ld places x %ld corners of triangles = %.0f runs of the vertex stage, making %.3g cuts (%.0f times as many)", places,
+                                perPlace, runs, filled + empty, (filled + empty) / std::max(1.0, (double)all.cuts));
+                }
                 std::printf("\n    pieces by number of corners:");
                 for (int i = 3; i < 20; ++i)
                     if (all.byCorners[i] > 0) std::printf("  %d: %ld", i, all.byCorners[i]);

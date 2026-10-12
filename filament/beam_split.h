@@ -66,6 +66,13 @@ inline SplitShape split_shape(const Solid& local, int use = 15) {
 struct SplitStats {
     long beams = 0, leaves = 0, corners = 0;
     long byCorners[20] = {};   // how many pieces of light (inside or leaving) had this many corners
+    // For a storage-free GPU version (every vertex works the splitting out again until it comes to its own patch):
+    long cuts = 0;             // cuts made (a beam against one wall ahead), all colour steps
+    long mostLeaves = 0;       // most patches one colour step of this solid gave
+    long mostCuts = 0;         // most cuts one colour step took
+    double cutsBefore = 0;     // summed over the patches: cuts made, within its colour step, up to and with the one that gave it
+    long steps = 0;            // colour steps traced
+    long leavesCorners[20] = {};   // patches by number of corners
     double light[12] = {};   // light that left the glass after meeting this many of its faces (the last one counted)
     int deepest = 0;
 };
@@ -119,6 +126,7 @@ inline void split_light(const SplitShape* shapes, const V3 R[3], double scale, V
     auto world = [&](V3 p) { return (R[0] * p.x + R[1] * p.y + R[2] * p.z) * scale + at; };
     auto turn = [&](V3 v) { return R[0] * v.x + R[1] * v.y + R[2] * v.z; };
     // a flat piece of light leaving the glass along `out`: down to the floor, as triangles
+    long cutsHere = 0, leavesHere = 0;   // within the colour step being traced
     auto land = [&](const Poly& P, V3 out, V3 rgb, double irrOnPlane, double cosOut) {
         const V3 dW = turn(out);
         if (!(dW.y < -1e-6)) return;
@@ -133,7 +141,7 @@ inline void split_light(const SplitShape* shapes, const V3 R[3], double scale, V
         for (int i = 1; i + 1 < P.n; ++i)
             for (int k : {0, i, i + 1})
                 tri.insert(tri.end(), {(float)X[k].x, (float)X[k].z, (float)(rgb.x * bright), (float)(rgb.y * bright), (float)(rgb.z * bright), (float)fl[k]});
-        if (st) { ++st->leaves; st->corners += P.n; }
+        if (st) { ++st->leaves; st->corners += P.n; ++st->leavesCorners[std::min(19, P.n)]; ++leavesHere; st->cutsBefore += (double)cutsHere; }
     };
     // the band of sun, as halves in the solid's own frame: g(p) = m . world(p) - c, kept where |g - k every| <= half
     const V3 mW{band.ux, -(band.ux * sun.x + band.uz * sun.z) / std::min(sun.y, -1e-6), band.uz};
@@ -150,6 +158,8 @@ inline void split_light(const SplitShape* shapes, const V3 R[3], double scale, V
             if (n > filmN[f][0] && n < filmN[f][1]) use |= 1 << f;
         const SplitShape& sh = shapes[mirrored ? 0 : use];
         stack.clear();
+        cutsHere = 0;
+        leavesHere = 0;
         // the light as it comes in: every sunlit face of the solid, by the cells it belongs to, cut to the band of sun
         for (size_t c = 0; c < sh.cells.size(); ++c) {
             const SplitCell& cell = sh.cells[c];
@@ -203,6 +213,7 @@ inline void split_light(const SplitShape* shapes, const V3 R[3], double scale, V
                 Poly P = b.poly;
                 for (int i = 0; i < P.n; ++i) P.p[(size_t)i] = P.p[(size_t)i] + b.d * ((cell.planes[f].o - dot(nB, P.p[(size_t)i])) / db);
                 cut_to_face(P, F, nB);
+                ++cutsHere;
                 if (P.n < 3) continue;
                 const double a = area(P);
                 const double irr = b.irr * db / b.cosOn;
@@ -227,6 +238,12 @@ inline void split_light(const SplitShape* shapes, const V3 R[3], double scale, V
                     else if (cell.across[film] >= 0) stack.push_back(SplitBeam{P, b.d, irr, db, cell.across[film], b.faces, b.events + 1});
                 }
             }
+        }
+        if (st) {
+            st->cuts += cutsHere;
+            st->mostLeaves = std::max(st->mostLeaves, leavesHere);
+            st->mostCuts = std::max(st->mostCuts, cutsHere);
+            ++st->steps;
         }
     }
 }

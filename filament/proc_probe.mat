@@ -1,0 +1,43 @@
+// Procedural-vertex probe (see proc_probe.mm): the corners of the triangles come from getVertexIndex() and
+// getInstanceIndex() alone; the mesh has no attributes at all. Each instance draws one small triangle in its own
+// cell of the picture; loops and arrays in the vertex stage are used on purpose.
+material {
+    name : proc_probe,
+    shadingModel : unlit,
+    blending : opaque,
+    depthWrite : false,
+    depthCulling : false,
+    culling : none,
+    doubleSided : true,
+    instanced : true,
+    variables : [ tint ],
+    parameters : [
+        { type : float4[64], name : table },
+        { type : float, name : cells }
+    ]
+}
+
+vertex {
+    void materialVertex(inout MaterialVertexInputs material) {
+        int v = getVertexIndex(), i = getInstanceIndex();
+        float n = materialParams.cells;
+        vec2 corner[3];
+        for (int k = 0; k < 3; k++) corner[k] = vec2(k == 1 ? 0.8 : 0.1, k == 2 ? 0.8 : 0.1);
+        float acc = 0.0;
+        for (int k = 0; k < 64; k++) {            // (a loop with a table, to see that the vertex stage takes it)
+            if (k > i) break;
+            acc += materialParams.table[k].x;
+        }
+        vec2 cell = vec2(float(i - (i / int(n)) * int(n)), float(i / int(n)));
+        vec2 p = (cell + corner[v - (v / 3) * 3]) / n * 2.0 - 1.0;
+        material.tint = vec4(acc, float(v), float(i), 1.0);
+        material.worldPosition = mulMat4x4Float3(getWorldFromModelMatrix(), vec3(p, 0.0));
+    }
+}
+
+fragment {
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        material.baseColor = variable_tint;
+    }
+}
