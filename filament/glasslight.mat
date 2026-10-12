@@ -93,6 +93,6 @@ fragment {
         highp float before = abs(dFdx(w.x) * dFdy(w.y) - dFdx(w.y) * dFdy(w.x));   // the cut's size across the sunlight ...
         highp float after = abs(dFdx(w.z) * dFdy(w.w) - dFdx(w.w) * dFdy(w.z));    // ... and on the floor
         float squeeze = min(before / max(after, 1e-12) / -materialParams.sunWay.y, materialParams.most);   // against the bare sunlit floor
-        material.baseColor = vec4(variable_tint.rgb * (squeeze * materialParams.gain), 1.0);   // (in bare suns: the paper turns it into light)
+        material.baseColor = vec4(variable_tint.rgb * (squeeze * materialParams.gain), 0.0);   // (in bare suns: the paper turns it into light; the fourth number, how far shade flew, is left as it is)
     }
 }

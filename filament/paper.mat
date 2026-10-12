@@ -3,6 +3,8 @@
 // (kit.h draws it): 1 where the sun falls bare, 0 in a thing's shade, more than 1 where glass throws light.
 // Shade and thrown light lie in the one picture and are softened here together, by the same amount, so they
 // belong to each other; the hook is Filament's own (customSurfaceShading: the material says what a light does).
+// How much: as a sun with some width does it. The picture's fourth number is how far the shade at a place flew
+// from its thing; the softening reaches that far times the sun's width: sharp at a thing's foot, soft far from it.
 material {
     name : paper,
     shadingModel : lit,
@@ -11,7 +13,9 @@ material {
         { type : float3, name : color },
         { type : sampler2d, name : sunlight, precision : medium },
         { type : mat4, name : pictureFromScene, precision : high },   // the scene's coordinates -> the picture's (-1..1)
-        { type : float, name : soft }                                 // how far the softening reaches, in the picture's own 0..1
+        { type : float, name : sunWide },                             // the sun's width: how far shade spreads for every unit it flew (a tangent)
+        { type : float, name : perUnit },                             // one unit of the floor, in the picture's own 0..1
+        { type : float, name : furthest }                             // the furthest any shade flies, in floor units
     ]
 }
 
@@ -26,13 +30,22 @@ fragment {
     vec3 surfaceShading(const MaterialInputs materialInputs, const ShadingData shadingData, const LightData lightData) {
         highp vec4 c = materialParams.pictureFromScene * vec4(getUserWorldPosition(), 1.0);
         highp vec2 uv = uvToRenderTargetUV(c.xy * 0.5 + 0.5);
+        // how far the shade about here flew: the most of it within the widest reach (a ring and the place itself)
+        float widest = materialParams.sunWide * materialParams.furthest * materialParams.perUnit;
+        float flown = textureLod(materialParams_sunlight, uv, 0.0).a;
+        for (int i = 0; i < 8; i++) {
+            float a = float(i) * 0.785398;
+            flown = max(flown, textureLod(materialParams_sunlight, uv + widest * vec2(cos(a), sin(a)), 0.0).a);
+            flown = max(flown, textureLod(materialParams_sunlight, uv + 0.5 * widest * vec2(cos(a + 0.39), sin(a + 0.39)), 0.0).a);
+        }
+        float reach = materialParams.sunWide * flown * materialParams.perUnit;
         // a fixed spiral of lookups: the same every frame, no noise
         vec3 sun = vec3(0.0);
-        for (int i = 0; i < 16; i++) {
-            float r = sqrt((float(i) + 0.5) / 16.0) * materialParams.soft, a = float(i) * 2.39996;
+        for (int i = 0; i < 24; i++) {
+            float r = sqrt((float(i) + 0.5) / 24.0) * reach, a = float(i) * 2.39996;
             sun += textureLod(materialParams_sunlight, uv + r * vec2(cos(a), sin(a)), 0.0).rgb;
         }
-        sun *= 1.0 / 16.0;
+        sun *= 1.0 / 24.0;
         return shadingData.diffuseColor * (1.0 / PI) * lightData.colorIntensity.rgb
                * (lightData.colorIntensity.w * lightData.attenuation * lightData.NdotL) * sun;
     }

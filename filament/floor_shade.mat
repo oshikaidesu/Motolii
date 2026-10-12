@@ -1,5 +1,7 @@
 // floor_shade.mat: a mesh laid flat on the floor along the sun's way, in one plain value. kit.h draws the floor's
 // picture of sunlight with it: the whole floor in 1 (bare sun), then every thing's shade in 0 on top.
+// Beside the value it writes how far the shade flew from the thing to the floor (the picture's fourth number):
+// a sun has some width, so shade is sharp at a thing's foot and softer the further it flew (paper.mat).
 material {
     name : floor_shade,
     shadingModel : unlit,
@@ -7,6 +9,7 @@ material {
     depthCulling : false,
     depthWrite : false,
     culling : none,
+    variables : [ flown ],
     parameters : [
         { type : float3, name : sunWay },
         { type : float,  name : value },
@@ -19,6 +22,7 @@ vertex {
         highp mat4 toScene = getUserWorldFromWorldMatrix();
         highp vec3 P = mulMat4x4Float3(toScene, material.worldPosition.xyz).xyz;
         highp vec3 X = P + materialParams.sunWay * (max(P.y - materialParams.floorY, 0.0) / -materialParams.sunWay.y);
+        material.flown = vec4(length(X - P), 0.0, 0.0, 0.0);
         material.worldPosition = vec4(transpose(mat3(toScene)) * (X - toScene[3].xyz), 1.0);
     }
 }
@@ -26,6 +30,6 @@ vertex {
 fragment {
     void material(inout MaterialInputs material) {
         prepareMaterial(material);
-        material.baseColor = vec4(vec3(materialParams.value), 1.0);
+        material.baseColor = vec4(vec3(materialParams.value), variable_flown.x);
     }
 }

@@ -328,7 +328,9 @@ static bool paper_and_sun(Stage& s, Sunlit& lit) {
     paper->setParameter("color", lit.paper);
     paper->setParameter("sunlight", s.sunlight, TextureSampler(TextureSampler::MinFilter::LINEAR, TextureSampler::MagFilter::LINEAR, TextureSampler::WrapMode::CLAMP_TO_EDGE));
     paper->setParameter("pictureFromScene", mat4f(above->getProjectionMatrix() * above->getViewMatrix()));
-    paper->setParameter("soft", 0.03f / (2.f * half));   // (softened over 0.02 of the floor's units)
+    paper->setParameter("sunWide", 0.022f);   // (a sun some 4.5 degrees wide: far wider than the true one, for the softness)
+    paper->setParameter("perUnit", 1.f / (2.f * half));
+    paper->setParameter("furthest", 2.5f);   // (softened over 0.02 of the floor's units)
     return true;
 }
 
