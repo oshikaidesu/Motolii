@@ -199,7 +199,7 @@ int main() {
     view->setScene(scene);
     view->setCamera(camera);
     view->setViewport({0, 0, (uint32_t)W, (uint32_t)H});
-    view->setColorGrading(ColorGrading::Builder().toneMapper(&filmic).saturation(0.75f).build(*engine));
+    view->setColorGrading(ColorGrading::Builder().toneMapper(&filmic).contrast(1.3f).saturation(1.2f).build(*engine));
     view->setDithering(View::Dithering::NONE);
     view->setAntiAliasing(View::AntiAliasing::FXAA);
     view->setScreenSpaceRefractionEnabled(true);
@@ -221,7 +221,7 @@ int main() {
         .castShadows(false).build(*engine, sun);
     scene->addEntity(sun);
 
-    // layer 2: left out of the picture of what is behind (the glass blocks themselves)
+    // layer 2: left out of the picture of what is behind (all the glass)
     auto add = [&](Mesh* m, const char* filamat, std::vector<mat4f> places = {mat4f{}}, uint8_t layer = 1) -> MaterialInstance* {
         static std::vector<std::vector<uint8_t>> pkgs;
         pkgs.push_back(load_file(filamat));
@@ -267,12 +267,14 @@ int main() {
     Texture* tex = Texture::Builder().width(W).height(H).levels(1).format(Texture::InternalFormat::SRGB8_A8).build(*engine);
     tex->setImage(*engine, 0, Texture::PixelBufferDescriptor(px.data(), px.size(), Texture::Format::RGBA, Texture::Type::UBYTE));
     sheet_mi->setParameter("color", tex, TextureSampler(TextureSampler::MinFilter::LINEAR, TextureSampler::MagFilter::LINEAR));
-    MaterialInstance* band_mi = add(band(), "poster_glass.filamat");
+    MaterialInstance* band_mi = add(band(), "poster_glass.filamat", {mat4f{}}, 2);
     if (!band_mi) return fail("poster_glass.filamat");
     band_mi->setParameter("thickness", 0.6f);
     band_mi->setParameter("lean", 0.f);
 
-    // what is behind the blocks: the same scene without them, drawn first into a picture of its own
+    // what is behind the blocks: the poster alone, drawn first into a picture of its own. (Not the band: a block
+    // does not show the band through itself. With the band in it Filament made its copy of the screen and its
+    // seven blurred steps twice a frame; a music video wants the lavish picture, not the exact one.)
     Texture* behind = Texture::Builder().width(W).height(H).levels(1).usage(Texture::Usage::COLOR_ATTACHMENT | Texture::Usage::SAMPLEABLE)
                           .format(Texture::InternalFormat::RGBA16F).build(*engine);
     Texture* behind_depth = Texture::Builder().width(W).height(H).levels(1).usage(Texture::Usage::DEPTH_ATTACHMENT).format(Texture::InternalFormat::DEPTH24).build(*engine);
@@ -282,7 +284,7 @@ int main() {
     view_behind->setViewport({0, 0, (uint32_t)W, (uint32_t)H});
     view_behind->setRenderTarget(RenderTarget::Builder().texture(RenderTarget::AttachmentPoint::COLOR, behind).texture(RenderTarget::AttachmentPoint::DEPTH, behind_depth).build(*engine));
     view_behind->setPostProcessingEnabled(false);
-    view_behind->setScreenSpaceRefractionEnabled(true);
+    view_behind->setScreenSpaceRefractionEnabled(false);
     view->setVisibleLayers(0x03, 0x03);
     MaterialInstance* blocks_mi = add(cube(), "glassbox.filamat", heap(), 2);
     if (!blocks_mi) return fail("glassbox.filamat");
