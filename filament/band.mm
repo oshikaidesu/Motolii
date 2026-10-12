@@ -442,9 +442,9 @@ struct GlassLook {
 int main(int argc, char** argv) {
     const std::string which = argc > 1 ? argv[1] : "ref";
     const std::string model = std::getenv("MODEL") ? std::getenv("MODEL") : "A";
-    if (model != "A" && model != "B" && model != "C") return fail("MODEL: A, B or C");
+    if (model != "A" && model != "B" && model != "C" && model != "D") return fail("MODEL: A, B, C or D");
     const GlassLook look;
-    const int per = 96, sides = 96;
+    const int per = (int)envf("MESHPER", 96.f), sides = (int)envf("MESHSIDES", 96.f);   // (how finely the band's mesh is cut: along a span, around)
 
     // ---- a scene: paths (points of a closed loop, half width), what is behind, the camera
     struct Band { std::vector<V3> pts; float wide; float twist; };
@@ -668,6 +668,59 @@ int main(int argc, char** argv) {
         nearSides.push_back(add(std::move(nearMesh), near_mi, false));
     }
 
+    // model D (a probe): the bands' mesh in a tree three-mesh-bvh builds and packs itself (bvh_probe/build_bvh.mjs);
+    // band_bvh.mat walks it with three-mesh-bvh's own GLSL. Done once, here; a frame only draws.
+    MaterialInstance* bvh_mi = nullptr;
+    std::vector<V3> allPos;
+    std::vector<uint32_t> allIdx;
+    static std::vector<uint8_t> bvhBytes;
+    if (model == "D") {
+        for (const Built& m : cpuNear) {
+            const uint32_t base = (uint32_t)allPos.size();
+            allPos.insert(allPos.end(), m.pos.begin(), m.pos.end());
+            for (uint32_t i : m.idx) allIdx.push_back(base + i);
+        }
+        {
+            FILE* f = std::fopen("out/band-mesh.bin", "wb");
+            if (!f) return fail("out/band-mesh.bin");
+            const uint32_t head[2] = {(uint32_t)allPos.size(), (uint32_t)allIdx.size()};
+            std::fwrite(head, 4, 2, f);
+            std::fwrite(allPos.data(), sizeof(V3), allPos.size(), f);
+            std::fwrite(allIdx.data(), 4, allIdx.size(), f);
+            std::fclose(f);
+        }
+        if (std::system("node bvh_probe/build_bvh.mjs out/band-mesh.bin out/band-bvh.bin bvh_probe/three_mesh_bvh.glsl") != 0) return fail("bvh_probe/build_bvh.mjs (node, three-mesh-bvh)");
+        bvhBytes = load_file("out/band-bvh.bin");
+        auto bvh_pkg = load_file("band_bvh.filamat");
+        if (bvhBytes.empty() || bvh_pkg.empty()) return fail("out/band-bvh.bin / band_bvh.filamat");
+        Material* bvh_mat = Material::Builder().package(bvh_pkg.data(), bvh_pkg.size()).build(*engine);
+        if (!bvh_mat) return fail("band_bvh material");
+        bvh_mi = bvh_mat->createInstance();
+        TextureSampler exact1(TextureSampler::MinFilter::NEAREST, TextureSampler::MagFilter::NEAREST);
+        const char* names[4] = {"bvhPosition", "bvhIndex", "bvhBounds", "bvhContents"};
+        size_t at = 0;
+        for (int k = 0; k < 4; ++k) {   // (the file: three-mesh-bvh's four textures, as it packed them)
+            uint32_t h[4];
+            std::memcpy(h, bvhBytes.data() + at, 16);
+            at += 16;
+            const size_t bytes = (size_t)h[0] * h[1] * h[2] * 4;
+            const bool u = h[3] != 0;
+            if ((h[2] != 4 && h[2] != 2) || (h[2] == 2 && !u)) return fail("a texture layout this probe does not know");
+            Texture* t = Texture::Builder().width(h[0]).height(h[1]).levels(1).sampler(Texture::Sampler::SAMPLER_2D)
+                .format(h[2] == 2 ? Texture::InternalFormat::RG32UI : u ? Texture::InternalFormat::RGBA32UI : Texture::InternalFormat::RGBA32F).build(*engine);
+            t->setImage(*engine, 0, Texture::PixelBufferDescriptor(bvhBytes.data() + at, bytes,
+                h[2] == 2 ? Texture::Format::RG_INTEGER : u ? Texture::Format::RGBA_INTEGER : Texture::Format::RGBA, u ? Texture::Type::UINT : Texture::Type::FLOAT));
+            bvh_mi->setParameter(names[k], t, exact1);
+            at += bytes;
+        }
+        const float exposure = 1.0f / (1.2f * 256.f * 125.f);
+        bvh_mi->setParameter("studio", studio_tex, TextureSampler(TextureSampler::MinFilter::LINEAR, TextureSampler::MagFilter::LINEAR));
+        bvh_mi->setParameter("studioGain", 60000.f * exposure);
+        bvh_mi->setParameter("ior", envf("IOR", 1.5f));
+        bvh_mi->setParameter("most", envf("MOST", 5.f));
+        bvh_mi->setParameter("show", 0.0f);
+    }
+
     // the picture so far, held up in front of the camera for the next pass to bend (hero.mm's plate)
     TextureSampler plate_sampler(TextureSampler::MinFilter::LINEAR, TextureSampler::MagFilter::LINEAR);
     plate_sampler.setWrapModeS(TextureSampler::WrapMode::CLAMP_TO_EDGE);
@@ -707,6 +760,7 @@ int main(int argc, char** argv) {
     std::vector<uint8_t> pic((size_t)W * H * 4);
     std::vector<uint16_t> half((size_t)W * H * 4);
     bool readGlass = false;   // (checks: the glass pass's own numbers)
+    std::vector<float> full((size_t)W * H * 4);   // (model D's checks: whole numbers must come back whole)
     auto frame = [&](bool read) {
         bool ok = false;
         for (int spin = 0; spin < 4000 && !ok; ++spin) ok = renderer->beginFrame(swap);
@@ -733,6 +787,19 @@ int main(int argc, char** argv) {
             rm.setMaterialInstanceAt(rm.getInstance(plate), 0, plate_mi[1]);
             show({plate}, nearSides);                          // 3. + the near sides
             view->setRenderTarget(rtF[0]);
+            renderer->render(view);
+        } else if (model == "D") {
+            dress(nearSides, bvh_mi);
+            if (readGlass) {                                   // (checks) the glass alone, as numbers
+                show(nearSides, {});
+                view->setRenderTarget(rtGNear);
+                renderer->render(view);
+                renderer->readPixels(rtGNear, 0, 0, (uint32_t)W, (uint32_t)H,
+                                     backend::PixelBufferDescriptor(full.data(), full.size() * sizeof(float), backend::PixelDataFormat::RGBA, backend::PixelDataType::FLOAT));
+            }
+            rm.setMaterialInstanceAt(rm.getInstance(plate), 0, plate_mi[0]);
+            show({plate}, nearSides);                          // 2. the glass: every pixel asks the mesh's tree for its way
+            view->setRenderTarget(rtF[1]);
             renderer->render(view);
         } else {
             dress(farSides, gbuf_far);
@@ -779,7 +846,7 @@ int main(int argc, char** argv) {
     std::printf("wrote %s  (%zu band(s))\n", out.c_str(), bands.size());
 
     // ---- CHECK=1 (models B, C): is the way through the glass the right one?
-    if (std::getenv("CHECK") && model != "A") {
+    if (std::getenv("CHECK") && (model == "B" || model == "C")) {
         auto glass_numbers = [&](float showMode, float exactMode, std::vector<float>& outv) {
             two_mi->setParameter("show", showMode);
             two_mi->setParameter("exact", exactMode);
@@ -952,6 +1019,144 @@ int main(int argc, char** argv) {
             auto q = [&](double at) { return px.empty() ? 0.f : px[(size_t)(at * (double)(px.size() - 1))]; };
             std::printf("CHECK 3: of %ld glass pixels whose line leaves through the far side, it is looked up on screen for %.1f%% (taken %.1f units away) and %.1f%% (true floor and backdrop). Where both are on screen (%zu): the two places are %.0f pixels apart (median), %.0f (9 in 10 within), %.0f (worst)\n",
                         both, 100.0 * (double)nearOn / (double)std::max(1L, both), envf("BEYOND", 3.0f), 100.0 * (double)exactOn / (double)std::max(1L, both), px.size(), q(0.5), q(0.9), q(1.0));
+        }
+    }
+
+    // ---- CHECK=1 (model D): does three-mesh-bvh's tree, walked in a Filament material, give what the mesh itself gives?
+    // The CPU side below is a test twin: every triangle tried, the same rule as band_bvh.mat (flat normal of the
+    // triangle met, start 0.001 along the line). Geometry only: it says nothing about how the picture should look.
+    if (std::getenv("CHECK") && model == "D") {
+        const float cap = 32.f;
+        bvh_mi->setParameter("most", cap);
+        auto numbers = [&](float showMode, std::vector<float>& outv) {
+            bvh_mi->setParameter("show", showMode);
+            readGlass = true;
+            for (int i = 0; i < 2; ++i) { frame(false); engine->flushAndWait(); }
+            readGlass = false;
+            outv = full;
+        };
+        std::vector<float> g1, g2, g3;
+        numbers(1.f, g1);
+        numbers(2.f, g2);
+        numbers(3.f, g3);
+        bvh_mi->setParameter("show", 0.f);
+        bvh_mi->setParameter("most", envf("MOST", 5.f));
+
+        struct Hit { float t; V3 n; uint32_t c[3]; V3 smooth; };
+        auto first_hit = [&](V3 o, V3 d) {
+            Hit best{1e30f, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}};
+            for (size_t i = 0; i + 2 < allIdx.size(); i += 3) {
+                const V3 a = allPos[allIdx[i]], e1 = allPos[allIdx[i + 1]] - a, e2 = allPos[allIdx[i + 2]] - a;
+                const V3 pv = cross(d, e2);
+                const float det = dot(e1, pv);
+                if (std::fabs(det) < 1e-20f) continue;
+                const V3 tv = o - a;
+                const float u = dot(tv, pv) / det;
+                if (u < -1e-5f || u > 1.00001f) continue;
+                const V3 qv = cross(tv, e1);
+                const float v = dot(d, qv) / det;
+                if (v < -1e-5f || u + v > 1.00001f) continue;
+                const float t = dot(e2, qv) / det;
+                if (t >= -1e-5f && t < best.t) {
+                    V3 fn = norm(cross(e1, e2));
+                    if (dot(fn, d) > 0) fn = fn * -1.f;   // (facing the line, as three-mesh-bvh gives it)
+                    best = Hit{t, fn, {allIdx[i], allIdx[i + 1], allIdx[i + 2]}, {u, v, 0}};
+                }
+            }
+            return best;
+        };
+        std::vector<V3> allNrm;
+        for (const Built& m : cpuNear) allNrm.insert(allNrm.end(), m.nrm.begin(), m.nrm.end());
+        const float3 f3 = normalize(target - eye), r3 = normalize(cross(f3, float3{0, 1, 0})), u3 = cross(r3, f3);
+        const V3 F{f3.x, f3.y, f3.z}, Rr{r3.x, r3.y, r3.z}, U{u3.x, u3.y, u3.z}, E{eye.x, eye.y, eye.z};
+        const float th = std::tan(0.5f * fov * PI / 180.f), asp = (float)W / (float)H, n = envf("IOR", 1.5f);
+        const int MOST = (int)cap, every = (int)envf("CHECKEVERY", 12.f);
+        for (int flip = 0; flip < 2; ++flip) {   // (the numbers may come back upside down: the way that agrees is the right one)
+            long lines = 0, gpuNone = 0, sameTri = 0, sameCount = 0, cpuIn = 0, gpuIn = 0;
+            std::vector<float> lenErr, angErr, wayErr;
+            std::vector<long> cpuAfter((size_t)MOST + 3, 0), gpuAfter((size_t)MOST + 3, 0);
+            auto slot = [&](float c) { return c < -0.5f ? (size_t)MOST + 2 : c > 98.f ? (size_t)MOST + 1 : (size_t)std::lround(c); };
+            for (int y = every / 2; y < H; y += every)
+                for (int x = every / 2; x < W; x += every) {
+                    const float ndx = ((float)x + 0.5f) / (float)W * 2.f - 1.f, ndy = ((float)y + 0.5f) / (float)H * 2.f - 1.f;
+                    const V3 d = norm(F + Rr * (ndx * th * asp) + U * (ndy * th));
+                    const Hit h1 = first_hit(E, d);
+                    if (h1.t > 1e29f) continue;
+                    // (the way in: the smooth normal, as the drawn surface has it)
+                    V3 N = norm(allNrm[h1.c[0]] * (1 - h1.smooth.x - h1.smooth.y) + allNrm[h1.c[1]] * h1.smooth.x + allNrm[h1.c[2]] * h1.smooth.y);
+                    if (dot(N, d) > 0) N = N * -1.f;
+                    const float ci = -dot(N, d), k = 1.f - (1.f - ci * ci) / (n * n);
+                    V3 T = norm(d * (1.f / n) + N * (ci / n - std::sqrt(std::max(k, 0.f))));
+                    V3 O = E + d * h1.t + T * 0.001f;
+                    float count = 99.f, way = 0, firstT = -1;
+                    V3 firstN{0, 0, 0};
+                    uint32_t firstC[3] = {0, 0, 0};
+                    for (int b = 0; b <= MOST; ++b) {
+                        const Hit h = first_hit(O, T);
+                        if (h.t > 1e29f) { count = -1.f; break; }
+                        way += h.t + 0.001f;
+                        if (b == 0) { firstT = h.t + 0.001f; firstN = h.n; std::memcpy(firstC, h.c, sizeof firstC); }
+                        const float co = -dot(h.n, T), kk = 1.f - n * n * (1.f - co * co);
+                        if (kk >= 0) { count = (float)b; break; }
+                        const V3 at = O + T * h.t;
+                        T = norm(T + h.n * (2.f * co));
+                        O = at + T * 0.001f;
+                    }
+                    ++lines;
+                    const size_t gi = ((size_t)(flip ? H - 1 - y : y) * W + x) * 4;
+                    if (!(g1[gi] > 0) && !(g3[gi] < -0.5f)) { ++gpuNone; continue; }   // (the picture has no glass in this pixel)
+                    ++cpuAfter[slot(count)];
+                    ++gpuAfter[slot(g3[gi])];
+                    if (count == g3[gi]) ++sameCount;
+                    if (count > 98.f) ++cpuIn;
+                    if (g3[gi] > 98.f) ++gpuIn;
+                    if (firstT < 0 || !(g1[gi] > 0)) continue;
+                    uint32_t a[3] = {firstC[0], firstC[1], firstC[2]}, c[3] = {(uint32_t)std::lround(g2[gi]), (uint32_t)std::lround(g2[gi + 1]), (uint32_t)std::lround(g2[gi + 2])};
+                    std::sort(a, a + 3);
+                    std::sort(c, c + 3);
+                    if (a[0] == c[0] && a[1] == c[1] && a[2] == c[2]) ++sameTri;
+                    lenErr.push_back(std::fabs(g1[gi] - firstT) / firstT);
+                    const V3 gn{g1[gi + 1], g1[gi + 2], g3[gi + 2]};
+                    angErr.push_back(std::acos(std::clamp(dot(norm(gn), firstN), -1.f, 1.f)) * 180.f / PI);
+                    if (count == g3[gi] && count >= 0 && count < 98.f) wayErr.push_back(std::fabs(g3[gi + 1] - way) / way);
+                }
+            std::sort(lenErr.begin(), lenErr.end());
+            std::sort(angErr.begin(), angErr.end());
+            std::sort(wayErr.begin(), wayErr.end());
+            auto q = [](const std::vector<float>& v, double at) { return v.empty() ? 0.f : v[(size_t)(at * (double)(v.size() - 1))]; };
+            const long both = lines - gpuNone;
+            std::printf("CHECK D (%s): %ld sight lines into the glass (CPU, every triangle tried), %ld of them not glass in the picture.\n", flip ? "numbers upside down" : "numbers as they are", lines, gpuNone);
+            std::printf("    first surface inside: the same triangle for %.2f%% (%ld of %zu); way to it off by %.4f%% (median), %.4f%% (9 in 10), %.3f%% (worst); its normal off by %.3f deg (median), %.3f (9 in 10), %.2f (worst)\n",
+                        100.0 * (double)sameTri / (double)std::max<size_t>(1, lenErr.size()), sameTri, lenErr.size(), 100.f * q(lenErr, 0.5), 100.f * q(lenErr, 0.9), 100.f * q(lenErr, 1.0), q(angErr, 0.5), q(angErr, 0.9), q(angErr, 1.0));
+            std::printf("    mirrorings before leaving: the same number for %.2f%% of %ld lines; whole way inside off by %.4f%% (median), %.3f%% (9 in 10) where the number is the same\n",
+                        100.0 * (double)sameCount / (double)std::max(1L, both), both, 100.f * q(wayErr, 0.5), 100.f * q(wayErr, 0.9));
+            std::printf("    mirrorings   CPU      GPU (three-mesh-bvh in Filament)\n");
+            for (int b = 0; b <= MOST + 2; ++b) {
+                if (!cpuAfter[(size_t)b] && !gpuAfter[(size_t)b]) continue;
+                char name[40];
+                if (b == MOST + 1) std::snprintf(name, sizeof name, "still inside after %d", MOST);
+                else if (b == MOST + 2) std::snprintf(name, sizeof name, "no surface ahead");
+                else std::snprintf(name, sizeof name, "%d", b);
+                std::printf("    %-22s %6.2f%%  %6.2f%%\n", name, 100.0 * (double)cpuAfter[(size_t)b] / (double)std::max(1L, both), 100.0 * (double)gpuAfter[(size_t)b] / (double)std::max(1L, both));
+            }
+        }
+        // every glass pixel of the picture (GPU only): how many are still inside at each limit of mirrorings
+        {
+            std::vector<long> after((size_t)MOST + 3, 0);
+            long glass = 0;
+            for (size_t i = 0; i < (size_t)W * H; ++i) {
+                const float c = g3[i * 4];
+                if (!(g1[i * 4] > 0) && !(c < -0.5f)) continue;
+                ++glass;
+                ++after[c < -0.5f ? (size_t)MOST + 2 : c > 98.f ? (size_t)MOST + 1 : (size_t)std::lround(c)];
+            }
+            std::printf("CHECK D, every glass pixel (%ld, GPU): out within N mirrorings (the rest is NOT out):", glass);
+            long sum = 0;
+            for (int b = 0; b <= MOST; ++b) {
+                sum += after[(size_t)b];
+                if (b <= 5 || b == 8 || b == 16 || b == MOST) std::printf("  %d: %.2f%%", b, 100.0 * (double)sum / (double)std::max(1L, glass));
+            }
+            std::printf("  | still inside after %d: %.2f%%, no surface ahead: %.2f%%\n", MOST, 100.0 * (double)after[(size_t)MOST + 1] / (double)std::max(1L, glass), 100.0 * (double)after[(size_t)MOST + 2] / (double)std::max(1L, glass));
         }
     }
 
