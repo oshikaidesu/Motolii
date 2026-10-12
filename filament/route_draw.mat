@@ -1,0 +1,115 @@
+// ROUTES=2 (experiment): draws the light of every leaf of route_tree.mat's tables, one four-cornered shape per leaf.
+// A leaf names a way through the solid and the box, on the face the light came in by, that its light lies in. The
+// corners of that box are carried along the way (through each face and film met, out of the glass, down to the
+// floor): one affine map, worked out here from the planes themselves. Every pixel then checks its own ray against
+// the way (route_check.glsl), so what is drawn is exactly the light that goes that way.
+// Mesh: per entry of the table four corners, position = (entry, u, v), u and v 0 or 1 across the box.
+// Instance = a line of the table (solid of this shape, colour step, face the light came in by).
+// Output as beam_light.mat: rgb = the light, a = light * distance flown.
+material {
+    name : route_draw,
+    shadingModel : unlit,
+    blending : add,
+    depthWrite : false,
+    depthCulling : false,
+    culling : none,
+    doubleSided : true,
+    instanced : true,
+    flipUV : false,
+    variables : [ light, from, way, sun, face ],
+    parameters : [
+        { type : sampler2d, name : tree, precision : high, format : float },    // one level of route_tree.mat
+        { type : sampler2d, name : pose, precision : high, format : float },
+        { type : sampler2d, name : corners, precision : high, format : float },
+        { type : float4[40], name : planes, precision : high },
+        { type : int,    name : planeCount },
+        { type : float4[4], name : films, precision : high },
+        { type : int,    name : filmCount },
+        { type : float4[4], name : filmBand },
+        { type : float4[16], name : steps },
+        { type : float,  name : stepCount },
+        { type : float4[16], name : solids },
+        { type : float3, name : sunDir },
+        { type : float4, name : strip },
+        { type : float2, name : stripSoft },
+        { type : float,  name : floorY }
+    ]
+}
+
+vertex {
+#include "route_chain.glsl"
+    void materialVertex(inout MaterialVertexInputs material) {
+        int entryAt = int(mesh_position.x + 0.5);
+        int F = materialParams.planeCount, stepsAll = int(materialParams.stepCount);
+        int row = getInstanceIndex();
+        int A = row - (row / F) * F;
+        int rest = row / F;
+        int stepAt = rest - (rest / stepsAll) * stepsAll;
+        int which = rest / stepsAll;
+        vec4 t0 = texelFetch(materialParams_tree, ivec2(entryAt * 2, row), 0);
+        material.light = vec4(0.0);
+        material.from = vec4(0.0);
+        material.way = vec4(0.0);
+        material.sun = vec4(0.0);
+        material.face = vec4(0.0);
+        material.worldPosition = mulMat4x4Float3(getWorldFromModelMatrix(), vec3(0.0, materialParams.floorY, 0.0));
+        if (!(t0.z > 1.5)) return;                      // (not a leaf: nothing to draw)
+        vec4 t1 = texelFetch(materialParams_tree, ivec2(entryAt * 2 + 1, row), 0);
+        int solid = int(materialParams.solids[which / 4][which - (which / 4) * 4] + 0.5);
+        vec4 ax = texelFetch(materialParams_pose, ivec2(solid, 0), 0);
+        vec3 ay = texelFetch(materialParams_pose, ivec2(solid, 1), 0).xyz;
+        vec3 az = texelFetch(materialParams_pose, ivec2(solid, 2), 0).xyz;
+        vec3 at = texelFetch(materialParams_pose, ivec2(solid, 3), 0).xyz;
+        vec3 L = materialParams.sunDir;
+        vec3 sunL = normalize(vec3(dot(L, ax.xyz), dot(L, ay), dot(L, az)));
+        vec3 nf = normalize(materialParams.planes[A].xyz);
+        bool mirrored = stepAt == stepsAll - 1;
+        float n = materialParams.steps[mirrored ? (stepsAll - 1) / 2 : stepAt].w;
+        vec3 c0, e1, e2;
+        routeFrame(A, c0, e1, e2);
+        vec2 pad = 0.01 * (t1.zw - t1.xy) + 1e-4;
+        vec2 ab = mix(t1.xy - pad, t1.zw + pad, mesh_position.yz);
+        vec3 P = c0 + e1 * ab.x + e2 * ab.y;            // on the plane of the face the light came in by, in the solid's own frame
+
+        // carried along the way, and out
+        vec3 p = P, out0 = reflect(sunL, nf);
+        if (!mirrored) {
+            vec3 dir[9];
+            vec4 met[8];
+            int ids[8];
+            int events = routeChain(t0.xy, sunL, nf, n, dir, met, ids);
+            for (int e = 0; e < 8; e++) {
+                if (e >= events) break;
+                p += dir[e] * ((met[e].w - dot(met[e].xyz, p)) / dot(met[e].xyz, dir[e]));
+            }
+            vec3 nj = normalize(met[events - 1].xyz);
+            out0 = refract(dir[events - 1], -nj, n);
+        }
+        vec3 pw = (ax.xyz * p.x + ay * p.y + az * p.z) * ax.w + at;
+        vec3 outW = ax.xyz * out0.x + ay * out0.y + az * out0.z;
+        float flown = (materialParams.floorY - pw.y) / min(outW.y, -1e-6);
+        vec3 X = pw + outW * flown;
+        vec3 Pw = (ax.xyz * P.x + ay * P.y + az * P.z) * ax.w + at;
+        vec3 down = Pw + L * ((materialParams.floorY - Pw.y) / min(L.y, -1e-6));   // where the sun would put this point on the floor
+
+        vec3 rgb = (mirrored ? vec3(1.0) : materialParams.steps[stepAt].rgb) * t0.w;
+        material.light = vec4(rgb, flown);
+        material.from = vec4(P, n);
+        material.way = vec4(t0.x, t0.y, mirrored ? 1.0 : 0.0, down.x);
+        material.sun = vec4(sunL, down.z);
+        material.face = vec4(nf, float(A));
+        material.worldPosition = mulMat4x4Float3(getWorldFromModelMatrix(), vec3(X.x, materialParams.floorY, X.z));
+    }
+}
+
+fragment {
+#include "route_check.glsl"
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        vec4 c = variable_light;
+        float keep = routeKeep();
+        if (keep <= 0.0) discard;
+        c.rgb *= keep;
+        material.baseColor = vec4(c.rgb, (c.r + c.g + c.b) / 3.0 * c.a);
+    }
+}

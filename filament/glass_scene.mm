@@ -1026,6 +1026,15 @@ int main(int argc, char** argv) {
     const bool flatClip = env_f("EDGES", 0.f) > 0.5f && !rainbowOnce && !flatRoutes;
     const int flatPer = (flatClip || flatRoutes) ? 4 : 3;
     std::vector<MaterialInstance*> routeMis;
+    // ROUTES=2: the ways are not found by rays but worked out from where the faces and films are, level by level
+    // (route_tree.mat), and every leaf is drawn by route_draw.mat. ROUTESTAT=1 counts the leaves and their light.
+    const bool routeTree = flatRoutes && env_f("ROUTES", 0.f) > 1.5f;
+    struct RouteLevel {
+        Target table;
+        View* view;
+        int slots, rows;
+    };
+    static std::vector<RouteLevel> routeLevels;
     if (flatMostPieces * flatPer > 16384) return fail("too many pieces for one line of the walk table (PIECES is too high)");
     Target flatWalk = make_rt(flatMostPieces * flatPer, (int)items.size() * flatLines, Texture::InternalFormat::RGBA32F);
     Target flatWalk2 = flatClip ? make_rt(flatMostPieces * flatPer, (int)items.size() * flatLines, Texture::InternalFormat::RGBA32F) : Target{nullptr, nullptr};
@@ -1083,7 +1092,98 @@ int main(int argc, char** argv) {
             if (turn == 0 && std::getenv("XDRAW1")) rm.setLayerMask(rm.getInstance(e), 0xFF, 0x00);   // (XDRAW1: to look at the second turn alone)
         }
     }
-    if (flatRoutes) {
+    if (routeTree) {
+        Material* treeMat = mat("route_tree.filamat");
+        Material* drawMat = mat("route_draw.filamat");
+        if (!treeMat || !drawMat) return fail("route_tree.filamat / route_draw.filamat");
+        static const int fans[] = {6, 4, 3, 2, 2};   // how many things an entry of the level before may go on to meet
+        const int levels = std::min(5, std::max(1, (int)env_f("ROUTEDEPTH", 5.f)));
+        for (FlatKind& fk : flatKinds) {
+            const beam::Solid& loc = items[(size_t)fk.solids[0]].local;
+            float4 planes[40] = {}, films[4] = {};
+            int planeCount = 0;
+            auto* cornerTexels = new std::vector<float>((size_t)8 * 40 * 4, 0.f);
+            for (size_t f = 0; f < loc.planes.size() && planeCount < 40; ++f) {   // (the order of the table of faces)
+                if (loc.faces[f].n < 3) continue;
+                planes[planeCount] = float4{(float)loc.planes[f].n.x, (float)loc.planes[f].n.y, (float)loc.planes[f].n.z, (float)loc.planes[f].o};
+                const int cn = std::min(8, loc.faces[f].n);
+                for (int k = 0; k < cn; ++k) {
+                    float* o = cornerTexels->data() + ((size_t)planeCount * 8 + (size_t)k) * 4;
+                    o[0] = (float)loc.faces[f].p[(size_t)k].x; o[1] = (float)loc.faces[f].p[(size_t)k].y; o[2] = (float)loc.faces[f].p[(size_t)k].z;
+                    o[3] = (float)cn;
+                }
+                ++planeCount;
+            }
+            const int filmCount = (int)std::min<size_t>(4, loc.films.size());
+            for (int f = 0; f < filmCount; ++f) films[f] = float4{(float)loc.films[(size_t)f].n.x, (float)loc.films[(size_t)f].n.y, (float)loc.films[(size_t)f].n.z, (float)loc.films[(size_t)f].o};
+            Texture* cornerTex = Texture::Builder().width(8).height(40).levels(1).format(Texture::InternalFormat::RGBA32F).build(*engine);
+            cornerTex->setImage(*engine, 0, Texture::PixelBufferDescriptor(cornerTexels->data(), cornerTexels->size() * sizeof(float), backend::PixelDataFormat::RGBA, backend::PixelDataType::FLOAT,
+                                                                           [](void*, size_t, void* u) { delete (std::vector<float>*)u; }, cornerTexels));
+            float4 which[16] = {};
+            for (size_t i = 0; i < fk.solids.size() && i < 64; ++i) which[i / 4][i % 4] = (float)fk.solids[i];
+            const int rows = (int)fk.solids.size() * flatLines * planeCount;
+            if (rows > 16384) return fail("ROUTES=2: too many solids of one shape for one table");
+            auto common = [&](MaterialInstance* mi) {
+                mi->setParameter("pose", poseTex, nearest);
+                mi->setParameter("corners", cornerTex, nearest);
+                mi->setParameter("planes", planes, 40);
+                mi->setParameter("planeCount", (int32_t)planeCount);
+                mi->setParameter("films", films, 4);
+                mi->setParameter("filmCount", (int32_t)filmCount);
+                mi->setParameter("stepCount", (float)flatLines);
+                mi->setParameter("solids", which, 16);
+                routeMis.push_back(mi);
+            };
+            int slots = 1;
+            Texture* before = cornerTex;
+            for (int lv = 1; lv <= levels; ++lv) {
+                slots *= fans[lv - 1];
+                RouteLevel rl{make_rt(slots * 2, rows, Texture::InternalFormat::RGBA32F), engine->createView(), slots, rows};
+                MaterialInstance* tmi = treeMat->createInstance();
+                common(tmi);
+                tmi->setParameter("prev", before, nearest);
+                tmi->setParameter("solidsHere", (float)fk.solids.size());
+                tmi->setParameter("level", (float)lv);
+                tmi->setParameter("fan", (float)fans[lv - 1]);
+                tmi->setParameter("last", lv == levels ? 1.f : 0.f);
+                Scene* sc = engine->createScene();
+                sc->addEntity(renderable(sqVB, sqIB, tmi, false, false));
+                rl.view->setScene(sc);
+                rl.view->setRenderTarget(rl.table.rt);
+                rl.view->setViewport({0, 0, (uint32_t)(slots * 2), (uint32_t)rows});
+                rl.view->setDithering(View::Dithering::NONE);
+                rl.view->setPostProcessingEnabled(false);
+                rl.view->setShadowingEnabled(false);
+                routeLevels.push_back(rl);
+                before = rl.table.color;
+                // its leaves: four corners per entry
+                auto* v = new std::vector<float>();
+                auto* ix = new std::vector<uint32_t>();
+                for (int i = 0; i < slots; ++i) {
+                    const uint32_t base = (uint32_t)(v->size() / 3);
+                    for (int k = 0; k < 4; ++k) v->insert(v->end(), {(float)i, (float)(k & 1), (float)(k >> 1)});
+                    ix->insert(ix->end(), {base, base + 1, base + 3, base, base + 3, base + 2});
+                }
+                VertexBuffer* vb = VertexBuffer::Builder().vertexCount((uint32_t)(v->size() / 3)).bufferCount(1)
+                                       .attribute(VertexAttribute::POSITION, 0, VertexBuffer::AttributeType::FLOAT3, 0, 12).build(*engine);
+                vb->setBufferAt(*engine, 0, VertexBuffer::BufferDescriptor(v->data(), v->size() * sizeof(float)));
+                IndexBuffer* ib = IndexBuffer::Builder().indexCount((uint32_t)ix->size()).bufferType(IndexBuffer::IndexType::UINT).build(*engine);
+                ib->setBuffer(*engine, IndexBuffer::BufferDescriptor(ix->data(), ix->size() * sizeof(uint32_t)));
+                MaterialInstance* dmi = drawMat->createInstance();
+                common(dmi);
+                dmi->setParameter("tree", rl.table.color, nearest);
+                dmi->setParameter("floorY", 0.f);
+                const utils::Entity e = em.create();
+                RenderableManager::Builder(1).boundingBox({{0, 0, 0}, {100.f, 100.f, 100.f}})
+                    .geometry(0, RenderableManager::PrimitiveType::TRIANGLES, vb, ib)
+                    .instances((size_t)rows)
+                    .material(0, dmi).culling(false).castShadows(false).receiveShadows(false)
+                    .layerMask(0xFF, std::getenv("NOLIGHT") ? 0x00 : 0x01).build(*engine, e);
+                sLight->addEntity(e);
+            }
+            std::printf("  routes: %s, %d faces, %d films, %d levels, %d entries in the last, %d lines\n", fk.name.c_str(), planeCount, filmCount, levels, slots, rows);
+        }
+    } else if (flatRoutes) {
         Material* routeMat = mat("route_light.filamat");
         if (!routeMat) return fail("route_light.filamat");
         for (FlatKind& fk : flatKinds) {
@@ -1671,6 +1771,7 @@ int main(int argc, char** argv) {
     View* vFlatWalk = engine->createView();
     vFlatWalk->setScene(sFlatWalk);
     vFlatWalk->setCamera(camera);
+    for (const RouteLevel& rl : routeLevels) rl.view->setCamera(camera);
     vFlatWalk->setRenderTarget(flatWalk.rt);
     vFlatWalk->setViewport({0, 0, (uint32_t)(flatMostPieces * flatPer), (uint32_t)(items.size() * (size_t)flatLines)});
     vFlatWalk->setDithering(View::Dithering::NONE);
@@ -2188,7 +2289,9 @@ int main(int argc, char** argv) {
         static const char* xw = std::getenv("XWALK");
         static const bool xF = xw && (std::strchr(xw, '1') || std::strchr(xw, 'f')), xE = xw && (std::strchr(xw, '1') || std::strchr(xw, 'e')),
                           xW = xw && (std::strchr(xw, '1') || std::strchr(xw, 'w')), xC = xw && (std::strchr(xw, '1') || std::strchr(xw, 'c'));
-        if (!xF && !flatOnCpu && !flatKinds.empty()) {
+        if (routeTree) {
+            for (const RouteLevel& rl : routeLevels) renderer->render(rl.view);
+        } else if (!xF && !flatOnCpu && !flatKinds.empty()) {
             renderer->render(vFlatWalk);
             if (flatClip && !std::getenv("XWALK2")) renderer->render(vFlatWalk2);   // (XWALK2: timing only, the second turn left out)
         }
@@ -2226,8 +2329,40 @@ int main(int argc, char** argv) {
             renderer->readPixels(nodesRT.rt, 0, 0, 289, (uint32_t)items.size() * 6,
                                  backend::PixelBufferDescriptor(nodeDump.data(), nodeDump.size() * sizeof(float), backend::PixelDataFormat::RGBA, backend::PixelDataType::FLOAT));
         }
+        // ROUTESTAT=1: how many leaves each level of route_tree.mat holds, and how much light (read back only to count)
+        static std::vector<std::vector<float>> routeDump;
+        if (routeTree && std::getenv("ROUTESTAT")) {
+            routeDump.resize(routeLevels.size());
+            for (size_t i = 0; i < routeLevels.size(); ++i) {
+                const RouteLevel& rl = routeLevels[i];
+                routeDump[i].assign((size_t)rl.slots * 2 * (size_t)rl.rows * 4, 0.f);
+                renderer->readPixels(rl.table.rt, 0, 0, (uint32_t)(rl.slots * 2), (uint32_t)rl.rows,
+                                     backend::PixelBufferDescriptor(routeDump[i].data(), routeDump[i].size() * sizeof(float), backend::PixelDataFormat::RGBA, backend::PixelDataType::FLOAT));
+            }
+        }
         renderer->endFrame();
         engine->flushAndWait();
+        if (!routeDump.empty()) {
+            double all = 0;
+            std::vector<double> light(routeDump.size(), 0.0);
+            std::vector<long> leaves(routeDump.size(), 0), inner(routeDump.size(), 0), full(routeDump.size(), 0);
+            for (size_t i = 0; i < routeDump.size(); ++i) {
+                const RouteLevel& rl = routeLevels[i];
+                const int fan = i == 0 ? rl.slots : rl.slots / routeLevels[i - 1].slots;
+                for (int r = 0; r < rl.rows; ++r)
+                    for (int sl = 0; sl < rl.slots; ++sl) {
+                        const float* t = routeDump[i].data() + ((size_t)r * (size_t)rl.slots * 2 + (size_t)sl * 2) * 4;
+                        if (t[2] > 1.5f) { ++leaves[i]; light[i] += t[3] * (double)((t[6] - t[4]) * (t[7] - t[5])); }
+                        else if (t[2] > 0.5f) ++inner[i];
+                        if (sl % fan == fan - 1 && t[2] > 0.5f) ++full[i];   // (the last place of its parent is taken: more may have been dropped)
+                    }
+                all += light[i];
+            }
+            std::printf("  ROUTESTAT (all solids, all colour steps; light = brightness x area of the box, a rough measure):\n");
+            for (size_t i = 0; i < routeDump.size(); ++i)
+                std::printf("    level %zu: %6ld leaves, %6ld go on inside, %5.1f%% of the light, %ld parents with every place taken\n", i + 1, leaves[i], inner[i],
+                            all > 0 ? 100.0 * light[i] / all : 0.0, full[i]);
+        }
         if (!nodeDump.empty())
             if (FILE* f = std::fopen(std::getenv("VDUMP"), "wb")) {
                 std::fwrite(nodeDump.data(), sizeof(float), nodeDump.size(), f);

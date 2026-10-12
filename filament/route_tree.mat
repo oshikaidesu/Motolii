@@ -1,0 +1,181 @@
+// ROUTES=2 (experiment): the ways light goes through a flat-faced solid, found from where its faces and films are
+// instead of by sending rays. One table per step of the way ("level"), written one after the other:
+//   level 1: for every face the sun shines on, what the light that came in by it meets first;
+//   level L: for every entry of level L - 1 that goes on inside the glass, what it meets next.
+// An entry is a way so far (route_chain.glsl) and the box, on the face the light came in by, that its light lies in:
+// the faces met so far carried back to that face, one box cut by the next. Something the light can meet next is a
+// face that its direction leaves the glass by and whose box, carried back, still overlaps; or a film that mirrors
+// this colour and lies ahead. Each entry has room for `fan` of them (more are dropped). Where the glass lets the
+// light out, the entry is a leaf: route_draw.mat draws its light. The boxes are generous (a box is more than the
+// face in it), so a leaf may turn out to hold no light; the drawing checks every pixel (route_check.glsl).
+// A line of the table = (solid of this shape, colour step, face the light came in by); across: two texels per entry,
+// (way x, way y, kind: 0 none, 1 goes on inside, 2 leaf, how bright a leaf lands) and (box low a, b, high a, b).
+material {
+    name : route_tree,
+    shadingModel : unlit,
+    vertexDomain : device,
+    blending : opaque,
+    depthWrite : false,
+    depthCulling : false,
+    culling : none,
+    doubleSided : true,
+    flipUV : false,
+    parameters : [
+        { type : sampler2d, name : prev, precision : high, format : float },    // the level before (not read at level 1)
+        { type : sampler2d, name : pose, precision : high, format : float },    // per solid (column): axis x + size; axis y; axis z; place
+        { type : sampler2d, name : corners, precision : high, format : float },
+        { type : float4[40], name : planes, precision : high },
+        { type : int,    name : planeCount },
+        { type : float4[4], name : films, precision : high },
+        { type : int,    name : filmCount },
+        { type : float4[4], name : filmBand },
+        { type : float4[16], name : steps },
+        { type : float,  name : stepCount },                                    // colour steps + 1 (the last: mirrored off the outside)
+        { type : float4[16], name : solids },
+        { type : float,  name : solidsHere },                                   // how many solids have this shape
+        { type : float3, name : sunDir },
+        { type : float,  name : level },
+        { type : float,  name : fan },                                          // entries per entry of the level before
+        { type : float,  name : last },                                         // 1: nothing comes after this level
+        { type : float4, name : strip },                                        // (not used here; set together with route_draw.mat's)
+        { type : float2, name : stripSoft }
+    ]
+}
+
+fragment {
+#include "route_chain.glsl"
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        ivec2 px = ivec2(gl_FragCoord.xy);
+        int slot = px.x / 2, part = px.x - slot * 2;
+        int F = materialParams.planeCount, stepsAll = int(materialParams.stepCount);
+        int A = px.y - (px.y / F) * F;
+        int rest = px.y / F;
+        int stepAt = rest - (rest / stepsAll) * stepsAll;
+        int which = rest / stepsAll;
+        int level = int(materialParams.level + 0.5), fan = int(materialParams.fan + 0.5);
+        vec4 result = vec4(0.0);
+        material.baseColor = result;
+        if (which >= int(materialParams.solidsHere + 0.5)) return;
+        int solid = int(materialParams.solids[which / 4][which - (which / 4) * 4] + 0.5);
+        vec3 ax = texelFetch(materialParams_pose, ivec2(solid, 0), 0).xyz;
+        vec3 ay = texelFetch(materialParams_pose, ivec2(solid, 1), 0).xyz;
+        vec3 az = texelFetch(materialParams_pose, ivec2(solid, 2), 0).xyz;
+        vec3 L = materialParams.sunDir;
+        vec3 sunL = normalize(vec3(dot(L, ax), dot(L, ay), dot(L, az)));
+        vec3 nf = normalize(materialParams.planes[A].xyz);
+        float ci = -dot(nf, sunL);
+        if (!(ci > 1e-6)) return;                       // (the sun does not shine on this face)
+        bool mirrored = stepAt == stepsAll - 1;
+        float n = materialParams.steps[mirrored ? (stepsAll - 1) / 2 : stepAt].w;
+        vec3 c0, e1, e2;
+        routeFrame(A, c0, e1, e2);
+        float entryAt = materialParams.planes[A].w;
+
+        // the entry this one grows from
+        vec2 seq = vec2(0.0), lo = vec2(1e9), hi = vec2(-1e9);
+        int parent = slot / fan, nth = slot - parent * fan;
+        if (level == 1) {
+            parent = 0;
+            nth = slot;
+            int cn = int(texelFetch(materialParams_corners, ivec2(0, A), 0).w + 0.5);
+            for (int k = 0; k < 8; k++) {
+                if (k >= cn) break;
+                vec2 q = routeAB(texelFetch(materialParams_corners, ivec2(k, A), 0).xyz, c0, e1, e2);
+                lo = min(lo, q);
+                hi = max(hi, q);
+            }
+            if (mirrored) {
+                // the white light mirrored off the outside: one leaf, the face as it is
+                vec3 out0 = reflect(sunL, nf);
+                float down = -(ax.y * out0.x + ay.y * out0.y + az.y * out0.z);
+                if (nth == 0 && down > 1e-6) result = part == 0 ? vec4(0.0, 0.0, 2.0, routeFresnel(ci, 1.0, n) * down) : vec4(lo, hi);
+                material.baseColor = result;
+                return;
+            }
+        } else {
+            if (mirrored) return;
+            vec4 p0 = texelFetch(materialParams_prev, ivec2(parent * 2, px.y), 0);
+            if (!(p0.z > 0.5 && p0.z < 1.5)) return;    // (nothing there, or its light has left the glass)
+            vec4 p1 = texelFetch(materialParams_prev, ivec2(parent * 2 + 1, px.y), 0);
+            seq = p0.xy;
+            lo = p1.xy;
+            hi = p1.zw;
+        }
+        vec3 dir[9];
+        vec4 met[8];
+        int ids[8];
+        int events = routeChain(seq, sunL, nf, n, dir, met, ids);
+        vec3 d = dir[events];
+        // how much of the sun's light is still in it, and how many faces it has met
+        float irr = ci * (1.0 - routeFresnel(ci, 1.0, n)), cosOn = abs(dot(nf, dir[0]));
+        int faces = 0;
+        for (int e = 0; e < 8; e++) {
+            if (e >= events) break;
+            float db = abs(dot(normalize(met[e].xyz), dir[e]));
+            irr *= db / cosOn;
+            cosOn = db;
+            if (ids[e] < 40) faces++;
+        }
+        int lastId = events > 0 ? ids[events - 1] : -1;
+        // the corners of its box, carried forward to where the light is now (to tell whether a film lies ahead)
+        vec3 now[4];
+        for (int k = 0; k < 4; k++) {
+            vec3 p = c0 + e1 * ((k & 1) != 0 ? hi.x : lo.x) + e2 * (k > 1 ? hi.y : lo.y);
+            for (int e = 0; e < 8; e++) {
+                if (e >= events) break;
+                p += dir[e] * ((met[e].w - dot(met[e].xyz, p)) / dot(met[e].xyz, dir[e]));
+            }
+            now[k] = p;
+        }
+
+        // the nth thing this light can meet next
+        int found = -1, count = 0;
+        vec2 lo2 = lo, hi2 = hi;
+        for (int c = 0; c < 44; c++) {
+            if (c >= F + materialParams.filmCount) break;
+            bool film = c >= F;
+            int id = film ? 40 + (c - F) : c;
+            if (id == lastId) continue;
+            vec4 pl = film ? materialParams.films[c - F] : materialParams.planes[c];
+            float den = dot(normalize(pl.xyz), d);
+            vec2 l3 = lo, h3 = hi;
+            if (film) {
+                if (!(n > materialParams.filmBand[c - F].x && n < materialParams.filmBand[c - F].y)) continue;
+                if (abs(den) < 1e-6) continue;
+                bool ahead = false;
+                for (int k = 0; k < 4; k++) if ((pl.w - dot(pl.xyz, now[k])) / dot(pl.xyz, d) > 1e-4) ahead = true;
+                if (!ahead) continue;
+            } else {
+                if (!(den > 1e-6) || faces >= 5) continue;
+                vec2 wl, wh;
+                routeWindow(c, events, dir, met, nf, entryAt, c0, e1, e2, wl, wh);
+                l3 = max(lo, wl);
+                h3 = min(hi, wh);
+                if (!(l3.x < h3.x && l3.y < h3.y)) continue;
+            }
+            if (count == nth) { found = id; lo2 = l3; hi2 = h3; }
+            count++;
+        }
+        if (found < 0 || events >= 8) return;
+        float code = float(found + 1);
+        if (events < 4) seq.x += code * pow(64.0, float(events));
+        else seq.y += code * pow(64.0, float(events - 4));
+        float kind = 1.0, gain = 0.0;
+        if (found < 40) {
+            vec3 nj = normalize(materialParams.planes[found].xyz);
+            float db = dot(nj, d);
+            float Ri = routeFresnel(db, n, 1.0);
+            if (Ri < 1.0) {
+                // the glass lets it out here: a leaf, as bright as it lands on the floor
+                vec3 out0 = refract(d, -nj, n);
+                float down = -(ax.y * out0.x + ay.y * out0.y + az.y * out0.z);
+                if (!(down > 1e-6)) return;             // (it goes up: never lands)
+                kind = 2.0;
+                gain = irr * (db / cosOn) * (1.0 - Ri) * down / abs(dot(nj, out0));
+            }
+        }
+        if (kind < 1.5 && materialParams.last > 0.5) return;
+        material.baseColor = part == 0 ? vec4(seq, kind, gain) : vec4(lo2, hi2);
+    }
+}
