@@ -21,7 +21,8 @@ material {
     parameters : [
         { type : float3, name : sunWay },       // the way the sunlight travels
         { type : float3, name : sunOnFloor },   // what the sun adds to the bare floor at noon: floor colour * lux / pi
-        { type : float,  name : colours },      // copies drawn
+        { type : float,  name : colours },      // copies drawn (the most colours)
+        { type : float,  name : size },         // the mesh's size (its bounds' longest half), in its own units
         { type : float,  name : ior },
         { type : float,  name : abbe },         // how far apart the colours' indices lie (small: far)
         { type : float,  name : lean },         // how far the surface leans from its own facing, slowly, this way and that (real glass is not dead flat)
@@ -36,8 +37,20 @@ material {
 vertex {
 #include "spectrum.glsl"
     void materialVertex(inout MaterialVertexInputs material) {
-        int all = int(materialParams.colours + 0.5);
+        // As many colours as the thing shows large (glassbox.mat's rule: its size over its distance to the camera's
+        // plane, against a pixel): a thing a few pixels wide gets 3, the copies beyond are not drawn (all their
+        // corners at one place) and their work is not done.
+        highp mat4 own = getWorldFromModelMatrix();
+        float away = max(-mulMat4x4Float3(getViewFromWorldMatrix(), own[3].xyz).z, 1e-3);
+        float across = materialParams.size * length(own[0].xyz) / away * getClipFromViewMatrix()[1][1] * getResolution().y;   // its width, in pixels
+        int all = int(clamp(across / 14.0, 3.0, materialParams.colours) + 0.5);
         int colour = getInstanceIndex();
+        if (colour >= all) {
+            material.tint = vec4(0.0);
+            material.where = vec4(0.0);
+            material.worldPosition = vec4(own[3].xyz, 1.0);
+            return;
+        }
         // the scene's own coordinates (Filament's are moved and turned)
         highp mat4 toScene = getUserWorldFromWorldMatrix();
         highp vec3 P = mulMat4x4Float3(toScene, material.worldPosition.xyz).xyz;
@@ -59,7 +72,7 @@ vertex {
         float through = ok ? (1.0 - 0.5 * (rs * rs + rp * rp)) * smoothstep(materialParams.facing.x, materialParams.facing.y, ci) : 0.0;
         if (!(through > 0.0)) ok = false;
         // (a corner that throws nothing is not drawn: all such corners go to one place, the thing's own middle, so cuts that throw nothing cost no screen)
-        highp vec3 X = ok ? P + d * ((materialParams.floorY - P.y) / d.y) : mulMat4x4Float3(toScene, getWorldFromModelMatrix()[3].xyz).xyz;
+        highp vec3 X = ok ? P + d * ((materialParams.floorY - P.y) / d.y) : mulMat4x4Float3(toScene, own[3].xyz).xyz;
         vec3 share = max(xyzToSrgb(cieXyz(lambda)), vec3(0.0)) / (SPECTRUM_MEAN * float(all));   // the colour's share of white light
 
         // the corner across the sunlight (two numbers), for the squeeze

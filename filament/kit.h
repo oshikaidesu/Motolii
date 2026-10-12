@@ -311,6 +311,9 @@ static bool glass_light(Stage& s, const Sunlit& lit, Mesh* m, std::vector<mat4f>
     mi->setParameter("sunWay", lit.sunWay);
     mi->setParameter("sunOnFloor", lit.paper * (lit.sunLux / 3.14159265f));
     mi->setParameter("colours", (float)colours);
+    float size = 0.f;
+    for (const float3& p : m->pos) size = std::max(size, std::max(std::fabs(p.x), std::max(std::fabs(p.y), std::fabs(p.z))));
+    mi->setParameter("size", size);
     mi->setParameter("ior", 1.5f);
     mi->setParameter("abbe", 2.f);
     mi->setParameter("lean", uneven);
