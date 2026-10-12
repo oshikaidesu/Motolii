@@ -1,0 +1,29 @@
+// MRT probe (see mrt_probe.mm): a post-process material that writes three float4 outputs in one fragment.
+material {
+    name : mrt_probe,
+    domain : postprocess,
+    depthWrite : false,
+    depthCulling : false,
+    culling : none,
+    parameters : [
+        { type : float, name : seed },
+        { type : float4[4], name : table },
+        { type : sampler2d, name : source, precision : high, format : float }
+    ],
+    outputs : [
+        { name : first,  target : color, type : float4 },
+        { name : second, target : color, type : float4 },
+        { name : third,  target : color, type : float4 }
+    ]
+}
+
+fragment {
+    void postProcess(inout PostProcessInputs postProcess) {
+        vec2 px = floor(gl_FragCoord.xy);
+        // "the dear work", done once per fragment: a number, one from a table, one from a texture
+        float once = px.x * 10.0 + px.y + materialParams.seed + materialParams.table[2].y + texelFetch(materialParams_source, ivec2(1, 0), 0).z;
+        postProcess.first  = vec4(once, 1.0, 2.0, 3.0);
+        postProcess.second = vec4(once + 0.25, 10.0, 20.0, 30.0);
+        postProcess.third  = vec4(once + 0.5, 100.0, 200.0, 300.0);
+    }
+}

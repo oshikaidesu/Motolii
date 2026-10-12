@@ -1,0 +1,203 @@
+// GBEAMS=2: one level of the beams of light inside the flat-faced solids, ONE fragment per beam (gbm.glsl).
+// A line = (solid of this shape, colour step); a place across = a node.
+// Level 0: the light as it comes in: a place = (cell, wall, which band of sun).
+// Level L: every node of level L - 1 that goes on, carried onto a wall it reaches and cut to that wall's outline
+// (gbm_index.mat says which node and which wall a place is). The cut is made once here, written with everything
+// else about the node, and with the walls this node goes on to in turn (found by cutting it against the walls
+// ahead; a child then makes its own cut again: that one cut is done twice, see glass_scene.mm).
+material {
+    name : gbm_node,
+    domain : postprocess,
+    depthWrite : false,
+    depthCulling : false,
+    culling : none,
+    parameters : [
+        { type : sampler2d, name : cells, precision : high, format : float },
+        { type : sampler2d, name : prev0, precision : high, format : float },   // the level before, its four pictures (not read at level 0)
+        { type : sampler2d, name : prev1, precision : high, format : float },
+        { type : sampler2d, name : prev2, precision : high, format : float },
+        { type : sampler2d, name : prev3, precision : high, format : float },
+        { type : sampler2d, name : index, precision : high, format : float },   // gbm_index.mat for this level (not read at level 0)
+        { type : sampler2d, name : pose, precision : high, format : float },
+        { type : float4[4], name : filmBand },
+        { type : float4[16], name : steps },
+        { type : float,  name : stepCount },
+        { type : float4[16], name : solids },
+        { type : float,  name : solidsHere },
+        { type : float3, name : sunDir },
+        { type : float4, name : strip },
+        { type : float2, name : stripSoft },
+        { type : float,  name : level },
+        { type : float,  name : least },
+        { type : float,  name : mostFaces }
+    ],
+    outputs : [
+        { name : o0, target : color, type : float4 },
+        { name : o1, target : color, type : float4 },
+        { name : o2, target : color, type : float4 },
+        { name : o3, target : color, type : float4 }
+    ]
+}
+
+fragment {
+#include "gbm.glsl"
+    void postProcess(inout PostProcessInputs postProcess) {
+        postProcess.o0 = vec4(0.0); postProcess.o1 = vec4(0.0); postProcess.o2 = vec4(0.0); postProcess.o3 = vec4(0.0);
+        ivec2 px = ivec2(gl_FragCoord.xy);
+        int slot = px.x;
+        int stepsAll = int(materialParams.stepCount + 0.5);
+        int which = px.y / stepsAll, stepAt = px.y - which * stepsAll;
+        if (which >= int(materialParams.solidsHere + 0.5)) return;
+        bool mirrored = stepAt == stepsAll - 1;
+        float n = materialParams.steps[mirrored ? (stepsAll - 1) / 2 : stepAt].w;
+        int use = 0;
+        if (!mirrored)
+            for (int f = 0; f < 4; f++)
+                if (n > materialParams.filmBand[f].x && n < materialParams.filmBand[f].y) use |= 1 << f;
+        int solid = int(materialParams.solids[which / 4][which - (which / 4) * 4] + 0.5);
+        vec4 ax = texelFetch(materialParams_pose, ivec2(solid, 0), 0);
+        vec3 ay = texelFetch(materialParams_pose, ivec2(solid, 1), 0).xyz;
+        vec3 az = texelFetch(materialParams_pose, ivec2(solid, 2), 0).xyz;
+        vec3 at = texelFetch(materialParams_pose, ivec2(solid, 3), 0).xyz;
+        vec3 L = normalize(materialParams.sunDir);
+        vec3 sunL = normalize(vec3(dot(L, ax.xyz), dot(L, ay), dot(L, az)));
+
+        vec2 P[12];
+        for (int i = 0; i < 12; i++) P[i] = vec2(0.0);
+        int np = 0, cell = 0, faces = 0, wall = 0;
+        vec3 d = vec3(0.0, -1.0, 0.0);
+        float irr = 0.0, cosOn = 1.0, landed = 0.0;
+        bool leaf = false;
+
+        if (int(materialParams.level + 0.5) == 0) {
+            cell = slot / (GM_WALLS * 3);
+            wall = (slot - cell * GM_WALLS * 3) / 3;
+            int nth = slot - (slot / 3) * 3;
+            if (cell >= 16) return;
+            int line = use * 16 + cell;
+            vec4 info = gmWall(line, wall, 1);
+            if (info.z < 2.5 || info.x < -0.5) return;      // (no such wall, or a film)
+            vec4 pl = gmWall(line, wall, 0);
+            vec3 nf = pl.xyz;
+            float ci = -dot(nf, sunL);
+            if (!(ci > 1e-6)) return;
+            np = int(info.z + 0.5);
+            for (int k = 0; k < 6; k++) {
+                vec4 two = gmWall(line, wall, 5 + k);
+                P[2 * k] = two.xy;
+                P[2 * k + 1] = two.zw;
+            }
+            for (int i = 0; i < 12; i++) if (i >= np) P[i] = vec2(0.0);
+            if (materialParams.strip.w > 0.0) {
+                // the band of sun, as a line across the wall: g = m . (the point in the world) - middle
+                vec2 u2 = materialParams.strip.xy;
+                vec3 mW = vec3(u2.x, -(u2.x * L.x + u2.y * L.z) / min(L.y, -1e-6), u2.y);
+                vec3 mL = vec3(dot(mW, ax.xyz), dot(mW, ay), dot(mW, az)) * ax.w;
+                vec3 uu = gmWall(line, wall, 2).xyz, vv = gmWall(line, wall, 3).xyz, oo = nf * pl.w;
+                vec2 g1 = vec2(dot(mL, uu), dot(mL, vv));
+                float g0 = dot(mL, oo) + dot(mW, at) - materialParams.strip.z, every = materialParams.stripSoft.y, half2 = materialParams.strip.w;
+                float k = 0.0;
+                if (every > 0.0) {
+                    float lo = 1e30, hi = -1e30;
+                    for (int i = 0; i < 12; i++) {
+                        if (i >= np) break;
+                        float g = dot(g1, P[i]) + g0;
+                        lo = min(lo, g);
+                        hi = max(hi, g);
+                    }
+                    k = ceil((lo - half2) / every) + float(nth);
+                    if (k > floor((hi + half2) / every)) return;
+                } else if (nth > 0) return;
+                float mid = g0 - k * every;
+                gmClip(P, np, g1, mid + half2);
+                if (np >= 3) gmClip(P, np, -g1, -mid + half2);
+            } else if (nth > 0) return;
+            if (np < 3 || !(gmArea(P, np) > 1e-10)) return;
+            float Rf = gmFresnel(ci, 1.0, n);
+            if (mirrored) {
+                d = sunL + nf * (2.0 * ci);
+                float down = -(ax.y * d.x + ay.y * d.y + az.y * d.z);
+                leaf = true;
+                landed = down > 1e-6 ? Rf * down : 0.0;
+                cosOn = ci;
+            } else {
+                d = refract(sunL, nf, 1.0 / n);
+                irr = ci * (1.0 - Rf);
+                cosOn = abs(dot(nf, d));
+            }
+        } else {
+            if (mirrored) return;
+            vec4 from = texelFetch(materialParams_index, ivec2(slot, px.y), 0);
+            if (from.z < 0.5) return;
+            ivec2 at2 = ivec2(int(from.x + 0.5), px.y);
+            wall = int(from.y + 0.5);
+            vec4 t0 = texelFetch(materialParams_prev0, at2, 0);
+            int meta = int(t0.w + 0.5);
+            cell = (meta >> 2) & 15;
+            faces = (meta >> 6) & 15;
+            int on = (meta >> 10) & 31;                     // the wall the node before lies on
+            int line = use * 16 + cell;
+            vec3 dBefore = vec3(t0.xy, sqrt(max(0.0, 1.0 - dot(t0.xy, t0.xy))) * ((meta >> 19) != 0 ? -1.0 : 1.0));
+            vec2 Pp[12];
+            gmCorners(texelFetch(materialParams_prev1, at2, 0), texelFetch(materialParams_prev2, at2, 0), texelFetch(materialParams_prev3, at2, 0), (meta >> 15) & 15,
+                      gmWall(line, on, 4), Pp);
+            float cosBefore = abs(dot(gmWall(line, on, 0).xyz, dBefore));
+            gmOnto(Pp, (meta >> 15) & 15, line, on, wall, dBefore, P, np);   // the one cut of this node
+            if (np < 3) return;
+            vec4 pl = gmWall(line, wall, 0);
+            bool film = gmWall(line, wall, 1).x < -0.5;
+            float db = dot(pl.xyz, dBefore);
+            irr = t0.z * db / cosBefore;
+            float Ri = film ? 1.0 : gmFresnel(db, n, 1.0);
+            if (!film) faces++;
+            if (Ri < 1.0) {
+                d = refract(dBefore, -pl.xyz, n);
+                float down = -(ax.y * d.x + ay.y * d.y + az.y * d.z);
+                leaf = true;
+                cosOn = abs(dot(pl.xyz, d));
+                landed = down > 1e-6 ? irr * (1.0 - Ri) * down / cosOn : 0.0;
+            } else {
+                d = dBefore - pl.xyz * (2.0 * db);
+                cosOn = db;
+            }
+        }
+
+        // the walls it goes on to: those ahead of it that some of it reaches, carrying at least `least`
+        int bits = 0, go = 0;
+        if (!leaf) {
+            int line = use * 16 + cell;
+            {   // (tried with the corners as the next level will read them)
+                vec4 box = gmWall(line, wall, 4);
+                np = min(np, 11);
+                for (int i = 0; i < 12; i++) P[i] = i < np ? gmUnpack(gmPack(P[i], box), box) : vec2(0.0);
+            }
+            for (int w = 0; w < GM_WALLS; w++) {
+                vec4 info = gmWall(line, w, 1);
+                if (info.z < 2.5 || w == wall) continue;
+                vec4 pl = gmWall(line, w, 0);
+                float db = dot(pl.xyz, d);
+                if (!(db > 1e-7)) continue;
+                // (a face that would mirror it once more than is followed is not gone on to)
+                if (info.x > -0.5 && gmFresnel(db, n, 1.0) >= 1.0 && faces + 1 >= int(materialParams.mostFaces + 0.5)) continue;
+                vec2 Q[12];
+                int m;
+                gmOnto(P, np, line, wall, w, d, Q, m);
+                if (m < 3) continue;
+                float a = gmArea(Q, m);
+                if (!(a > 1e-10) || irr * db / cosOn * a * db < materialParams.least) continue;
+                bits |= 1 << w;
+                go++;
+            }
+        }
+        // (what is passed on is what the next level will read: the corners as they will be unpacked)
+        np = min(np, 11);
+        vec4 box = gmWall(use * 16 + cell, wall, 4);
+        float c[11];
+        for (int i = 0; i < 11; i++) c[i] = i < np ? gmPack(P[i], box) : 0.0;
+        postProcess.o0 = vec4(d.xy, leaf ? landed : irr,
+                              float((leaf ? 2 : 1) + 4 * cell + 64 * faces + 1024 * wall + 32768 * np + (d.z < 0.0 ? 524288 : 0)));
+        postProcess.o1 = vec4(float(bits), c[0], c[1], c[2]);
+        postProcess.o2 = vec4(c[3], c[4], c[5], c[6]);
+        postProcess.o3 = vec4(c[7], c[8], c[9], c[10]);
+    }
+}

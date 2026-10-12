@@ -1031,6 +1031,13 @@ int main(int argc, char** argv) {
     // GBEAMS=1: the same splitting done on the GPU, level by level in tables (gbeam.glsl); the CPU hands over poses only.
     const bool flatGBeams = env_f("GBEAMS", 0.f) > 0.5f && !rainbowOnce;
     static std::vector<View*> gbeamViews;   // in the order they are to be drawn
+    // GBEAMS=2: the same with ONE fragment per beam: a level is a render target of several pictures, written at once by
+    // a post-process material (mrt_probe.mm shows that Filament lets an application do this). Filament 1.77.2 on Metal
+    // writes only the first FOUR colour attachments (MetalState.mm:62), 16 numbers, and an exact beam needs about 28
+    // (up to 12 corners): so this version packs each corner into one number, on a grid of 1/4096 of its wall, and
+    // keeps 11 corners. It is NOT exact; it is here to measure what one fragment per beam costs (gbm.glsl).
+    const bool gbMrt = flatGBeams && env_f("GBEAMS", 0.f) > 1.5f;
+    static std::vector<MaterialInstance*> gbmCommit;   // post-process material instances: to be committed by hand each frame
     const bool flatBeams = env_f("BEAMS", 0.f) > 0.5f && !flatGBeams;
     static std::vector<std::array<beam::SplitShape, 16>> beamShapes;   // per shape, per set of films
     struct BeamPose {
@@ -1116,7 +1123,141 @@ int main(int argc, char** argv) {
         }
         beamPose.resize(items.size());
     }
-    if (flatGBeams) {
+    if (gbMrt) {
+        Material* nodeMat = mat("gbm_node.filamat");
+        Material* indexMat = mat("gbm_index.filamat");
+        Material* drawMat = mat("gbm_draw.filamat");
+        if (!nodeMat || !indexMat || !drawMat) return fail("gbm_node / gbm_index / gbm_draw .filamat");
+        const int levels = std::min(16, std::max(1, (int)env_f("GBEAMLEVELS", 8.f)));
+        const int wide = std::min(1024, std::max(8, (int)env_f("GBEAMW", 96.f)));
+        const int WALLS = 18, WALL_W = 11;
+        auto table_view = [&](MaterialInstance* mi, RenderTarget* rt, int w, int h) {
+            Scene* sc = engine->createScene();
+            sc->addEntity(renderable(sqVB, sqIB, mi, false, false));
+            View* v = engine->createView();
+            v->setScene(sc);
+            v->setRenderTarget(rt);
+            v->setViewport({0, 0, (uint32_t)w, (uint32_t)h});
+            v->setDithering(View::Dithering::NONE);
+            v->setPostProcessingEnabled(false);
+            v->setShadowingEnabled(false);
+            gbeamViews.push_back(v);
+        };
+        for (FlatKind& fk : flatKinds) {
+            using beam::V3;
+            const beam::Solid& loc = items[(size_t)fk.solids[0]].local;
+            auto* cellTexels = new std::vector<float>((size_t)WALLS * WALL_W * 256 * 4, 0.f);
+            int mostWalls = 0, mostCorners = 0;
+            for (int use = 0; use < 16; ++use) {
+                const beam::SplitShape sh = beam::split_shape(loc, use);
+                for (size_t c = 0; c < sh.cells.size() && c < 16; ++c) {
+                    const beam::SplitCell& cell = sh.cells[c];
+                    mostWalls = std::max(mostWalls, (int)cell.planes.size());
+                    for (size_t w = 0; w < cell.planes.size() && w < (size_t)WALLS; ++w) {
+                        const beam::Poly& F = cell.faces[w];
+                        if (F.n < 3) continue;
+                        float* o = cellTexels->data() + (((size_t)use * 16 + c) * (size_t)(WALLS * WALL_W) + w * (size_t)WALL_W) * 4;
+                        const V3 nrm = cell.planes[w].n, org = nrm * cell.planes[w].o;
+                        const V3 u = beam::normalize(F.p[1] - F.p[0]), v = beam::cross(nrm, u);
+                        const int cn = std::min(12, F.n);
+                        mostCorners = std::max(mostCorners, F.n);
+                        o[0] = (float)nrm.x; o[1] = (float)nrm.y; o[2] = (float)nrm.z; o[3] = (float)cell.planes[w].o;
+                        o[4] = cell.what[w] >= 0 ? (float)cell.what[w] : -1.f;
+                        o[6] = (float)cn;
+                        o[8] = (float)u.x; o[9] = (float)u.y; o[10] = (float)u.z;
+                        o[12] = (float)v.x; o[13] = (float)v.y; o[14] = (float)v.z;
+                        float lo[2] = {1e30f, 1e30f}, hi[2] = {-1e30f, -1e30f};
+                        for (int k = 0; k < cn; ++k) {
+                            const float a = (float)beam::dot(F.p[(size_t)k] - org, u), b = (float)beam::dot(F.p[(size_t)k] - org, v);
+                            o[20 + k * 2] = a;
+                            o[21 + k * 2] = b;
+                            lo[0] = std::min(lo[0], a); lo[1] = std::min(lo[1], b);
+                            hi[0] = std::max(hi[0], a); hi[1] = std::max(hi[1], b);
+                        }
+                        o[16] = lo[0]; o[17] = lo[1]; o[18] = hi[0]; o[19] = hi[1];
+                    }
+                }
+            }
+            if (mostWalls > WALLS || mostCorners > 12) return fail("GBEAMS=2: a cell has more than 18 walls, or a wall more than 12 corners");
+            Texture* cellTex = Texture::Builder().width((uint32_t)(WALLS * WALL_W)).height(256).levels(1).format(Texture::InternalFormat::RGBA32F).build(*engine);
+            cellTex->setImage(*engine, 0, Texture::PixelBufferDescriptor(cellTexels->data(), cellTexels->size() * sizeof(float), backend::PixelDataFormat::RGBA, backend::PixelDataType::FLOAT,
+                                                                         [](void*, size_t, void* u) { delete (std::vector<float>*)u; }, cellTexels));
+            float4 which[16] = {};
+            for (size_t i = 0; i < fk.solids.size() && i < 64; ++i) which[i / 4][i % 4] = (float)fk.solids[i];
+            const int rows = (int)fk.solids.size() * flatLines;
+            const int OUTS = 4;
+            static const char* prevName[4] = {"prev0", "prev1", "prev2", "prev3"};
+            static const char* nodeName[4] = {"n0", "n1", "n2", "n3"};
+            Texture* before[4];
+            for (Texture*& b : before) b = cellTex;   // (a stand-in where a level has nothing before it)
+            int beforeWide = 0;
+            const auto use8 = Texture::Usage::COLOR_ATTACHMENT | Texture::Usage::SAMPLEABLE | Texture::Usage::BLIT_SRC;
+            for (int lv = 0; lv <= levels; ++lv) {
+                const int places = lv == 0 ? 16 * WALLS * 3 : wide;
+                Target index{nullptr, nullptr};
+                if (lv > 0) {
+                    index = make_rt(places, rows, Texture::InternalFormat::RGBA32F);
+                    MaterialInstance* imi = indexMat->createInstance();
+                    imi->setParameter("nodes", before[0], nearest);
+                    imi->setParameter("walls", before[1], nearest);
+                    imi->setParameter("nodesWide", (float)beforeWide);
+                    table_view(imi, index.rt, places, rows);
+                }
+                Texture* now[4];
+                RenderTarget::Builder rtb;
+                for (int a = 0; a < OUTS; ++a) {
+                    now[a] = Texture::Builder().width((uint32_t)places).height((uint32_t)rows).levels(1).usage(use8).format(Texture::InternalFormat::RGBA32F).build(*engine);
+                    rtb.texture((RenderTarget::AttachmentPoint)a, now[a]);
+                }
+                RenderTarget* nodesRt = rtb.build(*engine);
+                MaterialInstance* nmi = nodeMat->createInstance();
+                nmi->setParameter("cells", cellTex, nearest);
+                for (int a = 0; a < OUTS; ++a) nmi->setParameter(prevName[a], before[a], nearest);
+                nmi->setParameter("index", lv > 0 ? index.color : cellTex, nearest);
+                nmi->setParameter("pose", poseTex, nearest);
+                nmi->setParameter("stepCount", (float)flatLines);
+                nmi->setParameter("solids", which, 16);
+                nmi->setParameter("solidsHere", (float)fk.solids.size());
+                nmi->setParameter("level", (float)lv);
+                nmi->setParameter("least", env_f("BEAMCUT", 2e-5f));
+                nmi->setParameter("mostFaces", env_f("BEAMFACES", 8.f));
+                routeMis.push_back(nmi);
+                gbmCommit.push_back(nmi);
+                table_view(nmi, nodesRt, places, rows);
+                auto* v = new std::vector<float>();
+                auto* ix = new std::vector<uint32_t>();
+                for (int i = 0; i < places; ++i) {
+                    const uint32_t base = (uint32_t)(v->size() / 3);
+                    for (int k = 0; k < 12; ++k) v->insert(v->end(), {(float)i, (float)k, 0.f});
+                    for (uint32_t k = 1; k + 1 < 12; ++k) ix->insert(ix->end(), {base, base + k, base + k + 1});
+                }
+                VertexBuffer* vb = VertexBuffer::Builder().vertexCount((uint32_t)(v->size() / 3)).bufferCount(1)
+                                       .attribute(VertexAttribute::POSITION, 0, VertexBuffer::AttributeType::FLOAT3, 0, 12).build(*engine);
+                vb->setBufferAt(*engine, 0, VertexBuffer::BufferDescriptor(v->data(), v->size() * sizeof(float)));
+                IndexBuffer* ib = IndexBuffer::Builder().indexCount((uint32_t)ix->size()).bufferType(IndexBuffer::IndexType::UINT).build(*engine);
+                ib->setBuffer(*engine, IndexBuffer::BufferDescriptor(ix->data(), ix->size() * sizeof(uint32_t)));
+                MaterialInstance* dmi = drawMat->createInstance();
+                dmi->setParameter("cells", cellTex, nearest);
+                for (int a = 0; a < OUTS; ++a) dmi->setParameter(nodeName[a], now[a], nearest);
+                dmi->setParameter("pose", poseTex, nearest);
+                dmi->setParameter("stepCount", (float)flatLines);
+                dmi->setParameter("solids", which, 16);
+                dmi->setParameter("floorY", 0.f);
+                routeMis.push_back(dmi);
+                const utils::Entity e = em.create();
+                RenderableManager::Builder(1).boundingBox({{0, 0, 0}, {100.f, 100.f, 100.f}})
+                    .geometry(0, RenderableManager::PrimitiveType::TRIANGLES, vb, ib)
+                    .instances((size_t)rows)
+                    .material(0, dmi).culling(false).castShadows(false).receiveShadows(false)
+                    .layerMask(0xFF, std::getenv("NOLIGHT") ? 0x00 : 0x01).build(*engine, e);
+                sLight->addEntity(e);
+                for (int a = 0; a < OUTS; ++a) before[a] = now[a];
+                beforeWide = places;
+            }
+            std::printf("  gbeams, one fragment a beam: %s, %d levels of %d nodes after the first, %d lines; most walls to a cell %d, most corners to a wall %d\n", fk.name.c_str(),
+                        levels, wide, rows, mostWalls, mostCorners);
+        }
+    } else if (flatGBeams) {
         Material* nodeMat = mat("gbeam_node.filamat");
         Material* indexMat = mat("gbeam_index.filamat");
         Material* drawMat = mat("gbeam_draw.filamat");
@@ -2186,6 +2327,7 @@ int main(int argc, char** argv) {
                     all.beams += st.beams; all.leaves += st.leaves; all.corners += st.corners;
                     all.deepest = std::max(all.deepest, st.deepest);
                     for (int i = 0; i < 12; ++i) all.light[i] += st.light[i];
+                    for (int i = 0; i < 20; ++i) all.byCorners[i] += st.byCorners[i];
                 }
                 double sum = 0;
                 for (double l : all.light) sum += l;
@@ -2194,6 +2336,9 @@ int main(int argc, char** argv) {
                 std::printf("    light by how many faces it met inside:");
                 for (int i = 1; i < 12; ++i)
                     if (all.light[i] > 0) std::printf("  %d: %.1f%%", i, 100.0 * all.light[i] / sum);
+                std::printf("\n    pieces by number of corners:");
+                for (int i = 3; i < 20; ++i)
+                    if (all.byCorners[i] > 0) std::printf("  %d: %ld", i, all.byCorners[i]);
                 std::printf("\n");
             } else if (!std::getenv("BEAMSTAT")) ++frames;
         }
@@ -2473,6 +2618,7 @@ int main(int argc, char** argv) {
         static const bool xF = xw && (std::strchr(xw, '1') || std::strchr(xw, 'f')), xE = xw && (std::strchr(xw, '1') || std::strchr(xw, 'e')),
                           xW = xw && (std::strchr(xw, '1') || std::strchr(xw, 'w')), xC = xw && (std::strchr(xw, '1') || std::strchr(xw, 'c'));
         if (flatGBeams) {
+            for (MaterialInstance* mi : gbmCommit) mi->commit(*engine);   // (MaterialInstance.h: post-process instances are committed by hand)
             for (View* v : gbeamViews) renderer->render(v);
         } else if (routeTree) {
             for (const RouteLevel& rl : routeLevels) renderer->render(rl.view);

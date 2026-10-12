@@ -65,6 +65,7 @@ inline SplitShape split_shape(const Solid& local, int use = 15) {
 
 struct SplitStats {
     long beams = 0, leaves = 0, corners = 0;
+    long byCorners[20] = {};   // how many pieces of light (inside or leaving) had this many corners
     double light[12] = {};   // light that left the glass after meeting this many of its faces (the last one counted)
     int deepest = 0;
 };
@@ -206,6 +207,7 @@ inline void split_light(const SplitShape* shapes, const V3 R[3], double scale, V
                 const double a = area(P);
                 const double irr = b.irr * db / b.cosOn;
                 if (!(a > 1e-10) || irr * a * db < least) continue;
+                if (st) ++st->byCorners[std::min(19, P.n)];
                 const int what = cell.what[f];
                 if (what >= 0) {
                     const double Ri = fres(db, n, 1.0);

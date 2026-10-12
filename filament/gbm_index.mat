@@ -1,0 +1,44 @@
+// GBEAMS=2, between two levels: for every place of the next level, which node of this level it grows from and which
+// of that node's walls it is (gbm.glsl). Out: (node, wall, 1, 0).
+material {
+    name : gbm_index,
+    shadingModel : unlit,
+    vertexDomain : device,
+    blending : opaque,
+    depthWrite : false,
+    depthCulling : false,
+    culling : none,
+    doubleSided : true,
+    flipUV : false,
+    parameters : [
+        { type : sampler2d, name : nodes, precision : high, format : float },   // the first picture of the level (meta in w)
+        { type : sampler2d, name : walls, precision : high, format : float },   // the second (the walls it goes on to in x)
+        { type : float, name : nodesWide }
+    ]
+}
+
+fragment {
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        ivec2 px = ivec2(gl_FragCoord.xy);
+        int want = px.x, seen = 0, wide = int(materialParams.nodesWide + 0.5);
+        vec4 result = vec4(0.0);
+        for (int p = 0; p < 1024; p++) {
+            if (p >= wide) break;
+            if ((int(texelFetch(materialParams_nodes, ivec2(p, px.y), 0).w + 0.5) & 3) != 1) continue;
+            int bits = int(texelFetch(materialParams_walls, ivec2(p, px.y), 0).x + 0.5), go = 0;
+            for (int w = 0; w < 18; w++) go += (bits >> w) & 1;
+            if (want < seen + go) {
+                int nth = want - seen;
+                for (int w = 0; w < 18; w++) {
+                    if ((bits & (1 << w)) == 0) continue;
+                    if (nth == 0) { result = vec4(float(p), float(w), 1.0, 0.0); break; }
+                    nth--;
+                }
+                break;
+            }
+            seen += go;
+        }
+        material.baseColor = result;
+    }
+}

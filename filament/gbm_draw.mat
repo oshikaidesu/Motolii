@@ -1,0 +1,82 @@
+// GBEAMS=2: draws the patches of light that have left the glass (the leaves of gbm_node.mat) as they are.
+// Mesh: per place a fan of 12 corners, position = (place, corner, 0). Instance = a line (solid, colour step).
+// Output as beam_light.mat: rgb = the light, a = light * distance flown.
+material {
+    name : gbm_draw,
+    shadingModel : unlit,
+    blending : add,
+    depthWrite : false,
+    depthCulling : false,
+    culling : none,
+    doubleSided : true,
+    instanced : true,
+    flipUV : false,
+    variables : [ light ],
+    parameters : [
+        { type : sampler2d, name : cells, precision : high, format : float },
+        { type : sampler2d, name : n0, precision : high, format : float },
+        { type : sampler2d, name : n1, precision : high, format : float },
+        { type : sampler2d, name : n2, precision : high, format : float },
+        { type : sampler2d, name : n3, precision : high, format : float },
+        { type : sampler2d, name : pose, precision : high, format : float },
+        { type : float4[4], name : filmBand },
+        { type : float4[16], name : steps },
+        { type : float,  name : stepCount },
+        { type : float4[16], name : solids },
+        { type : float3, name : sunDir },
+        { type : float4, name : strip },
+        { type : float2, name : stripSoft },
+        { type : float,  name : floorY }
+    ]
+}
+
+vertex {
+    void materialVertex(inout MaterialVertexInputs material) {
+        int corner = int(mesh_position.y + 0.5);
+        int row = getInstanceIndex();
+        ivec2 at2 = ivec2(int(mesh_position.x + 0.5), row);
+        int stepsAll = int(materialParams.stepCount + 0.5);
+        int which = row / stepsAll, stepAt = row - which * stepsAll;
+        material.light = vec4(0.0);
+        material.worldPosition = mulMat4x4Float3(getWorldFromModelMatrix(), vec3(0.0, materialParams.floorY, 0.0));
+        vec4 t0 = texelFetch(materialParams_n0, at2, 0);
+        int meta = int(t0.w + 0.5);
+        if ((meta & 3) != 2 || !(t0.z > 0.0)) return;    // (not a patch that has left the glass, or one that never lands)
+        int k = min(corner, ((meta >> 15) & 15) - 1);
+        float c = k < 3 ? texelFetch(materialParams_n1, at2, 0)[k + 1] : (k < 7 ? texelFetch(materialParams_n2, at2, 0)[k - 3] : texelFetch(materialParams_n3, at2, 0)[k - 7]);
+        bool mirrored = stepAt == stepsAll - 1;
+        float n = materialParams.steps[mirrored ? (stepsAll - 1) / 2 : stepAt].w;
+        int use = 0;
+        if (!mirrored)
+            for (int f = 0; f < 4; f++)
+                if (n > materialParams.filmBand[f].x && n < materialParams.filmBand[f].y) use |= 1 << f;
+        int line = use * 16 + ((meta >> 2) & 15), wall = (meta >> 10) & 31;
+        vec4 pl = texelFetch(materialParams_cells, ivec2(wall * 11, line), 0);
+        vec3 u = texelFetch(materialParams_cells, ivec2(wall * 11 + 2, line), 0).xyz, v = texelFetch(materialParams_cells, ivec2(wall * 11 + 3, line), 0).xyz;
+        vec4 box = texelFetch(materialParams_cells, ivec2(wall * 11 + 4, line), 0);
+        float cb = floor(c / 4096.0), ca = c - 4096.0 * cb;
+        vec2 ab = box.xy + vec2(ca, cb) / 4095.0 * (box.zw - box.xy);
+        vec3 p = pl.xyz * pl.w + u * ab.x + v * ab.y;
+        vec3 out0 = vec3(t0.xy, sqrt(max(0.0, 1.0 - dot(t0.xy, t0.xy))) * ((meta >> 19) != 0 ? -1.0 : 1.0));
+        int solid = int(materialParams.solids[which / 4][which - (which / 4) * 4] + 0.5);
+        vec4 ax = texelFetch(materialParams_pose, ivec2(solid, 0), 0);
+        vec3 ay = texelFetch(materialParams_pose, ivec2(solid, 1), 0).xyz;
+        vec3 az = texelFetch(materialParams_pose, ivec2(solid, 2), 0).xyz;
+        vec3 at = texelFetch(materialParams_pose, ivec2(solid, 3), 0).xyz;
+        vec3 pw = (ax.xyz * p.x + ay * p.y + az * p.z) * ax.w + at;
+        vec3 outW = ax.xyz * out0.x + ay * out0.y + az * out0.z;
+        float flown = (materialParams.floorY - pw.y) / min(outW.y, -1e-6);
+        vec3 X = pw + outW * flown;
+        vec3 rgb = mirrored ? vec3(1.0) : materialParams.steps[stepAt].rgb;
+        material.light = vec4(rgb * t0.z, flown);
+        material.worldPosition = mulMat4x4Float3(getWorldFromModelMatrix(), vec3(X.x, materialParams.floorY, X.z));
+    }
+}
+
+fragment {
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        vec4 c = variable_light;
+        material.baseColor = vec4(c.rgb, (c.r + c.g + c.b) / 3.0 * c.a);
+    }
+}
