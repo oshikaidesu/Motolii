@@ -9,7 +9,10 @@
 //   2. that picture + the bands' FAR sides          -> a picture   (the far surface mirrors the studio, bends once)
 //   3. that picture + the bands' NEAR sides         -> a picture   (bends again; the colours split at what 2 drew)
 //   4. that picture, bloom, tone mapping            -> the screen
-// ./build_one.sh band && ./out/band [scene]     scene: ref (default), loops, dark    -> out/band-<scene>.png
+// MODEL=A (default) is the above. MODEL=B: the near side's pixels follow their sight line through the REAL far
+// side (band_two.mat; the far side's normals and depth drawn first by band_gbuf.mat), two true crossings of the
+// surface per colour step. MODEL=C: B and one mirroring inside (the near side drawn as numbers too).
+// ./build_one.sh band && ./out/band [scene]     scene: ref (default), loops, dark    -> out/band-<scene>[-B|-C].png
 // TIME=n: n frames one after another, then the mean time of a frame.
 #include <filament/Camera.h>
 #include <filament/ColorGrading.h>
@@ -417,6 +420,8 @@ struct GlassLook {
 
 int main(int argc, char** argv) {
     const std::string which = argc > 1 ? argv[1] : "ref";
+    const std::string model = std::getenv("MODEL") ? std::getenv("MODEL") : "A";
+    if (model != "A" && model != "B" && model != "C") return fail("MODEL: A, B or C");
     const GlassLook look;
     const int per = 96, sides = 96;
 
@@ -492,6 +497,9 @@ int main(int argc, char** argv) {
     auto [colorB, rtB] = make_target(Texture::InternalFormat::RGBA16F);
     auto [color8, rt8] = make_target(Texture::InternalFormat::RGBA8);
     if (!rtA || !rtB || !rt8) return fail("target");
+    auto [gFar, rtGFar] = make_target(Texture::InternalFormat::RGBA32F);     // models B, C: the far sides as numbers
+    auto [gNear, rtGNear] = make_target(Texture::InternalFormat::RGBA32F);   // model C: the near sides
+    if (!rtGFar || !rtGNear) return fail("target");
     Texture* colorF[2] = {colorA, colorB};
     RenderTarget* rtF[2] = {rtA, rtB};
 
@@ -529,6 +537,45 @@ int main(int argc, char** argv) {
         mi->setParameter("filmWave", look.filmWave);
         return mi;
     };
+    // models B and C
+    auto gbuf_pkg = load_file("band_gbuf.filamat");
+    auto two_pkg = load_file("band_two.filamat");
+    auto sky_bytes = load_file("out/studio/_skybox.ktx");
+    if (gbuf_pkg.empty() || two_pkg.empty() || sky_bytes.empty()) return fail("band_gbuf / band_two .filamat, out/studio/_skybox.ktx");
+    Material* gbuf_mat = Material::Builder().package(gbuf_pkg.data(), gbuf_pkg.size()).build(*engine);
+    Material* two_mat = Material::Builder().package(two_pkg.data(), two_pkg.size()).build(*engine);
+    Texture* studio_tex = ktxreader::Ktx1Reader::createTexture(engine, new image::Ktx1Bundle(sky_bytes.data(), (uint32_t)sky_bytes.size()), false);
+    if (!gbuf_mat || !two_mat || !studio_tex) return fail("material");
+    MaterialInstance* gbuf_far = gbuf_mat->createInstance();
+    gbuf_far->setParameter("flip", -1.0f);
+    MaterialInstance* gbuf_near = gbuf_mat->createInstance();
+    gbuf_near->setParameter("flip", 1.0f);
+    MaterialInstance* two_mi = two_mat->createInstance();
+    {
+        TextureSampler lin(TextureSampler::MinFilter::LINEAR, TextureSampler::MagFilter::LINEAR);
+        lin.setWrapModeS(TextureSampler::WrapMode::CLAMP_TO_EDGE);
+        lin.setWrapModeT(TextureSampler::WrapMode::CLAMP_TO_EDGE);
+        TextureSampler near1(TextureSampler::MinFilter::NEAREST, TextureSampler::MagFilter::NEAREST);
+        near1.setWrapModeS(TextureSampler::WrapMode::CLAMP_TO_EDGE);
+        near1.setWrapModeT(TextureSampler::WrapMode::CLAMP_TO_EDGE);
+        float widest = 0;
+        for (const Band& b : bands) widest = std::max(widest, b.wide);
+        two_mi->setParameter("scene", colorA, lin);
+        two_mi->setParameter("farSide", gFar, near1);
+        two_mi->setParameter("nearSide", gNear, near1);
+        two_mi->setParameter("studio", studio_tex, TextureSampler(TextureSampler::MinFilter::LINEAR, TextureSampler::MagFilter::LINEAR));
+        const float exposure = 1.0f / (1.2f * 256.f * 125.f);   // (f/16, 1/125 s, ISO 100)
+        two_mi->setParameter("studioGain", 60000.f * exposure * envf("STUDIO", 1.0f));
+        two_mi->setParameter("studioTurn", 2.2f);
+        two_mi->setParameter("sunTo", normalize(float3{-0.35f, 0.6f, 0.7f}));
+        two_mi->setParameter("sunGain", envf("SUNGLINT", 60.f));
+        two_mi->setParameter("ior", envf("IOR", 1.5f));
+        two_mi->setParameter("spread", envf("SPREAD", 0.04f));
+        two_mi->setParameter("absorb", float3{0.5f, 0.28f, 0.16f} * envf("ABSORB", 1.0f));
+        two_mi->setParameter("reach", widest * envf("REACH", 3.0f));
+        two_mi->setParameter("beyond", envf("BEYOND", 3.0f));
+        two_mi->setParameter("inner", model == "C" ? 1.0f : 0.0f);
+    }
     MaterialInstance* near_mi = glass_of(false);
     MaterialInstance* far_mi = glass_of(true);
     MaterialInstance* floor_mi = floor_mat->createInstance();
@@ -637,21 +684,44 @@ int main(int argc, char** argv) {
         show(opaque, {});                                  // 1. the scene without glass
         view->setRenderTarget(rtF[0]);
         renderer->render(view);
-        view->setScreenSpaceRefractionEnabled(true);
-        rm.setMaterialInstanceAt(rm.getInstance(plate), 0, plate_mi[0]);
-        show({plate}, farSides);                           // 2. + the far sides
-        view->setRenderTarget(rtF[1]);
-        renderer->render(view);
-        rm.setMaterialInstanceAt(rm.getInstance(plate), 0, plate_mi[1]);
-        show({plate}, nearSides);                          // 3. + the near sides
-        view->setRenderTarget(rtF[0]);
-        renderer->render(view);
+        auto dress = [&](const std::vector<utils::Entity>& es, MaterialInstance* mi) {
+            for (utils::Entity e : es) rm.setMaterialInstanceAt(rm.getInstance(e), 0, mi);
+        };
+        if (model == "A") {
+            view->setScreenSpaceRefractionEnabled(true);
+            dress(farSides, far_mi);
+            dress(nearSides, near_mi);
+            rm.setMaterialInstanceAt(rm.getInstance(plate), 0, plate_mi[0]);
+            show({plate}, farSides);                           // 2. + the far sides
+            view->setRenderTarget(rtF[1]);
+            renderer->render(view);
+            rm.setMaterialInstanceAt(rm.getInstance(plate), 0, plate_mi[1]);
+            show({plate}, nearSides);                          // 3. + the near sides
+            view->setRenderTarget(rtF[0]);
+            renderer->render(view);
+        } else {
+            dress(farSides, gbuf_far);
+            show(farSides, {});                                // 2. the far sides as numbers
+            view->setRenderTarget(rtGFar);
+            renderer->render(view);
+            if (model == "C") {
+                dress(nearSides, gbuf_near);
+                show(nearSides, {});                           // (C) the near sides as numbers
+                view->setRenderTarget(rtGNear);
+                renderer->render(view);
+            }
+            dress(nearSides, two_mi);
+            rm.setMaterialInstanceAt(rm.getInstance(plate), 0, plate_mi[0]);
+            show({plate}, nearSides);                          // 3. the glass: every pixel follows its line through the solid
+            view->setRenderTarget(rtF[1]);
+            renderer->render(view);
+        }
         bloom.enabled = true;
         view->setBloomOptions(bloom);
         view->setPostProcessingEnabled(true);
         view->setAntiAliasing(View::AntiAliasing::FXAA);
         view->setScreenSpaceRefractionEnabled(false);
-        rm.setMaterialInstanceAt(rm.getInstance(plate), 0, plate_mi[0]);
+        rm.setMaterialInstanceAt(rm.getInstance(plate), 0, plate_mi[model == "A" ? 0 : 1]);
         show({plate}, {});                                 // 4. bloom, tone mapping
         view->setRenderTarget(rt8);
         renderer->render(view);
@@ -665,7 +735,7 @@ int main(int argc, char** argv) {
         if (!frame(i == 2)) return fail("begin");
         engine->flushAndWait();
     }
-    const std::string out = "out/band-" + which + ".png";
+    const std::string out = "out/band-" + which + (model == "A" ? "" : "-" + model) + ".png";
     if (!write_png(out.c_str(), W, H, pic.data())) return fail("png");
     std::printf("wrote %s  (%zu band(s))\n", out.c_str(), bands.size());
 
@@ -679,7 +749,7 @@ int main(int argc, char** argv) {
         }
         engine->flushAndWait();
         const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
-        std::printf("TIME: %.2f ms a frame (%d frames, %dx%d, %zu bands, 4 passes)\n", ms / std::max(1, drawn), drawn, W, H, bands.size());
+        std::printf("TIME: model %s, %.2f ms a frame (%d frames, %dx%d, %zu bands)\n", model.c_str(), ms / std::max(1, drawn), drawn, W, H, bands.size());
     }
     return 0;
 }
