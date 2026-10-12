@@ -258,7 +258,11 @@ int main(int argc, char** argv) {
 #ifdef GLASS_LIB
     Engine* engine = glass_door_engine();
 #else
-    Engine* engine = Engine::Builder().backend(Engine::Backend::METAL).featureLevel(Engine::FeatureLevel::FEATURE_LEVEL_3).build();
+    // BACKEND=webgpu (trial): Filament's WebGPU backend (Dawn). Needs a Filament built with it and materials compiled
+    // for it (dawn_probe/build.sh, dawn_probe/glass_wgpu.sh); the prebuilt SDK has neither.
+    const char* via = std::getenv("BACKEND");
+    const bool viaDawn = via && std::string(via) == "webgpu";
+    Engine* engine = Engine::Builder().backend(viaDawn ? Engine::Backend::WEBGPU : Engine::Backend::METAL).featureLevel(Engine::FeatureLevel::FEATURE_LEVEL_3).build();
 #endif
     if (!engine) return fail("engine");
     Renderer* renderer = engine->createRenderer();

@@ -160,3 +160,16 @@ index 675a6cc4..f8fd0c27 100644
  };
  
  } // namespace filament::backend
+diff --git a/filament/backend/src/webgpu/platform/WebGPUPlatform.cpp b/filament/backend/src/webgpu/platform/WebGPUPlatform.cpp
+index 04c92ae7..b416b2e3 100644
+--- a/filament/backend/src/webgpu/platform/WebGPUPlatform.cpp
++++ b/filament/backend/src/webgpu/platform/WebGPUPlatform.cpp
+@@ -76,6 +76,8 @@ constexpr std::array OPTIONAL_FEATURES = {
+     wgpu::FeatureName::CoreFeaturesAndLimits,
+     wgpu::FeatureName::DepthClipControl,
+     wgpu::FeatureName::Depth32FloatStencil8,
++    // blending into a 32-bit float colour target (as the Metal and Vulkan backends allow)
++    wgpu::FeatureName::Float32Blendable,
+ 
+     // Unsupported on WASM
+ #if !defined(__EMSCRIPTEN__)
