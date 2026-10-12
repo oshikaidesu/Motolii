@@ -22,6 +22,9 @@
 
 #include <algorithm>
 #include <array>
+#ifdef __APPLE__
+#include <pthread.h>
+#endif
 #include <atomic>
 #include <cmath>
 #include <condition_variable>
@@ -529,6 +532,11 @@ class Workers {
         for (std::thread& t : pool_) t.join();
     }
     void loop() {
+#ifdef __APPLE__
+        // (helpers of default priority are woken late and pushed aside when the machine is busy: WORKQOS=1 asks the
+        // system to treat them as part of what the user is looking at)
+        if (std::getenv("WORKQOS")) pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+#endif
         std::unique_lock<std::mutex> lock(m_);
         uint64_t seen = 0;
         for (;;) {

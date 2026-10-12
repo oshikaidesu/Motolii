@@ -1,0 +1,162 @@
+// GBEAMS=1: one level of the beams of light inside the flat-faced solids (the layout and the method: gbeam.glsl,
+// beam_split.h). A line = (solid of this shape, colour step).
+// Level 0: the light as it comes in. A place = (cell, wall of the cell, which band of sun): where that wall is a
+// sunlit face of the solid, the face cut to the band of sun, and the direction the glass bends the sun to.
+// Level L: every node of level L - 1 that goes on, carried onto each wall it reaches and cut to that wall's outline
+// (gbeam_index.mat says which node and which wall a place is). Where the wall is a face that lets the light out,
+// the node is a patch of light leaving the glass: gbeam_draw.mat draws it as it is.
+material {
+    name : gbeam_node,
+    shadingModel : unlit,
+    vertexDomain : device,
+    blending : opaque,
+    depthWrite : false,
+    depthCulling : false,
+    culling : none,
+    doubleSided : true,
+    flipUV : false,
+    parameters : [
+        { type : sampler2d, name : cells, precision : high, format : float },
+        { type : sampler2d, name : prev, precision : high, format : float },    // the level before (not read at level 0)
+        { type : sampler2d, name : index, precision : high, format : float },   // gbeam_index.mat for this level (not read at level 0)
+        { type : sampler2d, name : pose, precision : high, format : float },    // per solid (column): axis x + size; axis y; axis z; place
+        { type : float4[4], name : filmBand },                                  // film f mirrors light of an index between x and y
+        { type : float4[16], name : steps },                                    // rgb, index of refraction
+        { type : float,  name : stepCount },                                    // colour steps + 1 (the last: mirrored off the outside)
+        { type : float4[16], name : solids },
+        { type : float,  name : solidsHere },
+        { type : float3, name : sunDir },
+        { type : float4, name : strip },                                        // the band of sun (beam_soften.mat)
+        { type : float2, name : stripSoft },
+        { type : float,  name : level },
+        { type : float,  name : least },                                        // light less than this is not followed
+        { type : float,  name : mostFaces },
+        { type : float,  name : floorY }
+    ]
+}
+
+fragment {
+#include "gbeam.glsl"
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        ivec2 px = ivec2(gl_FragCoord.xy);
+        int slot = px.x / GB_NODE_W, part = px.x - slot * GB_NODE_W;
+        int stepsAll = int(materialParams.stepCount + 0.5);
+        int which = px.y / stepsAll, stepAt = px.y - which * stepsAll;
+        material.baseColor = vec4(0.0);
+        if (which >= int(materialParams.solidsHere + 0.5)) return;
+        bool mirrored = stepAt == stepsAll - 1;
+        float n = materialParams.steps[mirrored ? (stepsAll - 1) / 2 : stepAt].w;
+        int use = 0;
+        if (!mirrored)
+            for (int f = 0; f < 4; f++)
+                if (n > materialParams.filmBand[f].x && n < materialParams.filmBand[f].y) use |= 1 << f;
+        int solid = int(materialParams.solids[which / 4][which - (which / 4) * 4] + 0.5);
+        vec4 ax = texelFetch(materialParams_pose, ivec2(solid, 0), 0);
+        vec3 ay = texelFetch(materialParams_pose, ivec2(solid, 1), 0).xyz;
+        vec3 az = texelFetch(materialParams_pose, ivec2(solid, 2), 0).xyz;
+        vec3 at = texelFetch(materialParams_pose, ivec2(solid, 3), 0).xyz;
+        vec3 L = normalize(materialParams.sunDir);
+        vec3 sunL = normalize(vec3(dot(L, ax.xyz), dot(L, ay), dot(L, az)));
+
+        vec3 P[12];
+        for (int i = 0; i < 12; i++) P[i] = vec3(0.0);
+        int np = 0, cell = 0, faces = 0;
+        vec3 d = vec3(0.0, -1.0, 0.0);
+        float irr = 0.0, cosOn = 1.0;
+        bool leaf = false;
+        float landed = 0.0;             // a leaf: how bright it lands on the floor
+
+        if (int(materialParams.level + 0.5) == 0) {
+            cell = slot / (GB_WALLS * 3);
+            int wall = (slot - cell * GB_WALLS * 3) / 3, nth = slot - (slot / 3) * 3;
+            if (cell >= 16) return;
+            int line = use * 16 + cell;
+            vec4 info = gbWall(line, wall, 1);
+            if (info.z < 2.5 || info.x < -0.5) return;      // (no such wall, or a film)
+            vec3 nf = gbWall(line, wall, 0).xyz;
+            float ci = -dot(nf, sunL);
+            if (!(ci > 1e-6)) return;
+            np = int(info.z + 0.5);
+            for (int i = 0; i < 12; i++) P[i] = i < np ? gbWall(line, wall, 2 + i).xyz : vec3(0.0);
+            if (materialParams.strip.w > 0.0) {
+                // the band of sun: kept where | m . (the point in the world) - middle - k every | <= half wide
+                vec2 u = materialParams.strip.xy;
+                vec3 mW = vec3(u.x, -(u.x * L.x + u.y * L.z) / min(L.y, -1e-6), u.y);
+                vec3 mL = vec3(dot(mW, ax.xyz), dot(mW, ay), dot(mW, az)) * ax.w;
+                float m0 = dot(mW, at) - materialParams.strip.z, every = materialParams.stripSoft.y, half2 = materialParams.strip.w;
+                float k = 0.0;
+                if (every > 0.0) {
+                    float lo = 1e30, hi = -1e30;
+                    for (int i = 0; i < 12; i++) {
+                        if (i >= np) break;
+                        float g = dot(mL, P[i]) + m0;
+                        lo = min(lo, g);
+                        hi = max(hi, g);
+                    }
+                    k = ceil((lo - half2) / every) + float(nth);
+                    if (k > floor((hi + half2) / every)) return;
+                } else if (nth > 0) return;
+                float mid = m0 - k * every;
+                gbClip(P, np, mL, mid + half2);
+                if (np >= 3) gbClip(P, np, -mL, -mid + half2);
+            } else if (nth > 0) return;
+            if (np < 3 || !(gbArea(P, np) > 1e-10)) return;
+            float Rf = gbFresnel(ci, 1.0, n);
+            if (mirrored) {
+                d = sunL + nf * (2.0 * ci);
+                float down = -(ax.y * d.x + ay.y * d.y + az.y * d.z);
+                leaf = true;
+                landed = down > 1e-6 ? Rf * down : 0.0;
+                cosOn = ci;
+            } else {
+                d = refract(sunL, nf, 1.0 / n);
+                irr = ci * (1.0 - Rf);
+                cosOn = abs(dot(nf, d));
+            }
+        } else {
+            if (mirrored) return;
+            vec4 from = texelFetch(materialParams_index, ivec2(slot, px.y), 0);
+            if (from.z < 0.5) return;
+            int parent = int(from.x + 0.5), wall = int(from.y + 0.5);
+            vec4 t0 = texelFetch(materialParams_prev, ivec2(parent * GB_NODE_W, px.y), 0);
+            vec4 t1 = texelFetch(materialParams_prev, ivec2(parent * GB_NODE_W + 1, px.y), 0);
+            int meta = int(t1.y + 0.5);
+            cell = (meta >> 2) & 15;
+            faces = (meta >> 6) & 15;
+            int line = use * 16 + cell;
+            vec4 pl = gbWall(line, wall, 0);
+            bool film = gbWall(line, wall, 1).x < -0.5;
+            float db = dot(pl.xyz, t0.xyz);
+            irr = t0.w * db / t1.x;
+            float Ri = film ? 1.0 : gbFresnel(db, n, 1.0);
+            if (part >= 1) {            // (the first texel needs no outline)
+                np = min(int(t1.w + 0.5), GB_CORNERS);
+                for (int i = 0; i < GB_CORNERS; i++) P[i] = i < np ? texelFetch(materialParams_prev, ivec2(parent * GB_NODE_W + 2 + i, px.y), 0).xyz : vec3(0.0);
+                gbOnto(P, np, t0.xyz, line, wall);
+                if (np < 3) return;
+            }
+            if (!film) faces++;
+            if (Ri < 1.0) {
+                d = refract(t0.xyz, -pl.xyz, n);
+                float down = -(ax.y * d.x + ay.y * d.y + az.y * d.z);
+                leaf = true;
+                cosOn = abs(dot(pl.xyz, d));
+                landed = down > 1e-6 ? irr * (1.0 - Ri) * down / cosOn : 0.0;
+            } else {
+                d = t0.xyz - pl.xyz * (2.0 * db);
+                cosOn = db;
+            }
+        }
+
+        if (part == 0) {
+            material.baseColor = vec4(d, leaf ? landed : irr);
+        } else if (part == 1) {
+            int bits = 0, go = 0;
+            if (!leaf) gbAhead(P, np, d, irr, cosOn, use * 16 + cell, faces, n, bits, go);
+            material.baseColor = vec4(cosOn, float((leaf ? 2 : 1) + 4 * cell + 64 * faces + 1024 * go), float(bits), float(min(np, GB_CORNERS)));
+        } else {
+            material.baseColor = vec4(P[min(part - 2, max(np, 1) - 1)], 1.0);
+        }
+    }
+}

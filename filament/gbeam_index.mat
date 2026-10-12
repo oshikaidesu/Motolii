@@ -1,0 +1,45 @@
+// GBEAMS=1, between two levels: for every place of the next level, which node of this level it grows from and which
+// of that node's walls it is (gbeam.glsl). The nodes that go on are counted off in order, each taking as many places
+// as it has walls to go on to; places left over stay empty. Out: (node, wall, 1, 0).
+material {
+    name : gbeam_index,
+    shadingModel : unlit,
+    vertexDomain : device,
+    blending : opaque,
+    depthWrite : false,
+    depthCulling : false,
+    culling : none,
+    doubleSided : true,
+    flipUV : false,
+    parameters : [
+        { type : sampler2d, name : nodes, precision : high, format : float },   // the level before
+        { type : float, name : nodesWide }                                      // how many nodes it has room for
+    ]
+}
+
+fragment {
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        ivec2 px = ivec2(gl_FragCoord.xy);
+        int want = px.x, seen = 0, wide = int(materialParams.nodesWide + 0.5);
+        vec4 result = vec4(0.0);
+        for (int p = 0; p < 1024; p++) {
+            if (p >= wide) break;
+            vec4 t1 = texelFetch(materialParams_nodes, ivec2(p * 12 + 1, px.y), 0);
+            int meta = int(t1.y + 0.5);
+            if ((meta & 3) != 1) continue;
+            int go = meta >> 10;
+            if (want < seen + go) {
+                int bits = int(t1.z + 0.5), nth = want - seen;
+                for (int w = 0; w < 18; w++) {
+                    if ((bits & (1 << w)) == 0) continue;
+                    if (nth == 0) { result = vec4(float(p), float(w), 1.0, 0.0); break; }
+                    nth--;
+                }
+                break;
+            }
+            seen += go;
+        }
+        material.baseColor = result;
+    }
+}
