@@ -296,6 +296,7 @@ int main() {
     blocks_mi->setParameter("sceneMix", 1.f);
     blocks_mi->setParameter("absorption", float3{0.10f, 0.04f, 0.06f});
     blocks_mi->setParameter("round", ROUND);
+    blocks_mi->setParameter("bySize", 1.f);
     blocks_mi->setParameter("lean", 0.08f);      // (the letters inside run like water; at 0.15 they break up)
 
     static std::vector<uint8_t> pic((size_t)W * H * 4);

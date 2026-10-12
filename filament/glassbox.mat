@@ -26,7 +26,8 @@ material {
         { type : float, name : sceneMix },
         { type : float3, name : absorption },
         { type : float, name : round },      // the edges' rounding, as a part of half the edge (0: sharp; the mesh has the same)
-        { type : float, name : lean }        // how far the faces lean from flat, slowly, this way and that (0: dead flat)
+        { type : float, name : lean },       // how far the faces lean from flat, slowly, this way and that (0: dead flat)
+        { type : float, name : bySize }      // 1: work as hard as the block shows large (see `across` below); 0: always 8 colours, 4 mirrorings
     ]
 }
 
@@ -43,6 +44,7 @@ vertex {
 fragment {
     const int WAVES = 8;
     const int BOUNCES = 4;
+    const int MOST_WAVES = 12;
 
     // --- Spectral-Glass: Cauchy + Abbe number (glTF KHR_materials_dispersion formulation)
     float cauchyIor(float lambda, float n_d, float V_d) {
@@ -123,15 +125,29 @@ fragment {
         float F = schlickFresnel(-dot(dl, nl), materialParams.ior);
         vec3 reflected = lookup(P, R * reflect(dl, nl), view);
 
+        // How large the block shows, as Filament sizes things for its own blur levels: world size over the distance to
+        // the camera's plane, against one pixel's size at that distance. A block a few pixels wide shows neither its
+        // inner mirrorings nor a fine rainbow, and a block that fills the screen shows eight colours as eight steps.
+        // Up to the size the look was set at (an edge of some 265 pixels) the colours keep the same number of pixels
+        // between them, 8 at most; only a block larger than half the screen's height gets more, 12 at most.
+        int waves = WAVES, bounces = BOUNCES;
+        if (materialParams.bySize > 0.5) {
+            float away = max(-mulMat4x4Float3(getViewFromWorldMatrix(), c).z, 1e-3);
+            float across = min(h.x, min(h.y, h.z)) / away * getClipFromViewMatrix()[1][1] * getResolution().y;   // the edge, in pixels
+            waves = int(clamp(across / 33.0, 3.0, float(WAVES)) + clamp((across - 530.0) / 130.0, 0.0, float(MOST_WAVES - WAVES)) + 0.5);
+            bounces = int(clamp(across / 24.0, 1.0, float(BOUNCES)));
+        }
         vec3 acc = vec3(0.0), wsum = vec3(0.0);
-        for (int i = 0; i < WAVES; i++) {
-            float lambda = mix(400.0, 700.0, (float(i) + 0.5) / float(WAVES));
+        for (int i = 0; i < MOST_WAVES; i++) {
+            if (i >= waves) break;
+            float lambda = mix(400.0, 700.0, (float(i) + 0.5) / float(waves));
             float n = cauchyIor(lambda, materialParams.ior, materialParams.abbe);
             // N8python totalInternalReflection: refract in, then bounce until a refraction out succeeds
             vec3 rd = refract(dl, nl, 1.0 / n);
             vec3 ro = pl;
             float path = 0.0;
             for (int b = 0; b < BOUNCES; b++) {
+                if (b >= bounces) break;
                 // Spectral-Glass cubeAnalyticExit: slab exit of an axis-aligned box, from inside
                 vec3 inv = 1.0 / rd;
                 vec3 tHi = (h - ro) * inv, tLo = (-h - ro) * inv;
