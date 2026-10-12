@@ -369,7 +369,7 @@ fn pass(b: &Band, numbers: bool) {
     }
     b.g.queue.submit(Some(enc.finish()));
 }
-fn wait(b: &Band) { b.g.device.poll(wgpu::PollType::wait_indefinitely()).unwrap(); }
+fn wait(b: &Band) { wait_some(&b.g); }
 const SETTINGS: [(&str, f32); 6] = [("the way in only (no glass walked)", -1.0), ("in + first surface (0 mirrorings)", 0.0), ("up to 3 mirrorings", 3.0), ("up to 5", 5.0), ("up to 8", 8.0), ("up to 32", 32.0)];
 fn three(v: &mut Vec<f64>) -> String { v.sort_by(|a, b| a.total_cmp(b)); format!("{:5.2} / {:5.2} / {:5.2}", v[0], v[v.len() / 2], v[v.len() - 1]) }
 

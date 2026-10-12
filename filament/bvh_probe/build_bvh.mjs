@@ -3,10 +3,10 @@
 // Also writes three-mesh-bvh's GLSL (common_functions + bvh_ray_functions), word for word, for a Filament material to include.
 //   node build_bvh.mjs mesh.bin bvh.bin [three_mesh_bvh.glsl]
 // mesh.bin: uint32 vertices, uint32 indices, float32 xyz per vertex, uint32 per index.
-// bvh.bin:  4 textures in the order position, index, bvhBounds, bvhContents; each: uint32 width, height, channels, isUint; then the data (32 bits a channel).
+// bvh.bin:  5 textures in the order position, index, bvhBounds, bvhContents, normal; each: uint32 width, height, channels, isUint; then the data (32 bits a channel).
 import fs from 'node:fs';
 import { BufferGeometry, BufferAttribute } from 'three';
-import { MeshBVH, MeshBVHUniformStruct, SAH, BVHShaderGLSL } from 'three-mesh-bvh';
+import { MeshBVH, MeshBVHUniformStruct, SAH, BVHShaderGLSL, FloatVertexAttributeTexture } from 'three-mesh-bvh';
 
 const [meshPath, outPath, glslPath] = process.argv.slice(2);
 const raw = fs.readFileSync(meshPath);
@@ -17,6 +17,10 @@ const idx = new Uint32Array(raw.buffer.slice(raw.byteOffset + 8 + nv * 12, raw.b
 const geometry = new BufferGeometry();
 geometry.setAttribute('position', new BufferAttribute(pos, 3));
 geometry.setIndex(new BufferAttribute(idx, 1));
+// (smooth normals, if the file has them after the indices: packed the same way as the positions, a fifth texture)
+const nAt = raw.byteOffset + 8 + nv * 12 + ni * 4;
+const nrm = raw.byteLength >= 8 + nv * 24 + ni * 4 ? new Float32Array(raw.buffer.slice(nAt, nAt + nv * 12)) : new Float32Array(nv * 3);
+geometry.setAttribute('normal', new BufferAttribute(nrm, 3));
 
 const t0 = performance.now();
 const bvh = new MeshBVH(geometry, { strategy: SAH, maxLeafTris: Number(process.env.LEAFTRIS || 10) });   // (10: three-mesh-bvh's own default)
@@ -25,8 +29,10 @@ const s = new MeshBVHUniformStruct();
 s.updateFrom(bvh);
 const t2 = performance.now();
 
+s.normal = new FloatVertexAttributeTexture();
+s.normal.updateFrom(geometry.attributes.normal);
 const parts = [];
-for (const name of ['position', 'index', 'bvhBounds', 'bvhContents']) {
+for (const name of ['position', 'index', 'bvhBounds', 'bvhContents', 'normal']) {
     const tex = s[name], { width, height, data } = tex.image;
     const channels = data.length / (width * height), isUint = data instanceof Uint32Array ? 1 : 0;
     if (!(data instanceof Uint32Array) && !(data instanceof Float32Array)) throw new Error(name + ': not 32 bits a channel: ' + data.constructor.name);

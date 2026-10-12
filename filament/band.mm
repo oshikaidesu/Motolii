@@ -46,6 +46,8 @@
 
 #include <zlib.h>
 
+#import <Cocoa/Cocoa.h>
+
 #include <algorithm>
 #include <chrono>
 #include <clocale>
@@ -264,20 +266,26 @@ static void pack(std::vector<float>& v, V3 p, V3 T, V3 normal) {
 // inside: the same surface seen from within (triangles turned round, normals inward): the band's far side.
 // Experiments on the shape (band.mm, PROFILE): facets > 0: the outline is that many flat faces with sharp creases;
 // grooves > 0: that many furrows run along the band (the outline waves in and out by `deep`).
+// wav > 0: the outline swells and thins in slow waves that wind round the band as they run along it (whole counts
+// along the loop, so it closes); the normals are then taken from the waved surface itself.
 static Built tube(const std::vector<Sample>& s, int sides, float wide, float thick, float round, float rib, bool inside,
-                  int facets = 0, int grooves = 0, float deep = 0.f) {
+                  int facets = 0, int grooves = 0, float deep = 0.f, float wav = 0.f) {
     Built m;
     int rings = (int)s.size();
+    float u = 0;   // (how far along the loop, 0..1)
     auto at = [&](float ang, float& x, float& y) {
         float c = std::cos(ang), sn = std::sin(ang);
         y = (sn < 0 ? -1.f : 1.f) * std::pow(std::fabs(sn), 2.f / round);
         x = (c < 0 ? -1.f : 1.f) * std::pow(std::fabs(c), 2.f / round) * (1.f + rib * std::exp(-(y * y) / 0.10f));
         float wave = grooves > 0 ? 1.f + deep * std::cos((float)grooves * ang) : 1.f;
+        if (wav > 0) wave *= 1.f + wav * (0.55f * std::sin(2.f * ang + TAU * 9.f * u) + 0.35f * std::sin(3.f * ang - TAU * 14.f * u + 1.3f)
+                                          + 0.25f * std::sin(ang + TAU * 23.f * u + 4.0f) + 0.5f * std::sin(TAU * 5.f * u + 0.7f));
         x *= thick * wave;
         y *= wide * wave;
     };
     const int per = facets > 0 ? 2 * facets : sides;   // corners in a ring (a facet has its own two)
     for (int i = 0; i < rings; ++i) {
+        u = (float)i / (float)rings;
         for (int k = 0; k < per; ++k) {
             float x, y;
             V3 nrm;
@@ -301,6 +309,17 @@ static Built tube(const std::vector<Sample>& s, int sides, float wide, float thi
             m.pos.push_back(p);
             m.nrm.push_back(nrm);
         }
+    }
+    if (wav > 0 && facets == 0) {   // the waved surface's own normals: across its neighbours round the ring and along the band
+        m.v.clear();
+        for (int i = 0; i < rings; ++i)
+            for (int k = 0; k < per; ++k) {
+                auto P = [&](int a, int b) { return m.pos[(size_t)(((a + rings) % rings) * per + (b + per) % per)]; };
+                V3 n = norm(cross(P(i, k + 1) - P(i, k - 1), P(i + 1, k) - P(i - 1, k)));
+                V3& was = m.nrm[(size_t)(i * per + k)];
+                was = dot(n, was) < 0 ? n * -1.f : n;
+                pack(m.v, P(i, k), s[i].T, inside ? was * -1.f : was);
+            }
     }
     for (int i = 0; i < rings; ++i) {
         int i1 = (i + 1) % rings;
@@ -422,6 +441,42 @@ struct Hold {
     IndexBuffer* ib = nullptr;
 };
 
+// Scene "poster": white letters on black, drawn by the system's own text drawing (top row first).
+static std::vector<uint8_t> poster_pixels(int w, int h) {
+    std::vector<uint8_t> px((size_t)w * h * 4, 0);
+    CGColorSpaceRef cs = CGColorSpaceCreateDeviceRGB();
+    CGContextRef cg = CGBitmapContextCreate(px.data(), w, h, 8, w * 4, cs, kCGImageAlphaPremultipliedLast);
+    CGContextSetRGBFillColor(cg, 0, 0, 0, 1);
+    CGContextFillRect(cg, CGRectMake(0, 0, w, h));
+    [NSGraphicsContext setCurrentContext:[NSGraphicsContext graphicsContextWithCGContext:cg flipped:NO]];
+    auto text = [&](NSString* t, CGFloat size, CGFloat x, CGFloat top) {
+        [t drawAtPoint:NSMakePoint(x, h - top - size * 1.2) withAttributes:@{NSFontAttributeName : [NSFont fontWithName:@"Helvetica-Bold" size:size], NSForegroundColorAttributeName : NSColor.whiteColor}];
+    };
+    auto dashes = [&](CGFloat top) {
+        CGContextSetRGBFillColor(cg, 1, 1, 1, 1);
+        for (int x = 90; x < w - 90; x += 22) CGContextFillRect(cg, CGRectMake(x, h - top, 12, 6));
+    };
+    text(@"MOTOLII", 26, 90, 80);
+    text(@"2026", 40, 90, 110);
+    text(@"FILAMENT", 26, 520, 80);
+    text(@"1.77.2", 40, 520, 110);
+    text(@"CLEAR", 268, 78, 300);
+    text(@"GLASS", 268, 78, 560);
+    dashes(940);
+    text(@"MOVE", 268, 78, 990);
+    text(@"MORE", 268, 78, 1250);
+    dashes(1640);
+    text(@"REFRACTION", 34, 90, 1670);
+    text(@"DISPERSION", 34, 90, 1712);
+    text(@"ONE PASS", 34, 620, 1670);
+    text(@"AS IT IS", 34, 620, 1712);
+    [NSGraphicsContext.currentContext flushGraphics];
+    [NSGraphicsContext setCurrentContext:nil];
+    CGContextRelease(cg);
+    CGColorSpaceRelease(cs);
+    return px;
+}
+
 static int fail(const char* msg) {
     std::printf("FAIL %s\n", msg);
     return 1;
@@ -442,7 +497,7 @@ struct GlassLook {
 int main(int argc, char** argv) {
     const std::string which = argc > 1 ? argv[1] : "ref";
     const std::string model = std::getenv("MODEL") ? std::getenv("MODEL") : "A";
-    if (model != "A" && model != "B" && model != "C" && model != "D") return fail("MODEL: A, B, C or D");
+    if (model != "A" && model != "B" && model != "C" && model != "D" && model != "S") return fail("MODEL: A, B, C, D or S");
     const GlassLook look;
     const int per = (int)envf("MESHPER", 96.f), sides = (int)envf("MESHSIDES", 96.f);   // (how finely the band's mesh is cut: along a span, around)
 
@@ -452,6 +507,10 @@ int main(int argc, char** argv) {
     float3 eye, target;
     float fov = 30.f;
     float backLow = 0.62f, backHigh = 1.25f, floorCol = 0.055f, floorRough = 0.6f;   // (the floor is the scene's: a glossy one mirrors the studio and goes white)
+    float slabUse = look.slab, roundUse = look.round, ribUse = look.rib;   // (the section; a scene may ask for a plain round one)
+    bool bare = false;                                                    // (nothing but the studio behind the glass)
+    float wavUse = 0.f;                                                   // (the section waving along the band)
+    bool poster = false;                                                  // (white letters on black behind the glass, nothing else)
     auto loop = [](float R, V3 c, float tiltX, float wob) {
         std::vector<V3> p;
         for (int i = 0; i < 8; ++i) {
@@ -480,7 +539,21 @@ int main(int argc, char** argv) {
         target = {0.1f, 0.8f, 0.f};
         fov = 34.f;
         backLow = 0.012f; backHigh = 0.05f; floorCol = 0.02f; floorRough = 0.45f;
-    } else return fail("scene: ref, loops or dark");
+    } else if (which == "torus") {   // a plain ring of round section, seen whole against the studio itself (no floor, no backdrop)
+        bands.push_back({loop(1.0f, {0, 1.3f, 0}, 0.95f, 0.f), 0.40f, 0.f});
+        eye = {1.2f, 4.2f, 10.5f};
+        target = {0.f, 1.3f, 0.f};
+        fov = 24.f;
+        slabUse = 1.0f; roundUse = 2.0f; ribUse = 0.f;
+        bare = true;
+    } else if (which == "poster") {  // one thick band sweeping in front of a black poster with white letters, seen straight on
+        bands.push_back({loop(envf("PR", 2.0f), {envf("PX", 1.5f), 1.4f, 0}, 0.f, envf("PWOB", 0.35f)), envf("PWIDE", 0.42f), envf("PTWIST", 0.5f)});
+        eye = {0.f, 1.4f, 6.f};
+        target = {0.f, 1.4f, 0.f};
+        slabUse = envf("PSLAB", 0.75f); roundUse = envf("PROUND", 2.4f); ribUse = 0.f;
+        wavUse = envf("WAV", 0.14f);
+        poster = true;
+    } else return fail("scene: ref, loops, dark, torus or poster");
 
     Engine* engine = Engine::Builder().backend(Engine::Backend::METAL).featureLevel(Engine::FeatureLevel::FEATURE_LEVEL_3).build();
     if (!engine) return fail("engine");
@@ -495,7 +568,14 @@ int main(int argc, char** argv) {
     camera->setProjection(fov, double(W) / double(H), 0.05, 60.0, Camera::Fov::VERTICAL);
 
     static AgxToneMapper agx(AgxToneMapper::AgxLook::NONE);
-    ColorGrading* grading = ColorGrading::Builder().toneMapper(&agx).saturation(1.4f).build(*engine);
+    static ACESToneMapper aces;
+    static FilmicToneMapper filmic;
+    static PBRNeutralToneMapper neutral;
+    static LinearToneMapper linearTone;
+    const std::string tone = std::getenv("TONE") ? std::getenv("TONE") : "agx";   // (which of Filament's tone mappers: agx, aces, filmic, neutral, linear)
+    const ToneMapper* mapper = tone == "aces" ? (const ToneMapper*)&aces : tone == "filmic" ? (const ToneMapper*)&filmic : tone == "neutral" ? (const ToneMapper*)&neutral
+                             : tone == "linear" ? (const ToneMapper*)&linearTone : (const ToneMapper*)&agx;
+    ColorGrading* grading = ColorGrading::Builder().toneMapper(mapper).saturation(envf("SATURATION", 1.4f)).build(*engine);
     view->setScene(scene);
     view->setCamera(camera);
     view->setViewport({0, 0, (uint32_t)W, (uint32_t)H});
@@ -506,7 +586,8 @@ int main(int argc, char** argv) {
     clear.clear = true;
     renderer->setClearOptions(clear);
 
-    auto make_target = [&](Texture::InternalFormat format) {
+    auto make_target = [&](Texture::InternalFormat format, int part = 1) {   // (part 2: half as wide and as high)
+        const uint32_t W = (uint32_t)(::W / part), H = (uint32_t)(::H / part);
         Texture* color = Texture::Builder().width(W).height(H).levels(1)
                              .usage(Texture::Usage::COLOR_ATTACHMENT | Texture::Usage::SAMPLEABLE | Texture::Usage::BLIT_SRC).format(format).build(*engine);
         Texture* depth = Texture::Builder().width(W).height(H).levels(1).usage(Texture::Usage::DEPTH_ATTACHMENT)
@@ -518,20 +599,25 @@ int main(int argc, char** argv) {
     auto [colorB, rtB] = make_target(Texture::InternalFormat::RGBA16F);
     auto [color8, rt8] = make_target(Texture::InternalFormat::RGBA8);
     if (!rtA || !rtB || !rt8) return fail("target");
-    auto [gFar, rtGFar] = make_target(Texture::InternalFormat::RGBA32F);     // models B, C: the far sides as numbers
-    auto [gNear, rtGNear] = make_target(Texture::InternalFormat::RGBA32F);   // model C: the near sides
+    // MODEL=S: the two helper pictures may be smaller (GPART=2: half as wide and as high) and the frame may be finished
+    // inside the glass's own render (DIRECT=1: no separate picture held up for bloom and tone mapping)
+    const int gpart = model == "S" ? (int)envf("GPART", 1.f) : 1;
+    const bool direct = model == "S" && envf("DIRECT", 0.f) > 0.5f;
+    auto [gFar, rtGFar] = make_target(Texture::InternalFormat::RGBA32F, gpart);     // models B, C: the far sides as numbers
+    auto [gNear, rtGNear] = make_target(Texture::InternalFormat::RGBA32F, gpart);   // model C: the near sides
     if (!rtGFar || !rtGNear) return fail("target");
     Texture* colorF[2] = {colorA, colorB};
     RenderTarget* rtF[2] = {rtA, rtB};
 
     // the bundled studio (the one glass_scene.mm uses): the glass's light and what it mirrors; never shown as a background
-    auto ibl_bytes = load_file("out/studio/_ibl.ktx");
-    if (ibl_bytes.empty()) return fail("out/studio/_ibl.ktx");
+    const std::string room = std::getenv("ROOM") ? std::getenv("ROOM") : "out/studio";   // (ROOM=out/colour_room: a dark room with coloured panels)
+    auto ibl_bytes = load_file((room + "/_ibl.ktx").c_str());
+    if (ibl_bytes.empty()) return fail("ROOM: no _ibl.ktx there");
     Texture* ibl_tex = ktxreader::Ktx1Reader::createTexture(engine, new image::Ktx1Bundle(ibl_bytes.data(), (uint32_t)ibl_bytes.size()), false);
     float3 sh[9];
-    if (!ibl_tex || !load_sh("out/studio/sh.txt", sh)) return fail("studio");
-    IndirectLight* ibl = IndirectLight::Builder().reflections(ibl_tex).irradiance(3, sh).intensity(60000.f)
-                             .rotation(mat3f::rotation(2.2f, float3{0, 1, 0})).build(*engine);
+    if (!ibl_tex || !load_sh((room + "/sh.txt").c_str(), sh)) return fail("studio");
+    IndirectLight* ibl = IndirectLight::Builder().reflections(ibl_tex).irradiance(3, sh).intensity(60000.f * envf("ROOMGAIN", 1.f))
+                             .rotation(mat3f::rotation(envf("ROOMTURN", 2.2f), float3{0, 1, 0})).build(*engine);
     scene->setIndirectLight(ibl);
 
     auto glass_pkg = load_file("band_glass.filamat");
@@ -561,7 +647,7 @@ int main(int argc, char** argv) {
     // models B and C
     auto gbuf_pkg = load_file("band_gbuf.filamat");
     auto two_pkg = load_file("band_two.filamat");
-    auto sky_bytes = load_file("out/studio/_skybox.ktx");
+    auto sky_bytes = load_file((room + "/_skybox.ktx").c_str());
     if (gbuf_pkg.empty() || two_pkg.empty() || sky_bytes.empty()) return fail("band_gbuf / band_two .filamat, out/studio/_skybox.ktx");
     Material* gbuf_mat = Material::Builder().package(gbuf_pkg.data(), gbuf_pkg.size()).build(*engine);
     Material* two_mat = Material::Builder().package(two_pkg.data(), two_pkg.size()).build(*engine);
@@ -603,6 +689,32 @@ int main(int argc, char** argv) {
     }
     MaterialInstance* near_mi = glass_of(false);
     MaterialInstance* far_mi = glass_of(true);
+    // MODEL=S: Filament's own refraction and dispersion and nothing else (no thin film, no far-side pass)
+    // dirt_glass.filamat: by the stock matc. dirt_glass_p.filamat (PATCHED=1): by the matc of third_party/filament_src,
+    // whose refraction follows the leaving direction on for `behind` and whose dispersion has eight wavelengths.
+    // dirt_glass_f.filamat (PATCHED=2): the same matc with -DMOTOLII_FAR_SIDE: through the real far side (a picture of it
+    // drawn first) and on to the real depth of the scene behind (a picture of that too); `behind` is not used.
+    const int patched = std::getenv("PATCHED") ? std::atoi(std::getenv("PATCHED")) : 0;
+    auto dirt_pkg = load_file(std::getenv("GLASSPKG") ? std::getenv("GLASSPKG") : patched >= 2 ? "dirt_glass_f.filamat" : patched == 1 ? "dirt_glass_p.filamat" : "dirt_glass.filamat");
+    Material* dirt_mat = dirt_pkg.empty() ? nullptr : Material::Builder().package(dirt_pkg.data(), dirt_pkg.size()).build(*engine);
+    if (!dirt_mat) return fail("dirt_glass.filamat");
+    MaterialInstance* std_mi = dirt_mat->createInstance();
+    std_mi->setParameter("ior", envf("IOR", 1.5f));
+    std_mi->setParameter("thickness", envf("THICK", 0.8f));
+    std_mi->setParameter("dispersion", envf("DISP", 12.f));
+    std_mi->setParameter("reflectance", envf("REFL", 0.5f));
+    std_mi->setParameter("absorption", float3{1.6f, 0.9f, 0.5f} * envf("ABSORB", 0.03f));
+    std_mi->setParameter("inner", envf("INNER", 0.6f));
+    std_mi->setParameter("smudge", envf("SMUDGE", 0.06f));
+    std_mi->setParameter("grain", envf("GRAIN", 0.006f));
+    std_mi->setParameter("behind", envf("BEHIND", 1.2f));
+    {
+        TextureSampler near1(TextureSampler::MinFilter::NEAREST, TextureSampler::MagFilter::NEAREST);
+        near1.setWrapModeS(TextureSampler::WrapMode::CLAMP_TO_EDGE);
+        near1.setWrapModeT(TextureSampler::WrapMode::CLAMP_TO_EDGE);
+        std_mi->setParameter("farSide", gFar, near1);
+        std_mi->setParameter("sceneBehind", gNear, near1);
+    }
     MaterialInstance* floor_mi = floor_mat->createInstance();
     floor_mi->setParameter("color", float4{floorCol, floorCol + 0.003f, floorCol + 0.012f, 1});
     floor_mi->setParameter("roughness", floorRough);
@@ -645,8 +757,24 @@ int main(int argc, char** argv) {
 
     // what is behind (the scene's own business)
     std::vector<utils::Entity> opaque;
-    opaque.push_back(add(quad({0, 0, 0}, {1, 0, 0}, {0, 0, -1}, 40.f, 40.f), floor_mi, false));
-    opaque.push_back(add(quad_uv({0, 6.f, -9.f}, {1, 0, 0}, {0, 1, 0}, 40.f, 9.f), back_mi, true));
+    if (poster) {   // the picture fills the view, 1.2 behind the band's middle
+        auto pkg = load_file("poster.filamat");
+        Material* mat = pkg.empty() ? nullptr : Material::Builder().package(pkg.data(), pkg.size()).build(*engine);
+        if (!mat) return fail("poster.filamat");
+        static std::vector<uint8_t> px = poster_pixels(W, H);
+        Texture* tex = Texture::Builder().width(W).height(H).levels(1).format(Texture::InternalFormat::SRGB8_A8).build(*engine);
+        tex->setImage(*engine, 0, Texture::PixelBufferDescriptor(px.data(), px.size(), Texture::Format::RGBA, Texture::Type::UBYTE));
+        MaterialInstance* mi = mat->createInstance();
+        mi->setParameter("color", tex, TextureSampler(TextureSampler::MinFilter::LINEAR, TextureSampler::MagFilter::LINEAR));
+        mi->setParameter("gain", envf("POSTER", 1.1f));
+        const float dist = 7.2f, hh = dist * std::tan(0.5f * fov * PI / 180.f), hw = hh * ((float)W / (float)H);
+        opaque.push_back(add(quad_uv({eye.x, eye.y, eye.z - dist}, {1, 0, 0}, {0, 1, 0}, hw, hh), mi, true));
+    } else if (!bare) {
+        opaque.push_back(add(quad({0, 0, 0}, {1, 0, 0}, {0, 0, -1}, 40.f, 40.f), floor_mi, false));
+        opaque.push_back(add(quad_uv({0, 6.f, -9.f}, {1, 0, 0}, {0, 1, 0}, 40.f, 9.f), back_mi, true));
+    } else {
+        scene->setSkybox(Skybox::Builder().environment(studio_tex).intensity(60000.f).showSun(false).build(*engine));
+    }
 
     // DROPPING A BAND IN: its path and its half width; everything else is the glass's own
     std::vector<utils::Entity> farSides, nearSides;
@@ -658,12 +786,13 @@ int main(int argc, char** argv) {
     const float deep = envf("DEEP", 0.06f);
     for (const Band& b : bands) {
         std::vector<Sample> path = close_frames(catmull(b.pts), per);
-        for (Sample& q : path) {
-            q.N = norm(rot_about(q.N, q.T, b.twist));
+        for (size_t i = 0; i < path.size(); ++i) {
+            Sample& q = path[i];
+            q.N = norm(rot_about(q.N, q.T, b.twist + (poster ? envf("TWISTWAVE", 0.7f) * std::sin(TAU * 4.f * (float)i / (float)path.size()) : 0.f)));
             q.B = norm(cross(q.T, q.N));
         }
-        farSides.push_back(add(tube(path, sides, b.wide, b.wide * look.slab, look.round, look.rib, true, facets, grooves, deep), far_mi, false));
-        Built nearMesh = tube(path, sides, b.wide, b.wide * look.slab, look.round, look.rib, false, facets, grooves, deep);
+        farSides.push_back(add(tube(path, sides, b.wide, b.wide * slabUse, roundUse, ribUse, true, facets, grooves, deep, wavUse), far_mi, false));
+        Built nearMesh = tube(path, sides, b.wide, b.wide * slabUse, roundUse, ribUse, false, facets, grooves, deep, wavUse);
         cpuNear.push_back(Built{{}, nearMesh.idx, nearMesh.pos, nearMesh.nrm});
         nearSides.push_back(add(std::move(nearMesh), near_mi, false));
     }
@@ -698,9 +827,9 @@ int main(int argc, char** argv) {
         if (!bvh_mat) return fail("band_bvh material");
         bvh_mi = bvh_mat->createInstance();
         TextureSampler exact1(TextureSampler::MinFilter::NEAREST, TextureSampler::MagFilter::NEAREST);
-        const char* names[4] = {"bvhPosition", "bvhIndex", "bvhBounds", "bvhContents"};
+        const char* names[5] = {"bvhPosition", "bvhIndex", "bvhBounds", "bvhContents", "bvhNormal"};
         size_t at = 0;
-        for (int k = 0; k < 4; ++k) {   // (the file: three-mesh-bvh's four textures, as it packed them)
+        for (int k = 0; k < 5; ++k) {   // (the file: three-mesh-bvh's four textures, as it packed them)
             uint32_t h[4];
             std::memcpy(h, bvhBytes.data() + at, 16);
             at += 16;
@@ -720,6 +849,9 @@ int main(int argc, char** argv) {
         bvh_mi->setParameter("ior", envf("IOR", 1.5f));
         bvh_mi->setParameter("most", envf("MOST", 5.f));
         bvh_mi->setParameter("show", 0.0f);
+        bvh_mi->setParameter("smoothIn", envf("SMOOTHIN", bare ? 1.f : 0.f));   // (the checks against the CPU use the flat normal: 0)
+        bvh_mi->setParameter("spread", envf("SPREAD", bare ? 0.14f : 0.f));     // index of refraction, blue minus red, used where the line leaves only
+        bvh_mi->setParameter("mirror", envf("MIRROR", bare ? 1.f : 0.f));       // 1: the near surface also mirrors the studio (Fresnel)
     }
 
     // the picture so far, held up in front of the camera for the next pass to bend (hero.mm's plate)
@@ -752,9 +884,9 @@ int main(int argc, char** argv) {
         for (utils::Entity e : shown) scene->addEntity(e);
     };
     BloomOptions bloom{};
-    bloom.strength = 0.7f;
-    bloom.levels = 8;
-    bloom.resolution = 1080;
+    bloom.strength = envf("BLOOM", 0.7f);
+    bloom.levels = (uint8_t)envf("BLOOMLEVELS", 8.f);
+    bloom.resolution = (uint32_t)envf("BLOOMRES", 1080.f);
     bloom.threshold = true;
     bloom.highlight = 20.0f;
     bloom.blendMode = BloomOptions::BlendMode::ADD;
@@ -771,9 +903,11 @@ int main(int argc, char** argv) {
         view->setPostProcessingEnabled(false);
         view->setAntiAliasing(View::AntiAliasing::NONE);
         view->setScreenSpaceRefractionEnabled(false);
-        show(opaque, {});                                  // 1. the scene without glass
-        view->setRenderTarget(rtF[0]);
-        renderer->render(view);
+        if (model != "S" || std::getenv("FIRST")) {        // (S draws scene and glass in one go: it has no use for this picture)
+            show(opaque, {});                              // 1. the scene without glass
+            view->setRenderTarget(rtF[0]);
+            renderer->render(view);
+        }
         auto dress = [&](const std::vector<utils::Entity>& es, MaterialInstance* mi) {
             for (utils::Entity e : es) rm.setMaterialInstanceAt(rm.getInstance(e), 0, mi);
         };
@@ -788,6 +922,33 @@ int main(int argc, char** argv) {
             rm.setMaterialInstanceAt(rm.getInstance(plate), 0, plate_mi[1]);
             show({plate}, nearSides);                          // 3. + the near sides
             view->setRenderTarget(rtF[0]);
+            renderer->render(view);
+        } else if (model == "S") {
+            if (patched >= 2 || std::getenv("PREPASS")) {      // the far sides, then the scene without glass, as numbers
+                view->setViewport({0, 0, (uint32_t)(W / gpart), (uint32_t)(H / gpart)});
+                dress(farSides, gbuf_far);
+                show(farSides, {});
+                view->setRenderTarget(rtGFar);
+                renderer->render(view);
+                std::vector<MaterialInstance*> own;
+                for (utils::Entity e : opaque) own.push_back(rm.getMaterialInstanceAt(rm.getInstance(e), 0));
+                dress(opaque, gbuf_near);
+                show(opaque, {});
+                view->setRenderTarget(rtGNear);
+                renderer->render(view);
+                for (size_t k = 0; k < opaque.size(); ++k) rm.setMaterialInstanceAt(rm.getInstance(opaque[k]), 0, own[k]);
+                view->setViewport({0, 0, (uint32_t)W, (uint32_t)H});
+            }
+            view->setScreenSpaceRefractionEnabled(true);
+            dress(nearSides, std_mi);
+            show(opaque, nearSides);                           // 2. the scene and the glass, drawn by Filament in one go
+            if (direct) {                                      // ... bloom and tone mapping in the same go
+                bloom.enabled = bloom.strength > 0.f;
+                view->setBloomOptions(bloom);
+                view->setPostProcessingEnabled(true);
+                view->setAntiAliasing(View::AntiAliasing::FXAA);
+            }
+            view->setRenderTarget(direct ? rt8 : rtF[1]);
             renderer->render(view);
         } else if (model == "D") {
             dress(nearSides, bvh_mi);
@@ -822,7 +983,8 @@ int main(int argc, char** argv) {
                 renderer->readPixels(rtF[1], 0, 0, (uint32_t)W, (uint32_t)H,
                                      backend::PixelBufferDescriptor(half.data(), half.size() * sizeof(uint16_t), backend::PixelDataFormat::RGBA, backend::PixelDataType::HALF));
         }
-        bloom.enabled = true;
+        if (!direct) {
+        bloom.enabled = bloom.strength > 0.f;
         view->setBloomOptions(bloom);
         view->setPostProcessingEnabled(true);
         view->setAntiAliasing(View::AntiAliasing::FXAA);
@@ -831,6 +993,7 @@ int main(int argc, char** argv) {
         show({plate}, {});                                 // 4. bloom, tone mapping
         view->setRenderTarget(rt8);
         renderer->render(view);
+        }
         if (read)
             renderer->readPixels(rt8, 0, 0, (uint32_t)W, (uint32_t)H,
                                  backend::PixelBufferDescriptor(pic.data(), pic.size(), backend::PixelDataFormat::RGBA, backend::PixelDataType::UBYTE));
@@ -1172,6 +1335,18 @@ int main(int argc, char** argv) {
         engine->flushAndWait();
         const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
         std::printf("TIME: model %s, %.2f ms a frame (%d frames, %dx%d, %zu bands)\n", model.c_str(), ms / std::max(1, drawn), drawn, W, H, bands.size());
+        // Filament's own record of its frames (Renderer::getFrameInfoHistory): time on the GPU, and the two CPU sides
+        auto hist = renderer->getFrameInfoHistory(renderer->getMaxFrameHistorySize());
+        std::vector<double> gpu, den, cpu, back;
+        for (const auto& f : hist) {
+            if (f.gpuFrameDuration > 0) gpu.push_back((double)f.gpuFrameDuration / 1e6);
+            if (f.denoisedGpuFrameDuration > 0) den.push_back((double)f.denoisedGpuFrameDuration / 1e6);
+            if (f.endFrame > 0 && f.beginFrame > 0) cpu.push_back((double)(f.endFrame - f.beginFrame) / 1e6);
+            if (f.backendEndFrame > 0 && f.backendBeginFrame > 0) back.push_back((double)(f.backendEndFrame - f.backendBeginFrame) / 1e6);
+        }
+        auto mid = [](std::vector<double>& v) { if (v.empty()) return -1.0; std::sort(v.begin(), v.end()); return v[v.size() / 2]; };
+        std::printf("FILAMENT: %zu frames on record | GPU %.2f ms, least %.2f (smoothed %.2f) | beginFrame..endFrame %.2f ms | backend thread %.2f ms   (medians; -1 = not given)\n",
+                    hist.size(), mid(gpu), gpu.empty() ? -1.0 : gpu[0], mid(den), mid(cpu), mid(back));
     }
     return 0;
 }

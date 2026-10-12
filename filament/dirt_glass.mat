@@ -1,0 +1,68 @@
+// band.mm, MODEL=S: clear glass by Filament's own screen-space refraction and dispersion, not quite clean:
+// the thickness the bend is worked out with wanders (the picture behind swims), patches are slightly matt (smudges:
+// Filament blurs what is seen through them), and a fine grain tilts the surface. All three are fixed to the solid
+// (the mesh's own coordinates), so they move with it.
+material {
+    name : dirt_glass,
+    shadingModel : lit,
+    blending : fade,
+    refractionMode : screenspace,
+    refractionType : solid,
+    doubleSided : false,
+    variables : [ objPos ],
+    parameters : [
+        { type : float, name : ior },
+        { type : float, name : thickness },
+        { type : float, name : dispersion },
+        { type : float, name : reflectance },
+        { type : float3, name : absorption },
+        { type : float, name : inner },      // 0..1: how much the thickness wanders
+        { type : float, name : smudge },     // roughness of the matt patches
+        { type : float, name : grain },      // tilt of the fine grain
+        { type : float, name : behind },     // (patched matc only) how far behind the solid the scene is
+        // (patched matc with -DMOTOLII_FAR_SIDE only) band_gbuf.mat pictures of the solid's far side and of the scene without it
+        { type : sampler2d, name : farSide, precision : high, format : float },
+        { type : sampler2d, name : sceneBehind, precision : high, format : float }
+    ]
+}
+
+vertex {
+    void materialVertex(inout MaterialVertexInputs material) {
+        material.objPos = getPosition();
+    }
+}
+
+fragment {
+    float hash(vec3 p) {
+        p = fract(p * 0.3183099 + vec3(0.71, 0.113, 0.419));
+        p *= 17.0;
+        return fract(p.x * p.y * p.z * (p.x + p.y + p.z));
+    }
+    float noise(vec3 x) {
+        vec3 i = floor(x), f = fract(x);
+        f = f * f * (3.0 - 2.0 * f);
+        return mix(mix(mix(hash(i), hash(i + vec3(1, 0, 0)), f.x), mix(hash(i + vec3(0, 1, 0)), hash(i + vec3(1, 1, 0)), f.x), f.y),
+                   mix(mix(hash(i + vec3(0, 0, 1)), hash(i + vec3(1, 0, 1)), f.x), mix(hash(i + vec3(0, 1, 1)), hash(i + vec3(1, 1, 1)), f.x), f.y), f.z);
+    }
+    float cloud(vec3 p) {
+        return 0.5 * noise(p) + 0.3 * noise(p * 2.1 + 5.0) + 0.2 * noise(p * 4.3 + 11.0);
+    }
+    void material(inout MaterialInputs material) {
+        vec3 p = variable_objPos.xyz;
+        vec2 g = vec2(noise(p * 140.0), noise(p * 140.0 + 31.0)) - 0.5;
+        material.normal = normalize(vec3(g * materialParams.grain, 1.0));
+        prepareMaterial(material);
+        material.baseColor = vec4(1.0);
+        material.metallic = 0.0;
+        material.roughness = materialParams.smudge * smoothstep(0.45, 0.7, cloud(p * 2.6 + 3.0));
+        material.reflectance = materialParams.reflectance;
+        material.absorption = materialParams.absorption;
+        material.transmission = 1.0;
+        material.ior = materialParams.ior;
+        material.thickness = materialParams.thickness * (1.0 + materialParams.inner * (2.0 * cloud(p * 1.7) - 1.0) * 2.0);
+        material.dispersion = materialParams.dispersion;
+#if defined(MOTOLII_PATCHED)
+        material.microThickness = materialParams.behind;
+#endif
+    }
+}
