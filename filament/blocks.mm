@@ -1,6 +1,6 @@
 // blocks.mm: clear glass blocks standing on pale paper in hard sun, seen from above.
 // Everything is kit.h's: the blocks (glassbox.mat), the paper and the sun with Filament's own shadow, and the light the
-// blocks throw on the paper (glasslight.mat). One picture, no switches.   ./blocks.sh  ->  out/blocks.png
+// blocks throw on the paper (boxlight.mat: through the box itself). One picture, no switches.   ./blocks.sh  ->  out/blocks.png
 #include "kit.h"
 
 static const int W = 1920;
@@ -34,7 +34,7 @@ int main() {
     blocks_mi->setParameter("absorption", float3{0.30f, 0.10f, 0.06f});   // (a breath of blue)
     blocks_mi->setParameter("lean", 0.02f);
     if (!shadow_of(s, cube(ROUND), places)) return fail("shadow_only.filamat");
-    if (!glass_light(s, lit, cube(ROUND, 16), places, 0.01f, 0.5f)) return fail("glasslight.filamat");
+    if (!box_light(s, lit, places, ROUND)) return fail("boxlight.filamat");
 
     if (!shoot(s, "out/blocks.png")) return fail("png");
     std::printf("wrote out/blocks.png\n");

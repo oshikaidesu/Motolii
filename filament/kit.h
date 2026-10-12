@@ -332,6 +332,40 @@ static bool glass_light(Stage& s, const Sunlit& lit, Mesh* m, std::vector<mat4f>
     return true;
 }
 
+// The light a glass BOX throws on the paper (boxlight.mat): as glass_light, but the light is taken through the box
+// itself (in by one face, mirrored inside where it cannot leave, out by another), which a box allows by plain
+// formulas. That is what gives a glass box its true shadow: dark nearly all over, since most of its light leaves
+// through its underside, with a few small windows of light in it. places: the unit cube's places (a box each).
+static bool box_light(Stage& s, const Sunlit& lit, std::vector<mat4f> places, float round) {
+    const int colours = 20;
+    if (places.size() > 64) return false;
+    static float4 poseX[64], poseY[64], poseZ[64], poseAt[64];
+    for (size_t i = 0; i < places.size(); ++i) {
+        const mat4f& p = places[i];
+        poseX[i] = {normalize(p[0].xyz), length(p[0].xyz) * 0.5f};
+        poseY[i] = {normalize(p[1].xyz), length(p[1].xyz) * 0.5f};
+        poseZ[i] = {normalize(p[2].xyz), length(p[2].xyz) * 0.5f};
+        poseAt[i] = {p[3].xyz, 0.f};
+    }
+    MaterialInstance* mi = add(s, cube(round, 16), "boxlight.filamat", {mat4f{}}, 1, false, (int)places.size() * colours);
+    if (!mi) return false;
+    mi->setParameter("poseX", poseX, 64);
+    mi->setParameter("poseY", poseY, 64);
+    mi->setParameter("poseZ", poseZ, 64);
+    mi->setParameter("poseAt", poseAt, 64);
+    mi->setParameter("sunWay", lit.sunWay);
+    mi->setParameter("sunOnFloor", lit.paper * (lit.sunLux / 3.14159265f));
+    mi->setParameter("colours", (float)colours);
+    mi->setParameter("ior", 1.5f);
+    mi->setParameter("abbe", 6.f);
+    mi->setParameter("round", round);
+    mi->setParameter("lean", 0.01f);
+    mi->setParameter("most", 6.f);
+    mi->setParameter("gain", 1.f);
+    mi->setParameter("floorY", 0.f);
+    return true;
+}
+
 // Three frames, the last one read back and written as a .png.
 static bool shoot(Stage& s, const char* path) {
     static std::vector<uint8_t> pic;
