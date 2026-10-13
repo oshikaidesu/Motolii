@@ -1,55 +1,74 @@
-// acid.mm: a poster of flat graphics with a burst of lacquered blades over it (the reference: research_notes/refs/F).
-// Layers, back to front, as one picture: the flat layers (ground, giant letters, lime bars, black figure, type, small
-// marks, hairline arcs) are one SVG, acid_flat.svg, drawn by ThorVG on Filament's own device (drawn.h) and shown on a
-// sheet; the blades are Filament's own lit, clear-coated surfaces before it, mirroring a studio. WebGPU backend only.
+// acid.mm: a poster of flat graphics with a burst of crushed glass over it (the reference: research_notes/refs/F).
+// Two moves: the flat picture (ground, giant letters, lime bars, black figure, type, small marks, hairline arcs: one
+// SVG, acid_flat.svg, drawn by ThorVG on Filament's own device, drawn.h) on a sheet; and the burst, one solid of glass
+// made by one call and put down as it comes (Filament's own glass, kit.h: it bends and takes the colours of the flat
+// picture behind it). WebGPU backend only.
 //   ./dawn_probe/kit_wgpu.sh acid          ->  out/wgpu_kit/out/acid.png
 #include "kit.h"
 #include "drawn.h"
 
 static const int W = 1920;
 static const int H = 1080;
-static const float HIGH = 1.f, WIDE = HIGH * W / H;   // the frame in the scene: 2 high, 3.56 wide, seen square-on without perspective
+static const float HIGH = 1.f, WIDE = HIGH * W / H;   // the frame in the scene: the sheet is 2 high, 3.56 wide
 
 // a place of the frame (fractions: x from the left, y from the top) in the scene
 static float2 at(float fx, float fy) { return {(fx - 0.5f) * 2.f * WIDE, (0.5f - fy) * 2.f * HIGH}; }
 
-// A blade: a ribbon bent in one even arc, widest at mid-length and running out to a needle at both ends, its section a
-// flat lens. from: where it starts; heading: which way (degrees, 0 right, 90 up); length; bend: how far it turns over
-// its length (radians); wide: half its greatest width; depth: how far before the sheet it lies, bow: how far its
-// middle rises towards the eye; twist: how far it rolls about itself from end to end.
-static Mesh* blade(float2 from, float heading, float length, float bend, float wide, float depth, float bow, float twist) {
-    const int rings = 120, sides = 16;
+// A burst of crushed blades, as ONE solid: `count` ribbons out of a knot, each bent in one arc, twisted and pinched
+// like something squashed, widest about its middle and running out to needles. Nothing is placed by hand: the
+// ribbons' ways, lengths, bends and twists are drawn by `seed` from one recipe: long and few towards `lean` (degrees,
+// 0 right, 90 up), short and many the other way, a few hooked right round. knot: where; reach: how far the longest goes.
+static Mesh* burst(float2 knot, float reach, float lean, int count, uint32_t seed) {
+    const int rings = 96, sides = 14;
     Mesh* m = new Mesh;
-    const float h0 = heading * TAU / 360.f;
-    for (int i = 0; i <= rings; ++i) {
-        const float u = (float)i / rings, h = h0 + bend * u;
+    uint32_t state = seed * 2654435761u + 12345u;
+    const auto rnd = [&]() { state = state * 1664525u + 1013904223u; return (float)(state >> 8) / 16777216.f; };   // 0..1
+    const auto between = [&](float a, float b) { return a + (b - a) * rnd(); };
+    for (int n = 0; n < count; ++n) {
+        const bool longway = n < count / 5;   // a fifth go the long way
+        const float heading = (lean + (longway ? between(-20.f, 20.f) : between(40.f, 320.f))) * TAU / 360.f;
+        const float length = reach * (longway ? between(0.55f, 1.f) : between(0.14f, 0.42f));
+        const bool hook = rnd() < 0.2f;
+        const float bend = (rnd() < 0.5f ? -1.f : 1.f) * (hook ? between(1.6f, 2.6f) : between(0.25f, 1.0f));
+        const float thin = rnd();
+        const float wide = reach * (0.006f + 0.022f * thin * thin) * (hook ? 1.5f : 1.f);   // (most are thin)
+        const float twist = between(-3.2f, 3.2f), depth = between(0.1f, 0.7f), bow = between(0.05f, 0.3f);
+        const float pinches = between(1.f, 3.f), pinch_at = between(0.f, TAU), kink = between(-0.3f, 0.3f);
+        const float2 from = knot + reach * 0.05f * float2{between(-1.f, 1.f), between(-1.f, 1.f)};   // (not all out of one point: a knot)
+        const uint32_t first = (uint32_t)m->pos.size();
         float2 c = from;
-        if (std::fabs(bend) < 1e-4f) c += length * u * float2{std::cos(h0), std::sin(h0)};
-        else c += length / bend * float2{std::sin(h) - std::sin(h0), std::cos(h0) - std::cos(h)};
-        const float3 centre{c.x, c.y, depth + bow * std::sin(0.5f * TAU * u)};
-        const float w = std::max(wide * std::pow(std::sin(0.5f * TAU * u), 0.8f), 1e-4f), t = 0.2f * w;
-        const float roll = twist * (u - 0.5f);
-        const float3 across{-std::sin(h), std::cos(h), 0.f}, up{0.f, 0.f, 1.f};
-        const float3 n = across * std::cos(roll) + up * std::sin(roll), b = up * std::cos(roll) - across * std::sin(roll);
-        for (int k = 0; k < sides; ++k) {
-            const float a = (float)k / sides * TAU;
-            m->pos.push_back(centre + n * (std::cos(a) * w) + b * (std::sin(a) * t));
-            m->nrm.push_back(normalize(n * (std::cos(a) / w) + b * (std::sin(a) / t)));
-            m->uv.push_back({u, (float)k / sides});
+        for (int i = 0; i <= rings; ++i) {
+            const float u = (float)i / rings;
+            const float h = heading + bend * u * u + kink * std::sin(0.5f * TAU * u);   // (the arc tightens towards the tip)
+            if (i) c += length / rings * float2{std::cos(h), std::sin(h)};
+            const float3 centre{c.x, c.y, depth + bow * std::sin(0.5f * TAU * u)};
+            // (the sine is held at 0 or more: at the very tip it comes out a hair below, and a power of that is no number at all)
+            const float w = std::max(wide * std::pow(std::max(std::sin(0.5f * TAU * u), 0.f), 0.7f) * (1.f + 0.22f * std::sin(pinches * TAU * u + pinch_at)), 1e-4f), t = 0.22f * w;
+            const float roll = twist * (u - 0.5f);
+            const float3 across{-std::sin(h), std::cos(h), 0.f}, up{0.f, 0.f, 1.f};
+            const float3 nn = across * std::cos(roll) + up * std::sin(roll), bb = up * std::cos(roll) - across * std::sin(roll);
+            for (int k = 0; k < sides; ++k) {
+                const float a = (float)k / sides * TAU;
+                m->pos.push_back(centre + nn * (std::cos(a) * w) + bb * (std::sin(a) * t));
+                m->nrm.push_back(normalize(nn * (std::cos(a) / w) + bb * (std::sin(a) / t)));
+                m->uv.push_back({(float)n + 0.25f * u, (float)k / sides});   // (the whole part: which ribbon, own_glass.mat makes a mixed lot of them; a quarter of the uv along one, so the glass's waves run long)
+            }
         }
+        for (int i = 0; i < rings; ++i)
+            for (int k = 0; k < sides; ++k) {
+                const uint32_t p = first + (uint32_t)(i * sides + k), q = first + (uint32_t)(i * sides + (k + 1) % sides), r = p + sides, t2 = q + sides;
+                m->idx.insert(m->idx.end(), {p, q, r, q, t2, r});
+            }
     }
-    for (int i = 0; i < rings; ++i)
-        for (int k = 0; k < sides; ++k) {
-            const uint32_t p = (uint32_t)(i * sides + k), q = (uint32_t)(i * sides + (k + 1) % sides), r = p + sides, t2 = q + sides;
-            m->idx.insert(m->idx.end(), {p, q, r, q, t2, r});
-        }
     return m;
 }
 
 int main(int argc, char** argv) {
     Stage s = open_stage(W, H);
-    s.camera->lookAt({0.f, 0.f, 10.f}, {0.f, 0.f, 0.f}, {0, 1, 0});
-    s.camera->setProjection(Camera::Projection::ORTHO, -WIDE, WIDE, -HIGH, HIGH, 0.1, 40.0);
+    // seen from far off through a long lens: nearly without perspective, so the flat picture's places hold for the glass before it
+    const float far_off = 24.f;
+    s.camera->lookAt({0.f, 0.f, far_off - 1.f}, {0.f, 0.f, -1.f}, {0, 1, 0});
+    s.camera->setProjection(2.0 * std::atan(HIGH / far_off) * 360.0 / TAU, double(W) / double(H), 1.0, 60.0, Camera::Fov::VERTICAL);
     static LinearToneMapper as_it_is;   // (the flat colours are the screen's own: nothing bends them)
     s.view->setColorGrading(ColorGrading::Builder().toneMapper(&as_it_is).build(*s.engine));
     if (!room(s, "out/lightroom/lightroom_ibl.ktx", 34000.f)) return fail("out/lightroom/lightroom_ibl.ktx");
@@ -75,45 +94,8 @@ int main(int argc, char** argv) {
     if (!sheet_mi) return fail("flat.filamat");
     sheet_mi->setParameter("picture", flat->texture, TextureSampler(TextureSampler::MinFilter::LINEAR, TextureSampler::MagFilter::LINEAR));
 
-    // the burst: blades out of a knot right of the middle, long and few to the left, short and many to the right
-    const float2 knot = at(0.76f, 0.52f);
-    const float3 olive{0.16f, 0.22f, 0.03f}, lime{0.50f, 0.74f, 0.10f}, teal{0.02f, 0.10f, 0.09f}, sea{0.10f, 0.36f, 0.28f},
-                 iron{0.20f, 0.22f, 0.22f}, silver{0.78f, 0.80f, 0.78f}, soot{0.008f, 0.012f, 0.008f}, moss{0.07f, 0.10f, 0.04f};
-    struct Blade { float2 from; float heading, length, bend, wide, depth, bow, twist; float3 dark, light; float metal, hatch; };
-    const float F = 2.f * WIDE;   // (lengths below are shares of the frame's width)
-    const Blade blades[] = {
-        // long and few to the left
-        {knot, 176.f, 0.74f * F, -0.30f, 0.060f, 0.30f, 0.25f, 1.2f, olive, lime, 0.3f, 0.f},
-        {knot, 187.f, 0.66f * F, 0.38f, 0.050f, 0.20f, 0.20f, -0.9f, teal, sea, 0.5f, 0.f},
-        {knot, 166.f, 0.58f * F, 0.30f, 0.042f, 0.45f, 0.15f, 0.6f, moss, lime, 0.3f, 0.f},
-        {knot, 181.f, 0.50f * F, 1.75f, 0.064f, 0.55f, 0.20f, 1.6f, iron, silver, 1.0f, 0.f},     // the sickle: thick, hooking
-        {at(0.30f, 0.60f), 127.f, 0.44f * F, -0.22f, 0.020f, 0.60f, 0.05f, 0.f, soot, moss, 0.4f, 1.f},   // long, thin, dark, hatched, up to the top left corner
-        // up
-        {knot, 78.f, 0.30f * F, -0.55f, 0.050f, 0.35f, 0.20f, 1.0f, olive, lime, 0.3f, 0.f},
-        {knot, 104.f, 0.27f * F, 0.35f, 0.040f, 0.25f, 0.15f, -0.8f, soot, moss, 0.6f, 0.f},
-        {knot, 52.f, 0.24f * F, 0.70f, 0.045f, 0.50f, 0.20f, 0.9f, teal, sea, 0.5f, 0.f},
-        {knot, 128.f, 0.36f * F, -0.45f, 0.044f, 0.40f, 0.25f, 1.3f, iron, silver, 1.0f, 0.f},
-        {knot, 143.f, 0.44f * F, 0.25f, 0.036f, 0.15f, 0.15f, -0.5f, olive, lime, 0.3f, 0.f},
-        // down
-        {knot, -82.f, 0.22f * F, 0.50f, 0.048f, 0.30f, 0.20f, 1.1f, olive, lime, 0.3f, 0.f},
-        {knot, -112.f, 0.27f * F, -0.55f, 0.042f, 0.45f, 0.15f, -1.0f, iron, silver, 1.0f, 0.f},
-        {knot, -58.f, 0.20f * F, -0.60f, 0.040f, 0.20f, 0.15f, 0.7f, soot, moss, 0.6f, 0.f},
-        {knot, -138.f, 0.36f * F, 0.45f, 0.046f, 0.55f, 0.25f, 1.4f, teal, sea, 0.5f, 0.f},
-        {knot, -160.f, 0.46f * F, -0.35f, 0.034f, 0.10f, 0.15f, -0.6f, moss, lime, 0.3f, 0.f},
-        // short and many to the right
-        {knot, 12.f, 0.13f * F, 0.60f, 0.040f, 0.40f, 0.10f, 0.8f, olive, lime, 0.3f, 0.f},
-        {knot, -22.f, 0.14f * F, -0.50f, 0.036f, 0.25f, 0.10f, -0.7f, iron, silver, 1.0f, 0.f},
-        {knot, 33.f, 0.12f * F, -0.70f, 0.034f, 0.55f, 0.10f, 1.0f, soot, moss, 0.6f, 0.f},
-        {knot, -42.f, 0.13f * F, 0.65f, 0.038f, 0.35f, 0.10f, -0.9f, teal, sea, 0.5f, 0.f},
-    };
-    for (const Blade& b : blades) {
-        MaterialInstance* mi = add(s, blade(b.from, b.heading, b.length, b.bend, b.wide, b.depth, b.bow, b.twist), "blade.filamat");
-        if (!mi) return fail("blade.filamat");
-        mi->setParameter("dark", b.dark);
-        mi->setParameter("light", b.light);
-        mi->setParameter("metal", b.metal);
-        mi->setParameter("hatch", b.hatch);
-    }
+    // the burst: crushed glass of a bottle green, put down as it comes (Filament's own glass, kit.h: it is given no depth)
+    if (!own_glass(s, burst(at(0.76f, 0.52f), 0.74f * 2.f * WIDE, 178.f, 22, 11), {mat4f{}}, float3{0.33f, 0.40f, 0.06f}, 0.15f)) return fail("own_glass.filamat");
 
     const auto pose = [&](float) { drawn_now(s, flat); };
     pose(0.f);

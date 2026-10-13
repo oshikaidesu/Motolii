@@ -9,17 +9,17 @@
 <rect x="1401.6" y="54.0" width="268.8" height="842.4" fill="#B5EE3A"/>
 <rect x="38.4" y="540.0" width="1632.0" height="129.6" fill="#B5EE3A"/>
 <rect x="1190.4" y="1023.8" width="729.6" height="4" fill="#B5EE3A"/>
-<!-- the heavy black figure: a broken X of wedges and slanted bars, x 0.52-0.91, y 0.11-0.88 -->
-<polygon fill="#000000" points="1000.6,189.7 1279.0,556.9 1409.0,458.3 1130.6,91.1"/>
-<polygon fill="#000000" points="1614.6,91.6 1365.0,426.4 1495.8,524.0 1745.4,189.2"/>
-<polygon fill="#000000" points="1280.3,575.4 1021.1,899.4 1148.5,1001.4 1407.7,677.4"/>
-<polygon fill="#000000" points="1397.2,701.1 1656.4,1003.5 1780.4,897.3 1521.2,594.9"/>
-<polygon fill="#000000" points="1152.0,356.4 1257.6,118.8 1363.2,356.4"/>
-<polygon fill="#000000" points="1459.2,388.8 1564.8,172.8 1670.4,388.8"/>
+<!-- the heavy black figure, in pieces: two up-pointing wedges above the knot, two slanted legs with cut ends below, a small wedge between; x 0.52-0.91, y 0.11-0.88 -->
+<polygon fill="#000000" points="998.4,507.6 1180.8,118.8 1363.2,507.6"/>
+<polygon fill="#F8F7F3" points="1123.2,507.6 1180.8,388.8 1238.4,507.6"/>
+<polygon fill="#000000" points="1344.0,475.2 1488.0,183.6 1632.0,475.2"/>
+<polygon fill="#000000" points="1152.0,648.0 1324.8,648.0 1180.8,950.4 1008.0,950.4"/>
+<polygon fill="#000000" points="1459.2,669.6 1632.0,669.6 1747.2,907.2 1574.4,907.2"/>
+<polygon fill="#000000" points="1344.0,712.8 1411.2,604.8 1478.4,712.8"/>
 <!-- "19" three times, very wide and heavy, top right -->
-<text x="0" y="0" font-family="Arial Black" font-size="112" fill="#000000" transform="translate(1666.6 138.2) scale(1.72 1)">19</text>
-<text x="0" y="0" font-family="Arial Black" font-size="112" fill="#000000" transform="translate(1666.6 243.0) scale(1.72 1)">19</text>
-<text x="0" y="0" font-family="Arial Black" font-size="112" fill="#000000" transform="translate(1666.6 347.8) scale(1.72 1)">19</text>
+<text x="0" y="0" font-family="Arial Black" font-size="104" fill="#000000" transform="translate(1668.0 138.2) scale(1.5 1)">19</text>
+<text x="0" y="0" font-family="Arial Black" font-size="104" fill="#000000" transform="translate(1668.0 243.0) scale(1.5 1)">19</text>
+<text x="0" y="0" font-family="Arial Black" font-size="104" fill="#000000" transform="translate(1668.0 347.8) scale(1.5 1)">19</text>
 <!-- six ornate glyphs in white outline inside the level band -->
 <rect x="113.0" y="562.8" width="62" height="84" rx="14" fill="none" stroke="#FFFFFF" stroke-width="5"/>
 <path d="M 121.0 604.8 L 167.0 604.8 M 144.0 570.8 L 144.0 638.8" stroke="#FFFFFF" stroke-width="5" fill="none"/>

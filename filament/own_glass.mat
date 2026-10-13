@@ -1,0 +1,52 @@
+// own_glass.mat: glass by Filament's own means, nothing of ours in it: its screen-space refraction of a solid, its
+// absorption (the glass's colour), its dispersion, its mirroring of the room, and a thin film if wanted. Put down
+// through kit.h's own_glass(), which takes its depth from the mesh.
+// thickness: how deep the solid is, for the bend and the colour. absorb: how much of red, green and blue a unit of
+// depth takes. lean: how far its faces lean from flat, slowly, this way and that (a crushed look), in whole waves
+// of the mesh's uv. film: how much thin film lies on the glass (0: none). split: how far the colours part.
+// A mesh of several pieces may number them in the whole part of uv.x (0: the first, or a mesh of one piece): the
+// pieces after the first are then a mixed lot of the one glass: paler and darker, some with red and blue changed
+// about (an olive's teal), some grey, some nearly black.
+material {
+    name : own_glass,
+    shadingModel : lit,
+    blending : fade,
+    refractionMode : screenspace,
+    refractionType : solid,
+    requires : [ uv0 ],
+    parameters : [ { type : float, name : thickness }, { type : float, name : lean }, { type : float3, name : absorb },
+                   { type : float, name : film },         // how much thin film lies on the glass (0: none, 1: all)
+                   { type : float, name : split } ]       // how far the colours part in the glass (Filament's dispersion)
+}
+
+fragment {
+    void material(inout MaterialInputs material) {
+        vec2 uv = getUV0();
+        material.normal = normalize(vec3(materialParams.lean * vec2(sin(6.2832 * (8.0 * uv.x + uv.y)), sin(6.2832 * (5.0 * uv.x - 2.0 * uv.y) + 2.0)), 1.0));
+        prepareMaterial(material);
+        material.baseColor = vec4(1.0);
+        material.metallic = 0.0;
+        material.roughness = 0.0;
+        material.reflectance = 0.5;
+        vec3 absorb = materialParams.absorb;
+        float deep = 1.0;
+        float piece = floor(uv.x);
+        if (piece > 0.5) {
+            float lot = fract(sin(piece * 12.9898) * 43758.5453);
+            if (lot < 0.5) deep = 1.2 + 4.0 * lot;
+            else if (lot < 0.72) { absorb = absorb.bgr; deep = 3.0; }
+            else if (lot < 0.86) { absorb = vec3(0.6 * min(absorb.r, min(absorb.g, absorb.b))); }
+            else { absorb = vec3(max(absorb.r, max(absorb.g, absorb.b))); deep = 3.0; }
+        }
+        material.absorption = absorb;
+        material.transmission = 1.0;
+        material.ior = 1.5;
+        // (crushed glass is not evenly deep: where it is deep it is dark, where thin pale; the depth wanders along the solid)
+        float uneven = clamp(materialParams.lean * 6.0, 0.0, 1.0);
+        material.thickness = materialParams.thickness * deep * mix(1.0, 0.4 + 1.6 * (0.5 + 0.5 * sin(6.2832 * (3.0 * uv.x + 0.5 * uv.y))) * (0.6 + 0.4 * sin(6.2832 * (11.0 * uv.x - uv.y) + 1.0)), uneven);
+        material.dispersion = materialParams.split;
+        material.iridescence = materialParams.film;
+        material.iridescenceIor = 1.3;
+        material.iridescenceThickness = 450.0 + 250.0 * sin(6.2832 * (3.0 * uv.x + uv.y)) * sin(6.2832 * (7.0 * uv.x - 2.0 * uv.y) + 1.0);
+    }
+}

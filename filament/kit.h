@@ -471,6 +471,34 @@ static bool bubbles(Stage& s, std::vector<mat4f> places, int each) {
     return true;
 }
 
+// How deep a solid is as a rule: four times its volume over its surface (a ball: two thirds of its width; a bar: its
+// width; a sheet: twice its thickness). What the glasses below take their depth from, so that a scene gives none.
+static float usual_depth(const Mesh* m) {
+    double volume = 0, surface = 0;
+    for (size_t i = 0; i + 2 < m->idx.size(); i += 3) {
+        const float3 a = m->pos[m->idx[i]], b = m->pos[m->idx[i + 1]], c = m->pos[m->idx[i + 2]];
+        volume += dot(a, cross(b, c)) / 6.0;
+        surface += length(cross(b - a, c - a)) / 2.0;
+    }
+    return (float)(4.0 * std::fabs(volume) / surface);
+}
+
+// Glass by Filament's own means (own_glass.mat: its refraction, absorption, dispersion and mirroring of the room),
+// put down as it comes: its depth is the mesh's own. colour: what white light is left as after a usual depth of
+// this glass ({1, 1, 1}: clear). crushed: how far its faces lean this way and that (0: smooth).
+// Thin, bent solids (blades, ribbons, sheets) read well in it; it does not show its own far side as thick_glass does.
+static MaterialInstance* own_glass(Stage& s, Mesh* m, std::vector<mat4f> places, float3 colour = float3{1.f}, float crushed = 0.f) {
+    MaterialInstance* mi = add(s, m, "own_glass.filamat", places, 2);
+    if (!mi) return nullptr;
+    const float deep = 8.f * usual_depth(m) * length(places[0][0].xyz);   // (overdone eight times: what is behind swims in it)
+    mi->setParameter("thickness", deep);
+    mi->setParameter("absorb", float3{-std::log(std::max(colour.x, 1e-3f)), -std::log(std::max(colour.y, 1e-3f)), -std::log(std::max(colour.z, 1e-3f))} / deep);
+    mi->setParameter("lean", crushed);
+    mi->setParameter("film", 0.f);
+    mi->setParameter("split", 0.5f);
+    return mi;
+}
+
 // Glass seen through both of its sides (thick_glass.mat): the mesh at its places, drawn three times. Its far faces go
 // into a picture of their own, which way they face and how far away they are (far_side.mat; nothing else is in that
 // picture), and as they look from within over the picture of the scene without the glass (far_look.mat);
@@ -505,13 +533,7 @@ static MaterialInstance* thick_glass(Stage& s, Mesh* m, std::vector<mat4f> place
     // How deep the solid is as a rule: four times its volume over its surface (a ball: two thirds of its width; a bar:
     // its width; a sheet: twice its thickness). Worked out once, here; a way through the glass much longer than this
     // is the glass seen along itself, and goes dark.
-    double volume = 0, surface = 0;
-    for (size_t i = 0; i + 2 < m->idx.size(); i += 3) {
-        const float3 a = m->pos[m->idx[i]], b = m->pos[m->idx[i + 1]], c = m->pos[m->idx[i + 2]];
-        volume += dot(a, cross(b, c)) / 6.0;
-        surface += length(cross(b - a, c - a)) / 2.0;
-    }
-    const float usual = (float)(4.0 * std::fabs(volume) / surface) * length(places[0][0].xyz);
+    const float usual = usual_depth(m) * length(places[0][0].xyz);
     // A bar or a sheet has places where it is seen along itself; a lump (a ball, a gem) has none: its longest way is
     // straight through its middle, about one and a half times `usual`. So the nearer to a lump the solid is (how deep
     // against how far it reaches), the longer a way must be before it counts as long: the middle of a gem stays clear.
