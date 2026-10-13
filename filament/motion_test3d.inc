@@ -1,0 +1,32 @@
+// answers of the earlier Motolii's reference/lottie-transform-oracle.json (lottie-web 5.13's own transformation-matrix.js and
+// TransformProperty.js, turned to After Effects' axes): a point of the layer -> where it is in the composition
+    there3(m, "ref_identity", 0, 0, 0, 0, 97.900002f, 84.199997f, 35.000000f);
+    there3(m, "ref_identity", 0, 1, 0, 0, 99.600002f, 84.199997f, 35.000000f);
+    there3(m, "ref_identity", 0, 0, 1, 0, 97.900002f, 84.799997f, 35.000000f);
+    there3(m, "ref_identity", 0, 0, 0, 1, 97.900002f, 84.199997f, 36.000000f);
+    there3(m, "ref_identity", 0, 43, -29, 17, 171.000004f, 66.799996f, 52.000000f);
+    there3(m, "ref_xy_rotation", 0, 0, 0, 0, 99.822533f, 70.054153f, 35.000000f);
+    there3(m, "ref_xy_rotation", 0, 1, 0, 0, 101.180213f, 71.077239f, 35.000000f);
+    there3(m, "ref_xy_rotation", 0, 0, 1, 0, 99.461444f, 70.533335f, 35.000000f);
+    there3(m, "ref_xy_rotation", 0, 0, 0, 1, 99.822533f, 70.054153f, 36.000000f);
+    there3(m, "ref_xy_rotation", 0, 43, -29, 17, 168.674373f, 100.150576f, 52.000000f);
+    there3(m, "ref_xy_skew", 0, 0, 0, 0, 93.699997f, 84.199997f, 35.000000f);
+    there3(m, "ref_xy_skew", 0, 1, 0, 0, 95.399997f, 84.199997f, 35.000000f);
+    there3(m, "ref_xy_skew", 0, 0, 1, 0, 93.099997f, 84.799997f, 35.000000f);
+    there3(m, "ref_xy_skew", 0, 0, 0, 1, 93.699997f, 84.199997f, 36.000000f);
+    there3(m, "ref_xy_skew", 0, 43, -29, 17, 184.200000f, 66.799996f, 52.000000f);
+    there3(m, "ref_axis_skew", 0, 0, 0, 0, 93.840225f, 79.842300f, 35.000000f);
+    there3(m, "ref_axis_skew", 0, 1, 0, 0, 95.865554f, 80.127448f, 35.000000f);
+    there3(m, "ref_axis_skew", 0, 0, 1, 0, 93.864438f, 80.349331f, 35.000000f);
+    there3(m, "ref_axis_skew", 0, 0, 0, 1, 93.840225f, 79.842300f, 36.000000f);
+    there3(m, "ref_axis_skew", 0, 43, -29, 17, 180.227178f, 77.399744f, 52.000000f);
+    there3(m, "ref_x_y_order", 0, 0, 0, 0, 120.000000f, 57.900002f, 39.200001f);
+    there3(m, "ref_x_y_order", 0, 1, 0, 0, 120.000000f, 59.600002f, 39.200001f);
+    there3(m, "ref_x_y_order", 0, 0, 1, 0, 120.000000f, 57.900002f, 39.800001f);
+    there3(m, "ref_x_y_order", 0, 0, 0, 1, 121.000000f, 57.900002f, 39.200001f);
+    there3(m, "ref_x_y_order", 0, 43, -29, 17, 137.000000f, 131.000004f, 21.800000f);
+    there3(m, "ref_all_axes", 0, 0, 0, 0, 105.241470f, 71.374054f, 21.950638f);
+    there3(m, "ref_all_axes", 0, 1, 0, 0, 106.124708f, 72.274773f, 22.886933f);
+    there3(m, "ref_all_axes", 0, 0, 1, 0, 104.773407f, 71.814539f, 21.825277f);
+    there3(m, "ref_all_axes", 0, 0, 0, 1, 104.726432f, 71.052953f, 22.745390f);
+    there3(m, "ref_all_axes", 0, 43, -29, 17, 148.038883f, 91.872189f, 79.357575f);
