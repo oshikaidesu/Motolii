@@ -15,6 +15,7 @@ fragment {
     void material(inout MaterialInputs material) {
         prepareMaterial(material);
         vec3 c = textureLod(materialParams_picture, getUV0(), 0.0).rgb;
-        material.baseColor = vec4(pow(c, vec3(2.2)), 1.0);
+        // (the screen's own rule, exactly: Filament's output step is its reverse, so a number comes out as it went in)
+        material.baseColor = vec4(mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(vec3(0.04045), c)), 1.0);
     }
 }
