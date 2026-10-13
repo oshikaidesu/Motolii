@@ -20,5 +20,5 @@ int main(int argc, char** argv) {
         key_out(cat);
         if (!picture(s, (ae + "confetti.json").c_str(), mat4f::translation(float3{x, 0.9f, 0.f}), 0.42f, float3{1.f}, true, ways[i])) return fail("picture");
     }
-    return show(s, argc, argv, "lay", 240, 0.f, [](float) {});
+    return show(s, argc, argv, "lay", 240, [](float) {});
 }

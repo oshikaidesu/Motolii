@@ -113,7 +113,8 @@ static bool doc_match(Doc& d) {
             made.film = video(s, file.c_str(), mat4f{}, 1.f, (float)from, length < 0 ? -1.f : (float)(from + length * std::fabs(speed)), (float)speed, lay);
             if (!made.film) why = video_trouble;
             else if (doc_number(d, thing, "keyed", 0, 0) > 0.5) key_out(made.film);
-            if (made.film) s.playing.erase(made.film);   // (the document tells it its moment)
+            if (made.film) s.playing.erase(made.film);   // (the document tells it its moment, and when its sound comes on)
+            if (made.film && made.film->sound) s.sounding[made.film] = [&d, thing, v = made.film, file] { return Stage::Sound{file, v->from, v->to, v->speed, 0.0, doc_number(d, thing, "start", 0, 0), doc_number(d, thing, "duration", 0, -1)}; };
         } else if (kind == "picture") {
             if ((made.drawn = picture(s, file.c_str(), mat4f{}, 1.f, float3{-1.f}, true, lay))) s.playing.erase(made.drawn);
         } else if (kind == "solid") {

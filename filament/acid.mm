@@ -81,5 +81,5 @@ int main(int argc, char** argv) {
     // the burst: crushed glass of a bottle green, put down as it comes (Filament's own glass, kit.h: it is given no depth)
     if (!own_glass(s, burst(at(0.76f, 0.52f), 0.74f * 2.f * WIDE, 178.f, 32, 77), {mat4f{}}, float3{0.33f, 0.40f, 0.06f}, 0.3f)) return fail("own_glass.filamat");
 
-    return show(s, argc, argv, "acid", 480, 0.f, [](float) {});
+    return show(s, argc, argv, "acid", 480, [](float) {});
 }

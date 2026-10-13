@@ -56,5 +56,5 @@ int main(int argc, char** argv) {
         }
     };
     pose(0.f);
-    return show(s, argc, argv, "led", 480, 2.f, pose);
+    return show(s, argc, argv, "led", 480, pose);
 }

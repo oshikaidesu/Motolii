@@ -94,5 +94,5 @@ int main(int argc, char** argv) {
         for (MaterialInstance* mi : thrown) mi->setParameter("gain", 0.9f + 0.6f * kick);
         s.camera->lookAt(aim + (eye - aim) * (1.14f - 0.06f * (0.5f - 0.5f * std::cos(TAU * t))), aim, {0, 1, 0});   // (a little further off than the still: broad-on, the ring is wider than the still's frame)
     };
-    return show(s, argc, argv, "ring", 480, 2.f, pose);
+    return show(s, argc, argv, "ring", 480, pose);
 }

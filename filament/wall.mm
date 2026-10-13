@@ -37,5 +37,5 @@ int main(int argc, char** argv) {
         for (const Thing& thing : things)
             move(s, thing.mesh, [&](int, const mat4f& at) { return mat4f::translation(at[3].xyz) * mat4f::rotation(TAU * t * thing.turns, float3{0, 1, 0}) * mat4f::translation(-at[3].xyz) * at; });
     };
-    return show(s, argc, argv, "wall", 480, 2.f, pose);
+    return show(s, argc, argv, "wall", 480, pose);
 }

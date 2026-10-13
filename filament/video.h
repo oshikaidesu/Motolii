@@ -31,12 +31,14 @@ struct Video {
     float seconds = 0.f;               // how long it is as it is shown (its cut, at its speed)
     float starts = 0.f;                // how far into its cut it is when the stage's time is 0
     float from = 0.f, to = 0.f, speed = 1.f;   // the cut of the file that is shown, in the file's seconds, and how fast (below 0: backwards)
+    std::atomic<bool> sound{false};    // the file has sound too
     std::atomic<bool> ended{false};    // the reader has read to the cut's end: the mark of it has come down the stream of pictures, after the last of them
     float4 key{0.f};                   // its green screen, if it has one (green); until its first picture is on the sheet the sheet is all clear
     float2 keySoft{0.f};
     Mesh* sheet = nullptr;             // the thing in the scene: moved like any other (kit.h: move)
     MaterialInstance* look = nullptr;
-    struct Planes { std::atomic<WGPUTexture> shared{nullptr}; WGPUSharedTextureMemory lent = nullptr; Texture* light = nullptr; Texture* colour = nullptr; };
+    struct Planes { std::atomic<WGPUTexture> shared{nullptr}; WGPUSharedTextureMemory lent = nullptr; Texture* light = nullptr; Texture* colour = nullptr; gint64 used = 0; };
+    uint32_t shown = 0;                // which surface is on the sheet
     std::map<uint32_t, Planes> seen;   // the decoder's surfaces come round again: each is shared once
 };
 
@@ -57,6 +59,21 @@ static double video_due(GstSample* picture) {
 // The held picture put on the sheet. A surface seen for the first time is first shared with Filament's device, on
 // Filament's own thread and without waiting for it: until that is done (a picture or two later) the sheet keeps the
 // picture it had. false: not on the sheet yet.
+static long video_shared = 0;   // how many of the decoders' surfaces are shared now
+// A surface that was lent is given back: Filament's two views of it let go, then Dawn's own end of a lend.
+static void video_give_back(Stage& s, Video::Planes& planes) {
+    --video_shared;
+    if (planes.light) s.engine->destroy(planes.light);
+    if (planes.colour) s.engine->destroy(planes.colour);
+    door::on_driver(s.engine, [lent = planes.lent, shared = planes.shared.load()] {
+        WGPUSharedTextureMemoryEndAccessState ended{};
+        wgpuSharedTextureMemoryEndAccess(lent, shared, &ended);
+        wgpuSharedTextureMemoryEndAccessStateFreeMembers(ended);
+        wgpuTextureRelease(shared);
+        wgpuSharedTextureMemoryRelease(lent);
+    });
+}
+
 static CVPixelBufferRef video_surface(GstSample* picture) {
     const GType api = g_type_from_name("GstCoreVideoMetaAPI");
     VideoCoreVideoMeta* meta = api ? (VideoCoreVideoMeta*)gst_buffer_get_meta(gst_sample_get_buffer(picture), api) : nullptr;
@@ -68,7 +85,14 @@ static bool video_show(Stage& s, Video* v) {
     if (!surface) return false;
     auto found = v->seen.find(IOSurfaceGetID(surface));
     if (found == v->seen.end()) {
+        // (a decoder goes round a few surfaces, and takes new ones when its film goes round: one it has not handed on
+        //  for two seconds is given back, but for the one on the sheet)
+        for (auto it = v->seen.begin(); it != v->seen.end();)
+            if (it->second.shared && it->first != v->shown && g_get_monotonic_time() - it->second.used > 2 * G_USEC_PER_SEC) { video_give_back(s, it->second); it = v->seen.erase(it); }
+            else ++it;
         Video::Planes* planes = &v->seen[IOSurfaceGetID(surface)];
+        planes->used = g_get_monotonic_time();
+        ++video_shared;
         CFRetain(surface);
         const uint32_t w = (uint32_t)v->w, h = (uint32_t)v->h;
         Engine* engine = s.engine;
@@ -99,7 +123,9 @@ static bool video_show(Stage& s, Video* v) {
     }
     Video::Planes& planes = found->second;
     WGPUTexture shared = planes.shared;
+    planes.used = g_get_monotonic_time();
     if (!shared) return false;   // (being shared)
+    v->shown = found->first;
     if (!planes.light) {
         const auto plane = [&](Texture::InternalFormat as, int w, int h) {
             return Texture::Builder().width((uint32_t)w).height((uint32_t)h).levels(1).sampler(Texture::Sampler::SAMPLER_2D).format(as)
@@ -150,7 +176,8 @@ static void video_at(Stage& s, Video* v, float seconds);
 // Which of the file's streams the reader reads: its pictures only (GStreamer asks, stream by stream). The sound is
 // not read at all. (Read and dropped it cost 51 decoders their work, and an HEVC film played slower than it was shot
 // then gave no picture at all: so GStreamer alone, 1.28.8, with both streams taken.)
-static gint video_wanted(GstElement*, GstStreamCollection*, GstStream* stream, gpointer) {
+static gint video_wanted(GstElement*, GstStreamCollection*, GstStream* stream, gpointer film) {
+    if (gst_stream_get_stream_type(stream) & GST_STREAM_TYPE_AUDIO) ((Video*)film)->sound = true;   // (it has sound: heard in a written film, kit.h)
     return (gst_stream_get_stream_type(stream) & GST_STREAM_TYPE_VIDEO) ? 1 : 0;
 }
 
@@ -180,7 +207,7 @@ static Video* video(Stage& s, const char* file, const mat4f& place, float high, 
     gst_caps_unref(wanted);
     gst_bin_add_many(GST_BIN(v->reader), opens, reads, GST_ELEMENT(v->out), nullptr);
     gst_element_link(opens, reads);
-    g_signal_connect(reads, "select-stream", G_CALLBACK(video_wanted), nullptr);
+    g_signal_connect(reads, "select-stream", G_CALLBACK(video_wanted), v);
     g_signal_connect(reads, "pad-added", G_CALLBACK(video_found), v);
     GstPad* in = gst_element_get_static_pad(GST_ELEMENT(v->out), "sink");
     gst_pad_add_probe(in, GST_PAD_PROBE_TYPE_EVENT_DOWNSTREAM, video_ending, v, nullptr);
@@ -248,10 +275,11 @@ static Video* video(Stage& s, const char* file, const mat4f& place, float high, 
     v->look->setParameter("keySoft", float2{1.f, 1.f});
     video_put(s, v);
     s.playing[v] = [&s, v](double now) { video_at(s, v, (float)now + v->starts); };   // (it goes on by itself as the stage's time does)
+    if (v->sound) s.sounding[v] = [v, name = std::string(file)] { return Stage::Sound{name, v->from, v->to, v->speed, v->starts, 0.0, -1.0}; };
     if (s.said_after.empty() || !video_counted) {
         video_counted = true;
         s.said_after.push_back([] {   // (of the times a film was asked for a moment in that stretch, how often it could not yet tell its picture)
-            std::printf("    films late %ld of %ld times asked (%.2f %%)\n", video_late, video_asked, video_asked ? 100.0 * (double)video_late / (double)video_asked : 0.0);
+            std::printf("    films late %ld of %ld times asked (%.2f %%); surfaces shared now %ld\n", video_late, video_asked, video_asked ? 100.0 * (double)video_late / (double)video_asked : 0.0, video_shared);
             video_asked = video_late = 0;
         });
     }
@@ -261,6 +289,7 @@ static Video* video(Stage& s, const char* file, const mat4f& place, float high, 
 // A film taken off the stage for good: its sheet gone, its reader stopped and let go.
 static void video_off(Stage& s, Video* v) {
     s.playing.erase(v);
+    s.sounding.erase(v);
     take_off(s, v->sheet);
     s.engine->flushAndWait();   // (a surface may be on its way to being shared)
     gst_element_set_state(v->reader, GST_STATE_NULL);
@@ -268,20 +297,8 @@ static void video_off(Stage& s, Video* v) {
     if (v->held && v->held != v->on) gst_sample_unref(v->held);
     if (v->on) gst_sample_unref(v->on);
     gst_object_unref(v->reader);
-    for (auto& [surface, planes] : v->seen) {
-        if (planes.light) s.engine->destroy(planes.light);
-        if (planes.colour) s.engine->destroy(planes.colour);
-    }
-    door::on_driver(s.engine, [v] {   // (every surface that was lent is given back: Dawn's own end of a lend)
-        for (auto& [surface, planes] : v->seen) {
-            if (!planes.shared) continue;
-            WGPUSharedTextureMemoryEndAccessState ended{};
-            wgpuSharedTextureMemoryEndAccess(planes.lent, planes.shared, &ended);
-            wgpuSharedTextureMemoryEndAccessStateFreeMembers(ended);
-            wgpuTextureRelease(planes.shared);
-            wgpuSharedTextureMemoryRelease(planes.lent);
-        }
-    });
+    for (auto& [surface, planes] : v->seen)
+        if (planes.shared) video_give_back(s, planes);
     s.engine->flushAndWait();
     delete v;
 }

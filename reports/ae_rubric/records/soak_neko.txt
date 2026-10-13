@@ -1,21 +1,21 @@
-minute  1: 3599 drawn, 1 left out; longest 11.7 ms; memory 203 MB
-    films late 5154 of 180000 times asked (2.86 %)
-minute  2: 3600 drawn, 0 left out; longest 2.9 ms; memory 117 MB
+minute  1: 3599 drawn, 1 left out; longest 3.0 ms; memory 194 MB
+    films late 4969 of 180000 times asked (2.76 %)
+minute  2: 3600 drawn, 0 left out; longest 3.1 ms; memory 115 MB
     films late 611 of 180000 times asked (0.34 %)
-minute  3: 3599 drawn, 1 left out; longest 9.6 ms; memory 101 MB
-    films late 622 of 180000 times asked (0.35 %)
-minute  4: 3600 drawn, 0 left out; longest 2.7 ms; memory 104 MB
-    films late 614 of 180000 times asked (0.34 %)
-minute  5: 3600 drawn, 0 left out; longest 2.7 ms; memory 106 MB
-    films late 618 of 180000 times asked (0.34 %)
-minute  6: 3600 drawn, 0 left out; longest 2.4 ms; memory 109 MB
+minute  3: 3600 drawn, 0 left out; longest 2.7 ms; memory 118 MB
+    films late 623 of 180000 times asked (0.35 %)
+minute  4: 3600 drawn, 0 left out; longest 2.7 ms; memory 101 MB
     films late 616 of 180000 times asked (0.34 %)
-minute  7: 3600 drawn, 0 left out; longest 2.3 ms; memory 112 MB
+minute  5: 3600 drawn, 0 left out; longest 3.4 ms; memory 106 MB
+    films late 623 of 180000 times asked (0.35 %)
+minute  6: 3600 drawn, 0 left out; longest 3.2 ms; memory 113 MB
+    films late 616 of 180000 times asked (0.34 %)
+minute  7: 3600 drawn, 0 left out; longest 2.3 ms; memory 118 MB
     films late 612 of 180000 times asked (0.34 %)
-minute  8: 3600 drawn, 0 left out; longest 4.2 ms; memory 115 MB
+minute  8: 3600 drawn, 0 left out; longest 2.9 ms; memory 122 MB
     films late 621 of 180000 times asked (0.34 %)
-minute  9: 3599 drawn, 1 left out; longest 10.8 ms; memory 118 MB
-    films late 617 of 180000 times asked (0.34 %)
-minute 10: 3600 drawn, 0 left out; longest 5.3 ms; memory 119 MB
+minute  9: 3600 drawn, 0 left out; longest 3.9 ms; memory 124 MB
     films late 616 of 180000 times asked (0.34 %)
-in all: 35997 drawn, 3 left out, over 600 seconds
+minute 10: 3600 drawn, 0 left out; longest 3.0 ms; memory 128 MB
+    films late 616 of 180000 times asked (0.34 %)
+in all: 35999 drawn, 1 left out, over 600 seconds

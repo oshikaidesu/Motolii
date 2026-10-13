@@ -13,6 +13,7 @@ within 300 ./motion_test.sh > $R/motion.txt 2>&1
 within 900 ./ae_test.sh 2>&1 | grep "films compared" > $R/ae_files.txt; cp out/wgpu_kit/out/ae_test.tsv $R/ae_files.tsv
 within 300 ./check/video_colour.sh > $R/video_colour.tsv 2>/dev/null
 within 300 ./check/doc.sh > $R/doc.txt 2>&1
+within 300 ./check/sound.sh > $R/sound.txt 2>&1
 
 KIT_EXTRA="$E" KIT_SRC=check/video_time.mm BUILDONLY=1 ./dawn_probe/kit_wgpu.sh time_check
 for f in out/vid_odd/*; do

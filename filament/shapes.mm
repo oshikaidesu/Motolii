@@ -50,5 +50,5 @@ int main(int argc, char** argv) {
         for (MaterialInstance* mi : thrown) mi->setParameter("gain", 0.9f + 0.6f * kick);
         s.camera->lookAt(aim + (mat4f::rotation(0.12f * std::sin(TAU * t), float3{0, 1, 0}) * float4{eye - aim, 0.f}).xyz, aim, {0, 1, 0});
     };
-    return show(s, argc, argv, "shapes", 480, 2.f, pose);
+    return show(s, argc, argv, "shapes", 480, pose);
 }

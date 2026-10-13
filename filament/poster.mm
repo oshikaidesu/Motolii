@@ -163,5 +163,5 @@ int main(int argc, char** argv) {
             return mat4f::translation(float3{0.f, 0.06f * std::sin(TAU * t + 1.7f * (float)i), 0.f}) * at * mat4f::rotation(TAU * go * (i % 2 ? -1.f : 1.f), normalize(float3{0.4f, 1.f, 0.3f * (float)i}));
         });
     };
-    return show(s, argc, argv, "poster", 480, 2.f, pose);
+    return show(s, argc, argv, "poster", 480, pose);
 }

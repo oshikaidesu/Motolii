@@ -46,5 +46,5 @@ int main(int argc, char** argv) {
         for (MaterialInstance* mi : bodies) mi->setParameter("split", 0.10f + 0.08f * kick);
         for (MaterialInstance* mi : thrown) mi->setParameter("gain", 0.9f + 0.6f * kick);
     };
-    return show(s, argc, argv, "dance", 480, 2.f, pose);
+    return show(s, argc, argv, "dance", 480, pose);
 }

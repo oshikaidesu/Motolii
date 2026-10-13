@@ -39,7 +39,7 @@ int main(int argc, char** argv) {
             time_is(s, at);
         }
         else if (call == "still" && said >> word) { time_is(s, s.now); ok = shoot(s, word.c_str()); }
-        else if (call == "write" && said >> word) ok = film(s, word.c_str(), (int)std::lround(doc_seconds(*d) * 60.0), 0.f, [](float) {});
+        else if (call == "write" && said >> word) ok = film(s, word.c_str(), (int)std::lround(doc_seconds(*d) * 60.0), [](float) {});
         else if (call == "time") clock(s, 120, [](float) {});
         else if (call == "list") doc_rows(*d, sqlite3_mprintf("select thing, name, at, value from fact order by thing, name, at"), [](sqlite3_stmt* row) {
             std::printf("  %d %s at %g: %s\n", sqlite3_column_int(row, 0), sqlite3_column_text(row, 1), sqlite3_column_double(row, 2), sqlite3_column_text(row, 3)); });

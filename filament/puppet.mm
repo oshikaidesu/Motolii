@@ -60,5 +60,5 @@ int main(int argc, char** argv) {
         }
         move(s, ring, [&](int, const mat4f& at) { return mat4f::translation(float3{0.7f * std::sin(2.f * TAU * t), 0.f, 0.f}) * at * mat4f::rotation(2.f * TAU * t, normalize(float3{0.3f, 1, 0.2f})); });
     };
-    return show(s, argc, argv, crowd.empty() ? "puppet" : "puppet_crowd", 480, 2.f, pose);
+    return show(s, argc, argv, crowd.empty() ? "puppet" : "puppet_crowd", 480, pose);
 }

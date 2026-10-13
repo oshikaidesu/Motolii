@@ -100,5 +100,5 @@ int main(int argc, char** argv) {
                 return mat4f::translation(float3{0.85f * std::sin(a), g.height + 0.3f * std::sin(2.f * a + g.tilt), g.far + 0.5f * std::cos(a)}) * mat4f::rotation(2.f * a, normalize(float3{g.tilt, 1, 0.3f}));
             });
     };
-    return show(s, argc, argv, "neko", 480, 2.f, pose);
+    return show(s, argc, argv, "neko", 480, pose);
 }

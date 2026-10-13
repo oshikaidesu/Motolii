@@ -1,4 +1,4 @@
-2026-10-14 00:01
-bd8d39f kit: the stage owns time (films and AE pictures go on by the stage's clock; scenes no longer step them), one key_out for films, pictures and looks; a matte's eye is told before the frame begins (Filament sends what looks are told as a frame begins: mattes were a frame late, and empty in a film's first picture); AE rubric: evidence and the first judge's round (3.8)
+2026-10-14 00:39
+d9dac30 after the second round (two judges: 4.5): undo holds when a value is changed again and again (a change is written as SQLite's own update: delete-then-insert made the session keep two records that clash when reversed); a change the stage cannot show is not made (rolled back, with its reason); things and names that are not there are refused; a thing stays on unless given a duration; numbers are never given again; solid.h: a 3D file as a thing, all by Filament's gltfio (and photos through ThorVG's picture as they are); an AE picture's clearness is ThorVG's own (no white ground keyed out); the rotation tag by GStreamer's own reader; lent surfaces given back when a film goes (Dawn's EndAccess); one material built per file, not per thing
 15.5
 Apple M4

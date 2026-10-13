@@ -50,5 +50,5 @@ int main(int argc, char** argv) {
         return 0;
     }
     pose(0.5f);
-    return show(s, argc - 1, argv + 1, "ae", (int)std::lround(seconds * 60.f), 0.f, pose);
+    return show(s, argc - 1, argv + 1, "ae", (int)std::lround(seconds * 60.f), pose);
 }

@@ -1,28 +1,37 @@
 == wall
-257 pictures a second, 3.89 ms each (4.3 times 60)
-at 60 a second: 120 drawn, 0 left out; the last was done 5.2 ms after it was asked for
-at 120 a second: 240 drawn, 0 left out; the last was done 6.7 ms after it was asked for
-at 240 a second: 478 drawn, 2 left out; the last was done 3.8 ms after it was asked for
+278 pictures a second, 3.59 ms each (4.6 times 60)
+at 60 a second: 120 drawn, 0 left out; the last was done 4.5 ms after it was asked for
+at 120 a second: 240 drawn, 0 left out; the last was done 6.0 ms after it was asked for
+at 240 a second: 478 drawn, 2 left out; the last was done 4.5 ms after it was asked for
 == mask
-120 pictures a second, 8.34 ms each (2.0 times 60)
-at 60 a second: 120 drawn, 0 left out; the last was done 11.9 ms after it was asked for
-at 120 a second: 238 drawn, 2 left out; the last was done 8.7 ms after it was asked for
-at 240 a second: 25 drawn, 455 left out; the last was done 606.2 ms after it was asked for
+122 pictures a second, 8.21 ms each (2.0 times 60)
+at 60 a second: 120 drawn, 0 left out; the last was done 13.3 ms after it was asked for
+at 120 a second: 238 drawn, 2 left out; the last was done 9.9 ms after it was asked for
+at 240 a second: 26 drawn, 454 left out; the last was done 572.9 ms after it was asked for
 == puppet
-309 pictures a second, 3.23 ms each (5.2 times 60)
+433 pictures a second, 2.31 ms each (7.2 times 60)
     films late 9 of 1920 times asked (0.47 %)
-at 60 a second: 120 drawn, 0 left out; the last was done 9.2 ms after it was asked for
+at 60 a second: 120 drawn, 0 left out; the last was done 9.9 ms after it was asked for
     films late 4 of 480 times asked (0.83 %)
-at 120 a second: 240 drawn, 0 left out; the last was done 5.0 ms after it was asked for
-    films late 5 of 960 times asked (0.52 %)
-at 240 a second: 479 drawn, 1 left out; the last was done 3.3 ms after it was asked for
-    films late 10 of 1920 times asked (0.52 %)
+at 120 a second: 240 drawn, 0 left out; the last was done 5.8 ms after it was asked for
+    films late 4 of 960 times asked (0.42 %)
+at 240 a second: 480 drawn, 0 left out; the last was done 4.3 ms after it was asked for
+    films late 9 of 1920 times asked (0.47 %)
 == neko
-107 pictures a second, 9.34 ms each (1.8 times 60)
-    films late 10156 of 24000 times asked (42.32 %)
-at 60 a second: 118 drawn, 2 left out; the last was done 8.3 ms after it was asked for
-    films late 2116 of 6000 times asked (35.27 %)
-at 120 a second: 174 drawn, 66 left out; the last was done 7.5 ms after it was asked for
-    films late 4083 of 12000 times asked (34.02 %)
-at 240 a second: 16 drawn, 464 left out; the last was done 207.1 ms after it was asked for
-    films late 7817 of 24000 times asked (32.57 %)
+121 pictures a second, 8.27 ms each (2.0 times 60)
+    films late 13186 of 24000 times asked (54.94 %)
+at 60 a second: 118 drawn, 2 left out; the last was done 13.3 ms after it was asked for
+    films late 2022 of 6000 times asked (33.70 %)
+at 120 a second: 231 drawn, 9 left out; the last was done 7.4 ms after it was asked for
+    films late 3781 of 12000 times asked (31.51 %)
+at 240 a second: 352 drawn, 128 left out; the last was done 6.2 ms after it was asked for
+    films late 7562 of 24000 times asked (31.51 %)
+== lay
+174 pictures a second, 5.74 ms each (2.9 times 60)
+    films late 0 of 960 times asked (0.00 %)
+at 60 a second: 120 drawn, 0 left out; the last was done 11.6 ms after it was asked for
+    films late 4 of 480 times asked (0.83 %)
+at 120 a second: 240 drawn, 0 left out; the last was done 8.6 ms after it was asked for
+    films late 4 of 960 times asked (0.42 %)
+at 240 a second: 466 drawn, 14 left out; the last was done 4.0 ms after it was asked for
+    films late 6 of 1920 times asked (0.31 %)

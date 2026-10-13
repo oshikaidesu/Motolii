@@ -87,6 +87,10 @@ struct Stage {
     Texture* sunlight = nullptr;
     double now = 0.0;        // the stage's time, in seconds
     bool by_clock = false;   // true: played as the clock goes (nothing is waited for); false: picture by picture (each one exact)
+    // a thing's own sound: the cut of its file (seconds of the file) and how fast, how far into that it is as it comes on,
+    // and when on the stage it comes on and for how long (below 0: to the end)
+    struct Sound { std::string file; double from, to, speed, into, on, lasts; };
+    std::map<const void*, std::function<Sound()>> sounding;   // what is heard, each under its own thing: asked when a film is written
     std::map<const void*, std::function<void(double)>> playing;   // what goes on by itself as the stage's time does (films, pictures), each under its own thing
     std::vector<std::function<void()>> said_after;      // a word of their own after each line of `clock` and `soak`
     struct Made { utils::Entity thing; const Mesh* of; int nth; mat4f place; };
@@ -777,15 +781,29 @@ static void move(Stage& s, const Mesh* m, const std::function<mat4f(int, const m
 }
 
 // A film of the stage, 60 pictures a second, written by ffmpeg. Before each picture `pose` is told how far through
-// the film it is (0 up to 1): where the end meets the start, the film loops. drum: beats a second to hear (a drum on
-// each, a tick between, made by ffmpeg; 0: silent).
-static bool film(Stage& s, const char* path, int pictures, float drum, const std::function<void(float)>& pose) {
-    char sound[400] = "", cmd[1000];
-    if (drum > 0.f)
-        std::snprintf(sound, sizeof sound, "-f lavfi -i 'aevalsrc=0.8*sin(2*PI*(45*mod(t\\,%g)+2.5*(1-exp(-30*mod(t\\,%g)))))*exp(-7*mod(t\\,%g))+0.06*(random(0)*2-1)*exp(-45*mod(t+%g\\,%g)):s=48000' -c:a aac -b:a 160k -shortest",
-                      1.0 / drum, 1.0 / drum, 1.0 / drum, 0.5 / drum, 1.0 / drum);
-    std::snprintf(cmd, sizeof cmd, "ffmpeg -loglevel error -y -f rawvideo -pix_fmt rgba -s %dx%d -r 60 -i - %s -c:v libx264 -crf 17 -pix_fmt yuv420p -movflags +faststart %s", s.w, s.h, sound, path);
-    FILE* to = popen(cmd, "w");
+// the film it is (0 up to 1): where the end meets the start, the film loops. What is heard is the things' own sound
+// (Stage::sounding), cut, sped, gone round and mixed by ffmpeg as each thing says.
+static bool film(Stage& s, const char* path, int pictures, const std::function<void(float)>& pose) {
+    const auto quoted = [](std::string name) {   // (a file's name as a shell takes it)
+        for (size_t at = 0; (at = name.find('\'', at)) != std::string::npos; at += 4) name.replace(at, 1, "'\\''");
+        return "'" + name + "'";
+    };
+    std::string files, each, all;
+    int n = 0;
+    for (const auto& [who, tells] : s.sounding) {
+        const Stage::Sound a = tells();
+        const double fast = std::fabs(a.speed);
+        char how[700];
+        std::snprintf(how, sizeof how, "[%d:a]aresample=48000,atrim=start=%g:end=%g,asetpts=PTS-STARTPTS,%s%satempo=%g,aloop=loop=-1:size=%ld,atrim=start=%g%s%s,asetpts=PTS-STARTPTS,adelay=delays=%ld:all=1[a%d];",
+                      n + 1, a.from, a.to, a.speed < 0.0 ? "areverse," : "", fast < 0.5 ? "atempo=0.5," : "", fast < 0.5 ? fast / 0.5 : fast, std::lround((a.to - a.from) / fast * 48000.0), a.into,
+                      a.lasts < 0.0 ? "" : ":duration=", a.lasts < 0.0 ? "" : std::to_string(a.lasts).c_str(), std::lround(a.on * 1000.0), n + 1);
+        files += " -i " + quoted(a.file);
+        each += how;
+        all += "[a" + std::to_string(++n) + "]";
+    }
+    const std::string sound = n ? files + " -filter_complex \"" + each + all + "amix=inputs=" + std::to_string(n) + ":normalize=0:duration=longest,alimiter[a]\" -map 0:v -map '[a]' -c:a aac -b:a 160k -t " + std::to_string(pictures / 60.0) : "";
+    const std::string cmd = "ffmpeg -loglevel error -y -f rawvideo -pix_fmt rgba -s " + std::to_string(s.w) + "x" + std::to_string(s.h) + " -r 60 -i -" + sound + " -c:v libx264 -crf 17 -pix_fmt yuv420p -movflags +faststart " + quoted(path);
+    FILE* to = popen(cmd.c_str(), "w");
     if (!to) return false;
     std::vector<uint8_t> pic((size_t)s.w * s.h * 4);
     s.by_clock = false;
@@ -892,8 +910,8 @@ static void sun_to(Stage& s, float3 way) {
 }
 
 // What a picture's program does once its stage is set: the still (out/<name>.png); or, asked for `film`, the film
-// (out/<name>.mp4, with a drum on `drum` beats a second); or, asked for `time`, the film played for its cost.
-static int show(Stage& s, int argc, char** argv, const char* name, int pictures, float drum, const std::function<void(float)>& pose) {
+// (out/<name>.mp4); or, asked for `time`, the film played for its cost.
+static int show(Stage& s, int argc, char** argv, const char* name, int pictures, const std::function<void(float)>& pose) {
     const std::string still = std::string("out/") + name + ".png", moving = std::string("out/") + name + ".mp4";
     if (argc > 1 && !strcmp(argv[1], "time")) return clock(s, pictures, pose), 0;
     if (argc > 1 && !strcmp(argv[1], "soak")) return soak(s, argc > 2 ? atof(argv[2]) : 60.0, pictures, pose), 0;   // (soak 600: ten minutes)
@@ -903,7 +921,7 @@ static int show(Stage& s, int argc, char** argv, const char* name, int pictures,
         time_is(s, 0.3 * (double)pictures / 60.0);
         pose(0.3f);
     }
-    if (!(as_film ? film(s, moving.c_str(), pictures, drum, pose) : shoot(s, still.c_str()))) return fail(as_film ? "film" : "png");
+    if (!(as_film ? film(s, moving.c_str(), pictures, pose) : shoot(s, still.c_str()))) return fail(as_film ? "film" : "png");
     std::printf("wrote %s\n", (as_film ? moving : still).c_str());
     return 0;
 }

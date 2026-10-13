@@ -94,5 +94,5 @@ int main(int argc, char** argv) {
         move(s, hole, [&](int, const mat4f& at) { return at * mat4f::rotation(TAU * t, normalize(float3{1, 0.4f, 0})); });
         move(s, ring, [&](int, const mat4f& at) { return mat4f::translation(float3{0.75f * std::sin(TAU * t), 0.f, 0.f}) * at * mat4f::rotation(2.f * TAU * t, normalize(float3{0.3f, 1, 0.2f})); });
     };
-    return show(s, argc, argv, god ? "mask_god" : "mask", 480, 2.f, pose);
+    return show(s, argc, argv, god ? "mask_god" : "mask", 480, pose);
 }
