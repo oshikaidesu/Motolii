@@ -1,6 +1,6 @@
 // poster.mm: a band and a heap of blocks of clear glass in front of a black poster with white letters, seen straight on.
 // The band is kit.h's thick glass (the letters bent twice, the colours parting); the blocks are kit.h's too.
-// One picture, no switches.   ./poster.sh  ->  out/poster.png
+// One picture, no switches.   ./poster.sh  ->  out/poster.png        ./poster.sh film  ->  out/poster.mp4 (8 seconds, it loops)
 #include "kit.h"
 
 static const int W = 1080;
@@ -95,7 +95,7 @@ static std::vector<uint8_t> poster_pixels() {
     return px;
 }
 
-int main() {
+int main(int argc, char** argv) {
     Stage s = open_stage(W, H);
     const float3 eye{0.f, 1.4f, 6.f};
     const float fov = 30.f;
@@ -123,20 +123,19 @@ int main() {
     MaterialInstance* sheet_mi = add(s, sheet, "poster.filamat");
     if (!sheet_mi) return fail("poster.filamat");
     static std::vector<uint8_t> px = poster_pixels();
-    Texture* tex = Texture::Builder().width(W).height(H).levels(1).format(Texture::InternalFormat::SRGB8_A8).build(*s.engine);
+    // (with its smaller copies, which Filament makes: the sheet lays the blurred ones over the letters as their glow)
+    Texture* tex = Texture::Builder().width(W).height(H).levels(8).format(Texture::InternalFormat::SRGB8_A8).usage(Texture::Usage::DEFAULT | Texture::Usage::GEN_MIPMAPPABLE).build(*s.engine);
     tex->setImage(*s.engine, 0, Texture::PixelBufferDescriptor(px.data(), px.size(), Texture::Format::RGBA, Texture::Type::UBYTE));
-    sheet_mi->setParameter("color", tex, TextureSampler(TextureSampler::MinFilter::LINEAR, TextureSampler::MagFilter::LINEAR));
+    tex->generateMipmaps(*s.engine);
+    sheet_mi->setParameter("color", tex, TextureSampler(TextureSampler::MinFilter::LINEAR_MIPMAP_LINEAR, TextureSampler::MagFilter::LINEAR, TextureSampler::WrapMode::REPEAT));
+    sheet_mi->setParameter("glow", 0.5f);   // (0.8 and up: the glow shows the blurred copies' squares)
+    sheet_mi->setParameter("roll", 0.f);
 
     // the band: thick glass. The letters behind are bent by its far side and again by its near side, and the colours
     // part on the way (at 0.2 they turn to blocks of colour). A block does not show the band through itself.
-    MaterialInstance* band_far = nullptr;
-    MaterialInstance* band_mi = thick_glass(s, band(), {mat4f{}}, &band_far);
+    Mesh* the_band = band();
+    MaterialInstance* band_mi = thick_glass(s, the_band, {mat4f{}});
     if (!band_mi) return fail("thick_glass.filamat");
-    for (MaterialInstance* mi : {band_mi, band_far}) {
-        mi->setParameter("thickness", 0.5f);
-        mi->setParameter("split", 0.10f);
-        mi->setParameter("vivid", 1.4f);
-    }
 
     MaterialInstance* blocks_mi = glass_blocks(s, heap(), 0.1f);
     if (!blocks_mi) return fail("glassbox.filamat");
@@ -144,7 +143,25 @@ int main() {
     blocks_mi->setParameter("envGain", 0.05f);   // (glassbox's own studio, nearly off: at 1 the blocks go milky, at 0 they sink into black)
     blocks_mi->setParameter("lean", 0.08f);      // (the letters inside run like water; at 0.15 they break up)
 
-    if (!shoot(s, "out/poster.png")) return fail("png");
-    std::printf("wrote out/poster.png\n");
-    return 0;
+    // The film, 8 seconds of 16 beats: the band goes once round its own loop (its waves and twists run over the
+    // letters), each block rolls over about its own axis, the four big lines run sideways; all of it whole turns, so
+    // the end meets the start. Nothing moves evenly: on each beat things jump on and then ease (`go`), the colours
+    // burst apart and close again, and on each bar's first beat the letters' glow flares and the eye is jolted nearer.
+    const Mesh* block = s.made.back().of;
+    const float3 mid{1.5f, 1.4f, 0.f};
+    const auto pose = [&](float t) {
+        const float beat = t * 16.f - std::floor(t * 16.f), bar = t * 4.f - std::floor(t * 4.f);
+        const float kick = std::exp(-6.f * beat), flare = std::exp(-5.f * bar);
+        const float go = 0.4f * t + 0.6f * (std::floor(t * 16.f) + 1.f - std::pow(1.f - beat, 4.f)) / 16.f;
+        sheet_mi->setParameter("roll", go);
+        sheet_mi->setParameter("glow", 0.45f + 0.4f * flare);
+        band_mi->setParameter("split", 0.10f + 0.10f * kick);
+        blocks_mi->setParameter("abbe", 2.5f - 0.9f * kick);
+        s.camera->lookAt(eye - float3{0.f, 0.f, 0.3f * (0.5f - 0.5f * std::cos(TAU * t)) + 0.06f * flare}, {0.f, 1.4f, 0.f}, {0, 1, 0});
+        move(s, the_band, [&](int, const mat4f& at) { return mat4f::translation(mid) * mat4f::rotation(TAU * go, float3{0, 0, 1}) * mat4f::translation(-mid) * at; });
+        move(s, block, [&](int i, const mat4f& at) {
+            return mat4f::translation(float3{0.f, 0.06f * std::sin(TAU * t + 1.7f * (float)i), 0.f}) * at * mat4f::rotation(TAU * go * (i % 2 ? -1.f : 1.f), normalize(float3{0.4f, 1.f, 0.3f * (float)i}));
+        });
+    };
+    return show(s, argc, argv, "poster", 480, 2.f, pose);
 }

@@ -54,23 +54,11 @@ fragment {
         return f0 + (1.0 - f0) * k * k * k * k * k;
     }
 
-    // --- the bundled studio: what clear glass needs to read as glass (bright field + black lines)
-    float band(float x, float centre, float halfWidth, float soft) {
-        float d = abs(x - centre);
-        d = min(d, 6.2831853 - d);
-        return 1.0 - smoothstep(halfWidth, halfWidth + soft, d);
-    }
+    // --- the bundled studio (studio.glsl): what clear glass needs to read as glass (bright field + black lines)
+#include "studio.glsl"
     vec3 studio(vec3 d) {
         if (materialParams.plainSky > 0.5) return vec3(d.y < 0.0 ? mix(0.62, 0.45, smoothstep(0.0, -0.6, d.y)) : mix(1.0, 0.6, smoothstep(0.0, 0.9, d.y)));   // bright at the horizon, dimmer overhead and on the ground
-        float el = asin(clamp(d.y, -1.0, 1.0));
-        float az = atan(d.z, d.x) + 3.14159265;
-        float wall = mix(0.62, 0.30, smoothstep(0.0, 1.25, el));           // pale near the horizon, grey overhead
-        float v = d.y < 0.0 ? mix(wall, 0.66, smoothstep(0.0, -0.2, d.y)) : wall;
-        float rise = smoothstep(0.02, 0.12, el) * (1.0 - smoothstep(1.0, 1.2, el));
-        v *= 1.0 - 0.92 * rise * (band(az, 1.35, 0.16, 0.05) + band(az, 3.55, 0.14, 0.05) + band(az, 5.35, 0.16, 0.05));
-        v += rise * (7.0 * band(az, 0.95, 0.10, 0.03) + 5.0 * band(az, 3.15, 0.07, 0.03) + 4.0 * band(az, 4.95, 0.10, 0.03));
-        v += 2.2 * smoothstep(1.15, 1.35, el);                              // overhead softbox
-        return vec3(v);
+        return vec3(studioRoom(d));
     }
     vec3 lookup(vec3 p, vec3 d, vec3 view) {
         vec3 env = studio(d) * materialParams.envGain;

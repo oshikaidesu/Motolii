@@ -1,58 +1,158 @@
-// thick_glass.mat: clear glass of any shape that reads as THICK: what lies behind is seen bent twice, by the far side
-// and by the near side, and the colours part on the way. No light is followed; the recipe is the one real-time glass
-// is made by everywhere (three.js drei's MeshTransmissionMaterial with `backside`, by N8Programs, MIT; the same in
-// Maxime Heckel's write-up and in TouchDesigner GLSL materials):
-//   1. the scene without the glass is a picture (kit.h: `behind`);
-//   2. the glass's FAR faces are drawn over it, each pixel reading that picture at its bent place: a second picture
-//      (kit.h: `through`);
-//   3. the glass's NEAR faces read the second picture at their bent place.
-// A pixel reads its picture `samples` times, red, green and blue each with its own index, the indices drawn further
-// apart from sample to sample: a smooth smear of colour instead of three stripes.
-// What the glass mirrors (the room, the sun) is Filament's own lit surface on top.
-// Draw the mesh twice with this: far faces (culling FRONT, `behind` = the first picture, mirror 0) and near faces
-// (culling BACK, `behind` = the second picture).
+// thick_glass.mat: clear glass of any shape, seen through both of its sides. The eye's way is bent where it enters
+// (this near face) and again where it leaves (the far face it meets), each colour by its own index; where a colour
+// cannot leave (the two faces stand like a wedge: a prism, a twist, an edge) it is thrown back inside and ends in the
+// glass's own room. Faces that run alongside each other bend the way there and back: such glass is plainly clear.
+// The method is Wyman's image-space refraction through two interfaces (SIGGRAPH 2005): the far faces are not followed
+// but looked up in two pictures kit.h draws first, which way they face (far_side.mat) and how far away they are.
+// The colours part as in three.js drei's MeshTransmissionMaterial (N8Programs, MIT): `samples` readings, red, green
+// and blue each with its own index, the indices drawn further apart from reading to reading.
+// The glass mirrors its own room too (its strip lamps, as bright as the scene's sky makes them), not the scene's:
+// the material is unlit, Filament's lighting has no part in it.
 material {
     name : thick_glass,
-    shadingModel : lit,
+    shadingModel : unlit,
     blending : opaque,
-    doubleSided : true,
+    requires : [ tangents ],
+    variables : [ facing ],
     parameters : [
-        { type : sampler2d, name : behind, precision : medium },
+        { type : sampler2d, name : behind, precision : medium },    // the scene without the glass, with the glass's far side laid over it (far_look.mat)
+        { type : sampler2d, name : farSide, precision : medium },   // which way the glass's far faces face (far_side.mat)
+        { type : sampler2d, name : farDepth, precision : high, filterable : false },   // and how far away they are
         { type : float, name : ior },
-        { type : float, name : thickness },   // how far along the bent way the picture is read, in the scene's units
+        { type : float, name : thickness },   // how far beyond the glass the picture behind is read, in the scene's units
+        { type : float, name : swim },        // how much of the bend is kept where the way leaves (0: as glass does; 1: all of it)
+        { type : float, name : usual },       // how deep the solid is as a rule (kit.h works it out from the mesh)
+        { type : float, name : longFrom },    // how many times that a way must be before it counts as long (1 for bars and sheets, more for lumps; kit.h)
+        { type : float, name : dark },        // how fast a way through the glass longer than that goes dark
+        { type : float, name : edgeFire },    // how far the colours part at that dark's edge, against what glass does (1)
         { type : float, name : split },       // how far the colours' indices part (drei's chromaticAberration)
-        { type : float, name : samples },     // readings per colour, 16 at most
+        { type : float, name : samples },     // readings, each one colour of the rainbow, 16 at most
         { type : float, name : vivid },       // saturation of what is seen through (1: as it is)
-        { type : float, name : mirror }       // Filament's reflectance (0.5: plain glass; 0: none)
+        { type : float, name : roomGain }     // how bright the glass's own room (studio.glsl) shows in it (0: not at all)
     ]
 }
 
+vertex {
+    void materialVertex(inout MaterialVertexInputs material) {
+        material.facing = vec4(material.worldNormal, 0.0);   // (an unlit material's pixels are given no normal: handed on from here)
+    }
+}
+
 fragment {
-    float red(highp vec3 at)   { highp vec4 c = getClipFromWorldMatrix() * vec4(at, 1.0); return textureLod(materialParams_behind, uvToRenderTargetUV(c.xy / c.w * 0.5 + 0.5), 0.0).r; }
-    float green(highp vec3 at) { highp vec4 c = getClipFromWorldMatrix() * vec4(at, 1.0); return textureLod(materialParams_behind, uvToRenderTargetUV(c.xy / c.w * 0.5 + 0.5), 0.0).g; }
-    float blue(highp vec3 at)  { highp vec4 c = getClipFromWorldMatrix() * vec4(at, 1.0); return textureLod(materialParams_behind, uvToRenderTargetUV(c.xy / c.w * 0.5 + 0.5), 0.0).b; }
+#include "studio.glsl"
+#include "spectrum.glsl"
+    // where a place of the scene is on the pictures
+    highp vec2 onPicture(highp vec3 at) { highp vec4 c = getClipFromWorldMatrix() * vec4(at, 1.0); return uvToRenderTargetUV(c.xy / c.w * 0.5 + 0.5); }
+    // how far in front of the eye a depth is (Filament's own linearizeDepth)
+    highp float away(highp float z) { highp mat4 m = getViewFromClipMatrix(); return -(z * m[2].z + m[3].z) / max(z * m[2].w + m[3].w, 1e-7); }
+    // How much of a way inside the glass a face throws back instead of letting out (all of it past the steepness
+    // where no light leaves glass; that steepness differs from colour to colour, which is where a prism's colours sit).
+    float thrown(float ior, float facing) {
+        float k = 1.0 - ior * ior * (1.0 - facing * facing);
+        return k <= 0.0 ? 1.0 : pow(1.0 - sqrt(k), 5.0);
+    }
+    // One colour's way (what it shows of all three screen colours: the caller keeps that colour's share): in through this face, to the far face, and out to the picture behind. A way thrown back, or
+    // bent far off the eye's own, does not end on the ground behind but in the glass's room (dim, lamps, flags): that
+    // is what draws a solid's rims dark and bright.
+    vec3 through(highp vec3 P, vec3 v, vec3 n, vec3 nf, highp float deep, float ior) {
+        vec3 inside = refract(v, n, 1.0 / ior);
+        vec3 out_ = refract(inside, -nf, ior);
+        float back = thrown(ior, dot(inside, nf));
+        vec3 way = back >= 1.0 ? reflect(inside, -nf) : out_;
+        float astray = max(back, smoothstep(0.10, 0.30, 1.0 - dot(way, v)));   // (bent by more than a quarter turn's third or so; less, and letters behind go striped)
+        // (where the way leaves, glass would bend it most of the way back; for the picture behind it is left bent,
+        //  overdone: what is behind the glass swims in it. Where the way ends is not overdone.)
+        vec3 leaving = normalize(mix(out_, inside, materialParams.swim));
+        vec3 beyond = textureLod(materialParams_behind, onPicture(P + inside * deep + leaving * materialParams.thickness), 0.0).rgb;
+        return beyond * mix(1.0, glassRoom(way) * materialParams.roomGain, astray);
+    }
+    // how deep the glass is at a place on the picture, in the solid's usual depths (none there, beside the glass: 0)
+    highp float deepThere(highp vec2 at, highp float near, highp float slant) {
+        highp float z = textureLod(materialParams_farDepth, at, 0.0).r;
+        return clamp((away(z) - near) * slant * step(1e-6, z), 0.0, 8.0 * materialParams.usual) / materialParams.usual;
+    }
+    // that depth `at` along the line the colours part on (0 .. 4 from the first of five readings to the last), running evenly between them
+    float deepAlong(float at, float d0, float d1, float d2, float d3, float d4) {
+        return d0 + (d1 - d0) * clamp(at, 0.0, 1.0) + (d2 - d1) * clamp(at - 1.0, 0.0, 1.0) + (d3 - d2) * clamp(at - 2.0, 0.0, 1.0) + (d4 - d3) * clamp(at - 3.0, 0.0, 1.0);
+    }
+    // how much of one colour (0 red .. 1 violet) the dark of deep glass leaves: looked up at the colour's own place on
+    // that line, most of it near the middle and a little far out (a hard edge on the dark's side, a long pale tail)
+    // (violet goes dark soonest and fastest, red last: the dark's edges lead with yellow and orange, not with blue)
+    float left(float along, float d0, float d1, float d2, float d3, float d4) {
+        float shift = mix(-2.5, 2.0, along) / 4.5 * 4.0, rate = materialParams.dark * mix(0.7, 1.6, along), from = mix(1.6, 1.35, along) * materialParams.longFrom;
+        const float MIDDLE = 2.5 / 4.5 * 4.0;
+        return 0.5 * exp(-rate * max(deepAlong(MIDDLE + 0.06 * shift, d0, d1, d2, d3, d4) - from, 0.0))
+             + 0.3 * exp(-rate * max(deepAlong(MIDDLE + 0.3 * shift, d0, d1, d2, d3, d4) - from, 0.0))
+             + 0.2 * exp(-rate * max(deepAlong(MIDDLE + 0.8 * shift, d0, d1, d2, d3, d4) - from, 0.0));
+    }
     void material(inout MaterialInputs material) {
         prepareMaterial(material);
         highp vec3 P = getWorldPosition();
         vec3 v = -getWorldViewVector();     // from the eye to here
-        vec3 n = getWorldNormalVector();    // (two-sided: it faces the eye on the far faces too)
+        vec3 n = normalize(variable_facing.xyz);
+        highp vec2 here = uvToRenderTargetUV(getNormalizedPhysicalViewportCoord().xy);
+        // how far the eye's way runs inside the glass: from this face to the far face behind it
+        highp float near = away(gl_FragCoord.z);
+        highp float slant = length(P - getWorldCameraPosition()) / near;
+        highp float deep = clamp((away(textureLod(materialParams_farDepth, here, 0.0).r) - near) * slant, 0.0, 8.0 * materialParams.usual);
         // a fixed grain per pixel, so the readings of neighbouring pixels interleave (no noise in time)
         float grain = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
         int count = int(clamp(materialParams.samples, 1.0, 16.0) + 0.5);
-        vec3 seen = vec3(0.0);
+        vec3 seen = vec3(0.0), lit = vec3(0.0), white = vec3(0.0);
+        // how far, and which way on the picture, the colours part at most where their ways arrive at the far side
+        highp vec2 partedMost = (onPicture(P + refract(v, n, 1.0 / (materialParams.ior * (1.0 + materialParams.split))) * deep)
+                               - onPicture(P + refract(v, n, 1.0 / materialParams.ior) * deep)) * materialParams.edgeFire;
+        partedMost *= min(1.0, 0.045 / max(length(partedMost), 1e-6));   // (never further than a twentieth of the picture)
+        // Each reading is ONE colour of the rainbow (red first, violet last; spectrum.glsl says what it shows as): bent
+        // by its own index, it reads the picture behind once and keeps its own colour's share of it. (Red, green and
+        // blue each followed on their own: three times the readings for a three-colour split instead of a rainbow.)
         for (int i = 0; i < 16; i++) {
             if (i >= count) break;
-            float apart = materialParams.split * (float(i) + grain) / float(count);
-            seen.r += red(P + refract(v, n, 1.0 / materialParams.ior) * materialParams.thickness);
-            seen.g += green(P + refract(v, n, 1.0 / (materialParams.ior * (1.0 + apart))) * materialParams.thickness);
-            seen.b += blue(P + refract(v, n, 1.0 / (materialParams.ior * (1.0 + 2.0 * apart))) * materialParams.thickness);
+            float along = (float(i) + grain) / float(count);   // 0 red .. 1 violet
+            vec3 tint = max(xyzToSrgb(cieXyz(mix(660.0, 430.0, along))), vec3(0.0));
+            float ior = materialParams.ior * (1.0 + 1.6 * materialParams.split * along);
+            // the far face this way meets: looked up where it arrives
+            vec3 q = textureLod(materialParams_farSide, onPicture(P + refract(v, n, 1.0 / ior) * deep), 0.0).rgb;
+            vec2 side = q.rg / max(q.b, 1e-3) * 2.0 - 1.0;
+            vec3 nf = q.b < 0.5 ? -n : mat3(getWorldFromViewMatrix()) * vec3(side, -sqrt(max(1.0 - dot(side, side), 0.0)));   // (none there: as if it ran alongside this face)
+            seen += tint * through(P, v, n, nf, deep, ior);
+            white += tint;
         }
-        seen /= float(count);
+        seen /= white;
+        // Glass seen along itself (a bar's side, a twist) is a long way of glass, and dark. Each colour finds that dark
+        // somewhere else (overdone): red to one side, violet to the other, so on one side the dark runs out yellow,
+        // orange, red and on the other blue, cyan, green: the two edge colours of a dark bar on a bright ground. (All
+        // shifted the same way, the dark is yellow on both sides, or one navy blob.)
+        // How deep the glass is, is read at five places along that line and taken as running evenly between them;
+        // eight colours each look it up at their own place, most of each colour's light near the middle and a little
+        // far out (a hard edge on the dark's side, a long pale tail). Nothing here is shifted from pixel to pixel:
+        // one reading a colour, shifted by the grain, shows as a screen of dots.
+        // (written out, with no lists looked up by a counter: Filament's WebGPU backend runs those a millisecond slower)
+        highp float d0 = deepThere(here - 2.5 * partedMost, near, slant), d1 = deepThere(here - 1.375 * partedMost, near, slant),
+                    d2 = deepThere(here - 0.25 * partedMost, near, slant), d3 = deepThere(here + 0.875 * partedMost, near, slant),
+                    d4 = deepThere(here + 2.0 * partedMost, near, slant);
+        // (what each of eight colours, red to violet, gives of a white: spectrum.glsl's colours at 646 .. 444 nm)
+        lit = vec3(0.1581, 0.0000, 0.0000) * left(0.0625, d0, d1, d2, d3, d4)
+            + vec3(0.3886, 0.0000, 0.0000) * left(0.1875, d0, d1, d2, d3, d4)
+            + vec3(0.3463, 0.1235, 0.0000) * left(0.3125, d0, d1, d2, d3, d4)
+            + vec3(0.0660, 0.3199, 0.0000) * left(0.4375, d0, d1, d2, d3, d4)
+            + vec3(0.0000, 0.3682, 0.0000) * left(0.5625, d0, d1, d2, d3, d4)
+            + vec3(0.0000, 0.1676, 0.0572) * left(0.6875, d0, d1, d2, d3, d4)
+            + vec3(0.0000, 0.0207, 0.3647) * left(0.8125, d0, d1, d2, d3, d4)
+            + vec3(0.0410, 0.0000, 0.5781) * left(0.9375, d0, d1, d2, d3, d4);
+        // (the dark is never black: a dusky violet, a third as bright as the ground; but only where all three colours are
+        //  dark: laid under one colour's dark, it greys the rainbow at the dark's edge to a pale violet)
+        seen *= lit + vec3(0.30, 0.32, 0.52) * (1.0 - max(lit.r, max(lit.g, lit.b)));
         seen = max(mix(vec3(dot(seen, vec3(0.2125, 0.7154, 0.0721))), seen, materialParams.vivid), vec3(0.0));
+        // (this face a little lighter or darker by how it stands to the room's key lamp; the far side's look is in the picture behind: far_look.mat)
+        // (towards DARK: a pale ground sits at the top of the screen's range, where lighter hardly shows; and from the side,
+        //  so the face towards the eye and the faces beside it differ)
+        seen *= 1.06 + 0.18 * dot(n, vec3(0.81, 0.5, -0.3));   // (0.93 + 0.30: a smoky body, a sixth darker than the paper)
+        // a broad soft sheen on faces that mirror what is overhead. On the ground's own brightness, so none of it lies on a black poster.
+        seen *= 1.0 + 0.30 * smoothstep(0.3, 0.9, reflect(v, n).y);
+        // this face mirrors the glass's room: its strip lamps run along the solid as long white lines, a small hot lamp glints
+        seen += frameUniforms.iblLuminance * materialParams.roomGain * 14.0 * mirroredLamp(reflect(v, n)) * (0.04 + 0.96 * pow(1.0 - clamp(dot(n, -v), 0.0, 1.0), 5.0));
         material.baseColor = vec4(0.0, 0.0, 0.0, 1.0);
         material.emissive = vec4(seen, 0.0);   // (as it is: the pictures hold light as the screen does)
-        material.roughness = 0.0;
-        material.metallic = 0.0;
-        material.reflectance = materialParams.mirror;
     }
 }

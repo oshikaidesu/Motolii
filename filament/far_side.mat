@@ -1,0 +1,27 @@
+// far_side.mat: the far faces of a glass solid, as a picture of which way each of them faces. kit.h's thick_glass draws
+// them (culling FRONT) into a picture of their own; thick_glass.mat's near faces read it, and its depth, to bend the
+// eye's way a second time where it leaves the glass.
+// Red and green: the face's direction as the eye sees it, sideways and up (a far face looks away from the eye, so
+// the third part needs no sign). Blue: 1, glass is here (the cleared picture is black: none). Read smoothly, blue
+// is how much of the reading is glass, and red and green divide by it.
+material {
+    name : far_side,
+    shadingModel : unlit,
+    blending : opaque,
+    requires : [ tangents ],
+    variables : [ facing ]
+}
+
+vertex {
+    void materialVertex(inout MaterialVertexInputs material) {
+        material.facing = vec4(material.worldNormal, 0.0);   // (an unlit material's pixels are given no normal: handed on from here)
+    }
+}
+
+fragment {
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        vec3 n = mat3(getViewFromWorldMatrix()) * normalize(variable_facing.xyz);
+        material.baseColor = vec4(n.xy * 0.5 + 0.5, 1.0, 1.0);
+    }
+}

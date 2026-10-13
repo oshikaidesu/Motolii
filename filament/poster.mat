@@ -5,13 +5,32 @@ material {
     requires : [ uv0 ],
     culling : none,
     parameters : [
-        { type : sampler2d, name : color }
+        { type : sampler2d, name : color },
+        { type : float, name : glow },   // how bright the letters' glow (their blurred smaller copies laid over them; no pass of its own)
+        { type : float, name : roll }   // how far through a film (0 to 1): the four big lines run sideways, each a whole number of widths
     ]
 }
 
 fragment {
+    // the letters' glow: the sheet's blurred smaller copies
+    vec3 softAt(vec2 uv) { return 0.6 * textureLod(materialParams_color, uv, 3.5).rgb + 0.4 * textureLod(materialParams_color, uv, 5.5).rgb; }
+    // 1 where a line's letters stand (from..to, in the sheet's 1920 rows), fading out above and below them
+    float lineOf(float top, float from, float to) { return smoothstep(from - 55.0, from - 5.0, top) * (1.0 - smoothstep(to + 5.0, to + 55.0, top)); }
     void material(inout MaterialInputs material) {
         prepareMaterial(material);
-        material.baseColor = vec4(texture(materialParams_color, getUV0()).rgb * 1.1, 1.0);
+        vec2 uv = getUV0();
+        // The four big lines run sideways in a film, each its own way (CLEAR, GLASS one width a film, MOVE, MORE two).
+        // The letters go with their own line, cut hard in the gaps between the lines; their glow reaches into the gaps
+        // and would be cut there, so it is mixed from both neighbours' runs.
+        float top = uv.y * 1920.0;
+        vec4 run = materialParams.roll * vec4(-1.0, 1.0, -2.0, 2.0);
+        vec4 near = vec4(lineOf(top, 367.0, 560.0), lineOf(top, 627.0, 820.0), lineOf(top, 1057.0, 1250.0), lineOf(top, 1317.0, 1510.0));
+        float upper = step(340.0, top) * step(top, 860.0), lower = step(1030.0, top) * step(top, 1550.0);
+        int line = int(upper * floor((top - 340.0) / 260.0) + lower * (2.0 + floor((top - 1030.0) / 260.0)));
+        vec3 sharp = textureLod(materialParams_color, uv + vec2((upper + lower) * run[line], 0.0), 0.0).rgb;
+        vec3 soft = max(1.0 - dot(near, vec4(1.0)), 0.0) * softAt(uv);
+        for (int i = 0; i < 4; i++)
+            if (near[i] > 0.0) soft += near[i] * softAt(uv + vec2(run[i], 0.0));
+        material.baseColor = vec4((sharp + materialParams.glow * soft * vec3(0.75, 0.85, 1.0)) * 1.1, 1.0);
     }
 }

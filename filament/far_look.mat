@@ -1,0 +1,31 @@
+// far_look.mat: how the far faces of a glass solid look from within: the room's lamps mirrored on them, a thin shade
+// on each face, a darker line where a face is seen along itself. kit.h's thick_glass lays them (culling FRONT,
+// blended) over the picture of the scene without the glass; the near faces (thick_glass.mat) bend that picture, so
+// the solid's own far side is seen through it, shifted and stretched: what tells a solid from a shell.
+material {
+    name : far_look,
+    shadingModel : unlit,
+    blending : transparent,
+    depthWrite : false,
+    requires : [ tangents ],
+    variables : [ facing ]
+}
+
+vertex {
+    void materialVertex(inout MaterialVertexInputs material) {
+        material.facing = vec4(material.worldNormal, 0.0);   // (an unlit material's pixels are given no normal: handed on from here)
+    }
+}
+
+fragment {
+#include "studio.glsl"
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        vec3 n = normalize(variable_facing.xyz);   // (outward: away from the eye)
+        vec3 v = -getWorldViewVector();
+        float along = 1.0 - clamp(dot(n, v), 0.0, 1.0);   // 0: the face seen square on; 1: seen along itself
+        float lamps = mirroredLamp(reflect(v, -n)) * (0.06 + 0.2 * pow(along, 5.0));   // (not mirror-bright where seen along itself: bent and parted by the near face, that is a broad rainbow streak along every rim)
+        float shade = 0.0 + 0.08 * max(dot(n, vec3(0.81, 0.5, -0.3)), 0.0) + 0.6 * smoothstep(0.55, 0.95, along);
+        material.baseColor = vec4(vec3(frameUniforms.iblLuminance * 5.0 * lamps), shade);   // (light laid on, and what is behind dimmed by `shade`)
+    }
+}

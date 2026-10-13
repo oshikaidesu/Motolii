@@ -1,0 +1,17 @@
+// paper_copy.mat: the paper on the screen, taken from the picture of the scene without the glass (kit.h: `behind`),
+// where it has been drawn already with its sunlight, shade and tooth. Drawing the paper once instead of twice.
+material {
+    name : paper_copy,
+    shadingModel : unlit,
+    blending : opaque,
+    parameters : [ { type : sampler2d, name : behind, precision : medium } ]
+}
+
+fragment {
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        material.baseColor = vec4(0.0, 0.0, 0.0, 1.0);
+        highp vec4 c = getClipFromWorldMatrix() * vec4(getWorldPosition(), 1.0);   // (where this place is on that picture)
+        material.emissive = vec4(textureLod(materialParams_behind, uvToRenderTargetUV(c.xy / c.w * 0.5 + 0.5), 0.0).rgb, 0.0);
+    }
+}

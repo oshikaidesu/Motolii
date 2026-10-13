@@ -53,20 +53,24 @@ fragment {
         // (a mean, not the most: the most jumps as a lookup crosses a shade's edge, and the jumps showed as blocks)
         float widest = materialParams.sunWide * materialParams.furthest * materialParams.perUnit;
         float flown = textureLod(materialParams_sunlight, uv, 0.0).a, shaded = step(1e-4, flown);
-        for (int i = 0; i < 24; i++) {
-            float r = sqrt((float(i) + 0.5) / 24.0) * widest, a = float(i) * 2.39996;
+        for (int i = 0; i < 12; i++) {
+            float r = sqrt((float(i) + 0.5) / 12.0) * widest, a = float(i) * 2.39996;
             float f = textureLod(materialParams_sunlight, uv + r * vec2(cos(a), sin(a)), 0.0).a;
             flown += f;
             shaded += smoothstep(0.0, 0.02, f);
         }
-        float reach = materialParams.sunWide * (flown / max(shaded, 1.0)) * smoothstep(0.0, 3.0, shaded) * materialParams.perUnit;
+        float reach = materialParams.sunWide * (flown / max(shaded, 1.0)) * smoothstep(0.0, 1.5, shaded) * materialParams.perUnit;
         // a fixed spiral of lookups: the same every frame, no noise
+        // (where no shade is near, which is most of the paper, the spiral would read one spot 24 times: read it once)
         vec3 sun = vec3(0.0);
-        for (int i = 0; i < 24; i++) {
-            float r = sqrt((float(i) + 0.5) / 24.0) * reach, a = float(i) * 2.39996;
-            sun += textureLod(materialParams_sunlight, uv + r * vec2(cos(a), sin(a)), 0.0).rgb;
+        if (reach < 0.0003) sun = textureLod(materialParams_sunlight, uv, 0.0).rgb;
+        else {
+            for (int i = 0; i < 24; i++) {
+                float r = sqrt((float(i) + 0.5) / 24.0) * reach, a = float(i) * 2.39996;
+                sun += textureLod(materialParams_sunlight, uv + r * vec2(cos(a), sin(a)), 0.0).rgb;
+            }
+            sun *= 1.0 / 24.0;
         }
-        sun *= 1.0 / 24.0;
         return shadingData.diffuseColor * (1.0 / PI) * lightData.colorIntensity.rgb
                * (lightData.colorIntensity.w * lightData.attenuation * lightData.NdotL) * sun;
     }
