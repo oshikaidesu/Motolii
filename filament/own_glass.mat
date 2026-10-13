@@ -34,7 +34,7 @@ fragment {
         if (piece > 0.5) {
             float lot = fract(sin(piece * 12.9898) * 43758.5453);
             if (lot < 0.5) deep = 0.6 + 1.8 * lot;
-            else if (lot < 0.72) { absorb = absorb.bgr; deep = 2.6; }
+            else if (lot < 0.72) { absorb = mix(absorb.bgr, vec3(dot(absorb, vec3(0.3333))), 0.5); deep = 2.6; }
             else if (lot < 0.86) { absorb = vec3(0.6 * min(absorb.r, min(absorb.g, absorb.b))); }
             else { absorb = vec3(max(absorb.r, max(absorb.g, absorb.b))); deep = 2.0; }
         }

@@ -27,9 +27,9 @@ static Mesh* burst(float2 knot, float reach, float lean, int count, uint32_t see
     for (int n = 0; n < count; ++n) {
         const bool longway = n < count / 5;   // a fifth go the long way
         const float heading = (lean + (longway ? between(-20.f, 20.f) : between(40.f, 320.f))) * TAU / 360.f;
-        const float length = reach * (longway ? between(0.55f, 1.f) : between(0.16f, 0.38f));
+        const float length = reach * (longway ? (n == 0 ? between(0.6f, 0.75f) : between(0.55f, 1.f)) : between(0.16f, 0.38f));
         const bool hook = n == 0 || rnd() < 0.2f;   // (the first of the long ones always ends in a sickle)
-        const float bend = (rnd() < 0.5f ? -1.f : 1.f) * (hook ? between(1.6f, 2.6f) : longway ? between(0.25f, 1.0f) : between(0.5f, 1.6f));
+        const float bend = (rnd() < 0.5f ? -1.f : 1.f) * (hook ? between(1.6f, 2.6f) : longway ? between(0.25f, 1.0f) : between(0.2f, 0.9f));
         const float thin = rnd();
         const float wide = reach * (0.007f + 0.017f * thin) * (hook ? 1.4f : longway ? 1.f : 0.6f);   // (the short ones thinner)
         const float twist = between(-3.2f, 3.2f), depth = between(0.1f, 0.7f), bow = between(0.05f, 0.3f);
@@ -39,7 +39,7 @@ static Mesh* burst(float2 knot, float reach, float lean, int count, uint32_t see
         float2 c = from;
         for (int i = 0; i <= rings; ++i) {
             const float u = (float)i / rings;
-            const float h = heading + bend * (hook ? u * u * u * u : u * u) + kink * std::sin(0.5f * TAU * u);   // (the arc tightens towards the tip; a hook's all at its end, a sickle)
+            const float h = heading + bend * (hook ? u * u * (3.f - 2.f * u) * u : u * u) + kink * std::sin(0.5f * TAU * u);   // (the arc tightens towards the tip; a hook turns late and fast, while it is still wide: a sickle)
             if (i) c += length / rings * float2{std::cos(h), std::sin(h)};
             const float3 centre{c.x, c.y, depth + bow * std::sin(0.5f * TAU * u)};
             // (the sine is held at 0 or more: at the very tip it comes out a hair below, and a power of that is no number at all)
@@ -71,8 +71,8 @@ int main(int argc, char** argv) {
     s.camera->setProjection(2.0 * std::atan(HIGH / far_off) * 360.0 / TAU, double(W) / double(H), 1.0, 60.0, Camera::Fov::VERTICAL);
     static LinearToneMapper as_it_is;   // (the flat colours are the screen's own: nothing bends them)
     s.view->setColorGrading(ColorGrading::Builder().toneMapper(&as_it_is).build(*s.engine));
-    // (a room of many narrow lights: they lie on the glass as thin streaks; a room of a few large ones as white patches)
-    if (!room(s, "out/pillars_2k/pillars_2k_ibl.ktx", 34000.f)) return fail("out/pillars_2k/pillars_2k_ibl.ktx");
+    // (a room of many narrow lights, none of them blue: they lie on the glass as thin streaks; a room of a few large ones as white patches)
+    if (!room(s, "out/graffiti_shelter_2k/graffiti_shelter_2k_ibl.ktx", 34000.f)) return fail("out/graffiti_shelter_2k/graffiti_shelter_2k_ibl.ktx");
 
     // the flat layers, drawn by ThorVG
     Drawn* flat = drawn_open(s, W, H, [](tvg::WgCanvas* canvas) {
@@ -96,7 +96,7 @@ int main(int argc, char** argv) {
     sheet_mi->setParameter("picture", flat->texture, TextureSampler(TextureSampler::MinFilter::LINEAR, TextureSampler::MagFilter::LINEAR));
 
     // the burst: crushed glass of a bottle green, put down as it comes (Filament's own glass, kit.h: it is given no depth)
-    if (!own_glass(s, burst(at(0.76f, 0.52f), 0.74f * 2.f * WIDE, 178.f, 26, 64), {mat4f{}}, float3{0.33f, 0.40f, 0.06f}, 0.15f)) return fail("own_glass.filamat");
+    if (!own_glass(s, burst(at(0.76f, 0.52f), 0.74f * 2.f * WIDE, 178.f, 26, 77), {mat4f{}}, float3{0.33f, 0.40f, 0.06f}, 0.15f)) return fail("own_glass.filamat");
 
     const auto pose = [&](float) { drawn_now(s, flat); };
     pose(0.f);
