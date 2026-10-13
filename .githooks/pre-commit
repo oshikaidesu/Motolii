@@ -1,0 +1,4 @@
+#!/bin/sh
+# Before every commit: is ASSETS.md (the ledger of what is at hand) still true? (.githooks/assets_check.py)
+# Set up once with:  git config core.hooksPath .githooks        To commit all the same:  git commit --no-verify
+exec "$(git rev-parse --show-toplevel)/.githooks/assets_check.py"

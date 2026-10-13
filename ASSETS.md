@@ -2,6 +2,8 @@
 
 **作る前にここを見る。「無い」と思ったら、ここと過去の倉庫を探してから言う。**
 最終更新：2026-10-14。足した物・消した物があったら、その時にここも直す。
+**忘れても見張りが止める**：コミットの前に `.githooks/assets_check.py` が走って、git の知っているファイルのうち台帳に場所の無い物と、台帳に在るのにもう無い場所を数える。1つでもあればコミットは通らない。
+（場所は `` ` `` で囲んで書く。フォルダを書けば中身は全部載った事になる。同じ行で前の場所と同じフォルダなら、名前だけでいい。）
 
 状態の言葉：
 - **今の土台で動く** ＝ Filament を Dawn（WebGPU）で動かす今の作りで、検査か動画で確かめてある。
@@ -22,25 +24,26 @@
 | C の顔：描く係を始める、数を1個渡す、最後の絵を渡す（`glass_start`、`glass_env`、`glass_front`、`glass_frames`） | `filament/glass_live.h`、`glass_live.mm` | 前の土台で動いた |
 | ライブラリにするビルド（`out/libglass_live.dylib`） | `filament/build_live.sh` | 前の土台で動いた |
 | ガワ無しで確かめる机上の検査 | `filament/glass_live_test.mm` | 前の土台で動いた |
-| Flutter 側：その置き場をテクスチャとして登録して貼る（`GlassTexture`、`FlutterTexture`、`copyPixelBuffer`、`textureFrameAvailable`、チャンネル `motolii/glass`） | `skin/book/macos/Runner/MainFlutterWindow.swift` | 前の土台で動いた |
+| Flutter 側：その置き場をテクスチャとして登録して貼る（`GlassTexture`、`FlutterTexture`、`copyPixelBuffer`、`textureFrameAvailable`、チャンネルの名前は motolii/glass） | `skin/book/macos/Runner/MainFlutterWindow.swift` | 前の土台で動いた |
 | 貼る部品：絵を出して、ドラッグとホイールと数を送る | `skin/book/lib/sets/glass_live.dart` | 前の土台で動いた |
 | 開く：`skin/book/glass.sh`（Widgetbook の Glass › Live） | `skin/book/glass.sh` | 前の土台で動いた |
 | Windows の道筋（古い土台の物と、今の土台の物の両方） | `filament/WINDOWS.md` | 読んだだけ（何もビルドしていない） |
 
-今の土台に持ってくる時に要る事：描いているのは古いガラスの場面（`glass_scene.mm`、Metal）。今の舞台（`kit.h`、Dawn）の絵をこの置き場に描かせる所がまだ無い。Debug ビルドの Mac だけ。
+今の土台に持ってくる時に要る事：描いているのは古いガラスの場面（`filament/glass_scene.mm`、Metal）。今の舞台（`filament/kit.h`、Dawn）の絵をこの置き場に描かせる所がまだ無い。Debug ビルドの Mac だけ。
 
 ## 2. ガワ（Flutter）
 
 | 何 | どこ | 状態 |
 |---|---|---|
-| Flutter 本体 | `~/rust_ae/Motolii/.tools/flutter` | 前の土台で動いた（`glass.sh` がここを使う） |
-| 部品の棚（Widgetbook）：19 コンポーネント、約 166 の使い方、約 1.8 万行。数値の井戸・スイッチ・スライダー・色・タブ・タイムライン（行、バー、キー、再生ヘッド、定規）・ブラウザ・舞台のふち・窓 | `skin/book/lib/`（`tokens.dart`、`kit.dart`、`sets/`、`parts/`） | 前の土台で動いた（見た目の部品。中身にはつながっていない） |
-| 見本の窓（製品ではない）：机（`desk.dart`、`desk_ease.dart`、`desk_depth.dart`）、ドック（ファイル、フォント、エフェクト、素材）、舞台 | `skin/book/lib/workspace/` | 前の土台で動いた |
+| Flutter 本体 | `~/rust_ae/Motolii/.tools/flutter/` | 前の土台で動いた（ガラスを開くスクリプトがここを使う） |
+| 部品の棚（Widgetbook）：19 コンポーネント、約 166 の使い方、約 1.8 万行。数値の井戸・スイッチ・スライダー・色・タブ・タイムライン（行、バー、キー、再生ヘッド、定規）・ブラウザ・舞台のふち・窓 | `skin/book/lib/`（`skin/book/lib/tokens.dart`、`kit.dart`、`skin/book/lib/sets/`、`skin/book/lib/parts/`） | 前の土台で動いた（見た目の部品。中身にはつながっていない） |
+| ウィジェットブックの土台：Mac 用の窓の作り、部品の検査、設定 | `skin/book/`（`skin/book/macos/`、`skin/book/test/`、`skin/book/pubspec.yaml`）、`skin/README.md` | 前の土台で動いた |
+| 見本の窓（製品ではない）：机、ドック（ファイル、フォント、エフェクト、素材）、舞台 | `skin/book/lib/workspace/`（机は `desk.dart`、`desk_ease.dart`、`desk_depth.dart`） | 前の土台で動いた |
 | 間の定義を触る習作（イージング、ウィグル） | `skin/book/lib/sets/studies/`（`panel_inspector_a_ease.dart`、`op_04_wiggle.dart`、`pop_04_wiggle.dart` ほか 160 本） | 未確認（在る事だけ） |
 | 設計の紙 | `skin/DESIGN.md`、`skin/OVERVIEW.md`、`skin/PROCESS.md` | — |
 | **過去の製品の窓**：橋、セッション、タイムライン、インスペクタ、舞台、机（ease、blend、depth、history、relations、notes） | `~/rust_ae/Motolii/motolii/ui/lib/` | 読んだだけ |
-| 過去のスキンと中身の間の約束：命令 JSON 約 90 個、返事の「様子」の JSON、絵のテクスチャ番号 | `~/rust_ae/Motolii/motolii/ui/lib/bridge/protocol.dart`、`ui/native/src/port.rs`、`snapshot.rs` | 読んだだけ。対応表は `reports/ae_rubric/past_document_map.md` |
-| 過去の「Ease の机」と、間の種類のいつもの数 | `~/rust_ae/Motolii/motolii/ui/lib/desks/ease/`、`ui/native/src/editor/ease_kinds.rs` | 読んだだけ。数は `filament/interp.h` に持ってきた |
+| 過去のスキンと中身の間の約束：命令 JSON 約 90 個、返事の「様子」の JSON、絵のテクスチャ番号 | `~/rust_ae/Motolii/motolii/ui/lib/bridge/protocol.dart`、`~/rust_ae/Motolii/motolii/ui/native/src/port.rs`、`snapshot.rs` | 読んだだけ。対応表は `reports/ae_rubric/past_document_map.md` |
+| 過去の「Ease の机」と、間の種類のいつもの数 | `~/rust_ae/Motolii/motolii/ui/lib/desks/ease/`、`~/rust_ae/Motolii/motolii/ui/native/src/editor/ease_kinds.rs` | 読んだだけ。数は `filament/interp.h` に持ってきた |
 
 ## 3. 中身（今の土台：Filament を Dawn で）
 
@@ -53,11 +56,11 @@
 | AEの動きを物に渡す（3Dレイヤー、カメラ） | `filament/motion.h`、ThorVG へのパッチ | 今の土台で動く |
 | 間の定義9種類（過去の倉庫の写し） | `filament/interp.h` | 今の土台で動く（倉庫の式と差 0） |
 | 文書（SQLite に事実を並べる）、取り消し、キーと間 | `filament/doc.h` | 今の土台で動く。**形と名前を過去の倉庫に揃える途中** |
-| 編集の口（C の関数）と、その客（行を読む道具、素の C） | `filament/motolii.h`、`motolii.mm`、`edit.cpp`、`check/api.c`、`edit.sh` | 今の土台で動く |
+| 編集の口（C の関数）と、その客（行を読む道具、素の C） | `filament/motolii.h`、`motolii.mm`、`edit.cpp`、`edit.sh`、`filament/check/api.c` | 今の土台で動く |
 | 板の材質（色抜き、型、重ね方4つ、動画の色） | `filament/flat.mat`、`matte.mat`、`matte.glsl` | 今の土台で動く |
-| 場面の見本：民衆、人形劇、マスク、重ね方、壁、AE再生、AEの動き、文書 | `filament/neko.mm`、`puppet.mm`、`mask.mm`、`lay.mm`、`wall.mm`、`ae.mm`、`led.mm` | 今の土台で動く。動画は `reports/show/` |
-| ビルド：今の土台用 | `filament/dawn_probe/kit_wgpu.sh`、`tvg_on_dawn.sh` | 今の土台で動く |
-| 人の物への手入れ：Filament（計算の口、機械を借りる口、外の絵を受ける口、動画の共有の機能）、ThorVG（3つ目の数 z） | `filament/dawn_probe/filament_dawn_compute.patch`、`thorvg_z.patch`、`gpu_door.*` | 今の土台で動く。ThorVG の物は本家に送らない |
+| 場面の見本：民衆、人形劇、マスク、重ね方、壁、AE再生、AEの動き、文書 | `filament/neko.mm`、`puppet.mm`、`mask.mm`、`lay.mm`、`wall.mm`、`ae.mm`、`led.mm`（開くのは `filament/neko.sh`、`puppet.sh`、`lay.sh`、`led.sh`。led の動きは `filament/led.json`） | 今の土台で動く。動画は `reports/show/` |
+| ビルド：今の土台用。Filament と ThorVG を Dawn で作る手順、Filament の中に仕事を入れる口、計算の口の確かめ | `filament/dawn_probe/`（場面を作るのは `kit_wgpu.sh`、ThorVG は `tvg_on_dawn.sh`） | 今の土台で動く |
+| 人の物への手入れ：Filament（計算の口、機械を借りる口、外の絵を受ける口、動画の共有の機能）、ThorVG（3つ目の数 z） | `filament/dawn_probe/filament_dawn_compute.patch`、`thorvg_z.patch`、`gpu_door.h`、`gpu_door.cpp` | 今の土台で動く。ThorVG の物は本家に送らない |
 
 ## 4. ガラスと光（残すと決まっている）
 
@@ -65,23 +68,24 @@
 |---|---|---|
 | 厚いガラス（二面の屈折、縁の虹、後ろの絵と動画を曲げて映す） | `filament/thick_glass.mat`、`far_look.mat`、`far_side.mat`、`studio.glsl`、`kit.h` の `thick_glass` | 今の土台で動く |
 | 紙の上の影と、どんな形でも落ちる虹の光 | `filament/glasslight.mat`、`paper.mat`、`floor_shade.mat`、`kit.h`（`paper_and_sun`、`glass_light`、`shadow_of`）、`blocks.mm`、`shapes.mm`、`dance.mm` | 今の土台で動く（`led.mm` が使う）。1個に 6〜10 ms |
-| 輪、ポスター、踊り、砕いたガラスのポスター | `filament/ring.mm`、`poster.mm`、`dance.mm`、`acid.mm`、`own_glass.mat` | 前の土台で動いた（Dawn でも同じ絵、と当時確かめた物もある） |
-| **気に入りの絵**：X-cube のオーロラ | `filament/xcube_gpu.mm`（`try 11 56`）、`xcube_drop.mm`、`xcube_*.mat` | 前の土台で動いた |
-| 平らな面のガラスの、正確で鋭い床の光（光の束を割る） | `filament/beam_glass.h`、`beam_split.h`、`beam_spectrum.h`、`beam_extrude.h`、`glass_beam.mm`、`glass_scene.mm`、`BEAM_GLASS.md` | 前の土台で動いた。**これ以上の最適化はしない、と止めてある** |
+| 輪、ポスター、踊り、砕いたガラスのポスター | `filament/ring.mm`、`poster.mm`、`dance.mm`、`acid.mm`、`acid_flat.svg`、`own_glass.mat`（開くのは `filament/ring.sh`、`poster.sh`、`dance.sh`、`blocks.sh`、`shapes.sh`、`show.sh`） | 前の土台で動いた（Dawn でも同じ絵、と当時確かめた物もある） |
+| **気に入りの絵**：X-cube のオーロラ | `filament/xcube_gpu.mm`（`try 11 56`）、`xcube_drop.mm`、`xcube.mm`、`xcube_*.mat` | 前の土台で動いた |
+| 平らな面のガラスの、正確で鋭い床の光（光の束を割る） | `filament/beam_glass.h`、`beam_split.h`、`beam_spectrum.h`、`beam_extrude.h`、`glass_beam.mm`、`glass_scene.mm`、`BEAM_GLASS.md`、`beam_glass_test.cpp`、`extrude_check.cpp`、`flat_pop_test.cpp`、`beam_test.sh`、`build_one.sh` | 前の土台で動いた。**これ以上の最適化はしない、と止めてある** |
+| 光の束を割るのを GPU の上で（Filament の計算の口を通して） | `filament/cbeam.h`、`cbeam.wgsl` | 前の土台で動いた |
 | 虹のコースティクス（Filament だけで） | `filament/caustic_tri.h`、`caustic_tri.mm`、`filament/caustic_tri/` | 前の土台で動いた |
-| 3Dの道のガラス、プリズム、ほかの習作 | `filament/beauty.mm`、`hero.mm`、`trio.mm`、`prism*.mm`、`collage.mm`、`link.mm`、`torture.mm`、`spatial.mm`、`gpu_tube.mm` ほか | 前の土台で動いた（古い。材質は `filament/*.mat` の 93 本のうち約 84 本がこの山の物） |
+| 3Dの道のガラス、プリズム、ほかの習作 | `filament/beauty.mm`、`hero.mm`、`trio.mm`、`prism*.mm`、`collage.mm`、`link.mm`、`torture.mm`、`spatial.mm`、`gpu_tube.mm`、`caustics.mm`、`fresh.mm`、`holes.mm`、`layers.mm`、`probe.mm`、`robust.mm`、`filament/prism.sh`、`dichro.sh`、`link.sh`、材質の部品 `filament/*.glsl` | 前の土台で動いた（古い。材質 `filament/*.mat` は 93 本あって、約 84 本がこの山の物） |
 
 ## 5. 文書と編集（過去の倉庫）
 
-| 何 | どこ（`~/rust_ae/Motolii/motolii/crates/`） | 状態 |
+| 何 | どこ | 状態 |
 |---|---|---|
-| 文書の形：層、種類、値、番号、並び、時間（コマと分数）、カメラ、文字、素材 | `motolii-doc/src/store/`、`core/` | 読んだだけ |
-| キーと間の定義、値の種類 | `motolii-doc/src/eval/track.rs`、`bezier.rs`、`value.rs` | 読んだだけ。式は `filament/interp.h` に写した |
-| GSAP の名前の表 | `motolii-doc/src/eval/gsap.rs` | **持ってこない**（負の遺産） |
-| 編集の操作、まとめ（グループ）、取り消し、確かめ、保存 | `motolii-edit/src/` | 読んだだけ |
-| ThorVG や OS とのつなぎ | `motolii-glue/src/macos/` | 未確認 |
-| 描く側、Lottie への書き出し | `motolii-render/` | 未確認 |
-| 決め事の紙 | `docs/`、`MANIFESTO.ja.md`、`VISION.ja.md`、`v1/PLAN/` | ほぼ未読 |
+| 文書の形：層、種類、値、番号、並び、時間（コマと分数）、カメラ、文字、素材 | `~/rust_ae/Motolii/motolii/crates/motolii-doc/src/store/`、`~/rust_ae/Motolii/motolii/crates/motolii-doc/src/core/` | 読んだだけ |
+| キーと間の定義、値の種類 | `~/rust_ae/Motolii/motolii/crates/motolii-doc/src/eval/track.rs`、`bezier.rs`、`value.rs` | 読んだだけ。式は `filament/interp.h` に写した |
+| GSAP の名前の表 | `~/rust_ae/Motolii/motolii/crates/motolii-doc/src/eval/gsap.rs` | **持ってこない**（負の遺産） |
+| 編集の操作、まとめ（グループ）、取り消し、確かめ、保存 | `~/rust_ae/Motolii/motolii/crates/motolii-edit/src/` | 読んだだけ |
+| ThorVG や OS とのつなぎ | `~/rust_ae/Motolii/motolii/crates/motolii-glue/src/macos/` | 未確認 |
+| 描く側、Lottie への書き出し | `~/rust_ae/Motolii/motolii/crates/motolii-render/` | 未確認 |
+| 決め事の紙 | `~/rust_ae/Motolii/docs/`、`~/rust_ae/Motolii/MANIFESTO.ja.md`、`VISION.ja.md`、`~/rust_ae/Motolii/v1/PLAN/` | ほぼ未読 |
 
 ## 6. 検査と記録
 
@@ -89,10 +93,12 @@
 |---|---|---|
 | 検査を全部走らせ直して記録に書く | `filament/records.sh` → `reports/ae_rubric/records/` | 今の土台で動く（約20分） |
 | 文書（置く・取り消し・間違い35個・間の行き方・開き直し・色） | `filament/check/doc.sh`、`doc_calls.txt`、`doc_wrong.txt`、`doc_ways.txt` | 今の土台で動く |
-| 音、動画の色、動画の時間、C からの呼び出し、間の式の突き合わせ | `filament/check/sound.sh`、`video_colour.sh`、`video_time.mm`、`api.c`、`interp_twin.sh` | 今の土台で動く |
-| AEのファイル103本、AEの動き | `filament/ae_test.sh`、`motion_test.sh` | 今の土台で動く |
+| 音、動画の色、動画の時間、C からの呼び出し、間の式の突き合わせ | `filament/check/`（`sound.sh`、`video_colour.sh`、`video_time.mm`、`api.c`、`interp_twin.sh`、`solid_probe.mm`） | 今の土台で動く |
+| AEのファイル103本、AEの動き | `filament/ae_test.sh`、`ae_ref.cpp`、`motion_test.sh`、`motion_test.mm`、`motion_test.json`、`motion_test3d.json`、`motion_test3d.inc` | 今の土台で動く |
 | 採点表と採点4回 | `AE_RUBRIC.md`、`reports/ae_rubric/round_0*.md`、`evidence.md`、`try.md` | — |
 | タスク表 | `TASKS.md` | — |
+| この台帳と、その見張り（コミットの前に走る） | `ASSETS.md`、`.githooks/assets_check.py`、`.githooks/pre-commit` | 今の土台で動く |
+| 入口の紙 | `README.md` | — |
 
 ## 7. 実験と調べ物（結果だけ使う。作り直さない）
 
@@ -100,12 +106,13 @@
 |---|---|---|
 | 動画40本の読み比べ（GStreamer と FFmpeg） | `filament/probe_gst/` | 今の土台で動く |
 | 文書の入れ物の確かめ（SQLite の取り消し、GES、式の計算） | `filament/probe_edit/` | 今の土台で動く |
+| Filament に出来るかの確かめ（GPU の切り取り、1回で複数の値を書く、頂点の無い描き方） | `filament/clip_probe.mm`、`mrt_probe.mm`、`proc_probe.mm` | 前の土台で動いた |
 | 床の虹のコースティクス（wgpu + WGSL） | `caustics/` | 前の土台で動いた（別の作り） |
 | ハードウェアの光線（wgpu の ray query） | `rayq/` | 前の土台で動いた（別の作り） |
 | ThorVG のマスクを WebGPU の上で測った物 | `melt/` | 前の土台で動いた（git には入っていない） |
 | 動く Filament を Mac の窓に出した最初の確かめ | `bridge/` | 前の土台で動いた（git には入っていない） |
 | `filmask/`、`thorvg/`（Rust の小さい物） | `filmask/`、`thorvg/` | 未確認 |
-| `filament_base/`、`filament_holes/`、`filament_premerge/`、`filament_walls/` | 同名のフォルダ | 未確認（10/12 の `filament/` の写しに見える） |
+| `filament_base/`、`filament_holes/`、`filament_premerge/`、`filament_walls/` | 同名のフォルダ | 未確認（10/12 の filament フォルダの写しに見える） |
 | 調べた紙：編集の中身、Flutter のガワの作り、過去の倉庫との対応、ガラス、マスク、二つのカメラ | `reports/ae_rubric/research_*.md`、`past_document_map.md`、`reports/`、`research_notes/` | — |
 
 ## 8. 素材（git には入れていない物が多い）
@@ -116,5 +123,5 @@
 | 変な動画14本（この Mac で作った試し用） | `filament/out/vid_odd/` |
 | AE のファイルの見本103本 | `filament/third_party/thorvg_example/res/lottie/` |
 | 3Dファイルの見本（ヘルメット、狐ほか） | `filament/third_party/filament_src/third_party/models/` |
-| 部屋の光 | `filament/out/small_studio/`、`lightroom/`、`graffiti_shelter_2k/` |
+| 部屋の光 | `filament/out/small_studio/`、`filament/out/lightroom/`、`filament/out/graffiti_shelter_2k/` |
 | フォントへの近道 | `filament/out/arial_black.ttf`、`arial_unicode.ttf` |
