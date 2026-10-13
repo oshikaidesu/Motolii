@@ -85,6 +85,10 @@ struct Stage {
     Texture* through_depth = nullptr;   // how far away those far faces are: thick_glass.mat's near faces measure the glass by it
     View* view_floor = nullptr;   // the floor from straight above (layer 4 only), drawn before all into `sunlight` (paper_and_sun)
     Texture* sunlight = nullptr;
+    double now = 0.0;        // the stage's time, in seconds
+    bool by_clock = false;   // true: played as the clock goes (nothing is waited for); false: picture by picture (each one exact)
+    std::vector<std::function<void(double)>> playing;   // what goes on by itself as the stage's time does (films, pictures)
+    std::vector<std::function<void()>> said_after;      // a word of their own after each line of `clock` and `soak`
     struct Made { utils::Entity thing; const Mesh* of; int nth; mat4f place; };
     utils::Entity sun;                     // the sun, where there is one (paper_and_sun), and all that goes by its direction: `sun_to`
     std::vector<MaterialInstance*> by_sun;
@@ -587,6 +591,15 @@ static MaterialInstance* thick_glass(Stage& s, Mesh* m, std::vector<mat4f> place
     return front;
 }
 
+// A colour of a picture made clear (a green screen): for a sheet that shows a picture (flat.mat). near: how near to
+// the colour counts as the screen itself (in the two colour numbers of video, where pure green is 0.6 from grey: the
+// screen's own noise must fit in it); soft: over how much more the picture comes in (a point half screen, half grey
+// is 0.3 from the screen); spill: how far from the screen its colour is still taken out of what stays.
+static void key_out(MaterialInstance* look, float3 colour = float3{0.f, 1.f, 0.f}, float near = 0.12f, float soft = 0.3f, float spill = 0.9f) {
+    look->setParameter("key", float4{colour, near});
+    look->setParameter("keySoft", float2{soft, spill});
+}
+
 // A matte, as After Effects has them: a shape that is not seen itself and cuts other things. Any mesh is one: a solid,
 // or a sheet with a picture on it (ThorVG's), which cuts by how clear the picture is, or by its light (After Effects'
 // luma matte). It is a thing like any other: `move` moves it.
@@ -686,14 +699,26 @@ static Camera* god_view(Stage& s) {
 
 // Three frames, the last one read back and written as a .png.
 // One picture of the stage drawn (the helper pictures first), and read back into `pic` if one is given.
-// All the pictures of one frame, the helper pictures first (between Filament's beginFrame and endFrame). Every way
-// of drawing the stage goes through here.
-static void pictures_of(Stage& s) {
+// The stage's time set: everything that goes on by itself is at that moment for the picture drawn next.
+static void time_is(Stage& s, double seconds) {
+    s.now = seconds;
+    for (const auto& goes : s.playing) goes(seconds);
+}
+
+// A frame begins (Filament's beginFrame: false if this one is to be left out). What the looks are told is sent on
+// as a frame begins, so each matte's eye is told just before: where it is now, a pose handed over, nothing more.
+static bool begins(Stage& s) {
     static const char* const eyes[] = {"matteEye0", "matteEye1", "matteEye2", "matteEye3"};
-    for (const Stage::Cut& c : s.cuts) {   // (where each matte's eye is now: a pose handed over, nothing more)
+    for (const Stage::Cut& c : s.cuts) {
         const Camera* eye = s.mattes[(size_t)c.matte].eye;
         c.look->setParameter(eyes[c.slot], mat4f(eye->getProjectionMatrix() * eye->getViewMatrix()));
     }
+    return s.renderer->beginFrame(s.swap);
+}
+
+// All the pictures of one frame, the helper pictures first (between Filament's beginFrame and endFrame). Every way
+// of drawing the stage goes through here.
+static void pictures_of(Stage& s) {
     for (Stage::Matte& m : s.mattes) {
         s.renderer->render(m.view);
         if (m.soft) m.picture->generateMipmaps(*s.engine);
@@ -705,7 +730,7 @@ static void pictures_of(Stage& s) {
 }
 
 static void draw(Stage& s, std::vector<uint8_t>* pic = nullptr, bool wait = true) {
-    while (!s.renderer->beginFrame(s.swap)) {}
+    while (!begins(s)) {}
     pictures_of(s);
     if (pic)
         s.renderer->readPixels(0, 0, (uint32_t)s.w, (uint32_t)s.h,
@@ -734,7 +759,9 @@ static bool film(Stage& s, const char* path, int pictures, float drum, const std
     FILE* to = popen(cmd, "w");
     if (!to) return false;
     std::vector<uint8_t> pic((size_t)s.w * s.h * 4);
+    s.by_clock = false;
     for (int i = 0; i < pictures; ++i) {
+        time_is(s, (double)i / 60.0);
         pose((float)i / (float)pictures);
         draw(s, &pic);
         if (std::fwrite(pic.data(), 1, pic.size(), to) != pic.size()) break;
@@ -748,17 +775,18 @@ static bool film(Stage& s, const char* path, int pictures, float drum, const std
 // millisecond or two, and differently on each (waiting after every picture or every second one, WebGPU and Metal
 // read alike; after every fourth, WebGPU reads a millisecond or two dearer; seldom or never, both are held back).
 // (And at 60 a second the GPU slows its clock, so a picture's own time cannot be read off a paced run either.)
-static std::function<void()> clock_after;   // (a scene's own word after each line of `clock`, if it has one to say)
 static void clock(Stage& s, int pictures, const std::function<void(float)>& pose) {
+    s.by_clock = true;
     const auto from = std::chrono::steady_clock::now();
     for (int i = 0; i < pictures; ++i) {
+        time_is(s, (double)i / 60.0);
         pose((float)i / (float)pictures);
         draw(s, nullptr, i % 4 == 3);
     }
     s.engine->flushAndWait();
     const double took = std::chrono::duration<double>(std::chrono::steady_clock::now() - from).count();
     std::printf("%.0f pictures a second, %.2f ms each (%.1f times 60)\n", pictures / took, 1000.0 * took / pictures, pictures / took / 60.0);
-    if (clock_after) clock_after();
+    for (const auto& word : s.said_after) word();
     // And by the clock, as a screen asks for them: on every tick Filament is asked once whether it will draw (it says
     // no when it is behind), nothing is waited for. Pictures drawn and pictures left out, at 60, 120 and 240 a second.
     for (int rate : {60, 120, 240}) {
@@ -766,8 +794,9 @@ static void clock(Stage& s, int pictures, const std::function<void(float)>& pose
         const auto start = std::chrono::steady_clock::now();
         for (int i = 0; i < 2 * rate; ++i) {   // two seconds
             std::this_thread::sleep_until(start + std::chrono::microseconds((long long)i * 1000000 / rate));
-            pose((float)(i % pictures) / (float)pictures);
-            if (!s.renderer->beginFrame(s.swap)) { ++left_out; continue; }
+            time_is(s, (double)i / (double)rate);
+            pose((float)(i % (pictures * rate / 60)) / (float)(pictures * rate / 60));
+            if (!begins(s)) { ++left_out; continue; }
             pictures_of(s);
             s.renderer->endFrame();
             ++drawn;
@@ -776,7 +805,7 @@ static void clock(Stage& s, int pictures, const std::function<void(float)>& pose
         s.engine->flushAndWait();
         std::printf("at %d a second: %d drawn, %d left out; the last was done %.1f ms after it was asked for\n", rate, drawn, left_out,
                     std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - asked).count());
-        if (clock_after) clock_after();
+        for (const auto& word : s.said_after) word();
     }
 }
 
@@ -784,6 +813,7 @@ static void clock(Stage& s, int pictures, const std::function<void(float)>& pose
 // takes): how it holds up over minutes. A line a minute: pictures drawn and left out (Filament says no when it is
 // behind), the longest this thread took over one picture, and how much memory the program holds.
 static void soak(Stage& s, double seconds, int pictures, const std::function<void(float)>& pose) {
+    s.by_clock = true;
     const auto start = std::chrono::steady_clock::now();
     const long ticks = (long)(seconds * 60.0);
     int drawn = 0, left_out = 0, all_drawn = 0, all_left = 0;
@@ -791,8 +821,9 @@ static void soak(Stage& s, double seconds, int pictures, const std::function<voi
     for (long i = 0; i < ticks; ++i) {
         std::this_thread::sleep_until(start + std::chrono::microseconds(i * 1000000 / 60));
         const auto began = std::chrono::steady_clock::now();
+        time_is(s, (double)i / 60.0);
         pose((float)((double)i / (double)pictures));   // (on past 1: time does not go back)
-        if (s.renderer->beginFrame(s.swap)) {
+        if (begins(s)) {
             pictures_of(s);
             s.renderer->endFrame();
             ++drawn;
@@ -804,7 +835,7 @@ static void soak(Stage& s, double seconds, int pictures, const std::function<voi
             task_info(mach_task_self(), MACH_TASK_BASIC_INFO, (task_info_t)&info, &count);
             std::printf("minute %2ld: %d drawn, %d left out; longest %.1f ms; memory %.0f MB\n", (i + 1 + 3599) / 3600, drawn, left_out, longest, (double)info.resident_size / 1048576.0);
             std::fflush(stdout);
-            if (clock_after) clock_after();
+            for (const auto& word : s.said_after) word();
             all_drawn += drawn; all_left += left_out;
             drawn = left_out = 0;
             longest = 0.0;
@@ -838,6 +869,11 @@ static int show(Stage& s, int argc, char** argv, const char* name, int pictures,
     if (argc > 1 && !strcmp(argv[1], "time")) return clock(s, pictures, pose), 0;
     if (argc > 1 && !strcmp(argv[1], "soak")) return soak(s, argc > 2 ? atof(argv[2]) : 60.0, pictures, pose), 0;   // (soak 600: ten minutes)
     const bool as_film = argc > 1 && !strcmp(argv[1], "film");
+    if (!as_film) {   // (a still: the stage three tenths of the way through its film)
+        s.by_clock = false;
+        time_is(s, 0.3 * (double)pictures / 60.0);
+        pose(0.3f);
+    }
     if (!(as_film ? film(s, moving.c_str(), pictures, drum, pose) : shoot(s, still.c_str()))) return fail(as_film ? "film" : "png");
     std::printf("wrote %s\n", (as_film ? moving : still).c_str());
     return 0;

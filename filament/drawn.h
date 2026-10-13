@@ -16,6 +16,7 @@ struct Drawn {
     Mesh* sheet = nullptr;             // the thing in the scene: moved like any other (kit.h: move)
     MaterialInstance* look = nullptr;  // its look (none if it is not shown)
     float seconds = 0.f, frames = 0.f; // a film's length (a still: 0)
+    float starts = 0.f;                // how far into itself it is when the stage's time is 0
 };
 
 // A font for the pictures put after it (an SVG names its fonts; ThorVG knows only the ones it is given).
@@ -23,6 +24,16 @@ static void font(Stage& s, const char* path) {
     door::on_driver(s.engine, [path] {
         tvg::Initializer::init(0);
         tvg::Text::load(path);
+    });
+}
+
+// A film at its moment, `seconds` from its start (after its end it holds its last picture), for the frame that comes next.
+static void picture_at(Stage& s, Drawn* d, float seconds) {
+    door::on_driver(s.engine, [d, seconds] {
+        d->film->frame(std::min(seconds / d->seconds * d->frames, d->frames - 1.f));
+        d->canvas->update();
+        d->canvas->draw(true);
+        d->canvas->sync();
     });
 }
 
@@ -77,6 +88,8 @@ static Drawn* picture(Stage& s, const char* file, const mat4f& place, float high
         d->sheet->uv.push_back(c * 0.5f + 0.5f);
     }
     d->sheet->idx = {0, 1, 2, 0, 2, 3};
+    if (d->frames > 1.f)   // (a film: it goes on by itself as the stage's time does, round and round)
+        s.playing.push_back([&s, d](double now) { picture_at(s, d, std::fmod((float)now + d->starts, d->seconds)); });
     if (!shown) return d;
     d->look = add(s, d->sheet, "flat.filamat", {place});
     if (!d->look) return nullptr;
@@ -84,12 +97,6 @@ static Drawn* picture(Stage& s, const char* file, const mat4f& place, float high
     return d;
 }
 
-// A film at its moment, `seconds` from its start (after its end it holds its last picture), for the frame that comes next.
-static void picture_at(Stage& s, Drawn* d, float seconds) {
-    door::on_driver(s.engine, [d, seconds] {
-        d->film->frame(std::min(seconds / d->seconds * d->frames, d->frames - 1.f));
-        d->canvas->update();
-        d->canvas->draw(true);
-        d->canvas->sync();
-    });
-}
+
+// A colour of the picture made clear (kit.h: key_out), white by default: a picture drawn on a white ground.
+static void key_out(Drawn* d, float3 colour = float3{1.f}, float near = 0.035f, float soft = 0.05f, float spill = 0.f) { key_out(d->look, colour, near, soft, spill); }

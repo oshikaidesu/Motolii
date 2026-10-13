@@ -8,6 +8,7 @@
 #include "kit.h"
 #include "drawn.h"
 #include "video.h"
+#include <filesystem>
 
 static const int W = 1080;
 static const int H = 1920;
@@ -25,17 +26,14 @@ int main(int argc, char** argv) {
     Drawn* wall = picture(s, (ae + "gradient_background.json").c_str(), mat4f::translation(float3{0.f, 2.2f, -5.5f}), 12.f);
     if (!wall) return fail("picture (WebGPU backend only)");
 
-    std::vector<std::string> clips;
-    if (FILE* found = popen("ls ../vid/* 2>/dev/null", "r")) {
-        char line[1024];
-        while (fgets(line, sizeof line, found)) clips.push_back(std::string(line, strcspn(line, "\n")));
-        pclose(found);
-    }
+    std::vector<std::string> clips;   // (every film in the folder, in the order of their names)
+    for (const auto& found : std::filesystem::directory_iterator("../vid")) clips.push_back(found.path().string());
+    std::sort(clips.begin(), clips.end());
     if (clips.empty()) return fail("no film in out/vid (puppet.sh makes one)");
 
     // the crowd: rows that rise and go back, more to a row the further back; who stands where, how tall, and when
     // each one's film starts are drawn from one seed
-    struct One { Video* film; float starts, sways; };
+    struct One { Video* film; float sways; };
     std::vector<One> crowd;
     uint32_t seed = 20261013u;
     const auto chance = [&] { seed = seed * 1664525u + 1013904223u; return (float)(seed >> 8) / 16777216.f; };
@@ -47,23 +45,25 @@ int main(int argc, char** argv) {
             const float x = wide * (((float)i + 0.5f + 0.5f * (chance() - 0.5f)) / (float)here - 0.5f);
             Video* v = video(s, clips[(size_t)(chance() * 2.999f) % clips.size()].c_str(),
                              mat4f::translation(float3{x, up + 0.12f * (chance() - 0.5f), back + 0.25f * (chance() - 0.5f)}), 0.62f + 0.3f * chance());
-            if (!v) return fail("video");
-            green(v);
-            crowd.push_back({v, 10.f * chance(), chance()});
+            if (!v) return fail(video_trouble);
+            key_out(v);
+            v->starts = 10.f * chance();
+            crowd.push_back({v, chance()});
         }
     }
     // two great heads before the crowd, and one great cat behind and above it, seen through a gem's shape
     for (int side : {-1, 1}) {
         Video* head = video(s, clips[clips.size() > 2 ? 2 : 0].c_str(), mat4f::translation(float3{0.62f * (float)side, -0.05f, 2.6f}), 1.5f);
-        if (!head) return fail("video");
-        green(head);
-        crowd.push_back({head, 1.7f * (float)(side + 1), 0.5f + 0.2f * (float)side});
+        if (!head) return fail(video_trouble);
+        key_out(head);
+        head->starts = 1.7f * (float)(side + 1);
+        crowd.push_back({head, 0.5f + 0.2f * (float)side});
     }
     const mat4f high = mat4f::translation(float3{0.f, 3.75f, -3.9f});
     Video* great = video(s, clips[clips.size() > 1 ? 1 : 0].c_str(), high, 6.f);
     Mesh* window = gem(1.6f);
-    if (!great) return fail("video");
-    green(great);
+    if (!great) return fail(video_trouble);
+    key_out(great);
     const int byGem = matte(s, window, {high});
     if (byGem < 0 || !matted(s, great->look, byGem, true, 3.f)) return fail("matte.filamat");
 
@@ -74,8 +74,8 @@ int main(int argc, char** argv) {
         const char* name = "confetti.json";
         Drawn* d = picture(s, (ae + name).c_str(), mat4f::translation(float3{twice ? 0.25f : -0.1f, twice ? 1.9f : 1.3f, 3.1f + 0.5f * (float)twice}) * mat4f::rotation(twice ? 2.6f : 0.f, float3{0, 0, 1}), twice ? 1.9f : 1.6f);
         if (!d) return fail(name);
-        d->look->setParameter("key", float4{1.f, 1.f, 1.f, 0.035f});
-        d->look->setParameter("keySoft", float2{0.05f, 0.f});
+        key_out(d);
+        d->starts = 1.5f * (float)twice;
         party.push_back(d);
     }
     struct Glass { Mesh* mesh; float round, tilt, height, far; };
@@ -87,31 +87,19 @@ int main(int argc, char** argv) {
         // the eye sways from side to side and breathes in and out
         const float round = 0.3f * std::sin(TAU * t), near = 6.f - 0.5f * std::sin(2.f * TAU * t);
         s.camera->lookAt(look + near * float3{std::sin(round), 0.1f * std::sin(TAU * t + 1.f), std::cos(round)}, look, {0, 1, 0});
-        picture_at(s, wall, std::fmod(t * 2.f, 1.f) * wall->seconds);
-        for (size_t i = 0; i < party.size(); ++i) picture_at(s, party[i], std::fmod(t * std::max(1.f, std::round(8.f / party[i]->seconds)) + 0.5f * (float)i, 1.f) * party[i]->seconds);
         for (const One& one : crowd) {
-            video_at(s, one.film, t * 8.f + one.starts);
             // (each jumps to its own beat and leans as it lands)
             move(s, one.film->sheet, [&](int, const mat4f& at) {
                 const float beat = TAU * (4.f * t + one.sways);
                 return mat4f::translation(float3{0.f, 0.07f * std::fabs(std::sin(beat)), 0.f}) * at * mat4f::rotation(0.1f * std::sin(beat), float3{0, 0, 1});
             });
         }
-        video_at(s, great, t * 8.f);
         move(s, window, [&](int, const mat4f& at) { return at * mat4f::rotation(TAU * t, normalize(float3{0.3f, 1, 0.1f})); });
         for (const Glass& g : glasses)
             move(s, g.mesh, [&](int, const mat4f&) {
                 const float a = TAU * t * g.round + g.tilt * 3.f;
                 return mat4f::translation(float3{0.85f * std::sin(a), g.height + 0.3f * std::sin(2.f * a + g.tilt), g.far + 0.5f * std::cos(a)}) * mat4f::rotation(2.f * a, normalize(float3{g.tilt, 1, 0.3f}));
             });
-    };
-    pose(0.3f);
-    const bool timed = argc > 1 && (!strcmp(argv[1], "time") || !strcmp(argv[1], "soak"));
-    if (timed) video_patience = 0.f;   // (played as the clock goes: no film is waited for)
-    video_asked = video_late = 0;
-    if (timed) clock_after = [] {
-        std::printf("    films late %ld of %ld times asked (%.2f %%)\n", video_late, video_asked, video_asked ? 100.0 * (double)video_late / (double)video_asked : 0.0);
-        video_asked = video_late = 0;
     };
     return show(s, argc, argv, "neko", 480, 2.f, pose);
 }

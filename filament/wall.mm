@@ -34,10 +34,8 @@ int main(int argc, char** argv) {
         if (!thick_glass(s, t.mesh, {t.place})) return fail("thick_glass.filamat");
 
     const auto pose = [&](float t) {
-        picture_at(s, film, std::fmod(t * 8.f, film->seconds));   // (the film's own speed; it starts again when it ends)
         for (const Thing& thing : things)
             move(s, thing.mesh, [&](int, const mat4f& at) { return mat4f::translation(at[3].xyz) * mat4f::rotation(TAU * t * thing.turns, float3{0, 1, 0}) * mat4f::translation(-at[3].xyz) * at; });
     };
-    pose(0.3f);
     return show(s, argc, argv, "wall", 480, 2.f, pose);
 }

@@ -28,6 +28,7 @@ struct Video {
     double origin = 0.0, last = 0.0;   // the stage's time at which that run began; the stage's time last asked for
     int w = 0, h = 0, turned = 0;      // turned: quarter turns clockwise the film asks for before it is shown
     float seconds = 0.f;               // how long it is as it is shown (its cut, at its speed)
+    float starts = 0.f;                // how far into its cut it is when the stage's time is 0
     float from = 0.f, to = 0.f, speed = 1.f;   // the cut of the file that is shown, in the file's seconds, and how fast (below 0: backwards)
     std::atomic<bool> ended{false};    // the reader has read to the cut's end: the mark of it has come down the stream of pictures, after the last of them
     float4 key{0.f};                   // its green screen, if it has one (green); until its first picture is on the sheet the sheet is all clear
@@ -42,11 +43,8 @@ struct Video {
 // layout (gst-plugins-bad, sys/applemedia/corevideobuffer.h, which is not installed for others to include).
 struct VideoCoreVideoMeta { GstMeta meta; CVBufferRef cvbuf; CVPixelBufferRef pixbuf; };
 
-// How long a film may be waited for when its next picture is not there yet, in thousandths of a second. A film made
-// picture by picture wants every one (the default); a stage that plays as the clock goes sets 0: a film that is not
-// ready keeps its picture for that one and catches up at the next.
-static float video_patience = 500.f;
 static const char* video_trouble = "";   // why the last film that could not be shown could not
+static bool video_counted = false;
 static long video_asked = 0, video_late = 0;   // how often a film was asked for a moment, and how often it could not yet tell its picture for it
 
 // When a picture is due, in seconds of the film's run: its own time stamp, on through the film's repeats.
@@ -119,7 +117,7 @@ static bool video_show(Stage& s, Video* v) {
 // The held picture on the sheet for the picture drawn next: a film made picture by picture waits for a surface that
 // is being shared (a moment, once for each of the decoder's surfaces); one played by the clock does not.
 static void video_put(Stage& s, Video* v) {
-    if (v->on == v->held || video_show(s, v) || video_patience <= 0.f) return;
+    if (v->on == v->held || video_show(s, v) || s.by_clock) return;
     s.engine->flushAndWait();
     video_show(s, v);
 }
@@ -140,6 +138,8 @@ static GstPadProbeReturn video_ending(GstPad*, GstPadProbeInfo* info, gpointer f
     if (GST_EVENT_TYPE(GST_PAD_PROBE_INFO_EVENT(info)) == GST_EVENT_SEGMENT_DONE) ((Video*)film)->ended = true;
     return GST_PAD_PROBE_OK;
 }
+
+static void video_at(Stage& s, Video* v, float seconds);
 
 // Which of the file's streams the reader reads: its pictures only (GStreamer asks, stream by stream). The sound is
 // not read at all. (Read and dropped it cost 51 decoders their work, and an HEVC film played slower than it was shot
@@ -224,19 +224,23 @@ static Video* video(Stage& s, const char* file, const mat4f& place, float high, 
     v->look->setParameter("key", float4{1.f, 0.5f, 1.f, 9.f});            //  keyed out whole, so the sheet is not seen)
     v->look->setParameter("keySoft", float2{1.f, 1.f});
     video_put(s, v);
+    s.playing.push_back([&s, v](double now) { video_at(s, v, (float)now + v->starts); });   // (it goes on by itself as the stage's time does)
+    if (s.said_after.empty() || !video_counted) {
+        video_counted = true;
+        s.said_after.push_back([] {   // (of the times a film was asked for a moment in that stretch, how often it could not yet tell its picture)
+            std::printf("    films late %ld of %ld times asked (%.2f %%)\n", video_late, video_asked, video_asked ? 100.0 * (double)video_late / (double)video_asked : 0.0);
+            video_asked = video_late = 0;
+        });
+    }
     return v;
 }
 
-// A green screen: where the film is this colour it is clear. near: how near to the colour counts as the screen itself
-// (in the two colour numbers of video, where pure green is 0.6 from grey: the screen's own noise must fit in it);
-// soft: over how much more the film comes in (a point half screen, half grey is 0.3 from the screen);
-// spill: how far from the screen its colour is still taken out of what stays.
-static void green(Video* v, float3 colour = float3{0.f, 1.f, 0.f}, float near = 0.12f, float soft = 0.3f, float spill = 0.9f) {
+// A colour of the film made clear (kit.h: key_out), green by default: a green screen. Until the film's first picture is
+// on the sheet the sheet stays all clear.
+static void key_out(Video* v, float3 colour = float3{0.f, 1.f, 0.f}, float near = 0.12f, float soft = 0.3f, float spill = 0.9f) {
     v->key = float4{colour, near};
     v->keySoft = float2{soft, spill};
-    if (!v->on) return;
-    v->look->setParameter("key", v->key);
-    v->look->setParameter("keySoft", v->keySoft);
+    if (v->on) key_out(v->look, colour, near, soft, spill);
 }
 
 // The film at its moment, `seconds` of the stage's time (it goes round again when it ends), for the picture that comes
@@ -250,10 +254,12 @@ static void video_at(Stage& s, Video* v, float seconds) {
     }
     v->last = seconds;
     const double now = (double)seconds - v->origin;
-    const gint64 until = g_get_monotonic_time() + (gint64)(video_patience * 1000.f);
+    // (a stage played by the clock does not wait for a film: one that is not ready keeps its picture for that frame and
+    //  catches up at the next; made picture by picture, every picture is waited for, up to half a second)
+    const gint64 until = g_get_monotonic_time() + (s.by_clock ? 0 : 500000);
     bool sure = false;   // (known: the picture held is the one for now)
     while (true) {
-        if (!v->next && (v->next = gst_app_sink_try_pull_sample(v->out, video_patience > 0.f ? 2 * GST_MSECOND : 0))) v->nextAt = video_due(v->next);
+        if (!v->next && (v->next = gst_app_sink_try_pull_sample(v->out, s.by_clock ? 0 : 2 * GST_MSECOND))) v->nextAt = video_due(v->next);
         if (v->next) {
             if (v->nextAt > now) { sure = true; break; }
             if (v->held != v->on) gst_sample_unref(v->held);   // (the next one is due: it is the picture now)

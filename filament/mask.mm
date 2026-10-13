@@ -89,13 +89,10 @@ int main(int argc, char** argv) {
         if (marker) move(s, marker, [&](int, const mat4f&) { return mat4f::translation(from) * mat4f::rotation(3.f * TAU * t, float3{0, 1, 0}); });
         // the two sheets swing alike: the one behind its window, the other with its sticker
         for (Drawn* d : {colours, more}) move(s, d->sheet, [&](int, const mat4f& at) { return at * mat4f::rotation(0.7f * std::sin(2.f * TAU * t), float3{0, 1, 0}); });
-        // (each film about at its own speed, a whole number of times over these 8 seconds, so that the loop closes)
-        for (Drawn* d : {wall, figures, colours, more, light}) picture_at(s, d, std::fmod(t * std::max(1.f, std::round(8.f / d->seconds)), 1.f) * d->seconds);
         move(s, lump, [&](int, const mat4f& at) { return at * mat4f::rotation(TAU * t, normalize(float3{0.2f, 1, 0})); });
         move(s, window, [&](int, const mat4f& at) { return at * mat4f::rotation(-TAU * t, normalize(float3{0.5f, 1, 0.3f})); });
         move(s, hole, [&](int, const mat4f& at) { return at * mat4f::rotation(TAU * t, normalize(float3{1, 0.4f, 0})); });
         move(s, ring, [&](int, const mat4f& at) { return mat4f::translation(float3{0.75f * std::sin(TAU * t), 0.f, 0.f}) * at * mat4f::rotation(2.f * TAU * t, normalize(float3{0.3f, 1, 0.2f})); });
     };
-    pose(0.3f);
     return show(s, argc, argv, god ? "mask_god" : "mask", 480, 2.f, pose);
 }
