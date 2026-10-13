@@ -17,6 +17,7 @@ material {
     variables : [ facing ],
     parameters : [
         { type : sampler2d, name : matte0 }, { type : sampler2d, name : matte1 }, { type : sampler2d, name : matte2 }, { type : sampler2d, name : matte3 },
+        { type : mat4, name : matteEye0 }, { type : mat4, name : matteEye1 }, { type : mat4, name : matteEye2 }, { type : mat4, name : matteEye3 },
         { type : float4, name : matteUse }, { type : float4, name : matteSoft },   // (matte.glsl)
         { type : sampler2d, name : behind, precision : medium },    // the scene without the glass, with the glass's far side laid over it (far_look.mat)
         { type : sampler2d, name : farSide, precision : medium },   // which way the glass's far faces face (far_side.mat)

@@ -74,7 +74,8 @@ struct Stage {
     Scene* scene;
     View* view;
     SwapChain* swap;
-    Camera* camera;
+    Camera* camera;      // the eye that looks at the stage: every picture of it is taken by this
+    Camera* film;        // the film's own camera: the same, unless another eye looks (god_view); mattes in the film's picture are taken by it
     View* view_behind;   // the same scene without the glass (layer 2), drawn first into `behind`: what a block shows
     Texture* behind;
     View* view_through = nullptr; // the glass's far faces alone (layer 8), drawn second into `through`: which way they face (far_side.mat)
@@ -85,8 +86,10 @@ struct Stage {
     struct Made { utils::Entity thing; const Mesh* of; int nth; mat4f place; };
     utils::Entity sun;                     // the sun, where there is one (paper_and_sun), and all that goes by its direction: `sun_to`
     std::vector<MaterialInstance*> by_sun;
-    struct Matte { Scene* scene; View* view; Texture* picture; bool soft; };
-    std::vector<Matte> mattes;   // the mattes: each a picture of the screen, drawn before all else (matte); soft: some thing reads it blurred
+    struct Matte { Scene* scene; View* view; Texture* picture; bool soft; Camera* eye; utils::Entity on; mat4f onPlace; };
+    std::vector<Matte> mattes;   // the mattes: each a picture taken by its own eye, drawn before all else (matte); soft: some thing reads it blurred
+    struct Cut { MaterialInstance* look; int slot, matte; };
+    std::vector<Cut> cuts;       // which look reads which matte (matted): told where the matte's eye is before every picture
     Texture* white = nullptr;    // a white point: the matte of a thing that nothing cuts
     std::vector<Made> made;   // every thing put on the stage: of which mesh, at which of that mesh's places (a film moves them: `move`)
 };
@@ -105,6 +108,7 @@ static Stage open_stage(int w, int h) {
     s.swap = s.engine->createSwapChain((uint32_t)w, (uint32_t)h, 0);
     s.camera = s.engine->createCamera(utils::EntityManager::get().create());
     s.camera->setExposure(16.0f, 1.0f / 125.0f, 100.0f);
+    s.film = s.camera;
     s.view->setScene(s.scene);
     s.view->setCamera(s.camera);
     s.view->setViewport({0, 0, (uint32_t)w, (uint32_t)h});
@@ -177,6 +181,7 @@ static MaterialInstance* add(Stage& s, Mesh* m, const char* filamat, std::vector
     MaterialInstance* mi = mat->createInstance();
     if (mat->hasParameter("matteUse")) {   // (a material that can be cut: by nothing, until `matted` says so)
         for (const char* name : {"matte0", "matte1", "matte2", "matte3"}) mi->setParameter(name, white_point(s), TextureSampler());
+        for (const char* name : {"matteEye0", "matteEye1", "matteEye2", "matteEye3"}) mi->setParameter(name, mat4f{});
         mi->setParameter("matteUse", float4{0.f});
         mi->setParameter("matteSoft", float4{0.f});
     }
@@ -579,35 +584,64 @@ static MaterialInstance* thick_glass(Stage& s, Mesh* m, std::vector<mat4f> place
     return front;
 }
 
-// A matte, as After Effects has them: a shape that is not seen itself and cuts other things by where it is seen from
-// the eye, whatever lies between. Any mesh is one: a solid, or a sheet with a picture on it (ThorVG's), which cuts by
-// how clear the picture is, or by its light (After Effects' luma matte). It is a thing like any other: `move` moves it.
+// A matte, as After Effects has them: a shape that is not seen itself and cuts other things. Any mesh is one: a solid,
+// or a sheet with a picture on it (ThorVG's), which cuts by how clear the picture is, or by its light (After Effects'
+// luma matte). It is a thing like any other: `move` moves it.
+// on: where the matte is. nullptr: in the film's picture, a window on the screen: it cuts by where its shape is seen
+// from the film's camera, whatever lies between, and stays in the picture while things move behind it. A mesh on the
+// stage: on that thing, a sticker: it rides on the thing (Filament's own parent and child) and cuts by where its
+// shape lies on it, seen along the thing's own z.
 // strength: how much it covers at most (a half-clear matte). into: a matte made before, which this shape joins.
-// What comes back names the matte. Each matte is a picture of the screen of its own, twice as fine as the screen,
-// drawn before all else (`draw`), with nothing but its shapes in it; the things it cuts read it (matte.glsl).
-static int matte(Stage& s, Mesh* m, std::vector<mat4f> places, Texture* picture = nullptr, bool byLight = false, float strength = 1.f, int into = -1) {
+// What comes back names the matte. Each matte is a picture of its own, taken before all else (`draw`) by its own eye,
+// the film's camera or one riding on the thing, with nothing but its shapes in it; the things it cuts look themselves
+// up in it by that eye (matte.glsl), so they are cut the same whichever eye looks at the stage.
+static int matte(Stage& s, Mesh* m, std::vector<mat4f> places, Texture* picture = nullptr, bool byLight = false, float strength = 1.f, int into = -1, const Mesh* on = nullptr) {
+    auto& tm = s.engine->getTransformManager();
     if (into < 0) {
-        const uint32_t w = 2 * (uint32_t)s.w, h = 2 * (uint32_t)s.h;
+        Stage::Matte made{};
+        uint32_t w = 2 * (uint32_t)s.w, h = 2 * (uint32_t)s.h;   // (in the film's picture: twice as fine as the screen)
+        made.eye = s.film;
+        made.onPlace = mat4f{};
+        for (const Stage::Made& d : s.made) {
+            if (!on || d.of != on) continue;
+            float3 low = on->pos[0], high = on->pos[0];
+            for (const float3& p : on->pos) { low = min(low, p); high = max(high, p); }
+            // an eye before the thing, looking along its z at all of it, and going where it goes
+            utils::Entity e = utils::EntityManager::get().create();
+            tm.create(e, tm.getInstance(d.thing), mat4f::translation(float3{0.f, 0.f, high.z + 1.f}));
+            made.eye = s.engine->createCamera(e);
+            made.eye->setProjection(Camera::Projection::ORTHO, low.x, high.x, low.y, high.y, 0.1, double(high.z - low.z) + 2.0);
+            const float fine = (float)std::max(s.w, s.h) / std::max(high.x - low.x, high.y - low.y);   // (its longer side as fine as the screen's)
+            w = 2 * (uint32_t)std::lround(0.5f * fine * (high.x - low.x));
+            h = 2 * (uint32_t)std::lround(0.5f * fine * (high.y - low.y));
+            made.on = d.thing;
+            made.onPlace = d.place;
+            break;
+        }
         uint8_t levels = 1;
         while ((std::max(w, h) >> levels) > 0) ++levels;
-        Stage::Matte made{};
         made.picture = Texture::Builder().width(w).height(h).levels(levels).format(Texture::InternalFormat::R8)
                            .usage(Texture::Usage::COLOR_ATTACHMENT | Texture::Usage::SAMPLEABLE | Texture::Usage::GEN_MIPMAPPABLE).build(*s.engine);
         made.scene = s.engine->createScene();
         made.view = s.engine->createView();
         made.view->setScene(made.scene);
-        made.view->setCamera(s.camera);
+        made.view->setCamera(made.eye);
         made.view->setViewport({0, 0, w, h});
         made.view->setRenderTarget(RenderTarget::Builder().texture(RenderTarget::AttachmentPoint::COLOR, made.picture).build(*s.engine));
         made.view->setPostProcessingEnabled(false);
         s.mattes.push_back(made);
         into = (int)s.mattes.size() - 1;
     }
+    Stage::Matte& to = s.mattes[(size_t)into];
     MaterialInstance* shape = add(s, m, "matte.filamat", places);
     if (!shape) return -1;
     for (size_t i = s.made.size() - places.size(); i < s.made.size(); ++i) {   // (its shape is in the matte's own scene, and in no other picture)
         s.scene->remove(s.made[i].thing);
-        s.mattes[(size_t)into].scene->addEntity(s.made[i].thing);
+        to.scene->addEntity(s.made[i].thing);
+        if (to.eye == s.film) continue;
+        s.made[i].place = inverse(to.onPlace) * s.made[i].place;   // (on a thing: its place is told from the thing from now on)
+        tm.setParent(tm.getInstance(s.made[i].thing), tm.getInstance(to.on));
+        tm.setTransform(tm.getInstance(s.made[i].thing), s.made[i].place);
     }
     shape->setParameter("picture", picture ? picture : white_point(s), TextureSampler(TextureSampler::MinFilter::LINEAR, TextureSampler::MagFilter::LINEAR));
     shape->setParameter("byLight", byLight ? 1.f : 0.f);
@@ -617,7 +651,7 @@ static int matte(Stage& s, Mesh* m, std::vector<mat4f> places, Texture* picture 
 }
 
 // The thing with this look is cut by that matte: seen only inside it (or only outside it). soft: how far the edge is
-// blurred, in pixels of the screen (0: as sharp as the matte is). Up to four mattes cut one thing (call again): what
+// blurred, in pixels of the screen (of the matte's own picture, if it is on a thing; 0: as sharp as the matte is). Up to four mattes cut one thing (call again): what
 // all of them leave is seen. false: the look's material cannot be cut (it does not read mattes: matte.glsl), or four cut it already.
 static bool matted(Stage& s, MaterialInstance* look, int matte, bool inside = true, float soft = 0.f) {
     struct Cut { float4 use{0.f}, soft{0.f}; int n = 0; };
@@ -632,14 +666,30 @@ static bool matted(Stage& s, MaterialInstance* look, int matte, bool inside = tr
     look->setParameter("matteUse", c.use);
     look->setParameter("matteSoft", c.soft);
     if (soft > 0.f) s.mattes[(size_t)matte].soft = true;
+    s.cuts.push_back({look, c.n, matte});
     ++c.n;
     return true;
+}
+
+// Another eye on the stage than the film's camera: the stage is looked at through it from now on (`camera`), as one
+// stands beside a set and watches; the film's own camera (`film`) goes on taking the mattes that are in the film's picture.
+static Camera* god_view(Stage& s) {
+    s.camera = s.engine->createCamera(utils::EntityManager::get().create());
+    s.camera->setExposure(16.0f, 1.0f / 125.0f, 100.0f);
+    for (View* v : {s.view, s.view_behind, s.view_through})
+        if (v) v->setCamera(s.camera);
+    return s.camera;
 }
 
 // Three frames, the last one read back and written as a .png.
 // One picture of the stage drawn (the helper pictures first), and read back into `pic` if one is given.
 static void draw(Stage& s, std::vector<uint8_t>* pic = nullptr, bool wait = true) {
     while (!s.renderer->beginFrame(s.swap)) {}
+    static const char* const eyes[] = {"matteEye0", "matteEye1", "matteEye2", "matteEye3"};
+    for (const Stage::Cut& c : s.cuts) {   // (where each matte's eye is now: a pose handed over, nothing more)
+        const Camera* eye = s.mattes[(size_t)c.matte].eye;
+        c.look->setParameter(eyes[c.slot], mat4f(eye->getProjectionMatrix() * eye->getViewMatrix()));
+    }
     for (Stage::Matte& m : s.mattes) {
         s.renderer->render(m.view);
         if (m.soft) m.picture->generateMipmaps(*s.engine);
