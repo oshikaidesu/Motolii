@@ -1,4 +1,4 @@
-2026-10-14 01:07
-437717f sound: a written film carries its films' own sound (cut, speed, backwards, round again, when it comes on: all cut and mixed by ffmpeg from what each thing says; check/sound.sh: within 5 ms of the files' own, silent before a film comes on); the made-up drum is gone; video: surfaces a decoder has stopped handing on are given back (they were kept for ever: 200 more a minute, the memory rise); try.md and evidence brought up to date
+2026-10-14 01:49
+ff713c9 TASKS.md: the third round (5.1) and what followed in the morning report; evidence line counts
 15.5
 Apple M4

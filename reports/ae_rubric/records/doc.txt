@@ -1,36 +1,36 @@
 
 thing 1
-add: done, 52.5 ms
-set: done, 1.3 ms
-set: done, 1.1 ms
-thing 2
-add: done, 65.0 ms
-set: done, 10.2 ms
-set: done, 2.6 ms
+add: done, 53.1 ms
+set: done, 1.6 ms
 set: done, 1.0 ms
-still: done, 39.2 ms
+thing 2
+add: done, 64.9 ms
+set: done, 9.8 ms
+set: done, 2.0 ms
+set: done, 2.1 ms
+still: done, 37.8 ms
 thing 3
-add: done, 2.6 ms
-set: done, 1.1 ms
-set: done, 1.1 ms
-key: done, 0.7 ms
+add: done, 2.9 ms
+set: done, 1.0 ms
+set: done, 2.3 ms
+key: done, 0.9 ms
+key: done, 2.1 ms
+key: done, 1.8 ms
 key: done, 1.3 ms
-key: done, 1.1 ms
-key: done, 1.0 ms
-at: done, 27.0 ms
-still: done, 43.0 ms
-say: done, 22.3 ms
-still: done, 38.8 ms
-undo: done, 23.1 ms
-remove: done, 1.4 ms
-still: done, 26.1 ms
-undo: done, 3.3 ms
-undo: done, 1.7 ms
+at: done, 27.6 ms
+still: done, 43.1 ms
+say: done, 22.1 ms
+still: done, 43.2 ms
+undo: done, 22.4 ms
+remove: done, 0.8 ms
+still: done, 25.6 ms
+undo: done, 3.0 ms
+undo: done, 2.0 ms
 undo: done, 2.2 ms
-still: done, 44.1 ms
-redo: done, 2.7 ms
-redo: done, 1.8 ms
-still: done, 45.4 ms
+still: done, 40.4 ms
+redo: done, 2.5 ms
+redo: done, 6.4 ms
+still: done, 41.0 ms
   1 file at 0: ../../third_party/thorvg_example/res/lottie/gradient_background.json
   1 high at 0: 4.2
   1 kind at 0: picture
@@ -50,12 +50,12 @@ still: done, 45.4 ms
   3 z at 0: 1.0
   (the document runs 14.35 seconds)
 
-at: done, 17.6 ms
-still: done, 63.5 ms
+at: done, 16.3 ms
+still: done, 52.7 ms
 undo: NOT done: nothing to undo, 0.0 ms
-add: NOT done: the film (../vid/no_such_file.mp4) could not be made: there is no such file, 0.4 ms
-add: NOT done: the glass (banana) could not be made: a glass's shape is ring, gem or cube, 1.4 ms
-add: NOT done: the picture (../vid/no_such_file.json) could not be made: there is no such file, 0.3 ms
+add: NOT done: the film (../vid/no_such_file.mp4) could not be made: there is no such file, 0.6 ms
+add: NOT done: the glass (banana) could not be made: a glass's shape is ring, gem or cube, 0.4 ms
+add: NOT done: the picture (../vid/no_such_file.json) could not be made: there is no such file, 0.4 ms
 set: NOT done: there is no thing 99, 0.0 ms
 remove: NOT done: there is no thing 99, 0.0 ms
 remove: NOT done: there is no thing 1, 0.0 ms
@@ -63,8 +63,8 @@ set: NOT done: a glass has no wobble: it has x, y, z, turn, high, start, duratio
 say: NOT done: a glass has no lay: it has x, y, z, turn, high, start, duration, shape, 0.0 ms
 say: NOT done: a glass has no keyed: it has x, y, z, turn, high, start, duration, shape, 0.0 ms
 key: NOT done: a key is at a moment of the stage: from 0 to 1000000 seconds, 0.0 ms
-set: NOT done: the film (../vid/happy.mp4) could not be made: a speed of 0 shows nothing: a film goes forwards or backwards, 14.4 ms
-set: NOT done: the film (../vid/happy.mp4) could not be made: the cut is empty, 13.7 ms
+set: NOT done: the film (../vid/happy.mp4) could not be made: a speed of 0 shows nothing: a film goes forwards or backwards, 13.9 ms
+set: NOT done: the film (../vid/happy.mp4) could not be made: the cut is empty, 13.5 ms
 add: NOT done: the picture (../vid) could not be made: there is no such file, 0.7 ms
 add: NOT done: a thing is a film, a picture, a type, a solid or a glass, 0.0 ms
 key: NOT done: speed does not move: keys go on x, y, z, turn, high, 0.0 ms
@@ -81,11 +81,11 @@ set: NOT done: high is from 0.001 to 10000, 0.0 ms
 set: NOT done: x is from -10000 to 10000, 0.0 ms
 key: NOT done: a key is at a moment of the stage: from 0 to 1000000 seconds, 0.0 ms
 unkey: NOT done: x has no key at that moment, 0.0 ms
-still: NOT done: the file could not be written, 68.1 ms
+still: NOT done: the file could not be written, 65.8 ms
 still: NOT done: a still is a .png, 0.0 ms
 at: NOT done: the document runs from 0 to 14.35 seconds, 0.0 ms
 say: NOT done: the type (../arial_black.ttf) could not be made: a colour is six digits, as ff3366, 2.6 ms
 set: NOT done: a type has no speed: it has x, y, z, turn, high, start, duration, lay, file, words, colour, 0.0 ms
-add: NOT done: the type (../no_such_font.ttf) could not be made: there is no such file, 0.8 ms
+add: NOT done: the type (../no_such_font.ttf) could not be made: there is no such file, 1.7 ms
 after the wrong calls the document is as expected: yes (35 calls refused)
 opened afresh against before closing: mean off 0.000 of 255: the same

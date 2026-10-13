@@ -12,7 +12,7 @@ twice as fast                          shown for 3.01 s:  0.03  0.53  1.03  1.53
 half as fast                           shown for 12.03 s:  0.00  0.13  0.23  0.37  0.50  0.63  0.73  0.87  1.00  1.13  1.23  1.37  1.50  1.63   (every quarter second of the stage)
 cut 2 to 3                             shown for 1.00 s:  2.00  2.27  2.50  2.77  2.00  2.27  2.50  2.77  2.00  2.27  2.50  2.77  2.00  2.27 [segment-done] [segment-done] [segment-done]   (every quarter second of the stage)
 backwards                              shown for 6.01 s:  5.97  5.73  5.50  5.23  5.00  4.73  4.50  4.23  4.00  3.73  3.50  3.23  3.00  2.73   (every quarter second of the stage)
-cut 2 to 3, backwards, half as fast    shown for 2.00 s:  2.97  2.87  2.77  2.63  2.50  2.37  2.27  2.13  2.00  2.87  2.77  2.63  2.50  2.37 [segment-done]   (every quarter second of the stage)
+cut 2 to 3, backwards, half as fast    shown for 2.00 s:  2.97  2.87  2.80  2.63  2.50  2.37  2.27  2.13  2.00  2.87  2.77  2.63  2.50  2.37 [segment-done]   (every quarter second of the stage)
 cut 2 to 4, backwards, twice as fast   shown for 1.00 s:  3.97  3.47  2.97  2.47  3.97  3.47  2.97  2.47  3.97  3.47  2.97  2.47  3.97  3.47 [segment-done] [segment-done] [segment-done]   (every quarter second of the stage)
 == 03_hevc_10bit_hlg.mov
 whole, as it is                        shown for 6.01 s:  0.00  0.27  0.50  0.77  1.00  1.27  1.50  1.77  2.00  2.27  2.50  2.77  3.00  3.27   (every quarter second of the stage)
@@ -82,7 +82,7 @@ cut 2 to 4, backwards, twice as fast   shown for 1.00 s:  3.97  3.47  2.97  2.47
 whole, as it is                        shown for 6.00 s:  0.07  0.33  0.57  0.83  1.07  1.33  1.57  1.83  2.07  2.33  2.57  2.83  3.07  3.33   (every quarter second of the stage)
 twice as fast                          shown for 3.00 s:  0.10  0.60  1.10  1.60  2.10  2.60  3.10  3.60  4.10  4.60  5.10  5.60  0.10  0.60 [segment-done]   (every quarter second of the stage)
 half as fast                           shown for 12.00 s:  0.07  0.20  0.30  0.43  0.57  0.70  0.80  0.93  1.07  1.20  1.30  1.43  1.57  1.70   (every quarter second of the stage)
-cut 2 to 3                             shown for 1.00 s:  2.07  2.33  2.57  2.83  2.07  2.33  2.57  2.83  2.07  2.33  2.57  2.83  2.07  2.33 [segment-done] [segment-done] [segment-done] [segment-done]   (every quarter second of the stage)
+cut 2 to 3                             shown for 1.00 s:  2.07  2.33  2.57  2.83  2.07  2.33  2.57  2.83  2.07  2.33  2.57  2.83  2.07  2.33 [segment-done] [segment-done] [segment-done]   (every quarter second of the stage)
 backwards                              shown for 6.00 s:  6.03  5.80  5.57  5.30  5.07  4.80  4.57  4.30  4.07  3.80  3.57  3.30  3.07  2.80   (every quarter second of the stage)
 cut 2 to 3, backwards, half as fast    shown for 2.00 s:  3.03  2.93  2.83  2.70  2.57  2.43  2.33  2.20  2.07  2.93  2.83  2.70  2.57  2.43 [segment-done]   (every quarter second of the stage)
 cut 2 to 4, backwards, twice as fast   shown for 1.00 s:  4.03  3.53  3.03  2.53  2.03  3.53  3.03  2.53  2.03  3.53  3.03  2.53  2.03  3.53 [segment-done] [segment-done] [segment-done]   (every quarter second of the stage)
