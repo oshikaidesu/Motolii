@@ -1,5 +1,5 @@
-puppet film, against happy.mp4                                             off by   2.0 ms, alike 0.40: in time
-puppet film, against mohsen.mp4                                            off by   3.5 ms, alike 0.42: in time
-puppet film where mohsen.mp4 has gone round, against its start             off by   0.0 ms, alike 0.32: in time
+puppet film, against happy.mp4                                             off by   2.0 ms, alike 0.48: in time
+puppet film, against mohsen.mp4                                            off by   3.5 ms, alike 0.25: in time
+puppet film where mohsen.mp4 has gone round, against its start             off by   0.0 ms, alike 0.22: in time
 document: film on at 1.5 s, cut from 2 s, twice as fast, against that cut  off by   5.0 ms, alike 0.52: in time
 document: before the film comes on (loudest, of 1)                         0.0000: silent

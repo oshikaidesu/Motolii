@@ -11,5 +11,6 @@ if [ ! -x out/edit_wgpu ] || [ -n "$(find . dawn_probe -maxdepth 1 \( -name '*.h
     mv out/motolii_wgpu out/libmotolii.dylib
     clang++ -std=c++20 -O2 edit.cpp -Lout -lmotolii -Wl,-rpath,@executable_path -o out/edit_wgpu || exit 1
     cc check/api.c -Lout -lmotolii -Wl,-rpath,@executable_path -o out/api_check || exit 1   # (the same calls from plain C)
+    clang++ -std=c++20 -fobjc-arc check/live.mm -Lout -lmotolii -Wl,-rpath,@executable_path -framework Foundation -framework CoreVideo -framework CoreGraphics -framework ImageIO -framework UniformTypeIdentifiers -o out/live_check || exit 1   # (the live picture, without a shell)
 fi
 cd out/wgpu_kit && BACKEND="${BACKEND:-webgpu}" ../edit_wgpu $doc "$@" 2>&1 | grep -v "FrameInfo's circular queue\|libvulkan\|BackendVk\|FEngine\|WebGPU adapter\|Backend feature"

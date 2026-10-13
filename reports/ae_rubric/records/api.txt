@@ -1,5 +1,6 @@
+
 a glass: thing 1
-set x 0.4: 1   key y at 1 = 0.5: 1   undo: 1   set wobble: 0 (a glass has no wobble: it has x, y, z, turn, high, start, duration, shape)
+set x 0.4: 1   key y at 1 = 0.5: 1   undo: 1   set wobble: 0 (a glass has no wobble: it has x, y, z, rotate, size, start, duration, shape)
   1 kind at 0.0: glass
   1 shape at 0.0: ring
   1 x at 0.0: 0.4

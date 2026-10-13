@@ -1,0 +1,5 @@
+
+playing: 120 pictures finished in 2 seconds; the stage's moment 2.53
+standing: 0 pictures finished in the next second (none are asked for)
+the shared buffer written out: yes
+the inside's own still of that moment: yes

@@ -12,6 +12,7 @@ extern "C" {
 #endif
 typedef struct Motolii Motolii;
 
+void motolii_home(const char* folder);                             /* where the inside's own files are (its materials, its room): said once, before a document is opened */
 Motolii* motolii_open(const char* document, int wide, int high);   /* the document (made if it is not there) on a stage of that many points; 0: not a document */
 void motolii_close(Motolii* m);
 const char* motolii_trouble(Motolii* m);                           /* why the last call that was not done was not */
@@ -39,6 +40,15 @@ int motolii_at(Motolii* m, double seconds);                        /* the stage'
 int motolii_still(Motolii* m, const char* png);                    /* the stage as it is now, as a picture */
 int motolii_write(Motolii* m, const char* mp4);                    /* the whole document as a film, with its films' sound */
 const char* motolii_list(Motolii* m);                              /* every fact of the document, a line each (until the next call) */
+/* The stage's picture as it is drawn, for a shell to show without a copy. The inside keeps its own clock: it draws
+   when something has changed or time is going on, and the shell asks only for the last finished picture.
+   motolii_front: a CVPixelBufferRef on macOS, held for the caller (who lets it go); it and motolii_frames (how many
+   pictures have been finished) may be called from any thread. */
+int motolii_live(Motolii* m);
+void* motolii_front(Motolii* m);
+unsigned long long motolii_frames(Motolii* m);
+int motolii_play(Motolii* m, int playing);                         /* time goes on by the clock (and round again at the end), or stands */
+double motolii_now(Motolii* m);                                    /* the stage's moment */
 void motolii_timed(Motolii* m, int pictures);                      /* played by the clock for that many pictures: says on its output what it cost and what was left out */
 #ifdef __cplusplus
 }
