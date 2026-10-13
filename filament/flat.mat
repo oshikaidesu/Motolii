@@ -14,6 +14,8 @@ material {
         { type : float4, name : matteUse }, { type : float4, name : matteSoft },   // (matte.glsl)
         { type : float4, name : key },       // a colour of the picture that is to be clear (a green screen), and how near to it counts (0: none)
         { type : float2, name : keySoft },   // how wide the edge of that is, and how far from it the key's colour is taken out of what stays
+        { type : float, name : filmed },       // 1: the picture is a film's as its decoder left it, light in `picture` and colour in `colours`
+        { type : sampler2d, name : colours },
         { type : sampler2d, name : picture }
     ]
 }
@@ -38,6 +40,12 @@ fragment {
     void material(inout MaterialInputs material) {
         prepareMaterial(material);
         vec3 c = textureLod(materialParams_picture, getUV0(), 0.0).rgb;
+        if (materialParams.filmed > 0.5) {
+            // video keeps light and colour apart, in its own range (16 to 235, colour about 128): to red, green, blue (BT.709)
+            vec2 tint = (textureLod(materialParams_colours, getUV0(), 0.0).rg - 128.0 / 255.0) * (255.0 / 224.0);
+            float light = (c.r - 16.0 / 255.0) * (255.0 / 219.0);
+            c = clamp(vec3(light + 1.5748 * tint.y, light - 0.1873 * tint.x - 0.4681 * tint.y, light + 1.8556 * tint.x), 0.0, 1.0);
+        }
         // (the screen's own rule, exactly: Filament's output step is its reverse, so a number comes out as it went in)
         float kept = keyLeft(c);   // (the colour is then the film's share of the point already: only its clearness is `kept`)
         material.baseColor = vec4(mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(vec3(0.04045), c)), kept) * matteLeft();

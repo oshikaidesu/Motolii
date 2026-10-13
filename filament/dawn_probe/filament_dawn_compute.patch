@@ -1,5 +1,5 @@
 diff --git a/filament/CMakeLists.txt b/filament/CMakeLists.txt
-index 32479e06..ce4e1db7 100644
+index 32479e063..ce4e1db79 100644
 --- a/filament/CMakeLists.txt
 +++ b/filament/CMakeLists.txt
 @@ -840,3 +840,8 @@ install(FILES "../LICENSE" DESTINATION .)
@@ -12,7 +12,7 @@ index 32479e06..ce4e1db7 100644
 +    add_subdirectory(${MOTOLII_PROBE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/motolii_probe)
 +endif()
 diff --git a/filament/backend/include/backend/platforms/WebGPUPlatform.h b/filament/backend/include/backend/platforms/WebGPUPlatform.h
-index b9aee345..4c1ce02b 100644
+index b9aee345b..4c1ce02b0 100644
 --- a/filament/backend/include/backend/platforms/WebGPUPlatform.h
 +++ b/filament/backend/include/backend/platforms/WebGPUPlatform.h
 @@ -57,6 +57,10 @@ public:
@@ -35,7 +35,7 @@ index b9aee345..4c1ce02b 100644
  
  }// namespace filament::backend
 diff --git a/filament/backend/src/webgpu/WebGPUBufferObject.cpp b/filament/backend/src/webgpu/WebGPUBufferObject.cpp
-index eb5afbd7..e6ca5e99 100644
+index eb5afbd74..e6ca5e994 100644
 --- a/filament/backend/src/webgpu/WebGPUBufferObject.cpp
 +++ b/filament/backend/src/webgpu/WebGPUBufferObject.cpp
 @@ -32,9 +32,13 @@ namespace {
@@ -55,7 +55,7 @@ index eb5afbd7..e6ca5e99 100644
  }
  
 diff --git a/filament/backend/src/webgpu/WebGPUDescriptorSet.cpp b/filament/backend/src/webgpu/WebGPUDescriptorSet.cpp
-index ce0a20a6..598e45fe 100644
+index ce0a20a62..598e45fe9 100644
 --- a/filament/backend/src/webgpu/WebGPUDescriptorSet.cpp
 +++ b/filament/backend/src/webgpu/WebGPUDescriptorSet.cpp
 @@ -123,7 +123,6 @@ wgpu::BindGroup WebGPUDescriptorSet::lockAndReturn(wgpu::Device const& device) {
@@ -67,7 +67,7 @@ index ce0a20a6..598e45fe 100644
      mEntries.shrink_to_fit();
      return mBindGroup;
 diff --git a/filament/backend/src/webgpu/WebGPUDescriptorSet.h b/filament/backend/src/webgpu/WebGPUDescriptorSet.h
-index facdcbfa..03753547 100644
+index facdcbfa6..03753547c 100644
 --- a/filament/backend/src/webgpu/WebGPUDescriptorSet.h
 +++ b/filament/backend/src/webgpu/WebGPUDescriptorSet.h
 @@ -75,9 +75,7 @@ public:
@@ -81,7 +81,7 @@ index facdcbfa..03753547 100644
  private:
      wgpu::BindGroupLayout mLayout = nullptr;
 diff --git a/filament/backend/src/webgpu/WebGPUDescriptorSetLayout.cpp b/filament/backend/src/webgpu/WebGPUDescriptorSetLayout.cpp
-index 5a67cb41..db2316a9 100644
+index 5a67cb414..db2316a9d 100644
 --- a/filament/backend/src/webgpu/WebGPUDescriptorSetLayout.cpp
 +++ b/filament/backend/src/webgpu/WebGPUDescriptorSetLayout.cpp
 @@ -151,7 +151,10 @@ WebGPUDescriptorSetLayout::WebGPUDescriptorSetLayout(DescriptorSetLayout const&
@@ -97,7 +97,7 @@ index 5a67cb41..db2316a9 100644
              }
              case DescriptorType::SAMPLER_EXTERNAL: {
 diff --git a/filament/backend/src/webgpu/WebGPUDriver.cpp b/filament/backend/src/webgpu/WebGPUDriver.cpp
-index ad409d39..0db6e07f 100644
+index ad409d397..0db6e07f3 100644
 --- a/filament/backend/src/webgpu/WebGPUDriver.cpp
 +++ b/filament/backend/src/webgpu/WebGPUDriver.cpp
 @@ -681,7 +681,11 @@ void WebGPUDriver::importTextureR(Handle<HwTexture> textureHandle, const intptr_
@@ -229,7 +229,7 @@ index ad409d39..0db6e07f 100644
          .offsets = std::move(offsets) };
  }
 diff --git a/filament/backend/src/webgpu/WebGPUDriver.h b/filament/backend/src/webgpu/WebGPUDriver.h
-index 06c380e1..3bdb3465 100644
+index 06c380e1a..3bdb34652 100644
 --- a/filament/backend/src/webgpu/WebGPUDriver.h
 +++ b/filament/backend/src/webgpu/WebGPUDriver.h
 @@ -110,6 +110,7 @@ private:
@@ -241,7 +241,7 @@ index 06c380e1..3bdb3465 100644
          backend::DescriptorSetOffsetArray offsets;
      };
 diff --git a/filament/backend/src/webgpu/WebGPUProgram.h b/filament/backend/src/webgpu/WebGPUProgram.h
-index 675a6cc4..f8fd0c27 100644
+index 675a6cc4d..f8fd0c27c 100644
 --- a/filament/backend/src/webgpu/WebGPUProgram.h
 +++ b/filament/backend/src/webgpu/WebGPUProgram.h
 @@ -39,6 +39,7 @@ public:
@@ -253,7 +253,7 @@ index 675a6cc4..f8fd0c27 100644
  
  } // namespace filament::backend
 diff --git a/filament/backend/src/webgpu/WebGPUQueueManager.cpp b/filament/backend/src/webgpu/WebGPUQueueManager.cpp
-index db2b5c35..f50aac48 100644
+index db2b5c35c..f50aac488 100644
 --- a/filament/backend/src/webgpu/WebGPUQueueManager.cpp
 +++ b/filament/backend/src/webgpu/WebGPUQueueManager.cpp
 @@ -92,7 +92,7 @@ void WebGPUQueueManager::finish() {
@@ -266,10 +266,10 @@ index db2b5c35..f50aac48 100644
  }
  
 diff --git a/filament/backend/src/webgpu/WebGPUTexture.cpp b/filament/backend/src/webgpu/WebGPUTexture.cpp
-index 1a230d5b..f947cd3b 100644
+index 1a230d5b0..24ade8bae 100644
 --- a/filament/backend/src/webgpu/WebGPUTexture.cpp
 +++ b/filament/backend/src/webgpu/WebGPUTexture.cpp
-@@ -282,6 +282,28 @@ WebGPUTexture::WebGPUTexture(const SamplerType samplerType, const uint8_t levels
+@@ -282,6 +282,31 @@ WebGPUTexture::WebGPUTexture(const SamplerType samplerType, const uint8_t levels
  #endif
  }
  
@@ -277,10 +277,13 @@ index 1a230d5b..f947cd3b 100644
 +WebGPUTexture::WebGPUTexture(wgpu::Texture const& made, const SamplerType samplerType,
 +        const TextureFormat format, const TextureUsage usage) noexcept
 +    : HwTexture{ samplerType, 1, 1, made.GetWidth(), made.GetHeight(), 1, format, usage, false },
-+      mViewFormat{ made.GetFormat() },
++      // (a film's picture is two planes in one texture: asked for as R8 it is seen as its light, else as its colour)
++      mViewFormat{ made.GetFormat() != wgpu::TextureFormat::R8BG8Biplanar420Unorm ? made.GetFormat()
++                   : format == TextureFormat::R8 ? wgpu::TextureFormat::R8Unorm : wgpu::TextureFormat::RG8Unorm },
 +      mMipmapGenerationStrategy{ MipmapGenerationStrategy::NONE },
 +      mWebGPUFormat{ made.GetFormat() },
-+      mAspect{ wgpu::TextureAspect::All },
++      mAspect{ made.GetFormat() != wgpu::TextureFormat::R8BG8Biplanar420Unorm ? wgpu::TextureAspect::All
++               : format == TextureFormat::R8 ? wgpu::TextureAspect::Plane0Only : wgpu::TextureAspect::Plane1Only },
 +      mWebGPUUsage{ made.GetUsage() },
 +      mViewUsage{ made.GetUsage() },
 +      mDimension{ wgpu::TextureViewDimension::e2D },
@@ -299,7 +302,7 @@ index 1a230d5b..f947cd3b 100644
          const uint8_t levelCount) noexcept
      : HwTexture{ src->target, levelCount, src->samples, src->width, src->height, src->depth,
 diff --git a/filament/backend/src/webgpu/WebGPUTexture.h b/filament/backend/src/webgpu/WebGPUTexture.h
-index 8722bc03..12bb1b0e 100644
+index 8722bc039..12bb1b0e4 100644
 --- a/filament/backend/src/webgpu/WebGPUTexture.h
 +++ b/filament/backend/src/webgpu/WebGPUTexture.h
 @@ -50,6 +50,12 @@ public:
@@ -316,7 +319,7 @@ index 8722bc03..12bb1b0e 100644
       * @param nextSwizzle the swizzle to apply to the source texture.
       * Creates a new texture view by composing the nextSwizzle with the source which itself it
 diff --git a/filament/backend/src/webgpu/platform/WebGPUPlatform.cpp b/filament/backend/src/webgpu/platform/WebGPUPlatform.cpp
-index 04c92ae7..eb7826da 100644
+index 04c92ae74..98a3e8eff 100644
 --- a/filament/backend/src/webgpu/platform/WebGPUPlatform.cpp
 +++ b/filament/backend/src/webgpu/platform/WebGPUPlatform.cpp
 @@ -28,6 +28,8 @@
@@ -328,7 +331,7 @@ index 04c92ae7..eb7826da 100644
  #include <utils/Mutex.h>
  
  #include <algorithm>
-@@ -76,6 +78,8 @@ constexpr std::array OPTIONAL_FEATURES = {
+@@ -76,10 +78,17 @@ constexpr std::array OPTIONAL_FEATURES = {
      wgpu::FeatureName::CoreFeaturesAndLimits,
      wgpu::FeatureName::DepthClipControl,
      wgpu::FeatureName::Depth32FloatStencil8,
@@ -337,7 +340,16 @@ index 04c92ae7..eb7826da 100644
  
      // Unsupported on WASM
  #if !defined(__EMSCRIPTEN__)
-@@ -274,6 +278,15 @@ void printInstanceDetails(wgpu::Instance const& instance) {
+     wgpu::FeatureName::TextureComponentSwizzle,
++    // motolii: a film's pictures stay where the OS's decoder left them and are shared with this device
++    // (video.h: a SharedTextureMemory of an IOSurface, its light and its colour as two planes)
++    wgpu::FeatureName::SharedTextureMemoryIOSurface,
++    wgpu::FeatureName::SharedFenceMTLSharedEvent,
++    wgpu::FeatureName::DawnMultiPlanarFormats,
+ #endif
+ };
+ 
+@@ -274,6 +283,15 @@ void printInstanceDetails(wgpu::Instance const& instance) {
       */
      toggles.push_back("enable_immediate_error_handling");
  #endif
@@ -353,7 +365,7 @@ index 04c92ae7..eb7826da 100644
      dawnTogglesDescriptor.enabledToggleCount = toggles.size();
      dawnTogglesDescriptor.enabledToggles = toggles.data();
  
-@@ -712,6 +725,7 @@ wgpu::Device WebGPUPlatform::requestDevice(wgpu::Adapter const& adapter) {
+@@ -712,6 +730,7 @@ wgpu::Device WebGPUPlatform::requestDevice(wgpu::Adapter const& adapter) {
  #if FWGPU_ENABLED(FWGPU_PRINT_SYSTEM)
      printDeviceDetails(device);
  #endif

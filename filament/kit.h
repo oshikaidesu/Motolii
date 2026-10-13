@@ -182,6 +182,7 @@ static MaterialInstance* add(Stage& s, Mesh* m, const char* filamat, std::vector
     if (mat->hasParameter("matteUse")) {   // (a material that can be cut: by nothing, until `matted` says so)
         for (const char* name : {"matte0", "matte1", "matte2", "matte3"}) mi->setParameter(name, white_point(s), TextureSampler());
         for (const char* name : {"matteEye0", "matteEye1", "matteEye2", "matteEye3"}) mi->setParameter(name, mat4f{});
+        if (mat->hasParameter("colours")) mi->setParameter("colours", white_point(s), TextureSampler());   // (a film's second plane: video.h)
         mi->setParameter("matteUse", float4{0.f});
         mi->setParameter("matteSoft", float4{0.f});
     }
@@ -739,6 +740,7 @@ static bool film(Stage& s, const char* path, int pictures, float drum, const std
 // millisecond or two, and differently on each (waiting after every picture or every second one, WebGPU and Metal
 // read alike; after every fourth, WebGPU reads a millisecond or two dearer; seldom or never, both are held back).
 // (And at 60 a second the GPU slows its clock, so a picture's own time cannot be read off a paced run either.)
+static std::function<void()> clock_after;   // (a scene's own word after each line of `clock`, if it has one to say)
 static void clock(Stage& s, int pictures, const std::function<void(float)>& pose) {
     const auto from = std::chrono::steady_clock::now();
     for (int i = 0; i < pictures; ++i) {
@@ -748,6 +750,7 @@ static void clock(Stage& s, int pictures, const std::function<void(float)>& pose
     s.engine->flushAndWait();
     const double took = std::chrono::duration<double>(std::chrono::steady_clock::now() - from).count();
     std::printf("%.0f pictures a second, %.2f ms each (%.1f times 60)\n", pictures / took, 1000.0 * took / pictures, pictures / took / 60.0);
+    if (clock_after) clock_after();
     // And by the clock, as a screen asks for them: on every tick Filament is asked once whether it will draw (it says
     // no when it is behind), nothing is waited for. Pictures drawn and pictures left out, at 60, 120 and 240 a second.
     for (int rate : {60, 120, 240}) {
@@ -768,6 +771,7 @@ static void clock(Stage& s, int pictures, const std::function<void(float)>& pose
         s.engine->flushAndWait();
         std::printf("at %d a second: %d drawn, %d left out; the last was done %.1f ms after it was asked for\n", rate, drawn, left_out,
                     std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - asked).count());
+                    if (clock_after) clock_after();
     }
 }
 

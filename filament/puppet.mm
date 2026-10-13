@@ -49,7 +49,7 @@ int main(int argc, char** argv) {
     // PUPPETS=40: that many more of the clip, each read on its own, keyed, in rows over the wall (how many can play at once)
     std::vector<Video*> crowd;
     for (int i = 0, n = getenv("PUPPETS") ? atoi(getenv("PUPPETS")) : 0; i < n; ++i) {
-        crowd.push_back(video(s, clips[0].c_str(), mat4f::translation(float3{-0.78f + 0.39f * (float)(i % 5), 2.75f - 0.385f * (float)(i / 5), 0.5f + 0.002f * (float)i}), 0.42f));
+        crowd.push_back(video(s, clips[(size_t)i % clips.size()].c_str(), mat4f::translation(float3{-0.78f + 0.39f * (float)(i % 5), 2.75f - 0.385f * (float)(i / 5), 0.5f + 0.002f * (float)i}), 0.42f));
         if (!crowd.back()) return fail("video");
         green(crowd.back());
     }
@@ -65,5 +65,13 @@ int main(int argc, char** argv) {
         move(s, ring, [&](int, const mat4f& at) { return mat4f::translation(float3{0.7f * std::sin(2.f * TAU * t), 0.f, 0.f}) * at * mat4f::rotation(2.f * TAU * t, normalize(float3{0.3f, 1, 0.2f})); });
     };
     pose(0.3f);
-    return show(s, argc, argv, crowd.empty() ? "puppet" : "puppet_crowd", 480, 2.f, pose);
+    const bool timed = argc > 1 && !strcmp(argv[1], "time");
+    if (timed) video_patience = 0.f;   // (played as the clock goes: no film is waited for)
+    video_asked = video_late = 0;
+    if (timed) clock_after = [] {   // (of the times a film was asked for a moment in that stretch, how often its picture was not there yet)
+        std::printf("    films late %ld of %ld times asked (%.2f %%)\n", video_late, video_asked, video_asked ? 100.0 * (double)video_late / (double)video_asked : 0.0);
+        video_asked = video_late = 0;
+    };
+    const int done = show(s, argc, argv, crowd.empty() ? "puppet" : "puppet_crowd", 480, 2.f, pose);
+    return done;
 }
