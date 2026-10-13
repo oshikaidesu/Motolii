@@ -35,7 +35,11 @@
   間の行き方：タイムラインでキーを選ぶと机が Ease になり、文書の今の行き方を読んで出す（vest の 0 コマ目は BOUNCE、90 コマ目は ELASTIC）。札（Linear・Ease・In・Out・In-out・Back・Bounce・Hold）や持ち手で変えると、指が離れた時に1回だけ `way` を言う。持ち手の引きずり1回＝1歩。
   中身に足した口：`motolii_together`（手の1動作が幾つかの変更になる時、取り消し1歩にまとめる。`step` の表に `joined` の列）、`motolii_way_of`（その間が今どう行ってるか）。`check/api.c` に検査を足した。
   まだ：机に席が無い行き方（Elastic・Cyclic・Random・Steps・ElasticSteps）は名前だけ出て、線は直線のまま（嘘の線）。机の Wiggle は未接続。右クリックの品書きは窓で未確認。タイムラインでバーやキーを引きずる動きは見本に元から無い。
-- まだ作り物のままの所：机の Wiggle・Blend ほか。インスペクタは Transform と Fill だけ（文字の中身、動画の `keyed`・`speed`・`begin`、`blend` の席が無い）。Fonts・Effects 棚。物を消す入口。
+- **動画は置いただけで抜ける**（`reports/skin_run/keyed_by_its_own_ground.jpg`）。窓には緑抜きを入れる席がどこにも無い（Effects 棚の33個にも無く、33個とも中身に無い）ので、正しい初期値にした：最初の1枚の四隅を1回だけ読み、四隅がそろって濃い色ならそれが「地の色」。文書で `keyed` を言ってなければ、地の色がある動画だけ抜く（`keyed 1`：必ず、`keyed 0`：抜かない）。抜きの幅は地の色の濃さに比例（明るい緑の時は前と同じ数）。手元の23本で測った：四隅のばらつき 0.003 以下、灰色からの遠さは明るい緑 0.51〜0.59、暗い緑の dog 0.174（しきい値 0.15）。前からの課題「dog.mp4 の暗い緑が抜けない」も片付いた。
+  穴：四隅が同じ濃い色の普通の動画（一面の赤など）は黙って抜ける。`keyed 0` で戻せるが、窓にその席はまだ無い。
+- **インスペクタの言葉の席と、消す入口**：文字の中身（Text の箱。箱を離れた時に1回 `say text`）、重ね方（Blend の選び → `say blend`。窓で Multiply を確かめた）。タイムラインで Delete / Backspace → 選んだ物を消す（見本に元から無い入口。見た目は足してない）。
+  鍵盤は裏の窓に届かないので、**本物の中身をつないだ Flutter のテスト**を作った（`skin/book/test/workspace_joined_test.dart`、`libmotolii.dylib` を dart:ffi でそのまま開く）：箱に打つ → 離れると文書の字、取り消しで戻る／Backspace で消える、取り消しでガラスの塗りごと戻る。2本通過。
+- まだ作り物のままの所：インスペクタの Opacity（62% と出るのは見本の数。中身に不透明度がまだ無い）、Fill and stroke の Stroke、Font・Size・Alignment、Effects（2個と出るのも見本）、Anchor、Depth、Parent。Blend の8つのうち中身にあるのは4つ（無い物を選ぶと元に戻る。理由はどこにも出ない）。机の Wiggle ほか。Fonts・Effects 棚。棚の小さい絵。
 - 開き方：`skin/book` で Flutter（`~/rust_ae/Motolii/.tools/flutter/bin/flutter`）の `build macos --debug --dart-define=LAB_ROUTE=/?path=workspace/workspace/live`、できた `lab_book.app` を開く。文書は `filament/out/skin.motolii`。
 
 作る的：①`edit_v5` を窓だけで作り直す ②猫ミームの人形劇 ③青いロケットのコラージュ（`research_notes/refs/G_rocket_collage_blue.jpg`）。

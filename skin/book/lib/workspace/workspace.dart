@@ -150,6 +150,35 @@ String _hex(Color c) => '#${(c.toARGB32() & 0xFFFFFF).toRadixString(16).padLeft(
 /// The paint each layer wears on the stage, so the Inspector's Fill names the colour you see.
 const _fills = {'blob': ArtInk.orange, 'ring': ArtInk.lime, 'title': ArtInk.cream, 'chips': ArtInk.pink, 'confetti': ArtInk.pink, 'bg': ArtInk.blue};
 
+/// Joined: the picked thing's words in the inspector's ids (a text's content; how it lies on what is behind), and a change of them told to the document.
+Map<String, String> _words(Ws ws, String? id) {
+  final m = ws.inside, t = int.tryParse(id ?? '');
+  if (m == null || t == null) return const {};
+  final blend = m.word(t, 'blend');
+  return {
+    if (m.word(t, 'kind') == 'text') 'text.content': m.word(t, 'text'),
+    'blend': blend.isEmpty ? 'Normal' : blend.replaceRange(0, 1, blend[0].toUpperCase()),
+  };
+}
+
+bool _say(Ws ws, String? id, Map<String, String> changed) {
+  final m = ws.inside!, t = int.tryParse(id ?? '');
+  if (t == null) return false;
+  var all = true;
+  m.together(() {
+    for (final e in changed.entries) {
+      final ok = switch (e.key) {
+        'text.content' => m.say(t, 'text', e.value.replaceAll('\n', ' ')),
+        'blend' => m.say(t, 'blend', e.value.toLowerCase()),
+        _ => true, // (a seat the inside has nothing behind yet: the inspector keeps its own word)
+      };
+      all = all && ok;
+    }
+  });
+  ws.reread();
+  return all;
+}
+
 /// What the Inspector's Fill names: joined, the document's word for the thing (a colour, or the material Glass); else the sample's paint.
 String? _fillWord(Ws ws, String? id, Color? sample) {
   final m = ws.inside;
@@ -267,7 +296,8 @@ class _InspectorSeat extends StatelessWidget {
         title: l?.name,
         onRoute: ws.route,
         values: _transform(ws, l?.id),
-        strs: {'fill': ?_fillWord(ws, l?.id, fill)},
+        strs: {'fill': ?_fillWord(ws, l?.id, fill), ..._words(ws, l?.id)},
+        onWords: ws.inside == null ? null : (changed) => _say(ws, l?.id, changed),
         keyMarks: _keyMarks(ws, l?.id),
         onValues: ws.inside == null ? null : (changed, {required live}) => _write(ws, l?.id, changed, live: live),
         onDrop: ws.inside?.tryDrop,

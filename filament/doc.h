@@ -16,7 +16,7 @@
 //   numbers  x, y, z, rotate, size  where its middle is, turned by how many degrees, how tall
 //            start, duration        when it comes on, and for how long (not said: for good, going round)
 //            begin, speed           a film's: from where in itself, how fast (below 0: backwards)
-//            keyed                  a film's: 1 if its green ground is keyed out
+//            keyed                  a film's: 1 if its ground is keyed out (a green screen, of whatever colour: the colour its four corners share), 0 if not; not said: keyed if it has such a ground
 //   words    blend                  how it lies on what is behind: normal | add | multiply | screen
 //            file, shape            what it was made from (add says them): a file (a text's: its font); or, a solid's, one of the kit's shapes: ring | gem | cube
 //            text                   a text's: what it says (to the end of the line)
@@ -182,7 +182,7 @@ static bool doc_match(Doc& d) {
             const double from = doc_number(d, thing, "begin", 0, 0), length = doc_number(d, thing, "duration", 0, -1), speed = doc_number(d, thing, "speed", 0, 1);
             made.film = video(s, file.c_str(), mat4f{}, 1.f, (float)from, length < 0 ? -1.f : (float)(from + length * std::fabs(speed)), (float)speed, lay);
             if (!made.film) why = video_trouble;
-            else if (doc_number(d, thing, "keyed", 0, 0) > 0.5) key_out(made.film);
+            else if (const double keyed = doc_number(d, thing, "keyed", 0, -1); keyed != 0.0) key_own(made.film, keyed > 0.5);   // (not said: keyed if it has a ground of its own)
             if (made.film) s.playing.erase(made.film);   // (the document tells it its moment, and when its sound comes on)
             if (made.film && made.film->sound) s.sounding[made.film] = [&d, thing, v = made.film, file] { return Stage::Sound{file, v->from, v->to, v->speed, 0.0, doc_number(d, thing, "start", 0, 0), doc_number(d, thing, "duration", 0, -1)}; };
         } else if (kind == "picture") {

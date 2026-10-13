@@ -35,6 +35,8 @@ struct Video {
     std::atomic<bool> ended{false};    // the reader has read to the cut's end: the mark of it has come down the stream of pictures, after the last of them
     float4 key{0.f};                   // its green screen, if it has one (green); until its first picture is on the sheet the sheet is all clear
     float2 keySoft{0.f};
+    int own = 0;                       // keyed by its own ground (the colour its four corners share): 1 if it has one, 2 in any case (green if it has none)
+    mat4f rule;                        // its light and two colour numbers to red, green, blue
     Mesh* sheet = nullptr;             // the thing in the scene: moved like any other (kit.h: move)
     MaterialInstance* look = nullptr;
     struct Planes { std::atomic<WGPUTexture> shared{nullptr}; WGPUSharedTextureMemory lent = nullptr; Texture* light = nullptr; Texture* colour = nullptr; gint64 used = 0; };
@@ -78,6 +80,45 @@ static CVPixelBufferRef video_surface(GstSample* picture) {
     const GType api = g_type_from_name("GstCoreVideoMetaAPI");
     VideoCoreVideoMeta* meta = api ? (VideoCoreVideoMeta*)gst_buffer_get_meta(gst_sample_get_buffer(picture), api) : nullptr;
     return meta ? meta->pixbuf : nullptr;
+}
+// A film's ground: the colour its picture has in all four corners, if they are one strong colour (a green screen, of
+// whatever green; a blue one). Read once, from its first picture: four small patches of the decoder's surface.
+static bool video_ground(Video* v, CVPixelBufferRef picture, float3* ground, float* strong) {
+    if (CVPixelBufferGetPlaneCount(picture) < 2 || CVPixelBufferLockBaseAddress(picture, kCVPixelBufferLock_ReadOnly) != kCVReturnSuccess) return false;
+    const uint8_t* light = (const uint8_t*)CVPixelBufferGetBaseAddressOfPlane(picture, 0);
+    const uint8_t* colours = (const uint8_t*)CVPixelBufferGetBaseAddressOfPlane(picture, 1);
+    const size_t lightRow = CVPixelBufferGetBytesPerRowOfPlane(picture, 0), coloursRow = CVPixelBufferGetBytesPerRowOfPlane(picture, 1);
+    const int w = v->w / 2, h = v->h / 2, in = std::max(2, std::min(w, h) / 40);   // (in the colour plane's points; a little in from the very edge)
+    const auto hue = [](float3 c) { return float2{dot(c, float3{-0.1146f, -0.3854f, 0.5f}), dot(c, float3{0.5f, -0.4542f, -0.0458f})}; };   // (as flat.mat's)
+    float3 corner[4];
+    for (int i = 0; i < 4; ++i) {
+        const int x = i & 1 ? w - 1 - in : in, y = i & 2 ? h - 1 - in : in;
+        float3 sum{0.f};
+        for (int dy = 0; dy < 4; ++dy)
+            for (int dx = 0; dx < 4; ++dx) {
+                const int cx = std::clamp(x + dx - 2, 0, w - 1), cy = std::clamp(y + dy - 2, 0, h - 1);
+                sum += float3{(float)light[(size_t)(cy * 2) * lightRow + (size_t)(cx * 2)], (float)colours[(size_t)cy * coloursRow + (size_t)cx * 2], (float)colours[(size_t)cy * coloursRow + (size_t)cx * 2 + 1]};
+            }
+        corner[i] = clamp((v->rule * float4{sum / (16.f * 255.f), 1.f}).xyz, float3{0.f}, float3{1.f});
+    }
+    CVPixelBufferUnlockBaseAddress(picture, kCVPixelBufferLock_ReadOnly);
+    const float3 mean = 0.25f * (corner[0] + corner[1] + corner[2] + corner[3]);
+    float apart = 0.f;
+    for (const float3& c : corner) apart = std::max(apart, distance(hue(c), hue(mean)));
+    // (measured on 23 files with a screen: the corners 0.003 apart at most; a bright green 0.5 to 0.6 from grey, a dark one 0.17)
+    *ground = mean, *strong = length(hue(mean));
+    return apart < 0.05f && *strong > 0.15f;
+}
+// The key of a film that is keyed by its own ground, worked out from the picture it has now.
+static void video_own_key(Video* v, GstSample* picture) {
+    float3 ground{0.f, 1.f, 0.f};
+    float strong = 0.6f;   // (pure green's)
+    CVPixelBufferRef surface = picture ? video_surface(picture) : nullptr;
+    const bool has = surface && video_ground(v, surface, &ground, &strong);
+    if (!has) ground = float3{0.f, 1.f, 0.f}, strong = 0.6f;
+    // (how near counts as the screen, how wide its edge, how far its colour is taken out: kit.h's numbers for pure green, in
+    //  proportion to how far this ground is from grey: a dark green's greys are nearer to it)
+    if (v->own && (has || v->own == 2)) v->key = float4{ground, 0.2f * strong}, v->keySoft = float2{0.5f * strong, 1.5f * strong};
 }
 static bool video_show(Stage& s, Video* v) {
     CVPixelBufferRef held = video_surface(v->held);
@@ -138,6 +179,7 @@ static bool video_show(Stage& s, Video* v) {
     v->look->setParameter("picture", planes.light, smooth);
     v->look->setParameter("colours", planes.colour, smooth);
     if (!v->on) {   // (its first picture: seen from now on)
+        video_own_key(v, v->held);
         v->look->setParameter("key", v->key);
         v->look->setParameter("keySoft", v->keySoft);
     }
@@ -270,6 +312,7 @@ static Video* video(Stage& s, const char* file, const mat4f& place, float high, 
     if (!v->look) return video_trouble = "flat.filamat", nullptr;
     v->look->setParameter("filmed", 1.f);
     v->look->setParameter("filmRule", rule);
+    v->rule = rule;
     v->look->setParameter("picture", white_point(s), TextureSampler());   // (until its first picture is shared: a white that is
     v->look->setParameter("key", float4{1.f, 0.5f, 1.f, 9.f});            //  keyed out whole, so the sheet is not seen)
     v->look->setParameter("keySoft", float2{1.f, 1.f});
@@ -309,6 +352,16 @@ static void key_out(Video* v, float3 colour = float3{0.f, 1.f, 0.f}, float near 
     v->key = float4{colour, near};
     v->keySoft = float2{soft, spill};
     if (v->on) key_out(v->look, colour, near, soft, spill);
+}
+
+// The film keyed by its own ground (the colour its four corners share in its first picture): a green screen of
+// whatever colour, without being told which. always: keyed even if it has no such ground (then as a green screen).
+static void key_own(Video* v, bool always) {
+    v->own = always ? 2 : 1;
+    if (!v->on) return;   // (its first picture is not on the sheet yet: worked out when it comes)
+    video_own_key(v, v->on);
+    v->look->setParameter("key", v->key);
+    v->look->setParameter("keySoft", v->keySoft);
 }
 
 // The film at its moment, `seconds` of the stage's time (it goes round again when it ends), for the picture that comes

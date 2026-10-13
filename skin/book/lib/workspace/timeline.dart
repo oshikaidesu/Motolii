@@ -148,6 +148,10 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
     final k = e.logicalKey, ws = _ws!;
     if (k == LogicalKeyboardKey.space && e is KeyDownEvent) {
       _toggle();
+    } else if ((k == LogicalKeyboardKey.delete || k == LogicalKeyboardKey.backspace) && ws.inside != null) {
+      // Joined: the picked thing is taken out of the document (undo brings it back).
+      final t = int.tryParse(ws.selected ?? '');
+      if (t != null && ws.inside!.remove(t)) ws.reread();
     } else if (k == LogicalKeyboardKey.arrowLeft) {
       _step(HardwareKeyboard.instance.isShiftPressed ? -10 : -1);
     } else if (k == LogicalKeyboardKey.arrowRight) {

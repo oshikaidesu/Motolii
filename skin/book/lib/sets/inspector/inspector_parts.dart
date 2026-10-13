@@ -151,6 +151,7 @@ class InspHost extends StatefulWidget {
     this.onValues,
     this.onDrop,
     this.onKey,
+    this.onWords,
     this.together,
     required this.child,
   });
@@ -181,6 +182,9 @@ class InspHost extends StatefulWidget {
   /// A property's key mark was changed in the inspector.
   final void Function(String prop, KeyS mark)? onKey;
 
+  /// Words changed in the inspector (a text's content, a chooser's choice). false: the host did not take them, and they go back to what they were.
+  final bool Function(Map<String, String> changed)? onWords;
+
   /// What one change of the inspector tells the host (values, then key marks) is told inside this, so a host can keep it as one act.
   final void Function(VoidCallback tells)? together;
   @override
@@ -201,12 +205,16 @@ class _InspHostState extends State<InspHost> {
     _seenKeys
       ..clear()
       ..addAll(d.keys);
+    _seenWords
+      ..clear()
+      ..addAll(d.s2);
     return d..addListener(_r);
   }
 
   // what the host has been told of (or gave): only what differs from it is told
   final _seen = <String, double>{};
   final _seenKeys = <String, KeyS>{};
+  final _seenWords = <String, String>{};
   bool _live = false;
   void _tell() => widget.together == null ? _tells() : widget.together!(_tells);
   void _tells() {
@@ -225,6 +233,18 @@ class _InspHostState extends State<InspHost> {
       if (live || _seenKeys[e.key] == e.value) continue; // (while a hand is on it nothing is settled: told when it lets go)
       _seenKeys[e.key] = e.value;
       widget.onKey?.call(e.key, e.value);
+    }
+    final words = {
+      for (final e in doc.s2.entries)
+        if (e.key != 'route' && _seenWords[e.key] != e.value) e.key: e.value,
+    };
+    if (words.isEmpty) return;
+    if (widget.onWords?.call(words) ?? true) {
+      _seenWords.addAll(words);
+    } else {
+      for (final id in words.keys) {
+        _seenWords.containsKey(id) ? doc.s2[id] = _seenWords[id]! : doc.s2.remove(id);
+      }
     }
   }
 
@@ -249,7 +269,10 @@ class _InspHostState extends State<InspHost> {
         doc.v.addAll(widget.values);
         _seen.addAll(widget.values);
       }
-      if (!mapEquals(o.strs, widget.strs)) doc.s2.addAll(widget.strs);
+      if (!mapEquals(o.strs, widget.strs)) {
+        doc.s2.addAll(widget.strs);
+        _seenWords.addAll(widget.strs);
+      }
       if (!mapEquals(o.keyMarks, widget.keyMarks)) {
         doc.keys.addAll(widget.keyMarks);
         _seenKeys.addAll(widget.keyMarks);
