@@ -1,17 +1,14 @@
 == wall
-    at operator() (/Users/motolii_maker/motolii/filament/third_party/filament_src/third_party/dawn/src/dawn/native/vulkan/BackendVk.cpp:368)
 257 pictures a second, 3.89 ms each (4.3 times 60)
 at 60 a second: 120 drawn, 0 left out; the last was done 5.2 ms after it was asked for
 at 120 a second: 240 drawn, 0 left out; the last was done 6.7 ms after it was asked for
 at 240 a second: 478 drawn, 2 left out; the last was done 3.8 ms after it was asked for
 == mask
-    at operator() (/Users/motolii_maker/motolii/filament/third_party/filament_src/third_party/dawn/src/dawn/native/vulkan/BackendVk.cpp:368)
 120 pictures a second, 8.34 ms each (2.0 times 60)
 at 60 a second: 120 drawn, 0 left out; the last was done 11.9 ms after it was asked for
 at 120 a second: 238 drawn, 2 left out; the last was done 8.7 ms after it was asked for
 at 240 a second: 25 drawn, 455 left out; the last was done 606.2 ms after it was asked for
 == puppet
-    at operator() (/Users/motolii_maker/motolii/filament/third_party/filament_src/third_party/dawn/src/dawn/native/vulkan/BackendVk.cpp:368)
 309 pictures a second, 3.23 ms each (5.2 times 60)
     films late 9 of 1920 times asked (0.47 %)
 at 60 a second: 120 drawn, 0 left out; the last was done 9.2 ms after it was asked for
@@ -21,7 +18,6 @@ at 120 a second: 240 drawn, 0 left out; the last was done 5.0 ms after it was as
 at 240 a second: 479 drawn, 1 left out; the last was done 3.3 ms after it was asked for
     films late 10 of 1920 times asked (0.52 %)
 == neko
-    at operator() (/Users/motolii_maker/motolii/filament/third_party/filament_src/third_party/dawn/src/dawn/native/vulkan/BackendVk.cpp:368)
 107 pictures a second, 9.34 ms each (1.8 times 60)
     films late 10156 of 24000 times asked (42.32 %)
 at 60 a second: 118 drawn, 2 left out; the last was done 8.3 ms after it was asked for

@@ -248,7 +248,7 @@ static Video* video(Stage& s, const char* file, const mat4f& place, float high, 
     v->look->setParameter("key", float4{1.f, 0.5f, 1.f, 9.f});            //  keyed out whole, so the sheet is not seen)
     v->look->setParameter("keySoft", float2{1.f, 1.f});
     video_put(s, v);
-    s.playing.push_back([&s, v](double now) { video_at(s, v, (float)now + v->starts); });   // (it goes on by itself as the stage's time does)
+    s.playing[v] = [&s, v](double now) { video_at(s, v, (float)now + v->starts); };   // (it goes on by itself as the stage's time does)
     if (s.said_after.empty() || !video_counted) {
         video_counted = true;
         s.said_after.push_back([] {   // (of the times a film was asked for a moment in that stretch, how often it could not yet tell its picture)
@@ -257,6 +257,23 @@ static Video* video(Stage& s, const char* file, const mat4f& place, float high, 
         });
     }
     return v;
+}
+
+// A film taken off the stage for good: its sheet gone, its reader stopped and let go.
+static void video_off(Stage& s, Video* v) {
+    s.playing.erase(v);
+    take_off(s, v->sheet);
+    s.engine->flushAndWait();   // (a surface may be on its way to being shared)
+    gst_element_set_state(v->reader, GST_STATE_NULL);
+    if (v->next) gst_sample_unref(v->next);
+    if (v->held && v->held != v->on) gst_sample_unref(v->held);
+    if (v->on) gst_sample_unref(v->on);
+    gst_object_unref(v->reader);
+    for (auto& [surface, planes] : v->seen) {
+        if (planes.light) s.engine->destroy(planes.light);
+        if (planes.colour) s.engine->destroy(planes.colour);
+    }
+    delete v;
 }
 
 // A colour of the film made clear (kit.h: key_out), green by default: a green screen. Until the film's first picture is

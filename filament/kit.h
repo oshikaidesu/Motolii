@@ -87,7 +87,7 @@ struct Stage {
     Texture* sunlight = nullptr;
     double now = 0.0;        // the stage's time, in seconds
     bool by_clock = false;   // true: played as the clock goes (nothing is waited for); false: picture by picture (each one exact)
-    std::vector<std::function<void(double)>> playing;   // what goes on by itself as the stage's time does (films, pictures)
+    std::map<const void*, std::function<void(double)>> playing;   // what goes on by itself as the stage's time does (films, pictures), each under its own thing
     std::vector<std::function<void()>> said_after;      // a word of their own after each line of `clock` and `soak`
     struct Made { utils::Entity thing; const Mesh* of; int nth; mat4f place; };
     utils::Entity sun;                     // the sun, where there is one (paper_and_sun), and all that goes by its direction: `sun_to`
@@ -706,7 +706,7 @@ static Camera* god_view(Stage& s) {
 // The stage's time set: everything that goes on by itself is at that moment for the picture drawn next.
 static void time_is(Stage& s, double seconds) {
     s.now = seconds;
-    for (const auto& goes : s.playing) goes(seconds);
+    for (const auto& [who, goes] : s.playing) goes(seconds);
 }
 
 // A frame begins (Filament's beginFrame: false if this one is to be left out). What the looks are told is sent on
@@ -741,6 +741,30 @@ static void draw(Stage& s, std::vector<uint8_t>* pic = nullptr, bool wait = true
                                backend::PixelBufferDescriptor(pic->data(), pic->size(), backend::PixelDataFormat::RGBA, backend::PixelDataType::UBYTE));
     s.renderer->endFrame();
     if (wait) s.engine->flushAndWait();
+}
+
+// Whether the things made of mesh `m` are in the picture (they stay made, and are moved and played as before).
+static void seen(Stage& s, const Mesh* m, bool in) {
+    for (const Stage::Made& d : s.made)
+        if (d.of == m) { if (in) s.scene->addEntity(d.thing); else s.scene->remove(d.thing); }
+}
+
+// The things made of mesh `m` taken off the stage for good.
+static void take_off(Stage& s, const Mesh* m) {
+    auto& looks = s.engine->getRenderableManager();
+    MaterialInstance* look = nullptr;
+    for (size_t i = s.made.size(); i-- > 0;) {
+        if (s.made[i].of != m) continue;
+        look = looks.getMaterialInstanceAt(looks.getInstance(s.made[i].thing), 0);
+        s.scene->remove(s.made[i].thing);
+        s.engine->destroy(s.made[i].thing);
+        s.made.erase(s.made.begin() + (long)i);
+    }
+    if (!look) return;
+    std::erase_if(s.cuts, [look](const Stage::Cut& c) { return c.look == look; });   // (no matte's eye is told to it any more)
+    const Material* of = look->getMaterial();   // (its look goes with it, and the material, which `add` made for it alone)
+    s.engine->destroy(look);
+    s.engine->destroy(of);
 }
 
 // A film moves things between its pictures: every thing made of mesh `m` goes where `to` says (told which of the

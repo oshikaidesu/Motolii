@@ -89,7 +89,7 @@ static Drawn* picture(Stage& s, const char* file, const mat4f& place, float high
     }
     d->sheet->idx = {0, 1, 2, 0, 2, 3};
     if (d->frames > 1.f)   // (a film: it goes on by itself as the stage's time does, round and round)
-        s.playing.push_back([&s, d](double now) { picture_at(s, d, std::fmod((float)now + d->starts, d->seconds)); });
+        s.playing[d] = [&s, d](double now) { picture_at(s, d, std::fmod((float)now + d->starts, d->seconds)); };
     if (!shown) return d;
     d->look = add(s, d->sheet, flat_laid(lay).c_str(), {place});
     if (!d->look) return nullptr;
@@ -97,6 +97,16 @@ static Drawn* picture(Stage& s, const char* file, const mat4f& place, float high
     return d;
 }
 
+
+// A picture taken off the stage for good.
+static void picture_off(Stage& s, Drawn* d) {
+    s.playing.erase(d);
+    take_off(s, d->sheet);
+    door::on_driver(s.engine, [d] { delete d->canvas; delete d->film; });
+    s.engine->flushAndWait();
+    s.engine->destroy(d->texture);
+    delete d;
+}
 
 // A colour of the picture made clear (kit.h: key_out), white by default: a picture drawn on a white ground.
 static void key_out(Drawn* d, float3 colour = float3{1.f}, float near = 0.035f, float soft = 0.05f, float spill = 0.f) { key_out(d->look, colour, near, soft, spill); }

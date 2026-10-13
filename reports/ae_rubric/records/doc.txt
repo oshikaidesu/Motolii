@@ -1,0 +1,54 @@
+
+thing 1
+add: done, 59.5 ms
+set: done, 1.1 ms
+set: done, 1.8 ms
+thing 2
+add: done, 87.8 ms
+set: done, 11.6 ms
+set: done, 2.2 ms
+set: done, 1.9 ms
+still: done, 37.6 ms
+thing 3
+add: done, 3.4 ms
+set: done, 2.5 ms
+set: done, 1.7 ms
+key: done, 1.7 ms
+key: done, 1.9 ms
+key: done, 2.1 ms
+key: done, 1.8 ms
+at: done, 20.4 ms
+still: done, 45.9 ms
+say: done, 22.0 ms
+still: done, 40.7 ms
+undo: done, 23.2 ms
+remove: done, 1.4 ms
+still: done, 28.1 ms
+undo: done, 4.2 ms
+undo: done, 2.2 ms
+undo: done, 2.9 ms
+still: done, 48.7 ms
+redo: done, 2.0 ms
+redo: done, 2.1 ms
+still: done, 49.3 ms
+  1 file at 0: ../../third_party/thorvg_example/res/lottie/gradient_background.json
+  1 high at 0: 4.2
+  1 kind at 0: picture
+  1 z at 0: -1.0
+  2 file at 0: ../vid/happy.mp4
+  2 high at 0: 1.4
+  2 key at 0: 1.0
+  2 kind at 0: film
+  2 turn at 0: -20.0
+  2 turn at 3: 20.0
+  2 x at 0: -0.6
+  2 x at 3: 0.6
+  2 y at 0: 0.6
+  3 kind at 0: glass
+  3 shape at 0: ring
+  3 y at 0: -0.7
+  3 z at 0: 1.0
+
+at: done, 16.8 ms
+still: done, 64.8 ms
+opened afresh against before closing: mean off 0.000 of 255: the same
