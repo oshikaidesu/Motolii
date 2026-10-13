@@ -16,7 +16,7 @@ within 300 ./check/doc.sh > $R/doc.txt 2>&1
 
 KIT_EXTRA="$E" KIT_SRC=check/video_time.mm BUILDONLY=1 ./dawn_probe/kit_wgpu.sh time_check
 for f in out/vid_odd/*; do
-    echo "== ${f:t}"; (cd out/wgpu_kit && BACKEND=webgpu within 120 ../time_check_wgpu ../../$f 2>&1 | quiet)
+    echo "== ${f:t}"; (cd out/wgpu_kit && BACKEND=webgpu within 120 ../time_check_wgpu ../vid_odd/${f:t} 2>&1 | quiet)
 done > $R/video_time.txt
 
 for n in wall mask puppet neko lay; do

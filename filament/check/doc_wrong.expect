@@ -1,0 +1,10 @@
+  1 kind at 0: glass
+  1 shape at 0: ring
+  1 x at 0: 0.2
+  5 file at 0: ../vid/happy.mp4
+  5 kind at 0: film
+  5 speed at 0: -1.0
+  6 file at 0: ../../third_party/filament_src/third_party/models/Fox/Fox.glb
+  6 kind at 0: solid
+  7 file at 0: ../../../reports/ae_rubric/stills/lay_v1.jpg
+  7 kind at 0: picture

@@ -170,9 +170,12 @@ static std::string flat_laid(const char* lay) { return lay ? std::string("flat_"
 // copies: how many times each is drawn in one go (a material that asks for its instance index tells them apart).
 static MaterialInstance* add(Stage& s, Mesh* m, const char* filamat, std::vector<mat4f> places = {mat4f{}}, uint8_t layer = 1,
                              bool shadows = false, int copies = 1, int order = 4) {
-    static std::vector<std::vector<uint8_t>> pkgs;
-    pkgs.push_back(load_file(filamat));
-    Material* mat = pkgs.back().empty() ? nullptr : Material::Builder().package(pkgs.back().data(), pkgs.back().size()).build(*s.engine);
+    static std::map<std::string, Material*> built;   // (a material is read and built once; every thing of it has its own look)
+    if (!built.count(filamat)) {
+        const std::vector<uint8_t> pkg = load_file(filamat);
+        built[filamat] = pkg.empty() ? nullptr : Material::Builder().package(pkg.data(), pkg.size()).build(*s.engine);
+    }
+    Material* mat = built[filamat];
     if (!mat) return nullptr;
     const size_t n = m->pos.size();
     auto* frames = geometry::SurfaceOrientation::Builder().vertexCount(n).normals(m->nrm.data()).build();
@@ -762,9 +765,7 @@ static void take_off(Stage& s, const Mesh* m) {
     }
     if (!look) return;
     std::erase_if(s.cuts, [look](const Stage::Cut& c) { return c.look == look; });   // (no matte's eye is told to it any more)
-    const Material* of = look->getMaterial();   // (its look goes with it, and the material, which `add` made for it alone)
-    s.engine->destroy(look);
-    s.engine->destroy(of);
+    s.engine->destroy(look);   // (its look goes with it)
 }
 
 // A film moves things between its pictures: every thing made of mesh `m` goes where `to` says (told which of the

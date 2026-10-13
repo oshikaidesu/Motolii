@@ -37,7 +37,7 @@ int main(int argc, char** argv) {
     const std::string films = "../../third_party/thorvg_example/res/lottie/";
     const auto file = [&](const char* name) { static std::string path; path = films + name; return path.c_str(); };
     const float dist = 6.6f;
-    Drawn* wall = picture(s, file("text_anim.json"), mat4f::translation(float3{eye.x, eye.y, eye.z - dist}), (god ? 2.6f : 1.6f) * 2.f * dist * std::tan(0.5f * fov * TAU / 360.f));   // (larger than the view head-on: the eye goes round)
+    Drawn* wall = picture(s, file("text_anim.json"), mat4f::translation(float3{eye.x, eye.y, eye.z - dist}), (god ? 2.6f : 1.6f) * 2.f * dist * std::tan(0.5f * fov * TAU / 360.f), float3{1.f});   // (on white; larger than the view head-on: the eye goes round)
     if (!wall || wall->frames <= 0.f) return fail("picture (WebGPU backend only): the example films (third_party/thorvg_example)");
 
     // a pale floor under it all, so that the eye standing aside sees where things stand

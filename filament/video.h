@@ -36,7 +36,7 @@ struct Video {
     float2 keySoft{0.f};
     Mesh* sheet = nullptr;             // the thing in the scene: moved like any other (kit.h: move)
     MaterialInstance* look = nullptr;
-    struct Planes { std::atomic<WGPUTexture> shared{nullptr}; Texture* light = nullptr; Texture* colour = nullptr; };
+    struct Planes { std::atomic<WGPUTexture> shared{nullptr}; WGPUSharedTextureMemory lent = nullptr; Texture* light = nullptr; Texture* colour = nullptr; };
     std::map<uint32_t, Planes> seen;   // the decoder's surfaces come round again: each is shared once
 };
 
@@ -92,6 +92,7 @@ static bool video_show(Stage& s, Video* v) {
             lend.initialized = true;
             wgpuSharedTextureMemoryBeginAccess(memory, shared, &lend);
             CFRelease(surface);
+            planes->lent = memory;
             planes->shared = shared;
         });
         return false;
@@ -190,7 +191,8 @@ static Video* video(Stage& s, const char* file, const mat4f& place, float high, 
     if (!gst_element_query_duration(v->reader, GST_FORMAT_TIME, &length) || length <= 0) return video_trouble = "the file does not open as a film (no length)", nullptr;
     v->from = std::max(0.f, from);
     v->to = to < 0.f ? (float)((double)length / (double)GST_SECOND) : std::min(to, (float)((double)length / (double)GST_SECOND));
-    v->speed = speed == 0.f ? 1.f : speed;
+    if (speed == 0.f) return video_trouble = "a speed of 0 shows nothing: a film goes forwards or backwards", nullptr;
+    v->speed = speed;
     v->seconds = (v->to - v->from) / std::fabs(v->speed);
     if (v->seconds <= 0.f) return video_trouble = "the cut is empty", nullptr;
     video_from(v, 0.f, true);
@@ -220,12 +222,9 @@ static Video* video(Stage& s, const char* file, const mat4f& place, float high, 
     GstBus* bus = gst_element_get_bus(v->reader);
     while (GstMessage* said = gst_bus_pop_filtered(bus, GST_MESSAGE_TAG)) {   // (a film shot upright says which way it is to be turned)
         GstTagList* tags = nullptr;
-        gchar* way = nullptr;
+        GstVideoOrientationMethod way = GST_VIDEO_ORIENTATION_IDENTITY;
         gst_message_parse_tag(said, &tags);
-        if (gst_tag_list_get_string(tags, GST_TAG_IMAGE_ORIENTATION, &way)) {
-            v->turned = !strcmp(way, "rotate-90") ? 1 : !strcmp(way, "rotate-180") ? 2 : !strcmp(way, "rotate-270") ? 3 : 0;
-            g_free(way);
-        }
+        if (gst_video_orientation_from_tag(tags, &way)) v->turned = way == GST_VIDEO_ORIENTATION_90R ? 1 : way == GST_VIDEO_ORIENTATION_180 ? 2 : way == GST_VIDEO_ORIENTATION_90L ? 3 : 0;
         gst_tag_list_unref(tags);
         gst_message_unref(said);
     }
@@ -273,6 +272,17 @@ static void video_off(Stage& s, Video* v) {
         if (planes.light) s.engine->destroy(planes.light);
         if (planes.colour) s.engine->destroy(planes.colour);
     }
+    door::on_driver(s.engine, [v] {   // (every surface that was lent is given back: Dawn's own end of a lend)
+        for (auto& [surface, planes] : v->seen) {
+            if (!planes.shared) continue;
+            WGPUSharedTextureMemoryEndAccessState ended{};
+            wgpuSharedTextureMemoryEndAccess(planes.lent, planes.shared, &ended);
+            wgpuSharedTextureMemoryEndAccessStateFreeMembers(ended);
+            wgpuTextureRelease(planes.shared);
+            wgpuSharedTextureMemoryRelease(planes.lent);
+        }
+    });
+    s.engine->flushAndWait();
     delete v;
 }
 

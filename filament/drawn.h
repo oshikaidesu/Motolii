@@ -41,7 +41,7 @@ static void picture_at(Stage& s, Drawn* d, float seconds) {
 // `place`, facing along the place's z. It is drawn as finely as the stage is, and where the file draws nothing it is `ground`
 // (a ground below 0: clear there). shown = false: the sheet and its picture are made but not put in the scene (for a
 // matte: kit.h, matte(s, d->sheet, {place}, d->texture)).
-static Drawn* picture(Stage& s, const char* file, const mat4f& place, float high, float3 ground = float3{1.f}, bool shown = true, const char* lay = nullptr) {
+static Drawn* picture(Stage& s, const char* file, const mat4f& place, float high, float3 ground = float3{-1.f}, bool shown = true, const char* lay = nullptr) {
     if (!door::device(s.engine)) return nullptr;   // (another backend)
     Drawn* d = new Drawn;
     WGPUTexture made = nullptr;
@@ -108,5 +108,3 @@ static void picture_off(Stage& s, Drawn* d) {
     delete d;
 }
 
-// A colour of the picture made clear (kit.h: key_out), white by default: a picture drawn on a white ground.
-static void key_out(Drawn* d, float3 colour = float3{1.f}, float near = 0.035f, float soft = 0.05f, float spill = 0.f) { key_out(d->look, colour, near, soft, spill); }

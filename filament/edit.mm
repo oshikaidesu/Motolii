@@ -1,9 +1,10 @@
 // edit.mm: a document on the stage, edited by calls (doc.h): one program for every document, never built again for a
 // scene. It reads one call a line (what a shell on a screen would send), and shows the stage as it then is.
 //   ./edit.sh out/first.motolii            then, a line each:
-//     add film ../vid/happy.mp4 | add picture <file.json> | add glass ring      -> the new thing's number
+//     add film ../vid/happy.mp4 | add picture <an After Effects file, a photo> | add solid <file.glb> | add glass ring      -> the new thing's number
 //     set 1 x 0.5 | say 1 lay add | key 1 x 2 -0.5 | unkey 1 x 2 | remove 1 | undo | redo
-//     list | at 1.5 (the stage's moment) | still out/a.png | film out/a.mp4 | time
+//     list | at 1.5 (the stage's moment) | still out/a.png | write out/a.mp4 | time
+// A call that is not done says why, and leaves the document as it was.
 #include "kit.h"
 #include "doc.h"
 #include <iostream>
@@ -33,14 +34,17 @@ int main(int argc, char** argv) {
         else if (call == "unkey" && said >> thing >> name >> at) ok = doc_unkey(*d, thing, name.c_str(), at);
         else if (call == "undo") ok = doc_undo(*d);
         else if (call == "redo") ok = doc_redo(*d);
-        else if (call == "at" && said >> at) time_is(s, at);
+        else if (call == "at" && said >> at) {
+            if (at < 0.0 || at > doc_seconds(*d)) std::printf("(the document runs from 0 to %.2f)\n", doc_seconds(*d));
+            time_is(s, at);
+        }
         else if (call == "still" && said >> word) { time_is(s, s.now); ok = shoot(s, word.c_str()); }
-        else if (call == "film" && said >> word) ok = film(s, word.c_str(), (int)std::lround(doc_seconds(*d) * 60.0), 0.f, [](float) {});
+        else if (call == "write" && said >> word) ok = film(s, word.c_str(), (int)std::lround(doc_seconds(*d) * 60.0), 0.f, [](float) {});
         else if (call == "time") clock(s, 120, [](float) {});
         else if (call == "list") doc_rows(*d, sqlite3_mprintf("select thing, name, at, value from fact order by thing, name, at"), [](sqlite3_stmt* row) {
             std::printf("  %d %s at %g: %s\n", sqlite3_column_int(row, 0), sqlite3_column_text(row, 1), sqlite3_column_double(row, 2), sqlite3_column_text(row, 3)); });
         else if (!call.empty()) { std::printf("not a call: %s\n", line.c_str()); continue; }
-        if (!call.empty() && call != "list") std::printf("%s: %s, %.1f ms\n", call.c_str(), ok ? "done" : "NOT done", std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count());
+        if (!call.empty() && call != "list") std::printf("%s: %s, %.1f ms\n", call.c_str(), ok ? "done" : ("NOT done: " + d->trouble).c_str(), std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count());
         std::fflush(stdout);
     }
     return 0;

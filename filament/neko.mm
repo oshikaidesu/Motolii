@@ -67,14 +67,13 @@ int main(int argc, char** argv) {
     const int byGem = matte(s, window, {high});
     if (byGem < 0 || !matted(s, great->look, byGem, true, 3.f)) return fail("matte.filamat");
 
-    // confetti before all, twice over: an After Effects film, its white ground keyed out as a film's green is
+    // confetti before all, twice over: an After Effects film, clear where it draws nothing
     // (0.3 ms each; balloons_with_string.json cost 5 ms and confetti2.json 3: many shapes, drawn over the whole screen)
     std::vector<Drawn*> party;
     for (int twice = 0; twice < 2; ++twice) {
         const char* name = "confetti.json";
         Drawn* d = picture(s, (ae + name).c_str(), mat4f::translation(float3{twice ? 0.25f : -0.1f, twice ? 1.9f : 1.3f, 3.1f + 0.5f * (float)twice}) * mat4f::rotation(twice ? 2.6f : 0.f, float3{0, 0, 1}), twice ? 1.9f : 1.6f);
         if (!d) return fail(name);
-        key_out(d);
         d->starts = 1.5f * (float)twice;
         party.push_back(d);
     }

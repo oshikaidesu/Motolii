@@ -2,7 +2,7 @@ add picture ../../third_party/thorvg_example/res/lottie/gradient_background.json
 set 1 z -1
 set 1 high 4.2
 add film ../vid/happy.mp4
-set 2 key 1
+set 2 keyed 1
 set 2 high 1.4
 set 2 y 0.6
 still out/e_1.png

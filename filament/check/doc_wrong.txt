@@ -1,0 +1,37 @@
+add glass ring
+set 1 x 0.1
+set 1 x 0.2
+set 1 x 0.3
+key 1 y 1 0.5
+key 1 y 1 0.7
+set 1 y 0.2
+undo
+undo
+undo
+undo
+undo
+undo
+undo
+undo
+redo
+redo
+redo
+add film ../vid/no_such_file.mp4
+add glass banana
+add picture ../vid/no_such_file.json
+set 99 x 1
+remove 99
+remove 1
+remove 1
+undo
+set 1 wobble 3
+say 1 lay purple
+say 1 keyed yes
+key 1 x -1 0
+add film ../vid/happy.mp4
+set 5 speed 0
+set 5 inpoint 100
+set 5 speed -1
+add solid ../../third_party/filament_src/third_party/models/Fox/Fox.glb
+add picture ../../../reports/ae_rubric/stills/lay_v1.jpg
+list
