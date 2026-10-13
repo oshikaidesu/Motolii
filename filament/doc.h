@@ -13,6 +13,7 @@
 //            keyed                  a film's: 1 if its green ground is keyed out
 //   words    lay                    how it lies on what is behind: over | add | multiply | screen
 //            file, shape            what it was made from (add says them): a file; a glass's shape: ring | gem | cube
+//            words, colour          a type's: what it says (to the end of the line), and its colour as six digits (ff3366)
 #include "drawn.h"
 #include "solid.h"
 #include "video.h"
@@ -31,11 +32,12 @@ struct Doc {
 // words), and whether it can move (take keys).
 struct DocValue { const char* name; const char* kinds; double low, high; bool moves; const char* words; };
 static const DocValue doc_values[] = {
-    {"x", "film picture solid glass", -1e4, 1e4, true, nullptr}, {"y", "film picture solid glass", -1e4, 1e4, true, nullptr}, {"z", "film picture solid glass", -1e4, 1e4, true, nullptr},
-    {"turn", "film picture solid glass", -1e6, 1e6, true, nullptr}, {"high", "film picture solid glass", 1e-3, 1e4, true, nullptr},
-    {"start", "film picture solid glass", 0, 1e6, false, nullptr}, {"duration", "film picture solid glass", 1e-3, 1e6, false, nullptr},
+    {"x", "film picture solid glass type", -1e4, 1e4, true, nullptr}, {"y", "film picture solid glass type", -1e4, 1e4, true, nullptr}, {"z", "film picture solid glass type", -1e4, 1e4, true, nullptr},
+    {"turn", "film picture solid glass type", -1e6, 1e6, true, nullptr}, {"high", "film picture solid glass type", 1e-3, 1e4, true, nullptr},
+    {"start", "film picture solid glass type", 0, 1e6, false, nullptr}, {"duration", "film picture solid glass type", 1e-3, 1e6, false, nullptr},
     {"inpoint", "film", 0, 1e6, false, nullptr}, {"speed", "film", -100, 100, false, nullptr}, {"keyed", "film", 0, 1, false, nullptr},
-    {"lay", "film picture", 0, 0, false, "over add multiply screen"}, {"file", "film picture solid", 0, 0, false, ""}, {"shape", "glass", 0, 0, false, "ring gem cube"}};
+    {"lay", "film picture type", 0, 0, false, "over add multiply screen"}, {"file", "film picture solid type", 0, 0, false, ""}, {"shape", "glass", 0, 0, false, "ring gem cube"},
+    {"words", "type", 0, 0, false, ""}, {"colour", "type", 0, 0, false, ""}};
 static bool doc_among(const std::string& words, const std::string& one) { return (" " + words + " ").find(" " + one + " ") != std::string::npos; }
 
 // Rows of the document: `each` is told every row of what is asked (in SQLite's own words).
@@ -98,7 +100,7 @@ static void doc_moment(Doc& d, double now) {
 static bool doc_match(Doc& d) {
     Stage& s = *d.stage;
     std::map<int, std::string> told;   // every thing of the document, and all that its making goes by
-    doc_rows(d, sqlite3_mprintf("select thing, group_concat(name || '=' || value, ' ') from (select * from fact where name in ('kind','file','shape','lay','keyed','inpoint','duration','speed') order by thing, name) group by thing"),
+    doc_rows(d, sqlite3_mprintf("select thing, group_concat(name || '=' || value, ' ') from (select * from fact where name in ('kind','file','shape','lay','keyed','inpoint','duration','speed','words','colour') order by thing, name) group by thing"),
              [&](sqlite3_stmt* row) { told[sqlite3_column_int(row, 0)] = (const char*)sqlite3_column_text(row, 1); });
     for (auto it = d.shown.begin(); it != d.shown.end();) {
         const auto still = told.find(it->first);
@@ -126,13 +128,18 @@ static bool doc_match(Doc& d) {
             if (made.film && made.film->sound) s.sounding[made.film] = [&d, thing, v = made.film, file] { return Stage::Sound{file, v->from, v->to, v->speed, 0.0, doc_number(d, thing, "start", 0, 0), doc_number(d, thing, "duration", 0, -1)}; };
         } else if (kind == "picture") {
             if ((made.drawn = picture(s, file.c_str(), mat4f{}, 1.f, float3{-1.f}, true, lay))) s.playing.erase(made.drawn);
+        } else if (kind == "type") {   // (words in a font: said by `say N words ...`; until then, the font's own name)
+            const std::string words = doc_word(d, thing, "words"), colour = doc_word(d, thing, "colour");
+            const long rgb = colour.empty() ? 0x111111 : colour.size() == 6 ? std::strtol(colour.c_str(), nullptr, 16) : -1;
+            if (rgb < 0) why = "a colour is six digits, as ff3366";
+            else made.drawn = type(s, words.empty() ? std::filesystem::path(file).stem().string().c_str() : words.c_str(), file.c_str(), mat4f{}, 1.f, float3{(float)((rgb >> 16) & 255), (float)((rgb >> 8) & 255), (float)(rgb & 255)} / 255.f, lay);
         } else if (kind == "solid") {
             made.solid = solid(s, file.c_str(), mat4f{}, 1.f);
         } else if (kind == "glass") {
             made.glass = shape == "gem" ? gem(0.5f) : shape == "cube" ? cube(0.1f) : shape == "ring" ? torus(0.37f, 0.13f) : nullptr;
             if (!made.glass) why = "a glass's shape is ring, gem or cube";
             else if (!thick_glass(s, made.glass, {mat4f{}})) made.glass = nullptr;
-        } else why = "its kind is film, picture, solid or glass";
+        } else why = "its kind is film, picture, type, solid or glass";
         if (!made.film && !made.drawn && !made.solid && !made.glass) { d.trouble = "the " + kind + " (" + file + shape + ") could not be made: " + why; all = false; continue; }
         d.shown[thing] = made;
     }
@@ -240,10 +247,10 @@ static bool doc_knows(Doc& d, int thing, const char* name = nullptr, const doubl
     return true;
 }
 
-// The calls. A new thing of a kind (film, picture, solid, glass) from a file (a glass: its shape): its number (0: not
+// The calls. A new thing of a kind (film, picture, type, solid, glass) from a file (a type: its font; a glass: its shape): its number (0: not
 // made, and no number is used up).
 static int doc_add(Doc& d, const char* kind, const char* file) {
-    if (!doc_among("film picture solid glass", kind)) return d.trouble = "a thing is a film, a picture, a solid or a glass", 0;
+    if (!doc_among("film picture solid glass type", kind)) return d.trouble = "a thing is a film, a picture, a type, a solid or a glass", 0;
     if (!doc_change(d, sqlite3_mprintf("insert into thing default values; insert into fact values(last_insert_rowid(), 'kind', 0.0, %Q); insert into fact values(last_insert_rowid(), %Q, 0.0, %Q)", kind, !strcmp(kind, "glass") ? "shape" : "file", file))) return 0;
     int thing = 0;   // (the newest number: SQLite's own count of things, which a change not made does not move)
     doc_rows(d, sqlite3_mprintf("select max(id) from thing"), [&](sqlite3_stmt* row) { thing = sqlite3_column_int(row, 0); });

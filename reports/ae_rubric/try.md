@@ -21,6 +21,11 @@ add glass ring
 set 3 y -0.7
 add solid ../../third_party/filament_src/third_party/models/Fox/Fox.glb
 add picture ../../../reports/ae_rubric/stills/lay_v1.jpg
+add type ../arial_black.ttf
+say 6 words MOTOLII
+say 6 colour ffffff
+set 6 y 1.3
+set 6 high 0.24
 at 2.5
 still out/now.png
 undo
@@ -31,9 +36,10 @@ list
 ```
 
 - `add 種類 ファイル` … 置く。返事に物の番号が出る（番号は使い回さない）。種類：
-  film（動画）、picture（AE のファイル、写真の .jpg／.png）、solid（3Dのファイル .glb／.gltf）、glass（ring、gem、cube）。
+  film（動画）、picture（AE のファイル、写真の .jpg／.png）、type（文字。ファイルはフォント .ttf）、solid（3Dのファイル .glb／.gltf）、glass（ring、gem、cube）。
+  フォントは `filament/out/arial_black.ttf` と `arial_unicode.ttf`（日本語も入っている）に、この Mac の物への近道が置いてある。
 - `set 番号 名前 数` … 値を変える。`key 番号 名前 時刻 数` … その時刻にキーを打つ。`unkey 番号 名前 時刻` … キーを消す。
-- `say 番号 名前 言葉` … 言葉の値を変える（`lay` に over／add／multiply／screen）。`remove 番号` … 消す。
+- `say 番号 名前 言葉` … 言葉の値を変える（`lay` に over／add／multiply／screen。文字なら `words` に行の終わりまでの文、`colour` に6桁の色 ff3366）。文字の `high` は1行の高さ。`remove 番号` … 消す。
 - `undo`、`redo` … 取り消し、やり直し。閉じて開き直した後でも効く。
 - `at 秒` … 舞台の時刻。`still 絵.png` … 今の絵。`write 動画.mp4` … 最初から最後までの動画。`list` … 文書の中身（自分で変えた値だけ出る）。
 - 数の名前：x、y、z（場所）、turn（傾き、度）、high（高さ）、start（出る時刻）、duration（出ている長さ。言わなければずっと出ていて、終わりまで行ったら頭から繰り返す）、
@@ -46,11 +52,11 @@ list
 - 同じ場所（同じ z）に2つ置くと、後から置いた方が前。
 
 絵と動画は `filament/out/wgpu_kit/out/` に出る。保存の操作は無い（打った時にもうファイルに入っている）。
-文書からはまだ出来ない事：型（マスク）、カメラを動かす、文字を打つ、ぼかし、影、音。
+文書からはまだ出来ない事：型（マスク）、カメラを動かす、ぼかし、影。音は書き出した動画に入る（作業中は鳴らない）。
 
 ## 出来上がった場面を見る
 
-`reports/show/` の動画。それぞれ一番新しい版：`neko_v4.mp4`（猫の民衆）、`mask_v7.mp4`（マスク）、`lay_v3.mp4`（重ね方）、`edit_v3.mp4`（文書：AEの絵、動画、ガラス、3Dファイル、写真）、
+`reports/show/` の動画。それぞれ一番新しい版：`neko_v4.mp4`（猫の民衆）、`mask_v7.mp4`（マスク）、`lay_v3.mp4`（重ね方）、`edit_v4.mp4`（文書：AEの絵、動画、ガラス、文字2つ、3Dファイル、写真）、
 `puppet_v6.mp4`・`puppet_v6_forty.mp4`・`puppet_v6_awkward.mp4`（人形劇、40本、変な動画14本）、`led_v5_arch.mp4`（AEの動きを3Dの物に）。
 音は動画の素材そのものの音（動画の無い `mask_v7`、`led_v5_arch` は無音）。
 古い版（番号の小さい物）は直す前の記録として置いてあるだけ。

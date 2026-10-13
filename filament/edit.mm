@@ -8,7 +8,7 @@
 #include <sstream>
 
 static const char* const calls =
-    "  add film <file> | add picture <an After Effects file, a .jpg, a .png> | add solid <file.glb> | add glass ring|gem|cube\n"
+    "  add film <file> | add picture <an After Effects file, a .jpg, a .png> | add type <font.ttf> | add solid <file.glb> | add glass ring|gem|cube\n"
     "  remove <thing> | set <thing> <name> <number> | say <thing> <name> <word> | key <thing> <name> <at> <number> | unkey <thing> <name> <at>\n"
     "  undo | redo | list | at <seconds> | still <file.png> | write <file.mp4> | time\n";
 
@@ -40,7 +40,10 @@ int main(int argc, char** argv) {
             const double is = number(3);
             if (numbers && (ok = doc_set(*d, n, w[2].c_str(), is)) && keys) std::printf("(its %d keys are gone: it stays at that)\n", keys);
         }
-        else if (call == "say" && w.size() == 4) ok = doc_say(*d, thing(), w[2].c_str(), w[3].c_str());
+        else if (call == "say" && w.size() >= 4 && (w.size() == 4 || w[2] == "words")) {   // (a type's words are the rest of the line)
+            const int n = thing();
+            if (numbers) ok = doc_say(*d, n, w[2].c_str(), w[2] == "words" ? line.substr(line.find(w[3], line.find(" words ") + 6)).c_str() : w[3].c_str());
+        }
         else if (call == "key" && w.size() == 5) { const int n = thing(); const double at = number(3), is = number(4); if (numbers) ok = doc_key(*d, n, w[2].c_str(), at, is); }
         else if (call == "unkey" && w.size() == 4) { const int n = thing(); const double at = number(3); if (numbers) ok = doc_unkey(*d, n, w[2].c_str(), at); }
         else if (call == "undo" && w.size() == 1) ok = doc_undo(*d);

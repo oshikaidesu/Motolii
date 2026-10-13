@@ -10,6 +10,8 @@ printf 'at 2.5\nstill out/e_7.png\n' | ./edit.sh out/doc_check.motolii
 # that are not there, things and names that are not there, values the stage cannot show): every such call is refused
 # with its reason, and the document ends as check/doc_wrong.expect says
 rm -f out/doc_wrong.motolii
+ln -sf "/System/Library/Fonts/Supplemental/Arial Black.ttf" out/arial_black.ttf   # (a font for the typed words: the system's, by a link)
+ln -sf "/System/Library/Fonts/Supplemental/Arial Unicode.ttf" out/arial_unicode.ttf
 ./edit.sh out/doc_wrong.motolii < check/doc_wrong.txt > out/doc_wrong.txt
 grep "NOT done" out/doc_wrong.txt
 grep "^  [0-9(]" out/doc_wrong.txt | grep -v "(a number" | diff - check/doc_wrong.expect > /dev/null && echo "after the wrong calls the document is as expected: yes ($(grep -c "NOT done" out/doc_wrong.txt) calls refused)" || echo "after the wrong calls the document is as expected: NO"

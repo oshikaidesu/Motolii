@@ -39,25 +39,18 @@ static void picture_at(Stage& s, Drawn* d, float seconds) {
     });
 }
 
-// The picture in `file` put in the scene: a sheet `high` tall (as wide as the picture makes it) with its middle at
-// `place`, facing along the place's z. It is drawn as finely as the stage is, and where the file draws nothing it is `ground`
-// (a ground below 0: clear there). shown = false: the sheet and its picture are made but not put in the scene (for a
-// matte: kit.h, matte(s, d->sheet, {place}, d->texture)).
-static Drawn* picture(Stage& s, const char* file, const mat4f& place, float high, float3 ground = float3{-1.f}, bool shown = true, const char* lay = nullptr) {
+// What `picture` and `type` share: something of ThorVG's (made by `paints` on Filament's own thread, which says how
+// many points wide and high it is drawn) on a canvas that draws into a texture of Filament's device, and the sheet
+// that shows it. ground below 0: clear where nothing is drawn. shown = false: made but not put in the scene (for a matte).
+static Drawn* drawn(Stage& s, const std::function<tvg::Paint*(Drawn*, int*, int*)>& paints, const mat4f& place, float high, float3 ground, bool shown, const char* lay) {
     if (!door::device(s.engine)) return nullptr;   // (another backend)
-    if (!std::filesystem::is_regular_file(file)) return nullptr;   // (ThorVG ends the program on a folder)
     Drawn* d = new Drawn;
     WGPUTexture made = nullptr;
     int w = 0, h = 0;
     door::on_driver(s.engine, [&] {
         tvg::Initializer::init(0);
-        d->film = tvg::Animation::gen();
-        tvg::Picture* p = d->film->picture();
-        float fw = 0.f, fh = 0.f;
-        if (p->load(file) != tvg::Result::Success || p->size(&fw, &fh) != tvg::Result::Success || fw <= 0.f || fh <= 0.f) return;
-        const float fit = (float)std::max(s.w, s.h) / std::max(fw, fh);
-        w = 2 * (int)std::lround(0.5f * fw * fit);
-        h = 2 * (int)std::lround(0.5f * fh * fit);
+        tvg::Paint* p = paints(d, &w, &h);
+        if (!p || w <= 0 || h <= 0) return;
         WGPUTextureDescriptor like{};
         like.size = {(uint32_t)w, (uint32_t)h, 1};
         like.format = WGPUTextureFormat_BGRA8Unorm;   // (what ThorVG's last step writes)
@@ -68,14 +61,12 @@ static Drawn* picture(Stage& s, const char* file, const mat4f& place, float high
         made = wgpuDeviceCreateTexture((WGPUDevice)door::device(s.engine), &like);
         d->canvas = tvg::WgCanvas::gen();
         if (!d->canvas || d->canvas->target(door::device(s.engine), door::instance(s.engine), made, (uint32_t)w, (uint32_t)h, tvg::ColorSpace::ABGR8888S, 1) != tvg::Result::Success) return;
-        p->size((float)w, (float)h);
         tvg::Shape* under = tvg::Shape::gen();
         under->appendRect(0, 0, (float)w, (float)h);
         under->fill((uint8_t)std::lround(255.f * ground.x), (uint8_t)std::lround(255.f * ground.y), (uint8_t)std::lround(255.f * ground.z), 255);
         if (ground.x >= 0.f) d->canvas->add(under);
         d->canvas->add(p);
-        d->frames = d->film->totalFrame();
-        d->seconds = d->film->duration();
+        if (d->film) d->frames = d->film->totalFrame(), d->seconds = d->film->duration();
         d->canvas->update();
         d->canvas->draw(true);
         d->canvas->sync();
@@ -100,6 +91,44 @@ static Drawn* picture(Stage& s, const char* file, const mat4f& place, float high
     return d;
 }
 
+
+// The picture in `file` put in the scene (an After Effects film, an SVG, a photo): a sheet `high` tall (as wide as
+// the picture makes it) with its middle at `place`, facing along the place's z, drawn as finely as the stage is.
+static Drawn* picture(Stage& s, const char* file, const mat4f& place, float high, float3 ground = float3{-1.f}, bool shown = true, const char* lay = nullptr) {
+    if (!std::filesystem::is_regular_file(file)) return nullptr;   // (ThorVG ends the program on a folder)
+    return drawn(s, [&](Drawn* d, int* w, int* h) -> tvg::Paint* {
+        d->film = tvg::Animation::gen();
+        tvg::Picture* p = d->film->picture();
+        float fw = 0.f, fh = 0.f;
+        if (p->load(file) != tvg::Result::Success || p->size(&fw, &fh) != tvg::Result::Success || fw <= 0.f || fh <= 0.f) return nullptr;
+        const float fit = (float)std::max(s.w, s.h) / std::max(fw, fh);
+        *w = 2 * (int)std::lround(0.5f * fw * fit);
+        *h = 2 * (int)std::lround(0.5f * fh * fit);
+        p->size((float)*w, (float)*h);
+        return p;
+    }, place, high, ground, shown, lay);
+}
+
+// Words put in the scene, set by ThorVG in the font of `fontFile` (a .ttf): a sheet `high` tall for each line, as
+// wide as the words make it, its middle at `place`.
+static Drawn* type(Stage& s, const char* words, const char* fontFile, const mat4f& place, float high, float3 colour = float3{0.f}, const char* lay = nullptr) {
+    if (!std::filesystem::is_regular_file(fontFile)) return nullptr;
+    return drawn(s, [&](Drawn*, int* w, int* h) -> tvg::Paint* {
+        if (tvg::Text::load(fontFile) != tvg::Result::Success) return nullptr;
+        tvg::Text* t = tvg::Text::gen();
+        float x = 0.f, y = 0.f, wide = 0.f, tall = 0.f;
+        const float fine = 0.12f * (float)std::max(s.w, s.h);   // (letters this many points tall: a line as fine as an eighth of the stage)
+        t->font(std::filesystem::path(fontFile).stem().string().c_str());   // (ThorVG names a font by its file)
+        t->size(fine);
+        t->text(words);
+        t->fill((uint8_t)std::lround(255.f * colour.x), (uint8_t)std::lround(255.f * colour.y), (uint8_t)std::lround(255.f * colour.z));
+        if (t->bounds(&x, &y, &wide, &tall) != tvg::Result::Success || wide <= 0.f || tall <= 0.f) return nullptr;
+        t->translate(-x, -y);
+        *w = 2 * (int)std::ceil(0.5f * wide);
+        *h = 2 * (int)std::ceil(0.5f * tall);
+        return t;
+    }, place, high, float3{-1.f}, true, lay);
+}
 
 // A picture taken off the stage for good.
 static void picture_off(Stage& s, Drawn* d) {

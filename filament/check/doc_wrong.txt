@@ -60,5 +60,11 @@ set 2 x 0.1
 still out/nodir/a.png
 still out/a.jpg
 at 100000
+add type ../arial_black.ttf
+say 5 words two words  and a gap
+say 5 colour blue
+say 5 colour ff3366
+set 5 speed 2
+add type ../no_such_font.ttf
 help
 list
