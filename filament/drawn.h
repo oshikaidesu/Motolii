@@ -46,11 +46,14 @@ static Drawn* drawn(Stage& s, const std::function<tvg::Paint*(Drawn*, int*, int*
     if (!door::device(s.engine)) return nullptr;   // (another backend)
     Drawn* d = new Drawn;
     WGPUTexture made = nullptr;
+    tvg::Paint* loose = nullptr;
+    bool owned = false;
     int w = 0, h = 0;
     door::on_driver(s.engine, [&] {
         tvg::Initializer::init(0);
         tvg::Paint* p = paints(d, &w, &h);
         if (!p || w <= 0 || h <= 0) return;
+        loose = d->film ? nullptr : p;   // (a paint that no film owns is let go here if the canvas never takes it)
         WGPUTextureDescriptor like{};
         like.size = {(uint32_t)w, (uint32_t)h, 1};
         like.format = WGPUTextureFormat_BGRA8Unorm;   // (what ThorVG's last step writes)
@@ -61,18 +64,26 @@ static Drawn* drawn(Stage& s, const std::function<tvg::Paint*(Drawn*, int*, int*
         made = wgpuDeviceCreateTexture((WGPUDevice)door::device(s.engine), &like);
         d->canvas = tvg::WgCanvas::gen();
         if (!d->canvas || d->canvas->target(door::device(s.engine), door::instance(s.engine), made, (uint32_t)w, (uint32_t)h, tvg::ColorSpace::ABGR8888S, 1) != tvg::Result::Success) return;
-        tvg::Shape* under = tvg::Shape::gen();
-        under->appendRect(0, 0, (float)w, (float)h);
-        under->fill((uint8_t)std::lround(255.f * ground.x), (uint8_t)std::lround(255.f * ground.y), (uint8_t)std::lround(255.f * ground.z), 255);
-        if (ground.x >= 0.f) d->canvas->add(under);
+        if (ground.x >= 0.f) {
+            tvg::Shape* under = tvg::Shape::gen();
+            under->appendRect(0, 0, (float)w, (float)h);
+            under->fill((uint8_t)std::lround(255.f * ground.x), (uint8_t)std::lround(255.f * ground.y), (uint8_t)std::lround(255.f * ground.z), 255);
+            d->canvas->add(under);
+        }
         d->canvas->add(p);
+        owned = true;
         if (d->film) d->frames = d->film->totalFrame(), d->seconds = d->film->duration();
         d->canvas->update();
         d->canvas->draw(true);
         d->canvas->sync();
     });
     s.engine->flushAndWait();   // (once, at set-up: the lines above ran on the other thread)
-    if (!made || !d->canvas || w <= 0) return nullptr;
+    if (!made || !owned) {   // (not made: what was begun is let go)
+        door::on_driver(s.engine, [&] { if (loose) tvg::Paint::rel(loose); delete d->canvas; delete d->film; if (made) wgpuTextureRelease(made); });
+        s.engine->flushAndWait();
+        delete d;
+        return nullptr;
+    }
     d->texture = Texture::Builder().width((uint32_t)w).height((uint32_t)h).levels(1).sampler(Texture::Sampler::SAMPLER_2D).format(Texture::InternalFormat::RGBA8)
                      .usage(Texture::Usage::SAMPLEABLE).import((intptr_t)made).build(*s.engine);
     d->sheet = new Mesh;
@@ -122,7 +133,12 @@ static Drawn* type(Stage& s, const char* words, const char* fontFile, const mat4
         t->size(fine);
         t->text(words);
         t->fill((uint8_t)std::lround(255.f * colour.x), (uint8_t)std::lround(255.f * colour.y), (uint8_t)std::lround(255.f * colour.z));
-        if (t->bounds(&x, &y, &wide, &tall) != tvg::Result::Success || wide <= 0.f || tall <= 0.f) return nullptr;
+        bool measured = t->bounds(&x, &y, &wide, &tall) == tvg::Result::Success && wide > 0.f && tall > 0.f;
+        if (measured && wide > 4096.f) {   // (a line too long for one picture is set smaller)
+            t->size(fine * 4096.f / wide);
+            measured = t->bounds(&x, &y, &wide, &tall) == tvg::Result::Success;
+        }
+        if (!measured) return tvg::Paint::rel(t), nullptr;
         t->translate(-x, -y);
         *w = 2 * (int)std::ceil(0.5f * wide);
         *h = 2 * (int)std::ceil(0.5f * tall);

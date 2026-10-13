@@ -41,6 +41,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <fstream>
+#include <csignal>
 #include <map>
 #include <functional>
 #include <string>
@@ -98,7 +99,7 @@ struct Stage {
     std::vector<MaterialInstance*> by_sun;
     struct Matte { Scene* scene; View* view; Texture* picture; bool soft; Camera* eye; utils::Entity on; mat4f onPlace; };
     std::vector<Matte> mattes;   // the mattes: each a picture taken by its own eye, drawn before all else (matte); soft: some thing reads it blurred
-    struct Cut { MaterialInstance* look; int slot, matte; };
+    struct Cut { MaterialInstance* look; int slot, matte; float use, soft; };
     std::vector<Cut> cuts;       // which look reads which matte (matted): told where the matte's eye is before every picture
     Texture* white = nullptr;    // a white point: the matte of a thing that nothing cuts
     std::vector<Made> made;   // every thing put on the stage: of which mesh, at which of that mesh's places (a film moves them: `move`)
@@ -681,20 +682,20 @@ static int matte(Stage& s, Mesh* m, std::vector<mat4f> places, Texture* picture 
 // blurred, in pixels of the screen (of the matte's own picture, if it is on a thing; 0: as sharp as the matte is). Up to four mattes cut one thing (call again): what
 // all of them leave is seen. false: the look's material cannot be cut (it does not read mattes: matte.glsl), or four cut it already.
 static bool matted(Stage& s, MaterialInstance* look, int matte, bool inside = true, float soft = 0.f) {
-    struct Cut { float4 use{0.f}, soft{0.f}; int n = 0; };
-    static std::map<MaterialInstance*, Cut> cuts;
     static const char* const names[] = {"matte0", "matte1", "matte2", "matte3"};
-    Cut& c = cuts[look];
-    if (c.n == 4 || !look->getMaterial()->hasParameter("matteUse")) return false;
-    look->setParameter(names[c.n], s.mattes[(size_t)matte].picture,
+    float4 use{0.f}, softs{0.f};   // (what cuts this look already: the stage's own list says)
+    int n = 0;
+    for (const Stage::Cut& c : s.cuts)
+        if (c.look == look) use[c.slot] = c.use, softs[c.slot] = c.soft, ++n;
+    if (n == 4 || !look->getMaterial()->hasParameter("matteUse")) return false;
+    look->setParameter(names[n], s.mattes[(size_t)matte].picture,
                        TextureSampler(TextureSampler::MinFilter::LINEAR_MIPMAP_LINEAR, TextureSampler::MagFilter::LINEAR, TextureSampler::WrapMode::CLAMP_TO_EDGE));
-    c.use[c.n] = inside ? 1.f : -1.f;
-    c.soft[c.n] = std::log2(1.f + 2.f * std::max(soft, 0.f));   // (a level of the matte's picture: each is twice as coarse as the one before)
-    look->setParameter("matteUse", c.use);
-    look->setParameter("matteSoft", c.soft);
+    use[n] = inside ? 1.f : -1.f;
+    softs[n] = std::log2(1.f + 2.f * std::max(soft, 0.f));   // (a level of the matte's picture: each is twice as coarse as the one before)
+    look->setParameter("matteUse", use);
+    look->setParameter("matteSoft", softs);
     if (soft > 0.f) s.mattes[(size_t)matte].soft = true;
-    s.cuts.push_back({look, c.n, matte});
-    ++c.n;
+    s.cuts.push_back({look, n, matte, use[n], softs[n]});
     return true;
 }
 
@@ -794,8 +795,11 @@ static bool film(Stage& s, const char* path, int pictures, const std::function<v
         const Stage::Sound a = tells();
         const double fast = std::fabs(a.speed);
         char how[700];
+        std::string halved;   // (ffmpeg's atempo goes no slower than half at a time)
+        double left = fast;
+        for (; left < 0.5; left /= 0.5) halved += "atempo=0.5,";
         std::snprintf(how, sizeof how, "[%d:a]aresample=48000,atrim=start=%g:end=%g,asetpts=PTS-STARTPTS,%s%satempo=%g,aloop=loop=-1:size=%ld,atrim=start=%g%s%s,asetpts=PTS-STARTPTS,adelay=delays=%ld:all=1[a%d];",
-                      n + 1, a.from, a.to, a.speed < 0.0 ? "areverse," : "", fast < 0.5 ? "atempo=0.5," : "", fast < 0.5 ? fast / 0.5 : fast, std::lround((a.to - a.from) / fast * 48000.0), a.into,
+                      n + 1, a.from, a.to, a.speed < 0.0 ? "areverse," : "", halved.c_str(), left, std::lround((a.to - a.from) / fast * 48000.0), a.into,
                       a.lasts < 0.0 ? "" : ":duration=", a.lasts < 0.0 ? "" : std::to_string(a.lasts).c_str(), std::lround(a.on * 1000.0), n + 1);
         files += " -i " + quoted(a.file);
         each += how;
@@ -803,6 +807,7 @@ static bool film(Stage& s, const char* path, int pictures, const std::function<v
     }
     const std::string sound = n ? files + " -filter_complex \"" + each + all + "amix=inputs=" + std::to_string(n) + ":normalize=0:duration=longest,alimiter[a]\" -map 0:v -map '[a]' -c:a aac -b:a 160k -t " + std::to_string(pictures / 60.0) : "";
     const std::string cmd = "ffmpeg -loglevel error -y -f rawvideo -pix_fmt rgba -s " + std::to_string(s.w) + "x" + std::to_string(s.h) + " -r 60 -i -" + sound + " -c:v libx264 -crf 17 -pix_fmt yuv420p -movflags +faststart " + quoted(path);
+    std::signal(SIGPIPE, SIG_IGN);   // (if ffmpeg gives up, writing to it fails and that is told, instead of this program ending with it)
     FILE* to = popen(cmd.c_str(), "w");
     if (!to) return false;
     std::vector<uint8_t> pic((size_t)s.w * s.h * 4);

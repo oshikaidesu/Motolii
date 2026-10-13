@@ -18,6 +18,8 @@ int main(int argc, char** argv) {
     s.camera->lookAt({0.f, 0.f, 6.f}, {0.f, 0.f, 0.f}, {0, 1, 0});
     s.camera->setProjection(30.0, 1080.0 / 1920.0, 0.05, 60.0, Camera::Fov::VERTICAL);
     if (!room(s, "out/small_studio/small_studio_ibl.ktx", 60000.f)) return fail("out/small_studio/small_studio_ibl.ktx");
+    static LinearToneMapper as_it_is;   // (a film, a photo, typed words keep the colours they came with)
+    s.view->setColorGrading(ColorGrading::Builder().toneMapper(&as_it_is).build(*s.engine));
     Doc* d = doc_open(s, argv[1]);
     if (!d) return fail("the document could not be opened");
     for (std::string line; std::getline(std::cin, line);) {
@@ -33,7 +35,10 @@ int main(int argc, char** argv) {
         const auto t0 = std::chrono::steady_clock::now();
         bool ok = true, known = true;
         d->trouble.clear();
-        if (call == "add" && w.size() == 3) { const int made = doc_add(*d, w[1].c_str(), w[2].c_str()); if ((ok = made > 0)) std::printf("thing %d\n", made); }
+        if (call == "add" && w.size() >= 3) {   // (the file is the rest of the line: its name may have spaces)
+            const int made = doc_add(*d, w[1].c_str(), line.substr(line.find(w[2], line.find(w[1]) + w[1].size())).c_str());
+            if ((ok = made > 0)) std::printf("thing %d\n", made);
+        }
         else if (call == "remove" && w.size() == 2) ok = doc_remove(*d, thing());
         else if (call == "set" && w.size() == 4) {
             const int n = thing(), keys = numbers ? doc_keys(*d, n, w[2].c_str()) : 0;
@@ -61,6 +66,7 @@ int main(int argc, char** argv) {
         }
         else if (call == "write" && w.size() == 2) {
             if (!(ok = ends(1, ".mp4"))) d->trouble = "a film is written as an .mp4";
+            else if (!(ok = std::filesystem::is_directory(std::filesystem::absolute(w[1]).parent_path()))) d->trouble = "there is no such folder";
             else if (!(ok = film(s, w[1].c_str(), (int)std::lround(doc_seconds(*d) * 60.0), [](float) {}))) d->trouble = "the file could not be written";
         }
         else if (call == "time" && w.size() == 1) clock(s, 120, [](float) {});
