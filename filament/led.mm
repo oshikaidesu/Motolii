@@ -1,7 +1,8 @@
 // led.mm: glass things on paper, led by After Effects' motion: where each thing is at a moment, and where the eye
 // is, is read from the layer of its name in led.json (a Lottie file: a flat layer on a curved path with easing,
 // turning to face its way; 3D layers: a child riding on a turning parent and rising off the paper, a thing whose two
-// keys are looped for ever by an expression; a camera drifting and zooming). ThorVG works the motion out (motion.h;
+// keys are looped for ever by an expression, a thing flying arches over the paper (a path curved in space); a camera drifting
+// and zooming). ThorVG works the motion out (motion.h;
 // the file goes to it as it is); nothing of the motion is written here.
 //   ./led.sh  ->  out/wgpu_kit/out/led.png        ./led.sh film  ->  out/wgpu_kit/out/led.mp4
 #include "kit.h"
@@ -31,6 +32,7 @@ int main(int argc, char** argv) {
         {"runner", torus(0.45f, 0.17f), standing(0.62f, 0.25f * TAU)},
         {"rider", gem(0.5f), standing(0.43f, 0.f)},
         {"hopper", gem(0.36f), standing(0.31f, 0.4f)},
+        {"flyer", gem(0.42f), standing(0.36f, 0.2f)},
     };
     for (const Thing& t : things) {
         if (!thick_glass(s, t.mesh, {mat4f{}})) return fail("thick_glass.filamat");
