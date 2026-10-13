@@ -114,6 +114,14 @@ int motolii_way(Motolii* m, int thing, const char* name, double at, const char* 
 int motolii_define(Motolii* m, const char* way, const char* expression) { return by_hand(m, [=] { return (int)(doc_define(doc(m), way, expression)); }); }
 const char* motolii_ways(Motolii* m) { return by_hand(m, [m] { return (m->listed = doc_ways(*m->d)).c_str(); }); }
 int motolii_value(Motolii* m, int thing, const char* name, double at, double* is) { return by_hand(m, [=] { return (int)(doc_value(doc(m), thing, name, at, is)); }); }
+int motolii_things(Motolii* m, int* things, int room) {
+    return by_hand(m, [=] { const std::vector<int> all = doc_things(*m->d); for (int i = 0; i < room && i < (int)all.size(); ++i) things[i] = all[(size_t)i]; return (int)all.size(); });
+}
+const char* motolii_word(Motolii* m, int thing, const char* name) { return by_hand(m, [=] { return (m->word = doc_word(*m->d, thing, name)).c_str(); }); }
+double motolii_lasts(Motolii* m, int thing) { return by_hand(m, [=] { return doc_lasts(*m->d, thing); }); }
+int motolii_key_moments(Motolii* m, int thing, const char* name, double* at, int room) {
+    return by_hand(m, [=] { const std::vector<double> all = doc_key_moments(*m->d, thing, name); for (int i = 0; i < room && i < (int)all.size(); ++i) at[i] = all[(size_t)i]; return (int)all.size(); });
+}
 int motolii_undo(Motolii* m) { return by_hand(m, [=] { return (int)(doc_undo(doc(m))); }); }
 int motolii_redo(Motolii* m) { return by_hand(m, [=] { return (int)(doc_redo(doc(m))); }); }
 

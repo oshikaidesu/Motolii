@@ -50,6 +50,10 @@ class Motolii {
   late final _unkey = _lib.lookupFunction<Int32 Function(_P, Int32, _S, Double), int Function(_P, int, _S, double)>('motolii_unkey');
   late final _way = _lib.lookupFunction<Int32 Function(_P, Int32, _S, Double, _S), int Function(_P, int, _S, double, _S)>('motolii_way');
   late final _value = _lib.lookupFunction<Int32 Function(_P, Int32, _S, Double, Pointer<Double>), int Function(_P, int, _S, double, Pointer<Double>)>('motolii_value');
+  late final _things = _lib.lookupFunction<Int32 Function(_P, Pointer<Int32>, Int32), int Function(_P, Pointer<Int32>, int)>('motolii_things');
+  late final _word = _lib.lookupFunction<_S Function(_P, Int32, _S), _S Function(_P, int, _S)>('motolii_word');
+  late final _lasts = _lib.lookupFunction<Double Function(_P, Int32), double Function(_P, int)>('motolii_lasts');
+  late final _keyMoments = _lib.lookupFunction<Int32 Function(_P, Int32, _S, Pointer<Double>, Int32), int Function(_P, int, _S, Pointer<Double>, int)>('motolii_key_moments');
   late final _undo = _lib.lookupFunction<Int32 Function(_P), int Function(_P)>('motolii_undo');
   late final _redo = _lib.lookupFunction<Int32 Function(_P), int Function(_P)>('motolii_redo');
   late final _trouble = _lib.lookupFunction<_S Function(_P), _S Function(_P)>('motolii_trouble');
@@ -95,6 +99,32 @@ class Motolii {
     final ok = _value(_m, thing, s[0], at, out) != 0, v = out.value;
     malloc.free(out);
     return ok ? v : null;
+  });
+  /// The numbers of the things there are.
+  List<int> get things {
+    var room = 64;
+    while (true) {
+      final out = malloc<Int32>(room);
+      final n = _things(_m, out, room), all = [for (var i = 0; i < n && i < room; i++) out[i]];
+      malloc.free(out);
+      if (n <= room) return all;
+      room = n;
+    }
+  }
+
+  /// A thing's word by name (kind, file, shape, blend, text, fill); '' if it has none.
+  String word(int thing, String name) => _with([name], (s) => _word(_m, thing, s[0]).toDartString());
+
+  /// How long a thing is on, in seconds; below 0: for good.
+  double lasts(int thing) => _lasts(_m, thing);
+
+  /// The moments of a value's keys (none if the value stays).
+  List<double> keyMoments(int thing, String name) => _with([name], (s) {
+    const room = 256;
+    final out = malloc<Double>(room);
+    final n = _keyMoments(_m, thing, s[0], out, room), all = [for (var i = 0; i < n && i < room; i++) out[i]];
+    malloc.free(out);
+    return all;
   });
   bool undo() => _undo(_m) != 0;
   bool redo() => _redo(_m) != 0;

@@ -377,6 +377,24 @@ static bool doc_define(Doc& d, const char* name, const char* expression) {
     }
     return doc_change(d, sqlite3_mprintf("insert into way values(%Q, %Q) on conflict do update set goes = excluded.goes", name, expression));
 }
+// What a shell reads to draw its lists: the things there are, how long each is on (its duration; below 0: for good,
+// going round), and the moments of a value's keys (a value with one fact has none).
+static std::vector<int> doc_things(Doc& d) {
+    std::vector<int> all;
+    doc_rows(d, sqlite3_mprintf("select thing from fact where name = 'kind' order by thing"), [&](sqlite3_stmt* row) { all.push_back(sqlite3_column_int(row, 0)); });
+    return all;
+}
+static double doc_lasts(Doc& d, int thing) {
+    const double lasts = doc_number(d, thing, "duration", 0, -1);
+    return lasts > 0.0 ? lasts : -1.0;
+}
+static std::vector<double> doc_key_moments(Doc& d, int thing, const char* name) {
+    std::vector<double> at;
+    doc_rows(d, sqlite3_mprintf("select at from fact where thing = %d and name = %Q and (select count(*) from fact where thing = %d and name = %Q) > 1 order by at", thing, name, thing, name),
+             [&](sqlite3_stmt* row) { at.push_back(sqlite3_column_double(row, 0)); });
+    return at;
+}
+
 // What a value is where the document does not say; and a value at a moment, as the stage is told it.
 static double doc_usual(const char* name) { return !strcmp(name, "size") || !strcmp(name, "speed") ? 1.0 : !strcmp(name, "duration") ? -1.0 : 0.0; }
 static bool doc_value(Doc& d, int thing, const char* name, double at, double* is) { return doc_knows(d, thing, name) && (*is = doc_number(d, thing, name, at, doc_usual(name)), true); }

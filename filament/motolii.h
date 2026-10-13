@@ -32,6 +32,14 @@ int motolii_way(Motolii* m, int thing, const char* name, double at, const char* 
 int motolii_define(Motolii* m, const char* way, const char* expression);
 const char* motolii_ways(Motolii* m);                              /* the names of the ways the document knows (until the next call) */
 int motolii_value(Motolii* m, int thing, const char* name, double at, double* is);   /* a value at a moment, as the stage is told it */
+/* What a shell reads to draw its lists. motolii_things: the numbers of the things there are (as many as there is room
+   for; it returns how many there are). motolii_word: a thing's word by name (kind, file, shape, blend, text, fill; ""
+   if it has none; until the next call). motolii_lasts: how long a thing is on, in seconds (below 0: for good).
+   motolii_key_moments: the moments of a value's keys (none if the value stays). */
+int motolii_things(Motolii* m, int* things, int room);
+const char* motolii_word(Motolii* m, int thing, const char* name);
+double motolii_lasts(Motolii* m, int thing);
+int motolii_key_moments(Motolii* m, int thing, const char* name, double* at, int room);
 int motolii_undo(Motolii* m);
 int motolii_redo(Motolii* m);
 

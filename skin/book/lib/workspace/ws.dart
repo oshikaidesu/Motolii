@@ -4,6 +4,7 @@
 // what you touch or read round, colour flat and opaque, one lime accent, each kind of thing wearing its own hue.
 import 'package:flutter/widgets.dart';
 
+import '../motolii.dart';
 import '../tokens.dart';
 
 /// The window's own sizes and colours. A seat names one of these; it never types a number that is the window's business.
@@ -91,7 +92,50 @@ class Ws extends ChangeNotifier {
   }
 
   final layers = <WsLayer>[];
-  static const fps = 30, duration = 240;
+
+  /// The composition's rate and length in frames (the sample's; a joined document's own length).
+  static int fps = 30, duration = 240;
+
+  /// The inside this window is joined to (motolii.dart), if it is: the layers are then the document's things, a
+  /// change is a call to it, and the playhead is its moment. null: the sample's mock document.
+  Motolii? _inside;
+  Motolii? get inside => _inside;
+  void join(Motolii inside) {
+    _inside = inside;
+    reread();
+  }
+
+  /// The values a thing moves by: a key on any of them is a key on its bar.
+  static const moving = ['x', 'y', 'z', 'rotate', 'size'];
+
+  /// The document read again, after any change to it: what the seats list is what the document holds.
+  void reread() {
+    final m = _inside;
+    if (m == null) return;
+    duration = (m.seconds * fps).round().clamp(1, 1 << 20);
+    layers
+      ..clear()
+      ..addAll([
+        for (final t in m.things)
+          () {
+            final kind = m.word(t, 'kind'), file = m.word(t, 'file'), from = ((m.value(t, 'start', 0) ?? 0) * fps).round(), lasts = m.lasts(t);
+            final name = switch (kind) {
+              'text' => m.word(t, 'text').isEmpty ? file.split('/').last : m.word(t, 'text'),
+              'glass' => 'Glass ${m.word(t, 'shape')}',
+              _ => file.split('/').last,
+            };
+            final keys = <int>{for (final v in moving) ...m.keyMoments(t, v).map((s) => (s * fps).round())}.toList()..sort();
+            return WsLayer('$t', name, switch (kind) {
+              'text' => WsKind.text,
+              'film' || 'picture' => WsKind.image,
+              _ => WsKind.shape,
+            }, from, lasts < 0 ? duration : (from + (lasts * fps).round()).clamp(from + 1, duration), keys);
+          }(),
+      ]);
+    if (layers.every((l) => l.id != _sel)) _sel = layers.firstOrNull?.id;
+    _keys.clear();
+    notifyListeners();
+  }
 
   /// The inside's own picture of the stage, as a Flutter texture, when the window is joined to it (null: the stand-in art).
   int? _stageTexture;
@@ -135,6 +179,7 @@ class Ws extends ChangeNotifier {
     final v = f.clamp(0, duration);
     if (v == _frame) return;
     _frame = v;
+    if (!_playing) _inside?.at(v / fps);   // (standing: the stage goes to the moment the playhead is put at)
     notifyListeners();
   }
 
@@ -143,6 +188,8 @@ class Ws extends ChangeNotifier {
   set playing(bool p) {
     if (p == _playing) return;
     _playing = p;
+    if (p) _inside?.at(_frame / fps);
+    _inside?.play(p);   // (the inside keeps the clock; the playhead follows its moment: timeline.dart)
     notifyListeners();
   }
 

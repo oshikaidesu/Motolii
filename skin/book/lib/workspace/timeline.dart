@@ -67,6 +67,11 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
 
   void _tick(Duration e) {
     final ws = _ws!;
+    if (ws.inside case final inside?) {   // (joined: the inside keeps the clock, the playhead shows its moment)
+      _last = (inside.now * Ws.fps).round().clamp(0, Ws.duration);
+      ws.frame = _last;
+      return;
+    }
     if (ws.frame != _last) {
       _base = ws.frame;
       _t0 = e;
@@ -441,7 +446,7 @@ class _Header extends StatelessWidget {
               Text(tc[2], style: big.copyWith(color: T.ink(WsT.accent))),
               const SizedBox(width: 8),
               if (roomy) ...[Text('/ ${ws.timecode(Ws.duration)}', style: T.value(Grey.g56)), const SizedBox(width: 10)],
-              const _Chip('${Ws.fps} fps'),
+              _Chip('${Ws.fps} fps'),
               const SizedBox(width: 12),
               if (mid && layer != null)
                 Flexible(

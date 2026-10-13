@@ -45,7 +45,7 @@ class _WorkspaceState extends State<Workspace> {
     final id = await inside.texture();
     if (!mounted) return;
     if (id >= 0) _ws.stageTexture = id;
-    _ws.addListener(() => inside.play(_ws.playing));
+    _ws.join(inside);
   }
 
   @override

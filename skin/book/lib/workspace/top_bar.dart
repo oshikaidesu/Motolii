@@ -33,7 +33,7 @@ class _WsTopBarState extends State<WsTopBar> {
           const SizedBox(width: 10),
           const _Chip('1920 × 1080'),
           const SizedBox(width: 4),
-          const _Chip('${Ws.fps} fps'),
+          _Chip('${Ws.fps} fps'),
           const SizedBox(width: 4),
           _Chip(ws.timecode(Ws.duration)),
           const Spacer(),
