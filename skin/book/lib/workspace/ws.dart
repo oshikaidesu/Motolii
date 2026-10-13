@@ -126,7 +126,7 @@ class Ws extends ChangeNotifier {
             final kind = m.word(t, 'kind'), file = m.word(t, 'file'), from = ((m.value(t, 'start', 0) ?? 0) * fps).round(), lasts = m.lasts(t);
             final name = switch (kind) {
               'text' => m.word(t, 'text').isEmpty ? file.split('/').last : m.word(t, 'text'),
-              'glass' => 'Glass ${m.word(t, 'shape')}',
+              'solid' when m.word(t, 'shape').isNotEmpty => m.word(t, 'shape').replaceRange(0, 1, m.word(t, 'shape')[0].toUpperCase()),
               _ => file.split('/').last,
             };
             final keys = <int>{for (final v in moving) ...m.keyMoments(t, v).map((s) => (s * fps).round())}.toList()..sort();

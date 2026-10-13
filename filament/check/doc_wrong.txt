@@ -1,4 +1,4 @@
-add glass ring
+add solid ring
 set 1 x 0.1
 set 1 x 0.2
 set 1 x 0.3
@@ -17,7 +17,7 @@ redo
 redo
 redo
 add film ../vid/no_such_file.mp4
-add glass banana
+add solid banana
 add picture ../vid/no_such_file.json
 set 99 x 1
 remove 99
@@ -52,7 +52,7 @@ key 2 x 1e30 0
 set 2 x 0.5 0.7
 set 2 x abc
 undo 3
-add glass
+add solid
 unkey 2 x 5
 key 2 x 1 0.3
 key 2 x 2 0.6

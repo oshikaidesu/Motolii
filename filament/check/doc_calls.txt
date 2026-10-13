@@ -6,7 +6,8 @@ set 2 keyed 1
 set 2 size 1.4
 set 2 y 0.6
 still out/e_1.png
-add glass ring
+add solid ring
+say 3 fill glass
 set 3 y -0.7
 set 3 z 1
 key 2 x 0 -0.6

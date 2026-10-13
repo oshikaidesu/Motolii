@@ -42,6 +42,17 @@ final _field = [
   [for (var i = 0; i < 12; i++) HSLColor.fromAHSL(1, 0, 0, i / 11).toColor()],
 ];
 
+/// Joined: a fill that is not a colour. Glass is a material a solid is filled with, not a thing of its own.
+final _glass = _Make('Glass', DockG.radial, WsT.toneShape, '', 'Material · thick glass, for a solid');
+
+/// Joined: the picked thing's fill told to the document (a colour as six digits, or a material's name). Not done: the foot says why.
+void _fill(DockCtx c, String word) {
+  final m = c.ws.inside!, t = int.tryParse(c.ws.selected ?? '');
+  final done = t != null && m.say(t, 'fill', word);
+  c.set(() => done ? c.mem.trouble.remove('fill') : c.mem.trouble['fill'] = t == null ? 'Nothing is picked' : m.trouble);
+  if (done) c.ws.reread();
+}
+
 class ColorsShelf extends StatelessWidget {
   const ColorsShelf(this.c, {super.key});
   final DockCtx c;
@@ -64,7 +75,20 @@ class ColorsShelf extends StatelessWidget {
         );
       },
     );
+    final joined = c.ws.inside != null;
     final blocks = <(Widget, double)>[
+      if (joined && chip == 'All' && c.hit('glass material'))
+        (
+          block([
+            DockSection('Materials', count: 1, hue: _glass.hue),
+            const SizedBox(height: WsT.gutter),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: SizedBox(width: 74, height: 70, child: _MakeTile(_glass, c)),
+            ),
+          ]),
+          1.6,
+        ),
       if ((chip == 'All' || chip == 'Used') && c.hit('used'))
         (block([DockSection('Used here', count: used.length, hue: WsT.accent), _Strip('used', used.values.toList(), c, names: used.keys.toList())]), 2.0),
       if (chip != 'Used' && pals.isNotEmpty)
@@ -112,7 +136,23 @@ class ColorsShelf extends StatelessWidget {
               ? DockEmpty(c.query)
               : DockMasonry(minColumn: 300, weights: [for (final b in blocks) b.$2], children: [for (final b in blocks) b.$1]),
         ),
-        if (sel != null)
+        if (joined && c.sel == _glass.name)
+          DockFooter(
+            preview: DockBadge(_glass.g, _glass.hue, size: 34),
+            title: _glass.name,
+            meta: c.mem.trouble['fill'] ?? _glass.what,
+            action: 'Fill',
+            onAction: () => _fill(c, 'glass'),
+          )
+        else if (joined && sel != null)
+          DockFooter(
+            preview: ColoredBox(color: sel.$2),
+            title: _hex(sel.$2),
+            meta: c.mem.trouble['fill'] ?? sel.$1,
+            action: 'Fill',
+            onAction: () => _fill(c, _hex(sel.$2).substring(1).toLowerCase()),
+          )
+        else if (sel != null)
           DockFooter(
             preview: ColoredBox(color: sel.$2),
             title: _hex(sel.$2),
@@ -313,20 +353,21 @@ final _makes = <(String, List<_Make>)>[
   ),
 ];
 
-/// Joined: what the inside makes that the sample's tiles do not name (glass), and how a tile is asked of it (kind, then its file or shape).
-final _glass = (
-  'Glass',
+/// Joined: the inside's own 3D shapes, which the sample's tiles do not name, and how a tile is asked of it (kind, then its file or shape).
+/// What a solid is made of (a colour, glass) is not a tile here: it is its fill, given on the Colors shelf.
+final _solids = (
+  '3D',
   [
-    _Make('Ring', DockG.radial, WsT.toneShape, '', 'Thick glass ring'),
-    _Make('Gem', DockG.polygon, WsT.toneShape, '', 'Cut glass gem'),
-    _Make('Cube', DockG.rect, WsT.toneShape, '', 'Glass cube'),
+    _Make('Ring', DockG.radial, WsT.toneShape, '', 'A solid ring'),
+    _Make('Gem', DockG.polygon, WsT.toneShape, '', 'A cut solid'),
+    _Make('Cube', DockG.rect, WsT.toneShape, '', 'A round-edged cube'),
   ],
 );
 const _asked = {
   'Text': ('text', '/System/Library/Fonts/Supplemental/Arial Unicode.ttf'),
-  'Ring': ('glass', 'ring'),
-  'Gem': ('glass', 'gem'),
-  'Cube': ('glass', 'cube'),
+  'Ring': ('solid', 'ring'),
+  'Gem': ('solid', 'gem'),
+  'Cube': ('solid', 'cube'),
 };
 
 /// A tile made on the stage as a new thing, picked. Not done: the foot of the shelf says why.
@@ -343,7 +384,7 @@ class CreateShelf extends StatelessWidget {
   final DockCtx c;
   @override
   Widget build(BuildContext context) {
-    final joined = c.ws.inside != null, makes = joined ? [..._makes, _glass] : _makes;
+    final joined = c.ws.inside != null, makes = joined ? [..._makes, _solids] : _makes;
     final groups = [
       for (final (g, items) in makes)
         if (c.chip == 'All' || c.chip == g) (g, items.where((m) => c.hit(m.name)).toList()),

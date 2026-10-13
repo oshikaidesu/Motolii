@@ -96,7 +96,8 @@ class Motolii {
   bool play(bool on) => _play(_m, on ? 1 : 0) != 0;
   bool at(double seconds) => _at(_m, seconds) != 0;
 
-  /// A new thing (film, picture, text, solid, glass) from a file (a glass: its shape): its number, 0 if it was not made.
+  /// A new thing (film, picture, text, solid) from a file (a solid: a file, or ring, gem or cube): its number, 0 if it was not made.
+  /// What a solid is made of is its `fill`: a colour, or `glass`.
   int add(String kind, String file) => _with([kind, file], (s) => _add(_m, s[0], s[1]));
   bool remove(int thing) => _remove(_m, thing) != 0;
   bool set(int thing, String name, double number) => _with([name], (s) => _set(_m, thing, s[0], number)) != 0;

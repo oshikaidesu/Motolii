@@ -13,7 +13,7 @@
 #include <vector>
 
 static const char* const calls =
-    "  add film <file> | add picture <an After Effects file, a .jpg, a .png> | add text <font.ttf> | add solid <file.glb> | add glass ring|gem|cube\n"
+    "  add film <file> | add picture <an After Effects file, a .jpg, a .png> | add text <font.ttf> | add solid <file.glb>|ring|gem|cube   (say N fill glass: it is glass)\n"
     "  remove <thing> | set <thing> <name> <number> | say <thing> <name> <word> | key <thing> <name> <at> <number> | unkey <thing> <name> <at>\n"
     "  way <thing> <name> <at> <a way, and its numbers> | ways | define <a way's name> <its expression> | value <thing> <name> <at>\n"
     "  undo | redo | list | at <seconds> | still <file.png> | write <file.mp4> | time\n";

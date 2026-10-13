@@ -150,6 +150,14 @@ String _hex(Color c) => '#${(c.toARGB32() & 0xFFFFFF).toRadixString(16).padLeft(
 /// The paint each layer wears on the stage, so the Inspector's Fill names the colour you see.
 const _fills = {'blob': ArtInk.orange, 'ring': ArtInk.lime, 'title': ArtInk.cream, 'chips': ArtInk.pink, 'confetti': ArtInk.pink, 'bg': ArtInk.blue};
 
+/// What the Inspector's Fill names: joined, the document's word for the thing (a colour, or the material Glass); else the sample's paint.
+String? _fillWord(Ws ws, String? id, Color? sample) {
+  final m = ws.inside;
+  if (m == null) return sample == null ? null : _hex(sample);
+  final t = int.tryParse(id ?? ''), f = t == null ? '' : m.word(t, 'fill');
+  return f.isEmpty ? null : (f == 'glass' ? 'Glass' : '#${f.toUpperCase()}');
+}
+
 /// The selected layer's transform as the stage draws it at this frame, in the Inspector's ids.
 Map<String, double> _transform(Ws ws, String? id) {
   if (ws.inside case final m?) {   // (joined: the document's own values, in the composition's points)
@@ -257,7 +265,7 @@ class _InspectorSeat extends StatelessWidget {
         title: l?.name,
         onRoute: ws.route,
         values: _transform(ws, l?.id),
-        strs: {if (fill != null) 'fill': _hex(fill)},
+        strs: {'fill': ?_fillWord(ws, l?.id, fill)},
         keyMarks: _keyMarks(ws, l?.id),
         onValues: ws.inside == null ? null : (changed, {required live}) => _write(ws, l?.id, changed, live: live),
         onDrop: ws.inside?.tryDrop,

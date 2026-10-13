@@ -1,6 +1,7 @@
 // solid.h: a 3D file (glTF: .glb, .gltf) in the scene. All of it is Filament's own: its loader (gltfio) reads the
 // file, its ready-made materials for glTF give the looks the file names (lit by the stage's room), and the file's own
 // movement, if it has one, goes on as the stage's time does (gltfio's Animator).
+#include <filament/Color.h>
 #include <filesystem>
 #include <gltfio/Animator.h>
 #include <gltfio/AssetLoader.h>
@@ -58,6 +59,28 @@ static Solid* solid(Stage& s, const char* file, const mat4f& place, float high) 
         };
     }
     return d;
+}
+
+// A plain look in one colour (floor_lit.mat: lit by the stage's room); and every face of a file's shape given it, the
+// looks the file names set aside.
+static void plain(MaterialInstance* look, float3 colour) {
+    look->setParameter("color", float4{Color::toLinear<ACCURATE>(sRGBColor{colour}), 1.f});
+    look->setParameter("roughness", 0.6f);
+}
+static void solid_fill(Stage& s, Solid* d, float3 colour) {
+    static Material* lit = nullptr;
+    if (!lit) {
+        const std::vector<uint8_t> pkg = load_file("floor_lit.filamat");
+        lit = pkg.empty() ? nullptr : Material::Builder().package(pkg.data(), pkg.size()).build(*s.engine);
+    }
+    if (!lit) return;
+    MaterialInstance* look = lit->createInstance();
+    plain(look, colour);
+    auto& faces = s.engine->getRenderableManager();
+    for (size_t i = 0; i < d->made->getRenderableEntityCount(); ++i) {
+        const auto one = faces.getInstance(d->made->getRenderableEntities()[i]);
+        for (size_t part = 0; part < faces.getPrimitiveCount(one); ++part) faces.setMaterialInstanceAt(one, part, look);
+    }
 }
 
 // Whether it is in the picture; and taken off the stage for good.

@@ -22,7 +22,7 @@ way: NOT done: Random is said alone or with its 5 numbers (seed grain center_u c
 way: NOT done: Bezier is said alone or with its 4 numbers (x1 y1 x2 y2): x1 and x2 are from 0 to 1
 define: NOT done: Bounce is one of the nine kinds already
   0.6000
-  1 kind at 0.0: glass
+  1 kind at 0.0: solid
   1 shape at 0.0: ring
   1 x at 0.0: 1.0, then Random
   1 x at 2.0: 3.0, then overshoot

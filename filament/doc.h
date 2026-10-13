@@ -18,8 +18,9 @@
 //            begin, speed           a film's: from where in itself, how fast (below 0: backwards)
 //            keyed                  a film's: 1 if its green ground is keyed out
 //   words    blend                  how it lies on what is behind: normal | add | multiply | screen
-//            file, shape            what it was made from (add says them): a file (a text's: its font); a glass's shape: ring | gem | cube
-//            text, fill             a text's: what it says (to the end of the line), and its colour as six digits (ff3366)
+//            file, shape            what it was made from (add says them): a file (a text's: its font); or, a solid's, one of the kit's shapes: ring | gem | cube
+//            text                   a text's: what it says (to the end of the line)
+//            fill                   what its surface is: a text's colour as six digits (ff3366); a solid's: a colour, or the material glass
 #include "drawn.h"
 #include "interp.h"
 #include "solid.h"
@@ -34,20 +35,21 @@ struct Doc {
     struct Keys { std::vector<double> at, value; std::vector<Interp> interp; std::vector<std::string> own; };   // (own: a way defined in the document, where the stretch is not one of the nine kinds)
     std::map<std::pair<int, std::string>, Keys> moving;   // a value's keys, and the way of the stretch after each; read from the facts when first asked for, forgotten at every change
     std::map<std::string, sqlite3_stmt*> named, goes;     // a way by its name, and by its expression: made ready once (SQLite works it out)
-    struct Shown { std::string of; Video* film = nullptr; Drawn* drawn = nullptr; Solid* solid = nullptr; Mesh* glass = nullptr; bool in = true; };
+    struct Shown { std::string of; Video* film = nullptr; Drawn* drawn = nullptr; Solid* solid = nullptr; Mesh* shape = nullptr; bool in = true; };
     std::map<int, Shown> shown;   // the things as they are on the stage, and what each was made of
 };
 // What a thing may be told, by name: which kinds of thing have it, a number between which two (or one of which
 // words), and whether it can move (take keys).
-static const char* const doc_kinds = "film picture text solid glass";   // (the kinds of thing)
+static const char* const doc_kinds = "film picture text solid";   // (the kinds of thing)
+static const char* const doc_shapes = "ring gem cube";             // (the kit's own shapes a solid may be)
 struct DocValue { const char* name; const char* kinds; double low, high; bool moves; const char* words; };
 static const DocValue doc_values[] = {
     {"x", doc_kinds, -1e4, 1e4, true, nullptr}, {"y", doc_kinds, -1e4, 1e4, true, nullptr}, {"z", doc_kinds, -1e4, 1e4, true, nullptr},
     {"rotate", doc_kinds, -1e6, 1e6, true, nullptr}, {"size", doc_kinds, 1e-3, 1e4, true, nullptr},
     {"start", doc_kinds, 0, 1e6, false, nullptr}, {"duration", doc_kinds, 1e-3, 1e6, false, nullptr},
     {"begin", "film", 0, 1e6, false, nullptr}, {"speed", "film", -100, 100, false, nullptr}, {"keyed", "film", 0, 1, false, nullptr},
-    {"blend", "film picture text", 0, 0, false, "normal add multiply screen"}, {"file", "film picture solid text", 0, 0, false, ""}, {"shape", "glass", 0, 0, false, "ring gem cube"},
-    {"text", "text", 0, 0, false, ""}, {"fill", "text", 0, 0, false, ""}};
+    {"blend", "film picture text", 0, 0, false, "normal add multiply screen"}, {"file", "film picture solid text", 0, 0, false, ""}, {"shape", "solid", 0, 0, false, doc_shapes},
+    {"text", "text", 0, 0, false, ""}, {"fill", "text solid", 0, 0, false, ""}};
 static bool doc_among(const std::string& words, const std::string& one) { return (" " + words + " ").find(" " + one + " ") != std::string::npos; }
 
 // Rows of the document: `each` is told every row of what is asked (in SQLite's own words).
@@ -136,7 +138,7 @@ static void doc_moment(Doc& d, double now) {
     for (auto& [thing, t] : d.shown) {
         const double since = now - doc_number(d, thing, "start", 0, 0), lasts = doc_number(d, thing, "duration", 0, -1);
         const bool in = since >= 0.0 && (lasts < 0.0 || since < lasts);
-        const Mesh* m = t.film ? t.film->sheet : t.drawn ? t.drawn->sheet : t.glass;
+        const Mesh* m = t.film ? t.film->sheet : t.drawn ? t.drawn->sheet : t.shape;
         if (in != t.in) { if (t.solid) solid_seen(s, t.solid, in); else seen(s, m, in); t.in = in; }
         if (!in) continue;
         if (t.film) video_at(s, t.film, (float)since);
@@ -161,7 +163,7 @@ static bool doc_match(Doc& d) {
         if (it->second.film) video_off(s, it->second.film);
         if (it->second.drawn) picture_off(s, it->second.drawn);
         if (it->second.solid) solid_off(s, it->second.solid);
-        if (it->second.glass) take_off(s, it->second.glass);
+        if (it->second.shape) take_off(s, it->second.shape);
         it = d.shown.erase(it);
     }
     bool all = true;
@@ -171,7 +173,10 @@ static bool doc_match(Doc& d) {
         const std::string kind = doc_word(d, thing, "kind"), file = doc_word(d, thing, "file"), laid = doc_word(d, thing, "blend"), shape = doc_word(d, thing, "shape");
         const char* lay = laid.empty() || laid == "normal" ? nullptr : laid.c_str();
         std::string why = "it could not be read";
-        if (kind != "glass" && !std::filesystem::is_regular_file(file)) why = "there is no such file";
+        const std::string fill = doc_word(d, thing, "fill");
+        const long rgb = fill.size() == 6 && fill.find_first_not_of("0123456789abcdefABCDEF") == std::string::npos ? std::strtol(fill.c_str(), nullptr, 16) : -1;
+        const float3 colour = float3{(float)((rgb >> 16) & 255), (float)((rgb >> 8) & 255), (float)(rgb & 255)} / 255.f;
+        if (shape.empty() && !std::filesystem::is_regular_file(file)) why = "there is no such file";
         else if (kind == "film") {
             const double from = doc_number(d, thing, "begin", 0, 0), length = doc_number(d, thing, "duration", 0, -1), speed = doc_number(d, thing, "speed", 0, 1);
             made.film = video(s, file.c_str(), mat4f{}, 1.f, (float)from, length < 0 ? -1.f : (float)(from + length * std::fabs(speed)), (float)speed, lay);
@@ -182,18 +187,21 @@ static bool doc_match(Doc& d) {
         } else if (kind == "picture") {
             if ((made.drawn = picture(s, file.c_str(), mat4f{}, 1.f, float3{-1.f}, true, lay))) s.playing.erase(made.drawn);
         } else if (kind == "text") {   // (words in a font: said by `say N text ...`; until then, the font's own name)
-            const std::string words = doc_word(d, thing, "text"), colour = doc_word(d, thing, "fill");
-            const long rgb = colour.empty() ? 0x111111 : colour.size() == 6 && colour.find_first_not_of("0123456789abcdefABCDEF") == std::string::npos ? std::strtol(colour.c_str(), nullptr, 16) : -1;
-            if (rgb < 0) why = "a fill is six digits, as ff3366";
-            else made.drawn = type(s, words.empty() ? std::filesystem::path(file).stem().string().c_str() : words.c_str(), file.c_str(), mat4f{}, 1.f, float3{(float)((rgb >> 16) & 255), (float)((rgb >> 8) & 255), (float)(rgb & 255)} / 255.f, lay);
-        } else if (kind == "solid") {
-            made.solid = solid(s, file.c_str(), mat4f{}, 1.f);
-        } else if (kind == "glass") {
-            made.glass = shape == "gem" ? gem(0.5f) : shape == "cube" ? cube(0.1f) : shape == "ring" ? torus(0.37f, 0.13f) : nullptr;
-            if (!made.glass) why = "a glass's shape is ring, gem or cube";
-            else if (!thick_glass(s, made.glass, {mat4f{}})) made.glass = nullptr;
+            const std::string words = doc_word(d, thing, "text");
+            if (!fill.empty() && rgb < 0) why = "a text's fill is six digits, as ff3366";
+            else made.drawn = type(s, words.empty() ? std::filesystem::path(file).stem().string().c_str() : words.c_str(), file.c_str(), mat4f{}, 1.f, fill.empty() ? float3{0x11 / 255.f} : colour, lay);
+        } else if (kind == "solid") {   // (one of the kit's shapes, or a file; its fill is its surface: a colour, or the material glass)
+            const bool glass = fill == "glass";
+            if (!fill.empty() && !glass && rgb < 0) why = "a solid's fill is six digits, as ff3366, or glass";
+            else if (!shape.empty()) {
+                made.shape = shape == "gem" ? gem(0.5f) : shape == "cube" ? cube(0.1f) : torus(0.37f, 0.13f);
+                MaterialInstance* look = glass ? thick_glass(s, made.shape, {mat4f{}}) : add(s, made.shape, "floor_lit.filamat");
+                if (!look) made.shape = nullptr;
+                else if (!glass) plain(look, fill.empty() ? float3{0xd9, 0xd2, 0xc3} / 255.f : colour);
+            } else if (glass) why = "glass on a file's shape is not made yet";
+            else if ((made.solid = solid(s, file.c_str(), mat4f{}, 1.f)) && rgb >= 0) solid_fill(s, made.solid, colour);
         } else why = std::string("its kind is one of: ") + doc_kinds;
-        if (!made.film && !made.drawn && !made.solid && !made.glass) { d.trouble = "the " + kind + " (" + file + shape + ") could not be made: " + why; all = false; continue; }
+        if (!made.film && !made.drawn && !made.solid && !made.shape) { d.trouble = "the " + kind + " (" + file + shape + ") could not be made: " + why; all = false; continue; }
         d.shown[thing] = made;
     }
     doc_moment(d, s.now);
@@ -305,13 +313,13 @@ static bool doc_knows(Doc& d, int thing, const char* name = nullptr, const doubl
     return true;
 }
 
-// The calls. A new thing of a kind (film, picture, text, solid, glass) from a file (a text: its font; a glass: its shape): its number (0: not
+// The calls. A new thing of a kind (film, picture, text, solid) from a file (a text: its font; a solid: a file, or ring, gem or cube): its number (0: not
 // made, and no number is used up).
 static int doc_add(Doc& d, const char* kind, const char* file) {
     if (!doc_among(doc_kinds, kind)) return d.trouble = std::string("a thing is one of: ") + doc_kinds, 0;
     // (it comes on at the stage's present moment)
     if (!doc_change(d, sqlite3_mprintf("insert into thing default values; insert into fact(thing, name, at, value) values(last_insert_rowid(), 'kind', 0.0, %Q); insert into fact(thing, name, at, value) values(last_insert_rowid(), %Q, 0.0, %Q); insert into fact(thing, name, at, value) select id, 'start', 0.0, %!.17g from thing where %d order by id desc limit 1",
-                                       kind, !strcmp(kind, "glass") ? "shape" : "file", file, d.stage->now, d.stage->now > 0.0))) return 0;
+                                       kind, !strcmp(kind, "solid") && doc_among(doc_shapes, file) ? "shape" : "file", file, d.stage->now, d.stage->now > 0.0))) return 0;
     int thing = 0;   // (the newest number: SQLite's own count of things, which a change not made does not move)
     doc_rows(d, sqlite3_mprintf("select max(id) from thing"), [&](sqlite3_stmt* row) { thing = sqlite3_column_int(row, 0); });
     return thing;
@@ -397,7 +405,7 @@ static std::vector<double> doc_key_moments(Doc& d, int thing, const char* name) 
     return at;
 }
 
-// Half of how wide and how high a thing is at size 1, before it is placed (a sheet: the sheet's; a solid or a glass: its
+// Half of how wide and how high a thing is at size 1, before it is placed (a sheet: the sheet's; a solid: its
 // bounds'): what a shell draws a thing's frame from.
 static bool doc_half(Doc& d, int thing, float2* half) {
     const auto shown = d.shown.find(thing);
@@ -408,7 +416,7 @@ static bool doc_half(Doc& d, int thing, float2* half) {
         const float tall = std::max(box.max.y - box.min.y, 1e-6f);
         return *half = float2{0.5f * (box.max.x - box.min.x) / tall, 0.5f}, true;
     }
-    const Mesh* m = t.film ? t.film->sheet : t.drawn ? t.drawn->sheet : t.glass;
+    const Mesh* m = t.film ? t.film->sheet : t.drawn ? t.drawn->sheet : t.shape;
     if (!m || m->pos.empty()) return false;
     float2 most{0.f};
     for (const float3& p : m->pos) most = max(most, float2{std::fabs(p.x), std::fabs(p.y)});
