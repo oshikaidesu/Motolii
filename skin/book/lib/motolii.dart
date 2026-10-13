@@ -55,6 +55,9 @@ class Motolii {
   late final _lasts = _lib.lookupFunction<Double Function(_P, Int32), double Function(_P, int)>('motolii_lasts');
   late final _keyMoments = _lib.lookupFunction<Int32 Function(_P, Int32, _S, Pointer<Double>, Int32), int Function(_P, int, _S, Pointer<Double>, int)>('motolii_key_moments');
   late final _frame = _lib.lookupFunction<Int32 Function(_P, Int32, Pointer<Double>), int Function(_P, int, Pointer<Double>)>('motolii_frame');
+  late final _try = _lib.lookupFunction<Int32 Function(_P, Int32, _S, Double), int Function(_P, int, _S, double)>('motolii_try');
+  late final _tryDrop = _lib.lookupFunction<Int32 Function(_P), int Function(_P)>('motolii_try_drop');
+  late final _point = _lib.lookupFunction<Double Function(_P), double Function(_P)>('motolii_point');
   late final _undo = _lib.lookupFunction<Int32 Function(_P), int Function(_P)>('motolii_undo');
   late final _redo = _lib.lookupFunction<Int32 Function(_P), int Function(_P)>('motolii_redo');
   late final _trouble = _lib.lookupFunction<_S Function(_P), _S Function(_P)>('motolii_trouble');
@@ -136,6 +139,12 @@ class Motolii {
     return ok ? f : null;
   }
 
+  /// While a hand is still on a thing: a value shown and not written (no step of undo). [set] settles it, [tryDrop] undoes it.
+  bool tryValue(int thing, String name, double number) => _with([name], (s) => _try(_m, thing, s[0], number)) != 0;
+  void tryDrop() => _tryDrop(_m);
+
+  /// Points of the picture to one unit of the stage, at z 0.
+  late final double point = _point(_m);
   bool undo() => _undo(_m) != 0;
   bool redo() => _redo(_m) != 0;
   void close() => _close(_m);

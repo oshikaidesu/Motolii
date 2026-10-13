@@ -121,6 +121,7 @@ class _NumFieldState extends State<NumField> {
     }
     _cancelled = true;
     _sum = 0;
+    if (_moved) _x.doc.endGesture();
     setState(() => _drag = false);
   }
 
@@ -157,7 +158,10 @@ class _NumFieldState extends State<NumField> {
     if (!_drag || _cancelled) return;
     if (!_moved && (e.position - _down).distance < 4) return;
     final cfg = _x.cfg;
-    if (!_moved) setState(() => _moved = true);
+    if (!_moved) {
+      _x.doc.beginGesture();   // (a scrub is one gesture: what it shows is settled when the hand lets go)
+      setState(() => _moved = true);
+    }
     var m = cfg.mult();
     if (cfg.maybe) {
       final r = _ladder(e.position.dy - _down.dy);
@@ -178,6 +182,7 @@ class _NumFieldState extends State<NumField> {
     if (!_drag) return;
     _drag = false;
     if (_moved) {
+      _x.doc.endGesture();
       setState(() {
         _moved = false;
         _rung = 1;

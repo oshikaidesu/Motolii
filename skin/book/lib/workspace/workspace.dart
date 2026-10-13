@@ -152,10 +152,95 @@ const _fills = {'blob': ArtInk.orange, 'ring': ArtInk.lime, 'title': ArtInk.crea
 
 /// The selected layer's transform as the stage draws it at this frame, in the Inspector's ids.
 Map<String, double> _transform(Ws ws, String? id) {
+  if (ws.inside case final m?) {   // (joined: the document's own values, in the composition's points)
+    final t = int.tryParse(id ?? '');
+    if (t == null) return const {};
+    final at = ws.frame / Ws.fps, p = m.point;
+    double v(String name) => m.value(t, name, at) ?? 0;
+    double r1(double x) => (x * 10).roundToDouble() / 10;
+    final s = r1(v('size') * 100);
+    return {
+      'pos.x': r1(WsArt.comp.width / 2 + v('x') * p),
+      'pos.y': r1(WsArt.comp.height / 2 - v('y') * p),
+      'pos.z': r1(v('z') * p),
+      'scale.x': s,
+      'scale.y': s,
+      'rot.z': r1(-v('rotate')) + 0,   // (+ 0: no minus nought)
+    };
+  }
   final b = WsArt.boxOf(ArtScene.of(ws, camera: true), id);
   if (b == null) return const {};
   final s = (b.scale * 1000).roundToDouble() / 10, r = (b.rot * 180 / math.pi * 10).roundToDouble() / 10;
   return {'pos.x': b.anchor.dx.roundToDouble(), 'pos.y': b.anchor.dy.roundToDouble(), 'scale.x': s, 'scale.y': s, 'rot.z': r};
+}
+
+/// The document's names for the inspector's ids, and the inspector's number as the document's (and back, in _transform):
+/// positions in the composition's points from its top left, scale in hundredths of a unit, turn clockwise.
+const _propNames = {
+  'pos': ['x', 'y', 'z'],
+  'scale': ['size'],
+  'rot': ['rotate'],
+};
+(String, double)? _asDocument(Ws ws, String id, double x) {
+  final p = ws.inside!.point;
+  return switch (id) {
+    'pos.x' => ('x', (x - WsArt.comp.width / 2) / p),
+    'pos.y' => ('y', (WsArt.comp.height / 2 - x) / p),
+    'pos.z' => ('z', x / p),
+    'scale.x' || 'scale.y' => ('size', x / 100),
+    'rot.z' => ('rotate', -x),
+    _ => null,
+  };
+}
+
+/// Joined: what was changed in the inspector goes to the document. While a hand is on it, it is only shown; when the
+/// hand lets go it is one change (a value that has keys gets a key at the playhead: the inspector's own rule).
+void _write(Ws ws, String? id, Map<String, double> changed, {required bool live}) {
+  final m = ws.inside!, t = int.tryParse(id ?? '');
+  if (t == null) return;
+  final at = ws.frame / Ws.fps;
+  var wrote = false;
+  for (final e in changed.entries) {
+    final to = _asDocument(ws, e.key, e.value);
+    if (to == null) continue;
+    final (name, number) = to;
+    if (live) {
+      m.tryValue(t, name, number);
+    } else {
+      wrote = (m.keyMoments(t, name).isNotEmpty ? m.key(t, name, at, number) : m.set(t, name, number)) || wrote;
+    }
+  }
+  if (!live) ws.reread();
+}
+
+/// Joined: a property's key mark from the document (a key at the playhead, keys elsewhere, or none).
+Map<String, KeyS> _keyMarks(Ws ws, String? id) {
+  final m = ws.inside, t = int.tryParse(id ?? '');
+  if (m == null || t == null) return const {};
+  final at = ws.frame / Ws.fps;
+  return {
+    for (final p in _propNames.entries)
+      p.key: () {
+        final moments = [for (final n in p.value) ...m.keyMoments(t, n)];
+        return moments.isEmpty ? KeyS.off : (moments.any((s) => (s - at).abs() < .5 / Ws.fps) ? KeyS.at : KeyS.anim);
+      }(),
+  };
+}
+
+/// Joined: a key mark changed in the inspector. On: a key at the playhead with the value as it is there. Off at a key: that key goes.
+void _mark(Ws ws, String? id, String prop, KeyS mark) {
+  final m = ws.inside!, t = int.tryParse(id ?? ''), names = _propNames[prop];
+  if (t == null || names == null) return;
+  final at = ws.frame / Ws.fps;
+  for (final n in names) {
+    final has = m.keyMoments(t, n).any((s) => (s - at).abs() < .5 / Ws.fps);
+    if (mark == KeyS.at && !has) {
+      m.key(t, n, at, m.value(t, n, at) ?? 0);
+    } else if (mark != KeyS.at && has) {
+      m.unkey(t, n, m.keyMoments(t, n).firstWhere((s) => (s - at).abs() < .5 / Ws.fps));
+    }
+  }
+  ws.reread();
 }
 
 /// The Inspector of the lab, fed by the workspace's selection; its panel links open the dock's shelves or the desk.
@@ -173,6 +258,10 @@ class _InspectorSeat extends StatelessWidget {
         onRoute: ws.route,
         values: _transform(ws, l?.id),
         strs: {if (fill != null) 'fill': _hex(fill)},
+        keyMarks: _keyMarks(ws, l?.id),
+        onValues: ws.inside == null ? null : (changed, {required live}) => _write(ws, l?.id, changed, live: live),
+        onDrop: ws.inside?.tryDrop,
+        onKey: ws.inside == null ? null : (prop, mark) => _mark(ws, l?.id, prop, mark),
         child: InspectorPanel(directTransform: true, width: box.maxWidth, height: box.maxHeight),
       ),
     );

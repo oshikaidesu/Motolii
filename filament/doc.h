@@ -413,6 +413,17 @@ static bool doc_half(Doc& d, int thing, float2* half) {
     return *half = most, true;
 }
 
+// A value shown for now and not written: what a shell does while a hand is still on the thing (a drag). The document
+// is not changed and no step is made; the next change, or doc_try_drop, puts the document's own value back.
+static bool doc_try(Doc& d, int thing, const char* name, double is) {
+    if (!doc_knows(d, thing, name, &is, nullptr, true)) return false;
+    Doc::Keys shown;
+    shown.at = {0.0}, shown.value = {is}, shown.interp = {Interp{}}, shown.own = {""};
+    d.moving[{thing, name}] = shown;
+    return doc_moment(d, d.stage->now), true;
+}
+static void doc_try_drop(Doc& d) { doc_forget(d), doc_moment(d, d.stage->now); }
+
 // What a value is where the document does not say; and a value at a moment, as the stage is told it.
 static double doc_usual(const char* name) { return !strcmp(name, "size") || !strcmp(name, "speed") ? 1.0 : !strcmp(name, "duration") ? -1.0 : 0.0; }
 static bool doc_value(Doc& d, int thing, const char* name, double at, double* is) { return doc_knows(d, thing, name) && (*is = doc_number(d, thing, name, at, doc_usual(name)), true); }

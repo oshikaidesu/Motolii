@@ -43,6 +43,11 @@ int motolii_key_moments(Motolii* m, int thing, const char* name, double* at, int
 /* A thing's frame on the picture at the stage's moment: frame[0..4] = its middle (x, y), how wide, how high (points
    of the picture, from the top left), how far it is turned (degrees, clockwise as seen). 0: there is no such thing. */
 int motolii_frame(Motolii* m, int thing, double* frame);
+/* While a hand is still on a thing (a drag): a value shown and not written. The document is not changed and no step
+   of undo is made; motolii_set (or any change) settles it, motolii_try_drop puts the document's own value back. */
+int motolii_try(Motolii* m, int thing, const char* name, double number);
+int motolii_try_drop(Motolii* m);
+double motolii_point(Motolii* m);                                  /* points of the picture to one unit of the stage, at z 0 */
 int motolii_undo(Motolii* m);
 int motolii_redo(Motolii* m);
 

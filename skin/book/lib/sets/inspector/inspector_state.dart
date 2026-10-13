@@ -243,6 +243,9 @@ class Doc extends ChangeNotifier {
   final _undo = <({Map<String, double> values, Map<String, List<double>> mixed, Map<String, KeyS> keys})>[];
   int get undoSteps => _undo.length;
 
+  /// A hand is on a value (between beginGesture and endGesture): what it shows is not settled yet.
+  bool get inGesture => _gesture != null;
+
   void beginGesture() {
     _gesture ??= (values: Map.of(v), mixed: {for (final e in multi.entries) e.key: List.of(e.value)}, keys: Map.of(keys));
   }

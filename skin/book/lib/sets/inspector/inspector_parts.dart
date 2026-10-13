@@ -147,6 +147,10 @@ class InspHost extends StatefulWidget {
     this.onRoute,
     this.values = const {},
     this.strs = const {},
+    this.keyMarks = const {},
+    this.onValues,
+    this.onDrop,
+    this.onKey,
     required this.child,
   });
   final Cfg cfg;
@@ -163,18 +167,64 @@ class InspHost extends StatefulWidget {
   /// Values the host owns (the layer's transform at this frame): written in silently when they change, so edits made here last until then.
   final Map<String, double> values;
   final Map<String, String> strs;
+
+  /// The key mark of each property (pos, scale, rot ...) as the host's document has it.
+  final Map<String, KeyS> keyMarks;
+
+  /// Values changed in the inspector: [live] while a hand is still on them (not settled), then once more when it lets go.
+  final void Function(Map<String, double> changed, {required bool live})? onValues;
+
+  /// A hand let go without keeping what it did (Esc): what it showed is to be dropped.
+  final VoidCallback? onDrop;
+
+  /// A property's key mark was changed in the inspector.
+  final void Function(String prop, KeyS mark)? onKey;
   @override
   State<InspHost> createState() => _InspHostState();
 }
 
 class _InspHostState extends State<InspHost> {
   late Doc doc = _make();
-  Doc _make() => Doc(widget.kind, count: widget.count, effects: widget.effects)
-    ..title = widget.title
-    ..v.addAll(widget.values)
-    ..s2.addAll(widget.strs)
-    ..addListener(_r);
+  Doc _make() {
+    final d = Doc(widget.kind, count: widget.count, effects: widget.effects)
+      ..title = widget.title
+      ..v.addAll(widget.values)
+      ..s2.addAll(widget.strs)
+      ..keys.addAll(widget.keyMarks);
+    _seen
+      ..clear()
+      ..addAll(d.v);
+    _seenKeys
+      ..clear()
+      ..addAll(d.keys);
+    return d..addListener(_r);
+  }
+
+  // what the host has been told of (or gave): only what differs from it is told
+  final _seen = <String, double>{};
+  final _seenKeys = <String, KeyS>{};
+  bool _live = false;
+  void _tell() {
+    final live = doc.inGesture, changed = {
+      for (final e in doc.v.entries)
+        if (_seen[e.key] != e.value) e.key: e.value,
+    };
+    if (changed.isNotEmpty) {
+      if (!live) _seen.addAll(changed);
+      widget.onValues?.call(changed, live: live);
+    } else if (_live && !live) {
+      widget.onDrop?.call();
+    }
+    _live = live;
+    for (final e in doc.keys.entries.toList()) {
+      if (_seenKeys[e.key] == e.value) continue;
+      _seenKeys[e.key] = e.value;
+      if (!live) widget.onKey?.call(e.key, e.value);
+    }
+  }
+
   void _r() {
+    _tell();
     final r = doc.s2['route'], go = widget.onRoute;
     if (r != null && go != null) {
       doc.s2.remove('route');
@@ -190,8 +240,15 @@ class _InspHostState extends State<InspHost> {
       doc.dispose();
       doc = _make();
     } else {
-      if (!mapEquals(o.values, widget.values)) doc.v.addAll(widget.values);
+      if (!mapEquals(o.values, widget.values)) {
+        doc.v.addAll(widget.values);
+        _seen.addAll(widget.values);
+      }
       if (!mapEquals(o.strs, widget.strs)) doc.s2.addAll(widget.strs);
+      if (!mapEquals(o.keyMarks, widget.keyMarks)) {
+        doc.keys.addAll(widget.keyMarks);
+        _seenKeys.addAll(widget.keyMarks);
+      }
     }
     doc.title = widget.title;
   }

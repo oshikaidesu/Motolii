@@ -140,6 +140,16 @@ int motolii_frame(Motolii* m, int thing, double* frame) {
         return 1;
     });
 }
+int motolii_try(Motolii* m, int thing, const char* name, double number) { return by_hand(m, [=] { return (int)doc_try(doc(m), thing, name, number); }); }
+int motolii_try_drop(Motolii* m) { return by_hand(m, [=] { return doc_try_drop(*m->d), 1; }); }
+// How many points of the picture one unit of the stage is, where things stand when their z is 0.
+double motolii_point(Motolii* m) {
+    return by_hand(m, [=] {
+        const math::mat4 eye = m->s->camera->getProjectionMatrix() * m->s->camera->getViewMatrix();
+        const math::double4 a = eye * math::double4{0, 0, 0, 1}, b = eye * math::double4{1, 0, 0, 1};
+        return 0.5 * (b.x / b.w - a.x / a.w) * m->s->w;
+    });
+}
 int motolii_undo(Motolii* m) { return by_hand(m, [=] { return (int)(doc_undo(doc(m))); }); }
 int motolii_redo(Motolii* m) { return by_hand(m, [=] { return (int)(doc_redo(doc(m))); }); }
 
