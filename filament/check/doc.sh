@@ -12,7 +12,7 @@ printf 'at 2.5\nstill out/e_7.png\n' | ./edit.sh out/doc_check.motolii
 rm -f out/doc_wrong.motolii
 ./edit.sh out/doc_wrong.motolii < check/doc_wrong.txt > out/doc_wrong.txt
 grep "NOT done" out/doc_wrong.txt
-grep "^  " out/doc_wrong.txt | diff - check/doc_wrong.expect > /dev/null && echo "after the wrong calls the document is as expected: yes ($(grep -c "NOT done" out/doc_wrong.txt) calls refused)" || echo "after the wrong calls the document is as expected: NO"
+grep "^  [0-9(]" out/doc_wrong.txt | grep -v "(a number" | diff - check/doc_wrong.expect > /dev/null && echo "after the wrong calls the document is as expected: yes ($(grep -c "NOT done" out/doc_wrong.txt) calls refused)" || echo "after the wrong calls the document is as expected: NO"
 python3 - <<'PY'
 import numpy as np
 from PIL import Image

@@ -1,6 +1,7 @@
 // solid.h: a 3D file (glTF: .glb, .gltf) in the scene. All of it is Filament's own: its loader (gltfio) reads the
 // file, its ready-made materials for glTF give the looks the file names (lit by the stage's room), and the file's own
 // movement, if it has one, goes on as the stage's time does (gltfio's Animator).
+#include <filesystem>
 #include <gltfio/Animator.h>
 #include <gltfio/AssetLoader.h>
 #include <gltfio/FilamentAsset.h>
@@ -32,10 +33,13 @@ static Solid* solid(Stage& s, const char* file, const mat4f& place, float high) 
     Solid* d = new Solid;
     d->made = bytes.empty() ? nullptr : solid_loader(s)->createAsset(bytes.data(), (uint32_t)bytes.size());
     if (!d->made) return nullptr;
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wdeprecated-declarations"   // (the file's own place, for a .gltf whose pictures lie beside it: gltfio's way until mid 2027)
-    gltfio::ResourceLoader pictures({s.engine, file, true});
-#pragma clang diagnostic pop
+    gltfio::ResourceLoader pictures({.engine = s.engine, .normalizeSkinningWeights = true});
+    std::vector<std::vector<uint8_t>> beside(d->made->getResourceUriCount());   // (a .gltf's parts in files beside it: read and handed over, as gltfio asks)
+    for (size_t i = 0; i < beside.size(); ++i) {
+        const char* part = d->made->getResourceUris()[i];
+        beside[i] = load_file((std::filesystem::path(file).parent_path() / part).string().c_str());
+        pictures.addResourceData(part, gltfio::ResourceLoader::BufferDescriptor(beside[i].data(), beside[i].size()));
+    }
     static gltfio::TextureProvider* reader = gltfio::createStbProvider(s.engine);
     pictures.addTextureProvider("image/png", reader);
     pictures.addTextureProvider("image/jpeg", reader);

@@ -29,9 +29,36 @@ say 1 lay purple
 say 1 keyed yes
 key 1 x -1 0
 add film ../vid/happy.mp4
-set 5 speed 0
-set 5 inpoint 100
-set 5 speed -1
+set 2 speed 0
+set 2 inpoint 100
+set 2 speed -1
 add solid ../../third_party/filament_src/third_party/models/Fox/Fox.glb
 add picture ../../../reports/ae_rubric/stills/lay_v1.jpg
+add picture ../vid
+add robot x
+key 2 speed 1 2
+key 2 start 1 2
+set 1 speed 2
+set 1 keyed 1
+say 1 lay add
+say 2 shape ring
+set 4 speed -1
+set 2 duration -2
+set 2 start -3
+set 2 keyed 7
+set 2 high 0
+set 2 x 1e30
+key 2 x 1e30 0
+set 2 x 0.5 0.7
+set 2 x abc
+undo 3
+add glass
+unkey 2 x 5
+key 2 x 1 0.3
+key 2 x 2 0.6
+set 2 x 0.1
+still out/nodir/a.png
+still out/a.jpg
+at 100000
+help
 list

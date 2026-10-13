@@ -9,6 +9,8 @@
 #include <thorvg.h>
 #include <webgpu/webgpu.h>
 
+#include <filesystem>
+
 struct Drawn {
     tvg::WgCanvas* canvas = nullptr;   // (touched on the driver thread only)
     tvg::Animation* film = nullptr;    // (the same)
@@ -43,6 +45,7 @@ static void picture_at(Stage& s, Drawn* d, float seconds) {
 // matte: kit.h, matte(s, d->sheet, {place}, d->texture)).
 static Drawn* picture(Stage& s, const char* file, const mat4f& place, float high, float3 ground = float3{-1.f}, bool shown = true, const char* lay = nullptr) {
     if (!door::device(s.engine)) return nullptr;   // (another backend)
+    if (!std::filesystem::is_regular_file(file)) return nullptr;   // (ThorVG ends the program on a folder)
     Drawn* d = new Drawn;
     WGPUTexture made = nullptr;
     int w = 0, h = 0;

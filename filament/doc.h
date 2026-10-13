@@ -27,8 +27,16 @@ struct Doc {
     struct Shown { std::string of; Video* film = nullptr; Drawn* drawn = nullptr; Solid* solid = nullptr; Mesh* glass = nullptr; bool in = true; };
     std::map<int, Shown> shown;   // the things as they are on the stage, and what each was made of
 };
-static const std::vector<std::string> doc_numbers{"x", "y", "z", "turn", "high", "start", "duration", "inpoint", "speed", "keyed"};
-static const std::map<std::string, std::vector<std::string>> doc_words{{"lay", {"over", "add", "multiply", "screen"}}, {"shape", {"ring", "gem", "cube"}}, {"file", {}}};
+// What a thing may be told, by name: which kinds of thing have it, a number between which two (or one of which
+// words), and whether it can move (take keys).
+struct DocValue { const char* name; const char* kinds; double low, high; bool moves; const char* words; };
+static const DocValue doc_values[] = {
+    {"x", "film picture solid glass", -1e4, 1e4, true, nullptr}, {"y", "film picture solid glass", -1e4, 1e4, true, nullptr}, {"z", "film picture solid glass", -1e4, 1e4, true, nullptr},
+    {"turn", "film picture solid glass", -1e6, 1e6, true, nullptr}, {"high", "film picture solid glass", 1e-3, 1e4, true, nullptr},
+    {"start", "film picture solid glass", 0, 1e6, false, nullptr}, {"duration", "film picture solid glass", 1e-3, 1e6, false, nullptr},
+    {"inpoint", "film", 0, 1e6, false, nullptr}, {"speed", "film", -100, 100, false, nullptr}, {"keyed", "film", 0, 1, false, nullptr},
+    {"lay", "film picture", 0, 0, false, "over add multiply screen"}, {"file", "film picture solid", 0, 0, false, ""}, {"shape", "glass", 0, 0, false, "ring gem cube"}};
+static bool doc_among(const std::string& words, const std::string& one) { return (" " + words + " ").find(" " + one + " ") != std::string::npos; }
 
 // Rows of the document: `each` is told every row of what is asked (in SQLite's own words).
 static bool doc_rows(Doc& d, char* ask, const std::function<void(sqlite3_stmt*)>& each = nullptr) {
@@ -108,7 +116,8 @@ static bool doc_match(Doc& d) {
         const std::string kind = doc_word(d, thing, "kind"), file = doc_word(d, thing, "file"), laid = doc_word(d, thing, "lay"), shape = doc_word(d, thing, "shape");
         const char* lay = laid.empty() || laid == "over" ? nullptr : laid.c_str();
         std::string why = "it could not be read";
-        if (kind == "film") {
+        if (kind != "glass" && !std::filesystem::is_regular_file(file)) why = "there is no such file";
+        else if (kind == "film") {
             const double from = doc_number(d, thing, "inpoint", 0, 0), length = doc_number(d, thing, "duration", 0, -1), speed = doc_number(d, thing, "speed", 0, 1);
             made.film = video(s, file.c_str(), mat4f{}, 1.f, (float)from, length < 0 ? -1.f : (float)(from + length * std::fabs(speed)), (float)speed, lay);
             if (!made.film) why = video_trouble;
@@ -124,7 +133,7 @@ static bool doc_match(Doc& d) {
             if (!made.glass) why = "a glass's shape is ring, gem or cube";
             else if (!thick_glass(s, made.glass, {mat4f{}})) made.glass = nullptr;
         } else why = "its kind is film, picture, solid or glass";
-        if (!made.film && !made.drawn && !made.solid && !made.glass) { d.trouble = "thing " + std::to_string(thing) + " (" + kind + " " + file + shape + ") could not be made: " + why; all = false; continue; }
+        if (!made.film && !made.drawn && !made.solid && !made.glass) { d.trouble = "the " + kind + " (" + file + shape + ") could not be made: " + why; all = false; continue; }
         d.shown[thing] = made;
     }
     doc_moment(d, s.now);
@@ -206,40 +215,62 @@ static bool doc_step(Doc& d, bool back) {
     return doc_match(d);
 }
 
-// Whether a call names a thing that is there and a value that things have (if not, d.trouble says so).
-static bool doc_knows(Doc& d, int thing, const char* name = nullptr, const char* word = nullptr) {
-    bool there = false;
-    doc_rows(d, sqlite3_mprintf("select 1 from fact where thing = %d and name = 'kind'", thing), [&](sqlite3_stmt*) { there = true; });
-    if (!there) return d.trouble = "there is no thing " + std::to_string(thing), false;
+// Whether a call names a thing that is there and tells it something a thing of its kind can be told (if not,
+// d.trouble says what it can be told).
+static bool doc_knows(Doc& d, int thing, const char* name = nullptr, const double* number = nullptr, const char* word = nullptr, bool key = false) {
+    const std::string kind = doc_word(d, thing, "kind");
+    if (kind.empty()) return d.trouble = "there is no thing " + std::to_string(thing), false;
     if (!name) return true;
-    const auto says = doc_words.find(name);
-    const auto listed = [](const std::vector<std::string>& of) { std::string all; for (const std::string& one : of) all += (all.empty() ? "" : ", ") + one; return all; };
-    std::vector<std::string> names;
-    for (const auto& [n, words] : doc_words) names.push_back(n);
-    if (!word && std::find(doc_numbers.begin(), doc_numbers.end(), name) == doc_numbers.end()) return d.trouble = std::string(name) + " is not a number a thing has: " + listed(doc_numbers), false;
-    if (word && says == doc_words.end()) return d.trouble = std::string(name) + " is not a word a thing has: " + listed(names), false;
-    if (word && !says->second.empty() && std::find(says->second.begin(), says->second.end(), word) == says->second.end()) return d.trouble = std::string(name) + " is one of: " + listed(says->second), false;
+    const DocValue* v = nullptr;
+    std::string has, moving;
+    for (const DocValue& one : doc_values) {
+        if (!doc_among(one.kinds, kind)) continue;
+        has += std::string(has.empty() ? "" : ", ") + one.name;
+        if (one.moves) moving += std::string(moving.empty() ? "" : ", ") + one.name;
+        if (!strcmp(one.name, name)) v = &one;
+    }
+    char range[120];
+    if (!v) return d.trouble = "a " + kind + " has no " + name + ": it has " + has, false;
+    if (number && v->words) return d.trouble = std::string(name) + " is a word, told by say" + (*v->words ? std::string(": ") + v->words : ""), false;
+    if (word && !v->words) return d.trouble = std::string(name) + " is a number, told by set", false;
+    if (word && *v->words && !doc_among(v->words, word)) return d.trouble = std::string(name) + " is one of: " + v->words, false;
+    if (number && (!std::isfinite(*number) || *number < v->low || *number > v->high || (!strcmp(name, "keyed") && *number != 0.0 && *number != 1.0)))
+        return std::snprintf(range, sizeof range, !strcmp(name, "keyed") ? " is 0 or 1" : " is from %g to %g", v->low, v->high), d.trouble = name + std::string(range), false;
+    if (key && !v->moves) return d.trouble = std::string(name) + " does not move: keys go on " + moving, false;
     return true;
 }
 
-// The calls. A new thing of a kind (film, picture, solid, glass) from a file (a glass: its shape): its number (0: not made).
+// The calls. A new thing of a kind (film, picture, solid, glass) from a file (a glass: its shape): its number (0: not
+// made, and no number is used up).
 static int doc_add(Doc& d, const char* kind, const char* file) {
-    if (sqlite3_exec(d.file, "insert into thing default values", nullptr, nullptr, nullptr) != SQLITE_OK) return 0;
-    const int thing = (int)sqlite3_last_insert_rowid(d.file);
-    return doc_change(d, sqlite3_mprintf("insert into fact values(%d, 'kind', 0.0, %Q); insert into fact values(%d, %Q, 0.0, %Q)", thing, kind, thing, !strcmp(kind, "glass") ? "shape" : "file", file)) ? thing : 0;
+    if (!doc_among("film picture solid glass", kind)) return d.trouble = "a thing is a film, a picture, a solid or a glass", 0;
+    if (!doc_change(d, sqlite3_mprintf("insert into thing default values; insert into fact values(last_insert_rowid(), 'kind', 0.0, %Q); insert into fact values(last_insert_rowid(), %Q, 0.0, %Q)", kind, !strcmp(kind, "glass") ? "shape" : "file", file))) return 0;
+    int thing = 0;   // (the newest number: SQLite's own count of things, which a change not made does not move)
+    doc_rows(d, sqlite3_mprintf("select max(id) from thing"), [&](sqlite3_stmt* row) { thing = sqlite3_column_int(row, 0); });
+    return thing;
 }
 static bool doc_remove(Doc& d, int thing) { return doc_knows(d, thing) && doc_change(d, sqlite3_mprintf("delete from fact where thing = %d", thing)); }
 // A value that stays (its keys, if it had any, are gone); a word; a key at a moment; a key taken away.
 static bool doc_set(Doc& d, int thing, const char* name, double is) {
-    return doc_knows(d, thing, name) && doc_change(d, sqlite3_mprintf("delete from fact where thing = %d and name = %Q and at <> 0; insert into fact values(%d, %Q, 0.0, %!.17g) on conflict do update set value = excluded.value", thing, name, thing, name, is));
+    return doc_knows(d, thing, name, &is) && doc_change(d, sqlite3_mprintf("delete from fact where thing = %d and name = %Q and at <> 0; insert into fact values(%d, %Q, 0.0, %!.17g) on conflict do update set value = excluded.value", thing, name, thing, name, is));
 }
 static bool doc_say(Doc& d, int thing, const char* name, const char* word) {
-    return doc_knows(d, thing, name, word) && doc_change(d, sqlite3_mprintf("insert into fact values(%d, %Q, 0.0, %Q) on conflict do update set value = excluded.value", thing, name, word));
+    return doc_knows(d, thing, name, nullptr, word) && doc_change(d, sqlite3_mprintf("insert into fact values(%d, %Q, 0.0, %Q) on conflict do update set value = excluded.value", thing, name, word));
 }
 static bool doc_key(Doc& d, int thing, const char* name, double at, double is) {
-    if (at < 0.0) return d.trouble = "a key is at a moment of the stage: 0 or later", false;
-    return doc_knows(d, thing, name) && doc_change(d, sqlite3_mprintf("insert into fact values(%d, %Q, %!.17g, %!.17g) on conflict do update set value = excluded.value", thing, name, at, is));
+    if (!(at >= 0.0 && at <= 1e6)) return d.trouble = "a key is at a moment of the stage: from 0 to 1000000 seconds", false;
+    return doc_knows(d, thing, name, &is, nullptr, true) && doc_change(d, sqlite3_mprintf("insert into fact values(%d, %Q, %!.17g, %!.17g) on conflict do update set value = excluded.value", thing, name, at, is));
 }
-static bool doc_unkey(Doc& d, int thing, const char* name, double at) { return doc_knows(d, thing, name) && doc_change(d, sqlite3_mprintf("delete from fact where thing = %d and name = %Q and at = %!.17g", thing, name, at)); }
+static int doc_keys(Doc& d, int thing, const char* name, double at = -1.0) {   // (how many keys a value has; or whether it has one at a moment)
+    int n = 0;
+    doc_rows(d, at < 0.0 ? sqlite3_mprintf("select count(*) from fact where thing = %d and name = %Q and (select count(*) from fact where thing = %d and name = %Q) > 1", thing, name, thing, name)
+                         : sqlite3_mprintf("select count(*) from fact where thing = %d and name = %Q and at = %!.17g", thing, name, at), [&](sqlite3_stmt* row) { n = sqlite3_column_int(row, 0); });
+    return n;
+}
+static bool doc_unkey(Doc& d, int thing, const char* name, double at) {
+    if (!doc_knows(d, thing, name)) return false;
+    if (!doc_keys(d, thing, name, at)) return d.trouble = std::string(name) + " has no key at that moment", false;
+    return doc_change(d, sqlite3_mprintf("delete from fact where thing = %d and name = %Q and at = %!.17g", thing, name, at));
+}
 static bool doc_undo(Doc& d) { return doc_step(d, true); }
 static bool doc_redo(Doc& d) { return doc_step(d, false); }
