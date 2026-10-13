@@ -119,7 +119,8 @@
 
 | 何 | どこ |
 |---|---|
-| 猫ミーム2本（ユーザーの物。リポジトリに入れない）と緑背景の猫 | `filament/out/vid/` |
+| 猫ミーム8本（ユーザーが置いた物。リポジトリに入れない。全部 H.264・音つき・緑背景：`happy`、`mohsen`、`waving`、`swinging`、`dog`（暗い緑）、`vest`、`popcat`、`girlfriend`）と、うちで作った緑背景の猫 `cat_green` | `filament/out/vid/` |
+| 作りたい画の手本7枚（ガラスの見た目6枚と、ロケットを四角い窓で切って並べた青いコラージュ） | `research_notes/refs/`（git の外。青いコラージュは `research_notes/refs/G_rocket_collage_blue.jpg`） |
 | 変な動画14本（この Mac で作った試し用） | `filament/out/vid_odd/` |
 | AE のファイルの見本103本 | `filament/third_party/thorvg_example/res/lottie/` |
 | 3Dファイルの見本（ヘルメット、狐ほか） | `filament/third_party/filament_src/third_party/models/` |
