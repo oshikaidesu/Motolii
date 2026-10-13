@@ -11,6 +11,29 @@ index 32479e06..ce4e1db7 100644
 +if (MOTOLII_PROBE_DIR)
 +    add_subdirectory(${MOTOLII_PROBE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/motolii_probe)
 +endif()
+diff --git a/filament/backend/include/backend/platforms/WebGPUPlatform.h b/filament/backend/include/backend/platforms/WebGPUPlatform.h
+index b9aee345..4c1ce02b 100644
+--- a/filament/backend/include/backend/platforms/WebGPUPlatform.h
++++ b/filament/backend/include/backend/platforms/WebGPUPlatform.h
+@@ -57,6 +57,10 @@ public:
+ 
+     [[nodiscard]] wgpu::Instance& getInstance() noexcept { return mInstance; }
+ 
++    // motolii: the device this platform handed to the driver (null before that), for an embedder that draws on it
++    // itself (see Texture::Builder::import, which on this backend takes a WGPUTexture of this device)
++    [[nodiscard]] wgpu::Device const& getDevice() const noexcept { return mDevice; }
++
+     // TODO consider that this functionality is not WebGPU-specific, and thus could be
+     //      placed in a generic place and even reused across backends. Alternatively,
+     //      a 3rd party library could be considered. However, this was a simple and
+@@ -88,6 +92,7 @@ protected:
+ 
+     // we may consider having the driver own this in the future
+     wgpu::Instance mInstance;
++    wgpu::Device mDevice = nullptr;   // motolii
+ };
+ 
+ }// namespace filament::backend
 diff --git a/filament/backend/src/webgpu/WebGPUBufferObject.cpp b/filament/backend/src/webgpu/WebGPUBufferObject.cpp
 index eb5afbd7..e6ca5e99 100644
 --- a/filament/backend/src/webgpu/WebGPUBufferObject.cpp
@@ -74,10 +97,23 @@ index 5a67cb41..db2316a9 100644
              }
              case DescriptorType::SAMPLER_EXTERNAL: {
 diff --git a/filament/backend/src/webgpu/WebGPUDriver.cpp b/filament/backend/src/webgpu/WebGPUDriver.cpp
-index ad409d39..b13d0fdc 100644
+index ad409d39..0db6e07f 100644
 --- a/filament/backend/src/webgpu/WebGPUDriver.cpp
 +++ b/filament/backend/src/webgpu/WebGPUDriver.cpp
-@@ -1820,8 +1820,47 @@ void WebGPUDriver::readTextureToBuffer(wgpu::Texture srcTexture, uint32_t level,
+@@ -681,7 +681,11 @@ void WebGPUDriver::importTextureR(Handle<HwTexture> textureHandle, const intptr_
+         const SamplerType target, const uint8_t levels, const TextureFormat format,
+         const uint8_t samples, const uint32_t width, const uint32_t height, const uint32_t depth,
+         const TextureUsage usage, utils::ImmutableCString&& tag) {
+-    PANIC_POSTCONDITION("Import WebGPU Texture is not supported");
++    // motolii: `id` is a WGPUTexture of this device, made by the embedder (WebGPUPlatform::getDevice()):
++    // 2D, one level, not multisampled. It is taken as it is, with its own format and usage.
++    constructHandle<WebGPUTexture>(textureHandle,
++            wgpu::Texture(reinterpret_cast<WGPUTexture>(id)), target, format, usage);
++    setDebugTag(textureHandle.getId(), std::move(tag));
+ }
+ 
+ void WebGPUDriver::importTextureAsyncR(Handle<HwTexture> textureHandle, const intptr_t id,
+@@ -1820,8 +1824,47 @@ void WebGPUDriver::readTextureToBuffer(wgpu::Texture srcTexture, uint32_t level,
  
  void WebGPUDriver::readBufferSubData(Handle<HwBufferObject> bufferObjectHandle,
          const uint32_t offset, const uint32_t size, backend::BufferDescriptor&& bufferDescriptor) {
@@ -127,7 +163,7 @@ index ad409d39..b13d0fdc 100644
  }
  
  void WebGPUDriver::readTexture(Handle<HwTexture> src, uint8_t level, uint16_t layer, uint32_t x,
-@@ -2145,8 +2184,49 @@ void WebGPUDriver::draw(PipelineState pipelineState,
+@@ -2145,8 +2188,49 @@ void WebGPUDriver::draw(PipelineState pipelineState,
      draw2(indexOffset, indexCount, instanceCount);
  }
  
@@ -179,7 +215,7 @@ index ad409d39..b13d0fdc 100644
  }
  
  void WebGPUDriver::scissor(Viewport scissor) {
-@@ -2251,10 +2331,12 @@ void WebGPUDriver::bindDescriptorSet(Handle<HwDescriptorSet> descriptorSetHandle
+@@ -2251,10 +2335,12 @@ void WebGPUDriver::bindDescriptorSet(Handle<HwDescriptorSet> descriptorSetHandle
          return;
      }
      const auto bindGroup = handleCast<WebGPUDescriptorSet>(descriptorSetHandle);
@@ -229,8 +265,58 @@ index db2b5c35..f50aac48 100644
      }
  }
  
+diff --git a/filament/backend/src/webgpu/WebGPUTexture.cpp b/filament/backend/src/webgpu/WebGPUTexture.cpp
+index 1a230d5b..f947cd3b 100644
+--- a/filament/backend/src/webgpu/WebGPUTexture.cpp
++++ b/filament/backend/src/webgpu/WebGPUTexture.cpp
+@@ -282,6 +282,28 @@ WebGPUTexture::WebGPUTexture(const SamplerType samplerType, const uint8_t levels
+ #endif
+ }
+ 
++// motolii: see WebGPUTexture.h
++WebGPUTexture::WebGPUTexture(wgpu::Texture const& made, const SamplerType samplerType,
++        const TextureFormat format, const TextureUsage usage) noexcept
++    : HwTexture{ samplerType, 1, 1, made.GetWidth(), made.GetHeight(), 1, format, usage, false },
++      mViewFormat{ made.GetFormat() },
++      mMipmapGenerationStrategy{ MipmapGenerationStrategy::NONE },
++      mWebGPUFormat{ made.GetFormat() },
++      mAspect{ wgpu::TextureAspect::All },
++      mWebGPUUsage{ made.GetUsage() },
++      mViewUsage{ made.GetUsage() },
++      mDimension{ wgpu::TextureViewDimension::e2D },
++      mBlockWidth{ 1 },
++      mBlockHeight{ 1 },
++      mTexture{ made },
++      mDefaultMipLevel{ 0 },
++      mDefaultBaseArrayLayer{ 0 },
++      mSwizzle{} {
++    mArrayLayerCount = 1;
++    mDefaultTextureView = makeTextureView(0, 1, 0, 1, wgpu::TextureViewDimension::e2D);
++    FILAMENT_CHECK_POSTCONDITION(mDefaultTextureView) << "Failed to view an imported texture";
++}
++
+ WebGPUTexture::WebGPUTexture(WebGPUTexture const* src, const uint8_t baseLevel,
+         const uint8_t levelCount) noexcept
+     : HwTexture{ src->target, levelCount, src->samples, src->width, src->height, src->depth,
+diff --git a/filament/backend/src/webgpu/WebGPUTexture.h b/filament/backend/src/webgpu/WebGPUTexture.h
+index 8722bc03..12bb1b0e 100644
+--- a/filament/backend/src/webgpu/WebGPUTexture.h
++++ b/filament/backend/src/webgpu/WebGPUTexture.h
+@@ -50,6 +50,12 @@ public:
+      */
+     WebGPUTexture(WebGPUTexture const* src, uint8_t baseLevel, uint8_t levelCount) noexcept;
+ 
++    /**
++     * motolii: wraps a texture of this device that the embedder made (Texture::Builder::import):
++     * 2D, one level, one layer, not multisampled. Its own format and usage are taken as they are.
++     */
++    WebGPUTexture(wgpu::Texture const& made, SamplerType, TextureFormat, TextureUsage) noexcept;
++
+     /**
+      * @param nextSwizzle the swizzle to apply to the source texture.
+      * Creates a new texture view by composing the nextSwizzle with the source which itself it
 diff --git a/filament/backend/src/webgpu/platform/WebGPUPlatform.cpp b/filament/backend/src/webgpu/platform/WebGPUPlatform.cpp
-index 04c92ae7..172a75aa 100644
+index 04c92ae7..eb7826da 100644
 --- a/filament/backend/src/webgpu/platform/WebGPUPlatform.cpp
 +++ b/filament/backend/src/webgpu/platform/WebGPUPlatform.cpp
 @@ -28,6 +28,8 @@
@@ -266,4 +352,12 @@ index 04c92ae7..172a75aa 100644
 +    }
      dawnTogglesDescriptor.enabledToggleCount = toggles.size();
      dawnTogglesDescriptor.enabledToggles = toggles.data();
+ 
+@@ -712,6 +725,7 @@ wgpu::Device WebGPUPlatform::requestDevice(wgpu::Adapter const& adapter) {
+ #if FWGPU_ENABLED(FWGPU_PRINT_SYSTEM)
+     printDeviceDetails(device);
+ #endif
++    mDevice = device;   // motolii
+     return device;
+ }
  

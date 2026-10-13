@@ -19,9 +19,14 @@ for f in paper paper_copy floor_shade thick_glass far_side far_look glasslight g
         $MATC -g -a webgpu -a metal -p desktop -o out/wgpu_kit/$f.filamat $f.mat > out/wgpu_kit/$f.log 2>&1 ||
         echo "no WebGPU material: $f (out/wgpu_kit/$f.log)"
 done
-clang++ -std=c++20 -fobjc-arc -O2 -I "$SDK/include" -I "$TVG/include/thorvg-1" ${KIT_SRC:-$n.mm} \
-    -L "$SDK/lib/arm64" -L "$TVG/lib" -Wl,-rpath,"$PWD/$TVG/lib" \
-    -lthorvg-1 -lfilament -lbackend -lwebgpu_dawn -lbluegl -lbluevk -lfilabridge -lfilaflat \
+# ThorVG here is the one built against Dawn (dawn_probe/tvg_on_dawn.sh makes it): it can draw on Filament's own device
+# (drawn.h), through the door built inside Filament's build (gpu_door.h).
+THOR=third_party/thorvg_src
+[ -f $THOR/build_dawn/src/libthorvg-1.a ] || ./dawn_probe/tvg_on_dawn.sh > /dev/null
+(cd $SRC/out/wgpu && ninja motolii_door > /dev/null)
+clang++ -std=c++20 -fobjc-arc -O2 -I "$SDK/include" -I $THOR/inc -I $SRC/third_party/dawn/include -I $SRC/out/wgpu/third_party/dawn/gen/include ${KIT_SRC:-$n.mm} \
+    $THOR/build_dawn/src/libthorvg-1.a $SRC/out/wgpu/filament/motolii_probe/libmotolii_door.a -L "$SDK/lib/arm64" \
+    -lfilament -lbackend -lwebgpu_dawn -lbluegl -lbluevk -lfilabridge -lfilaflat \
     -lutils -lgeometry -lsmol-v -libl -lktxreader -lstb -luberzlib -lzstd \
     -lshaders -lperfetto -labseil -lmeshoptimizer -lcamutils -limage -lbasis_transcoder -luberarchive \
     -framework Cocoa -framework SceneKit -framework ModelIO -framework Metal -framework CoreVideo -framework QuartzCore -framework IOSurface -framework IOKit \

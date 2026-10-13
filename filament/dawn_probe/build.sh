@@ -1,5 +1,6 @@
 #!/bin/zsh
-# dawn_probe: Filament 1.77.2 built from source WITH its WebGPU (Dawn) backend, plus filament_dawn_compute.patch.
+# dawn_probe: Filament 1.77.2 built from source WITH its WebGPU (Dawn) backend, plus filament_dawn_compute.patch
+# (compute; a shorter wait; the device lent out and Texture::Builder::import filled in, for drawn.h).
 # The prebuilt SDK in ../third_party/filament has no WebGPU backend; this builds a second Filament beside it and
 # leaves that one alone. First build: about 15 minutes on an M4 (Dawn is most of it).
 #   ./build.sh          build, then run once with pictures into out/shots
