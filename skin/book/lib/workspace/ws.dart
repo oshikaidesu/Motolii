@@ -102,6 +102,7 @@ class Ws extends ChangeNotifier {
   Motolii? get inside => _inside;
   void join(Motolii inside) {
     _inside = inside;
+    _frame = (inside.now * fps).round(); // (the playhead is the inside's moment from the first)
     reread();
   }
 

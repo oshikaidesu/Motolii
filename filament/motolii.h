@@ -17,7 +17,7 @@ Motolii* motolii_open(const char* document, int wide, int high);   /* the docume
 void motolii_close(Motolii* m);
 const char* motolii_trouble(Motolii* m);                           /* why the last call that was not done was not */
 
-int motolii_add(Motolii* m, const char* kind, const char* file);   /* a new thing: its number (0: not made) */
+int motolii_add(Motolii* m, const char* kind, const char* file);   /* a new thing, on from the stage's present moment: its number (0: not made) */
 int motolii_remove(Motolii* m, int thing);
 int motolii_set(Motolii* m, int thing, const char* name, double number);          /* a value that stays */
 int motolii_say(Motolii* m, int thing, const char* name, const char* word);       /* a word */

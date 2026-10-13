@@ -1,5 +1,7 @@
 // The Media shelf, AEViewer 2 style: one browser for the project's files and media. A folder tree (locations, then folders only) beside
 // or above the open folder's contents, shown as thumbnails or as a list. Wide: tree | contents. Narrow: tree band (height by drag) over contents.
+import 'dart:io';
+
 import 'package:flutter/widgets.dart';
 
 import '../tokens.dart';
@@ -16,11 +18,17 @@ const dockTreeHeight = 132.0;
 const _wide = 440.0;
 
 class FileNode {
-  const FileNode(this.id, this.name, this.g, {this.meta = '', this.kids = const []});
+  // ignore: prefer_initializing_formals
+  const FileNode(this.id, this.name, this.g, {this.meta = '', List<FileNode> kids = const []}) : _kids = kids;
   final String id, name, meta;
   final DockG g;
-  final List<FileNode> kids;
+  final List<FileNode> _kids;
   bool get folder => g == DockG.folder;
+
+  /// A file or folder of the disk: its id is its whole path. Its folder is read when it is first opened ([listed]).
+  bool get disk => id.startsWith('/');
+  bool get listed => !disk || _lists.containsKey(id);
+  List<FileNode> get kids => disk && folder ? _listed(id) : _kids;
 
   /// The catalogue entry behind a media file of the project (same id), if any.
   MediaAsset? get media => _assets[id];
@@ -114,6 +122,110 @@ final fileRoots = <FileNode>[
   ),
 ];
 
+// ---------------------------------------------------------------- the disk (a joined window)
+
+/// What a file of the disk is here, by its name's end (null: not shown).
+DockG? _glyphOf(String name) => switch (name.substring(name.lastIndexOf('.') + 1).toLowerCase()) {
+  'mp4' || 'mov' || 'm4v' || 'webm' || 'mkv' => DockG.video,
+  'png' || 'jpg' || 'jpeg' || 'webp' || 'svg' || 'json' || 'lot' => DockG.image,
+  'glb' || 'gltf' => DockG.shape,
+  'ttf' || 'otf' || 'ttc' => DockG.font,
+  'wav' || 'mp3' || 'm4a' || 'aac' => DockG.audio,
+  _ => null,
+};
+
+/// The inside's kind for a file placed on the stage (null: it is not placed).
+String? _kindFor(DockG g) => switch (g) {
+  DockG.video => 'film',
+  DockG.image => 'picture',
+  DockG.shape => 'solid',
+  DockG.font => 'text',
+  _ => null,
+};
+
+String _base(String path) => path.substring(path.lastIndexOf('/') + 1);
+String _dir(String path) => path.lastIndexOf('/') <= 0 ? '/' : path.substring(0, path.lastIndexOf('/'));
+String _size(int bytes) => bytes >= 1 << 20 ? '${(bytes / (1 << 20)).toStringAsFixed(1)} MB' : '${(bytes / 1024).ceil()} KB';
+final _home = Platform.environment['HOME'] ?? '/';
+
+final _lists = <String, List<FileNode>>{};
+List<FileNode> _listed(String path) => _lists[path] ??= () {
+  final out = <FileNode>[];
+  try {
+    for (final e in Directory(path).listSync()) {
+      final name = _base(e.path);
+      if (name.startsWith('.')) continue;
+      if (e is Directory) {
+        out.add(FileNode(e.path, name, DockG.folder));
+      } else if (_glyphOf(name) case final g?) {
+        out.add(FileNode(e.path, name, g, meta: '${name.substring(name.lastIndexOf('.') + 1).toUpperCase()} · ${_size(e.statSync().size)}'));
+      }
+    }
+  } on FileSystemException {
+    return const <FileNode>[];
+  }
+  return out..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+}();
+
+/// The files the document's things are made of, by whole path: the thing that uses each (the last one, the one in front).
+Map<String, String> _used(Ws ws) {
+  if (_usedRev == ws.rev) return _usedNow;
+  final m = ws.inside!;
+  _usedRev = ws.rev;
+  return _usedNow = {
+    for (final l in ws.layers)
+      if (m.word(int.parse(l.id), 'file') case final f when f.isNotEmpty) m.whole(f): l.id,
+  };
+}
+
+var _usedNow = <String, String>{};
+int? _usedRev;
+
+/// The locations of a joined window: what the document is made of (its files, and the folders they are in), then the disk.
+List<FileNode> _rootsOf(DockCtx c) {
+  if (c.ws.inside == null) return fileRoots;
+  final files = _used(c.ws).keys.toList()..sort();
+  return [
+    FileNode(
+      'Project',
+      'Project',
+      DockG.folder,
+      kids: [
+        for (final d in {for (final f in files) _dir(f)}) FileNode(d, _base(d), DockG.folder),
+        for (final f in files)
+          if (_glyphOf(f) case final g?) FileNode(f, _base(f), g),
+      ],
+    ),
+    FileNode(_home, 'Home', DockG.folder),
+  ];
+}
+
+/// Root first, [id] last.
+List<FileNode> _pathOf(DockCtx c, String id) {
+  if (c.ws.inside == null) return _path(id);
+  final roots = _rootsOf(c);
+  if (!id.startsWith('/')) return [roots.first];
+  final out = <FileNode>[];
+  for (var at = id; ; at = _dir(at)) {
+    if (at == _home || at == '/') return out..insert(0, FileNode(at, at == _home ? 'Home' : '/', DockG.folder));
+    out.insert(0, FileNode(at, _base(at), DockG.folder));
+  }
+}
+
+/// The thing of the document a file is on (the sample: the layer its catalogue entry names).
+String? _layerOf(FileNode n, DockCtx c) => c.ws.inside == null ? n.media?.layer : _used(c.ws)[n.id];
+
+/// A file put on the stage as a new thing, picked. Not done: the foot of the shelf says why.
+void _place(DockCtx c, FileNode n) {
+  final m = c.ws.inside!, made = m.add(_kindFor(n.g)!, n.id);
+  c.set(() => made == 0 ? c.mem.trouble[n.id] = m.trouble : c.mem.trouble.remove(n.id));
+  if (made == 0) return;
+  c.ws.reread();
+  c.ws.select('$made');
+}
+
+// ---------------------------------------------------------------- the sample's tree
+
 final _byId = <String, FileNode>{}, _parent = <String, String>{};
 void _index() {
   if (_byId.isNotEmpty) return;
@@ -161,14 +273,15 @@ MediaType? _typeOf(DockG g) => switch (g) {
 String _metaOf(FileNode n) {
   final a = n.media;
   if (a != null) return a.dur > 0 ? '${a.clock} · ${a.meta}' : a.meta;
-  return n.folder ? '${n.kids.length} items' : n.meta;
+  return n.folder ? (n.listed ? '${n.kids.length} items' : 'Folder') : n.meta;
 }
 
-bool _inUse(FileNode n, DockCtx c) => n.media?.layer != null || c.applied(n.id);
+bool _inUse(FileNode n, DockCtx c) => _layerOf(n, c) != null || c.applied(n.id);
 
 void _go(DockCtx c, String id) => c.set(() {
+  _lists.remove(id); // (a folder of the disk is read again each time it is gone to)
   c.mem.folder = id;
-  c.mem.open.addAll(_path(id).map((n) => n.id));
+  c.mem.open.addAll(_pathOf(c, id).map((n) => n.id));
 });
 
 class MediaShelf extends StatelessWidget {
@@ -178,7 +291,8 @@ class MediaShelf extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     _index();
-    if (!_byId.containsKey(c.mem.folder)) c.mem.folder = fileRoots.first.id;
+    final joined = c.ws.inside != null, at = c.mem.folder;
+    if (joined ? at != 'Project' && !at.startsWith('/') : !_byId.containsKey(at)) c.mem.folder = _rootsOf(c).first.id;
     return LayoutBuilder(
       builder: (context, box) {
         if (box.maxWidth >= _wide) {
@@ -223,8 +337,8 @@ class _Tree extends StatelessWidget {
   Widget build(BuildContext context) {
     final rows = <Widget>[];
     void walk(FileNode n, int depth) {
-      final subs = n.kids.where((k) => k.folder).toList(), open = c.mem.open.contains(n.id);
-      rows.add(_FolderRow(n, depth, c, open: open, hasSubs: subs.isNotEmpty));
+      final open = c.mem.open.contains(n.id), subs = open || n.listed ? n.kids.where((k) => k.folder).toList() : const <FileNode>[];
+      rows.add(_FolderRow(n, depth, c, open: open, hasSubs: !n.listed || subs.isNotEmpty));
       if (open) {
         for (final s in subs) {
           walk(s, depth + 1);
@@ -232,7 +346,7 @@ class _Tree extends StatelessWidget {
       }
     }
 
-    for (final r in fileRoots) {
+    for (final r in _rootsOf(c)) {
       walk(r, 0);
     }
     return ColoredBox(
@@ -250,7 +364,7 @@ class _FolderRow extends StatelessWidget {
   final bool open, hasSubs;
   @override
   Widget build(BuildContext context) {
-    final here = c.mem.folder == n.id, files = n.kids.where((k) => !k.folder).length;
+    final here = c.mem.folder == n.id, files = n.listed ? n.kids.where((k) => !k.folder).length : 0;
     return DockHover(
       key: ValueKey('browser:folder:${n.id}'),
       onTap: () => _go(c, n.id),
@@ -303,7 +417,8 @@ class _Contents extends StatelessWidget {
   final DockCtx c;
   @override
   Widget build(BuildContext context) {
-    final path = _path(c.mem.folder), here = path.last, root = path.first;
+    final path = _pathOf(c, c.mem.folder), here = path.last;
+    final root = here.disk ? here : path.first; // (on the disk a search stays in the open folder and the folders already read below it)
     final searching = c.query.isNotEmpty;
     final List<FileNode> items;
     if (searching) {
@@ -311,7 +426,7 @@ class _Contents extends StatelessWidget {
       void walk(FileNode n) {
         for (final k in n.kids) {
           if (k.folder) {
-            walk(k);
+            if (k.listed) walk(k);
           } else if (c.hit(k.name)) {
             found.add(k);
           }
@@ -341,7 +456,7 @@ class _Contents extends StatelessWidget {
               : c.mem.mediaList
               ? ListView(
                   padding: EdgeInsets.zero,
-                  children: [for (final n in shown) _Row(n, c, where: searching ? _parent[n.id] : null)],
+                  children: [for (final n in shown) _Row(n, c, where: searching ? (n.disk ? _base(_dir(n.id)) : _byId[_parent[n.id]]!.name) : null)],
                 )
               : LayoutBuilder(
                   builder: (context, box) {
@@ -465,7 +580,7 @@ class _Tile extends StatelessWidget {
               children: [
                 _Art(n),
                 if (t != null) Positioned(left: 3, top: 3, child: DockTag(t.badge, hue: t.hue, edge: true)),
-                if (n.folder) Positioned(right: 4, bottom: 3, child: Text('${n.kids.length}', style: T.value(Grey.g63).copyWith(fontSize: 10))),
+                if (n.folder && n.listed) Positioned(right: 4, bottom: 3, child: Text('${n.kids.length}', style: T.value(Grey.g63).copyWith(fontSize: 10))),
                 if (a != null && a.dur > 0)
                   Positioned(
                     right: 3,
@@ -516,7 +631,7 @@ class _Row extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final sel = c.sel == n.id, a = n.media;
-    final meta = where == null ? _metaOf(n) : '${_byId[where]!.name} · ${_metaOf(n)}';
+    final meta = where == null ? _metaOf(n) : '$where · ${_metaOf(n)}';
     return DockHover(
       key: ValueKey('browser:file:${n.id}'),
       onTap: () => _open(n, c),
@@ -570,6 +685,19 @@ class _Footer extends StatelessWidget {
   final DockCtx c;
   @override
   Widget build(BuildContext context) {
+    if (c.ws.inside != null) {
+      // Joined: a file the inside can show is placed (as often as wanted, each a new thing from the present moment); one in use says so.
+      final layer = _layerOf(n, c), can = _kindFor(n.g) != null;
+      return DockFooter(
+        preview: _Art(n),
+        title: n.name,
+        meta: c.mem.trouble[n.id] ?? (layer != null ? 'In use · ${_metaOf(n)}' : _metaOf(n)),
+        action: can ? 'Place' : 'Select',
+        done: !can && layer == null,
+        doneLabel: 'No seat yet',
+        onAction: () => can ? _place(c, n) : c.ws.select(layer),
+      );
+    }
     final layer = n.media?.layer, comp = n.g == DockG.comp, media = _typeOf(n.g) != null;
     return DockFooter(
       preview: _Art(n),

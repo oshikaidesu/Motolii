@@ -17,6 +17,9 @@ class DockMem {
   final open = <String>{'Project'};
   final starred = <String>{'Glow', 'Repeater', 'Trim Paths', 'Futura', 'Didot', 'Pop Poster'};
   final applied = <String>{};
+
+  /// Why the last thing asked of the inside for an entry was not done (by the entry's id).
+  final trouble = <String, String>{};
   bool mediaList = false;
 
   /// The Media shelf: the open folder (a [FileNode] id) and the tree band's height when the shelf is narrow.

@@ -14,10 +14,16 @@ typedef _P = Pointer<Void>;
 typedef _S = Pointer<Utf8>;
 
 class Motolii {
-  Motolii._(this._lib, this._m, this.libPath);
+  Motolii._(this._lib, this._m, this.libPath, this.home);
   final DynamicLibrary _lib;
   final _P _m;
   final String libPath;
+
+  /// The folder the document's file words are read from (a word that is not a whole path starts here).
+  final String home;
+
+  /// A file word of the document as a whole path.
+  String whole(String file) => Uri.directory(home).resolveUri(Uri.file(file)).toFilePath();
 
   /// The document at [document] (made if it is not there), on a stage [wide] by [high]. null: it could not be opened.
   static Motolii? open(String document, {int wide = 1920, int high = 1080, String dir = motoliiDir}) {
@@ -34,7 +40,7 @@ class Motolii {
     malloc
       ..free(home)
       ..free(doc);
-    return m == nullptr ? null : Motolii._(lib, m, path);
+    return m == nullptr ? null : Motolii._(lib, m, path, '$dir/out/wgpu_kit');
   }
 
   late final _live = _lib.lookupFunction<Int32 Function(_P), int Function(_P)>('motolii_live');

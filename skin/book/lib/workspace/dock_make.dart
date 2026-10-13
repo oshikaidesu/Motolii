@@ -313,21 +313,47 @@ final _makes = <(String, List<_Make>)>[
   ),
 ];
 
+/// Joined: what the inside makes that the sample's tiles do not name (glass), and how a tile is asked of it (kind, then its file or shape).
+final _glass = (
+  'Glass',
+  [
+    _Make('Ring', DockG.radial, WsT.toneShape, '', 'Thick glass ring'),
+    _Make('Gem', DockG.polygon, WsT.toneShape, '', 'Cut glass gem'),
+    _Make('Cube', DockG.rect, WsT.toneShape, '', 'Glass cube'),
+  ],
+);
+const _asked = {
+  'Text': ('text', '/System/Library/Fonts/Supplemental/Arial Unicode.ttf'),
+  'Ring': ('glass', 'ring'),
+  'Gem': ('glass', 'gem'),
+  'Cube': ('glass', 'cube'),
+};
+
+/// A tile made on the stage as a new thing, picked. Not done: the foot of the shelf says why.
+void _make(DockCtx c, String name) {
+  final m = c.ws.inside!, asked = _asked[name]!, made = m.add(asked.$1, asked.$2);
+  c.set(() => made == 0 ? c.mem.trouble[name] = m.trouble : c.mem.trouble.remove(name));
+  if (made == 0) return;
+  c.ws.reread();
+  c.ws.select('$made');
+}
+
 class CreateShelf extends StatelessWidget {
   const CreateShelf(this.c, {super.key});
   final DockCtx c;
   @override
   Widget build(BuildContext context) {
+    final joined = c.ws.inside != null, makes = joined ? [..._makes, _glass] : _makes;
     final groups = [
-      for (final (g, items) in _makes)
+      for (final (g, items) in makes)
         if (c.chip == 'All' || c.chip == g) (g, items.where((m) => c.hit(m.name)).toList()),
     ].where((e) => e.$2.isNotEmpty).toList();
-    final sel = _makes.expand((e) => e.$2).where((m) => m.name == c.sel).firstOrNull;
+    final sel = makes.expand((e) => e.$2).where((m) => m.name == c.sel).firstOrNull;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         DockChips(
-          [('All', _makes.fold<int>(0, (s, e) => s + e.$2.length)), for (final (g, items) in _makes) (g, items.length)],
+          [('All', makes.fold<int>(0, (s, e) => s + e.$2.length)), for (final (g, items) in makes) (g, items.length)],
           active: c.chip,
           onPick: c.pickChip,
         ),
@@ -362,7 +388,17 @@ class CreateShelf extends StatelessWidget {
                   ],
                 ),
         ),
-        if (sel != null)
+        if (sel != null && joined)
+          DockFooter(
+            preview: DockBadge(sel.g, sel.hue, size: 34),
+            title: '${sel.name} layer',
+            meta: c.mem.trouble[sel.name] ?? 'At ${c.ws.timecode()} · ${sel.what}',
+            action: 'Create',
+            done: !_asked.containsKey(sel.name),
+            doneLabel: 'No seat yet',
+            onAction: () => _make(c, sel.name),
+          )
+        else if (sel != null)
           DockFooter(
             preview: DockBadge(sel.g, sel.hue, size: 34),
             title: '${sel.name} layer',

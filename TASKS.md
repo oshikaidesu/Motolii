@@ -24,8 +24,10 @@
 - つないだ所（`reports/skin_run/live_02_*.jpg`、`live_03_*.jpg`）：タイムラインの層とバーとキーは文書の物。長さは文書の長さ。再生位置は中身の時刻（再生も、つまんで動かすのも中身に行く）。
   舞台で物を押すと選べて、枠は中身が答えた「絵のどこに映ってるか」。インスペクタとドックの置き先も選んだ物に変わる。
   中身に足した読み口：`motolii_things`、`motolii_word`、`motolii_lasts`、`motolii_key_moments`、`motolii_frame`。
-- まだ作り物のままの所：インスペクタの数を変えても文書に行かない。ドックの Place は置かない。タイムラインでキーを打てない・バーを動かせない。机の Ease・Wiggle・Blend は文書に行かない。上の帯の取り消し・やり直しは文書に行かない。
-  インスペクタの数の読み（Position が絵の点、Scale が 100 固定）は仮。
+- インスペクタと取り消し（84a10a3）：選んだ物の値が文書の値で出る。数をつまんで動かすと、動かしてる間は舞台の物がその場で動き（`motolii_try`：書かずに見せる）、離した時に1回だけ書く。1回のつまみ＝取り消し1歩（窓で確かめた：582.4 → 取り消し1回で 516.3）。上の帯の取り消し・やり直しは文書に行く。
+- **合格線2：窓で通した**（`reports/skin_run/live_04_placed_from_the_dock.jpg`）。Media 棚はつないだ時は本物の円盤：Project（文書が使ってるファイルと、その居るフォルダ）と Home。開いたフォルダだけ読む。Place で `add`（mp4 → film、png/jpg/svg/json → picture、glb → solid、ttf → text）。Create 棚は Text と Glass（Ring・Gem・Cube）が `add`、中身に無い物は押せない札「No seat yet」。置いた物は再生位置から始まる（`add` 1回の中でやるので取り消しも1歩）。置いたら選ばれる。取り消し4回で4つとも消えた。
+  見つけた事：(1) `~/Downloads` へのリンクを置こうとすると、macOS の許可の札の返事待ちで窓ごと固まる（中身の呼びが画面の線の上で待つ作りだから）。リンク2本（happy、mohsen）は実ファイルの写しに替えた。待つ呼びを画面の線から外すかは未着手。(2) 棚の小さい絵は作り物のポスターのまま（本物のファイルなのに嘘の絵）。(3) 置いた動画の緑は抜けてない（`keyed` を入れる席がまだ無い）。(4) 新しい文字は字体の名前がそのまま巨大に出る。(5) glb を窓から置くのは未確認。
+- まだ作り物のままの所：タイムラインでキーを打てない・バーを動かせない。机の Ease・Wiggle・Blend は文書に行かない。インスペクタは Transform の数だけ（文字の中身と色、動画の `keyed`・`speed`・`begin`、`blend` の席が無い）。Fonts・Colors・Effects 棚。
 - 開き方：`skin/book` で Flutter（`~/rust_ae/Motolii/.tools/flutter/bin/flutter`）の `build macos --debug --dart-define=LAB_ROUTE=/?path=workspace/workspace/live`、できた `lab_book.app` を開く。文書は `filament/out/skin.motolii`。
 
 作る的：①`edit_v5` を窓だけで作り直す ②猫ミームの人形劇 ③青いロケットのコラージュ（`research_notes/refs/G_rocket_collage_blue.jpg`）。

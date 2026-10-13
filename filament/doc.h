@@ -309,7 +309,9 @@ static bool doc_knows(Doc& d, int thing, const char* name = nullptr, const doubl
 // made, and no number is used up).
 static int doc_add(Doc& d, const char* kind, const char* file) {
     if (!doc_among(doc_kinds, kind)) return d.trouble = std::string("a thing is one of: ") + doc_kinds, 0;
-    if (!doc_change(d, sqlite3_mprintf("insert into thing default values; insert into fact(thing, name, at, value) values(last_insert_rowid(), 'kind', 0.0, %Q); insert into fact(thing, name, at, value) values(last_insert_rowid(), %Q, 0.0, %Q)", kind, !strcmp(kind, "glass") ? "shape" : "file", file))) return 0;
+    // (it comes on at the stage's present moment)
+    if (!doc_change(d, sqlite3_mprintf("insert into thing default values; insert into fact(thing, name, at, value) values(last_insert_rowid(), 'kind', 0.0, %Q); insert into fact(thing, name, at, value) values(last_insert_rowid(), %Q, 0.0, %Q); insert into fact(thing, name, at, value) select id, 'start', 0.0, %!.17g from thing where %d order by id desc limit 1",
+                                       kind, !strcmp(kind, "glass") ? "shape" : "file", file, d.stage->now, d.stage->now > 0.0))) return 0;
     int thing = 0;   // (the newest number: SQLite's own count of things, which a change not made does not move)
     doc_rows(d, sqlite3_mprintf("select max(id) from thing"), [&](sqlite3_stmt* row) { thing = sqlite3_column_int(row, 0); });
     return thing;
