@@ -5,9 +5,9 @@
   1.0000
   3.0000
   1.0000
-  1.9646
+  1.5732
   3.0000
-  2.0153
+  2.3333
   0.0000
   0.0000
   Hold, Linear, Bezier (x1 y1 x2 y2), Bounce (first_dip dip), Elastic (limit period damp), Cyclic (period peak linear envelope_end), Random (seed grain center_u center_v bias), Steps (width smooth), ElasticSteps (width elasticity)

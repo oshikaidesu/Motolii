@@ -91,7 +91,7 @@ static sqlite3_stmt* doc_way_named(Doc& d, const std::string& name) {
 }
 
 // A value at a moment: `otherwise` where the document does not say; where it has keys, the value the stretch it is in
-// gives (before the first key and after the last: theirs). A stretch goes the way said for it (not said: Bezier, eased).
+// gives (before the first key and after the last: theirs). A stretch goes the way said for it (not said: Linear).
 static double doc_number(Doc& d, int thing, const char* name, double at, double otherwise) {
     auto found = d.moving.find({thing, name});
     if (found == d.moving.end()) {
@@ -101,7 +101,7 @@ static double doc_number(Doc& d, int thing, const char* name, double at, double 
             keys.value.push_back(sqlite3_column_double(row, 1));
             const std::string way = (const char*)sqlite3_column_text(row, 2);
             Interp kind;
-            const bool of_the_nine = interp_said(way.empty() ? "Bezier" : way, &kind) == 0;   // (not said: the past skin's "Ease")
+            const bool of_the_nine = interp_said(way.empty() ? "Linear" : way, &kind) == 0;   // (not said: Linear, as a new key is in the past repository)
             keys.interp.push_back(kind);
             keys.own.push_back(of_the_nine ? "" : way);
         });

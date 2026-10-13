@@ -11,17 +11,16 @@ struct Interp {
     enum Kind { Hold, Linear, Bezier, Bounce, Elastic, Cyclic, Random, Steps, ElasticSteps } kind = Linear;
     double p[5] = {0, 0, 0, 0, 0};   // (its numbers, in the order of interp_kinds' names)
 };
-// name, how many numbers, their names, and the usual numbers when none are said. (The usual numbers: Bezier's is the
-// past skin's "Ease" preset, Bounce's and Elastic's are the past repository's own; Cyclic's period and the widths of
-// the steps are what its formulas fall back to; the rest are placed here.)
+// name, how many numbers, their names, and the usual numbers when none are said: the past repository's own, as it
+// found them good on the machine (rust_ae/Motolii, motolii/ui/native/src/editor/ease_kinds.rs).
 static const struct { const char* name; int numbers; const char* names; double usual[5]; } interp_kinds[] = {
     {"Hold", 0, "", {}},
     {"Linear", 0, "", {}},
     {"Bezier", 4, "x1 y1 x2 y2", {0.42, 0.0, 0.58, 1.0}},
-    {"Bounce", 2, "first_dip dip", {1.5 / 2.75, 0.75}},
+    {"Bounce", 2, "first_dip dip", {0.27, 0.2}},
     {"Elastic", 3, "limit period damp", {1.5, 0.3, 0.35}},
     {"Cyclic", 4, "period peak linear envelope_end", {2.0 / 7.0, 0.5, 0.0, 0.0}},
-    {"Random", 5, "seed grain center_u center_v bias", {0.0, 0.25, 0.5, 0.8, 0.5}},
+    {"Random", 5, "seed grain center_u center_v bias", {500.0, 0.15, 0.5, 0.75, 0.5}},
     {"Steps", 2, "width smooth", {0.178, 0.0}},
     {"ElasticSteps", 2, "width elasticity", {0.2, 0.5}},
 };
