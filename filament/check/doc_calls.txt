@@ -1,9 +1,9 @@
 add picture ../../third_party/thorvg_example/res/lottie/gradient_background.json
 set 1 z -1
-set 1 high 4.2
+set 1 size 4.2
 add film ../vid/happy.mp4
 set 2 keyed 1
-set 2 high 1.4
+set 2 size 1.4
 set 2 y 0.6
 still out/e_1.png
 add glass ring
@@ -11,11 +11,11 @@ set 3 y -0.7
 set 3 z 1
 key 2 x 0 -0.6
 key 2 x 3 0.6
-key 2 turn 0 -20
-key 2 turn 3 20
+key 2 rotate 0 -20
+key 2 rotate 3 20
 at 2.5
 still out/e_2.png
-say 2 lay screen
+say 2 blend screen
 still out/e_3.png
 undo
 remove 3

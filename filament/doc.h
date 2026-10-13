@@ -8,14 +8,15 @@
 // inpoint, duration).
 // NOT RIGHT YET: every stretch between two keys goes the same one way here (smooth, never past a key). Motolii's own
 // way is that the stretch itself is defined: its easing, or a movement such as a wiggle. To be made so.
-// The names a thing's facts go by (still to be settled):
-//   numbers  x, y, z, turn, high    where its middle is, turned by how many degrees, how tall
+// The names a thing's facts go by are ThorVG's own, where it has one (translate's x and y, rotate, size, blend and its
+// words, text, fill, a segment's begin, add, remove):
+//   numbers  x, y, z, rotate, size  where its middle is, turned by how many degrees, how tall
 //            start, duration        when it comes on, and for how long (not said: for good, going round)
-//            inpoint, speed         a film's: from where in itself, how fast (below 0: backwards)
+//            begin, speed           a film's: from where in itself, how fast (below 0: backwards)
 //            keyed                  a film's: 1 if its green ground is keyed out
-//   words    lay                    how it lies on what is behind: over | add | multiply | screen
-//            file, shape            what it was made from (add says them): a file; a glass's shape: ring | gem | cube
-//            words, colour          a type's: what it says (to the end of the line), and its colour as six digits (ff3366)
+//   words    blend                  how it lies on what is behind: normal | add | multiply | screen
+//            file, shape            what it was made from (add says them): a file (a text's: its font); a glass's shape: ring | gem | cube
+//            text, fill             a text's: what it says (to the end of the line), and its colour as six digits (ff3366)
 #include "drawn.h"
 #include "solid.h"
 #include "video.h"
@@ -32,15 +33,15 @@ struct Doc {
 };
 // What a thing may be told, by name: which kinds of thing have it, a number between which two (or one of which
 // words), and whether it can move (take keys).
-static const char* const doc_kinds = "film picture type solid glass";   // (the kinds of thing)
+static const char* const doc_kinds = "film picture text solid glass";   // (the kinds of thing)
 struct DocValue { const char* name; const char* kinds; double low, high; bool moves; const char* words; };
 static const DocValue doc_values[] = {
     {"x", doc_kinds, -1e4, 1e4, true, nullptr}, {"y", doc_kinds, -1e4, 1e4, true, nullptr}, {"z", doc_kinds, -1e4, 1e4, true, nullptr},
-    {"turn", doc_kinds, -1e6, 1e6, true, nullptr}, {"high", doc_kinds, 1e-3, 1e4, true, nullptr},
+    {"rotate", doc_kinds, -1e6, 1e6, true, nullptr}, {"size", doc_kinds, 1e-3, 1e4, true, nullptr},
     {"start", doc_kinds, 0, 1e6, false, nullptr}, {"duration", doc_kinds, 1e-3, 1e6, false, nullptr},
-    {"inpoint", "film", 0, 1e6, false, nullptr}, {"speed", "film", -100, 100, false, nullptr}, {"keyed", "film", 0, 1, false, nullptr},
-    {"lay", "film picture type", 0, 0, false, "over add multiply screen"}, {"file", "film picture solid type", 0, 0, false, ""}, {"shape", "glass", 0, 0, false, "ring gem cube"},
-    {"words", "type", 0, 0, false, ""}, {"colour", "type", 0, 0, false, ""}};
+    {"begin", "film", 0, 1e6, false, nullptr}, {"speed", "film", -100, 100, false, nullptr}, {"keyed", "film", 0, 1, false, nullptr},
+    {"blend", "film picture text", 0, 0, false, "normal add multiply screen"}, {"file", "film picture solid text", 0, 0, false, ""}, {"shape", "glass", 0, 0, false, "ring gem cube"},
+    {"text", "text", 0, 0, false, ""}, {"fill", "text", 0, 0, false, ""}};
 static bool doc_among(const std::string& words, const std::string& one) { return (" " + words + " ").find(" " + one + " ") != std::string::npos; }
 
 // Rows of the document: `each` is told every row of what is asked (in SQLite's own words).
@@ -92,7 +93,7 @@ static void doc_moment(Doc& d, double now) {
         if (t.film) video_at(s, t.film, (float)since);
         if (t.drawn && t.drawn->seconds > 0.f) picture_at(s, t.drawn, std::fmod((float)since, t.drawn->seconds));
         const float3 at{(float)doc_number(d, thing, "x", now, 0), (float)doc_number(d, thing, "y", now, 0), (float)doc_number(d, thing, "z", now, 0)};
-        const mat4f place = mat4f::translation(at) * mat4f::rotation((float)doc_number(d, thing, "turn", now, 0) * TAU / 360.f, float3{0, 0, 1}) * mat4f::scaling((float)doc_number(d, thing, "high", now, 1));
+        const mat4f place = mat4f::translation(at) * mat4f::rotation((float)doc_number(d, thing, "rotate", now, 0) * TAU / 360.f, float3{0, 0, 1}) * mat4f::scaling((float)doc_number(d, thing, "size", now, 1));
         if (t.solid) solid_to(s, t.solid, place); else move(s, m, [&](int, const mat4f&) { return place; });
     }
 }
@@ -103,7 +104,7 @@ static void doc_moment(Doc& d, double now) {
 static bool doc_match(Doc& d) {
     Stage& s = *d.stage;
     std::map<int, std::string> told;   // every thing of the document, and all that its making goes by
-    doc_rows(d, sqlite3_mprintf("select thing, group_concat(name || '=' || value, ' ') from (select * from fact where name in ('kind','file','shape','lay','keyed','inpoint','duration','speed','words','colour') order by thing, name) group by thing"),
+    doc_rows(d, sqlite3_mprintf("select thing, group_concat(name || '=' || value, ' ') from (select * from fact where name in ('kind','file','shape','blend','keyed','begin','duration','speed','text','fill') order by thing, name) group by thing"),
              [&](sqlite3_stmt* row) { told[sqlite3_column_int(row, 0)] = (const char*)sqlite3_column_text(row, 1); });
     for (auto it = d.shown.begin(); it != d.shown.end();) {
         const auto still = told.find(it->first);
@@ -118,12 +119,12 @@ static bool doc_match(Doc& d) {
     for (const auto& [thing, of] : told) {
         if (d.shown.count(thing)) continue;
         Doc::Shown made{of};
-        const std::string kind = doc_word(d, thing, "kind"), file = doc_word(d, thing, "file"), laid = doc_word(d, thing, "lay"), shape = doc_word(d, thing, "shape");
-        const char* lay = laid.empty() || laid == "over" ? nullptr : laid.c_str();
+        const std::string kind = doc_word(d, thing, "kind"), file = doc_word(d, thing, "file"), laid = doc_word(d, thing, "blend"), shape = doc_word(d, thing, "shape");
+        const char* lay = laid.empty() || laid == "normal" ? nullptr : laid.c_str();
         std::string why = "it could not be read";
         if (kind != "glass" && !std::filesystem::is_regular_file(file)) why = "there is no such file";
         else if (kind == "film") {
-            const double from = doc_number(d, thing, "inpoint", 0, 0), length = doc_number(d, thing, "duration", 0, -1), speed = doc_number(d, thing, "speed", 0, 1);
+            const double from = doc_number(d, thing, "begin", 0, 0), length = doc_number(d, thing, "duration", 0, -1), speed = doc_number(d, thing, "speed", 0, 1);
             made.film = video(s, file.c_str(), mat4f{}, 1.f, (float)from, length < 0 ? -1.f : (float)(from + length * std::fabs(speed)), (float)speed, lay);
             if (!made.film) why = video_trouble;
             else if (doc_number(d, thing, "keyed", 0, 0) > 0.5) key_out(made.film);
@@ -131,10 +132,10 @@ static bool doc_match(Doc& d) {
             if (made.film && made.film->sound) s.sounding[made.film] = [&d, thing, v = made.film, file] { return Stage::Sound{file, v->from, v->to, v->speed, 0.0, doc_number(d, thing, "start", 0, 0), doc_number(d, thing, "duration", 0, -1)}; };
         } else if (kind == "picture") {
             if ((made.drawn = picture(s, file.c_str(), mat4f{}, 1.f, float3{-1.f}, true, lay))) s.playing.erase(made.drawn);
-        } else if (kind == "type") {   // (words in a font: said by `say N words ...`; until then, the font's own name)
-            const std::string words = doc_word(d, thing, "words"), colour = doc_word(d, thing, "colour");
+        } else if (kind == "text") {   // (words in a font: said by `say N text ...`; until then, the font's own name)
+            const std::string words = doc_word(d, thing, "text"), colour = doc_word(d, thing, "fill");
             const long rgb = colour.empty() ? 0x111111 : colour.size() == 6 && colour.find_first_not_of("0123456789abcdefABCDEF") == std::string::npos ? std::strtol(colour.c_str(), nullptr, 16) : -1;
-            if (rgb < 0) why = "a colour is six digits, as ff3366";
+            if (rgb < 0) why = "a fill is six digits, as ff3366";
             else made.drawn = type(s, words.empty() ? std::filesystem::path(file).stem().string().c_str() : words.c_str(), file.c_str(), mat4f{}, 1.f, float3{(float)((rgb >> 16) & 255), (float)((rgb >> 8) & 255), (float)(rgb & 255)} / 255.f, lay);
         } else if (kind == "solid") {
             made.solid = solid(s, file.c_str(), mat4f{}, 1.f);
@@ -251,7 +252,7 @@ static bool doc_knows(Doc& d, int thing, const char* name = nullptr, const doubl
     return true;
 }
 
-// The calls. A new thing of a kind (film, picture, type, solid, glass) from a file (a type: its font; a glass: its shape): its number (0: not
+// The calls. A new thing of a kind (film, picture, text, solid, glass) from a file (a text: its font; a glass: its shape): its number (0: not
 // made, and no number is used up).
 static int doc_add(Doc& d, const char* kind, const char* file) {
     if (!doc_among(doc_kinds, kind)) return d.trouble = std::string("a thing is one of: ") + doc_kinds, 0;

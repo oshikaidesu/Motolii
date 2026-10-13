@@ -9,8 +9,8 @@
   3 kind at 0.0: solid
   4 file at 0.0: ../../../reports/ae_rubric/stills/lay_v1.jpg
   4 kind at 0.0: picture
-  5 colour at 0.0: ff3366
   5 file at 0.0: ../arial_black.ttf
-  5 kind at 0.0: type
-  5 words at 0.0: two words  and a gap
+  5 fill at 0.0: ff3366
+  5 kind at 0.0: text
+  5 text at 0.0: two words  and a gap
   (the document runs 14.35 seconds)

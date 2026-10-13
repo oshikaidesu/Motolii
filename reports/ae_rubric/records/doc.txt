@@ -1,46 +1,46 @@
 
 thing 1
-add: done, 62.1 ms
+add: done, 53.4 ms
 set: done, 0.7 ms
-set: done, 1.0 ms
+set: done, 0.6 ms
 thing 2
-add: done, 66.2 ms
-set: done, 10.4 ms
+add: done, 63.9 ms
+set: done, 11.3 ms
 set: done, 0.7 ms
 set: done, 0.7 ms
-still: done, 40.1 ms
+still: done, 58.0 ms
 thing 3
 add: done, 2.2 ms
 set: done, 0.7 ms
-set: done, 0.7 ms
+set: done, 0.6 ms
 key: done, 0.6 ms
+key: done, 0.7 ms
+key: done, 0.7 ms
 key: done, 0.6 ms
-key: done, 0.6 ms
-key: done, 0.5 ms
-at: done, 30.3 ms
-still: done, 43.2 ms
-say: done, 23.9 ms
-still: done, 39.0 ms
-undo: done, 22.6 ms
-remove: done, 1.1 ms
-still: done, 26.7 ms
-undo: done, 1.7 ms
-undo: done, 1.2 ms
-undo: done, 1.2 ms
-still: done, 44.2 ms
-redo: done, 1.7 ms
-redo: done, 3.1 ms
-still: done, 47.2 ms
+at: done, 30.1 ms
+still: done, 64.9 ms
+say: done, 26.9 ms
+still: done, 47.0 ms
+undo: done, 22.7 ms
+remove: done, 0.9 ms
+still: done, 24.9 ms
+undo: done, 1.6 ms
+undo: done, 1.0 ms
+undo: done, 1.1 ms
+still: done, 38.7 ms
+redo: done, 1.4 ms
+redo: done, 1.0 ms
+still: done, 39.1 ms
   1 file at 0.0: ../../third_party/thorvg_example/res/lottie/gradient_background.json
-  1 high at 0.0: 4.2
   1 kind at 0.0: picture
+  1 size at 0.0: 4.2
   1 z at 0.0: -1.0
   2 file at 0.0: ../vid/happy.mp4
-  2 high at 0.0: 1.4
   2 keyed at 0.0: 1.0
   2 kind at 0.0: film
-  2 turn at 0.0: -20.0
-  2 turn at 3.0: 20.0
+  2 rotate at 0.0: -20.0
+  2 rotate at 3.0: 20.0
+  2 size at 0.0: 1.4
   2 x at 0.0: -0.6
   2 x at 3.0: 0.6
   2 y at 0.0: 0.6
@@ -50,43 +50,43 @@ still: done, 47.2 ms
   3 z at 0.0: 1.0
   (the document runs 14.35 seconds)
 
-at: done, 18.0 ms
-still: done, 64.1 ms
+at: done, 16.8 ms
+still: done, 86.1 ms
 undo: NOT done: nothing to undo, 0.0 ms
-add: NOT done: the film (../vid/no_such_file.mp4) could not be made: there is no such file, 0.4 ms
+add: NOT done: the film (../vid/no_such_file.mp4) could not be made: there is no such file, 0.3 ms
 add: NOT done: the glass (banana) could not be made: a glass's shape is ring, gem or cube, 0.3 ms
 add: NOT done: the picture (../vid/no_such_file.json) could not be made: there is no such file, 0.3 ms
 set: NOT done: there is no thing 99, 0.0 ms
 remove: NOT done: there is no thing 99, 0.0 ms
 remove: NOT done: there is no thing 1, 0.0 ms
-set: NOT done: a glass has no wobble: it has x, y, z, turn, high, start, duration, shape, 0.0 ms
-say: NOT done: a glass has no lay: it has x, y, z, turn, high, start, duration, shape, 0.0 ms
-say: NOT done: a glass has no keyed: it has x, y, z, turn, high, start, duration, shape, 0.0 ms
+set: NOT done: a glass has no wobble: it has x, y, z, rotate, size, start, duration, shape, 0.0 ms
+say: NOT done: a glass has no blend: it has x, y, z, rotate, size, start, duration, shape, 0.0 ms
+say: NOT done: a glass has no keyed: it has x, y, z, rotate, size, start, duration, shape, 0.0 ms
 key: NOT done: a key is at a moment of the stage: from 0 to 1000000 seconds, 0.0 ms
-set: NOT done: the film (../vid/happy.mp4) could not be made: a speed of 0 shows nothing: a film goes forwards or backwards, 14.4 ms
-set: NOT done: the film (../vid/happy.mp4) could not be made: the cut is empty, 19.9 ms
-add: NOT done: the picture (../vid) could not be made: there is no such file, 4.0 ms
-add: NOT done: a thing is one of: film picture type solid glass, 0.0 ms
-key: NOT done: speed does not move: keys go on x, y, z, turn, high, 0.0 ms
-key: NOT done: start does not move: keys go on x, y, z, turn, high, 0.0 ms
-set: NOT done: a glass has no speed: it has x, y, z, turn, high, start, duration, shape, 0.0 ms
-set: NOT done: a glass has no keyed: it has x, y, z, turn, high, start, duration, shape, 0.0 ms
-say: NOT done: a glass has no lay: it has x, y, z, turn, high, start, duration, shape, 0.0 ms
-say: NOT done: a film has no shape: it has x, y, z, turn, high, start, duration, inpoint, speed, keyed, lay, file, 0.0 ms
-set: NOT done: a picture has no speed: it has x, y, z, turn, high, start, duration, lay, file, 0.0 ms
+set: NOT done: the film (../vid/happy.mp4) could not be made: a speed of 0 shows nothing: a film goes forwards or backwards, 15.7 ms
+set: NOT done: the film (../vid/happy.mp4) could not be made: the cut is empty, 14.8 ms
+add: NOT done: the picture (../vid) could not be made: there is no such file, 0.6 ms
+add: NOT done: a thing is one of: film picture text solid glass, 0.0 ms
+key: NOT done: speed does not move: keys go on x, y, z, rotate, size, 0.0 ms
+key: NOT done: start does not move: keys go on x, y, z, rotate, size, 0.0 ms
+set: NOT done: a glass has no speed: it has x, y, z, rotate, size, start, duration, shape, 0.0 ms
+set: NOT done: a glass has no keyed: it has x, y, z, rotate, size, start, duration, shape, 0.0 ms
+say: NOT done: a glass has no blend: it has x, y, z, rotate, size, start, duration, shape, 0.0 ms
+say: NOT done: a film has no shape: it has x, y, z, rotate, size, start, duration, begin, speed, keyed, blend, file, 0.0 ms
+set: NOT done: a picture has no speed: it has x, y, z, rotate, size, start, duration, blend, file, 0.0 ms
 set: NOT done: duration is from 0.001 to 1e+06, 0.0 ms
 set: NOT done: start is from 0 to 1e+06, 0.0 ms
 set: NOT done: keyed is 0 or 1, 0.0 ms
-set: NOT done: high is from 0.001 to 10000, 0.0 ms
+set: NOT done: size is from 0.001 to 10000, 0.0 ms
 set: NOT done: x is from -10000 to 10000, 0.0 ms
 key: NOT done: a key is at a moment of the stage: from 0 to 1000000 seconds, 0.0 ms
 unkey: NOT done: x has no key at that moment, 0.0 ms
 still: NOT done: there is no such folder, 0.0 ms
 still: NOT done: a still is a .png, 0.0 ms
 at: NOT done: the document runs from 0 to 14.35 seconds, 0.0 ms
-say: NOT done: the type (../arial_black.ttf) could not be made: a colour is six digits, as ff3366, 4.2 ms
-set: NOT done: a type has no speed: it has x, y, z, turn, high, start, duration, lay, file, words, colour, 0.0 ms
-add: NOT done: the type (../no_such_font.ttf) could not be made: there is no such file, 0.6 ms
+say: NOT done: the text (../arial_black.ttf) could not be made: a fill is six digits, as ff3366, 3.2 ms
+set: NOT done: a text has no speed: it has x, y, z, rotate, size, start, duration, blend, file, text, fill, 0.0 ms
+add: NOT done: the text (../no_such_font.ttf) could not be made: there is no such file, 0.7 ms
 after the wrong calls the document is as expected: yes (35 calls refused)
 opened afresh against before closing: mean off 0.000 of 255: the same
 colours on a document's stage: white 255 shown as (255, 255, 255), grey 144 as (144, 144, 144), white words as (255, 255, 255): as the files hold them

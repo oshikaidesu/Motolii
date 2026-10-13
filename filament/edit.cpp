@@ -13,7 +13,7 @@
 #include <vector>
 
 static const char* const calls =
-    "  add film <file> | add picture <an After Effects file, a .jpg, a .png> | add type <font.ttf> | add solid <file.glb> | add glass ring|gem|cube\n"
+    "  add film <file> | add picture <an After Effects file, a .jpg, a .png> | add text <font.ttf> | add solid <file.glb> | add glass ring|gem|cube\n"
     "  remove <thing> | set <thing> <name> <number> | say <thing> <name> <word> | key <thing> <name> <at> <number> | unkey <thing> <name> <at>\n"
     "  undo | redo | list | at <seconds> | still <file.png> | write <file.mp4> | time\n";
 
@@ -41,7 +41,7 @@ int main(int argc, char** argv) {
             const double is = number(3);
             if (numbers && (ok = motolii_set(m, n, w[2].c_str(), is)) && keys) std::printf("(its %d keys are gone: it stays at that)\n", keys);
         }
-        else if (call == "say" && w.size() >= 4 && (w.size() == 4 || w[2] == "words")) { const int n = thing(); if (numbers) ok = motolii_say(m, n, w[2].c_str(), w[2] == "words" ? rest(3).c_str() : w[3].c_str()); }   // (a type's words are the rest of the line)
+        else if (call == "say" && w.size() >= 4 && (w.size() == 4 || w[2] == "text")) { const int n = thing(); if (numbers) ok = motolii_say(m, n, w[2].c_str(), w[2] == "text" ? rest(3).c_str() : w[3].c_str()); }   // (a text's words are the rest of the line)
         else if (call == "key" && w.size() == 5) { const int n = thing(); const double at = number(3), is = number(4); if (numbers) ok = motolii_key(m, n, w[2].c_str(), at, is); }
         else if (call == "unkey" && w.size() == 4) { const int n = thing(); const double at = number(3); if (numbers) ok = motolii_unkey(m, n, w[2].c_str(), at); }
         else if (call == "undo" && w.size() == 1) ok = motolii_undo(m);

@@ -6,7 +6,7 @@ cd "$(dirname "$0")/.."
 W=out/wgpu_kit/out
 rm -f $W/puppet.mp4 $W/sound_doc.mp4 out/sound_check.motolii
 ./puppet.sh film > /dev/null 2>&1
-printf 'add film ../vid/mohsen.mp4\nset 1 start 1.5\nset 1 inpoint 2\nset 1 speed 2\nwrite out/sound_doc.mp4\n' | ./edit.sh out/sound_check.motolii > /dev/null 2>&1
+printf 'add film ../vid/mohsen.mp4\nset 1 start 1.5\nset 1 begin 2\nset 1 speed 2\nwrite out/sound_doc.mp4\n' | ./edit.sh out/sound_check.motolii > /dev/null 2>&1
 for n in $W/puppet.mp4 $W/sound_doc.mp4 out/vid/happy.mp4 out/vid/mohsen.mp4; do ffmpeg -hide_banner -loglevel error -y -i $n -vn -ac 1 -ar 8000 -f f32le $W/${n:t:r}.f32 || echo "no sound in $n"; done
 ffmpeg -hide_banner -loglevel error -y -ss 2 -i out/vid/mohsen.mp4 -vn -af atempo=2 -ac 1 -ar 8000 -f f32le $W/mohsen_cut.f32
 python3 - $W $(ffprobe -v error -show_entries format=duration -of csv=p=0 out/vid/mohsen.mp4) <<'PY'

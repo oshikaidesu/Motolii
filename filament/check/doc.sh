@@ -20,7 +20,7 @@ python3 -c "
 from PIL import Image
 im = Image.new('RGB', (64, 64), (255, 255, 255)); im.paste((144, 144, 144), (0, 32, 64, 64)); im.save('out/white_grey.png')"
 rm -f out/doc_colour.motolii
-printf 'add picture ../white_grey.png\nset 1 high 2\nadd type ../arial_black.ttf\nsay 2 colour ffffff\nsay 2 words III\nset 2 y -1.3\nset 2 high 0.4\nstill out/e_colour.png\n' | ./edit.sh out/doc_colour.motolii > /dev/null
+printf 'add picture ../white_grey.png\nset 1 size 2\nadd text ../arial_black.ttf\nsay 2 fill ffffff\nsay 2 text III\nset 2 y -1.3\nset 2 size 0.4\nstill out/e_colour.png\n' | ./edit.sh out/doc_colour.motolii > /dev/null
 python3 - <<'PY'
 import numpy as np
 from PIL import Image

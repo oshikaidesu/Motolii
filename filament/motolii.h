@@ -2,8 +2,9 @@
    else. The shell holds no document: it holds this handle and the numbers of things. One call = one change = one step
    of undo, in the document's file as the call returns. A call that is not done returns 0, changes nothing, and
    motolii_trouble() says why.
-   kinds: film, picture (an After Effects file, a .jpg, a .png), type (a font, .ttf), solid (.glb, .gltf), glass
-   (ring, gem, cube). The names of a thing's values: doc.h. */
+   kinds: film, picture (an After Effects file, a .jpg, a .png), text (a font, .ttf), solid (.glb, .gltf), glass
+   (ring, gem, cube). The names of a thing's values are ThorVG's own where it has one (x, y, rotate, size, blend,
+   text, fill, begin): doc.h lists them. */
 #ifndef MOTOLII_H
 #define MOTOLII_H
 #ifdef __cplusplus
