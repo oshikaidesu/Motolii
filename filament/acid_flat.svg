@@ -9,12 +9,12 @@
 <rect x="1401.6" y="54.0" width="268.8" height="842.4" fill="#B5EE3A"/>
 <rect x="38.4" y="540.0" width="1632.0" height="129.6" fill="#B5EE3A"/>
 <rect x="1190.4" y="1023.8" width="729.6" height="4" fill="#B5EE3A"/>
-<!-- the heavy black figure, in pieces: two up-pointing wedges above the knot, two slanted legs with cut ends below, a small wedge between; x 0.52-0.91, y 0.11-0.88 -->
-<polygon fill="#000000" points="998.4,507.6 1180.8,118.8 1363.2,507.6"/>
-<polygon fill="#F8F7F3" points="1123.2,507.6 1180.8,388.8 1238.4,507.6"/>
-<polygon fill="#000000" points="1344.0,475.2 1488.0,183.6 1632.0,475.2"/>
-<polygon fill="#000000" points="1152.0,648.0 1324.8,648.0 1180.8,950.4 1008.0,950.4"/>
-<polygon fill="#000000" points="1459.2,669.6 1632.0,669.6 1747.2,907.2 1574.4,907.2"/>
+<!-- the heavy black figure, in pieces: two up-pointing wedges above the knot, two slanted legs with cut ends below, a small wedge between; x 0.53-0.91, y 0.12-0.88 -->
+<polygon fill="#000000" points="1017.6,507.6 1180.8,129.6 1344.0,507.6"/>
+<polygon fill="#F8F7F3" points="1084.8,507.6 1180.8,291.6 1276.8,507.6"/>
+<polygon fill="#000000" points="1372.8,475.2 1488.0,216.0 1603.2,475.2"/>
+<polygon fill="#000000" points="1171.2,658.8 1315.2,658.8 1171.2,950.4 1027.2,950.4"/>
+<polygon fill="#000000" points="1468.8,669.6 1612.8,669.6 1737.6,907.2 1593.6,907.2"/>
 <polygon fill="#000000" points="1344.0,712.8 1411.2,604.8 1478.4,712.8"/>
 <!-- "19" three times, very wide and heavy, top right -->
 <text x="0" y="0" font-family="Arial Black" font-size="104" fill="#000000" transform="translate(1668.0 138.2) scale(1.5 1)">19</text>

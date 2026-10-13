@@ -27,11 +27,12 @@ static Mesh* burst(float2 knot, float reach, float lean, int count, uint32_t see
     for (int n = 0; n < count; ++n) {
         const bool longway = n < count / 5;   // a fifth go the long way
         const float heading = (lean + (longway ? between(-20.f, 20.f) : between(40.f, 320.f))) * TAU / 360.f;
-        const float length = reach * (longway ? between(0.55f, 1.f) : between(0.14f, 0.42f));
-        const bool hook = rnd() < 0.2f;
-        const float bend = (rnd() < 0.5f ? -1.f : 1.f) * (hook ? between(1.6f, 2.6f) : between(0.25f, 1.0f));
+        const float length = reach * (longway ? between(0.55f, 1.f) : between(0.22f, 0.50f));
+        const bool hook = n == 0 || rnd() < 0.2f;   // (the first of the long ones always ends in a sickle)
+        // (the short ones curl round the knot; the long ones bend in one slow arc)
+        const float bend = (rnd() < 0.5f ? -1.f : 1.f) * (longway ? (hook ? between(1.6f, 2.6f) : between(0.25f, 1.0f)) : between(1.0f, 4.5f));
         const float thin = rnd();
-        const float wide = reach * (0.006f + 0.022f * thin * thin) * (hook ? 1.5f : 1.f);   // (most are thin)
+        const float wide = reach * (0.006f + 0.022f * thin * thin) * (longway ? (hook ? 1.5f : 1.f) : 0.55f);   // (most are thin)
         const float twist = between(-3.2f, 3.2f), depth = between(0.1f, 0.7f), bow = between(0.05f, 0.3f);
         const float pinches = between(1.f, 3.f), pinch_at = between(0.f, TAU), kink = between(-0.3f, 0.3f);
         const float2 from = knot + reach * 0.05f * float2{between(-1.f, 1.f), between(-1.f, 1.f)};   // (not all out of one point: a knot)
@@ -95,7 +96,7 @@ int main(int argc, char** argv) {
     sheet_mi->setParameter("picture", flat->texture, TextureSampler(TextureSampler::MinFilter::LINEAR, TextureSampler::MagFilter::LINEAR));
 
     // the burst: crushed glass of a bottle green, put down as it comes (Filament's own glass, kit.h: it is given no depth)
-    if (!own_glass(s, burst(at(0.76f, 0.52f), 0.74f * 2.f * WIDE, 178.f, 22, 11), {mat4f{}}, float3{0.33f, 0.40f, 0.06f}, 0.15f)) return fail("own_glass.filamat");
+    if (!own_glass(s, burst(at(0.76f, 0.52f), 0.74f * 2.f * WIDE, 178.f, 26, 31), {mat4f{}}, float3{0.33f, 0.40f, 0.06f}, 0.15f)) return fail("own_glass.filamat");
 
     const auto pose = [&](float) { drawn_now(s, flat); };
     pose(0.f);

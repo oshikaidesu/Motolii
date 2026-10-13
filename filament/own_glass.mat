@@ -33,14 +33,17 @@ fragment {
         float piece = floor(uv.x);
         if (piece > 0.5) {
             float lot = fract(sin(piece * 12.9898) * 43758.5453);
-            if (lot < 0.5) deep = 1.2 + 4.0 * lot;
-            else if (lot < 0.72) { absorb = absorb.bgr; deep = 3.0; }
+            if (lot < 0.5) deep = 0.6 + 1.8 * lot;
+            else if (lot < 0.72) { absorb = absorb.bgr; deep = 1.5; }
             else if (lot < 0.86) { absorb = vec3(0.6 * min(absorb.r, min(absorb.g, absorb.b))); }
-            else { absorb = vec3(max(absorb.r, max(absorb.g, absorb.b))); deep = 3.0; }
+            else { absorb = vec3(max(absorb.r, max(absorb.g, absorb.b))); deep = 2.0; }
         }
         material.absorption = absorb;
         material.transmission = 1.0;
         material.ior = 1.5;
+        // (seen square on, the way through a solid is short and it is clear; towards its rim the way is long and it is dark)
+        float rim = 1.0 - abs(dot(getWorldNormalVector(), getWorldViewVector()));
+        deep *= 0.8 + 3.0 * rim * rim;
         // (crushed glass is not evenly deep: where it is deep it is dark, where thin pale; the depth wanders along the solid)
         float uneven = clamp(materialParams.lean * 6.0, 0.0, 1.0);
         material.thickness = materialParams.thickness * deep * mix(1.0, 0.4 + 1.6 * (0.5 + 0.5 * sin(6.2832 * (3.0 * uv.x + 0.5 * uv.y))) * (0.6 + 0.4 * sin(6.2832 * (11.0 * uv.x - uv.y) + 1.0)), uneven);
