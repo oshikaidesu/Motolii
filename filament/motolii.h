@@ -3,7 +3,7 @@
    of undo, in the document's file as the call returns. A call that is not done returns 0, changes nothing, and
    motolii_trouble() says why.
    kinds: film, picture (an After Effects file, a .jpg, a .png), text (a font, .ttf), solid (.glb, .gltf, or one of ring, gem, cube)
-   (ring, gem, cube). The names of a thing's values are ThorVG's own where it has one (x, y, rotate, size, blend,
+   A solid's fill is what it is made of: a colour, or glass. The names of a thing's values are ThorVG's own where it has one (x, y, rotate, size, blend,
    text, fill, begin): doc.h lists them. */
 #ifndef MOTOLII_H
 #define MOTOLII_H
