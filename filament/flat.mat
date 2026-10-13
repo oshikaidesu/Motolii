@@ -1,0 +1,20 @@
+// flat.mat: a sheet that shows a picture drawn for the screen (ThorVG's, drawn.h) as it was drawn: its colours are
+// the screen's own numbers, so they are taken back to light before Filament's output step turns light into screen
+// numbers again. Unlit: no lamp and no shadow touches it.
+material {
+    name : flat,
+    shadingModel : unlit,
+    requires : [ uv0 ],
+    culling : none,
+    parameters : [
+        { type : sampler2d, name : picture }
+    ]
+}
+
+fragment {
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        vec3 c = textureLod(materialParams_picture, getUV0(), 0.0).rgb;
+        material.baseColor = vec4(pow(c, vec3(2.2)), 1.0);
+    }
+}

@@ -12,7 +12,7 @@ TVG=../thorvg/third_party
 MATC=$SRC/out/wgpu/tools/matc/matc
 mkdir -p out/wgpu_kit/out
 for d in lightroom small_studio; do [ -d out/$d ] && ln -sfn ../../$d out/wgpu_kit/out/$d; done
-for f in paper paper_copy floor_shade thick_glass far_side far_look glasslight glassbox boxlight bubble poster poster_glass; do
+for f in paper paper_copy floor_shade thick_glass far_side far_look glasslight glassbox boxlight bubble poster poster_glass flat blade; do
     [ -f $f.mat ] || continue
     [ out/wgpu_kit/$f.filamat -nt $f.mat ] && [ out/wgpu_kit/$f.filamat -nt studio.glsl ] && [ out/wgpu_kit/$f.filamat -nt spectrum.glsl ] && continue
     $MATC -a webgpu -a metal -p desktop -o out/wgpu_kit/$f.filamat $f.mat > out/wgpu_kit/$f.log 2>&1 ||
