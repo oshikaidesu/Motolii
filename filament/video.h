@@ -11,6 +11,7 @@
 #include "dawn_probe/gpu_door.h"
 #include <gst/gst.h>
 #include <gst/app/gstappsink.h>
+#include <gst/video/video.h>
 #include <CoreVideo/CoreVideo.h>
 #include <IOSurface/IOSurface.h>
 #include <webgpu/webgpu.h>
@@ -56,10 +57,14 @@ static double video_due(GstSample* picture) {
 // The held picture put on the sheet. A surface seen for the first time is first shared with Filament's device, on
 // Filament's own thread and without waiting for it: until that is done (a picture or two later) the sheet keeps the
 // picture it had. false: not on the sheet yet.
-static bool video_show(Stage& s, Video* v) {
+static CVPixelBufferRef video_surface(GstSample* picture) {
     const GType api = g_type_from_name("GstCoreVideoMetaAPI");
-    VideoCoreVideoMeta* meta = api ? (VideoCoreVideoMeta*)gst_buffer_get_meta(gst_sample_get_buffer(v->held), api) : nullptr;
-    IOSurfaceRef surface = meta && meta->pixbuf ? CVPixelBufferGetIOSurface(meta->pixbuf) : nullptr;
+    VideoCoreVideoMeta* meta = api ? (VideoCoreVideoMeta*)gst_buffer_get_meta(gst_sample_get_buffer(picture), api) : nullptr;
+    return meta ? meta->pixbuf : nullptr;
+}
+static bool video_show(Stage& s, Video* v) {
+    CVPixelBufferRef held = video_surface(v->held);
+    IOSurfaceRef surface = held ? CVPixelBufferGetIOSurface(held) : nullptr;
     if (!surface) return false;
     auto found = v->seen.find(IOSurfaceGetID(surface));
     if (found == v->seen.end()) {
@@ -194,6 +199,24 @@ static Video* video(Stage& s, const char* file, const mat4f& place, float high, 
     if (!v->held) return video_trouble = "no picture came within 5 seconds", nullptr;
     const GstStructure* said = gst_caps_get_structure(gst_sample_get_caps(v->held), 0);
     if (!gst_structure_get_int(said, "width", &v->w) || !gst_structure_get_int(said, "height", &v->h)) return video_trouble = "the picture does not say its size", nullptr;
+    // the film's own rule for its colours, as GStreamer read it from the file: which two weights (BT.601, BT.709,
+    // BT.2020: Kr, Kb), and where black, white and no-colour lie in its numbers (the narrow range or the full one)
+    GstVideoInfo told;
+    gdouble kr = 0.2126, kb = 0.0722;
+    gint zero[GST_VIDEO_MAX_COMPONENTS] = {16, 128, 128}, span[GST_VIDEO_MAX_COMPONENTS] = {219, 224, 224};
+    if (gst_video_info_from_caps(&told, gst_sample_get_caps(v->held))) {
+        gst_video_color_matrix_get_Kr_Kb(told.colorimetry.matrix, &kr, &kb);
+        // (the range is asked of the picture itself where it says: the Mac's decoder hands on the narrow range
+        //  whatever the file was in, and the caps go on naming the file's)
+        CVPixelBufferRef first = video_surface(v->held);
+        const GstVideoColorRange range = !first ? told.colorimetry.range
+            : CVPixelBufferGetPixelFormatType(first) == kCVPixelFormatType_420YpCbCr8BiPlanarFullRange ? GST_VIDEO_COLOR_RANGE_0_255 : GST_VIDEO_COLOR_RANGE_16_235;
+        gst_video_color_range_offsets(range, told.finfo, zero, span);
+    }
+    const float kg = 1.f - (float)kr - (float)kb, red = 2.f * (1.f - (float)kr), blue = 2.f * (1.f - (float)kb);
+    const float3 gain{255.f / (float)span[0], 255.f / (float)span[1], 255.f / (float)span[2]}, base{-(float)zero[0] / (float)span[0], -(float)zero[1] / (float)span[1], -(float)zero[2] / (float)span[2]};
+    const float3 byBlue{0.f, -blue * (float)kb / kg, blue}, byRed{red, -red * (float)kr / kg, 0.f};   // (what its two colour numbers add to red, green, blue)
+    const mat4f rule(float4{float3{gain.x}, 0.f}, float4{gain.y * byBlue, 0.f}, float4{gain.z * byRed, 0.f}, float4{float3{base.x} + base.y * byBlue + base.z * byRed, 1.f});
     GstBus* bus = gst_element_get_bus(v->reader);
     while (GstMessage* said = gst_bus_pop_filtered(bus, GST_MESSAGE_TAG)) {   // (a film shot upright says which way it is to be turned)
         GstTagList* tags = nullptr;
@@ -220,6 +243,7 @@ static Video* video(Stage& s, const char* file, const mat4f& place, float high, 
     v->look = add(s, v->sheet, flat_laid(lay).c_str(), {place});
     if (!v->look) return video_trouble = "flat.filamat", nullptr;
     v->look->setParameter("filmed", 1.f);
+    v->look->setParameter("filmRule", rule);
     v->look->setParameter("picture", white_point(s), TextureSampler());   // (until its first picture is shared: a white that is
     v->look->setParameter("key", float4{1.f, 0.5f, 1.f, 9.f});            //  keyed out whole, so the sheet is not seen)
     v->look->setParameter("keySoft", float2{1.f, 1.f});

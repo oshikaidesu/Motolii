@@ -1,0 +1,15 @@
+film	what the file says	mean off (of 255)	99 in 100 within	pass (mean under 2)
+01_plain_h264	yuv420p,tv,bt709,bt709	0.77	3.0	yes
+02_hevc	yuv420p,tv,bt709,bt709	0.77	3.0	yes
+03_hevc_10bit_hlg	yuv420p10le,tv,bt2020nc,bt709	1.44	4.0	yes
+04_variable_rate	yuv420p,tv,bt709,bt709	0.76	3.0	yes
+05_turned_90	yuv420p,tv,bt709,bt709,	0.76	3.0	yes
+06_phone_like	yuv420p10le,tv,bt709,bt709	1.70	5.0	yes
+07_vp9	yuv420p,tv,bt709,bt709	1.37	3.0	yes
+08_av1	yuv420p,tv,bt709,bt709	0.91	3.0	yes
+09_prores	yuv422p10le,tv,bt709,bt709	0.83	4.0	yes
+10_4k_h264	yuv420p,tv,bt709,bt709	0.77	3.0	yes
+11_odd_size_444	yuv444p,tv,bt709,bt709	0.10	4.0	yes
+12_120_a_second	yuv420p,tv,bt709,bt709	0.77	3.0	yes
+13_bt601	yuv420p,tv,smpte170m,bt709	0.43	2.0	yes
+14_full_range	yuvj420p,pc,bt709,bt709	0.07	2.0	yes

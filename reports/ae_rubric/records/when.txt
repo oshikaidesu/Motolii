@@ -1,0 +1,4 @@
+2026-10-14 00:01
+bd8d39f kit: the stage owns time (films and AE pictures go on by the stage's clock; scenes no longer step them), one key_out for films, pictures and looks; a matte's eye is told before the frame begins (Filament sends what looks are told as a frame begins: mattes were a frame late, and empty in a film's first picture); AE rubric: evidence and the first judge's round (3.8)
+15.5
+Apple M4
