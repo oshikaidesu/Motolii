@@ -4,8 +4,10 @@
 // bridge is so), and the stage shows it as the call returns. A change the stage cannot show is not made.
 // Borrowed whole: the file, saving (a change is in the file as its call returns) and undo are SQLite's (its session
 // extension: what a call changed is kept, and undone by applying it reversed: the steps are in the file too);
-// a moving value between its keys is GStreamer's (its controller, smooth and never past a key: no easing to set for
-// each stretch); a thing's time is told in GES's words (start, inpoint, duration).
+// a moving value between its keys is GStreamer's (its controller); a thing's time is told in GES's words (start,
+// inpoint, duration).
+// NOT RIGHT YET: every stretch between two keys goes the same one way here (smooth, never past a key). Motolii's own
+// way is that the stretch itself is defined: its easing, or a movement such as a wiggle. To be made so.
 // The names a thing's facts go by (still to be settled):
 //   numbers  x, y, z, turn, high    where its middle is, turned by how many degrees, how tall
 //            start, duration        when it comes on, and for how long (not said: for good, going round)
