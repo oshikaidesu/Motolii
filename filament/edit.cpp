@@ -1,0 +1,62 @@
+// edit.cpp: a document edited by calls, a line each: a shell over motolii.h, as a shell on a screen would be. It
+// calls motolii.h and nothing else: one program for every document, never built again for a scene.
+//   ./edit.sh out/first.motolii       then a call a line (`help` lists them)
+// A call that is not done says why, and leaves the document as it was.
+#include "motolii.h"
+#include <chrono>
+#include <cmath>
+#include <cstdio>
+#include <cstdlib>
+#include <iostream>
+#include <sstream>
+#include <string>
+#include <vector>
+
+static const char* const calls =
+    "  add film <file> | add picture <an After Effects file, a .jpg, a .png> | add type <font.ttf> | add solid <file.glb> | add glass ring|gem|cube\n"
+    "  remove <thing> | set <thing> <name> <number> | say <thing> <name> <word> | key <thing> <name> <at> <number> | unkey <thing> <name> <at>\n"
+    "  undo | redo | list | at <seconds> | still <file.png> | write <file.mp4> | time\n";
+
+int main(int argc, char** argv) {
+    if (argc < 2) return std::printf("FAIL edit <document>\n"), 1;
+    Motolii* m = motolii_open(argv[1], 1080, 1920);
+    if (!m) return std::printf("FAIL the document could not be opened\n"), 1;
+    for (std::string line; std::getline(std::cin, line);) {
+        std::istringstream said(line);
+        std::vector<std::string> w;
+        for (std::string word; said >> word;) w.push_back(word);
+        if (w.empty()) continue;
+        const std::string& call = w[0];
+        bool numbers = true;   // (whether every word asked for as a number was one)
+        const auto number = [&](size_t i) { char* end = nullptr; const double is = std::strtod(w[i].c_str(), &end); if (*end || !std::isfinite(is)) numbers = false; return is; };
+        const auto thing = [&] { const double n = number(1); return numbers && n == std::floor(n) ? (int)n : (numbers = false, 0); };
+        const auto rest = [&](size_t i) { size_t at = 0; for (size_t k = 0; k < i; ++k) at = line.find(w[k], at) + w[k].size(); return line.substr(line.find(w[i], at)); };   // (from that word to the end of the line)
+        const auto t0 = std::chrono::steady_clock::now();
+        int ok = 1;
+        bool known = true;
+        if (call == "add" && w.size() >= 3) { if ((ok = motolii_add(m, w[1].c_str(), rest(2).c_str()))) std::printf("thing %d\n", ok); }   // (a file's name may have spaces)
+        else if (call == "remove" && w.size() == 2) { const int n = thing(); if (numbers) ok = motolii_remove(m, n); }
+        else if (call == "set" && w.size() == 4) {
+            const int n = thing(), keys = numbers ? motolii_keys(m, n, w[2].c_str()) : 0;
+            const double is = number(3);
+            if (numbers && (ok = motolii_set(m, n, w[2].c_str(), is)) && keys) std::printf("(its %d keys are gone: it stays at that)\n", keys);
+        }
+        else if (call == "say" && w.size() >= 4 && (w.size() == 4 || w[2] == "words")) { const int n = thing(); if (numbers) ok = motolii_say(m, n, w[2].c_str(), w[2] == "words" ? rest(3).c_str() : w[3].c_str()); }   // (a type's words are the rest of the line)
+        else if (call == "key" && w.size() == 5) { const int n = thing(); const double at = number(3), is = number(4); if (numbers) ok = motolii_key(m, n, w[2].c_str(), at, is); }
+        else if (call == "unkey" && w.size() == 4) { const int n = thing(); const double at = number(3); if (numbers) ok = motolii_unkey(m, n, w[2].c_str(), at); }
+        else if (call == "undo" && w.size() == 1) ok = motolii_undo(m);
+        else if (call == "redo" && w.size() == 1) ok = motolii_redo(m);
+        else if (call == "at" && w.size() == 2) { const double at = number(1); if (numbers) ok = motolii_at(m, at); }
+        else if (call == "still" && w.size() >= 2) ok = motolii_still(m, rest(1).c_str());
+        else if (call == "write" && w.size() >= 2) ok = motolii_write(m, rest(1).c_str());
+        else if (call == "time" && w.size() == 1) motolii_timed(m, 120);
+        else if (call == "help") { std::printf("%s", calls); continue; }
+        else if (call == "list" && w.size() == 1) { std::printf("%s  (the document runs %.2f seconds)\n", motolii_list(m), motolii_seconds(m)); continue; }
+        else known = false;
+        if (!known || !numbers) std::printf("not a call: %s\n%s", line.c_str(), !numbers ? "  (a number was asked for where a word stands)\n" : calls);
+        else std::printf("%s: %s, %.1f ms\n", call.c_str(), ok ? "done" : (std::string("NOT done: ") + motolii_trouble(m)).c_str(), std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count());
+        std::fflush(stdout);
+    }
+    motolii_close(m);
+    return 0;
+}

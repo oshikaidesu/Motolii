@@ -66,3 +66,8 @@ list
 ## 検査を走らせ直す
 
 `cd filament && ./records.sh`（20分ほど。結果は `reports/ae_rubric/records/`）。
+
+## 同じ事を C の関数で（Flutter のガワが呼ぶ形）
+
+`filament/motolii.h` が口。`filament/check/api.c` が素の C からの呼び方の見本（`filament/out/wgpu_kit/` で `../api_check ../mine2.motolii out/api.png`）。
+上の行を読む道具（`edit.sh`）も、中ではこの関数だけを呼んでいる。

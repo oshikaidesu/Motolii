@@ -14,6 +14,7 @@ within 900 ./ae_test.sh 2>&1 | grep "films compared" > $R/ae_files.txt; cp out/w
 within 300 ./check/video_colour.sh > $R/video_colour.tsv 2>/dev/null
 within 300 ./check/doc.sh > $R/doc.txt 2>&1
 within 300 ./check/sound.sh > $R/sound.txt 2>&1
+(cd out/wgpu_kit && rm -f ../api.motolii && BACKEND=webgpu within 60 ../api_check ../api.motolii out/api.png 2>&1 | quiet) > $R/api.txt   # (motolii.h called from plain C)
 
 KIT_EXTRA="$E" KIT_SRC=check/video_time.mm BUILDONLY=1 ./dawn_probe/kit_wgpu.sh time_check
 for f in out/vid_odd/*; do
