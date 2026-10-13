@@ -1,0 +1,24 @@
+// matte.mat: a matte's shape (kit.h: matte). It puts no colour on the screen and hides nothing: it only leaves its
+// mark where it is seen (Filament's stencil), and things that are matted by it are drawn by that mark. A sheet with a
+// picture on it marks where the picture is not clear; a solid is given a white picture and marks all of itself.
+material {
+    name : matte,
+    shadingModel : unlit,
+    blending : masked,
+    maskThreshold : 0.5,
+    requires : [ uv0 ],
+    culling : none,
+    colorWrite : false,
+    depthWrite : false,
+    depthCulling : false,
+    parameters : [
+        { type : sampler2d, name : picture }
+    ]
+}
+
+fragment {
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        material.baseColor = vec4(0.0, 0.0, 0.0, textureLod(materialParams_picture, getUV0(), 0.0).a);
+    }
+}

@@ -561,6 +561,47 @@ static MaterialInstance* thick_glass(Stage& s, Mesh* m, std::vector<mat4f> place
     return front;
 }
 
+// A matte, as After Effects has them: a shape that is not seen itself and cuts other things by where it is seen from
+// the eye, whatever lies between. Any mesh is one: a solid, or a sheet with a picture on it (ThorVG's: it cuts where
+// the picture is not clear). It is a thing like any other: `move` moves it. What comes back names it (eight at most).
+// Filament's own stencil does it, a bit for each matte, so no material knows of it and it costs next to nothing;
+// the edge is hard, a matte is all or nothing.
+static int matte(Stage& s, Mesh* m, std::vector<mat4f> places, Texture* picture = nullptr) {
+    static int made = 0;
+    static Texture* white = nullptr;
+    if (made == 8) return -1;
+    if (!white) {
+        static const uint8_t one[4] = {255, 255, 255, 255};
+        white = Texture::Builder().width(1).height(1).levels(1).format(Texture::InternalFormat::RGBA8).build(*s.engine);
+        white->setImage(*s.engine, 0, backend::PixelBufferDescriptor(one, 4, backend::PixelDataFormat::RGBA, backend::PixelDataType::UBYTE));
+        // (on the screen only: a picture drawn aside, like the one of what is behind the glass, cannot have the mark
+        // in Filament 1.77, so through glass a matted thing is seen whole)
+        s.view->setStencilBufferEnabled(true);
+        Renderer::ClearOptions clear{};   // (as open_stage has it, and every bit of the mark set: a matte takes its bit away where it is seen.
+        clear.clearColor = {0, 0, 0, 1};  // That way round nothing is ever compared with a number but 0: Filament 1.77's WebGPU
+        clear.clear = true;               // backend never hands the stencil's reference number on, Metal's does)
+        clear.clearStencil = 0xFF;
+        s.renderer->setClearOptions(clear);
+    }
+    MaterialInstance* mark = add(s, m, "matte.filamat", places);
+    if (!mark) return -1;
+    // drawn before all else: in a channel of its own (a material that cuts by its picture is drawn after the plain ones
+    // whatever its order, within a channel)
+    auto& rm = s.engine->getRenderableManager();
+    for (size_t i = s.made.size() - places.size(); i < s.made.size(); ++i) rm.setChannel(rm.getInstance(s.made[i].thing), 0);
+    mark->setParameter("picture", picture ? picture : white, TextureSampler(TextureSampler::MinFilter::LINEAR, TextureSampler::MagFilter::LINEAR));
+    mark->setStencilWrite(true);
+    mark->setStencilWriteMask((uint8_t)(1 << made));
+    mark->setStencilOpDepthStencilPass(MaterialInstance::StencilOperation::ZERO);
+    return made++;
+}
+
+// The thing with this look is seen only inside that matte (or only outside it).
+static void matted(MaterialInstance* look, int matte, bool inside = true) {
+    look->setStencilReadMask((uint8_t)(1 << matte));
+    look->setStencilCompareFunction(inside ? MaterialInstance::StencilCompareFunc::E : MaterialInstance::StencilCompareFunc::NE);
+}
+
 // Three frames, the last one read back and written as a .png.
 // One picture of the stage drawn (the helper pictures first), and read back into `pic` if one is given.
 static void draw(Stage& s, std::vector<uint8_t>* pic = nullptr, bool wait = true) {

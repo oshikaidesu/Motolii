@@ -14,6 +14,7 @@ struct Drawn {
     tvg::Animation* film = nullptr;    // (the same)
     Texture* texture = nullptr;        // what Filament reads
     Mesh* sheet = nullptr;             // the thing in the scene: moved like any other (kit.h: move)
+    MaterialInstance* look = nullptr;  // its look (none if it is not shown)
     float seconds = 0.f, frames = 0.f; // a film's length (a still: 0)
 };
 
@@ -26,8 +27,10 @@ static void font(Stage& s, const char* path) {
 }
 
 // The picture in `file` put in the scene: a sheet `high` tall (as wide as the picture makes it) with its middle at
-// `place`, facing along the place's z. It is drawn as finely as the stage is, and where the file draws nothing it is `ground`.
-static Drawn* picture(Stage& s, const char* file, const mat4f& place, float high, float3 ground = float3{1.f}) {
+// `place`, facing along the place's z. It is drawn as finely as the stage is, and where the file draws nothing it is `ground`
+// (a ground below 0: clear there). shown = false: the sheet and its picture are made but not put in the scene (for a
+// matte: kit.h, matte(s, d->sheet, {place}, d->texture)).
+static Drawn* picture(Stage& s, const char* file, const mat4f& place, float high, float3 ground = float3{1.f}, bool shown = true) {
     if (!door::device(s.engine)) return nullptr;   // (another backend)
     Drawn* d = new Drawn;
     WGPUTexture made = nullptr;
@@ -55,7 +58,7 @@ static Drawn* picture(Stage& s, const char* file, const mat4f& place, float high
         tvg::Shape* under = tvg::Shape::gen();
         under->appendRect(0, 0, (float)w, (float)h);
         under->fill((uint8_t)std::lround(255.f * ground.x), (uint8_t)std::lround(255.f * ground.y), (uint8_t)std::lround(255.f * ground.z), 255);
-        d->canvas->add(under);
+        if (ground.x >= 0.f) d->canvas->add(under);
         d->canvas->add(p);
         d->frames = d->film->totalFrame();
         d->seconds = d->film->duration();
@@ -74,9 +77,10 @@ static Drawn* picture(Stage& s, const char* file, const mat4f& place, float high
         d->sheet->uv.push_back(c * 0.5f + 0.5f);
     }
     d->sheet->idx = {0, 1, 2, 0, 2, 3};
-    MaterialInstance* look = add(s, d->sheet, "flat.filamat", {place});
-    if (!look) return nullptr;
-    look->setParameter("picture", d->texture, TextureSampler(TextureSampler::MinFilter::LINEAR, TextureSampler::MagFilter::LINEAR));
+    if (!shown) return d;
+    d->look = add(s, d->sheet, "flat.filamat", {place});
+    if (!d->look) return nullptr;
+    d->look->setParameter("picture", d->texture, TextureSampler(TextureSampler::MinFilter::LINEAR, TextureSampler::MagFilter::LINEAR));
     return d;
 }
 
