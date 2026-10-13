@@ -14,6 +14,7 @@
 // The names a thing's facts go by are ThorVG's own, where it has one (translate's x and y, rotate, size, blend and its
 // words, text, fill, a segment's begin, add, remove):
 //   numbers  x, y, z, rotate, size  where its middle is, turned by how many degrees, how tall
+//            opacity                how much of it is there: 1 all, 0 none (a film's, a picture's, a text's)
 //            start, duration        when it comes on, and for how long (not said: for good, going round)
 //            begin, speed           a film's: from where in itself, how fast (below 0: backwards)
 //            keyed                  a film's: 1 if its ground is keyed out (a green screen, of whatever colour: the colour its four corners share), 0 if not; not said: keyed if it has such a ground
@@ -46,7 +47,7 @@ static const char* const doc_shapes = "ring gem cube";             // (the kit's
 struct DocValue { const char* name; const char* kinds; double low, high; bool moves; const char* words; };
 static const DocValue doc_values[] = {
     {"x", doc_kinds, -1e4, 1e4, true, nullptr}, {"y", doc_kinds, -1e4, 1e4, true, nullptr}, {"z", doc_kinds, -1e4, 1e4, true, nullptr},
-    {"rotate", doc_kinds, -1e6, 1e6, true, nullptr}, {"size", doc_kinds, 1e-3, 1e4, true, nullptr},
+    {"rotate", doc_kinds, -1e6, 1e6, true, nullptr}, {"size", doc_kinds, 1e-3, 1e4, true, nullptr}, {"opacity", "film picture text", 0, 1, true, nullptr},
     {"start", doc_kinds, 0, 1e6, false, nullptr}, {"duration", doc_kinds, 1e-3, 1e6, false, nullptr},
     {"begin", "film", 0, 1e6, false, nullptr}, {"speed", "film", -100, 100, false, nullptr}, {"keyed", "film", 0, 1, false, nullptr},
     {"blend", "film picture text", 0, 0, false, "normal add multiply screen"}, {"file", "film picture solid text", 0, 0, false, ""}, {"shape", "solid", 0, 0, false, doc_shapes},
@@ -147,6 +148,7 @@ static void doc_moment(Doc& d, double now) {
         const float3 at{(float)doc_number(d, thing, "x", now, 0), (float)doc_number(d, thing, "y", now, 0), (float)doc_number(d, thing, "z", now, 0)};
         const mat4f place = mat4f::translation(at) * mat4f::rotation((float)doc_number(d, thing, "rotate", now, 0) * TAU / 360.f, float3{0, 0, 1}) * mat4f::scaling((float)doc_number(d, thing, "size", now, 1));
         if (t.solid) solid_to(s, t.solid, place); else move(s, m, [&](int, const mat4f&) { return place; });
+        if (MaterialInstance* look = t.film ? t.film->look : t.drawn ? t.drawn->look : nullptr) look->setParameter("opacity", (float)doc_number(d, thing, "opacity", now, 1));
     }
 }
 
@@ -457,7 +459,7 @@ static bool doc_try(Doc& d, int thing, const char* name, double is) {
 static void doc_try_drop(Doc& d) { doc_forget(d), doc_moment(d, d.stage->now); }
 
 // What a value is where the document does not say; and a value at a moment, as the stage is told it.
-static double doc_usual(const char* name) { return !strcmp(name, "size") || !strcmp(name, "speed") ? 1.0 : !strcmp(name, "duration") ? -1.0 : 0.0; }
+static double doc_usual(const char* name) { return !strcmp(name, "size") || !strcmp(name, "speed") || !strcmp(name, "opacity") ? 1.0 : !strcmp(name, "duration") ? -1.0 : 0.0; }
 static bool doc_value(Doc& d, int thing, const char* name, double at, double* is) { return doc_knows(d, thing, name) && (*is = doc_number(d, thing, name, at, doc_usual(name)), true); }
 static bool doc_undo(Doc& d) { return doc_step(d, true); }
 static bool doc_redo(Doc& d) { return doc_step(d, false); }

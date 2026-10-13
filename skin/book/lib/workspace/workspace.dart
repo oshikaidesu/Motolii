@@ -203,6 +203,7 @@ Map<String, double> _transform(Ws ws, String? id) {
       'scale.x': s,
       'scale.y': s,
       'rot.z': r1(-v('rotate')) + 0,   // (+ 0: no minus nought)
+      'op': r1((m.value(t, 'opacity', at) ?? 1) * 100), // (a thing that has no opacity is all there)
     };
   }
   final b = WsArt.boxOf(ArtScene.of(ws, camera: true), id);
@@ -217,6 +218,7 @@ const _propNames = {
   'pos': ['x', 'y', 'z'],
   'scale': ['size'],
   'rot': ['rotate'],
+  'op': ['opacity'],
 };
 (String, double)? _asDocument(Ws ws, String id, double x) {
   final p = ws.inside!.point;
@@ -226,6 +228,7 @@ const _propNames = {
     'pos.z' => ('z', x / p),
     'scale.x' || 'scale.y' => ('size', x / 100),
     'rot.z' => ('rotate', -x),
+    'op' => ('opacity', x / 100),
     _ => null,
   };
 }

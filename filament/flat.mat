@@ -12,6 +12,7 @@ material {
         { type : sampler2d, name : matte0 }, { type : sampler2d, name : matte1 }, { type : sampler2d, name : matte2 }, { type : sampler2d, name : matte3 },
         { type : mat4, name : matteEye0 }, { type : mat4, name : matteEye1 }, { type : mat4, name : matteEye2 }, { type : mat4, name : matteEye3 },
         { type : float4, name : matteUse }, { type : float4, name : matteSoft },   // (matte.glsl)
+        { type : float, name : opacity },    // how much of it is there at all (ThorVG's word): 1 all, 0 none
         { type : float4, name : key },       // a colour of the picture that is to be clear (a green screen), and how near to it counts (0: none)
         { type : float2, name : keySoft },   // how wide the edge of that is, and how far from it the key's colour is taken out of what stays
         { type : float, name : filmed },       // 1: the picture is a film's as its decoder left it, light in `picture` and colour in `colours`
@@ -50,7 +51,7 @@ fragment {
         float kept = keyLeft(c);   // (the colour is then the film's share of the point already: only its clearness is `kept`)
         float there = materialParams.filmed > 0.5 ? 1.0 : drawn.a;
         if (kept * there < 0.004) discard;   // (where nothing of it is left it is not there at all: it hides nothing behind it)
-        float uncut = matteLeft();
+        float uncut = matteLeft() * materialParams.opacity;
         if (uncut < 0.004) discard;
         material.baseColor = vec4(mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(vec3(0.04045), c)), kept) * (there * uncut);
 #if defined(LAY_multiply)

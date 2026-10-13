@@ -197,6 +197,7 @@ static MaterialInstance* add(Stage& s, Mesh* m, const char* filamat, std::vector
     IndexBuffer* ib = IndexBuffer::Builder().indexCount((uint32_t)m->idx.size()).bufferType(IndexBuffer::IndexType::UINT).build(*s.engine);
     ib->setBuffer(*s.engine, IndexBuffer::BufferDescriptor(m->idx.data(), m->idx.size() * sizeof(uint32_t)));
     MaterialInstance* mi = mat->createInstance();
+    if (mat->hasParameter("opacity")) mi->setParameter("opacity", 1.f);   // (all there, until it is told otherwise)
     if (mat->hasParameter("matteUse")) {   // (a material that can be cut: by nothing, until `matted` says so)
         for (const char* name : {"matte0", "matte1", "matte2", "matte3"}) mi->setParameter(name, white_point(s), TextureSampler());
         for (const char* name : {"matteEye0", "matteEye1", "matteEye2", "matteEye3"}) mi->setParameter(name, mat4f{});

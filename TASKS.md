@@ -39,7 +39,8 @@
   穴：四隅が同じ濃い色の普通の動画（一面の赤など）は黙って抜ける。`keyed 0` で戻せるが、窓にその席はまだ無い。
 - **インスペクタの言葉の席と、消す入口**：文字の中身（Text の箱。箱を離れた時に1回 `say text`）、重ね方（Blend の選び → `say blend`。窓で Multiply を確かめた）。タイムラインで Delete / Backspace → 選んだ物を消す（見本に元から無い入口。見た目は足してない）。
   鍵盤は裏の窓に届かないので、**本物の中身をつないだ Flutter のテスト**を作った（`skin/book/test/workspace_joined_test.dart`、`libmotolii.dylib` を dart:ffi でそのまま開く）：箱に打つ → 離れると文書の字、取り消しで戻る／Backspace で消える、取り消しでガラスの塗りごと戻る。2本通過。
-- まだ作り物のままの所：インスペクタの Opacity（62% と出るのは見本の数。中身に不透明度がまだ無い）、Fill and stroke の Stroke、Font・Size・Alignment、Effects（2個と出るのも見本）、Anchor、Depth、Parent。Blend の8つのうち中身にあるのは4つ（無い物を選ぶと元に戻る。理由はどこにも出ない）。机の Wiggle ほか。Fonts・Effects 棚。棚の小さい絵。
+- 不透明度：中身に `opacity`（ThorVG の言葉、0〜1、キーも打てる。動画・絵・文字）。インスペクタの Opacity は文書の数（窓で 100% → 85% を確かめた）。solid には無い（理由つきで断る）。
+- まだ作り物のままの所：Fill and stroke の Stroke、Font・Size・Alignment、Effects（2個と出るのも見本）、Anchor、Depth、Parent。Blend の8つのうち中身にあるのは4つ（無い物を選ぶと元に戻る。理由はどこにも出ない）。机の Wiggle ほか。Fonts・Effects 棚。棚の小さい絵。
 - 開き方：`skin/book` で Flutter（`~/rust_ae/Motolii/.tools/flutter/bin/flutter`）の `build macos --debug --dart-define=LAB_ROUTE=/?path=workspace/workspace/live`、できた `lab_book.app` を開く。文書は `filament/out/skin.motolii`。
 
 作る的：①`edit_v5` を窓だけで作り直す ②猫ミームの人形劇 ③青いロケットのコラージュ（`research_notes/refs/G_rocket_collage_blue.jpg`）。
