@@ -39,6 +39,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <fstream>
+#include <map>
 #include <functional>
 #include <string>
 #include <thread>
@@ -84,6 +85,9 @@ struct Stage {
     struct Made { utils::Entity thing; const Mesh* of; int nth; mat4f place; };
     utils::Entity sun;                     // the sun, where there is one (paper_and_sun), and all that goes by its direction: `sun_to`
     std::vector<MaterialInstance*> by_sun;
+    struct Matte { Scene* scene; View* view; Texture* picture; bool soft; };
+    std::vector<Matte> mattes;   // the mattes: each a picture of the screen, drawn before all else (matte); soft: some thing reads it blurred
+    Texture* white = nullptr;    // a white point: the matte of a thing that nothing cuts
     std::vector<Made> made;   // every thing put on the stage: of which mesh, at which of that mesh's places (a film moves them: `move`)
 };
 
@@ -138,6 +142,15 @@ static bool room(Stage& s, const char* ktx, float intensity) {
     return true;
 }
 
+static Texture* white_point(Stage& s) {
+    static const uint8_t one[4] = {255, 255, 255, 255};
+    if (!s.white) {
+        s.white = Texture::Builder().width(1).height(1).levels(1).format(Texture::InternalFormat::RGBA8).build(*s.engine);
+        s.white->setImage(*s.engine, 0, backend::PixelBufferDescriptor(one, 4, backend::PixelDataFormat::RGBA, backend::PixelDataType::UBYTE));
+    }
+    return s.white;
+}
+
 // A mesh on the stage, once per place. layer 2: left out of the picture of what is behind (all the glass);
 // layer 4: only in the floor's picture of sunlight; layer 8: only in the picture of the glass's far faces. order: among things of a kind, lower is drawn first.
 // copies: how many times each is drawn in one go (a material that asks for its instance index tells them apart).
@@ -162,6 +175,11 @@ static MaterialInstance* add(Stage& s, Mesh* m, const char* filamat, std::vector
     IndexBuffer* ib = IndexBuffer::Builder().indexCount((uint32_t)m->idx.size()).bufferType(IndexBuffer::IndexType::UINT).build(*s.engine);
     ib->setBuffer(*s.engine, IndexBuffer::BufferDescriptor(m->idx.data(), m->idx.size() * sizeof(uint32_t)));
     MaterialInstance* mi = mat->createInstance();
+    if (mat->hasParameter("matteUse")) {   // (a material that can be cut: by nothing, until `matted` says so)
+        for (const char* name : {"matte0", "matte1", "matte2", "matte3"}) mi->setParameter(name, white_point(s), TextureSampler());
+        mi->setParameter("matteUse", float4{0.f});
+        mi->setParameter("matteSoft", float4{0.f});
+    }
     float3 low = m->pos[0], high = m->pos[0];   // (Filament wants a thing's rough size if it casts or takes shadows)
     for (const float3& p : m->pos) { low = min(low, p); high = max(high, p); }
     for (const mat4f& place : places) {
@@ -562,50 +580,70 @@ static MaterialInstance* thick_glass(Stage& s, Mesh* m, std::vector<mat4f> place
 }
 
 // A matte, as After Effects has them: a shape that is not seen itself and cuts other things by where it is seen from
-// the eye, whatever lies between. Any mesh is one: a solid, or a sheet with a picture on it (ThorVG's: it cuts where
-// the picture is not clear). It is a thing like any other: `move` moves it. What comes back names it (eight at most).
-// Filament's own stencil does it, a bit for each matte, so no material knows of it and it costs next to nothing;
-// the edge is hard, a matte is all or nothing.
-static int matte(Stage& s, Mesh* m, std::vector<mat4f> places, Texture* picture = nullptr) {
-    static int made = 0;
-    static Texture* white = nullptr;
-    if (made == 8) return -1;
-    if (!white) {
-        static const uint8_t one[4] = {255, 255, 255, 255};
-        white = Texture::Builder().width(1).height(1).levels(1).format(Texture::InternalFormat::RGBA8).build(*s.engine);
-        white->setImage(*s.engine, 0, backend::PixelBufferDescriptor(one, 4, backend::PixelDataFormat::RGBA, backend::PixelDataType::UBYTE));
-        // (on the screen only: a picture drawn aside, like the one of what is behind the glass, cannot have the mark
-        // in Filament 1.77, so through glass a matted thing is seen whole)
-        s.view->setStencilBufferEnabled(true);
-        Renderer::ClearOptions clear{};   // (as open_stage has it, and every bit of the mark set: a matte takes its bit away where it is seen.
-        clear.clearColor = {0, 0, 0, 1};  // That way round nothing is ever compared with a number but 0: Filament 1.77's WebGPU
-        clear.clear = true;               // backend never hands the stencil's reference number on, Metal's does)
-        clear.clearStencil = 0xFF;
-        s.renderer->setClearOptions(clear);
+// the eye, whatever lies between. Any mesh is one: a solid, or a sheet with a picture on it (ThorVG's), which cuts by
+// how clear the picture is, or by its light (After Effects' luma matte). It is a thing like any other: `move` moves it.
+// strength: how much it covers at most (a half-clear matte). into: a matte made before, which this shape joins.
+// What comes back names the matte. Each matte is a picture of the screen of its own, twice as fine as the screen,
+// drawn before all else (`draw`), with nothing but its shapes in it; the things it cuts read it (matte.glsl).
+static int matte(Stage& s, Mesh* m, std::vector<mat4f> places, Texture* picture = nullptr, bool byLight = false, float strength = 1.f, int into = -1) {
+    if (into < 0) {
+        const uint32_t w = 2 * (uint32_t)s.w, h = 2 * (uint32_t)s.h;
+        uint8_t levels = 1;
+        while ((std::max(w, h) >> levels) > 0) ++levels;
+        Stage::Matte made{};
+        made.picture = Texture::Builder().width(w).height(h).levels(levels).format(Texture::InternalFormat::R8)
+                           .usage(Texture::Usage::COLOR_ATTACHMENT | Texture::Usage::SAMPLEABLE | Texture::Usage::GEN_MIPMAPPABLE).build(*s.engine);
+        made.scene = s.engine->createScene();
+        made.view = s.engine->createView();
+        made.view->setScene(made.scene);
+        made.view->setCamera(s.camera);
+        made.view->setViewport({0, 0, w, h});
+        made.view->setRenderTarget(RenderTarget::Builder().texture(RenderTarget::AttachmentPoint::COLOR, made.picture).build(*s.engine));
+        made.view->setPostProcessingEnabled(false);
+        s.mattes.push_back(made);
+        into = (int)s.mattes.size() - 1;
     }
-    MaterialInstance* mark = add(s, m, "matte.filamat", places);
-    if (!mark) return -1;
-    // drawn before all else: in a channel of its own (a material that cuts by its picture is drawn after the plain ones
-    // whatever its order, within a channel)
-    auto& rm = s.engine->getRenderableManager();
-    for (size_t i = s.made.size() - places.size(); i < s.made.size(); ++i) rm.setChannel(rm.getInstance(s.made[i].thing), 0);
-    mark->setParameter("picture", picture ? picture : white, TextureSampler(TextureSampler::MinFilter::LINEAR, TextureSampler::MagFilter::LINEAR));
-    mark->setStencilWrite(true);
-    mark->setStencilWriteMask((uint8_t)(1 << made));
-    mark->setStencilOpDepthStencilPass(MaterialInstance::StencilOperation::ZERO);
-    return made++;
+    MaterialInstance* shape = add(s, m, "matte.filamat", places);
+    if (!shape) return -1;
+    for (size_t i = s.made.size() - places.size(); i < s.made.size(); ++i) {   // (its shape is in the matte's own scene, and in no other picture)
+        s.scene->remove(s.made[i].thing);
+        s.mattes[(size_t)into].scene->addEntity(s.made[i].thing);
+    }
+    shape->setParameter("picture", picture ? picture : white_point(s), TextureSampler(TextureSampler::MinFilter::LINEAR, TextureSampler::MagFilter::LINEAR));
+    shape->setParameter("byLight", byLight ? 1.f : 0.f);
+    shape->setParameter("strength", strength);
+    if (!picture) shape->setCullingMode(backend::CullingMode::BACK);   // (a solid: its near faces only, so that it covers once)
+    return into;
 }
 
-// The thing with this look is seen only inside that matte (or only outside it).
-static void matted(MaterialInstance* look, int matte, bool inside = true) {
-    look->setStencilReadMask((uint8_t)(1 << matte));
-    look->setStencilCompareFunction(inside ? MaterialInstance::StencilCompareFunc::E : MaterialInstance::StencilCompareFunc::NE);
+// The thing with this look is cut by that matte: seen only inside it (or only outside it). soft: how far the edge is
+// blurred, in pixels of the screen (0: as sharp as the matte is). Up to four mattes cut one thing (call again): what
+// all of them leave is seen. false: the look's material cannot be cut (it does not read mattes: matte.glsl), or four cut it already.
+static bool matted(Stage& s, MaterialInstance* look, int matte, bool inside = true, float soft = 0.f) {
+    struct Cut { float4 use{0.f}, soft{0.f}; int n = 0; };
+    static std::map<MaterialInstance*, Cut> cuts;
+    static const char* const names[] = {"matte0", "matte1", "matte2", "matte3"};
+    Cut& c = cuts[look];
+    if (c.n == 4 || !look->getMaterial()->hasParameter("matteUse")) return false;
+    look->setParameter(names[c.n], s.mattes[(size_t)matte].picture,
+                       TextureSampler(TextureSampler::MinFilter::LINEAR_MIPMAP_LINEAR, TextureSampler::MagFilter::LINEAR, TextureSampler::WrapMode::CLAMP_TO_EDGE));
+    c.use[c.n] = inside ? 1.f : -1.f;
+    c.soft[c.n] = std::log2(1.f + 2.f * std::max(soft, 0.f));   // (a level of the matte's picture: each is twice as coarse as the one before)
+    look->setParameter("matteUse", c.use);
+    look->setParameter("matteSoft", c.soft);
+    if (soft > 0.f) s.mattes[(size_t)matte].soft = true;
+    ++c.n;
+    return true;
 }
 
 // Three frames, the last one read back and written as a .png.
 // One picture of the stage drawn (the helper pictures first), and read back into `pic` if one is given.
 static void draw(Stage& s, std::vector<uint8_t>* pic = nullptr, bool wait = true) {
     while (!s.renderer->beginFrame(s.swap)) {}
+    for (Stage::Matte& m : s.mattes) {
+        s.renderer->render(m.view);
+        if (m.soft) m.picture->generateMipmaps(*s.engine);
+    }
     if (s.view_floor) s.renderer->render(s.view_floor);
     s.renderer->render(s.view_behind);
     if (s.view_through) s.renderer->render(s.view_through);

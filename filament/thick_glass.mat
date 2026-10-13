@@ -11,10 +11,13 @@
 material {
     name : thick_glass,
     shadingModel : unlit,
-    blending : opaque,
+    blending : transparent,   // (only so that a matte can cut it softly: matte.glsl; uncut it covers all it is on)
+    depthWrite : true,
     requires : [ tangents ],
     variables : [ facing ],
     parameters : [
+        { type : sampler2d, name : matte0 }, { type : sampler2d, name : matte1 }, { type : sampler2d, name : matte2 }, { type : sampler2d, name : matte3 },
+        { type : float4, name : matteUse }, { type : float4, name : matteSoft },   // (matte.glsl)
         { type : sampler2d, name : behind, precision : medium },    // the scene without the glass, with the glass's far side laid over it (far_look.mat)
         { type : sampler2d, name : farSide, precision : medium },   // which way the glass's far faces face (far_side.mat)
         { type : sampler2d, name : farDepth, precision : high, filterable : false },   // and how far away they are
@@ -41,6 +44,7 @@ vertex {
 fragment {
 #include "studio.glsl"
 #include "spectrum.glsl"
+#include "matte.glsl"
     // where a place of the scene is on the pictures
     highp vec2 onPicture(highp vec3 at) { highp vec4 c = getClipFromWorldMatrix() * vec4(at, 1.0); return uvToRenderTargetUV(c.xy / c.w * 0.5 + 0.5); }
     // how far in front of the eye a depth is (Filament's own linearizeDepth)
@@ -152,7 +156,8 @@ fragment {
         seen *= 1.0 + 0.30 * smoothstep(0.3, 0.9, reflect(v, n).y);
         // this face mirrors the glass's room: its strip lamps run along the solid as long white lines, a small hot lamp glints
         seen += frameUniforms.iblLuminance * materialParams.roomGain * 14.0 * mirroredLamp(reflect(v, n)) * (0.04 + 0.96 * pow(1.0 - clamp(dot(n, -v), 0.0, 1.0), 5.0));
-        material.baseColor = vec4(0.0, 0.0, 0.0, 1.0);
-        material.emissive = vec4(seen, 0.0);   // (as it is: the pictures hold light as the screen does)
+        float uncut = matteLeft();
+        material.baseColor = vec4(0.0, 0.0, 0.0, uncut);
+        material.emissive = vec4(seen * uncut, 0.0);   // (as it is: the pictures hold light as the screen does)
     }
 }

@@ -1,24 +1,27 @@
-// matte.mat: a matte's shape (kit.h: matte). It puts no colour on the screen and hides nothing: it only leaves its
-// mark where it is seen (Filament's stencil), and things that are matted by it are drawn by that mark. A sheet with a
-// picture on it marks where the picture is not clear; a solid is given a white picture and marks all of itself.
+// matte.mat: a matte's shape, drawn into the matte's own picture of the screen (kit.h: matte): white where it is,
+// by how much it covers. A sheet with a picture on it (ThorVG's) covers by the picture's clearness, or by its light
+// (After Effects' luma matte); a solid is given a white picture and covers all of itself. Shapes laid over each
+// other in one matte join.
 material {
     name : matte,
     shadingModel : unlit,
-    blending : masked,
-    maskThreshold : 0.5,
+    blending : transparent,
     requires : [ uv0 ],
     culling : none,
-    colorWrite : false,
     depthWrite : false,
     depthCulling : false,
     parameters : [
-        { type : sampler2d, name : picture }
+        { type : sampler2d, name : picture },
+        { type : float, name : byLight },
+        { type : float, name : strength }
     ]
 }
 
 fragment {
     void material(inout MaterialInputs material) {
         prepareMaterial(material);
-        material.baseColor = vec4(0.0, 0.0, 0.0, textureLod(materialParams_picture, getUV0(), 0.0).a);
+        vec4 p = textureLod(materialParams_picture, getUV0(), 0.0);
+        float c = materialParams.strength * p.a * mix(1.0, dot(p.rgb, vec3(0.2126, 0.7152, 0.0722)), materialParams.byLight);
+        material.baseColor = vec4(c);
     }
 }

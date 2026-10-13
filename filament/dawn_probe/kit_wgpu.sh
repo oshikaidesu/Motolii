@@ -14,7 +14,7 @@ mkdir -p out/wgpu_kit/out
 for d in lightroom small_studio graffiti_shelter_2k; do [ -d out/$d ] && ln -sfn ../../$d out/wgpu_kit/out/$d; done
 for f in paper paper_copy floor_shade thick_glass far_side far_look glasslight glassbox boxlight bubble poster own_glass flat blade matte; do
     [ -f $f.mat ] || continue
-    [ out/wgpu_kit/$f.filamat -nt $f.mat ] && [ out/wgpu_kit/$f.filamat -nt studio.glsl ] && [ out/wgpu_kit/$f.filamat -nt spectrum.glsl ] && continue
+    [ out/wgpu_kit/$f.filamat -nt $f.mat ] && [ out/wgpu_kit/$f.filamat -nt studio.glsl ] && [ out/wgpu_kit/$f.filamat -nt spectrum.glsl ] && [ out/wgpu_kit/$f.filamat -nt matte.glsl ] && continue
     $MATC -a webgpu -a metal -p desktop -o out/wgpu_kit/$f.filamat $f.mat > out/wgpu_kit/$f.log 2>&1 ||
         $MATC -g -a webgpu -a metal -p desktop -o out/wgpu_kit/$f.filamat $f.mat > out/wgpu_kit/$f.log 2>&1 ||
         echo "no WebGPU material: $f (out/wgpu_kit/$f.log)"
