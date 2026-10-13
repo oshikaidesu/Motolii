@@ -19,42 +19,11 @@ int main(int argc, char** argv) {
     s.view->setColorGrading(ColorGrading::Builder().toneMapper(&filmic).contrast(1.2f).saturation(1.1f).build(*s.engine));
     if (!room(s, "out/small_studio/small_studio_ibl.ktx", 60000.f)) return fail("out/small_studio/small_studio_ibl.ktx");
 
-    // the film, drawn by ThorVG to fill the picture's width
-    static tvg::Animation* film_of = nullptr;
-    Drawn* film = drawn_open(s, W, H, [](tvg::WgCanvas* canvas) {
-        film_of = tvg::Animation::gen();
-        tvg::Picture* p = film_of->picture();
-        for (const char* at : {"third_party/thorvg_example/res/lottie/new_design.json", "../../third_party/thorvg_example/res/lottie/new_design.json"})
-            if (p->load(at) == tvg::Result::Success) break;
-        float w = 0.f, h = 0.f;
-        p->size(&w, &h);
-        if (w <= 0.f) return;
-        const float fit = std::min((float)W / w, (float)H / h);
-        p->size(w * fit, h * fit);
-        p->translate(0.5f * ((float)W - w * fit), 0.5f * ((float)H - h * fit));
-        tvg::Shape* ground = tvg::Shape::gen();   // (the film has no ground of its own)
-        ground->appendRect(0, 0, (float)W, (float)H);
-        ground->fill(245, 242, 235, 255);
-        canvas->add(ground);
-        canvas->add(p);
-    });
-    if (!film) return fail("drawn_open: the WebGPU backend, ThorVG built against Dawn and the patched Filament are needed (BACKEND=webgpu)");
-    if (!film_of || film_of->totalFrame() <= 0.f) return fail("the example film (third_party/thorvg_example)");
-
-    // the wall fills the view, 0.6 behind the middle
-    const float dist = 6.6f, hh = dist * std::tan(0.5f * fov * TAU / 360.f), hw = hh * W / H;
-    Mesh* sheet = new Mesh;
-    for (float2 c : {float2{-1, -1}, float2{1, -1}, float2{1, 1}, float2{-1, 1}}) {
-        sheet->pos.push_back({eye.x + hw * c.x, eye.y + hh * c.y, eye.z - dist});
-        sheet->nrm.push_back({0, 0, 1});
-        sheet->uv.push_back(c * 0.5f + 0.5f);
-    }
-    sheet->idx = {0, 1, 2, 0, 2, 3};
-    MaterialInstance* sheet_mi = add(s, sheet, "poster.filamat");
-    if (!sheet_mi) return fail("poster.filamat");
-    sheet_mi->setParameter("color", film->texture, TextureSampler(TextureSampler::MinFilter::LINEAR, TextureSampler::MagFilter::LINEAR));
-    sheet_mi->setParameter("glow", 0.f);
-    sheet_mi->setParameter("roll", 0.f);
+    // the film: a thing on the wall, 0.6 behind the middle, as tall as the view there
+    const float dist = 6.6f;
+    Drawn* film = picture(s, "../../third_party/thorvg_example/res/lottie/new_design.json", mat4f::translation(float3{eye.x, eye.y, eye.z - dist}),
+                          2.f * dist * std::tan(0.5f * fov * TAU / 360.f), float3{245.f, 242.f, 235.f} / 255.f);
+    if (!film || film->frames <= 0.f) return fail("picture (WebGPU backend only): the example film (third_party/thorvg_example)");
 
     struct Thing { Mesh* mesh; mat4f place; float turns; };
     const Thing things[] = {
@@ -64,10 +33,8 @@ int main(int argc, char** argv) {
     for (const Thing& t : things)
         if (!thick_glass(s, t.mesh, {t.place})) return fail("thick_glass.filamat");
 
-    const float frames = film_of->totalFrame(), seconds = film_of->duration();
     const auto pose = [&](float t) {
-        const float frame = std::fmod(t * 8.f / seconds, 1.f) * frames;   // (the film's own speed; it starts again when it ends)
-        drawn_now(s, film, [frame] { film_of->frame(frame); });
+        picture_at(s, film, std::fmod(t * 8.f, film->seconds));   // (the film's own speed; it starts again when it ends)
         for (const Thing& thing : things)
             move(s, thing.mesh, [&](int, const mat4f& at) { return mat4f::translation(at[3].xyz) * mat4f::rotation(TAU * t * thing.turns, float3{0, 1, 0}) * mat4f::translation(-at[3].xyz) * at; });
     };

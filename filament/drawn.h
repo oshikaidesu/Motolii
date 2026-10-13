@@ -1,30 +1,46 @@
-// drawn.h: pictures ThorVG draws, in the scene. ThorVG draws with WebGPU on Filament's own device straight into a
-// texture, and Filament reads that texture as any other: nothing goes through the CPU, nothing is copied, and it is
-// the same on every system Filament's WebGPU backend runs on. Whatever ThorVG can draw comes this way: a Lottie film
-// with its masks, mattes, shapes, type and effects, an SVG, shapes of one's own.
+// drawn.h: a picture ThorVG draws, put in the scene as a thing like any other. The scene and its things are
+// Filament's (an entity with a place and a look); this only makes one whose look is ThorVG's picture: a flat sheet.
+// The picture is a file: an After Effects film (Lottie) with all it holds, or an SVG. ThorVG draws it with WebGPU on
+// Filament's own device straight into a texture Filament reads: nothing goes through the CPU, nothing is copied.
 // Only on the WebGPU backend (BACKEND=webgpu, dawn_probe/kit_wgpu.sh), with ThorVG built against Dawn
 // (dawn_probe/tvg_on_dawn.sh) and Filament patched to lend its device and take a texture (gpu_door.h).
-// ThorVG's drawing is queued like Filament's own calls and runs on Filament's driver thread, so the picture is ready
-// for the frame rendered after it; and all of ThorVG's work for a picture is done there, never on the caller's thread.
+// All of ThorVG's work is queued like Filament's own calls and runs on Filament's driver thread.
 #include "dawn_probe/gpu_door.h"
 #include <thorvg.h>
 #include <webgpu/webgpu.h>
-#include <functional>
 
 struct Drawn {
-    tvg::WgCanvas* canvas = nullptr;   // (touched on the driver thread only: inside `set` and `each`)
+    tvg::WgCanvas* canvas = nullptr;   // (touched on the driver thread only)
+    tvg::Animation* film = nullptr;    // (the same)
     Texture* texture = nullptr;        // what Filament reads
-    int w = 0, h = 0;
+    Mesh* sheet = nullptr;             // the thing in the scene: moved like any other (kit.h: move)
+    float seconds = 0.f, frames = 0.f; // a film's length (a still: 0)
 };
 
-// A picture of w x h for ThorVG to draw. `set` is run once, on the driver thread, with the canvas: put there what is to be drawn.
-static Drawn* drawn_open(Stage& s, int w, int h, std::function<void(tvg::WgCanvas*)> set) {
+// A font for the pictures put after it (an SVG names its fonts; ThorVG knows only the ones it is given).
+static void font(Stage& s, const char* path) {
+    door::on_driver(s.engine, [path] {
+        tvg::Initializer::init(0);
+        tvg::Text::load(path);
+    });
+}
+
+// The picture in `file` put in the scene: a sheet `high` tall (as wide as the picture makes it) with its middle at
+// `place`, facing along the place's z. It is drawn as finely as the stage is, and where the file draws nothing it is `ground`.
+static Drawn* picture(Stage& s, const char* file, const mat4f& place, float high, float3 ground = float3{1.f}) {
     if (!door::device(s.engine)) return nullptr;   // (another backend)
     Drawn* d = new Drawn;
-    d->w = w;
-    d->h = h;
     WGPUTexture made = nullptr;
+    int w = 0, h = 0;
     door::on_driver(s.engine, [&] {
+        tvg::Initializer::init(0);
+        d->film = tvg::Animation::gen();
+        tvg::Picture* p = d->film->picture();
+        float fw = 0.f, fh = 0.f;
+        if (p->load(file) != tvg::Result::Success || p->size(&fw, &fh) != tvg::Result::Success || fw <= 0.f || fh <= 0.f) return;
+        const float fit = (float)std::max(s.w, s.h) / std::max(fw, fh);
+        w = 2 * (int)std::lround(0.5f * fw * fit);
+        h = 2 * (int)std::lround(0.5f * fh * fit);
         WGPUTextureDescriptor like{};
         like.size = {(uint32_t)w, (uint32_t)h, 1};
         like.format = WGPUTextureFormat_BGRA8Unorm;   // (what ThorVG's last step writes)
@@ -33,22 +49,41 @@ static Drawn* drawn_open(Stage& s, int w, int h, std::function<void(tvg::WgCanva
         like.mipLevelCount = 1;
         like.sampleCount = 1;
         made = wgpuDeviceCreateTexture((WGPUDevice)door::device(s.engine), &like);
-        tvg::Initializer::init(0);
         d->canvas = tvg::WgCanvas::gen();
-        if (d->canvas && d->canvas->target(door::device(s.engine), door::instance(s.engine), made, (uint32_t)w, (uint32_t)h, tvg::ColorSpace::ABGR8888S, 1) == tvg::Result::Success) set(d->canvas);
+        if (!d->canvas || d->canvas->target(door::device(s.engine), door::instance(s.engine), made, (uint32_t)w, (uint32_t)h, tvg::ColorSpace::ABGR8888S, 1) != tvg::Result::Success) return;
+        p->size((float)w, (float)h);
+        tvg::Shape* under = tvg::Shape::gen();
+        under->appendRect(0, 0, (float)w, (float)h);
+        under->fill((uint8_t)std::lround(255.f * ground.x), (uint8_t)std::lround(255.f * ground.y), (uint8_t)std::lround(255.f * ground.z), 255);
+        d->canvas->add(under);
+        d->canvas->add(p);
+        d->frames = d->film->totalFrame();
+        d->seconds = d->film->duration();
+        d->canvas->update();
+        d->canvas->draw(true);
+        d->canvas->sync();
     });
-    s.engine->flushAndWait();   // (once, at set-up: `made` is filled in on the other thread)
-    if (!made || !d->canvas) return nullptr;
+    s.engine->flushAndWait();   // (once, at set-up: the lines above ran on the other thread)
+    if (!made || !d->canvas || w <= 0) return nullptr;
     d->texture = Texture::Builder().width((uint32_t)w).height((uint32_t)h).levels(1).sampler(Texture::Sampler::SAMPLER_2D).format(Texture::InternalFormat::RGBA8)
                      .usage(Texture::Usage::SAMPLEABLE).import((intptr_t)made).build(*s.engine);
+    d->sheet = new Mesh;
+    for (float2 c : {float2{-1, -1}, float2{1, -1}, float2{1, 1}, float2{-1, 1}}) {
+        d->sheet->pos.push_back({0.5f * high * (float)w / (float)h * c.x, 0.5f * high * c.y, 0.f});
+        d->sheet->nrm.push_back({0, 0, 1});
+        d->sheet->uv.push_back(c * 0.5f + 0.5f);
+    }
+    d->sheet->idx = {0, 1, 2, 0, 2, 3};
+    MaterialInstance* look = add(s, d->sheet, "flat.filamat", {place});
+    if (!look) return nullptr;
+    look->setParameter("picture", d->texture, TextureSampler(TextureSampler::MinFilter::LINEAR, TextureSampler::MagFilter::LINEAR));
     return d;
 }
 
-// The picture drawn anew for the frame that comes next. `each` (if any) is run first, on the driver thread: move
-// what is on the canvas to its moment there (a film's frame).
-static void drawn_now(Stage& s, Drawn* d, std::function<void()> each = {}) {
-    door::on_driver(s.engine, [d, each] {
-        if (each) each();
+// A film at its moment, `seconds` from its start (after its end it holds its last picture), for the frame that comes next.
+static void picture_at(Stage& s, Drawn* d, float seconds) {
+    door::on_driver(s.engine, [d, seconds] {
+        d->film->frame(std::min(seconds / d->seconds * d->frames, d->frames - 1.f));
         d->canvas->update();
         d->canvas->draw(true);
         d->canvas->sync();

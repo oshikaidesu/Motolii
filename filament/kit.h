@@ -92,6 +92,9 @@ static Stage open_stage(int w, int h) {
     // (BACKEND=webgpu: Filament's WebGPU backend, Dawn, which is the way to Windows; it needs the Filament built from source, see dawn_probe/kit_wgpu.sh)
     const char* backend = getenv("BACKEND");
     s.engine = Engine::Builder().backend(backend && !strcmp(backend, "webgpu") ? Engine::Backend::WEBGPU : Engine::Backend::METAL).build();
+    // (a picture that does nothing to its colours gets them through exactly: Filament may then take its one fine row of
+    // numbers instead of a coarse block of them; with the block a white of 255 comes out 249)
+    s.engine->setFeatureFlag("engine.color_grading.use_1d_lut", true);
     s.renderer = s.engine->createRenderer();
     s.scene = s.engine->createScene();
     s.view = s.engine->createView();

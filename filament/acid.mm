@@ -74,31 +74,12 @@ int main(int argc, char** argv) {
     // (a room of many narrow lights, none of them blue: they lie on the glass as thin streaks; a room of a few large ones as white patches)
     if (!room(s, "out/graffiti_shelter_2k/graffiti_shelter_2k_ibl.ktx", 34000.f)) return fail("out/graffiti_shelter_2k/graffiti_shelter_2k_ibl.ktx");
 
-    // the flat layers, drawn by ThorVG
-    Drawn* flat = drawn_open(s, W, H, [](tvg::WgCanvas* canvas) {
-        tvg::Text::load("/System/Library/Fonts/Supplemental/Arial Black.ttf");
-        tvg::Picture* p = tvg::Picture::gen();
-        for (const char* file : {"acid_flat.svg", "../../acid_flat.svg"})
-            if (p->load(file) == tvg::Result::Success) break;
-        p->size((float)W, (float)H);
-        canvas->add(p);
-    });
-    if (!flat) return fail("drawn_open: the WebGPU backend, ThorVG built against Dawn and the patched Filament are needed (BACKEND=webgpu)");
-    Mesh* sheet = new Mesh;
-    for (float2 c : {float2{-1, -1}, float2{1, -1}, float2{1, 1}, float2{-1, 1}}) {
-        sheet->pos.push_back({WIDE * c.x, HIGH * c.y, -1.f});
-        sheet->nrm.push_back({0, 0, 1});
-        sheet->uv.push_back(c * 0.5f + 0.5f);
-    }
-    sheet->idx = {0, 1, 2, 0, 2, 3};
-    MaterialInstance* sheet_mi = add(s, sheet, "flat.filamat");
-    if (!sheet_mi) return fail("flat.filamat");
-    sheet_mi->setParameter("picture", flat->texture, TextureSampler(TextureSampler::MinFilter::LINEAR, TextureSampler::MagFilter::LINEAR));
+    // the flat layers: one picture, a thing behind the glass
+    font(s, "/System/Library/Fonts/Supplemental/Arial Black.ttf");
+    if (!picture(s, "../../acid_flat.svg", mat4f::translation(float3{0.f, 0.f, -1.f}), 2.f * HIGH)) return fail("picture (WebGPU backend only): acid_flat.svg");
 
     // the burst: crushed glass of a bottle green, put down as it comes (Filament's own glass, kit.h: it is given no depth)
     if (!own_glass(s, burst(at(0.76f, 0.52f), 0.74f * 2.f * WIDE, 178.f, 32, 77), {mat4f{}}, float3{0.33f, 0.40f, 0.06f}, 0.3f)) return fail("own_glass.filamat");
 
-    const auto pose = [&](float) { drawn_now(s, flat); };
-    pose(0.f);
-    return show(s, argc, argv, "acid", 480, 0.f, pose);
+    return show(s, argc, argv, "acid", 480, 0.f, [](float) {});
 }
