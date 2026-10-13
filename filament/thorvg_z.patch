@@ -1,0 +1,303 @@
+diff --git a/src/loaders/lottie/thorvg_lottie.h b/src/loaders/lottie/thorvg_lottie.h
+index 6b285a2..7645d3c 100644
+--- a/src/loaders/lottie/thorvg_lottie.h
++++ b/src/loaders/lottie/thorvg_lottie.h
+@@ -127,6 +127,20 @@ struct TVG_API LottieAnimation final : Animation
+      */
+     Result tween(float progress) noexcept;
+ 
++    /**
++     * @brief A layer's own transform at the current frame as the file has it, the third dimension kept.
++     *
++     * @param[in] layer The layer's id (@ref Accessor::id() of its name), in the main composition.
++     * @param[out] out 19 numbers: position x y z, anchor x y z, scale x y z (percent), orientation x y z, rotation x y z,
++     *                 skew, skew axis, the heading of an auto-oriented layer (all degrees), a camera's zoom (pixels).
++     * @param[out] parent The parent layer's id, 0 if it has none.
++     * @param[out] kind 0: a 2D layer (nothing written to @p out), 1: a 3D layer, 2: a camera with a point of interest (its "anchor"), 3: a camera without.
++     *
++     * @retval Result::InsufficientCondition If the animation is not loaded.
++     * @retval Result::InvalidArguments If there is no such layer.
++     */
++    Result pose(uint32_t layer, float* out, uint32_t* parent, int* kind) noexcept;
++
+     /**
+      * @brief Gets the marker count of the animation.
+      *
+diff --git a/src/loaders/lottie/tvgLottieAnimation.cpp b/src/loaders/lottie/tvgLottieAnimation.cpp
+index abeba56..af2dd28 100644
+--- a/src/loaders/lottie/tvgLottieAnimation.cpp
++++ b/src/loaders/lottie/tvgLottieAnimation.cpp
+@@ -124,6 +124,13 @@ const char* LottieAnimation::marker(uint32_t idx, float* begin, float* end) noex
+     return loader->markers(idx, begin, end);
+ }
+ 
++Result LottieAnimation::pose(uint32_t layer, float* out, uint32_t* parent, int* kind) noexcept
++{
++    FETCH_LOADER(Result::InsufficientCondition);
++    return loader->pose(layer, out, parent, kind) ? Result::Success : Result::InvalidArguments;
++}
++
++
+ Result LottieAnimation::quality(uint8_t value) noexcept
+ {
+     if (value > 100) return Result::InvalidArguments;
+diff --git a/src/loaders/lottie/tvgLottieBuilder.h b/src/loaders/lottie/tvgLottieBuilder.h
+index f20aff7..82c0c92 100644
+--- a/src/loaders/lottie/tvgLottieBuilder.h
++++ b/src/loaders/lottie/tvgLottieBuilder.h
+@@ -178,6 +178,7 @@ struct LottieBuilder
+     const AssetResolver* resolver = nullptr;  //do not free this
+     AudioResolver audioResolver;
+     LottieTween tween;
++    friend struct LottieLoader;   //(pose() works a layer's properties out as the builder does)
+     float volume = 1.0f;
+ 
+ private:
+diff --git a/src/loaders/lottie/tvgLottieLoader.cpp b/src/loaders/lottie/tvgLottieLoader.cpp
+index 4441ede..2fc4ba8 100644
+--- a/src/loaders/lottie/tvgLottieLoader.cpp
++++ b/src/loaders/lottie/tvgLottieLoader.cpp
+@@ -444,6 +444,34 @@ uint32_t LottieLoader::markersCnt()
+     return ready() ? comp->markers.count : 0;
+ }
+ 
++bool LottieLoader::pose(uint32_t id, float* out, uint32_t* parent, int* kind)
++{
++    if (!ready()) return false;
++    done();
++    LottieLayer* layer = nullptr;
++    ARRAY_FOREACH(p, comp->root->children) {   //(the id that is public is the name's hash cut to 32 bits)
++        if ((*p)->type == LottieObject::Type::Layer && (uint32_t)(*p)->id == id) layer = static_cast<LottieLayer*>(*p);
++    }
++    if (!layer || !layer->transform) return false;
++    auto t = layer->transform;
++    *parent = layer->parent ? (uint32_t)layer->parent->id : 0;
++    *kind = t->ddd ? ((int)layer->type == 13 ? (t->ddd->aimed ? 2 : 3) : 1) : 0;
++    if (!t->ddd) return true;
++    auto no = layer->cache.frameNo;   //the layer's own time, as it was last worked out
++    auto& tween = builder->tween;
++    auto exps = builder->exps;
++    auto p = t->ddd->position(no, tween, exps);
++    if (t->coords) p = {t->coords->x(no, tween, exps), t->coords->y(no, tween, exps), t->coords->z(no, tween, exps)};
++    auto a = t->ddd->anchor(no, tween, exps), s = t->ddd->scale(no, tween, exps), o = t->ddd->orient(no, tween, exps);
++    float all[19] = {p.x, p.y, p.z, a.x, a.y, a.z, s.x, s.y, s.z, o.x, o.y, o.z,
++                     t->ddd->rx(no, tween, exps), t->ddd->ry(no, tween, exps), t->rotation(no, tween, exps),
++                     t->skewAngle(no, tween, exps), t->skewAxis(no, exps),
++                     layer->autoOrient ? t->ddd->position.angle(no, tween) : 0.0f, layer->zoom(no, tween, exps)};
++    memcpy(out, all, sizeof(all));
++    return true;
++}
++
++
+ const char* LottieLoader::markers(uint32_t index, float* begin, float* end)
+ {
+     if (!ready() || index >= comp->markers.count) return nullptr;
+diff --git a/src/loaders/lottie/tvgLottieLoader.h b/src/loaders/lottie/tvgLottieLoader.h
+index bd585a7..8772903 100644
+--- a/src/loaders/lottie/tvgLottieLoader.h
++++ b/src/loaders/lottie/tvgLottieLoader.h
+@@ -90,6 +90,7 @@ struct LottieLoader : AnimLoader, Task
+     bool sync() override;
+ 
+     //Marker Supports
++    bool pose(uint32_t id, float* out, uint32_t* parent, int* kind);
+     uint32_t markersCnt();
+     const char* markers(uint32_t index, float* begin = nullptr, float* end = nullptr);
+     bool segment(const char* marker, float& begin, float& end);
+diff --git a/src/loaders/lottie/tvgLottieModel.h b/src/loaders/lottie/tvgLottieModel.h
+index e9beabe..8b0c686 100644
+--- a/src/loaders/lottie/tvgLottieModel.h
++++ b/src/loaders/lottie/tvgLottieModel.h
+@@ -692,6 +692,7 @@ struct LottieTransform : LottieObject
+     {
+         LottieFloat x = 0.0f;
+         LottieFloat y = 0.0f;
++        LottieFloat z = 0.0f;
+     };
+ 
+     SeparateCoord* separateCoord()
+@@ -750,6 +751,10 @@ struct LottieTransform : LottieObject
+     {
+         LottieFloat rx = 0.0f, ry = 0.0f;  // use the rotation for z rotation
+         LottieScalar3 orient = {};
++        LottieVector3 position = Point3{0.0f, 0.0f, 0.0f};     //as the file has them; what is flat of them is in the transform's own too
++        LottieScalar3 anchor = Point3{0.0f, 0.0f, 0.0f};
++        LottieScalar3 scale = Point3{100.0f, 100.0f, 100.0f};
++        bool aimed = false;                //has an anchor in the file (a camera's point of interest)
+     }* ddd = nullptr;
+ };
+ 
+@@ -1155,6 +1160,7 @@ struct LottieLayer : LottieRootLayer
+ 
+     unsigned long rid = 0;      //pre-composition reference id.
+     int16_t mix = -1;           //index of the matte layer.
++    LottieFloat zoom = 0.0f;    //a camera's
+     int16_t pix = -1;           //index of the parent layer.
+     int16_t ix = -1;            //index of the current layer.
+ 
+diff --git a/src/loaders/lottie/tvgLottieParser.cpp b/src/loaders/lottie/tvgLottieParser.cpp
+index b6992bb..d47546b 100644
+--- a/src/loaders/lottie/tvgLottieParser.cpp
++++ b/src/loaders/lottie/tvgLottieParser.cpp
+@@ -490,6 +490,47 @@ void LottieParser::parseProperty(T& prop, LottieObject* obj)
+ }
+ 
+ 
++//a 3D layer's property is read whole, and what is flat of it is handed to the 2D property, which is all as before
++static void _flat(LottieVectorFrame<Point3>& from, LottieVectorFrame<Point>& to)
++{
++    to.inTangent = {from.inTangent.x, from.inTangent.y};
++    to.outTangent = {from.outTangent.x, from.outTangent.y};
++    to.hasTangent = from.hasTangent;
++}
++
++static void _flat(LottieScalarFrame<Point3>& from, LottieScalarFrame<Point>& to) {}
++
++template<typename T3, typename T>
++static void _flat(T3& deep, T& flat)
++{
++    flat.value = {deep.value.x, deep.value.y};
++    if (!deep.frames) return;
++    for (auto from = deep.frames->begin(); from < deep.frames->end(); ++from) {
++        auto& to = flat.newFrame();
++        to.value = {from->value.x, from->value.y};
++        to.no = from->no;
++        to.interpolator = from->interpolator;
++        to.hold = from->hold;
++        _flat(*from, to);
++    }
++    flat.prepare();
++}
++
++
++template<typename T3, typename T>
++void LottieParser::parseProperty3(T3& deep, T& flat, LottieObject* obj)
++{
++    enterObject();
++    while (auto key = nextObjectKey()) {
++        if (KEY_AS("k")) {
++            parsePropertyInternal(deep);
++            _flat(deep, flat);
++        } else if (parseCommon(obj, flat, key)) continue;
++        else skip();
++    }
++}
++
++
+ bool LottieParser::parseCommon(LottieObject* obj, const char* key)
+ {
+     if (KEY_AS("nm")) {
+@@ -575,7 +616,12 @@ LottieTransform* LottieParser::parseTransform(bool ddd)
+         {
+             enterObject();
+             while (auto key = nextObjectKey()) {
+-                if (KEY_AS("k")) parsePropertyInternal(transform->position);
++                if (KEY_AS("k")) {
++                    if (transform->ddd) {
++                        parsePropertyInternal(transform->ddd->position);
++                        _flat(transform->ddd->position, transform->position);
++                    } else parsePropertyInternal(transform->position);
++                }
+                 else if (KEY_AS("x")) //must be prior to parseCommon()
+                 {
+                     //check separateCoord to figure out whether "x(expression)" / "x(coord)"
+@@ -585,10 +631,16 @@ LottieTransform* LottieParser::parseTransform(bool ddd)
+                     } else parseProperty(transform->separateCoord()->x);
+                 }
+                 else if (KEY_AS("y")) parseProperty(transform->separateCoord()->y);
++                else if (transform->ddd && KEY_AS("z")) parseProperty(transform->separateCoord()->z);
+                 else if (parseCommon(transform, transform->position, key)) continue;
+                 else skip();
+             }
+         }
++        else if (transform->ddd && KEY_AS("a")) {
++            parseProperty3(transform->ddd->anchor, transform->anchor, transform);
++            transform->ddd->aimed = true;
++        }
++        else if (transform->ddd && KEY_AS("s")) parseProperty3(transform->ddd->scale, transform->scale, transform);
+         else if (KEY_AS("a")) parseProperty(transform->anchor, transform);
+         else if (KEY_AS("s")) parseProperty(transform->scale, transform);
+         else if (KEY_AS("r")) parseProperty(transform->rotation, transform);
+@@ -1577,6 +1629,7 @@ LottieLayer* LottieParser::parseLayer(LottieRootLayer* precomp)
+             layer->transform = parseTransform(ddd);
+         }
+         else if (KEY_AS("ao")) layer->autoOrient = getInt();
++        else if (KEY_AS("pe")) parseProperty(layer->zoom);
+         else if (KEY_AS("shapes")) parseShapes(layer->children);
+         else if (KEY_AS("ip")) layer->inPoint = getFloat();
+         else if (KEY_AS("op")) layer->outPoint = getFloat();
+diff --git a/src/loaders/lottie/tvgLottieParser.h b/src/loaders/lottie/tvgLottieParser.h
+index b247cfc..65c7124 100644
+--- a/src/loaders/lottie/tvgLottieParser.h
++++ b/src/loaders/lottie/tvgLottieParser.h
+@@ -72,6 +72,7 @@ private:
+     template<typename T> void parseKeyFrame(T& prop);
+     template<typename T> void parsePropertyInternal(T& prop);
+     template<typename T> void parseProperty(T& prop, LottieObject* obj = nullptr);
++    template<typename T3, typename T> void parseProperty3(T3& deep, T& flat, LottieObject* obj);
+     template<typename T> void parseSlotProperty(T& prop);
+ 
+     LottieObject* parseObject(const char* type);
+diff --git a/src/loaders/lottie/tvgLottieProperty.h b/src/loaders/lottie/tvgLottieProperty.h
+index 0f7e94d..d742d60 100644
+--- a/src/loaders/lottie/tvgLottieProperty.h
++++ b/src/loaders/lottie/tvgLottieProperty.h
+@@ -111,6 +111,50 @@ struct LottieVectorFrame
+     }
+ };
+ 
++//a position keyed in space (a 3D layer's): the same curve as in the plane, measured by its chords
++static inline Point3 _along3(LottieVectorFrame<Point3>* cur, LottieVectorFrame<Point3>* next, float want, float* total, Point3* heading)
++{
++    auto prev = cur->value;
++    auto done = 0.0f;
++    for (auto i = 1; i <= 64; ++i) {
++        auto t = i / 64.0f, u = 1.0f - t;
++        auto pt = cur->value * (u * u * u) + (cur->value + cur->outTangent) * (3.0f * u * u * t) + (next->value + cur->inTangent) * (3.0f * u * t * t) + next->value * (t * t * t);
++        auto d = pt - prev;
++        auto len = sqrtf(d.x * d.x + d.y * d.y + d.z * d.z);
++        if (heading && len > 0.0f) *heading = d;
++        if (!total && done + len >= want) return len > 0.0f ? prev + d * ((want - done) / len) : prev;
++        done += len;
++        prev = pt;
++    }
++    if (total) *total = done;
++    return next->value;
++}
++
++template<> inline void LottieVectorFrame<Point3>::prepare(LottieVectorFrame<Point3>* next)
++{
++    _along3(this, next, 0.0f, &length, nullptr);
++}
++
++template<> inline Point3 LottieVectorFrame<Point3>::interpolate(LottieVectorFrame<Point3>* next, float frameNo)
++{
++    auto t = (frameNo - no) / (next->no - no);
++    if (interpolator) t = interpolator->progress(t);
++    if (hold) return (t < 1.0f) ? value : next->value;
++    if (hasTangent) return _along3(this, next, t * length, nullptr, nullptr);
++    return tvg::lerp(value, next->value, t);
++}
++
++template<> inline float LottieVectorFrame<Point3>::angle(LottieVectorFrame<Point3>* next, float frameNo)
++{
++    auto heading = next->value - value;
++    if (hasTangent) {
++        auto t = (frameNo - no) / (next->no - no);
++        if (interpolator) t = interpolator->progress(t);
++        _along3(this, next, t * length, nullptr, &heading);
++    }
++    return rad2deg(tvg::atan(Point{heading.x, heading.y}));
++}
++
+ struct LottieExpression
+ {
+     char* code;
+@@ -510,6 +554,7 @@ using LottieInteger = LottieGenericProperty<LottieScalarFrame<int8_t>, int8_t, L
+ using LottieScalar = LottieGenericProperty<LottieScalarFrame<Point>, Point, LottieProperty::Type::Scalar>;
+ using LottieVector = LottieGenericProperty<LottieVectorFrame<Point>, Point, LottieProperty::Type::Vector, 0>;
+ using LottieScalar3 = LottieGenericProperty<LottieScalarFrame<Point3>, Point3, LottieProperty::Type::Scalar3>;
++using LottieVector3 = LottieGenericProperty<LottieVectorFrame<Point3>, Point3, LottieProperty::Type::Scalar3, 0>;
+ using LottieColor = LottieGenericProperty<LottieScalarFrame<RGB32>, RGB32, LottieProperty::Type::Color>;
+ using LottieOpacity = LottieGenericProperty<LottieScalarFrame<uint8_t>, uint8_t, LottieProperty::Type::Opacity>;
+ 

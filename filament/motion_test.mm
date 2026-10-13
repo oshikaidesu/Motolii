@@ -112,7 +112,7 @@ int main() {
     // the third dimension: motion_test3d.json (motion_test3d.src.json through lottie3d.py)
     {
         Motion deep;
-        if (!motion_open(deep, "motion_test3d.json")) { std::printf("FAIL open motion_test3d.json\n"); return 1; }
+        if (!motion_open(deep, "motion_test3d.src.json")) { std::printf("FAIL open motion_test3d.json\n"); return 1; }
         Motion& m = deep;
 #include "motion_test3d.inc"
         there3(m, "deep", 25, 0, 0, 0, 1, 2, 50);          // position keyed dimension by dimension: z 0 -> 200 over 100 frames
@@ -142,7 +142,7 @@ int main() {
     }
     // what a moment costs the CPU: led.json (four layers, one with an expression), every frame of it once
     Motion led;
-    if (motion_open(led, "led.json")) {
+    if (motion_open(led, "led.src.json")) {
         const auto from = std::chrono::steady_clock::now();
         for (int f = 0; f < 480; ++f) {
             motion_at(led, (float)f);
