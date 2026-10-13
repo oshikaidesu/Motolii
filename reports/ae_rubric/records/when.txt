@@ -1,4 +1,4 @@
-2026-10-14 00:39
-d9dac30 after the second round (two judges: 4.5): undo holds when a value is changed again and again (a change is written as SQLite's own update: delete-then-insert made the session keep two records that clash when reversed); a change the stage cannot show is not made (rolled back, with its reason); things and names that are not there are refused; a thing stays on unless given a duration; numbers are never given again; solid.h: a 3D file as a thing, all by Filament's gltfio (and photos through ThorVG's picture as they are); an AE picture's clearness is ThorVG's own (no white ground keyed out); the rotation tag by GStreamer's own reader; lent surfaces given back when a film goes (Dawn's EndAccess); one material built per file, not per thing
+2026-10-14 01:07
+437717f sound: a written film carries its films' own sound (cut, speed, backwards, round again, when it comes on: all cut and mixed by ffmpeg from what each thing says; check/sound.sh: within 5 ms of the files' own, silent before a film comes on); the made-up drum is gone; video: surfaces a decoder has stopped handing on are given back (they were kept for ever: 200 more a minute, the memory rise); try.md and evidence brought up to date
 15.5
 Apple M4
