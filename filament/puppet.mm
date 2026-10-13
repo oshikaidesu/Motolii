@@ -26,7 +26,8 @@ int main(int argc, char** argv) {
     if (!wall) return fail("picture (WebGPU backend only)");
 
     std::vector<std::string> clips;
-    if (FILE* found = popen("ls ../vid/*.mp4 2>/dev/null", "r")) {
+    const std::string films = getenv("FILMS") ? getenv("FILMS") : "../vid";   // (FILMS=../vid_odd: another folder of films)
+    if (FILE* found = popen(("ls " + films + "/* 2>/dev/null").c_str(), "r")) {
         char line[1024];
         while (fgets(line, sizeof line, found)) clips.push_back(std::string(line, strcspn(line, "\n")));
         pclose(found);
@@ -35,11 +36,12 @@ int main(int argc, char** argv) {
     const bool many = getenv("PUPPETS") != nullptr;   // (then the puppets stand below, small)
     // where the puppets stand: middle and height of each (they come round again past the fourth)
     const float3 stand[] = {{-0.4f, 2.3f, 0.2f}, {0.3f, 1.5f, 0.5f}, {-0.25f, 0.62f, 0.8f}, {0.5f, 0.45f, 0.35f}};
+    const bool rows = clips.size() > 4;   // (many films: in rows of three, small)
     std::vector<Video*> puppets;
     for (size_t i = 0; i < clips.size(); ++i) {
-        const float3 at = many ? float3{-0.6f + 0.6f * (float)(i % 3), 0.38f, 0.4f} : stand[i % 4];
-        puppets.push_back(video(s, clips[i].c_str(), mat4f::translation(at), many ? 0.55f : 0.95f));
-        if (!puppets.back()) return fail("video");
+        const float3 at = many ? float3{-0.6f + 0.6f * (float)(i % 3), 0.38f, 0.4f} : rows ? float3{-0.56f + 0.56f * (float)(i % 3), 2.62f - 0.62f * (float)(i / 3), 0.3f + 0.01f * (float)i} : stand[i % 4];
+        puppets.push_back(video(s, clips[i].c_str(), mat4f::translation(at), many ? 0.55f : rows ? (i == 5 ? 0.6f : 0.34f) : 0.95f));
+        if (!puppets.back()) { std::printf("could not show %s\n", clips[i].c_str()); return fail("video"); }
         green(puppets.back());
     }
     Video* plain = many ? nullptr : video(s, clips[0].c_str(), mat4f::translation(float3{0.52f, 2.62f, 0.1f}), 0.42f);   // (as it is)

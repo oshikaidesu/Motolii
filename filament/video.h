@@ -1,10 +1,11 @@
-// video.h: a film from a file (an .mp4 with H.264 in it), put in the scene as a thing like any other: a flat sheet
+// video.h: a film from a file (whatever GStreamer can read: it chooses the parts itself), put in the scene as a thing like any other: a flat sheet
 // whose look is the film's picture at a moment (flat.mat, as for ThorVG's pictures: so it can be cut by mattes, seen
 // through glass, and keyed: `green`).
 // GStreamer reads the file and has the machine's video decoder make the pictures; a picture stays where the decoder
 // left it, on the GPU (on the Mac an IOSurface), and is shared with Filament's own WebGPU device as it is (Dawn's
 // SharedTextureMemory): its light and its colour are two planes of one texture, turned to red, green and blue in
-// flat.mat. Nothing of a picture goes through the CPU.
+// flat.mat. Nothing of a picture goes through the CPU. A picture is chosen by the time the film gives it (a phone's
+// film does not keep an even pace), and a film that says it is to be turned (shot upright) is turned.
 // Only on the WebGPU backend (BACKEND=webgpu, dawn_probe/kit_wgpu.sh with KIT_EXTRA: see puppet.sh), with Filament
 // asking its device for the sharing (filament_dawn_compute.patch). The Mac's door only, so far.
 #include "dawn_probe/gpu_door.h"
@@ -20,11 +21,16 @@
 struct Video {
     GstElement* reader = nullptr;      // GStreamer's pipeline for this film
     GstAppSink* out = nullptr;
-    GstSample* held = nullptr;         // the picture last taken from the reader (held, so that the decoder does not write over it)
-    GstSample* on = nullptr;           // the picture that is on the sheet (the same, but for the moment a surface is first shared)
-    int w = 0, h = 0, count = 0, shown = -1;   // count: its pictures in all; shown: which is held, counted on through its repeats
-    float each = 0.f, seconds = 0.f;   // pictures a second, and how long it is
+    GstSample* held = nullptr;         // the picture for now (held, so that the decoder does not write over it)
+    GstSample* next = nullptr;         // the one after it, once it has come: it says until when `held` is the picture
+    GstSample* on = nullptr;           // the picture that is on the sheet (`held`, but for the moment a surface is first shared)
+    double nextAt = 0.0;               // when `next` is due, in seconds of the film's run (on through its repeats)
+    double origin = 0.0, last = 0.0;   // the stage's time at which that run began; the stage's time last asked for
+    int w = 0, h = 0, turned = 0;      // turned: quarter turns clockwise the film asks for before it is shown
+    float seconds = 0.f;               // how long it is
     bool ended = false;                // the reader has read to the film's end (its last pictures may still be on their way)
+    float4 key{0.f};                   // its green screen, if it has one (green); until its first picture is on the sheet the sheet is all clear
+    float2 keySoft{0.f};
     Mesh* sheet = nullptr;             // the thing in the scene: moved like any other (kit.h: move)
     MaterialInstance* look = nullptr;
     struct Planes { std::atomic<WGPUTexture> shared{nullptr}; Texture* light = nullptr; Texture* colour = nullptr; };
@@ -37,18 +43,14 @@ struct VideoCoreVideoMeta { GstMeta meta; CVBufferRef cvbuf; CVPixelBufferRef pi
 
 // How long a film may be waited for when its next picture is not there yet, in thousandths of a second. A film made
 // picture by picture wants every one (the default); a stage that plays as the clock goes sets 0: a film that is not
-// ready keeps its last picture for that one and catches up at the next.
+// ready keeps its picture for that one and catches up at the next.
 static float video_patience = 500.f;
-static long video_asked = 0, video_late = 0;   // how often a film was asked for a moment, and how often its picture for it was not there
+static long video_asked = 0, video_late = 0;   // how often a film was asked for a moment, and how often it could not yet tell its picture for it
 
-// The film's next picture taken from the reader; false if it is not there (within the patience left).
-static bool video_pull(Video* v, GstClockTime wait) {
-    GstSample* next = gst_app_sink_try_pull_sample(v->out, wait);
-    if (!next) return false;
-    if (v->held && v->held != v->on) gst_sample_unref(v->held);
-    v->held = next;
-    ++v->shown;
-    return true;
+// When a picture is due, in seconds of the film's run: its own time stamp, on through the film's repeats.
+static double video_due(GstSample* picture) {
+    const GstClockTime at = gst_segment_to_running_time(gst_sample_get_segment(picture), GST_FORMAT_TIME, GST_BUFFER_PTS(gst_sample_get_buffer(picture)));
+    return GST_CLOCK_TIME_IS_VALID(at) ? (double)at / (double)GST_SECOND : 0.0;
 }
 
 // The held picture put on the sheet. A surface seen for the first time is first shared with Filament's device, on
@@ -103,9 +105,21 @@ static bool video_show(Stage& s, Video* v) {
     const TextureSampler smooth(TextureSampler::MinFilter::LINEAR, TextureSampler::MagFilter::LINEAR, TextureSampler::WrapMode::CLAMP_TO_EDGE);
     v->look->setParameter("picture", planes.light, smooth);
     v->look->setParameter("colours", planes.colour, smooth);
+    if (!v->on) {   // (its first picture: seen from now on)
+        v->look->setParameter("key", v->key);
+        v->look->setParameter("keySoft", v->keySoft);
+    }
     if (v->on && v->on != v->held) gst_sample_unref(v->on);
     v->on = v->held;
     return true;
+}
+
+// The held picture on the sheet for the picture drawn next: a film made picture by picture waits for a surface that
+// is being shared (a moment, once for each of the decoder's surfaces); one played by the clock does not.
+static void video_put(Stage& s, Video* v) {
+    if (v->on == v->held || video_show(s, v) || video_patience <= 0.f) return;
+    s.engine->flushAndWait();
+    video_show(s, v);
 }
 
 // The reader set to a moment of the film, to go on from there and round again without a break at the film's end
@@ -115,6 +129,24 @@ static void video_from(Video* v, float seconds, bool afresh) {
                      GST_SEEK_TYPE_SET, (gint64)((double)seconds * (double)GST_SECOND), GST_SEEK_TYPE_NONE, -1);
 }
 
+// A stream the reader found in the file: its pictures go to `out`; whatever else it holds (sound) is read and dropped.
+static void video_found(GstElement*, GstPad* stream, gpointer film) {
+    Video* v = (Video*)film;
+    gchar* name = gst_pad_get_name(stream);
+    GstPad* to = gst_element_get_static_pad(GST_ELEMENT(v->out), "sink");
+    if (!g_str_has_prefix(name, "video") || gst_pad_is_linked(to)) {
+        GstElement* away = gst_element_factory_make("fakesink", nullptr);
+        g_object_set(away, "sync", FALSE, "async", FALSE, nullptr);
+        gst_bin_add(GST_BIN(v->reader), away);
+        gst_element_sync_state_with_parent(away);
+        gst_object_unref(to);
+        to = gst_element_get_static_pad(away, "sink");
+    }
+    gst_pad_link(stream, to);
+    gst_object_unref(to);
+    g_free(name);
+}
+
 // The film in `file` put in the scene: a sheet `high` tall (as wide as the film makes it) with its middle at `place`,
 // facing along the place's z.
 static Video* video(Stage& s, const char* file, const mat4f& place, float high) {
@@ -122,36 +154,58 @@ static Video* video(Stage& s, const char* file, const mat4f& place, float high) 
     static const bool started = (gst_init(nullptr, nullptr), true);
     (void)started;
     Video* v = new Video;
-    gchar* line = g_strdup_printf("filesrc location=\"%s\" ! qtdemux ! h264parse ! vtdec_hw ! video/x-raw,format=NV12 ! appsink name=out sync=false max-buffers=2", file);
-    v->reader = gst_parse_launch(line, nullptr);
-    g_free(line);
-    if (!v->reader) return nullptr;
-    v->out = GST_APP_SINK(gst_bin_get_by_name(GST_BIN(v->reader), "out"));
+    v->reader = gst_pipeline_new(nullptr);
+    GstElement* from = gst_element_factory_make("filesrc", nullptr);
+    GstElement* reads = gst_element_factory_make("decodebin3", nullptr);   // (chooses the parts for whatever the file is: the machine's decoder where there is one)
+    v->out = GST_APP_SINK(gst_element_factory_make("appsink", nullptr));
+    if (!from || !reads || !v->out) return nullptr;
+    GstCaps* wanted = gst_caps_from_string("video/x-raw,format=NV12");   // (light and colour apart, eight bits: what video.h shares)
+    g_object_set(from, "location", file, nullptr);
+    g_object_set(v->out, "sync", FALSE, "max-buffers", 2, "caps", wanted, nullptr);
+    gst_caps_unref(wanted);
+    gst_bin_add_many(GST_BIN(v->reader), from, reads, GST_ELEMENT(v->out), nullptr);
+    gst_element_link(from, reads);
+    g_signal_connect(reads, "pad-added", G_CALLBACK(video_found), v);
     gst_element_set_state(v->reader, GST_STATE_PAUSED);
-    gst_element_get_state(v->reader, nullptr, nullptr, GST_CLOCK_TIME_NONE);   // (waits until the file is open and its first picture is there)
+    gst_element_get_state(v->reader, nullptr, nullptr, 5 * GST_SECOND);   // (waits until the file is open and its first picture is there)
     video_from(v, 0.f, true);
     gst_element_set_state(v->reader, GST_STATE_PLAYING);
-    if (!video_pull(v, 5 * GST_SECOND)) return nullptr;   // (its first picture says how large it is and how fast it goes)
+    v->held = gst_app_sink_try_pull_sample(v->out, 5 * GST_SECOND);   // (its first picture says how large it is)
+    if (!v->held) return nullptr;
     const GstStructure* said = gst_caps_get_structure(gst_sample_get_caps(v->held), 0);
-    int num = 0, den = 1;
     gint64 length = 0;
-    if (!gst_structure_get_int(said, "width", &v->w) || !gst_structure_get_int(said, "height", &v->h) || !gst_structure_get_fraction(said, "framerate", &num, &den) ||
-        num <= 0 || !gst_element_query_duration(v->reader, GST_FORMAT_TIME, &length) || length <= 0) return nullptr;
-    v->each = (float)num / (float)den;
+    if (!gst_structure_get_int(said, "width", &v->w) || !gst_structure_get_int(said, "height", &v->h) || !gst_element_query_duration(v->reader, GST_FORMAT_TIME, &length) || length <= 0) return nullptr;
     v->seconds = (float)((double)length / (double)GST_SECOND);
-    v->count = std::max(1, (int)std::lround(v->seconds * v->each));
+    GstBus* bus = gst_element_get_bus(v->reader);
+    while (GstMessage* said = gst_bus_pop_filtered(bus, GST_MESSAGE_TAG)) {   // (a film shot upright says which way it is to be turned)
+        GstTagList* tags = nullptr;
+        gchar* way = nullptr;
+        gst_message_parse_tag(said, &tags);
+        if (gst_tag_list_get_string(tags, GST_TAG_IMAGE_ORIENTATION, &way)) {
+            v->turned = !strcmp(way, "rotate-90") ? 1 : !strcmp(way, "rotate-180") ? 2 : !strcmp(way, "rotate-270") ? 3 : 0;
+            g_free(way);
+        }
+        gst_tag_list_unref(tags);
+        gst_message_unref(said);
+    }
+    gst_object_unref(bus);
+    const float wide = v->turned % 2 ? (float)v->h / (float)v->w : (float)v->w / (float)v->h;   // (as it is shown)
     v->sheet = new Mesh;
     for (float2 c : {float2{-1, -1}, float2{1, -1}, float2{1, 1}, float2{-1, 1}}) {
-        v->sheet->pos.push_back({0.5f * high * (float)v->w / (float)v->h * c.x, 0.5f * high * c.y, 0.f});
+        v->sheet->pos.push_back({0.5f * high * wide * c.x, 0.5f * high * c.y, 0.f});
         v->sheet->nrm.push_back({0, 0, 1});
-        v->sheet->uv.push_back(c * 0.5f + 0.5f);   // (a film's first row is its top: Filament turns a sheet's v over itself)
+        // which point of the film is at this corner: the corner turned back the other way
+        const float2 of = v->turned == 1 ? float2{-c.y, c.x} : v->turned == 2 ? float2{-c.x, -c.y} : v->turned == 3 ? float2{c.y, -c.x} : c;
+        v->sheet->uv.push_back(of * 0.5f + 0.5f);   // (a film's first row is its top: Filament turns a sheet's v over itself)
     }
     v->sheet->idx = {0, 1, 2, 0, 2, 3};
     v->look = add(s, v->sheet, "flat.filamat", {place});
     if (!v->look) return nullptr;
     v->look->setParameter("filmed", 1.f);
-    v->look->setParameter("picture", white_point(s), TextureSampler());   // (until its first picture is shared)
-    video_show(s, v);
+    v->look->setParameter("picture", white_point(s), TextureSampler());   // (until its first picture is shared: a white that is
+    v->look->setParameter("key", float4{1.f, 0.5f, 1.f, 9.f});            //  keyed out whole, so the sheet is not seen)
+    v->look->setParameter("keySoft", float2{1.f, 1.f});
+    video_put(s, v);
     return v;
 }
 
@@ -160,26 +214,40 @@ static Video* video(Stage& s, const char* file, const mat4f& place, float high) 
 // soft: over how much more the film comes in (a point half screen, half grey is 0.3 from the screen);
 // spill: how far from the screen its colour is still taken out of what stays.
 static void green(Video* v, float3 colour = float3{0.f, 1.f, 0.f}, float near = 0.12f, float soft = 0.3f, float spill = 0.9f) {
-    v->look->setParameter("key", float4{colour, near});
-    v->look->setParameter("keySoft", float2{soft, spill});
+    v->key = float4{colour, near};
+    v->keySoft = float2{soft, spill};
+    if (!v->on) return;
+    v->look->setParameter("key", v->key);
+    v->look->setParameter("keySoft", v->keySoft);
 }
 
-// The film at its moment, `seconds` from its start (it goes round again when it ends), for the picture that comes next.
+// The film at its moment, `seconds` of the stage's time (it goes round again when it ends), for the picture that comes
+// next. The picture for a moment is the last one due by then, by the film's own time stamps.
 static void video_at(Stage& s, Video* v, float seconds) {
-    const int want = (int)std::floor(seconds * v->each);   // (counted on through its repeats)
-    if (want < v->shown) {   // (time went back: from that moment afresh)
-        video_from(v, (float)(want % v->count) / v->each, true);
-        v->shown = want - 1;
+    if (seconds < v->last) {   // (time went back: from that moment afresh)
+        video_from(v, std::fmod(seconds, v->seconds), true);
+        v->origin = seconds;
+        v->ended = false;
+        if (v->next) { gst_sample_unref(v->next); v->next = nullptr; }
     }
+    v->last = seconds;
+    const double now = (double)seconds - v->origin;
     GstBus* bus = gst_element_get_bus(v->reader);
     const gint64 until = g_get_monotonic_time() + (gint64)(video_patience * 1000.f);
+    bool sure = false;   // (known: the picture held is the one for now)
     while (true) {
         while (GstMessage* said = gst_bus_pop_filtered(bus, GST_MESSAGE_SEGMENT_DONE)) {
             gst_message_unref(said);
             v->ended = true;
         }
-        if (v->shown >= want) break;
-        if (video_pull(v, video_patience > 0.f ? 2 * GST_MSECOND : 0)) continue;
+        if (!v->next && (v->next = gst_app_sink_try_pull_sample(v->out, video_patience > 0.f ? 2 * GST_MSECOND : 0))) v->nextAt = video_due(v->next);
+        if (v->next) {
+            if (v->nextAt > now) { sure = true; break; }
+            if (v->held != v->on) gst_sample_unref(v->held);   // (the next one is due: it is the picture now)
+            v->held = v->next;
+            v->next = nullptr;
+            continue;
+        }
         if (v->ended) {   // (round again, without a break. Asked from another thread, GStreamer's own way: the reader
             v->ended = false;   //  cannot be turned back while it waits to hand a picture on, and this thread is the one that takes them)
             gst_element_call_async(v->reader, [](GstElement*, gpointer film) { video_from((Video*)film, 0.f, false); }, v, nullptr);
@@ -189,6 +257,6 @@ static void video_at(Stage& s, Video* v, float seconds) {
     }
     gst_object_unref(bus);
     ++video_asked;
-    video_late += v->shown < want;
-    if (v->on != v->held) video_show(s, v);
+    video_late += !sure;
+    video_put(s, v);
 }
