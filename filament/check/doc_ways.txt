@@ -4,17 +4,17 @@ key 1 x 2 3
 value 1 x 0
 value 1 x 1
 value 1 x 2
-way 1 x 0 linear
+way 1 x 0 Linear
 value 1 x 0.5
-way 1 x 0 hold
+way 1 x 0 Hold
 value 1 x 1.99
 value 1 x 2
-way 1 x 0 wiggle 3 0.2
+way 1 x 0 Random
 value 1 x 0
 value 1 x 0.7
 value 1 x 2
 key 1 x 4 0
-way 1 x 2 bounce
+way 1 x 2 Bounce
 value 1 x 2.5
 value 1 x 4
 value 1 x 9
@@ -26,9 +26,12 @@ value 1 x 4
 define broken a + (b - a) * u + 0.5
 define nonsense a +* b
 way 1 x 2 zigzag
-way 1 x 1 smooth
-way 1 start 0 smooth
-way 1 x 0 wiggle 1 2 3 4 5
+way 1 x 1 Linear
+way 1 start 0 Linear
+way 1 x 0 Random 1 2 3
+way 1 x 0 Bezier 2 0 0.5 1
+way 1 x 0 steps 0.25 0.1
+define Bounce a + (b - a) * u
 undo
 value 1 x 3
 list

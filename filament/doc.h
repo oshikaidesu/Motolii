@@ -3,14 +3,14 @@
 // fact stays as it is; with more it moves, and they are its keys. One call = one change = one step of undo (Lumit's
 // bridge is so), and the stage shows it as the call returns. A change the stage cannot show is not made.
 // Keys, Motolii's own way: a key holds a value, and THE STRETCH FROM A KEY TO THE NEXT IS ITSELF DEFINED: how the value
-// goes there (straight, smooth, held, with a wiggle on the way, bouncing...). A way has a name and is an expression kept
-// in the document, so almost anything can be one; whatever it does on the way, it begins at the one key's value and
-// ends at the other's (a way that does not is refused).
+// goes there. The kinds of stretch are Motolii's own nine, brought from the past repository as they are (interp.h:
+// Hold, Linear, Bezier, Bounce, Elastic, Cyclic, Random, Steps, ElasticSteps, each with its numbers). A way of one's
+// own can be added by an expression kept in the document (worked out by SQLite's own expressions: u is how far
+// through the stretch, 0 to 1; t the seconds into it; d its length; a and b the two keys' values; p1 to p4 numbers
+// said with it), taken only if it begins at the one key's value and ends at the other's.
 // Borrowed whole: the file, saving (a change is in the file as its call returns) and undo are SQLite's (its session
-// extension: what a call changed is kept, and undone by applying it reversed: the steps are in the file too); a way's
-// expression is worked out by SQLite as well (its own expressions and maths: u is how far through the stretch, 0 to
-// 1; t the seconds into it; d its length; a and b the two keys' values; p1 to p4 numbers said with the way). A thing's
-// time is told in GES's words (start, duration).
+// extension: what a call changed is kept, and undone by applying it reversed: the steps are in the file too). A
+// thing's time is told in GES's words (start, duration).
 // The names a thing's facts go by are ThorVG's own, where it has one (translate's x and y, rotate, size, blend and its
 // words, text, fill, a segment's begin, add, remove):
 //   numbers  x, y, z, rotate, size  where its middle is, turned by how many degrees, how tall
@@ -21,6 +21,7 @@
 //            file, shape            what it was made from (add says them): a file (a text's: its font); a glass's shape: ring | gem | cube
 //            text, fill             a text's: what it says (to the end of the line), and its colour as six digits (ff3366)
 #include "drawn.h"
+#include "interp.h"
 #include "solid.h"
 #include "video.h"
 #include <sstream>
@@ -30,7 +31,7 @@ struct Doc {
     sqlite3* file = nullptr;
     Stage* stage = nullptr;
     std::string trouble;   // why the last call that was not done was not
-    struct Keys { std::vector<double> at, value; std::vector<std::string> way; };
+    struct Keys { std::vector<double> at, value; std::vector<Interp> interp; std::vector<std::string> own; };   // (own: a way defined in the document, where the stretch is not one of the nine kinds)
     std::map<std::pair<int, std::string>, Keys> moving;   // a value's keys, and the way of the stretch after each; read from the facts when first asked for, forgotten at every change
     std::map<std::string, sqlite3_stmt*> named, goes;     // a way by its name, and by its expression: made ready once (SQLite works it out)
     struct Shown { std::string of; Video* film = nullptr; Drawn* drawn = nullptr; Solid* solid = nullptr; Mesh* glass = nullptr; bool in = true; };
@@ -90,7 +91,7 @@ static sqlite3_stmt* doc_way_named(Doc& d, const std::string& name) {
 }
 
 // A value at a moment: `otherwise` where the document does not say; where it has keys, the value the stretch it is in
-// gives (before the first key and after the last: theirs). A stretch goes the way said for it (not said: smooth).
+// gives (before the first key and after the last: theirs). A stretch goes the way said for it (not said: Bezier, eased).
 static double doc_number(Doc& d, int thing, const char* name, double at, double otherwise) {
     auto found = d.moving.find({thing, name});
     if (found == d.moving.end()) {
@@ -98,7 +99,11 @@ static double doc_number(Doc& d, int thing, const char* name, double at, double 
         doc_rows(d, sqlite3_mprintf("select at, value, coalesce(way, '') from fact where thing = %d and name = %Q order by at", thing, name), [&](sqlite3_stmt* row) {
             keys.at.push_back(sqlite3_column_double(row, 0));
             keys.value.push_back(sqlite3_column_double(row, 1));
-            keys.way.push_back((const char*)sqlite3_column_text(row, 2));
+            const std::string way = (const char*)sqlite3_column_text(row, 2);
+            Interp kind;
+            const bool of_the_nine = interp_said(way.empty() ? "Bezier" : way, &kind) == 0;   // (not said: the past skin's "Ease")
+            keys.interp.push_back(kind);
+            keys.own.push_back(of_the_nine ? "" : way);
         });
         found = d.moving.emplace(std::make_pair(thing, std::string(name)), keys).first;
     }
@@ -107,14 +112,16 @@ static double doc_number(Doc& d, int thing, const char* name, double at, double 
     if (k.at.size() == 1 || at <= k.at.front()) return k.value.front();
     if (at >= k.at.back()) return k.value.back();
     const size_t i = (size_t)(std::upper_bound(k.at.begin(), k.at.end(), at) - k.at.begin()) - 1;   // (the stretch it is in begins at key i)
-    std::istringstream said(k.way[i].empty() ? "smooth" : k.way[i]);
+    const double u = (at - k.at[i]) / (k.at[i + 1] - k.at[i]);
+    if (k.own[i].empty()) return k.value[i] + (k.value[i + 1] - k.value[i]) * interp_ease(k.interp[i], u);
+    std::istringstream said(k.own[i]);
     std::string way;
     double p[4] = {0, 0, 0, 0};
     said >> way;
     for (double& one : p) said >> one;
     sqlite3_stmt* goes = doc_way_named(d, way);
     const double length = k.at[i + 1] - k.at[i];
-    return goes ? doc_went(goes, (at - k.at[i]) / length, at - k.at[i], length, k.value[i], k.value[i + 1], p) : k.value[i];
+    return goes ? doc_went(goes, u, at - k.at[i], length, k.value[i], k.value[i + 1], p) : k.value[i];
 }
 static std::string doc_word(Doc& d, int thing, const char* name) {
     std::string is;
@@ -208,13 +215,9 @@ static Doc* doc_open(Stage& s, const char* path) {
     Doc* d = new Doc;
     if (sqlite3_open(path, &d->file) != SQLITE_OK) return nullptr;
     sqlite3_busy_timeout(d->file, 2000);   // (another program at the same document is waited for)
-    // (a key's `way` is how the stretch from it to the next key goes; the ways a document knows are its own, by name:
-    //  a few to begin with, any other by `define`)
+    // (a key's `way` is how the stretch from it to the next key goes; `way` the table holds the ways defined in this document)
     if (sqlite3_exec(d->file, "create table if not exists fact(thing integer, name text, at real, value, way text, primary key(thing, name, at)) without rowid;"
                               "create table if not exists way(name text primary key, goes text) without rowid;"
-                              "insert or ignore into way values('linear', 'a + (b - a) * u'), ('smooth', 'a + (b - a) * u * u * (3 - 2 * u)'), ('in', 'a + (b - a) * u * u'), ('out', 'a + (b - a) * u * (2 - u)'),"
-                              " ('hold', 'case when u < 1 then a else b end'), ('bounce', 'a + (b - a) * (1 - abs(cos(pi() * 2.5 * u)) * pow(1 - u, 2))'),"
-                              " ('wiggle', 'a + (b - a) * u * u * (3 - 2 * u) + p2 * sin(pi() * u) * (0.6 * sin(6.2832 * p1 * t) + 0.3 * sin(14.451 * p1 * t + 1.7) + 0.1 * sin(25.761 * p1 * t + 0.3))');"
                               "create table if not exists step(n integer primary key, change blob, undone integer default 0);"
                               "create table if not exists thing(id integer primary key autoincrement);"   // (a thing's number is never given again: SQLite's own)
                               "insert into thing(id) select max(thing) from fact where (select count(*) from thing) = 0 having max(thing) is not null", nullptr, nullptr, nullptr) != SQLITE_OK) return nullptr;
@@ -334,29 +337,34 @@ static bool doc_unkey(Doc& d, int thing, const char* name, double at) {
     if (!doc_keys(d, thing, name, at)) return d.trouble = std::string(name) + " has no key at that moment", false;
     return doc_change(d, sqlite3_mprintf("delete from fact where thing = %d and name = %Q and at = %!.17g", thing, name, at));
 }
-// How the stretch from a key to the next goes: a way by its name, with up to four numbers (wiggle 3 0.2: three a
-// second, 0.2 either side). And a way of one's own, by an expression: taken only if SQLite can work it out and it
-// begins at the one key's value and ends at the other's.
+// How the stretch from a key to the next goes: one of the nine kinds, alone or with all its numbers (Random 3 0.25
+// 0.5 0.8 0.5), or a way defined in this document with up to four numbers.
 static std::string doc_ways(Doc& d) {
     std::string all;
-    doc_rows(d, sqlite3_mprintf("select name from way order by name"), [&](sqlite3_stmt* row) { all += std::string(all.empty() ? "" : ", ") + (const char*)sqlite3_column_text(row, 0); });
+    for (const auto& kind : interp_kinds) all += std::string(all.empty() ? "" : ", ") + kind.name + (kind.numbers ? std::string(" (") + kind.names + ")" : "");
+    doc_rows(d, sqlite3_mprintf("select name from way order by name"), [&](sqlite3_stmt* row) { all += std::string("; defined here: ") + (const char*)sqlite3_column_text(row, 0); });
     return all;
 }
 static bool doc_way(Doc& d, int thing, const char* name, double at, const char* way) {
     if (!doc_knows(d, thing, name, nullptr, nullptr, true)) return false;
     if (!doc_keys(d, thing, name, at)) return d.trouble = std::string(name) + " has no key at that moment: a stretch begins at a key", false;
+    Interp kind;
     std::istringstream said(way);
     std::string named, more;
     double p = 0;
     int numbers = 0;
+    const int of_the_nine = interp_said(way, &kind, &d.trouble);
+    if (of_the_nine == 1) return false;
     said >> named;
     while (said >> p) ++numbers;
     said.clear();
-    if (!doc_way_named(d, named)) return d.trouble = "a way is one of: " + doc_ways(d), false;
-    if (said >> more || numbers > 4) return d.trouble = "a way is its name and up to four numbers", false;
+    if (of_the_nine < 0 && !doc_way_named(d, named)) return d.trouble = "a way is one of: " + doc_ways(d), false;
+    if (of_the_nine < 0 && (said >> more || numbers > 4)) return d.trouble = "a way defined here is its name and up to four numbers", false;
     return doc_change(d, sqlite3_mprintf("update fact set way = %Q where thing = %d and name = %Q and at = %!.17g", way, thing, name, at));
 }
 static bool doc_define(Doc& d, const char* name, const char* expression) {
+    Interp kind;
+    if (interp_said(name, &kind) >= 0) return d.trouble = std::string(name) + " is one of the nine kinds already", false;
     sqlite3_stmt* goes = doc_goes(d, expression);
     if (!goes) return false;
     const double p[4] = {1, 1, 1, 1}, tried[2][3] = {{0, 1, 1}, {2, -5, 3}};   // (two stretches to try it on: values a to b, over that many seconds)

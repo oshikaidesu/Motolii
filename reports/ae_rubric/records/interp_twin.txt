@@ -1,0 +1,2 @@
+Bezier against the ruler's three exact rows: worst off 2.2e-16: the same
+Bounce, Elastic, Cyclic, Random, Steps, ElasticSteps (two settings each, 41 points): worst difference from the past repository 0.0e+00: the same

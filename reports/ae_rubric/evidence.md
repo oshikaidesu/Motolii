@@ -234,3 +234,16 @@ Windows の道筋は `filament/WINDOWS.md` の頭に、今の土台（Dawn、Tho
 - 自分で決めた物（借り物ではない）：はじめの7つの行き方の式、行き方を「名前と数4つまで」で言う形、式の中の字（u、t、d、a、b、p1〜p4）、「両端で合う」の確かめ方（2つの間で試す）。
 - 文書の値の名前を ThorVG の言葉に合わせた：rotate、size、blend（normal／add／multiply／screen）、text、fill、begin、種類の text。
 - ガラスと光は残す（ユーザーが決めた）。音は、猫の民衆の動画でユーザーが聞いている。
+
+間の行き方は、過去の倉庫から持ってきた（同じ朝、ユーザーに「それらは過去倉庫から持ってこれる」と言われて）：
+- 上の「作り直した」の中の「はじめから入れた行き方は7つ（smooth、linear、in、out、hold、bounce、wiggle）」は私が式を決めた物で、**消した**。
+- 代わりに、過去の倉庫 `~/rust_ae/Motolii`（`motolii/crates/motolii-doc/src/eval/track.rs`、`bezier.rs`）の間の定義9種類を、名前・数の名前と並び・式・断る数の決まりごと、そのまま C++ に写した（`filament/interp.h`、162行）：
+  Hold、Linear、Bezier、Bounce、Elastic、Cyclic、Random、Steps、ElasticSteps。
+- 写しの確かめ（`filament/check/interp_twin.sh`、`records/interp_twin.txt`）：倉庫の式の行をそのまま別の場所でコンパイルして、41点×10通りで C++ の写しと突き合わせた。**差 0**（小数12桁まで）。Bezier は倉庫の物差しの厳密な3行と 2e-16 で合う。倉庫の中は読むだけで、何も書いていない。
+- 倉庫に無くて私が置いた物：数を言わない時の「いつもの数」のうち、Cyclic の peak・linear・envelope_end、Random の5つ、ElasticSteps の elasticity。何も言わない間を Bezier（過去のスキンの「Ease」の数）にした事。
+  倉庫の GSAP の名前の表は持ってきていない（ユーザー：「負の遺産」）。
+- 式で足す行き方（`define`、SQLite が計算）は残してある。9種類に無い動きのための口。
+- Cyclic は倉庫の式のとおり、波の終わり方しだいで次のキーの値に合わない事がある（キーの時刻ちょうどではキーの値になる）。Random は両端で止まる。
+- 見本を9種類ぜんぶで作り直した：`reports/show/ways_v2.mp4`、`stills/ways_v2.jpg`（朝の5種類の `ways_v1` は消した）。検査 `records/doc.txt`：15個の値と、断るべき8個が期待どおり。
+- **過去の倉庫には、文書の形・編集・取り消し・保存（`motolii-doc`、`motolii-edit`）と、それを操作する Flutter のスキン（`motolii/ui`、間の定義を触る「Ease の机」もある）が丸ごとある。**
+  夜の私はこれを一度も見ずに `doc.h` の文書の形を自分で決めた。今朝持ってきたのは間の式だけ。

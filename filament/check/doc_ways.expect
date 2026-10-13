@@ -5,24 +5,26 @@
   1.0000
   3.0000
   1.0000
-  1.6430
+  1.9646
   3.0000
-  0.6458
+  2.0153
   0.0000
   0.0000
-  bounce, hold, in, linear, out, smooth, wiggle
+  Hold, Linear, Bezier (x1 y1 x2 y2), Bounce (first_dip dip), Elastic (limit period damp), Cyclic (period peak linear envelope_end), Random (seed grain center_u center_v bias), Steps (width smooth), ElasticSteps (width elasticity)
   0.6000
   0.0000
 define: NOT done: a way begins at the one key's value and ends at the other's: from 0 to 1 this one begins at 0.5 and ends at 1.5
 define: NOT done: near "*": syntax error
-way: NOT done: a way is one of: bounce, hold, in, linear, out, overshoot, smooth, wiggle
+way: NOT done: a way is one of: Hold, Linear, Bezier (x1 y1 x2 y2), Bounce (first_dip dip), Elastic (limit period damp), Cyclic (period peak linear envelope_end), Random (seed grain center_u center_v bias), Steps (width smooth), ElasticSteps (width elasticity); defined here: overshoot
 way: NOT done: x has no key at that moment: a stretch begins at a key
 way: NOT done: start does not move: keys go on x, y, z, rotate, size
-way: NOT done: a way is its name and up to four numbers
-  0.5303
+way: NOT done: Random is said alone or with its 5 numbers (seed grain center_u center_v bias)
+way: NOT done: Bezier is said alone or with its 4 numbers (x1 y1 x2 y2): x1 and x2 are from 0 to 1
+define: NOT done: Bounce is one of the nine kinds already
+  0.6000
   1 kind at 0.0: glass
   1 shape at 0.0: ring
-  1 x at 0.0: 1.0, then wiggle 3 0.2
-  1 x at 2.0: 3.0, then bounce
+  1 x at 0.0: 1.0, then Random
+  1 x at 2.0: 3.0, then overshoot
   1 x at 4.0: 0.0
   (the document runs 8.00 seconds)
