@@ -8,6 +8,7 @@ environment:
 
 dependencies:
   docking: ^1.16.2
+  ffi: ^2.1.0
   flutter:
     sdk: flutter
   widgetbook: ^3.25.0

@@ -53,7 +53,11 @@ class StageView extends StatefulWidget {
     required this.safe,
     required this.cursor,
     this.onPoke,
+    this.texture,
   });
+
+  /// The inside's picture of the stage (a Flutter texture). null: the stand-in art is painted.
+  final int? texture;
   final ArtScene scene;
   final String? selected;
   final int zoom;
@@ -128,14 +132,24 @@ class _StageViewState extends State<StageView> {
               children: [
                 RepaintBoundary(
                   child: CustomPaint(
-                    painter: _ViewPainter(scene, v, widget.selected, _hover == widget.selected ? null : _hover, grid: widget.grid, safe: widget.safe),
+                    painter: _ViewPainter(scene, v, widget.selected, _hover == widget.selected ? null : _hover, grid: widget.grid, safe: widget.safe, part: widget.texture == null ? _Part.all : _Part.under),
                   ),
                 ),
-                IgnorePointer(child: CustomPaint(painter: _RulerPainter(v, widget.cursor))),
                 Positioned.fromRect(
                   rect: v.comp,
-                  child: const IgnorePointer(child: SizedBox(key: ValueKey('ws-stage-comp'))),
+                  child: IgnorePointer(
+                    child: widget.texture == null
+                        ? const SizedBox(key: ValueKey('ws-stage-comp'))
+                        : ClipRect(key: const ValueKey('ws-stage-comp'), child: Texture(textureId: widget.texture!, filterQuality: FilterQuality.medium)),
+                  ),
                 ),
+                if (widget.texture != null)
+                  IgnorePointer(
+                    child: CustomPaint(
+                      painter: _ViewPainter(scene, v, widget.selected, _hover == widget.selected ? null : _hover, grid: widget.grid, safe: widget.safe, part: _Part.over),
+                    ),
+                  ),
+                IgnorePointer(child: CustomPaint(painter: _RulerPainter(v, widget.cursor))),
                 Positioned(
                   left: _V.ruler + _V.pad,
                   bottom: _V.pad,
@@ -251,8 +265,13 @@ TextPainter _tp(String t, TextStyle s) => TextPainter(
   maxLines: 1,
 )..layout();
 
+/// What one painter draws: everything (the stand-in art too), or, when the inside's picture sits in the composition,
+/// what lies under it (the surround, the captions) and what lies over it (grid, guides, the selection).
+enum _Part { all, under, over }
+
 class _ViewPainter extends CustomPainter {
-  _ViewPainter(this.scene, this.v, this.sel, this.hover, {required this.grid, required this.safe});
+  _ViewPainter(this.scene, this.v, this.sel, this.hover, {required this.grid, required this.safe, this.part = _Part.all});
+  final _Part part;
   final ArtScene scene;
   final _View v;
   final String? sel, hover;
@@ -264,17 +283,23 @@ class _ViewPainter extends CustomPainter {
   @override
   void paint(Canvas c, Size size) {
     final comp = v.comp;
-    c.drawRect(Offset.zero & size, Paint()..color = _V.surround);
+    if (part != _Part.over) c.drawRect(Offset.zero & size, Paint()..color = _V.surround);
     c.save();
     c.clipRect(v.area);
-    _captions(c, comp);
+    if (part != _Part.over) _captions(c, comp);
+    if (part == _Part.under) {
+      c.restore();
+      return;
+    }
     c.save();
     c.clipRect(comp);
-    c.save();
-    c.translate(v.o.dx, v.o.dy);
-    c.scale(v.s);
-    WsArt.paint(c, scene);
-    c.restore();
+    if (part == _Part.all) {
+      c.save();
+      c.translate(v.o.dx, v.o.dy);
+      c.scale(v.s);
+      WsArt.paint(c, scene);
+      c.restore();
+    }
     if (grid) _grid(c, comp);
     if (safe) _safe(c, comp);
     c.restore();
@@ -403,7 +428,7 @@ class _ViewPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_ViewPainter o) => o.scene != scene || o.v != v || o.sel != sel || o.hover != hover || o.grid != grid || o.safe != safe;
+  bool shouldRepaint(_ViewPainter o) => o.scene != scene || o.v != v || o.sel != sel || o.hover != hover || o.grid != grid || o.safe != safe || o.part != part;
 }
 
 // ---- rulers -----------------------------------------------------------------------------------------------------------

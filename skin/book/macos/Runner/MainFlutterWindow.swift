@@ -11,6 +11,7 @@ class MainFlutterWindow: NSWindow {
 
     RegisterGeneratedPlugins(registry: flutterViewController)
     GlassTexture.attach(to: flutterViewController)
+    StageTexture.attach(to: flutterViewController)
 
     super.awakeFromNib()
     // after the xib has restored its own frame
@@ -86,6 +87,69 @@ final class GlassTexture: NSObject, FlutterTexture {
   /// Flutter releases what it gets here; the library hands the buffer over retained.
   func copyPixelBuffer() -> Unmanaged<CVPixelBuffer>? {
     guard let p = front() else { return nil }
+    return Unmanaged<CVPixelBuffer>.fromOpaque(p)
+  }
+}
+
+/// The present inside's stage (motolii/filament/out/libmotolii.dylib, motolii.h) as a Flutter texture, without a copy:
+/// the same manner as GlassTexture. The Dart side opens the document itself (dart:ffi) and makes it live; here the
+/// library is only asked for its last finished picture and how many there have been.
+/// Channel "motolii/stage", method "start" {lib, handle (the Motolii* as a number)} -> texture id, or -1.
+final class StageTexture: NSObject, FlutterTexture {
+  private typealias FrontFn = @convention(c) (UnsafeMutableRawPointer?) -> UnsafeMutableRawPointer?
+  private typealias FramesFn = @convention(c) (UnsafeMutableRawPointer?) -> UInt64
+
+  private static var shared: StageTexture?
+  private let front: FrontFn
+  private let frames: FramesFn
+  private let inside: UnsafeMutableRawPointer?
+  private let textures: FlutterTextureRegistry
+  private var id: Int64 = -1
+  private var seen: UInt64 = 0
+  private var timer: Timer?
+
+  static func attach(to controller: FlutterViewController) {
+    let registrar = controller.registrar(forPlugin: "MotoliiStage")
+    let channel = FlutterMethodChannel(name: "motolii/stage", binaryMessenger: registrar.messenger)
+    channel.setMethodCallHandler { call, result in
+      guard call.method == "start", let a = call.arguments as? [String: Any], let lib = a["lib"] as? String, let handle = a["handle"] as? Int else {
+        result(FlutterMethodNotImplemented)
+        return
+      }
+      shared?.stop()
+      shared = StageTexture(lib: lib, inside: UnsafeMutableRawPointer(bitPattern: handle), textures: registrar.textures)
+      result(shared?.id ?? -1)
+    }
+  }
+
+  private init?(lib: String, inside: UnsafeMutableRawPointer?, textures: FlutterTextureRegistry) {
+    guard let h = dlopen(lib, RTLD_NOW), let f = dlsym(h, "motolii_front"), let n = dlsym(h, "motolii_frames") else { return nil }
+    front = unsafeBitCast(f, to: FrontFn.self)
+    frames = unsafeBitCast(n, to: FramesFn.self)
+    self.inside = inside
+    self.textures = textures
+    super.init()
+    id = textures.register(self)
+    // tell Flutter whenever the inside has finished another picture (the inside keeps the clock)
+    timer = Timer.scheduledTimer(withTimeInterval: 1.0 / 120.0, repeats: true) { [weak self] _ in
+      guard let me = self else { return }
+      let now = me.frames(me.inside)
+      if now != me.seen {
+        me.seen = now
+        me.textures.textureFrameAvailable(me.id)
+      }
+    }
+    RunLoop.main.add(timer!, forMode: .common)
+  }
+
+  private func stop() {
+    timer?.invalidate()
+    textures.unregisterTexture(id)
+  }
+
+  /// Flutter releases what it gets here; the library hands the buffer over retained.
+  func copyPixelBuffer() -> Unmanaged<CVPixelBuffer>? {
+    guard let p = front(inside) else { return nil }
     return Unmanaged<CVPixelBuffer>.fromOpaque(p)
   }
 }

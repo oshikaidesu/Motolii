@@ -18,6 +18,12 @@
 3. インスペクタの値、タイムラインのキー、机の「間の行き方」が効く。取り消しが効く。
 4. 閉じて開き直すと同じ物が出る。
 
+進み具合（その都度ここを直す）：
+- 合格線1：**見た目では通った**。中身側は `filament/live.h`（検査 `check/live.mm`：60コマ毎秒、置き場の絵と止め絵の差 0）。スキン側は Workspace › Live（`skin/book/lib/motolii.dart` ほか）。舞台の席に絵が出て、再生ボタンで動く（`reports/skin_run/live_01_picture_in_the_seat.jpg`）。
+  まだ：スキンの再生位置と中身の時刻が別々に進んでいる。窓の大きさを変えた時、コマ落ちの数は未確認。
+- 合格線2〜4：これから。スキンの共有の状態（`skin/book/lib/workspace/ws.dart` の `Ws`）を本物の文書につなぐ。中身に要る読み口：物の一覧、種類、名前、出る時刻と長さ、キーの時刻。
+- 開き方：`skin/book` で Flutter（`~/rust_ae/Motolii/.tools/flutter/bin/flutter`）の `build macos --debug --dart-define=LAB_ROUTE=/?path=workspace/workspace/live`、できた `lab_book.app` を開く。文書は `filament/out/skin.motolii`。
+
 作る的：①`edit_v5` を窓だけで作り直す ②猫ミームの人形劇 ③青いロケットのコラージュ（`research_notes/refs/G_rocket_collage_blue.jpg`）。
 
 守る事：作る前に `ASSETS.md` と過去の倉庫を見る／名前は ThorVG の言葉／ガラスと光は残す／過去のスキンは生かさない／見本の窓の見た目と席の作りは勝手に変えない／

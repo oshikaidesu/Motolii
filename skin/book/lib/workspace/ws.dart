@@ -93,6 +93,15 @@ class Ws extends ChangeNotifier {
   final layers = <WsLayer>[];
   static const fps = 30, duration = 240;
 
+  /// The inside's own picture of the stage, as a Flutter texture, when the window is joined to it (null: the stand-in art).
+  int? _stageTexture;
+  int? get stageTexture => _stageTexture;
+  set stageTexture(int? id) {
+    if (id == _stageTexture) return;
+    _stageTexture = id;
+    notifyListeners();
+  }
+
   String? _sel = 'blob';
   String? get selected => _sel;
   WsLayer? get layer => layers.where((l) => l.id == _sel).firstOrNull;

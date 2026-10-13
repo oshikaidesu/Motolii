@@ -15,19 +15,42 @@ import 'stage.dart';
 import 'stage_art.dart';
 import 'timeline.dart';
 import 'top_bar.dart';
+import '../motolii.dart';
 import 'ws.dart';
 
 class Workspace extends StatefulWidget {
-  const Workspace({super.key});
+  const Workspace({super.key, this.document});
+
+  /// A document of the inside (motolii.dart) to join the window to: its stage is then the inside's own picture.
+  /// null: the sample, with its stand-in art.
+  final String? document;
   @override
   State<Workspace> createState() => _WorkspaceState();
 }
 
 class _WorkspaceState extends State<Workspace> {
   final _ws = Ws();
+  Motolii? _inside;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.document case final doc?) _join(doc);
+  }
+
+  Future<void> _join(String doc) async {
+    final inside = Motolii.open(doc);
+    if (inside == null) return;
+    _inside = inside;
+    final id = await inside.texture();
+    if (!mounted) return;
+    if (id >= 0) _ws.stageTexture = id;
+    _ws.addListener(() => inside.play(_ws.playing));
+  }
 
   @override
   void dispose() {
+    _inside?.close();
     _ws.dispose();
     super.dispose();
   }

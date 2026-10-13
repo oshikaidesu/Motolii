@@ -85,7 +85,7 @@ class _StageState extends State<_Stage> {
                   child: Stack(
                     fit: StackFit.expand,
                     children: [
-                      StageView(scene: scene, selected: ws.selected, zoom: _zoom, grid: _grid, safe: _safe, cursor: _cursor, onPoke: _focus.requestFocus),
+                      StageView(scene: scene, selected: ws.selected, zoom: _zoom, grid: _grid, safe: _safe, cursor: _cursor, onPoke: _focus.requestFocus, texture: ws.stageTexture),
                       if (ws.trial != null) const Positioned(bottom: 44, left: 0, right: 0, child: Center(child: StageTrialBar())),
                     ],
                   ),

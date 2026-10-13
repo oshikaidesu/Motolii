@@ -10,6 +10,7 @@ import 'colour_addon.dart';
 import 'parts/controls.dart';
 import 'sets/workflows/dose_set.dart';
 import 'sets/foundations/feedback.dart';
+import 'motolii.dart';
 import 'sets/glass_live.dart';
 import 'sets/inspector_gui_set.dart';
 import 'sets/inspector/inspector_set.dart';
@@ -51,7 +52,11 @@ class LabBook extends StatelessWidget {
         children: [
           WidgetbookComponent(
             name: 'Workspace',
-            useCases: [WidgetbookUseCase(name: 'Window', builder: (c) => const Workspace())],
+            useCases: [
+              WidgetbookUseCase(name: 'Window', builder: (c) => const Workspace()),
+              // the same window joined to the inside (motolii.dart): its stage is the inside's own picture
+              WidgetbookUseCase(name: 'Live', builder: (c) => const Workspace(document: String.fromEnvironment('MOTOLII_DOC', defaultValue: '$motoliiDir/out/skin.motolii'))),
+            ],
           ),
         ],
       ),
