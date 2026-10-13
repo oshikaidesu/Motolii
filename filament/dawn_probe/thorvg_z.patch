@@ -1,3 +1,67 @@
+diff --git a/src/common/tvgMath.h b/src/common/tvgMath.h
+index f09ca98..c85e78d 100644
+--- a/src/common/tvgMath.h
++++ b/src/common/tvgMath.h
+@@ -564,6 +564,59 @@ struct Bezier
+     static void bounds(BBox& box, const Point& start, const Point& ctrl1, const Point& ctrl2, const Point& end);
+ };
+ 
++/************************************************************************/
++/* Bezier3 functions                                                    */
++/************************************************************************/
++
++//a Bezier in space (the path of a 3D layer), under Bezier's own names: the same code leads a thing along either
++struct Bezier3
++{
++    Point3 start, ctrl1, ctrl2, end;
++
++    //the heading of what is flat of it
++    float angle(float t) const
++    {
++        if (t < 0 || t > 1) return 0;
++        auto pt = tangent(t);
++        return rad2deg(tvg::atan(Point{pt.x, pt.y}));
++    }
++
++    Point3 tangent(float t) const
++    {
++        auto mt = 1.0f - t;
++        auto d = t * t;
++        auto a = -mt * mt;
++        auto b = 1.0f - 4.0f * t + 3.0f * d;
++        auto c = 2.0f * t - 3.0f * d;
++        return (start * a + ctrl1 * b + ctrl2 * c + end * d) * 3.0f;
++    }
++
++    Point3 at(float t) const
++    {
++        auto it = 1.0f - t;
++        return start * (it * it * it) + ctrl1 * (3.0f * it * it * t) + ctrl2 * (3.0f * it * t * t) + end * (t * t * t);
++    }
++
++    //by 150 chords (0.07 px off on a 3400 px arch): the whole length, or (with `at`) where the length `at` is reached
++    float measure(const float* at) const
++    {
++        const auto chords = 150;
++        auto prev = start;
++        auto done = 0.0f;
++        for (auto i = 1; i <= chords; ++i) {
++            auto d = this->at(float(i) / chords) - prev;
++            auto len = sqrtf(d.x * d.x + d.y * d.y + d.z * d.z);
++            if (at && done + len >= *at) return (i - 1 + (len > 0.0f ? (*at - done) / len : 0.0f)) / chords;
++            done += len;
++            prev = prev + d;
++        }
++        return at ? 1.0f : done;
++    }
++
++    float lengthApprox() const { return measure(nullptr); }
++    float atApprox(float at, TVG_UNUSED float length) const { return measure(&at); }
++};
++
+ /************************************************************************/
+ /* Interpolation functions                                              */
+ /************************************************************************/
 diff --git a/src/loaders/lottie/thorvg_lottie.h b/src/loaders/lottie/thorvg_lottie.h
 index 6b285a2..7645d3c 100644
 --- a/src/loaders/lottie/thorvg_lottie.h
@@ -239,61 +303,56 @@ index b247cfc..65c7124 100644
  
      LottieObject* parseObject(const char* type);
 diff --git a/src/loaders/lottie/tvgLottieProperty.h b/src/loaders/lottie/tvgLottieProperty.h
-index 0f7e94d..6a203d1 100644
+index 0f7e94d..84e49d0 100644
 --- a/src/loaders/lottie/tvgLottieProperty.h
 +++ b/src/loaders/lottie/tvgLottieProperty.h
-@@ -111,6 +111,50 @@ struct LottieVectorFrame
-     }
+@@ -61,6 +61,12 @@ struct LottieScalarFrame
+     void prepare(TVG_UNUSED LottieScalarFrame* next) {}
  };
  
-+//a position keyed in space (a 3D layer's): the same curve as in the plane, measured by 150 chords (0.04 px off on a 3400 px arch)
-+static inline Point3 _along3(LottieVectorFrame<Point3>* cur, LottieVectorFrame<Point3>* next, float want, float* total, Point3* heading)
-+{
-+    auto prev = cur->value;
-+    auto done = 0.0f;
-+    for (auto i = 1; i <= 150; ++i) {
-+        auto t = i / 150.0f, u = 1.0f - t;
-+        auto pt = cur->value * (u * u * u) + (cur->value + cur->outTangent) * (3.0f * u * u * t) + (next->value + cur->inTangent) * (3.0f * u * t * t) + next->value * (t * t * t);
-+        auto d = pt - prev;
-+        auto len = sqrtf(d.x * d.x + d.y * d.y + d.z * d.z);
-+        if (heading && len > 0.0f) *heading = d;
-+        if (!total && done + len >= want) return len > 0.0f ? prev + d * ((want - done) / len) : prev;
-+        done += len;
-+        prev = pt;
-+    }
-+    if (total) *total = done;
-+    return next->value;
-+}
++//a keyed path, in the plane or in space (a 3D layer's), and what is flat of a direction
++static inline Bezier _bezier(const Point& start, const Point& ctrl1, const Point& ctrl2, const Point& end) { return {start, ctrl1, ctrl2, end}; }
++static inline Bezier3 _bezier(const Point3& start, const Point3& ctrl1, const Point3& ctrl2, const Point3& end) { return {start, ctrl1, ctrl2, end}; }
++static inline Point _xy(const Point& pt) { return pt; }
++static inline Point _xy(const Point3& pt) { return {pt.x, pt.y}; }
 +
-+template<> inline void LottieVectorFrame<Point3>::prepare(LottieVectorFrame<Point3>* next)
-+{
-+    _along3(this, next, 0.0f, &length, nullptr);
-+}
-+
-+template<> inline Point3 LottieVectorFrame<Point3>::interpolate(LottieVectorFrame<Point3>* next, float frameNo)
-+{
-+    auto t = (frameNo - no) / (next->no - no);
-+    if (interpolator) t = interpolator->progress(t);
-+    if (hold) return (t < 1.0f) ? value : next->value;
-+    if (hasTangent) return _along3(this, next, t * length, nullptr, nullptr);
-+    return tvg::lerp(value, next->value, t);
-+}
-+
-+template<> inline float LottieVectorFrame<Point3>::angle(LottieVectorFrame<Point3>* next, float frameNo)
-+{
-+    auto heading = next->value - value;
-+    if (hasTangent) {
-+        auto t = (frameNo - no) / (next->no - no);
-+        if (interpolator) t = interpolator->progress(t);
-+        _along3(this, next, t * length, nullptr, &heading);
-+    }
-+    return rad2deg(tvg::atan(Point{heading.x, heading.y}));
-+}
-+
- struct LottieExpression
+ template<typename T>
+ struct LottieVectorFrame
  {
-     char* code;
-@@ -510,6 +554,7 @@ using LottieInteger = LottieGenericProperty<LottieScalarFrame<int8_t>, int8_t, L
+@@ -83,7 +89,7 @@ struct LottieVectorFrame
+         }
+ 
+         if (hasTangent) {
+-            Bezier bz = {value, value + outTangent, next->value + inTangent, next->value};
++            auto bz = _bezier(value, value + outTangent, next->value + inTangent, next->value);
+             return bz.at(bz.atApprox(t * length, length));
+         } else {
+             return tvg::lerp(value, next->value, t);
+@@ -93,20 +99,19 @@ struct LottieVectorFrame
+     float angle(LottieVectorFrame* next, float frameNo)
+     {
+         if (!hasTangent) {
+-            Point dp = next->value - value;
+-            return rad2deg(tvg::atan(dp));
++            return rad2deg(tvg::atan(_xy(next->value - value)));
+         }
+ 
+         auto t = (frameNo - no) / (next->no - no);
+         if (interpolator) t = interpolator->progress(t);
+-        Bezier bz = {value, value + outTangent, next->value + inTangent, next->value};
++        auto bz = _bezier(value, value + outTangent, next->value + inTangent, next->value);
+         t = bz.atApprox(t * length, length);
+         return bz.angle(t >= 1.0f ? 0.99f : (t <= 0.0f ? 0.01f : t));
+     }
+ 
+     void prepare(LottieVectorFrame* next)
+     {
+-        Bezier bz = {value, value + outTangent, next->value + inTangent, next->value};
++        auto bz = _bezier(value, value + outTangent, next->value + inTangent, next->value);
+         length = bz.lengthApprox();
+     }
+ };
+@@ -510,6 +515,7 @@ using LottieInteger = LottieGenericProperty<LottieScalarFrame<int8_t>, int8_t, L
  using LottieScalar = LottieGenericProperty<LottieScalarFrame<Point>, Point, LottieProperty::Type::Scalar>;
  using LottieVector = LottieGenericProperty<LottieVectorFrame<Point>, Point, LottieProperty::Type::Vector, 0>;
  using LottieScalar3 = LottieGenericProperty<LottieScalarFrame<Point3>, Point3, LottieProperty::Type::Scalar3>;
