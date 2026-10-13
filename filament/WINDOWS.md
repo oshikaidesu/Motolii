@@ -1,3 +1,44 @@
+# 今の土台の Windows の道（2026-10-14）
+
+**Windows では何もビルドしていないし、動かしてもいない。機械も無い。** ここにあるのは、手元のソースとヘッダを読んで分かった事と、まだ分からない事。
+今の土台＝Filament を Dawn（WebGPU）で、ThorVG、GStreamer、SQLite、FFmpeg。下の「ガラスを Windows の Skin に出す経路」は 10/12 の古い土台（Vulkan 直）の話で、今は使っていない。
+
+## そのまま行くはずの物（読んで確かめた）
+
+| 物 | なぜ | どこで読んだ |
+|---|---|---|
+| Filament の WebGPU 版 | Windows 用の土台がある。Dawn の Vulkan か D3D12 を選ぶ | `filament_src/filament/backend/src/webgpu/platform/WebGPUPlatformWindows.cpp` 39、42行 |
+| 材質（`flat.mat`、`thick_glass.mat`、`matte.mat`）、型、重ね方 | WebGPU 用にビルドした物をそのまま使う。Mac 専用の行は無い | 材質のファイル |
+| ThorVG（AEの絵、写真、文字） | Dawn の上で描かせている。Dawn は Windows にある。ビルドは meson | `dawn_probe/tvg_on_dawn.sh` |
+| 3Dファイル（gltfio） | Filament の部品。OS 専用の行は `solid.h` に無い | `solid.h` |
+| 文書（SQLite）、キー（GStreamer の controller）、編集の口（`motolii.h`） | どれも C。OS 専用の行は `doc.h`、`motolii.h` に無い | `doc.h`、`motolii.h` |
+| 動画を読む（GStreamer の decodebin3、切り出し・速さ・逆再生） | GStreamer の口だけ。Windows では専用回路の部品が D3D12／D3D11 の物に替わる（GStreamer が自分で選ぶ） | `video.h` 160〜260行 |
+| 音と書き出し（FFmpeg） | コマンドを呼ぶだけ | `kit.h` の `film` |
+
+## 書き直しが要る物（Mac 専用の行）
+
+| 物 | 今 | Windows では | 分かっている事 |
+|---|---|---|---|
+| 動画の絵の受け渡し（`video.h` の13行） | 専用回路の絵（IOSurface）を Dawn の `SharedTextureMemoryIOSurface` で共有 | D3D12 か D3D11 の絵を、Dawn の `SharedTextureMemoryD3D12Resource`／`D3D11Texture2D`／`DXGISharedHandle` で共有 | Dawn に口がある事は確認（`webgpu.h` 633、634、656行の機能名、2750行の記述、`dawn/native/D3D12Backend.h`）。Filament に足した「機能を頼む」数行（パッチ 344〜348行）に Windows の機能名を足す必要がある |
+| 専用回路の絵を GStreamer から受け取る口 | 公開されていない札の並びを読んでいる | GStreamer の D3D12 用の公開ヘッダ（`gst/d3d12`）があるはず | **未確認。** この Mac の GStreamer には Windows 用のヘッダが入っていないので、名前を確かめられていない。あれば、Mac より正しい形（公開の口）になる |
+| 絵の範囲（狭い／フル） | 渡ってきた絵の形式（Mac の `420v`／`420f`）に聞く | D3D の絵は形式に範囲を持たない。GStreamer の札に聞く事になる | Mac では札と中身が食い違った。Windows で食い違うかは未確認 |
+| 絵をファイルに書く（`kit.h` の `shoot`）、メモリを読む（`soak`）、文字の立体（`letters`） | Cocoa、mach、SceneKit | 絵は Filament の `imageio`、ほかは Windows の物 | `letters` は今夜の場面は使っていない |
+| ビルドの手順 | zsh のスクリプトと clang | CMake か同じ手順を別に | 手つかず |
+| `gpu_door`（Filament の描画の列に仕事を入れる口） | Filament の内側のヘッダを使う | 同じ（OS に依らない） | ThorVG を Filament の機械で描かせるのに要る |
+
+## 分からない事
+
+- Dawn の D3D12 と Vulkan のどちらで行くか。動画の受け渡しは D3D12 の方が口が直接（D3D12 の絵をそのまま渡せる）。
+- 2面の絵（明るさ＋色）の形式 `R8BG8Biplanar420Unorm` が Dawn の D3D12 で同じように使えるか（機能名 `DawnMultiPlanarFormats` はある。試していない）。
+- 専用回路で同時に読める動画の本数（Mac は59本まで）。
+- Flutter の Windows 版に動く絵を渡す口（Mac で使った形とは別の物になる）。
+
+## 最初の一歩（機械が来たら）
+
+動画の無い場面（マスク）を1本、Windows でビルドして同じ絵を出す。上の「そのまま行くはずの物」だけで出来ているので、ここで詰まるならビルドの手順の問題。
+
+---
+
 # ガラスを Windows の Skin に出す経路
 
 2026-10-12 に書いた。**Windows では何もビルドしていないし、動かしてもいない。** ここにあるのは、ヘッダと公式ソースを読んで決めた道順と、実機で最初に確かめる項目。
