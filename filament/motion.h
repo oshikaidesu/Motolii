@@ -4,9 +4,9 @@
 // is done again here. What is taken from ThorVG is a layer's place by the layer's name. Nothing is drawn by ThorVG
 // for this.
 // Flat layers and 3D layers are one world: every place is a 4x4 in the composition's own space, which is After
-// Effects': pixels, x to the right, y down, z away from the eye. ThorVG keeps only what is flat of a 3D layer, so a
-// file with 3D layers goes through lottie3d.py first, which writes the numbers ThorVG would drop onto helper layers;
-// here they are read back and the layer is put together from them, in After Effects' order (checked against
+// Effects': pixels, x to the right, y down, z away from the eye. ThorVG draws only what is flat of a 3D layer, but
+// (with dawn_probe/thorvg_z.patch) keeps its numbers whole and says them (LottieAnimation::pose); here the layer
+// is put together from them, in After Effects' order (checked against
 // lottie-web's own answers, motion_test.mm):  place = position · turn x · turn y · turn z · skew · size · anchor back,
 // with the orientation turned before the three turns (and, before that, the turn to face its way along its path, if
 // the layer has one), and a child under its parent.

@@ -1,6 +1,7 @@
 #!/bin/zsh
 # ThorVG's WebGPU engine on the Dawn that Filament's WebGPU backend is built with (dawn_probe/build.sh first).
-# ThorVG: its official source at the version we use, unchanged, fetched once into third_party/thorvg_src and built
+# ThorVG: its official source at the version we use, fetched once into third_party/thorvg_src, with thorvg_z.patch
+# (a 3D layer's third number kept and said: LottieAnimation::pose, for motion.h; nothing drawn changes), and built
 # against Dawn's webgpu.h: its build asks pkg-config for `wgpu_native`, and is given a file of that name that points at Dawn.
 #   ./dawn_probe/tvg_on_dawn.sh            builds ThorVG (once) and the probe, runs it
 set -e
@@ -8,6 +9,7 @@ cd "$(dirname "$0")/.."
 F=$PWD/third_party/filament_src
 T=$PWD/third_party/thorvg_src
 [ -d $T ] || git -c core.hooksPath=/dev/null clone -q --depth 1 --branch v1.1.2 https://github.com/thorvg/thorvg $T
+git -C $T diff --quiet && git -C $T apply $PWD/dawn_probe/thorvg_z.patch
 mkdir -p $T/dawn_pc
 cat > $T/dawn_pc/wgpu_native.pc <<PC
 Name: wgpu_native

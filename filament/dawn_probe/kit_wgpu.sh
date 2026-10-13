@@ -23,8 +23,9 @@ done
 # (drawn.h), through the door built inside Filament's build (gpu_door.h).
 THOR=third_party/thorvg_src
 [ -f $THOR/build_dawn/src/libthorvg-1.a ] || ./dawn_probe/tvg_on_dawn.sh > /dev/null
+ninja -C $THOR/build_dawn > /dev/null
 (cd $SRC/out/wgpu && ninja motolii_door > /dev/null)
-clang++ -std=c++20 -fobjc-arc -O2 -I "$SDK/include" -I $THOR/inc -I $SRC/third_party/dawn/include -I $SRC/out/wgpu/third_party/dawn/gen/include ${KIT_SRC:-$n.mm} \
+clang++ -std=c++20 -fobjc-arc -O2 -I "$SDK/include" -I $THOR/inc -I $THOR/src/loaders/lottie -I $SRC/third_party/dawn/include -I $SRC/out/wgpu/third_party/dawn/gen/include ${KIT_SRC:-$n.mm} \
     $THOR/build_dawn/src/libthorvg-1.a $SRC/out/wgpu/filament/motolii_probe/libmotolii_door.a -L "$SDK/lib/arm64" \
     -lfilament -lbackend -lwebgpu_dawn -lbluegl -lbluevk -lfilabridge -lfilaflat \
     -lutils -lgeometry -lsmol-v -libl -lktxreader -lstb -luberzlib -lzstd \

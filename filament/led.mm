@@ -2,8 +2,8 @@
 // is, is read from the layer of its name in led.json (a Lottie file: a flat layer on a curved path with easing,
 // turning to face its way; 3D layers: a child riding on a turning parent and rising off the paper, a thing whose two
 // keys are looped for ever by an expression; a camera drifting and zooming). ThorVG works the motion out (motion.h;
-// led.json is led.src.json through lottie3d.py); nothing of the motion is written here.
-//   ./led.sh  ->  out/led.png        ./led.sh film  ->  out/led.mp4
+// the file goes to it as it is); nothing of the motion is written here.
+//   ./led.sh  ->  out/wgpu_kit/out/led.png        ./led.sh film  ->  out/wgpu_kit/out/led.mp4
 #include "kit.h"
 #include "motion.h"
 

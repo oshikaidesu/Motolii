@@ -1,5 +1,5 @@
 // motion_test.mm: motion.h against answers worked out by hand: a turn at an even pace, a child under a turning
-// parent, an eased move, a looping expression, a layer that is only there for a while.   ./build_one.sh motion_test && ./out/motion_test
+// parent, an eased move, a looping expression, a layer that is only there for a while.   ./motion_test.sh
 #include "motion.h"
 #include <chrono>
 #include <cmath>
@@ -109,10 +109,10 @@ int main() {
     near("the plane's depth goes into the floor (y -1)", p.y, -1);
     p = motion_in_scene(motion_deep(doubled), float3{0.f}, right, down) * float4{0, 0, 1, 0};
     near("a layer twice the size is twice as deep", p.y, -2);
-    // the third dimension: motion_test3d.json (motion_test3d.src.json through lottie3d.py)
+    // the third dimension: motion_test3d.json, as it is
     {
         Motion deep;
-        if (!motion_open(deep, "motion_test3d.src.json")) { std::printf("FAIL open motion_test3d.json\n"); return 1; }
+        if (!motion_open(deep, "motion_test3d.json")) { std::printf("FAIL open motion_test3d.json\n"); return 1; }
         Motion& m = deep;
 #include "motion_test3d.inc"
         there3(m, "deep", 25, 0, 0, 0, 1, 2, 50);          // position keyed dimension by dimension: z 0 -> 200 over 100 frames
@@ -142,7 +142,7 @@ int main() {
     }
     // what a moment costs the CPU: led.json (four layers, one with an expression), every frame of it once
     Motion led;
-    if (motion_open(led, "led.src.json")) {
+    if (motion_open(led, "led.json")) {
         const auto from = std::chrono::steady_clock::now();
         for (int f = 0; f < 480; ++f) {
             motion_at(led, (float)f);
