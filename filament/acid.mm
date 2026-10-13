@@ -27,12 +27,11 @@ static Mesh* burst(float2 knot, float reach, float lean, int count, uint32_t see
     for (int n = 0; n < count; ++n) {
         const bool longway = n < count / 5;   // a fifth go the long way
         const float heading = (lean + (longway ? between(-20.f, 20.f) : between(40.f, 320.f))) * TAU / 360.f;
-        const float length = reach * (longway ? between(0.55f, 1.f) : between(0.22f, 0.50f));
+        const float length = reach * (longway ? between(0.55f, 1.f) : between(0.20f, 0.46f));
         const bool hook = n == 0 || rnd() < 0.2f;   // (the first of the long ones always ends in a sickle)
-        // (the short ones curl round the knot; the long ones bend in one slow arc)
-        const float bend = (rnd() < 0.5f ? -1.f : 1.f) * (longway ? (hook ? between(1.6f, 2.6f) : between(0.25f, 1.0f)) : between(1.0f, 4.5f));
+        const float bend = (rnd() < 0.5f ? -1.f : 1.f) * (hook ? between(1.6f, 2.6f) : longway ? between(0.25f, 1.0f) : between(0.5f, 1.6f));
         const float thin = rnd();
-        const float wide = reach * (0.006f + 0.022f * thin * thin) * (longway ? (hook ? 1.5f : 1.f) : 0.55f);   // (most are thin)
+        const float wide = reach * (0.007f + 0.017f * thin) * (hook ? 1.4f : 1.f);   // (most are thin)
         const float twist = between(-3.2f, 3.2f), depth = between(0.1f, 0.7f), bow = between(0.05f, 0.3f);
         const float pinches = between(1.f, 3.f), pinch_at = between(0.f, TAU), kink = between(-0.3f, 0.3f);
         const float2 from = knot + reach * 0.05f * float2{between(-1.f, 1.f), between(-1.f, 1.f)};   // (not all out of one point: a knot)
