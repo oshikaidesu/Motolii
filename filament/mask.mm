@@ -7,6 +7,7 @@
 //   passes before it, and shows it cut as it is;
 // below, a picture cuts a picture by its light: the same film on another sheet, as much of it as a third film
 //   (dancing_star.json, never shown) is light there.
+// The eye goes round all of it.
 // The films are After Effects' files, ThorVG's examples (third_party/thorvg_example). WebGPU backend only.
 //   ./dawn_probe/kit_wgpu.sh mask          ->  out/wgpu_kit/out/mask.png       (then: cd out/wgpu_kit && ../mask_wgpu film)
 #include "kit.h"
@@ -27,7 +28,7 @@ int main(int argc, char** argv) {
     const std::string films = "../../third_party/thorvg_example/res/lottie/";
     const auto file = [&](const char* name) { static std::string path; path = films + name; return path.c_str(); };
     const float dist = 6.6f;
-    Drawn* wall = picture(s, file("text_anim.json"), mat4f::translation(float3{eye.x, eye.y, eye.z - dist}), 2.f * dist * std::tan(0.5f * fov * TAU / 360.f));
+    Drawn* wall = picture(s, file("text_anim.json"), mat4f::translation(float3{eye.x, eye.y, eye.z - dist}), 1.6f * 2.f * dist * std::tan(0.5f * fov * TAU / 360.f));   // (larger than the view head-on: the eye goes round)
     if (!wall || wall->frames <= 0.f) return fail("picture (WebGPU backend only): the example films (third_party/thorvg_example)");
 
     // above: a flat picture cuts a solid, softly
@@ -59,6 +60,10 @@ int main(int argc, char** argv) {
     if (!matted(s, glass, byFigures, true, 6.f) || !matted(s, colours->look, byGem) || !matted(s, colours->look, byRing, false) || !matted(s, more->look, byLight)) return fail("matted");
 
     const auto pose = [&](float t) {
+        // the eye goes round what it looks at: 25 degrees to either side, a little up and down. The mattes' pictures
+        // are taken by the same camera, so they go with it.
+        const float round = 0.44f * std::sin(TAU * t), up = 0.16f * std::sin(2.f * TAU * t);
+        s.camera->lookAt(float3{0.f, 1.4f, 0.f} + 6.f * float3{std::sin(round) * std::cos(up), std::sin(up), std::cos(round) * std::cos(up)}, {0.f, 1.4f, 0.f}, {0, 1, 0});
         // (each film about at its own speed, a whole number of times over these 8 seconds, so that the loop closes)
         for (Drawn* d : {wall, figures, colours, more, light}) picture_at(s, d, std::fmod(t * std::max(1.f, std::round(8.f / d->seconds)), 1.f) * d->seconds);
         move(s, lump, [&](int, const mat4f& at) { return at * mat4f::rotation(TAU * t, normalize(float3{0.2f, 1, 0})); });
