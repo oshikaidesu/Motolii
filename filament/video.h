@@ -27,8 +27,9 @@ struct Video {
     double nextAt = 0.0;               // when `next` is due, in seconds of the film's run (on through its repeats)
     double origin = 0.0, last = 0.0;   // the stage's time at which that run began; the stage's time last asked for
     int w = 0, h = 0, turned = 0;      // turned: quarter turns clockwise the film asks for before it is shown
-    float seconds = 0.f;               // how long it is
-    bool ended = false;                // the reader has read to the film's end (its last pictures may still be on their way)
+    float seconds = 0.f;               // how long it is as it is shown (its cut, at its speed)
+    float from = 0.f, to = 0.f, speed = 1.f;   // the cut of the file that is shown, in the file's seconds, and how fast (below 0: backwards)
+    std::atomic<bool> ended{false};    // the reader has read to the cut's end: the mark of it has come down the stream of pictures, after the last of them
     float4 key{0.f};                   // its green screen, if it has one (green); until its first picture is on the sheet the sheet is all clear
     float2 keySoft{0.f};
     Mesh* sheet = nullptr;             // the thing in the scene: moved like any other (kit.h: move)
@@ -45,6 +46,7 @@ struct VideoCoreVideoMeta { GstMeta meta; CVBufferRef cvbuf; CVPixelBufferRef pi
 // picture by picture wants every one (the default); a stage that plays as the clock goes sets 0: a film that is not
 // ready keeps its picture for that one and catches up at the next.
 static float video_patience = 500.f;
+static const char* video_trouble = "";   // why the last film that could not be shown could not
 static long video_asked = 0, video_late = 0;   // how often a film was asked for a moment, and how often it could not yet tell its picture for it
 
 // When a picture is due, in seconds of the film's run: its own time stamp, on through the film's repeats.
@@ -122,60 +124,76 @@ static void video_put(Stage& s, Video* v) {
     video_show(s, v);
 }
 
-// The reader set to a moment of the film, to go on from there and round again without a break at the film's end
-// (GStreamer's own: a segment, which ends with a word on the bus instead of the end of the stream).
+// The reader set to a moment of the film as it is shown (`seconds` into its cut, at its speed), to go on from there
+// and round again without a break at the cut's end (GStreamer's own: a segment with a rate, which ends with a word
+// on the bus instead of the end of the stream; backwards it runs from the segment's end down to its start).
 static void video_from(Video* v, float seconds, bool afresh) {
-    gst_element_seek(v->reader, 1.0, GST_FORMAT_TIME, (GstSeekFlags)((afresh ? GST_SEEK_FLAG_FLUSH | GST_SEEK_FLAG_ACCURATE : 0) | GST_SEEK_FLAG_SEGMENT),
-                     GST_SEEK_TYPE_SET, (gint64)((double)seconds * (double)GST_SECOND), GST_SEEK_TYPE_NONE, -1);
+    const double at = (double)seconds * std::fabs((double)v->speed);   // (that far into the cut, in the file's seconds)
+    const double start = v->speed > 0.f ? (double)v->from + at : (double)v->from, stop = v->speed > 0.f ? (double)v->to : (double)v->to - at;
+    gst_element_seek(v->reader, (double)v->speed, GST_FORMAT_TIME, (GstSeekFlags)((afresh ? GST_SEEK_FLAG_FLUSH | GST_SEEK_FLAG_ACCURATE : 0) | GST_SEEK_FLAG_SEGMENT),
+                     GST_SEEK_TYPE_SET, (gint64)(start * (double)GST_SECOND), GST_SEEK_TYPE_SET, (gint64)(stop * (double)GST_SECOND));
 }
 
-// A stream the reader found in the file: its pictures go to `out`; whatever else it holds (sound) is read and dropped.
+// The mark that the cut is read to its end, seen as it comes down the stream of pictures (GStreamer also says so on
+// its bus, but only when every stream of the file has ended, and played backwards the sound's never does).
+static GstPadProbeReturn video_ending(GstPad*, GstPadProbeInfo* info, gpointer film) {
+    if (GST_EVENT_TYPE(GST_PAD_PROBE_INFO_EVENT(info)) == GST_EVENT_SEGMENT_DONE) ((Video*)film)->ended = true;
+    return GST_PAD_PROBE_OK;
+}
+
+// Which of the file's streams the reader reads: its pictures only (GStreamer asks, stream by stream). The sound is
+// not read at all. (Read and dropped it cost 51 decoders their work, and an HEVC film played slower than it was shot
+// then gave no picture at all: so GStreamer alone, 1.28.8, with both streams taken.)
+static gint video_wanted(GstElement*, GstStreamCollection*, GstStream* stream, gpointer) {
+    return (gst_stream_get_stream_type(stream) & GST_STREAM_TYPE_VIDEO) ? 1 : 0;
+}
+
+// The stream of pictures the reader found in the file goes to `out`.
 static void video_found(GstElement*, GstPad* stream, gpointer film) {
-    Video* v = (Video*)film;
-    gchar* name = gst_pad_get_name(stream);
-    GstPad* to = gst_element_get_static_pad(GST_ELEMENT(v->out), "sink");
-    if (!g_str_has_prefix(name, "video") || gst_pad_is_linked(to)) {
-        GstElement* away = gst_element_factory_make("fakesink", nullptr);
-        g_object_set(away, "sync", FALSE, "async", FALSE, nullptr);
-        gst_bin_add(GST_BIN(v->reader), away);
-        gst_element_sync_state_with_parent(away);
-        gst_object_unref(to);
-        to = gst_element_get_static_pad(away, "sink");
-    }
-    gst_pad_link(stream, to);
+    GstPad* to = gst_element_get_static_pad(GST_ELEMENT(((Video*)film)->out), "sink");
+    if (!gst_pad_is_linked(to)) gst_pad_link(stream, to);
     gst_object_unref(to);
-    g_free(name);
 }
 
 // The film in `file` put in the scene: a sheet `high` tall (as wide as the film makes it) with its middle at `place`,
-// facing along the place's z.
-static Video* video(Stage& s, const char* file, const mat4f& place, float high) {
-    if (!door::device(s.engine)) return nullptr;   // (another backend)
+// facing along the place's z. from, to: the cut of it that is shown, in seconds of the file (to below 0: to its end);
+// speed: how fast (2: twice as fast, 0.5: half, below 0: backwards).
+static Video* video(Stage& s, const char* file, const mat4f& place, float high, float from = 0.f, float to = -1.f, float speed = 1.f) {
+    if (!door::device(s.engine)) return video_trouble = "not the WebGPU backend", nullptr;   // (another backend)
     static const bool started = (gst_init(nullptr, nullptr), true);
     (void)started;
     Video* v = new Video;
     v->reader = gst_pipeline_new(nullptr);
-    GstElement* from = gst_element_factory_make("filesrc", nullptr);
+    GstElement* opens = gst_element_factory_make("filesrc", nullptr);
     GstElement* reads = gst_element_factory_make("decodebin3", nullptr);   // (chooses the parts for whatever the file is: the machine's decoder where there is one)
     v->out = GST_APP_SINK(gst_element_factory_make("appsink", nullptr));
-    if (!from || !reads || !v->out) return nullptr;
+    if (!opens || !reads || !v->out) return video_trouble = "GStreamer lacks a part (filesrc, decodebin3 or appsink)", nullptr;
     GstCaps* wanted = gst_caps_from_string("video/x-raw,format=NV12");   // (light and colour apart, eight bits: what video.h shares)
-    g_object_set(from, "location", file, nullptr);
+    g_object_set(opens, "location", file, nullptr);
     g_object_set(v->out, "sync", FALSE, "max-buffers", 2, "caps", wanted, nullptr);
     gst_caps_unref(wanted);
-    gst_bin_add_many(GST_BIN(v->reader), from, reads, GST_ELEMENT(v->out), nullptr);
-    gst_element_link(from, reads);
+    gst_bin_add_many(GST_BIN(v->reader), opens, reads, GST_ELEMENT(v->out), nullptr);
+    gst_element_link(opens, reads);
+    g_signal_connect(reads, "select-stream", G_CALLBACK(video_wanted), nullptr);
     g_signal_connect(reads, "pad-added", G_CALLBACK(video_found), v);
+    GstPad* in = gst_element_get_static_pad(GST_ELEMENT(v->out), "sink");
+    gst_pad_add_probe(in, GST_PAD_PROBE_TYPE_EVENT_DOWNSTREAM, video_ending, v, nullptr);
+    gst_object_unref(in);
     gst_element_set_state(v->reader, GST_STATE_PAUSED);
     gst_element_get_state(v->reader, nullptr, nullptr, 5 * GST_SECOND);   // (waits until the file is open and its first picture is there)
+    gint64 length = 0;
+    if (!gst_element_query_duration(v->reader, GST_FORMAT_TIME, &length) || length <= 0) return video_trouble = "the file does not open as a film (no length)", nullptr;
+    v->from = std::max(0.f, from);
+    v->to = to < 0.f ? (float)((double)length / (double)GST_SECOND) : std::min(to, (float)((double)length / (double)GST_SECOND));
+    v->speed = speed == 0.f ? 1.f : speed;
+    v->seconds = (v->to - v->from) / std::fabs(v->speed);
+    if (v->seconds <= 0.f) return video_trouble = "the cut is empty", nullptr;
     video_from(v, 0.f, true);
     gst_element_set_state(v->reader, GST_STATE_PLAYING);
     v->held = gst_app_sink_try_pull_sample(v->out, 5 * GST_SECOND);   // (its first picture says how large it is)
-    if (!v->held) return nullptr;
+    if (!v->held) return video_trouble = "no picture came within 5 seconds", nullptr;
     const GstStructure* said = gst_caps_get_structure(gst_sample_get_caps(v->held), 0);
-    gint64 length = 0;
-    if (!gst_structure_get_int(said, "width", &v->w) || !gst_structure_get_int(said, "height", &v->h) || !gst_element_query_duration(v->reader, GST_FORMAT_TIME, &length) || length <= 0) return nullptr;
-    v->seconds = (float)((double)length / (double)GST_SECOND);
+    if (!gst_structure_get_int(said, "width", &v->w) || !gst_structure_get_int(said, "height", &v->h)) return video_trouble = "the picture does not say its size", nullptr;
     GstBus* bus = gst_element_get_bus(v->reader);
     while (GstMessage* said = gst_bus_pop_filtered(bus, GST_MESSAGE_TAG)) {   // (a film shot upright says which way it is to be turned)
         GstTagList* tags = nullptr;
@@ -200,7 +218,7 @@ static Video* video(Stage& s, const char* file, const mat4f& place, float high) 
     }
     v->sheet->idx = {0, 1, 2, 0, 2, 3};
     v->look = add(s, v->sheet, "flat.filamat", {place});
-    if (!v->look) return nullptr;
+    if (!v->look) return video_trouble = "flat.filamat", nullptr;
     v->look->setParameter("filmed", 1.f);
     v->look->setParameter("picture", white_point(s), TextureSampler());   // (until its first picture is shared: a white that is
     v->look->setParameter("key", float4{1.f, 0.5f, 1.f, 9.f});            //  keyed out whole, so the sheet is not seen)
@@ -232,14 +250,9 @@ static void video_at(Stage& s, Video* v, float seconds) {
     }
     v->last = seconds;
     const double now = (double)seconds - v->origin;
-    GstBus* bus = gst_element_get_bus(v->reader);
     const gint64 until = g_get_monotonic_time() + (gint64)(video_patience * 1000.f);
     bool sure = false;   // (known: the picture held is the one for now)
     while (true) {
-        while (GstMessage* said = gst_bus_pop_filtered(bus, GST_MESSAGE_SEGMENT_DONE)) {
-            gst_message_unref(said);
-            v->ended = true;
-        }
         if (!v->next && (v->next = gst_app_sink_try_pull_sample(v->out, video_patience > 0.f ? 2 * GST_MSECOND : 0))) v->nextAt = video_due(v->next);
         if (v->next) {
             if (v->nextAt > now) { sure = true; break; }
@@ -255,7 +268,6 @@ static void video_at(Stage& s, Video* v, float seconds) {
         }
         if (g_get_monotonic_time() >= until) break;
     }
-    gst_object_unref(bus);
     ++video_asked;
     video_late += !sure;
     video_put(s, v);
