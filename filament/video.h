@@ -224,8 +224,8 @@ static void green(Video* v, float3 colour = float3{0.f, 1.f, 0.f}, float near = 
 // The film at its moment, `seconds` of the stage's time (it goes round again when it ends), for the picture that comes
 // next. The picture for a moment is the last one due by then, by the film's own time stamps.
 static void video_at(Stage& s, Video* v, float seconds) {
-    if (seconds < v->last) {   // (time went back: from that moment afresh)
-        video_from(v, std::fmod(seconds, v->seconds), true);
+    if (seconds < v->last) {   // (time went back: from that moment afresh. Asked on this thread: tried from another,
+        video_from(v, std::fmod(seconds, v->seconds), true);   //  it left out as many pictures and the films took longer to settle)
         v->origin = seconds;
         v->ended = false;
         if (v->next) { gst_sample_unref(v->next); v->next = nullptr; }

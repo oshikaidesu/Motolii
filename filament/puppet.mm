@@ -67,7 +67,7 @@ int main(int argc, char** argv) {
         move(s, ring, [&](int, const mat4f& at) { return mat4f::translation(float3{0.7f * std::sin(2.f * TAU * t), 0.f, 0.f}) * at * mat4f::rotation(2.f * TAU * t, normalize(float3{0.3f, 1, 0.2f})); });
     };
     pose(0.3f);
-    const bool timed = argc > 1 && !strcmp(argv[1], "time");
+    const bool timed = argc > 1 && (!strcmp(argv[1], "time") || !strcmp(argv[1], "soak"));
     if (timed) video_patience = 0.f;   // (played as the clock goes: no film is waited for)
     video_asked = video_late = 0;
     if (timed) clock_after = [] {   // (of the times a film was asked for a moment in that stretch, how often its picture was not there yet)

@@ -1,8 +1,8 @@
 // neko.mm: the cat populace. Every film in out/vid (green-screen clips of cats: two real meme clips put there by hand,
 // one made by puppet.sh) is read many times over, each on its own, keyed, and stood in rising rows like a crowd on
 // terraces: 46 of them, placed by one seed. Before the crowd two great heads rise; behind and above it one great cat
-// is seen only through the shape of a turning gem (a matte: the solid cuts the film); confetti and balloons (After
-// Effects films, their white keyed out) fall and rise before all; glass goes round through it; the eye sways.
+// is seen only through the shape of a turning gem (a matte: the solid cuts the film); confetti (an After Effects
+// film, its white keyed out) bursts before all, twice over; glass goes round through it; the eye sways.
 // 51 films at once (the machine's decoder reads at most 59). WebGPU backend only.
 //   ./neko.sh          ->  out/wgpu_kit/out/neko.png       ./neko.sh film  ->  out/wgpu_kit/out/neko.mp4
 #include "kit.h"
@@ -67,10 +67,12 @@ int main(int argc, char** argv) {
     const int byGem = matte(s, window, {high});
     if (byGem < 0 || !matted(s, great->look, byGem, true, 3.f)) return fail("matte.filamat");
 
-    // confetti and balloons before all: After Effects films, their white ground keyed out as a film's green is
+    // confetti before all, twice over: an After Effects film, its white ground keyed out as a film's green is
+    // (0.3 ms each; balloons_with_string.json cost 5 ms and confetti2.json 3: many shapes, drawn over the whole screen)
     std::vector<Drawn*> party;
-    for (const char* name : {"confetti.json", "balloons_with_string.json", "confetti2.json"}) {
-        Drawn* d = picture(s, (ae + name).c_str(), mat4f::translation(float3{0.f, 1.5f, 3.2f + 0.2f * (float)party.size()}), party.size() == 1 ? 1.7f : 1.55f);
+    for (int twice = 0; twice < 2; ++twice) {
+        const char* name = "confetti.json";
+        Drawn* d = picture(s, (ae + name).c_str(), mat4f::translation(float3{twice ? 0.25f : -0.1f, twice ? 1.9f : 1.3f, 3.1f + 0.5f * (float)twice}) * mat4f::rotation(twice ? 2.6f : 0.f, float3{0, 0, 1}), twice ? 1.9f : 1.6f);
         if (!d) return fail(name);
         d->look->setParameter("key", float4{1.f, 1.f, 1.f, 0.035f});
         d->look->setParameter("keySoft", float2{0.05f, 0.f});
@@ -86,7 +88,7 @@ int main(int argc, char** argv) {
         const float round = 0.3f * std::sin(TAU * t), near = 6.f - 0.5f * std::sin(2.f * TAU * t);
         s.camera->lookAt(look + near * float3{std::sin(round), 0.1f * std::sin(TAU * t + 1.f), std::cos(round)}, look, {0, 1, 0});
         picture_at(s, wall, std::fmod(t * 2.f, 1.f) * wall->seconds);
-        for (Drawn* d : party) picture_at(s, d, std::fmod(t * std::max(1.f, std::round(8.f / d->seconds)), 1.f) * d->seconds);
+        for (size_t i = 0; i < party.size(); ++i) picture_at(s, party[i], std::fmod(t * std::max(1.f, std::round(8.f / party[i]->seconds)) + 0.5f * (float)i, 1.f) * party[i]->seconds);
         for (const One& one : crowd) {
             video_at(s, one.film, t * 8.f + one.starts);
             // (each jumps to its own beat and leans as it lands)
@@ -104,7 +106,7 @@ int main(int argc, char** argv) {
             });
     };
     pose(0.3f);
-    const bool timed = argc > 1 && !strcmp(argv[1], "time");
+    const bool timed = argc > 1 && (!strcmp(argv[1], "time") || !strcmp(argv[1], "soak"));
     if (timed) video_patience = 0.f;   // (played as the clock goes: no film is waited for)
     video_asked = video_late = 0;
     if (timed) clock_after = [] {

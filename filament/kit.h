@@ -34,6 +34,8 @@
 #import <ModelIO/ModelIO.h>
 #import <SceneKit/ModelIO.h>
 
+#include <mach/mach.h>
+
 #include <chrono>
 #include <cmath>
 #include <cstdint>
@@ -684,8 +686,9 @@ static Camera* god_view(Stage& s) {
 
 // Three frames, the last one read back and written as a .png.
 // One picture of the stage drawn (the helper pictures first), and read back into `pic` if one is given.
-static void draw(Stage& s, std::vector<uint8_t>* pic = nullptr, bool wait = true) {
-    while (!s.renderer->beginFrame(s.swap)) {}
+// All the pictures of one frame, the helper pictures first (between Filament's beginFrame and endFrame). Every way
+// of drawing the stage goes through here.
+static void pictures_of(Stage& s) {
     static const char* const eyes[] = {"matteEye0", "matteEye1", "matteEye2", "matteEye3"};
     for (const Stage::Cut& c : s.cuts) {   // (where each matte's eye is now: a pose handed over, nothing more)
         const Camera* eye = s.mattes[(size_t)c.matte].eye;
@@ -699,6 +702,11 @@ static void draw(Stage& s, std::vector<uint8_t>* pic = nullptr, bool wait = true
     s.renderer->render(s.view_behind);
     if (s.view_through) s.renderer->render(s.view_through);
     s.renderer->render(s.view);
+}
+
+static void draw(Stage& s, std::vector<uint8_t>* pic = nullptr, bool wait = true) {
+    while (!s.renderer->beginFrame(s.swap)) {}
+    pictures_of(s);
     if (pic)
         s.renderer->readPixels(0, 0, (uint32_t)s.w, (uint32_t)s.h,
                                backend::PixelBufferDescriptor(pic->data(), pic->size(), backend::PixelDataFormat::RGBA, backend::PixelDataType::UBYTE));
@@ -760,10 +768,7 @@ static void clock(Stage& s, int pictures, const std::function<void(float)>& pose
             std::this_thread::sleep_until(start + std::chrono::microseconds((long long)i * 1000000 / rate));
             pose((float)(i % pictures) / (float)pictures);
             if (!s.renderer->beginFrame(s.swap)) { ++left_out; continue; }
-            if (s.view_floor) s.renderer->render(s.view_floor);
-            s.renderer->render(s.view_behind);
-            if (s.view_through) s.renderer->render(s.view_through);
-            s.renderer->render(s.view);
+            pictures_of(s);
             s.renderer->endFrame();
             ++drawn;
         }
@@ -771,8 +776,42 @@ static void clock(Stage& s, int pictures, const std::function<void(float)>& pose
         s.engine->flushAndWait();
         std::printf("at %d a second: %d drawn, %d left out; the last was done %.1f ms after it was asked for\n", rate, drawn, left_out,
                     std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - asked).count());
-                    if (clock_after) clock_after();
+        if (clock_after) clock_after();
     }
+}
+
+// The stage played on and on by the clock at 60 a second, with no jump in time (the film goes round as often as it
+// takes): how it holds up over minutes. A line a minute: pictures drawn and left out (Filament says no when it is
+// behind), the longest this thread took over one picture, and how much memory the program holds.
+static void soak(Stage& s, double seconds, int pictures, const std::function<void(float)>& pose) {
+    const auto start = std::chrono::steady_clock::now();
+    const long ticks = (long)(seconds * 60.0);
+    int drawn = 0, left_out = 0, all_drawn = 0, all_left = 0;
+    double longest = 0.0;
+    for (long i = 0; i < ticks; ++i) {
+        std::this_thread::sleep_until(start + std::chrono::microseconds(i * 1000000 / 60));
+        const auto began = std::chrono::steady_clock::now();
+        pose((float)((double)i / (double)pictures));   // (on past 1: time does not go back)
+        if (s.renderer->beginFrame(s.swap)) {
+            pictures_of(s);
+            s.renderer->endFrame();
+            ++drawn;
+        } else ++left_out;
+        longest = std::max(longest, std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - began).count());
+        if ((i + 1) % 3600 == 0 || i + 1 == ticks) {
+            mach_task_basic_info_data_t info;
+            mach_msg_type_number_t count = MACH_TASK_BASIC_INFO_COUNT;
+            task_info(mach_task_self(), MACH_TASK_BASIC_INFO, (task_info_t)&info, &count);
+            std::printf("minute %2ld: %d drawn, %d left out; longest %.1f ms; memory %.0f MB\n", (i + 1 + 3599) / 3600, drawn, left_out, longest, (double)info.resident_size / 1048576.0);
+            std::fflush(stdout);
+            if (clock_after) clock_after();
+            all_drawn += drawn; all_left += left_out;
+            drawn = left_out = 0;
+            longest = 0.0;
+        }
+    }
+    s.engine->flushAndWait();
+    std::printf("in all: %d drawn, %d left out, over %.0f seconds\n", all_drawn, all_left, seconds);
 }
 
 static bool shoot(Stage& s, const char* path) {
@@ -797,6 +836,7 @@ static void sun_to(Stage& s, float3 way) {
 static int show(Stage& s, int argc, char** argv, const char* name, int pictures, float drum, const std::function<void(float)>& pose) {
     const std::string still = std::string("out/") + name + ".png", moving = std::string("out/") + name + ".mp4";
     if (argc > 1 && !strcmp(argv[1], "time")) return clock(s, pictures, pose), 0;
+    if (argc > 1 && !strcmp(argv[1], "soak")) return soak(s, argc > 2 ? atof(argv[2]) : 60.0, pictures, pose), 0;   // (soak 600: ten minutes)
     const bool as_film = argc > 1 && !strcmp(argv[1], "film");
     if (!(as_film ? film(s, moving.c_str(), pictures, drum, pose) : shoot(s, still.c_str()))) return fail(as_film ? "film" : "png");
     std::printf("wrote %s\n", (as_film ? moving : still).c_str());

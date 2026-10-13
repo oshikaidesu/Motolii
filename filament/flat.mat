@@ -48,7 +48,9 @@ fragment {
         }
         // (the screen's own rule, exactly: Filament's output step is its reverse, so a number comes out as it went in)
         float kept = keyLeft(c);   // (the colour is then the film's share of the point already: only its clearness is `kept`)
-        if (kept * matteLeft() < 0.004) discard;   // (where nothing of it is left it is not there at all: it hides nothing behind it)
-        material.baseColor = vec4(mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(vec3(0.04045), c)), kept) * matteLeft();
+        if (kept < 0.004) discard;   // (where nothing of it is left it is not there at all: it hides nothing behind it)
+        float uncut = matteLeft();
+        if (uncut < 0.004) discard;
+        material.baseColor = vec4(mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(vec3(0.04045), c)), kept) * uncut;
     }
 }

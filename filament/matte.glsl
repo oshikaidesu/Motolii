@@ -12,6 +12,7 @@ highp vec3 matteSeen(highp mat4 eye, highp vec3 at) {   // where on its picture,
     return vec3(uvToRenderTargetUV(uv), step(1e-6, c.w) * step(0.0, uv.x) * step(uv.x, 1.0) * step(0.0, uv.y) * step(uv.y, 1.0));
 }
 float matteLeft() {
+    if (materialParams.matteUse == vec4(0.0)) return 1.0;   // (nothing cuts it: none of the pictures is looked at)
     highp vec3 at = getUserWorldPosition();
     highp vec3 a = matteSeen(materialParams.matteEye0, at), b = matteSeen(materialParams.matteEye1, at);
     highp vec3 c = matteSeen(materialParams.matteEye2, at), d = matteSeen(materialParams.matteEye3, at);
