@@ -1,37 +1,37 @@
 == wall
-293 pictures a second, 3.41 ms each (4.9 times 60)
-at 60 a second: 120 drawn, 0 left out; the last was done 5.0 ms after it was asked for
-at 120 a second: 240 drawn, 0 left out; the last was done 6.5 ms after it was asked for
-at 240 a second: 478 drawn, 2 left out; the last was done 4.0 ms after it was asked for
-== mask
-125 pictures a second, 7.97 ms each (2.1 times 60)
-at 60 a second: 120 drawn, 0 left out; the last was done 13.4 ms after it was asked for
-at 120 a second: 237 drawn, 3 left out; the last was done 10.1 ms after it was asked for
-at 240 a second: 28 drawn, 452 left out; the last was done 540.2 ms after it was asked for
-== puppet
-452 pictures a second, 2.21 ms each (7.5 times 60)
-    films late 9 of 1920 times asked (0.47 %); surfaces shared now 77
-at 60 a second: 120 drawn, 0 left out; the last was done 8.6 ms after it was asked for
-    films late 4 of 480 times asked (0.83 %); surfaces shared now 77
-at 120 a second: 240 drawn, 0 left out; the last was done 8.5 ms after it was asked for
-    films late 4 of 960 times asked (0.42 %); surfaces shared now 74
+292 pictures a second, 3.43 ms each (4.9 times 60)
+at 60 a second: 120 drawn, 0 left out; the last was done 11.2 ms after it was asked for
+at 120 a second: 240 drawn, 0 left out; the last was done 9.7 ms after it was asked for
 at 240 a second: 476 drawn, 4 left out; the last was done 4.0 ms after it was asked for
-    films late 8 of 1920 times asked (0.42 %); surfaces shared now 78
+== mask
+126 pictures a second, 7.92 ms each (2.1 times 60)
+at 60 a second: 120 drawn, 0 left out; the last was done 13.2 ms after it was asked for
+at 120 a second: 238 drawn, 2 left out; the last was done 8.1 ms after it was asked for
+at 240 a second: 28 drawn, 452 left out; the last was done 517.8 ms after it was asked for
+== puppet
+472 pictures a second, 2.12 ms each (7.9 times 60)
+    films late 9 of 1920 times asked (0.47 %); surfaces shared now 77
+at 60 a second: 120 drawn, 0 left out; the last was done 8.3 ms after it was asked for
+    films late 4 of 480 times asked (0.83 %); surfaces shared now 77
+at 120 a second: 240 drawn, 0 left out; the last was done 8.1 ms after it was asked for
+    films late 4 of 960 times asked (0.42 %); surfaces shared now 77
+at 240 a second: 475 drawn, 5 left out; the last was done 4.2 ms after it was asked for
+    films late 9 of 1920 times asked (0.47 %); surfaces shared now 76
 == neko
-135 pictures a second, 7.39 ms each (2.3 times 60)
-    films late 15997 of 24000 times asked (66.65 %); surfaces shared now 785
-at 60 a second: 118 drawn, 2 left out; the last was done 11.6 ms after it was asked for
-    films late 2097 of 6000 times asked (34.95 %); surfaces shared now 839
-at 120 a second: 231 drawn, 9 left out; the last was done 7.4 ms after it was asked for
-    films late 3862 of 12000 times asked (32.18 %); surfaces shared now 866
-at 240 a second: 393 drawn, 87 left out; the last was done 6.9 ms after it was asked for
-    films late 7644 of 24000 times asked (31.85 %); surfaces shared now 901
+141 pictures a second, 7.12 ms each (2.3 times 60)
+    films late 17006 of 24000 times asked (70.86 %); surfaces shared now 788
+at 60 a second: 117 drawn, 3 left out; the last was done 12.0 ms after it was asked for
+    films late 2131 of 6000 times asked (35.52 %); surfaces shared now 841
+at 120 a second: 231 drawn, 9 left out; the last was done 6.8 ms after it was asked for
+    films late 3872 of 12000 times asked (32.27 %); surfaces shared now 867
+at 240 a second: 396 drawn, 84 left out; the last was done 8.4 ms after it was asked for
+    films late 7617 of 24000 times asked (31.74 %); surfaces shared now 899
 == lay
-198 pictures a second, 5.05 ms each (3.3 times 60)
+215 pictures a second, 4.65 ms each (3.6 times 60)
     films late 0 of 960 times asked (0.00 %); surfaces shared now 72
-at 60 a second: 120 drawn, 0 left out; the last was done 12.5 ms after it was asked for
+at 60 a second: 120 drawn, 0 left out; the last was done 11.4 ms after it was asked for
     films late 4 of 480 times asked (0.83 %); surfaces shared now 72
-at 120 a second: 239 drawn, 1 left out; the last was done 6.7 ms after it was asked for
-    films late 4 of 960 times asked (0.42 %); surfaces shared now 72
-at 240 a second: 473 drawn, 7 left out; the last was done 4.4 ms after it was asked for
-    films late 7 of 1920 times asked (0.36 %); surfaces shared now 74
+at 120 a second: 240 drawn, 0 left out; the last was done 7.3 ms after it was asked for
+    films late 4 of 960 times asked (0.42 %); surfaces shared now 71
+at 240 a second: 473 drawn, 7 left out; the last was done 3.9 ms after it was asked for
+    films late 8 of 1920 times asked (0.42 %); surfaces shared now 70
