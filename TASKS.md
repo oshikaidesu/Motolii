@@ -30,7 +30,12 @@
 - **ガラスは物の種類じゃなく材質**（ユーザー、2026-10-14：「あくまでガラスは材質としてテクスチャ枠で入れて。そうすればかさばらない」）。文書から種類 `glass` を消した。3D の物は全部 `solid`（ファイルか、組み込みの形 ring・gem・cube）で、表面は `fill`：6桁の色か `glass`。文字の色と同じ言葉なので名前は増えてない。色の時は素の塗り（`floor_lit.mat`、手元にあった物）で、glb に色を言うと全部その色になる（白いロケット＝的③の白い粘土の見た目、`reports/skin_run/fill_is_the_surface.jpg`）。
   窓：Create 棚の Glass の札は取り下げて「3D」（Ring・Gem・Cube、素の塗りで出る）。Colors 棚の Fill ボタンが選んだ物の `fill` を言う（色、または Materials の Glass）。インスペクタの Fill が文書の言葉を出す。窓で確かめた：Cube → 橙 → Glass（`live_05_glass_is_a_fill.jpg`）。
   まだ：glb にガラスは断る（「まだ作ってない」。ガラスは同じ形を3回描くので、gltfio の物を3つに増やす手が要る）。3D の形の入口を Create 棚の「3D」に置いたのは私の仮置き。
-- まだ作り物のままの所：タイムラインでキーを打てない・バーを動かせない。机の Ease・Wiggle・Blend は文書に行かない。インスペクタは Transform の数だけ（文字の中身と色、動画の `keyed`・`speed`・`begin`、`blend` の席が無い）。Fonts・Colors・Effects 棚。
+- **キーと「間の行き方」**（合格線3の残り）：窓で通した（`reports/skin_run/live_06_ease_is_the_stretch.jpg`）。
+  キーを打つ：見本のこの肌では入口は「Animate all を入れて値を動かす」と行の右クリックの品書き。Animate all で X を動かすと再生位置に Position のキー（x・y・z）が入り、タイムラインのバーに印が出る。取り消し1回で値もキーも全部戻る。
+  間の行き方：タイムラインでキーを選ぶと机が Ease になり、文書の今の行き方を読んで出す（vest の 0 コマ目は BOUNCE、90 コマ目は ELASTIC）。札（Linear・Ease・In・Out・In-out・Back・Bounce・Hold）や持ち手で変えると、指が離れた時に1回だけ `way` を言う。持ち手の引きずり1回＝1歩。
+  中身に足した口：`motolii_together`（手の1動作が幾つかの変更になる時、取り消し1歩にまとめる。`step` の表に `joined` の列）、`motolii_way_of`（その間が今どう行ってるか）。`check/api.c` に検査を足した。
+  まだ：机に席が無い行き方（Elastic・Cyclic・Random・Steps・ElasticSteps）は名前だけ出て、線は直線のまま（嘘の線）。机の Wiggle は未接続。右クリックの品書きは窓で未確認。タイムラインでバーやキーを引きずる動きは見本に元から無い。
+- まだ作り物のままの所：机の Wiggle・Blend ほか。インスペクタは Transform と Fill だけ（文字の中身、動画の `keyed`・`speed`・`begin`、`blend` の席が無い）。Fonts・Effects 棚。物を消す入口。
 - 開き方：`skin/book` で Flutter（`~/rust_ae/Motolii/.tools/flutter/bin/flutter`）の `build macos --debug --dart-define=LAB_ROUTE=/?path=workspace/workspace/live`、できた `lab_book.app` を開く。文書は `filament/out/skin.motolii`。
 
 作る的：①`edit_v5` を窓だけで作り直す ②猫ミームの人形劇 ③青いロケットのコラージュ（`research_notes/refs/G_rocket_collage_blue.jpg`）。

@@ -43,7 +43,9 @@ const easePresets = [
   Ease(EaseKind.hold, Offset(.25, .1), Offset(.25, 1), 'Hold'),
 ];
 
-String? easeName(Ease e) => easePresets.where((p) => p == e).firstOrNull?.name;
+/// A way of the document that has no seat on this desk yet (Elastic, Random, Steps...): it is carried by its own words, as its name.
+bool easeOther(Ease e) => e.name != null && easePresets.every((p) => p.name != e.name);
+String? easeName(Ease e) => easeOther(e) ? e.name : easePresets.where((p) => p == e).firstOrNull?.name;
 
 double bezierY(Offset p1, Offset p2, double x) {
   double bx(double u) => 3 * (1 - u) * (1 - u) * u * p1.dx + 3 * (1 - u) * u * u * p2.dx + u * u * u;
@@ -93,16 +95,82 @@ class DeskEase extends StatefulWidget {
   State<DeskEase> createState() => _DeskEaseState();
 }
 
+/// Joined: an ease as the document says a stretch's way (three of its nine kinds have a seat on this desk), and back.
+String _said(Ease e) => easeOther(e) ? e.name! : switch (e.kind) {
+  EaseKind.hold => 'Hold',
+  EaseKind.bounce => 'Bounce',
+  EaseKind.bezier => e == easePresets.first ? 'Linear' : 'Bezier ${e.p1.dx} ${e.p1.dy} ${e.p2.dx} ${e.p2.dy}',
+};
+Ease _heard(String said) {
+  final w = said.split(' '), n = [for (final x in w.skip(1)) double.tryParse(x) ?? 0];
+  return switch (w.first) {
+    'Hold' => easePresets.last,
+    'Bounce' => easePresets[6],
+    'Bezier' when n.length == 4 => Ease(EaseKind.bezier, Offset(n[0], n[1]), Offset(n[2], n[3])),
+    'Linear' => easePresets.first,
+    _ => Ease(EaseKind.bezier, Offset.zero, const Offset(1, 1), said), // (a kind with no seat here yet: its own words, over a straight line)
+  };
+}
+
+/// Joined: the values of the span's thing that have a key where the span begins, each with that key's own moment.
+Map<String, double> _keysAt(Ws ws, EaseSpan span) {
+  final m = ws.inside!, t = int.parse(span.layer.id);
+  return {
+    for (final name in Ws.moving)
+      for (final s in m.keyMoments(t, name))
+        if ((s * Ws.fps).round() == span.from) name: s,
+  };
+}
+
 class _DeskEaseState extends State<DeskEase> {
+  // Joined: while a hand is down the ease is only shown here; when it lets go it is told to the document once.
+  bool _down = false;
+  Ease? _pending;
+  String? _trouble;
+
+  void _settle(Ws ws, EaseSpan? span) {
+    final e = _pending;
+    _pending = null;
+    if (e == null || span == null) return;
+    final m = ws.inside!, t = int.parse(span.layer.id), at = _keysAt(ws, span);
+    final done = m.together(() => [for (final k in at.entries) m.way(t, k.key, k.value, _said(e))].every((ok) => ok));
+    setState(() => _trouble = at.isEmpty ? 'No key where the stretch begins' : (done ? null : m.trouble));
+  }
+
   @override
   Widget build(BuildContext context) {
     final ws = WsScope.of(context), span = easeSpan(ws), store = _eases[ws] ??= {}, id = _spanId(span);
+    if (ws.inside case final m?) {
+      final at = span == null ? const <String, double>{} : _keysAt(ws, span);
+      final ease = _pending ?? (at.isEmpty ? easePresets.first : _heard(m.wayOf(int.parse(span!.layer.id), at.keys.first, at.values.first)));
+      void set(Ease e) {
+        setState(() => _pending = e);
+        if (!_down) _settle(ws, span);
+      }
+
+      return Listener(
+        onPointerDown: (_) => _down = true,
+        onPointerUp: (_) {
+          _down = false;
+          _settle(ws, span);
+        },
+        onPointerCancel: (_) {
+          _down = false;
+          setState(() => _pending = null);
+        },
+        child: _body(ws, span, ease, set),
+      );
+    }
     final ease = store[id] ?? easePresets[1];
-    void set(Ease e) => setState(() => store[id] = e);
+    return _body(ws, span, ease, (e) => setState(() => store[id] = e));
+  }
+
+  Widget _body(Ws ws, EaseSpan? span, Ease ease, ValueChanged<Ease> set) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _SpanStrip(span: span, onReverse: () => set(ease.reversed())),
+        if (_trouble case final why?) Text(why, maxLines: 1, overflow: TextOverflow.ellipsis, style: T.label(Grey.g63)),
         const SizedBox(height: WsT.gutter),
         Expanded(
           child: Row(
@@ -563,7 +631,7 @@ class _Presets extends StatelessWidget {
         for (final (i, p) in easePresets.indexed) ...[
           if (i > 0) const SizedBox(width: 3),
           Expanded(
-            child: _PresetTile(p, on: p == ease, onTap: () => onPick(p)),
+            child: _PresetTile(p, on: p == ease && !easeOther(ease), onTap: () => onPick(p)),
           ),
         ],
       ],

@@ -8,6 +8,18 @@ int main(int argc, char** argv) {
     const int ring = motolii_add(m, "solid", "ring");
     printf("a ring: thing %d; its fill is glass: %d\n", ring, motolii_say(m, ring, "fill", "glass"));
     printf("set x 0.4: %d   key y at 1 = 0.5: %d   undo: %d   set wobble: %d (%s)\n", motolii_set(m, ring, "x", 0.4), motolii_key(m, ring, "y", 1.0, 0.5), motolii_undo(m), motolii_set(m, ring, "wobble", 1.0), motolii_trouble(m));
+    motolii_key(m, ring, "x", 0.0, 0.0), motolii_key(m, ring, "x", 1.0, 1.0), motolii_key(m, ring, "y", 0.0, 0.0), motolii_key(m, ring, "y", 1.0, 1.0);
+    motolii_together(m, 1);   /* (two changes by one act of a hand: one step back) */
+    const int both = motolii_way(m, ring, "x", 0.0, "Hold") + motolii_way(m, ring, "y", 0.0, "Bezier 0.42 0 0.58 1");
+    motolii_together(m, 0);
+    printf("two ways told together: %d; x goes %s,", both, motolii_way_of(m, ring, "x", 0.0));
+    printf(" y goes %s;", motolii_way_of(m, ring, "y", 0.0));
+    printf(" one undo: %d; x goes %s,", motolii_undo(m), motolii_way_of(m, ring, "x", 0.0));
+    printf(" y goes %s;", motolii_way_of(m, ring, "y", 0.0));
+    printf(" one redo: %d;", motolii_redo(m));
+    printf(" x goes %s,", motolii_way_of(m, ring, "x", 0.0));
+    printf(" y goes %s;", motolii_way_of(m, ring, "y", 0.0));
+    printf(" no key at 0.5: \"%s\"\n", motolii_way_of(m, ring, "x", 0.5));
     printf("%sruns %.2f s; still: %d\n", motolii_list(m), motolii_seconds(m), motolii_still(m, argv[2]));
     motolii_close(m);
     return 0;

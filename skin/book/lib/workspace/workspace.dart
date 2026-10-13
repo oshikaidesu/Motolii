@@ -242,7 +242,9 @@ void _mark(Ws ws, String? id, String prop, KeyS mark) {
   final at = ws.frame / Ws.fps;
   for (final n in names) {
     final has = m.keyMoments(t, n).any((s) => (s - at).abs() < .5 / Ws.fps);
-    if (mark == KeyS.at && !has) {
+    if (mark == KeyS.off) {
+      if (m.keyMoments(t, n).isNotEmpty) m.set(t, n, m.value(t, n, at) ?? 0); // (no longer animated: it stays as it is now)
+    } else if (mark == KeyS.at && !has) {
       m.key(t, n, at, m.value(t, n, at) ?? 0);
     } else if (mark != KeyS.at && has) {
       m.unkey(t, n, m.keyMoments(t, n).firstWhere((s) => (s - at).abs() < .5 / Ws.fps));
@@ -270,6 +272,7 @@ class _InspectorSeat extends StatelessWidget {
         onValues: ws.inside == null ? null : (changed, {required live}) => _write(ws, l?.id, changed, live: live),
         onDrop: ws.inside?.tryDrop,
         onKey: ws.inside == null ? null : (prop, mark) => _mark(ws, l?.id, prop, mark),
+        together: ws.inside?.together,
         child: InspectorPanel(directTransform: true, width: box.maxWidth, height: box.maxHeight),
       ),
     );

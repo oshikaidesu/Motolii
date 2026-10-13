@@ -138,7 +138,7 @@ class Ws extends ChangeNotifier {
           }(),
       ]);
     if (layers.every((l) => l.id != _sel)) _sel = layers.firstOrNull?.id;
-    _keys.clear();
+    _keys.removeWhere((k) => !layers.any((l) => l.id == k.layer && l.keys.contains(k.frame))); // (a picked key stays picked while it is still there)
     notifyListeners();
   }
 

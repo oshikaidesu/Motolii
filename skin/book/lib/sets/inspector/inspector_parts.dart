@@ -151,6 +151,7 @@ class InspHost extends StatefulWidget {
     this.onValues,
     this.onDrop,
     this.onKey,
+    this.together,
     required this.child,
   });
   final Cfg cfg;
@@ -179,6 +180,9 @@ class InspHost extends StatefulWidget {
 
   /// A property's key mark was changed in the inspector.
   final void Function(String prop, KeyS mark)? onKey;
+
+  /// What one change of the inspector tells the host (values, then key marks) is told inside this, so a host can keep it as one act.
+  final void Function(VoidCallback tells)? together;
   @override
   State<InspHost> createState() => _InspHostState();
 }
@@ -204,7 +208,8 @@ class _InspHostState extends State<InspHost> {
   final _seen = <String, double>{};
   final _seenKeys = <String, KeyS>{};
   bool _live = false;
-  void _tell() {
+  void _tell() => widget.together == null ? _tells() : widget.together!(_tells);
+  void _tells() {
     final live = doc.inGesture, changed = {
       for (final e in doc.v.entries)
         if (_seen[e.key] != e.value) e.key: e.value,
@@ -217,9 +222,9 @@ class _InspHostState extends State<InspHost> {
     }
     _live = live;
     for (final e in doc.keys.entries.toList()) {
-      if (_seenKeys[e.key] == e.value) continue;
+      if (live || _seenKeys[e.key] == e.value) continue; // (while a hand is on it nothing is settled: told when it lets go)
       _seenKeys[e.key] = e.value;
-      if (!live) widget.onKey?.call(e.key, e.value);
+      widget.onKey?.call(e.key, e.value);
     }
   }
 

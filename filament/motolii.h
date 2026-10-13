@@ -30,6 +30,7 @@ int motolii_keys(Motolii* m, int thing, const char* name);         /* how many k
    (the numbers said with it); it is taken only if it begins at a and ends at b. */
 int motolii_way(Motolii* m, int thing, const char* name, double at, const char* way);
 int motolii_define(Motolii* m, const char* way, const char* expression);
+const char* motolii_way_of(Motolii* m, int thing, const char* name, double at);   /* the way of the stretch that begins at that key, as it is said ("": no key there; until the next call) */
 const char* motolii_ways(Motolii* m);                              /* the names of the ways the document knows (until the next call) */
 int motolii_value(Motolii* m, int thing, const char* name, double at, double* is);   /* a value at a moment, as the stage is told it */
 /* What a shell reads to draw its lists. motolii_things: the numbers of the things there are (as many as there is room
@@ -48,6 +49,9 @@ int motolii_frame(Motolii* m, int thing, double* frame);
 int motolii_try(Motolii* m, int thing, const char* name, double number);
 int motolii_try_drop(Motolii* m);
 double motolii_point(Motolii* m);                                  /* points of the picture to one unit of the stage, at z 0 */
+/* One act of a hand that is several changes (a thing dragged: its x and its y): the changes made from
+   motolii_together(m, 1) to motolii_together(m, 0) are one step of undo. */
+int motolii_together(Motolii* m, int on);
 int motolii_undo(Motolii* m);
 int motolii_redo(Motolii* m);
 
