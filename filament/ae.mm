@@ -36,7 +36,9 @@ int main(int argc, char** argv) {
     s.view->setAntiAliasing(View::AntiAliasing::NONE);   // (ThorVG has smoothed its own edges)
 
     // the film: the one thing in the scene, filling the view
-    Drawn* film = picture(s, file, mat4f{}, 2.f);
+    float3 ground{1.f};   // (GROUND="0 1 0": a green screen behind the film)
+    if (const char* g = getenv("GROUND")) sscanf(g, "%f %f %f", &ground.x, &ground.y, &ground.z);
+    Drawn* film = picture(s, file, mat4f{}, 2.f, ground);
     if (!film) return fail("picture (WebGPU backend only)");
 
     const auto pose = [&](float t) { picture_at(s, film, t * film->seconds); };
