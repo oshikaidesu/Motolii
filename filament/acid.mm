@@ -25,7 +25,7 @@ static Mesh* burst(float2 knot, float reach, float lean, int count, uint32_t see
     const auto rnd = [&]() { state = state * 1664525u + 1013904223u; return (float)(state >> 8) / 16777216.f; };   // 0..1
     const auto between = [&](float a, float b) { return a + (b - a) * rnd(); };
     for (int n = 0; n < count; ++n) {
-        const bool longway = n < count / 5;   // a fifth go the long way
+        const bool longway = n < count / 8;   // an eighth go the long way
         const float heading = (lean + (longway ? between(-20.f, 20.f) : between(40.f, 320.f))) * TAU / 360.f;
         const float length = reach * (longway ? (n == 0 ? between(0.6f, 0.75f) : between(0.55f, 1.f)) : between(0.16f, 0.38f));
         const bool hook = n == 0 || rnd() < 0.2f;   // (the first of the long ones always ends in a sickle)
@@ -96,7 +96,7 @@ int main(int argc, char** argv) {
     sheet_mi->setParameter("picture", flat->texture, TextureSampler(TextureSampler::MinFilter::LINEAR, TextureSampler::MagFilter::LINEAR));
 
     // the burst: crushed glass of a bottle green, put down as it comes (Filament's own glass, kit.h: it is given no depth)
-    if (!own_glass(s, burst(at(0.76f, 0.52f), 0.74f * 2.f * WIDE, 178.f, 26, 77), {mat4f{}}, float3{0.33f, 0.40f, 0.06f}, 0.15f)) return fail("own_glass.filamat");
+    if (!own_glass(s, burst(at(0.76f, 0.52f), 0.74f * 2.f * WIDE, 178.f, 32, 77), {mat4f{}}, float3{0.33f, 0.40f, 0.06f}, 0.3f)) return fail("own_glass.filamat");
 
     const auto pose = [&](float) { drawn_now(s, flat); };
     pose(0.f);
