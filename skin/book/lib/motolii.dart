@@ -54,6 +54,7 @@ class Motolii {
   late final _word = _lib.lookupFunction<_S Function(_P, Int32, _S), _S Function(_P, int, _S)>('motolii_word');
   late final _lasts = _lib.lookupFunction<Double Function(_P, Int32), double Function(_P, int)>('motolii_lasts');
   late final _keyMoments = _lib.lookupFunction<Int32 Function(_P, Int32, _S, Pointer<Double>, Int32), int Function(_P, int, _S, Pointer<Double>, int)>('motolii_key_moments');
+  late final _frame = _lib.lookupFunction<Int32 Function(_P, Int32, Pointer<Double>), int Function(_P, int, Pointer<Double>)>('motolii_frame');
   late final _undo = _lib.lookupFunction<Int32 Function(_P), int Function(_P)>('motolii_undo');
   late final _redo = _lib.lookupFunction<Int32 Function(_P), int Function(_P)>('motolii_redo');
   late final _trouble = _lib.lookupFunction<_S Function(_P), _S Function(_P)>('motolii_trouble');
@@ -126,6 +127,15 @@ class Motolii {
     malloc.free(out);
     return all;
   });
+  /// A thing's frame on the picture at the stage's moment: its middle (x, y), how wide, how high (points of the picture,
+  /// from the top left), how far it is turned (degrees, clockwise as seen). null: there is no such thing.
+  List<double>? frame(int thing) {
+    final out = malloc<Double>(5);
+    final ok = _frame(_m, thing, out) != 0, f = [for (var i = 0; i < 5; i++) out[i]];
+    malloc.free(out);
+    return ok ? f : null;
+  }
+
   bool undo() => _undo(_m) != 0;
   bool redo() => _redo(_m) != 0;
   void close() => _close(_m);

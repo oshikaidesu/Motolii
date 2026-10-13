@@ -395,6 +395,24 @@ static std::vector<double> doc_key_moments(Doc& d, int thing, const char* name) 
     return at;
 }
 
+// Half of how wide and how high a thing is at size 1, before it is placed (a sheet: the sheet's; a solid or a glass: its
+// bounds'): what a shell draws a thing's frame from.
+static bool doc_half(Doc& d, int thing, float2* half) {
+    const auto shown = d.shown.find(thing);
+    if (shown == d.shown.end()) return false;
+    const Doc::Shown& t = shown->second;
+    if (t.solid) {
+        const Aabb box = t.solid->made->getBoundingBox();
+        const float tall = std::max(box.max.y - box.min.y, 1e-6f);
+        return *half = float2{0.5f * (box.max.x - box.min.x) / tall, 0.5f}, true;
+    }
+    const Mesh* m = t.film ? t.film->sheet : t.drawn ? t.drawn->sheet : t.glass;
+    if (!m || m->pos.empty()) return false;
+    float2 most{0.f};
+    for (const float3& p : m->pos) most = max(most, float2{std::fabs(p.x), std::fabs(p.y)});
+    return *half = most, true;
+}
+
 // What a value is where the document does not say; and a value at a moment, as the stage is told it.
 static double doc_usual(const char* name) { return !strcmp(name, "size") || !strcmp(name, "speed") ? 1.0 : !strcmp(name, "duration") ? -1.0 : 0.0; }
 static bool doc_value(Doc& d, int thing, const char* name, double at, double* is) { return doc_knows(d, thing, name) && (*is = doc_number(d, thing, name, at, doc_usual(name)), true); }

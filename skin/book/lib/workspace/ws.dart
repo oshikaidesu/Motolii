@@ -108,10 +108,14 @@ class Ws extends ChangeNotifier {
   /// The values a thing moves by: a key on any of them is a key on its bar.
   static const moving = ['x', 'y', 'z', 'rotate', 'size'];
 
+  /// How many times the document has been read again.
+  int rev = 0;
+
   /// The document read again, after any change to it: what the seats list is what the document holds.
   void reread() {
     final m = _inside;
     if (m == null) return;
+    rev++;
     duration = (m.seconds * fps).round().clamp(1, 1 << 20);
     layers
       ..clear()

@@ -122,6 +122,24 @@ double motolii_lasts(Motolii* m, int thing) { return by_hand(m, [=] { return doc
 int motolii_key_moments(Motolii* m, int thing, const char* name, double* at, int room) {
     return by_hand(m, [=] { const std::vector<double> all = doc_key_moments(*m->d, thing, name); for (int i = 0; i < room && i < (int)all.size(); ++i) at[i] = all[(size_t)i]; return (int)all.size(); });
 }
+// A thing's frame on the picture at the stage's moment, as the stage's own eye sees it: its middle, how wide and how
+// high (points of the picture, from the top left), and how far it is turned (degrees, clockwise as seen).
+int motolii_frame(Motolii* m, int thing, double* frame) {
+    return by_hand(m, [=] {
+        float2 half{0.f};
+        if (!doc_knows(doc(m), thing) || !doc_half(*m->d, thing, &half)) return 0;
+        Doc& d = *m->d;
+        const double now = m->now, size = doc_number(d, thing, "size", now, 1);
+        const math::double3 at{doc_number(d, thing, "x", now, 0), doc_number(d, thing, "y", now, 0), doc_number(d, thing, "z", now, 0)};
+        const math::mat4 eye = m->s->camera->getProjectionMatrix() * m->s->camera->getViewMatrix();
+        const auto seen = [&](math::double3 p) { const math::double4 c = eye * math::double4{p, 1.0}; return math::double2{(0.5 + 0.5 * c.x / c.w) * m->s->w, (0.5 - 0.5 * c.y / c.w) * m->s->h}; };
+        const math::double2 middle = seen(at), right = seen(at + math::double3{1, 0, 0});
+        const double point = right.x - middle.x;   // (how many points of the picture one unit of the stage is, where the thing stands)
+        frame[0] = middle.x, frame[1] = middle.y, frame[2] = 2.0 * half.x * size * point, frame[3] = 2.0 * half.y * size * point;
+        frame[4] = -doc_number(d, thing, "rotate", now, 0);
+        return 1;
+    });
+}
 int motolii_undo(Motolii* m) { return by_hand(m, [=] { return (int)(doc_undo(doc(m))); }); }
 int motolii_redo(Motolii* m) { return by_hand(m, [=] { return (int)(doc_redo(doc(m))); }); }
 

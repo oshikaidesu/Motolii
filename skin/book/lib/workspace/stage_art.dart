@@ -42,7 +42,20 @@ class ArtScene {
         for (final l in ws.layers)
           if ([...ws.fxOf(l.id), if (l.id == ws.selected) ?ws.trial] case final names when names.isNotEmpty)
             l.id: List<FxFamily>.unmodifiable([for (final n in names) ?fxNamed(n)?.family]),
-      });
+      }),
+      rev = ws.rev,
+      boxes = ws.inside == null
+          ? null
+          : Map.unmodifiable({
+              for (final l in ws.layers)
+                if (ws.inside!.frame(int.parse(l.id)) case final f?) l.id: ArtBox(Offset(f[0], f[1]), Size(f[2], f[3]), rot: f[4] * math.pi / 180),
+            });
+
+  /// Joined to the inside: each thing's frame on the picture as the inside sees it at this moment (null: the sample's own boxes).
+  final Map<String, ArtBox>? boxes;
+
+  /// How many times the joined document has been read again: a change at the same frame is another scene.
+  final int rev;
   final int frame;
   final bool camera;
   final List<ArtLayer> layers;
@@ -53,7 +66,7 @@ class ArtScene {
   String get _fxSig => fx.entries.map((e) => '${e.key}:${e.value.map((f) => f.index).join(',')}').join(';');
   @override
   bool operator ==(Object other) =>
-      other is ArtScene && other.frame == frame && other.camera == camera && listEquals(other.layers, layers) && other._fxSig == _fxSig;
+      other is ArtScene && other.frame == frame && other.rev == rev && other.camera == camera && listEquals(other.layers, layers) && other._fxSig == _fxSig;
   @override
   int get hashCode => Object.hash(frame, camera, Object.hashAll(layers), _fxSig);
 }
@@ -229,6 +242,7 @@ abstract final class WsArt {
 
   /// The box the stage frames when [id] is selected, or null when the layer has no picture at this frame.
   static ArtBox? boxOf(ArtScene s, String? id) {
+    if (s.boxes case final real?) return s.layer(id)?.live(s.frame) ?? false ? real[id] : null;
     final l = s.layer(id), f = s.frame;
     if (l == null || l.kind == WsKind.audio) return null;
     if (l.kind == WsKind.camera) return s.camera ? const ArtBox(centre, comp) : cameraBox(s);
@@ -255,6 +269,12 @@ abstract final class WsArt {
 
   /// The topmost layer under [p] (document px), or null. The background is locked: a click on it means "nothing".
   static String? hit(ArtScene s, Offset p) {
+    if (s.boxes case final real?) {   // (joined: the thing in front, of those whose real frame the point is in; a later thing is in front)
+      for (final l in s.layers.reversed) {
+        if (l.live(s.frame) && (real[l.id]?.contains(p) ?? false)) return l.id;
+      }
+      return null;
+    }
     final f = s.frame;
     bool on(String id) => s.layer(id)?.live(f) ?? false;
     if (on('chips') && _chipRects().any((r) => r.inflate(4).contains(p))) return 'chips';

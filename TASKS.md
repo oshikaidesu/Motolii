@@ -21,7 +21,11 @@
 進み具合（その都度ここを直す）：
 - 合格線1：**見た目では通った**。中身側は `filament/live.h`（検査 `check/live.mm`：60コマ毎秒、置き場の絵と止め絵の差 0）。スキン側は Workspace › Live（`skin/book/lib/motolii.dart` ほか）。舞台の席に絵が出て、再生ボタンで動く（`reports/skin_run/live_01_picture_in_the_seat.jpg`）。
   まだ：スキンの再生位置と中身の時刻が別々に進んでいる。窓の大きさを変えた時、コマ落ちの数は未確認。
-- 合格線2〜4：これから。スキンの共有の状態（`skin/book/lib/workspace/ws.dart` の `Ws`）を本物の文書につなぐ。中身に要る読み口：物の一覧、種類、名前、出る時刻と長さ、キーの時刻。
+- つないだ所（`reports/skin_run/live_02_*.jpg`、`live_03_*.jpg`）：タイムラインの層とバーとキーは文書の物。長さは文書の長さ。再生位置は中身の時刻（再生も、つまんで動かすのも中身に行く）。
+  舞台で物を押すと選べて、枠は中身が答えた「絵のどこに映ってるか」。インスペクタとドックの置き先も選んだ物に変わる。
+  中身に足した読み口：`motolii_things`、`motolii_word`、`motolii_lasts`、`motolii_key_moments`、`motolii_frame`。
+- まだ作り物のままの所：インスペクタの数を変えても文書に行かない。ドックの Place は置かない。タイムラインでキーを打てない・バーを動かせない。机の Ease・Wiggle・Blend は文書に行かない。上の帯の取り消し・やり直しは文書に行かない。
+  インスペクタの数の読み（Position が絵の点、Scale が 100 固定）は仮。
 - 開き方：`skin/book` で Flutter（`~/rust_ae/Motolii/.tools/flutter/bin/flutter`）の `build macos --debug --dart-define=LAB_ROUTE=/?path=workspace/workspace/live`、できた `lab_book.app` を開く。文書は `filament/out/skin.motolii`。
 
 作る的：①`edit_v5` を窓だけで作り直す ②猫ミームの人形劇 ③青いロケットのコラージュ（`research_notes/refs/G_rocket_collage_blue.jpg`）。

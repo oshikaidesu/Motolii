@@ -40,6 +40,9 @@ int motolii_things(Motolii* m, int* things, int room);
 const char* motolii_word(Motolii* m, int thing, const char* name);
 double motolii_lasts(Motolii* m, int thing);
 int motolii_key_moments(Motolii* m, int thing, const char* name, double* at, int room);
+/* A thing's frame on the picture at the stage's moment: frame[0..4] = its middle (x, y), how wide, how high (points
+   of the picture, from the top left), how far it is turned (degrees, clockwise as seen). 0: there is no such thing. */
+int motolii_frame(Motolii* m, int thing, double* frame);
 int motolii_undo(Motolii* m);
 int motolii_redo(Motolii* m);
 
