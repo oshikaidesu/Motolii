@@ -1,0 +1,34 @@
+add glass ring
+key 1 x 0 1
+key 1 x 2 3
+value 1 x 0
+value 1 x 1
+value 1 x 2
+way 1 x 0 linear
+value 1 x 0.5
+way 1 x 0 hold
+value 1 x 1.99
+value 1 x 2
+way 1 x 0 wiggle 3 0.2
+value 1 x 0
+value 1 x 0.7
+value 1 x 2
+key 1 x 4 0
+way 1 x 2 bounce
+value 1 x 2.5
+value 1 x 4
+value 1 x 9
+ways
+define overshoot a + (b - a) * (u + sin(pi() * u) * 0.3)
+way 1 x 2 overshoot
+value 1 x 3
+value 1 x 4
+define broken a + (b - a) * u + 0.5
+define nonsense a +* b
+way 1 x 2 zigzag
+way 1 x 1 smooth
+way 1 start 0 smooth
+way 1 x 0 wiggle 1 2 3 4 5
+undo
+value 1 x 3
+list

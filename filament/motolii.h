@@ -23,6 +23,14 @@ int motolii_say(Motolii* m, int thing, const char* name, const char* word);     
 int motolii_key(Motolii* m, int thing, const char* name, double at, double number);   /* a key at a moment */
 int motolii_unkey(Motolii* m, int thing, const char* name, double at);
 int motolii_keys(Motolii* m, int thing, const char* name);         /* how many keys a value has */
+/* The stretch from the key at a moment to the next key is itself defined: how the value goes there. A way is a name
+   and up to four numbers ("smooth", "hold", "wiggle 3 0.2"). A way of one's own is an expression (SQLite's) in u (how
+   far through the stretch, 0 to 1), t (seconds into it), d (its length), a and b (the two keys' values), p1 to p4
+   (the numbers said with it); it is taken only if it begins at a and ends at b. */
+int motolii_way(Motolii* m, int thing, const char* name, double at, const char* way);
+int motolii_define(Motolii* m, const char* way, const char* expression);
+const char* motolii_ways(Motolii* m);                              /* the names of the ways the document knows (until the next call) */
+int motolii_value(Motolii* m, int thing, const char* name, double at, double* is);   /* a value at a moment, as the stage is told it */
 int motolii_undo(Motolii* m);
 int motolii_redo(Motolii* m);
 

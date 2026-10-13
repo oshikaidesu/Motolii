@@ -26,6 +26,10 @@ int motolii_say(Motolii* m, int thing, const char* name, const char* word) { ret
 int motolii_key(Motolii* m, int thing, const char* name, double at, double number) { return doc_key(doc(m), thing, name, at, number); }
 int motolii_unkey(Motolii* m, int thing, const char* name, double at) { return doc_unkey(doc(m), thing, name, at); }
 int motolii_keys(Motolii* m, int thing, const char* name) { return doc_keys(doc(m), thing, name); }
+int motolii_way(Motolii* m, int thing, const char* name, double at, const char* way) { return doc_way(doc(m), thing, name, at, way); }
+int motolii_define(Motolii* m, const char* way, const char* expression) { return doc_define(doc(m), way, expression); }
+const char* motolii_ways(Motolii* m) { return (m->listed = doc_ways(*m->d)).c_str(); }
+int motolii_value(Motolii* m, int thing, const char* name, double at, double* is) { return doc_value(doc(m), thing, name, at, is); }
 int motolii_undo(Motolii* m) { return doc_undo(doc(m)); }
 int motolii_redo(Motolii* m) { return doc_redo(doc(m)); }
 
@@ -51,7 +55,7 @@ int motolii_write(Motolii* m, const char* mp4) {
 }
 const char* motolii_list(Motolii* m) {
     m->listed.clear();
-    doc_rows(*m->d, sqlite3_mprintf("select thing || ' ' || name || ' at ' || at || ': ' || value from fact order by thing, name, at"), [m](sqlite3_stmt* row) { m->listed += std::string("  ") + (const char*)sqlite3_column_text(row, 0) + "\n"; });
+    doc_rows(*m->d, sqlite3_mprintf("select thing || ' ' || name || ' at ' || at || ': ' || value || coalesce(', then ' || way, '') from fact order by thing, name, at"), [m](sqlite3_stmt* row) { m->listed += std::string("  ") + (const char*)sqlite3_column_text(row, 0) + "\n"; });
     return m->listed.c_str();
 }
 void motolii_timed(Motolii* m, int pictures) { clock(m->s, pictures, [](float) {}); }

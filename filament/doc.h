@@ -2,12 +2,15 @@
 // else. The document is a file of facts: a thing's value, by name, at a time (thing, name, at, value). A value with one
 // fact stays as it is; with more it moves, and they are its keys. One call = one change = one step of undo (Lumit's
 // bridge is so), and the stage shows it as the call returns. A change the stage cannot show is not made.
+// Keys, Motolii's own way: a key holds a value, and THE STRETCH FROM A KEY TO THE NEXT IS ITSELF DEFINED: how the value
+// goes there (straight, smooth, held, with a wiggle on the way, bouncing...). A way has a name and is an expression kept
+// in the document, so almost anything can be one; whatever it does on the way, it begins at the one key's value and
+// ends at the other's (a way that does not is refused).
 // Borrowed whole: the file, saving (a change is in the file as its call returns) and undo are SQLite's (its session
-// extension: what a call changed is kept, and undone by applying it reversed: the steps are in the file too);
-// a moving value between its keys is GStreamer's (its controller); a thing's time is told in GES's words (start,
-// inpoint, duration).
-// NOT RIGHT YET: every stretch between two keys goes the same one way here (smooth, never past a key). Motolii's own
-// way is that the stretch itself is defined: its easing, or a movement such as a wiggle. To be made so.
+// extension: what a call changed is kept, and undone by applying it reversed: the steps are in the file too); a way's
+// expression is worked out by SQLite as well (its own expressions and maths: u is how far through the stretch, 0 to
+// 1; t the seconds into it; d its length; a and b the two keys' values; p1 to p4 numbers said with the way). A thing's
+// time is told in GES's words (start, duration).
 // The names a thing's facts go by are ThorVG's own, where it has one (translate's x and y, rotate, size, blend and its
 // words, text, fill, a segment's begin, add, remove):
 //   numbers  x, y, z, rotate, size  where its middle is, turned by how many degrees, how tall
@@ -20,14 +23,16 @@
 #include "drawn.h"
 #include "solid.h"
 #include "video.h"
-#include <gst/controller/gstinterpolationcontrolsource.h>
+#include <sstream>
 #include <sqlite3.h>
 
 struct Doc {
     sqlite3* file = nullptr;
     Stage* stage = nullptr;
     std::string trouble;   // why the last call that was not done was not
-    std::map<std::pair<int, std::string>, GstControlSource*> moving;   // a value's keys, read from the facts when first asked for; forgotten at every change
+    struct Keys { std::vector<double> at, value; std::vector<std::string> way; };
+    std::map<std::pair<int, std::string>, Keys> moving;   // a value's keys, and the way of the stretch after each; read from the facts when first asked for, forgotten at every change
+    std::map<std::string, sqlite3_stmt*> named, goes;     // a way by its name, and by its expression: made ready once (SQLite works it out)
     struct Shown { std::string of; Video* film = nullptr; Drawn* drawn = nullptr; Solid* solid = nullptr; Mesh* glass = nullptr; bool in = true; };
     std::map<int, Shown> shown;   // the things as they are on the stage, and what each was made of
 };
@@ -55,24 +60,61 @@ static bool doc_rows(Doc& d, char* ask, const std::function<void(sqlite3_stmt*)>
     return ok;
 }
 static void doc_forget(Doc& d) {
-    for (auto& [value, keys] : d.moving) if (keys) gst_object_unref(keys);
     d.moving.clear();
+    d.named.clear();
 }
 
-// A value at a moment: where it has keys, between them; `otherwise` where the document does not say.
+// A way's expression made ready for SQLite to work out (nullptr: SQLite does not take it; d.trouble says why).
+static sqlite3_stmt* doc_goes(Doc& d, const std::string& expression) {
+    auto ready = d.goes.find(expression);
+    if (ready != d.goes.end()) return ready->second;
+    sqlite3_stmt* made = nullptr;
+    char* asked = sqlite3_mprintf("with v(u, t, d, a, b, p1, p2, p3, p4) as (select ?, ?, ?, ?, ?, ?, ?, ?, ?) select (%s) from v", expression.c_str());
+    if (sqlite3_prepare_v2(d.file, asked, -1, &made, nullptr) != SQLITE_OK) d.trouble = sqlite3_errmsg(d.file), made = nullptr;
+    sqlite3_free(asked);
+    return made ? d.goes[expression] = made : nullptr;
+}
+static double doc_went(sqlite3_stmt* way, double u, double t, double length, double a, double b, const double* p) {
+    const double told[] = {u, t, length, a, b, p[0], p[1], p[2], p[3]};
+    for (int i = 0; i < 9; ++i) sqlite3_bind_double(way, i + 1, told[i]);
+    const double is = sqlite3_step(way) == SQLITE_ROW ? sqlite3_column_double(way, 0) : a;
+    sqlite3_reset(way);
+    return is;
+}
+static sqlite3_stmt* doc_way_named(Doc& d, const std::string& name) {
+    auto known = d.named.find(name);
+    if (known != d.named.end()) return known->second;
+    sqlite3_stmt* way = nullptr;
+    doc_rows(d, sqlite3_mprintf("select goes from way where name = %Q", name.c_str()), [&](sqlite3_stmt* row) { way = doc_goes(d, (const char*)sqlite3_column_text(row, 0)); });
+    return d.named[name] = way;
+}
+
+// A value at a moment: `otherwise` where the document does not say; where it has keys, the value the stretch it is in
+// gives (before the first key and after the last: theirs). A stretch goes the way said for it (not said: smooth).
 static double doc_number(Doc& d, int thing, const char* name, double at, double otherwise) {
     auto found = d.moving.find({thing, name});
     if (found == d.moving.end()) {
-        GstControlSource* keys = nullptr;
-        doc_rows(d, sqlite3_mprintf("select at, value from fact where thing = %d and name = %Q order by at", thing, name), [&](sqlite3_stmt* row) {
-            if (!keys) g_object_set(keys = gst_interpolation_control_source_new(), "mode", GST_INTERPOLATION_MODE_CUBIC_MONOTONIC, nullptr);
-            gst_timed_value_control_source_set(GST_TIMED_VALUE_CONTROL_SOURCE(keys), (GstClockTime)(sqlite3_column_double(row, 0) * (double)GST_SECOND), sqlite3_column_double(row, 1));
+        Doc::Keys keys;
+        doc_rows(d, sqlite3_mprintf("select at, value, coalesce(way, '') from fact where thing = %d and name = %Q order by at", thing, name), [&](sqlite3_stmt* row) {
+            keys.at.push_back(sqlite3_column_double(row, 0));
+            keys.value.push_back(sqlite3_column_double(row, 1));
+            keys.way.push_back((const char*)sqlite3_column_text(row, 2));
         });
         found = d.moving.emplace(std::make_pair(thing, std::string(name)), keys).first;
     }
-    gdouble is = otherwise;
-    if (found->second) gst_control_source_get_value(found->second, (GstClockTime)(std::max(at, 0.0) * (double)GST_SECOND), &is);
-    return is;
+    const Doc::Keys& k = found->second;
+    if (k.at.empty()) return otherwise;
+    if (k.at.size() == 1 || at <= k.at.front()) return k.value.front();
+    if (at >= k.at.back()) return k.value.back();
+    const size_t i = (size_t)(std::upper_bound(k.at.begin(), k.at.end(), at) - k.at.begin()) - 1;   // (the stretch it is in begins at key i)
+    std::istringstream said(k.way[i].empty() ? "smooth" : k.way[i]);
+    std::string way;
+    double p[4] = {0, 0, 0, 0};
+    said >> way;
+    for (double& one : p) said >> one;
+    sqlite3_stmt* goes = doc_way_named(d, way);
+    const double length = k.at[i + 1] - k.at[i];
+    return goes ? doc_went(goes, (at - k.at[i]) / length, at - k.at[i], length, k.value[i], k.value[i + 1], p) : k.value[i];
 }
 static std::string doc_word(Doc& d, int thing, const char* name) {
     std::string is;
@@ -164,13 +206,20 @@ static double doc_seconds(Doc& d) {
 // The document in `path` (made if it is not there), on the stage. nullptr: the file is not a document.
 static Doc* doc_open(Stage& s, const char* path) {
     Doc* d = new Doc;
-    gst_init(nullptr, nullptr);
     if (sqlite3_open(path, &d->file) != SQLITE_OK) return nullptr;
     sqlite3_busy_timeout(d->file, 2000);   // (another program at the same document is waited for)
-    if (sqlite3_exec(d->file, "create table if not exists fact(thing integer, name text, at real, value, primary key(thing, name, at)) without rowid;"
+    // (a key's `way` is how the stretch from it to the next key goes; the ways a document knows are its own, by name:
+    //  a few to begin with, any other by `define`)
+    if (sqlite3_exec(d->file, "create table if not exists fact(thing integer, name text, at real, value, way text, primary key(thing, name, at)) without rowid;"
+                              "create table if not exists way(name text primary key, goes text) without rowid;"
+                              "insert or ignore into way values('linear', 'a + (b - a) * u'), ('smooth', 'a + (b - a) * u * u * (3 - 2 * u)'), ('in', 'a + (b - a) * u * u'), ('out', 'a + (b - a) * u * (2 - u)'),"
+                              " ('hold', 'case when u < 1 then a else b end'), ('bounce', 'a + (b - a) * (1 - abs(cos(pi() * 2.5 * u)) * pow(1 - u, 2))'),"
+                              " ('wiggle', 'a + (b - a) * u * u * (3 - 2 * u) + p2 * sin(pi() * u) * (0.6 * sin(6.2832 * p1 * t) + 0.3 * sin(14.451 * p1 * t + 1.7) + 0.1 * sin(25.761 * p1 * t + 0.3))');"
                               "create table if not exists step(n integer primary key, change blob, undone integer default 0);"
                               "create table if not exists thing(id integer primary key autoincrement);"   // (a thing's number is never given again: SQLite's own)
                               "insert into thing(id) select max(thing) from fact where (select count(*) from thing) = 0 having max(thing) is not null", nullptr, nullptr, nullptr) != SQLITE_OK) return nullptr;
+    if (sqlite3_exec(d->file, "select way from fact limit 0", nullptr, nullptr, nullptr) != SQLITE_OK)   // (a document from before stretches had ways)
+        sqlite3_exec(d->file, "alter table fact add column way text", nullptr, nullptr, nullptr);
     d->stage = &s;
     s.playing[d] = [d](double now) { doc_moment(*d, now); };
     if (!doc_match(*d)) std::printf("%s\n", d->trouble.c_str());
@@ -186,6 +235,7 @@ static bool doc_change(Doc& d, char* change) {
     sqlite3_exec(d.file, "begin", nullptr, nullptr, nullptr);
     sqlite3session_create(d.file, "main", &watch);
     sqlite3session_attach(watch, "fact");
+    sqlite3session_attach(watch, "way");
     bool ok = sqlite3_exec(d.file, change, nullptr, nullptr, nullptr) == SQLITE_OK;
     if (!ok) d.trouble = sqlite3_errmsg(d.file);
     sqlite3session_changeset(watch, &size, &changed);
@@ -256,7 +306,7 @@ static bool doc_knows(Doc& d, int thing, const char* name = nullptr, const doubl
 // made, and no number is used up).
 static int doc_add(Doc& d, const char* kind, const char* file) {
     if (!doc_among(doc_kinds, kind)) return d.trouble = std::string("a thing is one of: ") + doc_kinds, 0;
-    if (!doc_change(d, sqlite3_mprintf("insert into thing default values; insert into fact values(last_insert_rowid(), 'kind', 0.0, %Q); insert into fact values(last_insert_rowid(), %Q, 0.0, %Q)", kind, !strcmp(kind, "glass") ? "shape" : "file", file))) return 0;
+    if (!doc_change(d, sqlite3_mprintf("insert into thing default values; insert into fact(thing, name, at, value) values(last_insert_rowid(), 'kind', 0.0, %Q); insert into fact(thing, name, at, value) values(last_insert_rowid(), %Q, 0.0, %Q)", kind, !strcmp(kind, "glass") ? "shape" : "file", file))) return 0;
     int thing = 0;   // (the newest number: SQLite's own count of things, which a change not made does not move)
     doc_rows(d, sqlite3_mprintf("select max(id) from thing"), [&](sqlite3_stmt* row) { thing = sqlite3_column_int(row, 0); });
     return thing;
@@ -264,14 +314,14 @@ static int doc_add(Doc& d, const char* kind, const char* file) {
 static bool doc_remove(Doc& d, int thing) { return doc_knows(d, thing) && doc_change(d, sqlite3_mprintf("delete from fact where thing = %d", thing)); }
 // A value that stays (its keys, if it had any, are gone); a word; a key at a moment; a key taken away.
 static bool doc_set(Doc& d, int thing, const char* name, double is) {
-    return doc_knows(d, thing, name, &is) && doc_change(d, sqlite3_mprintf("delete from fact where thing = %d and name = %Q and at <> 0; insert into fact values(%d, %Q, 0.0, %!.17g) on conflict do update set value = excluded.value", thing, name, thing, name, is));
+    return doc_knows(d, thing, name, &is) && doc_change(d, sqlite3_mprintf("delete from fact where thing = %d and name = %Q and at <> 0; insert into fact(thing, name, at, value) values(%d, %Q, 0.0, %!.17g) on conflict do update set value = excluded.value, way = null", thing, name, thing, name, is));
 }
 static bool doc_say(Doc& d, int thing, const char* name, const char* word) {
-    return doc_knows(d, thing, name, nullptr, word) && doc_change(d, sqlite3_mprintf("insert into fact values(%d, %Q, 0.0, %Q) on conflict do update set value = excluded.value", thing, name, word));
+    return doc_knows(d, thing, name, nullptr, word) && doc_change(d, sqlite3_mprintf("insert into fact(thing, name, at, value) values(%d, %Q, 0.0, %Q) on conflict do update set value = excluded.value", thing, name, word));
 }
 static bool doc_key(Doc& d, int thing, const char* name, double at, double is) {
     if (!(at >= 0.0 && at <= 1e6)) return d.trouble = "a key is at a moment of the stage: from 0 to 1000000 seconds", false;
-    return doc_knows(d, thing, name, &is, nullptr, true) && doc_change(d, sqlite3_mprintf("insert into fact values(%d, %Q, %!.17g, %!.17g) on conflict do update set value = excluded.value", thing, name, at, is));
+    return doc_knows(d, thing, name, &is, nullptr, true) && doc_change(d, sqlite3_mprintf("insert into fact(thing, name, at, value) values(%d, %Q, %!.17g, %!.17g) on conflict do update set value = excluded.value", thing, name, at, is));
 }
 static int doc_keys(Doc& d, int thing, const char* name, double at = -1.0) {   // (how many keys a value has; or whether it has one at a moment)
     int n = 0;
@@ -284,5 +334,43 @@ static bool doc_unkey(Doc& d, int thing, const char* name, double at) {
     if (!doc_keys(d, thing, name, at)) return d.trouble = std::string(name) + " has no key at that moment", false;
     return doc_change(d, sqlite3_mprintf("delete from fact where thing = %d and name = %Q and at = %!.17g", thing, name, at));
 }
+// How the stretch from a key to the next goes: a way by its name, with up to four numbers (wiggle 3 0.2: three a
+// second, 0.2 either side). And a way of one's own, by an expression: taken only if SQLite can work it out and it
+// begins at the one key's value and ends at the other's.
+static std::string doc_ways(Doc& d) {
+    std::string all;
+    doc_rows(d, sqlite3_mprintf("select name from way order by name"), [&](sqlite3_stmt* row) { all += std::string(all.empty() ? "" : ", ") + (const char*)sqlite3_column_text(row, 0); });
+    return all;
+}
+static bool doc_way(Doc& d, int thing, const char* name, double at, const char* way) {
+    if (!doc_knows(d, thing, name, nullptr, nullptr, true)) return false;
+    if (!doc_keys(d, thing, name, at)) return d.trouble = std::string(name) + " has no key at that moment: a stretch begins at a key", false;
+    std::istringstream said(way);
+    std::string named, more;
+    double p = 0;
+    int numbers = 0;
+    said >> named;
+    while (said >> p) ++numbers;
+    said.clear();
+    if (!doc_way_named(d, named)) return d.trouble = "a way is one of: " + doc_ways(d), false;
+    if (said >> more || numbers > 4) return d.trouble = "a way is its name and up to four numbers", false;
+    return doc_change(d, sqlite3_mprintf("update fact set way = %Q where thing = %d and name = %Q and at = %!.17g", way, thing, name, at));
+}
+static bool doc_define(Doc& d, const char* name, const char* expression) {
+    sqlite3_stmt* goes = doc_goes(d, expression);
+    if (!goes) return false;
+    const double p[4] = {1, 1, 1, 1}, tried[2][3] = {{0, 1, 1}, {2, -5, 3}};   // (two stretches to try it on: values a to b, over that many seconds)
+    for (const auto& s : tried) {
+        const double from = doc_went(goes, 0, 0, s[2], s[0], s[1], p), to = doc_went(goes, 1, s[2], s[2], s[0], s[1], p);
+        char why[160];
+        if (std::isfinite(from) && std::isfinite(to) && std::fabs(from - s[0]) < 1e-6 && std::fabs(to - s[1]) < 1e-6) continue;
+        std::snprintf(why, sizeof why, "a way begins at the one key's value and ends at the other's: from %g to %g this one begins at %g and ends at %g", s[0], s[1], from, to);
+        return d.trouble = why, false;
+    }
+    return doc_change(d, sqlite3_mprintf("insert into way values(%Q, %Q) on conflict do update set goes = excluded.goes", name, expression));
+}
+// What a value is where the document does not say; and a value at a moment, as the stage is told it.
+static double doc_usual(const char* name) { return !strcmp(name, "size") || !strcmp(name, "speed") ? 1.0 : !strcmp(name, "duration") ? -1.0 : 0.0; }
+static bool doc_value(Doc& d, int thing, const char* name, double at, double* is) { return doc_knows(d, thing, name) && (*is = doc_number(d, thing, name, at, doc_usual(name)), true); }
 static bool doc_undo(Doc& d) { return doc_step(d, true); }
 static bool doc_redo(Doc& d) { return doc_step(d, false); }

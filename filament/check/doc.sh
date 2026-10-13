@@ -15,6 +15,12 @@ ln -sf "/System/Library/Fonts/Supplemental/Arial Unicode.ttf" out/arial_unicode.
 ./edit.sh out/doc_wrong.motolii < check/doc_wrong.txt > out/doc_wrong.txt
 grep "NOT done" out/doc_wrong.txt
 grep "^  [0-9(]" out/doc_wrong.txt | grep -v "(a number" | diff - check/doc_wrong.expect > /dev/null && echo "after the wrong calls the document is as expected: yes ($(grep -c "NOT done" out/doc_wrong.txt) calls refused)" || echo "after the wrong calls the document is as expected: NO"
+# the stretch between two keys goes the way said for it (check/doc_ways.txt: values read back at moments for linear,
+# smooth, hold, wiggle, bounce and a way defined there; every way begins and ends at its keys' values; ways that do not,
+# or that SQLite cannot work out, are refused): the replies are as check/doc_ways.expect says
+rm -f out/doc_ways.motolii
+./edit.sh out/doc_ways.motolii < check/doc_ways.txt > out/doc_ways.txt
+grep "^  \|NOT done" out/doc_ways.txt | sed 's/, [0-9.]* ms$//' | diff - check/doc_ways.expect > /dev/null && echo "the stretches between keys go as expected: yes ($(grep -c '^  [0-9-]*\.[0-9]*$' out/doc_ways.txt) values read, $(grep -c 'NOT done' out/doc_ways.txt) calls refused)" || echo "the stretches between keys go as expected: NO"
 # colours as the files hold them: a picture half white (255), half grey (144), and white typed words, on a document's stage
 python3 -c "
 from PIL import Image

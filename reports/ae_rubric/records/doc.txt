@@ -1,36 +1,36 @@
 
 thing 1
-add: done, 53.4 ms
-set: done, 0.7 ms
+add: done, 49.9 ms
+set: done, 0.6 ms
 set: done, 0.6 ms
 thing 2
-add: done, 63.9 ms
+add: done, 67.8 ms
 set: done, 11.3 ms
 set: done, 0.7 ms
-set: done, 0.7 ms
-still: done, 58.0 ms
+set: done, 0.6 ms
+still: done, 38.0 ms
 thing 3
-add: done, 2.2 ms
-set: done, 0.7 ms
+add: done, 2.1 ms
+set: done, 0.6 ms
 set: done, 0.6 ms
 key: done, 0.6 ms
 key: done, 0.7 ms
-key: done, 0.7 ms
 key: done, 0.6 ms
-at: done, 30.1 ms
-still: done, 64.9 ms
-say: done, 26.9 ms
-still: done, 47.0 ms
-undo: done, 22.7 ms
-remove: done, 0.9 ms
-still: done, 24.9 ms
-undo: done, 1.6 ms
-undo: done, 1.0 ms
-undo: done, 1.1 ms
-still: done, 38.7 ms
-redo: done, 1.4 ms
-redo: done, 1.0 ms
+key: done, 0.6 ms
+at: done, 19.6 ms
+still: done, 42.6 ms
+say: done, 26.7 ms
 still: done, 39.1 ms
+undo: done, 23.2 ms
+remove: done, 1.1 ms
+still: done, 28.3 ms
+undo: done, 1.7 ms
+undo: done, 1.1 ms
+undo: done, 1.2 ms
+still: done, 46.1 ms
+redo: done, 1.4 ms
+redo: done, 1.1 ms
+still: done, 51.4 ms
   1 file at 0.0: ../../third_party/thorvg_example/res/lottie/gradient_background.json
   1 kind at 0.0: picture
   1 size at 0.0: 4.2
@@ -50,12 +50,12 @@ still: done, 39.1 ms
   3 z at 0.0: 1.0
   (the document runs 14.35 seconds)
 
-at: done, 16.8 ms
-still: done, 86.1 ms
+at: done, 17.2 ms
+still: done, 63.0 ms
 undo: NOT done: nothing to undo, 0.0 ms
-add: NOT done: the film (../vid/no_such_file.mp4) could not be made: there is no such file, 0.3 ms
+add: NOT done: the film (../vid/no_such_file.mp4) could not be made: there is no such file, 0.4 ms
 add: NOT done: the glass (banana) could not be made: a glass's shape is ring, gem or cube, 0.3 ms
-add: NOT done: the picture (../vid/no_such_file.json) could not be made: there is no such file, 0.3 ms
+add: NOT done: the picture (../vid/no_such_file.json) could not be made: there is no such file, 0.4 ms
 set: NOT done: there is no thing 99, 0.0 ms
 remove: NOT done: there is no thing 99, 0.0 ms
 remove: NOT done: there is no thing 1, 0.0 ms
@@ -63,8 +63,8 @@ set: NOT done: a glass has no wobble: it has x, y, z, rotate, size, start, durat
 say: NOT done: a glass has no blend: it has x, y, z, rotate, size, start, duration, shape, 0.0 ms
 say: NOT done: a glass has no keyed: it has x, y, z, rotate, size, start, duration, shape, 0.0 ms
 key: NOT done: a key is at a moment of the stage: from 0 to 1000000 seconds, 0.0 ms
-set: NOT done: the film (../vid/happy.mp4) could not be made: a speed of 0 shows nothing: a film goes forwards or backwards, 15.7 ms
-set: NOT done: the film (../vid/happy.mp4) could not be made: the cut is empty, 14.8 ms
+set: NOT done: the film (../vid/happy.mp4) could not be made: a speed of 0 shows nothing: a film goes forwards or backwards, 14.1 ms
+set: NOT done: the film (../vid/happy.mp4) could not be made: the cut is empty, 12.7 ms
 add: NOT done: the picture (../vid) could not be made: there is no such file, 0.6 ms
 add: NOT done: a thing is one of: film picture text solid glass, 0.0 ms
 key: NOT done: speed does not move: keys go on x, y, z, rotate, size, 0.0 ms
@@ -84,9 +84,10 @@ unkey: NOT done: x has no key at that moment, 0.0 ms
 still: NOT done: there is no such folder, 0.0 ms
 still: NOT done: a still is a .png, 0.0 ms
 at: NOT done: the document runs from 0 to 14.35 seconds, 0.0 ms
-say: NOT done: the text (../arial_black.ttf) could not be made: a fill is six digits, as ff3366, 3.2 ms
+say: NOT done: the text (../arial_black.ttf) could not be made: a fill is six digits, as ff3366, 3.0 ms
 set: NOT done: a text has no speed: it has x, y, z, rotate, size, start, duration, blend, file, text, fill, 0.0 ms
 add: NOT done: the text (../no_such_font.ttf) could not be made: there is no such file, 0.7 ms
 after the wrong calls the document is as expected: yes (35 calls refused)
+the stretches between keys go as expected: yes (15 values read, 6 calls refused)
 opened afresh against before closing: mean off 0.000 of 255: the same
 colours on a document's stage: white 255 shown as (255, 255, 255), grey 144 as (144, 144, 144), white words as (255, 255, 255): as the files hold them
