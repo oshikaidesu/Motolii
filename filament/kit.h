@@ -41,6 +41,7 @@
 #include <fstream>
 #include <functional>
 #include <string>
+#include <thread>
 #include <vector>
 
 using namespace filament;
@@ -578,10 +579,12 @@ static bool film(Stage& s, const char* path, int pictures, float drum, const std
     return pclose(to) == 0;
 }
 
-// The same film played without being kept, to see what a picture costs: how many pictures a second it makes, played
-// as fast as it goes (against 60: the room to spare). The GPU is waited for after every fourth picture.
-// (At 60 a second the GPU slows its clock and every picture reads about 15 ms. Waiting after every picture costs
-// WebGPU 5 ms a wait and halves its count; waiting seldom or never, Filament holds some runs to the screen's 60.)
+// The same film played without being kept, to see what a picture costs. Two measures.
+// Flat out, the GPU waited for after every fourth picture: pictures a second. Steady to a few hundredths on Metal, so
+// good for telling two versions apart there; NOT for comparing backends: how often one waits moves it by a
+// millisecond or two, and differently on each (waiting after every picture or every second one, WebGPU and Metal
+// read alike; after every fourth, WebGPU reads a millisecond or two dearer; seldom or never, both are held back).
+// (And at 60 a second the GPU slows its clock, so a picture's own time cannot be read off a paced run either.)
 static void clock(Stage& s, int pictures, const std::function<void(float)>& pose) {
     const auto from = std::chrono::steady_clock::now();
     for (int i = 0; i < pictures; ++i) {
@@ -591,6 +594,27 @@ static void clock(Stage& s, int pictures, const std::function<void(float)>& pose
     s.engine->flushAndWait();
     const double took = std::chrono::duration<double>(std::chrono::steady_clock::now() - from).count();
     std::printf("%.0f pictures a second, %.2f ms each (%.1f times 60)\n", pictures / took, 1000.0 * took / pictures, pictures / took / 60.0);
+    // And by the clock, as a screen asks for them: on every tick Filament is asked once whether it will draw (it says
+    // no when it is behind), nothing is waited for. Pictures drawn and pictures left out, at 60, 120 and 240 a second.
+    for (int rate : {60, 120, 240}) {
+        int drawn = 0, left_out = 0;
+        const auto start = std::chrono::steady_clock::now();
+        for (int i = 0; i < 2 * rate; ++i) {   // two seconds
+            std::this_thread::sleep_until(start + std::chrono::microseconds((long long)i * 1000000 / rate));
+            pose((float)(i % pictures) / (float)pictures);
+            if (!s.renderer->beginFrame(s.swap)) { ++left_out; continue; }
+            if (s.view_floor) s.renderer->render(s.view_floor);
+            s.renderer->render(s.view_behind);
+            if (s.view_through) s.renderer->render(s.view_through);
+            s.renderer->render(s.view);
+            s.renderer->endFrame();
+            ++drawn;
+        }
+        const auto asked = std::chrono::steady_clock::now();
+        s.engine->flushAndWait();
+        std::printf("at %d a second: %d drawn, %d left out; the last was done %.1f ms after it was asked for\n", rate, drawn, left_out,
+                    std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - asked).count());
+    }
 }
 
 static bool shoot(Stage& s, const char* path) {

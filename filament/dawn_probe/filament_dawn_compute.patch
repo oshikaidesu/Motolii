@@ -216,6 +216,19 @@ index 675a6cc4..f8fd0c27 100644
  };
  
  } // namespace filament::backend
+diff --git a/filament/backend/src/webgpu/WebGPUQueueManager.cpp b/filament/backend/src/webgpu/WebGPUQueueManager.cpp
+index db2b5c35..f50aac48 100644
+--- a/filament/backend/src/webgpu/WebGPUQueueManager.cpp
++++ b/filament/backend/src/webgpu/WebGPUQueueManager.cpp
+@@ -92,7 +92,7 @@ void WebGPUQueueManager::finish() {
+ #if !defined(__EMSCRIPTEN__)
+         mDevice.GetAdapter().GetInstance().ProcessEvents();
+ #endif
+-        std::this_thread::sleep_for(std::chrono::milliseconds(1));
++        std::this_thread::sleep_for(std::chrono::microseconds(50));
+     }
+ }
+ 
 diff --git a/filament/backend/src/webgpu/platform/WebGPUPlatform.cpp b/filament/backend/src/webgpu/platform/WebGPUPlatform.cpp
 index 04c92ae7..172a75aa 100644
 --- a/filament/backend/src/webgpu/platform/WebGPUPlatform.cpp

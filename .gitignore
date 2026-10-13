@@ -15,3 +15,7 @@ node_modules/
 /filament*/prism
 # collected reference pictures and clips (280 MB, not source); add later if wanted
 /research_notes/
+
+# made from their sources by lottie3d.py (filament/led.sh, filament/motion_test.sh)
+/filament/led.json
+/filament/motion_test3d.json
