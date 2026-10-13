@@ -161,6 +161,10 @@ static Texture* white_point(Stage& s) {
     return s.white;
 }
 
+// The flat sheet's material for a way of lying on what is behind it: nullptr (over it, as usual), or "add", "multiply",
+// "screen": Filament's own blending, flat.mat built once for each.
+static std::string flat_laid(const char* lay) { return lay ? std::string("flat_") + lay + ".filamat" : "flat.filamat"; }
+
 // A mesh on the stage, once per place. layer 2: left out of the picture of what is behind (all the glass);
 // layer 4: only in the floor's picture of sunlight; layer 8: only in the picture of the glass's far faces. order: among things of a kind, lower is drawn first.
 // copies: how many times each is drawn in one go (a material that asks for its instance index tells them apart).

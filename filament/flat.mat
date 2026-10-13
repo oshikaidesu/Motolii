@@ -6,7 +6,7 @@ material {
     shadingModel : unlit,
     requires : [ uv0 ],
     culling : none,
-    blending : transparent,
+    blending : ${BLENDING},   // (kit_wgpu.sh builds it once for each way a sheet lies on what is behind: transparent, add, multiply, screen)
     depthWrite : true,
     parameters : [
         { type : sampler2d, name : matte0 }, { type : sampler2d, name : matte1 }, { type : sampler2d, name : matte2 }, { type : sampler2d, name : matte3 },
@@ -52,5 +52,8 @@ fragment {
         float uncut = matteLeft();
         if (uncut < 0.004) discard;
         material.baseColor = vec4(mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(vec3(0.04045), c)), kept) * uncut;
+#if defined(LAY_multiply)
+        material.baseColor.rgb += 1.0 - material.baseColor.a;   // (where it is clear, what is behind is left as it is: times one)
+#endif
     }
 }

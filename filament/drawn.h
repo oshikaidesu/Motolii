@@ -41,7 +41,7 @@ static void picture_at(Stage& s, Drawn* d, float seconds) {
 // `place`, facing along the place's z. It is drawn as finely as the stage is, and where the file draws nothing it is `ground`
 // (a ground below 0: clear there). shown = false: the sheet and its picture are made but not put in the scene (for a
 // matte: kit.h, matte(s, d->sheet, {place}, d->texture)).
-static Drawn* picture(Stage& s, const char* file, const mat4f& place, float high, float3 ground = float3{1.f}, bool shown = true) {
+static Drawn* picture(Stage& s, const char* file, const mat4f& place, float high, float3 ground = float3{1.f}, bool shown = true, const char* lay = nullptr) {
     if (!door::device(s.engine)) return nullptr;   // (another backend)
     Drawn* d = new Drawn;
     WGPUTexture made = nullptr;
@@ -91,7 +91,7 @@ static Drawn* picture(Stage& s, const char* file, const mat4f& place, float high
     if (d->frames > 1.f)   // (a film: it goes on by itself as the stage's time does, round and round)
         s.playing.push_back([&s, d](double now) { picture_at(s, d, std::fmod((float)now + d->starts, d->seconds)); });
     if (!shown) return d;
-    d->look = add(s, d->sheet, "flat.filamat", {place});
+    d->look = add(s, d->sheet, flat_laid(lay).c_str(), {place});
     if (!d->look) return nullptr;
     d->look->setParameter("picture", d->texture, TextureSampler(TextureSampler::MinFilter::LINEAR, TextureSampler::MagFilter::LINEAR));
     return d;

@@ -158,7 +158,7 @@ static void video_found(GstElement*, GstPad* stream, gpointer film) {
 // The film in `file` put in the scene: a sheet `high` tall (as wide as the film makes it) with its middle at `place`,
 // facing along the place's z. from, to: the cut of it that is shown, in seconds of the file (to below 0: to its end);
 // speed: how fast (2: twice as fast, 0.5: half, below 0: backwards).
-static Video* video(Stage& s, const char* file, const mat4f& place, float high, float from = 0.f, float to = -1.f, float speed = 1.f) {
+static Video* video(Stage& s, const char* file, const mat4f& place, float high, float from = 0.f, float to = -1.f, float speed = 1.f, const char* lay = nullptr) {
     if (!door::device(s.engine)) return video_trouble = "not the WebGPU backend", nullptr;   // (another backend)
     static const bool started = (gst_init(nullptr, nullptr), true);
     (void)started;
@@ -217,7 +217,7 @@ static Video* video(Stage& s, const char* file, const mat4f& place, float high, 
         v->sheet->uv.push_back(of * 0.5f + 0.5f);   // (a film's first row is its top: Filament turns a sheet's v over itself)
     }
     v->sheet->idx = {0, 1, 2, 0, 2, 3};
-    v->look = add(s, v->sheet, "flat.filamat", {place});
+    v->look = add(s, v->sheet, flat_laid(lay).c_str(), {place});
     if (!v->look) return video_trouble = "flat.filamat", nullptr;
     v->look->setParameter("filmed", 1.f);
     v->look->setParameter("picture", white_point(s), TextureSampler());   // (until its first picture is shared: a white that is

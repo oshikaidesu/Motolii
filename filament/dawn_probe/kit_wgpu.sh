@@ -15,9 +15,12 @@ for d in lightroom small_studio graffiti_shelter_2k; do [ -d out/$d ] && ln -sfn
 for f in paper paper_copy floor_shade thick_glass far_side far_look glasslight glassbox boxlight bubble poster own_glass flat blade matte; do
     [ -f $f.mat ] || continue
     [ out/wgpu_kit/$f.filamat -nt $f.mat ] && [ out/wgpu_kit/$f.filamat -nt studio.glsl ] && [ out/wgpu_kit/$f.filamat -nt spectrum.glsl ] && [ out/wgpu_kit/$f.filamat -nt matte.glsl ] && continue
-    $MATC -a webgpu -a metal -p desktop -o out/wgpu_kit/$f.filamat $f.mat > out/wgpu_kit/$f.log 2>&1 ||
-        $MATC -g -a webgpu -a metal -p desktop -o out/wgpu_kit/$f.filamat $f.mat > out/wgpu_kit/$f.log 2>&1 ||
+    $MATC -a webgpu -a metal -p desktop -TBLENDING=transparent -o out/wgpu_kit/$f.filamat $f.mat > out/wgpu_kit/$f.log 2>&1 ||
+        $MATC -g -a webgpu -a metal -p desktop -TBLENDING=transparent -o out/wgpu_kit/$f.filamat $f.mat > out/wgpu_kit/$f.log 2>&1 ||
         echo "no WebGPU material: $f (out/wgpu_kit/$f.log)"
+    [ $f = flat ] && for way in add multiply screen; do   # (the ways a sheet lies on what is behind it: Filament's own blending)
+        $MATC -a webgpu -a metal -p desktop -TBLENDING=$way -DLAY_$way -o out/wgpu_kit/flat_$way.filamat flat.mat > out/wgpu_kit/flat_$way.log 2>&1 || echo "no WebGPU material: flat_$way"
+    done
 done
 # ThorVG here is the one built against Dawn (dawn_probe/tvg_on_dawn.sh makes it): it can draw on Filament's own device
 # (drawn.h), through the door built inside Filament's build (gpu_door.h).
