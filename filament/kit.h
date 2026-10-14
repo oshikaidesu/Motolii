@@ -849,7 +849,7 @@ static bool film(Stage& s, const char* path, int pictures, const std::function<v
         all += "[a" + std::to_string(++n) + "]";
     }
     const std::string sound = n ? files + " -filter_complex \"" + each + all + "amix=inputs=" + std::to_string(n) + ":normalize=0:duration=longest,alimiter[a]\" -map 0:v -map '[a]' -c:a aac -b:a 160k -t " + std::to_string(pictures / 60.0) : "";
-    const std::string cmd = "ffmpeg -loglevel error -y -f rawvideo -pix_fmt rgba -s " + std::to_string(s.w) + "x" + std::to_string(s.h) + " -r 60 -i -" + sound + " -c:v libx264 -crf 17 -pix_fmt yuv420p -movflags +faststart " + quoted(path);
+    const std::string cmd = "ffmpeg -loglevel error -y -f rawvideo -pix_fmt rgba -s " + std::to_string(s.w) + "x" + std::to_string(s.h) + " -r 60 -i -" + sound + " -c:v libx264 -crf 17 -g 60 -pix_fmt yuv420p -movflags +faststart " + quoted(path);
     std::signal(SIGPIPE, SIG_IGN);   // (if ffmpeg gives up, writing to it fails and that is told, instead of this program ending with it)
     FILE* to = popen(cmd.c_str(), "w");
     if (!to) return false;

@@ -1226,6 +1226,8 @@ static bool doc_knows(Doc& d, int thing, const char* name = nullptr, const doubl
         return std::snprintf(range, sizeof range, doc_among("keyed clip visible solo lock shadows clip_invert", name) ? " is 0 or 1" : " is from %g to %g", v->low, v->high), d.trouble = name + std::string(range), false;
     if (key && !v->moves) return d.trouble = std::string(name) + " does not move: " + (moving.empty() ? std::string("nothing of it does") : "keys go on " + moving), false;
     if ((number || word || key) && strcmp(name, "lock") && doc_number(d, thing, "lock", 0, 0) > 0.5) return d.trouble = "it is locked", false;
+    if (number && (!strcmp(name, "connect") || !strcmp(name, "connect_to")) && *number != 0.0 && (*number != std::floor(*number) || (int)*number == thing || doc_word(d, (int)*number, "kind").empty()))
+        return d.trouble = std::string(name) + " is another thing that is there", false;   // (as a parent is)
     if (number && !strcmp(name, "parent") && *number != 0.0) {   // (a parent is a thing that is there, and not the thing itself nor one that goes with it: the past repository's rule)
         const int to = (int)*number;
         if (to != *number || doc_word(d, to, "kind").empty()) return d.trouble = "a parent is a thing that is there", false;
@@ -1371,18 +1373,18 @@ static bool doc_raise(Doc& d, int thing, int places) {
 // "say name words", "key name seconds number", one to a line.
 struct DocRecipe { const char* name; const char* kind; const char* file; const char* what; const char* lines; };
 static const DocRecipe doc_recipes[] = {
-    {"Wave lines", "shape", "wave", "rows of waving lines, each with more waves than the one above, flowing a little after it",
+    {"Wave lines", "shape", "wave", "rows of waving lines, each stretched wider than the one above (fewer waves across), flowing a little after it",
      "say fill ffffff\nset wide 30\nset points 12\nset inner 0.6\nset copies 12\nset copy_y -0.25\nset copy_wide 3\nset wave_x 0.25\nset wave_phase 1.5\nset wave_speed 0.4\nsay copy_fill ffffff ff3366"},
     {"Iris", "shape", "line", "lines round a centre, coloured in their order, breathing",
-     "set size 1\nset anchor_x -1.6\nset copies 120\nset copy_turn 360\nsay copy_fill ff3366 ffd166 1b2fd8 22c55e ff3366\nset wave_size 0.06\nset wave_phase 2"},
+     "set size 1\nset anchor_x -1.6\nset copies 120\nset copy_turn 360\nsay copy_fill ff3366 ffd166 1b2fd8 22c55e ff3366\nset wave_size 0.06\nset wave_phase 1"},
     {"Dot wave", "shape", "circle", "a grid of dots rising and falling one after another",
-     "say fill ffd166\nset size 0.12\nset copies 160\nset copy_columns 16\nset copy_x 0.3\nset copy_y -0.3\nset wave_y 0.03\nset wave_size 0.6\nset wave_phase 3\nset wave_noise 1\nset noise_scale 0.8\nset wave_speed 0.4\nsay copy_fill ffd166 ff3366"},
+     "say fill ffd166\nset size 0.12\nset copies 160\nset copy_columns 16\nset copy_x 0.3\nset copy_y -0.3\nset wave_y 0.03\nset wave_size 1.6\nset wave_phase 3\nset wave_noise 1\nset noise_scale 0.8\nset wave_speed 0.4\nsay copy_fill ffd166 ff3366"},
     {"Tunnel", "shape", "rect", "squares within squares, turning one after another",
      "say fill 000000\nsay stroke ffffff\nset stroke_width 6\nset size 2.2\nset copies 24\nset copy_size 0.88\nset wave_rotate 30\nset wave_phase 1\nset wave_speed 0.5"},
     {"Text ripple", "text", "/System/Library/Fonts/Supplemental/Arial Unicode.ttf", "words whose letters bob one after another, coloured in their order",
      "say text MOTOLII\nsay fill ffffff\nset size 0.6\nsay split letters\nset wave_y 0.12\nset wave_phase 1\nset wave_rotate 8\nsay copy_fill ff3366 ffd166 1b2fd8"},
     {"Field dots", "shape", "circle", "a grid of dots swelling where a round field passes over them",
-     "say fill ffffff\nset size 0.06\nset copies 312\nset copy_columns 24\nset copy_x 0.24\nset copy_y -0.24\nset field_radius 1.4\nset field_size 1.2\nset field_push 0.6\nkey field_x 0 -3\nkey field_x 4 3\nkey field_x 8 -3\nset wave_y 0.015\nset wave_noise 1\nset wave_speed 0.5\nsay copy_fill ffffff ff3366"},
+     "say fill ffffff\nset size 0.06\nset copies 312\nset copy_columns 24\nset copy_x 0.24\nset copy_y -0.24\nset field_radius 1.4\nset field_size 1.2\nset field_push 0.6\nkey field_x 0 -1.8\nkey field_x 4 1.8\nkey field_x 8 -1.8\nset wave_y 0.015\nset wave_noise 1\nset wave_speed 0.5\nsay copy_fill ffffff ff3366"},
     {"Weave", "shape", "line", "short lines across and down in turn, turning where a round field passes over them",
      "say fill ffffff\nset size 0.26\nset copies 135\nset copy_columns 15\nset copy_rotate 90\nset copy_x 0.36\nset copy_y -0.36\nset field_radius 1.4\nset field_rotate 90\nkey field_x 0 -3\nkey field_x 4 3\nkey field_x 8 -3\nsay copy_fill ffffff 3366ff"},
     {"Rings", "shape", "circle", "rings within rings breathing one after another",
@@ -1394,14 +1396,14 @@ static const DocRecipe doc_recipes[] = {
     {"Helix", "shape", "circle", "two strands of dots winding round each other, joined by rungs, one large where the other is small",
      "say fill ff3366\nset size 0.12\nset copies 40\nset copy_x 0.132\nset wave_y 0.72\nset wave_size 0.4\nset wave_phase 2\nset wave_speed 0.3\nsay copy_fill ff3366 ffd166\n"
      "then shape circle\nsay fill 1b2fd8\nset size 0.12\nset copies 40\nset copy_x 0.132\nset wave_y -0.72\nset wave_size 0.4\nset wave_phase 2\nset wave_speed 0.3\nsay copy_fill 1b2fd8 22c55e\n"
-     "then shape line\nsay fill ffffff\nset opacity 0.45\nset size 0.3\nset copies 40\nset connect first\nset connect_to before"},
+     "then shape line\nsay fill ffffff\nset opacity 0.45\nset size 0.3\nset copies 40\nset connect first\nset connect_to before\nset order behind"},
     {"Plexus", "shape", "circle", "dots drifting and bobbing, joined by lines where they come near, finer the further apart",
-     "say fill ffffff\nset size 0.05\nset copies 70\nset scatter_x 2.6\nset scatter_y 1.4\nset seed 7\nset drift_x 0.65\nset wave_y 0.3\nset wave_noise 1\nset wave_speed 0.25\n"
-     "then shape line\nsay fill 9ad7ff\nset opacity 0.7\nset size 0.25\nset copies 400\nset connect first\nset connect_reach 0.7"},
+     "say fill ffffff\nset size 0.05\nset copies 100\nset scatter_x 3.2\nset scatter_y 1.9\nset seed 7\nset drift_x 0.65\nset wave_y 0.3\nset wave_noise 1\nset wave_speed 0.25\n"
+     "then shape line\nsay fill 9ad7ff\nset opacity 0.7\nset size 0.25\nset copies 900\nset connect first\nset connect_reach 0.7"},
     {"Spiral", "shape", "circle", "dots on a spiral growing outwards, turning, a band of large dots going out and back through them",
-     "say fill ffffff\nset size 0.03\nset anchor_x -36\nset copies 200\nset copy_turn 1800\nset copy_size 1.006\nkey rotate 0 0\nkey rotate 8 -360\nset field_band 0.5\nset field_size 2.5\nkey field_radius 0 0.2\nkey field_radius 4 2.6\nkey field_radius 8 0.2\nsay copy_fill ffd166 ff3366 1b2fd8"},
+     "say fill ffffff\nset size 0.03\nset anchor_x -30\nset copies 170\nset copy_turn 1800\nset copy_size 1.006\nkey rotate 0 0\nkey rotate 8 -360\nset field_band 0.5\nset field_size 2.5\nkey field_radius 0 0.2\nkey field_radius 4 1.6\nkey field_radius 8 0.2\nsay copy_fill ffd166 ff3366 1b2fd8"},
     {"Burst", "shape", "line", "lines from a centre growing out one after another",
-     "say fill ffffff\nset anchor_x -1\nset copies 24\nset copy_turn 360\nkey size 0 0.001\nkey size 0.5 1.3\nset stagger 0.8\nset wave_size 0.15\nset wave_phase 2\nsay copy_fill ffffff ffd166 ffffff"},
+     "say fill ffffff\nset anchor_x -1\nset copies 24\nset copy_turn 360\nkey size 0 0.001\nkey size 0.5 1.3\nkey size 6.5 1.3\nkey size 7 0.001\nset stagger 0.8\nset wave_size 0.15\nset wave_phase 2\nsay copy_fill ffffff ffd166 ffffff"},
 };
 static std::string doc_recipe_names() {
     std::string all;
@@ -1415,7 +1417,7 @@ static int doc_make(Doc& d, const char* name) {
     if (!r) return d.trouble = std::string("there is no recipe ") + name, 0;
     doc_act(d);
     const int thing = doc_add(d, r->kind, r->file);
-    if (thing) doc_say(d, thing, "name", r->name);   // (listed by the recipe's name)
+    if (thing) doc_say(d, thing, "name", r->name), doc_set(d, thing, "start", 0);   // (listed by the recipe's name; on from the document's beginning, wherever the stage stands: a picture that goes round with it)
     std::istringstream lines(r->lines);
     int now = thing, first = thing, before = thing;   // (the thing the lines tell: "then kind file" makes another, named as the recipe too)
     for (std::string line; now && std::getline(lines, line);) {
@@ -1425,11 +1427,11 @@ static int doc_make(Doc& d, const char* name) {
         std::string rest;
         std::getline(w, rest);
         rest.erase(0, rest.find_first_not_of(' '));
-        if (call == "then") { before = now; if ((now = doc_add(d, value.c_str(), rest.c_str()))) doc_say(d, now, "name", r->name); continue; }
+        if (call == "then") { before = now; if ((now = doc_add(d, value.c_str(), rest.c_str()))) doc_say(d, now, "name", r->name), doc_set(d, now, "start", 0); continue; }
         const int thing = now;
-        if (call == "set") doc_set(d, thing, value.c_str(), rest == "first" ? first : rest == "before" ? before : std::atof(rest.c_str()));   // (a thing it goes with: the recipe's first, or the one made before this one)
+        if (call == "set") doc_set(d, thing, value.c_str(), rest == "first" ? first : rest == "before" ? before : rest == "behind" ? first - 0.5 : std::atof(rest.c_str()));   // (a thing it goes with: the recipe's first, or the one made before this one; an order just behind the first)
         else if (call == "say") doc_say(d, thing, value.c_str(), rest.c_str());
-        else if (call == "key") { std::istringstream k(rest); double at = 0, is = 0; k >> at >> is; doc_key(d, thing, value.c_str(), d.stage->now + at, is); }
+        else if (call == "key") { std::istringstream k(rest); double at = 0, is = 0; k >> at >> is; doc_key(d, thing, value.c_str(), at, is); }   // (at that moment of the document, wherever the stage stands: its film loops as made)
     }
     return doc_acted(d) ? thing : 0;
 }
