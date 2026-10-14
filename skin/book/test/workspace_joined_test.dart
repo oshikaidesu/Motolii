@@ -608,6 +608,20 @@ void main() {
     await _close(t);
   }, skip: !_built);
 
+  testWidgets('Create: Polygon, Star, Line and Null are ThorVG shapes of the document; a Null is a thing to go with', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    for (final (shape, name) in const [('polygon', 'Polygon'), ('star', 'Star'), ('line', 'Line'), ('null', 'Null')]) {
+      final made = m.add('shape', shape);
+      expect(made, isNot(0), reason: m.trouble);
+      expect(m.word(made, 'name'), name);
+      expect(m.frame(made), isNotNull, reason: 'it can be held, even if nothing of it is seen');
+    }
+    expect(m.set(m.things[1], 'points', 8) && m.set(m.things[1], 'inner', .7), isTrue, reason: m.trouble);
+    expect(m.set(m.things[0], 'points', 2), isFalse, reason: 'a polygon has three points at least');
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
   testWidgets('Backspace on the timeline takes the picked thing out; undo brings it back', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final ring = m.add('solid', 'ring'), cube = m.add('solid', 'cube');

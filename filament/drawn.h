@@ -197,16 +197,32 @@ static Drawn* type(Stage& s, const char* words, const char* fontFile, const mat4
 
 // A flat shape in one colour, drawn by ThorVG's own Shape (a rectangle, a circle): `wide` times as wide as it is high.
 // edge: ThorVG's stroke round it, inside its frame (its colour; w: how wide, a share of its height; 0: none).
-static Drawn* flat(Stage& s, const char* form, float wide, const mat4f& place, float high, float3 colour, const char* lay = nullptr, float4 edge = float4{0.f}, const DrawnFx& fx = {}) {
+// form: rect (round: its corners, a share of its shorter side), circle, polygon and star (points of it; a star's
+// inner points at `inner` of the way out), line (a long rect, round at its ends), null (nothing to see: a thing to
+// go with); all drawn by ThorVG's own Shape.
+static Drawn* flat(Stage& s, const char* form, float wide, const mat4f& place, float high, float3 colour, const char* lay = nullptr, float4 edge = float4{0.f}, const DrawnFx& fx = {},
+                   int points = 6, float inner = 0.5f, float round = 0.f) {
     return drawn(s, [&](Drawn*, int* w, int* h) -> tvg::Paint* {
         const float tall = std::min(0.5f * (float)std::max(s.w, s.h), 4096.f / std::max(wide, 1e-3f));   // (as fine as half the stage; a long thin bar less high, so that it is as long as it is said)
         *h = std::max(2, 2 * (int)std::ceil(0.5f * tall));
         *w = std::max(2, 2 * (int)std::ceil(0.5f * tall * wide));
         tvg::Shape* shape = tvg::Shape::gen();
         const float in = 0.5f * std::min(edge.w * (float)*h, 0.5f * (float)std::min(*w, *h));   // (half the stroke: the path is set in by that, so all of it is seen)
-        if (!strcmp(form, "circle")) shape->appendCircle(0.5f * (float)*w, 0.5f * (float)*h, 0.5f * (float)*w - in, 0.5f * (float)*h - in);
-        else shape->appendRect(in, in, (float)*w - 2.f * in, (float)*h - 2.f * in);
-        shape->fill((uint8_t)std::lround(255.f * colour.x), (uint8_t)std::lround(255.f * colour.y), (uint8_t)std::lround(255.f * colour.z));
+        const float cx = 0.5f * (float)*w, cy = 0.5f * (float)*h, rx = cx - in, ry = cy - in;
+        if (!strcmp(form, "circle")) shape->appendCircle(cx, cy, rx, ry);
+        else if (!strcmp(form, "polygon") || !strcmp(form, "star")) {
+            const bool star = !strcmp(form, "star");
+            const int n = std::clamp(points, 3, 100) * (star ? 2 : 1);
+            for (int k = 0; k < n; ++k) {
+                const float a = -0.5f * TAU / 2.f + TAU * (float)k / (float)n, r = star && (k & 1) ? std::clamp(inner, 0.01f, 1.f) : 1.f;   // (the first point straight up)
+                k ? shape->lineTo(cx + rx * r * std::cos(a), cy + ry * r * std::sin(a)) : shape->moveTo(cx + rx * r * std::cos(a), cy + ry * r * std::sin(a));
+            }
+            shape->close();
+        } else {
+            const float side = std::min((float)*w, (float)*h) - 2.f * in, corner = (!strcmp(form, "line") ? 0.5f : std::clamp(round, 0.f, 0.5f)) * side;
+            shape->appendRect(in, in, (float)*w - 2.f * in, (float)*h - 2.f * in, corner, corner);
+        }
+        shape->fill((uint8_t)std::lround(255.f * colour.x), (uint8_t)std::lround(255.f * colour.y), (uint8_t)std::lround(255.f * colour.z), strcmp(form, "null") ? 255 : 0);
         if (in > 0.f) shape->strokeWidth(2.f * in), shape->strokeFill((uint8_t)std::lround(255.f * edge.x), (uint8_t)std::lround(255.f * edge.y), (uint8_t)std::lround(255.f * edge.z));
         return shape;
     }, place, high, float3{-1.f}, true, lay, fx);

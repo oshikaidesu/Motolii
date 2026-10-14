@@ -368,6 +368,10 @@ const _asked = {
   'Solid': ('shape', 'solid'), // (a flat colour as large as the stage: the inside makes it so)
   'Rectangle': ('shape', 'rect'),
   'Ellipse': ('shape', 'circle'),
+  'Polygon': ('shape', 'polygon'),
+  'Star': ('shape', 'star'),
+  'Line': ('shape', 'line'),
+  'Null': ('shape', 'null'), // (nothing to see: a thing to go with)
   'Ring': ('solid', 'ring'),
   'Gem': ('solid', 'gem'),
   'Cube': ('solid', 'cube'),
