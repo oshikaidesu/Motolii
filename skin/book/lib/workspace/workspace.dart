@@ -1,5 +1,6 @@
 // The whole window: top bar, then the panes (panes.dart) — browser shelves | Stage over Timeline, Inspector over Desk, rearrangeable.
 // Each seat is its own file and reads the shared Ws.
+import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:docking/docking.dart';
@@ -32,29 +33,109 @@ class _WorkspaceState extends State<Workspace> {
   final _ws = Ws();
   Motolii? _inside;
 
+  String? _doc; // (the document that is open: the one the window was given, or one made or opened from the menu)
+
   @override
   void initState() {
     super.initState();
     if (widget.document case final doc?) _join(doc);
   }
 
+  /// Another document in place of the open one (made, if there is none at that place).
+  void _open(String doc) {
+    _ws.stageTexture = null;
+    _inside?.close();
+    _inside = null;
+    _join(doc);
+  }
+
+  /// The documents beside the open one, and a place for a new one there.
+  List<String> _documents() {
+    final here = Directory(File(_doc!).parent.path);
+    return [for (final f in here.listSync().whereType<File>()) if (f.path.endsWith('.motolii')) f.path]..sort();
+  }
+
+  String _fresh() {
+    final here = File(_doc!).parent.path;
+    for (var n = 1; ; n++) {
+      if (!File('$here/untitled_$n.motolii').existsSync()) return '$here/untitled_$n.motolii';
+    }
+  }
+
+  /// The document written as a film beside itself; the top bar says how it went.
+  Future<void> _render() async {
+    final m = _inside, doc = _doc;
+    if (m == null || doc == null) return;
+    final mp4 = '${doc.substring(0, doc.lastIndexOf('.'))}.mp4';
+    _ws.notice = 'Writing ${mp4.split('/').last} …';
+    final done = await m.write(mp4);
+    if (mounted) _ws.notice = done ? 'Written: ${mp4.split('/').last}' : 'Not written: ${m.trouble}';
+  }
+
+  /// The window's menus, in the system's own menu bar: what the sample window has no seat for (a new document,
+  /// another document, the film written out) and what the keyboard does elsewhere (undo, redo, take a thing out).
+  List<PlatformMenuItem> _menus() {
+    final m = _inside!;
+    void then(bool done) {
+      if (done) _ws.reread();
+    }
+
+    return [
+      PlatformMenu(
+        label: 'lab_book',
+        menus: [if (PlatformProvidedMenuItem.hasMenu(PlatformProvidedMenuItemType.quit)) const PlatformProvidedMenuItem(type: PlatformProvidedMenuItemType.quit)],
+      ),
+      PlatformMenu(
+        label: 'File',
+        menus: [
+          PlatformMenuItemGroup(
+            members: [
+              PlatformMenuItem(label: 'New Document', shortcut: const SingleActivator(LogicalKeyboardKey.keyN, meta: true), onSelected: () => _open(_fresh())),
+              PlatformMenu(label: 'Open', menus: [for (final f in _documents()) PlatformMenuItem(label: f.split('/').last, onSelected: f == _doc ? null : () => _open(f))]),
+            ],
+          ),
+          PlatformMenuItem(label: 'Render', shortcut: const SingleActivator(LogicalKeyboardKey.keyR, meta: true), onSelected: _render),
+        ],
+      ),
+      PlatformMenu(
+        label: 'Edit',
+        menus: [
+          PlatformMenuItemGroup(
+            members: [
+              PlatformMenuItem(label: 'Undo', shortcut: const SingleActivator(LogicalKeyboardKey.keyZ, meta: true), onSelected: () => then(m.undo())),
+              PlatformMenuItem(label: 'Redo', shortcut: const SingleActivator(LogicalKeyboardKey.keyZ, meta: true, shift: true), onSelected: () => then(m.redo())),
+            ],
+          ),
+          PlatformMenuItem(
+            label: 'Remove',
+            onSelected: () {
+              final t = int.tryParse(_ws.selected ?? '');
+              then(t != null && m.remove(t));
+            },
+          ),
+        ],
+      ),
+    ];
+  }
+
   Future<void> _join(String doc) async {
     final inside = Motolii.open(doc);
     if (inside == null) return;
     _inside = inside;
+    _doc = doc;
     final id = await inside.texture();
     if (!mounted) return;
     if (id >= 0) _ws.stageTexture = id;
     _ws
       ..document = doc.split('/').last
+      ..notice = null
+      ..onRender = _render
       ..onSize = (wide, high) {
         // (a stage is opened at a size: the document is told its new one, closed, and opened again)
-        if (!inside.resize(wide, high)) return;
-        _ws.stageTexture = null;
-        inside.close();
-        _join(doc);
+        if (inside.resize(wide, high)) _open(doc);
       }
       ..join(inside);
+    setState(() {}); // (the menus are the open document's)
   }
 
   @override
@@ -93,17 +174,20 @@ class _WorkspaceState extends State<Workspace> {
   );
 
   @override
-  Widget build(BuildContext context) => WsScope(
-    ws: _ws,
-    child: Focus(
-      autofocus: true,
-      onKeyEvent: _key,
-      child: ColoredBox(
-        color: WsT.ground,
-        child: Overlay(initialEntries: [_entry]),
+  Widget build(BuildContext context) {
+    final window = WsScope(
+      ws: _ws,
+      child: Focus(
+        autofocus: true,
+        onKeyEvent: _key,
+        child: ColoredBox(
+          color: WsT.ground,
+          child: Overlay(initialEntries: [_entry]),
+        ),
       ),
-    ),
-  );
+    );
+    return _inside == null ? window : PlatformMenuBar(menus: _menus(), child: window);
+  }
 }
 
 class _Window extends StatelessWidget {
@@ -256,7 +340,7 @@ List<String> _namesOf(String prop) => {
 }.toList();
 
 /// The selected layer's transform as the stage draws it at this frame, in the Inspector's ids.
-Map<String, double> _transform(Ws ws, String? id) {
+Map<String, double> wsTransform(Ws ws, String? id) {
   if (ws.inside case final m?) {   // (joined: the document's own values, as the inspector counts them)
     final t = int.tryParse(id ?? '');
     if (t == null) return const {};
@@ -346,7 +430,7 @@ class _InspectorSeat extends StatelessWidget {
         effects: ws.inside == null ? 2 : 0, // (joined: the inside has no effects yet, so none are listed)
         title: l?.name,
         onRoute: ws.route,
-        values: _transform(ws, l?.id),
+        values: wsTransform(ws, l?.id),
         strs: {'fill': ?_fillWord(ws, l?.id, fill), ..._words(ws, l?.id)},
         onWords: ws.inside == null ? null : (changed) => _say(ws, l?.id, changed),
         choices: _choices(ws, l?.id),

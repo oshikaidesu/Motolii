@@ -91,7 +91,7 @@ class _StageViewState extends State<StageView> {
   Offset _doc(_View v, Offset local) => WsArt.toDoc(widget.scene, v.toComp(local));
 
   String? _hit(_View v, Offset local) {
-    if (!v.comp.contains(local) && widget.scene.camera) return null;
+    if (!v.comp.contains(local) && widget.scene.camera && widget.scene.boxes == null) return null; // (joined: a thing that lies off the picture can still be held by its frame and carried back)
     final d = _doc(v, local), id = WsArt.hit(widget.scene, d);
     if (id != null || widget.scene.camera) return id;
     final cam = WsArt.cameraBox(widget.scene), tol = 8 / v.s;
@@ -156,6 +156,7 @@ class _StageViewState extends State<StageView> {
               widget.onPoke?.call();
               WsScope.read(context).select(_hit(v, d.localPosition));
             },
+            dragStartBehavior: DragStartBehavior.down, // (a thing is held where the hand came down, not where it had got to when the drag was known for one)
             onPanStart: (d) => _hold(v, d.localPosition),
             onPanUpdate: (d) => _carry(v, d.localPosition),
             onPanEnd: (_) => _letGo(),

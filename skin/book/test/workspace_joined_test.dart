@@ -20,6 +20,7 @@ Future<Ws> _pump(WidgetTester t) async {
   t.view.physicalSize = const Size(1600, 960);
   t.view.devicePixelRatio = 1;
   t.binding.defaultBinaryMessenger.setMockMethodCallHandler(const MethodChannel('motolii/stage'), (_) async => -1);
+  t.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.menu, (_) async => null); // (the system's menu bar is not there in a test)
   final doc = '${Directory.systemTemp.createTempSync('joined').path}/joined.motolii';
   await t.pumpWidget(WidgetsApp(color: const Color(0xFF000000), builder: (c, _) => Workspace(document: doc)));
   await t.pumpAndSettle();
@@ -244,6 +245,29 @@ void main() {
     // (a thing held and let go without keeping: nothing happened; kept: one step, whatever was carried)
     expect(m.hold(text) && m.carry('place', 100, 0) && m.letGo(false), isTrue, reason: m.trouble);
     expect(m.value(text, 'x', 2), 1);
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
+  testWidgets('a thing that lies off the picture can be held and carried back; Render writes the document as a film beside it', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    final cube = m.add('solid', 'cube');
+    expect(m.set(cube, 'x', 3.3) && m.set(cube, 'duration', 1), isTrue, reason: m.trouble); // (off to the right of a 1920 x 1080 picture; a film of one second)
+    ws.reread();
+    await t.pumpAndSettle();
+    final stage = t.getRect(find.byKey(const ValueKey('ws-stage-comp')));
+    final frame = m.frame(cube)!;
+    expect(frame[0] - frame[2] / 2, greaterThan(1890), reason: 'its frame is all but off the picture');
+    final held = Offset(stage.right + 10, stage.top + frame[1] * (stage.width / 1920)); // (a point of its frame that is off the picture)
+    await t.dragFrom(held, Offset(-stage.width * .5, 0));
+    await t.pumpAndSettle();
+    expect(m.value(cube, 'x', 0), lessThan(2), reason: 'carried back on to the picture');
+
+    final mp4 = File('${Directory.systemTemp.path}/joined_render_${DateTime.now().microsecondsSinceEpoch}.mp4');
+    final done = await t.runAsync(() => m.write(mp4.path));
+    expect(done, isTrue, reason: m.trouble);
+    expect(mp4.lengthSync(), greaterThan(1000));
+    mp4.deleteSync();
     expect(t.takeException(), isNull);
     await _close(t);
   }, skip: !_built);

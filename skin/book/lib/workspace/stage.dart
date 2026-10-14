@@ -8,6 +8,7 @@ import '../tokens.dart';
 import 'stage_art.dart';
 import 'stage_trial.dart';
 import 'stage_view.dart';
+import 'workspace.dart' show wsTransform;
 import 'ws.dart';
 
 class WsStage extends StatelessWidget {
@@ -424,7 +425,7 @@ class _Readout extends StatelessWidget {
   final WsLayer? layer;
   @override
   Widget build(BuildContext context) {
-    final l = layer, box = WsArt.boxOf(scene, l?.id);
+    final l = layer, box = WsArt.boxOf(scene, l?.id), ws = WsScope.of(context);
     if (l == null) return Text('Nothing selected', style: T.label(Grey.g56));
     Widget pair(String k, String v) => Padding(
       padding: const EdgeInsets.only(left: 10),
@@ -452,7 +453,14 @@ class _Readout extends StatelessWidget {
             padding: const EdgeInsets.only(left: 10),
             child: Text(l.kind == WsKind.audio ? 'No picture' : 'Not on this frame', style: T.label(Grey.g56)),
           )
-        else ...[
+        else if (ws.inside != null) ...[
+          // (joined: the same numbers as the inspector's, which are the document's)
+          if (wsTransform(ws, l.id) case final at) ...[
+            pair('P', '${at['pos.x']?.round()}, ${at['pos.y']?.round()}'),
+            pair('S', '${at['scale.y']?.round()}%'),
+            pair('R', '${at['rot.z']?.round()}°'),
+          ],
+        ] else ...[
           pair('P', '${box.anchor.dx.round()}, ${box.anchor.dy.round()}'),
           pair('S', '${(box.scale * 100).round()}%'),
           pair('R', '${(box.rot * 180 / 3.141592653589793).round()}°'),

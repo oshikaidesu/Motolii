@@ -112,6 +112,17 @@ class Ws extends ChangeNotifier {
   String? document;
   void Function(int wide, int high)? onSize;
 
+  /// Joined: how the document is written as a film (the host does it), and what the window has to say about the
+  /// document just now (it is being written, where it was written, why something was not done); null: nothing.
+  VoidCallback? onRender;
+  String? _notice;
+  String? get notice => _notice;
+  set notice(String? said) {
+    if (said == _notice) return;
+    _notice = said;
+    notifyListeners();
+  }
+
   /// How many times the document has been read again.
   int rev = 0;
 

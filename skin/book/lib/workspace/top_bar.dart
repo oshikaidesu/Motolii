@@ -265,7 +265,10 @@ class _Saved extends StatelessWidget {
         decoration: const BoxDecoration(color: WsT.accent, shape: BoxShape.circle),
       ),
       const SizedBox(width: 6),
-      Text('Saved', style: T.label(Grey.g63)),
+      ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 260),
+        child: Text(WsScope.of(context).notice ?? 'Saved', maxLines: 1, overflow: TextOverflow.ellipsis, style: T.label(Grey.g63)),
+      ),
     ],
   );
 }
@@ -275,6 +278,7 @@ class _Render extends StatelessWidget {
   const _Render();
   @override
   Widget build(BuildContext context) => _Hover(
+    onTap: WsScope.of(context).onRender,
     builder: (h) => Container(
       height: 26,
       padding: const EdgeInsets.symmetric(horizontal: 14),

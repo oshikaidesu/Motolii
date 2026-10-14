@@ -129,6 +129,19 @@ class Motolii {
 
   String get trouble => _trouble(_m).toDartString();
   String get list => _list(_m).toDartString();
+
+  /// The whole document written as a film (.mp4, with its films' sound), on another isolate: the window does not wait.
+  /// The inside's one hand takes the call in its turn, from whatever thread it comes.
+  Future<bool> write(String mp4) {
+    final lib = libPath, at = _m.address;
+    return Isolate.run(() {
+      final ask = DynamicLibrary.open(lib).lookupFunction<Int32 Function(Pointer<Void>, Pointer<Utf8>), int Function(Pointer<Void>, Pointer<Utf8>)>('motolii_write');
+      final to = mp4.toNativeUtf8();
+      final done = ask(Pointer<Void>.fromAddress(at), to) != 0;
+      malloc.free(to);
+      return done;
+    });
+  }
   double get now => _now(_m);
   double get seconds => _seconds(_m);
   bool play(bool on) => _play(_m, on ? 1 : 0) != 0;
