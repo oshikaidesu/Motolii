@@ -56,6 +56,7 @@ struct Doc {
     bool act_ok = true;                 // no change of the open act has been refused
     bool writing = false;               // it is being written as a film: it is read, not changed, until that is done
     double written_from = 0.0;          // the moment of the document that a film being written begins at (its work area's start)
+    double round = 8.0;                 // how long the document is, as last shown: waves, noise and drifts go round in it a whole number of times (a film loops)
     sqlite3_session* acting = nullptr;  // SQLite's own record of what the open act changes
     // A thing held by a hand (doc_hold): what of it is carried shows at once and is not yet the document's.
     struct Held { int thing = -1; std::map<std::string, double> from, tried; } held;   // (-1: nothing held; 0 is the stage, which a hand may hold by a value of its own)
@@ -133,7 +134,8 @@ static const DocValue doc_values[] = {
     {"stagger_from", "picture text shape", 0, 0, false, "start centre end edges"},   // (which of them moves first: the first, the middle one, the last, the outer ones)
     {"copy_fill", "picture text shape", 0, 0, false, ""},   // (its copies coloured from the first colour to the last, in their order: six digits each; one, all in it; none, not coloured each)
     {"copy_fill_way", "picture text shape", 0, 0, false, "ramp cycle"},   // (from the first to the last across them all, or one colour each in turn, round and round)
-    {"copy_turn", "picture text shape", -1e5, 1e5, true, nullptr},   // (how far its copies turn in all, spread evenly over them: 360 fills a round; 0: as copy_rotate says each)
+    {"copy_wide", "picture text shape", 0.01, 100, true, nullptr},   // (how many times as wide its last copy is as its first, those between in step: rows of waves, each with more of them)
+    {"copy_turn", "picture text shape", -1e5, 1e5, true, nullptr},   // (how far its copies turn in all, spread evenly over them: 360 fills a round; copy_rotate's turn each on top)
     // (a wave through it and its copies, Cavalry's oscillator: so far across and up (units), so far turned (degrees),
     //  so much larger (a share), so many times a second, each copy so far behind the one before (turns spread over all)
     {"wave_x", "picture text shape", -1e3, 1e3, true, nullptr}, {"wave_y", "picture text shape", -1e3, 1e3, true, nullptr},
@@ -195,7 +197,7 @@ struct DocCard { const char* title; const char* names; const char* when = nullpt
 static const DocCard doc_cards[] = {
     {"Type", "split letter_spacing line_spacing italic wrap wrap_at"},
     {"Gradient", "gradient gradient_angle gradient_scale gradient_spread", "fill", "~ "},
-    {"Copies", "copies copy_columns copy_x copy_y copy_rotate copy_turn copy_size stagger stagger_from copy_fill copy_fill_way"},
+    {"Copies", "copies copy_columns copy_x copy_y copy_rotate copy_turn copy_size copy_wide stagger stagger_from copy_fill copy_fill_way"},
     {"Wave", "wave_x wave_y wave_rotate wave_size wave_speed wave_phase wave_noise noise_scale"},
     {"Field", "field_x field_y field_radius field_size field_rotate field_push"},
     {"Scatter", "scatter_x scatter_y scatter_rotate scatter_size seed drift_x drift_y"},
@@ -335,6 +337,7 @@ static bool doc_half(Doc& d, int thing, float2* half, float* deep = nullptr);
 // Where a thing is at a moment, as a matrix: moved, turned about z, y and x, made its size, all about its anchor (a
 // point of its own box: 0 its middle, 1 its edge on that side; the past repository's `anchor`, keyed as it was).
 static math::mat4 doc_place(Doc& d, int thing, double now, int deeper = 0, int copy = 0, bool member = false);
+static double doc_seconds(Doc& d);
 // A thing's copies given back its own look, their own looks done away with (no longer coloured each, or taken off).
 static void doc_copy_looks_off(Doc& d, const Mesh* m, MaterialInstance* main) {
     Stage& s = *d.stage;
@@ -388,8 +391,9 @@ static math::mat4 doc_place(Doc& d, int thing, double now, int deeper, int copy,
         const double along = columns > 0 ? copy % columns : copy, down = columns > 0 ? copy / columns : copy;
         const double alongMid = columns > 0 ? (std::min(n, columns) - 1) * 0.5 : (n - 1) * 0.5, downMid = columns > 0 ? (std::ceil((double)n / columns) - 1) * 0.5 : (n - 1) * 0.5;
         shift += math::double3{(along - alongMid) * doc_number(d, thing, "copy_x", now, 0), (down - downMid) * doc_number(d, thing, "copy_y", now, 0), 0.0};
-        own = math::mat4::rotation(copy * (doc_number(d, thing, "copy_turn", now, 0) != 0.0 ? doc_number(d, thing, "copy_turn", now, 0) / n : doc_number(d, thing, "copy_rotate", now, 0)) * (double)TAU / 360.0, math::double3{0, 0, 1}) *
-              math::mat4::scaling(std::pow(doc_number(d, thing, "copy_size", now, 1), copy));
+        own = math::mat4::rotation(copy * (doc_number(d, thing, "copy_turn", now, 0) / n + doc_number(d, thing, "copy_rotate", now, 0)) * (double)TAU / 360.0, math::double3{0, 0, 1}) *
+              math::mat4::scaling(std::pow(doc_number(d, thing, "copy_size", now, 1), copy)) *
+              math::mat4::scaling(math::double3{n > 1 ? std::pow(doc_number(d, thing, "copy_wide", now, 1), (double)copy / (n - 1)) : 1.0, 1.0, 1.0});
         // (scattered: each copy its own way, from the seed and its number; the same each time)
         const double sx = doc_number(d, thing, "scatter_x", now, 0), sy = doc_number(d, thing, "scatter_y", now, 0), sr = doc_number(d, thing, "scatter_rotate", now, 0), ss = doc_number(d, thing, "scatter_size", now, 0);
         const uint32_t seed = (uint32_t)doc_number(d, thing, "seed", 0, 0);
@@ -400,15 +404,19 @@ static math::mat4 doc_place(Doc& d, int thing, double now, int deeper, int copy,
         };
         if (sx != 0.0 || sy != 0.0 || sr != 0.0 || ss != 0.0) {
             const auto round = [](double v, double edge) { return edge > 0.0 ? v - 2.0 * edge * std::floor((v + edge) / (2.0 * edge)) : v; };   // (flowing past the edge: back at the other)
-            shift += math::double3{round(sx * roll(1) + doc_number(d, thing, "drift_x", 0, 0) * now, sx), round(sy * roll(2) + doc_number(d, thing, "drift_y", 0, 0) * now, sy), 0.0};
+            const auto whole = [&](double drift, double edge) { const double k = edge > 0.0 ? std::round(drift * d.round / (2.0 * edge)) : 0.0; return k != 0.0 ? k * 2.0 * edge / d.round : drift; };   // (round the scattering a whole number of times in the document)
+            shift += math::double3{round(sx * roll(1) + whole(doc_number(d, thing, "drift_x", 0, 0), sx) * now, sx), round(sy * roll(2) + whole(doc_number(d, thing, "drift_y", 0, 0), sy) * now, sy), 0.0};
             own = own * math::mat4::rotation(sr * roll(3) * (double)TAU / 360.0, math::double3{0, 0, 1}) * math::mat4::scaling(std::max(0.0, 1.0 + ss * roll(4)));
         }
         // (a wave through it: each copy so far behind the one before, at its own moment, a copy staggered so much later)
-        const double speed = doc_number(d, thing, "wave_speed", said, 1), noisy = doc_number(d, thing, "wave_noise", said, 0);
+        const double said_speed = doc_number(d, thing, "wave_speed", said, 1), noisy = doc_number(d, thing, "wave_noise", said, 0);
+        const double turns = std::round(said_speed * d.round), speed = turns > 0.0 ? turns / d.round : said_speed;   // (a whole number of times round in the document: its film loops)
         double w = std::sin((double)TAU * (speed * now - doc_number(d, thing, "wave_phase", said, 0) * copy / n));
         if (noisy > 0.0) {   // (a smooth noise: random values at the corners of a lattice, eased between; its own for each copy, or, with a scale, read where the copy lies)
             const double scale = doc_number(d, thing, "noise_scale", said, 0);
             const auto at = [&](int64_t i, int64_t j, int64_t k) {
+                const int64_t ring = turns > 0.0 ? (int64_t)turns * 2 : 0;   // (round in time as the wave is: the lattice's last row is its first)
+                if (ring > 0) k = ((k % ring) + ring) % ring;
                 uint32_t h = seed * 0x9E3779B9u ^ (uint32_t)i * 0x85EBCA6Bu ^ (uint32_t)j * 0x27d4eb2du ^ (uint32_t)k * 0xC2B2AE35u ^ (scale > 0.0 ? 0u : ((uint32_t)copy + 1u) * 0x165667B1u);
                 h ^= h >> 16, h *= 0x7FEB352Du, h ^= h >> 15, h *= 0x846CA68Bu, h ^= h >> 16;
                 return (double)h / 2147483647.5 - 1.0;
@@ -432,7 +440,8 @@ static math::mat4 doc_place(Doc& d, int thing, double now, int deeper, int copy,
         const math::double3 at = (place * math::double4{anchor, 1.0}).xyz;
         const double near = std::clamp(1.0 - length(at.xy - math::double2{doc_number(d, thing, "field_x", said, 0), doc_number(d, thing, "field_y", said, 0)}) / reach, 0.0, 1.0), k = near * near * (3.0 - 2.0 * near);
         const math::double2 away = at.xy - math::double2{doc_number(d, thing, "field_x", said, 0), doc_number(d, thing, "field_y", said, 0)};
-        const math::double2 push = length(away) > 1e-9 ? normalize(away) * (k * doc_number(d, thing, "field_push", said, 0)) : math::double2{0.0};
+        const double r = length(away), by = doc_number(d, thing, "field_push", said, 0);   // (pushed out as if from a hole that wide: the nearest ones all end about as far out, the hole round however they lay)
+        const math::double2 push = r > 1e-9 ? normalize(away) * (by > 0.0 ? k * (std::sqrt(r * r + by * by) - r) : k * by) : math::double2{0.0};
         place = math::mat4::translation(math::double3{push, 0.0}) * math::mat4::translation(at) * math::mat4::rotation(k * doc_number(d, thing, "field_rotate", said, 0) * (double)TAU / 360.0, math::double3{0, 0, 1}) *
                 math::mat4::scaling(std::max(0.0, 1.0 + k * doc_number(d, thing, "field_size", said, 0))) * math::mat4::translation(-at) * place;
     }
@@ -639,6 +648,7 @@ static void doc_moment(Doc& d, double now) {
         d.facing = math::mat4(d.rig.upperLeft());
     }
     doc_look(d);
+    d.round = doc_seconds(d);
     // Who is before whom (the past repository's law of 2026-09-12: a flat thing is not in the world). Flat things take
     // no part in depth and lie by the order of the things alone; solid things that follow one another settle depth
     // among themselves; a run of the one sort is drawn whole over the run before it. By Filament's own means: the
@@ -1319,10 +1329,10 @@ static bool doc_raise(Doc& d, int thing, int places) {
 // "say name words", "key name seconds number", one to a line.
 struct DocRecipe { const char* name; const char* kind; const char* file; const char* what; const char* lines; };
 static const DocRecipe doc_recipes[] = {
-    {"Wave lines", "shape", "wave", "rows of waving lines, each flowing a little after the one above",
-     "say fill ffffff\nset wide 30\nset points 12\nset inner 0.6\nset copies 12\nset copy_y -0.25\nset wave_x 0.25\nset wave_phase 1.5\nset wave_speed 0.4\nsay copy_fill ffffff ff3366"},
+    {"Wave lines", "shape", "wave", "rows of waving lines, each with more waves than the one above, flowing a little after it",
+     "say fill ffffff\nset wide 30\nset points 12\nset inner 0.6\nset copies 12\nset copy_y -0.25\nset copy_wide 3\nset wave_x 0.25\nset wave_phase 1.5\nset wave_speed 0.4\nsay copy_fill ffffff ff3366"},
     {"Iris", "shape", "line", "lines round a centre, coloured in their order, breathing",
-     "set size 1\nset anchor_x -1.6\nset copies 48\nset copy_turn 360\nsay copy_fill ff3366 ffd166 1b2fd8 ff3366\nset wave_size 0.3\nset wave_phase 3"},
+     "set size 1\nset anchor_x -1.6\nset copies 120\nset copy_turn 360\nsay copy_fill ff3366 ffd166 1b2fd8 22c55e ff3366\nset wave_size 0.06\nset wave_phase 2"},
     {"Dot wave", "shape", "circle", "a grid of dots rising and falling one after another",
      "say fill ffd166\nset size 0.12\nset copies 160\nset copy_columns 16\nset copy_x 0.3\nset copy_y -0.3\nset wave_y 0.03\nset wave_size 0.6\nset wave_phase 3\nset wave_noise 1\nset noise_scale 0.8\nset wave_speed 0.4\nsay copy_fill ffd166 ff3366"},
     {"Tunnel", "shape", "rect", "squares within squares, turning one after another",
@@ -1330,15 +1340,15 @@ static const DocRecipe doc_recipes[] = {
     {"Text ripple", "text", "/System/Library/Fonts/Supplemental/Arial Unicode.ttf", "words whose letters bob one after another, coloured in their order",
      "say text MOTOLII\nsay fill ffffff\nset size 0.6\nsay split letters\nset wave_y 0.12\nset wave_phase 1\nset wave_rotate 8\nsay copy_fill ff3366 ffd166 1b2fd8"},
     {"Field dots", "shape", "circle", "a grid of dots swelling where a round field passes over them",
-     "say fill ffffff\nset size 0.06\nset copies 312\nset copy_columns 24\nset copy_x 0.24\nset copy_y -0.24\nset field_radius 1\nset field_size 1.5\nset field_push 0.25\nkey field_x 0 -3\nkey field_x 4 3\nkey field_x 8 -3\nset wave_y 0.015\nset wave_noise 1\nset wave_speed 0.5\nsay copy_fill ffffff ff3366"},
-    {"Line maze", "shape", "line", "a grid of short lines turning where a round field passes over them",
-     "say fill ffffff\nset size 0.3\nset copies 128\nset copy_columns 16\nset copy_x 0.36\nset copy_y -0.36\nset field_radius 1.4\nset field_rotate 90\nkey field_x 0 -3\nkey field_x 4 3\nkey field_x 8 -3\nsay copy_fill ffffff 3366ff"},
+     "say fill ffffff\nset size 0.06\nset copies 312\nset copy_columns 24\nset copy_x 0.24\nset copy_y -0.24\nset field_radius 1.4\nset field_size 1.2\nset field_push 0.6\nkey field_x 0 -3\nkey field_x 4 3\nkey field_x 8 -3\nset wave_y 0.015\nset wave_noise 1\nset wave_speed 0.5\nsay copy_fill ffffff ff3366"},
+    {"Weave", "shape", "line", "short lines across and down in turn, turning where a round field passes over them",
+     "say fill ffffff\nset size 0.26\nset copies 135\nset copy_columns 15\nset copy_rotate 90\nset copy_x 0.36\nset copy_y -0.36\nset field_radius 1.4\nset field_rotate 90\nkey field_x 0 -3\nkey field_x 4 3\nkey field_x 8 -3\nsay copy_fill ffffff 3366ff"},
     {"Rings", "shape", "circle", "rings within rings breathing one after another",
      "say fill 000000\nsay stroke ffd166\nset stroke_width 5\nset size 2.2\nset copies 14\nset copy_size 0.86\nset wave_size 0.12\nset wave_phase 1\nset wave_speed 0.7"},
     {"Confetti", "shape", "rect", "bits of colour scattered about, each turning its own way",
      "set size 0.08\nset wide 0.5\nset copies 160\nset scatter_x 2.9\nset scatter_y 1.7\nset scatter_rotate 180\nset scatter_size 0.5\nset drift_y -0.6\nset wave_rotate 120\nset wave_phase 37\nset wave_x 0.1\nsay copy_fill ff3366 ffd166 1b2fd8 22c55e ff3366"},
     {"Op star", "shape", "star", "stars within stars, black and white in turn, each turning a little after the one outside it",
-     "set size 2.6\nset copies 22\nset copy_size 0.88\nsay copy_fill ffffff 000000\nsay copy_fill_way cycle\nset wave_rotate 12\nset wave_phase 1\nset wave_speed 0.4"},
+     "set size 2.6\nset points 16\nset inner 0.78\nset copies 30\nset copy_size 0.9\nsay copy_fill ffffff 000000\nsay copy_fill_way cycle\nset wave_rotate 25\nset wave_phase 1\nset wave_speed 0.4"},
     {"Helix", "shape", "circle", "two strands of dots winding round each other, front larger than back",
      "say fill ff3366\nset size 0.12\nset copies 40\nset copy_x 0.132\nset wave_y 0.72\nset wave_size 0.4\nset wave_phase 2\nset wave_speed 0.3\nsay copy_fill ff3366 ffd166\n"
      "then shape circle\nsay fill 1b2fd8\nset size 0.12\nset copies 40\nset copy_x 0.132\nset wave_y -0.72\nset wave_size -0.4\nset wave_phase 2\nset wave_speed 0.3\nsay copy_fill 1b2fd8 22c55e"},
@@ -1583,7 +1593,7 @@ static bool doc_covers(Doc& d, int thing, double now, double* box) {
 }
 
 static double doc_usual(const char* name) {
-    return doc_among("size speed opacity wide visible distance zoom copies copy_size blur_level letter_spacing line_spacing contrast saturation vibrance environment gradient_scale wave_speed", name) ? 1.0 : !strcmp(name, "duration") ? -1.0
+    return doc_among("size speed opacity wide visible distance zoom copies copy_size copy_wide blur_level letter_spacing line_spacing contrast saturation vibrance environment gradient_scale wave_speed", name) ? 1.0 : !strcmp(name, "duration") ? -1.0
          : !strcmp(name, "metallic") ? 0.08 : !strcmp(name, "roughness") ? 0.6 : !strcmp(name, "reflectance") ? 0.5   // (a solid's surface as it comes)
          : !strcmp(name, "intensity") ? 1.0 : !strcmp(name, "falloff") ? 10.0 : !strcmp(name, "cone") ? 30.0   // (a light as it comes)
          : !strcmp(name, "ior") ? 1.5 : !strcmp(name, "dispersion") ? 0.1 : !strcmp(name, "swim") ? 0.5 : !strcmp(name, "dark") ? 4.0 : !strcmp(name, "vivid") ? 1.3 : 0.0;   // (the kit's glass as it comes)

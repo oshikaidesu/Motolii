@@ -336,22 +336,31 @@ static Drawn* type(Stage& s, const char* words, const char* fontFile, const mat4
         *w = 2 * (int)std::ceil(0.5f * (wide + outline));
         *h = 2 * (int)std::ceil(0.5f * (tall + outline));
         if (fx.split && !strchr(words, '\n') && fx.wrapWidth <= 0.f) {   // (one line split into its letters: where each ends, by how wide the words up to it are set)
-            float was = 0.f;
-            for (const char* at = words; *at;) {
-                const char* next = at + 1;
-                while (*next && ((unsigned char)*next & 0xC0) == 0x80) ++next;   // (one letter, however many bytes)
+            const auto across = [&](const std::string& some) {   // (how wide some letters are set, a share of the picture's width; and where their ink ends)
                 tvg::Text* up = tvg::Text::gen();
                 up->font(std::filesystem::path(fontFile).stem().string().c_str());
                 up->size(sized);
                 up->spacing(fx.letters, fx.lines);
                 if (fx.italic > 0.f) up->italic(fx.italic);
-                up->text(std::string(words, next).c_str());
+                up->text(some.c_str());
                 float ux = 0.f, uy = 0.f, uw = 0.f, uh = 0.f;
-                const float end = up->bounds(&ux, &uy, &uw, &uh) == tvg::Result::Success ? (ux + uw - x + 0.5f * outline) / (float)*w : was;
+                const bool ok = up->bounds(&ux, &uy, &uw, &uh) == tvg::Result::Success;
                 tvg::Paint::rel(up);
-                d->letters.push_back(float2{was, *next ? std::max(was, end) : 1.f});
-                was = std::max(was, end);
+                return float2{ok ? (ux + uw - x + 0.5f * outline) / (float)*w : 0.f, ok ? (uw + outline) / (float)*w : 0.f};
+            };
+            std::vector<float2> inks;   // (each letter: where the words up to it end, and how wide it is alone)
+            for (const char* at = words; *at;) {
+                const char* next = at + 1;
+                while (*next && ((unsigned char)*next & 0xC0) == 0x80) ++next;   // (one letter, however many bytes)
+                inks.push_back(float2{across(std::string(words, next)).x, across(std::string(at, next)).y});
                 at = next;
+            }
+            float was = 0.f;   // (cut half way across the gap between a letter's ink and the next one's: no edge of a neighbour in either)
+            for (size_t i = 0; i < inks.size(); ++i) {
+                const float end = std::max(was, inks[i].x);
+                const float cut = i + 1 < inks.size() ? std::max(end, 0.5f * (end + std::max(end, inks[i + 1].x - inks[i + 1].y))) : 1.f;
+                d->letters.push_back(float2{was, cut});
+                was = cut;
             }
         }
         if (fx.ramp.size() < 2) return t;

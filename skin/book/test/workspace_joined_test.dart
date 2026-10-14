@@ -1224,7 +1224,7 @@ void main() {
     await t.tap(find.descendant(of: find.byType(DockFooter), matching: find.text('Create')));
     await t.pumpAndSettle();
     final iris = int.parse(ws.selected!);
-    expect([m.value(iris, 'copies', 0), m.word(iris, 'copy_fill')], [48, 'ff3366 ffd166 1b2fd8 ff3366'], reason: m.trouble);
+    expect([m.value(iris, 'copies', 0), m.word(iris, 'copy_fill')], [120, 'ff3366 ffd166 1b2fd8 22c55e ff3366'], reason: m.trouble);
     expect([for (final e in find.byType(ValuesCard).evaluate()) (e.widget as ValuesCard).card.name], containsAll(['Copies', 'Wave']));
     expect(m.undo() && m.things.isEmpty, isTrue, reason: 'one step');
     // (two presses on the tile make it at once, without the foot's button)
