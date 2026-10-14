@@ -69,7 +69,7 @@ static const DocValue doc_values[] = {
     {"x", doc_kinds, -1e4, 1e4, true, nullptr}, {"y", doc_kinds, -1e4, 1e4, true, nullptr}, {"z", doc_kinds, -1e4, 1e4, true, nullptr},
     {"rotate", doc_kinds, -1e6, 1e6, true, nullptr}, {"rotate_x", doc_kinds, -1e6, 1e6, true, nullptr}, {"rotate_y", doc_kinds, -1e6, 1e6, true, nullptr},
     {"size", doc_kinds, 1e-3, 1e4, true, nullptr}, {"opacity", "film picture text shape", 0, 1, true, nullptr},
-    {"clip", doc_kinds, 0, 1, false, nullptr}, {"visible", doc_kinds, 0, 1, false, nullptr}, {"order", doc_kinds, -1e9, 1e9, false, nullptr}, {"wide", "shape", 1e-3, 1e3, false, nullptr}, {"shape", "shape", 0, 0, false, "rect circle"},
+    {"clip", doc_kinds, 0, 1, false, nullptr}, {"visible", doc_kinds, 0, 1, false, nullptr}, {"order", doc_kinds, -1e9, 1e9, false, nullptr}, {"wide", "shape", 1e-3, 1e3, false, nullptr}, {"shape", "shape", 0, 0, false, "rect circle solid"},
     {"start", doc_kinds, 0, 1e6, false, nullptr}, {"duration", doc_kinds, 1e-3, 1e6, false, nullptr},
     {"begin", "film", 0, 1e6, false, nullptr}, {"speed", "film", -100, 100, false, nullptr}, {"keyed", "film", 0, 1, false, nullptr},
     {"blend", "film picture text shape", 0, 0, false, "normal add multiply screen"}, {"file", "film picture solid text", 0, 0, false, ""}, {"shape", "solid", 0, 0, false, doc_shapes},
@@ -123,6 +123,17 @@ static sqlite3_stmt* doc_way_named(Doc& d, const std::string& name) {
     doc_rows(d, sqlite3_mprintf("select goes from way where name = %Q", name.c_str()), [&](sqlite3_stmt* row) { way = doc_goes(d, (const char*)sqlite3_column_text(row, 0)); });
     return d.named[name] = way;
 }
+// A stretch that goes a way defined in the document (`own`: its name, then its numbers): the value at `u` of the way
+// through, `t` seconds in, between a key of `a` and a key of `b`, `length` seconds apart (no such way: `a`).
+static double doc_went_by(Doc& d, const std::string& own, double u, double t, double length, double a, double b) {
+    std::istringstream said(own);
+    std::string way;
+    double p[4] = {0, 0, 0, 0};
+    said >> way;
+    for (double& one : p) said >> one;
+    sqlite3_stmt* goes = doc_way_named(d, way);
+    return goes ? doc_went(goes, u, t, length, a, b, p) : a;
+}
 
 // A value at a moment: `otherwise` where the document does not say; where it has keys, the value the stretch it is in
 // gives (before the first key and after the last: theirs). A stretch goes the way said for it (not said: Linear).
@@ -150,14 +161,7 @@ static double doc_number(Doc& d, int thing, const char* name, double at, double 
     const size_t i = (size_t)(std::upper_bound(k.at.begin(), k.at.end(), at) - k.at.begin()) - 1;   // (the stretch it is in begins at key i)
     const double u = (at - k.at[i]) / (k.at[i + 1] - k.at[i]);
     if (k.own[i].empty()) return k.value[i] + (k.value[i + 1] - k.value[i]) * interp_ease(k.interp[i], u);
-    std::istringstream said(k.own[i]);
-    std::string way;
-    double p[4] = {0, 0, 0, 0};
-    said >> way;
-    for (double& one : p) said >> one;
-    sqlite3_stmt* goes = doc_way_named(d, way);
-    const double length = k.at[i + 1] - k.at[i];
-    return goes ? doc_went(goes, u, at - k.at[i], length, k.value[i], k.value[i + 1], p) : k.value[i];
+    return doc_went_by(d, k.own[i], u, at - k.at[i], k.at[i + 1] - k.at[i], k.value[i], k.value[i + 1]);
 }
 static std::string doc_word(Doc& d, int thing, const char* name) {
     std::string is;
@@ -313,7 +317,10 @@ static bool doc_match(Doc& d) {
             else made.drawn = type(s, words.empty() ? std::filesystem::path(file).stem().string().c_str() : words.c_str(), file.c_str(), mat4f{}, 1.f, fill.empty() ? float3{0x11 / 255.f} : colour, lay);
         } else if (kind == "shape") {   // (a flat shape in one colour: ThorVG's own rectangle or circle)
             if (!fill.empty() && rgb < 0) why = "a shape's fill is six digits, as ff3366";
-            else made.drawn = flat(s, shape.c_str(), (float)doc_number(d, thing, "wide", 0, 1), mat4f{}, 1.f, fill.empty() ? float3{0xd9, 0xd2, 0xc3} / 255.f : colour, lay);
+            else if (shape == "solid") {   // (a flat colour as large as the stage, where it stands at first: as wide to its height, and as high in the stage's units)
+                const math::double4 up = s.camera->getProjectionMatrix() * s.camera->getViewMatrix() * math::double4{0, 1, 0, 1};
+                made.drawn = flat(s, "rect", (float)s.w / (float)s.h, mat4f{}, (float)(2.0 * up.w / up.y), fill.empty() ? float3{0xd9, 0xd2, 0xc3} / 255.f : colour, lay);
+            } else made.drawn = flat(s, shape.c_str(), (float)doc_number(d, thing, "wide", 0, 1), mat4f{}, 1.f, fill.empty() ? float3{0xd9, 0xd2, 0xc3} / 255.f : colour, lay);
         } else if (kind == "solid") {   // (one of the kit's shapes, or a file; its fill is its surface: a colour, or the material glass)
             const bool glass = fill == "glass";
             if (!fill.empty() && !glass && rgb < 0) why = "a solid's fill is six digits, as ff3366, or glass";
@@ -599,6 +606,14 @@ static std::string doc_words(Doc& d, int thing, const char* name) {
     for (const DocValue& one : doc_values)
         if (!strcmp(one.name, name) && doc_among(one.kinds, kind)) return one.words ? one.words : "";
     return "";
+}
+// What a thing is called where things are listed: a text by its words, a shape by what shape it is, a file by its name.
+static std::string doc_name(Doc& d, int thing) {
+    std::string is = doc_word(d, thing, "text");
+    if (is.empty()) is = doc_word(d, thing, "shape");
+    if (is.empty()) return std::filesystem::path(doc_word(d, thing, "file")).filename().string();
+    if (doc_word(d, thing, "kind") != "text") is[0] = (char)std::toupper((unsigned char)is[0]);
+    return is;
 }
 static std::string doc_moving(Doc& d, int thing) {
     const std::string kind = doc_word(d, thing, "kind");

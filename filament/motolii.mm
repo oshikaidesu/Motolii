@@ -130,7 +130,7 @@ int motolii_value(Motolii* m, int thing, const char* name, double at, double* is
 int motolii_things(Motolii* m, int* things, int room) {
     return by_hand(m, [=] { const std::vector<int> all = doc_things(*m->d); for (int i = 0; i < room && i < (int)all.size(); ++i) things[i] = all[(size_t)i]; return (int)all.size(); });
 }
-const char* motolii_word(Motolii* m, int thing, const char* name) { return by_hand(m, [=] { return (m->word = doc_word(*m->d, thing, name)).c_str(); }); }
+const char* motolii_word(Motolii* m, int thing, const char* name) { return by_hand(m, [=] { return (m->word = !strcmp(name, "name") ? doc_name(*m->d, thing) : doc_word(*m->d, thing, name)).c_str(); }); }
 double motolii_lasts(Motolii* m, int thing) { return by_hand(m, [=] { return doc_lasts(*m->d, thing); }); }
 int motolii_key_moments(Motolii* m, int thing, const char* name, double* at, int room) {
     return by_hand(m, [=] { const std::vector<double> all = doc_key_moments(*m->d, thing, name); for (int i = 0; i < room && i < (int)all.size(); ++i) at[i] = all[(size_t)i]; return (int)all.size(); });
@@ -175,9 +175,10 @@ const char* motolii_way_names(Motolii* m) {
         return m->word.c_str();
     });
 }
-double motolii_way_at(const char* way, double u) {
+double motolii_way_at(Motolii* m, const char* way, double u) {
     Interp kind;
-    return interp_said(way, &kind) == 0 ? interp_ease(kind, u) : u;
+    if (interp_said(way, &kind) == 0) return interp_ease(kind, u);
+    return by_hand(m, [=] { return doc_went_by(*m->d, way, u, u, 1.0, 0.0, 1.0); });   // (one defined in the document: as between a key of 0 and a key of 1, a second apart)
 }
 // A film's first picture as a small .png: GStreamer's own line for it (decode, scale, into a .png), held at its first
 // picture, which is taken and written. It asks nothing of a stage, so a shell may call it from another thread.

@@ -65,7 +65,9 @@
   (4) **舞台の大きさは取り消しの1歩**になった：大きさの変更は書類の普通の変更。舞台は開いた時の大きさのままなので、殻は読み直しのたび中に聞く（`motolii_fits`：舞台は書類の言う大きさか）、違えば開き直す。札でも、取り消しでも、やり直しでも同じ道。開き直しても再生位置はそのまま。窓で確かめた（札で縦 → Edit › Undo で横）。
   (5) **回した物の枠**：X・Y で回した物の枠は、切り抜きと同じ「覆ってる所の箱」（3D は奥行きも入れた8つの角）。(6) **Edit メニュー**：文字の箱がキーを持ってる時の Undo・Redo・Cut・Copy・Paste・Select All は、Flutter 自身の文字編集の動作に渡す（書類は戻らない）。(7) **コマ**：殻は自分の 30 をやめて、中の数（`motolii_rate`＝書き出す映像の毎秒60枚）で数える。(8) 隣の書類の一覧は、開いた時に1回だけ読む。
   (9) **Render の間も窓は生きてる**：書き出しは1枚ごとに、その間に頼まれた呼びを片付ける（手は1本のまま）。書き出し中、書類は読めるが変えられない・つかめない（理由つきで断る）。試験：書き出し中に聞いた返事の一番遅いのが 71〜82 ms。窓で確かめた：書き出し中に行を選べた。書けた `skin.mp4` は 1920×1080、毎秒60枚、940枚。
-  開いたまま残った物（3回目の指摘）：自分で定めた行き方の札が直線／3D に不透明度と重ね方が効かない／切り抜きは四角だけ／文字の Size・Alignment、Stroke、Anchor、Depth、Parent、Ghost、Effects 棚、Fonts 棚は見本のまま。
+  (10) **殻の決まりを3つ中へ**：Create 棚の Solid は形の言葉 `solid`（`rect circle solid`）＝舞台ぴったりの平たい色。大きさは中が舞台から出す（Dart の計算は消した。舞台の大きさを変えても付いてくる）。行の名前は中が言う（`motolii_word(thing, "name")`：文字は中身、形は形の名、ファイルは名前。殻の「種類→名前」の表は消した）。自分で定めた行き方の札の線は書類から出す（`motolii_way_at` が書類を見る。C の確かめ：u の二乗は半分で 0.250）。
+  引っかかり：平たい形の言葉 `solid`（＝AE の平面）と、3D の物の種類の名前 `solid` が中で同じ綴り。窓では「Solid」と「3D」で分かれてるので見えないが、種類の方を改名するかは聞く事。
+  開いたまま残った物（3回目の指摘）：3D に不透明度と重ね方が効かない／切り抜きは四角だけ／文字の Size・Alignment、Stroke、Anchor、Depth、Parent、Ghost、Effects 棚、Fonts 棚は見本のまま。
 - 開き方：`skin/book` で Flutter（`~/rust_ae/Motolii/.tools/flutter/bin/flutter`）の `build macos --debug --dart-define=LAB_ROUTE=/?path=workspace/workspace/live`、できた `lab_book.app` を開く。文書は `filament/out/skin.motolii`。
 
 作る的：①`edit_v5` を窓だけで作り直す ②猫ミームの人形劇 ③青いロケットのコラージュ（`research_notes/refs/G_rocket_collage_blue.jpg`）。

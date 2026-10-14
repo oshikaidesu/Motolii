@@ -20,6 +20,7 @@ int main(int argc, char** argv) {
     printf(" x goes %s,", motolii_way_of(m, ring, "x", 0.0));
     printf(" y goes %s;", motolii_way_of(m, ring, "y", 0.0));
     printf(" no key at 0.5: \"%s\"\n", motolii_way_of(m, ring, "x", 0.5));
+    printf("a way defined in the document: %d; half way through it is at %.3f (the square: 0.250), a kind of the nine at %.3f\n", motolii_define(m, "square", "a + (b - a) * u * u"), motolii_way_at(m, "square", 0.5), motolii_way_at(m, "Linear", 0.5));
     printf("%sruns %.2f s; still: %d\n", motolii_list(m), motolii_seconds(m), motolii_still(m, argv[2]));
     motolii_close(m);
     return 0;

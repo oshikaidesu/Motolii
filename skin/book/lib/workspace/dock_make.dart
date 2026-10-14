@@ -365,7 +365,7 @@ final _solids = (
 );
 const _asked = {
   'Text': ('text', '/System/Library/Fonts/Supplemental/Arial Unicode.ttf'),
-  'Solid': ('shape', 'rect'), // (a flat colour as large as the stage: _make gives it the stage's size)
+  'Solid': ('shape', 'solid'), // (a flat colour as large as the stage: the inside makes it so)
   'Rectangle': ('shape', 'rect'),
   'Ellipse': ('shape', 'circle'),
   'Ring': ('solid', 'ring'),
@@ -376,12 +376,7 @@ const _asked = {
 /// A tile made on the stage as a new thing, picked. Not done: the foot of the shelf says why.
 void _make(DockCtx c, String name) {
   final m = c.ws.inside!, asked = _asked[name]!;
-  final made = m.together(() {
-    final made = m.add(asked.$1, asked.$2);
-    // (the sample's Solid is "flat colour, comp size": a rectangle as high and as wide as the stage)
-    if (made != 0 && name == 'Solid') m.set(made, 'size', m.size.$2 / m.point) && m.set(made, 'wide', m.size.$1 / m.size.$2);
-    return made;
-  });
+  final made = m.add(asked.$1, asked.$2);
   c.set(() => made == 0 ? c.mem.trouble[name] = m.trouble : c.mem.trouble.remove(name));
   if (made == 0) return;
   c.ws.reread();

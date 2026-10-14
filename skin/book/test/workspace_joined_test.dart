@@ -206,6 +206,13 @@ void main() {
 
   testWidgets('a flat shape is a thing; Clip to below shows a thing only inside the one before it; a seat with nothing behind goes back', (t) async {
     final ws = await _pump(t), m = ws.inside!;
+    // (the Create shelf's Solid: a flat colour as large as the stage, by the inside's own doing; it is called Solid)
+    final solid = m.add('shape', 'solid');
+    expect(solid, isNot(0), reason: m.trouble);
+    final all = m.frame(solid)!;
+    expect([all[0], all[1], all[2], all[3]], [closeTo(960, 1), closeTo(540, 1), closeTo(1920, 2), closeTo(1080, 2)]);
+    expect(m.word(solid, 'name'), 'Solid');
+    expect(m.undo() && m.things.isEmpty, isTrue, reason: 'made in one step');
     final rect = m.add('', 'rect');
     expect([m.word(rect, 'kind'), m.word(rect, 'shape')], ['shape', 'rect'], reason: m.trouble);
     expect(m.say(rect, 'fill', '1b2fd8') && m.set(rect, 'wide', 2), isTrue, reason: m.trouble);
