@@ -91,6 +91,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
           if (k == Kind.camera) const CameraGroup() else const DirectTransform(), // (a camera has its own card in place of Transform, as the tabs have it)
           if (k == Kind.text && doc.seat('text')) const TextGroup(),
           if ((k == Kind.shape || k == Kind.text) && doc.seat('fill')) const FillStroke(),
+          for (final c in doc.cards) ValuesCard(c), // (the host's own: what it has beyond the sample's cards)
           if (k != Kind.camera && (doc.seat('blend') || doc.seat('clip'))) const BlendRows(),
           PopGroupLabel('Effects', count: Ctx.of(context).doc.fxOrder.length),
           const EffectsStack(),

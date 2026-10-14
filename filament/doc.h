@@ -109,7 +109,19 @@ static const DocValue doc_values[] = {
     {"copy_columns", "picture text shape", 0, 100, false, nullptr},   // (so many to a row, then the next row: copy_x along it, copy_y down; 0: one row)
     {"tint", "picture text shape", 0, 1, false, nullptr}, {"tint_black", "picture text shape", 0, 0, false, ""}, {"tint_white", "picture text shape", 0, 0, false, ""},
     {"tritone", "picture text shape", 0, 1, false, nullptr}, {"tritone_shadow", "picture text shape", 0, 0, false, ""}, {"tritone_midtone", "picture text shape", 0, 0, false, ""}, {"tritone_highlight", "picture text shape", 0, 0, false, ""},   // (how its lines lie one under another, ThorVG's own: 0 at the left, 0.5 about the middle, 1 at the right)
-    {"stroke", "text shape", 0, 0, false, ""}, {"stroke_width", "text shape", 0, 1000, false, nullptr}};   // (its edge: a colour, and how wide, in points of the picture at size 1)
+    {"stroke", "text shape", 0, 0, false, ""}, {"stroke_width", "text shape", 0, 1000, false, nullptr},   // (its edge: a colour, and how wide, in points of the picture at size 1)
+    // (ThorVG's own: a text's letters and lines so many times as far apart as the font sets them, its slant; an edge's
+    //  ends and corners, and dashes along it so long, with gaps as long, begun so far along)
+    {"letter_spacing", "text", 0, 10, false, nullptr}, {"line_spacing", "text", 0, 10, false, nullptr}, {"italic", "text", 0, 0.5, false, nullptr},
+    {"cap", "shape", 0, 0, false, "butt round square"}, {"join", "shape", 0, 0, false, "miter round bevel"},
+    {"dash", "shape", 0, 1000, false, nullptr}, {"dash_offset", "shape", -1e4, 1e4, false, nullptr}};
+// The cards a maker sees a thing's values on, besides where it is and its fill: a title and the values on it, in the
+// order shown (a thing is shown those of them its kind has). A value the window has no other seat for goes here.
+struct DocCard { const char* title; const char* names; };
+static const DocCard doc_cards[] = {
+    {"Type", "letter_spacing line_spacing italic"},
+    {"Line", "cap join dash dash_offset"},
+};
 static bool doc_among(const std::string& words, const std::string& one) { return (" " + words + " ").find(" " + one + " ") != std::string::npos; }
 
 // Rows of the document: `each` is told every row of what is asked (in SQLite's own words).
@@ -428,7 +440,7 @@ static void doc_moment(Doc& d, double now) {
 static bool doc_match(Doc& d) {
     Stage& s = *d.stage;
     std::map<int, std::string> told;   // every thing of the document, and all that its making goes by
-    doc_rows(d, sqlite3_mprintf("select thing, group_concat(name || '=' || value, ' ') from (select * from fact where thing > 0 and name in ('kind','file','shape','blend','keyed','space','begin','duration','speed','text','fill','wide','points','inner','round','stroke','stroke_width','align','blur','shadow','shadow_distance','shadow_angle','shadow_blur','shadow_opacity','glow','glow_blur','glow_opacity','copies','tint','tint_black','tint_white','tritone','tritone_shadow','tritone_midtone','tritone_highlight') order by thing, name) group by thing"),
+    doc_rows(d, sqlite3_mprintf("select thing, group_concat(name || '=' || value, ' ') from (select * from fact where thing > 0 and name in ('kind','file','shape','blend','keyed','space','begin','duration','speed','text','fill','wide','points','inner','round','stroke','stroke_width','align','blur','shadow','shadow_distance','shadow_angle','shadow_blur','shadow_opacity','glow','glow_blur','glow_opacity','copies','tint','tint_black','tint_white','tritone','tritone_shadow','tritone_midtone','tritone_highlight','letter_spacing','line_spacing','italic','cap','join','dash','dash_offset') order by thing, name) group by thing"),
              [&](sqlite3_stmt* row) { told[sqlite3_column_int(row, 0)] = (const char*)sqlite3_column_text(row, 1); });
     for (auto it = d.shown.begin(); it != d.shown.end();) {
         const auto still = told.find(it->first);
@@ -477,6 +489,10 @@ static bool doc_match(Doc& d) {
         DrawnFx fx;
         if (ramp.size() > 1) fx.ramp = ramp;
         fx.copies = (int)doc_number(d, thing, "copies", 0, 1);
+        fx.letters = (float)doc_number(d, thing, "letter_spacing", 0, 1), fx.lines = (float)doc_number(d, thing, "line_spacing", 0, 1), fx.italic = (float)doc_number(d, thing, "italic", 0, 0);
+        const auto which = [&](const char* name, const char* words) { const std::string w = doc_word(d, thing, name); if (w.empty()) return -1; int n = 0; for (const char* at = words; *at; ++n) { const size_t len = strcspn(at, " "); if (w == std::string(at, len)) return n; at += len + (at[len] ? 1 : 0); } return -1; };
+        fx.cap = which("cap", "butt round square"), fx.join = which("join", "miter round bevel");   // (ThorVG's StrokeCap and StrokeJoin, in its order)
+        fx.dash = (float)(doc_number(d, thing, "dash", 0, 0) / units), fx.dashFrom = (float)(doc_number(d, thing, "dash_offset", 0, 0) / units);
         fx.blur = (float)(doc_number(d, thing, "blur", 0, 0) / units);
         if (shadeRgb >= 0) {   // (After Effects' own drop shadow, as it comes: half of it, 135 degrees, 10 points away, 10 soft)
             fx.shadow = float4{float3{(float)((shadeRgb >> 16) & 255), (float)((shadeRgb >> 8) & 255), (float)(shadeRgb & 255)} / 255.f, (float)doc_number(d, thing, "shadow_opacity", 0, 0.5)};
@@ -926,6 +942,22 @@ static std::string doc_has(Doc& d, int thing) {
         if (doc_among(one.kinds, kind)) names += std::string(names.empty() ? "" : " ") + one.name;
     return names;
 }
+// The cards of a thing: "title: name name; title: name" (those of its values its kind has; a card with none, left out).
+static std::string doc_cards_of(Doc& d, int thing) {
+    const std::string has = " " + doc_has(d, thing) + " ";
+    std::string all;
+    for (const DocCard& card : doc_cards) {
+        std::string names;
+        for (const char* at = card.names; *at;) {
+            const size_t len = strcspn(at, " ");
+            const std::string n(at, len);
+            if (has.find(" " + n + " ") != std::string::npos) names += (names.empty() ? "" : " ") + n;
+            at += len + (at[len] ? 1 : 0);
+        }
+        if (!names.empty()) all += (all.empty() ? "" : "; ") + std::string(card.title) + ": " + names;
+    }
+    return all;
+}
 static bool doc_range(Doc& d, int thing, const char* name, double* low, double* high) {
     const std::string kind = doc_word(d, thing, "kind");
     for (const DocValue& one : doc_values)
@@ -1056,7 +1088,7 @@ static bool doc_covers(Doc& d, int thing, double now, double* box) {
     return true;
 }
 
-static double doc_usual(const char* name) { return doc_among("size speed opacity wide visible distance zoom copies copy_size blur_level", name) ? 1.0 : !strcmp(name, "duration") ? -1.0 : 0.0; }
+static double doc_usual(const char* name) { return doc_among("size speed opacity wide visible distance zoom copies copy_size blur_level letter_spacing line_spacing", name) ? 1.0 : !strcmp(name, "duration") ? -1.0 : 0.0; }
 static bool doc_value(Doc& d, int thing, const char* name, double at, double* is) { return doc_knows(d, thing, name) && (*is = doc_number(d, thing, name, at, doc_usual(name)), true); }
 // A thing held by a hand, carried, and let go: the one form of everything a hand drags (a thing on the stage, its bar
 // on the timeline, a number). What is carried shows at once and is not the document's until it is let go, and then

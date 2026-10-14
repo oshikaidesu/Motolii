@@ -179,6 +179,7 @@ const char* motolii_words(Motolii* m, int thing, const char* name) { return by_h
 const char* motolii_moving(Motolii* m, int thing) { return by_hand(m, [=] { return (m->word = doc_moving(*m->d, thing)).c_str(); }); }
 const char* motolii_values(Motolii* m, int thing) { return by_hand(m, [=] { return (m->word = doc_has(*m->d, thing)).c_str(); }); }
 int motolii_range(Motolii* m, int thing, const char* name, double* low, double* high) { return by_hand(m, [=] { return (int)doc_range(*m->d, thing, name, low, high); }); }
+const char* motolii_cards(Motolii* m, int thing) { return by_hand(m, [=] { return (m->word = doc_cards_of(*m->d, thing)).c_str(); }); }
 const char* motolii_kind_of(const char* file) { return doc_kind_of(file); }
 int motolii_sets(const char* font, const char* words) { return type_sets(font, words) ? 1 : 0; }
 // The names of the ways a stretch may go (the nine kinds, then the ways defined in this document), with spaces between;

@@ -61,7 +61,8 @@ static void picture_at(Stage& s, Drawn* d, float seconds) {
 // much of it (shadow.w), falling so far, that way (degrees, as ThorVG counts them) and so soft.
 // tint: how much its darks and lights are made two colours (0: not at all); tritone: how much its darks, middles and
 // lights are made three (0: not at all).
-struct DrawnFx { float blur = 0.f; float4 shadow{0.f}; float fall = 0.f, way = 0.f, soft = 0.f; float tint = 0.f; float3 tints[2]{}; float tritone = 0.f; float3 tones[3]{}; float4 glow{0.f}; float glowSoft = 0.f; int copies = 1;
+struct DrawnFx { float letters = 1.f, lines = 1.f, italic = 0.f; float dash = 0.f, dashFrom = 0.f; int cap = -1, join = -1;   // (ThorVG's own: Text::spacing, italic; Shape::strokeDash, strokeCap, strokeJoin; -1: as it comes)
+    float blur = 0.f; float4 shadow{0.f}; float fall = 0.f, way = 0.f, soft = 0.f; float tint = 0.f; float3 tints[2]{}; float tritone = 0.f; float3 tones[3]{}; float4 glow{0.f}; float glowSoft = 0.f; int copies = 1;
                  std::vector<float3> ramp;   // (two colours or more: it is filled from the first at its top to the last at its bottom, ThorVG's linear gradient)
                  DrawnFx over(float high) const {   // (the same for a thing `high` units high: its lengths as shares of that)
                      DrawnFx f = *this;
@@ -206,6 +207,8 @@ static Drawn* type(Stage& s, const char* words, const char* fontFile, const mat4
         t->font(std::filesystem::path(fontFile).stem().string().c_str());   // (ThorVG names a font by its file)
         t->size(fine);
         t->text(words);
+        t->spacing(fx.letters, fx.lines);
+        if (fx.italic > 0.f) t->italic(fx.italic);
         t->fill((uint8_t)std::lround(255.f * colour.x), (uint8_t)std::lround(255.f * colour.y), (uint8_t)std::lround(255.f * colour.z));
         bool measured = t->bounds(&x, &y, &wide, &tall) == tvg::Result::Success && wide > 0.f && tall > 0.f;
         if (measured && wide > 4096.f) {   // (a line too long for one picture is set smaller)
@@ -264,6 +267,9 @@ static Drawn* flat(Stage& s, const char* form, float wide, const mat4f& place, f
         shape->fill((uint8_t)std::lround(255.f * colour.x), (uint8_t)std::lround(255.f * colour.y), (uint8_t)std::lround(255.f * colour.z), strcmp(form, "null") ? 255 : 0);
         if (fx.ramp.size() > 1 && strcmp(form, "null")) shape->fill(ramp_of(fx.ramp, 0.f, (float)*h));
         if (in > 0.f) shape->strokeWidth(2.f * in), shape->strokeFill((uint8_t)std::lround(255.f * edge.x), (uint8_t)std::lround(255.f * edge.y), (uint8_t)std::lround(255.f * edge.z));
+        if (fx.cap >= 0) shape->strokeCap((tvg::StrokeCap)fx.cap);
+        if (fx.join >= 0) shape->strokeJoin((tvg::StrokeJoin)fx.join);
+        if (fx.dash > 0.f) { const float gap[2] = {fx.dash * (float)*h, fx.dash * (float)*h}; shape->strokeDash(gap, 2, fx.dashFrom * (float)*h); }   // (as long as the gaps; in shares of its height)
         return shape;
     }, place, high, float3{-1.f}, true, lay, fx);
 }

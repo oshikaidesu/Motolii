@@ -97,7 +97,7 @@ String propOf(String id) => RegExp(r'\.[xyz]$').hasMatch(id) ? id.substring(0, i
 
 /// A pure-Dart mock of the selected layer(s). Not the product's model; only enough to make every control really do its job.
 class Doc extends ChangeNotifier {
-  Doc(this.kind, {this.count = 1, int effects = 2, List<Fx>? fx}) : fxDefs = fx ?? kEffects {
+  Doc(this.kind, {this.count = 1, int effects = 2, List<Fx>? fx, this.cards = const []}) : fxDefs = fx ?? kEffects {
     void s(String id, double v) {
       this.v[id] = v;
       d[id] = v;
@@ -138,7 +138,7 @@ class Doc extends ChangeNotifier {
     s('comp.w', 1920);
     s('comp.h', 1080);
     s('comp.fps', 30);
-    for (final f in fxDefs) {
+    for (final f in [...fxDefs, ...cards]) {
       for (final (i, p) in f.params.indexed) {
         paramDefaults(f.id, p).forEach(s);
         if (p.look == ParamLook.colour) s2['${f.id}_${p.id}'] = paramColour(f.decls[i]);
@@ -194,6 +194,10 @@ class Doc extends ChangeNotifier {
   String? kindWord;
   Set<String>? seats;
   bool seat(String id) => seats?.contains(id) ?? true;
+
+  /// The host's own cards of values (each one's Params, its fields keyed `v_` and the value's name): what the host has
+  /// beyond the sample's cards.
+  final List<Fx> cards;
 
   /// The effects the cards are made from: the host's, or the sample's.
   final List<Fx> fxDefs;

@@ -8,7 +8,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lab_book/motolii.dart';
 import 'package:lab_book/parts/controls.dart' show Segmented;
-import 'package:lab_book/sets/inspector/inspector_parts.dart' show AnchorCube, AnchorGeometry, EffectCard, FillStroke, InspHeader, NumField, OnOff, PropRow, Space, SpacePlate, TextGroup;
+import 'package:lab_book/sets/inspector/inspector_parts.dart' show AnchorCube, AnchorGeometry, EffectCard, ValuesCard, FillStroke, InspHeader, NumField, OnOff, PropRow, Space, SpacePlate, TextGroup;
 import 'package:lab_book/workspace/dock_fonts.dart';
 import 'package:lab_book/workspace/dock_make.dart' show CreateShelf;
 import 'package:lab_book/workspace/desk_kit.dart' show DeskScrub;
@@ -1054,6 +1054,35 @@ void main() {
     await t.pumpAndSettle();
     expect(find.descendant(of: find.byType(InspHeader), matching: find.text('Solid')), findsOneWidget);
     expect(find.byType(FillStroke), findsOneWidget, reason: 'a solid\'s fill is a colour or glass');
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
+  testWidgets('the inside\'s own cards: a text\'s Type (ThorVG\'s spacing and slant), a shape\'s Line (its ends, corners, dashes), each from the document', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    final text = m.add('text', _font), rect = m.add('shape', 'rect');
+    expect(m.say(text, 'text', 'MOTOLII') && m.say(rect, 'stroke', 'ff3366') && m.set(rect, 'stroke_width', 12), isTrue, reason: m.trouble);
+    ws
+      ..reread()
+      ..select('$text');
+    await t.pumpAndSettle();
+    expect(find.descendant(of: find.byType(ValuesCard), matching: find.text('Type')), findsOneWidget);
+    final wide = m.frame(text)![2], letters = find.byWidgetPredicate((w) => w is NumField && w.id == 'v_letter_spacing');
+    expect(letters, findsOneWidget);
+    await t.ensureVisible(letters);
+    await t.drag(letters, const Offset(80, 0));
+    await t.pumpAndSettle();
+    expect(m.value(text, 'letter_spacing', 0), greaterThan(1), reason: 'the letters further apart: ${ws.notice}');
+    expect(m.frame(text)![2], greaterThan(wide), reason: 'and the words wider on the stage');
+    ws.select('$rect');
+    await t.pumpAndSettle();
+    expect(find.descendant(of: find.byType(ValuesCard), matching: find.text('Line')), findsOneWidget);
+    final round = find.descendant(of: find.byType(ValuesCard), matching: find.text('ROUND')).first; // (the ends: butt, round, square, as the sample's segments write them)
+    await t.ensureVisible(round);
+    await t.tap(round);
+    await t.pumpAndSettle();
+    expect(m.word(rect, 'cap'), 'round', reason: m.trouble);
+    expect(m.undo() && m.word(rect, 'cap').isEmpty, isTrue, reason: 'one step');
     expect(t.takeException(), isNull);
     await _close(t);
   }, skip: !_built);

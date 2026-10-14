@@ -377,6 +377,7 @@ bool _say(Ws ws, String? id, Map<String, String> changed) {
         'camTarget' => m.set(t, 'parent', (_others(ws, t)[e.value] ?? 0).toDouble()),
         'parent' => m.set(t, 'parent', (_others(ws, t)[e.value] ?? 0).toDouble()), // (it goes with that one, and stays where it is)
         'stroke' => m.say(t, 'stroke', e.value == 'None' ? '' : e.value.replaceFirst('#', '').toLowerCase()), // (None: no edge)
+        final k when k.startsWith('v_') => m.say(t, k.substring(2), e.value), // (a card of the inside's own: the value of that name)
         _ => true, // (a seat the inside has nothing behind yet: the inspector keeps its own word)
       };
       if (!ok) why ??= m.trouble;
@@ -494,6 +495,24 @@ List<Fx>? _fxCards(Ws ws, String? id) {
   ];
 }
 
+/// Joined: the cards the inside shows a thing's values on beyond the sample's (motolii_cards), each as Params in the
+/// effects' manner: a number its range and what it is now, a word the words it may be. Nothing of them is typed here.
+List<Fx>? _valueCards(Ws ws, String? id) {
+  final m = ws.inside, t = int.tryParse(id ?? '');
+  if (m == null || t == null) return null;
+  final at = ws.frame / Ws.fps;
+  return [
+    for (final (title, names) in m.cards(t))
+      Fx('v', title, 'struct Params {\n${[
+        for (final n in names)
+          if (m.words(t, n) case final words when words.isNotEmpty)
+            '  /// @enum(${words.join(', ')}) @default(${math.max(0, words.indexOf(m.word(t, n)))})\n  $n: u32,'
+          else if (m.range(t, n) case (final lo, final hi))
+            '  /// @range($lo, $hi) @default(${m.value(t, n, at) ?? lo})\n  $n: f32,',
+      ].join('\n')}\n}', tone: Pop.toneText, mark: CardMark.text),
+  ];
+}
+
 /// The selected layer's transform as the stage draws it at this frame, in the Inspector's ids.
 Map<String, double> wsTransform(Ws ws, String? id) {
   if (ws.inside case final m?) {   // (joined: the document's own values, as the inspector counts them)
@@ -505,6 +524,9 @@ Map<String, double> wsTransform(Ws ws, String? id) {
       for (final s in _seats) s.$1: r1(s.$3(m.value(t, s.$2, at) ?? (s.$2 == 'opacity' ? 1 : 0), WsArt.comp, p)), // (a thing that has no opacity is all there)
       if (m.value(t, 'wide', 0) case final wide?) 'scale.x': r1((m.value(t, 'size', at) ?? 1) * wide * 100), // (a flat shape may be wider than it is high: its scale x)
       'depth': r1(m.frame(t)?[7] ?? 0), // (how deep it is in points of the picture: a flat thing is Flat)
+      for (final (_, names) in m.cards(t))
+        for (final n in names)
+          'v_$n': m.words(t, n).isEmpty ? m.value(t, n, at) ?? 0 : math.max(0, m.words(t, n).indexOf(m.word(t, n))).toDouble(), // (the inside's own cards: a number as it is, a word by its place among those it may be)
       for (final fields in _fxFields(ws, id).values)
         for (final MapEntry(:key, value: n) in fields.entries) key: m.value(t, n, at) ?? 0, // (the effects' numbers, as they are)
     };
@@ -517,6 +539,7 @@ Map<String, double> wsTransform(Ws ws, String? id) {
 
 (String, double)? _asDocument(Ws ws, String id, double x) {
   final seat = _seats.where((s) => s.$1 == id).firstOrNull;
+  if (seat == null && id.startsWith('v_')) return (id.substring(2), x); // (a card of the inside's own: the value of that name, as it is)
   if (seat == null) {
     for (final fields in _fxFields(ws, ws.selected).values) {
       if (fields[id] case final n?) return (n, x); // (an effect's number: the document's, as it is)
@@ -529,6 +552,15 @@ Map<String, double> wsTransform(Ws ws, String? id) {
 /// drag): while a hand is on it, it only shows; when the hand lets go it is the document's, by the document's rules.
 void _write(Ws ws, String? id, Map<String, double> changed, {required bool live}) {
   final m = ws.inside!, t = int.tryParse(id ?? '');
+  // (a word on a card of the inside's own, picked: the word in that place, said; one step)
+  final said = {for (final e in changed.entries) if (t != null && e.key.startsWith('v_') && m.words(t, e.key.substring(2)).isNotEmpty) e.key: e.value};
+  if (said.isNotEmpty) {
+    if (live) return;
+    final ok = m.together(() => said.entries.every((e) => m.say(t!, e.key.substring(2), m.words(t, e.key.substring(2))[e.value.round().clamp(0, m.words(t, e.key.substring(2)).length - 1)])));
+    _told(ws, ok ? null : m.trouble);
+    changed = {for (final e in changed.entries) if (!said.containsKey(e.key)) e.key: e.value};
+    if (changed.isEmpty) return ws.reread();
+  }
   if (t == null || !m.hold(t)) return;
   // (a flat shape's scale x and y are the document's size and how many times as wide as high it is)
   final shaped = m.word(t, 'kind') == 'shape' && (changed.containsKey('scale.x') || changed.containsKey('scale.y'));
@@ -597,6 +629,7 @@ class _InspectorSeat extends StatelessWidget {
         effects: 2,
         fx: _fxCards(ws, l?.id), // (joined: the effects the document has on it, each a card)
         kindWord: _kindWord(ws, l?.id),
+        cards: _valueCards(ws, l?.id),
         onFxRemove: ws.inside == null ? null : (v) => ws.fxToggle(fxValues.entries.firstWhere((e) => e.value.$1 == v).key), // (taken off the document, as the shelf's Remove)
         onFxMove: ws.inside == null
             ? null

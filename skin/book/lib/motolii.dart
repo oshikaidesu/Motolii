@@ -97,6 +97,7 @@ class Motolii {
   late final _keyed = _lib.lookupFunction<Int32 Function(_P, Int32, _S, Double), int Function(_P, int, _S, double)>('motolii_keyed');
   late final _moving = _lib.lookupFunction<_S Function(_P, Int32), _S Function(_P, int)>('motolii_moving');
   late final _values = _lib.lookupFunction<_S Function(_P, Int32), _S Function(_P, int)>('motolii_values');
+  late final _cards = _lib.lookupFunction<_S Function(_P, Int32), _S Function(_P, int)>('motolii_cards');
   late final _range = _lib.lookupFunction<Int32 Function(_P, Int32, _S, Pointer<Double>, Pointer<Double>), int Function(_P, int, _S, Pointer<Double>, Pointer<Double>)>('motolii_range');
   late final _words = _lib.lookupFunction<_S Function(_P, Int32, _S), _S Function(_P, int, _S)>('motolii_words');
   late final _wayNames = _lib.lookupFunction<_S Function(_P), _S Function(_P)>('motolii_way_names');
@@ -300,6 +301,12 @@ class Motolii {
 
   /// The names of all a thing's values.
   List<String> values(int thing) => _values(_m, thing).toDartString().split(' ').where((n) => n.isNotEmpty).toList();
+
+  /// The cards a maker sees a thing's values on, besides where it is and its fill: each a title and the values on it.
+  List<(String, List<String>)> cards(int thing) => [
+    for (final c in _cards(_m, thing).toDartString().split('; '))
+      if (c.indexOf(': ') case final at when at > 0) (c.substring(0, at), c.substring(at + 2).split(' ')),
+  ];
 
   /// A number value's lowest and highest (null: the thing has no such number).
   (double, double)? range(int thing, String name) {

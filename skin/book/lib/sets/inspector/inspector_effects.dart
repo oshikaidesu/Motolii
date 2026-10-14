@@ -390,3 +390,11 @@ class _ParamSearchState extends State<ParamSearch> {
     );
   }
 }
+
+/// A card of the host's own values, in the effects' manner: its Params, each field a value (keyed `v_` and its name).
+class ValuesCard extends StatelessWidget {
+  const ValuesCard(this.card, {super.key});
+  final Fx card;
+  @override
+  Widget build(BuildContext context) => Sect(title: card.name, tone: card.tone, mark: card.mark, children: [ParamGrid('v', card.params)]);
+}

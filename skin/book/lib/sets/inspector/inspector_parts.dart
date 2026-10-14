@@ -148,6 +148,7 @@ class InspHost extends StatefulWidget {
     this.seats,
     this.onFxRemove,
     this.onFxMove,
+    this.cards,
     this.title,
     this.onRoute,
     this.values = const {},
@@ -180,6 +181,9 @@ class InspHost extends StatefulWidget {
   /// The host's say on an effect taken off, and on their order (see [Doc.onFxRemove]).
   final bool Function(String id)? onFxRemove;
   final bool Function()? onFxMove;
+
+  /// The host's own cards of values (see [Doc.cards]).
+  final List<Fx>? cards;
 
   /// The selected layer's name, when the host knows it.
   final String? title;
@@ -229,7 +233,7 @@ class InspHost extends StatefulWidget {
 class _InspHostState extends State<InspHost> {
   late Doc doc = _make();
   Doc _make() {
-    final d = Doc(widget.kind, count: widget.count, effects: widget.effects, fx: widget.fx)
+    final d = Doc(widget.kind, count: widget.count, effects: widget.effects, fx: widget.fx, cards: widget.cards ?? const [])
       ..title = widget.title
       ..kindWord = widget.kindWord
       ..seats = widget.seats
@@ -328,7 +332,7 @@ class _InspHostState extends State<InspHost> {
   @override
   void didUpdateWidget(InspHost o) {
     super.didUpdateWidget(o);
-    if (o.kind != widget.kind || o.count != widget.count || o.effects != widget.effects || !listEquals(o.fx?.map((f) => f.wgsl).toList(), widget.fx?.map((f) => f.wgsl).toList())) {
+    if (o.kind != widget.kind || o.count != widget.count || o.effects != widget.effects || !listEquals(o.fx?.map((f) => f.wgsl).toList(), widget.fx?.map((f) => f.wgsl).toList()) || !listEquals(o.cards?.map((f) => f.name + f.wgsl.replaceAll(RegExp(r'@default\([^)]*\)'), '')).toList(), widget.cards?.map((f) => f.name + f.wgsl.replaceAll(RegExp(r'@default\([^)]*\)'), '')).toList())) {
       doc.dispose();
       doc = _make();
     } else {

@@ -100,6 +100,9 @@ const char* motolii_moving(Motolii* m, int thing);
    value's lowest and highest (0: it has no such number). */
 const char* motolii_values(Motolii* m, int thing);
 int motolii_range(Motolii* m, int thing, const char* name, double* low, double* high);
+/* The cards a maker sees a thing's values on, besides where it is and its fill: "title: name name; title: name" (until
+   the next call). A value added to the document's cards is shown by a shell that reads this, with nothing of its own. */
+const char* motolii_cards(Motolii* m, int thing);
 const char* motolii_words(Motolii* m, int thing, const char* name);   /* the words a value of a thing may be, with spaces between ("": any, or it is not a word; until the next call) */
 /* One act that is several calls (a value changed and its key put): the changes made from motolii_together(m, 1) to
    motolii_together(m, 0) are one step of undo, and if one of them is refused none of them is made (0 comes back).
