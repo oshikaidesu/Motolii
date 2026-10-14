@@ -1327,6 +1327,9 @@ static const DocRecipe doc_recipes[] = {
      "set size 0.08\nset wide 0.5\nset copies 160\nset scatter_x 36\nset scatter_y 20\nset scatter_rotate 180\nset scatter_size 0.5\nset wave_rotate 120\nset wave_phase 37\nset wave_y 1\nsay copy_fill ff3366 ffd166 1b2fd8 22c55e ff3366"},
     {"Op star", "shape", "star", "stars within stars, black and white in turn, each turning a little after the one outside it",
      "set size 2.6\nset copies 22\nset copy_size 0.88\nsay copy_fill ffffff 000000\nsay copy_fill_way cycle\nset wave_rotate 12\nset wave_phase 1\nset wave_speed 0.4"},
+    {"Helix", "shape", "circle", "two strands of dots winding round each other, front larger than back",
+     "say fill ff3366\nset size 0.12\nset x -2.6\nset copies 40\nset copy_x 1.1\nset wave_y 6\nset wave_size 0.4\nset wave_phase 2\nset wave_speed 0.3\nsay copy_fill ff3366 ffd166\n"
+     "then shape circle\nsay fill 1b2fd8\nset size 0.12\nset x -2.6\nset copies 40\nset copy_x 1.1\nset wave_y -6\nset wave_size -0.4\nset wave_phase 2\nset wave_speed 0.3\nsay copy_fill 1b2fd8 22c55e"},
     {"Burst", "shape", "line", "lines from a centre growing out one after another",
      "say fill ffffff\nset anchor_x -1\nset copies 24\nset copy_turn 360\nkey size 0 0.001\nkey size 0.5 1.3\nset stagger 0.8\nset wave_size 0.15\nset wave_phase 2\nsay copy_fill ffffff ffd166"},
 };
@@ -1344,13 +1347,16 @@ static int doc_make(Doc& d, const char* name) {
     const int thing = doc_add(d, r->kind, r->file);
     if (thing) doc_say(d, thing, "name", r->name);   // (listed by the recipe's name)
     std::istringstream lines(r->lines);
-    for (std::string line; thing && std::getline(lines, line);) {
+    int now = thing;   // (the thing the lines tell: "then kind file" makes another, named as the recipe too)
+    for (std::string line; now && std::getline(lines, line);) {
         std::istringstream w(line);
         std::string call, value;
         w >> call >> value;
         std::string rest;
         std::getline(w, rest);
         rest.erase(0, rest.find_first_not_of(' '));
+        if (call == "then") { if ((now = doc_add(d, value.c_str(), rest.c_str()))) doc_say(d, now, "name", r->name); continue; }
+        const int thing = now;
         if (call == "set") doc_set(d, thing, value.c_str(), std::atof(rest.c_str()));
         else if (call == "say") doc_say(d, thing, value.c_str(), rest.c_str());
         else if (call == "key") { std::istringstream k(rest); double at = 0, is = 0; k >> at >> is; doc_key(d, thing, value.c_str(), d.stage->now + at, is); }
