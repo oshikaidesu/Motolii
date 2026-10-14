@@ -852,6 +852,46 @@ void main() {
     await _close(t);
   }, skip: !_built);
 
+  testWidgets('the strip means the document: Snap sticks to the picture\'s middle, Group picks the parent, a Mask rectangle cuts the picked thing; the pivot is the anchor', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    final a = m.add('shape', 'circle'), b = m.add('shape', 'rect');
+    expect(m.set(a, 'x', -1.5) && m.set(b, 'x', 1.5) && m.set(b, 'anchor_x', 1), isTrue, reason: m.trouble);
+    ws.reread();
+    await t.pumpAndSettle();
+    final fb = m.frame(b)!;
+    expect(fb[5], closeTo(fb[0] + fb[2] / 2, 1), reason: 'the point it turns about is its anchor: its right edge');
+    final stage = t.getRect(find.byKey(const ValueKey('ws-stage-comp'))), k = 1920 / stage.width;
+    Offset at(int thing) => stage.topLeft + Offset(m.frame(thing)![0], m.frame(thing)![1]) / k;
+    await t.tap(find.byKey(const ValueKey('ws-tool-1')));
+    await t.pumpAndSettle();
+    await t.dragFrom(at(a), stage.center + const Offset(3, -2) - at(a));
+    await t.pumpAndSettle();
+    expect(m.frame(a)![0], closeTo(960, .5), reason: 'Snap: its middle on the picture\'s, though let go three points off');
+    expect(m.frame(a)![1], closeTo(540, .5));
+    expect(m.set(a, 'parent', b.toDouble()), isTrue, reason: m.trouble);
+    ws.reread();
+    await t.tap(find.byKey(const ValueKey('ws-tool-0')));
+    await t.pumpAndSettle();
+    await t.tap(find.text('Group'));
+    await t.pumpAndSettle();
+    await t.tapAt(at(a));
+    await t.pumpAndSettle();
+    expect(ws.selected, '$b', reason: 'Group: what goes with another is picked as that one');
+    ws.select('$a');
+    await t.tap(find.byKey(const ValueKey('ws-tool-2')));
+    await t.pumpAndSettle();
+    await t.tap(find.text('Mask'));
+    await t.pumpAndSettle();
+    await t.dragFrom(at(a) - Offset(stage.width * .03, stage.height * .03), Offset(stage.width * .06, stage.height * .06));
+    await t.pumpAndSettle();
+    final cut = int.parse(ws.selected!), all = m.things;
+    expect(all.indexOf(cut), all.indexOf(a) - 1, reason: 'the mask lies just behind the thing it cuts: ${m.trouble}');
+    expect([m.value(a, 'clip', 0), m.value(cut, 'opacity', 0)], [1, 0], reason: 'it is clipped by it, which is not seen itself');
+    expect(m.undo() && m.things.length == 2 && m.value(a, 'clip', 0) == 0, isTrue, reason: 'one step');
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
   testWidgets('Backspace on the timeline takes the picked thing out; undo brings it back', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final ring = m.add('solid', 'ring'), cube = m.add('solid', 'cube');

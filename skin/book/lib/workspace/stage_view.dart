@@ -55,11 +55,20 @@ class StageView extends StatefulWidget {
     this.make,
     this.axis = 0,
     this.fromCentre = false,
+    this.snap = false,
+    this.pivots = false,
+    this.group = false,
+    this.mask = false,
   });
 
   /// Joined: the Move tool's way (0 free, 1 along x only, 2 along y only), and whether an ellipse is drawn out from its middle.
   final int axis;
   final bool fromCentre;
+
+  /// Joined: a thing carried sticks to the lines of the others, of the picture and of the guides (snap); every thing's
+  /// point it turns about is shown (pivots); a thing taken hold of is the one it goes with, outermost (group); what is
+  /// drawn cuts the picked thing (mask: it lies just behind it, and that one is clipped by it).
+  final bool snap, pivots, group, mask;
 
   /// Joined: what the tool in hand makes where the hand is drawn across the stage (rect, circle, line, text; null:
   /// the hand takes hold of things).
@@ -101,7 +110,14 @@ class _StageViewState extends State<StageView> {
 
   String? _hit(_View v, Offset local) {
     if (!v.comp.contains(local) && widget.scene.camera && widget.scene.boxes == null) return null; // (joined: a thing that lies off the picture can still be held by its frame and carried back)
-    final d = _doc(v, local), id = WsArt.hit(widget.scene, d);
+    final d = _doc(v, local), id = WsArt.hit(widget.scene, d), m = WsScope.read(context).inside;
+    if (widget.group && m != null && id != null) { // (Group: the outermost of the things it goes with, by the document's parent)
+      var t = int.parse(id);
+      for (var p = (m.value(t, 'parent', 0) ?? 0).round(), n = 0; p > 0 && n < 64; p = (m.value(t, 'parent', 0) ?? 0).round(), n++) {
+        t = p;
+      }
+      return '$t';
+    }
     if (id != null || widget.scene.camera) return id;
     final cam = WsArt.cameraBox(widget.scene), tol = 8 / v.s;
     return cam.contains(d, tol) && !cam.contains(d, -tol) ? 'cam' : null;
@@ -110,6 +126,65 @@ class _StageViewState extends State<StageView> {
   // Joined: a thing held on the stage, carried, and let go. The stage only says how far the hand has gone, in points of
   // the picture; where that puts the thing (at its own depth), and what it is to the document, is the inside's.
   ({Offset from, bool moved})? _held;
+
+  // Joined, Snap (the past repository's, After Effects' snapping): the held thing's left, middle and right (top, middle,
+  // bottom) stick to the nearest of the same three lines of every other thing it does not go with and of the picture,
+  // or to a guide, within six points of the screen. What it holds to, and the lines it met.
+  ({Rect box, List<(double, double)> xs, List<(double, double)> ys})? _snapTo;
+  (double?, double?) _met = (null, null);
+
+  Rect _bounds(ArtBox b) {
+    final p = [for (final c in b.corners) WsArt.toView(widget.scene, c)];
+    return p.skip(1).fold(Rect.fromPoints(p[0], p[0]), (r, q) => r.expandToInclude(Rect.fromPoints(q, q)));
+  }
+
+  void _snapFrom(String id) {
+    final boxes = widget.scene.boxes, m = WsScope.read(context).inside;
+    final held = boxes?[id];
+    if (!widget.snap || held == null || m == null) return _snapTo = null;
+    int top(int t) {
+      for (var p = (m.value(t, 'parent', 0) ?? 0).round(), n = 0; p > 0 && n < 64; p = (m.value(t, 'parent', 0) ?? 0).round(), n++) {
+        t = p;
+      }
+      return t;
+    }
+    final mine = top(int.parse(id)), c = WsArt.comp;
+    final xs = <(double, double)>[(0, c.width)], ys = <(double, double)>[(0, c.height)];
+    for (final g in widget.scene.guidesX) {
+      xs.add((g, g));
+    }
+    for (final g in widget.scene.guidesY) {
+      ys.add((g, g));
+    }
+    for (final MapEntry(:key, :value) in boxes!.entries) {
+      if (top(int.parse(key)) == mine) continue;
+      final r = _bounds(value);
+      xs.add((r.left, r.right));
+      ys.add((r.top, r.bottom));
+    }
+    _snapTo = (box: _bounds(held), xs: xs, ys: ys);
+  }
+
+  Offset _snapped(Offset by, double s) {
+    final to = _snapTo;
+    if (to == null) return by;
+    (double, double?) one(double lo, double size, double d, List<(double, double)> lines) {
+      (double, double)? best;
+      for (final (a, b) in lines) {
+        for (final line in [a, (a + b) / 2, b]) {
+          for (final mine in [lo + d, lo + d + size / 2, lo + d + size]) {
+            final diff = line - mine;
+            if (diff.abs() <= 6 / s && (best == null || diff.abs() < best.$1.abs())) best = (diff, line);
+          }
+        }
+      }
+      return best == null ? (d, null) : (d + best.$1, best.$2);
+    }
+    final (x, mx) = widget.axis == 2 ? (by.dx, null) : one(to.box.left, to.box.width, by.dx, to.xs);
+    final (y, my) = widget.axis == 1 ? (by.dy, null) : one(to.box.top, to.box.height, by.dy, to.ys);
+    _met = (mx, my);
+    return Offset(x, y);
+  }
 
   // Joined: a guide pulled out of a ruler (from the top one, a level line; from the left one, an upright one) or taken
   // hold of where it lies; let go on the picture it is the document's there, let go back over its ruler it is gone.
@@ -156,11 +231,16 @@ class _StageViewState extends State<StageView> {
     final centred = kind == 'circle' && widget.fromCentre; // (drawn out from its middle: twice as large about where the hand came down)
     final mid = centred ? a : (a + b) / 2, d = centred ? (b - a) * 2 : b - a, tiny = d.distance < 6 / v.s;
     final x = ((kind == 'text' || tiny ? a.dx : mid.dx) - c.width / 2) / p, y = (c.height / 2 - (kind == 'text' || tiny ? a.dy : mid.dy)) / p;
+    final cut = widget.mask ? int.tryParse(ws.selected ?? '') : null;
     final made = m.together(() {
       final t = m.add(kind == 'text' ? '' : 'shape', kind == 'text' ? '/System/Library/Fonts/Supplemental/Arial Unicode.ttf' : kind); // (a text in the font the Create shelf's Text has)
       if (t == 0 || !m.set(t, 'x', x) || !m.set(t, 'y', y)) return 0;
       if (ws.ink.isNotEmpty && !m.say(t, 'fill', ws.ink)) return 0; // (the drawing inks)
       if (ws.edge.isNotEmpty && kind != 'line' && !(m.say(t, 'stroke', ws.edge) && m.set(t, 'stroke_width', 6))) return 0;
+      if (cut != null) { // (Mask: it lies just behind the picked thing, and that one is clipped by it)
+        final all = m.things;
+        if (!all.contains(cut) || !m.raise(t, all.indexOf(cut) - all.indexOf(t)) || !m.set(cut, 'clip', 1) || !m.set(t, 'opacity', 0)) return 0; // (not seen itself: it only cuts, as After Effects' matte)
+      }
       if (tiny || kind == 'text') return t;
       final ok = switch (kind) {
         'line' => m.set(t, 'wide', d.distance / p / .04) && m.set(t, 'rotate', math.atan2(d.dy, d.dx) * 180 / math.pi), // (a line is a twenty-fifth of a unit thick: as long as drawn, turned as drawn)
@@ -185,21 +265,25 @@ class _StageViewState extends State<StageView> {
     ws.select(id);
     if (ws.playing) ws.playing = false; // (a hand on a thing stops the play)
     _held = (from: local, moved: false);
+    _snapFrom(id!);
   }
 
   void _carry(_View v, Offset local) {
     final h = _held, ws = WsScope.read(context), m = ws.inside;
     if (h == null || m == null) return;
     final all = (local - h.from) / v.s; // (screen px -> points of the picture)
-    final by = switch (widget.axis) { 1 => Offset(all.dx, 0), 2 => Offset(0, all.dy), _ => all }; // (the Move tool's way)
+    final by = _snapped(switch (widget.axis) { 1 => Offset(all.dx, 0), 2 => Offset(0, all.dy), _ => all }, v.s); // (the Move tool's way)
     m.carry('place', by.dx, by.dy);
     _held = (from: h.from, moved: true);
+    setState(() {});
     ws.shown();
   }
 
   void _letGo({bool keep = true}) {
     final h = _held, ws = WsScope.read(context), m = ws.inside;
     _held = null;
+    _snapTo = null;
+    if (_met != (null, null)) setState(() => _met = (null, null));
     if (h == null || m == null) return;
     m.letGo(keep && h.moved) && keep && h.moved ? ws.reread() : ws.shown();
   }
@@ -252,7 +336,7 @@ class _StageViewState extends State<StageView> {
               children: [
                 RepaintBoundary(
                   child: CustomPaint(
-                    painter: _ViewPainter(scene, v, widget.selected, _hover == widget.selected ? null : _hover, grid: widget.grid, safe: widget.safe, part: widget.texture == null ? _Part.all : _Part.under),
+                    painter: _ViewPainter(scene, v, widget.selected, _hover == widget.selected ? null : _hover, grid: widget.grid, safe: widget.safe, part: widget.texture == null ? _Part.all : _Part.under, pivots: widget.pivots, met: _met),
                   ),
                 ),
                 Positioned.fromRect(
@@ -271,7 +355,7 @@ class _StageViewState extends State<StageView> {
                 if (widget.texture != null)
                   IgnorePointer(
                     child: CustomPaint(
-                      painter: _ViewPainter(scene, v, widget.selected, _hover == widget.selected ? null : _hover, grid: widget.grid, safe: widget.safe, part: _Part.over),
+                      painter: _ViewPainter(scene, v, widget.selected, _hover == widget.selected ? null : _hover, grid: widget.grid, safe: widget.safe, part: _Part.over, pivots: widget.pivots, met: _met),
                     ),
                   ),
                 IgnorePointer(child: CustomPaint(painter: _RulerPainter(v, widget.cursor, scene))),
@@ -284,7 +368,7 @@ class _StageViewState extends State<StageView> {
                   Positioned(
                     right: _V.pad,
                     bottom: _V.pad,
-                    child: _Navigator(scene: scene, view: v),
+                    child: _Navigator(scene: scene, view: v, texture: widget.texture),
                   ),
               ],
             ),
@@ -329,9 +413,12 @@ class _Hud extends StatelessWidget {
 
 /// The navigator: the whole frame small, the part the viewport shows outlined in the accent. Shown only when zoomed past fit.
 class _Navigator extends StatelessWidget {
-  const _Navigator({required this.scene, required this.view});
+  const _Navigator({required this.scene, required this.view, this.texture});
   final ArtScene scene;
   final _View view;
+
+  /// Joined: the inside's own picture, the whole frame, under the outline (the same texture the stage shows).
+  final int? texture;
   @override
   Widget build(BuildContext context) {
     final h = _V.mapW * WsArt.comp.height / WsArt.comp.width;
@@ -340,22 +427,29 @@ class _Navigator extends StatelessWidget {
       height: h + 8,
       padding: const EdgeInsets.all(4),
       color: WsT.card,
-      child: CustomPaint(painter: _MapPainter(scene, Rect.fromPoints(view.toComp(view.area.topLeft), view.toComp(view.area.bottomRight)))),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          if (texture != null) Texture(textureId: texture!, filterQuality: FilterQuality.medium),
+          CustomPaint(painter: _MapPainter(scene, Rect.fromPoints(view.toComp(view.area.topLeft), view.toComp(view.area.bottomRight)), art: texture == null)),
+        ],
+      ),
     );
   }
 }
 
 class _MapPainter extends CustomPainter {
-  _MapPainter(this.scene, this.shown);
+  _MapPainter(this.scene, this.shown, {this.art = true});
   final ArtScene scene;
   final Rect shown;
+  final bool art;
   @override
   void paint(Canvas c, Size s) {
     final k = s.width / WsArt.comp.width;
     c.save();
     c.clipRect(Offset.zero & s);
     c.scale(k);
-    WsArt.paint(c, scene);
+    if (art) WsArt.paint(c, scene);
     c.restore();
     final r = Rect.fromLTRB(shown.left * k, shown.top * k, shown.right * k, shown.bottom * k).intersect(Offset.zero & s);
     c.drawRect(
@@ -395,8 +489,12 @@ TextPainter _tp(String t, TextStyle s) => TextPainter(
 enum _Part { all, under, over }
 
 class _ViewPainter extends CustomPainter {
-  _ViewPainter(this.scene, this.v, this.sel, this.hover, {required this.grid, required this.safe, this.part = _Part.all});
+  _ViewPainter(this.scene, this.v, this.sel, this.hover, {required this.grid, required this.safe, this.part = _Part.all, this.pivots = false, this.met = (null, null)});
   final _Part part;
+
+  /// Joined: every thing's point it turns about shown (Pivots), and the lines a carried thing has stuck to (Snap).
+  final bool pivots;
+  final (double?, double?) met;
   final ArtScene scene;
   final _View v;
   final String? sel, hover;
@@ -429,6 +527,16 @@ class _ViewPainter extends CustomPainter {
     if (safe) _safe(c, comp);
     c.restore();
     _guides(c);
+    if (met.$1 case final x?) c.drawLine(Offset(v.toScreen(Offset(x, 0)).dx, v.area.top), Offset(v.toScreen(Offset(x, 0)).dx, v.area.bottom), _line(WsT.accent));
+    if (met.$2 case final y?) c.drawLine(Offset(v.area.left, v.toScreen(Offset(0, y)).dy), Offset(v.area.right, v.toScreen(Offset(0, y)).dy), _line(WsT.accent));
+    if (pivots) {
+      for (final MapEntry(:key, :value) in (scene.boxes ?? const <String, ArtBox>{}).entries) {
+        if (key == sel) continue;
+        final a = _scr(value.anchor);
+        c.drawCircle(a, 3.5, _line(Grey.g00, 3));
+        c.drawCircle(a, 3.5, _line(Grey.g91, 1.2));
+      }
+    }
     if (!scene.camera && scene.layer('cam') != null) _camera(c);
     if (WsArt.boxOf(scene, hover) case final b?) _legible(c, _boxPath(b), wsTone(scene.layer(hover)!.kind), 1);
     if (WsArt.boxOf(scene, sel) case final b?) _selection(c, b, scene.layer(sel)!);
@@ -553,7 +661,7 @@ class _ViewPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_ViewPainter o) => o.scene != scene || o.v != v || o.sel != sel || o.hover != hover || o.grid != grid || o.safe != safe || o.part != part;
+  bool shouldRepaint(_ViewPainter o) => o.scene != scene || o.v != v || o.sel != sel || o.hover != hover || o.grid != grid || o.safe != safe || o.part != part || o.pivots != pivots || o.met != met;
 }
 
 // ---- rulers -----------------------------------------------------------------------------------------------------------

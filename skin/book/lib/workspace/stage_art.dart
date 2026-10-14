@@ -55,7 +55,7 @@ class ArtScene {
           ? null
           : Map.unmodifiable({
               for (final l in ws.layers)
-                if (ws.inside!.frame(int.parse(l.id)) case final f?) l.id: ArtBox(Offset(f[0], f[1]), Size(f[2], f[3]), rot: f[4] * math.pi / 180),
+                if (ws.inside!.frame(int.parse(l.id)) case final f?) l.id: ArtBox(Offset(f[0], f[1]), Size(f[2], f[3]), rot: f[4] * math.pi / 180, anchor: Offset(f[5], f[6])),
             });
 
   /// Joined to the inside: each thing's frame on the picture as the inside sees it at this moment (null: the sample's own boxes).

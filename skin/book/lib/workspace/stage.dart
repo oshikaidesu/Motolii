@@ -86,7 +86,7 @@ class _StageState extends State<_Stage> {
                   child: Stack(
                     fit: StackFit.expand,
                     children: [
-                      StageView(scene: scene, selected: ws.selected, zoom: _zoom, grid: _grid, safe: _safe, cursor: _cursor, onPoke: _focus.requestFocus, texture: ws.stageTexture, make: const [null, null, 'rect', 'circle', 'line', 'text'][_tool], axis: _tool == 1 ? _opts['move.axis'] ?? 0 : 0, fromCentre: (_opts['ell.from'] ?? 0) == 1), // (joined: the tool in hand draws a thing of the document)
+                      StageView(scene: scene, selected: ws.selected, zoom: _zoom, grid: _grid, safe: _safe, cursor: _cursor, onPoke: _focus.requestFocus, texture: ws.stageTexture, make: const [null, null, 'rect', 'circle', 'line', 'text'][_tool], axis: _tool == 1 ? _opts['move.axis'] ?? 0 : 0, fromCentre: (_opts['ell.from'] ?? 0) == 1, snap: _tool < 2 && (_opts[_tool == 0 ? 'sel.snap' : 'move.snap'] ?? 1) == 1, pivots: (_opts['sel.pivot'] ?? 0) == 1, group: _tool == 0 && (_opts['sel.level'] ?? 0) == 1, mask: (_opts[_tool == 2 ? 'rect.mode' : 'pen.mode'] ?? 0) == 1 && (_tool == 2 || _tool == 4)), // (joined: the tool in hand draws a thing of the document)
                       if (ws.trial != null) const Positioned(bottom: 44, left: 0, right: 0, child: Center(child: StageTrialBar())),
                     ],
                   ),
