@@ -1,0 +1,27 @@
+add picture ../../third_party/thorvg_example/res/lottie/swinging.json
+say 1 marker Nope
+say 1 marker Start
+add solid cube
+say 2 animation Walk
+add solid ../../third_party/filament_src/third_party/models/Fox/Fox.glb
+say 3 animation Fly
+say 3 animation Walk
+add light sun
+say 4 fill notacolour
+say 4 fill 00ff00 0000ff
+say 4 fill ffb36b
+say 0 background blue
+say 0 background 3366ff
+say 0 vignette_color zz
+key 0 exposure 0 0
+add text ../arial_black.ttf
+say 5 text a b c d e f g h i j k l m n o p q r s t u v w x y z
+say 5 wrap character
+set 5 wrap_at 0.5
+add shape circle
+say 6 shadow ff0000
+set 6 tint 1
+set 6 glow_blur 1000
+set 6 blur 1000
+still out/doc_breaker.png
+list

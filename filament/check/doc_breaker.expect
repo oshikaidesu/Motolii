@@ -1,0 +1,26 @@
+add: done
+say: NOT done: marker is one of: all Start End
+say: done
+add: done
+say: NOT done: its file has no movements of its own
+add: done
+say: NOT done: animation is one of: Survey Walk Run
+say: done
+add: done
+say: NOT done: fill is six digits, as ff3366
+say: NOT done: fill is six digits, as ff3366
+say: done
+say: NOT done: background is six digits, as ff3366
+say: done
+say: NOT done: vignette_color is six digits, as ff3366
+key: NOT done: exposure does not move: nothing of it does
+add: done
+say: done
+say: done
+set: done
+add: done
+say: done
+set: done
+set: done
+set: done
+still: done

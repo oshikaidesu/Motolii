@@ -566,7 +566,7 @@ static void doc_moment(Doc& d, double now) {
         if (t.film) video_at(s, t.film, (float)lies[i].since);
         if (t.solid && !t.solid->moves.empty()) solid_at(t.solid, doc_word(d, thing, "animation"), lies[i].since * doc_number(d, thing, "speed", 0, 1));   // (its own movement, from when it comes on)
         if (t.drawn && t.drawn->seconds > 0.f) picture_at(s, t.drawn, std::fmod((float)lies[i].since, t.drawn->seconds));
-        if (t.drawn && t.drawn->effects) {   // (its effects as they are now: those that move are drawn again)
+        if (t.drawn && !t.drawn->effects.empty()) {   // (its effects as they are now: those that move are drawn again)
             DrawnFx fx;
             std::string why;
             if (doc_fx(d, thing, now, false, t.units, fx, why)) fx_at(s, t.drawn, fx);
@@ -977,6 +977,7 @@ static std::string doc_way_of(Doc& d, int thing, const char* name, double at) {
 
 // Whether a call names a thing that is there and tells it something a thing of its kind can be told (if not,
 // d.trouble says what it can be told).
+static std::string doc_words(Doc& d, int thing, const char* name);
 static bool doc_knows(Doc& d, int thing, const char* name = nullptr, const double* number = nullptr, const char* word = nullptr, bool key = false) {
     const std::string kind = doc_word(d, thing, "kind");
     if (kind.empty()) return d.trouble = "there is no thing " + std::to_string(thing), false;
@@ -994,9 +995,16 @@ static bool doc_knows(Doc& d, int thing, const char* name = nullptr, const doubl
     if (number && v->words) return d.trouble = std::string(name) + " is a word, told by say" + (*v->words ? std::string(": ") + v->words : ""), false;
     if (word && !v->words) return d.trouble = std::string(name) + " is a number, told by set", false;
     if (word && *v->words && !doc_among(v->words, word)) return d.trouble = std::string(name) + " is one of: " + v->words, false;
+    if (word && *word && (!strcmp(name, "marker") || !strcmp(name, "animation"))) {   // (a name its file has)
+        const std::string has = doc_words(d, thing, name);
+        if (has.empty()) return d.trouble = std::string("its file has no ") + (!strcmp(name, "marker") ? "markers" : "movements of its own"), false;
+        if (!doc_among(has.c_str(), word)) return d.trouble = std::string(name) + " is one of: " + has, false;
+    }
+    if (word && *word && (doc_among("vignette_color fog_color background", name) || (!strcmp(name, "fill") && kind == "light")))   // (one colour: six digits)
+        if (strlen(word) != 6 || strspn(word, "0123456789abcdefABCDEF") != 6) return d.trouble = std::string(name) + " is six digits, as ff3366", false;
     if (number && (!std::isfinite(*number) || *number < v->low || *number > v->high || (doc_among("keyed clip visible solo lock shadows clip_invert", name) && *number != 0.0 && *number != 1.0)))
         return std::snprintf(range, sizeof range, doc_among("keyed clip visible solo lock shadows clip_invert", name) ? " is 0 or 1" : " is from %g to %g", v->low, v->high), d.trouble = name + std::string(range), false;
-    if (key && !v->moves) return d.trouble = std::string(name) + " does not move: keys go on " + moving, false;
+    if (key && !v->moves) return d.trouble = std::string(name) + " does not move: " + (moving.empty() ? std::string("nothing of it does") : "keys go on " + moving), false;
     if ((number || word || key) && strcmp(name, "lock") && doc_number(d, thing, "lock", 0, 0) > 0.5) return d.trouble = "it is locked", false;
     if (number && !strcmp(name, "parent") && *number != 0.0) {   // (a parent is a thing that is there, and not the thing itself nor one that goes with it: the past repository's rule)
         const int to = (int)*number;

@@ -11,6 +11,7 @@
 #include <webgpu/webgpu.h>
 
 #include <filesystem>
+#include <fstream>
 
 // tint: how much its darks and lights are made two colours (0: not at all); tritone: how much its darks, middles and
 // lights are made three (0: not at all).
@@ -37,22 +38,24 @@ struct Drawn {
     float3 trimmed{0.f};   // (as last cut: off the end, off the beginning, slid along)
     std::vector<std::string> markers;  // an After Effects file's named stretches (ThorVG's Lottie markers)
     float fromFrame = 0.f, toFrame = 0.f;   // the stretch it plays, when one is named (frames of the file)
-    tvg::Scene* effects = nullptr;     // the scene of ThorVG's its effects are on, if it has any (driver thread only)
+    std::vector<tvg::Scene*> effects;  // ThorVG's scenes its effects are on, one an effect, each over the one before (a scene draws one; driver thread only)
     float tall = 0.f;                  // how high it was drawn, in its own points: what its effects' lengths are shares of
     DrawnFx fx;                        // its effects as last told
 };
 
-// ThorVG's own effects on a scene, its lengths as shares of `tall` points.
-static void effects_on(tvg::Scene* scene, const DrawnFx& fx, float tall) {
+// ThorVG's own effects, one on each scene of the chain (a scene draws only the last it is given), in the order they
+// are laid: its colours first (tint, tritone), then its shadow, its glow, and last its blur; lengths as shares of `tall` points.
+static void effects_on(const std::vector<tvg::Scene*>& chain, const DrawnFx& fx, float tall) {
     const float blur = fx.blur * tall, fall = fx.fall * tall, soft = fx.soft * tall, glowSoft = fx.glowSoft * tall;
     const auto c = [](float v) { return (int)std::lround(255.f * v); };
-    if (fx.shadow.w > 0.f) scene->add(tvg::SceneEffect::DropShadow, c(fx.shadow.x), c(fx.shadow.y), c(fx.shadow.z), c(fx.shadow.w), (double)fx.way, (double)fall, (double)std::max(soft, 0.01f), 75);
-    if (fx.glow.w > 0.f)   // (a glow is ThorVG's drop shadow that does not fall: a light all round it)
-        scene->add(tvg::SceneEffect::DropShadow, c(fx.glow.x), c(fx.glow.y), c(fx.glow.z), c(fx.glow.w), 0.0, 0.0, (double)std::max(glowSoft, 0.01f), 75);
-    if (fx.tint > 0.f) scene->add(tvg::SceneEffect::Tint, c(fx.tints[0].x), c(fx.tints[0].y), c(fx.tints[0].z), c(fx.tints[1].x), c(fx.tints[1].y), c(fx.tints[1].z), (double)(100.f * fx.tint));
+    for (tvg::Scene* scene : chain) scene->add(tvg::SceneEffect::Clear);
+    if (fx.tint > 0.f) chain[0]->add(tvg::SceneEffect::Tint, c(fx.tints[0].x), c(fx.tints[0].y), c(fx.tints[0].z), c(fx.tints[1].x), c(fx.tints[1].y), c(fx.tints[1].z), (double)(100.f * fx.tint));
     if (fx.tritone > 0.f)
-        scene->add(tvg::SceneEffect::Tritone, c(fx.tones[0].x), c(fx.tones[0].y), c(fx.tones[0].z), c(fx.tones[1].x), c(fx.tones[1].y), c(fx.tones[1].z), c(fx.tones[2].x), c(fx.tones[2].y), c(fx.tones[2].z), c(1.f - fx.tritone));
-    if (blur > 0.f) scene->add(tvg::SceneEffect::GaussianBlur, (double)blur, fx.blurWay, 0, 75);   // (its way: both, across, up and down)
+        chain[1]->add(tvg::SceneEffect::Tritone, c(fx.tones[0].x), c(fx.tones[0].y), c(fx.tones[0].z), c(fx.tones[1].x), c(fx.tones[1].y), c(fx.tones[1].z), c(fx.tones[2].x), c(fx.tones[2].y), c(fx.tones[2].z), c(1.f - fx.tritone));
+    if (fx.shadow.w > 0.f) chain[2]->add(tvg::SceneEffect::DropShadow, c(fx.shadow.x), c(fx.shadow.y), c(fx.shadow.z), c(fx.shadow.w), (double)fx.way, (double)fall, (double)std::max(soft, 0.01f), 75);
+    if (fx.glow.w > 0.f)   // (a glow is ThorVG's drop shadow that does not fall: a light all round it)
+        chain[3]->add(tvg::SceneEffect::DropShadow, c(fx.glow.x), c(fx.glow.y), c(fx.glow.z), c(fx.glow.w), 0.0, 0.0, (double)std::max(glowSoft, 0.01f), 75);
+    if (blur > 0.f) chain[4]->add(tvg::SceneEffect::GaussianBlur, (double)blur, fx.blurWay, 0, 75);   // (its way: both, across, up and down)
 }
 
 // A flat shape with so much of its path cut off the end and so much off its beginning, the part left slid along it by
@@ -73,7 +76,7 @@ static void trim_at(Stage& s, Drawn* d, float cut, float begin = 0.f, float offs
 // A flat thing's effects as they are now (lengths in shares of its height, as it was made), drawn again for the frame
 // that comes next; nothing is done if they are as they were. They reach no further than they did at their most.
 static void fx_at(Stage& s, Drawn* d, const DrawnFx& told) {
-    if (!d->effects) return;
+    if (d->effects.empty()) return;
     const DrawnFx fx = told.over(d->fx.overHigh);
     const DrawnFx& was = d->fx;
     if (fx.blur == was.blur && fx.blurWay == was.blurWay && (fx.shadow == was.shadow) && fx.fall == was.fall && fx.way == was.way && fx.soft == was.soft && fx.tint == was.tint && fx.tritone == was.tritone
@@ -81,7 +84,6 @@ static void fx_at(Stage& s, Drawn* d, const DrawnFx& told) {
         return;
     d->fx = fx;
     door::on_driver(s.engine, [d, fx] {
-        d->effects->add(tvg::SceneEffect::Clear);
         effects_on(d->effects, fx, d->tall);
         d->canvas->update();
         d->canvas->draw(true);
@@ -128,14 +130,24 @@ static Drawn* drawn(Stage& s, const std::function<tvg::Paint*(Drawn*, int*, int*
             const float tall = (float)h, blur = fx.blur * tall, fall = fx.fall * tall, soft = fx.soft * tall;
             const float glowSoft = fx.glowSoft * tall;
             const int room = (int)std::ceil(std::max({3.f * blur, fx.shadow.w > 0.f ? fall + 3.f * soft : 0.f, fx.glow.w > 0.f ? 3.f * glowSoft : 0.f}));
-            tvg::Scene* scene = tvg::Scene::gen();
-            scene->add(p);
-            scene->translate((float)room, (float)room);
-            effects_on(scene, fx, tall);
-            d->effects = scene, d->tall = tall, d->fx = fx;   // (told again at each moment: those that move are drawn again)
+            for (int k = 0; k < 5; ++k) {   // (a scene an effect, each over the one before)
+                tvg::Scene* scene = tvg::Scene::gen();
+                scene->add(p);
+                d->effects.push_back(scene);
+                p = scene;
+            }
+            p->translate((float)room, (float)room);
+            effects_on(d->effects, fx, tall);
+            d->tall = tall, d->fx = fx;   // (told again at each moment: those that move are drawn again)
             w += 2 * room, h += 2 * room;
             high *= (float)h / tall;   // (the thing itself stays as large)
-            p = scene;
+        }
+        if (const float most = (float)std::max(w, h); most > 4096.f) {   // (no larger than a picture the device takes, with room to spare: the whole drawn smaller, its sheet as large)
+            tvg::Scene* smaller = tvg::Scene::gen();
+            smaller->add(p);
+            smaller->scale(4096.f / most);
+            p = smaller;
+            w = std::max(2, (int)std::floor((float)w * 4096.f / most)), h = std::max(2, (int)std::floor((float)h * 4096.f / most));
         }
         loose = d->film ? nullptr : p;   // (a paint that no film owns is let go here if the canvas never takes it)
         WGPUTextureDescriptor like{};
@@ -190,6 +202,27 @@ static Drawn* drawn(Stage& s, const std::function<tvg::Paint*(Drawn*, int*, int*
 
 // The picture in `file` put in the scene (an After Effects film, an SVG, a photo): a sheet `high` tall (as wide as
 // the picture makes it) with its middle at `place`, facing along the place's z, drawn as finely as the stage is.
+// The frame an After Effects file begins at (its own "ip", at the top of the file: ThorVG does not say it).
+static float lottie_in(const char* file) {
+    std::ifstream in(file);
+    std::string all((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    int depth = 0;
+    bool quoted = false;
+    for (size_t i = 0; i < all.size(); ++i) {   // (the key at the outermost depth only: the layers have theirs)
+        const char c = all[i];
+        if (quoted) { if (c == '\\') ++i; else if (c == '"') quoted = false; continue; }
+        if (c == '"') {
+            if (depth == 1 && all.compare(i, 4, "\"ip\"") == 0) {
+                const size_t colon = all.find(':', i + 4);
+                return colon == std::string::npos ? 0.f : std::strtof(all.c_str() + colon + 1, nullptr);
+            }
+            quoted = true;
+        } else if (c == '{' || c == '[') ++depth;
+        else if (c == '}' || c == ']') --depth;
+    }
+    return 0.f;
+}
+
 // marker: a named stretch of an After Effects file it plays, over and over (ThorVG's Lottie markers; none: all of it).
 static Drawn* picture(Stage& s, const char* file, const mat4f& place, float high, float3 ground = float3{-1.f}, bool shown = true, const char* lay = nullptr, const DrawnFx& fx = {}, const char* marker = "") {
     if (!std::filesystem::is_regular_file(file)) return nullptr;   // (ThorVG ends the program on a folder)
@@ -201,6 +234,7 @@ static Drawn* picture(Stage& s, const char* file, const mat4f& place, float high
         tvg::Picture* p = d->film->picture();
         float fw = 0.f, fh = 0.f;
         if (p->load(file) != tvg::Result::Success || p->size(&fw, &fh) != tvg::Result::Success || fw <= 0.f || fh <= 0.f) return nullptr;
+        const float first = lottie ? lottie_in(file) : 0.f;
         std::vector<float> starts;   // (where each named stretch begins: one of no length runs to the next, or to the end)
         for (uint32_t i = 0; own && i < own->markersCnt(); ++i) {
             float from = 0.f, to = 0.f;
@@ -213,11 +247,12 @@ static Drawn* picture(Stage& s, const char* file, const mat4f& place, float high
             std::string word(name);
             word.erase(std::remove_if(word.begin(), word.end(), [](char c) { return std::isspace((unsigned char)c); }), word.end());   // (a name is one word: "End\r\n" is End)
             d->markers.push_back(word);
-            if (to <= from) {
-                to = d->film->totalFrame();
+            if (to <= from) {   // (none long: to the next, or to its end)
+                to = 1e9f;
                 for (float b : starts) if (b > from) to = std::min(to, b);
             }
-            if (marker && *marker && word == marker) d->fromFrame = from, d->toFrame = to;
+            if (marker && *marker && word == marker)   // (a marker counts the file's own frames, which begin at its in point; ThorVG counts from 0)
+                d->fromFrame = from - first, d->toFrame = std::min(to - first, d->film->totalFrame());
         }
         const float fit = (float)std::max(s.w, s.h) / std::max(fw, fh);
         *w = 2 * (int)std::lround(0.5f * fw * fit);
