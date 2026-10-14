@@ -54,6 +54,7 @@ struct Doc {
     double keying_from = 0.0;           // the stage's moment at which that was turned on: a value's first key then has the value it had, there, before it
     int act = 0;                        // how many acts are open, one within another
     bool act_ok = true;                 // no change of the open act has been refused
+    bool act_unmatched = false;         // a change within a larger act not yet shown: the stage is matched once, when the act ends
     bool writing = false;               // it is being written as a film: it is read, not changed, until that is done
     double written_from = 0.0;          // the moment of the document that a film being written begins at (its work area's start)
     double round = 8.0;                 // how long the document is, as last shown: waves, noise and drifts go round in it a whole number of times (a film loops)
@@ -1316,7 +1317,14 @@ static void doc_act(Doc& d) {
     sqlite3session_attach(d.acting, "way");
     d.act_ok = true;
 }
+static bool doc_match(Doc& d);
+static void doc_forget(Doc& d);
 static bool doc_acted(Doc& d) {
+    if (d.act == 1 && d.act_unmatched) {   // (the act's changes shown once, all of them: if the stage cannot, none of them is made)
+        d.act_unmatched = false;
+        doc_forget(d);
+        if (d.act_ok && !doc_match(d)) d.act_ok = false;
+    }
     if (--d.act) return d.act_ok;
     int size = 0;
     void* changed = nullptr;
@@ -1344,7 +1352,8 @@ static bool doc_change(Doc& d, char* change) {
     if (ok && d.writing) ok = false, d.trouble = "the document is being written as a film: it is not changed until that is done";
     if (ok && !(ok = sqlite3_exec(d.file, change, nullptr, nullptr, nullptr) == SQLITE_OK)) d.trouble = sqlite3_errmsg(d.file);
     sqlite3_free(change);
-    if (ok) {
+    if (ok && d.act > 1) d.act_unmatched = true;   // (within a larger act, a key of a thousand: matched once when it ends)
+    else if (ok) {
         doc_forget(d);
         ok = doc_match(d);
     }

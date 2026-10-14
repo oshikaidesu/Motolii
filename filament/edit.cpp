@@ -16,7 +16,7 @@ static const char* const calls =
     "  add film <file> | add picture <an After Effects file, a .jpg, a .png> | add text <font.ttf> | add solid <file.glb>|ring|gem|cube   (say N fill glass: it is glass)\n"
     "  remove <thing> | set <thing> <name> <number> | say <thing> <name> <word> | key <thing> <name> <at> <number> | unkey <thing> <name> <at>\n"
     "  way <thing> <name> <at> <a way, and its numbers> | ways | define <a way's name> <its expression> | value <thing> <name> <at>\n"
-    "  make <recipe> | recipes | undo | redo | list | at <seconds> | still <file.png> | write <file.mp4> | time\n";
+    "  make <recipe> | recipes | together on|off | undo | redo | list | at <seconds> | still <file.png> | write <file.mp4> | time\n";
 
 int main(int argc, char** argv) {
     if (argc < 2) return std::printf("FAIL edit <document>\n"), 1;
@@ -53,6 +53,7 @@ int main(int argc, char** argv) {
         else if (call == "value" && w.size() == 4) { const int n = thing(); const double at = number(3); double is = 0; if (numbers && (ok = motolii_value(m, n, w[2].c_str(), at, &is))) { std::printf("  %.4f\n", is); continue; } }
         else if (call == "make" && w.size() >= 2) ok = motolii_make(m, rest(1).c_str()) != 0;
         else if (call == "recipes" && w.size() == 1) { std::printf("  %s\n", motolii_recipes(m)); continue; }
+        else if (call == "together" && w.size() == 2) ok = motolii_together(m, w[1] == "on" ? 1 : 0) || w[1] == "on";   // (the calls between are one step, the stage matched once at the end)
         else if (call == "undo" && w.size() == 1) ok = motolii_undo(m);
         else if (call == "redo" && w.size() == 1) ok = motolii_redo(m);
         else if (call == "at" && w.size() == 2) { const double at = number(1); if (numbers) ok = motolii_at(m, at); }

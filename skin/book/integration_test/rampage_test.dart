@@ -217,10 +217,7 @@ void main() {
                 if (at0 == null) continue;
                 from = t.getTopLeft(where.first) + at0;
               }
-              final by = Offset(
-                r.nextDouble() * 100 - 50,
-                r.nextDouble() * 100 - 50,
-              );
+              final sign = r.nextBool() ? 1.0 : -1.0, by = Offset(sign * (30 + r.nextDouble() * 30), (r.nextBool() ? 1 : -1) * (30 + r.nextDouble() * 30)); // (far enough to move a whole step)
               var seen = await dragSeen(from, by);
               await settle();
               if (_all(
@@ -271,17 +268,19 @@ void main() {
               await settle();
               final pick = chooser.options[r.nextInt(chooser.options.length)];
               final option = find.text(pick);
-              if (option.evaluate().length > 1) await t.tap(option.last);
-              await t.sendKeyEvent(
-                LogicalKeyboardKey.escape,
-              ); // (a menu left open would cover the next hand)
+              if (option.evaluate().length > 1) {
+                await t.tap(option.last);
+              } else {
+                await t.tap(where.first); // (nothing to pick: the menu closed again, so it does not cover the next hand)
+              }
             } else {
               await t.ensureVisible(where.first);
               await t.tap(where.first);
             }
-          } catch (e) {
+          } catch (e, stack) {
+            final at = stack.toString().split('\n').where((l) => l.contains('package:lab_book')).take(2).join(' < ');
             reds.add(
-              '$what: the hand could not work it (${e.toString().split('\n').first})',
+              '$what: the hand could not work it (${e.toString().split('\n').first}) at $at',
             );
           }
           await settle();

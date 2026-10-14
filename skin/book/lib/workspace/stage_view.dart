@@ -284,7 +284,6 @@ class _StageViewState extends State<StageView> implements StageHandles {
       setState(() => _drawFrom = local);
       return;
     }
-    if (_pull(v, local)) return;
     final ws = WsScope.read(context), m = ws.inside;
     // (joined: a hand on one of the picked thing's handles carries it the handle's way: the inside reckons it from where it took hold)
     final picked = int.tryParse(widget.selected ?? '');
@@ -305,6 +304,7 @@ class _StageViewState extends State<StageView> implements StageHandles {
         return;
       }
     }
+    if (_pull(v, local)) return; // (a guide out of a ruler, or one taken hold of: after the handles, which lie over everything)
     final id = m == null ? null : _hit(v, local), t = int.tryParse(id ?? '');
     if (m == null || t == null || !m.hold(t)) return;
     ws.select(id);
