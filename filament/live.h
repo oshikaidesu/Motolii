@@ -61,8 +61,10 @@ static Live* live_open(Stage& s) {
 // The stage's picture as it now is, drawn into the next buffer; it is the front one once the GPU has finished it.
 static void live_draw(Stage& s, Live* l) {
     s.view->setRenderTarget(l->target[l->next]);
+    for (View* v : s.layers) v->setRenderTarget(l->target[l->next]);   // (the pictures laid over it go to the same place)
     draw(s, nullptr, true);
     s.view->setRenderTarget(nullptr);
+    for (View* v : s.layers) v->setRenderTarget(nullptr);
     l->front = l->next;
     l->next = (l->next + 1) % Live::N;
     ++l->frames;

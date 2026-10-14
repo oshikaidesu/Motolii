@@ -59,8 +59,6 @@ struct Doc {
     // moved for it (rig; a 2D thing goes with it) and only how it is turned (facing; a 2.5D thing keeps its own angle).
     math::mat4 rig, facing;
     std::map<int, Shown> shown;   // the things as they are on the stage, and what each was made of
-    Mesh* clears[8] = {};         // for each run of things, the triangle that clears depth before it (clear_depth.mat), made when first needed
-    unsigned cleared = 0;         // which of them are on the stage now
 };
 // What a thing may be told, by name: which kinds of thing have it, a number between which two (or one of which
 // words), and whether it can move (take keys).
@@ -205,14 +203,18 @@ static void doc_looks(Stage& s, const Doc::Shown& t, const std::function<void(Ma
         for (size_t part = 0; part < faces.getPrimitiveCount(one); ++part) each(faces.getMaterialInstanceAt(one, part));
     }
 }
-// Each drawn part of a thing (Filament's renderables).
-static void doc_parts(Stage& s, const Doc::Shown& t, const std::function<void(RenderableManager&, RenderableManager::Instance)>& each) {
-    auto& faces = s.engine->getRenderableManager();
+// Each drawn part of a thing (Filament's renderables), and the scene it is in (its run's: run 0 or not yet put, the stage's own).
+static void doc_entities(Stage& s, const Doc::Shown& t, const std::function<void(utils::Entity)>& each) {
     const Mesh* m = t.film ? t.film->sheet : t.drawn ? t.drawn->sheet : t.shape;
     for (const Stage::Made& made : s.made)
-        if (m && made.of == m) each(faces, faces.getInstance(made.thing));
-    for (size_t i = 0; t.solid && i < t.solid->made->getRenderableEntityCount(); ++i) each(faces, faces.getInstance(t.solid->made->getRenderableEntities()[i]));
+        if (m && made.of == m) each(made.thing);
+    for (size_t i = 0; t.solid && i < t.solid->made->getRenderableEntityCount(); ++i) each(t.solid->made->getRenderableEntities()[i]);
 }
+static void doc_parts(Stage& s, const Doc::Shown& t, const std::function<void(RenderableManager&, RenderableManager::Instance)>& each) {
+    auto& faces = s.engine->getRenderableManager();
+    doc_entities(s, t, [&](utils::Entity e) { each(faces, faces.getInstance(e)); });
+}
+static Scene* doc_scene(Stage& s, int run) { return run > 0 && (size_t)run <= s.layers.size() ? s.layers[(size_t)run - 1]->getScene() : s.scene; }
 static bool doc_covers(Doc& d, int thing, double now, double* box);
 static bool doc_half(Doc& d, int thing, float2* half, float* deep = nullptr);
 // Where a thing is at a moment, as a matrix: moved, turned about z, y and x, made its size, all about its anchor (a
@@ -281,44 +283,39 @@ static void doc_moment(Doc& d, double now) {
     }
     // Who is before whom (the past repository's law of 2026-09-12: a flat thing is not in the world). Flat things take
     // no part in depth and lie by the order of the things alone; solid things that follow one another settle depth
-    // among themselves; a run of the one sort is drawn whole after the run before it. By Filament's own means: a run
-    // is a channel (it has 8: past the eighth change of sort the rest are one run), the order within a run of flat
-    // things is the blend order, and a flat thing's looks neither ask nor write depth.
-    // A run of solid things that is not the first run has depth cleared before it (the triangle is the first drawn in
-    // its channel), so it is over all that was drawn before, whatever depth that had.
+    // among themselves; a run of the one sort is drawn whole over the run before it. By Filament's own means: the
+    // first run is the stage's own view, each run after it a view of its own laid over the one before (kit.h
+    // layer_view; a run of flat things is laid as Filament lays its UI, nothing done to it after), the order within a
+    // run of flat things is the blend order, and a flat thing's looks neither ask nor write depth.
     int run = 0, sort = -1;
-    unsigned clear = 0;
     for (size_t i = 0; i < lies.size(); ++i) {
         if (!lies[i].on) continue;
-        if (sort >= 0 && sort != (int)lies[i].solid && run < 7) ++run;
+        if (sort >= 0 && sort != (int)lies[i].solid) ++run;
         sort = lies[i].solid;
-        if (lies[i].solid && run > 0) clear |= 1u << run;
         Doc::Shown& t = *lies[i].shown;
-        if (t.run == run && t.lies == (int)i) continue;
+        Scene* into = run ? layer_view(s, (size_t)run - 1, !lies[i].solid)->getScene() : s.scene;
+        if (t.run != run && t.in) {   // (into the scene of its run; one not seen goes in when it is seen)
+            Scene* from = doc_scene(s, t.run);
+            doc_entities(s, t, [&](utils::Entity e) { from->remove(e), into->addEntity(e); });
+        }
         if (t.run < 0 && !lies[i].solid) doc_looks(s, t, [](MaterialInstance* look) { look->setDepthCulling(false), look->setDepthWrite(false); });
-        doc_parts(s, t, [&](RenderableManager& faces, RenderableManager::Instance one) {
-            faces.setChannel(one, (uint8_t)run);
-            for (size_t part = 0; !lies[i].solid && part < faces.getPrimitiveCount(one); ++part) faces.setBlendOrderAt(one, part, (uint16_t)i), faces.setGlobalBlendOrderEnabledAt(one, part, true);
-        });
+        if (t.lies != (int)i && !lies[i].solid)
+            doc_parts(s, t, [&](RenderableManager& faces, RenderableManager::Instance one) {
+                for (size_t part = 0; part < faces.getPrimitiveCount(one); ++part) faces.setBlendOrderAt(one, part, (uint16_t)i), faces.setGlobalBlendOrderEnabledAt(one, part, true);
+            });
         t.run = run, t.lies = (int)i;
     }
-    for (int k = 1; k < 8 && clear != d.cleared; ++k) {
-        const bool want = clear >> k & 1u;
-        if (want == (bool)(d.cleared >> k & 1u)) continue;
-        if (!d.clears[k]) {
-            d.clears[k] = new Mesh{{float3{-1, -1, 1}, float3{3, -1, 1}, float3{-1, 3, 1}}, std::vector<float3>(3, float3{0, 0, 1}), std::vector<float2>(3, float2{0.f}), {0, 1, 2}, {}};   // (Filament's own full-screen triangle)
-            add(s, d.clears[k], "clear_depth.filamat", {mat4f{}}, 1, false, 1, 0);   // (order 0: before all else in its channel)
-            for (const Stage::Made& made : s.made) if (made.of == d.clears[k]) s.engine->getRenderableManager().setChannel(s.engine->getRenderableManager().getInstance(made.thing), (uint8_t)k);
-        }
-        seen(s, d.clears[k], want);
-    }
-    d.cleared = clear;
+    s.layered = (size_t)run;
     for (size_t i = 0; i < lies.size(); ++i) {
         const int thing = lies[i].thing;
         Doc::Shown& t = *lies[i].shown;
         const bool in = lies[i].on;
         const Mesh* m = t.film ? t.film->sheet : t.drawn ? t.drawn->sheet : t.shape;
-        if (in != t.in) { if (t.solid) solid_seen(s, t.solid, in); else seen(s, m, in); t.in = in; }
+        if (in != t.in) {   // (in or out of the scene of its run)
+            Scene* sc = doc_scene(s, t.run);
+            doc_entities(s, t, [&](utils::Entity e) { in ? sc->addEntity(e) : sc->remove(e); });
+            t.in = in;
+        }
         if (!in) continue;
         if (t.film) video_at(s, t.film, (float)lies[i].since);
         if (t.drawn && t.drawn->seconds > 0.f) picture_at(s, t.drawn, std::fmod((float)lies[i].since, t.drawn->seconds));

@@ -106,6 +106,8 @@ struct Stage {
     std::map<std::string, Material*> materials;    // each material file, read and built once
     void* solids = nullptr; void* solidPictures = nullptr;   // Filament's reader of 3D files and its reader of their pictures (solid.h)
     std::vector<Made> made;   // every thing put on the stage: of which mesh, at which of that mesh's places (a film moves them: `move`)
+    std::vector<View*> layers;   // further pictures laid over the stage's own view, in order (layer_view); the first `layered` of them are drawn
+    size_t layered = 0;
 };
 
 static Stage open_stage(int w, int h) {
@@ -145,6 +147,37 @@ static Stage open_stage(int w, int h) {
     s.view_behind->setPostProcessingEnabled(false);
     s.view_behind->setScreenSpaceRefractionEnabled(false);
     return s;
+}
+
+// A further picture laid over the stage's own (and over the ones before it): Filament's own way of laying one picture
+// over another, a view of its own scene, blended on (its UI is laid so: ImGuiHelper). flat: a picture of flat things,
+// which takes nothing of depth (no depth of field, no bloom, no shade where things meet); its colours still go the way
+// the stage's own do (with no post-processing at all they would not be made ready for the screen: darker). Made when
+// first wanted, lit by the stage's own room, seen by the stage's eye; the k-th is layers[k].
+static View* layer_view(Stage& s, size_t k, bool flat) {
+    while (s.layers.size() <= k) {
+        View* v = s.engine->createView();
+        v->setScene(s.engine->createScene());
+        v->getScene()->setIndirectLight(s.scene->getIndirectLight());
+        v->setCamera(s.camera);
+        v->setViewport(s.view->getViewport());
+        v->setDithering(View::Dithering::NONE);
+        v->setAntiAliasing(s.view->getAntiAliasing());
+        v->setAmbientOcclusionOptions(s.view->getAmbientOcclusionOptions());
+        v->setColorGrading(const_cast<ColorGrading*>(s.view->getColorGrading()));   // (the same one: Filament hands it out read-only)
+        v->setScreenSpaceRefractionEnabled(false);
+        v->setVisibleLayers(0x03, 0x03);
+        v->setBlendMode(View::BlendMode::TRANSLUCENT);
+        if (s.view->getRenderTarget()) v->setRenderTarget(s.view->getRenderTarget());
+        s.layers.push_back(v);
+        Renderer::ClearOptions clear = s.renderer->getClearOptions();   // (a picture laid over another begins clear, not black: the stage's own view covers all of it anyway)
+        clear.clearColor = {0, 0, 0, 0};
+        s.renderer->setClearOptions(clear);
+    }
+    View::AmbientOcclusionOptions shade = s.view->getAmbientOcclusionOptions();
+    shade.enabled = shade.enabled && !flat;
+    s.layers[k]->setAmbientOcclusionOptions(shade);
+    return s.layers[k];
 }
 
 // The room the glass mirrors and is lit by: one of the studios that come with Filament, made into a .ktx by cmgen.
@@ -747,6 +780,7 @@ static void pictures_of(Stage& s) {
     s.renderer->render(s.view_behind);
     if (s.view_through) s.renderer->render(s.view_through);
     s.renderer->render(s.view);
+    for (size_t k = 0; k < s.layered && k < s.layers.size(); ++k) s.renderer->render(s.layers[k]);
 }
 
 static void draw(Stage& s, std::vector<uint8_t>* pic = nullptr, bool wait = true) {

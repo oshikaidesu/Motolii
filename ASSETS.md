@@ -60,7 +60,7 @@
 | 間の定義9種類（過去の倉庫の写し） | `filament/interp.h` | 今の土台で動く（倉庫の式と差 0） |
 | 文書（SQLite に事実を並べる）、取り消し、キーと間 | `filament/doc.h` | 今の土台で動く。**形と名前を過去の倉庫に揃える途中** |
 | 編集の口（C の関数）と、その客（行を読む道具、素の C）。エンジンを触る係は中の1本の糸で、時計も中身が持つ | `filament/motolii.h`、`motolii.mm`、`edit.cpp`、`edit.sh`、`filament/check/api.c` | 今の土台で動く |
-| 板の材質（色抜き、型、重ね方4つ、動画の色） | `filament/flat.mat`、`matte.mat`、`matte.glsl`、`clear_depth.mat`（平たい物と 3D の重なりの束の境で、奥行きだけ白紙に戻す三角。Filament の空と同じ書き方） | 今の土台で動く |
+| 板の材質（色抜き、型、重ね方4つ、動画の色） | `filament/flat.mat`、`matte.mat`、`matte.glsl` | 今の土台で動く |
 | 場面の見本：民衆、人形劇、マスク、重ね方、壁、AE再生、AEの動き、文書 | `filament/neko.mm`、`puppet.mm`、`mask.mm`、`lay.mm`、`wall.mm`、`ae.mm`、`led.mm`（開くのは `filament/neko.sh`、`puppet.sh`、`lay.sh`、`led.sh`。led の動きは `filament/led.json`） | 今の土台で動く。動画は `reports/show/` |
 | ビルド：今の土台用。Filament と ThorVG を Dawn で作る手順、Filament の中に仕事を入れる口、計算の口の確かめ | `filament/dawn_probe/`（場面を作るのは `kit_wgpu.sh`、ThorVG は `tvg_on_dawn.sh`） | 今の土台で動く |
 | 人の物への手入れ：Filament（計算の口、機械を借りる口、外の絵を受ける口、動画の共有の機能）、ThorVG（3つ目の数 z） | `filament/dawn_probe/filament_dawn_compute.patch`、`thorvg_z.patch`、`gpu_door.h`、`gpu_door.cpp` | 今の土台で動く。ThorVG の物は本家に送らない |
