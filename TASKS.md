@@ -20,6 +20,8 @@
 1. **夜間：Filament の力を引き出す**（ユーザー：「地味なのはfilamentの引き出し方」）。Filament に在って、まだ値になっていない物を値にして札に出す。作り直しは無し。
    候補：材質（布のつや sheen、筋 anisotropy、肌の透け subsurface、厚みの透過 transmission）、画面（隅の影 SSAO、床の映り込み SSR、触れた所の影 contact shadows）、写しが instancing を使えているかの確認。
    通ったと言える一文：それぞれ「その値を変えると絵が変わる」を前後の絵で見せ、60コマ毎秒のまま、Dawn で。
+   **10/14 夜：6個は済み**（`reports/skin_run/drawn_out/`）。立体の Sheen・Brushed（anisotropy）、段の AO（SSAO）・Mirror（SSR）、光の Contact。前後で画素が変わるのを数えて確認、60コマで落ち0。全部入りで 1枚 7.7〜9.3 ms（全部切りは 2.5〜3.3、増えた分はほぼ SSR）。Contact は効くが小さい（Filament の既定で届く距離 0.3）。
+   切った物：transmission と subsurface（陰影の型ごと別の材質になる。transmission は全部の立体を屈折に乗せて重い）。残り：写しが instancing を使えているかの確認。
 2. **札を Ableton の作法に**（`reports/skin_run/dense_ui_research.md`）：名前は8文字くらい、使えない時は説明せず灰色、絵はデータの種類で決める、単位は小さく灰色で桁は単位ごとに固定、Advanced は中身の名前（Each copy・Timing など）。説明文は書かない（ユーザー：「漢は語らない」）。
 3. **窓そのものの 60コマ毎秒を数える**（夜向き）：Flutter の `FrameTiming` で、再生中・つまみを動かしてる間・15レシピの重い書類。通ったと言える一文：60秒間、遅れたコマ 0。
 4. **Cavalry の残り**：生成ポスター（升目の分割、写しごとに形を乱数で）、同じ長さで行ごとに波の数を変える、split の文字を各自の真ん中で大きくする、空の text でフォント名が出る、迷路（写しごとに 0／90 度を乱数で）。

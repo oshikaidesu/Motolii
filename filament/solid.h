@@ -136,7 +136,7 @@ static Mesh* solid_mesh(const char* file) {
 // A plain look in one colour (floor_lit.mat: lit by the stage's room); and every face of a file's shape given it, the
 // looks the file names set aside. Its surface, Filament's own: how metal, how rough, how much it reflects, a clear coat
 // over it (how much, how rough), and how much it lights itself (on the picture: 1 its own colour, more brighter).
-struct Surface { float metallic = 0.08f, roughness = 0.6f, reflectance = 0.5f, coat = 0.f, coatRoughness = 0.f, glow = 0.f; };
+struct Surface { float metallic = 0.08f, roughness = 0.6f, reflectance = 0.5f, coat = 0.f, coatRoughness = 0.f, glow = 0.f, sheen = 0.f, anisotropy = 0.f; };
 static void plain(MaterialInstance* look, float3 colour, const Surface& is = {}) {
     look->setParameter("color", float4{Color::toLinear<ACCURATE>(sRGBColor{colour}), 1.f});
     look->setParameter("roughness", is.roughness);
@@ -145,6 +145,8 @@ static void plain(MaterialInstance* look, float3 colour, const Surface& is = {})
     look->setParameter("clearCoat", is.coat);
     look->setParameter("clearCoatRoughness", is.coatRoughness);
     look->setParameter("glowing", is.glow);
+    look->setParameter("sheen", is.sheen);
+    look->setParameter("anisotropy", is.anisotropy);
 }
 static void solid_fill(Stage& s, Solid* d, float3 colour, const Surface& is = {}) {
     Material* lit = material(s, "floor_lit.filamat");

@@ -114,6 +114,8 @@ static const DocValue doc_values[] = {
     //  the solid things it lights cast shadows. Its colour is its fill; it shines the way it is turned, ahead of it)
     {"intensity", "light", 0, 100, true, nullptr}, {"falloff", "light", 0.01, 1000, false, nullptr}, {"cone", "light", 1, 89, true, nullptr}, {"shadows", "light", 0, 1, false, nullptr},
     {"shadow_softness", "light", 0, 1, false, nullptr},   // (how soft its shadows are: as from a larger lamp, Filament's PCSS; 0: crisp)
+    // (Filament's contact shadows: where things touch, the thin shadow its map misses, found on the picture)
+    {"contact_shadows", "light", 0, 1, false, nullptr},
     {"parent", doc_kinds, 0, 1e9, false, nullptr},   // (the thing it goes with: it is moved, turned and sized as that one is, then as it is itself; 0: none)
     {"space", "film picture text shape", 0, 0, false, "2d 2.5d"},   // (the past repository's three tags: 2d is not in the world and lies by the order alone; 2.5d is a sheet in the world, before or behind by depth; a solid is 3d)
     {"align", "text", 0, 1, false, nullptr},
@@ -188,6 +190,9 @@ static const DocValue doc_values[] = {
     //  how much what is behind it swims, how fast a long way through it goes dark, how vivid what is seen through it is)
     {"ior", "solid", 1, 3, false, nullptr}, {"dispersion", "solid", 0, 0.5, false, nullptr}, {"swim", "solid", 0, 1, false, nullptr}, {"dark", "solid", 0, 20, false, nullptr}, {"vivid", "solid", 0, 3, false, nullptr},
     {"clear_coat", "solid", 0, 1, false, nullptr}, {"clear_coat_roughness", "solid", 0, 1, false, nullptr}, {"emissive", "film picture text shape solid", 0, 20, true, nullptr},
+    // (Filament's velvet sheen at its rim, in its own colour; its highlights drawn out as on brushed metal, -1 to 1 the other way)
+    {"sheen", "solid", 0, 1, false, nullptr},
+    {"anisotropy", "solid", -1, 1, false, nullptr},
     // (the stage's, thing 0: the whole picture, Filament's own. Its grade, on every picture laid: a tone mapper, an
     //  exposure in stops, contrast, saturation, vibrance, how warm; its glow round bright parts and its lens flare, a
     //  darkening at the corners and a fog in a colour, on the stage's own view; the room's light, how bright and turned
@@ -199,6 +204,9 @@ static const DocValue doc_values[] = {
     {"contrast", "stage", 0, 2, false, nullptr}, {"saturation", "stage", 0, 2, false, nullptr}, {"vibrance", "stage", 0, 2, false, nullptr}, {"temperature", "stage", -1, 1, false, nullptr},
     {"bloom", "stage", 0, 1, false, nullptr}, {"lens_flare", "stage", 0, 1, false, nullptr}, {"vignette", "stage", 0, 1, false, nullptr}, {"vignette_color", "stage", 0, 0, false, ""},
     {"fog", "stage", 0, 1, false, nullptr}, {"fog_color", "stage", 0, 0, false, ""},
+    // (Filament's screen effects on solid things: shade where they meet and in their folds (SSAO), and what is near mirrored in them (SSR))
+    {"ambient_occlusion", "stage", 0, 1, false, nullptr},
+    {"reflections", "stage", 0, 1, false, nullptr},
     {"anti_aliasing", "stage", 0, 0, false, "fxaa taa none"},   // (how its edges are smoothed: Filament's FXAA as it came, its temporal one (steadier on fine edges in motion), or not)
     {"room", "stage", 0, 0, false, "small_studio studio_small_02_2k lightroom venetian_crossroads_2k graffiti_shelter_2k parking_garage_2k pillars_2k"},   // (which room lights it: the rooms made ready in out/)
     {"environment", "stage", 0, 10, false, nullptr}, {"environment_rotate", "stage", -1e6, 1e6, false, nullptr}, {"background", "stage", 0, 0, false, ""},
@@ -284,6 +292,8 @@ static const DocShown doc_shown[] = {
     {"reflectance", "share", "%", "Shine", 0, 1, false},
     {"clear_coat", "share", "%", "Varnish", 0, 1, true},
     {"clear_coat_roughness", "share", "%", "Varnish rough", 0, 1, true},
+    {"sheen", "share", "%", "Sheen", 0, 1, false},
+    {"anisotropy", "", "", "Brushed", -1, 1, true},
     {"ior", "", "", "Bend", 1, 3, false},
     {"dispersion", "share", "%", "Rainbow", 0, 0.5, false},
     {"swim", "share", "%", "Wobble", 0, 1, false},
@@ -294,6 +304,7 @@ static const DocShown doc_shown[] = {
     {"cone", "angle", "°", "Cone", 1, 89, false},
     {"shadows", "onoff", "", "Shadows", 0, 1, false},
     {"shadow_softness", "share", "%", "Soft shadows", 0, 1, false},
+    {"contact_shadows", "onoff", "", "Contact", 0, 1, true},
     {"projection", "", "", "Lens", 0, 0, false},
     {"shift_x", "", "", "Shift across", -2, 2, true},
     {"shift_y", "", "", "Shift up", -2, 2, true},
@@ -304,6 +315,8 @@ static const DocShown doc_shown[] = {
     {"vibrance", "", "×", "Vibrance", 0, 2, true},
     {"temperature", "", "", "Warm / cool", -1, 1, false},
     {"bloom", "share", "%", "Bloom", 0, 1, false},
+    {"ambient_occlusion", "share", "%", "AO", 0, 1, false},
+    {"reflections", "share", "%", "Mirror", 0, 1, false},
     {"vignette", "share", "%", "Dark corners", 0, 1, false},
     {"vignette_color", "colour", "", "Corner colour", 0, 0, true},
     {"fog", "share", "%", "Fog", 0, 1, false},
@@ -332,12 +345,12 @@ static const DocCard doc_cards[] = {
     {"Matte", "clip_matte clip_invert clip_feather", "clip", "1"},
     {"Connect", "connect connect_to connect_reach"},
     {"Line", "cap join dash dash_offset"},
-    {"Surface", "metallic roughness reflectance clear_coat clear_coat_roughness emissive", "fill", "!glass"},
+    {"Surface", "metallic roughness reflectance clear_coat clear_coat_roughness sheen anisotropy emissive", "fill", "!glass"},
     {"Glass", "ior dispersion swim dark vivid", "fill", "glass"},
-    {"Light", "intensity falloff cone shadows shadow_softness"},
+    {"Light", "intensity falloff cone shadows shadow_softness contact_shadows"},
     {"Projection", "projection shift_x shift_y"},
     {"Grade", "tone_mapper exposure contrast saturation vibrance temperature"},
-    {"Lens", "bloom lens_flare vignette vignette_color fog fog_color anti_aliasing"},
+    {"Lens", "bloom ambient_occlusion reflections lens_flare vignette vignette_color fog fog_color anti_aliasing"},
     {"Room", "room environment environment_rotate behind background"},
 };
 static bool doc_among(const std::string& words, const std::string& one) { return (" " + words + " ").find(" " + one + " ") != std::string::npos; }
@@ -690,6 +703,12 @@ static void doc_look(Doc& d) {
     View::FogOptions haze = s.view->getFogOptions();
     haze.enabled = doc_number(d, 0, "fog", 0, 0) > 0.0, haze.density = 0.5f * (float)doc_number(d, 0, "fog", 0, 0), haze.distance = 2.f, haze.height = -1e3f, haze.heightFalloff = 0.f, haze.color = hex("fog_color", float3{0.85f, 0.85f, 0.9f}), haze.fogColorFromIbl = false;
     s.view->setFogOptions(haze);
+    View::AmbientOcclusionOptions folds = s.view->getAmbientOcclusionOptions();
+    folds.enabled = doc_number(d, 0, "ambient_occlusion", 0, 0) > 0.0, folds.intensity = 2.f * (float)doc_number(d, 0, "ambient_occlusion", 0, 0);
+    s.view->setAmbientOcclusionOptions(folds);
+    View::ScreenSpaceReflectionsOptions mirror = s.view->getScreenSpaceReflectionsOptions();
+    mirror.enabled = doc_number(d, 0, "reflections", 0, 0) > 0.0;
+    s.view->setScreenSpaceReflectionsOptions(mirror);
     if (d.roomLight <= 0.f && s.scene->getIndirectLight()) d.roomLight = s.scene->getIndirectLight()->getIntensity();
     std::string which = doc_word(d, 0, "room");
     if (which.empty()) which = "small_studio";   // (as the stage was opened)
@@ -1030,7 +1049,7 @@ static void doc_moment(Doc& d, double now) {
 static bool doc_match(Doc& d) {
     Stage& s = *d.stage;
     std::map<int, std::string> told;   // every thing of the document, and all that its making goes by
-    doc_rows(d, sqlite3_mprintf("select thing, group_concat(name || '=' || value, ' ') from (select * from fact where thing > 0 and name in ('kind','file','shape','blend','keyed','space','begin','duration','speed','text','fill','wide','points','inner','round','stroke','stroke_width','align','blur','shadow','shadow_distance','shadow_angle','shadow_blur','shadow_opacity','glow','glow_blur','glow_opacity','copies','tint','tint_black','tint_white','tritone','tritone_shadow','tritone_midtone','tritone_highlight','letter_spacing','line_spacing','italic','cap','join','dash','dash_offset','metallic','roughness','reflectance','clear_coat','clear_coat_roughness','falloff','shadows','shadow_softness','gradient','gradient_angle','gradient_scale','gradient_spread','wrap','wrap_at','split','ior','dispersion','swim','dark','vivid','marker') order by thing, name) group by thing"),
+    doc_rows(d, sqlite3_mprintf("select thing, group_concat(name || '=' || value, ' ') from (select * from fact where thing > 0 and name in ('kind','file','shape','blend','keyed','space','begin','duration','speed','text','fill','wide','points','inner','round','stroke','stroke_width','align','blur','shadow','shadow_distance','shadow_angle','shadow_blur','shadow_opacity','glow','glow_blur','glow_opacity','copies','tint','tint_black','tint_white','tritone','tritone_shadow','tritone_midtone','tritone_highlight','letter_spacing','line_spacing','italic','cap','join','dash','dash_offset','metallic','roughness','reflectance','clear_coat','clear_coat_roughness','falloff','shadows','shadow_softness','contact_shadows','sheen','anisotropy','gradient','gradient_angle','gradient_scale','gradient_spread','wrap','wrap_at','split','ior','dispersion','swim','dark','vivid','marker') order by thing, name) group by thing"),
              [&](sqlite3_stmt* row) { told[sqlite3_column_int(row, 0)] = (const char*)sqlite3_column_text(row, 1); });
     for (auto it = d.shown.begin(); it != d.shown.end();) {
         const auto still = told.find(it->first);
@@ -1105,6 +1124,7 @@ static bool doc_match(Doc& d) {
                 LightManager::ShadowOptions shade;   // (a finer map than as it comes, so the edge is not stepped; a lamp as large as its softness says)
                 shade.mapSize = 2048;
                 const float soft = (float)doc_number(d, thing, "shadow_softness", 0, 0);
+                shade.screenSpaceContactShadows = doc_number(d, thing, "contact_shadows", 0, 0) > 0.5;
                 if (soft > 0.f) shade.shadowBulbRadius = type == LightManager::Type::SUN ? 0.05f * soft : 0.5f * soft;
                 LightManager::Builder(type).color(Color::toLinear<ACCURATE>(sRGBColor{fill.empty() ? float3{1.f} : colour})).falloff((float)doc_number(d, thing, "falloff", 0, 10))
                     .castShadows(doc_number(d, thing, "shadows", 0, 0) > 0.5).shadowOptions(shade).build(*s.engine, made.light);
@@ -1150,7 +1170,8 @@ static bool doc_match(Doc& d) {
                 look->setParameter("vivid", (float)doc_number(d, thing, "vivid", 0, 1.3));
             };
             const Surface surface{(float)doc_number(d, thing, "metallic", 0, 0.08), (float)doc_number(d, thing, "roughness", 0, 0.6), (float)doc_number(d, thing, "reflectance", 0, 0.5),
-                                  (float)doc_number(d, thing, "clear_coat", 0, 0), (float)doc_number(d, thing, "clear_coat_roughness", 0, 0), (float)doc_number(d, thing, "emissive", 0, 0)};
+                                  (float)doc_number(d, thing, "clear_coat", 0, 0), (float)doc_number(d, thing, "clear_coat_roughness", 0, 0), (float)doc_number(d, thing, "emissive", 0, 0),
+                                  (float)doc_number(d, thing, "sheen", 0, 0), (float)doc_number(d, thing, "anisotropy", 0, 0)};
             if (!fill.empty() && !glass && (rgb < 0 || ramp.size() > 1)) why = "a solid's fill is six digits, as ff3366, or glass";
             else if (!shape.empty()) {
                 made.shape = shape == "gem" ? gem(0.5f) : shape == "cube" ? cube(0.1f) : torus(0.37f, 0.13f);
@@ -1168,7 +1189,7 @@ static bool doc_match(Doc& d) {
         if (!made.film && !made.drawn && !made.solid && !made.shape && !made.camera && made.light.isNull()) { d.trouble = why + ": the " + kind + " " + std::filesystem::path(file + shape).filename().string() + " could not be made"; all = false; continue; }
         d.shown[thing] = made;
         if (made.solid || made.shape)   // (a solid thing casts a shadow from a light that throws them, and takes one)
-            doc_parts(s, d.shown[thing], [](RenderableManager& faces, RenderableManager::Instance one) { faces.setCastShadows(one, true), faces.setReceiveShadows(one, true); });
+            doc_parts(s, d.shown[thing], [](RenderableManager& faces, RenderableManager::Instance one) { faces.setCastShadows(one, true), faces.setReceiveShadows(one, true), faces.setScreenSpaceContactShadows(one, true); });   // (contact shadows: Filament draws them only where the light asks too)
     }
     doc_moment(d, s.now);
     return all;

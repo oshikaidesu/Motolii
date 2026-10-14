@@ -2,6 +2,7 @@ material {
     name : floor_lit,
     shadingModel : lit,
     specularAntiAliasing : true,
+    reflections : screenspace,   // (what is near mirrored in it, when the stage asks for reflections: Filament's SSR)
     parameters : [
         { type : float4, name : color },
         { type : float, name : roughness },
@@ -10,7 +11,10 @@ material {
         { type : float, name : reflectanceOff },
         { type : float, name : clearCoat },
         { type : float, name : clearCoatRoughness },
-        { type : float, name : glowing }
+        { type : float, name : glowing },
+        // (a velvet sheen at the rim, in its own colour; brushed highlights drawn out along it, -1 to 1)
+        { type : float, name : sheen },
+        { type : float, name : anisotropy }
     ]
 }
 
@@ -23,6 +27,9 @@ fragment {
         material.reflectance = 0.5 + materialParams.reflectanceOff;
         material.clearCoat = materialParams.clearCoat;
         material.clearCoatRoughness = materialParams.clearCoatRoughness;
+        material.sheenColor = materialParams.color.rgb * materialParams.sheen;
+        material.sheenRoughness = materialParams.roughness;
+        material.anisotropy = materialParams.anisotropy;
         material.emissive = vec4(materialParams.color.rgb * materialParams.glowing, 0.0);   // (it lights itself in its own colour, so bright on the picture: 1 its colour itself, more spills over; w 0: not by the stage's exposure, Filament's own)
     }
 }
