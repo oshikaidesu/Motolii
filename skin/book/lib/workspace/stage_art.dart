@@ -35,8 +35,10 @@ class ArtLayer {
 /// What the stage draws: the frame, the layers, and whether the camera layer frames the view.
 @immutable
 class ArtScene {
+  final String title;
   ArtScene.of(Ws ws, {required this.camera})
     : frame = ws.frame,
+      title = ws.document == null ? 'CODA_main' : ws.document!.replaceFirst(RegExp(r'\.motolii$'), ''), // (joined: the document's own name)
       layers = List.unmodifiable([for (final l in ws.layers) ArtLayer(l)]),
       fx = Map.unmodifiable({
         for (final l in ws.layers)

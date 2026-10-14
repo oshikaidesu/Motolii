@@ -70,7 +70,9 @@ static void motolii_hand(Motolii* m, std::string document, int wide, int high, s
         if (!m->live || t < due || !(m->playing || m->changed)) { last = m->playing ? last : t; continue; }
         if (m->playing) {   // (time goes on by the clock, and round again at the document's end)
             const double runs = doc_seconds(*m->d), on = m->now + std::chrono::duration<double>(t - last).count();
-            m->now = on >= runs ? 0.0 : on;
+            double from = 0.0, to = runs;
+            doc_work(*m->d, &from, &to);   // (round and round within the work area)
+            m->now = on >= to || on < from ? from : on;
         }
         last = t;
         m->s->by_clock = m->playing;
@@ -150,6 +152,10 @@ int motolii_size(Motolii* m, int wide, int high) {
         return say ? changes(m, (int)doc_change(*m->d, say)) : (m->d->trouble = "a stage is from 16 to 8192 points each way, an even number of them", 0);
     });
 }
+int motolii_work(Motolii* m, double from, double to) { return by_hand(m, [=] { return changes(m, (int)doc_work_is(doc(m), from, to)); }); }
+int motolii_work_of(Motolii* m, double* from, double* to) { return by_hand(m, [=] { return doc_work(*m->d, from, to), 1; }); }
+int motolii_mark(Motolii* m, double at, const char* word) { return by_hand(m, [=] { return changes(m, (int)doc_mark(doc(m), at, word)); }); }
+const char* motolii_marks(Motolii* m) { return by_hand(m, [=] { return (m->word = doc_marks(*m->d)).c_str(); }); }
 int motolii_fits(Motolii* m) {
     return by_hand(m, [=] {
         int wide = m->s->w, high = m->s->h;
@@ -245,17 +251,21 @@ int motolii_write(Motolii* m, const char* mp4) {
     return by_hand(m, [m, mp4] {
         doc(m);
         if (!told(m, ends(mp4, ".mp4"), "a film is written as an .mp4") || !told(m, placed(mp4), "there is no such folder") || !told(m, !m->d->writing, "it is being written already")) return 0;
-        const int pictures = (int)std::lround(doc_seconds(*m->d) * RATE);
+        double from = 0.0, to = 0.0;
+        doc_work(*m->d, &from, &to);   // (the work area is what is written)
+        const int pictures = (int)std::lround((to - from) * RATE);
         m->d->writing = true;
+        m->d->written_from = from;
         // (between two pictures the hand does what it was asked meanwhile, so a shell that asks does not stand still;
         //  the document is read then, not changed, and the picture being written is told its moment again after)
-        const int ok = told(m, film(*m->s, mp4, pictures, [m, pictures](float done) {
+        const int ok = told(m, film(*m->s, mp4, pictures, [m, pictures, from](float done) {
             std::deque<std::function<void()>> todo;
             { std::lock_guard<std::mutex> hold(m->asked_lock); todo.swap(m->asked); }
             for (auto& does : todo) does();
-            if (!todo.empty()) time_is(*m->s, (double)std::lround(done * (float)pictures) / RATE);
+            time_is(*m->s, from + (double)std::lround(done * (float)pictures) / RATE);   // (the picture's moment: from the work area's start)
         }), "the file could not be written");
         m->d->writing = false;
+        m->d->written_from = 0.0;
         time_is(*m->s, m->now);   // (back to the moment it was at)
         return ok;
     });

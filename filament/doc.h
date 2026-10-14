@@ -47,6 +47,7 @@ struct Doc {
     int act = 0;                        // how many acts are open, one within another
     bool act_ok = true;                 // no change of the open act has been refused
     bool writing = false;               // it is being written as a film: it is read, not changed, until that is done
+    double written_from = 0.0;          // the moment of the document that a film being written begins at (its work area's start)
     sqlite3_session* acting = nullptr;  // SQLite's own record of what the open act changes
     // A thing held by a hand (doc_hold): what of it is carried shows at once and is not yet the document's.
     struct Held { int thing = 0; std::map<std::string, double> from, tried; } held;
@@ -501,7 +502,10 @@ static bool doc_match(Doc& d) {
             if (!made.film) why = video_trouble;
             else if (const double keyed = doc_number(d, thing, "keyed", 0, -1); keyed != 0.0) key_own(made.film, keyed > 0.5);   // (not said: keyed if it has a ground of its own)
             if (made.film) s.playing.erase(made.film);   // (the document tells it its moment, and when its sound comes on)
-            if (made.film && made.film->sound) s.sounding[made.film] = [&d, thing, v = made.film, file] { return Stage::Sound{file, v->from, v->to, v->speed, 0.0, doc_number(d, thing, "start", 0, 0), doc_number(d, thing, "duration", 0, -1)}; };
+            if (made.film && made.film->sound) s.sounding[made.film] = [&d, thing, v = made.film, file] {   // (counted from where the film being written begins: a sound already going then is heard from that far into it)
+                const double on = doc_number(d, thing, "start", 0, 0) - d.written_from, lasts = doc_number(d, thing, "duration", 0, -1), late = std::max(0.0, -on);
+                return Stage::Sound{file, v->from, v->to, v->speed, late, std::max(0.0, on), lasts < 0.0 ? lasts : std::max(1e-3, lasts - late)};
+            };
         } else if (kind == "picture") {
             if (fxOk && (made.drawn = picture(s, file.c_str(), mat4f{}, 1.f, float3{-1.f}, true, lay, fx))) s.playing.erase(made.drawn);
         } else if (kind == "text") {   // (words in a font: said by `say N text ...`; until then, the font's own name)
@@ -549,6 +553,38 @@ static double doc_seconds(Doc& d) {
         if (lasts > 0.0) all = std::max(all, doc_number(d, thing, "start", 0, 0) + lasts);
     }
     return all > 0.0 ? all : 8.0;
+}
+
+// The work area: the stretch of the document that is played round and written as a film (After Effects' own); not
+// said, all of it. And the marks: moments of the document with a name (After Effects' composition markers). Both are
+// facts of thing 0, the stage itself, and every change of them is a step.
+static bool doc_change(Doc& d, char* change);
+static void doc_work(Doc& d, double* from, double* to) {
+    const double all = doc_seconds(d);
+    double in = 0.0, out = all;
+    doc_rows(d, sqlite3_mprintf("select name, value from fact where thing = 0 and name in ('work_in', 'work_out')"),
+             [&](sqlite3_stmt* row) { (strcmp((const char*)sqlite3_column_text(row, 0), "work_in") ? out : in) = sqlite3_column_double(row, 1); });
+    *from = std::clamp(in, 0.0, std::max(0.0, all - 1e-3));
+    *to = std::clamp(out, *from + 1e-3, all);
+}
+static bool doc_work_is(Doc& d, double from, double to) {
+    if (!(from >= 0.0 && to > from + 1e-3 && to <= 1e6)) return d.trouble = "a work area is from one moment to a later one", false;
+    return doc_change(d, sqlite3_mprintf("insert into fact(thing, name, at, value) values(0, 'work_in', 0.0, %!.17g), (0, 'work_out', 0.0, %!.17g) on conflict do update set value = excluded.value", from, to));
+}
+static bool doc_mark(Doc& d, double at, const char* word) {   // ("": the mark there is taken away)
+    if (!(at >= 0.0 && at <= 1e6)) return d.trouble = "a mark is at a moment of the stage: from 0 to 1000000 seconds", false;
+    if (strchr(word, '\n')) return d.trouble = "a mark's name is one line", false;
+    return doc_change(d, *word ? sqlite3_mprintf("insert into fact(thing, name, at, value) values(0, 'mark', %!.17g, %Q) on conflict do update set value = excluded.value", at, word)
+                               : sqlite3_mprintf("delete from fact where thing = 0 and name = 'mark' and at = %!.17g", at));
+}
+static std::string doc_marks(Doc& d) {   // (a line each, in time: the moment, a space, the name)
+    std::string all;
+    doc_rows(d, sqlite3_mprintf("select at, value from fact where thing = 0 and name = 'mark' order by at"), [&](sqlite3_stmt* row) {
+        char at[40];
+        std::snprintf(at, sizeof at, "%.6g ", sqlite3_column_double(row, 0));
+        all += at + std::string((const char*)sqlite3_column_text(row, 1)) + "\n";
+    });
+    return all;
 }
 
 // A document's own stage: how many points wide and high it is (facts of thing 0, which is the stage itself; they are

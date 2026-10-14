@@ -21,6 +21,13 @@ Motolii* motolii_open(const char* document, int wide, int high);
 int motolii_size(Motolii* m, int wide, int high);
 int motolii_size_of(Motolii* m, int* wide, int* high);
 int motolii_fits(Motolii* m);
+/* The work area: the stretch played round and written as a film (not said: all of it); a change is a step. The marks:
+   moments with a name; motolii_mark with "" takes the one there away; motolii_marks: a line each, in time, "moment name"
+   (until the next call). */
+int motolii_work(Motolii* m, double from, double to);
+int motolii_work_of(Motolii* m, double* from, double* to);
+int motolii_mark(Motolii* m, double at, const char* word);
+const char* motolii_marks(Motolii* m);
 void motolii_close(Motolii* m);
 const char* motolii_trouble(Motolii* m);                           /* why the last call that was not done was not */
 

@@ -272,6 +272,19 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
     }
   }
 
+  /// Joined: the work area carried is the document's when the hand lets go (one step).
+  void _workLetGo() {
+    final m = _ws?.inside;
+    if (_workDrag != null && m != null && m.setWork(_workIn / Ws.fps, _workOut / Ws.fps)) _ws!.reread();
+    _workDrag = null;
+  }
+
+  /// The marks on the ruler: joined, the document's own (moments with a name); else the sample's.
+  List<(int, String)> _marksOf(Ws ws) {
+    final m = ws.inside;
+    return m == null ? _markers : [for (final (at, name) in m.marks) ((at * Ws.fps).round(), name)];
+  }
+
   void _overview(Offset p, double w) {
     final f = (p.dx - 4) / (w - 8) * Ws.duration;
     setState(() => _scroll = _clampScroll(f - _visible / 2));
@@ -283,6 +296,11 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
 
   @override
   Widget build(BuildContext context) {
+    if (_ws?.inside case final m? when _workDrag == null) {   // (joined: the document's work area)
+      final (from, to) = m.work;
+      _workIn = (from * Ws.fps).round();
+      _workOut = (to * Ws.fps).round();
+    }
     final ws = WsScope.of(context);
     final sel = ws.selected, picks = ws.keys;
     final rows = [
@@ -403,10 +421,12 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
                 behavior: HitTestBehavior.opaque,
                 onPanDown: (d) => _rulerDown(d.localPosition),
                 onPanUpdate: (d) => _rulerMove(d.localPosition),
+                onPanEnd: (_) => _workLetGo(),
+                onPanCancel: _workLetGo,
                 child: SizedBox(
                   height: WtM.ruler,
                   child: CustomPaint(
-                    painter: WtRulerPainter(view: v, fps: Ws.fps, workIn: _workIn, workOut: _workOut, markers: _markers),
+                    painter: WtRulerPainter(view: v, fps: Ws.fps, workIn: _workIn, workOut: _workOut, markers: _marksOf(_ws!)),
                   ),
                 ),
               ),
@@ -491,7 +511,7 @@ class _Header extends StatelessWidget {
           final roomy = box.maxWidth >= 1000, mid = box.maxWidth >= 820;
           return Row(
             children: [
-              if (mid) ...[const _Chip('Main', mono: false), const SizedBox(width: 12)],
+              if (mid) ...[_Chip(ws.document?.replaceFirst(RegExp(r'\.motolii$'), '') ?? 'Main', mono: false), const SizedBox(width: 12)], // (joined: the document's name)
               _Btn(TpGlyph.toStart, key: const ValueKey('ws-tl-start'), onTap: () => onStep(-ws.frame)),
               const SizedBox(width: 2),
               _Btn(TpGlyph.stepBack, key: const ValueKey('ws-tl-back'), onTap: () => onStep(-1)),

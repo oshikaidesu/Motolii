@@ -30,7 +30,7 @@ class _WsTopBarState extends State<WsTopBar> {
           const SizedBox(width: 6),
           Text('/', style: T.name(Grey.g44)),
           const SizedBox(width: 6),
-          Text('Main comp', style: T.name(Grey.g76)),
+          Text(ws.inside == null ? 'Main comp' : ws.layer?.name ?? 'Stage', style: T.name(Grey.g76)), // (joined: where the hand is: the picked thing, or the stage itself)
           const SizedBox(width: 10),
           // Joined: the document's own size; a tap goes to the next of the usual three (wide, tall, square) and the document is opened again at it.
           GestureDetector(

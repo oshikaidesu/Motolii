@@ -718,6 +718,27 @@ void main() {
     await _close(t);
   }, skip: !_built);
 
+  testWidgets('no decoration: the document\'s name on the stage and the timeline, its own marks and work area on the ruler', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    m.add('shape', 'rect');
+    ws.reread();
+    await t.pumpAndSettle();
+    expect(find.text('Hit'), findsNothing, reason: 'the sample\'s marks are not the document\'s');
+    final name = ws.document!.replaceFirst('.motolii', '');
+    expect(find.text(name), findsWidgets, reason: 'the timeline says the document');
+    expect(m.work, (0.0, m.seconds), reason: 'not said: all of it');
+    expect(m.setWork(1, 3) && m.work == (1.0, 3.0), isTrue, reason: m.trouble);
+    expect(m.undo() && m.work == (0.0, m.seconds), isTrue, reason: 'one step');
+    expect(m.setWork(3, 1), isFalse);
+    expect(m.mark(2, 'Drop') && m.mark(.5, 'Hit'), isTrue, reason: m.trouble);
+    expect(m.marks, [(.5, 'Hit'), (2.0, 'Drop')]);
+    ws.reread();
+    await t.pumpAndSettle();
+    expect(m.mark(2, '') && m.marks.length == 1, isTrue, reason: 'a mark said with nothing is taken away');
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
   testWidgets('Backspace on the timeline takes the picked thing out; undo brings it back', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final ring = m.add('solid', 'ring'), cube = m.add('solid', 'cube');

@@ -246,6 +246,28 @@ class Motolii {
   }();
   bool resize(int wide, int high) => _size(_m, wide, high) != 0;
   late final _fits = _lib.lookupFunction<Int32 Function(_P), int Function(_P)>('motolii_fits');
+  late final _work = _lib.lookupFunction<Int32 Function(_P, Double, Double), int Function(_P, double, double)>('motolii_work');
+  late final _workOf = _lib.lookupFunction<Int32 Function(_P, Pointer<Double>, Pointer<Double>), int Function(_P, Pointer<Double>, Pointer<Double>)>('motolii_work_of');
+  late final _mark = _lib.lookupFunction<Int32 Function(_P, Double, _S), int Function(_P, double, _S)>('motolii_mark');
+  late final _marks = _lib.lookupFunction<_S Function(_P), _S Function(_P)>('motolii_marks');
+
+  /// The work area, in seconds: the stretch played round and written as a film (not said: all of it); a change is a step.
+  (double, double) get work {
+    final at = malloc<Double>(2);
+    _workOf(_m, at, at + 1);
+    final w = (at[0], at[1]);
+    malloc.free(at);
+    return w;
+  }
+
+  bool setWork(double from, double to) => _work(_m, from, to) != 0;
+
+  /// The marks: moments with a name, in time; a mark said with '' is taken away.
+  List<(double, String)> get marks => [
+    for (final line in _marks(_m).toDartString().split('\n'))
+      if (line.indexOf(' ') case final i when i > 0) (double.parse(line.substring(0, i)), line.substring(i + 1)),
+  ];
+  bool mark(double at, String word) => _with([word], (s) => _mark(_m, at, s[0])) != 0;
 
   /// Whether the stage is the size the document says now (not, after [resize] or an undo of one: open it again).
   bool get fits => _fits(_m) != 0;
