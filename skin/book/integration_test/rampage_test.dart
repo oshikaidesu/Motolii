@@ -195,10 +195,11 @@ void main() {
             for (final e in find.byWidgetPredicate((w) => w.key is ValueKey<String> && (w.key as ValueKey<String>).value.startsWith('ws-screen-')).evaluate())
               ('screen ${(e.widget.key as ValueKey<String>).value.substring(10)}', find.byKey(e.widget.key!)),
             if (find.byType(StageView).evaluate().isNotEmpty)
-              for (final name in (t.state(
+              for (final MapEntry(key: name, value: at) in (t.state(
                 find.byType(StageView),
-              ) as StageHandles).handles.keys)
-                ('handle $name', find.byType(StageView)),
+              ) as StageHandles).handles.entries)
+                if ((Offset.zero & t.getSize(find.byType(StageView))).deflate(4).contains(at)) // (a hand takes only what it sees: a thing fallen off the picture has its handles there too)
+                  ('handle $name', find.byType(StageView)),
           ];
           if (ledger.isEmpty) continue;
           final (what, where) = ledger[r.nextInt(ledger.length)];
