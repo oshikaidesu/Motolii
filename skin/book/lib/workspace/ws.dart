@@ -115,6 +115,18 @@ class Ws extends ChangeNotifier {
   /// How many times the document has been read again.
   int rev = 0;
 
+  /// Where a bar ends, in frames: a thing on for good runs to the document's end.
+  static int _outF(int from, double lasts) => lasts < 0 ? duration : (from + (lasts * fps).round()).clamp(from + 1, duration);
+
+  /// One thing's bar read again from the inside (while a hand carries it: what the inside says is what is drawn).
+  void respan(String id) {
+    final m = _inside, l = layers.where((l) => l.id == id).firstOrNull, t = int.tryParse(id);
+    if (m == null || l == null || t == null) return;
+    l.inF = ((m.value(t, 'start', 0) ?? 0) * fps).round();
+    l.outF = _outF(l.inF, m.lasts(t));
+    shown();
+  }
+
   /// What the inside shows changed without the document changing (a thing held and carried): the seats look again.
   void shown() {
     rev++;
@@ -144,7 +156,7 @@ class Ws extends ChangeNotifier {
               'text' => WsKind.text,
               'film' || 'picture' => WsKind.image,
               _ => WsKind.shape,
-            }, from, lasts < 0 ? duration : (from + (lasts * fps).round()).clamp(from + 1, duration), keys);
+            }, from, _outF(from, lasts), keys);
           }(),
       ]);
     if (layers.every((l) => l.id != _sel)) _sel = layers.firstOrNull?.id;

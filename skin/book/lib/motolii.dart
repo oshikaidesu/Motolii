@@ -20,7 +20,9 @@ typedef _S = Pointer<Utf8>;
 final _thumbnails = <String, Future<String?>>{};
 Future<String?> _thumbnail(String lib, String film) async {
   final folder = Directory('${Directory.systemTemp.path}/motolii_thumbnails')..createSync(recursive: true);
-  final png = '${folder.path}/${film.hashCode.toRadixString(16)}_${File(film).statSync().modified.millisecondsSinceEpoch}.png';
+  // (named by the film's own place, so it is found again in another run, and by when the film was last changed)
+  final named = film.replaceAll(RegExp(r'[^A-Za-z0-9]'), '_');
+  final png = '${folder.path}/${named.length > 150 ? named.substring(named.length - 150) : named}_${File(film).statSync().modified.millisecondsSinceEpoch}.png';
   if (File(png).existsSync()) return png;
   final made = await Isolate.run(() {
     final ask = DynamicLibrary.open(lib).lookupFunction<Int32 Function(Pointer<Utf8>, Pointer<Utf8>, Int32), int Function(Pointer<Utf8>, Pointer<Utf8>, int)>('motolii_thumbnail');
@@ -82,13 +84,13 @@ class Motolii {
   late final _lasts = _lib.lookupFunction<Double Function(_P, Int32), double Function(_P, int)>('motolii_lasts');
   late final _keyMoments = _lib.lookupFunction<Int32 Function(_P, Int32, _S, Pointer<Double>, Int32), int Function(_P, int, _S, Pointer<Double>, int)>('motolii_key_moments');
   late final _frame = _lib.lookupFunction<Int32 Function(_P, Int32, Pointer<Double>), int Function(_P, int, Pointer<Double>)>('motolii_frame');
-  late final _try = _lib.lookupFunction<Int32 Function(_P, Int32, _S, Double), int Function(_P, int, _S, double)>('motolii_try');
-  late final _tryDrop = _lib.lookupFunction<Int32 Function(_P), int Function(_P)>('motolii_try_drop');
+  late final _hold = _lib.lookupFunction<Int32 Function(_P, Int32), int Function(_P, int)>('motolii_hold');
+  late final _carry = _lib.lookupFunction<Int32 Function(_P, _S, Double, Double), int Function(_P, _S, double, double)>('motolii_carry');
+  late final _letGo = _lib.lookupFunction<Int32 Function(_P, Int32), int Function(_P, int)>('motolii_let_go');
   late final _put = _lib.lookupFunction<Int32 Function(_P, Int32, _S, Double, Double), int Function(_P, int, _S, double, double)>('motolii_put');
   late final _keyHere = _lib.lookupFunction<Int32 Function(_P, Int32, _S, Double), int Function(_P, int, _S, double)>('motolii_key_here');
   late final _size = _lib.lookupFunction<Int32 Function(_P, Int32, Int32), int Function(_P, int, int)>('motolii_size');
   late final _sizeOf = _lib.lookupFunction<Int32 Function(_P, Pointer<Int32>, Pointer<Int32>), int Function(_P, Pointer<Int32>, Pointer<Int32>)>('motolii_size_of');
-  late final _trim = _lib.lookupFunction<Int32 Function(_P, Int32, Double, Double), int Function(_P, int, double, double)>('motolii_trim');
   late final _raise = _lib.lookupFunction<Int32 Function(_P, Int32, Int32), int Function(_P, int, int)>('motolii_raise');
   late final _stay = _lib.lookupFunction<Int32 Function(_P, Int32, _S, Double), int Function(_P, int, _S, double)>('motolii_stay');
   late final _keyed = _lib.lookupFunction<Int32 Function(_P, Int32, _S, Double), int Function(_P, int, _S, double)>('motolii_keyed');
@@ -180,9 +182,13 @@ class Motolii {
     return ok ? f : null;
   }
 
-  /// While a hand is still on a thing: a value shown and not written (no step of undo). [set] settles it, [tryDrop] undoes it.
-  bool tryValue(int thing, String name, double number) => _with([name], (s) => _try(_m, thing, s[0], number)) != 0;
-  void tryDrop() => _tryDrop(_m);
+  /// A thing held by a hand, carried, and let go (motolii.h): the one form of everything a hand drags. [by] is
+  /// 'place' (on the stage: how far the hand has gone, in points of the picture), 'bar', 'head' or 'tail' (its bar on
+  /// the timeline: how many seconds), or a value's name (what the number is now). What is carried shows at once and
+  /// is the document's only when it is let go and kept: one step.
+  bool hold(int thing) => _hold(_m, thing) != 0;
+  bool carry(String by, double a, [double b = 0]) => _with([by], (s) => _carry(_m, s[0], a, b)) != 0;
+  bool letGo(bool keep) => _letGo(_m, keep ? 1 : 0) != 0;
 
   /// What a hand does to a value at a moment, by the document's own rules (motolii.h): the value changed there (a key
   /// if it has keys, else the value that stays); a key there holding what it is; its keys gone; and how it is keyed
@@ -201,9 +207,6 @@ class Motolii {
     return is_;
   }();
   bool resize(int wide, int high) => _size(_m, wide, high) != 0;
-
-  /// When a thing is on, cut at its bar's ends: from [from] to [to] seconds of the stage (motolii.h).
-  bool trim(int thing, double from, double to) => _trim(_m, thing, from, to) != 0;
 
   /// A thing brought [places] places nearer among the things (below 0: further back).
   bool raise(int thing, int places) => _raise(_m, thing, places) != 0;

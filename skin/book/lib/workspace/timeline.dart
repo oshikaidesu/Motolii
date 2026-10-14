@@ -192,54 +192,35 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
     }
   }
 
-  // Joined: a bar held by a hand. By its body it slides (when the thing comes on); by an end it is cut there. While
-  // it is held the stage only shows it (the inside's try); let go, it is told to the document once.
-  ({WsLayer layer, int end, double grab, int inF, int outF})? _bar; // end: 0 its head, 1 its tail, 2 its body
+  // Joined: a bar held by a hand: by its body it slides, by an end it is cut there. The timeline only says which part
+  // is held and how many seconds the hand has gone; what that does to the thing (its limits, a film's head) is the
+  // inside's, and the bar is drawn from what the inside then says.
+  ({String id, String part, double grab, bool moved})? _bar;
 
   void _barDown(Offset p) {
     final ws = _ws!, v = _view, m = ws.inside;
     final i = ((p.dy + _vscroll) / WtM.row).floor();
     if (m == null || i < 0 || i >= ws.layers.length) return;
     final l = ws.layers[i], a = v.x(l.inF), b = v.x(l.outF);
-    if (_locked.contains(l.id) || p.dx < a - 6 || p.dx > b + 6) return;
+    if (_locked.contains(l.id) || p.dx < a - 6 || p.dx > b + 6 || !m.hold(int.parse(l.id))) return;
     ws.select(l.id);
     if (ws.playing) ws.playing = false;
-    _bar = (layer: l, end: (p.dx - b).abs() <= 6 ? 1 : ((p.dx - a).abs() <= 6 ? 0 : 2), grab: v.frameAt(p.dx) - l.inF, inF: l.inF, outF: l.outF);
+    _bar = (id: l.id, part: (p.dx - b).abs() <= 6 ? 'tail' : ((p.dx - a).abs() <= 6 ? 'head' : 'bar'), grab: v.frameAt(p.dx), moved: false);
   }
 
   void _barMove(Offset p) {
     final h = _bar, ws = _ws!, m = ws.inside;
     if (h == null || m == null) return;
-    final l = h.layer, f = _view.frameAt(p.dx), t = int.parse(l.id);
-    setState(() {
-      switch (h.end) {
-        case 0:
-          l.inF = f.round().clamp(0, l.outF - 1);
-        case 1:
-          l.outF = f.round().clamp(l.inF + 1, Ws.duration);
-        default:
-          final to = (f - h.grab).round().clamp(0, Ws.duration - 1);
-          l.outF = h.outF >= Ws.duration ? h.outF : (l.outF + to - l.inF); // (a thing on for good stays on to the end)
-          l.inF = to;
-      }
-    });
-    m.tryValue(t, 'start', l.inF / Ws.fps);
-    if (h.end != 2) m.tryValue(t, 'duration', (l.outF - l.inF) / Ws.fps);
-    ws.shown();
+    m.carry(h.part, (_view.frameAt(p.dx) - h.grab).round() / Ws.fps); // (by whole frames)
+    _bar = (id: h.id, part: h.part, grab: h.grab, moved: true);
+    ws.respan(h.id);
   }
 
   void _barUp({bool keep = true}) {
     final h = _bar, ws = _ws!, m = ws.inside;
     _bar = null;
     if (h == null || m == null) return;
-    final l = h.layer, t = int.parse(l.id);
-    if (!keep || (l.inF == h.inF && l.outF == h.outF)) {
-      m.tryDrop();
-    } else if (h.end == 2) {
-      m.set(t, 'start', l.inF / Ws.fps);
-    } else {
-      m.trim(t, l.inF / Ws.fps, l.outF / Ws.fps);
-    }
+    m.letGo(keep && h.moved);
     ws.reread();
   }
 

@@ -222,26 +222,49 @@ String? _fillWord(Ws ws, String? id, Color? sample) {
   return f.isEmpty ? 'None' : (f == 'glass' ? 'Glass' : '#${f.toUpperCase()}'); // (nothing said: nothing is named, not the last thing's fill)
 }
 
+/// The inspector's numbers and the document's, in one place: an inspector id, the document's value it shows, and the
+/// way across and back (c: the composition's size, p: its points to one unit of the stage; positions are in points
+/// from the top left, scale in hundredths of a unit, the turn about z clockwise, opacity in hundredths).
+typedef _Across = double Function(double value, Size c, double p);
+const _seats = <(String, String, _Across, _Across)>[
+  ('pos.x', 'x', _xOut, _xIn),
+  ('pos.y', 'y', _yOut, _yIn),
+  ('pos.z', 'z', _zOut, _zIn),
+  ('scale.x', 'size', _hundredOut, _hundredIn),
+  ('scale.y', 'size', _hundredOut, _hundredIn),
+  ('scale.z', 'size', _hundredOut, _hundredIn), // (a thing has one size)
+  ('rot.x', 'rotate_x', _same, _same),
+  ('rot.y', 'rotate_y', _same, _same),
+  ('rot.z', 'rotate', _minus, _minus),
+  ('op', 'opacity', _hundredOut, _hundredIn),
+];
+double _xOut(double v, Size c, double p) => c.width / 2 + v * p;
+double _xIn(double x, Size c, double p) => (x - c.width / 2) / p;
+double _yOut(double v, Size c, double p) => c.height / 2 - v * p;
+double _yIn(double x, Size c, double p) => (c.height / 2 - x) / p;
+double _zOut(double v, Size c, double p) => v * p;
+double _zIn(double x, Size c, double p) => x / p;
+double _hundredOut(double v, Size c, double p) => v * 100;
+double _hundredIn(double x, Size c, double p) => x / 100;
+double _same(double v, Size c, double p) => v;
+double _minus(double v, Size c, double p) => -v;
+
+/// The document's values behind an inspector property (pos, scale, rot, op): its key mark is theirs.
+List<String> _namesOf(String prop) => {
+  for (final s in _seats)
+    if (s.$1.split('.').first == prop) s.$2,
+}.toList();
+
 /// The selected layer's transform as the stage draws it at this frame, in the Inspector's ids.
 Map<String, double> _transform(Ws ws, String? id) {
-  if (ws.inside case final m?) {   // (joined: the document's own values, in the composition's points)
+  if (ws.inside case final m?) {   // (joined: the document's own values, as the inspector counts them)
     final t = int.tryParse(id ?? '');
     if (t == null) return const {};
     final at = ws.frame / Ws.fps, p = m.point;
-    double v(String name) => m.value(t, name, at) ?? 0;
-    double r1(double x) => (x * 10).roundToDouble() / 10;
-    final s = r1(v('size') * 100), wide = m.value(t, 'wide', 0) ?? 1; // (a flat shape may be wider than it is high: its scale x)
+    double r1(double x) => (x * 10).roundToDouble() / 10 + 0; // (+ 0: no minus nought)
     return {
-      'pos.x': r1(WsArt.comp.width / 2 + v('x') * p),
-      'pos.y': r1(WsArt.comp.height / 2 - v('y') * p),
-      'pos.z': r1(v('z') * p),
-      'scale.x': r1(v('size') * wide * 100),
-      'scale.y': s,
-      'scale.z': s, // (a thing has one size)
-      'rot.x': r1(v('rotate_x')) + 0,
-      'rot.y': r1(v('rotate_y')) + 0,
-      'rot.z': r1(-v('rotate')) + 0,   // (+ 0: no minus nought)
-      'op': r1((m.value(t, 'opacity', at) ?? 1) * 100), // (a thing that has no opacity is all there)
+      for (final s in _seats) s.$1: r1(s.$3(m.value(t, s.$2, at) ?? (s.$2 == 'opacity' ? 1 : 0), WsArt.comp, p)), // (a thing that has no opacity is all there)
+      if (m.value(t, 'wide', 0) case final wide?) 'scale.x': r1((m.value(t, 'size', at) ?? 1) * wide * 100), // (a flat shape may be wider than it is high: its scale x)
     };
   }
   final b = WsArt.boxOf(ArtScene.of(ws, camera: true), id);
@@ -250,54 +273,35 @@ Map<String, double> _transform(Ws ws, String? id) {
   return {'pos.x': b.anchor.dx.roundToDouble(), 'pos.y': b.anchor.dy.roundToDouble(), 'scale.x': s, 'scale.y': s, 'rot.z': r};
 }
 
-/// The document's names for the inspector's ids, and the inspector's number as the document's (and back, in _transform):
-/// positions in the composition's points from its top left, scale in hundredths of a unit, turn clockwise.
-const _propNames = {
-  'pos': ['x', 'y', 'z'],
-  'scale': ['size'],
-  'rot': ['rotate', 'rotate_x', 'rotate_y'],
-  'op': ['opacity'],
-};
 (String, double)? _asDocument(Ws ws, String id, double x) {
-  final p = ws.inside!.point;
-  return switch (id) {
-    'pos.x' => ('x', (x - WsArt.comp.width / 2) / p),
-    'pos.y' => ('y', (WsArt.comp.height / 2 - x) / p),
-    'pos.z' => ('z', x / p),
-    'scale.x' || 'scale.y' || 'scale.z' => ('size', x / 100),
-    'rot.x' => ('rotate_x', x),
-    'rot.y' => ('rotate_y', x),
-    'rot.z' => ('rotate', -x),
-    'op' => ('opacity', x / 100),
-    _ => null,
-  };
+  final seat = _seats.where((s) => s.$1 == id).firstOrNull;
+  return seat == null ? null : (seat.$2, seat.$4(x, WsArt.comp, ws.inside!.point));
 }
 
-/// Joined: what was changed in the inspector goes to the document. While a hand is on it, it is only shown; when the
-/// hand lets go it is put there (the document's own rule: a key at the playhead if the value has keys, else the value).
+/// Joined: what was changed in the inspector is a thing held and its numbers carried (the inside's one form of a
+/// drag): while a hand is on it, it only shows; when the hand lets go it is the document's, by the document's rules.
 void _write(Ws ws, String? id, Map<String, double> changed, {required bool live}) {
   final m = ws.inside!, t = int.tryParse(id ?? '');
-  if (t == null) return;
-  final at = ws.frame / Ws.fps;
+  if (t == null || !m.hold(t)) return;
   // (a flat shape's scale x and y are the document's size and how many times as wide as high it is)
   final shaped = m.word(t, 'kind') == 'shape' && (changed.containsKey('scale.x') || changed.containsKey('scale.y'));
   if (shaped) {
-    final size = m.value(t, 'size', at) ?? 1, wide = m.value(t, 'wide', 0) ?? 1;
+    final size = m.value(t, 'size', ws.frame / Ws.fps) ?? 1, wide = m.value(t, 'wide', 0) ?? 1;
     final x = (changed['scale.x'] ?? size * wide * 100) / 100, y = (changed['scale.y'] ?? size * 100) / 100;
-    if (live) {
-      m.tryValue(t, 'size', y);
-    } else {
-      m.together(() => m.put(t, 'size', at, y) && m.set(t, 'wide', x / y));
-    }
+    m
+      ..carry('size', y)
+      ..carry('wide', x / y);
   }
   for (final e in changed.entries) {
     final to = shaped && e.key.startsWith('scale.') ? null : _asDocument(ws, e.key, e.value);
-    if (to == null) continue;
-    final (name, number) = to;
-    live ? m.tryValue(t, name, number) : m.put(t, name, at, number);
+    if (to != null) m.carry(to.$1, to.$2);
   }
-  if (live && ws.playing) ws.playing = false; // (a hand on a value stops the play: what is changed is changed at one moment)
-  if (!live) ws.reread();
+  if (live) {
+    if (ws.playing) ws.playing = false; // (a hand on a value stops the play: what is changed is changed at one moment)
+  } else {
+    m.letGo(true);
+    ws.reread();
+  }
 }
 
 /// Joined: a property's key mark as the document has it at the playhead (the most keyed of its values).
@@ -306,7 +310,7 @@ Map<String, KeyS> _keyMarks(Ws ws, String? id) {
   if (m == null || t == null) return const {};
   final at = ws.frame / Ws.fps;
   return {
-    for (final p in _propNames.entries) p.key: KeyS.values[p.value.map((n) => m.keyed(t, n, at)).reduce(math.max)],
+    for (final p in const ['pos', 'scale', 'rot', 'op']) p: KeyS.values[_namesOf(p).map((n) => m.keyed(t, n, at)).reduce(math.max)],
   };
 }
 
@@ -315,7 +319,7 @@ void _mark(Ws ws, String? id, String prop, KeyS mark) {
   final m = ws.inside!, t = int.tryParse(id ?? '');
   if (t == null) return;
   final at = ws.frame / Ws.fps;
-  for (final n in _propNames[prop] ?? const <String>[]) {
+  for (final n in _namesOf(prop)) {
     switch (mark) {
       case KeyS.at:
         m.keyHere(t, n, at);
@@ -350,7 +354,7 @@ class _InspectorSeat extends StatelessWidget {
         onFlags: ws.inside == null ? null : (changed) => _flag(ws, l?.id, changed),
         keyMarks: _keyMarks(ws, l?.id),
         onValues: ws.inside == null ? null : (changed, {required live}) => _write(ws, l?.id, changed, live: live),
-        onDrop: ws.inside?.tryDrop,
+        onDrop: ws.inside == null ? null : () => ws.inside!.letGo(false),
         onKey: ws.inside == null ? null : (prop, mark) => _mark(ws, l?.id, prop, mark),
         together: ws.inside?.together,
         child: InspectorPanel(directTransform: true, width: box.maxWidth, height: box.maxHeight),

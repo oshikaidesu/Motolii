@@ -149,8 +149,9 @@ void main() {
     expect(m.lasts(cube), lessThan(0), reason: 'still on for good');
     final tail = t.getRect(find.byKey(const ValueKey('ws-tl-tracks'))).right - 1;
     expect(ws.layers.last.outF, Ws.duration);
-    expect(m.trim(cube, start, start + 2), isTrue, reason: m.trouble);
-    expect(m.lasts(cube), 2);
+    // (its tail carried four seconds earlier than the document's end, which is at 6: it is on for start..2)
+    expect(m.hold(cube) && m.carry('tail', 2 - (6 - start)) && m.letGo(true), isTrue, reason: m.trouble);
+    expect(m.lasts(cube), closeTo(2, 1e-9));
     expect(m.undo() && m.lasts(cube) < 0 && m.value(cube, 'start', 0) == start, isTrue, reason: 'the cut goes back as one step');
     expect(m.undo() && m.value(cube, 'start', 0) == 0, isTrue, reason: 'and the slide as one');
     expect(tail, greaterThan(tracks.left));

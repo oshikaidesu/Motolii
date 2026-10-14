@@ -111,12 +111,12 @@ String _said(Ease e) => easeOther(e) ? e.name! : switch (e.kind) {
 };
 Ease _heard(String said) {
   // (the inside says a way back in one form: the kind's name, then all its numbers)
-  final w = said.split(' '), n = [for (final x in w.skip(1)) double.parse(x)];
+  final w = said.split(' '), n = [for (final x in w.skip(1)) double.tryParse(x) ?? 0];
   return switch (w.first) {
     'Hold' => easePresets.last,
     'Linear' => easePresets.first,
     'Bounce' => easePresets[6],
-    'Bezier' => Ease(EaseKind.bezier, Offset(n[0], n[1]), Offset(n[2], n[3])),
+    'Bezier' when n.length == 4 => Ease(EaseKind.bezier, Offset(n[0], n[1]), Offset(n[2], n[3])),
     _ => Ease(EaseKind.bezier, Offset.zero, const Offset(1, 1), said), // (a kind with no seat here yet: its own words, over a straight line)
   };
 }

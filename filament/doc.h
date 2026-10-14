@@ -39,7 +39,13 @@ struct Doc {
     Stage* stage = nullptr;
     std::string trouble;   // why the last call that was not done was not
     std::vector<int> laid;   // the things in the order they lie, the one furthest back first (read when first asked for, forgotten at every change)
-    int together = 0;      // changes made as one step of undo (one act of a hand): 0 not so, 1 so and none made yet, 2 so and the step is begun
+    // One act of a hand: the changes made from its beginning to its end are one step of undo, and if one of them is
+    // refused none of them is made. Acts may lie one within another: the outermost one is the step.
+    int act = 0;                        // how many acts are open, one within another
+    bool act_ok = true;                 // no change of the open act has been refused
+    sqlite3_session* acting = nullptr;  // SQLite's own record of what the open act changes
+    // A thing held by a hand (doc_hold): what of it is carried shows at once and is not yet the document's.
+    struct Held { int thing = 0; std::map<std::string, double> from, tried; } held;
     struct Keys { std::vector<double> at, value; std::vector<Interp> interp; std::vector<std::string> own; };   // (own: a way defined in the document, where the stretch is not one of the nine kinds)
     std::map<std::pair<int, std::string>, Keys> moving;   // a value's keys, and the way of the stretch after each; read from the facts when first asked for, forgotten at every change
     std::map<std::string, sqlite3_stmt*> named, goes;     // a way by its name, and by its expression: made ready once (SQLite works it out)
@@ -115,6 +121,8 @@ static sqlite3_stmt* doc_way_named(Doc& d, const std::string& name) {
 // A value at a moment: `otherwise` where the document does not say; where it has keys, the value the stretch it is in
 // gives (before the first key and after the last: theirs). A stretch goes the way said for it (not said: Linear).
 static double doc_number(Doc& d, int thing, const char* name, double at, double otherwise) {
+    if (d.held.thing == thing)   // (what a hand is carrying shows in place of the document's own)
+        if (const auto tried = d.held.tried.find(name); tried != d.held.tried.end()) return tried->second;
     auto found = d.moving.find({thing, name});
     if (found == d.moving.end()) {
         Doc::Keys keys;
@@ -163,7 +171,7 @@ static void doc_looks(Stage& s, const Doc::Shown& t, const std::function<void(Ma
         for (size_t part = 0; part < faces.getPrimitiveCount(one); ++part) each(faces.getMaterialInstanceAt(one, part));
     }
 }
-static bool doc_frame(Doc& d, int thing, double now, double* frame);
+static bool doc_covers(Doc& d, int thing, double now, double* box);
 
 // Every thing told its moment: whether it is on (from its start, for its duration if it has one), what of itself it
 // shows (it goes round when it comes to its end), and where it is.
@@ -190,18 +198,17 @@ static void doc_moment(Doc& d, double now) {
         if (MaterialInstance* look = t.film ? t.film->look : t.drawn ? t.drawn->look : nullptr) look->setParameter("opacity", (float)doc_number(d, thing, "opacity", now, 1));
     }
     // A clipped thing is seen only inside the frame of the thing before it: Filament's own scissor on its looks, told
-    // the rectangle of the picture that the thing before it covers now (a thing turned: the upright box around it).
+    // the rectangle of the picture that the thing before it covers now (turned or leaning: the upright box around it).
     int before = 0;
     for (int thing : lie) {
         const auto found = d.shown.find(thing);
         if (found == d.shown.end()) continue;
         Doc::Shown& t = found->second;
-        double frame[5];
-        const bool clipped = t.in && before && doc_number(d, thing, "clip", 0, 0) > 0.5 && doc_frame(d, before, now, frame);
+        double box[4] = {0, 0, 0, 0};
+        const bool clipped = t.in && before && doc_number(d, thing, "clip", 0, 0) > 0.5 && doc_covers(d, before, now, box);
         if (clipped || t.clipped) {
-            const double turn = frame[4] * TAU / 360.0, wide = std::fabs(frame[2] * std::cos(turn)) + std::fabs(frame[3] * std::sin(turn)), high = std::fabs(frame[2] * std::sin(turn)) + std::fabs(frame[3] * std::cos(turn));
-            const uint32_t left = (uint32_t)std::max(0.0, frame[0] - 0.5 * wide), bottom = (uint32_t)std::max(0.0, (double)s.h - (frame[1] + 0.5 * high));
-            doc_looks(s, t, [&](MaterialInstance* look) { if (clipped) look->setScissor(left, bottom, (uint32_t)std::lround(wide), (uint32_t)std::lround(high)); else look->unsetScissor(); });
+            const uint32_t left = (uint32_t)std::clamp(box[0], 0.0, (double)s.w), bottom = (uint32_t)std::clamp((double)s.h - (box[1] + box[3]), 0.0, (double)s.h);
+            doc_looks(s, t, [&](MaterialInstance* look) { if (clipped) look->setScissor(left, bottom, (uint32_t)std::lround(std::max(box[2], 0.0)), (uint32_t)std::lround(std::max(box[3], 0.0))); else look->unsetScissor(); });
             t.clipped = clipped;
         }
         if (t.in) before = thing;
@@ -324,46 +331,47 @@ static Doc* doc_open(Stage& s, const char* path) {
 
 // One change to the document (in SQLite's own words), kept as one step of undo; the stage shows it at once. If the
 // stage cannot show it, it is not made: the document and the stage stay as they were.
-static bool doc_change(Doc& d, char* change) {
-    sqlite3_session* watch = nullptr;
+static void doc_act(Doc& d) {
+    if (d.act++) return;
+    sqlite3_exec(d.file, "begin", nullptr, nullptr, nullptr);
+    sqlite3session_create(d.file, "main", &d.acting);
+    sqlite3session_attach(d.acting, "fact");
+    sqlite3session_attach(d.acting, "way");
+    d.act_ok = true;
+}
+static bool doc_acted(Doc& d) {
+    if (--d.act) return d.act_ok;
     int size = 0;
     void* changed = nullptr;
-    sqlite3_exec(d.file, "begin", nullptr, nullptr, nullptr);
-    sqlite3session_create(d.file, "main", &watch);
-    sqlite3session_attach(watch, "fact");
-    sqlite3session_attach(watch, "way");
-    bool ok = sqlite3_exec(d.file, change, nullptr, nullptr, nullptr) == SQLITE_OK;
-    if (!ok) d.trouble = sqlite3_errmsg(d.file);
-    sqlite3session_changeset(watch, &size, &changed);
-    sqlite3session_delete(watch);
-    sqlite3_free(change);
-    if (ok && size) {   // (what was undone and not done again is forgotten: a new step follows the last one that stands)
+    sqlite3session_changeset(d.acting, &size, &changed);
+    sqlite3session_delete(d.acting);
+    d.acting = nullptr;
+    if (d.act_ok && size) {   // (what was undone and not done again is forgotten: a new step follows the last one that stands)
         sqlite3_exec(d.file, "delete from step where undone", nullptr, nullptr, nullptr);
-        int last = 0, all = 0;
-        std::vector<uint8_t> begun;
-        void* joined = nullptr;
-        if (d.together == 2) doc_rows(d, sqlite3_mprintf("select n, change from step order by n desc limit 1"), [&](sqlite3_stmt* row) {
-            last = sqlite3_column_int(row, 0);
-            begun.assign((const uint8_t*)sqlite3_column_blob(row, 1), (const uint8_t*)sqlite3_column_blob(row, 1) + sqlite3_column_bytes(row, 1));
-        });
-        // (one act of a hand: this change is joined onto the step the act began, by SQLite's own joining of two changesets)
-        if (last) sqlite3changeset_concat((int)begun.size(), begun.data(), size, changed, &all, &joined);
         sqlite3_stmt* keep = nullptr;
-        sqlite3_prepare_v2(d.file, joined ? "update step set change = ?1 where n = ?2" : "insert into step(change) values(?1)", -1, &keep, nullptr);
-        sqlite3_bind_blob(keep, 1, joined ? joined : changed, joined ? all : size, SQLITE_TRANSIENT);
-        if (joined) sqlite3_bind_int(keep, 2, last);
+        sqlite3_prepare_v2(d.file, "insert into step(change) values(?)", -1, &keep, nullptr);
+        sqlite3_bind_blob(keep, 1, changed, size, SQLITE_TRANSIENT);
         sqlite3_step(keep);
         sqlite3_finalize(keep);
-        sqlite3_free(joined);
     }
-    const bool stepped = ok && size;
     sqlite3_free(changed);
-    doc_forget(d);
-    ok = ok && doc_match(d);
-    sqlite3_exec(d.file, ok ? "commit" : "rollback", nullptr, nullptr, nullptr);
-    if (ok && stepped && d.together == 1) d.together = 2;
-    if (!ok) { doc_forget(d); const std::string why = d.trouble; doc_match(d); d.trouble = why; }
-    return ok;
+    sqlite3_exec(d.file, d.act_ok ? "commit" : "rollback", nullptr, nullptr, nullptr);
+    if (!d.act_ok) { doc_forget(d); const std::string why = d.trouble; doc_match(d); d.trouble = why; }   // (the stage as the document was before the act)
+    return d.act_ok;
+}
+// One change to the document (in SQLite's own words), an act by itself unless it is made within one; the stage shows
+// it at once. If the stage cannot show it, it is not made, and no other change of its act is.
+static bool doc_change(Doc& d, char* change) {
+    doc_act(d);
+    bool ok = d.act_ok;   // (a change before it in this act was refused: d.trouble still says why)
+    if (ok && !(ok = sqlite3_exec(d.file, change, nullptr, nullptr, nullptr) == SQLITE_OK)) d.trouble = sqlite3_errmsg(d.file);
+    sqlite3_free(change);
+    if (ok) {
+        doc_forget(d);
+        ok = doc_match(d);
+    }
+    if (!ok) d.act_ok = false;
+    return doc_acted(d) && ok;
 }
 
 // The last step undone (back = true), or the last undone step done again. false: there is none.
@@ -483,17 +491,6 @@ static bool doc_key_here(Doc& d, int thing, const char* name, double at) {
     return doc_keys(d, thing, name, at) && doc_keys(d, thing, name) ? true : doc_key(d, thing, name, at, doc_number(d, thing, name, at, doc_usual(name)));
 }
 static bool doc_set(Doc& d, int thing, const char* name, double is);
-// trim: when a thing is on, cut by a hand at its bar's ends: from `from` to `to` seconds of the stage. A film cut at
-// its head goes on showing, at each moment, what it showed there before (it begins further into itself).
-static bool doc_trim(Doc& d, int thing, double from, double to) {
-    if (!doc_knows(d, thing)) return false;
-    if (!(from >= 0.0 && to > from && to <= 1e6)) return d.trouble = "a thing is on from a moment of the stage to a later one", false;
-    const double was = doc_number(d, thing, "start", 0, 0), speed = doc_number(d, thing, "speed", 0, 1), into = doc_number(d, thing, "begin", 0, 0) + (from - was) * std::fabs(speed);
-    const bool film = doc_word(d, thing, "kind") == "film" && from != was && into >= 0.0;
-    const char* const put = "insert into fact(thing, name, at, value) values(%d, %Q, 0.0, %!.17g) on conflict do update set value = excluded.value;";
-    return doc_change(d, sqlite3_mprintf("%z%z%z", sqlite3_mprintf(put, thing, "start", from), sqlite3_mprintf(put, thing, "duration", to - from),
-                                         film ? sqlite3_mprintf(put, thing, "begin", into) : sqlite3_mprintf("")));
-}
 // raise: a thing brought `places` places nearer among the things (below 0: further back): each thing is told where it
 // lies now, as one change.
 static bool doc_raise(Doc& d, int thing, int places) {
@@ -604,36 +601,101 @@ static bool doc_half(Doc& d, int thing, float2* half) {
     return *half = most, true;
 }
 
+// Where a point of the stage is seen on the picture (points from the top left), by the stage's own eye.
+static math::double2 doc_seen(Doc& d, math::double3 p) {
+    Stage& s = *d.stage;
+    const math::double4 c = s.camera->getProjectionMatrix() * s.camera->getViewMatrix() * math::double4{p, 1.0};
+    return math::double2{(0.5 + 0.5 * c.x / c.w) * s.w, (0.5 - 0.5 * c.y / c.w) * s.h};
+}
+// How many points of the picture one unit of the stage is, where a thing stands (at its own depth).
+static double doc_point(Doc& d, int thing, double now) {
+    const math::double3 at{doc_number(d, thing, "x", now, 0), doc_number(d, thing, "y", now, 0), doc_number(d, thing, "z", now, 0)};
+    return doc_seen(d, at + math::double3{1, 0, 0}).x - doc_seen(d, at).x;
+}
 // A thing's frame on the picture at a moment, as the stage's own eye sees it: its middle, how wide and how high (points
 // of the picture, from the top left), and how far it is turned (degrees, clockwise as seen). false: it is not shown.
 static bool doc_frame(Doc& d, int thing, double now, double* frame) {
     float2 half{0.f};
     if (!doc_half(d, thing, &half)) return false;
-    Stage& s = *d.stage;
-    const double size = doc_number(d, thing, "size", now, 1);
-    const math::double3 at{doc_number(d, thing, "x", now, 0), doc_number(d, thing, "y", now, 0), doc_number(d, thing, "z", now, 0)};
-    const math::mat4 eye = s.camera->getProjectionMatrix() * s.camera->getViewMatrix();
-    const auto seen = [&](math::double3 p) { const math::double4 c = eye * math::double4{p, 1.0}; return math::double2{(0.5 + 0.5 * c.x / c.w) * s.w, (0.5 - 0.5 * c.y / c.w) * s.h}; };
-    const math::double2 middle = seen(at), right = seen(at + math::double3{1, 0, 0});
-    const double point = right.x - middle.x;   // (how many points of the picture one unit of the stage is, where the thing stands)
+    const double size = doc_number(d, thing, "size", now, 1), point = doc_point(d, thing, now);
+    const math::double2 middle = doc_seen(d, {doc_number(d, thing, "x", now, 0), doc_number(d, thing, "y", now, 0), doc_number(d, thing, "z", now, 0)});
     frame[0] = middle.x, frame[1] = middle.y, frame[2] = 2.0 * half.x * size * point, frame[3] = 2.0 * half.y * size * point;
     frame[4] = -doc_number(d, thing, "rotate", now, 0);
     return true;
 }
-
-// A value shown for now and not written: what a shell does while a hand is still on the thing (a drag). The document
-// is not changed and no step is made; the next change, or doc_try_drop, puts the document's own value back.
-static bool doc_try(Doc& d, int thing, const char* name, double is) {
-    if (!doc_knows(d, thing, name, &is)) return false;   // (any number of it: where it is, and when it is on)
-    Doc::Keys shown;
-    shown.at = {0.0}, shown.value = {is}, shown.interp = {Interp{}}, shown.own = {""};
-    d.moving[{thing, name}] = shown;
-    return doc_moment(d, d.stage->now), true;
+// The upright box of the picture a thing covers at a moment, however it is turned or leans: left, top, wide, high.
+static bool doc_covers(Doc& d, int thing, double now, double* box) {
+    float2 half{0.f};
+    if (!doc_half(d, thing, &half)) return false;
+    const auto turned = [&](const char* name, math::double3 about) { return math::mat4::rotation(doc_number(d, thing, name, now, 0) * (double)TAU / 360.0, about); };
+    const math::mat4 place = math::mat4::translation(math::double3{doc_number(d, thing, "x", now, 0), doc_number(d, thing, "y", now, 0), doc_number(d, thing, "z", now, 0)}) *
+                             turned("rotate", {0, 0, 1}) * turned("rotate_y", {0, 1, 0}) * turned("rotate_x", {1, 0, 0}) * math::mat4::scaling(doc_number(d, thing, "size", now, 1));
+    math::double2 low{1e12}, high{-1e12};
+    for (int corner = 0; corner < 4; ++corner) {
+        const math::double2 at = doc_seen(d, (place * math::double4{corner & 1 ? half.x : -half.x, corner & 2 ? half.y : -half.y, 0.0, 1.0}).xyz);
+        low = min(low, at), high = max(high, at);
+    }
+    box[0] = low.x, box[1] = low.y, box[2] = high.x - low.x, box[3] = high.y - low.y;
+    return true;
 }
-static void doc_try_drop(Doc& d) { doc_forget(d), doc_moment(d, d.stage->now); }
 
-// What a value is where the document does not say; and a value at a moment, as the stage is told it.
 static double doc_usual(const char* name) { return doc_among("size speed opacity wide", name) ? 1.0 : !strcmp(name, "duration") ? -1.0 : 0.0; }
 static bool doc_value(Doc& d, int thing, const char* name, double at, double* is) { return doc_knows(d, thing, name) && (*is = doc_number(d, thing, name, at, doc_usual(name)), true); }
+// A thing held by a hand, carried, and let go: the one form of everything a hand drags (a thing on the stage, its bar
+// on the timeline, a number). What is carried shows at once and is not the document's until it is let go, and then
+// it is one step; let go without keeping, nothing happened. The reckoning is here, once: a shell says where the hand
+// is, never what the document is to hold.
+//   by "place"  the thing carried on the stage: a, b = how far the hand has gone since it took hold, in points of the
+//               picture (to the right, down); the thing stays under the hand at its own depth
+//   by "bar"    its bar slid on the timeline: a = how many seconds later (when it comes on)
+//   by "head", "tail"  its bar cut at an end: a = how many seconds later that end is (a film cut at its head goes on
+//               showing at each moment what it showed there)
+//   by a value's name  that number carried: a = what it is now
+static bool doc_hold(Doc& d, int thing) {
+    if (!doc_knows(d, thing)) return false;
+    if (d.held.thing != thing) d.held = Doc::Held{}, d.held.thing = thing;   // (held already: the same hold goes on)
+    return true;
+}
+static bool doc_carry(Doc& d, const char* by, double a, double b) {
+    Doc::Held& h = d.held;
+    if (!h.thing) return d.trouble = "nothing is held", false;
+    const double now = d.stage->now;
+    const auto was = [&](const char* name) {   // (as it was when the hand first carried it)
+        auto found = h.from.find(name);
+        if (found == h.from.end()) found = h.from.emplace(name, doc_number(d, h.thing, name, now, doc_usual(name))).first;
+        return found->second;
+    };
+    const auto tries = [&](const char* name, double is) { return doc_knows(d, h.thing, name, &is) && (h.tried[name] = is, true); };
+    bool ok = true;
+    if (!strcmp(by, "place")) {
+        if (!h.from.count(" point")) h.from[" point"] = doc_point(d, h.thing, now);   // (remembered with the hold: one unit of the stage in points of the picture, where the thing stood)
+        const double x = was("x"), y = was("y"), point = h.from[" point"];
+        ok = tries("x", x + a / point) && tries("y", y - b / point);
+    } else if (!strcmp(by, "bar")) {
+        ok = tries("start", std::max(0.0, was("start") + a));
+    } else if (!strcmp(by, "head")) {
+        const double start = was("start"), lasts = was("duration"), to = std::clamp(start + a, 0.0, lasts > 0.0 ? start + lasts - 1e-3 : 1e6);
+        ok = tries("start", to) && (lasts <= 0.0 || tries("duration", start + lasts - to));
+        if (ok && doc_word(d, h.thing, "kind") == "film") ok = tries("begin", std::max(0.0, was("begin") + (to - start) * std::fabs(was("speed"))));
+    } else if (!strcmp(by, "tail")) {
+        const double start = was("start"), lasts = was("duration");
+        ok = tries("duration", std::max(1e-3, (lasts > 0.0 ? lasts : doc_seconds(d) - start) + a));
+    } else ok = tries(by, a);
+    doc_moment(d, now);
+    return ok;
+}
+static bool doc_let_go(Doc& d, bool keep) {
+    const Doc::Held h = d.held;
+    d.held = Doc::Held{};
+    if (!h.thing) return d.trouble = "nothing is held", false;
+    if (!keep || h.tried.empty()) return doc_moment(d, d.stage->now), true;
+    doc_act(d);   // (all that was carried is one step: a value that takes keys by the rule of a value changed at a moment, any other as the value it is)
+    for (const auto& [name, is] : h.tried) {
+        bool moves = false;
+        for (const DocValue& one : doc_values) moves = moves || (one.moves && name == one.name);
+        if (!(moves ? doc_put(d, h.thing, name.c_str(), d.stage->now, is) : doc_set(d, h.thing, name.c_str(), is))) break;
+    }
+    return doc_acted(d);
+}
 static bool doc_undo(Doc& d) { return doc_step(d, true); }
 static bool doc_redo(Doc& d) { return doc_step(d, false); }

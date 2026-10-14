@@ -51,10 +51,19 @@ int motolii_key_moments(Motolii* m, int thing, const char* name, double* at, int
 /* A thing's frame on the picture at the stage's moment: frame[0..4] = its middle (x, y), how wide, how high (points
    of the picture, from the top left), how far it is turned (degrees, clockwise as seen). 0: there is no such thing. */
 int motolii_frame(Motolii* m, int thing, double* frame);
-/* While a hand is still on a thing (a drag): a value shown and not written. The document is not changed and no step
-   of undo is made; motolii_set (or any change) settles it, motolii_try_drop puts the document's own value back. */
-int motolii_try(Motolii* m, int thing, const char* name, double number);
-int motolii_try_drop(Motolii* m);
+/* A thing held by a hand, carried, and let go: the one form of everything a hand drags. What is carried shows at once
+   and is not the document's until it is let go; then it is one step (keep 0: nothing happened). The reckoning is the
+   inside's: a shell says where the hand is, never what the document is to hold.
+     by "place"          carried on the stage: a, b = how far the hand has gone since it took hold, in points of the
+                         picture (right, down); the thing stays under the hand at its own depth
+     by "bar"            its bar slid on the timeline: a = how many seconds later it comes on
+     by "head", "tail"   its bar cut at an end: a = how many seconds later that end is (a film cut at its head goes on
+                         showing at each moment what it showed there)
+     by a value's name   that number carried: a = what it is now
+   motolii_hold on the thing already held goes on with the same hold. */
+int motolii_hold(Motolii* m, int thing);
+int motolii_carry(Motolii* m, const char* by, double a, double b);
+int motolii_let_go(Motolii* m, int keep);
 double motolii_point(Motolii* m);                                  /* points of the picture to one unit of the stage, at z 0 */
 /* What a hand does to a value at a moment, by the document's own rules. motolii_put: the value changed there: a key
    at that moment if the value has keys, else the value that stays. motolii_key_here: a key at that moment holding
@@ -63,17 +72,15 @@ double motolii_point(Motolii* m);                                  /* points of 
 int motolii_put(Motolii* m, int thing, const char* name, double at, double number);
 int motolii_key_here(Motolii* m, int thing, const char* name, double at);
 int motolii_stay(Motolii* m, int thing, const char* name, double at);
-/* When a thing is on, cut at its bar's ends by a hand: from `from` to `to` seconds of the stage (a film cut at its
-   head goes on showing at each moment what it showed there). Sliding the whole bar is motolii_set(thing, "start"). */
-int motolii_trim(Motolii* m, int thing, double from, double to);
 /* A thing brought `places` places nearer among the things (below 0: further back). motolii_things lists them in the
    order they lie, the one furthest back first; at the same depth a nearer thing is seen in front. */
 int motolii_raise(Motolii* m, int thing, int places);
 int motolii_keyed(Motolii* m, int thing, const char* name, double at);
 const char* motolii_moving(Motolii* m, int thing);
 const char* motolii_words(Motolii* m, int thing, const char* name);   /* the words a value of a thing may be, with spaces between ("": any, or it is not a word; until the next call) */
-/* One act of a hand that is several changes (a thing dragged: its x and its y): the changes made from
-   motolii_together(m, 1) to motolii_together(m, 0) are one step of undo. */
+/* One act that is several calls (a value changed and its key put): the changes made from motolii_together(m, 1) to
+   motolii_together(m, 0) are one step of undo, and if one of them is refused none of them is made (0 comes back).
+   Acts may lie one within another: the outermost is the step. */
 int motolii_together(Motolii* m, int on);
 int motolii_undo(Motolii* m);
 int motolii_redo(Motolii* m);

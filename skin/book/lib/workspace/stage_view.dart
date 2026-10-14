@@ -98,27 +98,25 @@ class _StageViewState extends State<StageView> {
     return cam.contains(d, tol) && !cam.contains(d, -tol) ? 'cam' : null;
   }
 
-  // Joined: a thing held on the stage and carried. While it is held its place is only shown (the inside's try); let
-  // go, it is put there: x and y as one act, by the document's own rule for a value changed at a moment.
-  ({int thing, Offset from, double x, double y, Offset by})? _held;
+  // Joined: a thing held on the stage, carried, and let go. The stage only says how far the hand has gone, in points of
+  // the picture; where that puts the thing (at its own depth), and what it is to the document, is the inside's.
+  ({Offset from, bool moved})? _held;
 
   void _hold(_View v, Offset local) {
     final ws = WsScope.read(context), m = ws.inside;
     final id = m == null ? null : _hit(v, local), t = int.tryParse(id ?? '');
-    if (m == null || t == null) return;
+    if (m == null || t == null || !m.hold(t)) return;
     ws.select(id);
     if (ws.playing) ws.playing = false; // (a hand on a thing stops the play)
-    final at = ws.frame / Ws.fps;
-    _held = (thing: t, from: local, x: m.value(t, 'x', at) ?? 0, y: m.value(t, 'y', at) ?? 0, by: Offset.zero);
+    _held = (from: local, moved: false);
   }
 
   void _carry(_View v, Offset local) {
     final h = _held, ws = WsScope.read(context), m = ws.inside;
     if (h == null || m == null) return;
-    final by = (local - h.from) / v.s / m.point; // (screen px -> composition px -> units of the stage, where things stand at z 0)
-    _held = (thing: h.thing, from: h.from, x: h.x, y: h.y, by: by);
-    m.tryValue(h.thing, 'x', h.x + by.dx);
-    m.tryValue(h.thing, 'y', h.y - by.dy);
+    final by = (local - h.from) / v.s; // (screen px -> points of the picture)
+    m.carry('place', by.dx, by.dy);
+    _held = (from: h.from, moved: true);
     ws.shown();
   }
 
@@ -126,16 +124,7 @@ class _StageViewState extends State<StageView> {
     final h = _held, ws = WsScope.read(context), m = ws.inside;
     _held = null;
     if (h == null || m == null) return;
-    if (!keep || h.by == Offset.zero) {
-      m.tryDrop();
-      return ws.shown();
-    }
-    final at = ws.frame / Ws.fps;
-    m.together(() {
-      m.put(h.thing, 'x', at, h.x + h.by.dx);
-      m.put(h.thing, 'y', at, h.y - h.by.dy);
-    });
-    ws.reread();
+    m.letGo(keep && h.moved) && keep && h.moved ? ws.reread() : ws.shown();
   }
 
   void _scroll(PointerSignalEvent e, _View v) {
