@@ -621,6 +621,7 @@ void main() {
     expect([m.word(camera, 'name'), m.frame(camera)], ['Camera', null], reason: 'a camera is not seen: nothing to hold on the stage');
     expect(m.set(camera, 'rotate_y', 30) && m.set(camera, 'zoom', 2) && m.set(camera, 'distance', 1.5), isTrue, reason: m.trouble);
     expect(m.set(camera, 'size', 2), isFalse, reason: 'a camera has no size');
+    expect(m.set(camera, 'aperture', 1.4) && m.set(camera, 'focus', 6) && m.set(camera, 'blur_level', 3), isTrue, reason: m.trouble);
     ws.reread();
     expect(ws.layers.first.kind, WsKind.camera);
     final seen = wsTransform(ws, '$camera');

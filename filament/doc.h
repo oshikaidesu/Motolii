@@ -54,10 +54,12 @@ struct Doc {
     std::map<std::pair<int, std::string>, Keys> moving;   // a value's keys, and the way of the stretch after each; read from the facts when first asked for, forgotten at every change
     std::map<std::string, sqlite3_stmt*> named, goes;     // a way by its name, and by its expression: made ready once (SQLite works it out)
     struct Shown { std::string of; Video* film = nullptr; Drawn* drawn = nullptr; Solid* solid = nullptr; Mesh* shape = nullptr; bool in = true, clipped = false, camera = false; int run = -1, lies = -1;
-                   int space = 3; };   // (read as it is made: 2 a flat thing on the camera, 25 one in the world, 3 a solid thing or a camera)
+                   int space = 3;
+                   Scene* scene = nullptr; int channel = -1; };   // (the scene it is in: none said, the stage's own, where it was made; and its channel there)   // (read as it is made: 2 a flat thing on the camera, 25 one in the world, 3 a solid thing or a camera)
     // The camera of the moment, against the stage's own (from 6 units in front, 30 degrees high): how the world is
     // moved for it (rig; a 2D thing goes with it) and only how it is turned (facing; a 2.5D thing keeps its own angle).
     math::mat4 rig, facing;
+    bool blurred = false;   // its lens blurs what is off its focus (solid things and things in the world only)
     std::map<int, Shown> shown;   // the things as they are on the stage, and what each was made of
 };
 // What a thing may be told, by name: which kinds of thing have it, a number between which two (or one of which
@@ -73,7 +75,10 @@ static const DocValue doc_values[] = {
     {"rotate", doc_kinds, -1e6, 1e6, true, nullptr}, {"rotate_x", doc_kinds, -1e6, 1e6, true, nullptr}, {"rotate_y", doc_kinds, -1e6, 1e6, true, nullptr},
     {"size", doc_drawn, 1e-3, 1e4, true, nullptr}, {"anchor_x", doc_drawn, -100, 100, true, nullptr}, {"anchor_y", doc_drawn, -100, 100, true, nullptr}, {"anchor_z", doc_drawn, -100, 100, true, nullptr},
     // (a camera, the past repository's: it looks at where it is, from round about it as it is turned, so far away, so near)
-    {"distance", "camera", 0.01, 100, true, nullptr}, {"zoom", "camera", 0.01, 100, true, nullptr}, {"opacity", "film picture text shape", 0, 1, true, nullptr},
+    {"distance", "camera", 0.01, 100, true, nullptr}, {"zoom", "camera", 0.01, 100, true, nullptr},
+    // (and its lens: how far off from it things are sharp, 0 being where it looks; the f-number, 0: all sharp)
+    {"focus", "camera", 0, 1e4, true, nullptr}, {"aperture", "camera", 0, 64, true, nullptr}, {"blur_level", "camera", 0, 100, true, nullptr},   // (After Effects' blur level: how many times the lens's own blur)
+    {"opacity", "film picture text shape", 0, 1, true, nullptr},
     {"clip", doc_drawn, 0, 1, false, nullptr}, {"visible", doc_kinds, 0, 1, false, nullptr}, {"order", doc_kinds, -1e9, 1e9, false, nullptr}, {"wide", "shape", 1e-3, 1e3, false, nullptr}, {"shape", "shape", 0, 0, false, "rect circle solid polygon star line null"},
     {"points", "shape", 3, 100, false, nullptr}, {"inner", "shape", 0.01, 1, false, nullptr}, {"round", "shape", 0, 0.5, false, nullptr},   // (a polygon's or star's points, a star's inner points, a rect's corners)
     {"start", doc_kinds, 0, 1e6, false, nullptr}, {"duration", doc_kinds, 1e-3, 1e6, false, nullptr},
@@ -214,7 +219,6 @@ static void doc_parts(Stage& s, const Doc::Shown& t, const std::function<void(Re
     auto& faces = s.engine->getRenderableManager();
     doc_entities(s, t, [&](utils::Entity e) { each(faces, faces.getInstance(e)); });
 }
-static Scene* doc_scene(Stage& s, int run) { return run > 0 && (size_t)run <= s.layers.size() ? s.layers[(size_t)run - 1]->getScene() : s.scene; }
 static bool doc_covers(Doc& d, int thing, double now, double* box);
 static bool doc_half(Doc& d, int thing, float2* half, float* deep = nullptr);
 // Where a thing is at a moment, as a matrix: moved, turned about z, y and x, made its size, all about its anchor (a
@@ -279,24 +283,45 @@ static void doc_moment(Doc& d, double now) {
         s.camera->lookAt(eye, look, up);
         s.camera->setProjection(2.0 * std::atan(std::tan(15.0 * (double)TAU / 360.0) / near) * 360.0 / (double)TAU, double(s.w) / double(s.h), 0.05, 60.0 * std::max(1.0, far));
         d.rig = s.camera->getModelMatrix() * math::mat4::translation(math::double3{0, 0, -6});   // (from the stage's own camera to this one)
+        // (its lens, Filament's own: sharp at the focus, as blurred off it as the f-number says; the shutter goes with the
+        //  f-number so the picture is as bright as at the stage's own f/16 and 1/125 s)
+        const double said = camera ? doc_number(d, camera, "aperture", now, 0) : 0.0, focus = camera ? doc_number(d, camera, "focus", now, 0) : 0.0;
+        d.blurred = said > 0.0;
+        const double stop = std::max(said, 0.5);   // (Filament's widest)
+        View::DepthOfFieldOptions lens = s.view->getDepthOfFieldOptions();
+        if (camera && lens.cocScale != (float)doc_number(d, camera, "blur_level", now, 1)) lens.cocScale = (float)doc_number(d, camera, "blur_level", now, 1), s.view->setDepthOfFieldOptions(lens);
+        s.camera->setExposure(d.blurred ? (float)stop : 16.f, d.blurred ? (float)(stop * stop / (16.0 * 16.0 * 125.0)) : 1.f / 125.f, 100.f);
+        s.camera->setFocusDistance((float)(focus > 0.0 ? focus : length(eye - look)));
         d.facing = math::mat4(d.rig.upperLeft());
     }
     // Who is before whom (the past repository's law of 2026-09-12: a flat thing is not in the world). Flat things take
     // no part in depth and lie by the order of the things alone; solid things that follow one another settle depth
     // among themselves; a run of the one sort is drawn whole over the run before it. By Filament's own means: the
-    // first run is the stage's own view, each run after it a view of its own laid over the one before (kit.h
-    // layer_view; a run of flat things is laid as Filament lays its UI, nothing done to it after), the order within a
-    // run of flat things is the blend order, and a flat thing's looks neither ask nor write depth.
-    int run = 0, sort = -1;
+    // stage's own view holds the first run, and with it the first run of solid things when flat things lie under them
+    // (a ground; Filament's channels keep the two in order there, and its depth of field, which only an opaque view
+    // takes, blurs that ground as far off); each run after those is a view of its own laid over the ones before (kit.h
+    // layer_view; flat things there are sharp). The order within a run of flat things is the blend order, and a flat
+    // thing's looks neither ask nor write depth.
+    std::vector<int> runOf(lies.size(), -1), sorts;
     for (size_t i = 0; i < lies.size(); ++i) {
         if (!lies[i].on) continue;
-        if (sort >= 0 && sort != (int)lies[i].solid) ++run;
-        sort = lies[i].solid;
+        if (sorts.empty() || sorts.back() != (int)lies[i].solid) sorts.push_back((int)lies[i].solid);
+        runOf[i] = (int)sorts.size() - 1;
+    }
+    const int base = sorts.size() > 1 && !sorts[0] ? 1 : 0;   // (the last run in the stage's own view)
+    for (size_t i = 0; i < lies.size(); ++i) {
+        if (runOf[i] < 0) continue;
+        const int run = runOf[i];
         Doc::Shown& t = *lies[i].shown;
-        Scene* into = run ? layer_view(s, (size_t)run - 1, !lies[i].solid)->getScene() : s.scene;
-        if (t.run != run && t.in) {   // (into the scene of its run; one not seen goes in when it is seen)
-            Scene* from = doc_scene(s, t.run);
-            doc_entities(s, t, [&](utils::Entity e) { from->remove(e), into->addEntity(e); });
+        Scene* into = run <= base ? s.scene : layer_view(s, (size_t)(run - base - 1), !lies[i].solid)->getScene();
+        Scene* const was = t.scene ? t.scene : s.scene;
+        if (was != into) {   // (into the scene of its run; one not seen goes in when it is seen)
+            if (t.in) doc_entities(s, t, [&](utils::Entity e) { was->remove(e), into->addEntity(e); });
+            t.scene = into;
+        }
+        if (const int channel = run <= base ? run : 2; channel != t.channel) {
+            doc_parts(s, t, [&](RenderableManager& faces, RenderableManager::Instance one) { faces.setChannel(one, (uint8_t)channel); });
+            t.channel = channel;
         }
         if (t.run < 0 && !lies[i].solid) doc_looks(s, t, [](MaterialInstance* look) { look->setDepthCulling(false), look->setDepthWrite(false); });
         if (t.lies != (int)i && !lies[i].solid)
@@ -305,14 +330,17 @@ static void doc_moment(Doc& d, double now) {
             });
         t.run = run, t.lies = (int)i;
     }
-    s.layered = (size_t)run;
+    s.layered = sorts.size() > (size_t)base + 1 ? sorts.size() - (size_t)base - 1 : 0;
+    View::DepthOfFieldOptions lens = s.view->getDepthOfFieldOptions();   // (the camera's lens, on the stage's own view when solid things are in it)
+    if (lens.enabled != (d.blurred && (base == 1 || (!sorts.empty() && sorts[0]))))
+        lens.enabled = !lens.enabled, s.view->setDepthOfFieldOptions(lens);
     for (size_t i = 0; i < lies.size(); ++i) {
         const int thing = lies[i].thing;
         Doc::Shown& t = *lies[i].shown;
         const bool in = lies[i].on;
         const Mesh* m = t.film ? t.film->sheet : t.drawn ? t.drawn->sheet : t.shape;
         if (in != t.in) {   // (in or out of the scene of its run)
-            Scene* sc = doc_scene(s, t.run);
+            Scene* sc = t.scene ? t.scene : s.scene;
             doc_entities(s, t, [&](utils::Entity e) { in ? sc->addEntity(e) : sc->remove(e); });
             t.in = in;
         }
@@ -886,7 +914,7 @@ static bool doc_covers(Doc& d, int thing, double now, double* box) {
     return true;
 }
 
-static double doc_usual(const char* name) { return doc_among("size speed opacity wide visible distance zoom copies copy_size", name) ? 1.0 : !strcmp(name, "duration") ? -1.0 : 0.0; }
+static double doc_usual(const char* name) { return doc_among("size speed opacity wide visible distance zoom copies copy_size blur_level", name) ? 1.0 : !strcmp(name, "duration") ? -1.0 : 0.0; }
 static bool doc_value(Doc& d, int thing, const char* name, double at, double* is) { return doc_knows(d, thing, name) && (*is = doc_number(d, thing, name, at, doc_usual(name)), true); }
 // A thing held by a hand, carried, and let go: the one form of everything a hand drags (a thing on the stage, its bar
 // on the timeline, a number). What is carried shows at once and is not the document's until it is let go, and then
