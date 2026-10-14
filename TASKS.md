@@ -95,6 +95,13 @@
 守る事：作る前に `ASSETS.md` と過去の倉庫を見る／名前は ThorVG の言葉／ガラスと光は残す／過去のスキンは生かさない／見本の窓の見た目と席の作りは勝手に変えない／
 詰まる前に別の頭に聞く（「それは本当に問題か。抽象化すると何か。もう在る物は無いか」）。ユーザー：「判断が割れる部分もないはず。おれは参考先のベクトルを出してるだけ」。
 
+## Cavalry より少ない手で（2026-10-14 夜、ユーザー：「cavalryの画やチュートリアルを検索して、それより小さい手やguiですぐ画が出せるようにしておく」）
+
+調べ（別の頭、公式の One Minute Wonder 12本と Scenery の244枚を絵で見た）：Cavalry の絵の芯は「形1つを複製して、写しごとに値を変える」。欠けは写しの時間のずれ（S）、波（N）、場所で効く力（F）、写しの色（K）、文字を1字ずつ（L）。報告 `reports/skin_run/cavalry_research.md`。
+- 足した（全部 書類の値、札で見える）：Copies の札に stagger・stagger_from（過去倉庫の順の決まり）と copy_fill（写しごとの色の並び、写しごとに材質の写し）。Wave の札（wave_x・y・rotate・size・speed・phase、Cavalry の Oscillator）。Field の札（field_x・y・radius・size・rotate、Falloff）。文字の split letters（1行を字ごとの写しに、ThorVG で字の位置を測る）。写しの上限 1000（400 個で 1コマ 5.8 ms）。
+- レシピ（1回の呼び＝1歩、Create 棚の先頭）：Wave lines・Iris・Dot wave・Tunnel・Text ripple・Field dots・Burst。Cavalry のチュートリアルは3〜6ノード・10個弱のつまみ。こちらはタイル1回押し＋札のつまみ。絵 `reports/skin_run/recipes_one_call.jpg`、`text_ripple.jpg`、`field_dots.jpg`。
+- 限り：写しのずれは置き場所（位置・回転・大きさ）だけ。絵（Trim など）は写し全部で共有なので写しごとにずれない。「真ん中から」は写しの番号の真ん中（場所ではない、場所は Field で）。split は1行だけ。
+
 ## 棚崩し（2026-10-14 夕方、ユーザー：「filamentやthorvgの棚崩しだ。今度は逆、能力をflutterのトンマナでguiとしてわかりやすく露出させたい」）
 
 能力を中の値にして、窓は中が答える札（`doc_cards`／`motolii_cards`）を見本の効果の札の作り（Params）で出すだけ。能力1つ＝中の値の表に1行＋札の表に名前＋描く所で ThorVG／Filament に渡す。窓に表は持たない。棚卸し：ThorVG 49個、Filament 45個（別の頭2つ、ソースを読んで）。

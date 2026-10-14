@@ -667,7 +667,7 @@ void main() {
     await t.pumpAndSettle();
     expect([m.value(star, 'copies', 0), m.value(star, 'copy_rotate', 0)], [8, 45], reason: m.trouble);
     expect(m.undo() && m.value(star, 'copies', 0) == 1, isTrue, reason: 'one step');
-    expect(m.set(star, 'copies', 101), isFalse, reason: 'a hundred at most');
+    expect(m.set(star, 'copies', 1001), isFalse, reason: 'a thousand at most');
     await search('Grid');
     final grid = find.descendant(of: find.byType(CreateShelf), matching: find.text('Grid')).first;
     await t.ensureVisible(grid);
@@ -917,7 +917,7 @@ void main() {
     expect(find.text('$fx of ${fxCatalog.length} work'), findsOneWidget);
     ws.shelf = 'Create';
     await t.pumpAndSettle();
-    expect(find.text('24 of 36 work'), findsOneWidget);
+    expect(find.text('25 of 37 work'), findsOneWidget);
     expect(t.takeException(), isNull);
     await _close(t);
   }, skip: !_built);

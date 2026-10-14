@@ -123,7 +123,7 @@ static const DocValue doc_values[] = {
     // (copies of it, each the one before moved, turned about its anchor and sized by as much: After Effects' repeater)
     {"trim", "shape", 0, 1, true, nullptr},   // (how much of its path is cut off the end: After Effects' trim paths, ThorVG's trimpath)
     {"trim_begin", "shape", 0, 1, true, nullptr}, {"trim_offset", "shape", -1e3, 1e3, true, nullptr},   // (and off its beginning; the part left slid along it, in turns)
-    {"copies", "picture text shape", 1, 100, false, nullptr}, {"copy_x", "picture text shape", -1e4, 1e4, true, nullptr}, {"copy_y", "picture text shape", -1e4, 1e4, true, nullptr},
+    {"copies", "picture text shape", 1, 1000, false, nullptr}, {"copy_x", "picture text shape", -1e4, 1e4, true, nullptr}, {"copy_y", "picture text shape", -1e4, 1e4, true, nullptr},
     {"copy_rotate", "picture text shape", -1e6, 1e6, true, nullptr}, {"copy_size", "picture text shape", 0.01, 100, true, nullptr},
     {"copy_columns", "picture text shape", 0, 100, false, nullptr},   // (so many to a row, then the next row: copy_x along it, copy_y down; 0: one row)
     {"stagger", "picture text shape", 0, 1e3, false, nullptr},   // (how much later the last of its copies moves than the first, in seconds: each as late as its order says)
@@ -134,6 +134,10 @@ static const DocValue doc_values[] = {
     {"wave_x", "picture text shape", -1e3, 1e3, true, nullptr}, {"wave_y", "picture text shape", -1e3, 1e3, true, nullptr},
     {"wave_rotate", "picture text shape", -1e4, 1e4, true, nullptr}, {"wave_size", "picture text shape", -1, 10, true, nullptr},
     {"wave_speed", "picture text shape", 0, 100, true, nullptr}, {"wave_phase", "picture text shape", -100, 100, true, nullptr},
+    // (a field over its copies, Cavalry's falloff: a round place on the stage (its middle, units; how far it reaches); a
+    //  copy within it is so much larger and so far turned, most at its middle, none at its edge)
+    {"field_x", "picture text shape", -1e4, 1e4, true, nullptr}, {"field_y", "picture text shape", -1e4, 1e4, true, nullptr}, {"field_radius", "picture text shape", 0, 1e4, true, nullptr},
+    {"field_size", "picture text shape", -1, 20, true, nullptr}, {"field_rotate", "picture text shape", -1e4, 1e4, true, nullptr},
     {"tint", "picture text shape", 0, 1, true, nullptr}, {"tint_black", "picture text shape", 0, 0, false, ""}, {"tint_white", "picture text shape", 0, 0, false, ""},
     {"tritone", "picture text shape", 0, 1, true, nullptr}, {"tritone_shadow", "picture text shape", 0, 0, false, ""}, {"tritone_midtone", "picture text shape", 0, 0, false, ""}, {"tritone_highlight", "picture text shape", 0, 0, false, ""},   // (how its lines lie one under another, ThorVG's own: 0 at the left, 0.5 about the middle, 1 at the right)
     {"stroke", "text shape", 0, 0, false, ""}, {"stroke_width", "text shape", 0, 1000, false, nullptr},   // (its edge: a colour, and how wide, in points of the picture at size 1)
@@ -179,6 +183,7 @@ static const DocCard doc_cards[] = {
     {"Gradient", "gradient gradient_angle gradient_scale gradient_spread", "fill", "~ "},
     {"Copies", "copies copy_columns copy_x copy_y copy_rotate copy_size stagger stagger_from copy_fill"},
     {"Wave", "wave_x wave_y wave_rotate wave_size wave_speed wave_phase"},
+    {"Field", "field_x field_y field_radius field_size field_rotate"},
     {"Shine", "emissive", "kind", "!solid"},   // (a flat thing lit from within: past 1, the stage's bloom takes it up where it lies in the stage's own view; laid over a solid thing, a picture of its own is clear round it and keeps no halo: ThorVG's glow does that)
     {"Play", "marker animation speed"},
     {"Matte", "clip_matte clip_invert clip_feather", "clip", "1"},
@@ -357,7 +362,7 @@ static math::mat4 doc_place(Doc& d, int thing, double now, int deeper, int copy,
     float deep = 0.f;
     doc_half(d, thing, &half, &deep);
     const math::double3 anchor{doc_number(d, thing, "anchor_x", now, 0) * half.x, doc_number(d, thing, "anchor_y", now, 0) * half.y, doc_number(d, thing, "anchor_z", now, 0) * deep};
-    const math::mat4 place = doc_above(d, thing, now, deeper) * math::mat4::translation(math::double3{doc_number(d, thing, "x", now, 0), doc_number(d, thing, "y", now, 0), doc_number(d, thing, "z", now, 0)}) *
+    math::mat4 place = doc_above(d, thing, now, deeper) * math::mat4::translation(math::double3{doc_number(d, thing, "x", now, 0), doc_number(d, thing, "y", now, 0), doc_number(d, thing, "z", now, 0)}) *
                              turned("rotate", {0, 0, 1}) * turned("rotate_y", {0, 1, 0}) * turned("rotate_x", {1, 0, 0}) * math::mat4::scaling(doc_number(d, thing, "size", now, 1)) *
                              (copy ? math::mat4::translation([&] {   // (the nth copy: n steps on; in rows, so many along and so many down)
                                          const int columns = (int)doc_number(d, thing, "copy_columns", 0, 0);
@@ -375,6 +380,13 @@ static math::mat4 doc_place(Doc& d, int thing, double now, int deeper, int copy,
                                         math::mat4::scaling(std::max(0.0, 1.0 + w * doc_number(d, thing, "wave_size", said, 0)));
                              }() *
                              math::mat4::translation(-anchor);
+    const double reach = member ? doc_number(d, thing, "field_radius", said, 0) : 0.0;
+    if (reach > 0.0) {   // (within the field: larger and turned about where it stands, as near its middle as it is)
+        const math::double3 at = (place * math::double4{anchor, 1.0}).xyz;
+        const double near = std::clamp(1.0 - length(at.xy - math::double2{doc_number(d, thing, "field_x", said, 0), doc_number(d, thing, "field_y", said, 0)}) / reach, 0.0, 1.0), k = near * near * (3.0 - 2.0 * near);
+        place = math::mat4::translation(at) * math::mat4::rotation(k * doc_number(d, thing, "field_rotate", said, 0) * (double)TAU / 360.0, math::double3{0, 0, 1}) *
+                math::mat4::scaling(std::max(0.0, 1.0 + k * doc_number(d, thing, "field_size", said, 0))) * math::mat4::translation(-at) * place;
+    }
     // (the user's three tags: 2D sticks to the camera; 2.5D stays in the world, smaller far, but keeps the angle it
     //  was given on the screen; 3D, and a solid, is filmed as it is)
     const auto shown = d.shown.find(thing);
@@ -626,7 +638,7 @@ static void doc_moment(Doc& d, double now) {
         if (t.drawn && t.drawn->shape) trim_at(s, t.drawn, (float)doc_number(d, thing, "trim", now, 0), (float)doc_number(d, thing, "trim_begin", now, 0), (float)doc_number(d, thing, "trim_offset", now, 0));
         const mat4f place = mat4f(doc_place(d, thing, now));
         const bool staggered = doc_number(d, thing, "stagger", 0, 0) > 0.0 || doc_number(d, thing, "wave_x", now, 0) != 0.0 || doc_number(d, thing, "wave_y", now, 0) != 0.0
-                            || doc_number(d, thing, "wave_rotate", now, 0) != 0.0 || doc_number(d, thing, "wave_size", now, 0) != 0.0;   // (each copy, the first too, as late as its order says, waving as its place in the wave says)
+                            || doc_number(d, thing, "wave_rotate", now, 0) != 0.0 || doc_number(d, thing, "wave_size", now, 0) != 0.0 || doc_number(d, thing, "field_radius", now, 0) > 0.0;   // (each copy, the first too, as late as its order says, waving as its place in the wave says)
         if (t.solid) solid_to(s, t.solid, place); else move(s, m, [&](int nth, const mat4f&) { return nth || staggered ? mat4f(doc_place(d, thing, now, 0, nth, staggered)) : place; });
         if (MaterialInstance* look = t.film ? t.film->look : t.drawn ? t.drawn->look : nullptr) look->setParameter("opacity", (float)doc_number(d, thing, "opacity", now, 1));
         if (MaterialInstance* main = t.film ? t.film->look : t.drawn ? t.drawn->look : nullptr) {   // (its copies coloured each their own, along a ramp in their order: a look of its own each, told what the thing's is)
@@ -1251,6 +1263,8 @@ static const DocRecipe doc_recipes[] = {
      "say fill 000000\nsay stroke ffffff\nset stroke_width 6\nset size 2.2\nset copies 24\nset copy_size 0.88\nset wave_rotate 30\nset wave_phase 1\nset wave_speed 0.5"},
     {"Text ripple", "text", "/System/Library/Fonts/Supplemental/Arial Unicode.ttf", "words whose letters bob one after another, coloured in their order",
      "say text MOTOLII\nsay fill ffffff\nset size 0.4\nsay split letters\nset wave_y 0.2\nset wave_phase 1\nset wave_rotate 8\nsay copy_fill ff3366 ffd166 1b2fd8"},
+    {"Field dots", "shape", "circle", "a grid of dots swelling where a round field passes over them",
+     "say fill ffffff\nset size 0.06\nset x -2.9\nset y 1.6\nset copies 336\nset copy_columns 24\nset copy_x 4\nset copy_y -4\nset field_radius 1\nset field_size 2.5\nkey field_x 0 -3\nkey field_x 3 3\nsay copy_fill ffffff ff3366"},
     {"Burst", "shape", "line", "lines from a centre growing out one after another",
      "say fill ffffff\nset anchor_x -1\nset copies 24\nset copy_rotate 15\nkey size 0 0.001\nkey size 0.5 0.6\nset stagger 0.8\nsay copy_fill ffffff ffd166"},
 };
