@@ -631,6 +631,28 @@ void main() {
     await _close(t);
   }, skip: !_built);
 
+  testWidgets('Create: Repeater and Radial lay the picked thing out in copies, as one step', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    final star = m.add('shape', 'star');
+    ws
+      ..reread()
+      ..select('$star')
+      ..shelf = 'Create';
+    await t.pumpAndSettle();
+    final tile = find.text('Radial').last;
+    await t.ensureVisible(tile);
+    await t.pumpAndSettle();
+    await t.tap(tile);
+    await t.pumpAndSettle();
+    await t.tap(find.text('Lay out'));
+    await t.pumpAndSettle();
+    expect([m.value(star, 'copies', 0), m.value(star, 'copy_rotate', 0)], [8, 45], reason: m.trouble);
+    expect(m.undo() && m.value(star, 'copies', 0) == 1, isTrue, reason: 'one step');
+    expect(m.set(star, 'copies', 101), isFalse, reason: 'a hundred at most');
+    expect(t.takeException(), isNull, reason: 'an anchor outside the box is named Custom');
+    await _close(t);
+  }, skip: !_built);
+
   testWidgets('Backspace on the timeline takes the picked thing out; undo brings it back', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final ring = m.add('solid', 'ring'), cube = m.add('solid', 'cube');

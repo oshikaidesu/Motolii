@@ -4,7 +4,7 @@ const _depthNames = {-50: 'Front', 0: 'Middle', 50: 'Back'};
 
 String anchorName(double? x, double? y, double? z) {
   if (x == null || y == null || z == null) return 'Mixed';
-  final grid = x % 50 == 0 && y % 50 == 0 && z % 50 == 0 && z.abs() <= 50;
+  final grid = x % 50 == 0 && y % 50 == 0 && z % 50 == 0 && x >= 0 && x <= 100 && y >= 0 && y <= 100 && z.abs() <= 50; // (an anchor outside the box is Custom)
   if (!grid) return 'Custom';
   return '${_anchorNames[(y ~/ 50) * 3 + x ~/ 50]} · ${_depthNames[z.toInt()]}';
 }

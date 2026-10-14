@@ -92,6 +92,9 @@ static const DocValue doc_values[] = {
     {"shadow_blur", "picture text shape", 0, 1000, false, nullptr}, {"shadow_opacity", "picture text shape", 0, 1, false, nullptr},
     // (and its darks and lights made two colours, how much: ThorVG's tint; or its darks, middles and lights three: its tritone)
     {"glow", "picture text shape", 0, 0, false, ""}, {"glow_blur", "picture text shape", 0, 1000, false, nullptr}, {"glow_opacity", "picture text shape", 0, 1, false, nullptr},
+    // (copies of it, each the one before moved, turned about its anchor and sized by as much: After Effects' repeater)
+    {"copies", "picture text shape", 1, 100, false, nullptr}, {"copy_x", "picture text shape", -1e4, 1e4, true, nullptr}, {"copy_y", "picture text shape", -1e4, 1e4, true, nullptr},
+    {"copy_rotate", "picture text shape", -1e6, 1e6, true, nullptr}, {"copy_size", "picture text shape", 0.01, 100, true, nullptr},
     {"tint", "picture text shape", 0, 1, false, nullptr}, {"tint_black", "picture text shape", 0, 0, false, ""}, {"tint_white", "picture text shape", 0, 0, false, ""},
     {"tritone", "picture text shape", 0, 1, false, nullptr}, {"tritone_shadow", "picture text shape", 0, 0, false, ""}, {"tritone_midtone", "picture text shape", 0, 0, false, ""}, {"tritone_highlight", "picture text shape", 0, 0, false, ""},   // (how its lines lie one under another, ThorVG's own: 0 at the left, 0.5 about the middle, 1 at the right)
     {"stroke", "text shape", 0, 0, false, ""}, {"stroke_width", "text shape", 0, 1000, false, nullptr}};   // (its edge: a colour, and how wide, in points of the picture at size 1)
@@ -214,20 +217,24 @@ static bool doc_covers(Doc& d, int thing, double now, double* box);
 static bool doc_half(Doc& d, int thing, float2* half, float* deep = nullptr);
 // Where a thing is at a moment, as a matrix: moved, turned about z, y and x, made its size, all about its anchor (a
 // point of its own box: 0 its middle, 1 its edge on that side; the past repository's `anchor`, keyed as it was).
-static math::mat4 doc_place(Doc& d, int thing, double now, int deeper = 0);
+static math::mat4 doc_place(Doc& d, int thing, double now, int deeper = 0, int copy = 0);
 // Where the thing it goes with is (its parent's place; none, or one not there any more: as the stage is).
 static math::mat4 doc_above(Doc& d, int thing, double now, int deeper = 0) {
     const int parent = (int)doc_number(d, thing, "parent", 0, 0);
     return parent && d.shown.count(parent) && deeper < 64 ? doc_place(d, parent, now, deeper + 1) : math::mat4{};   // (64: a document written elsewhere with a ring of parents still ends)
 }
-static math::mat4 doc_place(Doc& d, int thing, double now, int deeper) {
+static math::mat4 doc_place(Doc& d, int thing, double now, int deeper, int copy) {
     const auto turned = [&](const char* name, math::double3 about) { return math::mat4::rotation(doc_number(d, thing, name, now, 0) * (double)TAU / 360.0, about); };
     float2 half{0.5f};
     float deep = 0.f;
     doc_half(d, thing, &half, &deep);
     const math::double3 anchor{doc_number(d, thing, "anchor_x", now, 0) * half.x, doc_number(d, thing, "anchor_y", now, 0) * half.y, doc_number(d, thing, "anchor_z", now, 0) * deep};
     const math::mat4 place = doc_above(d, thing, now, deeper) * math::mat4::translation(math::double3{doc_number(d, thing, "x", now, 0), doc_number(d, thing, "y", now, 0), doc_number(d, thing, "z", now, 0)}) *
-                             turned("rotate", {0, 0, 1}) * turned("rotate_y", {0, 1, 0}) * turned("rotate_x", {1, 0, 0}) * math::mat4::scaling(doc_number(d, thing, "size", now, 1)) * math::mat4::translation(-anchor);
+                             turned("rotate", {0, 0, 1}) * turned("rotate_y", {0, 1, 0}) * turned("rotate_x", {1, 0, 0}) * math::mat4::scaling(doc_number(d, thing, "size", now, 1)) *
+                             (copy ? math::mat4::translation(copy * math::double3{doc_number(d, thing, "copy_x", now, 0), doc_number(d, thing, "copy_y", now, 0), 0.0}) *   // (the nth copy: n steps on)
+                                         math::mat4::rotation(copy * doc_number(d, thing, "copy_rotate", now, 0) * (double)TAU / 360.0, math::double3{0, 0, 1}) * math::mat4::scaling(std::pow(doc_number(d, thing, "copy_size", now, 1), copy))
+                                   : math::mat4{}) *
+                             math::mat4::translation(-anchor);
     // (the user's three tags: 2D sticks to the camera; 2.5D stays in the world, smaller far, but keeps the angle it
     //  was given on the screen; 3D, and a solid, is filmed as it is)
     const auto shown = d.shown.find(thing);
@@ -316,7 +323,7 @@ static void doc_moment(Doc& d, double now) {
         if (t.film) video_at(s, t.film, (float)lies[i].since);
         if (t.drawn && t.drawn->seconds > 0.f) picture_at(s, t.drawn, std::fmod((float)lies[i].since, t.drawn->seconds));
         const mat4f place = mat4f(doc_place(d, thing, now));
-        if (t.solid) solid_to(s, t.solid, place); else move(s, m, [&](int, const mat4f&) { return place; });
+        if (t.solid) solid_to(s, t.solid, place); else move(s, m, [&](int nth, const mat4f&) { return nth ? mat4f(doc_place(d, thing, now, 0, nth)) : place; });
         if (MaterialInstance* look = t.film ? t.film->look : t.drawn ? t.drawn->look : nullptr) look->setParameter("opacity", (float)doc_number(d, thing, "opacity", now, 1));
     }
     // A clipped thing is seen only inside the frame of the thing before it: Filament's own scissor on its looks, told
@@ -343,7 +350,7 @@ static void doc_moment(Doc& d, double now) {
 static bool doc_match(Doc& d) {
     Stage& s = *d.stage;
     std::map<int, std::string> told;   // every thing of the document, and all that its making goes by
-    doc_rows(d, sqlite3_mprintf("select thing, group_concat(name || '=' || value, ' ') from (select * from fact where thing > 0 and name in ('kind','file','shape','blend','keyed','space','begin','duration','speed','text','fill','wide','points','inner','round','stroke','stroke_width','align','blur','shadow','shadow_distance','shadow_angle','shadow_blur','shadow_opacity','glow','glow_blur','glow_opacity','tint','tint_black','tint_white','tritone','tritone_shadow','tritone_midtone','tritone_highlight') order by thing, name) group by thing"),
+    doc_rows(d, sqlite3_mprintf("select thing, group_concat(name || '=' || value, ' ') from (select * from fact where thing > 0 and name in ('kind','file','shape','blend','keyed','space','begin','duration','speed','text','fill','wide','points','inner','round','stroke','stroke_width','align','blur','shadow','shadow_distance','shadow_angle','shadow_blur','shadow_opacity','glow','glow_blur','glow_opacity','copies','tint','tint_black','tint_white','tritone','tritone_shadow','tritone_midtone','tritone_highlight') order by thing, name) group by thing"),
              [&](sqlite3_stmt* row) { told[sqlite3_column_int(row, 0)] = (const char*)sqlite3_column_text(row, 1); });
     for (auto it = d.shown.begin(); it != d.shown.end();) {
         const auto still = told.find(it->first);
@@ -375,6 +382,7 @@ static bool doc_match(Doc& d) {
         const std::string shade = doc_word(d, thing, "shadow");
         const long shadeRgb = shade.size() == 6 && shade.find_first_not_of("0123456789abcdefABCDEF") == std::string::npos ? std::strtol(shade.c_str(), nullptr, 16) : -1;
         DrawnFx fx;
+        fx.copies = (int)doc_number(d, thing, "copies", 0, 1);
         fx.blur = (float)(doc_number(d, thing, "blur", 0, 0) / units);
         if (shadeRgb >= 0) {   // (After Effects' own drop shadow, as it comes: half of it, 135 degrees, 10 points away, 10 soft)
             fx.shadow = float4{float3{(float)((shadeRgb >> 16) & 255), (float)((shadeRgb >> 8) & 255), (float)(shadeRgb & 255)} / 255.f, (float)doc_number(d, thing, "shadow_opacity", 0, 0.5)};
@@ -416,12 +424,12 @@ static bool doc_match(Doc& d) {
             else if ((!stroke.empty() && edgeRgb < 0) || !fxOk) {}
             else if (shape == "solid") {   // (a flat colour as large as the stage, where it stands at first: as wide to its height, and as high in the stage's units)
                 const float high = (float)(2.0 * up.w / up.y);
-                made.drawn = flat(s, "rect", (float)s.w / (float)s.h, mat4f{}, high, fill.empty() ? float3{0xd9, 0xd2, 0xc3} / 255.f : colour, lay, float4{edge.xyz, edge.w / high}, DrawnFx{fx.blur / high, fx.shadow, fx.fall / high, fx.way, fx.soft / high, fx.tint, {fx.tints[0], fx.tints[1]}, fx.tritone, {fx.tones[0], fx.tones[1], fx.tones[2]}, fx.glow, fx.glowSoft / high});
+                made.drawn = flat(s, "rect", (float)s.w / (float)s.h, mat4f{}, high, fill.empty() ? float3{0xd9, 0xd2, 0xc3} / 255.f : colour, lay, float4{edge.xyz, edge.w / high}, DrawnFx{fx.blur / high, fx.shadow, fx.fall / high, fx.way, fx.soft / high, fx.tint, {fx.tints[0], fx.tints[1]}, fx.tritone, {fx.tones[0], fx.tones[1], fx.tones[2]}, fx.glow, fx.glowSoft / high, fx.copies});
             } else {   // (a line is long and thin as it comes: 25 times as long as it is thick, a tenth of a unit thick)
                 const bool line = shape == "line";
                 const float high = line ? 0.04f : 1.f;
                 made.drawn = flat(s, shape.c_str(), (float)doc_number(d, thing, "wide", 0, line ? 25 : 1), mat4f{}, high, fill.empty() ? float3{0xd9, 0xd2, 0xc3} / 255.f : colour, lay,
-                                  float4{edge.xyz, edge.w / high}, DrawnFx{fx.blur / high, fx.shadow, fx.fall / high, fx.way, fx.soft / high, fx.tint, {fx.tints[0], fx.tints[1]}, fx.tritone, {fx.tones[0], fx.tones[1], fx.tones[2]}, fx.glow, fx.glowSoft / high},
+                                  float4{edge.xyz, edge.w / high}, DrawnFx{fx.blur / high, fx.shadow, fx.fall / high, fx.way, fx.soft / high, fx.tint, {fx.tints[0], fx.tints[1]}, fx.tritone, {fx.tones[0], fx.tones[1], fx.tones[2]}, fx.glow, fx.glowSoft / high, fx.copies},
                                   (int)doc_number(d, thing, "points", 0, shape == "star" ? 5 : 6), (float)doc_number(d, thing, "inner", 0, 0.5), (float)doc_number(d, thing, "round", 0, 0));
             }
         } else if (kind == "solid") {   // (one of the kit's shapes, or a file; its fill is its surface: a colour, or the material glass)
@@ -881,7 +889,7 @@ static bool doc_covers(Doc& d, int thing, double now, double* box) {
     return true;
 }
 
-static double doc_usual(const char* name) { return doc_among("size speed opacity wide visible distance zoom", name) ? 1.0 : !strcmp(name, "duration") ? -1.0 : 0.0; }
+static double doc_usual(const char* name) { return doc_among("size speed opacity wide visible distance zoom copies copy_size", name) ? 1.0 : !strcmp(name, "duration") ? -1.0 : 0.0; }
 static bool doc_value(Doc& d, int thing, const char* name, double at, double* is) { return doc_knows(d, thing, name) && (*is = doc_number(d, thing, name, at, doc_usual(name)), true); }
 // A thing held by a hand, carried, and let go: the one form of everything a hand drags (a thing on the stage, its bar
 // on the timeline, a number). What is carried shows at once and is not the document's until it is let go, and then

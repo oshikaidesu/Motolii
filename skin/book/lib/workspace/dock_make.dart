@@ -378,9 +378,25 @@ const _asked = {
   'Cube': ('solid', 'cube'),
 };
 
-/// A tile made on the stage as a new thing, picked. Not done: the foot of the shelf says why.
+/// Joined: the tiles that lay the picked thing out in copies (the document's copies, as After Effects' repeater), and
+/// what each tells it: in a row, side by side and a little smaller each time; round a centre below it.
+const _laid = <String, Map<String, double>>{
+  'Repeater': {'copies': 5, 'copy_x': 1.3, 'copy_size': .92},
+  'Radial': {'copies': 8, 'copy_rotate': 45, 'anchor_y': -3},
+};
+
+/// A tile made on the stage as a new thing, picked; a tile of copies lays the picked thing out. Not done: the foot of
+/// the shelf says why.
 void _make(DockCtx c, String name) {
-  final m = c.ws.inside!, asked = _asked[name]!;
+  final m = c.ws.inside!;
+  if (_laid[name] case final told?) {
+    final t = int.tryParse(c.ws.selected ?? '');
+    final done = t != null && m.together(() => told.entries.every((e) => m.set(t, e.key, e.value)));
+    c.set(() => done ? c.mem.trouble.remove(name) : c.mem.trouble[name] = t == null ? 'Pick a thing to lay out' : m.trouble);
+    c.ws.reread();
+    return;
+  }
+  final asked = _asked[name]!;
   final made = m.add(asked.$1, asked.$2);
   c.set(() => made == 0 ? c.mem.trouble[name] = m.trouble : c.mem.trouble.remove(name));
   if (made == 0) return;
@@ -443,8 +459,8 @@ class CreateShelf extends StatelessWidget {
             preview: DockBadge(sel.g, sel.hue, size: 34),
             title: '${sel.name} layer',
             meta: c.mem.trouble[sel.name] ?? 'At ${c.ws.timecode()} · ${sel.what}',
-            action: 'Create',
-            done: !_asked.containsKey(sel.name),
+            action: _laid.containsKey(sel.name) ? 'Lay out' : 'Create',
+            done: !_asked.containsKey(sel.name) && !_laid.containsKey(sel.name),
             doneLabel: 'No seat yet',
             onAction: () => _make(c, sel.name),
           )
