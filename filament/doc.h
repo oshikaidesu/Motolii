@@ -68,7 +68,7 @@ struct DocValue { const char* name; const char* kinds; double low, high; bool mo
 static const DocValue doc_values[] = {
     {"x", doc_kinds, -1e4, 1e4, true, nullptr}, {"y", doc_kinds, -1e4, 1e4, true, nullptr}, {"z", doc_kinds, -1e4, 1e4, true, nullptr},
     {"rotate", doc_kinds, -1e6, 1e6, true, nullptr}, {"rotate_x", doc_kinds, -1e6, 1e6, true, nullptr}, {"rotate_y", doc_kinds, -1e6, 1e6, true, nullptr},
-    {"size", doc_kinds, 1e-3, 1e4, true, nullptr}, {"opacity", "film picture text shape", 0, 1, true, nullptr},
+    {"size", doc_kinds, 1e-3, 1e4, true, nullptr}, {"anchor_x", doc_kinds, -100, 100, true, nullptr}, {"anchor_y", doc_kinds, -100, 100, true, nullptr}, {"anchor_z", doc_kinds, -100, 100, true, nullptr}, {"opacity", "film picture text shape", 0, 1, true, nullptr},
     {"clip", doc_kinds, 0, 1, false, nullptr}, {"visible", doc_kinds, 0, 1, false, nullptr}, {"order", doc_kinds, -1e9, 1e9, false, nullptr}, {"wide", "shape", 1e-3, 1e3, false, nullptr}, {"shape", "shape", 0, 0, false, "rect circle solid"},
     {"start", doc_kinds, 0, 1e6, false, nullptr}, {"duration", doc_kinds, 1e-3, 1e6, false, nullptr},
     {"begin", "film", 0, 1e6, false, nullptr}, {"speed", "film", -100, 100, false, nullptr}, {"keyed", "film", 0, 1, false, nullptr},
@@ -191,6 +191,18 @@ static void doc_parts(Stage& s, const Doc::Shown& t, const std::function<void(Re
     for (size_t i = 0; t.solid && i < t.solid->made->getRenderableEntityCount(); ++i) each(faces, faces.getInstance(t.solid->made->getRenderableEntities()[i]));
 }
 static bool doc_covers(Doc& d, int thing, double now, double* box);
+static bool doc_half(Doc& d, int thing, float2* half, float* deep = nullptr);
+// Where a thing is at a moment, as a matrix: moved, turned about z, y and x, made its size, all about its anchor (a
+// point of its own box: 0 its middle, 1 its edge on that side; the past repository's `anchor`, keyed as it was).
+static math::mat4 doc_place(Doc& d, int thing, double now) {
+    const auto turned = [&](const char* name, math::double3 about) { return math::mat4::rotation(doc_number(d, thing, name, now, 0) * (double)TAU / 360.0, about); };
+    float2 half{0.5f};
+    float deep = 0.f;
+    doc_half(d, thing, &half, &deep);
+    const math::double3 anchor{doc_number(d, thing, "anchor_x", now, 0) * half.x, doc_number(d, thing, "anchor_y", now, 0) * half.y, doc_number(d, thing, "anchor_z", now, 0) * deep};
+    return math::mat4::translation(math::double3{doc_number(d, thing, "x", now, 0), doc_number(d, thing, "y", now, 0), doc_number(d, thing, "z", now, 0)}) *
+           turned("rotate", {0, 0, 1}) * turned("rotate_y", {0, 1, 0}) * turned("rotate_x", {1, 0, 0}) * math::mat4::scaling(doc_number(d, thing, "size", now, 1)) * math::mat4::translation(-anchor);
+}
 
 // Every thing told its moment: whether it is on (from its start, for its duration if it has one), what of itself it
 // shows (it goes round when it comes to its end), and where it is.
@@ -250,10 +262,7 @@ static void doc_moment(Doc& d, double now) {
         if (!in) continue;
         if (t.film) video_at(s, t.film, (float)lies[i].since);
         if (t.drawn && t.drawn->seconds > 0.f) picture_at(s, t.drawn, std::fmod((float)lies[i].since, t.drawn->seconds));
-        const math::double3 at{doc_number(d, thing, "x", now, 0), doc_number(d, thing, "y", now, 0), doc_number(d, thing, "z", now, 0)};
-        const auto turned = [&](const char* name, float3 about) { return mat4f::rotation((float)doc_number(d, thing, name, now, 0) * TAU / 360.f, about); };
-        const mat4f place = mat4f::translation(float3{(float)at.x, (float)at.y, (float)at.z}) * turned("rotate", float3{0, 0, 1}) * turned("rotate_y", float3{0, 1, 0}) * turned("rotate_x", float3{1, 0, 0}) *
-                            mat4f::scaling((float)doc_number(d, thing, "size", now, 1));
+        const mat4f place = mat4f(doc_place(d, thing, now));
         if (t.solid) solid_to(s, t.solid, place); else move(s, m, [&](int, const mat4f&) { return place; });
         if (MaterialInstance* look = t.film ? t.film->look : t.drawn ? t.drawn->look : nullptr) look->setParameter("opacity", (float)doc_number(d, thing, "opacity", now, 1));
     }
@@ -693,7 +702,7 @@ static std::vector<double> doc_key_moments(Doc& d, int thing, const char* name) 
 
 // Half of how wide and how high a thing is at size 1, before it is placed (a sheet: the sheet's; a solid: its
 // bounds'): what a shell draws a thing's frame from.
-static bool doc_half(Doc& d, int thing, float2* half, float* deep = nullptr) {   // (deep: half of how far it reaches towards the eye and away; a flat thing: 0)
+static bool doc_half(Doc& d, int thing, float2* half, float* deep) {   // (deep: half of how far it reaches towards the eye and away; a flat thing: 0)
     const auto shown = d.shown.find(thing);
     if (shown == d.shown.end()) return false;
     const Doc::Shown& t = shown->second;
@@ -728,7 +737,7 @@ static bool doc_frame(Doc& d, int thing, double now, double* frame) {
     float2 half{0.f};
     if (!doc_half(d, thing, &half) || !d.shown[thing].in) return false;   // (a thing that is not on, or is put aside, has no frame: a hand cannot take hold of what is not seen)
     const double size = doc_number(d, thing, "size", now, 1), point = doc_point(d, thing, now);
-    const math::double2 middle = doc_seen(d, {doc_number(d, thing, "x", now, 0), doc_number(d, thing, "y", now, 0), doc_number(d, thing, "z", now, 0)});
+    const math::double2 middle = doc_seen(d, (doc_place(d, thing, now) * math::double4{0, 0, 0, 1}).xyz);   // (its own middle, wherever its anchor is)
     frame[0] = middle.x, frame[1] = middle.y, frame[2] = 2.0 * half.x * size * point, frame[3] = 2.0 * half.y * size * point;
     frame[4] = -doc_number(d, thing, "rotate", now, 0);
     double box[4];   // (turned about another line than the eye's, its frame is the upright box of what it covers)
@@ -741,9 +750,7 @@ static bool doc_covers(Doc& d, int thing, double now, double* box) {
     float2 half{0.f};
     float deep = 0.f;
     if (!doc_half(d, thing, &half, &deep)) return false;
-    const auto turned = [&](const char* name, math::double3 about) { return math::mat4::rotation(doc_number(d, thing, name, now, 0) * (double)TAU / 360.0, about); };
-    const math::mat4 place = math::mat4::translation(math::double3{doc_number(d, thing, "x", now, 0), doc_number(d, thing, "y", now, 0), doc_number(d, thing, "z", now, 0)}) *
-                             turned("rotate", {0, 0, 1}) * turned("rotate_y", {0, 1, 0}) * turned("rotate_x", {1, 0, 0}) * math::mat4::scaling(doc_number(d, thing, "size", now, 1));
+    const math::mat4 place = doc_place(d, thing, now);
     math::double2 low{1e12}, high{-1e12};
     for (int corner = 0; corner < 8; ++corner) {
         const math::double2 at = doc_seen(d, (place * math::double4{corner & 1 ? half.x : -half.x, corner & 2 ? half.y : -half.y, corner & 4 ? deep : -deep, 1.0}).xyz);

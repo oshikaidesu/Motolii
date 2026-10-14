@@ -7,7 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lab_book/motolii.dart';
-import 'package:lab_book/sets/inspector/inspector_parts.dart' show OnOff, PropRow, TextGroup;
+import 'package:lab_book/sets/inspector/inspector_parts.dart' show AnchorCube, AnchorGeometry, OnOff, PropRow, TextGroup;
 import 'package:lab_book/workspace/dock_fonts.dart';
 import 'package:lab_book/workspace/timeline.dart';
 import 'package:lab_book/workspace/workspace.dart';
@@ -427,6 +427,29 @@ void main() {
     expect(m.value(cube, 'stroke_width', 0), isNull, reason: 'a solid thing has no edge to say');
     expect(m.say(rect, 'stroke', 'grey'), isFalse);
     expect(m.trouble, contains('six digits'));
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
+  testWidgets('the Anchor box points into the thing: it turns and grows about that point, and it is where it stands', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    final rect = m.add('shape', 'rect');
+    ws
+      ..reread()
+      ..select('$rect');
+    await t.pumpAndSettle();
+    final before = m.frame(rect)!;
+    expect([before[0], before[1]], [closeTo(960, 1), closeTo(540, 1)]);
+    await t.ensureVisible(find.byType(AnchorCube));
+    await t.pumpAndSettle();
+    final box = t.getRect(find.byType(AnchorCube));
+    await t.tapAt(box.topLeft + AnchorGeometry(box.size).at(0, 0, 0)); // (its top left corner)
+    await t.pumpAndSettle();
+    expect([m.value(rect, 'anchor_x', 0), m.value(rect, 'anchor_y', 0), m.value(rect, 'anchor_z', 0)], [-1, 1, 0], reason: m.trouble);
+    final after = m.frame(rect)!;
+    expect(after[0], greaterThan(before[0] + 10), reason: 'its top left corner is where it stands now: it lies right of there');
+    expect(after[1], greaterThan(before[1] + 10), reason: 'and below');
+    expect(m.undo() && m.value(rect, 'anchor_x', 0) == 0, isTrue, reason: 'one step');
     expect(t.takeException(), isNull);
     await _close(t);
   }, skip: !_built);

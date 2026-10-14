@@ -349,7 +349,18 @@ const _seats = <(String, String, _Across, _Across)>[
   ('rot.z', 'rotate', _minus, _minus),
   ('op', 'opacity', _hundredOut, _hundredIn),
   ('stroke.w', 'stroke_width', _same, _same), // (points of the picture at size 1: the edge grows with the thing, as in After Effects)
+  // (the anchor: the sample's hundredths of the box from its top left, front -50 to back 50; the document's share of
+  //  half the box from its middle, up and towards the eye)
+  ('anchor.x', 'anchor_x', _acrossOut, _acrossIn),
+  ('anchor.y', 'anchor_y', _downOut, _downIn),
+  ('anchor.z', 'anchor_z', _backOut, _backIn),
 ];
+double _acrossOut(double v, Size c, double p) => 50 + 50 * v;
+double _acrossIn(double x, Size c, double p) => (x - 50) / 50;
+double _downOut(double v, Size c, double p) => 50 - 50 * v;
+double _downIn(double x, Size c, double p) => (50 - x) / 50;
+double _backOut(double v, Size c, double p) => -50 * v;
+double _backIn(double x, Size c, double p) => -x / 50;
 double _xOut(double v, Size c, double p) => c.width / 2 + v * p;
 double _xIn(double x, Size c, double p) => (x - c.width / 2) / p;
 double _yOut(double v, Size c, double p) => c.height / 2 - v * p;
@@ -422,7 +433,7 @@ Map<String, KeyS> _keyMarks(Ws ws, String? id) {
   if (m == null || t == null) return const {};
   final at = ws.frame / Ws.fps;
   return {
-    for (final p in const ['pos', 'scale', 'rot', 'op']) p: KeyS.values[_namesOf(p).map((n) => m.keyed(t, n, at)).reduce(math.max)],
+    for (final p in const ['pos', 'scale', 'rot', 'op', 'anchor']) p: KeyS.values[_namesOf(p).map((n) => m.keyed(t, n, at)).reduce(math.max)],
   };
 }
 
