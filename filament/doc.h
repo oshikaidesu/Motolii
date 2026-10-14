@@ -103,6 +103,7 @@ static const DocValue doc_values[] = {
     {"trim", "shape", 0, 1, true, nullptr},   // (how much of its path is cut off the end: After Effects' trim paths, ThorVG's trimpath)
     {"copies", "picture text shape", 1, 100, false, nullptr}, {"copy_x", "picture text shape", -1e4, 1e4, true, nullptr}, {"copy_y", "picture text shape", -1e4, 1e4, true, nullptr},
     {"copy_rotate", "picture text shape", -1e6, 1e6, true, nullptr}, {"copy_size", "picture text shape", 0.01, 100, true, nullptr},
+    {"copy_columns", "picture text shape", 0, 100, false, nullptr},   // (so many to a row, then the next row: copy_x along it, copy_y down; 0: one row)
     {"tint", "picture text shape", 0, 1, false, nullptr}, {"tint_black", "picture text shape", 0, 0, false, ""}, {"tint_white", "picture text shape", 0, 0, false, ""},
     {"tritone", "picture text shape", 0, 1, false, nullptr}, {"tritone_shadow", "picture text shape", 0, 0, false, ""}, {"tritone_midtone", "picture text shape", 0, 0, false, ""}, {"tritone_highlight", "picture text shape", 0, 0, false, ""},   // (how its lines lie one under another, ThorVG's own: 0 at the left, 0.5 about the middle, 1 at the right)
     {"stroke", "text shape", 0, 0, false, ""}, {"stroke_width", "text shape", 0, 1000, false, nullptr}};   // (its edge: a colour, and how wide, in points of the picture at size 1)
@@ -242,7 +243,11 @@ static math::mat4 doc_place(Doc& d, int thing, double now, int deeper, int copy)
     const math::double3 anchor{doc_number(d, thing, "anchor_x", now, 0) * half.x, doc_number(d, thing, "anchor_y", now, 0) * half.y, doc_number(d, thing, "anchor_z", now, 0) * deep};
     const math::mat4 place = doc_above(d, thing, now, deeper) * math::mat4::translation(math::double3{doc_number(d, thing, "x", now, 0), doc_number(d, thing, "y", now, 0), doc_number(d, thing, "z", now, 0)}) *
                              turned("rotate", {0, 0, 1}) * turned("rotate_y", {0, 1, 0}) * turned("rotate_x", {1, 0, 0}) * math::mat4::scaling(doc_number(d, thing, "size", now, 1)) *
-                             (copy ? math::mat4::translation(copy * math::double3{doc_number(d, thing, "copy_x", now, 0), doc_number(d, thing, "copy_y", now, 0), 0.0}) *   // (the nth copy: n steps on)
+                             (copy ? math::mat4::translation([&] {   // (the nth copy: n steps on; in rows, so many along and so many down)
+                                         const int columns = (int)doc_number(d, thing, "copy_columns", 0, 0);
+                                         const double along = columns > 0 ? copy % columns : copy, down = columns > 0 ? copy / columns : copy;
+                                         return math::double3{along * doc_number(d, thing, "copy_x", now, 0), down * doc_number(d, thing, "copy_y", now, 0), 0.0};
+                                     }()) *
                                          math::mat4::rotation(copy * doc_number(d, thing, "copy_rotate", now, 0) * (double)TAU / 360.0, math::double3{0, 0, 1}) * math::mat4::scaling(std::pow(doc_number(d, thing, "copy_size", now, 1), copy))
                                    : math::mat4{}) *
                              math::mat4::translation(-anchor);

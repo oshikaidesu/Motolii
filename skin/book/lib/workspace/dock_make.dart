@@ -398,6 +398,7 @@ const _asked = {
 const _laid = <String, Map<String, double>>{
   'Repeater': {'copies': 5, 'copy_x': 1.3, 'copy_size': .92},
   'Radial': {'copies': 8, 'copy_rotate': 45, 'anchor_y': -3},
+  'Grid': {'copies': 9, 'copy_columns': 3, 'copy_x': 1.3, 'copy_y': -1.3},
 };
 
 /// A tile made on the stage as a new thing, picked; a tile of copies lays the picked thing out. Not done: the foot of
