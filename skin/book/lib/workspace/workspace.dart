@@ -544,9 +544,11 @@ List<Fx>? _valueCards(Ws ws, String? id) {
   return [
     for (final (title, names) in m.cards(t))
       Fx('v', title, 'struct Params {\n${[
-        for (final n in names) if (m.shown(n)?.more != true) field(n),
-        if (names.any((n) => m.shown(n)?.more == true)) '  // @advanced',
-        for (final n in names) if (m.shown(n)?.more == true) field(n),
+        for (final n in names) if (m.shown(n)?.fold == null) field(n),
+        for (final fold in {for (final n in names) ?m.shown(n)?.fold}) ...[
+          '  // @advanced($fold)',
+          for (final n in names) if (m.shown(n)?.fold == fold) field(n),
+        ],
       ].join('\n')}\n}', tone: Pop.toneLayer, mark: CardMark.layer),
   ];
 }

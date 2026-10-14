@@ -297,7 +297,7 @@ class HostCameraCard extends StatelessWidget {
         'Orbit ${brief(doc.get('hc_pan'), 0)}° ${brief(doc.get('hc_tilt'), 0)}°',
       ],
       children: [
-        _ScShell('Target', const Chooser(id: 'hc_target', options: _hcTargets, word: 'Layers', searchable: true)),
+        _ScShell('Target', const Chooser(id: 'hc_target', options: _hcTargets, searchable: true)),
         const SizedBox(height: Pop.tileGap),
         SizedBox(
           height: Pop.tile * 2 + Pop.tileGap,

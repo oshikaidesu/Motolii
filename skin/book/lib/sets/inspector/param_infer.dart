@@ -51,11 +51,12 @@ enum ParamLook {
 
 /// One field of the struct as written, with the attributes found on it.
 class Decl {
-  const Decl(this.name, this.type, {this.attrs = const {}, this.advanced = false});
+  const Decl(this.name, this.type, {this.attrs = const {}, this.advanced = false, this.fold});
   final String name;
   final WType type;
   final Map<String, List<String>> attrs;
   final bool advanced;
+  final String? fold;
 }
 
 /// What the Inspector needs to draw one parameter. Values are kept in display units (degrees, percent); [toShader] maps back.
@@ -73,6 +74,7 @@ class Param {
     this.dec = 0,
     this.options = const [],
     this.advanced = false,
+    this.fold,
     this.upIncreases = true,
     this.toShader = 1,
     this.why = '',
@@ -85,6 +87,9 @@ class Param {
   final int dec;
   final List<String> options;
   final bool advanced;
+
+  /// The name of the fold it lies in, as `// @advanced(Name)` says (null: unnamed, shown as Advanced).
+  final String? fold;
 
   /// For vertical looks: dragging up raises the value (false: dragging down does, e.g. a drop).
   final bool upIncreases;
@@ -110,13 +115,15 @@ WType? _type(String t) => switch (t) {
 };
 
 /// The first struct in [src], one [Decl] per field. Attributes come from `///` lines above a field and `//` after it,
-/// e.g. `@range(0, 200) @unit(px) @enum(Low, Med, High) @default(12) @toggle`. A `// @advanced` line marks every field after it.
+/// e.g. `@range(0, 200) @unit(px) @enum(Low, Med, High) @default(12) @toggle`. A `// @advanced` line marks every field after it;
+/// `// @advanced(Each copy)` names that fold by what it holds.
 List<Decl> parseWgsl(String src) {
   final body = _structRe.firstMatch(src)?.group(1);
   if (body == null) return const [];
   final out = <Decl>[];
   var pending = <String, List<String>>{};
   var advanced = false;
+  String? fold;
   Map<String, List<String>> attrs(String s) => {
     for (final m in _attrRe.allMatches(s))
       m.group(1)!: (m.group(2) ?? '').split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList(),
@@ -128,6 +135,7 @@ List<Decl> parseWgsl(String src) {
       final a = attrs(line);
       if (a.containsKey('advanced') && a.length == 1 && !line.startsWith('///')) {
         advanced = true;
+        fold = a['advanced']!.firstOrNull;
       } else {
         pending.addAll(a);
       }
@@ -137,7 +145,7 @@ List<Decl> parseWgsl(String src) {
     final t = m == null ? null : _type(m.group(2)!);
     if (m == null || t == null) continue;
     final all = {...pending, ...attrs(line), ...attrs(m.group(3) ?? '')};
-    out.add(Decl(m.group(1)!, t, attrs: all, advanced: advanced || all.containsKey('advanced')));
+    out.add(Decl(m.group(1)!, t, attrs: all, advanced: advanced || all.containsKey('advanced'), fold: fold));
     pending = {};
   }
   return out;
@@ -213,6 +221,8 @@ Param infer(Decl d) {
   int dec(double? lo, double? hi) {
     if (whole) return 0;
     if (a['step']?.firstOrNull case final s?) return s.contains('.') ? s.split('.').last.length : 0;
+    if (unit == 's' || unit == '×') return 1; // (fixed places for a unit, as Push shows them: seconds and times to one, pixels and degrees whole)
+    if (unit == 'px' || unit == '°') return 0;
     final span = lo != null && hi != null ? hi - lo : 100;
     return span <= 4 ? 2 : (span <= 40 ? 1 : 0);
   }
@@ -232,6 +242,7 @@ Param infer(Decl d) {
       dec: scale == 1 ? dec(l, h) : (look == ParamLook.percent || look == ParamLook.angle ? 0 : 1),
       options: opts,
       advanced: d.advanced,
+      fold: d.fold,
       upIncreases: up,
       toShader: scale,
       why: why,

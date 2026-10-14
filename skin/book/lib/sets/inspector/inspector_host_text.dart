@@ -297,7 +297,7 @@ class TextAnimatorCard extends StatelessWidget {
             _TaBlock(
               label: 'Shape',
               glyph: CustomPaint(size: const Size(22, 16), painter: _TaShapePaint(math.max(0, _taShapes.indexOf(shape)), on)),
-              child: Chooser(id: 'ta_shape', options: _taShapes, word: 'Shapes', enabled: on),
+              child: Chooser(id: 'ta_shape', options: _taShapes, enabled: on),
             ),
           ),
         ]),
@@ -552,7 +552,7 @@ class TextMorphCard extends StatelessWidget {
             2,
             const _TaBlock(
               label: 'Target',
-              child: Chooser(id: 'tm_target', options: _tmTargets, word: 'Text layers'),
+              child: Chooser(id: 'tm_target', options: _tmTargets),
             ),
           ),
           (1, RowOff(off: !has, narrow: false, child: const ParamTile('tm', _tmAmount))),

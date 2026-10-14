@@ -21,7 +21,7 @@ class BlendRows extends StatelessWidget {
           id: 'blend',
           label: 'Blend',
           keyable: false,
-          cells: [Chooser(id: 'blend', options: doc.choices['blend'] ?? _blends, word: 'Modes')],
+          cells: [Chooser(id: 'blend', options: doc.choices['blend'] ?? _blends)],
         ),
         PropRow(
           id: 'ghost',
@@ -76,14 +76,13 @@ class FillStroke extends StatelessWidget {
           label: 'Stroke',
           keyable: false,
           cells: [
-            Chooser(id: 'stroke', options: doc.choices['stroke'] ?? const ['None', '#F2F2F2', '#C1C1C1', '#8E8E8E'], word: 'Colours'),
+            Chooser(id: 'stroke', options: doc.choices['stroke'] ?? const ['None', '#F2F2F2', '#C1C1C1', '#8E8E8E']),
           ],
         ),
         PropRow(
           id: 'stroke.w',
           label: 'Stroke width',
           enabled: !none,
-          note: none ? 'Off while Stroke is None' : null,
           cells: [NumField(id: 'stroke.w', unit: 'px', decimals: 1, min: 0, max: 64, perPx: .1)],
         ),
       ],
@@ -175,7 +174,6 @@ class _TextGroupState extends State<TextGroup> {
             ),
           ),
         ),
-        Cap('Applies when you leave the box · Esc restores', color: Grey.g56),
         PropRow(
           id: 'font',
           label: 'Font',

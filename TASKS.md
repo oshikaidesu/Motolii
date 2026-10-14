@@ -23,12 +23,12 @@
    **10/14 夜：6個は済み**（`reports/skin_run/drawn_out/`）。立体の Sheen・Brushed（anisotropy）、段の AO（SSAO）・Mirror（SSR）、光の Contact。前後で画素が変わるのを数えて確認、60コマで落ち0。全部入りで 1枚 7.7〜9.3 ms（全部切りは 2.5〜3.3、増えた分はほぼ SSR）。Contact は効くが小さい（Filament の既定で届く距離 0.3）。
    切った物：transmission と subsurface（陰影の型ごと別の材質になる。transmission は全部の立体を屈折に乗せて重い）。残り：写しが instancing を使えているかの確認。
 2. **札を Ableton の作法に**（`reports/skin_run/dense_ui_research.md`）：名前は8文字くらい、使えない時は説明せず灰色、絵はデータの種類で決める、単位は小さく灰色で桁は単位ごとに固定、Advanced は中身の名前（Each copy・Timing など）。説明文は書かない（ユーザー：「漢は語らない」）。
+   **10/14 夜：済み**（`reports/skin_run/ableton_cards/cards_ableton.png`）。名前は全部8文字以内（47個を短く）。1段目は8個までにして、畳みは中身の名前で3つだけ（Copies「Each copy」、Wave「Noise」、Lens「Tints」）。数字の桁は単位ごとに固定（s・× は小数1桁、px・° は整数）、末尾の0を消さない。説明文は消して灰色に任せた（Stroke width、カメラの Point、Layout の Width、錠、選んでない時、効果0個）。選ぶ欄の言葉（Modes・Colours・Layers…）は矢印の絵に。窓の試験112本、中の試験は全部通る。
 3. **窓そのものの 60コマ毎秒を数える**（夜向き）：Flutter の `FrameTiming` で、再生中・つまみを動かしてる間・15レシピの重い書類。通ったと言える一文：60秒間、遅れたコマ 0。
 4. **Cavalry の残り**：生成ポスター（升目の分割、写しごとに形を乱数で）、同じ長さで行ごとに波の数を変える、split の文字を各自の真ん中で大きくする、空の text でフォント名が出る、迷路（写しごとに 0／90 度を乱数で）。
 
 ## きみが決める事
 
-- 見本の窓のしゃべりすぎの文：「Off while Stroke is None」「Applies when you leave the box · Esc restores」、選ぶ欄の「Modes」。消すか、短くするか。
 - 文字の size：今は「全部の行を合わせた高さ」。AE と同じ「1行の字の高さ」にするか。
 - 新しい能力になる物：ペンの自由なパスと閉じる、平らな物の押し出し（Depth）、Ghost、机の道具10個、舞台の Camera／Free。
 - Lottie のスロット（差し替え）：見本ファイルのダウンロードの許し。

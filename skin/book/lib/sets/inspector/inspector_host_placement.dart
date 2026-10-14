@@ -719,7 +719,7 @@ class BlobTrackCard extends StatelessWidget {
                       label: 'Track Layer',
                       child: SizedBox(
                         height: 22,
-                        child: Chooser(id: 'blob_source', options: _plLayers, word: 'Layers', searchable: true),
+                        child: Chooser(id: 'blob_source', options: _plLayers, searchable: true),
                       ),
                     ),
                   ),

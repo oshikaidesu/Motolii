@@ -158,15 +158,15 @@ class _LdSeg extends StatelessWidget {
 
 /// A long choice as a block whose field opens the floating [Chooser].
 class _LdPick extends StatelessWidget {
-  const _LdPick(this.label, this.id, this.options, {this.word = 'Pick'});
-  final String label, id, word;
+  const _LdPick(this.label, this.id, this.options);
+  final String label, id;
   final List<String> options;
   @override
   Widget build(BuildContext context) => _LdTile(
     label: label,
     child: SizedBox(
       height: 22,
-      child: Chooser(id: id, options: options, word: word),
+      child: Chooser(id: id, options: options),
     ),
   );
 }
@@ -407,7 +407,7 @@ class MasksCard extends StatelessWidget {
         _LdAdd('Add mask', () => _ldAddTo(doc, 'mask_list')),
         const _LdSub('Track matte', note: 'Another layer cuts this one'),
         _LdGrid([
-          const _LdCell(_LdPick('Matte layer', 'mask_matte', _ldMatteLayers, word: 'Layers')),
+          const _LdCell(_LdPick('Matte layer', 'mask_matte', _ldMatteLayers)),
           if (matte != 'None') const _LdCell(_LdSeg('Use', 'mask_matte.mode', _ldMatteModes, words: ['Alpha', 'Inv α', 'Luma', 'Inv L']), span: 2),
         ]),
       ],
@@ -436,7 +436,7 @@ class _LdMask extends StatelessWidget {
           note: 'Feather ${brief(doc.get('$k.feather'), 0)} · ${brief(doc.get('$k.op'), 0)}%${inv ? ' · Inverted' : ''}',
           trail: SizedBox(
             width: 128,
-            child: Chooser(id: '$k.mode', options: _ldMaskModes, word: 'Mode'),
+            child: Chooser(id: '$k.mode', options: _ldMaskModes),
           ),
         ),
         if (open)
@@ -738,15 +738,15 @@ class HostLayoutCard extends StatelessWidget {
               ),
             ],
             if (flex) ...[
-              const _LdCell(_LdPick('Direction', 'hl_dir', _ldDirections, word: '')),
+              const _LdCell(_LdPick('Direction', 'hl_dir', _ldDirections)),
               const _LdCell(_LdSeg('Wrap', 'hl_wrap', ['No Wrap', 'Wrap', 'Wrap Reverse'], words: ['No', 'Wrap', 'Rev']), span: 2),
             ],
             _LdCell(_ldNum(doc, 'hl_gap', 'Gap', unit: 'px', min: 0, max: 1000, glyph: _LdMini(_LdMiniKind.gap, doc.get('hl_gap') ?? 0))),
             _LdCell(_ldNum(doc, 'hl_padx', 'Padding X', unit: 'px', min: 0, max: 1000, glyph: _LdMini(_LdMiniKind.padX, doc.get('hl_padx') ?? 0))),
             _LdCell(_ldNum(doc, 'hl_pady', 'Padding Y', unit: 'px', min: 0, max: 1000, glyph: _LdMini(_LdMiniKind.padY, doc.get('hl_pady') ?? 0))),
             const _LdCell(_LdAlignPad()),
-            const _LdCell(_LdPick('Justify', 'hl_justify', _ldJustify, word: '')),
-            const _LdCell(_LdPick('Items', 'hl_align', _ldAlign, word: '')),
+            const _LdCell(_LdPick('Justify', 'hl_justify', _ldJustify)),
+            const _LdCell(_LdPick('Items', 'hl_align', _ldAlign)),
             const _LdCell(_LdSeg('Width', 'hl_wsize', _ldSizing), span: 2),
             _LdCell(_ldNum(doc, 'hl_w', 'W', unit: 'px', min: 0, max: 100000, enabled: wFixed)),
             const _LdCell(_LdSeg('Height', 'hl_hsize', _ldSizing), span: 2),
@@ -759,7 +759,7 @@ class HostLayoutCard extends StatelessWidget {
             const _LdSub('As a child', note: 'Its own lines in Jewel Field'),
             _LdGrid([
               const _LdCell(_LdToggle('Ignore layout', 'hl_abs')),
-              const _LdCell(_LdPick('Align self', 'hl_self', _ldSelf, word: '')),
+              const _LdCell(_LdPick('Align self', 'hl_self', _ldSelf)),
               _LdCell(_ldNum(doc, 'hl_margin', 'Margin', unit: 'px', min: 0, max: 100000)),
               _LdCell(_ldNum(doc, 'hl_colStart', 'Column start', min: 0, max: 64, perPx: .1, zero: 'Auto')),
               _LdCell(_ldNum(doc, 'hl_rowStart', 'Row start', min: 0, max: 64, perPx: .1, zero: 'Auto')),
@@ -961,9 +961,9 @@ class _LdLink extends StatelessWidget {
         ),
         if (open)
           _LdGrid([
-            _LdCell(_LdPick('Drives', '$k.to', _ldTargets, word: '')),
-            _LdCell(_LdPick('From layer', '$k.layer', _ldLayers, word: '')),
-            _LdCell(_LdPick('Its property', '$k.prop', _ldSources, word: '')),
+            _LdCell(_LdPick('Drives', '$k.to', _ldTargets)),
+            _LdCell(_LdPick('From layer', '$k.layer', _ldLayers)),
+            _LdCell(_LdPick('Its property', '$k.prop', _ldSources)),
             _LdCell(ParamTile('link', Param(id: '$i.mul', label: 'Multiply', look: ParamLook.bipolar, type: WType.f32, min: -4, max: 4, dec: 2, def: 1))),
             _LdCell(ParamTile('link', Param(id: '$i.add', label: 'Offset', look: ParamLook.scrub, type: WType.f32, dec: 1))),
             _LdCell(_ldNum(doc, '$k.time', 'Delay', unit: 'f', min: -120, max: 120, perPx: .25, zero: 'None', bipolar: true)),

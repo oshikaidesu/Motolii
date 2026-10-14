@@ -493,9 +493,9 @@ Widget _lySeg(Doc doc, String id, List<String> items, {List<String>? words}) => 
   ),
 );
 
-Widget _lyPick(String id, List<String> options, String word) => SizedBox(
+Widget _lyPick(String id, List<String> options) => SizedBox(
   height: Pop.cell,
-  child: Chooser(id: id, options: options, word: word),
+  child: Chooser(id: id, options: options),
 );
 
 Widget _lyNum(
@@ -587,7 +587,7 @@ class _LyA extends StatelessWidget {
         _lyCells(
           [
             _lySeg(doc, 'ly_a_mode', const ['Row', 'Column', 'Grid']),
-            grid ? _lyNum('ly_a_cols', 'Cols', min: 1, max: 6, perPx: .1) : _lyPick('ly_a_justify', _lyJustify, 'Justify'),
+            grid ? _lyNum('ly_a_cols', 'Cols', min: 1, max: 6, perPx: .1) : _lyPick('ly_a_justify', _lyJustify),
           ],
           flex: const [3, 2],
         ),
@@ -619,7 +619,7 @@ class _LyA extends StatelessWidget {
             [_lySeg(doc, '$k.sz', _lySizing), _lyNum('$k.fw', mode == 'Column' ? 'H' : 'W', min: 8, max: 400, enabled: !grid && doc.s2['$k.sz'] == 'Fixed')],
             flex: const [3, 2],
           ),
-          _lyCells([_lyPick('$k.self', _lySelf, 'Align self'), _lyNum('$k.m', 'Margin', max: 64)]),
+          _lyCells([_lyPick('$k.self', _lySelf), _lyNum('$k.m', 'Margin', max: 64)]),
         ],
       ],
     );

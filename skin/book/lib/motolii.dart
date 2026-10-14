@@ -321,10 +321,10 @@ class Motolii {
   ];
 
   /// How a value is shown to a hand, as the inside says (null: as its range says): its look, the unit it is read in,
-  /// its name in plain words, the span its knob covers (in the document's units) and whether it is folded away.
+  /// its name in plain words, the span its knob covers (in the document's units) and the fold it lies in.
   Shown? shown(String name) => _shownOf.putIfAbsent(name, () {
     final f = _with([name], (s) => _shown(_m, s[0]).toDartString()).split('\t');
-    return f.length < 6 ? null : Shown(f[0], f[1], f[2], double.parse(f[3]), double.parse(f[4]), f[5] == '1');
+    return f.length < 6 ? null : Shown(f[0], f[1], f[2], double.parse(f[3]), double.parse(f[4]), f[5].isEmpty ? null : f[5]);
   });
   final _shownOf = <String, Shown?>{};
 
@@ -374,8 +374,10 @@ class Motolii {
 
 /// How a value is shown to a hand (Motolii.shown): look, unit, plain name, knob span, folded away.
 class Shown {
-  const Shown(this.look, this.unit, this.label, this.low, this.high, this.more);
+  const Shown(this.look, this.unit, this.label, this.low, this.high, this.fold);
   final String look, unit, label;
   final double low, high;
-  final bool more;
+
+  /// The fold it lies in on its card, named by what the fold holds (null: on the card's first row).
+  final String? fold;
 }

@@ -93,7 +93,7 @@ void main() {
     expect(doc.get('mir_centre.x'), isNot(0));
 
     // Blob Track: the layer chooser floats, Color brings its rows
-    await tap(tester, find.text('Layers'));
+    await tap(tester, find.byWidgetPredicate((w) => w is Chooser && w.id == 'blob_source'));
     await tap(tester, find.text('Footage'));
     expect(doc.s2['blob_source'], 'Footage');
     expect(find.text('Tolerance'), findsNothing);

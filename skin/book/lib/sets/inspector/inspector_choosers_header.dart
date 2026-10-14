@@ -3,8 +3,8 @@ part of 'inspector_parts.dart';
 // ---- 6. choosers and hand-overs -------------------------------------------------------------------------------------
 /// A short list lives in a segmented control; a long one opens a searchable list (G2, G3). Never prev/next cycling (do-not-repeat 6, 7).
 class Chooser extends StatefulWidget {
-  const Chooser({super.key, required this.id, required this.options, this.searchable = false, this.word = 'Choose', this.enabled = true});
-  final String id, word;
+  const Chooser({super.key, required this.id, required this.options, this.searchable = false, this.enabled = true});
+  final String id;
   final List<String> options;
   final bool searchable, enabled;
   @override
@@ -156,17 +156,15 @@ class _ChooserState extends State<Chooser> {
                   color: _open ? Grey.g63 : (h && on ? Grey.g38 : (x.cfg.look == Look.quiet && x.cfg.ed == Editorial.a ? const Color(0x00000000) : ed.rule)),
                 ),
               ),
-        // the value wins a narrow field: the word only shows when there is room for both
-        child: LayoutBuilder(
-          builder: (context, box) => Row(
-            children: [
-              // the default value (the first option) is dim; a chosen one is bright (dim = default)
-              Expanded(
-                child: Text(cur, maxLines: 1, overflow: TextOverflow.ellipsis, style: T.name(!on || cur == widget.options.first ? Grey.g56 : Grey.g91)),
-              ),
-              if (box.maxWidth >= 120) Text(_open ? 'Close' : widget.word, style: T.label(Grey.g56)),
-            ],
-          ),
+        // (a menu says so by its mark, not a word)
+        child: Row(
+          children: [
+            // the default value (the first option) is dim; a chosen one is bright (dim = default)
+            Expanded(
+              child: Text(cur, maxLines: 1, overflow: TextOverflow.ellipsis, style: T.name(!on || cur == widget.options.first ? Grey.g56 : Grey.g91)),
+            ),
+            FoldMark(open: true, hot: _open),
+          ],
         ),
       ),
     );
@@ -334,7 +332,7 @@ class EmptyState extends StatelessWidget {
       children: [
         Padding(
           padding: const EdgeInsets.only(top: 4, bottom: 8),
-          child: Text('Nothing selected. Pick a layer on the Stage or in the Timeline.', style: T.label(Grey.g56).copyWith(height: 1.4)),
+          child: Text('Nothing selected', style: T.label(Grey.g56).copyWith(height: 1.4)),
         ),
         for (final c in x.doc.cards) ValuesCard(c), // (the host's own: the whole picture's values)
         if (x.cfg.maybe)

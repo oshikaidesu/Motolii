@@ -54,9 +54,6 @@ class CameraGroup extends StatelessWidget {
               id: 'cam.t',
               label: 'Point',
               enabled: !driven,
-              note: driven
-                  ? 'Set by ${doc.s2['camTarget']}. Choose None to edit.'
-                  : null,
               ids: const ['cam.t.x', 'cam.t.y', 'cam.t.z'],
               cells: [
                 NumField(
@@ -245,7 +242,7 @@ class LayoutGroup extends StatelessWidget {
                     PropRow(
                       id: 'lay.w',
                       label: 'Width',
-                      note: fixed ? null : 'Counts only when Size is Fixed',
+                      enabled: fixed,
                       cells: [
                         NumField(
                           id: 'lay.w',

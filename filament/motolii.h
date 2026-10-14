@@ -103,10 +103,10 @@ int motolii_range(Motolii* m, int thing, const char* name, double* low, double* 
 /* The cards a maker sees a thing's values on, besides where it is and its fill: "title: name name; title: name" (until
    the next call). A value added to the document's cards is shown by a shell that reads this, with nothing of its own. */
 const char* motolii_cards(Motolii* m, int thing);
-/* How a value is shown to a hand: "look\tunit\tplain name\tlow\thigh\tmore" (empty: as its range says; until the next
+/* How a value is shown to a hand: "look\tunit\tplain name\tlow\thigh\tfold" (empty: as its range says; until the next
    call). The look is count, onoff, angle, stage (a length of the stage, shown in points of the picture), down (one up the stage, shown down it), share (0 to 1,
    shown in hundredths), colour, colours, numbers, thing, seed or none; low and high the span its knob covers, in the
-   document's own units; more 1 when it is folded away. */
+   document's own units; fold the name of the fold it lies in on its card (empty: not folded). */
 const char* motolii_shown(Motolii* m, const char* name);
 /* Pictures in one call: motolii_recipes says each recipe's name and what it makes ("name\twhat", one to a line, until
    the next call); motolii_make makes one at the stage's present moment, as one step, and says the new thing (0: not). */

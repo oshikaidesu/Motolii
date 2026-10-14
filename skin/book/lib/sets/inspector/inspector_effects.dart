@@ -321,11 +321,6 @@ class EffectsStack extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (x.cfg.maybe) const ParamSearch(),
-        if (doc.fxOrder.isEmpty)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: Text('No effects. Add one from the Browser.', style: T.label(Grey.g56)),
-          ),
         if (none)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 8),
@@ -399,7 +394,7 @@ class ValuesCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final x = Ctx.of(context), doc = x.doc, ed = Ed(x.cfg.ed), k = 'v.${card.name}', adv = doc.b['$k.adv'] ?? false;
     final heroes = [for (final p in card.params) if (!p.advanced) p], rest = [for (final p in card.params) if (p.advanced) p];
-    // (the effect cards' fold: the few a hand reaches for first, the rest under Advanced, as the card keeps it)
+    // (the first row, then the rest folded under the name of what they are; the fold says nothing more than its glyph)
     return Sect(
       title: card.name,
       tone: card.tone,
@@ -416,9 +411,9 @@ class ValuesCard extends StatelessWidget {
                 decoration: BoxDecoration(border: Border(top: BorderSide(color: ed.rule))),
                 child: Row(
                   children: [
-                    Text('Advanced', style: ed.labStyle(h || adv ? Grey.g95 : Grey.g63)),
+                    Text(rest.first.fold ?? 'Advanced', style: ed.labStyle(h || adv ? Grey.g95 : Grey.g63)),
                     const Spacer(),
-                    Text(adv ? 'Fold' : '${rest.length} more', style: T.label(Grey.g56)),
+                    FoldMark(open: adv, hot: h || adv),
                   ],
                 ),
               ),

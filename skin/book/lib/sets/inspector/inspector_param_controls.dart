@@ -596,7 +596,7 @@ class _ChoiceField extends StatelessWidget {
   Widget build(BuildContext context) => _ChoiceSync(
     id: id,
     options: options,
-    child: Chooser(id: id, options: options, word: 'Modes'),
+    child: Chooser(id: id, options: options),
   );
 }
 

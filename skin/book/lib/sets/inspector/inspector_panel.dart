@@ -80,11 +80,6 @@ class _InspectorPanelState extends State<InspectorPanel> {
         const EmptyState()
       else ...[
         const InspHeader(),
-        if (cfg.locked)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 4),
-            child: Text('Locked. Values are readable; unlock the layer to edit.', style: T.label(Grey.g56)),
-          ),
         if (pop) ...[
           // contract: one stack, After Effects style: transform, material, then effects piled below; every titled card folds on its own.
           const SizedBox(height: Pop.gap),

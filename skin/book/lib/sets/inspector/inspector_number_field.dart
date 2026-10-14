@@ -371,7 +371,7 @@ class _NumFieldState extends State<NumField> {
             TextSpan(
               children: [
                 TextSpan(
-                  text: pop ? trimZeros(fmt(v, widget.decimals, tight: tight)) : fmt(v, widget.decimals, tight: tight),
+                  text: fmt(v, widget.decimals, tight: tight), // (its places fixed, as Push shows them: a number does not jump in width as it moves)
                   style: widget.caption != null
                       ? _blockValue(on ? Grey.g95 : Grey.g56)
                       : pop

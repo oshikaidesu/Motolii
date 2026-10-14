@@ -185,7 +185,7 @@ const char* motolii_shown(Motolii* m, const char* name) {
     return by_hand(m, [=] {
         const DocShown* s = doc_shown_of(name);
         char line[512] = "";
-        if (s) std::snprintf(line, sizeof line, "%s\t%s\t%s\t%g\t%g\t%d", s->look, s->unit, s->label, s->low, s->high, (int)s->more);
+        if (s) std::snprintf(line, sizeof line, "%s\t%s\t%s\t%g\t%g\t%s", s->look, s->unit, s->label, s->low, s->high, s->fold ? s->fold : "");
         return (m->word = line).c_str();
     });
 }
