@@ -82,12 +82,16 @@ static CVPixelBufferRef video_surface(GstSample* picture) {
     return meta ? meta->pixbuf : nullptr;
 }
 // A film's ground: the colour its picture has in all four corners, if they are one strong colour (a green screen, of
-// whatever green; a blue one). Read once, from its first picture: four small patches of the decoder's surface.
-static bool video_ground(Video* v, CVPixelBufferRef picture, float3* ground, float* strong) {
-    if (CVPixelBufferGetPlaneCount(picture) < 2 || CVPixelBufferLockBaseAddress(picture, kCVPixelBufferLock_ReadOnly) != kCVReturnSuccess) return false;
-    const uint8_t* light = (const uint8_t*)CVPixelBufferGetBaseAddressOfPlane(picture, 0);
-    const uint8_t* colours = (const uint8_t*)CVPixelBufferGetBaseAddressOfPlane(picture, 1);
-    const size_t lightRow = CVPixelBufferGetBytesPerRowOfPlane(picture, 0), coloursRow = CVPixelBufferGetBytesPerRowOfPlane(picture, 1);
+// whatever green; a blue one). Read once, from its first picture: four small patches, through GStreamer's own view of
+// a picture's planes (gst_video_frame_map: the same on every system).
+static bool video_ground(Video* v, GstSample* picture, float3* ground, float* strong) {
+    GstVideoInfo info;
+    GstVideoFrame planes;
+    if (!gst_video_info_from_caps(&info, gst_sample_get_caps(picture)) || GST_VIDEO_INFO_FORMAT(&info) != GST_VIDEO_FORMAT_NV12) return false;   // (light, and the two colour numbers side by side at half the size)
+    if (!gst_video_frame_map(&planes, &info, gst_sample_get_buffer(picture), GST_MAP_READ)) return false;
+    const uint8_t* light = (const uint8_t*)GST_VIDEO_FRAME_PLANE_DATA(&planes, 0);
+    const uint8_t* colours = (const uint8_t*)GST_VIDEO_FRAME_PLANE_DATA(&planes, 1);
+    const size_t lightRow = (size_t)GST_VIDEO_FRAME_PLANE_STRIDE(&planes, 0), coloursRow = (size_t)GST_VIDEO_FRAME_PLANE_STRIDE(&planes, 1);
     const int w = v->w / 2, h = v->h / 2, in = std::max(2, std::min(w, h) / 40);   // (in the colour plane's points; a little in from the very edge)
     const auto hue = [](float3 c) { return float2{dot(c, float3{-0.1146f, -0.3854f, 0.5f}), dot(c, float3{0.5f, -0.4542f, -0.0458f})}; };   // (as flat.mat's)
     float3 corner[4];
@@ -101,7 +105,7 @@ static bool video_ground(Video* v, CVPixelBufferRef picture, float3* ground, flo
             }
         corner[i] = clamp((v->rule * float4{sum / (16.f * 255.f), 1.f}).xyz, float3{0.f}, float3{1.f});
     }
-    CVPixelBufferUnlockBaseAddress(picture, kCVPixelBufferLock_ReadOnly);
+    gst_video_frame_unmap(&planes);
     const float3 mean = 0.25f * (corner[0] + corner[1] + corner[2] + corner[3]);
     float apart = 0.f;
     for (const float3& c : corner) apart = std::max(apart, distance(hue(c), hue(mean)));
@@ -113,8 +117,7 @@ static bool video_ground(Video* v, CVPixelBufferRef picture, float3* ground, flo
 static void video_own_key(Video* v, GstSample* picture) {
     float3 ground{0.f, 1.f, 0.f};
     float strong = 0.6f;   // (pure green's)
-    CVPixelBufferRef surface = picture ? video_surface(picture) : nullptr;
-    const bool has = surface && video_ground(v, surface, &ground, &strong);
+    const bool has = picture && video_ground(v, picture, &ground, &strong);
     if (!has) ground = float3{0.f, 1.f, 0.f}, strong = 0.6f;
     // (how near counts as the screen, how wide its edge, how far its colour is taken out: kit.h's numbers for pure green, in
     //  proportion to how far this ground is from grey: a dark green's greys are nearer to it)

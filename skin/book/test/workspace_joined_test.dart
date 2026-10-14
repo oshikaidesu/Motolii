@@ -63,6 +63,43 @@ void main() {
     await _close(t);
   }, skip: !_built);
 
+  testWidgets('what the judges broke: keys of every value that moves are on the bar; a way reads back in one form; one act is one step', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    expect(m.kindOf('$motoliiDir/out/vid/happy.mp4'), 'film');
+    final film = m.add('', '$motoliiDir/out/vid/happy.mp4'); // (the inside makes of a file what it is)
+    expect(film, isNot(0), reason: m.trouble);
+    expect(m.word(film, 'kind'), 'film');
+    expect(m.moving(film), containsAll(['x', 'y', 'z', 'rotate', 'size', 'opacity']));
+
+    expect(m.key(film, 'opacity', 0, 0) && m.key(film, 'opacity', 1, 1), isTrue, reason: m.trouble);
+    ws.reread();
+    expect(ws.layers.single.keys, [0, Ws.fps], reason: 'opacity keys are keys on the bar');
+    expect(m.keyed(film, 'opacity', 1), 2);
+    expect(m.keyed(film, 'opacity', .5), 1);
+    expect(m.keyed(film, 'x', 1), 0);
+
+    expect(m.way(film, 'opacity', 0, 'bezier 0.2 0.1 0.3 1'), isTrue, reason: m.trouble);
+    expect(m.wayOf(film, 'opacity', 0), 'Bezier 0.2 0.1 0.3 1');
+    expect(m.way(film, 'opacity', 0, 'Bounce 0.3 0.5'), isTrue, reason: m.trouble);
+    expect(m.wayOf(film, 'opacity', 0), 'Bounce 0.3 0.5');
+
+    expect(m.put(film, 'opacity', .5, .25), isTrue, reason: m.trouble); // (it has keys: a key there)
+    expect(m.keyed(film, 'opacity', .5), 2);
+    expect(m.put(film, 'x', .5, 1), isTrue, reason: m.trouble); // (it has none: the value that stays)
+    expect(m.keyed(film, 'x', .5), 0);
+
+    m.together(() {
+      m.set(film, 'x', 2);
+      m.set(film, 'y', 3);
+    });
+    expect(m.undo(), isTrue);
+    expect([m.value(film, 'x', 0), m.value(film, 'y', 0)], [1, 0], reason: 'both changes of the one act went back');
+    expect(m.redo(), isTrue);
+    expect([m.value(film, 'x', 0), m.value(film, 'y', 0)], [2, 3]);
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
   testWidgets('Backspace on the timeline takes the picked thing out; undo brings it back', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final ring = m.add('solid', 'ring'), cube = m.add('solid', 'cube');

@@ -234,52 +234,43 @@ const _propNames = {
 }
 
 /// Joined: what was changed in the inspector goes to the document. While a hand is on it, it is only shown; when the
-/// hand lets go it is one change (a value that has keys gets a key at the playhead: the inspector's own rule).
+/// hand lets go it is put there (the document's own rule: a key at the playhead if the value has keys, else the value).
 void _write(Ws ws, String? id, Map<String, double> changed, {required bool live}) {
   final m = ws.inside!, t = int.tryParse(id ?? '');
   if (t == null) return;
   final at = ws.frame / Ws.fps;
-  var wrote = false;
   for (final e in changed.entries) {
     final to = _asDocument(ws, e.key, e.value);
     if (to == null) continue;
     final (name, number) = to;
-    if (live) {
-      m.tryValue(t, name, number);
-    } else {
-      wrote = (m.keyMoments(t, name).isNotEmpty ? m.key(t, name, at, number) : m.set(t, name, number)) || wrote;
-    }
+    live ? m.tryValue(t, name, number) : m.put(t, name, at, number);
   }
   if (!live) ws.reread();
 }
 
-/// Joined: a property's key mark from the document (a key at the playhead, keys elsewhere, or none).
+/// Joined: a property's key mark as the document has it at the playhead (the most keyed of its values).
 Map<String, KeyS> _keyMarks(Ws ws, String? id) {
   final m = ws.inside, t = int.tryParse(id ?? '');
   if (m == null || t == null) return const {};
   final at = ws.frame / Ws.fps;
   return {
-    for (final p in _propNames.entries)
-      p.key: () {
-        final moments = [for (final n in p.value) ...m.keyMoments(t, n)];
-        return moments.isEmpty ? KeyS.off : (moments.any((s) => (s - at).abs() < .5 / Ws.fps) ? KeyS.at : KeyS.anim);
-      }(),
+    for (final p in _propNames.entries) p.key: KeyS.values[p.value.map((n) => m.keyed(t, n, at)).reduce(math.max)],
   };
 }
 
-/// Joined: a key mark changed in the inspector. On: a key at the playhead with the value as it is there. Off at a key: that key goes.
+/// Joined: a key mark changed in the inspector: a key at the playhead, that key taken away, or no keys at all.
 void _mark(Ws ws, String? id, String prop, KeyS mark) {
-  final m = ws.inside!, t = int.tryParse(id ?? ''), names = _propNames[prop];
-  if (t == null || names == null) return;
+  final m = ws.inside!, t = int.tryParse(id ?? '');
+  if (t == null) return;
   final at = ws.frame / Ws.fps;
-  for (final n in names) {
-    final has = m.keyMoments(t, n).any((s) => (s - at).abs() < .5 / Ws.fps);
-    if (mark == KeyS.off) {
-      if (m.keyMoments(t, n).isNotEmpty) m.set(t, n, m.value(t, n, at) ?? 0); // (no longer animated: it stays as it is now)
-    } else if (mark == KeyS.at && !has) {
-      m.key(t, n, at, m.value(t, n, at) ?? 0);
-    } else if (mark != KeyS.at && has) {
-      m.unkey(t, n, m.keyMoments(t, n).firstWhere((s) => (s - at).abs() < .5 / Ws.fps));
+  for (final n in _propNames[prop] ?? const <String>[]) {
+    switch (mark) {
+      case KeyS.at:
+        m.keyHere(t, n, at);
+      case KeyS.anim:
+        m.unkey(t, n, at);
+      case KeyS.off:
+        m.stay(t, n, at);
     }
   }
   ws.reread();

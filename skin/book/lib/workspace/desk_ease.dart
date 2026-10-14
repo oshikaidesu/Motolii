@@ -102,12 +102,13 @@ String _said(Ease e) => easeOther(e) ? e.name! : switch (e.kind) {
   EaseKind.bezier => e == easePresets.first ? 'Linear' : 'Bezier ${e.p1.dx} ${e.p1.dy} ${e.p2.dx} ${e.p2.dy}',
 };
 Ease _heard(String said) {
-  final w = said.split(' '), n = [for (final x in w.skip(1)) double.tryParse(x) ?? 0];
+  // (the inside says a way back in one form: the kind's name, then all its numbers)
+  final w = said.split(' '), n = [for (final x in w.skip(1)) double.parse(x)];
   return switch (w.first) {
     'Hold' => easePresets.last,
-    'Bounce' => easePresets[6],
-    'Bezier' when n.length == 4 => Ease(EaseKind.bezier, Offset(n[0], n[1]), Offset(n[2], n[3])),
     'Linear' => easePresets.first,
+    'Bounce' => easePresets[6],
+    'Bezier' => Ease(EaseKind.bezier, Offset(n[0], n[1]), Offset(n[2], n[3])),
     _ => Ease(EaseKind.bezier, Offset.zero, const Offset(1, 1), said), // (a kind with no seat here yet: its own words, over a straight line)
   };
 }
@@ -116,7 +117,7 @@ Ease _heard(String said) {
 Map<String, double> _keysAt(Ws ws, EaseSpan span) {
   final m = ws.inside!, t = int.parse(span.layer.id);
   return {
-    for (final name in Ws.moving)
+    for (final name in m.moving(t))
       for (final s in m.keyMoments(t, name))
         if ((s * Ws.fps).round() == span.from) name: s,
   };
@@ -133,6 +134,8 @@ class _DeskEaseState extends State<DeskEase> {
     _pending = null;
     if (e == null || span == null) return;
     final m = ws.inside!, t = int.parse(span.layer.id), at = _keysAt(ws, span);
+    // (as it already goes: nothing is told, so a way's own numbers that have no seat here are not written over)
+    if (at.isNotEmpty && e == _heard(m.wayOf(t, at.keys.first, at.values.first))) return;
     final done = m.together(() => [for (final k in at.entries) m.way(t, k.key, k.value, _said(e))].every((ok) => ok));
     setState(() => _trouble = at.isEmpty ? 'No key where the stretch begins' : (done ? null : m.trouble));
   }

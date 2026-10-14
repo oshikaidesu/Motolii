@@ -106,9 +106,6 @@ class Ws extends ChangeNotifier {
     reread();
   }
 
-  /// The values a thing moves by: a key on any of them is a key on its bar.
-  static const moving = ['x', 'y', 'z', 'rotate', 'size'];
-
   /// How many times the document has been read again.
   int rev = 0;
 
@@ -129,7 +126,8 @@ class Ws extends ChangeNotifier {
               'solid' when m.word(t, 'shape').isNotEmpty => m.word(t, 'shape').replaceRange(0, 1, m.word(t, 'shape')[0].toUpperCase()),
               _ => file.split('/').last,
             };
-            final keys = <int>{for (final v in moving) ...m.keyMoments(t, v).map((s) => (s * fps).round())}.toList()..sort();
+            // (a key on any value of it that takes keys is a key on its bar: the inside says which those are)
+            final keys = <int>{for (final v in m.moving(t)) ...m.keyMoments(t, v).map((s) => (s * fps).round())}.toList()..sort();
             return WsLayer('$t', name, switch (kind) {
               'text' => WsKind.text,
               'film' || 'picture' => WsKind.image,

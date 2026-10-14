@@ -124,22 +124,14 @@ final fileRoots = <FileNode>[
 
 // ---------------------------------------------------------------- the disk (a joined window)
 
-/// What a file of the disk is here, by its name's end (null: not shown).
-DockG? _glyphOf(String name) => switch (name.substring(name.lastIndexOf('.') + 1).toLowerCase()) {
-  'mp4' || 'mov' || 'm4v' || 'webm' || 'mkv' => DockG.video,
-  'png' || 'jpg' || 'jpeg' || 'webp' || 'svg' || 'json' || 'lot' => DockG.image,
-  'glb' || 'gltf' => DockG.shape,
-  'ttf' || 'otf' || 'ttc' => DockG.font,
-  'wav' || 'mp3' || 'm4a' || 'aac' => DockG.audio,
-  _ => null,
-};
-
-/// The inside's kind for a file placed on the stage (null: it is not placed).
-String? _kindFor(DockG g) => switch (g) {
-  DockG.video => 'film',
-  DockG.image => 'picture',
-  DockG.shape => 'solid',
-  DockG.font => 'text',
+/// What a file of the disk is here: the inside says what kind of thing it makes (null: none, not shown); the mark for
+/// each kind is the shelf's own.
+String Function(String file) _kindOfFile = (_) => '';
+DockG? _glyphOf(String file) => switch (_kindOfFile(file)) {
+  'film' => DockG.video,
+  'picture' => DockG.image,
+  'solid' => DockG.shape,
+  'text' => DockG.font,
   _ => null,
 };
 
@@ -184,6 +176,7 @@ int? _usedRev;
 /// The locations of a joined window: what the document is made of (its files, and the folders they are in), then the disk.
 List<FileNode> _rootsOf(DockCtx c) {
   if (c.ws.inside == null) return fileRoots;
+  _kindOfFile = c.ws.inside!.kindOf;
   final files = _used(c.ws).keys.toList()..sort();
   return [
     FileNode(
@@ -217,7 +210,7 @@ String? _layerOf(FileNode n, DockCtx c) => c.ws.inside == null ? n.media?.layer 
 
 /// A file put on the stage as a new thing, picked. Not done: the foot of the shelf says why.
 void _place(DockCtx c, FileNode n) {
-  final m = c.ws.inside!, made = m.add(_kindFor(n.g)!, n.id);
+  final m = c.ws.inside!, made = m.add('', n.id); // (the inside makes of it what the file is)
   c.set(() => made == 0 ? c.mem.trouble[n.id] = m.trouble : c.mem.trouble.remove(n.id));
   if (made == 0) return;
   c.ws.reread();
@@ -687,7 +680,7 @@ class _Footer extends StatelessWidget {
   Widget build(BuildContext context) {
     if (c.ws.inside != null) {
       // Joined: a file the inside can show is placed (as often as wanted, each a new thing from the present moment); one in use says so.
-      final layer = _layerOf(n, c), can = _kindFor(n.g) != null;
+      final layer = _layerOf(n, c), can = _kindOfFile(n.id).isNotEmpty;
       return DockFooter(
         preview: _Art(n),
         title: n.name,

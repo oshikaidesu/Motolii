@@ -33,7 +33,7 @@ struct Doc {
     sqlite3* file = nullptr;
     Stage* stage = nullptr;
     std::string trouble;   // why the last call that was not done was not
-    int together = 0;      // changes made as one step of undo: 0 not so, 1 so and none made yet, 2 so and the step is begun
+    int together = 0;      // changes made as one step of undo (one act of a hand): 0 not so, 1 so and none made yet, 2 so and the step is begun
     struct Keys { std::vector<double> at, value; std::vector<Interp> interp; std::vector<std::string> own; };   // (own: a way defined in the document, where the stretch is not one of the nine kinds)
     std::map<std::pair<int, std::string>, Keys> moving;   // a value's keys, and the way of the stretch after each; read from the facts when first asked for, forgotten at every change
     std::map<std::string, sqlite3_stmt*> named, goes;     // a way by its name, and by its expression: made ready once (SQLite works it out)
@@ -229,13 +229,11 @@ static Doc* doc_open(Stage& s, const char* path) {
     // (a key's `way` is how the stretch from it to the next key goes; `way` the table holds the ways defined in this document)
     if (sqlite3_exec(d->file, "create table if not exists fact(thing integer, name text, at real, value, way text, primary key(thing, name, at)) without rowid;"
                               "create table if not exists way(name text primary key, goes text) without rowid;"
-                              "create table if not exists step(n integer primary key, change blob, undone integer default 0, joined integer default 0);"
+                              "create table if not exists step(n integer primary key, change blob, undone integer default 0);"
                               "create table if not exists thing(id integer primary key autoincrement);"   // (a thing's number is never given again: SQLite's own)
                               "insert into thing(id) select max(thing) from fact where (select count(*) from thing) = 0 having max(thing) is not null", nullptr, nullptr, nullptr) != SQLITE_OK) return nullptr;
     if (sqlite3_exec(d->file, "select way from fact limit 0", nullptr, nullptr, nullptr) != SQLITE_OK)   // (a document from before stretches had ways)
         sqlite3_exec(d->file, "alter table fact add column way text", nullptr, nullptr, nullptr);
-    if (sqlite3_exec(d->file, "select joined from step limit 0", nullptr, nullptr, nullptr) != SQLITE_OK)   // (a document from before steps could be made together)
-        sqlite3_exec(d->file, "alter table step add column joined integer default 0", nullptr, nullptr, nullptr);
     d->stage = &s;
     s.playing[d] = [d](double now) { doc_moment(*d, now); };
     if (!doc_match(*d)) std::printf("%s\n", d->trouble.c_str());
@@ -258,13 +256,23 @@ static bool doc_change(Doc& d, char* change) {
     sqlite3session_delete(watch);
     sqlite3_free(change);
     if (ok && size) {   // (what was undone and not done again is forgotten: a new step follows the last one that stands)
-        sqlite3_stmt* keep = nullptr;
         sqlite3_exec(d.file, "delete from step where undone", nullptr, nullptr, nullptr);
-        sqlite3_prepare_v2(d.file, "insert into step(change, joined) values(?, ?)", -1, &keep, nullptr);
-        sqlite3_bind_blob(keep, 1, changed, size, SQLITE_TRANSIENT);
-        sqlite3_bind_int(keep, 2, d.together == 2);   // (joined: it goes back and comes again with the step before it)
+        int last = 0, all = 0;
+        std::vector<uint8_t> begun;
+        void* joined = nullptr;
+        if (d.together == 2) doc_rows(d, sqlite3_mprintf("select n, change from step order by n desc limit 1"), [&](sqlite3_stmt* row) {
+            last = sqlite3_column_int(row, 0);
+            begun.assign((const uint8_t*)sqlite3_column_blob(row, 1), (const uint8_t*)sqlite3_column_blob(row, 1) + sqlite3_column_bytes(row, 1));
+        });
+        // (one act of a hand: this change is joined onto the step the act began, by SQLite's own joining of two changesets)
+        if (last) sqlite3changeset_concat((int)begun.size(), begun.data(), size, changed, &all, &joined);
+        sqlite3_stmt* keep = nullptr;
+        sqlite3_prepare_v2(d.file, joined ? "update step set change = ?1 where n = ?2" : "insert into step(change) values(?1)", -1, &keep, nullptr);
+        sqlite3_bind_blob(keep, 1, joined ? joined : changed, joined ? all : size, SQLITE_TRANSIENT);
+        if (joined) sqlite3_bind_int(keep, 2, last);
         sqlite3_step(keep);
         sqlite3_finalize(keep);
+        sqlite3_free(joined);
     }
     const bool stepped = ok && size;
     sqlite3_free(changed);
@@ -276,15 +284,13 @@ static bool doc_change(Doc& d, char* change) {
     return ok;
 }
 
-// The last step undone (back = true), or the last undone step done again. false: there is none. Changes made
-// together are one step: they go back, and come again, as one.
-static bool doc_step_one(Doc& d, bool back, bool* more) {
+// The last step undone (back = true), or the last undone step done again. false: there is none.
+static bool doc_step(Doc& d, bool back) {
     int n = 0;
     std::vector<uint8_t> change;
-    doc_rows(d, sqlite3_mprintf(back ? "select n, change, joined from step where not undone order by n desc limit 1" : "select n, change from step where undone order by n limit 1"), [&](sqlite3_stmt* row) {
+    doc_rows(d, sqlite3_mprintf(back ? "select n, change from step where not undone order by n desc limit 1" : "select n, change from step where undone order by n limit 1"), [&](sqlite3_stmt* row) {
         n = sqlite3_column_int(row, 0);
         change.assign((const uint8_t*)sqlite3_column_blob(row, 1), (const uint8_t*)sqlite3_column_blob(row, 1) + sqlite3_column_bytes(row, 1));
-        if (back) *more = sqlite3_column_int(row, 2) != 0;
     });
     if (!n) return d.trouble = back ? "nothing to undo" : "nothing to do again", false;
     int size = (int)change.size();
@@ -294,22 +300,17 @@ static bool doc_step_one(Doc& d, bool back, bool* more) {
     if (back) sqlite3_free(apply);
     if (!ok) return d.trouble = "the step does not fit the document as it is", false;
     doc_rows(d, sqlite3_mprintf("update step set undone = %d where n = %d", back ? 1 : 0, n));
-    if (!back) doc_rows(d, sqlite3_mprintf("select joined from step where undone order by n limit 1"), [&](sqlite3_stmt* row) { *more = sqlite3_column_int(row, 0) != 0; });
     doc_forget(d);
     return doc_match(d);
 }
-static bool doc_step(Doc& d, bool back) {
-    bool more = false;
-    if (!doc_step_one(d, back, &more)) return false;
-    while (more) { more = false; if (!doc_step_one(d, back, &more)) break; }
-    return true;
-}
-// The way of the stretch that begins at a key, as it is said ("": there is no key of that value at that moment).
+// The way of the stretch that begins at a key, said back in one form: a kind's name as the table writes it and all
+// its numbers, however it was told ("": there is no key of that value at that moment).
 static std::string doc_way_of(Doc& d, int thing, const char* name, double at) {
     std::string said;
     doc_rows(d, sqlite3_mprintf("select coalesce(way, 'Linear') from fact where thing = %d and name = %Q and at = %!.17g and (select count(*) from fact where thing = %d and name = %Q) > 1", thing, name, at, thing, name),
              [&](sqlite3_stmt* row) { said = (const char*)sqlite3_column_text(row, 0); });
-    return said;
+    Interp kind;
+    return !said.empty() && interp_said(said, &kind) == 0 ? interp_words(kind) : said;
 }
 
 // Whether a call names a thing that is there and tells it something a thing of its kind can be told (if not,
@@ -339,7 +340,20 @@ static bool doc_knows(Doc& d, int thing, const char* name = nullptr, const doubl
 
 // The calls. A new thing of a kind (film, picture, text, solid) from a file (a text: its font; a solid: a file, or ring, gem or cube): its number (0: not
 // made, and no number is used up).
+// What kind of thing a file makes, by its name's end ("": none): the one place that says so.
+static const char* doc_kind_of(const char* file) {
+    static const struct { const char* kind; const char* ends; } made[] = {
+        {"film", "mp4 mov m4v webm mkv"}, {"picture", "png jpg jpeg webp svg json lot"}, {"solid", "glb gltf"}, {"text", "ttf otf ttc"}};
+    std::string end = std::filesystem::path(file).extension().string();
+    for (char& c : end) c = (char)std::tolower((unsigned char)c);
+    if (doc_among(doc_shapes, file)) return "solid";
+    for (const auto& one : made)
+        if (end.size() > 1 && doc_among(one.ends, end.substr(1))) return one.kind;
+    return "";
+}
 static int doc_add(Doc& d, const char* kind, const char* file) {
+    if (!*kind) kind = doc_kind_of(file);   // (not said: what the file makes)
+    if (!*kind) return d.trouble = std::string("no kind of thing is made from ") + file, 0;
     if (!doc_among(doc_kinds, kind)) return d.trouble = std::string("a thing is one of: ") + doc_kinds, 0;
     // (it comes on at the stage's present moment)
     if (!doc_change(d, sqlite3_mprintf("insert into thing default values; insert into fact(thing, name, at, value) values(last_insert_rowid(), 'kind', 0.0, %Q); insert into fact(thing, name, at, value) values(last_insert_rowid(), %Q, 0.0, %Q); insert into fact(thing, name, at, value) select id, 'start', 0.0, %!.17g from thing where %d order by id desc limit 1",
@@ -365,6 +379,30 @@ static int doc_keys(Doc& d, int thing, const char* name, double at = -1.0) {   /
     doc_rows(d, at < 0.0 ? sqlite3_mprintf("select count(*) from fact where thing = %d and name = %Q and (select count(*) from fact where thing = %d and name = %Q) > 1", thing, name, thing, name)
                          : sqlite3_mprintf("select count(*) from fact where thing = %d and name = %Q and at = %!.17g", thing, name, at), [&](sqlite3_stmt* row) { n = sqlite3_column_int(row, 0); });
     return n;
+}
+// What a hand does to a value at a moment, as the document's own rules (a shell does not work them out):
+// put: the value changed there: a key at that moment if the value has keys, else the value that stays.
+// key_here: a key at that moment holding what the value is there (nothing, if it has one there).
+// stay: its keys are taken away, and it stays what it is at that moment.
+// keyed: 0 the value has no keys, 1 it has keys but none at that moment, 2 it has a key at that moment.
+// moving: the names of the values of a thing that can take keys.
+static bool doc_put(Doc& d, int thing, const char* name, double at, double is) { return doc_keys(d, thing, name) ? doc_key(d, thing, name, at, is) : doc_set(d, thing, name, is); }
+static double doc_usual(const char* name);
+static bool doc_key_here(Doc& d, int thing, const char* name, double at) {
+    if (!doc_knows(d, thing, name, nullptr, nullptr, true)) return false;
+    return doc_keys(d, thing, name, at) && doc_keys(d, thing, name) ? true : doc_key(d, thing, name, at, doc_number(d, thing, name, at, doc_usual(name)));
+}
+static bool doc_set(Doc& d, int thing, const char* name, double is);
+static bool doc_stay(Doc& d, int thing, const char* name, double at) {   // (its keys go: it stays what it is at that moment)
+    return doc_knows(d, thing, name) && (!doc_keys(d, thing, name) || doc_set(d, thing, name, doc_number(d, thing, name, at, doc_usual(name))));
+}
+static int doc_keyed(Doc& d, int thing, const char* name, double at) { return !doc_keys(d, thing, name) ? 0 : doc_keys(d, thing, name, at) ? 2 : 1; }
+static std::string doc_moving(Doc& d, int thing) {
+    const std::string kind = doc_word(d, thing, "kind");
+    std::string names;
+    for (const DocValue& one : doc_values)
+        if (one.moves && doc_among(one.kinds, kind)) names += std::string(names.empty() ? "" : " ") + one.name;
+    return names;
 }
 static bool doc_unkey(Doc& d, int thing, const char* name, double at) {
     if (!doc_knows(d, thing, name)) return false;

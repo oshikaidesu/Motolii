@@ -18,8 +18,8 @@ struct Solid {
 };
 
 static gltfio::AssetLoader* solid_loader(Stage& s) {
-    static gltfio::AssetLoader* loader = gltfio::AssetLoader::create({s.engine, gltfio::createUbershaderProvider(s.engine, UBERARCHIVE_DEFAULT_DATA, UBERARCHIVE_DEFAULT_SIZE)});
-    return loader;
+    if (!s.solids) s.solids = gltfio::AssetLoader::create({s.engine, gltfio::createUbershaderProvider(s.engine, UBERARCHIVE_DEFAULT_DATA, UBERARCHIVE_DEFAULT_SIZE)});
+    return (gltfio::AssetLoader*)s.solids;
 }
 
 // Where it is (and how large: a place may scale).
@@ -41,7 +41,8 @@ static Solid* solid(Stage& s, const char* file, const mat4f& place, float high) 
         beside[i] = load_file((std::filesystem::path(file).parent_path() / part).string().c_str());
         pictures.addResourceData(part, gltfio::ResourceLoader::BufferDescriptor(beside[i].data(), beside[i].size()));
     }
-    static gltfio::TextureProvider* reader = gltfio::createStbProvider(s.engine);
+    if (!s.solidPictures) s.solidPictures = gltfio::createStbProvider(s.engine);
+    gltfio::TextureProvider* reader = (gltfio::TextureProvider*)s.solidPictures;
     pictures.addTextureProvider("image/png", reader);
     pictures.addTextureProvider("image/jpeg", reader);
     if (!pictures.loadResources(d->made)) return nullptr;
@@ -68,11 +69,7 @@ static void plain(MaterialInstance* look, float3 colour) {
     look->setParameter("roughness", 0.6f);
 }
 static void solid_fill(Stage& s, Solid* d, float3 colour) {
-    static Material* lit = nullptr;
-    if (!lit) {
-        const std::vector<uint8_t> pkg = load_file("floor_lit.filamat");
-        lit = pkg.empty() ? nullptr : Material::Builder().package(pkg.data(), pkg.size()).build(*s.engine);
-    }
+    Material* lit = material(s, "floor_lit.filamat");
     if (!lit) return;
     MaterialInstance* look = lit->createInstance();
     plain(look, colour);

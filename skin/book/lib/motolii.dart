@@ -63,6 +63,12 @@ class Motolii {
   late final _frame = _lib.lookupFunction<Int32 Function(_P, Int32, Pointer<Double>), int Function(_P, int, Pointer<Double>)>('motolii_frame');
   late final _try = _lib.lookupFunction<Int32 Function(_P, Int32, _S, Double), int Function(_P, int, _S, double)>('motolii_try');
   late final _tryDrop = _lib.lookupFunction<Int32 Function(_P), int Function(_P)>('motolii_try_drop');
+  late final _put = _lib.lookupFunction<Int32 Function(_P, Int32, _S, Double, Double), int Function(_P, int, _S, double, double)>('motolii_put');
+  late final _keyHere = _lib.lookupFunction<Int32 Function(_P, Int32, _S, Double), int Function(_P, int, _S, double)>('motolii_key_here');
+  late final _stay = _lib.lookupFunction<Int32 Function(_P, Int32, _S, Double), int Function(_P, int, _S, double)>('motolii_stay');
+  late final _keyed = _lib.lookupFunction<Int32 Function(_P, Int32, _S, Double), int Function(_P, int, _S, double)>('motolii_keyed');
+  late final _moving = _lib.lookupFunction<_S Function(_P, Int32), _S Function(_P, int)>('motolii_moving');
+  late final _kindOf = _lib.lookupFunction<_S Function(_S), _S Function(_S)>('motolii_kind_of');
   late final _together = _lib.lookupFunction<Int32 Function(_P, Int32), int Function(_P, int)>('motolii_together');
   late final _wayOf = _lib.lookupFunction<_S Function(_P, Int32, _S, Double), _S Function(_P, int, _S, double)>('motolii_way_of');
   late final _point = _lib.lookupFunction<Double Function(_P), double Function(_P)>('motolii_point');
@@ -151,6 +157,20 @@ class Motolii {
   /// While a hand is still on a thing: a value shown and not written (no step of undo). [set] settles it, [tryDrop] undoes it.
   bool tryValue(int thing, String name, double number) => _with([name], (s) => _try(_m, thing, s[0], number)) != 0;
   void tryDrop() => _tryDrop(_m);
+
+  /// What a hand does to a value at a moment, by the document's own rules (motolii.h): the value changed there (a key
+  /// if it has keys, else the value that stays); a key there holding what it is; its keys gone; and how it is keyed
+  /// at that moment (0 no keys, 1 keys but none there, 2 a key there).
+  bool put(int thing, String name, double at, double number) => _with([name], (s) => _put(_m, thing, s[0], at, number)) != 0;
+  bool keyHere(int thing, String name, double at) => _with([name], (s) => _keyHere(_m, thing, s[0], at)) != 0;
+  bool stay(int thing, String name, double at) => _with([name], (s) => _stay(_m, thing, s[0], at)) != 0;
+  int keyed(int thing, String name, double at) => _with([name], (s) => _keyed(_m, thing, s[0], at));
+
+  /// The names of a thing's values that take keys.
+  List<String> moving(int thing) => _moving(_m, thing).toDartString().split(' ').where((n) => n.isNotEmpty).toList();
+
+  /// What kind of thing a file makes ('': none).
+  String kindOf(String file) => _with([file], (s) => _kindOf(s[0]).toDartString());
 
   /// One act of a hand that is several changes: they are one step of undo.
   T together<T>(T Function() changes) {

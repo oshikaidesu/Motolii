@@ -102,6 +102,9 @@ struct Stage {
     struct Cut { MaterialInstance* look; int slot, matte; float use, soft; };
     std::vector<Cut> cuts;       // which look reads which matte (matted): told where the matte's eye is before every picture
     Texture* white = nullptr;    // a white point: the matte of a thing that nothing cuts
+    // (what is made once for this stage's engine and kept: a stage opened after another in the same program has its own)
+    std::map<std::string, Material*> materials;    // each material file, read and built once
+    void* solids = nullptr; void* solidPictures = nullptr;   // Filament's reader of 3D files and its reader of their pictures (solid.h)
     std::vector<Made> made;   // every thing put on the stage: of which mesh, at which of that mesh's places (a film moves them: `move`)
 };
 
@@ -173,14 +176,18 @@ static std::string flat_laid(const char* lay) { return lay ? std::string("flat_"
 // A mesh on the stage, once per place. layer 2: left out of the picture of what is behind (all the glass);
 // layer 4: only in the floor's picture of sunlight; layer 8: only in the picture of the glass's far faces. order: among things of a kind, lower is drawn first.
 // copies: how many times each is drawn in one go (a material that asks for its instance index tells them apart).
-static MaterialInstance* add(Stage& s, Mesh* m, const char* filamat, std::vector<mat4f> places = {mat4f{}}, uint8_t layer = 1,
-                             bool shadows = false, int copies = 1, int order = 4) {
-    static std::map<std::string, Material*> built;   // (a material is read and built once; every thing of it has its own look)
+// A material by its file: read and built once (every thing of it has its own look). nullptr: there is no such file.
+static Material* material(Stage& s, const char* filamat) {
+    auto& built = s.materials;
     if (!built.count(filamat)) {
         const std::vector<uint8_t> pkg = load_file(filamat);
         built[filamat] = pkg.empty() ? nullptr : Material::Builder().package(pkg.data(), pkg.size()).build(*s.engine);
     }
-    Material* mat = built[filamat];
+    return built[filamat];
+}
+static MaterialInstance* add(Stage& s, Mesh* m, const char* filamat, std::vector<mat4f> places = {mat4f{}}, uint8_t layer = 1,
+                             bool shadows = false, int copies = 1, int order = 4) {
+    Material* mat = material(s, filamat);
     if (!mat) return nullptr;
     const size_t n = m->pos.size();
     auto* frames = geometry::SurfaceOrientation::Builder().vertexCount(n).normals(m->nrm.data()).build();

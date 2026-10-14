@@ -154,6 +154,15 @@ static double interp_ease(const Interp& i, double u) {
     return u;
 }
 
+// A kind said back: its name as the table writes it, then all its numbers. (However it was said, it reads back so.)
+static std::string interp_words(const Interp& is) {
+    const auto& kind = interp_kinds[(size_t)is.kind];
+    std::string said = kind.name;
+    char one[40];
+    for (int j = 0; j < kind.numbers; ++j) std::snprintf(one, sizeof one, " %.9g", is.p[j]), said += one;
+    return said;
+}
+
 // A kind as it is said: its name (capitals or not) and then either none of its numbers (the usual ones) or all of
 // them. 0: said rightly. -1: not the name of a kind. 1: a kind, but not rightly said (`why` tells how it is said).
 static int interp_said(const std::string& text, Interp* is, std::string* why = nullptr) {

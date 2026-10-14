@@ -17,7 +17,8 @@ Motolii* motolii_open(const char* document, int wide, int high);   /* the docume
 void motolii_close(Motolii* m);
 const char* motolii_trouble(Motolii* m);                           /* why the last call that was not done was not */
 
-int motolii_add(Motolii* m, const char* kind, const char* file);   /* a new thing, on from the stage's present moment: its number (0: not made) */
+const char* motolii_kind_of(const char* file);                     /* what kind of thing a file makes ("": none) */
+int motolii_add(Motolii* m, const char* kind, const char* file);   /* a new thing (kind "": what the file makes), on from the stage's present moment: its number (0: not made) */
 int motolii_remove(Motolii* m, int thing);
 int motolii_set(Motolii* m, int thing, const char* name, double number);          /* a value that stays */
 int motolii_say(Motolii* m, int thing, const char* name, const char* word);       /* a word */
@@ -49,6 +50,15 @@ int motolii_frame(Motolii* m, int thing, double* frame);
 int motolii_try(Motolii* m, int thing, const char* name, double number);
 int motolii_try_drop(Motolii* m);
 double motolii_point(Motolii* m);                                  /* points of the picture to one unit of the stage, at z 0 */
+/* What a hand does to a value at a moment, by the document's own rules. motolii_put: the value changed there: a key
+   at that moment if the value has keys, else the value that stays. motolii_key_here: a key at that moment holding
+   what the value is there. motolii_stay: its keys go, it stays what it is at that moment. motolii_keyed: 0 the value has no keys, 1 keys but none at that moment, 2 a key at that
+   moment. motolii_moving: the names of a thing's values that take keys, with spaces between (until the next call). */
+int motolii_put(Motolii* m, int thing, const char* name, double at, double number);
+int motolii_key_here(Motolii* m, int thing, const char* name, double at);
+int motolii_stay(Motolii* m, int thing, const char* name, double at);
+int motolii_keyed(Motolii* m, int thing, const char* name, double at);
+const char* motolii_moving(Motolii* m, int thing);
 /* One act of a hand that is several changes (a thing dragged: its x and its y): the changes made from
    motolii_together(m, 1) to motolii_together(m, 0) are one step of undo. */
 int motolii_together(Motolii* m, int on);

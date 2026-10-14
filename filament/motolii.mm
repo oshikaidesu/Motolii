@@ -142,6 +142,12 @@ int motolii_frame(Motolii* m, int thing, double* frame) {
 }
 int motolii_try(Motolii* m, int thing, const char* name, double number) { return by_hand(m, [=] { return (int)doc_try(doc(m), thing, name, number); }); }
 int motolii_try_drop(Motolii* m) { return by_hand(m, [=] { return doc_try_drop(*m->d), 1; }); }
+int motolii_put(Motolii* m, int thing, const char* name, double at, double number) { return by_hand(m, [=] { return (int)doc_put(doc(m), thing, name, at, number); }); }
+int motolii_key_here(Motolii* m, int thing, const char* name, double at) { return by_hand(m, [=] { return (int)doc_key_here(doc(m), thing, name, at); }); }
+int motolii_stay(Motolii* m, int thing, const char* name, double at) { return by_hand(m, [=] { return (int)doc_stay(doc(m), thing, name, at); }); }
+int motolii_keyed(Motolii* m, int thing, const char* name, double at) { return by_hand(m, [=] { return doc_keyed(*m->d, thing, name, at); }); }
+const char* motolii_moving(Motolii* m, int thing) { return by_hand(m, [=] { return (m->word = doc_moving(*m->d, thing)).c_str(); }); }
+const char* motolii_kind_of(const char* file) { return doc_kind_of(file); }
 int motolii_together(Motolii* m, int on) { return by_hand(m, [=] { return m->d->together = on ? 1 : 0, 1; }); }
 const char* motolii_way_of(Motolii* m, int thing, const char* name, double at) { return by_hand(m, [=] { return (m->word = doc_way_of(*m->d, thing, name, at)).c_str(); }); }
 // How many points of the picture one unit of the stage is, where things stand when their z is 0.
