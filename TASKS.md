@@ -24,6 +24,8 @@
 10/14 夜に済んだ物：Filament の力を引き出す（Sheen・Brushed・AO・Mirror・Contact、`reports/skin_run/drawn_out/`）、札を Ableton の作法に（`reports/skin_run/ableton_cards/`）。
 
 **夜間（10/14 にユーザーと決めた順）**。調べた物：記憶 project-motolii-cavalry-dig-2026-10-14、`research_notes/cavalry_community/`（リポジトリ外、ライセンスは SOURCES.tsv）。Cavalry のファイルは参考の地図で、写さない。
+0. **物理を決めて、猫を 3D で**（ユーザー、10/14 深夜：「物理エンジン決めたらあとは自走」）：8 の測り方に、踊る猫（緑を抜いた動画の輪郭を前後に押し出した見えない板）に本物の 3D の球40個が当たる場面を足して、Rapier と Jolt を測って決める。決めたら 3D 版を作る（球は Filament の立体、つや・影・AO・Mirror）。見える猫は平らな動画のまま（見た目の押し出しはきみが決める事）。2D 版は `filament/catball/`（Box2D、輪郭は OpenCV で焼く、玉はキーに焼く）、`reports/show/catball/catball_v2.mp4`。知った穴：キーを1本ずつ3万4千回入れると5分（1回約8ミリ秒）、まとめて入れる口が要る。
+   通ったと言える一文：猫が球を奥行きの中で弾く 3D 版が、書き出し2回で画素まで同じ、60コマ毎秒。
 1. **窓の言う事と中身を合わせる**：Scale を X・Y・Z の3つの数で持つ（AE と同じ。size＋倍率はやめる）、舞台の四隅で拡大・丸で回転・十字で回転の中心、物が持たない値の欄は出さない（立体と光の不透明度、光の Scale、平らな物の Scale Z）、Depth は読むだけの表示に。
    通ったと言える一文：`skin/book/test/sweep_test.dart`（欄と掴み所の総当たり）が全部緑、窓の試験も全部緑。
 2. **レシピの器（スクリプトの層）**：描く力は ThorVG と Filament で揃っている。足りないのは Cavalry の「スクリプト的な処理」（ユーザー、10/14）。1ファイル＝頭に AviUtl2 式のつまみの宣言（`--track@名前:表示名,最小,最大,初期,刻み`、check・color・select・file・text、`--hide@` の条件、`--group`）＋中身の JavaScript。中身が宣言を読んで、値の表と札に自動で出す。JS は Cavalry と同じく普通の JavaScript（Cavalry の中は V8）で、LLM がすぐ書ける物にする。API の型定義（.d.ts）を添える（cavalry-types の流儀）。スクリプトの3種は Cavalry に合わせる：写し1個ずつの値（JS Utility：番号と総数から位置・大きさ・色・時間のずれ）、形の点を動かす（Deformer）、形を作る（Shape）。毎コマの CPU は写しの姿勢を返すまで。重い物は GPU の計算（WGSL）。エンジンは最初に QuickJS-ng ほかを入れて測って決める（勘で外さない）。今の15レシピをこの器に移す。数値だけキーが打てる。
