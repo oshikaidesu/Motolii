@@ -652,7 +652,13 @@ void main() {
       ..select('$star')
       ..shelf = 'Create';
     await t.pumpAndSettle();
-    final tile = find.text('Radial').last;
+    Future<void> search(String what) async {
+      await t.enterText(find.descendant(of: find.byType(DockSearch), matching: find.byType(EditableText)), what);
+      await t.pumpAndSettle();
+    }
+
+    await search('Radial');
+    final tile = find.descendant(of: find.byType(CreateShelf), matching: find.text('Radial')).first;
     await t.ensureVisible(tile);
     await t.pumpAndSettle();
     await t.tap(tile);
@@ -662,7 +668,8 @@ void main() {
     expect([m.value(star, 'copies', 0), m.value(star, 'copy_rotate', 0)], [8, 45], reason: m.trouble);
     expect(m.undo() && m.value(star, 'copies', 0) == 1, isTrue, reason: 'one step');
     expect(m.set(star, 'copies', 101), isFalse, reason: 'a hundred at most');
-    final grid = find.descendant(of: find.byType(CreateShelf), matching: find.text('Grid'));
+    await search('Grid');
+    final grid = find.descendant(of: find.byType(CreateShelf), matching: find.text('Grid')).first;
     await t.ensureVisible(grid);
     await t.pumpAndSettle();
     await t.tap(grid);
@@ -910,7 +917,7 @@ void main() {
     expect(find.text('$fx of ${fxCatalog.length} work'), findsOneWidget);
     ws.shelf = 'Create';
     await t.pumpAndSettle();
-    expect(find.text('18 of 30 work'), findsOneWidget);
+    expect(find.text('23 of 35 work'), findsOneWidget);
     expect(t.takeException(), isNull);
     await _close(t);
   }, skip: !_built);
@@ -1193,6 +1200,30 @@ void main() {
     expect(m.words(fox, 'animation'), ['Survey', 'Walk', 'Run'], reason: 'its file\'s own movements');
     expect(m.say(fox, 'animation', 'Run') && m.set(fox, 'speed', 2), isTrue, reason: m.trouble);
     expect(m.cards(fox).firstWhere((c) => c.$1 == 'Play').$2, ['animation', 'speed']);
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
+  testWidgets('a recipe is a picture in one step (as Cavalry builds it from a shape, a duplicator and a behaviour): the Create shelf makes it, its knobs on its cards', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    expect(m.recipes.map((r) => r.$1), containsAll(['Wave lines', 'Iris', 'Dot wave', 'Tunnel', 'Burst']));
+    ws
+      ..reread()
+      ..shelf = 'Create';
+    await t.pumpAndSettle();
+    await t.enterText(find.descendant(of: find.byType(DockSearch), matching: find.byType(EditableText)), 'Iris');
+    await t.pumpAndSettle();
+    final tile = find.descendant(of: find.byType(CreateShelf), matching: find.text('Iris')).first;
+    await t.ensureVisible(tile);
+    await t.tap(tile);
+    await t.pumpAndSettle();
+    await t.tap(find.descendant(of: find.byType(DockFooter), matching: find.text('Create')));
+    await t.pumpAndSettle();
+    final iris = int.parse(ws.selected!);
+    expect([m.value(iris, 'copies', 0), m.word(iris, 'copy_fill')], [48, 'ff3366 ffd166 1b2fd8 ff3366'], reason: m.trouble);
+    expect([for (final e in find.byType(ValuesCard).evaluate()) (e.widget as ValuesCard).card.name], containsAll(['Copies', 'Wave']));
+    expect(m.undo() && m.things.isEmpty, isTrue, reason: 'one step');
+    expect(m.make('Nope'), 0);
     expect(t.takeException(), isNull);
     await _close(t);
   }, skip: !_built);

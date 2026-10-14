@@ -67,7 +67,7 @@ class _WsShelfState extends State<WsShelf> {
                             'Fonts' => '${fontsOffered ?? '…'} fonts',
                             'Effects' => '${fxCatalog.where((f) => fxValues.containsKey(f.name)).length} of ${fxCatalog.length} work',
                             'Colors' => '${usedColours(ws).values.toSet().length} used here',
-                            'Create' => createFact(),
+                            'Create' => createFact(ws),
                             _ => _facts[name] ?? '',
                           },
                     maxLines: 1,

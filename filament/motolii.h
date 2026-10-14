@@ -103,6 +103,10 @@ int motolii_range(Motolii* m, int thing, const char* name, double* low, double* 
 /* The cards a maker sees a thing's values on, besides where it is and its fill: "title: name name; title: name" (until
    the next call). A value added to the document's cards is shown by a shell that reads this, with nothing of its own. */
 const char* motolii_cards(Motolii* m, int thing);
+/* Pictures in one call: motolii_recipes says each recipe's name and what it makes ("name\twhat", one to a line, until
+   the next call); motolii_make makes one at the stage's present moment, as one step, and says the new thing (0: not). */
+const char* motolii_recipes(Motolii* m);
+int motolii_make(Motolii* m, const char* recipe);
 const char* motolii_words(Motolii* m, int thing, const char* name);   /* the words a value of a thing may be, with spaces between ("": any, or it is not a word; until the next call) */
 /* One act that is several calls (a value changed and its key put): the changes made from motolii_together(m, 1) to
    motolii_together(m, 0) are one step of undo, and if one of them is refused none of them is made (0 comes back).

@@ -98,6 +98,8 @@ class Motolii {
   late final _moving = _lib.lookupFunction<_S Function(_P, Int32), _S Function(_P, int)>('motolii_moving');
   late final _values = _lib.lookupFunction<_S Function(_P, Int32), _S Function(_P, int)>('motolii_values');
   late final _cards = _lib.lookupFunction<_S Function(_P, Int32), _S Function(_P, int)>('motolii_cards');
+  late final _recipes = _lib.lookupFunction<_S Function(_P), _S Function(_P)>('motolii_recipes');
+  late final _make = _lib.lookupFunction<Int32 Function(_P, _S), int Function(_P, _S)>('motolii_make');
   late final _range = _lib.lookupFunction<Int32 Function(_P, Int32, _S, Pointer<Double>, Pointer<Double>), int Function(_P, int, _S, Pointer<Double>, Pointer<Double>)>('motolii_range');
   late final _words = _lib.lookupFunction<_S Function(_P, Int32, _S), _S Function(_P, int, _S)>('motolii_words');
   late final _wayNames = _lib.lookupFunction<_S Function(_P), _S Function(_P)>('motolii_way_names');
@@ -301,6 +303,15 @@ class Motolii {
 
   /// The names of all a thing's values.
   List<String> values(int thing) => _values(_m, thing).toDartString().split(' ').where((n) => n.isNotEmpty).toList();
+
+  /// Pictures in one call: each recipe's name and what it makes.
+  List<(String, String)> get recipes => [
+    for (final line in _recipes(_m).toDartString().split('\n'))
+      if (line.indexOf('\t') case final at when at > 0) (line.substring(0, at), line.substring(at + 1)),
+  ];
+
+  /// A recipe made at the present moment, as one step: the new thing (0: not made, [trouble] says why).
+  int make(String recipe) => _with([recipe], (s) => _make(_m, s[0]));
 
   /// The cards a maker sees a thing's values on, besides where it is and its fill: each a title and the values on it.
   List<(String, List<String>)> cards(int thing) => [

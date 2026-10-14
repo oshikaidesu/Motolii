@@ -1224,6 +1224,48 @@ static bool doc_raise(Doc& d, int thing, int places) {
         all = sqlite3_mprintf("%zinsert into fact(thing, name, at, value) values(%d, 'order', 0.0, %d) on conflict do update set value = excluded.value;", all, lie[i], (int)i + 1);
     return doc_change(d, all);
 }
+// Pictures in one call (what Cavalry's tutorials build from a shape, a duplicator and a behaviour or two, each named):
+// a thing of a kind made, and told these values, as one step; a few of them are its knobs. "set name number",
+// "say name words", "key name seconds number", one to a line.
+struct DocRecipe { const char* name; const char* kind; const char* file; const char* what; const char* lines; };
+static const DocRecipe doc_recipes[] = {
+    {"Wave lines", "shape", "line", "a column of lines bending in a wave",
+     "say fill ffffff\nset size 0.4\nset y 2.2\nset copies 36\nset copy_y -0.55\nset wave_rotate 25\nset wave_x 0.25\nset wave_phase 2"},
+    {"Iris", "shape", "line", "lines round a centre, coloured in their order, breathing",
+     "set size 0.5\nset anchor_x -1.6\nset copies 48\nset copy_rotate 7.5\nsay copy_fill ff3366 ffd166 1b2fd8 ff3366\nset wave_size 0.3\nset wave_phase 3"},
+    {"Dot wave", "shape", "circle", "a grid of dots rising and falling one after another",
+     "say fill ffd166\nset size 0.12\nset x -1.1\nset y 1.1\nset copies 100\nset copy_columns 10\nset copy_x 2\nset copy_y -2\nset wave_y 0.15\nset wave_size 0.4\nset wave_phase 3\nsay copy_fill ffd166 ff3366"},
+    {"Tunnel", "shape", "rect", "squares within squares, turning one after another",
+     "say fill 000000\nsay stroke ffffff\nset stroke_width 6\nset size 2.2\nset copies 24\nset copy_size 0.88\nset wave_rotate 30\nset wave_phase 1\nset wave_speed 0.5"},
+    {"Burst", "shape", "line", "lines from a centre growing out one after another",
+     "say fill ffffff\nset anchor_x -1\nset copies 24\nset copy_rotate 15\nkey size 0 0.001\nkey size 0.5 0.6\nset stagger 0.8\nsay copy_fill ffffff ffd166"},
+};
+static std::string doc_recipe_names() {
+    std::string all;
+    for (const DocRecipe& r : doc_recipes) all += (all.empty() ? "" : "\n") + std::string(r.name) + "\t" + r.what;
+    return all;
+}
+// The recipe of that name made at the stage's present moment, one step (0: not made, d.trouble says why).
+static int doc_make(Doc& d, const char* name) {
+    const DocRecipe* r = nullptr;
+    for (const DocRecipe& one : doc_recipes) if (!strcmp(one.name, name)) r = &one;
+    if (!r) return d.trouble = std::string("there is no recipe ") + name, 0;
+    doc_act(d);
+    const int thing = doc_add(d, r->kind, r->file);
+    std::istringstream lines(r->lines);
+    for (std::string line; thing && std::getline(lines, line);) {
+        std::istringstream w(line);
+        std::string call, value;
+        w >> call >> value;
+        std::string rest;
+        std::getline(w, rest);
+        rest.erase(0, rest.find_first_not_of(' '));
+        if (call == "set") doc_set(d, thing, value.c_str(), std::atof(rest.c_str()));
+        else if (call == "say") doc_say(d, thing, value.c_str(), rest.c_str());
+        else if (call == "key") { std::istringstream k(rest); double at = 0, is = 0; k >> at >> is; doc_key(d, thing, value.c_str(), d.stage->now + at, is); }
+    }
+    return doc_acted(d) ? thing : 0;
+}
 static bool doc_stay(Doc& d, int thing, const char* name, double at) {   // (its keys go: it stays what it is at that moment)
     return doc_knows(d, thing, name) && (!doc_keys(d, thing, name) || doc_set(d, thing, name, doc_number(d, thing, name, at, doc_usual(name))));
 }

@@ -77,7 +77,13 @@ Map<String, Color> usedColours(Ws ws) {
 }
 
 /// Joined: how many of the Create shelf's tiles make or lay out something of the document, of all it shows.
-String createFact() => '${_asked.length + _laid.length} of ${[..._makes, _solids, _lights].fold<int>(0, (s, e) => s + e.$2.length)} work';
+String createFact(Ws ws) {
+  final recipes = ws.inside!.recipes.length;
+  return '${_asked.length + _laid.length + recipes} of ${[..._makes, _solids, _lights].fold<int>(0, (s, e) => s + e.$2.length) + recipes} work';
+}
+
+/// Joined: the inside's recipes, pictures in one call (as Cavalry's tutorials build them), each a tile.
+(String, List<_Make>) _recipesOf(Ws ws) => ('Recipes', [for (final (name, what) in ws.inside!.recipes) _Make(name, DockG.copies, Pop.tonePlace, '', what)]);
 
 class ColorsShelf extends StatelessWidget {
   const ColorsShelf(this.c, {super.key});
@@ -437,6 +443,14 @@ const _laid = <String, Map<String, double>>{
 /// the shelf says why.
 void _make(DockCtx c, String name) {
   final m = c.ws.inside!;
+  if (m.recipes.any((r) => r.$1 == name)) { // (a picture in one call: one step, and it is picked)
+    final made = m.make(name);
+    c.set(() => made == 0 ? c.mem.trouble[name] = m.trouble : c.mem.trouble.remove(name));
+    if (made == 0) return;
+    c.ws.reread();
+    c.ws.select('$made');
+    return;
+  }
   if (_laid[name] case final told?) {
     final t = int.tryParse(c.ws.selected ?? '');
     final done = t != null && m.together(() => told.entries.every((e) => m.set(t, e.key, e.value)));
@@ -457,7 +471,7 @@ class CreateShelf extends StatelessWidget {
   final DockCtx c;
   @override
   Widget build(BuildContext context) {
-    final joined = c.ws.inside != null, makes = joined ? [..._makes, _solids, _lights] : _makes;
+    final joined = c.ws.inside != null, makes = joined ? [_recipesOf(c.ws), ..._makes, _solids, _lights] : _makes;
     final groups = [
       for (final (g, items) in makes)
         if (c.chip == 'All' || c.chip == g) (g, items.where((m) => c.hit(m.name)).toList()),
@@ -508,7 +522,7 @@ class CreateShelf extends StatelessWidget {
             title: '${sel.name} layer',
             meta: c.mem.trouble[sel.name] ?? 'At ${c.ws.timecode()} · ${sel.what}',
             action: _laid.containsKey(sel.name) ? 'Lay out' : 'Create',
-            done: !_asked.containsKey(sel.name) && !_laid.containsKey(sel.name),
+            done: !_asked.containsKey(sel.name) && !_laid.containsKey(sel.name) && !c.ws.inside!.recipes.any((r) => r.$1 == sel.name),
             doneLabel: 'No seat yet',
             fresh: !_laid.containsKey(sel.name), // (a tile makes a new thing; a tile of copies lays out the picked one)
             onAction: () => _make(c, sel.name),
