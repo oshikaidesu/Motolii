@@ -132,6 +132,19 @@ class Ws extends ChangeNotifier {
   /// How many times the document has been read again.
   int rev = 0;
 
+  /// How many times the document has been read again (not counting what a hand only carries): what is made from its
+  /// shape (the cards) is made again when this moves.
+  int reads = 0;
+
+  /// Where the window's building spends its time (for the rampage's report): a name and the time it took, summed.
+  static final spent = <String, Duration>{};
+  static T timed<T>(String name, T Function() does) {
+    final w = Stopwatch()..start();
+    final made = does();
+    spent[name] = (spent[name] ?? Duration.zero) + w.elapsed;
+    return made;
+  }
+
   /// Where a bar ends, in frames: a thing on for good runs to the document's end.
   static int _outF(int from, double lasts) => lasts < 0 ? duration : (from + (lasts * fps).round()).clamp(from + 1, duration);
 
@@ -156,6 +169,7 @@ class Ws extends ChangeNotifier {
     if (m == null) return;
     if (!m.fits && refit != null) return refit!(); // (the document says another size, by a hand or by undo: the host opens it again, and that reads it)
     rev++;
+    reads++;
     duration = (m.seconds * fps).round().clamp(1, 1 << 20);
     layers
       ..clear()

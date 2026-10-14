@@ -514,6 +514,16 @@ Map<String, String> _cardColours(Motolii m, int t) => {
 List<Fx>? _valueCards(Ws ws, String? id) {
   final m = ws.inside, t = id == null ? 0 : int.tryParse(id); // (nothing picked: the stage's own, thing 0)
   if (m == null || t == null) return null;
+  // (made once a reading of the document: while a hand carries a value only the numbers move, and those the cards read from wsTransform)
+  final made = _cardsMade[t];
+  if (made != null && made.$1 == ws.reads && identical(made.$3, m)) return made.$2;
+  final cards = _makeCards(ws, m, t);
+  _cardsMade[t] = (ws.reads, cards, m);
+  return cards;
+}
+final _cardsMade = <int, (int, List<Fx>, Motolii)>{};
+
+List<Fx> _makeCards(Ws ws, Motolii m, int t) {
   final at = ws.frame / Ws.fps;
   String field(String n) {
     final sh = m.shown(n), k = _shownTimes(m, n), label = '@label(${sh?.label ?? n.replaceAll('_', ' ').replaceRange(0, 1, n[0].toUpperCase())})';
@@ -698,9 +708,9 @@ class _InspectorSeat extends StatelessWidget {
         cfg: const Cfg(),
         kind: k,
         effects: 2,
-        fx: _fxCards(ws, l?.id), // (joined: the effects the document has on it, each a card)
+        fx: Ws.timed('fx cards', () => _fxCards(ws, l?.id)), // (joined: the effects the document has on it, each a card)
         kindWord: _kindWord(ws, l?.id),
-        cards: _valueCards(ws, l?.id),
+        cards: Ws.timed('value cards', () => _valueCards(ws, l?.id)),
         onFxRemove: ws.inside == null ? null : (v) => ws.fxToggle(fxValues.entries.firstWhere((e) => e.value.$1 == v).key), // (taken off the document, as the shelf's Remove)
         onFxMove: ws.inside == null
             ? null
@@ -708,19 +718,19 @@ class _InspectorSeat extends StatelessWidget {
                 _told(ws, 'the effects have no order in the document: '); // (ThorVG lays them in its own)
                 return false;
               },
-        seats: ws.inside == null || int.tryParse(l?.id ?? '') == null ? null : ws.inside!.values(int.parse(l!.id)).toSet(), // (joined: a card of values the thing has not is not shown)
+        seats: Ws.timed('seats', () => ws.inside == null || int.tryParse(l?.id ?? '') == null ? null : ws.inside!.values(int.parse(l!.id)).toSet()), // (joined: a card of values the thing has not is not shown)
         title: l?.name,
         onRoute: ws.route,
         onAim: (at) => ws.aim = ws.inside != null && at.startsWith('v_') ? at.substring(2) : null, // (joined: a colour link of a card is aimed at that value)
-        values: wsTransform(ws, l?.id),
-        strs: {'fill': ?_fillWord(ws, l?.id, fill), ..._words(ws, l?.id)},
+        values: Ws.timed('transform', () => wsTransform(ws, l?.id)),
+        strs: Ws.timed('words', () => {'fill': ?_fillWord(ws, l?.id, fill), ..._words(ws, l?.id)}),
         onWords: ws.inside == null ? null : (changed) => _say(ws, l?.id, changed),
         onAnimateAll: ws.inside == null ? null : (on) => ws.animating = on,
         animating: ws.inside == null ? null : ws.animating,
-        choices: _choices(ws, l?.id),
-        flags: _flags(ws, l?.id),
+        choices: Ws.timed('choices', () => _choices(ws, l?.id)),
+        flags: Ws.timed('flags', () => _flags(ws, l?.id)),
         onFlags: ws.inside == null ? null : (changed) => _flag(ws, l?.id, changed),
-        keyMarks: _keyMarks(ws, l?.id),
+        keyMarks: Ws.timed('key marks', () => _keyMarks(ws, l?.id)),
         onValues: ws.inside == null ? null : (changed, {required live}) => _write(ws, l?.id, changed, live: live),
         onDrop: ws.inside == null ? null : () => ws.inside!.letGo(false),
         onKey: ws.inside == null ? null : (prop, mark) => _mark(ws, l?.id, prop, mark),

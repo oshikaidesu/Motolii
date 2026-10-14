@@ -59,7 +59,7 @@ class _StageState extends State<_Stage> {
 
   @override
   Widget build(BuildContext context) {
-    final ws = WsScope.of(context), scene = ArtScene.of(ws, camera: _camera);
+    final ws = WsScope.of(context), scene = Ws.timed('stage scene', () => ArtScene.of(ws, camera: _camera));
     return Focus(
       focusNode: _focus,
       onKeyEvent: _key,

@@ -331,7 +331,9 @@ class _InspHostState extends State<InspHost> {
       widget.onAim?.call(doc.s2.remove('route.at') ?? '');
       go(r);
     }
-    if (mounted) setState(() {});
+    // (while a hand is on a value the whole inspector is not built again each step: the field under the hand shows its
+    //  own number and the stage follows what the host is told; everything is built once when the hand lets go)
+    if (mounted && !doc.inGesture) setState(() {});
   }
 
   @override

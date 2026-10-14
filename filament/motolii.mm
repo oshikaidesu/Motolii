@@ -59,7 +59,7 @@ static void motolii_hand(Motolii* m, std::string document, int wide, int high, s
     if (ok && !says) doc_size_is(m->d->file, wide, high);   // (a new one is the size it was first opened at)
     opened->set_value(ok);
     if (!ok) return;
-    auto last = std::chrono::steady_clock::now(), due = last;
+    auto last = std::chrono::steady_clock::now(), due = last, drawn = last;
     for (;;) {
         std::deque<std::function<void()>> todo;
         {
@@ -72,6 +72,9 @@ static void motolii_hand(Motolii* m, std::string document, int wide, int high, s
         }
         for (auto& does : todo) does();
         const auto t = std::chrono::steady_clock::now();
+        // (asked something: a shell that writes reads next, so the picture waits a moment for it rather than it for a
+        //  whole picture; never more than two pictures' time since the last was drawn)
+        if (!todo.empty()) due = std::min(std::max(due, t + std::chrono::milliseconds(3)), drawn + std::chrono::milliseconds(33));
         if (!m->live || t < due || !(m->playing || m->changed)) { last = m->playing ? last : t; continue; }
         if (m->playing) {   // (time goes on by the clock, and round again at the document's end)
             const double runs = doc_seconds(*m->d), on = m->now + std::chrono::duration<double>(t - last).count();
@@ -84,6 +87,7 @@ static void motolii_hand(Motolii* m, std::string document, int wide, int high, s
         m->s->by_clock = m->playing;
         time_is(*m->s, m->now);
         live_draw(*m->s, m->live);
+        drawn = std::chrono::steady_clock::now();
         m->changed = false;
         due = std::max(due + std::chrono::microseconds(16667), t);   // (sixty a second)
     }

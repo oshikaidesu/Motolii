@@ -176,6 +176,7 @@ class _NumFieldState extends State<NumField> {
       _acc = _clamp(_acc + d);
       _apply(_acc);
     }
+    if (mounted) setState(() {}); // (while a hand is on it the inspector is not built again: this field shows its own number)
   }
 
   void _onUp(PointerUpEvent e) {
