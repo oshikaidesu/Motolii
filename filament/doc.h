@@ -135,7 +135,10 @@ static const DocValue doc_values[] = {
     {"copy_fill", "picture text shape", 0, 0, false, ""},   // (its copies coloured from the first colour to the last, in their order: six digits each; one, all in it; none, not coloured each)
     {"copy_fill_way", "picture text shape", 0, 0, false, "ramp cycle"},   // (from the first to the last across them all, or one colour each in turn, round and round)
     {"copy_wide", "picture text shape", 0.01, 100, true, nullptr},   // (how many times as wide its last copy is as its first, those between in step: rows of waves, each with more of them)
-    {"copy_turn", "picture text shape", -1e5, 1e5, true, nullptr},   // (how far its copies turn in all, spread evenly over them: 360 fills a round; copy_rotate's turn each on top)
+    {"copy_turn", "picture text shape", -1e5, 1e5, true, nullptr},
+    {"connect", "shape", 0, 1e9, false, nullptr},   // (the thing whose copies its own copies join, one each from one to another: lines between dots; 0: none)
+    {"connect_to", "shape", 0, 1e9, false, nullptr},   // (and another: the first's nth copy joined to this one's nth, rungs between two strands; 0: within the first)
+    {"connect_reach", "shape", 0, 1e4, true, nullptr},   // (only those nearer than this, in units of the stage, finer the further apart: a plexus; 0: each to the next in their order)   // (how far its copies turn in all, spread evenly over them: 360 fills a round; copy_rotate's turn each on top)
     // (a wave through it and its copies, Cavalry's oscillator: so far across and up (units), so far turned (degrees),
     //  so much larger (a share), so many times a second, each copy so far behind the one before (turns spread over all)
     {"wave_x", "picture text shape", -1e3, 1e3, true, nullptr}, {"wave_y", "picture text shape", -1e3, 1e3, true, nullptr},
@@ -204,6 +207,7 @@ static const DocCard doc_cards[] = {
     {"Shine", "emissive", "kind", "!solid"},   // (a flat thing lit from within: past 1, the stage's bloom takes it up where it lies in the stage's own view; laid over a solid thing, a picture of its own is clear round it and keeps no halo: ThorVG's glow does that)
     {"Play", "marker animation speed"},
     {"Matte", "clip_matte clip_invert clip_feather", "clip", "1"},
+    {"Connect", "connect connect_to connect_reach"},
     {"Line", "cap join dash dash_offset"},
     {"Surface", "metallic roughness reflectance clear_coat clear_coat_roughness emissive", "fill", "!glass"},
     {"Glass", "ior dispersion swim dark vivid", "fill", "glass"},
@@ -452,6 +456,43 @@ static math::mat4 doc_place(Doc& d, int thing, double now, int deeper, int copy,
     if (shown->second.space == 2) return d.rig * place;
     const math::double3 at = (place * math::double4{anchor, 1.0}).xyz;   // (where it stands)
     return math::mat4::translation(at) * d.facing * math::mat4::translation(-at) * place;
+}
+// Where a joining thing's copies lie (its connect): one from each copy of the thing it joins to another, stretched
+// along the way between them and as fine as they are far apart; those left over shown nowhere. Only where its copies
+// are placed, as any thing's: the lines are its own copies, in its own fill.
+static std::vector<math::mat4> doc_joins(Doc& d, int thing, double now) {
+    const int one = (int)doc_number(d, thing, "connect", 0, 0), two = (int)doc_number(d, thing, "connect_to", 0, 0);
+    if (!one || one == thing || !d.shown.count(one) || (two && (two == thing || !d.shown.count(two)))) return {};
+    const auto where = [&](int other) {   // (where each copy of it stands, before its space is taken into account)
+        float2 half{0.5f};
+        float deep = 0.f;
+        doc_half(d, other, &half, &deep);
+        const math::double3 anchor{doc_number(d, other, "anchor_x", now, 0) * half.x, doc_number(d, other, "anchor_y", now, 0) * half.y, doc_number(d, other, "anchor_z", now, 0) * deep};
+        std::vector<math::double3> at((size_t)doc_members(d, other));
+        for (size_t i = 0; i < at.size(); ++i) at[i] = (doc_place(d, other, now, 1, (int)i, true) * math::double4{anchor, 1.0}).xyz;
+        return at;
+    };
+    const std::vector<math::double3> a = where(one), b = two ? where(two) : a;
+    const double reach = doc_number(d, thing, "connect_reach", now, 0);
+    std::vector<std::pair<size_t, size_t>> pairs;
+    const size_t most = (size_t)doc_members(d, thing);
+    if (two) for (size_t i = 0; i < std::min(a.size(), b.size()); ++i) pairs.push_back({i, i});
+    else if (reach <= 0.0) for (size_t i = 0; i + 1 < a.size(); ++i) pairs.push_back({i, i + 1});
+    else for (size_t i = 0; i < a.size() && pairs.size() < most; ++i) for (size_t j = i + 1; j < a.size() && pairs.size() < most; ++j) if (length(a[i] - a[j]) < reach) pairs.push_back({i, j});
+    float2 half{0.5f};
+    float deep = 0.f;
+    doc_half(d, thing, &half, &deep);
+    const auto shown = d.shown.find(thing);
+    const int space = shown == d.shown.end() ? 3 : shown->second.space;
+    std::vector<math::mat4> lines;
+    for (size_t k = 0; k < pairs.size() && k < most; ++k) {
+        const math::double3 from = a[pairs[k].first], to = b[pairs[k].second], mid = (from + to) * 0.5, way = to - from;
+        const double far = length(way), fine = reach > 0.0 && !two ? 0.35 + 0.65 * (1.0 - far / reach) : 1.0;   // (never finer than about a third: thinner than a dot of the screen it breaks up)
+        const math::mat4 line = math::mat4::translation(mid) * math::mat4::rotation(std::atan2(way.y, way.x), math::double3{0, 0, 1}) *
+                                math::mat4::scaling(math::double3{far / std::max(1e-6, 2.0 * half.x), doc_number(d, thing, "size", now, 1) * fine, 1.0});
+        lines.push_back(space == 2 ? d.rig * line : space == 3 ? line : math::mat4::translation(mid) * d.facing * math::mat4::translation(-mid) * line);
+    }
+    return lines;
 }
 
 // The shapes the kit's mattes are cut by that `which` names, taken out of their matte's scene and done away with,
@@ -713,7 +754,10 @@ static void doc_moment(Doc& d, double now) {
         const bool staggered = doc_members(d, thing) > 1 || doc_number(d, thing, "stagger", 0, 0) > 0.0 || doc_number(d, thing, "wave_x", now, 0) != 0.0 || doc_number(d, thing, "wave_y", now, 0) != 0.0
                             || doc_number(d, thing, "wave_rotate", now, 0) != 0.0 || doc_number(d, thing, "wave_size", now, 0) != 0.0 || doc_number(d, thing, "field_radius", now, 0) > 0.0
                             || doc_number(d, thing, "scatter_x", now, 0) > 0.0 || doc_number(d, thing, "scatter_y", now, 0) > 0.0 || doc_number(d, thing, "scatter_rotate", now, 0) > 0.0 || doc_number(d, thing, "scatter_size", now, 0) > 0.0;   // (each copy, the first too, as late as its order says, waving as its place in the wave says)
-        if (t.solid) solid_to(s, t.solid, place); else move(s, m, [&](int nth, const mat4f&) { return nth || staggered ? mat4f(doc_place(d, thing, now, 0, nth, staggered)) : place; });
+        const std::vector<math::mat4> joins = doc_number(d, thing, "connect", 0, 0) != 0.0 ? doc_joins(d, thing, now) : std::vector<math::mat4>{};   // (a joining thing: its copies lie between another's)
+        if (t.solid) solid_to(s, t.solid, place);
+        else if (doc_number(d, thing, "connect", 0, 0) != 0.0) move(s, m, [&](int nth, const mat4f&) { return (size_t)nth < joins.size() ? mat4f(joins[(size_t)nth]) : mat4f::scaling(float3{0.f}); });
+        else move(s, m, [&](int nth, const mat4f&) { return nth || staggered ? mat4f(doc_place(d, thing, now, 0, nth, staggered)) : place; });
         if (MaterialInstance* look = t.film ? t.film->look : t.drawn ? t.drawn->look : nullptr) look->setParameter("opacity", (float)doc_number(d, thing, "opacity", now, 1));
         if (MaterialInstance* main = t.film ? t.film->look : t.drawn ? t.drawn->look : nullptr) {   // (its copies coloured each their own, along a ramp in their order: a look of its own each, told what the thing's is)
             std::vector<float3> ramp;
@@ -1349,9 +1393,13 @@ static const DocRecipe doc_recipes[] = {
      "set size 0.08\nset wide 0.5\nset copies 160\nset scatter_x 2.9\nset scatter_y 1.7\nset scatter_rotate 180\nset scatter_size 0.5\nset drift_y -0.6\nset wave_rotate 120\nset wave_phase 37\nset wave_x 0.1\nsay copy_fill ff3366 ffd166 1b2fd8 22c55e ff3366"},
     {"Op star", "shape", "star", "stars within stars, black and white in turn, each turning a little after the one outside it",
      "set size 2.6\nset points 16\nset inner 0.78\nset copies 30\nset copy_size 0.9\nsay copy_fill ffffff 000000\nsay copy_fill_way cycle\nset wave_rotate 25\nset wave_phase 1\nset wave_speed 0.4"},
-    {"Helix", "shape", "circle", "two strands of dots winding round each other, front larger than back",
+    {"Helix", "shape", "circle", "two strands of dots winding round each other, joined by rungs, one large where the other is small",
      "say fill ff3366\nset size 0.12\nset copies 40\nset copy_x 0.132\nset wave_y 0.72\nset wave_size 0.4\nset wave_phase 2\nset wave_speed 0.3\nsay copy_fill ff3366 ffd166\n"
-     "then shape circle\nsay fill 1b2fd8\nset size 0.12\nset copies 40\nset copy_x 0.132\nset wave_y -0.72\nset wave_size -0.4\nset wave_phase 2\nset wave_speed 0.3\nsay copy_fill 1b2fd8 22c55e"},
+     "then shape circle\nsay fill 1b2fd8\nset size 0.12\nset copies 40\nset copy_x 0.132\nset wave_y -0.72\nset wave_size 0.4\nset wave_phase 2\nset wave_speed 0.3\nsay copy_fill 1b2fd8 22c55e\n"
+     "then shape line\nsay fill ffffff\nset opacity 0.45\nset size 0.3\nset copies 40\nset connect first\nset connect_to before"},
+    {"Plexus", "shape", "circle", "dots drifting and bobbing, joined by lines where they come near, finer the further apart",
+     "say fill ffffff\nset size 0.05\nset copies 70\nset scatter_x 2.6\nset scatter_y 1.4\nset seed 7\nset drift_x 0.65\nset wave_y 0.3\nset wave_noise 1\nset wave_speed 0.25\n"
+     "then shape line\nsay fill 9ad7ff\nset opacity 0.7\nset size 0.25\nset copies 400\nset connect first\nset connect_reach 0.7"},
     {"Spiral", "shape", "circle", "dots on a spiral growing outwards, turning",
      "say fill ffffff\nset size 0.03\nset anchor_x -40\nset copies 220\nset copy_turn 1800\nset copy_size 1.006\nkey rotate 0 0\nkey rotate 8 -360\nsay copy_fill ffd166 ff3366 1b2fd8"},
     {"Burst", "shape", "line", "lines from a centre growing out one after another",
@@ -1371,7 +1419,7 @@ static int doc_make(Doc& d, const char* name) {
     const int thing = doc_add(d, r->kind, r->file);
     if (thing) doc_say(d, thing, "name", r->name);   // (listed by the recipe's name)
     std::istringstream lines(r->lines);
-    int now = thing;   // (the thing the lines tell: "then kind file" makes another, named as the recipe too)
+    int now = thing, first = thing, before = thing;   // (the thing the lines tell: "then kind file" makes another, named as the recipe too)
     for (std::string line; now && std::getline(lines, line);) {
         std::istringstream w(line);
         std::string call, value;
@@ -1379,9 +1427,9 @@ static int doc_make(Doc& d, const char* name) {
         std::string rest;
         std::getline(w, rest);
         rest.erase(0, rest.find_first_not_of(' '));
-        if (call == "then") { if ((now = doc_add(d, value.c_str(), rest.c_str()))) doc_say(d, now, "name", r->name); continue; }
+        if (call == "then") { before = now; if ((now = doc_add(d, value.c_str(), rest.c_str()))) doc_say(d, now, "name", r->name); continue; }
         const int thing = now;
-        if (call == "set") doc_set(d, thing, value.c_str(), std::atof(rest.c_str()));
+        if (call == "set") doc_set(d, thing, value.c_str(), rest == "first" ? first : rest == "before" ? before : std::atof(rest.c_str()));   // (a thing it goes with: the recipe's first, or the one made before this one)
         else if (call == "say") doc_say(d, thing, value.c_str(), rest.c_str());
         else if (call == "key") { std::istringstream k(rest); double at = 0, is = 0; k >> at >> is; doc_key(d, thing, value.c_str(), d.stage->now + at, is); }
     }
