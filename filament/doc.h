@@ -145,6 +145,7 @@ static const DocValue doc_values[] = {
     {"field_size", "picture text shape", -1, 20, true, nullptr}, {"field_rotate", "picture text shape", -1e4, 1e4, true, nullptr},
     {"field_push", "picture text shape", -1e3, 1e3, true, nullptr},   // (and pushed so far away from its middle, in units of the stage; below 0: drawn in)
     {"wave_noise", "picture text shape", 0, 1, true, nullptr},   // (how much of the wave is a noise of each copy's own instead of a sine: Cavalry's noise; 1 all noise)
+    {"noise_scale", "picture text shape", 0, 1e3, true, nullptr},   // (that noise read where each copy lies, so near ones move alike: how large its blobs are, in units of the stage; 0: each copy its own)
     // (its copies scattered, each its own way by a seed: up to so far across and up (units), so far turned (degrees), so
     //  much larger or smaller (a share); another seed, another scattering)
     {"scatter_x", "picture text shape", 0, 1e4, true, nullptr}, {"scatter_y", "picture text shape", 0, 1e4, true, nullptr},
@@ -194,7 +195,7 @@ static const DocCard doc_cards[] = {
     {"Type", "split letter_spacing line_spacing italic wrap wrap_at"},
     {"Gradient", "gradient gradient_angle gradient_scale gradient_spread", "fill", "~ "},
     {"Copies", "copies copy_columns copy_x copy_y copy_rotate copy_turn copy_size stagger stagger_from copy_fill copy_fill_way"},
-    {"Wave", "wave_x wave_y wave_rotate wave_size wave_speed wave_phase wave_noise"},
+    {"Wave", "wave_x wave_y wave_rotate wave_size wave_speed wave_phase wave_noise noise_scale"},
     {"Field", "field_x field_y field_radius field_size field_rotate field_push"},
     {"Scatter", "scatter_x scatter_y scatter_rotate scatter_size seed"},
     {"Shine", "emissive", "kind", "!solid"},   // (a flat thing lit from within: past 1, the stage's bloom takes it up where it lies in the stage's own view; laid over a solid thing, a picture of its own is clear round it and keeps no halo: ThorVG's glow does that)
@@ -403,14 +404,19 @@ static math::mat4 doc_place(Doc& d, int thing, double now, int deeper, int copy,
         // (a wave through it: each copy so far behind the one before, at its own moment, a copy staggered so much later)
         const double speed = doc_number(d, thing, "wave_speed", said, 1), noisy = doc_number(d, thing, "wave_noise", said, 0);
         double w = std::sin((double)TAU * (speed * now - doc_number(d, thing, "wave_phase", said, 0) * copy / n));
-        if (noisy > 0.0) {   // (a smooth noise of its own: a random value at each beat, eased from one to the next, from the seed and the copy)
-            const auto at = [&](int64_t beat) {
-                uint32_t h = seed * 0x9E3779B9u ^ ((uint32_t)copy + 1u) * 0x85EBCA6Bu ^ (uint32_t)beat * 0xC2B2AE35u ^ 0x27d4eb2du;
+        if (noisy > 0.0) {   // (a smooth noise: random values at the corners of a lattice, eased between; its own for each copy, or, with a scale, read where the copy lies)
+            const double scale = doc_number(d, thing, "noise_scale", said, 0);
+            const auto at = [&](int64_t i, int64_t j, int64_t k) {
+                uint32_t h = seed * 0x9E3779B9u ^ (uint32_t)i * 0x85EBCA6Bu ^ (uint32_t)j * 0x27d4eb2du ^ (uint32_t)k * 0xC2B2AE35u ^ (scale > 0.0 ? 0u : ((uint32_t)copy + 1u) * 0x165667B1u);
                 h ^= h >> 16, h *= 0x7FEB352Du, h ^= h >> 15, h *= 0x846CA68Bu, h ^= h >> 16;
                 return (double)h / 2147483647.5 - 1.0;
             };
-            const double x = speed * now * 2.0, f = std::floor(x), u = x - f, e = u * u * (3.0 - 2.0 * u);
-            w = w * (1.0 - noisy) + noisy * (at((int64_t)f) * (1.0 - e) + at((int64_t)f + 1) * e);
+            const math::double3 p{scale > 0.0 ? shift.x / scale : 0.0, scale > 0.0 ? shift.y / scale : 0.0, speed * now * 2.0};
+            const math::double3 f{std::floor(p.x), std::floor(p.y), std::floor(p.z)}, u = p - f, e = u * u * (3.0 - 2.0 * u);
+            double sum = 0.0;
+            for (int c = 0; c < 8; ++c)
+                sum += at((int64_t)f.x + (c & 1), (int64_t)f.y + ((c >> 1) & 1), (int64_t)f.z + ((c >> 2) & 1)) * ((c & 1) ? e.x : 1.0 - e.x) * ((c & 2) ? e.y : 1.0 - e.y) * ((c & 4) ? e.z : 1.0 - e.z);
+            w = w * (1.0 - noisy) + noisy * sum;
         }
         shift += math::double3{doc_number(d, thing, "wave_x", said, 0), doc_number(d, thing, "wave_y", said, 0), 0.0} * w;
         own = own * math::mat4::rotation(w * doc_number(d, thing, "wave_rotate", said, 0) * (double)TAU / 360.0, math::double3{0, 0, 1}) *
@@ -1316,7 +1322,7 @@ static const DocRecipe doc_recipes[] = {
     {"Iris", "shape", "line", "lines round a centre, coloured in their order, breathing",
      "set size 1\nset anchor_x -1.6\nset copies 48\nset copy_turn 360\nsay copy_fill ff3366 ffd166 1b2fd8 ff3366\nset wave_size 0.3\nset wave_phase 3"},
     {"Dot wave", "shape", "circle", "a grid of dots rising and falling one after another",
-     "say fill ffd166\nset size 0.12\nset copies 160\nset copy_columns 16\nset copy_x 0.3\nset copy_y -0.3\nset wave_y 0.03\nset wave_size 0.4\nset wave_phase 3\nset wave_noise 0.7\nsay copy_fill ffd166 ff3366"},
+     "say fill ffd166\nset size 0.12\nset copies 160\nset copy_columns 16\nset copy_x 0.3\nset copy_y -0.3\nset wave_y 0.03\nset wave_size 0.6\nset wave_phase 3\nset wave_noise 1\nset noise_scale 0.8\nset wave_speed 0.4\nsay copy_fill ffd166 ff3366"},
     {"Tunnel", "shape", "rect", "squares within squares, turning one after another",
      "say fill 000000\nsay stroke ffffff\nset stroke_width 6\nset size 2.2\nset copies 24\nset copy_size 0.88\nset wave_rotate 30\nset wave_phase 1\nset wave_speed 0.5"},
     {"Text ripple", "text", "/System/Library/Fonts/Supplemental/Arial Unicode.ttf", "words whose letters bob one after another, coloured in their order",
