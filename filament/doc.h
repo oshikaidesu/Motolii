@@ -69,7 +69,7 @@ struct Doc {
     bool blurred = false;   // its lens blurs what is off its focus (solid things and things in the world only)
     // A thing clipped by the flat thing before it: the kit's matte it is cut by (its own), cut by which thing's picture,
     // and which of its own looks were told of it.
-    struct Cut { int matte = -1, from = 0; const Drawn* by = nullptr; MaterialInstance* look = nullptr; };
+    struct Cut { int matte = -1, from = 0; const Drawn* by = nullptr; MaterialInstance* look = nullptr; std::string how; };   // (how: by its clearness or its light, the other way about, how soft: as last cut)
     std::map<int, Cut> cuts;
     std::map<int, Shown> shown;   // the things as they are on the stage, and what each was made of
 };
@@ -91,6 +91,9 @@ static const DocValue doc_values[] = {
     {"focus", "camera", 0, 1e4, true, nullptr}, {"aperture", "camera", 0, 64, true, nullptr}, {"blur_level", "camera", 0, 100, true, nullptr},   // (After Effects' blur level: how many times the lens's own blur)
     {"opacity", "film picture text shape", 0, 1, true, nullptr},
     {"clip", doc_drawn, 0, 1, false, nullptr},
+    // (clipped by a flat thing before it, the kit's matte: by how clear that is or how light (After Effects' alpha and
+    //  luma mattes), the other way about (inverted), its edge so soft, in points of the screen)
+    {"clip_matte", doc_drawn, 0, 0, false, "alpha luma"}, {"clip_invert", doc_drawn, 0, 1, false, nullptr}, {"clip_feather", doc_drawn, 0, 500, false, nullptr},
     {"solo", doc_kinds, 0, 1, false, nullptr}, {"lock", doc_kinds, 0, 1, false, nullptr},   // (After Effects' own: while any thing is solo only those are seen; a locked thing is not changed)
     {"visible", doc_kinds, 0, 1, false, nullptr}, {"order", doc_kinds, -1e9, 1e9, false, nullptr}, {"wide", "shape", 1e-3, 1e3, false, nullptr}, {"shape", "shape", 0, 0, false, "rect circle solid polygon star line null"},
     {"points", "shape", 3, 100, false, nullptr}, {"inner", "shape", 0.01, 1, false, nullptr}, {"round", "shape", 0, 0.5, false, nullptr},   // (a polygon's or star's points, a star's inner points, a rect's corners)
@@ -151,6 +154,7 @@ struct DocCard { const char* title; const char* names; };
 static const DocCard doc_cards[] = {
     {"Type", "letter_spacing line_spacing italic wrap wrap_width"},
     {"Gradient", "gradient gradient_angle gradient_scale gradient_spread"},
+    {"Matte", "clip_matte clip_invert clip_feather"},
     {"Line", "cap join dash dash_offset"},
     {"Surface", "metallic roughness reflectance clear_coat clear_coat_roughness emissive"},
     {"Light", "intensity falloff cone shadows"},
@@ -553,15 +557,20 @@ static void doc_moment(Doc& d, double now) {
         const bool shaped = a && a->drawn && (t.drawn || t.film);
         Doc::Cut& cut = d.cuts[thing];
         MaterialInstance* const own = t.film ? t.film->look : t.drawn ? t.drawn->look : nullptr;
-        if (shaped && (cut.from != before || cut.by != a->drawn)) {   // (its matte takes that picture's shape, at that thing's place)
+        const std::string how = doc_word(d, thing, "clip_matte") + " " + std::to_string(doc_number(d, thing, "clip_invert", 0, 0)) + " " + std::to_string(doc_number(d, thing, "clip_feather", 0, 0));
+        if (shaped && (cut.from != before || cut.by != a->drawn || cut.how != how)) {   // (its matte takes that picture's shape, at that thing's place, cut as it is said)
+            if (cut.look) {   // (what cut its look before is let go of first)
+                std::erase_if(s.cuts, [&](const Stage::Cut& c) { return c.look == cut.look; });
+                cut.look->setParameter("matteUse", float4{0.f});
+            }
             if (cut.matte >= 0) {
                 Scene* sc = s.mattes[(size_t)cut.matte].scene;
                 doc_unshape(s, [sc](const Stage::Made& made) { return sc->hasEntity(made.thing); });
             }
-            cut.matte = matte(s, a->drawn->sheet, {mat4f(doc_place(d, before, now))}, a->drawn->texture, false, 1.f, cut.matte);
-            cut.from = before, cut.by = a->drawn, cut.look = nullptr;
+            cut.matte = matte(s, a->drawn->sheet, {mat4f(doc_place(d, before, now))}, a->drawn->texture, doc_word(d, thing, "clip_matte") == "luma", 1.f, cut.matte);
+            cut.from = before, cut.by = a->drawn, cut.look = nullptr, cut.how = how;
         }
-        if (shaped && cut.look != own && own && cut.matte >= 0) matted(s, own, cut.matte), cut.look = own;   // (its look, or its look made again, is cut by it)
+        if (shaped && cut.look != own && own && cut.matte >= 0) matted(s, own, cut.matte, doc_number(d, thing, "clip_invert", 0, 0) < 0.5, (float)doc_number(d, thing, "clip_feather", 0, 0)), cut.look = own;   // (its look, or its look made again, is cut by it)
         if (!shaped && cut.look) {   // (no longer cut so: the matte is let go of)
             std::erase_if(s.cuts, [&](const Stage::Cut& c) { return c.look == cut.look; });
             if (cut.look == own) cut.look->setParameter("matteUse", float4{0.f});
@@ -911,8 +920,8 @@ static bool doc_knows(Doc& d, int thing, const char* name = nullptr, const doubl
     if (number && v->words) return d.trouble = std::string(name) + " is a word, told by say" + (*v->words ? std::string(": ") + v->words : ""), false;
     if (word && !v->words) return d.trouble = std::string(name) + " is a number, told by set", false;
     if (word && *v->words && !doc_among(v->words, word)) return d.trouble = std::string(name) + " is one of: " + v->words, false;
-    if (number && (!std::isfinite(*number) || *number < v->low || *number > v->high || (doc_among("keyed clip visible solo lock shadows", name) && *number != 0.0 && *number != 1.0)))
-        return std::snprintf(range, sizeof range, doc_among("keyed clip visible solo lock shadows", name) ? " is 0 or 1" : " is from %g to %g", v->low, v->high), d.trouble = name + std::string(range), false;
+    if (number && (!std::isfinite(*number) || *number < v->low || *number > v->high || (doc_among("keyed clip visible solo lock shadows clip_invert", name) && *number != 0.0 && *number != 1.0)))
+        return std::snprintf(range, sizeof range, doc_among("keyed clip visible solo lock shadows clip_invert", name) ? " is 0 or 1" : " is from %g to %g", v->low, v->high), d.trouble = name + std::string(range), false;
     if (key && !v->moves) return d.trouble = std::string(name) + " does not move: keys go on " + moving, false;
     if ((number || word || key) && strcmp(name, "lock") && doc_number(d, thing, "lock", 0, 0) > 0.5) return d.trouble = "it is locked", false;
     if (number && !strcmp(name, "parent") && *number != 0.0) {   // (a parent is a thing that is there, and not the thing itself nor one that goes with it: the past repository's rule)
