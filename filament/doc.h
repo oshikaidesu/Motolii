@@ -77,6 +77,7 @@ struct Doc {
     struct Held { int thing = -1; std::map<std::string, double> from, tried; } held;   // (-1: nothing held; 0 is the stage, which a hand may hold by a value of its own)
     struct Keys { std::vector<double> at, value; std::vector<Interp> interp; std::vector<std::string> own; };   // (own: a way defined in the document, where the stretch is not one of the nine kinds)
     std::map<std::pair<int, std::string>, Keys> moving;   // a value's keys, and the way of the stretch after each; read from the facts when first asked for, forgotten at every change
+    std::map<std::pair<int, std::string>, std::string> words;   // a value's word, the same way
     std::map<std::string, sqlite3_stmt*> named, goes;     // a way by its name, and by its expression: made ready once (SQLite works it out)
     struct Shown { std::string of; Video* film = nullptr; Drawn* drawn = nullptr; Solid* solid = nullptr; Mesh* shape = nullptr; bool in = true, clipped = false, camera = false; int run = -1, lies = -1;
                    utils::Entity light;   // (a light, Filament's own: in every scene of the stage while it is on)
@@ -452,7 +453,7 @@ static bool doc_rows(Doc& d, char* ask, const std::function<void(sqlite3_stmt*)>
 }
 static void doc_forget(Doc& d) {
     d.phys_stale = true, d.scripted.clear();   // (the world made again only if what it is made of changed: doc_physics)
-    d.moving.clear();
+    d.moving.clear(), d.words.clear();
     d.named.clear();
     d.laid.clear();
 }
@@ -530,8 +531,11 @@ static double doc_number(Doc& d, int thing, const char* name, double at, double 
 }
 static std::string doc_word(Doc& d, int thing, const char* name) {
     if (thing == 0 && !strcmp(name, "kind")) return "stage";   // (thing 0 is the stage: its values are the whole picture's)
+    const auto known = d.words.find({thing, name});   // (asked again and again between changes: the document asked once)
+    if (known != d.words.end()) return known->second;
     std::string is;
     doc_rows(d, sqlite3_mprintf("select value from fact where thing = %d and name = %Q", thing, name), [&](sqlite3_stmt* row) { is = (const char*)sqlite3_column_text(row, 0); });
+    d.words.emplace(std::make_pair(thing, std::string(name)), is);
     return is;
 }
 

@@ -63,7 +63,7 @@ static void motolii_hand(Motolii* m, std::string document, int wide, int high, s
     static LinearToneMapper as_it_is;   // (a film, a photo, typed words keep the colours they came with)
     m->s->view->setColorGrading(ColorGrading::Builder().toneMapper(&as_it_is).build(*m->s->engine));
     const bool ok = room(*m->s, "out/small_studio/small_studio_ibl.ktx", 60000.f) && (m->d = doc_open(*m->s, document.c_str()));
-    if (ok && !says) doc_size_is(m->d->file, wide, high);   // (a new one is the size it was first opened at)
+    if (ok && !says) doc_size_is(m->d->file, wide, high), doc_forget(*m->d);   // (a new one is the size it was first opened at; what was read before is read again)
     opened->set_value(ok);
     if (!ok) return;
     auto last = std::chrono::steady_clock::now(), due = last, drawn = last;
