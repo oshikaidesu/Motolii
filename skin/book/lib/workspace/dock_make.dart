@@ -365,6 +365,8 @@ final _solids = (
 );
 const _asked = {
   'Text': ('text', '/System/Library/Fonts/Supplemental/Arial Unicode.ttf'),
+  'Rectangle': ('shape', 'rect'),
+  'Ellipse': ('shape', 'circle'),
   'Ring': ('solid', 'ring'),
   'Gem': ('solid', 'gem'),
   'Cube': ('solid', 'cube'),

@@ -18,9 +18,12 @@
 //            opacity                how much of it is there: 1 all, 0 none (a film's, a picture's, a text's)
 //            start, duration        when it comes on, and for how long (not said: for good, going round)
 //            begin, speed           a film's: from where in itself, how fast (below 0: backwards)
+//            clip                   1: it is seen only inside the frame of the thing before it (a 3D thing cut by a rectangle)
+//            wide                   a shape's: how many times as wide as it is high
 //            keyed                  a film's: 1 if its ground is keyed out (a green screen, of whatever colour: the colour its four corners share), 0 if not; not said: keyed if it has such a ground
 //   words    blend                  how it lies on what is behind: normal | add | multiply | screen
-//            file, shape            what it was made from (add says them): a file (a text's: its font); or, a solid's, one of the kit's shapes: ring | gem | cube
+//            file, shape            what it was made from (add says them): a file (a text's: its font); or, a solid's, one of the kit's shapes: ring | gem | cube;
+//                                   or, a shape's (a flat one, drawn by ThorVG), rect | circle
 //            text                   a text's: what it says (to the end of the line)
 //            fill                   what its surface is: a text's colour as six digits (ff3366); a solid's: a colour, or the material glass
 #include "drawn.h"
@@ -38,12 +41,12 @@ struct Doc {
     struct Keys { std::vector<double> at, value; std::vector<Interp> interp; std::vector<std::string> own; };   // (own: a way defined in the document, where the stretch is not one of the nine kinds)
     std::map<std::pair<int, std::string>, Keys> moving;   // a value's keys, and the way of the stretch after each; read from the facts when first asked for, forgotten at every change
     std::map<std::string, sqlite3_stmt*> named, goes;     // a way by its name, and by its expression: made ready once (SQLite works it out)
-    struct Shown { std::string of; Video* film = nullptr; Drawn* drawn = nullptr; Solid* solid = nullptr; Mesh* shape = nullptr; bool in = true; };
+    struct Shown { std::string of; Video* film = nullptr; Drawn* drawn = nullptr; Solid* solid = nullptr; Mesh* shape = nullptr; bool in = true, clipped = false; };
     std::map<int, Shown> shown;   // the things as they are on the stage, and what each was made of
 };
 // What a thing may be told, by name: which kinds of thing have it, a number between which two (or one of which
 // words), and whether it can move (take keys).
-static const char* const doc_kinds = "film picture text solid";   // (the kinds of thing)
+static const char* const doc_kinds = "film picture text solid shape";   // (the kinds of thing)
 static const char* const doc_shapes = "ring gem cube";             // (the kit's own shapes a solid may be)
 // (whether a value is keyed, in SQLite's words: see doc_key)
 #define DOC_KEYED "(select count(*) > 1 or max(at) <> 0 or max(way) is not null from fact where thing = %d and name = %Q)"
@@ -51,11 +54,12 @@ struct DocValue { const char* name; const char* kinds; double low, high; bool mo
 static const DocValue doc_values[] = {
     {"x", doc_kinds, -1e4, 1e4, true, nullptr}, {"y", doc_kinds, -1e4, 1e4, true, nullptr}, {"z", doc_kinds, -1e4, 1e4, true, nullptr},
     {"rotate", doc_kinds, -1e6, 1e6, true, nullptr}, {"rotate_x", doc_kinds, -1e6, 1e6, true, nullptr}, {"rotate_y", doc_kinds, -1e6, 1e6, true, nullptr},
-    {"size", doc_kinds, 1e-3, 1e4, true, nullptr}, {"opacity", "film picture text", 0, 1, true, nullptr},
+    {"size", doc_kinds, 1e-3, 1e4, true, nullptr}, {"opacity", "film picture text shape", 0, 1, true, nullptr},
+    {"clip", doc_kinds, 0, 1, false, nullptr}, {"wide", "shape", 1e-3, 1e3, false, nullptr}, {"shape", "shape", 0, 0, false, "rect circle"},
     {"start", doc_kinds, 0, 1e6, false, nullptr}, {"duration", doc_kinds, 1e-3, 1e6, false, nullptr},
     {"begin", "film", 0, 1e6, false, nullptr}, {"speed", "film", -100, 100, false, nullptr}, {"keyed", "film", 0, 1, false, nullptr},
-    {"blend", "film picture text", 0, 0, false, "normal add multiply screen"}, {"file", "film picture solid text", 0, 0, false, ""}, {"shape", "solid", 0, 0, false, doc_shapes},
-    {"text", "text", 0, 0, false, ""}, {"fill", "text solid", 0, 0, false, ""}};
+    {"blend", "film picture text shape", 0, 0, false, "normal add multiply screen"}, {"file", "film picture solid text", 0, 0, false, ""}, {"shape", "solid", 0, 0, false, doc_shapes},
+    {"text", "text", 0, 0, false, ""}, {"fill", "text solid shape", 0, 0, false, ""}};
 static bool doc_among(const std::string& words, const std::string& one) { return (" " + words + " ").find(" " + one + " ") != std::string::npos; }
 
 // Rows of the document: `each` is told every row of what is asked (in SQLite's own words).
@@ -137,6 +141,20 @@ static std::string doc_word(Doc& d, int thing, const char* name) {
     return is;
 }
 
+// Every look of a thing as it is on the stage (a sheet's one; a kit shape's, as many as it is drawn by; every face of a 3D file).
+static void doc_looks(Stage& s, const Doc::Shown& t, const std::function<void(MaterialInstance*)>& each) {
+    auto& faces = s.engine->getRenderableManager();
+    if (t.film) each(t.film->look);
+    if (t.drawn) each(t.drawn->look);
+    for (const Stage::Made& made : s.made)
+        if (t.shape && made.of == t.shape) each(faces.getMaterialInstanceAt(faces.getInstance(made.thing), 0));
+    for (size_t i = 0; t.solid && i < t.solid->made->getRenderableEntityCount(); ++i) {
+        const auto one = faces.getInstance(t.solid->made->getRenderableEntities()[i]);
+        for (size_t part = 0; part < faces.getPrimitiveCount(one); ++part) each(faces.getMaterialInstanceAt(one, part));
+    }
+}
+static bool doc_frame(Doc& d, int thing, double now, double* frame);
+
 // Every thing told its moment: whether it is on (from its start, for its duration if it has one), what of itself it
 // shows (it goes round when it comes to its end), and where it is.
 static void doc_moment(Doc& d, double now) {
@@ -157,6 +175,20 @@ static void doc_moment(Doc& d, double now) {
         if (t.solid) solid_to(s, t.solid, place); else move(s, m, [&](int, const mat4f&) { return place; });
         if (MaterialInstance* look = t.film ? t.film->look : t.drawn ? t.drawn->look : nullptr) look->setParameter("opacity", (float)doc_number(d, thing, "opacity", now, 1));
     }
+    // A clipped thing is seen only inside the frame of the thing before it: Filament's own scissor on its looks, told
+    // the rectangle of the picture that the thing before it covers now (a thing turned: the upright box around it).
+    int before = 0;
+    for (auto& [thing, t] : d.shown) {
+        double frame[5];
+        const bool clipped = t.in && before && doc_number(d, thing, "clip", 0, 0) > 0.5 && doc_frame(d, before, now, frame);
+        if (clipped || t.clipped) {
+            const double turn = frame[4] * TAU / 360.0, wide = std::fabs(frame[2] * std::cos(turn)) + std::fabs(frame[3] * std::sin(turn)), high = std::fabs(frame[2] * std::sin(turn)) + std::fabs(frame[3] * std::cos(turn));
+            const uint32_t left = (uint32_t)std::max(0.0, frame[0] - 0.5 * wide), bottom = (uint32_t)std::max(0.0, (double)s.h - (frame[1] + 0.5 * high));
+            doc_looks(s, t, [&](MaterialInstance* look) { if (clipped) look->setScissor(left, bottom, (uint32_t)std::lround(wide), (uint32_t)std::lround(high)); else look->unsetScissor(); });
+            t.clipped = clipped;
+        }
+        if (t.in) before = thing;
+    }
 }
 
 // The stage made to match the document: a thing the document has and the stage has not is made (by the kit's own
@@ -165,7 +197,7 @@ static void doc_moment(Doc& d, double now) {
 static bool doc_match(Doc& d) {
     Stage& s = *d.stage;
     std::map<int, std::string> told;   // every thing of the document, and all that its making goes by
-    doc_rows(d, sqlite3_mprintf("select thing, group_concat(name || '=' || value, ' ') from (select * from fact where name in ('kind','file','shape','blend','keyed','begin','duration','speed','text','fill') order by thing, name) group by thing"),
+    doc_rows(d, sqlite3_mprintf("select thing, group_concat(name || '=' || value, ' ') from (select * from fact where thing > 0 and name in ('kind','file','shape','blend','keyed','begin','duration','speed','text','fill','wide') order by thing, name) group by thing"),
              [&](sqlite3_stmt* row) { told[sqlite3_column_int(row, 0)] = (const char*)sqlite3_column_text(row, 1); });
     for (auto it = d.shown.begin(); it != d.shown.end();) {
         const auto still = told.find(it->first);
@@ -200,6 +232,9 @@ static bool doc_match(Doc& d) {
             const std::string words = doc_word(d, thing, "text");
             if (!fill.empty() && rgb < 0) why = "a text's fill is six digits, as ff3366";
             else made.drawn = type(s, words.empty() ? std::filesystem::path(file).stem().string().c_str() : words.c_str(), file.c_str(), mat4f{}, 1.f, fill.empty() ? float3{0x11 / 255.f} : colour, lay);
+        } else if (kind == "shape") {   // (a flat shape in one colour: ThorVG's own rectangle or circle)
+            if (!fill.empty() && rgb < 0) why = "a shape's fill is six digits, as ff3366";
+            else made.drawn = flat(s, shape.c_str(), (float)doc_number(d, thing, "wide", 0, 1), mat4f{}, 1.f, fill.empty() ? float3{0xd9, 0xd2, 0xc3} / 255.f : colour, lay);
         } else if (kind == "solid") {   // (one of the kit's shapes, or a file; its fill is its surface: a colour, or the material glass)
             const bool glass = fill == "glass";
             if (!fill.empty() && !glass && rgb < 0) why = "a solid's fill is six digits, as ff3366, or glass";
@@ -360,8 +395,8 @@ static bool doc_knows(Doc& d, int thing, const char* name = nullptr, const doubl
     if (number && v->words) return d.trouble = std::string(name) + " is a word, told by say" + (*v->words ? std::string(": ") + v->words : ""), false;
     if (word && !v->words) return d.trouble = std::string(name) + " is a number, told by set", false;
     if (word && *v->words && !doc_among(v->words, word)) return d.trouble = std::string(name) + " is one of: " + v->words, false;
-    if (number && (!std::isfinite(*number) || *number < v->low || *number > v->high || (!strcmp(name, "keyed") && *number != 0.0 && *number != 1.0)))
-        return std::snprintf(range, sizeof range, !strcmp(name, "keyed") ? " is 0 or 1" : " is from %g to %g", v->low, v->high), d.trouble = name + std::string(range), false;
+    if (number && (!std::isfinite(*number) || *number < v->low || *number > v->high || (doc_among("keyed clip", name) && *number != 0.0 && *number != 1.0)))
+        return std::snprintf(range, sizeof range, doc_among("keyed clip", name) ? " is 0 or 1" : " is from %g to %g", v->low, v->high), d.trouble = name + std::string(range), false;
     if (key && !v->moves) return d.trouble = std::string(name) + " does not move: keys go on " + moving, false;
     return true;
 }
@@ -375,6 +410,7 @@ static const char* doc_kind_of(const char* file) {
     std::string end = std::filesystem::path(file).extension().string();
     for (char& c : end) c = (char)std::tolower((unsigned char)c);
     if (doc_among(doc_shapes, file)) return "solid";
+    if (doc_among("rect circle", file)) return "shape";
     for (const auto& one : made)
         if (end.size() > 1 && doc_among(one.ends, end.substr(1))) return one.kind;
     return "";
@@ -385,7 +421,7 @@ static int doc_add(Doc& d, const char* kind, const char* file) {
     if (!doc_among(doc_kinds, kind)) return d.trouble = std::string("a thing is one of: ") + doc_kinds, 0;
     // (it comes on at the stage's present moment)
     if (!doc_change(d, sqlite3_mprintf("insert into thing default values; insert into fact(thing, name, at, value) values(last_insert_rowid(), 'kind', 0.0, %Q); insert into fact(thing, name, at, value) values(last_insert_rowid(), %Q, 0.0, %Q); insert into fact(thing, name, at, value) select id, 'start', 0.0, %!.17g from thing where %d order by id desc limit 1",
-                                       kind, !strcmp(kind, "solid") && doc_among(doc_shapes, file) ? "shape" : "file", file, d.stage->now, d.stage->now > 0.0))) return 0;
+                                       kind, (!strcmp(kind, "solid") && doc_among(doc_shapes, file)) || !strcmp(kind, "shape") ? "shape" : "file", file, d.stage->now, d.stage->now > 0.0))) return 0;
     int thing = 0;   // (the newest number: SQLite's own count of things, which a change not made does not move)
     doc_rows(d, sqlite3_mprintf("select max(id) from thing"), [&](sqlite3_stmt* row) { thing = sqlite3_column_int(row, 0); });
     return thing;
@@ -538,6 +574,23 @@ static bool doc_half(Doc& d, int thing, float2* half) {
     return *half = most, true;
 }
 
+// A thing's frame on the picture at a moment, as the stage's own eye sees it: its middle, how wide and how high (points
+// of the picture, from the top left), and how far it is turned (degrees, clockwise as seen). false: it is not shown.
+static bool doc_frame(Doc& d, int thing, double now, double* frame) {
+    float2 half{0.f};
+    if (!doc_half(d, thing, &half)) return false;
+    Stage& s = *d.stage;
+    const double size = doc_number(d, thing, "size", now, 1);
+    const math::double3 at{doc_number(d, thing, "x", now, 0), doc_number(d, thing, "y", now, 0), doc_number(d, thing, "z", now, 0)};
+    const math::mat4 eye = s.camera->getProjectionMatrix() * s.camera->getViewMatrix();
+    const auto seen = [&](math::double3 p) { const math::double4 c = eye * math::double4{p, 1.0}; return math::double2{(0.5 + 0.5 * c.x / c.w) * s.w, (0.5 - 0.5 * c.y / c.w) * s.h}; };
+    const math::double2 middle = seen(at), right = seen(at + math::double3{1, 0, 0});
+    const double point = right.x - middle.x;   // (how many points of the picture one unit of the stage is, where the thing stands)
+    frame[0] = middle.x, frame[1] = middle.y, frame[2] = 2.0 * half.x * size * point, frame[3] = 2.0 * half.y * size * point;
+    frame[4] = -doc_number(d, thing, "rotate", now, 0);
+    return true;
+}
+
 // A value shown for now and not written: what a shell does while a hand is still on the thing (a drag). The document
 // is not changed and no step is made; the next change, or doc_try_drop, puts the document's own value back.
 static bool doc_try(Doc& d, int thing, const char* name, double is) {
@@ -550,7 +603,7 @@ static bool doc_try(Doc& d, int thing, const char* name, double is) {
 static void doc_try_drop(Doc& d) { doc_forget(d), doc_moment(d, d.stage->now); }
 
 // What a value is where the document does not say; and a value at a moment, as the stage is told it.
-static double doc_usual(const char* name) { return !strcmp(name, "size") || !strcmp(name, "speed") || !strcmp(name, "opacity") ? 1.0 : !strcmp(name, "duration") ? -1.0 : 0.0; }
+static double doc_usual(const char* name) { return doc_among("size speed opacity wide", name) ? 1.0 : !strcmp(name, "duration") ? -1.0 : 0.0; }
 static bool doc_value(Doc& d, int thing, const char* name, double at, double* is) { return doc_knows(d, thing, name) && (*is = doc_number(d, thing, name, at, doc_usual(name)), true); }
 static bool doc_undo(Doc& d) { return doc_step(d, true); }
 static bool doc_redo(Doc& d) { return doc_step(d, false); }

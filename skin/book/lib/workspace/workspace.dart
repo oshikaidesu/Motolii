@@ -170,6 +170,22 @@ Map<String, String> _words(Ws ws, String? id) {
   };
 }
 
+/// Joined: the on/off seats the document has something behind (Clip to below: seen only inside the frame of the thing
+/// before it), and a change of them told to it. A seat with nothing behind it is not taken, and goes back.
+Map<String, bool> _flags(Ws ws, String? id) {
+  final m = ws.inside, t = int.tryParse(id ?? '');
+  if (m == null || t == null) return const {};
+  return {'clip': (m.value(t, 'clip', 0) ?? 0) > .5, 'ghost': false};
+}
+
+bool _flag(Ws ws, String? id, Map<String, bool> changed) {
+  final m = ws.inside!, t = int.tryParse(id ?? '');
+  if (t == null) return false;
+  final all = changed.entries.every((e) => e.key == 'clip' && m.set(t, 'clip', e.value ? 1 : 0));
+  ws.reread();
+  return all;
+}
+
 /// Joined: what the choosers offer is what the document has words for (a thing with no blend lies as it comes: Normal).
 Map<String, List<String>> _choices(Ws ws, String? id) {
   final m = ws.inside, t = int.tryParse(id ?? '');
@@ -214,12 +230,12 @@ Map<String, double> _transform(Ws ws, String? id) {
     final at = ws.frame / Ws.fps, p = m.point;
     double v(String name) => m.value(t, name, at) ?? 0;
     double r1(double x) => (x * 10).roundToDouble() / 10;
-    final s = r1(v('size') * 100);
+    final s = r1(v('size') * 100), wide = m.value(t, 'wide', 0) ?? 1; // (a flat shape may be wider than it is high: its scale x)
     return {
       'pos.x': r1(WsArt.comp.width / 2 + v('x') * p),
       'pos.y': r1(WsArt.comp.height / 2 - v('y') * p),
       'pos.z': r1(v('z') * p),
-      'scale.x': s,
+      'scale.x': r1(v('size') * wide * 100),
       'scale.y': s,
       'scale.z': s, // (a thing has one size)
       'rot.x': r1(v('rotate_x')) + 0,
@@ -263,8 +279,19 @@ void _write(Ws ws, String? id, Map<String, double> changed, {required bool live}
   final m = ws.inside!, t = int.tryParse(id ?? '');
   if (t == null) return;
   final at = ws.frame / Ws.fps;
+  // (a flat shape's scale x and y are the document's size and how many times as wide as high it is)
+  final shaped = m.word(t, 'kind') == 'shape' && (changed.containsKey('scale.x') || changed.containsKey('scale.y'));
+  if (shaped) {
+    final size = m.value(t, 'size', at) ?? 1, wide = m.value(t, 'wide', 0) ?? 1;
+    final x = (changed['scale.x'] ?? size * wide * 100) / 100, y = (changed['scale.y'] ?? size * 100) / 100;
+    if (live) {
+      m.tryValue(t, 'size', y);
+    } else {
+      m.together(() => m.put(t, 'size', at, y) && m.set(t, 'wide', x / y));
+    }
+  }
   for (final e in changed.entries) {
-    final to = _asDocument(ws, e.key, e.value);
+    final to = shaped && e.key.startsWith('scale.') ? null : _asDocument(ws, e.key, e.value);
     if (to == null) continue;
     final (name, number) = to;
     live ? m.tryValue(t, name, number) : m.put(t, name, at, number);
@@ -319,6 +346,8 @@ class _InspectorSeat extends StatelessWidget {
         strs: {'fill': ?_fillWord(ws, l?.id, fill), ..._words(ws, l?.id)},
         onWords: ws.inside == null ? null : (changed) => _say(ws, l?.id, changed),
         choices: _choices(ws, l?.id),
+        flags: _flags(ws, l?.id),
+        onFlags: ws.inside == null ? null : (changed) => _flag(ws, l?.id, changed),
         keyMarks: _keyMarks(ws, l?.id),
         onValues: ws.inside == null ? null : (changed, {required live}) => _write(ws, l?.id, changed, live: live),
         onDrop: ws.inside?.tryDrop,

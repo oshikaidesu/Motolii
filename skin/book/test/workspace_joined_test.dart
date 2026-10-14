@@ -7,7 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lab_book/motolii.dart';
-import 'package:lab_book/sets/inspector/inspector_parts.dart' show TextGroup;
+import 'package:lab_book/sets/inspector/inspector_parts.dart' show OnOff, PropRow, TextGroup;
 import 'package:lab_book/workspace/timeline.dart';
 import 'package:lab_book/workspace/workspace.dart';
 import 'package:lab_book/workspace/ws.dart';
@@ -171,6 +171,34 @@ void main() {
     expect(find.text('1080 × 1920'), findsOneWidget);
     expect(again.things, [cube], reason: 'the same document');
     expect(again.undo(), isTrue, reason: 'and its steps are still there');
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
+  testWidgets('a flat shape is a thing; Clip to below shows a thing only inside the one before it; a seat with nothing behind goes back', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    final rect = m.add('', 'rect');
+    expect([m.word(rect, 'kind'), m.word(rect, 'shape')], ['shape', 'rect'], reason: m.trouble);
+    expect(m.say(rect, 'fill', '1b2fd8') && m.set(rect, 'wide', 2), isTrue, reason: m.trouble);
+    final cube = m.add('solid', 'cube');
+    expect(m.set(cube, 'clip', 2), isFalse, reason: 'clip is 0 or 1');
+    ws
+      ..reread()
+      ..select('$cube');
+    await t.pumpAndSettle();
+    expect(ws.layers.map((l) => l.name), ['Rect', 'Cube']);
+
+    Finder seat(String label) => find.descendant(of: find.ancestor(of: find.text(label), matching: find.byType(PropRow)), matching: find.byType(OnOff));
+    await t.ensureVisible(seat('Clip to below'));
+    await t.pumpAndSettle();
+    await t.tap(seat('Clip to below'));
+    await t.pumpAndSettle();
+    expect(m.value(cube, 'clip', 0), 1, reason: 'the seat is the document\'s clip');
+    expect(t.widget<OnOff>(seat('Clip to below')).on, isTrue);
+    await t.tap(seat('Ghost'));
+    await t.pumpAndSettle();
+    expect(t.widget<OnOff>(seat('Ghost')).on, isFalse, reason: 'nothing is behind it: it goes back');
+    expect(m.undo() && m.value(cube, 'clip', 0) == 0, isTrue, reason: 'one step back: the clip');
     expect(t.takeException(), isNull);
     await _close(t);
   }, skip: !_built);

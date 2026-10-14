@@ -47,6 +47,8 @@
   窓の指摘で直した物：再生中に値を動かすと保存されない → 手が触れたら再生を止め、手の下の値は上書きしない／Rotation X・Y が空 → 中身に `rotate_x`・`rotate_y`／見本の数（Effects 2個、Fill、Scale Z）→ 文書に在る物だけ出す／Effects の Add・Fonts の Apply → 「No seat yet」／最初のキーが前の値を書き換える → 文書の決まりを1つに（値は「そのままの値」か「キー」のどちらか。キーは1個でもキー。最初のキーはそのままの値と入れ替わる。最後のキーを外すと値に戻る）／断りの文は理由が先／新しい文字は「Text」で大きさ 0.5。
   そのあと直した物：舞台で物を引きずれる（引いてる間は書かずに見せ、離した時に x と y を1歩で置く。テストにも入れた）／同じ奥行きなら後から置いた物が手前（後の物ほど髪の毛1本ぶん手前）／棚の小さい絵は本物（動画は最初の1枚を GStreamer が書く：`motolii_thumbnail`、1本 0.15 秒、別の走り手で作るので窓は待たない。写真は Flutter が読む。絵の無い物は種類の印だけの札。`reports/skin_run/live_07_real_thumbnails.jpg`）／フォルダを押すとそのフォルダが開く／Blend の一覧は中身にある4つだけ（`motolii_words`）で、机に重なる下の行も押せる。
   さらに足した物：タイムラインのバーを手で持てる（胴を持つと滑る＝いつ出るか、端を持つとそこで切る＝`motolii_trim`。頭を切った動画は、各時刻に前と同じ絵を出し続ける。`reports/skin_run/live_08_bars_held.jpg`）／**文書が自分の舞台の大きさを持つ**（物0番の `wide`・`high`。在る文書はその大きさで開き、新しい文書は最初に開いた大きさ。上の帯の大きさの札を押すと 横長 → 縦長 → 正方形 と回って、その場で開き直る。取り消しの歩ではない）／上の帯の題は文書の名前。
+  **的③の部品**（`reports/skin_run/clip_is_a_rectangle.jpg`）：平らな形（種類 `shape`：rect・circle、ThorVG の Shape。`fill` で色、`wide` で横幅の比＝帯。Create 棚の Rectangle・Ellipse）／切り抜き `clip`（1：1つ前の物の枠の中だけ見える。絵を別に描く仕掛けは使わず、Filament に元からある「材質ごとの四角」`setScissor` に、前の物の枠を毎コマ渡すだけ。glb にもそのまま効く。インスペクタの Clip to below の席）／Filament 自前の陰（SSAO）を舞台で入れた（素の塗りの立体が立体に見える。手本の作りの絵で1枚 3.76 ms）。
+  限り：切り抜きは四角だけ（前の物が丸や字でも、その外枠の四角で切る。回した物は立てた外枠）。見本の文書で陰を入れた後の重さは未計測。
   **残ってる指摘**：重なりの順を入れ替える入口が無い（新しい物が手前、まで）、`saturn_v.glb` が大きさを触るまで見えなかった（1回）、舞台の下の帯の「S 100%」、Render と大きさの札が無反応、Colors の「Used here」の数、Elastic の線が直線、glb にガラス、文字の Size・Alignment、窓の大きさ変更と 60 コマは未計測、的③は 3D を四角で切る席が無い。
 - 開き方：`skin/book` で Flutter（`~/rust_ae/Motolii/.tools/flutter/bin/flutter`）の `build macos --debug --dart-define=LAB_ROUTE=/?path=workspace/workspace/live`、できた `lab_book.app` を開く。文書は `filament/out/skin.motolii`。
 

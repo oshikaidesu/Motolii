@@ -135,7 +135,7 @@ class Ws extends ChangeNotifier {
             final kind = m.word(t, 'kind'), file = m.word(t, 'file'), from = ((m.value(t, 'start', 0) ?? 0) * fps).round(), lasts = m.lasts(t);
             final name = switch (kind) {
               'text' => m.word(t, 'text').isEmpty ? file.split('/').last : m.word(t, 'text'),
-              'solid' when m.word(t, 'shape').isNotEmpty => m.word(t, 'shape').replaceRange(0, 1, m.word(t, 'shape')[0].toUpperCase()),
+              'solid' || 'shape' when m.word(t, 'shape').isNotEmpty => m.word(t, 'shape').replaceRange(0, 1, m.word(t, 'shape')[0].toUpperCase()),
               _ => file.split('/').last,
             };
             // (a key on any value of it that takes keys is a key on its bar: the inside says which those are)

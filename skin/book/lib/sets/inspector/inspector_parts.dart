@@ -152,6 +152,8 @@ class InspHost extends StatefulWidget {
     this.onDrop,
     this.onKey,
     this.onWords,
+    this.flags = const {},
+    this.onFlags,
     this.choices = const {},
     this.together,
     required this.child,
@@ -186,6 +188,11 @@ class InspHost extends StatefulWidget {
   /// Words changed in the inspector (a text's content, a chooser's choice). false: the host did not take them, and they go back to what they were.
   final bool Function(Map<String, String> changed)? onWords;
 
+  /// The on/off seats the host owns (Clip to below ...), and a change of them told to it. false: the host did not
+  /// take it (nothing is behind that seat), and the seat goes back.
+  final Map<String, bool> flags;
+  final bool Function(Map<String, bool> changed)? onFlags;
+
   /// What a chooser may offer, by its id, where the host's document has its own words for it (a blend's).
   final Map<String, List<String>> choices;
 
@@ -203,6 +210,7 @@ class _InspHostState extends State<InspHost> {
       ..v.addAll(widget.values)
       ..s2.addAll(widget.strs)
       ..choices.addAll(widget.choices)
+      ..b.addAll(widget.flags)
       ..keys.addAll(widget.keyMarks);
     _seen
       ..clear()
@@ -213,6 +221,9 @@ class _InspHostState extends State<InspHost> {
     _seenWords
       ..clear()
       ..addAll(d.s2);
+    _seenFlags
+      ..clear()
+      ..addAll(d.b);
     return d..addListener(_r);
   }
 
@@ -220,6 +231,7 @@ class _InspHostState extends State<InspHost> {
   final _seen = <String, double>{};
   final _seenKeys = <String, KeyS>{};
   final _seenWords = <String, String>{};
+  final _seenFlags = <String, bool>{};
   bool _live = false;
   void _tell() => widget.together == null ? _tells() : widget.together!(_tells);
   void _tells() {
@@ -243,6 +255,21 @@ class _InspHostState extends State<InspHost> {
       for (final e in doc.s2.entries)
         if (e.key != 'route' && _seenWords[e.key] != e.value) e.key: e.value,
     };
+    if (widget.onFlags case final tell?) {
+      final flags = {
+        for (final e in doc.b.entries)
+          if ((_seenFlags[e.key] ?? false) != e.value) e.key: e.value,
+      };
+      if (flags.isNotEmpty) {
+        if (tell(flags)) {
+          _seenFlags.addAll(flags);
+        } else {
+          for (final id in flags.keys) {
+            doc.b[id] = _seenFlags[id] ?? false;
+          }
+        }
+      }
+    }
     if (words.isEmpty) return;
     if (widget.onWords?.call(words) ?? true) {
       _seenWords.addAll(words);
@@ -276,6 +303,10 @@ class _InspHostState extends State<InspHost> {
       if (owned ? !doc.inGesture : !mapEquals(o.values, widget.values)) {
         doc.v.addAll(widget.values);
         _seen.addAll(widget.values);
+      }
+      if (widget.onFlags != null) {
+        doc.b.addAll(widget.flags);
+        _seenFlags.addAll(widget.flags);
       }
       if (widget.onWords != null || !mapEquals(o.strs, widget.strs)) {
         doc.s2.addAll(widget.strs);

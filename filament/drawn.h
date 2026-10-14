@@ -146,6 +146,20 @@ static Drawn* type(Stage& s, const char* words, const char* fontFile, const mat4
     }, place, high, float3{-1.f}, true, lay);
 }
 
+// A flat shape in one colour, drawn by ThorVG's own Shape (a rectangle, a circle): `wide` times as wide as it is high.
+static Drawn* flat(Stage& s, const char* form, float wide, const mat4f& place, float high, float3 colour, const char* lay = nullptr) {
+    return drawn(s, [&](Drawn*, int* w, int* h) -> tvg::Paint* {
+        const float tall = std::min(0.5f * (float)std::max(s.w, s.h), 4096.f / std::max(wide, 1e-3f));   // (as fine as half the stage; a long thin bar less high, so that it is as long as it is said)
+        *h = std::max(2, 2 * (int)std::ceil(0.5f * tall));
+        *w = std::max(2, 2 * (int)std::ceil(0.5f * tall * wide));
+        tvg::Shape* shape = tvg::Shape::gen();
+        if (!strcmp(form, "circle")) shape->appendCircle(0.5f * (float)*w, 0.5f * (float)*h, 0.5f * (float)*w, 0.5f * (float)*h);
+        else shape->appendRect(0.f, 0.f, (float)*w, (float)*h);
+        shape->fill((uint8_t)std::lround(255.f * colour.x), (uint8_t)std::lround(255.f * colour.y), (uint8_t)std::lround(255.f * colour.z));
+        return shape;
+    }, place, high, float3{-1.f}, true, lay);
+}
+
 // A picture taken off the stage for good.
 static void picture_off(Stage& s, Drawn* d) {
     s.playing.erase(d);
