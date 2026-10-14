@@ -159,7 +159,8 @@ static const DocValue doc_values[] = {
     {"fog", "stage", 0, 1, false, nullptr}, {"fog_color", "stage", 0, 0, false, ""},
     {"anti_aliasing", "stage", 0, 0, false, "fxaa taa none"},   // (how its edges are smoothed: Filament's FXAA as it came, its temporal one (steadier on fine edges in motion), or not)
     {"room", "stage", 0, 0, false, "small_studio studio_small_02_2k lightroom venetian_crossroads_2k graffiti_shelter_2k parking_garage_2k pillars_2k"},   // (which room lights it: the rooms made ready in out/)
-    {"environment", "stage", 0, 10, false, nullptr}, {"environment_rotate", "stage", -1e6, 1e6, false, nullptr}, {"background", "stage", 0, 0, false, ""}};   // (a colour, six digits; or "room": the room itself)
+    {"environment", "stage", 0, 10, false, nullptr}, {"environment_rotate", "stage", -1e6, 1e6, false, nullptr}, {"background", "stage", 0, 0, false, ""},
+    {"behind", "stage", 0, 0, false, "colour room"}};   // (what is behind everything: the background's colour, or the room itself)
 // The cards a maker sees a thing's values on, besides where it is and its fill: a title and the values on it, in the
 // order shown (a thing is shown those of them its kind has). A value the window has no other seat for goes here.
 struct DocCard { const char* title; const char* names; const char* when = nullptr; const char* is = nullptr; };   // (shown only while `when` is `is`; "!...": is not; "~...": has it in it)
@@ -175,7 +176,7 @@ static const DocCard doc_cards[] = {
     {"Projection", "projection shift_x shift_y"},
     {"Grade", "tone_mapper exposure contrast saturation vibrance temperature"},
     {"Lens", "bloom lens_flare vignette vignette_color fog fog_color anti_aliasing"},
-    {"Room", "room environment environment_rotate background"},
+    {"Room", "room environment environment_rotate behind background"},
 };
 static bool doc_among(const std::string& words, const std::string& one) { return (" " + words + " ").find(" " + one + " ") != std::string::npos; }
 
@@ -403,7 +404,7 @@ static void doc_look(Doc& d) {
         room->setRotation(math::mat3f::rotation((float)(doc_number(d, 0, "environment_rotate", 0, 0) * (double)TAU / 360.0), math::float3{0, 1, 0}));
     }
     const std::string behind = doc_word(d, 0, "background");
-    if (behind == "room") {   // (the room itself behind everything, as bright as it lights the stage: its own picture, made once a room)
+    if (doc_word(d, 0, "behind") == "room") {   // (the room itself behind everything, as bright as it lights the stage: its own picture, made once a room)
         static std::map<std::string, Skybox*> shown;
         Skybox*& sky = shown[d.roomIs];
         if (!sky) {
