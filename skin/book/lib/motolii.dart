@@ -86,6 +86,8 @@ class Motolii {
   late final _tryDrop = _lib.lookupFunction<Int32 Function(_P), int Function(_P)>('motolii_try_drop');
   late final _put = _lib.lookupFunction<Int32 Function(_P, Int32, _S, Double, Double), int Function(_P, int, _S, double, double)>('motolii_put');
   late final _keyHere = _lib.lookupFunction<Int32 Function(_P, Int32, _S, Double), int Function(_P, int, _S, double)>('motolii_key_here');
+  late final _size = _lib.lookupFunction<Int32 Function(_P, Int32, Int32), int Function(_P, int, int)>('motolii_size');
+  late final _sizeOf = _lib.lookupFunction<Int32 Function(_P, Pointer<Int32>, Pointer<Int32>), int Function(_P, Pointer<Int32>, Pointer<Int32>)>('motolii_size_of');
   late final _trim = _lib.lookupFunction<Int32 Function(_P, Int32, Double, Double), int Function(_P, int, double, double)>('motolii_trim');
   late final _stay = _lib.lookupFunction<Int32 Function(_P, Int32, _S, Double), int Function(_P, int, _S, double)>('motolii_stay');
   late final _keyed = _lib.lookupFunction<Int32 Function(_P, Int32, _S, Double), int Function(_P, int, _S, double)>('motolii_keyed');
@@ -188,6 +190,16 @@ class Motolii {
   bool keyHere(int thing, String name, double at) => _with([name], (s) => _keyHere(_m, thing, s[0], at)) != 0;
   bool stay(int thing, String name, double at) => _with([name], (s) => _stay(_m, thing, s[0], at)) != 0;
   int keyed(int thing, String name, double at) => _with([name], (s) => _keyed(_m, thing, s[0], at));
+
+  /// The size of the stage the document is open on; and the size it is to be when it is next opened (close, open again).
+  late final (int, int) size = () {
+    final at = malloc<Int32>(2);
+    _sizeOf(_m, at, at + 1);
+    final is_ = (at[0], at[1]);
+    malloc.free(at);
+    return is_;
+  }();
+  bool resize(int wide, int high) => _size(_m, wide, high) != 0;
 
   /// When a thing is on, cut at its bar's ends: from [from] to [to] seconds of the stage (motolii.h).
   bool trim(int thing, double from, double to) => _trim(_m, thing, from, to) != 0;

@@ -6,6 +6,7 @@ import 'package:flutter/widgets.dart';
 
 import '../motolii.dart';
 import '../tokens.dart';
+import 'stage_art.dart' show WsArt;
 
 /// The window's own sizes and colours. A seat names one of these; it never types a number that is the window's business.
 abstract final class WsT {
@@ -102,9 +103,14 @@ class Ws extends ChangeNotifier {
   Motolii? get inside => _inside;
   void join(Motolii inside) {
     _inside = inside;
+    WsArt.comp = Size(inside.size.$1.toDouble(), inside.size.$2.toDouble());
     _frame = (inside.now * fps).round(); // (the playhead is the inside's moment from the first)
     reread();
   }
+
+  /// Joined: the document's name, and how the window is told to open it again at another size (the host does it).
+  String? document;
+  void Function(int wide, int high)? onSize;
 
   /// How many times the document has been read again.
   int rev = 0;

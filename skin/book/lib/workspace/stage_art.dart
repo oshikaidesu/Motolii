@@ -117,8 +117,8 @@ class _Bit {
 
 /// The poster: document size, placement constants, painting and hit testing.
 abstract final class WsArt {
-  static const comp = Size(1920, 1080);
-  static const centre = Offset(960, 540);
+  static Size comp = const Size(1920, 1080); // (the sample's; a joined document's own)
+  static Offset get centre => comp.center(Offset.zero);
   static const _frame = 36.0, _baseline = 812.0, _left = 150.0, _titlePx = 410.0;
   static const _chips = [('MOTION', ArtInk.lime), ('TYPE', ArtInk.pink), ('LOOP', ArtInk.orange), ('30 FPS', ArtInk.cream)];
   static const _chipH = 64.0, _chipGap = 14.0, _chipTop = 872.0;
@@ -245,7 +245,7 @@ abstract final class WsArt {
     if (s.boxes case final real?) return s.layer(id)?.live(s.frame) ?? false ? real[id] : null;
     final l = s.layer(id), f = s.frame;
     if (l == null || l.kind == WsKind.audio) return null;
-    if (l.kind == WsKind.camera) return s.camera ? const ArtBox(centre, comp) : cameraBox(s);
+    if (l.kind == WsKind.camera) return s.camera ? ArtBox(centre, comp) : cameraBox(s);
     if (!l.live(f)) return null;
     switch (l.id) {
       case 'blob':
@@ -263,7 +263,7 @@ abstract final class WsArt {
       case 'confetti':
         return ArtBox(_confettiArea.center, _confettiArea.size);
       default:
-        return const ArtBox(centre, comp);
+        return ArtBox(centre, comp);
     }
   }
 

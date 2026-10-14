@@ -45,7 +45,16 @@ class _WorkspaceState extends State<Workspace> {
     final id = await inside.texture();
     if (!mounted) return;
     if (id >= 0) _ws.stageTexture = id;
-    _ws.join(inside);
+    _ws
+      ..document = doc.split('/').last
+      ..onSize = (wide, high) {
+        // (a stage is opened at a size: the document is told its new one, closed, and opened again)
+        if (!inside.resize(wide, high)) return;
+        _ws.stageTexture = null;
+        inside.close();
+        _join(doc);
+      }
+      ..join(inside);
   }
 
   @override

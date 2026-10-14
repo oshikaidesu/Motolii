@@ -158,6 +158,23 @@ void main() {
     await _close(t);
   }, skip: !_built);
 
+  testWidgets('a document says its own size: the size chip turns the stage tall, and it is tall when opened again', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    expect(m.size, (1920, 1080));
+    final cube = m.add('solid', 'cube');
+    expect(cube, isNot(0));
+    await t.tap(find.byKey(const ValueKey('ws-top-size')));
+    await t.pumpAndSettle();
+    final again = ws.inside!;
+    expect(identical(again, m), isFalse, reason: 'closed and opened again');
+    expect(again.size, (1080, 1920));
+    expect(find.text('1080 × 1920'), findsOneWidget);
+    expect(again.things, [cube], reason: 'the same document');
+    expect(again.undo(), isTrue, reason: 'and its steps are still there');
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
   testWidgets('Backspace on the timeline takes the picked thing out; undo brings it back', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final ring = m.add('solid', 'ring'), cube = m.add('solid', 'cube');

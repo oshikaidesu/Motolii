@@ -228,6 +228,27 @@ static double doc_seconds(Doc& d) {
     return all > 0.0 ? all : 8.0;
 }
 
+// A document's own stage: how many points wide and high it is (facts of thing 0, which is the stage itself; they are
+// not steps: a stage is opened at a size, so a new size is the document's when it is next opened).
+// doc_size: read before a stage is opened for the document (false: it does not say, or it is not there yet).
+static bool doc_size(const char* path, int* wide, int* high) {
+    sqlite3* file = nullptr;
+    sqlite3_stmt* rows = nullptr;
+    int w = 0, h = 0;
+    if (sqlite3_open_v2(path, &file, SQLITE_OPEN_READONLY, nullptr) == SQLITE_OK && sqlite3_prepare_v2(file, "select name, value from fact where thing = 0 and name in ('wide', 'high')", -1, &rows, nullptr) == SQLITE_OK)
+        while (sqlite3_step(rows) == SQLITE_ROW) (strcmp((const char*)sqlite3_column_text(rows, 0), "wide") ? h : w) = sqlite3_column_int(rows, 1);
+    sqlite3_finalize(rows);
+    sqlite3_close(file);
+    return w > 0 && h > 0 ? (*wide = w, *high = h, true) : false;
+}
+static bool doc_size_is(sqlite3* file, int wide, int high) {
+    if (wide < 16 || high < 16 || wide > 8192 || high > 8192 || wide % 2 || high % 2) return false;
+    char* say = sqlite3_mprintf("insert into fact(thing, name, at, value) values(0, 'wide', 0.0, %d), (0, 'high', 0.0, %d) on conflict do update set value = excluded.value", wide, high);
+    const bool ok = sqlite3_exec(file, say, nullptr, nullptr, nullptr) == SQLITE_OK;
+    sqlite3_free(say);
+    return ok;
+}
+
 // The document in `path` (made if it is not there), on the stage. nullptr: the file is not a document.
 static Doc* doc_open(Stage& s, const char* path) {
     Doc* d = new Doc;

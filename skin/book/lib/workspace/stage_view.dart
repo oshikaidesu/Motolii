@@ -356,7 +356,7 @@ class _ViewPainter extends CustomPainter {
 
   void _captions(Canvas c, Rect comp) {
     if (comp.top - v.area.top < 18) return;
-    final l = _tp('CODA_main', T.micro(Grey.g76).copyWith(fontWeight: FontWeight.w700)), d = _tp('1920 × 1080  ·  30 fps', T.micro(Grey.g56));
+    final l = _tp('CODA_main', T.micro(Grey.g76).copyWith(fontWeight: FontWeight.w700)), d = _tp('${WsArt.comp.width.round()} × ${WsArt.comp.height.round()}  ·  ${Ws.fps} fps', T.micro(Grey.g56));
     final y = comp.top - 6 - l.height;
     l.paint(c, Offset(comp.left, y));
     d.paint(c, Offset(comp.left + l.width + 8, y));

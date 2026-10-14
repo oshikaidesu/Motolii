@@ -2,6 +2,7 @@
 import 'package:flutter/widgets.dart';
 
 import '../tokens.dart';
+import 'stage_art.dart' show WsArt;
 import 'ws.dart';
 
 class WsTopBar extends StatefulWidget {
@@ -25,13 +26,24 @@ class _WsTopBarState extends State<WsTopBar> {
           const SizedBox(width: 14),
           const _UndoRedo(),
           const SizedBox(width: 14),
-          Text('CODA Teaser', style: T.name(Grey.g95).copyWith(fontWeight: FontWeight.w600)),
+          Text(ws.document ?? 'CODA Teaser', style: T.name(Grey.g95).copyWith(fontWeight: FontWeight.w600)),
           const SizedBox(width: 6),
           Text('/', style: T.name(Grey.g44)),
           const SizedBox(width: 6),
           Text('Main comp', style: T.name(Grey.g76)),
           const SizedBox(width: 10),
-          const _Chip('1920 × 1080'),
+          // Joined: the document's own size; a tap goes to the next of the usual three (wide, tall, square) and the document is opened again at it.
+          GestureDetector(
+            key: const ValueKey('ws-top-size'),
+            onTap: ws.onSize == null
+                ? null
+                : () {
+                    const usual = [(1920, 1080), (1080, 1920), (1080, 1080)];
+                    final now = usual.indexOf((WsArt.comp.width.round(), WsArt.comp.height.round())), to = usual[(now + 1) % usual.length];
+                    ws.onSize!(to.$1, to.$2);
+                  },
+            child: _Chip('${WsArt.comp.width.round()} × ${WsArt.comp.height.round()}'),
+          ),
           const SizedBox(width: 4),
           _Chip('${Ws.fps} fps'),
           const SizedBox(width: 4),

@@ -13,7 +13,12 @@ extern "C" {
 typedef struct Motolii Motolii;
 
 void motolii_home(const char* folder);                             /* where the inside's own files are (its materials, its room): said once, before a document is opened */
-Motolii* motolii_open(const char* document, int wide, int high);   /* the document (made if it is not there) on a stage of that many points; 0: not a document */
+/* The document on a stage (0: not a document). A document says its own size: one that is there is opened at it; a
+   new one is made `wide` by `high` points. motolii_size: the document is another size when it is next opened (close
+   it and open it again; it is not a step of undo). motolii_size_of: the size of the stage it is open on. */
+Motolii* motolii_open(const char* document, int wide, int high);
+int motolii_size(Motolii* m, int wide, int high);
+int motolii_size_of(Motolii* m, int* wide, int* high);
 void motolii_close(Motolii* m);
 const char* motolii_trouble(Motolii* m);                           /* why the last call that was not done was not */
 
