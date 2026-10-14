@@ -77,7 +77,7 @@ Map<String, Color> usedColours(Ws ws) {
 }
 
 /// Joined: how many of the Create shelf's tiles make or lay out something of the document, of all it shows.
-String createFact() => '${_asked.length + _laid.length} of ${[..._makes, _solids].fold<int>(0, (s, e) => s + e.$2.length)} work';
+String createFact() => '${_asked.length + _laid.length} of ${[..._makes, _solids, _lights].fold<int>(0, (s, e) => s + e.$2.length)} work';
 
 class ColorsShelf extends StatelessWidget {
   const ColorsShelf(this.c, {super.key});
@@ -397,6 +397,16 @@ final _solids = (
     _Make('Cube', DockG.rect, WsT.toneShape, '', 'A round-edged cube'),
   ],
 );
+
+/// Joined: Filament's own lights, things of the document: placed and turned as any thing, they light the solid things.
+final _lights = (
+  'Light',
+  [
+    _Make('Sun', DockG.light, WsT.toneCamera, '', 'Light from one way, everywhere'),
+    _Make('Point', DockG.light, WsT.toneCamera, '', 'Light from a point, all round'),
+    _Make('Spot', DockG.light, WsT.toneCamera, '', 'A cone of light'),
+  ],
+);
 const _asked = {
   'Text': ('text', '/System/Library/Fonts/Supplemental/Arial Unicode.ttf'),
   'Solid': ('shape', 'solid'), // (a flat colour as large as the stage: the inside makes it so)
@@ -410,6 +420,9 @@ const _asked = {
   'Ring': ('solid', 'ring'),
   'Gem': ('solid', 'gem'),
   'Cube': ('solid', 'cube'),
+  'Sun': ('light', 'sun'),
+  'Point': ('light', 'point'),
+  'Spot': ('light', 'spot'),
 };
 
 /// Joined: the tiles that lay the picked thing out in copies (the document's copies, as After Effects' repeater), and
@@ -444,7 +457,7 @@ class CreateShelf extends StatelessWidget {
   final DockCtx c;
   @override
   Widget build(BuildContext context) {
-    final joined = c.ws.inside != null, makes = joined ? [..._makes, _solids] : _makes;
+    final joined = c.ws.inside != null, makes = joined ? [..._makes, _solids, _lights] : _makes;
     final groups = [
       for (final (g, items) in makes)
         if (c.chip == 'All' || c.chip == g) (g, items.where((m) => c.hit(m.name)).toList()),

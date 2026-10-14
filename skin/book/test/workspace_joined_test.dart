@@ -910,7 +910,7 @@ void main() {
     expect(find.text('$fx of ${fxCatalog.length} work'), findsOneWidget);
     ws.shelf = 'Create';
     await t.pumpAndSettle();
-    expect(find.text('15 of 27 work'), findsOneWidget);
+    expect(find.text('18 of 30 work'), findsOneWidget);
     expect(t.takeException(), isNull);
     await _close(t);
   }, skip: !_built);
@@ -1120,6 +1120,33 @@ void main() {
     expect(m.word(0, 'background'), hasLength(6), reason: 'the stage\'s colour behind everything: ${m.trouble}');
     expect(m.say(0, 'tone_mapper', 'agx') && m.word(0, 'tone_mapper') == 'agx', isTrue, reason: m.trouble);
     expect(m.say(0, 'tone_mapper', 'sepia'), isFalse, reason: 'one of Filament\'s own');
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
+  testWidgets('a light is a thing of the document, Filament\'s own: made from the Create shelf, its Light card, its colour its fill', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    m.add('solid', 'cube');
+    ws
+      ..reread()
+      ..shelf = 'Create';
+    await t.pumpAndSettle();
+    await t.enterText(find.descendant(of: find.byType(DockSearch), matching: find.byType(EditableText)), 'Spot');
+    await t.pumpAndSettle();
+    final tile = find.descendant(of: find.byType(CreateShelf), matching: find.text('Spot')).first;
+    await t.ensureVisible(tile);
+    await t.tap(tile);
+    await t.pumpAndSettle();
+    await t.tap(find.descendant(of: find.byType(DockFooter), matching: find.text('Create')));
+    await t.pumpAndSettle();
+    final spot = int.parse(ws.selected!);
+    expect([m.word(spot, 'kind'), m.word(spot, 'file')], ['light', 'spot'], reason: m.trouble);
+    expect(find.descendant(of: find.byType(InspHeader), matching: find.text('Light')), findsOneWidget);
+    expect([for (final e in find.byType(ValuesCard).evaluate()) (e.widget as ValuesCard).card.name], ['Light']);
+    expect(m.set(spot, 'shadows', 1) && m.say(spot, 'fill', 'ffb36b') && m.set(spot, 'cone', 20), isTrue, reason: m.trouble);
+    expect(m.set(spot, 'shadows', 2), isFalse, reason: 'shadows is 0 or 1');
+    expect(m.key(spot, 'intensity', 0, 0) && m.key(spot, 'intensity', 1, 3), isTrue, reason: 'its strength moves: ${m.trouble}');
+    expect(m.add('light', 'lamp'), 0, reason: 'a light is a sun, a point or a spot');
     expect(t.takeException(), isNull);
     await _close(t);
   }, skip: !_built);

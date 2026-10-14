@@ -259,7 +259,7 @@ DockingArea _preset(DockingItem Function(String name, {double? size, double? wei
 /// Joined: the document's word for what a thing is, where the inspector's kinds have none (film, picture, solid).
 String? _kindWord(Ws ws, String? id) {
   final t = int.tryParse(id ?? ''), w = t == null ? '' : ws.inside?.word(t, 'kind') ?? '';
-  return const {'film', 'picture', 'solid'}.contains(w) ? w.replaceRange(0, 1, w[0].toUpperCase()) : null;
+  return const {'film', 'picture', 'solid', 'light'}.contains(w) ? w.replaceRange(0, 1, w[0].toUpperCase()) : null;
 }
 
 Kind _kindOf(WsLayer? l) => switch (l?.kind) {

@@ -59,6 +59,7 @@ struct Doc {
     std::map<std::pair<int, std::string>, Keys> moving;   // a value's keys, and the way of the stretch after each; read from the facts when first asked for, forgotten at every change
     std::map<std::string, sqlite3_stmt*> named, goes;     // a way by its name, and by its expression: made ready once (SQLite works it out)
     struct Shown { std::string of; Video* film = nullptr; Drawn* drawn = nullptr; Solid* solid = nullptr; Mesh* shape = nullptr; bool in = true, clipped = false, camera = false; int run = -1, lies = -1;
+                   utils::Entity light;   // (a light, Filament's own: in every scene of the stage while it is on)
                    int space = 3;
                    Scene* scene = nullptr; int channel = -1; };   // (the scene it is in: none said, the stage's own, where it was made; and its channel there)   // (read as it is made: 2 a flat thing on the camera, 25 one in the world, 3 a solid thing or a camera)
     // The camera of the moment, against the stage's own (from 6 units in front, 30 degrees high): how the world is
@@ -73,7 +74,7 @@ struct Doc {
 };
 // What a thing may be told, by name: which kinds of thing have it, a number between which two (or one of which
 // words), and whether it can move (take keys).
-static const char* const doc_kinds = "film picture text solid shape camera";   // (the kinds of thing)
+static const char* const doc_kinds = "film picture text solid shape camera light";   // (the kinds of thing)
 static const char* const doc_drawn = "film picture text solid shape";          // (those that are seen)
 static const char* const doc_shapes = "ring gem cube";             // (the kit's own shapes a solid may be)
 // (whether a value is keyed, in SQLite's words: see doc_key)
@@ -95,7 +96,11 @@ static const DocValue doc_values[] = {
     {"start", doc_kinds, 0, 1e6, false, nullptr}, {"duration", doc_kinds, 1e-3, 1e6, false, nullptr},
     {"begin", "film", 0, 1e6, false, nullptr}, {"speed", "film", -100, 100, false, nullptr}, {"keyed", "film", 0, 1, false, nullptr},
     {"blend", "film picture text shape", 0, 0, false, "normal add multiply screen"}, {"file", "film picture solid text", 0, 0, false, ""}, {"shape", "solid", 0, 0, false, doc_shapes},
-    {"text", "text", 0, 0, false, ""}, {"fill", "text solid shape", 0, 0, false, ""},
+    {"text", "text", 0, 0, false, ""}, {"fill", "text solid shape light", 0, 0, false, ""},
+    // (a light, Filament's own: made a sun, a point or a spot (its file); how strong, 1 as bright as the stage's own
+    //  light; how far a point or spot reaches, in units of the stage; how wide a spot's cone is, in degrees; whether
+    //  the solid things it lights cast shadows. Its colour is its fill; it shines the way it is turned, ahead of it)
+    {"intensity", "light", 0, 100, true, nullptr}, {"falloff", "light", 0.01, 1000, false, nullptr}, {"cone", "light", 1, 89, true, nullptr}, {"shadows", "light", 0, 1, false, nullptr},
     {"parent", doc_kinds, 0, 1e9, false, nullptr},   // (the thing it goes with: it is moved, turned and sized as that one is, then as it is itself; 0: none)
     {"space", "film picture text shape", 0, 0, false, "2d 2.5d"},   // (the past repository's three tags: 2d is not in the world and lies by the order alone; 2.5d is a sheet in the world, before or behind by depth; a solid is 3d)
     {"align", "text", 0, 1, false, nullptr},
@@ -139,6 +144,7 @@ static const DocCard doc_cards[] = {
     {"Type", "letter_spacing line_spacing italic"},
     {"Line", "cap join dash dash_offset"},
     {"Surface", "metallic roughness reflectance clear_coat clear_coat_roughness emissive"},
+    {"Light", "intensity falloff cone shadows"},
     {"Grade", "tone_mapper exposure contrast saturation vibrance temperature"},
     {"Lens", "bloom lens_flare vignette vignette_color fog fog_color"},
     {"Room", "environment environment_rotate background"},
@@ -409,7 +415,7 @@ static void doc_moment(Doc& d, double now) {
     // thing's looks neither ask nor write depth.
     std::vector<int> runOf(lies.size(), -1), sorts;
     for (size_t i = 0; i < lies.size(); ++i) {
-        if (!lies[i].on) continue;
+        if (!lies[i].on || lies[i].shown->camera || !lies[i].shown->light.isNull()) continue;   // (a camera or a light is in no run: nothing of it is drawn)
         if (sorts.empty() || sorts.back() != (int)lies[i].solid) sorts.push_back((int)lies[i].solid);
         runOf[i] = (int)sorts.size() - 1;
     }
@@ -456,6 +462,28 @@ static void doc_moment(Doc& d, double now) {
         const mat4f place = mat4f(doc_place(d, thing, now));
         if (t.solid) solid_to(s, t.solid, place); else move(s, m, [&](int nth, const mat4f&) { return nth ? mat4f(doc_place(d, thing, now, 0, nth)) : place; });
         if (MaterialInstance* look = t.film ? t.film->look : t.drawn ? t.drawn->look : nullptr) look->setParameter("opacity", (float)doc_number(d, thing, "opacity", now, 1));
+    }
+    // The lights: in every scene of the stage while each is on (the stage's own and every picture laid over it), where
+    // it is, shining the way it is turned (ahead of it), as strong as it is now; 1 as bright as the stage's own light.
+    for (const Lies& one : lies) {
+        const utils::Entity e = one.shown->light;
+        if (e.isNull()) continue;
+        std::vector<Scene*> all{s.scene};
+        for (View* v : s.layers) all.push_back(v->getScene());
+        for (Scene* sc : all) one.on ? (sc->hasEntity(e) ? void() : sc->addEntity(e)) : sc->remove(e);
+        if (!one.on) continue;
+        auto& lights = s.engine->getLightManager();
+        const auto it = lights.getInstance(e);
+        const math::mat4 place = doc_place(d, one.thing, now);
+        lights.setPosition(it, math::float3((place * math::double4{0, 0, 0, 1}).xyz));
+        lights.setDirection(it, normalize(math::float3((place * math::double4{0, 0, -1, 0}).xyz)));
+        const float strong = (float)doc_number(d, one.thing, "intensity", now, 1);
+        if (lights.getType(it) == LightManager::Type::SUN) lights.setIntensity(it, 60000.f * strong);   // (lux, as the room's own light)
+        else lights.setIntensityCandela(it, 60000.f * 36.f * strong);   // (as bright as that six units off: where the stage's own eye stands)
+        if (lights.getType(it) == LightManager::Type::FOCUSED_SPOT) {
+            const float cone = (float)(doc_number(d, one.thing, "cone", now, 30) * (double)TAU / 360.0);
+            lights.setSpotLightCone(it, 0.8f * cone, cone);
+        }
     }
     // A clipped thing is seen only inside the frame of the thing before it: Filament's own scissor on its looks, told
     // the rectangle of the picture that the thing before it covers now (turned or leaning: the upright box around it).
@@ -504,7 +532,7 @@ static void doc_moment(Doc& d, double now) {
 static bool doc_match(Doc& d) {
     Stage& s = *d.stage;
     std::map<int, std::string> told;   // every thing of the document, and all that its making goes by
-    doc_rows(d, sqlite3_mprintf("select thing, group_concat(name || '=' || value, ' ') from (select * from fact where thing > 0 and name in ('kind','file','shape','blend','keyed','space','begin','duration','speed','text','fill','wide','points','inner','round','stroke','stroke_width','align','blur','shadow','shadow_distance','shadow_angle','shadow_blur','shadow_opacity','glow','glow_blur','glow_opacity','copies','tint','tint_black','tint_white','tritone','tritone_shadow','tritone_midtone','tritone_highlight','letter_spacing','line_spacing','italic','cap','join','dash','dash_offset','metallic','roughness','reflectance','clear_coat','clear_coat_roughness','emissive') order by thing, name) group by thing"),
+    doc_rows(d, sqlite3_mprintf("select thing, group_concat(name || '=' || value, ' ') from (select * from fact where thing > 0 and name in ('kind','file','shape','blend','keyed','space','begin','duration','speed','text','fill','wide','points','inner','round','stroke','stroke_width','align','blur','shadow','shadow_distance','shadow_angle','shadow_blur','shadow_opacity','glow','glow_blur','glow_opacity','copies','tint','tint_black','tint_white','tritone','tritone_shadow','tritone_midtone','tritone_highlight','letter_spacing','line_spacing','italic','cap','join','dash','dash_offset','metallic','roughness','reflectance','clear_coat','clear_coat_roughness','emissive','falloff','shadows') order by thing, name) group by thing"),
              [&](sqlite3_stmt* row) { told[sqlite3_column_int(row, 0)] = (const char*)sqlite3_column_text(row, 1); });
     for (auto it = d.shown.begin(); it != d.shown.end();) {
         const auto still = told.find(it->first);
@@ -516,6 +544,11 @@ static bool doc_match(Doc& d) {
         if (it->second.film) video_off(s, it->second.film);
         if (it->second.drawn) picture_off(s, it->second.drawn);
         if (it->second.solid) solid_off(s, it->second.solid);
+        if (!it->second.light.isNull()) {   // (out of every scene, and done away with)
+            s.scene->remove(it->second.light);
+            for (View* v : s.layers) v->getScene()->remove(it->second.light);
+            s.engine->getLightManager().destroy(it->second.light), utils::EntityManager::get().destroy(it->second.light);
+        }
         if (it->second.shape) take_off(s, it->second.shape);
         it = d.shown.erase(it);
     }
@@ -579,6 +612,16 @@ static bool doc_match(Doc& d) {
         if ((fx.tritone = (float)doc_number(d, thing, "tritone", 0, 0)) > 0.f) hue("tritone_shadow", "1b1f5c", &fx.tones[0]), hue("tritone_midtone", "c44569", &fx.tones[1]), hue("tritone_highlight", "ffd166", &fx.tones[2]);
         if (doc_among("film picture text shape", kind)) made.space = doc_word(d, thing, "space") == "2.5d" ? 25 : 2;
         if (kind == "camera") made.camera = true;   // (nothing of it is seen: it is how the rest is)
+        else if (kind == "light") {   // (Filament's own light, made as the document says; placed and told how strong at each moment)
+            const LightManager::Type type = file == "sun" ? LightManager::Type::SUN : file == "spot" ? LightManager::Type::FOCUSED_SPOT : LightManager::Type::POINT;
+            if (!doc_among("sun point spot", file.c_str())) why = "a light is a sun, a point or a spot";
+            else {
+                made.light = utils::EntityManager::get().create();
+                LightManager::Builder(type).color(Color::toLinear<ACCURATE>(sRGBColor{fill.empty() ? float3{1.f} : colour})).falloff((float)doc_number(d, thing, "falloff", 0, 10))
+                    .castShadows(doc_number(d, thing, "shadows", 0, 0) > 0.5).build(*s.engine, made.light);
+                made.in = false;   // (in the scenes when it is on)
+            }
+        }
         else if (shape.empty() && !std::filesystem::is_regular_file(file)) why = "there is no such file";
         else if (kind == "film") {
             const double from = doc_number(d, thing, "begin", 0, 0), length = doc_number(d, thing, "duration", 0, -1), speed = doc_number(d, thing, "speed", 0, 1);
@@ -624,8 +667,10 @@ static bool doc_match(Doc& d) {
             }
             else if ((made.solid = solid(s, file.c_str(), mat4f{}, 1.f)) && rgb >= 0) solid_fill(s, made.solid, colour, surface);
         } else why = std::string("its kind is one of: ") + doc_kinds;
-        if (!made.film && !made.drawn && !made.solid && !made.shape && !made.camera) { d.trouble = why + ": the " + kind + " " + std::filesystem::path(file + shape).filename().string() + " could not be made"; all = false; continue; }
+        if (!made.film && !made.drawn && !made.solid && !made.shape && !made.camera && made.light.isNull()) { d.trouble = why + ": the " + kind + " " + std::filesystem::path(file + shape).filename().string() + " could not be made"; all = false; continue; }
         d.shown[thing] = made;
+        if (made.solid || made.shape)   // (a solid thing casts a shadow from a light that throws them, and takes one)
+            doc_parts(s, d.shown[thing], [](RenderableManager& faces, RenderableManager::Instance one) { faces.setCastShadows(one, true), faces.setReceiveShadows(one, true); });
     }
     doc_moment(d, s.now);
     return all;
@@ -829,8 +874,8 @@ static bool doc_knows(Doc& d, int thing, const char* name = nullptr, const doubl
     if (number && v->words) return d.trouble = std::string(name) + " is a word, told by say" + (*v->words ? std::string(": ") + v->words : ""), false;
     if (word && !v->words) return d.trouble = std::string(name) + " is a number, told by set", false;
     if (word && *v->words && !doc_among(v->words, word)) return d.trouble = std::string(name) + " is one of: " + v->words, false;
-    if (number && (!std::isfinite(*number) || *number < v->low || *number > v->high || (doc_among("keyed clip visible solo lock", name) && *number != 0.0 && *number != 1.0)))
-        return std::snprintf(range, sizeof range, doc_among("keyed clip visible solo lock", name) ? " is 0 or 1" : " is from %g to %g", v->low, v->high), d.trouble = name + std::string(range), false;
+    if (number && (!std::isfinite(*number) || *number < v->low || *number > v->high || (doc_among("keyed clip visible solo lock shadows", name) && *number != 0.0 && *number != 1.0)))
+        return std::snprintf(range, sizeof range, doc_among("keyed clip visible solo lock shadows", name) ? " is 0 or 1" : " is from %g to %g", v->low, v->high), d.trouble = name + std::string(range), false;
     if (key && !v->moves) return d.trouble = std::string(name) + " does not move: keys go on " + moving, false;
     if ((number || word || key) && strcmp(name, "lock") && doc_number(d, thing, "lock", 0, 0) > 0.5) return d.trouble = "it is locked", false;
     if (number && !strcmp(name, "parent") && *number != 0.0) {   // (a parent is a thing that is there, and not the thing itself nor one that goes with it: the past repository's rule)
@@ -860,6 +905,7 @@ static int doc_add(Doc& d, const char* kind, const char* file) {
     if (!*kind) kind = doc_kind_of(file);   // (not said: what the file makes)
     if (!*kind) return d.trouble = std::string("no kind of thing is made from ") + file, 0;
     if (!doc_among(doc_kinds, kind)) return d.trouble = std::string("a thing is one of: ") + doc_kinds, 0;
+    if (!strcmp(kind, "light") && !doc_among("sun point spot", file)) return d.trouble = "a light is a sun, a point or a spot", 0;
     // (it comes on at the stage's present moment)
     if (!doc_change(d, sqlite3_mprintf("insert into thing default values; insert into fact(thing, name, at, value) values(last_insert_rowid(), 'kind', 0.0, %Q); insert into fact(thing, name, at, value) values(last_insert_rowid(), %Q, 0.0, %Q); insert into fact(thing, name, at, value) select id, 'start', 0.0, %!.17g from thing where %d order by id desc limit 1%s",
                                        kind, (!strcmp(kind, "solid") && doc_among(doc_shapes, file)) || !strcmp(kind, "shape") ? "shape" : "file", file, d.stage->now, d.stage->now > 0.0,
@@ -1156,7 +1202,8 @@ static bool doc_covers(Doc& d, int thing, double now, double* box) {
 
 static double doc_usual(const char* name) {
     return doc_among("size speed opacity wide visible distance zoom copies copy_size blur_level letter_spacing line_spacing contrast saturation vibrance environment", name) ? 1.0 : !strcmp(name, "duration") ? -1.0
-         : !strcmp(name, "metallic") ? 0.08 : !strcmp(name, "roughness") ? 0.6 : !strcmp(name, "reflectance") ? 0.5 : 0.0;   // (a solid's surface as it comes)
+         : !strcmp(name, "metallic") ? 0.08 : !strcmp(name, "roughness") ? 0.6 : !strcmp(name, "reflectance") ? 0.5   // (a solid's surface as it comes)
+         : !strcmp(name, "intensity") ? 1.0 : !strcmp(name, "falloff") ? 10.0 : !strcmp(name, "cone") ? 30.0 : 0.0;   // (a light as it comes)
 }
 static bool doc_value(Doc& d, int thing, const char* name, double at, double* is) { return doc_knows(d, thing, name) && (*is = doc_number(d, thing, name, at, doc_usual(name)), true); }
 // A thing held by a hand, carried, and let go: the one form of everything a hand drags (a thing on the stage, its bar
