@@ -8,7 +8,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lab_book/motolii.dart';
 import 'package:lab_book/parts/controls.dart' show Segmented;
-import 'package:lab_book/sets/inspector/inspector_parts.dart' show AnchorCube, AnchorGeometry, EffectCard, ValuesCard, FillStroke, InspHeader, NumField, OnOff, PropRow, Space, SpacePlate, TextGroup;
+import 'package:lab_book/sets/inspector/inspector_parts.dart' show AnchorCube, AnchorGeometry, EffectCard, ValuesCard, FillStroke, InspHeader, KeyS, NumField, OnOff, PropRow, Space, SpacePlate, TextGroup;
 import 'package:lab_book/workspace/dock_fonts.dart';
 import 'package:lab_book/workspace/dock_make.dart' show CreateShelf;
 import 'package:lab_book/workspace/desk_kit.dart' show DeskScrub;
@@ -1147,6 +1147,19 @@ void main() {
     expect(m.set(spot, 'shadows', 2), isFalse, reason: 'shadows is 0 or 1');
     expect(m.key(spot, 'intensity', 0, 0) && m.key(spot, 'intensity', 1, 3), isTrue, reason: 'its strength moves: ${m.trouble}');
     expect(m.add('light', 'lamp'), 0, reason: 'a light is a sun, a point or a spot');
+    // (Animate on: a card's number dragged is a key at the playhead, as every change then is; the field shows it)
+    expect(m.unkey(spot, 'intensity', 0) && m.unkey(spot, 'intensity', 1), isTrue, reason: m.trouble);
+    ws
+      ..animating = true
+      ..reread();
+    await t.pumpAndSettle();
+    final strong = find.byWidgetPredicate((w) => w is NumField && w.id == 'v_intensity');
+    await t.ensureVisible(strong);
+    await t.drag(strong, const Offset(40, 0));
+    await t.pumpAndSettle();
+    expect(m.keyMoments(spot, 'intensity'), [0], reason: 'a key where the playhead is: ${ws.notice}');
+    expect(wsKeyMarks(ws, '$spot')['v_intensity'], KeyS.at);
+    ws.animating = false;
     expect(t.takeException(), isNull);
     await _close(t);
   }, skip: !_built);

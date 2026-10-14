@@ -603,21 +603,40 @@ void _write(Ws ws, String? id, Map<String, double> changed, {required bool live}
 }
 
 /// Joined: a property's key mark as the document has it at the playhead (the most keyed of its values).
+/// Joined: the key marks the inspector shows (for the checks: the same the inspector is given).
+Map<String, KeyS> wsKeyMarks(Ws ws, String? id) => _keyMarks(ws, id);
+
 Map<String, KeyS> _keyMarks(Ws ws, String? id) {
-  final m = ws.inside, t = int.tryParse(id ?? '');
+  final m = ws.inside, t = id == null ? 0 : int.tryParse(id);
   if (m == null || t == null) return const {};
   final at = ws.frame / Ws.fps;
   return {
-    for (final p in const ['pos', 'scale', 'rot', 'op', 'anchor']) p: KeyS.values[_namesOf(p).map((n) => m.keyed(t, n, at)).reduce(math.max)],
+    if (t > 0)
+      for (final p in const ['pos', 'scale', 'rot', 'op', 'anchor']) p: KeyS.values[_namesOf(p).map((n) => m.keyed(t, n, at)).reduce(math.max)],
+    // (the cards' own numbers that take keys: the inside's cards, and the effects' fields)
+    for (final MapEntry(:key, :value) in _keyable(ws, t).entries) key: KeyS.values[m.keyed(t, value, at)],
+  };
+}
+
+/// Joined: the fields of the cards whose values take keys, by the inspector's id and the document's name.
+Map<String, String> _keyable(Ws ws, int t) {
+  final m = ws.inside!, moving = m.moving(t).toSet();
+  return {
+    for (final (_, names) in m.cards(t))
+      for (final n in names)
+        if (moving.contains(n)) 'v_$n': n,
+    for (final fields in (t > 0 ? _fxFields(ws, '$t') : const <String, Map<String, String>>{}).values)
+      for (final MapEntry(:key, :value) in fields.entries)
+        if (moving.contains(value)) key: value,
   };
 }
 
 /// Joined: a key mark changed in the inspector: a key at the playhead, that key taken away, or no keys at all.
 void _mark(Ws ws, String? id, String prop, KeyS mark) {
-  final m = ws.inside!, t = int.tryParse(id ?? '');
+  final m = ws.inside!, t = id == null ? 0 : int.tryParse(id);
   if (t == null) return;
   final at = ws.frame / Ws.fps;
-  for (final n in _namesOf(prop)) {
+  for (final n in [..._namesOf(prop), ?_keyable(ws, t)[prop]]) {
     switch (mark) {
       case KeyS.at:
         m.keyHere(t, n, at);
