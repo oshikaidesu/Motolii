@@ -7,7 +7,7 @@ cd "$(dirname "$0")"
 doc=${1:a}; shift
 # (built again only if something it is made of has changed since)
 if [ ! -x out/edit_wgpu ] || [ -n "$(find . dawn_probe check -maxdepth 1 \( -name '*.c' -o -name '*.h' -o -name '*.mm' -o -name '*.cpp' -o -name '*.mat' -o -name '*.glsl' -o -name '*.sh' \) -newer out/edit_wgpu | head -1)" ]; then
-    KIT_EXTRA="-dynamiclib -install_name @rpath/libmotolii.dylib $(pkg-config --cflags --libs gstreamer-1.0 gstreamer-app-1.0 gstreamer-video-1.0) -lgltfio -lgltfio_core -ldracodec -DSQLITE_ENABLE_SESSION -DSQLITE_ENABLE_PREUPDATE_HOOK -I/opt/homebrew/opt/sqlite/include /opt/homebrew/opt/sqlite/lib/libsqlite3.dylib" BUILDONLY=1 ./dawn_probe/kit_wgpu.sh motolii || exit 1
+    KIT_EXTRA="-dynamiclib -install_name @rpath/libmotolii.dylib $(pkg-config --cflags --libs gstreamer-1.0 gstreamer-app-1.0 gstreamer-video-1.0) -lgltfio -lgltfio_core -ldracodec -DSQLITE_ENABLE_SESSION -DSQLITE_ENABLE_PREUPDATE_HOOK -I/opt/homebrew/opt/sqlite/include /opt/homebrew/opt/sqlite/lib/libsqlite3.dylib $PWD/physics.cpp -I$PWD/third_party/physics/JoltPhysics -DJPH_CROSS_PLATFORM_DETERMINISTIC -DJPH_DEBUG_RENDERER -DJPH_OBJECT_LAYER_BITS=16 -DJPH_OBJECT_STREAM -DJPH_PROFILE_ENABLED -ffp-contract=off $PWD/third_party/physics/JoltPhysics/jbuild/libJolt.a" BUILDONLY=1 ./dawn_probe/kit_wgpu.sh motolii || exit 1
     mv out/motolii_wgpu out/libmotolii.dylib
     clang++ -std=c++20 -O2 edit.cpp -Lout -lmotolii -Wl,-rpath,@executable_path -o out/edit_wgpu || exit 1
     cc check/api.c -Lout -lmotolii -Wl,-rpath,@executable_path -o out/api_check || exit 1   # (the same calls from plain C)

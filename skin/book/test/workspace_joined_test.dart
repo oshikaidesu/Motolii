@@ -1095,11 +1095,11 @@ void main() {
     await t.pumpAndSettle();
     expect(find.descendant(of: find.byType(ValuesCard), matching: find.text('Surface')), findsOneWidget, reason: 'Filament\'s own surface of a solid');
     expect(m.say(cube, 'fill', 'glass'), isTrue, reason: m.trouble);
-    expect(m.cards(cube).map((c) => c.$1), ['Glass'], reason: 'filled with glass: the glass\'s own card, not the surface\'s');
+    expect(m.cards(cube).map((c) => c.$1), ['Glass', 'Physics'], reason: 'filled with glass: the glass\'s own card, not the surface\'s');
     expect(m.cards(rect).map((c) => c.$1).contains('Matte'), isFalse, reason: 'not clipped: no matte to say how');
     expect(m.set(rect, 'clip', 1) && m.cards(rect).map((c) => c.$1).contains('Matte'), isTrue);
     expect(m.set(cube, 'ior', 2.2) && m.value(cube, 'ior', 0) == 2.2, isTrue, reason: m.trouble);
-    expect(m.say(cube, 'fill', 'ff3366') && m.cards(cube).map((c) => c.$1).join() == 'Surface', isTrue);
+    expect(m.say(cube, 'fill', 'ff3366') && m.cards(cube).map((c) => c.$1).join(' ') == 'Surface Physics', isTrue);
     expect(find.byWidgetPredicate((w) => w is NumField && w.id == 'v_metallic'), findsOneWidget);
     expect(t.takeException(), isNull);
     await _close(t);
@@ -1113,7 +1113,7 @@ void main() {
       ..select(null);
     await t.pumpAndSettle();
     final titles = [for (final e in find.byType(ValuesCard).evaluate()) (e.widget as ValuesCard).card.name];
-    expect(titles, ['Grade', 'Lens', 'Room']);
+    expect(titles, ['Grade', 'Lens', 'Room', 'Physics']);
     final bloom = find.byWidgetPredicate((w) => w is NumField && w.id == 'v_bloom');
     await t.ensureVisible(bloom);
     await t.drag(bloom, const Offset(60, 0));

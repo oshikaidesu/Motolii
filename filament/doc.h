@@ -30,6 +30,7 @@
 //            fill                   what its surface is: a text's colour as six digits (ff3366); a solid's: a colour, or the material glass
 #include "drawn.h"
 #include "interp.h"
+#include "physics.h"
 #include "solid.h"
 #include "video.h"
 #include <filament/Skybox.h>
@@ -55,6 +56,10 @@ struct Doc {
     int act = 0;                        // how many acts are open, one within another
     bool act_ok = true;                 // no change of the open act has been refused
     bool act_unmatched = false;         // a change within a larger act not yet shown: the stage is matched once, when the act ends
+    std::unique_ptr<PhysWorld> phys;    // the things that fall and strike (Jolt): made when first asked, gone when the document changes
+    std::vector<int> phys_of;           // which thing each of its bodies is
+    std::vector<double> phys_until;     // and till when its keys have it
+    bool phys_keyed = false;            // reading where a thing's keys put it (not where the world has it)
     bool writing = false;               // it is being written as a film: it is read, not changed, until that is done
     double written_from = 0.0;          // the moment of the document that a film being written begins at (its work area's start)
     double round = 8.0;                 // how long the document is, as last shown: waves, noise and drifts go round in it a whole number of times (a film loops)
@@ -95,6 +100,12 @@ static const DocValue doc_values[] = {
     {"scale_x", doc_drawn, -1e4, 1e4, true, nullptr},
     {"scale_y", doc_drawn, -1e4, 1e4, true, nullptr},
     {"scale_z", "solid", -1e4, 1e4, true, nullptr},
+    // (falls and strikes others: moves, the world has it from its last key on; still, a wall where the document puts it;
+    //  how much it bounces, how it rubs; and the stage's pull down, in units of the stage a second each second)
+    {"physics", doc_drawn, 0, 0, false, "none moves still"},
+    {"bounce", doc_drawn, 0, 1, false, nullptr},
+    {"friction", doc_drawn, 0, 2, false, nullptr},
+    {"gravity", "stage", -100, 100, false, nullptr},
     {"size", doc_drawn, 1e-3, 1e4, true, nullptr}, {"anchor_x", doc_drawn, -100, 100, true, nullptr}, {"anchor_y", doc_drawn, -100, 100, true, nullptr}, {"anchor_z", doc_drawn, -100, 100, true, nullptr},
     // (a camera, the past repository's: it looks at where it is, from round about it as it is turned, so far away, so near)
     {"distance", "camera", 0.01, 100, true, nullptr}, {"zoom", "camera", 0.01, 100, true, nullptr},
@@ -322,6 +333,10 @@ static const DocShown doc_shown[] = {
     {"vibrance", "", "×", "Vibrance", 0, 2, nullptr},
     {"temperature", "", "", "Warmth", -1, 1, nullptr},
     {"bloom", "share", "%", "Bloom", 0, 1, nullptr},
+    {"physics", "", "", "Physics", 0, 0, nullptr},
+    {"bounce", "share", "%", "Bounce", 0, 1, nullptr},
+    {"friction", "", "", "Friction", 0, 2, nullptr},
+    {"gravity", "", "", "Gravity", 0, 30, nullptr},
     {"ambient_occlusion", "share", "%", "AO", 0, 1, nullptr},
     {"reflections", "share", "%", "Mirror", 0, 1, nullptr},
     {"vignette", "share", "%", "Vignette", 0, 1, nullptr},
@@ -359,6 +374,7 @@ static const DocCard doc_cards[] = {
     {"Grade", "tone_mapper exposure contrast saturation vibrance temperature"},
     {"Lens", "bloom ambient_occlusion reflections lens_flare vignette vignette_color fog fog_color anti_aliasing"},
     {"Room", "room environment environment_rotate behind background"},
+    {"Physics", "physics bounce friction gravity"},
 };
 static bool doc_among(const std::string& words, const std::string& one) { return (" " + words + " ").find(" " + one + " ") != std::string::npos; }
 
@@ -373,6 +389,7 @@ static bool doc_rows(Doc& d, char* ask, const std::function<void(sqlite3_stmt*)>
     return ok;
 }
 static void doc_forget(Doc& d) {
+    d.phys.reset(), d.phys_of.clear(), d.phys_until.clear();   // (the world made again from what the document says now)
     d.moving.clear();
     d.named.clear();
     d.laid.clear();
@@ -519,6 +536,58 @@ static math::mat4 doc_above(Doc& d, int thing, double now, int deeper = 0) {
     const int parent = (int)doc_number(d, thing, "parent", 0, 0);
     return parent && d.shown.count(parent) && deeper < 64 ? doc_place(d, parent, now, deeper + 1) : math::mat4{};   // (64: a document written elsewhere with a ring of parents still ends)
 }
+// The world of the things that fall and strike, made from the document when first asked: each one's shape (a box as
+// large as it is, a ball for a ball, flat things held to their plane), what it bounces and rubs, where its keys put
+// it. Where the world has one at a moment (false: the world does not have it then, its keys do).
+static bool doc_physics(Doc& d, int thing, double now, PhysPose* pose) {
+    const std::string mine = doc_word(d, thing, "physics");
+    if (mine != "moves") return false;
+    if (!d.phys) {
+        std::vector<PhysThing> made;
+        d.phys_of.clear(), d.phys_until.clear();
+        for (int t : doc_laid(d)) {
+            const std::string how = doc_word(d, t, "physics");
+            if ((how != "moves" && how != "still") || doc_number(d, t, "parent", 0, 0) != 0.0) continue;
+            float2 half{0.5f};
+            float deep = 0.f;
+            if (!doc_half(d, t, &half, &deep)) continue;
+            const double size = doc_number(d, t, "size", 0, 1);
+            PhysThing one;
+            one.still = how == "still", one.flat = deep == 0.f;
+            one.ball = doc_word(d, t, "shape") == "ball";
+            one.half[0] = (float)(half.x * size * std::fabs(doc_number(d, t, "scale_x", 0, 1)));
+            one.half[1] = (float)(half.y * size * std::fabs(doc_number(d, t, "scale_y", 0, 1)));
+            one.half[2] = one.flat ? 0.05f : (float)(deep * size * std::fabs(doc_number(d, t, "scale_z", 0, 1)));
+            one.bounce = (float)doc_number(d, t, "bounce", 0, 0.3), one.friction = (float)doc_number(d, t, "friction", 0, 0.5);
+            for (const char* name : {"x", "y", "z", "rotate", "rotate_x", "rotate_y"}) {   // (its keys hold it till the last of them)
+                doc_rows(d, sqlite3_mprintf("select max(at) from fact where thing = %d and name = %Q and " DOC_KEYED, t, name, t, name), [&](sqlite3_stmt* row) {
+                    if (sqlite3_column_type(row, 0) != SQLITE_NULL) one.until = std::max(one.until, sqlite3_column_double(row, 0));
+                });
+            }
+            made.push_back(one);
+            d.phys_of.push_back(t), d.phys_until.push_back(one.still ? 1e9 : one.until);
+        }
+        const auto keyed = [&d](int index, double at) {   // (where its keys put its middle, and how they turn it)
+            const int t = d.phys_of[(size_t)index];
+            d.phys_keyed = true;
+            const math::double3 middle = (doc_place(d, t, at) * math::double4{0, 0, 0, 1}).xyz;
+            d.phys_keyed = false;
+            const auto half = [](double degrees, math::double3 about) { const double a = 0.5 * degrees * (double)TAU / 360.0; return math::quat{std::cos(a), about.x * std::sin(a), about.y * std::sin(a), about.z * std::sin(a)}; };
+            const math::quat q = half(doc_number(d, t, "rotate", at, 0), {0, 0, 1}) * half(doc_number(d, t, "rotate_y", at, 0), {0, 1, 0}) * half(doc_number(d, t, "rotate_x", at, 0), {1, 0, 0});
+            PhysPose p;
+            p.at[0] = (float)middle.x, p.at[1] = (float)middle.y, p.at[2] = (float)middle.z;
+            p.turn[0] = (float)q.x, p.turn[1] = (float)q.y, p.turn[2] = (float)q.z, p.turn[3] = (float)q.w;
+            return p;
+        };
+        d.phys = std::make_unique<PhysWorld>(made, (float)doc_number(d, 0, "gravity", 0, 9.81), keyed);
+    }
+    const auto found = std::find(d.phys_of.begin(), d.phys_of.end(), thing);
+    if (found == d.phys_of.end()) return false;
+    const size_t index = (size_t)(found - d.phys_of.begin());
+    if (now <= d.phys_until[index]) return false;   // (its keys have it still)
+    *pose = d.phys->pose((int)index, (int)std::lround(now * 60.0));
+    return true;
+}
 static math::mat4 doc_place(Doc& d, int thing, double now, int deeper, int copy, bool member) {
     const double said = now;   // (the moment itself: a wave goes on at it, whatever the copy's delay)
     if (member) now -= doc_delay(d, thing, copy);   // (a member of its copies: as it was so much earlier)
@@ -591,6 +660,15 @@ static math::mat4 doc_place(Doc& d, int thing, double now, int deeper, int copy,
         if (!each.empty()) tall *= each[(size_t)copy % each.size()];
     }
     own = own * math::mat4::scaling(math::double3{1.0, tall, 1.0});
+    if (!d.phys_keyed && !member && !deeper) {   // (a thing that falls and strikes: where the world has its middle, turned as it has it)
+        PhysPose pose;
+        if (doc_physics(d, thing, now, &pose)) {
+            const math::quat q{pose.turn[3], pose.turn[0], pose.turn[1], pose.turn[2]};
+            return math::mat4::translation(math::double3{pose.at[0], pose.at[1], pose.at[2]}) * math::mat4(math::mat3(math::quat(q))) *
+                   math::mat4::scaling(doc_number(d, thing, "size", now, 1)) *
+                   math::mat4::scaling(math::double3{doc_number(d, thing, "scale_x", now, 1), doc_number(d, thing, "scale_y", now, 1), doc_number(d, thing, "scale_z", now, 1)});
+        }
+    }
     math::mat4 place = doc_above(d, thing, now, deeper) * math::mat4::translation(math::double3{doc_number(d, thing, "x", now, 0), doc_number(d, thing, "y", now, 0), doc_number(d, thing, "z", now, 0)}) *
                        turned("rotate", {0, 0, 1}) * turned("rotate_y", {0, 1, 0}) * turned("rotate_x", {1, 0, 0}) * math::mat4::translation(shift) * math::mat4::scaling(doc_number(d, thing, "size", now, 1)) *
                        math::mat4::scaling(math::double3{doc_number(d, thing, "scale_x", now, 1), doc_number(d, thing, "scale_y", now, 1), doc_number(d, thing, "scale_z", now, 1)}) *
@@ -1216,7 +1294,7 @@ static double doc_seconds(Doc& d) {
 // The work area: the stretch of the document that is played round and written as a film (After Effects' own); not
 // said, all of it. And the marks: moments of the document with a name (After Effects' composition markers). Both are
 // facts of thing 0, the stage itself, and every change of them is a step.
-static bool doc_change(Doc& d, char* change);
+static bool doc_change(Doc& d, char* change, bool later = false);   // (later: a key, whose act need not show it before its end)
 static void doc_work(Doc& d, double* from, double* to) {
     const double all = doc_seconds(d);
     double in = 0.0, out = all;
@@ -1346,13 +1424,13 @@ static bool doc_acted(Doc& d) {
 }
 // One change to the document (in SQLite's own words), an act by itself unless it is made within one; the stage shows
 // it at once. If the stage cannot show it, it is not made, and no other change of its act is.
-static bool doc_change(Doc& d, char* change) {
+static bool doc_change(Doc& d, char* change, bool later) {
     doc_act(d);
     bool ok = d.act_ok;   // (a change before it in this act was refused: d.trouble still says why)
     if (ok && d.writing) ok = false, d.trouble = "the document is being written as a film: it is not changed until that is done";
     if (ok && !(ok = sqlite3_exec(d.file, change, nullptr, nullptr, nullptr) == SQLITE_OK)) d.trouble = sqlite3_errmsg(d.file);
     sqlite3_free(change);
-    if (ok && d.act > 1) d.act_unmatched = true;   // (within a larger act, a key of a thousand: matched once when it ends)
+    if (ok && later && d.act > 1) d.act_unmatched = true;   // (a key within a larger act, one of a thousand: matched once when the act ends)
     else if (ok) {
         doc_forget(d);
         ok = doc_match(d);
@@ -1491,7 +1569,7 @@ static bool doc_key(Doc& d, int thing, const char* name, double at, double is) {
     if (!doc_knows(d, thing, name, &is, nullptr, true)) return false;
     const bool stayed = !doc_keys(d, thing, name, -1.0) && at != 0.0;   // (the value that stayed goes: the key holds the place now)
     return doc_change(d, sqlite3_mprintf("%z insert into fact(thing, name, at, value, way) values(%d, %Q, %!.17g, %!.17g, %s) on conflict do update set value = excluded.value, way = coalesce(way, excluded.way)",
-                                         stayed ? sqlite3_mprintf("delete from fact where thing = %d and name = %Q;", thing, name) : sqlite3_mprintf(""), thing, name, at, is, at == 0.0 ? "'Linear'" : "null"));
+                                         stayed ? sqlite3_mprintf("delete from fact where thing = %d and name = %Q;", thing, name) : sqlite3_mprintf(""), thing, name, at, is, at == 0.0 ? "'Linear'" : "null"), true);
 }
 static int doc_keys(Doc& d, int thing, const char* name, double at = -1.0) {   // (how many keys a value has; or whether it has one at a moment)
     int n = 0;
@@ -1853,6 +1931,7 @@ static double doc_usual(const char* name) {
     return doc_among("scale_x scale_y scale_z size speed opacity wide tall visible distance zoom copies copy_size copy_wide blur_level letter_spacing line_spacing contrast saturation vibrance environment gradient_scale wave_speed", name) ? 1.0 : !strcmp(name, "duration") ? -1.0
          : !strcmp(name, "metallic") ? 0.08 : !strcmp(name, "roughness") ? 0.6 : !strcmp(name, "reflectance") ? 0.5   // (a solid's surface as it comes)
          : !strcmp(name, "intensity") ? 1.0 : !strcmp(name, "falloff") ? 10.0 : !strcmp(name, "cone") ? 30.0   // (a light as it comes)
+         : !strcmp(name, "bounce") ? 0.3 : !strcmp(name, "friction") ? 0.5 : !strcmp(name, "gravity") ? 9.81   // (what falls and strikes, as it comes)
          : !strcmp(name, "ior") ? 1.5 : !strcmp(name, "dispersion") ? 0.1 : !strcmp(name, "swim") ? 0.5 : !strcmp(name, "dark") ? 4.0 : !strcmp(name, "vivid") ? 1.3 : 0.0;   // (the kit's glass as it comes)
 }
 static bool doc_value(Doc& d, int thing, const char* name, double at, double* is) { return doc_knows(d, thing, name) && (*is = doc_number(d, thing, name, at, doc_usual(name)), true); }

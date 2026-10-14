@@ -62,6 +62,7 @@
 | 編集の口（C の関数）と、その客（行を読む道具、素の C）。エンジンを触る係は中の1本の糸で、時計も中身が持つ | `filament/motolii.h`、`motolii.mm`、`edit.cpp`、`edit.sh`、`filament/check/api.c` | 今の土台で動く |
 | **物理の試し：踊る猫が玉を弾く（2D、Box2D）、ハリネズミのボールプール（3D、Jolt）**。緑を抜いた動画の輪郭を毎コマ OpenCV で焼き、玉をその輪郭に当てて、キーに焼いて書類にする | `filament/catball/` | 今の土台で動く（Box2D 3.1.1 は Homebrew。どの物理に決めるかは TASKS の 0 と 8） |
 | **物理エンジンの測り台**：同じ4場面（かけらの山・関節の格子・ロープ・猫の壁と球）を Rapier（Rust）と Jolt（C++）で測る。エンジン本体は `filament/third_party/physics/`（リポジトリ外、取ってきた物） | `filament/physics_bench/`（Rapier の測り台と Jolt の測り台） | 測り終えた（Jolt に決めた、TASKS の 0） |
+| **書類の中の物理（Jolt）**：物の値 physics（none・moves・still）・bounce・friction、段の gravity。最後のキーまではキー通り、そこから物理（速さを引き継ぐ）。1/60 秒刻みで回して毎コマ貯める、書類が変わったら回し直す | `filament/physics.h`、`filament/physics.cpp`（Jolt は `filament/third_party/physics/`、ビルドは `filament/edit.sh`） | 今の土台で動く |
 | 板の材質（色抜き、型、重ね方4つ、動画の色） | `filament/flat.mat`、`matte.mat`、`matte.glsl` | 今の土台で動く |
 | 場面の見本：民衆、人形劇、マスク、重ね方、壁、AE再生、AEの動き、文書 | `filament/neko.mm`、`puppet.mm`、`mask.mm`、`lay.mm`、`wall.mm`、`ae.mm`、`led.mm`（開くのは `filament/neko.sh`、`puppet.sh`、`lay.sh`、`led.sh`。led の動きは `filament/led.json`） | 今の土台で動く。動画は `reports/show/` |
 | ビルド：今の土台用。Filament と ThorVG を Dawn で作る手順、Filament の中に仕事を入れる口、計算の口の確かめ | `filament/dawn_probe/`（場面を作るのは `kit_wgpu.sh`、ThorVG は `tvg_on_dawn.sh`） | 今の土台で動く |
