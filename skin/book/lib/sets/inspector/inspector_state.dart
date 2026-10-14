@@ -189,6 +189,12 @@ class Doc extends ChangeNotifier {
   final Map<String, bool> b = {};
   final List<String> fxOrder = [];
 
+  /// What the host calls the layer's kind, where the six kinds have no word for it (a film, a picture, a solid); and the
+  /// values the host has for it (a card of values it has not is not shown); null: the sample's.
+  String? kindWord;
+  Set<String>? seats;
+  bool seat(String id) => seats?.contains(id) ?? true;
+
   /// The effects the cards are made from: the host's, or the sample's.
   final List<Fx> fxDefs;
   bool animateAll = false, link = true;

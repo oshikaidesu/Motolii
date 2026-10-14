@@ -144,6 +144,8 @@ class InspHost extends StatefulWidget {
     this.count = 1,
     this.effects = 2,
     this.fx,
+    this.kindWord,
+    this.seats,
     this.title,
     this.onRoute,
     this.values = const {},
@@ -168,6 +170,10 @@ class InspHost extends StatefulWidget {
 
   /// The effects on the layer, as the host has them (each one's card from its Params); null: the sample's first [effects].
   final List<Fx>? fx;
+
+  /// What the host calls the kind (see [Doc.kindWord]), and the values it has (see [Doc.seats]).
+  final String? kindWord;
+  final Set<String>? seats;
 
   /// The selected layer's name, when the host knows it.
   final String? title;
@@ -219,6 +225,8 @@ class _InspHostState extends State<InspHost> {
   Doc _make() {
     final d = Doc(widget.kind, count: widget.count, effects: widget.effects, fx: widget.fx)
       ..title = widget.title
+      ..kindWord = widget.kindWord
+      ..seats = widget.seats
       ..v.addAll(widget.values)
       ..s2.addAll(widget.strs)
       ..choices.addAll(widget.choices)
@@ -339,7 +347,10 @@ class _InspHostState extends State<InspHost> {
     if (widget.animating case final on? when on != _animating) {
       doc.animateAll = _animating = on;
     }
-    doc.title = widget.title;
+    doc
+      ..title = widget.title
+      ..kindWord = widget.kindWord
+      ..seats = widget.seats;
     doc.choices
       ..clear()
       ..addAll(widget.choices);

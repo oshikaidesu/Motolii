@@ -1,4 +1,6 @@
 // The window's top bar: who and what (wordmark, project, comp), the mode, and the one loud action (Render).
+import 'dart:io';
+
 import 'package:flutter/widgets.dart';
 
 import '../tokens.dart';
@@ -259,6 +261,14 @@ class _ShadePaint extends CustomPainter {
   bool shouldRepaint(_ShadePaint o) => o.c != c;
 }
 
+/// Joined: when the document's file was last written (a change is written as it is made); else the sample's word.
+String _savedAt(Ws ws) {
+  final f = File('${ws.documentFolder}/${ws.document}');
+  if (ws.inside == null || ws.document == null || !f.existsSync()) return 'Saved';
+  final t = f.lastModifiedSync();
+  return 'Saved ${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+}
+
 class _Saved extends StatelessWidget {
   const _Saved();
   @override
@@ -273,7 +283,7 @@ class _Saved extends StatelessWidget {
       const SizedBox(width: 6),
       ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 260),
-        child: Text(WsScope.of(context).notice ?? 'Saved', maxLines: 1, overflow: TextOverflow.ellipsis, style: T.label(Grey.g63)),
+        child: Text(WsScope.of(context).notice ?? _savedAt(WsScope.of(context)), maxLines: 1, overflow: TextOverflow.ellipsis, style: T.label(Grey.g63)),
       ),
     ],
   );

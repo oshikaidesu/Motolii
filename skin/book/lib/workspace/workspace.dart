@@ -255,6 +255,12 @@ DockingArea _preset(DockingItem Function(String name, {double? size, double? wei
   DockingColumn([item('Inspector'), item('Desk', size: WsT.lower + _strip)], size: WsT.inspector, minimalSize: 340),
 ]);
 
+/// Joined: the document's word for what a thing is, where the inspector's kinds have none (film, picture, solid).
+String? _kindWord(Ws ws, String? id) {
+  final t = int.tryParse(id ?? ''), w = t == null ? '' : ws.inside?.word(t, 'kind') ?? '';
+  return const {'film', 'picture', 'solid'}.contains(w) ? w.replaceRange(0, 1, w[0].toUpperCase()) : null;
+}
+
 Kind _kindOf(WsLayer? l) => switch (l?.kind) {
   null || WsKind.audio => Kind.none,
   WsKind.text => Kind.text,
@@ -587,6 +593,8 @@ class _InspectorSeat extends StatelessWidget {
         kind: k,
         effects: 2,
         fx: _fxCards(ws, l?.id), // (joined: the effects the document has on it, each a card)
+        kindWord: _kindWord(ws, l?.id),
+        seats: ws.inside == null || int.tryParse(l?.id ?? '') == null ? null : ws.inside!.values(int.parse(l!.id)).toSet(), // (joined: a card of values the thing has not is not shown)
         title: l?.name,
         onRoute: ws.route,
         values: wsTransform(ws, l?.id),

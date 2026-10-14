@@ -221,7 +221,9 @@ class InspHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final x = Ctx.of(context), doc = x.doc, ed = Ed(x.cfg.ed);
+    final w = doc.kindWord; // (what the host calls it, where the kinds have no word)
     final (word, glyph) = switch (doc.kind) {
+      Kind.shape when w != null => (w, w == 'Film' || w == 'Picture' ? G.image : G.shape),
       Kind.shape => ('Shape', G.shape),
       Kind.text => ('Text', G.text),
       Kind.camera => ('Camera', G.camera),

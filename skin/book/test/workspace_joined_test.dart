@@ -8,7 +8,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lab_book/motolii.dart';
 import 'package:lab_book/parts/controls.dart' show Segmented;
-import 'package:lab_book/sets/inspector/inspector_parts.dart' show AnchorCube, AnchorGeometry, EffectCard, NumField, OnOff, PropRow, Space, SpacePlate, TextGroup;
+import 'package:lab_book/sets/inspector/inspector_parts.dart' show AnchorCube, AnchorGeometry, EffectCard, FillStroke, InspHeader, NumField, OnOff, PropRow, Space, SpacePlate, TextGroup;
 import 'package:lab_book/workspace/dock_fonts.dart';
 import 'package:lab_book/workspace/dock_make.dart' show CreateShelf;
 import 'package:lab_book/workspace/desk_kit.dart' show DeskScrub;
@@ -1008,6 +1008,35 @@ void main() {
     expect(m.value(a, 'shadow_distance', 0), isNot(was), reason: 'the distance is the document\'s: ${ws.notice}');
     expect(m.undo(), isTrue);
     expect(m.value(a, 'shadow_distance', 0), was, reason: 'one step');
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
+  testWidgets('Saved says when the document\'s file was last written: a change is written as it is made', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    m.add('shape', 'rect');
+    ws.reread();
+    await t.pumpAndSettle();
+    final at = File('${ws.documentFolder}/${ws.document}').lastModifiedSync();
+    expect(DateTime.now().difference(at).inSeconds, lessThan(5), reason: 'the change is in the file already');
+    expect(find.text('Saved ${at.hour.toString().padLeft(2, '0')}:${at.minute.toString().padLeft(2, '0')}'), findsOneWidget);
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
+  testWidgets('the inspector says what a thing is in the document\'s word, and shows only the cards of values it has', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    final film = m.add('', '$motoliiDir/out/vid/happy.mp4'), cube = m.add('solid', 'cube');
+    ws
+      ..reread()
+      ..select('$film');
+    await t.pumpAndSettle();
+    expect(find.descendant(of: find.byType(InspHeader), matching: find.text('Film')), findsOneWidget);
+    expect(find.byType(FillStroke), findsNothing, reason: 'a film has no fill: ${m.values(film)}');
+    ws.select('$cube');
+    await t.pumpAndSettle();
+    expect(find.descendant(of: find.byType(InspHeader), matching: find.text('Solid')), findsOneWidget);
+    expect(find.byType(FillStroke), findsOneWidget, reason: 'a solid\'s fill is a colour or glass');
     expect(t.takeException(), isNull);
     await _close(t);
   }, skip: !_built);
