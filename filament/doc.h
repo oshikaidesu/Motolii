@@ -136,6 +136,8 @@ static const DocValue doc_values[] = {
     {"copy_fill_way", "picture text shape", 0, 0, false, "ramp cycle"},   // (from the first to the last across them all, or one colour each in turn, round and round)
     {"copy_wide", "picture text shape", 0.01, 100, true, nullptr},   // (how many times as wide its last copy is as its first, those between in step: rows of waves, each with more of them)
     {"copy_turn", "picture text shape", -1e5, 1e5, true, nullptr},
+    {"tall", "picture text shape", 0, 1e3, true, nullptr},   // (how many times as tall as it is, its anchor staying where it is: a bar growing up from its foot)
+    {"copy_tall", "picture text shape", 0, 0, false, ""},   // (and its copies each so many times as tall again, in their order, going round: numbers, a bar chart's data; none: all as tall)
     {"connect", "shape", 0, 1e9, false, nullptr},   // (the thing whose copies its own copies join, one each from one to another: lines between dots; 0: none)
     {"connect_to", "shape", 0, 1e9, false, nullptr},   // (and another: the first's nth copy joined to this one's nth, rungs between two strands; 0: within the first)
     {"connect_reach", "shape", 0, 1e4, true, nullptr},   // (only those nearer than this, in units of the stage, finer the further apart: a plexus; 0: each to the next in their order)   // (how far its copies turn in all, spread evenly over them: 360 fills a round; copy_rotate's turn each on top)
@@ -201,7 +203,7 @@ struct DocCard { const char* title; const char* names; const char* when = nullpt
 static const DocCard doc_cards[] = {
     {"Type", "split letter_spacing line_spacing italic wrap wrap_at"},
     {"Gradient", "gradient gradient_angle gradient_scale gradient_spread", "fill", "~ "},
-    {"Copies", "copies copy_columns copy_x copy_y copy_rotate copy_turn copy_size copy_wide stagger stagger_from copy_fill copy_fill_way"},
+    {"Copies", "copies copy_columns copy_x copy_y copy_rotate copy_turn copy_size copy_wide tall copy_tall stagger stagger_from copy_fill copy_fill_way"},
     {"Wave", "wave_x wave_y wave_rotate wave_size wave_speed wave_phase wave_noise noise_scale"},
     {"Field", "field_x field_y field_radius field_band field_size field_rotate field_push"},
     {"Scatter", "scatter_x scatter_y scatter_rotate scatter_size seed drift_x drift_y"},
@@ -437,6 +439,14 @@ static math::mat4 doc_place(Doc& d, int thing, double now, int deeper, int copy,
         own = own * math::mat4::rotation(w * doc_number(d, thing, "wave_rotate", said, 0) * (double)TAU / 360.0, math::double3{0, 0, 1}) *
               math::mat4::scaling(std::max(0.0, 1.0 + w * doc_number(d, thing, "wave_size", said, 0)));
     }
+    double tall = doc_number(d, thing, "tall", now, 1);   // (taller, its anchor staying: a copy as its number in copy_tall says too)
+    if (member) {
+        std::istringstream said(doc_word(d, thing, "copy_tall"));
+        std::vector<double> each;
+        for (std::string one; said >> one && one != "none";) each.push_back(std::atof(one.c_str()));
+        if (!each.empty()) tall *= each[(size_t)copy % each.size()];
+    }
+    own = own * math::mat4::scaling(math::double3{1.0, tall, 1.0});
     math::mat4 place = doc_above(d, thing, now, deeper) * math::mat4::translation(math::double3{doc_number(d, thing, "x", now, 0), doc_number(d, thing, "y", now, 0), doc_number(d, thing, "z", now, 0)}) *
                        turned("rotate", {0, 0, 1}) * turned("rotate_y", {0, 1, 0}) * turned("rotate_x", {1, 0, 0}) * math::mat4::translation(shift) * math::mat4::scaling(doc_number(d, thing, "size", now, 1)) *
                        own * math::mat4::translation(-anchor);
@@ -1213,6 +1223,10 @@ static bool doc_knows(Doc& d, int thing, const char* name = nullptr, const doubl
         if (has.empty()) return d.trouble = std::string("its file has no ") + (!strcmp(name, "marker") ? "markers" : "movements of its own"), false;
         if (!doc_among(has.c_str(), word)) return d.trouble = std::string(name) + " is one of: " + has, false;
     }
+    if (word && *word && !strcmp(name, "copy_tall") && strcmp(word, "none")) {   // (numbers, one for each copy in their order)
+        std::istringstream all(word);
+        for (std::string one; all >> one;) { char* end = nullptr; const double is = std::strtod(one.c_str(), &end); if (*end || !std::isfinite(is) || is < 0.0 || is > 1e3) return d.trouble = "copy_tall is numbers from 0 to 1000, one for each copy, as 1 2.5 0.8", false; }
+    }
     if (word && *word && !strcmp(name, "copy_fill") && strcmp(word, "none")) {   // (colours, six digits each; none: not coloured each)
         std::istringstream all(word);
         int n = 0;
@@ -1400,6 +1414,8 @@ static const DocRecipe doc_recipes[] = {
     {"Plexus", "shape", "circle", "dots drifting and bobbing, joined by lines where they come near, finer the further apart",
      "say fill ffffff\nset size 0.05\nset copies 100\nset scatter_x 3.2\nset scatter_y 1.9\nset seed 7\nset drift_x 0.65\nset wave_y 0.3\nset wave_noise 1\nset wave_speed 0.25\n"
      "then shape line\nsay fill 9ad7ff\nset opacity 0.7\nset size 0.25\nset copies 900\nset connect first\nset connect_reach 0.7"},
+    {"Bars", "shape", "rect", "a bar chart: bars growing up one after another to their numbers (copy_tall), and down again",
+     "say fill ffffff\nset size 0.25\nset wide 0.6\nset y -0.9\nset anchor_y -1\nset copies 8\nset copy_x 0.42\nsay copy_tall 1.5 3.2 2.2 4.6 3.6 5.4 4.2 6\nkey tall 0 0\nkey tall 1.2 1\nkey tall 6.5 1\nkey tall 7.4 0\nset stagger 0.5\nsay copy_fill 1b2fd8 ff3366 ffd166"},
     {"Spiral", "shape", "circle", "dots on a spiral growing outwards, turning, a band of large dots going out and back through them",
      "say fill ffffff\nset size 0.03\nset anchor_x -30\nset copies 170\nset copy_turn 1800\nset copy_size 1.006\nkey rotate 0 0\nkey rotate 8 -360\nset field_band 0.5\nset field_size 2.5\nkey field_radius 0 0.2\nkey field_radius 4 1.6\nkey field_radius 8 0.2\nsay copy_fill ffd166 ff3366 1b2fd8"},
     {"Burst", "shape", "line", "lines from a centre growing out one after another",
@@ -1641,7 +1657,7 @@ static bool doc_covers(Doc& d, int thing, double now, double* box) {
 }
 
 static double doc_usual(const char* name) {
-    return doc_among("size speed opacity wide visible distance zoom copies copy_size copy_wide blur_level letter_spacing line_spacing contrast saturation vibrance environment gradient_scale wave_speed", name) ? 1.0 : !strcmp(name, "duration") ? -1.0
+    return doc_among("size speed opacity wide tall visible distance zoom copies copy_size copy_wide blur_level letter_spacing line_spacing contrast saturation vibrance environment gradient_scale wave_speed", name) ? 1.0 : !strcmp(name, "duration") ? -1.0
          : !strcmp(name, "metallic") ? 0.08 : !strcmp(name, "roughness") ? 0.6 : !strcmp(name, "reflectance") ? 0.5   // (a solid's surface as it comes)
          : !strcmp(name, "intensity") ? 1.0 : !strcmp(name, "falloff") ? 10.0 : !strcmp(name, "cone") ? 30.0   // (a light as it comes)
          : !strcmp(name, "ior") ? 1.5 : !strcmp(name, "dispersion") ? 0.1 : !strcmp(name, "swim") ? 0.5 : !strcmp(name, "dark") ? 4.0 : !strcmp(name, "vivid") ? 1.3 : 0.0;   // (the kit's glass as it comes)
