@@ -1181,6 +1181,13 @@ void main() {
     expect(m.words(pic, 'marker'), ['all', 'Start', 'End'], reason: 'its file\'s own names');
     expect([for (final e in find.byType(ValuesCard).evaluate()) (e.widget as ValuesCard).card.name], contains('Play'));
     expect(m.say(pic, 'marker', 'Start') && m.word(pic, 'marker') == 'Start', isTrue, reason: m.trouble);
+    // (a 3D file plays one of its own movements, at its speed)
+    final fox = m.add('solid', '$motoliiDir/third_party/filament_src/third_party/models/Fox/Fox.glb');
+    ws.reread();
+    await t.pumpAndSettle();
+    expect(m.words(fox, 'animation'), ['Survey', 'Walk', 'Run'], reason: 'its file\'s own movements');
+    expect(m.say(fox, 'animation', 'Run') && m.set(fox, 'speed', 2), isTrue, reason: m.trouble);
+    expect(m.cards(fox).firstWhere((c) => c.$1 == 'Play').$2, ['animation', 'speed']);
     expect(t.takeException(), isNull);
     await _close(t);
   }, skip: !_built);

@@ -99,10 +99,11 @@ static const DocValue doc_values[] = {
     {"visible", doc_kinds, 0, 1, false, nullptr}, {"order", doc_kinds, -1e9, 1e9, false, nullptr}, {"wide", "shape", 1e-3, 1e3, false, nullptr}, {"shape", "shape", 0, 0, false, "rect circle solid polygon star line null"},
     {"points", "shape", 3, 100, false, nullptr}, {"inner", "shape", 0.01, 1, false, nullptr}, {"round", "shape", 0, 0.5, false, nullptr},   // (a polygon's or star's points, a star's inner points, a rect's corners)
     {"start", doc_kinds, 0, 1e6, false, nullptr}, {"duration", doc_kinds, 1e-3, 1e6, false, nullptr},
-    {"begin", "film", 0, 1e6, false, nullptr}, {"speed", "film", -100, 100, false, nullptr}, {"keyed", "film", 0, 1, false, nullptr},
+    {"begin", "film", 0, 1e6, false, nullptr}, {"speed", "film solid", -100, 100, false, nullptr}, {"keyed", "film", 0, 1, false, nullptr},
     {"blend", "film picture text shape", 0, 0, false, "normal add multiply screen"}, {"file", "film picture solid text", 0, 0, false, ""}, {"shape", "solid", 0, 0, false, doc_shapes},
     {"text", "text", 0, 0, false, ""}, {"fill", "text solid shape light", 0, 0, false, ""},
     {"marker", "picture", 0, 0, false, ""},   // (an After Effects file: which of its named stretches it plays, over and over; all: the whole of it)
+    {"animation", "solid", 0, 0, false, ""},   // (a 3D file: which of its own movements it plays, round and round, at its speed, from when it comes on)
     // (a light, Filament's own: made a sun, a point or a spot (its file); how strong, 1 as bright as the stage's own
     //  light; how far a point or spot reaches, in units of the stage; how wide a spot's cone is, in degrees; whether
     //  the solid things it lights cast shadows. Its colour is its fill; it shines the way it is turned, ahead of it)
@@ -160,7 +161,7 @@ struct DocCard { const char* title; const char* names; const char* when = nullpt
 static const DocCard doc_cards[] = {
     {"Type", "letter_spacing line_spacing italic wrap wrap_width"},
     {"Gradient", "gradient gradient_angle gradient_scale gradient_spread"},
-    {"Play", "marker"},
+    {"Play", "marker animation speed"},
     {"Matte", "clip_matte clip_invert clip_feather", "clip", "1"},
     {"Line", "cap join dash dash_offset"},
     {"Surface", "metallic roughness reflectance clear_coat clear_coat_roughness emissive", "fill", "!glass"},
@@ -528,6 +529,7 @@ static void doc_moment(Doc& d, double now) {
         }
         if (!in) continue;
         if (t.film) video_at(s, t.film, (float)lies[i].since);
+        if (t.solid && !t.solid->moves.empty()) solid_at(t.solid, doc_word(d, thing, "animation"), lies[i].since * doc_number(d, thing, "speed", 0, 1));   // (its own movement, from when it comes on)
         if (t.drawn && t.drawn->seconds > 0.f) picture_at(s, t.drawn, std::fmod((float)lies[i].since, t.drawn->seconds));
         if (t.drawn && t.drawn->effects) {   // (its effects as they are now: those that move are drawn again)
             DrawnFx fx;
@@ -738,6 +740,7 @@ static bool doc_match(Doc& d) {
                 if (!look) made.shape = nullptr; else glassy(look);
             }
             else if ((made.solid = solid(s, file.c_str(), mat4f{}, 1.f)) && rgb >= 0) solid_fill(s, made.solid, colour, surface);
+            if (made.solid) s.playing.erase(made.solid);   // (the document tells it its moment)
         } else why = std::string("its kind is one of: ") + doc_kinds;
         if (!made.film && !made.drawn && !made.solid && !made.shape && !made.camera && made.light.isNull()) { d.trouble = why + ": the " + kind + " " + std::filesystem::path(file + shape).filename().string() + " could not be made"; all = false; continue; }
         d.shown[thing] = made;
@@ -1097,6 +1100,12 @@ static int doc_keyed(Doc& d, int thing, const char* name, double at) { return !d
 // The words a value of a thing may be (a blend's, a solid's shape), with spaces between ("": any word, or not a word).
 static std::string doc_words(Doc& d, int thing, const char* name) {
     const std::string kind = doc_word(d, thing, "kind");
+    if (!strcmp(name, "animation") && kind == "solid") {   // (its file's own movements, as gltfio reads them)
+        std::string all;
+        if (const auto t = d.shown.find(thing); t != d.shown.end() && t->second.solid)
+            for (const std::string& m : t->second.solid->moves) all += (all.empty() ? "" : " ") + m;
+        return all;
+    }
     if (!strcmp(name, "marker") && kind == "picture") {   // (the named stretches of its file, as ThorVG reads them; any: all of it)
         std::string all = "all";
         if (const auto t = d.shown.find(thing); t != d.shown.end() && t->second.drawn)
@@ -1148,7 +1157,8 @@ static std::string doc_cards_of(Doc& d, int thing) {
         for (const char* at = card.names; *at;) {
             const size_t len = strcspn(at, " ");
             const std::string n(at, len);
-            if (has.find(" " + n + " ") != std::string::npos) names += (names.empty() ? "" : " ") + n;
+            const bool still = (n == "animation" || n == "speed") && doc_word(d, thing, "kind") == "solid" && doc_words(d, thing, "animation").empty();   // (a solid with no movement of its own has none to play)
+            if (has.find(" " + n + " ") != std::string::npos && !still) names += (names.empty() ? "" : " ") + n;
             at += len + (at[len] ? 1 : 0);
         }
         if (!names.empty()) all += (all.empty() ? "" : "; ") + std::string(card.title) + ": " + names;

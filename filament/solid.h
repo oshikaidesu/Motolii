@@ -16,7 +16,20 @@ struct Solid {
     mat4f fit;             // the file's own size and middle brought to: 1 tall, its middle at the place
     float seconds = 0.f;   // how long its own movement is (none: 0)
     float starts = 0.f;    // how far into it it is when the stage's time is 0
+    std::vector<std::string> moves;   // the names of its own movements (gltfio's Animator: a file may have several)
 };
+
+// A file's movement at a moment of its own: the one named (none, or not one of its own: its first), round and round.
+static void solid_at(Solid* d, const std::string& name, double seconds) {
+    gltfio::Animator* moves = d->made->getInstance()->getAnimator();
+    if (!moves->getAnimationCount()) return;
+    size_t which = 0;
+    for (size_t i = 0; i < d->moves.size(); ++i) if (d->moves[i] == name) which = i;
+    const float lasts = moves->getAnimationDuration(which);
+    if (lasts <= 0.f) return;
+    moves->applyAnimation(which, (float)(seconds - lasts * std::floor(seconds / lasts)));
+    moves->updateBoneMatrices();
+}
 
 static gltfio::AssetLoader* solid_loader(Stage& s) {
     if (!s.solids) s.solids = gltfio::AssetLoader::create({s.engine, gltfio::createUbershaderProvider(s.engine, UBERARCHIVE_DEFAULT_DATA, UBERARCHIVE_DEFAULT_SIZE)});
@@ -53,6 +66,12 @@ static Solid* solid(Stage& s, const char* file, const mat4f& place, float high) 
     solid_to(s, d, place);
     s.scene->addEntities(d->made->getRenderableEntities(), d->made->getRenderableEntityCount());
     gltfio::Animator* moves = d->made->getInstance()->getAnimator();
+    for (size_t i = 0; i < moves->getAnimationCount(); ++i) {   // (its movements by name; one with none, by its number)
+        const char* name = moves->getAnimationName(i);
+        std::string word = name && *name ? name : "move" + std::to_string(i + 1);
+        std::replace(word.begin(), word.end(), ' ', '_');
+        d->moves.push_back(word);
+    }
     if (moves->getAnimationCount()) {   // (its own movement: round and round, as the stage's time goes)
         d->seconds = moves->getAnimationDuration(0);
         s.playing[d] = [d, moves](double now) {

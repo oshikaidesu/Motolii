@@ -38,7 +38,7 @@ add picture ../vid
 add robot x
 key 2 speed 1 2
 key 2 start 1 2
-set 1 speed 2
+set 1 begin 2
 set 1 keyed 1
 say 1 blend add
 say 2 shape ring
