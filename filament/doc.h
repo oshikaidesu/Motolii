@@ -699,17 +699,17 @@ static math::mat4 doc_place(Doc& d, int thing, double now, int deeper, int copy,
     }
     if (member)   // (a recipe as code: each copy where the thing's script says, on top of what its copies' values say)
         if (DocScript* sc = doc_script_of(doc_word(d, thing, "script")); sc && sc->run && sc->run->ok()) {
-            std::map<std::string, double> numbers;
-            std::map<std::string, std::string> words;
-            for (size_t i = 0; i < sc->knobs.size(); ++i) {
-                if (sc->knobs[i].kind == "select") {   // (not said yet: its first word)
-                    const std::string w = doc_word(d, thing, sc->names[i].c_str());
-                    words[sc->knobs[i].name] = w.empty() ? sc->knobs[i].words.substr(0, sc->knobs[i].words.find(' ')) : w;
-                }
-                else numbers[sc->knobs[i].name] = doc_number(d, thing, sc->names[i].c_str(), said, sc->knobs[i].usual);
-            }
             Doc::Scripted& kept = d.scripted[thing];
             if (kept.at != said || kept.made != doc_scripts_made() || (int)kept.copies.size() != n) {   // (every copy at once, the knobs read once)
+                std::map<std::string, double> numbers;
+                std::map<std::string, std::string> words;
+                for (size_t i = 0; i < sc->knobs.size(); ++i) {
+                    if (sc->knobs[i].kind == "select") {   // (not said yet: its first word)
+                        const std::string w = doc_word(d, thing, sc->names[i].c_str());
+                        words[sc->knobs[i].name] = w.empty() ? sc->knobs[i].words.substr(0, sc->knobs[i].words.find(' ')) : w;
+                    }
+                    else numbers[sc->knobs[i].name] = doc_number(d, thing, sc->names[i].c_str(), said, sc->knobs[i].usual);
+                }
                 kept.at = said, kept.made = doc_scripts_made(), kept.copies.resize((size_t)n);
                 for (int i = 0; i < n; ++i) kept.copies[(size_t)i] = sc->run->each(i, n, said, numbers, words);
             }
