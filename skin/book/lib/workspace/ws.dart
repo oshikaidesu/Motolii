@@ -325,6 +325,7 @@ class Ws extends ChangeNotifier {
 const fxValues = <String, (String, Object)>{
   'Gaussian Blur': ('blur', 12),
   'Drop Shadow': ('shadow', '000000'),
+  'Glow': ('glow', 'ffd166'), // (a warm light all round)
   'Duotone': ('tint', 1),
   'Gradient Map': ('tritone', 1),
 };

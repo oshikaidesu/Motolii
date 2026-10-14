@@ -516,6 +516,7 @@ void main() {
     await t.pumpAndSettle();
     expect(m.word(text, 'text'), 'MOTOLII\nmakes moves', reason: m.trouble);
     expect(ws.layer?.name, 'MOTOLII makes moves', reason: 'listed on one line');
+    expect(wsTransform(ws, '$text')['text.size'], closeTo(.5 * m.point, .1), reason: 'its size in points of the picture');
     final seat = find.byWidgetPredicate((w) => w is PropRow && w.id == 'align');
     await t.ensureVisible(seat);
     await t.pumpAndSettle();
@@ -573,6 +574,11 @@ void main() {
     await t.pumpAndSettle();
     expect(m.value(rect, 'tritone', 0), 1, reason: m.trouble);
     expect(ws.fxOf('$rect'), ['Duotone', 'Gradient Map']);
+
+    await pick('Glow');
+    await t.tap(find.text('Add'));
+    await t.pumpAndSettle();
+    expect(m.word(rect, 'glow'), 'ffd166', reason: m.trouble);
 
     await pick('Twirl');
     expect(find.text('No seat yet'), findsOneWidget);

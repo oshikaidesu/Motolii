@@ -82,6 +82,7 @@ static const DocValue doc_values[] = {
     {"shadow_distance", "picture text shape", 0, 1000, false, nullptr}, {"shadow_angle", "picture text shape", -1e6, 1e6, false, nullptr},
     {"shadow_blur", "picture text shape", 0, 1000, false, nullptr}, {"shadow_opacity", "picture text shape", 0, 1, false, nullptr},
     // (and its darks and lights made two colours, how much: ThorVG's tint; or its darks, middles and lights three: its tritone)
+    {"glow", "picture text shape", 0, 0, false, ""}, {"glow_blur", "picture text shape", 0, 1000, false, nullptr}, {"glow_opacity", "picture text shape", 0, 1, false, nullptr},
     {"tint", "picture text shape", 0, 1, false, nullptr}, {"tint_black", "picture text shape", 0, 0, false, ""}, {"tint_white", "picture text shape", 0, 0, false, ""},
     {"tritone", "picture text shape", 0, 1, false, nullptr}, {"tritone_shadow", "picture text shape", 0, 0, false, ""}, {"tritone_midtone", "picture text shape", 0, 0, false, ""}, {"tritone_highlight", "picture text shape", 0, 0, false, ""},   // (how its lines lie one under another, ThorVG's own: 0 at the left, 0.5 about the middle, 1 at the right)
     {"stroke", "text shape", 0, 0, false, ""}, {"stroke_width", "text shape", 0, 1000, false, nullptr}};   // (its edge: a colour, and how wide, in points of the picture at size 1)
@@ -306,7 +307,7 @@ static void doc_moment(Doc& d, double now) {
 static bool doc_match(Doc& d) {
     Stage& s = *d.stage;
     std::map<int, std::string> told;   // every thing of the document, and all that its making goes by
-    doc_rows(d, sqlite3_mprintf("select thing, group_concat(name || '=' || value, ' ') from (select * from fact where thing > 0 and name in ('kind','file','shape','blend','keyed','begin','duration','speed','text','fill','wide','stroke','stroke_width','align','blur','shadow','shadow_distance','shadow_angle','shadow_blur','shadow_opacity','tint','tint_black','tint_white','tritone','tritone_shadow','tritone_midtone','tritone_highlight') order by thing, name) group by thing"),
+    doc_rows(d, sqlite3_mprintf("select thing, group_concat(name || '=' || value, ' ') from (select * from fact where thing > 0 and name in ('kind','file','shape','blend','keyed','begin','duration','speed','text','fill','wide','stroke','stroke_width','align','blur','shadow','shadow_distance','shadow_angle','shadow_blur','shadow_opacity','glow','glow_blur','glow_opacity','tint','tint_black','tint_white','tritone','tritone_shadow','tritone_midtone','tritone_highlight') order by thing, name) group by thing"),
              [&](sqlite3_stmt* row) { told[sqlite3_column_int(row, 0)] = (const char*)sqlite3_column_text(row, 1); });
     for (auto it = d.shown.begin(); it != d.shown.end();) {
         const auto still = told.find(it->first);
@@ -351,6 +352,11 @@ static bool doc_match(Doc& d) {
             if (rgb < 0) return fxOk = false, why = std::string("a ") + name + " is six digits, as ff3366", void();
             *to = float3{(float)((rgb >> 16) & 255), (float)((rgb >> 8) & 255), (float)(rgb & 255)} / 255.f;
         };
+        if (!doc_word(d, thing, "glow").empty()) {   // (a warm light all round it, as it comes: soft 40, all of it; ThorVG's shadow spreads narrowly)
+            float3 light{0.f};
+            hue("glow", "ffd166", &light);
+            fx.glow = float4{light, (float)doc_number(d, thing, "glow_opacity", 0, 1)}, fx.glowSoft = (float)(doc_number(d, thing, "glow_blur", 0, 40) / units);
+        }
         if ((fx.tint = (float)doc_number(d, thing, "tint", 0, 0)) > 0.f) hue("tint_black", "1b1f5c", &fx.tints[0]), hue("tint_white", "ff8a65", &fx.tints[1]);   // (a deep blue and a warm pink, as it comes)
         if ((fx.tritone = (float)doc_number(d, thing, "tritone", 0, 0)) > 0.f) hue("tritone_shadow", "1b1f5c", &fx.tones[0]), hue("tritone_midtone", "c44569", &fx.tones[1]), hue("tritone_highlight", "ffd166", &fx.tones[2]);
         if (shape.empty() && !std::filesystem::is_regular_file(file)) why = "there is no such file";
@@ -372,7 +378,7 @@ static bool doc_match(Doc& d) {
             else if ((!stroke.empty() && edgeRgb < 0) || !fxOk) {}
             else if (shape == "solid") {   // (a flat colour as large as the stage, where it stands at first: as wide to its height, and as high in the stage's units)
                 const float high = (float)(2.0 * up.w / up.y);
-                made.drawn = flat(s, "rect", (float)s.w / (float)s.h, mat4f{}, high, fill.empty() ? float3{0xd9, 0xd2, 0xc3} / 255.f : colour, lay, float4{edge.xyz, edge.w / high}, DrawnFx{fx.blur / high, fx.shadow, fx.fall / high, fx.way, fx.soft / high, fx.tint, {fx.tints[0], fx.tints[1]}, fx.tritone, {fx.tones[0], fx.tones[1], fx.tones[2]}});
+                made.drawn = flat(s, "rect", (float)s.w / (float)s.h, mat4f{}, high, fill.empty() ? float3{0xd9, 0xd2, 0xc3} / 255.f : colour, lay, float4{edge.xyz, edge.w / high}, DrawnFx{fx.blur / high, fx.shadow, fx.fall / high, fx.way, fx.soft / high, fx.tint, {fx.tints[0], fx.tints[1]}, fx.tritone, {fx.tones[0], fx.tones[1], fx.tones[2]}, fx.glow, fx.glowSoft / high});
             } else made.drawn = flat(s, shape.c_str(), (float)doc_number(d, thing, "wide", 0, 1), mat4f{}, 1.f, fill.empty() ? float3{0xd9, 0xd2, 0xc3} / 255.f : colour, lay, edge, fx);
         } else if (kind == "solid") {   // (one of the kit's shapes, or a file; its fill is its surface: a colour, or the material glass)
             const bool glass = fill == "glass";

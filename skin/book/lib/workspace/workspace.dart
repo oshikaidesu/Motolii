@@ -383,7 +383,8 @@ const _seats = <(String, String, _Across, _Across)>[
   ('rot.z', 'rotate', _minus, _minus),
   ('op', 'opacity', _hundredOut, _hundredIn),
   ('stroke.w', 'stroke_width', _same, _same),
-  ('blur_radius', 'blur', _same, _same), // (the Blur card's radius: points of the picture at size 1) // (points of the picture at size 1: the edge grows with the thing, as in After Effects)
+  ('blur_radius', 'blur', _same, _same),
+  ('text.size', 'size', _pointsOut, _pointsIn), // (a text's size in points of the picture: its own size, one unit high at size 1) // (the Blur card's radius: points of the picture at size 1) // (points of the picture at size 1: the edge grows with the thing, as in After Effects)
   // (the anchor: the sample's hundredths of the box from its top left, front -50 to back 50; the document's share of
   //  half the box from its middle, up and towards the eye)
   ('anchor.x', 'anchor_x', _acrossOut, _acrossIn),
@@ -405,6 +406,8 @@ double _zIn(double x, Size c, double p) => x / p;
 double _hundredOut(double v, Size c, double p) => v * 100;
 double _hundredIn(double x, Size c, double p) => x / 100;
 double _same(double v, Size c, double p) => v;
+double _pointsOut(double v, Size c, double p) => v * p;
+double _pointsIn(double x, Size c, double p) => x / p;
 double _minus(double v, Size c, double p) => -v;
 
 /// The document's values behind an inspector property (pos, scale, rot, op): its key mark is theirs.
