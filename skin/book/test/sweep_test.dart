@@ -1,15 +1,16 @@
 // Every control the window shows, worked one at a time, and the document asked what it did (the judge is the inside,
-// never the screen: what the window claims and what the document holds must agree). A knob that moves nothing, two
-// knobs that move the same values, a handle that moves something other than what it is drawn for: each is a failure.
+// never the screen: what the window claims and what the document holds must agree). A knob that moves nothing, a knob
+// whose own number, read back from the document, stays or drags others with it, a handle that moves something other
+// than what it is drawn for: each is a failure.
 import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lab_book/motolii.dart';
-import 'package:lab_book/sets/inspector/inspector_parts.dart' show InspectorPanel, NumField;
+import 'package:lab_book/sets/inspector/inspector_parts.dart' show InspectorPanel, LinkMark, NumField;
 import 'package:lab_book/workspace/stage_view.dart';
 import 'package:lab_book/workspace/timeline.dart';
-import 'package:lab_book/workspace/workspace.dart';
+import 'package:lab_book/workspace/workspace.dart' show Workspace, wsTransform;
 import 'package:lab_book/workspace/ws.dart';
 
 final _built = File('$motoliiDir/out/libmotolii.dylib').existsSync();
@@ -75,16 +76,22 @@ void main() {
   for (final what in _things) {
     testWidgets('every knob on the cards of a ${what.$1} ${what.$2.split('/').last} moves a value of its own', (t) async {
       final ws = await _picked(t, what), m = ws.inside!, at = ws.frame / Ws.fps;
+      // (the scale's link let go: each axis on its own, as a hand that wants another aspect lets it go first)
+      final link = find.descendant(of: find.byType(InspectorPanel), matching: find.byType(LinkMark));
+      if (link.evaluate().isNotEmpty) {
+        await t.tap(link.first);
+        await t.pumpAndSettle();
+      }
       final ids = [
         for (final e in find.descendant(of: find.byType(InspectorPanel), matching: find.byType(NumField)).evaluate())
           if ((e.widget as NumField).enabled && !_off(e)) (e.widget as NumField).id,
       ];
-      final did = <String, Set<String>>{}, dead = <String>[], undone = <String>[];
+      final dead = <String>[], deaf = <String>[], spill = <String>[], undone = <String>[];
       for (final id in ids.toSet()) {
         final knob = find.byWidgetPredicate((w) => w is NumField && w.id == id).first;
         await t.ensureVisible(knob);
         await t.pumpAndSettle();
-        final before = _all(m, at);
+        final before = _all(m, at), shown = wsTransform(ws, ws.selected);
         var moved = <String>{};
         for (final by in const [Offset(40, -40), Offset(-80, 80)]) {
           await t.drag(knob, by);
@@ -92,21 +99,23 @@ void main() {
           moved = _moved(before, _all(m, at));
           if (moved.isNotEmpty) break;
         }
-        if (moved.isEmpty) dead.add(id);
-        did[id] = moved;
+        // (what the cards show now, read from the document: the knob's own number moved, and no other's)
+        final now = wsTransform(ws, ws.selected), others = [for (final k in ids) if (k != id && now[k] != shown[k]) k];
+        if (moved.isEmpty) {
+          dead.add(id);
+        } else if (now[id] == shown[id]) {
+          deaf.add('$id (moved ${moved.join(', ')})');
+        } else if (others.isNotEmpty) {
+          spill.add('$id moved ${others.join(', ')} too');
+        }
         if (moved.isNotEmpty) m.undo(); // (one drag is one step)
         ws.reread();
         await t.pumpAndSettle();
         if (_moved(before, _all(m, at)).isNotEmpty) undone.add(id);
       }
-      final twins = <String>[
-        for (final (i, a) in did.keys.indexed)
-          for (final b in did.keys.skip(i + 1))
-            if (did[a]!.isNotEmpty && did[a]!.length == did[b]!.length && did[a]!.containsAll(did[b]!)) '$a = $b (${did[a]!.join(', ')})',
-      ];
       // ignore: avoid_print
-      print('${what.$1} ${what.$2.split('/').last}: ${ids.length} knobs; moves nothing: $dead; the same as another: $twins; not undone in one step: $undone');
-      expect([...dead.map((d) => 'moves nothing: $d'), ...twins.map((w) => 'twins: $w'), ...undone.map((u) => 'not undone in one step: $u')], isEmpty);
+      print('${what.$1} ${what.$2.split('/').last}: ${ids.length} knobs; moves nothing: $dead; its own number stays: $deaf; others move with it: $spill; not undone in one step: $undone');
+      expect([...dead.map((d) => 'moves nothing: $d'), ...deaf.map((d) => 'its own number stays: $d'), ...spill, ...undone.map((u) => 'not undone in one step: $u')], isEmpty);
       expect(t.takeException(), isNull);
       await t.pumpWidget(const SizedBox());
       t.view.reset();
