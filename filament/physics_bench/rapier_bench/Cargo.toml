@@ -1,0 +1,10 @@
+[package]
+name = "rapier_bench"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+rapier3d = { path = "../../third_party/physics/rapier/crates/rapier3d", features = ["enhanced-determinism"] }
+
+[profile.release]
+debug = false

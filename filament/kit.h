@@ -323,6 +323,24 @@ static Mesh* torus(float R, float r, int around = 128, int about = 40) {
     return m;
 }
 
+// A ball of radius r, round from pole to pole.
+static Mesh* sphere(float r, int around = 48, int about = 24) {
+    Mesh* m = new Mesh;
+    for (int i = 0; i <= around; ++i)
+        for (int k = 0; k <= about; ++k) {
+            const float a = TAU * (float)i / around, b = 0.5f * TAU * (float)k / about - 0.25f * TAU;
+            const float3 out{std::cos(a) * std::cos(b), std::sin(b), std::sin(a) * std::cos(b)};
+            m->pos.push_back(out * r);
+            m->nrm.push_back(out);
+            m->uv.push_back({(float)i / around, (float)k / about});
+            if (i < around && k < about) {
+                const uint32_t p = (uint32_t)(i * (about + 1) + k), q = p + 1, s = p + (uint32_t)(about + 1), t = s + 1;
+                m->idx.insert(m->idx.end(), {p, q, s, s, q, t});
+            }
+        }
+    return m;
+}
+
 // A solid of twenty flat faces (an icosahedron), each face its own three corners: hard edges.
 static Mesh* gem(float size) {
     const float f = (1.f + std::sqrt(5.f)) * 0.5f;

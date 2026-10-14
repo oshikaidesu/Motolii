@@ -82,7 +82,7 @@ struct Doc {
 // words), and whether it can move (take keys).
 static const char* const doc_kinds = "film picture text solid shape camera light";   // (the kinds of thing)
 static const char* const doc_drawn = "film picture text solid shape";          // (those that are seen)
-static const char* const doc_shapes = "ring gem cube";             // (the kit's own shapes a solid may be)
+static const char* const doc_shapes = "ring gem cube ball";             // (the kit's own shapes a solid may be)
 // (whether a value is keyed, in SQLite's words: see doc_key)
 #define DOC_KEYED "(select count(*) > 1 or max(at) <> 0 or max(way) is not null from fact where thing = %d and name = %Q)"
 struct DocValue { const char* name; const char* kinds; double low, high; bool moves; const char* words; };
@@ -1175,7 +1175,7 @@ static bool doc_match(Doc& d) {
                                   (float)doc_number(d, thing, "sheen", 0, 0), (float)doc_number(d, thing, "anisotropy", 0, 0)};
             if (!fill.empty() && !glass && (rgb < 0 || ramp.size() > 1)) why = "a solid's fill is six digits, as ff3366, or glass";
             else if (!shape.empty()) {
-                made.shape = shape == "gem" ? gem(0.5f) : shape == "cube" ? cube(0.1f) : torus(0.37f, 0.13f);
+                made.shape = shape == "gem" ? gem(0.5f) : shape == "cube" ? cube(0.1f) : shape == "ball" ? sphere(0.5f) : torus(0.37f, 0.13f);
                 MaterialInstance* look = glass ? thick_glass(s, made.shape, {mat4f{}}) : add(s, made.shape, "floor_lit.filamat");
                 if (look && glass) glassy(look);
                 if (!look) made.shape = nullptr;
