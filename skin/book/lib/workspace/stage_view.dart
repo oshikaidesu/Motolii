@@ -118,7 +118,7 @@ class _StageViewState extends State<StageView> {
       }
       return '$t';
     }
-    if (id != null || widget.scene.camera) return id;
+    if (id != null || widget.scene.camera || widget.scene.boxes != null) return id; // (joined: there is no sample camera frame to take hold of)
     final cam = WsArt.cameraBox(widget.scene), tol = 8 / v.s;
     return cam.contains(d, tol) && !cam.contains(d, -tol) ? 'cam' : null;
   }
