@@ -125,6 +125,8 @@ static const DocValue doc_values[] = {
     {"copies", "picture text shape", 1, 100, false, nullptr}, {"copy_x", "picture text shape", -1e4, 1e4, true, nullptr}, {"copy_y", "picture text shape", -1e4, 1e4, true, nullptr},
     {"copy_rotate", "picture text shape", -1e6, 1e6, true, nullptr}, {"copy_size", "picture text shape", 0.01, 100, true, nullptr},
     {"copy_columns", "picture text shape", 0, 100, false, nullptr},   // (so many to a row, then the next row: copy_x along it, copy_y down; 0: one row)
+    {"stagger", "picture text shape", 0, 1e3, false, nullptr},   // (how much later the last of its copies moves than the first, in seconds: each as late as its order says)
+    {"stagger_from", "picture text shape", 0, 0, false, "start centre end edges"},   // (which of them moves first: the first, the middle one, the last, the outer ones)
     {"tint", "picture text shape", 0, 1, true, nullptr}, {"tint_black", "picture text shape", 0, 0, false, ""}, {"tint_white", "picture text shape", 0, 0, false, ""},
     {"tritone", "picture text shape", 0, 1, true, nullptr}, {"tritone_shadow", "picture text shape", 0, 0, false, ""}, {"tritone_midtone", "picture text shape", 0, 0, false, ""}, {"tritone_highlight", "picture text shape", 0, 0, false, ""},   // (how its lines lie one under another, ThorVG's own: 0 at the left, 0.5 about the middle, 1 at the right)
     {"stroke", "text shape", 0, 0, false, ""}, {"stroke_width", "text shape", 0, 1000, false, nullptr},   // (its edge: a colour, and how wide, in points of the picture at size 1)
@@ -167,6 +169,7 @@ struct DocCard { const char* title; const char* names; const char* when = nullpt
 static const DocCard doc_cards[] = {
     {"Type", "letter_spacing line_spacing italic wrap wrap_at"},
     {"Gradient", "gradient gradient_angle gradient_scale gradient_spread", "fill", "~ "},
+    {"Copies", "copies copy_columns copy_x copy_y copy_rotate copy_size stagger stagger_from"},
     {"Shine", "emissive", "kind", "!solid"},   // (a flat thing lit from within: past 1, the stage's bloom takes it up where it lies in the stage's own view; laid over a solid thing, a picture of its own is clear round it and keeps no halo: ThorVG's glow does that)
     {"Play", "marker animation speed"},
     {"Matte", "clip_matte clip_invert clip_feather", "clip", "1"},
@@ -302,13 +305,24 @@ static bool doc_covers(Doc& d, int thing, double now, double* box);
 static bool doc_half(Doc& d, int thing, float2* half, float* deep = nullptr);
 // Where a thing is at a moment, as a matrix: moved, turned about z, y and x, made its size, all about its anchor (a
 // point of its own box: 0 its middle, 1 its edge on that side; the past repository's `anchor`, keyed as it was).
-static math::mat4 doc_place(Doc& d, int thing, double now, int deeper = 0, int copy = 0);
+static math::mat4 doc_place(Doc& d, int thing, double now, int deeper = 0, int copy = 0, bool member = false);
+// How much later a thing's nth copy moves than it is said to (the past repository's order law, GSAP's stagger: the
+// stagger spread over them by their order: from the start, from the centre out, from the end, from the edges in).
+static double doc_delay(Doc& d, int thing, int nth) {
+    const double stagger = doc_number(d, thing, "stagger", 0, 0);
+    const int n = (int)doc_number(d, thing, "copies", 0, 1);
+    if (stagger <= 0.0 || n < 2) return 0.0;
+    const double along = (double)nth / (double)(n - 1), centre = std::fabs(along - 0.5) * 2.0;
+    const std::string from = doc_word(d, thing, "stagger_from");
+    return stagger * (from == "centre" ? centre : from == "end" ? 1.0 - along : from == "edges" ? 1.0 - centre : along);
+}
 // Where the thing it goes with is (its parent's place; none, or one not there any more: as the stage is).
 static math::mat4 doc_above(Doc& d, int thing, double now, int deeper = 0) {
     const int parent = (int)doc_number(d, thing, "parent", 0, 0);
     return parent && d.shown.count(parent) && deeper < 64 ? doc_place(d, parent, now, deeper + 1) : math::mat4{};   // (64: a document written elsewhere with a ring of parents still ends)
 }
-static math::mat4 doc_place(Doc& d, int thing, double now, int deeper, int copy) {
+static math::mat4 doc_place(Doc& d, int thing, double now, int deeper, int copy, bool member) {
+    if (member) now -= doc_delay(d, thing, copy);   // (a member of its copies: as it was so much earlier)
     const auto turned = [&](const char* name, math::double3 about) { return math::mat4::rotation(doc_number(d, thing, name, now, 0) * (double)TAU / 360.0, about); };
     float2 half{0.5f};
     float deep = 0.f;
@@ -574,7 +588,8 @@ static void doc_moment(Doc& d, double now) {
         }
         if (t.drawn && t.drawn->shape) trim_at(s, t.drawn, (float)doc_number(d, thing, "trim", now, 0), (float)doc_number(d, thing, "trim_begin", now, 0), (float)doc_number(d, thing, "trim_offset", now, 0));
         const mat4f place = mat4f(doc_place(d, thing, now));
-        if (t.solid) solid_to(s, t.solid, place); else move(s, m, [&](int nth, const mat4f&) { return nth ? mat4f(doc_place(d, thing, now, 0, nth)) : place; });
+        const bool staggered = doc_number(d, thing, "stagger", 0, 0) > 0.0;   // (each copy, the first too, as late as its order says)
+        if (t.solid) solid_to(s, t.solid, place); else move(s, m, [&](int nth, const mat4f&) { return nth || staggered ? mat4f(doc_place(d, thing, now, 0, nth, staggered)) : place; });
         if (MaterialInstance* look = t.film ? t.film->look : t.drawn ? t.drawn->look : nullptr) look->setParameter("opacity", (float)doc_number(d, thing, "opacity", now, 1));
         const float shine = (float)doc_number(d, thing, "emissive", now, 0);   // (how much it lights itself now: a flat thing's sheet, a solid's own faces)
         doc_looks(s, t, [&](MaterialInstance* look) { if (look->getMaterial()->hasParameter("glowing")) look->setParameter("glowing", shine); });
