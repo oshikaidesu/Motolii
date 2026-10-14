@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lab_book/motolii.dart';
+import 'package:lab_book/parts/controls.dart' show Segmented;
 import 'package:lab_book/sets/inspector/inspector_parts.dart' show AnchorCube, AnchorGeometry, OnOff, PropRow, TextGroup;
 import 'package:lab_book/workspace/dock_fonts.dart';
 import 'package:lab_book/workspace/timeline.dart';
@@ -479,6 +480,36 @@ void main() {
     expect(m.set(rect, 'parent', cube.toDouble()), isFalse, reason: 'no ring of parents');
     expect(m.set(cube, 'parent', 0), isTrue);
     expect(m.frame(cube)![0], closeTo(m.frame(cube)![0], 1));
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
+  testWidgets('a text of two lines, and Alignment: Left, Centre, Right are ThorVG\'s own; Justify it has not', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    final text = m.add('text', _font);
+    ws
+      ..reread()
+      ..select('$text');
+    await t.pumpAndSettle();
+    final box = find.descendant(of: find.byType(TextGroup), matching: find.byType(EditableText));
+    await t.ensureVisible(box);
+    await t.pumpAndSettle();
+    await t.tap(box);
+    await t.enterText(box, 'MOTOLII\nmakes moves');
+    FocusManager.instance.primaryFocus?.unfocus();
+    await t.pumpAndSettle();
+    expect(m.word(text, 'text'), 'MOTOLII\nmakes moves', reason: m.trouble);
+    expect(ws.layer?.name, 'MOTOLII makes moves', reason: 'listed on one line');
+    final seat = find.byWidgetPredicate((w) => w is PropRow && w.id == 'align');
+    await t.ensureVisible(seat);
+    await t.pumpAndSettle();
+    final row = t.getRect(find.descendant(of: seat, matching: find.byType(Segmented))); // (four marks in a row: Left, Centre, Right, Justify)
+    await t.tapAt(Offset(row.left + row.width * 1.5 / 4, row.center.dy));
+    await t.pumpAndSettle();
+    expect(m.value(text, 'align', 0), .5, reason: m.trouble);
+    await t.tapAt(Offset(row.left + row.width * 3.5 / 4, row.center.dy));
+    await t.pumpAndSettle();
+    expect(m.value(text, 'align', 0), .5, reason: 'not taken: ThorVG has no justified lines');
     expect(t.takeException(), isNull);
     await _close(t);
   }, skip: !_built);

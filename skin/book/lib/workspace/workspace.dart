@@ -274,12 +274,18 @@ Map<String, String> _words(Ws ws, String? id) {
   if (m == null || t == null) return const {};
   final blend = m.word(t, 'blend'), stroke = m.word(t, 'stroke');
   return {
-    if (m.word(t, 'kind') == 'text') ...{'text.content': m.word(t, 'text'), 'font': m.word(t, 'file').split('/').last},
+    if (m.word(t, 'kind') == 'text') ...{
+      'text.content': m.word(t, 'text'),
+      'font': m.word(t, 'file').split('/').last,
+      'align': _aligned[((m.value(t, 'align', 0) ?? 0) * 2).round().clamp(0, 2)],
+    },
     if (m.value(t, 'stroke_width', 0) != null) 'stroke': stroke.isEmpty ? 'None' : '#${stroke.toUpperCase()}',
     'blend': blend.isEmpty ? 'Normal' : blend.replaceRange(0, 1, blend[0].toUpperCase()),
     'parent': _others(ws, t).entries.where((e) => e.value == (m.value(t, 'parent', 0) ?? 0)).firstOrNull?.key ?? 'None',
   };
 }
+
+const _aligned = ['Left', 'Centre', 'Right'];
 
 /// Joined: the on/off seats the document has something behind (Clip to below: seen only inside the frame of the thing
 /// before it), and a change of them told to it. A seat with nothing behind it is not taken, and goes back.
@@ -323,7 +329,11 @@ bool _say(Ws ws, String? id, Map<String, String> changed) {
   m.together(() {
     for (final e in changed.entries) {
       final ok = switch (e.key) {
-        'text.content' => m.say(t, 'text', e.value.replaceAll('\n', ' ')),
+        'text.content' => m.say(t, 'text', e.value), // (its lines too)
+        'align' => switch (_aligned.indexOf(e.value)) {
+          final i when i >= 0 => m.set(t, 'align', i / 2), // (Left, Centre, Right: ThorVG's 0, 0.5, 1; Justify it has not)
+          _ => false,
+        },
         'blend' => m.say(t, 'blend', e.value.toLowerCase()),
         'parent' => m.set(t, 'parent', (_others(ws, t)[e.value] ?? 0).toDouble()), // (it goes with that one, and stays where it is)
         'stroke' => m.say(t, 'stroke', e.value == 'None' ? '' : e.value.replaceFirst('#', '').toLowerCase()), // (None: no edge)

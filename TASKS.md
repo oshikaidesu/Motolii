@@ -71,7 +71,7 @@
   (13) **Anchor（基準点）をつないだ**：過去の倉庫の `anchor` と同じく、物の中の点で鍵が打てる（`anchor_x/y/z`：物の箱に対する割合、0 が真ん中、1 がその側の端、上と手前が正）。物の置き方の行列は `doc_place` の一か所にまとめて、絵・枠・切り抜きの箱が同じ物を使う。インスペクタの Anchor の箱で点を選ぶと、その点を軸に回り・縮み、その点が位置に来る（AE と同じ）。1歩。
   (14) **Parent（親子）をつないだ**：過去の倉庫と同じく鍵の打てない属性 `parent`（相手の番号、0 で無し）。居ない物・自分・自分の子孫は断る（輪にならない）。親の置き方が子の前に掛かる（位置・回転・大きさ。不透明度や出番は引き継がない、AE と同じ）。見本の席の約束「親を替えても物は動かない」の通り、付けた・外した時は位置・Z 回転・大きさを新しい親から見た値に言い直す（キーのある値は動き全体をずらす）。舞台で子を引きずると、親の向きと大きさを考えて動く。インスペクタの Parent の選び（Layer の札と行の2か所）は書類の他の物の名前を出す。
   違い：過去の倉庫は親を消すと子も消した（グループの決まり）。こっちは親が居なくなったら「親無し」として扱い、子は残す。
-  見送り：文字の Alignment は、今の文字が1行だけなので揃えても見た目が変わらない（ThorVG の `align`・`layout` はある。複数行の文字が来たら）。
+  (15) **文字の行と Alignment**：文字の箱の改行がそのまま書類の文字になる（前は空白に替えてた）。ThorVG 自身が `\n` で行を分ける。`align`（ThorVG と同じ数：0 左、0.5 真ん中、1 右）は ThorVG の `layout`（一番長い行の幅の箱）と `align` で揃える。見本の Left・Centre・Right が 0・0.5・1。Justify は ThorVG に無いので取らない（席は書類の値に戻る）。行の名前は改行を空白にして1行。絵：`reports/skin_run/lines_and_alignment.jpg`。
   引っかかり：平たい形の言葉 `solid`（＝AE の平面）と、3D の物の種類の名前 `solid` が中で同じ綴り。窓では「Solid」と「3D」で分かれてるので見えないが、種類の方を改名するかは聞く事。
   開いたまま残った物（3回目の指摘）：3D に不透明度と重ね方が効かない／切り抜きは四角だけ／文字の Size・Alignment、Stroke、Anchor、Depth、Parent、Ghost、Effects 棚、Fonts 棚は見本のまま。
 - 開き方：`skin/book` で Flutter（`~/rust_ae/Motolii/.tools/flutter/bin/flutter`）の `build macos --debug --dart-define=LAB_ROUTE=/?path=workspace/workspace/live`、できた `lab_book.app` を開く。文書は `filament/out/skin.motolii`。

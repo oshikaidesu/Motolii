@@ -136,7 +136,8 @@ static bool type_sets(const char* fontFile, const char* words) {
     return sets;
 }
 // edge: an outline round the letters, ThorVG's own (its colour; w: how wide, a share of the line's height; 0: none).
-static Drawn* type(Stage& s, const char* words, const char* fontFile, const mat4f& place, float high, float3 colour = float3{0.f}, const char* lay = nullptr, float4 edge = float4{0.f}) {
+// Lines: the words may be broken by \n; align: how the lines lie one under another (ThorVG's own: 0 left, 1 right).
+static Drawn* type(Stage& s, const char* words, const char* fontFile, const mat4f& place, float high, float3 colour = float3{0.f}, const char* lay = nullptr, float4 edge = float4{0.f}, float align = 0.f) {
     if (!std::filesystem::is_regular_file(fontFile)) return nullptr;
     return drawn(s, [&](Drawn*, int* w, int* h) -> tvg::Paint* {
         if (tvg::Text::load(fontFile) != tvg::Result::Success) return nullptr;
@@ -153,6 +154,11 @@ static Drawn* type(Stage& s, const char* words, const char* fontFile, const mat4
             measured = t->bounds(&x, &y, &wide, &tall) == tvg::Result::Success;
         }
         if (!measured) return tvg::Paint::rel(t), nullptr;
+        if (align > 0.f) {   // (the lines aligned in a box as wide as the widest of them: ThorVG's layout and align)
+            t->layout(wide, 0.f);
+            t->align(align, 0.f);
+            measured = t->bounds(&x, &y, &wide, &tall) == tvg::Result::Success;
+        }
         const float outline = edge.w * tall;   // (half of it lies outside the letters: the picture is that much larger all round)
         if (outline > 0.f) t->outline(outline, (uint8_t)std::lround(255.f * edge.x), (uint8_t)std::lround(255.f * edge.y), (uint8_t)std::lround(255.f * edge.z));
         t->translate(-x + 0.5f * outline, -y + 0.5f * outline);

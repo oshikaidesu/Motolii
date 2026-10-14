@@ -75,6 +75,7 @@ static const DocValue doc_values[] = {
     {"blend", "film picture text shape", 0, 0, false, "normal add multiply screen"}, {"file", "film picture solid text", 0, 0, false, ""}, {"shape", "solid", 0, 0, false, doc_shapes},
     {"text", "text", 0, 0, false, ""}, {"fill", "text solid shape", 0, 0, false, ""},
     {"parent", doc_kinds, 0, 1e9, false, nullptr},   // (the thing it goes with: it is moved, turned and sized as that one is, then as it is itself; 0: none)
+    {"align", "text", 0, 1, false, nullptr},   // (how its lines lie one under another, ThorVG's own: 0 at the left, 0.5 about the middle, 1 at the right)
     {"stroke", "text shape", 0, 0, false, ""}, {"stroke_width", "text shape", 0, 1000, false, nullptr}};   // (its edge: a colour, and how wide, in points of the picture at size 1)
 static bool doc_among(const std::string& words, const std::string& one) { return (" " + words + " ").find(" " + one + " ") != std::string::npos; }
 
@@ -297,7 +298,7 @@ static void doc_moment(Doc& d, double now) {
 static bool doc_match(Doc& d) {
     Stage& s = *d.stage;
     std::map<int, std::string> told;   // every thing of the document, and all that its making goes by
-    doc_rows(d, sqlite3_mprintf("select thing, group_concat(name || '=' || value, ' ') from (select * from fact where thing > 0 and name in ('kind','file','shape','blend','keyed','begin','duration','speed','text','fill','wide','stroke','stroke_width') order by thing, name) group by thing"),
+    doc_rows(d, sqlite3_mprintf("select thing, group_concat(name || '=' || value, ' ') from (select * from fact where thing > 0 and name in ('kind','file','shape','blend','keyed','begin','duration','speed','text','fill','wide','stroke','stroke_width','align') order by thing, name) group by thing"),
              [&](sqlite3_stmt* row) { told[sqlite3_column_int(row, 0)] = (const char*)sqlite3_column_text(row, 1); });
     for (auto it = d.shown.begin(); it != d.shown.end();) {
         const auto still = told.find(it->first);
@@ -338,7 +339,7 @@ static bool doc_match(Doc& d) {
         } else if (kind == "text") {   // (words in a font: said by `say N text ...`; until then, the font's own name)
             const std::string words = doc_word(d, thing, "text");
             if (!fill.empty() && rgb < 0) why = "a text's fill is six digits, as ff3366";
-            else if (stroke.empty() || edgeRgb >= 0) made.drawn = type(s, words.empty() ? std::filesystem::path(file).stem().string().c_str() : words.c_str(), file.c_str(), mat4f{}, 1.f, fill.empty() ? float3{0x11 / 255.f} : colour, lay, edge);
+            else if (stroke.empty() || edgeRgb >= 0) made.drawn = type(s, words.empty() ? std::filesystem::path(file).stem().string().c_str() : words.c_str(), file.c_str(), mat4f{}, 1.f, fill.empty() ? float3{0x11 / 255.f} : colour, lay, edge, (float)doc_number(d, thing, "align", 0, 0));
         } else if (kind == "shape") {   // (a flat shape in one colour: ThorVG's own rectangle or circle)
             if (!fill.empty() && rgb < 0) why = "a shape's fill is six digits, as ff3366";
             else if (!stroke.empty() && edgeRgb < 0) {}
@@ -672,6 +673,7 @@ static std::string doc_name(Doc& d, int thing) {
     if (is.empty()) is = doc_word(d, thing, "shape");
     if (is.empty()) return std::filesystem::path(doc_word(d, thing, "file")).filename().string();
     if (doc_word(d, thing, "kind") != "text") is[0] = (char)std::toupper((unsigned char)is[0]);
+    std::replace(is.begin(), is.end(), '\n', ' ');   // (a text of lines is listed on one)
     return is;
 }
 static std::string doc_moving(Doc& d, int thing) {
