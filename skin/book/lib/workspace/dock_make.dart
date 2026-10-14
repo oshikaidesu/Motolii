@@ -58,20 +58,28 @@ void _fill(DockCtx c, String word) {
   if (done) c.ws.reread();
 }
 
+/// The colours of the things, each by the thing's name: joined, what the document's things are filled with (a ramp by
+/// its first); else the sample's layer hues.
+Map<String, Color> usedColours(Ws ws) {
+  final m = ws.inside;
+  if (m == null) return {for (final l in ws.layers) l.name: wsTone(l.kind)};
+  return {
+    for (final l in ws.layers)
+      if (m.word(int.parse(l.id), 'fill').split(' ').first case final f when f.length == 6)
+        if (int.tryParse(f, radix: 16) case final v?) l.name: Color(0xFF000000 | v),
+  };
+}
+
+/// Joined: how many of the Create shelf's tiles make or lay out something of the document, of all it shows.
+String createFact() => '${_asked.length + _laid.length} of ${[..._makes, _solids].fold<int>(0, (s, e) => s + e.$2.length)} work';
+
 class ColorsShelf extends StatelessWidget {
   const ColorsShelf(this.c, {super.key});
   final DockCtx c;
 
   @override
   Widget build(BuildContext context) {
-    final m = c.ws.inside;
-    // (joined: the colours the document's things are filled with, each by the thing's name; a ramp by its first)
-    final used = m == null
-        ? <String, Color>{for (final l in c.ws.layers) l.name: wsTone(l.kind)}
-        : <String, Color>{
-            for (final l in c.ws.layers)
-              if (int.tryParse(m.word(int.parse(l.id), 'fill').split(' ').first, radix: 16) case final v? when m.word(int.parse(l.id), 'fill').split(' ').first.length == 6) l.name: Color(0xFF000000 | v),
-          };
+    final used = usedColours(c.ws);
     final chip = c.chip;
     final pals = _pals.where((p) => c.hit(p.name) && (chip == 'All' || (chip == 'Saved' ? p.saved : chip == 'Starter' && !p.saved))).toList();
     Widget block(List<Widget> kids) => Padding(

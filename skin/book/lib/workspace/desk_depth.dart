@@ -66,6 +66,20 @@ void _carryLens(Ws ws, int camera, _Lens lens) {
     ..carry('focus', lens.focus / p);
 }
 
+typedef _Slab = ({String id, String name, Color tone, double x, double z, double w});
+
+/// Each thing seen from above: joined, where it is (across, and how far from the eye); else the sample's places.
+List<_Slab> _slabsOf(Ws ws) {
+  final m = ws.inside, eye = m == null ? null : _lensOf(ws, _Lens())?.eye;
+  return [
+    for (final l in ws.layers)
+      if (m != null && eye != null && l.kind != WsKind.camera)
+        (id: l.id, name: l.name, tone: wsTone(l.kind), x: (m.value(int.parse(l.id), 'x', 0) ?? 0) * m.point, z: eye - (m.value(int.parse(l.id), 'z', 0) ?? 0) * m.point, w: m.frame(int.parse(l.id))?[2] ?? 200)
+      else if (_place[l.id] case final p?)
+        (id: l.id, name: l.name, tone: wsTone(l.kind), x: p.x, z: p.z, w: p.w),
+  ];
+}
+
 class DeskDepth extends StatefulWidget {
   const DeskDepth({super.key});
   @override
@@ -82,6 +96,10 @@ class _DeskDepthState extends State<DeskDepth> {
     }
 
     final cam = ws.layers.where((l) => l.kind == WsKind.camera).firstOrNull;
+    if (joined != null) { // (joined: the thing the focus is on is the one nearest it of those it holds sharp, by the document's values)
+      final d = lens.dof, sharp = _slabsOf(ws).where((s) => s.z >= d.near && s.z <= d.far).toList()..sort((a, b) => (a.z - lens.focus).abs().compareTo((b.z - lens.focus).abs()));
+      lens.target = sharp.firstOrNull?.id;
+    }
     final target = ws.layers.where((l) => l.id == lens.target).firstOrNull;
     return Listener(
       // (joined: a hand let go is one step of the document)
@@ -220,15 +238,7 @@ class _DiagramState extends State<_Diagram> {
 
   @override
   Widget build(BuildContext context) {
-    final ws = WsScope.of(context);
-    final m = ws.inside, eye = m == null ? null : _lensOf(ws, _Lens())?.eye;
-    final slabs = [
-      for (final l in ws.layers)
-        if (m != null && eye != null && l.kind != WsKind.camera) // (joined: each thing where it is, seen from above: across, and how far from the eye)
-          (id: l.id, name: l.name, tone: wsTone(l.kind), x: (m.value(int.parse(l.id), 'x', 0) ?? 0) * m.point, z: eye - (m.value(int.parse(l.id), 'z', 0) ?? 0) * m.point, w: m.frame(int.parse(l.id))?[2] ?? 200)
-        else if (_place[l.id] case final p?)
-          (id: l.id, name: l.name, tone: wsTone(l.kind), x: p.x, z: p.z, w: p.w),
-    ];
+    final slabs = _slabsOf(WsScope.of(context));
     return LayoutBuilder(
       builder: (context, box) {
         final m = _Map(box.biggest);
@@ -255,7 +265,7 @@ class _DiagramState extends State<_Diagram> {
             behavior: HitTestBehavior.opaque,
             onTapUp: (e) {
               final id = hit(e.localPosition);
-              if (id != null) widget.onFocus(_place[id]!.z, id);
+              if (id != null) widget.onFocus(slabs.firstWhere((s) => s.id == id).z, id); // (focus on that thing, where it is)
             },
             onVerticalDragStart: (e) {
               if (nearFocus(e.localPosition)) setState(() => _drag = true);
@@ -289,8 +299,6 @@ class _Map {
   double z(double y) => (eye.dy - y) / scale;
   Rect slab(double x, double z, double w) => Rect.fromCenter(center: at(x, z), width: w * scale, height: 6);
 }
-
-typedef _Slab = ({String id, String name, Color tone, double x, double z, double w});
 
 class _DepthPainter extends CustomPainter {
   const _DepthPainter({

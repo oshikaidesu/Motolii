@@ -13,6 +13,7 @@ import 'package:lab_book/workspace/dock_fonts.dart';
 import 'package:lab_book/workspace/dock_make.dart' show CreateShelf;
 import 'package:lab_book/workspace/desk_kit.dart' show DeskScrub;
 import 'package:lab_book/workspace/dock_parts.dart' show DockFooter, DockSearch;
+import 'package:lab_book/workspace/fx_catalog.dart' show fxCatalog;
 import 'package:lab_book/workspace/timeline.dart';
 import 'package:lab_book/workspace/workspace.dart';
 import 'package:lab_book/workspace/ws.dart';
@@ -675,7 +676,7 @@ void main() {
 
   testWidgets('the Depth desk is the camera\'s lens: its focal length is the zoom, a scrub of the aperture is one step', (t) async {
     final ws = await _pump(t), m = ws.inside!;
-    m.add('solid', 'cube');
+    final cube = m.add('solid', 'cube');
     final camera = m.add('camera', 'camera');
     ws
       ..reread()
@@ -683,6 +684,7 @@ void main() {
       ..openDesk('Depth');
     await t.pumpAndSettle();
     expect(find.text('45 mm'), findsWidgets, reason: 'zoom 1 on Filament\'s 24 mm film');
+    expect(find.text('On ${m.word(cube, 'name')}'), findsOneWidget, reason: 'the focus is on what lies where it looks: the document says so, not the window');
     final stop = find.widgetWithText(DeskScrub, 'Aperture');
     await t.ensureVisible(stop);
     await t.drag(stop, const Offset(-80, 0));
@@ -888,6 +890,27 @@ void main() {
     expect(all.indexOf(cut), all.indexOf(a) - 1, reason: 'the mask lies just behind the thing it cuts: ${m.trouble}');
     expect([m.value(a, 'clip', 0), m.value(cut, 'opacity', 0)], [1, 0], reason: 'it is clipped by it, which is not seen itself');
     expect(m.undo() && m.things.length == 2 && m.value(a, 'clip', 0) == 0, isTrue, reason: 'one step');
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
+  testWidgets('the shelves\' headers count what the inside has: effects it does, colours the document uses, tiles that make', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    final a = m.add('shape', 'rect');
+    expect(m.say(a, 'fill', 'ff3366'), isTrue, reason: m.trouble);
+    ws
+      ..reread()
+      ..shelf = 'Colors';
+    await t.pumpAndSettle();
+    expect(find.text('1 used here'), findsOneWidget);
+    ws.shelf = 'Effects';
+    await t.pumpAndSettle();
+    final fx = fxCatalog.where((f) => fxValues.containsKey(f.name)).length;
+    expect(fx, greaterThan(3));
+    expect(find.text('$fx of ${fxCatalog.length} work'), findsOneWidget);
+    ws.shelf = 'Create';
+    await t.pumpAndSettle();
+    expect(find.text('15 of 27 work'), findsOneWidget);
     expect(t.takeException(), isNull);
     await _close(t);
   }, skip: !_built);

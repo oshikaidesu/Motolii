@@ -10,6 +10,7 @@ import 'dock_fonts.dart';
 import 'dock_glyphs.dart';
 import 'dock_make.dart';
 import 'dock_parts.dart';
+import 'fx_catalog.dart';
 import 'ws.dart';
 
 /// The shelves: name (also the pane's id and [Ws.shelf]), the mark on its tab, the search hint.
@@ -60,7 +61,15 @@ class _WsShelfState extends State<WsShelf> {
                 child: ValueListenableBuilder<int>(
                   valueListenable: dockRead,
                   builder: (context, _, _) => Text(
-                    name == 'Fonts' && ws.inside != null ? '${fontsOffered ?? '…'} fonts' : _facts[name] ?? '', // (joined: the fonts the inside sets)
+                    ws.inside == null
+                        ? _facts[name] ?? ''
+                        : switch (name) { // (joined: what the inside has: the fonts it sets, the effects it does, the colours the document uses, the tiles that make)
+                            'Fonts' => '${fontsOffered ?? '…'} fonts',
+                            'Effects' => '${fxCatalog.where((f) => fxValues.containsKey(f.name)).length} of ${fxCatalog.length} work',
+                            'Colors' => '${usedColours(ws).values.toSet().length} used here',
+                            'Create' => createFact(),
+                            _ => _facts[name] ?? '',
+                          },
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: T.label(Grey.g56),
