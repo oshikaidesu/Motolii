@@ -100,6 +100,7 @@
 調べ（別の頭、公式の One Minute Wonder 12本と Scenery の244枚を絵で見た）：Cavalry の絵の芯は「形1つを複製して、写しごとに値を変える」。欠けは写しの時間のずれ（S）、波（N）、場所で効く力（F）、写しの色（K）、文字を1字ずつ（L）。報告 `reports/skin_run/cavalry_research.md`。
 - 足した（全部 書類の値、札で見える）：Copies の札に stagger・stagger_from（過去倉庫の順の決まり）と copy_fill（写しごとの色の並び、写しごとに材質の写し）。Wave の札（wave_x・y・rotate・size・speed・phase、Cavalry の Oscillator）。Field の札（field_x・y・radius・size・rotate、Falloff）。文字の split letters（1行を字ごとの写しに、ThorVG で字の位置を測る）。写しの上限 1000（400 個で 1コマ 5.8 ms）。
 - レシピ（1回の呼び＝1歩、Create 棚の先頭）：Wave lines・Iris・Dot wave・Tunnel・Text ripple・Field dots・Burst。Cavalry のチュートリアルは3〜6ノード・10個弱のつまみ。こちらはタイル1回押し＋札のつまみ。絵 `reports/skin_run/recipes_one_call.jpg`、`text_ripple.jpg`、`field_dots.jpg`。
+- 足した（2回目）：物の名前（name、レシピの物はレシピの名で並ぶ）。ばらまき（Scatter の札：scatter_x・y・rotate・size と種 seed）。レシピ Line maze・Rings・Confetti（全部で10）。窓で Create 棚から2回押して Iris が出るのを確かめた（`reports/skin_run/recipe_in_window.jpg`）。
 - 限り：写しのずれは置き場所（位置・回転・大きさ）だけ。絵（Trim など）は写し全部で共有なので写しごとにずれない。「真ん中から」は写しの番号の真ん中（場所ではない、場所は Field で）。split は1行だけ。
 
 ## 棚崩し（2026-10-14 夕方、ユーザー：「filamentやthorvgの棚崩しだ。今度は逆、能力をflutterのトンマナでguiとしてわかりやすく露出させたい」）
