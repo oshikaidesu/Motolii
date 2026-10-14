@@ -38,6 +38,8 @@
    通ったと言える一文：効果ごとに前後の絵で効いて見え、ウェブの WGSL の効果を1本、ほぼそのまま置いて動き、全部入りで 1080p・60コマ毎秒、Dawn で。
    **10/15 朝：調べた**。vgpu（MIT、`research_notes/vgpu_src/`、読むだけ）の効果は、フラグメントだけの .wgsl 1本。入り口は `fs_main(@builtin(position) frag, @location(0) uv) -> vec4f`、頂点（全画面の三角）は vgpu が持つ。入力は名前つきの `texture_2d`（`src`）と `sampler`、つまみは `var<uniform> params: Params` の構造体で、外からは名前で入れる（例 `examples/particle-orbit/post.wgsl`＝色収差・走査線・グレイン・周辺減光）。こちらの効果ファイルもこの形にして、頭に AviUtl2 式のつまみを足し、それを `params` の欄に流す。
    中身の道：Filament の命令の列に乗せる。前例は `dawn_probe/compute_door.cpp`（WGSL を Filament の Program にして DriverApi の dispatchCompute、同じ列なので順番が揃う）。効果は同じ口で、本の絵（s.view と層）を画面外のテクスチャに描く → DriverApi の render pass で効果の Program を全画面に1枚 → 画面へ。自前で Dawn に命令を出すと Filament がまだ出してない絵を読む恐れがある（推測、未確認）ので、そちらはとらない。
+   **10/15 朝：器ができた**（a80b193）。段の `script` に .wgsl を1本置くと画面全体にかかる（`filament/screen.h`）。段の絵を画面外のテクスチャに描き、`dawn_probe/screen_door.cpp`（Filament の描く係の口と、Filament 自身の全画面の三角）で効果を画面へ。WGSL は vgpu の書き方のまま読み、Filament の番号（絵 0・sampler 1・つまみ 2）と入り口 `main` に書き換える。つまみは頭の宣言で `js_名前`、`time`・`aspect`・`resolution` は段が入れる。確かめた事：素通しの効果は効果なしと画素まで同じ（色も順番も合う）、vgpu の CRT（particle-orbit の post.wgsl から他の絵を読む6行を外しただけ、`filament/effects/crt_finish.wgsl`）が効く（`reports/screen/crt_before_after.jpg`）、ひまわり800個で 13.44 → 14.22 ms、60コマで落ち0。
+   残り：最初の効果の残り（グレイン、フィルム調、ハーフトーン、万華鏡、グリッチ、残像：MIT・Zlib・Apache から）、絵を2枚以上読む効果（ブルームの合成など）、効果を重ねる、窓で Effects 棚から選べる・札が出る、Filament のブルームとボケはそのまま使う。
 4. **出来合いの動き**：Cavalry の Animators 13本（Spring In＝かけらごとに画面の外から40コマ・SpringOut・最大20コマのずらし、など）を2の器のレシピに。名前で選べるイージング（VerySlowIn/Out、Spring、Overshoot、Bounce）も足す。
    通ったと言える一文：文字1つに13本どれも1手で付き、Cavalry の作例と並べて同じ気持ちよさに見える。
 5. **写しの並べ方**：Canvalry-scripts（MIT）の26種から MV で映える物（ひまわり＝黄金角、リサージュ、スーパーフォーミュラなど）を並べ方に足す。
