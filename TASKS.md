@@ -6,7 +6,7 @@
 **作る前に `ASSETS.md`（資産台帳）を見る。** 手元と過去の倉庫に在る物の一覧。
 今日の経過の全文は `reports/tasks_log_2026-10-14.md`（前の日の分は git の履歴）。
 
-最終更新：2026-10-14 深夜
+最終更新：2026-10-15 朝
 
 ## 目標（ユーザー、10/14）
 
@@ -32,6 +32,8 @@
    **10/15 2時台：済み**（f4ae2bd）。Scale は書類の3つの数 `scale_x`・`scale_y`・`scale_z`（キーもそれぞれ、`size` は物の元の大きさとして残す）。物が持たない値の欄は出さない（光の Scale と不透明度、立体の不透明度、平らな物の Scale Z）。Depth の欄は消した。舞台の四隅で拡大・丸で回転・十字で回転の中心（中身の `grip`・`scale`・`turn`・`pivot`、計算は中身）。総当たりの試験が緑、窓の試験 122本が緑、中の試験も全部。残り：平らな物の厚み（Scale Z）＝押し出しの描画はまだ。
 2. **レシピの器（スクリプトの層）**：描く力は ThorVG と Filament で揃っている。足りないのは Cavalry の「スクリプト的な処理」（ユーザー、10/14）。1ファイル＝頭に AviUtl2 式のつまみの宣言（`--track@名前:表示名,最小,最大,初期,刻み`、check・color・select・file・text、`--hide@` の条件、`--group`）＋中身の JavaScript。中身が宣言を読んで、値の表と札に自動で出す。JS は Cavalry と同じく普通の JavaScript（Cavalry の中は V8）で、LLM がすぐ書ける物にする。API の型定義（.d.ts）を添える（cavalry-types の流儀）。スクリプトの3種は Cavalry に合わせる：写し1個ずつの値（JS Utility：番号と総数から位置・大きさ・色・時間のずれ）、形の点を動かす（Deformer）、形を作る（Shape）。毎コマの CPU は写しの姿勢を返すまで。重い物は GPU の計算（WGSL）。エンジンは最初に QuickJS-ng ほかを入れて測って決める（勘で外さない）。今の15レシピをこの器に移す。数値だけキーが打てる。
    通ったと言える一文：新しいレシピを1ファイル置くだけで、窓に札とつまみが出て動き、15レシピが器の上で前と同じ絵。Canvalry（MIT）の JS が、ほぼそのまま1本動く。
+   **10/15 朝：済み**（a06ffb6、eb9d982、1c7c7bd）。エンジンは QuickJS-ng（`js_bench/` で測って決めた）。レシピは `filament/recipes/*.js` の1ファイル：頭に元の表の行と AviUtl2 式のつまみ（track・check・select）、下に `each(i, n, t, k)`。棚にはビルドなしで出る（窓の試験「a recipe is a file」：置く→棚→作る→Script の札のつまみを引っ張る→書類の値が変わる）。15レシピはファイルから前と同じ画素。Canvalry は `each()` の無いファイルを丸ごと走らせ、`cavalry.Point`・`PointCloud`（appendPoint・appendSize）・`cavalry.random`・`frame` の肩代わり（JS 十数行）で、返った点を写しに配る。単位は書類の画素。Rose Curve は頭の宣言を足しただけ、Galaxy・Cube・Lorenz は本文そのまま（`reports/script/canvalry_sheet.jpg`）。速さ：ひまわり800個 1枚 13.9 ms、スクリプトなしの同じ800個 13.2 ms（つまみを写し1個ずつ読み直していたのを1枚1回にして 17.5 → 14.3）。窓の試験 123本、中の試験は全部緑。
+   残り：Deformer（形の点を動かす）と Shape（形を作る）の2種、型の定義（.d.ts）、つまみの color・file・text・`--hide@`・`--group`、写しの上限 1000（Lorenz は途中で切れる）。
 3. **画面効果を WGSL で**（Cavalry の弱い所、こちらの勝ち筋）：ウェブで見た表現がすぐ MV に使えるように、効果は WGSL（モジュールは WESL）の1ファイル＋頭に2と同じつまみの宣言。Filament には自作の画面効果を差し込む公開の口が無いので、Filament の絵を画面外に描き、同じ Dawn の上で WGSL の全画面パスをかける（マットで画面を読む形と同じ）。ブルームと周辺減光とボケは Filament の物を使う（作り直さない）。最初の効果：グレイン、色収差、フィルム調の色（ハレーション込み）、ハーフトーン、万華鏡、グリッチ、残像。借り元は MIT／Zlib／Apache だけ：three.js の shaders と TSL（MIT）、ISF-Files（MIT、200本超）、pmndrs/postprocessing（Zlib）、Babylon の WGSL（Apache）、Bevy の WGSL。GLSL の物は naga で WGSL に機械的に変換する。最初に Vercel の vgpu（MIT、エージェント向けの WebGPU ライブラリ、.wgsl を TS のように import、Dawn で頭なしでも動く、llms.txt・MCP・作例 vgpu.sh/examples）を読み、効果の書き方とつまみの宣言を合わせられるなら合わせる（ユーザー：ウェブの表現がすぐ MV に使えるのがいい体験）。使わない：LYGIA（商用は30日まで）、Shadertoy（既定は非商用）、compute.toys の投稿（ライセンス不明）、cavalry-field-kit のコード（AGPL）。
    通ったと言える一文：効果ごとに前後の絵で効いて見え、ウェブの WGSL の効果を1本、ほぼそのまま置いて動き、全部入りで 1080p・60コマ毎秒、Dawn で。
 4. **出来合いの動き**：Cavalry の Animators 13本（Spring In＝かけらごとに画面の外から40コマ・SpringOut・最大20コマのずらし、など）を2の器のレシピに。名前で選べるイージング（VerySlowIn/Out、Spring、Overshoot、Bounce）も足す。

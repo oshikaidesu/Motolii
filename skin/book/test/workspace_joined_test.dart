@@ -909,7 +909,8 @@ void main() {
     expect(find.text('$fx of ${fxCatalog.length} work'), findsOneWidget);
     ws.shelf = 'Create';
     await t.pumpAndSettle();
-    expect(find.text('33 of 45 work'), findsOneWidget);
+    final r = ws.inside!.recipes.length; // (a recipe is a file: the shelf grows by what is in recipes/)
+    expect(find.text('${18 + r} of ${30 + r} work'), findsOneWidget);
     expect(t.takeException(), isNull);
     await _close(t);
   }, skip: !_built);
@@ -1226,6 +1227,30 @@ void main() {
     expect(m.things.length, 1, reason: 'made by two presses: ${m.trouble}');
     expect(m.word(m.things.single, 'name'), 'Iris');
     expect(m.make('Nope'), 0);
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
+  testWidgets('a recipe is a file: one put in recipes/ is on the shelf at once, its knobs on a Script card, a drag on one is the document\'s', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    final file = File('$motoliiDir/recipes/zz_window_test.js');
+    addTearDown(() => file.existsSync() ? file.deleteSync() : null);
+    file.writeAsStringSync('// Window test: dots in a ring\n// make shape circle\n// set copies 24\n// --track@reach:Reach,0,3,1,0.01\n\n'
+        'function each(i, n, t, k) { const a = 2 * Math.PI * i / n; return { x: k.reach * Math.cos(a), y: k.reach * Math.sin(a) }; }\n');
+    expect(m.recipes.map((r) => r.$1), contains('Window test'), reason: 'on the shelf without a build');
+    final dots = m.make('Window test');
+    expect(dots, isNot(0), reason: m.trouble);
+    ws
+      ..reread()
+      ..select('$dots');
+    await t.pumpAndSettle();
+    expect([for (final e in find.byType(ValuesCard).evaluate()) (e.widget as ValuesCard).card.name], contains('Script'));
+    final knob = find.byWidgetPredicate((w) => w is NumField && w.id.contains('js_reach'));
+    expect(knob, findsOneWidget, reason: 'ids: ${[for (final e in find.byType(NumField).evaluate()) (e.widget as NumField).id]}');
+    await t.ensureVisible(knob);
+    await t.drag(knob, const Offset(60, 0));
+    await t.pumpAndSettle();
+    expect(m.value(dots, 'js_reach', 0), isNot(1.0), reason: 'the knob is the document\'s: ${ws.notice}');
     expect(t.takeException(), isNull);
     await _close(t);
   }, skip: !_built);
