@@ -61,6 +61,26 @@ class EffectsShelf extends StatelessWidget {
   Widget build(BuildContext context) {
     final ws = c.ws, shown = fxCatalog.where((f) => _keep(f)).toList();
     final blocks = <Widget>[], weights = <double>[];
+    // (joined: the inside's whole-screen effects first, each on the stage or not: effects/*.wgsl, its knobs on the stage's card)
+    final screen = [for (final e in ws.inside?.effects ?? const <(String, String)>[]) if (c.hit(e.$1)) e];
+    if (screen.isNotEmpty) {
+      final folded = c.query.isEmpty && c.mem.folded.contains('Screen');
+      final on = ws.screenFx;
+      blocks.add(
+        Padding(
+          padding: const EdgeInsets.only(bottom: WsT.gutter),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              DockSection('Screen', count: screen.length, hue: Pop.toneOutput, folded: folded, onTap: () => c.toggle(c.mem.folded, 'Screen')),
+              if (!folded)
+                for (final e in screen) _ScreenRow(e.$1, on: on.indexOf(e.$2), onTap: () => ws.screenToggle(e.$2)),
+            ],
+          ),
+        ),
+      );
+      weights.add(1.0 + (folded ? 0 : screen.length));
+    }
     for (final fam in FxFamily.values) {
       final items = shown.where((f) => f.family == fam).toList();
       if (items.isEmpty) continue;
@@ -175,6 +195,32 @@ class _FxRow extends StatelessWidget {
       ),
     );
   }
+}
+
+/// A whole-screen effect: its name, and its place among those on the stage when it is on (1 nearest the picture).
+class _ScreenRow extends StatelessWidget {
+  const _ScreenRow(this.name, {required this.on, required this.onTap});
+  final String name;
+  final int on;
+  final VoidCallback onTap;
+  @override
+  Widget build(BuildContext context) => DockHover(
+    key: ValueKey('ws-screen-$name'),
+    onTap: onTap,
+    builder: (context, h) => AnimatedContainer(
+      duration: Mo.dur,
+      curve: Mo.ease,
+      height: 24,
+      padding: const EdgeInsets.only(left: 22, right: 4),
+      color: dockFill(false, h),
+      child: Row(
+        children: [
+          Expanded(child: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis, style: T.name(dockInk(false)).copyWith(fontWeight: FontWeight.w500))),
+          if (on >= 0) ...[DockTag('ON ${on + 1}', hue: WsT.accent), const SizedBox(width: 2)],
+        ],
+      ),
+    ),
+  );
 }
 
 /// Joined: the document's value an effect is, and what the picked thing has for it now.

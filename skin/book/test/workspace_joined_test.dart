@@ -1255,6 +1255,28 @@ void main() {
     await _close(t);
   }, skip: !_built);
 
+  testWidgets('a whole-screen effect is a file: the Effects shelf lists effects/, a press puts it over the stage, its knobs on the stage\'s card, a press takes it off', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    final kaleido = m.effects.firstWhere((e) => e.$2.endsWith('/kaleido.wgsl'));
+    ws
+      ..reread()
+      ..shelf = 'Effects';
+    await t.pumpAndSettle();
+    final row = find.byKey(ValueKey('ws-screen-${kaleido.$1}'));
+    await t.ensureVisible(row);
+    await t.tap(row);
+    await t.pumpAndSettle();
+    expect(m.word(0, 'script'), kaleido.$2, reason: m.trouble);
+    expect(find.descendant(of: row, matching: find.text('ON 1')), findsOneWidget);
+    expect(m.cards(0).firstWhere((c) => c.$1 == 'Script').$2, containsAll(['js_sides', 'js_angle']));
+    expect(m.set(0, 'js_sides', 3), isTrue, reason: m.trouble);
+    await t.tap(row);
+    await t.pumpAndSettle();
+    expect(ws.screenFx, isEmpty, reason: 'taken off');
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
   testWidgets('Backspace on the timeline takes the picked thing out; undo brings it back', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final ring = m.add('solid', 'ring'), cube = m.add('solid', 'cube');

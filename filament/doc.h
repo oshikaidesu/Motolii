@@ -1777,6 +1777,25 @@ static std::string doc_recipe_names() {
     for (const DocRecipe& r : doc_recipes()) all += (all.empty() ? "" : "\n") + r.name + "\t" + r.what;
     return all;
 }
+// The whole-screen effects on the shelf (screen.h): a file each in effects/, beside recipes/ (one put there is on the
+// shelf at once), "name\tpath" one to a line, the name what its head's first line says before its colon.
+static std::string doc_effect_names() {
+    Dl_info lib{};
+    dladdr((const void*)&doc_effect_names, &lib);
+    std::error_code wrong;
+    const std::filesystem::path dir = std::filesystem::weakly_canonical(lib.dli_fname ? lib.dli_fname : ".", wrong).parent_path().parent_path() / "effects";
+    std::vector<std::filesystem::path> files;
+    for (const auto& e : std::filesystem::directory_iterator(dir, wrong)) if (e.path().extension() == ".wgsl") files.push_back(e.path());
+    std::sort(files.begin(), files.end());
+    std::string all;
+    for (const auto& f : files) {
+        std::ifstream in(f);
+        std::string first, name = f.stem().string();
+        if (std::getline(in, first) && first.rfind("// ", 0) == 0 && first.find(':') != std::string::npos) name = first.substr(3, first.find(':') - 3);
+        all += (all.empty() ? "" : "\n") + name + "\t" + f.string();
+    }
+    return all;
+}
 // The recipe of that name made at the stage's present moment, one step (0: not made, d.trouble says why).
 static int doc_make(Doc& d, const char* name) {
     std::vector<DocRecipe> all = doc_recipes();

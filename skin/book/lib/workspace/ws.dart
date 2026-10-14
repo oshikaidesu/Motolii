@@ -312,6 +312,23 @@ class Ws extends ChangeNotifier {
     return m.keyMoments(t, name).isNotEmpty || (w.isNotEmpty && (m.range(t, name) == null || (double.tryParse(w) ?? 1) != 0)); // (a colour said is on, black too; a number, when not nought)
   }
 
+  /// Joined: the whole-screen effects on the stage (the files its script says, nearest the picture first).
+  List<String> get screenFx => [
+    for (final f in (_inside?.word(0, 'script') ?? '').split(' '))
+      if (f.isNotEmpty && f != 'none') f,
+  ];
+
+  /// Joined: a whole-screen effect put over the others on the stage, or taken off (one step either way).
+  bool screenToggle(String file) {
+    final m = _inside;
+    if (m == null) return false;
+    final now = screenFx, on = now.remove(file);
+    if (!on) now.add(file);
+    final done = m.say(0, 'script', now.isEmpty ? 'none' : now.join(' '));
+    reread();
+    return done;
+  }
+
   /// Joined: an effect of the shelf put on the picked thing as it comes, or taken off (one step either way).
   bool fxToggle(String name) {
     final m = _inside, t = int.tryParse(selected ?? ''), v = fxValues[name];

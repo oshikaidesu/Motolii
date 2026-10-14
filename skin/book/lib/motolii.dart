@@ -101,6 +101,7 @@ class Motolii {
   late final _shown = _lib.lookupFunction<_S Function(_P, _S), _S Function(_P, _S)>('motolii_shown');
   late final _recipes = _lib.lookupFunction<_S Function(_P), _S Function(_P)>('motolii_recipes');
   late final _make = _lib.lookupFunction<Int32 Function(_P, _S), int Function(_P, _S)>('motolii_make');
+  late final _effects = _lib.lookupFunction<_S Function(_P), _S Function(_P)>('motolii_effects');
   late final _range = _lib.lookupFunction<Int32 Function(_P, Int32, _S, Pointer<Double>, Pointer<Double>), int Function(_P, int, _S, Pointer<Double>, Pointer<Double>)>('motolii_range');
   late final _words = _lib.lookupFunction<_S Function(_P, Int32, _S), _S Function(_P, int, _S)>('motolii_words');
   late final _wayNames = _lib.lookupFunction<_S Function(_P), _S Function(_P)>('motolii_way_names');
@@ -308,6 +309,12 @@ class Motolii {
   /// Pictures in one call: each recipe's name and what it makes.
   List<(String, String)> get recipes => [
     for (final line in _recipes(_m).toDartString().split('\n'))
+      if (line.indexOf('\t') case final at when at > 0) (line.substring(0, at), line.substring(at + 1)),
+  ];
+
+  /// The whole-screen effects on the shelf: each one's name and file (the stage's script is the files of those on it).
+  List<(String, String)> get effects => [
+    for (final line in _effects(_m).toDartString().split('\n'))
       if (line.indexOf('\t') case final at when at > 0) (line.substring(0, at), line.substring(at + 1)),
   ];
 
