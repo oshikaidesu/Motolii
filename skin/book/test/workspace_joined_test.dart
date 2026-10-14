@@ -581,6 +581,15 @@ void main() {
     await t.pumpAndSettle();
     expect(m.word(rect, 'glow'), 'ffd166', reason: m.trouble);
 
+    await pick('Trim Paths');
+    await t.tap(find.text('Add'));
+    await t.pumpAndSettle();
+    expect(m.keyMoments(rect, 'trim'), [0, 1], reason: 'drawn on in a second, from the playhead');
+    expect([m.value(rect, 'trim', 0), m.value(rect, 'trim', 1)], [1, 0]);
+    await t.tap(find.text('Remove'));
+    await t.pumpAndSettle();
+    expect([m.keyMoments(rect, 'trim'), m.value(rect, 'trim', 0)], [isEmpty, 0], reason: 'taken off with its keys');
+
     await pick('Twirl');
     expect(find.text('No seat yet'), findsOneWidget);
     expect(t.takeException(), isNull);

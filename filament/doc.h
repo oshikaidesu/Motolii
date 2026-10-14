@@ -96,6 +96,7 @@ static const DocValue doc_values[] = {
     // (and its darks and lights made two colours, how much: ThorVG's tint; or its darks, middles and lights three: its tritone)
     {"glow", "picture text shape", 0, 0, false, ""}, {"glow_blur", "picture text shape", 0, 1000, false, nullptr}, {"glow_opacity", "picture text shape", 0, 1, false, nullptr},
     // (copies of it, each the one before moved, turned about its anchor and sized by as much: After Effects' repeater)
+    {"trim", "shape", 0, 1, true, nullptr},   // (how much of its path is cut off the end: After Effects' trim paths, ThorVG's trimpath)
     {"copies", "picture text shape", 1, 100, false, nullptr}, {"copy_x", "picture text shape", -1e4, 1e4, true, nullptr}, {"copy_y", "picture text shape", -1e4, 1e4, true, nullptr},
     {"copy_rotate", "picture text shape", -1e6, 1e6, true, nullptr}, {"copy_size", "picture text shape", 0.01, 100, true, nullptr},
     {"tint", "picture text shape", 0, 1, false, nullptr}, {"tint_black", "picture text shape", 0, 0, false, ""}, {"tint_white", "picture text shape", 0, 0, false, ""},
@@ -347,6 +348,7 @@ static void doc_moment(Doc& d, double now) {
         if (!in) continue;
         if (t.film) video_at(s, t.film, (float)lies[i].since);
         if (t.drawn && t.drawn->seconds > 0.f) picture_at(s, t.drawn, std::fmod((float)lies[i].since, t.drawn->seconds));
+        if (t.drawn && t.drawn->shape) trim_at(s, t.drawn, (float)doc_number(d, thing, "trim", now, 0));
         const mat4f place = mat4f(doc_place(d, thing, now));
         if (t.solid) solid_to(s, t.solid, place); else move(s, m, [&](int nth, const mat4f&) { return nth ? mat4f(doc_place(d, thing, now, 0, nth)) : place; });
         if (MaterialInstance* look = t.film ? t.film->look : t.drawn ? t.drawn->look : nullptr) look->setParameter("opacity", (float)doc_number(d, thing, "opacity", now, 1));

@@ -19,7 +19,22 @@ struct Drawn {
     MaterialInstance* look = nullptr;  // its look (none if it is not shown)
     float seconds = 0.f, frames = 0.f; // a film's length (a still: 0)
     float starts = 0.f;                // how far into itself it is when the stage's time is 0
+    tvg::Shape* shape = nullptr;       // a flat shape's own path (driver thread only), and how much of it is cut off its end
+    float trimmed = 0.f;
 };
+
+// A flat shape with so much of its path cut off the end (ThorVG's own trimpath), drawn again for the frame that comes
+// next; nothing is done if it is cut as it was.
+static void trim_at(Stage& s, Drawn* d, float cut) {
+    if (!d->shape || cut == d->trimmed) return;
+    d->trimmed = cut;
+    door::on_driver(s.engine, [d, cut] {
+        d->shape->trimpath(0.f, 1.f - std::clamp(cut, 0.f, 1.f));
+        d->canvas->update();
+        d->canvas->draw(true);
+        d->canvas->sync();
+    });
+}
 
 // A font for the pictures put after it (an SVG names its fonts; ThorVG knows only the ones it is given).
 static void font(Stage& s, const char* path) {
@@ -202,11 +217,11 @@ static Drawn* type(Stage& s, const char* words, const char* fontFile, const mat4
 // go with); all drawn by ThorVG's own Shape.
 static Drawn* flat(Stage& s, const char* form, float wide, const mat4f& place, float high, float3 colour, const char* lay = nullptr, float4 edge = float4{0.f}, const DrawnFx& fx = {},
                    int points = 6, float inner = 0.5f, float round = 0.f) {
-    return drawn(s, [&](Drawn*, int* w, int* h) -> tvg::Paint* {
+    return drawn(s, [&](Drawn* d, int* w, int* h) -> tvg::Paint* {
         const float tall = std::min(0.5f * (float)std::max(s.w, s.h), 4096.f / std::max(wide, 1e-3f));   // (as fine as half the stage; a long thin bar less high, so that it is as long as it is said)
         *h = std::max(2, 2 * (int)std::ceil(0.5f * tall));
         *w = std::max(2, 2 * (int)std::ceil(0.5f * tall * wide));
-        tvg::Shape* shape = tvg::Shape::gen();
+        tvg::Shape* shape = d->shape = tvg::Shape::gen();
         const float in = 0.5f * std::min(edge.w * (float)*h, 0.5f * (float)std::min(*w, *h));   // (half the stroke: the path is set in by that, so all of it is seen)
         const float cx = 0.5f * (float)*w, cy = 0.5f * (float)*h, rx = cx - in, ry = cy - in;
         if (!strcmp(form, "circle")) shape->appendCircle(cx, cy, rx, ry);

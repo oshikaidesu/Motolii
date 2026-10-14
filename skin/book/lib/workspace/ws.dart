@@ -271,10 +271,16 @@ class Ws extends ChangeNotifier {
       if (t == null) return const [];
       return [
         for (final e in fxValues.entries)
-          if (m.word(t, e.value.$1) case final w when w.isNotEmpty && (double.tryParse(w) ?? 1) != 0) e.key,
+          if (_on(m, t, e.value.$1)) e.key,
       ];
     }
     return List.unmodifiable(_fx[id] ?? const <String>[]);
+  }
+
+  /// Joined: whether a value that puts an effect on a thing is on (keyed, or said and not nought).
+  static bool _on(Motolii m, int t, String name) {
+    final w = m.word(t, name);
+    return m.keyMoments(t, name).isNotEmpty || (w.isNotEmpty && (double.tryParse(w) ?? 1) != 0);
   }
 
   /// Joined: an effect of the shelf put on the picked thing as it comes, or taken off (one step either way).
@@ -282,8 +288,11 @@ class Ws extends ChangeNotifier {
     final m = _inside, t = int.tryParse(selected ?? ''), v = fxValues[name];
     if (m == null || t == null || v == null) return false;
     final on = fxOf(selected).contains(name);
+    final at = frame / fps;
     final done = switch (v.$2) {
-      final num n => m.set(t, v.$1, on ? 0 : n.toDouble()),
+      _ when on && v.$2 is! String => m.set(t, v.$1, 0), // (taken off: its keys too)
+      final num n => m.set(t, v.$1, n.toDouble()),
+      final List<(double, double)> keys => m.together(() => keys.every((k) => m.key(t, v.$1, at + k.$1, k.$2))),
       final w => m.say(t, v.$1, on ? '' : '$w'),
     };
     reread();
@@ -327,6 +336,7 @@ const fxValues = <String, (String, Object)>{
   'Gaussian Blur': ('blur', 12),
   'Drop Shadow': ('shadow', '000000'),
   'Glow': ('glow', 'ffd166'), // (a warm light all round)
+  'Trim Paths': ('trim', [(0.0, 1.0), (1.0, 0.0)]), // (drawn on from here, in a second: keys as After Effects' trim paths is mostly used)
   'Duotone': ('tint', 1),
   'Gradient Map': ('tritone', 1),
 };
