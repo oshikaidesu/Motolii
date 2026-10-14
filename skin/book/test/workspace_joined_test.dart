@@ -778,6 +778,25 @@ void main() {
     await _close(t);
   }, skip: !_built);
 
+  testWidgets('the tools draw things of the document: a rectangle as wide and high as the box drawn, a line from point to point', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    ws.reread();
+    await t.pumpAndSettle();
+    final stage = t.getRect(find.byKey(const ValueKey('ws-stage-comp')));
+    await t.tap(find.byKey(const ValueKey('ws-tool-2'))); // (the Rectangle tool)
+    await t.pumpAndSettle();
+    await t.dragFrom(stage.center - Offset(stage.width * .2, stage.height * .1), Offset(stage.width * .4, stage.height * .2));
+    await t.pumpAndSettle();
+    final rect = int.parse(ws.selected!);
+    expect([m.word(rect, 'kind'), m.word(rect, 'shape')], ['shape', 'rect'], reason: m.trouble);
+    final box = m.frame(rect)!, k = 1920 / stage.width;
+    expect(box[2], closeTo(stage.width * .4 * k, 12), reason: 'as wide as drawn');
+    expect(box[3], closeTo(stage.height * .2 * k, 12), reason: 'and as high');
+    expect(m.undo() && m.things.isEmpty, isTrue, reason: 'one step');
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
   testWidgets('Backspace on the timeline takes the picked thing out; undo brings it back', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final ring = m.add('solid', 'ring'), cube = m.add('solid', 'cube');

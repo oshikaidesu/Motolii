@@ -86,7 +86,7 @@ class _StageState extends State<_Stage> {
                   child: Stack(
                     fit: StackFit.expand,
                     children: [
-                      StageView(scene: scene, selected: ws.selected, zoom: _zoom, grid: _grid, safe: _safe, cursor: _cursor, onPoke: _focus.requestFocus, texture: ws.stageTexture),
+                      StageView(scene: scene, selected: ws.selected, zoom: _zoom, grid: _grid, safe: _safe, cursor: _cursor, onPoke: _focus.requestFocus, texture: ws.stageTexture, make: const [null, null, 'rect', 'circle', 'line', 'text'][_tool]), // (joined: the tool in hand draws a thing of the document)
                       if (ws.trial != null) const Positioned(bottom: 44, left: 0, right: 0, child: Center(child: StageTrialBar())),
                     ],
                   ),
@@ -237,7 +237,7 @@ class _ToolColumn extends StatelessWidget {
               for (var i = 0; i < _tools.length; i++) ...[
                 if (i == 2 || i == 4) Container(width: 20, height: 1, margin: const EdgeInsets.symmetric(vertical: 5), color: WsT.line),
                 if (i != 0 && i != 2 && i != 4) const SizedBox(height: 3),
-                _ToolButton(glyph: _tools[i].$1, on: i == active, onTap: () => onChanged(i)),
+                _ToolButton(key: ValueKey('ws-tool-$i'), glyph: _tools[i].$1, on: i == active, onTap: () => onChanged(i)),
               ],
               Container(width: 20, height: 1, margin: const EdgeInsets.symmetric(vertical: 8), color: WsT.line),
               const _Swatches(),
@@ -250,7 +250,7 @@ class _ToolColumn extends StatelessWidget {
 }
 
 class _ToolButton extends StatelessWidget {
-  const _ToolButton({required this.glyph, required this.on, required this.onTap});
+  const _ToolButton({super.key, required this.glyph, required this.on, required this.onTap});
   final G glyph;
   final bool on;
   final VoidCallback onTap;

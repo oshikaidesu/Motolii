@@ -52,7 +52,12 @@ class StageView extends StatefulWidget {
     required this.cursor,
     this.onPoke,
     this.texture,
+    this.make,
   });
+
+  /// Joined: what the tool in hand makes where the hand is drawn across the stage (rect, circle, line, text; null:
+  /// the hand takes hold of things).
+  final String? make;
 
   /// The inside's picture of the stage (a Flutter texture). null: the stand-in art is painted.
   final int? texture;
@@ -131,7 +136,39 @@ class _StageViewState extends State<StageView> {
 
   Offset? _last;
 
+  // Joined: a thing drawn with the tool in hand: from where the hand came down to where it is let go (a rect or a
+  // circle that box, a line from the one point to the other, a text where it came down); only come down, one as it
+  // comes. One step; it is picked.
+  Offset? _drawFrom;
+
+  void _draw(_View v, Offset to) {
+    final from = _drawFrom, ws = WsScope.read(context), m = ws.inside, kind = widget.make;
+    _drawFrom = null;
+    setState(() {});
+    if (from == null || m == null || kind == null) return;
+    final a = v.toComp(from), b = v.toComp(to), p = m.point, c = WsArt.comp;
+    final mid = (a + b) / 2, d = b - a, tiny = d.distance < 6 / v.s;
+    final x = ((kind == 'text' || tiny ? a.dx : mid.dx) - c.width / 2) / p, y = (c.height / 2 - (kind == 'text' || tiny ? a.dy : mid.dy)) / p;
+    final made = m.together(() {
+      final t = m.add(kind == 'text' ? '' : 'shape', kind == 'text' ? '/System/Library/Fonts/Supplemental/Arial Unicode.ttf' : kind); // (a text in the font the Create shelf's Text has)
+      if (t == 0 || !m.set(t, 'x', x) || !m.set(t, 'y', y)) return 0;
+      if (tiny || kind == 'text') return t;
+      final ok = switch (kind) {
+        'line' => m.set(t, 'wide', d.distance / p / .04) && m.set(t, 'rotate', math.atan2(d.dy, d.dx) * 180 / math.pi), // (a line is a twenty-fifth of a unit thick: as long as drawn, turned as drawn)
+        _ => m.set(t, 'size', d.dy.abs() / p) && m.set(t, 'wide', d.dx.abs() / math.max(d.dy.abs(), 1e-3)),
+      };
+      return ok ? t : 0;
+    });
+    if (made == 0) return;
+    ws.reread();
+    ws.select('$made');
+  }
+
   void _hold(_View v, Offset local) {
+    if (widget.make != null && WsScope.read(context).inside != null) {
+      setState(() => _drawFrom = local);
+      return;
+    }
     if (_pull(v, local)) return;
     final ws = WsScope.read(context), m = ws.inside;
     final id = m == null ? null : _hit(v, local), t = int.tryParse(id ?? '');
@@ -184,13 +221,22 @@ class _StageViewState extends State<StageView> {
             behavior: HitTestBehavior.opaque,
             onTapUp: (d) {
               widget.onPoke?.call();
+              if (widget.make != null && WsScope.read(context).inside != null) return _draw(v, (_drawFrom = d.localPosition)!); // (only come down: one as it comes, there)
               WsScope.read(context).select(_hit(v, d.localPosition));
             },
             dragStartBehavior: DragStartBehavior.down, // (a thing is held where the hand came down, not where it had got to when the drag was known for one)
             onPanStart: (d) => _hold(v, _last = d.localPosition),
-            onPanUpdate: (d) => _pulling != null ? (widget.cursor.value = v.toComp(_last = d.localPosition)) : _carry(v, _last = d.localPosition),
-            onPanEnd: (_) => _pulling != null ? _pullLetGo(v, _last!) : _letGo(),
-            onPanCancel: () => _pulling != null ? _pulling = null : _letGo(keep: false),
+            onPanUpdate: (d) => _drawFrom != null
+                ? setState(() => _last = d.localPosition)
+                : _pulling != null
+                ? (widget.cursor.value = v.toComp(_last = d.localPosition))
+                : _carry(v, _last = d.localPosition),
+            onPanEnd: (_) => _drawFrom != null
+                ? _draw(v, _last ?? _drawFrom!)
+                : _pulling != null
+                ? _pullLetGo(v, _last!)
+                : _letGo(),
+            onPanCancel: () => _drawFrom != null ? setState(() => _drawFrom = null) : _pulling != null ? _pulling = null : _letGo(keep: false),
             child: Stack(
               fit: StackFit.expand,
               children: [
@@ -207,6 +253,11 @@ class _StageViewState extends State<StageView> {
                         : ClipRect(key: const ValueKey('ws-stage-comp'), child: Texture(textureId: widget.texture!, filterQuality: FilterQuality.medium)),
                   ),
                 ),
+                if (_drawFrom case final from? when _last != null) // (what is being drawn: its box)
+                  Positioned.fromRect(
+                    rect: Rect.fromPoints(from, _last!),
+                    child: IgnorePointer(child: DecoratedBox(decoration: BoxDecoration(border: Border.all(color: WsT.accent)))),
+                  ),
                 if (widget.texture != null)
                   IgnorePointer(
                     child: CustomPaint(
