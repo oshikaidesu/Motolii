@@ -16,6 +16,7 @@
 struct DrawnFx { float letters = 1.f, lines = 1.f, italic = 0.f; float dash = 0.f, dashFrom = 0.f; int cap = -1, join = -1;   // (ThorVG's own: Text::spacing, italic; Shape::strokeDash, strokeCap, strokeJoin; -1: as it comes)
     float blur = 0.f; int blurWay = 0; float overHigh = 1.f; float4 shadow{0.f}; float fall = 0.f, way = 0.f, soft = 0.f; float tint = 0.f; float3 tints[2]{}; float tritone = 0.f; float3 tones[3]{}; float4 glow{0.f}; float glowSoft = 0.f; int copies = 1;
                  std::vector<float3> ramp;   // (two colours or more: it is filled from the first at its top to the last at its bottom, ThorVG's linear gradient)
+                 bool radial = false; float rampAngle = 0.f, rampScale = 1.f; int spread = 0;   // (or from its middle out, ThorVG's radial gradient; turned so far, clockwise; so long, as a share of its reach; past its ends padded, reflected or repeated)
                  DrawnFx over(float high) const {   // (the same for a thing `high` units high: its lengths as shares of that)
                      DrawnFx f = *this;
                      f.blur /= high, f.fall /= high, f.soft /= high, f.glowSoft /= high, f.overHigh = high;
@@ -202,9 +203,21 @@ static Drawn* picture(Stage& s, const char* file, const mat4f& place, float high
 // Words put in the scene, set by ThorVG in the font of `fontFile` (a .ttf): a sheet `high` tall for each line, as
 // wide as the words make it, its middle at `place`.
 // The colours of a ramp as ThorVG's linear gradient, from the first at y0 to the last at y1 (evenly spaced).
-static tvg::Fill* ramp_of(const std::vector<float3>& ramp, float y0, float y1) {
-    tvg::LinearGradient* g = tvg::LinearGradient::gen();
-    g->linear(0.f, y0, 0.f, y1);
+static tvg::Fill* ramp_of(const std::vector<float3>& ramp, float w, float h, bool radial = false, float angle = 0.f, float scale = 1.f, int spread = 0) {
+    tvg::Fill* g = nullptr;
+    const float cx = 0.5f * w, cy = 0.5f * h, k = std::max(scale, 0.01f);
+    if (radial) {   // (from its middle out to its corners)
+        tvg::RadialGradient* r = tvg::RadialGradient::gen();
+        const float reach = 0.5f * std::hypot(w, h) * k;
+        r->radial(cx, cy, reach, cx, cy, 0.f);
+        g = r;
+    } else {   // (across it the way it is turned: 0 from its top to its bottom, as far as its box reaches that way)
+        tvg::LinearGradient* l = tvg::LinearGradient::gen();
+        const float a = angle * (float)TAU / 360.f, dx = std::sin(a), dy = std::cos(a), reach = (0.5f * std::fabs(w * dx) + 0.5f * std::fabs(h * dy)) * k;
+        l->linear(cx - dx * reach, cy - dy * reach, cx + dx * reach, cy + dy * reach);
+        g = l;
+    }
+    g->spread((tvg::FillSpread)std::clamp(spread, 0, 2));
     std::vector<tvg::Fill::ColorStop> stops;
     for (size_t i = 0; i < ramp.size(); ++i)
         stops.push_back({(float)i / (float)(ramp.size() - 1), (uint8_t)std::lround(255.f * ramp[i].x), (uint8_t)std::lround(255.f * ramp[i].y), (uint8_t)std::lround(255.f * ramp[i].z), 255});
@@ -261,7 +274,7 @@ static Drawn* type(Stage& s, const char* words, const char* fontFile, const mat4
         //  mask; ThorVG counts a text's own gradient in the font's units, which are not to be had from outside)
         tvg::Shape* ramp = tvg::Shape::gen();
         ramp->appendRect(0.f, 0.f, (float)*w, (float)*h);
-        ramp->fill(ramp_of(fx.ramp, 0.f, (float)*h));
+        ramp->fill(ramp_of(fx.ramp, (float)*w, (float)*h, fx.radial, fx.rampAngle, fx.rampScale, fx.spread));
         ramp->mask(t, tvg::MaskMethod::Alpha);
         return ramp;
     }, place, high, float3{-1.f}, true, lay, fx);
@@ -295,7 +308,7 @@ static Drawn* flat(Stage& s, const char* form, float wide, const mat4f& place, f
             shape->appendRect(in, in, (float)*w - 2.f * in, (float)*h - 2.f * in, corner, corner);
         }
         shape->fill((uint8_t)std::lround(255.f * colour.x), (uint8_t)std::lround(255.f * colour.y), (uint8_t)std::lround(255.f * colour.z), strcmp(form, "null") ? 255 : 0);
-        if (fx.ramp.size() > 1 && strcmp(form, "null")) shape->fill(ramp_of(fx.ramp, 0.f, (float)*h));
+        if (fx.ramp.size() > 1 && strcmp(form, "null")) shape->fill(ramp_of(fx.ramp, (float)*w, (float)*h, fx.radial, fx.rampAngle, fx.rampScale, fx.spread));
         if (in > 0.f) shape->strokeWidth(2.f * in), shape->strokeFill((uint8_t)std::lround(255.f * edge.x), (uint8_t)std::lround(255.f * edge.y), (uint8_t)std::lround(255.f * edge.z));
         if (fx.cap >= 0) shape->strokeCap((tvg::StrokeCap)fx.cap);
         if (fx.join >= 0) shape->strokeJoin((tvg::StrokeJoin)fx.join);
