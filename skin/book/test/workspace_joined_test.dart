@@ -1067,6 +1067,9 @@ void main() {
       ..select('$text');
     await t.pumpAndSettle();
     expect(find.descendant(of: find.byType(ValuesCard), matching: find.text('Type')), findsOneWidget);
+    expect(m.cards(text).map((c) => c.$1).contains('Gradient'), isFalse, reason: 'one colour: no ramp to turn');
+    expect(m.say(text, 'fill', 'ff3366 1b2fd8') && m.cards(text).map((c) => c.$1).contains('Gradient'), isTrue, reason: 'two: its ramp');
+    expect(m.say(text, 'fill', 'ffffff'), isTrue);
     final wide = m.frame(text)![2], letters = find.byWidgetPredicate((w) => w is NumField && w.id == 'v_letter_spacing');
     expect(letters, findsOneWidget);
     await t.ensureVisible(letters);

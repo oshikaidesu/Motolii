@@ -129,7 +129,7 @@ static const DocValue doc_values[] = {
     {"stroke", "text shape", 0, 0, false, ""}, {"stroke_width", "text shape", 0, 1000, false, nullptr},   // (its edge: a colour, and how wide, in points of the picture at size 1)
     // (ThorVG's own: a text's letters and lines so many times as far apart as the font sets them, its slant; an edge's
     //  ends and corners, and dashes along it so long, with gaps as long, begun so far along)
-    {"wrap", "text", 0, 0, false, "none character word smart ellipsis"}, {"wrap_width", "text", 0, 1000, false, nullptr},   // (its lines broken in a box so many of its own heights wide: ThorVG's layout and wrap)
+    {"wrap", "text", 0, 0, false, "none character word smart ellipsis"}, {"wrap_at", "text", 0, 1000, false, nullptr},   // (its lines broken in a box so many times as wide as its letters are high: ThorVG's layout and wrap; a text's size is the height of all its lines, so this goes with the letters, not the picture)
     {"letter_spacing", "text", 0, 10, false, nullptr}, {"line_spacing", "text", 0, 10, false, nullptr}, {"italic", "text", 0, 0.5, false, nullptr},
     // (a fill of two colours or more: across, ThorVG's linear gradient, or from the middle out, its radial; turned so far,
     //  in degrees clockwise, 0 from top to bottom; so long, as a share of how far it reaches; past its ends padded,
@@ -157,10 +157,10 @@ static const DocValue doc_values[] = {
     {"environment", "stage", 0, 10, false, nullptr}, {"environment_rotate", "stage", -1e6, 1e6, false, nullptr}, {"background", "stage", 0, 0, false, ""}};
 // The cards a maker sees a thing's values on, besides where it is and its fill: a title and the values on it, in the
 // order shown (a thing is shown those of them its kind has). A value the window has no other seat for goes here.
-struct DocCard { const char* title; const char* names; const char* when = nullptr; const char* is = nullptr; };   // (shown only while `when` is `is`; "!...": is not)
+struct DocCard { const char* title; const char* names; const char* when = nullptr; const char* is = nullptr; };   // (shown only while `when` is `is`; "!...": is not; "~...": has it in it)
 static const DocCard doc_cards[] = {
-    {"Type", "letter_spacing line_spacing italic wrap wrap_width"},
-    {"Gradient", "gradient gradient_angle gradient_scale gradient_spread"},
+    {"Type", "letter_spacing line_spacing italic wrap wrap_at"},
+    {"Gradient", "gradient gradient_angle gradient_scale gradient_spread", "fill", "~ "},
     {"Play", "marker animation speed"},
     {"Matte", "clip_matte clip_invert clip_feather", "clip", "1"},
     {"Line", "cap join dash dash_offset"},
@@ -615,7 +615,7 @@ static void doc_moment(Doc& d, double now) {
 static bool doc_match(Doc& d) {
     Stage& s = *d.stage;
     std::map<int, std::string> told;   // every thing of the document, and all that its making goes by
-    doc_rows(d, sqlite3_mprintf("select thing, group_concat(name || '=' || value, ' ') from (select * from fact where thing > 0 and name in ('kind','file','shape','blend','keyed','space','begin','duration','speed','text','fill','wide','points','inner','round','stroke','stroke_width','align','blur','shadow','shadow_distance','shadow_angle','shadow_blur','shadow_opacity','glow','glow_blur','glow_opacity','copies','tint','tint_black','tint_white','tritone','tritone_shadow','tritone_midtone','tritone_highlight','letter_spacing','line_spacing','italic','cap','join','dash','dash_offset','metallic','roughness','reflectance','clear_coat','clear_coat_roughness','emissive','falloff','shadows','gradient','gradient_angle','gradient_scale','gradient_spread','wrap','wrap_width','ior','split','swim','dark','vivid','marker') order by thing, name) group by thing"),
+    doc_rows(d, sqlite3_mprintf("select thing, group_concat(name || '=' || value, ' ') from (select * from fact where thing > 0 and name in ('kind','file','shape','blend','keyed','space','begin','duration','speed','text','fill','wide','points','inner','round','stroke','stroke_width','align','blur','shadow','shadow_distance','shadow_angle','shadow_blur','shadow_opacity','glow','glow_blur','glow_opacity','copies','tint','tint_black','tint_white','tritone','tritone_shadow','tritone_midtone','tritone_highlight','letter_spacing','line_spacing','italic','cap','join','dash','dash_offset','metallic','roughness','reflectance','clear_coat','clear_coat_roughness','emissive','falloff','shadows','gradient','gradient_angle','gradient_scale','gradient_spread','wrap','wrap_at','ior','split','swim','dark','vivid','marker') order by thing, name) group by thing"),
              [&](sqlite3_stmt* row) { told[sqlite3_column_int(row, 0)] = (const char*)sqlite3_column_text(row, 1); });
     for (auto it = d.shown.begin(); it != d.shown.end();) {
         const auto still = told.find(it->first);
@@ -669,7 +669,7 @@ static bool doc_match(Doc& d) {
         fx.radial = doc_word(d, thing, "gradient") == "radial", fx.rampAngle = (float)doc_number(d, thing, "gradient_angle", 0, 0), fx.rampScale = (float)doc_number(d, thing, "gradient_scale", 0, 1);
         fx.spread = doc_word(d, thing, "gradient_spread") == "reflect" ? 1 : doc_word(d, thing, "gradient_spread") == "repeat" ? 2 : 0;
         fx.copies = (int)doc_number(d, thing, "copies", 0, 1);
-        fx.wrapWidth = (float)doc_number(d, thing, "wrap_width", 0, 0);
+        fx.wrapWidth = (float)doc_number(d, thing, "wrap_at", 0, 0);
         { const std::string w = doc_word(d, thing, "wrap"); fx.wrap = w == "character" ? 1 : w == "word" ? 2 : w == "smart" ? 3 : w == "ellipsis" ? 4 : fx.wrapWidth > 0.f ? 2 : 0; }   // (ThorVG's TextWrap; a box said and no way: by words)
         fx.letters = (float)doc_number(d, thing, "letter_spacing", 0, 1), fx.lines = (float)doc_number(d, thing, "line_spacing", 0, 1), fx.italic = (float)doc_number(d, thing, "italic", 0, 0);
         const auto which = [&](const char* name, const char* words) { const std::string w = doc_word(d, thing, name); if (w.empty()) return -1; int n = 0; for (const char* at = words; *at; ++n) { const size_t len = strcspn(at, " "); if (w == std::string(at, len)) return n; at += len + (at[len] ? 1 : 0); } return -1; };
@@ -1146,7 +1146,9 @@ static std::string doc_cards_of(Doc& d, int thing) {
     const std::string has = " " + doc_has(d, thing) + " ";
     std::string all;
     for (const DocCard& card : doc_cards) {
-        if (card.when) {   // (a card for one fill and not another, or while it is clipped)
+        if (card.when && card.is[0] == '~') {   // (a ramp's card while the fill has more colours than one)
+            if (doc_word(d, thing, card.when).find(card.is + 1) == std::string::npos) continue;
+        } else if (card.when) {   // (a card for one fill and not another, or while it is clipped)
             const std::string w = doc_word(d, thing, card.when), want = card.is[0] == '!' ? card.is + 1 : card.is;
             char* end = nullptr;
             const double n = std::strtod(w.c_str(), &end);
