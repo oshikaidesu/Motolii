@@ -20,7 +20,9 @@ static const char* const calls =
 
 int main(int argc, char** argv) {
     if (argc < 2) return std::printf("FAIL edit <document>\n"), 1;
-    Motolii* m = motolii_open(argv[1], 1080, 1920);
+    int wide = 1080, high = 1920;   // (a new document's size; SIZE=1920x1080 for another: one that says its own is opened at it)
+    if (const char* size = std::getenv("SIZE")) std::sscanf(size, "%dx%d", &wide, &high);
+    Motolii* m = motolii_open(argv[1], wide, high);
     if (!m) return std::printf("FAIL the document could not be opened\n"), 1;
     for (std::string line; std::getline(std::cin, line);) try {
         std::istringstream said(line);

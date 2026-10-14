@@ -1274,9 +1274,9 @@ static bool doc_raise(Doc& d, int thing, int places) {
 struct DocRecipe { const char* name; const char* kind; const char* file; const char* what; const char* lines; };
 static const DocRecipe doc_recipes[] = {
     {"Wave lines", "shape", "line", "a column of lines bending in a wave",
-     "say fill ffffff\nset size 0.4\nset y 2.2\nset copies 36\nset copy_y -0.55\nset wave_rotate 25\nset wave_x 0.25\nset wave_phase 2"},
+     "say fill ffffff\nset size 1\nset y 1.5\nset copies 26\nset copy_y -0.12\nset wave_rotate 25\nset wave_x 0.25\nset wave_phase 2"},
     {"Iris", "shape", "line", "lines round a centre, coloured in their order, breathing",
-     "set size 0.5\nset anchor_x -1.6\nset copies 48\nset copy_rotate 7.5\nsay copy_fill ff3366 ffd166 1b2fd8 ff3366\nset wave_size 0.3\nset wave_phase 3"},
+     "set size 1\nset anchor_x -1.6\nset copies 48\nset copy_rotate 7.5\nsay copy_fill ff3366 ffd166 1b2fd8 ff3366\nset wave_size 0.3\nset wave_phase 3"},
     {"Dot wave", "shape", "circle", "a grid of dots rising and falling one after another",
      "say fill ffd166\nset size 0.12\nset x -1.1\nset y 1.1\nset copies 100\nset copy_columns 10\nset copy_x 2\nset copy_y -2\nset wave_y 0.15\nset wave_size 0.4\nset wave_phase 3\nsay copy_fill ffd166 ff3366"},
     {"Tunnel", "shape", "rect", "squares within squares, turning one after another",
@@ -1292,7 +1292,7 @@ static const DocRecipe doc_recipes[] = {
     {"Confetti", "shape", "rect", "bits of colour scattered about, each turning its own way",
      "set size 0.08\nset wide 0.5\nset copies 160\nset scatter_x 36\nset scatter_y 20\nset scatter_rotate 180\nset scatter_size 0.5\nset wave_rotate 120\nset wave_phase 37\nset wave_y 1\nsay copy_fill ff3366 ffd166 1b2fd8 22c55e ff3366"},
     {"Burst", "shape", "line", "lines from a centre growing out one after another",
-     "say fill ffffff\nset anchor_x -1\nset copies 24\nset copy_rotate 15\nkey size 0 0.001\nkey size 0.5 0.6\nset stagger 0.8\nsay copy_fill ffffff ffd166"},
+     "say fill ffffff\nset anchor_x -1\nset copies 24\nset copy_rotate 15\nkey size 0 0.001\nkey size 0.5 1.3\nset stagger 0.8\nsay copy_fill ffffff ffd166"},
 };
 static std::string doc_recipe_names() {
     std::string all;
