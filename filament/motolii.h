@@ -25,6 +25,7 @@ int motolii_fits(Motolii* m);
    moments with a name; motolii_mark with "" takes the one there away; motolii_marks: a line each, in time, "moment name"
    (until the next call). */
 int motolii_work(Motolii* m, double from, double to);
+int motolii_loop(Motolii* m, int on);   /* play goes round the work area (1, as a document is opened) or stops at its end (0); below 0: only asks */
 int motolii_work_of(Motolii* m, double* from, double* to);
 int motolii_mark(Motolii* m, double at, const char* word);
 const char* motolii_marks(Motolii* m);

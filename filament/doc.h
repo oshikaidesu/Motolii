@@ -84,7 +84,9 @@ static const DocValue doc_values[] = {
     // (and its lens: how far off from it things are sharp, 0 being where it looks; the f-number, 0: all sharp)
     {"focus", "camera", 0, 1e4, true, nullptr}, {"aperture", "camera", 0, 64, true, nullptr}, {"blur_level", "camera", 0, 100, true, nullptr},   // (After Effects' blur level: how many times the lens's own blur)
     {"opacity", "film picture text shape", 0, 1, true, nullptr},
-    {"clip", doc_drawn, 0, 1, false, nullptr}, {"visible", doc_kinds, 0, 1, false, nullptr}, {"order", doc_kinds, -1e9, 1e9, false, nullptr}, {"wide", "shape", 1e-3, 1e3, false, nullptr}, {"shape", "shape", 0, 0, false, "rect circle solid polygon star line null"},
+    {"clip", doc_drawn, 0, 1, false, nullptr},
+    {"solo", doc_kinds, 0, 1, false, nullptr}, {"lock", doc_kinds, 0, 1, false, nullptr},   // (After Effects' own: while any thing is solo only those are seen; a locked thing is not changed)
+    {"visible", doc_kinds, 0, 1, false, nullptr}, {"order", doc_kinds, -1e9, 1e9, false, nullptr}, {"wide", "shape", 1e-3, 1e3, false, nullptr}, {"shape", "shape", 0, 0, false, "rect circle solid polygon star line null"},
     {"points", "shape", 3, 100, false, nullptr}, {"inner", "shape", 0.01, 1, false, nullptr}, {"round", "shape", 0, 0.5, false, nullptr},   // (a polygon's or star's points, a star's inner points, a rect's corners)
     {"start", doc_kinds, 0, 1e6, false, nullptr}, {"duration", doc_kinds, 1e-3, 1e6, false, nullptr},
     {"begin", "film", 0, 1e6, false, nullptr}, {"speed", "film", -100, 100, false, nullptr}, {"keyed", "film", 0, 1, false, nullptr},
@@ -283,11 +285,13 @@ static void doc_moment(Doc& d, double now) {
     // Each thing as it is now, in the order they lie: whether it is on, and whether it is a solid thing.
     struct Lies { int thing; Doc::Shown* shown; bool on, solid; double since; };
     std::vector<Lies> lies;
+    bool solo = false;   // (while any thing is solo, only those are seen)
+    for (int thing : lie) solo = solo || doc_number(d, thing, "solo", 0, 0) > 0.5;
     for (int thing : lie) {
         const auto found = d.shown.find(thing);
         if (found == d.shown.end() || found->second.camera) continue;
         const double since = now - doc_number(d, thing, "start", 0, 0), lasts = doc_number(d, thing, "duration", 0, -1);
-        Lies one{thing, &found->second, since >= 0.0 && (lasts < 0.0 || since < lasts) && doc_number(d, thing, "visible", 0, 1) > 0.5, found->second.space != 2, since};   // (a sheet in the world settles depth with the solid things)
+        Lies one{thing, &found->second, since >= 0.0 && (lasts < 0.0 || since < lasts) && doc_number(d, thing, "visible", 0, 1) > 0.5 && (!solo || doc_number(d, thing, "solo", 0, 0) > 0.5), found->second.space != 2, since};   // (a sheet in the world settles depth with the solid things)
         lies.push_back(one);
     }
     // The camera: the nearest one in the order of the things that is on (the past repository's choice); none, the
@@ -743,9 +747,10 @@ static bool doc_knows(Doc& d, int thing, const char* name = nullptr, const doubl
     if (number && v->words) return d.trouble = std::string(name) + " is a word, told by say" + (*v->words ? std::string(": ") + v->words : ""), false;
     if (word && !v->words) return d.trouble = std::string(name) + " is a number, told by set", false;
     if (word && *v->words && !doc_among(v->words, word)) return d.trouble = std::string(name) + " is one of: " + v->words, false;
-    if (number && (!std::isfinite(*number) || *number < v->low || *number > v->high || (doc_among("keyed clip visible", name) && *number != 0.0 && *number != 1.0)))
-        return std::snprintf(range, sizeof range, doc_among("keyed clip visible", name) ? " is 0 or 1" : " is from %g to %g", v->low, v->high), d.trouble = name + std::string(range), false;
+    if (number && (!std::isfinite(*number) || *number < v->low || *number > v->high || (doc_among("keyed clip visible solo lock", name) && *number != 0.0 && *number != 1.0)))
+        return std::snprintf(range, sizeof range, doc_among("keyed clip visible solo lock", name) ? " is 0 or 1" : " is from %g to %g", v->low, v->high), d.trouble = name + std::string(range), false;
     if (key && !v->moves) return d.trouble = std::string(name) + " does not move: keys go on " + moving, false;
+    if ((number || word || key) && strcmp(name, "lock") && doc_number(d, thing, "lock", 0, 0) > 0.5) return d.trouble = "it is locked", false;
     if (number && !strcmp(name, "parent") && *number != 0.0) {   // (a parent is a thing that is there, and not the thing itself nor one that goes with it: the past repository's rule)
         const int to = (int)*number;
         if (to != *number || doc_word(d, to, "kind").empty()) return d.trouble = "a parent is a thing that is there", false;
@@ -782,7 +787,9 @@ static int doc_add(Doc& d, const char* kind, const char* file) {
     doc_rows(d, sqlite3_mprintf("select max(id) from thing"), [&](sqlite3_stmt* row) { thing = sqlite3_column_int(row, 0); });
     return thing;
 }
-static bool doc_remove(Doc& d, int thing) { return doc_knows(d, thing) && doc_change(d, sqlite3_mprintf("delete from fact where thing = %d", thing)); }
+static bool doc_remove(Doc& d, int thing) {
+    if (doc_knows(d, thing) && doc_number(d, thing, "lock", 0, 0) > 0.5) return d.trouble = "it is locked", false;
+    return doc_knows(d, thing) && doc_change(d, sqlite3_mprintf("delete from fact where thing = %d", thing)); }
 // A value that stays (its keys, if it had any, are gone); a word; a key at a moment; a key taken away.
 static bool doc_parent(Doc& d, int thing, double to);
 static bool doc_set(Doc& d, int thing, const char* name, double is) {

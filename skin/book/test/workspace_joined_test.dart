@@ -832,6 +832,26 @@ void main() {
     await _close(t);
   }, skip: !_built);
 
+  testWidgets('solo, lock and loop are the document\'s and the inside\'s, not the window\'s', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    final a = m.add('shape', 'rect'), b = m.add('shape', 'circle');
+    ws.reread();
+    await t.pumpAndSettle();
+    expect(m.set(a, 'solo', 1), isTrue, reason: m.trouble);
+    expect([m.frame(a), m.frame(b)], [isNotNull, isNull], reason: 'while one is solo only it is seen');
+    expect(m.set(a, 'solo', 0) && m.frame(b) != null, isTrue);
+    expect(m.set(b, 'lock', 1), isTrue);
+    expect(m.set(b, 'x', 1), isFalse);
+    expect(m.trouble, 'it is locked');
+    expect(m.remove(b), isFalse, reason: 'nor taken away');
+    expect(m.set(b, 'lock', 0) && m.set(b, 'x', 1), isTrue, reason: 'unlocked, it is changed again');
+    expect(m.looping, isTrue, reason: 'play goes round, as a document is opened');
+    m.looping = false;
+    expect(m.looping, isFalse);
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
   testWidgets('Backspace on the timeline takes the picked thing out; undo brings it back', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final ring = m.add('solid', 'ring'), cube = m.add('solid', 'cube');

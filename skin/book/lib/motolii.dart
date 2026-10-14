@@ -264,6 +264,11 @@ class Motolii {
   }
 
   bool setWork(double from, double to) => _work(_m, from, to) != 0;
+  late final _loopIs = _lib.lookupFunction<Int32 Function(_P, Int32), int Function(_P, int)>('motolii_loop');
+
+  /// Whether play goes round the work area (or stops at its end).
+  bool get looping => _loopIs(_m, -1) != 0;
+  set looping(bool on) => _loopIs(_m, on ? 1 : 0);
 
   /// The marks: moments with a name, in time; a mark said with '' is taken away.
   List<(double, String)> get marks => [

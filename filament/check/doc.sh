@@ -21,6 +21,9 @@ grep "^  [0-9(]" out/doc_wrong.txt | grep -v "(a number" | diff - check/doc_wron
 rm -f out/doc_ways.motolii
 ./edit.sh out/doc_ways.motolii < check/doc_ways.txt > out/doc_ways.txt
 grep "^  \|NOT done" out/doc_ways.txt | sed 's/, [0-9.]* ms$//' | diff - check/doc_ways.expect > /dev/null && echo "the stretches between keys go as expected: yes ($(grep -c '^  [0-9-]*\.[0-9]*$' out/doc_ways.txt) values read, $(grep -c 'NOT done' out/doc_ways.txt) calls refused)" || echo "the stretches between keys go as expected: NO"
+# every kind has the values it is to have (a line of the table of values lost, as a comment swallowing it, shows here)
+rm -f out/doc_names.motolii
+printf 'add shape rect\nset 1 nosuch 1\nadd text ../arial_black.ttf\nset 2 nosuch 1\nadd solid cube\nset 3 nosuch 1\nadd camera eye\nset 4 nosuch 1\nadd film ../vid/happy.mp4\nset 5 nosuch 1\n' | ./edit.sh out/doc_names.motolii | grep "has no nosuch" | sed 's/, [0-9.]* ms$//' | diff - check/doc_names.expect > /dev/null && echo "every kind has its values: yes" || echo "every kind has its values: NO (check/doc_names.expect)"
 # colours as the files hold them: a picture half white (255), half grey (144), and white typed words, on a document's stage
 python3 -c "
 from PIL import Image

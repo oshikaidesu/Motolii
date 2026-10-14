@@ -172,7 +172,7 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
     if (i < 0 || i >= ws.layers.length) return ws.clearKeys();
     final l = ws.layers[i];
     final cy = i * WtM.row - _vscroll + WtM.row / 2;
-    if (!_locked.contains(l.id) && (p.dy - cy).abs() <= WtM.bar / 2 + 2) {
+    if (!_isLocked(ws, l.id) && (p.dy - cy).abs() <= WtM.bar / 2 + 2) {
       int? best;
       var bd = WtM.keyPicked + 2;
       for (final k in l.keys) {
@@ -202,7 +202,7 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
     final i = ((p.dy + _vscroll) / WtM.row).floor();
     if (m == null || i < 0 || i >= ws.layers.length) return;
     final l = ws.layers[i], a = v.x(l.inF), b = v.x(l.outF);
-    if (_locked.contains(l.id) || p.dx < a - 6 || p.dx > b + 6 || !m.hold(int.parse(l.id))) return;
+    if (_isLocked(_ws!, l.id) || p.dx < a - 6 || p.dx > b + 6 || !m.hold(int.parse(l.id))) return;
     ws.select(l.id);
     if (ws.playing) ws.playing = false;
     _bar = (id: l.id, part: (p.dx - b).abs() <= 6 ? 'tail' : ((p.dx - a).abs() <= 6 ? 'head' : 'bar'), grab: v.frameAt(p.dx), moved: false);
@@ -292,6 +292,17 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
 
   void _flip(Set<String> s, String id) => setState(() => s.contains(id) ? s.remove(id) : s.add(id));
 
+  // Joined: solo and lock are the document's (After Effects keeps both in its project): while any thing is solo only
+  // those are seen; a locked thing is not changed (the inside refuses, and says so). Else the sample's own sets.
+  bool _isSolo(Ws ws, String id) => ws.inside == null ? _solo.contains(id) : (ws.inside!.value(int.parse(id), 'solo', 0) ?? 0) > .5;
+  bool _isLocked(Ws ws, String id) => ws.inside == null ? _locked.contains(id) : (ws.inside!.value(int.parse(id), 'lock', 0) ?? 0) > .5;
+  bool _anySolo(Ws ws) => ws.layers.any((l) => _isSolo(ws, l.id));
+  void _flag(Ws ws, Set<String> s, String name, String id) {
+    final m = ws.inside;
+    if (m == null) return _flip(s, id);
+    if (m.set(int.parse(id), name, (name == 'solo' ? _isSolo(ws, id) : _isLocked(ws, id)) ? 0 : 1)) ws.reread();
+  }
+
   // ---------------------------------------------------------------- build
 
   @override
@@ -316,8 +327,8 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
               if (k.layer == l.id) k.frame,
           },
           selected: l.id == sel,
-          dim: _isHidden(ws, l.id) || (_solo.isNotEmpty && !_solo.contains(l.id)),
-          locked: _locked.contains(l.id),
+          dim: _isHidden(ws, l.id) || (_anySolo(ws) && !_isSolo(ws, l.id)),
+          locked: _isLocked(ws, l.id),
         ),
     ];
     return Focus(
@@ -330,7 +341,7 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _Header(ws: ws, loop: _loop, zoom: _zoom, onToggle: _toggle, onStep: _step, onLoop: () => setState(() => _loop = !_loop), onZoom: _setZoom),
+              _Header(ws: ws, loop: ws.inside?.looping ?? _loop, zoom: _zoom, onToggle: _toggle, onStep: _step, onLoop: () => setState(() => ws.inside == null ? _loop = !_loop : ws.inside!.looping = !ws.inside!.looping), onZoom: _setZoom),
               Expanded(
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -354,7 +365,7 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
   Widget _labels(Ws ws, List<WtRow> rows) => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
-      _LabelHeader(count: ws.layers.length, solo: _solo.isNotEmpty),
+      _LabelHeader(count: ws.layers.length, solo: _anySolo(ws)),
       Expanded(
         child: Listener(
           onPointerSignal: _wheel,
@@ -386,11 +397,11 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
                             index: i,
                             row: rows[i],
                             hidden: _isHidden(ws, ws.layers[i].id),
-                            solo: _solo.contains(ws.layers[i].id),
+                            solo: _isSolo(ws, ws.layers[i].id),
                             onSelect: () => ws.select(ws.layers[i].id),
                             onEye: () => _eye(ws, ws.layers[i].id),
-                            onSolo: () => _flip(_solo, ws.layers[i].id),
-                            onLock: () => _flip(_locked, ws.layers[i].id),
+                            onSolo: () => _flag(ws, _solo, 'solo', ws.layers[i].id),
+                            onLock: () => _flag(ws, _locked, 'lock', ws.layers[i].id),
                           ),
                         ),
                       ),

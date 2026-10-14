@@ -24,6 +24,7 @@ struct Motolii {
     std::deque<std::function<void()>> asked;
     bool closing = false, changed = true;
     std::atomic<bool> playing{false};
+    bool loop = true;   // (play goes round the work area; not: it stops at its end)
     std::atomic<double> now{0.0};
 };
 
@@ -72,7 +73,8 @@ static void motolii_hand(Motolii* m, std::string document, int wide, int high, s
             const double runs = doc_seconds(*m->d), on = m->now + std::chrono::duration<double>(t - last).count();
             double from = 0.0, to = runs;
             doc_work(*m->d, &from, &to);   // (round and round within the work area)
-            m->now = on >= to || on < from ? from : on;
+            if (on >= to && !m->loop) m->now = to, m->playing = false;   // (once through: it stops at the work area's end)
+            else m->now = on >= to || on < from ? from : on;
         }
         last = t;
         m->s->by_clock = m->playing;
@@ -115,6 +117,7 @@ static int changes(Motolii* m, int done) {
 int motolii_live(Motolii* m) { return by_hand(m, [m] { return m->live || (m->live = live_open(*m->s)) ? 1 : 0; }); }
 void* motolii_front(Motolii* m) { return m->live ? live_front(m->live) : nullptr; }
 unsigned long long motolii_frames(Motolii* m) { return m->live ? m->live->frames.load() : 0; }
+int motolii_loop(Motolii* m, int on) { return by_hand(m, [=] { if (on >= 0) m->loop = on != 0; return (int)m->loop; }); }
 int motolii_play(Motolii* m, int playing) { return by_hand(m, [m, playing] { m->playing = playing != 0; return 1; }); }
 double motolii_now(Motolii* m) { return m->now; }
 
