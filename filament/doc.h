@@ -52,8 +52,10 @@ struct Doc {
     struct Keys { std::vector<double> at, value; std::vector<Interp> interp; std::vector<std::string> own; };   // (own: a way defined in the document, where the stretch is not one of the nine kinds)
     std::map<std::pair<int, std::string>, Keys> moving;   // a value's keys, and the way of the stretch after each; read from the facts when first asked for, forgotten at every change
     std::map<std::string, sqlite3_stmt*> named, goes;     // a way by its name, and by its expression: made ready once (SQLite works it out)
-    struct Shown { std::string of; Video* film = nullptr; Drawn* drawn = nullptr; Solid* solid = nullptr; Mesh* shape = nullptr; bool in = true, clipped = false; };
+    struct Shown { std::string of; Video* film = nullptr; Drawn* drawn = nullptr; Solid* solid = nullptr; Mesh* shape = nullptr; bool in = true, clipped = false; int run = -1, lies = -1; };
     std::map<int, Shown> shown;   // the things as they are on the stage, and what each was made of
+    Mesh* clears[8] = {};         // for each run of things, the triangle that clears depth before it (clear_depth.mat), made when first needed
+    unsigned cleared = 0;         // which of them are on the stage now
 };
 // What a thing may be told, by name: which kinds of thing have it, a number between which two (or one of which
 // words), and whether it can move (take keys).
@@ -174,6 +176,14 @@ static void doc_looks(Stage& s, const Doc::Shown& t, const std::function<void(Ma
         for (size_t part = 0; part < faces.getPrimitiveCount(one); ++part) each(faces.getMaterialInstanceAt(one, part));
     }
 }
+// Each drawn part of a thing (Filament's renderables).
+static void doc_parts(Stage& s, const Doc::Shown& t, const std::function<void(RenderableManager&, RenderableManager::Instance)>& each) {
+    auto& faces = s.engine->getRenderableManager();
+    const Mesh* m = t.film ? t.film->sheet : t.drawn ? t.drawn->sheet : t.shape;
+    for (const Stage::Made& made : s.made)
+        if (m && made.of == m) each(faces, faces.getInstance(made.thing));
+    for (size_t i = 0; t.solid && i < t.solid->made->getRenderableEntityCount(); ++i) each(faces, faces.getInstance(t.solid->made->getRenderableEntities()[i]));
+}
 static bool doc_covers(Doc& d, int thing, double now, double* box);
 static bool doc_half(Doc& d, int thing, float2* half);
 
@@ -182,23 +192,50 @@ static bool doc_half(Doc& d, int thing, float2* half);
 static void doc_moment(Doc& d, double now) {
     Stage& s = *d.stage;
     const std::vector<int> lie = doc_laid(d);
-    // Each thing as it is now, in the order they lie: whether it is on, and, if it is a solid thing, how near and how
-    // far it reaches (roughly: a ball as wide as its widest).
-    struct Lies { int thing; Doc::Shown* shown; bool on, solid; double since, near, far; };
+    // Each thing as it is now, in the order they lie: whether it is on, and whether it is a solid thing.
+    struct Lies { int thing; Doc::Shown* shown; bool on, solid; double since; };
     std::vector<Lies> lies;
     for (int thing : lie) {
         const auto found = d.shown.find(thing);
         if (found == d.shown.end()) continue;
         const double since = now - doc_number(d, thing, "start", 0, 0), lasts = doc_number(d, thing, "duration", 0, -1);
-        Lies one{thing, &found->second, since >= 0.0 && (lasts < 0.0 || since < lasts) && doc_number(d, thing, "visible", 0, 1) > 0.5, found->second.solid || found->second.shape, since, 0.0, 0.0};
-        float2 half{0.5f};
-        if (one.solid && doc_half(d, thing, &half)) {
-            const double z = doc_number(d, thing, "z", now, 0), round = doc_number(d, thing, "size", now, 1) * std::max({(double)half.x, (double)half.y, 0.5});
-            one.near = z + round, one.far = z - round;
-        }
+        Lies one{thing, &found->second, since >= 0.0 && (lasts < 0.0 || since < lasts) && doc_number(d, thing, "visible", 0, 1) > 0.5, found->second.solid || found->second.shape, since};
         lies.push_back(one);
     }
-    const math::double3 eye = s.camera->getPosition();
+    // Who is before whom (the past repository's law of 2026-09-12: a flat thing is not in the world). Flat things take
+    // no part in depth and lie by the order of the things alone; solid things that follow one another settle depth
+    // among themselves; a run of the one sort is drawn whole after the run before it. By Filament's own means: a run
+    // is a channel (it has 8: past the eighth change of sort the rest are one run), the order within a run of flat
+    // things is the blend order, and a flat thing's looks neither ask nor write depth.
+    // A run of solid things that is not the first run has depth cleared before it (the triangle is the first drawn in
+    // its channel), so it is over all that was drawn before, whatever depth that had.
+    int run = 0, sort = -1;
+    unsigned clear = 0;
+    for (size_t i = 0; i < lies.size(); ++i) {
+        if (!lies[i].on) continue;
+        if (sort >= 0 && sort != (int)lies[i].solid && run < 7) ++run;
+        sort = lies[i].solid;
+        if (lies[i].solid && run > 0) clear |= 1u << run;
+        Doc::Shown& t = *lies[i].shown;
+        if (t.run == run && t.lies == (int)i) continue;
+        if (t.run < 0 && !lies[i].solid) doc_looks(s, t, [](MaterialInstance* look) { look->setDepthCulling(false), look->setDepthWrite(false); });
+        doc_parts(s, t, [&](RenderableManager& faces, RenderableManager::Instance one) {
+            faces.setChannel(one, (uint8_t)run);
+            for (size_t part = 0; !lies[i].solid && part < faces.getPrimitiveCount(one); ++part) faces.setBlendOrderAt(one, part, (uint16_t)i), faces.setGlobalBlendOrderEnabledAt(one, part, true);
+        });
+        t.run = run, t.lies = (int)i;
+    }
+    for (int k = 1; k < 8 && clear != d.cleared; ++k) {
+        const bool want = clear >> k & 1u;
+        if (want == (bool)(d.cleared >> k & 1u)) continue;
+        if (!d.clears[k]) {
+            d.clears[k] = new Mesh{{float3{-1, -1, 1}, float3{3, -1, 1}, float3{-1, 3, 1}}, std::vector<float3>(3, float3{0, 0, 1}), std::vector<float2>(3, float2{0.f}), {0, 1, 2}, {}};   // (Filament's own full-screen triangle)
+            add(s, d.clears[k], "clear_depth.filamat", {mat4f{}}, 1, false, 1, 0);   // (order 0: before all else in its channel)
+            for (const Stage::Made& made : s.made) if (made.of == d.clears[k]) s.engine->getRenderableManager().setChannel(s.engine->getRenderableManager().getInstance(made.thing), (uint8_t)k);
+        }
+        seen(s, d.clears[k], want);
+    }
+    d.cleared = clear;
     for (size_t i = 0; i < lies.size(); ++i) {
         const int thing = lies[i].thing;
         Doc::Shown& t = *lies[i].shown;
@@ -208,23 +245,10 @@ static void doc_moment(Doc& d, double now) {
         if (!in) continue;
         if (t.film) video_at(s, t.film, (float)lies[i].since);
         if (t.drawn && t.drawn->seconds > 0.f) picture_at(s, t.drawn, std::fmod((float)lies[i].since, t.drawn->seconds));
-        math::double3 at{doc_number(d, thing, "x", now, 0), doc_number(d, thing, "y", now, 0), doc_number(d, thing, "z", now, 0)};
-        double grown = 1.0;
-        if (!lies[i].solid) {
-            // A flat thing lies by the order of the things, whatever its depth: a hair nearer than the flat thing before
-            // it, before every solid thing that lies before it, behind every one that lies after it. It is brought there
-            // along the eye's own line and made larger or smaller by as much, so it is seen where and as large as the
-            // document says: only what is before and behind it changes.
-            double to = at.z, need = -1e9, allow = 1e9;
-            for (size_t j = 0; j < lies.size(); ++j)
-                if (lies[j].on && lies[j].solid) { if (j < i) need = std::max(need, lies[j].near + 0.02); else allow = std::min(allow, lies[j].far - 0.02); }
-            to = std::min(std::max(std::min(to, allow), need), eye.z - 0.5) + 1e-4 * (double)(i + 1);   // (the hair last: flat things brought to the same depth still lie in their order)
-            grown = (eye.z - to) / std::max(eye.z - at.z, 1e-6);
-            at = eye + (at - eye) * grown;
-        }
+        const math::double3 at{doc_number(d, thing, "x", now, 0), doc_number(d, thing, "y", now, 0), doc_number(d, thing, "z", now, 0)};
         const auto turned = [&](const char* name, float3 about) { return mat4f::rotation((float)doc_number(d, thing, name, now, 0) * TAU / 360.f, about); };
         const mat4f place = mat4f::translation(float3{(float)at.x, (float)at.y, (float)at.z}) * turned("rotate", float3{0, 0, 1}) * turned("rotate_y", float3{0, 1, 0}) * turned("rotate_x", float3{1, 0, 0}) *
-                            mat4f::scaling((float)(doc_number(d, thing, "size", now, 1) * grown));
+                            mat4f::scaling((float)doc_number(d, thing, "size", now, 1));
         if (t.solid) solid_to(s, t.solid, place); else move(s, m, [&](int, const mat4f&) { return place; });
         if (MaterialInstance* look = t.film ? t.film->look : t.drawn ? t.drawn->look : nullptr) look->setParameter("opacity", (float)doc_number(d, thing, "opacity", now, 1));
     }
