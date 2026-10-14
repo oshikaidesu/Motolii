@@ -48,6 +48,12 @@ final _glass = _Make('Glass', DockG.radial, WsT.toneShape, '', 'Material · thic
 /// Joined: the picked thing's fill told to the document (a colour as six digits, or a material's name). Not done: the foot says why.
 void _fill(DockCtx c, String word) {
   final m = c.ws.inside!, t = int.tryParse(c.ws.selected ?? '');
+  if (c.ws.aim case final aim?) { // (a card's colour link aimed it: said to that value, of the picked thing or of the stage)
+    final done = m.say(t ?? 0, aim, word);
+    c.set(() => done ? c.mem.trouble.remove('fill') : c.mem.trouble['fill'] = m.trouble);
+    if (done) c.ws.reread();
+    return;
+  }
   if (t == null) { // (nothing picked: the drawing tools' ink, what a thing drawn next is filled with)
     c.set(() => word == 'glass' ? c.mem.trouble['fill'] = 'Glass fills a solid thing: pick one' : (c.ws.ink = word, c.mem.trouble.remove('fill')));
     c.ws.reread();
@@ -168,8 +174,8 @@ class ColorsShelf extends StatelessWidget {
           DockFooter(
             preview: ColoredBox(color: sel.$2),
             title: _hex(sel.$2),
-            meta: c.mem.trouble['fill'] ?? sel.$1,
-            action: 'Fill',
+            meta: c.mem.trouble['fill'] ?? (c.ws.aim == null ? sel.$1 : 'to ${c.ws.aim}'),
+            action: c.ws.aim == null ? 'Fill' : 'Set',
             onAction: () => _fill(c, _wordOf(c.sel) ?? _hex(sel.$2).substring(1).toLowerCase()),
           )
         else if (sel != null)

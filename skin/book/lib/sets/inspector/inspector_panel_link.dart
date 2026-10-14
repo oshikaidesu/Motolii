@@ -58,7 +58,12 @@ class LinkLine extends StatelessWidget {
     return Hov(
       key: ValueKey('link:${to.name}:$id'),
       cursor: off ? SystemMouseCursors.basic : SystemMouseCursors.click,
-      onTap: off ? null : () => x.doc.str('route', to.route),
+      onTap: off
+          ? null
+          : () {
+              x.doc.s2['route.at'] = id; // (the slot it is aimed at: the host may say the panel's pick to it)
+              x.doc.str('route', to.route);
+            },
       builder: (_, h) => SizedBox(
         height: 18,
         child: Row(

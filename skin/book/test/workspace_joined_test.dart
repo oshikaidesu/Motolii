@@ -12,7 +12,7 @@ import 'package:lab_book/sets/inspector/inspector_parts.dart' show AnchorCube, A
 import 'package:lab_book/workspace/dock_fonts.dart';
 import 'package:lab_book/workspace/dock_make.dart' show CreateShelf;
 import 'package:lab_book/workspace/desk_kit.dart' show DeskScrub;
-import 'package:lab_book/workspace/dock_parts.dart' show DockFooter, DockSearch;
+import 'package:lab_book/workspace/dock_parts.dart' show DockFooter, DockHover, DockSearch;
 import 'package:lab_book/workspace/fx_catalog.dart' show fxCatalog;
 import 'package:lab_book/workspace/timeline.dart';
 import 'package:lab_book/workspace/workspace.dart';
@@ -1109,6 +1109,15 @@ void main() {
     await t.pumpAndSettle();
     expect(m.value(0, 'bloom', 0), greaterThan(0), reason: 'the stage glows: ${ws.notice}');
     expect(m.undo() && m.value(0, 'bloom', 0) == 0, isTrue, reason: 'one step');
+    // (a colour on a card: its link aims the Colors shelf at it; a swatch picked there is set to it)
+    await t.tap(find.byKey(const ValueKey('link:colors:v_background')));
+    await t.pumpAndSettle();
+    expect(ws.aim, 'background');
+    await t.tap(find.descendant(of: find.byWidgetPredicate((w) => w.runtimeType.toString() == '_Strip'), matching: find.byType(DockHover)).first);
+    await t.pumpAndSettle();
+    await t.tap(find.descendant(of: find.byType(DockFooter), matching: find.text('Set')));
+    await t.pumpAndSettle();
+    expect(m.word(0, 'background'), hasLength(6), reason: 'the stage\'s colour behind everything: ${m.trouble}');
     expect(m.say(0, 'tone_mapper', 'agx') && m.word(0, 'tone_mapper') == 'agx', isTrue, reason: m.trouble);
     expect(m.say(0, 'tone_mapper', 'sepia'), isFalse, reason: 'one of Filament\'s own');
     expect(t.takeException(), isNull);

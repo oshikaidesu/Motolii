@@ -151,6 +151,7 @@ class InspHost extends StatefulWidget {
     this.cards,
     this.title,
     this.onRoute,
+    this.onAim,
     this.values = const {},
     this.strs = const {},
     this.keyMarks = const {},
@@ -190,6 +191,9 @@ class InspHost extends StatefulWidget {
 
   /// A panel link asked for a panel (`Browser › Fonts`, `Ease`); the host opens it.
   final ValueChanged<String>? onRoute;
+
+  /// The slot a panel link was aimed at when it asked for its panel ('' : none), told just before [onRoute].
+  final ValueChanged<String>? onAim;
 
   /// Values the host owns (the layer's transform at this frame): written in silently when they change, so edits made here last until then.
   final Map<String, double> values;
@@ -292,7 +296,7 @@ class _InspHostState extends State<InspHost> {
     }
     final words = {
       for (final e in doc.s2.entries)
-        if (e.key != 'route' && _seenWords[e.key] != e.value) e.key: e.value,
+        if (e.key != 'route' && e.key != 'route.at' && _seenWords[e.key] != e.value) e.key: e.value,
     };
     if (widget.onFlags case final tell?) {
       final flags = {
@@ -324,6 +328,7 @@ class _InspHostState extends State<InspHost> {
     final r = doc.s2['route'], go = widget.onRoute;
     if (r != null && go != null) {
       doc.s2.remove('route');
+      widget.onAim?.call(doc.s2.remove('route.at') ?? '');
       go(r);
     }
     if (mounted) setState(() {});

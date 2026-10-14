@@ -169,7 +169,11 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
   void _trackDown(Offset p) {
     final ws = _ws!, v = _view;
     final i = ((p.dy + _vscroll) / WtM.row).floor();
-    if (i < 0 || i >= ws.layers.length) return ws.clearKeys();
+    if (i < 0 || i >= ws.layers.length) { // (below the rows: nothing picked, After Effects' manner; joined, the inspector is then the whole picture's)
+      ws.clearKeys();
+      if (ws.inside != null) ws.select(null);
+      return;
+    }
     final l = ws.layers[i];
     final cy = i * WtM.row - _vscroll + WtM.row / 2;
     if (!_isLocked(ws, l.id) && (p.dy - cy).abs() <= WtM.bar / 2 + 2) {

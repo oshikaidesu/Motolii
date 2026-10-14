@@ -174,7 +174,7 @@ class Ws extends ChangeNotifier {
             }, from, _outF(from, lasts), keys);
           }(),
       ]);
-    if (layers.every((l) => l.id != _sel)) _sel = layers.firstOrNull?.id;
+    if (_sel != null && layers.every((l) => l.id != _sel)) _sel = layers.firstOrNull?.id; // (a picked thing gone: the first; nothing picked stays so, the stage's)
     _keys.removeWhere((k) => !layers.any((l) => l.id == k.layer && l.keys.contains(k.frame))); // (a picked key stays picked while it is still there)
     notifyListeners();
   }
@@ -194,6 +194,7 @@ class Ws extends ChangeNotifier {
   void select(String? id) {
     if (id == _sel) return;
     _sel = id;
+    aim = null;
     _keys.clear();
     deskManual = null;
     notifyListeners();
@@ -253,6 +254,10 @@ class Ws extends ChangeNotifier {
 
   /// The desk follows the selection (Motolii panels/desk.dart): keys picked -> Ease, a camera -> Depth, else Tools.
   String get desk => deskManual ?? (_keys.isNotEmpty ? 'Ease' : (layer?.kind == WsKind.camera ? 'Depth' : 'Tools'));
+
+  /// Joined: the value of the picked thing (or of the stage, with nothing picked) a colour picked on the Colors shelf is
+  /// said to, when a card's colour link aimed it there; null: the fill.
+  String? aim;
 
   /// A panel link elsewhere asked for a panel (fonts, colours, ease): the dock or desk shows it.
   void route(String to) {

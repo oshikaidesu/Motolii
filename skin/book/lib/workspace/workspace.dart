@@ -277,10 +277,12 @@ const _fills = {'blob': ArtInk.orange, 'ring': ArtInk.lime, 'title': ArtInk.crea
 
 /// Joined: the picked thing's words in the inspector's ids (a text's content; how it lies on what is behind), and a change of them told to the document.
 Map<String, String> _words(Ws ws, String? id) {
-  final m = ws.inside, t = int.tryParse(id ?? '');
+  final m = ws.inside, t = id == null ? 0 : int.tryParse(id); // (nothing picked: the stage's own cards)
   if (m == null || t == null) return const {};
+  if (t == 0) return _cardColours(m, 0);
   final blend = m.word(t, 'blend'), stroke = m.word(t, 'stroke');
   return {
+    ..._cardColours(m, t),
     if (m.word(t, 'kind') == 'text') ...{
       'text.content': m.word(t, 'text'),
       'font': m.word(t, 'file').split('/').last,
@@ -495,6 +497,13 @@ List<Fx>? _fxCards(Ws ws, String? id) {
   ];
 }
 
+/// Joined: the colours on the inside's own cards, as the inspector writes a colour (none said: a dash).
+Map<String, String> _cardColours(Motolii m, int t) => {
+  for (final (_, names) in m.cards(t))
+    for (final n in names)
+      if (m.words(t, n).isEmpty && m.range(t, n) == null) 'v_$n': m.word(t, n).isEmpty ? '—' : '#${m.word(t, n).toUpperCase()}',
+};
+
 /// Joined: the cards the inside shows a thing's values on beyond the sample's (motolii_cards), each as Params in the
 /// effects' manner: a number its range and what it is now, a word the words it may be. Nothing of them is typed here.
 List<Fx>? _valueCards(Ws ws, String? id) {
@@ -508,8 +517,10 @@ List<Fx>? _valueCards(Ws ws, String? id) {
           if (m.words(t, n) case final words when words.isNotEmpty)
             '  /// @enum(${words.join(', ')}) @default(${math.max(0, words.indexOf(m.word(t, n)))})\n  $n: u32,'
           else if (m.range(t, n) case (final lo, final hi))
-            '  /// @range($lo, $hi) @default(${m.value(t, n, at) ?? lo})\n  $n: f32,',
-      ].join('\n')}\n}', tone: Pop.toneText, mark: CardMark.text),
+            '  /// @range($lo, $hi) @default(${m.value(t, n, at) ?? lo})\n  $n: f32,'
+          else
+            '  /// @label(${n.replaceAll('_', ' ').replaceRange(0, 1, n[0].toUpperCase())})\n  $n: vec3<f32>,', // (any word: a colour, six digits, given from the Colors shelf)
+      ].join('\n')}\n}', tone: Pop.toneLayer, mark: CardMark.layer),
   ];
 }
 
@@ -644,6 +655,7 @@ class _InspectorSeat extends StatelessWidget {
         seats: ws.inside == null || int.tryParse(l?.id ?? '') == null ? null : ws.inside!.values(int.parse(l!.id)).toSet(), // (joined: a card of values the thing has not is not shown)
         title: l?.name,
         onRoute: ws.route,
+        onAim: (at) => ws.aim = ws.inside != null && at.startsWith('v_') ? at.substring(2) : null, // (joined: a colour link of a card is aimed at that value)
         values: wsTransform(ws, l?.id),
         strs: {'fill': ?_fillWord(ws, l?.id, fill), ..._words(ws, l?.id)},
         onWords: ws.inside == null ? null : (changed) => _say(ws, l?.id, changed),
