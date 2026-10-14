@@ -145,7 +145,7 @@ static const DocValue doc_values[] = {
     // (a solid filled with glass, the kit's own: how much it bends light (index of refraction), how far its colours part,
     //  how much what is behind it swims, how fast a long way through it goes dark, how vivid what is seen through it is)
     {"ior", "solid", 1, 3, false, nullptr}, {"split", "solid", 0, 0.5, false, nullptr}, {"swim", "solid", 0, 1, false, nullptr}, {"dark", "solid", 0, 20, false, nullptr}, {"vivid", "solid", 0, 3, false, nullptr},
-    {"clear_coat", "solid", 0, 1, false, nullptr}, {"clear_coat_roughness", "solid", 0, 1, false, nullptr}, {"emissive", "solid", 0, 20, false, nullptr},
+    {"clear_coat", "solid", 0, 1, false, nullptr}, {"clear_coat_roughness", "solid", 0, 1, false, nullptr}, {"emissive", "film picture text shape solid", 0, 20, true, nullptr},
     // (the stage's, thing 0: the whole picture, Filament's own. Its grade, on every picture laid: a tone mapper, an
     //  exposure in stops, contrast, saturation, vibrance, how warm; its glow round bright parts and its lens flare, a
     //  darkening at the corners and a fog in a colour, on the stage's own view; the room's light, how bright and turned
@@ -167,6 +167,7 @@ struct DocCard { const char* title; const char* names; const char* when = nullpt
 static const DocCard doc_cards[] = {
     {"Type", "letter_spacing line_spacing italic wrap wrap_at"},
     {"Gradient", "gradient gradient_angle gradient_scale gradient_spread", "fill", "~ "},
+    {"Shine", "emissive", "kind", "!solid"},   // (a flat thing lit from within: past 1, the stage's bloom takes it up where it lies in the stage's own view; laid over a solid thing, a picture of its own is clear round it and keeps no halo: ThorVG's glow does that)
     {"Play", "marker animation speed"},
     {"Matte", "clip_matte clip_invert clip_feather", "clip", "1"},
     {"Line", "cap join dash dash_offset"},
@@ -575,6 +576,8 @@ static void doc_moment(Doc& d, double now) {
         const mat4f place = mat4f(doc_place(d, thing, now));
         if (t.solid) solid_to(s, t.solid, place); else move(s, m, [&](int nth, const mat4f&) { return nth ? mat4f(doc_place(d, thing, now, 0, nth)) : place; });
         if (MaterialInstance* look = t.film ? t.film->look : t.drawn ? t.drawn->look : nullptr) look->setParameter("opacity", (float)doc_number(d, thing, "opacity", now, 1));
+        const float shine = (float)doc_number(d, thing, "emissive", now, 0);   // (how much it lights itself now: a flat thing's sheet, a solid's own faces)
+        doc_looks(s, t, [&](MaterialInstance* look) { if (look->getMaterial()->hasParameter("glowing")) look->setParameter("glowing", shine); });
     }
     // Soft shadows (Filament's PCSS) on the stage's own view while any light that is on says so; else its crisp ones.
     {
@@ -656,7 +659,7 @@ static void doc_moment(Doc& d, double now) {
 static bool doc_match(Doc& d) {
     Stage& s = *d.stage;
     std::map<int, std::string> told;   // every thing of the document, and all that its making goes by
-    doc_rows(d, sqlite3_mprintf("select thing, group_concat(name || '=' || value, ' ') from (select * from fact where thing > 0 and name in ('kind','file','shape','blend','keyed','space','begin','duration','speed','text','fill','wide','points','inner','round','stroke','stroke_width','align','blur','shadow','shadow_distance','shadow_angle','shadow_blur','shadow_opacity','glow','glow_blur','glow_opacity','copies','tint','tint_black','tint_white','tritone','tritone_shadow','tritone_midtone','tritone_highlight','letter_spacing','line_spacing','italic','cap','join','dash','dash_offset','metallic','roughness','reflectance','clear_coat','clear_coat_roughness','emissive','falloff','shadows','shadow_softness','gradient','gradient_angle','gradient_scale','gradient_spread','wrap','wrap_at','ior','split','swim','dark','vivid','marker') order by thing, name) group by thing"),
+    doc_rows(d, sqlite3_mprintf("select thing, group_concat(name || '=' || value, ' ') from (select * from fact where thing > 0 and name in ('kind','file','shape','blend','keyed','space','begin','duration','speed','text','fill','wide','points','inner','round','stroke','stroke_width','align','blur','shadow','shadow_distance','shadow_angle','shadow_blur','shadow_opacity','glow','glow_blur','glow_opacity','copies','tint','tint_black','tint_white','tritone','tritone_shadow','tritone_midtone','tritone_highlight','letter_spacing','line_spacing','italic','cap','join','dash','dash_offset','metallic','roughness','reflectance','clear_coat','clear_coat_roughness','falloff','shadows','shadow_softness','gradient','gradient_angle','gradient_scale','gradient_spread','wrap','wrap_at','ior','split','swim','dark','vivid','marker') order by thing, name) group by thing"),
              [&](sqlite3_stmt* row) { told[sqlite3_column_int(row, 0)] = (const char*)sqlite3_column_text(row, 1); });
     for (auto it = d.shown.begin(); it != d.shown.end();) {
         const auto still = told.find(it->first);

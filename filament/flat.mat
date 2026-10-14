@@ -13,6 +13,7 @@ material {
         { type : mat4, name : matteEye0 }, { type : mat4, name : matteEye1 }, { type : mat4, name : matteEye2 }, { type : mat4, name : matteEye3 },
         { type : float4, name : matteUse }, { type : float4, name : matteSoft },   // (matte.glsl)
         { type : float, name : opacity },    // how much of it is there at all (ThorVG's word): 1 all, 0 none
+        { type : float, name : glowing },    // how much brighter than itself it shines (0: as it is; past 1 the stage's bloom takes it up)
         { type : float4, name : key },       // a colour of the picture that is to be clear (a green screen), and how near to it counts (0: none)
         { type : float2, name : keySoft },   // how wide the edge of that is, and how far from it the key's colour is taken out of what stays
         { type : float, name : filmed },       // 1: the picture is a film's as its decoder left it, light in `picture` and colour in `colours`
@@ -54,6 +55,7 @@ fragment {
         float uncut = matteLeft() * materialParams.opacity;
         if (uncut < 0.004) discard;
         material.baseColor = vec4(mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(vec3(0.04045), c)), kept) * (there * uncut);
+        material.baseColor.rgb *= 1.0 + materialParams.glowing;   // (a neon: its own colour, brighter than white)
 #if defined(LAY_multiply)
         material.baseColor.rgb += 1.0 - material.baseColor.a;   // (where it is clear, what is behind is left as it is: times one)
 #endif
