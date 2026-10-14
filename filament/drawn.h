@@ -13,7 +13,8 @@
 
 // tint: how much its darks and lights are made two colours (0: not at all); tritone: how much its darks, middles and
 // lights are made three (0: not at all).
-struct DrawnFx { float letters = 1.f, lines = 1.f, italic = 0.f; float dash = 0.f, dashFrom = 0.f; int cap = -1, join = -1;   // (ThorVG's own: Text::spacing, italic; Shape::strokeDash, strokeCap, strokeJoin; -1: as it comes)
+struct DrawnFx { float letters = 1.f, lines = 1.f, italic = 0.f, wrapWidth = 0.f; int wrap = 0;   // (a text's lines broken in a box so many of its letters' heights wide, ThorVG's layout and wrap; 0: as typed)
+    float dash = 0.f, dashFrom = 0.f; int cap = -1, join = -1;   // (ThorVG's own: Text::spacing, italic; Shape::strokeDash, strokeCap, strokeJoin; -1: as it comes)
     float blur = 0.f; int blurWay = 0; float overHigh = 1.f; float4 shadow{0.f}; float fall = 0.f, way = 0.f, soft = 0.f; float tint = 0.f; float3 tints[2]{}; float tritone = 0.f; float3 tones[3]{}; float4 glow{0.f}; float glowSoft = 0.f; int copies = 1;
                  std::vector<float3> ramp;   // (two colours or more: it is filled from the first at its top to the last at its bottom, ThorVG's linear gradient)
                  bool radial = false; float rampAngle = 0.f, rampScale = 1.f; int spread = 0;   // (or from its middle out, ThorVG's radial gradient; turned so far, clockwise; so long, as a share of its reach; past its ends padded, reflected or repeated)
@@ -252,6 +253,7 @@ static Drawn* type(Stage& s, const char* words, const char* fontFile, const mat4
         t->text(words);
         t->spacing(fx.letters, fx.lines);
         if (fx.italic > 0.f) t->italic(fx.italic);
+        if (fx.wrapWidth > 0.f) t->layout(fx.wrapWidth * fine, 0.f), t->wrap((tvg::TextWrap)std::clamp(fx.wrap, 0, 4)), t->align(align, 0.f);   // (in a box: broken into lines there, ThorVG's own)
         t->fill((uint8_t)std::lround(255.f * colour.x), (uint8_t)std::lround(255.f * colour.y), (uint8_t)std::lround(255.f * colour.z));
         bool measured = t->bounds(&x, &y, &wide, &tall) == tvg::Result::Success && wide > 0.f && tall > 0.f;
         if (measured && wide > 4096.f) {   // (a line too long for one picture is set smaller)
@@ -259,7 +261,7 @@ static Drawn* type(Stage& s, const char* words, const char* fontFile, const mat4
             measured = t->bounds(&x, &y, &wide, &tall) == tvg::Result::Success;
         }
         if (!measured) return tvg::Paint::rel(t), nullptr;
-        if (align > 0.f) {   // (the lines aligned in a box as wide as the widest of them: ThorVG's layout and align)
+        if (align > 0.f && fx.wrapWidth <= 0.f) {   // (the lines aligned in a box as wide as the widest of them: ThorVG's layout and align)
             t->layout(wide, 0.f);
             t->align(align, 0.f);
             measured = t->bounds(&x, &y, &wide, &tall) == tvg::Result::Success;

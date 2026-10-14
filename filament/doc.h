@@ -123,6 +123,7 @@ static const DocValue doc_values[] = {
     {"stroke", "text shape", 0, 0, false, ""}, {"stroke_width", "text shape", 0, 1000, false, nullptr},   // (its edge: a colour, and how wide, in points of the picture at size 1)
     // (ThorVG's own: a text's letters and lines so many times as far apart as the font sets them, its slant; an edge's
     //  ends and corners, and dashes along it so long, with gaps as long, begun so far along)
+    {"wrap", "text", 0, 0, false, "none character word smart ellipsis"}, {"wrap_width", "text", 0, 1000, false, nullptr},   // (its lines broken in a box so many of its own heights wide: ThorVG's layout and wrap)
     {"letter_spacing", "text", 0, 10, false, nullptr}, {"line_spacing", "text", 0, 10, false, nullptr}, {"italic", "text", 0, 0.5, false, nullptr},
     // (a fill of two colours or more: across, ThorVG's linear gradient, or from the middle out, its radial; turned so far,
     //  in degrees clockwise, 0 from top to bottom; so long, as a share of how far it reaches; past its ends padded,
@@ -148,7 +149,7 @@ static const DocValue doc_values[] = {
 // order shown (a thing is shown those of them its kind has). A value the window has no other seat for goes here.
 struct DocCard { const char* title; const char* names; };
 static const DocCard doc_cards[] = {
-    {"Type", "letter_spacing line_spacing italic"},
+    {"Type", "letter_spacing line_spacing italic wrap wrap_width"},
     {"Gradient", "gradient gradient_angle gradient_scale gradient_spread"},
     {"Line", "cap join dash dash_offset"},
     {"Surface", "metallic roughness reflectance clear_coat clear_coat_roughness emissive"},
@@ -584,7 +585,7 @@ static void doc_moment(Doc& d, double now) {
 static bool doc_match(Doc& d) {
     Stage& s = *d.stage;
     std::map<int, std::string> told;   // every thing of the document, and all that its making goes by
-    doc_rows(d, sqlite3_mprintf("select thing, group_concat(name || '=' || value, ' ') from (select * from fact where thing > 0 and name in ('kind','file','shape','blend','keyed','space','begin','duration','speed','text','fill','wide','points','inner','round','stroke','stroke_width','align','blur','shadow','shadow_distance','shadow_angle','shadow_blur','shadow_opacity','glow','glow_blur','glow_opacity','copies','tint','tint_black','tint_white','tritone','tritone_shadow','tritone_midtone','tritone_highlight','letter_spacing','line_spacing','italic','cap','join','dash','dash_offset','metallic','roughness','reflectance','clear_coat','clear_coat_roughness','emissive','falloff','shadows','gradient','gradient_angle','gradient_scale','gradient_spread') order by thing, name) group by thing"),
+    doc_rows(d, sqlite3_mprintf("select thing, group_concat(name || '=' || value, ' ') from (select * from fact where thing > 0 and name in ('kind','file','shape','blend','keyed','space','begin','duration','speed','text','fill','wide','points','inner','round','stroke','stroke_width','align','blur','shadow','shadow_distance','shadow_angle','shadow_blur','shadow_opacity','glow','glow_blur','glow_opacity','copies','tint','tint_black','tint_white','tritone','tritone_shadow','tritone_midtone','tritone_highlight','letter_spacing','line_spacing','italic','cap','join','dash','dash_offset','metallic','roughness','reflectance','clear_coat','clear_coat_roughness','emissive','falloff','shadows','gradient','gradient_angle','gradient_scale','gradient_spread','wrap','wrap_width') order by thing, name) group by thing"),
              [&](sqlite3_stmt* row) { told[sqlite3_column_int(row, 0)] = (const char*)sqlite3_column_text(row, 1); });
     for (auto it = d.shown.begin(); it != d.shown.end();) {
         const auto still = told.find(it->first);
@@ -638,6 +639,8 @@ static bool doc_match(Doc& d) {
         fx.radial = doc_word(d, thing, "gradient") == "radial", fx.rampAngle = (float)doc_number(d, thing, "gradient_angle", 0, 0), fx.rampScale = (float)doc_number(d, thing, "gradient_scale", 0, 1);
         fx.spread = doc_word(d, thing, "gradient_spread") == "reflect" ? 1 : doc_word(d, thing, "gradient_spread") == "repeat" ? 2 : 0;
         fx.copies = (int)doc_number(d, thing, "copies", 0, 1);
+        fx.wrapWidth = (float)doc_number(d, thing, "wrap_width", 0, 0);
+        { const std::string w = doc_word(d, thing, "wrap"); fx.wrap = w == "character" ? 1 : w == "word" ? 2 : w == "smart" ? 3 : w == "ellipsis" ? 4 : fx.wrapWidth > 0.f ? 2 : 0; }   // (ThorVG's TextWrap; a box said and no way: by words)
         fx.letters = (float)doc_number(d, thing, "letter_spacing", 0, 1), fx.lines = (float)doc_number(d, thing, "line_spacing", 0, 1), fx.italic = (float)doc_number(d, thing, "italic", 0, 0);
         const auto which = [&](const char* name, const char* words) { const std::string w = doc_word(d, thing, name); if (w.empty()) return -1; int n = 0; for (const char* at = words; *at; ++n) { const size_t len = strcspn(at, " "); if (w == std::string(at, len)) return n; at += len + (at[len] ? 1 : 0); } return -1; };
         fx.cap = which("cap", "butt round square"), fx.join = which("join", "miter round bevel");   // (ThorVG's StrokeCap and StrokeJoin, in its order)
