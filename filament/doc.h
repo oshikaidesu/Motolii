@@ -108,6 +108,7 @@ static const DocValue doc_values[] = {
     //  light; how far a point or spot reaches, in units of the stage; how wide a spot's cone is, in degrees; whether
     //  the solid things it lights cast shadows. Its colour is its fill; it shines the way it is turned, ahead of it)
     {"intensity", "light", 0, 100, true, nullptr}, {"falloff", "light", 0.01, 1000, false, nullptr}, {"cone", "light", 1, 89, true, nullptr}, {"shadows", "light", 0, 1, false, nullptr},
+    {"shadow_softness", "light", 0, 1, false, nullptr},   // (how soft its shadows are: as from a larger lamp, Filament's PCSS; 0: crisp)
     {"parent", doc_kinds, 0, 1e9, false, nullptr},   // (the thing it goes with: it is moved, turned and sized as that one is, then as it is itself; 0: none)
     {"space", "film picture text shape", 0, 0, false, "2d 2.5d"},   // (the past repository's three tags: 2d is not in the world and lies by the order alone; 2.5d is a sheet in the world, before or behind by depth; a solid is 3d)
     {"align", "text", 0, 1, false, nullptr},
@@ -153,6 +154,7 @@ static const DocValue doc_values[] = {
     {"contrast", "stage", 0, 2, false, nullptr}, {"saturation", "stage", 0, 2, false, nullptr}, {"vibrance", "stage", 0, 2, false, nullptr}, {"temperature", "stage", -1, 1, false, nullptr},
     {"bloom", "stage", 0, 1, false, nullptr}, {"lens_flare", "stage", 0, 1, false, nullptr}, {"vignette", "stage", 0, 1, false, nullptr}, {"vignette_color", "stage", 0, 0, false, ""},
     {"fog", "stage", 0, 1, false, nullptr}, {"fog_color", "stage", 0, 0, false, ""},
+    {"anti_aliasing", "stage", 0, 0, false, "fxaa taa none"},   // (how its edges are smoothed: Filament's FXAA as it came, its temporal one (steadier on fine edges in motion), or not)
     {"room", "stage", 0, 0, false, "small_studio studio_small_02_2k lightroom venetian_crossroads_2k graffiti_shelter_2k parking_garage_2k pillars_2k"},   // (which room lights it: the rooms made ready in out/)
     {"environment", "stage", 0, 10, false, nullptr}, {"environment_rotate", "stage", -1e6, 1e6, false, nullptr}, {"background", "stage", 0, 0, false, ""}};
 // The cards a maker sees a thing's values on, besides where it is and its fill: a title and the values on it, in the
@@ -166,9 +168,9 @@ static const DocCard doc_cards[] = {
     {"Line", "cap join dash dash_offset"},
     {"Surface", "metallic roughness reflectance clear_coat clear_coat_roughness emissive", "fill", "!glass"},
     {"Glass", "ior split swim dark vivid", "fill", "glass"},
-    {"Light", "intensity falloff cone shadows"},
+    {"Light", "intensity falloff cone shadows shadow_softness"},
     {"Grade", "tone_mapper exposure contrast saturation vibrance temperature"},
-    {"Lens", "bloom lens_flare vignette vignette_color fog fog_color"},
+    {"Lens", "bloom lens_flare vignette vignette_color fog fog_color anti_aliasing"},
     {"Room", "room environment environment_rotate background"},
 };
 static bool doc_among(const std::string& words, const std::string& one) { return (" " + words + " ").find(" " + one + " ") != std::string::npos; }
@@ -366,6 +368,14 @@ static void doc_look(Doc& d) {
     glow.enabled = glow.enabled || glow.lensFlare;   // (a flare is drawn by the glow's own passes)
     glow.chromaticAberration = 0.005f * (float)doc_number(d, 0, "lens_flare", 0, 0), glow.ghostThreshold = glow.haloThreshold = 1.f;
     s.view->setBloomOptions(glow);
+    const std::string smooth = doc_word(d, 0, "anti_aliasing");   // (on every picture laid: each smooths its own edges)
+    for (View* v : std::vector<View*>{s.view}) {
+        v->setAntiAliasing(smooth.empty() || smooth == "fxaa" ? View::AntiAliasing::FXAA : View::AntiAliasing::NONE);
+        View::TemporalAntiAliasingOptions taa = v->getTemporalAntiAliasingOptions();
+        taa.enabled = smooth == "taa";
+        v->setTemporalAntiAliasingOptions(taa);
+    }
+    for (View* v : s.layers) v->setAntiAliasing(s.view->getAntiAliasing()), v->setTemporalAntiAliasingOptions(s.view->getTemporalAntiAliasingOptions());
     View::VignetteOptions corners = s.view->getVignetteOptions();
     corners.enabled = doc_number(d, 0, "vignette", 0, 0) > 0.0, corners.midPoint = 1.f - 0.9f * (float)doc_number(d, 0, "vignette", 0, 0), corners.color = LinearColorA{hex("vignette_color", float3{0.f}), 1.f};
     s.view->setVignetteOptions(corners);
@@ -541,6 +551,12 @@ static void doc_moment(Doc& d, double now) {
         if (t.solid) solid_to(s, t.solid, place); else move(s, m, [&](int nth, const mat4f&) { return nth ? mat4f(doc_place(d, thing, now, 0, nth)) : place; });
         if (MaterialInstance* look = t.film ? t.film->look : t.drawn ? t.drawn->look : nullptr) look->setParameter("opacity", (float)doc_number(d, thing, "opacity", now, 1));
     }
+    // Soft shadows (Filament's PCSS) on the stage's own view while any light that is on says so; else its crisp ones.
+    {
+        bool soft = false;
+        for (const Lies& one : lies) soft = soft || (one.on && !one.shown->light.isNull() && doc_number(d, one.thing, "shadow_softness", 0, 0) > 0.0);
+        s.view->setShadowType(soft ? View::ShadowType::PCSS : View::ShadowType::PCF);
+    }
     // The lights: in every scene of the stage while each is on (the stage's own and every picture laid over it), where
     // it is, shining the way it is turned (ahead of it), as strong as it is now; 1 as bright as the stage's own light.
     for (const Lies& one : lies) {
@@ -615,7 +631,7 @@ static void doc_moment(Doc& d, double now) {
 static bool doc_match(Doc& d) {
     Stage& s = *d.stage;
     std::map<int, std::string> told;   // every thing of the document, and all that its making goes by
-    doc_rows(d, sqlite3_mprintf("select thing, group_concat(name || '=' || value, ' ') from (select * from fact where thing > 0 and name in ('kind','file','shape','blend','keyed','space','begin','duration','speed','text','fill','wide','points','inner','round','stroke','stroke_width','align','blur','shadow','shadow_distance','shadow_angle','shadow_blur','shadow_opacity','glow','glow_blur','glow_opacity','copies','tint','tint_black','tint_white','tritone','tritone_shadow','tritone_midtone','tritone_highlight','letter_spacing','line_spacing','italic','cap','join','dash','dash_offset','metallic','roughness','reflectance','clear_coat','clear_coat_roughness','emissive','falloff','shadows','gradient','gradient_angle','gradient_scale','gradient_spread','wrap','wrap_at','ior','split','swim','dark','vivid','marker') order by thing, name) group by thing"),
+    doc_rows(d, sqlite3_mprintf("select thing, group_concat(name || '=' || value, ' ') from (select * from fact where thing > 0 and name in ('kind','file','shape','blend','keyed','space','begin','duration','speed','text','fill','wide','points','inner','round','stroke','stroke_width','align','blur','shadow','shadow_distance','shadow_angle','shadow_blur','shadow_opacity','glow','glow_blur','glow_opacity','copies','tint','tint_black','tint_white','tritone','tritone_shadow','tritone_midtone','tritone_highlight','letter_spacing','line_spacing','italic','cap','join','dash','dash_offset','metallic','roughness','reflectance','clear_coat','clear_coat_roughness','emissive','falloff','shadows','shadow_softness','gradient','gradient_angle','gradient_scale','gradient_spread','wrap','wrap_at','ior','split','swim','dark','vivid','marker') order by thing, name) group by thing"),
              [&](sqlite3_stmt* row) { told[sqlite3_column_int(row, 0)] = (const char*)sqlite3_column_text(row, 1); });
     for (auto it = d.shown.begin(); it != d.shown.end();) {
         const auto still = told.find(it->first);
@@ -684,8 +700,12 @@ static bool doc_match(Doc& d) {
             if (!doc_among("sun point spot", file.c_str())) why = "a light is a sun, a point or a spot";
             else {
                 made.light = utils::EntityManager::get().create();
+                LightManager::ShadowOptions shade;   // (a finer map than as it comes, so the edge is not stepped; a lamp as large as its softness says)
+                shade.mapSize = 2048;
+                const float soft = (float)doc_number(d, thing, "shadow_softness", 0, 0);
+                if (soft > 0.f) shade.shadowBulbRadius = type == LightManager::Type::SUN ? 0.05f * soft : 0.5f * soft;
                 LightManager::Builder(type).color(Color::toLinear<ACCURATE>(sRGBColor{fill.empty() ? float3{1.f} : colour})).falloff((float)doc_number(d, thing, "falloff", 0, 10))
-                    .castShadows(doc_number(d, thing, "shadows", 0, 0) > 0.5).build(*s.engine, made.light);
+                    .castShadows(doc_number(d, thing, "shadows", 0, 0) > 0.5).shadowOptions(shade).build(*s.engine, made.light);
                 made.in = false;   // (in the scenes when it is on)
             }
         }
