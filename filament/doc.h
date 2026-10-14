@@ -78,6 +78,7 @@ struct Doc {
     struct Keys { std::vector<double> at, value; std::vector<Interp> interp; std::vector<std::string> own; };   // (own: a way defined in the document, where the stretch is not one of the nine kinds)
     std::map<std::pair<int, std::string>, Keys> moving;   // a value's keys, and the way of the stretch after each; read from the facts when first asked for, forgotten at every change
     std::map<std::pair<int, std::string>, std::string> words;   // a value's word, the same way
+    std::map<std::pair<int, std::string>, std::vector<double>> keyed;   // the moments of a value's keys, the same way
     std::map<std::string, sqlite3_stmt*> named, goes;     // a way by its name, and by its expression: made ready once (SQLite works it out)
     struct Shown { std::string of; Video* film = nullptr; Drawn* drawn = nullptr; Solid* solid = nullptr; Mesh* shape = nullptr; bool in = true, clipped = false, camera = false; int run = -1, lies = -1;
                    utils::Entity light;   // (a light, Filament's own: in every scene of the stage while it is on)
@@ -453,7 +454,7 @@ static bool doc_rows(Doc& d, char* ask, const std::function<void(sqlite3_stmt*)>
 }
 static void doc_forget(Doc& d) {
     d.phys_stale = true, d.scripted.clear();   // (the world made again only if what it is made of changed: doc_physics)
-    d.moving.clear(), d.words.clear();
+    d.moving.clear(), d.words.clear(), d.keyed.clear();
     d.named.clear();
     d.laid.clear();
 }
@@ -2024,7 +2025,9 @@ static double doc_lasts(Doc& d, int thing) {
     return lasts > 0.0 ? lasts : -1.0;
 }
 static std::vector<double> doc_key_moments(Doc& d, int thing, const char* name) {
-    std::vector<double> at;
+    const auto known = d.keyed.find({thing, name});   // (asked again and again between changes: the document asked once)
+    if (known != d.keyed.end()) return known->second;
+    std::vector<double>& at = d.keyed[{thing, name}];
     doc_rows(d, sqlite3_mprintf("select at from fact where thing = %d and name = %Q and " DOC_KEYED " order by at", thing, name, thing, name),
              [&](sqlite3_stmt* row) { at.push_back(sqlite3_column_double(row, 0)); });
     return at;
