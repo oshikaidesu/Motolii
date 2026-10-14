@@ -1008,6 +1008,21 @@ void main() {
     expect(m.value(a, 'shadow_distance', 0), isNot(was), reason: 'the distance is the document\'s: ${ws.notice}');
     expect(m.undo(), isTrue);
     expect(m.value(a, 'shadow_distance', 0), was, reason: 'one step');
+    ws.reread();
+    await t.pumpAndSettle();
+    final more = find.descendant(of: find.byType(EffectCard).first, matching: find.text('More'));
+    await t.ensureVisible(more);
+    await t.tap(more);
+    await t.pumpAndSettle();
+    await t.tap(find.text('Move later'));
+    await t.pumpAndSettle();
+    expect(ws.notice, startsWith('Not taken: the effects have no order'));
+    if (find.text('Remove').evaluate().isEmpty) await t.tap(more); // (the menu closes once used)
+    await t.pumpAndSettle();
+    await t.tap(find.text('Remove'));
+    await t.pumpAndSettle();
+    expect([ws.fxOf('$a'), m.word(a, 'shadow')], [['Glow'], ''], reason: 'taken off the document');
+    expect([for (final e in find.byType(EffectCard).evaluate()) (e.widget as EffectCard).fx.name], ['Glow']);
     expect(t.takeException(), isNull);
     await _close(t);
   }, skip: !_built);

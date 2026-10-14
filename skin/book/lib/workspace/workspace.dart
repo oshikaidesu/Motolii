@@ -594,6 +594,13 @@ class _InspectorSeat extends StatelessWidget {
         effects: 2,
         fx: _fxCards(ws, l?.id), // (joined: the effects the document has on it, each a card)
         kindWord: _kindWord(ws, l?.id),
+        onFxRemove: ws.inside == null ? null : (v) => ws.fxToggle(fxValues.entries.firstWhere((e) => e.value.$1 == v).key), // (taken off the document, as the shelf's Remove)
+        onFxMove: ws.inside == null
+            ? null
+            : () {
+                _told(ws, 'the effects have no order in the document: '); // (ThorVG lays them in its own)
+                return false;
+              },
         seats: ws.inside == null || int.tryParse(l?.id ?? '') == null ? null : ws.inside!.values(int.parse(l!.id)).toSet(), // (joined: a card of values the thing has not is not shown)
         title: l?.name,
         onRoute: ws.route,

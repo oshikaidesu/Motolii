@@ -146,6 +146,8 @@ class InspHost extends StatefulWidget {
     this.fx,
     this.kindWord,
     this.seats,
+    this.onFxRemove,
+    this.onFxMove,
     this.title,
     this.onRoute,
     this.values = const {},
@@ -174,6 +176,10 @@ class InspHost extends StatefulWidget {
   /// What the host calls the kind (see [Doc.kindWord]), and the values it has (see [Doc.seats]).
   final String? kindWord;
   final Set<String>? seats;
+
+  /// The host's say on an effect taken off, and on their order (see [Doc.onFxRemove]).
+  final bool Function(String id)? onFxRemove;
+  final bool Function()? onFxMove;
 
   /// The selected layer's name, when the host knows it.
   final String? title;
@@ -227,6 +233,8 @@ class _InspHostState extends State<InspHost> {
       ..title = widget.title
       ..kindWord = widget.kindWord
       ..seats = widget.seats
+      ..onFxRemove = widget.onFxRemove
+      ..onFxMove = widget.onFxMove
       ..v.addAll(widget.values)
       ..s2.addAll(widget.strs)
       ..choices.addAll(widget.choices)
@@ -350,7 +358,9 @@ class _InspHostState extends State<InspHost> {
     doc
       ..title = widget.title
       ..kindWord = widget.kindWord
-      ..seats = widget.seats;
+      ..seats = widget.seats
+      ..onFxRemove = widget.onFxRemove
+      ..onFxMove = widget.onFxMove;
     doc.choices
       ..clear()
       ..addAll(widget.choices);

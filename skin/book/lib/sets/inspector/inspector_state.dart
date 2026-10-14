@@ -410,7 +410,12 @@ class Doc extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// The host's say on the effects: one taken off (true: it is); their order changed (false: the host has none).
+  bool Function(String id)? onFxRemove;
+  bool Function()? onFxMove;
+
   void moveFx(String id, int by) {
+    if (!(onFxMove?.call() ?? true)) return;
     final i = fxOrder.indexOf(id), j = i + by;
     if (i < 0 || j < 0 || j >= fxOrder.length) return;
     fxOrder
@@ -420,6 +425,7 @@ class Doc extends ChangeNotifier {
   }
 
   void placeFx(String id, int at) {
+    if (!(onFxMove?.call() ?? true)) return;
     final i = fxOrder.indexOf(id);
     if (i < 0 || at < 0 || at >= fxOrder.length || at == i) return;
     fxOrder
@@ -429,6 +435,7 @@ class Doc extends ChangeNotifier {
   }
 
   void removeFx(String id) {
+    if (!(onFxRemove?.call(id) ?? true)) return;
     fxOrder.remove(id);
     notifyListeners();
   }
