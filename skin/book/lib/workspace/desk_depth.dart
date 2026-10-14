@@ -38,6 +38,34 @@ class _Lens {
 
 final _lenses = Expando<_Lens>();
 
+/// Joined: millimetres of focal length to the document camera's zoom 1, on Filament's own 24 mm high film
+/// (Camera::setLensProjection): 12 mm over the tangent of half the stage's 30 degrees.
+const _filmMm = 12 / 0.2679491924311227;
+
+/// Joined: the document's camera that the desk is on (the first one listed), the lens read from it as the desk counts
+/// (focus in points of the picture from the eye; none said, where it looks), and how far off its eye is.
+({int camera, double eye})? _lensOf(Ws ws, _Lens lens) {
+  final m = ws.inside, cam = ws.layers.where((l) => l.kind == WsKind.camera).firstOrNull;
+  if (m == null || cam == null) return null;
+  final t = int.parse(cam.id), at = ws.frame / Ws.fps, p = m.point, eye = 6 * (m.value(t, 'distance', at) ?? 1) * p;
+  final stop = m.value(t, 'aperture', at) ?? 0, focus = m.value(t, 'focus', at) ?? 0;
+  lens
+    ..focal = (m.value(t, 'zoom', at) ?? 1) * _filmMm
+    ..fstop = stop > 0 ? stop : 22 // (nought, all sharp: the desk's narrowest)
+    ..focus = focus > 0 ? focus * p : eye;
+  return (camera: t, eye: eye);
+}
+
+/// Joined: the lens as the desk now has it, carried on the camera (shown at once; the document's when the hand lets go).
+void _carryLens(Ws ws, int camera, _Lens lens) {
+  final m = ws.inside!, p = m.point;
+  if (!m.hold(camera)) return;
+  m
+    ..carry('zoom', lens.focal / _filmMm)
+    ..carry('aperture', lens.fstop)
+    ..carry('focus', lens.focus / p);
+}
+
 class DeskDepth extends StatefulWidget {
   const DeskDepth({super.key});
   @override
@@ -47,11 +75,22 @@ class DeskDepth extends StatefulWidget {
 class _DeskDepthState extends State<DeskDepth> {
   @override
   Widget build(BuildContext context) {
-    final ws = WsScope.of(context), lens = _lenses[ws] ??= _Lens();
-    void edit(void Function() f) => setState(f);
+    final ws = WsScope.of(context), lens = _lenses[ws] ??= _Lens(), joined = _lensOf(ws, lens);
+    void edit(void Function() f) {
+      setState(f);
+      if (joined != null) _carryLens(ws, joined.camera, lens);
+    }
+
     final cam = ws.layers.where((l) => l.kind == WsKind.camera).firstOrNull;
     final target = ws.layers.where((l) => l.id == lens.target).firstOrNull;
-    return Column(
+    return Listener(
+      // (joined: a hand let go is one step of the document)
+      onPointerUp: joined == null
+          ? null
+          : (_) {
+              if (ws.inside!.letGo(true)) ws.reread();
+            },
+      child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         DeskStrip(
@@ -92,7 +131,7 @@ class _DeskDepthState extends State<DeskDepth> {
           ),
         ),
       ],
-    );
+    ));
   }
 }
 
@@ -182,9 +221,13 @@ class _DiagramState extends State<_Diagram> {
   @override
   Widget build(BuildContext context) {
     final ws = WsScope.of(context);
+    final m = ws.inside, eye = m == null ? null : _lensOf(ws, _Lens())?.eye;
     final slabs = [
       for (final l in ws.layers)
-        if (_place[l.id] case final p?) (id: l.id, name: l.name, tone: wsTone(l.kind), x: p.x, z: p.z, w: p.w),
+        if (m != null && eye != null && l.kind != WsKind.camera) // (joined: each thing where it is, seen from above: across, and how far from the eye)
+          (id: l.id, name: l.name, tone: wsTone(l.kind), x: (m.value(int.parse(l.id), 'x', 0) ?? 0) * m.point, z: eye - (m.value(int.parse(l.id), 'z', 0) ?? 0) * m.point, w: m.frame(int.parse(l.id))?[2] ?? 200)
+        else if (_place[l.id] case final p?)
+          (id: l.id, name: l.name, tone: wsTone(l.kind), x: p.x, z: p.z, w: p.w),
     ];
     return LayoutBuilder(
       builder: (context, box) {

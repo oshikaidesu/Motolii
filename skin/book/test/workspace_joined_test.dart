@@ -10,6 +10,7 @@ import 'package:lab_book/motolii.dart';
 import 'package:lab_book/parts/controls.dart' show Segmented;
 import 'package:lab_book/sets/inspector/inspector_parts.dart' show AnchorCube, AnchorGeometry, NumField, OnOff, PropRow, Space, SpacePlate, TextGroup;
 import 'package:lab_book/workspace/dock_fonts.dart';
+import 'package:lab_book/workspace/desk_kit.dart' show DeskScrub;
 import 'package:lab_book/workspace/dock_parts.dart' show DockSearch;
 import 'package:lab_book/workspace/timeline.dart';
 import 'package:lab_book/workspace/workspace.dart';
@@ -651,6 +652,27 @@ void main() {
     expect(m.undo() && m.value(star, 'copies', 0) == 1, isTrue, reason: 'one step');
     expect(m.set(star, 'copies', 101), isFalse, reason: 'a hundred at most');
     expect(t.takeException(), isNull, reason: 'an anchor outside the box is named Custom');
+    await _close(t);
+  }, skip: !_built);
+
+  testWidgets('the Depth desk is the camera\'s lens: its focal length is the zoom, a scrub of the aperture is one step', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    m.add('solid', 'cube');
+    final camera = m.add('camera', 'camera');
+    ws
+      ..reread()
+      ..select('$camera')
+      ..openDesk('Depth');
+    await t.pumpAndSettle();
+    expect(find.text('45 mm'), findsWidgets, reason: 'zoom 1 on Filament\'s 24 mm film');
+    final stop = find.widgetWithText(DeskScrub, 'Aperture');
+    await t.ensureVisible(stop);
+    await t.drag(stop, const Offset(-80, 0));
+    await t.pumpAndSettle();
+    final aperture = m.value(camera, 'aperture', 0)!;
+    expect(aperture, inExclusiveRange(1.4, 22), reason: 'the f-number the hand left');
+    expect(m.undo() && m.value(camera, 'aperture', 0) == 0, isTrue, reason: 'one step');
+    expect(t.takeException(), isNull);
     await _close(t);
   }, skip: !_built);
 
