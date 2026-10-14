@@ -98,6 +98,7 @@ class Motolii {
   late final _moving = _lib.lookupFunction<_S Function(_P, Int32), _S Function(_P, int)>('motolii_moving');
   late final _values = _lib.lookupFunction<_S Function(_P, Int32), _S Function(_P, int)>('motolii_values');
   late final _cards = _lib.lookupFunction<_S Function(_P, Int32), _S Function(_P, int)>('motolii_cards');
+  late final _shown = _lib.lookupFunction<_S Function(_P, _S), _S Function(_P, _S)>('motolii_shown');
   late final _recipes = _lib.lookupFunction<_S Function(_P), _S Function(_P)>('motolii_recipes');
   late final _make = _lib.lookupFunction<Int32 Function(_P, _S), int Function(_P, _S)>('motolii_make');
   late final _range = _lib.lookupFunction<Int32 Function(_P, Int32, _S, Pointer<Double>, Pointer<Double>), int Function(_P, int, _S, Pointer<Double>, Pointer<Double>)>('motolii_range');
@@ -319,6 +320,14 @@ class Motolii {
       if (c.indexOf(': ') case final at when at > 0) (c.substring(0, at), c.substring(at + 2).split(' ')),
   ];
 
+  /// How a value is shown to a hand, as the inside says (null: as its range says): its look, the unit it is read in,
+  /// its name in plain words, the span its knob covers (in the document's units) and whether it is folded away.
+  Shown? shown(String name) => _shownOf.putIfAbsent(name, () {
+    final f = _with([name], (s) => _shown(_m, s[0]).toDartString()).split('\t');
+    return f.length < 6 ? null : Shown(f[0], f[1], f[2], double.parse(f[3]), double.parse(f[4]), f[5] == '1');
+  });
+  final _shownOf = <String, Shown?>{};
+
   /// A number value's lowest and highest (null: the thing has no such number).
   (double, double)? range(int thing, String name) {
     final lo = malloc<Double>(), hi = malloc<Double>();
@@ -361,4 +370,12 @@ class Motolii {
   bool undo() => _undo(_m) != 0;
   bool redo() => _redo(_m) != 0;
   void close() => _close(_m);
+}
+
+/// How a value is shown to a hand (Motolii.shown): look, unit, plain name, knob span, folded away.
+class Shown {
+  const Shown(this.look, this.unit, this.label, this.low, this.high, this.more);
+  final String look, unit, label;
+  final double low, high;
+  final bool more;
 }

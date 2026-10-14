@@ -396,5 +396,37 @@ class ValuesCard extends StatelessWidget {
   const ValuesCard(this.card, {super.key});
   final Fx card;
   @override
-  Widget build(BuildContext context) => Sect(title: card.name, tone: card.tone, mark: card.mark, children: [ParamGrid('v', card.params)]);
+  Widget build(BuildContext context) {
+    final x = Ctx.of(context), doc = x.doc, ed = Ed(x.cfg.ed), k = 'v.${card.name}', adv = doc.b['$k.adv'] ?? false;
+    final heroes = [for (final p in card.params) if (!p.advanced) p], rest = [for (final p in card.params) if (p.advanced) p];
+    // (the effect cards' fold: the few a hand reaches for first, the rest under Advanced, as the card keeps it)
+    return Sect(
+      title: card.name,
+      tone: card.tone,
+      mark: card.mark,
+      children: [
+        ParamGrid('v', heroes),
+        if (rest.isNotEmpty) ...[
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Hov(
+              onTap: () => doc.flag('$k.adv', !adv),
+              builder: (_, h) => Container(
+                height: 24,
+                decoration: BoxDecoration(border: Border(top: BorderSide(color: ed.rule))),
+                child: Row(
+                  children: [
+                    Text('Advanced', style: ed.labStyle(h || adv ? Grey.g95 : Grey.g63)),
+                    const Spacer(),
+                    Text(adv ? 'Fold' : '${rest.length} more', style: T.label(Grey.g56)),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          if (adv) ParamGrid('v', rest),
+        ],
+      ],
+    );
+  }
 }

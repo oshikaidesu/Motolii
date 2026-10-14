@@ -169,12 +169,16 @@ class ParamTile extends StatelessWidget {
                 : _ChoiceField(id: id, options: p.options),
           ),
         );
+      case ParamLook.colour when p.unit == 'numbers':
+        // numbers, one for each in their order (a bar chart's heights): bars a hand drags up and down, said when let go
+        return shell(_Heights(id: id, on: on));
       case ParamLook.colour:
+        final all = (doc.s2[id] ?? '—').split(' ').where((c) => _hex(c) != null).toList();
         return shell(
-          glyph: _Swatch(doc.s2[id]),
+          glyph: all.length > 1 ? _Ramp(all) : _Swatch(doc.s2[id]),
           Padding(
             padding: const EdgeInsets.only(bottom: 3),
-            child: LinkLine(to: LinkTo.colors, value: doc.s2[id] ?? '—', id: id),
+            child: LinkLine(to: LinkTo.colors, value: all.length > 1 ? '${all.length}' : doc.s2[id] ?? '—', id: id), // (colours in their order: how many, the strip shows which)
           ),
         );
       case ParamLook.angle:
@@ -611,4 +615,102 @@ class _ChoiceSync extends StatelessWidget {
     }
     return child;
   }
+}
+
+/// Colours in their order, as a swatch: a strip from the first to the last.
+class _Ramp extends StatelessWidget {
+  const _Ramp(this.hexes);
+  final List<String> hexes;
+  @override
+  Widget build(BuildContext context) => Center(
+    child: Container(
+      width: 16,
+      height: 16,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(3),
+        border: Border.all(color: Grey.g44, width: .5),
+        gradient: LinearGradient(colors: [for (final h in hexes) _hex(h)!]),
+      ),
+    ),
+  );
+}
+
+/// Numbers, one for each in their order, as bars: a hand drags a bar up or down; the row is said once it lets go.
+class _Heights extends StatefulWidget {
+  const _Heights({required this.id, required this.on});
+  final String id;
+  final bool on;
+  @override
+  State<_Heights> createState() => _HeightsState();
+}
+
+class _HeightsState extends State<_Heights> {
+  List<double>? _held; // (while a hand is on it: the numbers as it moves them)
+  double _top = 1;
+
+  List<double> _said(Doc doc) {
+    final w = [for (final s in (doc.s2[widget.id] ?? '').split(' ')) ?double.tryParse(s)];
+    return w.isEmpty ? List.filled(8, 1) : w; // (none said yet: eight alike, to be dragged)
+  }
+
+  void _at(Offset p, Size box) {
+    final v = _held!, i = (p.dx / box.width * v.length).floor().clamp(0, v.length - 1);
+    setState(() => v[i] = (((1 - p.dy / box.height) * _top) * 10).roundToDouble().clamp(0, _top * 10) / 10);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final doc = Ctx.of(context).doc, v = _held ?? _said(doc);
+    return SizedBox(
+      height: 24,
+      child: LayoutBuilder(
+        builder: (_, box) {
+          final size = Size(box.maxWidth, 24);
+          void start(Offset at) {
+            _held = [..._said(doc)];
+            _top = math.max(1, _held!.reduce(math.max) * 1.25);
+            _at(at, size);
+          }
+
+          void end() {
+            doc.str(widget.id, [for (final x in _held!) x == x.roundToDouble() ? '${x.round()}' : '$x'].join(' '));
+            setState(() => _held = null);
+          }
+
+          // (up and down, as the bars go: the panel's own scrolling does not take the hand away; a tap sets a bar too)
+          return GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onVerticalDragStart: widget.on ? (d) => start(d.localPosition) : null,
+            onVerticalDragUpdate: widget.on ? (d) => _at(d.localPosition, size) : null,
+            onVerticalDragEnd: widget.on ? (_) => end() : null,
+            onTapUp: widget.on
+                ? (d) {
+                    start(d.localPosition);
+                    end();
+                  }
+                : null,
+            child: CustomPaint(size: size, painter: _BarsPaint(v, _held == null ? math.max(1, v.reduce(math.max) * 1.25) : _top, widget.on)),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _BarsPaint extends CustomPainter {
+  _BarsPaint(this.v, this.top, this.on);
+  final List<double> v;
+  final double top;
+  final bool on;
+  @override
+  void paint(Canvas c, Size s) {
+    final w = s.width / v.length, paint = Paint()..color = on ? Grey.g76 : Grey.g44;
+    for (var i = 0; i < v.length; i++) {
+      final h = (v[i] / top).clamp(0.0, 1.0) * s.height;
+      c.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(i * w + w * .15, s.height - h, w * .7, h), const Radius.circular(1.5)), paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_BarsPaint o) => o.v != v || o.top != top || o.on != on;
 }

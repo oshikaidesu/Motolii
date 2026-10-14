@@ -181,6 +181,14 @@ const char* motolii_values(Motolii* m, int thing) { return by_hand(m, [=] { retu
 int motolii_range(Motolii* m, int thing, const char* name, double* low, double* high) { return by_hand(m, [=] { return (int)doc_range(*m->d, thing, name, low, high); }); }
 const char* motolii_recipes(Motolii* m) { return by_hand(m, [=] { return (m->word = doc_recipe_names()).c_str(); }); }
 int motolii_make(Motolii* m, const char* recipe) { return by_hand(m, [=] { return changes(m, doc_make(doc(m), recipe)); }); }
+const char* motolii_shown(Motolii* m, const char* name) {
+    return by_hand(m, [=] {
+        const DocShown* s = doc_shown_of(name);
+        char line[512] = "";
+        if (s) std::snprintf(line, sizeof line, "%s\t%s\t%s\t%g\t%g\t%d", s->look, s->unit, s->label, s->low, s->high, (int)s->more);
+        return (m->word = line).c_str();
+    });
+}
 const char* motolii_cards(Motolii* m, int thing) { return by_hand(m, [=] { return (m->word = doc_cards_of(*m->d, thing)).c_str(); }); }
 const char* motolii_kind_of(const char* file) { return doc_kind_of(file); }
 int motolii_sets(const char* font, const char* words) { return type_sets(font, words) ? 1 : 0; }

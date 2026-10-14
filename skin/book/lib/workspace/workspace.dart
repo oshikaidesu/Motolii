@@ -501,7 +501,12 @@ List<Fx>? _fxCards(Ws ws, String? id) {
 Map<String, String> _cardColours(Motolii m, int t) => {
   for (final (_, names) in m.cards(t))
     for (final n in names)
-      if (m.words(t, n).isEmpty && m.range(t, n) == null) 'v_$n': m.word(t, n).isEmpty ? '—' : '#${m.word(t, n).toUpperCase()}',
+      if (m.words(t, n).isEmpty && m.range(t, n) == null)
+        'v_$n': m.word(t, n).isEmpty || m.word(t, n) == 'none'
+            ? '—'
+            : m.shown(n)?.look == 'numbers'
+            ? m.word(t, n) // (numbers, one for each copy, as they are)
+            : m.word(t, n).split(' ').where((c) => c.isNotEmpty).map((c) => '#${c.toUpperCase()}').join(' '), // (a colour, or colours in their order)
 };
 
 /// Joined: the cards the inside shows a thing's values on beyond the sample's (motolii_cards), each as Params in the
@@ -510,19 +515,45 @@ List<Fx>? _valueCards(Ws ws, String? id) {
   final m = ws.inside, t = id == null ? 0 : int.tryParse(id); // (nothing picked: the stage's own, thing 0)
   if (m == null || t == null) return null;
   final at = ws.frame / Ws.fps;
+  String field(String n) {
+    final sh = m.shown(n), k = _shownTimes(m, n), label = '@label(${sh?.label ?? n.replaceAll('_', ' ').replaceRange(0, 1, n[0].toUpperCase())})';
+    if (sh?.look == 'thing') {
+      // (another thing, by the names the timeline shows: None, then the others; its number is the document's)
+      final others = _others(ws, t), at = others.values.toList().indexOf((m.value(t, n, 0) ?? 0).round());
+      return '  /// $label @enum(${['None', ...others.keys.map((o) => o.replaceAll(',', ' '))].join(', ')}) @default(${at + 1})\n  $n: u32,';
+    }
+    if (m.words(t, n) case final words when words.isNotEmpty) {
+      return '  /// $label @enum(${words.join(', ')}) @default(${math.max(0, words.indexOf(m.word(t, n)))})\n  $n: u32,';
+    }
+    if (m.range(t, n) case (final lo0, final hi0)) {
+      final a = (sh != null && sh.high > sh.low ? sh.low : lo0) * k, b = (sh != null && sh.high > sh.low ? sh.high : hi0) * k, lo = math.min(a, b), hi = math.max(a, b);
+      final ui = switch (sh?.look) {
+        'onoff' => '@toggle',
+        'angle' => '@ui(angle)',
+        'seed' => '@ui(seed)',
+        'count' => hi - lo <= 12 ? '@ui(stepper)' : '@ui(bar)',
+        'share' when lo >= 0 && hi <= 100 => '@ui(percent)',
+        _ => lo < 0 && hi > 0 ? '@ui(bipolar)' : '@ui(bar)',
+      };
+      final whole = sh?.look == 'count' || sh?.look == 'onoff' || sh?.look == 'seed';
+      return '  /// $label $ui @range($lo, $hi) @unit(${sh?.unit ?? ''}) @default(${(m.value(t, n, at) ?? lo0) * k})\n  $n: ${whole ? 'u32' : 'f32'},';
+    }
+    return '  /// $label${sh?.look == 'numbers' || sh?.look == 'colours' ? ' @unit(${sh!.look})' : ''}\n  $n: vec3<f32>,'; // (any word: colours, six digits each, given from the Colors shelf; or numbers, one for each copy)
+  }
+
   return [
     for (final (title, names) in m.cards(t))
       Fx('v', title, 'struct Params {\n${[
-        for (final n in names)
-          if (m.words(t, n) case final words when words.isNotEmpty)
-            '  /// @enum(${words.join(', ')}) @default(${math.max(0, words.indexOf(m.word(t, n)))})\n  $n: u32,'
-          else if (m.range(t, n) case (final lo, final hi))
-            '  /// @range($lo, $hi) @default(${m.value(t, n, at) ?? lo})\n  $n: f32,'
-          else
-            '  /// @label(${n.replaceAll('_', ' ').replaceRange(0, 1, n[0].toUpperCase())})\n  $n: vec3<f32>,', // (any word: a colour, six digits, given from the Colors shelf)
+        for (final n in names) if (m.shown(n)?.more != true) field(n),
+        if (names.any((n) => m.shown(n)?.more == true)) '  // @advanced',
+        for (final n in names) if (m.shown(n)?.more == true) field(n),
       ].join('\n')}\n}', tone: Pop.toneLayer, mark: CardMark.layer),
   ];
 }
+
+/// Joined: how many of a knob's units make one of the document's (the inside's shown look: a length of the stage in
+/// points of the picture, a share in hundredths; else as it is).
+double _shownTimes(Motolii m, String n) => switch (m.shown(n)?.look) { 'stage' => m.point, 'down' => -m.point, 'share' => 100, _ => 1 };
 
 /// The selected layer's transform as the stage draws it at this frame, in the Inspector's ids.
 Map<String, double> wsTransform(Ws ws, String? id) {
@@ -541,7 +572,7 @@ Map<String, double> wsTransform(Ws ws, String? id) {
       'depth': r1(m.frame(t)?[7] ?? 0), // (how deep it is in points of the picture: a flat thing is Flat)
       for (final (_, names) in m.cards(t))
         for (final n in names)
-          'v_$n': m.words(t, n).isEmpty ? m.value(t, n, at) ?? 0 : math.max(0, m.words(t, n).indexOf(m.word(t, n))).toDouble(), // (the inside's own cards: a number as it is, a word by its place among those it may be)
+          'v_$n': m.shown(n)?.look == 'thing' ? (_others(ws, t).values.toList().indexOf((m.value(t, n, 0) ?? 0).round()) + 1).toDouble() : m.words(t, n).isEmpty ? (m.value(t, n, at) ?? 0) * _shownTimes(m, n) : math.max(0, m.words(t, n).indexOf(m.word(t, n))).toDouble(), // (the inside's own cards: a number as it is, a word by its place among those it may be)
       for (final fields in _fxFields(ws, id).values)
         for (final MapEntry(:key, value: n) in fields.entries) key: m.value(t, n, at) ?? 0, // (the effects' numbers, as they are)
     };
@@ -554,7 +585,11 @@ Map<String, double> wsTransform(Ws ws, String? id) {
 
 (String, double)? _asDocument(Ws ws, String id, double x) {
   final seat = _seats.where((s) => s.$1 == id).firstOrNull;
-  if (seat == null && id.startsWith('v_')) return (id.substring(2), x); // (a card of the inside's own: the value of that name, as it is)
+  if (seat == null && id.startsWith('v_') && ws.inside!.shown(id.substring(2))?.look == 'thing') { // (another thing: None, then the others by their place)
+    final others = _others(ws, int.tryParse(ws.selected ?? '') ?? 0).values.toList(), i = x.round();
+    return (id.substring(2), i >= 1 && i <= others.length ? others[i - 1].toDouble() : 0);
+  }
+  if (seat == null && id.startsWith('v_')) return (id.substring(2), x / _shownTimes(ws.inside!, id.substring(2))); // (a card of the inside's own: the value of that name, in the document's own units)
   if (seat == null) {
     for (final fields in _fxFields(ws, ws.selected).values) {
       if (fields[id] case final n?) return (n, x); // (an effect's number: the document's, as it is)
