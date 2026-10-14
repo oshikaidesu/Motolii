@@ -151,6 +151,7 @@ static const DocValue doc_values[] = {
     {"scatter_x", "picture text shape", 0, 1e4, true, nullptr}, {"scatter_y", "picture text shape", 0, 1e4, true, nullptr},
     {"scatter_rotate", "picture text shape", 0, 1e4, true, nullptr}, {"scatter_size", "picture text shape", 0, 1, true, nullptr},
     {"seed", "picture text shape", 0, 1e6, false, nullptr},
+    {"drift_x", "picture text shape", -1e3, 1e3, true, nullptr}, {"drift_y", "picture text shape", -1e3, 1e3, true, nullptr},   // (scattered copies flowing so far a second, units of the stage: past the scattering's edge, back in at the other)
     {"tint", "picture text shape", 0, 1, true, nullptr}, {"tint_black", "picture text shape", 0, 0, false, ""}, {"tint_white", "picture text shape", 0, 0, false, ""},
     {"tritone", "picture text shape", 0, 1, true, nullptr}, {"tritone_shadow", "picture text shape", 0, 0, false, ""}, {"tritone_midtone", "picture text shape", 0, 0, false, ""}, {"tritone_highlight", "picture text shape", 0, 0, false, ""},   // (how its lines lie one under another, ThorVG's own: 0 at the left, 0.5 about the middle, 1 at the right)
     {"stroke", "text shape", 0, 0, false, ""}, {"stroke_width", "text shape", 0, 1000, false, nullptr},   // (its edge: a colour, and how wide, in points of the picture at size 1)
@@ -197,7 +198,7 @@ static const DocCard doc_cards[] = {
     {"Copies", "copies copy_columns copy_x copy_y copy_rotate copy_turn copy_size stagger stagger_from copy_fill copy_fill_way"},
     {"Wave", "wave_x wave_y wave_rotate wave_size wave_speed wave_phase wave_noise noise_scale"},
     {"Field", "field_x field_y field_radius field_size field_rotate field_push"},
-    {"Scatter", "scatter_x scatter_y scatter_rotate scatter_size seed"},
+    {"Scatter", "scatter_x scatter_y scatter_rotate scatter_size seed drift_x drift_y"},
     {"Shine", "emissive", "kind", "!solid"},   // (a flat thing lit from within: past 1, the stage's bloom takes it up where it lies in the stage's own view; laid over a solid thing, a picture of its own is clear round it and keeps no halo: ThorVG's glow does that)
     {"Play", "marker animation speed"},
     {"Matte", "clip_matte clip_invert clip_feather", "clip", "1"},
@@ -398,7 +399,8 @@ static math::mat4 doc_place(Doc& d, int thing, double now, int deeper, int copy,
             return (double)h / 2147483647.5 - 1.0;
         };
         if (sx != 0.0 || sy != 0.0 || sr != 0.0 || ss != 0.0) {
-            shift += math::double3{sx * roll(1), sy * roll(2), 0.0};
+            const auto round = [](double v, double edge) { return edge > 0.0 ? v - 2.0 * edge * std::floor((v + edge) / (2.0 * edge)) : v; };   // (flowing past the edge: back at the other)
+            shift += math::double3{round(sx * roll(1) + doc_number(d, thing, "drift_x", 0, 0) * now, sx), round(sy * roll(2) + doc_number(d, thing, "drift_y", 0, 0) * now, sy), 0.0};
             own = own * math::mat4::rotation(sr * roll(3) * (double)TAU / 360.0, math::double3{0, 0, 1}) * math::mat4::scaling(std::max(0.0, 1.0 + ss * roll(4)));
         }
         // (a wave through it: each copy so far behind the one before, at its own moment, a copy staggered so much later)
@@ -1334,7 +1336,7 @@ static const DocRecipe doc_recipes[] = {
     {"Rings", "shape", "circle", "rings within rings breathing one after another",
      "say fill 000000\nsay stroke ffd166\nset stroke_width 5\nset size 2.2\nset copies 14\nset copy_size 0.86\nset wave_size 0.12\nset wave_phase 1\nset wave_speed 0.7"},
     {"Confetti", "shape", "rect", "bits of colour scattered about, each turning its own way",
-     "set size 0.08\nset wide 0.5\nset copies 160\nset scatter_x 2.9\nset scatter_y 1.6\nset scatter_rotate 180\nset scatter_size 0.5\nset wave_rotate 120\nset wave_phase 37\nset wave_y 0.08\nsay copy_fill ff3366 ffd166 1b2fd8 22c55e ff3366"},
+     "set size 0.08\nset wide 0.5\nset copies 160\nset scatter_x 2.9\nset scatter_y 1.7\nset scatter_rotate 180\nset scatter_size 0.5\nset drift_y -0.6\nset wave_rotate 120\nset wave_phase 37\nset wave_x 0.1\nsay copy_fill ff3366 ffd166 1b2fd8 22c55e ff3366"},
     {"Op star", "shape", "star", "stars within stars, black and white in turn, each turning a little after the one outside it",
      "set size 2.6\nset copies 22\nset copy_size 0.88\nsay copy_fill ffffff 000000\nsay copy_fill_way cycle\nset wave_rotate 12\nset wave_phase 1\nset wave_speed 0.4"},
     {"Helix", "shape", "circle", "two strands of dots winding round each other, front larger than back",
