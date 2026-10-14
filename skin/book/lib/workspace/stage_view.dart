@@ -151,7 +151,7 @@ class _StageViewState extends State<StageView> implements StageHandles {
 
   // Joined: a thing held on the stage, carried, and let go. The stage only says how far the hand has gone, in points of
   // the picture; where that puts the thing (at its own depth), and what it is to the document, is the inside's.
-  ({Offset from, bool moved})? _held;
+  ({Offset from, bool moved, String? by})? _held;   // (by: a handle's way of carrying it, scale, turn or pivot; null: placed)
 
   // Joined, Snap (the past repository's, After Effects' snapping): the held thing's left, middle and right (top, middle,
   // bottom) stick to the nearest of the same three lines of every other thing it does not go with and of the picture,
@@ -286,11 +286,30 @@ class _StageViewState extends State<StageView> implements StageHandles {
     }
     if (_pull(v, local)) return;
     final ws = WsScope.read(context), m = ws.inside;
+    // (joined: a hand on one of the picked thing's handles carries it the handle's way: the inside reckons it from where it took hold)
+    final picked = int.tryParse(widget.selected ?? '');
+    if (m != null && picked != null) {
+      String? by;
+      var near = 8.0;
+      for (final MapEntry(:key, :value) in handles.entries) {
+        final d = (value - local).distance;
+        if (d > near) continue;
+        near = d;
+        by = switch (key.split(' ').first) { 'corner' => 'scale', 'turn' => 'turn', 'anchor' => 'pivot', _ => null };
+      }
+      if (by != null && m.hold(picked)) {
+        final at = _doc(v, local); // (points of the picture, as the inside counts them)
+        m.carry('grip', at.dx, at.dy);
+        if (ws.playing) ws.playing = false;
+        _held = (from: local, moved: false, by: by);
+        return;
+      }
+    }
     final id = m == null ? null : _hit(v, local), t = int.tryParse(id ?? '');
     if (m == null || t == null || !m.hold(t)) return;
     ws.select(id);
     if (ws.playing) ws.playing = false; // (a hand on a thing stops the play)
-    _held = (from: local, moved: false);
+    _held = (from: local, moved: false, by: null);
     _snapFrom(id!);
   }
 
@@ -298,9 +317,17 @@ class _StageViewState extends State<StageView> implements StageHandles {
     final h = _held, ws = WsScope.read(context), m = ws.inside;
     if (h == null || m == null) return;
     final all = (local - h.from) / v.s; // (screen px -> points of the picture)
+    if (h.by case final way?) {
+      final gone = _doc(v, local) - _doc(v, h.from);
+      m.carry(way, gone.dx, gone.dy);
+      _held = (from: h.from, moved: true, by: way);
+      setState(() {});
+      ws.shown();
+      return;
+    }
     final by = _snapped(switch (widget.axis) { 1 => Offset(all.dx, 0), 2 => Offset(0, all.dy), _ => all }, v.s); // (the Move tool's way)
     m.carry('place', by.dx, by.dy);
-    _held = (from: h.from, moved: true);
+    _held = (from: h.from, moved: true, by: null);
     setState(() {});
     ws.shown();
   }

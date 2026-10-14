@@ -40,7 +40,6 @@ class DirectTransform extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final doc = Ctx.of(context).doc;
-    final depth = doc.get('depth');
     return RowMark(
       marks: const {
         'pos': ValueGlyph(ValueShape.position),
@@ -78,9 +77,9 @@ class DirectTransform extends StatelessWidget {
           Sect(
             title: 'Layer',
             tone: Pop.toneLayer,
-            keyIds: const ['op', 'depth'],
+            keyIds: const ['op'],
             mark: CardMark.layer,
-            brief: ['${brief(doc.get('op'), 0)}%', depth == 0 ? 'Flat' : '${brief(depth, 0)} px', if (doc.s2['parent'] case final p? when p != 'None') p],
+            brief: [if (doc.seat('op')) '${brief(doc.get('op'), 0)}%', if (doc.s2['parent'] case final p? when p != 'None') p],
             children: const [LayerTiles()],
           ),
         ],

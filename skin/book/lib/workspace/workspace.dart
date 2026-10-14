@@ -407,9 +407,9 @@ const _seats = <(String, String, _Across, _Across)>[
   ('pos.x', 'x', _xOut, _xIn),
   ('pos.y', 'y', _yOut, _yIn),
   ('pos.z', 'z', _zOut, _zIn),
-  ('scale.x', 'size', _hundredOut, _hundredIn),
-  ('scale.y', 'size', _hundredOut, _hundredIn),
-  ('scale.z', 'size', _hundredOut, _hundredIn), // (a thing has one size)
+  ('scale.x', 'scale_x', _hundredOut, _hundredIn),
+  ('scale.y', 'scale_y', _hundredOut, _hundredIn),
+  ('scale.z', 'scale_z', _hundredOut, _hundredIn), // (each on its own, as After Effects' Scale; the thing's size is its own value)
   ('rot.x', 'rotate_x', _same, _same),
   ('rot.y', 'rotate_y', _same, _same),
   ('rot.z', 'rotate', _minus, _minus),
@@ -452,6 +452,10 @@ double _same(double v, Size c, double p) => v;
 double _pointsOut(double v, Size c, double p) => v * p;
 double _pointsIn(double x, Size c, double p) => x / p;
 double _minus(double v, Size c, double p) => -v;
+
+/// The seats a thing has: the document's own names, and the inspector's numbers whose value it holds (a light has no
+/// scale and no opacity, a flat thing no scale z: those are not shown).
+Set<String> _seatsOf(Set<String> names) => {...names, for (final s in _seats) if (names.contains(s.$2)) s.$1, 'parent', 'depth'};
 
 /// The document's values behind an inspector property (pos, scale, rot, op): its key mark is theirs.
 List<String> _namesOf(String prop) => {
@@ -579,8 +583,7 @@ Map<String, double> wsTransform(Ws ws, String? id) {
     final at = ws.frame / Ws.fps, p = m.point;
     double r1(double x) => (x * 10).roundToDouble() / 10 + 0; // (+ 0: no minus nought)
     return {
-      for (final s in _seats) s.$1: r1(s.$3(m.value(t, s.$2, at) ?? (s.$2 == 'opacity' ? 1 : 0), WsArt.comp, p)), // (a thing that has no opacity is all there)
-      if (m.value(t, 'wide', 0) case final wide?) 'scale.x': r1((m.value(t, 'size', at) ?? 1) * wide * 100), // (a flat shape may be wider than it is high: its scale x)
+      for (final s in _seats) s.$1: r1(s.$3(m.value(t, s.$2, at) ?? (s.$2 == 'opacity' || s.$2.startsWith('scale_') ? 1 : 0), WsArt.comp, p)), // (a thing that has no opacity is all there, no scale as it is)
       'depth': r1(m.frame(t)?[7] ?? 0), // (how deep it is in points of the picture: a flat thing is Flat)
       for (final (_, names) in m.cards(t))
         for (final n in names)
@@ -624,20 +627,11 @@ void _write(Ws ws, String? id, Map<String, double> changed, {required bool live}
     if (changed.isEmpty) return ws.reread();
   }
   if (t == null || !m.hold(t)) return;
-  // (a flat shape's scale x and y are the document's size and how many times as wide as high it is)
-  final shaped = m.word(t, 'kind') == 'shape' && (changed.containsKey('scale.x') || changed.containsKey('scale.y'));
-  if (shaped) {
-    final size = m.value(t, 'size', ws.frame / Ws.fps) ?? 1, wide = m.value(t, 'wide', 0) ?? 1;
-    final x = (changed['scale.x'] ?? size * wide * 100) / 100, y = (changed['scale.y'] ?? size * 100) / 100;
-    m
-      ..carry('size', y)
-      ..carry('wide', x / y);
-  }
   String? why;
   for (final e in changed.entries) {
-    final to = shaped && e.key.startsWith('scale.') ? null : _asDocument(ws, e.key, e.value);
+    final to = _asDocument(ws, e.key, e.value);
     if (to != null && !m.carry(to.$1, to.$2)) why ??= m.trouble;
-    if (to == null && !(shaped && e.key.startsWith('scale.'))) why ??= 'the document has no ${e.key}: '; // (a seat the document has no value for says so, rather than keep the number)
+    if (to == null) why ??= 'the document has no ${e.key}: '; // (a seat the document has no value for says so, rather than keep the number)
   }
   if (live) {
     if (ws.playing) ws.playing = false; // (a hand on a value stops the play: what is changed is changed at one moment)
@@ -718,7 +712,7 @@ class _InspectorSeat extends StatelessWidget {
                 _told(ws, 'the effects have no order in the document: '); // (ThorVG lays them in its own)
                 return false;
               },
-        seats: Ws.timed('seats', () => ws.inside == null || int.tryParse(l?.id ?? '') == null ? null : ws.inside!.values(int.parse(l!.id)).toSet()), // (joined: a card of values the thing has not is not shown)
+        seats: Ws.timed('seats', () => ws.inside == null || int.tryParse(l?.id ?? '') == null ? null : _seatsOf(ws.inside!.values(int.parse(l!.id)).toSet())), // (joined: a card of values the thing has not is not shown)
         title: l?.name,
         onRoute: ws.route,
         onAim: (at) => ws.aim = ws.inside != null && at.startsWith('v_') ? at.substring(2) : null, // (joined: a colour link of a card is aimed at that value)

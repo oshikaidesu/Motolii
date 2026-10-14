@@ -89,6 +89,11 @@ struct DocValue { const char* name; const char* kinds; double low, high; bool mo
 static const DocValue doc_values[] = {
     {"x", doc_kinds, -1e4, 1e4, true, nullptr}, {"y", doc_kinds, -1e4, 1e4, true, nullptr}, {"z", doc_kinds, -1e4, 1e4, true, nullptr},
     {"rotate", doc_kinds, -1e6, 1e6, true, nullptr}, {"rotate_x", doc_kinds, -1e6, 1e6, true, nullptr}, {"rotate_y", doc_kinds, -1e6, 1e6, true, nullptr},
+    // (how many times as wide, as high and as deep as its size makes it, each on its own as After Effects' Scale: below 0
+    //  turned over; a flat thing has no depth to scale yet, its thickness to come as its scale_z)
+    {"scale_x", doc_drawn, -1e4, 1e4, true, nullptr},
+    {"scale_y", doc_drawn, -1e4, 1e4, true, nullptr},
+    {"scale_z", "solid", -1e4, 1e4, true, nullptr},
     {"size", doc_drawn, 1e-3, 1e4, true, nullptr}, {"anchor_x", doc_drawn, -100, 100, true, nullptr}, {"anchor_y", doc_drawn, -100, 100, true, nullptr}, {"anchor_z", doc_drawn, -100, 100, true, nullptr},
     // (a camera, the past repository's: it looks at where it is, from round about it as it is turned, so far away, so near)
     {"distance", "camera", 0.01, 100, true, nullptr}, {"zoom", "camera", 0.01, 100, true, nullptr},
@@ -587,6 +592,7 @@ static math::mat4 doc_place(Doc& d, int thing, double now, int deeper, int copy,
     own = own * math::mat4::scaling(math::double3{1.0, tall, 1.0});
     math::mat4 place = doc_above(d, thing, now, deeper) * math::mat4::translation(math::double3{doc_number(d, thing, "x", now, 0), doc_number(d, thing, "y", now, 0), doc_number(d, thing, "z", now, 0)}) *
                        turned("rotate", {0, 0, 1}) * turned("rotate_y", {0, 1, 0}) * turned("rotate_x", {1, 0, 0}) * math::mat4::translation(shift) * math::mat4::scaling(doc_number(d, thing, "size", now, 1)) *
+                       math::mat4::scaling(math::double3{doc_number(d, thing, "scale_x", now, 1), doc_number(d, thing, "scale_y", now, 1), doc_number(d, thing, "scale_z", now, 1)}) *
                        own * math::mat4::translation(-anchor);
     const double reach = member ? doc_number(d, thing, "field_radius", said, 0) : 0.0;
     if (reach > 0.0) {   // (within the field: larger and turned about where it is seen, its picture's middle, as near the field's middle as it is)
@@ -1808,11 +1814,12 @@ static bool doc_frame(Doc& d, int thing, double now, double* frame) {
     if (!doc_half(d, thing, &half, &deep) || !d.shown[thing].in) return false;   // (a thing that is not on, or is put aside, has no frame: a hand cannot take hold of what is not seen)
     const double size = doc_number(d, thing, "size", now, 1), point = doc_point(d, thing, now);
     const math::double2 middle = doc_seen(d, (doc_place(d, thing, now) * math::double4{0, 0, 0, 1}).xyz);   // (its own middle, wherever its anchor is)
-    frame[0] = middle.x, frame[1] = middle.y, frame[2] = 2.0 * half.x * size * point, frame[3] = 2.0 * half.y * size * point;
+    const double sx = doc_number(d, thing, "scale_x", now, 1), sy = doc_number(d, thing, "scale_y", now, 1), sz = doc_number(d, thing, "scale_z", now, 1);
+    frame[0] = middle.x, frame[1] = middle.y, frame[2] = 2.0 * half.x * size * std::fabs(sx) * point, frame[3] = 2.0 * half.y * size * std::fabs(sy) * point;
     frame[4] = -doc_number(d, thing, "rotate", now, 0);
     const math::double3 anchor{doc_number(d, thing, "anchor_x", now, 0) * half.x, doc_number(d, thing, "anchor_y", now, 0) * half.y, 0.0};
     const math::double2 pivot = doc_seen(d, (doc_place(d, thing, now) * math::double4{anchor, 1.0}).xyz);   // (the point it turns about)
-    frame[5] = pivot.x, frame[6] = pivot.y, frame[7] = 2.0 * deep * size * point;   // (and how deep it is: a flat thing, 0)
+    frame[5] = pivot.x, frame[6] = pivot.y, frame[7] = 2.0 * deep * size * std::fabs(sz) * point;   // (and how deep it is: a flat thing, 0)
     double box[4];   // (turned about another line than the eye's, its frame is the upright box of what it covers)
     if ((doc_number(d, thing, "rotate_x", now, 0) != 0.0 || doc_number(d, thing, "rotate_y", now, 0) != 0.0 || doc_number(d, thing, "parent", 0, 0) != 0.0) && doc_covers(d, thing, now, box))
         frame[2] = box[2], frame[3] = box[3], frame[4] = 0.0;   // (as wide and high as that box; its middle stays the thing's own)
@@ -1834,7 +1841,7 @@ static bool doc_covers(Doc& d, int thing, double now, double* box) {
 }
 
 static double doc_usual(const char* name) {
-    return doc_among("size speed opacity wide tall visible distance zoom copies copy_size copy_wide blur_level letter_spacing line_spacing contrast saturation vibrance environment gradient_scale wave_speed", name) ? 1.0 : !strcmp(name, "duration") ? -1.0
+    return doc_among("scale_x scale_y scale_z size speed opacity wide tall visible distance zoom copies copy_size copy_wide blur_level letter_spacing line_spacing contrast saturation vibrance environment gradient_scale wave_speed", name) ? 1.0 : !strcmp(name, "duration") ? -1.0
          : !strcmp(name, "metallic") ? 0.08 : !strcmp(name, "roughness") ? 0.6 : !strcmp(name, "reflectance") ? 0.5   // (a solid's surface as it comes)
          : !strcmp(name, "intensity") ? 1.0 : !strcmp(name, "falloff") ? 10.0 : !strcmp(name, "cone") ? 30.0   // (a light as it comes)
          : !strcmp(name, "ior") ? 1.5 : !strcmp(name, "dispersion") ? 0.1 : !strcmp(name, "swim") ? 0.5 : !strcmp(name, "dark") ? 4.0 : !strcmp(name, "vivid") ? 1.3 : 0.0;   // (the kit's glass as it comes)
@@ -1873,6 +1880,33 @@ static bool doc_carry(Doc& d, const char* by, double a, double b) {
         // (the hand's travel is the stage's; a thing that goes with another is moved in that one's own turned and sized way)
         const math::double3 by = inverse(doc_above(d, h.thing, now).upperLeft()) * math::double3{a / point, -b / point, 0.0};
         ok = tries("x", x + by.x) && tries("y", y + by.y);
+    } else if (!strcmp(by, "grip")) {   // (where on the picture the hand took hold, points from the top left: what scale, turn and pivot reckon from)
+        double frame[8];
+        if (!doc_frame(d, h.thing, now, frame)) return d.trouble = "it has no frame on the picture", false;
+        h.from[" grip x"] = a, h.from[" grip y"] = b, h.from[" pivot x"] = frame[5], h.from[" pivot y"] = frame[6], h.from[" turned"] = frame[4];
+        h.from[" point"] = doc_point(d, h.thing, now);
+        was("scale_x"), was("scale_y"), was("rotate"), was("anchor_x"), was("anchor_y"), was("x"), was("y");
+    } else if (!strcmp(by, "scale") || !strcmp(by, "turn") || !strcmp(by, "pivot")) {   // (a, b: how far the hand has gone since it took hold)
+        if (!h.from.count(" grip x")) return d.trouble = "the hand has not said where it took hold (grip)", false;
+        const double px = h.from[" pivot x"], py = h.from[" pivot y"], gx = h.from[" grip x"] - px, gy = h.from[" grip y"] - py, hx = gx + a, hy = gy + b;
+        const double turned = h.from[" turned"] * (double)TAU / 360.0, c = std::cos(-turned), s = std::sin(-turned);   // (into the thing's own upright: as the picture counts, clockwise)
+        if (!strcmp(by, "scale")) {   // (each way as far from the point it turns about as the hand now is, against where it took hold)
+            const double g0 = c * gx - s * gy, g1 = s * gx + c * gy, n0 = c * hx - s * hy, n1 = s * hx + c * hy;
+            ok = (std::fabs(g0) < 2.0 || tries("scale_x", was("scale_x") * n0 / g0)) && (std::fabs(g1) < 2.0 || tries("scale_y", was("scale_y") * n1 / g1));
+        } else if (!strcmp(by, "turn")) {   // (round the point it turns about as far as the hand has gone round it; the picture counts clockwise, the stage the other way)
+            const double by = std::atan2(hy, hx) - std::atan2(gy, gx);
+            ok = tries("rotate", was("rotate") - by * 360.0 / (double)TAU);
+        } else {   // (the point it turns about moved under the hand, the thing staying where it is seen: After Effects' Pan Behind)
+            float2 half{0.5f};
+            doc_half(d, h.thing, &half);
+            const double point = h.from[" point"], size = was("size") == 0.0 ? 1.0 : doc_number(d, h.thing, "size", now, 1);
+            const double l0 = (c * a - s * b) / point, l1 = -(s * a + c * b) / point;   // (the hand's travel in the thing's own units, y up)
+            const double sx = was("scale_x"), sy = was("scale_y");
+            ok = tries("anchor_x", was("anchor_x") + l0 / (size * (sx == 0.0 ? 1.0 : sx) * std::max(half.x, 1e-6f))) &&
+                 tries("anchor_y", was("anchor_y") + l1 / (size * (sy == 0.0 ? 1.0 : sy) * std::max(half.y, 1e-6f)));
+            const math::double3 move = inverse(doc_above(d, h.thing, now).upperLeft()) * math::double3{a / point, -b / point, 0.0};
+            ok = ok && tries("x", was("x") + move.x) && tries("y", was("y") + move.y);
+        }
     } else if (!strcmp(by, "bar")) {
         ok = tries("start", std::max(0.0, was("start") + a));
     } else if (!strcmp(by, "head")) {

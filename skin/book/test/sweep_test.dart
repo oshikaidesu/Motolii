@@ -21,9 +21,9 @@ const _things = [('solid', 'cube', ''), ('solid', 'ring', 'glass'), ('shape', 'r
 
 /// The values a handle on the stage is drawn for (a corner sizes, the knob turns, the cross moves the point it turns about, the body moves).
 const _handleFor = {
-  'corner': {'size', 'wide', 'tall'},
+  'corner': {'scale_x', 'scale_y'},
   'turn': {'rotate'},
-  'anchor': {'anchor_x', 'anchor_y'},
+  'anchor': {'anchor_x', 'anchor_y', 'x', 'y'}, // (the point it turns about, the thing staying put; where it lies on the body, the body is taken and moved, as After Effects' selection tool)
   'body': {'x', 'y', 'z'},
 };
 
@@ -121,6 +121,7 @@ void main() {
       t.view.reset();
     }, skip: !_built);
 
+    if (what.$1 == 'light') continue; // (a light has no frame on the stage, so no handles: its knobs are swept above)
     testWidgets('every handle drawn on a ${what.$1} ${what.$2.split('/').last} moves what it is drawn for', (t) async {
       final ws = await _picked(t, what), m = ws.inside!, at = ws.frame / Ws.fps, stage = find.byType(StageView);
       final handles = (t.state(stage) as StageHandles).handles, origin = t.getTopLeft(stage), wrong = <String>[];

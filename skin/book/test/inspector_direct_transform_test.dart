@@ -203,7 +203,7 @@ void main() {
     await mount(tester, doc);
     List<String> fields() => [for (final w in tester.widgetList<NumField>(find.byType(NumField))) w.id];
     final flat = fields();
-    expect(flat, containsAll(['pos.z', 'rot.x', 'rot.y', 'scale.z', 'depth']));
+    expect(flat, containsAll(['pos.z', 'rot.x', 'rot.y', 'scale.z']));
     for (final s in [Space.d25, Space.d3]) {
       doc
         ..space = s

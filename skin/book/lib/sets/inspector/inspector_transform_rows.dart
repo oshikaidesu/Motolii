@@ -126,7 +126,8 @@ class ScaleRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final x = Ctx.of(context), doc = x.doc;
-    const axes = ['x', 'y', 'z'];
+    final axes = [for (final a in const ['x', 'y', 'z']) if (doc.seat('scale.$a')) a]; // (only the axes the thing has: a light none, a flat thing no depth)
+    if (axes.isEmpty) return const SizedBox.shrink();
     // contract: with the link on, a factor applies to every axis (2:3, X=4 gives 4:6); unlinked writes only the touched axis; a zero axis gets the typed value (E1). Toggling the link changes nothing.
     void set(String a, double v) {
       final id = 'scale.$a';
@@ -393,8 +394,7 @@ class LayerTiles extends StatelessWidget {
       ),
     );
     return _LdGrid([
-      _LdCell(num('op', 'Opacity', const ValueGlyph(ValueShape.opacity), unit: '%', min: 0, max: 100, perPx: .5)),
-      _LdCell(num('depth', 'Depth', const ValueGlyph(ValueShape.depth), unit: 'px', zeroWord: 'Flat')),
+      if (doc.seat('op')) _LdCell(num('op', 'Opacity', const ValueGlyph(ValueShape.opacity), unit: '%', min: 0, max: 100, perPx: .5)), // (a solid or a light has none)
       _LdCell(
         _Revealed(
           id: 'parent',

@@ -8,7 +8,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lab_book/motolii.dart';
 import 'package:lab_book/parts/controls.dart' show Segmented;
-import 'package:lab_book/sets/inspector/inspector_parts.dart' show AnchorCube, AnchorGeometry, EffectCard, ValuesCard, FillStroke, InspHeader, KeyS, NumField, OnOff, PropRow, Space, SpacePlate, TextGroup;
+import 'package:lab_book/sets/inspector/inspector_parts.dart' show AnchorCube, AnchorGeometry, LinkMark, EffectCard, ValuesCard, FillStroke, InspHeader, KeyS, NumField, OnOff, PropRow, Space, SpacePlate, TextGroup;
 import 'package:lab_book/workspace/dock_fonts.dart';
 import 'package:lab_book/workspace/dock_make.dart' show CreateShelf;
 import 'package:lab_book/workspace/desk_kit.dart' show DeskScrub;
@@ -435,17 +435,7 @@ void main() {
     // (a value the thing has not, changed in the inspector: the top bar says why it was not taken)
     ws.select('$cube');
     await t.pumpAndSettle();
-    final op = find.byWidgetPredicate((w) => w is PropRow && w.id == 'op');
-    if (op.evaluate().isNotEmpty) {
-      await t.ensureVisible(op.first);
-      await t.pumpAndSettle();
-    }
-    final field = find.byWidgetPredicate((w) => w is NumField && w.id == 'op').first;
-    await t.ensureVisible(field);
-    await t.pumpAndSettle();
-    await t.drag(field, const Offset(-60, 0));
-    await t.pumpAndSettle();
-    expect(ws.notice, 'Not taken: a solid has no opacity');
+    expect(find.byWidgetPredicate((w) => w is NumField && w.id == 'op'), findsNothing, reason: 'a solid has no opacity: no knob for it');
     expect(m.set(rect, 'opacity', .5), isTrue);
     expect(m.say(rect, 'stroke', 'grey'), isFalse);
     expect(m.trouble, contains('six digits'));
@@ -924,24 +914,25 @@ void main() {
     await _close(t);
   }, skip: !_built);
 
-  testWidgets('Depth says how deep a thing is (a flat one is Flat, a solid its depth); a seat the document has no value for says so', (t) async {
+  testWidgets('scale is three numbers of the document, each its own; a flat thing has no scale z (its thickness to come), a solid has', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final a = m.add('shape', 'rect'), cube = m.add('solid', 'cube');
     ws
       ..reread()
       ..select('$a');
     await t.pumpAndSettle();
-    final row = find.byWidgetPredicate((w) => w is NumField && w.id == 'depth');
-    String shown() => [for (final e in find.descendant(of: row, matching: find.byType(RichText)).evaluate()) (e.widget as RichText).text.toPlainText()].last;
-    expect(shown(), 'Flat');
-    await t.ensureVisible(row);
-    await t.drag(row, const Offset(60, 0));
-    await t.pumpAndSettle();
-    expect(ws.notice, startsWith('Not taken: the document has no depth'));
-    expect(shown(), 'Flat', reason: 'the number goes back to the document\'s');
+    Finder knob(String id) => find.byWidgetPredicate((w) => w is NumField && w.id == id);
+    expect(knob('scale.z'), findsNothing, reason: 'a flat thing: no depth to scale yet');
+    expect(knob('depth'), findsNothing, reason: 'no Depth knob: a thing\'s thickness is its scale z');
     ws.select('$cube');
     await t.pumpAndSettle();
-    expect(shown(), startsWith('${m.frame(cube)![7].round()}'), reason: 'a solid: how deep it is');
+    await t.tap(find.byType(LinkMark).first); // (each axis on its own)
+    await t.pumpAndSettle();
+    await t.ensureVisible(knob('scale.z'));
+    await t.drag(knob('scale.z'), const Offset(60, 0));
+    await t.pumpAndSettle();
+    expect([m.value(cube, 'scale_x', 0), m.value(cube, 'scale_y', 0)], [1, 1], reason: 'z alone');
+    expect(m.value(cube, 'scale_z', 0), isNot(1), reason: m.trouble);
     expect(t.takeException(), isNull);
     await _close(t);
   }, skip: !_built);
