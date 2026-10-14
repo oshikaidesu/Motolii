@@ -74,6 +74,7 @@ static const DocValue doc_values[] = {
     {"begin", "film", 0, 1e6, false, nullptr}, {"speed", "film", -100, 100, false, nullptr}, {"keyed", "film", 0, 1, false, nullptr},
     {"blend", "film picture text shape", 0, 0, false, "normal add multiply screen"}, {"file", "film picture solid text", 0, 0, false, ""}, {"shape", "solid", 0, 0, false, doc_shapes},
     {"text", "text", 0, 0, false, ""}, {"fill", "text solid shape", 0, 0, false, ""},
+    {"parent", doc_kinds, 0, 1e9, false, nullptr},   // (the thing it goes with: it is moved, turned and sized as that one is, then as it is itself; 0: none)
     {"stroke", "text shape", 0, 0, false, ""}, {"stroke_width", "text shape", 0, 1000, false, nullptr}};   // (its edge: a colour, and how wide, in points of the picture at size 1)
 static bool doc_among(const std::string& words, const std::string& one) { return (" " + words + " ").find(" " + one + " ") != std::string::npos; }
 
@@ -194,13 +195,19 @@ static bool doc_covers(Doc& d, int thing, double now, double* box);
 static bool doc_half(Doc& d, int thing, float2* half, float* deep = nullptr);
 // Where a thing is at a moment, as a matrix: moved, turned about z, y and x, made its size, all about its anchor (a
 // point of its own box: 0 its middle, 1 its edge on that side; the past repository's `anchor`, keyed as it was).
-static math::mat4 doc_place(Doc& d, int thing, double now) {
+static math::mat4 doc_place(Doc& d, int thing, double now, int deeper = 0);
+// Where the thing it goes with is (its parent's place; none, or one not there any more: as the stage is).
+static math::mat4 doc_above(Doc& d, int thing, double now, int deeper = 0) {
+    const int parent = (int)doc_number(d, thing, "parent", 0, 0);
+    return parent && d.shown.count(parent) && deeper < 64 ? doc_place(d, parent, now, deeper + 1) : math::mat4{};   // (64: a document written elsewhere with a ring of parents still ends)
+}
+static math::mat4 doc_place(Doc& d, int thing, double now, int deeper) {
     const auto turned = [&](const char* name, math::double3 about) { return math::mat4::rotation(doc_number(d, thing, name, now, 0) * (double)TAU / 360.0, about); };
     float2 half{0.5f};
     float deep = 0.f;
     doc_half(d, thing, &half, &deep);
     const math::double3 anchor{doc_number(d, thing, "anchor_x", now, 0) * half.x, doc_number(d, thing, "anchor_y", now, 0) * half.y, doc_number(d, thing, "anchor_z", now, 0) * deep};
-    return math::mat4::translation(math::double3{doc_number(d, thing, "x", now, 0), doc_number(d, thing, "y", now, 0), doc_number(d, thing, "z", now, 0)}) *
+    return doc_above(d, thing, now, deeper) * math::mat4::translation(math::double3{doc_number(d, thing, "x", now, 0), doc_number(d, thing, "y", now, 0), doc_number(d, thing, "z", now, 0)}) *
            turned("rotate", {0, 0, 1}) * turned("rotate_y", {0, 1, 0}) * turned("rotate_x", {1, 0, 0}) * math::mat4::scaling(doc_number(d, thing, "size", now, 1)) * math::mat4::translation(-anchor);
 }
 
@@ -511,6 +518,12 @@ static bool doc_knows(Doc& d, int thing, const char* name = nullptr, const doubl
     if (number && (!std::isfinite(*number) || *number < v->low || *number > v->high || (doc_among("keyed clip visible", name) && *number != 0.0 && *number != 1.0)))
         return std::snprintf(range, sizeof range, doc_among("keyed clip visible", name) ? " is 0 or 1" : " is from %g to %g", v->low, v->high), d.trouble = name + std::string(range), false;
     if (key && !v->moves) return d.trouble = std::string(name) + " does not move: keys go on " + moving, false;
+    if (number && !strcmp(name, "parent") && *number != 0.0) {   // (a parent is a thing that is there, and not the thing itself nor one that goes with it: the past repository's rule)
+        const int to = (int)*number;
+        if (to != *number || doc_word(d, to, "kind").empty()) return d.trouble = "a parent is a thing that is there", false;
+        for (int up = to, n = 0; up && n < 1000; up = (int)doc_number(d, up, "parent", 0, 0), ++n)
+            if (up == thing) return d.trouble = "a thing cannot go with itself, nor with one that goes with it", false;
+    }
     return true;
 }
 
@@ -543,7 +556,9 @@ static int doc_add(Doc& d, const char* kind, const char* file) {
 }
 static bool doc_remove(Doc& d, int thing) { return doc_knows(d, thing) && doc_change(d, sqlite3_mprintf("delete from fact where thing = %d", thing)); }
 // A value that stays (its keys, if it had any, are gone); a word; a key at a moment; a key taken away.
+static bool doc_parent(Doc& d, int thing, double to);
 static bool doc_set(Doc& d, int thing, const char* name, double is) {
+    if (!strcmp(name, "parent")) return doc_parent(d, thing, is);
     return doc_knows(d, thing, name, &is) && doc_change(d, sqlite3_mprintf("delete from fact where thing = %d and name = %Q and at <> 0; insert into fact(thing, name, at, value) values(%d, %Q, 0.0, %!.17g) on conflict do update set value = excluded.value, way = null", thing, name, thing, name, is));
 }
 static bool doc_say(Doc& d, int thing, const char* name, const char* word) {
@@ -595,6 +610,32 @@ static bool doc_put(Doc& d, int thing, const char* name, double at, double is) {
     if (d.keying_from != at) doc_key(d, thing, name, d.keying_from, was);
     doc_key(d, thing, name, at, is);
     return doc_acted(d);
+}
+// A thing given another to go with (0: none) without moving on the stage, as the sample's Parent seat promises and
+// After Effects does: where it is, how far it is turned about the eye's line and how large are said again as the new
+// parent sees them (a value with keys is moved whole, by the rule of doc_put; a keyed size is left as it is). A parent
+// that leans, turned about x or y, is not undone in the turn: only where the thing is takes it in.
+static bool doc_parent(Doc& d, int thing, double to) {
+    if (!doc_knows(d, thing, "parent", &to)) return false;
+    const double now = d.stage->now;
+    const auto chain = [&](int up, double* turn, double* size) {   // (how far the parents turn it, and how large they make it)
+        *turn = 0.0, *size = 1.0;
+        for (int n = 0; up && n < 64 && d.shown.count(up); up = (int)doc_number(d, up, "parent", 0, 0), ++n) *turn += doc_number(d, up, "rotate", now, 0), *size *= doc_number(d, up, "size", now, 1);
+    };
+    double turnWas, sizeWas, turnTo, sizeTo;
+    chain((int)doc_number(d, thing, "parent", 0, 0), &turnWas, &sizeWas);
+    chain((int)to, &turnTo, &sizeTo);
+    const math::double4 world = doc_above(d, thing, now) * math::double4{doc_number(d, thing, "x", now, 0), doc_number(d, thing, "y", now, 0), doc_number(d, thing, "z", now, 0), 1.0};
+    const double turn = doc_number(d, thing, "rotate", now, 0), size = doc_number(d, thing, "size", now, 1);
+    doc_act(d);
+    const bool keying = d.keying;
+    d.keying = false;   // (said again, not keyed)
+    bool ok = doc_change(d, sqlite3_mprintf("insert into fact(thing, name, at, value) values(%d, 'parent', 0.0, %!.17g) on conflict do update set value = excluded.value", thing, to));
+    const math::double3 here = (inverse(doc_above(d, thing, now)) * world).xyz;
+    ok = ok && doc_put(d, thing, "x", now, here.x) && doc_put(d, thing, "y", now, here.y) && doc_put(d, thing, "z", now, here.z) && doc_put(d, thing, "rotate", now, turn + turnWas - turnTo);
+    if (ok && !doc_keys(d, thing, "size")) ok = doc_set(d, thing, "size", std::clamp(size * sizeWas / sizeTo, 1e-3, 1e4));
+    d.keying = keying;
+    return doc_acted(d) && ok;
 }
 static bool doc_key_here(Doc& d, int thing, const char* name, double at) {
     if (!doc_knows(d, thing, name, nullptr, nullptr, true)) return false;
@@ -728,7 +769,7 @@ static math::double2 doc_seen(Doc& d, math::double3 p) {
 }
 // How many points of the picture one unit of the stage is, where a thing stands (at its own depth).
 static double doc_point(Doc& d, int thing, double now) {
-    const math::double3 at{doc_number(d, thing, "x", now, 0), doc_number(d, thing, "y", now, 0), doc_number(d, thing, "z", now, 0)};
+    const math::double3 at = (doc_above(d, thing, now) * math::double4{doc_number(d, thing, "x", now, 0), doc_number(d, thing, "y", now, 0), doc_number(d, thing, "z", now, 0), 1.0}).xyz;
     return doc_seen(d, at + math::double3{1, 0, 0}).x - doc_seen(d, at).x;
 }
 // A thing's frame on the picture at a moment, as the stage's own eye sees it: its middle, how wide and how high (points
@@ -741,8 +782,8 @@ static bool doc_frame(Doc& d, int thing, double now, double* frame) {
     frame[0] = middle.x, frame[1] = middle.y, frame[2] = 2.0 * half.x * size * point, frame[3] = 2.0 * half.y * size * point;
     frame[4] = -doc_number(d, thing, "rotate", now, 0);
     double box[4];   // (turned about another line than the eye's, its frame is the upright box of what it covers)
-    if ((doc_number(d, thing, "rotate_x", now, 0) != 0.0 || doc_number(d, thing, "rotate_y", now, 0) != 0.0) && doc_covers(d, thing, now, box))
-        frame[0] = box[0] + 0.5 * box[2], frame[1] = box[1] + 0.5 * box[3], frame[2] = box[2], frame[3] = box[3], frame[4] = 0.0;
+    if ((doc_number(d, thing, "rotate_x", now, 0) != 0.0 || doc_number(d, thing, "rotate_y", now, 0) != 0.0 || doc_number(d, thing, "parent", 0, 0) != 0.0) && doc_covers(d, thing, now, box))
+        frame[2] = box[2], frame[3] = box[3], frame[4] = 0.0;   // (as wide and high as that box; its middle stays the thing's own)
     return true;
 }
 // The upright box of the picture a thing covers at a moment, however it is turned or leans: left, top, wide, high.
@@ -792,7 +833,9 @@ static bool doc_carry(Doc& d, const char* by, double a, double b) {
     if (!strcmp(by, "place")) {
         if (!h.from.count(" point")) h.from[" point"] = doc_point(d, h.thing, now);   // (remembered with the hold: one unit of the stage in points of the picture, where the thing stood)
         const double x = was("x"), y = was("y"), point = h.from[" point"];
-        ok = tries("x", x + a / point) && tries("y", y - b / point);
+        // (the hand's travel is the stage's; a thing that goes with another is moved in that one's own turned and sized way)
+        const math::double3 by = inverse(doc_above(d, h.thing, now).upperLeft()) * math::double3{a / point, -b / point, 0.0};
+        ok = tries("x", x + by.x) && tries("y", y + by.y);
     } else if (!strcmp(by, "bar")) {
         ok = tries("start", std::max(0.0, was("start") + a));
     } else if (!strcmp(by, "head")) {

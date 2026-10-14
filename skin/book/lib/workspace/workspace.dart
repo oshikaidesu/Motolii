@@ -277,6 +277,7 @@ Map<String, String> _words(Ws ws, String? id) {
     if (m.word(t, 'kind') == 'text') ...{'text.content': m.word(t, 'text'), 'font': m.word(t, 'file').split('/').last},
     if (m.value(t, 'stroke_width', 0) != null) 'stroke': stroke.isEmpty ? 'None' : '#${stroke.toUpperCase()}',
     'blend': blend.isEmpty ? 'Normal' : blend.replaceRange(0, 1, blend[0].toUpperCase()),
+    'parent': _others(ws, t).entries.where((e) => e.value == (m.value(t, 'parent', 0) ?? 0)).firstOrNull?.key ?? 'None',
   };
 }
 
@@ -303,6 +304,15 @@ Map<String, List<String>> _choices(Ws ws, String? id) {
   final blends = m.words(t, 'blend');
   return {
     'blend': blends.isEmpty ? const ['Normal'] : [for (final w in blends) w.replaceRange(0, 1, w[0].toUpperCase())],
+    'parent': ['None', ..._others(ws, t).keys],
+  };
+}
+
+/// Joined: the other things by the names the timeline shows (a name two things share is told apart by its number).
+Map<String, int> _others(Ws ws, int t) {
+  final rows = ws.layers.where((l) => l.id != '$t');
+  return {
+    for (final l in rows) (rows.where((o) => o.name == l.name).length > 1 ? '${l.name} ${l.id}' : l.name): int.parse(l.id),
   };
 }
 
@@ -315,6 +325,7 @@ bool _say(Ws ws, String? id, Map<String, String> changed) {
       final ok = switch (e.key) {
         'text.content' => m.say(t, 'text', e.value.replaceAll('\n', ' ')),
         'blend' => m.say(t, 'blend', e.value.toLowerCase()),
+        'parent' => m.set(t, 'parent', (_others(ws, t)[e.value] ?? 0).toDouble()), // (it goes with that one, and stays where it is)
         'stroke' => m.say(t, 'stroke', e.value == 'None' ? '' : e.value.replaceFirst('#', '').toLowerCase()), // (None: no edge)
         _ => true, // (a seat the inside has nothing behind yet: the inspector keeps its own word)
       };

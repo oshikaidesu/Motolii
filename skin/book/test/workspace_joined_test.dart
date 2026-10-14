@@ -454,6 +454,35 @@ void main() {
     await _close(t);
   }, skip: !_built);
 
+  testWidgets('Parent: a thing goes with another without moving when it is given; moves with it after; no ring of parents', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    final rect = m.add('shape', 'rect'), cube = m.add('solid', 'cube');
+    expect(m.set(rect, 'x', -1) && m.set(rect, 'size', 2) && m.set(rect, 'rotate', 30) && m.set(cube, 'x', 1) && m.set(cube, 'y', .5), isTrue, reason: m.trouble);
+    ws
+      ..reread()
+      ..select('$cube');
+    await t.pumpAndSettle();
+    final before = m.frame(cube)!;
+    final seat = find.byWidgetPredicate((w) => w is PropRow && w.id == 'parent');
+    final chooser = seat.evaluate().isEmpty ? find.text('None').first : find.descendant(of: seat, matching: find.text('None'));
+    await t.ensureVisible(chooser);
+    await t.pumpAndSettle();
+    await t.tap(chooser);
+    await t.pumpAndSettle();
+    await t.tap(find.text('Rect').last);
+    await t.pumpAndSettle();
+    expect(m.value(cube, 'parent', 0), rect, reason: m.trouble);
+    final given = m.frame(cube)!;
+    expect([given[0], given[1]], [closeTo(before[0], 1), closeTo(before[1], 1)], reason: 'it did not move when it was given a parent');
+    expect(m.set(rect, 'x', 0), isTrue);
+    expect(m.frame(cube)![0], greaterThan(given[0] + 50), reason: 'it goes with its parent');
+    expect(m.set(rect, 'parent', cube.toDouble()), isFalse, reason: 'no ring of parents');
+    expect(m.set(cube, 'parent', 0), isTrue);
+    expect(m.frame(cube)![0], closeTo(m.frame(cube)![0], 1));
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
   testWidgets('Backspace on the timeline takes the picked thing out; undo brings it back', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final ring = m.add('solid', 'ring'), cube = m.add('solid', 'cube');

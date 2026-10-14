@@ -369,11 +369,11 @@ class ParentRow extends StatelessWidget {
   const ParentRow({super.key});
   @override
   // contract: shows the parent's name or None; a list with search, never prev/next arrows; changing it does not move the layer (G3).
-  Widget build(BuildContext context) => const PropRow(
+  Widget build(BuildContext context) => PropRow(
     id: 'parent',
     label: 'Parent',
     keyable: false,
-    cells: [Chooser(id: 'parent', options: _layers, searchable: true)],
+    cells: [Chooser(id: 'parent', options: Ctx.of(context).doc.choices['parent'] ?? _layers, searchable: true)],
   );
 }
 
@@ -403,7 +403,7 @@ class LayerTiles extends StatelessWidget {
             glyph: const ValueGlyph(ValueShape.parent),
             child: SizedBox(
               height: 22,
-              child: Chooser(id: 'parent', options: _layers, searchable: true, enabled: on),
+              child: Chooser(id: 'parent', options: doc.choices['parent'] ?? _layers, searchable: true, enabled: on),
             ),
           ),
         ),
