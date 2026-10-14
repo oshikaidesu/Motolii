@@ -8,7 +8,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lab_book/motolii.dart';
 import 'package:lab_book/parts/controls.dart' show Segmented;
-import 'package:lab_book/sets/inspector/inspector_parts.dart' show AnchorCube, AnchorGeometry, NumField, OnOff, PropRow, TextGroup;
+import 'package:lab_book/sets/inspector/inspector_parts.dart' show AnchorCube, AnchorGeometry, NumField, OnOff, PropRow, Space, SpacePlate, TextGroup;
 import 'package:lab_book/workspace/dock_fonts.dart';
 import 'package:lab_book/workspace/dock_parts.dart' show DockSearch;
 import 'package:lab_book/workspace/timeline.dart';
@@ -582,6 +582,28 @@ void main() {
 
     await pick('Twirl');
     expect(find.text('No seat yet'), findsOneWidget);
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
+  testWidgets('Space: a flat thing is 2D (by the order) or 2.5D (in the world, by depth); a solid thing is 3D', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    final ring = m.add('solid', 'ring'), rect = m.add('shape', 'rect');
+    ws
+      ..reread()
+      ..select('$rect');
+    await t.pumpAndSettle();
+    final plate = find.byWidgetPredicate((w) => w is SpacePlate && w.space == Space.d25);
+    await t.ensureVisible(plate);
+    await t.pumpAndSettle();
+    await t.tap(plate);
+    await t.pumpAndSettle();
+    expect(m.word(rect, 'space'), '2.5d', reason: m.trouble);
+    expect(m.undo() && m.word(rect, 'space').isEmpty, isTrue, reason: 'one step');
+    ws.select('$ring');
+    await t.pumpAndSettle();
+    final on = t.widget<SpacePlate>(find.byWidgetPredicate((w) => w is SpacePlate && w.space == Space.d3));
+    expect(on.on, isTrue, reason: 'a solid thing is 3D');
     expect(t.takeException(), isNull);
     await _close(t);
   }, skip: !_built);

@@ -75,6 +75,7 @@ static const DocValue doc_values[] = {
     {"blend", "film picture text shape", 0, 0, false, "normal add multiply screen"}, {"file", "film picture solid text", 0, 0, false, ""}, {"shape", "solid", 0, 0, false, doc_shapes},
     {"text", "text", 0, 0, false, ""}, {"fill", "text solid shape", 0, 0, false, ""},
     {"parent", doc_kinds, 0, 1e9, false, nullptr},   // (the thing it goes with: it is moved, turned and sized as that one is, then as it is itself; 0: none)
+    {"space", "film picture text shape", 0, 0, false, "2d 2.5d"},   // (the past repository's three tags: 2d is not in the world and lies by the order alone; 2.5d is a sheet in the world, before or behind by depth; a solid is 3d)
     {"align", "text", 0, 1, false, nullptr},
     // (ThorVG's own scene effects on a thing it draws: a blur, and a shadow of a colour, how far it falls, which way, how
     //  soft, how much of it; lengths in points of the picture at size 1)
@@ -233,7 +234,7 @@ static void doc_moment(Doc& d, double now) {
         const auto found = d.shown.find(thing);
         if (found == d.shown.end()) continue;
         const double since = now - doc_number(d, thing, "start", 0, 0), lasts = doc_number(d, thing, "duration", 0, -1);
-        Lies one{thing, &found->second, since >= 0.0 && (lasts < 0.0 || since < lasts) && doc_number(d, thing, "visible", 0, 1) > 0.5, found->second.solid || found->second.shape, since};
+        Lies one{thing, &found->second, since >= 0.0 && (lasts < 0.0 || since < lasts) && doc_number(d, thing, "visible", 0, 1) > 0.5, found->second.solid || found->second.shape || doc_word(d, thing, "space") == "2.5d", since};   // (a sheet in the world settles depth with the solid things)
         lies.push_back(one);
     }
     // Who is before whom (the past repository's law of 2026-09-12: a flat thing is not in the world). Flat things take
@@ -307,7 +308,7 @@ static void doc_moment(Doc& d, double now) {
 static bool doc_match(Doc& d) {
     Stage& s = *d.stage;
     std::map<int, std::string> told;   // every thing of the document, and all that its making goes by
-    doc_rows(d, sqlite3_mprintf("select thing, group_concat(name || '=' || value, ' ') from (select * from fact where thing > 0 and name in ('kind','file','shape','blend','keyed','begin','duration','speed','text','fill','wide','stroke','stroke_width','align','blur','shadow','shadow_distance','shadow_angle','shadow_blur','shadow_opacity','glow','glow_blur','glow_opacity','tint','tint_black','tint_white','tritone','tritone_shadow','tritone_midtone','tritone_highlight') order by thing, name) group by thing"),
+    doc_rows(d, sqlite3_mprintf("select thing, group_concat(name || '=' || value, ' ') from (select * from fact where thing > 0 and name in ('kind','file','shape','blend','keyed','space','begin','duration','speed','text','fill','wide','stroke','stroke_width','align','blur','shadow','shadow_distance','shadow_angle','shadow_blur','shadow_opacity','glow','glow_blur','glow_opacity','tint','tint_black','tint_white','tritone','tritone_shadow','tritone_midtone','tritone_highlight') order by thing, name) group by thing"),
              [&](sqlite3_stmt* row) { told[sqlite3_column_int(row, 0)] = (const char*)sqlite3_column_text(row, 1); });
     for (auto it = d.shown.begin(); it != d.shown.end();) {
         const auto still = told.find(it->first);

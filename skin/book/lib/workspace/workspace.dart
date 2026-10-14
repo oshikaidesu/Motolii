@@ -281,11 +281,14 @@ Map<String, String> _words(Ws ws, String? id) {
     },
     if (m.value(t, 'stroke_width', 0) != null) 'stroke': stroke.isEmpty ? 'None' : '#${stroke.toUpperCase()}',
     'blend': blend.isEmpty ? 'Normal' : blend.replaceRange(0, 1, blend[0].toUpperCase()),
+    // (a flat thing's space is the document's word; a solid thing has none: it is 3D)
+    'space': m.words(t, 'space').isEmpty ? 'd3' : _spaces.entries.firstWhere((e) => e.value == m.word(t, 'space'), orElse: () => _spaces.entries.first).key,
     'parent': _others(ws, t).entries.where((e) => e.value == (m.value(t, 'parent', 0) ?? 0)).firstOrNull?.key ?? 'None',
   };
 }
 
 const _aligned = ['Left', 'Centre', 'Right'];
+const _spaces = {'d2': '2d', 'd25': '2.5d', 'd3': '3d'}; // (the inspector's three plates and the document's words; 3d a flat thing has not)
 
 /// Joined: the on/off seats the document has something behind (Clip to below: seen only inside the frame of the thing
 /// before it), and a change of them told to it. A seat with nothing behind it is not taken, and goes back.
@@ -346,6 +349,7 @@ bool _say(Ws ws, String? id, Map<String, String> changed) {
           _ => false,
         },
         'blend' => m.say(t, 'blend', e.value.toLowerCase()),
+        'space' => m.words(t, 'space').isEmpty ? e.value == 'd3' : m.say(t, 'space', _spaces[e.value] ?? e.value), // (a solid is 3D and only that)
         'parent' => m.set(t, 'parent', (_others(ws, t)[e.value] ?? 0).toDouble()), // (it goes with that one, and stays where it is)
         'stroke' => m.say(t, 'stroke', e.value == 'None' ? '' : e.value.replaceFirst('#', '').toLowerCase()), // (None: no edge)
         _ => true, // (a seat the inside has nothing behind yet: the inspector keeps its own word)

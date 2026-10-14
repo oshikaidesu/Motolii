@@ -189,7 +189,9 @@ class Doc extends ChangeNotifier {
   final Map<String, bool> b = {};
   final List<String> fxOrder = [];
   bool animateAll = false, link = true;
-  Space space = Space.d2;
+  /// The layer's space, kept as a word with the others so that a host is told of it (d2, d25, d3).
+  Space get space => Space.values.where((s) => s.name == s2['space']).firstOrNull ?? Space.d2;
+  set space(Space s) => s2['space'] = s.name;
   String? revealed;
   String? directHover;
   String query = '';
