@@ -662,6 +662,7 @@ void main() {
     await t.ensureVisible(tile);
     await t.pumpAndSettle();
     await t.tap(tile);
+    await t.pump(const Duration(milliseconds: 400)); // (two presses would make it: one is known when the second does not come)
     await t.pumpAndSettle();
     await t.tap(find.text('Lay out'));
     await t.pumpAndSettle();
@@ -673,6 +674,7 @@ void main() {
     await t.ensureVisible(grid);
     await t.pumpAndSettle();
     await t.tap(grid);
+    await t.pump(const Duration(milliseconds: 400)); // (two presses would make it: one is known when the second does not come)
     await t.pumpAndSettle();
     await t.tap(find.text('Lay out'));
     await t.pumpAndSettle();
@@ -1154,6 +1156,7 @@ void main() {
     final tile = find.descendant(of: find.byType(CreateShelf), matching: find.text('Spot')).first;
     await t.ensureVisible(tile);
     await t.tap(tile);
+    await t.pump(const Duration(milliseconds: 400)); // (two presses would make it: one is known when the second does not come)
     await t.pumpAndSettle();
     await t.tap(find.descendant(of: find.byType(DockFooter), matching: find.text('Create')));
     await t.pumpAndSettle();
@@ -1216,6 +1219,7 @@ void main() {
     final tile = find.descendant(of: find.byType(CreateShelf), matching: find.text('Iris')).first;
     await t.ensureVisible(tile);
     await t.tap(tile);
+    await t.pump(const Duration(milliseconds: 400)); // (a tile that makes on two presses knows one only when the second is not coming)
     await t.pumpAndSettle();
     await t.tap(find.descendant(of: find.byType(DockFooter), matching: find.text('Create')));
     await t.pumpAndSettle();
@@ -1223,6 +1227,13 @@ void main() {
     expect([m.value(iris, 'copies', 0), m.word(iris, 'copy_fill')], [48, 'ff3366 ffd166 1b2fd8 ff3366'], reason: m.trouble);
     expect([for (final e in find.byType(ValuesCard).evaluate()) (e.widget as ValuesCard).card.name], containsAll(['Copies', 'Wave']));
     expect(m.undo() && m.things.isEmpty, isTrue, reason: 'one step');
+    // (two presses on the tile make it at once, without the foot's button)
+    await t.tap(tile);
+    await t.pump(const Duration(milliseconds: 60));
+    await t.tap(tile);
+    await t.pumpAndSettle();
+    expect(m.things.length, 1, reason: 'made by two presses: ${m.trouble}');
+    expect(m.word(m.things.single, 'name'), 'Iris');
     expect(m.make('Nope'), 0);
     expect(t.takeException(), isNull);
     await _close(t);

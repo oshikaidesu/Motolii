@@ -549,8 +549,10 @@ class _MakeTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final sel = c.sel == m.name;
+    final makes = c.ws.inside != null && (_asked.containsKey(m.name) || _laid.containsKey(m.name) || c.ws.inside!.recipes.any((r) => r.$1 == m.name));
     return DockHover(
       onTap: () => c.pick(m.name),
+      onDoubleTap: makes ? () => _make(c, m.name) : null, // (joined: two presses make it, one step)
       builder: (context, h) => AnimatedContainer(
         duration: Mo.dur,
         curve: Mo.ease,

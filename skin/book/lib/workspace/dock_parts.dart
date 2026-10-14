@@ -58,9 +58,12 @@ class DockCtx {
 
 /// Hover + tap, nothing else: repaints only when the pointer enters or leaves.
 class DockHover extends StatefulWidget {
-  const DockHover({super.key, required this.builder, this.onTap});
+  const DockHover({super.key, required this.builder, this.onTap, this.onDoubleTap});
   final Widget Function(BuildContext context, bool hover) builder;
   final VoidCallback? onTap;
+
+  /// Two presses: the item's own action at once (joined: a tile made without its foot's button).
+  final VoidCallback? onDoubleTap;
   @override
   State<DockHover> createState() => _DockHoverState();
 }
@@ -72,7 +75,7 @@ class _DockHoverState extends State<DockHover> {
     cursor: widget.onTap == null ? MouseCursor.defer : SystemMouseCursors.click,
     onEnter: (_) => setState(() => _h = true),
     onExit: (_) => setState(() => _h = false),
-    child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: widget.onTap, child: widget.builder(context, _h)),
+    child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: widget.onTap, onDoubleTap: widget.onDoubleTap, child: widget.builder(context, _h)),
   );
 }
 
