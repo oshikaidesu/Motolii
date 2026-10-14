@@ -22,10 +22,10 @@
 **夜間（10/14 にユーザーと決めた順）**。調べた物：記憶 project-motolii-cavalry-dig-2026-10-14、`research_notes/cavalry_community/`（リポジトリ外、ライセンスは SOURCES.tsv）。Cavalry のファイルは参考の地図で、写さない。
 1. **窓の言う事と中身を合わせる**：Scale を X・Y・Z の3つの数で持つ（AE と同じ。size＋倍率はやめる）、舞台の四隅で拡大・丸で回転・十字で回転の中心、物が持たない値の欄は出さない（立体と光の不透明度、光の Scale、平らな物の Scale Z）、Depth は読むだけの表示に。
    通ったと言える一文：`skin/book/test/sweep_test.dart`（欄と掴み所の総当たり）が全部緑、窓の試験も全部緑。
-2. **レシピの器**：AviUtl2 式のつまみの宣言（`--track@名前:表示名,最小,最大,初期,刻み`、check・color・select・file・text、`--hide@` の条件、`--group`）をレシピのファイルの頭に書くと、中身が読んで値の表と札に自動で出す。今の15レシピをこの器に移す。数値だけキーが打てる。
-   通ったと言える一文：新しいレシピを1ファイル置くだけで、窓に札とつまみが出て動き、15レシピが器の上で前と同じ絵。
-3. **仕上げの光と粒**（Cavalry の弱い所、こちらの勝ち筋）：何段も重ねるグロー、フィルム調のトーン、光のにじみ（halation）、粒（grain）を Filament の画面効果として足す。cavalry-field-kit は AGPL なので考え方だけ借りる。
-   通ったと言える一文：それぞれ前後の絵で効いて見え、全部入りで 1080p・60コマ毎秒、Dawn で。
+2. **レシピの器（スクリプトの層）**：描く力は ThorVG と Filament で揃っている。足りないのは Cavalry の「スクリプト的な処理」（ユーザー、10/14）。1ファイル＝頭に AviUtl2 式のつまみの宣言（`--track@名前:表示名,最小,最大,初期,刻み`、check・color・select・file・text、`--hide@` の条件、`--group`）＋中身の JavaScript。中身が宣言を読んで、値の表と札に自動で出す。JS は Cavalry と同じく普通の JavaScript（Cavalry の中は V8）で、LLM がすぐ書ける物にする。API の型定義（.d.ts）を添える（cavalry-types の流儀）。スクリプトの3種は Cavalry に合わせる：写し1個ずつの値（JS Utility：番号と総数から位置・大きさ・色・時間のずれ）、形の点を動かす（Deformer）、形を作る（Shape）。毎コマの CPU は写しの姿勢を返すまで。重い物は GPU の計算（WGSL）。エンジンは最初に QuickJS-ng ほかを入れて測って決める（勘で外さない）。今の15レシピをこの器に移す。数値だけキーが打てる。
+   通ったと言える一文：新しいレシピを1ファイル置くだけで、窓に札とつまみが出て動き、15レシピが器の上で前と同じ絵。Canvalry（MIT）の JS が、ほぼそのまま1本動く。
+3. **画面効果を WGSL で**（Cavalry の弱い所、こちらの勝ち筋）：ウェブで見た表現がすぐ MV に使えるように、効果は WGSL（モジュールは WESL）の1ファイル＋頭に2と同じつまみの宣言。Filament には自作の画面効果を差し込む公開の口が無いので、Filament の絵を画面外に描き、同じ Dawn の上で WGSL の全画面パスをかける（マットで画面を読む形と同じ）。ブルームと周辺減光とボケは Filament の物を使う（作り直さない）。最初の効果：グレイン、色収差、フィルム調の色（ハレーション込み）、ハーフトーン、万華鏡、グリッチ、残像。借り元は MIT／Zlib／Apache だけ：three.js の shaders と TSL（MIT）、ISF-Files（MIT、200本超）、pmndrs/postprocessing（Zlib）、Babylon の WGSL（Apache）、Bevy の WGSL。GLSL の物は naga で WGSL に機械的に変換する。使わない：LYGIA（商用は30日まで）、Shadertoy（既定は非商用）、compute.toys の投稿（ライセンス不明）、cavalry-field-kit のコード（AGPL）。
+   通ったと言える一文：効果ごとに前後の絵で効いて見え、ウェブの WGSL の効果を1本、ほぼそのまま置いて動き、全部入りで 1080p・60コマ毎秒、Dawn で。
 4. **出来合いの動き**：Cavalry の Animators 13本（Spring In＝かけらごとに画面の外から40コマ・SpringOut・最大20コマのずらし、など）を2の器のレシピに。名前で選べるイージング（VerySlowIn/Out、Spring、Overshoot、Bounce）も足す。
    通ったと言える一文：文字1つに13本どれも1手で付き、Cavalry の作例と並べて同じ気持ちよさに見える。
 5. **写しの並べ方**：Canvalry-scripts（MIT）の26種から MV で映える物（ひまわり＝黄金角、リサージュ、スーパーフォーミュラなど）を並べ方に足す。
