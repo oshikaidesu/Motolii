@@ -11,6 +11,17 @@
 
 #include <filesystem>
 
+// tint: how much its darks and lights are made two colours (0: not at all); tritone: how much its darks, middles and
+// lights are made three (0: not at all).
+struct DrawnFx { float letters = 1.f, lines = 1.f, italic = 0.f; float dash = 0.f, dashFrom = 0.f; int cap = -1, join = -1;   // (ThorVG's own: Text::spacing, italic; Shape::strokeDash, strokeCap, strokeJoin; -1: as it comes)
+    float blur = 0.f; int blurWay = 0; float overHigh = 1.f; float4 shadow{0.f}; float fall = 0.f, way = 0.f, soft = 0.f; float tint = 0.f; float3 tints[2]{}; float tritone = 0.f; float3 tones[3]{}; float4 glow{0.f}; float glowSoft = 0.f; int copies = 1;
+                 std::vector<float3> ramp;   // (two colours or more: it is filled from the first at its top to the last at its bottom, ThorVG's linear gradient)
+                 DrawnFx over(float high) const {   // (the same for a thing `high` units high: its lengths as shares of that)
+                     DrawnFx f = *this;
+                     f.blur /= high, f.fall /= high, f.soft /= high, f.glowSoft /= high, f.overHigh = high;
+                     return f;
+                 } };
+
 struct Drawn {
     tvg::WgCanvas* canvas = nullptr;   // (touched on the driver thread only)
     tvg::Animation* film = nullptr;    // (the same)
@@ -20,16 +31,53 @@ struct Drawn {
     float seconds = 0.f, frames = 0.f; // a film's length (a still: 0)
     float starts = 0.f;                // how far into itself it is when the stage's time is 0
     tvg::Shape* shape = nullptr;       // a flat shape's own path (driver thread only), and how much of it is cut off its end
-    float trimmed = 0.f;
+    float3 trimmed{0.f};   // (as last cut: off the end, off the beginning, slid along)
+    tvg::Scene* effects = nullptr;     // the scene of ThorVG's its effects are on, if it has any (driver thread only)
+    float tall = 0.f;                  // how high it was drawn, in its own points: what its effects' lengths are shares of
+    DrawnFx fx;                        // its effects as last told
 };
 
-// A flat shape with so much of its path cut off the end (ThorVG's own trimpath), drawn again for the frame that comes
-// next; nothing is done if it is cut as it was.
-static void trim_at(Stage& s, Drawn* d, float cut) {
-    if (!d->shape || cut == d->trimmed) return;
-    d->trimmed = cut;
-    door::on_driver(s.engine, [d, cut] {
-        d->shape->trimpath(0.f, 1.f - std::clamp(cut, 0.f, 1.f));
+// ThorVG's own effects on a scene, its lengths as shares of `tall` points.
+static void effects_on(tvg::Scene* scene, const DrawnFx& fx, float tall) {
+    const float blur = fx.blur * tall, fall = fx.fall * tall, soft = fx.soft * tall, glowSoft = fx.glowSoft * tall;
+    const auto c = [](float v) { return (int)std::lround(255.f * v); };
+    if (fx.shadow.w > 0.f) scene->add(tvg::SceneEffect::DropShadow, c(fx.shadow.x), c(fx.shadow.y), c(fx.shadow.z), c(fx.shadow.w), (double)fx.way, (double)fall, (double)std::max(soft, 0.01f), 75);
+    if (fx.glow.w > 0.f)   // (a glow is ThorVG's drop shadow that does not fall: a light all round it)
+        scene->add(tvg::SceneEffect::DropShadow, c(fx.glow.x), c(fx.glow.y), c(fx.glow.z), c(fx.glow.w), 0.0, 0.0, (double)std::max(glowSoft, 0.01f), 75);
+    if (fx.tint > 0.f) scene->add(tvg::SceneEffect::Tint, c(fx.tints[0].x), c(fx.tints[0].y), c(fx.tints[0].z), c(fx.tints[1].x), c(fx.tints[1].y), c(fx.tints[1].z), (double)(100.f * fx.tint));
+    if (fx.tritone > 0.f)
+        scene->add(tvg::SceneEffect::Tritone, c(fx.tones[0].x), c(fx.tones[0].y), c(fx.tones[0].z), c(fx.tones[1].x), c(fx.tones[1].y), c(fx.tones[1].z), c(fx.tones[2].x), c(fx.tones[2].y), c(fx.tones[2].z), c(1.f - fx.tritone));
+    if (blur > 0.f) scene->add(tvg::SceneEffect::GaussianBlur, (double)blur, fx.blurWay, 0, 75);   // (its way: both, across, up and down)
+}
+
+// A flat shape with so much of its path cut off the end and so much off its beginning, the part left slid along it by
+// `offset` of the way round (ThorVG's own trimpath, which goes round past either end: After Effects' trim paths),
+// drawn again for the frame that comes next; nothing is done if it is cut as it was.
+static void trim_at(Stage& s, Drawn* d, float cut, float begin = 0.f, float offset = 0.f) {
+    const float3 is{cut, begin, offset};
+    if (!d->shape || (is == d->trimmed)) return;
+    d->trimmed = is;
+    door::on_driver(s.engine, [d, cut, begin, offset] {
+        d->shape->trimpath(std::clamp(begin, 0.f, 1.f) + offset, 1.f - std::clamp(cut, 0.f, 1.f) + offset);
+        d->canvas->update();
+        d->canvas->draw(true);
+        d->canvas->sync();
+    });
+}
+
+// A flat thing's effects as they are now (lengths in shares of its height, as it was made), drawn again for the frame
+// that comes next; nothing is done if they are as they were. They reach no further than they did at their most.
+static void fx_at(Stage& s, Drawn* d, const DrawnFx& told) {
+    if (!d->effects) return;
+    const DrawnFx fx = told.over(d->fx.overHigh);
+    const DrawnFx& was = d->fx;
+    if (fx.blur == was.blur && fx.blurWay == was.blurWay && (fx.shadow == was.shadow) && fx.fall == was.fall && fx.way == was.way && fx.soft == was.soft && fx.tint == was.tint && fx.tritone == was.tritone
+        && (fx.glow == was.glow) && fx.glowSoft == was.glowSoft && (fx.tints[0] == was.tints[0]) && (fx.tints[1] == was.tints[1]) && (fx.tones[0] == was.tones[0]) && (fx.tones[1] == was.tones[1]) && (fx.tones[2] == was.tones[2]))
+        return;
+    d->fx = fx;
+    door::on_driver(s.engine, [d, fx] {
+        d->effects->add(tvg::SceneEffect::Clear);
+        effects_on(d->effects, fx, d->tall);
         d->canvas->update();
         d->canvas->draw(true);
         d->canvas->sync();
@@ -59,16 +107,7 @@ static void picture_at(Stage& s, Drawn* d, float seconds) {
 // that shows it. ground below 0: clear where nothing is drawn. shown = false: made but not put in the scene (for a matte).
 // What ThorVG's own scene effects do to it, each as a share of its height (0: none): a blur; a shadow of a colour, so
 // much of it (shadow.w), falling so far, that way (degrees, as ThorVG counts them) and so soft.
-// tint: how much its darks and lights are made two colours (0: not at all); tritone: how much its darks, middles and
-// lights are made three (0: not at all).
-struct DrawnFx { float letters = 1.f, lines = 1.f, italic = 0.f; float dash = 0.f, dashFrom = 0.f; int cap = -1, join = -1;   // (ThorVG's own: Text::spacing, italic; Shape::strokeDash, strokeCap, strokeJoin; -1: as it comes)
-    float blur = 0.f; float4 shadow{0.f}; float fall = 0.f, way = 0.f, soft = 0.f; float tint = 0.f; float3 tints[2]{}; float tritone = 0.f; float3 tones[3]{}; float4 glow{0.f}; float glowSoft = 0.f; int copies = 1;
-                 std::vector<float3> ramp;   // (two colours or more: it is filled from the first at its top to the last at its bottom, ThorVG's linear gradient)
-                 DrawnFx over(float high) const {   // (the same for a thing `high` units high: its lengths as shares of that)
-                     DrawnFx f = *this;
-                     f.blur /= high, f.fall /= high, f.soft /= high, f.glowSoft /= high;
-                     return f;
-                 } };   // (copies: how many times it is put down: the document tells each where)
+   // (copies: how many times it is put down: the document tells each where)
 static Drawn* drawn(Stage& s, const std::function<tvg::Paint*(Drawn*, int*, int*)>& paints, const mat4f& place, float high, float3 ground, bool shown, const char* lay, const DrawnFx& fx = {}) {
     if (!door::device(s.engine)) return nullptr;   // (another backend)
     Drawn* d = new Drawn;
@@ -87,17 +126,8 @@ static Drawn* drawn(Stage& s, const std::function<tvg::Paint*(Drawn*, int*, int*
             tvg::Scene* scene = tvg::Scene::gen();
             scene->add(p);
             scene->translate((float)room, (float)room);
-            if (fx.shadow.w > 0.f)
-                scene->add(tvg::SceneEffect::DropShadow, (int)std::lround(255.f * fx.shadow.x), (int)std::lround(255.f * fx.shadow.y), (int)std::lround(255.f * fx.shadow.z), (int)std::lround(255.f * fx.shadow.w),
-                           (double)fx.way, (double)fall, (double)std::max(soft, 0.01f), 75);
-            const auto c = [](float v) { return (int)std::lround(255.f * v); };
-            if (fx.glow.w > 0.f)   // (a glow is ThorVG's drop shadow that does not fall: a light all round it)
-                scene->add(tvg::SceneEffect::DropShadow, c(fx.glow.x), c(fx.glow.y), c(fx.glow.z), c(fx.glow.w), 0.0, 0.0, (double)std::max(glowSoft, 0.01f), 75);
-            if (fx.tint > 0.f) scene->add(tvg::SceneEffect::Tint, c(fx.tints[0].x), c(fx.tints[0].y), c(fx.tints[0].z), c(fx.tints[1].x), c(fx.tints[1].y), c(fx.tints[1].z), (double)(100.f * fx.tint));
-            if (fx.tritone > 0.f)
-                scene->add(tvg::SceneEffect::Tritone, c(fx.tones[0].x), c(fx.tones[0].y), c(fx.tones[0].z), c(fx.tones[1].x), c(fx.tones[1].y), c(fx.tones[1].z), c(fx.tones[2].x), c(fx.tones[2].y), c(fx.tones[2].z),
-                           c(1.f - fx.tritone));
-            if (blur > 0.f) scene->add(tvg::SceneEffect::GaussianBlur, (double)blur, 0, 0, 75);
+            effects_on(scene, fx, tall);
+            d->effects = scene, d->tall = tall, d->fx = fx;   // (told again at each moment: those that move are drawn again)
             w += 2 * room, h += 2 * room;
             high *= (float)h / tall;   // (the thing itself stays as large)
             p = scene;

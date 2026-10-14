@@ -60,6 +60,7 @@ struct Doc {
     std::map<std::string, sqlite3_stmt*> named, goes;     // a way by its name, and by its expression: made ready once (SQLite works it out)
     struct Shown { std::string of; Video* film = nullptr; Drawn* drawn = nullptr; Solid* solid = nullptr; Mesh* shape = nullptr; bool in = true, clipped = false, camera = false; int run = -1, lies = -1;
                    utils::Entity light;   // (a light, Filament's own: in every scene of the stage while it is on)
+                   double units = 1.0;    // (a flat thing's: points of the picture to a unit of the stage as it was made, which its effects are counted in)
                    int space = 3;
                    Scene* scene = nullptr; int channel = -1; };   // (the scene it is in: none said, the stage's own, where it was made; and its channel there)   // (read as it is made: 2 a flat thing on the camera, 25 one in the world, 3 a solid thing or a camera)
     // The camera of the moment, against the stage's own (from 6 units in front, 30 degrees high): how the world is
@@ -106,18 +107,19 @@ static const DocValue doc_values[] = {
     {"align", "text", 0, 1, false, nullptr},
     // (ThorVG's own scene effects on a thing it draws: a blur, and a shadow of a colour, how far it falls, which way, how
     //  soft, how much of it; lengths in points of the picture at size 1)
-    {"blur", "picture text shape", 0, 1000, false, nullptr}, {"shadow", "picture text shape", 0, 0, false, ""},
-    {"shadow_distance", "picture text shape", 0, 1000, false, nullptr}, {"shadow_angle", "picture text shape", -1e6, 1e6, false, nullptr},
-    {"shadow_blur", "picture text shape", 0, 1000, false, nullptr}, {"shadow_opacity", "picture text shape", 0, 1, false, nullptr},
+    {"blur", "picture text shape", 0, 1000, true, nullptr}, {"blur_direction", "picture text shape", 0, 0, false, "both horizontal vertical"}, {"shadow", "picture text shape", 0, 0, false, ""},
+    {"shadow_distance", "picture text shape", 0, 1000, true, nullptr}, {"shadow_angle", "picture text shape", -1e6, 1e6, true, nullptr},
+    {"shadow_blur", "picture text shape", 0, 1000, true, nullptr}, {"shadow_opacity", "picture text shape", 0, 1, true, nullptr},
     // (and its darks and lights made two colours, how much: ThorVG's tint; or its darks, middles and lights three: its tritone)
-    {"glow", "picture text shape", 0, 0, false, ""}, {"glow_blur", "picture text shape", 0, 1000, false, nullptr}, {"glow_opacity", "picture text shape", 0, 1, false, nullptr},
+    {"glow", "picture text shape", 0, 0, false, ""}, {"glow_blur", "picture text shape", 0, 1000, true, nullptr}, {"glow_opacity", "picture text shape", 0, 1, true, nullptr},
     // (copies of it, each the one before moved, turned about its anchor and sized by as much: After Effects' repeater)
     {"trim", "shape", 0, 1, true, nullptr},   // (how much of its path is cut off the end: After Effects' trim paths, ThorVG's trimpath)
+    {"trim_begin", "shape", 0, 1, true, nullptr}, {"trim_offset", "shape", -1e3, 1e3, true, nullptr},   // (and off its beginning; the part left slid along it, in turns)
     {"copies", "picture text shape", 1, 100, false, nullptr}, {"copy_x", "picture text shape", -1e4, 1e4, true, nullptr}, {"copy_y", "picture text shape", -1e4, 1e4, true, nullptr},
     {"copy_rotate", "picture text shape", -1e6, 1e6, true, nullptr}, {"copy_size", "picture text shape", 0.01, 100, true, nullptr},
     {"copy_columns", "picture text shape", 0, 100, false, nullptr},   // (so many to a row, then the next row: copy_x along it, copy_y down; 0: one row)
-    {"tint", "picture text shape", 0, 1, false, nullptr}, {"tint_black", "picture text shape", 0, 0, false, ""}, {"tint_white", "picture text shape", 0, 0, false, ""},
-    {"tritone", "picture text shape", 0, 1, false, nullptr}, {"tritone_shadow", "picture text shape", 0, 0, false, ""}, {"tritone_midtone", "picture text shape", 0, 0, false, ""}, {"tritone_highlight", "picture text shape", 0, 0, false, ""},   // (how its lines lie one under another, ThorVG's own: 0 at the left, 0.5 about the middle, 1 at the right)
+    {"tint", "picture text shape", 0, 1, true, nullptr}, {"tint_black", "picture text shape", 0, 0, false, ""}, {"tint_white", "picture text shape", 0, 0, false, ""},
+    {"tritone", "picture text shape", 0, 1, true, nullptr}, {"tritone_shadow", "picture text shape", 0, 0, false, ""}, {"tritone_midtone", "picture text shape", 0, 0, false, ""}, {"tritone_highlight", "picture text shape", 0, 0, false, ""},   // (how its lines lie one under another, ThorVG's own: 0 at the left, 0.5 about the middle, 1 at the right)
     {"stroke", "text shape", 0, 0, false, ""}, {"stroke_width", "text shape", 0, 1000, false, nullptr},   // (its edge: a colour, and how wide, in points of the picture at size 1)
     // (ThorVG's own: a text's letters and lines so many times as far apart as the font sets them, its slant; an edge's
     //  ends and corners, and dashes along it so long, with gaps as long, begun so far along)
@@ -360,6 +362,45 @@ static void doc_look(Doc& d) {
     if (d.sky) d.sky->setColor(LinearColorA{behind.empty() ? float3{0.f} : Color::toLinear<ACCURATE>(sRGBColor{hex("background", float3{0.f})}), 1.f});
 }
 
+static int doc_keys(Doc& d, int thing, const char* name, double at);
+// A value at its most: the highest of its keys, or what it is said to be (how far a moving effect may reach).
+static double doc_most(Doc& d, int thing, const char* name, double otherwise) {
+    double most = doc_number(d, thing, name, 0, otherwise);
+    if (doc_keys(d, thing, name, -1.0)) doc_rows(d, sqlite3_mprintf("select max(value) from fact where thing = %d and name = %Q", thing, name), [&](sqlite3_stmt* row) { most = sqlite3_column_double(row, 0); });
+    return most;
+}
+// The effects of a flat thing at a moment (or, `most`, as far as each reaches at its most), ThorVG's own: in shares of
+// its height from points of the picture (`units` to a unit of the stage, as it was made). false: a colour is not
+// six digits (why says which).
+static bool doc_fx(Doc& d, int thing, double at, bool most, double units, DrawnFx& fx, std::string& why) {
+    const auto num = [&](const char* name, double otherwise) { return most ? doc_most(d, thing, name, otherwise) : doc_number(d, thing, name, at, otherwise); };
+    bool ok = true;
+    const auto hue = [&](const char* name, const char* otherwise, float3* to) {   // (a colour said as six digits; not said: as it comes)
+        std::string said = doc_word(d, thing, name);
+        if (said.empty()) said = otherwise;
+        const long rgb = said.size() == 6 && said.find_first_not_of("0123456789abcdefABCDEF") == std::string::npos ? std::strtol(said.c_str(), nullptr, 16) : -1;
+        if (rgb < 0) return ok = false, why = std::string("a ") + name + " is six digits, as ff3366", void();
+        *to = float3{(float)((rgb >> 16) & 255), (float)((rgb >> 8) & 255), (float)(rgb & 255)} / 255.f;
+    };
+    fx.blur = (float)(num("blur", 0) / units);
+    const std::string way = doc_word(d, thing, "blur_direction");
+    fx.blurWay = way == "horizontal" ? 1 : way == "vertical" ? 2 : 0;
+    if (!doc_word(d, thing, "shadow").empty()) {   // (After Effects' own drop shadow, as it comes: half of it, 135 degrees, 10 points away, 10 soft)
+        float3 dark{0.f};
+        hue("shadow", "000000", &dark);
+        fx.shadow = float4{dark, (float)num("shadow_opacity", 0.5)};
+        fx.fall = (float)(num("shadow_distance", 10) / units), fx.way = (float)num("shadow_angle", 135), fx.soft = (float)(num("shadow_blur", 10) / units);
+    }
+    if (!doc_word(d, thing, "glow").empty()) {   // (a warm light all round it, as it comes: soft 40, all of it; ThorVG's shadow spreads narrowly)
+        float3 light{0.f};
+        hue("glow", "ffd166", &light);
+        fx.glow = float4{light, (float)num("glow_opacity", 1)}, fx.glowSoft = (float)(num("glow_blur", 40) / units);
+    }
+    if ((fx.tint = (float)num("tint", 0)) > 0.f) hue("tint_black", "1b1f5c", &fx.tints[0]), hue("tint_white", "ff8a65", &fx.tints[1]);   // (a deep blue and a warm pink, as it comes)
+    if ((fx.tritone = (float)num("tritone", 0)) > 0.f) hue("tritone_shadow", "1b1f5c", &fx.tones[0]), hue("tritone_midtone", "c44569", &fx.tones[1]), hue("tritone_highlight", "ffd166", &fx.tones[2]);
+    return ok;
+}
+
 static void doc_moment(Doc& d, double now) {
     Stage& s = *d.stage;
     const std::vector<int> lie = doc_laid(d);
@@ -458,7 +499,12 @@ static void doc_moment(Doc& d, double now) {
         if (!in) continue;
         if (t.film) video_at(s, t.film, (float)lies[i].since);
         if (t.drawn && t.drawn->seconds > 0.f) picture_at(s, t.drawn, std::fmod((float)lies[i].since, t.drawn->seconds));
-        if (t.drawn && t.drawn->shape) trim_at(s, t.drawn, (float)doc_number(d, thing, "trim", now, 0));
+        if (t.drawn && t.drawn->effects) {   // (its effects as they are now: those that move are drawn again)
+            DrawnFx fx;
+            std::string why;
+            if (doc_fx(d, thing, now, false, t.units, fx, why)) fx_at(s, t.drawn, fx);
+        }
+        if (t.drawn && t.drawn->shape) trim_at(s, t.drawn, (float)doc_number(d, thing, "trim", now, 0), (float)doc_number(d, thing, "trim_begin", now, 0), (float)doc_number(d, thing, "trim_offset", now, 0));
         const mat4f place = mat4f(doc_place(d, thing, now));
         if (t.solid) solid_to(s, t.solid, place); else move(s, m, [&](int nth, const mat4f&) { return nth ? mat4f(doc_place(d, thing, now, 0, nth)) : place; });
         if (MaterialInstance* look = t.film ? t.film->look : t.drawn ? t.drawn->look : nullptr) look->setParameter("opacity", (float)doc_number(d, thing, "opacity", now, 1));
@@ -581,8 +627,6 @@ static bool doc_match(Doc& d) {
         const float4 edge = edgeRgb < 0 ? float4{0.f} : float4{float3{(float)((edgeRgb >> 16) & 255), (float)((edgeRgb >> 8) & 255), (float)(edgeRgb & 255)} / 255.f, (float)(doc_number(d, thing, "stroke_width", 0, 0) / (0.5 * s.h * up.y / up.w))};
         if (!stroke.empty() && edgeRgb < 0) why = "a stroke is six digits, as ff3366";
         const double units = 0.5 * s.h * up.y / up.w;   // (points of the picture to one unit of the stage, where things stand at first)
-        const std::string shade = doc_word(d, thing, "shadow");
-        const long shadeRgb = shade.size() == 6 && shade.find_first_not_of("0123456789abcdefABCDEF") == std::string::npos ? std::strtol(shade.c_str(), nullptr, 16) : -1;
         DrawnFx fx;
         if (ramp.size() > 1) fx.ramp = ramp;
         fx.copies = (int)doc_number(d, thing, "copies", 0, 1);
@@ -590,26 +634,8 @@ static bool doc_match(Doc& d) {
         const auto which = [&](const char* name, const char* words) { const std::string w = doc_word(d, thing, name); if (w.empty()) return -1; int n = 0; for (const char* at = words; *at; ++n) { const size_t len = strcspn(at, " "); if (w == std::string(at, len)) return n; at += len + (at[len] ? 1 : 0); } return -1; };
         fx.cap = which("cap", "butt round square"), fx.join = which("join", "miter round bevel");   // (ThorVG's StrokeCap and StrokeJoin, in its order)
         fx.dash = (float)(doc_number(d, thing, "dash", 0, 0) / units), fx.dashFrom = (float)(doc_number(d, thing, "dash_offset", 0, 0) / units);
-        fx.blur = (float)(doc_number(d, thing, "blur", 0, 0) / units);
-        if (shadeRgb >= 0) {   // (After Effects' own drop shadow, as it comes: half of it, 135 degrees, 10 points away, 10 soft)
-            fx.shadow = float4{float3{(float)((shadeRgb >> 16) & 255), (float)((shadeRgb >> 8) & 255), (float)(shadeRgb & 255)} / 255.f, (float)doc_number(d, thing, "shadow_opacity", 0, 0.5)};
-            fx.fall = (float)(doc_number(d, thing, "shadow_distance", 0, 10) / units), fx.way = (float)doc_number(d, thing, "shadow_angle", 0, 135), fx.soft = (float)(doc_number(d, thing, "shadow_blur", 0, 10) / units);
-        } else if (!shade.empty()) why = "a shadow is six digits, as 000000";
-        bool fxOk = shade.empty() || shadeRgb >= 0;
-        const auto hue = [&](const char* name, const char* otherwise, float3* to) {   // (a colour said as six digits; not said: as it comes)
-            std::string said = doc_word(d, thing, name);
-            if (said.empty()) said = otherwise;
-            const long rgb = said.size() == 6 && said.find_first_not_of("0123456789abcdefABCDEF") == std::string::npos ? std::strtol(said.c_str(), nullptr, 16) : -1;
-            if (rgb < 0) return fxOk = false, why = std::string("a ") + name + " is six digits, as ff3366", void();
-            *to = float3{(float)((rgb >> 16) & 255), (float)((rgb >> 8) & 255), (float)(rgb & 255)} / 255.f;
-        };
-        if (!doc_word(d, thing, "glow").empty()) {   // (a warm light all round it, as it comes: soft 40, all of it; ThorVG's shadow spreads narrowly)
-            float3 light{0.f};
-            hue("glow", "ffd166", &light);
-            fx.glow = float4{light, (float)doc_number(d, thing, "glow_opacity", 0, 1)}, fx.glowSoft = (float)(doc_number(d, thing, "glow_blur", 0, 40) / units);
-        }
-        if ((fx.tint = (float)doc_number(d, thing, "tint", 0, 0)) > 0.f) hue("tint_black", "1b1f5c", &fx.tints[0]), hue("tint_white", "ff8a65", &fx.tints[1]);   // (a deep blue and a warm pink, as it comes)
-        if ((fx.tritone = (float)doc_number(d, thing, "tritone", 0, 0)) > 0.f) hue("tritone_shadow", "1b1f5c", &fx.tones[0]), hue("tritone_midtone", "c44569", &fx.tones[1]), hue("tritone_highlight", "ffd166", &fx.tones[2]);
+        bool fxOk = doc_fx(d, thing, 0.0, true, units, fx, why);   // (made as large as its effects reach at their most; each moment tells them as they are then)
+        made.units = units;
         if (doc_among("film picture text shape", kind)) made.space = doc_word(d, thing, "space") == "2.5d" ? 25 : 2;
         if (kind == "camera") made.camera = true;   // (nothing of it is seen: it is how the rest is)
         else if (kind == "light") {   // (Filament's own light, made as the document says; placed and told how strong at each moment)
