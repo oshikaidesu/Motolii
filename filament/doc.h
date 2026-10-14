@@ -44,6 +44,7 @@ struct Doc {
     // One act of a hand: the changes made from its beginning to its end are one step of undo, and if one of them is
     // refused none of them is made. Acts may lie one within another: the outermost one is the step.
     std::string graded;                 // the stage's grade as last made (doc_look): made again only when it is told otherwise
+    std::map<uint32_t, MaterialInstance*> copyLooks;   // a copy's own look (its thing's look duplicated, by the copy's entity), while its copies are coloured each their own
     float roomLight = 0.f;              // the room's own light, as the stage was opened with it
     std::string roomIs;                 // which room lights it now (doc_look)
     Skybox* sky = nullptr;              // the colour behind everything, once one is said
@@ -127,6 +128,12 @@ static const DocValue doc_values[] = {
     {"copy_columns", "picture text shape", 0, 100, false, nullptr},   // (so many to a row, then the next row: copy_x along it, copy_y down; 0: one row)
     {"stagger", "picture text shape", 0, 1e3, false, nullptr},   // (how much later the last of its copies moves than the first, in seconds: each as late as its order says)
     {"stagger_from", "picture text shape", 0, 0, false, "start centre end edges"},   // (which of them moves first: the first, the middle one, the last, the outer ones)
+    {"copy_fill", "picture text shape", 0, 0, false, ""},   // (its copies coloured from the first colour to the last, in their order: two colours or more, six digits each)
+    // (a wave through it and its copies, Cavalry's oscillator: so far across and up (units), so far turned (degrees),
+    //  so much larger (a share), so many times a second, each copy so far behind the one before (turns spread over all)
+    {"wave_x", "picture text shape", -1e3, 1e3, true, nullptr}, {"wave_y", "picture text shape", -1e3, 1e3, true, nullptr},
+    {"wave_rotate", "picture text shape", -1e4, 1e4, true, nullptr}, {"wave_size", "picture text shape", -1, 10, true, nullptr},
+    {"wave_speed", "picture text shape", 0, 100, true, nullptr}, {"wave_phase", "picture text shape", -100, 100, true, nullptr},
     {"tint", "picture text shape", 0, 1, true, nullptr}, {"tint_black", "picture text shape", 0, 0, false, ""}, {"tint_white", "picture text shape", 0, 0, false, ""},
     {"tritone", "picture text shape", 0, 1, true, nullptr}, {"tritone_shadow", "picture text shape", 0, 0, false, ""}, {"tritone_midtone", "picture text shape", 0, 0, false, ""}, {"tritone_highlight", "picture text shape", 0, 0, false, ""},   // (how its lines lie one under another, ThorVG's own: 0 at the left, 0.5 about the middle, 1 at the right)
     {"stroke", "text shape", 0, 0, false, ""}, {"stroke_width", "text shape", 0, 1000, false, nullptr},   // (its edge: a colour, and how wide, in points of the picture at size 1)
@@ -169,7 +176,8 @@ struct DocCard { const char* title; const char* names; const char* when = nullpt
 static const DocCard doc_cards[] = {
     {"Type", "letter_spacing line_spacing italic wrap wrap_at"},
     {"Gradient", "gradient gradient_angle gradient_scale gradient_spread", "fill", "~ "},
-    {"Copies", "copies copy_columns copy_x copy_y copy_rotate copy_size stagger stagger_from"},
+    {"Copies", "copies copy_columns copy_x copy_y copy_rotate copy_size stagger stagger_from copy_fill"},
+    {"Wave", "wave_x wave_y wave_rotate wave_size wave_speed wave_phase"},
     {"Shine", "emissive", "kind", "!solid"},   // (a flat thing lit from within: past 1, the stage's bloom takes it up where it lies in the stage's own view; laid over a solid thing, a picture of its own is clear round it and keeps no halo: ThorVG's glow does that)
     {"Play", "marker animation speed"},
     {"Matte", "clip_matte clip_invert clip_feather", "clip", "1"},
@@ -306,6 +314,19 @@ static bool doc_half(Doc& d, int thing, float2* half, float* deep = nullptr);
 // Where a thing is at a moment, as a matrix: moved, turned about z, y and x, made its size, all about its anchor (a
 // point of its own box: 0 its middle, 1 its edge on that side; the past repository's `anchor`, keyed as it was).
 static math::mat4 doc_place(Doc& d, int thing, double now, int deeper = 0, int copy = 0, bool member = false);
+// A thing's copies given back its own look, their own looks done away with (no longer coloured each, or taken off).
+static void doc_copy_looks_off(Doc& d, const Mesh* m, MaterialInstance* main) {
+    Stage& s = *d.stage;
+    auto& faces = s.engine->getRenderableManager();
+    for (const Stage::Made& made : s.made) {
+        if (made.of != m) continue;
+        const auto found = d.copyLooks.find(made.thing.getId());
+        if (found == d.copyLooks.end()) continue;
+        if (main) faces.setMaterialInstanceAt(faces.getInstance(made.thing), 0, main);
+        s.engine->destroy(found->second);
+        d.copyLooks.erase(found);
+    }
+}
 // How much later a thing's nth copy moves than it is said to (the past repository's order law, GSAP's stagger: the
 // stagger spread over them by their order: from the start, from the centre out, from the end, from the edges in).
 static double doc_delay(Doc& d, int thing, int nth) {
@@ -322,6 +343,7 @@ static math::mat4 doc_above(Doc& d, int thing, double now, int deeper = 0) {
     return parent && d.shown.count(parent) && deeper < 64 ? doc_place(d, parent, now, deeper + 1) : math::mat4{};   // (64: a document written elsewhere with a ring of parents still ends)
 }
 static math::mat4 doc_place(Doc& d, int thing, double now, int deeper, int copy, bool member) {
+    const double said = now;   // (the moment itself: a wave goes on at it, whatever the copy's delay)
     if (member) now -= doc_delay(d, thing, copy);   // (a member of its copies: as it was so much earlier)
     const auto turned = [&](const char* name, math::double3 about) { return math::mat4::rotation(doc_number(d, thing, name, now, 0) * (double)TAU / 360.0, about); };
     float2 half{0.5f};
@@ -337,6 +359,14 @@ static math::mat4 doc_place(Doc& d, int thing, double now, int deeper, int copy,
                                      }()) *
                                          math::mat4::rotation(copy * doc_number(d, thing, "copy_rotate", now, 0) * (double)TAU / 360.0, math::double3{0, 0, 1}) * math::mat4::scaling(std::pow(doc_number(d, thing, "copy_size", now, 1), copy))
                                    : math::mat4{}) *
+                             [&] {   // (a wave through it: each copy so far behind the one before)
+                                 if (!member) return math::mat4{};
+                                 const int n = std::max(1, (int)doc_number(d, thing, "copies", 0, 1));
+                                 const double w = std::sin((double)TAU * (doc_number(d, thing, "wave_speed", said, 1) * said - doc_number(d, thing, "wave_phase", said, 0) * copy / n));
+                                 return math::mat4::translation(math::double3{doc_number(d, thing, "wave_x", said, 0), doc_number(d, thing, "wave_y", said, 0), 0.0} * w) *
+                                        math::mat4::rotation(w * doc_number(d, thing, "wave_rotate", said, 0) * (double)TAU / 360.0, math::double3{0, 0, 1}) *
+                                        math::mat4::scaling(std::max(0.0, 1.0 + w * doc_number(d, thing, "wave_size", said, 0)));
+                             }() *
                              math::mat4::translation(-anchor);
     // (the user's three tags: 2D sticks to the camera; 2.5D stays in the world, smaller far, but keeps the angle it
     //  was given on the screen; 3D, and a solid, is filmed as it is)
@@ -588,9 +618,30 @@ static void doc_moment(Doc& d, double now) {
         }
         if (t.drawn && t.drawn->shape) trim_at(s, t.drawn, (float)doc_number(d, thing, "trim", now, 0), (float)doc_number(d, thing, "trim_begin", now, 0), (float)doc_number(d, thing, "trim_offset", now, 0));
         const mat4f place = mat4f(doc_place(d, thing, now));
-        const bool staggered = doc_number(d, thing, "stagger", 0, 0) > 0.0;   // (each copy, the first too, as late as its order says)
+        const bool staggered = doc_number(d, thing, "stagger", 0, 0) > 0.0 || doc_number(d, thing, "wave_x", now, 0) != 0.0 || doc_number(d, thing, "wave_y", now, 0) != 0.0
+                            || doc_number(d, thing, "wave_rotate", now, 0) != 0.0 || doc_number(d, thing, "wave_size", now, 0) != 0.0;   // (each copy, the first too, as late as its order says, waving as its place in the wave says)
         if (t.solid) solid_to(s, t.solid, place); else move(s, m, [&](int nth, const mat4f&) { return nth || staggered ? mat4f(doc_place(d, thing, now, 0, nth, staggered)) : place; });
         if (MaterialInstance* look = t.film ? t.film->look : t.drawn ? t.drawn->look : nullptr) look->setParameter("opacity", (float)doc_number(d, thing, "opacity", now, 1));
+        if (MaterialInstance* main = t.film ? t.film->look : t.drawn ? t.drawn->look : nullptr) {   // (its copies coloured each their own, along a ramp in their order: a look of its own each, told what the thing's is)
+            std::vector<float3> ramp;
+            std::istringstream said(doc_word(d, thing, "copy_fill"));
+            for (std::string one; said >> one;) { const long rgb = std::strtol(one.c_str(), nullptr, 16); ramp.push_back(Color::toLinear<ACCURATE>(sRGBColor{float3{(float)((rgb >> 16) & 255), (float)((rgb >> 8) & 255), (float)(rgb & 255)} / 255.f})); }
+            if (ramp.size() < 2) doc_copy_looks_off(d, m, main);
+            else {
+                auto& faces = s.engine->getRenderableManager();
+                const int n = std::max(1, (int)doc_number(d, thing, "copies", 0, 1));
+                for (const Stage::Made& made : s.made) {
+                    if (made.of != m || made.matte) continue;
+                    MaterialInstance*& own = d.copyLooks[made.thing.getId()];
+                    if (!own) own = MaterialInstance::duplicate(main), faces.setMaterialInstanceAt(faces.getInstance(made.thing), 0, own);
+                    const float along = n > 1 ? (float)made.nth / (float)(n - 1) * (float)(ramp.size() - 1) : 0.f;
+                    const size_t i = std::min((size_t)along, ramp.size() - 2);
+                    own->setParameter("wash", float4{mix(ramp[i], ramp[i + 1], along - (float)i), 1.f});
+                    own->setParameter("opacity", (float)doc_number(d, thing, "opacity", now, 1));
+                    own->setParameter("glowing", (float)doc_number(d, thing, "emissive", now, 0));
+                }
+            }
+        }
         const float shine = (float)doc_number(d, thing, "emissive", now, 0);   // (how much it lights itself now: a flat thing's sheet, a solid's own faces)
         doc_looks(s, t, [&](MaterialInstance* look) { if (look->getMaterial()->hasParameter("glowing")) look->setParameter("glowing", shine); });
     }
@@ -684,6 +735,8 @@ static bool doc_match(Doc& d) {
         if (const Mesh* m = it->second.film ? it->second.film->sheet : it->second.drawn ? it->second.drawn->sheet : it->second.shape)   // (and the shape it cuts a matte by: done away with first)
             doc_unshape(s, [m](const Stage::Made& made) { return made.of == m; });
         if (it->second.film) video_off(s, it->second.film);
+        if (const Mesh* m = it->second.film ? it->second.film->sheet : it->second.drawn ? it->second.drawn->sheet : nullptr)   // (its copies' own looks first)
+            doc_copy_looks_off(d, m, it->second.film ? it->second.film->look : it->second.drawn->look);
         if (it->second.drawn) picture_off(s, it->second.drawn);
         if (it->second.solid) solid_off(s, it->second.solid);
         if (!it->second.light.isNull()) {   // (out of every scene, and done away with)
@@ -1017,6 +1070,13 @@ static bool doc_knows(Doc& d, int thing, const char* name = nullptr, const doubl
         const std::string has = doc_words(d, thing, name);
         if (has.empty()) return d.trouble = std::string("its file has no ") + (!strcmp(name, "marker") ? "markers" : "movements of its own"), false;
         if (!doc_among(has.c_str(), word)) return d.trouble = std::string(name) + " is one of: " + has, false;
+    }
+    if (word && *word && !strcmp(name, "copy_fill")) {   // (colours, six digits each, two or more)
+        std::istringstream all(word);
+        int n = 0;
+        for (std::string one; all >> one; ++n)
+            if (one.size() != 6 || one.find_first_not_of("0123456789abcdefABCDEF") != std::string::npos) return d.trouble = "copy_fill is colours of six digits, as ff3366 1b2fd8", false;
+        if (n < 2) return d.trouble = "copy_fill is two colours or more, as ff3366 1b2fd8", false;
     }
     if (word && *word && (doc_among("vignette_color fog_color background", name) || (!strcmp(name, "fill") && kind == "light")))   // (one colour: six digits)
         if (strlen(word) != 6 || strspn(word, "0123456789abcdefABCDEF") != 6) return d.trouble = std::string(name) + " is six digits, as ff3366", false;
@@ -1369,7 +1429,7 @@ static bool doc_covers(Doc& d, int thing, double now, double* box) {
 }
 
 static double doc_usual(const char* name) {
-    return doc_among("size speed opacity wide visible distance zoom copies copy_size blur_level letter_spacing line_spacing contrast saturation vibrance environment gradient_scale", name) ? 1.0 : !strcmp(name, "duration") ? -1.0
+    return doc_among("size speed opacity wide visible distance zoom copies copy_size blur_level letter_spacing line_spacing contrast saturation vibrance environment gradient_scale wave_speed", name) ? 1.0 : !strcmp(name, "duration") ? -1.0
          : !strcmp(name, "metallic") ? 0.08 : !strcmp(name, "roughness") ? 0.6 : !strcmp(name, "reflectance") ? 0.5   // (a solid's surface as it comes)
          : !strcmp(name, "intensity") ? 1.0 : !strcmp(name, "falloff") ? 10.0 : !strcmp(name, "cone") ? 30.0   // (a light as it comes)
          : !strcmp(name, "ior") ? 1.5 : !strcmp(name, "split") ? 0.1 : !strcmp(name, "swim") ? 0.5 : !strcmp(name, "dark") ? 4.0 : !strcmp(name, "vivid") ? 1.3 : 0.0;   // (the kit's glass as it comes)
