@@ -108,6 +108,7 @@ struct Stage {
     std::vector<Made> made;   // every thing put on the stage: of which mesh, at which of that mesh's places (a film moves them: `move`)
     std::vector<View*> layers;   // further pictures laid over the stage's own view, in order (layer_view); the first `layered` of them are drawn
     size_t layered = 0;
+    std::function<void()> over;   // drawn last, over all of them (a whole-screen effect: screen.h)
 };
 
 static Stage open_stage(int w, int h) {
@@ -800,6 +801,7 @@ static void pictures_of(Stage& s) {
     if (s.view_through) s.renderer->render(s.view_through);
     s.renderer->render(s.view);
     for (size_t k = 0; k < s.layered && k < s.layers.size(); ++k) s.renderer->render(s.layers[k]);
+    if (s.over) s.over();
 }
 
 static void draw(Stage& s, std::vector<uint8_t>* pic = nullptr, bool wait = true) {

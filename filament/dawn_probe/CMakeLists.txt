@@ -5,7 +5,7 @@ target_link_libraries(dawn_probe PRIVATE filament)
 target_include_directories(dawn_probe PRIVATE ${EXTERNAL}/stb)
 
 # compute_door.h and gpu_door.h for programs built outside this build (glass_wgpu.sh, kit_wgpu.sh)
-add_library(motolii_door STATIC compute_door.cpp gpu_door.cpp)
+add_library(motolii_door STATIC compute_door.cpp gpu_door.cpp screen_door.cpp)
 target_link_libraries(motolii_door PUBLIC filament)
 # WebGPUPlatform.h includes Dawn's C++ header
 target_include_directories(motolii_door PRIVATE ${EXTERNAL}/dawn/include ${CMAKE_BINARY_DIR}/third_party/dawn/gen/include)
