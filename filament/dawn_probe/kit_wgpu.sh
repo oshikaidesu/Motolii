@@ -18,7 +18,7 @@ for f in paper paper_copy floor_shade thick_glass far_side far_look glasslight g
     $MATC -a webgpu -a metal -p desktop -TBLENDING=transparent -o out/wgpu_kit/$f.filamat $f.mat > out/wgpu_kit/$f.log 2>&1 ||
         $MATC -g -a webgpu -a metal -p desktop -TBLENDING=transparent -o out/wgpu_kit/$f.filamat $f.mat > out/wgpu_kit/$f.log 2>&1 ||
         echo "no WebGPU material: $f (out/wgpu_kit/$f.log)"
-    [ $f = flat ] && for way in add multiply screen; do   # (the ways a sheet lies on what is behind it: Filament's own blending)
+    [ $f = flat ] && for way in add multiply screen opaque; do   # (the ways a sheet lies on what is behind it: Filament's own blending; opaque: the colour behind everything, drawn before the solid things)
         $MATC -a webgpu -a metal -p desktop -TBLENDING=$way -DLAY_$way -o out/wgpu_kit/flat_$way.filamat flat.mat > out/wgpu_kit/flat_$way.log 2>&1 || echo "no WebGPU material: flat_$way"
     done
 done

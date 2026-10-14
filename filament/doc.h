@@ -827,13 +827,14 @@ static void doc_look(Doc& d) {
     } else s.scene->setSkybox(nullptr);
     // A colour behind everything: a flat colour as large as the stage, stuck to the eye, drawn first in the stage's own
     // view and writing no depth, so every thing is drawn over it (Filament's sky is drawn after the things it holds, and
-    // a flat thing writes no depth, so a sky painted over them)
+    // a flat thing writes no depth, so a sky painted over them). It is opaque: Filament draws blended sheets after every
+    // solid thing whatever their priority, so a blended backdrop was painted over the solids.
     const std::string colour = doc_word(d, 0, "behind") == "room" ? "" : behind;
     if (colour != d.backdropIs) {
         if (d.backdrop) picture_off(s, d.backdrop), d.backdrop = nullptr;
         if (!colour.empty()) {
             const math::double4 up = s.camera->getProjectionMatrix() * s.camera->getViewMatrix() * math::double4{0, 1, 0, 1};
-            if ((d.backdrop = flat(s, "rect", (float)s.w / (float)s.h, mat4f{}, (float)(2.0 * up.w / up.y), hex("background", float3{0.f})))) {
+            if ((d.backdrop = flat(s, "rect", (float)s.w / (float)s.h, mat4f{}, (float)(2.0 * up.w / up.y), hex("background", float3{0.f}), "opaque"))) {   // (opaque: Filament draws it with the solid things, first by its priority, not over them with the sheets)
                 auto& faces = s.engine->getRenderableManager();
                 for (const Stage::Made& made : s.made)
                     if (made.of == d.backdrop->sheet) faces.setPriority(faces.getInstance(made.thing), 0), faces.setChannel(faces.getInstance(made.thing), 0);
