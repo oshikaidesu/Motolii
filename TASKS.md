@@ -101,6 +101,8 @@
 - 足した（全部 書類の値、札で見える）：Copies の札に stagger・stagger_from（過去倉庫の順の決まり）と copy_fill（写しごとの色の並び、写しごとに材質の写し）。Wave の札（wave_x・y・rotate・size・speed・phase、Cavalry の Oscillator）。Field の札（field_x・y・radius・size・rotate、Falloff）。文字の split letters（1行を字ごとの写しに、ThorVG で字の位置を測る）。写しの上限 1000（400 個で 1コマ 5.8 ms）。
 - レシピ（1回の呼び＝1歩、Create 棚の先頭）：Wave lines・Iris・Dot wave・Tunnel・Text ripple・Field dots・Burst。Cavalry のチュートリアルは3〜6ノード・10個弱のつまみ。こちらはタイル1回押し＋札のつまみ。絵 `reports/skin_run/recipes_one_call.jpg`、`text_ripple.jpg`、`field_dots.jpg`。
 - 足した（2回目）：物の名前（name、レシピの物はレシピの名で並ぶ）。ばらまき（Scatter の札：scatter_x・y・rotate・size と種 seed）。レシピ Line maze・Rings・Confetti（全部で10）。窓で Create 棚から2回押して Iris が出るのを確かめた（`reports/skin_run/recipe_in_window.jpg`）。
+- 第三者の採点（1回目）：10点中4点。手は5つの絵で Cavalry より少ない（2回押し）が、絵の多くが似ない・映像の途中で止まる・押しのけやノイズが無い。壊れ：背景の色で平らな物が全部消える（重い）、キーの無いずれが何もしない。直した：背景の色は舞台大の平らな色を一番先に描く。ずれは波の時刻もずらす。field_push（押しのけ）、wave_noise（写しごとのノイズ）、レシピは映像の長さいっぱい動く。copy_turn（一周に割り振り）、copy_fill_way cycle（交互）、Op star。呼びの台本は SIZE=1920x1080 で横長を開ける（今日の絵が縦長で切れていた）。絵 `reports/skin_run/recipes_landscape.jpg`、`background_colour_fixed.jpg`、`field_push.jpg`、`op_star_iris.jpg`。
+- 残り（採点から）：線そのものを曲げる波（線が直線のまま）、写し同士を線で繋ぐ（plexus）、写しの間隔が物の size と一緒に伸び縮みする（Cavalry は舞台の点で並べる）、データで写しの値、生成ポスターの区画割り。部屋の写真の背景は、まだ奥の平らな物を塗りつぶす。
 - 限り：写しのずれは置き場所（位置・回転・大きさ）だけ。絵（Trim など）は写し全部で共有なので写しごとにずれない。「真ん中から」は写しの番号の真ん中（場所ではない、場所は Field で）。split は1行だけ。
 
 ## 棚崩し（2026-10-14 夕方、ユーザー：「filamentやthorvgの棚崩しだ。今度は逆、能力をflutterのトンマナでguiとしてわかりやすく露出させたい」）
