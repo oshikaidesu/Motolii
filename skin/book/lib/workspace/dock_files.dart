@@ -127,6 +127,7 @@ final fileRoots = <FileNode>[
 /// What a file of the disk is here: the inside says what kind of thing it makes (null: none, not shown); the mark for
 /// each kind is the shelf's own.
 String Function(String file) _kindOfFile = (_) => '';
+Future<String?> Function(String film)? _thumbnailOf;
 DockG? _glyphOf(String file) => switch (_kindOfFile(file)) {
   'film' => DockG.video,
   'picture' => DockG.image,
@@ -177,6 +178,7 @@ int? _usedRev;
 List<FileNode> _rootsOf(DockCtx c) {
   if (c.ws.inside == null) return fileRoots;
   _kindOfFile = c.ws.inside!.kindOf;
+  _thumbnailOf = c.ws.inside!.thumbnail;
   final files = _used(c.ws).keys.toList()..sort();
   return [
     FileNode(
@@ -274,7 +276,9 @@ bool _inUse(FileNode n, DockCtx c) => _layerOf(n, c) != null || c.applied(n.id);
 void _go(DockCtx c, String id) => c.set(() {
   _lists.remove(id); // (a folder of the disk is read again each time it is gone to)
   c.mem.folder = id;
-  c.mem.open.addAll(_pathOf(c, id).map((n) => n.id));
+  // (the sample's tree opens down to the folder gone to; on the disk only that folder opens: the same folder is listed
+  //  under more than one place, and opening every place above it moves the rows under the hand)
+  c.ws.inside == null ? c.mem.open.addAll(_pathOf(c, id).map((n) => n.id)) : c.mem.open.add(id);
 });
 
 class MediaShelf extends StatelessWidget {
@@ -529,8 +533,21 @@ class _Art extends StatelessWidget {
   final FileNode n;
   @override
   Widget build(BuildContext context) {
+    if (n.disk && (n.g == DockG.video || n.g == DockG.image)) {
+      // A file of the disk shows its own picture: a film its first one (the inside makes it), a photo itself (Flutter
+      // reads it); what has none to show (a vector picture, until it is made) is a flat tile with its kind's mark.
+      final flat = Container(color: WsT.well, alignment: Alignment.center, child: DockBadge(n.g, Grey.g63, size: 26));
+      if (n.g == DockG.video) {
+        return FutureBuilder<String?>(
+          future: _thumbnailOf?.call(n.id),
+          builder: (context, made) => made.data == null ? flat : Image.file(File(made.data!), fit: BoxFit.cover, gaplessPlayback: true),
+        );
+      }
+      final photo = RegExp(r'\.(png|jpe?g|webp)$', caseSensitive: false).hasMatch(n.id);
+      return photo ? Image.file(File(n.id), fit: BoxFit.cover, cacheWidth: 240, errorBuilder: (_, _, _) => flat) : flat;
+    }
     if (n.media case final a?) return MediaThumb(a);
-    if (_typeOf(n.g) case final t?) {
+    if (_typeOf(n.g) case final t? when !n.disk) {
       return RepaintBoundary(
         child: CustomPaint(painter: PopArt(n.name.codeUnits.fold(0, (s, u) => s + u), t), size: Size.infinite),
       );

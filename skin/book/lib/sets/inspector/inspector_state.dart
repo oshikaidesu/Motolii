@@ -183,6 +183,9 @@ class Doc extends ChangeNotifier {
   final Map<String, List<double>> multi = {};
   final Map<String, KeyS> keys = {};
   final Map<String, String> s2 = {};
+
+  /// What a chooser may offer, where the host says so (by the chooser's id): otherwise its own list.
+  final Map<String, List<String>> choices = {};
   final Map<String, bool> b = {};
   final List<String> fxOrder = [];
   bool animateAll = false, link = true;

@@ -3,6 +3,8 @@
 // One call = one change = one step of undo. A call that is not done returns false and [trouble] says why.
 // macOS only, Debug build only (the Debug entitlements have the sandbox off so that the library can be loaded).
 import 'dart:ffi';
+import 'dart:io';
+import 'dart:isolate';
 
 import 'package:ffi/ffi.dart';
 import 'package:flutter/services.dart';
@@ -12,6 +14,25 @@ const motoliiDir = String.fromEnvironment('MOTOLII_DIR', defaultValue: '/Users/m
 
 typedef _P = Pointer<Void>;
 typedef _S = Pointer<Utf8>;
+
+/// A film's thumbnail, made by the inside's own call on another isolate (nothing of a document is handed over: the
+/// call asks nothing of one). Kept in the system's temp folder under the film's place and when it was last changed.
+final _thumbnails = <String, Future<String?>>{};
+Future<String?> _thumbnail(String lib, String film) async {
+  final folder = Directory('${Directory.systemTemp.path}/motolii_thumbnails')..createSync(recursive: true);
+  final png = '${folder.path}/${film.hashCode.toRadixString(16)}_${File(film).statSync().modified.millisecondsSinceEpoch}.png';
+  if (File(png).existsSync()) return png;
+  final made = await Isolate.run(() {
+    final ask = DynamicLibrary.open(lib).lookupFunction<Int32 Function(Pointer<Utf8>, Pointer<Utf8>, Int32), int Function(Pointer<Utf8>, Pointer<Utf8>, int)>('motolii_thumbnail');
+    final from = film.toNativeUtf8(), to = png.toNativeUtf8();
+    final done = ask(from, to, 240) != 0;
+    malloc
+      ..free(from)
+      ..free(to);
+    return done;
+  });
+  return made ? png : null;
+}
 
 class Motolii {
   Motolii._(this._lib, this._m, this.libPath, this.home);
@@ -68,6 +89,7 @@ class Motolii {
   late final _stay = _lib.lookupFunction<Int32 Function(_P, Int32, _S, Double), int Function(_P, int, _S, double)>('motolii_stay');
   late final _keyed = _lib.lookupFunction<Int32 Function(_P, Int32, _S, Double), int Function(_P, int, _S, double)>('motolii_keyed');
   late final _moving = _lib.lookupFunction<_S Function(_P, Int32), _S Function(_P, int)>('motolii_moving');
+  late final _words = _lib.lookupFunction<_S Function(_P, Int32, _S), _S Function(_P, int, _S)>('motolii_words');
   late final _kindOf = _lib.lookupFunction<_S Function(_S), _S Function(_S)>('motolii_kind_of');
   late final _together = _lib.lookupFunction<Int32 Function(_P, Int32), int Function(_P, int)>('motolii_together');
   late final _wayOf = _lib.lookupFunction<_S Function(_P, Int32, _S, Double), _S Function(_P, int, _S, double)>('motolii_way_of');
@@ -168,6 +190,13 @@ class Motolii {
 
   /// The names of a thing's values that take keys.
   List<String> moving(int thing) => _moving(_m, thing).toDartString().split(' ').where((n) => n.isNotEmpty).toList();
+
+  /// The words a value of a thing may be (a blend's): none if any word will do, or the thing has no such value.
+  List<String> words(int thing, String name) => _with([name], (s) => _words(_m, thing, s[0]).toDartString()).split(' ').where((w) => w.isNotEmpty).toList();
+
+  /// A film's first picture, small, as a .png file (null: none could be made). Made once and on another isolate: the
+  /// window does not wait.
+  Future<String?> thumbnail(String film) => _thumbnails[film] ??= _thumbnail(libPath, film);
 
   /// What kind of thing a file makes ('': none).
   String kindOf(String file) => _with([file], (s) => _kindOf(s[0]).toDartString());

@@ -31,7 +31,7 @@ class _ChooserState extends State<Chooser> {
     if (open) {
       // contract: the list floats over the panel and never pushes the rows below it; it opens upward when there is no room underneath.
       final box = context.findRenderObject() as RenderBox?;
-      final overlay = Overlay.maybeOf(context)?.context.findRenderObject() as RenderBox?;
+      final overlay = Overlay.maybeOf(context, rootOverlay: true)?.context.findRenderObject() as RenderBox?;
       if (box != null && overlay != null) {
         final bottom = box.localToGlobal(Offset(0, box.size.height), ancestor: overlay).dy;
         final need = math.min(widget.options.length, _maxItems) * _itemH + (widget.searchable ? 24 : 0) + 12;
@@ -183,7 +183,8 @@ class _ChooserState extends State<Chooser> {
         ignoring: !on,
         child: CompositedTransformTarget(
           link: _link,
-          child: OverlayPortal(
+          // (the window's own overlay, not the nearest one: a list that hangs out of its pane is still under the hand)
+          child: OverlayPortal.targetsRootOverlay(
             controller: _portal,
             overlayChildBuilder: (_) {
               final w = (context.findRenderObject() as RenderBox?)?.size.width ?? 160;

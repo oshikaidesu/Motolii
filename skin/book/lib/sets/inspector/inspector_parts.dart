@@ -152,6 +152,7 @@ class InspHost extends StatefulWidget {
     this.onDrop,
     this.onKey,
     this.onWords,
+    this.choices = const {},
     this.together,
     required this.child,
   });
@@ -185,6 +186,9 @@ class InspHost extends StatefulWidget {
   /// Words changed in the inspector (a text's content, a chooser's choice). false: the host did not take them, and they go back to what they were.
   final bool Function(Map<String, String> changed)? onWords;
 
+  /// What a chooser may offer, by its id, where the host's document has its own words for it (a blend's).
+  final Map<String, List<String>> choices;
+
   /// What one change of the inspector tells the host (values, then key marks) is told inside this, so a host can keep it as one act.
   final void Function(VoidCallback tells)? together;
   @override
@@ -198,6 +202,7 @@ class _InspHostState extends State<InspHost> {
       ..title = widget.title
       ..v.addAll(widget.values)
       ..s2.addAll(widget.strs)
+      ..choices.addAll(widget.choices)
       ..keys.addAll(widget.keyMarks);
     _seen
       ..clear()
@@ -282,6 +287,9 @@ class _InspHostState extends State<InspHost> {
       }
     }
     doc.title = widget.title;
+    doc.choices
+      ..clear()
+      ..addAll(widget.choices);
   }
 
   @override

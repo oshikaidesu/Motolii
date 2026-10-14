@@ -18,6 +18,7 @@ void motolii_close(Motolii* m);
 const char* motolii_trouble(Motolii* m);                           /* why the last call that was not done was not */
 
 const char* motolii_kind_of(const char* file);                     /* what kind of thing a file makes ("": none) */
+int motolii_thumbnail(const char* film, const char* png, int wide);   /* a film's first picture written small, as a .png (asks nothing of a document: callable from any thread) */
 int motolii_add(Motolii* m, const char* kind, const char* file);   /* a new thing (kind "": what the file makes), on from the stage's present moment: its number (0: not made) */
 int motolii_remove(Motolii* m, int thing);
 int motolii_set(Motolii* m, int thing, const char* name, double number);          /* a value that stays */
@@ -59,6 +60,7 @@ int motolii_key_here(Motolii* m, int thing, const char* name, double at);
 int motolii_stay(Motolii* m, int thing, const char* name, double at);
 int motolii_keyed(Motolii* m, int thing, const char* name, double at);
 const char* motolii_moving(Motolii* m, int thing);
+const char* motolii_words(Motolii* m, int thing, const char* name);   /* the words a value of a thing may be, with spaces between ("": any, or it is not a word; until the next call) */
 /* One act of a hand that is several changes (a thing dragged: its x and its y): the changes made from
    motolii_together(m, 1) to motolii_together(m, 0) are one step of undo. */
 int motolii_together(Motolii* m, int on);

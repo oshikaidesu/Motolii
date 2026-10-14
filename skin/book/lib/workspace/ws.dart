@@ -109,6 +109,12 @@ class Ws extends ChangeNotifier {
   /// How many times the document has been read again.
   int rev = 0;
 
+  /// What the inside shows changed without the document changing (a thing held and carried): the seats look again.
+  void shown() {
+    rev++;
+    notifyListeners();
+  }
+
   /// The document read again, after any change to it: what the seats list is what the document holds.
   void reread() {
     final m = _inside;

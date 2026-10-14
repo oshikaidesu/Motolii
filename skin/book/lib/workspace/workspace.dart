@@ -161,6 +161,16 @@ Map<String, String> _words(Ws ws, String? id) {
   };
 }
 
+/// Joined: what the choosers offer is what the document has words for (a thing with no blend lies as it comes: Normal).
+Map<String, List<String>> _choices(Ws ws, String? id) {
+  final m = ws.inside, t = int.tryParse(id ?? '');
+  if (m == null || t == null) return const {};
+  final blends = m.words(t, 'blend');
+  return {
+    'blend': blends.isEmpty ? const ['Normal'] : [for (final w in blends) w.replaceRange(0, 1, w[0].toUpperCase())],
+  };
+}
+
 bool _say(Ws ws, String? id, Map<String, String> changed) {
   final m = ws.inside!, t = int.tryParse(id ?? '');
   if (t == null) return false;
@@ -299,6 +309,7 @@ class _InspectorSeat extends StatelessWidget {
         values: _transform(ws, l?.id),
         strs: {'fill': ?_fillWord(ws, l?.id, fill), ..._words(ws, l?.id)},
         onWords: ws.inside == null ? null : (changed) => _say(ws, l?.id, changed),
+        choices: _choices(ws, l?.id),
         keyMarks: _keyMarks(ws, l?.id),
         onValues: ws.inside == null ? null : (changed, {required live}) => _write(ws, l?.id, changed, live: live),
         onDrop: ws.inside?.tryDrop,

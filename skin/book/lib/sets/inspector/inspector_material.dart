@@ -17,11 +17,11 @@ class BlendRows extends StatelessWidget {
       mark: CardMark.blend,
       brief: [doc.s2['blend'] ?? _blends.first, if (doc.b['ghost'] ?? false) 'Ghost', if (doc.b['clip'] ?? false) 'Clip'],
       children: [
-        const PropRow(
+        PropRow(
           id: 'blend',
           label: 'Blend',
           keyable: false,
-          cells: [Chooser(id: 'blend', options: _blends, word: 'Modes')],
+          cells: [Chooser(id: 'blend', options: doc.choices['blend'] ?? _blends, word: 'Modes')],
         ),
         PropRow(
           id: 'ghost',

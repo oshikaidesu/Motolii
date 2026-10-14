@@ -141,7 +141,9 @@ static std::string doc_word(Doc& d, int thing, const char* name) {
 // shows (it goes round when it comes to its end), and where it is.
 static void doc_moment(Doc& d, double now) {
     Stage& s = *d.stage;
+    int laid = 0;   // (things lie like sheets put down one after another: each a hair nearer than the one before, so at the same depth the later one is in front)
     for (auto& [thing, t] : d.shown) {
+        ++laid;
         const double since = now - doc_number(d, thing, "start", 0, 0), lasts = doc_number(d, thing, "duration", 0, -1);
         const bool in = since >= 0.0 && (lasts < 0.0 || since < lasts);
         const Mesh* m = t.film ? t.film->sheet : t.drawn ? t.drawn->sheet : t.shape;
@@ -149,7 +151,7 @@ static void doc_moment(Doc& d, double now) {
         if (!in) continue;
         if (t.film) video_at(s, t.film, (float)since);
         if (t.drawn && t.drawn->seconds > 0.f) picture_at(s, t.drawn, std::fmod((float)since, t.drawn->seconds));
-        const float3 at{(float)doc_number(d, thing, "x", now, 0), (float)doc_number(d, thing, "y", now, 0), (float)doc_number(d, thing, "z", now, 0)};
+        const float3 at{(float)doc_number(d, thing, "x", now, 0), (float)doc_number(d, thing, "y", now, 0), (float)doc_number(d, thing, "z", now, 0) + 1e-4f * (float)laid};
         const auto turned = [&](const char* name, float3 about) { return mat4f::rotation((float)doc_number(d, thing, name, now, 0) * TAU / 360.f, about); };
         const mat4f place = mat4f::translation(at) * turned("rotate", float3{0, 0, 1}) * turned("rotate_y", float3{0, 1, 0}) * turned("rotate_x", float3{1, 0, 0}) * mat4f::scaling((float)doc_number(d, thing, "size", now, 1));
         if (t.solid) solid_to(s, t.solid, place); else move(s, m, [&](int, const mat4f&) { return place; });
@@ -408,6 +410,13 @@ static bool doc_stay(Doc& d, int thing, const char* name, double at) {   // (its
     return doc_knows(d, thing, name) && (!doc_keys(d, thing, name) || doc_set(d, thing, name, doc_number(d, thing, name, at, doc_usual(name))));
 }
 static int doc_keyed(Doc& d, int thing, const char* name, double at) { return !doc_keys(d, thing, name) ? 0 : doc_keys(d, thing, name, at) ? 2 : 1; }
+// The words a value of a thing may be (a blend's, a solid's shape), with spaces between ("": any word, or not a word).
+static std::string doc_words(Doc& d, int thing, const char* name) {
+    const std::string kind = doc_word(d, thing, "kind");
+    for (const DocValue& one : doc_values)
+        if (!strcmp(one.name, name) && doc_among(one.kinds, kind)) return one.words ? one.words : "";
+    return "";
+}
 static std::string doc_moving(Doc& d, int thing) {
     const std::string kind = doc_word(d, thing, "kind");
     std::string names;

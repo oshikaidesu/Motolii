@@ -146,8 +146,34 @@ int motolii_put(Motolii* m, int thing, const char* name, double at, double numbe
 int motolii_key_here(Motolii* m, int thing, const char* name, double at) { return by_hand(m, [=] { return (int)doc_key_here(doc(m), thing, name, at); }); }
 int motolii_stay(Motolii* m, int thing, const char* name, double at) { return by_hand(m, [=] { return (int)doc_stay(doc(m), thing, name, at); }); }
 int motolii_keyed(Motolii* m, int thing, const char* name, double at) { return by_hand(m, [=] { return doc_keyed(*m->d, thing, name, at); }); }
+const char* motolii_words(Motolii* m, int thing, const char* name) { return by_hand(m, [=] { return (m->word = doc_words(*m->d, thing, name)).c_str(); }); }
 const char* motolii_moving(Motolii* m, int thing) { return by_hand(m, [=] { return (m->word = doc_moving(*m->d, thing)).c_str(); }); }
 const char* motolii_kind_of(const char* file) { return doc_kind_of(file); }
+// A film's first picture as a small .png: GStreamer's own line for it (decode, scale, into a .png), held at its first
+// picture, which is taken and written. It asks nothing of a stage, so a shell may call it from another thread.
+int motolii_thumbnail(const char* film, const char* png, int wide) {
+    gst_init(nullptr, nullptr);
+    gchar* uri = gst_filename_to_uri(film, nullptr);
+    if (!uri) return 0;
+    gchar* line = g_strdup_printf("uridecodebin uri=\"%s\" ! videoconvert ! videoscale ! video/x-raw,width=%d,pixel-aspect-ratio=1/1 ! pngenc ! appsink name=out", uri, wide);
+    GstElement* made = gst_parse_launch(line, nullptr);
+    g_free(line), g_free(uri);
+    if (!made) return 0;
+    GstElement* out = gst_bin_get_by_name(GST_BIN(made), "out");
+    gst_element_set_state(made, GST_STATE_PAUSED);
+    GstSample* first = gst_app_sink_try_pull_preroll(GST_APP_SINK(out), 4 * GST_SECOND);
+    bool done = false;
+    GstMapInfo bytes;
+    if (first && gst_buffer_map(gst_sample_get_buffer(first), &bytes, GST_MAP_READ)) {
+        done = g_file_set_contents(png, (const gchar*)bytes.data, (gssize)bytes.size, nullptr);
+        gst_buffer_unmap(gst_sample_get_buffer(first), &bytes);
+    }
+    if (first) gst_sample_unref(first);
+    gst_element_set_state(made, GST_STATE_NULL);
+    gst_object_unref(out);
+    gst_object_unref(made);
+    return done;
+}
 int motolii_together(Motolii* m, int on) { return by_hand(m, [=] { return m->d->together = on ? 1 : 0, 1; }); }
 const char* motolii_way_of(Motolii* m, int thing, const char* name, double at) { return by_hand(m, [=] { return (m->word = doc_way_of(*m->d, thing, name, at)).c_str(); }); }
 // How many points of the picture one unit of the stage is, where things stand when their z is 0.

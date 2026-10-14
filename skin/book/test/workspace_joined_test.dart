@@ -112,6 +112,28 @@ void main() {
     await _close(t);
   }, skip: !_built);
 
+  testWidgets('a thing held on the stage and carried is put where it was let go, x and y as one step; a new thing lies in front', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    final cube = m.add('solid', 'cube');
+    ws
+      ..reread()
+      ..select(null);
+    await t.pumpAndSettle();
+    final stage = t.getRect(find.byKey(const ValueKey('ws-stage-comp')));
+    await t.dragFrom(stage.center, Offset(stage.width * .2, -stage.height * .1));
+    await t.pumpAndSettle();
+    expect(ws.selected, '$cube', reason: 'held, it is picked');
+    final x = m.value(cube, 'x', 0)!, y = m.value(cube, 'y', 0)!;
+    expect(x, greaterThan(.3), reason: 'carried to the right');
+    expect(y, greaterThan(.1), reason: 'and up');
+    expect(m.undo(), isTrue);
+    expect([m.value(cube, 'x', 0), m.value(cube, 'y', 0)], [0, 0], reason: 'the one act goes back whole');
+    expect(m.undo(), isTrue, reason: 'the step before it is the cube\'s own making');
+    expect(m.things, isEmpty);
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
   testWidgets('Backspace on the timeline takes the picked thing out; undo brings it back', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final ring = m.add('solid', 'ring'), cube = m.add('solid', 'cube');
