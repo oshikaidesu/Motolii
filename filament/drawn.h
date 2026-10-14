@@ -122,6 +122,19 @@ static Drawn* picture(Stage& s, const char* file, const mat4f& place, float high
 
 // Words put in the scene, set by ThorVG in the font of `fontFile` (a .ttf): a sheet `high` tall for each line, as
 // wide as the words make it, its middle at `place`.
+// Whether ThorVG sets `words` in a font file: it reads the file and the words come out with a size (a font of other
+// letters gives them none). ThorVG's own loader keeps its fonts under a lock, so any thread may ask, once ThorVG is up.
+static bool type_sets(const char* fontFile, const char* words) {
+    if (!std::filesystem::is_regular_file(fontFile) || tvg::Text::load(fontFile) != tvg::Result::Success) return false;
+    tvg::Text* t = tvg::Text::gen();
+    t->font(std::filesystem::path(fontFile).stem().string().c_str());
+    t->size(100.f);
+    t->text(words);
+    float x = 0.f, y = 0.f, wide = 0.f, tall = 0.f;
+    const bool sets = t->bounds(&x, &y, &wide, &tall) == tvg::Result::Success && wide > 0.f && tall > 0.f;
+    tvg::Paint::rel(t);
+    return sets;
+}
 static Drawn* type(Stage& s, const char* words, const char* fontFile, const mat4f& place, float high, float3 colour = float3{0.f}, const char* lay = nullptr) {
     if (!std::filesystem::is_regular_file(fontFile)) return nullptr;
     return drawn(s, [&](Drawn*, int* w, int* h) -> tvg::Paint* {

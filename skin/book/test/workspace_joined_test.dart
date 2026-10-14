@@ -8,6 +8,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lab_book/motolii.dart';
 import 'package:lab_book/sets/inspector/inspector_parts.dart' show OnOff, PropRow, TextGroup;
+import 'package:lab_book/workspace/dock_fonts.dart';
 import 'package:lab_book/workspace/timeline.dart';
 import 'package:lab_book/workspace/workspace.dart';
 import 'package:lab_book/workspace/ws.dart';
@@ -376,6 +377,31 @@ void main() {
     final edgeOn = m.frame(cube)!;
     expect(edgeOn[2], greaterThan(faceOn[2] * 1.2));
     expect(edgeOn[4], 0);
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
+  testWidgets('the Fonts shelf offers the machine\'s font files: the picked text is set in the one applied, as one step', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    final text = m.add('text', _font);
+    await t.runAsync(() => fontsRead(ws)); // (the shelf reads the folders without waiting; here the reading is done first)
+    ws
+      ..reread()
+      ..select('$text')
+      ..shelf = 'Fonts';
+    await t.pumpAndSettle();
+    final georgia = find.text('Andale Mono');
+    await t.scrollUntilVisible(georgia, 300, scrollable: find.descendant(of: find.byType(FontsShelf), matching: find.byType(Scrollable)).first, maxScrolls: 200);
+    expect(georgia, findsWidgets, reason: 'a font file of the system is on the shelf');
+    await t.pumpAndSettle();
+    await t.tap(georgia.first);
+    await t.pumpAndSettle();
+    await t.tap(find.text('Apply'));
+    await t.pumpAndSettle();
+    expect(m.word(text, 'file'), endsWith('/Andale Mono.ttf'), reason: m.trouble);
+    expect(find.text('In use'), findsOneWidget);
+    expect(m.undo(), isTrue);
+    expect(m.word(text, 'file'), _font);
     expect(t.takeException(), isNull);
     await _close(t);
   }, skip: !_built);

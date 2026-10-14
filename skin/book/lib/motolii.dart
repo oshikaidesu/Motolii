@@ -143,6 +143,22 @@ class Motolii {
       return done;
     });
   }
+  /// Of these font files, those a text can be [words] in (asked on another isolate: the window does not wait).
+  Future<List<String>> setting(List<String> fonts, String words) {
+    final lib = libPath;
+    return Isolate.run(() {
+      final ask = DynamicLibrary.open(lib).lookupFunction<Int32 Function(Pointer<Utf8>, Pointer<Utf8>), int Function(Pointer<Utf8>, Pointer<Utf8>)>('motolii_sets');
+      final said = words.toNativeUtf8(), out = <String>[];
+      for (final f in fonts) {
+        final file = f.toNativeUtf8();
+        if (ask(file, said) != 0) out.add(f);
+        malloc.free(file);
+      }
+      malloc.free(said);
+      return out;
+    });
+  }
+
   double get now => _now(_m);
   double get seconds => _seconds(_m);
   late final _rate = _lib.lookupFunction<Int32 Function(_P), int Function(_P)>('motolii_rate');

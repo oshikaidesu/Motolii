@@ -57,13 +57,21 @@ class _WsShelfState extends State<WsShelf> {
             ] else
               ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 88),
-                child: Text(_facts[name] ?? '', maxLines: 1, overflow: TextOverflow.ellipsis, style: T.label(Grey.g56)),
+                child: ValueListenableBuilder<int>(
+                  valueListenable: dockRead,
+                  builder: (context, _, _) => Text(
+                    name == 'Fonts' && ws.inside != null ? '${fontsOffered ?? '…'} fonts' : _facts[name] ?? '', // (joined: the fonts the inside sets)
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: T.label(Grey.g56),
+                  ),
+                ),
               ),
           ],
         ),
         DockSearch(
           controller: _search,
-          hint: hint,
+          hint: name == 'Fonts' && ws.inside != null ? 'Search fonts' : hint,
           trailing: name == 'Effects'
               ? DockFilterToggle(open: _mem.filtersOpen, active: fxActiveFilters(_mem), onTap: () => setState(() => _mem.filtersOpen = !_mem.filtersOpen))
               : null,

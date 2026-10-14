@@ -165,6 +165,7 @@ int motolii_keyed(Motolii* m, int thing, const char* name, double at) { return b
 const char* motolii_words(Motolii* m, int thing, const char* name) { return by_hand(m, [=] { return (m->word = doc_words(*m->d, thing, name)).c_str(); }); }
 const char* motolii_moving(Motolii* m, int thing) { return by_hand(m, [=] { return (m->word = doc_moving(*m->d, thing)).c_str(); }); }
 const char* motolii_kind_of(const char* file) { return doc_kind_of(file); }
+int motolii_sets(const char* font, const char* words) { return type_sets(font, words) ? 1 : 0; }
 // The names of the ways a stretch may go (the nine kinds, then the ways defined in this document), with spaces between;
 // and how one of the nine goes: how far it is, from 0 at its beginning to 1 at its end, at `u` of the way through.
 const char* motolii_way_names(Motolii* m) {
