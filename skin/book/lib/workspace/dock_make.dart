@@ -491,6 +491,7 @@ class CreateShelf extends StatelessWidget {
             action: _laid.containsKey(sel.name) ? 'Lay out' : 'Create',
             done: !_asked.containsKey(sel.name) && !_laid.containsKey(sel.name),
             doneLabel: 'No seat yet',
+            fresh: !_laid.containsKey(sel.name), // (a tile makes a new thing; a tile of copies lays out the picked one)
             onAction: () => _make(c, sel.name),
           )
         else if (sel != null)

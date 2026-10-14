@@ -165,6 +165,7 @@ class FontsShelf extends StatelessWidget {
             action: m != null && m.word(int.tryParse(c.ws.selected ?? '') ?? 0, 'kind') != 'text' ? 'Place' : 'Apply',
             done: m != null ? onText : c.applied(sel.family) || sel.family == _usedFont,
             doneLabel: 'In use',
+            fresh: m != null && m.word(int.tryParse(c.ws.selected ?? '') ?? 0, 'kind') != 'text', // (no text picked: a new text)
             onAction: m != null ? () => _setFont(c, sel) : () => c.apply(sel.family),
           ),
       ],

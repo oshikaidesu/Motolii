@@ -10,6 +10,7 @@ import 'package:flutter/widgets.dart';
 import '../sets/inspector/inspector_parts.dart';
 import 'desk.dart';
 import 'dock.dart';
+import 'dock_make.dart' show usedColours;
 import 'dock_glyphs.dart';
 import 'panes.dart';
 import 'stage.dart';
@@ -335,6 +336,8 @@ Map<String, List<String>> _choices(Ws ws, String? id) {
     'parent': ['None', ..._others(ws, t).keys],
     'camTarget': ['None', ..._others(ws, t).keys], // (a camera looks at the thing it goes with)
     'align': _aligned, // (Justify ThorVG has not)
+    // (an edge in a colour the document has: this thing's own, and those its things are filled with)
+    'stroke': {'None', if (m.word(t, 'stroke') case final s when s.isNotEmpty) '#${s.toUpperCase()}', for (final c in usedColours(ws).values) _hex(c)}.toList(),
   };
 }
 

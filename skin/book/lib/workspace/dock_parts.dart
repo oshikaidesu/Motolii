@@ -16,6 +16,7 @@ class DockMem {
   final folded = <String>{'Time'};
   final open = <String>{'Project'};
   final starred = <String>{'Glow', 'Repeater', 'Trim Paths', 'Futura', 'Didot', 'Pop Poster'};
+  final starredHere = <String>{}; // (joined: only what the hand starred, not the sample's)
   final applied = <String>{};
 
   /// Why the last thing asked of the inside for an entry was not done (by the entry's id).
@@ -49,8 +50,9 @@ class DockCtx {
   bool hit(String name) => query.isEmpty || name.toLowerCase().contains(query.toLowerCase());
   bool applied(String id) => mem.applied.contains('$shelf:$id');
   void apply(String id) => set(() => mem.applied.add('$shelf:$id'));
-  bool starred(String id) => mem.starred.contains(id);
-  void star(String id) => set(() => mem.starred.contains(id) ? mem.starred.remove(id) : mem.starred.add(id));
+  Set<String> get _stars => ws.inside == null ? mem.starred : mem.starredHere;
+  bool starred(String id) => _stars.contains(id);
+  void star(String id) => set(() => _stars.contains(id) ? _stars.remove(id) : _stars.add(id));
   void toggle(Set<String> s, String id) => set(() => s.contains(id) ? s.remove(id) : s.add(id));
 }
 
@@ -241,14 +243,18 @@ class DockFooter extends StatelessWidget {
     this.onAction,
     this.done = false,
     this.doneLabel = 'Added',
+    this.fresh = false,
   });
+
+  /// What the action does is make a new thing (not change the selected one): 'to new layer'.
+  final bool fresh;
   final Widget? preview;
   final String title, meta, action, doneLabel;
   final VoidCallback? onAction;
   final bool done;
   @override
   Widget build(BuildContext context) {
-    final ws = WsScope.of(context), l = ws.layer;
+    final ws = WsScope.of(context), l = fresh ? null : ws.layer;
     return Container(
       height: 52,
       padding: const EdgeInsets.symmetric(horizontal: WsT.inset),
@@ -289,7 +295,7 @@ class DockFooter extends StatelessWidget {
                         child: Text(l.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: T.label(Grey.g91)),
                       ),
                     ] else
-                      Text('new layer', style: T.label(Grey.g91)),
+                      Flexible(child: Text('new layer', maxLines: 1, overflow: TextOverflow.ellipsis, style: T.label(Grey.g91))),
                   ],
                 ),
               ],

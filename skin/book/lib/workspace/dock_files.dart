@@ -726,6 +726,7 @@ class _Footer extends StatelessWidget {
         action: can ? 'Place' : 'Select',
         done: !can && layer == null,
         doneLabel: 'No seat yet',
+        fresh: can, // (placed, it is a new thing)
         onAction: () => can ? _place(c, n) : c.ws.select(layer),
       );
     }

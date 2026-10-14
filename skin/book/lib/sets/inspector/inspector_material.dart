@@ -71,12 +71,12 @@ class FillStroke extends StatelessWidget {
           keyable: false,
           cells: [PanelLink(to: LinkTo.colors, value: doc.s2['fill'] ?? '#D9D2C3', lead: LinkSwatch(doc.s2['fill'] ?? '#D9D2C3'))],
         ),
-        const PropRow(
+        PropRow(
           id: 'stroke',
           label: 'Stroke',
           keyable: false,
           cells: [
-            Chooser(id: 'stroke', options: ['None', '#F2F2F2', '#C1C1C1', '#8E8E8E'], word: 'Colours'),
+            Chooser(id: 'stroke', options: doc.choices['stroke'] ?? const ['None', '#F2F2F2', '#C1C1C1', '#8E8E8E'], word: 'Colours'),
           ],
         ),
         PropRow(
