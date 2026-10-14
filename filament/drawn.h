@@ -20,6 +20,7 @@ struct DrawnFx { bool split = false;   // (a text's letters each a copy of their
     float dash = 0.f, dashFrom = 0.f; int cap = -1, join = -1;   // (ThorVG's own: Text::spacing, italic; Shape::strokeDash, strokeCap, strokeJoin; -1: as it comes)
     float blur = 0.f; int blurWay = 0; float overHigh = 1.f; float4 shadow{0.f}; float fall = 0.f, way = 0.f, soft = 0.f; float tint = 0.f; float3 tints[2]{}; float tritone = 0.f; float3 tones[3]{}; float4 glow{0.f}; float glowSoft = 0.f; int copies = 1;
                  std::vector<float3> ramp;   // (two colours or more: it is filled from the first at its top to the last at its bottom, ThorVG's linear gradient)
+                 bool hollow = false;   // (a flat shape filled with nothing: only its edge is seen)
                  bool radial = false; float rampAngle = 0.f, rampScale = 1.f; int spread = 0;   // (or from its middle out, ThorVG's radial gradient; turned so far, clockwise; so long, as a share of its reach; past its ends padded, reflected or repeated)
                  DrawnFx over(float high) const {   // (the same for a thing `high` units high: its lengths as shares of that)
                      DrawnFx f = *this;
@@ -410,7 +411,7 @@ static Drawn* flat(Stage& s, const char* form, float wide, const mat4f& place, f
             const float side = std::min((float)*w, (float)*h) - 2.f * in, corner = (!strcmp(form, "line") ? 0.5f : std::clamp(round, 0.f, 0.5f)) * side;
             shape->appendRect(in, in, (float)*w - 2.f * in, (float)*h - 2.f * in, corner, corner);
         }
-        shape->fill((uint8_t)std::lround(255.f * colour.x), (uint8_t)std::lround(255.f * colour.y), (uint8_t)std::lround(255.f * colour.z), strcmp(form, "null") ? 255 : 0);
+        shape->fill((uint8_t)std::lround(255.f * colour.x), (uint8_t)std::lround(255.f * colour.y), (uint8_t)std::lround(255.f * colour.z), strcmp(form, "null") && !fx.hollow ? 255 : 0);
         if (fx.ramp.size() > 1 && strcmp(form, "null")) shape->fill(ramp_of(fx.ramp, (float)*w, (float)*h, fx.radial, fx.rampAngle, fx.rampScale, fx.spread));
         if (in > 0.f) shape->strokeWidth(2.f * in), shape->strokeFill((uint8_t)std::lround(255.f * edge.x), (uint8_t)std::lround(255.f * edge.y), (uint8_t)std::lround(255.f * edge.z));
         if (!strcmp(form, "wave")) {   // (only its line is seen: in its edge's colour, or its fill's; round at its ends)

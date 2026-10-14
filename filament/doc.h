@@ -134,16 +134,18 @@ static const DocValue doc_values[] = {
     {"stagger_from", "picture text shape", 0, 0, false, "start centre end edges"},   // (which of them moves first: the first, the middle one, the last, the outer ones)
     {"copy_fill", "picture text shape", 0, 0, false, ""},   // (its copies coloured from the first colour to the last, in their order: six digits each; one, all in it; none, not coloured each)
     {"copy_fill_way", "picture text shape", 0, 0, false, "ramp cycle"},   // (from the first to the last across them all, or one colour each in turn, round and round)
-    {"copy_wide", "picture text shape", 0.01, 100, true, nullptr},
+    {"copy_wide", "picture text shape", 0.01, 100, true, nullptr},   // (how many times as wide its last copy is as its first, those between in step: rows of waves, each with more of them)
     {"copy_z", "picture text shape", -1e4, 1e4, true, nullptr},   // (its copies so far apart towards the eye, in units of the stage: a row going into the picture)
+    {"copy_rotate_x", "picture text shape", -1e6, 1e6, true, nullptr},   // (each copy turned so much more than the one before about the level, towards the eye: a fan of sheets in depth)
+    {"copy_rotate_y", "picture text shape", -1e6, 1e6, true, nullptr},   // (and about the upright: sheets turning round like pages)
     {"wave_z", "picture text shape", -1e3, 1e3, true, nullptr},   // (and waved so far towards the eye and away, a quarter round after up and down: with wave_y, round and round, a helix)
-    {"scatter_z", "picture text shape", 0, 1e4, true, nullptr},   // (scattered so far towards the eye and away)   // (how many times as wide its last copy is as its first, those between in step: rows of waves, each with more of them)
-    {"copy_turn", "picture text shape", -1e5, 1e5, true, nullptr},
+    {"scatter_z", "picture text shape", 0, 1e4, true, nullptr},   // (scattered so far towards the eye and away)
+    {"copy_turn", "picture text shape", -1e5, 1e5, true, nullptr},   // (how far its copies turn in all, spread evenly over them: 360 fills a round; copy_rotate's turn each on top)
     {"tall", "picture text shape", 0, 1e3, true, nullptr},   // (how many times as tall as it is, its anchor staying where it is: a bar growing up from its foot)
     {"copy_tall", "picture text shape", 0, 0, false, ""},   // (and its copies each so many times as tall again, in their order, going round: numbers, a bar chart's data; none: all as tall)
     {"connect", "shape", 0, 1e9, false, nullptr},   // (the thing whose copies its own copies join, one each from one to another: lines between dots; 0: none)
     {"connect_to", "shape", 0, 1e9, false, nullptr},   // (and another: the first's nth copy joined to this one's nth, rungs between two strands; 0: within the first)
-    {"connect_reach", "shape", 0, 1e4, true, nullptr},   // (only those nearer than this, in units of the stage, finer the further apart: a plexus; 0: each to the next in their order)   // (how far its copies turn in all, spread evenly over them: 360 fills a round; copy_rotate's turn each on top)
+    {"connect_reach", "shape", 0, 1e4, true, nullptr},   // (only those nearer than this, in units of the stage, finer the further apart: a plexus; 0: each to the next in their order)
     // (a wave through it and its copies, Cavalry's oscillator: so far across and up (units), so far turned (degrees),
     //  so much larger (a share), so many times a second, each copy so far behind the one before (turns spread over all)
     {"wave_x", "picture text shape", -1e3, 1e3, true, nullptr}, {"wave_y", "picture text shape", -1e3, 1e3, true, nullptr},
@@ -153,8 +155,9 @@ static const DocValue doc_values[] = {
     //  copy within it is so much larger and so far turned, most at its middle, none at its edge)
     {"field_x", "picture text shape", -1e4, 1e4, true, nullptr}, {"field_y", "picture text shape", -1e4, 1e4, true, nullptr}, {"field_radius", "picture text shape", 0, 1e4, true, nullptr},
     {"field_size", "picture text shape", -1, 20, true, nullptr}, {"field_rotate", "picture text shape", -1e4, 1e4, true, nullptr},
-    {"field_push", "picture text shape", -1e3, 1e3, true, nullptr},
-    {"field_band", "picture text shape", 0, 1e4, true, nullptr},   // (a ring so wide, strongest at its radius from its middle and nothing so far either side: a band of large dots going out; 0: a round, strongest in its middle)   // (and pushed so far away from its middle, in units of the stage; below 0: drawn in)
+    {"field_push", "picture text shape", -1e3, 1e3, true, nullptr},   // (and pushed so far away from its middle, in units of the stage; below 0: drawn in)
+    {"field_band", "picture text shape", 0, 1e4, true, nullptr},   // (a ring so wide, strongest at its radius from its middle and nothing so far either side: a band of large dots going out; 0: a round, strongest in its middle)
+    {"field_z", "picture text shape", -1e4, 1e4, true, nullptr},   // (where its middle is towards the eye: the field is a ball, near and far measured too)
     {"wave_noise", "picture text shape", 0, 1, true, nullptr},   // (how much of the wave is a noise of each copy's own instead of a sine: Cavalry's noise; 1 all noise)
     {"noise_scale", "picture text shape", 0, 1e3, true, nullptr},   // (that noise read where each copy lies, so near ones move alike: how large its blobs are, in units of the stage; 0: each copy its own)
     // (its copies scattered, each its own way by a seed: up to so far across and up (units), so far turned (degrees), so
@@ -228,6 +231,8 @@ static const DocShown doc_shown[] = {
     {"stagger", "", "s", "Delay", 0, 3, false},
     {"copy_fill", "colours", "", "Colours", 0, 0, false},
     {"copy_z", "stage", "px", "Gap deep", -2, 2, true},
+    {"copy_rotate_x", "angle", "°", "Tilt each", -180, 180, true},
+    {"copy_rotate_y", "angle", "°", "Swing each", -180, 180, true},
     {"copy_rotate", "angle", "°", "Turn each", -180, 180, true},
     {"copy_size", "", "×", "Grow each", 0.5, 1.5, true},
     {"copy_wide", "", "×", "Last one wider", 0.2, 5, true},
@@ -250,6 +255,7 @@ static const DocShown doc_shown[] = {
     {"field_size", "share", "%", "Grow inside", -1, 5, false},
     {"field_push", "stage", "px", "Push", -2, 2, false},
     {"field_band", "stage", "px", "Ring width", 0, 2, true},
+    {"field_z", "stage", "px", "Where deep", -2, 2, true},
     {"field_rotate", "angle", "°", "Turn inside", -180, 180, true},
     {"scatter_x", "stage", "px", "Spread across", 0, 4, false},
     {"scatter_y", "stage", "px", "Spread up", 0, 3, false},
@@ -317,9 +323,9 @@ static const DocShown* doc_shown_of(const char* name) {
 static const DocCard doc_cards[] = {
     {"Type", "split letter_spacing line_spacing italic wrap wrap_at"},
     {"Gradient", "gradient gradient_angle gradient_scale gradient_spread", "fill", "~ "},
-    {"Copies", "copies copy_columns copy_x copy_y copy_rotate copy_turn copy_size copy_wide copy_z tall copy_tall stagger stagger_from copy_fill copy_fill_way"},
+    {"Copies", "copies copy_columns copy_x copy_y copy_rotate copy_rotate_x copy_rotate_y copy_turn copy_size copy_wide copy_z tall copy_tall stagger stagger_from copy_fill copy_fill_way"},
     {"Wave", "wave_x wave_y wave_z wave_rotate wave_size wave_speed wave_phase wave_noise noise_scale"},
-    {"Field", "field_x field_y field_radius field_band field_size field_rotate field_push"},
+    {"Field", "field_x field_y field_z field_radius field_band field_size field_rotate field_push"},
     {"Scatter", "scatter_x scatter_y scatter_z scatter_rotate scatter_size seed drift_x drift_y"},
     {"Shine", "emissive", "kind", "!solid"},   // (a flat thing lit from within: past 1, the stage's bloom takes it up where it lies in the stage's own view; laid over a solid thing, a picture of its own is clear round it and keeps no halo: ThorVG's glow does that)
     {"Play", "marker animation speed"},
@@ -515,6 +521,8 @@ static math::mat4 doc_place(Doc& d, int thing, double now, int deeper, int copy,
         own = math::mat4::rotation(copy * (doc_number(d, thing, "copy_turn", now, 0) / n + doc_number(d, thing, "copy_rotate", now, 0)) * (double)TAU / 360.0, math::double3{0, 0, 1}) *
               math::mat4::scaling(std::pow(doc_number(d, thing, "copy_size", now, 1), copy)) *
               math::mat4::scaling(math::double3{n > 1 ? std::pow(doc_number(d, thing, "copy_wide", now, 1), (double)copy / (n - 1)) : 1.0, 1.0, 1.0});
+        if (const double ty = doc_number(d, thing, "copy_rotate_y", now, 0), tx = doc_number(d, thing, "copy_rotate_x", now, 0); tx != 0.0 || ty != 0.0)   // (turned out of the picture's plane too, each more than the one before)
+            own = math::mat4::rotation(copy * ty * (double)TAU / 360.0, math::double3{0, 1, 0}) * math::mat4::rotation(copy * tx * (double)TAU / 360.0, math::double3{1, 0, 0}) * own;
         // (scattered: each copy its own way, from the seed and its number; the same each time)
         const double sx = doc_number(d, thing, "scatter_x", now, 0), sy = doc_number(d, thing, "scatter_y", now, 0), sr = doc_number(d, thing, "scatter_rotate", now, 0), ss = doc_number(d, thing, "scatter_size", now, 0);
         const uint32_t seed = (uint32_t)doc_number(d, thing, "seed", 0, 0);
@@ -569,12 +577,13 @@ static math::mat4 doc_place(Doc& d, int thing, double now, int deeper, int copy,
     const double reach = member ? doc_number(d, thing, "field_radius", said, 0) : 0.0;
     if (reach > 0.0) {   // (within the field: larger and turned about where it is seen, its picture's middle, as near the field's middle as it is)
         const math::double3 at = (place * math::double4{0.0, 0.0, 0.0, 1.0}).xyz;
-        const double from = length(at.xy - math::double2{doc_number(d, thing, "field_x", said, 0), doc_number(d, thing, "field_y", said, 0)}), band = doc_number(d, thing, "field_band", said, 0);
+        const math::double3 middle{doc_number(d, thing, "field_x", said, 0), doc_number(d, thing, "field_y", said, 0), doc_number(d, thing, "field_z", said, 0)};   // (a ball: near and far measured too)
+        const double from = length(at - middle), band = doc_number(d, thing, "field_band", said, 0);
         const double near = std::clamp(band > 0.0 ? 1.0 - std::fabs(from - reach) / band : 1.0 - from / reach, 0.0, 1.0), k = near * near * (3.0 - 2.0 * near);
-        const math::double2 away = at.xy - math::double2{doc_number(d, thing, "field_x", said, 0), doc_number(d, thing, "field_y", said, 0)};
+        const math::double3 away = at - middle;
         const double r = length(away), by = doc_number(d, thing, "field_push", said, 0);   // (pushed out as if from a hole that wide: the nearest ones all end about as far out, the hole round however they lay)
-        const math::double2 push = r > 1e-9 ? normalize(away) * (by > 0.0 ? k * (std::sqrt(r * r + by * by) - r) : k * by) : math::double2{0.0};
-        place = math::mat4::translation(math::double3{push, 0.0}) * math::mat4::translation(at) * math::mat4::rotation(k * doc_number(d, thing, "field_rotate", said, 0) * (double)TAU / 360.0, math::double3{0, 0, 1}) *
+        const math::double3 push = r > 1e-9 ? normalize(away) * (by > 0.0 ? k * (std::sqrt(r * r + by * by) - r) : k * by) : math::double3{0.0};
+        place = math::mat4::translation(push) * math::mat4::translation(at) * math::mat4::rotation(k * doc_number(d, thing, "field_rotate", said, 0) * (double)TAU / 360.0, math::double3{0, 0, 1}) *
                 math::mat4::scaling(std::max(0.0, 1.0 + k * doc_number(d, thing, "field_size", said, 0))) * math::mat4::translation(-at) * place;
     }
     // (the user's three tags: 2D sticks to the camera; 2.5D stays in the world, smaller far, but keeps the angle it
@@ -1120,13 +1129,14 @@ static bool doc_match(Doc& d) {
             if (!fill.empty() && rgb < 0) why = "a text's fill is six digits, as ff3366";
             else if ((stroke.empty() || edgeRgb >= 0) && fxOk) made.drawn = type(s, words.empty() ? std::filesystem::path(file).stem().string().c_str() : words.c_str(), file.c_str(), mat4f{}, 1.f, fill.empty() ? float3{0x11 / 255.f} : colour, lay, edge, (float)doc_number(d, thing, "align", 0, 0), fx);
         } else if (kind == "shape") {   // (a flat shape in one colour: ThorVG's own rectangle or circle)
-            if (!fill.empty() && rgb < 0) why = "a shape's fill is six digits, as ff3366";
+            if (!fill.empty() && fill != "none" && rgb < 0) why = "a shape's fill is six digits, as ff3366, or none";
             else if ((!stroke.empty() && edgeRgb < 0) || !fxOk) {}
             else if (shape == "solid") {   // (a flat colour as large as the stage, where it stands at first: as wide to its height, and as high in the stage's units)
                 const float high = (float)(2.0 * up.w / up.y);
                 made.drawn = flat(s, "rect", (float)s.w / (float)s.h, mat4f{}, high, fill.empty() ? float3{0xd9, 0xd2, 0xc3} / 255.f : colour, lay, float4{edge.xyz, edge.w / high}, fx.over(high));
             } else {   // (a line is long and thin as it comes: 25 times as long as it is thick, a tenth of a unit thick)
                 const bool line = shape == "line", wave = shape == "wave";   // (a wave: a line waving, ten times as long as it is high)
+                fx.hollow = fill == "none";   // (filled with nothing: its edge alone, a frame)
                 const float high = line ? 0.04f : wave ? 0.3f : 1.f;
                 made.drawn = flat(s, shape.c_str(), (float)doc_number(d, thing, "wide", 0, line ? 25 : wave ? 10 : 1), mat4f{}, high, fill.empty() ? float3{0xd9, 0xd2, 0xc3} / 255.f : colour, lay,
                                   float4{edge.xyz, edge.w / high}, fx.over(high),
@@ -1538,8 +1548,8 @@ static const DocRecipe doc_recipes[] = {
      "set size 1\nset anchor_x -1.6\nset copies 120\nset copy_turn 360\nsay copy_fill ff3366 ffd166 1b2fd8 22c55e ff3366\nset wave_size 0.06\nset wave_phase 1"},
     {"Dot wave", "shape", "circle", "a grid of dots rising and falling one after another",
      "say fill ffd166\nset size 0.12\nset copies 160\nset copy_columns 16\nset copy_x 0.3\nset copy_y -0.3\nset wave_y 0.03\nset wave_size 1.6\nset wave_phase 3\nset wave_noise 1\nset noise_scale 0.8\nset wave_speed 0.4\nsay copy_fill ffd166 ff3366"},
-    {"Tunnel", "shape", "rect", "squares within squares, turning one after another",
-     "say fill 000000\nsay stroke ffffff\nset stroke_width 6\nset size 2.2\nset copies 24\nset copy_size 0.88\nset wave_rotate 30\nset wave_phase 1\nset wave_speed 0.5"},
+    {"Tunnel", "shape", "rect", "frames going away into the picture, turning one after another",
+     "say space 2.5d\nsay fill none\nsay stroke ffffff\nset stroke_width 6\nset size 1.6\nset z -4\nset copies 24\nset copy_z -0.45\nset wave_rotate 30\nset wave_phase 1\nset wave_speed 0.5"},
     {"Text ripple", "text", "/System/Library/Fonts/Supplemental/Arial Unicode.ttf", "words whose letters bob one after another, coloured in their order",
      "say text MOTOLII\nsay fill ffffff\nset size 0.6\nsay split letters\nset wave_y 0.12\nset wave_phase 1\nset wave_rotate 8\nsay copy_fill ff3366 ffd166 1b2fd8"},
     {"Field dots", "shape", "circle", "a grid of dots swelling where a round field passes over them",
@@ -1556,9 +1566,9 @@ static const DocRecipe doc_recipes[] = {
      "say space 2.5d\nsay fill ff3366\nset size 0.12\nset copies 40\nset copy_x 0.132\nset wave_y 0.6\nset wave_z 0.6\nset wave_phase 2\nset wave_speed 0.25\nsay copy_fill ff3366 ffd166\n"
      "then shape circle\nsay space 2.5d\nsay fill 1b2fd8\nset size 0.12\nset copies 40\nset copy_x 0.132\nset wave_y -0.6\nset wave_z -0.6\nset wave_phase 2\nset wave_speed 0.25\nsay copy_fill 1b2fd8 22c55e\n"
      "then shape line\nsay space 2.5d\nsay fill ffffff\nset opacity 0.45\nset size 0.3\nset copies 40\nset connect first\nset connect_to before\nset order behind"},
-    {"Plexus", "shape", "circle", "dots drifting and bobbing, joined by lines where they come near, finer the further apart",
-     "say fill ffffff\nset size 0.05\nset copies 100\nset scatter_x 3.2\nset scatter_y 1.9\nset seed 7\nset drift_x 0.65\nset wave_y 0.3\nset wave_noise 1\nset wave_speed 0.25\n"
-     "then shape line\nsay fill 9ad7ff\nset opacity 0.7\nset size 0.25\nset copies 900\nset connect first\nset connect_reach 0.7"},
+    {"Plexus", "shape", "circle", "a cloud of dots bobbing and turning round in depth, joined by lines where they come near, finer the further apart",
+     "say space 2.5d\nsay fill ffffff\nset size 0.05\nset copies 100\nset scatter_x 2.4\nset scatter_y 1.5\nset scatter_z 1.6\nset seed 7\nset wave_y 0.25\nset wave_noise 1\nset wave_speed 0.25\nkey rotate_y 0 0\nkey rotate_y 8 360\n"
+     "then shape line\nsay space 2.5d\nsay fill 9ad7ff\nset opacity 0.7\nset size 0.25\nset copies 900\nset connect first\nset connect_reach 0.7"},
     {"Bars", "shape", "rect", "a bar chart: bars growing up one after another to their numbers (copy_tall), and down again",
      "say fill ffffff\nset size 0.25\nset wide 0.6\nset y -0.9\nset anchor_y -1\nset copies 8\nset copy_x 0.42\nsay copy_tall 1.5 3.2 2.2 4.6 3.6 5.4 4.2 6\nkey tall 0 0\nkey tall 1.2 1\nkey tall 6.5 1\nkey tall 7.4 0\nset stagger 0.5\nsay copy_fill 1b2fd8 ff3366 ffd166"},
     {"Spiral", "shape", "circle", "dots on a spiral growing outwards, turning, a band of large dots going out and back through them",
