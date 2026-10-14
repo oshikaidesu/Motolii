@@ -15,6 +15,7 @@ material {
         { type : float, name : opacity },    // how much of it is there at all (ThorVG's word): 1 all, 0 none
         { type : float, name : glowing },    // how much brighter than itself it shines (0: as it is; past 1 the stage's bloom takes it up)
         { type : float4, name : wash },      // a colour laid over it where it is drawn, and how much (a copy's own, from a ramp along the copies; 0: none)
+        { type : float4, name : window },    // the part of the picture across this copy shows, from x to y of its width, when z is 1 (a text's letter of its own)
         { type : float4, name : key },       // a colour of the picture that is to be clear (a green screen), and how near to it counts (0: none)
         { type : float2, name : keySoft },   // how wide the edge of that is, and how far from it the key's colour is taken out of what stays
         { type : float, name : filmed },       // 1: the picture is a film's as its decoder left it, light in `picture` and colour in `colours`
@@ -43,6 +44,7 @@ fragment {
     }
     void material(inout MaterialInputs material) {
         prepareMaterial(material);
+        if (materialParams.window.z > 0.5 && (getUV0().x < materialParams.window.x || getUV0().x >= materialParams.window.y)) discard;   // (a letter: its own part of the words only)
         vec4 drawn = textureLod(materialParams_picture, getUV0(), 0.0);   // (a drawn picture says itself how clear each point is; a film's is all there)
         vec3 c = drawn.rgb;
         if (materialParams.filmed > 0.5) {

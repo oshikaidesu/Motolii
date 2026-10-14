@@ -15,7 +15,8 @@
 
 // tint: how much its darks and lights are made two colours (0: not at all); tritone: how much its darks, middles and
 // lights are made three (0: not at all).
-struct DrawnFx { float letters = 1.f, lines = 1.f, italic = 0.f, wrapWidth = 0.f; int wrap = 0;   // (a text's lines broken in a box so many of its letters' heights wide, ThorVG's layout and wrap; 0: as typed)
+struct DrawnFx { bool split = false;   // (a text's letters each a copy of their own)
+    float letters = 1.f, lines = 1.f, italic = 0.f, wrapWidth = 0.f; int wrap = 0;   // (a text's lines broken in a box so many of its letters' heights wide, ThorVG's layout and wrap; 0: as typed)
     float dash = 0.f, dashFrom = 0.f; int cap = -1, join = -1;   // (ThorVG's own: Text::spacing, italic; Shape::strokeDash, strokeCap, strokeJoin; -1: as it comes)
     float blur = 0.f; int blurWay = 0; float overHigh = 1.f; float4 shadow{0.f}; float fall = 0.f, way = 0.f, soft = 0.f; float tint = 0.f; float3 tints[2]{}; float tritone = 0.f; float3 tones[3]{}; float4 glow{0.f}; float glowSoft = 0.f; int copies = 1;
                  std::vector<float3> ramp;   // (two colours or more: it is filled from the first at its top to the last at its bottom, ThorVG's linear gradient)
@@ -37,6 +38,7 @@ struct Drawn {
     tvg::Shape* shape = nullptr;       // a flat shape's own path (driver thread only), and how much of it is cut off its end
     float3 trimmed{0.f};   // (as last cut: off the end, off the beginning, slid along)
     std::vector<std::string> markers;  // an After Effects file's named stretches (ThorVG's Lottie markers)
+    std::vector<float2> letters;       // a text split into its letters: where each lies across the picture (shares of its width); its copies show one each
     float fromFrame = 0.f, toFrame = 0.f;   // the stretch it plays, when one is named (frames of the file)
     std::vector<tvg::Scene*> effects;  // ThorVG's scenes its effects are on, one an effect, each over the one before (a scene draws one; driver thread only)
     float tall = 0.f;                  // how high it was drawn, in its own points: what its effects' lengths are shares of
@@ -193,7 +195,7 @@ static Drawn* drawn(Stage& s, const std::function<tvg::Paint*(Drawn*, int*, int*
     if (d->frames > 1.f)   // (a film: it goes on by itself as the stage's time does, round and round)
         s.playing[d] = [&s, d](double now) { picture_at(s, d, std::fmod((float)now + d->starts, d->seconds)); };
     if (!shown) return d;
-    d->look = add(s, d->sheet, flat_laid(lay).c_str(), std::vector<mat4f>((size_t)std::max(1, fx.copies), place));
+    d->look = add(s, d->sheet, flat_laid(lay).c_str(), std::vector<mat4f>((size_t)std::max(1, d->letters.empty() ? fx.copies : (int)d->letters.size()), place));   // (split into letters: a copy each)
     if (!d->look) return nullptr;
     d->look->setParameter("picture", d->texture, TextureSampler(TextureSampler::MinFilter::LINEAR, TextureSampler::MagFilter::LINEAR));
     return d;
@@ -304,13 +306,14 @@ static bool type_sets(const char* fontFile, const char* words) {
 // Lines: the words may be broken by \n; align: how the lines lie one under another (ThorVG's own: 0 left, 1 right).
 static Drawn* type(Stage& s, const char* words, const char* fontFile, const mat4f& place, float high, float3 colour = float3{0.f}, const char* lay = nullptr, float4 edge = float4{0.f}, float align = 0.f, const DrawnFx& fx = {}) {
     if (!std::filesystem::is_regular_file(fontFile)) return nullptr;
-    return drawn(s, [&](Drawn*, int* w, int* h) -> tvg::Paint* {
+    return drawn(s, [&](Drawn* d, int* w, int* h) -> tvg::Paint* {
         if (tvg::Text::load(fontFile) != tvg::Result::Success) return nullptr;
         tvg::Text* t = tvg::Text::gen();
         float x = 0.f, y = 0.f, wide = 0.f, tall = 0.f;
         const float fine = 0.12f * (float)std::max(s.w, s.h);   // (letters this many points tall: a line as fine as an eighth of the stage)
         t->font(std::filesystem::path(fontFile).stem().string().c_str());   // (ThorVG names a font by its file)
-        t->size(fine);
+        float sized = fine;   // (as large as it is set: ThorVG does not say it back)
+        t->size(sized);
         t->text(words);
         t->spacing(fx.letters, fx.lines);
         if (fx.italic > 0.f) t->italic(fx.italic);
@@ -318,7 +321,7 @@ static Drawn* type(Stage& s, const char* words, const char* fontFile, const mat4
         t->fill((uint8_t)std::lround(255.f * colour.x), (uint8_t)std::lround(255.f * colour.y), (uint8_t)std::lround(255.f * colour.z));
         bool measured = t->bounds(&x, &y, &wide, &tall) == tvg::Result::Success && wide > 0.f && tall > 0.f;
         if (measured && wide > 4096.f) {   // (a line too long for one picture is set smaller)
-            t->size(fine * 4096.f / wide);
+            t->size(sized = fine * 4096.f / wide);
             measured = t->bounds(&x, &y, &wide, &tall) == tvg::Result::Success;
         }
         if (!measured) return tvg::Paint::rel(t), nullptr;
@@ -332,6 +335,25 @@ static Drawn* type(Stage& s, const char* words, const char* fontFile, const mat4
         t->translate(-x + 0.5f * outline, -y + 0.5f * outline);
         *w = 2 * (int)std::ceil(0.5f * (wide + outline));
         *h = 2 * (int)std::ceil(0.5f * (tall + outline));
+        if (fx.split && !strchr(words, '\n') && fx.wrapWidth <= 0.f) {   // (one line split into its letters: where each ends, by how wide the words up to it are set)
+            float was = 0.f;
+            for (const char* at = words; *at;) {
+                const char* next = at + 1;
+                while (*next && ((unsigned char)*next & 0xC0) == 0x80) ++next;   // (one letter, however many bytes)
+                tvg::Text* up = tvg::Text::gen();
+                up->font(std::filesystem::path(fontFile).stem().string().c_str());
+                up->size(sized);
+                up->spacing(fx.letters, fx.lines);
+                if (fx.italic > 0.f) up->italic(fx.italic);
+                up->text(std::string(words, next).c_str());
+                float ux = 0.f, uy = 0.f, uw = 0.f, uh = 0.f;
+                const float end = up->bounds(&ux, &uy, &uw, &uh) == tvg::Result::Success ? (ux + uw - x + 0.5f * outline) / (float)*w : was;
+                tvg::Paint::rel(up);
+                d->letters.push_back(float2{was, *next ? std::max(was, end) : 1.f});
+                was = std::max(was, end);
+                at = next;
+            }
+        }
         if (fx.ramp.size() < 2) return t;
         // (a ramp: a rect as large as the words, filled with it, seen only where the letters are: ThorVG's own alpha
         //  mask; ThorVG counts a text's own gradient in the font's units, which are not to be had from outside)

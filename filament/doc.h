@@ -140,6 +140,7 @@ static const DocValue doc_values[] = {
     // (ThorVG's own: a text's letters and lines so many times as far apart as the font sets them, its slant; an edge's
     //  ends and corners, and dashes along it so long, with gaps as long, begun so far along)
     {"wrap", "text", 0, 0, false, "none character word smart ellipsis"}, {"wrap_at", "text", 0, 1000, false, nullptr},   // (its lines broken in a box so many times as wide as its letters are high: ThorVG's layout and wrap; a text's size is the height of all its lines, so this goes with the letters, not the picture)
+    {"split", "text", 0, 0, false, "none letters"},   // (one line of it split into its letters, each a copy of its own: they lie where they are, and move, wave and are coloured each in their order)
     {"letter_spacing", "text", 0, 10, false, nullptr}, {"line_spacing", "text", 0, 10, false, nullptr}, {"italic", "text", 0, 0.5, false, nullptr},
     // (a fill of two colours or more: across, ThorVG's linear gradient, or from the middle out, its radial; turned so far,
     //  in degrees clockwise, 0 from top to bottom; so long, as a share of how far it reaches; past its ends padded,
@@ -153,7 +154,7 @@ static const DocValue doc_values[] = {
     {"metallic", "solid", 0, 1, false, nullptr}, {"roughness", "solid", 0, 1, false, nullptr}, {"reflectance", "solid", 0, 1, false, nullptr},
     // (a solid filled with glass, the kit's own: how much it bends light (index of refraction), how far its colours part,
     //  how much what is behind it swims, how fast a long way through it goes dark, how vivid what is seen through it is)
-    {"ior", "solid", 1, 3, false, nullptr}, {"split", "solid", 0, 0.5, false, nullptr}, {"swim", "solid", 0, 1, false, nullptr}, {"dark", "solid", 0, 20, false, nullptr}, {"vivid", "solid", 0, 3, false, nullptr},
+    {"ior", "solid", 1, 3, false, nullptr}, {"dispersion", "solid", 0, 0.5, false, nullptr}, {"swim", "solid", 0, 1, false, nullptr}, {"dark", "solid", 0, 20, false, nullptr}, {"vivid", "solid", 0, 3, false, nullptr},
     {"clear_coat", "solid", 0, 1, false, nullptr}, {"clear_coat_roughness", "solid", 0, 1, false, nullptr}, {"emissive", "film picture text shape solid", 0, 20, true, nullptr},
     // (the stage's, thing 0: the whole picture, Filament's own. Its grade, on every picture laid: a tone mapper, an
     //  exposure in stops, contrast, saturation, vibrance, how warm; its glow round bright parts and its lens flare, a
@@ -174,7 +175,7 @@ static const DocValue doc_values[] = {
 // order shown (a thing is shown those of them its kind has). A value the window has no other seat for goes here.
 struct DocCard { const char* title; const char* names; const char* when = nullptr; const char* is = nullptr; };   // (shown only while `when` is `is`; "!...": is not; "~...": has it in it)
 static const DocCard doc_cards[] = {
-    {"Type", "letter_spacing line_spacing italic wrap wrap_at"},
+    {"Type", "split letter_spacing line_spacing italic wrap wrap_at"},
     {"Gradient", "gradient gradient_angle gradient_scale gradient_spread", "fill", "~ "},
     {"Copies", "copies copy_columns copy_x copy_y copy_rotate copy_size stagger stagger_from copy_fill"},
     {"Wave", "wave_x wave_y wave_rotate wave_size wave_speed wave_phase"},
@@ -183,7 +184,7 @@ static const DocCard doc_cards[] = {
     {"Matte", "clip_matte clip_invert clip_feather", "clip", "1"},
     {"Line", "cap join dash dash_offset"},
     {"Surface", "metallic roughness reflectance clear_coat clear_coat_roughness emissive", "fill", "!glass"},
-    {"Glass", "ior split swim dark vivid", "fill", "glass"},
+    {"Glass", "ior dispersion swim dark vivid", "fill", "glass"},
     {"Light", "intensity falloff cone shadows shadow_softness"},
     {"Projection", "projection shift_x shift_y"},
     {"Grade", "tone_mapper exposure contrast saturation vibrance temperature"},
@@ -327,11 +328,17 @@ static void doc_copy_looks_off(Doc& d, const Mesh* m, MaterialInstance* main) {
         d.copyLooks.erase(found);
     }
 }
+// How many members a thing has in their order: a text split into letters, a letter each; else its copies.
+static int doc_members(Doc& d, int thing) {
+    const auto t = d.shown.find(thing);
+    if (t != d.shown.end() && t->second.drawn && !t->second.drawn->letters.empty()) return (int)t->second.drawn->letters.size();
+    return std::max(1, (int)doc_number(d, thing, "copies", 0, 1));
+}
 // How much later a thing's nth copy moves than it is said to (the past repository's order law, GSAP's stagger: the
 // stagger spread over them by their order: from the start, from the centre out, from the end, from the edges in).
 static double doc_delay(Doc& d, int thing, int nth) {
     const double stagger = doc_number(d, thing, "stagger", 0, 0);
-    const int n = (int)doc_number(d, thing, "copies", 0, 1);
+    const int n = doc_members(d, thing);
     if (stagger <= 0.0 || n < 2) return 0.0;
     const double along = (double)nth / (double)(n - 1), centre = std::fabs(along - 0.5) * 2.0;
     const std::string from = doc_word(d, thing, "stagger_from");
@@ -361,7 +368,7 @@ static math::mat4 doc_place(Doc& d, int thing, double now, int deeper, int copy,
                                    : math::mat4{}) *
                              [&] {   // (a wave through it: each copy so far behind the one before)
                                  if (!member) return math::mat4{};
-                                 const int n = std::max(1, (int)doc_number(d, thing, "copies", 0, 1));
+                                 const int n = doc_members(d, thing);
                                  const double w = std::sin((double)TAU * (doc_number(d, thing, "wave_speed", said, 1) * said - doc_number(d, thing, "wave_phase", said, 0) * copy / n));
                                  return math::mat4::translation(math::double3{doc_number(d, thing, "wave_x", said, 0), doc_number(d, thing, "wave_y", said, 0), 0.0} * w) *
                                         math::mat4::rotation(w * doc_number(d, thing, "wave_rotate", said, 0) * (double)TAU / 360.0, math::double3{0, 0, 1}) *
@@ -626,17 +633,21 @@ static void doc_moment(Doc& d, double now) {
             std::vector<float3> ramp;
             std::istringstream said(doc_word(d, thing, "copy_fill"));
             for (std::string one; said >> one;) { const long rgb = std::strtol(one.c_str(), nullptr, 16); ramp.push_back(Color::toLinear<ACCURATE>(sRGBColor{float3{(float)((rgb >> 16) & 255), (float)((rgb >> 8) & 255), (float)(rgb & 255)} / 255.f})); }
-            if (ramp.size() < 2) doc_copy_looks_off(d, m, main);
+            const std::vector<float2>& letters = t.drawn ? t.drawn->letters : std::vector<float2>{};
+            if (ramp.size() < 2 && letters.empty()) doc_copy_looks_off(d, m, main);
             else {
                 auto& faces = s.engine->getRenderableManager();
-                const int n = std::max(1, (int)doc_number(d, thing, "copies", 0, 1));
+                const int n = doc_members(d, thing);
                 for (const Stage::Made& made : s.made) {
                     if (made.of != m || made.matte) continue;
                     MaterialInstance*& own = d.copyLooks[made.thing.getId()];
                     if (!own) own = MaterialInstance::duplicate(main), faces.setMaterialInstanceAt(faces.getInstance(made.thing), 0, own);
-                    const float along = n > 1 ? (float)made.nth / (float)(n - 1) * (float)(ramp.size() - 1) : 0.f;
-                    const size_t i = std::min((size_t)along, ramp.size() - 2);
-                    own->setParameter("wash", float4{mix(ramp[i], ramp[i + 1], along - (float)i), 1.f});
+                    if (ramp.size() >= 2) {
+                        const float along = n > 1 ? (float)made.nth / (float)(n - 1) * (float)(ramp.size() - 1) : 0.f;
+                        const size_t i = std::min((size_t)along, ramp.size() - 2);
+                        own->setParameter("wash", float4{mix(ramp[i], ramp[i + 1], along - (float)i), 1.f});
+                    } else own->setParameter("wash", float4{0.f});
+                    if ((size_t)made.nth < letters.size()) own->setParameter("window", float4{letters[(size_t)made.nth].x, letters[(size_t)made.nth].y, 1.f, 0.f});   // (its own letter)
                     own->setParameter("opacity", (float)doc_number(d, thing, "opacity", now, 1));
                     own->setParameter("glowing", (float)doc_number(d, thing, "emissive", now, 0));
                 }
@@ -725,7 +736,7 @@ static void doc_moment(Doc& d, double now) {
 static bool doc_match(Doc& d) {
     Stage& s = *d.stage;
     std::map<int, std::string> told;   // every thing of the document, and all that its making goes by
-    doc_rows(d, sqlite3_mprintf("select thing, group_concat(name || '=' || value, ' ') from (select * from fact where thing > 0 and name in ('kind','file','shape','blend','keyed','space','begin','duration','speed','text','fill','wide','points','inner','round','stroke','stroke_width','align','blur','shadow','shadow_distance','shadow_angle','shadow_blur','shadow_opacity','glow','glow_blur','glow_opacity','copies','tint','tint_black','tint_white','tritone','tritone_shadow','tritone_midtone','tritone_highlight','letter_spacing','line_spacing','italic','cap','join','dash','dash_offset','metallic','roughness','reflectance','clear_coat','clear_coat_roughness','falloff','shadows','shadow_softness','gradient','gradient_angle','gradient_scale','gradient_spread','wrap','wrap_at','ior','split','swim','dark','vivid','marker') order by thing, name) group by thing"),
+    doc_rows(d, sqlite3_mprintf("select thing, group_concat(name || '=' || value, ' ') from (select * from fact where thing > 0 and name in ('kind','file','shape','blend','keyed','space','begin','duration','speed','text','fill','wide','points','inner','round','stroke','stroke_width','align','blur','shadow','shadow_distance','shadow_angle','shadow_blur','shadow_opacity','glow','glow_blur','glow_opacity','copies','tint','tint_black','tint_white','tritone','tritone_shadow','tritone_midtone','tritone_highlight','letter_spacing','line_spacing','italic','cap','join','dash','dash_offset','metallic','roughness','reflectance','clear_coat','clear_coat_roughness','falloff','shadows','shadow_softness','gradient','gradient_angle','gradient_scale','gradient_spread','wrap','wrap_at','split','ior','dispersion','swim','dark','vivid','marker') order by thing, name) group by thing"),
              [&](sqlite3_stmt* row) { told[sqlite3_column_int(row, 0)] = (const char*)sqlite3_column_text(row, 1); });
     for (auto it = d.shown.begin(); it != d.shown.end();) {
         const auto still = told.find(it->first);
@@ -782,6 +793,7 @@ static bool doc_match(Doc& d) {
         fx.spread = doc_word(d, thing, "gradient_spread") == "reflect" ? 1 : doc_word(d, thing, "gradient_spread") == "repeat" ? 2 : 0;
         fx.copies = (int)doc_number(d, thing, "copies", 0, 1);
         fx.wrapWidth = (float)doc_number(d, thing, "wrap_at", 0, 0);
+        fx.split = doc_word(d, thing, "split") == "letters";
         { const std::string w = doc_word(d, thing, "wrap"); fx.wrap = w == "character" ? 1 : w == "word" ? 2 : w == "smart" ? 3 : w == "ellipsis" ? 4 : fx.wrapWidth > 0.f ? 2 : 0; }   // (ThorVG's TextWrap; a box said and no way: by words)
         fx.letters = (float)doc_number(d, thing, "letter_spacing", 0, 1), fx.lines = (float)doc_number(d, thing, "line_spacing", 0, 1), fx.italic = (float)doc_number(d, thing, "italic", 0, 0);
         const auto which = [&](const char* name, const char* words) { const std::string w = doc_word(d, thing, name); if (w.empty()) return -1; int n = 0; for (const char* at = words; *at; ++n) { const size_t len = strcspn(at, " "); if (w == std::string(at, len)) return n; at += len + (at[len] ? 1 : 0); } return -1; };
@@ -838,7 +850,7 @@ static bool doc_match(Doc& d) {
         } else if (kind == "solid") {   // (one of the kit's shapes, or a file; its fill is its surface: a colour, or the material glass)
             const bool glass = fill == "glass";
             const auto glassy = [&](MaterialInstance* look) {   // (the kit's glass as the document says it; not said, as it comes)
-                look->setParameter("ior", (float)doc_number(d, thing, "ior", 0, 1.5)), look->setParameter("split", (float)doc_number(d, thing, "split", 0, 0.1));
+                look->setParameter("ior", (float)doc_number(d, thing, "ior", 0, 1.5)), look->setParameter("split", (float)doc_number(d, thing, "dispersion", 0, 0.1));
                 look->setParameter("swim", (float)doc_number(d, thing, "swim", 0, 0.5)), look->setParameter("dark", (float)doc_number(d, thing, "dark", 0, 4));
                 look->setParameter("vivid", (float)doc_number(d, thing, "vivid", 0, 1.3));
             };
@@ -1237,6 +1249,8 @@ static const DocRecipe doc_recipes[] = {
      "say fill ffd166\nset size 0.12\nset x -1.1\nset y 1.1\nset copies 100\nset copy_columns 10\nset copy_x 2\nset copy_y -2\nset wave_y 0.15\nset wave_size 0.4\nset wave_phase 3\nsay copy_fill ffd166 ff3366"},
     {"Tunnel", "shape", "rect", "squares within squares, turning one after another",
      "say fill 000000\nsay stroke ffffff\nset stroke_width 6\nset size 2.2\nset copies 24\nset copy_size 0.88\nset wave_rotate 30\nset wave_phase 1\nset wave_speed 0.5"},
+    {"Text ripple", "text", "/System/Library/Fonts/Supplemental/Arial Unicode.ttf", "words whose letters bob one after another, coloured in their order",
+     "say text MOTOLII\nsay fill ffffff\nset size 0.4\nsay split letters\nset wave_y 0.2\nset wave_phase 1\nset wave_rotate 8\nsay copy_fill ff3366 ffd166 1b2fd8"},
     {"Burst", "shape", "line", "lines from a centre growing out one after another",
      "say fill ffffff\nset anchor_x -1\nset copies 24\nset copy_rotate 15\nkey size 0 0.001\nkey size 0.5 0.6\nset stagger 0.8\nsay copy_fill ffffff ffd166"},
 };
@@ -1474,7 +1488,7 @@ static double doc_usual(const char* name) {
     return doc_among("size speed opacity wide visible distance zoom copies copy_size blur_level letter_spacing line_spacing contrast saturation vibrance environment gradient_scale wave_speed", name) ? 1.0 : !strcmp(name, "duration") ? -1.0
          : !strcmp(name, "metallic") ? 0.08 : !strcmp(name, "roughness") ? 0.6 : !strcmp(name, "reflectance") ? 0.5   // (a solid's surface as it comes)
          : !strcmp(name, "intensity") ? 1.0 : !strcmp(name, "falloff") ? 10.0 : !strcmp(name, "cone") ? 30.0   // (a light as it comes)
-         : !strcmp(name, "ior") ? 1.5 : !strcmp(name, "split") ? 0.1 : !strcmp(name, "swim") ? 0.5 : !strcmp(name, "dark") ? 4.0 : !strcmp(name, "vivid") ? 1.3 : 0.0;   // (the kit's glass as it comes)
+         : !strcmp(name, "ior") ? 1.5 : !strcmp(name, "dispersion") ? 0.1 : !strcmp(name, "swim") ? 0.5 : !strcmp(name, "dark") ? 4.0 : !strcmp(name, "vivid") ? 1.3 : 0.0;   // (the kit's glass as it comes)
 }
 static bool doc_value(Doc& d, int thing, const char* name, double at, double* is) { return doc_knows(d, thing, name) && (*is = doc_number(d, thing, name, at, doc_usual(name)), true); }
 // A thing held by a hand, carried, and let go: the one form of everything a hand drags (a thing on the stage, its bar
