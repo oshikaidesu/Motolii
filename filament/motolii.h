@@ -115,6 +115,8 @@ int motolii_make(Motolii* m, const char* recipe);
 /* The whole-screen effects on the shelf ("name\tpath", one to a line, until the next call): the stage's script is the
    paths of those on it, with spaces between, the first nearest the picture. */
 const char* motolii_effects(Motolii* m);
+/* What the inside's hand has spent its time on since it was opened (a line of words, for measuring). */
+const char* motolii_spent(Motolii* m);
 const char* motolii_words(Motolii* m, int thing, const char* name);   /* the words a value of a thing may be, with spaces between ("": any, or it is not a word; until the next call) */
 /* One act that is several calls (a value changed and its key put): the changes made from motolii_together(m, 1) to
    motolii_together(m, 0) are one step of undo, and if one of them is refused none of them is made (0 comes back).

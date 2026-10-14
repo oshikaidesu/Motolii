@@ -340,6 +340,8 @@ void main() {
         await rampage();
       }
       SchedulerBinding.instance.removeTimingsCallback(took);
+      // ignore: avoid_print
+      print('INSIDE ${m.spent}');
       for (final MapEntry(:key, :value)
           in (Ws.spent.entries.toList()
             ..sort((a, b) => b.value.compareTo(a.value)))) {

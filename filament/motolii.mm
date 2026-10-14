@@ -26,6 +26,8 @@ struct Motolii {
     std::atomic<bool> playing{false};
     bool loop = true;   // (play goes round the work area; not: it stops at its end)
     std::atomic<double> now{0.0};
+    double spent[4] = {0, 0, 0, 0};   // (seconds the hand spent: asked to change, asked to read, telling the moment, drawing)
+    long many[4] = {0, 0, 0, 0};
 };
 
 template <class Does> static auto asked(Motolii* m, Does does, bool changes) -> decltype(does()) {
@@ -33,7 +35,12 @@ template <class Does> static auto asked(Motolii* m, Does does, bool changes) -> 
     auto done = task.get_future();
     {
         std::lock_guard<std::mutex> hold(m->asked_lock);
-        m->asked.push_back([&task, m, changes] { task(); if (changes) m->changed = true; });
+        m->asked.push_back([&task, m, changes] {
+            const auto t0 = std::chrono::steady_clock::now();
+            task();
+            if (changes) m->changed = true;
+            m->spent[changes ? 0 : 1] += std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count(), m->many[changes ? 0 : 1]++;
+        });
     }
     m->asked_now.notify_one();
     return done.get();
@@ -86,8 +93,11 @@ static void motolii_hand(Motolii* m, std::string document, int wide, int high, s
         last = t;
         m->s->by_clock = m->playing;
         time_is(*m->s, m->now);
+        const auto told = std::chrono::steady_clock::now();
         live_draw(*m->s, m->live);
         drawn = std::chrono::steady_clock::now();
+        m->spent[2] += std::chrono::duration<double>(told - t).count(), m->many[2]++;
+        m->spent[3] += std::chrono::duration<double>(drawn - told).count(), m->many[3]++;
         m->changed = false;
         due = std::max(due + std::chrono::microseconds(16667), t);   // (sixty a second)
     }
@@ -126,6 +136,13 @@ int motolii_live(Motolii* m) { return by_hand(m, [m] { return m->live || (m->liv
 void* motolii_front(Motolii* m) { return m->live ? live_front(m->live) : nullptr; }
 unsigned long long motolii_frames(Motolii* m) { return m->live ? m->live->frames.load() : 0; }
 int motolii_loop(Motolii* m, int on) { return by_hand(m, [=] { if (on >= 0) m->loop = on != 0; return (int)m->loop; }); }
+const char* motolii_spent(Motolii* m) {
+    return by_look(m, [=] {
+        char line[200];
+        std::snprintf(line, sizeof line, "changes %ld %.0f ms, reads %ld %.0f ms, moments %ld %.0f ms, draws %ld %.0f ms", m->many[0], 1e3 * m->spent[0], m->many[1], 1e3 * m->spent[1], m->many[2], 1e3 * m->spent[2], m->many[3], 1e3 * m->spent[3]);
+        return (m->word = line).c_str();
+    });
+}
 int motolii_play(Motolii* m, int playing) { return by_hand(m, [m, playing] { m->playing = playing != 0; return 1; }); }
 double motolii_now(Motolii* m) { return m->now; }
 
