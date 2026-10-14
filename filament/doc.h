@@ -93,7 +93,7 @@ static const DocValue doc_values[] = {
     {"clip", doc_drawn, 0, 1, false, nullptr},
     // (clipped by a flat thing before it, the kit's matte: by how clear that is or how light (After Effects' alpha and
     //  luma mattes), the other way about (inverted), its edge so soft, in points of the screen)
-    {"clip_matte", doc_drawn, 0, 0, false, "alpha luma"}, {"clip_invert", doc_drawn, 0, 1, false, nullptr}, {"clip_feather", doc_drawn, 0, 500, false, nullptr},
+    {"clip_matte", "film picture text shape", 0, 0, false, "alpha luma"}, {"clip_invert", "film picture text shape", 0, 1, false, nullptr}, {"clip_feather", "film picture text shape", 0, 500, false, nullptr},   // (a solid is cut by a box, not a matte)
     {"solo", doc_kinds, 0, 1, false, nullptr}, {"lock", doc_kinds, 0, 1, false, nullptr},   // (After Effects' own: while any thing is solo only those are seen; a locked thing is not changed)
     {"visible", doc_kinds, 0, 1, false, nullptr}, {"order", doc_kinds, -1e9, 1e9, false, nullptr}, {"wide", "shape", 1e-3, 1e3, false, nullptr}, {"shape", "shape", 0, 0, false, "rect circle solid polygon star line null"},
     {"points", "shape", 3, 100, false, nullptr}, {"inner", "shape", 0.01, 1, false, nullptr}, {"round", "shape", 0, 0.5, false, nullptr},   // (a polygon's or star's points, a star's inner points, a rect's corners)
@@ -138,6 +138,9 @@ static const DocValue doc_values[] = {
     // (Filament's own surface of a solid in a colour: how metal, how rough, how much it reflects, a clear coat over it
     //  and how rough that is, and how much it lights itself: 1 its colour itself on the picture, more brighter still)
     {"metallic", "solid", 0, 1, false, nullptr}, {"roughness", "solid", 0, 1, false, nullptr}, {"reflectance", "solid", 0, 1, false, nullptr},
+    // (a solid filled with glass, the kit's own: how much it bends light (index of refraction), how far its colours part,
+    //  how much what is behind it swims, how fast a long way through it goes dark, how vivid what is seen through it is)
+    {"ior", "solid", 1, 3, false, nullptr}, {"split", "solid", 0, 0.5, false, nullptr}, {"swim", "solid", 0, 1, false, nullptr}, {"dark", "solid", 0, 20, false, nullptr}, {"vivid", "solid", 0, 3, false, nullptr},
     {"clear_coat", "solid", 0, 1, false, nullptr}, {"clear_coat_roughness", "solid", 0, 1, false, nullptr}, {"emissive", "solid", 0, 20, false, nullptr},
     // (the stage's, thing 0: the whole picture, Filament's own. Its grade, on every picture laid: a tone mapper, an
     //  exposure in stops, contrast, saturation, vibrance, how warm; its glow round bright parts and its lens flare, a
@@ -150,13 +153,14 @@ static const DocValue doc_values[] = {
     {"environment", "stage", 0, 10, false, nullptr}, {"environment_rotate", "stage", -1e6, 1e6, false, nullptr}, {"background", "stage", 0, 0, false, ""}};
 // The cards a maker sees a thing's values on, besides where it is and its fill: a title and the values on it, in the
 // order shown (a thing is shown those of them its kind has). A value the window has no other seat for goes here.
-struct DocCard { const char* title; const char* names; };
+struct DocCard { const char* title; const char* names; const char* when = nullptr; const char* is = nullptr; };   // (shown only while `when` is `is`; "!...": is not)
 static const DocCard doc_cards[] = {
     {"Type", "letter_spacing line_spacing italic wrap wrap_width"},
     {"Gradient", "gradient gradient_angle gradient_scale gradient_spread"},
-    {"Matte", "clip_matte clip_invert clip_feather"},
+    {"Matte", "clip_matte clip_invert clip_feather", "clip", "1"},
     {"Line", "cap join dash dash_offset"},
-    {"Surface", "metallic roughness reflectance clear_coat clear_coat_roughness emissive"},
+    {"Surface", "metallic roughness reflectance clear_coat clear_coat_roughness emissive", "fill", "!glass"},
+    {"Glass", "ior split swim dark vivid", "fill", "glass"},
     {"Light", "intensity falloff cone shadows"},
     {"Grade", "tone_mapper exposure contrast saturation vibrance temperature"},
     {"Lens", "bloom lens_flare vignette vignette_color fog fog_color"},
@@ -594,7 +598,7 @@ static void doc_moment(Doc& d, double now) {
 static bool doc_match(Doc& d) {
     Stage& s = *d.stage;
     std::map<int, std::string> told;   // every thing of the document, and all that its making goes by
-    doc_rows(d, sqlite3_mprintf("select thing, group_concat(name || '=' || value, ' ') from (select * from fact where thing > 0 and name in ('kind','file','shape','blend','keyed','space','begin','duration','speed','text','fill','wide','points','inner','round','stroke','stroke_width','align','blur','shadow','shadow_distance','shadow_angle','shadow_blur','shadow_opacity','glow','glow_blur','glow_opacity','copies','tint','tint_black','tint_white','tritone','tritone_shadow','tritone_midtone','tritone_highlight','letter_spacing','line_spacing','italic','cap','join','dash','dash_offset','metallic','roughness','reflectance','clear_coat','clear_coat_roughness','emissive','falloff','shadows','gradient','gradient_angle','gradient_scale','gradient_spread','wrap','wrap_width') order by thing, name) group by thing"),
+    doc_rows(d, sqlite3_mprintf("select thing, group_concat(name || '=' || value, ' ') from (select * from fact where thing > 0 and name in ('kind','file','shape','blend','keyed','space','begin','duration','speed','text','fill','wide','points','inner','round','stroke','stroke_width','align','blur','shadow','shadow_distance','shadow_angle','shadow_blur','shadow_opacity','glow','glow_blur','glow_opacity','copies','tint','tint_black','tint_white','tritone','tritone_shadow','tritone_midtone','tritone_highlight','letter_spacing','line_spacing','italic','cap','join','dash','dash_offset','metallic','roughness','reflectance','clear_coat','clear_coat_roughness','emissive','falloff','shadows','gradient','gradient_angle','gradient_scale','gradient_spread','wrap','wrap_width','ior','split','swim','dark','vivid') order by thing, name) group by thing"),
              [&](sqlite3_stmt* row) { told[sqlite3_column_int(row, 0)] = (const char*)sqlite3_column_text(row, 1); });
     for (auto it = d.shown.begin(); it != d.shown.end();) {
         const auto still = told.find(it->first);
@@ -700,16 +704,23 @@ static bool doc_match(Doc& d) {
             }
         } else if (kind == "solid") {   // (one of the kit's shapes, or a file; its fill is its surface: a colour, or the material glass)
             const bool glass = fill == "glass";
+            const auto glassy = [&](MaterialInstance* look) {   // (the kit's glass as the document says it; not said, as it comes)
+                look->setParameter("ior", (float)doc_number(d, thing, "ior", 0, 1.5)), look->setParameter("split", (float)doc_number(d, thing, "split", 0, 0.1));
+                look->setParameter("swim", (float)doc_number(d, thing, "swim", 0, 0.5)), look->setParameter("dark", (float)doc_number(d, thing, "dark", 0, 4));
+                look->setParameter("vivid", (float)doc_number(d, thing, "vivid", 0, 1.3));
+            };
             const Surface surface{(float)doc_number(d, thing, "metallic", 0, 0.08), (float)doc_number(d, thing, "roughness", 0, 0.6), (float)doc_number(d, thing, "reflectance", 0, 0.5),
                                   (float)doc_number(d, thing, "clear_coat", 0, 0), (float)doc_number(d, thing, "clear_coat_roughness", 0, 0), (float)doc_number(d, thing, "emissive", 0, 0)};
             if (!fill.empty() && !glass && (rgb < 0 || ramp.size() > 1)) why = "a solid's fill is six digits, as ff3366, or glass";
             else if (!shape.empty()) {
                 made.shape = shape == "gem" ? gem(0.5f) : shape == "cube" ? cube(0.1f) : torus(0.37f, 0.13f);
                 MaterialInstance* look = glass ? thick_glass(s, made.shape, {mat4f{}}) : add(s, made.shape, "floor_lit.filamat");
+                if (look && glass) glassy(look);
                 if (!look) made.shape = nullptr;
                 else if (!glass) plain(look, fill.empty() ? float3{0xd9, 0xd2, 0xc3} / 255.f : colour, surface);
             } else if (glass) {   // (a file's shape as glass: its triangles alone, for the kit's glass, which draws a shape three times)
-                if ((made.shape = solid_mesh(file.c_str())) && !thick_glass(s, made.shape, {mat4f{}})) made.shape = nullptr;
+                MaterialInstance* look = (made.shape = solid_mesh(file.c_str())) ? thick_glass(s, made.shape, {mat4f{}}) : nullptr;
+                if (!look) made.shape = nullptr; else glassy(look);
             }
             else if ((made.solid = solid(s, file.c_str(), mat4f{}, 1.f)) && rgb >= 0) solid_fill(s, made.solid, colour, surface);
         } else why = std::string("its kind is one of: ") + doc_kinds;
@@ -1105,6 +1116,13 @@ static std::string doc_cards_of(Doc& d, int thing) {
     const std::string has = " " + doc_has(d, thing) + " ";
     std::string all;
     for (const DocCard& card : doc_cards) {
+        if (card.when) {   // (a card for one fill and not another, or while it is clipped)
+            const std::string w = doc_word(d, thing, card.when), want = card.is[0] == '!' ? card.is + 1 : card.is;
+            char* end = nullptr;
+            const double n = std::strtod(w.c_str(), &end);
+            const bool is = w == want || (!w.empty() && !*end && n == std::atof(want.c_str()) && !want.empty() && isdigit((unsigned char)want[0]));
+            if (is == (card.is[0] == '!')) continue;
+        }
         std::string names;
         for (const char* at = card.names; *at;) {
             const size_t len = strcspn(at, " ");
@@ -1249,7 +1267,8 @@ static bool doc_covers(Doc& d, int thing, double now, double* box) {
 static double doc_usual(const char* name) {
     return doc_among("size speed opacity wide visible distance zoom copies copy_size blur_level letter_spacing line_spacing contrast saturation vibrance environment gradient_scale", name) ? 1.0 : !strcmp(name, "duration") ? -1.0
          : !strcmp(name, "metallic") ? 0.08 : !strcmp(name, "roughness") ? 0.6 : !strcmp(name, "reflectance") ? 0.5   // (a solid's surface as it comes)
-         : !strcmp(name, "intensity") ? 1.0 : !strcmp(name, "falloff") ? 10.0 : !strcmp(name, "cone") ? 30.0 : 0.0;   // (a light as it comes)
+         : !strcmp(name, "intensity") ? 1.0 : !strcmp(name, "falloff") ? 10.0 : !strcmp(name, "cone") ? 30.0   // (a light as it comes)
+         : !strcmp(name, "ior") ? 1.5 : !strcmp(name, "split") ? 0.1 : !strcmp(name, "swim") ? 0.5 : !strcmp(name, "dark") ? 4.0 : !strcmp(name, "vivid") ? 1.3 : 0.0;   // (the kit's glass as it comes)
 }
 static bool doc_value(Doc& d, int thing, const char* name, double at, double* is) { return doc_knows(d, thing, name) && (*is = doc_number(d, thing, name, at, doc_usual(name)), true); }
 // A thing held by a hand, carried, and let go: the one form of everything a hand drags (a thing on the stage, its bar
