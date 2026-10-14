@@ -139,6 +139,11 @@ static const DocValue doc_values[] = {
     //  copy within it is so much larger and so far turned, most at its middle, none at its edge)
     {"field_x", "picture text shape", -1e4, 1e4, true, nullptr}, {"field_y", "picture text shape", -1e4, 1e4, true, nullptr}, {"field_radius", "picture text shape", 0, 1e4, true, nullptr},
     {"field_size", "picture text shape", -1, 20, true, nullptr}, {"field_rotate", "picture text shape", -1e4, 1e4, true, nullptr},
+    // (its copies scattered, each its own way by a seed: up to so far across and up (units), so far turned (degrees), so
+    //  much larger or smaller (a share); another seed, another scattering)
+    {"scatter_x", "picture text shape", 0, 1e4, true, nullptr}, {"scatter_y", "picture text shape", 0, 1e4, true, nullptr},
+    {"scatter_rotate", "picture text shape", 0, 1e4, true, nullptr}, {"scatter_size", "picture text shape", 0, 1, true, nullptr},
+    {"seed", "picture text shape", 0, 1e6, false, nullptr},
     {"tint", "picture text shape", 0, 1, true, nullptr}, {"tint_black", "picture text shape", 0, 0, false, ""}, {"tint_white", "picture text shape", 0, 0, false, ""},
     {"tritone", "picture text shape", 0, 1, true, nullptr}, {"tritone_shadow", "picture text shape", 0, 0, false, ""}, {"tritone_midtone", "picture text shape", 0, 0, false, ""}, {"tritone_highlight", "picture text shape", 0, 0, false, ""},   // (how its lines lie one under another, ThorVG's own: 0 at the left, 0.5 about the middle, 1 at the right)
     {"stroke", "text shape", 0, 0, false, ""}, {"stroke_width", "text shape", 0, 1000, false, nullptr},   // (its edge: a colour, and how wide, in points of the picture at size 1)
@@ -185,6 +190,7 @@ static const DocCard doc_cards[] = {
     {"Copies", "copies copy_columns copy_x copy_y copy_rotate copy_size stagger stagger_from copy_fill"},
     {"Wave", "wave_x wave_y wave_rotate wave_size wave_speed wave_phase"},
     {"Field", "field_x field_y field_radius field_size field_rotate"},
+    {"Scatter", "scatter_x scatter_y scatter_rotate scatter_size seed"},
     {"Shine", "emissive", "kind", "!solid"},   // (a flat thing lit from within: past 1, the stage's bloom takes it up where it lies in the stage's own view; laid over a solid thing, a picture of its own is clear round it and keeps no halo: ThorVG's glow does that)
     {"Play", "marker animation speed"},
     {"Matte", "clip_matte clip_invert clip_feather", "clip", "1"},
@@ -372,6 +378,18 @@ static math::mat4 doc_place(Doc& d, int thing, double now, int deeper, int copy,
                                      }()) *
                                          math::mat4::rotation(copy * doc_number(d, thing, "copy_rotate", now, 0) * (double)TAU / 360.0, math::double3{0, 0, 1}) * math::mat4::scaling(std::pow(doc_number(d, thing, "copy_size", now, 1), copy))
                                    : math::mat4{}) *
+                             [&] {   // (scattered: each copy its own way, from the seed and its number; the same each time)
+                                 const double sx = doc_number(d, thing, "scatter_x", now, 0), sy = doc_number(d, thing, "scatter_y", now, 0), sr = doc_number(d, thing, "scatter_rotate", now, 0), ss = doc_number(d, thing, "scatter_size", now, 0);
+                                 if (!member || (sx == 0.0 && sy == 0.0 && sr == 0.0 && ss == 0.0)) return math::mat4{};
+                                 const uint32_t seed = (uint32_t)doc_number(d, thing, "seed", 0, 0);
+                                 const auto roll = [&](uint32_t k) {   // (-1 to 1: a hash of the seed, the copy and which roll)
+                                     uint32_t h = seed * 0x9E3779B9u ^ ((uint32_t)copy + 1u) * 0x85EBCA6Bu ^ k * 0xC2B2AE35u;
+                                     h ^= h >> 16, h *= 0x7FEB352Du, h ^= h >> 15, h *= 0x846CA68Bu, h ^= h >> 16;
+                                     return (double)h / 2147483647.5 - 1.0;
+                                 };
+                                 return math::mat4::translation(math::double3{sx * roll(1), sy * roll(2), 0.0}) * math::mat4::rotation(sr * roll(3) * (double)TAU / 360.0, math::double3{0, 0, 1}) *
+                                        math::mat4::scaling(std::max(0.0, 1.0 + ss * roll(4)));
+                             }() *
                              [&] {   // (a wave through it: each copy so far behind the one before)
                                  if (!member) return math::mat4{};
                                  const int n = doc_members(d, thing);
@@ -639,7 +657,8 @@ static void doc_moment(Doc& d, double now) {
         if (t.drawn && t.drawn->shape) trim_at(s, t.drawn, (float)doc_number(d, thing, "trim", now, 0), (float)doc_number(d, thing, "trim_begin", now, 0), (float)doc_number(d, thing, "trim_offset", now, 0));
         const mat4f place = mat4f(doc_place(d, thing, now));
         const bool staggered = doc_number(d, thing, "stagger", 0, 0) > 0.0 || doc_number(d, thing, "wave_x", now, 0) != 0.0 || doc_number(d, thing, "wave_y", now, 0) != 0.0
-                            || doc_number(d, thing, "wave_rotate", now, 0) != 0.0 || doc_number(d, thing, "wave_size", now, 0) != 0.0 || doc_number(d, thing, "field_radius", now, 0) > 0.0;   // (each copy, the first too, as late as its order says, waving as its place in the wave says)
+                            || doc_number(d, thing, "wave_rotate", now, 0) != 0.0 || doc_number(d, thing, "wave_size", now, 0) != 0.0 || doc_number(d, thing, "field_radius", now, 0) > 0.0
+                            || doc_number(d, thing, "scatter_x", now, 0) > 0.0 || doc_number(d, thing, "scatter_y", now, 0) > 0.0 || doc_number(d, thing, "scatter_rotate", now, 0) > 0.0 || doc_number(d, thing, "scatter_size", now, 0) > 0.0;   // (each copy, the first too, as late as its order says, waving as its place in the wave says)
         if (t.solid) solid_to(s, t.solid, place); else move(s, m, [&](int nth, const mat4f&) { return nth || staggered ? mat4f(doc_place(d, thing, now, 0, nth, staggered)) : place; });
         if (MaterialInstance* look = t.film ? t.film->look : t.drawn ? t.drawn->look : nullptr) look->setParameter("opacity", (float)doc_number(d, thing, "opacity", now, 1));
         if (MaterialInstance* main = t.film ? t.film->look : t.drawn ? t.drawn->look : nullptr) {   // (its copies coloured each their own, along a ramp in their order: a look of its own each, told what the thing's is)
@@ -1270,6 +1289,8 @@ static const DocRecipe doc_recipes[] = {
      "say fill ffffff\nset size 0.25\nset x -2.9\nset y 1.6\nset copies 192\nset copy_columns 16\nset copy_x 1.5\nset copy_y -1.5\nset field_radius 1.4\nset field_rotate 90\nkey field_x 0 -3\nkey field_x 3 3\nsay copy_fill ffffff 3366ff"},
     {"Rings", "shape", "circle", "rings within rings breathing one after another",
      "say fill 000000\nsay stroke ffd166\nset stroke_width 5\nset size 2.2\nset copies 14\nset copy_size 0.86\nset wave_size 0.06\nset wave_phase 1\nset wave_speed 0.7"},
+    {"Confetti", "shape", "rect", "bits of colour scattered about, each turning its own way",
+     "set size 0.08\nset wide 0.5\nset copies 160\nset scatter_x 36\nset scatter_y 20\nset scatter_rotate 180\nset scatter_size 0.5\nset wave_rotate 120\nset wave_phase 37\nset wave_y 1\nsay copy_fill ff3366 ffd166 1b2fd8 22c55e ff3366"},
     {"Burst", "shape", "line", "lines from a centre growing out one after another",
      "say fill ffffff\nset anchor_x -1\nset copies 24\nset copy_rotate 15\nkey size 0 0.001\nkey size 0.5 0.6\nset stagger 0.8\nsay copy_fill ffffff ffd166"},
 };
