@@ -406,6 +406,31 @@ void main() {
     await _close(t);
   }, skip: !_built);
 
+  testWidgets('Stroke in the inspector is the edge of a flat shape or a text: a colour, None, and a width', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    final rect = m.add('shape', 'rect'), cube = m.add('solid', 'cube');
+    ws
+      ..reread()
+      ..select('$rect');
+    await t.pumpAndSettle();
+    final seat = find.byWidgetPredicate((w) => w is PropRow && w.id == 'stroke');
+    await t.ensureVisible(seat);
+    await t.pumpAndSettle();
+    await t.tap(find.descendant(of: seat, matching: find.text('None')));
+    await t.pumpAndSettle();
+    await t.tap(find.text('#F2F2F2').last);
+    await t.pumpAndSettle();
+    expect(m.word(rect, 'stroke'), 'f2f2f2', reason: m.trouble);
+    expect(m.set(rect, 'stroke_width', 6), isTrue, reason: m.trouble);
+    expect(wsTransform(ws, '$rect')['stroke.w'], 6, reason: 'the width is shown as the document says it');
+    expect(m.say(rect, 'stroke', ''), isTrue, reason: 'None: no edge');
+    expect(m.value(cube, 'stroke_width', 0), isNull, reason: 'a solid thing has no edge to say');
+    expect(m.say(rect, 'stroke', 'grey'), isFalse);
+    expect(m.trouble, contains('six digits'));
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
   testWidgets('Backspace on the timeline takes the picked thing out; undo brings it back', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final ring = m.add('solid', 'ring'), cube = m.add('solid', 'cube');

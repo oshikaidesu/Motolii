@@ -272,9 +272,10 @@ const _fills = {'blob': ArtInk.orange, 'ring': ArtInk.lime, 'title': ArtInk.crea
 Map<String, String> _words(Ws ws, String? id) {
   final m = ws.inside, t = int.tryParse(id ?? '');
   if (m == null || t == null) return const {};
-  final blend = m.word(t, 'blend');
+  final blend = m.word(t, 'blend'), stroke = m.word(t, 'stroke');
   return {
     if (m.word(t, 'kind') == 'text') ...{'text.content': m.word(t, 'text'), 'font': m.word(t, 'file').split('/').last},
+    if (m.value(t, 'stroke_width', 0) != null) 'stroke': stroke.isEmpty ? 'None' : '#${stroke.toUpperCase()}',
     'blend': blend.isEmpty ? 'Normal' : blend.replaceRange(0, 1, blend[0].toUpperCase()),
   };
 }
@@ -314,6 +315,7 @@ bool _say(Ws ws, String? id, Map<String, String> changed) {
       final ok = switch (e.key) {
         'text.content' => m.say(t, 'text', e.value.replaceAll('\n', ' ')),
         'blend' => m.say(t, 'blend', e.value.toLowerCase()),
+        'stroke' => m.say(t, 'stroke', e.value == 'None' ? '' : e.value.replaceFirst('#', '').toLowerCase()), // (None: no edge)
         _ => true, // (a seat the inside has nothing behind yet: the inspector keeps its own word)
       };
       all = all && ok;
@@ -346,6 +348,7 @@ const _seats = <(String, String, _Across, _Across)>[
   ('rot.y', 'rotate_y', _same, _same),
   ('rot.z', 'rotate', _minus, _minus),
   ('op', 'opacity', _hundredOut, _hundredIn),
+  ('stroke.w', 'stroke_width', _same, _same), // (points of the picture at size 1: the edge grows with the thing, as in After Effects)
 ];
 double _xOut(double v, Size c, double p) => c.width / 2 + v * p;
 double _xIn(double x, Size c, double p) => (x - c.width / 2) / p;

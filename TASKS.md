@@ -67,6 +67,8 @@
   (9) **Render の間も窓は生きてる**：書き出しは1枚ごとに、その間に頼まれた呼びを片付ける（手は1本のまま）。書き出し中、書類は読めるが変えられない・つかめない（理由つきで断る）。試験：書き出し中に聞いた返事の一番遅いのが 71〜82 ms。窓で確かめた：書き出し中に行を選べた。書けた `skin.mp4` は 1920×1080、毎秒60枚、940枚。
   (10) **殻の決まりを3つ中へ**：Create 棚の Solid は形の言葉 `solid`（`rect circle solid`）＝舞台ぴったりの平たい色。大きさは中が舞台から出す（Dart の計算は消した。舞台の大きさを変えても付いてくる）。行の名前は中が言う（`motolii_word(thing, "name")`：文字は中身、形は形の名、ファイルは名前。殻の「種類→名前」の表は消した）。自分で定めた行き方の札の線は書類から出す（`motolii_way_at` が書類を見る。C の確かめ：u の二乗は半分で 0.250）。
   (11) **Fonts 棚をつないだ**：見本の15の名前の代わりに、この機械の .ttf（システム、ライブラリ、ホーム、書類の隣）のうち、中が棚の見本の一行を組める物だけを並べる（`motolii_sets`：ThorVG が読めて、その言葉に大きさが出るか。裏の線で聞く）。この機械で 180 のうち 101。押して Apply で選んだ文字の字体が替わる（文字を選んでなければその字体で新しい文字を置く）、1歩。窓で確かめた：MOTOLII が Andale Mono になった。読めなかった 79 は、ほとんどラテン文字を持たない字体。ラテン文字でも ThorVG が読めない物が少し（Apple Chancery、Big Caslon、Herculanum）。Sans・Serif などの札は、ファイルからは分からないので 0 のまま。
+  (12) **Stroke の席をつないだ**：文字と平たい形に縁（`stroke`＝6桁の色、空で無し／`stroke_width`＝大きさ1の時の絵の点。AE と同じく物の大きさと一緒に太る）。描くのは ThorVG 自身（文字は `outline`、形は `strokeWidth/strokeFill`。形は線が全部見えるよう内側へ半分寄せる）。インスペクタの Stroke の選びと Stroke width が文書に行く。どの物が縁を持つかは殻に書かず、中に聞く（`stroke_width` の値が返るか）。絵：`reports/skin_run/stroke_is_the_edge.jpg`。
+  見送り：文字の Alignment は、今の文字が1行だけなので揃えても見た目が変わらない（ThorVG の `align`・`layout` はある。複数行の文字が来たら）。
   引っかかり：平たい形の言葉 `solid`（＝AE の平面）と、3D の物の種類の名前 `solid` が中で同じ綴り。窓では「Solid」と「3D」で分かれてるので見えないが、種類の方を改名するかは聞く事。
   開いたまま残った物（3回目の指摘）：3D に不透明度と重ね方が効かない／切り抜きは四角だけ／文字の Size・Alignment、Stroke、Anchor、Depth、Parent、Ghost、Effects 棚、Fonts 棚は見本のまま。
 - 開き方：`skin/book` で Flutter（`~/rust_ae/Motolii/.tools/flutter/bin/flutter`）の `build macos --debug --dart-define=LAB_ROUTE=/?path=workspace/workspace/live`、できた `lab_book.app` を開く。文書は `filament/out/skin.motolii`。

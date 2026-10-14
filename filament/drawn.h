@@ -135,7 +135,8 @@ static bool type_sets(const char* fontFile, const char* words) {
     tvg::Paint::rel(t);
     return sets;
 }
-static Drawn* type(Stage& s, const char* words, const char* fontFile, const mat4f& place, float high, float3 colour = float3{0.f}, const char* lay = nullptr) {
+// edge: an outline round the letters, ThorVG's own (its colour; w: how wide, a share of the line's height; 0: none).
+static Drawn* type(Stage& s, const char* words, const char* fontFile, const mat4f& place, float high, float3 colour = float3{0.f}, const char* lay = nullptr, float4 edge = float4{0.f}) {
     if (!std::filesystem::is_regular_file(fontFile)) return nullptr;
     return drawn(s, [&](Drawn*, int* w, int* h) -> tvg::Paint* {
         if (tvg::Text::load(fontFile) != tvg::Result::Success) return nullptr;
@@ -152,23 +153,28 @@ static Drawn* type(Stage& s, const char* words, const char* fontFile, const mat4
             measured = t->bounds(&x, &y, &wide, &tall) == tvg::Result::Success;
         }
         if (!measured) return tvg::Paint::rel(t), nullptr;
-        t->translate(-x, -y);
-        *w = 2 * (int)std::ceil(0.5f * wide);
-        *h = 2 * (int)std::ceil(0.5f * tall);
+        const float outline = edge.w * tall;   // (half of it lies outside the letters: the picture is that much larger all round)
+        if (outline > 0.f) t->outline(outline, (uint8_t)std::lround(255.f * edge.x), (uint8_t)std::lround(255.f * edge.y), (uint8_t)std::lround(255.f * edge.z));
+        t->translate(-x + 0.5f * outline, -y + 0.5f * outline);
+        *w = 2 * (int)std::ceil(0.5f * (wide + outline));
+        *h = 2 * (int)std::ceil(0.5f * (tall + outline));
         return t;
     }, place, high, float3{-1.f}, true, lay);
 }
 
 // A flat shape in one colour, drawn by ThorVG's own Shape (a rectangle, a circle): `wide` times as wide as it is high.
-static Drawn* flat(Stage& s, const char* form, float wide, const mat4f& place, float high, float3 colour, const char* lay = nullptr) {
+// edge: ThorVG's stroke round it, inside its frame (its colour; w: how wide, a share of its height; 0: none).
+static Drawn* flat(Stage& s, const char* form, float wide, const mat4f& place, float high, float3 colour, const char* lay = nullptr, float4 edge = float4{0.f}) {
     return drawn(s, [&](Drawn*, int* w, int* h) -> tvg::Paint* {
         const float tall = std::min(0.5f * (float)std::max(s.w, s.h), 4096.f / std::max(wide, 1e-3f));   // (as fine as half the stage; a long thin bar less high, so that it is as long as it is said)
         *h = std::max(2, 2 * (int)std::ceil(0.5f * tall));
         *w = std::max(2, 2 * (int)std::ceil(0.5f * tall * wide));
         tvg::Shape* shape = tvg::Shape::gen();
-        if (!strcmp(form, "circle")) shape->appendCircle(0.5f * (float)*w, 0.5f * (float)*h, 0.5f * (float)*w, 0.5f * (float)*h);
-        else shape->appendRect(0.f, 0.f, (float)*w, (float)*h);
+        const float in = 0.5f * std::min(edge.w * (float)*h, 0.5f * (float)std::min(*w, *h));   // (half the stroke: the path is set in by that, so all of it is seen)
+        if (!strcmp(form, "circle")) shape->appendCircle(0.5f * (float)*w, 0.5f * (float)*h, 0.5f * (float)*w - in, 0.5f * (float)*h - in);
+        else shape->appendRect(in, in, (float)*w - 2.f * in, (float)*h - 2.f * in);
         shape->fill((uint8_t)std::lround(255.f * colour.x), (uint8_t)std::lround(255.f * colour.y), (uint8_t)std::lround(255.f * colour.z));
+        if (in > 0.f) shape->strokeWidth(2.f * in), shape->strokeFill((uint8_t)std::lround(255.f * edge.x), (uint8_t)std::lround(255.f * edge.y), (uint8_t)std::lround(255.f * edge.z));
         return shape;
     }, place, high, float3{-1.f}, true, lay);
 }
