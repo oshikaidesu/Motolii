@@ -86,6 +86,7 @@ class Motolii {
   late final _tryDrop = _lib.lookupFunction<Int32 Function(_P), int Function(_P)>('motolii_try_drop');
   late final _put = _lib.lookupFunction<Int32 Function(_P, Int32, _S, Double, Double), int Function(_P, int, _S, double, double)>('motolii_put');
   late final _keyHere = _lib.lookupFunction<Int32 Function(_P, Int32, _S, Double), int Function(_P, int, _S, double)>('motolii_key_here');
+  late final _trim = _lib.lookupFunction<Int32 Function(_P, Int32, Double, Double), int Function(_P, int, double, double)>('motolii_trim');
   late final _stay = _lib.lookupFunction<Int32 Function(_P, Int32, _S, Double), int Function(_P, int, _S, double)>('motolii_stay');
   late final _keyed = _lib.lookupFunction<Int32 Function(_P, Int32, _S, Double), int Function(_P, int, _S, double)>('motolii_keyed');
   late final _moving = _lib.lookupFunction<_S Function(_P, Int32), _S Function(_P, int)>('motolii_moving');
@@ -187,6 +188,9 @@ class Motolii {
   bool keyHere(int thing, String name, double at) => _with([name], (s) => _keyHere(_m, thing, s[0], at)) != 0;
   bool stay(int thing, String name, double at) => _with([name], (s) => _stay(_m, thing, s[0], at)) != 0;
   int keyed(int thing, String name, double at) => _with([name], (s) => _keyed(_m, thing, s[0], at));
+
+  /// When a thing is on, cut at its bar's ends: from [from] to [to] seconds of the stage (motolii.h).
+  bool trim(int thing, double from, double to) => _trim(_m, thing, from, to) != 0;
 
   /// The names of a thing's values that take keys.
   List<String> moving(int thing) => _moving(_m, thing).toDartString().split(' ').where((n) => n.isNotEmpty).toList();

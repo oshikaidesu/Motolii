@@ -406,6 +406,17 @@ static bool doc_key_here(Doc& d, int thing, const char* name, double at) {
     return doc_keys(d, thing, name, at) && doc_keys(d, thing, name) ? true : doc_key(d, thing, name, at, doc_number(d, thing, name, at, doc_usual(name)));
 }
 static bool doc_set(Doc& d, int thing, const char* name, double is);
+// trim: when a thing is on, cut by a hand at its bar's ends: from `from` to `to` seconds of the stage. A film cut at
+// its head goes on showing, at each moment, what it showed there before (it begins further into itself).
+static bool doc_trim(Doc& d, int thing, double from, double to) {
+    if (!doc_knows(d, thing)) return false;
+    if (!(from >= 0.0 && to > from && to <= 1e6)) return d.trouble = "a thing is on from a moment of the stage to a later one", false;
+    const double was = doc_number(d, thing, "start", 0, 0), speed = doc_number(d, thing, "speed", 0, 1), into = doc_number(d, thing, "begin", 0, 0) + (from - was) * std::fabs(speed);
+    const bool film = doc_word(d, thing, "kind") == "film" && from != was && into >= 0.0;
+    const char* const put = "insert into fact(thing, name, at, value) values(%d, %Q, 0.0, %!.17g) on conflict do update set value = excluded.value;";
+    return doc_change(d, sqlite3_mprintf("%z%z%z", sqlite3_mprintf(put, thing, "start", from), sqlite3_mprintf(put, thing, "duration", to - from),
+                                         film ? sqlite3_mprintf(put, thing, "begin", into) : sqlite3_mprintf("")));
+}
 static bool doc_stay(Doc& d, int thing, const char* name, double at) {   // (its keys go: it stays what it is at that moment)
     return doc_knows(d, thing, name) && (!doc_keys(d, thing, name) || doc_set(d, thing, name, doc_number(d, thing, name, at, doc_usual(name))));
 }
@@ -509,7 +520,7 @@ static bool doc_half(Doc& d, int thing, float2* half) {
 // A value shown for now and not written: what a shell does while a hand is still on the thing (a drag). The document
 // is not changed and no step is made; the next change, or doc_try_drop, puts the document's own value back.
 static bool doc_try(Doc& d, int thing, const char* name, double is) {
-    if (!doc_knows(d, thing, name, &is, nullptr, true)) return false;
+    if (!doc_knows(d, thing, name, &is)) return false;   // (any number of it: where it is, and when it is on)
     Doc::Keys shown;
     shown.at = {0.0}, shown.value = {is}, shown.interp = {Interp{}}, shown.own = {""};
     d.moving[{thing, name}] = shown;

@@ -144,6 +144,7 @@ int motolii_try(Motolii* m, int thing, const char* name, double number) { return
 int motolii_try_drop(Motolii* m) { return by_hand(m, [=] { return doc_try_drop(*m->d), 1; }); }
 int motolii_put(Motolii* m, int thing, const char* name, double at, double number) { return by_hand(m, [=] { return (int)doc_put(doc(m), thing, name, at, number); }); }
 int motolii_key_here(Motolii* m, int thing, const char* name, double at) { return by_hand(m, [=] { return (int)doc_key_here(doc(m), thing, name, at); }); }
+int motolii_trim(Motolii* m, int thing, double from, double to) { return by_hand(m, [=] { return (int)doc_trim(doc(m), thing, from, to); }); }
 int motolii_stay(Motolii* m, int thing, const char* name, double at) { return by_hand(m, [=] { return (int)doc_stay(doc(m), thing, name, at); }); }
 int motolii_keyed(Motolii* m, int thing, const char* name, double at) { return by_hand(m, [=] { return doc_keyed(*m->d, thing, name, at); }); }
 const char* motolii_words(Motolii* m, int thing, const char* name) { return by_hand(m, [=] { return (m->word = doc_words(*m->d, thing, name)).c_str(); }); }

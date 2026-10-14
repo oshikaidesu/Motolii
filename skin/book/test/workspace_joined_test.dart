@@ -134,6 +134,30 @@ void main() {
     await _close(t);
   }, skip: !_built);
 
+  testWidgets('a bar slid on the timeline is when the thing comes on; cut at its tail it is on that long; each is one step', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    final cube = m.add('solid', 'cube');
+    expect(m.set(m.add('solid', 'ring'), 'duration', 6), isTrue, reason: m.trouble); // (so the document is 6 seconds long)
+    ws.reread();
+    await t.pumpAndSettle();
+    final tracks = t.getRect(find.byKey(const ValueKey('ws-tl-tracks')));
+    final row = tracks.top + 12, perFrame = (tracks.width - 60) / Ws.duration; // (about: the room at the two ends is the timeline's own)
+    await t.dragFrom(Offset(tracks.left + tracks.width * .3, row), Offset(perFrame * 30, 0));
+    await t.pumpAndSettle();
+    final start = m.value(cube, 'start', 0)!;
+    expect(start, greaterThan(.5), reason: 'slid to the right: it comes on later');
+    expect(m.lasts(cube), lessThan(0), reason: 'still on for good');
+    final tail = t.getRect(find.byKey(const ValueKey('ws-tl-tracks'))).right - 1;
+    expect(ws.layers.first.outF, Ws.duration);
+    expect(m.trim(cube, start, start + 2), isTrue, reason: m.trouble);
+    expect(m.lasts(cube), 2);
+    expect(m.undo() && m.lasts(cube) < 0 && m.value(cube, 'start', 0) == start, isTrue, reason: 'the cut goes back as one step');
+    expect(m.undo() && m.value(cube, 'start', 0) == 0, isTrue, reason: 'and the slide as one');
+    expect(tail, greaterThan(tracks.left));
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
   testWidgets('Backspace on the timeline takes the picked thing out; undo brings it back', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final ring = m.add('solid', 'ring'), cube = m.add('solid', 'cube');

@@ -58,6 +58,9 @@ double motolii_point(Motolii* m);                                  /* points of 
 int motolii_put(Motolii* m, int thing, const char* name, double at, double number);
 int motolii_key_here(Motolii* m, int thing, const char* name, double at);
 int motolii_stay(Motolii* m, int thing, const char* name, double at);
+/* When a thing is on, cut at its bar's ends by a hand: from `from` to `to` seconds of the stage (a film cut at its
+   head goes on showing at each moment what it showed there). Sliding the whole bar is motolii_set(thing, "start"). */
+int motolii_trim(Motolii* m, int thing, double from, double to);
 int motolii_keyed(Motolii* m, int thing, const char* name, double at);
 const char* motolii_moving(Motolii* m, int thing);
 const char* motolii_words(Motolii* m, int thing, const char* name);   /* the words a value of a thing may be, with spaces between ("": any, or it is not a word; until the next call) */
