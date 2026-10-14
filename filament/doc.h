@@ -577,6 +577,23 @@ static bool doc_mark(Doc& d, double at, const char* word) {   // ("": the mark t
     return doc_change(d, *word ? sqlite3_mprintf("insert into fact(thing, name, at, value) values(0, 'mark', %!.17g, %Q) on conflict do update set value = excluded.value", at, word)
                                : sqlite3_mprintf("delete from fact where thing = 0 and name = 'mark' and at = %!.17g", at));
 }
+// The guides: lines across the picture at a place, in points of it (After Effects' composition guides): x, an upright
+// line that far from the left; y, a level one that far from the top. Facts of the stage, a change of them a step.
+static bool doc_guide(Doc& d, const char* axis, double at, bool on) {
+    if (strcmp(axis, "x") && strcmp(axis, "y")) return d.trouble = "a guide is x (upright) or y (level)", false;
+    if (!(std::fabs(at) <= 1e5)) return d.trouble = "a guide is within the picture's reach", false;
+    return doc_change(d, on ? sqlite3_mprintf("insert into fact(thing, name, at, value) values(0, 'guide_%s', %!.17g, 1) on conflict do nothing", axis, at)
+                            : sqlite3_mprintf("delete from fact where thing = 0 and name = 'guide_%s' and at = %!.17g", axis, at));
+}
+static std::string doc_guides(Doc& d) {   // (a line each: x or y, a space, where)
+    std::string all;
+    doc_rows(d, sqlite3_mprintf("select substr(name, 7), at from fact where thing = 0 and name in ('guide_x', 'guide_y') order by name, at"), [&](sqlite3_stmt* row) {
+        char line[60];
+        std::snprintf(line, sizeof line, "%s %.6g\n", (const char*)sqlite3_column_text(row, 0), sqlite3_column_double(row, 1));
+        all += line;
+    });
+    return all;
+}
 static std::string doc_marks(Doc& d) {   // (a line each, in time: the moment, a space, the name)
     std::string all;
     doc_rows(d, sqlite3_mprintf("select at, value from fact where thing = 0 and name = 'mark' order by at"), [&](sqlite3_stmt* row) {

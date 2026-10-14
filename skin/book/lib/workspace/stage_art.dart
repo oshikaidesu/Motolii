@@ -36,9 +36,14 @@ class ArtLayer {
 @immutable
 class ArtScene {
   final String title;
+
+  /// The guides, in composition px: joined, the document's own; else the sample's (its title's left margin and baseline).
+  final List<double> guidesX, guidesY;
   ArtScene.of(Ws ws, {required this.camera})
     : frame = ws.frame,
       title = ws.document == null ? 'CODA_main' : ws.document!.replaceFirst(RegExp(r'\.motolii$'), ''), // (joined: the document's own name)
+      guidesX = ws.inside == null ? const [150.0, 1770.0] : [for (final (a, at) in ws.inside!.guides) if (a == 'x') at],
+      guidesY = ws.inside == null ? const [812.0] : [for (final (a, at) in ws.inside!.guides) if (a == 'y') at],
       layers = List.unmodifiable([for (final l in ws.layers) ArtLayer(l)]),
       fx = Map.unmodifiable({
         for (final l in ws.layers)

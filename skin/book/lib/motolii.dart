@@ -271,6 +271,15 @@ class Motolii {
       if (line.indexOf(' ') case final i when i > 0) (double.parse(line.substring(0, i)), line.substring(i + 1)),
   ];
   bool mark(double at, String word) => _with([word], (s) => _mark(_m, at, s[0])) != 0;
+  late final _guide = _lib.lookupFunction<Int32 Function(_P, _S, Double, Int32), int Function(_P, _S, double, int)>('motolii_guide');
+  late final _guides = _lib.lookupFunction<_S Function(_P), _S Function(_P)>('motolii_guides');
+
+  /// The guides: lines across the picture, 'x' upright and 'y' level, at so many points from its left or top.
+  List<(String, double)> get guides => [
+    for (final line in _guides(_m).toDartString().split('\n'))
+      if (line.length > 2) (line[0], double.parse(line.substring(2))),
+  ];
+  bool guide(String axis, double at, bool on) => _with([axis], (s) => _guide(_m, s[0], at, on ? 1 : 0)) != 0;
 
   /// Whether the stage is the size the document says now (not, after [resize] or an undo of one: open it again).
   bool get fits => _fits(_m) != 0;

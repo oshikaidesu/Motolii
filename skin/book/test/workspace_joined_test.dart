@@ -759,6 +759,25 @@ void main() {
     await _close(t);
   }, skip: !_built);
 
+  testWidgets('guides are the document\'s: pulled out of the top ruler, a level one where it is let go; back over the ruler, gone', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    m.add('shape', 'rect');
+    ws.reread();
+    await t.pumpAndSettle();
+    expect(m.guides, isEmpty, reason: 'the sample\'s guides are not the document\'s');
+    final stage = t.getRect(find.byKey(const ValueKey('ws-stage-comp')));
+    final view = t.getRect(find.ancestor(of: find.byKey(const ValueKey('ws-stage-comp')), matching: find.byType(LayoutBuilder)).first);
+    await t.dragFrom(Offset(stage.center.dx, view.top + 5), Offset(0, stage.center.dy - view.top - 5));
+    await t.pumpAndSettle();
+    expect(m.guides.length, 1, reason: m.trouble);
+    expect(m.guides.single.$1, 'y');
+    expect(m.guides.single.$2, closeTo(540, 30), reason: 'about the middle of the picture');
+    expect(m.undo() && m.guides.isEmpty, isTrue, reason: 'one step');
+    expect(m.guide('x', 150, true) && m.guide('x', 150, false) && m.guides.isEmpty, isTrue);
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
   testWidgets('Backspace on the timeline takes the picked thing out; undo brings it back', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final ring = m.add('solid', 'ring'), cube = m.add('solid', 'cube');

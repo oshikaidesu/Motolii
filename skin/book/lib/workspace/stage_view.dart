@@ -24,8 +24,6 @@ abstract final class _V {
   static const guide = WsT.toneAudio, overlay = Color(0x40FFFFFF), safe = Color(0x99F6EFDD);
 }
 
-/// Document guides (left margin and the title's baseline), in composition px.
-const _guidesX = [150.0, 1770.0], _guidesY = [812.0];
 
 /// Composition px to screen px: the composition's top-left at [o], [s] screen px per composition px, inside [area].
 @immutable
@@ -102,7 +100,39 @@ class _StageViewState extends State<StageView> {
   // the picture; where that puts the thing (at its own depth), and what it is to the document, is the inside's.
   ({Offset from, bool moved})? _held;
 
+  // Joined: a guide pulled out of a ruler (from the top one, a level line; from the left one, an upright one) or taken
+  // hold of where it lies; let go on the picture it is the document's there, let go back over its ruler it is gone.
+  ({String axis, double? was})? _pulling;
+
+  bool _pull(_View v, Offset local) {
+    final ws = WsScope.read(context), m = ws.inside;
+    if (m == null) return false;
+    final at = v.toComp(local), tol = 4 / v.s;
+    if (local.dy < _V.ruler || local.dx < _V.ruler) {
+      _pulling = (axis: local.dy < _V.ruler ? 'y' : 'x', was: null);
+      return true;
+    }
+    for (final (axis, g) in m.guides) {
+      if (((axis == 'x' ? at.dx : at.dy) - g).abs() > tol) continue;
+      _pulling = (axis: axis, was: g);
+      return true;
+    }
+    return false;
+  }
+
+  void _pullLetGo(_View v, Offset local) {
+    final p = _pulling, ws = WsScope.read(context), m = ws.inside;
+    _pulling = null;
+    if (p == null || m == null) return;
+    final over = p.axis == 'y' ? local.dy < _V.ruler : local.dx < _V.ruler, at = v.toComp(local);
+    final done = m.together(() => (p.was == null || m.guide(p.axis, p.was!, false)) && (over || m.guide(p.axis, ((p.axis == 'x' ? at.dx : at.dy)).roundToDouble(), true)));
+    if (done) ws.reread();
+  }
+
+  Offset? _last;
+
   void _hold(_View v, Offset local) {
+    if (_pull(v, local)) return;
     final ws = WsScope.read(context), m = ws.inside;
     final id = m == null ? null : _hit(v, local), t = int.tryParse(id ?? '');
     if (m == null || t == null || !m.hold(t)) return;
@@ -157,10 +187,10 @@ class _StageViewState extends State<StageView> {
               WsScope.read(context).select(_hit(v, d.localPosition));
             },
             dragStartBehavior: DragStartBehavior.down, // (a thing is held where the hand came down, not where it had got to when the drag was known for one)
-            onPanStart: (d) => _hold(v, d.localPosition),
-            onPanUpdate: (d) => _carry(v, d.localPosition),
-            onPanEnd: (_) => _letGo(),
-            onPanCancel: () => _letGo(keep: false),
+            onPanStart: (d) => _hold(v, _last = d.localPosition),
+            onPanUpdate: (d) => _pulling != null ? (widget.cursor.value = v.toComp(_last = d.localPosition)) : _carry(v, _last = d.localPosition),
+            onPanEnd: (_) => _pulling != null ? _pullLetGo(v, _last!) : _letGo(),
+            onPanCancel: () => _pulling != null ? _pulling = null : _letGo(keep: false),
             child: Stack(
               fit: StackFit.expand,
               children: [
@@ -183,7 +213,7 @@ class _StageViewState extends State<StageView> {
                       painter: _ViewPainter(scene, v, widget.selected, _hover == widget.selected ? null : _hover, grid: widget.grid, safe: widget.safe, part: _Part.over),
                     ),
                   ),
-                IgnorePointer(child: CustomPaint(painter: _RulerPainter(v, widget.cursor))),
+                IgnorePointer(child: CustomPaint(painter: _RulerPainter(v, widget.cursor, scene))),
                 Positioned(
                   left: _V.ruler + _V.pad,
                   bottom: _V.pad,
@@ -386,11 +416,11 @@ class _ViewPainter extends CustomPainter {
 
   void _guides(Canvas c) {
     final p = _line(_V.guide);
-    for (final gx in _guidesX) {
+    for (final gx in scene.guidesX) {
       final x = v.toScreen(Offset(gx, 0)).dx.roundToDouble() + .5;
       c.drawLine(Offset(x, v.area.top), Offset(x, v.area.bottom), p);
     }
-    for (final gy in _guidesY) {
+    for (final gy in scene.guidesY) {
       final y = v.toScreen(Offset(0, gy)).dy.roundToDouble() + .5;
       c.drawLine(Offset(v.area.left, y), Offset(v.area.right, y), p);
     }
@@ -468,8 +498,9 @@ class _ViewPainter extends CustomPainter {
 // ---- rulers -----------------------------------------------------------------------------------------------------------
 
 class _RulerPainter extends CustomPainter {
-  _RulerPainter(this.v, this.cursor) : super(repaint: cursor);
+  _RulerPainter(this.v, this.cursor, this.scene) : super(repaint: cursor);
   final _View v;
+  final ArtScene scene;
   final ValueNotifier<Offset?> cursor;
 
   static double _step(double s) {
@@ -520,11 +551,11 @@ class _RulerPainter extends CustomPainter {
     c.restore();
 
     final g = Paint()..color = _V.guide;
-    for (final gx in _guidesX) {
+    for (final gx in scene.guidesX) {
       final x = v.toScreen(Offset(gx, 0)).dx;
       if (x > r) c.drawPath(Path()..addPolygon([Offset(x - 4, r - 5), Offset(x + 4, r - 5), Offset(x, r)], true), g);
     }
-    for (final gy in _guidesY) {
+    for (final gy in scene.guidesY) {
       final y = v.toScreen(Offset(0, gy)).dy;
       if (y > r) c.drawPath(Path()..addPolygon([Offset(r - 5, y - 4), Offset(r - 5, y + 4), Offset(r, y)], true), g);
     }
@@ -541,5 +572,5 @@ class _RulerPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_RulerPainter o) => o.v != v || o.cursor != cursor;
+  bool shouldRepaint(_RulerPainter o) => o.v != v || o.cursor != cursor || o.scene != scene;
 }

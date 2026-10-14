@@ -28,6 +28,10 @@ int motolii_work(Motolii* m, double from, double to);
 int motolii_work_of(Motolii* m, double* from, double* to);
 int motolii_mark(Motolii* m, double at, const char* word);
 const char* motolii_marks(Motolii* m);
+/* The guides: lines across the picture, x upright and y level, at so many points from its left or top; a change is a
+   step. motolii_guides: a line each, "x 150" (until the next call). */
+int motolii_guide(Motolii* m, const char* axis, double at, int on);
+const char* motolii_guides(Motolii* m);
 void motolii_close(Motolii* m);
 const char* motolii_trouble(Motolii* m);                           /* why the last call that was not done was not */
 
