@@ -372,6 +372,7 @@ const _asked = {
   'Star': ('shape', 'star'),
   'Line': ('shape', 'line'),
   'Null': ('shape', 'null'), // (nothing to see: a thing to go with)
+  'Camera': ('camera', 'camera'), // (the nearest one that is on is the stage's eye)
   'Ring': ('solid', 'ring'),
   'Gem': ('solid', 'gem'),
   'Cube': ('solid', 'cube'),

@@ -165,6 +165,7 @@ class Ws extends ChangeNotifier {
             final keys = <int>{for (final v in m.moving(t)) ...m.keyMoments(t, v).map((s) => (s * fps).round())}.toList()..sort();
             return WsLayer('$t', name, switch (kind) {
               'text' => WsKind.text,
+              'camera' => WsKind.camera,
               'film' || 'picture' => WsKind.image,
               _ => WsKind.shape,
             }, from, _outF(from, lasts), keys);

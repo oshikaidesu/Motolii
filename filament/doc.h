@@ -53,14 +53,19 @@ struct Doc {
     struct Keys { std::vector<double> at, value; std::vector<Interp> interp; std::vector<std::string> own; };   // (own: a way defined in the document, where the stretch is not one of the nine kinds)
     std::map<std::pair<int, std::string>, Keys> moving;   // a value's keys, and the way of the stretch after each; read from the facts when first asked for, forgotten at every change
     std::map<std::string, sqlite3_stmt*> named, goes;     // a way by its name, and by its expression: made ready once (SQLite works it out)
-    struct Shown { std::string of; Video* film = nullptr; Drawn* drawn = nullptr; Solid* solid = nullptr; Mesh* shape = nullptr; bool in = true, clipped = false; int run = -1, lies = -1; };
+    struct Shown { std::string of; Video* film = nullptr; Drawn* drawn = nullptr; Solid* solid = nullptr; Mesh* shape = nullptr; bool in = true, clipped = false, camera = false; int run = -1, lies = -1;
+                   int space = 3; };   // (read as it is made: 2 a flat thing on the camera, 25 one in the world, 3 a solid thing or a camera)
+    // The camera of the moment, against the stage's own (from 6 units in front, 30 degrees high): how the world is
+    // moved for it (rig; a 2D thing goes with it) and only how it is turned (facing; a 2.5D thing keeps its own angle).
+    math::mat4 rig, facing;
     std::map<int, Shown> shown;   // the things as they are on the stage, and what each was made of
     Mesh* clears[8] = {};         // for each run of things, the triangle that clears depth before it (clear_depth.mat), made when first needed
     unsigned cleared = 0;         // which of them are on the stage now
 };
 // What a thing may be told, by name: which kinds of thing have it, a number between which two (or one of which
 // words), and whether it can move (take keys).
-static const char* const doc_kinds = "film picture text solid shape";   // (the kinds of thing)
+static const char* const doc_kinds = "film picture text solid shape camera";   // (the kinds of thing)
+static const char* const doc_drawn = "film picture text solid shape";          // (those that are seen)
 static const char* const doc_shapes = "ring gem cube";             // (the kit's own shapes a solid may be)
 // (whether a value is keyed, in SQLite's words: see doc_key)
 #define DOC_KEYED "(select count(*) > 1 or max(at) <> 0 or max(way) is not null from fact where thing = %d and name = %Q)"
@@ -68,8 +73,10 @@ struct DocValue { const char* name; const char* kinds; double low, high; bool mo
 static const DocValue doc_values[] = {
     {"x", doc_kinds, -1e4, 1e4, true, nullptr}, {"y", doc_kinds, -1e4, 1e4, true, nullptr}, {"z", doc_kinds, -1e4, 1e4, true, nullptr},
     {"rotate", doc_kinds, -1e6, 1e6, true, nullptr}, {"rotate_x", doc_kinds, -1e6, 1e6, true, nullptr}, {"rotate_y", doc_kinds, -1e6, 1e6, true, nullptr},
-    {"size", doc_kinds, 1e-3, 1e4, true, nullptr}, {"anchor_x", doc_kinds, -100, 100, true, nullptr}, {"anchor_y", doc_kinds, -100, 100, true, nullptr}, {"anchor_z", doc_kinds, -100, 100, true, nullptr}, {"opacity", "film picture text shape", 0, 1, true, nullptr},
-    {"clip", doc_kinds, 0, 1, false, nullptr}, {"visible", doc_kinds, 0, 1, false, nullptr}, {"order", doc_kinds, -1e9, 1e9, false, nullptr}, {"wide", "shape", 1e-3, 1e3, false, nullptr}, {"shape", "shape", 0, 0, false, "rect circle solid polygon star line null"},
+    {"size", doc_drawn, 1e-3, 1e4, true, nullptr}, {"anchor_x", doc_drawn, -100, 100, true, nullptr}, {"anchor_y", doc_drawn, -100, 100, true, nullptr}, {"anchor_z", doc_drawn, -100, 100, true, nullptr},
+    // (a camera, the past repository's: it looks at where it is, from round about it as it is turned, so far away, so near)
+    {"distance", "camera", 0.01, 100, true, nullptr}, {"zoom", "camera", 0.01, 100, true, nullptr}, {"opacity", "film picture text shape", 0, 1, true, nullptr},
+    {"clip", doc_drawn, 0, 1, false, nullptr}, {"visible", doc_kinds, 0, 1, false, nullptr}, {"order", doc_kinds, -1e9, 1e9, false, nullptr}, {"wide", "shape", 1e-3, 1e3, false, nullptr}, {"shape", "shape", 0, 0, false, "rect circle solid polygon star line null"},
     {"points", "shape", 3, 100, false, nullptr}, {"inner", "shape", 0.01, 1, false, nullptr}, {"round", "shape", 0, 0.5, false, nullptr},   // (a polygon's or star's points, a star's inner points, a rect's corners)
     {"start", doc_kinds, 0, 1e6, false, nullptr}, {"duration", doc_kinds, 1e-3, 1e6, false, nullptr},
     {"begin", "film", 0, 1e6, false, nullptr}, {"speed", "film", -100, 100, false, nullptr}, {"keyed", "film", 0, 1, false, nullptr},
@@ -219,8 +226,15 @@ static math::mat4 doc_place(Doc& d, int thing, double now, int deeper) {
     float deep = 0.f;
     doc_half(d, thing, &half, &deep);
     const math::double3 anchor{doc_number(d, thing, "anchor_x", now, 0) * half.x, doc_number(d, thing, "anchor_y", now, 0) * half.y, doc_number(d, thing, "anchor_z", now, 0) * deep};
-    return doc_above(d, thing, now, deeper) * math::mat4::translation(math::double3{doc_number(d, thing, "x", now, 0), doc_number(d, thing, "y", now, 0), doc_number(d, thing, "z", now, 0)}) *
-           turned("rotate", {0, 0, 1}) * turned("rotate_y", {0, 1, 0}) * turned("rotate_x", {1, 0, 0}) * math::mat4::scaling(doc_number(d, thing, "size", now, 1)) * math::mat4::translation(-anchor);
+    const math::mat4 place = doc_above(d, thing, now, deeper) * math::mat4::translation(math::double3{doc_number(d, thing, "x", now, 0), doc_number(d, thing, "y", now, 0), doc_number(d, thing, "z", now, 0)}) *
+                             turned("rotate", {0, 0, 1}) * turned("rotate_y", {0, 1, 0}) * turned("rotate_x", {1, 0, 0}) * math::mat4::scaling(doc_number(d, thing, "size", now, 1)) * math::mat4::translation(-anchor);
+    // (the user's three tags: 2D sticks to the camera; 2.5D stays in the world, smaller far, but keeps the angle it
+    //  was given on the screen; 3D, and a solid, is filmed as it is)
+    const auto shown = d.shown.find(thing);
+    if (deeper || shown == d.shown.end() || shown->second.space == 3) return place;
+    if (shown->second.space == 2) return d.rig * place;
+    const math::double3 at = (place * math::double4{anchor, 1.0}).xyz;   // (where it stands)
+    return math::mat4::translation(at) * d.facing * math::mat4::translation(-at) * place;
 }
 
 // Every thing told its moment: whether it is on (from its start, for its duration if it has one), what of itself it
@@ -233,10 +247,30 @@ static void doc_moment(Doc& d, double now) {
     std::vector<Lies> lies;
     for (int thing : lie) {
         const auto found = d.shown.find(thing);
-        if (found == d.shown.end()) continue;
+        if (found == d.shown.end() || found->second.camera) continue;
         const double since = now - doc_number(d, thing, "start", 0, 0), lasts = doc_number(d, thing, "duration", 0, -1);
-        Lies one{thing, &found->second, since >= 0.0 && (lasts < 0.0 || since < lasts) && doc_number(d, thing, "visible", 0, 1) > 0.5, found->second.solid || found->second.shape || doc_word(d, thing, "space") == "2.5d", since};   // (a sheet in the world settles depth with the solid things)
+        Lies one{thing, &found->second, since >= 0.0 && (lasts < 0.0 || since < lasts) && doc_number(d, thing, "visible", 0, 1) > 0.5, found->second.space != 2, since};   // (a sheet in the world settles depth with the solid things)
         lies.push_back(one);
+    }
+    // The camera: the nearest one in the order of the things that is on (the past repository's choice); none, the
+    // stage's own. It looks at where it is, from round about it as it is turned (y: about, x: up and down, z: its lean),
+    // `distance` times the stage's own way off, `zoom` times as near.
+    {
+        int camera = 0;
+        for (int thing : lie)
+            if (d.shown.count(thing) && d.shown[thing].camera) {
+                const double since = now - doc_number(d, thing, "start", 0, 0), lasts = doc_number(d, thing, "duration", 0, -1);
+                if (since >= 0.0 && (lasts < 0.0 || since < lasts) && doc_number(d, thing, "visible", 0, 1) > 0.5) camera = thing;
+            }
+        const auto turned = [&](const char* name, math::double3 about) { return camera ? math::mat4::rotation(doc_number(d, camera, name, now, 0) * (double)TAU / 360.0, about) : math::mat4{}; };
+        const math::mat4 round = turned("rotate_y", {0, 1, 0}) * turned("rotate_x", {1, 0, 0}) * turned("rotate", {0, 0, 1});
+        const math::double3 look = camera ? (doc_place(d, camera, now) * math::double4{0, 0, 0, 1}).xyz : math::double3{0.0};
+        const double far = camera ? doc_number(d, camera, "distance", now, 1) : 1.0, near = camera ? doc_number(d, camera, "zoom", now, 1) : 1.0;
+        const math::double3 eye = look + (round * math::double4{0, 0, 6.0 * far, 0}).xyz, up = (round * math::double4{0, 1, 0, 0}).xyz;
+        s.camera->lookAt(eye, look, up);
+        s.camera->setProjection(2.0 * std::atan(std::tan(15.0 * (double)TAU / 360.0) / near) * 360.0 / (double)TAU, double(s.w) / double(s.h), 0.05, 60.0 * std::max(1.0, far));
+        d.rig = s.camera->getModelMatrix() * math::mat4::translation(math::double3{0, 0, -6});   // (from the stage's own camera to this one)
+        d.facing = math::mat4(d.rig.upperLeft());
     }
     // Who is before whom (the past repository's law of 2026-09-12: a flat thing is not in the world). Flat things take
     // no part in depth and lie by the order of the things alone; solid things that follow one another settle depth
@@ -361,7 +395,9 @@ static bool doc_match(Doc& d) {
         }
         if ((fx.tint = (float)doc_number(d, thing, "tint", 0, 0)) > 0.f) hue("tint_black", "1b1f5c", &fx.tints[0]), hue("tint_white", "ff8a65", &fx.tints[1]);   // (a deep blue and a warm pink, as it comes)
         if ((fx.tritone = (float)doc_number(d, thing, "tritone", 0, 0)) > 0.f) hue("tritone_shadow", "1b1f5c", &fx.tones[0]), hue("tritone_midtone", "c44569", &fx.tones[1]), hue("tritone_highlight", "ffd166", &fx.tones[2]);
-        if (shape.empty() && !std::filesystem::is_regular_file(file)) why = "there is no such file";
+        if (doc_among("film picture text shape", kind)) made.space = doc_word(d, thing, "space") == "2.5d" ? 25 : 2;
+        if (kind == "camera") made.camera = true;   // (nothing of it is seen: it is how the rest is)
+        else if (shape.empty() && !std::filesystem::is_regular_file(file)) why = "there is no such file";
         else if (kind == "film") {
             const double from = doc_number(d, thing, "begin", 0, 0), length = doc_number(d, thing, "duration", 0, -1), speed = doc_number(d, thing, "speed", 0, 1);
             made.film = video(s, file.c_str(), mat4f{}, 1.f, (float)from, length < 0 ? -1.f : (float)(from + length * std::fabs(speed)), (float)speed, lay);
@@ -401,7 +437,7 @@ static bool doc_match(Doc& d) {
             }
             else if ((made.solid = solid(s, file.c_str(), mat4f{}, 1.f)) && rgb >= 0) solid_fill(s, made.solid, colour);
         } else why = std::string("its kind is one of: ") + doc_kinds;
-        if (!made.film && !made.drawn && !made.solid && !made.shape) { d.trouble = why + ": the " + kind + " " + std::filesystem::path(file + shape).filename().string() + " could not be made"; all = false; continue; }
+        if (!made.film && !made.drawn && !made.solid && !made.shape && !made.camera) { d.trouble = why + ": the " + kind + " " + std::filesystem::path(file + shape).filename().string() + " could not be made"; all = false; continue; }
         d.shown[thing] = made;
     }
     doc_moment(d, s.now);
@@ -710,6 +746,7 @@ static std::string doc_words(Doc& d, int thing, const char* name) {
 }
 // What a thing is called where things are listed: a text by its words, a shape by what shape it is, a file by its name.
 static std::string doc_name(Doc& d, int thing) {
+    if (doc_word(d, thing, "kind") == "camera") return "Camera";
     std::string is = doc_word(d, thing, "text");
     if (is.empty()) is = doc_word(d, thing, "shape");
     if (is.empty()) return std::filesystem::path(doc_word(d, thing, "file")).filename().string();

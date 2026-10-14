@@ -616,6 +616,13 @@ void main() {
       expect(m.word(made, 'name'), name);
       expect(m.frame(made), isNotNull, reason: 'it can be held, even if nothing of it is seen');
     }
+    final camera = m.add('camera', 'camera');
+    expect(camera, isNot(0), reason: m.trouble);
+    expect([m.word(camera, 'name'), m.frame(camera)], ['Camera', null], reason: 'a camera is not seen: nothing to hold on the stage');
+    expect(m.set(camera, 'rotate_y', 30) && m.set(camera, 'zoom', 2) && m.set(camera, 'distance', 1.5), isTrue, reason: m.trouble);
+    expect(m.set(camera, 'size', 2), isFalse, reason: 'a camera has no size');
+    ws.reread();
+    expect(ws.layers.first.kind, WsKind.camera);
     expect(m.set(m.things[1], 'points', 8) && m.set(m.things[1], 'inner', .7), isTrue, reason: m.trouble);
     expect(m.set(m.things[0], 'points', 2), isFalse, reason: 'a polygon has three points at least');
     expect(t.takeException(), isNull);
