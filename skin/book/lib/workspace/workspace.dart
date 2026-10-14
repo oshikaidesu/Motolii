@@ -498,7 +498,7 @@ List<Fx>? _fxCards(Ws ws, String? id) {
 /// Joined: the cards the inside shows a thing's values on beyond the sample's (motolii_cards), each as Params in the
 /// effects' manner: a number its range and what it is now, a word the words it may be. Nothing of them is typed here.
 List<Fx>? _valueCards(Ws ws, String? id) {
-  final m = ws.inside, t = int.tryParse(id ?? '');
+  final m = ws.inside, t = id == null ? 0 : int.tryParse(id); // (nothing picked: the stage's own, thing 0)
   if (m == null || t == null) return null;
   final at = ws.frame / Ws.fps;
   return [
@@ -517,6 +517,10 @@ List<Fx>? _valueCards(Ws ws, String? id) {
 Map<String, double> wsTransform(Ws ws, String? id) {
   if (ws.inside case final m?) {   // (joined: the document's own values, as the inspector counts them)
     final t = int.tryParse(id ?? '');
+    if (id == null) { // (nothing picked: the stage's own cards, thing 0)
+      final at = ws.frame / Ws.fps;
+      return {for (final (_, names) in m.cards(0)) for (final n in names) 'v_$n': m.words(0, n).isEmpty ? m.value(0, n, at) ?? 0 : math.max(0, m.words(0, n).indexOf(m.word(0, n))).toDouble()};
+    }
     if (t == null) return const {};
     final at = ws.frame / Ws.fps, p = m.point;
     double r1(double x) => (x * 10).roundToDouble() / 10 + 0; // (+ 0: no minus nought)
@@ -551,7 +555,7 @@ Map<String, double> wsTransform(Ws ws, String? id) {
 /// Joined: what was changed in the inspector is a thing held and its numbers carried (the inside's one form of a
 /// drag): while a hand is on it, it only shows; when the hand lets go it is the document's, by the document's rules.
 void _write(Ws ws, String? id, Map<String, double> changed, {required bool live}) {
-  final m = ws.inside!, t = int.tryParse(id ?? '');
+  final m = ws.inside!, t = id == null ? 0 : int.tryParse(id); // (nothing picked: the stage's own, thing 0)
   // (a word on a card of the inside's own, picked: the word in that place, said; one step)
   final said = {for (final e in changed.entries) if (t != null && e.key.startsWith('v_') && m.words(t, e.key.substring(2)).isNotEmpty) e.key: e.value};
   if (said.isNotEmpty) {

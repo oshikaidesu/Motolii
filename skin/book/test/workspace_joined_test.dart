@@ -1094,6 +1094,27 @@ void main() {
     await _close(t);
   }, skip: !_built);
 
+  testWidgets('nothing picked, the inspector is the whole picture\'s: Filament\'s grade, glow and room, the stage\'s own values', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    m.add('solid', 'cube');
+    ws
+      ..reread()
+      ..select(null);
+    await t.pumpAndSettle();
+    final titles = [for (final e in find.byType(ValuesCard).evaluate()) (e.widget as ValuesCard).card.name];
+    expect(titles, ['Grade', 'Lens', 'Room']);
+    final bloom = find.byWidgetPredicate((w) => w is NumField && w.id == 'v_bloom');
+    await t.ensureVisible(bloom);
+    await t.drag(bloom, const Offset(60, 0));
+    await t.pumpAndSettle();
+    expect(m.value(0, 'bloom', 0), greaterThan(0), reason: 'the stage glows: ${ws.notice}');
+    expect(m.undo() && m.value(0, 'bloom', 0) == 0, isTrue, reason: 'one step');
+    expect(m.say(0, 'tone_mapper', 'agx') && m.word(0, 'tone_mapper') == 'agx', isTrue, reason: m.trouble);
+    expect(m.say(0, 'tone_mapper', 'sepia'), isFalse, reason: 'one of Filament\'s own');
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
   testWidgets('Backspace on the timeline takes the picked thing out; undo brings it back', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final ring = m.add('solid', 'ring'), cube = m.add('solid', 'cube');

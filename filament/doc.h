@@ -32,6 +32,7 @@
 #include "interp.h"
 #include "solid.h"
 #include "video.h"
+#include <filament/Skybox.h>
 #include <sstream>
 #include <sqlite3.h>
 
@@ -42,6 +43,9 @@ struct Doc {
     std::vector<int> laid;   // the things in the order they lie, the one furthest back first (read when first asked for, forgotten at every change)
     // One act of a hand: the changes made from its beginning to its end are one step of undo, and if one of them is
     // refused none of them is made. Acts may lie one within another: the outermost one is the step.
+    std::string graded;                 // the stage's grade as last made (doc_look): made again only when it is told otherwise
+    float roomLight = 0.f;              // the room's own light, as the stage was opened with it
+    Skybox* sky = nullptr;              // the colour behind everything, once one is said
     bool keying = false;                // every value a hand changes gets a key at that moment (a shell's "animate all")
     double keying_from = 0.0;           // the stage's moment at which that was turned on: a value's first key then has the value it had, there, before it
     int act = 0;                        // how many acts are open, one within another
@@ -50,7 +54,7 @@ struct Doc {
     double written_from = 0.0;          // the moment of the document that a film being written begins at (its work area's start)
     sqlite3_session* acting = nullptr;  // SQLite's own record of what the open act changes
     // A thing held by a hand (doc_hold): what of it is carried shows at once and is not yet the document's.
-    struct Held { int thing = 0; std::map<std::string, double> from, tried; } held;
+    struct Held { int thing = -1; std::map<std::string, double> from, tried; } held;   // (-1: nothing held; 0 is the stage, which a hand may hold by a value of its own)
     struct Keys { std::vector<double> at, value; std::vector<Interp> interp; std::vector<std::string> own; };   // (own: a way defined in the document, where the stretch is not one of the nine kinds)
     std::map<std::pair<int, std::string>, Keys> moving;   // a value's keys, and the way of the stretch after each; read from the facts when first asked for, forgotten at every change
     std::map<std::string, sqlite3_stmt*> named, goes;     // a way by its name, and by its expression: made ready once (SQLite works it out)
@@ -118,7 +122,16 @@ static const DocValue doc_values[] = {
     // (Filament's own surface of a solid in a colour: how metal, how rough, how much it reflects, a clear coat over it
     //  and how rough that is, and how much it lights itself: 1 its colour itself on the picture, more brighter still)
     {"metallic", "solid", 0, 1, false, nullptr}, {"roughness", "solid", 0, 1, false, nullptr}, {"reflectance", "solid", 0, 1, false, nullptr},
-    {"clear_coat", "solid", 0, 1, false, nullptr}, {"clear_coat_roughness", "solid", 0, 1, false, nullptr}, {"emissive", "solid", 0, 20, false, nullptr}};
+    {"clear_coat", "solid", 0, 1, false, nullptr}, {"clear_coat_roughness", "solid", 0, 1, false, nullptr}, {"emissive", "solid", 0, 20, false, nullptr},
+    // (the stage's, thing 0: the whole picture, Filament's own. Its grade, on every picture laid: a tone mapper, an
+    //  exposure in stops, contrast, saturation, vibrance, how warm; its glow round bright parts and its lens flare, a
+    //  darkening at the corners and a fog in a colour, on the stage's own view; the room's light, how bright and turned
+    //  how far, and the colour behind everything)
+    {"tone_mapper", "stage", 0, 0, false, "linear aces filmic agx pbr_neutral"}, {"exposure", "stage", -10, 10, false, nullptr},
+    {"contrast", "stage", 0, 2, false, nullptr}, {"saturation", "stage", 0, 2, false, nullptr}, {"vibrance", "stage", 0, 2, false, nullptr}, {"temperature", "stage", -1, 1, false, nullptr},
+    {"bloom", "stage", 0, 1, false, nullptr}, {"lens_flare", "stage", 0, 1, false, nullptr}, {"vignette", "stage", 0, 1, false, nullptr}, {"vignette_color", "stage", 0, 0, false, ""},
+    {"fog", "stage", 0, 1, false, nullptr}, {"fog_color", "stage", 0, 0, false, ""},
+    {"environment", "stage", 0, 10, false, nullptr}, {"environment_rotate", "stage", -1e6, 1e6, false, nullptr}, {"background", "stage", 0, 0, false, ""}};
 // The cards a maker sees a thing's values on, besides where it is and its fill: a title and the values on it, in the
 // order shown (a thing is shown those of them its kind has). A value the window has no other seat for goes here.
 struct DocCard { const char* title; const char* names; };
@@ -126,6 +139,9 @@ static const DocCard doc_cards[] = {
     {"Type", "letter_spacing line_spacing italic"},
     {"Line", "cap join dash dash_offset"},
     {"Surface", "metallic roughness reflectance clear_coat clear_coat_roughness emissive"},
+    {"Grade", "tone_mapper exposure contrast saturation vibrance temperature"},
+    {"Lens", "bloom lens_flare vignette vignette_color fog fog_color"},
+    {"Room", "environment environment_rotate background"},
 };
 static bool doc_among(const std::string& words, const std::string& one) { return (" " + words + " ").find(" " + one + " ") != std::string::npos; }
 
@@ -217,6 +233,7 @@ static double doc_number(Doc& d, int thing, const char* name, double at, double 
     return doc_went_by(d, k.own[i], u, at - k.at[i], k.at[i + 1] - k.at[i], k.value[i], k.value[i + 1]);
 }
 static std::string doc_word(Doc& d, int thing, const char* name) {
+    if (thing == 0 && !strcmp(name, "kind")) return "stage";   // (thing 0 is the stage: its values are the whole picture's)
     std::string is;
     doc_rows(d, sqlite3_mprintf("select value from fact where thing = %d and name = %Q", thing, name), [&](sqlite3_stmt* row) { is = (const char*)sqlite3_column_text(row, 0); });
     return is;
@@ -296,6 +313,47 @@ static void doc_unshape(Stage& s, const std::function<bool(const Stage::Made&)>&
 }
 // Every thing told its moment: whether it is on (from its start, for its duration if it has one), what of itself it
 // shows (it goes round when it comes to its end), and where it is.
+// The stage's own looks, Filament's, as the document says them (thing 0): its grade made again only when it is told
+// otherwise; the glow, flare, darkened corners and fog on the stage's own view; the room's light and the colour behind.
+static void doc_look(Doc& d) {
+    Stage& s = *d.stage;
+    const auto hex = [&](const char* name, float3 otherwise) { const std::string w = doc_word(d, 0, name); return w.size() == 6 ? float3{(float)((std::strtol(w.c_str(), nullptr, 16) >> 16) & 255), (float)((std::strtol(w.c_str(), nullptr, 16) >> 8) & 255), (float)(std::strtol(w.c_str(), nullptr, 16) & 255)} / 255.f : otherwise; };
+    const std::string mapper = doc_word(d, 0, "tone_mapper");
+    char grade[200];
+    std::snprintf(grade, sizeof grade, "%s %g %g %g %g %g", mapper.c_str(), doc_number(d, 0, "exposure", 0, 0), doc_number(d, 0, "contrast", 0, 1), doc_number(d, 0, "saturation", 0, 1), doc_number(d, 0, "vibrance", 0, 1), doc_number(d, 0, "temperature", 0, 0));
+    if (d.graded != grade) {
+        static LinearToneMapper linear; static ACESToneMapper aces; static FilmicToneMapper filmic; static AgxToneMapper agx; static PBRNeutralToneMapper neutral;
+        const ToneMapper* tm = mapper == "aces" ? (const ToneMapper*)&aces : mapper == "filmic" ? (const ToneMapper*)&filmic : mapper == "agx" ? (const ToneMapper*)&agx : mapper == "pbr_neutral" ? (const ToneMapper*)&neutral : (const ToneMapper*)&linear;
+        ColorGrading* was = const_cast<ColorGrading*>(s.view->getColorGrading());
+        ColorGrading* now = ColorGrading::Builder().toneMapper(tm).exposure((float)doc_number(d, 0, "exposure", 0, 0)).contrast((float)doc_number(d, 0, "contrast", 0, 1))
+                                .saturation((float)doc_number(d, 0, "saturation", 0, 1)).vibrance((float)doc_number(d, 0, "vibrance", 0, 1)).whiteBalance((float)doc_number(d, 0, "temperature", 0, 0), 0.f).build(*s.engine);
+        s.view->setColorGrading(now);
+        for (View* v : s.layers) v->setColorGrading(now);   // (the same grade on every picture laid over the stage's own)
+        if (was) s.engine->destroy(was);
+        d.graded = grade;
+    }
+    View::BloomOptions glow = s.view->getBloomOptions();
+    glow.enabled = doc_number(d, 0, "bloom", 0, 0) > 0.0, glow.strength = (float)doc_number(d, 0, "bloom", 0, 0);
+    glow.lensFlare = glow.starburst = doc_number(d, 0, "lens_flare", 0, 0) > 0.0;
+    glow.enabled = glow.enabled || glow.lensFlare;   // (a flare is drawn by the glow's own passes)
+    glow.chromaticAberration = 0.005f * (float)doc_number(d, 0, "lens_flare", 0, 0), glow.ghostThreshold = glow.haloThreshold = 1.f;
+    s.view->setBloomOptions(glow);
+    View::VignetteOptions corners = s.view->getVignetteOptions();
+    corners.enabled = doc_number(d, 0, "vignette", 0, 0) > 0.0, corners.midPoint = 1.f - 0.9f * (float)doc_number(d, 0, "vignette", 0, 0), corners.color = LinearColorA{hex("vignette_color", float3{0.f}), 1.f};
+    s.view->setVignetteOptions(corners);
+    View::FogOptions haze = s.view->getFogOptions();
+    haze.enabled = doc_number(d, 0, "fog", 0, 0) > 0.0, haze.density = 0.5f * (float)doc_number(d, 0, "fog", 0, 0), haze.distance = 2.f, haze.height = -1e3f, haze.heightFalloff = 0.f, haze.color = hex("fog_color", float3{0.85f, 0.85f, 0.9f}), haze.fogColorFromIbl = false;
+    s.view->setFogOptions(haze);
+    if (IndirectLight* room = s.scene->getIndirectLight()) {
+        if (d.roomLight <= 0.f) d.roomLight = room->getIntensity();
+        room->setIntensity(d.roomLight * (float)doc_number(d, 0, "environment", 0, 1));
+        room->setRotation(math::mat3f::rotation((float)(doc_number(d, 0, "environment_rotate", 0, 0) * (double)TAU / 360.0), math::float3{0, 1, 0}));
+    }
+    const std::string behind = doc_word(d, 0, "background");
+    if (!behind.empty() && !d.sky) s.scene->setSkybox(d.sky = Skybox::Builder().color({0.f, 0.f, 0.f, 1.f}).build(*s.engine));
+    if (d.sky) d.sky->setColor(LinearColorA{behind.empty() ? float3{0.f} : Color::toLinear<ACCURATE>(sRGBColor{hex("background", float3{0.f})}), 1.f});
+}
+
 static void doc_moment(Doc& d, double now) {
     Stage& s = *d.stage;
     const std::vector<int> lie = doc_laid(d);
@@ -340,6 +398,7 @@ static void doc_moment(Doc& d, double now) {
         s.camera->setFocusDistance((float)(focus > 0.0 ? focus : length(eye - look)));
         d.facing = math::mat4(d.rig.upperLeft());
     }
+    doc_look(d);
     // Who is before whom (the past repository's law of 2026-09-12: a flat thing is not in the world). Flat things take
     // no part in depth and lie by the order of the things alone; solid things that follow one another settle depth
     // among themselves; a run of the one sort is drawn whole over the run before it. By Filament's own means: the
@@ -1096,7 +1155,7 @@ static bool doc_covers(Doc& d, int thing, double now, double* box) {
 }
 
 static double doc_usual(const char* name) {
-    return doc_among("size speed opacity wide visible distance zoom copies copy_size blur_level letter_spacing line_spacing", name) ? 1.0 : !strcmp(name, "duration") ? -1.0
+    return doc_among("size speed opacity wide visible distance zoom copies copy_size blur_level letter_spacing line_spacing contrast saturation vibrance environment", name) ? 1.0 : !strcmp(name, "duration") ? -1.0
          : !strcmp(name, "metallic") ? 0.08 : !strcmp(name, "roughness") ? 0.6 : !strcmp(name, "reflectance") ? 0.5 : 0.0;   // (a solid's surface as it comes)
 }
 static bool doc_value(Doc& d, int thing, const char* name, double at, double* is) { return doc_knows(d, thing, name) && (*is = doc_number(d, thing, name, at, doc_usual(name)), true); }
@@ -1118,7 +1177,7 @@ static bool doc_hold(Doc& d, int thing) {
 }
 static bool doc_carry(Doc& d, const char* by, double a, double b) {
     Doc::Held& h = d.held;
-    if (!h.thing) return d.trouble = "nothing is held", false;
+    if (h.thing < 0) return d.trouble = "nothing is held", false;
     const double now = d.stage->now;
     const auto was = [&](const char* name) {   // (as it was when the hand first carried it)
         auto found = h.from.find(name);
@@ -1149,7 +1208,7 @@ static bool doc_carry(Doc& d, const char* by, double a, double b) {
 static bool doc_let_go(Doc& d, bool keep) {
     const Doc::Held h = d.held;
     d.held = Doc::Held{};
-    if (!h.thing) return d.trouble = "nothing is held", false;
+    if (h.thing < 0) return d.trouble = "nothing is held", false;
     if (!keep || h.tried.empty()) return doc_moment(d, d.stage->now), true;
     doc_act(d);   // (all that was carried is one step: a value that takes keys by the rule of a value changed at a moment, any other as the value it is)
     for (const auto& [name, is] : h.tried) {

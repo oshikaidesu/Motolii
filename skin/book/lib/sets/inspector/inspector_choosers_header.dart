@@ -336,6 +336,7 @@ class EmptyState extends StatelessWidget {
           padding: const EdgeInsets.only(top: 4, bottom: 8),
           child: Text('Nothing selected. Pick a layer on the Stage or in the Timeline.', style: T.label(Grey.g56).copyWith(height: 1.4)),
         ),
+        for (final c in x.doc.cards) ValuesCard(c), // (the host's own: the whole picture's values)
         if (x.cfg.maybe)
           Sect(
             title: 'Composition',
