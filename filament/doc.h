@@ -31,6 +31,9 @@
 #include "drawn.h"
 #include "interp.h"
 #include "physics.h"
+#include "script.h"
+#include <filesystem>
+#include <dlfcn.h>
 #include "solid.h"
 #include "video.h"
 #include <filament/Skybox.h>
@@ -59,6 +62,8 @@ struct Doc {
     std::unique_ptr<PhysWorld> phys;    // the things that fall and strike (Jolt): made when first asked, gone when the document changes
     std::vector<int> phys_of;           // which thing each of its bodies is
     std::vector<double> phys_until;     // and till when its keys have it
+    struct Scripted { double at = -1; int made = -1; std::vector<ScriptCopy> copies; };
+    std::map<int, Scripted> scripted;   // each thing's copies as its script said them, at one moment (worked out once a picture)
     bool phys_keyed = false;            // reading where a thing's keys put it (not where the world has it)
     bool writing = false;               // it is being written as a film: it is read, not changed, until that is done
     double written_from = 0.0;          // the moment of the document that a film being written begins at (its work area's start)
@@ -103,6 +108,8 @@ static const DocValue doc_values[] = {
     // (falls and strikes others: moves, the world has it from its last key on; still, a wall where the document puts it;
     //  how much it bounces, how it rubs; and the stage's pull down, in units of the stage a second each second)
     {"physics", doc_drawn, 0, 0, false, "none moves still"},
+    // (a recipe as code: a JavaScript file that says where each copy is (script.h); its head's knobs are values of the thing, named js_ and the knob's name)
+    {"script", "picture text shape", 0, 0, false, ""},
     {"bounce", doc_drawn, 0, 1, false, nullptr},
     {"friction", doc_drawn, 0, 2, false, nullptr},
     {"gravity", "stage", -100, 100, false, nullptr},
@@ -351,9 +358,47 @@ static const DocShown doc_shown[] = {
     {"behind", "", "", "Behind", 0, 0, nullptr},
     {"background", "colour", "", "Colour", 0, 0, nullptr},
 };
+// A thing's script (script.h): the knobs its file's head declares, as values of the thing named js_ and the knob's name,
+// and its code, made once a file and again when the file changes (a script written and saved shows at once).
+struct DocScript {
+    long long stamp = -1;
+    std::chrono::steady_clock::time_point looked{};   // (when the file was last asked whether it changed: a few times a second at most)
+    std::vector<ScriptKnob> knobs;
+    std::vector<std::string> names;
+    std::vector<DocValue> values;
+    std::vector<DocShown> shown;
+    std::unique_ptr<Script> run;
+};
+static std::map<std::string, DocScript>& doc_scripts() { static std::map<std::string, DocScript> all; return all; }
+static int& doc_scripts_made() { static int made = 0; return made; }
 static const DocShown* doc_shown_of(const char* name) {
     for (const DocShown& one : doc_shown) if (!strcmp(one.name, name)) return &one;
+    for (const auto& [file, script] : doc_scripts())
+        for (const DocShown& one : script.shown) if (!strcmp(one.name, name)) return &one;
     return nullptr;
+}
+static DocScript* doc_script_of(const std::string& file) {
+    if (file.empty() || file == "none") return nullptr;
+    DocScript& s = doc_scripts()[file];
+    const auto now = std::chrono::steady_clock::now();
+    if (s.stamp >= 0 && now - s.looked < std::chrono::milliseconds(250)) return &s;
+    s.looked = now;
+    std::error_code wrong;
+    const long long stamp = (long long)std::filesystem::last_write_time(file, wrong).time_since_epoch().count();
+    if (wrong) return s.stamp >= 0 ? &s : nullptr;
+    if (s.stamp != stamp) {
+        s = DocScript{};
+        s.stamp = stamp, s.looked = now, s.knobs = script_knobs(file);
+        doc_scripts_made()++;   // (what was worked out from the old one is forgotten)
+        for (const ScriptKnob& k : s.knobs) s.names.push_back("js_" + k.name);
+        for (size_t i = 0; i < s.knobs.size(); ++i) {   // (the names are all made first: what points into them stays put)
+            const ScriptKnob& k = s.knobs[i];
+            s.values.push_back(DocValue{s.names[i].c_str(), "picture text shape", k.kind == "select" ? 0.0 : k.low, k.kind == "select" ? 0.0 : k.high, k.kind == "track", k.kind == "select" ? k.words.c_str() : nullptr});
+            s.shown.push_back(DocShown{s.names[i].c_str(), k.kind == "check" ? "onoff" : "", "", k.label.c_str(), k.low, k.high, nullptr});
+        }
+        s.run = std::make_unique<Script>(file);
+    }
+    return &s;
 }
 static const DocCard doc_cards[] = {
     {"Type", "split letter_spacing line_spacing italic wrap wrap_at"},
@@ -389,7 +434,7 @@ static bool doc_rows(Doc& d, char* ask, const std::function<void(sqlite3_stmt*)>
     return ok;
 }
 static void doc_forget(Doc& d) {
-    d.phys.reset(), d.phys_of.clear(), d.phys_until.clear();   // (the world made again from what the document says now)
+    d.phys.reset(), d.phys_of.clear(), d.phys_until.clear(), d.scripted.clear();   // (the world made again from what the document says now)
     d.moving.clear();
     d.named.clear();
     d.laid.clear();
@@ -652,6 +697,26 @@ static math::mat4 doc_place(Doc& d, int thing, double now, int deeper, int copy,
         own = own * math::mat4::rotation(w * doc_number(d, thing, "wave_rotate", said, 0) * (double)TAU / 360.0, math::double3{0, 0, 1}) *
               math::mat4::scaling(std::max(0.0, 1.0 + w * doc_number(d, thing, "wave_size", said, 0)));
     }
+    if (member)   // (a recipe as code: each copy where the thing's script says, on top of what its copies' values say)
+        if (DocScript* sc = doc_script_of(doc_word(d, thing, "script")); sc && sc->run && sc->run->ok()) {
+            std::map<std::string, double> numbers;
+            std::map<std::string, std::string> words;
+            for (size_t i = 0; i < sc->knobs.size(); ++i) {
+                if (sc->knobs[i].kind == "select") {   // (not said yet: its first word)
+                    const std::string w = doc_word(d, thing, sc->names[i].c_str());
+                    words[sc->knobs[i].name] = w.empty() ? sc->knobs[i].words.substr(0, sc->knobs[i].words.find(' ')) : w;
+                }
+                else numbers[sc->knobs[i].name] = doc_number(d, thing, sc->names[i].c_str(), said, sc->knobs[i].usual);
+            }
+            Doc::Scripted& kept = d.scripted[thing];
+            if (kept.at != said || kept.made != doc_scripts_made() || (int)kept.copies.size() != n) {   // (every copy at once, the knobs read once)
+                kept.at = said, kept.made = doc_scripts_made(), kept.copies.resize((size_t)n);
+                for (int i = 0; i < n; ++i) kept.copies[(size_t)i] = sc->run->each(i, n, said, numbers, words);
+            }
+            const ScriptCopy c = copy < n ? kept.copies[(size_t)copy] : ScriptCopy{};
+            shift += math::double3{c.x, c.y, c.z};
+            own = own * math::mat4::rotation(c.rotate * (double)TAU / 360.0, math::double3{0, 0, 1}) * math::mat4::scaling(c.size);
+        }
     double tall = doc_number(d, thing, "tall", now, 1);   // (taller, its anchor staying: a copy as its number in copy_tall says too)
     if (member) {
         std::istringstream said(doc_word(d, thing, "copy_tall"));
@@ -1484,6 +1549,13 @@ static bool doc_knows(Doc& d, int thing, const char* name = nullptr, const doubl
         if (one.moves) moving += std::string(moving.empty() ? "" : ", ") + one.name;
         if (!strcmp(one.name, name)) v = &one;
     }
+    if (!v && !strncmp(name, "js_", 3) && doc_among("picture text shape", kind))   // (a knob of the thing's script)
+        if (const DocScript* sc = doc_script_of(doc_word(d, thing, "script")))
+            for (const DocValue& one : sc->values) {
+                has += std::string(has.empty() ? "" : ", ") + one.name;
+                if (one.moves) moving += std::string(moving.empty() ? "" : ", ") + one.name;
+                if (!strcmp(one.name, name)) v = &one;
+            }
     char range[120];
     if (!v) return d.trouble = "a " + kind + " has no " + name + ": it has " + has, false;
     if (number && v->words) return d.trouble = std::string(name) + " is a word, told by say" + (*v->words ? std::string(": ") + v->words : ""), false;
@@ -1654,80 +1726,84 @@ static bool doc_raise(Doc& d, int thing, int places) {
     return doc_change(d, all);
 }
 // Pictures in one call (what Cavalry's tutorials build from a shape, a duplicator and a behaviour or two, each named):
-// a thing of a kind made, and told these values, as one step; a few of them are its knobs. "set name number",
-// "say name words", "key name seconds number", one to a line.
-struct DocRecipe { const char* name; const char* kind; const char* file; const char* what; const char* lines; };
-static const DocRecipe doc_recipes[] = {
-    {"Wave lines", "shape", "wave", "rows of waving lines, each stretched wider than the one above (fewer waves across), flowing a little after it",
-     "say fill ffffff\nset wide 30\nset points 12\nset inner 0.6\nset copies 12\nset copy_y -0.25\nset copy_wide 3\nset wave_x 0.25\nset wave_phase 1.5\nset wave_speed 0.4\nsay copy_fill ffffff ff3366"},
-    {"Iris", "shape", "line", "lines round a centre, coloured in their order, breathing",
-     "set size 1\nset anchor_x -1.6\nset copies 120\nset copy_turn 360\nsay copy_fill ff3366 ffd166 1b2fd8 22c55e ff3366\nset wave_size 0.06\nset wave_phase 1"},
-    {"Dot wave", "shape", "circle", "a grid of dots rising and falling one after another",
-     "say fill ffd166\nset size 0.12\nset copies 160\nset copy_columns 16\nset copy_x 0.3\nset copy_y -0.3\nset wave_y 0.03\nset wave_size 1.6\nset wave_phase 3\nset wave_noise 1\nset noise_scale 0.8\nset wave_speed 0.4\nsay copy_fill ffd166 ff3366"},
-    {"Tunnel", "shape", "rect", "frames going away into the picture, turning one after another",
-     "say space 2.5d\nsay fill none\nsay stroke ffffff\nset stroke_width 6\nset size 1.6\nset z -4\nset copies 24\nset copy_z -0.45\nset wave_rotate 30\nset wave_phase 1\nset wave_speed 0.5"},
-    {"Text ripple", "text", "/System/Library/Fonts/Supplemental/Arial Unicode.ttf", "words whose letters bob one after another, coloured in their order",
-     "say text MOTOLII\nsay fill ffffff\nset size 0.6\nsay split letters\nset wave_y 0.12\nset wave_phase 1\nset wave_rotate 8\nsay copy_fill ff3366 ffd166 1b2fd8"},
-    {"Field dots", "shape", "circle", "a grid of dots swelling where a round field passes over them",
-     "say fill ffffff\nset size 0.06\nset copies 312\nset copy_columns 24\nset copy_x 0.24\nset copy_y -0.24\nset field_radius 1.4\nset field_size 1.2\nset field_push 0.6\nkey field_x 0 -1.8\nkey field_x 4 1.8\nkey field_x 8 -1.8\nset wave_y 0.015\nset wave_noise 1\nset wave_speed 0.5\nsay copy_fill ffffff ff3366"},
-    {"Weave", "shape", "line", "short lines across and down in turn, turning where a round field passes over them",
-     "say fill ffffff\nset size 0.26\nset copies 135\nset copy_columns 15\nset copy_rotate 90\nset copy_x 0.36\nset copy_y -0.36\nset field_radius 1.4\nset field_rotate 90\nkey field_x 0 -3\nkey field_x 4 3\nkey field_x 8 -3\nsay copy_fill ffffff 3366ff"},
-    {"Rings", "shape", "circle", "rings within rings breathing one after another",
-     "say fill 000000\nsay stroke ffd166\nset stroke_width 5\nset size 2.2\nset copies 14\nset copy_size 0.86\nset wave_size 0.12\nset wave_phase 1\nset wave_speed 0.7"},
-    {"Confetti", "shape", "rect", "bits of colour scattered about, each turning its own way",
-     "set size 0.08\nset wide 0.5\nset copies 160\nset scatter_x 2.9\nset scatter_y 1.7\nset scatter_rotate 180\nset scatter_size 0.5\nset drift_y -0.6\nset wave_rotate 120\nset wave_phase 37\nset wave_x 0.1\nsay copy_fill ff3366 ffd166 1b2fd8 22c55e ff3366"},
-    {"Op star", "shape", "star", "stars within stars, black and white in turn, each turning a little after the one outside it",
-     "set size 2.6\nset points 16\nset inner 0.78\nset copies 30\nset copy_size 0.9\nsay copy_fill ffffff 000000\nsay copy_fill_way cycle\nset wave_rotate 25\nset wave_phase 1\nset wave_speed 0.4"},
-    {"Helix", "shape", "circle", "two strands of dots winding round each other in depth, joined by rungs, the far side smaller and behind",
-     "say space 2.5d\nsay fill ff3366\nset size 0.12\nset copies 40\nset copy_x 0.132\nset wave_y 0.6\nset wave_z 0.6\nset wave_phase 2\nset wave_speed 0.25\nsay copy_fill ff3366 ffd166\n"
-     "then shape circle\nsay space 2.5d\nsay fill 1b2fd8\nset size 0.12\nset copies 40\nset copy_x 0.132\nset wave_y -0.6\nset wave_z -0.6\nset wave_phase 2\nset wave_speed 0.25\nsay copy_fill 1b2fd8 22c55e\n"
-     "then shape line\nsay space 2.5d\nsay fill ffffff\nset opacity 0.45\nset size 0.3\nset copies 40\nset connect first\nset connect_to before\nset order behind"},
-    {"Plexus", "shape", "circle", "a cloud of dots bobbing and turning round in depth, joined by lines where they come near, finer the further apart",
-     "say space 2.5d\nsay fill ffffff\nset size 0.05\nset copies 100\nset scatter_x 2.4\nset scatter_y 1.5\nset scatter_z 1.6\nset seed 7\nset wave_y 0.25\nset wave_noise 1\nset wave_speed 0.25\nkey rotate_y 0 0\nkey rotate_y 8 360\n"
-     "then shape line\nsay space 2.5d\nsay fill 9ad7ff\nset opacity 0.7\nset size 0.25\nset copies 900\nset connect first\nset connect_reach 0.7"},
-    {"Bars", "shape", "rect", "a bar chart: bars growing up one after another to their numbers (copy_tall), and down again",
-     "say fill ffffff\nset size 0.25\nset wide 0.6\nset y -0.9\nset anchor_y -1\nset copies 8\nset copy_x 0.42\nsay copy_tall 1.5 3.2 2.2 4.6 3.6 5.4 4.2 6\nkey tall 0 0\nkey tall 1.2 1\nkey tall 6.5 1\nkey tall 7.4 0\nset stagger 0.5\nsay copy_fill 1b2fd8 ff3366 ffd166"},
-    {"Spiral", "shape", "circle", "dots on a spiral growing outwards, turning, a band of large dots going out and back through them",
-     "say fill ffffff\nset size 0.03\nset anchor_x -30\nset copies 170\nset copy_turn 1800\nset copy_size 1.006\nkey rotate 0 0\nkey rotate 8 -360\nset field_band 0.5\nset field_size 2.5\nkey field_radius 0 0.2\nkey field_radius 4 1.6\nkey field_radius 8 0.2\nsay copy_fill ffd166 ff3366 1b2fd8"},
-    {"Burst", "shape", "line", "lines from a centre growing out one after another",
-     "say fill ffffff\nset anchor_x -1\nset copies 24\nset copy_turn 360\nkey size 0 0.001\nkey size 0.5 1.3\nkey size 6.5 1.3\nkey size 7 0.001\nset stagger 0.8\nset wave_size 0.15\nset wave_phase 2\nsay copy_fill ffffff ffd166 ffffff"},
-};
+// a file each in recipes/, beside the out/ this library is in (a file put there is on the shelf at once). Its head:
+// "// Name: what it makes", "// make kind file", then a thing's values, one to a line: "set name number",
+// "say name words", "key name seconds number", "then kind file" for another thing; its knobs as script.h says.
+// Code below the head is the first thing's script.
+struct DocRecipe { std::string name, what, path; std::vector<std::string> lines; bool code = false; };
+static std::vector<DocRecipe> doc_recipes() {
+    Dl_info lib{};
+    dladdr((const void*)&doc_recipes, &lib);
+    std::error_code wrong;
+    const std::filesystem::path dir = std::filesystem::weakly_canonical(lib.dli_fname ? lib.dli_fname : ".", wrong).parent_path().parent_path() / "recipes";
+    std::vector<std::filesystem::path> files;
+    for (const auto& e : std::filesystem::directory_iterator(dir, wrong)) if (e.path().extension() == ".js") files.push_back(e.path());
+    std::sort(files.begin(), files.end());
+    std::vector<DocRecipe> all;
+    for (const auto& f : files) {
+        DocRecipe r;
+        r.path = f.string();
+        std::ifstream in(f);
+        for (std::string line; std::getline(in, line);) {
+            if (line.rfind("//", 0) != 0) { if (line.find_first_not_of(" \t\r") != std::string::npos) { r.code = true; break; } continue; }
+            line.erase(0, line.find_first_not_of("/ "));
+            if (line.rfind("--", 0) == 0) continue;   // (a knob)
+            if (r.name.empty()) { const size_t colon = line.find(':'); r.name = line.substr(0, colon); r.what = colon == std::string::npos ? "" : line.substr(line.find_first_not_of(' ', colon + 1)); }
+            else if (!line.empty()) r.lines.push_back(line);
+        }
+        if (!r.name.empty() && !r.lines.empty() && r.lines[0].rfind("make ", 0) == 0) all.push_back(r);
+    }
+    return all;
+}
 static std::string doc_recipe_names() {
     std::string all;
-    for (const DocRecipe& r : doc_recipes) all += (all.empty() ? "" : "\n") + std::string(r.name) + "\t" + r.what;
+    for (const DocRecipe& r : doc_recipes()) all += (all.empty() ? "" : "\n") + r.name + "\t" + r.what;
     return all;
 }
 // The recipe of that name made at the stage's present moment, one step (0: not made, d.trouble says why).
 static int doc_make(Doc& d, const char* name) {
+    std::vector<DocRecipe> all = doc_recipes();
     const DocRecipe* r = nullptr;
-    for (const DocRecipe& one : doc_recipes) if (!strcmp(one.name, name)) r = &one;
+    for (const DocRecipe& one : all) if (one.name == name) r = &one;
     if (!r) return d.trouble = std::string("there is no recipe ") + name, 0;
     doc_act(d);
-    const int thing = doc_add(d, r->kind, r->file);
-    if (thing) doc_say(d, thing, "name", r->name), doc_set(d, thing, "start", 0);   // (listed by the recipe's name; on from the document's beginning, wherever the stage stands: a picture that goes round with it)
-    std::istringstream lines(r->lines);
-    int now = thing, first = thing, before = thing;   // (the thing the lines tell: "then kind file" makes another, named as the recipe too)
-    for (std::string line; now && std::getline(lines, line);) {
+    int now = 0, first = 0, before = 0;   // (the thing the lines tell: "make" the first, "then" another, each named as the recipe)
+    for (const std::string& line : r->lines) {
         std::istringstream w(line);
         std::string call, value;
         w >> call >> value;
         std::string rest;
         std::getline(w, rest);
         rest.erase(0, rest.find_first_not_of(' '));
-        if (call == "then") { before = now; if ((now = doc_add(d, value.c_str(), rest.c_str()))) doc_say(d, now, "name", r->name), doc_set(d, now, "start", 0); continue; }
+        if (call == "make" || call == "then") {
+            before = now;
+            if (!(now = doc_add(d, value.c_str(), rest.c_str()))) break;
+            if (!first) first = now;
+            doc_say(d, now, "name", r->name.c_str()), doc_set(d, now, "start", 0);   // (on from the document's beginning, wherever the stage stands: a picture that goes round with it)
+            if (now == first && r->code) doc_say(d, now, "script", r->path.c_str());
+            continue;
+        }
         const int thing = now;
+        if (!thing) break;
         if (call == "set") doc_set(d, thing, value.c_str(), rest == "first" ? first : rest == "before" ? before : rest == "behind" ? first - 0.5 : std::atof(rest.c_str()));   // (a thing it goes with: the recipe's first, or the one made before this one; an order just behind the first)
         else if (call == "say") doc_say(d, thing, value.c_str(), rest.c_str());
         else if (call == "key") { std::istringstream k(rest); double at = 0, is = 0; k >> at >> is; doc_key(d, thing, value.c_str(), at, is); }   // (at that moment of the document, wherever the stage stands: its film loops as made)
     }
-    return doc_acted(d) ? thing : 0;
+    return doc_acted(d) && now ? first : 0;
 }
 static bool doc_stay(Doc& d, int thing, const char* name, double at) {   // (its keys go: it stays what it is at that moment)
     return doc_knows(d, thing, name) && (!doc_keys(d, thing, name) || doc_set(d, thing, name, doc_number(d, thing, name, at, doc_usual(name))));
 }
 static int doc_keyed(Doc& d, int thing, const char* name, double at) { return !doc_keys(d, thing, name) ? 0 : doc_keys(d, thing, name, at) ? 2 : 1; }
 // The words a value of a thing may be (a blend's, a solid's shape), with spaces between ("": any word, or not a word).
+static const DocValue* doc_script_value(Doc& d, int thing, const char* name) {   // (a knob of the thing's script)
+    if (strncmp(name, "js_", 3)) return nullptr;
+    if (const DocScript* sc = doc_script_of(doc_word(d, thing, "script")))
+        for (const DocValue& one : sc->values) if (!strcmp(one.name, name)) return &one;
+    return nullptr;
+}
 static std::string doc_words(Doc& d, int thing, const char* name) {
+    if (const DocValue* v = doc_script_value(d, thing, name)) return v->words ? v->words : "";
     const std::string kind = doc_word(d, thing, "kind");
     if (!strcmp(name, "animation") && kind == "solid") {   // (its file's own movements, as gltfio reads them)
         std::string all;
@@ -1769,6 +1845,9 @@ static std::string doc_has(Doc& d, int thing) {
     std::string names;
     for (const DocValue& one : doc_values)
         if (doc_among(one.kinds, kind)) names += std::string(names.empty() ? "" : " ") + one.name;
+    if (doc_among("picture text shape", kind))
+        if (const DocScript* sc = doc_script_of(doc_word(d, thing, "script")))
+            for (const DocValue& one : sc->values) names += std::string(names.empty() ? "" : " ") + one.name;
     return names;
 }
 // The cards of a thing: "title: name name; title: name" (those of its values its kind has; a card with none, left out).
@@ -1795,12 +1874,19 @@ static std::string doc_cards_of(Doc& d, int thing) {
         }
         if (!names.empty()) all += (all.empty() ? "" : "; ") + std::string(card.title) + ": " + names;
     }
+    if (doc_among("picture text shape", doc_word(d, thing, "kind")))   // (its script's own card: the knobs its head declares)
+        if (const DocScript* sc = doc_script_of(doc_word(d, thing, "script")); sc && !sc->values.empty()) {
+            std::string names = "script";
+            for (const DocValue& one : sc->values) names += std::string(" ") + one.name;
+            all += (all.empty() ? "" : "; ") + std::string("Script: ") + names;
+        }
     return all;
 }
 static bool doc_range(Doc& d, int thing, const char* name, double* low, double* high) {
     const std::string kind = doc_word(d, thing, "kind");
     for (const DocValue& one : doc_values)
         if (!strcmp(one.name, name) && doc_among(one.kinds, kind) && !one.words) return *low = one.low, *high = one.high, true;
+    if (const DocValue* v = doc_script_value(d, thing, name); v && !v->words) return *low = v->low, *high = v->high, true;
     return false;
 }
 static bool doc_unkey(Doc& d, int thing, const char* name, double at) {
@@ -1929,6 +2015,10 @@ static bool doc_covers(Doc& d, int thing, double now, double* box) {
 }
 
 static double doc_usual(const char* name) {
+    if (!strncmp(name, "js_", 3))   // (a knob of a script: as its head says it comes)
+        for (const auto& [file, sc] : doc_scripts())
+            for (size_t i = 0; i < sc.names.size(); ++i)
+                if (sc.names[i] == name) return sc.knobs[i].usual;
     return doc_among("scale_x scale_y scale_z size speed opacity wide tall visible distance zoom copies copy_size copy_wide blur_level letter_spacing line_spacing contrast saturation vibrance environment gradient_scale wave_speed", name) ? 1.0 : !strcmp(name, "duration") ? -1.0
          : !strcmp(name, "metallic") ? 0.08 : !strcmp(name, "roughness") ? 0.6 : !strcmp(name, "reflectance") ? 0.5   // (a solid's surface as it comes)
          : !strcmp(name, "intensity") ? 1.0 : !strcmp(name, "falloff") ? 10.0 : !strcmp(name, "cone") ? 30.0   // (a light as it comes)
