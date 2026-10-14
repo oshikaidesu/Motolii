@@ -26,20 +26,24 @@ struct Motolii {
     std::atomic<bool> playing{false};
     bool loop = true;   // (play goes round the work area; not: it stops at its end)
     std::atomic<double> now{0.0};
+    std::map<std::string, std::pair<long, double>> by_door;   // (what each call has cost, by its name: for measuring)
     double spent[4] = {0, 0, 0, 0};   // (seconds the hand spent: asked to change, asked to read, telling the moment, drawing)
     long many[4] = {0, 0, 0, 0};
 };
 
-template <class Does> static auto asked(Motolii* m, Does does, bool changes) -> decltype(does()) {
+template <class Does> static auto asked(Motolii* m, Does does, bool changes, const char* who) -> decltype(does()) {
     std::packaged_task<decltype(does())()> task(does);
     auto done = task.get_future();
     {
         std::lock_guard<std::mutex> hold(m->asked_lock);
-        m->asked.push_back([&task, m, changes] {
+        m->asked.push_back([&task, m, changes, who] {
             const auto t0 = std::chrono::steady_clock::now();
             task();
             if (changes) m->changed = true;
-            m->spent[changes ? 0 : 1] += std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count(), m->many[changes ? 0 : 1]++;
+            const double took = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+            m->spent[changes ? 0 : 1] += took, m->many[changes ? 0 : 1]++;
+            auto& door = m->by_door[who];
+            door.first++, door.second += took;
         });
     }
     m->asked_now.notify_one();
@@ -47,8 +51,8 @@ template <class Does> static auto asked(Motolii* m, Does does, bool changes) -> 
 }
 // Asked of the hand: by_hand for what may change what is seen (the stage is drawn again after), by_look for what only
 // reads (nothing drawn again: a shell that reads its cards a hundred times a picture never waits on a hundred pictures).
-template <class Does> static auto by_hand(Motolii* m, Does does) -> decltype(does()) { return asked(m, does, true); }
-template <class Does> static auto by_look(Motolii* m, Does does) -> decltype(does()) { return asked(m, does, false); }
+template <class Does> static auto by_hand(Motolii* m, Does does, const char* who = __builtin_FUNCTION()) -> decltype(does()) { return asked(m, does, true, who); }
+template <class Does> static auto by_look(Motolii* m, Does does, const char* who = __builtin_FUNCTION()) -> decltype(does()) { return asked(m, does, false, who); }
 
 static void motolii_hand(Motolii* m, std::string document, int wide, int high, std::promise<bool>* opened) {
     const bool says = doc_size(document.c_str(), &wide, &high);   // (a document that says its own size is opened at it)
@@ -140,7 +144,16 @@ const char* motolii_spent(Motolii* m) {
     return by_look(m, [=] {
         char line[200];
         std::snprintf(line, sizeof line, "changes %ld %.0f ms, reads %ld %.0f ms, moments %ld %.0f ms, draws %ld %.0f ms", m->many[0], 1e3 * m->spent[0], m->many[1], 1e3 * m->spent[1], m->many[2], 1e3 * m->spent[2], m->many[3], 1e3 * m->spent[3]);
-        return (m->word = line).c_str();
+        std::vector<std::pair<double, std::string>> doors;
+        for (const auto& [name, cost] : m->by_door) {
+            char one[160];
+            std::snprintf(one, sizeof one, "%s %ld %.0f ms", name.c_str(), cost.first, 1e3 * cost.second);
+            doors.push_back({cost.second, one});
+        }
+        std::sort(doors.rbegin(), doors.rend());
+        m->word = line;
+        for (size_t i = 0; i < doors.size() && i < 12; ++i) m->word += "; " + doors[i].second;   // (the dearest calls)
+        return m->word.c_str();
     });
 }
 int motolii_play(Motolii* m, int playing) { return by_hand(m, [m, playing] { m->playing = playing != 0; return 1; }); }

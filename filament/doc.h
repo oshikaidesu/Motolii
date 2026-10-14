@@ -1575,22 +1575,24 @@ static bool doc_knows(Doc& d, int thing, const char* name = nullptr, const doubl
     if (kind.empty()) return d.trouble = "there is no thing " + std::to_string(thing), false;
     if (!name) return true;
     const DocValue* v = nullptr;
-    std::string has, moving;
-    for (const DocValue& one : doc_values) {
-        if (!doc_among(one.kinds, kind)) continue;
-        has += std::string(has.empty() ? "" : ", ") + one.name;
-        if (one.moves) moving += std::string(moving.empty() ? "" : ", ") + one.name;
-        if (!strcmp(one.name, name)) v = &one;
-    }
+    for (const DocValue& one : doc_values)
+        if (!strcmp(one.name, name) && doc_among(one.kinds, kind)) { v = &one; break; }
     if (!v && !strncmp(name, "js_", 3) && doc_among("picture text shape stage", kind))   // (a knob of the thing's script)
         for (const DocScript* sc : doc_scripts_on(d, thing))
-            for (const DocValue& one : sc->values) {
-                has += std::string(has.empty() ? "" : ", ") + one.name;
-                if (one.moves) moving += std::string(moving.empty() ? "" : ", ") + one.name;
+            for (const DocValue& one : sc->values)
                 if (!strcmp(one.name, name)) v = &one;
-            }
+    const auto said = [&](bool moves) {   // (the names it has, or those that move: said only when a call is refused)
+        std::string all;
+        for (const DocValue& one : doc_values)
+            if (doc_among(one.kinds, kind) && (!moves || one.moves)) all += std::string(all.empty() ? "" : ", ") + one.name;
+        if (doc_among("picture text shape stage", kind))
+            for (const DocScript* sc : doc_scripts_on(d, thing))
+                for (const DocValue& one : sc->values)
+                    if (!moves || one.moves) all += std::string(all.empty() ? "" : ", ") + one.name;
+        return all;
+    };
     char range[120];
-    if (!v) return d.trouble = "a " + kind + " has no " + name + ": it has " + has, false;
+    if (!v) return d.trouble = "a " + kind + " has no " + name + ": it has " + said(false), false;
     if (number && v->words) return d.trouble = std::string(name) + " is a word, told by say" + (*v->words ? std::string(": ") + v->words : ""), false;
     if (word && !v->words) return d.trouble = std::string(name) + " is a number, told by set", false;
     if (word && *v->words && !doc_among(v->words, word)) return d.trouble = std::string(name) + " is one of: " + v->words, false;
@@ -1614,7 +1616,7 @@ static bool doc_knows(Doc& d, int thing, const char* name = nullptr, const doubl
         if (strlen(word) != 6 || strspn(word, "0123456789abcdefABCDEF") != 6) return d.trouble = std::string(name) + " is six digits, as ff3366", false;
     if (number && (!std::isfinite(*number) || *number < v->low || *number > v->high || (doc_among("keyed clip visible solo lock shadows clip_invert", name) && *number != 0.0 && *number != 1.0)))
         return std::snprintf(range, sizeof range, doc_among("keyed clip visible solo lock shadows clip_invert", name) ? " is 0 or 1" : " is from %g to %g", v->low, v->high), d.trouble = name + std::string(range), false;
-    if (key && !v->moves) return d.trouble = std::string(name) + " does not move: " + (moving.empty() ? std::string("nothing of it does") : "keys go on " + moving), false;
+    if (key && !v->moves) { const std::string moving = said(true); return d.trouble = std::string(name) + " does not move: " + (moving.empty() ? std::string("nothing of it does") : "keys go on " + moving), false; }
     if ((number || word || key) && strcmp(name, "lock") && doc_number(d, thing, "lock", 0, 0) > 0.5) return d.trouble = "it is locked", false;
     if (number && (!strcmp(name, "connect") || !strcmp(name, "connect_to")) && *number != 0.0 && (*number != std::floor(*number) || (int)*number == thing || doc_word(d, (int)*number, "kind").empty()))
         return d.trouble = std::string(name) + " is another thing that is there", false;   // (as a parent is)
@@ -1764,9 +1766,30 @@ static bool doc_raise(Doc& d, int thing, int places) {
 // "say name words", "key name seconds number", "then kind file" for another thing; its knobs as script.h says.
 // Code below the head is the first thing's script.
 struct DocRecipe { std::string name, what, path; std::vector<std::string> lines; bool code = false; };
-static std::vector<DocRecipe> doc_recipes() {
+static std::vector<DocRecipe> doc_recipes_read();
+// Whether a folder of this library's files (recipes, effects) is to be read again: a file put in or taken out (the
+// folder's time), else every two seconds (a file written over). A window asks at every build.
+static bool doc_folder_moved(const char* folder, std::filesystem::file_time_type& was, std::chrono::steady_clock::time_point& looked) {
     Dl_info lib{};
-    dladdr((const void*)&doc_recipes, &lib);
+    dladdr((const void*)&doc_folder_moved, &lib);
+    std::error_code wrong;
+    static const std::filesystem::path home = std::filesystem::weakly_canonical(lib.dli_fname ? lib.dli_fname : ".", wrong).parent_path().parent_path();
+    const auto stamp = std::filesystem::last_write_time(home / folder, wrong);
+    const auto now = std::chrono::steady_clock::now();
+    if (stamp == was && now - looked < std::chrono::seconds(2)) return false;
+    was = stamp, looked = now;
+    return true;
+}
+static std::vector<DocRecipe> doc_recipes() {
+    static std::vector<DocRecipe> all;
+    static std::filesystem::file_time_type was{};
+    static std::chrono::steady_clock::time_point looked{};
+    if (doc_folder_moved("recipes", was, looked)) all = doc_recipes_read();
+    return all;
+}
+static std::vector<DocRecipe> doc_recipes_read() {
+    Dl_info lib{};
+    dladdr((const void*)&doc_recipes_read, &lib);
     std::error_code wrong;
     const std::filesystem::path dir = std::filesystem::weakly_canonical(lib.dli_fname ? lib.dli_fname : ".", wrong).parent_path().parent_path() / "recipes";
     std::vector<std::filesystem::path> files;
@@ -1797,10 +1820,9 @@ static std::string doc_recipe_names() {
 // shelf at once), "name\tpath" one to a line, the name what its head's first line says before its colon.
 static std::string doc_effect_names() {
     static std::string all;
+    static std::filesystem::file_time_type was{};
     static std::chrono::steady_clock::time_point looked{};
-    const auto now = std::chrono::steady_clock::now();
-    if (!all.empty() && now - looked < std::chrono::milliseconds(500)) return all;   // (a window asks at every build: the folder read twice a second at most)
-    looked = now;
+    if (!doc_folder_moved("effects", was, looked)) return all;
     all.clear();
     Dl_info lib{};
     dladdr((const void*)&doc_effect_names, &lib);
