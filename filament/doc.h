@@ -881,7 +881,7 @@ static bool doc_covers(Doc& d, int thing, double now, double* box) {
     return true;
 }
 
-static double doc_usual(const char* name) { return doc_among("size speed opacity wide visible", name) ? 1.0 : !strcmp(name, "duration") ? -1.0 : 0.0; }
+static double doc_usual(const char* name) { return doc_among("size speed opacity wide visible distance zoom", name) ? 1.0 : !strcmp(name, "duration") ? -1.0 : 0.0; }
 static bool doc_value(Doc& d, int thing, const char* name, double at, double* is) { return doc_knows(d, thing, name) && (*is = doc_number(d, thing, name, at, doc_usual(name)), true); }
 // A thing held by a hand, carried, and let go: the one form of everything a hand drags (a thing on the stage, its bar
 // on the timeline, a number). What is carried shows at once and is not the document's until it is let go, and then

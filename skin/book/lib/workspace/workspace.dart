@@ -283,6 +283,7 @@ Map<String, String> _words(Ws ws, String? id) {
     'blend': blend.isEmpty ? 'Normal' : blend.replaceRange(0, 1, blend[0].toUpperCase()),
     // (a flat thing's space is the document's word; a solid thing has none: it is 3D)
     'space': m.words(t, 'space').isEmpty ? 'd3' : _spaces.entries.firstWhere((e) => e.value == m.word(t, 'space'), orElse: () => _spaces.entries.first).key,
+    'camTarget': _others(ws, t).entries.where((e) => e.value == (m.value(t, 'parent', 0) ?? 0)).firstOrNull?.key ?? 'None',
     'parent': _others(ws, t).entries.where((e) => e.value == (m.value(t, 'parent', 0) ?? 0)).firstOrNull?.key ?? 'None',
   };
 }
@@ -314,6 +315,7 @@ Map<String, List<String>> _choices(Ws ws, String? id) {
   return {
     'blend': blends.isEmpty ? const ['Normal'] : [for (final w in blends) w.replaceRange(0, 1, w[0].toUpperCase())],
     'parent': ['None', ..._others(ws, t).keys],
+    'camTarget': ['None', ..._others(ws, t).keys], // (a camera looks at the thing it goes with)
   };
 }
 
@@ -350,6 +352,7 @@ bool _say(Ws ws, String? id, Map<String, String> changed) {
         },
         'blend' => m.say(t, 'blend', e.value.toLowerCase()),
         'space' => m.words(t, 'space').isEmpty ? e.value == 'd3' : m.say(t, 'space', _spaces[e.value] ?? e.value), // (a solid is 3D and only that)
+        'camTarget' => m.set(t, 'parent', (_others(ws, t)[e.value] ?? 0).toDouble()),
         'parent' => m.set(t, 'parent', (_others(ws, t)[e.value] ?? 0).toDouble()), // (it goes with that one, and stays where it is)
         'stroke' => m.say(t, 'stroke', e.value == 'None' ? '' : e.value.replaceFirst('#', '').toLowerCase()), // (None: no edge)
         _ => true, // (a seat the inside has nothing behind yet: the inspector keeps its own word)
@@ -394,7 +397,19 @@ const _seats = <(String, String, _Across, _Across)>[
   ('anchor.x', 'anchor_x', _acrossOut, _acrossIn),
   ('anchor.y', 'anchor_y', _downOut, _downIn),
   ('anchor.z', 'anchor_z', _backOut, _backIn),
+  // (a camera: the point it looks at, as a thing's place; looking down is the sample's pitch up; its distance in points
+  //  of the picture, the stage's own eye being 6 units off; its zoom in hundredths)
+  ('cam.t.x', 'x', _xOut, _xIn),
+  ('cam.t.y', 'y', _yOut, _yIn),
+  ('cam.t.z', 'z', _zOut, _zIn),
+  ('cam.pitch', 'rotate_x', _minus, _minus),
+  ('cam.yaw', 'rotate_y', _same, _same),
+  ('cam.roll', 'rotate', _same, _same),
+  ('cam.dist', 'distance', _awayOut, _awayIn),
+  ('cam.zoom', 'zoom', _hundredOut, _hundredIn),
 ];
+double _awayOut(double v, Size c, double p) => v * 6 * p;
+double _awayIn(double x, Size c, double p) => x / (6 * p);
 double _acrossOut(double v, Size c, double p) => 50 + 50 * v;
 double _acrossIn(double x, Size c, double p) => (x - 50) / 50;
 double _downOut(double v, Size c, double p) => 50 - 50 * v;
