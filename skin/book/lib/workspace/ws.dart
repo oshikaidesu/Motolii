@@ -103,6 +103,7 @@ class Ws extends ChangeNotifier {
   Motolii? get inside => _inside;
   void join(Motolii inside) {
     _inside = inside;
+    fps = inside.rate; // (a frame is the inside's: the timeline counts what a written film has)
     WsArt.comp = Size(inside.size.$1.toDouble(), inside.size.$2.toDouble());
     _frame = (inside.now * fps).round(); // (the playhead is the inside's moment from the first)
     reread();
@@ -112,6 +113,7 @@ class Ws extends ChangeNotifier {
   String? document;
   String? documentFolder; // (where the document's file is: the dock offers it, so a new document is one step from its footage)
   void Function(int wide, int high)? onSize;
+  VoidCallback? refit;
 
   /// Joined: how the document is written as a film (the host does it), and what the window has to say about the
   /// document just now (it is being written, where it was written, why something was not done); null: nothing.
@@ -149,6 +151,7 @@ class Ws extends ChangeNotifier {
   void reread() {
     final m = _inside;
     if (m == null) return;
+    if (!m.fits && refit != null) return refit!(); // (the document says another size, by a hand or by undo: the host opens it again, and that reads it)
     rev++;
     duration = (m.seconds * fps).round().clamp(1, 1 << 20);
     layers

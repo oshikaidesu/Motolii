@@ -50,6 +50,15 @@ void main() {
     await t.ensureVisible(box);
     await t.pumpAndSettle();
     await t.tap(box);
+    await t.pump();
+    // (Edit > Undo while a text box has the keys is the box's own undo, not the document's)
+    expect(m.set(text, 'x', 1), isTrue, reason: m.trouble);
+    final edit = t.widget<PlatformMenuBar>(find.byType(PlatformMenuBar)).menus.whereType<PlatformMenu>().firstWhere((e) => e.label == 'Edit');
+    PlatformMenuItem item(String label) => edit.menus.expand((e) => e is PlatformMenuItemGroup ? e.members : [e]).firstWhere((e) => e.label == label);
+    item('Undo').onSelected!();
+    await t.pump();
+    expect(m.value(text, 'x', 0), 1, reason: 'the document did not go back');
+    expect(['Cut', 'Copy', 'Paste', 'Select All'].every((l) => item(l).onSelected != null), isTrue);
     await t.enterText(box, 'CATS');
     await t.pump();
     expect(m.word(text, 'text'), 'Text', reason: 'nothing is told while the box is still held');
@@ -149,7 +158,7 @@ void main() {
     await t.pumpAndSettle();
     final tracks = t.getRect(find.byKey(const ValueKey('ws-tl-tracks')));
     final row = tracks.top + 36, perFrame = (tracks.width - 60) / Ws.duration; // (about: the room at the two ends is the timeline's own)
-    await t.dragFrom(Offset(tracks.left + tracks.width * .3, row), Offset(perFrame * 30, 0));
+    await t.dragFrom(Offset(tracks.left + tracks.width * .3, row), Offset(perFrame * Ws.fps, 0)); // (a second's worth)
     await t.pumpAndSettle();
     final start = m.value(cube, 'start', 0)!;
     expect(start, greaterThan(.5), reason: 'slid to the right: it comes on later');
@@ -178,7 +187,19 @@ void main() {
     expect(again.size, (1080, 1920));
     expect(find.text('1080 × 1920'), findsOneWidget);
     expect(again.things, [cube], reason: 'the same document');
-    expect(again.undo(), isTrue, reason: 'and its steps are still there');
+    // (the size is a step: undo makes the stage wide again, and it is the size change that went back, not the cube)
+    expect(again.at(1), isTrue);
+    expect(again.undo(), isTrue);
+    ws.reread();
+    await t.pumpAndSettle();
+    final wide = ws.inside!;
+    expect(wide.size, (1920, 1080), reason: 'undo took the size back');
+    expect(wide.things, [cube]);
+    expect(wide.now, 1, reason: 'opened again at the moment it was at');
+    expect(wide.redo(), isTrue);
+    ws.reread();
+    await t.pumpAndSettle();
+    expect(ws.inside!.size, (1080, 1920), reason: 'and redo makes it tall again');
     expect(t.takeException(), isNull);
     await _close(t);
   }, skip: !_built);
@@ -318,6 +339,13 @@ void main() {
     expect(m.put(cube, 'x', 1, 2.5), isTrue, reason: m.trouble);
     expect([m.value(cube, 'x', 0), m.value(cube, 'x', 1), m.value(cube, 'x', 2)], [1, 2.5, 4]);
     expect(m.keyed(cube, 'x', 1), 1, reason: 'no key was made');
+
+    // (the frame of a thing turned about Y is the box of what it covers: a cube seen edge-on is wider than face-on)
+    final faceOn = m.frame(cube)!;
+    expect(m.set(cube, 'rotate_y', 45), isTrue, reason: m.trouble);
+    final edgeOn = m.frame(cube)!;
+    expect(edgeOn[2], greaterThan(faceOn[2] * 1.2));
+    expect(edgeOn[4], 0);
     expect(t.takeException(), isNull);
     await _close(t);
   }, skip: !_built);

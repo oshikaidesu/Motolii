@@ -145,7 +145,18 @@ int motolii_let_go(Motolii* m, int keep) { return by_hand(m, [=] { return change
 int motolii_put(Motolii* m, int thing, const char* name, double at, double number) { return by_hand(m, [=] { return changes(m, (int)doc_put(doc(m), thing, name, at, number)); }); }
 int motolii_key_here(Motolii* m, int thing, const char* name, double at) { return by_hand(m, [=] { return changes(m, (int)doc_key_here(doc(m), thing, name, at)); }); }
 int motolii_size(Motolii* m, int wide, int high) {
-    return by_hand(m, [=] { return doc_size_is(m->d->file, wide, high) ? 1 : (m->d->trouble = "a stage is from 16 to 8192 points each way, an even number of them", 0); });
+    return by_hand(m, [=] {
+        char* say = doc_size_words(wide, high);
+        return say ? changes(m, (int)doc_change(*m->d, say)) : (m->d->trouble = "a stage is from 16 to 8192 points each way, an even number of them", 0);
+    });
+}
+int motolii_fits(Motolii* m) {
+    return by_hand(m, [=] {
+        int wide = m->s->w, high = m->s->h;
+        doc_rows(*m->d, sqlite3_mprintf("select name, value from fact where thing = 0 and name in ('wide', 'high')"),
+                 [&](sqlite3_stmt* row) { (strcmp((const char*)sqlite3_column_text(row, 0), "wide") ? high : wide) = sqlite3_column_int(row, 1); });
+        return (int)(wide == m->s->w && high == m->s->h);
+    });
 }
 int motolii_size_of(Motolii* m, int* wide, int* high) { return by_hand(m, [=] { return *wide = m->s->w, *high = m->s->h, 1; }); }
 int motolii_raise(Motolii* m, int thing, int places) { return by_hand(m, [=] { return changes(m, (int)doc_raise(doc(m), thing, places)); }); }
@@ -226,11 +237,13 @@ int motolii_still(Motolii* m, const char* png) {
         return told(m, shoot(*m->s, png), "the file could not be written");
     });
 }
+static const int RATE = 60;   // (pictures a second of a written film: the kit's `film` writes that many)
+int motolii_rate(Motolii*) { return RATE; }
 int motolii_write(Motolii* m, const char* mp4) {
     return by_hand(m, [m, mp4] {
         doc(m);
         if (!told(m, ends(mp4, ".mp4"), "a film is written as an .mp4") || !told(m, placed(mp4), "there is no such folder")) return 0;
-        const int ok = told(m, film(*m->s, mp4, (int)std::lround(doc_seconds(*m->d) * 60.0), [](float) {}), "the file could not be written");
+        const int ok = told(m, film(*m->s, mp4, (int)std::lround(doc_seconds(*m->d) * RATE), [](float) {}), "the file could not be written");
         time_is(*m->s, m->now);   // (back to the moment it was at)
         return ok;
     });

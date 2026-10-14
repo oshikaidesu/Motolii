@@ -185,7 +185,6 @@ static void doc_parts(Stage& s, const Doc::Shown& t, const std::function<void(Re
     for (size_t i = 0; t.solid && i < t.solid->made->getRenderableEntityCount(); ++i) each(faces, faces.getInstance(t.solid->made->getRenderableEntities()[i]));
 }
 static bool doc_covers(Doc& d, int thing, double now, double* box);
-static bool doc_half(Doc& d, int thing, float2* half);
 
 // Every thing told its moment: whether it is on (from its start, for its duration if it has one), what of itself it
 // shows (it goes round when it comes to its end), and where it is.
@@ -357,10 +356,15 @@ static bool doc_size(const char* path, int* wide, int* high) {
     sqlite3_close(file);
     return w > 0 && h > 0 ? (*wide = w, *high = h, true) : false;
 }
+// doc_size_words: the change that says it (nullptr: a stage cannot be that size). doc_size_is: a new document told
+// the size it was first opened at (no step of undo: there is nothing before it).
+static char* doc_size_words(int wide, int high) {
+    if (wide < 16 || high < 16 || wide > 8192 || high > 8192 || wide % 2 || high % 2) return nullptr;
+    return sqlite3_mprintf("insert into fact(thing, name, at, value) values(0, 'wide', 0.0, %d), (0, 'high', 0.0, %d) on conflict do update set value = excluded.value", wide, high);
+}
 static bool doc_size_is(sqlite3* file, int wide, int high) {
-    if (wide < 16 || high < 16 || wide > 8192 || high > 8192 || wide % 2 || high % 2) return false;
-    char* say = sqlite3_mprintf("insert into fact(thing, name, at, value) values(0, 'wide', 0.0, %d), (0, 'high', 0.0, %d) on conflict do update set value = excluded.value", wide, high);
-    const bool ok = sqlite3_exec(file, say, nullptr, nullptr, nullptr) == SQLITE_OK;
+    char* say = doc_size_words(wide, high);
+    const bool ok = say && sqlite3_exec(file, say, nullptr, nullptr, nullptr) == SQLITE_OK;
     sqlite3_free(say);
     return ok;
 }
@@ -663,20 +667,22 @@ static std::vector<double> doc_key_moments(Doc& d, int thing, const char* name) 
 
 // Half of how wide and how high a thing is at size 1, before it is placed (a sheet: the sheet's; a solid: its
 // bounds'): what a shell draws a thing's frame from.
-static bool doc_half(Doc& d, int thing, float2* half) {
+static bool doc_half(Doc& d, int thing, float2* half, float* deep = nullptr) {   // (deep: half of how far it reaches towards the eye and away; a flat thing: 0)
     const auto shown = d.shown.find(thing);
     if (shown == d.shown.end()) return false;
     const Doc::Shown& t = shown->second;
     if (t.solid) {
         const Aabb box = t.solid->made->getBoundingBox();
         const float tall = std::max(box.max.y - box.min.y, 1e-6f);
+        if (deep) *deep = 0.5f * (box.max.z - box.min.z) / tall;
         return *half = float2{0.5f * (box.max.x - box.min.x) / tall, 0.5f}, true;
     }
     const Mesh* m = t.film ? t.film->sheet : t.drawn ? t.drawn->sheet : t.shape;
     if (!m || m->pos.empty()) return false;
-    float2 most{0.f};
-    for (const float3& p : m->pos) most = max(most, float2{std::fabs(p.x), std::fabs(p.y)});
-    return *half = most, true;
+    float3 most{0.f};
+    for (const float3& p : m->pos) most = max(most, abs(p));
+    if (deep) *deep = most.z;
+    return *half = most.xy, true;
 }
 
 // Where a point of the stage is seen on the picture (points from the top left), by the stage's own eye.
@@ -699,18 +705,22 @@ static bool doc_frame(Doc& d, int thing, double now, double* frame) {
     const math::double2 middle = doc_seen(d, {doc_number(d, thing, "x", now, 0), doc_number(d, thing, "y", now, 0), doc_number(d, thing, "z", now, 0)});
     frame[0] = middle.x, frame[1] = middle.y, frame[2] = 2.0 * half.x * size * point, frame[3] = 2.0 * half.y * size * point;
     frame[4] = -doc_number(d, thing, "rotate", now, 0);
+    double box[4];   // (turned about another line than the eye's, its frame is the upright box of what it covers)
+    if ((doc_number(d, thing, "rotate_x", now, 0) != 0.0 || doc_number(d, thing, "rotate_y", now, 0) != 0.0) && doc_covers(d, thing, now, box))
+        frame[0] = box[0] + 0.5 * box[2], frame[1] = box[1] + 0.5 * box[3], frame[2] = box[2], frame[3] = box[3], frame[4] = 0.0;
     return true;
 }
 // The upright box of the picture a thing covers at a moment, however it is turned or leans: left, top, wide, high.
 static bool doc_covers(Doc& d, int thing, double now, double* box) {
     float2 half{0.f};
-    if (!doc_half(d, thing, &half)) return false;
+    float deep = 0.f;
+    if (!doc_half(d, thing, &half, &deep)) return false;
     const auto turned = [&](const char* name, math::double3 about) { return math::mat4::rotation(doc_number(d, thing, name, now, 0) * (double)TAU / 360.0, about); };
     const math::mat4 place = math::mat4::translation(math::double3{doc_number(d, thing, "x", now, 0), doc_number(d, thing, "y", now, 0), doc_number(d, thing, "z", now, 0)}) *
                              turned("rotate", {0, 0, 1}) * turned("rotate_y", {0, 1, 0}) * turned("rotate_x", {1, 0, 0}) * math::mat4::scaling(doc_number(d, thing, "size", now, 1));
     math::double2 low{1e12}, high{-1e12};
-    for (int corner = 0; corner < 4; ++corner) {
-        const math::double2 at = doc_seen(d, (place * math::double4{corner & 1 ? half.x : -half.x, corner & 2 ? half.y : -half.y, 0.0, 1.0}).xyz);
+    for (int corner = 0; corner < 8; ++corner) {
+        const math::double2 at = doc_seen(d, (place * math::double4{corner & 1 ? half.x : -half.x, corner & 2 ? half.y : -half.y, corner & 4 ? deep : -deep, 1.0}).xyz);
         low = min(low, at), high = max(high, at);
     }
     box[0] = low.x, box[1] = low.y, box[2] = high.x - low.x, box[3] = high.y - low.y;

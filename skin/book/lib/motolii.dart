@@ -145,6 +145,10 @@ class Motolii {
   }
   double get now => _now(_m);
   double get seconds => _seconds(_m);
+  late final _rate = _lib.lookupFunction<Int32 Function(_P), int Function(_P)>('motolii_rate');
+
+  /// How many pictures a second a film written of the document has: what a frame is.
+  int get rate => _rate(_m);
   bool play(bool on) => _play(_m, on ? 1 : 0) != 0;
   bool at(double seconds) => _at(_m, seconds) != 0;
 
@@ -225,6 +229,10 @@ class Motolii {
     return is_;
   }();
   bool resize(int wide, int high) => _size(_m, wide, high) != 0;
+  late final _fits = _lib.lookupFunction<Int32 Function(_P), int Function(_P)>('motolii_fits');
+
+  /// Whether the stage is the size the document says now (not, after [resize] or an undo of one: open it again).
+  bool get fits => _fits(_m) != 0;
 
   /// A thing brought [places] places nearer among the things (below 0: further back).
   bool raise(int thing, int places) => _raise(_m, thing, places) != 0;

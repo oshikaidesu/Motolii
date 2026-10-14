@@ -14,11 +14,13 @@ typedef struct Motolii Motolii;
 
 void motolii_home(const char* folder);                             /* where the inside's own files are (its materials, its room): said once, before a document is opened */
 /* The document on a stage (0: not a document). A document says its own size: one that is there is opened at it; a
-   new one is made `wide` by `high` points. motolii_size: the document is another size when it is next opened (close
-   it and open it again; it is not a step of undo). motolii_size_of: the size of the stage it is open on. */
+   new one is made `wide` by `high` points. motolii_size: the document says another size (a step of undo); the stage it
+   is open on stays the size it was opened at. motolii_size_of: the size of that stage. motolii_fits: 1 if the stage
+   is the size the document says now; 0 (after motolii_size, or an undo or redo of one): close it and open it again. */
 Motolii* motolii_open(const char* document, int wide, int high);
 int motolii_size(Motolii* m, int wide, int high);
 int motolii_size_of(Motolii* m, int* wide, int* high);
+int motolii_fits(Motolii* m);
 void motolii_close(Motolii* m);
 const char* motolii_trouble(Motolii* m);                           /* why the last call that was not done was not */
 
@@ -92,6 +94,7 @@ double motolii_seconds(Motolii* m);                                /* how long t
 int motolii_at(Motolii* m, double seconds);                        /* the stage's moment */
 int motolii_still(Motolii* m, const char* png);                    /* the stage as it is now, as a picture */
 int motolii_write(Motolii* m, const char* mp4);                    /* the whole document as a film, with its films' sound */
+int motolii_rate(Motolii* m);                                      /* how many pictures a second that film has (a shell that counts in frames counts in these) */
 const char* motolii_list(Motolii* m);                              /* every fact of the document, a line each (until the next call) */
 /* The stage's picture as it is drawn, for a shell to show without a copy. The inside keeps its own clock: it draws
    when something has changed or time is going on, and the shell asks only for the last finished picture.

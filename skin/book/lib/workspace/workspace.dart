@@ -49,10 +49,19 @@ class _WorkspaceState extends State<Workspace> {
     _join(doc);
   }
 
-  /// The documents beside the open one, and a place for a new one there.
+  /// The documents beside the open one (read as one is opened), and a place for a new one there.
+  List<String> _beside = const [];
   List<String> _documents() {
     final here = Directory(File(_doc!).parent.path);
     return [for (final f in here.listSync().whereType<File>()) if (f.path.endsWith('.motolii')) f.path]..sort();
+  }
+
+  /// A text box has the keys: the act is its own, by Flutter's own text actions (true: it was given it).
+  bool _typed(Intent act) {
+    final box = primaryFocus?.context;
+    if (box == null || box.findAncestorStateOfType<EditableTextState>() == null) return false;
+    Actions.maybeInvoke(box, act);
+    return true;
   }
 
   String _fresh() {
@@ -91,7 +100,7 @@ class _WorkspaceState extends State<Workspace> {
           PlatformMenuItemGroup(
             members: [
               PlatformMenuItem(label: 'New Document', shortcut: const SingleActivator(LogicalKeyboardKey.keyN, meta: true), onSelected: () => _open(_fresh())),
-              PlatformMenu(label: 'Open', menus: [for (final f in _documents()) PlatformMenuItem(label: f.split('/').last, onSelected: f == _doc ? null : () => _open(f))]),
+              PlatformMenu(label: 'Open', menus: [for (final f in _beside) PlatformMenuItem(label: f.split('/').last, onSelected: f == _doc ? null : () => _open(f))]),
             ],
           ),
           PlatformMenuItem(label: 'Render', shortcut: const SingleActivator(LogicalKeyboardKey.keyR, meta: true), onSelected: _render),
@@ -102,8 +111,17 @@ class _WorkspaceState extends State<Workspace> {
         menus: [
           PlatformMenuItemGroup(
             members: [
-              PlatformMenuItem(label: 'Undo', shortcut: const SingleActivator(LogicalKeyboardKey.keyZ, meta: true), onSelected: () => then(m.undo())),
-              PlatformMenuItem(label: 'Redo', shortcut: const SingleActivator(LogicalKeyboardKey.keyZ, meta: true, shift: true), onSelected: () => then(m.redo())),
+              PlatformMenuItem(label: 'Undo', shortcut: const SingleActivator(LogicalKeyboardKey.keyZ, meta: true), onSelected: () => then(!_typed(const UndoTextIntent(SelectionChangedCause.keyboard)) && m.undo())),
+              PlatformMenuItem(label: 'Redo', shortcut: const SingleActivator(LogicalKeyboardKey.keyZ, meta: true, shift: true), onSelected: () => then(!_typed(const RedoTextIntent(SelectionChangedCause.keyboard)) && m.redo())),
+            ],
+          ),
+          // (the system's own Edit menu went when these menus came: what a text box does is given back to it)
+          PlatformMenuItemGroup(
+            members: [
+              PlatformMenuItem(label: 'Cut', shortcut: const SingleActivator(LogicalKeyboardKey.keyX, meta: true), onSelected: () => _typed(const CopySelectionTextIntent.cut(SelectionChangedCause.keyboard))),
+              PlatformMenuItem(label: 'Copy', shortcut: const SingleActivator(LogicalKeyboardKey.keyC, meta: true), onSelected: () => _typed(CopySelectionTextIntent.copy)),
+              PlatformMenuItem(label: 'Paste', shortcut: const SingleActivator(LogicalKeyboardKey.keyV, meta: true), onSelected: () => _typed(const PasteTextIntent(SelectionChangedCause.keyboard))),
+              PlatformMenuItem(label: 'Select All', shortcut: const SingleActivator(LogicalKeyboardKey.keyA, meta: true), onSelected: () => _typed(const SelectAllTextIntent(SelectionChangedCause.keyboard))),
             ],
           ),
           PlatformMenuItem(
@@ -123,6 +141,7 @@ class _WorkspaceState extends State<Workspace> {
     if (inside == null) return;
     _inside = inside;
     _doc = doc;
+    _beside = _documents();
     final id = await inside.texture();
     if (!mounted) return;
     if (id >= 0) _ws.stageTexture = id;
@@ -132,8 +151,13 @@ class _WorkspaceState extends State<Workspace> {
       ..notice = null
       ..onRender = _render
       ..onSize = (wide, high) {
-        // (a stage is opened at a size: the document is told its new one, closed, and opened again)
-        if (inside.resize(wide, high)) _open(doc);
+        if (inside.resize(wide, high)) _ws.reread();
+      }
+      ..refit = () {
+        // (a stage is opened at a size: the document closed and opened again, at the moment it was at)
+        final at = inside.now;
+        _open(doc);
+        _inside?.at(at);
       }
       ..join(inside);
     setState(() {}); // (the menus are the open document's)
