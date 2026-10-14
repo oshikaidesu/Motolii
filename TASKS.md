@@ -41,6 +41,11 @@
   鍵盤は裏の窓に届かないので、**本物の中身をつないだ Flutter のテスト**を作った（`skin/book/test/workspace_joined_test.dart`、`libmotolii.dylib` を dart:ffi でそのまま開く）：箱に打つ → 離れると文書の字、取り消しで戻る／Backspace で消える、取り消しでガラスの塗りごと戻る。2本通過。
 - 不透明度：中身に `opacity`（ThorVG の言葉、0〜1、キーも打てる。動画・絵・文字）。インスペクタの Opacity は文書の数（窓で 100% → 85% を確かめた）。solid には無い（理由つきで断る）。
 - まだ作り物のままの所：Fill and stroke の Stroke、Font・Size・Alignment、Effects（2個と出るのも見本）、Anchor、Depth、Parent。Blend の8つのうち中身にあるのは4つ（無い物を選ぶと元に戻る。理由はどこにも出ない）。机の Wiggle ほか。Fonts・Effects 棚。棚の小さい絵。
+- **採点1回目（2026-10-14）**：`reports/skin_run/judge_user_round1.md`（窓を触る人：A 7 / B 7 / C 6 / D 8 / E 4 / F 2）、`judge_reuse_round1.md`（作り直しを数える人：**G 0**、8個）。合格線の 8 に届いたのは D だけ。
+  G の指摘（殻に小さい読み書きだけ渡して、文書の決まりを Dart でもう一回書いた）で直した物（c52c510）：キーの決まりを中身に（`motolii_put`・`key_here`・`stay`・`keyed`）、動く値の名前とファイルの種類は中身に聞く（`motolii_moving`・`motolii_kind_of`、`add` は種類を言わなければファイルから決める）、行き方は同じ形で読み返す、まとめの1歩は SQLite の「変更の束を継ぐ」口、材質の読み手は1つ、四隅の読みは GStreamer の口（Windows でも同じ）、絵の受け口は1クラス。直してない：`try`／`try_drop` の名前（過去は preview／commit／cancel）。
+  テストが見つけた本物の誤り：エンジンに付く物（材質、glTF の読み手）がプロセスに1つで、閉じて同じプログラムの中で開き直すと落ちた。舞台の持ち物にした。
+  窓の指摘で直した物：再生中に値を動かすと保存されない → 手が触れたら再生を止め、手の下の値は上書きしない／Rotation X・Y が空 → 中身に `rotate_x`・`rotate_y`／見本の数（Effects 2個、Fill、Scale Z）→ 文書に在る物だけ出す／Effects の Add・Fonts の Apply → 「No seat yet」／最初のキーが前の値を書き換える → 文書の決まりを1つに（値は「そのままの値」か「キー」のどちらか。キーは1個でもキー。最初のキーはそのままの値と入れ替わる。最後のキーを外すと値に戻る）／断りの文は理由が先／新しい文字は「Text」で大きさ 0.5。
+  **残ってる指摘**：舞台で物を引きずって動かせない、重なりの順を選べない、置いた物が全部まん中、棚の小さい絵が見本の絵、フォルダの木（`vid` を押すと `out` が開く、数が合わない）、Blend の下の方の行が押せない（机の上に重なる所）、`saturn_v.glb` が大きさを触るまで見えなかった（1回）、舞台の下の帯の「S 100%」、Render と大きさの札が無反応、Colors の「Used here」の数、Elastic の線が直線、glb にガラス、文字の Size・Alignment、窓の大きさ変更と 60 コマは未計測、的③は 3D を四角で切る席が無い。
 - 開き方：`skin/book` で Flutter（`~/rust_ae/Motolii/.tools/flutter/bin/flutter`）の `build macos --debug --dart-define=LAB_ROUTE=/?path=workspace/workspace/live`、できた `lab_book.app` を開く。文書は `filament/out/skin.motolii`。
 
 作る的：①`edit_v5` を窓だけで作り直す ②猫ミームの人形劇 ③青いロケットのコラージュ（`research_notes/refs/G_rocket_collage_blue.jpg`）。

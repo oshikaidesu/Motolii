@@ -372,7 +372,13 @@ const _asked = {
 
 /// A tile made on the stage as a new thing, picked. Not done: the foot of the shelf says why.
 void _make(DockCtx c, String name) {
-  final m = c.ws.inside!, asked = _asked[name]!, made = m.add(asked.$1, asked.$2);
+  final m = c.ws.inside!, asked = _asked[name]!;
+  // (one act: a new text comes with a word to read and at a size that fits the stage)
+  final made = m.together(() {
+    final made = m.add(asked.$1, asked.$2);
+    if (made != 0 && asked.$1 == 'text') m.say(made, 'text', 'Text') && m.set(made, 'size', .5);
+    return made;
+  });
   c.set(() => made == 0 ? c.mem.trouble[name] = m.trouble : c.mem.trouble.remove(name));
   if (made == 0) return;
   c.ws.reread();

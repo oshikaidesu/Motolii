@@ -156,7 +156,7 @@ Map<String, String> _words(Ws ws, String? id) {
   if (m == null || t == null) return const {};
   final blend = m.word(t, 'blend');
   return {
-    if (m.word(t, 'kind') == 'text') 'text.content': m.word(t, 'text'),
+    if (m.word(t, 'kind') == 'text') ...{'text.content': m.word(t, 'text'), 'font': m.word(t, 'file').split('/').last},
     'blend': blend.isEmpty ? 'Normal' : blend.replaceRange(0, 1, blend[0].toUpperCase()),
   };
 }
@@ -184,7 +184,7 @@ String? _fillWord(Ws ws, String? id, Color? sample) {
   final m = ws.inside;
   if (m == null) return sample == null ? null : _hex(sample);
   final t = int.tryParse(id ?? ''), f = t == null ? '' : m.word(t, 'fill');
-  return f.isEmpty ? null : (f == 'glass' ? 'Glass' : '#${f.toUpperCase()}');
+  return f.isEmpty ? 'None' : (f == 'glass' ? 'Glass' : '#${f.toUpperCase()}'); // (nothing said: nothing is named, not the last thing's fill)
 }
 
 /// The selected layer's transform as the stage draws it at this frame, in the Inspector's ids.
@@ -202,6 +202,9 @@ Map<String, double> _transform(Ws ws, String? id) {
       'pos.z': r1(v('z') * p),
       'scale.x': s,
       'scale.y': s,
+      'scale.z': s, // (a thing has one size)
+      'rot.x': r1(v('rotate_x')) + 0,
+      'rot.y': r1(v('rotate_y')) + 0,
       'rot.z': r1(-v('rotate')) + 0,   // (+ 0: no minus nought)
       'op': r1((m.value(t, 'opacity', at) ?? 1) * 100), // (a thing that has no opacity is all there)
     };
@@ -217,7 +220,7 @@ Map<String, double> _transform(Ws ws, String? id) {
 const _propNames = {
   'pos': ['x', 'y', 'z'],
   'scale': ['size'],
-  'rot': ['rotate'],
+  'rot': ['rotate', 'rotate_x', 'rotate_y'],
   'op': ['opacity'],
 };
 (String, double)? _asDocument(Ws ws, String id, double x) {
@@ -226,7 +229,9 @@ const _propNames = {
     'pos.x' => ('x', (x - WsArt.comp.width / 2) / p),
     'pos.y' => ('y', (WsArt.comp.height / 2 - x) / p),
     'pos.z' => ('z', x / p),
-    'scale.x' || 'scale.y' => ('size', x / 100),
+    'scale.x' || 'scale.y' || 'scale.z' => ('size', x / 100),
+    'rot.x' => ('rotate_x', x),
+    'rot.y' => ('rotate_y', x),
     'rot.z' => ('rotate', -x),
     'op' => ('opacity', x / 100),
     _ => null,
@@ -245,6 +250,7 @@ void _write(Ws ws, String? id, Map<String, double> changed, {required bool live}
     final (name, number) = to;
     live ? m.tryValue(t, name, number) : m.put(t, name, at, number);
   }
+  if (live && ws.playing) ws.playing = false; // (a hand on a value stops the play: what is changed is changed at one moment)
   if (!live) ws.reread();
 }
 
@@ -287,6 +293,7 @@ class _InspectorSeat extends StatelessWidget {
         key: ValueKey(k),
         cfg: const Cfg(),
         kind: k,
+        effects: ws.inside == null ? 2 : 0, // (joined: the inside has no effects yet, so none are listed)
         title: l?.name,
         onRoute: ws.route,
         values: _transform(ws, l?.id),

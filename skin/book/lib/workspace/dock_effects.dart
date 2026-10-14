@@ -187,7 +187,8 @@ class _FxFooter extends StatelessWidget {
     title: f.name,
     meta: [f.family.label, f.seat, f.time, f.inputs, ...f.looks].join(' · '),
     action: 'Add',
-    done: done,
+    done: done || ws.inside != null,
+    doneLabel: ws.inside != null ? 'No seat yet' : 'Added',
     onAction: ws.canTry
         ? () {
             ws.tryFx(f.name);

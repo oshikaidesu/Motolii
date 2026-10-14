@@ -233,7 +233,9 @@ class Ws extends ChangeNotifier {
   /// The effect being tried on the selected layer: the renderer draws it as if added; Add keeps it, Esc drops it.
   String? _trial;
   String? get trial => canTry ? _trial : null;
-  bool get canTry => switch (layer?.kind) {
+  bool get canTry => _inside != null
+      ? false // (joined: the inside has no effects yet, so there is nothing to try on)
+      : switch (layer?.kind) {
     null || WsKind.audio || WsKind.camera => false,
     _ => true,
   };

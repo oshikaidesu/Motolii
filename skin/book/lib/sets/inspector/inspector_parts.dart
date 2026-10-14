@@ -265,11 +265,14 @@ class _InspHostState extends State<InspHost> {
       doc.dispose();
       doc = _make();
     } else {
-      if (!mapEquals(o.values, widget.values)) {
+      // A host that is told of changes owns the values: whatever it did not take goes back to what it says, as soon
+      // as no hand is on them (never under a hand: a value being dragged is not written over, even while it plays).
+      final owned = widget.onValues != null;
+      if (owned ? !doc.inGesture : !mapEquals(o.values, widget.values)) {
         doc.v.addAll(widget.values);
         _seen.addAll(widget.values);
       }
-      if (!mapEquals(o.strs, widget.strs)) {
+      if (widget.onWords != null || !mapEquals(o.strs, widget.strs)) {
         doc.s2.addAll(widget.strs);
         _seenWords.addAll(widget.strs);
       }

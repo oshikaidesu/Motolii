@@ -14,6 +14,7 @@
 // The names a thing's facts go by are ThorVG's own, where it has one (translate's x and y, rotate, size, blend and its
 // words, text, fill, a segment's begin, add, remove):
 //   numbers  x, y, z, rotate, size  where its middle is, turned by how many degrees, how tall
+//            rotate_x, rotate_y     turned about its own x and y too (degrees): a thing leaning back, a thing turned to its side
 //            opacity                how much of it is there: 1 all, 0 none (a film's, a picture's, a text's)
 //            start, duration        when it comes on, and for how long (not said: for good, going round)
 //            begin, speed           a film's: from where in itself, how fast (below 0: backwards)
@@ -44,10 +45,13 @@ struct Doc {
 // words), and whether it can move (take keys).
 static const char* const doc_kinds = "film picture text solid";   // (the kinds of thing)
 static const char* const doc_shapes = "ring gem cube";             // (the kit's own shapes a solid may be)
+// (whether a value is keyed, in SQLite's words: see doc_key)
+#define DOC_KEYED "(select count(*) > 1 or max(at) <> 0 or max(way) is not null from fact where thing = %d and name = %Q)"
 struct DocValue { const char* name; const char* kinds; double low, high; bool moves; const char* words; };
 static const DocValue doc_values[] = {
     {"x", doc_kinds, -1e4, 1e4, true, nullptr}, {"y", doc_kinds, -1e4, 1e4, true, nullptr}, {"z", doc_kinds, -1e4, 1e4, true, nullptr},
-    {"rotate", doc_kinds, -1e6, 1e6, true, nullptr}, {"size", doc_kinds, 1e-3, 1e4, true, nullptr}, {"opacity", "film picture text", 0, 1, true, nullptr},
+    {"rotate", doc_kinds, -1e6, 1e6, true, nullptr}, {"rotate_x", doc_kinds, -1e6, 1e6, true, nullptr}, {"rotate_y", doc_kinds, -1e6, 1e6, true, nullptr},
+    {"size", doc_kinds, 1e-3, 1e4, true, nullptr}, {"opacity", "film picture text", 0, 1, true, nullptr},
     {"start", doc_kinds, 0, 1e6, false, nullptr}, {"duration", doc_kinds, 1e-3, 1e6, false, nullptr},
     {"begin", "film", 0, 1e6, false, nullptr}, {"speed", "film", -100, 100, false, nullptr}, {"keyed", "film", 0, 1, false, nullptr},
     {"blend", "film picture text", 0, 0, false, "normal add multiply screen"}, {"file", "film picture solid text", 0, 0, false, ""}, {"shape", "solid", 0, 0, false, doc_shapes},
@@ -146,7 +150,8 @@ static void doc_moment(Doc& d, double now) {
         if (t.film) video_at(s, t.film, (float)since);
         if (t.drawn && t.drawn->seconds > 0.f) picture_at(s, t.drawn, std::fmod((float)since, t.drawn->seconds));
         const float3 at{(float)doc_number(d, thing, "x", now, 0), (float)doc_number(d, thing, "y", now, 0), (float)doc_number(d, thing, "z", now, 0)};
-        const mat4f place = mat4f::translation(at) * mat4f::rotation((float)doc_number(d, thing, "rotate", now, 0) * TAU / 360.f, float3{0, 0, 1}) * mat4f::scaling((float)doc_number(d, thing, "size", now, 1));
+        const auto turned = [&](const char* name, float3 about) { return mat4f::rotation((float)doc_number(d, thing, name, now, 0) * TAU / 360.f, about); };
+        const mat4f place = mat4f::translation(at) * turned("rotate", float3{0, 0, 1}) * turned("rotate_y", float3{0, 1, 0}) * turned("rotate_x", float3{1, 0, 0}) * mat4f::scaling((float)doc_number(d, thing, "size", now, 1));
         if (t.solid) solid_to(s, t.solid, place); else move(s, m, [&](int, const mat4f&) { return place; });
         if (MaterialInstance* look = t.film ? t.film->look : t.drawn ? t.drawn->look : nullptr) look->setParameter("opacity", (float)doc_number(d, thing, "opacity", now, 1));
     }
@@ -204,7 +209,7 @@ static bool doc_match(Doc& d) {
             } else if (glass) why = "glass on a file's shape is not made yet";
             else if ((made.solid = solid(s, file.c_str(), mat4f{}, 1.f)) && rgb >= 0) solid_fill(s, made.solid, colour);
         } else why = std::string("its kind is one of: ") + doc_kinds;
-        if (!made.film && !made.drawn && !made.solid && !made.shape) { d.trouble = "the " + kind + " (" + file + shape + ") could not be made: " + why; all = false; continue; }
+        if (!made.film && !made.drawn && !made.solid && !made.shape) { d.trouble = why + ": the " + kind + " " + std::filesystem::path(file + shape).filename().string() + " could not be made"; all = false; continue; }
         d.shown[thing] = made;
     }
     doc_moment(d, s.now);
@@ -307,7 +312,7 @@ static bool doc_step(Doc& d, bool back) {
 // its numbers, however it was told ("": there is no key of that value at that moment).
 static std::string doc_way_of(Doc& d, int thing, const char* name, double at) {
     std::string said;
-    doc_rows(d, sqlite3_mprintf("select coalesce(way, 'Linear') from fact where thing = %d and name = %Q and at = %!.17g and (select count(*) from fact where thing = %d and name = %Q) > 1", thing, name, at, thing, name),
+    doc_rows(d, sqlite3_mprintf("select coalesce(way, 'Linear') from fact where thing = %d and name = %Q and at = %!.17g and " DOC_KEYED, thing, name, at, thing, name),
              [&](sqlite3_stmt* row) { said = (const char*)sqlite3_column_text(row, 0); });
     Interp kind;
     return !said.empty() && interp_said(said, &kind) == 0 ? interp_words(kind) : said;
@@ -370,13 +375,19 @@ static bool doc_set(Doc& d, int thing, const char* name, double is) {
 static bool doc_say(Doc& d, int thing, const char* name, const char* word) {
     return doc_knows(d, thing, name, nullptr, word) && doc_change(d, sqlite3_mprintf("insert into fact(thing, name, at, value) values(%d, %Q, 0.0, %Q) on conflict do update set value = excluded.value", thing, name, word));
 }
+// A value either stays (one fact, at 0, with no way: what `set` writes) or is keyed: a key is a key even alone, and
+// a value's first key takes the place of the value that stayed (a key at 0 is marked by its way, Linear until told).
+static int doc_keys(Doc& d, int thing, const char* name, double at);
 static bool doc_key(Doc& d, int thing, const char* name, double at, double is) {
     if (!(at >= 0.0 && at <= 1e6)) return d.trouble = "a key is at a moment of the stage: from 0 to 1000000 seconds", false;
-    return doc_knows(d, thing, name, &is, nullptr, true) && doc_change(d, sqlite3_mprintf("insert into fact(thing, name, at, value) values(%d, %Q, %!.17g, %!.17g) on conflict do update set value = excluded.value", thing, name, at, is));
+    if (!doc_knows(d, thing, name, &is, nullptr, true)) return false;
+    const bool stayed = !doc_keys(d, thing, name, -1.0) && at != 0.0;   // (the value that stayed goes: the key holds the place now)
+    return doc_change(d, sqlite3_mprintf("%z insert into fact(thing, name, at, value, way) values(%d, %Q, %!.17g, %!.17g, %s) on conflict do update set value = excluded.value, way = coalesce(way, excluded.way)",
+                                         stayed ? sqlite3_mprintf("delete from fact where thing = %d and name = %Q;", thing, name) : sqlite3_mprintf(""), thing, name, at, is, at == 0.0 ? "'Linear'" : "null"));
 }
 static int doc_keys(Doc& d, int thing, const char* name, double at = -1.0) {   // (how many keys a value has; or whether it has one at a moment)
     int n = 0;
-    doc_rows(d, at < 0.0 ? sqlite3_mprintf("select count(*) from fact where thing = %d and name = %Q and (select count(*) from fact where thing = %d and name = %Q) > 1", thing, name, thing, name)
+    doc_rows(d, at < 0.0 ? sqlite3_mprintf("select count(*) from fact where thing = %d and name = %Q and " DOC_KEYED, thing, name, thing, name)
                          : sqlite3_mprintf("select count(*) from fact where thing = %d and name = %Q and at = %!.17g", thing, name, at), [&](sqlite3_stmt* row) { n = sqlite3_column_int(row, 0); });
     return n;
 }
@@ -406,7 +417,8 @@ static std::string doc_moving(Doc& d, int thing) {
 }
 static bool doc_unkey(Doc& d, int thing, const char* name, double at) {
     if (!doc_knows(d, thing, name)) return false;
-    if (!doc_keys(d, thing, name, at)) return d.trouble = std::string(name) + " has no key at that moment", false;
+    if (!doc_keys(d, thing, name) || !doc_keys(d, thing, name, at)) return d.trouble = std::string(name) + " has no key at that moment", false;
+    if (doc_keys(d, thing, name) == 1) return doc_set(d, thing, name, doc_number(d, thing, name, at, 0));   // (its last key: it stays what the key held)
     return doc_change(d, sqlite3_mprintf("delete from fact where thing = %d and name = %Q and at = %!.17g", thing, name, at));
 }
 // How the stretch from a key to the next goes: one of the nine kinds, alone or with all its numbers (Random 3 0.25
@@ -462,7 +474,7 @@ static double doc_lasts(Doc& d, int thing) {
 }
 static std::vector<double> doc_key_moments(Doc& d, int thing, const char* name) {
     std::vector<double> at;
-    doc_rows(d, sqlite3_mprintf("select at from fact where thing = %d and name = %Q and (select count(*) from fact where thing = %d and name = %Q) > 1 order by at", thing, name, thing, name),
+    doc_rows(d, sqlite3_mprintf("select at from fact where thing = %d and name = %Q and " DOC_KEYED " order by at", thing, name, thing, name),
              [&](sqlite3_stmt* row) { at.push_back(sqlite3_column_double(row, 0)); });
     return at;
 }

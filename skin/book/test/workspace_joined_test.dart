@@ -88,6 +88,18 @@ void main() {
     expect(m.put(film, 'x', .5, 1), isTrue, reason: m.trouble); // (it has none: the value that stays)
     expect(m.keyed(film, 'x', .5), 0);
 
+    // (the window judge's fifth finding) a value's first key takes the place of the value that stayed: no key appears at 0,
+    // and a second change at another moment is a move between the two
+    final cube = m.add('solid', 'cube');
+    expect(m.put(cube, 'x', 1, 2) && m.keyHere(cube, 'x', 1) && m.keyHere(cube, 'y', 1), isTrue, reason: m.trouble);
+    expect([m.keyMoments(cube, 'x'), m.keyMoments(cube, 'y')], [[1.0], [1.0]], reason: 'one key each, where the hand was');
+    expect(m.put(cube, 'y', 2, 3), isTrue, reason: m.trouble);
+    expect(m.keyMoments(cube, 'y'), [1.0, 2.0]);
+    expect(m.value(cube, 'y', 1.5), 1.5, reason: 'it travels from where it was to where it was put');
+    expect(m.unkey(cube, 'y', 1) && m.unkey(cube, 'y', 2), isTrue, reason: m.trouble);
+    expect([m.keyed(cube, 'y', 2), m.value(cube, 'y', 0)], [0, 3], reason: 'its last key gone, it stays what that key held');
+    expect(m.set(cube, 'rotate_x', 30) && m.set(cube, 'rotate_y', 40), isTrue, reason: m.trouble);
+
     m.together(() {
       m.set(film, 'x', 2);
       m.set(film, 'y', 3);

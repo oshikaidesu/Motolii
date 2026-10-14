@@ -106,8 +106,8 @@ class FontsShelf extends StatelessWidget {
             title: sel.family,
             meta: '${sel.kind} · ${sel.styles} styles · Latin',
             action: 'Apply',
-            done: c.applied(sel.family) || sel.family == _usedFont,
-            doneLabel: 'In use',
+            done: c.ws.inside != null || c.applied(sel.family) || sel.family == _usedFont,
+            doneLabel: c.ws.inside != null ? 'No seat yet' : 'In use', // (joined: these are the sample's families, not files; a font file is placed from Media)
             onAction: () => c.apply(sel.family),
           ),
       ],
