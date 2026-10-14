@@ -59,7 +59,14 @@ class ColorsShelf extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final used = <String, Color>{for (final l in c.ws.layers) l.name: wsTone(l.kind)};
+    final m = c.ws.inside;
+    // (joined: the colours the document's things are filled with, each by the thing's name; a ramp by its first)
+    final used = m == null
+        ? <String, Color>{for (final l in c.ws.layers) l.name: wsTone(l.kind)}
+        : <String, Color>{
+            for (final l in c.ws.layers)
+              if (int.tryParse(m.word(int.parse(l.id), 'fill').split(' ').first, radix: 16) case final v? when m.word(int.parse(l.id), 'fill').split(' ').first.length == 6) l.name: Color(0xFF000000 | v),
+          };
     final chip = c.chip;
     final pals = _pals.where((p) => c.hit(p.name) && (chip == 'All' || (chip == 'Saved' ? p.saved : chip == 'Starter' && !p.saved))).toList();
     Widget block(List<Widget> kids) => Padding(
@@ -150,7 +157,7 @@ class ColorsShelf extends StatelessWidget {
             title: _hex(sel.$2),
             meta: c.mem.trouble['fill'] ?? sel.$1,
             action: 'Fill',
-            onAction: () => _fill(c, _hex(sel.$2).substring(1).toLowerCase()),
+            onAction: () => _fill(c, _wordOf(c.sel) ?? _hex(sel.$2).substring(1).toLowerCase()),
           )
         else if (sel != null)
           DockFooter(
@@ -164,6 +171,14 @@ class ColorsShelf extends StatelessWidget {
           ),
       ],
     );
+  }
+
+  /// Joined: a saved gradient is all its colours, a ramp down the thing (the document's fill of two colours or more).
+  String? _wordOf(String? id) {
+    final parts = id?.split('-') ?? const [];
+    final i = parts.length > 1 ? int.tryParse(parts.last) : null;
+    if (i == null || parts.sublist(0, parts.length - 1).join('-') != 'grad' || i >= _grads.length) return null;
+    return [for (final k in _grads[i].$2) _hex(k).substring(1).toLowerCase()].join(' ');
   }
 
   (String, Color)? _resolve(String? id, Map<String, Color> used) {

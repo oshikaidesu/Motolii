@@ -441,7 +441,18 @@ static bool doc_match(Doc& d) {
         const char* lay = laid.empty() || laid == "normal" ? nullptr : laid.c_str();
         std::string why = "it could not be read";
         const std::string fill = doc_word(d, thing, "fill");
-        const long rgb = fill.size() == 6 && fill.find_first_not_of("0123456789abcdefABCDEF") == std::string::npos ? std::strtol(fill.c_str(), nullptr, 16) : -1;
+        // (a fill is a colour, six digits; or, of a text or a flat shape, two colours or more: a ramp down it)
+        std::vector<float3> ramp;
+        long rgb = -1;
+        {
+            std::istringstream said(fill);
+            for (std::string one; said >> one;) {
+                const long c = one.size() == 6 && one.find_first_not_of("0123456789abcdefABCDEF") == std::string::npos ? std::strtol(one.c_str(), nullptr, 16) : -1;
+                if (c < 0) { ramp.clear(), rgb = -1; break; }
+                if (ramp.empty()) rgb = c;
+                ramp.push_back(float3{(float)((c >> 16) & 255), (float)((c >> 8) & 255), (float)(c & 255)} / 255.f);
+            }
+        }
         const float3 colour = float3{(float)((rgb >> 16) & 255), (float)((rgb >> 8) & 255), (float)(rgb & 255)} / 255.f;
         // (an edge, ThorVG's stroke: its colour said as a fill is, and its width as a share of the thing's own height,
         //  from points of the picture at size 1 where things stand at first)
@@ -454,6 +465,7 @@ static bool doc_match(Doc& d) {
         const std::string shade = doc_word(d, thing, "shadow");
         const long shadeRgb = shade.size() == 6 && shade.find_first_not_of("0123456789abcdefABCDEF") == std::string::npos ? std::strtol(shade.c_str(), nullptr, 16) : -1;
         DrawnFx fx;
+        if (ramp.size() > 1) fx.ramp = ramp;
         fx.copies = (int)doc_number(d, thing, "copies", 0, 1);
         fx.blur = (float)(doc_number(d, thing, "blur", 0, 0) / units);
         if (shadeRgb >= 0) {   // (After Effects' own drop shadow, as it comes: half of it, 135 degrees, 10 points away, 10 soft)
@@ -496,17 +508,17 @@ static bool doc_match(Doc& d) {
             else if ((!stroke.empty() && edgeRgb < 0) || !fxOk) {}
             else if (shape == "solid") {   // (a flat colour as large as the stage, where it stands at first: as wide to its height, and as high in the stage's units)
                 const float high = (float)(2.0 * up.w / up.y);
-                made.drawn = flat(s, "rect", (float)s.w / (float)s.h, mat4f{}, high, fill.empty() ? float3{0xd9, 0xd2, 0xc3} / 255.f : colour, lay, float4{edge.xyz, edge.w / high}, DrawnFx{fx.blur / high, fx.shadow, fx.fall / high, fx.way, fx.soft / high, fx.tint, {fx.tints[0], fx.tints[1]}, fx.tritone, {fx.tones[0], fx.tones[1], fx.tones[2]}, fx.glow, fx.glowSoft / high, fx.copies});
+                made.drawn = flat(s, "rect", (float)s.w / (float)s.h, mat4f{}, high, fill.empty() ? float3{0xd9, 0xd2, 0xc3} / 255.f : colour, lay, float4{edge.xyz, edge.w / high}, fx.over(high));
             } else {   // (a line is long and thin as it comes: 25 times as long as it is thick, a tenth of a unit thick)
                 const bool line = shape == "line";
                 const float high = line ? 0.04f : 1.f;
                 made.drawn = flat(s, shape.c_str(), (float)doc_number(d, thing, "wide", 0, line ? 25 : 1), mat4f{}, high, fill.empty() ? float3{0xd9, 0xd2, 0xc3} / 255.f : colour, lay,
-                                  float4{edge.xyz, edge.w / high}, DrawnFx{fx.blur / high, fx.shadow, fx.fall / high, fx.way, fx.soft / high, fx.tint, {fx.tints[0], fx.tints[1]}, fx.tritone, {fx.tones[0], fx.tones[1], fx.tones[2]}, fx.glow, fx.glowSoft / high, fx.copies},
+                                  float4{edge.xyz, edge.w / high}, fx.over(high),
                                   (int)doc_number(d, thing, "points", 0, shape == "star" ? 5 : 6), (float)doc_number(d, thing, "inner", 0, 0.5), (float)doc_number(d, thing, "round", 0, 0));
             }
         } else if (kind == "solid") {   // (one of the kit's shapes, or a file; its fill is its surface: a colour, or the material glass)
             const bool glass = fill == "glass";
-            if (!fill.empty() && !glass && rgb < 0) why = "a solid's fill is six digits, as ff3366, or glass";
+            if (!fill.empty() && !glass && (rgb < 0 || ramp.size() > 1)) why = "a solid's fill is six digits, as ff3366, or glass";
             else if (!shape.empty()) {
                 made.shape = shape == "gem" ? gem(0.5f) : shape == "cube" ? cube(0.1f) : torus(0.37f, 0.13f);
                 MaterialInstance* look = glass ? thick_glass(s, made.shape, {mat4f{}}) : add(s, made.shape, "floor_lit.filamat");

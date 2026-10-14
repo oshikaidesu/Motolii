@@ -11,7 +11,7 @@ import 'package:lab_book/parts/controls.dart' show Segmented;
 import 'package:lab_book/sets/inspector/inspector_parts.dart' show AnchorCube, AnchorGeometry, NumField, OnOff, PropRow, Space, SpacePlate, TextGroup;
 import 'package:lab_book/workspace/dock_fonts.dart';
 import 'package:lab_book/workspace/desk_kit.dart' show DeskScrub;
-import 'package:lab_book/workspace/dock_parts.dart' show DockSearch;
+import 'package:lab_book/workspace/dock_parts.dart' show DockFooter, DockSearch;
 import 'package:lab_book/workspace/timeline.dart';
 import 'package:lab_book/workspace/workspace.dart';
 import 'package:lab_book/workspace/ws.dart';
@@ -681,6 +681,30 @@ void main() {
     final aperture = m.value(camera, 'aperture', 0)!;
     expect(aperture, inExclusiveRange(1.4, 22), reason: 'the f-number the hand left');
     expect(m.undo() && m.value(camera, 'aperture', 0) == 0, isTrue, reason: 'one step');
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
+  testWidgets('Colors: a saved gradient fills a flat thing as a ramp of all its colours; Used here is the document\'s fills', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    final rect = m.add('shape', 'rect');
+    expect(m.say(rect, 'fill', '2a4bd8'), isTrue);
+    ws
+      ..reread()
+      ..select('$rect')
+      ..shelf = 'Colors';
+    await t.pumpAndSettle();
+    await t.enterText(find.descendant(of: find.byType(DockSearch), matching: find.byType(EditableText)), 'gradient');
+    await t.pumpAndSettle();
+    final tile = find.byWidgetPredicate((w) => w.runtimeType.toString() == '_Grad').at(1); // (the second saved gradient: Hot pink)
+    await t.ensureVisible(tile);
+    await t.pumpAndSettle();
+    await t.tap(tile);
+    await t.pumpAndSettle();
+    await t.tap(find.descendant(of: find.byType(DockFooter), matching: find.text('Fill')));
+    await t.pumpAndSettle();
+    expect(m.word(rect, 'fill'), 'e974ab f08a5d efcb4e', reason: m.trouble);
+    expect(m.say(m.add('solid', 'cube'), 'fill', 'e974ab f08a5d'), isFalse, reason: 'a solid is filled with one colour');
     expect(t.takeException(), isNull);
     await _close(t);
   }, skip: !_built);

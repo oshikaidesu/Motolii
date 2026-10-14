@@ -61,7 +61,13 @@ static void picture_at(Stage& s, Drawn* d, float seconds) {
 // much of it (shadow.w), falling so far, that way (degrees, as ThorVG counts them) and so soft.
 // tint: how much its darks and lights are made two colours (0: not at all); tritone: how much its darks, middles and
 // lights are made three (0: not at all).
-struct DrawnFx { float blur = 0.f; float4 shadow{0.f}; float fall = 0.f, way = 0.f, soft = 0.f; float tint = 0.f; float3 tints[2]{}; float tritone = 0.f; float3 tones[3]{}; float4 glow{0.f}; float glowSoft = 0.f; int copies = 1; };   // (copies: how many times it is put down: the document tells each where)
+struct DrawnFx { float blur = 0.f; float4 shadow{0.f}; float fall = 0.f, way = 0.f, soft = 0.f; float tint = 0.f; float3 tints[2]{}; float tritone = 0.f; float3 tones[3]{}; float4 glow{0.f}; float glowSoft = 0.f; int copies = 1;
+                 std::vector<float3> ramp;   // (two colours or more: it is filled from the first at its top to the last at its bottom, ThorVG's linear gradient)
+                 DrawnFx over(float high) const {   // (the same for a thing `high` units high: its lengths as shares of that)
+                     DrawnFx f = *this;
+                     f.blur /= high, f.fall /= high, f.soft /= high, f.glowSoft /= high;
+                     return f;
+                 } };   // (copies: how many times it is put down: the document tells each where)
 static Drawn* drawn(Stage& s, const std::function<tvg::Paint*(Drawn*, int*, int*)>& paints, const mat4f& place, float high, float3 ground, bool shown, const char* lay, const DrawnFx& fx = {}) {
     if (!door::device(s.engine)) return nullptr;   // (another backend)
     Drawn* d = new Drawn;
@@ -164,6 +170,17 @@ static Drawn* picture(Stage& s, const char* file, const mat4f& place, float high
 
 // Words put in the scene, set by ThorVG in the font of `fontFile` (a .ttf): a sheet `high` tall for each line, as
 // wide as the words make it, its middle at `place`.
+// The colours of a ramp as ThorVG's linear gradient, from the first at y0 to the last at y1 (evenly spaced).
+static tvg::Fill* ramp_of(const std::vector<float3>& ramp, float y0, float y1) {
+    tvg::LinearGradient* g = tvg::LinearGradient::gen();
+    g->linear(0.f, y0, 0.f, y1);
+    std::vector<tvg::Fill::ColorStop> stops;
+    for (size_t i = 0; i < ramp.size(); ++i)
+        stops.push_back({(float)i / (float)(ramp.size() - 1), (uint8_t)std::lround(255.f * ramp[i].x), (uint8_t)std::lround(255.f * ramp[i].y), (uint8_t)std::lround(255.f * ramp[i].z), 255});
+    g->colorStops(stops.data(), (uint32_t)stops.size());
+    return g;
+}
+
 // Whether ThorVG sets `words` in a font file: it reads the file and the words come out with a size (a font of other
 // letters gives them none). ThorVG's own loader keeps its fonts under a lock, so any thread may ask, once ThorVG is up.
 static bool type_sets(const char* fontFile, const char* words) {
@@ -206,7 +223,14 @@ static Drawn* type(Stage& s, const char* words, const char* fontFile, const mat4
         t->translate(-x + 0.5f * outline, -y + 0.5f * outline);
         *w = 2 * (int)std::ceil(0.5f * (wide + outline));
         *h = 2 * (int)std::ceil(0.5f * (tall + outline));
-        return t;
+        if (fx.ramp.size() < 2) return t;
+        // (a ramp: a rect as large as the words, filled with it, seen only where the letters are: ThorVG's own alpha
+        //  mask; ThorVG counts a text's own gradient in the font's units, which are not to be had from outside)
+        tvg::Shape* ramp = tvg::Shape::gen();
+        ramp->appendRect(0.f, 0.f, (float)*w, (float)*h);
+        ramp->fill(ramp_of(fx.ramp, 0.f, (float)*h));
+        ramp->mask(t, tvg::MaskMethod::Alpha);
+        return ramp;
     }, place, high, float3{-1.f}, true, lay, fx);
 }
 
@@ -238,6 +262,7 @@ static Drawn* flat(Stage& s, const char* form, float wide, const mat4f& place, f
             shape->appendRect(in, in, (float)*w - 2.f * in, (float)*h - 2.f * in, corner, corner);
         }
         shape->fill((uint8_t)std::lround(255.f * colour.x), (uint8_t)std::lround(255.f * colour.y), (uint8_t)std::lround(255.f * colour.z), strcmp(form, "null") ? 255 : 0);
+        if (fx.ramp.size() > 1 && strcmp(form, "null")) shape->fill(ramp_of(fx.ramp, 0.f, (float)*h));
         if (in > 0.f) shape->strokeWidth(2.f * in), shape->strokeFill((uint8_t)std::lround(255.f * edge.x), (uint8_t)std::lround(255.f * edge.y), (uint8_t)std::lround(255.f * edge.z));
         return shape;
     }, place, high, float3{-1.f}, true, lay, fx);
