@@ -1,0 +1,217 @@
+// The window rampaged, in a real window (flutter drive --profile): every control it shows now (the cards' knobs,
+// switches, segments, menus, links, folds, and the stage's handles) worked over and over in a seeded order. Red:
+// a control that moves nothing (neither the document nor the window), a card whose numbers disagree with the
+// document after a hand let go, and any picture of the window that took longer than a sixtieth of a second.
+//   flutter drive --profile -d macos --driver=test_driver/integration_test.dart --target=integration_test/rampage_test.dart
+import 'dart:io';
+import 'dart:math' as math;
+import 'dart:ui' show FrameTiming;
+import 'package:flutter/scheduler.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:integration_test/integration_test.dart';
+import 'package:lab_book/motolii.dart';
+import 'package:lab_book/parts/controls.dart' show Segmented;
+import 'package:lab_book/sets/inspector/inspector_parts.dart' show Chooser, Ctx, InspectorPanel, LinkMark, NumField, OnOff;
+import 'package:lab_book/workspace/stage_view.dart';
+import 'package:lab_book/workspace/timeline.dart';
+import 'package:lab_book/workspace/workspace.dart' show Workspace, wsTransform;
+import 'package:lab_book/workspace/ws.dart';
+
+const _font = '$motoliiDir/out/arial_black.ttf';
+const _seed = int.fromEnvironment('SEED', defaultValue: 7), _acts = int.fromEnvironment('ACTS', defaultValue: 400);
+
+/// The whole document as values, thing by thing (the stage's own is thing 0).
+Map<String, Object?> _all(Motolii m, double at) => {
+  for (final t in [0, ...m.things])
+    for (final n in m.values(t)) '$t:$n': m.value(t, n, at) ?? m.word(t, n),
+};
+
+/// Whether a control is greyed by its row (a row that is off takes no hand).
+bool _off(Element e) {
+  var off = false;
+  e.visitAncestorElements((a) => !(off = a.widget is IgnorePointer && (a.widget as IgnorePointer).ignoring));
+  return off;
+}
+
+void main() {
+  final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+  binding.framePolicy = LiveTestWidgetsFlutterBindingFramePolicy.fullyLive;
+  WidgetController.hitTestWarningShouldBeFatal = true;
+
+  testWidgets('the window rampaged: everything moves, the cards agree with the document, 60 a second', (t) async {
+    final timings = <FrameTiming>[];
+    void took(List<FrameTiming> ts) => timings.addAll(ts);
+    t.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.menu, (_) async => null);
+    final doc = '${Directory.systemTemp.createTempSync('rampage').path}/rampage.motolii';
+    await t.pumpWidget(WidgetsApp(color: const Color(0xFF000000), builder: (c, _) => Workspace(document: doc)));
+    await t.pumpAndSettle();
+    final ws = WsScope.read(t.element(find.byType(WsTimeline))), m = ws.inside!;
+    final things = [m.add('solid', 'cube'), m.add('solid', 'ring'), m.add('text', _font), m.add('light', 'sun'), m.make('Wave lines')]..removeWhere((n) => n == 0);
+    m.say(things[1], 'fill', 'glass');
+    ws.reread();
+    await t.pumpAndSettle();
+    SchedulerBinding.instance.addTimingsCallback(took);
+
+    final r = math.Random(_seed), reds = <String>{}, worked = <String, int>{}, slow = <String, double>{};
+    double at() => ws.frame / Ws.fps;
+    Object state() {   // (the window's own state: what its inspector holds, folds and flags and words)
+      final d = Ctx.read(t.element(find.byType(InspectorPanel))).doc;
+      return '${d.v}|${d.b}|${d.s2}|${d.animateAll}|${d.link}|${d.kind}';
+    }
+
+    // A drag as a hand makes it, in steps: before it is let go, the document must already show it (the preview the
+    // stage draws while a hand is on a knob or a handle); the moment that happens is told back.
+    Future<bool> dragSeen(Offset from, Offset by) async {
+      final start = _all(m, at()), g = await t.startGesture(from);
+      var seen = false;
+      for (var i = 1; i <= 3; i++) {
+        await g.moveTo(from + by * (i / 3));
+        await t.pump(const Duration(milliseconds: 16));
+        final mid = _all(m, at());
+        seen = seen || mid.length != start.length || mid.entries.any((e) => start[e.key] != e.value);
+      }
+      await g.up();
+      return seen;
+    }
+
+    Future<void> settle() async {
+      for (var i = 0; i < 6; i++) {
+        await t.pump(const Duration(milliseconds: 16));
+      }
+    }
+
+    for (var act = 0; act < _acts; act++) {
+      if (act % 25 == 0) {   // (now and then another thing picked, or none)
+        final pick = r.nextInt(things.length + 1);
+        ws.select(pick == things.length ? null : '${things[pick]}');
+        await settle();
+      }
+      final panel = find.byType(InspectorPanel);
+      final ledger = <(String, Finder)>[
+        for (final e in find.descendant(of: panel, matching: find.byType(NumField)).evaluate())
+          if ((e.widget as NumField).enabled && !_off(e)) ('knob ${(e.widget as NumField).id}', find.descendant(of: panel, matching: find.byWidgetPredicate((w) => w is NumField && w.id == (e.widget as NumField).id))),
+        for (final e in find.descendant(of: panel, matching: find.byType(OnOff)).evaluate())
+          if ((e.widget as OnOff).enabled && !_off(e)) ('switch #${e.hashCode % 997}', find.byWidget(e.widget)),
+        for (final e in find.descendant(of: panel, matching: find.byType(Segmented)).evaluate())
+          if (!_off(e)) ('segments ${(e.widget as Segmented).items.join('/')}', find.descendant(of: panel, matching: find.byWidgetPredicate((w) => w is Segmented && w.items.join('/') == (e.widget as Segmented).items.join('/')))),
+        for (final e in find.descendant(of: panel, matching: find.byType(Chooser)).evaluate())
+          if ((e.widget as Chooser).enabled && !_off(e)) ('menu ${(e.widget as Chooser).id}', find.descendant(of: panel, matching: find.byWidgetPredicate((w) => w is Chooser && w.id == (e.widget as Chooser).id))),
+        for (final e in find.descendant(of: panel, matching: find.byType(LinkMark)).evaluate())
+          if (!_off(e)) ('link', find.byWidget(e.widget)),
+        if (find.byType(StageView).evaluate().isNotEmpty)
+          for (final name in (t.state(find.byType(StageView)) as StageHandles).handles.keys) ('handle $name', find.byType(StageView)),
+      ];
+      if (ledger.isEmpty) continue;
+      final (what, where) = ledger[r.nextInt(ledger.length)];
+      worked[what.split(' ').take(2).join(' ')] = (worked[what.split(' ').take(2).join(' ')] ?? 0) + 1;
+      final before = _all(m, at()), was = state(), seen = timings.length;
+      try {
+        if (what.startsWith('knob') || what.startsWith('handle')) {
+          // (one way, and if that moved nothing (a value at its end), the other way: then the preview is judged)
+          Offset from;
+          if (what.startsWith('knob')) {
+            await t.ensureVisible(where.first);
+            from = t.getCenter(where.first);
+          } else {
+            final at0 = (t.state(where.first) as StageHandles).handles[what.substring(7)];
+            if (at0 == null) continue;
+            from = t.getTopLeft(where.first) + at0;
+          }
+          final by = Offset(r.nextDouble() * 100 - 50, r.nextDouble() * 100 - 50);
+          var seen = await dragSeen(from, by);
+          await settle();
+          if (_all(m, at()).entries.every((e) => before[e.key] == e.value) && state() == was) {
+            seen = await dragSeen(what.startsWith('knob') ? t.getCenter(where.first) : from, -by * 2);
+            await settle();
+          }
+          final done = _all(m, at());
+          if (!seen && done.entries.any((e) => before[e.key] != e.value)) reds.add('$what: nothing moves until the hand lets go (no preview)');
+        } else if (what.startsWith('segments')) {
+          await t.ensureVisible(where.first);
+          final seg = t.widget(where.first) as Segmented, n = seg.items.length;
+          final other = (seg.index + 1 + r.nextInt(math.max(1, n - 1))) % n;
+          final word = find.descendant(of: where.first, matching: find.byWidgetPredicate((w) => w is Text && (w.data ?? '').toLowerCase() == seg.items[other].toLowerCase()));
+          if (word.evaluate().isNotEmpty) {
+            await t.tap(word.first);
+          } else {
+            final box = t.getRect(where.first);
+            await t.tapAt(Offset(box.left + box.width * (other + 0.5) / n, box.center.dy));
+          }
+        } else if (what.startsWith('menu')) {
+          await t.ensureVisible(where.first);
+          final chooser = t.widget(where.first) as Chooser;
+          await t.tap(where.first);
+          await settle();
+          final pick = chooser.options[r.nextInt(chooser.options.length)];
+          final option = find.text(pick);
+          if (option.evaluate().length > 1) await t.tap(option.last);
+          await t.sendKeyEvent(LogicalKeyboardKey.escape);   // (a menu left open would cover the next hand)
+        } else {
+          await t.ensureVisible(where.first);
+          await t.tap(where.first);
+        }
+      } catch (e) {
+        reds.add('$what: the hand could not work it (${e.toString().split('\n').first})');
+      }
+      await settle();
+      final after = _all(m, at()), now = state();
+      for (final f in timings.skip(seen)) {   // (the slowest picture after each kind of hand)
+        final ms = f.totalSpan.inMicroseconds / 1000.0, key = what.split(' ').take(2).join(' ');
+        if (ms > 1000 / 60 && ms > (slow[key] ?? 0)) slow[key] = ms;
+      }
+      final moved = {for (final k in {...before.keys, ...after.keys}) if (before[k] != after[k]) k};
+      if (moved.isEmpty && was == now && !what.startsWith('menu')) reds.add('$what: moves nothing');
+      // (the cards agree with the document: each number the inspector holds is what the document makes of it now)
+      final told = wsTransform(ws, ws.selected), held = Ctx.read(t.element(find.byType(InspectorPanel))).doc.v;
+      for (final MapEntry(:key, :value) in told.entries) {
+        if (held[key] case final shown? when (shown - value).abs() > 0.051 && !key.startsWith('cam.')) reds.add('$what: the card shows $key $shown, the document $value');
+      }
+      if (act % 40 == 39) {   // (now and then five steps taken back and done again: the document as it was)
+        final snap = _all(m, at());
+        var back = 0;
+        while (back < 5 && m.undo()) {
+          back++;
+        }
+        for (var i = 0; i < back; i++) {
+          m.redo();
+        }
+        final again = _all(m, at());
+        if (again.length != snap.length || again.entries.any((e) => snap[e.key] != e.value)) reds.add('five undone and redone: the document is not as it was');
+        ws.reread();
+        await settle();
+      }
+    }
+    SchedulerBinding.instance.removeTimingsCallback(took);
+
+    final spans = [for (final f in timings) f.totalSpan.inMicroseconds / 1000.0]..sort();
+    double pc(double p) => spans.isEmpty ? 0 : spans[math.min(spans.length - 1, (p * spans.length).floor())];
+    final late = spans.where((s) => s > 1000 / 60).length;
+    final report = {
+      'acts': _acts,
+      'seed': _seed,
+      'pictures': spans.length,
+      'late (over 16.7 ms)': late,
+      'median ms': pc(0.5),
+      '90th ms': pc(0.9),
+      '99th ms': pc(0.99),
+      'most ms': spans.isEmpty ? 0 : spans.last,
+      'worked': worked,
+      'red': reds.toList()..sort(),
+    };
+    binding.reportData = report;
+    for (final red in reds.toList()..sort()) {
+      // ignore: avoid_print
+      print('RED $red');
+    }
+    for (final MapEntry(:key, :value) in (slow.entries.toList()..sort((a, b) => b.value.compareTo(a.value)))) {
+      // ignore: avoid_print
+      print('SLOW $key ${value.toStringAsFixed(1)} ms');
+    }
+    // ignore: avoid_print
+    print('RAMPAGE ${report['pictures']} pictures, late ${report['late (over 16.7 ms)']}, median ${pc(0.5).toStringAsFixed(2)} ms, 99th ${pc(0.99).toStringAsFixed(2)} ms, most ${(spans.isEmpty ? 0 : spans.last).toStringAsFixed(2)} ms; ${reds.length} red');
+    expect(reds, isEmpty);
+    expect(late, 0, reason: 'pictures over a sixtieth of a second');
+  });
+}
