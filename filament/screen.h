@@ -3,7 +3,7 @@
 // knobs one `var<uniform>` struct), with its knobs declared in its head as a recipe's are (script.h: // --track@name:...).
 // The stage's picture is drawn to a texture of its own instead of the screen, and the effect draws it on the screen
 // (screen_door.h: through Filament's own driver, in order with its pictures). Knobs the struct has and the head does not
-// name are told as they come; `time` (seconds), `aspect` (wide over high) and `resolution` (points) by the stage.
+// name are told as they come; `time` (seconds), `aspect` (wide over high), `resolution`, `width` and `height` (points) by the stage.
 #pragma once
 // (kit.h: read before this, as doc.h does)
 #include "script.h"
@@ -103,11 +103,14 @@ static bool screen_effect(Stage& s, ScreenFx*& fx, const std::string& file, std:
             if (f.name == "time") v[0] = (float)s.now;
             else if (f.name == "aspect") v[0] = (float)s.w / (float)s.h;
             else if (f.name == "resolution") v[0] = (float)s.w, v[1] = (float)s.h;
-            else {
-                double usual = 0;
-                for (const ScriptKnob& k : made->knobs) if (k.name == f.name) usual = k.usual;
-                v[0] = (float)numbers(f.name, usual);
-            }
+            else if (f.name == "width" || f.name == "height") v[0] = (float)(f.name == "width" ? s.w : s.h);   // (three's way of saying it)
+            else
+                for (uint32_t i = 0; i < f.floats; ++i) {   // (a vector's numbers each a knob of its own, name_x, name_y...)
+                    const std::string k = f.floats == 1 ? f.name : f.name + "_" + "xyzw"[i];
+                    double usual = 0;
+                    for (const ScriptKnob& one : made->knobs) if (one.name == k) usual = one.usual;
+                    v[i] = (float)numbers(k, usual);
+                }
             for (uint32_t i = 0; i < f.floats; ++i) {
                 if (f.whole) { const int32_t w = (int32_t)std::lround(v[i]); std::memcpy(&at[f.at / 4 + i], &w, 4); }
                 else at[f.at / 4 + i] = v[i];
