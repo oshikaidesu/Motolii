@@ -42,7 +42,8 @@ struct Doc {
     std::vector<int> laid;   // the things in the order they lie, the one furthest back first (read when first asked for, forgotten at every change)
     // One act of a hand: the changes made from its beginning to its end are one step of undo, and if one of them is
     // refused none of them is made. Acts may lie one within another: the outermost one is the step.
-    bool keying = false;                // every value a hand changes gets a key at that moment (a shell's "animate all"), not only one that has keys
+    bool keying = false;                // every value a hand changes gets a key at that moment (a shell's "animate all")
+    double keying_from = 0.0;           // the stage's moment at which that was turned on: a value's first key then has the value it had, there, before it
     int act = 0;                        // how many acts are open, one within another
     bool act_ok = true;                 // no change of the open act has been refused
     sqlite3_session* acting = nullptr;  // SQLite's own record of what the open act changes
@@ -510,19 +511,40 @@ static int doc_keys(Doc& d, int thing, const char* name, double at = -1.0) {   /
     return n;
 }
 // What a hand does to a value at a moment, as the document's own rules (a shell does not work them out):
-// put: the value changed there: a key at that moment if the value has keys (or every change is to be keyed: d.keying), else the value that stays.
+// put: the value changed there. Every change is being keyed (d.keying): a key there, and if it is the value's first, what
+//      it was stays as a key where the keying began. Not being keyed: a value with keys is moved whole (every key by as
+//      much), a value without is the value that stays.
 // key_here: a key at that moment holding what the value is there (nothing, if it has one there).
 // raise: brought nearer or further back among the things.
 // stay: its keys are taken away, and it stays what it is at that moment.
 // keyed: 0 the value has no keys, 1 it has keys but none at that moment, 2 it has a key at that moment.
 // moving: the names of the values of a thing that can take keys.
-static bool doc_put(Doc& d, int thing, const char* name, double at, double is) { return d.keying || doc_keys(d, thing, name) ? doc_key(d, thing, name, at, is) : doc_set(d, thing, name, is); }
 static double doc_usual(const char* name);
+static bool doc_set(Doc& d, int thing, const char* name, double is);
+static bool doc_put(Doc& d, int thing, const char* name, double at, double is) {   // (the past repository's own rule: motolii-edit, place_checked)
+    if (!doc_knows(d, thing, name, &is)) return false;
+    const bool keyed = doc_keys(d, thing, name) > 0;
+    if (keyed && !d.keying) {   // (a movement that is not being keyed is moved whole: every key by as much)
+        const double by = is - doc_number(d, thing, name, at, doc_usual(name));
+        double ends[2] = {is, is};   // (its lowest and highest keys, carried: each must still be something the value can be)
+        doc_rows(d, sqlite3_mprintf("select min(value) + %!.17g, max(value) + %!.17g from fact where thing = %d and name = %Q", by, by, thing, name),
+                 [&](sqlite3_stmt* row) { ends[0] = sqlite3_column_double(row, 0), ends[1] = sqlite3_column_double(row, 1); });
+        if (!doc_knows(d, thing, name, &ends[0]) || !doc_knows(d, thing, name, &ends[1])) return false;
+        return by == 0.0 || doc_change(d, sqlite3_mprintf("update fact set value = value + %!.17g where thing = %d and name = %Q", by, thing, name));
+    }
+    if (keyed) return doc_key(d, thing, name, at, is);
+    if (!d.keying) return doc_set(d, thing, name, is);
+    // (its first key while every change is keyed: what it was stays, as a key where the keying began, so it travels from there)
+    const double was = doc_number(d, thing, name, d.keying_from, doc_usual(name));
+    doc_act(d);
+    if (d.keying_from != at) doc_key(d, thing, name, d.keying_from, was);
+    doc_key(d, thing, name, at, is);
+    return doc_acted(d);
+}
 static bool doc_key_here(Doc& d, int thing, const char* name, double at) {
     if (!doc_knows(d, thing, name, nullptr, nullptr, true)) return false;
     return doc_keys(d, thing, name, at) && doc_keys(d, thing, name) ? true : doc_key(d, thing, name, at, doc_number(d, thing, name, at, doc_usual(name)));
 }
-static bool doc_set(Doc& d, int thing, const char* name, double is);
 // raise: a thing brought `places` places nearer among the things (below 0: further back): each thing is told where it
 // lies now, as one change.
 static bool doc_raise(Doc& d, int thing, int places) {
@@ -648,7 +670,7 @@ static double doc_point(Doc& d, int thing, double now) {
 // of the picture, from the top left), and how far it is turned (degrees, clockwise as seen). false: it is not shown.
 static bool doc_frame(Doc& d, int thing, double now, double* frame) {
     float2 half{0.f};
-    if (!doc_half(d, thing, &half)) return false;
+    if (!doc_half(d, thing, &half) || !d.shown[thing].in) return false;   // (a thing that is not on, or is put aside, has no frame: a hand cannot take hold of what is not seen)
     const double size = doc_number(d, thing, "size", now, 1), point = doc_point(d, thing, now);
     const math::double2 middle = doc_seen(d, {doc_number(d, thing, "x", now, 0), doc_number(d, thing, "y", now, 0), doc_number(d, thing, "z", now, 0)});
     frame[0] = middle.x, frame[1] = middle.y, frame[2] = 2.0 * half.x * size * point, frame[3] = 2.0 * half.y * size * point;

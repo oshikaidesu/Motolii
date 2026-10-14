@@ -138,7 +138,7 @@ int motolii_key_moments(Motolii* m, int thing, const char* name, double* at, int
 // A thing's frame on the picture at the stage's moment, as the stage's own eye sees it: its middle, how wide and how
 // high (points of the picture, from the top left), and how far it is turned (degrees, clockwise as seen).
 int motolii_frame(Motolii* m, int thing, double* frame) { return by_hand(m, [=] { return (int)(doc_knows(doc(m), thing) && doc_frame(*m->d, thing, m->now, frame)); }); }
-int motolii_keying(Motolii* m, int on) { return by_hand(m, [=] { return m->d->keying = on != 0, 1; }); }
+int motolii_keying(Motolii* m, int on) { return by_hand(m, [=] { return m->d->keying = on != 0, m->d->keying_from = m->now, 1; }); }
 int motolii_hold(Motolii* m, int thing) { return by_hand(m, [=] { return (int)doc_hold(doc(m), thing); }); }
 int motolii_carry(Motolii* m, const char* by, double a, double b) { return by_hand(m, [=] { return (int)doc_carry(doc(m), by, a, b); }); }
 int motolii_let_go(Motolii* m, int keep) { return by_hand(m, [=] { return changes(m, (int)doc_let_go(doc(m), keep != 0)); }); }

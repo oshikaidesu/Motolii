@@ -67,12 +67,12 @@ int motolii_hold(Motolii* m, int thing);
 int motolii_carry(Motolii* m, const char* by, double a, double b);
 int motolii_let_go(Motolii* m, int keep);
 double motolii_point(Motolii* m);                                  /* points of the picture to one unit of the stage, at z 0 */
-/* What a hand does to a value at a moment, by the document's own rules. motolii_put: the value changed there: a key
-   at that moment if the value has keys, else the value that stays. motolii_key_here: a key at that moment holding
+/* What a hand does to a value at a moment, by the document's own rules. motolii_put: the value changed there (see
+   motolii_keying for what that is to a value with keys and to one without). motolii_key_here: a key at that moment holding
    what the value is there. motolii_stay: its keys go, it stays what it is at that moment. motolii_keyed: 0 the value has no keys, 1 keys but none at that moment, 2 a key at that
    moment. motolii_moving: the names of a thing's values that take keys, with spaces between (until the next call). */
 int motolii_put(Motolii* m, int thing, const char* name, double at, double number);
-int motolii_keying(Motolii* m, int on);                            /* on: every value a hand changes or carries gets a key at that moment, whether or not it has keys (off as a document is opened) */
+int motolii_keying(Motolii* m, int on);                            /* on: every value a hand changes or carries gets a key at that moment, and its first key leaves what it was as a key at the moment this was turned on, so it travels from there; off (as a document is opened): a value with keys is moved whole, every key by as much */
 int motolii_key_here(Motolii* m, int thing, const char* name, double at);
 int motolii_stay(Motolii* m, int thing, const char* name, double at);
 /* A thing brought `places` places nearer among the things (below 0: further back). motolii_things lists them in the

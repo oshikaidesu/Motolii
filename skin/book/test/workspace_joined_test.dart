@@ -84,8 +84,12 @@ void main() {
     expect(m.way(film, 'opacity', 0, 'Bounce 0.3 0.5'), isTrue, reason: m.trouble);
     expect(m.wayOf(film, 'opacity', 0), 'Bounce 0.3 0.5');
 
-    expect(m.put(film, 'opacity', .5, .25), isTrue, reason: m.trouble); // (it has keys: a key there)
+    m.keying(true);
+    expect(m.put(film, 'opacity', .5, .25), isTrue, reason: m.trouble); // (it has keys and changes are being keyed: a key there)
     expect(m.keyed(film, 'opacity', .5), 2);
+    m.keying(false);
+    expect(m.put(film, 'opacity', 0, .5), isFalse, reason: 'not being keyed the whole movement is carried: its last key would be 1.5');
+    expect(m.value(film, 'opacity', 0), 0);
     expect(m.put(film, 'x', .5, 1), isTrue, reason: m.trouble); // (it has none: the value that stays)
     expect(m.keyed(film, 'x', .5), 0);
 
@@ -94,7 +98,9 @@ void main() {
     final cube = m.add('solid', 'cube');
     expect(m.put(cube, 'x', 1, 2) && m.keyHere(cube, 'x', 1) && m.keyHere(cube, 'y', 1), isTrue, reason: m.trouble);
     expect([m.keyMoments(cube, 'x'), m.keyMoments(cube, 'y')], [[1.0], [1.0]], reason: 'one key each, where the hand was');
+    m.keying(true);
     expect(m.put(cube, 'y', 2, 3), isTrue, reason: m.trouble);
+    m.keying(false);
     expect(m.keyMoments(cube, 'y'), [1.0, 2.0]);
     expect(m.value(cube, 'y', 1.5), 1.5, reason: 'it travels from where it was to where it was put');
     expect(m.unkey(cube, 'y', 1) && m.unkey(cube, 'y', 2), isTrue, reason: m.trouble);
@@ -276,6 +282,42 @@ void main() {
     expect(done, isTrue, reason: m.trouble);
     expect(mp4.lengthSync(), greaterThan(1000));
     mp4.deleteSync();
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
+  testWidgets('round 3 of the judges: a thing put aside is not held; Animate all travels from where it was; a movement not being keyed is carried whole', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    final cube = m.add('solid', 'cube');
+    expect(m.set(cube, 'visible', 0), isTrue, reason: m.trouble);
+    ws
+      ..reread()
+      ..select(null);
+    await t.pumpAndSettle();
+    expect(m.frame(cube), isNull, reason: 'what is not seen has no frame');
+    final stage = t.getRect(find.byKey(const ValueKey('ws-stage-comp')));
+    await t.dragFrom(stage.center, Offset(stage.width * .2, 0));
+    await t.pumpAndSettle();
+    expect(ws.selected, isNull, reason: 'the hand went through it');
+    expect(m.value(cube, 'x', 0), 0);
+    expect(m.set(cube, 'visible', 1), isTrue);
+
+    // (Animate all turned on at 0, the thing carried at 2: it is where it was at 0 and travels to where it was let go)
+    expect(m.at(0), isTrue);
+    m.keying(true);
+    expect(m.at(2), isTrue);
+    expect(m.hold(cube) && m.carry('x', 3, 0) && m.letGo(true), isTrue, reason: m.trouble);
+    expect([m.value(cube, 'x', 0), m.value(cube, 'x', 1), m.value(cube, 'x', 2)], [0, 1.5, 3], reason: 'from where it was to where it was let go');
+    expect(m.undo(), isTrue, reason: 'both keys are one step');
+    expect(m.keyed(cube, 'x', 2), 0);
+    expect(m.redo(), isTrue);
+    m.keying(false);
+
+    // (not being keyed: the whole movement is carried, every key by as much)
+    expect(m.at(1), isTrue);
+    expect(m.put(cube, 'x', 1, 2.5), isTrue, reason: m.trouble);
+    expect([m.value(cube, 'x', 0), m.value(cube, 'x', 1), m.value(cube, 'x', 2)], [1, 2.5, 4]);
+    expect(m.keyed(cube, 'x', 1), 1, reason: 'no key was made');
     expect(t.takeException(), isNull);
     await _close(t);
   }, skip: !_built);
