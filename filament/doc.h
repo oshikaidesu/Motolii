@@ -45,6 +45,7 @@ struct Doc {
     // refused none of them is made. Acts may lie one within another: the outermost one is the step.
     std::string graded;                 // the stage's grade as last made (doc_look): made again only when it is told otherwise
     float roomLight = 0.f;              // the room's own light, as the stage was opened with it
+    std::string roomIs;                 // which room lights it now (doc_look)
     Skybox* sky = nullptr;              // the colour behind everything, once one is said
     bool keying = false;                // every value a hand changes gets a key at that moment (a shell's "animate all")
     double keying_from = 0.0;           // the stage's moment at which that was turned on: a value's first key then has the value it had, there, before it
@@ -150,6 +151,7 @@ static const DocValue doc_values[] = {
     {"contrast", "stage", 0, 2, false, nullptr}, {"saturation", "stage", 0, 2, false, nullptr}, {"vibrance", "stage", 0, 2, false, nullptr}, {"temperature", "stage", -1, 1, false, nullptr},
     {"bloom", "stage", 0, 1, false, nullptr}, {"lens_flare", "stage", 0, 1, false, nullptr}, {"vignette", "stage", 0, 1, false, nullptr}, {"vignette_color", "stage", 0, 0, false, ""},
     {"fog", "stage", 0, 1, false, nullptr}, {"fog_color", "stage", 0, 0, false, ""},
+    {"room", "stage", 0, 0, false, "small_studio studio_small_02_2k lightroom venetian_crossroads_2k graffiti_shelter_2k parking_garage_2k pillars_2k"},   // (which room lights it: the rooms made ready in out/)
     {"environment", "stage", 0, 10, false, nullptr}, {"environment_rotate", "stage", -1e6, 1e6, false, nullptr}, {"background", "stage", 0, 0, false, ""}};
 // The cards a maker sees a thing's values on, besides where it is and its fill: a title and the values on it, in the
 // order shown (a thing is shown those of them its kind has). A value the window has no other seat for goes here.
@@ -164,7 +166,7 @@ static const DocCard doc_cards[] = {
     {"Light", "intensity falloff cone shadows"},
     {"Grade", "tone_mapper exposure contrast saturation vibrance temperature"},
     {"Lens", "bloom lens_flare vignette vignette_color fog fog_color"},
-    {"Room", "environment environment_rotate background"},
+    {"Room", "room environment environment_rotate background"},
 };
 static bool doc_among(const std::string& words, const std::string& one) { return (" " + words + " ").find(" " + one + " ") != std::string::npos; }
 
@@ -367,8 +369,19 @@ static void doc_look(Doc& d) {
     View::FogOptions haze = s.view->getFogOptions();
     haze.enabled = doc_number(d, 0, "fog", 0, 0) > 0.0, haze.density = 0.5f * (float)doc_number(d, 0, "fog", 0, 0), haze.distance = 2.f, haze.height = -1e3f, haze.heightFalloff = 0.f, haze.color = hex("fog_color", float3{0.85f, 0.85f, 0.9f}), haze.fogColorFromIbl = false;
     s.view->setFogOptions(haze);
+    if (d.roomLight <= 0.f && s.scene->getIndirectLight()) d.roomLight = s.scene->getIndirectLight()->getIntensity();
+    std::string which = doc_word(d, 0, "room");
+    if (which.empty()) which = "small_studio";   // (as the stage was opened)
+    if (which != d.roomIs) {   // (another room: made once from its file, then kept; every picture laid over the stage's own is lit by it too)
+        static std::map<std::string, IndirectLight*> made;
+        if (!d.roomIs.empty() || made.empty()) made.emplace(d.roomIs.empty() ? "small_studio" : d.roomIs, s.scene->getIndirectLight());
+        const auto found = made.find(which);
+        if (found != made.end()) s.scene->setIndirectLight(found->second);
+        else if (room(s, ("out/" + which + "/" + which + "_ibl.ktx").c_str(), d.roomLight)) made[which] = s.scene->getIndirectLight();
+        for (View* v : s.layers) v->getScene()->setIndirectLight(s.scene->getIndirectLight());
+        d.roomIs = which;
+    }
     if (IndirectLight* room = s.scene->getIndirectLight()) {
-        if (d.roomLight <= 0.f) d.roomLight = room->getIntensity();
         room->setIntensity(d.roomLight * (float)doc_number(d, 0, "environment", 0, 1));
         room->setRotation(math::mat3f::rotation((float)(doc_number(d, 0, "environment_rotate", 0, 0) * (double)TAU / 360.0), math::float3{0, 1, 0}));
     }

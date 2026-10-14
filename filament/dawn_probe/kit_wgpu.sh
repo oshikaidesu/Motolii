@@ -11,7 +11,7 @@ SDK=$SRC/out/wgpu_install
 TVG=../thorvg/third_party
 MATC=$SRC/out/wgpu/tools/matc/matc
 mkdir -p out/wgpu_kit/out
-for d in lightroom small_studio graffiti_shelter_2k; do [ -d out/$d ] && ln -sfn ../../$d out/wgpu_kit/out/$d 2> /dev/null; done; true
+for d in lightroom small_studio graffiti_shelter_2k studio_small_02_2k venetian_crossroads_2k parking_garage_2k pillars_2k; do [ -d out/$d ] && ln -sfn ../../$d out/wgpu_kit/out/$d 2> /dev/null; done; true
 for f in paper paper_copy floor_shade thick_glass far_side far_look glasslight glassbox boxlight bubble poster own_glass flat blade matte floor_lit; do
     [ -f $f.mat ] || continue
     [ out/wgpu_kit/$f.filamat -nt $f.mat ] && [ out/wgpu_kit/$f.filamat -nt studio.glsl ] && [ out/wgpu_kit/$f.filamat -nt spectrum.glsl ] && [ out/wgpu_kit/$f.filamat -nt matte.glsl ] && continue
