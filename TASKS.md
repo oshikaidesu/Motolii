@@ -6,7 +6,7 @@
 **作る前に `ASSETS.md`（資産台帳）を見る。** 手元と過去の倉庫に在る物の一覧。
 今日の経過の全文は `reports/tasks_log_2026-10-14.md`（前の日の分は git の履歴）。
 
-最終更新：2026-10-14 夜
+最終更新：2026-10-14 深夜
 
 ## 今の状態（2026-10-14 夜）
 
@@ -17,15 +17,23 @@
 
 ## 次にやる（順に）
 
-1. **夜間：Filament の力を引き出す**（ユーザー：「地味なのはfilamentの引き出し方」）。Filament に在って、まだ値になっていない物を値にして札に出す。作り直しは無し。
-   候補：材質（布のつや sheen、筋 anisotropy、肌の透け subsurface、厚みの透過 transmission）、画面（隅の影 SSAO、床の映り込み SSR、触れた所の影 contact shadows）、写しが instancing を使えているかの確認。
-   通ったと言える一文：それぞれ「その値を変えると絵が変わる」を前後の絵で見せ、60コマ毎秒のまま、Dawn で。
-   **10/14 夜：6個は済み**（`reports/skin_run/drawn_out/`）。立体の Sheen・Brushed（anisotropy）、段の AO（SSAO）・Mirror（SSR）、光の Contact。前後で画素が変わるのを数えて確認、60コマで落ち0。全部入りで 1枚 7.7〜9.3 ms（全部切りは 2.5〜3.3、増えた分はほぼ SSR）。Contact は効くが小さい（Filament の既定で届く距離 0.3）。
-   切った物：transmission と subsurface（陰影の型ごと別の材質になる。transmission は全部の立体を屈折に乗せて重い）。残り：写しが instancing を使えているかの確認。
-2. **札を Ableton の作法に**（`reports/skin_run/dense_ui_research.md`）：名前は8文字くらい、使えない時は説明せず灰色、絵はデータの種類で決める、単位は小さく灰色で桁は単位ごとに固定、Advanced は中身の名前（Each copy・Timing など）。説明文は書かない（ユーザー：「漢は語らない」）。
-   **10/14 夜：済み**（`reports/skin_run/ableton_cards/cards_ableton.png`）。名前は全部8文字以内（47個を短く）。1段目は8個までにして、畳みは中身の名前で3つだけ（Copies「Each copy」、Wave「Noise」、Lens「Tints」）。数字の桁は単位ごとに固定（s・× は小数1桁、px・° は整数）、末尾の0を消さない。説明文は消して灰色に任せた（Stroke width、カメラの Point、Layout の Width、錠、選んでない時、効果0個）。選ぶ欄の言葉（Modes・Colours・Layers…）は矢印の絵に。窓の試験112本、中の試験は全部通る。
-3. **窓そのものの 60コマ毎秒を数える**（夜向き）：Flutter の `FrameTiming` で、再生中・つまみを動かしてる間・15レシピの重い書類。通ったと言える一文：60秒間、遅れたコマ 0。
-4. **Cavalry の残り**：生成ポスター（升目の分割、写しごとに形を乱数で）、同じ長さで行ごとに波の数を変える、split の文字を各自の真ん中で大きくする、空の text でフォント名が出る、迷路（写しごとに 0／90 度を乱数で）。
+10/14 夜に済んだ物：Filament の力を引き出す（Sheen・Brushed・AO・Mirror・Contact、`reports/skin_run/drawn_out/`）、札を Ableton の作法に（`reports/skin_run/ableton_cards/`）。
+
+**夜間（10/14 にユーザーと決めた順）**。調べた物：記憶 project-motolii-cavalry-dig-2026-10-14、`research_notes/cavalry_community/`（リポジトリ外、ライセンスは SOURCES.tsv）。Cavalry のファイルは参考の地図で、写さない。
+1. **窓の言う事と中身を合わせる**：Scale を X・Y・Z の3つの数で持つ（AE と同じ。size＋倍率はやめる）、舞台の四隅で拡大・丸で回転・十字で回転の中心、物が持たない値の欄は出さない（立体と光の不透明度、光の Scale、平らな物の Scale Z）、Depth は読むだけの表示に。
+   通ったと言える一文：`skin/book/test/sweep_test.dart`（欄と掴み所の総当たり）が全部緑、窓の試験も全部緑。
+2. **レシピの器**：AviUtl2 式のつまみの宣言（`--track@名前:表示名,最小,最大,初期,刻み`、check・color・select・file・text、`--hide@` の条件、`--group`）をレシピのファイルの頭に書くと、中身が読んで値の表と札に自動で出す。今の15レシピをこの器に移す。数値だけキーが打てる。
+   通ったと言える一文：新しいレシピを1ファイル置くだけで、窓に札とつまみが出て動き、15レシピが器の上で前と同じ絵。
+3. **仕上げの光と粒**（Cavalry の弱い所、こちらの勝ち筋）：何段も重ねるグロー、フィルム調のトーン、光のにじみ（halation）、粒（grain）を Filament の画面効果として足す。cavalry-field-kit は AGPL なので考え方だけ借りる。
+   通ったと言える一文：それぞれ前後の絵で効いて見え、全部入りで 1080p・60コマ毎秒、Dawn で。
+4. **出来合いの動き**：Cavalry の Animators 13本（Spring In＝かけらごとに画面の外から40コマ・SpringOut・最大20コマのずらし、など）を2の器のレシピに。名前で選べるイージング（VerySlowIn/Out、Spring、Overshoot、Bounce）も足す。
+   通ったと言える一文：文字1つに13本どれも1手で付き、Cavalry の作例と並べて同じ気持ちよさに見える。
+5. **写しの並べ方**：Canvalry-scripts（MIT）の26種から MV で映える物（ひまわり＝黄金角、リサージュ、スーパーフォーミュラなど）を並べ方に足す。
+   通ったと言える一文：それぞれ1手で出て、写し1000個で60コマ毎秒。
+
+**その後**
+6. **窓そのものの 60コマ毎秒を数える**（夜向き）：Flutter の `FrameTiming` で、再生中・つまみを動かしてる間・15レシピの重い書類。通ったと言える一文：60秒間、遅れたコマ 0。
+7. **Cavalry の残り**：生成ポスター（升目の分割、写しごとに形を乱数で）、同じ長さで行ごとに波の数を変える、split の文字を各自の真ん中で大きくする、空の text でフォント名が出る、迷路（写しごとに 0／90 度を乱数で）。
 
 ## きみが決める事
 
