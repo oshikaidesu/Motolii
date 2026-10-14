@@ -937,6 +937,25 @@ void main() {
     await _close(t);
   }, skip: !_built);
 
+  testWidgets('a camera picked shows its own card (where it looks, how far, its zoom), not a thing\'s scale, opacity or depth', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    final cam = m.add('camera', 'camera');
+    ws
+      ..reread()
+      ..select('$cam');
+    await t.pumpAndSettle();
+    final ids = {for (final e in find.byType(NumField).evaluate()) (e.widget as NumField).id};
+    expect(ids, containsAll(['cam.t.x', 'cam.dist', 'cam.zoom']));
+    expect(ids.intersection({'scale.x', 'op', 'depth'}), isEmpty, reason: 'a camera has none of these');
+    final dist = find.byWidgetPredicate((w) => w is NumField && w.id == 'cam.dist');
+    await t.ensureVisible(dist);
+    await t.drag(dist, const Offset(60, 0));
+    await t.pumpAndSettle();
+    expect(m.value(cam, 'distance', 0), isNot(anyOf(isNull, 1.0)), reason: 'the distance is the document\'s: ${ws.notice}');
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
   testWidgets('Backspace on the timeline takes the picked thing out; undo brings it back', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final ring = m.add('solid', 'ring'), cube = m.add('solid', 'cube');
