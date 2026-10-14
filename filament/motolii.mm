@@ -43,7 +43,11 @@ static void motolii_hand(Motolii* m, std::string document, int wide, int high, s
     m->s = new Stage(open_stage(wide, high));
     m->s->camera->lookAt({0.f, 0.f, 6.f}, {0.f, 0.f, 0.f}, {0, 1, 0});
     m->s->camera->setProjection(30.0, double(wide) / double(high), 0.05, 60.0, Camera::Fov::VERTICAL);
-    m->s->view->setAmbientOcclusionOptions({.enabled = true});   // (Filament's own: where faces meet it is darker, so a plain solid reads as a solid)
+    m->s->view->setAmbientOcclusionOptions({.enabled = true});
+    // (a 3D file may call its faces light-passing: Filament draws such faces in a turn of their own, after the solid
+    //  things and before every sheet, so any sheet, however far behind, was painted over them. With that turn off
+    //  they are drawn with the solid things, and depth decides. The kit's own glass does not use that turn.)
+    m->s->view->setScreenSpaceRefractionEnabled(false);   // (Filament's own: where faces meet it is darker, so a plain solid reads as a solid)
     static LinearToneMapper as_it_is;   // (a film, a photo, typed words keep the colours they came with)
     m->s->view->setColorGrading(ColorGrading::Builder().toneMapper(&as_it_is).build(*m->s->engine));
     const bool ok = room(*m->s, "out/small_studio/small_studio_ibl.ktx", 60000.f) && (m->d = doc_open(*m->s, document.c_str()));
@@ -98,6 +102,12 @@ void motolii_close(Motolii* m) {
 const char* motolii_trouble(Motolii* m) { return m->trouble.empty() ? m->d->trouble.c_str() : m->trouble.c_str(); }
 static int told(Motolii* m, bool ok, const char* otherwise = nullptr) { if (!ok && otherwise) m->trouble = otherwise; return ok ? 1 : 0; }
 static Doc& doc(Motolii* m) { m->trouble.clear(); m->d->trouble.clear(); return *m->d; }
+// What a call that changes the document answers. Refused within an act, at whatever door (a number out of its range
+// is refused before anything is changed), the act it is part of is not made.
+static int changes(Motolii* m, int done) {
+    if (!done && m->d->act) m->d->act_ok = false;
+    return done;
+}
 
 // The stage's picture, live: started once; then the last finished picture and how many there have been (any thread).
 int motolii_live(Motolii* m) { return by_hand(m, [m] { return m->live || (m->live = live_open(*m->s)) ? 1 : 0; }); }
@@ -106,15 +116,15 @@ unsigned long long motolii_frames(Motolii* m) { return m->live ? m->live->frames
 int motolii_play(Motolii* m, int playing) { return by_hand(m, [m, playing] { m->playing = playing != 0; return 1; }); }
 double motolii_now(Motolii* m) { return m->now; }
 
-int motolii_add(Motolii* m, const char* kind, const char* file) { return by_hand(m, [=] { return (int)(doc_add(doc(m), kind, file)); }); }
-int motolii_remove(Motolii* m, int thing) { return by_hand(m, [=] { return (int)(doc_remove(doc(m), thing)); }); }
-int motolii_set(Motolii* m, int thing, const char* name, double number) { return by_hand(m, [=] { return (int)(doc_set(doc(m), thing, name, number)); }); }
-int motolii_say(Motolii* m, int thing, const char* name, const char* word) { return by_hand(m, [=] { return (int)(doc_say(doc(m), thing, name, word)); }); }
-int motolii_key(Motolii* m, int thing, const char* name, double at, double number) { return by_hand(m, [=] { return (int)(doc_key(doc(m), thing, name, at, number)); }); }
-int motolii_unkey(Motolii* m, int thing, const char* name, double at) { return by_hand(m, [=] { return (int)(doc_unkey(doc(m), thing, name, at)); }); }
+int motolii_add(Motolii* m, const char* kind, const char* file) { return by_hand(m, [=] { return changes(m, (int)(doc_add(doc(m), kind, file))); }); }
+int motolii_remove(Motolii* m, int thing) { return by_hand(m, [=] { return changes(m, (int)(doc_remove(doc(m), thing))); }); }
+int motolii_set(Motolii* m, int thing, const char* name, double number) { return by_hand(m, [=] { return changes(m, (int)(doc_set(doc(m), thing, name, number))); }); }
+int motolii_say(Motolii* m, int thing, const char* name, const char* word) { return by_hand(m, [=] { return changes(m, (int)(doc_say(doc(m), thing, name, word))); }); }
+int motolii_key(Motolii* m, int thing, const char* name, double at, double number) { return by_hand(m, [=] { return changes(m, (int)(doc_key(doc(m), thing, name, at, number))); }); }
+int motolii_unkey(Motolii* m, int thing, const char* name, double at) { return by_hand(m, [=] { return changes(m, (int)(doc_unkey(doc(m), thing, name, at))); }); }
 int motolii_keys(Motolii* m, int thing, const char* name) { return by_hand(m, [=] { return (int)(doc_keys(doc(m), thing, name)); }); }
-int motolii_way(Motolii* m, int thing, const char* name, double at, const char* way) { return by_hand(m, [=] { return (int)(doc_way(doc(m), thing, name, at, way)); }); }
-int motolii_define(Motolii* m, const char* way, const char* expression) { return by_hand(m, [=] { return (int)(doc_define(doc(m), way, expression)); }); }
+int motolii_way(Motolii* m, int thing, const char* name, double at, const char* way) { return by_hand(m, [=] { return changes(m, (int)(doc_way(doc(m), thing, name, at, way))); }); }
+int motolii_define(Motolii* m, const char* way, const char* expression) { return by_hand(m, [=] { return changes(m, (int)(doc_define(doc(m), way, expression))); }); }
 const char* motolii_ways(Motolii* m) { return by_hand(m, [m] { return (m->listed = doc_ways(*m->d)).c_str(); }); }
 int motolii_value(Motolii* m, int thing, const char* name, double at, double* is) { return by_hand(m, [=] { return (int)(doc_value(doc(m), thing, name, at, is)); }); }
 int motolii_things(Motolii* m, int* things, int room) {
@@ -130,19 +140,33 @@ int motolii_key_moments(Motolii* m, int thing, const char* name, double* at, int
 int motolii_frame(Motolii* m, int thing, double* frame) { return by_hand(m, [=] { return (int)(doc_knows(doc(m), thing) && doc_frame(*m->d, thing, m->now, frame)); }); }
 int motolii_hold(Motolii* m, int thing) { return by_hand(m, [=] { return (int)doc_hold(doc(m), thing); }); }
 int motolii_carry(Motolii* m, const char* by, double a, double b) { return by_hand(m, [=] { return (int)doc_carry(doc(m), by, a, b); }); }
-int motolii_let_go(Motolii* m, int keep) { return by_hand(m, [=] { return (int)doc_let_go(doc(m), keep != 0); }); }
-int motolii_put(Motolii* m, int thing, const char* name, double at, double number) { return by_hand(m, [=] { return (int)doc_put(doc(m), thing, name, at, number); }); }
-int motolii_key_here(Motolii* m, int thing, const char* name, double at) { return by_hand(m, [=] { return (int)doc_key_here(doc(m), thing, name, at); }); }
+int motolii_let_go(Motolii* m, int keep) { return by_hand(m, [=] { return changes(m, (int)doc_let_go(doc(m), keep != 0)); }); }
+int motolii_put(Motolii* m, int thing, const char* name, double at, double number) { return by_hand(m, [=] { return changes(m, (int)doc_put(doc(m), thing, name, at, number)); }); }
+int motolii_key_here(Motolii* m, int thing, const char* name, double at) { return by_hand(m, [=] { return changes(m, (int)doc_key_here(doc(m), thing, name, at)); }); }
 int motolii_size(Motolii* m, int wide, int high) {
     return by_hand(m, [=] { return doc_size_is(m->d->file, wide, high) ? 1 : (m->d->trouble = "a stage is from 16 to 8192 points each way, an even number of them", 0); });
 }
 int motolii_size_of(Motolii* m, int* wide, int* high) { return by_hand(m, [=] { return *wide = m->s->w, *high = m->s->h, 1; }); }
-int motolii_raise(Motolii* m, int thing, int places) { return by_hand(m, [=] { return (int)doc_raise(doc(m), thing, places); }); }
-int motolii_stay(Motolii* m, int thing, const char* name, double at) { return by_hand(m, [=] { return (int)doc_stay(doc(m), thing, name, at); }); }
+int motolii_raise(Motolii* m, int thing, int places) { return by_hand(m, [=] { return changes(m, (int)doc_raise(doc(m), thing, places)); }); }
+int motolii_stay(Motolii* m, int thing, const char* name, double at) { return by_hand(m, [=] { return changes(m, (int)doc_stay(doc(m), thing, name, at)); }); }
 int motolii_keyed(Motolii* m, int thing, const char* name, double at) { return by_hand(m, [=] { return doc_keyed(*m->d, thing, name, at); }); }
 const char* motolii_words(Motolii* m, int thing, const char* name) { return by_hand(m, [=] { return (m->word = doc_words(*m->d, thing, name)).c_str(); }); }
 const char* motolii_moving(Motolii* m, int thing) { return by_hand(m, [=] { return (m->word = doc_moving(*m->d, thing)).c_str(); }); }
 const char* motolii_kind_of(const char* file) { return doc_kind_of(file); }
+// The names of the ways a stretch may go (the nine kinds, then the ways defined in this document), with spaces between;
+// and how one of the nine goes: how far it is, from 0 at its beginning to 1 at its end, at `u` of the way through.
+const char* motolii_way_names(Motolii* m) {
+    return by_hand(m, [=] {
+        m->word.clear();
+        for (const auto& kind : interp_kinds) m->word += std::string(m->word.empty() ? "" : " ") + kind.name;
+        doc_rows(*m->d, sqlite3_mprintf("select name from way order by name"), [&](sqlite3_stmt* row) { m->word += std::string(" ") + (const char*)sqlite3_column_text(row, 0); });
+        return m->word.c_str();
+    });
+}
+double motolii_way_at(const char* way, double u) {
+    Interp kind;
+    return interp_said(way, &kind) == 0 ? interp_ease(kind, u) : u;
+}
 // A film's first picture as a small .png: GStreamer's own line for it (decode, scale, into a .png), held at its first
 // picture, which is taken and written. It asks nothing of a stage, so a shell may call it from another thread.
 int motolii_thumbnail(const char* film, const char* png, int wide) {

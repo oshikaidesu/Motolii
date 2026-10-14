@@ -96,6 +96,8 @@ class Motolii {
   late final _keyed = _lib.lookupFunction<Int32 Function(_P, Int32, _S, Double), int Function(_P, int, _S, double)>('motolii_keyed');
   late final _moving = _lib.lookupFunction<_S Function(_P, Int32), _S Function(_P, int)>('motolii_moving');
   late final _words = _lib.lookupFunction<_S Function(_P, Int32, _S), _S Function(_P, int, _S)>('motolii_words');
+  late final _wayNames = _lib.lookupFunction<_S Function(_P), _S Function(_P)>('motolii_way_names');
+  late final _wayAt = _lib.lookupFunction<Double Function(_S, Double), double Function(_S, double)>('motolii_way_at');
   late final _kindOf = _lib.lookupFunction<_S Function(_S), _S Function(_S)>('motolii_kind_of');
   late final _together = _lib.lookupFunction<Int32 Function(_P, Int32), int Function(_P, int)>('motolii_together');
   late final _wayOf = _lib.lookupFunction<_S Function(_P, Int32, _S, Double), _S Function(_P, int, _S, double)>('motolii_way_of');
@@ -220,6 +222,10 @@ class Motolii {
   /// A film's first picture, small, as a .png file (null: none could be made). Made once and on another isolate: the
   /// window does not wait.
   Future<String?> thumbnail(String film) => _thumbnails[film] ??= _thumbnail(libPath, film);
+
+  /// The names of the ways a stretch may go, and how one of the nine kinds goes at [u] of the way through (0 to 1).
+  List<String> get wayNames => _wayNames(_m).toDartString().split(' ').where((w) => w.isNotEmpty).toList();
+  double wayAt(String way, double u) => _with([way], (s) => _wayAt(s[0], u));
 
   /// What kind of thing a file makes ('': none).
   String kindOf(String file) => _with([file], (s) => _kindOf(s[0]).toDartString());

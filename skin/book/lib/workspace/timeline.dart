@@ -224,6 +224,14 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
     ws.reread();
   }
 
+  // The eye of a row. Joined: the thing is put aside in the document (visible 0) and is not on the stage; one step.
+  bool _isHidden(Ws ws, String id) => ws.inside == null ? _hidden.contains(id) : (ws.inside!.value(int.parse(id), 'visible', 0) ?? 1) < .5;
+  void _eye(Ws ws, String id) {
+    final m = ws.inside;
+    if (m == null) return _flip(_hidden, id);
+    if (m.set(int.parse(id), 'visible', _isHidden(ws, id) ? 1 : 0)) ws.reread();
+  }
+
   double _lift = 0; // how far a label row has been carried up or down
 
   int? _workDrag; // 0 in, 1 out, 2 both, null scrub
@@ -290,7 +298,7 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
               if (k.layer == l.id) k.frame,
           },
           selected: l.id == sel,
-          dim: _hidden.contains(l.id) || (_solo.isNotEmpty && !_solo.contains(l.id)),
+          dim: _isHidden(ws, l.id) || (_solo.isNotEmpty && !_solo.contains(l.id)),
           locked: _locked.contains(l.id),
         ),
     ];
@@ -359,10 +367,10 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
                           child: _LabelRow(
                             index: i,
                             row: rows[i],
-                            hidden: _hidden.contains(ws.layers[i].id),
+                            hidden: _isHidden(ws, ws.layers[i].id),
                             solo: _solo.contains(ws.layers[i].id),
                             onSelect: () => ws.select(ws.layers[i].id),
-                            onEye: () => _flip(_hidden, ws.layers[i].id),
+                            onEye: () => _eye(ws, ws.layers[i].id),
                             onSolo: () => _flip(_solo, ws.layers[i].id),
                             onLock: () => _flip(_locked, ws.layers[i].id),
                           ),

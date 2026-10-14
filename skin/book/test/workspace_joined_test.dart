@@ -51,14 +51,14 @@ void main() {
     await t.tap(box);
     await t.enterText(box, 'CATS');
     await t.pump();
-    expect(m.word(text, 'text'), '', reason: 'nothing is told while the box is still held');
+    expect(m.word(text, 'text'), 'Text', reason: 'nothing is told while the box is still held');
     FocusManager.instance.primaryFocus?.unfocus();
     await t.pumpAndSettle();
     expect(m.word(text, 'text'), 'CATS');
     expect(ws.layer?.name, 'CATS', reason: 'the timeline row is named by the words');
 
     expect(m.undo(), isTrue);
-    expect(m.word(text, 'text'), '');
+    expect(m.word(text, 'text'), 'Text');
     expect(t.takeException(), isNull);
     await _close(t);
   }, skip: !_built);
@@ -209,6 +209,41 @@ void main() {
     await t.pumpAndSettle();
     expect(t.widget<OnOff>(seat('Ghost')).on, isFalse, reason: 'nothing is behind it: it goes back');
     expect(m.undo() && m.value(cube, 'clip', 0) == 0, isTrue, reason: 'one step back: the clip');
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
+  testWidgets('round 2 of the judges: a thing put aside is in the document; every way has a seat; a new text has a word; acts within acts', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    final text = m.add('', _font);
+    expect([m.word(text, 'kind'), m.word(text, 'text'), m.value(text, 'size', 0)], ['text', 'Text', .5], reason: 'a font placed is a text with a word, at a size that fits');
+    expect(m.set(text, 'visible', 0), isTrue, reason: m.trouble);
+    expect(m.value(text, 'visible', 0), 0);
+    expect(m.undo() && m.value(text, 'visible', 0) == 1, isTrue);
+
+    expect(m.wayNames, containsAll(['Hold', 'Linear', 'Bezier', 'Bounce', 'Elastic', 'Cyclic', 'Random', 'Steps', 'ElasticSteps']));
+    expect([m.wayAt('Linear', .25), m.wayAt('Hold', .5), m.wayAt('Elastic', 0), m.wayAt('Elastic', 1)], [.25, 0, 0, 1]);
+    expect(m.key(text, 'x', 0, 0) && m.key(text, 'x', 1, 1) && m.way(text, 'x', 0, 'Elastic'), isTrue, reason: m.trouble);
+    expect(m.wayOf(text, 'x', 0), startsWith('Elastic '));
+
+    // (an act within an act is one step; a refused change unmakes the whole act)
+    final before = m.value(text, 'y', 0);
+    final kept = m.together(() {
+      m.set(text, 'y', 1);
+      return m.together(() => m.set(text, 'opacity', .5)) && m.set(text, 'rotate', 10);
+    });
+    expect(kept, isTrue);
+    expect(m.undo(), isTrue);
+    expect([m.value(text, 'y', 0), m.value(text, 'opacity', 0), m.value(text, 'rotate', 0)], [before, 1, 0], reason: 'the three changes were one step');
+    m.together(() {
+      m.set(text, 'y', 2);
+      m.set(text, 'opacity', 7); // (refused: from 0 to 1)
+    });
+    expect(m.value(text, 'y', 0), before, reason: 'the act was not made at all');
+
+    // (a thing held and let go without keeping: nothing happened; kept: one step, whatever was carried)
+    expect(m.hold(text) && m.carry('place', 100, 0) && m.letGo(false), isTrue, reason: m.trouble);
+    expect(m.value(text, 'x', 2), 1);
     expect(t.takeException(), isNull);
     await _close(t);
   }, skip: !_built);

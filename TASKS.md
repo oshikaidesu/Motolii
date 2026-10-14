@@ -51,6 +51,10 @@
   限り：切り抜きは四角だけ（前の物が丸や字でも、その外枠の四角で切る。回した物は立てた外枠）。見本の文書で陰を入れた後の重さは未計測。
   採点2回目の前に足した物：**glb にガラス**（`fill glass`。ファイルの三角形を、Filament の読み手の中にもう入ってる cgltf で読んで、手元のガラスに渡す。ロケットで1枚 4.29 ms、`reports/skin_run/glass_fills_a_file.jpg`。ファイル自身の動きは通さない、止まった形）／**順**（`order`、`motolii_raise`：何番ぶん手前へ・奥へ。タイムラインは見本の通り上の行が手前になり、行を上下に運ぶと順が入れ替わる）／席の無い行き方（Elastic など）の線は、文書の値そのものから描く（嘘の直線をやめた）／陰を入れた後の見本の文書：1枚 3.81 ms、60 で落ち 0。
   **残ってる指摘**：`saturn_v.glb` が大きさを触るまで見えなかった（1回）、舞台の下の帯の「S 100%」、Render と大きさの札が無反応、Colors の「Used here」の数、Elastic の線が直線、glb にガラス、文字の Size・Alignment、窓の大きさ変更と 60 コマは未計測、的③は 3D を四角で切る席が無い。
+- **採点2回目（2026-10-14）**：`judge_user_round2.md`（A 7 / B 8 / C 8 / D 9 / E 6 / F 3）、`judge_reuse_round2.md`（**G 0**、作り直し5個。1回目の8個は 戻った4・半分3・戻ってない1）。残りの採点はあと1回。
+  G の芯：1回目の後に足した手つき（舞台で運ぶ、バーを持つ）をまた殻で計算して二度言っていた。直した（daeee7e）：**手つきは中身が持つ**。`motolii_hold` → `motolii_carry`（place／bar／head／tail／値の名前）→ `motolii_let_go`。奥行きの換算、バーの限り、動画の頭出しは中身が1か所で計算。`try`・`try_drop`・`trim` は消した。1動作＝1歩は入れ子にできる束（SQLite のセッション1つ）で、束の中で1つでも断られたら全部無かった事になる。
+  窓の指摘で直した物：ロケットの glb を置くと胴体が出ない → 原因は Filament の「画面の絵を使った屈折の番」（ファイルが胴体を光を通す材質と言っていて、板が後から上塗りしていた）。舞台でその番を切った／行の順が平らな物と 3D の間で効かない → 平らな物を、目から見て同じ場所・同じ大きさのまま奥行きだけ前後にずらす（`reports/skin_run/order_holds_against_solids.jpg`）／目の印が嘘 → `visible`（隠すと文書に入り、舞台から消える。1歩）／Elastic を選べない → 机に9種類ぜんぶの札（`live_09_nine_ways.jpg`）／Media から置いた字体が巨大な名前になる → 新しい字は中身が「Text」・大きさ 0.5 で作る。
+  まだ：舞台の外の物を運んで戻せない、大きさの札で場所がそのまま（題字が切れる）、舞台の下の帯の「S 100%」、Render が無言、文字の Size・Alignment、新しい空の文書を作る入口、鎖を外した Scale（直したつもりで窓では未確認）。
 - 開き方：`skin/book` で Flutter（`~/rust_ae/Motolii/.tools/flutter/bin/flutter`）の `build macos --debug --dart-define=LAB_ROUTE=/?path=workspace/workspace/live`、できた `lab_book.app` を開く。文書は `filament/out/skin.motolii`。
 
 作る的：①`edit_v5` を窓だけで作り直す ②猫ミームの人形劇 ③青いロケットのコラージュ（`research_notes/refs/G_rocket_collage_blue.jpg`）。

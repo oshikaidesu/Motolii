@@ -38,7 +38,9 @@ int motolii_keys(Motolii* m, int thing, const char* name);         /* how many k
 int motolii_way(Motolii* m, int thing, const char* name, double at, const char* way);
 int motolii_define(Motolii* m, const char* way, const char* expression);
 const char* motolii_way_of(Motolii* m, int thing, const char* name, double at);   /* the way of the stretch that begins at that key, as it is said ("": no key there; until the next call) */
-const char* motolii_ways(Motolii* m);                              /* the names of the ways the document knows (until the next call) */
+const char* motolii_ways(Motolii* m);
+const char* motolii_way_names(Motolii* m);                         /* the names alone, with spaces between: the nine kinds, then the ways defined here (until the next call) */
+double motolii_way_at(const char* way, double u);                  /* how one of the nine kinds goes: how far (0 at its beginning, 1 at its end) at u of the way through */                              /* the names of the ways the document knows (until the next call) */
 int motolii_value(Motolii* m, int thing, const char* name, double at, double* is);   /* a value at a moment, as the stage is told it */
 /* What a shell reads to draw its lists. motolii_things: the numbers of the things there are (as many as there is room
    for; it returns how many there are). motolii_word: a thing's word by name (kind, file, shape, blend, text, fill; ""

@@ -131,6 +131,18 @@ Map<String, double> _keysAt(Ws ws, EaseSpan span) {
   };
 }
 
+/// Joined: the ways of the document that the sample's eight tiles have no seat for (Elastic, Cyclic, Random, Steps,
+/// ElasticSteps, and any defined in the document), each a tile of its own: its curve is the inside's own working of it.
+final _unseatedOf = Expando<List<Ease>>();
+List<Ease> _unseated(Ws ws) {
+  final m = ws.inside;
+  if (m == null) return const [];
+  return _unseatedOf[m] ??= [
+    for (final name in m.wayNames)
+      if (!const ['Hold', 'Linear', 'Bezier', 'Bounce'].contains(name)) Ease(EaseKind.bezier, Offset.zero, const Offset(1, 1), name, [for (var i = 0; i <= 32; i++) m.wayAt(name, i / 32)]),
+  ];
+}
+
 class _DeskEaseState extends State<DeskEase> {
   // Joined: while a hand is down the ease is only shown here; when it lets go it is told to the document once.
   bool _down = false;
@@ -211,7 +223,7 @@ class _DeskEaseState extends State<DeskEase> {
           ),
         ),
         const SizedBox(height: WsT.gutter),
-        _Presets(ease: ease, onPick: set),
+        _Presets(ease: ease, onPick: set, more: _unseated(ws)),
       ],
     );
   }
@@ -638,24 +650,36 @@ class _EaseNumbers extends StatelessWidget {
 
 /// The presets, each a tiny curve; the one in use is lit in the accent.
 class _Presets extends StatelessWidget {
-  const _Presets({required this.ease, required this.onPick});
+  const _Presets({required this.ease, required this.onPick, this.more = const []});
   final Ease ease;
   final ValueChanged<Ease> onPick;
-  @override
-  Widget build(BuildContext context) => Container(
+
+  /// Tiles under the sample's eight (joined: the document's ways that have no seat among them).
+  final List<Ease> more;
+
+  Widget _row(List<Ease> tiles, bool Function(Ease) on) => Container(
     height: 50,
     color: WsT.card,
     padding: const EdgeInsets.all(5),
     child: Row(
       children: [
-        for (final (i, p) in easePresets.indexed) ...[
+        for (final (i, p) in tiles.indexed) ...[
           if (i > 0) const SizedBox(width: 3),
           Expanded(
-            child: _PresetTile(p, on: p == ease && !easeOther(ease), onTap: () => onPick(p)),
+            child: _PresetTile(p, on: on(p), onTap: () => onPick(p)),
           ),
         ],
       ],
     ),
+  );
+
+  @override
+  Widget build(BuildContext context) => Column(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      _row(easePresets, (p) => p == ease && !easeOther(ease)),
+      if (more.isNotEmpty) _row(more, (p) => ease.name == p.name || (ease.name?.startsWith('${p.name} ') ?? false)),
+    ],
   );
 }
 

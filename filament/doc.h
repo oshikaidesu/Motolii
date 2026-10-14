@@ -19,6 +19,7 @@
 //            start, duration        when it comes on, and for how long (not said: for good, going round)
 //            begin, speed           a film's: from where in itself, how fast (below 0: backwards)
 //            order                  where it lies among the things: one with a greater number is nearer (not said: as they were made)
+//            visible                0: it is put aside, not seen (ThorVG's word), though it is still in the document
 //            clip                   1: it is seen only inside the frame of the thing before it (a 3D thing cut by a rectangle)
 //            wide                   a shape's: how many times as wide as it is high
 //            keyed                  a film's: 1 if its ground is keyed out (a green screen, of whatever colour: the colour its four corners share), 0 if not; not said: keyed if it has such a ground
@@ -63,7 +64,7 @@ static const DocValue doc_values[] = {
     {"x", doc_kinds, -1e4, 1e4, true, nullptr}, {"y", doc_kinds, -1e4, 1e4, true, nullptr}, {"z", doc_kinds, -1e4, 1e4, true, nullptr},
     {"rotate", doc_kinds, -1e6, 1e6, true, nullptr}, {"rotate_x", doc_kinds, -1e6, 1e6, true, nullptr}, {"rotate_y", doc_kinds, -1e6, 1e6, true, nullptr},
     {"size", doc_kinds, 1e-3, 1e4, true, nullptr}, {"opacity", "film picture text shape", 0, 1, true, nullptr},
-    {"clip", doc_kinds, 0, 1, false, nullptr}, {"order", doc_kinds, -1e9, 1e9, false, nullptr}, {"wide", "shape", 1e-3, 1e3, false, nullptr}, {"shape", "shape", 0, 0, false, "rect circle"},
+    {"clip", doc_kinds, 0, 1, false, nullptr}, {"visible", doc_kinds, 0, 1, false, nullptr}, {"order", doc_kinds, -1e9, 1e9, false, nullptr}, {"wide", "shape", 1e-3, 1e3, false, nullptr}, {"shape", "shape", 0, 0, false, "rect circle"},
     {"start", doc_kinds, 0, 1e6, false, nullptr}, {"duration", doc_kinds, 1e-3, 1e6, false, nullptr},
     {"begin", "film", 0, 1e6, false, nullptr}, {"speed", "film", -100, 100, false, nullptr}, {"keyed", "film", 0, 1, false, nullptr},
     {"blend", "film picture text shape", 0, 0, false, "normal add multiply screen"}, {"file", "film picture solid text", 0, 0, false, ""}, {"shape", "solid", 0, 0, false, doc_shapes},
@@ -172,28 +173,56 @@ static void doc_looks(Stage& s, const Doc::Shown& t, const std::function<void(Ma
     }
 }
 static bool doc_covers(Doc& d, int thing, double now, double* box);
+static bool doc_half(Doc& d, int thing, float2* half);
 
 // Every thing told its moment: whether it is on (from its start, for its duration if it has one), what of itself it
 // shows (it goes round when it comes to its end), and where it is.
 static void doc_moment(Doc& d, double now) {
     Stage& s = *d.stage;
-    int laid = 0;   // (things lie like sheets put down one after another: each a hair nearer than the one before, so at the same depth the later one is in front)
     const std::vector<int> lie = doc_laid(d);
+    // Each thing as it is now, in the order they lie: whether it is on, and, if it is a solid thing, how near and how
+    // far it reaches (roughly: a ball as wide as its widest).
+    struct Lies { int thing; Doc::Shown* shown; bool on, solid; double since, near, far; };
+    std::vector<Lies> lies;
     for (int thing : lie) {
         const auto found = d.shown.find(thing);
         if (found == d.shown.end()) continue;
-        Doc::Shown& t = found->second;
-        ++laid;
         const double since = now - doc_number(d, thing, "start", 0, 0), lasts = doc_number(d, thing, "duration", 0, -1);
-        const bool in = since >= 0.0 && (lasts < 0.0 || since < lasts);
+        Lies one{thing, &found->second, since >= 0.0 && (lasts < 0.0 || since < lasts) && doc_number(d, thing, "visible", 0, 1) > 0.5, found->second.solid || found->second.shape, since, 0.0, 0.0};
+        float2 half{0.5f};
+        if (one.solid && doc_half(d, thing, &half)) {
+            const double z = doc_number(d, thing, "z", now, 0), round = doc_number(d, thing, "size", now, 1) * std::max({(double)half.x, (double)half.y, 0.5});
+            one.near = z + round, one.far = z - round;
+        }
+        lies.push_back(one);
+    }
+    const math::double3 eye = s.camera->getPosition();
+    for (size_t i = 0; i < lies.size(); ++i) {
+        const int thing = lies[i].thing;
+        Doc::Shown& t = *lies[i].shown;
+        const bool in = lies[i].on;
         const Mesh* m = t.film ? t.film->sheet : t.drawn ? t.drawn->sheet : t.shape;
         if (in != t.in) { if (t.solid) solid_seen(s, t.solid, in); else seen(s, m, in); t.in = in; }
         if (!in) continue;
-        if (t.film) video_at(s, t.film, (float)since);
-        if (t.drawn && t.drawn->seconds > 0.f) picture_at(s, t.drawn, std::fmod((float)since, t.drawn->seconds));
-        const float3 at{(float)doc_number(d, thing, "x", now, 0), (float)doc_number(d, thing, "y", now, 0), (float)doc_number(d, thing, "z", now, 0) + 1e-4f * (float)laid};
+        if (t.film) video_at(s, t.film, (float)lies[i].since);
+        if (t.drawn && t.drawn->seconds > 0.f) picture_at(s, t.drawn, std::fmod((float)lies[i].since, t.drawn->seconds));
+        math::double3 at{doc_number(d, thing, "x", now, 0), doc_number(d, thing, "y", now, 0), doc_number(d, thing, "z", now, 0)};
+        double grown = 1.0;
+        if (!lies[i].solid) {
+            // A flat thing lies by the order of the things, whatever its depth: a hair nearer than the flat thing before
+            // it, before every solid thing that lies before it, behind every one that lies after it. It is brought there
+            // along the eye's own line and made larger or smaller by as much, so it is seen where and as large as the
+            // document says: only what is before and behind it changes.
+            double to = at.z, need = -1e9, allow = 1e9;
+            for (size_t j = 0; j < lies.size(); ++j)
+                if (lies[j].on && lies[j].solid) { if (j < i) need = std::max(need, lies[j].near + 0.02); else allow = std::min(allow, lies[j].far - 0.02); }
+            to = std::min(std::max(std::min(to, allow), need), eye.z - 0.5) + 1e-4 * (double)(i + 1);   // (the hair last: flat things brought to the same depth still lie in their order)
+            grown = (eye.z - to) / std::max(eye.z - at.z, 1e-6);
+            at = eye + (at - eye) * grown;
+        }
         const auto turned = [&](const char* name, float3 about) { return mat4f::rotation((float)doc_number(d, thing, name, now, 0) * TAU / 360.f, about); };
-        const mat4f place = mat4f::translation(at) * turned("rotate", float3{0, 0, 1}) * turned("rotate_y", float3{0, 1, 0}) * turned("rotate_x", float3{1, 0, 0}) * mat4f::scaling((float)doc_number(d, thing, "size", now, 1));
+        const mat4f place = mat4f::translation(float3{(float)at.x, (float)at.y, (float)at.z}) * turned("rotate", float3{0, 0, 1}) * turned("rotate_y", float3{0, 1, 0}) * turned("rotate_x", float3{1, 0, 0}) *
+                            mat4f::scaling((float)(doc_number(d, thing, "size", now, 1) * grown));
         if (t.solid) solid_to(s, t.solid, place); else move(s, m, [&](int, const mat4f&) { return place; });
         if (MaterialInstance* look = t.film ? t.film->look : t.drawn ? t.drawn->look : nullptr) look->setParameter("opacity", (float)doc_number(d, thing, "opacity", now, 1));
     }
@@ -422,8 +451,8 @@ static bool doc_knows(Doc& d, int thing, const char* name = nullptr, const doubl
     if (number && v->words) return d.trouble = std::string(name) + " is a word, told by say" + (*v->words ? std::string(": ") + v->words : ""), false;
     if (word && !v->words) return d.trouble = std::string(name) + " is a number, told by set", false;
     if (word && *v->words && !doc_among(v->words, word)) return d.trouble = std::string(name) + " is one of: " + v->words, false;
-    if (number && (!std::isfinite(*number) || *number < v->low || *number > v->high || (doc_among("keyed clip", name) && *number != 0.0 && *number != 1.0)))
-        return std::snprintf(range, sizeof range, doc_among("keyed clip", name) ? " is 0 or 1" : " is from %g to %g", v->low, v->high), d.trouble = name + std::string(range), false;
+    if (number && (!std::isfinite(*number) || *number < v->low || *number > v->high || (doc_among("keyed clip visible", name) && *number != 0.0 && *number != 1.0)))
+        return std::snprintf(range, sizeof range, doc_among("keyed clip visible", name) ? " is 0 or 1" : " is from %g to %g", v->low, v->high), d.trouble = name + std::string(range), false;
     if (key && !v->moves) return d.trouble = std::string(name) + " does not move: keys go on " + moving, false;
     return true;
 }
@@ -447,8 +476,10 @@ static int doc_add(Doc& d, const char* kind, const char* file) {
     if (!*kind) return d.trouble = std::string("no kind of thing is made from ") + file, 0;
     if (!doc_among(doc_kinds, kind)) return d.trouble = std::string("a thing is one of: ") + doc_kinds, 0;
     // (it comes on at the stage's present moment)
-    if (!doc_change(d, sqlite3_mprintf("insert into thing default values; insert into fact(thing, name, at, value) values(last_insert_rowid(), 'kind', 0.0, %Q); insert into fact(thing, name, at, value) values(last_insert_rowid(), %Q, 0.0, %Q); insert into fact(thing, name, at, value) select id, 'start', 0.0, %!.17g from thing where %d order by id desc limit 1",
-                                       kind, (!strcmp(kind, "solid") && doc_among(doc_shapes, file)) || !strcmp(kind, "shape") ? "shape" : "file", file, d.stage->now, d.stage->now > 0.0))) return 0;
+    if (!doc_change(d, sqlite3_mprintf("insert into thing default values; insert into fact(thing, name, at, value) values(last_insert_rowid(), 'kind', 0.0, %Q); insert into fact(thing, name, at, value) values(last_insert_rowid(), %Q, 0.0, %Q); insert into fact(thing, name, at, value) select id, 'start', 0.0, %!.17g from thing where %d order by id desc limit 1%s",
+                                       kind, (!strcmp(kind, "solid") && doc_among(doc_shapes, file)) || !strcmp(kind, "shape") ? "shape" : "file", file, d.stage->now, d.stage->now > 0.0,
+                                       // (a new text comes with a word to read, at a size that fits a stage)
+                                       strcmp(kind, "text") ? "" : "; insert into fact(thing, name, at, value) select id, 'text', 0.0, 'Text' from thing order by id desc limit 1; insert into fact(thing, name, at, value) select id, 'size', 0.0, 0.5 from thing order by id desc limit 1"))) return 0;
     int thing = 0;   // (the newest number: SQLite's own count of things, which a change not made does not move)
     doc_rows(d, sqlite3_mprintf("select max(id) from thing"), [&](sqlite3_stmt* row) { thing = sqlite3_column_int(row, 0); });
     return thing;
@@ -639,7 +670,7 @@ static bool doc_covers(Doc& d, int thing, double now, double* box) {
     return true;
 }
 
-static double doc_usual(const char* name) { return doc_among("size speed opacity wide", name) ? 1.0 : !strcmp(name, "duration") ? -1.0 : 0.0; }
+static double doc_usual(const char* name) { return doc_among("size speed opacity wide visible", name) ? 1.0 : !strcmp(name, "duration") ? -1.0 : 0.0; }
 static bool doc_value(Doc& d, int thing, const char* name, double at, double* is) { return doc_knows(d, thing, name) && (*is = doc_number(d, thing, name, at, doc_usual(name)), true); }
 // A thing held by a hand, carried, and let go: the one form of everything a hand drags (a thing on the stage, its bar
 // on the timeline, a number). What is carried shows at once and is not the document's until it is let go, and then
