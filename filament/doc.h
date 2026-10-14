@@ -47,7 +47,9 @@ struct Doc {
     std::map<uint32_t, MaterialInstance*> copyLooks;   // a copy's own look (its thing's look duplicated, by the copy's entity), while its copies are coloured each their own
     float roomLight = 0.f;              // the room's own light, as the stage was opened with it
     std::string roomIs;                 // which room lights it now (doc_look)
-    Skybox* sky = nullptr;              // the colour behind everything, once one is said
+    Skybox* sky = nullptr;              // the room behind everything, once it is said
+    Drawn* backdrop = nullptr;          // the colour behind everything: a flat colour as large as the stage, drawn before all else in the stage's own view
+    std::string backdropIs;             // (the colour it was made in)
     bool keying = false;                // every value a hand changes gets a key at that moment (a shell's "animate all")
     double keying_from = 0.0;           // the stage's moment at which that was turned on: a value's first key then has the value it had, there, before it
     int act = 0;                        // how many acts are open, one within another
@@ -139,6 +141,8 @@ static const DocValue doc_values[] = {
     //  copy within it is so much larger and so far turned, most at its middle, none at its edge)
     {"field_x", "picture text shape", -1e4, 1e4, true, nullptr}, {"field_y", "picture text shape", -1e4, 1e4, true, nullptr}, {"field_radius", "picture text shape", 0, 1e4, true, nullptr},
     {"field_size", "picture text shape", -1, 20, true, nullptr}, {"field_rotate", "picture text shape", -1e4, 1e4, true, nullptr},
+    {"field_push", "picture text shape", -1e3, 1e3, true, nullptr},   // (and pushed so far away from its middle, in units of the stage; below 0: drawn in)
+    {"wave_noise", "picture text shape", 0, 1, true, nullptr},   // (how much of the wave is a noise of each copy's own instead of a sine: Cavalry's noise; 1 all noise)
     // (its copies scattered, each its own way by a seed: up to so far across and up (units), so far turned (degrees), so
     //  much larger or smaller (a share); another seed, another scattering)
     {"scatter_x", "picture text shape", 0, 1e4, true, nullptr}, {"scatter_y", "picture text shape", 0, 1e4, true, nullptr},
@@ -188,8 +192,8 @@ static const DocCard doc_cards[] = {
     {"Type", "split letter_spacing line_spacing italic wrap wrap_at"},
     {"Gradient", "gradient gradient_angle gradient_scale gradient_spread", "fill", "~ "},
     {"Copies", "copies copy_columns copy_x copy_y copy_rotate copy_size stagger stagger_from copy_fill"},
-    {"Wave", "wave_x wave_y wave_rotate wave_size wave_speed wave_phase"},
-    {"Field", "field_x field_y field_radius field_size field_rotate"},
+    {"Wave", "wave_x wave_y wave_rotate wave_size wave_speed wave_phase wave_noise"},
+    {"Field", "field_x field_y field_radius field_size field_rotate field_push"},
     {"Scatter", "scatter_x scatter_y scatter_rotate scatter_size seed"},
     {"Shine", "emissive", "kind", "!solid"},   // (a flat thing lit from within: past 1, the stage's bloom takes it up where it lies in the stage's own view; laid over a solid thing, a picture of its own is clear round it and keeps no halo: ThorVG's glow does that)
     {"Play", "marker animation speed"},
@@ -393,7 +397,18 @@ static math::mat4 doc_place(Doc& d, int thing, double now, int deeper, int copy,
                              [&] {   // (a wave through it: each copy so far behind the one before)
                                  if (!member) return math::mat4{};
                                  const int n = doc_members(d, thing);
-                                 const double w = std::sin((double)TAU * (doc_number(d, thing, "wave_speed", said, 1) * said - doc_number(d, thing, "wave_phase", said, 0) * copy / n));
+                                 const double speed = doc_number(d, thing, "wave_speed", said, 1), noisy = doc_number(d, thing, "wave_noise", said, 0);
+                                 double w = std::sin((double)TAU * (speed * now - doc_number(d, thing, "wave_phase", said, 0) * copy / n));   // (at its own moment: a copy staggered waves so much later)
+                                 if (noisy > 0.0) {   // (a smooth noise of its own: a random value at each beat, eased from one to the next, from the seed and the copy)
+                                     const uint32_t seed = (uint32_t)doc_number(d, thing, "seed", 0, 0);
+                                     const auto at = [&](int64_t beat) {
+                                         uint32_t h = seed * 0x9E3779B9u ^ ((uint32_t)copy + 1u) * 0x85EBCA6Bu ^ (uint32_t)beat * 0xC2B2AE35u ^ 0x27d4eb2du;
+                                         h ^= h >> 16, h *= 0x7FEB352Du, h ^= h >> 15, h *= 0x846CA68Bu, h ^= h >> 16;
+                                         return (double)h / 2147483647.5 - 1.0;
+                                     };
+                                     const double x = speed * now * 2.0, f = std::floor(x), u = x - f, e = u * u * (3.0 - 2.0 * u);
+                                     w = w * (1.0 - noisy) + noisy * (at((int64_t)f) * (1.0 - e) + at((int64_t)f + 1) * e);
+                                 }
                                  return math::mat4::translation(math::double3{doc_number(d, thing, "wave_x", said, 0), doc_number(d, thing, "wave_y", said, 0), 0.0} * w) *
                                         math::mat4::rotation(w * doc_number(d, thing, "wave_rotate", said, 0) * (double)TAU / 360.0, math::double3{0, 0, 1}) *
                                         math::mat4::scaling(std::max(0.0, 1.0 + w * doc_number(d, thing, "wave_size", said, 0)));
@@ -403,7 +418,9 @@ static math::mat4 doc_place(Doc& d, int thing, double now, int deeper, int copy,
     if (reach > 0.0) {   // (within the field: larger and turned about where it stands, as near its middle as it is)
         const math::double3 at = (place * math::double4{anchor, 1.0}).xyz;
         const double near = std::clamp(1.0 - length(at.xy - math::double2{doc_number(d, thing, "field_x", said, 0), doc_number(d, thing, "field_y", said, 0)}) / reach, 0.0, 1.0), k = near * near * (3.0 - 2.0 * near);
-        place = math::mat4::translation(at) * math::mat4::rotation(k * doc_number(d, thing, "field_rotate", said, 0) * (double)TAU / 360.0, math::double3{0, 0, 1}) *
+        const math::double2 away = at.xy - math::double2{doc_number(d, thing, "field_x", said, 0), doc_number(d, thing, "field_y", said, 0)};
+        const math::double2 push = length(away) > 1e-9 ? normalize(away) * (k * doc_number(d, thing, "field_push", said, 0)) : math::double2{0.0};
+        place = math::mat4::translation(math::double3{push, 0.0}) * math::mat4::translation(at) * math::mat4::rotation(k * doc_number(d, thing, "field_rotate", said, 0) * (double)TAU / 360.0, math::double3{0, 0, 1}) *
                 math::mat4::scaling(std::max(0.0, 1.0 + k * doc_number(d, thing, "field_size", said, 0))) * math::mat4::translation(-at) * place;
     }
     // (the user's three tags: 2D sticks to the camera; 2.5D stays in the world, smaller far, but keeps the angle it
@@ -499,11 +516,25 @@ static void doc_look(Doc& d) {
         }
         if (sky) sky->setLayerMask(0xFF, 0x01);
         s.scene->setSkybox(sky);
-    } else {   // (a colour behind everything, once one is said)
-        if (!behind.empty() && !d.sky) d.sky = Skybox::Builder().color({0.f, 0.f, 0.f, 1.f}).build(*s.engine);
-        s.scene->setSkybox(d.sky);
-        if (d.sky) d.sky->setColor(LinearColorA{behind.empty() ? float3{0.f} : Color::toLinear<ACCURATE>(sRGBColor{hex("background", float3{0.f})}), 1.f});
+    } else s.scene->setSkybox(nullptr);
+    // A colour behind everything: a flat colour as large as the stage, stuck to the eye, drawn first in the stage's own
+    // view and writing no depth, so every thing is drawn over it (Filament's sky is drawn after the things it holds, and
+    // a flat thing writes no depth, so a sky painted over them)
+    const std::string colour = doc_word(d, 0, "behind") == "room" ? "" : behind;
+    if (colour != d.backdropIs) {
+        if (d.backdrop) picture_off(s, d.backdrop), d.backdrop = nullptr;
+        if (!colour.empty()) {
+            const math::double4 up = s.camera->getProjectionMatrix() * s.camera->getViewMatrix() * math::double4{0, 1, 0, 1};
+            if ((d.backdrop = flat(s, "rect", (float)s.w / (float)s.h, mat4f{}, (float)(2.0 * up.w / up.y), hex("background", float3{0.f})))) {
+                auto& faces = s.engine->getRenderableManager();
+                for (const Stage::Made& made : s.made)
+                    if (made.of == d.backdrop->sheet) faces.setPriority(faces.getInstance(made.thing), 0), faces.setChannel(faces.getInstance(made.thing), 0);
+                d.backdrop->look->setDepthWrite(false), d.backdrop->look->setDepthCulling(false);
+            }
+        }
+        d.backdropIs = colour;
     }
+    if (d.backdrop) move(s, d.backdrop->sheet, [&](int, const mat4f&) { return mat4f(d.rig); });
 }
 
 static int doc_keys(Doc& d, int thing, const char* name, double at);
@@ -1278,21 +1309,21 @@ static const DocRecipe doc_recipes[] = {
     {"Iris", "shape", "line", "lines round a centre, coloured in their order, breathing",
      "set size 1\nset anchor_x -1.6\nset copies 48\nset copy_rotate 7.5\nsay copy_fill ff3366 ffd166 1b2fd8 ff3366\nset wave_size 0.3\nset wave_phase 3"},
     {"Dot wave", "shape", "circle", "a grid of dots rising and falling one after another",
-     "say fill ffd166\nset size 0.12\nset x -1.1\nset y 1.1\nset copies 100\nset copy_columns 10\nset copy_x 2\nset copy_y -2\nset wave_y 0.15\nset wave_size 0.4\nset wave_phase 3\nsay copy_fill ffd166 ff3366"},
+     "say fill ffd166\nset size 0.12\nset x -1.1\nset y 1.1\nset copies 100\nset copy_columns 10\nset copy_x 2\nset copy_y -2\nset wave_y 0.15\nset wave_size 0.4\nset wave_phase 3\nset wave_noise 0.7\nsay copy_fill ffd166 ff3366"},
     {"Tunnel", "shape", "rect", "squares within squares, turning one after another",
      "say fill 000000\nsay stroke ffffff\nset stroke_width 6\nset size 2.2\nset copies 24\nset copy_size 0.88\nset wave_rotate 30\nset wave_phase 1\nset wave_speed 0.5"},
     {"Text ripple", "text", "/System/Library/Fonts/Supplemental/Arial Unicode.ttf", "words whose letters bob one after another, coloured in their order",
      "say text MOTOLII\nsay fill ffffff\nset size 0.4\nsay split letters\nset wave_y 0.2\nset wave_phase 1\nset wave_rotate 8\nsay copy_fill ff3366 ffd166 1b2fd8"},
     {"Field dots", "shape", "circle", "a grid of dots swelling where a round field passes over them",
-     "say fill ffffff\nset size 0.06\nset x -2.9\nset y 1.6\nset copies 336\nset copy_columns 24\nset copy_x 4\nset copy_y -4\nset field_radius 1\nset field_size 2.5\nkey field_x 0 -3\nkey field_x 3 3\nsay copy_fill ffffff ff3366"},
+     "say fill ffffff\nset size 0.06\nset x -2.9\nset y 1.6\nset copies 336\nset copy_columns 24\nset copy_x 4\nset copy_y -4\nset field_radius 1\nset field_size 1.5\nset field_push 0.25\nkey field_x 0 -3\nkey field_x 4 3\nkey field_x 8 -3\nset wave_y 0.2\nset wave_noise 1\nset wave_speed 0.5\nsay copy_fill ffffff ff3366"},
     {"Line maze", "shape", "line", "a grid of short lines turning where a round field passes over them",
-     "say fill ffffff\nset size 0.25\nset x -2.9\nset y 1.6\nset copies 192\nset copy_columns 16\nset copy_x 1.5\nset copy_y -1.5\nset field_radius 1.4\nset field_rotate 90\nkey field_x 0 -3\nkey field_x 3 3\nsay copy_fill ffffff 3366ff"},
+     "say fill ffffff\nset size 0.25\nset x -2.9\nset y 1.6\nset copies 192\nset copy_columns 16\nset copy_x 1.5\nset copy_y -1.5\nset field_radius 1.4\nset field_rotate 90\nkey field_x 0 -3\nkey field_x 4 3\nkey field_x 8 -3\nsay copy_fill ffffff 3366ff"},
     {"Rings", "shape", "circle", "rings within rings breathing one after another",
-     "say fill 000000\nsay stroke ffd166\nset stroke_width 5\nset size 2.2\nset copies 14\nset copy_size 0.86\nset wave_size 0.06\nset wave_phase 1\nset wave_speed 0.7"},
+     "say fill 000000\nsay stroke ffd166\nset stroke_width 5\nset size 2.2\nset copies 14\nset copy_size 0.86\nset wave_size 0.12\nset wave_phase 1\nset wave_speed 0.7"},
     {"Confetti", "shape", "rect", "bits of colour scattered about, each turning its own way",
      "set size 0.08\nset wide 0.5\nset copies 160\nset scatter_x 36\nset scatter_y 20\nset scatter_rotate 180\nset scatter_size 0.5\nset wave_rotate 120\nset wave_phase 37\nset wave_y 1\nsay copy_fill ff3366 ffd166 1b2fd8 22c55e ff3366"},
     {"Burst", "shape", "line", "lines from a centre growing out one after another",
-     "say fill ffffff\nset anchor_x -1\nset copies 24\nset copy_rotate 15\nkey size 0 0.001\nkey size 0.5 1.3\nset stagger 0.8\nsay copy_fill ffffff ffd166"},
+     "say fill ffffff\nset anchor_x -1\nset copies 24\nset copy_rotate 15\nkey size 0 0.001\nkey size 0.5 1.3\nset stagger 0.8\nset wave_size 0.15\nset wave_phase 2\nsay copy_fill ffffff ffd166"},
 };
 static std::string doc_recipe_names() {
     std::string all;
