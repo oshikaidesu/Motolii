@@ -134,7 +134,10 @@ static const DocValue doc_values[] = {
     {"stagger_from", "picture text shape", 0, 0, false, "start centre end edges"},   // (which of them moves first: the first, the middle one, the last, the outer ones)
     {"copy_fill", "picture text shape", 0, 0, false, ""},   // (its copies coloured from the first colour to the last, in their order: six digits each; one, all in it; none, not coloured each)
     {"copy_fill_way", "picture text shape", 0, 0, false, "ramp cycle"},   // (from the first to the last across them all, or one colour each in turn, round and round)
-    {"copy_wide", "picture text shape", 0.01, 100, true, nullptr},   // (how many times as wide its last copy is as its first, those between in step: rows of waves, each with more of them)
+    {"copy_wide", "picture text shape", 0.01, 100, true, nullptr},
+    {"copy_z", "picture text shape", -1e4, 1e4, true, nullptr},   // (its copies so far apart towards the eye, in units of the stage: a row going into the picture)
+    {"wave_z", "picture text shape", -1e3, 1e3, true, nullptr},   // (and waved so far towards the eye and away, a quarter round after up and down: with wave_y, round and round, a helix)
+    {"scatter_z", "picture text shape", 0, 1e4, true, nullptr},   // (scattered so far towards the eye and away)   // (how many times as wide its last copy is as its first, those between in step: rows of waves, each with more of them)
     {"copy_turn", "picture text shape", -1e5, 1e5, true, nullptr},
     {"tall", "picture text shape", 0, 1e3, true, nullptr},   // (how many times as tall as it is, its anchor staying where it is: a bar growing up from its foot)
     {"copy_tall", "picture text shape", 0, 0, false, ""},   // (and its copies each so many times as tall again, in their order, going round: numbers, a bar chart's data; none: all as tall)
@@ -224,6 +227,7 @@ static const DocShown doc_shown[] = {
     {"copy_turn", "angle", "°", "Turn in all", 0, 720, false},
     {"stagger", "", "s", "Delay", 0, 3, false},
     {"copy_fill", "colours", "", "Colours", 0, 0, false},
+    {"copy_z", "stage", "px", "Gap deep", -2, 2, true},
     {"copy_rotate", "angle", "°", "Turn each", -180, 180, true},
     {"copy_size", "", "×", "Grow each", 0.5, 1.5, true},
     {"copy_wide", "", "×", "Last one wider", 0.2, 5, true},
@@ -233,6 +237,7 @@ static const DocShown doc_shown[] = {
     {"copy_fill_way", "", "", "Colours go", 0, 0, true},
     {"wave_y", "stage", "px", "Up and down", -1, 1, false},
     {"wave_x", "stage", "px", "Side to side", -1, 1, false},
+    {"wave_z", "stage", "px", "In and out", -1, 1, false},
     {"wave_rotate", "angle", "°", "Swing", -90, 90, false},
     {"wave_size", "share", "%", "Pulse", -1, 2, false},
     {"wave_speed", "", "/s", "Speed", 0, 4, false},
@@ -248,6 +253,7 @@ static const DocShown doc_shown[] = {
     {"field_rotate", "angle", "°", "Turn inside", -180, 180, true},
     {"scatter_x", "stage", "px", "Spread across", 0, 4, false},
     {"scatter_y", "stage", "px", "Spread up", 0, 3, false},
+    {"scatter_z", "stage", "px", "Spread deep", 0, 3, true},
     {"scatter_rotate", "angle", "°", "Random turn", 0, 180, false},
     {"scatter_size", "share", "%", "Random size", 0, 1, false},
     {"seed", "seed", "", "Seed", 0, 9999, false},
@@ -311,10 +317,10 @@ static const DocShown* doc_shown_of(const char* name) {
 static const DocCard doc_cards[] = {
     {"Type", "split letter_spacing line_spacing italic wrap wrap_at"},
     {"Gradient", "gradient gradient_angle gradient_scale gradient_spread", "fill", "~ "},
-    {"Copies", "copies copy_columns copy_x copy_y copy_rotate copy_turn copy_size copy_wide tall copy_tall stagger stagger_from copy_fill copy_fill_way"},
-    {"Wave", "wave_x wave_y wave_rotate wave_size wave_speed wave_phase wave_noise noise_scale"},
+    {"Copies", "copies copy_columns copy_x copy_y copy_rotate copy_turn copy_size copy_wide copy_z tall copy_tall stagger stagger_from copy_fill copy_fill_way"},
+    {"Wave", "wave_x wave_y wave_z wave_rotate wave_size wave_speed wave_phase wave_noise noise_scale"},
     {"Field", "field_x field_y field_radius field_band field_size field_rotate field_push"},
-    {"Scatter", "scatter_x scatter_y scatter_rotate scatter_size seed drift_x drift_y"},
+    {"Scatter", "scatter_x scatter_y scatter_z scatter_rotate scatter_size seed drift_x drift_y"},
     {"Shine", "emissive", "kind", "!solid"},   // (a flat thing lit from within: past 1, the stage's bloom takes it up where it lies in the stage's own view; laid over a solid thing, a picture of its own is clear round it and keeps no halo: ThorVG's glow does that)
     {"Play", "marker animation speed"},
     {"Matte", "clip_matte clip_invert clip_feather", "clip", "1"},
@@ -505,7 +511,7 @@ static math::mat4 doc_place(Doc& d, int thing, double now, int deeper, int copy,
         const int columns = (int)doc_number(d, thing, "copy_columns", 0, 0);
         const double along = columns > 0 ? copy % columns : copy, down = columns > 0 ? copy / columns : copy;
         const double alongMid = columns > 0 ? (std::min(n, columns) - 1) * 0.5 : (n - 1) * 0.5, downMid = columns > 0 ? (std::ceil((double)n / columns) - 1) * 0.5 : (n - 1) * 0.5;
-        shift += math::double3{(along - alongMid) * doc_number(d, thing, "copy_x", now, 0), (down - downMid) * doc_number(d, thing, "copy_y", now, 0), 0.0};
+        shift += math::double3{(along - alongMid) * doc_number(d, thing, "copy_x", now, 0), (down - downMid) * doc_number(d, thing, "copy_y", now, 0), (copy - (n - 1) * 0.5) * doc_number(d, thing, "copy_z", now, 0)};
         own = math::mat4::rotation(copy * (doc_number(d, thing, "copy_turn", now, 0) / n + doc_number(d, thing, "copy_rotate", now, 0)) * (double)TAU / 360.0, math::double3{0, 0, 1}) *
               math::mat4::scaling(std::pow(doc_number(d, thing, "copy_size", now, 1), copy)) *
               math::mat4::scaling(math::double3{n > 1 ? std::pow(doc_number(d, thing, "copy_wide", now, 1), (double)copy / (n - 1)) : 1.0, 1.0, 1.0});
@@ -517,6 +523,7 @@ static math::mat4 doc_place(Doc& d, int thing, double now, int deeper, int copy,
             h ^= h >> 16, h *= 0x7FEB352Du, h ^= h >> 15, h *= 0x846CA68Bu, h ^= h >> 16;
             return (double)h / 2147483647.5 - 1.0;
         };
+        if (const double sz = doc_number(d, thing, "scatter_z", now, 0); sz != 0.0) shift.z += sz * roll(5);
         if (sx != 0.0 || sy != 0.0 || sr != 0.0 || ss != 0.0) {
             const auto round = [](double v, double edge) { return edge > 0.0 ? v - 2.0 * edge * std::floor((v + edge) / (2.0 * edge)) : v; };   // (flowing past the edge: back at the other)
             const auto whole = [&](double drift, double edge) { const double k = edge > 0.0 ? std::round(drift * d.round / (2.0 * edge)) : 0.0; return k != 0.0 ? k * 2.0 * edge / d.round : drift; };   // (round the scattering a whole number of times in the document)
@@ -544,6 +551,7 @@ static math::mat4 doc_place(Doc& d, int thing, double now, int deeper, int copy,
             w = w * (1.0 - noisy) + noisy * sum;
         }
         shift += math::double3{doc_number(d, thing, "wave_x", said, 0), doc_number(d, thing, "wave_y", said, 0), 0.0} * w;
+        shift.z += doc_number(d, thing, "wave_z", said, 0) * std::cos((double)TAU * (speed * now - doc_number(d, thing, "wave_phase", said, 0) * copy / n));   // (a quarter round after: round and round with up and down)
         own = own * math::mat4::rotation(w * doc_number(d, thing, "wave_rotate", said, 0) * (double)TAU / 360.0, math::double3{0, 0, 1}) *
               math::mat4::scaling(std::max(0.0, 1.0 + w * doc_number(d, thing, "wave_size", said, 0)));
     }
@@ -604,9 +612,16 @@ static std::vector<math::mat4> doc_joins(Doc& d, int thing, double now) {
     for (size_t k = 0; k < pairs.size() && k < most; ++k) {
         const math::double3 from = a[pairs[k].first], to = b[pairs[k].second], mid = (from + to) * 0.5, way = to - from;
         const double far = length(way), fine = reach > 0.0 && !two ? 0.35 + 0.65 * (1.0 - far / reach) : 1.0;   // (never finer than about a third: thinner than a dot of the screen it breaks up)
-        const math::mat4 line = math::mat4::translation(mid) * math::mat4::rotation(std::atan2(way.y, way.x), math::double3{0, 0, 1}) *
-                                math::mat4::scaling(math::double3{far / std::max(1e-6, 2.0 * half.x), doc_number(d, thing, "size", now, 1) * fine, 1.0});
-        lines.push_back(space == 2 ? d.rig * line : space == 3 ? line : math::mat4::translation(mid) * d.facing * math::mat4::translation(-mid) * line);
+        // (along the way between them however deep it goes; its width across, as level as it can lie, facing the eye)
+        const math::double3 along = far > 1e-9 ? way / far : math::double3{1, 0, 0}, flat = cross(along, math::double3{0, 0, 1});
+        const math::double3 across = length(flat) > 1e-6 ? normalize(flat) : math::double3{0, 1, 0}, up = cross(along, across);
+        const double wide = doc_number(d, thing, "size", now, 1) * fine;
+        math::mat4 line;
+        line[0] = math::double4{along * (far / std::max(1e-6, 2.0 * half.x)), 0.0};
+        line[1] = math::double4{-across * wide, 0.0};
+        line[2] = math::double4{up, 0.0};
+        line[3] = math::double4{mid, 1.0};
+        lines.push_back(space == 2 ? d.rig * line : line);
     }
     return lines;
 }
@@ -838,7 +853,7 @@ static void doc_moment(Doc& d, double now) {
         if (t.run < 0 && !lies[i].solid) doc_looks(s, t, [](MaterialInstance* look) { look->setDepthCulling(false), look->setDepthWrite(false); });
         if (t.lies != (int)i && !lies[i].solid)
             doc_parts(s, t, [&](RenderableManager& faces, RenderableManager::Instance one) {
-                for (size_t part = 0; part < faces.getPrimitiveCount(one); ++part) faces.setBlendOrderAt(one, part, (uint16_t)i), faces.setGlobalBlendOrderEnabledAt(one, part, true);
+                for (size_t part = 0; part < faces.getPrimitiveCount(one); ++part) faces.setBlendOrderAt(one, part, (uint16_t)(i * 128)), faces.setGlobalBlendOrderEnabledAt(one, part, true);   // (128 places for each: its copies lie among themselves by how far off they are)
             });
         t.run = run, t.lies = (int)i;
     }
@@ -873,7 +888,29 @@ static void doc_moment(Doc& d, double now) {
         const std::vector<math::mat4> joins = doc_number(d, thing, "connect", 0, 0) != 0.0 ? doc_joins(d, thing, now) : std::vector<math::mat4>{};   // (a joining thing: its copies lie between another's)
         if (t.solid) solid_to(s, t.solid, place);
         else if (doc_number(d, thing, "connect", 0, 0) != 0.0) move(s, m, [&](int nth, const mat4f&) { return (size_t)nth < joins.size() ? mat4f(joins[(size_t)nth]) : mat4f::scaling(float3{0.f}); });
-        else move(s, m, [&](int nth, const mat4f&) { return nth || staggered ? mat4f(doc_place(d, thing, now, 0, nth, staggered)) : place; });
+        else {
+            std::vector<float> far;   // (how far off each copy is from the eye: those further off drawn first, within the thing's own place)
+            const mat4f eye = mat4f(s.camera->getViewMatrix());
+            move(s, m, [&](int nth, const mat4f&) {
+                const mat4f at = nth || staggered ? mat4f(doc_place(d, thing, now, 0, nth, staggered)) : place;
+                if ((size_t)nth >= far.size()) far.resize((size_t)nth + 1, 0.f);
+                far[(size_t)nth] = -(eye * at[3]).z;
+                return at;
+            });
+            if (far.size() > 1 && !lies[i].solid && t.lies >= 0) {
+                std::vector<size_t> order(far.size());
+                for (size_t k = 0; k < order.size(); ++k) order[k] = k;
+                std::stable_sort(order.begin(), order.end(), [&](size_t a, size_t b) { return far[a] > far[b]; });
+                std::vector<uint16_t> place_of(far.size());
+                for (size_t k = 0; k < order.size(); ++k) place_of[order[k]] = (uint16_t)(k * 127 / std::max<size_t>(1, order.size() - 1));
+                auto& faces = s.engine->getRenderableManager();
+                for (const Stage::Made& made : s.made) {
+                    if (made.of != m || made.nth < 0 || (size_t)made.nth >= place_of.size()) continue;
+                    const auto one = faces.getInstance(made.thing);
+                    for (size_t part = 0; part < faces.getPrimitiveCount(one); ++part) faces.setBlendOrderAt(one, part, (uint16_t)(t.lies * 128 + place_of[(size_t)made.nth]));
+                }
+            }
+        }
         if (MaterialInstance* look = t.film ? t.film->look : t.drawn ? t.drawn->look : nullptr) look->setParameter("opacity", (float)doc_number(d, thing, "opacity", now, 1));
         if (MaterialInstance* main = t.film ? t.film->look : t.drawn ? t.drawn->look : nullptr) {   // (its copies coloured each their own, along a ramp in their order: a look of its own each, told what the thing's is)
             std::vector<float3> ramp;
@@ -1515,10 +1552,10 @@ static const DocRecipe doc_recipes[] = {
      "set size 0.08\nset wide 0.5\nset copies 160\nset scatter_x 2.9\nset scatter_y 1.7\nset scatter_rotate 180\nset scatter_size 0.5\nset drift_y -0.6\nset wave_rotate 120\nset wave_phase 37\nset wave_x 0.1\nsay copy_fill ff3366 ffd166 1b2fd8 22c55e ff3366"},
     {"Op star", "shape", "star", "stars within stars, black and white in turn, each turning a little after the one outside it",
      "set size 2.6\nset points 16\nset inner 0.78\nset copies 30\nset copy_size 0.9\nsay copy_fill ffffff 000000\nsay copy_fill_way cycle\nset wave_rotate 25\nset wave_phase 1\nset wave_speed 0.4"},
-    {"Helix", "shape", "circle", "two strands of dots winding round each other, joined by rungs, one large where the other is small",
-     "say fill ff3366\nset size 0.12\nset copies 40\nset copy_x 0.132\nset wave_y 0.72\nset wave_size 0.4\nset wave_phase 2\nset wave_speed 0.3\nsay copy_fill ff3366 ffd166\n"
-     "then shape circle\nsay fill 1b2fd8\nset size 0.12\nset copies 40\nset copy_x 0.132\nset wave_y -0.72\nset wave_size 0.4\nset wave_phase 2\nset wave_speed 0.3\nsay copy_fill 1b2fd8 22c55e\n"
-     "then shape line\nsay fill ffffff\nset opacity 0.45\nset size 0.3\nset copies 40\nset connect first\nset connect_to before\nset order behind"},
+    {"Helix", "shape", "circle", "two strands of dots winding round each other in depth, joined by rungs, the far side smaller and behind",
+     "say space 2.5d\nsay fill ff3366\nset size 0.12\nset copies 40\nset copy_x 0.132\nset wave_y 0.6\nset wave_z 0.6\nset wave_phase 2\nset wave_speed 0.25\nsay copy_fill ff3366 ffd166\n"
+     "then shape circle\nsay space 2.5d\nsay fill 1b2fd8\nset size 0.12\nset copies 40\nset copy_x 0.132\nset wave_y -0.6\nset wave_z -0.6\nset wave_phase 2\nset wave_speed 0.25\nsay copy_fill 1b2fd8 22c55e\n"
+     "then shape line\nsay space 2.5d\nsay fill ffffff\nset opacity 0.45\nset size 0.3\nset copies 40\nset connect first\nset connect_to before\nset order behind"},
     {"Plexus", "shape", "circle", "dots drifting and bobbing, joined by lines where they come near, finer the further apart",
      "say fill ffffff\nset size 0.05\nset copies 100\nset scatter_x 3.2\nset scatter_y 1.9\nset seed 7\nset drift_x 0.65\nset wave_y 0.3\nset wave_noise 1\nset wave_speed 0.25\n"
      "then shape line\nsay fill 9ad7ff\nset opacity 0.7\nset size 0.25\nset copies 900\nset connect first\nset connect_reach 0.7"},
