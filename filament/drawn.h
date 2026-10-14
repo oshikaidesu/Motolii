@@ -379,7 +379,16 @@ static Drawn* flat(Stage& s, const char* form, float wide, const mat4f& place, f
         tvg::Shape* shape = d->shape = tvg::Shape::gen();
         const float in = 0.5f * std::min(edge.w * (float)*h, 0.5f * (float)std::min(*w, *h));   // (half the stroke: the path is set in by that, so all of it is seen)
         const float cx = 0.5f * (float)*w, cy = 0.5f * (float)*h, rx = cx - in, ry = cy - in;
+        const float thick = in > 0.f ? 2.f * in : 0.08f * (float)*h;   // (a wave's line: its stroke, or a share of its height)
         if (!strcmp(form, "circle")) shape->appendCircle(cx, cy, rx, ry);
+        else if (!strcmp(form, "wave")) {   // (a line waving across it: so many times along (points), so far up and down (inner, a share of its half height))
+            const int cycles = std::clamp(points, 1, 100), n = 48 * cycles;
+            const float amp = (cy - thick) * std::clamp(inner, 0.f, 1.f);
+            for (int k = 0; k <= n; ++k) {
+                const float x = thick + ((float)*w - 2.f * thick) * (float)k / (float)n, y = cy + amp * std::sin(TAU * (float)cycles * (float)k / (float)n);
+                k ? shape->lineTo(x, y) : shape->moveTo(x, y);
+            }
+        }
         else if (!strcmp(form, "polygon") || !strcmp(form, "star")) {
             const bool star = !strcmp(form, "star");
             const int n = std::clamp(points, 3, 100) * (star ? 2 : 1);
@@ -395,6 +404,12 @@ static Drawn* flat(Stage& s, const char* form, float wide, const mat4f& place, f
         shape->fill((uint8_t)std::lround(255.f * colour.x), (uint8_t)std::lround(255.f * colour.y), (uint8_t)std::lround(255.f * colour.z), strcmp(form, "null") ? 255 : 0);
         if (fx.ramp.size() > 1 && strcmp(form, "null")) shape->fill(ramp_of(fx.ramp, (float)*w, (float)*h, fx.radial, fx.rampAngle, fx.rampScale, fx.spread));
         if (in > 0.f) shape->strokeWidth(2.f * in), shape->strokeFill((uint8_t)std::lround(255.f * edge.x), (uint8_t)std::lround(255.f * edge.y), (uint8_t)std::lround(255.f * edge.z));
+        if (!strcmp(form, "wave")) {   // (only its line is seen: in its edge's colour, or its fill's; round at its ends)
+            const float3 ink = in > 0.f ? float3{edge.x, edge.y, edge.z} : colour;
+            shape->fill(0, 0, 0, 0);
+            shape->strokeWidth(thick), shape->strokeFill((uint8_t)std::lround(255.f * ink.x), (uint8_t)std::lround(255.f * ink.y), (uint8_t)std::lround(255.f * ink.z));
+            shape->strokeCap(tvg::StrokeCap::Round);
+        }
         if (fx.cap >= 0) shape->strokeCap((tvg::StrokeCap)fx.cap);
         if (fx.join >= 0) shape->strokeJoin((tvg::StrokeJoin)fx.join);
         if (fx.dash > 0.f) { const float gap[2] = {fx.dash * (float)*h, fx.dash * (float)*h}; shape->strokeDash(gap, 2, fx.dashFrom * (float)*h); }   // (as long as the gaps; in shares of its height)

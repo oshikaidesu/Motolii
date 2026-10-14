@@ -99,7 +99,7 @@ static const DocValue doc_values[] = {
     //  luma mattes), the other way about (inverted), its edge so soft, in points of the screen)
     {"clip_matte", "film picture text shape", 0, 0, false, "alpha luma"}, {"clip_invert", "film picture text shape", 0, 1, false, nullptr}, {"clip_feather", "film picture text shape", 0, 500, false, nullptr},   // (a solid is cut by a box, not a matte)
     {"solo", doc_kinds, 0, 1, false, nullptr}, {"lock", doc_kinds, 0, 1, false, nullptr},   // (After Effects' own: while any thing is solo only those are seen; a locked thing is not changed)
-    {"visible", doc_kinds, 0, 1, false, nullptr}, {"order", doc_kinds, -1e9, 1e9, false, nullptr}, {"wide", "shape", 1e-3, 1e3, false, nullptr}, {"shape", "shape", 0, 0, false, "rect circle solid polygon star line null"},
+    {"visible", doc_kinds, 0, 1, false, nullptr}, {"order", doc_kinds, -1e9, 1e9, false, nullptr}, {"wide", "shape", 1e-3, 1e3, false, nullptr}, {"shape", "shape", 0, 0, false, "rect circle solid polygon star line wave null"},
     {"points", "shape", 3, 100, false, nullptr}, {"inner", "shape", 0.01, 1, false, nullptr}, {"round", "shape", 0, 0.5, false, nullptr},   // (a polygon's or star's points, a star's inner points, a rect's corners)
     {"start", doc_kinds, 0, 1e6, false, nullptr}, {"duration", doc_kinds, 1e-3, 1e6, false, nullptr},
     {"begin", "film", 0, 1e6, false, nullptr}, {"speed", "film solid", -100, 100, false, nullptr}, {"keyed", "film", 0, 1, false, nullptr},
@@ -907,11 +907,11 @@ static bool doc_match(Doc& d) {
                 const float high = (float)(2.0 * up.w / up.y);
                 made.drawn = flat(s, "rect", (float)s.w / (float)s.h, mat4f{}, high, fill.empty() ? float3{0xd9, 0xd2, 0xc3} / 255.f : colour, lay, float4{edge.xyz, edge.w / high}, fx.over(high));
             } else {   // (a line is long and thin as it comes: 25 times as long as it is thick, a tenth of a unit thick)
-                const bool line = shape == "line";
-                const float high = line ? 0.04f : 1.f;
-                made.drawn = flat(s, shape.c_str(), (float)doc_number(d, thing, "wide", 0, line ? 25 : 1), mat4f{}, high, fill.empty() ? float3{0xd9, 0xd2, 0xc3} / 255.f : colour, lay,
+                const bool line = shape == "line", wave = shape == "wave";   // (a wave: a line waving, ten times as long as it is high)
+                const float high = line ? 0.04f : wave ? 0.3f : 1.f;
+                made.drawn = flat(s, shape.c_str(), (float)doc_number(d, thing, "wide", 0, line ? 25 : wave ? 10 : 1), mat4f{}, high, fill.empty() ? float3{0xd9, 0xd2, 0xc3} / 255.f : colour, lay,
                                   float4{edge.xyz, edge.w / high}, fx.over(high),
-                                  (int)doc_number(d, thing, "points", 0, shape == "star" ? 5 : 6), (float)doc_number(d, thing, "inner", 0, 0.5), (float)doc_number(d, thing, "round", 0, 0));
+                                  (int)doc_number(d, thing, "points", 0, shape == "star" ? 5 : wave ? 4 : 6), (float)doc_number(d, thing, "inner", 0, 0.5), (float)doc_number(d, thing, "round", 0, 0));
             }
         } else if (kind == "solid") {   // (one of the kit's shapes, or a file; its fill is its surface: a colour, or the material glass)
             const bool glass = fill == "glass";
@@ -1307,8 +1307,8 @@ static bool doc_raise(Doc& d, int thing, int places) {
 // "say name words", "key name seconds number", one to a line.
 struct DocRecipe { const char* name; const char* kind; const char* file; const char* what; const char* lines; };
 static const DocRecipe doc_recipes[] = {
-    {"Wave lines", "shape", "line", "a column of lines bending in a wave",
-     "say fill ffffff\nset size 1\nset y 1.5\nset copies 26\nset copy_y -0.12\nset wave_rotate 25\nset wave_x 0.25\nset wave_phase 2"},
+    {"Wave lines", "shape", "wave", "rows of waving lines, each flowing a little after the one above",
+     "say fill ffffff\nset wide 30\nset points 12\nset inner 0.6\nset y 1.5\nset copies 13\nset copy_y -0.25\nset wave_x 0.25\nset wave_phase 1.5\nset wave_speed 0.4\nsay copy_fill ffffff ff3366"},
     {"Iris", "shape", "line", "lines round a centre, coloured in their order, breathing",
      "set size 1\nset anchor_x -1.6\nset copies 48\nset copy_turn 360\nsay copy_fill ff3366 ffd166 1b2fd8 ff3366\nset wave_size 0.3\nset wave_phase 3"},
     {"Dot wave", "shape", "circle", "a grid of dots rising and falling one after another",
