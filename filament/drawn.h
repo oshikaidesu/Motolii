@@ -7,6 +7,7 @@
 // All of ThorVG's work is queued like Filament's own calls and runs on Filament's driver thread.
 #include "dawn_probe/gpu_door.h"
 #include <thorvg.h>
+#include <thorvg_lottie.h>
 #include <webgpu/webgpu.h>
 
 #include <filesystem>
@@ -34,6 +35,8 @@ struct Drawn {
     float starts = 0.f;                // how far into itself it is when the stage's time is 0
     tvg::Shape* shape = nullptr;       // a flat shape's own path (driver thread only), and how much of it is cut off its end
     float3 trimmed{0.f};   // (as last cut: off the end, off the beginning, slid along)
+    std::vector<std::string> markers;  // an After Effects file's named stretches (ThorVG's Lottie markers)
+    float fromFrame = 0.f, toFrame = 0.f;   // the stretch it plays, when one is named (frames of the file)
     tvg::Scene* effects = nullptr;     // the scene of ThorVG's its effects are on, if it has any (driver thread only)
     float tall = 0.f;                  // how high it was drawn, in its own points: what its effects' lengths are shares of
     DrawnFx fx;                        // its effects as last told
@@ -97,7 +100,7 @@ static void font(Stage& s, const char* path) {
 // A film at its moment, `seconds` from its start (after its end it holds its last picture), for the frame that comes next.
 static void picture_at(Stage& s, Drawn* d, float seconds) {
     door::on_driver(s.engine, [d, seconds] {
-        d->film->frame(std::min(seconds / d->seconds * d->frames, d->frames - 1.f));
+        d->film->frame(d->fromFrame + std::min(seconds / d->seconds * d->frames, d->frames - 1.f));
         d->canvas->update();
         d->canvas->draw(true);
         d->canvas->sync();
@@ -154,6 +157,7 @@ static Drawn* drawn(Stage& s, const std::function<tvg::Paint*(Drawn*, int*, int*
         d->canvas->add(p);
         owned = true;
         if (d->film) d->frames = d->film->totalFrame(), d->seconds = d->film->duration();
+        if (d->film && d->toFrame > d->fromFrame && d->frames > 0.f) d->seconds *= (d->toFrame - d->fromFrame) / d->frames, d->frames = d->toFrame - d->fromFrame;   // (a named stretch of it: so long)
         d->canvas->update();
         d->canvas->draw(true);
         d->canvas->sync();
@@ -186,13 +190,35 @@ static Drawn* drawn(Stage& s, const std::function<tvg::Paint*(Drawn*, int*, int*
 
 // The picture in `file` put in the scene (an After Effects film, an SVG, a photo): a sheet `high` tall (as wide as
 // the picture makes it) with its middle at `place`, facing along the place's z, drawn as finely as the stage is.
-static Drawn* picture(Stage& s, const char* file, const mat4f& place, float high, float3 ground = float3{-1.f}, bool shown = true, const char* lay = nullptr, const DrawnFx& fx = {}) {
+// marker: a named stretch of an After Effects file it plays, over and over (ThorVG's Lottie markers; none: all of it).
+static Drawn* picture(Stage& s, const char* file, const mat4f& place, float high, float3 ground = float3{-1.f}, bool shown = true, const char* lay = nullptr, const DrawnFx& fx = {}, const char* marker = "") {
     if (!std::filesystem::is_regular_file(file)) return nullptr;   // (ThorVG ends the program on a folder)
+    const std::string ext = std::filesystem::path(file).extension().string();
+    const bool lottie = ext == ".json" || ext == ".lot";
     return drawn(s, [&](Drawn* d, int* w, int* h) -> tvg::Paint* {
-        d->film = tvg::Animation::gen();
+        tvg::LottieAnimation* own = lottie ? tvg::LottieAnimation::gen() : nullptr;
+        d->film = own ? own : tvg::Animation::gen();
         tvg::Picture* p = d->film->picture();
         float fw = 0.f, fh = 0.f;
         if (p->load(file) != tvg::Result::Success || p->size(&fw, &fh) != tvg::Result::Success || fw <= 0.f || fh <= 0.f) return nullptr;
+        std::vector<float> starts;   // (where each named stretch begins: one of no length runs to the next, or to the end)
+        for (uint32_t i = 0; own && i < own->markersCnt(); ++i) {
+            float from = 0.f, to = 0.f;
+            if (own->marker(i, &from, &to)) starts.push_back(from);
+        }
+        for (uint32_t i = 0; own && i < own->markersCnt(); ++i) {   // (its stretches by name, and the one it plays)
+            float from = 0.f, to = 0.f;
+            const char* name = own->marker(i, &from, &to);
+            if (!name || !*name) continue;
+            std::string word(name);
+            word.erase(std::remove_if(word.begin(), word.end(), [](char c) { return std::isspace((unsigned char)c); }), word.end());   // (a name is one word: "End\r\n" is End)
+            d->markers.push_back(word);
+            if (to <= from) {
+                to = d->film->totalFrame();
+                for (float b : starts) if (b > from) to = std::min(to, b);
+            }
+            if (marker && *marker && word == marker) d->fromFrame = from, d->toFrame = to;
+        }
         const float fit = (float)std::max(s.w, s.h) / std::max(fw, fh);
         *w = 2 * (int)std::lround(0.5f * fw * fit);
         *h = 2 * (int)std::lround(0.5f * fh * fit);

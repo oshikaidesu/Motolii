@@ -102,6 +102,7 @@ static const DocValue doc_values[] = {
     {"begin", "film", 0, 1e6, false, nullptr}, {"speed", "film", -100, 100, false, nullptr}, {"keyed", "film", 0, 1, false, nullptr},
     {"blend", "film picture text shape", 0, 0, false, "normal add multiply screen"}, {"file", "film picture solid text", 0, 0, false, ""}, {"shape", "solid", 0, 0, false, doc_shapes},
     {"text", "text", 0, 0, false, ""}, {"fill", "text solid shape light", 0, 0, false, ""},
+    {"marker", "picture", 0, 0, false, ""},   // (an After Effects file: which of its named stretches it plays, over and over; all: the whole of it)
     // (a light, Filament's own: made a sun, a point or a spot (its file); how strong, 1 as bright as the stage's own
     //  light; how far a point or spot reaches, in units of the stage; how wide a spot's cone is, in degrees; whether
     //  the solid things it lights cast shadows. Its colour is its fill; it shines the way it is turned, ahead of it)
@@ -159,6 +160,7 @@ struct DocCard { const char* title; const char* names; const char* when = nullpt
 static const DocCard doc_cards[] = {
     {"Type", "letter_spacing line_spacing italic wrap wrap_width"},
     {"Gradient", "gradient gradient_angle gradient_scale gradient_spread"},
+    {"Play", "marker"},
     {"Matte", "clip_matte clip_invert clip_feather", "clip", "1"},
     {"Line", "cap join dash dash_offset"},
     {"Surface", "metallic roughness reflectance clear_coat clear_coat_roughness emissive", "fill", "!glass"},
@@ -611,7 +613,7 @@ static void doc_moment(Doc& d, double now) {
 static bool doc_match(Doc& d) {
     Stage& s = *d.stage;
     std::map<int, std::string> told;   // every thing of the document, and all that its making goes by
-    doc_rows(d, sqlite3_mprintf("select thing, group_concat(name || '=' || value, ' ') from (select * from fact where thing > 0 and name in ('kind','file','shape','blend','keyed','space','begin','duration','speed','text','fill','wide','points','inner','round','stroke','stroke_width','align','blur','shadow','shadow_distance','shadow_angle','shadow_blur','shadow_opacity','glow','glow_blur','glow_opacity','copies','tint','tint_black','tint_white','tritone','tritone_shadow','tritone_midtone','tritone_highlight','letter_spacing','line_spacing','italic','cap','join','dash','dash_offset','metallic','roughness','reflectance','clear_coat','clear_coat_roughness','emissive','falloff','shadows','gradient','gradient_angle','gradient_scale','gradient_spread','wrap','wrap_width','ior','split','swim','dark','vivid') order by thing, name) group by thing"),
+    doc_rows(d, sqlite3_mprintf("select thing, group_concat(name || '=' || value, ' ') from (select * from fact where thing > 0 and name in ('kind','file','shape','blend','keyed','space','begin','duration','speed','text','fill','wide','points','inner','round','stroke','stroke_width','align','blur','shadow','shadow_distance','shadow_angle','shadow_blur','shadow_opacity','glow','glow_blur','glow_opacity','copies','tint','tint_black','tint_white','tritone','tritone_shadow','tritone_midtone','tritone_highlight','letter_spacing','line_spacing','italic','cap','join','dash','dash_offset','metallic','roughness','reflectance','clear_coat','clear_coat_roughness','emissive','falloff','shadows','gradient','gradient_angle','gradient_scale','gradient_spread','wrap','wrap_width','ior','split','swim','dark','vivid','marker') order by thing, name) group by thing"),
              [&](sqlite3_stmt* row) { told[sqlite3_column_int(row, 0)] = (const char*)sqlite3_column_text(row, 1); });
     for (auto it = d.shown.begin(); it != d.shown.end();) {
         const auto still = told.find(it->first);
@@ -697,7 +699,7 @@ static bool doc_match(Doc& d) {
                 return Stage::Sound{file, v->from, v->to, v->speed, late, std::max(0.0, on), lasts < 0.0 ? lasts : std::max(1e-3, lasts - late)};
             };
         } else if (kind == "picture") {
-            if (fxOk && (made.drawn = picture(s, file.c_str(), mat4f{}, 1.f, float3{-1.f}, true, lay, fx))) s.playing.erase(made.drawn);
+            if (fxOk && (made.drawn = picture(s, file.c_str(), mat4f{}, 1.f, float3{-1.f}, true, lay, fx, doc_word(d, thing, "marker").c_str()))) s.playing.erase(made.drawn);
         } else if (kind == "text") {   // (words in a font: said by `say N text ...`; until then, the font's own name)
             const std::string words = doc_word(d, thing, "text");
             if (!fill.empty() && rgb < 0) why = "a text's fill is six digits, as ff3366";
@@ -1095,6 +1097,12 @@ static int doc_keyed(Doc& d, int thing, const char* name, double at) { return !d
 // The words a value of a thing may be (a blend's, a solid's shape), with spaces between ("": any word, or not a word).
 static std::string doc_words(Doc& d, int thing, const char* name) {
     const std::string kind = doc_word(d, thing, "kind");
+    if (!strcmp(name, "marker") && kind == "picture") {   // (the named stretches of its file, as ThorVG reads them; any: all of it)
+        std::string all = "all";
+        if (const auto t = d.shown.find(thing); t != d.shown.end() && t->second.drawn)
+            for (const std::string& m : t->second.drawn->markers) all += " " + m;
+        return all;
+    }
     for (const DocValue& one : doc_values)
         if (!strcmp(one.name, name) && doc_among(one.kinds, kind)) return one.words ? one.words : "";
     return "";

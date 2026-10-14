@@ -1170,6 +1170,21 @@ void main() {
     await _close(t);
   }, skip: !_built);
 
+  testWidgets('an After Effects file plays a named stretch of its own (ThorVG\'s Lottie markers), chosen on its Play card', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    final pic = m.add('picture', '$motoliiDir/third_party/thorvg_example/res/lottie/swinging.json');
+    expect(pic, isNot(0), reason: m.trouble);
+    ws
+      ..reread()
+      ..select('$pic');
+    await t.pumpAndSettle();
+    expect(m.words(pic, 'marker'), ['all', 'Start', 'End'], reason: 'its file\'s own names');
+    expect([for (final e in find.byType(ValuesCard).evaluate()) (e.widget as ValuesCard).card.name], contains('Play'));
+    expect(m.say(pic, 'marker', 'Start') && m.word(pic, 'marker') == 'Start', isTrue, reason: m.trouble);
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
   testWidgets('Backspace on the timeline takes the picked thing out; undo brings it back', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final ring = m.add('solid', 'ring'), cube = m.add('solid', 'cube');
