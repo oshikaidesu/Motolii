@@ -153,6 +153,7 @@ class InspHost extends StatefulWidget {
     this.onKey,
     this.onWords,
     this.onAnimateAll,
+    this.animating,
     this.flags = const {},
     this.onFlags,
     this.choices = const {},
@@ -192,6 +193,9 @@ class InspHost extends StatefulWidget {
   /// Animate all was turned on or off (the host's document may key whatever a hand changes, wherever the hand is).
   final ValueChanged<bool>? onAnimateAll;
 
+  /// The host's own Animate all (null: the inspector keeps its own): shown as it is, never reset by a new kind.
+  final bool? animating;
+
   /// The on/off seats the host owns (Clip to below ...), and a change of them told to it. false: the host did not
   /// take it (nothing is behind that seat), and the seat goes back.
   final Map<String, bool> flags;
@@ -228,7 +232,11 @@ class _InspHostState extends State<InspHost> {
     _seenFlags
       ..clear()
       ..addAll(d.b);
-    widget.onAnimateAll?.call(_animating = d.animateAll); // (a new document of the inspector begins with it off: the host is told)
+    if (widget.animating case final on?) {
+      d.animateAll = _animating = on;   // (the host's: the inspector shows it)
+    } else {
+      widget.onAnimateAll?.call(_animating = d.animateAll); // (a new document of the inspector begins with it off: the host is told)
+    }
     return d..addListener(_r);
   }
 
@@ -323,6 +331,9 @@ class _InspHostState extends State<InspHost> {
         doc.keys.addAll(widget.keyMarks);
         _seenKeys.addAll(widget.keyMarks);
       }
+    }
+    if (widget.animating case final on? when on != _animating) {
+      doc.animateAll = _animating = on;
     }
     doc.title = widget.title;
     doc.choices

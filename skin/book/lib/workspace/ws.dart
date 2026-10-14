@@ -277,6 +277,13 @@ class Ws extends ChangeNotifier {
     return List.unmodifiable(_fx[id] ?? const <String>[]);
   }
 
+  /// Joined: whether every change a hand makes is keyed (the top bar's Animate, the inspector's Animate all: one truth, the inside's).
+  bool get animating => _inside?.keyingNow ?? false;
+  set animating(bool on) {
+    _inside?.keying(on);
+    notifyListeners();
+  }
+
   /// Joined: whether a value that puts an effect on a thing is on (keyed, or said and not nought).
   static bool _on(Motolii m, int t, String name) {
     final w = m.word(t, name);

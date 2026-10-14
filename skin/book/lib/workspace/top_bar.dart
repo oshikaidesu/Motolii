@@ -49,7 +49,13 @@ class _WsTopBarState extends State<WsTopBar> {
           const SizedBox(width: 4),
           _Chip(ws.timecode(Ws.duration)),
           const Spacer(),
-          _Modes(index: _mode, onPick: (i) => setState(() => _mode = i)),
+          // (joined: Edit and Animate are whether every change is keyed, the inside's one truth; Export writes the work area as a film, lit while it is written)
+          ws.inside == null
+              ? _Modes(index: _mode, onPick: (i) => setState(() => _mode = i))
+              : _Modes(
+                  index: (ws.notice ?? '').startsWith('Writing') ? 2 : (ws.animating ? 1 : 0),
+                  onPick: (i) => i == 2 ? ws.onRender?.call() : ws.animating = i == 1,
+                ),
           const Spacer(),
           const _ShadeSwitch(),
           const SizedBox(width: 10),

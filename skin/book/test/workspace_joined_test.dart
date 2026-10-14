@@ -739,6 +739,26 @@ void main() {
     await _close(t);
   }, skip: !_built);
 
+  testWidgets('Edit and Animate are one truth with the inspector\'s Animate all (the inside\'s keying); a new kind picked keeps it', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    final rect = m.add('shape', 'rect'), cube = m.add('solid', 'cube');
+    ws
+      ..reread()
+      ..select('$rect');
+    await t.pumpAndSettle();
+    await t.tap(find.text('Animate'));
+    await t.pumpAndSettle();
+    expect(m.keyingNow, isTrue, reason: 'Animate keys every change');
+    ws.select('$cube');
+    await t.pumpAndSettle();
+    expect(m.keyingNow, isTrue, reason: 'another kind picked does not turn it off');
+    await t.tap(find.text('Edit'));
+    await t.pumpAndSettle();
+    expect(m.keyingNow, isFalse);
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
   testWidgets('Backspace on the timeline takes the picked thing out; undo brings it back', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final ring = m.add('solid', 'ring'), cube = m.add('solid', 'cube');

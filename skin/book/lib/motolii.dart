@@ -224,6 +224,9 @@ class Motolii {
   /// is the document's only when it is let go and kept: one step.
   /// On: every value a hand changes or carries gets a key at that moment (the inspector's Animate all).
   void keying(bool on) => _keying(_m, on ? 1 : 0);
+
+  /// Whether every change a hand makes is keyed now (Animate all).
+  bool get keyingNow => _keying(_m, -1) != 0;
   bool hold(int thing) => _hold(_m, thing) != 0;
   bool carry(String by, double a, [double b = 0]) => _with([by], (s) => _carry(_m, s[0], a, b)) != 0;
   bool letGo(bool keep) => _letGo(_m, keep ? 1 : 0) != 0;

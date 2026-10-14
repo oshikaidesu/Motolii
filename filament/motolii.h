@@ -83,7 +83,7 @@ double motolii_point(Motolii* m);                                  /* points of 
    what the value is there. motolii_stay: its keys go, it stays what it is at that moment. motolii_keyed: 0 the value has no keys, 1 keys but none at that moment, 2 a key at that
    moment. motolii_moving: the names of a thing's values that take keys, with spaces between (until the next call). */
 int motolii_put(Motolii* m, int thing, const char* name, double at, double number);
-int motolii_keying(Motolii* m, int on);                            /* on: every value a hand changes or carries gets a key at that moment, and its first key leaves what it was as a key at the moment this was turned on, so it travels from there; off (as a document is opened): a value with keys is moved whole, every key by as much */
+int motolii_keying(Motolii* m, int on);                            /* on: every value a hand changes or carries gets a key at that moment, and its first key leaves what it was as a key at the moment this was turned on, so it travels from there; off (as a document is opened): a value with keys is moved whole, every key by as much; below 0: only asks. Returns whether it is on now */
 int motolii_key_here(Motolii* m, int thing, const char* name, double at);
 int motolii_stay(Motolii* m, int thing, const char* name, double at);
 /* A thing brought `places` places nearer among the things (below 0: further back). motolii_things lists them in the
