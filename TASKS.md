@@ -57,6 +57,7 @@
   まだ：舞台の外の物を運んで戻せない、大きさの札で場所がそのまま（題字が切れる）、舞台の下の帯の「S 100%」、Render が無言、文字の Size・Alignment、新しい空の文書を作る入口、鎖を外した Scale（直したつもりで窓では未確認）。
 - **的②を窓だけで組んだ**（2026-10-14、私が裏から窓を触って）：メニューで新しい文書 → Media 棚の猫3本を Place（置いただけで緑が抜ける）→ 舞台で運んで離す → 1本のバーを滑らせて3秒から登場 → Animate all で2秒と5秒にキー（途中は間の場所）→ Create の Solid（舞台ぴったりの板）を青く塗って行を一番下へ → メニューの Render で `filament/out/untitled_2.mp4`（1920×1080、60コマ、17.3秒、音つき）。3コマ抜いた絵：`reports/skin_run/target2_puppet_from_the_window.jpg`。字は打ってない（裏の窓に鍵盤が届かない。打つ所はテストで確かめてある）。
   その中で足した物：macOS のメニューバーに入口（File › New Document・Open・Render、Edit › Undo・Redo・Remove。見本の窓に席が無い物を、窓の見た目を変えずに置いた。裏の窓でもメニューは押せる）／Render（ボタンも）は別の走り手で書き出して、上の帯が成り行きを言う／舞台の外の物を枠で持って運び戻せる／フォルダの中身は待たずに読む（許可待ちで窓が止まらない）／Animate all を入れると舞台で運んだ時もキーになる（`motolii_keying`）／Solid は舞台ぴったりの板。
+- **的③の芯も窓だけで組めた**（`reports/skin_run/target3_start_from_the_window.jpg`、文書 `filament/out/untitled_3.motolii`）：新しい文書 → Solid（舞台ぴったりの板）→ Rectangle を青く塗って大きく・左へ → Media 棚の Project › out › models › saturn_v の glb を Place → 淡い色で Fill → 大きく・傾ける → 四角の上へ運ぶ → インスペクタの Clip to below を On。ロケットが四角の窓の中だけに見える。足した物：新しい文書でも Project に「文書の居るフォルダ」が出る（素材まで2押し）。
 - 開き方：`skin/book` で Flutter（`~/rust_ae/Motolii/.tools/flutter/bin/flutter`）の `build macos --debug --dart-define=LAB_ROUTE=/?path=workspace/workspace/live`、できた `lab_book.app` を開く。文書は `filament/out/skin.motolii`。
 
 作る的：①`edit_v5` を窓だけで作り直す ②猫ミームの人形劇 ③青いロケットのコラージュ（`research_notes/refs/G_rocket_collage_blue.jpg`）。

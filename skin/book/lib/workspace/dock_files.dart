@@ -204,7 +204,7 @@ List<FileNode> _rootsOf(DockCtx c) {
       'Project',
       DockG.folder,
       kids: [
-        for (final d in {for (final f in files) _dir(f)}) FileNode(d, _base(d), DockG.folder),
+        for (final d in {?c.ws.documentFolder, for (final f in files) _dir(f)}) FileNode(d, _base(d), DockG.folder), // (the document's own folder first: a new document is one step from what lies beside it)
         for (final f in files)
           if (_glyphOf(f) case final g?) FileNode(f, _base(f), g),
       ],
@@ -272,6 +272,7 @@ String _kindOf(FileNode n) => switch (n.g) {
   DockG.light => 'HDR',
   DockG.audio => 'Audio',
   DockG.font => 'Fonts',
+  DockG.shape => '3D',
   _ => 'Docs',
 };
 

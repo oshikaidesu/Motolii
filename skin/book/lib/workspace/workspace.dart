@@ -128,6 +128,7 @@ class _WorkspaceState extends State<Workspace> {
     if (id >= 0) _ws.stageTexture = id;
     _ws
       ..document = doc.split('/').last
+      ..documentFolder = File(doc).parent.path
       ..notice = null
       ..onRender = _render
       ..onSize = (wide, high) {

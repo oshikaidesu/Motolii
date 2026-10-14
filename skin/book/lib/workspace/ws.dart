@@ -110,6 +110,7 @@ class Ws extends ChangeNotifier {
 
   /// Joined: the document's name, and how the window is told to open it again at another size (the host does it).
   String? document;
+  String? documentFolder; // (where the document's file is: the dock offers it, so a new document is one step from its footage)
   void Function(int wide, int high)? onSize;
 
   /// Joined: how the document is written as a film (the host does it), and what the window has to say about the
