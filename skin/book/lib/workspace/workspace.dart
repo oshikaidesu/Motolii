@@ -445,6 +445,7 @@ Map<String, double> wsTransform(Ws ws, String? id) {
     return {
       for (final s in _seats) s.$1: r1(s.$3(m.value(t, s.$2, at) ?? (s.$2 == 'opacity' ? 1 : 0), WsArt.comp, p)), // (a thing that has no opacity is all there)
       if (m.value(t, 'wide', 0) case final wide?) 'scale.x': r1((m.value(t, 'size', at) ?? 1) * wide * 100), // (a flat shape may be wider than it is high: its scale x)
+      'depth': r1(m.frame(t)?[7] ?? 0), // (how deep it is in points of the picture: a flat thing is Flat)
     };
   }
   final b = WsArt.boxOf(ArtScene.of(ws, camera: true), id);
@@ -476,6 +477,7 @@ void _write(Ws ws, String? id, Map<String, double> changed, {required bool live}
   for (final e in changed.entries) {
     final to = shaped && e.key.startsWith('scale.') ? null : _asDocument(ws, e.key, e.value);
     if (to != null && !m.carry(to.$1, to.$2)) why ??= m.trouble;
+    if (to == null && !(shaped && e.key.startsWith('scale.'))) why ??= 'the document has no ${e.key}: '; // (a seat the document has no value for says so, rather than keep the number)
   }
   if (live) {
     if (ws.playing) ws.playing = false; // (a hand on a value stops the play: what is changed is changed at one moment)

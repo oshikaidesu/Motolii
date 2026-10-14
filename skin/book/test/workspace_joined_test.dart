@@ -915,6 +915,28 @@ void main() {
     await _close(t);
   }, skip: !_built);
 
+  testWidgets('Depth says how deep a thing is (a flat one is Flat, a solid its depth); a seat the document has no value for says so', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    final a = m.add('shape', 'rect'), cube = m.add('solid', 'cube');
+    ws
+      ..reread()
+      ..select('$a');
+    await t.pumpAndSettle();
+    final row = find.byWidgetPredicate((w) => w is NumField && w.id == 'depth');
+    String shown() => [for (final e in find.descendant(of: row, matching: find.byType(RichText)).evaluate()) (e.widget as RichText).text.toPlainText()].last;
+    expect(shown(), 'Flat');
+    await t.ensureVisible(row);
+    await t.drag(row, const Offset(60, 0));
+    await t.pumpAndSettle();
+    expect(ws.notice, startsWith('Not taken: the document has no depth'));
+    expect(shown(), 'Flat', reason: 'the number goes back to the document\'s');
+    ws.select('$cube');
+    await t.pumpAndSettle();
+    expect(shown(), startsWith('${m.frame(cube)![7].round()}'), reason: 'a solid: how deep it is');
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
   testWidgets('Backspace on the timeline takes the picked thing out; undo brings it back', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final ring = m.add('solid', 'ring'), cube = m.add('solid', 'cube');
