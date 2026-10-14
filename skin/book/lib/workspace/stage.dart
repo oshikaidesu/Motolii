@@ -86,7 +86,7 @@ class _StageState extends State<_Stage> {
                   child: Stack(
                     fit: StackFit.expand,
                     children: [
-                      StageView(scene: scene, selected: ws.selected, zoom: _zoom, grid: _grid, safe: _safe, cursor: _cursor, onPoke: _focus.requestFocus, texture: ws.stageTexture, make: const [null, null, 'rect', 'circle', 'line', 'text'][_tool]), // (joined: the tool in hand draws a thing of the document)
+                      StageView(scene: scene, selected: ws.selected, zoom: _zoom, grid: _grid, safe: _safe, cursor: _cursor, onPoke: _focus.requestFocus, texture: ws.stageTexture, make: const [null, null, 'rect', 'circle', 'line', 'text'][_tool], axis: _tool == 1 ? _opts['move.axis'] ?? 0 : 0, fromCentre: (_opts['ell.from'] ?? 0) == 1), // (joined: the tool in hand draws a thing of the document)
                       if (ws.trial != null) const Positioned(bottom: 44, left: 0, right: 0, child: Center(child: StageTrialBar())),
                     ],
                   ),
@@ -94,7 +94,7 @@ class _StageState extends State<_Stage> {
               ],
             ),
           ),
-          _OptionsStrip(tool: _tool, opts: _opts, onOpt: (k, v) => setState(() => _opts[k] = v), scene: scene, layer: ws.layer),
+          _OptionsStrip(tool: _tool, opts: _opts, onOpt: (k, v) => setState(() => _opts[k] = v), scene: scene, layer: ws.layer, ws: ws),
         ],
       ),
     );
@@ -240,7 +240,7 @@ class _ToolColumn extends StatelessWidget {
                 _ToolButton(key: ValueKey('ws-tool-$i'), glyph: _tools[i].$1, on: i == active, onTap: () => onChanged(i)),
               ],
               Container(width: 20, height: 1, margin: const EdgeInsets.symmetric(vertical: 8), color: WsT.line),
-              const _Swatches(),
+              const _Swatches(),   // (joined: the picked thing's fill and stroke, or the inks a drawn thing gets)
             ],
           ),
         ),
@@ -271,7 +271,10 @@ class _ToolButton extends StatelessWidget {
 class _Swatches extends StatelessWidget {
   const _Swatches();
   @override
-  Widget build(BuildContext context) => SizedBox(
+  Widget build(BuildContext context) {
+    final ws = WsScope.of(context), p = ws.inside == null ? null : _paintOf(ws);
+    final fill = ws.inside == null ? ArtInk.orange : p?.fill ?? WsT.body, stroke = ws.inside == null ? ArtInk.cream : p?.stroke ?? WsT.line;
+    return SizedBox(
     width: 26,
     height: 26,
     child: Stack(
@@ -285,7 +288,7 @@ class _Swatches extends StatelessWidget {
             decoration: BoxDecoration(
               color: WsT.body,
               borderRadius: BorderRadius.circular(WsT.chipRadius),
-              border: Border.all(color: ArtInk.cream, width: 3),
+              border: Border.all(color: stroke, width: 3),
             ),
           ),
         ),
@@ -293,7 +296,7 @@ class _Swatches extends StatelessWidget {
           width: 16,
           height: 16,
           decoration: BoxDecoration(
-            color: ArtInk.orange,
+            color: fill,
             borderRadius: BorderRadius.circular(WsT.chipRadius),
             border: Border.all(color: WsT.body),
           ),
@@ -301,12 +304,33 @@ class _Swatches extends StatelessWidget {
       ],
     ),
   );
+  }
+}
+
+/// Joined: a colour of the document as Flutter's (six digits; a ramp by its first); null: none.
+Color? _colourOf(String word) => word.split(' ').first.length == 6 ? (int.tryParse(word.split(' ').first, radix: 16) == null ? null : Color(0xFF000000 | int.parse(word.split(' ').first, radix: 16))) : null;
+
+/// Joined: what the picked thing is painted with and how it is set (or, nothing picked, the inks a drawn thing gets).
+({Color? fill, Color? stroke, String width, String round, String font, String size, int align}) _paintOf(Ws ws) {
+  final m = ws.inside!, t = int.tryParse(ws.selected ?? '');
+  if (t == null) return (fill: _colourOf(ws.ink), stroke: _colourOf(ws.edge), width: ws.edge.isEmpty ? 'None' : '6 px', round: '0%', font: '—', size: '—', align: 0);
+  final w = m.value(t, 'stroke_width', 0), r = m.value(t, 'round', 0), text = m.word(t, 'kind') == 'text';
+  return (
+    fill: _colourOf(m.word(t, 'fill')),
+    stroke: _colourOf(m.word(t, 'stroke')),
+    width: m.word(t, 'stroke').isEmpty ? 'None' : '${(w ?? 0).round()} px',
+    round: '${((r ?? 0) * 200).round()}%', // (of the shorter side's half)
+    font: text ? m.word(t, 'file').split('/').last.replaceFirst(RegExp(r'\.ttf$'), '') : '—',
+    size: text ? '${((m.value(t, 'size', ws.frame / Ws.fps) ?? 1) * m.point).round()} px' : '—',
+    align: ((m.value(t, 'align', 0) ?? 0) * 2).round().clamp(0, 2),
+  );
 }
 
 // ---- tool options strip ------------------------------------------------------------------------------------------------
 
 class _OptionsStrip extends StatelessWidget {
-  const _OptionsStrip({required this.tool, required this.opts, required this.onOpt, required this.scene, required this.layer});
+  const _OptionsStrip({required this.tool, required this.opts, required this.onOpt, required this.scene, required this.layer, required this.ws});
+  final Ws ws;
   final int tool;
   final Map<String, int> opts;
   final void Function(String, int) onOpt;
@@ -319,7 +343,34 @@ class _OptionsStrip extends StatelessWidget {
     return _Toggle(label: label, on: on, glyph: glyph, icon: glyph == null ? _Icon.safe : null, onTap: () => onOpt(key, on ? 0 : 1));
   }
 
-  List<Widget> _items() => switch (tool) {
+  List<Widget> _items() {
+    final p = ws.inside == null ? null : _paintOf(ws);
+    if (p != null) return _joined(ws, p);
+    return _sample();
+  }
+
+  /// Joined: the tool's own settings (how it draws or carries), and the picked thing's values as the document has them.
+  List<Widget> _joined(Ws ws, ({Color? fill, Color? stroke, String width, String round, String font, String size, int align}) p) => switch (tool) {
+    0 => [_seg('sel.level', const ['Layer', 'Group']), _flag('sel.snap', 'Snap', initial: true), _flag('sel.pivot', 'Pivots')],
+    1 => [_seg('move.axis', const ['Free', 'X', 'Y']), _flag('move.snap', 'Snap', initial: true)],
+    2 => [_Field('Fill', swatch: p.fill ?? WsT.body), _Field('Stroke', value: p.width), _Field('Radius', value: p.round), _seg('rect.mode', const ['Shape', 'Mask'])],
+    3 => [_Field('Fill', swatch: p.fill ?? WsT.body), _Field('Stroke', value: p.width), _seg('ell.from', const ['Corner', 'Centre'])],
+    4 => [_seg('pen.mode', const ['Path', 'Mask']), _flag('pen.close', 'Close path', initial: true)],
+    _ => [
+      _Field('Font', value: p.font),
+      _Field('Size', value: p.size),
+      _Seg(
+        items: const ['L', 'C', 'R'],
+        index: p.align,
+        onChanged: (i) { // (the picked text's lines laid so: the document's align)
+          final t = int.tryParse(ws.selected ?? '');
+          if (t != null && ws.inside!.set(t, 'align', i / 2)) ws.reread();
+        },
+      ),
+    ],
+  };
+
+  List<Widget> _sample() => switch (tool) {
     0 => [
       _seg('sel.level', const ['Layer', 'Group']),
       _flag('sel.snap', 'Snap', initial: true),

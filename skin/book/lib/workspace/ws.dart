@@ -118,6 +118,9 @@ class Ws extends ChangeNotifier {
   /// Joined: how the document is written as a film (the host does it), and what the window has to say about the
   /// document just now (it is being written, where it was written, why something was not done); null: nothing.
   VoidCallback? onRender;
+  /// Joined: the inks the drawing tools give a new thing (a fill word, a stroke colour; '': the document's own).
+  String ink = '', edge = '';
+
   String? _notice;
   String? get notice => _notice;
   set notice(String? said) {

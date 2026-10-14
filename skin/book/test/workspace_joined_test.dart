@@ -797,6 +797,41 @@ void main() {
     await _close(t);
   }, skip: !_built);
 
+  testWidgets('the inks and the strip mean the document: a colour filled with nothing picked is what is drawn next; the Move tool along X keeps y', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    ws
+      ..reread()
+      ..select(null)
+      ..shelf = 'Colors';
+    await t.pumpAndSettle();
+    await t.enterText(find.descendant(of: find.byType(DockSearch), matching: find.byType(EditableText)), 'gradient');
+    await t.pumpAndSettle();
+    final tile = find.byWidgetPredicate((w) => w.runtimeType.toString() == '_Grad').first;
+    await t.ensureVisible(tile);
+    await t.tap(tile);
+    await t.pumpAndSettle();
+    await t.tap(find.descendant(of: find.byType(DockFooter), matching: find.text('Fill')));
+    await t.pumpAndSettle();
+    expect(ws.ink, 'b3c66b 4781e5', reason: 'nothing picked: the ink');
+    final stage = t.getRect(find.byKey(const ValueKey('ws-stage-comp')));
+    await t.tap(find.byKey(const ValueKey('ws-tool-2')));
+    await t.pumpAndSettle();
+    await t.dragFrom(stage.center, Offset(stage.width * .1, stage.height * .1));
+    await t.pumpAndSettle();
+    final rect = int.parse(ws.selected!);
+    expect(m.word(rect, 'fill'), 'b3c66b 4781e5', reason: 'drawn in the ink');
+    await t.tap(find.byKey(const ValueKey('ws-tool-1')));
+    await t.pumpAndSettle();
+    await t.tap(find.text('X').first); // (the strip's, before the inspector's)
+    await t.pumpAndSettle();
+    final y = m.value(rect, 'y', 0);
+    await t.dragFrom(stage.center + Offset(stage.width * .05, stage.height * .05), Offset(stage.width * .1, stage.height * .1));
+    await t.pumpAndSettle();
+    expect(m.value(rect, 'y', 0), y, reason: 'carried along X only');
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
   testWidgets('Backspace on the timeline takes the picked thing out; undo brings it back', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final ring = m.add('solid', 'ring'), cube = m.add('solid', 'cube');

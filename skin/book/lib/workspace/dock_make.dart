@@ -48,8 +48,13 @@ final _glass = _Make('Glass', DockG.radial, WsT.toneShape, '', 'Material · thic
 /// Joined: the picked thing's fill told to the document (a colour as six digits, or a material's name). Not done: the foot says why.
 void _fill(DockCtx c, String word) {
   final m = c.ws.inside!, t = int.tryParse(c.ws.selected ?? '');
-  final done = t != null && m.say(t, 'fill', word);
-  c.set(() => done ? c.mem.trouble.remove('fill') : c.mem.trouble['fill'] = t == null ? 'Nothing is picked' : m.trouble);
+  if (t == null) { // (nothing picked: the drawing tools' ink, what a thing drawn next is filled with)
+    c.set(() => word == 'glass' ? c.mem.trouble['fill'] = 'Glass fills a solid thing: pick one' : (c.ws.ink = word, c.mem.trouble.remove('fill')));
+    c.ws.reread();
+    return;
+  }
+  final done = m.say(t, 'fill', word);
+  c.set(() => done ? c.mem.trouble.remove('fill') : c.mem.trouble['fill'] = m.trouble);
   if (done) c.ws.reread();
 }
 

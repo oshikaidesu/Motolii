@@ -53,7 +53,13 @@ class StageView extends StatefulWidget {
     this.onPoke,
     this.texture,
     this.make,
+    this.axis = 0,
+    this.fromCentre = false,
   });
+
+  /// Joined: the Move tool's way (0 free, 1 along x only, 2 along y only), and whether an ellipse is drawn out from its middle.
+  final int axis;
+  final bool fromCentre;
 
   /// Joined: what the tool in hand makes where the hand is drawn across the stage (rect, circle, line, text; null:
   /// the hand takes hold of things).
@@ -147,11 +153,14 @@ class _StageViewState extends State<StageView> {
     setState(() {});
     if (from == null || m == null || kind == null) return;
     final a = v.toComp(from), b = v.toComp(to), p = m.point, c = WsArt.comp;
-    final mid = (a + b) / 2, d = b - a, tiny = d.distance < 6 / v.s;
+    final centred = kind == 'circle' && widget.fromCentre; // (drawn out from its middle: twice as large about where the hand came down)
+    final mid = centred ? a : (a + b) / 2, d = centred ? (b - a) * 2 : b - a, tiny = d.distance < 6 / v.s;
     final x = ((kind == 'text' || tiny ? a.dx : mid.dx) - c.width / 2) / p, y = (c.height / 2 - (kind == 'text' || tiny ? a.dy : mid.dy)) / p;
     final made = m.together(() {
       final t = m.add(kind == 'text' ? '' : 'shape', kind == 'text' ? '/System/Library/Fonts/Supplemental/Arial Unicode.ttf' : kind); // (a text in the font the Create shelf's Text has)
       if (t == 0 || !m.set(t, 'x', x) || !m.set(t, 'y', y)) return 0;
+      if (ws.ink.isNotEmpty && !m.say(t, 'fill', ws.ink)) return 0; // (the drawing inks)
+      if (ws.edge.isNotEmpty && kind != 'line' && !(m.say(t, 'stroke', ws.edge) && m.set(t, 'stroke_width', 6))) return 0;
       if (tiny || kind == 'text') return t;
       final ok = switch (kind) {
         'line' => m.set(t, 'wide', d.distance / p / .04) && m.set(t, 'rotate', math.atan2(d.dy, d.dx) * 180 / math.pi), // (a line is a twenty-fifth of a unit thick: as long as drawn, turned as drawn)
@@ -181,7 +190,8 @@ class _StageViewState extends State<StageView> {
   void _carry(_View v, Offset local) {
     final h = _held, ws = WsScope.read(context), m = ws.inside;
     if (h == null || m == null) return;
-    final by = (local - h.from) / v.s; // (screen px -> points of the picture)
+    final all = (local - h.from) / v.s; // (screen px -> points of the picture)
+    final by = switch (widget.axis) { 1 => Offset(all.dx, 0), 2 => Offset(0, all.dy), _ => all }; // (the Move tool's way)
     m.carry('place', by.dx, by.dy);
     _held = (from: h.from, moved: true);
     ws.shown();
@@ -221,7 +231,7 @@ class _StageViewState extends State<StageView> {
             behavior: HitTestBehavior.opaque,
             onTapUp: (d) {
               widget.onPoke?.call();
-              if (widget.make != null && WsScope.read(context).inside != null) return _draw(v, (_drawFrom = d.localPosition)!); // (only come down: one as it comes, there)
+              if (widget.make != null && WsScope.read(context).inside != null) return _draw(v, _drawFrom = d.localPosition); // (only come down: one as it comes, there)
               WsScope.read(context).select(_hit(v, d.localPosition));
             },
             dragStartBehavior: DragStartBehavior.down, // (a thing is held where the hand came down, not where it had got to when the drag was known for one)
