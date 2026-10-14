@@ -114,13 +114,18 @@ static const DocValue doc_values[] = {
     //  ends and corners, and dashes along it so long, with gaps as long, begun so far along)
     {"letter_spacing", "text", 0, 10, false, nullptr}, {"line_spacing", "text", 0, 10, false, nullptr}, {"italic", "text", 0, 0.5, false, nullptr},
     {"cap", "shape", 0, 0, false, "butt round square"}, {"join", "shape", 0, 0, false, "miter round bevel"},
-    {"dash", "shape", 0, 1000, false, nullptr}, {"dash_offset", "shape", -1e4, 1e4, false, nullptr}};
+    {"dash", "shape", 0, 1000, false, nullptr}, {"dash_offset", "shape", -1e4, 1e4, false, nullptr},
+    // (Filament's own surface of a solid in a colour: how metal, how rough, how much it reflects, a clear coat over it
+    //  and how rough that is, and how much it lights itself: 1 its colour itself on the picture, more brighter still)
+    {"metallic", "solid", 0, 1, false, nullptr}, {"roughness", "solid", 0, 1, false, nullptr}, {"reflectance", "solid", 0, 1, false, nullptr},
+    {"clear_coat", "solid", 0, 1, false, nullptr}, {"clear_coat_roughness", "solid", 0, 1, false, nullptr}, {"emissive", "solid", 0, 20, false, nullptr}};
 // The cards a maker sees a thing's values on, besides where it is and its fill: a title and the values on it, in the
 // order shown (a thing is shown those of them its kind has). A value the window has no other seat for goes here.
 struct DocCard { const char* title; const char* names; };
 static const DocCard doc_cards[] = {
     {"Type", "letter_spacing line_spacing italic"},
     {"Line", "cap join dash dash_offset"},
+    {"Surface", "metallic roughness reflectance clear_coat clear_coat_roughness emissive"},
 };
 static bool doc_among(const std::string& words, const std::string& one) { return (" " + words + " ").find(" " + one + " ") != std::string::npos; }
 
@@ -440,7 +445,7 @@ static void doc_moment(Doc& d, double now) {
 static bool doc_match(Doc& d) {
     Stage& s = *d.stage;
     std::map<int, std::string> told;   // every thing of the document, and all that its making goes by
-    doc_rows(d, sqlite3_mprintf("select thing, group_concat(name || '=' || value, ' ') from (select * from fact where thing > 0 and name in ('kind','file','shape','blend','keyed','space','begin','duration','speed','text','fill','wide','points','inner','round','stroke','stroke_width','align','blur','shadow','shadow_distance','shadow_angle','shadow_blur','shadow_opacity','glow','glow_blur','glow_opacity','copies','tint','tint_black','tint_white','tritone','tritone_shadow','tritone_midtone','tritone_highlight','letter_spacing','line_spacing','italic','cap','join','dash','dash_offset') order by thing, name) group by thing"),
+    doc_rows(d, sqlite3_mprintf("select thing, group_concat(name || '=' || value, ' ') from (select * from fact where thing > 0 and name in ('kind','file','shape','blend','keyed','space','begin','duration','speed','text','fill','wide','points','inner','round','stroke','stroke_width','align','blur','shadow','shadow_distance','shadow_angle','shadow_blur','shadow_opacity','glow','glow_blur','glow_opacity','copies','tint','tint_black','tint_white','tritone','tritone_shadow','tritone_midtone','tritone_highlight','letter_spacing','line_spacing','italic','cap','join','dash','dash_offset','metallic','roughness','reflectance','clear_coat','clear_coat_roughness','emissive') order by thing, name) group by thing"),
              [&](sqlite3_stmt* row) { told[sqlite3_column_int(row, 0)] = (const char*)sqlite3_column_text(row, 1); });
     for (auto it = d.shown.begin(); it != d.shown.end();) {
         const auto still = told.find(it->first);
@@ -547,16 +552,18 @@ static bool doc_match(Doc& d) {
             }
         } else if (kind == "solid") {   // (one of the kit's shapes, or a file; its fill is its surface: a colour, or the material glass)
             const bool glass = fill == "glass";
+            const Surface surface{(float)doc_number(d, thing, "metallic", 0, 0.08), (float)doc_number(d, thing, "roughness", 0, 0.6), (float)doc_number(d, thing, "reflectance", 0, 0.5),
+                                  (float)doc_number(d, thing, "clear_coat", 0, 0), (float)doc_number(d, thing, "clear_coat_roughness", 0, 0), (float)doc_number(d, thing, "emissive", 0, 0)};
             if (!fill.empty() && !glass && (rgb < 0 || ramp.size() > 1)) why = "a solid's fill is six digits, as ff3366, or glass";
             else if (!shape.empty()) {
                 made.shape = shape == "gem" ? gem(0.5f) : shape == "cube" ? cube(0.1f) : torus(0.37f, 0.13f);
                 MaterialInstance* look = glass ? thick_glass(s, made.shape, {mat4f{}}) : add(s, made.shape, "floor_lit.filamat");
                 if (!look) made.shape = nullptr;
-                else if (!glass) plain(look, fill.empty() ? float3{0xd9, 0xd2, 0xc3} / 255.f : colour);
+                else if (!glass) plain(look, fill.empty() ? float3{0xd9, 0xd2, 0xc3} / 255.f : colour, surface);
             } else if (glass) {   // (a file's shape as glass: its triangles alone, for the kit's glass, which draws a shape three times)
                 if ((made.shape = solid_mesh(file.c_str())) && !thick_glass(s, made.shape, {mat4f{}})) made.shape = nullptr;
             }
-            else if ((made.solid = solid(s, file.c_str(), mat4f{}, 1.f)) && rgb >= 0) solid_fill(s, made.solid, colour);
+            else if ((made.solid = solid(s, file.c_str(), mat4f{}, 1.f)) && rgb >= 0) solid_fill(s, made.solid, colour, surface);
         } else why = std::string("its kind is one of: ") + doc_kinds;
         if (!made.film && !made.drawn && !made.solid && !made.shape && !made.camera) { d.trouble = why + ": the " + kind + " " + std::filesystem::path(file + shape).filename().string() + " could not be made"; all = false; continue; }
         d.shown[thing] = made;
@@ -1088,7 +1095,10 @@ static bool doc_covers(Doc& d, int thing, double now, double* box) {
     return true;
 }
 
-static double doc_usual(const char* name) { return doc_among("size speed opacity wide visible distance zoom copies copy_size blur_level letter_spacing line_spacing", name) ? 1.0 : !strcmp(name, "duration") ? -1.0 : 0.0; }
+static double doc_usual(const char* name) {
+    return doc_among("size speed opacity wide visible distance zoom copies copy_size blur_level letter_spacing line_spacing", name) ? 1.0 : !strcmp(name, "duration") ? -1.0
+         : !strcmp(name, "metallic") ? 0.08 : !strcmp(name, "roughness") ? 0.6 : !strcmp(name, "reflectance") ? 0.5 : 0.0;   // (a solid's surface as it comes)
+}
 static bool doc_value(Doc& d, int thing, const char* name, double at, double* is) { return doc_knows(d, thing, name) && (*is = doc_number(d, thing, name, at, doc_usual(name)), true); }
 // A thing held by a hand, carried, and let go: the one form of everything a hand drags (a thing on the stage, its bar
 // on the timeline, a number). What is carried shows at once and is not the document's until it is let go, and then

@@ -1083,6 +1083,13 @@ void main() {
     await t.pumpAndSettle();
     expect(m.word(rect, 'cap'), 'round', reason: m.trouble);
     expect(m.undo() && m.word(rect, 'cap').isEmpty, isTrue, reason: 'one step');
+    final cube = m.add('solid', 'cube');
+    ws
+      ..reread()
+      ..select('$cube');
+    await t.pumpAndSettle();
+    expect(find.descendant(of: find.byType(ValuesCard), matching: find.text('Surface')), findsOneWidget, reason: 'Filament\'s own surface of a solid');
+    expect(find.byWidgetPredicate((w) => w is NumField && w.id == 'v_metallic'), findsOneWidget);
     expect(t.takeException(), isNull);
     await _close(t);
   }, skip: !_built);

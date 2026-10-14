@@ -115,16 +115,23 @@ static Mesh* solid_mesh(const char* file) {
 }
 
 // A plain look in one colour (floor_lit.mat: lit by the stage's room); and every face of a file's shape given it, the
-// looks the file names set aside.
-static void plain(MaterialInstance* look, float3 colour) {
+// looks the file names set aside. Its surface, Filament's own: how metal, how rough, how much it reflects, a clear coat
+// over it (how much, how rough), and how much it lights itself (on the picture: 1 its own colour, more brighter).
+struct Surface { float metallic = 0.08f, roughness = 0.6f, reflectance = 0.5f, coat = 0.f, coatRoughness = 0.f, glow = 0.f; };
+static void plain(MaterialInstance* look, float3 colour, const Surface& is = {}) {
     look->setParameter("color", float4{Color::toLinear<ACCURATE>(sRGBColor{colour}), 1.f});
-    look->setParameter("roughness", 0.6f);
+    look->setParameter("roughness", is.roughness);
+    look->setParameter("metalOff", is.metallic - 0.08f);
+    look->setParameter("reflectanceOff", is.reflectance - 0.5f);
+    look->setParameter("clearCoat", is.coat);
+    look->setParameter("clearCoatRoughness", is.coatRoughness);
+    look->setParameter("glowing", is.glow);
 }
-static void solid_fill(Stage& s, Solid* d, float3 colour) {
+static void solid_fill(Stage& s, Solid* d, float3 colour, const Surface& is = {}) {
     Material* lit = material(s, "floor_lit.filamat");
     if (!lit) return;
     MaterialInstance* look = lit->createInstance();
-    plain(look, colour);
+    plain(look, colour, is);
     auto& faces = s.engine->getRenderableManager();
     for (size_t i = 0; i < d->made->getRenderableEntityCount(); ++i) {
         const auto one = faces.getInstance(d->made->getRenderableEntities()[i]);

@@ -4,7 +4,13 @@ material {
     specularAntiAliasing : true,
     parameters : [
         { type : float4, name : color },
-        { type : float, name : roughness }
+        { type : float, name : roughness },
+        // (Filament's own surface, each as far off the look it had before: a look not told them is as it was)
+        { type : float, name : metalOff },
+        { type : float, name : reflectanceOff },
+        { type : float, name : clearCoat },
+        { type : float, name : clearCoatRoughness },
+        { type : float, name : glowing }
     ]
 }
 
@@ -13,7 +19,10 @@ fragment {
         prepareMaterial(material);
         material.baseColor = materialParams.color;
         material.roughness = materialParams.roughness;
-        material.metallic = 0.08;
-        material.reflectance = 0.5;
+        material.metallic = 0.08 + materialParams.metalOff;
+        material.reflectance = 0.5 + materialParams.reflectanceOff;
+        material.clearCoat = materialParams.clearCoat;
+        material.clearCoatRoughness = materialParams.clearCoatRoughness;
+        material.emissive = vec4(materialParams.color.rgb * materialParams.glowing, 0.0);   // (it lights itself in its own colour, so bright on the picture: 1 its colour itself, more spills over; w 0: not by the stage's exposure, Filament's own)
     }
 }
