@@ -8,7 +8,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lab_book/motolii.dart';
 import 'package:lab_book/parts/controls.dart' show Segmented;
-import 'package:lab_book/sets/inspector/inspector_parts.dart' show AnchorCube, AnchorGeometry, OnOff, PropRow, TextGroup;
+import 'package:lab_book/sets/inspector/inspector_parts.dart' show AnchorCube, AnchorGeometry, NumField, OnOff, PropRow, TextGroup;
 import 'package:lab_book/workspace/dock_fonts.dart';
 import 'package:lab_book/workspace/dock_parts.dart' show DockSearch;
 import 'package:lab_book/workspace/timeline.dart';
@@ -427,6 +427,21 @@ void main() {
     expect(wsTransform(ws, '$rect')['stroke.w'], 6, reason: 'the width is shown as the document says it');
     expect(m.say(rect, 'stroke', ''), isTrue, reason: 'None: no edge');
     expect(m.value(cube, 'stroke_width', 0), isNull, reason: 'a solid thing has no edge to say');
+    // (a value the thing has not, changed in the inspector: the top bar says why it was not taken)
+    ws.select('$cube');
+    await t.pumpAndSettle();
+    final op = find.byWidgetPredicate((w) => w is PropRow && w.id == 'op');
+    if (op.evaluate().isNotEmpty) {
+      await t.ensureVisible(op.first);
+      await t.pumpAndSettle();
+    }
+    final field = find.byWidgetPredicate((w) => w is NumField && w.id == 'op').first;
+    await t.ensureVisible(field);
+    await t.pumpAndSettle();
+    await t.drag(field, const Offset(-60, 0));
+    await t.pumpAndSettle();
+    expect(ws.notice, 'Not taken: a solid has no opacity');
+    expect(m.set(rect, 'opacity', .5), isTrue);
     expect(m.say(rect, 'stroke', 'grey'), isFalse);
     expect(m.trouble, contains('six digits'));
     expect(t.takeException(), isNull);

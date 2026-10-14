@@ -322,10 +322,21 @@ Map<String, int> _others(Ws ws, int t) {
   };
 }
 
+/// Joined: a change the document did not take is said in the top bar, by the inside's own reason (its first clause,
+/// read as it was refused: every call of the inside forgets the last reason); the next one it takes clears it.
+void _told(Ws ws, String? why) {
+  if (why != null && why.isNotEmpty) {
+    ws.notice = 'Not taken: ${why.split(':').first}';
+  } else if (why == null && (ws.notice?.startsWith('Not taken') ?? false)) {
+    ws.notice = null;
+  }
+}
+
 bool _say(Ws ws, String? id, Map<String, String> changed) {
   final m = ws.inside!, t = int.tryParse(id ?? '');
   if (t == null) return false;
   var all = true;
+  String? why;
   m.together(() {
     for (final e in changed.entries) {
       final ok = switch (e.key) {
@@ -339,9 +350,11 @@ bool _say(Ws ws, String? id, Map<String, String> changed) {
         'stroke' => m.say(t, 'stroke', e.value == 'None' ? '' : e.value.replaceFirst('#', '').toLowerCase()), // (None: no edge)
         _ => true, // (a seat the inside has nothing behind yet: the inspector keeps its own word)
       };
+      if (!ok) why ??= m.trouble;
       all = all && ok;
     }
   });
+  _told(ws, all ? null : why ?? '');
   ws.reread();
   return all;
 }
@@ -437,14 +450,17 @@ void _write(Ws ws, String? id, Map<String, double> changed, {required bool live}
       ..carry('size', y)
       ..carry('wide', x / y);
   }
+  String? why;
   for (final e in changed.entries) {
     final to = shaped && e.key.startsWith('scale.') ? null : _asDocument(ws, e.key, e.value);
-    if (to != null) m.carry(to.$1, to.$2);
+    if (to != null && !m.carry(to.$1, to.$2)) why ??= m.trouble;
   }
   if (live) {
     if (ws.playing) ws.playing = false; // (a hand on a value stops the play: what is changed is changed at one moment)
+    if (why != null) _told(ws, why);
   } else {
-    m.letGo(true);
+    if (!m.letGo(true)) why ??= m.trouble;
+    _told(ws, why);
     ws.reread();
   }
 }
