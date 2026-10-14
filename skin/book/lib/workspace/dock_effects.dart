@@ -164,7 +164,8 @@ class _FxRow extends StatelessWidget {
             ),
             const SizedBox(width: 6),
             Expanded(
-              child: Text(f.desc, maxLines: 1, overflow: TextOverflow.ellipsis, style: T.label(dockInk(sel, Grey.g56))),
+              // (joined: who does it: ThorVG, for the six the inside has; the sample's analysis says nothing of the document)
+              child: Text(c.ws.inside == null ? f.desc : (fxValues.containsKey(f.name) ? 'ThorVG' : 'No seat yet'), maxLines: 1, overflow: TextOverflow.ellipsis, style: T.label(dockInk(sel, Grey.g56))),
             ),
             if (trying) ...[DockTag('TRY', hue: sel ? null : WsT.accent), const SizedBox(width: 2)],
             if (on) ...[DockTag('ON', hue: sel ? null : WsT.accent), const SizedBox(width: 2)],
@@ -176,6 +177,14 @@ class _FxRow extends StatelessWidget {
   }
 }
 
+/// Joined: the document's value an effect is, and what the picked thing has for it now.
+String _said(Ws ws, String name) {
+  final v = fxValues[name]?.$1, t = int.tryParse(ws.selected ?? ''), m = ws.inside!;
+  if (v == null) return 'No seat yet';
+  final now = t == null ? '' : m.word(t, v);
+  return now.isEmpty ? '$v · none on it' : '$v · $now';
+}
+
 /// The foot: the picked effect, what the analysis says about it, and Add (keeps the try-on, or adds straight away).
 class _FxFooter extends StatelessWidget {
   const _FxFooter(this.f, {required this.ws, required this.done});
@@ -185,7 +194,7 @@ class _FxFooter extends StatelessWidget {
   @override
   Widget build(BuildContext context) => DockFooter(
     title: f.name,
-    meta: [f.family.label, f.seat, f.time, f.inputs, ...f.looks].join(' · '),
+    meta: ws.inside == null ? [f.family.label, f.seat, f.time, f.inputs, ...f.looks].join(' · ') : _said(ws, f.name),
     // (joined: an effect the inside has goes on or comes off the picked thing; the others have no seat yet)
     action: ws.inside != null && done ? 'Remove' : 'Add',
     done: ws.inside != null ? !fxValues.containsKey(f.name) || ws.selected == null : done,

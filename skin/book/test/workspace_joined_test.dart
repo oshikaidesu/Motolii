@@ -593,7 +593,7 @@ void main() {
     expect([m.keyMoments(rect, 'trim'), m.value(rect, 'trim', 0)], [isEmpty, 0], reason: 'taken off with its keys');
 
     await pick('Twirl');
-    expect(find.text('No seat yet'), findsOneWidget);
+    expect(find.descendant(of: find.byType(DockFooter), matching: find.text('No seat yet')), findsNWidgets(2), reason: 'what it is to the document, and its button');
     expect(t.takeException(), isNull);
     await _close(t);
   }, skip: !_built);
