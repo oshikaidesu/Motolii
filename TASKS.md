@@ -114,6 +114,8 @@
 - 第三者の採点（4回目）：10点中5.5。12本がぴったりループ、1000写しで 7.7 ms/枚。弱い：棒グラフ3、生成ポスター1、Plexus の点が画面内で消えて出る（67回）、途中の時刻で作るとループしない、Spiral が上下にはみ出す。
 - 直した（4回目の後）：レシピの物は 0 秒から、キーは書類の時刻（どこで作ってもループ）。Plexus の折り返しを画面の外に。Helix の横木は点の下（order behind）。connect は在る他の物だけ（parent と同じく断る）。Spiral・Field dots は画面の中。Burst も一周。Iris は丸、Dot wave は大きく動く。書き出す映画は1秒ごとに鍵の絵（-g 60）。絵：reports/skin_run/after_judge4.jpg。
 - 足した（止める前）：tall（足元を残して縦に伸ばす、キー可）と copy_tall（写しごとの高さの数の並び）。レシピ Bars（8本が順に伸びて戻る）。絵：reports/skin_run/recipe_bars.jpg。ループはここでユーザーが止めた（2026-10-14）。
+- z は済んだ（2026-10-14 夜、b051327・5132ea7）：写しの奥行き（copy_z・wave_z・scatter_z・copy_rotate_x/y）、場は玉（field_z）、写しは遠い順、つなぐ線は奥行きにも真っすぐ、Helix は本物の3D（ロケットが中を通る：reports/skin_run/helix_rocket.mp4）、Tunnel と Plexus も3D、形の塗りに none。写し1000個で 6.6 ms。
+- 夜間（ユーザー：「地味なのはfilamentの引き出し方」）：Filament にあって、まだ値になっていない物を値にして札に出す。作り直しは無し。候補：材質（布のつや sheen、筋 anisotropy、肌の透け subsurface、厚みの透過 transmission）、画面（隅の影 SSAO、床の映り込み SSR、触れた所の影 contact shadows）、写しが instancing を使えているかの確認。合格線：それぞれ「その値を変えると絵が変わる」を前後の絵で見せ、60コマ毎秒のまま。札は Ableton の作法（reports/skin_run/dense_ui_research.md：名前は8文字くらい、単位は小さく、説明文は書かない）。
 - 次（ユーザー、2026-10-14 夜）：(1) 写しに z（doc_place に copy_z・wave_z・x/y 軸まわりの回り）で本物の3Dの Helix。ThorVG の z はもうある。先に flat.mat の depthWrite と「平たい物は深さを読まない」のどちらが効いてるか確かめる。(2) Filament の力を引き出す（作り直さない）：sheen・anisotropy・subsurface・厚みのある透過、SSAO・SSR・接触影、写しの instancing の確認。(3) カードの種類を増やす：物を選ぶ欄（connect・parent）、数の並びの欄（copy_tall）など。(4) 夜向き：窓の60fpsを Flutter の FrameTiming で数える。
 - 残り（4回目から）：生成ポスター（升目の分割、写しごとに形を乱数で）、行ごとの波の数を同じ長さで変える、split の文字を各自の真ん中で大きさを変える、空の text でフォント名が出る。
 - 残り（3回目から）：Helix の大きさが高さでなく奥行きに沿う、迷路（写しごとに 0/90 度を乱数で選ぶ道具が無い）、データ、生成ポスター。
