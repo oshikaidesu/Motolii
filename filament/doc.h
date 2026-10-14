@@ -104,6 +104,7 @@ static const DocValue doc_values[] = {
     {"blend", "film picture text shape", 0, 0, false, "normal add multiply screen"}, {"file", "film picture solid text", 0, 0, false, ""}, {"shape", "solid", 0, 0, false, doc_shapes},
     {"text", "text", 0, 0, false, ""}, {"fill", "text solid shape light", 0, 0, false, ""},
     {"marker", "picture", 0, 0, false, ""},   // (an After Effects file: which of its named stretches it plays, over and over; all: the whole of it)
+    {"name", doc_kinds, 0, 0, false, ""},   // (what it is called where things are listed; not said: by what it is)
     {"animation", "solid", 0, 0, false, ""},   // (a 3D file: which of its own movements it plays, round and round, at its speed, from when it comes on)
     // (a light, Filament's own: made a sun, a point or a spot (its file); how strong, 1 as bright as the stage's own
     //  light; how far a point or spot reaches, in units of the stage; how wide a spot's cone is, in degrees; whether
@@ -1265,6 +1266,10 @@ static const DocRecipe doc_recipes[] = {
      "say text MOTOLII\nsay fill ffffff\nset size 0.4\nsay split letters\nset wave_y 0.2\nset wave_phase 1\nset wave_rotate 8\nsay copy_fill ff3366 ffd166 1b2fd8"},
     {"Field dots", "shape", "circle", "a grid of dots swelling where a round field passes over them",
      "say fill ffffff\nset size 0.06\nset x -2.9\nset y 1.6\nset copies 336\nset copy_columns 24\nset copy_x 4\nset copy_y -4\nset field_radius 1\nset field_size 2.5\nkey field_x 0 -3\nkey field_x 3 3\nsay copy_fill ffffff ff3366"},
+    {"Line maze", "shape", "line", "a grid of short lines turning where a round field passes over them",
+     "say fill ffffff\nset size 0.25\nset x -2.9\nset y 1.6\nset copies 192\nset copy_columns 16\nset copy_x 1.5\nset copy_y -1.5\nset field_radius 1.4\nset field_rotate 90\nkey field_x 0 -3\nkey field_x 3 3\nsay copy_fill ffffff 3366ff"},
+    {"Rings", "shape", "circle", "rings within rings breathing one after another",
+     "say fill 000000\nsay stroke ffd166\nset stroke_width 5\nset size 2.2\nset copies 14\nset copy_size 0.86\nset wave_size 0.06\nset wave_phase 1\nset wave_speed 0.7"},
     {"Burst", "shape", "line", "lines from a centre growing out one after another",
      "say fill ffffff\nset anchor_x -1\nset copies 24\nset copy_rotate 15\nkey size 0 0.001\nkey size 0.5 0.6\nset stagger 0.8\nsay copy_fill ffffff ffd166"},
 };
@@ -1280,6 +1285,7 @@ static int doc_make(Doc& d, const char* name) {
     if (!r) return d.trouble = std::string("there is no recipe ") + name, 0;
     doc_act(d);
     const int thing = doc_add(d, r->kind, r->file);
+    if (thing) doc_say(d, thing, "name", r->name);   // (listed by the recipe's name)
     std::istringstream lines(r->lines);
     for (std::string line; thing && std::getline(lines, line);) {
         std::istringstream w(line);
@@ -1319,6 +1325,7 @@ static std::string doc_words(Doc& d, int thing, const char* name) {
 }
 // What a thing is called where things are listed: a text by its words, a shape by what shape it is, a file by its name.
 static std::string doc_name(Doc& d, int thing) {
+    if (const std::string said = doc_word(d, thing, "name"); !said.empty()) return said;
     if (doc_word(d, thing, "kind") == "camera") return "Camera";
     std::string is = doc_word(d, thing, "text");
     if (is.empty()) is = doc_word(d, thing, "shape");
