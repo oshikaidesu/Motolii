@@ -97,7 +97,7 @@ String propOf(String id) => RegExp(r'\.[xyz]$').hasMatch(id) ? id.substring(0, i
 
 /// A pure-Dart mock of the selected layer(s). Not the product's model; only enough to make every control really do its job.
 class Doc extends ChangeNotifier {
-  Doc(this.kind, {this.count = 1, int effects = 2}) {
+  Doc(this.kind, {this.count = 1, int effects = 2, List<Fx>? fx}) : fxDefs = fx ?? kEffects {
     void s(String id, double v) {
       this.v[id] = v;
       d[id] = v;
@@ -138,14 +138,14 @@ class Doc extends ChangeNotifier {
     s('comp.w', 1920);
     s('comp.h', 1080);
     s('comp.fps', 30);
-    for (final f in kEffects) {
+    for (final f in fxDefs) {
       for (final (i, p) in f.params.indexed) {
         paramDefaults(f.id, p).forEach(s);
         if (p.look == ParamLook.colour) s2['${f.id}_${p.id}'] = paramColour(f.decls[i]);
         if (p.look == ParamLook.choice) s2['${f.id}_${p.id}'] = p.options[p.def.round().clamp(0, p.options.length - 1)];
       }
     }
-    fxOrder.addAll(kEffects.take(effects).map((f) => f.id));
+    fxOrder.addAll(fx == null ? kEffects.take(effects).map((f) => f.id) : fx.map((f) => f.id));
     v['pos.x'] = 420.5;
     v['op'] = 62;
     v['rot.z'] = 450;
@@ -188,6 +188,9 @@ class Doc extends ChangeNotifier {
   final Map<String, List<String>> choices = {};
   final Map<String, bool> b = {};
   final List<String> fxOrder = [];
+
+  /// The effects the cards are made from: the host's, or the sample's.
+  final List<Fx> fxDefs;
   bool animateAll = false, link = true;
   /// The layer's space, kept as a word with the others so that a host is told of it (d2, d25, d3).
   Space get space => Space.values.where((s) => s.name == s2['space']).firstOrNull ?? Space.d2;

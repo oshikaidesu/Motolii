@@ -96,6 +96,10 @@ int motolii_stay(Motolii* m, int thing, const char* name, double at);
 int motolii_raise(Motolii* m, int thing, int places);
 int motolii_keyed(Motolii* m, int thing, const char* name, double at);
 const char* motolii_moving(Motolii* m, int thing);
+/* motolii_values: the names of all a thing's values, with spaces between (until the next call). motolii_range: a number
+   value's lowest and highest (0: it has no such number). */
+const char* motolii_values(Motolii* m, int thing);
+int motolii_range(Motolii* m, int thing, const char* name, double* low, double* high);
 const char* motolii_words(Motolii* m, int thing, const char* name);   /* the words a value of a thing may be, with spaces between ("": any, or it is not a word; until the next call) */
 /* One act that is several calls (a value changed and its key put): the changes made from motolii_together(m, 1) to
    motolii_together(m, 0) are one step of undo, and if one of them is refused none of them is made (0 comes back).

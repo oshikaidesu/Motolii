@@ -4,7 +4,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
-import 'package:flutter/foundation.dart' show mapEquals;
+import 'package:flutter/foundation.dart' show listEquals, mapEquals;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -143,6 +143,7 @@ class InspHost extends StatefulWidget {
     required this.kind,
     this.count = 1,
     this.effects = 2,
+    this.fx,
     this.title,
     this.onRoute,
     this.values = const {},
@@ -164,6 +165,9 @@ class InspHost extends StatefulWidget {
   final Kind kind;
   final int count, effects;
   final Widget child;
+
+  /// The effects on the layer, as the host has them (each one's card from its Params); null: the sample's first [effects].
+  final List<Fx>? fx;
 
   /// The selected layer's name, when the host knows it.
   final String? title;
@@ -213,7 +217,7 @@ class InspHost extends StatefulWidget {
 class _InspHostState extends State<InspHost> {
   late Doc doc = _make();
   Doc _make() {
-    final d = Doc(widget.kind, count: widget.count, effects: widget.effects)
+    final d = Doc(widget.kind, count: widget.count, effects: widget.effects, fx: widget.fx)
       ..title = widget.title
       ..v.addAll(widget.values)
       ..s2.addAll(widget.strs)
@@ -308,7 +312,7 @@ class _InspHostState extends State<InspHost> {
   @override
   void didUpdateWidget(InspHost o) {
     super.didUpdateWidget(o);
-    if (o.kind != widget.kind || o.count != widget.count || o.effects != widget.effects) {
+    if (o.kind != widget.kind || o.count != widget.count || o.effects != widget.effects || !listEquals(o.fx?.map((f) => f.wgsl).toList(), widget.fx?.map((f) => f.wgsl).toList())) {
       doc.dispose();
       doc = _make();
     } else {

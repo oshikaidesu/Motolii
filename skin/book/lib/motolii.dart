@@ -96,6 +96,8 @@ class Motolii {
   late final _stay = _lib.lookupFunction<Int32 Function(_P, Int32, _S, Double), int Function(_P, int, _S, double)>('motolii_stay');
   late final _keyed = _lib.lookupFunction<Int32 Function(_P, Int32, _S, Double), int Function(_P, int, _S, double)>('motolii_keyed');
   late final _moving = _lib.lookupFunction<_S Function(_P, Int32), _S Function(_P, int)>('motolii_moving');
+  late final _values = _lib.lookupFunction<_S Function(_P, Int32), _S Function(_P, int)>('motolii_values');
+  late final _range = _lib.lookupFunction<Int32 Function(_P, Int32, _S, Pointer<Double>, Pointer<Double>), int Function(_P, int, _S, Pointer<Double>, Pointer<Double>)>('motolii_range');
   late final _words = _lib.lookupFunction<_S Function(_P, Int32, _S), _S Function(_P, int, _S)>('motolii_words');
   late final _wayNames = _lib.lookupFunction<_S Function(_P), _S Function(_P)>('motolii_way_names');
   late final _wayAt = _lib.lookupFunction<Double Function(_P, _S, Double), double Function(_P, _S, double)>('motolii_way_at');
@@ -295,6 +297,19 @@ class Motolii {
 
   /// The names of a thing's values that take keys.
   List<String> moving(int thing) => _moving(_m, thing).toDartString().split(' ').where((n) => n.isNotEmpty).toList();
+
+  /// The names of all a thing's values.
+  List<String> values(int thing) => _values(_m, thing).toDartString().split(' ').where((n) => n.isNotEmpty).toList();
+
+  /// A number value's lowest and highest (null: the thing has no such number).
+  (double, double)? range(int thing, String name) {
+    final lo = malloc<Double>(), hi = malloc<Double>();
+    final ok = _with([name], (s) => _range(_m, thing, s[0], lo, hi)) != 0, r = (lo.value, hi.value);
+    malloc
+      ..free(lo)
+      ..free(hi);
+    return ok ? r : null;
+  }
 
   /// The words a value of a thing may be (a blend's): none if any word will do, or the thing has no such value.
   List<String> words(int thing, String name) => _with([name], (s) => _words(_m, thing, s[0]).toDartString()).split(' ').where((w) => w.isNotEmpty).toList();

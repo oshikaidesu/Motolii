@@ -302,7 +302,19 @@ Map<String, bool> _flags(Ws ws, String? id) {
 bool _flag(Ws ws, String? id, Map<String, bool> changed) {
   final m = ws.inside!, t = int.tryParse(id ?? '');
   if (t == null) return false;
-  final all = changed.entries.every((e) => e.key == 'clip' && m.set(t, 'clip', e.value ? 1 : 0));
+  // (a card folded or opened, its Advanced shown: how the inspector is looked at, its own, not the document's)
+  final told = {for (final e in changed.entries) if (!(e.key.endsWith('.open') || e.key.endsWith('.adv') || e.key.startsWith('fold.'))) e.key: e.value};
+  if (told.isEmpty) return true;
+  String? why;
+  for (final e in told.entries) {
+    if (e.key != 'clip') {
+      why ??= 'the document has no ${e.key.endsWith('.on') ? 'bypass' : e.key}: '; // (Ghost; an effect switched off and kept)
+    } else if (!m.set(t, 'clip', e.value ? 1 : 0)) {
+      why ??= m.trouble;
+    }
+  }
+  final all = why == null;
+  _told(ws, why);
   ws.reread();
   return all;
 }
@@ -316,6 +328,7 @@ Map<String, List<String>> _choices(Ws ws, String? id) {
     'blend': blends.isEmpty ? const ['Normal'] : [for (final w in blends) w.replaceRange(0, 1, w[0].toUpperCase())],
     'parent': ['None', ..._others(ws, t).keys],
     'camTarget': ['None', ..._others(ws, t).keys], // (a camera looks at the thing it goes with)
+    'align': _aligned, // (Justify ThorVG has not)
   };
 }
 
@@ -390,7 +403,6 @@ const _seats = <(String, String, _Across, _Across)>[
   ('rot.z', 'rotate', _minus, _minus),
   ('op', 'opacity', _hundredOut, _hundredIn),
   ('stroke.w', 'stroke_width', _same, _same),
-  ('blur_radius', 'blur', _same, _same),
   ('text.size', 'size', _pointsOut, _pointsIn), // (a text's size in points of the picture: its own size, one unit high at size 1) // (the Blur card's radius: points of the picture at size 1) // (points of the picture at size 1: the edge grows with the thing, as in After Effects)
   // (the anchor: the sample's hundredths of the box from its top left, front -50 to back 50; the document's share of
   //  half the box from its middle, up and towards the eye)
@@ -435,6 +447,44 @@ List<String> _namesOf(String prop) => {
     if (s.$1.split('.').first == prop) s.$2,
 }.toList();
 
+/// Joined: the numbers of each effect on a thing, as the inside has them: an inspector id (the effect's value, '_', the
+/// card's field) and the document's value behind it. Its own amount is the field 'amount' (blur, tint); the rest are
+/// the values named after it (shadow_distance: the shadow card's distance).
+Map<String, Map<String, String>> _fxFields(Ws ws, String? id) {
+  final m = ws.inside, t = int.tryParse(id ?? '');
+  if (m == null || t == null) return const {};
+  final has = m.values(t);
+  return {
+    for (final name in ws.fxOf(id))
+      if (fxValues[name]?.$1 case final v?)
+        v: {
+          for (final n in has)
+            if ((n == v || n.startsWith('${v}_')) && m.range(t, n) != null) '${v}_${n == v ? 'amount' : n.substring(v.length + 1)}': n,
+        },
+  };
+}
+
+/// Joined: each effect on a thing as a card, in the sample's own manner: its Params, one field a number of the
+/// document, the inside's range, what it is now as its default.
+List<Fx>? _fxCards(Ws ws, String? id) {
+  final m = ws.inside, t = int.tryParse(id ?? '');
+  if (m == null || t == null) return null;
+  final fields = _fxFields(ws, id), at = ws.frame / Ws.fps;
+  return [
+    for (final name in ws.fxOf(id))
+      if (fxValues[name]?.$1 case final v? when fields[v] != null)
+        () {
+          final mark = switch (v) { 'blur' => CardMark.blur, 'glow' => CardMark.glow, _ => CardMark.shader };
+          final params = [
+            for (final MapEntry(:key, value: n) in fields[v]!.entries)
+              if (m.range(t, n) case (final lo, final hi))
+                '  /// @range($lo, $hi) @default(${m.value(t, n, at) ?? lo})\n  ${key.substring(v.length + 1)}: f32,',
+          ];
+          return Fx(v, name, 'struct Params {\n${params.join('\n')}\n}', tone: kEffects.firstWhere((f) => f.mark == mark, orElse: () => kEffects.first).tone, mark: mark);
+        }(),
+  ];
+}
+
 /// The selected layer's transform as the stage draws it at this frame, in the Inspector's ids.
 Map<String, double> wsTransform(Ws ws, String? id) {
   if (ws.inside case final m?) {   // (joined: the document's own values, as the inspector counts them)
@@ -446,6 +496,8 @@ Map<String, double> wsTransform(Ws ws, String? id) {
       for (final s in _seats) s.$1: r1(s.$3(m.value(t, s.$2, at) ?? (s.$2 == 'opacity' ? 1 : 0), WsArt.comp, p)), // (a thing that has no opacity is all there)
       if (m.value(t, 'wide', 0) case final wide?) 'scale.x': r1((m.value(t, 'size', at) ?? 1) * wide * 100), // (a flat shape may be wider than it is high: its scale x)
       'depth': r1(m.frame(t)?[7] ?? 0), // (how deep it is in points of the picture: a flat thing is Flat)
+      for (final fields in _fxFields(ws, id).values)
+        for (final MapEntry(:key, value: n) in fields.entries) key: m.value(t, n, at) ?? 0, // (the effects' numbers, as they are)
     };
   }
   final b = WsArt.boxOf(ArtScene.of(ws, camera: true), id);
@@ -456,6 +508,11 @@ Map<String, double> wsTransform(Ws ws, String? id) {
 
 (String, double)? _asDocument(Ws ws, String id, double x) {
   final seat = _seats.where((s) => s.$1 == id).firstOrNull;
+  if (seat == null) {
+    for (final fields in _fxFields(ws, ws.selected).values) {
+      if (fields[id] case final n?) return (n, x); // (an effect's number: the document's, as it is)
+    }
+  }
   return seat == null ? null : (seat.$2, seat.$4(x, WsArt.comp, ws.inside!.point));
 }
 
@@ -528,7 +585,8 @@ class _InspectorSeat extends StatelessWidget {
         key: ValueKey(k),
         cfg: const Cfg(),
         kind: k,
-        effects: ws.inside == null ? 2 : (ws.fxOf(l?.id).contains('Gaussian Blur') ? 1 : 0), // (joined: the sample's first card, Blur, is the document's blur)
+        effects: 2,
+        fx: _fxCards(ws, l?.id), // (joined: the effects the document has on it, each a card)
         title: l?.name,
         onRoute: ws.route,
         values: wsTransform(ws, l?.id),

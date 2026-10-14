@@ -8,7 +8,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lab_book/motolii.dart';
 import 'package:lab_book/parts/controls.dart' show Segmented;
-import 'package:lab_book/sets/inspector/inspector_parts.dart' show AnchorCube, AnchorGeometry, NumField, OnOff, PropRow, Space, SpacePlate, TextGroup;
+import 'package:lab_book/sets/inspector/inspector_parts.dart' show AnchorCube, AnchorGeometry, EffectCard, NumField, OnOff, PropRow, Space, SpacePlate, TextGroup;
 import 'package:lab_book/workspace/dock_fonts.dart';
 import 'package:lab_book/workspace/dock_make.dart' show CreateShelf;
 import 'package:lab_book/workspace/desk_kit.dart' show DeskScrub;
@@ -523,13 +523,11 @@ void main() {
     final seat = find.byWidgetPredicate((w) => w is PropRow && w.id == 'align');
     await t.ensureVisible(seat);
     await t.pumpAndSettle();
-    final row = t.getRect(find.descendant(of: seat, matching: find.byType(Segmented))); // (four marks in a row: Left, Centre, Right, Justify)
-    await t.tapAt(Offset(row.left + row.width * 1.5 / 4, row.center.dy));
+    final row = t.getRect(find.descendant(of: seat, matching: find.byType(Segmented))); // (three marks in a row: Left, Centre, Right)
+    await t.tapAt(Offset(row.left + row.width * 1.5 / 3, row.center.dy));
     await t.pumpAndSettle();
     expect(m.value(text, 'align', 0), .5, reason: m.trouble);
-    await t.tapAt(Offset(row.left + row.width * 3.5 / 4, row.center.dy));
-    await t.pumpAndSettle();
-    expect(m.value(text, 'align', 0), .5, reason: 'not taken: ThorVG has no justified lines');
+    expect(find.descendant(of: seat, matching: find.text('Justify')), findsNothing, reason: 'not offered: ThorVG has no justified lines');
     expect(t.takeException(), isNull);
     await _close(t);
   }, skip: !_built);
@@ -557,7 +555,7 @@ void main() {
     await t.pumpAndSettle();
     expect(m.value(rect, 'blur', 0), 12, reason: m.trouble);
     expect(ws.fxOf('$rect'), ['Gaussian Blur']);
-    expect(wsTransform(ws, '$rect')['blur_radius'], 12, reason: 'the Blur card says the document\'s blur');
+    expect(wsTransform(ws, '$rect')['blur_amount'], 12, reason: 'the Blur card says the document\'s blur');
     await t.tap(find.text('Remove'));
     await t.pumpAndSettle();
     expect(m.value(rect, 'blur', 0), 0);
@@ -952,6 +950,64 @@ void main() {
     await t.drag(dist, const Offset(60, 0));
     await t.pumpAndSettle();
     expect(m.value(cam, 'distance', 0), isNot(anyOf(isNull, 1.0)), reason: 'the distance is the document\'s: ${ws.notice}');
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
+  testWidgets('the inspector\'s own: a card folds and stays folded; Ghost the document has not says so; the text box is the picked text\'s', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    const font = '/System/Library/Fonts/Supplemental/Arial Unicode.ttf';
+    final a = m.add('text', font), b = m.add('text', font);
+    expect(m.say(a, 'text', 'first') && m.say(b, 'text', 'second'), isTrue, reason: m.trouble);
+    ws
+      ..reread()
+      ..select('$a');
+    await t.pumpAndSettle();
+    final box = find.descendant(of: find.byType(TextGroup), matching: find.byType(EditableText));
+    expect((t.widget(box) as EditableText).controller.text, 'first');
+    ws.select('$b');
+    await t.pumpAndSettle();
+    expect((t.widget(box) as EditableText).controller.text, 'second', reason: 'another text picked: its own words');
+    await t.tap(box);
+    await t.pumpAndSettle();
+    FocusManager.instance.primaryFocus?.unfocus();
+    await t.pumpAndSettle();
+    expect([m.word(a, 'text'), m.word(b, 'text')], ['first', 'second'], reason: 'in and out of the box writes nothing stale');
+    expect(find.text('Justify'), findsNothing, reason: 'ThorVG has not');
+    expect(find.byWidgetPredicate((w) => w is NumField && w.id == 'pos.x'), findsOneWidget);
+    await t.tap(find.text('Transform').first);
+    await t.pumpAndSettle();
+    expect(find.byWidgetPredicate((w) => w is NumField && w.id == 'pos.x'), findsNothing, reason: 'folded, and it stays so');
+    final ghost = find.descendant(of: find.byWidgetPredicate((w) => w is PropRow && w.id == 'ghost'), matching: find.byType(OnOff));
+    await t.ensureVisible(ghost);
+    await t.tap(ghost);
+    await t.pumpAndSettle();
+    expect((t.widget(ghost) as OnOff).on, isFalse, reason: 'it goes back');
+    expect(ws.notice, startsWith('Not taken: the document has no ghost'));
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
+  testWidgets('the inspector\'s effects are the document\'s on the thing: a card each, its fields the numbers the inside has for it', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    final a = m.add('shape', 'rect');
+    ws
+      ..reread()
+      ..select('$a');
+    await t.pumpAndSettle();
+    expect(ws.fxToggle('Drop Shadow') && ws.fxToggle('Glow'), isTrue, reason: m.trouble);
+    await t.pumpAndSettle();
+    final cards = [for (final e in find.byType(EffectCard).evaluate()) (e.widget as EffectCard).fx.name];
+    expect(cards, ['Drop Shadow', 'Glow']);
+    final ids = {for (final e in find.byType(NumField).evaluate()) (e.widget as NumField).id};
+    expect(ids, containsAll(['shadow_distance', 'shadow_angle', 'shadow_blur', 'shadow_opacity', 'glow_blur', 'glow_opacity']));
+    final far = find.byWidgetPredicate((w) => w is NumField && w.id == 'shadow_distance'), was = m.value(a, 'shadow_distance', 0);
+    await t.ensureVisible(far);
+    await t.drag(far, const Offset(40, 0));
+    await t.pumpAndSettle();
+    expect(m.value(a, 'shadow_distance', 0), isNot(was), reason: 'the distance is the document\'s: ${ws.notice}');
+    expect(m.undo(), isTrue);
+    expect(m.value(a, 'shadow_distance', 0), was, reason: 'one step');
     expect(t.takeException(), isNull);
     await _close(t);
   }, skip: !_built);

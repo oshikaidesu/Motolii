@@ -290,7 +290,7 @@ class Ws extends ChangeNotifier {
   /// Joined: whether a value that puts an effect on a thing is on (keyed, or said and not nought).
   static bool _on(Motolii m, int t, String name) {
     final w = m.word(t, name);
-    return m.keyMoments(t, name).isNotEmpty || (w.isNotEmpty && (double.tryParse(w) ?? 1) != 0);
+    return m.keyMoments(t, name).isNotEmpty || (w.isNotEmpty && (m.range(t, name) == null || (double.tryParse(w) ?? 1) != 0)); // (a colour said is on, black too; a number, when not nought)
   }
 
   /// Joined: an effect of the shelf put on the picked thing as it comes, or taken off (one step either way).

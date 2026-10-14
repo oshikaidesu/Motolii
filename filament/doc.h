@@ -918,6 +918,20 @@ static std::string doc_moving(Doc& d, int thing) {
         if (one.moves && doc_among(one.kinds, kind)) names += std::string(names.empty() ? "" : " ") + one.name;
     return names;
 }
+// The names of all the values a thing has (from the values table: those of its kind), and a number's range.
+static std::string doc_has(Doc& d, int thing) {
+    const std::string kind = doc_word(d, thing, "kind");
+    std::string names;
+    for (const DocValue& one : doc_values)
+        if (doc_among(one.kinds, kind)) names += std::string(names.empty() ? "" : " ") + one.name;
+    return names;
+}
+static bool doc_range(Doc& d, int thing, const char* name, double* low, double* high) {
+    const std::string kind = doc_word(d, thing, "kind");
+    for (const DocValue& one : doc_values)
+        if (!strcmp(one.name, name) && doc_among(one.kinds, kind) && !one.words) return *low = one.low, *high = one.high, true;
+    return false;
+}
 static bool doc_unkey(Doc& d, int thing, const char* name, double at) {
     if (!doc_knows(d, thing, name)) return false;
     if (!doc_keys(d, thing, name) || !doc_keys(d, thing, name, at)) return d.trouble = std::string(name) + " has no key at that moment", false;

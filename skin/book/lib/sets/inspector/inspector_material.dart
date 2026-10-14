@@ -113,7 +113,6 @@ class _TextGroupState extends State<TextGroup> {
     },
   );
   String _entered = '';
-  bool _init = false;
 
   @override
   void initState() {
@@ -139,11 +138,8 @@ class _TextGroupState extends State<TextGroup> {
   @override
   Widget build(BuildContext context) {
     final x = Ctx.of(context), doc = x.doc, ed = Ed(x.cfg.ed);
-    if (!_init) {
-      _c.text = doc.s2['text.content'] ?? '';
-      _init = true;
-    }
-    const aligns = ['Left', 'Centre', 'Right', 'Justify'];
+    if (!_f.hasFocus && _c.text != (doc.s2['text.content'] ?? '')) _c.text = doc.s2['text.content'] ?? ''; // (out of the box it is the text the host has now: another thing picked, an undo)
+    final aligns = doc.choices['align'] ?? const ['Left', 'Centre', 'Right', 'Justify'];
     return Sect(
       title: 'Text',
       first: widget.first,
