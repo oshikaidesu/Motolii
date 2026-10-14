@@ -917,7 +917,7 @@ void main() {
     expect(find.text('$fx of ${fxCatalog.length} work'), findsOneWidget);
     ws.shelf = 'Create';
     await t.pumpAndSettle();
-    expect(find.text('30 of 42 work'), findsOneWidget);
+    expect(find.text('31 of 43 work'), findsOneWidget);
     expect(t.takeException(), isNull);
     await _close(t);
   }, skip: !_built);

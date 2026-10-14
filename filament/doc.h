@@ -1330,6 +1330,8 @@ static const DocRecipe doc_recipes[] = {
     {"Helix", "shape", "circle", "two strands of dots winding round each other, front larger than back",
      "say fill ff3366\nset size 0.12\nset x -2.6\nset copies 40\nset copy_x 1.1\nset wave_y 6\nset wave_size 0.4\nset wave_phase 2\nset wave_speed 0.3\nsay copy_fill ff3366 ffd166\n"
      "then shape circle\nsay fill 1b2fd8\nset size 0.12\nset x -2.6\nset copies 40\nset copy_x 1.1\nset wave_y -6\nset wave_size -0.4\nset wave_phase 2\nset wave_speed 0.3\nsay copy_fill 1b2fd8 22c55e"},
+    {"Spiral", "shape", "circle", "dots on a spiral growing outwards, turning",
+     "say fill ffffff\nset size 0.03\nset anchor_x -40\nset copies 220\nset copy_turn 1800\nset copy_size 1.006\nkey rotate 0 0\nkey rotate 8 -360\nsay copy_fill ffd166 ff3366 1b2fd8"},
     {"Burst", "shape", "line", "lines from a centre growing out one after another",
      "say fill ffffff\nset anchor_x -1\nset copies 24\nset copy_turn 360\nkey size 0 0.001\nkey size 0.5 1.3\nset stagger 0.8\nset wave_size 0.15\nset wave_phase 2\nsay copy_fill ffffff ffd166"},
 };
