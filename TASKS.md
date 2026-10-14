@@ -112,6 +112,7 @@
 - 出した（5回目）：立体ファイルの動きの選びと速さ（狐の Survey／Walk／Run、Play の札、動きの無い立体には出さない。絵 `reports/skin_run/gltf_animation_choice.jpg`）。本物の窓での札の見え方 `reports/skin_run/cards_in_window.jpg`（Type・Gradient が見本の部品のまま）。Gradient の札は塗りに色が2つ以上ある時だけ。
 - きみが決める事：文字の size は今「全部の行を合わせた高さ」。AE は1行の字の高さ。1行の高さに変えると、折り返しの箱を点（px）で言えるようになり、行が増えても字が小さくならない。代わりに今ある複数行の文字は大きくなる。今は折り返しの箱を「字の高さの何倍」（wrap_at）で持つ。
 - 取れない物：Lottie のスロット（差し替え）は見本ファイルが手元に無い。取るならダウンロードの許しが要る。
+- 出した（6回目）：光の影の柔らかさ（Filament の PCSS、影の地図を 2048 にして段々の縁が消えた。絵 `reports/skin_run/filament_soft_shadow.jpg`）。画面全体の縁のなめらかさ（FXAA／TAA／なし。TAA は Dawn で壊れない、効き目は動きの中）。カメラの平行投影とシフト（Projection の札、シフトはキー可。絵 `reports/skin_run/camera_orthographic.jpg`）。
 - 次（棚卸しの上から）：グラデの向き・放射、文字の箱と折り返し、マスクの種類、キットのガラスの屈折率・分散・色、環境の選び（ファイル）、Lottie のマーカー・スロット。
 
 ## 飾りを無くす（2026-10-14 午後、ユーザー：「flutterskinにはただの装飾はありません。全て意味があるのです」）

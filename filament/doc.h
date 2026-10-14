@@ -150,6 +150,9 @@ static const DocValue doc_values[] = {
     //  exposure in stops, contrast, saturation, vibrance, how warm; its glow round bright parts and its lens flare, a
     //  darkening at the corners and a fog in a colour, on the stage's own view; the room's light, how bright and turned
     //  how far, and the colour behind everything)
+    // (a camera's lens, Filament's own: drawn without depth (orthographic: as large far as near, as an axonometric
+    //  drawing), and shifted across and up, in shares of the picture (a shift lens: uprights stay upright))
+    {"projection", "camera", 0, 0, false, "perspective orthographic"}, {"shift_x", "camera", -2, 2, true, nullptr}, {"shift_y", "camera", -2, 2, true, nullptr},
     {"tone_mapper", "stage", 0, 0, false, "linear aces filmic agx pbr_neutral"}, {"exposure", "stage", -10, 10, false, nullptr},
     {"contrast", "stage", 0, 2, false, nullptr}, {"saturation", "stage", 0, 2, false, nullptr}, {"vibrance", "stage", 0, 2, false, nullptr}, {"temperature", "stage", -1, 1, false, nullptr},
     {"bloom", "stage", 0, 1, false, nullptr}, {"lens_flare", "stage", 0, 1, false, nullptr}, {"vignette", "stage", 0, 1, false, nullptr}, {"vignette_color", "stage", 0, 0, false, ""},
@@ -169,6 +172,7 @@ static const DocCard doc_cards[] = {
     {"Surface", "metallic roughness reflectance clear_coat clear_coat_roughness emissive", "fill", "!glass"},
     {"Glass", "ior split swim dark vivid", "fill", "glass"},
     {"Light", "intensity falloff cone shadows shadow_softness"},
+    {"Projection", "projection shift_x shift_y"},
     {"Grade", "tone_mapper exposure contrast saturation vibrance temperature"},
     {"Lens", "bloom lens_flare vignette vignette_color fog fog_color anti_aliasing"},
     {"Room", "room environment environment_rotate background"},
@@ -473,7 +477,12 @@ static void doc_moment(Doc& d, double now) {
         const double far = camera ? doc_number(d, camera, "distance", now, 1) : 1.0, near = camera ? doc_number(d, camera, "zoom", now, 1) : 1.0;
         const math::double3 eye = look + (round * math::double4{0, 0, 6.0 * far, 0}).xyz, up = (round * math::double4{0, 1, 0, 0}).xyz;
         s.camera->lookAt(eye, look, up);
-        s.camera->setProjection(2.0 * std::atan(std::tan(15.0 * (double)TAU / 360.0) / near) * 360.0 / (double)TAU, double(s.w) / double(s.h), 0.05, 60.0 * std::max(1.0, far));
+        const double fov = 2.0 * std::atan(std::tan(15.0 * (double)TAU / 360.0) / near);
+        if (camera && doc_word(d, camera, "projection") == "orthographic") {   // (as large at the point it looks at as the perspective one shows it there)
+            const double high = 6.0 * far * std::tan(0.5 * fov), wide = high * double(s.w) / double(s.h);
+            s.camera->setProjection(Camera::Projection::ORTHO, -wide, wide, -high, high, 0.05, 60.0 * std::max(1.0, far));
+        } else s.camera->setProjection(fov * 360.0 / (double)TAU, double(s.w) / double(s.h), 0.05, 60.0 * std::max(1.0, far));
+        s.camera->setShift(camera ? math::double2{doc_number(d, camera, "shift_x", now, 0), doc_number(d, camera, "shift_y", now, 0)} : math::double2{0.0});
         d.rig = s.camera->getModelMatrix() * math::mat4::translation(math::double3{0, 0, -6});   // (from the stage's own camera to this one)
         // (its lens, Filament's own: sharp at the focus, as blurred off it as the f-number says; the shutter goes with the
         //  f-number so the picture is as bright as at the stage's own f/16 and 1/125 s)

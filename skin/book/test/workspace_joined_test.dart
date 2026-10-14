@@ -947,6 +947,8 @@ void main() {
     final ids = {for (final e in find.byType(NumField).evaluate()) (e.widget as NumField).id};
     expect(ids, containsAll(['cam.t.x', 'cam.dist', 'cam.zoom']));
     expect(ids.intersection({'scale.x', 'op', 'depth'}), isEmpty, reason: 'a camera has none of these');
+    expect([for (final e in find.byType(ValuesCard).evaluate()) (e.widget as ValuesCard).card.name], ['Projection'], reason: 'its lens: orthographic, shifted');
+    expect(m.say(cam, 'projection', 'orthographic') && m.key(cam, 'shift_y', 0, 0.2), isTrue, reason: m.trouble);
     final dist = find.byWidgetPredicate((w) => w is NumField && w.id == 'cam.dist');
     await t.ensureVisible(dist);
     await t.drag(dist, const Offset(60, 0));
