@@ -88,9 +88,35 @@ class StageView extends StatefulWidget {
   State<StageView> createState() => _StageViewState();
 }
 
-class _StageViewState extends State<StageView> {
+/// The picked thing's handles where the stage draws them now, by name, in the stage's own coordinates: what a hand
+/// (or a test, as tldraw's and Excalidraw's do) presses to take hold of each.
+abstract interface class StageHandles {
+  Map<String, Offset> get handles;
+}
+
+/// The selection's handles where they are drawn, by name: its four corners, the knob it turns by, the point it turns
+/// about and its middle (the body). The painter draws them from here; [StageHandles] hands them out from here.
+Map<String, Offset> _handles(Offset Function(Offset doc) scr, ArtBox b, {required bool knob}) {
+  final top = scr(b.top), dir = top - scr(b.c), n = dir.distance < 1 ? const Offset(0, -1) : dir / dir.distance;
+  return {
+    for (final (i, p) in b.corners.indexed) 'corner $i': scr(p),
+    if (knob) 'turn': top + n * _V.stem,
+    'anchor': scr(b.anchor),
+    'body': scr(b.c),
+  };
+}
+
+class _StageViewState extends State<StageView> implements StageHandles {
   Offset _pan = Offset.zero;
   String? _hover;
+  _View? _shown; // (the view as last laid out: where the handles are now)
+
+  @override
+  Map<String, Offset> get handles {
+    final v = _shown, scene = widget.scene, b = WsArt.boxOf(scene, widget.selected), l = scene.layer(widget.selected);
+    if (v == null || b == null || l == null) return const {};
+    return _handles((d) => v.toScreen(WsArt.toView(scene, d)), b, knob: l.kind != WsKind.camera && l.id != 'bg');
+  }
 
   @override
   void didUpdateWidget(StageView o) {
@@ -298,7 +324,7 @@ class _StageViewState extends State<StageView> {
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, box) {
-      final v = _view(box.biggest), scene = widget.scene;
+      final v = _shown = _view(box.biggest), scene = widget.scene;
       return Listener(
         onPointerSignal: (e) => _scroll(e, v),
         child: MouseRegion(
@@ -608,10 +634,10 @@ class _ViewPainter extends CustomPainter {
   }
 
   void _selection(Canvas c, ArtBox b, ArtLayer l) {
-    final pts = [for (final p in b.corners) _scr(p)];
+    final h = _handles(_scr, b, knob: l.kind != WsKind.camera && l.id != 'bg'), pts = [for (var i = 0; i < 4; i++) h['corner $i']!];
     _legible(c, Path()..addPolygon(pts, true), WsT.accent);
-    final top = _scr(b.top), dir = top - _scr(b.c), n = dir.distance < 1 ? const Offset(0, -1) : dir / dir.distance, knob = top + n * _V.stem;
-    if (l.kind != WsKind.camera && l.id != 'bg') {
+    final top = _scr(b.top);
+    if (h['turn'] case final knob?) {
       _legible(
         c,
         Path()
@@ -628,7 +654,7 @@ class _ViewPainter extends CustomPainter {
       c.drawRect(r.inflate(1), Paint()..color = Grey.g00);
       c.drawRect(r, Paint()..color = WsT.accent);
     }
-    final a = _scr(b.anchor);
+    final a = h['anchor']!;
     c.drawCircle(a, 6, _line(Grey.g00, 3.5));
     c.drawCircle(a, 6, _line(WsT.accent, 1.5));
     for (final d in const [Offset(1, 0), Offset(-1, 0), Offset(0, 1), Offset(0, -1)]) {
