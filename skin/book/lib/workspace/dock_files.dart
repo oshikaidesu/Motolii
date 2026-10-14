@@ -142,23 +142,41 @@ String _size(int bytes) => bytes >= 1 << 20 ? '${(bytes / (1 << 20)).toStringAsF
 final _home = Platform.environment['HOME'] ?? '/';
 
 final _lists = <String, List<FileNode>>{};
-List<FileNode> _listed(String path) => _lists[path] ??= () {
-  final out = <FileNode>[];
-  try {
-    for (final e in Directory(path).listSync()) {
-      final name = _base(e.path);
-      if (name.startsWith('.')) continue;
-      if (e is Directory) {
-        out.add(FileNode(e.path, name, DockG.folder));
-      } else if (_glyphOf(name) case final g?) {
-        out.add(FileNode(e.path, name, g, meta: '${name.substring(name.lastIndexOf('.') + 1).toUpperCase()} · ${_size(e.statSync().size)}'));
+final _reading = <String>{};
+
+/// Goes up each time a folder of the disk has been read: the shelf then looks again.
+final dockRead = ValueNotifier<int>(0);
+
+/// A folder of the disk as it was last read, read again without waiting (the window never stands still for the
+/// disk: a folder the system asks leave for is simply empty until leave is given).
+List<FileNode> _listed(String path) {
+  if (!_lists.containsKey(path)) _read(path);
+  return _lists[path] ?? const [];
+}
+
+void _read(String path) {
+  if (!_reading.add(path)) return;
+  _lists.putIfAbsent(path, () => const []);
+  () async {
+    final out = <FileNode>[];
+    try {
+      await for (final e in Directory(path).list()) {
+        final name = _base(e.path);
+        if (name.startsWith('.')) continue;
+        if (e is Directory) {
+          out.add(FileNode(e.path, name, DockG.folder));
+        } else if (_glyphOf(name) case final g?) {
+          out.add(FileNode(e.path, name, g, meta: '${name.substring(name.lastIndexOf('.') + 1).toUpperCase()} · ${_size((await e.stat()).size)}'));
+        }
       }
+    } on FileSystemException {
+      out.clear();
     }
-  } on FileSystemException {
-    return const <FileNode>[];
-  }
-  return out..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
-}();
+    _lists[path] = out..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    _reading.remove(path);
+    dockRead.value++;
+  }();
+}
 
 /// The files the document's things are made of, by whole path: the thing that uses each (the last one, the one in front).
 Map<String, String> _used(Ws ws) {
@@ -274,7 +292,7 @@ String _metaOf(FileNode n) {
 bool _inUse(FileNode n, DockCtx c) => _layerOf(n, c) != null || c.applied(n.id);
 
 void _go(DockCtx c, String id) => c.set(() {
-  _lists.remove(id); // (a folder of the disk is read again each time it is gone to)
+  if (id.startsWith('/')) _read(id); // (a folder of the disk is read again each time it is gone to)
   c.mem.folder = id;
   // (the sample's tree opens down to the folder gone to; on the disk only that folder opens: the same folder is listed
   //  under more than one place, and opening every place above it moves the rows under the hand)
@@ -286,7 +304,9 @@ class MediaShelf extends StatelessWidget {
   final DockCtx c;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => ValueListenableBuilder<int>(valueListenable: dockRead, builder: (context, _, _) => _shelf(context));
+
+  Widget _shelf(BuildContext context) {
     _index();
     final joined = c.ws.inside != null, at = c.mem.folder;
     if (joined ? at != 'Project' && !at.startsWith('/') : !_byId.containsKey(at)) c.mem.folder = _rootsOf(c).first.id;

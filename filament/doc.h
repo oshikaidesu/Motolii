@@ -42,6 +42,7 @@ struct Doc {
     std::vector<int> laid;   // the things in the order they lie, the one furthest back first (read when first asked for, forgotten at every change)
     // One act of a hand: the changes made from its beginning to its end are one step of undo, and if one of them is
     // refused none of them is made. Acts may lie one within another: the outermost one is the step.
+    bool keying = false;                // every value a hand changes gets a key at that moment (a shell's "animate all"), not only one that has keys
     int act = 0;                        // how many acts are open, one within another
     bool act_ok = true;                 // no change of the open act has been refused
     sqlite3_session* acting = nullptr;  // SQLite's own record of what the open act changes
@@ -509,13 +510,13 @@ static int doc_keys(Doc& d, int thing, const char* name, double at = -1.0) {   /
     return n;
 }
 // What a hand does to a value at a moment, as the document's own rules (a shell does not work them out):
-// put: the value changed there: a key at that moment if the value has keys, else the value that stays.
+// put: the value changed there: a key at that moment if the value has keys (or every change is to be keyed: d.keying), else the value that stays.
 // key_here: a key at that moment holding what the value is there (nothing, if it has one there).
 // raise: brought nearer or further back among the things.
 // stay: its keys are taken away, and it stays what it is at that moment.
 // keyed: 0 the value has no keys, 1 it has keys but none at that moment, 2 it has a key at that moment.
 // moving: the names of the values of a thing that can take keys.
-static bool doc_put(Doc& d, int thing, const char* name, double at, double is) { return doc_keys(d, thing, name) ? doc_key(d, thing, name, at, is) : doc_set(d, thing, name, is); }
+static bool doc_put(Doc& d, int thing, const char* name, double at, double is) { return d.keying || doc_keys(d, thing, name) ? doc_key(d, thing, name, at, is) : doc_set(d, thing, name, is); }
 static double doc_usual(const char* name);
 static bool doc_key_here(Doc& d, int thing, const char* name, double at) {
     if (!doc_knows(d, thing, name, nullptr, nullptr, true)) return false;

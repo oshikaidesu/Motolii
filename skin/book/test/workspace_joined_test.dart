@@ -242,6 +242,14 @@ void main() {
     });
     expect(m.value(text, 'y', 0), before, reason: 'the act was not made at all');
 
+    // (Animate all: whatever a hand changes or carries gets a key there, whether or not it had keys)
+    final ring = m.add('solid', 'ring');
+    m.keying(true);
+    expect(m.hold(ring) && m.carry('place', 120, 0) && m.letGo(true), isTrue, reason: m.trouble);
+    expect([m.keyed(ring, 'x', 0), m.keyed(ring, 'y', 0)], [2, 2], reason: 'carried with Animate all on: keys where the hand let go');
+    m.keying(false);
+    expect(m.undo() && m.keyed(ring, 'x', 0) == 0, isTrue);
+
     // (a thing held and let go without keeping: nothing happened; kept: one step, whatever was carried)
     expect(m.hold(text) && m.carry('place', 100, 0) && m.letGo(false), isTrue, reason: m.trouble);
     expect(m.value(text, 'x', 2), 1);

@@ -433,6 +433,7 @@ class _InspectorSeat extends StatelessWidget {
         values: wsTransform(ws, l?.id),
         strs: {'fill': ?_fillWord(ws, l?.id, fill), ..._words(ws, l?.id)},
         onWords: ws.inside == null ? null : (changed) => _say(ws, l?.id, changed),
+        onAnimateAll: ws.inside?.keying,
         choices: _choices(ws, l?.id),
         flags: _flags(ws, l?.id),
         onFlags: ws.inside == null ? null : (changed) => _flag(ws, l?.id, changed),

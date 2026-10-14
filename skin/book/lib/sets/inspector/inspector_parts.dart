@@ -152,6 +152,7 @@ class InspHost extends StatefulWidget {
     this.onDrop,
     this.onKey,
     this.onWords,
+    this.onAnimateAll,
     this.flags = const {},
     this.onFlags,
     this.choices = const {},
@@ -187,6 +188,9 @@ class InspHost extends StatefulWidget {
 
   /// Words changed in the inspector (a text's content, a chooser's choice). false: the host did not take them, and they go back to what they were.
   final bool Function(Map<String, String> changed)? onWords;
+
+  /// Animate all was turned on or off (the host's document may key whatever a hand changes, wherever the hand is).
+  final ValueChanged<bool>? onAnimateAll;
 
   /// The on/off seats the host owns (Clip to below ...), and a change of them told to it. false: the host did not
   /// take it (nothing is behind that seat), and the seat goes back.
@@ -224,6 +228,7 @@ class _InspHostState extends State<InspHost> {
     _seenFlags
       ..clear()
       ..addAll(d.b);
+    widget.onAnimateAll?.call(_animating = d.animateAll); // (a new document of the inspector begins with it off: the host is told)
     return d..addListener(_r);
   }
 
@@ -234,7 +239,9 @@ class _InspHostState extends State<InspHost> {
   final _seenFlags = <String, bool>{};
   bool _live = false;
   void _tell() => widget.together == null ? _tells() : widget.together!(_tells);
+  bool _animating = false;
   void _tells() {
+    if (doc.animateAll != _animating) widget.onAnimateAll?.call(_animating = doc.animateAll);
     final live = doc.inGesture, changed = {
       for (final e in doc.v.entries)
         if (_seen[e.key] != e.value) e.key: e.value,

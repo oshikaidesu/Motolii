@@ -84,6 +84,7 @@ class Motolii {
   late final _lasts = _lib.lookupFunction<Double Function(_P, Int32), double Function(_P, int)>('motolii_lasts');
   late final _keyMoments = _lib.lookupFunction<Int32 Function(_P, Int32, _S, Pointer<Double>, Int32), int Function(_P, int, _S, Pointer<Double>, int)>('motolii_key_moments');
   late final _frame = _lib.lookupFunction<Int32 Function(_P, Int32, Pointer<Double>), int Function(_P, int, Pointer<Double>)>('motolii_frame');
+  late final _keying = _lib.lookupFunction<Int32 Function(_P, Int32), int Function(_P, int)>('motolii_keying');
   late final _hold = _lib.lookupFunction<Int32 Function(_P, Int32), int Function(_P, int)>('motolii_hold');
   late final _carry = _lib.lookupFunction<Int32 Function(_P, _S, Double, Double), int Function(_P, _S, double, double)>('motolii_carry');
   late final _letGo = _lib.lookupFunction<Int32 Function(_P, Int32), int Function(_P, int)>('motolii_let_go');
@@ -201,6 +202,8 @@ class Motolii {
   /// 'place' (on the stage: how far the hand has gone, in points of the picture), 'bar', 'head' or 'tail' (its bar on
   /// the timeline: how many seconds), or a value's name (what the number is now). What is carried shows at once and
   /// is the document's only when it is let go and kept: one step.
+  /// On: every value a hand changes or carries gets a key at that moment (the inspector's Animate all).
+  void keying(bool on) => _keying(_m, on ? 1 : 0);
   bool hold(int thing) => _hold(_m, thing) != 0;
   bool carry(String by, double a, [double b = 0]) => _with([by], (s) => _carry(_m, s[0], a, b)) != 0;
   bool letGo(bool keep) => _letGo(_m, keep ? 1 : 0) != 0;
