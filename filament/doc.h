@@ -60,9 +60,11 @@ struct Doc {
     int act = 0;                        // how many acts are open, one within another
     bool act_ok = true;                 // no change of the open act has been refused
     bool act_unmatched = false;         // a change within a larger act not yet shown: the stage is matched once, when the act ends
-    std::unique_ptr<PhysWorld> phys;    // the things that fall and strike (Jolt): made when first asked, gone when the document changes
+    std::unique_ptr<PhysWorld> phys;    // the things that fall and strike (Jolt): made when first asked, made again when what it is made of changes
     std::vector<int> phys_of;           // which thing each of its bodies is
     std::vector<double> phys_until;     // and till when its keys have it
+    bool phys_stale = true, phys_any = false;   // (the document changed since the world was last looked at; some thing has physics)
+    std::string phys_made;              // all the world was made of, as the document said it then (made again only when that changes)
     struct Scripted { double at = -1; int made = -1; std::vector<ScriptCopy> copies; };
     std::map<int, Scripted> scripted;
     ScreenStack screen;                 // the stage's whole-screen effects, its script .wgsl files one over another (screen.h)   // each thing's copies as its script said them, at one moment (worked out once a picture)
@@ -449,7 +451,7 @@ static bool doc_rows(Doc& d, char* ask, const std::function<void(sqlite3_stmt*)>
     return ok;
 }
 static void doc_forget(Doc& d) {
-    d.phys.reset(), d.phys_of.clear(), d.phys_until.clear(), d.scripted.clear();   // (the world made again from what the document says now)
+    d.phys_stale = true, d.scripted.clear();   // (the world made again only if what it is made of changed: doc_physics)
     d.moving.clear();
     d.named.clear();
     d.laid.clear();
@@ -601,6 +603,16 @@ static math::mat4 doc_above(Doc& d, int thing, double now, int deeper = 0) {
 // large as it is, a ball for a ball, flat things held to their plane), what it bounces and rubs, where its keys put
 // it. Where the world has one at a moment (false: the world does not have it then, its keys do).
 static bool doc_physics(Doc& d, int thing, double now, PhysPose* pose) {
+    if (d.phys_stale) {   // (all the world is made of: every value and key of the things with physics, and the pull down)
+        d.phys_stale = false;
+        std::string made;
+        doc_rows(d, sqlite3_mprintf("select group_concat(thing || ' ' || name || ' ' || at || ' ' || quote(value) || ' ' || coalesce(way, ''), ';') from (select * from fact where thing in "
+                                    "(select thing from fact where name = 'physics' and value in ('moves', 'still')) or (thing = 0 and name = 'gravity') order by thing, name, at)"),
+                 [&](sqlite3_stmt* row) { if (sqlite3_column_type(row, 0) == SQLITE_TEXT) made = (const char*)sqlite3_column_text(row, 0); });
+        if (made != d.phys_made) d.phys.reset(), d.phys_of.clear(), d.phys_until.clear(), d.phys_made = made;
+        d.phys_any = made.find(" physics ") != std::string::npos;
+    }
+    if (!d.phys_any) return false;   // (no thing has physics: nothing asked of the document at every place)
     const std::string mine = doc_word(d, thing, "physics");
     if (mine != "moves") return false;
     if (!d.phys) {
