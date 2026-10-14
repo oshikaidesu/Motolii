@@ -19,9 +19,6 @@ struct ScreenFx {
     std::vector<Field> fields;   // the knobs' struct as WGSL lays a uniform out
     uint32_t bytes = 0;
     door::Screen* door = nullptr;
-    Texture* shot = nullptr;
-    Texture* depth = nullptr;
-    RenderTarget* target = nullptr;
 };
 
 // The file as Filament's driver takes it: the picture at binding 0, its sampler at 1, the knobs at 2 (Filament's
@@ -71,53 +68,78 @@ static bool screen_read(ScreenFx& fx, std::string& code) {
     return true;
 }
 
-// The stage given an effect (file empty: none). numbers(name, usual): a knob's value now. false: not made (fx.trouble).
-static bool screen_effect(Stage& s, ScreenFx*& fx, const std::string& file, std::function<double(const std::string&, double)> numbers) {
-    if (fx && fx->file == file) return true;
-    if (fx) {   // (the one before let go: the stage draws to the screen again)
-        s.over = nullptr;
-        s.view->setRenderTarget(nullptr);
-        for (View* v : s.layers) v->setRenderTarget(nullptr);
-        door::drop(s.engine, fx->door);
-        s.engine->destroy(fx->target), s.engine->destroy(fx->shot), s.engine->destroy(fx->depth);
-        delete fx;
-        fx = nullptr;
-    }
-    if (file.empty() || file == "none") return true;
-    auto* made = new ScreenFx;
-    made->file = file;
-    std::string code;
-    if (!screen_read(*made, code)) { const std::string why = made->trouble; delete made; fx = nullptr; return std::fprintf(stderr, "%s\n", why.c_str()), false; }
-    made->door = door::screen(s.engine, file.c_str(), code.c_str(), made->bytes);
-    made->shot = Texture::Builder().width((uint32_t)s.w).height((uint32_t)s.h).levels(1).format(Texture::InternalFormat::RGBA8)
-                     .usage(Texture::Usage::COLOR_ATTACHMENT | Texture::Usage::SAMPLEABLE).build(*s.engine);
-    made->depth = Texture::Builder().width((uint32_t)s.w).height((uint32_t)s.h).levels(1).usage(Texture::Usage::DEPTH_ATTACHMENT).format(Texture::InternalFormat::DEPTH24).build(*s.engine);
-    made->target = RenderTarget::Builder().texture(RenderTarget::AttachmentPoint::COLOR, made->shot).texture(RenderTarget::AttachmentPoint::DEPTH, made->depth).build(*s.engine);
-    s.view->setRenderTarget(made->target);
-    for (View* v : s.layers) v->setRenderTarget(made->target);
-    fx = made;
-    s.over = [&s, made, numbers] {
-        std::vector<float> at(made->bytes / 4, 0.f);
-        for (const ScreenFx::Field& f : made->fields) {
-            float v[4] = {0, 0, 0, 0};
-            if (f.name == "time") v[0] = (float)s.now;
-            else if (f.name == "aspect") v[0] = (float)s.w / (float)s.h;
-            else if (f.name == "resolution") v[0] = (float)s.w, v[1] = (float)s.h;
-            else if (f.name == "width" || f.name == "height") v[0] = (float)(f.name == "width" ? s.w : s.h);   // (three's way of saying it)
-            else
-                for (uint32_t i = 0; i < f.floats; ++i) {   // (a vector's numbers each a knob of its own, name_x, name_y...)
-                    const std::string k = f.floats == 1 ? f.name : f.name + "_" + "xyzw"[i];
-                    double usual = 0;
-                    for (const ScriptKnob& one : made->knobs) if (one.name == k) usual = one.usual;
-                    v[i] = (float)numbers(k, usual);
-                }
-            for (uint32_t i = 0; i < f.floats; ++i) {
-                if (f.whole) { const int32_t w = (int32_t)std::lround(v[i]); std::memcpy(&at[f.at / 4 + i], &w, 4); }
-                else at[f.at / 4 + i] = v[i];
+// The stage given its effects, one over another (files: paths with spaces between, "" or "none": none). numbers(name,
+// usual): a knob's value now. The first reads the stage's picture, each next the one before's, the last draws on the
+// screen: two pictures between them taken in turn. An effect that cannot be made is left out (said on stderr).
+struct ScreenStack {
+    std::string files;
+    std::vector<ScreenFx*> fx;
+    Texture* shot = nullptr;
+    Texture* depth = nullptr;
+    RenderTarget* target = nullptr;
+    Texture* between[2] = {nullptr, nullptr};
+    RenderTarget* betweenTarget[2] = {nullptr, nullptr};
+};
+static Texture* screen_picture(Stage& s) {
+    return Texture::Builder().width((uint32_t)s.w).height((uint32_t)s.h).levels(1).format(Texture::InternalFormat::RGBA8)
+        .usage(Texture::Usage::COLOR_ATTACHMENT | Texture::Usage::SAMPLEABLE).build(*s.engine);
+}
+static void screen_knobs(Stage& s, ScreenFx& fx, const std::function<double(const std::string&, double)>& numbers) {
+    std::vector<float> at(fx.bytes / 4, 0.f);
+    for (const ScreenFx::Field& f : fx.fields) {
+        float v[4] = {0, 0, 0, 0};
+        if (f.name == "time") v[0] = (float)s.now;
+        else if (f.name == "aspect") v[0] = (float)s.w / (float)s.h;
+        else if (f.name == "resolution") v[0] = (float)s.w, v[1] = (float)s.h;
+        else if (f.name == "width" || f.name == "height") v[0] = (float)(f.name == "width" ? s.w : s.h);   // (three's way of saying it)
+        else
+            for (uint32_t i = 0; i < f.floats; ++i) {   // (a vector's numbers each a knob of its own, name_x, name_y...)
+                const std::string k = f.floats == 1 ? f.name : f.name + "_" + "xyzw"[i];
+                double usual = 0;
+                for (const ScriptKnob& one : fx.knobs) if (one.name == k) usual = one.usual;
+                v[i] = (float)numbers(k, usual);
             }
+        for (uint32_t i = 0; i < f.floats; ++i) {
+            if (f.whole) { const int32_t w = (int32_t)std::lround(v[i]); std::memcpy(&at[f.at / 4 + i], &w, 4); }
+            else at[f.at / 4 + i] = v[i];
         }
-        if (!at.empty()) door::knobs(s.engine, made->door, at.data(), (uint32_t)(at.size() * 4));
-        door::draw(s.engine, made->door, made->shot, nullptr, (uint32_t)s.w, (uint32_t)s.h);
+    }
+    if (!at.empty()) door::knobs(s.engine, fx.door, at.data(), (uint32_t)(at.size() * 4));
+}
+static void screen_effects(Stage& s, ScreenStack& st, const std::string& files, std::function<double(const std::string&, double)> numbers) {
+    if (st.files == files) return;
+    st.files = files;
+    s.over = nullptr;   // (what there was let go: the stage draws to the screen again)
+    s.view->setRenderTarget(nullptr);
+    for (View* v : s.layers) v->setRenderTarget(nullptr);
+    for (ScreenFx* fx : st.fx) door::drop(s.engine, fx->door), delete fx;
+    st.fx.clear();
+    for (RenderTarget*& t : {std::ref(st.target), std::ref(st.betweenTarget[0]), std::ref(st.betweenTarget[1])}) if (t) s.engine->destroy(t), t = nullptr;
+    for (Texture*& t : {std::ref(st.shot), std::ref(st.depth), std::ref(st.between[0]), std::ref(st.between[1])}) if (t) s.engine->destroy(t), t = nullptr;
+    std::istringstream each(files);
+    for (std::string file; each >> file;) {
+        if (file == "none") continue;
+        auto* made = new ScreenFx;
+        made->file = file;
+        std::string code;
+        if (!screen_read(*made, code)) { std::fprintf(stderr, "%s\n", made->trouble.c_str()); delete made; continue; }
+        made->door = door::screen(s.engine, file.c_str(), code.c_str(), made->bytes);
+        st.fx.push_back(made);
+    }
+    if (st.fx.empty()) return;
+    st.shot = screen_picture(s);
+    st.depth = Texture::Builder().width((uint32_t)s.w).height((uint32_t)s.h).levels(1).usage(Texture::Usage::DEPTH_ATTACHMENT).format(Texture::InternalFormat::DEPTH24).build(*s.engine);
+    st.target = RenderTarget::Builder().texture(RenderTarget::AttachmentPoint::COLOR, st.shot).texture(RenderTarget::AttachmentPoint::DEPTH, st.depth).build(*s.engine);
+    for (int k = 0; k < 2 && st.fx.size() > 1; ++k)
+        st.between[k] = screen_picture(s), st.betweenTarget[k] = RenderTarget::Builder().texture(RenderTarget::AttachmentPoint::COLOR, st.between[k]).build(*s.engine);
+    s.view->setRenderTarget(st.target);
+    for (View* v : s.layers) v->setRenderTarget(st.target);
+    s.over = [&s, &st, numbers] {
+        for (size_t i = 0; i < st.fx.size(); ++i) {
+            screen_knobs(s, *st.fx[i], numbers);
+            Texture* from = i == 0 ? st.shot : st.between[(i - 1) % 2];
+            RenderTarget* to = i + 1 == st.fx.size() ? nullptr : st.betweenTarget[i % 2];
+            door::draw(s.engine, st.fx[i]->door, from, to, (uint32_t)s.w, (uint32_t)s.h);
+        }
     };
-    return true;
 }

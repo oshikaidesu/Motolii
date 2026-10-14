@@ -65,7 +65,7 @@ struct Doc {
     std::vector<double> phys_until;     // and till when its keys have it
     struct Scripted { double at = -1; int made = -1; std::vector<ScriptCopy> copies; };
     std::map<int, Scripted> scripted;
-    ScreenFx* screen = nullptr;          // the stage's whole-screen effect, its script a .wgsl (screen.h)   // each thing's copies as its script said them, at one moment (worked out once a picture)
+    ScreenStack screen;                 // the stage's whole-screen effects, its script .wgsl files one over another (screen.h)   // each thing's copies as its script said them, at one moment (worked out once a picture)
     bool phys_keyed = false;            // reading where a thing's keys put it (not where the world has it)
     bool writing = false;               // it is being written as a film: it is read, not changed, until that is done
     double written_from = 0.0;          // the moment of the document that a film being written begins at (its work area's start)
@@ -401,6 +401,19 @@ static DocScript* doc_script_of(const std::string& file) {
         if (std::filesystem::path(file).extension() != ".wgsl") s.run = std::make_unique<Script>(file);   // (a .wgsl is drawn, not run: screen.h)
     }
     return &s;
+}
+// A thing's scripts: its one (a path may have spaces), or the stage's effects, one over another (paths with spaces between).
+static std::string doc_word(Doc& d, int thing, const char* name);
+static std::vector<DocScript*> doc_scripts_on(Doc& d, int thing) {
+    const std::string said = doc_word(d, thing, "script");
+    std::vector<DocScript*> all;
+    if (thing != 0) {
+        if (DocScript* sc = doc_script_of(said)) all.push_back(sc);
+        return all;
+    }
+    std::istringstream each(said);
+    for (std::string file; each >> file;) if (DocScript* sc = doc_script_of(file)) all.push_back(sc);
+    return all;
 }
 static const DocCard doc_cards[] = {
     {"Type", "split letter_spacing line_spacing italic wrap wrap_at"},
@@ -879,7 +892,7 @@ static void doc_look(Doc& d) {
         room->setIntensity(d.roomLight * (float)doc_number(d, 0, "environment", 0, 1));
         room->setRotation(math::mat3f::rotation((float)(doc_number(d, 0, "environment_rotate", 0, 0) * (double)TAU / 360.0), math::float3{0, 1, 0}));
     }
-    screen_effect(s, d.screen, doc_word(d, 0, "script"), [&d](const std::string& name, double usual) { return doc_number(d, 0, ("js_" + name).c_str(), d.stage->now, usual); });
+    screen_effects(s, d.screen, doc_word(d, 0, "script"), [&d](const std::string& name, double usual) { return doc_number(d, 0, ("js_" + name).c_str(), d.stage->now, usual); });
     const std::string behind = doc_word(d, 0, "background");
     if (doc_word(d, 0, "behind") == "room") {   // (the room itself behind everything, as bright as it lights the stage: its own picture, made once a room)
         static std::map<std::string, Skybox*> shown;
@@ -1554,7 +1567,7 @@ static bool doc_knows(Doc& d, int thing, const char* name = nullptr, const doubl
         if (!strcmp(one.name, name)) v = &one;
     }
     if (!v && !strncmp(name, "js_", 3) && doc_among("picture text shape stage", kind))   // (a knob of the thing's script)
-        if (const DocScript* sc = doc_script_of(doc_word(d, thing, "script")))
+        for (const DocScript* sc : doc_scripts_on(d, thing))
             for (const DocValue& one : sc->values) {
                 has += std::string(has.empty() ? "" : ", ") + one.name;
                 if (one.moves) moving += std::string(moving.empty() ? "" : ", ") + one.name;
@@ -1802,7 +1815,7 @@ static int doc_keyed(Doc& d, int thing, const char* name, double at) { return !d
 // The words a value of a thing may be (a blend's, a solid's shape), with spaces between ("": any word, or not a word).
 static const DocValue* doc_script_value(Doc& d, int thing, const char* name) {   // (a knob of the thing's script)
     if (strncmp(name, "js_", 3)) return nullptr;
-    if (const DocScript* sc = doc_script_of(doc_word(d, thing, "script")))
+    for (const DocScript* sc : doc_scripts_on(d, thing))
         for (const DocValue& one : sc->values) if (!strcmp(one.name, name)) return &one;
     return nullptr;
 }
@@ -1850,7 +1863,7 @@ static std::string doc_has(Doc& d, int thing) {
     for (const DocValue& one : doc_values)
         if (doc_among(one.kinds, kind)) names += std::string(names.empty() ? "" : " ") + one.name;
     if (doc_among("picture text shape stage", kind))
-        if (const DocScript* sc = doc_script_of(doc_word(d, thing, "script")))
+        for (const DocScript* sc : doc_scripts_on(d, thing))
             for (const DocValue& one : sc->values) names += std::string(names.empty() ? "" : " ") + one.name;
     return names;
 }
@@ -1879,10 +1892,12 @@ static std::string doc_cards_of(Doc& d, int thing) {
         if (!names.empty()) all += (all.empty() ? "" : "; ") + std::string(card.title) + ": " + names;
     }
     if (doc_among("picture text shape stage", doc_word(d, thing, "kind")))   // (its script's own card: the knobs its head declares)
-        if (const DocScript* sc = doc_script_of(doc_word(d, thing, "script")); sc && !sc->values.empty()) {
+        if (const std::vector<DocScript*> scs = doc_scripts_on(d, thing); !scs.empty()) {
             std::string names = "script";
-            for (const DocValue& one : sc->values) names += std::string(" ") + one.name;
-            all += (all.empty() ? "" : "; ") + std::string("Script: ") + names;
+            for (const DocScript* sc : scs)
+                for (const DocValue& one : sc->values)
+                    if ((" " + names + " ").find(" " + std::string(one.name) + " ") == std::string::npos) names += std::string(" ") + one.name;   // (a knob two effects share is one)
+            if (names != "script") all += (all.empty() ? "" : "; ") + std::string("Script: ") + names;   // (none of them with knobs: no card)
         }
     return all;
 }
