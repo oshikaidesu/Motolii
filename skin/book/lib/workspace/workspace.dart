@@ -369,7 +369,8 @@ const _seats = <(String, String, _Across, _Across)>[
   ('rot.y', 'rotate_y', _same, _same),
   ('rot.z', 'rotate', _minus, _minus),
   ('op', 'opacity', _hundredOut, _hundredIn),
-  ('stroke.w', 'stroke_width', _same, _same), // (points of the picture at size 1: the edge grows with the thing, as in After Effects)
+  ('stroke.w', 'stroke_width', _same, _same),
+  ('blur_radius', 'blur', _same, _same), // (the Blur card's radius: points of the picture at size 1) // (points of the picture at size 1: the edge grows with the thing, as in After Effects)
   // (the anchor: the sample's hundredths of the box from its top left, front -50 to back 50; the document's share of
   //  half the box from its middle, up and towards the eye)
   ('anchor.x', 'anchor_x', _acrossOut, _acrossIn),
@@ -487,7 +488,7 @@ class _InspectorSeat extends StatelessWidget {
         key: ValueKey(k),
         cfg: const Cfg(),
         kind: k,
-        effects: ws.inside == null ? 2 : 0, // (joined: the inside has no effects yet, so none are listed)
+        effects: ws.inside == null ? 2 : (ws.fxOf(l?.id).contains('Gaussian Blur') ? 1 : 0), // (joined: the sample's first card, Blur, is the document's blur)
         title: l?.name,
         onRoute: ws.route,
         values: wsTransform(ws, l?.id),

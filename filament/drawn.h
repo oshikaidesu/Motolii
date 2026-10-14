@@ -42,7 +42,10 @@ static void picture_at(Stage& s, Drawn* d, float seconds) {
 // What `picture` and `type` share: something of ThorVG's (made by `paints` on Filament's own thread, which says how
 // many points wide and high it is drawn) on a canvas that draws into a texture of Filament's device, and the sheet
 // that shows it. ground below 0: clear where nothing is drawn. shown = false: made but not put in the scene (for a matte).
-static Drawn* drawn(Stage& s, const std::function<tvg::Paint*(Drawn*, int*, int*)>& paints, const mat4f& place, float high, float3 ground, bool shown, const char* lay) {
+// What ThorVG's own scene effects do to it, each as a share of its height (0: none): a blur; a shadow of a colour, so
+// much of it (shadow.w), falling so far, that way (degrees, as ThorVG counts them) and so soft.
+struct DrawnFx { float blur = 0.f; float4 shadow{0.f}; float fall = 0.f, way = 0.f, soft = 0.f; };
+static Drawn* drawn(Stage& s, const std::function<tvg::Paint*(Drawn*, int*, int*)>& paints, const mat4f& place, float high, float3 ground, bool shown, const char* lay, const DrawnFx& fx = {}) {
     if (!door::device(s.engine)) return nullptr;   // (another backend)
     Drawn* d = new Drawn;
     WGPUTexture made = nullptr;
@@ -53,6 +56,20 @@ static Drawn* drawn(Stage& s, const std::function<tvg::Paint*(Drawn*, int*, int*
         tvg::Initializer::init(0);
         tvg::Paint* p = paints(d, &w, &h);
         if (!p || w <= 0 || h <= 0) return;
+        if (fx.blur > 0.f || fx.shadow.w > 0.f) {   // (in a scene of ThorVG's, which takes the effects; the picture larger all round by as far as they reach)
+            const float tall = (float)h, blur = fx.blur * tall, fall = fx.fall * tall, soft = fx.soft * tall;
+            const int room = (int)std::ceil(std::max(3.f * blur, fx.shadow.w > 0.f ? fall + 3.f * soft : 0.f));
+            tvg::Scene* scene = tvg::Scene::gen();
+            scene->add(p);
+            scene->translate((float)room, (float)room);
+            if (fx.shadow.w > 0.f)
+                scene->add(tvg::SceneEffect::DropShadow, (int)std::lround(255.f * fx.shadow.x), (int)std::lround(255.f * fx.shadow.y), (int)std::lround(255.f * fx.shadow.z), (int)std::lround(255.f * fx.shadow.w),
+                           (double)fx.way, (double)fall, (double)std::max(soft, 0.01f), 75);
+            if (blur > 0.f) scene->add(tvg::SceneEffect::GaussianBlur, (double)blur, 0, 0, 75);
+            w += 2 * room, h += 2 * room;
+            high *= (float)h / tall;   // (the thing itself stays as large)
+            p = scene;
+        }
         loose = d->film ? nullptr : p;   // (a paint that no film owns is let go here if the canvas never takes it)
         WGPUTextureDescriptor like{};
         like.size = {(uint32_t)w, (uint32_t)h, 1};
@@ -105,7 +122,7 @@ static Drawn* drawn(Stage& s, const std::function<tvg::Paint*(Drawn*, int*, int*
 
 // The picture in `file` put in the scene (an After Effects film, an SVG, a photo): a sheet `high` tall (as wide as
 // the picture makes it) with its middle at `place`, facing along the place's z, drawn as finely as the stage is.
-static Drawn* picture(Stage& s, const char* file, const mat4f& place, float high, float3 ground = float3{-1.f}, bool shown = true, const char* lay = nullptr) {
+static Drawn* picture(Stage& s, const char* file, const mat4f& place, float high, float3 ground = float3{-1.f}, bool shown = true, const char* lay = nullptr, const DrawnFx& fx = {}) {
     if (!std::filesystem::is_regular_file(file)) return nullptr;   // (ThorVG ends the program on a folder)
     return drawn(s, [&](Drawn* d, int* w, int* h) -> tvg::Paint* {
         d->film = tvg::Animation::gen();
@@ -117,7 +134,7 @@ static Drawn* picture(Stage& s, const char* file, const mat4f& place, float high
         *h = 2 * (int)std::lround(0.5f * fh * fit);
         p->size((float)*w, (float)*h);
         return p;
-    }, place, high, ground, shown, lay);
+    }, place, high, ground, shown, lay, fx);
 }
 
 // Words put in the scene, set by ThorVG in the font of `fontFile` (a .ttf): a sheet `high` tall for each line, as
@@ -137,7 +154,7 @@ static bool type_sets(const char* fontFile, const char* words) {
 }
 // edge: an outline round the letters, ThorVG's own (its colour; w: how wide, a share of the line's height; 0: none).
 // Lines: the words may be broken by \n; align: how the lines lie one under another (ThorVG's own: 0 left, 1 right).
-static Drawn* type(Stage& s, const char* words, const char* fontFile, const mat4f& place, float high, float3 colour = float3{0.f}, const char* lay = nullptr, float4 edge = float4{0.f}, float align = 0.f) {
+static Drawn* type(Stage& s, const char* words, const char* fontFile, const mat4f& place, float high, float3 colour = float3{0.f}, const char* lay = nullptr, float4 edge = float4{0.f}, float align = 0.f, const DrawnFx& fx = {}) {
     if (!std::filesystem::is_regular_file(fontFile)) return nullptr;
     return drawn(s, [&](Drawn*, int* w, int* h) -> tvg::Paint* {
         if (tvg::Text::load(fontFile) != tvg::Result::Success) return nullptr;
@@ -165,12 +182,12 @@ static Drawn* type(Stage& s, const char* words, const char* fontFile, const mat4
         *w = 2 * (int)std::ceil(0.5f * (wide + outline));
         *h = 2 * (int)std::ceil(0.5f * (tall + outline));
         return t;
-    }, place, high, float3{-1.f}, true, lay);
+    }, place, high, float3{-1.f}, true, lay, fx);
 }
 
 // A flat shape in one colour, drawn by ThorVG's own Shape (a rectangle, a circle): `wide` times as wide as it is high.
 // edge: ThorVG's stroke round it, inside its frame (its colour; w: how wide, a share of its height; 0: none).
-static Drawn* flat(Stage& s, const char* form, float wide, const mat4f& place, float high, float3 colour, const char* lay = nullptr, float4 edge = float4{0.f}) {
+static Drawn* flat(Stage& s, const char* form, float wide, const mat4f& place, float high, float3 colour, const char* lay = nullptr, float4 edge = float4{0.f}, const DrawnFx& fx = {}) {
     return drawn(s, [&](Drawn*, int* w, int* h) -> tvg::Paint* {
         const float tall = std::min(0.5f * (float)std::max(s.w, s.h), 4096.f / std::max(wide, 1e-3f));   // (as fine as half the stage; a long thin bar less high, so that it is as long as it is said)
         *h = std::max(2, 2 * (int)std::ceil(0.5f * tall));
@@ -182,7 +199,7 @@ static Drawn* flat(Stage& s, const char* form, float wide, const mat4f& place, f
         shape->fill((uint8_t)std::lround(255.f * colour.x), (uint8_t)std::lround(255.f * colour.y), (uint8_t)std::lround(255.f * colour.z));
         if (in > 0.f) shape->strokeWidth(2.f * in), shape->strokeFill((uint8_t)std::lround(255.f * edge.x), (uint8_t)std::lround(255.f * edge.y), (uint8_t)std::lround(255.f * edge.z));
         return shape;
-    }, place, high, float3{-1.f}, true, lay);
+    }, place, high, float3{-1.f}, true, lay, fx);
 }
 
 // A picture taken off the stage for good.

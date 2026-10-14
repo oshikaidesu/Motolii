@@ -261,9 +261,30 @@ class Ws extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Effects kept on each layer, in stack order (layer id -> effect names).
+  /// Effects kept on each layer, in stack order (layer id -> effect names). Joined: the shelf's effects the document
+  /// has on the thing (a value said, and not nought).
   final _fx = <String, List<String>>{};
-  List<String> fxOf(String? id) => List.unmodifiable(_fx[id] ?? const <String>[]);
+  List<String> fxOf(String? id) {
+    if (_inside case final m?) {
+      final t = int.tryParse(id ?? '');
+      if (t == null) return const [];
+      return [
+        for (final e in fxValues.entries)
+          if (m.word(t, e.value) case final w when w.isNotEmpty && (double.tryParse(w) ?? 1) != 0) e.key,
+      ];
+    }
+    return List.unmodifiable(_fx[id] ?? const <String>[]);
+  }
+
+  /// Joined: an effect of the shelf put on the picked thing as it comes, or taken off (one step either way).
+  bool fxToggle(String name) {
+    final m = _inside, t = int.tryParse(selected ?? ''), v = fxValues[name];
+    if (m == null || t == null || v == null) return false;
+    final on = fxOf(selected).contains(name);
+    final done = v == 'blur' ? m.set(t, v, on ? 0 : 12) : m.say(t, v, on ? '' : '000000'); // (as the sample's Blur and After Effects' shadow come)
+    reread();
+    return done;
+  }
 
   /// The effect being tried on the selected layer: the renderer draws it as if added; Add keeps it, Esc drops it.
   String? _trial;
@@ -295,6 +316,9 @@ class Ws extends ChangeNotifier {
     return '${(s ~/ 60).toString().padLeft(2, '0')}:${(s % 60).toString().padLeft(2, '0')}:${fr.toString().padLeft(2, '0')}';
   }
 }
+
+/// Joined: the shelf's effects the inside has, by the document's value that puts each on a thing (ThorVG's own).
+const fxValues = {'Gaussian Blur': 'blur', 'Drop Shadow': 'shadow'};
 
 class WsScope extends InheritedNotifier<Ws> {
   const WsScope({super.key, required Ws ws, required super.child}) : super(notifier: ws);

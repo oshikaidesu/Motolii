@@ -75,7 +75,12 @@ static const DocValue doc_values[] = {
     {"blend", "film picture text shape", 0, 0, false, "normal add multiply screen"}, {"file", "film picture solid text", 0, 0, false, ""}, {"shape", "solid", 0, 0, false, doc_shapes},
     {"text", "text", 0, 0, false, ""}, {"fill", "text solid shape", 0, 0, false, ""},
     {"parent", doc_kinds, 0, 1e9, false, nullptr},   // (the thing it goes with: it is moved, turned and sized as that one is, then as it is itself; 0: none)
-    {"align", "text", 0, 1, false, nullptr},   // (how its lines lie one under another, ThorVG's own: 0 at the left, 0.5 about the middle, 1 at the right)
+    {"align", "text", 0, 1, false, nullptr},
+    // (ThorVG's own scene effects on a thing it draws: a blur, and a shadow of a colour, how far it falls, which way, how
+    //  soft, how much of it; lengths in points of the picture at size 1)
+    {"blur", "picture text shape", 0, 1000, false, nullptr}, {"shadow", "picture text shape", 0, 0, false, ""},
+    {"shadow_distance", "picture text shape", 0, 1000, false, nullptr}, {"shadow_angle", "picture text shape", -1e6, 1e6, false, nullptr},
+    {"shadow_blur", "picture text shape", 0, 1000, false, nullptr}, {"shadow_opacity", "picture text shape", 0, 1, false, nullptr},   // (how its lines lie one under another, ThorVG's own: 0 at the left, 0.5 about the middle, 1 at the right)
     {"stroke", "text shape", 0, 0, false, ""}, {"stroke_width", "text shape", 0, 1000, false, nullptr}};   // (its edge: a colour, and how wide, in points of the picture at size 1)
 static bool doc_among(const std::string& words, const std::string& one) { return (" " + words + " ").find(" " + one + " ") != std::string::npos; }
 
@@ -298,7 +303,7 @@ static void doc_moment(Doc& d, double now) {
 static bool doc_match(Doc& d) {
     Stage& s = *d.stage;
     std::map<int, std::string> told;   // every thing of the document, and all that its making goes by
-    doc_rows(d, sqlite3_mprintf("select thing, group_concat(name || '=' || value, ' ') from (select * from fact where thing > 0 and name in ('kind','file','shape','blend','keyed','begin','duration','speed','text','fill','wide','stroke','stroke_width','align') order by thing, name) group by thing"),
+    doc_rows(d, sqlite3_mprintf("select thing, group_concat(name || '=' || value, ' ') from (select * from fact where thing > 0 and name in ('kind','file','shape','blend','keyed','begin','duration','speed','text','fill','wide','stroke','stroke_width','align','blur','shadow','shadow_distance','shadow_angle','shadow_blur','shadow_opacity') order by thing, name) group by thing"),
              [&](sqlite3_stmt* row) { told[sqlite3_column_int(row, 0)] = (const char*)sqlite3_column_text(row, 1); });
     for (auto it = d.shown.begin(); it != d.shown.end();) {
         const auto still = told.find(it->first);
@@ -326,6 +331,16 @@ static bool doc_match(Doc& d) {
         const math::double4 up = s.camera->getProjectionMatrix() * s.camera->getViewMatrix() * math::double4{0, 1, 0, 1};
         const float4 edge = edgeRgb < 0 ? float4{0.f} : float4{float3{(float)((edgeRgb >> 16) & 255), (float)((edgeRgb >> 8) & 255), (float)(edgeRgb & 255)} / 255.f, (float)(doc_number(d, thing, "stroke_width", 0, 0) / (0.5 * s.h * up.y / up.w))};
         if (!stroke.empty() && edgeRgb < 0) why = "a stroke is six digits, as ff3366";
+        const double units = 0.5 * s.h * up.y / up.w;   // (points of the picture to one unit of the stage, where things stand at first)
+        const std::string shade = doc_word(d, thing, "shadow");
+        const long shadeRgb = shade.size() == 6 && shade.find_first_not_of("0123456789abcdefABCDEF") == std::string::npos ? std::strtol(shade.c_str(), nullptr, 16) : -1;
+        DrawnFx fx;
+        fx.blur = (float)(doc_number(d, thing, "blur", 0, 0) / units);
+        if (shadeRgb >= 0) {   // (After Effects' own drop shadow, as it comes: half of it, 135 degrees, 10 points away, 10 soft)
+            fx.shadow = float4{float3{(float)((shadeRgb >> 16) & 255), (float)((shadeRgb >> 8) & 255), (float)(shadeRgb & 255)} / 255.f, (float)doc_number(d, thing, "shadow_opacity", 0, 0.5)};
+            fx.fall = (float)(doc_number(d, thing, "shadow_distance", 0, 10) / units), fx.way = (float)doc_number(d, thing, "shadow_angle", 0, 135), fx.soft = (float)(doc_number(d, thing, "shadow_blur", 0, 10) / units);
+        } else if (!shade.empty()) why = "a shadow is six digits, as 000000";
+        const bool fxOk = shade.empty() || shadeRgb >= 0;
         if (shape.empty() && !std::filesystem::is_regular_file(file)) why = "there is no such file";
         else if (kind == "film") {
             const double from = doc_number(d, thing, "begin", 0, 0), length = doc_number(d, thing, "duration", 0, -1), speed = doc_number(d, thing, "speed", 0, 1);
@@ -335,18 +350,18 @@ static bool doc_match(Doc& d) {
             if (made.film) s.playing.erase(made.film);   // (the document tells it its moment, and when its sound comes on)
             if (made.film && made.film->sound) s.sounding[made.film] = [&d, thing, v = made.film, file] { return Stage::Sound{file, v->from, v->to, v->speed, 0.0, doc_number(d, thing, "start", 0, 0), doc_number(d, thing, "duration", 0, -1)}; };
         } else if (kind == "picture") {
-            if ((made.drawn = picture(s, file.c_str(), mat4f{}, 1.f, float3{-1.f}, true, lay))) s.playing.erase(made.drawn);
+            if (fxOk && (made.drawn = picture(s, file.c_str(), mat4f{}, 1.f, float3{-1.f}, true, lay, fx))) s.playing.erase(made.drawn);
         } else if (kind == "text") {   // (words in a font: said by `say N text ...`; until then, the font's own name)
             const std::string words = doc_word(d, thing, "text");
             if (!fill.empty() && rgb < 0) why = "a text's fill is six digits, as ff3366";
-            else if (stroke.empty() || edgeRgb >= 0) made.drawn = type(s, words.empty() ? std::filesystem::path(file).stem().string().c_str() : words.c_str(), file.c_str(), mat4f{}, 1.f, fill.empty() ? float3{0x11 / 255.f} : colour, lay, edge, (float)doc_number(d, thing, "align", 0, 0));
+            else if ((stroke.empty() || edgeRgb >= 0) && fxOk) made.drawn = type(s, words.empty() ? std::filesystem::path(file).stem().string().c_str() : words.c_str(), file.c_str(), mat4f{}, 1.f, fill.empty() ? float3{0x11 / 255.f} : colour, lay, edge, (float)doc_number(d, thing, "align", 0, 0), fx);
         } else if (kind == "shape") {   // (a flat shape in one colour: ThorVG's own rectangle or circle)
             if (!fill.empty() && rgb < 0) why = "a shape's fill is six digits, as ff3366";
-            else if (!stroke.empty() && edgeRgb < 0) {}
+            else if ((!stroke.empty() && edgeRgb < 0) || !fxOk) {}
             else if (shape == "solid") {   // (a flat colour as large as the stage, where it stands at first: as wide to its height, and as high in the stage's units)
                 const float high = (float)(2.0 * up.w / up.y);
-                made.drawn = flat(s, "rect", (float)s.w / (float)s.h, mat4f{}, high, fill.empty() ? float3{0xd9, 0xd2, 0xc3} / 255.f : colour, lay, float4{edge.xyz, edge.w / high});
-            } else made.drawn = flat(s, shape.c_str(), (float)doc_number(d, thing, "wide", 0, 1), mat4f{}, 1.f, fill.empty() ? float3{0xd9, 0xd2, 0xc3} / 255.f : colour, lay, edge);
+                made.drawn = flat(s, "rect", (float)s.w / (float)s.h, mat4f{}, high, fill.empty() ? float3{0xd9, 0xd2, 0xc3} / 255.f : colour, lay, float4{edge.xyz, edge.w / high}, DrawnFx{fx.blur / high, fx.shadow, fx.fall / high, fx.way, fx.soft / high});
+            } else made.drawn = flat(s, shape.c_str(), (float)doc_number(d, thing, "wide", 0, 1), mat4f{}, 1.f, fill.empty() ? float3{0xd9, 0xd2, 0xc3} / 255.f : colour, lay, edge, fx);
         } else if (kind == "solid") {   // (one of the kit's shapes, or a file; its fill is its surface: a colour, or the material glass)
             const bool glass = fill == "glass";
             if (!fill.empty() && !glass && rgb < 0) why = "a solid's fill is six digits, as ff3366, or glass";

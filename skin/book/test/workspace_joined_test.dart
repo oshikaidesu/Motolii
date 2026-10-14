@@ -514,6 +514,44 @@ void main() {
     await _close(t);
   }, skip: !_built);
 
+  testWidgets('the Effects shelf: Gaussian Blur and Drop Shadow are ThorVG\'s own, put on and taken off; the rest have no seat', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    final rect = m.add('shape', 'rect');
+    ws
+      ..reread()
+      ..select('$rect')
+      ..shelf = 'Effects';
+    await t.pumpAndSettle();
+    Future<void> pick(String name) async {
+      final row = find.text(name).first;
+      await t.ensureVisible(row);
+      await t.pumpAndSettle();
+      await t.tap(row);
+      await t.pumpAndSettle();
+    }
+
+    await pick('Gaussian Blur');
+    await t.tap(find.text('Add'));
+    await t.pumpAndSettle();
+    expect(m.value(rect, 'blur', 0), 12, reason: m.trouble);
+    expect(ws.fxOf('$rect'), ['Gaussian Blur']);
+    expect(wsTransform(ws, '$rect')['blur_radius'], 12, reason: 'the Blur card says the document\'s blur');
+    await t.tap(find.text('Remove'));
+    await t.pumpAndSettle();
+    expect(m.value(rect, 'blur', 0), 0);
+
+    await pick('Drop Shadow');
+    await t.tap(find.text('Add'));
+    await t.pumpAndSettle();
+    expect(m.word(rect, 'shadow'), '000000', reason: m.trouble);
+    expect(m.undo() && m.word(rect, 'shadow').isEmpty, isTrue, reason: 'one step');
+
+    await pick('Twirl');
+    expect(find.text('No seat yet'), findsOneWidget);
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
   testWidgets('Backspace on the timeline takes the picked thing out; undo brings it back', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final ring = m.add('solid', 'ring'), cube = m.add('solid', 'cube');

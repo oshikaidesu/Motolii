@@ -186,10 +186,13 @@ class _FxFooter extends StatelessWidget {
   Widget build(BuildContext context) => DockFooter(
     title: f.name,
     meta: [f.family.label, f.seat, f.time, f.inputs, ...f.looks].join(' · '),
-    action: 'Add',
-    done: done || ws.inside != null,
-    doneLabel: ws.inside != null ? 'No seat yet' : 'Added',
-    onAction: ws.canTry
+    // (joined: an effect the inside has goes on or comes off the picked thing; the others have no seat yet)
+    action: ws.inside != null && done ? 'Remove' : 'Add',
+    done: ws.inside != null ? !fxValues.containsKey(f.name) || ws.selected == null : done,
+    doneLabel: ws.inside != null ? (fxValues.containsKey(f.name) ? 'Pick a thing' : 'No seat yet') : 'Added',
+    onAction: ws.inside != null
+        ? () => ws.fxToggle(f.name)
+        : ws.canTry
         ? () {
             ws.tryFx(f.name);
             ws.keepFx();
