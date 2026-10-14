@@ -44,7 +44,9 @@ static void picture_at(Stage& s, Drawn* d, float seconds) {
 // that shows it. ground below 0: clear where nothing is drawn. shown = false: made but not put in the scene (for a matte).
 // What ThorVG's own scene effects do to it, each as a share of its height (0: none): a blur; a shadow of a colour, so
 // much of it (shadow.w), falling so far, that way (degrees, as ThorVG counts them) and so soft.
-struct DrawnFx { float blur = 0.f; float4 shadow{0.f}; float fall = 0.f, way = 0.f, soft = 0.f; };
+// tint: how much its darks and lights are made two colours (0: not at all); tritone: how much its darks, middles and
+// lights are made three (0: not at all).
+struct DrawnFx { float blur = 0.f; float4 shadow{0.f}; float fall = 0.f, way = 0.f, soft = 0.f; float tint = 0.f; float3 tints[2]{}; float tritone = 0.f; float3 tones[3]{}; };
 static Drawn* drawn(Stage& s, const std::function<tvg::Paint*(Drawn*, int*, int*)>& paints, const mat4f& place, float high, float3 ground, bool shown, const char* lay, const DrawnFx& fx = {}) {
     if (!door::device(s.engine)) return nullptr;   // (another backend)
     Drawn* d = new Drawn;
@@ -56,7 +58,7 @@ static Drawn* drawn(Stage& s, const std::function<tvg::Paint*(Drawn*, int*, int*
         tvg::Initializer::init(0);
         tvg::Paint* p = paints(d, &w, &h);
         if (!p || w <= 0 || h <= 0) return;
-        if (fx.blur > 0.f || fx.shadow.w > 0.f) {   // (in a scene of ThorVG's, which takes the effects; the picture larger all round by as far as they reach)
+        if (fx.blur > 0.f || fx.shadow.w > 0.f || fx.tint > 0.f || fx.tritone > 0.f) {   // (in a scene of ThorVG's, which takes the effects; the picture larger all round by as far as they reach)
             const float tall = (float)h, blur = fx.blur * tall, fall = fx.fall * tall, soft = fx.soft * tall;
             const int room = (int)std::ceil(std::max(3.f * blur, fx.shadow.w > 0.f ? fall + 3.f * soft : 0.f));
             tvg::Scene* scene = tvg::Scene::gen();
@@ -65,6 +67,11 @@ static Drawn* drawn(Stage& s, const std::function<tvg::Paint*(Drawn*, int*, int*
             if (fx.shadow.w > 0.f)
                 scene->add(tvg::SceneEffect::DropShadow, (int)std::lround(255.f * fx.shadow.x), (int)std::lround(255.f * fx.shadow.y), (int)std::lround(255.f * fx.shadow.z), (int)std::lround(255.f * fx.shadow.w),
                            (double)fx.way, (double)fall, (double)std::max(soft, 0.01f), 75);
+            const auto c = [](float v) { return (int)std::lround(255.f * v); };
+            if (fx.tint > 0.f) scene->add(tvg::SceneEffect::Tint, c(fx.tints[0].x), c(fx.tints[0].y), c(fx.tints[0].z), c(fx.tints[1].x), c(fx.tints[1].y), c(fx.tints[1].z), (double)(100.f * fx.tint));
+            if (fx.tritone > 0.f)
+                scene->add(tvg::SceneEffect::Tritone, c(fx.tones[0].x), c(fx.tones[0].y), c(fx.tones[0].z), c(fx.tones[1].x), c(fx.tones[1].y), c(fx.tones[1].z), c(fx.tones[2].x), c(fx.tones[2].y), c(fx.tones[2].z),
+                           c(1.f - fx.tritone));
             if (blur > 0.f) scene->add(tvg::SceneEffect::GaussianBlur, (double)blur, 0, 0, 75);
             w += 2 * room, h += 2 * room;
             high *= (float)h / tall;   // (the thing itself stays as large)

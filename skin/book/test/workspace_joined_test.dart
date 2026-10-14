@@ -10,6 +10,7 @@ import 'package:lab_book/motolii.dart';
 import 'package:lab_book/parts/controls.dart' show Segmented;
 import 'package:lab_book/sets/inspector/inspector_parts.dart' show AnchorCube, AnchorGeometry, OnOff, PropRow, TextGroup;
 import 'package:lab_book/workspace/dock_fonts.dart';
+import 'package:lab_book/workspace/dock_parts.dart' show DockSearch;
 import 'package:lab_book/workspace/timeline.dart';
 import 'package:lab_book/workspace/workspace.dart';
 import 'package:lab_book/workspace/ws.dart';
@@ -523,7 +524,9 @@ void main() {
       ..shelf = 'Effects';
     await t.pumpAndSettle();
     Future<void> pick(String name) async {
-      final row = find.text(name).first;
+      await t.enterText(find.descendant(of: find.byType(DockSearch), matching: find.byType(EditableText)), name); // (the shelf's own search: the row is in sight)
+      await t.pumpAndSettle();
+      final row = find.text(name).last; // (the first is the search box's own words)
       await t.ensureVisible(row);
       await t.pumpAndSettle();
       await t.tap(row);
@@ -545,6 +548,16 @@ void main() {
     await t.pumpAndSettle();
     expect(m.word(rect, 'shadow'), '000000', reason: m.trouble);
     expect(m.undo() && m.word(rect, 'shadow').isEmpty, isTrue, reason: 'one step');
+
+    await pick('Duotone');
+    await t.tap(find.text('Add'));
+    await t.pumpAndSettle();
+    expect(m.value(rect, 'tint', 0), 1, reason: m.trouble);
+    await pick('Gradient Map');
+    await t.tap(find.text('Add'));
+    await t.pumpAndSettle();
+    expect(m.value(rect, 'tritone', 0), 1, reason: m.trouble);
+    expect(ws.fxOf('$rect'), ['Duotone', 'Gradient Map']);
 
     await pick('Twirl');
     expect(find.text('No seat yet'), findsOneWidget);

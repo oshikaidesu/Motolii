@@ -270,7 +270,7 @@ class Ws extends ChangeNotifier {
       if (t == null) return const [];
       return [
         for (final e in fxValues.entries)
-          if (m.word(t, e.value) case final w when w.isNotEmpty && (double.tryParse(w) ?? 1) != 0) e.key,
+          if (m.word(t, e.value.$1) case final w when w.isNotEmpty && (double.tryParse(w) ?? 1) != 0) e.key,
       ];
     }
     return List.unmodifiable(_fx[id] ?? const <String>[]);
@@ -281,7 +281,10 @@ class Ws extends ChangeNotifier {
     final m = _inside, t = int.tryParse(selected ?? ''), v = fxValues[name];
     if (m == null || t == null || v == null) return false;
     final on = fxOf(selected).contains(name);
-    final done = v == 'blur' ? m.set(t, v, on ? 0 : 12) : m.say(t, v, on ? '' : '000000'); // (as the sample's Blur and After Effects' shadow come)
+    final done = switch (v.$2) {
+      final num n => m.set(t, v.$1, on ? 0 : n.toDouble()),
+      final w => m.say(t, v.$1, on ? '' : '$w'),
+    };
     reread();
     return done;
   }
@@ -317,8 +320,14 @@ class Ws extends ChangeNotifier {
   }
 }
 
-/// Joined: the shelf's effects the inside has, by the document's value that puts each on a thing (ThorVG's own).
-const fxValues = {'Gaussian Blur': 'blur', 'Drop Shadow': 'shadow'};
+/// Joined: the shelf's effects the inside has, by the document's value that puts each on a thing (ThorVG's own), and
+/// what it is told as it is put on (the sample's Blur radius; After Effects' black shadow; all of the two or three colours).
+const fxValues = <String, (String, Object)>{
+  'Gaussian Blur': ('blur', 12),
+  'Drop Shadow': ('shadow', '000000'),
+  'Duotone': ('tint', 1),
+  'Gradient Map': ('tritone', 1),
+};
 
 class WsScope extends InheritedNotifier<Ws> {
   const WsScope({super.key, required Ws ws, required super.child}) : super(notifier: ws);
