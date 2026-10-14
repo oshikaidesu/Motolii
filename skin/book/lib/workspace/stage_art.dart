@@ -269,8 +269,8 @@ abstract final class WsArt {
 
   /// The topmost layer under [p] (document px), or null. The background is locked: a click on it means "nothing".
   static String? hit(ArtScene s, Offset p) {
-    if (s.boxes case final real?) {   // (joined: the thing in front, of those whose real frame the point is in; a later thing is in front)
-      for (final l in s.layers.reversed) {
+    if (s.boxes case final real?) {   // (joined: the thing in front, of those whose real frame the point is in; the first row is the nearest thing)
+      for (final l in s.layers) {
         if (l.live(s.frame) && (real[l.id]?.contains(p) ?? false)) return l.id;
       }
       return null;

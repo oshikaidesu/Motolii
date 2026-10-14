@@ -9,6 +9,7 @@
 #include <gltfio/ResourceLoader.h>
 #include <gltfio/TextureProvider.h>
 #include <gltfio/materials/uberarchive.h>
+#include "third_party/filament_src/third_party/cgltf/cgltf.h"   // (the reader of glTF that Filament's own loader is built on: already in its library)
 
 struct Solid {
     gltfio::FilamentAsset* made = nullptr;
@@ -60,6 +61,57 @@ static Solid* solid(Stage& s, const char* file, const mat4f& place, float high) 
         };
     }
     return d;
+}
+
+// A 3D file's shape alone, as a mesh of the kit: every triangle of it where the file puts it, brought to 1 tall with
+// its middle at the middle (as `solid` shows it). For a look of the kit's own that draws a shape more than once
+// (glass). It stands as the file has it at rest: a movement of its own is not gone through. nullptr: not read.
+static Mesh* solid_mesh(const char* file) {
+    cgltf_options how{};
+    cgltf_data* read = nullptr;
+    if (cgltf_parse_file(&how, file, &read) != cgltf_result_success) return nullptr;
+    if (cgltf_load_buffers(&how, read, file) != cgltf_result_success) return cgltf_free(read), nullptr;
+    Mesh* m = new Mesh;
+    for (cgltf_size n = 0; n < read->nodes_count; ++n) {
+        const cgltf_node& node = read->nodes[n];
+        if (!node.mesh) continue;
+        float to[16];
+        cgltf_node_transform_world(&node, to);
+        const mat4f world(float4{to[0], to[1], to[2], to[3]}, float4{to[4], to[5], to[6], to[7]}, float4{to[8], to[9], to[10], to[11]}, float4{to[12], to[13], to[14], to[15]});
+        for (cgltf_size p = 0; p < node.mesh->primitives_count; ++p) {
+            const cgltf_primitive& part = node.mesh->primitives[p];
+            const cgltf_accessor* places = nullptr;
+            const cgltf_accessor* ways = nullptr;
+            for (cgltf_size a = 0; a < part.attributes_count; ++a) {
+                if (part.attributes[a].type == cgltf_attribute_type_position) places = part.attributes[a].data;
+                if (part.attributes[a].type == cgltf_attribute_type_normal) ways = part.attributes[a].data;
+            }
+            if (part.type != cgltf_primitive_type_triangles || !places) continue;
+            const uint32_t first = (uint32_t)m->pos.size();
+            for (cgltf_size v = 0; v < places->count; ++v) {
+                float at[3] = {0, 0, 0}, faces[3] = {0, 0, 1};
+                cgltf_accessor_read_float(places, v, at, 3);
+                if (ways) cgltf_accessor_read_float(ways, v, faces, 3);
+                m->pos.push_back((world * float4{at[0], at[1], at[2], 1.f}).xyz);
+                m->nrm.push_back(normalize((world * float4{faces[0], faces[1], faces[2], 0.f}).xyz));
+                m->uv.push_back(float2{0.f});
+            }
+            const cgltf_size corners = part.indices ? part.indices->count : places->count;
+            for (cgltf_size i = 0; i < corners; ++i) m->idx.push_back(first + (uint32_t)(part.indices ? cgltf_accessor_read_index(part.indices, i) : i));
+            if (!ways)   // (a file that does not say which way its faces look: each corner looks the way its triangles do)
+                for (size_t i = m->idx.size() - corners; i + 2 < m->idx.size(); i += 3) {
+                    const float3 flat = normalize(cross(m->pos[m->idx[i + 1]] - m->pos[m->idx[i]], m->pos[m->idx[i + 2]] - m->pos[m->idx[i]]));
+                    for (int k = 0; k < 3; ++k) m->nrm[m->idx[i + (size_t)k]] = flat;
+                }
+        }
+    }
+    cgltf_free(read);
+    if (m->idx.empty()) return delete m, nullptr;
+    float3 low = m->pos[0], high = m->pos[0];
+    for (const float3& p : m->pos) low = min(low, p), high = max(high, p);
+    const float fit = 1.f / std::max(high.y - low.y, 1e-6f);
+    for (float3& p : m->pos) p = (p - 0.5f * (low + high)) * fit;
+    return m;
 }
 
 // A plain look in one colour (floor_lit.mat: lit by the stage's room); and every face of a file's shape given it, the

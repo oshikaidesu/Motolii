@@ -18,6 +18,7 @@
 //            opacity                how much of it is there: 1 all, 0 none (a film's, a picture's, a text's)
 //            start, duration        when it comes on, and for how long (not said: for good, going round)
 //            begin, speed           a film's: from where in itself, how fast (below 0: backwards)
+//            order                  where it lies among the things: one with a greater number is nearer (not said: as they were made)
 //            clip                   1: it is seen only inside the frame of the thing before it (a 3D thing cut by a rectangle)
 //            wide                   a shape's: how many times as wide as it is high
 //            keyed                  a film's: 1 if its ground is keyed out (a green screen, of whatever colour: the colour its four corners share), 0 if not; not said: keyed if it has such a ground
@@ -37,6 +38,7 @@ struct Doc {
     sqlite3* file = nullptr;
     Stage* stage = nullptr;
     std::string trouble;   // why the last call that was not done was not
+    std::vector<int> laid;   // the things in the order they lie, the one furthest back first (read when first asked for, forgotten at every change)
     int together = 0;      // changes made as one step of undo (one act of a hand): 0 not so, 1 so and none made yet, 2 so and the step is begun
     struct Keys { std::vector<double> at, value; std::vector<Interp> interp; std::vector<std::string> own; };   // (own: a way defined in the document, where the stretch is not one of the nine kinds)
     std::map<std::pair<int, std::string>, Keys> moving;   // a value's keys, and the way of the stretch after each; read from the facts when first asked for, forgotten at every change
@@ -55,7 +57,7 @@ static const DocValue doc_values[] = {
     {"x", doc_kinds, -1e4, 1e4, true, nullptr}, {"y", doc_kinds, -1e4, 1e4, true, nullptr}, {"z", doc_kinds, -1e4, 1e4, true, nullptr},
     {"rotate", doc_kinds, -1e6, 1e6, true, nullptr}, {"rotate_x", doc_kinds, -1e6, 1e6, true, nullptr}, {"rotate_y", doc_kinds, -1e6, 1e6, true, nullptr},
     {"size", doc_kinds, 1e-3, 1e4, true, nullptr}, {"opacity", "film picture text shape", 0, 1, true, nullptr},
-    {"clip", doc_kinds, 0, 1, false, nullptr}, {"wide", "shape", 1e-3, 1e3, false, nullptr}, {"shape", "shape", 0, 0, false, "rect circle"},
+    {"clip", doc_kinds, 0, 1, false, nullptr}, {"order", doc_kinds, -1e9, 1e9, false, nullptr}, {"wide", "shape", 1e-3, 1e3, false, nullptr}, {"shape", "shape", 0, 0, false, "rect circle"},
     {"start", doc_kinds, 0, 1e6, false, nullptr}, {"duration", doc_kinds, 1e-3, 1e6, false, nullptr},
     {"begin", "film", 0, 1e6, false, nullptr}, {"speed", "film", -100, 100, false, nullptr}, {"keyed", "film", 0, 1, false, nullptr},
     {"blend", "film picture text shape", 0, 0, false, "normal add multiply screen"}, {"file", "film picture solid text", 0, 0, false, ""}, {"shape", "solid", 0, 0, false, doc_shapes},
@@ -75,6 +77,14 @@ static bool doc_rows(Doc& d, char* ask, const std::function<void(sqlite3_stmt*)>
 static void doc_forget(Doc& d) {
     d.moving.clear();
     d.named.clear();
+    d.laid.clear();
+}
+// The things in the order they lie, the one furthest back first: by `order` where it is said, else as they were made.
+static const std::vector<int>& doc_laid(Doc& d) {
+    if (d.laid.empty())
+        doc_rows(d, sqlite3_mprintf("select f.thing from fact f where f.name = 'kind' order by coalesce((select o.value from fact o where o.thing = f.thing and o.name = 'order' and o.at = 0), f.thing), f.thing"),
+                 [&](sqlite3_stmt* row) { d.laid.push_back(sqlite3_column_int(row, 0)); });
+    return d.laid;
 }
 
 // A way's expression made ready for SQLite to work out (nullptr: SQLite does not take it; d.trouble says why).
@@ -160,7 +170,11 @@ static bool doc_frame(Doc& d, int thing, double now, double* frame);
 static void doc_moment(Doc& d, double now) {
     Stage& s = *d.stage;
     int laid = 0;   // (things lie like sheets put down one after another: each a hair nearer than the one before, so at the same depth the later one is in front)
-    for (auto& [thing, t] : d.shown) {
+    const std::vector<int> lie = doc_laid(d);
+    for (int thing : lie) {
+        const auto found = d.shown.find(thing);
+        if (found == d.shown.end()) continue;
+        Doc::Shown& t = found->second;
         ++laid;
         const double since = now - doc_number(d, thing, "start", 0, 0), lasts = doc_number(d, thing, "duration", 0, -1);
         const bool in = since >= 0.0 && (lasts < 0.0 || since < lasts);
@@ -178,7 +192,10 @@ static void doc_moment(Doc& d, double now) {
     // A clipped thing is seen only inside the frame of the thing before it: Filament's own scissor on its looks, told
     // the rectangle of the picture that the thing before it covers now (a thing turned: the upright box around it).
     int before = 0;
-    for (auto& [thing, t] : d.shown) {
+    for (int thing : lie) {
+        const auto found = d.shown.find(thing);
+        if (found == d.shown.end()) continue;
+        Doc::Shown& t = found->second;
         double frame[5];
         const bool clipped = t.in && before && doc_number(d, thing, "clip", 0, 0) > 0.5 && doc_frame(d, before, now, frame);
         if (clipped || t.clipped) {
@@ -243,7 +260,9 @@ static bool doc_match(Doc& d) {
                 MaterialInstance* look = glass ? thick_glass(s, made.shape, {mat4f{}}) : add(s, made.shape, "floor_lit.filamat");
                 if (!look) made.shape = nullptr;
                 else if (!glass) plain(look, fill.empty() ? float3{0xd9, 0xd2, 0xc3} / 255.f : colour);
-            } else if (glass) why = "glass on a file's shape is not made yet";
+            } else if (glass) {   // (a file's shape as glass: its triangles alone, for the kit's glass, which draws a shape three times)
+                if ((made.shape = solid_mesh(file.c_str())) && !thick_glass(s, made.shape, {mat4f{}})) made.shape = nullptr;
+            }
             else if ((made.solid = solid(s, file.c_str(), mat4f{}, 1.f)) && rgb >= 0) solid_fill(s, made.solid, colour);
         } else why = std::string("its kind is one of: ") + doc_kinds;
         if (!made.film && !made.drawn && !made.solid && !made.shape) { d.trouble = why + ": the " + kind + " " + std::filesystem::path(file + shape).filename().string() + " could not be made"; all = false; continue; }
@@ -453,6 +472,7 @@ static int doc_keys(Doc& d, int thing, const char* name, double at = -1.0) {   /
 // What a hand does to a value at a moment, as the document's own rules (a shell does not work them out):
 // put: the value changed there: a key at that moment if the value has keys, else the value that stays.
 // key_here: a key at that moment holding what the value is there (nothing, if it has one there).
+// raise: brought nearer or further back among the things.
 // stay: its keys are taken away, and it stays what it is at that moment.
 // keyed: 0 the value has no keys, 1 it has keys but none at that moment, 2 it has a key at that moment.
 // moving: the names of the values of a thing that can take keys.
@@ -473,6 +493,20 @@ static bool doc_trim(Doc& d, int thing, double from, double to) {
     const char* const put = "insert into fact(thing, name, at, value) values(%d, %Q, 0.0, %!.17g) on conflict do update set value = excluded.value;";
     return doc_change(d, sqlite3_mprintf("%z%z%z", sqlite3_mprintf(put, thing, "start", from), sqlite3_mprintf(put, thing, "duration", to - from),
                                          film ? sqlite3_mprintf(put, thing, "begin", into) : sqlite3_mprintf("")));
+}
+// raise: a thing brought `places` places nearer among the things (below 0: further back): each thing is told where it
+// lies now, as one change.
+static bool doc_raise(Doc& d, int thing, int places) {
+    if (!doc_knows(d, thing)) return false;
+    std::vector<int> lie = doc_laid(d);
+    const long from = std::find(lie.begin(), lie.end(), thing) - lie.begin(), to = std::clamp(from + (long)places, 0L, (long)lie.size() - 1);
+    if (to == from) return d.trouble = places > 0 ? "it is the nearest already" : "it is the furthest back already", false;
+    lie.erase(lie.begin() + from);
+    lie.insert(lie.begin() + to, thing);
+    char* all = sqlite3_mprintf("");
+    for (size_t i = 0; i < lie.size(); ++i)
+        all = sqlite3_mprintf("%zinsert into fact(thing, name, at, value) values(%d, 'order', 0.0, %d) on conflict do update set value = excluded.value;", all, lie[i], (int)i + 1);
+    return doc_change(d, all);
 }
 static bool doc_stay(Doc& d, int thing, const char* name, double at) {   // (its keys go: it stays what it is at that moment)
     return doc_knows(d, thing, name) && (!doc_keys(d, thing, name) || doc_set(d, thing, name, doc_number(d, thing, name, at, doc_usual(name))));
@@ -540,11 +574,7 @@ static bool doc_define(Doc& d, const char* name, const char* expression) {
 }
 // What a shell reads to draw its lists: the things there are, how long each is on (its duration; below 0: for good,
 // going round), and the moments of a value's keys (a value with one fact has none).
-static std::vector<int> doc_things(Doc& d) {
-    std::vector<int> all;
-    doc_rows(d, sqlite3_mprintf("select thing from fact where name = 'kind' order by thing"), [&](sqlite3_stmt* row) { all.push_back(sqlite3_column_int(row, 0)); });
-    return all;
-}
+static std::vector<int> doc_things(Doc& d) { return doc_laid(d); }   // (in the order they lie: the one furthest back first)
 static double doc_lasts(Doc& d, int thing) {
     const double lasts = doc_number(d, thing, "duration", 0, -1);
     return lasts > 0.0 ? lasts : -1.0;

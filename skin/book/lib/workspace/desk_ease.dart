@@ -12,12 +12,15 @@ enum EaseKind { bezier, bounce, hold }
 
 /// One ease: a kind, and the two bezier handles (kept even while another kind shows, so grabbing a handle returns to bezier).
 class Ease {
-  const Ease(this.kind, this.p1, this.p2, [this.name]);
+  const Ease(this.kind, this.p1, this.p2, [this.name, this.drawn]);
   final EaseKind kind;
   final Offset p1, p2;
   final String? name;
 
-  double at(double x) => switch (kind) {
+  /// A way with no seat on this desk: how it goes, as the document itself works it out (how far, at even steps of the stretch).
+  final List<double>? drawn;
+
+  double at(double x) => drawn != null ? _along(drawn!, x) : switch (kind) {
     EaseKind.bezier => bezierY(p1, p2, x),
     EaseKind.bounce => _bounce(x),
     EaseKind.hold => x < 1 ? 0 : 1,
@@ -30,6 +33,11 @@ class Ease {
   bool operator ==(Object other) => other is Ease && other.kind == kind && other.p1 == p1 && other.p2 == p2;
   @override
   int get hashCode => Object.hash(kind, p1, p2);
+}
+
+double _along(List<double> ys, double x) {
+  final at = x.clamp(0.0, 1.0) * (ys.length - 1), i = at.floor().clamp(0, ys.length - 2);
+  return ys[i] + (ys[i + 1] - ys[i]) * (at - i);
 }
 
 const easePresets = [
@@ -145,7 +153,16 @@ class _DeskEaseState extends State<DeskEase> {
     final ws = WsScope.of(context), span = easeSpan(ws), store = _eases[ws] ??= {}, id = _spanId(span);
     if (ws.inside case final m?) {
       final at = span == null ? const <String, double>{} : _keysAt(ws, span);
-      final ease = _pending ?? (at.isEmpty ? easePresets.first : _heard(m.wayOf(int.parse(span!.layer.id), at.keys.first, at.values.first)));
+      var ease = _pending ?? (at.isEmpty ? easePresets.first : _heard(m.wayOf(int.parse(span!.layer.id), at.keys.first, at.values.first)));
+      if (easeOther(ease) && ease.drawn == null) {
+        // (no seat for this kind: its curve is read off the document, the value itself between the two keys)
+        final t = int.parse(span!.layer.id), name = at.keys.first, from = at.values.first;
+        final to = m.keyMoments(t, name).where((s) => s > from).firstOrNull;
+        final a = m.value(t, name, from), b = to == null ? null : m.value(t, name, to);
+        if (to != null && a != null && b != null && (b - a).abs() > 1e-9) {
+          ease = Ease(ease.kind, ease.p1, ease.p2, ease.name, [for (var i = 0; i <= 48; i++) ((m.value(t, name, from + (to - from) * i / 48) ?? a) - a) / (b - a)]);
+        }
+      }
       void set(Ease e) {
         setState(() => _pending = e);
         if (!_down) _settle(ws, span);

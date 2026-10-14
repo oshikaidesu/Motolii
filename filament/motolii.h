@@ -66,6 +66,9 @@ int motolii_stay(Motolii* m, int thing, const char* name, double at);
 /* When a thing is on, cut at its bar's ends by a hand: from `from` to `to` seconds of the stage (a film cut at its
    head goes on showing at each moment what it showed there). Sliding the whole bar is motolii_set(thing, "start"). */
 int motolii_trim(Motolii* m, int thing, double from, double to);
+/* A thing brought `places` places nearer among the things (below 0: further back). motolii_things lists them in the
+   order they lie, the one furthest back first; at the same depth a nearer thing is seen in front. */
+int motolii_raise(Motolii* m, int thing, int places);
 int motolii_keyed(Motolii* m, int thing, const char* name, double at);
 const char* motolii_moving(Motolii* m, int thing);
 const char* motolii_words(Motolii* m, int thing, const char* name);   /* the words a value of a thing may be, with spaces between ("": any, or it is not a word; until the next call) */

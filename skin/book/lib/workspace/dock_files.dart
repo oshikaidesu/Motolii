@@ -166,7 +166,7 @@ Map<String, String> _used(Ws ws) {
   final m = ws.inside!;
   _usedRev = ws.rev;
   return _usedNow = {
-    for (final l in ws.layers)
+    for (final l in ws.layers.reversed) // (the nearest thing is the first row: it is told last, so it is the one kept)
       if (m.word(int.parse(l.id), 'file') case final f when f.isNotEmpty) m.whole(f): l.id,
   };
 }

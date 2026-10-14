@@ -49,7 +49,8 @@
   さらに足した物：タイムラインのバーを手で持てる（胴を持つと滑る＝いつ出るか、端を持つとそこで切る＝`motolii_trim`。頭を切った動画は、各時刻に前と同じ絵を出し続ける。`reports/skin_run/live_08_bars_held.jpg`）／**文書が自分の舞台の大きさを持つ**（物0番の `wide`・`high`。在る文書はその大きさで開き、新しい文書は最初に開いた大きさ。上の帯の大きさの札を押すと 横長 → 縦長 → 正方形 と回って、その場で開き直る。取り消しの歩ではない）／上の帯の題は文書の名前。
   **的③の部品**（`reports/skin_run/clip_is_a_rectangle.jpg`）：平らな形（種類 `shape`：rect・circle、ThorVG の Shape。`fill` で色、`wide` で横幅の比＝帯。Create 棚の Rectangle・Ellipse）／切り抜き `clip`（1：1つ前の物の枠の中だけ見える。絵を別に描く仕掛けは使わず、Filament に元からある「材質ごとの四角」`setScissor` に、前の物の枠を毎コマ渡すだけ。glb にもそのまま効く。インスペクタの Clip to below の席）／Filament 自前の陰（SSAO）を舞台で入れた（素の塗りの立体が立体に見える。手本の作りの絵で1枚 3.76 ms）。
   限り：切り抜きは四角だけ（前の物が丸や字でも、その外枠の四角で切る。回した物は立てた外枠）。見本の文書で陰を入れた後の重さは未計測。
-  **残ってる指摘**：重なりの順を入れ替える入口が無い（新しい物が手前、まで）、`saturn_v.glb` が大きさを触るまで見えなかった（1回）、舞台の下の帯の「S 100%」、Render と大きさの札が無反応、Colors の「Used here」の数、Elastic の線が直線、glb にガラス、文字の Size・Alignment、窓の大きさ変更と 60 コマは未計測、的③は 3D を四角で切る席が無い。
+  採点2回目の前に足した物：**glb にガラス**（`fill glass`。ファイルの三角形を、Filament の読み手の中にもう入ってる cgltf で読んで、手元のガラスに渡す。ロケットで1枚 4.29 ms、`reports/skin_run/glass_fills_a_file.jpg`。ファイル自身の動きは通さない、止まった形）／**順**（`order`、`motolii_raise`：何番ぶん手前へ・奥へ。タイムラインは見本の通り上の行が手前になり、行を上下に運ぶと順が入れ替わる）／席の無い行き方（Elastic など）の線は、文書の値そのものから描く（嘘の直線をやめた）／陰を入れた後の見本の文書：1枚 3.81 ms、60 で落ち 0。
+  **残ってる指摘**：`saturn_v.glb` が大きさを触るまで見えなかった（1回）、舞台の下の帯の「S 100%」、Render と大きさの札が無反応、Colors の「Used here」の数、Elastic の線が直線、glb にガラス、文字の Size・Alignment、窓の大きさ変更と 60 コマは未計測、的③は 3D を四角で切る席が無い。
 - 開き方：`skin/book` で Flutter（`~/rust_ae/Motolii/.tools/flutter/bin/flutter`）の `build macos --debug --dart-define=LAB_ROUTE=/?path=workspace/workspace/live`、できた `lab_book.app` を開く。文書は `filament/out/skin.motolii`。
 
 作る的：①`edit_v5` を窓だけで作り直す ②猫ミームの人形劇 ③青いロケットのコラージュ（`research_notes/refs/G_rocket_collage_blue.jpg`）。

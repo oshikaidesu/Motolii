@@ -141,14 +141,14 @@ void main() {
     ws.reread();
     await t.pumpAndSettle();
     final tracks = t.getRect(find.byKey(const ValueKey('ws-tl-tracks')));
-    final row = tracks.top + 12, perFrame = (tracks.width - 60) / Ws.duration; // (about: the room at the two ends is the timeline's own)
+    final row = tracks.top + 36, perFrame = (tracks.width - 60) / Ws.duration; // (about: the room at the two ends is the timeline's own)
     await t.dragFrom(Offset(tracks.left + tracks.width * .3, row), Offset(perFrame * 30, 0));
     await t.pumpAndSettle();
     final start = m.value(cube, 'start', 0)!;
     expect(start, greaterThan(.5), reason: 'slid to the right: it comes on later');
     expect(m.lasts(cube), lessThan(0), reason: 'still on for good');
     final tail = t.getRect(find.byKey(const ValueKey('ws-tl-tracks'))).right - 1;
-    expect(ws.layers.first.outF, Ws.duration);
+    expect(ws.layers.last.outF, Ws.duration);
     expect(m.trim(cube, start, start + 2), isTrue, reason: m.trouble);
     expect(m.lasts(cube), 2);
     expect(m.undo() && m.lasts(cube) < 0 && m.value(cube, 'start', 0) == start, isTrue, reason: 'the cut goes back as one step');
@@ -186,7 +186,16 @@ void main() {
       ..reread()
       ..select('$cube');
     await t.pumpAndSettle();
+    expect(ws.layers.map((l) => l.name), ['Cube', 'Rect'], reason: 'the top row is the nearest thing');
+    // (a row carried down one row: the thing is one place further back)
+    await t.drag(find.byKey(ValueKey('ws-tl-label-$cube')), const Offset(0, 26));
+    await t.pumpAndSettle();
+    expect(m.things, [cube, rect]);
     expect(ws.layers.map((l) => l.name), ['Rect', 'Cube']);
+    expect(m.undo(), isTrue);
+    ws.reread();
+    await t.pumpAndSettle();
+    expect(m.things, [rect, cube], reason: 'one step back: the order');
 
     Finder seat(String label) => find.descendant(of: find.ancestor(of: find.text(label), matching: find.byType(PropRow)), matching: find.byType(OnOff));
     await t.ensureVisible(seat('Clip to below'));
@@ -211,7 +220,7 @@ void main() {
       ..reread()
       ..select('$cube');
     await t.pumpAndSettle();
-    expect(ws.layers.map((l) => l.name), ['Ring', 'Cube']);
+    expect(ws.layers.map((l) => l.name), ['Cube', 'Ring'], reason: 'the top row is the nearest thing');
 
     await t.tap(find.byKey(ValueKey('ws-tl-label-$cube')));
     await t.pump();

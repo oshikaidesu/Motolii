@@ -137,6 +137,7 @@ int motolii_size(Motolii* m, int wide, int high) {
 }
 int motolii_size_of(Motolii* m, int* wide, int* high) { return by_hand(m, [=] { return *wide = m->s->w, *high = m->s->h, 1; }); }
 int motolii_trim(Motolii* m, int thing, double from, double to) { return by_hand(m, [=] { return (int)doc_trim(doc(m), thing, from, to); }); }
+int motolii_raise(Motolii* m, int thing, int places) { return by_hand(m, [=] { return (int)doc_raise(doc(m), thing, places); }); }
 int motolii_stay(Motolii* m, int thing, const char* name, double at) { return by_hand(m, [=] { return (int)doc_stay(doc(m), thing, name, at); }); }
 int motolii_keyed(Motolii* m, int thing, const char* name, double at) { return by_hand(m, [=] { return doc_keyed(*m->d, thing, name, at); }); }
 const char* motolii_words(Motolii* m, int thing, const char* name) { return by_hand(m, [=] { return (m->word = doc_words(*m->d, thing, name)).c_str(); }); }

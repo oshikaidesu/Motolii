@@ -89,6 +89,7 @@ class Motolii {
   late final _size = _lib.lookupFunction<Int32 Function(_P, Int32, Int32), int Function(_P, int, int)>('motolii_size');
   late final _sizeOf = _lib.lookupFunction<Int32 Function(_P, Pointer<Int32>, Pointer<Int32>), int Function(_P, Pointer<Int32>, Pointer<Int32>)>('motolii_size_of');
   late final _trim = _lib.lookupFunction<Int32 Function(_P, Int32, Double, Double), int Function(_P, int, double, double)>('motolii_trim');
+  late final _raise = _lib.lookupFunction<Int32 Function(_P, Int32, Int32), int Function(_P, int, int)>('motolii_raise');
   late final _stay = _lib.lookupFunction<Int32 Function(_P, Int32, _S, Double), int Function(_P, int, _S, double)>('motolii_stay');
   late final _keyed = _lib.lookupFunction<Int32 Function(_P, Int32, _S, Double), int Function(_P, int, _S, double)>('motolii_keyed');
   late final _moving = _lib.lookupFunction<_S Function(_P, Int32), _S Function(_P, int)>('motolii_moving');
@@ -203,6 +204,9 @@ class Motolii {
 
   /// When a thing is on, cut at its bar's ends: from [from] to [to] seconds of the stage (motolii.h).
   bool trim(int thing, double from, double to) => _trim(_m, thing, from, to) != 0;
+
+  /// A thing brought [places] places nearer among the things (below 0: further back).
+  bool raise(int thing, int places) => _raise(_m, thing, places) != 0;
 
   /// The names of a thing's values that take keys.
   List<String> moving(int thing) => _moving(_m, thing).toDartString().split(' ').where((n) => n.isNotEmpty).toList();

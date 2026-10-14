@@ -243,6 +243,8 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
     ws.reread();
   }
 
+  double _lift = 0; // how far a label row has been carried up or down
+
   int? _workDrag; // 0 in, 1 out, 2 both, null scrub
   double _workGrab = 0;
 
@@ -362,15 +364,27 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
                         right: 0,
                         top: i * WtM.row - top,
                         height: WtM.row,
-                        child: _LabelRow(
-                          index: i,
-                          row: rows[i],
-                          hidden: _hidden.contains(ws.layers[i].id),
-                          solo: _solo.contains(ws.layers[i].id),
-                          onSelect: () => ws.select(ws.layers[i].id),
-                          onEye: () => _flip(_hidden, ws.layers[i].id),
-                          onSolo: () => _flip(_solo, ws.layers[i].id),
-                          onLock: () => _flip(_locked, ws.layers[i].id),
+                        // Joined: a row carried up or down is the thing brought nearer or further back, by as many rows as it was carried.
+                        child: GestureDetector(
+                          dragStartBehavior: DragStartBehavior.down, // (all of the way it was carried counts, from where the hand came down)
+                          onVerticalDragStart: ws.inside == null ? null : (_) => _lift = 0,
+                          onVerticalDragUpdate: ws.inside == null ? null : (d) => _lift += d.delta.dy,
+                          onVerticalDragEnd: ws.inside == null
+                              ? null
+                              : (_) {
+                                  final by = (_lift / WtM.row).round();
+                                  if (by != 0 && ws.inside!.raise(int.parse(ws.layers[i].id), -by)) ws.reread();
+                                },
+                          child: _LabelRow(
+                            index: i,
+                            row: rows[i],
+                            hidden: _hidden.contains(ws.layers[i].id),
+                            solo: _solo.contains(ws.layers[i].id),
+                            onSelect: () => ws.select(ws.layers[i].id),
+                            onEye: () => _flip(_hidden, ws.layers[i].id),
+                            onSolo: () => _flip(_solo, ws.layers[i].id),
+                            onLock: () => _flip(_locked, ws.layers[i].id),
+                          ),
                         ),
                       ),
                   ],

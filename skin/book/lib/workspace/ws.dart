@@ -130,7 +130,7 @@ class Ws extends ChangeNotifier {
     layers
       ..clear()
       ..addAll([
-        for (final t in m.things)
+        for (final t in m.things.reversed) // (the sample's manner: the nearest thing is the top row)
           () {
             final kind = m.word(t, 'kind'), file = m.word(t, 'file'), from = ((m.value(t, 'start', 0) ?? 0) * fps).round(), lasts = m.lasts(t);
             final name = switch (kind) {
