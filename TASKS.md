@@ -103,6 +103,8 @@
 - 足した（2回目）：物の名前（name、レシピの物はレシピの名で並ぶ）。ばらまき（Scatter の札：scatter_x・y・rotate・size と種 seed）。レシピ Line maze・Rings・Confetti（全部で10）。窓で Create 棚から2回押して Iris が出るのを確かめた（`reports/skin_run/recipe_in_window.jpg`）。
 - 第三者の採点（1回目）：10点中4点。手は5つの絵で Cavalry より少ない（2回押し）が、絵の多くが似ない・映像の途中で止まる・押しのけやノイズが無い。壊れ：背景の色で平らな物が全部消える（重い）、キーの無いずれが何もしない。直した：背景の色は舞台大の平らな色を一番先に描く。ずれは波の時刻もずらす。field_push（押しのけ）、wave_noise（写しごとのノイズ）、レシピは映像の長さいっぱい動く。copy_turn（一周に割り振り）、copy_fill_way cycle（交互）、Op star。呼びの台本は SIZE=1920x1080 で横長を開ける（今日の絵が縦長で切れていた）。絵 `reports/skin_run/recipes_landscape.jpg`、`background_colour_fixed.jpg`、`field_push.jpg`、`op_star_iris.jpg`。
 - 残り（採点から）：線そのものを曲げる波（線が直線のまま）、写し同士を線で繋ぐ（plexus）、写しの間隔が物の size と一緒に伸び縮みする（Cavalry は舞台の点で並べる）、データで写しの値、生成ポスターの区画割り。部屋の写真の背景は、まだ奥の平らな物を塗りつぶす。
+- 第三者の採点（2回目）：また4点。手は11中7で Cavalry より少ないが、絵が「素朴ないとこ」。一番の直し：写しの間隔が物の size と伸び縮みする。直した：写しの間隔・波の幅・ばらまきの幅は舞台の単位、写しの並びは物の位置を真ん中に（点を大きくしても格子は広がらない）。レシピは13個（Wave lines は本当の波の線に：新しい図形 wave、Helix は物2つを1回で：レシピの then、Spiral）。copy_fill は1色・none も。Burst の色の継ぎ目を閉じた。絵 `reports/skin_run/recipes13.jpg`。
+- 残り（2回目の採点から）：写しごとの値を points や fill にも（行ごとに波の数が違う、など）、場所のノイズ（点の群れが流れる）、plexus、データ、生成ポスター。キーは既定で直線（ease 無し）。Line maze は迷路でなく流れの場。Confetti は落ちない。
 - 限り：写しのずれは置き場所（位置・回転・大きさ）だけ。絵（Trim など）は写し全部で共有なので写しごとにずれない。「真ん中から」は写しの番号の真ん中（場所ではない、場所は Field で）。split は1行だけ。
 
 ## 棚崩し（2026-10-14 夕方、ユーザー：「filamentやthorvgの棚崩しだ。今度は逆、能力をflutterのトンマナでguiとしてわかりやすく露出させたい」）
