@@ -94,7 +94,7 @@ struct Stage {
     std::map<const void*, std::function<Sound()>> sounding;   // what is heard, each under its own thing: asked when a film is written
     std::map<const void*, std::function<void(double)>> playing;   // what goes on by itself as the stage's time does (films, pictures), each under its own thing
     std::vector<std::function<void()>> said_after;      // a word of their own after each line of `clock` and `soak`
-    struct Made { utils::Entity thing; const Mesh* of; int nth; mat4f place; };
+    struct Made { utils::Entity thing; const Mesh* of; int nth; mat4f place; bool matte = false; };   // (matte: the shape a matte is cut by, in that matte's own scene)
     utils::Entity sun;                     // the sun, where there is one (paper_and_sun), and all that goes by its direction: `sun_to`
     std::vector<MaterialInstance*> by_sun;
     struct Matte { Scene* scene; View* view; Texture* picture; bool soft; Camera* eye; utils::Entity on; mat4f onPlace; };
@@ -707,6 +707,7 @@ static int matte(Stage& s, Mesh* m, std::vector<mat4f> places, Texture* picture 
     for (size_t i = s.made.size() - places.size(); i < s.made.size(); ++i) {   // (its shape is in the matte's own scene, and in no other picture)
         s.scene->remove(s.made[i].thing);
         to.scene->addEntity(s.made[i].thing);
+        s.made[i].matte = true;
         if (to.eye == s.film) continue;
         s.made[i].place = inverse(to.onPlace) * s.made[i].place;   // (on a thing: its place is told from the thing from now on)
         tm.setParent(tm.getInstance(s.made[i].thing), tm.getInstance(to.on));

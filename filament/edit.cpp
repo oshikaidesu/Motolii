@@ -22,7 +22,7 @@ int main(int argc, char** argv) {
     if (argc < 2) return std::printf("FAIL edit <document>\n"), 1;
     Motolii* m = motolii_open(argv[1], 1080, 1920);
     if (!m) return std::printf("FAIL the document could not be opened\n"), 1;
-    for (std::string line; std::getline(std::cin, line);) {
+    for (std::string line; std::getline(std::cin, line);) try {
         std::istringstream said(line);
         std::vector<std::string> w;
         for (std::string word; said >> word;) w.push_back(word);
@@ -61,6 +61,9 @@ int main(int argc, char** argv) {
         if (!known || !numbers) std::printf("not a call: %s\n%s", line.c_str(), !numbers ? "  (a number was asked for where a word stands)\n" : calls);
         else std::printf("%s: %s, %.1f ms\n", call.c_str(), ok ? "done" : (std::string("NOT done: ") + motolii_trouble(m)).c_str(), std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count());
         std::fflush(stdout);
+    } catch (const std::exception& e) {   // (what the inside could not get past: said, and the end)
+        std::printf("FAIL %s: %s\n", line.c_str(), e.what());
+        return 1;
     }
     motolii_close(m);
     return 0;

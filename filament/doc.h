@@ -60,6 +60,10 @@ struct Doc {
     // moved for it (rig; a 2D thing goes with it) and only how it is turned (facing; a 2.5D thing keeps its own angle).
     math::mat4 rig, facing;
     bool blurred = false;   // its lens blurs what is off its focus (solid things and things in the world only)
+    // A thing clipped by the flat thing before it: the kit's matte it is cut by (its own), cut by which thing's picture,
+    // and which of its own looks were told of it.
+    struct Cut { int matte = -1, from = 0; const Drawn* by = nullptr; MaterialInstance* look = nullptr; };
+    std::map<int, Cut> cuts;
     std::map<int, Shown> shown;   // the things as they are on the stage, and what each was made of
 };
 // What a thing may be told, by name: which kinds of thing have it, a number between which two (or one of which
@@ -213,7 +217,7 @@ static void doc_looks(Stage& s, const Doc::Shown& t, const std::function<void(Ma
 static void doc_entities(Stage& s, const Doc::Shown& t, const std::function<void(utils::Entity)>& each) {
     const Mesh* m = t.film ? t.film->sheet : t.drawn ? t.drawn->sheet : t.shape;
     for (const Stage::Made& made : s.made)
-        if (m && made.of == m) each(made.thing);
+        if (m && made.of == m && !made.matte) each(made.thing);
     for (size_t i = 0; t.solid && i < t.solid->made->getRenderableEntityCount(); ++i) each(t.solid->made->getRenderableEntities()[i]);
 }
 static void doc_parts(Stage& s, const Doc::Shown& t, const std::function<void(RenderableManager&, RenderableManager::Instance)>& each) {
@@ -251,6 +255,20 @@ static math::mat4 doc_place(Doc& d, int thing, double now, int deeper, int copy)
     return math::mat4::translation(at) * d.facing * math::mat4::translation(-at) * place;
 }
 
+// The shapes the kit's mattes are cut by that `which` names, taken out of their matte's scene and done away with,
+// their looks too (a look holds the picture it reads: Filament will not let that picture go while a look holds it).
+static void doc_unshape(Stage& s, const std::function<bool(const Stage::Made&)>& which) {
+    auto& faces = s.engine->getRenderableManager();
+    for (size_t i = s.made.size(); i-- > 0;) {
+        if (!s.made[i].matte || !which(s.made[i])) continue;
+        const utils::Entity e = s.made[i].thing;
+        MaterialInstance* look = faces.getMaterialInstanceAt(faces.getInstance(e), 0);
+        for (Stage::Matte& mt : s.mattes) mt.scene->remove(e);
+        s.engine->destroy(e);
+        s.engine->destroy(look);
+        s.made.erase(s.made.begin() + (long)i);
+    }
+}
 // Every thing told its moment: whether it is on (from its start, for its duration if it has one), what of itself it
 // shows (it goes round when it comes to its end), and where it is.
 static void doc_moment(Doc& d, double now) {
@@ -362,7 +380,30 @@ static void doc_moment(Doc& d, double now) {
         Doc::Shown& t = found->second;
         double box[4] = {0, 0, 0, 0};
         const bool clipped = t.in && before && doc_number(d, thing, "clip", 0, 0) > 0.5 && doc_covers(d, before, now, box);
-        if (clipped || t.clipped) {
+        // (clipped by a flat thing ThorVG draws, it is cut by that thing's own picture: the kit's matte, After Effects'
+        //  alpha matte; by anything else, by the upright box of what that covers)
+        const Doc::Shown* const a = clipped ? &d.shown[before] : nullptr;
+        const bool shaped = a && a->drawn && (t.drawn || t.film);
+        Doc::Cut& cut = d.cuts[thing];
+        MaterialInstance* const own = t.film ? t.film->look : t.drawn ? t.drawn->look : nullptr;
+        if (shaped && (cut.from != before || cut.by != a->drawn)) {   // (its matte takes that picture's shape, at that thing's place)
+            if (cut.matte >= 0) {
+                Scene* sc = s.mattes[(size_t)cut.matte].scene;
+                doc_unshape(s, [sc](const Stage::Made& made) { return sc->hasEntity(made.thing); });
+            }
+            cut.matte = matte(s, a->drawn->sheet, {mat4f(doc_place(d, before, now))}, a->drawn->texture, false, 1.f, cut.matte);
+            cut.from = before, cut.by = a->drawn, cut.look = nullptr;
+        }
+        if (shaped && cut.look != own && own && cut.matte >= 0) matted(s, own, cut.matte), cut.look = own;   // (its look, or its look made again, is cut by it)
+        if (!shaped && cut.look) {   // (no longer cut so: the matte is let go of)
+            std::erase_if(s.cuts, [&](const Stage::Cut& c) { return c.look == cut.look; });
+            if (cut.look == own) cut.look->setParameter("matteUse", float4{0.f});
+            cut.look = nullptr, cut.from = 0, cut.by = nullptr;
+            Scene* sc = s.mattes[(size_t)cut.matte].scene;
+            doc_unshape(s, [sc](const Stage::Made& made) { return sc->hasEntity(made.thing); });
+        }
+        if (shaped) { if (t.clipped) doc_looks(s, t, [](MaterialInstance* look) { look->unsetScissor(); }), t.clipped = false; }
+        else if (clipped || t.clipped) {
             const uint32_t left = (uint32_t)std::clamp(box[0], 0.0, (double)s.w), bottom = (uint32_t)std::clamp((double)s.h - (box[1] + box[3]), 0.0, (double)s.h);
             doc_looks(s, t, [&](MaterialInstance* look) { if (clipped) look->setScissor(left, bottom, (uint32_t)std::lround(std::max(box[2], 0.0)), (uint32_t)std::lround(std::max(box[3], 0.0))); else look->unsetScissor(); });
             t.clipped = clipped;
@@ -382,6 +423,10 @@ static bool doc_match(Doc& d) {
     for (auto it = d.shown.begin(); it != d.shown.end();) {
         const auto still = told.find(it->first);
         if (still != told.end() && still->second == it->second.of) { ++it; continue; }
+        if (it->second.scene && it->second.scene != s.scene)   // (out of the scene of its run first: the kit takes things out of the stage's own only)
+            doc_entities(s, it->second, [&](utils::Entity e) { it->second.scene->remove(e); });
+        if (const Mesh* m = it->second.film ? it->second.film->sheet : it->second.drawn ? it->second.drawn->sheet : it->second.shape)   // (and the shape it cuts a matte by: done away with first)
+            doc_unshape(s, [m](const Stage::Made& made) { return made.of == m; });
         if (it->second.film) video_off(s, it->second.film);
         if (it->second.drawn) picture_off(s, it->second.drawn);
         if (it->second.solid) solid_off(s, it->second.solid);
