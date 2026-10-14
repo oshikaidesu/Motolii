@@ -242,8 +242,18 @@ int motolii_rate(Motolii*) { return RATE; }
 int motolii_write(Motolii* m, const char* mp4) {
     return by_hand(m, [m, mp4] {
         doc(m);
-        if (!told(m, ends(mp4, ".mp4"), "a film is written as an .mp4") || !told(m, placed(mp4), "there is no such folder")) return 0;
-        const int ok = told(m, film(*m->s, mp4, (int)std::lround(doc_seconds(*m->d) * RATE), [](float) {}), "the file could not be written");
+        if (!told(m, ends(mp4, ".mp4"), "a film is written as an .mp4") || !told(m, placed(mp4), "there is no such folder") || !told(m, !m->d->writing, "it is being written already")) return 0;
+        const int pictures = (int)std::lround(doc_seconds(*m->d) * RATE);
+        m->d->writing = true;
+        // (between two pictures the hand does what it was asked meanwhile, so a shell that asks does not stand still;
+        //  the document is read then, not changed, and the picture being written is told its moment again after)
+        const int ok = told(m, film(*m->s, mp4, pictures, [m, pictures](float done) {
+            std::deque<std::function<void()>> todo;
+            { std::lock_guard<std::mutex> hold(m->asked_lock); todo.swap(m->asked); }
+            for (auto& does : todo) does();
+            if (!todo.empty()) time_is(*m->s, (double)std::lround(done * (float)pictures) / RATE);
+        }), "the file could not be written");
+        m->d->writing = false;
         time_is(*m->s, m->now);   // (back to the moment it was at)
         return ok;
     });

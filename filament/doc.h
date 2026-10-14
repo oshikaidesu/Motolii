@@ -46,6 +46,7 @@ struct Doc {
     double keying_from = 0.0;           // the stage's moment at which that was turned on: a value's first key then has the value it had, there, before it
     int act = 0;                        // how many acts are open, one within another
     bool act_ok = true;                 // no change of the open act has been refused
+    bool writing = false;               // it is being written as a film: it is read, not changed, until that is done
     sqlite3_session* acting = nullptr;  // SQLite's own record of what the open act changes
     // A thing held by a hand (doc_hold): what of it is carried shows at once and is not yet the document's.
     struct Held { int thing = 0; std::map<std::string, double> from, tried; } held;
@@ -423,6 +424,7 @@ static bool doc_acted(Doc& d) {
 static bool doc_change(Doc& d, char* change) {
     doc_act(d);
     bool ok = d.act_ok;   // (a change before it in this act was refused: d.trouble still says why)
+    if (ok && d.writing) ok = false, d.trouble = "the document is being written as a film: it is not changed until that is done";
     if (ok && !(ok = sqlite3_exec(d.file, change, nullptr, nullptr, nullptr) == SQLITE_OK)) d.trouble = sqlite3_errmsg(d.file);
     sqlite3_free(change);
     if (ok) {
@@ -741,6 +743,7 @@ static bool doc_value(Doc& d, int thing, const char* name, double at, double* is
 //   by a value's name  that number carried: a = what it is now
 static bool doc_hold(Doc& d, int thing) {
     if (!doc_knows(d, thing)) return false;
+    if (d.writing) return d.trouble = "the document is being written as a film: nothing is held until that is done", false;
     if (d.held.thing != thing) d.held = Doc::Held{}, d.held.thing = thing;   // (held already: the same hold goes on)
     return true;
 }

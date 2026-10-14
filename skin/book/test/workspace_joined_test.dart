@@ -299,8 +299,31 @@ void main() {
     expect(m.value(cube, 'x', 0), lessThan(2), reason: 'carried back on to the picture');
 
     final mp4 = File('${Directory.systemTemp.path}/joined_render_${DateTime.now().microsecondsSinceEpoch}.mp4');
-    final done = await t.runAsync(() => m.write(mp4.path));
+    // (while it is written the inside still answers, so the window does not stand still; nothing is held or changed)
+    var slowest = 0, refused = 0;
+    final done = await t.runAsync(() async {
+      var over = false;
+      final written = m.write(mp4.path)..whenComplete(() => over = true);
+      final clock = Stopwatch()..start();
+      while (!over && clock.elapsedMilliseconds < 90000) {
+        await Future<void>.delayed(const Duration(milliseconds: 40));
+        if (over) break;
+        final from = clock.elapsedMilliseconds;
+        final things = m.things;
+        if (m.hold(cube)) {
+          m.letGo(false);
+        } else if (m.trouble.contains('being written')) {
+          refused++;
+        }
+        if (things.length != 1) return false;
+        if (clock.elapsedMilliseconds - from > slowest) slowest = clock.elapsedMilliseconds - from;
+      }
+      return written;
+    });
     expect(done, isTrue, reason: m.trouble);
+    expect(refused, greaterThan(3), reason: 'asked while it was being written, and told so');
+    expect(slowest, lessThan(1000), reason: 'an answer came between two pictures');
+    debugPrint('while a film was written: $refused askings answered, the slowest in $slowest ms');
     expect(mp4.lengthSync(), greaterThan(1000));
     mp4.deleteSync();
     expect(t.takeException(), isNull);

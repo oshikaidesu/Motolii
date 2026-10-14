@@ -93,7 +93,7 @@ int motolii_redo(Motolii* m);
 double motolii_seconds(Motolii* m);                                /* how long the document runs */
 int motolii_at(Motolii* m, double seconds);                        /* the stage's moment */
 int motolii_still(Motolii* m, const char* png);                    /* the stage as it is now, as a picture */
-int motolii_write(Motolii* m, const char* mp4);                    /* the whole document as a film, with its films' sound */
+int motolii_write(Motolii* m, const char* mp4);                    /* the whole document as a film, with its films' sound; other calls are answered meanwhile (from another thread), but the document is not changed and nothing is held until it is done */
 int motolii_rate(Motolii* m);                                      /* how many pictures a second that film has (a shell that counts in frames counts in these) */
 const char* motolii_list(Motolii* m);                              /* every fact of the document, a line each (until the next call) */
 /* The stage's picture as it is drawn, for a shell to show without a copy. The inside keeps its own clock: it draws
