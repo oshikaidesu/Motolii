@@ -29,6 +29,9 @@ public:
     const std::string& trouble() const;
     // Each copy at a moment, the knobs as the document says them now (a select by the word it is).
     ScriptCopy each(int i, int n, double t, const std::map<std::string, double>& numbers, const std::map<std::string, std::string>& words);
+    // Every copy at once: each() for each, or, for a file with no each(), the whole file run with its knobs as globals
+    // (n0, n1...), time and frame, giving a Canvalry PointCloud whose points are in pixels (`unit` stage units a pixel).
+    std::vector<ScriptCopy> copies(int n, double t, const std::map<std::string, double>& numbers, const std::map<std::string, std::string>& words, double unit);
 private:
     struct Own;
     std::unique_ptr<Own> own;

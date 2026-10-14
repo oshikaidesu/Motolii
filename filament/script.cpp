@@ -1,6 +1,7 @@
 // script.h's door: the head read for knobs, QuickJS-ng behind each().
 #include "script.h"
 #include <quickjs.h>
+#include <algorithm>
 #include <cstdlib>
 #include <fstream>
 #include <sstream>
@@ -40,11 +41,27 @@ std::vector<ScriptKnob> script_knobs(const std::string& file) {
     return knobs;
 }
 
+// What a Canvalry distribution asks of Cavalry's JavaScript (the four names its 26 files use), so one runs as it is.
+static const char* cavalry_kept = R"(
+var cavalry = {
+  Point: function (x, y) { this.x = x; this.y = y; },
+  PointCloud: function () { this.points = []; this.sizes = []; },
+  random: function (low, high, seed, sequence) {
+    var h = Math.imul((seed | 0) ^ 0x9E3779B9, 0x85EBCA6B) ^ Math.imul((sequence | 0) + 1, 0xC2B2AE35);
+    h ^= h >>> 16; h = Math.imul(h, 0x7FEB352D); h ^= h >>> 15; h = Math.imul(h, 0x846CA68B); h ^= h >>> 16;
+    return low + (high - low) * ((h >>> 0) / 4294967296);
+  }
+};
+cavalry.PointCloud.prototype.appendPoint = function (p) { this.points.push(p); };
+cavalry.PointCloud.prototype.appendSize = function (s) { this.sizes.push(s); };
+)";
+
 struct Script::Own {
     JSRuntime* rt = nullptr;
     JSContext* cx = nullptr;
     JSValue each = JS_UNDEFINED, knobs = JS_UNDEFINED;
-    std::string trouble;
+    std::string trouble, file, src;
+    bool whole = false;   // no each(): the whole file says every copy at once, as a Canvalry distribution (a PointCloud)
 };
 
 Script::Script(const std::string& file) : own(new Own) {
@@ -54,6 +71,8 @@ Script::Script(const std::string& file) : own(new Own) {
     const std::string src = code.str();
     own->rt = JS_NewRuntime();
     own->cx = JS_NewContext(own->rt);
+    own->file = file, own->src = src;
+    JS_FreeValue(own->cx, JS_Eval(own->cx, cavalry_kept, std::char_traits<char>::length(cavalry_kept), "cavalry", JS_EVAL_TYPE_GLOBAL));
     JSValue ran = JS_Eval(own->cx, src.c_str(), src.size(), file.c_str(), JS_EVAL_TYPE_GLOBAL);
     if (JS_IsException(ran)) {
         JSValue e = JS_GetException(own->cx);
@@ -65,7 +84,7 @@ Script::Script(const std::string& file) : own(new Own) {
     JSValue g = JS_GetGlobalObject(own->cx);
     own->each = JS_GetPropertyStr(own->cx, g, "each");
     JS_FreeValue(own->cx, g);
-    if (own->trouble.empty() && !JS_IsFunction(own->cx, own->each)) own->trouble = "the script " + file + " says no each(i, n, t, k)";
+    own->whole = !JS_IsFunction(own->cx, own->each);
     own->knobs = JS_NewObject(own->cx);
 }
 Script::~Script() {
@@ -76,9 +95,51 @@ Script::~Script() {
 bool Script::ok() const { return own->trouble.empty(); }
 const std::string& Script::trouble() const { return own->trouble; }
 
+std::vector<ScriptCopy> Script::copies(int n, double t, const std::map<std::string, double>& numbers, const std::map<std::string, std::string>& words, double unit) {
+    std::vector<ScriptCopy> all((size_t)std::max(n, 0));
+    if (!ok()) return all;
+    if (!own->whole) {
+        for (int i = 0; i < n; ++i) all[(size_t)i] = each(i, n, t, numbers, words);
+        return all;
+    }
+    JSContext* cx = own->cx;
+    JSValue g = JS_GetGlobalObject(cx);
+    for (const auto& [name, v] : numbers) JS_SetPropertyStr(cx, g, name.c_str(), JS_NewFloat64(cx, v));
+    for (const auto& [name, w] : words) JS_SetPropertyStr(cx, g, name.c_str(), JS_NewString(cx, w.c_str()));
+    JS_SetPropertyStr(cx, g, "time", JS_NewFloat64(cx, t)), JS_SetPropertyStr(cx, g, "frame", JS_NewFloat64(cx, t * 60.0));
+    JS_FreeValue(cx, g);
+    JSValue out = JS_Eval(cx, own->src.c_str(), own->src.size(), own->file.c_str(), JS_EVAL_TYPE_GLOBAL);
+    if (JS_IsException(out)) {
+        JSValue e = JS_GetException(cx);
+        const char* s = JS_ToCString(cx, e);
+        own->trouble = std::string("the script threw: ") + (s ? s : "?");
+        JS_FreeCString(cx, s), JS_FreeValue(cx, e);
+        return all;
+    }
+    const auto list = [&](const char* name, auto put) {   // (a cloud's points or sizes, each an {x, y})
+        JSValue a = JS_GetPropertyStr(cx, out, name);
+        int64_t len = 0;
+        if (JS_IsArray(a)) JS_GetLength(cx, a, &len);
+        for (int64_t i = 0; i < len && i < n; ++i) {
+            JSValue p = JS_GetPropertyUint32(cx, a, (uint32_t)i), x = JS_GetPropertyStr(cx, p, "x"), y = JS_GetPropertyStr(cx, p, "y");
+            double px = 0, py = 0;
+            JS_ToFloat64(cx, &px, x), JS_ToFloat64(cx, &py, y);
+            put(all[(size_t)i], px, py);
+            JS_FreeValue(cx, x), JS_FreeValue(cx, y), JS_FreeValue(cx, p);
+        }
+        JS_FreeValue(cx, a);
+        return len;
+    };
+    const int64_t made = list("points", [&](ScriptCopy& c, double x, double y) { c.x = x * unit, c.y = y * unit; });
+    list("sizes", [](ScriptCopy& c, double x, double) { c.size = x; });
+    for (int64_t i = made; i < n; ++i) all[(size_t)i].size = 0;   // (copies past the cloud's last point are not seen)
+    JS_FreeValue(cx, out);
+    return all;
+}
+
 ScriptCopy Script::each(int i, int n, double t, const std::map<std::string, double>& numbers, const std::map<std::string, std::string>& words) {
     ScriptCopy c;
-    if (!ok()) return c;
+    if (!ok() || own->whole) return c;
     JSContext* cx = own->cx;
     for (const auto& [name, v] : numbers) JS_SetPropertyStr(cx, own->knobs, name.c_str(), JS_NewFloat64(cx, v));
     for (const auto& [name, w] : words) JS_SetPropertyStr(cx, own->knobs, name.c_str(), JS_NewString(cx, w.c_str()));

@@ -546,6 +546,7 @@ static bool doc_half(Doc& d, int thing, float2* half, float* deep = nullptr);
 // Where a thing is at a moment, as a matrix: moved, turned about z, y and x, made its size, all about its anchor (a
 // point of its own box: 0 its middle, 1 its edge on that side; the past repository's `anchor`, keyed as it was).
 static math::mat4 doc_place(Doc& d, int thing, double now, int deeper = 0, int copy = 0, bool member = false);
+static double doc_point(Doc& d, int thing, double now);
 static double doc_seconds(Doc& d);
 // A thing's copies given back its own look, their own looks done away with (no longer coloured each, or taken off).
 static void doc_copy_looks_off(Doc& d, const Mesh* m, MaterialInstance* main) {
@@ -710,8 +711,8 @@ static math::mat4 doc_place(Doc& d, int thing, double now, int deeper, int copy,
                     }
                     else numbers[sc->knobs[i].name] = doc_number(d, thing, sc->names[i].c_str(), said, sc->knobs[i].usual);
                 }
-                kept.at = said, kept.made = doc_scripts_made(), kept.copies.resize((size_t)n);
-                for (int i = 0; i < n; ++i) kept.copies[(size_t)i] = sc->run->each(i, n, said, numbers, words);
+                kept.at = said, kept.made = doc_scripts_made();
+                kept.copies = sc->run->copies(n, said, numbers, words, (double)d.stage->h / std::max(1.0, doc_number(d, 0, "high", 0, 1080) * doc_point(d, thing, said)));   // (a pixel of the document, where the thing stands)
             }
             const ScriptCopy c = copy < n ? kept.copies[(size_t)copy] : ScriptCopy{};
             shift += math::double3{c.x, c.y, c.z};
