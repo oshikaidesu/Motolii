@@ -74,6 +74,7 @@ static bool screen_read(ScreenFx& fx, std::string& code) {
 struct ScreenStack {
     std::string files;
     std::vector<ScreenFx*> fx;
+    std::map<std::string, ScreenFx*> made;   // every effect made so far, by its file, kept (a shader is made once: making one takes a picture's time or ten)
     Texture* shot = nullptr;
     Texture* depth = nullptr;
     RenderTarget* target = nullptr;
@@ -112,26 +113,28 @@ static void screen_effects(Stage& s, ScreenStack& st, const std::string& files, 
     s.over = nullptr;   // (what there was let go: the stage draws to the screen again)
     s.view->setRenderTarget(nullptr);
     for (View* v : s.layers) v->setRenderTarget(nullptr);
-    for (ScreenFx* fx : st.fx) door::drop(s.engine, fx->door), delete fx;
     st.fx.clear();
-    for (RenderTarget*& t : {std::ref(st.target), std::ref(st.betweenTarget[0]), std::ref(st.betweenTarget[1])}) if (t) s.engine->destroy(t), t = nullptr;
-    for (Texture*& t : {std::ref(st.shot), std::ref(st.depth), std::ref(st.between[0]), std::ref(st.between[1])}) if (t) s.engine->destroy(t), t = nullptr;
     std::istringstream each(files);
     for (std::string file; each >> file;) {
         if (file == "none") continue;
-        auto* made = new ScreenFx;
-        made->file = file;
-        std::string code;
-        if (!screen_read(*made, code)) { std::fprintf(stderr, "%s\n", made->trouble.c_str()); delete made; continue; }
-        made->door = door::screen(s.engine, file.c_str(), code.c_str(), made->bytes);
-        st.fx.push_back(made);
+        ScreenFx*& made = st.made[file];
+        if (!made) {
+            made = new ScreenFx;
+            made->file = file;
+            std::string code;
+            if (!screen_read(*made, code)) { std::fprintf(stderr, "%s\n", made->trouble.c_str()); continue; }   // (kept as not made: not read again each time)
+            made->door = door::screen(s.engine, file.c_str(), code.c_str(), made->bytes);
+        }
+        if (made->door) st.fx.push_back(made);
     }
     if (st.fx.empty()) return;
-    st.shot = screen_picture(s);
-    st.depth = Texture::Builder().width((uint32_t)s.w).height((uint32_t)s.h).levels(1).usage(Texture::Usage::DEPTH_ATTACHMENT).format(Texture::InternalFormat::DEPTH24).build(*s.engine);
-    st.target = RenderTarget::Builder().texture(RenderTarget::AttachmentPoint::COLOR, st.shot).texture(RenderTarget::AttachmentPoint::DEPTH, st.depth).build(*s.engine);
+    if (!st.shot) {   // (the pictures between them made once, kept while the stage is)
+        st.shot = screen_picture(s);
+        st.depth = Texture::Builder().width((uint32_t)s.w).height((uint32_t)s.h).levels(1).usage(Texture::Usage::DEPTH_ATTACHMENT).format(Texture::InternalFormat::DEPTH24).build(*s.engine);
+        st.target = RenderTarget::Builder().texture(RenderTarget::AttachmentPoint::COLOR, st.shot).texture(RenderTarget::AttachmentPoint::DEPTH, st.depth).build(*s.engine);
+    }
     for (int k = 0; k < 2 && st.fx.size() > 1; ++k)
-        st.between[k] = screen_picture(s), st.betweenTarget[k] = RenderTarget::Builder().texture(RenderTarget::AttachmentPoint::COLOR, st.between[k]).build(*s.engine);
+        if (!st.between[k]) st.between[k] = screen_picture(s), st.betweenTarget[k] = RenderTarget::Builder().texture(RenderTarget::AttachmentPoint::COLOR, st.between[k]).build(*s.engine);
     s.view->setRenderTarget(st.target);
     for (View* v : s.layers) v->setRenderTarget(st.target);
     s.over = [&s, &st, numbers] {

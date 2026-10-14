@@ -1780,6 +1780,12 @@ static std::string doc_recipe_names() {
 // The whole-screen effects on the shelf (screen.h): a file each in effects/, beside recipes/ (one put there is on the
 // shelf at once), "name\tpath" one to a line, the name what its head's first line says before its colon.
 static std::string doc_effect_names() {
+    static std::string all;
+    static std::chrono::steady_clock::time_point looked{};
+    const auto now = std::chrono::steady_clock::now();
+    if (!all.empty() && now - looked < std::chrono::milliseconds(500)) return all;   // (a window asks at every build: the folder read twice a second at most)
+    looked = now;
+    all.clear();
     Dl_info lib{};
     dladdr((const void*)&doc_effect_names, &lib);
     std::error_code wrong;
@@ -1787,7 +1793,6 @@ static std::string doc_effect_names() {
     std::vector<std::filesystem::path> files;
     for (const auto& e : std::filesystem::directory_iterator(dir, wrong)) if (e.path().extension() == ".wgsl") files.push_back(e.path());
     std::sort(files.begin(), files.end());
-    std::string all;
     for (const auto& f : files) {
         std::ifstream in(f);
         std::string first, name = f.stem().string();

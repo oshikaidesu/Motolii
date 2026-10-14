@@ -76,7 +76,9 @@ void main() {
         m.make('Wave lines'),
       ]..removeWhere((n) => n == 0);
       m.say(things[1], 'fill', 'glass');
-      ws.reread();
+      ws
+        ..reread()
+        ..shelf = const bool.fromEnvironment('SHELF', defaultValue: true) ? 'Effects' : 'Media'; // (the shelf's buttons are hands too: the whole-screen effects go on and off the stage)
       await t.pumpAndSettle();
       SchedulerBinding.instance.addTimingsCallback(took);
 
@@ -190,6 +192,8 @@ void main() {
                     .descendant(of: panel, matching: find.byType(LinkMark))
                     .evaluate())
               if (!_off(e)) ('link', find.byWidget(e.widget)),
+            for (final e in find.byWidgetPredicate((w) => w.key is ValueKey<String> && (w.key as ValueKey<String>).value.startsWith('ws-screen-')).evaluate())
+              ('screen ${(e.widget.key as ValueKey<String>).value.substring(10)}', find.byKey(e.widget.key!)),
             if (find.byType(StageView).evaluate().isNotEmpty)
               for (final name in (t.state(
                 find.byType(StageView),
