@@ -65,6 +65,7 @@ struct Doc {
     bool act_unmatched = false;         // a change within a larger act not yet shown: the stage is matched once, when the act ends
     std::unique_ptr<PhysWorld> phys;    // the things that fall and strike (Jolt): made when first asked, made again when what it is made of changes
     std::vector<int> phys_of;           // which thing each of its bodies is
+    std::vector<int> phys_copy;         // and which of its copies (a split text's letter; -1: the thing whole)
     std::vector<double> phys_until;     // and till when its keys have it
     bool phys_stale = true, phys_any = false;   // (the document changed since the world was last looked at; some thing has physics)
     std::string phys_made;              // all the world was made of, as the document said it then (made again only when that changes)
@@ -639,17 +640,27 @@ static math::mat4 doc_above(Doc& d, int thing, double now, int deeper = 0) {
     const int parent = (int)doc_number(d, thing, "parent", 0, 0);
     return parent && d.shown.count(parent) && deeper < 64 ? doc_place(d, parent, now, deeper + 1) : math::mat4{};   // (64: a document written elsewhere with a ring of parents still ends)
 }
+// Where a split text's letter has its middle across the thing, in its own units (0: not a letter of one).
+static double doc_letter_middle(Doc& d, int thing, int copy) {
+    const auto sh = d.shown.find(thing);
+    if (copy < 0 || sh == d.shown.end() || !sh->second.drawn || copy >= (int)sh->second.drawn->letters.size()) return 0.0;
+    float2 half{0.5f};
+    float deep = 0.f;
+    doc_half(d, thing, &half, &deep);
+    const float2 l = sh->second.drawn->letters[(size_t)copy];
+    return ((double)(l.x + l.y) * 0.5 - 0.5) * 2.0 * half.x;
+}
 // The world of the things that fall and strike, made from the document when first asked: each one's shape (a box as
 // large as it is, a ball for a ball, flat things held to their plane), what it bounces and rubs, where its keys put
 // it. Where the world has one at a moment (false: the world does not have it then, its keys do).
-static bool doc_physics(Doc& d, int thing, double now, PhysPose* pose) {
+static bool doc_physics(Doc& d, int thing, double now, PhysPose* pose, int copy = -1) {
     if (d.phys_stale) {   // (all the world is made of: every value and key of the things with physics, and the pull down)
         d.phys_stale = false;
         std::string made;
         doc_rows(d, sqlite3_mprintf("select group_concat(thing || ' ' || name || ' ' || at || ' ' || quote(value) || ' ' || coalesce(way, ''), ';') from (select * from fact where thing in "
                                     "(select thing from fact where name = 'physics' and value in ('moves', 'still')) or (thing = 0 and name = 'gravity') order by thing, name, at)"),
                  [&](sqlite3_stmt* row) { if (sqlite3_column_type(row, 0) == SQLITE_TEXT) made = (const char*)sqlite3_column_text(row, 0); });
-        if (made != d.phys_made) d.phys.reset(), d.phys_of.clear(), d.phys_until.clear(), d.phys_made = made;
+        if (made != d.phys_made) d.phys.reset(), d.phys_of.clear(), d.phys_copy.clear(), d.phys_until.clear(), d.phys_made = made;
         d.phys_any = made.find(" physics ") != std::string::npos;
     }
     if (!d.phys_any) return false;   // (no thing has physics: nothing asked of the document at every place)
@@ -657,7 +668,7 @@ static bool doc_physics(Doc& d, int thing, double now, PhysPose* pose) {
     if (mine != "moves") return false;
     if (!d.phys) {
         std::vector<PhysThing> made;
-        d.phys_of.clear(), d.phys_until.clear();
+        d.phys_of.clear(), d.phys_copy.clear(), d.phys_until.clear();
         for (int t : doc_laid(d)) {
             const std::string how = doc_word(d, t, "physics");
             if ((how != "moves" && how != "still") || doc_number(d, t, "parent", 0, 0) != 0.0) continue;
@@ -677,13 +688,20 @@ static bool doc_physics(Doc& d, int thing, double now, PhysPose* pose) {
                     if (sqlite3_column_type(row, 0) != SQLITE_NULL) one.until = std::max(one.until, sqlite3_column_double(row, 0));
                 });
             }
-            made.push_back(one);
-            d.phys_of.push_back(t), d.phys_until.push_back(one.still ? 1e9 : one.until);
+            const auto sh = d.shown.find(t);
+            const std::vector<float2>* letters = sh != d.shown.end() && sh->second.drawn && !sh->second.drawn->letters.empty() ? &sh->second.drawn->letters : nullptr;
+            const int copies = letters ? (int)letters->size() : 1;   // (a split text: each letter a body of its own, as wide as its ink, a little narrower so neighbours do not start inside each other)
+            for (int c = 0; c < copies; ++c) {
+                PhysThing each = one;
+                if (letters) each.half[0] = std::max(0.01f, 0.92f * ((*letters)[(size_t)c].y - (*letters)[(size_t)c].x) * one.half[0]);
+                made.push_back(each);
+                d.phys_of.push_back(t), d.phys_copy.push_back(letters ? c : -1), d.phys_until.push_back(one.still ? 1e9 : one.until);
+            }
         }
         const auto keyed = [&d](int index, double at) {   // (where its keys put its middle, and how they turn it)
-            const int t = d.phys_of[(size_t)index];
+            const int t = d.phys_of[(size_t)index], copy = d.phys_copy[(size_t)index];
             d.phys_keyed = true;
-            const math::double3 middle = (doc_place(d, t, at) * math::double4{0, 0, 0, 1}).xyz;
+            const math::double3 middle = (doc_place(d, t, at, 0, std::max(copy, 0), copy >= 0) * math::double4{doc_letter_middle(d, t, copy), 0, 0, 1}).xyz;
             d.phys_keyed = false;
             const auto half = [](double degrees, math::double3 about) { const double a = 0.5 * degrees * (double)TAU / 360.0; return math::quat{std::cos(a), about.x * std::sin(a), about.y * std::sin(a), about.z * std::sin(a)}; };
             const math::quat q = half(doc_number(d, t, "rotate", at, 0), {0, 0, 1}) * half(doc_number(d, t, "rotate_y", at, 0), {0, 1, 0}) * half(doc_number(d, t, "rotate_x", at, 0), {1, 0, 0});
@@ -694,9 +712,9 @@ static bool doc_physics(Doc& d, int thing, double now, PhysPose* pose) {
         };
         d.phys = std::make_unique<PhysWorld>(made, (float)doc_number(d, 0, "gravity", 0, 9.81), keyed);
     }
-    const auto found = std::find(d.phys_of.begin(), d.phys_of.end(), thing);
-    if (found == d.phys_of.end()) return false;
-    const size_t index = (size_t)(found - d.phys_of.begin());
+    size_t index = d.phys_of.size();
+    for (size_t i = 0; i < d.phys_of.size(); ++i) if (d.phys_of[i] == thing && d.phys_copy[i] == copy) { index = i; break; }   // (a thing's copies that are not letters keep to their keys)
+    if (index == d.phys_of.size()) return false;
     if (now <= d.phys_until[index]) return false;   // (its keys have it still)
     *pose = d.phys->pose((int)index, (int)std::lround(now * 60.0));
     return true;
@@ -797,18 +815,15 @@ static math::mat4 doc_place(Doc& d, int thing, double now, int deeper, int copy,
     }
     own = own * math::mat4::scaling(math::double3{1.0, tall, 1.0});
     if (member)   // (a split text's letter turns and grows about its own middle, not the whole line's)
-        if (const auto sh = d.shown.find(thing); sh != d.shown.end() && sh->second.drawn && copy < (int)sh->second.drawn->letters.size()) {
-            const float2 l = sh->second.drawn->letters[(size_t)copy];
-            const math::double3 middle{((double)(l.x + l.y) * 0.5 - 0.5) * 2.0 * half.x, 0.0, 0.0};
-            own = math::mat4::translation(middle) * own * math::mat4::translation(-middle);
-        }
-    if (!d.phys_keyed && !member && !deeper) {   // (a thing that falls and strikes: where the world has its middle, turned as it has it)
+        if (const double middle = doc_letter_middle(d, thing, copy); middle != 0.0) own = math::mat4::translation(math::double3{middle, 0, 0}) * own * math::mat4::translation(math::double3{-middle, 0, 0});
+    if (!d.phys_keyed && !deeper) {   // (a thing that falls and strikes, or a letter of one: where the world has its middle, turned as it has it)
         PhysPose pose;
-        if (doc_physics(d, thing, now, &pose)) {
+        if (doc_physics(d, thing, now, &pose, member ? copy : -1)) {
             const math::quat q{pose.turn[3], pose.turn[0], pose.turn[1], pose.turn[2]};
             return math::mat4::translation(math::double3{pose.at[0], pose.at[1], pose.at[2]}) * math::mat4(math::mat3(math::quat(q))) *
                    math::mat4::scaling(doc_number(d, thing, "size", now, 1)) *
-                   math::mat4::scaling(math::double3{doc_number(d, thing, "scale_x", now, 1), doc_number(d, thing, "scale_y", now, 1), doc_number(d, thing, "scale_z", now, 1)});
+                   math::mat4::scaling(math::double3{doc_number(d, thing, "scale_x", now, 1), doc_number(d, thing, "scale_y", now, 1), doc_number(d, thing, "scale_z", now, 1)}) *
+                   math::mat4::translation(math::double3{-doc_letter_middle(d, thing, member ? copy : -1), 0, 0});
         }
     }
     math::mat4 place = doc_above(d, thing, now, deeper) * math::mat4::translation(math::double3{doc_number(d, thing, "x", now, 0), doc_number(d, thing, "y", now, 0), doc_number(d, thing, "z", now, 0)}) *
