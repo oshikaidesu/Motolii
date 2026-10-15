@@ -3,8 +3,10 @@
 // memory said each minute. Red: a late picture of the window, a picture the inside left out, memory that grows.
 //   flutter drive --profile -d macos --driver=test_driver/integration_test.dart --target=integration_test/crowd_test.dart
 import 'dart:io';
+import 'dart:ui' show FramePhase;
 
 import 'package:flutter/scheduler.dart';
+import 'package:flutter/widgets.dart' show debugProfileBuildsEnabled;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -44,6 +46,15 @@ void main() {
     final timings = <FrameTiming>[];
     SchedulerBinding.instance.addTimingsCallback(timings.addAll);
     ws.playing = true;
+    if (const bool.fromEnvironment('TRACE')) {   // (TRACE: twenty seconds of Flutter's own timeline, every widget's build, into build/integration_response_data.json)
+      debugProfileBuildsEnabled = const bool.fromEnvironment('BUILDS');   // (BUILDS: every widget's build too: fills the timeline's store in a moment)
+      for (final c = Stopwatch()..start(); c.elapsedMilliseconds < const int.fromEnvironment('TRACE_FROM', defaultValue: 0);) await t.pump(const Duration(milliseconds: 16));   // (TRACE_FROM: milliseconds played before the record: it holds a few seconds only)
+      await binding.traceAction(() async { for (final c = Stopwatch()..start(); c.elapsedMilliseconds < 4000;) await t.pump(const Duration(milliseconds: 16)); },
+          reportKey: 'timeline', streams: const ['Dart', 'Embedder', 'GC']);
+      debugProfileBuildsEnabled = false;
+      ws.playing = false;
+      return;
+    }
     final clock = Stopwatch()..start();
     var drawn = m.frames, minute = 0, lateAll = 0, leftAll = 0;
     var from = 0;
@@ -58,7 +69,11 @@ void main() {
         rss.add(ProcessInfo.currentRss ~/ (1 << 20));
         lateAll += late;
         if (minute > 1) leftAll += left.clamp(0, wanted);   // (the first minute: films come up)
-        debugPrint('CROWD minute $minute: window pictures ${spans.length}, late $late; inside drew ${nowDrawn - drawn} for $wanted; memory ${rss.last} MB');
+        final slow = [for (final f in timings.skip(from)) if (f.totalSpan.inMicroseconds > 16667) f];
+        String ms(Iterable<int> us) => us.map((u) => (u / 1000).toStringAsFixed(1)).join(' ');
+        debugPrint('CROWD minute $minute: window pictures ${spans.length}, late $late; inside drew ${nowDrawn - drawn} for $wanted; memory ${rss.last} MB'
+            '${slow.isEmpty ? '' : '; the late: build ${ms(slow.map((f) => f.buildDuration.inMicroseconds))}, raster ${ms(slow.map((f) => f.rasterDuration.inMicroseconds))}, '
+              'before building ${ms(slow.map((f) => f.timestampInMicroseconds(FramePhase.buildStart) - f.timestampInMicroseconds(FramePhase.vsyncStart)))}, at ${slow.map((f) => ((f.timestampInMicroseconds(FramePhase.vsyncStart) - timings.first.timestampInMicroseconds(FramePhase.vsyncStart)) / 1e6).toStringAsFixed(1)).join(' ')} s'}');
         from = timings.length;
         drawn = nowDrawn;
       }

@@ -231,7 +231,7 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
   }
 
   // The eye of a row. Joined: the thing is put aside in the document (visible 0) and is not on the stage; one step.
-  bool _isHidden(Ws ws, String id) => ws.inside == null ? _hidden.contains(id) : (ws.inside!.value(int.parse(id), 'visible', 0) ?? 1) < .5;
+  bool _isHidden(Ws ws, String id) => ws.inside == null ? _hidden.contains(id) : ws.layers.any((l) => l.id == id && l.hidden);   // (as last read: no call to the inside while a row is built)
   void _eye(Ws ws, String id) {
     final m = ws.inside;
     if (m == null) return _flip(_hidden, id);
@@ -300,8 +300,8 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
 
   // Joined: solo and lock are the document's (After Effects keeps both in its project): while any thing is solo only
   // those are seen; a locked thing is not changed (the inside refuses, and says so). Else the sample's own sets.
-  bool _isSolo(Ws ws, String id) => ws.inside == null ? _solo.contains(id) : (ws.inside!.value(int.parse(id), 'solo', 0) ?? 0) > .5;
-  bool _isLocked(Ws ws, String id) => ws.inside == null ? _locked.contains(id) : (ws.inside!.value(int.parse(id), 'lock', 0) ?? 0) > .5;
+  bool _isSolo(Ws ws, String id) => ws.inside == null ? _solo.contains(id) : ws.layers.any((l) => l.id == id && l.solo);
+  bool _isLocked(Ws ws, String id) => ws.inside == null ? _locked.contains(id) : ws.layers.any((l) => l.id == id && l.locked);
   bool _anySolo(Ws ws) => ws.layers.any((l) => _isSolo(ws, l.id));
   void _flag(Ws ws, Set<String> s, String name, String id) {
     final m = ws.inside;
