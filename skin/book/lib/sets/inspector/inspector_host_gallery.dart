@@ -1,4 +1,5 @@
 import 'package:flutter/widgets.dart';
+import 'package:lab_book/sets/inspector/inspector_host_particles_card.dart';
 import '../../tokens.dart';
 import 'inspector_parts.dart';
 

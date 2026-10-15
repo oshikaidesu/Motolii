@@ -1,5 +1,6 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lab_book/sets/inspector/inspector_host_particles_card.dart';
 import 'package:lab_book/sets/inspector/inspector_parts.dart';
 
 Future<Doc> mount(WidgetTester tester) async {
