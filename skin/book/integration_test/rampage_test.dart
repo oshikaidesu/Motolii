@@ -18,7 +18,7 @@ import 'package:integration_test/integration_test.dart';
 import 'package:lab_book/motolii.dart';
 import 'package:lab_book/parts/controls.dart' show Segmented;
 import 'package:lab_book/sets/inspector/inspector_parts.dart'
-    show Chooser, Ctx, InspectorPanel, LinkMark, NumField, OnOff;
+    show Chooser, Ctx, InspectorPanel, LinkMark, NumField, OnOff, RowOff;
 import 'package:lab_book/workspace/stage_view.dart';
 import 'package:lab_book/workspace/timeline.dart';
 import 'package:lab_book/workspace/workspace.dart' show Workspace, wsTransform;
@@ -40,7 +40,7 @@ bool _off(Element e) {
   var off = false;
   e.visitAncestorElements(
     (a) => !(off =
-        a.widget is IgnorePointer && (a.widget as IgnorePointer).ignoring),
+        (a.widget is IgnorePointer && (a.widget as IgnorePointer).ignoring) || (a.widget is RowOff && (a.widget as RowOff).off)), // (greyed as the field itself sees it: a row off takes no hand either)
   );
   return off;
 }
