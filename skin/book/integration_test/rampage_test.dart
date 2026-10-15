@@ -128,6 +128,12 @@ void main() {
       if (trace) debugProfileBuildsEnabledUserWidgets = true;
       Future<void> rampage() async {
         for (var act = 0; act < _acts; act++) {
+          // (a list left floating by the hand before takes the next press, as it should: closed first, as a hand would)
+          for (var k = 0; k < 3 && find.byType(CompositedTransformFollower).evaluate().isNotEmpty; k++) {
+            await t.tapAt(const Offset(2, 2));
+            await settle();
+            debugPrint('CLOSED a floating list left open before act $act');
+          }
           if (act % 25 == 0) {
             // (now and then another thing picked, or none)
             final pick = r.nextInt(things.length + 1);
@@ -280,6 +286,8 @@ void main() {
               final pick = chooser.options[r.nextInt(chooser.options.length)];
               final option = find.text(pick);
               if (option.evaluate().length > 1) {
+                await t.ensureVisible(option.last); // (a long list scrolls within: the word found is brought into view first)
+                await t.pump();
                 await t.tap(option.last);
               } else {
                 await t.tap(where.first); // (nothing to pick: the menu closed again, so it does not cover the next hand)
