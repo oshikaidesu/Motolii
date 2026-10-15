@@ -1970,7 +1970,7 @@ static int doc_make(Doc& d, const char* name) {
         const int thing = now;
         if (!thing) break;
         if (call == "set") doc_set(d, thing, value.c_str(), rest == "first" ? first : rest == "before" ? before : rest == "behind" ? first - 0.5 : std::atof(rest.c_str()));   // (a thing it goes with: the recipe's first, or the one made before this one; an order just behind the first)
-        else if (call == "say") doc_say(d, thing, value.c_str(), rest.c_str());
+        else if (call == "say") doc_say(d, thing, value.c_str(), value == "script" && rest == "this" ? r->path.c_str() : rest.c_str());   // (another of its things run by the recipe's own code: "this")
         else if (call == "key") { std::istringstream k(rest); double at = 0, is = 0; k >> at >> is; doc_key(d, thing, value.c_str(), at, is); }   // (at that moment of the document, wherever the stage stands: its film loops as made)
     }
     return doc_acted(d) && now ? first : 0;
