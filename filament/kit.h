@@ -58,6 +58,8 @@ struct Mesh {
     std::vector<float2> uv;
     std::vector<uint32_t> idx;
     std::vector<quatf> quat;
+    VertexBuffer* vb = nullptr;   // (as last put in the scene: add_parts, reshape)
+    IndexBuffer* ib = nullptr;
 };
 
 static std::vector<uint8_t> load_file(const char* path) {
@@ -222,10 +224,13 @@ static Material* material(Stage& s, const char* filamat) {
     }
     return built[filamat];
 }
-static MaterialInstance* add(Stage& s, Mesh* m, const char* filamat, std::vector<mat4f> places = {mat4f{}}, uint8_t layer = 1,
-                             bool shadows = false, int copies = 1, int order = 4) {
+// A mesh in the scene, once at each place, its triangles in parts (`ends`: where each part's indices end; none: one
+// part), each part a look of its own of the same material (Filament's own: a renderable of so many primitives).
+static std::vector<MaterialInstance*> add_parts(Stage& s, Mesh* m, const char* filamat, std::vector<mat4f> places, std::vector<uint32_t> ends,
+                                                uint8_t layer = 1, bool shadows = false, int copies = 1, int order = 4) {
     Material* mat = material(s, filamat);
-    if (!mat) return nullptr;
+    if (!mat) return {};
+    if (ends.empty()) ends = {(uint32_t)m->idx.size()};
     const size_t n = m->pos.size();
     auto* frames = geometry::SurfaceOrientation::Builder().vertexCount(n).normals(m->nrm.data()).build();
     m->quat.resize(n);
@@ -238,28 +243,75 @@ static MaterialInstance* add(Stage& s, Mesh* m, const char* filamat, std::vector
     vb->setBufferAt(*s.engine, 0, VertexBuffer::BufferDescriptor(m->pos.data(), n * sizeof(float3)));
     vb->setBufferAt(*s.engine, 1, VertexBuffer::BufferDescriptor(m->quat.data(), n * sizeof(quatf)));
     vb->setBufferAt(*s.engine, 2, VertexBuffer::BufferDescriptor(m->uv.data(), n * sizeof(float2)));
-    IndexBuffer* ib = IndexBuffer::Builder().indexCount((uint32_t)m->idx.size()).bufferType(IndexBuffer::IndexType::UINT).build(*s.engine);
-    ib->setBuffer(*s.engine, IndexBuffer::BufferDescriptor(m->idx.data(), m->idx.size() * sizeof(uint32_t)));
-    MaterialInstance* mi = mat->createInstance();
-    if (mat->hasParameter("opacity")) mi->setParameter("opacity", 1.f);   // (all there, until it is told otherwise)
-    if (mat->hasParameter("matteUse")) {   // (a material that can be cut: by nothing, until `matted` says so)
-        for (const char* name : {"matte0", "matte1", "matte2", "matte3"}) mi->setParameter(name, white_point(s), TextureSampler());
-        for (const char* name : {"matteEye0", "matteEye1", "matteEye2", "matteEye3"}) mi->setParameter(name, mat4f{});
-        if (mat->hasParameter("colours")) mi->setParameter("colours", white_point(s), TextureSampler());   // (a film's second plane: video.h)
-        mi->setParameter("matteUse", float4{0.f});
-        mi->setParameter("matteSoft", float4{0.f});
+    IndexBuffer* ib = IndexBuffer::Builder().indexCount((uint32_t)std::max<size_t>(1, m->idx.size())).bufferType(IndexBuffer::IndexType::UINT).build(*s.engine);
+    if (!m->idx.empty()) ib->setBuffer(*s.engine, IndexBuffer::BufferDescriptor(m->idx.data(), m->idx.size() * sizeof(uint32_t)));
+    m->vb = vb, m->ib = ib;
+    std::vector<MaterialInstance*> looks;
+    for (size_t k = 0; k < ends.size(); ++k) {
+        MaterialInstance* mi = mat->createInstance();
+        if (mat->hasParameter("opacity")) mi->setParameter("opacity", 1.f);   // (all there, until it is told otherwise)
+        if (mat->hasParameter("matteUse")) {   // (a material that can be cut: by nothing, until `matted` says so)
+            for (const char* name : {"matte0", "matte1", "matte2", "matte3"}) mi->setParameter(name, white_point(s), TextureSampler());
+            for (const char* name : {"matteEye0", "matteEye1", "matteEye2", "matteEye3"}) mi->setParameter(name, mat4f{});
+            if (mat->hasParameter("colours")) mi->setParameter("colours", white_point(s), TextureSampler());   // (a film's second plane: video.h)
+            mi->setParameter("matteUse", float4{0.f});
+            mi->setParameter("matteSoft", float4{0.f});
+        }
+        looks.push_back(mi);
     }
-    float3 low = m->pos[0], high = m->pos[0];   // (Filament wants a thing's rough size if it casts or takes shadows)
+    float3 low = n ? m->pos[0] : float3{0.f}, high = low;   // (Filament wants a thing's rough size if it casts or takes shadows)
     for (const float3& p : m->pos) { low = min(low, p); high = max(high, p); }
     for (const mat4f& place : places) {
         utils::Entity e = utils::EntityManager::get().create();
         s.engine->getTransformManager().create(e, {}, place);
-        RenderableManager::Builder(1).geometry(0, RenderableManager::PrimitiveType::TRIANGLES, vb, ib).material(0, mi)
-            .boundingBox({(low + high) * 0.5f, max((high - low) * 0.5f, float3{1e-3f})}).culling(false).castShadows(shadows).receiveShadows(shadows).layerMask(0xFF, layer).instances((size_t)copies).priority((uint8_t)order).build(*s.engine, e);
+        RenderableManager::Builder b(ends.size());
+        for (size_t k = 0; k < ends.size(); ++k) {
+            const uint32_t from = k ? ends[k - 1] : 0;
+            b.geometry(k, RenderableManager::PrimitiveType::TRIANGLES, vb, ib, from, ends[k] - from).material(k, looks[k]);
+        }
+        b.boundingBox({(low + high) * 0.5f, max((high - low) * 0.5f, float3{1e-3f})}).culling(false).castShadows(shadows).receiveShadows(shadows).layerMask(0xFF, layer).instances((size_t)copies).priority((uint8_t)order).build(*s.engine, e);
         s.scene->addEntity(e);
         s.made.push_back({e, m, (int)(&place - places.data()), place});
     }
-    return mi;
+    return looks;
+}
+static MaterialInstance* add(Stage& s, Mesh* m, const char* filamat, std::vector<mat4f> places = {mat4f{}}, uint8_t layer = 1,
+                             bool shadows = false, int copies = 1, int order = 4) {
+    const std::vector<MaterialInstance*> looks = add_parts(s, m, filamat, places, {}, layer, shadows, copies, order);
+    return looks.empty() ? nullptr : looks[0];
+}
+
+// A mesh in the scene made anew (its points and triangles changed, as many or not): new buffers for every place it is
+// at, its parts' ends as told; the old ones let go (Filament keeps them until no picture uses them).
+static void reshape(Stage& s, Mesh* m, const std::vector<uint32_t>& ends) {
+    VertexBuffer* oldVb = m->vb;
+    IndexBuffer* oldIb = m->ib;
+    const size_t n = m->pos.size();
+    if (!n || m->idx.empty()) return;
+    auto* frames = geometry::SurfaceOrientation::Builder().vertexCount(n).normals(m->nrm.data()).build();
+    m->quat.resize(n);
+    frames->getQuats(m->quat.data(), n);
+    delete frames;
+    m->vb = VertexBuffer::Builder().vertexCount((uint32_t)n).bufferCount(3)
+                .attribute(VertexAttribute::POSITION, 0, VertexBuffer::AttributeType::FLOAT3)
+                .attribute(VertexAttribute::TANGENTS, 1, VertexBuffer::AttributeType::FLOAT4)
+                .attribute(VertexAttribute::UV0, 2, VertexBuffer::AttributeType::FLOAT2).build(*s.engine);
+    m->vb->setBufferAt(*s.engine, 0, VertexBuffer::BufferDescriptor(m->pos.data(), n * sizeof(float3)));
+    m->vb->setBufferAt(*s.engine, 1, VertexBuffer::BufferDescriptor(m->quat.data(), n * sizeof(quatf)));
+    m->vb->setBufferAt(*s.engine, 2, VertexBuffer::BufferDescriptor(m->uv.data(), n * sizeof(float2)));
+    m->ib = IndexBuffer::Builder().indexCount((uint32_t)m->idx.size()).bufferType(IndexBuffer::IndexType::UINT).build(*s.engine);
+    m->ib->setBuffer(*s.engine, IndexBuffer::BufferDescriptor(m->idx.data(), m->idx.size() * sizeof(uint32_t)));
+    auto& faces = s.engine->getRenderableManager();
+    for (const Stage::Made& made : s.made) {
+        if (made.of != m) continue;
+        const auto at = faces.getInstance(made.thing);
+        for (size_t k = 0; k < ends.size() && k < faces.getPrimitiveCount(at); ++k) {
+            const uint32_t from = k ? ends[k - 1] : 0;
+            faces.setGeometryAt(at, k, RenderableManager::PrimitiveType::TRIANGLES, m->vb, m->ib, from, ends[k] - from);
+        }
+    }
+    if (oldVb) s.engine->destroy(oldVb);
+    if (oldIb) s.engine->destroy(oldIb);
 }
 
 // One glass block, edge 1, as real ones are: the edges a little round (a tenth of half the edge), the faces flat.

@@ -1246,6 +1246,9 @@ static void doc_moment(Doc& d, double now) {
                                      {num("skew", 0) * deg, num("skew_axis", 0) * deg, num("squash", 0), 0.5f * t.drawn->wideBy},
                                      {num("wiggle", 0), num("wiggle_detail", 3), num("wiggle_speed", 1) * since, num("seed", 0) * 7.31f}};
             t.drawn->look->setParameter("bends", bends, 4);
+            if (t.drawn->edgeLook) t.drawn->edgeLook->setParameter("bends", bends, 4);
+            cut_at(s, t.drawn, float3{num("trim", 0), num("trim_begin", 0), num("trim_offset", 0)},   // (its path anew, if it is told otherwise: cut again)
+                   {num("round", 0), num("bloat", 0), num("zigzag", 0), num("zigzag_ridges", 5), num("zigzag_smooth", 0), num("offset", 0)});
             for (const Stage::Made& made : s.made)
                 if (made.of == t.drawn->sheet)
                     if (const auto own = d.copyLooks.find(made.thing.getId()); own != d.copyLooks.end()) own->second->setParameter("bends", bends, 4);
@@ -1287,6 +1290,7 @@ static void doc_moment(Doc& d, double now) {
             }
         }
         if (MaterialInstance* look = t.film ? t.film->look : t.drawn ? t.drawn->look : nullptr) look->setParameter("opacity", (float)doc_number(d, thing, "opacity", now, 1));
+        if (t.drawn && t.drawn->edgeLook) t.drawn->edgeLook->setParameter("opacity", (float)doc_number(d, thing, "opacity", now, 1));
         if (MaterialInstance* main = t.film ? t.film->look : t.drawn ? t.drawn->look : nullptr) {   // (its copies coloured each their own, along a ramp in their order: a look of its own each, told what the thing's is)
             std::vector<float3> ramp;
             std::istringstream said(doc_word(d, thing, "copy_fill"));
@@ -1377,7 +1381,10 @@ static void doc_moment(Doc& d, double now) {
             cut.matte = matte(s, a->drawn->sheet, {mat4f(doc_place(d, before, now))}, a->drawn->texture ? a->drawn->texture : white_point(s), doc_word(d, thing, "clip_matte") == "luma", 1.f, cut.matte);
             cut.from = before, cut.by = a->drawn, cut.look = nullptr, cut.how = how;
         }
-        if (shaped && cut.look != own && own && cut.matte >= 0) matted(s, own, cut.matte, doc_number(d, thing, "clip_invert", 0, 0) < 0.5, (float)doc_number(d, thing, "clip_feather", 0, 0)), cut.look = own;   // (its look, or its look made again, is cut by it)
+        if (shaped && cut.look != own && own && cut.matte >= 0) {
+            matted(s, own, cut.matte, doc_number(d, thing, "clip_invert", 0, 0) < 0.5, (float)doc_number(d, thing, "clip_feather", 0, 0)), cut.look = own;
+            if (t.drawn && t.drawn->edgeLook) matted(s, t.drawn->edgeLook, cut.matte, doc_number(d, thing, "clip_invert", 0, 0) < 0.5, (float)doc_number(d, thing, "clip_feather", 0, 0));   // (its edge too)
+        }   // (its look, or its look made again, is cut by it)
         if (!shaped && cut.look) {   // (no longer cut so: the matte is let go of)
             std::erase_if(s.cuts, [&](const Stage::Cut& c) { return c.look == cut.look; });
             if (cut.look == own) cut.look->setParameter("matteUse", float4{0.f});
@@ -1517,13 +1524,10 @@ static bool doc_match(Doc& d) {
                 const float high = line ? 0.04f : wave ? 0.3f : 1.f;
                 // (its outline alone, in one colour: cut into triangles and drawn by Filament as the scene's other things
                 //  are, flat_mesh; with an edge, a ramp, a dash, effects, a trim or a bend made on the CPU: ThorVG's picture)
-                const auto ever = [&](const char* name) { return doc_most(d, thing, name, 0) != 0.0 || doc_number(d, thing, name, 0, 0) != 0.0; };
-                const bool plain = !wave && shape != "null" && !fx.hollow && edge.w <= 0.f && fx.ramp.size() < 2 && fx.dash <= 0.f && fx.blur <= 0.f && fx.shadow.w <= 0.f
-                                   && fx.glow.w <= 0.f && fx.tint <= 0.f && fx.tritone <= 0.f && !ever("trim") && !ever("trim_begin") && !ever("bloat") && !ever("zigzag") && !ever("offset")
-                                   && !doc_keys(d, thing, "round", -1.0);
+                const bool plain = !wave && shape != "null" && fx.ramp.size() < 2 && fx.blur <= 0.f && fx.shadow.w <= 0.f && fx.glow.w <= 0.f && fx.tint <= 0.f && fx.tritone <= 0.f;
                 if (plain)
                     made.drawn = flat_mesh(s, shape.c_str(), (float)doc_number(d, thing, "wide", 0, line ? 25 : 1), mat4f{}, high, fill.empty() ? float3{0xd9, 0xd2, 0xc3} / 255.f : colour, lay,
-                                           fx.over(high), (int)doc_number(d, thing, "points", 0, shape == "star" ? 5 : 6), (float)doc_number(d, thing, "inner", 0, 0.5), (float)doc_number(d, thing, "round", 0, 0));
+                                           float4{edge.xyz, edge.w / high}, fx.over(high), (int)doc_number(d, thing, "points", 0, shape == "star" ? 5 : 6), (float)doc_number(d, thing, "inner", 0, 0.5), (float)doc_number(d, thing, "round", 0, 0));
                 else made.drawn = flat(s, shape.c_str(), (float)doc_number(d, thing, "wide", 0, line ? 25 : wave ? 10 : 1), mat4f{}, high, fill.empty() ? float3{0xd9, 0xd2, 0xc3} / 255.f : colour, lay,
                                   float4{edge.xyz, edge.w / high}, fx.over(high),
                                   (int)doc_number(d, thing, "points", 0, shape == "star" ? 5 : wave ? 4 : 6), (float)doc_number(d, thing, "inner", 0, 0.5), (float)doc_number(d, thing, "round", 0, 0));

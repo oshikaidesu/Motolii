@@ -1,7 +1,11 @@
 // bend.cpp: After Effects' path operators on a flat shape, done by ThorVG's own (its Lottie reader's modifiers:
 // round corners, pucker & bloat, zig zag, offset paths), in that order, offset last as ThorVG chains them.
-// Apart from the rest because ThorVG's inside headers bring all of its names in; out comes one call (drawn.h).
+// And a shape's edge as triangles, as ThorVG's own WebGPU engine strokes it (tvg_edge). Apart from the rest because
+// ThorVG's inside headers bring all of its names in; out come two calls (drawn.h).
 #include "tvgLottieModifier.h"
+#include "tvgGpuCommon.h"
+#include "tvgWgTessellator.h"
+#include <vector>
 
 // A path as curves only, as an After Effects path is (a line a straight curve, a closed path back to its start: what
 // the operators know), into `into`; `sharp`: a line's handles on its ends, as After Effects writes them (its round
@@ -60,4 +64,34 @@ void tvg_bend(tvg::Shape* shape, const tvg::PathCommand* cmds, uint32_t cmdsCnt,
     const RenderPath& to = fine > 0.f ? cut : bent;
     shape->reset();
     shape->appendPath(to.cmds.data, to.cmds.count, to.pts.data, to.pts.count);
+}
+
+// A shape's edge as triangles, straight, as ThorVG's own WebGPU engine makes them (its trim, its dash, its stroker:
+// nothing cut by a tessellator): so wide (points), its cap and join (ThorVG's), dashed as long as its gaps (0: not),
+// the part from `from` to `to` of its length (After Effects' trim paths, as ThorVG's trimpath goes round past 1).
+void tvg_edge(const tvg::PathCommand* cmds, uint32_t cmdsCnt, const tvg::Point* pts, uint32_t ptsCnt, float width, int cap, int join, float dash, float dashFrom,
+              float from, float to, std::vector<float>& xy, std::vector<uint32_t>& idx) {
+    RenderShape rs;
+    for (uint32_t i = 0; i < cmdsCnt; ++i) rs.path.cmds.push(cmds[i]);
+    for (uint32_t i = 0; i < ptsCnt; ++i) rs.path.pts.push(pts[i]);
+    rs.stroke = new RenderStroke;
+    rs.stroke->width = width, rs.stroke->cap = (StrokeCap)cap, rs.stroke->join = (StrokeJoin)join;
+    rs.stroke->trim.begin = from, rs.stroke->trim.end = to;
+    if (dash > 0.f) {
+        rs.stroke->dash.pattern = tvg::malloc<float>(2 * sizeof(float));
+        rs.stroke->dash.pattern[0] = rs.stroke->dash.pattern[1] = dash;
+        rs.stroke->dash.count = 2, rs.stroke->dash.offset = dashFrom, rs.stroke->dash.length = 2.f * dash;
+    }
+    RenderPath stroked;
+    const RenderPath* along = &rs.path;
+    if (gpuStrokeDash(rs, stroked, nullptr)) along = &stroked;
+    else if (rs.trimpath()) {
+        if (!rs.stroke->trim.trim(rs.path, stroked)) return;   // (trimmed to nothing)
+        along = &stroked;
+    }
+    WgMesh mesh;
+    WgStroker stroker(&mesh, width, (StrokeCap)cap, (StrokeJoin)join);
+    stroker.run(*along);
+    for (uint32_t i = 0; i < mesh.vbuffer.count; ++i) xy.push_back(mesh.vbuffer[i].x), xy.push_back(mesh.vbuffer[i].y);
+    for (uint32_t i = 0; i < mesh.ibuffer.count; ++i) idx.push_back(mesh.ibuffer[i]);
 }

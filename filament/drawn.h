@@ -49,6 +49,11 @@ struct Drawn {
     bool cut = false;          // (a flat shape drawn by Filament as its own triangles (flat_mesh): no picture, no canvas; bent in its look)
     float4 wash{0.f};          // (its own colour laid over its look, as a copy's is: a shape cut in triangles is filled so)
     float wideBy = 1.f;        // (how many times as wide as it is high: what its bends are counted across)
+    tvg::Shape* outline = nullptr;   // (a shape in triangles: its path, ThorVG's, kept on the CPU only, never drawn)
+    float cutW = 0.f, sheetHigh = 1.f, edgeWide = 0.f;   // (its path's width in points; how high it stands on the stage; its edge's width in points)
+    bool hollow = false;
+    uint32_t fillPoints = 0, fillEnd = 0;   // (where its fill's points and triangles end in its sheet: its edge comes after)
+    MaterialInstance* edgeLook = nullptr;   // (its edge's own look: the second part of its triangles)
     std::array<float, 6> bent{};   // (as last bent: round, bloat, zigzag, ridges, smooth, offset)
     std::array<float, 48> warped{};   // (as last warped on the GPU (warp_at): ThorVG's WgCanvas::bend, thorvg_bend.patch)
     std::vector<std::string> markers;  // an After Effects file's named stretches (ThorVG's Lottie markers)
@@ -499,48 +504,104 @@ static Drawn* flat(Stage& s, const char* form, float wide, const mat4f& place, f
     }, place, high, float3{-1.f}, true, lay, fx);
 }
 
-// A flat shape in one colour drawn by Filament itself, as the scene's other things are: its path made as `flat` makes
-// it (ThorVG's), cut into triangles once (libtess2, as Unity's vector shapes are), on a sheet of flat.mat that shows a
-// white point washed in its colour; antialiased by the view's MSAA, warped in its look's vertex stage (its `wave`, in
-// shares of its height). Nothing is drawn for it into a picture of its own: forty of them waving cost a quarter of the
-// time as ThorVG pictures do (check/shape_mesh.sh). Its outline only: no stroke, ramp, dash, trim or effects (those are `flat`'s).
-static Drawn* flat_mesh(Stage& s, const char* form, float wide, const mat4f& place, float high, float3 colour, const char* lay = nullptr, const DrawnFx& fx = {},
-                        int points = 6, float inner = 0.5f, float round = 0.f) {
+void tvg_edge(const tvg::PathCommand* cmds, uint32_t cmdsCnt, const tvg::Point* pts, uint32_t ptsCnt, float width, int cap, int join, float dash, float dashFrom,
+              float from, float to, std::vector<float>& xy, std::vector<uint32_t>& idx);   // (bend.cpp)
+
+// A flat shape's triangles as its path is now (flat_mesh): its fill (none if hollow: cut by libtess2, made again only
+// when its path changes, `refill`), then its edge (ThorVG's own stroker: trimmed and dashed as told, its triangles
+// straight), in shares of its height from its middle (uv) and in the stage's units (pos), into its sheet; where each
+// part's indices end (a part with none: one empty triangle).
+static std::vector<uint32_t> shape_cut(Drawn* d, float trimFrom, float trimTo, bool refill) {
+    const tvg::PathCommand* cmds; const tvg::Point* pts; uint32_t cmdsCnt = 0, ptsCnt = 0;
+    d->outline->path(&cmds, &cmdsCnt, &pts, &ptsCnt);
+    Mesh& m = *d->sheet;
+    const float w = d->cutW, h = d->plainHigh;
+    const auto point = [&](float x, float y) {
+        const float2 at{(x - 0.5f * w) / h, (0.5f * h - y) / h};
+        m.pos.push_back({d->sheetHigh * at, 0.f}), m.nrm.push_back({0, 0, 1}), m.uv.push_back(at);
+    };
+    const auto none = [&] { if (m.pos.empty()) point(0.5f * w, 0.5f * h); for (int k = 0; k < 3; ++k) m.idx.push_back(0); };
+    if (refill || m.idx.empty()) {
+        m.pos.clear(), m.nrm.clear(), m.uv.clear(), m.idx.clear();
+        if (!d->hollow) {   // (its outline: its pieces are short, so a curve is its end)
+            TESStesselator* t = tessNewTess(nullptr);
+            std::vector<float2> ring;
+            const auto end = [&] { if (ring.size() > 2) tessAddContour(t, 2, ring.data(), sizeof(float2), (int)ring.size()); ring.clear(); };
+            for (uint32_t c = 0, p = 0; c < cmdsCnt; ++c) switch (cmds[c]) {
+                case tvg::PathCommand::MoveTo: end(); ring.push_back({pts[p].x, pts[p].y}); ++p; break;
+                case tvg::PathCommand::LineTo: ring.push_back({pts[p].x, pts[p].y}); ++p; break;
+                case tvg::PathCommand::CubicTo: ring.push_back({pts[p + 2].x, pts[p + 2].y}); p += 3; break;
+                case tvg::PathCommand::Close: end(); break;
+            }
+            end();
+            if (tessTesselate(t, TESS_WINDING_NONZERO, TESS_POLYGONS, 3, 2, nullptr)) {
+                const TESSreal* v = tessGetVertices(t);
+                for (int i = 0; i < tessGetVertexCount(t); ++i) point(v[2 * i], v[2 * i + 1]);
+                const TESSindex* e = tessGetElements(t);
+                for (int i = 0; i < 3 * tessGetElementCount(t); ++i) m.idx.push_back((uint32_t)e[i]);
+            }
+            tessDeleteTess(t);
+        }
+        if (m.idx.empty()) none();
+        d->fillPoints = (uint32_t)m.pos.size(), d->fillEnd = (uint32_t)m.idx.size();
+    } else {   // (its fill as it was: its edge only made again)
+        m.pos.resize(d->fillPoints), m.nrm.resize(d->fillPoints), m.uv.resize(d->fillPoints), m.idx.resize(d->fillEnd);
+    }
+    if (d->edgeWide <= 0.f) return {d->fillEnd};
+    std::vector<float> xy;
+    std::vector<uint32_t> idx;
+    tvg_edge(cmds, cmdsCnt, pts, ptsCnt, d->edgeWide, d->fx.cap < 0 ? (int)tvg::StrokeCap::Square : d->fx.cap, d->fx.join < 0 ? (int)tvg::StrokeJoin::Bevel : d->fx.join,   // (ThorVG's own: square, bevel)
+             d->fx.dash * h, d->fx.dashFrom * h, trimFrom, trimTo, xy, idx);
+    const uint32_t base = (uint32_t)m.pos.size();
+    for (size_t i = 0; i < xy.size(); i += 2) point(xy[i], xy[i + 1]);
+    for (uint32_t i : idx) m.idx.push_back(base + i);
+    if (idx.empty()) none();
+    return {d->fillEnd, (uint32_t)m.idx.size()};
+}
+
+// A flat shape drawn by Filament itself, as the scene's other things are: its path made as `flat` makes it (ThorVG's),
+// cut into triangles (libtess2, as Unity's vector shapes are) again only when its path changes (cut_at), shown with
+// flat.mat washed in its colour on a white point (its edge a second part of it, in its edge's colour, ThorVG's own stroke); antialiased by
+// the view's MSAA, its points moved in the look's vertex stage (bends). Nothing is drawn for it into a picture of its
+// own: forty of them waving cost a quarter of the time as ThorVG pictures do (check/shape_mesh.sh). No ramp, no effects:
+// those are `flat`'s. edge: its colour, and how wide (a share of its height; inside its frame, as `flat`'s).
+static Drawn* flat_mesh(Stage& s, const char* form, float wide, const mat4f& place, float high, float3 colour, const char* lay = nullptr, float4 edge = float4{0.f},
+                        const DrawnFx& fx = {}, int points = 6, float inner = 0.5f, float round = 0.f) {
     const int h = 1024, w = std::max(2, (int)std::lround(1024.f * wide));   // (points to make its path in: its own, as fine as it is)
     Drawn* d = new Drawn;
-    tvg::Shape* shape = tvg::Shape::gen();
-    flat_path(d, shape, form, w, h, 0.f, points, inner, round, (float)h / 64.f);
-    const tvg::PathCommand* cmds; const tvg::Point* pts; uint32_t cmdsCnt = 0, ptsCnt = 0;
-    shape->path(&cmds, &cmdsCnt, &pts, &ptsCnt);
-    TESStesselator* tess = tessNewTess(nullptr);
-    std::vector<float2> ring;
-    const auto end = [&] { if (ring.size() > 2) tessAddContour(tess, 2, ring.data(), sizeof(float2), (int)ring.size()); ring.clear(); };
-    const auto at = [&](const tvg::Point& p) { ring.push_back({(p.x - 0.5f * (float)w) / (float)h, (0.5f * (float)h - p.y) / (float)h}); };   // (in shares of its height, from its middle, up)
-    for (uint32_t c = 0, p = 0; c < cmdsCnt; ++c) switch (cmds[c]) {   // (its pieces are short: a curve is its end)
-        case tvg::PathCommand::MoveTo: end(); at(pts[p++]); break;
-        case tvg::PathCommand::LineTo: at(pts[p++]); break;
-        case tvg::PathCommand::CubicTo: at(pts[p + 2]); p += 3; break;
-        case tvg::PathCommand::Close: end(); break;
-    }
-    end();
-    tvg::Paint::rel(shape);
+    d->fx = fx, d->cutW = (float)w, d->sheetHigh = high, d->hollow = fx.hollow;
+    const float in = 0.5f * std::min(edge.w * (float)h, 0.5f * (float)std::min(w, h));   // (half its edge: the path set in by that, as `flat` does)
+    d->edgeWide = 2.f * in;
+    d->outline = tvg::Shape::gen();
+    flat_path(d, d->outline, form, w, h, in, points, inner, round, (float)h / 64.f);
     d->sheet = new Mesh;
-    if (tessTesselate(tess, TESS_WINDING_NONZERO, TESS_POLYGONS, 3, 2, nullptr)) {
-        const TESSreal* v = tessGetVertices(tess);
-        for (int i = 0; i < tessGetVertexCount(tess); ++i)
-            d->sheet->pos.push_back({high * v[2 * i], high * v[2 * i + 1], 0.f}), d->sheet->nrm.push_back({0, 0, 1}), d->sheet->uv.push_back({v[2 * i], v[2 * i + 1]});
-        const TESSindex* e = tessGetElements(tess);
-        for (int i = 0; i < 3 * tessGetElementCount(tess); ++i) d->sheet->idx.push_back((uint32_t)e[i]);
-    }
-    tessDeleteTess(tess);
-    if (d->sheet->idx.empty()) { delete d->sheet; delete d; return nullptr; }
+    const std::vector<uint32_t> ends = shape_cut(d, 0.f, 1.f, true);
     d->cut = true, d->wideBy = wide;
     d->wash = float4{Color::toLinear<ACCURATE>(sRGBColor{colour}), 1.f};
-    d->look = add(s, d->sheet, flat_laid(lay).c_str(), std::vector<mat4f>((size_t)std::max(1, fx.copies), place));
-    if (!d->look) return nullptr;
-    d->look->setParameter("picture", white_point(s), TextureSampler());
+    const std::vector<MaterialInstance*> looks = add_parts(s, d->sheet, flat_laid(lay).c_str(), std::vector<mat4f>((size_t)std::max(1, fx.copies), place), ends);
+    if (looks.empty()) return nullptr;
+    d->look = looks[0];
+    d->edgeLook = looks.size() > 1 ? looks[1] : nullptr;
+    for (MaterialInstance* look : looks) look->setParameter("picture", white_point(s), TextureSampler());
     d->look->setParameter("wash", d->wash);
+    if (d->edgeLook) d->edgeLook->setParameter("wash", float4{Color::toLinear<ACCURATE>(sRGBColor{edge.xyz}), 1.f});
     return d;
+}
+
+// A flat shape in triangles cut anew for the frame that comes next, if its path is told otherwise: After Effects' trim
+// paths on its edge (off its end, off its beginning, slid along), its operators (round, bloat, zig zag, offset: bend.cpp).
+static void cut_at(Stage& s, Drawn* d, float3 trim, const std::array<float, 6>& bend) {
+    if (!d->cut || !d->outline || (trim == d->trimmed && bend == d->bent)) return;
+    d->trimmed = trim;
+    const bool refill = bend != d->bent;
+    if (refill) {
+        d->bent = bend;
+        const float high = d->plainHigh;
+        tvg_bend(d->outline, d->plain.data(), (uint32_t)d->plain.size(), d->plainAt.data(), (uint32_t)d->plainAt.size(), std::clamp(bend[0], 0.f, 0.5f) * d->plainSide,
+                 100.f * std::clamp(bend[1], -1.f, 1.f), bend[2] * high, (int)std::clamp(bend[3], 0.f, 100.f), bend[4] > 0.5f, bend[5] * high, d->fine);
+    }
+    const float from = std::clamp(trim.y, 0.f, 1.f) + trim.z, to = 1.f - std::clamp(trim.x, 0.f, 1.f) + trim.z;
+    reshape(s, d->sheet, shape_cut(d, from, to, refill));
 }
 
 // A picture taken off the stage for good.
