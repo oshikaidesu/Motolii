@@ -1,5 +1,6 @@
 // A browser shelf as a pane of its own (Motolii's Browser: Media, Effects, Fonts, Colors, Create): header, search, body, footer.
 // Each shelf is one tab of the window's panes; Media is the one file browser (project and disk, dock_files.dart).
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 
 import '../tokens.dart';
@@ -35,15 +36,44 @@ class _WsShelfState extends State<WsShelf> {
   final _mem = DockMem();
   late final _search = TextEditingController()..addListener(() => setState(() {}));
 
+  // (the shelf follows the document a picture after the hand: a change made, the inspector and the stage are built in
+  //  that picture and the shelf in the next, once for all the changes since. It was half of each picture's work)
+  Ws? _ws;
+  bool _due = false;
+  Object? _seen;
+  void _later() {
+    final ws = _ws!, now = (ws.rev, ws.selected, ws.trial); // (what a shelf shows of the window: the document, what is picked, what is tried on)
+    if (_due || now == _seen) return;
+    _seen = now;
+    _due = true;
+    SchedulerBinding.instance
+      ..addPostFrameCallback((_) {
+        _due = false;
+        if (mounted) setState(() {}); // (built in the next picture, on its own)
+      })
+      ..ensureVisualUpdate();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final ws = WsScope.read(context);
+    if (ws != _ws) {
+      _ws?.removeListener(_later);
+      _ws = ws..addListener(_later);
+    }
+  }
+
   @override
   void dispose() {
+    _ws?.removeListener(_later);
     _search.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final ws = WsScope.of(context), name = widget.name;
+    final ws = WsScope.read(context), name = widget.name;
     final (_, _, hint) = dockShelves.firstWhere((s) => s.$1 == name);
     final c = DockCtx(name, _mem, _search.text.trim(), ws, setState);
     return Column(
