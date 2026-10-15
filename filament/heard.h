@@ -56,6 +56,9 @@ static void heard(Stage& s, std::map<const void*, Heard>& all, double now, bool 
                 g_object_set(h.bin, "audio-sink", none, nullptr);
             }
             g_free(uri);
+            GstBus* bus = gst_element_get_bus(h.bin);
+            gst_bus_set_flushing(bus, TRUE);   // (nobody reads it: what it is told goes as it comes, not kept)
+            gst_object_unref(bus);
             gst_element_set_state(h.bin, GST_STATE_PAUSED);
             h.file = a.file, h.on = false;
         }

@@ -3,6 +3,7 @@
 //   check/films_memory.sh [seconds]
 #include "../motolii.h"
 #include <dirent.h>
+#include <signal.h>
 #include <mach/mach.h>
 #include <malloc/malloc.h>
 #include <stdio.h>
@@ -48,6 +49,7 @@ int main(int argc, char** argv) {
     for (int s = 0; s <= seconds; s += 15) {
         const double mb = footprint_mb();
         if (s == 30) first = mb;   // (counted from half a minute in: the first moments fill what is made once)
+        if (getenv("GST_TRACERS") && (s == 30 || s == seconds)) raise(SIGUSR2);   // (GStreamer's leaks tracer: what came and stayed since)
         printf("  %3d s  %.1f MB  malloc %.1f MB  pictures %llu\n", s, mb, malloc_mb(), motolii_frames(m));
         fflush(stdout);
         if (s < seconds) sleep(15);

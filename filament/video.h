@@ -300,6 +300,7 @@ static Video* video(Stage& s, const char* file, const mat4f& place, float high, 
         gst_tag_list_unref(tags);
         gst_message_unref(said);
     }
+    gst_bus_set_flushing(bus, TRUE);   // (nothing more is read from it: what it is told from now on goes as it comes, not kept)
     gst_object_unref(bus);
     const float wide = v->turned % 2 ? (float)v->h / (float)v->w : (float)v->w / (float)v->h;   // (as it is shown)
     v->sheet = new Mesh;
