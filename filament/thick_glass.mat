@@ -95,7 +95,7 @@ fragment {
         highp vec3 P = getWorldPosition();
         vec3 v = -getWorldViewVector();     // from the eye to here
         vec3 n = normalize(variable_facing.xyz);
-        highp vec2 here = uvToRenderTargetUV(getNormalizedPhysicalViewportCoord().xy);
+        highp vec2 here = onPicture(P);   // (where this point is on the picture, by the same eye as every other reading)
         // how far the eye's way runs inside the glass: from this face to the far face behind it
         highp float near = away(gl_FragCoord.z);
         highp float slant = length(P - getWorldCameraPosition()) / near;
