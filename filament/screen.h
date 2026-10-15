@@ -127,9 +127,10 @@ static void screen_fresh(Stage& s, ScreenFx& fx) {
     again.file = fx.file;
     std::string code;
     if (!screen_read(again, code)) { std::fprintf(stderr, "%s\n", again.trouble.c_str()); return; }
+    door::Screen* made = door::screen(s.engine, fx.file.c_str(), code.c_str(), again.bytes, &again.trouble);
+    if (!made) { std::fprintf(stderr, "the effect %s as written now is not taken (the one before stays): %s\n", fx.file.c_str(), again.trouble.c_str()); return; }
     door::drop(s.engine, fx.door);
-    fx.knobs = again.knobs, fx.fields = again.fields, fx.bytes = again.bytes;
-    fx.door = door::screen(s.engine, fx.file.c_str(), code.c_str(), fx.bytes);
+    fx.knobs = again.knobs, fx.fields = again.fields, fx.bytes = again.bytes, fx.door = made;
 }
 // Whether a file of the stage's effects has been written over since it was made (what wakes a stage that is not drawing).
 static bool screen_moved(const ScreenStack& st) {
@@ -152,7 +153,8 @@ static void screen_effects(Stage& s, ScreenStack& st, const std::string& files, 
             made->file = file;
             std::string code;
             if (!screen_read(*made, code)) { std::fprintf(stderr, "%s\n", made->trouble.c_str()); continue; }   // (kept as not made: not read again each time)
-            made->door = door::screen(s.engine, file.c_str(), code.c_str(), made->bytes);
+            made->door = door::screen(s.engine, file.c_str(), code.c_str(), made->bytes, &made->trouble);
+            if (!made->door) std::fprintf(stderr, "the effect %s is not taken: %s\n", file.c_str(), made->trouble.c_str());
             made->stamp = screen_stamp(file);
         }
         if (made->door) st.fx.push_back(made);

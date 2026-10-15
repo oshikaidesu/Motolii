@@ -11,6 +11,12 @@
 #include "details/Engine.h"
 #include "details/RenderTarget.h"
 #include "details/Texture.h"
+#include "gpu_door.h"
+
+#include <webgpu/webgpu.h>
+
+#include <chrono>
+#include <thread>
 
 #include <cstdlib>
 #include <cstring>
@@ -40,7 +46,42 @@ struct Screen {
 
 static DriverApi& driver(Engine* engine) { return downcast(engine)->getDriverApi(); }
 
-Screen* screen(Engine* engine, const char* name, const char* fragment, uint32_t knobBytes) {
+// Whether Dawn takes the fragment shader: made once on Filament's own device, on its driver's thread, inside an error scope.
+static bool takes(Engine* engine, const char* fragment, std::string* why) {
+    WGPUDevice device = (WGPUDevice)door::device(engine);
+    WGPUInstance instance = (WGPUInstance)door::instance(engine);
+    if (!device || !instance) return true;
+    struct Said { bool done = false, ok = true; std::string message; } said;
+    door::on_driver(engine, [&] {
+        wgpuDevicePushErrorScope(device, WGPUErrorFilter_Validation);
+        WGPUShaderSourceWGSL code{};
+        code.chain.sType = WGPUSType_ShaderSourceWGSL;
+        code.code = {fragment, WGPU_STRLEN};
+        WGPUShaderModuleDescriptor made{};
+        made.nextInChain = &code.chain;
+        WGPUShaderModule module = wgpuDeviceCreateShaderModule(device, &made);
+        WGPUPopErrorScopeCallbackInfo told{};
+        told.mode = WGPUCallbackMode_AllowProcessEvents;
+        told.callback = [](WGPUPopErrorScopeStatus, WGPUErrorType type, WGPUStringView message, void* to, void*) {
+            Said& s = *(Said*)to;
+            s.done = true, s.ok = type == WGPUErrorType_NoError;
+            if (!s.ok && message.data) s.message.assign(message.data, message.length == WGPU_STRLEN ? std::strlen(message.data) : message.length);
+        };
+        told.userdata1 = &said;
+        wgpuDevicePopErrorScope(device, told);
+        for (int i = 0; i < 2000 && !said.done; ++i) {   // (Dawn says it within a moment; two seconds at most)
+            wgpuInstanceProcessEvents(instance);
+            if (!said.done) std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+        if (module) wgpuShaderModuleRelease(module);
+    });
+    engine->flushAndWait();
+    if (!said.ok && why) *why = said.message;
+    return said.ok;
+}
+
+Screen* screen(Engine* engine, const char* name, const char* fragment, uint32_t knobBytes, std::string* why) {
+    if (!takes(engine, fragment, why)) return nullptr;
     DriverApi& d = driver(engine);
     auto* s = new Screen;
     s->knobBytes = (knobBytes + 15u) & ~15u;

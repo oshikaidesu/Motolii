@@ -8,6 +8,7 @@
 // what shows its result is in order with them on the GPU.
 #pragma once
 #include <cstdint>
+#include <string>
 
 namespace filament {
 class Engine;
@@ -17,7 +18,9 @@ class RenderTarget;
 
 namespace door {
 struct Screen;
-Screen* screen(filament::Engine*, const char* name, const char* fragment, uint32_t knobBytes);
+// A fragment shader Dawn would refuse is not made (nullptr, `why` says what Dawn said): it is tried first on Filament's
+// own device, inside an error scope, so a shader written wrong takes nothing else down.
+Screen* screen(filament::Engine*, const char* name, const char* fragment, uint32_t knobBytes, std::string* why = nullptr);
 void knobs(filament::Engine*, Screen*, const void* data, uint32_t bytes);
 void draw(filament::Engine*, Screen*, filament::Texture* from, filament::RenderTarget* to, uint32_t w, uint32_t h);   // to null: the screen
 void drop(filament::Engine*, Screen*);
