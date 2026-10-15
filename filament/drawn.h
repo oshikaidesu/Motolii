@@ -10,6 +10,7 @@
 #include <thorvg_lottie.h>
 #include <webgpu/webgpu.h>
 
+#include <array>
 #include <filesystem>
 #include <fstream>
 
@@ -21,6 +22,7 @@ struct DrawnFx { bool split = false;   // (a text's letters each a copy of their
     float blur = 0.f; int blurWay = 0; float overHigh = 1.f; float4 shadow{0.f}; float fall = 0.f, way = 0.f, soft = 0.f; float tint = 0.f; float3 tints[2]{}; float tritone = 0.f; float3 tones[3]{}; float4 glow{0.f}; float glowSoft = 0.f; int copies = 1;
                  std::vector<float3> ramp;   // (two colours or more: it is filled from the first at its top to the last at its bottom, ThorVG's linear gradient)
                  bool hollow = false;   // (a flat shape filled with nothing: only its edge is seen)
+                 float reach = 0.f;     // (how far a bent shape goes out past its box at its most, a share of its height (bend_at): the picture larger all round by that)
                  bool radial = false; float rampAngle = 0.f, rampScale = 1.f; int spread = 0;   // (or from its middle out, ThorVG's radial gradient; turned so far, clockwise; so long, as a share of its reach; past its ends padded, reflected or repeated)
                  DrawnFx over(float high) const {   // (the same for a thing `high` units high: its lengths as shares of that)
                      DrawnFx f = *this;
@@ -38,6 +40,9 @@ struct Drawn {
     float starts = 0.f;                // how far into itself it is when the stage's time is 0
     tvg::Shape* shape = nullptr;       // a flat shape's own path (driver thread only), and how much of it is cut off its end
     float3 trimmed{0.f};   // (as last cut: off the end, off the beginning, slid along)
+    std::vector<tvg::PathCommand> plain; std::vector<tvg::Point> plainAt;   // (its path as made, before it is bent (bend_at))
+    float plainHigh = 0.f, plainSide = 0.f;   // (and how high it was drawn and its shorter side, in its own points)
+    std::array<float, 6> bent{};   // (as last bent: round, bloat, zigzag, ridges, smooth, offset)
     std::vector<std::string> markers;  // an After Effects file's named stretches (ThorVG's Lottie markers)
     std::vector<float2> letters;       // a text split into its letters: where each lies across the picture (shares of its width); its copies show one each
     float fromFrame = 0.f, toFrame = 0.f;   // the stretch it plays, when one is named (frames of the file)
@@ -70,6 +75,25 @@ static void trim_at(Stage& s, Drawn* d, float cut, float begin = 0.f, float offs
     d->trimmed = is;
     door::on_driver(s.engine, [d, cut, begin, offset] {
         d->shape->trimpath(std::clamp(begin, 0.f, 1.f) + offset, 1.f - std::clamp(cut, 0.f, 1.f) + offset);
+        d->canvas->update();
+        d->canvas->draw(true);
+        d->canvas->sync();
+    });
+}
+
+// After Effects' path operators, ThorVG's own (bend.cpp): its corners rounded (round: a share of its shorter side),
+// pucked in or bloated out (bloat, -1 to 1), zig-zagged (so high, a share of its height; so many ridges a side; smooth
+// or sharp), offset out or in (a share of its height); drawn again for the frame that comes next, if it is bent anew.
+void tvg_bend(tvg::Shape* shape, const tvg::PathCommand* cmds, uint32_t cmdsCnt, const tvg::Point* pts, uint32_t ptsCnt,
+              float round, float bloat, float zigzag, int ridges, bool smooth, float offset);
+static void bend_at(Stage& s, Drawn* d, float round, float bloat, float zigzag, float ridges, float smooth, float offset) {
+    const std::array<float, 6> is{round, bloat, zigzag, ridges, smooth, offset};
+    if (!d->shape || d->plain.empty() || is == d->bent) return;
+    d->bent = is;
+    door::on_driver(s.engine, [d, is] {
+        const float high = d->plainHigh, side = d->plainSide;
+        tvg_bend(d->shape, d->plain.data(), (uint32_t)d->plain.size(), d->plainAt.data(), (uint32_t)d->plainAt.size(), std::clamp(is[0], 0.f, 0.5f) * side,
+                 100.f * std::clamp(is[1], -1.f, 1.f), is[2] * high, (int)std::clamp(is[3], 0.f, 100.f), is[4] > 0.5f, is[5] * high);
         d->canvas->update();
         d->canvas->draw(true);
         d->canvas->sync();
@@ -129,8 +153,15 @@ static Drawn* drawn(Stage& s, const std::function<tvg::Paint*(Drawn*, int*, int*
         tvg::Initializer::init(0);
         tvg::Paint* p = paints(d, &w, &h);
         if (!p || w <= 0 || h <= 0) return;
+        const float tall = (float)h;   // (what its effects' lengths are shares of: the thing as drawn, without room)
+        if (fx.reach > 0.f) {
+            const float room = std::ceil(fx.reach * (float)h);
+            p->translate(room, room);
+            high *= ((float)h + 2.f * room) / (float)h;   // (the thing itself stays as large)
+            w += 2 * (int)room, h += 2 * (int)room;
+        }
         if (fx.blur > 0.f || fx.shadow.w > 0.f || fx.tint > 0.f || fx.tritone > 0.f || fx.glow.w > 0.f) {   // (in a scene of ThorVG's, which takes the effects; the picture larger all round by as far as they reach)
-            const float tall = (float)h, blur = fx.blur * tall, fall = fx.fall * tall, soft = fx.soft * tall;
+            const float blur = fx.blur * tall, fall = fx.fall * tall, soft = fx.soft * tall;
             const float glowSoft = fx.glowSoft * tall;
             const int room = (int)std::ceil(std::max({3.f * blur, fx.shadow.w > 0.f ? fall + 3.f * soft : 0.f, fx.glow.w > 0.f ? 3.f * glowSoft : 0.f}));
             for (int k = 0; k < 5; ++k) {   // (a scene an effect, each over the one before)
@@ -142,8 +173,8 @@ static Drawn* drawn(Stage& s, const std::function<tvg::Paint*(Drawn*, int*, int*
             p->translate((float)room, (float)room);
             effects_on(d->effects, fx, tall);
             d->tall = tall, d->fx = fx;   // (told again at each moment: those that move are drawn again)
+            high *= (float)(h + 2 * room) / (float)h;   // (the thing itself stays as large)
             w += 2 * room, h += 2 * room;
-            high *= (float)h / tall;   // (the thing itself stays as large)
         }
         if (const float most = (float)std::max(w, h); most > 4096.f) {   // (no larger than a picture the device takes, with room to spare: the whole drawn smaller, its sheet as large)
             tvg::Scene* smaller = tvg::Scene::gen();
@@ -408,9 +439,14 @@ static Drawn* flat(Stage& s, const char* form, float wide, const mat4f& place, f
             }
             shape->close();
         } else {
-            const float side = std::min((float)*w, (float)*h) - 2.f * in, corner = (!strcmp(form, "line") ? 0.5f : std::clamp(round, 0.f, 0.5f)) * side;
+            const float side = std::min((float)*w, (float)*h) - 2.f * in, corner = !strcmp(form, "line") ? 0.5f * side : 0.f;   // (a rect's corners: round, bent as the others)
             shape->appendRect(in, in, (float)*w - 2.f * in, (float)*h - 2.f * in, corner, corner);
         }
+        const tvg::PathCommand* cmds; const tvg::Point* pts; uint32_t cmdsCnt = 0, ptsCnt = 0;
+        shape->path(&cmds, &cmdsCnt, &pts, &ptsCnt);
+        d->plain.assign(cmds, cmds + cmdsCnt), d->plainAt.assign(pts, pts + ptsCnt);
+        d->plainHigh = (float)*h, d->plainSide = std::min((float)*w, (float)*h) - 2.f * in;
+        if (round > 0.f && strcmp(form, "line")) tvg_bend(shape, d->plain.data(), cmdsCnt, d->plainAt.data(), ptsCnt, std::clamp(round, 0.f, 0.5f) * d->plainSide, 0.f, 0.f, 0, false, 0.f), d->bent[0] = round;
         shape->fill((uint8_t)std::lround(255.f * colour.x), (uint8_t)std::lround(255.f * colour.y), (uint8_t)std::lround(255.f * colour.z), strcmp(form, "null") && !fx.hollow ? 255 : 0);
         if (fx.ramp.size() > 1 && strcmp(form, "null")) shape->fill(ramp_of(fx.ramp, (float)*w, (float)*h, fx.radial, fx.rampAngle, fx.rampScale, fx.spread));
         if (in > 0.f) shape->strokeWidth(2.f * in), shape->strokeFill((uint8_t)std::lround(255.f * edge.x), (uint8_t)std::lround(255.f * edge.y), (uint8_t)std::lround(255.f * edge.z));
