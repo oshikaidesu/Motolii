@@ -22,13 +22,17 @@ struct Motolii {
     std::mutex asked_lock;
     std::condition_variable asked_now;
     std::deque<std::function<void()>> asked;
+    std::map<std::string, std::shared_ptr<std::function<void()>>> latest;   // (posted and not done yet, by what it is: a later one of the same takes its place)
     bool closing = false, changed = true;
     std::atomic<bool> playing{false};
-    bool loop = true;   // (play goes round the work area; not: it stops at its end)
+    std::atomic<bool> loop{true};   // (play goes round the work area; not: it stops at its end. Atomic: asked without the document)
+    std::atomic<bool> keying{false};   // (the document's own, mirrored: asked each picture without waiting for the document)
+    std::atomic<bool> telling{false};  // (the hand is telling the stage a moment, the document held: a shell reading now would wait)
     std::atomic<double> now{0.0};
     std::map<std::string, std::pair<long, double>> by_door;   // (what each call has cost, by its name: for measuring)
     std::map<std::string, double> worst;                      // (and its slowest once)
-    double read_waited = 0, read_waited_most = 0; long read_waits = 0;   // (reads waiting for the document: in all, the longest, how many waited over 2 ms)
+    double read_waited = 0, read_waited_most = 0; long read_waits = 0;
+    std::map<std::string, std::pair<double, long>> rounds;   // (a call through the hand: its longest wait for the answer, and how many waited over 4 ms)   // (reads waiting for the document: in all, the longest, how many waited over 2 ms)
     double spent[4] = {0, 0, 0, 0};   // (seconds the hand spent: asked to change, asked to read, telling the moment, drawing)
     long many[4] = {0, 0, 0, 0};
 };
@@ -49,7 +53,11 @@ template <class Does> static auto asked(Motolii* m, Does does, bool changes, con
         });
     }
     m->asked_now.notify_one();
-    return done.get();
+    const auto sent = std::chrono::steady_clock::now();
+    auto out = done.get();
+    const double round = std::chrono::duration<double>(std::chrono::steady_clock::now() - sent).count();   // (the shell waited this long for the hand: in the queue and at work)
+    { std::lock_guard<std::mutex> hold(m->asked_lock); auto& r = m->rounds[who]; r.first = std::max(r.first, round), r.second += round > 0.004; }
+    return out;
 }
 // Asked of the hand: by_hand for what may change what is seen (the stage is drawn again after), by_look for what only
 // reads (nothing drawn again: a shell that reads its cards a hundred times a picture never waits on a hundred pictures).
@@ -57,6 +65,28 @@ template <class Does> static auto by_hand(Motolii* m, Does does, const char* who
 // A read is not queued behind the hand: it is done at once, on the asker's own thread, while it holds the document
 // (the hand holds it only while it changes the document or tells it a moment, never while a picture is drawn), so a
 // shell's hundreds of reads a build never wait on a picture. (The Flutter kin read so: research_notes/flutter_native_kin.md)
+// A change the shell does not wait for (where a hand is, the moment the playhead is put at, play or stop): put in the
+// hand's queue and answered at once; one of the same kind still waiting there is replaced by it, keeping its place, so
+// a hand moving faster than the pictures leaves only where it is now. What it says absolutely (where the hand is, not
+// how far it moved), the document's own reckoning.
+static int posted(Motolii* m, const std::string& kind, std::function<void()> does) {
+    {
+        std::lock_guard<std::mutex> hold(m->asked_lock);
+        auto& waiting = m->latest[kind];
+        if (waiting) *waiting = std::move(does);
+        else {
+            waiting = std::make_shared<std::function<void()>>(std::move(does));
+            m->asked.push_back([m, kind] {
+                std::function<void()> now;
+                { std::lock_guard<std::mutex> hold(m->asked_lock); now = std::move(*m->latest[kind]); m->latest.erase(kind); }
+                now();
+                m->changed = true;
+            });
+        }
+    }
+    m->asked_now.notify_one();
+    return 1;
+}
 template <class Does> static auto by_look(Motolii* m, Does does, const char* who = __builtin_FUNCTION()) -> decltype(does()) {
     const auto asked = std::chrono::steady_clock::now();
     std::lock_guard<std::recursive_mutex> hold(m->d->lock);
@@ -125,7 +155,9 @@ static void motolii_hand(Motolii* m, std::string document, int wide, int high, s
         m->s->by_clock = m->playing;
         {
             std::lock_guard<std::recursive_mutex> holding(m->d->lock);
+            m->telling = true;
             time_is(*m->s, m->now);
+            m->telling = false;
         }
         const auto told = std::chrono::steady_clock::now();
         live_draw(*m->s, m->live);
@@ -170,9 +202,10 @@ int motolii_live(Motolii* m) { return by_hand(m, [m] { return m->live || (m->liv
 void* motolii_front(Motolii* m) { return m->live ? live_front(m->live) : nullptr; }
 unsigned long long motolii_frames(Motolii* m) { return m->live ? m->live->frames.load() : 0; }
 int motolii_loop(Motolii* m, int on) {   // (on below 0: only asks: answered at once, not queued behind the hand's picture)
-    if (on < 0) return by_look(m, [=] { return (int)m->loop; });
+    if (on < 0) return (int)m->loop.load();
     return by_hand(m, [=] { m->loop = on != 0; return (int)m->loop; });
 }
+int motolii_busy(Motolii* m) { return m->telling ? 1 : 0; }   // (without the document: whether a read now would wait for the hand's moment)
 const char* motolii_spent(Motolii* m) {
     return by_look(m, [=] {
         char line[200];
@@ -188,11 +221,12 @@ const char* motolii_spent(Motolii* m) {
         char waits[160];
         std::snprintf(waits, sizeof waits, "; reads waited for the document %.0f ms, the longest %.1f ms, %ld over 2 ms", 1e3 * m->read_waited, 1e3 * m->read_waited_most, m->read_waits);
         m->word += waits;
+        { std::lock_guard<std::mutex> hold(m->asked_lock); for (const auto& [name, r] : m->rounds) if (r.second) { char one[160]; std::snprintf(one, sizeof one, "; %s waited for the hand up to %.1f ms, %ld over 4 ms", name.c_str(), 1e3 * r.first, r.second); m->word += one; } }
         for (size_t i = 0; i < doors.size() && i < 20; ++i) m->word += "; " + doors[i].second;   // (the dearest calls)
         return m->word.c_str();
     });
 }
-int motolii_play(Motolii* m, int playing) { return by_hand(m, [m, playing] { m->playing = playing != 0; return 1; }); }
+int motolii_play(Motolii* m, int playing) { return posted(m, "play", [m, playing] { m->playing = playing != 0; }); }
 double motolii_now(Motolii* m) { return m->now; }
 
 int motolii_add(Motolii* m, const char* kind, const char* file) { return by_hand(m, [=] { return changes(m, (int)(doc_add(doc(m), kind, file))); }); }
@@ -218,11 +252,11 @@ int motolii_key_moments(Motolii* m, int thing, const char* name, double* at, int
 // high (points of the picture, from the top left), and how far it is turned (degrees, clockwise as seen).
 int motolii_frame(Motolii* m, int thing, double* frame) { return by_look(m, [=] { return (int)(doc_knows(doc(m), thing) && doc_frame(*m->d, thing, m->now, frame)); }); }
 int motolii_keying(Motolii* m, int on) {   // (on below 0: only says whether every change is keyed: a read, answered at once, not queued behind the hand's picture)
-    if (on < 0) return by_look(m, [=] { return (int)m->d->keying; });
-    return by_hand(m, [=] { m->d->keying = on != 0, m->d->keying_from = m->now; return (int)m->d->keying; });
+    if (on < 0) return (int)m->keying.load();
+    return by_hand(m, [=] { m->d->keying = on != 0, m->d->keying_from = m->now; m->keying = m->d->keying; return (int)m->d->keying; });
 }
 int motolii_hold(Motolii* m, int thing) { return by_hand(m, [=] { return (int)doc_hold(doc(m), thing); }); }
-int motolii_carry(Motolii* m, const char* by, double a, double b) { return by_hand(m, [=] { return (int)doc_carry(doc(m), by, a, b); }); }
+int motolii_carry(Motolii* m, const char* by, double a, double b) { return posted(m, std::string("carry ") + by, [m, by = std::string(by), a, b] { doc_carry(doc(m), by.c_str(), a, b); }); }   // (refused: said when it is let go)
 int motolii_let_go(Motolii* m, int keep) { return by_hand(m, [=] { return changes(m, (int)doc_let_go(doc(m), keep != 0)); }); }
 int motolii_put(Motolii* m, int thing, const char* name, double at, double number) { return by_hand(m, [=] { return changes(m, (int)doc_put(doc(m), thing, name, at, number)); }); }
 int motolii_key_here(Motolii* m, int thing, const char* name, double at) { return by_hand(m, [=] { return changes(m, (int)doc_key_here(doc(m), thing, name, at)); }); }
@@ -324,13 +358,14 @@ int motolii_redo(Motolii* m) { return by_hand(m, [=] { return (int)(doc_redo(doc
 
 double motolii_seconds(Motolii* m) { return by_look(m, [m] { return doc_seconds(*m->d); }); }
 int motolii_at(Motolii* m, double seconds) {
-    return by_hand(m, [m, seconds] {
+    const bool within = by_look(m, [m, seconds] {   // (said at once: past the document's ends it is refused, as before)
         char runs[80];
-        std::snprintf(runs, sizeof runs, "the document runs from 0 to %.2f seconds", doc_seconds(doc(m)));
-        if (!told(m, seconds >= 0.0 && seconds <= doc_seconds(*m->d), runs)) return 0;
-        m->now = seconds;
-        return time_is(*m->s, seconds), 1;
+        std::snprintf(runs, sizeof runs, "the document runs from 0 to %.2f seconds", doc_seconds(*m->d));
+        return told(m, seconds >= 0.0 && seconds <= doc_seconds(*m->d), runs);
     });
+    // (waited for: a shell that puts the playhead reads that moment next, everywhere at once, and so waits once here
+    //  rather than at each reading; posted, every reading of the picture met the hand telling it)
+    return within && by_hand(m, [m, seconds] { m->now = seconds; m->telling = true; time_is(*m->s, seconds); m->telling = false; return 1; });
 }
 static bool ends(const char* name, const char* with) { return strlen(name) > strlen(with) && !strcmp(name + strlen(name) - strlen(with), with); }
 static bool placed(const char* name) { return std::filesystem::is_directory(std::filesystem::absolute(name).parent_path()); }

@@ -301,6 +301,15 @@ class Ws extends ChangeNotifier {
 
   /// Joined: whether every change a hand makes is keyed (the top bar's Animate, the inspector's Animate all: one truth, the inside's).
   bool get animating => _inside?.keyingNow ?? false;
+
+  /// Joined: what changes only with the document (the work area, the marks, the guides), read once a reading of it:
+  /// asked each picture they would wait for the inside's moment while it plays.
+  (int, (double, double))? _work;
+  (int, List<(double, String)>)? _marks;
+  (int, List<(String, double)>)? _guides;
+  (double, double) get work => (_work?.$1 == rev ? _work! : (_work = (rev, _inside!.work))).$2;
+  List<(double, String)> get marks => (_marks?.$1 == rev ? _marks! : (_marks = (rev, _inside!.marks))).$2;
+  List<(String, double)> get guides => (_guides?.$1 == rev ? _guides! : (_guides = (rev, _inside!.guides))).$2;
   set animating(bool on) {
     _inside?.keying(on);
     notifyListeners();

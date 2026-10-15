@@ -237,6 +237,10 @@ class Motolii {
 
   /// Whether every change a hand makes is keyed now (Animate all).
   bool get keyingNow => _keying(_m, -1) != 0;
+  late final _busy = _lib.lookupFunction<Int32 Function(_P), int Function(_P)>('motolii_busy');
+
+  /// Whether the inside is telling the stage a moment just now: a reading made now would wait for it (asked at once).
+  bool get busy => _busy(_m) != 0;
   bool hold(int thing) => _hold(_m, thing) != 0;
   bool carry(String by, double a, [double b = 0]) => _with([by], (s) => _carry(_m, s[0], a, b)) != 0;
   bool letGo(bool keep) => _letGo(_m, keep ? 1 : 0) != 0;

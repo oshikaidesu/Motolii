@@ -1,5 +1,6 @@
 // The whole window: top bar, then the panes (panes.dart) — browser shelves | Stage over Timeline, Inspector over Desk, rearrangeable.
 // Each seat is its own file and reads the shared Ws.
+import 'dart:developer' show Timeline;
 import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
@@ -722,7 +723,8 @@ class _InspectorSeatState extends State<_InspectorSeat> {
   final _live = ValueNotifier<(Map<String, double>, Map<String, KeyS>)>((const {}, const {}));
   int? _frame;
   Object _now(Ws ws) => (ws.rev, ws.selected, ws.animating);
-  void _changed() {
+  void _changed() => Timeline.timeSync('inspector at a moment', _changedNow); // (named in Flutter's timeline: frames_test TRACE)
+  void _changedNow() {
     final ws = _ws!, now = _now(ws);
     if (now != _seen) {
       _seen = now;
@@ -731,6 +733,11 @@ class _InspectorSeatState extends State<_InspectorSeat> {
     } else if (ws.frame != _frame) {
       _frame = ws.frame;
       if (!_keyed(ws)) return;
+      if (ws.inside?.busy ?? false) { // (the inside is telling the stage this moment: read at the next, or when it rests, rather than wait)
+        _settle?.cancel();
+        _settle = Timer(const Duration(milliseconds: 150), () => mounted ? setState(() {}) : null);
+        return;
+      }
       _live.value = (Ws.timed('transform', () => wsTransform(ws, ws.layer?.id)), Ws.timed('key marks', () => _keyMarks(ws, ws.layer?.id)));
       _settle?.cancel();
       _settle = Timer(const Duration(milliseconds: 150), () => mounted ? setState(() {}) : null); // (the moment at rest: built once, whatever does not watch its own number shows it too)

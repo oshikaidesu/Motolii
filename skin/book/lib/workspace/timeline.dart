@@ -1,5 +1,6 @@
 // The workspace's Timeline seat: transport + timecode on top, layer labels beside the track area, a ruler with the work area, the playhead.
 // The document lives in Ws; this seat keeps only how it looks at it (zoom, scroll, loop, the row toggles, the work area).
+import 'dart:developer' show Timeline;
 import 'dart:math' as math;
 
 import 'package:flutter/gestures.dart' show DragStartBehavior, PointerScrollEvent, PointerSignalEvent;
@@ -65,7 +66,8 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
     _follow(ws.frame);
   }
 
-  void _tick(Duration e) {
+  void _tick(Duration e) => Timeline.timeSync('ws tick', () => _tickNow(e)); // (named in Flutter's timeline: frames_test TRACE)
+  void _tickNow(Duration e) {
     final ws = _ws!;
     if (ws.inside case final inside?) {   // (joined: the inside keeps the clock, the playhead shows its moment)
       _last = (inside.now * Ws.fps).round().clamp(0, Ws.duration);
@@ -286,7 +288,7 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
   /// The marks on the ruler: joined, the document's own (moments with a name); else the sample's.
   List<(int, String)> _marksOf(Ws ws) {
     final m = ws.inside;
-    return m == null ? _markers : [for (final (at, name) in m.marks) ((at * Ws.fps).round(), name)];
+    return m == null ? _markers : [for (final (at, name) in _ws!.marks) ((at * Ws.fps).round(), name)];
   }
 
   void _overview(Offset p, double w) {
@@ -311,8 +313,8 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
 
   @override
   Widget build(BuildContext context) {
-    if (_ws?.inside case final m? when _workDrag == null) {   // (joined: the document's work area)
-      final (from, to) = m.work;
+    if (_ws?.inside != null && _workDrag == null) {   // (joined: the document's work area)
+      final (from, to) = _ws!.work;
       _workIn = (from * Ws.fps).round();
       _workOut = (to * Ws.fps).round();
     }

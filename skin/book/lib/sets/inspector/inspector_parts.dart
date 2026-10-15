@@ -279,7 +279,7 @@ class _InspHostState extends State<InspHost> {
   final _seenWords = <String, String>{};
   final _seenFlags = <String, bool>{};
   bool _live = false;
-  void _tell() => widget.together == null ? _tells() : widget.together!(_tells);
+  void _tell() => widget.together == null || doc.inGesture ? _tells() : widget.together!(_tells); // (under a hand only where it is is told, nothing settled: no step to make one of)
   bool _animating = false;
   void _tells() {
     if (doc.animateAll != _animating) widget.onAnimateAll?.call(_animating = doc.animateAll);
