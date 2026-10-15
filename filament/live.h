@@ -2,11 +2,12 @@
 // one of three pixel buffers that the GPU and the shell share (CVPixelBuffers on IOSurfaces: made as glass_door_mac.mm
 // makes them, which did this on Filament's Metal backend). Here each buffer is shown to Dawn as a texture (the call
 // video.h reads films by, used the other way round) and made a render target of Filament's through the door the
-// patch already has (Texture::Builder::import). "Finished" is Filament's own flushAndWait coming back. macOS only.
+// patch already has (Texture::Builder::import). "Finished" is a Filament fence put after it signalled. macOS only.
 #include <CoreVideo/CoreVideo.h>
 #include <IOSurface/IOSurface.h>
 #include <webgpu/webgpu.h>
 #include <atomic>
+#include <filament/Fence.h>
 
 struct Live {
     static constexpr int N = 3;
@@ -18,6 +19,9 @@ struct Live {
     int next = 0;                      // the buffer the next picture is drawn into (they go round)
     std::atomic<int> front{-1};        // the last one finished
     std::atomic<uint64_t> frames{0};   // how many have been finished
+    double waited = 0;   // seconds spent waiting for the GPU to finish them (for measuring)
+    Fence* pending = nullptr;          // the picture begun and not yet finished by the GPU, and which buffer it is in
+    int pendingIn = -1;
 };
 
 static Live* live_open(Stage& s) {
@@ -65,15 +69,27 @@ static void live_draw(Stage& s, Live* l) {
         s.view->setRenderTarget(s.out);
         for (View* v : s.layers) v->setRenderTarget(s.out);   // (the pictures laid over it go to the same place)
     }
-    draw(s, nullptr, true);
+    draw(s, nullptr, false);
+    l->pending = s.engine->createFence();   // (not waited for: the hand goes back to what it is asked; live_ready offers it once done)
+    s.engine->flush();
+    l->pendingIn = l->next;
     if (!s.over) {
         s.view->setRenderTarget(nullptr);
         for (View* v : s.layers) v->setRenderTarget(nullptr);
     }
     s.out = nullptr;
-    l->front = l->next;
     l->next = (l->next + 1) % Live::N;
+}
+// Whether the picture begun last is finished (then it is offered to the shell, the front): the hand asks this rather
+// than waiting for the GPU, and begins no other picture till it is (Thermion's way: research_notes/flutter_native_kin.md).
+static bool live_ready(Stage& s, Live* l) {
+    if (!l->pending) return true;
+    if (l->pending->wait(Fence::Mode::DONT_FLUSH, 0) != Fence::FenceStatus::CONDITION_SATISFIED) return false;
+    s.engine->destroy(l->pending);
+    l->pending = nullptr;
+    l->front = l->pendingIn;
     ++l->frames;
+    return true;
 }
 
 // The last finished picture, held for the one who asks (a CVPixelBufferRef: the shell lets it go). Any thread.

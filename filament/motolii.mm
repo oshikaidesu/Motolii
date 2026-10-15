@@ -87,8 +87,9 @@ static void motolii_hand(Motolii* m, std::string document, int wide, int high, s
         std::deque<std::function<void()>> todo;
         {
             std::unique_lock<std::mutex> hold(m->asked_lock);
-            const bool goes = m->live && (m->playing || m->changed);
-            if (goes) m->asked_now.wait_until(hold, due, [m] { return !m->asked.empty() || m->closing; });
+            const bool goes = m->live && (m->playing || m->changed), begun = m->live && m->live->pending;   // (begun: a picture the GPU has not finished)
+            if (begun) m->asked_now.wait_for(hold, std::chrono::milliseconds(1), [m] { return !m->asked.empty() || m->closing; });   // (looked at again a moment later)
+            else if (goes) m->asked_now.wait_until(hold, due, [m] { return !m->asked.empty() || m->closing; });
             else m->asked_now.wait_for(hold, std::chrono::milliseconds(500), [m] { return !m->asked.empty() || m->closing || (m->live && (m->playing || m->changed)); });   // (twice a second: a file written over)
             if (m->closing) break;
             todo.swap(m->asked);
@@ -101,11 +102,12 @@ static void motolii_hand(Motolii* m, std::string document, int wide, int high, s
             std::lock_guard<std::recursive_mutex> holding(m->d->lock);
             for (auto& does : todo) does();
         }
+        const bool ready = !m->live || live_ready(*m->s, m->live);   // (the picture begun before, offered once the GPU has finished it)
         const auto t = std::chrono::steady_clock::now();
         // (asked something: a shell that writes reads next, so the picture waits a moment for it rather than it for a
         //  whole picture; never more than two pictures' time since the last was drawn)
         if (!todo.empty()) due = std::min(std::max(due, t + std::chrono::milliseconds(3)), drawn + std::chrono::milliseconds(33));
-        if (!m->live || t < due || !(m->playing || m->changed)) { last = m->playing ? last : t; continue; }
+        if (!m->live || t < due || !(m->playing || m->changed) || !ready) { last = m->playing || !ready ? last : t; continue; }   // (not ready: no other picture is begun till it is)
         if (m->playing) {   // (time goes on by the clock, and round again at the document's end)
             std::lock_guard<std::recursive_mutex> holding(m->d->lock);
             const double runs = doc_seconds(*m->d), on = m->now + std::chrono::duration<double>(t - last).count();
@@ -166,7 +168,7 @@ int motolii_loop(Motolii* m, int on) { return by_hand(m, [=] { if (on >= 0) m->l
 const char* motolii_spent(Motolii* m) {
     return by_look(m, [=] {
         char line[200];
-        std::snprintf(line, sizeof line, "changes %ld %.0f ms, reads %ld %.0f ms, moments %ld %.0f ms, draws %ld %.0f ms", m->many[0], 1e3 * m->spent[0], m->many[1], 1e3 * m->spent[1], m->many[2], 1e3 * m->spent[2], m->many[3], 1e3 * m->spent[3]);
+        std::snprintf(line, sizeof line, "changes %ld %.0f ms, reads %ld %.0f ms, moments %ld %.0f ms, draws %ld %.0f ms (waiting for the GPU %.0f ms)", m->many[0], 1e3 * m->spent[0], m->many[1], 1e3 * m->spent[1], m->many[2], 1e3 * m->spent[2], m->many[3], 1e3 * m->spent[3], m->live ? 1e3 * m->live->waited : 0.0);
         std::vector<std::pair<double, std::string>> doors;
         for (const auto& [name, cost] : m->by_door) {
             char one[160];
