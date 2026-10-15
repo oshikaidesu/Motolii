@@ -2,6 +2,7 @@
 #include "kit.h"
 #include "doc.h"
 #include "live.h"
+#include "heard.h"
 #include "motolii.h"
 #include <set>
 #include <condition_variable>
@@ -18,6 +19,7 @@ struct Motolii {
     Stage* s = nullptr;
     Doc* d = nullptr;
     Live* live = nullptr;
+    std::map<const void*, Heard> heard;   // the things' sound heard as the live stage plays (heard.h)
     std::string trouble, listed, word;
     std::thread hand;
     std::mutex asked_lock;
@@ -141,6 +143,7 @@ static void motolii_hand(Motolii* m, std::string document, int wide, int high, s
             std::lock_guard<std::recursive_mutex> holding(m->d->lock);
             for (auto& does : todo) does();
         }
+        if (!m->playing) for (auto& [who, h] : m->heard) if (h.on) gst_element_set_state(h.bin, GST_STATE_PAUSED), h.on = false;   // (the stage stopped: so does its sound)
         const bool ready = !m->live || live_ready(*m->s, m->live);   // (the picture begun before, offered once the GPU has finished it)
         const auto t = std::chrono::steady_clock::now();
         // (asked something: a shell that writes reads next, so the picture waits a moment for it rather than it for a
@@ -162,6 +165,7 @@ static void motolii_hand(Motolii* m, std::string document, int wide, int high, s
             m->telling = true;
             time_is(*m->s, m->now);
             m->telling = false;
+            heard(*m->s, m->heard, m->now, m->playing);   // (its sound where the moment puts it)
         }
         const auto told = std::chrono::steady_clock::now();
         live_draw(*m->s, m->live);
@@ -171,6 +175,7 @@ static void motolii_hand(Motolii* m, std::string document, int wide, int high, s
         m->changed = false;
         due = std::max(due + std::chrono::microseconds(16667), t);   // (sixty a second)
     }
+    for (auto& [who, h] : m->heard) heard_off(h);
 }
 
 void motolii_home(const char* folder) { if (chdir(folder)) std::printf("motolii_home: %s is not a folder\n", folder); }
@@ -213,6 +218,21 @@ int motolii_loop(Motolii* m, int on) {   // (on below 0: only asks: answered at 
 // then "thing name" for each value; asking forgets them. And the names of the values that change what cards a thing
 // has (their conditions, its kind, its script, its shape or file, its letters split): a shell builds a thing's cards
 // again when one of these changes, and only tells its numbers otherwise.
+// Each thing's sound as heard now, a line each: its file, where the stage's moment puts it in its file, where it is,
+// and whether it is playing (seconds; -1: not heard now). For checks: the speakers are not asked.
+const char* motolii_heard(Motolii* m) {
+    return by_look(m, [=] {
+        std::string all;
+        for (const auto& [who, h] : m->heard) {
+            gint64 is = -1;
+            if (h.bin) gst_element_query_position(h.bin, GST_FORMAT_TIME, &is);
+            char line[600];
+            std::snprintf(line, sizeof line, "%s %.3f %.3f %d\n", h.file.c_str(), h.wanted, is < 0 ? -1.0 : (double)is / GST_SECOND, h.on ? 1 : 0);
+            all += line;
+        }
+        return (m->word = all).c_str();
+    });
+}
 const char* motolii_changes(Motolii* m) {
     return by_look(m, [=] {
         std::string all = m->d->things_changed ? "things\n" : "";
