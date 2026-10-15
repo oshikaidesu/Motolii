@@ -6,8 +6,9 @@
 import 'dart:developer' show Timeline;
 import 'dart:io';
 import 'dart:math' as math;
-import 'dart:ui' show FramePhase, FrameTiming;
+import 'dart:ui' show FramePhase, FrameTiming, ImageByteFormat;
 
+import 'package:flutter/rendering.dart' show OffsetLayer;
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart' show debugProfileBuildsEnabledUserWidgets;
 import 'package:flutter/services.dart';
@@ -403,6 +404,11 @@ void main() {
         'worked': worked,
         'red': reds.toList()..sort(),
       };
+      // (the window as it is at the end, as a picture: its outermost painted layer, made a PNG by Flutter itself)
+      // ignore: invalid_use_of_protected_member
+      final root = t.binding.renderViews.first.layer! as OffsetLayer;
+      final shot = await (await root.toImage(Offset.zero & t.view.physicalSize)).toByteData(format: ImageByteFormat.png);
+      if (shot != null) File('$motoliiDir/../reports/skin_run/window_after_rampage.png').writeAsBytesSync(shot.buffer.asUint8List()); // (seen by whoever reads the report)
       binding.reportData = {...?binding.reportData, ...report};
       for (final red in reds.toList()..sort()) {
         // ignore: avoid_print
