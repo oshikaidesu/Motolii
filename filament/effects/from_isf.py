@@ -17,8 +17,21 @@ credit = head.get("CREDIT", "")
 
 if re.search(r"v002|shadertoy", name + " " + credit + " " + body[:400], re.I) or name in ("VHS Glitch", "Optical Flow Distort", "Optical Flow Generator", "Glow", "ASCII Art", "Smoke Screen"):
     sys.exit(f"{name}: not MIT at its source ({credit})")
-if head.get("PASSES") or os.path.exists(src[:-3] + ".vs"):
-    sys.exit(f"{name}: passes or a vertex shader of its own: not yet")
+if os.path.exists(src[:-3] + ".vs"):
+    sys.exit(f"{name}: a vertex shader of its own: not yet")
+
+# Passes: each drawn in turn (PASSINDEX), into a picture of its own (TARGET: kept from frame to frame when PERSISTENT,
+# finer when FLOAT) or, the last, out; a target's size a share of the stage's or so many points.
+def size(e, side):
+    e = str(e).replace(" ", "")
+    m = re.fullmatch(r"(?:floor\()?\$" + side + r"(?:/([\d.]+))?(?:\*([\d.]+))?\)?", e)
+    if m: return f"s{(1 / float(m.group(1)) if m.group(1) else 1) * (float(m.group(2)) if m.group(2) else 1):g}"
+    if re.fullmatch(r"[\d.]+", e): return f"a{int(float(e))}"
+    sys.exit(f"{name}: a pass's size it cannot say: {e}")
+passes = head.get("PASSES") or []
+targets = []
+for p in passes:
+    if p.get("TARGET") and p["TARGET"] not in targets: targets.append(p["TARGET"])
 
 pictures = [i["NAME"] for i in head.get("INPUTS", []) if i["TYPE"] == "image"]
 picture = "inputImage" if "inputImage" in pictures else (pictures[0] if pictures else None)
@@ -32,12 +45,15 @@ kinds = {"float": "float", "bool": "int", "long": "int", "event": "int", "point2
 knobs = [i for i in head.get("INPUTS", []) if i["TYPE"] in kinds]
 glsl = "#version 450\n"
 glsl += "layout(set = 0, binding = 0) uniform texture2D isf_picture;\nlayout(set = 0, binding = 1) uniform sampler isf_sampler;\n"
-glsl += "layout(set = 0, binding = 2) uniform Knobs {\n  float time;\n  vec2 resolution;\n  float frame;\n"
+for k, t in enumerate(targets):   # (a pass's picture: binding 2(k+1) and its sampler after it)
+    glsl += f"layout(set = 0, binding = {2 * (k + 1)}) uniform texture2D isf_target{k};\nlayout(set = 0, binding = {2 * (k + 1) + 1}) uniform sampler isf_target{k}_sampler;\n"
+    glsl += f"#define {t} sampler2D(isf_target{k}, isf_target{k}_sampler)\n"
+glsl += f"layout(set = 0, binding = {2 * (len(targets) + 1)}) uniform Knobs {{\n  float time;\n  vec2 resolution;\n  float frame;\n  float passindex;\n"
 glsl += "".join(f"  {kinds[k['TYPE']]} {k['NAME']}{'_on' if k['TYPE'] in ('bool', 'event') else ''};\n" for k in knobs) + "};\n"
 glsl += "".join(f"#define {k['NAME']} ({k['NAME']}_on != 0)\n" for k in knobs if k["TYPE"] in ("bool", "event"))
 glsl += "layout(location = 0) in vec2 isf_FragNormCoord;\nlayout(location = 0) out vec4 isf_FragColor;\n"
 glsl += f"#define {picture} sampler2D(isf_picture, isf_sampler)\n"
-glsl += "#define TIME time\n#define RENDERSIZE resolution\n#define TIMEDELTA (1.0 / 60.0)\n#define FRAMEINDEX int(frame)\n#define PASSINDEX 0\n#define DATE vec4(0.0)\n"
+glsl += "#define TIME time\n#define RENDERSIZE resolution\n#define TIMEDELTA (1.0 / 60.0)\n#define FRAMEINDEX int(frame)\n#define PASSINDEX int(passindex)\n#define DATE vec4(0.0)\n"
 glsl += "#define IMG_NORM_PIXEL(i, c) texture(i, c)\n#define IMG_PIXEL(i, c) texture(i, (c) / RENDERSIZE)\n"
 glsl += "#define IMG_THIS_NORM_PIXEL(i) texture(i, isf_FragNormCoord)\n#define IMG_THIS_PIXEL(i) texture(i, isf_FragNormCoord)\n#define IMG_SIZE(i) RENDERSIZE\n"
 glsl += "#define gl_FragColor isf_FragColor\n#define texture2D texture\n#define varying //\n"
@@ -52,6 +68,7 @@ with tempfile.TemporaryDirectory() as d:
         sys.exit(f"{name}: naga: {run.stderr.strip()[:600]}")
     wgsl = open(w).read()
 
+passLines = [f"// --pass@{p.get('TARGET', '')}:{int(bool(p.get('PERSISTENT')))},{int(bool(p.get('FLOAT')))},{size(p.get('WIDTH', '$WIDTH'), 'WIDTH')},{size(p.get('HEIGHT', '$HEIGHT'), 'HEIGHT')}" for p in passes]
 lines = [f"// {name}: ISF-Files' {name}.fs (MIT, Copyright (c) 2018 Vidvox, github.com/Vidvox/ISF-Files{'; ' + credit if credit else ''}), its GLSL made WGSL by naga (filament/effects/from_isf.py)"]
 for k in knobs:
     n, t, label = k["NAME"], k["TYPE"], k.get("LABEL", k["NAME"]).replace(",", " ")
@@ -65,5 +82,5 @@ for k in knobs:
         for i in range(2 if t == "point2D" else 4):
             pick = lambda v, f: v[i] if isinstance(v, list) and i < len(v) else f
             lines.append(f"// --track@{n}_{'xyzw'[i]}:{label} {'xyzw'[i] if t == 'point2D' else 'rgba'[i]},{pick(low, 0)},{pick(high, 1)},{pick(usual, 0)},0.001")
-open(out, "w").write("\n".join(lines) + "\n\n" + wgsl)
+open(out, "w").write("\n".join(lines + passLines) + "\n\n" + wgsl)
 print(f"wrote {out}: knobs {[k['NAME'] for k in knobs]}")
