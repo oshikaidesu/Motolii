@@ -209,6 +209,25 @@ int motolii_loop(Motolii* m, int on) {   // (on below 0: only asks: answered at 
     if (on < 0) return (int)m->loop.load();
     return by_hand(m, [=] { m->loop = on != 0; return (int)m->loop; });
 }
+// What the document's steps changed since this was last asked, a line each: "things" first when a thing came or went,
+// then "thing name" for each value; asking forgets them. And the names of the values that change what cards a thing
+// has (their conditions, its kind, its script, its shape or file, its letters split): a shell builds a thing's cards
+// again when one of these changes, and only tells its numbers otherwise.
+const char* motolii_changes(Motolii* m) {
+    return by_look(m, [=] {
+        std::string all = m->d->things_changed ? "things\n" : "";
+        for (const auto& [thing, name] : m->d->changed) all += std::to_string(thing) + " " + name + "\n";
+        m->d->changed.clear(), m->d->things_changed = false;
+        return (m->word = all).c_str();
+    });
+}
+const char* motolii_shaping(Motolii* m) {
+    return by_look(m, [=] {
+        std::string all = "kind script shape file split name";   // (and its name: the inspector says it)
+        for (const DocCard& c : doc_cards) if (c.when && !doc_among(all, c.when)) all += std::string(" ") + c.when;
+        return (m->word = all).c_str();
+    });
+}
 int motolii_busy(Motolii* m) { return m->telling ? 1 : 0; }   // (without the document: whether a read now would wait for the hand's moment)
 const char* motolii_spent(Motolii* m) {
     return by_look(m, [=] {

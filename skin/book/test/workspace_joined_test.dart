@@ -8,7 +8,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lab_book/motolii.dart';
 import 'package:lab_book/parts/controls.dart' show Segmented;
-import 'package:lab_book/sets/inspector/inspector_parts.dart' show AnchorCube, AnchorGeometry, LinkMark, EffectCard, ValuesCard, FillStroke, InspHeader, KeyS, NumField, OnOff, PropRow, Space, SpacePlate, TextGroup;
+import 'package:lab_book/sets/inspector/inspector_parts.dart' show Ctx, AnchorCube, AnchorGeometry, LinkMark, EffectCard, ValuesCard, FillStroke, InspHeader, KeyS, NumField, OnOff, PropRow, Space, SpacePlate, TextGroup;
 import 'package:lab_book/workspace/dock_effects.dart' show EffectsShelf;
 import 'package:lab_book/workspace/dock_fonts.dart';
 import 'package:lab_book/workspace/dock_make.dart' show CreateShelf;
@@ -1343,6 +1343,30 @@ void main() {
     await t.pumpAndSettle();
     expect(t.state<ScrollableState>(list).position.pixels, scrolled, reason: 'the inspector stays where it was');
     expect(m.value(text, 'letter_spacing', 0), greaterThan(was), reason: 'the number went up');
+    await _close(t);
+  }, skip: !_built);
+
+  testWidgets('with Animate on, a flat thing\'s scale dragged goes into the document from the first drag, keyed (no key asked of a value it has not, scale_z, to take the step back)', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    final c = m.add('shape', 'rect');
+    ws..reread()..select('$c');
+    ws.animating = true;
+    await t.pumpAndSettle();
+    final k = find.byWidgetPredicate((w) => w is NumField && w.id == 'scale.x');
+    await t.ensureVisible(k);
+    await t.pumpAndSettle();
+    for (final (by, want) in const [(Offset(40, 30), 1.4), (Offset(-80, 0), 0.6)]) {
+      final g = await t.startGesture(t.getCenter(k));
+      for (var i = 1; i <= 3; ++i) {
+        await g.moveBy(by / 3);
+        await t.pump(const Duration(milliseconds: 16));
+      }
+      await g.up();
+      await t.pumpAndSettle();
+      expect(m.value(c, 'scale_x', ws.frame / Ws.fps), closeTo(want, 1e-6), reason: 'dragged by $by');
+      expect(m.keyMoments(c, 'scale_x'), isNotEmpty, reason: 'Animate keys it');
+    }
+    ws.animating = false;
     await _close(t);
   }, skip: !_built);
 

@@ -124,6 +124,10 @@ const char* motolii_spent(Motolii* m);
 /* Whether the inside is telling the stage a moment just now (the document held): a shell that reads each picture may
    leave this picture's reading out rather than wait (it is asked without the document, at once). */
 int motolii_busy(Motolii* m);
+/* What the document's steps changed since last asked, a line each ("things" when a thing came or went, then "thing
+   name" per value; asking forgets them), and the names of the values that change what cards a thing has. */
+const char* motolii_changes(Motolii* m);
+const char* motolii_shaping(Motolii* m);
 /* A change asked without waiting for the hand (say, set, let_go, undo, redo, together: number is let_go's keep and
    together's begin 1 / end 0): queued in order behind all others, a ticket said at once. motolii_answer: -1 not done
    yet, 0 refused (motolii_answer_why says why, until the next answer), 1 done; an answer is said once. */

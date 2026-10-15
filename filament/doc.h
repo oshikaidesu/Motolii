@@ -40,6 +40,7 @@
 #include "solid.h"
 #include "video.h"
 #include <filament/Skybox.h>
+#include <set>
 #include <sstream>
 #include <sqlite3.h>
 
@@ -52,6 +53,8 @@ struct Doc {
     // One act of a hand: the changes made from its beginning to its end are one step of undo, and if one of them is
     // refused none of them is made. Acts may lie one within another: the outermost one is the step.
     std::string graded;                 // the stage's grade as last made (doc_look): made again only when it is told otherwise
+    std::set<std::pair<int, std::string>> changed;   // the values changed since a shell last asked (motolii_changes), each (thing, name), from each step's own changeset
+    bool things_changed = false;        // and whether a thing came or went since
     std::map<uint32_t, MaterialInstance*> copyLooks;   // a copy's own look (its thing's look duplicated, by the copy's entity), while its copies are coloured each their own
     float roomLight = 0.f;              // the room's own light, as the stage was opened with it
     std::string roomIs;                 // which room lights it now (doc_look)
@@ -1604,6 +1607,26 @@ static void doc_act(Doc& d) {
 }
 static bool doc_match(Doc& d);
 static void doc_forget(Doc& d);
+// What a step changed, as a shell is told it: each value (thing, name) its changeset touches, and whether a thing came
+// or went (its kind written or taken away). The changeset is SQLite's own record of the step: nothing is missed.
+static void doc_note(Doc& d, int size, void* changeset) {
+    sqlite3_changeset_iter* it = nullptr;
+    if (sqlite3changeset_start(&it, size, changeset) != SQLITE_OK) return;
+    while (sqlite3changeset_next(it) == SQLITE_ROW) {
+        const char* table = nullptr;
+        int columns = 0, op = 0, indirect = 0;
+        sqlite3changeset_op(it, &table, &columns, &op, &indirect);
+        if (!table || strcmp(table, "fact")) { d.things_changed = true; continue; }   // (the ways defined: anything may go another way)
+        sqlite3_value *thing = nullptr, *name = nullptr;
+        (op == SQLITE_INSERT ? sqlite3changeset_new : sqlite3changeset_old)(it, 0, &thing);
+        (op == SQLITE_INSERT ? sqlite3changeset_new : sqlite3changeset_old)(it, 1, &name);
+        if (!thing || !name) continue;
+        const std::string n = (const char*)sqlite3_value_text(name);
+        d.changed.insert({sqlite3_value_int(thing), n});
+        if (n == "kind" && op != SQLITE_UPDATE) d.things_changed = true;
+    }
+    sqlite3changeset_finalize(it);
+}
 static bool doc_acted(Doc& d) {
     if (d.act == 1 && d.act_unmatched) {   // (the act's changes shown once, all of them: if the stage cannot, none of them is made)
         d.act_unmatched = false;
@@ -1616,6 +1639,7 @@ static bool doc_acted(Doc& d) {
     sqlite3session_changeset(d.acting, &size, &changed);
     sqlite3session_delete(d.acting);
     d.acting = nullptr;
+    if (d.act_ok && size) doc_note(d, size, changed);
     if (d.act_ok && size) {   // (what was undone and not done again is forgotten: a new step follows the last one that stands)
         sqlite3_exec(d.file, "delete from step where undone", nullptr, nullptr, nullptr);
         sqlite3_stmt* keep = nullptr;
@@ -1659,6 +1683,7 @@ static bool doc_step(Doc& d, bool back) {
     void* apply = change.data();
     if (back) sqlite3changeset_invert((int)change.size(), change.data(), &size, &apply);
     const bool ok = sqlite3changeset_apply(d.file, size, apply, nullptr, [](void*, int, sqlite3_changeset_iter*) { return (int)SQLITE_CHANGESET_ABORT; }, nullptr) == SQLITE_OK;
+    if (ok) doc_note(d, size, apply);
     if (back) sqlite3_free(apply);
     if (!ok) return d.trouble = "the step does not fit the document as it is", false;
     doc_rows(d, sqlite3_mprintf("update step set undone = %d where n = %d", back ? 1 : 0, n));

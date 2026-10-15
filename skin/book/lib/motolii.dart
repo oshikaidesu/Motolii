@@ -253,6 +253,24 @@ class Motolii {
   /// Whether every change a hand makes is keyed now (Animate all).
   bool get keyingNow => _keying(_m, -1) != 0;
   late final _busy = _lib.lookupFunction<Int32 Function(_P), int Function(_P)>('motolii_busy');
+  late final _changes = _lib.lookupFunction<_S Function(_P), _S Function(_P)>('motolii_changes');
+  late final _shaping = _lib.lookupFunction<_S Function(_P), _S Function(_P)>('motolii_shaping');
+
+  /// What the document's steps changed since last asked (asking forgets them): whether a thing came or went, and each
+  /// value changed as (thing, name), from each step's own changeset.
+  ({bool things, Set<(int, String)> values}) changes() {
+    final lines = _changes(_m).toDartString().split('\n');
+    return (
+      things: lines.contains('things'),
+      values: {
+        for (final l in lines)
+          if (l.indexOf(' ') case final i when i > 0) (int.parse(l.substring(0, i)), l.substring(i + 1)),
+      },
+    );
+  }
+
+  /// The names of the values that change what cards a thing has (and its name): the inside's own rule, asked once.
+  late final Set<String> shaping = _shaping(_m).toDartString().split(' ').toSet();
 
   /// Whether the inside is telling the stage a moment just now: a reading made now would wait for it (asked at once).
   bool get busy => _busy(_m) != 0;

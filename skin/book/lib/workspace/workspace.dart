@@ -698,8 +698,10 @@ Map<String, String> _keyable(Ws ws, int t) {
 void _mark(Ws ws, String? id, String prop, KeyS mark) {
   final m = ws.inside!, t = id == null ? 0 : int.tryParse(id);
   if (t == null) return;
-  final at = ws.frame / Ws.fps;
-  for (final n in [..._namesOf(prop), ?_keyable(ws, t)[prop]]) {
+  final at = ws.frame / Ws.fps, has = m.values(t).toSet();
+  // (only the values it has: a flat thing has no scale_z, and a key asked of it was refused and took the whole step,
+  //  the number let go of with it, back: with Animate on, a flat thing's first scale was lost)
+  for (final n in [..._namesOf(prop), ?_keyable(ws, t)[prop]].where(has.contains)) {
     switch (mark) {
       case KeyS.at:
         m.keyHere(t, n, at);
@@ -738,12 +740,27 @@ class _InspectorSeatState extends State<_InspectorSeat> {
   final _live = ValueNotifier<(Map<String, double>, Map<String, KeyS>)>((const {}, const {}));
   int? _frame;
   Object _now(Ws ws) => (ws.rev, ws.selected, ws.animating);
+
+  // (the reading of the document changed only numbers of what is picked, none that changes its cards: they are told
+  //  to the fields that show them, as a moment's are; anything else, or not known: the inspector built again)
+  bool _onlyNumbers(Ws ws) {
+    final m = ws.inside, c = ws.lastChange, t = int.tryParse(ws.selected ?? '') ?? (ws.selected == null ? 0 : null);
+    if (m == null || c == null || c.things || t == null || const bool.fromEnvironment('NOPOUR')) return false;
+    for (final (thing, name) in c.values) {
+      if (name == 'name' || (thing == t && (m.shaping.contains(name) || m.range(t, name) == null))) return false; // (a name changed anywhere: things are named on cards; a word: it is not watched)
+    }
+    return true;
+  }
   void _changed() => Timeline.timeSync('inspector at a moment', _changedNow); // (named in Flutter's timeline: frames_test TRACE)
   void _changedNow() {
-    final ws = _ws!, now = _now(ws);
+    final ws = _ws!, now = _now(ws), was = _seen;
     if (now != _seen) {
       _seen = now;
       _frame = ws.frame;
+      if (was is (int, String?, bool) && was.$2 == ws.selected && was.$3 == ws.animating && _onlyNumbers(ws)) {
+        _live.value = (Ws.timed('transform', () => wsTransform(ws, ws.layer?.id)), Ws.timed('key marks', () => _keyMarks(ws, ws.layer?.id)));
+        return;
+      }
       if (mounted) setState(() {});
     } else if (ws.frame != _frame) {
       _frame = ws.frame;

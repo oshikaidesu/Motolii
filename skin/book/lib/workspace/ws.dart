@@ -161,6 +161,7 @@ class Ws extends ChangeNotifier {
 
   /// What the inside shows changed without the document changing (a thing held and carried): the seats look again.
   void shown() {
+    lastChange = null; // (not a step of the document: what it changed is not known)
     rev++;
     notifyListeners();
   }
@@ -172,6 +173,7 @@ class Ws extends ChangeNotifier {
     if (m == null) return;
     if (!m.fits && refit != null) return refit!(); // (the document says another size, by a hand or by undo: the host opens it again, and that reads it)
     m.forget();
+    lastChange = m.changes();
     rev++;
     reads++;
     duration = Timeline.timeSync('MARK seconds', () => (m.seconds * fps).round().clamp(1, 1 << 20));
@@ -336,6 +338,10 @@ class Ws extends ChangeNotifier {
 
   /// Joined: a change asked without waiting ([Motolii.later]): looked at once a picture till the inside has done it, then
   /// the document read again and [then] told (done or not, and why not). The window never stands still for the inside.
+  /// Joined: what the steps changed that the last reading of the document took in (null: not known, as after a hand's
+  /// carry): a seat that shows only some values builds itself again only when they are among these.
+  ({bool things, Set<(int, String)> values})? lastChange;
+
   int _afters = 0; // (tickets still looked at: the document is read again once, when the last of them is done)
   void after(int ticket, [void Function(bool done, String why)? then]) {
     int? answer;
