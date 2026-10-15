@@ -54,6 +54,10 @@ struct Drawn {
     bool hollow = false;
     uint32_t fillPoints = 0, fillEnd = 0;   // (where its fill's points and triangles end in its sheet: its edge comes after)
     MaterialInstance* edgeLook = nullptr;   // (its edge's own look: the second part of its triangles)
+    tvg::Animation* source = nullptr;   // (one layer of an After Effects file drawn alone, layer_picture: the file, the layer, where it is held, how it is fitted)
+    uint32_t layerId = 0;
+    tvg::Scene* holder = nullptr;
+    tvg::Matrix fit{1, 0, 0, 0, 1, 0, 0, 0, 1};
     std::array<float, 6> bent{};   // (as last bent: round, bloat, zigzag, ridges, smooth, offset)
     std::array<float, 48> warped{};   // (as last warped on the GPU (warp_at): ThorVG's WgCanvas::bend, thorvg_bend.patch)
     std::vector<std::string> markers;  // an After Effects file's named stretches (ThorVG's Lottie markers)
@@ -602,6 +606,58 @@ static void cut_at(Stage& s, Drawn* d, float3 trim, const std::array<float, 6>& 
     }
     const float from = std::clamp(trim.y, 0.f, 1.f) + trim.z, to = 1.f - std::clamp(trim.x, 0.f, 1.f) + trim.z;
     reshape(s, d->sheet, shape_cut(d, from, to, refill));
+}
+
+// One layer of an After Effects file drawn alone, in its own space: its place and turn left out (they are its sheet's,
+// put in the scene by its pose: motion.h), on a sheet of its own `pixel` units a point of the composition. A 3D layer's
+// picture where it is. `box`: where its sheet lies in the layer's own space (x, y, w, h, in points of the composition).
+static Drawn* layer_picture(Stage& s, const char* file, const char* layer, float pixel, float4* box) {
+    if (!door::device(s.engine)) return nullptr;
+    const uint32_t id = tvg::Accessor::id(layer);
+    float4 found{0.f};
+    door::on_driver(s.engine, [&] {   // (how large it is, at its first moment: ThorVG's own bounds of it alone)
+        tvg::Initializer::init(0);
+        tvg::Animation* look = tvg::LottieAnimation::gen();
+        if (look->picture()->load(file) == tvg::Result::Success && (look->frame(1.f), look->frame(0.f), true))   // (built: ThorVG builds a moment when it is told one other than the one it has)
+            if (const tvg::Paint* one = look->picture()->paint(id)) {
+                tvg::Paint* copy = one->duplicate();
+                copy->transform(tvg::Matrix{1, 0, 0, 0, 1, 0, 0, 0, 1});
+                copy->bounds(&found.x, &found.y, &found.z, &found.w);
+                tvg::Paint::rel(copy);
+            }
+        delete look;
+    });
+    s.engine->flushAndWait();
+    if (found.z <= 0.f || found.w <= 0.f) return nullptr;
+    *box = found;
+    const float sharp = std::max(1.f, 512.f / found.w);   // (drawn at least 512 points high, however small it is in the composition)
+    return drawn(s, [&](Drawn* d, int* w, int* h) -> tvg::Paint* {
+        d->source = tvg::LottieAnimation::gen();
+        if (d->source->picture()->load(file) != tvg::Result::Success) return nullptr;
+        d->source->frame(1.f);   // (so that its first moment, asked for, is built)
+        d->layerId = id;
+        d->fit = tvg::Matrix{sharp, 0, -found.x * sharp, 0, sharp, -found.y * sharp, 0, 0, 1};
+        *w = std::max(2, (int)std::ceil(found.z * sharp)), *h = std::max(2, (int)std::ceil(found.w * sharp));
+        d->holder = tvg::Scene::gen();
+        return d->holder;
+    }, mat4f{}, found.w * pixel, float3{-1.f}, true, nullptr);
+}
+
+// That layer as it is at `frame` of its file, drawn again for the frame that comes next.
+static void layer_at(Stage& s, Drawn* d, float frame) {
+    if (!d || !d->source) return;
+    door::on_driver(s.engine, [d, frame] {
+        d->source->frame(frame);
+        d->holder->remove();
+        if (const tvg::Paint* one = d->source->picture()->paint(d->layerId)) {
+            tvg::Paint* copy = one->duplicate();
+            copy->transform(d->fit);
+            d->holder->add(copy);
+        }
+        d->canvas->update();
+        d->canvas->draw(true);
+        d->canvas->sync();
+    });
 }
 
 // A picture taken off the stage for good.
