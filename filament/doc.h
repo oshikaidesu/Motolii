@@ -796,6 +796,12 @@ static math::mat4 doc_place(Doc& d, int thing, double now, int deeper, int copy,
         if (!each.empty()) tall *= each[(size_t)copy % each.size()];
     }
     own = own * math::mat4::scaling(math::double3{1.0, tall, 1.0});
+    if (member)   // (a split text's letter turns and grows about its own middle, not the whole line's)
+        if (const auto sh = d.shown.find(thing); sh != d.shown.end() && sh->second.drawn && copy < (int)sh->second.drawn->letters.size()) {
+            const float2 l = sh->second.drawn->letters[(size_t)copy];
+            const math::double3 middle{((double)(l.x + l.y) * 0.5 - 0.5) * 2.0 * half.x, 0.0, 0.0};
+            own = math::mat4::translation(middle) * own * math::mat4::translation(-middle);
+        }
     if (!d.phys_keyed && !member && !deeper) {   // (a thing that falls and strikes: where the world has its middle, turned as it has it)
         PhysPose pose;
         if (doc_physics(d, thing, now, &pose)) {
