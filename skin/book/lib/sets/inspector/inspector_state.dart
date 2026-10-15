@@ -213,6 +213,9 @@ class Doc extends ChangeNotifier {
   @override
   void dispose() {
     _t?.cancel();
+    for (final w in _watched.values) {
+      w.dispose();
+    }
     super.dispose();
   }
 
@@ -300,6 +303,25 @@ class Doc extends ChangeNotifier {
     if (_gesture != null || _undo.isEmpty) return;
     _restore(_undo.removeLast());
   }
+
+  /// What the host has at a new moment, shown as it is (not a hand's change: no key, no undo step): only the fields
+  /// whose number or key mark moved are told (each watches its own), the inspector is not built again.
+  void showAt(Map<String, double> values, Map<String, KeyS> marks) {
+    for (final e in values.entries) {
+      if (v[e.key] == e.value) continue;
+      v[e.key] = e.value;
+      _watched[e.key]?.value++;
+    }
+    for (final e in marks.entries) {
+      if (keys[e.key] == e.value) continue;
+      keys[e.key] = e.value;
+      _watched['key:${e.key}']?.value++;
+    }
+  }
+
+  /// One value's own news ('key:' and its name: its key mark's), as [showAt] tells it.
+  final _watched = <String, ValueNotifier<int>>{};
+  ValueListenable<int> watch(String id) => _watched.putIfAbsent(id, () => ValueNotifier(0));
 
   void setMany(Map<String, double> xs) {
     for (final e in xs.entries) {

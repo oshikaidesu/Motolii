@@ -1,5 +1,6 @@
 // The whole window: top bar, then the panes (panes.dart) — browser shelves | Stage over Timeline, Inspector over Desk, rearrangeable.
 // Each seat is its own file and reads the shared Ws.
+import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
 
@@ -696,11 +697,71 @@ void _mark(Ws ws, String? id, String prop, KeyS mark) {
 }
 
 /// The Inspector of the lab, fed by the workspace's selection; its panel links open the dock's shelves or the desk.
-class _InspectorSeat extends StatelessWidget {
+class _InspectorSeat extends StatefulWidget {
   const _InspectorSeat();
   @override
+  State<_InspectorSeat> createState() => _InspectorSeatState();
+}
+
+class _InspectorSeatState extends State<_InspectorSeat> {
+  // (the inspector follows only what it shows: the document, what is picked, Animate, and the moment only while what is
+  //  picked has keys; played, a thing with no keys shows the same numbers, so it is not built again each picture)
+  Ws? _ws;
+  Object? _seen;
+  (int, bool)? _stageKeyed;
+  bool _keyed(Ws ws) {
+    final l = ws.layer;
+    if (l != null) return l.keys.isNotEmpty;
+    final m = ws.inside;
+    if (m == null) return true;
+    if (_stageKeyed?.$1 != ws.rev) _stageKeyed = (ws.rev, m.moving(0).any((n) => m.keyMoments(0, n).isNotEmpty)); // (the stage's: once a document)
+    return _stageKeyed!.$2;
+  }
+
+  // (the moment alone moved: the values and key marks told to the inspector as it stands; anything else: built again)
+  final _live = ValueNotifier<(Map<String, double>, Map<String, KeyS>)>((const {}, const {}));
+  int? _frame;
+  Object _now(Ws ws) => (ws.rev, ws.selected, ws.animating);
+  void _changed() {
+    final ws = _ws!, now = _now(ws);
+    if (now != _seen) {
+      _seen = now;
+      _frame = ws.frame;
+      if (mounted) setState(() {});
+    } else if (ws.frame != _frame) {
+      _frame = ws.frame;
+      if (!_keyed(ws)) return;
+      _live.value = (Ws.timed('transform', () => wsTransform(ws, ws.layer?.id)), Ws.timed('key marks', () => _keyMarks(ws, ws.layer?.id)));
+      _settle?.cancel();
+      _settle = Timer(const Duration(milliseconds: 150), () => mounted ? setState(() {}) : null); // (the moment at rest: built once, whatever does not watch its own number shows it too)
+    }
+  }
+
+  Timer? _settle;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final ws = WsScope.read(context);
+    if (ws != _ws) {
+      _ws?.removeListener(_changed);
+      _ws = ws..addListener(_changed);
+      _seen = _now(ws);
+      _frame = ws.frame;
+    }
+  }
+
+  @override
+  void dispose() {
+    _ws?.removeListener(_changed);
+    _settle?.cancel();
+    _live.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final ws = WsScope.of(context), l = ws.layer, k = _kindOf(l), fill = _fills[l?.id];
+    final ws = WsScope.read(context), l = ws.layer, k = _kindOf(l), fill = _fills[l?.id];
     return LayoutBuilder(
       builder: (context, box) => InspHost(
         key: ValueKey(k),
@@ -734,6 +795,7 @@ class _InspectorSeat extends StatelessWidget {
         onDrop: ws.inside == null ? null : () => ws.inside!.letGo(false),
         onKey: ws.inside == null ? null : (prop, mark) => _mark(ws, l?.id, prop, mark),
         together: ws.inside?.together,
+        live: _live,
         child: InspectorPanel(directTransform: true, width: box.maxWidth, height: box.maxHeight),
       ),
     );

@@ -4,7 +4,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
-import 'package:flutter/foundation.dart' show listEquals, mapEquals;
+import 'package:flutter/foundation.dart' show ValueListenable, ValueNotifier, listEquals, mapEquals;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -165,6 +165,7 @@ class InspHost extends StatefulWidget {
     this.onFlags,
     this.choices = const {},
     this.together,
+    this.live,
     required this.child,
   });
   final Cfg cfg;
@@ -178,6 +179,10 @@ class InspHost extends StatefulWidget {
   /// What the host calls the kind (see [Doc.kindWord]), and the values it has (see [Doc.seats]).
   final String? kindWord;
   final Set<String>? seats;
+
+  /// The values and key marks at a new moment, told without the host being built again (played, only the moment moves:
+  /// the fields that show them follow, the rest of the inspector stays as it was built).
+  final ValueListenable<(Map<String, double>, Map<String, KeyS>)>? live;
 
   /// The host's say on an effect taken off, and on their order (see [Doc.onFxRemove]).
   final bool Function(String id)? onFxRemove;
@@ -339,6 +344,10 @@ class _InspHostState extends State<InspHost> {
   @override
   void didUpdateWidget(InspHost o) {
     super.didUpdateWidget(o);
+    if (o.live != widget.live) {
+      o.live?.removeListener(_atMoment);
+      widget.live?.addListener(_atMoment);
+    }
     if (o.kind != widget.kind || o.count != widget.count || o.effects != widget.effects || !listEquals(o.fx?.map((f) => f.wgsl).toList(), widget.fx?.map((f) => f.wgsl).toList()) || !listEquals(o.cards?.map((f) => f.name + f.wgsl.replaceAll(RegExp(r'@default\([^)]*\)'), '')).toList(), widget.cards?.map((f) => f.name + f.wgsl.replaceAll(RegExp(r'@default\([^)]*\)'), '')).toList())) {
       doc.dispose();
       doc = _make();
@@ -377,8 +386,23 @@ class _InspHostState extends State<InspHost> {
       ..addAll(widget.choices);
   }
 
+  void _atMoment() {
+    final (values, marks) = widget.live!.value;
+    if (doc.inGesture) return; // (never under a hand)
+    _seen.addAll(values);
+    _seenKeys.addAll(marks);
+    doc.showAt(values, marks);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    widget.live?.addListener(_atMoment);
+  }
+
   @override
   void dispose() {
+    widget.live?.removeListener(_atMoment);
     doc.dispose();
     super.dispose();
   }

@@ -73,8 +73,25 @@ class _NumFieldState extends State<NumField> {
     _ef.addListener(_editFocus);
   }
 
+  // (its own number at a new moment, told alone: the inspector is not built again for it)
+  ValueListenable<int>? _watch;
+  void _retold() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final w = _x.doc.watch(widget.id);
+    if (w != _watch) {
+      _watch?.removeListener(_retold);
+      _watch = w..addListener(_retold);
+    }
+  }
+
   @override
   void dispose() {
+    _watch?.removeListener(_retold);
     _pending?.cancel();
     _ef.dispose();
     _node.dispose();

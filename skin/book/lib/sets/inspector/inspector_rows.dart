@@ -353,6 +353,36 @@ class PropRow extends StatefulWidget {
 class _PropRowState extends State<PropRow> {
   bool _menu = false, _was = false;
 
+  // (its key mark and whether it differs from as it comes, at a new moment: told alone, as its fields are)
+  final _watching = <ValueListenable<int>>[];
+  void _moved() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final doc = Ctx.read(context).doc, now = [doc.watch('key:${widget.id}'), for (final i in widget.ids ?? [widget.id]) doc.watch(i)];
+    if (listEquals(now, _watching)) return;
+    for (final w in _watching) {
+      w.removeListener(_moved);
+    }
+    _watching
+      ..clear()
+      ..addAll(now);
+    for (final w in now) {
+      w.addListener(_moved);
+    }
+  }
+
+  @override
+  void dispose() {
+    for (final w in _watching) {
+      w.removeListener(_moved);
+    }
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final x = Ctx.of(context), cfg = x.cfg, doc = x.doc, ed = Ed(cfg.ed);
