@@ -52,7 +52,19 @@ template <class Does> static auto asked(Motolii* m, Does does, bool changes, con
 // Asked of the hand: by_hand for what may change what is seen (the stage is drawn again after), by_look for what only
 // reads (nothing drawn again: a shell that reads its cards a hundred times a picture never waits on a hundred pictures).
 template <class Does> static auto by_hand(Motolii* m, Does does, const char* who = __builtin_FUNCTION()) -> decltype(does()) { return asked(m, does, true, who); }
-template <class Does> static auto by_look(Motolii* m, Does does, const char* who = __builtin_FUNCTION()) -> decltype(does()) { return asked(m, does, false, who); }
+// A read is not queued behind the hand: it is done at once, on the asker's own thread, while it holds the document
+// (the hand holds it only while it changes the document or tells it a moment, never while a picture is drawn), so a
+// shell's hundreds of reads a build never wait on a picture. (The Flutter kin read so: research_notes/flutter_native_kin.md)
+template <class Does> static auto by_look(Motolii* m, Does does, const char* who = __builtin_FUNCTION()) -> decltype(does()) {
+    std::lock_guard<std::recursive_mutex> hold(m->d->lock);
+    const auto t0 = std::chrono::steady_clock::now();
+    auto out = does();
+    const double took = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+    m->spent[1] += took, m->many[1]++;
+    auto& door = m->by_door[who];
+    door.first++, door.second += took;
+    return out;
+}
 
 static void motolii_hand(Motolii* m, std::string document, int wide, int high, std::promise<bool>* opened) {
     const bool says = doc_size(document.c_str(), &wide, &high);   // (a document that says its own size is opened at it)
@@ -81,14 +93,21 @@ static void motolii_hand(Motolii* m, std::string document, int wide, int high, s
             if (m->closing) break;
             todo.swap(m->asked);
         }
-        if (todo.empty() && m->live && !m->playing && !m->changed && doc_files_moved(*m->d)) m->changed = true;   // (a shader or a script saved: drawn again)
-        for (auto& does : todo) does();
+        if (todo.empty() && m->live && !m->playing && !m->changed) {
+            std::lock_guard<std::recursive_mutex> holding(m->d->lock);
+            if (doc_files_moved(*m->d)) m->changed = true;
+        }   // (a shader or a script saved: drawn again)
+        {
+            std::lock_guard<std::recursive_mutex> holding(m->d->lock);
+            for (auto& does : todo) does();
+        }
         const auto t = std::chrono::steady_clock::now();
         // (asked something: a shell that writes reads next, so the picture waits a moment for it rather than it for a
         //  whole picture; never more than two pictures' time since the last was drawn)
         if (!todo.empty()) due = std::min(std::max(due, t + std::chrono::milliseconds(3)), drawn + std::chrono::milliseconds(33));
         if (!m->live || t < due || !(m->playing || m->changed)) { last = m->playing ? last : t; continue; }
         if (m->playing) {   // (time goes on by the clock, and round again at the document's end)
+            std::lock_guard<std::recursive_mutex> holding(m->d->lock);
             const double runs = doc_seconds(*m->d), on = m->now + std::chrono::duration<double>(t - last).count();
             double from = 0.0, to = runs;
             doc_work(*m->d, &from, &to);   // (round and round within the work area)
@@ -97,7 +116,10 @@ static void motolii_hand(Motolii* m, std::string document, int wide, int high, s
         }
         last = t;
         m->s->by_clock = m->playing;
-        time_is(*m->s, m->now);
+        {
+            std::lock_guard<std::recursive_mutex> holding(m->d->lock);
+            time_is(*m->s, m->now);
+        }
         const auto told = std::chrono::steady_clock::now();
         live_draw(*m->s, m->live);
         drawn = std::chrono::steady_clock::now();
@@ -318,12 +340,15 @@ int motolii_write(Motolii* m, const char* mp4) {
         m->d->written_from = from;
         // (between two pictures the hand does what it was asked meanwhile, so a shell that asks does not stand still;
         //  the document is read then, not changed, and the picture being written is told its moment again after)
+        m->d->lock.unlock();   // (held by the hand that asked this: let go while each picture is drawn, as when it is live)
         const int ok = told(m, film(*m->s, mp4, pictures, [m, pictures, from](float done) {
+            std::lock_guard<std::recursive_mutex> holding(m->d->lock);
             std::deque<std::function<void()>> todo;
             { std::lock_guard<std::mutex> hold(m->asked_lock); todo.swap(m->asked); }
             for (auto& does : todo) does();
             time_is(*m->s, from + (double)std::lround(done * (float)pictures) / RATE);   // (the picture's moment: from the work area's start)
         }), "the file could not be written");
+        m->d->lock.lock();
         m->d->writing = false;
         m->d->written_from = 0.0;
         time_is(*m->s, m->now);   // (back to the moment it was at)

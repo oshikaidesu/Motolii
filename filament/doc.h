@@ -34,6 +34,7 @@
 #include "script.h"
 #include "screen.h"
 #include <filesystem>
+#include <mutex>
 #include <dlfcn.h>
 #include "solid.h"
 #include "video.h"
@@ -42,6 +43,7 @@
 #include <sqlite3.h>
 
 struct Doc {
+    std::recursive_mutex lock;   // held by whoever reads or changes it: a shell's reads need not wait for a picture being drawn (motolii.mm)
     sqlite3* file = nullptr;
     Stage* stage = nullptr;
     std::string trouble;   // why the last call that was not done was not
@@ -909,7 +911,10 @@ static void doc_look(Doc& d) {
         room->setIntensity(d.roomLight * (float)doc_number(d, 0, "environment", 0, 1));
         room->setRotation(math::mat3f::rotation((float)(doc_number(d, 0, "environment_rotate", 0, 0) * (double)TAU / 360.0), math::float3{0, 1, 0}));
     }
-    screen_effects(s, d.screen, doc_word(d, 0, "script"), [&d](const std::string& name, double usual) { return doc_number(d, 0, ("js_" + name).c_str(), d.stage->now, usual); });
+    screen_effects(s, d.screen, doc_word(d, 0, "script"), [&d](const std::string& name, double usual) {
+        std::lock_guard<std::recursive_mutex> hold(d.lock);   // (asked while the picture is drawn, when the hand does not hold it)
+        return doc_number(d, 0, ("js_" + name).c_str(), d.stage->now, usual);
+    });
     const std::string behind = doc_word(d, 0, "background");
     if (doc_word(d, 0, "behind") == "room") {   // (the room itself behind everything, as bright as it lights the stage: its own picture, made once a room)
         static std::map<std::string, Skybox*> shown;
