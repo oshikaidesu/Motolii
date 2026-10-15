@@ -94,5 +94,12 @@ int main(int argc, char** argv) {
         move(s, hole, [&](int, const mat4f& at) { return at * mat4f::rotation(TAU * t, normalize(float3{1, 0.4f, 0})); });
         move(s, ring, [&](int, const mat4f& at) { return mat4f::translation(float3{0.75f * std::sin(TAU * t), 0.f, 0.f}) * at * mat4f::rotation(2.f * TAU * t, normalize(float3{0.3f, 1, 0.2f})); });
     };
-    return show(s, argc, argv, god ? "mask_god" : "mask", 480, pose);
+    if (getenv("LIGHT")) {   // (and glass that throws its light on paper, as blocks.mm: both at once, timed)
+        Sunlit lit;
+        if (!paper_and_sun(s, lit)) return fail("paper and sun");
+        std::vector<mat4f> places;
+        for (int k = 0; k < 3; ++k) places.push_back(mat4f::translation(float3{-0.9f + 0.9f * (float)k, 0.2f, -0.5f}) * mat4f::rotation(0.6f, float3{0, 1, 0}) * mat4f::scaling(float3{0.4f}));
+        if (!glass_blocks(s, places, 0.1f) || !shadow_of(s, lit, cube(0.1f), places) || !box_light(s, lit, places, 0.1f)) return fail("glass blocks and their light");
+    }
+    return show(s, argc, argv, god ? "mask_god" : getenv("LIGHT") ? "mask_light" : "mask", 480, pose);
 }

@@ -7,7 +7,7 @@ static const int W = 1920;
 static const int H = 1080;
 static const float ROUND = 0.06f;   // the blocks' edges, for the glass and for its light alike
 
-int main() {
+int main(int argc, char** argv) {
     Stage s = open_stage(W, H);
     // seen from far through a long lens, as such still lifes are photographed: the blocks' edges stay parallel
     const float3 aim{-0.15f, 0.30f, 0.35f};
@@ -37,7 +37,5 @@ int main() {
     if (!shadow_of(s, lit, cube(ROUND), places)) return fail("floor_shade.filamat");
     if (!box_light(s, lit, places, ROUND)) return fail("boxlight.filamat");
 
-    if (!shoot(s, "out/blocks.png")) return fail("png");
-    std::printf("wrote out/blocks.png\n");
-    return 0;
+    return show(s, argc, argv, "blocks", 240, [](float) {});   // (a still; `time`: how long a picture takes)
 }
