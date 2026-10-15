@@ -31,7 +31,7 @@ const _seed = int.fromEnvironment('SEED', defaultValue: 7),
 const _judge = bool.fromEnvironment('JUDGE', defaultValue: true); // (off: the hand alone, nothing read to judge it: to see what the judging itself costs)
 Map<String, Object?> _all(Motolii m, double at) => !_judge ? const {} : {
   for (final t in [0, ...m.things])
-    for (final n in m.values(t)) '$t:$n': m.value(t, n, at) ?? m.word(t, n),
+    for (final n in m.values(t)) '$t:$n': m.range(t, n) != null ? m.value(t, n, at) : m.word(t, n), // (a word as a word: read as a number every word was 0, the stage's effects unseen)
 };
 
 /// Whether a control is greyed by its row (a row that is off takes no hand).
