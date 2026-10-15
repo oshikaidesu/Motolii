@@ -1279,6 +1279,32 @@ void main() {
     await _close(t);
   }, skip: !_built);
 
+  testWidgets('a motion is a file: the Effects shelf lists animators/ for the picked thing, a press gives it (a text then moves letter by letter), its knobs on its card, a press takes it off', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    final text = m.add('text', '/System/Library/Fonts/Supplemental/Arial Black.ttf');
+    expect(m.say(text, 'text', 'MOTOLII'), isTrue, reason: m.trouble);
+    final spring = m.animators.firstWhere((e) => e.$2.endsWith('/spring_in.js'));
+    expect(m.animators.length, 13, reason: 'Cavalry\'s thirteen');
+    ws
+      ..reread()
+      ..select('$text')
+      ..shelf = 'Effects';
+    await t.pumpAndSettle();
+    final row = find.byKey(ValueKey('ws-motion-${spring.$1}'));
+    await t.enterText(find.descendant(of: find.byType(DockSearch), matching: find.byType(EditableText)), spring.$1);
+    await t.pumpAndSettle();
+    await t.tap(row);
+    await t.pumpAndSettle();
+    expect(m.word(text, 'script'), spring.$2, reason: m.trouble);
+    expect(find.descendant(of: row, matching: find.text('ON')), findsOneWidget);
+    expect(m.cards(text).firstWhere((c) => c.$1 == 'Script').$2, containsAll(['js_length', 'js_delay', 'js_far']));
+    await t.tap(row);
+    await t.pumpAndSettle();
+    expect(ws.motion, isEmpty, reason: 'taken off');
+    expect(t.takeException(), isNull);
+    await _close(t);
+  }, skip: !_built);
+
   testWidgets('Backspace on the timeline takes the picked thing out; undo brings it back', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final ring = m.add('solid', 'ring'), cube = m.add('solid', 'cube');

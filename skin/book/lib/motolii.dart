@@ -102,6 +102,7 @@ class Motolii {
   late final _recipes = _lib.lookupFunction<_S Function(_P), _S Function(_P)>('motolii_recipes');
   late final _make = _lib.lookupFunction<Int32 Function(_P, _S), int Function(_P, _S)>('motolii_make');
   late final _effects = _lib.lookupFunction<_S Function(_P), _S Function(_P)>('motolii_effects');
+  late final _animators = _lib.lookupFunction<_S Function(_P), _S Function(_P)>('motolii_animators');
   late final _spent = _lib.lookupFunction<_S Function(_P), _S Function(_P)>('motolii_spent');
   late final _range = _lib.lookupFunction<Int32 Function(_P, Int32, _S, Pointer<Double>, Pointer<Double>), int Function(_P, int, _S, Pointer<Double>, Pointer<Double>)>('motolii_range');
   late final _words = _lib.lookupFunction<_S Function(_P, Int32, _S), _S Function(_P, int, _S)>('motolii_words');
@@ -316,6 +317,12 @@ class Motolii {
   /// The whole-screen effects on the shelf: each one's name and file (the stage's script is the files of those on it).
   List<(String, String)> get effects => [
     for (final line in _effects(_m).toDartString().split('\n'))
+      if (line.indexOf('\t') case final at when at > 0) (line.substring(0, at), line.substring(at + 1)),
+  ];
+
+  /// The motions a thing may be given (Cavalry's Animators): each one's name and file (a thing's script is the file of the one it has).
+  List<(String, String)> get animators => [
+    for (final line in _animators(_m).toDartString().split('\n'))
       if (line.indexOf('\t') case final at when at > 0) (line.substring(0, at), line.substring(at + 1)),
   ];
 

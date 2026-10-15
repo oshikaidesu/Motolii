@@ -329,6 +329,22 @@ class Ws extends ChangeNotifier {
     return done;
   }
 
+  /// Joined: the motion the picked thing has (its script's file; '' none).
+  String get motion {
+    final t = int.tryParse(selected ?? '');
+    final w = t == null ? '' : (_inside?.word(t, 'script') ?? '');
+    return w == 'none' ? '' : w;
+  }
+
+  /// Joined: a motion given to the picked thing in place of the one it had, or taken off (one step either way).
+  bool motionToggle(String file) {
+    final m = _inside, t = int.tryParse(selected ?? '');
+    if (m == null || t == null) return false;
+    final done = m.say(t, 'script', motion == file ? 'none' : file);
+    reread();
+    return done;
+  }
+
   /// Joined: an effect of the shelf put on the picked thing as it comes, or taken off (one step either way).
   bool fxToggle(String name) {
     final m = _inside, t = int.tryParse(selected ?? ''), v = fxValues[name];

@@ -1303,7 +1303,7 @@ static void doc_moment(Doc& d, double now) {
 static bool doc_match(Doc& d) {
     Stage& s = *d.stage;
     std::map<int, std::string> told;   // every thing of the document, and all that its making goes by
-    doc_rows(d, sqlite3_mprintf("select thing, group_concat(name || '=' || value, ' ') from (select * from fact where thing > 0 and name in ('kind','file','shape','blend','keyed','space','begin','duration','speed','text','fill','wide','points','inner','round','stroke','stroke_width','align','blur','shadow','shadow_distance','shadow_angle','shadow_blur','shadow_opacity','glow','glow_blur','glow_opacity','copies','tint','tint_black','tint_white','tritone','tritone_shadow','tritone_midtone','tritone_highlight','letter_spacing','line_spacing','italic','cap','join','dash','dash_offset','metallic','roughness','reflectance','clear_coat','clear_coat_roughness','falloff','shadows','shadow_softness','contact_shadows','sheen','anisotropy','shading','thickness','light_group','gradient','gradient_angle','gradient_scale','gradient_spread','wrap','wrap_at','split','ior','dispersion','swim','dark','vivid','marker') order by thing, name) group by thing"),
+    doc_rows(d, sqlite3_mprintf("select thing, group_concat(name || '=' || value, ' ') from (select * from fact where thing > 0 and name in ('kind','file','shape','blend','keyed','space','begin','duration','speed','text','fill','wide','points','inner','round','stroke','stroke_width','align','blur','shadow','shadow_distance','shadow_angle','shadow_blur','shadow_opacity','glow','glow_blur','glow_opacity','copies','tint','tint_black','tint_white','tritone','tritone_shadow','tritone_midtone','tritone_highlight','letter_spacing','line_spacing','italic','cap','join','dash','dash_offset','metallic','roughness','reflectance','clear_coat','clear_coat_roughness','falloff','shadows','shadow_softness','contact_shadows','sheen','anisotropy','shading','thickness','light_group','script','gradient','gradient_angle','gradient_scale','gradient_spread','wrap','wrap_at','split','ior','dispersion','swim','dark','vivid','marker') order by thing, name) group by thing"),
              [&](sqlite3_stmt* row) { told[sqlite3_column_int(row, 0)] = (const char*)sqlite3_column_text(row, 1); });
     for (auto it = d.shown.begin(); it != d.shown.end();) {
         const auto still = told.find(it->first);
@@ -1360,7 +1360,8 @@ static bool doc_match(Doc& d) {
         fx.spread = doc_word(d, thing, "gradient_spread") == "reflect" ? 1 : doc_word(d, thing, "gradient_spread") == "repeat" ? 2 : 0;
         fx.copies = (int)doc_number(d, thing, "copies", 0, 1);
         fx.wrapWidth = (float)doc_number(d, thing, "wrap_at", 0, 0);
-        fx.split = doc_word(d, thing, "split") == "letters";
+        const std::string split = doc_word(d, thing, "split"), script = doc_word(d, thing, "script");
+        fx.split = split == "letters" || (split.empty() && !script.empty() && script != "none");   // (a text given a script moves letter by letter, as Cavalry's are, unless said none)
         { const std::string w = doc_word(d, thing, "wrap"); fx.wrap = w == "character" ? 1 : w == "word" ? 2 : w == "smart" ? 3 : w == "ellipsis" ? 4 : fx.wrapWidth > 0.f ? 2 : 0; }   // (ThorVG's TextWrap; a box said and no way: by words)
         fx.letters = (float)doc_number(d, thing, "letter_spacing", 0, 1), fx.lines = (float)doc_number(d, thing, "line_spacing", 0, 1), fx.italic = (float)doc_number(d, thing, "italic", 0, 0);
         const auto which = [&](const char* name, const char* words) { const std::string w = doc_word(d, thing, name); if (w.empty()) return -1; int n = 0; for (const char* at = words; *at; ++n) { const size_t len = strcspn(at, " "); if (w == std::string(at, len)) return n; at += len + (at[len] ? 1 : 0); } return -1; };
@@ -1906,18 +1907,21 @@ static bool doc_files_moved(Doc& d) {
 }
 // The whole-screen effects on the shelf (screen.h): a file each in effects/, beside recipes/ (one put there is on the
 // shelf at once), "name\tpath" one to a line, the name what its head's first line says before its colon.
-static std::string doc_effect_names() {
-    static std::string all;
-    static std::filesystem::file_time_type was{};
-    static std::chrono::steady_clock::time_point looked{};
-    if (!doc_folder_moved("effects", was, looked)) return all;
+// The files of a folder beside the library ("name\tpath", one to a line): the whole-screen effects (effects/*.wgsl),
+// the motions a thing may be given (animators/*.js); a file's name as its first line says it, before the colon.
+static std::string doc_folder_names(const char* folder, const char* extension) {
+    struct Seen { std::string all; std::filesystem::file_time_type was{}; std::chrono::steady_clock::time_point looked{}; };
+    static std::map<std::string, Seen> seen;
+    Seen& one = seen[folder];
+    std::string& all = one.all;
+    if (!doc_folder_moved(folder, one.was, one.looked)) return all;
     all.clear();
     Dl_info lib{};
-    dladdr((const void*)&doc_effect_names, &lib);
+    dladdr((const void*)&doc_folder_names, &lib);
     std::error_code wrong;
-    const std::filesystem::path dir = std::filesystem::weakly_canonical(lib.dli_fname ? lib.dli_fname : ".", wrong).parent_path().parent_path() / "effects";
+    const std::filesystem::path dir = std::filesystem::weakly_canonical(lib.dli_fname ? lib.dli_fname : ".", wrong).parent_path().parent_path() / folder;
     std::vector<std::filesystem::path> files;
-    for (const auto& e : std::filesystem::directory_iterator(dir, wrong)) if (e.path().extension() == ".wgsl") files.push_back(e.path());
+    for (const auto& e : std::filesystem::directory_iterator(dir, wrong)) if (e.path().extension() == extension) files.push_back(e.path());
     std::sort(files.begin(), files.end());
     for (const auto& f : files) {
         std::ifstream in(f);
