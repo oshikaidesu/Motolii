@@ -221,6 +221,7 @@ static Material* material(Stage& s, const char* filamat) {
     if (!built.count(filamat)) {
         const std::vector<uint8_t> pkg = load_file(filamat);
         built[filamat] = pkg.empty() ? nullptr : Material::Builder().package(pkg.data(), pkg.size()).build(*s.engine);
+        if (built[filamat]) built[filamat]->compile(Material::CompilerPriorityQueue::HIGH);   // (its programs made now, not at the first picture that needs them: Filament's own; the crowd's first minute left out 1-4 pictures so, 3-16 without)
     }
     return built[filamat];
 }
