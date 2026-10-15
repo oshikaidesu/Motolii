@@ -216,6 +216,7 @@ void main() {
               (worked[what.split(' ').take(2).join(' ')] ?? 0) + 1;
           var j0 = Timeline.now;
           final before = _all(m, at()), was = state(), seen = timings.length;
+          var under = ''; // (what the hand's first touch landed on: told with a red)
           judging.add((j0, Timeline.now));
           try {
             if (what.startsWith('knob') || what.startsWith('handle')) {
@@ -233,6 +234,7 @@ void main() {
                 from = t.getTopLeft(where.first) + at0;
               }
               final sign = r.nextBool() ? 1.0 : -1.0, by = Offset(sign * (30 + r.nextDouble() * 30), (r.nextBool() ? 1 : -1) * (30 + r.nextDouble() * 30)); // (far enough to move a whole step)
+              under = [for (final e in t.hitTestOnBinding(from).path.take(6)) e.target.runtimeType.toString().replaceAll('Render', '')].join('<') + ' sel ${ws.selected}';
               var seen = await dragSeen(from, by);
               await settle();
               if (_all(
@@ -319,6 +321,7 @@ void main() {
           };
           if (moved.isEmpty && was == now && !what.startsWith('menu'))
             reds.add('$what: moves nothing');
+          if (moved.isEmpty && was == now && !what.startsWith('menu')) debugPrint('RED-UNDER $what: $under | trouble "${m.trouble}" notice "${ws.notice}" animating ${ws.animating} keys ${what.startsWith('knob v_') ? m.keyMoments(int.tryParse(ws.selected ?? '') ?? 0, what.substring(7)).length : -1} value ${what.startsWith('knob v_') ? m.word(int.tryParse(ws.selected ?? '') ?? 0, what.substring(7)) : ''}');
           // (the cards agree with the document: each number the inspector holds is what the document makes of it now)
           final told = wsTransform(ws, ws.selected),
               held = Ctx.read(t.element(find.byType(InspectorPanel))).doc.v;
