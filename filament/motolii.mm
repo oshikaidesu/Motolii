@@ -28,6 +28,7 @@ struct Motolii {
     std::atomic<double> now{0.0};
     std::map<std::string, std::pair<long, double>> by_door;   // (what each call has cost, by its name: for measuring)
     std::map<std::string, double> worst;                      // (and its slowest once)
+    double read_waited = 0, read_waited_most = 0; long read_waits = 0;   // (reads waiting for the document: in all, the longest, how many waited over 2 ms)
     double spent[4] = {0, 0, 0, 0};   // (seconds the hand spent: asked to change, asked to read, telling the moment, drawing)
     long many[4] = {0, 0, 0, 0};
 };
@@ -57,8 +58,11 @@ template <class Does> static auto by_hand(Motolii* m, Does does, const char* who
 // (the hand holds it only while it changes the document or tells it a moment, never while a picture is drawn), so a
 // shell's hundreds of reads a build never wait on a picture. (The Flutter kin read so: research_notes/flutter_native_kin.md)
 template <class Does> static auto by_look(Motolii* m, Does does, const char* who = __builtin_FUNCTION()) -> decltype(does()) {
+    const auto asked = std::chrono::steady_clock::now();
     std::lock_guard<std::recursive_mutex> hold(m->d->lock);
     const auto t0 = std::chrono::steady_clock::now();
+    const double waited = std::chrono::duration<double>(t0 - asked).count();   // (a read waits while the hand holds the document: telling a moment, making a change)
+    m->read_waited += waited, m->read_waited_most = std::max(m->read_waited_most, waited), m->read_waits += waited > 0.002;
     auto out = does();
     const double took = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
     m->spent[1] += took, m->many[1]++;
@@ -178,6 +182,9 @@ const char* motolii_spent(Motolii* m) {
         }
         std::sort(doors.rbegin(), doors.rend());
         m->word = line;
+        char waits[160];
+        std::snprintf(waits, sizeof waits, "; reads waited for the document %.0f ms, the longest %.1f ms, %ld over 2 ms", 1e3 * m->read_waited, 1e3 * m->read_waited_most, m->read_waits);
+        m->word += waits;
         for (size_t i = 0; i < doors.size() && i < 20; ++i) m->word += "; " + doors[i].second;   // (the dearest calls)
         return m->word.c_str();
     });

@@ -5,6 +5,7 @@
 import 'dart:io';
 import 'dart:ui' show FramePhase;
 
+import 'package:flutter/rendering.dart' show debugProfileLayoutsEnabled;
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -65,7 +66,13 @@ void main() {
     }
 
     ws.playing = true;
-    await phase('playing', (_) async {});
+    if (const bool.fromEnvironment('TRACE')) { // (TRACE: Flutter's own timeline of the playing, every widget's build and the collector, into build/integration_response_data.json)
+      debugProfileLayoutsEnabled = true;
+      await binding.traceAction(() => phase('playing', (_) async {}), reportKey: 'timeline', streams: const ['Dart', 'Embedder', 'GC']);
+      debugProfileLayoutsEnabled = false;
+    } else {
+      await phase('playing', (_) async {});
+    }
     ws.playing = false;
 
     final knob = find.byWidgetPredicate((w) => w is NumField && w.id == (const bool.fromEnvironment('NONE') ? 'v_exposure' : 'pos.x'));
@@ -79,6 +86,6 @@ void main() {
 
     SchedulerBinding.instance.removeTimingsCallback(took);
     debugPrint('FRAMES all: late $late');
-    expect(late, 0, reason: report.join('\n'));
+    if (!const bool.fromEnvironment('TRACE')) expect(late, 0, reason: report.join('\n')); // (a traced run is for reading: its timeline is written only if it passes)
   });
 }
