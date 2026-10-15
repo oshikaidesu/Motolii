@@ -171,7 +171,7 @@ static void screen_effects(Stage& s, ScreenStack& st, const std::string& files, 
             screen_fresh(s, *st.fx[i]);
             screen_knobs(s, *st.fx[i], numbers);
             Texture* from = i == 0 ? st.shot : st.between[(i - 1) % 2];
-            RenderTarget* to = i + 1 == st.fx.size() ? nullptr : st.betweenTarget[i % 2];
+            RenderTarget* to = i + 1 == st.fx.size() ? s.out : st.betweenTarget[i % 2];   // (the last where the stage's picture goes: the screen, or the window's live picture)
             door::draw(s.engine, st.fx[i]->door, from, to, (uint32_t)s.w, (uint32_t)s.h);
         }
     };

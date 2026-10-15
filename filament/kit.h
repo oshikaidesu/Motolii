@@ -109,6 +109,7 @@ struct Stage {
     std::vector<View*> layers;   // further pictures laid over the stage's own view, in order (layer_view); the first `layered` of them are drawn
     size_t layered = 0;
     std::function<void()> over;   // drawn last, over all of them (a whole-screen effect: screen.h)
+    RenderTarget* out = nullptr;   // where the picture goes at last (none: the screen; the window's live picture: live.h)
 };
 
 static Stage open_stage(int w, int h) {
