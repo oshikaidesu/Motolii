@@ -26,8 +26,9 @@ material {
         // [0] After Effects' wave warp: how high, how long a wave, how far along in waves, which way (radians);
         // [1] Cavalry's bend: how far round (radians), which way (0 across, 1 up); After Effects' twist (radians at its middle); Cavalry's pinch (-1 to 1: in, or out);
         // [2] Cavalry's skew (radians) and its axis (radians); squash and stretch (-1 to 1, its area kept); half its width;
-        // [3] After Effects' wiggle paths: how far, how fine (waves to its height), how far on in time, its seed
-        { type : float4[4], name : bends }
+        // [3] After Effects' wiggle paths: how far, how fine (waves to its height), how far on in time, its seed;
+        // [4] Cavalry's motion stretch: which way it moves and how fast (its own units a second, as it is turned), how much it stretches for that
+        { type : float4[5], name : bends }
     ]
 }
 
@@ -42,8 +43,9 @@ vertex {
     }
     vec2 turned(vec2 p, float a) { float c = cos(a), s = sin(a); return vec2(c * p.x - s * p.y, s * p.x + c * p.y); }
     void materialVertex(inout MaterialVertexInputs material) {
-        vec4 wave = materialParams.bends[0], bend = materialParams.bends[1], skew = materialParams.bends[2], wig = materialParams.bends[3];
-        if (wave.x == 0.0 && bend.x == 0.0 && bend.z == 0.0 && bend.w == 0.0 && skew.x == 0.0 && skew.z == 0.0 && wig.x == 0.0) return;
+        vec4 wave = materialParams.bends[0], bend = materialParams.bends[1], skew = materialParams.bends[2], wig = materialParams.bends[3], move = materialParams.bends[4];
+        float stretch = move.z * length(move.xy);
+        if (wave.x == 0.0 && bend.x == 0.0 && bend.z == 0.0 && bend.w == 0.0 && skew.x == 0.0 && skew.z == 0.0 && wig.x == 0.0 && stretch == 0.0) return;
         vec2 p0 = vec2(material.uv0.x, 1.0 - material.uv0.y), p = p0;   // (where its point is, in shares of its height from its middle: flat_mesh; Filament turns uv0 upside down, flipUV, and this turns it back)
         float halfWide = max(skew.w, 1e-3), reach = length(vec2(halfWide, 0.5));
         if (skew.z != 0.0) p *= vec2(1.0 / (1.0 + skew.z), 1.0 + skew.z);   // (squashed or stretched up, as wide the other way: its area kept)
@@ -58,6 +60,11 @@ vertex {
         if (bend.z != 0.0) p = turned(p, bend.z * max(0.0, 1.0 - length(p) / reach));   // (twisted most at its middle)
         if (bend.w != 0.0) { float d = length(p); if (d > 1e-5) p *= pow(d / reach, bend.w * 1.5) ; }   // (pinched in towards its middle, or out)
         if (wave.x != 0.0) { vec2 dir = vec2(cos(wave.w), sin(wave.w)); p += vec2(-dir.y, dir.x) * wave.x * sin(6.2831853 * (dot(p, dir) / max(wave.y, 1e-4) + wave.z)); }
+        if (stretch != 0.0) {   // (longer along the way it goes, as much narrower across: its area kept)
+            vec2 way = normalize(move.xy), side = vec2(-way.y, way.x);
+            float along = 1.0 + stretch;
+            p = way * dot(p, way) * along + side * dot(p, side) / along;
+        }
         if (wig.x != 0.0) p += wig.x * vec2(bendNoise(vec3(p0 * wig.y, wig.z + wig.w)), bendNoise(vec3(p0 * wig.y + 17.3, wig.z + wig.w + 5.1)));
         material.worldPosition.xyz += mulMat3x3Float3(getWorldFromModelMatrix(), vec3(p - p0, 0.0));
     }

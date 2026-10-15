@@ -201,6 +201,8 @@ static const DocValue doc_values[] = {
     {"wiggle", "shape", -10, 10, true, nullptr},
     {"wiggle_detail", "shape", 0, 1000, true, nullptr},
     {"wiggle_speed", "shape", -1e3, 1e3, true, nullptr},
+    // (and Cavalry's motion stretch: longer the way it moves, and narrower, so much for each unit a second it goes)
+    {"stretch", "shape", -10, 10, true, nullptr},
     {"copies", "picture text shape", 1, 1000, false, nullptr}, {"copy_x", "picture text shape", -1e4, 1e4, true, nullptr}, {"copy_y", "picture text shape", -1e4, 1e4, true, nullptr},
     {"copy_rotate", "picture text shape", -1e6, 1e6, true, nullptr}, {"copy_size", "picture text shape", 0.01, 100, true, nullptr},
     {"copy_columns", "picture text shape", 0, 100, false, nullptr},   // (so many to a row, then the next row: copy_x along it, copy_y down; 0: one row)
@@ -336,6 +338,7 @@ static const DocShown doc_shown[] = {
     {"wiggle", "", "", "Wiggle", 0, 0.3, nullptr},
     {"wiggle_detail", "", "", "Detail", 0.5, 20, "Wiggle"},
     {"wiggle_speed", "", "/s", "Wiggle speed", 0, 10, "Wiggle"},
+    {"stretch", "", "", "Stretch", 0, 0.5, nullptr},
     {"gradient_scale", "", "×", "Stretch", 0.1, 4, nullptr},
     {"gradient_spread", "", "", "Past end", 0, 0, nullptr},
     {"copies", "count", "", "How many", 1, 200, nullptr},
@@ -520,7 +523,7 @@ static const DocCard doc_cards[] = {
     {"Connect", "connect connect_to connect_reach"},
     {"Line", "cap join dash dash_offset"},
     {"Path", "round trim trim_begin trim_offset bloat offset zigzag zigzag_ridges zigzag_smooth", "kind", "shape"},   // (its path made anew: After Effects' shape operators, ThorVG's own)
-    {"Deform", "warp bend twist pinch skew squash wiggle bend_direction warp_width warp_angle warp_speed skew_axis wiggle_detail wiggle_speed", "kind", "shape"},   // (its points moved as it is drawn: Cavalry's deformers)
+    {"Deform", "warp bend twist pinch skew squash wiggle stretch bend_direction warp_width warp_angle warp_speed skew_axis wiggle_detail wiggle_speed", "kind", "shape"},   // (its points moved as it is drawn: Cavalry's deformers)
     {"Surface", "shading metallic roughness reflectance clear_coat clear_coat_roughness sheen anisotropy thickness emissive", "fill", "!glass"},
     {"Glass", "ior dispersion swim dark vivid", "fill", "glass"},
     {"Lit", "light_group", "kind", "solid"},   // (which lights reach it)
@@ -1241,17 +1244,23 @@ static void doc_moment(Doc& d, double now) {
         if (t.drawn && t.drawn->cut) {   // (a shape in triangles: bent in its look, and its copies' own looks, nothing drawn again)
             const auto num = [&](const char* name, double otherwise) { return (float)doc_number(d, thing, name, now, otherwise); };
             const float deg = (float)(TAU / 360.0), since = (float)lies[i].since;
-            const float4 bends[4] = {{num("warp", 0), num("warp_width", 0.5), num("warp_speed", 1) * since, num("warp_angle", 0) * deg},
+            float4 bends[5] = {{num("warp", 0), num("warp_width", 0.5), num("warp_speed", 1) * since, num("warp_angle", 0) * deg},
                                      {num("bend", 0) * deg, doc_word(d, thing, "bend_direction") == "vertical" ? 1.f : 0.f, num("twist", 0) * deg, num("pinch", 0)},
                                      {num("skew", 0) * deg, num("skew_axis", 0) * deg, num("squash", 0), 0.5f * t.drawn->wideBy},
-                                     {num("wiggle", 0), num("wiggle_detail", 3), num("wiggle_speed", 1) * since, num("seed", 0) * 7.31f}};
-            t.drawn->look->setParameter("bends", bends, 4);
-            if (t.drawn->edgeLook) t.drawn->edgeLook->setParameter("bends", bends, 4);
+                                     {num("wiggle", 0), num("wiggle_detail", 3), num("wiggle_speed", 1) * since, num("seed", 0) * 7.31f},
+                                     {0.f, 0.f, num("stretch", 0), 0.f}};
+            if (bends[4].z != 0.f) {   // (how it moves: where its middle was a sixtieth of a second ago, seen as it is now turned and sized)
+                const math::mat4 was = doc_place(d, thing, now - 1.0 / 60.0), is = doc_place(d, thing, now);
+                const math::float4 back = inverse(is) * was * math::float4{0, 0, 0, 1};
+                bends[4].x = (float)(-60.0 * back.x), bends[4].y = (float)(-60.0 * back.y);
+            }
+            t.drawn->look->setParameter("bends", bends, 5);
+            if (t.drawn->edgeLook) t.drawn->edgeLook->setParameter("bends", bends, 5);
             cut_at(s, t.drawn, float3{num("trim", 0), num("trim_begin", 0), num("trim_offset", 0)},   // (its path anew, if it is told otherwise: cut again)
                    {num("round", 0), num("bloat", 0), num("zigzag", 0), num("zigzag_ridges", 5), num("zigzag_smooth", 0), num("offset", 0)});
             for (const Stage::Made& made : s.made)
                 if (made.of == t.drawn->sheet)
-                    if (const auto own = d.copyLooks.find(made.thing.getId()); own != d.copyLooks.end()) own->second->setParameter("bends", bends, 4);
+                    if (const auto own = d.copyLooks.find(made.thing.getId()); own != d.copyLooks.end()) own->second->setParameter("bends", bends, 5);
         }
         if (t.drawn && t.drawn->shape)
             warp_at(s, t.drawn, (float)doc_number(d, thing, "warp", now, 0), (float)doc_number(d, thing, "warp_width", now, 0.5), (float)doc_number(d, thing, "warp_angle", now, 0),
