@@ -383,7 +383,7 @@ void main() {
 
       // ignore: avoid_print
       print(
-        'LATE ${lateOnes.length}: build median ${mid(lateOnes.map((f) => f.buildDuration.inMicroseconds / 1000)).toStringAsFixed(1)} ms, raster median ${mid(lateOnes.map((f) => f.rasterDuration.inMicroseconds / 1000)).toStringAsFixed(1)} ms, waiting median ${mid(lateOnes.map((f) => (f.totalSpan - f.buildDuration - f.rasterDuration).inMicroseconds / 1000)).toStringAsFixed(1)} ms',
+        'LATE ${lateOnes.length}: build median ${mid(lateOnes.map((f) => f.buildDuration.inMicroseconds / 1000)).toStringAsFixed(1)} ms, raster median ${mid(lateOnes.map((f) => f.rasterDuration.inMicroseconds / 1000)).toStringAsFixed(1)} ms, waiting median ${mid(lateOnes.map((f) => (f.totalSpan - f.buildDuration - f.rasterDuration).inMicroseconds / 1000)).toStringAsFixed(1)} ms (before building ${mid(lateOnes.map((f) => f.vsyncOverhead.inMicroseconds / 1000)).toStringAsFixed(1)}, between building and drawing ${mid(lateOnes.map((f) => (f.timestampInMicroseconds(FramePhase.rasterStart) - f.timestampInMicroseconds(FramePhase.buildFinish)) / 1000)).toStringAsFixed(1)})',
       );
       final report = {
         'acts': _acts,
