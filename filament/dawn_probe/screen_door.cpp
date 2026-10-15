@@ -40,8 +40,10 @@ struct Out { @builtin(position) position: vec4f, @location(0) uv: vec2f };
 struct Screen {
     ProgramHandle program;
     DescriptorSetLayoutHandle layout;
-    std::vector<std::pair<TextureHandle, DescriptorSetHandle>> sets;   // one for each picture it has read: a set once used is not told otherwise (Filament's WebGPU keeps what it made of it)
-    BufferObjectHandle knobs;
+    int pictures = 1;
+    struct Set { std::vector<TextureHandle> read; int pass = 0; DescriptorSetHandle handle; };
+    std::vector<Set> sets;   // one for each pictures read and pass: a set once used is not told otherwise (Filament's WebGPU keeps what it made of it)
+    std::vector<BufferObjectHandle> knobs;   // a pass's own (written several times in one frame, one buffer would show its last)
     uint32_t knobBytes = 0;
 };
 
@@ -81,54 +83,65 @@ static bool takes(Engine* engine, const char* fragment, std::string* why) {
     return said.ok;
 }
 
-Screen* screen(Engine* engine, const char* name, const char* fragment, uint32_t knobBytes, std::string* why) {
+Screen* screen(Engine* engine, const char* name, const char* fragment, uint32_t knobBytes, std::string* why, int pictures) {
     if (!takes(engine, fragment, why)) return nullptr;
     DriverApi& d = driver(engine);
     auto* s = new Screen;
     s->knobBytes = (knobBytes + 15u) & ~15u;
+    s->pictures = pictures < 1 ? 1 : pictures;
     backend::Program p;
     p.shaderLanguage(ShaderLanguage::WGSL);
     p.diagnostics(utils::CString(name), [](utils::CString const&, utils::io::ostream& out) -> utils::io::ostream& { return out; });
     p.shader(ShaderStage::VERTEX, sVertex, std::strlen(sVertex) + 1);
     p.shader(ShaderStage::FRAGMENT, fragment, std::strlen(fragment) + 1);
-    backend::Program::DescriptorBindingsInfo bindings = backend::Program::DescriptorBindingsInfo::with_capacity(2);
+    const size_t n = (size_t)s->pictures + 1;
+    backend::Program::DescriptorBindingsInfo bindings = backend::Program::DescriptorBindingsInfo::with_capacity(n);
     backend::DescriptorSetLayout layout;
     layout.label = utils::CString(name);
-    layout.descriptors = utils::FixedCapacityVector<DescriptorSetLayoutDescriptor>::with_capacity(2);
-    bindings.push_back({utils::CString("picture"), DescriptorType::SAMPLER_2D_FLOAT, descriptor_binding_t(0)});
-    layout.descriptors.push_back({DescriptorType::SAMPLER_2D_FLOAT, ShaderStageFlags::FRAGMENT, descriptor_binding_t(0)});
+    layout.descriptors = utils::FixedCapacityVector<DescriptorSetLayoutDescriptor>::with_capacity(n);
+    for (int i = 0; i < s->pictures; ++i) {
+        bindings.push_back({utils::CString("picture"), DescriptorType::SAMPLER_2D_FLOAT, descriptor_binding_t(i)});
+        layout.descriptors.push_back({DescriptorType::SAMPLER_2D_FLOAT, ShaderStageFlags::FRAGMENT, descriptor_binding_t(i)});
+    }
     if (s->knobBytes) {
-        bindings.push_back({utils::CString("knobs"), DescriptorType::UNIFORM_BUFFER, descriptor_binding_t(1)});
-        layout.descriptors.push_back({DescriptorType::UNIFORM_BUFFER, ShaderStageFlags::FRAGMENT, descriptor_binding_t(1)});
+        bindings.push_back({utils::CString("knobs"), DescriptorType::UNIFORM_BUFFER, descriptor_binding_t(s->pictures)});
+        layout.descriptors.push_back({DescriptorType::UNIFORM_BUFFER, ShaderStageFlags::FRAGMENT, descriptor_binding_t(s->pictures)});
     }
     p.descriptorBindings(0, std::move(bindings));
     s->program = d.createProgram(std::move(p), utils::ImmutableCString{name});
     s->layout = d.createDescriptorSetLayout(std::move(layout), utils::ImmutableCString{name});
-    if (s->knobBytes) s->knobs = d.createBufferObject(s->knobBytes, BufferObjectBinding::UNIFORM, BufferUsage::DYNAMIC, utils::ImmutableCString{name});
     return s;
 }
 
-void knobs(Engine* engine, Screen* s, const void* data, uint32_t bytes) {
+static BufferObjectHandle knobsOf(Engine* engine, Screen* s, int pass) {
+    while ((int)s->knobs.size() <= pass)
+        s->knobs.push_back(driver(engine).createBufferObject(s->knobBytes, BufferObjectBinding::UNIFORM, BufferUsage::DYNAMIC, utils::ImmutableCString{"screen"}));
+    return s->knobs[(size_t)pass];
+}
+
+void knobs(Engine* engine, Screen* s, const void* data, uint32_t bytes, int pass) {
     if (!s->knobBytes || !bytes) return;
+    const BufferObjectHandle to = knobsOf(engine, s, pass);
     bytes = bytes < s->knobBytes ? bytes : s->knobBytes;
     void* copy = std::calloc(1, s->knobBytes);
     std::memcpy(copy, data, bytes);
-    driver(engine).updateBufferObject(s->knobs, BufferDescriptor(copy, s->knobBytes, [](void* p, size_t, void*) { std::free(p); }), 0);
+    driver(engine).updateBufferObject(to, BufferDescriptor(copy, s->knobBytes, [](void* p, size_t, void*) { std::free(p); }), 0);
 }
 
-void draw(Engine* engine, Screen* s, Texture* from, RenderTarget* to, uint32_t w, uint32_t h) {
+void draw(Engine* engine, Screen* s, Texture* const* from, RenderTarget* to, uint32_t w, uint32_t h, int pass) {
     DriverApi& d = driver(engine);
-    const TextureHandle picture = downcast(from)->getHwHandle();
+    std::vector<TextureHandle> read;
+    for (int i = 0; i < s->pictures; ++i) read.push_back(downcast(from[i])->getHwHandle());
     DescriptorSetHandle set;
-    for (const auto& [read, made] : s->sets) if (read == picture) set = made;
-    if (!set) {   // (a picture not read before: a set of its own, made once)
+    for (const Screen::Set& one : s->sets) if (one.read == read && one.pass == pass) set = one.handle;
+    if (!set) {   // (pictures not read so before: a set of their own, made once)
         SamplerParams linear{};
         linear.filterMag = SamplerMagFilter::LINEAR, linear.filterMin = SamplerMinFilter::LINEAR;
         linear.wrapS = SamplerWrapMode::CLAMP_TO_EDGE, linear.wrapT = SamplerWrapMode::CLAMP_TO_EDGE;
         set = d.createDescriptorSet(s->layout, utils::ImmutableCString{"screen"});
-        d.updateDescriptorSetTexture(set, descriptor_binding_t(0), picture, linear);
-        if (s->knobBytes) d.updateDescriptorSetBuffer(set, descriptor_binding_t(1), s->knobs, 0, s->knobBytes);
-        s->sets.push_back({picture, set});
+        for (int i = 0; i < s->pictures; ++i) d.updateDescriptorSetTexture(set, descriptor_binding_t(i), read[(size_t)i], linear);
+        if (s->knobBytes) d.updateDescriptorSetBuffer(set, descriptor_binding_t(s->pictures), knobsOf(engine, s, pass), 0, s->knobBytes);
+        s->sets.push_back({read, pass, set});
     }
     RenderPassParams params{};
     params.viewport = {0, 0, w, h};
@@ -149,8 +162,8 @@ void draw(Engine* engine, Screen* s, Texture* from, RenderTarget* to, uint32_t w
 
 void drop(Engine* engine, Screen* s) {
     DriverApi& d = driver(engine);
-    if (s->knobBytes) d.destroyBufferObject(s->knobs);
-    for (const auto& [read, made] : s->sets) d.destroyDescriptorSet(made);
+    for (BufferObjectHandle k : s->knobs) d.destroyBufferObject(k);
+    for (const Screen::Set& one : s->sets) d.destroyDescriptorSet(one.handle);
     d.destroyDescriptorSetLayout(s->layout);
     d.destroyProgram(s->program);
     delete s;
