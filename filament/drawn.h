@@ -58,6 +58,8 @@ struct Drawn {
     uint32_t layerId = 0;
     tvg::Scene* holder = nullptr;
     tvg::Matrix fit{1, 0, 0, 0, 1, 0, 0, 0, 1};
+    tvg::LottieAnimation* lottie = nullptr;   // (its film, when it is an After Effects file: what says its layers' poses)
+    std::vector<uint32_t> deep;   // (an After Effects file's 3D layers: not drawn in its own picture, each a sheet of its own where it is: picture_deep)
     std::array<float, 6> bent{};   // (as last bent: round, bloat, zigzag, ridges, smooth, offset)
     std::array<float, 48> warped{};   // (as last warped on the GPU (warp_at): ThorVG's WgCanvas::bend, thorvg_bend.patch)
     std::vector<std::string> markers;  // an After Effects file's named stretches (ThorVG's Lottie markers)
@@ -163,6 +165,8 @@ static void font(Stage& s, const char* path) {
 static void picture_at(Stage& s, Drawn* d, float seconds) {
     door::on_driver(s.engine, [d, seconds] {
         d->film->frame(d->fromFrame + std::min(seconds / d->seconds * d->frames, d->frames - 1.f));
+        for (uint32_t id : d->deep)   // (its 3D layers are sheets of their own: not drawn flat here)
+            if (const tvg::Paint* one = d->film->picture()->paint(id)) const_cast<tvg::Paint*>(one)->visible(false);
         d->canvas->update();
         d->canvas->draw(true);
         d->canvas->sync();
@@ -300,6 +304,7 @@ static Drawn* picture(Stage& s, const char* file, const mat4f& place, float high
     return drawn(s, [&](Drawn* d, int* w, int* h) -> tvg::Paint* {
         tvg::LottieAnimation* own = lottie ? tvg::LottieAnimation::gen() : nullptr;
         d->film = own ? own : tvg::Animation::gen();
+        d->lottie = own;
         tvg::Picture* p = d->film->picture();
         float fw = 0.f, fh = 0.f;
         if (p->load(file) != tvg::Result::Success || p->size(&fw, &fh) != tvg::Result::Success || fw <= 0.f || fh <= 0.f) return nullptr;
@@ -611,9 +616,8 @@ static void cut_at(Stage& s, Drawn* d, float3 trim, const std::array<float, 6>& 
 // One layer of an After Effects file drawn alone, in its own space: its place and turn left out (they are its sheet's,
 // put in the scene by its pose: motion.h), on a sheet of its own `pixel` units a point of the composition. A 3D layer's
 // picture where it is. `box`: where its sheet lies in the layer's own space (x, y, w, h, in points of the composition).
-static Drawn* layer_picture(Stage& s, const char* file, const char* layer, float pixel, float4* box) {
+static Drawn* layer_picture(Stage& s, const char* file, uint32_t id, float pixel, float4* box) {
     if (!door::device(s.engine)) return nullptr;
-    const uint32_t id = tvg::Accessor::id(layer);
     float4 found{0.f};
     door::on_driver(s.engine, [&] {   // (how large it is, at its first moment: ThorVG's own bounds of it alone)
         tvg::Initializer::init(0);
@@ -641,6 +645,30 @@ static Drawn* layer_picture(Stage& s, const char* file, const char* layer, float
         d->holder = tvg::Scene::gen();
         return d->holder;
     }, mat4f{}, found.w * pixel, float3{-1.f}, true, nullptr);
+}
+
+static Drawn* layer_picture(Stage& s, const char* file, const char* layer, float pixel, float4* box) { return layer_picture(s, file, tvg::Accessor::id(layer), pixel, box); }
+
+// An After Effects picture's 3D layers (ThorVG says each layer's pose and whether it is 3D): from now on not drawn in
+// its own picture, each to be a sheet of its own where it is (layer_picture). Their ids.
+static std::vector<uint32_t> picture_deep(Stage& s, Drawn* d) {
+    std::vector<uint32_t> ids;
+    tvg::LottieAnimation* film = d ? d->lottie : nullptr;
+    if (!film) return ids;
+    door::on_driver(s.engine, [&] {
+        auto* walk = tvg::Accessor::gen();
+        walk->set(film->picture(), [&](const tvg::Paint* one, void*) {
+            float n[19];
+            uint32_t above = 0;
+            int kind = 0;
+            if (one->id && film->pose(one->id, n, &above, &kind) == tvg::Result::Success && kind == 1 && std::find(ids.begin(), ids.end(), one->id) == ids.end()) ids.push_back(one->id);
+            return true;
+        }, nullptr);
+        delete walk;
+    });
+    s.engine->flushAndWait();
+    d->deep = ids;
+    return ids;
 }
 
 // That layer as it is at `frame` of its file, drawn again for the frame that comes next.

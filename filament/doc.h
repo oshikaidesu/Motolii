@@ -29,6 +29,7 @@
 //            text                   a text's: what it says (to the end of the line)
 //            fill                   what its surface is: a text's colour as six digits (ff3366); a solid's: a colour, or the material glass
 #include "drawn.h"
+#include "motion.h"
 #include "interp.h"
 #include "physics.h"
 #include "script.h"
@@ -92,7 +93,10 @@ struct Doc {
                    double units = 1.0;    // (a flat thing's: points of the picture to a unit of the stage as it was made, which its effects are counted in)
                    int space = 3;
                    Scene* scene = nullptr; int channel = -1;
-                   MaterialInstance* look = nullptr; };   // (a solid's own look, made by the kit: what a matte cuts)   // (the scene it is in: none said, the stage's own, where it was made; and its channel there)   // (read as it is made: 2 a flat thing on the camera, 25 one in the world, 3 a solid thing or a camera)
+                   MaterialInstance* look = nullptr;   // (a solid's own look, made by the kit: what a matte cuts)
+                   struct Deep { uint32_t id; Drawn* sheet; float4 box; };   // (an After Effects picture's 3D layer: a sheet of its own where it is)
+                   std::vector<Deep> deep;
+                   std::shared_ptr<Motion> motion; };   // (what says where they are: the same file, read for its poses only)   // (the scene it is in: none said, the stage's own, where it was made; and its channel there)   // (read as it is made: 2 a flat thing on the camera, 25 one in the world, 3 a solid thing or a camera)
     // The camera of the moment, against the stage's own (from 6 units in front, 30 degrees high): how the world is
     // moved for it (rig; a 2D thing goes with it) and only how it is turned (facing; a 2.5D thing keeps its own angle).
     math::mat4 rig, facing;
@@ -1437,6 +1441,33 @@ static void doc_moment(Doc& d, double now) {
         }
         if (t.in) before = thing;
     }
+    // An After Effects picture's 3D layers: each at the moment its picture is at, where its pose puts it over that
+    // picture's sheet as the stage has it now (the composition's corner at the sheet's top left, a pixel a share of its height).
+    for (auto& [thing, t] : d.shown) {
+        if (t.deep.empty() || !t.drawn || !t.motion) continue;
+        const double since = now - doc_number(d, thing, "start", 0, 0);
+        const float sec = t.drawn->seconds > 0.f ? std::fmod((float)std::max(since, 0.0), t.drawn->seconds) : 0.f;
+        const float frame = t.drawn->fromFrame + std::min(sec / std::max(t.drawn->seconds, 1e-6f) * t.drawn->frames, std::max(t.drawn->frames - 1.f, 0.f));
+        motion_at(*t.motion, frame);
+        mat4f sheetAt;
+        bool found = false;
+        auto& places = s.engine->getTransformManager();
+        for (const Stage::Made& made : s.made)
+            if (made.of == t.drawn->sheet && !made.matte && made.nth == 0) { sheetAt = places.getWorldTransform(places.getInstance(made.thing)); found = true; break; }
+        const float px = 1.f / t.motion->h;
+        const float3 corner{-0.5f * t.motion->w * px, 0.5f, 0.f}, right{px, 0.f, 0.f}, down{0.f, -px, 0.f};
+        for (const auto& deep : t.deep) {
+            layer_at(s, deep.sheet, frame);
+            tvg::Matrix flat;
+            float seen = 0.f;
+            const bool there = t.in && found && motion_flat(*t.motion, deep.id, &flat, &seen) && seen > 0.f;
+            const mat4f at = motion_built(*t.motion, deep.id);
+            move(s, deep.sheet->sheet, [&](int, const mat4f&) {
+                return there ? sheetAt * motion_in_scene(at, corner, right, down) * mat4f::translation(float3{(deep.box.x + 0.5f * deep.box.z) * px, (deep.box.y + 0.5f * deep.box.w) * px, 0.f}) * mat4f::scaling(float3{1, -1, 1})
+                             : mat4f::scaling(0.f);
+            });
+        }
+    }
 }
 
 // The stage made to match the document: a thing the document has and the stage has not is made (by the kit's own
@@ -1458,6 +1489,7 @@ static bool doc_match(Doc& d) {
         if (const Mesh* m = it->second.film ? it->second.film->sheet : it->second.drawn ? it->second.drawn->sheet : nullptr)   // (its copies' own looks first)
             doc_copy_looks_off(d, m, it->second.film ? it->second.film->look : it->second.drawn->look);
         if (it->second.drawn) picture_off(s, it->second.drawn);
+        for (const auto& deep : it->second.deep) picture_off(s, deep.sheet);
         if (it->second.solid) solid_off(s, it->second.solid);
         if (!it->second.light.isNull()) {   // (out of every scene, and done away with)
             s.scene->remove(it->second.light);
@@ -1545,6 +1577,14 @@ static bool doc_match(Doc& d) {
             };
         } else if (kind == "picture") {
             if (fxOk && (made.drawn = picture(s, file.c_str(), mat4f{}, 1.f, float3{-1.f}, true, lay, fx, doc_word(d, thing, "marker").c_str()))) s.playing.erase(made.drawn);
+            if (made.drawn && made.drawn->lottie && !picture_deep(s, made.drawn).empty()) {   // (its 3D layers stood up where they are, as After Effects shows them)
+                made.motion = std::make_shared<Motion>();
+                if (motion_open(*made.motion, file.c_str()))
+                    for (uint32_t id : made.drawn->deep) {
+                        float4 box;
+                        if (Drawn* own = layer_picture(s, file.c_str(), id, 1.f / made.motion->h, &box)) made.deep.push_back({id, own, box});
+                    }
+            }
         } else if (kind == "text") {   // (words in a font: said by `say N text ...`; until then, the font's own name)
             const std::string words = doc_word(d, thing, "text");
             if (!fill.empty() && rgb < 0) why = "a text's fill is six digits, as ff3366";
