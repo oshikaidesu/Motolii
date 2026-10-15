@@ -1,4 +1,6 @@
-part of 'inspector_parts.dart';
+import 'package:flutter/widgets.dart';
+import '../../tokens.dart';
+import 'inspector_parts.dart';
 
 // ---- 10. effects ------------------------------------------------------------------------------------------------------
 /// An effect as a plugin ships it: a name and a WGSL uniform struct. Its rows are whatever [readParams] makes of the struct.
@@ -354,7 +356,7 @@ class _ParamSearchState extends State<ParamSearch> {
   Widget build(BuildContext context) {
     final x = Ctx.of(context), ed = Ed(x.cfg.ed);
     return Container(
-      height: _cellH,
+      height: cellH,
       margin: const EdgeInsets.only(bottom: 4),
       padding: const EdgeInsets.symmetric(horizontal: 8),
       alignment: Alignment.centerLeft,

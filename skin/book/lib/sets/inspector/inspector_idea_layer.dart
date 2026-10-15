@@ -1,4 +1,9 @@
-part of 'inspector_parts.dart';
+import 'dart:math' as math;
+import 'package:flutter/gestures.dart';
+import 'package:flutter/widgets.dart';
+import '../../parts/controls.dart';
+import '../../tokens.dart';
+import 'inspector_parts.dart';
 
 // ---- Masks, time, links, matte: small working stages inside the card -----------------------------------------------
 // Sources: motolii-doc store/mask.rs (MaskMode, feather, expansion, opacity, inverted), attrs.rs (Matte, MatteMode, clip_to_below),
@@ -274,9 +279,9 @@ class _LiMaskCard extends StatelessWidget {
         KeyedSubtree(
           key: ValueKey('li_m$s'),
           child: _liRow([
-            _ldNum(doc, 'li_m$s.fe', 'Feather', unit: 'px', min: 0, max: 200),
-            _ldNum(doc, 'li_m$s.ex', 'Expansion', unit: 'px', min: -100, max: 100, bipolar: true),
-            _ldNum(doc, 'li_m$s.op', 'Opacity', unit: '%', min: 0, max: 100),
+            ldNum(doc, 'li_m$s.fe', 'Feather', unit: 'px', min: 0, max: 200),
+            ldNum(doc, 'li_m$s.ex', 'Expansion', unit: 'px', min: -100, max: 100, bipolar: true),
+            ldNum(doc, 'li_m$s.op', 'Opacity', unit: '%', min: 0, max: 100),
           ]),
         ),
       ],
@@ -597,10 +602,10 @@ class _LiTimeCard extends StatelessWidget {
           ),
         ),
         _liRow([
-          _ldNum(doc, 'li_t.speed', 'Speed', unit: '%', min: 5, max: 800),
-          _ldNum(doc, 'li_t.loop', 'Loop', unit: 's', dec: 2, min: .1, max: _liSrcLen, perPx: .01, step: .1, enabled: k.mode > 0),
-          _ldNum(doc, 'li_t.delay', 'Delay', unit: 's', dec: 2, min: -2, max: 4, perPx: .01, step: .1, bipolar: true),
-          _ldNum(doc, 'li_t.ghost', 'Ghost', unit: 'f', min: -60, max: 60, perPx: .25, bipolar: true, enabled: k.ghost != null),
+          ldNum(doc, 'li_t.speed', 'Speed', unit: '%', min: 5, max: 800),
+          ldNum(doc, 'li_t.loop', 'Loop', unit: 's', dec: 2, min: .1, max: _liSrcLen, perPx: .01, step: .1, enabled: k.mode > 0),
+          ldNum(doc, 'li_t.delay', 'Delay', unit: 's', dec: 2, min: -2, max: 4, perPx: .01, step: .1, bipolar: true),
+          ldNum(doc, 'li_t.ghost', 'Ghost', unit: 'f', min: -60, max: 60, perPx: .25, bipolar: true, enabled: k.ghost != null),
         ]),
       ],
     );
@@ -936,9 +941,9 @@ class _LiLinkCard extends StatelessWidget {
           KeyedSubtree(
             key: ValueKey('li_l${cur.$1}'),
             child: _liRow([
-              _ldNum(doc, 'li_l.${cur.$1}.mul', 'Multiply', dec: 2, min: -4, max: 4, perPx: .01, step: .1, bipolar: true),
-              _ldNum(doc, 'li_l.${cur.$1}.add', 'Offset', dec: 1, perPx: .5),
-              _ldNum(doc, 'li_l.${cur.$1}.f', 'Delay', unit: 'f', min: -120, max: 120, perPx: .25, zero: 'None', bipolar: true),
+              ldNum(doc, 'li_l.${cur.$1}.mul', 'Multiply', dec: 2, min: -4, max: 4, perPx: .01, step: .1, bipolar: true),
+              ldNum(doc, 'li_l.${cur.$1}.add', 'Offset', dec: 1, perPx: .5),
+              ldNum(doc, 'li_l.${cur.$1}.f', 'Delay', unit: 'f', min: -120, max: 120, perPx: .25, zero: 'None', bipolar: true),
             ]),
           ),
         ],

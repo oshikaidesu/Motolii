@@ -1,4 +1,11 @@
-part of 'inspector_parts.dart';
+import 'dart:math' as math;
+import 'package:flutter/gestures.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
+import '../../parts/controls.dart';
+import '../../tokens.dart';
+import 'inspector_direct_transform.dart';
+import 'inspector_parts.dart';
 
 // ---- ideas: placement and anchor (ids pli_) ----------------------------------------------------------------------------
 /// Four ways to edit a Repeater and an Anchor where the panel does the work. A, B and C each own a Repeater (pli_a / pli_b / pli_c); D writes the layer's real anchor.
@@ -60,7 +67,7 @@ List<_PliCopy> _pliCopies(Doc doc, String p, {int cap = 200}) {
   return [
     for (var i = 0; i < math.min(n, cap); i++)
       () {
-        double u(int ch) => _plNoise(seed, i, ch);
+        double u(int ch) => plNoise(seed, i, ch);
         final clean = switch (mode) {
           1 => () {
             final a = (st + sw * (sw >= 360 ? i / n : i / (math.max(n, 2) - 1))) * math.pi / 180;
@@ -776,7 +783,7 @@ class _PliBScatterState extends _PliStage<_PliBScatter, _PliBS, Size> {
     c.drawLine(Offset(x0, cy), Offset(x1, cy), _pliLine(Grey.g26));
     for (var i = 0; i < 24; i++) {
       final x = x0 + (x1 - x0) * (i + .5) / 24;
-      c.drawCircle(Offset(x, cy + _plNoise(seed, i, 1) * 8 * a / max), 1.4, Paint()..color = x <= t ? Grey.g91 : Grey.g38);
+      c.drawCircle(Offset(x, cy + plNoise(seed, i, 1) * 8 * a / max), 1.4, Paint()..color = x <= t ? Grey.g91 : Grey.g38);
     }
     _pliKnob(c, Offset(t, cy), Grey.g95, hot: hot == _PliBS.amount, r: 3);
     _pliText(c, '${fmt(a.toDouble(), 0)} px', Offset(x1 + 8, cy), ink: Grey.g91, ay: .5);
@@ -848,7 +855,7 @@ class _PliC extends StatelessWidget {
       mark: CardMark.repeater,
       brief: ['$n copies', if (moved.isNotEmpty) moved.join(' · ')],
       children: [
-        _PlStrip(height: 48, painter: _RepPaint([for (final c in cs) (x: c.at.dx, y: c.at.dy, rot: c.rot, scale: c.scale, op: c.op)], n)),
+        PlStrip(height: 48, painter: RepPaint([for (final c in cs) (x: c.at.dx, y: c.at.dy, rot: c.rot, scale: c.scale, op: c.op)], n)),
         _PliCells([_pliNum(doc, id('count'), 'Count', min: 1, max: 200, perPx: .1, whole: true)]),
         Padding(
           padding: const EdgeInsets.only(top: 6, bottom: 2),
@@ -1007,7 +1014,7 @@ class _PliCGraphState extends _PliStage<_PliCGraph, _PliCH, _PliCRange> {
     c.drawPath(line, _pliLine(hot == _PliCH.end ? Grey.g100 : Grey.g91, 1.4));
     final step = math.max(1, (m / 48).ceil());
     for (var i = 0; i < m; i += step) {
-      c.drawCircle(Offset(_x(s, i, m), y(r.real(e, rr, i, _plNoise(seed, i, r.ch)))), 1.6, Paint()..color = rr > 0 ? Grey.g76 : Grey.g56);
+      c.drawCircle(Offset(_x(s, i, m), y(r.real(e, rr, i, plNoise(seed, i, r.ch)))), 1.6, Paint()..color = rr > 0 ? Grey.g76 : Grey.g56);
     }
     if (n > 1) _pliKnob(c, Offset(_x(s, m - 1, m), y(r.at(e, m - 1))), Grey.g95, hot: hot == _PliCH.end, r: 3);
     final gp = _grip(d, s, v), gw = hot == _PliCH.band ? 14.0 : 10.0;

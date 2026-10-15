@@ -1,4 +1,8 @@
-part of 'inspector_parts.dart';
+import 'package:flutter/gestures.dart';
+import 'package:flutter/widgets.dart';
+import '../../tokens.dart';
+import 'inspector_direct_transform.dart';
+import 'inspector_parts.dart';
 
 // ---- 8. the transform group ------------------------------------------------------------------------------------------
 class SpaceRow extends StatelessWidget {
@@ -113,9 +117,9 @@ class PosRow extends StatelessWidget {
       label: 'Position',
       ids: ['pos.x', 'pos.y', 'pos.z'],
       cells: [
-        NumField(id: 'pos.x', label: 'X', axis: _axX, unit: 'px', decimals: 1),
-        NumField(id: 'pos.y', label: 'Y', axis: _axY, unit: 'px', decimals: 1),
-        NumField(id: 'pos.z', label: 'Z', axis: _axZ, unit: 'px', decimals: 1),
+        NumField(id: 'pos.x', label: 'X', axis: axX, unit: 'px', decimals: 1),
+        NumField(id: 'pos.y', label: 'Y', axis: axY, unit: 'px', decimals: 1),
+        NumField(id: 'pos.z', label: 'Z', axis: axZ, unit: 'px', decimals: 1),
       ],
     );
   }
@@ -145,7 +149,7 @@ class ScaleRow extends StatelessWidget {
     }
 
     NumField cell(int i) =>
-        NumField(id: 'scale.${axes[i]}', label: axes[i].toUpperCase(), axis: _axes[i], unit: '%', decimals: 1, onSet: (v) => set(axes[i], v));
+        NumField(id: 'scale.${axes[i]}', label: axes[i].toUpperCase(), axis: axesParts[i], unit: '%', decimals: 1, onSet: (v) => set(axes[i], v));
     return PropRow(
       id: 'scale',
       label: 'Scale',
@@ -174,15 +178,15 @@ class RotRow extends StatelessWidget {
       label: 'Rotation',
       ids: ['rot.x', 'rot.y', 'rot.z'],
       cells: [
-        NumField(id: 'rot.x', label: 'X', axis: _axX, unit: '°', decimals: 1, perPx: .5),
-        NumField(id: 'rot.y', label: 'Y', axis: _axY, unit: '°', decimals: 1, perPx: .5),
-        NumField(id: 'rot.z', label: 'Z', axis: _axZ, unit: '°', decimals: 1, perPx: .5, turns: true),
+        NumField(id: 'rot.x', label: 'X', axis: axX, unit: '°', decimals: 1, perPx: .5),
+        NumField(id: 'rot.y', label: 'Y', axis: axY, unit: '°', decimals: 1, perPx: .5),
+        NumField(id: 'rot.z', label: 'Z', axis: axZ, unit: '°', decimals: 1, perPx: .5, turns: true),
       ],
     );
   }
 }
 
-const _anchorNames = ['Top left', 'Top', 'Top right', 'Left', 'Centre', 'Right', 'Bottom left', 'Bottom', 'Bottom right'];
+const anchorNames = ['Top left', 'Top', 'Top right', 'Left', 'Centre', 'Right', 'Bottom left', 'Bottom', 'Bottom right'];
 
 class AnchorRow extends StatelessWidget {
   const AnchorRow({super.key});
@@ -193,8 +197,8 @@ class AnchorRow extends StatelessWidget {
     ids: ['anchor.x', 'anchor.y'],
     lead: AnchorPad(),
     cells: [
-      NumField(id: 'anchor.x', label: 'X', axis: _axX, unit: '%', decimals: 0),
-      NumField(id: 'anchor.y', label: 'Y', axis: _axY, unit: '%', decimals: 0),
+      NumField(id: 'anchor.x', label: 'X', axis: axX, unit: '%', decimals: 0),
+      NumField(id: 'anchor.y', label: 'Y', axis: axY, unit: '%', decimals: 0),
     ],
   );
 }
@@ -241,7 +245,7 @@ class _AnchorPadState extends State<AnchorPad> {
     final sel = at == null ? null : [for (var i = 0; i < 9; i++) i].where((i) => _snap(i) == at).firstOrNull;
     final hot = doc.directHover == 'anchor';
     return Semantics(
-      label: 'Anchor: ${at == null ? 'Mixed' : (sel != null ? _anchorNames[sel] : 'Custom')}',
+      label: 'Anchor: ${at == null ? 'Mixed' : (sel != null ? anchorNames[sel] : 'Custom')}',
       child: MouseRegion(
         cursor: on ? SystemMouseCursors.precise : SystemMouseCursors.basic,
         onHover: (e) {
@@ -345,7 +349,7 @@ class DepthRow extends StatelessWidget {
   );
 }
 
-const _layers = [
+const layers = [
   'None',
   'Backdrop',
   'Hero title',
@@ -374,7 +378,7 @@ class ParentRow extends StatelessWidget {
     id: 'parent',
     label: 'Parent',
     keyable: false,
-    cells: [Chooser(id: 'parent', options: Ctx.of(context).doc.choices['parent'] ?? _layers, searchable: true)],
+    cells: [Chooser(id: 'parent', options: Ctx.of(context).doc.choices['parent'] ?? layers, searchable: true)],
   );
 }
 
@@ -387,23 +391,23 @@ class LayerTiles extends StatelessWidget {
     final doc = Ctx.of(context).doc, on = !Ctx.of(context).cfg.locked;
     Widget num(String id, String caption, Widget glyph, {required String unit, double? min, double? max, double perPx = 1, String? zeroWord}) => _Revealed(
       id: id,
-      child: _RowInfo(
+      child: RowInfo(
         unit: null,
         keys: doc.keys[id] ?? KeyS.off,
         child: NumField(id: id, caption: caption, glyph: glyph, unit: unit, min: min, max: max, perPx: perPx, zeroWord: zeroWord, enabled: on),
       ),
     );
-    return _LdGrid([
-      if (doc.seat('op')) _LdCell(num('op', 'Opacity', const ValueGlyph(ValueShape.opacity), unit: '%', min: 0, max: 100, perPx: .5)), // (a solid or a light has none)
-      _LdCell(
+    return LdGrid([
+      if (doc.seat('op')) LdCell(num('op', 'Opacity', const ValueGlyph(ValueShape.opacity), unit: '%', min: 0, max: 100, perPx: .5)), // (a solid or a light has none)
+      LdCell(
         _Revealed(
           id: 'parent',
-          child: _LdTile(
+          child: LdTile(
             label: 'Parent',
             glyph: const ValueGlyph(ValueShape.parent),
             child: SizedBox(
               height: 22,
-              child: Chooser(id: 'parent', options: doc.choices['parent'] ?? _layers, searchable: true, enabled: on),
+              child: Chooser(id: 'parent', options: doc.choices['parent'] ?? layers, searchable: true, enabled: on),
             ),
           ),
         ),

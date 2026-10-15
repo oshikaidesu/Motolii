@@ -1,4 +1,7 @@
-part of 'inspector_parts.dart';
+import 'dart:math' as math;
+import 'package:flutter/widgets.dart';
+import '../../tokens.dart';
+import 'inspector_parts.dart';
 
 // ---- host: path operations ------------------------------------------------------------------------------------------
 /// A path operation as the host ships it (motolii-render extensions/pathop.rs): its fields in display units (%, px, °),
@@ -27,9 +30,9 @@ Param _pc(String id, String label, List<String> o, {bool adv = false}) =>
     Param(id: id, label: label, look: ParamLook.choice, type: WType.u32, min: 0, max: o.length - 1.0, options: o, advanced: adv);
 Param _pp(String id, String label) => Param(id: id, label: label, look: ParamLook.point, type: WType.vec2, unit: 'px');
 
-const _multiples = ['Simultaneously', 'Individually'], _points = ['Corner', 'Smooth'], _joins = ['Miter', 'Round', 'Bevel'];
-String _sg(double v, [int dec = 0]) => '${v > 0 ? '+' : ''}${brief(v, dec)}';
-String _px(double v) => '${brief(v, 1)} px';
+const _multiples = ['Simultaneously', 'Individually'], points = ['Corner', 'Smooth'], joins = ['Miter', 'Round', 'Bevel'];
+String sgPaths(double v, [int dec = 0]) => '${v > 0 ? '+' : ''}${brief(v, dec)}';
+String px(double v) => '${brief(v, 1)} px';
 
 final _kPathOps = <_PathOp>[
   _PathOp('trim', 'Trim Paths', [
@@ -37,8 +40,8 @@ final _kPathOps = <_PathOp>[
     _pn('end', 'End', ParamLook.percent, 100, min: 0, max: 100, unit: '%'),
     _pn('offset', 'Offset', ParamLook.angle, 0, unit: '°'),
     _pc('multiple', 'Trim', _multiples),
-  ], (g) => ['${brief(g('start'), 0)}–${brief(g('end'), 0)}%', if (g('offset') != 0) '${_sg(g('offset'))}°', if (g('multiple') == 1) 'Individually']),
-  _PathOp('round', 'Rounded Corners', [_pn('radius', 'Radius', ParamLook.scrub, 10, min: 0, unit: 'px')], (g) => [_px(g('radius'))]),
+  ], (g) => ['${brief(g('start'), 0)}–${brief(g('end'), 0)}%', if (g('offset') != 0) '${sgPaths(g('offset'))}°', if (g('multiple') == 1) 'Individually']),
+  _PathOp('round', 'Rounded Corners', [_pn('radius', 'Radius', ParamLook.scrub, 10, min: 0, unit: 'px')], (g) => [px(g('radius'))]),
   _PathOp('pucker', 'Pucker & Bloat', [_pn('amount', 'Amount', ParamLook.bipolar, 0, min: -100, max: 100, unit: '%')], (g) {
     final a = g('amount');
     return [a == 0 ? '0%' : '${a < 0 ? 'Pucker' : 'Bloat'} ${brief(a.abs(), 0)}%'];
@@ -46,27 +49,27 @@ final _kPathOps = <_PathOp>[
   _PathOp('zigzag', 'Zig Zag', [
     _pn('amplitude', 'Size', ParamLook.scrub, 10, unit: 'px'),
     _pn('frequency', 'Ridges', ParamLook.stepper, 10, min: 0),
-    _pc('point_type', 'Points', _points),
-  ], (g) => [_px(g('amplitude')), '${brief(g('frequency'), 0)} ridges', if (g('point_type') == 1) 'Smooth']),
+    _pc('point_type', 'Points', points),
+  ], (g) => [px(g('amplitude')), '${brief(g('frequency'), 0)} ridges', if (g('point_type') == 1) 'Smooth']),
   _PathOp(
     'offset',
     'Offset Paths',
     [
       _pn('amount', 'Amount', ParamLook.scrub, 10, unit: 'px'),
-      _pc('join', 'Join', _joins),
+      _pc('join', 'Join', joins),
       _pn('miter_limit', 'Miter Limit', ParamLook.scrub, 4, min: 1, dec: 1),
     ],
-    (g) => ['${_sg(g('amount'), 1)} px', _joins[g('join').round().clamp(0, 2)]],
+    (g) => ['${sgPaths(g('amount'), 1)} px', joins[g('join').round().clamp(0, 2)]],
     when: {'miter_limit': (g) => g('join') == 0},
   ),
-  _PathOp('twist', 'Twist', [_pn('angle', 'Angle', ParamLook.angle, 0, unit: '°'), _pp('center', 'Center')], (g) => ['${_sg(g('angle'))}°']),
+  _PathOp('twist', 'Twist', [_pn('angle', 'Angle', ParamLook.angle, 0, unit: '°'), _pp('center', 'Center')], (g) => ['${sgPaths(g('angle'))}°']),
   _PathOp('wiggle', 'Wiggle Paths', [
     _pn('size', 'Size', ParamLook.scrub, 10, min: 0, unit: 'px'),
     _pn('detail', 'Detail', ParamLook.bar, 5, min: 1, max: 100),
     _pn('phase', 'Phase', ParamLook.angle, 0, unit: '°'),
     _pn('seed', 'Seed', ParamLook.seed, 1, min: 0, max: 9999, adv: true),
-    _pc('point_type', 'Points', _points, adv: true),
-  ], (g) => [_px(g('size')), 'Detail ${brief(g('detail'), 0)}', 'Seed ${brief(g('seed'), 0)}']),
+    _pc('point_type', 'Points', points, adv: true),
+  ], (g) => [px(g('size')), 'Detail ${brief(g('detail'), 0)}', 'Seed ${brief(g('seed'), 0)}']),
   _PathOp('smooth', 'Smooth', [
     _pn('strength', 'Strength', ParamLook.percent, 50, min: 0, max: 100, unit: '%'),
     _pn('iterations', 'Iterations', ParamLook.stepper, 1, min: 1, max: 50),
@@ -76,23 +79,23 @@ final _kPathOps = <_PathOp>[
   _PathOp('extend', 'Extend Paths', [
     _pn('start', 'Start', ParamLook.scrub, 0, unit: 'px'),
     _pn('end', 'End', ParamLook.scrub, 0, unit: 'px'),
-  ], (g) => ['${_sg(g('start'), 1)} / ${_sg(g('end'), 1)} px']),
+  ], (g) => ['${sgPaths(g('start'), 1)} / ${sgPaths(g('end'), 1)} px']),
   _PathOp('chop', 'Chop Path', [
     _pn('length', 'Length', ParamLook.scrub, 50, min: 0, unit: 'px'),
     _pn('gap', 'Gap', ParamLook.scrub, 10, min: 0, unit: 'px'),
   ], (g) => ['${brief(g('length'), 1)} on', '${brief(g('gap'), 1)} off']),
   _PathOp('resample', 'Resample', [
     _pn('spacing', 'Spacing', ParamLook.scrub, 20, min: 0, unit: 'px'),
-    _pc('point_type', 'Points', _points),
-  ], (g) => ['Every ${_px(g('spacing'))}', if (g('point_type') == 1) 'Smooth']),
-  _PathOp('bend', 'Bend', [_pn('angle', 'Angle', ParamLook.angle, 0, min: -360, max: 360, unit: '°'), _pp('center', 'Center')], (g) => ['${_sg(g('angle'))}°']),
+    _pc('point_type', 'Points', points),
+  ], (g) => ['Every ${px(g('spacing'))}', if (g('point_type') == 1) 'Smooth']),
+  _PathOp('bend', 'Bend', [_pn('angle', 'Angle', ParamLook.angle, 0, min: -360, max: 360, unit: '°'), _pp('center', 'Center')], (g) => ['${sgPaths(g('angle'))}°']),
   // contract: Frequency's 0–1000 is clamped below only; a bounded block scrubs range/200 per px, too coarse for a value around 2
   _PathOp('osc', 'Oscillator', [
     _pn('amplitude', 'Amplitude', ParamLook.scrub, 20, unit: 'px'),
     _pn('frequency', 'Frequency', ParamLook.scrub, 2, min: 0, dec: 1),
     _pn('offset', 'Offset', ParamLook.scrub, 0, dec: 1),
     _pn('detail', 'Detail', ParamLook.bar, 16, min: 2, max: 256, adv: true),
-  ], (g) => [_px(g('amplitude')), '${brief(g('frequency'), 1)} waves']),
+  ], (g) => [px(g('amplitude')), '${brief(g('frequency'), 1)} waves']),
 ];
 
 /// contract: the stack is `pop_order`, comma-separated instances (`trim1`); an instance is its kind plus a never-reused number,
@@ -258,7 +261,7 @@ class _OpLine extends StatelessWidget {
       child: Row(
         children: [
           SizedBox(
-            width: _briefX,
+            width: briefX,
             child: Row(
               children: [
                 const SizedBox(width: 8 + Pop.inset),
@@ -351,7 +354,7 @@ class _OpGhost extends StatelessWidget {
     ),
     child: Row(
       children: [
-        _OpGlyph(type),
+        OpGlyph(type),
         const SizedBox(width: 6),
         Text(name, style: T.title(Grey.g95).copyWith(fontSize: 12, fontWeight: FontWeight.w700)),
       ],
@@ -360,18 +363,18 @@ class _OpGhost extends StatelessWidget {
 }
 
 /// A menu that floats over the panel from its anchor and never pushes the cards below; it opens upward when there is no room under it.
-class _Float extends StatefulWidget {
-  const _Float({required this.anchor, required this.menu, required this.need, this.width, this.right = false});
+class Float extends StatefulWidget {
+  const Float({super.key, required this.anchor, required this.menu, required this.need, this.width, this.right = false});
   final Widget Function(bool open, VoidCallback toggle) anchor;
   final Widget Function(VoidCallback close) menu;
   final double need;
   final double? width;
   final bool right;
   @override
-  State<_Float> createState() => _FloatState();
+  State<Float> createState() => _FloatState();
 }
 
-class _FloatState extends State<_Float> {
+class _FloatState extends State<Float> {
   final _link = LayerLink(), _portal = OverlayPortalController();
   bool _up = false;
 
@@ -453,7 +456,7 @@ class _OpMore extends StatelessWidget {
       if (op.params.isNotEmpty) ('Reset to defaults', true, () => doc.resetIds(_popDefaults(inst, op).keys), false),
       ('Remove', true, () => _popSet(doc, o..remove(inst)), true),
     ];
-    return _Float(
+    return Float(
       right: true,
       width: 160,
       need: items.length * 22 + 8,
@@ -503,7 +506,7 @@ class _AddOp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final x = Ctx.of(context), doc = x.doc, rows = (_kPathOps.length / 2).ceil();
-    return _Float(
+    return Float(
       need: rows * _itemH + 8,
       anchor: (open, toggle) => Hov(
         onTap: x.cfg.locked ? null : toggle,
@@ -543,7 +546,7 @@ class _AddOp extends StatelessWidget {
                         decoration: BoxDecoration(color: h ? Grey.g26 : null, borderRadius: BorderRadius.circular(5)),
                         child: Row(
                           children: [
-                            _OpGlyph(op.id, hot: h),
+                            OpGlyph(op.id, hot: h),
                             const SizedBox(width: 6),
                             Expanded(
                               child: Text(op.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: T.name(h ? Grey.g95 : Grey.g76)),
@@ -563,8 +566,8 @@ class _AddOp extends StatelessWidget {
 }
 
 /// What each kind does to a line, drawn on one: a trimmed arc, a rounded corner, a zigzag.
-class _OpGlyph extends StatelessWidget {
-  const _OpGlyph(this.type, {this.hot = false});
+class OpGlyph extends StatelessWidget {
+  const OpGlyph(this.type, {super.key, this.hot = false});
   final String type;
   final bool hot;
   @override

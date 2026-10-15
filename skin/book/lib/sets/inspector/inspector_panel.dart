@@ -1,4 +1,9 @@
-part of 'inspector_parts.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
+import '../../parts/controls.dart';
+import '../../tokens.dart';
+import 'inspector_direct_transform.dart';
+import 'inspector_parts.dart';
 
 // ---- 13. the whole panel ----------------------------------------------------------------------------------------------
 /// The Inspector. Needs an InspHost above it. Tabs or one scrolling column is the Layout knob; P / S / R / T / A reveal their row (B7, I2).

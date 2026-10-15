@@ -1,6 +1,14 @@
-part of 'inspector_parts.dart';
+import 'dart:async';
+import 'dart:math' as math;
+import 'package:flutter/foundation.dart' show ValueListenable, ValueNotifier, listEquals, mapEquals, setEquals;
+import 'package:flutter/gestures.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
+import '../../parts/controls.dart';
+import '../../tokens.dart';
+import 'inspector_parts.dart';
 
-TextStyle _blockValue(Color c) => T.value(c).copyWith(fontSize: 14, fontWeight: FontWeight.w600, height: 1.1);
+TextStyle blockValue(Color c) => T.value(c).copyWith(fontSize: 14, fontWeight: FontWeight.w600, height: 1.1);
 
 class NumField extends StatefulWidget {
   const NumField({
@@ -207,7 +215,7 @@ class _NumFieldState extends State<NumField> {
       });
       return;
     }
-    final now = DateTime.now(), dbl = _lastUp != null && now.difference(_lastUp!) < _dbl;
+    final now = DateTime.now(), dbl = _lastUp != null && now.difference(_lastUp!) < dblParts;
     _lastUp = dbl ? null : now;
     final cfg = _x.cfg;
     if (dbl) {
@@ -219,7 +227,7 @@ class _NumFieldState extends State<NumField> {
       }
     } else if (cfg.resetDbl) {
       // contract: with double-click = reset, a single click types only after the double-click window, so no editor flashes (do-not-repeat 5).
-      _pending = Timer(_dbl, () {
+      _pending = Timer(dblParts, () {
         if (_x.doc.pickGen == _gen) _startEdit();
       });
     }
@@ -376,8 +384,8 @@ class _NumFieldState extends State<NumField> {
       builder: (context, box) {
         final w = box.maxWidth;
         _w = w;
-        final row = pop ? _RowInfo.of(context) : null;
-        final showUnit = w >= _wUnit && !narrow && row?.unit == null, tight = w < _wTight;
+        final row = pop ? RowInfo.of(context) : null;
+        final showUnit = w >= wUnit && !narrow && row?.unit == null, tight = w < wTight;
         final t = (_bounded && v != null) ? ((v - widget.min!) / (widget.max! - widget.min!)).clamp(0.0, 1.0) : 0.0;
         String unit = widget.unit ?? '';
         if (widget.turns && v != null && v.abs() >= 360 && w >= 120) unit = '° ${(v / 360).truncate()}x ${fmt(v.remainder(360), 0)}';
@@ -391,7 +399,7 @@ class _NumFieldState extends State<NumField> {
                 TextSpan(
                   text: fmt(v, widget.decimals, tight: tight), // (its places fixed, as Push shows them: a number does not jump in width as it moves)
                   style: widget.caption != null
-                      ? _blockValue(on ? Grey.g95 : Grey.g56)
+                      ? blockValue(on ? Grey.g95 : Grey.g56)
                       : pop
                       ? T.value(on ? Grey.g95 : Grey.g56).copyWith(fontWeight: FontWeight.w600)
                       : T.value(on ? Grey.g95 : Grey.g56),
@@ -427,7 +435,7 @@ class _NumFieldState extends State<NumField> {
                         : null));
         final block = widget.caption != null;
         final body = Container(
-          height: block ? Pop.tile : (pop ? Pop.cell : _cellH),
+          height: block ? Pop.tile : (pop ? Pop.cell : cellH),
           decoration: BoxDecoration(
             color: fillC,
             borderRadius: BorderRadius.circular(pop ? 6 : 4),
@@ -491,7 +499,7 @@ class _NumFieldState extends State<NumField> {
                               child: EditableText(
                                 controller: _ctl,
                                 focusNode: _ef,
-                                style: _blockValue(Grey.g95),
+                                style: blockValue(Grey.g95),
                                 cursorColor: Grey.g95,
                                 backgroundCursorColor: Grey.g20,
                                 selectionColor: Role.selected.withValues(alpha: .4),

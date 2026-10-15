@@ -1,4 +1,11 @@
-part of 'inspector_parts.dart';
+import 'dart:async';
+import 'dart:math' as math;
+import 'package:flutter/foundation.dart' show ValueListenable, ValueNotifier, listEquals, mapEquals, setEquals;
+import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
+import '../../parts/controls.dart';
+import '../../tokens.dart';
+import 'inspector_parts.dart';
 
 enum Editorial { a, b, c }
 

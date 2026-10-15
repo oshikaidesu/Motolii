@@ -1,4 +1,6 @@
-part of 'inspector_parts.dart';
+import 'package:flutter/widgets.dart';
+import '../../tokens.dart';
+import 'inspector_parts.dart';
 
 /// Ideas for host features where the panel does the work: small stages inside cards, edited in place, so nothing fights the Stage's gizmos.
 /// One column per topic; each idea is labelled with its letter and its pitch.

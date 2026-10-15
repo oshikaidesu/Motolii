@@ -1,69 +1,62 @@
 // Inspector parts. What the Inspector must DO comes from research/intents/inspector.md (Yes cards built, Maybe cards behind cfg.maybe).
 // How it LOOKS is the lab's (DESIGN.md): hairlines, type carries hierarchy, grey levels, accent only C.mode. The old Motolii is not a source.
 // Open questions are Cfg fields (knobs in inspector_set.dart); every behaviour below follows them.
-import 'dart:async';
-import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart' show ValueListenable, ValueNotifier, listEquals, mapEquals, setEquals;
-import 'package:flutter/gestures.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
-import '../../parts/controls.dart';
-import '../../parts/glyphs.dart';
-import '../../parts/relations.dart';
 import '../../tokens.dart';
-import 'inspector_direct_transform.dart';
-import 'param_infer.dart';
 
 export 'param_infer.dart';
 
-part 'inspector_state.dart';
-part 'inspector_number_field.dart';
-part 'inspector_small.dart';
-part 'inspector_rows.dart';
-part 'inspector_badges.dart';
-part 'inspector_choosers_header.dart';
-part 'inspector_transform_rows.dart';
-part 'inspector_anchor.dart';
-part 'inspector_material.dart';
-part 'inspector_effects.dart';
-part 'inspector_param_controls.dart';
-part 'inspector_camera_layout.dart';
-part 'inspector_relations.dart';
-part 'inspector_panel.dart';
-part 'inspector_host_gallery.dart';
-part 'inspector_host_placement.dart';
-part 'inspector_host_paths.dart';
-part 'inspector_host_text.dart';
-part 'inspector_host_layer.dart';
-part 'inspector_host_particles.dart';
-part 'inspector_host_scene.dart';
-part 'inspector_idea_gallery.dart';
-part 'inspector_idea_text.dart';
-part 'inspector_idea_paths.dart';
-part 'inspector_idea_layout.dart';
-part 'inspector_idea_placement.dart';
-part 'inspector_idea_layer.dart';
-part 'inspector_panel_link.dart';
-part 'inspector_advanced.dart';
+import 'inspector_state.dart';
+export 'inspector_state.dart';
+export 'inspector_number_field.dart';
+export 'inspector_small.dart';
+export 'inspector_rows.dart';
+export 'inspector_badges.dart';
+export 'inspector_choosers_header.dart';
+export 'inspector_transform_rows.dart';
+export 'inspector_anchor.dart';
+export 'inspector_material.dart';
+import 'inspector_effects.dart';
+export 'inspector_effects.dart';
+export 'inspector_param_controls.dart';
+export 'inspector_camera_layout.dart';
+export 'inspector_relations.dart';
+export 'inspector_panel.dart';
+export 'inspector_host_gallery.dart';
+export 'inspector_host_placement.dart';
+export 'inspector_host_paths.dart';
+export 'inspector_host_text.dart';
+export 'inspector_host_layer.dart';
+export 'inspector_host_particles.dart';
+export 'inspector_host_scene.dart';
+export 'inspector_idea_gallery.dart';
+export 'inspector_idea_text.dart';
+export 'inspector_idea_paths.dart';
+export 'inspector_idea_layout.dart';
+export 'inspector_idea_placement.dart';
+export 'inspector_idea_layer.dart';
+export 'inspector_panel_link.dart';
+export 'inspector_advanced.dart';
 
 // ---- 0. open values -------------------------------------------------------------------------------------------------
 // [open] a value cell's height (the lab's ValueWell is 22; rows are 24 on the 4px rhythm; B uses 22).
-const _cellH = 22.0;
+const cellH = 22.0;
 // [open] one narrowing rule for the whole panel (H1): a cell narrower than _wUnit drops its unit, narrower than _wTight drops decimals (never to a false 0).
-const _wUnit = 72.0, _wTight = 60.0;
+const wUnit = 72.0, wTight = 60.0;
 // [open] a third value stacks under the first two when a cell would be narrower than this.
-const _stack3 = 72.0;
+const stack3 = 72.0;
 // [open] the label column (wide / narrow panel).
-const _labelW = 88.0, _labelWNarrow = 76.0, _labelWPop = 104.0;
+const labelW = 88.0, labelWNarrow = 76.0, labelWPop = 104.0;
 // [open] the width of the key mark's and reset mark's columns.
-const _keyW = 22.0, _resetW = 18.0;
+const keyW = 22.0, resetW = 18.0;
 // [open] axis colours: X / Y / Z ticks reuse relation-family hues (the only hue outside relations).
-const _axX = Color(0xFFE974AB), _axY = Color(0xFF7DD5B1), _axZ = Color(0xFF4781E5);
-const _axes = [_axX, _axY, _axZ];
+const axX = Color(0xFFE974AB), axY = Color(0xFF7DD5B1), axZ = Color(0xFF4781E5);
+const axesParts = [axX, axY, axZ];
 // [open] two clicks within this are a double click.
-const _dbl = Duration(milliseconds: 320);
+const dblParts = Duration(milliseconds: 320);
 
 /// Set by a row: its controls are off (locked, driven or disabled) and whether the panel is narrow (units go everywhere at once).
 class RowOff extends InheritedWidget {

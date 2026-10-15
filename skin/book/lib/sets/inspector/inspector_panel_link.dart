@@ -1,4 +1,6 @@
-part of 'inspector_parts.dart';
+import 'package:flutter/widgets.dart';
+import '../../tokens.dart';
+import 'inspector_parts.dart';
 
 /// The panels that own lists (fonts, colours, eases). The Inspector shows what is set and sends you there; it never holds the list.
 enum LinkTo {
@@ -69,7 +71,7 @@ class LinkLine extends StatelessWidget {
         child: Row(
           children: [
             Expanded(
-              child: Text(value, maxLines: 1, overflow: TextOverflow.ellipsis, style: _blockValue(off ? Grey.g56 : Grey.g95)),
+              child: Text(value, maxLines: 1, overflow: TextOverflow.ellipsis, style: blockValue(off ? Grey.g56 : Grey.g95)),
             ),
             Text(to.shelf, style: T.micro(h && !off ? Grey.g95 : Grey.g56)),
             const SizedBox(width: 2),
@@ -90,7 +92,7 @@ class LinkSwatch extends StatelessWidget {
     width: 14,
     height: 14,
     decoration: BoxDecoration(
-      color: _hex(hex) ?? Grey.g95,
+      color: hexControls(hex) ?? Grey.g95,
       borderRadius: BorderRadius.circular(3),
       border: Border.all(color: Grey.g38),
     ),

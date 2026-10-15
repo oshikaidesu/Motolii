@@ -1,4 +1,7 @@
-part of 'inspector_parts.dart';
+import 'package:flutter/widgets.dart';
+import '../../parts/relations.dart';
+import '../../tokens.dart';
+import 'inspector_parts.dart';
 
 // ---- 12. relations ----------------------------------------------------------------------------------------------------
 /// The relation card and rows come from the lab's relations part (RelationCard); only the section around them is here.

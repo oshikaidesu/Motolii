@@ -1,4 +1,7 @@
-part of 'inspector_parts.dart';
+import 'dart:math' as math;
+import 'package:flutter/widgets.dart';
+import '../../tokens.dart';
+import 'inspector_parts.dart';
 
 // ---- idea: text -------------------------------------------------------------------------------------------------------
 /// contract: mirrors motolii-doc store/text.rs — runs over the content, each with its own style (size, wght axis, fill);
@@ -97,7 +100,7 @@ TextStyle _txStyle(_TxSt s, Doc d, double base) {
     fontFamilyFallback: const ['.AppleSystemUIFont'],
     fontSize: px,
     fontWeight: _txW(s.w),
-    color: T.ink(_hex(s.fill) ?? Grey.g95),
+    color: T.ink(hexControls(s.fill) ?? Grey.g95),
     height: 1.3,
     decoration: TextDecoration.none,
   );
@@ -360,7 +363,7 @@ class _TxAlign extends StatelessWidget {
                     borderRadius: BorderRadius.circular(4),
                     border: Border(bottom: BorderSide(color: i == at ? Role.selected : const Color(0x00000000))),
                   ),
-                  child: CustomPaint(size: const Size(12, 9), painter: _ParaJustPaint(i, i == at)),
+                  child: CustomPaint(size: const Size(12, 9), painter: ParaJustPaint(i, i == at)),
                 ),
               ),
             ),

@@ -1,4 +1,6 @@
-part of 'inspector_parts.dart';
+import 'package:flutter/widgets.dart';
+import '../../parts/controls.dart';
+import 'inspector_parts.dart';
 
 // ---- 11. camera and layout ------------------------------------------------------------------------------------------
 /// D4 (maybe): a group's key mark keys every member at once.
@@ -47,7 +49,7 @@ class CameraGroup extends StatelessWidget {
               label: 'Layer',
               keyable: false,
               cells: [
-                Chooser(id: 'camTarget', options: _layers, searchable: true),
+                Chooser(id: 'camTarget', options: layers, searchable: true),
               ],
             ),
             PropRow(
@@ -59,21 +61,21 @@ class CameraGroup extends StatelessWidget {
                 NumField(
                   id: 'cam.t.x',
                   label: 'X',
-                  axis: _axX,
+                  axis: axX,
                   unit: 'px',
                   enabled: !driven,
                 ),
                 NumField(
                   id: 'cam.t.y',
                   label: 'Y',
-                  axis: _axY,
+                  axis: axY,
                   unit: 'px',
                   enabled: !driven,
                 ),
                 NumField(
                   id: 'cam.t.z',
                   label: 'Z',
-                  axis: _axZ,
+                  axis: axZ,
                   unit: 'px',
                   enabled: !driven,
                 ),

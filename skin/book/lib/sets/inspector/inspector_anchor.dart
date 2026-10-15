@@ -1,4 +1,9 @@
-part of 'inspector_parts.dart';
+import 'dart:math' as math;
+import 'package:flutter/gestures.dart';
+import 'package:flutter/widgets.dart';
+import '../../tokens.dart';
+import 'inspector_direct_transform.dart';
+import 'inspector_parts.dart';
 
 const _depthNames = {-50: 'Front', 0: 'Middle', 50: 'Back'};
 
@@ -6,7 +11,7 @@ String anchorName(double? x, double? y, double? z) {
   if (x == null || y == null || z == null) return 'Mixed';
   final grid = x % 50 == 0 && y % 50 == 0 && z % 50 == 0 && x >= 0 && x <= 100 && y >= 0 && y <= 100 && z.abs() <= 50; // (an anchor outside the box is Custom)
   if (!grid) return 'Custom';
-  return '${_anchorNames[(y ~/ 50) * 3 + x ~/ 50]} · ${_depthNames[z.toInt()]}';
+  return '${anchorNames[(y ~/ 50) * 3 + x ~/ 50]} · ${_depthNames[z.toInt()]}';
 }
 
 /// The anchor in its own card: rarely moved, so it folds away and names itself; open, it is a box to point into.

@@ -1,4 +1,9 @@
-part of 'inspector_parts.dart';
+import 'dart:math' as math;
+import 'package:flutter/gestures.dart';
+import 'package:flutter/widgets.dart';
+import '../../parts/controls.dart';
+import '../../tokens.dart';
+import 'inspector_parts.dart';
 
 // ---- Layout ideas: the container's CSS flex / grid lines edited on a live, solved preview ----------------------------
 // Model: motolii-doc store/layout.rs (GROUP_ROWS / ITEM_ROWS). The preview solves its own small flex + grid (CSS rules, below).

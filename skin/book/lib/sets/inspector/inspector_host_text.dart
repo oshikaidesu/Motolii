@@ -1,4 +1,7 @@
-part of 'inspector_parts.dart';
+import 'dart:math' as math;
+import 'package:flutter/widgets.dart';
+import '../../tokens.dart';
+import 'inspector_parts.dart';
 
 // ---- host: text ---------------------------------------------------------------------------------------------------------
 /// contract: names follow motolii-doc store/text.rs (TextBasedOn, TextRangeUnits, TextShape, TextGrouping, TextJustify) and vector/text.rs (the CSS trio).
@@ -309,10 +312,10 @@ class TextAnimatorCard extends StatelessWidget {
                 1,
                 _TaBlock(
                   label: p.label,
-                  glyph: _Swatch(doc.s2['ta_${p.id}']),
+                  glyph: Swatch(doc.s2['ta_${p.id}']),
                   child: Align(
                     alignment: Alignment.centerLeft,
-                    child: Text(doc.s2['ta_${p.id}'] ?? '—', maxLines: 1, overflow: TextOverflow.ellipsis, style: _blockValue(on ? Grey.g95 : Grey.g56)),
+                    child: Text(doc.s2['ta_${p.id}'] ?? '—', maxLines: 1, overflow: TextOverflow.ellipsis, style: blockValue(on ? Grey.g95 : Grey.g56)),
                   ),
                 ),
               )
@@ -644,7 +647,7 @@ class ParagraphCard extends StatelessWidget {
           _taTile('para', _paraMain[2]),
           (
             1,
-            _RowInfo(
+            RowInfo(
               unit: null,
               keys: doc.keys['para_leading'] ?? KeyS.off,
               child: NumField(
@@ -699,7 +702,7 @@ class _ParaJustify extends StatelessWidget {
                         borderRadius: BorderRadius.circular(5),
                         border: Border(bottom: BorderSide(color: i == index ? Role.selected : const Color(0x00000000))),
                       ),
-                      child: CustomPaint(size: const Size(14, 10), painter: _ParaJustPaint(i, i == index)),
+                      child: CustomPaint(size: const Size(14, 10), painter: ParaJustPaint(i, i == index)),
                     ),
                   ),
                 ),
@@ -711,8 +714,8 @@ class _ParaJustify extends StatelessWidget {
   }
 }
 
-class _ParaJustPaint extends CustomPainter {
-  const _ParaJustPaint(this.align, this.on);
+class ParaJustPaint extends CustomPainter {
+  const ParaJustPaint(this.align, this.on);
   final int align;
   final bool on;
   @override
@@ -733,7 +736,7 @@ class _ParaJustPaint extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_ParaJustPaint o) => o.align != align || o.on != on;
+  bool shouldRepaint(ParaJustPaint o) => o.align != align || o.on != on;
 }
 
 /// Leading as three lines whose gap follows the value (Auto draws the font's own gap).

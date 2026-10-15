@@ -1,4 +1,8 @@
-part of 'inspector_parts.dart';
+import 'dart:math' as math;
+import 'package:flutter/widgets.dart';
+import '../../parts/controls.dart';
+import '../../tokens.dart';
+import 'inspector_parts.dart';
 
 // ---- host features: placement (motolii-render extensions placement.rs / blob.rs / motion.rs) --------------------------
 const _plShapes = ['Line', 'Circle', 'Grid'], _plPicks = ['Random', 'Iterate'], _plTransforms = ['Each', 'Whole'];
@@ -74,7 +78,7 @@ Widget _plNum(
   bool tall = false,
 }) {
   final doc = Ctx.of(context).doc;
-  return _RowInfo(
+  return RowInfo(
     unit: null,
     keys: doc.keys[id] ?? KeyS.off,
     child: NumField(
@@ -96,9 +100,9 @@ Widget _plNum(
   );
 }
 
-Widget _plGauge(double? v, [Param p = _plUnit, _GaugeKind k = _GaugeKind.across]) => SizedBox.square(
+Widget _plGauge(double? v, [Param p = _plUnit, GaugeKind k = GaugeKind.across]) => SizedBox.square(
   dimension: Pop.glyph,
-  child: FittedBox(child: _Gauge(k, v, p)),
+  child: FittedBox(child: Gauge(k, v, p)),
 );
 
 Param _plCount(double lo, double hi) => Param(id: 'n', label: '', look: ParamLook.stepper, type: WType.u32, min: lo, max: hi, def: lo);
@@ -172,8 +176,8 @@ class _PlSub extends StatelessWidget {
 }
 
 /// A live picture as wide as the card. contract: dragging it moves both axes (it is a glyph, not a number); one drag is one undo.
-class _PlStrip extends StatelessWidget {
-  const _PlStrip({required this.painter, this.height = 56, this.onDrag});
+class PlStrip extends StatelessWidget {
+  const PlStrip({super.key, required this.painter, this.height = 56, this.onDrag});
   final CustomPainter painter;
   final double height;
   final ValueChanged<Offset>? onDrag;
@@ -203,7 +207,7 @@ class _PlStrip extends StatelessWidget {
 }
 
 /// Same (seed, index, channel) gives the same value in [-1, 1].
-double _plNoise(int seed, int i, int ch) {
+double plNoise(int seed, int i, int ch) {
   var h = (seed * 73856093) ^ (i * 19349663) ^ (ch * 83492791);
   h = ((h ^ (h >> 13)) * 1274126177) & 0x7FFFFFFF;
   h ^= h >> 16;
@@ -254,7 +258,7 @@ List<_PlCopy> _repCopies(Doc doc) {
   return [
     for (var i = 0; i < math.min(n, 400); i++)
       () {
-        double u(int ch) => _plNoise(seed, i, ch);
+        double u(int ch) => plNoise(seed, i, ch);
         var (x, y) = switch (mode) {
           1 => () {
             final a = (start + sweep * (sweep >= 360 ? i / n : i / (math.max(n, 2) - 1))) * math.pi / 180;
@@ -276,8 +280,8 @@ List<_PlCopy> _repCopies(Doc doc) {
   ];
 }
 
-class _RepPaint extends CustomPainter {
-  const _RepPaint(this.copies, this.total);
+class RepPaint extends CustomPainter {
+  const RepPaint(this.copies, this.total);
   final List<_PlCopy> copies;
   final int total;
   @override
@@ -326,7 +330,7 @@ class _RepPaint extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_RepPaint o) => o.copies != copies || o.total != total;
+  bool shouldRepaint(RepPaint o) => o.copies != copies || o.total != total;
 }
 
 /// The start and sweep of a circle as an arc.
@@ -432,11 +436,11 @@ class _RepMatrix extends StatelessWidget {
               height: 14,
               child: Row(
                 children: [
-                  const SizedBox(width: _labelWPop),
+                  const SizedBox(width: labelWPop),
                   head('Each'),
                   const SizedBox(width: 4),
                   head('Random'),
-                  if (cfg.resetArrow) const SizedBox(width: _resetW),
+                  if (cfg.resetArrow) const SizedBox(width: resetW),
                 ],
               ),
             ),
@@ -447,7 +451,7 @@ class _RepMatrix extends StatelessWidget {
             ids: [?r.each, r.rand],
             label: r.label,
             enabled: enabled,
-            lead: r.mk != null ? _PlMark(r.mk!) : _Dice(id: r.rand, p: _plCount(0, r.rhi ?? 9999)),
+            lead: r.mk != null ? _PlMark(r.mk!) : Dice(id: r.rand, p: _plCount(0, r.rhi ?? 9999)),
             cells: [
               if (r.each case final e?)
                 NumField(id: e, unit: r.unit, decimals: r.dec, min: r.lo, max: r.hi, perPx: r.perPx, step: r.dec > 0 ? .1 : 1, bipolar: r.lo != null)
@@ -502,7 +506,7 @@ class RepeaterCard extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _PlStrip(painter: _RepPaint(copies, total)),
+              PlStrip(painter: RepPaint(copies, total)),
               _PlGrid([
                 [
                   (
@@ -516,7 +520,7 @@ class RepeaterCard extends StatelessWidget {
                       perPx: .2,
                       whole: true,
                       tick: false,
-                      glyph: _Steps(id: 'rep_count', p: _plCount(1, 1000)),
+                      glyph: Steps(id: 'rep_count', p: _plCount(1, 1000)),
                       owns: true,
                       tall: true,
                     ),
@@ -536,7 +540,7 @@ class RepeaterCard extends StatelessWidget {
                         perPx: .1,
                         whole: true,
                         tick: false,
-                        glyph: _Steps(id: 'rep_columns', p: _plCount(1, 1000)),
+                        glyph: Steps(id: 'rep_columns', p: _plCount(1, 1000)),
                         owns: true,
                         tall: true,
                       ),
@@ -550,7 +554,7 @@ class RepeaterCard extends StatelessWidget {
                         'rep_start',
                         'Start',
                         unit: '°',
-                        glyph: _AngleDial(
+                        glyph: AngleDial(
                           id: 'rep_start',
                           p: const Param(id: 'start', label: '', look: ParamLook.angle, type: WType.f32),
                         ),
@@ -641,7 +645,7 @@ class MirrorCard extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _PlStrip(
+              PlStrip(
                 height: 64,
                 painter: _MirPaint(mode, seg, cx, cy),
                 onDrag: (d) =>
@@ -663,7 +667,7 @@ class MirrorCard extends StatelessWidget {
                         max: 64,
                         perPx: .1,
                         whole: true,
-                        glyph: _Steps(id: 'mir_segments', p: _plCount(2, 64)),
+                        glyph: Steps(id: 'mir_segments', p: _plCount(2, 64)),
                         owns: true,
                         tall: true,
                       ),
@@ -737,7 +741,7 @@ class BlobTrackCard extends StatelessWidget {
                     (1, unit('blob_red', 'Red')),
                     (1, unit('blob_green', 'Green')),
                     (1, unit('blob_blue', 'Blue')),
-                    (1, _plNum(context, 'blob_tolerance', 'Tolerance', dec: 2, min: 0, max: 2, perPx: .01, glyph: _Swatch(hex))),
+                    (1, _plNum(context, 'blob_tolerance', 'Tolerance', dec: 2, min: 0, max: 2, perPx: .01, glyph: Swatch(hex))),
                   ],
                 ]),
               ],

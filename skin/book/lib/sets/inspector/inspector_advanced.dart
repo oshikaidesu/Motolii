@@ -1,4 +1,6 @@
-part of 'inspector_parts.dart';
+import 'package:flutter/widgets.dart';
+import '../../tokens.dart';
+import 'inspector_parts.dart';
 
 /// Values that seldom change (seeds, point types, limits): folded at the card's foot, never removed.
 /// contract: nothing the host can set is hidden from the user — what is rarely touched goes here instead.

@@ -1,4 +1,7 @@
-part of 'inspector_parts.dart';
+import 'dart:math' as math;
+import 'package:flutter/widgets.dart';
+import '../../tokens.dart';
+import 'inspector_parts.dart';
 
 // ---- host: particles ---------------------------------------------------------------------------------------------------
 /// The particle layer's table (motolii-doc store/particles.rs ROWS): lengths in comp px, time in seconds, angles in degrees (0 = right, -90 = up).
@@ -170,7 +173,7 @@ class _PtAngle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final doc = Ctx.of(context).doc, prm = _ptMotion[p], id = 'pt_${prm.id}';
-    return _RowInfo(
+    return RowInfo(
       unit: null,
       keys: doc.keys[id] ?? KeyS.off,
       child: NumField(
@@ -272,7 +275,7 @@ class _PtColour extends StatelessWidget {
       decoration: BoxDecoration(color: Pop.well, borderRadius: BorderRadius.circular(6)),
       child: Stack(
         children: [
-          Positioned(right: Pop.tilePad - 3, top: 4, width: Pop.glyph, height: Pop.glyph, child: _Swatch(x.doc.s2[id])),
+          Positioned(right: Pop.tilePad - 3, top: 4, width: Pop.glyph, height: Pop.glyph, child: Swatch(x.doc.s2[id])),
           Padding(
             padding: const EdgeInsets.fromLTRB(Pop.tilePad, 6, Pop.glyph + Pop.tilePad, 3),
             child: Column(
@@ -361,7 +364,7 @@ class _PtPreview extends StatelessWidget {
           Positioned.fill(
             child: ClipRRect(
               borderRadius: BorderRadius.circular(6),
-              child: CustomPaint(painter: _SprayPaint(q, _hex(doc.s2['pt_color']) ?? Grey.g95, _hex(doc.s2['pt_color_end']) ?? Grey.g95)),
+              child: CustomPaint(painter: _SprayPaint(q, hexControls(doc.s2['pt_color']) ?? Grey.g95, hexControls(doc.s2['pt_color_end']) ?? Grey.g95)),
             ),
           ),
           Positioned(left: 7, top: 6, child: Text('${alive.round()} alive', style: T.label(Grey.g56))),
@@ -473,8 +476,8 @@ class _PtRamp extends StatelessWidget {
                   doc.get('pt_size') ?? 0,
                   doc.get('pt_size_end') ?? 0,
                   doc.get('pt_opacity_end') ?? 0,
-                  _hex(doc.s2['pt_color']) ?? Grey.g95,
-                  _hex(doc.s2['pt_color_end']) ?? Grey.g95,
+                  hexControls(doc.s2['pt_color']) ?? Grey.g95,
+                  hexControls(doc.s2['pt_color_end']) ?? Grey.g95,
                 ),
               ),
             ),

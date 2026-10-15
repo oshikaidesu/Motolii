@@ -1,4 +1,9 @@
-part of 'inspector_parts.dart';
+import 'dart:math' as math;
+import 'package:flutter/gestures.dart';
+import 'package:flutter/widgets.dart';
+import '../../parts/controls.dart';
+import '../../tokens.dart';
+import 'inspector_parts.dart';
 
 // ---- ideas: path operations -----------------------------------------------------------------------------------------
 /// Three ways to edit path operations inside the Inspector, each drawing the real result of the ops in Dart.
@@ -373,30 +378,30 @@ final _piKinds = <String, _PiK>{
     final a = g('amount');
     return [a == 0 ? '0%' : '${a < 0 ? 'Pucker' : 'Bloat'} ${brief(a.abs(), 0)}%'];
   }),
-  'round': _PiK('Rounded Corners', 'Round', const {'radius': 8}, (g) => [_px(g('radius'))]),
+  'round': _PiK('Rounded Corners', 'Round', const {'radius': 8}, (g) => [px(g('radius'))]),
   'zigzag': _PiK('Zig Zag', 'Zig Zag', const {
     'amp': 6,
     'ridges': 5,
     'pt': 0,
-  }, (g) => [_px(g('amp')), '${brief(g('ridges'), 0)} ridges', if (g('pt') == 1) 'Smooth']),
+  }, (g) => [px(g('amp')), '${brief(g('ridges'), 0)} ridges', if (g('pt') == 1) 'Smooth']),
   'offset': _PiK('Offset Paths', 'Offset', const {
     'amount': 6,
     'join': 1,
     'miter': 4,
-  }, (g) => ['${_sg(g('amount'), 1)} px', _joins[g('join').round().clamp(0, 2)]]),
-  'twist': _PiK('Twist', 'Twist', const {'angle': 40, 'cx': 0, 'cy': 0}, (g) => ['${_sg(g('angle'))}°']),
+  }, (g) => ['${sgPaths(g('amount'), 1)} px', joins[g('join').round().clamp(0, 2)]]),
+  'twist': _PiK('Twist', 'Twist', const {'angle': 40, 'cx': 0, 'cy': 0}, (g) => ['${sgPaths(g('angle'))}°']),
   'wiggle': _PiK('Wiggle Paths', 'Wiggle', const {
     'size': 5,
     'detail': 6,
     'phase': 0,
     'seed': 1,
     'pt': 1,
-  }, (g) => [_px(g('size')), 'Seed ${brief(g('seed'), 0)}']),
+  }, (g) => [px(g('size')), 'Seed ${brief(g('seed'), 0)}']),
   'trim': _PiK('Trim Paths', 'Trim', const {
     'start': 0,
     'end': 72,
     'offset': 0,
-  }, (g) => ['${brief(g('start'), 0)}–${brief(g('end'), 0)}%', if (g('offset') != 0) '${_sg(g('offset'))}°']),
+  }, (g) => ['${brief(g('start'), 0)}–${brief(g('end'), 0)}%', if (g('offset') != 0) '${sgPaths(g('offset'))}°']),
 };
 
 // ---- stacks of instances --------------------------------------------------------------------------------------------
@@ -482,7 +487,7 @@ class _PiMore extends StatelessWidget {
       ('Duplicate', i >= 0, () => picked(_piAdd(doc, lane, _piKind(inst), at: i + 1, copy: inst)), false),
       ('Remove', i >= 0, () => _piSetOrder(doc, lane, o..remove(inst)), true),
     ];
-    return _Float(
+    return Float(
       right: true,
       width: 160,
       need: items.length * 22 + 8,
@@ -536,7 +541,7 @@ class _PiAdd extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final x = Ctx.of(context), doc = x.doc, kinds = _piKinds.keys.toList(), rows = (kinds.length / 2).ceil();
-    return _Float(
+    return Float(
       need: rows * _itemH + 8,
       anchor: (open, toggle) => Hov(
         key: ValueKey('pi_${lane}_add'),
@@ -580,7 +585,7 @@ class _PiAdd extends StatelessWidget {
                         decoration: BoxDecoration(color: h ? Grey.g26 : null, borderRadius: BorderRadius.circular(5)),
                         child: Row(
                           children: [
-                            _OpGlyph(k, hot: h),
+                            OpGlyph(k, hot: h),
                             const SizedBox(width: 6),
                             Expanded(
                               child: Text(_piKinds[k]!.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: T.name(h ? Grey.g95 : Grey.g76)),
@@ -623,15 +628,15 @@ class _PiFields extends StatelessWidget {
     final (List<Widget> cells, Widget? choice) = switch (op) {
       'round' => ([f('radius', 'Radius', u: 'px', min: 0, dec: 1, perPx: .5)], null),
       'pucker' => ([f('amount', 'Amount', u: '%', min: -100, max: 100, bi: true)], null),
-      'zigzag' => ([f('amp', 'Size', u: 'px', dec: 1, perPx: .25), f('ridges', 'Ridges', min: 0, max: 60, perPx: .1, whole: true)], seg('pt', _points)),
+      'zigzag' => ([f('amp', 'Size', u: 'px', dec: 1, perPx: .25), f('ridges', 'Ridges', min: 0, max: 60, perPx: .1, whole: true)], seg('pt', points)),
       'offset' => (
         [f('amount', 'Amount', u: 'px', dec: 1, perPx: .25), if (g('join') == 0) f('miter', 'Miter', min: 1, dec: 1, perPx: .05)],
-        seg('join', _joins),
+        seg('join', joins),
       ),
       'twist' => ([f('angle', 'Angle', u: '°'), f('cx', 'X', u: 'px'), f('cy', 'Y', u: 'px')], null),
       'wiggle' => (
         [f('size', 'Size', min: 0, dec: 1, perPx: .25), f('detail', 'Detail', min: 1, max: 100, perPx: .25, whole: true), f('phase', 'Phase', u: '°')],
-        seg('pt', _points),
+        seg('pt', points),
       ),
       'trim' => ([f('start', 'Start', u: '%', min: 0, max: 100), f('end', 'End', u: '%', min: 0, max: 100), f('offset', 'Offset', u: '°')], null),
       _ => (const <Widget>[], null),
@@ -1031,7 +1036,7 @@ List<_PiH> _piHandlesA(Doc doc, String inst, List<_PiC> inp) {
         ),
       ];
     case 'round':
-      final h = _piCornerH('${k}_radius', c, c.closed ? 0 : 1, g('radius'), (v) => set('radius', v), () => 'Radius ${_px(g('radius'))}');
+      final h = _piCornerH('${k}_radius', c, c.closed ? 0 : 1, g('radius'), (v) => set('radius', v), () => 'Radius ${px(g('radius'))}');
       return [?h];
     case 'wiggle':
       final p = c.flat;
@@ -1043,7 +1048,7 @@ List<_PiH> _piHandlesA(Doc doc, String inst, List<_PiC> inp) {
           q0 + n * g('size'),
           (q) => set('size', (math.max(0.0, _piDot(q - q0, n)) * 2).roundToDouble() / 2),
           from: q0,
-          tip: () => 'Size ${_px(g('size'))}',
+          tip: () => 'Size ${px(g('size'))}',
         ),
       ];
     case 'trim':
@@ -1099,7 +1104,7 @@ class _PiARow extends StatelessWidget {
         decoration: BoxDecoration(color: sel ? Grey.g20 : (h ? Grey.g15 : null), borderRadius: BorderRadius.circular(6)),
         child: Row(
           children: [
-            _OpGlyph(op, hot: sel),
+            OpGlyph(op, hot: sel),
             const SizedBox(width: 8),
             SizedBox(
               width: 104,
@@ -1280,7 +1285,7 @@ List<_PiH> _piHandlesB(Doc doc, String inst, List<_PiC> inp) {
         final d = (s.first - const Offset(80, -50)).distance;
         if (d < best) (at, best) = (i, d);
       }
-      return [?_piCornerH('${k}_radius', c, at, g('radius'), (v) => set('radius', v), () => 'Radius ${_px(g('radius'))}')];
+      return [?_piCornerH('${k}_radius', c, at, g('radius'), (v) => set('radius', v), () => 'Radius ${px(g('radius'))}')];
     case 'zigzag':
       final s = c.segs.first, l = _piLen(s), n = g('ridges').round().clamp(1, 60);
       if (l < 4) return const [];
@@ -1295,7 +1300,7 @@ List<_PiH> _piHandlesB(Doc doc, String inst, List<_PiC> inp) {
             doc.setMany({'${k}_ridges': (l / d - 1).roundToDouble().clamp(1, 60), '${k}_amp': (_piDot(q - p, _piN(tt) * sg) * 2).roundToDouble() / 2});
           },
           from: b0,
-          tip: () => 'Size ${_px(g('amp'))} · ${brief(g('ridges'), 0)} ridges (drag along to space them)',
+          tip: () => 'Size ${px(g('amp'))} · ${brief(g('ridges'), 0)} ridges (drag along to space them)',
         ),
       ];
     case 'offset':
@@ -1307,7 +1312,7 @@ List<_PiH> _piHandlesB(Doc doc, String inst, List<_PiC> inp) {
           q0 + n * g('amount'),
           (q) => set('amount', (_piDot(q - q0, n) * 2).roundToDouble() / 2),
           from: q0,
-          tip: () => 'Amount ${_sg(g('amount'), 1)} px',
+          tip: () => 'Amount ${sgPaths(g('amount'), 1)} px',
         ),
       ];
     case 'twist':
@@ -1322,7 +1327,7 @@ List<_PiH> _piHandlesB(Doc doc, String inst, List<_PiC> inp) {
             set('angle', (ang + d).roundToDouble());
           },
           from: ctr,
-          tip: () => 'Angle ${_sg(g('angle'))}° (keep turning past a full turn)',
+          tip: () => 'Angle ${sgPaths(g('angle'))}° (keep turning past a full turn)',
         ),
         _PiH(
           '${k}_centre',

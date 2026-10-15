@@ -1,4 +1,8 @@
-part of 'inspector_parts.dart';
+import 'dart:math' as math;
+import 'package:flutter/widgets.dart';
+import '../../parts/controls.dart';
+import '../../tokens.dart';
+import 'inspector_parts.dart';
 
 // ---- host: scene (projection, camera, solids, overlays) -----------------------------------------------------------------
 /// contract: ids are `sc_` scene, `hc_` camera, `ex_` extrude, `bv_` bevel, `ov_` overlay; a block's id is `<prefix>_<param>` as in [ParamTile].
@@ -268,7 +272,7 @@ class HostCameraCard extends StatelessWidget {
     void zoom(double z) => doc.setMany({'hc_zoom': z, 'hc_fov': double.parse(_hcFov(z).toStringAsFixed(1))});
     void fov(double f) => doc.setMany({'hc_fov': f, 'hc_zoom': double.parse(_hcZoom(f).toStringAsFixed(3))});
     Widget num(String id, String cap, String unit, int dec, double lo, double hi, double perPx, ValueChanged<double> set, double def, {Widget? glyph}) =>
-        _RowInfo(
+        RowInfo(
           unit: null,
           keys: doc.keys[id] ?? KeyS.off,
           child: NumField(
@@ -509,7 +513,7 @@ class ExtrudeCard extends StatelessWidget {
           child: _ScGrid(top: 0, [
             (
               99,
-              _RowInfo(
+              RowInfo(
                 unit: null,
                 keys: doc.keys['ex_depth'] ?? KeyS.off,
                 child: NumField(
@@ -582,7 +586,7 @@ class BevelCard extends StatelessWidget {
           child: _ScGrid(top: 0, [
             (
               1,
-              _RowInfo(
+              RowInfo(
                 unit: null,
                 keys: doc.keys['bv_radius'] ?? KeyS.off,
                 child: NumField(
@@ -798,7 +802,7 @@ class OverlayCard extends StatelessWidget {
         _ScShell(
           p.label,
           LinkLine(to: LinkTo.colors, value: doc.s2[id] ?? def, id: id),
-          glyph: _Swatch(doc.s2[id]),
+          glyph: Swatch(doc.s2[id]),
         ),
       );
     }

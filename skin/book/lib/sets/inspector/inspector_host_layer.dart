@@ -1,25 +1,29 @@
-part of 'inspector_parts.dart';
+import 'dart:math' as math;
+import 'package:flutter/widgets.dart';
+import '../../parts/controls.dart';
+import '../../tokens.dart';
+import 'inspector_parts.dart';
 
 // ---- Layer data: masks, the layer's clock, layout, property links ---------------------------------------------------
 // Sources: motolii-doc store/mask.rs, attrs.rs (matte, ghost), layout/clock.rs + time.rs, layout.rs (GROUP_ROWS / ITEM_ROWS), slot.rs (PropertyLink).
 
-/// One block in a [_LdGrid]: what it shows and how many columns it takes.
-class _LdCell {
-  const _LdCell(this.child, {this.span = 1});
+/// One block in a [LdGrid]: what it shows and how many columns it takes.
+class LdCell {
+  const LdCell(this.child, {this.span = 1});
   final Widget child;
   final int span;
 }
 
 /// The same flowing block grid as [ParamGrid], for blocks that are not shader parameters (choices, switches, pads).
-class _LdGrid extends StatelessWidget {
-  const _LdGrid(this.cells);
-  final List<_LdCell> cells;
+class LdGrid extends StatelessWidget {
+  const LdGrid(this.cells, {super.key});
+  final List<LdCell> cells;
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, box) {
       const g = Pop.tileGap;
       final cols = math.max(1, ((box.maxWidth + g) / (Pop.tileMin + g)).floor());
-      final rows = <List<_LdCell>>[[]];
+      final rows = <List<LdCell>>[[]];
       var used = 0;
       for (final c in cells) {
         final s = math.min(c.span, cols);
@@ -30,7 +34,7 @@ class _LdGrid extends StatelessWidget {
         rows.last.add(c);
         used += s;
       }
-      Widget row(List<_LdCell> cs, bool last) {
+      Widget row(List<LdCell> cs, bool last) {
         final filled = cs.fold<int>(0, (a, c) => a + math.min(c.span, cols));
         return Row(
           children: [
@@ -53,8 +57,8 @@ class _LdGrid extends StatelessWidget {
 }
 
 /// A block's skeleton: name top-left, the control along the bottom, an optional picture top-right (as [ParamTile]).
-class _LdTile extends StatelessWidget {
-  const _LdTile({required this.label, required this.child, this.glyph, this.onTap, this.glyphW = Pop.glyph});
+class LdTile extends StatelessWidget {
+  const LdTile({super.key, required this.label, required this.child, this.glyph, this.onTap, this.glyphW = Pop.glyph});
   final String label;
   final Widget child;
   final Widget? glyph;
@@ -106,7 +110,7 @@ class _LdToggle extends StatelessWidget {
   Widget build(BuildContext context) {
     final doc = Ctx.of(context).doc, b = doc.b[id] ?? false;
     final on = !Ctx.of(context).cfg.locked && !RowOff.offOf(context);
-    return _LdTile(
+    return LdTile(
       label: label,
       onTap: () => doc.flag(id, !b),
       child: Padding(
@@ -116,7 +120,7 @@ class _LdToggle extends StatelessWidget {
             IgnorePointer(
               child: Opacity(
                 opacity: on ? 1 : .4,
-                child: _PopSwitch(on: b, onChanged: (_) {}),
+                child: PopSwitch(on: b, onChanged: (_) {}),
               ),
             ),
             const SizedBox(width: 6),
@@ -139,7 +143,7 @@ class _LdSeg extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final doc = Ctx.of(context).doc;
-    return _LdTile(
+    return LdTile(
       label: label,
       child: SizedBox(
         height: 22,
@@ -162,7 +166,7 @@ class _LdPick extends StatelessWidget {
   final String label, id;
   final List<String> options;
   @override
-  Widget build(BuildContext context) => _LdTile(
+  Widget build(BuildContext context) => LdTile(
     label: label,
     child: SizedBox(
       height: 22,
@@ -172,7 +176,7 @@ class _LdPick extends StatelessWidget {
 }
 
 /// A number block (NumField caption form) carrying the row's key dot.
-Widget _ldNum(
+Widget ldNum(
   Doc doc,
   String id,
   String label, {
@@ -188,7 +192,7 @@ Widget _ldNum(
   Widget? glyph,
   bool owns = false,
   bool tall = false,
-}) => _RowInfo(
+}) => RowInfo(
   unit: null,
   keys: doc.keys[id] ?? KeyS.off,
   child: NumField(
@@ -406,9 +410,9 @@ class MasksCard extends StatelessWidget {
         for (final i in ids) _LdMask(i),
         _LdAdd('Add mask', () => _ldAddTo(doc, 'mask_list')),
         const _LdSub('Track matte', note: 'Another layer cuts this one'),
-        _LdGrid([
-          const _LdCell(_LdPick('Matte layer', 'mask_matte', _ldMatteLayers)),
-          if (matte != 'None') const _LdCell(_LdSeg('Use', 'mask_matte.mode', _ldMatteModes, words: ['Alpha', 'Inv α', 'Luma', 'Inv L']), span: 2),
+        LdGrid([
+          const LdCell(_LdPick('Matte layer', 'mask_matte', _ldMatteLayers)),
+          if (matte != 'None') const LdCell(_LdSeg('Use', 'mask_matte.mode', _ldMatteModes, words: ['Alpha', 'Inv α', 'Luma', 'Inv L']), span: 2),
         ]),
       ],
     );
@@ -440,18 +444,18 @@ class _LdMask extends StatelessWidget {
           ),
         ),
         if (open)
-          _LdGrid([
-            _LdCell(ParamTile('mask', Param(id: '$i.feather', label: 'Feather', look: ParamLook.bar, type: WType.f32, min: 0, max: 500, unit: 'px'))),
-            _LdCell(ParamTile('mask', Param(id: '$i.exp', label: 'Expansion', look: ParamLook.bipolar, type: WType.f32, min: -200, max: 200, unit: 'px'))),
-            _LdCell(ParamTile('mask', Param(id: '$i.op', label: 'Opacity', look: ParamLook.percent, type: WType.f32, min: 0, max: 100, unit: '%'))),
-            _LdCell(
+          LdGrid([
+            LdCell(ParamTile('mask', Param(id: '$i.feather', label: 'Feather', look: ParamLook.bar, type: WType.f32, min: 0, max: 500, unit: 'px'))),
+            LdCell(ParamTile('mask', Param(id: '$i.exp', label: 'Expansion', look: ParamLook.bipolar, type: WType.f32, min: -200, max: 200, unit: 'px'))),
+            LdCell(ParamTile('mask', Param(id: '$i.op', label: 'Opacity', look: ParamLook.percent, type: WType.f32, min: 0, max: 100, unit: '%'))),
+            LdCell(
               ParamTile(
                 'mask',
                 Param(id: '$i.frame', label: 'Frame', look: ParamLook.choice, type: WType.u32, min: 0, max: 1, options: const ['Layer', 'Box']),
               ),
               span: 2,
             ),
-            _LdCell(ParamTile('mask', Param(id: '$i.inv', label: 'Inverted', look: ParamLook.toggle, type: WType.u32, min: 0, max: 1))),
+            LdCell(ParamTile('mask', Param(id: '$i.inv', label: 'Inverted', look: ParamLook.toggle, type: WType.u32, min: 0, max: 1))),
           ]),
       ],
     );
@@ -551,15 +555,15 @@ class TimeCard extends StatelessWidget {
           padding: const EdgeInsets.only(top: 2),
           child: SizedBox(height: 30, child: CustomPaint(painter: _LdClockPaint(speed / 100, loop ? dur : 0, dir, delay, ghost ? gf / _ldFps : null))),
         ),
-        _LdGrid([
-          _LdCell(ParamTile('time', const Param(id: 'speed', label: 'Speed', look: ParamLook.bar, type: WType.f32, min: 0, max: 400, def: 100, unit: '%'))),
-          const _LdCell(_LdToggle('Loop', 'time_loop')),
+        LdGrid([
+          LdCell(ParamTile('time', const Param(id: 'speed', label: 'Speed', look: ParamLook.bar, type: WType.f32, min: 0, max: 400, def: 100, unit: '%'))),
+          const LdCell(_LdToggle('Loop', 'time_loop')),
           if (loop) ...[
-            _LdCell(_ldNum(doc, 'time_loop.dur', 'Length', unit: 's', dec: 2, min: 0, max: 3600, perPx: .02, step: .1, zero: 'Off')),
-            const _LdCell(_LdSeg('Loop direction', 'time_loop.dir', _ldLoopDirs, words: ['→', '←', '↔', '↔ rev']), span: 2),
+            LdCell(ldNum(doc, 'time_loop.dur', 'Length', unit: 's', dec: 2, min: 0, max: 3600, perPx: .02, step: .1, zero: 'Off')),
+            const LdCell(_LdSeg('Loop direction', 'time_loop.dir', _ldLoopDirs, words: ['→', '←', '↔', '↔ rev']), span: 2),
           ],
-          const _LdCell(_LdToggle('Ghost', 'time_ghost')),
-          if (ghost) _LdCell(_ldNum(doc, 'time_ghost.f', 'Ghost delay', unit: 'f', min: -120, max: 120, perPx: .25, zero: 'None', bipolar: true)),
+          const LdCell(_LdToggle('Ghost', 'time_ghost')),
+          if (ghost) LdCell(ldNum(doc, 'time_ghost.f', 'Ghost delay', unit: 'f', min: -120, max: 120, perPx: .25, zero: 'None', bipolar: true)),
         ]),
         if (ghost) const Cap('One delayed look of this layer. For copies use a Repeater.'),
         _LdAdvanced(
@@ -572,10 +576,10 @@ class TimeCard extends StatelessWidget {
                   ? 'Set on Jewel Field · 3rd of $_ldOrderN'
                   : 'Set on Jewel Field · 3rd of $_ldOrderN starts ${brief(delay.abs(), 2)} s ${delay > 0 ? 'later' : 'earlier'}',
             ),
-            _LdGrid([
-              _LdCell(_ldNum(doc, 'time_stagger', 'Stagger', unit: 's', dec: 2, min: 0, max: 60, perPx: .01, step: .05, zero: 'Off')),
-              const _LdCell(_LdSeg('From', 'time_from', _ldFrom), span: 2),
-              const _LdCell(_LdToggle('From end', 'time_fromEnd')),
+            LdGrid([
+              LdCell(ldNum(doc, 'time_stagger', 'Stagger', unit: 's', dec: 2, min: 0, max: 60, perPx: .01, step: .05, zero: 'Off')),
+              const LdCell(_LdSeg('From', 'time_from', _ldFrom), span: 2),
+              const LdCell(_LdToggle('From end', 'time_fromEnd')),
             ]),
           ],
         ),
@@ -707,23 +711,23 @@ class HostLayoutCard extends StatelessWidget {
         if (!grid && !flex)
           const Cap('Children keep their own positions.')
         else
-          _LdGrid([
+          LdGrid([
             if (grid) ...[
-              _LdCell(
-                _ldNum(
+              LdCell(
+                ldNum(
                   doc,
                   'hl_cols',
                   'Columns',
                   min: 1,
                   max: 64,
                   perPx: .1,
-                  glyph: _Steps(id: 'hl_cols', p: _ldCount(1)),
+                  glyph: Steps(id: 'hl_cols', p: _ldCount(1)),
                   owns: true,
                   tall: true,
                 ),
               ),
-              _LdCell(
-                _ldNum(
+              LdCell(
+                ldNum(
                   doc,
                   'hl_rows',
                   'Rows',
@@ -731,46 +735,46 @@ class HostLayoutCard extends StatelessWidget {
                   max: 64,
                   perPx: .1,
                   zero: 'Auto',
-                  glyph: _Steps(id: 'hl_rows', p: _ldCount(0)),
+                  glyph: Steps(id: 'hl_rows', p: _ldCount(0)),
                   owns: true,
                   tall: true,
                 ),
               ),
             ],
             if (flex) ...[
-              const _LdCell(_LdPick('Direction', 'hl_dir', _ldDirections)),
-              const _LdCell(_LdSeg('Wrap', 'hl_wrap', ['No Wrap', 'Wrap', 'Wrap Reverse'], words: ['No', 'Wrap', 'Rev']), span: 2),
+              const LdCell(_LdPick('Direction', 'hl_dir', _ldDirections)),
+              const LdCell(_LdSeg('Wrap', 'hl_wrap', ['No Wrap', 'Wrap', 'Wrap Reverse'], words: ['No', 'Wrap', 'Rev']), span: 2),
             ],
-            _LdCell(_ldNum(doc, 'hl_gap', 'Gap', unit: 'px', min: 0, max: 1000, glyph: _LdMini(_LdMiniKind.gap, doc.get('hl_gap') ?? 0))),
-            _LdCell(_ldNum(doc, 'hl_padx', 'Padding X', unit: 'px', min: 0, max: 1000, glyph: _LdMini(_LdMiniKind.padX, doc.get('hl_padx') ?? 0))),
-            _LdCell(_ldNum(doc, 'hl_pady', 'Padding Y', unit: 'px', min: 0, max: 1000, glyph: _LdMini(_LdMiniKind.padY, doc.get('hl_pady') ?? 0))),
-            const _LdCell(_LdAlignPad()),
-            const _LdCell(_LdPick('Justify', 'hl_justify', _ldJustify)),
-            const _LdCell(_LdPick('Items', 'hl_align', _ldAlign)),
-            const _LdCell(_LdSeg('Width', 'hl_wsize', _ldSizing), span: 2),
-            _LdCell(_ldNum(doc, 'hl_w', 'W', unit: 'px', min: 0, max: 100000, enabled: wFixed)),
-            const _LdCell(_LdSeg('Height', 'hl_hsize', _ldSizing), span: 2),
-            _LdCell(_ldNum(doc, 'hl_h', 'H', unit: 'px', min: 0, max: 100000, enabled: hFixed)),
+            LdCell(ldNum(doc, 'hl_gap', 'Gap', unit: 'px', min: 0, max: 1000, glyph: _LdMini(_LdMiniKind.gap, doc.get('hl_gap') ?? 0))),
+            LdCell(ldNum(doc, 'hl_padx', 'Padding X', unit: 'px', min: 0, max: 1000, glyph: _LdMini(_LdMiniKind.padX, doc.get('hl_padx') ?? 0))),
+            LdCell(ldNum(doc, 'hl_pady', 'Padding Y', unit: 'px', min: 0, max: 1000, glyph: _LdMini(_LdMiniKind.padY, doc.get('hl_pady') ?? 0))),
+            const LdCell(_LdAlignPad()),
+            const LdCell(_LdPick('Justify', 'hl_justify', _ldJustify)),
+            const LdCell(_LdPick('Items', 'hl_align', _ldAlign)),
+            const LdCell(_LdSeg('Width', 'hl_wsize', _ldSizing), span: 2),
+            LdCell(ldNum(doc, 'hl_w', 'W', unit: 'px', min: 0, max: 100000, enabled: wFixed)),
+            const LdCell(_LdSeg('Height', 'hl_hsize', _ldSizing), span: 2),
+            LdCell(ldNum(doc, 'hl_h', 'H', unit: 'px', min: 0, max: 100000, enabled: hFixed)),
           ]),
         _LdAdvanced(
           id: 'hl',
           count: 10,
           children: [
             const _LdSub('As a child', note: 'Its own lines in Jewel Field'),
-            _LdGrid([
-              const _LdCell(_LdToggle('Ignore layout', 'hl_abs')),
-              const _LdCell(_LdPick('Align self', 'hl_self', _ldSelf)),
-              _LdCell(_ldNum(doc, 'hl_margin', 'Margin', unit: 'px', min: 0, max: 100000)),
-              _LdCell(_ldNum(doc, 'hl_colStart', 'Column start', min: 0, max: 64, perPx: .1, zero: 'Auto')),
-              _LdCell(_ldNum(doc, 'hl_rowStart', 'Row start', min: 0, max: 64, perPx: .1, zero: 'Auto')),
-              _LdCell(_ldNum(doc, 'hl_colSpan', 'Column span', min: 1, max: 64, perPx: .1)),
-              _LdCell(_ldNum(doc, 'hl_rowSpan', 'Row span', min: 1, max: 64, perPx: .1)),
-              _LdCell(_ldNum(doc, 'hl_shrink', 'Shrink', dec: 1, min: 0, max: 1000, perPx: .05, step: .1)),
+            LdGrid([
+              const LdCell(_LdToggle('Ignore layout', 'hl_abs')),
+              const LdCell(_LdPick('Align self', 'hl_self', _ldSelf)),
+              LdCell(ldNum(doc, 'hl_margin', 'Margin', unit: 'px', min: 0, max: 100000)),
+              LdCell(ldNum(doc, 'hl_colStart', 'Column start', min: 0, max: 64, perPx: .1, zero: 'Auto')),
+              LdCell(ldNum(doc, 'hl_rowStart', 'Row start', min: 0, max: 64, perPx: .1, zero: 'Auto')),
+              LdCell(ldNum(doc, 'hl_colSpan', 'Column span', min: 1, max: 64, perPx: .1)),
+              LdCell(ldNum(doc, 'hl_rowSpan', 'Row span', min: 1, max: 64, perPx: .1)),
+              LdCell(ldNum(doc, 'hl_shrink', 'Shrink', dec: 1, min: 0, max: 1000, perPx: .05, step: .1)),
             ]),
             const _LdSub('Box'),
-            _LdGrid([
-              const _LdCell(_LdSeg('Overflow', 'hl_overflow', ['Visible', 'Clip', 'Bounce']), span: 2),
-              _LdCell(_ldNum(doc, 'hl_radius', 'Corner radius', unit: 'px', min: 0, max: 100000)),
+            LdGrid([
+              const LdCell(_LdSeg('Overflow', 'hl_overflow', ['Visible', 'Clip', 'Bounce']), span: 2),
+              LdCell(ldNum(doc, 'hl_radius', 'Corner radius', unit: 'px', min: 0, max: 100000)),
             ]),
           ],
         ),
@@ -843,7 +847,7 @@ class _LdAlignPad extends StatelessWidget {
       }
     }
 
-    return _LdTile(
+    return LdTile(
       label: 'Align',
       glyphW: 38,
       glyph: LayoutBuilder(
@@ -960,13 +964,13 @@ class _LdLink extends StatelessWidget {
           note: map,
         ),
         if (open)
-          _LdGrid([
-            _LdCell(_LdPick('Drives', '$k.to', _ldTargets)),
-            _LdCell(_LdPick('From layer', '$k.layer', _ldLayers)),
-            _LdCell(_LdPick('Its property', '$k.prop', _ldSources)),
-            _LdCell(ParamTile('link', Param(id: '$i.mul', label: 'Multiply', look: ParamLook.bipolar, type: WType.f32, min: -4, max: 4, dec: 2, def: 1))),
-            _LdCell(ParamTile('link', Param(id: '$i.add', label: 'Offset', look: ParamLook.scrub, type: WType.f32, dec: 1))),
-            _LdCell(_ldNum(doc, '$k.time', 'Delay', unit: 'f', min: -120, max: 120, perPx: .25, zero: 'None', bipolar: true)),
+          LdGrid([
+            LdCell(_LdPick('Drives', '$k.to', _ldTargets)),
+            LdCell(_LdPick('From layer', '$k.layer', _ldLayers)),
+            LdCell(_LdPick('Its property', '$k.prop', _ldSources)),
+            LdCell(ParamTile('link', Param(id: '$i.mul', label: 'Multiply', look: ParamLook.bipolar, type: WType.f32, min: -4, max: 4, dec: 2, def: 1))),
+            LdCell(ParamTile('link', Param(id: '$i.add', label: 'Offset', look: ParamLook.scrub, type: WType.f32, dec: 1))),
+            LdCell(ldNum(doc, '$k.time', 'Delay', unit: 'f', min: -120, max: 120, perPx: .25, zero: 'None', bipolar: true)),
           ]),
       ],
     );

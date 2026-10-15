@@ -1,4 +1,6 @@
-part of 'inspector_parts.dart';
+import 'package:flutter/widgets.dart';
+import '../../tokens.dart';
+import 'inspector_parts.dart';
 
 /// Every host feature (no shader) as Inspector cards, one panel-wide column per family, side by side for review.
 /// Each column is what a layer carrying those features would show under its Transform.

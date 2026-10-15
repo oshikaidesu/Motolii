@@ -1,4 +1,8 @@
-part of 'inspector_parts.dart';
+import 'dart:math' as math;
+import 'package:flutter/widgets.dart';
+import '../../parts/controls.dart';
+import '../../tokens.dart';
+import 'inspector_parts.dart';
 
 /// An effect's parameters as blocks that fill the panel's width: three across in a normal panel, more when it is widened,
 /// so thirty parameters stay a short list. Order is the shader's; a block that needs room (a point, a size, a choice) takes two.
@@ -70,7 +74,7 @@ class ParamTile extends StatelessWidget {
 
   Widget _num(BuildContext context, {String? sub, String? caption, Widget? glyph, bool owns = false, bool tall = false}) {
     final fid = sub == null ? id : '$id.$sub';
-    return _RowInfo(
+    return RowInfo(
       unit: null,
       keys: Ctx.of(context).doc.keys[id] ?? KeyS.off,
       child: NumField(
@@ -95,10 +99,10 @@ class ParamTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final x = Ctx.of(context), doc = x.doc, v = doc.get(id);
     final on = !x.cfg.locked && !RowOff.offOf(context);
-    Widget gauge(_GaugeKind k, {double? vx, double? vy}) => SizedBox.square(
+    Widget gauge(GaugeKind k, {double? vx, double? vy}) => SizedBox.square(
       dimension: Pop.glyph,
       child: FittedBox(
-        child: _Gauge(k, v, p, x: vx, y: vy),
+        child: Gauge(k, v, p, x: vx, y: vy),
       ),
     );
     // the same skeleton as a number block: name at the top-left, the control along the bottom, the picture top-right
@@ -144,7 +148,7 @@ class ParamTile extends StatelessWidget {
                 IgnorePointer(
                   child: Opacity(
                     opacity: on ? 1 : .4,
-                    child: _PopSwitch(on: b, onChanged: (_) {}),
+                    child: PopSwitch(on: b, onChanged: (_) {}),
                   ),
                 ),
                 const SizedBox(width: 6),
@@ -173,9 +177,9 @@ class ParamTile extends StatelessWidget {
         // numbers, one for each in their order (a bar chart's heights): bars a hand drags up and down, said when let go
         return shell(_Heights(id: id, on: on));
       case ParamLook.colour:
-        final all = (doc.s2[id] ?? '—').split(' ').where((c) => _hex(c) != null).toList();
+        final all = (doc.s2[id] ?? '—').split(' ').where((c) => hexControls(c) != null).toList();
         return shell(
-          glyph: all.length > 1 ? _Ramp(all) : _Swatch(doc.s2[id]),
+          glyph: all.length > 1 ? _Ramp(all) : Swatch(doc.s2[id]),
           Padding(
             padding: const EdgeInsets.only(bottom: 3),
             child: LinkLine(to: LinkTo.colors, value: all.length > 1 ? '${all.length}' : doc.s2[id] ?? '—', id: id), // (colours in their order: how many, the strip shows which)
@@ -184,28 +188,28 @@ class ParamTile extends StatelessWidget {
       case ParamLook.angle:
         return _num(
           context,
-          glyph: _AngleDial(id: id, p: p),
+          glyph: AngleDial(id: id, p: p),
           owns: true,
         );
       case ParamLook.percent:
-        return _num(context, glyph: gauge(_GaugeKind.pie));
+        return _num(context, glyph: gauge(GaugeKind.pie));
       case ParamLook.vertical:
-        return _num(context, glyph: gauge(p.upIncreases ? _GaugeKind.up : _GaugeKind.down));
+        return _num(context, glyph: gauge(p.upIncreases ? GaugeKind.up : GaugeKind.down));
       case ParamLook.horizontal:
-        return _num(context, glyph: gauge(_GaugeKind.across));
+        return _num(context, glyph: gauge(GaugeKind.across));
       case ParamLook.bipolar:
-        return _num(context, glyph: gauge(_GaugeKind.centre));
+        return _num(context, glyph: gauge(GaugeKind.centre));
       case ParamLook.bar:
-        return _num(context, glyph: gauge(_GaugeKind.ramp));
+        return _num(context, glyph: gauge(GaugeKind.ramp));
       case ParamLook.scrub:
-        return _num(context, glyph: gauge(_GaugeKind.free));
+        return _num(context, glyph: gauge(GaugeKind.free));
       case ParamLook.seed:
         return _num(
           context,
           glyph: SizedBox.square(
             dimension: Pop.glyph,
             child: FittedBox(
-              child: _Dice(id: id, p: p),
+              child: Dice(id: id, p: p),
             ),
           ),
           owns: true,
@@ -213,7 +217,7 @@ class ParamTile extends StatelessWidget {
       case ParamLook.stepper:
         return _num(
           context,
-          glyph: _Steps(id: id, p: p),
+          glyph: Steps(id: id, p: p),
           owns: true,
           tall: true,
         );
@@ -236,7 +240,7 @@ class ParamTile extends StatelessWidget {
   }
 }
 
-Color? _hex(String? s) => s != null && RegExp(r'^#[0-9A-Fa-f]{6}$').hasMatch(s) ? Color(int.parse(s.substring(1), radix: 16) | 0xFF000000) : null;
+Color? hexControls(String? s) => s != null && RegExp(r'^#[0-9A-Fa-f]{6}$').hasMatch(s) ? Color(int.parse(s.substring(1), radix: 16) | 0xFF000000) : null;
 
 /// The default value of every id a parameter owns, for a fresh layer and for Reset.
 Map<String, double> paramDefaults(String fx, Param p) => switch (p.look) {
@@ -252,8 +256,8 @@ String paramColour(Decl d) {
   return '#${[ch(0), ch(1), ch(2)].map((e) => e.toRadixString(16).padLeft(2, '0')).join().toUpperCase()}';
 }
 
-class _Swatch extends StatelessWidget {
-  const _Swatch(this.hex);
+class Swatch extends StatelessWidget {
+  const Swatch(this.hex, {super.key});
   final String? hex;
   @override
   Widget build(BuildContext context) => Center(
@@ -261,7 +265,7 @@ class _Swatch extends StatelessWidget {
       width: 16,
       height: 16,
       decoration: BoxDecoration(
-        color: _hex(hex) ?? Grey.g26,
+        color: hexControls(hex) ?? Grey.g26,
         borderRadius: BorderRadius.circular(4),
         border: Border.all(color: Grey.g38),
       ),
@@ -269,12 +273,12 @@ class _Swatch extends StatelessWidget {
   );
 }
 
-enum _GaugeKind { pie, up, down, across, centre, ramp, free, count, point, box }
+enum GaugeKind { pie, up, down, across, centre, ramp, free, count, point, box }
 
 /// The value as a small live picture beside its label: a pie for a share, a level for a height, a dot for a point.
-class _Gauge extends StatelessWidget {
-  const _Gauge(this.kind, this.v, this.p, {this.x, this.y});
-  final _GaugeKind kind;
+class Gauge extends StatelessWidget {
+  const Gauge(this.kind, this.v, this.p, {super.key, this.x, this.y});
+  final GaugeKind kind;
   final double? v, x, y;
   final Param? p;
   @override
@@ -283,7 +287,7 @@ class _Gauge extends StatelessWidget {
 
 class _GaugePaint extends CustomPainter {
   const _GaugePaint(this.kind, this.v, this.p, this.x, this.y);
-  final _GaugeKind kind;
+  final GaugeKind kind;
   final double? v, x, y;
   final Param? p;
 
@@ -303,62 +307,62 @@ class _GaugePaint extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.2;
     switch (kind) {
-      case _GaugeKind.pie:
+      case GaugeKind.pie:
         final r = Rect.fromCircle(center: o, radius: 8);
         c.drawCircle(o, 8, dim);
         final t = (v ?? 0) / ((p?.max ?? 100) == 0 ? 100 : (p!.max!.abs() > 100 ? p!.max!.abs() : 100));
         c.drawArc(r, -math.pi / 2, 2 * math.pi * t.clamp(-1.0, 1.0), true, lit);
         if (t.abs() > 1) c.drawCircle(o, 8, line..color = Grey.g91);
-      case _GaugeKind.up || _GaugeKind.down:
+      case GaugeKind.up || GaugeKind.down:
         final box = Rect.fromCenter(center: o, width: 8, height: 18);
         c.drawRRect(RRect.fromRectAndRadius(box, const Radius.circular(2)), dim);
         final h = box.height * _t(v);
-        final fill = kind == _GaugeKind.up
+        final fill = kind == GaugeKind.up
             ? Rect.fromLTRB(box.left, box.bottom - h, box.right, box.bottom)
             : Rect.fromLTRB(box.left, box.top, box.right, box.top + h);
         c.drawRRect(RRect.fromRectAndRadius(fill, const Radius.circular(2)), lit);
-        final tip = kind == _GaugeKind.up ? box.top - 1 : box.bottom + 1;
-        c.drawLine(Offset(o.dx - 2.5, tip + (kind == _GaugeKind.up ? 2.5 : -2.5)), Offset(o.dx, tip), line);
-        c.drawLine(Offset(o.dx + 2.5, tip + (kind == _GaugeKind.up ? 2.5 : -2.5)), Offset(o.dx, tip), line);
-      case _GaugeKind.across:
+        final tip = kind == GaugeKind.up ? box.top - 1 : box.bottom + 1;
+        c.drawLine(Offset(o.dx - 2.5, tip + (kind == GaugeKind.up ? 2.5 : -2.5)), Offset(o.dx, tip), line);
+        c.drawLine(Offset(o.dx + 2.5, tip + (kind == GaugeKind.up ? 2.5 : -2.5)), Offset(o.dx, tip), line);
+      case GaugeKind.across:
         final box = Rect.fromCenter(center: o, width: 18, height: 8);
         c.drawRRect(RRect.fromRectAndRadius(box, const Radius.circular(2)), dim);
         c.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(box.left, box.top, box.width * _t(v), box.height), const Radius.circular(2)), lit);
-      case _GaugeKind.centre:
+      case GaugeKind.centre:
         final box = Rect.fromCenter(center: o, width: 18, height: 8);
         c.drawRRect(RRect.fromRectAndRadius(box, const Radius.circular(2)), dim);
         final z = box.left + box.width * _t(0), at = box.left + box.width * _t(v);
         c.drawRect(Rect.fromLTRB(math.min(z, at), box.top, math.max(z, at), box.bottom), lit);
         c.drawLine(Offset(z, box.top - 2), Offset(z, box.bottom + 2), line);
-      case _GaugeKind.ramp:
+      case GaugeKind.ramp:
         final t = _t(v);
         for (var i = 0; i < 5; i++) {
           final h = 4.0 + i * 3;
           final r = Rect.fromLTWH(o.dx - 9 + i * 3.8, o.dy + 8 - h, 2.6, h);
           c.drawRRect(RRect.fromRectAndRadius(r, const Radius.circular(1)), (i + .5) / 5 <= t ? lit : dim);
         }
-      case _GaugeKind.free:
+      case GaugeKind.free:
         c.drawLine(Offset(o.dx - 7, o.dy), Offset(o.dx + 7, o.dy), line);
         for (final d in const [-1.0, 1.0]) {
           final tip = Offset(o.dx + d * 8, o.dy);
           c.drawLine(tip, tip + Offset(-d * 3, -3), line);
           c.drawLine(tip, tip + Offset(-d * 3, 3), line);
         }
-      case _GaugeKind.count:
+      case GaugeKind.count:
         final n = ((p?.max ?? 1) - (p?.min ?? 0)).round() + 1, k = ((v ?? 0) - (p?.min ?? 0)).round();
         final cols = math.min(n, 4), rows = (n / cols).ceil().clamp(1, 3);
         for (var i = 0; i < math.min(n, cols * rows); i++) {
           final cx = o.dx + (i % cols - (cols - 1) / 2) * 4.6, cy = o.dy + (i ~/ cols - (rows - 1) / 2) * 4.6;
           c.drawCircle(Offset(cx, cy), 1.6, i <= k ? lit : dim);
         }
-      case _GaugeKind.point:
+      case GaugeKind.point:
         final box = Rect.fromCenter(center: o, width: 18, height: 18);
         c.drawRRect(RRect.fromRectAndRadius(box, const Radius.circular(3)), dim);
         final px = box.left + box.width * _t(x), py = box.top + box.height * _t(y);
         c.drawLine(Offset(px, box.top), Offset(px, box.bottom), line);
         c.drawLine(Offset(box.left, py), Offset(box.right, py), line);
         c.drawCircle(Offset(px, py), 2.6, lit);
-      case _GaugeKind.box:
+      case GaugeKind.box:
         final mx = math.max(x ?? 1, y ?? 1).abs();
         final w = mx == 0 ? 0.0 : 18 * (x ?? 0).abs() / mx, h = mx == 0 ? 0.0 : 18 * (y ?? 0).abs() / mx;
         c.drawRRect(RRect.fromRectAndRadius(Rect.fromCenter(center: o, width: math.max(w, 1.5), height: math.max(h, 1.5)), const Radius.circular(2)), lit);
@@ -371,15 +375,15 @@ class _GaugePaint extends CustomPainter {
 
 /// A dial for an angle: turn it by moving around it (the farther out, the finer), or scrub the number beside it.
 /// contract: one turn of the pointer is one turn of the value, so the dial never lies about direction; one undo per drag.
-class _AngleDial extends StatefulWidget {
-  const _AngleDial({required this.id, required this.p});
+class AngleDial extends StatefulWidget {
+  const AngleDial({super.key, required this.id, required this.p});
   final String id;
   final Param p;
   @override
-  State<_AngleDial> createState() => _AngleDialState();
+  State<AngleDial> createState() => _AngleDialState();
 }
 
-class _AngleDialState extends State<_AngleDial> {
+class _AngleDialState extends State<AngleDial> {
   double? _last;
   bool _hot = false;
   double _angle(Offset local) => math.atan2(local.dy - 11, local.dx - 11);
@@ -506,7 +510,7 @@ class _PadGlyphState extends State<_PadGlyph> {
           height: Pop.tile,
           decoration: BoxDecoration(color: _drag || _hot ? Grey.g20 : Pop.well, borderRadius: BorderRadius.circular(6)),
           child: FittedBox(
-            child: _Gauge(widget.size ? _GaugeKind.box : _GaugeKind.point, null, p, x: doc.get(ix), y: doc.get(iy)),
+            child: Gauge(widget.size ? GaugeKind.box : GaugeKind.point, null, p, x: doc.get(ix), y: doc.get(iy)),
           ),
         ),
       ),
@@ -515,8 +519,8 @@ class _PadGlyphState extends State<_PadGlyph> {
 }
 
 /// A small whole number's plus and minus, stacked to stay one block tall; the count itself is the field beside them.
-class _Steps extends StatelessWidget {
-  const _Steps({required this.id, required this.p});
+class Steps extends StatelessWidget {
+  const Steps({super.key, required this.id, required this.p});
   final String id;
   final Param p;
   @override
@@ -542,8 +546,8 @@ class _Steps extends StatelessWidget {
 }
 
 /// A seed's re-roll: click the die for another random look; the number stays editable beside it.
-class _Dice extends StatelessWidget {
-  const _Dice({required this.id, required this.p});
+class Dice extends StatelessWidget {
+  const Dice({super.key, required this.id, required this.p});
   final String id;
   final Param p;
   @override
@@ -629,7 +633,7 @@ class _Ramp extends StatelessWidget {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(3),
         border: Border.all(color: Grey.g44, width: .5),
-        gradient: LinearGradient(colors: [for (final h in hexes) _hex(h)!]),
+        gradient: LinearGradient(colors: [for (final h in hexes) hexControls(h)!]),
       ),
     ),
   );

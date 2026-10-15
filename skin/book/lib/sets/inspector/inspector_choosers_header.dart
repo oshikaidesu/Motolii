@@ -1,4 +1,10 @@
-part of 'inspector_parts.dart';
+import 'dart:math' as math;
+import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
+import '../../parts/controls.dart';
+import '../../parts/glyphs.dart';
+import '../../tokens.dart';
+import 'inspector_parts.dart';
 
 // ---- 6. choosers and hand-overs -------------------------------------------------------------------------------------
 /// A short list lives in a segmented control; a long one opens a searchable list (G2, G3). Never prev/next cycling (do-not-repeat 6, 7).
@@ -141,7 +147,7 @@ class _ChooserState extends State<Chooser> {
     final field = Hov(
       onTap: () => _set(!_open),
       builder: (_, h) => Container(
-        height: Pop.on(context) ? Pop.cell : _cellH,
+        height: Pop.on(context) ? Pop.cell : cellH,
         padding: const EdgeInsets.symmetric(horizontal: 8),
         decoration: Pop.on(context)
             ? BoxDecoration(

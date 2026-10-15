@@ -1,4 +1,7 @@
-part of 'inspector_parts.dart';
+import 'package:flutter/widgets.dart';
+import '../../parts/controls.dart';
+import '../../tokens.dart';
+import 'inspector_parts.dart';
 
 // ---- 3. small things ------------------------------------------------------------------------------------------------
 /// A contract written as a 10px caption under a control.
@@ -58,8 +61,8 @@ class KeyMark extends StatelessWidget {
   Widget build(BuildContext context) => Hov(
     onTap: enabled ? onTap : null,
     builder: (_, h) => SizedBox(
-      width: _keyW,
-      height: _keyW,
+      width: keyW,
+      height: keyW,
       child: CustomPaint(painter: _KeyPaint(state, h && enabled, enabled)),
     ),
   );
@@ -107,7 +110,7 @@ class ResetMark extends StatelessWidget {
   final VoidCallback? onTap;
   @override
   Widget build(BuildContext context) => SizedBox(
-    width: _resetW,
+    width: resetW,
     child: show
         ? Hov(
             onTap: onTap,
@@ -131,7 +134,7 @@ class LinkMark extends StatelessWidget {
       onTap: enabled ? onTap : null,
       builder: (_, h) => SizedBox(
         width: 18,
-        height: _cellH,
+        height: cellH,
         child: CustomPaint(painter: _LinkPaint(on, h && enabled, enabled)),
       ),
     ),
@@ -186,7 +189,7 @@ class OnOff extends StatelessWidget {
           const SizedBox(width: 8),
           Opacity(
             opacity: live ? 1 : .5,
-            child: Pop.on(context) ? _PopSwitch(on: on, onChanged: onChanged) : PillSwitch(on: on, onChanged: onChanged),
+            child: Pop.on(context) ? PopSwitch(on: on, onChanged: onChanged) : PillSwitch(on: on, onChanged: onChanged),
           ),
         ],
       ),
@@ -194,8 +197,8 @@ class OnOff extends StatelessWidget {
   }
 }
 
-class _PopSwitch extends StatelessWidget {
-  const _PopSwitch({required this.on, required this.onChanged});
+class PopSwitch extends StatelessWidget {
+  const PopSwitch({super.key, required this.on, required this.onChanged});
   final bool on;
   final ValueChanged<bool> onChanged;
   @override

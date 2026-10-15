@@ -1,4 +1,8 @@
-part of 'inspector_parts.dart';
+import 'package:flutter/foundation.dart' show ValueListenable, ValueNotifier, listEquals, mapEquals, setEquals;
+import 'package:flutter/gestures.dart';
+import 'package:flutter/widgets.dart';
+import '../../tokens.dart';
+import 'inspector_parts.dart';
 
 // ---- 5. sections and rows -------------------------------------------------------------------------------------------
 class Rule extends StatelessWidget {
@@ -145,7 +149,7 @@ class _FoldPaint extends CustomPainter {
 /// The Pop card behind [Sect]: every titled card folds (its own toggle, or a per-title flag), untitled ones never do.
 /// Folded, a card is one line that still says what it holds: its colour, its name, a key dot if anything in it is animated, and its values in brief.
 /// Folded summaries all start here, so a closed stack reads as a two-column list: what, then how much.
-const _briefX = 136.0;
+const briefX = 136.0;
 
 class _PopCard extends StatelessWidget {
   const _PopCard(this.s);
@@ -191,7 +195,7 @@ class _PopCard extends StatelessWidget {
                 children: [
                   if (brief)
                     SizedBox(
-                      width: _briefX,
+                      width: briefX,
                       child: Row(children: lead(h)),
                     )
                   else
@@ -258,13 +262,13 @@ bool _fits(String s, TextStyle style, double w) =>
     )..layout()).width <=
     w;
 
-class _RowInfo extends InheritedWidget {
-  const _RowInfo({required this.unit, required this.keys, required super.child});
+class RowInfo extends InheritedWidget {
+  const RowInfo({super.key, required this.unit, required this.keys, required super.child});
   final String? unit;
   final KeyS keys;
-  static _RowInfo? of(BuildContext c) => c.dependOnInheritedWidgetOfExactType<_RowInfo>();
+  static RowInfo? of(BuildContext c) => c.dependOnInheritedWidgetOfExactType<RowInfo>();
   @override
-  bool updateShouldNotify(_RowInfo old) => old.unit != unit || old.keys != keys;
+  bool updateShouldNotify(RowInfo old) => old.unit != unit || old.keys != keys;
 }
 
 /// Under it, coordinate fields drop their axis letters: one header names the columns.
@@ -286,7 +290,7 @@ class AxisHeader extends StatelessWidget {
         height: 16,
         child: Row(
           children: [
-            const SizedBox(width: _labelWPop),
+            const SizedBox(width: labelWPop),
             Expanded(
               child: Row(
                 children: [
@@ -296,14 +300,14 @@ class AxisHeader extends StatelessWidget {
                       child: Text(
                         a,
                         textAlign: TextAlign.center,
-                        style: T.micro(Color.lerp(_axes[i], Grey.g100, .3)!).copyWith(fontWeight: FontWeight.w700),
+                        style: T.micro(Color.lerp(axesParts[i], Grey.g100, .3)!).copyWith(fontWeight: FontWeight.w700),
                       ),
                     ),
                   ],
                 ],
               ),
             ),
-            if (cfg.resetArrow) const SizedBox(width: _resetW),
+            if (cfg.resetArrow) const SizedBox(width: resetW),
           ],
         ),
       ),
@@ -395,7 +399,7 @@ class _PropRowState extends State<PropRow> {
     final pop = Pop.on(context);
     final units = widget.cells.whereType<NumField>().map((f) => f.unit).toSet();
     final shared = pop && units.length == 1 ? units.single : null;
-    final unit = shared != null && _fits('${ed.lab(widget.label)} $shared', ed.labStyle(Grey.g63), _labelWPop - 34 - 16) ? shared : null;
+    final unit = shared != null && _fits('${ed.lab(widget.label)} $shared', ed.labStyle(Grey.g63), labelWPop - 34 - 16) ? shared : null;
     final revealed = doc.revealed == widget.id;
     if (revealed && !_was) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -408,10 +412,10 @@ class _PropRowState extends State<PropRow> {
     final cellsOn = widget.enabled && !showRel && !locked;
     return LayoutBuilder(
       builder: (context, box) {
-        final lw = pop ? _labelWPop : (box.maxWidth < 300 ? _labelWNarrow : _labelW);
-        final slots = (pop ? 0 : _keyW) + (cfg.resetArrow ? _resetW : 0);
+        final lw = pop ? labelWPop : (box.maxWidth < 300 ? labelWNarrow : labelW);
+        final slots = (pop ? 0 : keyW) + (cfg.resetArrow ? resetW : 0);
         final cellsW = box.maxWidth - lw - slots - 8;
-        final stack = widget.cells.length == 3 && (cellsW - 8) / 3 < (pop ? 56 : _stack3);
+        final stack = widget.cells.length == 3 && (cellsW - 8) / 3 < (pop ? 56 : stack3);
         Widget gap(double w) => SizedBox(width: w);
         Widget cellsRow(List<Widget> cs) => Row(
           children: [
@@ -538,7 +542,7 @@ class _PropRowState extends State<PropRow> {
                         narrow: box.maxWidth < 300,
                         child: IgnorePointer(
                           ignoring: !cellsOn,
-                          child: pop ? _RowInfo(unit: unit, keys: widget.keyable ? ks : KeyS.off, child: cells) : cells,
+                          child: pop ? RowInfo(unit: unit, keys: widget.keyable ? ks : KeyS.off, child: cells) : cells,
                         ),
                       ),
                     ),
@@ -553,7 +557,7 @@ class _PropRowState extends State<PropRow> {
                         onTap: () => doc.setKey(widget.id, ks == KeyS.at ? KeyS.anim : KeyS.at),
                       )
                     else
-                      const SizedBox(width: _keyW),
+                      const SizedBox(width: keyW),
                     if (cfg.resetArrow) ResetMark(show: (changed || mixedAny) && !locked, onTap: () => doc.resetIds(ids)),
                   ],
                 ),
