@@ -160,13 +160,19 @@ static void motolii_hand(Motolii* m, std::string document, int wide, int high, s
         }
         last = t;
         m->s->by_clock = m->playing;
+        std::vector<std::function<void()>> films;   // (what the moment asks of the films: done once the document is let go)
+        std::map<const void*, Stage::Sound> sounds;
         {
             std::lock_guard<std::recursive_mutex> holding(m->d->lock);
             m->telling = true;
+            m->s->later = &films;
             time_is(*m->s, m->now);
+            m->s->later = nullptr;
             m->telling = false;
-            heard(*m->s, m->heard, m->now, m->playing);   // (its sound where the moment puts it)
+            sounds = heard_told(*m->s);   // (where each sound is to be: read of the document)
         }
+        for (const auto& now : films) now();   // (films put back or stepped on, while the shell reads the document)
+        heard(sounds, m->heard, m->now, m->playing);   // (and their sound sought and played so)
         const auto told = std::chrono::steady_clock::now();
         live_draw(*m->s, m->live);
         drawn = std::chrono::steady_clock::now();

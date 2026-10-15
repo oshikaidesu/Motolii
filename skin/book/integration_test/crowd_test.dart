@@ -79,6 +79,7 @@ void main() {
       }
     }
     ws.playing = false;
+    debugPrint('CROWD inside: ${m.spent}');
     debugPrint('CROWD in all: window late $lateAll, inside left out $leftAll after the first minute, memory ${rss.first} -> ${rss.last} MB');
   }, timeout: const Timeout(Duration(minutes: 30)));
 }

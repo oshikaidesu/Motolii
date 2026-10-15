@@ -35,14 +35,21 @@ static void heard_off(Heard& h) {
     h.bin = nullptr;
 }
 
-// Each picture of the live stage: every sounding thing heard where the stage's moment puts it, or not at all.
-static void heard(Stage& s, std::map<const void*, Heard>& all, double now, bool playing) {
+// What every sounding thing is to sound as at the moment: read of the document (held while it is read).
+static std::map<const void*, Stage::Sound> heard_told(Stage& s) {
+    std::map<const void*, Stage::Sound> told;
+    for (const auto& [who, tells] : s.sounding) told[who] = tells();
+    return told;
+}
+
+// Each picture of the live stage: every sounding thing heard where the stage's moment puts it, or not at all (its
+// readers sought and played with the document let go: heard_told read it).
+static void heard(const std::map<const void*, Stage::Sound>& told, std::map<const void*, Heard>& all, double now, bool playing) {
     static const bool mute = std::getenv("MOTOLII_MUTE") != nullptr;
     for (auto it = all.begin(); it != all.end();)   // (a thing gone, or no longer sounding: its sound goes too)
-        if (!s.sounding.count(it->first)) heard_off(it->second), it = all.erase(it);
+        if (!told.count(it->first)) heard_off(it->second), it = all.erase(it);
         else ++it;
-    for (const auto& [who, tells] : s.sounding) {
-        const Stage::Sound a = tells();
+    for (const auto& [who, a] : told) {
         Heard& h = all[who];
         if (h.bin && h.file != a.file) heard_off(h);
         if (!h.bin) {   // (made once a thing: ready, standing, its sound alone)

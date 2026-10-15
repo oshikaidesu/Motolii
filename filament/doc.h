@@ -1245,7 +1245,10 @@ static void doc_moment(Doc& d, double now) {
             t.in = in;
         }
         if (!in) continue;
-        if (t.film) video_at(s, t.film, (float)lies[i].since);
+        if (t.film) {   // (the film at its moment: on a live stage once the document is let go)
+            if (s.later) s.later->push_back([&s, film = t.film, since = (float)lies[i].since] { video_at(s, film, since); });
+            else video_at(s, t.film, (float)lies[i].since);
+        }
         if (t.film && t.film->look) {   // (its own look, in its material, as ThorVG's effects give a picture its: blurred (in points of the film), tinted, tritoned)
             DrawnFx fx;
             std::string why;

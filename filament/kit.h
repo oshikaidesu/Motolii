@@ -90,6 +90,9 @@ struct Stage {
     Texture* sunlight = nullptr;
     double now = 0.0;        // the stage's time, in seconds
     bool by_clock = false;   // true: played as the clock goes (nothing is waited for); false: picture by picture (each one exact)
+    // (a live stage: what a moment asks of its films, kept to be done once the document is let go (motolii.mm), so
+    //  that films put back to their start do not hold the shell's reads of it; empty: done at once)
+    std::vector<std::function<void()>>* later = nullptr;
     // a thing's own sound: the cut of its file (seconds of the file) and how fast, how far into that it is as it comes on,
     // and when on the stage it comes on and for how long (below 0: to the end)
     struct Sound { std::string file; double from, to, speed, into, on, lasts; };
