@@ -59,6 +59,7 @@
 
 | # | 通ったと言える一文 | 状態 |
 |---|---|---|
+| 22 | Cavalry の形の部品が全部ある（物差し `research_notes/cavalry_shape_parts.md` の80個）。毎コマ動かす曲げは GPU で、形の作り直しは変わった時だけ（`cavalry_shape_split.md`） | 10/15 夜：ThorVG の Lottie 部品で round・bloat・zigzag・offset（CPU、変わった時だけ）。GPU の曲げの口 `WgCanvas::bend`（`dawn_probe/thorvg_bend.patch`：頂点シェーダー10本、形を囲む四角を網に、凸の近道を切る）、1個目 `warp`（AE の Wave Warp）が手計算の正解と同じ形。40個を波で動かして形の作り直し0、ただし +8〜10 ms／コマ：物ごとの板を描き直す度の GPU への送信（1コマ80回以上）が重い。曲げ以外の動く平らな物も同じ。Skia（m149、道まわりだけ 5.3 MB）は `filament/skia.sh` で焼けるが未接続 |
 | 20 | 猫の民衆を、窓に出して、負荷ありで10分流して、落ち0・動画の遅れ0・メモリが増えない | 10分で1枚落ち（負荷なし、始まりだけ）、遅れ 0.34%。メモリ：`filament/check/films_memory.sh`（動画27本を生で、音なし）で 30秒以降 毎分 +3.5〜4.3 MB、60コマ毎秒のまま。**10/15 夜：増えの大半は malloc**（2分で全体 +8.7 MB のうち malloc +7.4 MB、`malloc_zone_statistics`）。GPU や動画の面ではなく CPU 側が溜めている。GStreamer の leaks トレーサー（`GST_LEAKS_TRACER_SIG=1 GST_TRACERS=leaks`、30秒目と最後に区切り）で、残った物は知らせ（GstMessage）+7381・タグ +843：動画と音の受け口を誰も読まず溜まっていた。読み終えた受け口に `gst_bus_set_flushing`（video.h・heard.h 各1行）で、毎分 +4.3 → **+1.6 MB**。残り：malloc が2分で +5.9 MB、出どころ未確認 |
 
 ### 動画の測定メモ（10/13、M4）

@@ -23,6 +23,7 @@ struct DrawnFx { bool split = false;   // (a text's letters each a copy of their
                  std::vector<float3> ramp;   // (two colours or more: it is filled from the first at its top to the last at its bottom, ThorVG's linear gradient)
                  bool hollow = false;   // (a flat shape filled with nothing: only its edge is seen)
                  float reach = 0.f;     // (how far a bent shape goes out past its box at its most, a share of its height (bend_at): the picture larger all round by that)
+                 bool warped = false;   // (a flat shape warped as it is drawn (warp_at): its lines made of pieces, so that they bend)
                  bool radial = false; float rampAngle = 0.f, rampScale = 1.f; int spread = 0;   // (or from its middle out, ThorVG's radial gradient; turned so far, clockwise; so long, as a share of its reach; past its ends padded, reflected or repeated)
                  DrawnFx over(float high) const {   // (the same for a thing `high` units high: its lengths as shares of that)
                      DrawnFx f = *this;
@@ -42,7 +43,10 @@ struct Drawn {
     float3 trimmed{0.f};   // (as last cut: off the end, off the beginning, slid along)
     std::vector<tvg::PathCommand> plain; std::vector<tvg::Point> plainAt;   // (its path as made, before it is bent (bend_at))
     float plainHigh = 0.f, plainSide = 0.f;   // (and how high it was drawn and its shorter side, in its own points)
+    float pictureHigh = 0.f;   // (how high its picture is, room and all, in the same points)
+    float fine = 0.f;          // (its lines cut in pieces no longer than so many points, if it is warped as it is drawn (warp_at))
     std::array<float, 6> bent{};   // (as last bent: round, bloat, zigzag, ridges, smooth, offset)
+    std::array<float, 48> warped{};   // (as last warped on the GPU (warp_at): ThorVG's WgCanvas::bend, thorvg_bend.patch)
     std::vector<std::string> markers;  // an After Effects file's named stretches (ThorVG's Lottie markers)
     std::vector<float2> letters;       // a text split into its letters: where each lies across the picture (shares of its width); its copies show one each
     float fromFrame = 0.f, toFrame = 0.f;   // the stretch it plays, when one is named (frames of the file)
@@ -85,7 +89,7 @@ static void trim_at(Stage& s, Drawn* d, float cut, float begin = 0.f, float offs
 // pucked in or bloated out (bloat, -1 to 1), zig-zagged (so high, a share of its height; so many ridges a side; smooth
 // or sharp), offset out or in (a share of its height); drawn again for the frame that comes next, if it is bent anew.
 void tvg_bend(tvg::Shape* shape, const tvg::PathCommand* cmds, uint32_t cmdsCnt, const tvg::Point* pts, uint32_t ptsCnt,
-              float round, float bloat, float zigzag, int ridges, bool smooth, float offset);
+              float round, float bloat, float zigzag, int ridges, bool smooth, float offset, float fine);
 static void bend_at(Stage& s, Drawn* d, float round, float bloat, float zigzag, float ridges, float smooth, float offset) {
     const std::array<float, 6> is{round, bloat, zigzag, ridges, smooth, offset};
     if (!d->shape || d->plain.empty() || is == d->bent) return;
@@ -93,7 +97,23 @@ static void bend_at(Stage& s, Drawn* d, float round, float bloat, float zigzag, 
     door::on_driver(s.engine, [d, is] {
         const float high = d->plainHigh, side = d->plainSide;
         tvg_bend(d->shape, d->plain.data(), (uint32_t)d->plain.size(), d->plainAt.data(), (uint32_t)d->plainAt.size(), std::clamp(is[0], 0.f, 0.5f) * side,
-                 100.f * std::clamp(is[1], -1.f, 1.f), is[2] * high, (int)std::clamp(is[3], 0.f, 100.f), is[4] > 0.5f, is[5] * high);
+                 100.f * std::clamp(is[1], -1.f, 1.f), is[2] * high, (int)std::clamp(is[3], 0.f, 100.f), is[4] > 0.5f, is[5] * high, d->fine);
+        d->canvas->update();
+        d->canvas->draw(true);
+        d->canvas->sync();
+    });
+}
+
+// A flat thing warped as it is drawn, on the GPU (ThorVG's WgCanvas::bend, thorvg_bend.patch): nothing of its shape is
+// made again, only drawn again for the frame that comes next, if it is warped anew. After Effects' wave warp: so high
+// and so long a wave (shares of its height), running at an angle (degrees), gone so far along (in waves).
+static void warp_at(Stage& s, Drawn* d, float high, float wide, float angle, float along) {
+    std::array<float, 48> is{};
+    if (high != 0.f) is[1] = 1.f, is[4] = 1.f, is[5] = high * d->plainHigh / d->pictureHigh, is[6] = wide * d->plainHigh / d->pictureHigh, is[7] = along, is[8] = angle * (float)TAU / 360.f;
+    if (!d->canvas || is == d->warped) return;
+    d->warped = is;
+    door::on_driver(s.engine, [d, is] {
+        d->canvas->bend(is.data(), (uint32_t)is.size());
         d->canvas->update();
         d->canvas->draw(true);
         d->canvas->sync();
@@ -176,6 +196,7 @@ static Drawn* drawn(Stage& s, const std::function<tvg::Paint*(Drawn*, int*, int*
             high *= (float)(h + 2 * room) / (float)h;   // (the thing itself stays as large)
             w += 2 * room, h += 2 * room;
         }
+        d->pictureHigh = (float)h;
         if (const float most = (float)std::max(w, h); most > 4096.f) {   // (no larger than a picture the device takes, with room to spare: the whole drawn smaller, its sheet as large)
             tvg::Scene* smaller = tvg::Scene::gen();
             smaller->add(p);
@@ -200,6 +221,7 @@ static Drawn* drawn(Stage& s, const std::function<tvg::Paint*(Drawn*, int*, int*
             under->fill((uint8_t)std::lround(255.f * ground.x), (uint8_t)std::lround(255.f * ground.y), (uint8_t)std::lround(255.f * ground.z), 255);
             d->canvas->add(under);
         }
+        if (fx.warped) d->canvas->bend(nullptr, 0);   // (its boxes made nets before it is first drawn, so that they bend with it)
         d->canvas->add(p);
         owned = true;
         if (d->film) d->frames = d->film->totalFrame(), d->seconds = d->film->duration();
@@ -446,7 +468,9 @@ static Drawn* flat(Stage& s, const char* form, float wide, const mat4f& place, f
         shape->path(&cmds, &cmdsCnt, &pts, &ptsCnt);
         d->plain.assign(cmds, cmds + cmdsCnt), d->plainAt.assign(pts, pts + ptsCnt);
         d->plainHigh = (float)*h, d->plainSide = std::min((float)*w, (float)*h) - 2.f * in;
-        if (round > 0.f && strcmp(form, "line")) tvg_bend(shape, d->plain.data(), cmdsCnt, d->plainAt.data(), ptsCnt, std::clamp(round, 0.f, 0.5f) * d->plainSide, 0.f, 0.f, 0, false, 0.f), d->bent[0] = round;
+        d->fine = fx.warped ? (float)*h / 64.f : 0.f;
+        if ((round > 0.f && strcmp(form, "line")) || d->fine > 0.f)
+            tvg_bend(shape, d->plain.data(), cmdsCnt, d->plainAt.data(), ptsCnt, strcmp(form, "line") ? std::clamp(round, 0.f, 0.5f) * d->plainSide : 0.f, 0.f, 0.f, 0, false, 0.f, d->fine), d->bent[0] = round;
         shape->fill((uint8_t)std::lround(255.f * colour.x), (uint8_t)std::lround(255.f * colour.y), (uint8_t)std::lround(255.f * colour.z), strcmp(form, "null") && !fx.hollow ? 255 : 0);
         if (fx.ramp.size() > 1 && strcmp(form, "null")) shape->fill(ramp_of(fx.ramp, (float)*w, (float)*h, fx.radial, fx.rampAngle, fx.rampScale, fx.spread));
         if (in > 0.f) shape->strokeWidth(2.f * in), shape->strokeFill((uint8_t)std::lround(255.f * edge.x), (uint8_t)std::lround(255.f * edge.y), (uint8_t)std::lround(255.f * edge.z));
