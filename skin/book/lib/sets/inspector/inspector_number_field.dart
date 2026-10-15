@@ -558,7 +558,11 @@ class _NumFieldState extends State<NumField> {
           focusNode: _node,
           onKeyEvent: _key,
           onFocusChange: (f) => setState(() => _focus = f),
-          child: Listener(
+          child: RawGestureDetector(
+            // (a press that scrubs is the field's at once: a scroll round the inspector would take a drag that goes up or
+            //  down too and carry the field away under the hand; a press on a glyph that owns it, or while typing, is not)
+            gestures: {_ScrubClaim: GestureRecognizerFactoryWithHandlers<_ScrubClaim>(() => _ScrubClaim(), (r) => r.takes = (e) => _on && !_editing && !(widget.glyph != null && widget.glyphOwnsPointer && _inGlyph(e.localPosition)))},
+            child: Listener(
             onPointerDown: _onDown,
             onPointerMove: _onMove,
             onPointerUp: _onUp,
@@ -578,8 +582,29 @@ class _NumFieldState extends State<NumField> {
               child: body,
             ),
           ),
+          ),
         );
       },
     );
   }
+}
+
+
+/// The field's claim on a press that scrubs it: taken at once, before a scroll round it can (Flutter's EagerGestureRecognizer, asked first).
+class _ScrubClaim extends OneSequenceGestureRecognizer {
+  bool Function(PointerDownEvent) takes = (_) => false;
+  @override
+  void addAllowedPointer(PointerDownEvent event) {
+    if (!takes(event)) return;
+    super.addAllowedPointer(event);
+    resolve(GestureDisposition.accepted);
+    stopTrackingPointer(event.pointer);
+  }
+
+  @override
+  String get debugDescription => 'scrub';
+  @override
+  void didStopTrackingLastPointer(int pointer) {}
+  @override
+  void handleEvent(PointerEvent event) {}
 }

@@ -1323,6 +1323,29 @@ void main() {
     await _close(t);
   }, skip: !_built);
 
+  testWidgets('a knob dragged up or down as well as across scrubs its number and does not scroll the inspector under the hand', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    final text = m.add('text', '/System/Library/Fonts/Supplemental/Arial Black.ttf');
+    ws..reread()..select('$text');
+    await t.pumpAndSettle();
+    final bloom = find.byWidgetPredicate((w) => w is NumField && w.id == 'v_letter_spacing');
+    await t.ensureVisible(bloom);
+    await t.pumpAndSettle();
+    final list = find.ancestor(of: bloom, matching: find.byType(Scrollable)).first;
+    final scrolled = t.state<ScrollableState>(list).position.pixels, was = m.value(text, 'letter_spacing', 0) ?? 1;
+    expect(t.state<ScrollableState>(list).position.maxScrollExtent, greaterThan(0), reason: 'the inspector is longer than its pane');
+    final g = await t.startGesture(t.getCenter(bloom));
+    for (var i = 1; i <= 10; ++i) {
+      await g.moveBy(const Offset(9, -8));
+      await t.pump(const Duration(milliseconds: 16));
+    }
+    await g.up();
+    await t.pumpAndSettle();
+    expect(t.state<ScrollableState>(list).position.pixels, scrolled, reason: 'the inspector stays where it was');
+    expect(m.value(text, 'letter_spacing', 0), greaterThan(was), reason: 'the number went up');
+    await _close(t);
+  }, skip: !_built);
+
   testWidgets('Backspace on the timeline takes the picked thing out; undo brings it back', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final ring = m.add('solid', 'ring'), cube = m.add('solid', 'cube');

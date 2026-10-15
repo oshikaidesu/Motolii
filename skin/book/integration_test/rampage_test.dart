@@ -240,8 +240,7 @@ void main() {
               if (_all(
                     m,
                     at(),
-                  ).entries.every((e) => before[e.key] == e.value) &&
-                  state() == was) {
+                  ).entries.every((e) => before[e.key] == e.value)) { // (the document unmoved: a value at its end, pushed past it; the window may show the hand a moment longer, that is not a move)
                 seen = await dragSeen(
                   what.startsWith('knob') ? t.getCenter(where.first) : from,
                   -by * 2,
@@ -321,7 +320,7 @@ void main() {
           };
           if (moved.isEmpty && was == now && !what.startsWith('menu'))
             reds.add('$what: moves nothing');
-          if (moved.isEmpty && was == now && !what.startsWith('menu')) debugPrint('RED-UNDER $what: $under | trouble "${m.trouble}" notice "${ws.notice}" animating ${ws.animating} keys ${what.startsWith('knob v_') ? m.keyMoments(int.tryParse(ws.selected ?? '') ?? 0, what.substring(7)).length : -1} value ${what.startsWith('knob v_') ? m.word(int.tryParse(ws.selected ?? '') ?? 0, what.substring(7)) : ''}');
+          if (moved.isEmpty && was == now && !what.startsWith('menu')) debugPrint('RED-UNDER $what: ${what.startsWith('knob') && where.evaluate().isNotEmpty ? 'wide ${t.getSize(where.first).width.toStringAsFixed(0)} editing ${find.descendant(of: where.first, matching: find.byType(EditableText)).evaluate().isNotEmpty} held ${Ctx.read(t.element(where.first)).doc.get((t.widget(where.first) as NumField).id)} worked ${worked[what.split(' ').take(2).join(' ')]}' : ''} $under | trouble "${m.trouble}" notice "${ws.notice}" animating ${ws.animating} keys ${what.startsWith('knob v_') ? m.keyMoments(int.tryParse(ws.selected ?? '') ?? 0, what.substring(7)).length : -1} value ${what.startsWith('knob v_') ? m.word(int.tryParse(ws.selected ?? '') ?? 0, what.substring(7)) : ''}');
           // (the cards agree with the document: each number the inspector holds is what the document makes of it now)
           final told = wsTransform(ws, ws.selected),
               held = Ctx.read(t.element(find.byType(InspectorPanel))).doc.v;
