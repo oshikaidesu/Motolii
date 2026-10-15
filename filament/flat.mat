@@ -28,7 +28,11 @@ material {
         // [2] Cavalry's skew (radians) and its axis (radians); squash and stretch (-1 to 1, its area kept); half its width;
         // [3] After Effects' wiggle paths: how far, how fine (waves to its height), how far on in time, its seed;
         // [4] Cavalry's motion stretch: which way it moves and how fast (its own units a second, as it is turned), how much it stretches for that
-        { type : float4[5], name : bends }
+        { type : float4[5], name : bends },
+        // a film's own look, as ThorVG's effects give a picture theirs: [0] how far it is blurred (across, up: shares of
+        // the picture), how much its darks and lights are made two colours, how much three; [1] [2] the two (tint);
+        // [3] [4] [5] the three (tritone: shadow, middle, highlight). All 0: as it is.
+        { type : float4[6], name : grade }
     ]
 }
 
@@ -87,6 +91,9 @@ fragment {
         c = mix(c, min(c, mix(c, vec3(next), of)), spilt);
         return clamp(beyond / max(materialParams.keySoft.x, 1e-4), 0.0, 1.0);
     }
+    vec3 filmAt(vec2 uv) {   // (a film's colour at a place: its light and its colour planes, by the film's own rule)
+        return clamp((materialParams.filmRule * vec4(textureLod(materialParams_picture, uv, 0.0).r, textureLod(materialParams_colours, uv, 0.0).rg, 1.0)).rgb, 0.0, 1.0);
+    }
     void material(inout MaterialInputs material) {
         prepareMaterial(material);
         if (materialParams.window.z > 0.5 && (getUV0().x < materialParams.window.x || getUV0().x >= materialParams.window.y)) discard;   // (a letter: its own part of the words only)
@@ -94,10 +101,23 @@ fragment {
         vec3 c = drawn.rgb;
         if (materialParams.filmed > 0.5) {
             // video keeps light and colour apart, in its own range: to red, green, blue by the film's own rule
-            c = clamp((materialParams.filmRule * vec4(c.r, textureLod(materialParams_colours, getUV0(), 0.0).rg, 1.0)).rgb, 0.0, 1.0);
+            c = filmAt(getUV0());
+            vec4 g = materialParams.grade[0];
+            if (g.x > 0.0 || g.y > 0.0) {   // (blurred: read at twelve places round it, near and far, and itself)
+                vec3 sum = c;
+                for (int k = 0; k < 12; k++) {
+                    float a = 6.2831853 * (float(k) + 0.5 * float(k / 6)) / 6.0, r = k < 6 ? 0.45 : 1.0;
+                    sum += filmAt(getUV0() + vec2(cos(a), sin(a)) * g.xy * r);
+                }
+                c = sum / 13.0;
+            }
         }
         // (the screen's own rule, exactly: Filament's output step is its reverse, so a number comes out as it went in)
-        float kept = keyLeft(c);   // (the colour is then the film's share of the point already: only its clearness is `kept`)
+        float kept = keyLeft(c);
+        vec4 g = materialParams.grade[0];   // (a film's colours made two or three, after its green is keyed out by its own: ThorVG's tint and tritone)
+        float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
+        if (g.z > 0.0) c = mix(c, mix(materialParams.grade[1].rgb, materialParams.grade[2].rgb, l), g.z);
+        if (g.w > 0.0) c = mix(c, l < 0.5 ? mix(materialParams.grade[3].rgb, materialParams.grade[4].rgb, 2.0 * l) : mix(materialParams.grade[4].rgb, materialParams.grade[5].rgb, 2.0 * l - 1.0), g.w);   // (the colour is then the film's share of the point already: only its clearness is `kept`)
         float there = materialParams.filmed > 0.5 ? 1.0 : drawn.a;
         if (kept * there < 0.004) discard;   // (where nothing of it is left it is not there at all: it hides nothing behind it)
         float uncut = matteLeft() * materialParams.opacity;

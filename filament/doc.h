@@ -166,7 +166,7 @@ static const DocValue doc_values[] = {
     {"align", "text", 0, 1, false, nullptr},
     // (ThorVG's own scene effects on a thing it draws: a blur, and a shadow of a colour, how far it falls, which way, how
     //  soft, how much of it; lengths in points of the picture at size 1)
-    {"blur", "picture text shape", 0, 1000, true, nullptr}, {"blur_direction", "picture text shape", 0, 0, false, "both horizontal vertical"}, {"shadow", "picture text shape", 0, 0, false, ""},
+    {"blur", "film picture text shape", 0, 1000, true, nullptr}, {"blur_direction", "film picture text shape", 0, 0, false, "both horizontal vertical"}, {"shadow", "picture text shape", 0, 0, false, ""},
     {"shadow_distance", "picture text shape", 0, 1000, true, nullptr}, {"shadow_angle", "picture text shape", -1e6, 1e6, true, nullptr},
     {"shadow_blur", "picture text shape", 0, 1000, true, nullptr}, {"shadow_opacity", "picture text shape", 0, 1, true, nullptr},
     // (and its darks and lights made two colours, how much: ThorVG's tint; or its darks, middles and lights three: its tritone)
@@ -242,8 +242,8 @@ static const DocValue doc_values[] = {
     {"scatter_rotate", "picture text shape", 0, 1e4, true, nullptr}, {"scatter_size", "picture text shape", 0, 1, true, nullptr},
     {"seed", "picture text shape", 0, 1e6, false, nullptr},
     {"drift_x", "picture text shape", -1e3, 1e3, true, nullptr}, {"drift_y", "picture text shape", -1e3, 1e3, true, nullptr},   // (scattered copies flowing so far a second, units of the stage: past the scattering's edge, back in at the other)
-    {"tint", "picture text shape", 0, 1, true, nullptr}, {"tint_black", "picture text shape", 0, 0, false, ""}, {"tint_white", "picture text shape", 0, 0, false, ""},
-    {"tritone", "picture text shape", 0, 1, true, nullptr}, {"tritone_shadow", "picture text shape", 0, 0, false, ""}, {"tritone_midtone", "picture text shape", 0, 0, false, ""}, {"tritone_highlight", "picture text shape", 0, 0, false, ""},   // (how its lines lie one under another, ThorVG's own: 0 at the left, 0.5 about the middle, 1 at the right)
+    {"tint", "film picture text shape", 0, 1, true, nullptr}, {"tint_black", "film picture text shape", 0, 0, false, ""}, {"tint_white", "film picture text shape", 0, 0, false, ""},
+    {"tritone", "film picture text shape", 0, 1, true, nullptr}, {"tritone_shadow", "film picture text shape", 0, 0, false, ""}, {"tritone_midtone", "film picture text shape", 0, 0, false, ""}, {"tritone_highlight", "film picture text shape", 0, 0, false, ""},   // (how its lines lie one under another, ThorVG's own: 0 at the left, 0.5 about the middle, 1 at the right)
     {"stroke", "text shape", 0, 0, false, ""}, {"stroke_width", "text shape", 0, 1000, false, nullptr},   // (its edge: a colour, and how wide, in points of the picture at size 1)
     // (ThorVG's own: a text's letters and lines so many times as far apart as the font sets them, its slant; an edge's
     //  ends and corners, and dashes along it so long, with gaps as long, begun so far along)
@@ -1233,6 +1233,16 @@ static void doc_moment(Doc& d, double now) {
         }
         if (!in) continue;
         if (t.film) video_at(s, t.film, (float)lies[i].since);
+        if (t.film && t.film->look) {   // (its own look, in its material, as ThorVG's effects give a picture its: blurred (in points of the film), tinted, tritoned)
+            DrawnFx fx;
+            std::string why;
+            doc_fx(d, thing, now, false, 1.0, fx, why);
+            const std::string way = doc_word(d, thing, "blur_direction");
+            const float blur = (float)doc_number(d, thing, "blur", now, 0);
+            const float4 grade[6] = {{way == "vertical" ? 0.f : blur / (float)t.film->w, way == "horizontal" ? 0.f : blur / (float)t.film->h, fx.tint, fx.tritone},
+                                     {fx.tints[0], 0.f}, {fx.tints[1], 0.f}, {fx.tones[0], 0.f}, {fx.tones[1], 0.f}, {fx.tones[2], 0.f}};
+            t.film->look->setParameter("grade", grade, 6);
+        }
         if (t.solid && !t.solid->moves.empty()) solid_at(t.solid, doc_word(d, thing, "animation"), lies[i].since * doc_number(d, thing, "speed", 0, 1));   // (its own movement, from when it comes on)
         if (t.drawn && t.drawn->seconds > 0.f) picture_at(s, t.drawn, std::fmod((float)lies[i].since, t.drawn->seconds));
         if (t.drawn && !t.drawn->effects.empty()) {   // (its effects as they are now: those that move are drawn again)
