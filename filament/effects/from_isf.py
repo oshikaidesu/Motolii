@@ -44,18 +44,21 @@ for other in pictures:
 kinds = {"float": "float", "bool": "int", "long": "int", "event": "int", "point2D": "vec2", "color": "vec4"}
 knobs = [i for i in head.get("INPUTS", []) if i["TYPE"] in kinds]
 glsl = "#version 450\n"
-glsl += "layout(set = 0, binding = 0) uniform texture2D isf_picture;\nlayout(set = 0, binding = 1) uniform sampler isf_sampler;\n"
+# (each picture a texture and a sampler named after it, read through ISF's own words by pasting the name: a name
+#  the shader also gives a variable of its own is left alone; only the picture in is also its own name outright)
+glsl += f"layout(set = 0, binding = 0) uniform texture2D isf_tex_{picture};\nlayout(set = 0, binding = 1) uniform sampler isf_smp_{picture};\n"
 for k, t in enumerate(targets):   # (a pass's picture: binding 2(k+1) and its sampler after it)
-    glsl += f"layout(set = 0, binding = {2 * (k + 1)}) uniform texture2D isf_target{k};\nlayout(set = 0, binding = {2 * (k + 1) + 1}) uniform sampler isf_target{k}_sampler;\n"
-    glsl += f"#define {t} sampler2D(isf_target{k}, isf_target{k}_sampler)\n"
+    glsl += f"layout(set = 0, binding = {2 * (k + 1)}) uniform texture2D isf_tex_{t};\nlayout(set = 0, binding = {2 * (k + 1) + 1}) uniform sampler isf_smp_{t};\n"
 glsl += f"layout(set = 0, binding = {2 * (len(targets) + 1)}) uniform Knobs {{\n  float time;\n  vec2 resolution;\n  float frame;\n  float passindex;\n"
 glsl += "".join(f"  {kinds[k['TYPE']]} {k['NAME']}{'_on' if k['TYPE'] in ('bool', 'event') else ''};\n" for k in knobs) + "};\n"
 glsl += "".join(f"#define {k['NAME']} ({k['NAME']}_on != 0)\n" for k in knobs if k["TYPE"] in ("bool", "event"))
 glsl += "layout(location = 0) in vec2 isf_FragNormCoord;\nlayout(location = 0) out vec4 isf_FragColor;\n"
-glsl += f"#define {picture} sampler2D(isf_picture, isf_sampler)\n"
+glsl += f"#define {picture} sampler2D(isf_tex_{picture}, isf_smp_{picture})\n"
 glsl += "#define TIME time\n#define RENDERSIZE resolution\n#define TIMEDELTA (1.0 / 60.0)\n#define FRAMEINDEX int(frame)\n#define PASSINDEX int(passindex)\n#define DATE vec4(0.0)\n"
+glsl += "".join(f"#define isf_img_{n} sampler2D(isf_tex_{n}, isf_smp_{n})\n" for n in [picture] + targets)
 glsl += "#define IMG_NORM_PIXEL(i, c) texture(i, c)\n#define IMG_PIXEL(i, c) texture(i, (c) / RENDERSIZE)\n"
 glsl += "#define IMG_THIS_NORM_PIXEL(i) texture(i, isf_FragNormCoord)\n#define IMG_THIS_PIXEL(i) texture(i, isf_FragNormCoord)\n#define IMG_SIZE(i) RENDERSIZE\n"
+body = re.sub(r"(\bIMG_(?:NORM_PIXEL|PIXEL|THIS_PIXEL|THIS_NORM_PIXEL|SIZE)\s*\(\s*)(\w+)", lambda m: m.group(1) + "isf_img_" + m.group(2), body)   # (the picture an ISF word reads, by a name of its own: naga's preprocessor pastes no names)
 glsl += "#define gl_FragColor isf_FragColor\n#define texture2D texture\n#define varying //\n"
 glsl += "#define texture(i, c) textureLod(i, c, 0.0)\n"   # (WGSL samples with derivatives only where every pixel goes the same way: these read the top level anywhere)
 glsl += re.sub(r"^\s*#version.*$", "", body, flags=re.M)

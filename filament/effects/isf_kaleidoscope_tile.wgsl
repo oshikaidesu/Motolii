@@ -14,6 +14,7 @@ struct Knobs {
     time: f32,
     resolution: vec2<f32>,
     frame: f32,
+    passindex: f32,
     size: f32,
     sides: f32,
     rotation: f32,
@@ -30,9 +31,9 @@ struct FragmentOutput {
 const tau: f32 = 6.2831855f;
 
 @group(0) @binding(0) 
-var isf_picture: texture_2d<f32>;
+var isf_tex_inputImage: texture_2d<f32>;
 @group(0) @binding(1) 
-var isf_sampler: sampler;
+var isf_smp_inputImage: sampler;
 @group(0) @binding(2) 
 var<uniform> global: Knobs;
 var<private> isf_FragNormCoord_1: vec2<f32>;
@@ -49,111 +50,111 @@ fn pattern() -> vec2<f32> {
     var a: f32;
     var zoom: f32;
 
-    let _e25 = global.rotation;
-    s = sin((tau * _e25));
-    let _e29 = global.rotation;
-    c = cos((tau * _e29));
-    let _e33 = isf_FragNormCoord_1;
-    let _e34 = global.resolution;
-    tex = (_e33 * _e34);
-    let _e38 = global.size;
-    scale = (1f / max(_e38, 0.001f));
-    let _e43 = c;
-    let _e44 = tex;
-    let _e47 = s;
-    let _e48 = tex;
-    let _e52 = s;
-    let _e53 = tex;
-    let _e56 = c;
-    let _e57 = tex;
-    let _e62 = scale;
-    point = (vec2<f32>(((_e43 * _e44.x) - (_e47 * _e48.y)), ((_e52 * _e53.x) + (_e56 * _e57.y))) * _e62);
-    let _e65 = point;
-    let _e66 = global.shift;
-    let _e67 = global.resolution;
-    let _e70 = global.resolution;
-    point = ((_e65 - (_e66 * _e67)) / _e70);
-    let _e72 = point;
-    let _e74 = vec2(1f);
-    point = (_e72 - (floor((_e72 / _e74)) * _e74));
-    let _e79 = point;
-    if (_e79.x < 0.5f) {
+    let _e27 = global.rotation;
+    s = sin((tau * _e27));
+    let _e31 = global.rotation;
+    c = cos((tau * _e31));
+    let _e35 = isf_FragNormCoord_1;
+    let _e36 = global.resolution;
+    tex = (_e35 * _e36);
+    let _e40 = global.size;
+    scale = (1f / max(_e40, 0.001f));
+    let _e45 = c;
+    let _e46 = tex;
+    let _e49 = s;
+    let _e50 = tex;
+    let _e54 = s;
+    let _e55 = tex;
+    let _e58 = c;
+    let _e59 = tex;
+    let _e64 = scale;
+    point = (vec2<f32>(((_e45 * _e46.x) - (_e49 * _e50.y)), ((_e54 * _e55.x) + (_e58 * _e59.y))) * _e64);
+    let _e67 = point;
+    let _e68 = global.shift;
+    let _e69 = global.resolution;
+    let _e72 = global.resolution;
+    point = ((_e67 - (_e68 * _e69)) / _e72);
+    let _e74 = point;
+    let _e76 = vec2(1f);
+    point = (_e74 - (floor((_e74 / _e76)) * _e76));
+    let _e81 = point;
+    if (_e81.x < 0.5f) {
         {
-            let _e84 = point;
-            let _e86 = global.slide1_;
-            let _e88 = (_e84.y + _e86.y);
-            point.y = (_e88 - (floor((_e88 / 1f)) * 1f));
+            let _e86 = point;
+            let _e88 = global.slide1_;
+            let _e90 = (_e86.y + _e88.y);
+            point.y = (_e90 - (floor((_e90 / 1f)) * 1f));
         }
     } else {
         {
-            let _e95 = point;
-            let _e97 = global.slide2_;
-            let _e99 = (_e95.y + _e97.y);
-            point.y = (_e99 - (floor((_e99 / 1f)) * 1f));
+            let _e97 = point;
+            let _e99 = global.slide2_;
+            let _e101 = (_e97.y + _e99.y);
+            point.y = (_e101 - (floor((_e101 / 1f)) * 1f));
         }
     }
-    let _e105 = point;
-    if (_e105.y < 0.5f) {
+    let _e107 = point;
+    if (_e107.y < 0.5f) {
         {
-            let _e110 = point;
-            let _e112 = global.slide1_;
-            let _e114 = (_e110.x + _e112.x);
-            point.x = (_e114 - (floor((_e114 / 1f)) * 1f));
+            let _e112 = point;
+            let _e114 = global.slide1_;
+            let _e116 = (_e112.x + _e114.x);
+            point.x = (_e116 - (floor((_e116 / 1f)) * 1f));
         }
     } else {
         {
-            let _e121 = point;
-            let _e123 = global.slide2_;
-            let _e125 = (_e121.x + _e123.x);
-            point.x = (_e125 - (floor((_e125 / 1f)) * 1f));
+            let _e123 = point;
+            let _e125 = global.slide2_;
+            let _e127 = (_e123.x + _e125.x);
+            point.x = (_e127 - (floor((_e127 / 1f)) * 1f));
         }
     }
-    let _e134 = point;
-    point = (vec2(1f) - abs((vec2(1f) - (2f * _e134))));
-    let _e145 = center;
-    let _e146 = point;
-    r = distance(_e145, _e146);
-    let _e149 = point;
-    let _e151 = center;
-    let _e154 = point;
-    let _e156 = center;
-    a = atan2((_e149.y - _e151.y), (_e154.x - _e156.x));
-    let _e161 = a;
-    let _e162 = global.sides;
-    let _e163 = (tau / _e162);
-    a = (_e161 - (floor((_e161 / _e163)) * _e163));
-    let _e168 = a;
-    let _e169 = global.sides;
-    a = abs((_e168 - ((tau / _e169) / 2f)));
-    let _e175 = a;
-    let _e176 = global.angle;
-    s = sin((_e175 + (tau * _e176)));
-    let _e180 = a;
-    let _e181 = global.angle;
-    c = cos((_e180 + (tau * _e181)));
-    let _e185 = global.resolution;
+    let _e136 = point;
+    point = (vec2(1f) - abs((vec2(1f) - (2f * _e136))));
+    let _e147 = center;
+    let _e148 = point;
+    r = distance(_e147, _e148);
+    let _e151 = point;
+    let _e153 = center;
+    let _e156 = point;
+    let _e158 = center;
+    a = atan2((_e151.y - _e153.y), (_e156.x - _e158.x));
+    let _e163 = a;
+    let _e164 = global.sides;
+    let _e165 = (tau / _e164);
+    a = (_e163 - (floor((_e163 / _e165)) * _e165));
+    let _e170 = a;
+    let _e171 = global.sides;
+    a = abs((_e170 - ((tau / _e171) / 2f)));
+    let _e177 = a;
+    let _e178 = global.angle;
+    s = sin((_e177 + (tau * _e178)));
+    let _e182 = a;
+    let _e183 = global.angle;
+    c = cos((_e182 + (tau * _e183)));
     let _e187 = global.resolution;
-    zoom = (_e185.x / _e187.y);
-    let _e192 = r;
-    let _e193 = c;
-    let _e195 = zoom;
-    point.x = (((_e192 * _e193) / _e195) + 0.5f);
-    let _e200 = r;
-    let _e201 = s;
-    let _e203 = zoom;
-    point.y = (((_e200 * _e201) / _e203) + 0.5f);
-    let _e207 = point;
-    return _e207;
+    let _e189 = global.resolution;
+    zoom = (_e187.x / _e189.y);
+    let _e194 = r;
+    let _e195 = c;
+    let _e197 = zoom;
+    point.x = (((_e194 * _e195) / _e197) + 0.5f);
+    let _e202 = r;
+    let _e203 = s;
+    let _e205 = zoom;
+    point.y = (((_e202 * _e203) / _e205) + 0.5f);
+    let _e209 = point;
+    return _e209;
 }
 
 fn main_1() {
     var pat: vec2<f32>;
 
-    let _e25 = pattern();
-    pat = _e25;
-    let _e27 = pat;
-    let _e29 = textureSampleLevel(isf_picture, isf_sampler, _e27, 0f);
-    isf_FragColor = _e29;
+    let _e27 = pattern();
+    pat = _e27;
+    let _e29 = pat;
+    let _e31 = textureSampleLevel(isf_tex_inputImage, isf_smp_inputImage, _e29, 0f);
+    isf_FragColor = _e31;
     return;
 }
 
@@ -161,6 +162,6 @@ fn main_1() {
 fn main(@location(0) isf_FragNormCoord: vec2<f32>) -> FragmentOutput {
     isf_FragNormCoord_1 = isf_FragNormCoord;
     main_1();
-    let _e33 = isf_FragColor;
-    return FragmentOutput(_e33);
+    let _e35 = isf_FragColor;
+    return FragmentOutput(_e35);
 }

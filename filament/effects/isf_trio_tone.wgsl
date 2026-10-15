@@ -16,6 +16,7 @@ struct Knobs {
     time: f32,
     resolution: vec2<f32>,
     frame: f32,
+    passindex: f32,
     darkColor: vec4<f32>,
     midColor: vec4<f32>,
     brightColor: vec4<f32>,
@@ -26,9 +27,9 @@ struct FragmentOutput {
 }
 
 @group(0) @binding(0) 
-var isf_picture: texture_2d<f32>;
+var isf_tex_inputImage: texture_2d<f32>;
 @group(0) @binding(1) 
-var isf_sampler: sampler;
+var isf_smp_inputImage: sampler;
 @group(0) @binding(2) 
 var<uniform> global: Knobs;
 var<private> isf_FragNormCoord_1: vec2<f32>;
@@ -43,44 +44,44 @@ fn main_1() {
     var lum: f32;
     var thermal: vec4<f32>;
 
-    let _e16 = isf_FragNormCoord_1;
-    let _e18 = textureSampleLevel(isf_picture, isf_sampler, _e16, 0f);
-    pixcol = _e18;
-    let _e26 = global.darkColor;
-    color2_ = _e26;
-    let _e36 = pixcol;
-    let _e37 = lumacoeff;
-    lum = dot(_e36, _e37);
-    let _e40 = lum;
-    if (_e40 > 0.66f) {
+    let _e18 = isf_FragNormCoord_1;
+    let _e20 = textureSampleLevel(isf_tex_inputImage, isf_smp_inputImage, _e18, 0f);
+    pixcol = _e20;
+    let _e28 = global.darkColor;
+    color2_ = _e28;
+    let _e38 = pixcol;
+    let _e39 = lumacoeff;
+    lum = dot(_e38, _e39);
+    let _e42 = lum;
+    if (_e42 > 0.66f) {
         {
-            let _e43 = global.midColor;
-            color1_ = _e43;
-            let _e44 = global.brightColor;
-            color2_ = _e44;
+            let _e45 = global.midColor;
+            color1_ = _e45;
+            let _e46 = global.brightColor;
+            color2_ = _e46;
             ix = 2i;
         }
     } else {
-        let _e46 = lum;
-        if (_e46 > 0.33f) {
+        let _e48 = lum;
+        if (_e48 > 0.33f) {
             {
-                let _e49 = global.darkColor;
-                color1_ = _e49;
-                let _e50 = global.midColor;
-                color2_ = _e50;
+                let _e51 = global.darkColor;
+                color1_ = _e51;
+                let _e52 = global.midColor;
+                color2_ = _e52;
                 ix = 1i;
             }
         }
     }
-    let _e52 = color1_;
-    let _e53 = color2_;
-    let _e54 = lum;
-    let _e55 = ix;
-    thermal = mix(_e52, _e53, vec4(((_e54 - (f32(_e55) * 0.33f)) / 0.33f)));
-    let _e65 = thermal;
-    let _e66 = _e65.xyz;
-    let _e67 = pixcol;
-    isf_FragColor = vec4<f32>(_e66.x, _e66.y, _e66.z, _e67.w);
+    let _e54 = color1_;
+    let _e55 = color2_;
+    let _e56 = lum;
+    let _e57 = ix;
+    thermal = mix(_e54, _e55, vec4(((_e56 - (f32(_e57) * 0.33f)) / 0.33f)));
+    let _e67 = thermal;
+    let _e68 = _e67.xyz;
+    let _e69 = pixcol;
+    isf_FragColor = vec4<f32>(_e68.x, _e68.y, _e68.z, _e69.w);
     return;
 }
 
@@ -88,6 +89,6 @@ fn main_1() {
 fn main(@location(0) isf_FragNormCoord: vec2<f32>) -> FragmentOutput {
     isf_FragNormCoord_1 = isf_FragNormCoord;
     main_1();
-    let _e23 = isf_FragColor;
-    return FragmentOutput(_e23);
+    let _e25 = isf_FragColor;
+    return FragmentOutput(_e25);
 }

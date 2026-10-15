@@ -7,6 +7,7 @@ struct Knobs {
     time: f32,
     resolution: vec2<f32>,
     frame: f32,
+    passindex: f32,
     randomSeed: f32,
     repetitions: f32,
     randomizeOpacity_on: i32,
@@ -17,9 +18,9 @@ struct FragmentOutput {
 }
 
 @group(0) @binding(0) 
-var isf_picture: texture_2d<f32>;
+var isf_tex_inputImage: texture_2d<f32>;
 @group(0) @binding(1) 
-var isf_sampler: sampler;
+var isf_smp_inputImage: sampler;
 @group(0) @binding(2) 
 var<uniform> global: Knobs;
 var<private> isf_FragNormCoord_1: vec2<f32>;
@@ -29,8 +30,8 @@ fn rand(co: vec2<f32>) -> f32 {
     var co_1: vec2<f32>;
 
     co_1 = co;
-    let _e18 = co_1;
-    return fract((sin(dot(_e18.xy, vec2<f32>(12.9898f, 78.233f))) * 43758.547f));
+    let _e20 = co_1;
+    return fract((sin(dot(_e20.xy, vec2<f32>(12.9898f, 78.233f))) * 43758.547f));
 }
 
 fn paddedZoomedPosition(loc: vec2<f32>, zl: f32, c: vec2<f32>, p: f32) -> vec2<f32> {
@@ -47,39 +48,39 @@ fn paddedZoomedPosition(loc: vec2<f32>, zl: f32, c: vec2<f32>, p: f32) -> vec2<f
     zl_1 = zl;
     c_1 = c;
     p_1 = p;
-    let _e24 = loc_1;
-    returnMe = _e24;
-    let _e27 = zl_1;
-    zoomMult = (1f / _e27);
-    let _e32 = p_1;
-    let _e35 = c_1;
-    let _e37 = global.resolution;
-    let _e40 = p_1;
-    modifiedCenter = ((((2f * (1f + _e32)) * _e35) / _e37) - vec2((1f + _e40)));
-    let _e45 = p_1;
-    modifiedPadding = _e45;
-    let _e48 = returnMe;
-    let _e50 = zoomMult;
-    let _e52 = p_1;
-    let _e56 = modifiedCenter;
-    returnMe.x = (((_e48.x * _e50) + (_e52 / 2f)) - _e56.x);
-    let _e60 = returnMe;
-    let _e62 = zoomMult;
-    let _e64 = p_1;
-    let _e68 = modifiedCenter;
-    returnMe.y = (((_e60.y * _e62) + (_e64 / 2f)) - _e68.y);
-    let _e72 = returnMe;
-    let _e75 = modifiedPadding;
-    let _e76 = (1f + _e75);
-    let _e81 = p_1;
-    returnMe.x = ((_e72.x - (floor((_e72.x / _e76)) * _e76)) - (_e81 / 2f));
-    let _e86 = returnMe;
-    let _e89 = modifiedPadding;
-    let _e90 = (1f + _e89);
-    let _e95 = p_1;
-    returnMe.y = ((_e86.y - (floor((_e86.y / _e90)) * _e90)) - (_e95 / 2f));
-    let _e99 = returnMe;
-    return _e99;
+    let _e26 = loc_1;
+    returnMe = _e26;
+    let _e29 = zl_1;
+    zoomMult = (1f / _e29);
+    let _e34 = p_1;
+    let _e37 = c_1;
+    let _e39 = global.resolution;
+    let _e42 = p_1;
+    modifiedCenter = ((((2f * (1f + _e34)) * _e37) / _e39) - vec2((1f + _e42)));
+    let _e47 = p_1;
+    modifiedPadding = _e47;
+    let _e50 = returnMe;
+    let _e52 = zoomMult;
+    let _e54 = p_1;
+    let _e58 = modifiedCenter;
+    returnMe.x = (((_e50.x * _e52) + (_e54 / 2f)) - _e58.x);
+    let _e62 = returnMe;
+    let _e64 = zoomMult;
+    let _e66 = p_1;
+    let _e70 = modifiedCenter;
+    returnMe.y = (((_e62.y * _e64) + (_e66 / 2f)) - _e70.y);
+    let _e74 = returnMe;
+    let _e77 = modifiedPadding;
+    let _e78 = (1f + _e77);
+    let _e83 = p_1;
+    returnMe.x = ((_e74.x - (floor((_e74.x / _e78)) * _e78)) - (_e83 / 2f));
+    let _e88 = returnMe;
+    let _e91 = modifiedPadding;
+    let _e92 = (1f + _e91);
+    let _e97 = p_1;
+    returnMe.y = ((_e88.y - (floor((_e88.y / _e92)) * _e92)) - (_e97 / 2f));
+    let _e101 = returnMe;
+    return _e101;
 }
 
 fn randomPaddedZoomedPositionWithSeed(loc_2: vec2<f32>, seed: vec2<f32>) -> vec2<f32> {
@@ -97,45 +98,45 @@ fn randomPaddedZoomedPositionWithSeed(loc_2: vec2<f32>, seed: vec2<f32>) -> vec2
 
     loc_3 = loc_2;
     seed_1 = seed;
-    let _e21 = global.resolution;
-    minZoomLevel = (4f / _e21.x);
-    let _e25 = seed_1;
-    zSeed = ((_e25 * vec2<f32>(0.128f, 9.21f)) + vec2<f32>(1.42f, 2.17f));
-    let _e35 = seed_1;
-    cSeed1_ = ((_e35 * vec2<f32>(0.436f, 0.931f)) + vec2<f32>(2.76f, 3.779f));
-    let _e45 = seed_1;
-    cSeed2_ = ((_e45 * vec2<f32>(2.831f, 2.173f)) + vec2<f32>(1.73f, 6.256f));
-    let _e56 = zSeed;
-    let _e57 = rand(_e56);
-    modZoom = (0.9f * _e57);
-    let _e60 = global.resolution;
-    let _e61 = cSeed1_;
-    let _e62 = rand(_e61);
-    let _e63 = cSeed2_;
+    let _e23 = global.resolution;
+    minZoomLevel = (4f / _e23.x);
+    let _e27 = seed_1;
+    zSeed = ((_e27 * vec2<f32>(0.128f, 9.21f)) + vec2<f32>(1.42f, 2.17f));
+    let _e37 = seed_1;
+    cSeed1_ = ((_e37 * vec2<f32>(0.436f, 0.931f)) + vec2<f32>(2.76f, 3.779f));
+    let _e47 = seed_1;
+    cSeed2_ = ((_e47 * vec2<f32>(2.831f, 2.173f)) + vec2<f32>(1.73f, 6.256f));
+    let _e58 = zSeed;
+    let _e59 = rand(_e58);
+    modZoom = (0.9f * _e59);
+    let _e62 = global.resolution;
+    let _e63 = cSeed1_;
     let _e64 = rand(_e63);
-    modCenter = (_e60 * vec2<f32>(_e62, _e64));
-    let _e69 = seed_1;
-    let _e70 = rand(_e69);
-    modPad = (0.5f * _e70);
-    let _e73 = modZoom;
-    let _e74 = minZoomLevel;
-    if (_e73 < _e74) {
-        let _e76 = minZoomLevel;
-        local = _e76;
+    let _e65 = cSeed2_;
+    let _e66 = rand(_e65);
+    modCenter = (_e62 * vec2<f32>(_e64, _e66));
+    let _e71 = seed_1;
+    let _e72 = rand(_e71);
+    modPad = (0.5f * _e72);
+    let _e75 = modZoom;
+    let _e76 = minZoomLevel;
+    if (_e75 < _e76) {
+        let _e78 = minZoomLevel;
+        local = _e78;
     } else {
-        let _e77 = modZoom;
-        local = _e77;
+        let _e79 = modZoom;
+        local = _e79;
     }
-    let _e79 = local;
-    modZoom = _e79;
-    let _e80 = loc_3;
-    let _e81 = modZoom;
-    let _e82 = modCenter;
-    let _e83 = modPad;
-    let _e84 = paddedZoomedPosition(_e80, _e81, _e82, _e83);
-    returnMe_1 = _e84;
-    let _e86 = returnMe_1;
-    return _e86;
+    let _e81 = local;
+    modZoom = _e81;
+    let _e82 = loc_3;
+    let _e83 = modZoom;
+    let _e84 = modCenter;
+    let _e85 = modPad;
+    let _e86 = paddedZoomedPosition(_e82, _e83, _e84, _e85);
+    returnMe_1 = _e86;
+    let _e88 = returnMe_1;
+    return _e88;
 }
 
 fn main_1() {
@@ -148,67 +149,67 @@ fn main_1() {
     var modOpacity: f32;
     var tmpColor: vec4<f32>;
 
-    let _e19 = global.repetitions;
-    depth = i32(_e19);
-    let _e22 = isf_FragNormCoord_1;
-    loc_4 = _e22;
+    let _e21 = global.repetitions;
+    depth = i32(_e21);
+    let _e24 = isf_FragNormCoord_1;
+    loc_4 = _e24;
     loop {
-        let _e26 = i;
-        if !((_e26 < 15i)) {
+        let _e28 = i;
+        if !((_e28 < 15i)) {
             break;
         }
         {
-            let _e33 = i;
-            let _e34 = depth;
-            if (_e33 >= _e34) {
+            let _e35 = i;
+            let _e36 = depth;
+            if (_e35 >= _e36) {
                 break;
             }
-            let _e37 = i;
-            let _e40 = global.randomSeed;
-            let _e45 = i;
-            let _e48 = global.randomSeed;
-            tmpSeed = vec2<f32>((((1.12f + f32(_e37)) * _e40) + 1.37f), (((1.92f + f32(_e45)) * _e48) + 1.37f));
-            let _e54 = global.randomizeOpacity_on;
-            if (_e54 != 0i) {
-                let _e59 = tmpSeed;
-                let _e60 = rand(_e59);
-                local_1 = (0.25f + (0.75f * _e60));
+            let _e39 = i;
+            let _e42 = global.randomSeed;
+            let _e47 = i;
+            let _e50 = global.randomSeed;
+            tmpSeed = vec2<f32>((((1.12f + f32(_e39)) * _e42) + 1.37f), (((1.92f + f32(_e47)) * _e50) + 1.37f));
+            let _e56 = global.randomizeOpacity_on;
+            if (_e56 != 0i) {
+                let _e61 = tmpSeed;
+                let _e62 = rand(_e61);
+                local_1 = (0.25f + (0.75f * _e62));
             } else {
                 local_1 = 1f;
             }
-            let _e65 = local_1;
-            modOpacity = _e65;
-            let _e67 = isf_FragNormCoord_1;
-            let _e68 = tmpSeed;
-            let _e69 = randomPaddedZoomedPositionWithSeed(_e67, _e68);
-            loc_4 = _e69;
-            let _e70 = loc_4;
-            let _e74 = loc_4;
-            let _e79 = loc_4;
-            let _e84 = loc_4;
-            if ((((_e70.x < 0f) || (_e74.y < 0f)) || (_e79.x > 1f)) || (_e84.y > 1f)) {
+            let _e67 = local_1;
+            modOpacity = _e67;
+            let _e69 = isf_FragNormCoord_1;
+            let _e70 = tmpSeed;
+            let _e71 = randomPaddedZoomedPositionWithSeed(_e69, _e70);
+            loc_4 = _e71;
+            let _e72 = loc_4;
+            let _e76 = loc_4;
+            let _e81 = loc_4;
+            let _e86 = loc_4;
+            if ((((_e72.x < 0f) || (_e76.y < 0f)) || (_e81.x > 1f)) || (_e86.y > 1f)) {
                 {
                 }
             } else {
                 {
-                    let _e89 = loc_4;
-                    let _e91 = textureSampleLevel(isf_picture, isf_sampler, _e89, 0f);
-                    tmpColor = _e91;
-                    let _e93 = inputPixelColor;
+                    let _e91 = loc_4;
+                    let _e93 = textureSampleLevel(isf_tex_inputImage, isf_smp_inputImage, _e91, 0f);
+                    tmpColor = _e93;
                     let _e95 = inputPixelColor;
-                    let _e97 = tmpColor;
+                    let _e97 = inputPixelColor;
                     let _e99 = tmpColor;
-                    let _e102 = modOpacity;
-                    let _e104 = (_e95.xyz + ((_e97.xyz * _e99.w) * _e102));
-                    inputPixelColor.x = _e104.x;
-                    inputPixelColor.y = _e104.y;
-                    inputPixelColor.z = _e104.z;
-                    let _e112 = inputPixelColor;
-                    let _e114 = tmpColor;
-                    let _e116 = modOpacity;
-                    inputPixelColor.w = (_e112.w + (_e114.w * _e116));
-                    let _e119 = inputPixelColor;
-                    if (_e119.w > 0.99f) {
+                    let _e101 = tmpColor;
+                    let _e104 = modOpacity;
+                    let _e106 = (_e97.xyz + ((_e99.xyz * _e101.w) * _e104));
+                    inputPixelColor.x = _e106.x;
+                    inputPixelColor.y = _e106.y;
+                    inputPixelColor.z = _e106.z;
+                    let _e114 = inputPixelColor;
+                    let _e116 = tmpColor;
+                    let _e118 = modOpacity;
+                    inputPixelColor.w = (_e114.w + (_e116.w * _e118));
+                    let _e121 = inputPixelColor;
+                    if (_e121.w > 0.99f) {
                         {
                             break;
                         }
@@ -217,12 +218,12 @@ fn main_1() {
             }
         }
         continuing {
-            let _e30 = i;
-            i = (_e30 + 1i);
+            let _e32 = i;
+            i = (_e32 + 1i);
         }
     }
-    let _e123 = inputPixelColor;
-    isf_FragColor = _e123;
+    let _e125 = inputPixelColor;
+    isf_FragColor = _e125;
     return;
 }
 
@@ -230,6 +231,6 @@ fn main_1() {
 fn main(@location(0) isf_FragNormCoord: vec2<f32>) -> FragmentOutput {
     isf_FragNormCoord_1 = isf_FragNormCoord;
     main_1();
-    let _e23 = isf_FragColor;
-    return FragmentOutput(_e23);
+    let _e25 = isf_FragColor;
+    return FragmentOutput(_e25);
 }
