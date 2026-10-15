@@ -297,13 +297,20 @@ class Ws extends ChangeNotifier {
     if (_inside case final m?) {
       final t = int.tryParse(id ?? '');
       if (t == null) return const [];
-      return [
+      if (_fxKeptAt != rev) { // (the effects on a thing change with the document: asked once a reading, not each picture of the stage, three questions an effect a thing)
+        _fxKept.clear();
+        _fxKeptAt = rev;
+      }
+      return _fxKept.putIfAbsent(t, () => List.unmodifiable([
         for (final e in fxValues.entries)
           if (_on(m, t, e.value.$1)) e.key,
-      ];
+      ]));
     }
     return List.unmodifiable(_fx[id] ?? const <String>[]);
   }
+
+  final _fxKept = <int, List<String>>{};
+  int _fxKeptAt = -1;
 
   /// Joined: whether every change a hand makes is keyed (the top bar's Animate, the inspector's Animate all: one truth, the inside's).
   bool get animating => _inside?.keyingNow ?? false;

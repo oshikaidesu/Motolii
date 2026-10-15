@@ -45,7 +45,9 @@ class ArtScene {
       guidesX = ws.inside == null ? const [150.0, 1770.0] : [for (final (a, at) in ws.guides) if (a == 'x') at],
       guidesY = ws.inside == null ? const [812.0] : [for (final (a, at) in ws.guides) if (a == 'y') at],
       layers = List.unmodifiable([for (final l in ws.layers) ArtLayer(l)]),
-      fx = Map.unmodifiable({
+      fx = ws.inside != null
+          ? const {} // (joined: the stage is the inside's own picture; the families are the sample's stand-in art, for its own layers)
+          : Map.unmodifiable({
         for (final l in ws.layers)
           if ([...ws.fxOf(l.id), if (l.id == ws.selected) ?ws.trial] case final names when names.isNotEmpty)
             l.id: List<FxFamily>.unmodifiable([for (final n in names) ?fxNamed(n)?.family]),
