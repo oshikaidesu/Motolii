@@ -1,6 +1,7 @@
 material {
     name : floor_lit,
     shadingModel : lit,
+    blending : ${CUT},   // (opaque; masked when it is cut by a matte, floor_lit_matte, which the kit builds from this)
     specularAntiAliasing : true,
     reflections : screenspace,   // (what is near mirrored in it, when the stage asks for reflections: Filament's SSR)
     parameters : [
@@ -14,11 +15,15 @@ material {
         { type : float, name : glowing },
         // (a velvet sheen at the rim, in its own colour; brushed highlights drawn out along it, -1 to 1)
         { type : float, name : sheen },
-        { type : float, name : anisotropy }
+        { type : float, name : anisotropy },
+        { type : sampler2d, name : matte0 }, { type : sampler2d, name : matte1 }, { type : sampler2d, name : matte2 }, { type : sampler2d, name : matte3 },
+        { type : mat4, name : matteEye0 }, { type : mat4, name : matteEye1 }, { type : mat4, name : matteEye2 }, { type : mat4, name : matteEye3 },
+        { type : float4, name : matteUse }, { type : float4, name : matteSoft }   // (matte.glsl)
     ]
 }
 
 fragment {
+#include "matte.glsl"
     void material(inout MaterialInputs material) {
         prepareMaterial(material);
         material.baseColor = materialParams.color;
@@ -30,6 +35,7 @@ fragment {
         material.sheenColor = materialParams.color.rgb * materialParams.sheen;
         material.sheenRoughness = materialParams.roughness;
         material.anisotropy = materialParams.anisotropy;
+        material.baseColor.a = matteLeft();   // (masked: not drawn where a matte cuts it away; opaque: not read)
         material.emissive = vec4(materialParams.color.rgb * materialParams.glowing, 0.0);   // (it lights itself in its own colour, so bright on the picture: 1 its colour itself, more spills over; w 0: not by the stage's exposure, Filament's own)
     }
 }

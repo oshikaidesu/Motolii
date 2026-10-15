@@ -91,7 +91,8 @@ struct Doc {
                    utils::Entity light;   // (a light, Filament's own: in every scene of the stage while it is on)
                    double units = 1.0;    // (a flat thing's: points of the picture to a unit of the stage as it was made, which its effects are counted in)
                    int space = 3;
-                   Scene* scene = nullptr; int channel = -1; };   // (the scene it is in: none said, the stage's own, where it was made; and its channel there)   // (read as it is made: 2 a flat thing on the camera, 25 one in the world, 3 a solid thing or a camera)
+                   Scene* scene = nullptr; int channel = -1;
+                   MaterialInstance* look = nullptr; };   // (a solid's own look, made by the kit: what a matte cuts)   // (the scene it is in: none said, the stage's own, where it was made; and its channel there)   // (read as it is made: 2 a flat thing on the camera, 25 one in the world, 3 a solid thing or a camera)
     // The camera of the moment, against the stage's own (from 6 units in front, 30 degrees high): how the world is
     // moved for it (rig; a 2D thing goes with it) and only how it is turned (facing; a 2.5D thing keeps its own angle).
     math::mat4 rig, facing;
@@ -1309,9 +1310,9 @@ static void doc_moment(Doc& d, double now) {
         // (clipped by a flat thing ThorVG draws, it is cut by that thing's own picture: the kit's matte, After Effects'
         //  alpha matte; by anything else, by the upright box of what that covers)
         const Doc::Shown* const a = clipped ? &d.shown[before] : nullptr;
-        const bool shaped = a && a->drawn && (t.drawn || t.film);
+        const bool shaped = a && a->drawn && (t.drawn || t.film || t.look);   // (a solid too, by its own look: the kit's glass, or its plain look made to be cut)
         Doc::Cut& cut = d.cuts[thing];
-        MaterialInstance* const own = t.film ? t.film->look : t.drawn ? t.drawn->look : nullptr;
+        MaterialInstance* const own = t.film ? t.film->look : t.drawn ? t.drawn->look : t.look;
         const std::string how = doc_word(d, thing, "clip_matte") + " " + std::to_string(doc_number(d, thing, "clip_invert", 0, 0)) + " " + std::to_string(doc_number(d, thing, "clip_feather", 0, 0));
         if (shaped && (cut.from != before || cut.by != a->drawn || cut.how != how)) {   // (its matte takes that picture's shape, at that thing's place, cut as it is said)
             if (cut.look) {   // (what cut its look before is let go of first)
@@ -1349,7 +1350,7 @@ static void doc_moment(Doc& d, double now) {
 static bool doc_match(Doc& d) {
     Stage& s = *d.stage;
     std::map<int, std::string> told;   // every thing of the document, and all that its making goes by
-    doc_rows(d, sqlite3_mprintf("select thing, group_concat(name || '=' || value, ' ') from (select * from fact where thing > 0 and name in ('kind','file','shape','blend','keyed','space','begin','duration','speed','text','fill','wide','points','inner','bloat','zigzag','offset','warp','stroke','stroke_width','align','blur','shadow','shadow_distance','shadow_angle','shadow_blur','shadow_opacity','glow','glow_blur','glow_opacity','copies','tint','tint_black','tint_white','tritone','tritone_shadow','tritone_midtone','tritone_highlight','letter_spacing','line_spacing','italic','cap','join','dash','dash_offset','metallic','roughness','reflectance','clear_coat','clear_coat_roughness','falloff','shadows','shadow_softness','contact_shadows','sheen','anisotropy','shading','thickness','light_group','script','gradient','gradient_angle','gradient_scale','gradient_spread','wrap','wrap_at','split','ior','dispersion','swim','dark','vivid','marker') order by thing, name) group by thing"),
+    doc_rows(d, sqlite3_mprintf("select thing, group_concat(name || '=' || value, ' ') from (select * from fact where thing > 0 and name in ('kind','file','shape','blend','keyed','space','begin','duration','speed','text','fill','wide','points','inner','bloat','zigzag','offset','warp','clip','stroke','stroke_width','align','blur','shadow','shadow_distance','shadow_angle','shadow_blur','shadow_opacity','glow','glow_blur','glow_opacity','copies','tint','tint_black','tint_white','tritone','tritone_shadow','tritone_midtone','tritone_highlight','letter_spacing','line_spacing','italic','cap','join','dash','dash_offset','metallic','roughness','reflectance','clear_coat','clear_coat_roughness','falloff','shadows','shadow_softness','contact_shadows','sheen','anisotropy','shading','thickness','light_group','script','gradient','gradient_angle','gradient_scale','gradient_spread','wrap','wrap_at','split','ior','dispersion','swim','dark','vivid','marker') order by thing, name) group by thing"),
              [&](sqlite3_stmt* row) { told[sqlite3_column_int(row, 0)] = (const char*)sqlite3_column_text(row, 1); });
     for (auto it = d.shown.begin(); it != d.shown.end();) {
         const auto still = told.find(it->first);
@@ -1477,16 +1478,19 @@ static bool doc_match(Doc& d) {
             const Surface surface{(float)doc_number(d, thing, "metallic", 0, 0.08), (float)doc_number(d, thing, "roughness", 0, 0.6), (float)doc_number(d, thing, "reflectance", 0, 0.5),
                                   (float)doc_number(d, thing, "clear_coat", 0, 0), (float)doc_number(d, thing, "clear_coat_roughness", 0, 0), (float)doc_number(d, thing, "emissive", 0, 0),
                                   (float)doc_number(d, thing, "sheen", 0, 0), (float)doc_number(d, thing, "anisotropy", 0, 0), (float)doc_number(d, thing, "thickness", 0, 0.5)};
-            const char* model = surface_model(doc_word(d, thing, "shading"));
+            const std::string shading = doc_word(d, thing, "shading");
+            const char* model = doc_number(d, thing, "clip", 0, 0) > 0.5 && (shading.empty() || shading == "lit") ? "floor_lit_matte.filamat" : surface_model(shading);   // (clipped: one a matte can cut)
             if (!fill.empty() && !glass && (rgb < 0 || ramp.size() > 1)) why = "a solid's fill is six digits, as ff3366, or glass";
             else if (!shape.empty()) {
                 made.shape = shape == "gem" ? gem(0.5f) : shape == "cube" ? cube(0.1f) : shape == "ball" ? sphere(0.5f) : torus(0.37f, 0.13f);
                 MaterialInstance* look = glass ? thick_glass(s, made.shape, {mat4f{}}) : add(s, made.shape, model);
+                made.look = look;
                 if (look && glass) glassy(look);
                 if (!look) made.shape = nullptr;
                 else if (!glass) plain(look, fill.empty() ? float3{0xd9, 0xd2, 0xc3} / 255.f : colour, surface);
             } else if (glass) {   // (a file's shape as glass: its triangles alone, for the kit's glass, which draws a shape three times)
                 MaterialInstance* look = (made.shape = solid_mesh(file.c_str())) ? thick_glass(s, made.shape, {mat4f{}}) : nullptr;
+                made.look = look;
                 if (!look) made.shape = nullptr; else glassy(look);
             }
             else if ((made.solid = solid(s, file.c_str(), mat4f{}, 1.f)) && rgb >= 0) solid_fill(s, made.solid, colour, surface, model);

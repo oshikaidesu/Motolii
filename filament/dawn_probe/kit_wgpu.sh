@@ -15,9 +15,11 @@ for d in lightroom small_studio graffiti_shelter_2k studio_small_02_2k venetian_
 for f in paper paper_copy floor_shade thick_glass far_side far_look glasslight glassbox boxlight bubble poster own_glass flat blade matte floor_lit solid_cloth solid_subsurface; do
     [ -f $f.mat ] || continue
     [ out/wgpu_kit/$f.filamat -nt $f.mat ] && [ out/wgpu_kit/$f.filamat -nt studio.glsl ] && [ out/wgpu_kit/$f.filamat -nt spectrum.glsl ] && [ out/wgpu_kit/$f.filamat -nt matte.glsl ] && continue
-    $MATC -a webgpu -a metal -p desktop -TBLENDING=transparent -o out/wgpu_kit/$f.filamat $f.mat > out/wgpu_kit/$f.log 2>&1 ||
-        $MATC -g -a webgpu -a metal -p desktop -TBLENDING=transparent -o out/wgpu_kit/$f.filamat $f.mat > out/wgpu_kit/$f.log 2>&1 ||
+    $MATC -a webgpu -a metal -p desktop -TBLENDING=transparent -TCUT=opaque -o out/wgpu_kit/$f.filamat $f.mat > out/wgpu_kit/$f.log 2>&1 ||
+        $MATC -g -a webgpu -a metal -p desktop -TBLENDING=transparent -TCUT=opaque -o out/wgpu_kit/$f.filamat $f.mat > out/wgpu_kit/$f.log 2>&1 ||
         echo "no WebGPU material: $f (out/wgpu_kit/$f.log)"
+    [ $f = floor_lit ] && { $MATC -a webgpu -a metal -p desktop -TBLENDING=transparent -TCUT=masked -o out/wgpu_kit/floor_lit_matte.filamat floor_lit.mat > out/wgpu_kit/floor_lit_matte.log 2>&1 ||
+        echo "no WebGPU material: floor_lit_matte"; }   # (the same, cut by a matte: what the matte leaves out is not drawn, matte.glsl)
     [ $f = flat ] && for way in add multiply screen opaque; do   # (the ways a sheet lies on what is behind it: Filament's own blending; opaque: the colour behind everything, drawn before the solid things)
         $MATC -a webgpu -a metal -p desktop -TBLENDING=$way -DLAY_$way -o out/wgpu_kit/flat_$way.filamat flat.mat > out/wgpu_kit/flat_$way.log 2>&1 || echo "no WebGPU material: flat_$way"
     done

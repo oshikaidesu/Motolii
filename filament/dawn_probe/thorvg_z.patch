@@ -303,32 +303,37 @@ index b247cfc..65c7124 100644
  
      LottieObject* parseObject(const char* type);
 diff --git a/src/loaders/lottie/tvgLottieProperty.h b/src/loaders/lottie/tvgLottieProperty.h
-index 0f7e94d..84e49d0 100644
+index 0f7e94d..08ee217 100644
 --- a/src/loaders/lottie/tvgLottieProperty.h
 +++ b/src/loaders/lottie/tvgLottieProperty.h
-@@ -61,6 +61,12 @@ struct LottieScalarFrame
+@@ -61,6 +61,15 @@ struct LottieScalarFrame
      void prepare(TVG_UNUSED LottieScalarFrame* next) {}
  };
  
 +//a keyed path, in the plane or in space (a 3D layer's), and what is flat of a direction
 +static inline Bezier _bezier(const Point& start, const Point& ctrl1, const Point& ctrl2, const Point& end) { return {start, ctrl1, ctrl2, end}; }
 +static inline Bezier3 _bezier(const Point3& start, const Point3& ctrl1, const Point3& ctrl2, const Point3& end) { return {start, ctrl1, ctrl2, end}; }
++//a layer goes along its path by its true length, as After Effects goes: by chords, as Bezier3 measures (thorvg_z.patch)
++static inline Bezier3 _chords(const Bezier& b) { return {{b.start.x, b.start.y, 0.0f}, {b.ctrl1.x, b.ctrl1.y, 0.0f}, {b.ctrl2.x, b.ctrl2.y, 0.0f}, {b.end.x, b.end.y, 0.0f}}; }
++static inline const Bezier3& _chords(const Bezier3& b) { return b; }
 +static inline Point _xy(const Point& pt) { return pt; }
 +static inline Point _xy(const Point3& pt) { return {pt.x, pt.y}; }
 +
  template<typename T>
  struct LottieVectorFrame
  {
-@@ -83,7 +89,7 @@ struct LottieVectorFrame
+@@ -83,8 +92,8 @@ struct LottieVectorFrame
          }
  
          if (hasTangent) {
 -            Bezier bz = {value, value + outTangent, next->value + inTangent, next->value};
+-            return bz.at(bz.atApprox(t * length, length));
 +            auto bz = _bezier(value, value + outTangent, next->value + inTangent, next->value);
-             return bz.at(bz.atApprox(t * length, length));
++            return bz.at(_chords(bz).atApprox(t * length, length));
          } else {
              return tvg::lerp(value, next->value, t);
-@@ -93,20 +99,19 @@ struct LottieVectorFrame
+         }
+@@ -93,21 +102,20 @@ struct LottieVectorFrame
      float angle(LottieVectorFrame* next, float frameNo)
      {
          if (!hasTangent) {
@@ -340,19 +345,22 @@ index 0f7e94d..84e49d0 100644
          auto t = (frameNo - no) / (next->no - no);
          if (interpolator) t = interpolator->progress(t);
 -        Bezier bz = {value, value + outTangent, next->value + inTangent, next->value};
+-        t = bz.atApprox(t * length, length);
 +        auto bz = _bezier(value, value + outTangent, next->value + inTangent, next->value);
-         t = bz.atApprox(t * length, length);
++        t = _chords(bz).atApprox(t * length, length);
          return bz.angle(t >= 1.0f ? 0.99f : (t <= 0.0f ? 0.01f : t));
      }
  
      void prepare(LottieVectorFrame* next)
      {
 -        Bezier bz = {value, value + outTangent, next->value + inTangent, next->value};
+-        length = bz.lengthApprox();
 +        auto bz = _bezier(value, value + outTangent, next->value + inTangent, next->value);
-         length = bz.lengthApprox();
++        length = _chords(bz).lengthApprox();
      }
  };
-@@ -510,6 +515,7 @@ using LottieInteger = LottieGenericProperty<LottieScalarFrame<int8_t>, int8_t, L
+ 
+@@ -510,6 +518,7 @@ using LottieInteger = LottieGenericProperty<LottieScalarFrame<int8_t>, int8_t, L
  using LottieScalar = LottieGenericProperty<LottieScalarFrame<Point>, Point, LottieProperty::Type::Scalar>;
  using LottieVector = LottieGenericProperty<LottieVectorFrame<Point>, Point, LottieProperty::Type::Vector, 0>;
  using LottieScalar3 = LottieGenericProperty<LottieScalarFrame<Point3>, Point3, LottieProperty::Type::Scalar3>;
