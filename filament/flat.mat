@@ -27,8 +27,9 @@ material {
         // [1] Cavalry's bend: how far round (radians), which way (0 across, 1 up); After Effects' twist (radians at its middle); Cavalry's pinch (-1 to 1: in, or out);
         // [2] Cavalry's skew (radians) and its axis (radians); squash and stretch (-1 to 1, its area kept); half its width;
         // [3] After Effects' wiggle paths: how far, how fine (waves to its height), how far on in time, its seed;
-        // [4] Cavalry's motion stretch: which way it moves and how fast (its own units a second, as it is turned), how much it stretches for that
-        { type : float4[5], name : bends },
+        // [4] Cavalry's motion stretch: which way it moves and how fast (its own units a second, as it is turned), how much it stretches for that;
+        // [5] [6] After Effects' corner pin: how far its corners are moved (top left, top right; bottom left, bottom right)
+        { type : float4[7], name : bends },
         // a film's own look, as ThorVG's effects give a picture theirs: [0] how far it is blurred (across, up: shares of
         // the picture), how much its darks and lights are made two colours, how much three; [1] [2] the two (tint);
         // [3] [4] [5] the three (tritone: shadow, middle, highlight). All 0: as it is.
@@ -48,10 +49,16 @@ vertex {
     vec2 turned(vec2 p, float a) { float c = cos(a), s = sin(a); return vec2(c * p.x - s * p.y, s * p.x + c * p.y); }
     void materialVertex(inout MaterialVertexInputs material) {
         vec4 wave = materialParams.bends[0], bend = materialParams.bends[1], skew = materialParams.bends[2], wig = materialParams.bends[3], move = materialParams.bends[4];
+        vec4 pinTop = materialParams.bends[5], pinBottom = materialParams.bends[6];
         float stretch = move.z * length(move.xy);
-        if (wave.x == 0.0 && bend.x == 0.0 && bend.z == 0.0 && bend.w == 0.0 && skew.x == 0.0 && skew.z == 0.0 && wig.x == 0.0 && stretch == 0.0) return;
+        bool pinned = pinTop != vec4(0.0) || pinBottom != vec4(0.0);
+        if (wave.x == 0.0 && bend.x == 0.0 && bend.z == 0.0 && bend.w == 0.0 && skew.x == 0.0 && skew.z == 0.0 && wig.x == 0.0 && stretch == 0.0 && !pinned) return;
         vec2 p0 = vec2(material.uv0.x, 1.0 - material.uv0.y), p = p0;   // (where its point is, in shares of its height from its middle: flat_mesh; Filament turns uv0 upside down, flipUV, and this turns it back)
         float halfWide = max(skew.w, 1e-3), reach = length(vec2(halfWide, 0.5));
+        if (pinned) {   // (each corner moved so far, all within between them in proportion: across, then down)
+            vec2 f = clamp(vec2(p.x / (2.0 * halfWide) + 0.5, 0.5 - p.y), 0.0, 1.0);
+            p += mix(mix(pinTop.xy, pinTop.zw, f.x), mix(pinBottom.xy, pinBottom.zw, f.x), f.y);
+        }
         if (skew.z != 0.0) p *= vec2(1.0 / (1.0 + skew.z), 1.0 + skew.z);   // (squashed or stretched up, as wide the other way: its area kept)
         if (skew.x != 0.0) { vec2 q = turned(p, -skew.y); q.x += q.y * tan(skew.x); p = turned(q, skew.y); }
         if (bend.x != 0.0) {   // (round a centre of its own, as far round as told across all of it)
