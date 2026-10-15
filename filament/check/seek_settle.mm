@@ -27,7 +27,9 @@ int main() {
             t = 1.37;   // (all put back at once, to a moment between their key pictures)
             std::printf("put back to %.2f s:\n", t);
         }
+        const auto asked = std::chrono::steady_clock::now();
         time_is(s, t);
+        if (i == 180) std::printf("  the stage's moment set (forty-two films sought) in %.1f ms\n", std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - asked).count());
         if (begins(s)) pictures_of(s), s.renderer->endFrame();
         else ++left;
         t += 1.0 / 60.0;
