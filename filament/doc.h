@@ -121,6 +121,8 @@ static const DocValue doc_values[] = {
     {"bounce", doc_drawn, 0, 1, false, nullptr},
     {"friction", doc_drawn, 0, 2, false, nullptr},
     {"gravity", "stage", -100, 100, false, nullptr},
+    {"follow", "stage", 0, 1e9, false, nullptr},
+    // (the thing the stage's effects follow in place of a mouse: their pointer, center, mouse or point knobs are where it is on the picture; 0: none)
     {"size", doc_drawn, 1e-3, 1e4, true, nullptr}, {"anchor_x", doc_drawn, -100, 100, true, nullptr}, {"anchor_y", doc_drawn, -100, 100, true, nullptr}, {"anchor_z", doc_drawn, -100, 100, true, nullptr},
     // (a camera, the past repository's: it looks at where it is, from round about it as it is turned, so far away, so near)
     {"distance", "camera", 0.01, 100, true, nullptr}, {"zoom", "camera", 0.01, 100, true, nullptr},
@@ -852,6 +854,8 @@ static void doc_unshape(Stage& s, const std::function<bool(const Stage::Made&)>&
 // shows (it goes round when it comes to its end), and where it is.
 // The stage's own looks, Filament's, as the document says them (thing 0): its grade made again only when it is told
 // otherwise; the glow, flare, darkened corners and fog on the stage's own view; the room's light and the colour behind.
+static bool doc_knows(Doc& d, int thing, const char* name, const double* number, const char* word, bool key);
+static bool doc_frame(Doc& d, int thing, double now, double* frame);
 static void doc_look(Doc& d) {
     Stage& s = *d.stage;
     const auto hex = [&](const char* name, float3 otherwise) { const std::string w = doc_word(d, 0, name); return w.size() == 6 ? float3{(float)((std::strtol(w.c_str(), nullptr, 16) >> 16) & 255), (float)((std::strtol(w.c_str(), nullptr, 16) >> 8) & 255), (float)(std::strtol(w.c_str(), nullptr, 16) & 255)} / 255.f : otherwise; };
@@ -913,6 +917,18 @@ static void doc_look(Doc& d) {
     }
     screen_effects(s, d.screen, doc_word(d, 0, "script"), [&d](const std::string& name, double usual) {
         std::lock_guard<std::recursive_mutex> hold(d.lock);   // (asked while the picture is drawn, when the hand does not hold it)
+        // (a mouse's knob, where the followed thing is on the picture: pointer as the web says it, -1 to 1 and up; the
+        //  others from the top left, 0 to 1, as the effects' own uv)
+        static const char* const mice[] = {"pointer", "center", "mouse", "point"};
+        if (const int t = (int)doc_number(d, 0, "follow", 0, 0); t > 0 && name.size() > 2 && name[name.size() - 2] == '_')
+            for (const char* mouse : mice)
+                if (name.compare(0, name.size() - 2, mouse) == 0) {
+                    double frame[8];
+                    if (!doc_knows(d, t, nullptr, nullptr, nullptr, false) || !doc_frame(d, t, d.stage->now, frame)) break;
+                    const bool across = name.back() == 'x';
+                    const double at = across ? frame[0] / d.stage->w : frame[1] / d.stage->h;
+                    return !strcmp(mouse, "pointer") ? (across ? 2.0 * at - 1.0 : 1.0 - 2.0 * at) : at;
+                }
         return doc_number(d, 0, ("js_" + name).c_str(), d.stage->now, usual);
     });
     const std::string behind = doc_word(d, 0, "background");
@@ -1970,7 +1986,7 @@ static std::string doc_cards_of(Doc& d, int thing) {
     }
     if (doc_among("picture text shape stage", doc_word(d, thing, "kind")))   // (its script's own card: the knobs its head declares)
         if (const std::vector<DocScript*> scs = doc_scripts_on(d, thing); !scs.empty()) {
-            std::string names = "script";
+            std::string names = thing == 0 ? "script follow" : "script";
             for (const DocScript* sc : scs)
                 for (const DocValue& one : sc->values)
                     if ((" " + names + " ").find(" " + std::string(one.name) + " ") == std::string::npos) names += std::string(" ") + one.name;   // (a knob two effects share is one)
