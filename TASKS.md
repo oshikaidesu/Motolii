@@ -83,7 +83,8 @@
 **ホットリロード**（ユーザー、10/15 朝：開発が速くなるので備える。Filament にも Flutter にもあるはず、使ってなければ使う）：レシピ（.js）は保存すればもう次の絵から変わる。画面効果（.wgsl）は一度作ると取っておくので、書き換えても変わらない（ファイルの時刻を見て作り直すようにする）。窓は `flutter run` のホットリロードを使っていない（いつも build した app を開いている）。Filament の材質（.mat）は matc で作り直してから開き直し。
    通ったと言える一文：.wgsl・.js・.dart を書き換えて保存すると、開いた窓のまま数秒で変わる。
    **10/15 昼：.wgsl と .js は済み**。効果は作った時のファイルの時刻を覚え、描くたびに（0.25秒に1回まで）見て、変わっていればその効果だけその場で作り直す（読めなければ前のを残す）。中身の手は何もしていない時も0.5秒おきに起き、段の効果か物のスクリプトのファイルが書き換わっていれば描き直す（窓が止まっていても保存で変わる）。確かめた事：止め絵の途中で効果を色の反転に書き換えると次の1枚で変わる（明るさの平均 192→63、作り直しの1枚 611 ms）。残り：窓の `flutter run` のホットリロード（.dart）、Filament の材質（.mat）。
-   **10/15 夕：.dart も済み**。`skin/book/live.sh`：Workspace > Live の窓を `flutter run` で開き、lib/ の .dart が保存されたら1秒以内に見つけて Flutter 自身のホットリロード（SIGUSR1）を送る（見張りの道具は入っていなかったので1秒おきの find、ダウンロードはしない）。確かめた：棚の見出しを書き換えて保存→2秒で「Reloaded 1 of 1265 libraries in 680ms」、戻しても同じ。窓を閉じると終わる。.mat は Filament 自身の材質デバッガ matdbg（WebGPU では WGSL を窓のまま直せる、`FILAMENT_MATDBG_PORT`）を使う：今の Filament は matdbg を切って建ててあったので入れて建て直し中。
+   **10/15 夕：.dart も済み**。`skin/book/live.sh`：Workspace > Live の窓を `flutter run` で開き、lib/ の .dart が保存されたら1秒以内に見つけて Flutter 自身のホットリロード（SIGUSR1）を送る（見張りの道具は入っていなかったので1秒おきの find、ダウンロードはしない）。確かめた：棚の見出しを書き換えて保存→2秒で「Reloaded 1 of 1265 libraries in 680ms」、戻しても同じ。窓を閉じると終わる。.mat は Filament 自身の材質デバッガ matdbg（WebGPU では WGSL を窓のまま直せる、`FILAMENT_MATDBG_PORT`）を使う。
+   **.mat：止めた（赤）**。Filament を matdbg 入りで建て直し（`-DFILAMENT_ENABLE_MATDBG=ON`、中身の link に matdbg・filamat・civetweb）、`FILAMENT_MATDBG_PORT=8081` で開くと「DebugServer listening」、材質の一覧（floor_lit・fxaa・colorGrading）、各材質の WGSL 26本、使われている変種まで読める。ところが WGSL を1行（地の色を赤に）直して `/api/edit` に送ると（200 が返る）、中身がそのまま固まった（次の絵が出ず、sample も掴めず、kill -9 で止めた）。毎日使う Mac で GPU が止まる道は追わない決まりなので、ここで止める。matdbg は環境変数が無ければ動かないので入れたまま。.mat を書き換えて開き直すのは前と同じ（edit.sh が建て直す）。
 
 ## きみが決める事
 
