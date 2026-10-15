@@ -150,6 +150,11 @@ static const DocValue doc_values[] = {
     {"shadow_softness", "light", 0, 1, false, nullptr},   // (how soft its shadows are: as from a larger lamp, Filament's PCSS; 0: crisp)
     // (Filament's contact shadows: where things touch, the thin shadow its map misses, found on the picture)
     {"contact_shadows", "light", 0, 1, false, nullptr},
+    // (a sun seen in the room behind (behind room): Filament's own disk, its size in degrees across, and the glow around it)
+    {"sun_size", "light", 0, 10, true, nullptr},
+    {"sun_halo", "light", 0, 100, true, nullptr},
+    // (Filament's light channels: a light of group 1 to 7 lights only the solids of that group; 0, as it comes: the solids of group 0 and every other)
+    {"light_group", "light solid", 0, 7, false, nullptr},
     {"parent", doc_kinds, 0, 1e9, false, nullptr},   // (the thing it goes with: it is moved, turned and sized as that one is, then as it is itself; 0: none)
     {"space", "film picture text shape", 0, 0, false, "2d 2.5d"},   // (the past repository's three tags: 2d is not in the world and lies by the order alone; 2.5d is a sheet in the world, before or behind by depth; a solid is 3d)
     {"align", "text", 0, 1, false, nullptr},
@@ -247,6 +252,10 @@ static const DocValue doc_values[] = {
     {"slope", "stage", 0, 4, false, nullptr},
     {"offset", "stage", -1, 1, false, nullptr},
     {"power", "stage", 0.1, 4, false, nullptr},
+    // (Filament's shadows, mid-tones and highlights each tinted their colour, six digits: not said, white, as they are)
+    {"shadows_color", "stage", 0, 0, false, ""},
+    {"midtones_color", "stage", 0, 0, false, ""},
+    {"highlights_color", "stage", 0, 0, false, ""},
     // (Filament's ASC CDL grade, the same on red, green and blue: each colour times slope, plus offset, to the power)
     {"anti_aliasing", "stage", 0, 0, false, "fxaa taa msaa none"},   // (how its edges are smoothed: Filament's FXAA as it came, its temporal one (steadier on fine edges in motion), or not)
     {"room", "stage", 0, 0, false, "small_studio studio_small_02_2k lightroom venetian_crossroads_2k graffiti_shelter_2k parking_garage_2k pillars_2k"},   // (which room lights it: the rooms made ready in out/)
@@ -348,6 +357,9 @@ static const DocShown doc_shown[] = {
     {"cone", "angle", "°", "Cone", 1, 89, nullptr},
     {"shadows", "onoff", "", "Shadows", 0, 1, nullptr},
     {"shadow_softness", "share", "%", "Soft", 0, 1, nullptr},
+    {"sun_size", "angle", "°", "Disk", 0, 10, nullptr},
+    {"sun_halo", "", "×", "Halo", 0, 100, nullptr},
+    {"light_group", "", "", "Group", 0, 7, nullptr},
     {"contact_shadows", "onoff", "", "Contact", 0, 1, nullptr},
     {"projection", "", "", "Lens", 0, 0, nullptr},
     {"shift_x", "", "", "Shift X", -2, 2, nullptr},
@@ -374,6 +386,9 @@ static const DocShown doc_shown[] = {
     {"slope", "", "", "Slope", 0, 4, nullptr},
     {"offset", "", "", "Offset", -1, 1, nullptr},
     {"power", "", "", "Power", 0.1, 4, nullptr},
+    {"shadows_color", "colour", "", "Shadows", 0, 0, nullptr},
+    {"midtones_color", "colour", "", "Mids", 0, 0, nullptr},
+    {"highlights_color", "colour", "", "Highs", 0, 0, nullptr},
     {"room", "", "", "Room", 0, 0, nullptr},
     {"environment", "", "×", "Bright", 0, 10, nullptr},
     {"environment_rotate", "angle", "°", "Turn", -180, 180, nullptr},
@@ -449,9 +464,10 @@ static const DocCard doc_cards[] = {
     {"Line", "cap join dash dash_offset"},
     {"Surface", "shading metallic roughness reflectance clear_coat clear_coat_roughness sheen anisotropy thickness emissive", "fill", "!glass"},
     {"Glass", "ior dispersion swim dark vivid", "fill", "glass"},
-    {"Light", "intensity falloff cone shadows shadow_softness contact_shadows"},
+    {"Lit", "light_group", "kind", "solid"},   // (which lights reach it)
+    {"Light", "intensity falloff cone shadows shadow_softness contact_shadows light_group sun_size sun_halo", "kind", "light"},
     {"Projection", "projection shift_x shift_y"},
-    {"Grade", "tone_mapper exposure contrast saturation vibrance temperature slope offset power"},
+    {"Grade", "tone_mapper exposure contrast saturation vibrance temperature slope offset power shadows_color midtones_color highlights_color"},
     {"Lens", "bloom ambient_occlusion reflections lens_flare vignette vignette_color fog fog_color anti_aliasing"},
     {"Room", "room environment environment_rotate behind background"},
     {"Physics", "physics bounce friction gravity"},
@@ -872,16 +888,19 @@ static void doc_look(Doc& d) {
     Stage& s = *d.stage;
     const auto hex = [&](const char* name, float3 otherwise) { const std::string w = doc_word(d, 0, name); return w.size() == 6 ? float3{(float)((std::strtol(w.c_str(), nullptr, 16) >> 16) & 255), (float)((std::strtol(w.c_str(), nullptr, 16) >> 8) & 255), (float)(std::strtol(w.c_str(), nullptr, 16) & 255)} / 255.f : otherwise; };
     const std::string mapper = doc_word(d, 0, "tone_mapper");
-    char grade[200];
+    char grade[300];
     const float slope = (float)doc_number(d, 0, "slope", 0, 1), offset = (float)doc_number(d, 0, "offset", 0, 0), power = (float)doc_number(d, 0, "power", 0, 1);
     std::snprintf(grade, sizeof grade, "%s %g %g %g %g %g %g %g %g", mapper.c_str(), doc_number(d, 0, "exposure", 0, 0), doc_number(d, 0, "contrast", 0, 1), doc_number(d, 0, "saturation", 0, 1), doc_number(d, 0, "vibrance", 0, 1), doc_number(d, 0, "temperature", 0, 0), slope, offset, power);
+    const auto tint = [&](const char* name) { const float3 c = hex(name, float3{1.f}); std::strncat(grade, (" " + doc_word(d, 0, name)).c_str(), 20); return float4{Color::toLinear<ACCURATE>(sRGBColor{c}), 0.f}; };
+    const float4 low = tint("shadows_color"), mid = tint("midtones_color"), high = tint("highlights_color");
     if (d.graded != grade) {
         static LinearToneMapper linear; static ACESToneMapper aces; static FilmicToneMapper filmic; static AgxToneMapper agx; static PBRNeutralToneMapper neutral;
         const ToneMapper* tm = mapper == "aces" ? (const ToneMapper*)&aces : mapper == "filmic" ? (const ToneMapper*)&filmic : mapper == "agx" ? (const ToneMapper*)&agx : mapper == "pbr_neutral" ? (const ToneMapper*)&neutral : (const ToneMapper*)&linear;
         ColorGrading* was = const_cast<ColorGrading*>(s.view->getColorGrading());
         ColorGrading* now = ColorGrading::Builder().toneMapper(tm).exposure((float)doc_number(d, 0, "exposure", 0, 0)).contrast((float)doc_number(d, 0, "contrast", 0, 1))
                                 .saturation((float)doc_number(d, 0, "saturation", 0, 1)).vibrance((float)doc_number(d, 0, "vibrance", 0, 1)).whiteBalance((float)doc_number(d, 0, "temperature", 0, 0), 0.f)
-                                .slopeOffsetPower(float3{slope}, float3{offset}, float3{power}).build(*s.engine);
+                                .slopeOffsetPower(float3{slope}, float3{offset}, float3{power})
+                                .shadowsMidtonesHighlights(low, mid, high, float4{0.f, 0.333f, 0.55f, 1.f}).build(*s.engine);   // (the ranges as Filament's own)
         s.view->setColorGrading(now);
         for (View* v : s.layers) v->setColorGrading(now);   // (the same grade on every picture laid over the stage's own)
         if (was) s.engine->destroy(was);
@@ -957,7 +976,7 @@ static void doc_look(Doc& d) {
             kept.push_back(load_file(("out/" + d.roomIs + "/" + d.roomIs + "_skybox.ktx").c_str()));
             if (!kept.back().empty())
                 if (Texture* tex = ktxreader::Ktx1Reader::createTexture(s.engine, new image::Ktx1Bundle(kept.back().data(), (uint32_t)kept.back().size()), false))
-                    sky = Skybox::Builder().environment(tex).intensity(d.roomLight).build(*s.engine);   // (Filament's sky takes its brightness as it is made)
+                    sky = Skybox::Builder().environment(tex).intensity(d.roomLight).showSun(true).build(*s.engine);   // (a sun among the lights: its disk in it)   // (Filament's sky takes its brightness as it is made)
         }
         if (sky) sky->setLayerMask(0xFF, 0x01);
         s.scene->setSkybox(sky);
@@ -1216,6 +1235,8 @@ static void doc_moment(Doc& d, double now) {
         const float strong = (float)doc_number(d, one.thing, "intensity", now, 1);
         if (lights.getType(it) == LightManager::Type::SUN) lights.setIntensity(it, 60000.f * strong);   // (lux, as the room's own light)
         else lights.setIntensityCandela(it, 60000.f * 36.f * strong);   // (as bright as that six units off: where the stage's own eye stands)
+        if (lights.getType(it) == LightManager::Type::SUN)
+            lights.setSunAngularRadius(it, (float)doc_number(d, one.thing, "sun_size", now, 1.09) / 2.f), lights.setSunHaloSize(it, (float)doc_number(d, one.thing, "sun_halo", now, 10));
         if (lights.getType(it) == LightManager::Type::FOCUSED_SPOT) {
             const float cone = (float)(doc_number(d, one.thing, "cone", now, 30) * (double)TAU / 360.0);
             lights.setSpotLightCone(it, 0.8f * cone, cone);
@@ -1273,7 +1294,7 @@ static void doc_moment(Doc& d, double now) {
 static bool doc_match(Doc& d) {
     Stage& s = *d.stage;
     std::map<int, std::string> told;   // every thing of the document, and all that its making goes by
-    doc_rows(d, sqlite3_mprintf("select thing, group_concat(name || '=' || value, ' ') from (select * from fact where thing > 0 and name in ('kind','file','shape','blend','keyed','space','begin','duration','speed','text','fill','wide','points','inner','round','stroke','stroke_width','align','blur','shadow','shadow_distance','shadow_angle','shadow_blur','shadow_opacity','glow','glow_blur','glow_opacity','copies','tint','tint_black','tint_white','tritone','tritone_shadow','tritone_midtone','tritone_highlight','letter_spacing','line_spacing','italic','cap','join','dash','dash_offset','metallic','roughness','reflectance','clear_coat','clear_coat_roughness','falloff','shadows','shadow_softness','contact_shadows','sheen','anisotropy','shading','thickness','gradient','gradient_angle','gradient_scale','gradient_spread','wrap','wrap_at','split','ior','dispersion','swim','dark','vivid','marker') order by thing, name) group by thing"),
+    doc_rows(d, sqlite3_mprintf("select thing, group_concat(name || '=' || value, ' ') from (select * from fact where thing > 0 and name in ('kind','file','shape','blend','keyed','space','begin','duration','speed','text','fill','wide','points','inner','round','stroke','stroke_width','align','blur','shadow','shadow_distance','shadow_angle','shadow_blur','shadow_opacity','glow','glow_blur','glow_opacity','copies','tint','tint_black','tint_white','tritone','tritone_shadow','tritone_midtone','tritone_highlight','letter_spacing','line_spacing','italic','cap','join','dash','dash_offset','metallic','roughness','reflectance','clear_coat','clear_coat_roughness','falloff','shadows','shadow_softness','contact_shadows','sheen','anisotropy','shading','thickness','light_group','gradient','gradient_angle','gradient_scale','gradient_spread','wrap','wrap_at','split','ior','dispersion','swim','dark','vivid','marker') order by thing, name) group by thing"),
              [&](sqlite3_stmt* row) { told[sqlite3_column_int(row, 0)] = (const char*)sqlite3_column_text(row, 1); });
     for (auto it = d.shown.begin(); it != d.shown.end();) {
         const auto still = told.find(it->first);
@@ -1352,6 +1373,10 @@ static bool doc_match(Doc& d) {
                 if (soft > 0.f) shade.shadowBulbRadius = type == LightManager::Type::SUN ? 0.05f * soft : 0.5f * soft;
                 LightManager::Builder(type).color(Color::toLinear<ACCURATE>(sRGBColor{fill.empty() ? float3{1.f} : colour})).falloff((float)doc_number(d, thing, "falloff", 0, 10))
                     .castShadows(doc_number(d, thing, "shadows", 0, 0) > 0.5).shadowOptions(shade).build(*s.engine, made.light);
+                if (const int group = (int)doc_number(d, thing, "light_group", 0, 0); group > 0) {
+                    auto& lights = s.engine->getLightManager();
+                    lights.setLightChannel(lights.getInstance(made.light), 0, false), lights.setLightChannel(lights.getInstance(made.light), (unsigned)group, true);
+                }
                 made.in = false;   // (in the scenes when it is on)
             }
         }
@@ -1413,8 +1438,13 @@ static bool doc_match(Doc& d) {
         } else why = std::string("its kind is one of: ") + doc_kinds;
         if (!made.film && !made.drawn && !made.solid && !made.shape && !made.camera && made.light.isNull()) { d.trouble = why + ": the " + kind + " " + std::filesystem::path(file + shape).filename().string() + " could not be made"; all = false; continue; }
         d.shown[thing] = made;
-        if (made.solid || made.shape)   // (a solid thing casts a shadow from a light that throws them, and takes one)
-            doc_parts(s, d.shown[thing], [](RenderableManager& faces, RenderableManager::Instance one) { faces.setCastShadows(one, true), faces.setReceiveShadows(one, true), faces.setScreenSpaceContactShadows(one, true); });   // (contact shadows: Filament draws them only where the light asks too)
+        if (made.solid || made.shape) {   // (a solid thing casts a shadow from a light that throws them, and takes one)
+            const int group = (int)doc_number(d, thing, "light_group", 0, 0);
+            doc_parts(s, d.shown[thing], [group](RenderableManager& faces, RenderableManager::Instance one) {
+                faces.setCastShadows(one, true), faces.setReceiveShadows(one, true), faces.setScreenSpaceContactShadows(one, true);   // (contact shadows: Filament draws them only where the light asks too)
+                if (group > 0) faces.setLightChannel(one, (unsigned)group, true);
+            });
+        }
     }
     doc_moment(d, s.now);
     return all;
@@ -2152,7 +2182,7 @@ static double doc_usual(const char* name) {
             for (size_t i = 0; i < sc.names.size(); ++i)
                 if (sc.names[i] == name) return sc.knobs[i].usual;
     return doc_among("scale_x scale_y scale_z size speed opacity wide tall visible distance zoom copies copy_size copy_wide blur_level letter_spacing line_spacing contrast saturation vibrance environment gradient_scale wave_speed slope power", name) ? 1.0 : !strcmp(name, "duration") ? -1.0
-         : !strcmp(name, "metallic") ? 0.08 : !strcmp(name, "roughness") ? 0.6 : !strcmp(name, "reflectance") ? 0.5 : !strcmp(name, "thickness") ? 0.5   // (a solid's surface as it comes)
+         : !strcmp(name, "metallic") ? 0.08 : !strcmp(name, "roughness") ? 0.6 : !strcmp(name, "reflectance") ? 0.5 : !strcmp(name, "thickness") ? 0.5 : !strcmp(name, "sun_size") ? 1.09 : !strcmp(name, "sun_halo") ? 10.0   // (a solid's surface as it comes)
          : !strcmp(name, "intensity") ? 1.0 : !strcmp(name, "falloff") ? 10.0 : !strcmp(name, "cone") ? 30.0   // (a light as it comes)
          : !strcmp(name, "bounce") ? 0.3 : !strcmp(name, "friction") ? 0.5 : !strcmp(name, "gravity") ? 9.81   // (what falls and strikes, as it comes)
          : !strcmp(name, "ior") ? 1.5 : !strcmp(name, "dispersion") ? 0.1 : !strcmp(name, "swim") ? 0.5 : !strcmp(name, "dark") ? 4.0 : !strcmp(name, "vivid") ? 1.3 : 0.0;   // (the kit's glass as it comes)
