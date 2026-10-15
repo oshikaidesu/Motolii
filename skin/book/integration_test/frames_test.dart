@@ -101,6 +101,7 @@ void main() {
       Ws.spent.clear();
       if (const bool.fromEnvironment('TRACE')) {
         debugProfileBuildsEnabled = true;
+        debugProfileBuildsEnabledUserWidgets = true; // (only the window's own widgets named: Flutter's own are many and slow the reading)
         await binding.traceAction(letGos, reportKey: 'timeline', streams: const ['Dart', 'Embedder']);
         debugProfileBuildsEnabled = false;
       } else {

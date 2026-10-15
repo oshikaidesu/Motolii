@@ -758,6 +758,14 @@ class _InspectorSeatState extends State<_InspectorSeat> {
 
   Timer? _settle;
 
+  // (the panel itself, made once a size: a new one each build would build its whole tree again, whatever changed)
+  (Size, InspectorPanel)? _panel;
+  InspectorPanel _panelOf(BoxConstraints box) {
+    final size = Size(box.maxWidth, box.maxHeight);
+    if (_panel?.$1 != size) _panel = (size, InspectorPanel(directTransform: true, width: box.maxWidth, height: box.maxHeight));
+    return _panel!.$2;
+  }
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -821,7 +829,7 @@ class _InspectorSeatState extends State<_InspectorSeat> {
                 ws.after(ws.inside!.later('together'));
               },
         live: _live,
-        child: InspectorPanel(directTransform: true, width: box.maxWidth, height: box.maxHeight),
+        child: _panelOf(box), // (the same panel while the pane keeps its size: built again only by what it reads, Ctx)
       ),
     );
   }

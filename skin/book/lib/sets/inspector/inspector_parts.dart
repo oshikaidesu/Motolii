@@ -4,7 +4,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
-import 'package:flutter/foundation.dart' show ValueListenable, ValueNotifier, listEquals, mapEquals;
+import 'package:flutter/foundation.dart' show ValueListenable, ValueNotifier, listEquals, mapEquals, setEquals;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -126,13 +126,17 @@ class Pop extends InheritedWidget {
 }
 
 class Ctx extends InheritedWidget {
-  const Ctx({super.key, required this.cfg, required this.doc, required super.child});
+  const Ctx({super.key, required this.cfg, required this.doc, this.tick, required super.child});
   final Cfg cfg;
   final Doc doc;
+
+  /// Bumped by the host when more than numbers changed (its shape, its words, a pick): only then is everything that
+  /// reads the inspector built again; a number alone tells the field that shows it (Doc.watch).
+  final int? tick; // (none: a host that does not count, everything again each time, as before)
   static Ctx of(BuildContext c) => c.dependOnInheritedWidgetOfExactType<Ctx>()!;
   static Ctx read(BuildContext c) => c.getInheritedWidgetOfExactType<Ctx>()!;
   @override
-  bool updateShouldNotify(Ctx old) => true;
+  bool updateShouldNotify(Ctx old) => tick == null || old.tick != tick || old.doc != doc || old.cfg != cfg;
 }
 
 /// Owns the mock document and re-provides it whenever it changes. A different kind or count makes a new document (give it a key).
@@ -338,7 +342,7 @@ class _InspHostState extends State<InspHost> {
     }
     // (while a hand is on a value the whole inspector is not built again each step: the field under the hand shows its
     //  own number and the stage follows what the host is told; everything is built once when the hand lets go)
-    if (mounted && !doc.inGesture && !doc.ending) setState(() {});
+    if (mounted && !doc.inGesture && !doc.ending) setState(() => _tick++);
   }
 
   @override
@@ -351,30 +355,36 @@ class _InspHostState extends State<InspHost> {
     if (o.kind != widget.kind || o.count != widget.count || o.effects != widget.effects || !listEquals(o.fx?.map((f) => f.wgsl).toList(), widget.fx?.map((f) => f.wgsl).toList()) || !listEquals(o.cards?.map((f) => f.name + f.wgsl.replaceAll(RegExp(r'@default\([^)]*\)'), '')).toList(), widget.cards?.map((f) => f.name + f.wgsl.replaceAll(RegExp(r'@default\([^)]*\)'), '')).toList())) {
       doc.dispose();
       doc = _make();
+      _tick++;
     } else {
       // A host that is told of changes owns the values: whatever it did not take goes back to what it says, as soon
       // as no hand is on them (never under a hand: a value being dragged is not written over, even while it plays).
+      // (numbers and key marks: told to the fields that show them; words, flags, choices and the rest: everything again)
       final owned = widget.onValues != null;
       if (owned ? !doc.inGesture : !mapEquals(o.values, widget.values)) {
-        doc.v.addAll(widget.values);
+        doc.showAt(widget.values, const {});
         _seen.addAll(widget.values);
       }
       if (widget.onFlags != null) {
+        if (widget.flags.entries.any((e) => doc.b[e.key] != e.value)) _tick++;
         doc.b.addAll(widget.flags);
         _seenFlags.addAll(widget.flags);
       }
       if (widget.onWords != null || !mapEquals(o.strs, widget.strs)) {
+        if (widget.strs.entries.any((e) => doc.s2[e.key] != e.value)) _tick++;
         doc.s2.addAll(widget.strs);
         _seenWords.addAll(widget.strs);
       }
       if (!mapEquals(o.keyMarks, widget.keyMarks)) {
-        doc.keys.addAll(widget.keyMarks);
+        doc.showAt(const {}, widget.keyMarks);
         _seenKeys.addAll(widget.keyMarks);
       }
     }
     if (widget.animating case final on? when on != _animating) {
       doc.animateAll = _animating = on;
+      _tick++;
     }
+    if (o.title != widget.title || o.kindWord != widget.kindWord || !setEquals(o.seats, widget.seats) || o.choices.toString() != widget.choices.toString()) _tick++;
     doc
       ..title = widget.title
       ..kindWord = widget.kindWord
@@ -407,6 +417,7 @@ class _InspHostState extends State<InspHost> {
     super.dispose();
   }
 
+  int _tick = 0;
   @override
-  Widget build(BuildContext context) => Ctx(cfg: widget.cfg, doc: doc, child: widget.child);
+  Widget build(BuildContext context) => Ctx(cfg: widget.cfg, doc: doc, tick: _tick, child: widget.child);
 }
