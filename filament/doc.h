@@ -187,6 +187,20 @@ static const DocValue doc_values[] = {
     {"warp_width", "shape", 0.001, 100, true, nullptr},
     {"warp_angle", "shape", -1e6, 1e6, true, nullptr},
     {"warp_speed", "shape", -1e3, 1e3, true, nullptr},
+    // (and its points moved as it is drawn, on the GPU, a shape of one colour only (flat_mesh): Cavalry's bend (degrees
+    //  round, across it or up it), After Effects' twist (degrees, most at its middle), Cavalry's pinch (in, or out
+    //  when less than 0), skew (degrees, along an axis turned so far), squash and stretch (taller and as much
+    //  narrower: its area kept), After Effects' wiggle paths (how far, a share of its height; how fine; how fast))
+    {"bend", "shape", -1e4, 1e4, true, nullptr},
+    {"bend_direction", "shape", 0, 0, false, "horizontal vertical"},
+    {"twist", "shape", -1e5, 1e5, true, nullptr},
+    {"pinch", "shape", -1, 1, true, nullptr},
+    {"skew", "shape", -89, 89, true, nullptr},
+    {"skew_axis", "shape", -1e4, 1e4, true, nullptr},
+    {"squash", "shape", -0.95, 10, true, nullptr},
+    {"wiggle", "shape", -10, 10, true, nullptr},
+    {"wiggle_detail", "shape", 0, 1000, true, nullptr},
+    {"wiggle_speed", "shape", -1e3, 1e3, true, nullptr},
     {"copies", "picture text shape", 1, 1000, false, nullptr}, {"copy_x", "picture text shape", -1e4, 1e4, true, nullptr}, {"copy_y", "picture text shape", -1e4, 1e4, true, nullptr},
     {"copy_rotate", "picture text shape", -1e6, 1e6, true, nullptr}, {"copy_size", "picture text shape", 0.01, 100, true, nullptr},
     {"copy_columns", "picture text shape", 0, 100, false, nullptr},   // (so many to a row, then the next row: copy_x along it, copy_y down; 0: one row)
@@ -299,6 +313,29 @@ static const DocShown doc_shown[] = {
     {"wrap_at", "", "×", "Wrap at", 0, 40, nullptr},
     {"gradient", "", "", "Gradient", 0, 0, nullptr},
     {"gradient_angle", "angle", "°", "Angle", -180, 180, nullptr},
+    {"round", "share", "%", "Round", 0, 0.5, nullptr},
+    {"trim", "share", "%", "Trim end", 0, 1, nullptr},
+    {"trim_begin", "share", "%", "Trim start", 0, 1, nullptr},
+    {"trim_offset", "share", "%", "Trim offset", -1, 1, nullptr},
+    {"bloat", "", "", "Bloat", -1, 1, nullptr},
+    {"offset", "", "", "Offset", -0.5, 0.5, nullptr},
+    {"zigzag", "", "", "Zig zag", -0.3, 0.3, nullptr},
+    {"zigzag_ridges", "count", "", "Ridges", 0, 20, "Zig zag"},
+    {"zigzag_smooth", "onoff", "", "Smooth", 0, 1, "Zig zag"},
+    {"warp", "", "", "Wave", -0.5, 0.5, nullptr},
+    {"warp_width", "", "", "Wave length", 0.05, 2, "Wave"},
+    {"warp_angle", "angle", "°", "Wave angle", -180, 180, "Wave"},
+    {"warp_speed", "", "/s", "Wave speed", -5, 5, "Wave"},
+    {"bend", "angle", "°", "Bend", -360, 360, nullptr},
+    {"bend_direction", "", "", "Bend way", 0, 0, "Bend"},
+    {"twist", "angle", "°", "Twist", -720, 720, nullptr},
+    {"pinch", "", "", "Pinch", -1, 1, nullptr},
+    {"skew", "angle", "°", "Skew", -80, 80, nullptr},
+    {"skew_axis", "angle", "°", "Skew axis", -180, 180, "Skew"},
+    {"squash", "", "", "Squash", -0.9, 2, nullptr},
+    {"wiggle", "", "", "Wiggle", 0, 0.3, nullptr},
+    {"wiggle_detail", "", "", "Detail", 0.5, 20, "Wiggle"},
+    {"wiggle_speed", "", "/s", "Wiggle speed", 0, 10, "Wiggle"},
     {"gradient_scale", "", "×", "Stretch", 0.1, 4, nullptr},
     {"gradient_spread", "", "", "Past end", 0, 0, nullptr},
     {"copies", "count", "", "How many", 1, 200, nullptr},
@@ -482,6 +519,8 @@ static const DocCard doc_cards[] = {
     {"Matte", "clip_matte clip_invert clip_feather", "clip", "1"},
     {"Connect", "connect connect_to connect_reach"},
     {"Line", "cap join dash dash_offset"},
+    {"Path", "round trim trim_begin trim_offset bloat offset zigzag zigzag_ridges zigzag_smooth", "kind", "shape"},   // (its path made anew: After Effects' shape operators, ThorVG's own)
+    {"Deform", "warp bend twist pinch skew squash wiggle bend_direction warp_width warp_angle warp_speed skew_axis wiggle_detail wiggle_speed", "kind", "shape"},   // (its points moved as it is drawn: Cavalry's deformers)
     {"Surface", "shading metallic roughness reflectance clear_coat clear_coat_roughness sheen anisotropy thickness emissive", "fill", "!glass"},
     {"Glass", "ior dispersion swim dark vivid", "fill", "glass"},
     {"Lit", "light_group", "kind", "solid"},   // (which lights reach it)
@@ -1199,9 +1238,18 @@ static void doc_moment(Doc& d, double now) {
             if (doc_fx(d, thing, now, false, t.units, fx, why)) fx_at(s, t.drawn, fx);
         }
         if (t.drawn && t.drawn->shape) trim_at(s, t.drawn, (float)doc_number(d, thing, "trim", now, 0), (float)doc_number(d, thing, "trim_begin", now, 0), (float)doc_number(d, thing, "trim_offset", now, 0));
-        if (t.drawn && t.drawn->cut)   // (a shape in triangles: warped in its look, nothing drawn again)
-            t.drawn->look->setParameter("wave", float4{(float)doc_number(d, thing, "warp", now, 0), (float)doc_number(d, thing, "warp_width", now, 0.5),
-                                                       (float)(doc_number(d, thing, "warp_speed", now, 1) * lies[i].since), (float)(doc_number(d, thing, "warp_angle", now, 0) * TAU / 360.0)});
+        if (t.drawn && t.drawn->cut) {   // (a shape in triangles: bent in its look, and its copies' own looks, nothing drawn again)
+            const auto num = [&](const char* name, double otherwise) { return (float)doc_number(d, thing, name, now, otherwise); };
+            const float deg = (float)(TAU / 360.0), since = (float)lies[i].since;
+            const float4 bends[4] = {{num("warp", 0), num("warp_width", 0.5), num("warp_speed", 1) * since, num("warp_angle", 0) * deg},
+                                     {num("bend", 0) * deg, doc_word(d, thing, "bend_direction") == "vertical" ? 1.f : 0.f, num("twist", 0) * deg, num("pinch", 0)},
+                                     {num("skew", 0) * deg, num("skew_axis", 0) * deg, num("squash", 0), 0.5f * t.drawn->wideBy},
+                                     {num("wiggle", 0), num("wiggle_detail", 3), num("wiggle_speed", 1) * since, num("seed", 0) * 7.31f}};
+            t.drawn->look->setParameter("bends", bends, 4);
+            for (const Stage::Made& made : s.made)
+                if (made.of == t.drawn->sheet)
+                    if (const auto own = d.copyLooks.find(made.thing.getId()); own != d.copyLooks.end()) own->second->setParameter("bends", bends, 4);
+        }
         if (t.drawn && t.drawn->shape)
             warp_at(s, t.drawn, (float)doc_number(d, thing, "warp", now, 0), (float)doc_number(d, thing, "warp_width", now, 0.5), (float)doc_number(d, thing, "warp_angle", now, 0),
                     (float)(doc_number(d, thing, "warp_speed", now, 1) * lies[i].since));

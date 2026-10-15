@@ -48,6 +48,7 @@ struct Drawn {
     float fine = 0.f;          // (its lines cut in pieces no longer than so many points, if it is warped as it is drawn (warp_at))
     bool cut = false;          // (a flat shape drawn by Filament as its own triangles (flat_mesh): no picture, no canvas; bent in its look)
     float4 wash{0.f};          // (its own colour laid over its look, as a copy's is: a shape cut in triangles is filled so)
+    float wideBy = 1.f;        // (how many times as wide as it is high: what its bends are counted across)
     std::array<float, 6> bent{};   // (as last bent: round, bloat, zigzag, ridges, smooth, offset)
     std::array<float, 48> warped{};   // (as last warped on the GPU (warp_at): ThorVG's WgCanvas::bend, thorvg_bend.patch)
     std::vector<std::string> markers;  // an After Effects file's named stretches (ThorVG's Lottie markers)
@@ -533,7 +534,7 @@ static Drawn* flat_mesh(Stage& s, const char* form, float wide, const mat4f& pla
     }
     tessDeleteTess(tess);
     if (d->sheet->idx.empty()) { delete d->sheet; delete d; return nullptr; }
-    d->cut = true;
+    d->cut = true, d->wideBy = wide;
     d->wash = float4{Color::toLinear<ACCURATE>(sRGBColor{colour}), 1.f};
     d->look = add(s, d->sheet, flat_laid(lay).c_str(), std::vector<mat4f>((size_t)std::max(1, fx.copies), place));
     if (!d->look) return nullptr;
