@@ -169,7 +169,10 @@ static int changes(Motolii* m, int done) {
 int motolii_live(Motolii* m) { return by_hand(m, [m] { return m->live || (m->live = live_open(*m->s)) ? 1 : 0; }); }
 void* motolii_front(Motolii* m) { return m->live ? live_front(m->live) : nullptr; }
 unsigned long long motolii_frames(Motolii* m) { return m->live ? m->live->frames.load() : 0; }
-int motolii_loop(Motolii* m, int on) { return by_hand(m, [=] { if (on >= 0) m->loop = on != 0; return (int)m->loop; }); }
+int motolii_loop(Motolii* m, int on) {   // (on below 0: only asks: answered at once, not queued behind the hand's picture)
+    if (on < 0) return by_look(m, [=] { return (int)m->loop; });
+    return by_hand(m, [=] { m->loop = on != 0; return (int)m->loop; });
+}
 const char* motolii_spent(Motolii* m) {
     return by_look(m, [=] {
         char line[200];
@@ -214,8 +217,9 @@ int motolii_key_moments(Motolii* m, int thing, const char* name, double* at, int
 // A thing's frame on the picture at the stage's moment, as the stage's own eye sees it: its middle, how wide and how
 // high (points of the picture, from the top left), and how far it is turned (degrees, clockwise as seen).
 int motolii_frame(Motolii* m, int thing, double* frame) { return by_look(m, [=] { return (int)(doc_knows(doc(m), thing) && doc_frame(*m->d, thing, m->now, frame)); }); }
-int motolii_keying(Motolii* m, int on) {   // (on below 0: only says whether every change is keyed)
-    return by_hand(m, [=] { if (on >= 0) m->d->keying = on != 0, m->d->keying_from = m->now; return (int)m->d->keying; });
+int motolii_keying(Motolii* m, int on) {   // (on below 0: only says whether every change is keyed: a read, answered at once, not queued behind the hand's picture)
+    if (on < 0) return by_look(m, [=] { return (int)m->d->keying; });
+    return by_hand(m, [=] { m->d->keying = on != 0, m->d->keying_from = m->now; return (int)m->d->keying; });
 }
 int motolii_hold(Motolii* m, int thing) { return by_hand(m, [=] { return (int)doc_hold(doc(m), thing); }); }
 int motolii_carry(Motolii* m, const char* by, double a, double b) { return by_hand(m, [=] { return (int)doc_carry(doc(m), by, a, b); }); }
@@ -278,7 +282,7 @@ const char* motolii_way_names(Motolii* m) {
 double motolii_way_at(Motolii* m, const char* way, double u) {
     Interp kind;
     if (interp_said(way, &kind) == 0) return interp_ease(kind, u);
-    return by_hand(m, [=] { return doc_went_by(*m->d, way, u, u, 1.0, 0.0, 1.0); });   // (one defined in the document: as between a key of 0 and a key of 1, a second apart)
+    return by_look(m, [=] { return doc_went_by(*m->d, way, u, u, 1.0, 0.0, 1.0); });   // (one defined in the document: as between a key of 0 and a key of 1, a second apart)
 }
 // A film's first picture as a small .png: GStreamer's own line for it (decode, scale, into a .png), held at its first
 // picture, which is taken and written. It asks nothing of a stage, so a shell may call it from another thread.
