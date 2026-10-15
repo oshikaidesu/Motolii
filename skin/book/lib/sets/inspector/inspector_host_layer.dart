@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import 'package:flutter/widgets.dart';
 import 'package:lab_book/sets/inspector/inspector_effects_effect_card.dart';
 import 'package:lab_book/sets/inspector/inspector_param_controls_tile.dart';
+import 'package:lab_book/sets/inspector/inspector_rows_sect.dart';
 import '../../parts/controls.dart';
 import '../../tokens.dart';
 import 'inspector_parts.dart';

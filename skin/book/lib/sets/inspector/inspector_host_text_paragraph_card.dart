@@ -1,6 +1,7 @@
 // Leading as three lines whose gap follows the value (Auto draws the font's own gap).
 import 'package:flutter/widgets.dart';
 import 'package:lab_book/sets/inspector/inspector_parts.dart';
+import 'package:lab_book/sets/inspector/inspector_rows_sect.dart';
 import 'package:lab_book/tokens.dart';
 
 class ParagraphCard extends StatelessWidget {

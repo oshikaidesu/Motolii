@@ -1,6 +1,7 @@
 // What follows the pointer while an effect is dragged: the folded head, lifted.
 import 'package:flutter/widgets.dart';
 import 'package:lab_book/sets/inspector/inspector_parts.dart';
+import 'package:lab_book/sets/inspector/inspector_rows_sect.dart';
 import 'package:lab_book/tokens.dart';
 
 class EffectCard extends StatefulWidget {

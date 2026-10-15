@@ -2,6 +2,7 @@
 import 'package:flutter/widgets.dart';
 import 'package:lab_book/sets/inspector/inspector_param_controls_tile.dart';
 import 'package:lab_book/sets/inspector/inspector_parts.dart';
+import 'package:lab_book/sets/inspector/inspector_rows_sect.dart';
 import 'package:lab_book/tokens.dart';
 
 class TextMorphCard extends StatelessWidget {

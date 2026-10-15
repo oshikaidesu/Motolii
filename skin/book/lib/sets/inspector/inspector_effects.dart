@@ -1,5 +1,6 @@
 import 'package:flutter/widgets.dart';
 import 'package:lab_book/sets/inspector/inspector_effects_effect_card.dart';
+import 'package:lab_book/sets/inspector/inspector_rows_sect.dart';
 
 import '../../tokens.dart';
 import 'inspector_parts.dart';

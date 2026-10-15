@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/widgets.dart';
 import 'package:lab_book/sets/inspector/inspector_direct_transform_canvas.dart';
 import 'package:lab_book/sets/inspector/inspector_direct_transform_value_glyph.dart';
+import 'package:lab_book/sets/inspector/inspector_rows_sect.dart';
 
 import 'inspector_parts.dart';
 

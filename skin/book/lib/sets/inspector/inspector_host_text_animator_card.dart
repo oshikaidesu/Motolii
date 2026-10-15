@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/widgets.dart';
 import 'package:lab_book/sets/inspector/inspector_parts.dart';
+import 'package:lab_book/sets/inspector/inspector_rows_sect.dart';
 import 'package:lab_book/tokens.dart';
 
 class TextAnimatorCard extends StatelessWidget {

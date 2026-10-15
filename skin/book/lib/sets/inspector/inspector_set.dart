@@ -2,6 +2,8 @@ import 'package:flutter/widgets.dart';
 import 'package:lab_book/sets/inspector/inspector_effects_effect_card.dart';
 import 'package:lab_book/sets/inspector/inspector_effects_k_effects.dart';
 import 'package:lab_book/sets/inspector/inspector_parts_insp_host.dart';
+import 'package:lab_book/sets/inspector/inspector_rows_prop_row.dart';
+import 'package:lab_book/sets/inspector/inspector_rows_sect.dart';
 import 'package:widgetbook/widgetbook.dart';
 
 import '../../kit.dart';

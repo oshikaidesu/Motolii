@@ -1,5 +1,7 @@
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
+import 'package:lab_book/sets/inspector/inspector_rows_prop_row.dart';
+import 'package:lab_book/sets/inspector/inspector_rows_sect.dart';
 import '../../parts/controls.dart';
 import '../../tokens.dart';
 import 'inspector_parts.dart';
