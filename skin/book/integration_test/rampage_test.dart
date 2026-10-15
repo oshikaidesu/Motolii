@@ -216,6 +216,7 @@ void main() {
               Offset from;
               if (what.startsWith('knob')) {
                 await t.ensureVisible(where.first);
+              await t.pump(); // (ensureVisible only scrolls: the place is laid out again at the next picture)
                 from = t.getCenter(where.first);
               } else {
                 final at0 = (t.state(
@@ -245,6 +246,7 @@ void main() {
                 );
             } else if (what.startsWith('segments')) {
               await t.ensureVisible(where.first);
+              await t.pump(); // (ensureVisible only scrolls: the place is laid out again at the next picture)
               final seg = t.widget(where.first) as Segmented,
                   n = seg.items.length;
               final other = (seg.index + 1 + r.nextInt(math.max(1, n - 1))) % n;
@@ -270,6 +272,7 @@ void main() {
               }
             } else if (what.startsWith('menu')) {
               await t.ensureVisible(where.first);
+              await t.pump(); // (ensureVisible only scrolls: the place is laid out again at the next picture)
               final chooser = t.widget(where.first) as Chooser;
               await t.tap(where.first);
               await settle();
@@ -282,6 +285,7 @@ void main() {
               }
             } else {
               await t.ensureVisible(where.first);
+              await t.pump(); // (ensureVisible only scrolls: the place is laid out again at the next picture)
               await t.tap(where.first);
             }
           } catch (e, stack) {
