@@ -123,6 +123,12 @@ const char* motolii_spent(Motolii* m);
 /* Whether the inside is telling the stage a moment just now (the document held): a shell that reads each picture may
    leave this picture's reading out rather than wait (it is asked without the document, at once). */
 int motolii_busy(Motolii* m);
+/* A change asked without waiting for the hand (say, set, let_go, undo, redo, together: number is let_go's keep and
+   together's begin 1 / end 0): queued in order behind all others, a ticket said at once. motolii_answer: -1 not done
+   yet, 0 refused (motolii_answer_why says why, until the next answer), 1 done; an answer is said once. */
+int motolii_later(Motolii* m, const char* call, int thing, const char* name, const char* word, double number);
+int motolii_answer(Motolii* m, int ticket);
+const char* motolii_answer_why(Motolii* m);
 const char* motolii_words(Motolii* m, int thing, const char* name);   /* the words a value of a thing may be, with spaces between ("": any, or it is not a word; until the next call) */
 /* One act that is several calls (a value changed and its key put): the changes made from motolii_together(m, 1) to
    motolii_together(m, 0) are one step of undo, and if one of them is refused none of them is made (0 comes back).

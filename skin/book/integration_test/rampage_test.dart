@@ -334,6 +334,7 @@ void main() {
           judging.add((j0, Timeline.now));
           if (act % 40 == 39) {
             // (now and then five steps taken back and done again: the document as it was)
+            final u0 = Timeline.now; // (the test's own check, at once and waited for: not a hand's, not the window's time)
             final snap = _all(m, at());
             var back = 0;
             while (back < 5 && m.undo()) {
@@ -347,6 +348,7 @@ void main() {
                 again.entries.any((e) => snap[e.key] != e.value))
               reds.add('five undone and redone: the document is not as it was');
             ws.reread();
+            judging.add((u0, Timeline.now));
             await settle();
           }
         }

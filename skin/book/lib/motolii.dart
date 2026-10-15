@@ -389,6 +389,17 @@ class Motolii {
 
   /// Points of the picture to one unit of the stage, at z 0.
   late final double point = _point(_m);
+  late final _later = _lib.lookupFunction<Int32 Function(_P, _S, Int32, _S, _S, Double), int Function(_P, _S, int, _S, _S, double)>('motolii_later');
+  late final _answer = _lib.lookupFunction<Int32 Function(_P, Int32), int Function(_P, int)>('motolii_answer');
+  late final _answerWhy = _lib.lookupFunction<_S Function(_P), _S Function(_P)>('motolii_answer_why');
+
+  /// A change asked without waiting for the inside's hand (say, set, let_go, undo, redo, together): queued in order behind
+  /// every other, its ticket said at once ([answer] says when it is done).
+  int later(String call, {int thing = 0, String name = '', String word = '', double number = 0}) => _with([call, name, word], (s) => _later(_m, s[0], thing, s[1], s[2], number));
+
+  /// A ticket's answer: -1 not done yet, 0 refused ([answerWhy] says why), 1 done; said once.
+  int answer(int ticket) => _answer(_m, ticket);
+  String get answerWhy => _answerWhy(_m).toDartString();
   bool undo() => _undo(_m) != 0;
   bool redo() => _redo(_m) != 0;
   void close() => _close(_m);

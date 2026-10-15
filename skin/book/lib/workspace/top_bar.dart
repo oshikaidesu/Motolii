@@ -166,8 +166,7 @@ class _UndoRedo extends StatelessWidget {
           onTap: () {
             final ws = WsScope.read(context), m = ws.inside;
             if (m == null) return;
-            flip ? m.redo() : m.undo();
-            ws.reread();
+            ws.after(m.later(flip ? 'redo' : 'undo')); // (the window does not wait for the step)
           },
           builder: (h) => Container(
             width: 24,

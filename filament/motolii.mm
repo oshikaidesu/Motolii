@@ -22,7 +22,10 @@ struct Motolii {
     std::mutex asked_lock;
     std::condition_variable asked_now;
     std::deque<std::function<void()>> asked;
-    std::map<std::string, std::shared_ptr<std::function<void()>>> latest;   // (posted and not done yet, by what it is: a later one of the same takes its place)
+    std::map<std::string, std::shared_ptr<std::function<void()>>> latest;
+    int tickets = 0;                                             // (motolii_later: the last ticket given)
+    std::map<int, std::pair<int, std::string>> answers;          // (and each change's answer once done: done or not, and why not)
+    std::string answered_why;                                    // (the last answer's why, told to the shell)   // (posted and not done yet, by what it is: a later one of the same takes its place)
     bool closing = false, changed = true;
     std::atomic<bool> playing{false};
     std::atomic<bool> loop{true};   // (play goes round the work area; not: it stops at its end. Atomic: asked without the document)
@@ -353,6 +356,43 @@ double motolii_point(Motolii* m) {
         return 0.5 * (b.x / b.w - a.x / a.w) * m->s->w;
     });
 }
+// A change asked without waiting (a shell's hand that must not stand still while the hand works it): queued in order
+// behind every other, a ticket said at once; motolii_answer says whether it is done (-1 not yet, 0 refused: then
+// motolii_answer_why says why, 1 done). The calls: say, set, let_go (number: keep), undo, redo, together (number:
+// begin 1, end 0: the end's answer is the step's).
+int motolii_later(Motolii* m, const char* call, int thing, const char* name, const char* word, double number) {
+    const std::string c = call ? call : "", n = name ? name : "", w = word ? word : "";
+    int ticket = 0;
+    {
+        std::lock_guard<std::mutex> hold(m->asked_lock);
+        ticket = ++m->tickets;
+        m->asked.push_back([m, c, n, w, thing, number, ticket] {
+            int ok = 0;
+            if (c == "say") ok = changes(m, (int)doc_say(doc(m), thing, n.c_str(), w.c_str()));
+            else if (c == "set") ok = changes(m, (int)doc_set(doc(m), thing, n.c_str(), number));
+            else if (c == "let_go") ok = changes(m, (int)doc_let_go(doc(m), number != 0.0));
+            else if (c == "undo") ok = (int)doc_undo(doc(m));
+            else if (c == "redo") ok = (int)doc_redo(doc(m));
+            else if (c == "together") ok = number != 0.0 ? (doc_act(*m->d), 1) : (m->d->act ? (int)doc_acted(*m->d) : 0);
+            else m->trouble = "a change asked later is one of: say, set, let_go, undo, redo, together";
+            m->changed = true;
+            std::lock_guard<std::mutex> hold(m->asked_lock);
+            m->answers[ticket] = {ok, ok ? std::string() : std::string(motolii_trouble(m))};
+        });
+    }
+    m->asked_now.notify_one();
+    return ticket;
+}
+int motolii_answer(Motolii* m, int ticket) {
+    std::lock_guard<std::mutex> hold(m->asked_lock);
+    const auto found = m->answers.find(ticket);
+    if (found == m->answers.end()) return -1;
+    const int ok = found->second.first;
+    m->answered_why = found->second.second;
+    m->answers.erase(found);
+    return ok;
+}
+const char* motolii_answer_why(Motolii* m) { return m->answered_why.c_str(); }
 int motolii_undo(Motolii* m) { return by_hand(m, [=] { return (int)(doc_undo(doc(m))); }); }
 int motolii_redo(Motolii* m) { return by_hand(m, [=] { return (int)(doc_redo(doc(m))); }); }
 

@@ -2,6 +2,7 @@
 // This file is what every seat shares: the mock document they all read (Ws), and the window's own tokens (WsT).
 // Tone and manner come from the Inspector's Pop rules (sets/inspector_parts.dart): containers square and tiled edge to edge,
 // what you touch or read round, colour flat and opaque, one lime accent, each kind of thing wearing its own hue.
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 
 import '../motolii.dart';
@@ -321,6 +322,26 @@ class Ws extends ChangeNotifier {
     return m.keyMoments(t, name).isNotEmpty || (w.isNotEmpty && (m.range(t, name) == null || (double.tryParse(w) ?? 1) != 0)); // (a colour said is on, black too; a number, when not nought)
   }
 
+  /// Joined: a change asked without waiting ([Motolii.later]): looked at once a picture till the inside has done it, then
+  /// the document read again and [then] told (done or not, and why not). The window never stands still for the inside.
+  void after(int ticket, [void Function(bool done, String why)? then]) {
+    void look(Duration _) {
+      final m = _inside;
+      if (m == null) return;
+      final a = m.answer(ticket);
+      if (a < 0) {
+        SchedulerBinding.instance.scheduleFrameCallback(look);
+        return;
+      }
+      then?.call(a == 1, a == 1 ? '' : m.answerWhy);
+      reread();
+    }
+
+    SchedulerBinding.instance
+      ..scheduleFrameCallback(look)
+      ..ensureVisualUpdate();
+  }
+
   /// Joined: the whole-screen effects on the stage (the files its script says, nearest the picture first).
   List<String> get screenFx => [
     for (final f in (_inside?.word(0, 'script') ?? '').split(' '))
@@ -333,9 +354,8 @@ class Ws extends ChangeNotifier {
     if (m == null) return false;
     final now = screenFx, on = now.remove(file);
     if (!on) now.add(file);
-    final done = m.say(0, 'script', now.isEmpty ? 'none' : now.join(' '));
-    reread();
-    return done;
+    after(m.later('say', name: 'script', word: now.isEmpty ? 'none' : now.join(' '))); // (an effect's shader made: the window does not wait for it)
+    return true;
   }
 
   /// Joined: the motion the picked thing has (its script's file; '' none).

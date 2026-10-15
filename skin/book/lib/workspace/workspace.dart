@@ -114,8 +114,8 @@ class _WorkspaceState extends State<Workspace> {
         menus: [
           PlatformMenuItemGroup(
             members: [
-              PlatformMenuItem(label: 'Undo', shortcut: const SingleActivator(LogicalKeyboardKey.keyZ, meta: true), onSelected: () => then(!_typed(const UndoTextIntent(SelectionChangedCause.keyboard)) && m.undo())),
-              PlatformMenuItem(label: 'Redo', shortcut: const SingleActivator(LogicalKeyboardKey.keyZ, meta: true, shift: true), onSelected: () => then(!_typed(const RedoTextIntent(SelectionChangedCause.keyboard)) && m.redo())),
+              PlatformMenuItem(label: 'Undo', shortcut: const SingleActivator(LogicalKeyboardKey.keyZ, meta: true), onSelected: () => _typed(const UndoTextIntent(SelectionChangedCause.keyboard)) ? null : _ws.after(m.later('undo'))),
+              PlatformMenuItem(label: 'Redo', shortcut: const SingleActivator(LogicalKeyboardKey.keyZ, meta: true, shift: true), onSelected: () => _typed(const RedoTextIntent(SelectionChangedCause.keyboard)) ? null : _ws.after(m.later('redo'))),
             ],
           ),
           // (the system's own Edit menu went when these menus came: what a text box does is given back to it)
@@ -366,30 +366,34 @@ void _told(Ws ws, String? why) {
 bool _say(Ws ws, String? id, Map<String, String> changed) {
   final m = ws.inside!, t = int.tryParse(id ?? '');
   if (t == null) return false;
+  // (asked without waiting, one step: the window goes on while the inside works it, then reads it again; refused, the
+  //  words go back to the document's own when it is read)
   var all = true;
-  String? why;
-  m.together(() {
-    for (final e in changed.entries) {
-      final ok = switch (e.key) {
-        'text.content' => m.say(t, 'text', e.value), // (its lines too)
-        'align' => switch (_aligned.indexOf(e.value)) {
-          final i when i >= 0 => m.set(t, 'align', i / 2), // (Left, Centre, Right: ThorVG's 0, 0.5, 1; Justify it has not)
-          _ => false,
-        },
-        'blend' => m.say(t, 'blend', e.value.toLowerCase()),
-        'space' => m.words(t, 'space').isEmpty ? e.value == 'd3' : m.say(t, 'space', _spaces[e.value] ?? e.value), // (a solid is 3D and only that)
-        'camTarget' => m.set(t, 'parent', (_others(ws, t)[e.value] ?? 0).toDouble()),
-        'parent' => m.set(t, 'parent', (_others(ws, t)[e.value] ?? 0).toDouble()), // (it goes with that one, and stays where it is)
-        'stroke' => m.say(t, 'stroke', e.value == 'None' ? '' : e.value.replaceFirst('#', '').toLowerCase()), // (None: no edge)
-        final k when k.startsWith('v_') => m.say(t, k.substring(2), e.value), // (a card of the inside's own: the value of that name)
-        _ => true, // (a seat the inside has nothing behind yet: the inspector keeps its own word)
-      };
-      if (!ok) why ??= m.trouble;
-      all = all && ok;
+  int say(String name, String word) => m.later('say', thing: t, name: name, word: word);
+  int set(String name, double number) => m.later('set', thing: t, name: name, number: number);
+  m.later('together', number: 1);
+  for (final e in changed.entries) {
+    switch (e.key) {
+      case 'text.content':
+        say('text', e.value); // (its lines too)
+      case 'align':
+        final i = _aligned.indexOf(e.value);
+        i >= 0 ? set('align', i / 2) : all = false; // (Left, Centre, Right: ThorVG's 0, 0.5, 1; Justify it has not)
+      case 'blend':
+        say('blend', e.value.toLowerCase());
+      case 'space':
+        m.words(t, 'space').isEmpty ? all = all && e.value == 'd3' : say('space', _spaces[e.value] ?? e.value); // (a solid is 3D and only that)
+      case 'camTarget' || 'parent':
+        set('parent', (_others(ws, t)[e.value] ?? 0).toDouble()); // (it goes with that one, and stays where it is)
+      case 'stroke':
+        say('stroke', e.value == 'None' ? '' : e.value.replaceFirst('#', '').toLowerCase()); // (None: no edge)
+      case final k when k.startsWith('v_'):
+        say(k.substring(2), e.value); // (a card of the inside's own: the value of that name)
+      default: // (a seat the inside has nothing behind yet: the inspector keeps its own word)
     }
-  });
-  _told(ws, all ? null : why ?? '');
-  ws.reread();
+  }
+  ws.after(m.later('together'), (done, no) => _told(ws, done ? null : no));
+  if (!all) _told(ws, 'that is not one of its words');
   return all;
 }
 
@@ -644,9 +648,7 @@ void _write(Ws ws, String? id, Map<String, double> changed, {required bool live}
     if (ws.playing) ws.playing = false; // (a hand on a value stops the play: what is changed is changed at one moment)
     if (why != null) _told(ws, why);
   } else {
-    if (!m.letGo(true)) why ??= m.trouble;
-    _told(ws, why);
-    ws.reread();
+    ws.after(m.later('let_go', number: 1), (done, no) => _told(ws, why ?? (done ? null : no))); // (the hand let go: the window does not wait for the step)
   }
 }
 
@@ -801,7 +803,13 @@ class _InspectorSeatState extends State<_InspectorSeat> {
         onValues: ws.inside == null ? null : (changed, {required live}) => _write(ws, l?.id, changed, live: live),
         onDrop: ws.inside == null ? null : () => ws.inside!.letGo(false),
         onKey: ws.inside == null ? null : (prop, mark) => _mark(ws, l?.id, prop, mark),
-        together: ws.inside?.together,
+        together: ws.inside == null
+            ? null
+            : (tells) { // (one step, asked without waiting: begun and ended in the inside's queue around what is told)
+                ws.inside!.later('together', number: 1);
+                tells();
+                ws.after(ws.inside!.later('together'));
+              },
         live: _live,
         child: InspectorPanel(directTransform: true, width: box.maxWidth, height: box.maxHeight),
       ),
