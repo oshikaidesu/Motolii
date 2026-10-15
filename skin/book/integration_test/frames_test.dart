@@ -84,6 +84,25 @@ void main() {
 
     await phase('the playhead moved', (f) async => ws.frame = (f * 3) % (Ws.fps * 8));
 
+    if (const bool.fromEnvironment('LETGO')) { // (LETGO: a knob taken, moved and let go again and again, Flutter's own timeline of it with each widget's build, for reading)
+      Future<void> letGos() async {
+        for (var i = 0; i < 15; i++) {
+          final h = await t.startGesture(t.getCenter(knob));
+          for (var k = 0; k < 5; k++) {
+            await h.moveBy(const Offset(4, 0));
+            await t.pump(const Duration(milliseconds: 16));
+          }
+          await h.up();
+          for (var k = 0; k < 20; k++) {
+            await t.pump(const Duration(milliseconds: 16));
+          }
+        }
+      }
+      debugProfileBuildsEnabled = true;
+      await binding.traceAction(letGos, reportKey: 'timeline', streams: const ['Dart', 'Embedder']);
+      debugProfileBuildsEnabled = false;
+    }
+
     SchedulerBinding.instance.removeTimingsCallback(took);
     debugPrint('FRAMES all: late $late');
     if (!const bool.fromEnvironment('TRACE')) expect(late, 0, reason: report.join('\n')); // (a traced run is for reading: its timeline is written only if it passes)

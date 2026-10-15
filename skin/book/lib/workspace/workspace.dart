@@ -582,6 +582,16 @@ double _onCard(Ws ws, Motolii m, int t, String n, double at) =>
 
 double _shownTimes(Motolii m, String n) => switch (m.shown(n)?.look) { 'stage' => m.point, 'down' => -m.point, 'share' => 100, _ => 1 };
 
+/// Joined: only where a thing is, how large and how turned (the inspector's seats), as the stage's readout shows them:
+/// not the cards' hundreds of numbers [wsTransform] reads.
+Map<String, double> wsPlace(Ws ws, String id) {
+  final m = ws.inside, t = int.tryParse(id);
+  if (m == null || t == null) return const {};
+  final at = ws.frame / Ws.fps, p = m.point;
+  double r1(double x) => (x * 10).roundToDouble() / 10 + 0;
+  return {for (final s in _seats) s.$1: r1(s.$3(m.value(t, s.$2, at) ?? (s.$2 == 'opacity' || s.$2.startsWith('scale_') ? 1 : 0), WsArt.comp, p))};
+}
+
 /// The selected layer's transform as the stage draws it at this frame, in the Inspector's ids.
 Map<String, double> wsTransform(Ws ws, String? id) {
   if (ws.inside case final m?) {   // (joined: the document's own values, as the inspector counts them)

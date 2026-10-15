@@ -8,7 +8,7 @@ import '../tokens.dart';
 import 'stage_art.dart';
 import 'stage_trial.dart';
 import 'stage_view.dart';
-import 'workspace.dart' show wsTransform;
+import 'workspace.dart' show wsPlace;
 import 'ws.dart';
 
 class WsStage extends StatelessWidget {
@@ -506,7 +506,7 @@ class _Readout extends StatelessWidget {
           )
         else if (ws.inside != null) ...[
           // (joined: the same numbers as the inspector's, which are the document's)
-          if (wsTransform(ws, l.id) case final at) ...[
+          if (wsPlace(ws, l.id) case final at) ...[
             pair('P', '${at['pos.x']?.round()}, ${at['pos.y']?.round()}'),
             pair('S', '${at['scale.y']?.round()}%'),
             pair('R', '${at['rot.z']?.round()}°'),
