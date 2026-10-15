@@ -1,4 +1,6 @@
 import 'package:flutter/widgets.dart';
+import 'package:lab_book/sets/inspector/inspector_effects_effect_card.dart';
+import 'package:lab_book/sets/inspector/inspector_effects_k_effects.dart';
 import 'package:widgetbook/widgetbook.dart';
 
 import '../../kit.dart';

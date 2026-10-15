@@ -8,6 +8,7 @@ import 'dart:math' as math;
 import 'package:docking/docking.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
+import 'package:lab_book/sets/inspector/inspector_effects_k_effects.dart';
 
 import '../sets/inspector/inspector_parts.dart';
 import 'desk.dart';

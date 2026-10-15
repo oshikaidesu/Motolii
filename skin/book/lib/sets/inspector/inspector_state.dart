@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart' show ValueListenable, ValueNotifier, listEquals, mapEquals, setEquals;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
+import 'package:lab_book/sets/inspector/inspector_effects_k_effects.dart';
 import '../../parts/controls.dart';
 import '../../tokens.dart';
 import 'inspector_parts.dart';

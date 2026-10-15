@@ -8,6 +8,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lab_book/motolii.dart';
 import 'package:lab_book/parts/controls.dart' show Segmented;
+import 'package:lab_book/sets/inspector/inspector_effects_effect_card.dart';
 import 'package:lab_book/sets/inspector/inspector_parts.dart' show Ctx, Chooser, AnchorCube, AnchorGeometry, LinkMark, EffectCard, ValuesCard, FillStroke, InspHeader, KeyS, NumField, OnOff, PropRow, Space, SpacePlate, TextGroup;
 import 'package:lab_book/workspace/dock_effects.dart' show EffectsShelf;
 import 'package:lab_book/workspace/dock_fonts.dart';
