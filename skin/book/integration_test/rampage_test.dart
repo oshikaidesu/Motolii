@@ -28,7 +28,8 @@ const _seed = int.fromEnvironment('SEED', defaultValue: 7),
     _acts = int.fromEnvironment('ACTS', defaultValue: 400);
 
 /// The whole document as values, thing by thing (the stage's own is thing 0).
-Map<String, Object?> _all(Motolii m, double at) => {
+const _judge = bool.fromEnvironment('JUDGE', defaultValue: true); // (off: the hand alone, nothing read to judge it: to see what the judging itself costs)
+Map<String, Object?> _all(Motolii m, double at) => !_judge ? const {} : {
   for (final t in [0, ...m.things])
     for (final n in m.values(t)) '$t:$n': m.value(t, n, at) ?? m.word(t, n),
 };
@@ -134,7 +135,7 @@ void main() {
             await settle();
             lateAfter['pick'] = (lateAfter['pick'] ?? 0) + timings.skip(seenPick).where((f) => f.totalSpan.inMicroseconds > 16667).length;
           }
-          final panel = find.byType(InspectorPanel);
+          final panel = find.byType(InspectorPanel), l0 = Timeline.now; // (the test's own walk of the window for what it may press: not the window's time)
           final ledger = <(String, Finder)>[
             for (final e
                 in find
@@ -201,6 +202,7 @@ void main() {
                 if ((Offset.zero & t.getSize(find.byType(StageView))).deflate(4).contains(at)) // (a hand takes only what it sees: a thing fallen off the picture has its handles there too)
                   ('handle $name', find.byType(StageView)),
           ];
+          judging.add((l0, Timeline.now));
           if (ledger.isEmpty) continue;
           final (what, where) = ledger[r.nextInt(ledger.length)];
           worked[what.split(' ').take(2).join(' ')] =

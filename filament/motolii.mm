@@ -27,6 +27,7 @@ struct Motolii {
     bool loop = true;   // (play goes round the work area; not: it stops at its end)
     std::atomic<double> now{0.0};
     std::map<std::string, std::pair<long, double>> by_door;   // (what each call has cost, by its name: for measuring)
+    std::map<std::string, double> worst;                      // (and its slowest once)
     double spent[4] = {0, 0, 0, 0};   // (seconds the hand spent: asked to change, asked to read, telling the moment, drawing)
     long many[4] = {0, 0, 0, 0};
 };
@@ -43,7 +44,7 @@ template <class Does> static auto asked(Motolii* m, Does does, bool changes, con
             const double took = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
             m->spent[changes ? 0 : 1] += took, m->many[changes ? 0 : 1]++;
             auto& door = m->by_door[who];
-            door.first++, door.second += took;
+            door.first++, door.second += took, m->worst[who] = std::max(m->worst[who], took);
         });
     }
     m->asked_now.notify_one();
@@ -62,7 +63,7 @@ template <class Does> static auto by_look(Motolii* m, Does does, const char* who
     const double took = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
     m->spent[1] += took, m->many[1]++;
     auto& door = m->by_door[who];
-    door.first++, door.second += took;
+    door.first++, door.second += took, m->worst[who] = std::max(m->worst[who], took);
     return out;
 }
 
@@ -172,12 +173,12 @@ const char* motolii_spent(Motolii* m) {
         std::vector<std::pair<double, std::string>> doors;
         for (const auto& [name, cost] : m->by_door) {
             char one[160];
-            std::snprintf(one, sizeof one, "%s %ld %.0f ms", name.c_str(), cost.first, 1e3 * cost.second);
+            std::snprintf(one, sizeof one, "%s %ld %.0f ms (slowest %.1f)", name.c_str(), cost.first, 1e3 * cost.second, 1e3 * m->worst[name]);
             doors.push_back({cost.second, one});
         }
         std::sort(doors.rbegin(), doors.rend());
         m->word = line;
-        for (size_t i = 0; i < doors.size() && i < 12; ++i) m->word += "; " + doors[i].second;   // (the dearest calls)
+        for (size_t i = 0; i < doors.size() && i < 20; ++i) m->word += "; " + doors[i].second;   // (the dearest calls)
         return m->word.c_str();
     });
 }
