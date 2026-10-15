@@ -5,6 +5,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lab_book/sets/inspector/inspector_direct_transform.dart';
+import 'package:lab_book/sets/inspector/inspector_direct_transform_canvas.dart';
+import 'package:lab_book/sets/inspector/inspector_direct_transform_layout.dart';
 import 'package:lab_book/sets/inspector/inspector_parts.dart';
 
 Future<void> mount(WidgetTester tester, Doc doc, {bool locked = false, bool panel = false}) async {

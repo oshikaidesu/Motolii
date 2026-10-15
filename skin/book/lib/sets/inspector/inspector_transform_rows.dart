@@ -1,5 +1,6 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
+import 'package:lab_book/sets/inspector/inspector_direct_transform_value_glyph.dart';
 import '../../tokens.dart';
 import 'inspector_direct_transform.dart';
 import 'inspector_parts.dart';
