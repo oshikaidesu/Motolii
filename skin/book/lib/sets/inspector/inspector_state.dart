@@ -277,8 +277,18 @@ class Doc extends ChangeNotifier {
     if (before != null && before.values.entries.any((e) => v[e.key] != e.value)) {
       _undo.add(before);
     }
+    // (a hand let go: the host is told, but the inspector is not built again for it: the field under the hand already
+    //  shows its number, the rows of what moved are told alone, and the host's reading of the document follows)
+    ending = true;
     notifyListeners();
+    ending = false;
+    for (final e in v.entries) {
+      if (before?.values[e.key] != e.value) _watched[e.key]?.value++;
+    }
   }
+
+  /// A hand letting go is being told (see [endGesture]).
+  bool ending = false;
 
   void _restore(({Map<String, double> values, Map<String, List<double>> mixed, Map<String, KeyS> keys}) before) {
     v

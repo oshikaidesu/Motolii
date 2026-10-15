@@ -361,7 +361,12 @@ class Motolii {
   }
 
   /// The words a value of a thing may be (a blend's): none if any word will do, or the thing has no such value.
-  List<String> words(int thing, String name) => _with([name], (s) => _words(_m, thing, s[0]).toDartString()).split(' ').where((w) => w.isNotEmpty).toList();
+  List<String> words(int thing, String name) => _wordsKept.putIfAbsent((thing, name), () => _with([name], (s) => _words(_m, thing, s[0]).toDartString()).split(' ').where((w) => w.isNotEmpty).toList());
+
+  /// The words a value may be, kept till the document is read again ([forget]): what a value may be changes with the
+  /// document (a thing's kind, a script's select), not with each picture's reading of the inspector.
+  final _wordsKept = <(int, String), List<String>>{};
+  void forget() => _wordsKept.clear();
 
   /// A film's first picture, small, as a .png file (null: none could be made). Made once and on another isolate: the
   /// window does not wait.

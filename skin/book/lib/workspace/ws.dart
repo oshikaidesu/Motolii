@@ -169,6 +169,7 @@ class Ws extends ChangeNotifier {
     final m = _inside;
     if (m == null) return;
     if (!m.fits && refit != null) return refit!(); // (the document says another size, by a hand or by undo: the host opens it again, and that reads it)
+    m.forget();
     rev++;
     reads++;
     duration = (m.seconds * fps).round().clamp(1, 1 << 20);
@@ -324,17 +325,25 @@ class Ws extends ChangeNotifier {
 
   /// Joined: a change asked without waiting ([Motolii.later]): looked at once a picture till the inside has done it, then
   /// the document read again and [then] told (done or not, and why not). The window never stands still for the inside.
+  int _afters = 0; // (tickets still looked at: the document is read again once, when the last of them is done)
   void after(int ticket, [void Function(bool done, String why)? then]) {
+    int? answer;
+    var waited = 0;
+    _afters++;
     void look(Duration _) {
       final m = _inside;
       if (m == null) return;
-      final a = m.answer(ticket);
-      if (a < 0) {
+      if (answer == null) {
+        final a = m.answer(ticket);
+        if (a >= 0) answer = a;
+      }
+      if (answer == null || (m.busy && waited++ < 3)) { // (done: read once the inside has told the stage the new moment too, so the reading does not wait on it; three pictures at most)
         SchedulerBinding.instance.scheduleFrameCallback(look);
         return;
       }
+      final a = answer!;
       then?.call(a == 1, a == 1 ? '' : m.answerWhy);
-      reread();
+      if (--_afters == 0) reread();
     }
 
     SchedulerBinding.instance

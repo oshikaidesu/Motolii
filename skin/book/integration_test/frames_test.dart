@@ -98,9 +98,19 @@ void main() {
           }
         }
       }
-      debugProfileBuildsEnabled = true;
-      await binding.traceAction(letGos, reportKey: 'timeline', streams: const ['Dart', 'Embedder']);
-      debugProfileBuildsEnabled = false;
+      Ws.spent.clear();
+      if (const bool.fromEnvironment('TRACE')) {
+        debugProfileBuildsEnabled = true;
+        await binding.traceAction(letGos, reportKey: 'timeline', streams: const ['Dart', 'Embedder']);
+        debugProfileBuildsEnabled = false;
+      } else {
+        final from = timings.length; // (the timings are being gathered already: see addTimingsCallback above)
+        await letGos();
+        await t.pump(const Duration(milliseconds: 100));
+        final spans = [for (final f in timings.skip(from)) f.totalSpan.inMicroseconds / 1000.0]..sort();
+        debugPrint('FRAMES let go fifteen times: ${spans.length} pictures, late ${spans.where((s) => s > 1000 / 60).length}, most ${spans.isEmpty ? 0 : spans.last.toStringAsFixed(1)} ms, the late ones ${[for (final s in spans) if (s > 1000 / 60) s.toStringAsFixed(1)]}');
+      }
+      debugPrint('BUILDING during let go: ${(Ws.spent.entries.toList()..sort((a, b) => b.value.compareTo(a.value))).map((e) => '${e.key} ${e.value.inMilliseconds} ms').join(', ')}');
     }
 
     SchedulerBinding.instance.removeTimingsCallback(took);

@@ -338,7 +338,7 @@ class _InspHostState extends State<InspHost> {
     }
     // (while a hand is on a value the whole inspector is not built again each step: the field under the hand shows its
     //  own number and the stage follows what the host is told; everything is built once when the hand lets go)
-    if (mounted && !doc.inGesture) setState(() {});
+    if (mounted && !doc.inGesture && !doc.ending) setState(() {});
   }
 
   @override

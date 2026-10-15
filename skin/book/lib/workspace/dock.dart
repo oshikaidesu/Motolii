@@ -41,8 +41,26 @@ class _WsShelfState extends State<WsShelf> {
   Ws? _ws;
   bool _due = false;
   Object? _seen;
+  // (a new reading of the document is looked at for what this shelf shows of it: a number a hand let go of changes
+  //  none of the effects on, the motion or the things laid, so the shelf is not built again for it)
+  int? _rev;
+  Object? _shows;
+  Object _showing(Ws ws) => switch (widget.name) {
+    'Effects' => (ws.screenFx.join(' '), ws.motion, ws.fxOf(ws.selected).join(' ')),
+    'Create' => ws.layers.map((l) => '${l.id} ${l.name}').join(' '),
+    _ => ws.rev,
+  };
   void _later() {
-    final ws = _ws!, now = (ws.rev, ws.selected, ws.trial); // (what a shelf shows of the window: the document, what is picked, what is tried on)
+    final ws = _ws!;
+    if (ws.rev != _rev) {
+      _rev = ws.rev;
+      final shows = ws.inside == null ? ws.rev : _showing(ws);
+      if (shows != _shows) {
+        _shows = shows;
+        _seen = null;
+      }
+    }
+    final now = (_shows, ws.selected, ws.trial); // (what a shelf shows of the window: its part of the document, what is picked, what is tried on)
     if (_due || now == _seen) return;
     _seen = now;
     _due = true;
