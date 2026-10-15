@@ -569,6 +569,11 @@ List<Fx> _makeCards(Ws ws, Motolii m, int t) {
 
 /// Joined: how many of a knob's units make one of the document's (the inside's shown look: a length of the stage in
 /// points of the picture, a share in hundredths; else as it is).
+/// A value of the inside's own cards as the inspector counts it: another thing by its place (None first), a number
+/// in the card's units, a word by its place among those it may be (the stage's and a thing's alike).
+double _onCard(Ws ws, Motolii m, int t, String n, double at) =>
+    m.shown(n)?.look == 'thing' ? (_others(ws, t).values.toList().indexOf((m.value(t, n, 0) ?? 0).round()) + 1).toDouble() : m.words(t, n).isEmpty ? (m.value(t, n, at) ?? 0) * _shownTimes(m, n) : math.max(0, m.words(t, n).indexOf(m.word(t, n))).toDouble(); // (the inside's own cards: a number as it is, a word by its place among those it may be)
+
 double _shownTimes(Motolii m, String n) => switch (m.shown(n)?.look) { 'stage' => m.point, 'down' => -m.point, 'share' => 100, _ => 1 };
 
 /// The selected layer's transform as the stage draws it at this frame, in the Inspector's ids.
@@ -577,7 +582,7 @@ Map<String, double> wsTransform(Ws ws, String? id) {
     final t = int.tryParse(id ?? '');
     if (id == null) { // (nothing picked: the stage's own cards, thing 0)
       final at = ws.frame / Ws.fps;
-      return {for (final (_, names) in m.cards(0)) for (final n in names) 'v_$n': m.words(0, n).isEmpty ? m.value(0, n, at) ?? 0 : math.max(0, m.words(0, n).indexOf(m.word(0, n))).toDouble()};
+      return {for (final (_, names) in m.cards(0)) for (final n in names) 'v_$n': _onCard(ws, m, 0, n, at)};
     }
     if (t == null) return const {};
     final at = ws.frame / Ws.fps, p = m.point;
@@ -587,7 +592,7 @@ Map<String, double> wsTransform(Ws ws, String? id) {
       'depth': r1(m.frame(t)?[7] ?? 0), // (how deep it is in points of the picture: a flat thing is Flat)
       for (final (_, names) in m.cards(t))
         for (final n in names)
-          'v_$n': m.shown(n)?.look == 'thing' ? (_others(ws, t).values.toList().indexOf((m.value(t, n, 0) ?? 0).round()) + 1).toDouble() : m.words(t, n).isEmpty ? (m.value(t, n, at) ?? 0) * _shownTimes(m, n) : math.max(0, m.words(t, n).indexOf(m.word(t, n))).toDouble(), // (the inside's own cards: a number as it is, a word by its place among those it may be)
+          'v_$n': _onCard(ws, m, t, n, at),
       for (final fields in _fxFields(ws, id).values)
         for (final MapEntry(:key, value: n) in fields.entries) key: m.value(t, n, at) ?? 0, // (the effects' numbers, as they are)
     };

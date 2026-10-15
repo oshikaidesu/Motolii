@@ -1305,6 +1305,24 @@ void main() {
     await _close(t);
   }, skip: !_built);
 
+  testWidgets('a knob of the stage\'s own cards in its units (Bloom in hundredths): a second drag right goes on from where the first left it, up', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    m.add('solid', 'cube');
+    ws..reread()..select(null);
+    await t.pumpAndSettle();
+    final bloom = find.byWidgetPredicate((w) => w is NumField && w.id == 'v_bloom');
+    await t.ensureVisible(bloom);
+    await t.pump();
+    for (final by in const [Offset(90, 0), Offset(45, 40)]) {
+      final g = await t.startGesture(t.getCenter(bloom));
+      for (var i = 1; i <= 10; ++i) { await g.moveBy(by / 10); await t.pump(const Duration(milliseconds: 16)); }
+      await g.up();
+      await t.pumpAndSettle();
+    }
+    expect(m.value(0, 'bloom', 0), greaterThan(0.45), reason: 'the second drag began from 45, not from the document\'s 0.45 read as hundredths');
+    await _close(t);
+  }, skip: !_built);
+
   testWidgets('Backspace on the timeline takes the picked thing out; undo brings it back', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final ring = m.add('solid', 'ring'), cube = m.add('solid', 'cube');
