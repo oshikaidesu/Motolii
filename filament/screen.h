@@ -3,7 +3,7 @@
 // knobs one `var<uniform>` struct), with its knobs declared in its head as a recipe's are (script.h: // --track@name:...).
 // The stage's picture is drawn to a texture of its own instead of the screen, and the effect draws it on the screen
 // (screen_door.h: through Filament's own driver, in order with its pictures). Knobs the struct has and the head does not
-// name are told as they come; `time` (seconds), `aspect` (wide over high), `resolution`, `width` and `height` (points) by the stage.
+// name are told as they come; `time` (seconds), `frame` (its number at sixty a second), `aspect` (wide over high), `resolution`, `width` and `height` (points) by the stage.
 #pragma once
 // (kit.h: read before this, as doc.h does)
 #include "script.h"
@@ -99,6 +99,7 @@ static void screen_knobs(Stage& s, ScreenFx& fx, const std::function<double(cons
         else if (f.name == "aspect") v[0] = (float)s.w / (float)s.h;
         else if (f.name == "resolution") v[0] = (float)s.w, v[1] = (float)s.h;
         else if (f.name == "width" || f.name == "height") v[0] = (float)(f.name == "width" ? s.w : s.h);   // (three's way of saying it)
+        else if (f.name == "frame") v[0] = (float)std::lround(s.now * 60.0);   // (ISF's FRAMEINDEX: the picture's number at sixty a second)
         else
             for (uint32_t i = 0; i < f.floats; ++i) {   // (a vector's numbers each a knob of its own, name_x, name_y...)
                 const std::string k = f.floats == 1 ? f.name : f.name + "_" + "xyzw"[i];

@@ -9,6 +9,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:lab_book/motolii.dart';
 import 'package:lab_book/parts/controls.dart' show Segmented;
 import 'package:lab_book/sets/inspector/inspector_parts.dart' show AnchorCube, AnchorGeometry, LinkMark, EffectCard, ValuesCard, FillStroke, InspHeader, KeyS, NumField, OnOff, PropRow, Space, SpacePlate, TextGroup;
+import 'package:lab_book/workspace/dock_effects.dart' show EffectsShelf;
 import 'package:lab_book/workspace/dock_fonts.dart';
 import 'package:lab_book/workspace/dock_make.dart' show CreateShelf;
 import 'package:lab_book/workspace/desk_kit.dart' show DeskScrub;
@@ -1263,7 +1264,7 @@ void main() {
       ..shelf = 'Effects';
     await t.pumpAndSettle();
     final row = find.byKey(ValueKey('ws-screen-${kaleido.$1}'));
-    await t.ensureVisible(row);
+    await t.scrollUntilVisible(row, 120, scrollable: find.descendant(of: find.byType(EffectsShelf), matching: find.byType(Scrollable)).first); // (the shelf is longer than the window: scrolled as a hand would)
     await t.tap(row);
     await t.pumpAndSettle();
     expect(m.word(0, 'script'), kaleido.$2, reason: m.trouble);

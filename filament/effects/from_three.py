@@ -31,6 +31,7 @@ if loose:
     glsl += "".join(f"#define {n} ({n}_on != 0)\n" for t, n in loose if t == "bool")   # (a uniform holds no bool: an int, read as one)
 glsl += f"layout(location = 0) in vec2 {at};\nlayout(location = 0) out vec4 three_FragColor;\n"
 glsl += "#define tDiffuse sampler2D(tDiffuse_picture, tDiffuse_sampler)\n#define texture2D texture\n#define gl_FragColor three_FragColor\n"
+glsl += "#define texture(i, c) textureLod(i, c, 0.0)\n"   # (WGSL samples with derivatives only where every pixel goes the same way: these read the top level anywhere)
 if common:   # (the shader asks for three's common piece: rand, PI, saturate...)
     glsl += re.sub(r"^\s*#include.*$", "", chunk("common"), flags=re.M) + "\n"
 if "luminance(" in body and "float luminance" not in body:   # (three puts this before every shader: WebGLProgram.js getLuminanceFunction, linear sRGB's weights)
