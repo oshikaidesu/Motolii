@@ -1264,7 +1264,8 @@ void main() {
       ..shelf = 'Effects';
     await t.pumpAndSettle();
     final row = find.byKey(ValueKey('ws-screen-${kaleido.$1}'));
-    await t.scrollUntilVisible(row, 120, scrollable: find.descendant(of: find.byType(EffectsShelf), matching: find.byType(Scrollable)).first); // (the shelf is longer than the window: scrolled as a hand would)
+    await t.enterText(find.descendant(of: find.byType(DockSearch), matching: find.byType(EditableText)), kaleido.$1); // (found as a hand finds one among forty: by its name)
+    await t.pumpAndSettle();
     await t.tap(row);
     await t.pumpAndSettle();
     expect(m.word(0, 'script'), kaleido.$2, reason: m.trouble);
