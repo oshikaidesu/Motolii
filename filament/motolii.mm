@@ -362,7 +362,7 @@ int motolii_write(Motolii* m, const char* mp4) {
 const char* motolii_list(Motolii* m) {
     return by_look(m, [m] {
     m->listed.clear();
-    doc_rows(*m->d, sqlite3_mprintf("select thing || ' ' || name || ' at ' || at || ': ' || value || coalesce(', then ' || way, '') from fact order by thing, name, at"), [m](sqlite3_stmt* row) { m->listed += std::string("  ") + (const char*)sqlite3_column_text(row, 0) + "\n"; });
+    doc_rows(*m->d, sqlite3_mprintf("select thing || ' ' || name || ' at ' || cast(at as real) || ': ' || value || coalesce(', then ' || way, '') from fact order by thing, name, at"), [m](sqlite3_stmt* row) { m->listed += std::string("  ") + (const char*)sqlite3_column_text(row, 0) + "\n"; });
     return m->listed.c_str();
     });
 }

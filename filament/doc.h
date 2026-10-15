@@ -1551,13 +1551,20 @@ static Doc* doc_open(Stage& s, const char* path) {
     if (sqlite3_open(path, &d->file) != SQLITE_OK) return nullptr;
     sqlite3_busy_timeout(d->file, 2000);   // (another program at the same document is waited for)
     // (a key's `way` is how the stretch from it to the next key goes; `way` the table holds the ways defined in this document)
-    if (sqlite3_exec(d->file, "create table if not exists fact(thing integer, name text, at real, value, way text, primary key(thing, name, at)) without rowid;"
+    if (sqlite3_exec(d->file, "create table if not exists fact(thing integer, name text, at numeric, value, way text, primary key(thing, name, at)) without rowid;"
                               "create table if not exists way(name text primary key, goes text) without rowid;"
                               "create table if not exists step(n integer primary key, change blob, undone integer default 0);"
                               "create table if not exists thing(id integer primary key autoincrement);"   // (a thing's number is never given again: SQLite's own)
                               "insert into thing(id) select max(thing) from fact where (select count(*) from thing) = 0 having max(thing) is not null", nullptr, nullptr, nullptr) != SQLITE_OK) return nullptr;
     if (sqlite3_exec(d->file, "select way from fact limit 0", nullptr, nullptr, nullptr) != SQLITE_OK)   // (a document from before stretches had ways)
         sqlite3_exec(d->file, "alter table fact add column way text", nullptr, nullptr, nullptr);
+    // (a document from before its moments were numeric: SQLite's session keeps a row whose moment is a whole number
+    //  made and then changed in one act as two, if the moment is real, and that step cannot be undone. Made again once)
+    bool real = false;
+    doc_rows(*d, sqlite3_mprintf("select 1 from pragma_table_info('fact') where name = 'at' and type = 'REAL'"), [&](sqlite3_stmt*) { real = true; });
+    if (real)
+        sqlite3_exec(d->file, "begin; create table fact_numeric(thing integer, name text, at numeric, value, way text, primary key(thing, name, at)) without rowid;"
+                              "insert into fact_numeric select thing, name, at, value, way from fact; drop table fact; alter table fact_numeric rename to fact; commit", nullptr, nullptr, nullptr);
     d->stage = &s;
     s.playing[d] = [d](double now) { doc_moment(*d, now); };
     if (!doc_match(*d)) std::printf("%s\n", d->trouble.c_str());

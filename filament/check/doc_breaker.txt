@@ -25,3 +25,18 @@ set 6 glow_blur 1000
 set 6 blur 1000
 still out/doc_breaker.png
 list
+at 2
+make Sunflower
+undo
+redo
+undo
+together on
+add shape circle
+set 8 size 2
+set 8 size 3
+say 8 fill ff0000
+say 8 fill 00ff00
+together off
+undo
+redo
+undo
