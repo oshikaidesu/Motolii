@@ -110,6 +110,7 @@ class Motolii {
   late final _wayAt = _lib.lookupFunction<Double Function(_P, _S, Double), double Function(_P, _S, double)>('motolii_way_at');
   late final _kindOf = _lib.lookupFunction<_S Function(_S), _S Function(_S)>('motolii_kind_of');
   late final _together = _lib.lookupFunction<Int32 Function(_P, Int32), int Function(_P, int)>('motolii_together');
+  late final _frames = _lib.lookupFunction<Uint64 Function(_P), int Function(_P)>('motolii_frames');
   late final _wayOf = _lib.lookupFunction<_S Function(_P, Int32, _S, Double), _S Function(_P, int, _S, double)>('motolii_way_of');
   late final _point = _lib.lookupFunction<Double Function(_P), double Function(_P)>('motolii_point');
   late final _undo = _lib.lookupFunction<Int32 Function(_P), int Function(_P)>('motolii_undo');
@@ -175,6 +176,7 @@ class Motolii {
   /// How many pictures a second a film written of the document has: what a frame is.
   int get rate => _rate(_m);
   bool play(bool on) => _play(_m, on ? 1 : 0) != 0;
+  int get frames => _frames(_m); // (how many pictures the live stage has drawn: motolii_frames)
   bool at(double seconds) => _at(_m, seconds) != 0;
 
   /// A new thing (film, picture, text, solid) from a file (a solid: a file, or ring, gem or cube): its number, 0 if it was not made.
