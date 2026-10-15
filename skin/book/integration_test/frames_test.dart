@@ -114,6 +114,28 @@ void main() {
       debugPrint('BUILDING during let go: ${(Ws.spent.entries.toList()..sort((a, b) => b.value.compareTo(a.value))).map((e) => '${e.key} ${e.value.inMilliseconds} ms').join(', ')}');
     }
 
+    if (const bool.fromEnvironment('SCREEN')) { // (SCREEN: a whole-screen effect put on the stage and taken off again ten times, nothing picked: the stage's cards change shape each time)
+      ws.select(null);
+      await t.pumpAndSettle();
+      final kaleido = m.effects.firstWhere((e) => e.$2.endsWith('/kaleido.wgsl')).$2;
+      Future<void> toggles() async {
+        for (var i = 0; i < 20; i++) {
+          ws.screenToggle(kaleido);
+          for (var k = 0; k < 20; k++) {
+            await t.pump(const Duration(milliseconds: 16));
+          }
+        }
+      }
+      final from = timings.length;
+      if (const bool.fromEnvironment('TRACE')) {
+        await binding.traceAction(toggles, reportKey: 'timeline', streams: const ['Dart', 'Embedder']);
+      } else {
+        await toggles();
+      }
+      await t.pump(const Duration(milliseconds: 100));
+      final spans = [for (final f in timings.skip(from)) f.totalSpan.inMicroseconds / 1000.0]..sort();
+      debugPrint('FRAMES an effect on and off ten times: ${spans.length} pictures, late ${spans.where((s) => s > 1000 / 60).length}, the late ones ${[for (final s in spans) if (s > 1000 / 60) s.toStringAsFixed(1)]}');
+    }
     SchedulerBinding.instance.removeTimingsCallback(took);
     debugPrint('FRAMES all: late $late');
     if (!const bool.fromEnvironment('TRACE')) expect(late, 0, reason: report.join('\n')); // (a traced run is for reading: its timeline is written only if it passes)

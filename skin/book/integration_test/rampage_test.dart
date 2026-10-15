@@ -89,7 +89,7 @@ void main() {
           worked = <String, int>{},
           slow = <String, double>{},
           lateAfter = <String, int>{};
-      final judging = <(int, int)>[], dragging = <(int, int)>[]; // (the test's own reading of the whole document: pictures begun then are not the window's)
+      final judging = <(int, int)>[], dragging = <(int, int)>[], acted = <(int, String)>[]; // (acted: when each act began, and what it was: a late picture told with the act before it) // (the test's own reading of the whole document: pictures begun then are not the window's)
       double at() => ws.frame / Ws.fps;
       Object state() {
         // (the window's own state: what its inspector holds, folds and flags and words)
@@ -212,6 +212,7 @@ void main() {
           judging.add((l0, Timeline.now));
           if (ledger.isEmpty) continue;
           final (what, where) = ledger[r.nextInt(ledger.length)];
+          acted.add((Timeline.now, what));
           worked[what.split(' ').take(2).join(' ')] =
               (worked[what.split(' ').take(2).join(' ')] ?? 0) + 1;
           var j0 = Timeline.now;
@@ -379,6 +380,7 @@ void main() {
         'JUDGED-OUT ${timings.where(judged).length} pictures begun while the test read the document',
       );
       timings.removeWhere(judged);
+      if (acted.isNotEmpty) timings.removeWhere((f) => f.timestampInMicroseconds(FramePhase.vsyncStart) < acted.first.$1); // (the window opening, before the first hand: not a hand's)
     bool underHand(FrameTiming f) { final v = f.timestampInMicroseconds(FramePhase.vsyncStart); return dragging.any((w) => v >= w.$1 && v <= w.$2); }
     final lateUnder = timings.where((f) => f.totalSpan.inMicroseconds > 16667 && underHand(f)).length, lateElse = timings.where((f) => f.totalSpan.inMicroseconds > 16667 && !underHand(f)).length;
     // ignore: avoid_print
@@ -434,6 +436,11 @@ void main() {
       }
       // ignore: avoid_print
       print('LATE-AFTER $lateAfter');
+      for (final f in lateOnes) {
+        final v = f.timestampInMicroseconds(FramePhase.vsyncStart), act = acted.lastWhere((a) => a.$1 <= v, orElse: () => (0, 'before the first act'));
+        // ignore: avoid_print
+        print('LATE-ONE ${(f.totalSpan.inMicroseconds / 1000).toStringAsFixed(1)} ms ${((v - act.$1) / 1000).toStringAsFixed(0)} ms into ${act.$2} (build ${(f.buildDuration.inMicroseconds / 1000).toStringAsFixed(1)}, before building ${(f.vsyncOverhead.inMicroseconds / 1000).toStringAsFixed(1)})');
+      }
       // ignore: avoid_print
       print(
         'RAMPAGE ${report['pictures']} pictures, late ${report['late (over 16.7 ms)']}, median ${pc(0.5).toStringAsFixed(2)} ms, 99th ${pc(0.99).toStringAsFixed(2)} ms, most ${(spans.isEmpty ? 0 : spans.last).toStringAsFixed(2)} ms; ${reds.length} red',
