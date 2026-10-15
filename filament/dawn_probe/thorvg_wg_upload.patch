@@ -1,0 +1,52 @@
+diff --git a/src/renderer/gpu_engine/wg/tvgWgCommon.cpp b/src/renderer/gpu_engine/wg/tvgWgCommon.cpp
+index 4436804..51f82fc 100644
+--- a/src/renderer/gpu_engine/wg/tvgWgCommon.cpp
++++ b/src/renderer/gpu_engine/wg/tvgWgCommon.cpp
+@@ -169,6 +169,17 @@ bool WgContext::allocateBufferUniform(WGPUBuffer& buffer, const void* data, uint
+     return allocateBufferUniform(buffer, data, size, size);
+ }
+ 
++// motolii: a write larger than Dawn's upload ring (4 MiB) took another way in Dawn that aborted (a long line finely
++// dashed: ~4.8 MB of vertices); written a ring's size at a time it stays on the ring's way.
++static void writeInRingSizes(WGPUQueue queue, WGPUBuffer buffer, const void* data, uint64_t size)
++{
++    const uint64_t ring = 4ull << 20;
++    for (uint64_t at = 0; at < size; at += ring) {
++        const uint64_t n = size - at < ring ? size - at : ring;
++        wgpuQueueWriteBuffer(queue, buffer, at, (const uint8_t*)data + at, n);
++    }
++}
++
+ bool WgContext::allocateBufferUniform(WGPUBuffer& buffer, const void* data, uint64_t capacity, uint64_t size)
+ {
+     if (capacity == 0) return false;
+@@ -187,12 +198,12 @@ bool WgContext::allocateBufferUniform(WGPUBuffer& buffer, const void* data, uint
+ bool WgContext::allocateBufferVertex(WGPUBuffer& buffer, const void* data, uint64_t size)
+ {
+     if ((buffer) && (wgpuBufferGetSize(buffer) >= size))
+-        wgpuQueueWriteBuffer(queue, buffer, 0, data, size);
++        writeInRingSizes(queue, buffer, data, size);
+     else {
+         releaseBuffer(buffer);
+         const WGPUBufferDescriptor bufferDesc { .usage = WGPUBufferUsage_CopyDst | WGPUBufferUsage_Vertex, .size = size };
+         buffer = wgpuDeviceCreateBuffer(device, &bufferDesc);
+-        wgpuQueueWriteBuffer(queue, buffer, 0, data, size);
++        writeInRingSizes(queue, buffer, data, size);
+         return true;
+     }
+     return false;
+@@ -202,12 +213,12 @@ bool WgContext::allocateBufferVertex(WGPUBuffer& buffer, const void* data, uint6
+ bool WgContext::allocateBufferIndex(WGPUBuffer& buffer, const uint32_t* data, uint64_t size)
+ {
+     if ((buffer) && (wgpuBufferGetSize(buffer) >= size))
+-        wgpuQueueWriteBuffer(queue, buffer, 0, data, size);
++        writeInRingSizes(queue, buffer, data, size);
+     else {
+         releaseBuffer(buffer);
+         const WGPUBufferDescriptor bufferDesc { .usage = WGPUBufferUsage_CopyDst | WGPUBufferUsage_Index, .size = size };
+         buffer = wgpuDeviceCreateBuffer(device, &bufferDesc);
+-        wgpuQueueWriteBuffer(queue, buffer, 0, data, size);
++        writeInRingSizes(queue, buffer, data, size);
+         return true;
+     }
+     return false;
