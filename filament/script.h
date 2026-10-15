@@ -3,7 +3,7 @@
 //   // --check@spin:Spin,1                    on or off (1 or 0)
 //   // --select@way:Way,ring,grid,spiral      one of some words, the first as it comes
 // and whose body says, for each copy of the thing it is given to, where it is and how:
-//   function each(i, n, t, k) { return { x, y, z, size, rotate }; }   // i of n copies, t seconds, k the knobs
+//   function each(i, n, t, k) { return { x, y, z, size, rotate, rotate_x, rotate_y, opacity }; }   // i of n copies, t seconds since the thing began, k the knobs (and k.duration: how long the thing lasts)
 // (as Cavalry's JavaScript Utility gives a Duplicator its points). Behind the door: QuickJS-ng (js_bench chose it).
 #pragma once
 #include <map>
@@ -16,7 +16,7 @@ struct ScriptKnob {
     double low = 0, high = 1, usual = 0, step = 0;
     std::string words;               // a select's words, with spaces between
 };
-struct ScriptCopy { double x = 0, y = 0, z = 0, size = 1, rotate = 0; };
+struct ScriptCopy { double x = 0, y = 0, z = 0, size = 1, rotate = 0, rotate_x = 0, rotate_y = 0, opacity = 1; };
 
 // The knobs a file declares (read from its head; empty if it has none or cannot be read).
 std::vector<ScriptKnob> script_knobs(const std::string& file);

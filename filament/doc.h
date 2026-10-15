@@ -32,6 +32,7 @@
 #include "interp.h"
 #include "physics.h"
 #include "script.h"
+#include "ways.h"
 #include "screen.h"
 #include <filesystem>
 #include <mutex>
@@ -520,6 +521,8 @@ static sqlite3_stmt* doc_way_named(Doc& d, const std::string& name) {
     if (known != d.named.end()) return known->second;
     sqlite3_stmt* way = nullptr;
     doc_rows(d, sqlite3_mprintf("select goes from way where name = %Q", name.c_str()), [&](sqlite3_stmt* row) { way = doc_goes(d, (const char*)sqlite3_column_text(row, 0)); });
+    if (!way)   // (not defined here: one of the ways by name, ways.h)
+        for (const auto& one : named_ways) if (name == one.name) way = doc_goes(d, std::string("a + (b - a) * (") + one.goes + ")");
     return d.named[name] = way;
 }
 // A stretch that goes a way defined in the document (`own`: its name, then its numbers): the value at `u` of the way
@@ -776,11 +779,14 @@ static math::mat4 doc_place(Doc& d, int thing, double now, int deeper, int copy,
                     else numbers[sc->knobs[i].name] = doc_number(d, thing, sc->names[i].c_str(), said, sc->knobs[i].usual);
                 }
                 kept.at = said, kept.made = doc_scripts_made();
-                kept.copies = sc->run->copies(n, said, numbers, words, (double)d.stage->h / std::max(1.0, doc_number(d, 0, "high", 0, 1080) * doc_point(d, thing, said)));   // (a pixel of the document, where the thing stands)
+                const double begins = doc_number(d, thing, "start", 0, 0);
+                numbers["duration"] = doc_number(d, thing, "duration", 0, -1);   // (how long the thing lasts: an Out ends before it)
+                kept.copies = sc->run->copies(n, said - begins, numbers, words, (double)d.stage->h / std::max(1.0, doc_number(d, 0, "high", 0, 1080) * doc_point(d, thing, said)));   // (a pixel of the document, where the thing stands)
             }
             const ScriptCopy c = copy < n ? kept.copies[(size_t)copy] : ScriptCopy{};
             shift += math::double3{c.x, c.y, c.z};
-            own = own * math::mat4::rotation(c.rotate * (double)TAU / 360.0, math::double3{0, 0, 1}) * math::mat4::scaling(c.size);
+            own = own * math::mat4::rotation(c.rotate * (double)TAU / 360.0, math::double3{0, 0, 1}) * math::mat4::rotation(c.rotate_y * (double)TAU / 360.0, math::double3{0, 1, 0}) *
+                  math::mat4::rotation(c.rotate_x * (double)TAU / 360.0, math::double3{1, 0, 0}) * math::mat4::scaling(c.size);
         }
     double tall = doc_number(d, thing, "tall", now, 1);   // (taller, its anchor staying: a copy as its number in copy_tall says too)
     if (member) {
@@ -1189,7 +1195,9 @@ static void doc_moment(Doc& d, double now) {
             for (std::string one; said >> one;) { if (one == "none") break; const long rgb = std::strtol(one.c_str(), nullptr, 16); ramp.push_back(Color::toLinear<ACCURATE>(sRGBColor{float3{(float)((rgb >> 16) & 255), (float)((rgb >> 8) & 255), (float)(rgb & 255)} / 255.f})); }
             if (ramp.size() == 1) ramp.push_back(ramp[0]);   // (one colour: every copy in it)
             const std::vector<float2>& letters = t.drawn ? t.drawn->letters : std::vector<float2>{};
-            if (ramp.size() < 2 && letters.empty()) doc_copy_looks_off(d, m, main);
+            const auto scripted = d.scripted.find(thing);   // (a script's copies each as clear as it says)
+            const bool clears = scripted != d.scripted.end() && std::any_of(scripted->second.copies.begin(), scripted->second.copies.end(), [](const ScriptCopy& c) { return c.opacity != 1.0; });
+            if (ramp.size() < 2 && letters.empty() && !clears) doc_copy_looks_off(d, m, main);
             else {
                 auto& faces = s.engine->getRenderableManager();
                 const int n = doc_members(d, thing);
@@ -1204,7 +1212,8 @@ static void doc_moment(Doc& d, double now) {
                         own->setParameter("wash", float4{mix(ramp[i], ramp[i + 1], along - (float)i), 1.f});
                     } else own->setParameter("wash", float4{0.f});
                     if ((size_t)made.nth < letters.size()) own->setParameter("window", float4{letters[(size_t)made.nth].x, letters[(size_t)made.nth].y, 1.f, 0.f});   // (its own letter)
-                    own->setParameter("opacity", (float)doc_number(d, thing, "opacity", now, 1));
+                    const double clear = scripted != d.scripted.end() && (size_t)made.nth < scripted->second.copies.size() ? scripted->second.copies[(size_t)made.nth].opacity : 1.0;
+                    own->setParameter("opacity", (float)(doc_number(d, thing, "opacity", now, 1) * std::clamp(clear, 0.0, 1.0)));
                     own->setParameter("glowing", (float)doc_number(d, thing, "emissive", now, 0));
                 }
             }
@@ -2060,6 +2069,8 @@ static bool doc_unkey(Doc& d, int thing, const char* name, double at) {
 static std::string doc_ways(Doc& d) {
     std::string all;
     for (const auto& kind : interp_kinds) all += std::string(all.empty() ? "" : ", ") + kind.name + (kind.numbers ? std::string(" (") + kind.names + ")" : "");
+    all += "; by name:";
+    for (const auto& one : named_ways) all += std::string(" ") + one.name;
     doc_rows(d, sqlite3_mprintf("select name from way order by name"), [&](sqlite3_stmt* row) { all += std::string("; defined here: ") + (const char*)sqlite3_column_text(row, 0); });
     return all;
 }

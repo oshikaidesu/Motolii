@@ -1,5 +1,6 @@
 // script.h's door: the head read for knobs, QuickJS-ng behind each().
 #include "script.h"
+#include "ways.h"
 #include <quickjs.h>
 #include <algorithm>
 #include <cstdlib>
@@ -54,7 +55,31 @@ var cavalry = {
 };
 cavalry.PointCloud.prototype.appendPoint = function (p) { this.points.push(p); };
 cavalry.PointCloud.prototype.appendSize = function (s) { this.sizes.push(s); };
+// Cavalry's Animators, all of one shape: a value of each copy (a letter of a split text) from one number to another
+// over a length of seconds, a way (ease), each copy later than the one before (or in a random order) by up to a delay;
+// an In from when the thing begins, an Out to end just before it does. what: x, y, rotate_x, opacity, or print (the
+// copies seen one after another, no way).
+function animate(i, n, t, k, a) {
+  var length = k.length || 40 / 60, delay = k.delay === undefined ? 20 / 60 : k.delay;
+  var order = a.random ? cavalry.random(0, 1, a.seed || 50, i) : n > 1 ? i / (n - 1) : 0;
+  var from = a.out ? Math.max(0, (k.duration > 0 ? k.duration : 4) - 1 / 60 - delay - length) : 0;
+  if (a.what === 'print') {
+    var seen = Math.min(1, Math.max(0, (t - from) / length)) * n;
+    return { opacity: a.out ? (i < seen ? 0 : 1) : (i < seen ? 1 : 0) };
+  }
+  var u = Math.min(1, Math.max(0, (t - from - delay * order) / length));
+  var out = {};
+  out[a.what] = a.from + (a.to - a.from) * ease(a.way, u);
+  return out;
+}
 )";
+
+// ease(name, u): a way by its name (ways.h), the same expression as a key's stretch; not one of them: as it is.
+static std::string ways_kept() {
+    std::string js = "var ease = (function () { var pow = Math.pow, exp = Math.exp, cos = Math.cos, abs = Math.abs, pi = function () { return Math.PI; }; var w = {";
+    for (const auto& one : named_ways) js += std::string(one.name) + ": function (u) { return " + one.goes + "; }, ";
+    return js + "}; return function (name, u) { u = Math.min(1, Math.max(0, u)); return w[name] ? w[name](u) : u; }; })();\n";
+}
 
 struct Script::Own {
     JSRuntime* rt = nullptr;
@@ -72,6 +97,8 @@ Script::Script(const std::string& file) : own(new Own) {
     own->rt = JS_NewRuntime();
     own->cx = JS_NewContext(own->rt);
     own->file = file, own->src = src;
+    const std::string ways = ways_kept();
+    JS_FreeValue(own->cx, JS_Eval(own->cx, ways.c_str(), ways.size(), "ways", JS_EVAL_TYPE_GLOBAL));
     JS_FreeValue(own->cx, JS_Eval(own->cx, cavalry_kept, std::char_traits<char>::length(cavalry_kept), "cavalry", JS_EVAL_TYPE_GLOBAL));
     JSValue ran = JS_Eval(own->cx, src.c_str(), src.size(), file.c_str(), JS_EVAL_TYPE_GLOBAL);
     if (JS_IsException(ran)) {
@@ -158,7 +185,7 @@ ScriptCopy Script::each(int i, int n, double t, const std::map<std::string, doub
         if (JS_IsNumber(v)) JS_ToFloat64(cx, &to, v);
         JS_FreeValue(cx, v);
     };
-    read("x", c.x), read("y", c.y), read("z", c.z), read("size", c.size), read("rotate", c.rotate);
+    read("x", c.x), read("y", c.y), read("z", c.z), read("size", c.size), read("rotate", c.rotate), read("rotate_x", c.rotate_x), read("rotate_y", c.rotate_y), read("opacity", c.opacity);
     JS_FreeValue(cx, out);
     return c;
 }
