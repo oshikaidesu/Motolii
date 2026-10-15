@@ -39,6 +39,9 @@ struct Motolii {
     std::map<std::string, double> worst;                      // (and its slowest once)
     double read_waited = 0, read_waited_most = 0; long read_waits = 0;
     std::map<std::string, std::pair<double, long>> rounds;   // (a call through the hand: its longest wait for the answer, and how many waited over 4 ms)   // (reads waiting for the document: in all, the longest, how many waited over 2 ms)
+    double budget = std::getenv("MOTOLII_BUDGET") ? std::atof(std::getenv("MOTOLII_BUDGET")) : 12.0;   // (the milliseconds the GPU may take for a live picture, of the 16.7 a picture has)
+    long judged = 0;
+    double gpu_ms = 0.0, gpu_most = 0.0;   // (the GPU's middle time for the last pictures, and the most it was)
     double spent[4] = {0, 0, 0, 0};   // (seconds the hand spent: asked to change, asked to read, telling the moment, drawing)
     long many[4] = {0, 0, 0, 0};
 };
@@ -176,6 +179,16 @@ static void motolii_hand(Motolii* m, std::string document, int wide, int high, s
         const auto told = std::chrono::steady_clock::now();
         live_draw(*m->s, m->live);
         drawn = std::chrono::steady_clock::now();
+        if (++m->judged % 30 == 0) {   // (how long the GPU took for its last pictures, against the time each may have)
+            std::vector<int64_t> took;
+            for (const auto& f : m->s->renderer->getFrameInfoHistory(30))
+                if (f.gpuFrameComplete > 0 && f.backendBeginFrame > 0) took.push_back(f.gpuFrameComplete - f.backendBeginFrame);
+            if (took.size() > 10) {
+                std::nth_element(took.begin(), took.begin() + took.size() / 2, took.end());
+                const double ms = (double)took[took.size() / 2] / 1e6;
+                m->gpu_ms = ms, m->gpu_most = std::max(m->gpu_most, ms);
+            }
+        }
         m->spent[2] += std::chrono::duration<double>(told - t).count(), m->many[2]++;
         m->spent[3] += std::chrono::duration<double>(drawn - told).count(), m->many[3]++;
         m->changed = false;
@@ -267,8 +280,8 @@ const char* motolii_spent(Motolii* m) {
         }
         std::sort(doors.rbegin(), doors.rend());
         m->word = line;
-        char waits[160];
-        std::snprintf(waits, sizeof waits, "; reads waited for the document %.0f ms, the longest %.1f ms, %ld over 2 ms", 1e3 * m->read_waited, 1e3 * m->read_waited_most, m->read_waits);
+        char waits[260];
+        std::snprintf(waits, sizeof waits, "; reads waited for the document %.0f ms, the longest %.1f ms, %ld over 2 ms; the GPU took %.1f ms a picture, at most %.1f, of %.0f it may", 1e3 * m->read_waited, 1e3 * m->read_waited_most, m->read_waits, m->gpu_ms, m->gpu_most, m->budget);
         m->word += waits;
         { std::lock_guard<std::mutex> hold(m->asked_lock); for (const auto& [name, r] : m->rounds) if (r.second) { char one[160]; std::snprintf(one, sizeof one, "; %s waited for the hand up to %.1f ms, %ld over 4 ms", name.c_str(), 1e3 * r.first, r.second); m->word += one; } }
         for (size_t i = 0; i < doors.size() && i < 20; ++i) m->word += "; " + doors[i].second;   // (the dearest calls)
