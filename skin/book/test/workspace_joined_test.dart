@@ -8,7 +8,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lab_book/motolii.dart';
 import 'package:lab_book/parts/controls.dart' show Segmented;
-import 'package:lab_book/sets/inspector/inspector_parts.dart' show Ctx, AnchorCube, AnchorGeometry, LinkMark, EffectCard, ValuesCard, FillStroke, InspHeader, KeyS, NumField, OnOff, PropRow, Space, SpacePlate, TextGroup;
+import 'package:lab_book/sets/inspector/inspector_parts.dart' show Ctx, Chooser, AnchorCube, AnchorGeometry, LinkMark, EffectCard, ValuesCard, FillStroke, InspHeader, KeyS, NumField, OnOff, PropRow, Space, SpacePlate, TextGroup;
 import 'package:lab_book/workspace/dock_effects.dart' show EffectsShelf;
 import 'package:lab_book/workspace/dock_fonts.dart';
 import 'package:lab_book/workspace/dock_make.dart' show CreateShelf;
@@ -1367,6 +1367,25 @@ void main() {
       expect(m.keyMoments(c, 'scale_x'), isNotEmpty, reason: 'Animate keys it');
     }
     ws.animating = false;
+    await _close(t);
+  }, skip: !_built);
+
+  testWidgets('the stage\'s Follow names a thing by its name (a choice, None first), not by a number dragged', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    m.add('shape', 'rect');
+    final cube = m.add('solid', 'cube');
+    expect(m.say(0, 'script', m.effects.firstWhere((e) => e.$2.endsWith('/kaleido.wgsl')).$2), isTrue, reason: m.trouble); // (the stage's Script card: shown with an effect on it)
+    ws
+      ..reread()
+      ..select(null);
+    await t.pumpAndSettle();
+    expect(find.byWidgetPredicate((w) => w is NumField && w.id == 'v_follow'), findsNothing, reason: 'not a knob of numbers');
+    final follow = find.byWidgetPredicate((w) => w is Segmented && w.items.contains('Cube')); // (a few things: a segmented choice, None first, by their names)
+    await t.ensureVisible(follow);
+    await t.pumpAndSettle();
+    await t.tap(find.descendant(of: follow, matching: find.textContaining(RegExp('cube', caseSensitive: false))));
+    await t.pumpAndSettle();
+    expect(m.value(0, 'follow', 0), cube, reason: m.trouble);
     await _close(t);
   }, skip: !_built);
 

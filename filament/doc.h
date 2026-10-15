@@ -338,6 +338,7 @@ static const DocShown doc_shown[] = {
     {"clip_feather", "", "px", "Feather", 0, 100, nullptr},
     {"connect", "thing", "", "Join", 0, 0, nullptr},
     {"connect_to", "thing", "", "With", 0, 0, nullptr},
+    {"follow", "thing", "", "Follow", 0, 0, nullptr},
     {"connect_reach", "stage", "px", "Reach", 0, 2, nullptr},
     {"cap", "", "", "Ends", 0, 0, nullptr},
     {"join", "", "", "Corners", 0, 0, nullptr},
