@@ -83,7 +83,7 @@ static bool takes(Engine* engine, const char* fragment, std::string* why) {
     return said.ok;
 }
 
-Screen* screen(Engine* engine, const char* name, const char* fragment, uint32_t knobBytes, std::string* why, int pictures) {
+Screen* screen(Engine* engine, const char* name, const char* fragment, uint32_t knobBytes, std::string* why, int pictures, unsigned layered) {
     if (!takes(engine, fragment, why)) return nullptr;
     DriverApi& d = driver(engine);
     auto* s = new Screen;
@@ -100,8 +100,9 @@ Screen* screen(Engine* engine, const char* name, const char* fragment, uint32_t 
     layout.label = utils::CString(name);
     layout.descriptors = utils::FixedCapacityVector<DescriptorSetLayoutDescriptor>::with_capacity(n);
     for (int i = 0; i < s->pictures; ++i) {
-        bindings.push_back({utils::CString("picture"), DescriptorType::SAMPLER_2D_FLOAT, descriptor_binding_t(i)});
-        layout.descriptors.push_back({DescriptorType::SAMPLER_2D_FLOAT, ShaderStageFlags::FRAGMENT, descriptor_binding_t(i)});
+        const DescriptorType kind = (layered >> i) & 1u ? DescriptorType::SAMPLER_2D_ARRAY_FLOAT : DescriptorType::SAMPLER_2D_FLOAT;
+        bindings.push_back({utils::CString("picture"), kind, descriptor_binding_t(i)});
+        layout.descriptors.push_back({kind, ShaderStageFlags::FRAGMENT, descriptor_binding_t(i)});
     }
     if (s->knobBytes) {
         bindings.push_back({utils::CString("knobs"), DescriptorType::UNIFORM_BUFFER, descriptor_binding_t(s->pictures)});

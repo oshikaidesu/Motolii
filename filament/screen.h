@@ -25,6 +25,14 @@ struct ScreenFx {
     struct Target { std::string name; bool kept = false, fine = false; double share[2] = {1, 1}; int points[2] = {0, 0}; Texture* picture[2] = {nullptr, nullptr}; RenderTarget* into[2] = {nullptr, nullptr}; int front = 0; uint32_t w = 0, h = 0; };
     std::vector<Target> targets;
     std::vector<int> passes;   // each pass's target (-1: out)
+    // The stage's past frames, when its head asks for them (// --history@frames:share): an array of layers, the frame
+    // drawn last at `history_head` (a knob), `history_count` of them, read as a `texture_2d_array<f32>`.
+    unsigned layered = 0;   // which of its pictures are that array
+    int historyFrames = 0, head = -1;
+    double historyShare = 1;
+    Texture* history = nullptr;
+    std::vector<RenderTarget*> historyInto;
+    uint32_t hw = 0, hh = 0;
     std::filesystem::file_time_type stamp{};       // (the file's time when it was made: written over, it is made again)
     std::chrono::steady_clock::time_point looked{};
 };
@@ -43,14 +51,15 @@ static bool screen_read(ScreenFx& fx, std::string& code) {
     code = all.str();
     const std::regex bound(R"(@group\(\s*\d+\s*\)\s*@binding\(\s*\d+\s*\)\s*var(<\s*uniform\s*>)?\s+(\w+)\s*:\s*([A-Za-z_][\w<>]*))");
     int reads = 0;   // (the pictures it reads: the k-th at 2k, the k-th sampler at 2k+1, the knobs after them all)
-    for (std::sregex_iterator m(code.begin(), code.end(), bound), end; m != end; ++m) reads += (*m)[3].str().rfind("texture_2d", 0) == 0;
+    for (std::sregex_iterator m(code.begin(), code.end(), bound), end; m != end; ++m) reads += (*m)[3].str().rfind("texture_2d", 0) == 0;   // (texture_2d and texture_2d_array alike)
     std::string out, knobsType;
     int pictures = 0, samplers = 0, uniforms = 0;
     auto at = code.cbegin();
     for (std::sregex_iterator m(code.begin(), code.end(), bound), end; m != end; ++m) {
         const std::string type = (*m)[3];
         int binding = -1;
-        if (type.rfind("texture_2d", 0) == 0) binding = 2 * pictures++;
+        if (type.rfind("texture_2d_array", 0) == 0) fx.layered |= 1u << pictures, binding = 2 * pictures++;
+        else if (type.rfind("texture_2d", 0) == 0) binding = 2 * pictures++;
         else if (type == "sampler") binding = 2 * samplers++ + 1;
         else if ((*m)[1].matched) binding = 2 * reads, ++uniforms, knobsType = type;
         if (binding < 0) return fx.trouble = "the effect has a binding of a kind it cannot be given: " + type, false;
@@ -63,6 +72,11 @@ static bool screen_read(ScreenFx& fx, std::string& code) {
     fx.pictures = pictures;
     std::istringstream lines(code);   // (its passes, as the head says them: // --pass@target:kept,fine,width,height)
     for (std::string line; std::getline(lines, line) && line.rfind("//", 0) == 0;) {
+        if (const size_t h = line.find("--history@"); h != std::string::npos) {   // (--history@frames:share)
+            fx.historyFrames = std::clamp(std::atoi(line.c_str() + h + 10), 2, 240);
+            if (const size_t c = line.find(':', h); c != std::string::npos) fx.historyShare = std::clamp(std::atof(line.c_str() + c + 1), 0.05, 1.0);
+            continue;
+        }
         const size_t p = line.find("--pass@"), colon = line.find(':', p);
         if (p == std::string::npos || colon == std::string::npos) continue;
         const std::string name = line.substr(p + 7, colon - p - 7);
@@ -87,7 +101,8 @@ static bool screen_read(ScreenFx& fx, std::string& code) {
         }
         fx.passes.push_back(target);
     }
-    if ((int)fx.targets.size() + 1 != pictures && !fx.targets.empty()) return fx.trouble = "its passes' pictures and the pictures it reads do not agree", false;
+    if (!fx.targets.empty() && (int)fx.targets.size() + 1 + (int)__builtin_popcount(fx.layered) != pictures) return fx.trouble = "its passes' pictures and the pictures it reads do not agree", false;
+    if (fx.layered && !fx.historyFrames) return fx.trouble = "it reads an array of past frames and its head does not ask for them (--history@frames:share)", false;
     code = std::regex_replace(out, std::regex(R"(\bfn\s+fs_main\s*\()"), "fn main(");
     if (!knobsType.empty()) {   // (WGSL's own rule: each as far on as its size, rounded up; vec3 as far as a vec4)
         std::smatch body;
@@ -138,6 +153,8 @@ static void screen_knobs(Stage& s, ScreenFx& fx, const std::function<double(cons
         else if (f.name == "width" || f.name == "height") v[0] = (float)(f.name == "width" ? s.w : s.h);   // (three's way of saying it)
         else if (f.name == "frame") v[0] = (float)std::lround(s.now * 60.0);   // (ISF's FRAMEINDEX: the picture's number at sixty a second)
         else if (f.name == "passindex") v[0] = (float)pass;   // (ISF's PASSINDEX: `pass` is a word WGSL keeps for itself)
+        else if (f.name == "history_head") v[0] = (float)std::max(0, fx.head);
+        else if (f.name == "history_count") v[0] = (float)fx.historyFrames;
         else
             for (uint32_t i = 0; i < f.floats; ++i) {   // (a vector's numbers each a knob of its own, name_x, name_y...)
                 const std::string k = f.floats == 1 ? f.name : f.name + "_" + "xyzw"[i];
@@ -170,17 +187,43 @@ static void screen_targets(Stage& s, ScreenFx& fx, bool drop = false) {
             t.into[k] = RenderTarget::Builder().texture(RenderTarget::AttachmentPoint::COLOR, t.picture[k]).build(*s.engine);
         }
 }
-// One effect drawn: reading `from` (the stage's picture or the effect before's), drawing to `to`, through its passes.
+static door::Screen* screen_copy(Stage& s, ScreenStack& st) {   // (a picture put out as it is)
+    if (!st.copy) {
+        static const char* const same = "@group(0) @binding(0) var picture: texture_2d<f32>;\n@group(0) @binding(1) var near: sampler;\n"
+                                        "@fragment fn main(@builtin(position) frag: vec4f, @location(0) uv: vec2f) -> @location(0) vec4f { return textureSampleLevel(picture, near, uv, 0.0); }\n";
+        st.copy = door::screen(s.engine, "copy", same, 0);
+    }
+    return st.copy;
+}
+// One effect drawn: reading `from` (the stage's picture or the effect before's), drawing to `to`, through its passes;
+// its own pictures in order: `from`, then each target (ISF's) or the stage's past frames (the array).
 static void screen_draw(Stage& s, ScreenStack& st, ScreenFx& fx, Texture* from, RenderTarget* to, const std::function<double(const std::string&, double)>& numbers) {
+    screen_targets(s, fx);
+    if (fx.historyFrames) {   // (this frame written into the next layer of the past frames, before it is read)
+        if (!fx.history) {
+            fx.hw = (uint32_t)std::max(2L, std::lround(s.w * fx.historyShare)), fx.hh = (uint32_t)std::max(2L, std::lround(s.h * fx.historyShare));
+            fx.history = Texture::Builder().width(fx.hw).height(fx.hh).depth((uint32_t)fx.historyFrames).levels(1).sampler(Texture::Sampler::SAMPLER_2D_ARRAY)
+                             .format(Texture::InternalFormat::RGBA8).usage(Texture::Usage::COLOR_ATTACHMENT | Texture::Usage::SAMPLEABLE).build(*s.engine);
+            for (int k = 0; k < fx.historyFrames; ++k)
+                fx.historyInto.push_back(RenderTarget::Builder().texture(RenderTarget::AttachmentPoint::COLOR, fx.history).layer(RenderTarget::AttachmentPoint::COLOR, (uint32_t)k).build(*s.engine));
+        }
+        fx.head = (fx.head + 1) % fx.historyFrames;
+        door::draw(s.engine, screen_copy(s, st), from, fx.historyInto[(size_t)fx.head], fx.hw, fx.hh);
+    }
+    std::vector<Texture*> read((size_t)fx.pictures, from);
+    const auto gather = [&] {
+        size_t target = 0;
+        for (size_t k = 1; k < read.size(); ++k)
+            read[k] = (fx.layered >> k) & 1u ? fx.history : target < fx.targets.size() ? fx.targets[target].picture[fx.targets[target].front] : from, target += !((fx.layered >> k) & 1u);
+    };
     if (fx.passes.empty()) {
+        gather();
         screen_knobs(s, fx, numbers);
-        door::draw(s.engine, fx.door, from, to, (uint32_t)s.w, (uint32_t)s.h);
+        door::draw(s.engine, fx.door, read.data(), to, (uint32_t)s.w, (uint32_t)s.h);
         return;
     }
-    screen_targets(s, fx);
-    std::vector<Texture*> read((size_t)fx.pictures, from);
     for (size_t p = 0; p < fx.passes.size(); ++p) {
-        for (size_t k = 0; k < fx.targets.size() && k + 1 < read.size(); ++k) read[k + 1] = fx.targets[k].picture[fx.targets[k].front];
+        gather();
         screen_knobs(s, fx, numbers, (int)p);
         const int t = fx.passes[p];
         if (t < 0) { door::draw(s.engine, fx.door, read.data(), to, (uint32_t)s.w, (uint32_t)s.h, (int)p); continue; }
@@ -190,13 +233,8 @@ static void screen_draw(Stage& s, ScreenStack& st, ScreenFx& fx, Texture* from, 
         into.front = back;
     }
     if (fx.passes.back() >= 0) {   // (its last pass drew into its own picture: that is what it shows)
-        if (!st.copy) {
-            static const char* const same = "@group(0) @binding(0) var picture: texture_2d<f32>;\n@group(0) @binding(1) var near: sampler;\n"
-                                            "@fragment fn main(@builtin(position) frag: vec4f, @location(0) uv: vec2f) -> @location(0) vec4f { return textureSampleLevel(picture, near, uv, 0.0); }\n";
-            st.copy = door::screen(s.engine, "copy", same, 0);
-        }
         const ScreenFx::Target& last = fx.targets[(size_t)fx.passes.back()];
-        door::draw(s.engine, st.copy, last.picture[last.front], to, (uint32_t)s.w, (uint32_t)s.h);
+        door::draw(s.engine, screen_copy(s, st), last.picture[last.front], to, (uint32_t)s.w, (uint32_t)s.h);
     }
 }
 // An effect whose file was written over made again where it stands (looked at four times a second at most): a shader
@@ -212,12 +250,12 @@ static void screen_fresh(Stage& s, ScreenFx& fx) {
     again.file = fx.file;
     std::string code;
     if (!screen_read(again, code)) { std::fprintf(stderr, "%s\n", again.trouble.c_str()); return; }
-    door::Screen* made = door::screen(s.engine, fx.file.c_str(), code.c_str(), again.bytes, &again.trouble, again.pictures);
+    door::Screen* made = door::screen(s.engine, fx.file.c_str(), code.c_str(), again.bytes, &again.trouble, again.pictures, again.layered);
     if (!made) { std::fprintf(stderr, "the effect %s as written now is not taken (the one before stays): %s\n", fx.file.c_str(), again.trouble.c_str()); return; }
     door::drop(s.engine, fx.door);
     screen_targets(s, fx, true);
     fx.knobs = again.knobs, fx.fields = again.fields, fx.bytes = again.bytes, fx.door = made;
-    fx.pictures = again.pictures, fx.targets = again.targets, fx.passes = again.passes;
+    fx.pictures = again.pictures, fx.targets = again.targets, fx.passes = again.passes, fx.layered = again.layered;   // (the past frames kept as they are if their count stays)
 }
 // Whether a file of the stage's effects has been written over since it was made (what wakes a stage that is not drawing).
 static bool screen_moved(const ScreenStack& st) {
@@ -240,7 +278,7 @@ static void screen_effects(Stage& s, ScreenStack& st, const std::string& files, 
             made->file = file;
             std::string code;
             if (!screen_read(*made, code)) { std::fprintf(stderr, "%s\n", made->trouble.c_str()); continue; }   // (kept as not made: not read again each time)
-            made->door = door::screen(s.engine, file.c_str(), code.c_str(), made->bytes, &made->trouble, made->pictures);
+            made->door = door::screen(s.engine, file.c_str(), code.c_str(), made->bytes, &made->trouble, made->pictures, made->layered);
             if (!made->door) std::fprintf(stderr, "the effect %s is not taken: %s\n", file.c_str(), made->trouble.c_str());
             made->stamp = screen_stamp(file);
         }
