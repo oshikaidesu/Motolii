@@ -524,14 +524,17 @@ Map<String, String> _cardColours(Motolii m, int t) => {
 List<Fx>? _valueCards(Ws ws, String? id) {
   final m = ws.inside, t = id == null ? 0 : int.tryParse(id); // (nothing picked: the stage's own, thing 0)
   if (m == null || t == null) return null;
-  // (made once a reading of the document: while a hand carries a value only the numbers move, and those the cards read from wsTransform)
+  // (made again only when the cards it has, their values or the things it may name change: a number let go of changes
+  //  none of them, and the numbers the cards show are read from wsTransform; what a card says a number is now, its
+  //  @default, the inspector takes only when it makes its cards anew)
+  final shape = '${m.cards(t)}|${ws.layers.map((l) => l.name).join(',')}';
   final made = _cardsMade[t];
-  if (made != null && made.$1 == ws.reads && identical(made.$3, m)) return made.$2;
+  if (made != null && made.$1 == shape && identical(made.$3, m)) return made.$2;
   final cards = _makeCards(ws, m, t);
-  _cardsMade[t] = (ws.reads, cards, m);
+  _cardsMade[t] = (shape, cards, m);
   return cards;
 }
-final _cardsMade = <int, (int, List<Fx>, Motolii)>{};
+final _cardsMade = <int, (String, List<Fx>, Motolii)>{};
 
 List<Fx> _makeCards(Ws ws, Motolii m, int t) {
   final at = ws.frame / Ws.fps;

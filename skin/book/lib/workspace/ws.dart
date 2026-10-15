@@ -2,6 +2,7 @@
 // This file is what every seat shares: the mock document they all read (Ws), and the window's own tokens (WsT).
 // Tone and manner come from the Inspector's Pop rules (sets/inspector_parts.dart): containers square and tiled edge to edge,
 // what you touch or read round, colour flat and opaque, one lime accent, each kind of thing wearing its own hue.
+import 'dart:developer' show Timeline, TimelineTask;
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 
@@ -141,7 +142,7 @@ class Ws extends ChangeNotifier {
   static final spent = <String, Duration>{};
   static T timed<T>(String name, T Function() does) {
     final w = Stopwatch()..start();
-    final made = does();
+    final made = Timeline.timeSync(name, does); // (named in Flutter's own timeline too: frames_test TRACE)
     spent[name] = (spent[name] ?? Duration.zero) + w.elapsed;
     return made;
   }
@@ -165,14 +166,16 @@ class Ws extends ChangeNotifier {
   }
 
   /// The document read again, after any change to it: what the seats list is what the document holds.
-  void reread() {
+  void reread() => Timeline.timeSync('ws reread', _reread); // (named in Flutter's timeline: frames_test TRACE)
+  void _reread() {
     final m = _inside;
     if (m == null) return;
     if (!m.fits && refit != null) return refit!(); // (the document says another size, by a hand or by undo: the host opens it again, and that reads it)
     m.forget();
     rev++;
     reads++;
-    duration = (m.seconds * fps).round().clamp(1, 1 << 20);
+    duration = Timeline.timeSync('MARK seconds', () => (m.seconds * fps).round().clamp(1, 1 << 20));
+    final tl = TimelineTask()..start('MARK layers');
     layers
       ..clear()
       ..addAll([
@@ -181,7 +184,7 @@ class Ws extends ChangeNotifier {
             final kind = m.word(t, 'kind'), from = ((m.value(t, 'start', 0) ?? 0) * fps).round(), lasts = m.lasts(t);
             final name = m.word(t, 'name'); // (what it is called is the inside's to say)
             // (a key on any value of it that takes keys is a key on its bar: the inside says which those are)
-            final keys = <int>{for (final v in m.moving(t)) ...m.keyMoments(t, v).map((s) => (s * fps).round())}.toList()..sort();
+            final keys = <int>{for (final s in m.thingKeyMoments(t)) (s * fps).round()}.toList()..sort();
             return WsLayer('$t', name, switch (kind) {
               'text' => WsKind.text,
               'camera' => WsKind.camera,
@@ -192,7 +195,8 @@ class Ws extends ChangeNotifier {
       ]);
     if (_sel != null && layers.every((l) => l.id != _sel)) _sel = layers.firstOrNull?.id; // (a picked thing gone: the first; nothing picked stays so, the stage's)
     _keys.removeWhere((k) => !layers.any((l) => l.id == k.layer && l.keys.contains(k.frame))); // (a picked key stays picked while it is still there)
-    notifyListeners();
+    tl.finish();
+    Timeline.timeSync('MARK notify', notifyListeners);
   }
 
   /// The inside's own picture of the stage, as a Flutter texture, when the window is joined to it (null: the stand-in art).

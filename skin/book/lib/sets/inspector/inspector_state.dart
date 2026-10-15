@@ -409,7 +409,7 @@ class Doc extends ChangeNotifier {
   bool isPicked(String id) => picked.length > 1 && picked.contains(id);
 
   void pick(String id, {bool span = false}) {
-    final from = _pickFrom, a = from == null ? null : _cell(from), b = _cell(id);
+    final from = _pickFrom, a = from == null ? null : _cell(from), b = _cell(id), shown = picked.length > 1;
     pickGen++;
     picked.clear();
     if (span && a != null && b != null) {
@@ -423,7 +423,9 @@ class Doc extends ChangeNotifier {
       picked.add(id);
       _pickFrom = id;
     }
-    notifyListeners();
+    // (one field picked shows as nothing ([isPicked] is several): told only when the picking shows, before or after;
+    //  a press on a knob picked it and built the whole inspector again for no change)
+    if (shown || picked.length > 1) notifyListeners();
   }
 
   void unpick() {

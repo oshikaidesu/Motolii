@@ -3,6 +3,7 @@
 #include "doc.h"
 #include "live.h"
 #include "motolii.h"
+#include <set>
 #include <condition_variable>
 #include <deque>
 #include <future>
@@ -288,6 +289,18 @@ int motolii_raise(Motolii* m, int thing, int places) { return by_hand(m, [=] { r
 int motolii_stay(Motolii* m, int thing, const char* name, double at) { return by_hand(m, [=] { return changes(m, (int)doc_stay(doc(m), thing, name, at)); }); }
 int motolii_keyed(Motolii* m, int thing, const char* name, double at) { return by_look(m, [=] { return doc_keyed(*m->d, thing, name, at); }); }
 const char* motolii_words(Motolii* m, int thing, const char* name) { return by_look(m, [=] { return (m->word = doc_words(*m->d, thing, name)).c_str(); }); }
+// Every moment a key of any of a thing's values that take keys stands at, each once and in time: a timeline's bar
+// marks in one call (asked a value at a time, a document of fifteen recipes was hundreds of calls each reading).
+int motolii_thing_key_moments(Motolii* m, int thing, double* at, int room) {
+    return by_look(m, [=] {   // (one question to SQLite: the moments of the values of it that have keys, as DOC_KEYED says one has)
+        int i = 0;
+        doc_rows(*m->d, sqlite3_mprintf("select distinct at from fact where thing = %d and name in (select name from fact where thing = %d group by name having count(*) > 1 or max(at) <> 0 or max(way) is not null) order by at", thing, thing), [&](sqlite3_stmt* row) {
+            if (i < room) at[i] = sqlite3_column_double(row, 0);
+            ++i;
+        });
+        return i;
+    });
+}
 const char* motolii_moving(Motolii* m, int thing) { return by_look(m, [=] { return (m->word = doc_moving(*m->d, thing)).c_str(); }); }
 const char* motolii_values(Motolii* m, int thing) { return by_look(m, [=] { return (m->word = doc_has(*m->d, thing)).c_str(); }); }
 int motolii_range(Motolii* m, int thing, const char* name, double* low, double* high) { return by_look(m, [=] { return (int)doc_range(*m->d, thing, name, low, high); }); }

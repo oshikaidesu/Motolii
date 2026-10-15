@@ -211,6 +211,21 @@ class Motolii {
   double lasts(int thing) => _lasts(_m, thing);
 
   /// The moments of a value's keys (none if the value stays).
+  late final _thingKeys = _lib.lookupFunction<Int32 Function(_P, Int32, Pointer<Double>, Int32), int Function(_P, int, Pointer<Double>, int)>('motolii_thing_key_moments');
+
+  /// Every moment a key of any of a thing's values stands at, each once, in time: one call (a timeline bar's marks).
+  List<double> thingKeyMoments(int thing) {
+    var room = 256;
+    for (;;) {
+      final out = malloc<Double>(room);
+      final n = _thingKeys(_m, thing, out, room);
+      final all = [for (var i = 0; i < n && i < room; i++) out[i]];
+      malloc.free(out);
+      if (n <= room) return all;
+      room = n;
+    }
+  }
+
   List<double> keyMoments(int thing, String name) => _with([name], (s) {
     const room = 256;
     final out = malloc<Double>(room);
