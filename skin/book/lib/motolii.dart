@@ -113,6 +113,7 @@ class Motolii {
   late final _frames = _lib.lookupFunction<Uint64 Function(_P), int Function(_P)>('motolii_frames');
   late final _wayOf = _lib.lookupFunction<_S Function(_P, Int32, _S, Double), _S Function(_P, int, _S, double)>('motolii_way_of');
   late final _point = _lib.lookupFunction<Double Function(_P), double Function(_P)>('motolii_point');
+  late final _reading = _lib.lookupFunction<_S Function(_P, Int32, _S), _S Function(_P, int, _S)>('motolii_reading');
   late final _undo = _lib.lookupFunction<Int32 Function(_P), int Function(_P)>('motolii_undo');
   late final _redo = _lib.lookupFunction<Int32 Function(_P), int Function(_P)>('motolii_redo');
   late final _trouble = _lib.lookupFunction<_S Function(_P), _S Function(_P)>('motolii_trouble');
@@ -429,6 +430,14 @@ class Motolii {
 
   /// Points of the picture to one unit of the stage, at z 0.
   late final double point = _point(_m);
+
+  /// How a hand reads a thing's value, as the inside says it: shown = value x times + from (places in points of the
+  /// picture from its top left, shares in hundredths...). Asked once a thing and a name.
+  (double, double) reading(int thing, String name) => _readings.putIfAbsent('$thing $name', () {
+    final f = _with([name], (s) => _reading(_m, thing, s[0]).toDartString()).split(' ');
+    return (double.parse(f[0]), double.parse(f[1]));
+  });
+  final _readings = <String, (double, double)>{};
   late final _later = _lib.lookupFunction<Int32 Function(_P, _S, Int32, _S, _S, Double), int Function(_P, _S, int, _S, _S, double)>('motolii_later');
   late final _answer = _lib.lookupFunction<Int32 Function(_P, Int32), int Function(_P, int)>('motolii_answer');
   late final _answerWhy = _lib.lookupFunction<_S Function(_P), _S Function(_P)>('motolii_answer_why');

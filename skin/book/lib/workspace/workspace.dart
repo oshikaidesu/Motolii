@@ -407,59 +407,33 @@ String? _fillWord(Ws ws, String? id, Color? sample) {
   return f.isEmpty ? 'None' : (f == 'glass' ? 'Glass' : '#${f.toUpperCase()}'); // (nothing said: nothing is named, not the last thing's fill)
 }
 
-/// The inspector's numbers and the document's, in one place: an inspector id, the document's value it shows, and the
-/// way across and back (c: the composition's size, p: its points to one unit of the stage; positions are in points
-/// from the top left, scale in hundredths of a unit, the turn about z clockwise, opacity in hundredths).
-typedef _Across = double Function(double value, Size c, double p);
-const _seats = <(String, String, _Across, _Across)>[
-  ('pos.x', 'x', _xOut, _xIn),
-  ('pos.y', 'y', _yOut, _yIn),
-  ('pos.z', 'z', _zOut, _zIn),
-  ('scale.x', 'scale_x', _hundredOut, _hundredIn),
-  ('scale.y', 'scale_y', _hundredOut, _hundredIn),
-  ('scale.z', 'scale_z', _hundredOut, _hundredIn), // (each on its own, as After Effects' Scale; the thing's size is its own value)
-  ('rot.x', 'rotate_x', _same, _same),
-  ('rot.y', 'rotate_y', _same, _same),
-  ('rot.z', 'rotate', _minus, _minus),
-  ('op', 'opacity', _hundredOut, _hundredIn),
-  ('stroke.w', 'stroke_width', _same, _same),
-  ('text.size', 'size', _pointsOut, _pointsIn), // (a text's size in points of the picture: its own size, one unit high at size 1) // (the Blur card's radius: points of the picture at size 1) // (points of the picture at size 1: the edge grows with the thing, as in After Effects)
-  // (the anchor: the sample's hundredths of the box from its top left, front -50 to back 50; the document's share of
-  //  half the box from its middle, up and towards the eye)
-  ('anchor.x', 'anchor_x', _acrossOut, _acrossIn),
-  ('anchor.y', 'anchor_y', _downOut, _downIn),
-  ('anchor.z', 'anchor_z', _backOut, _backIn),
-  // (a camera: the point it looks at, as a thing's place; looking down is the sample's pitch up; its distance in points
-  //  of the picture, the stage's own eye being 6 units off; its zoom in hundredths)
-  ('cam.t.x', 'x', _xOut, _xIn),
-  ('cam.t.y', 'y', _yOut, _yIn),
-  ('cam.t.z', 'z', _zOut, _zIn),
-  ('cam.pitch', 'rotate_x', _minus, _minus),
-  ('cam.yaw', 'rotate_y', _same, _same),
-  ('cam.roll', 'rotate', _same, _same),
-  ('cam.dist', 'distance', _awayOut, _awayIn),
-  ('cam.zoom', 'zoom', _hundredOut, _hundredIn),
+/// The inspector's numbers and the document's: an inspector id and the document's value it shows (how it is read, the
+/// inside says: Motolii.reading).
+const _seats = <(String, String)>[
+  ('pos.x', 'x'),
+  ('pos.y', 'y'),
+  ('pos.z', 'z'),
+  ('scale.x', 'scale_x'),
+  ('scale.y', 'scale_y'),
+  ('scale.z', 'scale_z'),
+  ('rot.x', 'rotate_x'),
+  ('rot.y', 'rotate_y'),
+  ('rot.z', 'rotate'),
+  ('op', 'opacity'),
+  ('stroke.w', 'stroke_width'),
+  ('text.size', 'size'),
+  ('anchor.x', 'anchor_x'),
+  ('anchor.y', 'anchor_y'),
+  ('anchor.z', 'anchor_z'),
+  ('cam.t.x', 'x'),
+  ('cam.t.y', 'y'),
+  ('cam.t.z', 'z'),
+  ('cam.pitch', 'rotate_x'),
+  ('cam.yaw', 'rotate_y'),
+  ('cam.roll', 'rotate'),
+  ('cam.dist', 'distance'),
+  ('cam.zoom', 'zoom'),
 ];
-double _awayOut(double v, Size c, double p) => v * 6 * p;
-double _awayIn(double x, Size c, double p) => x / (6 * p);
-double _acrossOut(double v, Size c, double p) => 50 + 50 * v;
-double _acrossIn(double x, Size c, double p) => (x - 50) / 50;
-double _downOut(double v, Size c, double p) => 50 - 50 * v;
-double _downIn(double x, Size c, double p) => (50 - x) / 50;
-double _backOut(double v, Size c, double p) => -50 * v;
-double _backIn(double x, Size c, double p) => -x / 50;
-double _xOut(double v, Size c, double p) => c.width / 2 + v * p;
-double _xIn(double x, Size c, double p) => (x - c.width / 2) / p;
-double _yOut(double v, Size c, double p) => c.height / 2 - v * p;
-double _yIn(double x, Size c, double p) => (c.height / 2 - x) / p;
-double _zOut(double v, Size c, double p) => v * p;
-double _zIn(double x, Size c, double p) => x / p;
-double _hundredOut(double v, Size c, double p) => v * 100;
-double _hundredIn(double x, Size c, double p) => x / 100;
-double _same(double v, Size c, double p) => v;
-double _pointsOut(double v, Size c, double p) => v * p;
-double _pointsIn(double x, Size c, double p) => x / p;
-double _minus(double v, Size c, double p) => -v;
 
 /// The seats a thing has: the document's own names, and the inspector's numbers whose value it holds (a light has no
 /// scale and no opacity, a flat thing no scale z: those are not shown).
@@ -585,16 +559,19 @@ List<Fx> _makeCards(Ws ws, Motolii m, int t) {
 double _onCard(Ws ws, Motolii m, int t, String n, double at) =>
     m.shown(n)?.look == 'thing' ? (_others(ws, t).values.toList().indexOf((m.value(t, n, 0) ?? 0).round()) + 1).toDouble() : m.words(t, n).isEmpty ? (m.value(t, n, at) ?? 0) * _shownTimes(m, n) : math.max(0, m.words(t, n).indexOf(m.word(t, n))).toDouble(); // (the inside's own cards: a number as it is, a word by its place among those it may be)
 
-double _shownTimes(Motolii m, String n) => switch (m.shown(n)?.look) { 'stage' => m.point, 'down' => -m.point, 'share' => 100, _ => 1 };
+double _shownTimes(Motolii m, String n) => m.reading(0, n).$1;
+/// A value as a hand reads it, and back (Motolii.reading).
+double _shown(Motolii m, int t, String n, double v) { final (k, f) = m.reading(t, n); return v * k + f; }
+double _unshown(Motolii m, int t, String n, double x) { final (k, f) = m.reading(t, n); return (x - f) / k; }
 
 /// Joined: only where a thing is, how large and how turned (the inspector's seats), as the stage's readout shows them:
 /// not the cards' hundreds of numbers [wsTransform] reads.
 Map<String, double> wsPlace(Ws ws, String id) {
   final m = ws.inside, t = int.tryParse(id);
   if (m == null || t == null) return const {};
-  final at = ws.frame / Ws.fps, p = m.point;
+  final at = ws.frame / Ws.fps;
   double r1(double x) => (x * 10).roundToDouble() / 10 + 0;
-  return {for (final s in _seats) s.$1: r1(s.$3(m.value(t, s.$2, at) ?? (s.$2 == 'opacity' || s.$2.startsWith('scale_') ? 1 : 0), WsArt.comp, p))};
+  return {for (final s in _seats) s.$1: r1(_shown(m, t, s.$2, m.value(t, s.$2, at) ?? (s.$2 == 'opacity' || s.$2.startsWith('scale_') ? 1 : 0)))};
 }
 
 /// The selected layer's transform as the stage draws it at this frame, in the Inspector's ids.
@@ -606,10 +583,10 @@ Map<String, double> wsTransform(Ws ws, String? id) {
       return {for (final (_, names) in m.cards(0)) for (final n in names) 'v_$n': _onCard(ws, m, 0, n, at)};
     }
     if (t == null) return const {};
-    final at = ws.frame / Ws.fps, p = m.point;
+    final at = ws.frame / Ws.fps;
     double r1(double x) => (x * 10).roundToDouble() / 10 + 0; // (+ 0: no minus nought)
     return {
-      for (final s in _seats) s.$1: r1(s.$3(m.value(t, s.$2, at) ?? (s.$2 == 'opacity' || s.$2.startsWith('scale_') ? 1 : 0), WsArt.comp, p)), // (a thing that has no opacity is all there, no scale as it is)
+      for (final s in _seats) s.$1: r1(_shown(m, t, s.$2, m.value(t, s.$2, at) ?? (s.$2 == 'opacity' || s.$2.startsWith('scale_') ? 1 : 0))), // (a thing that has no opacity is all there, no scale as it is)
       'depth': r1(m.frame(t)?[7] ?? 0), // (how deep it is in points of the picture: a flat thing is Flat)
       for (final (_, names) in m.cards(t))
         for (final n in names)
@@ -636,7 +613,7 @@ Map<String, double> wsTransform(Ws ws, String? id) {
       if (fields[id] case final n?) return (n, x); // (an effect's number: the document's, as it is)
     }
   }
-  return seat == null ? null : (seat.$2, seat.$4(x, WsArt.comp, ws.inside!.point));
+  return seat == null ? null : (seat.$2, _unshown(ws.inside!, int.tryParse(ws.selected ?? '') ?? 0, seat.$2, x));
 }
 
 /// Joined: what was changed in the inspector is a thing held and its numbers carried (the inside's one form of a

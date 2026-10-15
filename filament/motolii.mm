@@ -420,11 +420,41 @@ int motolii_thumbnail(const char* film, const char* png, int wide) {
 int motolii_together(Motolii* m, int on) { return by_hand(m, [=] { return on ? (doc_act(*m->d), 1) : (m->d->act ? (int)doc_acted(*m->d) : 0); }); }
 const char* motolii_way_of(Motolii* m, int thing, const char* name, double at) { return by_look(m, [=] { return (m->word = doc_way_of(*m->d, thing, name, at)).c_str(); }); }
 // How many points of the picture one unit of the stage is, where things stand when their z is 0.
-double motolii_point(Motolii* m) {
+static double point_of(Motolii* m) {   // (points of the picture to one unit of the stage, at its middle)
+    const math::mat4 eye = m->s->camera->getProjectionMatrix() * m->s->camera->getViewMatrix();
+    const math::double4 a = eye * math::double4{0, 0, 0, 1}, b = eye * math::double4{1, 0, 0, 1};
+    return 0.5 * (b.x / b.w - a.x / a.w) * m->s->w;
+}
+double motolii_point(Motolii* m) { return by_look(m, [=] { return point_of(m); }); }
+// How a hand reads a thing's value: as the value times `times`, and `from` more ("times from"). Places are counted in
+// points of the picture from its top left, as After Effects counts them; scale and opacity in hundredths; the turn about
+// z clockwise (a camera's turns as they are, its pitch looking down); the anchor in hundredths of the box from its top
+// left (front -50 to back 50); a camera's distance in points of the picture (the stage's own eye 6 units off); any other
+// value by its look (stage: points, down: points down the picture, share: hundredths), else as it is.
+const char* motolii_reading(Motolii* m, int thing, const char* name) {
     return by_look(m, [=] {
-        const math::mat4 eye = m->s->camera->getProjectionMatrix() * m->s->camera->getViewMatrix();
-        const math::double4 a = eye * math::double4{0, 0, 0, 1}, b = eye * math::double4{1, 0, 0, 1};
-        return 0.5 * (b.x / b.w - a.x / a.w) * m->s->w;
+        const double p = point_of(m), w = m->s->w, h = m->s->h;
+        const bool camera = doc_word(*m->d, thing, "kind") == "camera";
+        const std::string n = name;
+        double times = 1, from = 0;
+        if (n == "x") times = p, from = w / 2;
+        else if (n == "y") times = -p, from = h / 2;
+        else if (n == "z") times = p;
+        else if (n == "scale_x" || n == "scale_y" || n == "scale_z" || n == "opacity" || n == "zoom") times = 100;
+        else if (n == "rotate") times = camera ? 1 : -1;
+        else if (n == "rotate_x") times = camera ? -1 : 1;
+        else if (n == "anchor_x") times = 50, from = 50;
+        else if (n == "anchor_y") times = -50, from = 50;
+        else if (n == "anchor_z") times = -50;
+        else if (n == "distance") times = 6 * p;
+        else if (n == "size") times = p;
+        else if (const DocShown* s = doc_shown_of(name)) {
+            const std::string look = s->look;
+            times = look == "stage" ? p : look == "down" ? -p : look == "share" ? 100 : 1;
+        }
+        char line[64];
+        std::snprintf(line, sizeof line, "%.17g %.17g", times, from);
+        return (m->word = line).c_str();
     });
 }
 // A change asked without waiting (a shell's hand that must not stand still while the hand works it): queued in order

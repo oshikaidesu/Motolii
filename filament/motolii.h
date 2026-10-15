@@ -84,6 +84,7 @@ int motolii_hold(Motolii* m, int thing);
 int motolii_carry(Motolii* m, const char* by, double a, double b);
 int motolii_let_go(Motolii* m, int keep);
 double motolii_point(Motolii* m);                                  /* points of the picture to one unit of the stage, at z 0 */
+const char* motolii_reading(Motolii* m, int thing, const char* name);  /* how a hand reads a value: "times from" (shown = value x times + from) */
 /* What a hand does to a value at a moment, by the document's own rules. motolii_put: the value changed there (see
    motolii_keying for what that is to a value with keys and to one without). motolii_key_here: a key at that moment holding
    what the value is there. motolii_stay: its keys go, it stays what it is at that moment. motolii_keyed: 0 the value has no keys, 1 keys but none at that moment, 2 a key at that
