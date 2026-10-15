@@ -4,6 +4,7 @@
 #include "../motolii.h"
 #include <dirent.h>
 #include <mach/mach.h>
+#include <malloc/malloc.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -13,6 +14,12 @@ static double footprint_mb(void) {
     task_vm_info_data_t info;
     mach_msg_type_number_t n = TASK_VM_INFO_COUNT;
     return task_info(mach_task_self(), TASK_VM_INFO, (task_info_t)&info, &n) == KERN_SUCCESS ? info.phys_footprint / 1048576.0 : -1;
+}
+
+static double malloc_mb(void) {   // (the part of it that is malloc's: the rest is the GPU's and the films' surfaces)
+    malloc_statistics_t st;
+    malloc_zone_statistics(NULL, &st);
+    return st.size_in_use / 1048576.0;
 }
 
 int main(int argc, char** argv) {
@@ -41,7 +48,7 @@ int main(int argc, char** argv) {
     for (int s = 0; s <= seconds; s += 15) {
         const double mb = footprint_mb();
         if (s == 30) first = mb;   // (counted from half a minute in: the first moments fill what is made once)
-        printf("  %3d s  %.1f MB  pictures %llu\n", s, mb, motolii_frames(m));
+        printf("  %3d s  %.1f MB  malloc %.1f MB  pictures %llu\n", s, mb, malloc_mb(), motolii_frames(m));
         fflush(stdout);
         if (s < seconds) sleep(15);
     }
