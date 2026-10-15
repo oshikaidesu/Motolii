@@ -1,8 +1,8 @@
 // Direction or Spread as a number block whose picture is the emission cone in the layer's own frame.
+import 'inspector_studies.dart';
 import 'dart:math' as math;
 
 import 'package:flutter/widgets.dart';
-import 'package:lab_book/sets/inspector/inspector_parts.dart';
 import 'package:lab_book/tokens.dart';
 
 /// Direction or Spread as a number block whose picture is the emission cone in the layer's own frame.

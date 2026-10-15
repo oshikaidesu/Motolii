@@ -1,9 +1,7 @@
 // A particle layer (not an effect): one card, its thirty handles grouped by what they shape; the rarely used groups fold away.
+import 'inspector_studies.dart';
 import 'package:flutter/widgets.dart';
-import 'package:lab_book/sets/inspector/inspector_host_particles_pt_angle.dart';
-import 'package:lab_book/sets/inspector/inspector_host_particles_pt_preview.dart';
 import 'package:lab_book/sets/inspector/inspector_param_controls_tile.dart';
-import 'package:lab_book/sets/inspector/inspector_parts.dart';
 import 'package:lab_book/sets/inspector/inspector_rows_sect.dart';
 
 /// A particle layer (not an effect): one card, its thirty handles grouped by what they shape; the rarely used groups fold away.

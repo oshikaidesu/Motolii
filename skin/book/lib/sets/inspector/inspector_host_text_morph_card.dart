@@ -1,7 +1,7 @@
 // The outline blend, pictured: the sample's weight and spacing slide from this layer's toward the target's as Amount rises.
+import 'inspector_studies.dart';
 import 'package:flutter/widgets.dart';
 import 'package:lab_book/sets/inspector/inspector_param_controls_tile.dart';
-import 'package:lab_book/sets/inspector/inspector_parts.dart';
 import 'package:lab_book/sets/inspector/inspector_rows_sect.dart';
 import 'package:lab_book/tokens.dart';
 

@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'inspector_studies.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -6,7 +7,6 @@ import 'package:lab_book/sets/inspector/inspector_rows_sect.dart';
 import '../../parts/controls.dart';
 import '../../tokens.dart';
 import 'inspector_direct_transform.dart';
-import 'inspector_parts.dart';
 
 // ---- ideas: placement and anchor (ids pli_) ----------------------------------------------------------------------------
 /// Four ways to edit a Repeater and an Anchor where the panel does the work. A, B and C each own a Repeater (pli_a / pli_b / pli_c); D writes the layer's real anchor.

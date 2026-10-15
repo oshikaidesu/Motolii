@@ -8,6 +8,8 @@ import 'package:widgetbook/widgetbook.dart';
 
 import '../../kit.dart';
 import '../../tokens.dart';
+import 'inspector_host_gallery.dart';
+import 'inspector_idea_gallery.dart';
 import 'inspector_parts.dart';
 
 // set: inspector_set. What the Inspector must do comes from research/intents/inspector.md.

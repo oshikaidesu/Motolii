@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'inspector_studies.dart';
 import 'package:flutter/widgets.dart';
 import 'package:lab_book/sets/inspector/inspector_param_controls_angle_dial.dart';
 import 'package:lab_book/sets/inspector/inspector_param_controls_gauge.dart';

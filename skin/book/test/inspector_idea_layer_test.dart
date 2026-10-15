@@ -1,6 +1,6 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:lab_book/sets/inspector/inspector_parts.dart';
+import 'package:lab_book/sets/inspector/inspector_studies.dart';
 
 Finder _painted(String name) => find.byWidgetPredicate((w) => w is CustomPaint && w.painter.runtimeType.toString() == name);
 

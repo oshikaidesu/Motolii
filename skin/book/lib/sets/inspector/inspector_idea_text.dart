@@ -1,8 +1,8 @@
 import 'dart:math' as math;
+import 'inspector_studies.dart';
 import 'package:flutter/widgets.dart';
 import 'package:lab_book/sets/inspector/inspector_rows_sect.dart';
 import '../../tokens.dart';
-import 'inspector_parts.dart';
 
 // ---- idea: text -------------------------------------------------------------------------------------------------------
 /// contract: mirrors motolii-doc store/text.rs — runs over the content, each with its own style (size, wght axis, fill);

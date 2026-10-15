@@ -1,8 +1,8 @@
 // contract: names follow motolii-doc store/text.rs (TextBasedOn, TextRangeUnits, TextShape, TextGrouping, TextJustify) and vector/text.rs (the CSS trio).
+import 'inspector_studies.dart';
 import 'dart:math' as math;
 
 import 'package:flutter/widgets.dart';
-import 'package:lab_book/sets/inspector/inspector_parts.dart';
 import 'package:lab_book/sets/inspector/inspector_rows_sect.dart';
 import 'package:lab_book/tokens.dart';
 

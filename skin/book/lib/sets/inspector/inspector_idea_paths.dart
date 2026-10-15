@@ -1,10 +1,10 @@
 import 'dart:math' as math;
+import 'inspector_studies.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
 import 'package:lab_book/sets/inspector/inspector_rows_sect.dart';
 import '../../parts/controls.dart';
 import '../../tokens.dart';
-import 'inspector_parts.dart';
 
 // ---- ideas: path operations -----------------------------------------------------------------------------------------
 /// Three ways to edit path operations inside the Inspector, each drawing the real result of the ops in Dart.

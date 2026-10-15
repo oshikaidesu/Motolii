@@ -1,10 +1,10 @@
 import 'dart:math' as math;
+import 'inspector_studies.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
 import 'package:lab_book/sets/inspector/inspector_rows_sect.dart';
 import '../../parts/controls.dart';
 import '../../tokens.dart';
-import 'inspector_parts.dart';
 
 // ---- Masks, time, links, matte: small working stages inside the card -----------------------------------------------
 // Sources: motolii-doc store/mask.rs (MaskMode, feather, expansion, opacity, inverted), attrs.rs (Matte, MatteMode, clip_to_below),

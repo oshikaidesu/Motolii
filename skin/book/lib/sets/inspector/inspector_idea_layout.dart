@@ -1,10 +1,10 @@
 import 'dart:math' as math;
+import 'inspector_studies.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
 import 'package:lab_book/sets/inspector/inspector_rows_sect.dart';
 import '../../parts/controls.dart';
 import '../../tokens.dart';
-import 'inspector_parts.dart';
 
 // ---- Layout ideas: the container's CSS flex / grid lines edited on a live, solved preview ----------------------------
 // Model: motolii-doc store/layout.rs (GROUP_ROWS / ITEM_ROWS). The preview solves its own small flex + grid (CSS rules, below).

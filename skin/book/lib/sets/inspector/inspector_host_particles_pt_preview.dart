@@ -1,4 +1,5 @@
 // A still of the stream as it would stand once full: dots at evenly spread ages, each with the faint path it came along.
+import 'inspector_studies.dart';
 import 'dart:math' as math;
 
 import 'package:flutter/widgets.dart';

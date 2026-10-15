@@ -1,6 +1,6 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:lab_book/sets/inspector/inspector_parts.dart';
+import 'package:lab_book/sets/inspector/inspector_studies.dart';
 
 void main() {
   testWidgets('Layout ideas solve, paint and write to Doc', (tester) async {
