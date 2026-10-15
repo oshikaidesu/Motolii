@@ -1817,6 +1817,15 @@ static std::string doc_recipe_names() {
     for (const DocRecipe& r : doc_recipes()) all += (all.empty() ? "" : "\n") + r.name + "\t" + r.what;
     return all;
 }
+// Whether a file the document's pictures are made from (the stage's effects, the things' scripts) has been written
+// over since it was read: a stage that is not drawing is woken by it (a file saved shows at once).
+static bool doc_files_moved(Doc& d) {
+    bool moved = screen_moved(d.screen);
+    const int before = doc_scripts_made();
+    for (int t : doc_laid(d)) doc_scripts_on(d, t);   // (each looks at its file's time and reads it again if it changed)
+    if (doc_scripts_made() != before) moved = true, d.scripted.clear();
+    return moved;
+}
 // The whole-screen effects on the shelf (screen.h): a file each in effects/, beside recipes/ (one put there is on the
 // shelf at once), "name\tpath" one to a line, the name what its head's first line says before its colon.
 static std::string doc_effect_names() {

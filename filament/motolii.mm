@@ -77,10 +77,11 @@ static void motolii_hand(Motolii* m, std::string document, int wide, int high, s
             std::unique_lock<std::mutex> hold(m->asked_lock);
             const bool goes = m->live && (m->playing || m->changed);
             if (goes) m->asked_now.wait_until(hold, due, [m] { return !m->asked.empty() || m->closing; });
-            else m->asked_now.wait(hold, [m] { return !m->asked.empty() || m->closing || (m->live && (m->playing || m->changed)); });
+            else m->asked_now.wait_for(hold, std::chrono::milliseconds(500), [m] { return !m->asked.empty() || m->closing || (m->live && (m->playing || m->changed)); });   // (twice a second: a file written over)
             if (m->closing) break;
             todo.swap(m->asked);
         }
+        if (todo.empty() && m->live && !m->playing && !m->changed && doc_files_moved(*m->d)) m->changed = true;   // (a shader or a script saved: drawn again)
         for (auto& does : todo) does();
         const auto t = std::chrono::steady_clock::now();
         // (asked something: a shell that writes reads next, so the picture waits a moment for it rather than it for a

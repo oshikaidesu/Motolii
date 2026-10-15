@@ -19,7 +19,13 @@ struct ScreenFx {
     std::vector<Field> fields;   // the knobs' struct as WGSL lays a uniform out
     uint32_t bytes = 0;
     door::Screen* door = nullptr;
+    std::filesystem::file_time_type stamp{};       // (the file's time when it was made: written over, it is made again)
+    std::chrono::steady_clock::time_point looked{};
 };
+static std::filesystem::file_time_type screen_stamp(const std::string& file) {
+    std::error_code wrong;
+    return std::filesystem::last_write_time(file, wrong);
+}
 
 // The file as Filament's driver takes it: the picture at binding 0, its sampler at 1, the knobs at 2 (Filament's
 // descriptor 0 a sampled texture, 1 a uniform buffer), its entry `main`; and the knobs' struct read for where each is.
@@ -107,6 +113,28 @@ static void screen_knobs(Stage& s, ScreenFx& fx, const std::function<double(cons
     }
     if (!at.empty()) door::knobs(s.engine, fx.door, at.data(), (uint32_t)(at.size() * 4));
 }
+// An effect whose file was written over made again where it stands (looked at four times a second at most): a shader
+// saved shows at once. A file that no longer reads keeps the one before (said on stderr).
+static void screen_fresh(Stage& s, ScreenFx& fx) {
+    const auto now = std::chrono::steady_clock::now();
+    if (now - fx.looked < std::chrono::milliseconds(250)) return;
+    fx.looked = now;
+    const auto stamp = screen_stamp(fx.file);
+    if (stamp == fx.stamp) return;
+    fx.stamp = stamp;
+    ScreenFx again;
+    again.file = fx.file;
+    std::string code;
+    if (!screen_read(again, code)) { std::fprintf(stderr, "%s\n", again.trouble.c_str()); return; }
+    door::drop(s.engine, fx.door);
+    fx.knobs = again.knobs, fx.fields = again.fields, fx.bytes = again.bytes;
+    fx.door = door::screen(s.engine, fx.file.c_str(), code.c_str(), fx.bytes);
+}
+// Whether a file of the stage's effects has been written over since it was made (what wakes a stage that is not drawing).
+static bool screen_moved(const ScreenStack& st) {
+    for (const ScreenFx* fx : st.fx) if (screen_stamp(fx->file) != fx->stamp) return true;
+    return false;
+}
 static void screen_effects(Stage& s, ScreenStack& st, const std::string& files, std::function<double(const std::string&, double)> numbers) {
     if (st.files == files) return;
     st.files = files;
@@ -124,6 +152,7 @@ static void screen_effects(Stage& s, ScreenStack& st, const std::string& files, 
             std::string code;
             if (!screen_read(*made, code)) { std::fprintf(stderr, "%s\n", made->trouble.c_str()); continue; }   // (kept as not made: not read again each time)
             made->door = door::screen(s.engine, file.c_str(), code.c_str(), made->bytes);
+            made->stamp = screen_stamp(file);
         }
         if (made->door) st.fx.push_back(made);
     }
@@ -139,6 +168,7 @@ static void screen_effects(Stage& s, ScreenStack& st, const std::string& files, 
     for (View* v : s.layers) v->setRenderTarget(st.target);
     s.over = [&s, &st, numbers] {
         for (size_t i = 0; i < st.fx.size(); ++i) {
+            screen_fresh(s, *st.fx[i]);
             screen_knobs(s, *st.fx[i], numbers);
             Texture* from = i == 0 ? st.shot : st.between[(i - 1) % 2];
             RenderTarget* to = i + 1 == st.fx.size() ? nullptr : st.betweenTarget[i % 2];
