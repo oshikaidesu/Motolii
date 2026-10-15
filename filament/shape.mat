@@ -1,0 +1,32 @@
+// shape.mat: a flat shape drawn by Filament itself, as triangles (libtess2 cut its outline once), in one colour, bent
+// as it is drawn: After Effects' wave warp in its own units (uv0: where its point is, in units of its height, from its
+// middle). Antialiased by the view's MSAA, as Unity's and three.js's vector shapes are.
+material {
+    name : shape,
+    shadingModel : unlit,
+    requires : [ uv0 ],
+    blending : transparent,
+    doubleSided : true,
+    parameters : [
+        { type : float4, name : color },
+        { type : float, name : opacity },
+        { type : float4, name : wave }   // (how high, how long a wave, how far along in waves, which way it runs: radians)
+    ]
+}
+
+vertex {
+    void materialVertex(inout MaterialVertexInputs material) {
+        vec2 p = material.uv0;
+        vec4 w = materialParams.wave;
+        vec2 dir = vec2(cos(w.w), sin(w.w));
+        vec2 off = vec2(-dir.y, dir.x) * w.x * sin(6.2831853 * (dot(p, dir) / max(w.y, 1e-4) + w.z));
+        material.worldPosition.xyz += mulMat3x3Float3(getWorldFromModelMatrix(), vec3(off, 0.0));
+    }
+}
+
+fragment {
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        material.baseColor = vec4(materialParams.color.rgb, 1.0) * materialParams.opacity;
+    }
+}
