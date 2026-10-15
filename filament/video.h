@@ -41,6 +41,9 @@ struct Video {
     MaterialInstance* look = nullptr;
     struct Planes { std::atomic<WGPUTexture> shared{nullptr}; WGPUSharedTextureMemory lent = nullptr; Texture* light = nullptr; Texture* colour = nullptr; gint64 used = 0; };
     uint32_t shown = 0;                // which surface is on the sheet
+    GstElement* into = nullptr;        // what the reader's pictures go into: `out`, or (read on the CPU) a converter before it
+    Texture* cpuLight = nullptr;       // read on the CPU (the machine's decoder had no room for it): its two planes, put on the GPU picture by picture
+    Texture* cpuColour = nullptr;
     std::map<uint32_t, Planes> seen;   // the decoder's surfaces come round again: each is shared once
 };
 
@@ -123,10 +126,45 @@ static void video_own_key(Video* v, GstSample* picture) {
     //  proportion to how far this ground is from grey: a dark green's greys are nearer to it)
     if (v->own && (has || v->own == 2)) v->key = float4{ground, 0.2f * strong}, v->keySoft = float2{0.5f * strong, 1.5f * strong};
 }
+// A picture read on the CPU (by a decoder of the CPU: the machine's had no room for it) put on the sheet: its light
+// and its colour copied up to two textures of Filament's, as a film's shared planes are read.
+static bool video_show_copied(Stage& s, Video* v) {
+    GstVideoInfo info;
+    GstVideoFrame frame;
+    if (!gst_video_info_from_caps(&info, gst_sample_get_caps(v->held)) || GST_VIDEO_INFO_FORMAT(&info) != GST_VIDEO_FORMAT_NV12
+        || !gst_video_frame_map(&frame, &info, gst_sample_get_buffer(v->held), GST_MAP_READ)) return false;
+    const int w = v->w, h = v->h, cw = (w + 1) / 2, ch = (h + 1) / 2;
+    const TextureSampler smooth(TextureSampler::MinFilter::LINEAR, TextureSampler::MagFilter::LINEAR, TextureSampler::WrapMode::CLAMP_TO_EDGE);
+    if (!v->cpuLight) {
+        v->cpuLight = Texture::Builder().width((uint32_t)w).height((uint32_t)h).levels(1).format(Texture::InternalFormat::R8).build(*s.engine);
+        v->cpuColour = Texture::Builder().width((uint32_t)cw).height((uint32_t)ch).levels(1).format(Texture::InternalFormat::RG8).build(*s.engine);
+    }
+    const auto up = [&](Texture* t, int plane, int pw, int ph, int bytes, Texture::Format as) {   // (packed, without the decoder's row padding)
+        auto* copy = (uint8_t*)std::malloc((size_t)pw * ph * bytes);
+        const uint8_t* from = (const uint8_t*)GST_VIDEO_FRAME_PLANE_DATA(&frame, plane);
+        const int stride = GST_VIDEO_FRAME_PLANE_STRIDE(&frame, plane);
+        for (int y = 0; y < ph; ++y) std::memcpy(copy + (size_t)y * pw * bytes, from + (size_t)y * stride, (size_t)pw * bytes);
+        t->setImage(*s.engine, 0, Texture::PixelBufferDescriptor(copy, (size_t)pw * ph * bytes, as, Texture::Type::UBYTE, 1, 0, 0, 0,
+                                                                 [](void* buffer, size_t, void*) { std::free(buffer); }));
+    };
+    up(v->cpuLight, 0, w, h, 1, Texture::Format::R);
+    up(v->cpuColour, 1, cw, ch, 2, Texture::Format::RG);
+    gst_video_frame_unmap(&frame);
+    v->look->setParameter("picture", v->cpuLight, smooth);
+    v->look->setParameter("colours", v->cpuColour, smooth);
+    if (!v->on) {   // (its first picture: seen from now on)
+        video_own_key(v, v->held);
+        v->look->setParameter("key", v->key);
+        v->look->setParameter("keySoft", v->keySoft);
+    }
+    if (v->on && v->on != v->held) gst_sample_unref(v->on);
+    v->on = v->held;
+    return true;
+}
 static bool video_show(Stage& s, Video* v) {
     CVPixelBufferRef held = video_surface(v->held);
     IOSurfaceRef surface = held ? CVPixelBufferGetIOSurface(held) : nullptr;
-    if (!surface) return false;
+    if (!surface) return video_show_copied(s, v);
     auto found = v->seen.find(IOSurfaceGetID(surface));
     if (found == v->seen.end()) {
         // (a decoder goes round a few surfaces, and takes new ones when its film goes round: one it has not handed on
@@ -228,7 +266,7 @@ static gint video_wanted(GstElement*, GstStreamCollection*, GstStream* stream, g
 
 // The stream of pictures the reader found in the file goes to `out`.
 static void video_found(GstElement*, GstPad* stream, gpointer film) {
-    GstPad* to = gst_element_get_static_pad(GST_ELEMENT(((Video*)film)->out), "sink");
+    GstPad* to = gst_element_get_static_pad(((Video*)film)->into, "sink");
     if (!gst_pad_is_linked(to)) gst_pad_link(stream, to);
     gst_object_unref(to);
 }
@@ -241,35 +279,45 @@ static Video* video(Stage& s, const char* file, const mat4f& place, float high, 
     static const bool started = (gst_init(nullptr, nullptr), true);
     (void)started;
     Video* v = new Video;
-    v->reader = gst_pipeline_new(nullptr);
-    GstElement* opens = gst_element_factory_make("filesrc", nullptr);
-    GstElement* reads = gst_element_factory_make("decodebin3", nullptr);   // (chooses the parts for whatever the file is: the machine's decoder where there is one)
-    v->out = GST_APP_SINK(gst_element_factory_make("appsink", nullptr));
-    if (!opens || !reads || !v->out) return video_trouble = "GStreamer lacks a part (filesrc, decodebin3 or appsink)", nullptr;
-    GstCaps* wanted = gst_caps_from_string("video/x-raw,format=NV12");   // (light and colour apart, eight bits: what video.h shares)
-    g_object_set(opens, "location", file, nullptr);
-    g_object_set(v->out, "sync", FALSE, "max-buffers", 2, "caps", wanted, nullptr);
-    gst_caps_unref(wanted);
-    gst_bin_add_many(GST_BIN(v->reader), opens, reads, GST_ELEMENT(v->out), nullptr);
-    gst_element_link(opens, reads);
-    g_signal_connect(reads, "select-stream", G_CALLBACK(video_wanted), v);
-    g_signal_connect(reads, "pad-added", G_CALLBACK(video_found), v);
-    GstPad* in = gst_element_get_static_pad(GST_ELEMENT(v->out), "sink");
-    gst_pad_add_probe(in, GST_PAD_PROBE_TYPE_EVENT_DOWNSTREAM, video_ending, v, nullptr);
-    gst_object_unref(in);
-    gst_element_set_state(v->reader, GST_STATE_PAUSED);
-    gst_element_get_state(v->reader, nullptr, nullptr, 5 * GST_SECOND);   // (waits until the file is open and its first picture is there)
-    gint64 length = 0;
-    if (!gst_element_query_duration(v->reader, GST_FORMAT_TIME, &length) || length <= 0) return video_trouble = "the file does not open as a film (no length)", nullptr;
-    v->from = std::max(0.f, from);
-    v->to = to < 0.f ? (float)((double)length / (double)GST_SECOND) : std::min(to, (float)((double)length / (double)GST_SECOND));
-    if (speed == 0.f) return video_trouble = "a speed of 0 shows nothing: a film goes forwards or backwards", nullptr;
-    v->speed = speed;
-    v->seconds = (v->to - v->from) / std::fabs(v->speed);
-    if (v->seconds <= 0.f) return video_trouble = "the cut is empty", nullptr;
-    video_from(v, 0.f, true);
-    gst_element_set_state(v->reader, GST_STATE_PLAYING);
-    v->held = gst_app_sink_try_pull_sample(v->out, 5 * GST_SECOND);   // (its first picture says how large it is)
+    // (read by the machine's decoder; where it has no room (59 films at once on an M4) by a decoder of the CPU, the
+    //  pictures then copied up: decodebin, told to pass the machine's decoders over, and a converter to NV12)
+    for (int cpu = 0; cpu < 2; ++cpu) {
+        if (v->reader) gst_element_set_state(v->reader, GST_STATE_NULL), gst_object_unref(v->reader), v->reader = nullptr;
+        v->reader = gst_pipeline_new(nullptr);
+        GstElement* opens = gst_element_factory_make("filesrc", nullptr);
+        GstElement* reads = gst_element_factory_make(cpu ? "decodebin" : "decodebin3", nullptr);   // (chooses the parts for whatever the file is)
+        GstElement* turn = cpu ? gst_element_factory_make("videoconvert", nullptr) : nullptr;
+        v->out = GST_APP_SINK(gst_element_factory_make("appsink", nullptr));
+        if (!opens || !reads || !v->out || (cpu && !turn)) return video_trouble = "GStreamer lacks a part (filesrc, decodebin3, decodebin, videoconvert or appsink)", nullptr;
+        GstCaps* wanted = gst_caps_from_string("video/x-raw,format=NV12");   // (light and colour apart, eight bits: what video.h shares)
+        g_object_set(opens, "location", file, nullptr);
+        g_object_set(v->out, "sync", FALSE, "max-buffers", 2, "caps", wanted, nullptr);
+        gst_caps_unref(wanted);
+        gst_bin_add_many(GST_BIN(v->reader), opens, reads, GST_ELEMENT(v->out), nullptr);
+        gst_element_link(opens, reads);
+        if (turn) gst_bin_add(GST_BIN(v->reader), turn), gst_element_link(turn, GST_ELEMENT(v->out));
+        v->into = turn ? turn : GST_ELEMENT(v->out);
+        if (cpu) g_signal_connect(reads, "autoplug-select", G_CALLBACK(+[](GstElement*, GstPad*, GstCaps*, GstElementFactory* part, gpointer) {
+            return g_str_has_prefix(GST_OBJECT_NAME(part), "vtdec") ? 2 /* GST_AUTOPLUG_SELECT_SKIP */ : 0 /* TRY */; }), nullptr);
+        else g_signal_connect(reads, "select-stream", G_CALLBACK(video_wanted), v);
+        g_signal_connect(reads, "pad-added", G_CALLBACK(video_found), v);
+        GstPad* in = gst_element_get_static_pad(GST_ELEMENT(v->out), "sink");
+        gst_pad_add_probe(in, GST_PAD_PROBE_TYPE_EVENT_DOWNSTREAM, video_ending, v, nullptr);
+        gst_object_unref(in);
+        gst_element_set_state(v->reader, GST_STATE_PAUSED);
+        if (gst_element_get_state(v->reader, nullptr, nullptr, 5 * GST_SECOND) == GST_STATE_CHANGE_FAILURE) continue;   // (waits until the file is open and its first picture is there)
+        gint64 length = 0;
+        if (!gst_element_query_duration(v->reader, GST_FORMAT_TIME, &length) || length <= 0) return video_trouble = "the file does not open as a film (no length)", nullptr;
+        v->from = std::max(0.f, from);
+        v->to = to < 0.f ? (float)((double)length / (double)GST_SECOND) : std::min(to, (float)((double)length / (double)GST_SECOND));
+        if (speed == 0.f) return video_trouble = "a speed of 0 shows nothing: a film goes forwards or backwards", nullptr;
+        v->speed = speed;
+        v->seconds = (v->to - v->from) / std::fabs(v->speed);
+        if (v->seconds <= 0.f) return video_trouble = "the cut is empty", nullptr;
+        video_from(v, 0.f, true);
+        gst_element_set_state(v->reader, GST_STATE_PLAYING);
+        if ((v->held = gst_app_sink_try_pull_sample(v->out, (cpu ? 5 : 2) * GST_SECOND))) break;   // (its first picture says how large it is)
+    }
     if (!v->held) return video_trouble = "no picture came within 5 seconds", nullptr;
     const GstStructure* said = gst_caps_get_structure(gst_sample_get_caps(v->held), 0);
     if (!gst_structure_get_int(said, "width", &v->w) || !gst_structure_get_int(said, "height", &v->h)) return video_trouble = "the picture does not say its size", nullptr;
