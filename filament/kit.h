@@ -132,6 +132,7 @@ static Stage open_stage(int w, int h) {
     s.view->setViewport({0, 0, (uint32_t)w, (uint32_t)h});
     s.view->setDithering(View::Dithering::NONE);
     s.view->setAntiAliasing(View::AntiAliasing::FXAA);
+    s.view->setMultiSampleAntiAliasingOptions({.enabled = true, .sampleCount = 4});   // (the edges of flat shapes drawn as triangles, drawn.h flat_mesh: as Unity's and three.js's are)
     s.view->setScreenSpaceRefractionEnabled(true);
     s.view->setVisibleLayers(0x03, 0x03);
     Renderer::ClearOptions clear{};
@@ -165,6 +166,7 @@ static View* layer_view(Stage& s, size_t k, bool flat) {
         v->setViewport(s.view->getViewport());
         v->setDithering(View::Dithering::NONE);
         v->setAntiAliasing(s.view->getAntiAliasing());
+        v->setMultiSampleAntiAliasingOptions(s.view->getMultiSampleAntiAliasingOptions());
         v->setAmbientOcclusionOptions(s.view->getAmbientOcclusionOptions());
         v->setColorGrading(const_cast<ColorGrading*>(s.view->getColorGrading()));   // (the same one: Filament hands it out read-only)
         v->setScreenSpaceRefractionEnabled(false);

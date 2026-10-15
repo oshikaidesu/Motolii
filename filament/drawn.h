@@ -8,6 +8,7 @@
 #include "dawn_probe/gpu_door.h"
 #include <thorvg.h>
 #include <thorvg_lottie.h>
+#include <tesselator.h>
 #include <webgpu/webgpu.h>
 
 #include <array>
@@ -45,6 +46,8 @@ struct Drawn {
     float plainHigh = 0.f, plainSide = 0.f;   // (and how high it was drawn and its shorter side, in its own points)
     float pictureHigh = 0.f;   // (how high its picture is, room and all, in the same points)
     float fine = 0.f;          // (its lines cut in pieces no longer than so many points, if it is warped as it is drawn (warp_at))
+    bool cut = false;          // (a flat shape drawn by Filament as its own triangles (flat_mesh): no picture, no canvas; bent in its look)
+    float4 wash{0.f};          // (its own colour laid over its look, as a copy's is: a shape cut in triangles is filled so)
     std::array<float, 6> bent{};   // (as last bent: round, bloat, zigzag, ridges, smooth, offset)
     std::array<float, 48> warped{};   // (as last warped on the GPU (warp_at): ThorVG's WgCanvas::bend, thorvg_bend.patch)
     std::vector<std::string> markers;  // an After Effects file's named stretches (ThorVG's Lottie markers)
@@ -428,6 +431,42 @@ static Drawn* type(Stage& s, const char* words, const char* fontFile, const mat4
     }, place, high, float3{-1.f}, true, lay, fx);
 }
 
+// A flat shape's path, as `flat` draws it in a picture w by h points, set in by `in` (half its stroke): ThorVG's own
+// rectangle, circle, polygon, star, line or wave; its corners rounded (a share of its shorter side), its lines and curves
+// cut in pieces no longer than `fine` points (0: as they are), for what bends it as it is drawn. Kept as made in `d`.
+static void flat_path(Drawn* d, tvg::Shape* shape, const char* form, int w, int h, float in, int points, float inner, float round, float fine) {
+    const float cx = 0.5f * (float)w, cy = 0.5f * (float)h, rx = cx - in, ry = cy - in;
+    const float thick = in > 0.f ? 2.f * in : 0.08f * (float)h;   // (a wave's line: its stroke, or a share of its height)
+    if (!strcmp(form, "circle")) shape->appendCircle(cx, cy, rx, ry);
+    else if (!strcmp(form, "wave")) {   // (a line waving across it: so many times along (points), so far up and down (inner, a share of its half height))
+        const int cycles = std::clamp(points, 1, 100), n = 48 * cycles;
+        const float amp = (cy - thick) * std::clamp(inner, 0.f, 1.f);
+        for (int k = 0; k <= n; ++k) {
+            const float x = thick + ((float)w - 2.f * thick) * (float)k / (float)n, y = cy + amp * std::sin(TAU * (float)cycles * (float)k / (float)n);
+            k ? shape->lineTo(x, y) : shape->moveTo(x, y);
+        }
+    }
+    else if (!strcmp(form, "polygon") || !strcmp(form, "star")) {
+        const bool star = !strcmp(form, "star");
+        const int n = std::clamp(points, 3, 100) * (star ? 2 : 1);
+        for (int k = 0; k < n; ++k) {
+            const float a = -0.5f * TAU / 2.f + TAU * (float)k / (float)n, r = star && (k & 1) ? std::clamp(inner, 0.01f, 1.f) : 1.f;   // (the first point straight up)
+            k ? shape->lineTo(cx + rx * r * std::cos(a), cy + ry * r * std::sin(a)) : shape->moveTo(cx + rx * r * std::cos(a), cy + ry * r * std::sin(a));
+        }
+        shape->close();
+    } else {
+        const float side = std::min((float)w, (float)h) - 2.f * in, corner = !strcmp(form, "line") ? 0.5f * side : 0.f;   // (a rect's corners: round, bent as the others)
+        shape->appendRect(in, in, (float)w - 2.f * in, (float)h - 2.f * in, corner, corner);
+    }
+    const tvg::PathCommand* cmds; const tvg::Point* pts; uint32_t cmdsCnt = 0, ptsCnt = 0;
+    shape->path(&cmds, &cmdsCnt, &pts, &ptsCnt);
+    d->plain.assign(cmds, cmds + cmdsCnt), d->plainAt.assign(pts, pts + ptsCnt);
+    d->plainHigh = (float)h, d->plainSide = std::min((float)w, (float)h) - 2.f * in;
+    d->fine = fine;
+    if ((round > 0.f && strcmp(form, "line")) || d->fine > 0.f)
+        tvg_bend(shape, d->plain.data(), cmdsCnt, d->plainAt.data(), ptsCnt, strcmp(form, "line") ? std::clamp(round, 0.f, 0.5f) * d->plainSide : 0.f, 0.f, 0.f, 0, false, 0.f, d->fine), d->bent[0] = round;
+}
+
 // A flat shape in one colour, drawn by ThorVG's own Shape (a rectangle, a circle): `wide` times as wide as it is high.
 // edge: ThorVG's stroke round it, inside its frame (its colour; w: how wide, a share of its height; 0: none).
 // form: rect (round: its corners, a share of its shorter side), circle, polygon and star (points of it; a star's
@@ -439,38 +478,10 @@ static Drawn* flat(Stage& s, const char* form, float wide, const mat4f& place, f
         const float tall = std::min(0.5f * (float)std::max(s.w, s.h), 4096.f / std::max(wide, 1e-3f));   // (as fine as half the stage; a long thin bar less high, so that it is as long as it is said)
         *h = std::max(2, 2 * (int)std::ceil(0.5f * tall));
         *w = std::max(2, 2 * (int)std::ceil(0.5f * tall * wide));
-        tvg::Shape* shape = d->shape = tvg::Shape::gen();
         const float in = 0.5f * std::min(edge.w * (float)*h, 0.5f * (float)std::min(*w, *h));   // (half the stroke: the path is set in by that, so all of it is seen)
-        const float cx = 0.5f * (float)*w, cy = 0.5f * (float)*h, rx = cx - in, ry = cy - in;
         const float thick = in > 0.f ? 2.f * in : 0.08f * (float)*h;   // (a wave's line: its stroke, or a share of its height)
-        if (!strcmp(form, "circle")) shape->appendCircle(cx, cy, rx, ry);
-        else if (!strcmp(form, "wave")) {   // (a line waving across it: so many times along (points), so far up and down (inner, a share of its half height))
-            const int cycles = std::clamp(points, 1, 100), n = 48 * cycles;
-            const float amp = (cy - thick) * std::clamp(inner, 0.f, 1.f);
-            for (int k = 0; k <= n; ++k) {
-                const float x = thick + ((float)*w - 2.f * thick) * (float)k / (float)n, y = cy + amp * std::sin(TAU * (float)cycles * (float)k / (float)n);
-                k ? shape->lineTo(x, y) : shape->moveTo(x, y);
-            }
-        }
-        else if (!strcmp(form, "polygon") || !strcmp(form, "star")) {
-            const bool star = !strcmp(form, "star");
-            const int n = std::clamp(points, 3, 100) * (star ? 2 : 1);
-            for (int k = 0; k < n; ++k) {
-                const float a = -0.5f * TAU / 2.f + TAU * (float)k / (float)n, r = star && (k & 1) ? std::clamp(inner, 0.01f, 1.f) : 1.f;   // (the first point straight up)
-                k ? shape->lineTo(cx + rx * r * std::cos(a), cy + ry * r * std::sin(a)) : shape->moveTo(cx + rx * r * std::cos(a), cy + ry * r * std::sin(a));
-            }
-            shape->close();
-        } else {
-            const float side = std::min((float)*w, (float)*h) - 2.f * in, corner = !strcmp(form, "line") ? 0.5f * side : 0.f;   // (a rect's corners: round, bent as the others)
-            shape->appendRect(in, in, (float)*w - 2.f * in, (float)*h - 2.f * in, corner, corner);
-        }
-        const tvg::PathCommand* cmds; const tvg::Point* pts; uint32_t cmdsCnt = 0, ptsCnt = 0;
-        shape->path(&cmds, &cmdsCnt, &pts, &ptsCnt);
-        d->plain.assign(cmds, cmds + cmdsCnt), d->plainAt.assign(pts, pts + ptsCnt);
-        d->plainHigh = (float)*h, d->plainSide = std::min((float)*w, (float)*h) - 2.f * in;
-        d->fine = fx.warped ? (float)*h / 64.f : 0.f;
-        if ((round > 0.f && strcmp(form, "line")) || d->fine > 0.f)
-            tvg_bend(shape, d->plain.data(), cmdsCnt, d->plainAt.data(), ptsCnt, strcmp(form, "line") ? std::clamp(round, 0.f, 0.5f) * d->plainSide : 0.f, 0.f, 0.f, 0, false, 0.f, d->fine), d->bent[0] = round;
+        tvg::Shape* shape = d->shape = tvg::Shape::gen();
+        flat_path(d, shape, form, *w, *h, in, points, inner, round, fx.warped ? (float)*h / 64.f : 0.f);
         shape->fill((uint8_t)std::lround(255.f * colour.x), (uint8_t)std::lround(255.f * colour.y), (uint8_t)std::lround(255.f * colour.z), strcmp(form, "null") && !fx.hollow ? 255 : 0);
         if (fx.ramp.size() > 1 && strcmp(form, "null")) shape->fill(ramp_of(fx.ramp, (float)*w, (float)*h, fx.radial, fx.rampAngle, fx.rampScale, fx.spread));
         if (in > 0.f) shape->strokeWidth(2.f * in), shape->strokeFill((uint8_t)std::lround(255.f * edge.x), (uint8_t)std::lround(255.f * edge.y), (uint8_t)std::lround(255.f * edge.z));
@@ -487,13 +498,57 @@ static Drawn* flat(Stage& s, const char* form, float wide, const mat4f& place, f
     }, place, high, float3{-1.f}, true, lay, fx);
 }
 
+// A flat shape in one colour drawn by Filament itself, as the scene's other things are: its path made as `flat` makes
+// it (ThorVG's), cut into triangles once (libtess2, as Unity's vector shapes are), on a sheet of flat.mat that shows a
+// white point washed in its colour; antialiased by the view's MSAA, warped in its look's vertex stage (its `wave`, in
+// shares of its height). Nothing is drawn for it into a picture of its own: forty of them waving cost a quarter of the
+// time as ThorVG pictures do (check/shape_mesh.sh). Its outline only: no stroke, ramp, dash, trim or effects (those are `flat`'s).
+static Drawn* flat_mesh(Stage& s, const char* form, float wide, const mat4f& place, float high, float3 colour, const char* lay = nullptr, const DrawnFx& fx = {},
+                        int points = 6, float inner = 0.5f, float round = 0.f) {
+    const int h = 1024, w = std::max(2, (int)std::lround(1024.f * wide));   // (points to make its path in: its own, as fine as it is)
+    Drawn* d = new Drawn;
+    tvg::Shape* shape = tvg::Shape::gen();
+    flat_path(d, shape, form, w, h, 0.f, points, inner, round, (float)h / 64.f);
+    const tvg::PathCommand* cmds; const tvg::Point* pts; uint32_t cmdsCnt = 0, ptsCnt = 0;
+    shape->path(&cmds, &cmdsCnt, &pts, &ptsCnt);
+    TESStesselator* tess = tessNewTess(nullptr);
+    std::vector<float2> ring;
+    const auto end = [&] { if (ring.size() > 2) tessAddContour(tess, 2, ring.data(), sizeof(float2), (int)ring.size()); ring.clear(); };
+    const auto at = [&](const tvg::Point& p) { ring.push_back({(p.x - 0.5f * (float)w) / (float)h, (0.5f * (float)h - p.y) / (float)h}); };   // (in shares of its height, from its middle, up)
+    for (uint32_t c = 0, p = 0; c < cmdsCnt; ++c) switch (cmds[c]) {   // (its pieces are short: a curve is its end)
+        case tvg::PathCommand::MoveTo: end(); at(pts[p++]); break;
+        case tvg::PathCommand::LineTo: at(pts[p++]); break;
+        case tvg::PathCommand::CubicTo: at(pts[p + 2]); p += 3; break;
+        case tvg::PathCommand::Close: end(); break;
+    }
+    end();
+    tvg::Paint::rel(shape);
+    d->sheet = new Mesh;
+    if (tessTesselate(tess, TESS_WINDING_NONZERO, TESS_POLYGONS, 3, 2, nullptr)) {
+        const TESSreal* v = tessGetVertices(tess);
+        for (int i = 0; i < tessGetVertexCount(tess); ++i)
+            d->sheet->pos.push_back({high * v[2 * i], high * v[2 * i + 1], 0.f}), d->sheet->nrm.push_back({0, 0, 1}), d->sheet->uv.push_back({v[2 * i], v[2 * i + 1]});
+        const TESSindex* e = tessGetElements(tess);
+        for (int i = 0; i < 3 * tessGetElementCount(tess); ++i) d->sheet->idx.push_back((uint32_t)e[i]);
+    }
+    tessDeleteTess(tess);
+    if (d->sheet->idx.empty()) { delete d->sheet; delete d; return nullptr; }
+    d->cut = true;
+    d->wash = float4{Color::toLinear<ACCURATE>(sRGBColor{colour}), 1.f};
+    d->look = add(s, d->sheet, flat_laid(lay).c_str(), std::vector<mat4f>((size_t)std::max(1, fx.copies), place));
+    if (!d->look) return nullptr;
+    d->look->setParameter("picture", white_point(s), TextureSampler());
+    d->look->setParameter("wash", d->wash);
+    return d;
+}
+
 // A picture taken off the stage for good.
 static void picture_off(Stage& s, Drawn* d) {
     s.playing.erase(d);
     take_off(s, d->sheet);
     door::on_driver(s.engine, [d] { delete d->canvas; delete d->film; });
     s.engine->flushAndWait();
-    s.engine->destroy(d->texture);
+    if (d->texture) s.engine->destroy(d->texture);
     delete d;
 }
 

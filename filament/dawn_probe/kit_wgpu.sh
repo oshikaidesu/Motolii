@@ -29,9 +29,12 @@ done
 THOR=third_party/thorvg_src
 [ -f $THOR/build_dawn/src/libthorvg-1.a ] || ./dawn_probe/tvg_on_dawn.sh > /dev/null
 ninja -C $THOR/build_dawn > /dev/null
+# (bend.cpp: ThorVG's own path operators, built as ThorVG builds them; libtess2: a flat shape cut into triangles, flat_mesh)
+[ out/bend.o -nt bend.cpp ] || clang++ -c -std=c++17 -O2 -fno-rtti -fno-exceptions -DTVG_STATIC -I $THOR/build_dawn -I $THOR/inc -I $THOR/src/common -I $THOR/src/renderer -I $THOR/src/loaders/lottie bend.cpp -o out/bend.o
+./libtess2.sh
 (cd $SRC/out/wgpu && ninja motolii_door > /dev/null)
 clang++ -std=c++20 -fobjc-arc -O2 -I "$SDK/include" -I $THOR/inc -I $THOR/src/loaders/lottie -I $SRC/third_party/dawn/include -I $SRC/out/wgpu/third_party/dawn/gen/include ${KIT_SRC:-$n.mm} ${=KIT_EXTRA} \
-    $THOR/build_dawn/src/libthorvg-1.a $SRC/out/wgpu/filament/motolii_probe/libmotolii_door.a -L "$SDK/lib/arm64" \
+    $THOR/build_dawn/src/libthorvg-1.a out/bend.o -I third_party/libtess2/Include third_party/libtess2/build/libtess2.a $SRC/out/wgpu/filament/motolii_probe/libmotolii_door.a -L "$SDK/lib/arm64" \
     -lfilament -lbackend -lwebgpu_dawn -lbluegl -lbluevk -lfilabridge -lfilaflat \
     -lutils -lgeometry -lsmol-v -libl -lktxreader -lstb -luberzlib -lzstd \
     -lshaders -lperfetto -labseil -lmeshoptimizer -lcamutils -limage -lbasis_transcoder -luberarchive -lmatdbg -lfilamat -lcivetweb \

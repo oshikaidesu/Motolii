@@ -21,8 +21,19 @@ material {
         { type : float, name : filmed },       // 1: the picture is a film's as its decoder left it, light in `picture` and colour in `colours`
         { type : mat4, name : filmRule },      // from a film's own three numbers (and a one) to red, green, blue: the rule the file names (video.h)
         { type : sampler2d, name : colours },
-        { type : sampler2d, name : picture }
+        { type : sampler2d, name : picture },
+        { type : float4, name : wave }   // a flat shape in triangles warped (drawn.h flat_mesh): how high, how long a wave, how far along in waves, which way (radians); 0: not
     ]
+}
+
+vertex {
+    void materialVertex(inout MaterialVertexInputs material) {
+        vec4 w = materialParams.wave;
+        if (w.x == 0.0) return;
+        vec2 dir = vec2(cos(w.w), sin(w.w));   // (uv0 is where its point is, in shares of its height from its middle: flat_mesh)
+        vec2 off = vec2(-dir.y, dir.x) * w.x * sin(6.2831853 * (dot(material.uv0, dir) / max(w.y, 1e-4) + w.z));
+        material.worldPosition.xyz += mulMat3x3Float3(getWorldFromModelMatrix(), vec3(off, 0.0));
+    }
 }
 
 fragment {

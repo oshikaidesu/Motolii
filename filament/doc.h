@@ -1199,6 +1199,9 @@ static void doc_moment(Doc& d, double now) {
             if (doc_fx(d, thing, now, false, t.units, fx, why)) fx_at(s, t.drawn, fx);
         }
         if (t.drawn && t.drawn->shape) trim_at(s, t.drawn, (float)doc_number(d, thing, "trim", now, 0), (float)doc_number(d, thing, "trim_begin", now, 0), (float)doc_number(d, thing, "trim_offset", now, 0));
+        if (t.drawn && t.drawn->cut)   // (a shape in triangles: warped in its look, nothing drawn again)
+            t.drawn->look->setParameter("wave", float4{(float)doc_number(d, thing, "warp", now, 0), (float)doc_number(d, thing, "warp_width", now, 0.5),
+                                                       (float)(doc_number(d, thing, "warp_speed", now, 1) * lies[i].since), (float)(doc_number(d, thing, "warp_angle", now, 0) * TAU / 360.0)});
         if (t.drawn && t.drawn->shape)
             warp_at(s, t.drawn, (float)doc_number(d, thing, "warp", now, 0), (float)doc_number(d, thing, "warp_width", now, 0.5), (float)doc_number(d, thing, "warp_angle", now, 0),
                     (float)(doc_number(d, thing, "warp_speed", now, 1) * lies[i].since));
@@ -1257,7 +1260,7 @@ static void doc_moment(Doc& d, double now) {
                         const float along = n > 1 ? (float)made.nth / (float)(n - 1) * (float)(ramp.size() - 1) : 0.f;
                         const size_t i = std::min((size_t)along, ramp.size() - 2);
                         own->setParameter("wash", float4{mix(ramp[i], ramp[i + 1], along - (float)i), 1.f});
-                    } else own->setParameter("wash", float4{0.f});
+                    } else own->setParameter("wash", t.drawn ? t.drawn->wash : float4{0.f});   // (its own: a shape cut in triangles is filled by it)
                     if ((size_t)made.nth < letters.size()) own->setParameter("window", float4{letters[(size_t)made.nth].x, letters[(size_t)made.nth].y, 1.f, 0.f});   // (its own letter)
                     const double clear = scripted != d.scripted.end() && (size_t)made.nth < scripted->second.copies.size() ? scripted->second.copies[(size_t)made.nth].opacity : 1.0;
                     own->setParameter("opacity", (float)(doc_number(d, thing, "opacity", now, 1) * std::clamp(clear, 0.0, 1.0)));
@@ -1323,7 +1326,7 @@ static void doc_moment(Doc& d, double now) {
                 Scene* sc = s.mattes[(size_t)cut.matte].scene;
                 doc_unshape(s, [sc](const Stage::Made& made) { return sc->hasEntity(made.thing); });
             }
-            cut.matte = matte(s, a->drawn->sheet, {mat4f(doc_place(d, before, now))}, a->drawn->texture, doc_word(d, thing, "clip_matte") == "luma", 1.f, cut.matte);
+            cut.matte = matte(s, a->drawn->sheet, {mat4f(doc_place(d, before, now))}, a->drawn->texture ? a->drawn->texture : white_point(s), doc_word(d, thing, "clip_matte") == "luma", 1.f, cut.matte);
             cut.from = before, cut.by = a->drawn, cut.look = nullptr, cut.how = how;
         }
         if (shaped && cut.look != own && own && cut.matte >= 0) matted(s, own, cut.matte, doc_number(d, thing, "clip_invert", 0, 0) < 0.5, (float)doc_number(d, thing, "clip_feather", 0, 0)), cut.look = own;   // (its look, or its look made again, is cut by it)
@@ -1350,7 +1353,7 @@ static void doc_moment(Doc& d, double now) {
 static bool doc_match(Doc& d) {
     Stage& s = *d.stage;
     std::map<int, std::string> told;   // every thing of the document, and all that its making goes by
-    doc_rows(d, sqlite3_mprintf("select thing, group_concat(name || '=' || value, ' ') from (select * from fact where thing > 0 and name in ('kind','file','shape','blend','keyed','space','begin','duration','speed','text','fill','wide','points','inner','bloat','zigzag','offset','warp','clip','stroke','stroke_width','align','blur','shadow','shadow_distance','shadow_angle','shadow_blur','shadow_opacity','glow','glow_blur','glow_opacity','copies','tint','tint_black','tint_white','tritone','tritone_shadow','tritone_midtone','tritone_highlight','letter_spacing','line_spacing','italic','cap','join','dash','dash_offset','metallic','roughness','reflectance','clear_coat','clear_coat_roughness','falloff','shadows','shadow_softness','contact_shadows','sheen','anisotropy','shading','thickness','light_group','script','gradient','gradient_angle','gradient_scale','gradient_spread','wrap','wrap_at','split','ior','dispersion','swim','dark','vivid','marker') order by thing, name) group by thing"),
+    doc_rows(d, sqlite3_mprintf("select thing, group_concat(name || '=' || value, ' ') from (select * from fact where thing > 0 and name in ('kind','file','shape','blend','keyed','space','begin','duration','speed','text','fill','wide','points','inner','round','bloat','zigzag','offset','warp','clip','stroke','stroke_width','align','blur','shadow','shadow_distance','shadow_angle','shadow_blur','shadow_opacity','glow','glow_blur','glow_opacity','copies','tint','tint_black','tint_white','tritone','tritone_shadow','tritone_midtone','tritone_highlight','letter_spacing','line_spacing','italic','cap','join','dash','dash_offset','metallic','roughness','reflectance','clear_coat','clear_coat_roughness','falloff','shadows','shadow_softness','contact_shadows','sheen','anisotropy','shading','thickness','light_group','script','gradient','gradient_angle','gradient_scale','gradient_spread','wrap','wrap_at','split','ior','dispersion','swim','dark','vivid','marker') order by thing, name) group by thing"),
              [&](sqlite3_stmt* row) { told[sqlite3_column_int(row, 0)] = (const char*)sqlite3_column_text(row, 1); });
     for (auto it = d.shown.begin(); it != d.shown.end();) {
         const auto still = told.find(it->first);
@@ -1464,7 +1467,16 @@ static bool doc_match(Doc& d) {
                 const bool line = shape == "line", wave = shape == "wave";   // (a wave: a line waving, ten times as long as it is high)
                 fx.hollow = fill == "none";   // (filled with nothing: its edge alone, a frame)
                 const float high = line ? 0.04f : wave ? 0.3f : 1.f;
-                made.drawn = flat(s, shape.c_str(), (float)doc_number(d, thing, "wide", 0, line ? 25 : wave ? 10 : 1), mat4f{}, high, fill.empty() ? float3{0xd9, 0xd2, 0xc3} / 255.f : colour, lay,
+                // (its outline alone, in one colour: cut into triangles and drawn by Filament as the scene's other things
+                //  are, flat_mesh; with an edge, a ramp, a dash, effects, a trim or a bend made on the CPU: ThorVG's picture)
+                const auto ever = [&](const char* name) { return doc_most(d, thing, name, 0) != 0.0 || doc_number(d, thing, name, 0, 0) != 0.0; };
+                const bool plain = !wave && shape != "null" && !fx.hollow && edge.w <= 0.f && fx.ramp.size() < 2 && fx.dash <= 0.f && fx.blur <= 0.f && fx.shadow.w <= 0.f
+                                   && fx.glow.w <= 0.f && fx.tint <= 0.f && fx.tritone <= 0.f && !ever("trim") && !ever("trim_begin") && !ever("bloat") && !ever("zigzag") && !ever("offset")
+                                   && !doc_keys(d, thing, "round", -1.0);
+                if (plain)
+                    made.drawn = flat_mesh(s, shape.c_str(), (float)doc_number(d, thing, "wide", 0, line ? 25 : 1), mat4f{}, high, fill.empty() ? float3{0xd9, 0xd2, 0xc3} / 255.f : colour, lay,
+                                           fx.over(high), (int)doc_number(d, thing, "points", 0, shape == "star" ? 5 : 6), (float)doc_number(d, thing, "inner", 0, 0.5), (float)doc_number(d, thing, "round", 0, 0));
+                else made.drawn = flat(s, shape.c_str(), (float)doc_number(d, thing, "wide", 0, line ? 25 : wave ? 10 : 1), mat4f{}, high, fill.empty() ? float3{0xd9, 0xd2, 0xc3} / 255.f : colour, lay,
                                   float4{edge.xyz, edge.w / high}, fx.over(high),
                                   (int)doc_number(d, thing, "points", 0, shape == "star" ? 5 : wave ? 4 : 6), (float)doc_number(d, thing, "inner", 0, 0.5), (float)doc_number(d, thing, "round", 0, 0));
             }
