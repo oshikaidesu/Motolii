@@ -20,6 +20,7 @@
 
 #include <cstdlib>
 #include <cstring>
+#include <vector>
 
 namespace door {
 using namespace filament;
@@ -39,7 +40,7 @@ struct Out { @builtin(position) position: vec4f, @location(0) uv: vec2f };
 struct Screen {
     ProgramHandle program;
     DescriptorSetLayoutHandle layout;
-    DescriptorSetHandle set;
+    std::vector<std::pair<TextureHandle, DescriptorSetHandle>> sets;   // one for each picture it has read: a set once used is not told otherwise (Filament's WebGPU keeps what it made of it)
     BufferObjectHandle knobs;
     uint32_t knobBytes = 0;
 };
@@ -103,11 +104,7 @@ Screen* screen(Engine* engine, const char* name, const char* fragment, uint32_t 
     p.descriptorBindings(0, std::move(bindings));
     s->program = d.createProgram(std::move(p), utils::ImmutableCString{name});
     s->layout = d.createDescriptorSetLayout(std::move(layout), utils::ImmutableCString{name});
-    s->set = d.createDescriptorSet(s->layout, utils::ImmutableCString{name});
-    if (s->knobBytes) {
-        s->knobs = d.createBufferObject(s->knobBytes, BufferObjectBinding::UNIFORM, BufferUsage::DYNAMIC, utils::ImmutableCString{name});
-        d.updateDescriptorSetBuffer(s->set, descriptor_binding_t(1), s->knobs, 0, s->knobBytes);
-    }
+    if (s->knobBytes) s->knobs = d.createBufferObject(s->knobBytes, BufferObjectBinding::UNIFORM, BufferUsage::DYNAMIC, utils::ImmutableCString{name});
     return s;
 }
 
@@ -121,10 +118,18 @@ void knobs(Engine* engine, Screen* s, const void* data, uint32_t bytes) {
 
 void draw(Engine* engine, Screen* s, Texture* from, RenderTarget* to, uint32_t w, uint32_t h) {
     DriverApi& d = driver(engine);
-    SamplerParams linear{};
-    linear.filterMag = SamplerMagFilter::LINEAR, linear.filterMin = SamplerMinFilter::LINEAR;
-    linear.wrapS = SamplerWrapMode::CLAMP_TO_EDGE, linear.wrapT = SamplerWrapMode::CLAMP_TO_EDGE;
-    d.updateDescriptorSetTexture(s->set, descriptor_binding_t(0), downcast(from)->getHwHandle(), linear);
+    const TextureHandle picture = downcast(from)->getHwHandle();
+    DescriptorSetHandle set;
+    for (const auto& [read, made] : s->sets) if (read == picture) set = made;
+    if (!set) {   // (a picture not read before: a set of its own, made once)
+        SamplerParams linear{};
+        linear.filterMag = SamplerMagFilter::LINEAR, linear.filterMin = SamplerMinFilter::LINEAR;
+        linear.wrapS = SamplerWrapMode::CLAMP_TO_EDGE, linear.wrapT = SamplerWrapMode::CLAMP_TO_EDGE;
+        set = d.createDescriptorSet(s->layout, utils::ImmutableCString{"screen"});
+        d.updateDescriptorSetTexture(set, descriptor_binding_t(0), picture, linear);
+        if (s->knobBytes) d.updateDescriptorSetBuffer(set, descriptor_binding_t(1), s->knobs, 0, s->knobBytes);
+        s->sets.push_back({picture, set});
+    }
     RenderPassParams params{};
     params.viewport = {0, 0, w, h};
     params.flags.discardStart = TargetBufferFlags::ALL;
@@ -135,7 +140,7 @@ void draw(Engine* engine, Screen* s, Texture* from, RenderTarget* to, uint32_t w
     pipeline.rasterState.depthWrite = false;
     pipeline.rasterState.depthFunc = RasterState::DepthFunc::A;
     pipeline.rasterState.colorWrite = true;
-    d.bindDescriptorSet(s->set, 0, {});
+    d.bindDescriptorSet(set, 0, {});
     d.beginRenderPass(to ? downcast(to)->getHwHandle() : downcast(engine)->getDefaultRenderTarget(), params);   // (none: the screen, as the frame's swap chain is)
     d.draw(pipeline, downcast(engine)->getFullScreenRenderPrimitive(), 0, 3, 1);
     d.endRenderPass();
@@ -145,7 +150,7 @@ void draw(Engine* engine, Screen* s, Texture* from, RenderTarget* to, uint32_t w
 void drop(Engine* engine, Screen* s) {
     DriverApi& d = driver(engine);
     if (s->knobBytes) d.destroyBufferObject(s->knobs);
-    d.destroyDescriptorSet(s->set);
+    for (const auto& [read, made] : s->sets) d.destroyDescriptorSet(made);
     d.destroyDescriptorSetLayout(s->layout);
     d.destroyProgram(s->program);
     delete s;
