@@ -1,0 +1,22 @@
+material {
+    name : solid_cloth,
+    shadingModel : cloth,   // (Filament's cloth: no sharp highlight, a soft sheen at the rim, light passing through the weave)
+    parameters : [
+        { type : float4, name : color },
+        { type : float, name : roughness },
+        { type : float, name : glowing },
+        { type : float, name : sheen },
+        { type : float, name : thickness }
+    ]
+}
+
+fragment {
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        material.baseColor = materialParams.color;
+        material.roughness = materialParams.roughness;
+        if (materialParams.sheen > 0.0) material.sheenColor = materialParams.color.rgb * materialParams.sheen;   // (not said: Filament's own, the colour's square root)
+        material.subsurfaceColor = materialParams.color.rgb * (1.0 - materialParams.thickness);   // (thin: the light through it in its own colour)
+        material.emissive = vec4(materialParams.color.rgb * materialParams.glowing, 0.0);
+    }
+}

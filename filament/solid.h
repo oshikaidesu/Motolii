@@ -136,20 +136,25 @@ static Mesh* solid_mesh(const char* file) {
 // A plain look in one colour (floor_lit.mat: lit by the stage's room); and every face of a file's shape given it, the
 // looks the file names set aside. Its surface, Filament's own: how metal, how rough, how much it reflects, a clear coat
 // over it (how much, how rough), and how much it lights itself (on the picture: 1 its own colour, more brighter).
-struct Surface { float metallic = 0.08f, roughness = 0.6f, reflectance = 0.5f, coat = 0.f, coatRoughness = 0.f, glow = 0.f, sheen = 0.f, anisotropy = 0.f; };
+// Filament's shading model of it: lit (floor_lit.mat), cloth (solid_cloth.mat) or subsurface (solid_subsurface.mat), each
+// told only what it has.
+struct Surface { float metallic = 0.08f, roughness = 0.6f, reflectance = 0.5f, coat = 0.f, coatRoughness = 0.f, glow = 0.f, sheen = 0.f, anisotropy = 0.f, thickness = 0.5f; };
+static const char* surface_model(const std::string& shading) { return shading == "cloth" ? "solid_cloth.filamat" : shading == "subsurface" ? "solid_subsurface.filamat" : "floor_lit.filamat"; }
 static void plain(MaterialInstance* look, float3 colour, const Surface& is = {}) {
+    const auto put = [&](const char* name, float v) { if (look->getMaterial()->hasParameter(name)) look->setParameter(name, v); };
     look->setParameter("color", float4{Color::toLinear<ACCURATE>(sRGBColor{colour}), 1.f});
-    look->setParameter("roughness", is.roughness);
-    look->setParameter("metalOff", is.metallic - 0.08f);
-    look->setParameter("reflectanceOff", is.reflectance - 0.5f);
-    look->setParameter("clearCoat", is.coat);
-    look->setParameter("clearCoatRoughness", is.coatRoughness);
-    look->setParameter("glowing", is.glow);
-    look->setParameter("sheen", is.sheen);
-    look->setParameter("anisotropy", is.anisotropy);
+    put("roughness", is.roughness);
+    put("metalOff", is.metallic - 0.08f);
+    put("reflectanceOff", is.reflectance - 0.5f);
+    put("clearCoat", is.coat);
+    put("clearCoatRoughness", is.coatRoughness);
+    put("glowing", is.glow);
+    put("sheen", is.sheen);
+    put("anisotropy", is.anisotropy);
+    put("thickness", is.thickness);
 }
-static void solid_fill(Stage& s, Solid* d, float3 colour, const Surface& is = {}) {
-    Material* lit = material(s, "floor_lit.filamat");
+static void solid_fill(Stage& s, Solid* d, float3 colour, const Surface& is = {}, const char* model = "floor_lit.filamat") {
+    Material* lit = material(s, model);
     if (!lit) return;
     MaterialInstance* look = lit->createInstance();
     plain(look, colour, is);

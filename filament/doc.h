@@ -226,6 +226,9 @@ static const DocValue doc_values[] = {
     {"clear_coat", "solid", 0, 1, false, nullptr}, {"clear_coat_roughness", "solid", 0, 1, false, nullptr}, {"emissive", "film picture text shape solid", 0, 20, true, nullptr},
     // (Filament's velvet sheen at its rim, in its own colour; its highlights drawn out as on brushed metal, -1 to 1 the other way)
     {"sheen", "solid", 0, 1, false, nullptr},
+    // (Filament's shading model: lit, cloth (soft, no sharp highlight) or subsurface (light goes in, as in skin or wax); how thick it is to the light going through)
+    {"shading", "solid", 0, 0, false, "lit cloth subsurface"},
+    {"thickness", "solid", 0, 1, false, nullptr},
     {"anisotropy", "solid", -1, 1, false, nullptr},
     // (the stage's, thing 0: the whole picture, Filament's own. Its grade, on every picture laid: a tone mapper, an
     //  exposure in stops, contrast, saturation, vibrance, how warm; its glow round bright parts and its lens flare, a
@@ -241,7 +244,11 @@ static const DocValue doc_values[] = {
     // (Filament's screen effects on solid things: shade where they meet and in their folds (SSAO), and what is near mirrored in them (SSR))
     {"ambient_occlusion", "stage", 0, 1, false, nullptr},
     {"reflections", "stage", 0, 1, false, nullptr},
-    {"anti_aliasing", "stage", 0, 0, false, "fxaa taa none"},   // (how its edges are smoothed: Filament's FXAA as it came, its temporal one (steadier on fine edges in motion), or not)
+    {"slope", "stage", 0, 4, false, nullptr},
+    {"offset", "stage", -1, 1, false, nullptr},
+    {"power", "stage", 0.1, 4, false, nullptr},
+    // (Filament's ASC CDL grade, the same on red, green and blue: each colour times slope, plus offset, to the power)
+    {"anti_aliasing", "stage", 0, 0, false, "fxaa taa msaa none"},   // (how its edges are smoothed: Filament's FXAA as it came, its temporal one (steadier on fine edges in motion), or not)
     {"room", "stage", 0, 0, false, "small_studio studio_small_02_2k lightroom venetian_crossroads_2k graffiti_shelter_2k parking_garage_2k pillars_2k"},   // (which room lights it: the rooms made ready in out/)
     {"environment", "stage", 0, 10, false, nullptr}, {"environment_rotate", "stage", -1e6, 1e6, false, nullptr}, {"background", "stage", 0, 0, false, ""},
     {"behind", "stage", 0, 0, false, "colour room"}};   // (what is behind everything: the background's colour, or the room itself)
@@ -328,6 +335,8 @@ static const DocShown doc_shown[] = {
     {"clear_coat", "share", "%", "Varnish", 0, 1, nullptr},
     {"clear_coat_roughness", "share", "%", "Haze", 0, 1, nullptr},
     {"sheen", "share", "%", "Sheen", 0, 1, nullptr},
+    {"shading", "", "", "Model", 0, 0, nullptr},
+    {"thickness", "share", "%", "Thick", 0, 1, nullptr},
     {"anisotropy", "", "", "Brushed", -1, 1, nullptr},
     {"ior", "", "", "Bend", 1, 3, nullptr},
     {"dispersion", "share", "%", "Rainbow", 0, 0.5, nullptr},
@@ -362,6 +371,9 @@ static const DocShown doc_shown[] = {
     {"fog_color", "colour", "", "Fog", 0, 0, "Tints"},
     {"lens_flare", "share", "%", "Flare", 0, 1, nullptr},
     {"anti_aliasing", "", "", "Smooth", 0, 0, nullptr},
+    {"slope", "", "", "Slope", 0, 4, nullptr},
+    {"offset", "", "", "Offset", -1, 1, nullptr},
+    {"power", "", "", "Power", 0.1, 4, nullptr},
     {"room", "", "", "Room", 0, 0, nullptr},
     {"environment", "", "×", "Bright", 0, 10, nullptr},
     {"environment_rotate", "angle", "°", "Turn", -180, 180, nullptr},
@@ -435,11 +447,11 @@ static const DocCard doc_cards[] = {
     {"Matte", "clip_matte clip_invert clip_feather", "clip", "1"},
     {"Connect", "connect connect_to connect_reach"},
     {"Line", "cap join dash dash_offset"},
-    {"Surface", "metallic roughness reflectance clear_coat clear_coat_roughness sheen anisotropy emissive", "fill", "!glass"},
+    {"Surface", "shading metallic roughness reflectance clear_coat clear_coat_roughness sheen anisotropy thickness emissive", "fill", "!glass"},
     {"Glass", "ior dispersion swim dark vivid", "fill", "glass"},
     {"Light", "intensity falloff cone shadows shadow_softness contact_shadows"},
     {"Projection", "projection shift_x shift_y"},
-    {"Grade", "tone_mapper exposure contrast saturation vibrance temperature"},
+    {"Grade", "tone_mapper exposure contrast saturation vibrance temperature slope offset power"},
     {"Lens", "bloom ambient_occlusion reflections lens_flare vignette vignette_color fog fog_color anti_aliasing"},
     {"Room", "room environment environment_rotate behind background"},
     {"Physics", "physics bounce friction gravity"},
@@ -861,13 +873,15 @@ static void doc_look(Doc& d) {
     const auto hex = [&](const char* name, float3 otherwise) { const std::string w = doc_word(d, 0, name); return w.size() == 6 ? float3{(float)((std::strtol(w.c_str(), nullptr, 16) >> 16) & 255), (float)((std::strtol(w.c_str(), nullptr, 16) >> 8) & 255), (float)(std::strtol(w.c_str(), nullptr, 16) & 255)} / 255.f : otherwise; };
     const std::string mapper = doc_word(d, 0, "tone_mapper");
     char grade[200];
-    std::snprintf(grade, sizeof grade, "%s %g %g %g %g %g", mapper.c_str(), doc_number(d, 0, "exposure", 0, 0), doc_number(d, 0, "contrast", 0, 1), doc_number(d, 0, "saturation", 0, 1), doc_number(d, 0, "vibrance", 0, 1), doc_number(d, 0, "temperature", 0, 0));
+    const float slope = (float)doc_number(d, 0, "slope", 0, 1), offset = (float)doc_number(d, 0, "offset", 0, 0), power = (float)doc_number(d, 0, "power", 0, 1);
+    std::snprintf(grade, sizeof grade, "%s %g %g %g %g %g %g %g %g", mapper.c_str(), doc_number(d, 0, "exposure", 0, 0), doc_number(d, 0, "contrast", 0, 1), doc_number(d, 0, "saturation", 0, 1), doc_number(d, 0, "vibrance", 0, 1), doc_number(d, 0, "temperature", 0, 0), slope, offset, power);
     if (d.graded != grade) {
         static LinearToneMapper linear; static ACESToneMapper aces; static FilmicToneMapper filmic; static AgxToneMapper agx; static PBRNeutralToneMapper neutral;
         const ToneMapper* tm = mapper == "aces" ? (const ToneMapper*)&aces : mapper == "filmic" ? (const ToneMapper*)&filmic : mapper == "agx" ? (const ToneMapper*)&agx : mapper == "pbr_neutral" ? (const ToneMapper*)&neutral : (const ToneMapper*)&linear;
         ColorGrading* was = const_cast<ColorGrading*>(s.view->getColorGrading());
         ColorGrading* now = ColorGrading::Builder().toneMapper(tm).exposure((float)doc_number(d, 0, "exposure", 0, 0)).contrast((float)doc_number(d, 0, "contrast", 0, 1))
-                                .saturation((float)doc_number(d, 0, "saturation", 0, 1)).vibrance((float)doc_number(d, 0, "vibrance", 0, 1)).whiteBalance((float)doc_number(d, 0, "temperature", 0, 0), 0.f).build(*s.engine);
+                                .saturation((float)doc_number(d, 0, "saturation", 0, 1)).vibrance((float)doc_number(d, 0, "vibrance", 0, 1)).whiteBalance((float)doc_number(d, 0, "temperature", 0, 0), 0.f)
+                                .slopeOffsetPower(float3{slope}, float3{offset}, float3{power}).build(*s.engine);
         s.view->setColorGrading(now);
         for (View* v : s.layers) v->setColorGrading(now);   // (the same grade on every picture laid over the stage's own)
         if (was) s.engine->destroy(was);
@@ -886,7 +900,10 @@ static void doc_look(Doc& d) {
         taa.enabled = smooth == "taa";
         v->setTemporalAntiAliasingOptions(taa);
     }
-    for (View* v : s.layers) v->setAntiAliasing(s.view->getAntiAliasing()), v->setTemporalAntiAliasingOptions(s.view->getTemporalAntiAliasingOptions());
+    View::MultiSampleAntiAliasingOptions many = s.view->getMultiSampleAntiAliasingOptions();
+    many.enabled = smooth == "msaa", many.sampleCount = 4;
+    s.view->setMultiSampleAntiAliasingOptions(many);
+    for (View* v : s.layers) v->setAntiAliasing(s.view->getAntiAliasing()), v->setTemporalAntiAliasingOptions(s.view->getTemporalAntiAliasingOptions()), v->setMultiSampleAntiAliasingOptions(many);
     View::VignetteOptions corners = s.view->getVignetteOptions();
     corners.enabled = doc_number(d, 0, "vignette", 0, 0) > 0.0, corners.midPoint = 1.f - 0.9f * (float)doc_number(d, 0, "vignette", 0, 0), corners.color = LinearColorA{hex("vignette_color", float3{0.f}), 1.f};
     s.view->setVignetteOptions(corners);
@@ -1256,7 +1273,7 @@ static void doc_moment(Doc& d, double now) {
 static bool doc_match(Doc& d) {
     Stage& s = *d.stage;
     std::map<int, std::string> told;   // every thing of the document, and all that its making goes by
-    doc_rows(d, sqlite3_mprintf("select thing, group_concat(name || '=' || value, ' ') from (select * from fact where thing > 0 and name in ('kind','file','shape','blend','keyed','space','begin','duration','speed','text','fill','wide','points','inner','round','stroke','stroke_width','align','blur','shadow','shadow_distance','shadow_angle','shadow_blur','shadow_opacity','glow','glow_blur','glow_opacity','copies','tint','tint_black','tint_white','tritone','tritone_shadow','tritone_midtone','tritone_highlight','letter_spacing','line_spacing','italic','cap','join','dash','dash_offset','metallic','roughness','reflectance','clear_coat','clear_coat_roughness','falloff','shadows','shadow_softness','contact_shadows','sheen','anisotropy','gradient','gradient_angle','gradient_scale','gradient_spread','wrap','wrap_at','split','ior','dispersion','swim','dark','vivid','marker') order by thing, name) group by thing"),
+    doc_rows(d, sqlite3_mprintf("select thing, group_concat(name || '=' || value, ' ') from (select * from fact where thing > 0 and name in ('kind','file','shape','blend','keyed','space','begin','duration','speed','text','fill','wide','points','inner','round','stroke','stroke_width','align','blur','shadow','shadow_distance','shadow_angle','shadow_blur','shadow_opacity','glow','glow_blur','glow_opacity','copies','tint','tint_black','tint_white','tritone','tritone_shadow','tritone_midtone','tritone_highlight','letter_spacing','line_spacing','italic','cap','join','dash','dash_offset','metallic','roughness','reflectance','clear_coat','clear_coat_roughness','falloff','shadows','shadow_softness','contact_shadows','sheen','anisotropy','shading','thickness','gradient','gradient_angle','gradient_scale','gradient_spread','wrap','wrap_at','split','ior','dispersion','swim','dark','vivid','marker') order by thing, name) group by thing"),
              [&](sqlite3_stmt* row) { told[sqlite3_column_int(row, 0)] = (const char*)sqlite3_column_text(row, 1); });
     for (auto it = d.shown.begin(); it != d.shown.end();) {
         const auto still = told.find(it->first);
@@ -1378,11 +1395,12 @@ static bool doc_match(Doc& d) {
             };
             const Surface surface{(float)doc_number(d, thing, "metallic", 0, 0.08), (float)doc_number(d, thing, "roughness", 0, 0.6), (float)doc_number(d, thing, "reflectance", 0, 0.5),
                                   (float)doc_number(d, thing, "clear_coat", 0, 0), (float)doc_number(d, thing, "clear_coat_roughness", 0, 0), (float)doc_number(d, thing, "emissive", 0, 0),
-                                  (float)doc_number(d, thing, "sheen", 0, 0), (float)doc_number(d, thing, "anisotropy", 0, 0)};
+                                  (float)doc_number(d, thing, "sheen", 0, 0), (float)doc_number(d, thing, "anisotropy", 0, 0), (float)doc_number(d, thing, "thickness", 0, 0.5)};
+            const char* model = surface_model(doc_word(d, thing, "shading"));
             if (!fill.empty() && !glass && (rgb < 0 || ramp.size() > 1)) why = "a solid's fill is six digits, as ff3366, or glass";
             else if (!shape.empty()) {
                 made.shape = shape == "gem" ? gem(0.5f) : shape == "cube" ? cube(0.1f) : shape == "ball" ? sphere(0.5f) : torus(0.37f, 0.13f);
-                MaterialInstance* look = glass ? thick_glass(s, made.shape, {mat4f{}}) : add(s, made.shape, "floor_lit.filamat");
+                MaterialInstance* look = glass ? thick_glass(s, made.shape, {mat4f{}}) : add(s, made.shape, model);
                 if (look && glass) glassy(look);
                 if (!look) made.shape = nullptr;
                 else if (!glass) plain(look, fill.empty() ? float3{0xd9, 0xd2, 0xc3} / 255.f : colour, surface);
@@ -1390,7 +1408,7 @@ static bool doc_match(Doc& d) {
                 MaterialInstance* look = (made.shape = solid_mesh(file.c_str())) ? thick_glass(s, made.shape, {mat4f{}}) : nullptr;
                 if (!look) made.shape = nullptr; else glassy(look);
             }
-            else if ((made.solid = solid(s, file.c_str(), mat4f{}, 1.f)) && rgb >= 0) solid_fill(s, made.solid, colour, surface);
+            else if ((made.solid = solid(s, file.c_str(), mat4f{}, 1.f)) && rgb >= 0) solid_fill(s, made.solid, colour, surface, model);
             if (made.solid) s.playing.erase(made.solid);   // (the document tells it its moment)
         } else why = std::string("its kind is one of: ") + doc_kinds;
         if (!made.film && !made.drawn && !made.solid && !made.shape && !made.camera && made.light.isNull()) { d.trouble = why + ": the " + kind + " " + std::filesystem::path(file + shape).filename().string() + " could not be made"; all = false; continue; }
@@ -2133,8 +2151,8 @@ static double doc_usual(const char* name) {
         for (const auto& [file, sc] : doc_scripts())
             for (size_t i = 0; i < sc.names.size(); ++i)
                 if (sc.names[i] == name) return sc.knobs[i].usual;
-    return doc_among("scale_x scale_y scale_z size speed opacity wide tall visible distance zoom copies copy_size copy_wide blur_level letter_spacing line_spacing contrast saturation vibrance environment gradient_scale wave_speed", name) ? 1.0 : !strcmp(name, "duration") ? -1.0
-         : !strcmp(name, "metallic") ? 0.08 : !strcmp(name, "roughness") ? 0.6 : !strcmp(name, "reflectance") ? 0.5   // (a solid's surface as it comes)
+    return doc_among("scale_x scale_y scale_z size speed opacity wide tall visible distance zoom copies copy_size copy_wide blur_level letter_spacing line_spacing contrast saturation vibrance environment gradient_scale wave_speed slope power", name) ? 1.0 : !strcmp(name, "duration") ? -1.0
+         : !strcmp(name, "metallic") ? 0.08 : !strcmp(name, "roughness") ? 0.6 : !strcmp(name, "reflectance") ? 0.5 : !strcmp(name, "thickness") ? 0.5   // (a solid's surface as it comes)
          : !strcmp(name, "intensity") ? 1.0 : !strcmp(name, "falloff") ? 10.0 : !strcmp(name, "cone") ? 30.0   // (a light as it comes)
          : !strcmp(name, "bounce") ? 0.3 : !strcmp(name, "friction") ? 0.5 : !strcmp(name, "gravity") ? 9.81   // (what falls and strikes, as it comes)
          : !strcmp(name, "ior") ? 1.5 : !strcmp(name, "dispersion") ? 0.1 : !strcmp(name, "swim") ? 0.5 : !strcmp(name, "dark") ? 4.0 : !strcmp(name, "vivid") ? 1.3 : 0.0;   // (the kit's glass as it comes)

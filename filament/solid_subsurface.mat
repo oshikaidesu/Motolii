@@ -1,0 +1,25 @@
+material {
+    name : solid_subsurface,
+    shadingModel : subsurface,   // (Filament's subsurface: light goes in and comes out softened and in the colour, as in skin, wax or jade)
+    parameters : [
+        { type : float4, name : color },
+        { type : float, name : roughness },
+        { type : float, name : metalOff },
+        { type : float, name : reflectanceOff },
+        { type : float, name : glowing },
+        { type : float, name : thickness }
+    ]
+}
+
+fragment {
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        material.baseColor = materialParams.color;
+        material.roughness = materialParams.roughness;
+        material.metallic = 0.08 + materialParams.metalOff;
+        material.reflectance = 0.5 + materialParams.reflectanceOff;
+        material.thickness = materialParams.thickness;
+        material.subsurfaceColor = materialParams.color.rgb;
+        material.emissive = vec4(materialParams.color.rgb * materialParams.glowing, 0.0);
+    }
+}
