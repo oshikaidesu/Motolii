@@ -27,6 +27,7 @@
 | Flutter 側：その置き場をテクスチャとして登録して貼る（`GlassTexture`、`FlutterTexture`、`copyPixelBuffer`、`textureFrameAvailable`、チャンネルの名前は motolii/glass） | `skin/book/macos/Runner/MainFlutterWindow.swift` | 前の土台で動いた |
 | 貼る部品：絵を出して、ドラッグとホイールと数を送る | `skin/book/lib/sets/glass_live.dart` | 前の土台で動いた |
 | 開く：`skin/book/glass.sh`（Widgetbook の Glass › Live） | `skin/book/glass.sh` | 前の土台で動いた |
+| 開く：`skin/book/live.sh`（Workspace › Live、.dart を保存すると Flutter のホットリロード） | `skin/book/live.sh` | 今の土台で動く（保存から2秒） |
 | Windows の道筋（古い土台の物と、今の土台の物の両方） | `filament/WINDOWS.md` | 読んだだけ（何もビルドしていない） |
 
 | **今の舞台（Dawn）の絵を、同じ形の置き場に描く口**。置き場3枚を Dawn に見せて Filament の描き先にする。描き終わった最後の1枚を渡す | `filament/live.h`、口は `filament/motolii.h` の `motolii_live`、`motolii_front`、`motolii_frames`、`motolii_play`、`motolii_now` | 今の土台で動く（検査 `filament/check/live.mm`：60コマ毎秒、置き場の絵と止め絵の差 0） |
