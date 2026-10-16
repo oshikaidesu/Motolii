@@ -15,9 +15,7 @@ class DockMem {
   final chip = <String, String>{};
   final folded = <String>{'Time'};
   final open = <String>{'Project'};
-  final starred = <String>{'Glow', 'Repeater', 'Trim Paths', 'Futura', 'Didot', 'Pop Poster'};
-  final starredHere = <String>{}; // (joined: only what the hand starred, not the sample's)
-  final applied = <String>{};
+  final starred = <String>{}; // (what the hand starred)
 
   /// Why the last thing asked of the inside for an entry was not done (by the entry's id).
   final trouble = <String, String>{};
@@ -48,9 +46,7 @@ class DockCtx {
   String get chip => mem.chip[shelf] ?? 'All';
   void pickChip(String c) => set(() => mem.chip[shelf] = c);
   bool hit(String name) => query.isEmpty || name.toLowerCase().contains(query.toLowerCase());
-  bool applied(String id) => mem.applied.contains('$shelf:$id');
-  void apply(String id) => set(() => mem.applied.add('$shelf:$id'));
-  Set<String> get _stars => mem.starredHere;
+  Set<String> get _stars => mem.starred;
   bool starred(String id) => _stars.contains(id);
   void star(String id) => set(() => _stars.contains(id) ? _stars.remove(id) : _stars.add(id));
   void toggle(Set<String> s, String id) => set(() => s.contains(id) ? s.remove(id) : s.add(id));
