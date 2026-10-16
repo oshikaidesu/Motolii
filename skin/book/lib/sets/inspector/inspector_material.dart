@@ -27,6 +27,7 @@ class BlendRows extends StatelessWidget {
         PropRow(
           id: 'v_blend',
           label: 'Blend',
+          lead: const _MixGlyph(clip: false),
           keyable: false,
           cells: [Chooser(id: 'v_blend', options: doc.choices['v_blend'] ?? _blends)],
         ),
@@ -45,6 +46,7 @@ class BlendRows extends StatelessWidget {
         PropRow(
           id: 'v_clip',
           label: 'Clip to below',
+          lead: const _MixGlyph(clip: true),
           keyable: false,
           cells: [
             Align(
@@ -208,4 +210,48 @@ class _TextGroupState extends State<TextGroup> {
       ],
     );
   }
+}
+
+/// How it lies over what is below, drawn as its value: blend, two squares whose overlap is as the mode makes it (lighter
+/// for screen and add, darker for multiply, the top one alone for normal); clip, a disc seen only inside the square
+/// beneath it (or whole, when not clipped).
+class _MixGlyph extends StatelessWidget {
+  const _MixGlyph({required this.clip});
+  final bool clip;
+  @override
+  Widget build(BuildContext context) {
+    final doc = Ctx.of(context).doc;
+    return CustomPaint(size: const Size(24, 20), painter: _MixPaint(clip, clip ? ((doc.get('v_clip') ?? 0) > .5 ? 'on' : 'off') : (doc.s2['v_blend'] ?? 'normal').toLowerCase()));
+  }
+}
+
+class _MixPaint extends CustomPainter {
+  const _MixPaint(this.clip, this.how);
+  final bool clip;
+  final String how;
+  @override
+  void paint(Canvas c, Size s) {
+    final below = const Rect.fromLTWH(2, 5, 12, 12), top = const Rect.fromLTWH(9, 2, 12, 12);
+    final under = Paint()..color = const Color(0xFF6E8BC4), over = Paint()..color = const Color(0xFFE0A35A);
+    c.drawRect(below, under);
+    if (clip) {
+      c.save();
+      if (how == 'on') c.clipRect(below); // (seen only through the one beneath)
+      c.drawCircle(top.center, 6, over);
+      c.restore();
+      return;
+    }
+    c.drawRect(top, over);
+    final both = below.intersect(top);
+    switch (how) {
+      case 'screen' || 'add':
+        c.drawRect(both, Paint()..color = const Color(0xFFFFF1D6)); // (lighter where they meet)
+      case 'multiply':
+        c.drawRect(both, Paint()..color = const Color(0xFF3B3524)); // (darker where they meet)
+      default: // (normal: the top one covers)
+    }
+  }
+
+  @override
+  bool shouldRepaint(_MixPaint o) => o.how != how || o.clip != clip;
 }

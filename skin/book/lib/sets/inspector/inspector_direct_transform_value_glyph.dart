@@ -89,7 +89,7 @@ class _GlyphPaint extends CustomPainter {
             c.drawRect(Rect.fromLTWH(r.left + x * cell, r.top + y * cell, cell, cell), Paint()..color = (x + y).isEven ? Grey.g26 : Grey.g15);
           }
         }
-        c.drawRect(r, Paint()..color = ink.withValues(alpha: (v[0] / 100).clamp(0, 1)));
+        c.drawRect(r, Paint()..color = ink.withValues(alpha: .1 + .7 * (v[0] / 100).clamp(0, 1))); // (the checks always show through a little: the mark of how much is seen)
         c.drawRect(r, rim);
       case ValueShape.depth:
         final off = (v[0] / 25).clamp(0.0, 5.0);
@@ -97,21 +97,18 @@ class _GlyphPaint extends CustomPainter {
         if (off > 0) c.drawRect(front.shift(Offset(off, -off)), rim);
         c.drawRect(front, solid..color = ink.withValues(alpha: .85));
       case ValueShape.parent:
-        final child = Rect.fromCenter(center: mid + const Offset(3, 3), width: 9, height: 9);
-        if (v[0] > 0) {
-          final top = mid + const Offset(-5, -5);
-          c.drawLine(top, Offset(top.dx, child.center.dy), rim..color = Grey.g56);
-          c.drawLine(Offset(top.dx, child.center.dy), child.centerLeft, rim);
-          c.drawCircle(top, 2.5, solid);
+        // (two links of a chain, the mark of going with another: open when it goes with none, drawn solid when it does)
+        final ring = Paint()
+          ..color = v[0] > 0 ? ink : Grey.g56
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2;
+        for (final at in const [Offset(-3.5, 3.5), Offset(3.5, -3.5)]) {
+          c.save();
+          c.translate(mid.dx + at.dx, mid.dy + at.dy);
+          c.rotate(-math.pi / 4);
+          c.drawRRect(RRect.fromRectAndRadius(Rect.fromCenter(center: Offset.zero, width: 11, height: 6), const Radius.circular(3)), ring);
+          c.restore();
         }
-        c.drawRect(
-          child,
-          v[0] > 0
-              ? (Paint()..color = ink.withValues(alpha: .85))
-              : (Paint()
-                  ..color = Grey.g44
-                  ..style = PaintingStyle.stroke),
-        );
     }
   }
 

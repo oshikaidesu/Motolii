@@ -74,10 +74,12 @@ class _FxRow extends StatelessWidget {
         duration: Mo.dur,
         curve: Mo.ease,
         height: 24,
-        padding: const EdgeInsets.only(left: 22, right: 4),
+        padding: const EdgeInsets.only(left: 8, right: 4),
         color: dockFill(sel, h),
         child: Row(
           children: [
+            CustomPaint(size: const Size(18, 16), painter: _FxLook(name)), // (what it does, drawn: found with the words hidden)
+            const SizedBox(width: 6),
             Flexible(
               child: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis, style: T.name(dockInk(sel)).copyWith(fontWeight: sel ? FontWeight.w700 : FontWeight.w500)),
             ),
@@ -141,4 +143,45 @@ class _FxFooter extends StatelessWidget {
     doneLabel: 'Pick a thing',
     onAction: () => ws.fxToggle(name),
   );
+}
+
+/// What each of the inside's own effects does to a square, drawn small: a blur's soft edge, a shadow under it, a glow
+/// round it, a path half drawn, two tones, a ramp of colours. (An effect the window does not know has no picture.)
+class _FxLook extends CustomPainter {
+  const _FxLook(this.name);
+  final String name;
+  @override
+  void paint(Canvas c, Size s) {
+    const ink = Color(0xFFE0A35A), r = Rect.fromLTWH(4, 3, 10, 10);
+    switch (name) {
+      case 'Gaussian Blur':
+        c.drawRect(r, Paint()
+          ..color = ink
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.2));
+      case 'Drop Shadow':
+        c.drawRect(r.shift(const Offset(2, 2)), Paint()
+          ..color = const Color(0xFF000000)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 1.2));
+        c.drawRect(r, Paint()..color = ink);
+      case 'Glow':
+        c.drawRect(r, Paint()
+          ..color = const Color(0xFFFFE6A8)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.outer, 3));
+        c.drawRect(r, Paint()..color = ink);
+      case 'Trim Paths':
+        c.drawArc(Rect.fromCircle(center: r.center, radius: 5.5), -1.6, 3.8, false, Paint()
+          ..color = ink
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.8
+          ..strokeCap = StrokeCap.round);
+      case 'Duotone':
+        c.drawRect(Rect.fromLTWH(r.left, r.top, r.width / 2, r.height), Paint()..color = const Color(0xFF2B3A67));
+        c.drawRect(Rect.fromLTWH(r.center.dx, r.top, r.width / 2, r.height), Paint()..color = const Color(0xFFF4C27A));
+      case 'Gradient Map':
+        c.drawRect(r, Paint()..shader = const LinearGradient(colors: [Color(0xFF2B3A67), Color(0xFFE0607E), Color(0xFFF4C27A)]).createShader(r));
+    }
+  }
+
+  @override
+  bool shouldRepaint(_FxLook o) => o.name != name;
 }
