@@ -229,7 +229,7 @@ class _InspHostState extends State<InspHost> {
       // (numbers and key marks: told to the fields that show them; words, flags, choices and the rest: everything again)
       final owned = widget.onValues != null;
       if (owned ? !doc.inGesture : !mapEquals(o.values, widget.values)) {
-        doc.showAt(widget.values, const {});
+        if (doc.showAt(widget.values, const {})) _tick++;   // (a value no field watches changed: shown by building again)
         _seen.addAll(widget.values);
       }
       if (widget.onFlags != null) {

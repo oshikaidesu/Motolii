@@ -324,17 +324,25 @@ class Doc extends ChangeNotifier {
 
   /// What the host has at a new moment, shown as it is (not a hand's change: no key, no undo step): only the fields
   /// whose number or key mark moved are told (each watches its own), the inspector is not built again.
-  void showAt(Map<String, double> values, Map<String, KeyS> marks) {
+  /// Whether a value changed that no field watches (a choice, a switch): then the panel is built again to show it.
+  bool showAt(Map<String, double> values, Map<String, KeyS> marks) {
+    var unwatched = false;
     for (final e in values.entries) {
       if (v[e.key] == e.value) continue;
       v[e.key] = e.value;
-      _watched[e.key]?.value++;
+      final w = _watched[e.key];
+      if (w == null) {
+        unwatched = true;
+      } else {
+        w.value++;
+      }
     }
     for (final e in marks.entries) {
       if (keys[e.key] == e.value) continue;
       keys[e.key] = e.value;
       _watched['key:${e.key}']?.value++;
     }
+    return unwatched;
   }
 
   /// One value's own news ('key:' and its name: its key mark's), as [showAt] tells it.
