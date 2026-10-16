@@ -24,14 +24,10 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
   final _focus = FocusNode(debugLabel: 'timeline');
   Ws? _ws;
 
-  bool _loop = true;
   double _zoom = 1, _scroll = 0, _vscroll = 0, _trackW = 1000, _rowsH = 200;
   int _workIn = 12, _workOut = 228;
-  final _hidden = <String>{}, _locked = <String>{'bg'}, _solo = <String>{};
-  static const _markers = [(36, 'Hit'), (120, 'Drop'), (204, 'Out')];
 
-  Duration _t0 = Duration.zero;
-  int _base = 0, _last = -1;
+  int _last = -1;
 
   @override
   void didChangeDependencies() {
@@ -69,29 +65,8 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
   void _tick(Duration e) => Timeline.timeSync('ws tick', () => _tickNow(e)); // (named in Flutter's timeline: frames_test TRACE)
   void _tickNow(Duration e) {
     final ws = _ws!;
-    if (ws.inside case final inside?) {   // (joined: the inside keeps the clock, the playhead shows its moment)
-      _last = (inside.now * Ws.fps).round().clamp(0, Ws.duration);
-      ws.frame = _last;
-      return;
-    }
-    if (ws.frame != _last) {
-      _base = ws.frame;
-      _t0 = e;
-    }
-    var f = _base + ((e - _t0).inMicroseconds * Ws.fps ~/ 1000000);
-    if (f >= Ws.duration) {
-      if (!_loop) {
-        _last = Ws.duration;
-        ws.frame = Ws.duration;
-        ws.playing = false;
-        return;
-      }
-      f -= Ws.duration;
-      _base = f;
-      _t0 = e;
-    }
-    _last = f;
-    ws.frame = f;
+    _last = (ws.inside!.now * Ws.fps).round().clamp(0, Ws.duration); // (the inside keeps the clock, the playhead shows its moment)
+    ws.frame = _last;
   }
 
   void _toggle() {
@@ -150,8 +125,8 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
     final k = e.logicalKey, ws = _ws!;
     if (k == LogicalKeyboardKey.space && e is KeyDownEvent) {
       _toggle();
-    } else if ((k == LogicalKeyboardKey.delete || k == LogicalKeyboardKey.backspace) && ws.inside != null) {
-      // Joined: the picked thing is taken out of the document (undo brings it back).
+    } else if (k == LogicalKeyboardKey.delete || k == LogicalKeyboardKey.backspace) {
+      // The picked thing is taken out of the document (undo brings it back).
       final t = int.tryParse(ws.selected ?? '');
       if (t != null && ws.inside!.remove(t)) ws.reread();
     } else if (k == LogicalKeyboardKey.arrowLeft) {
@@ -173,7 +148,7 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
     final i = ((p.dy + _vscroll) / WtM.row).floor();
     if (i < 0 || i >= ws.layers.length) { // (below the rows: nothing picked, After Effects' manner; joined, the inspector is then the whole picture's)
       ws.clearKeys();
-      if (ws.inside != null) ws.select(null);
+      ws.select(null);
       return;
     }
     final l = ws.layers[i];
@@ -231,11 +206,9 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
   }
 
   // The eye of a row. Joined: the thing is put aside in the document (visible 0) and is not on the stage; one step.
-  bool _isHidden(Ws ws, String id) => ws.inside == null ? _hidden.contains(id) : ws.layers.any((l) => l.id == id && l.hidden);   // (as last read: no call to the inside while a row is built)
+  bool _isHidden(Ws ws, String id) => ws.layers.any((l) => l.id == id && l.hidden);   // (as last read: no call to the inside while a row is built)
   void _eye(Ws ws, String id) {
-    final m = ws.inside;
-    if (m == null) return _flip(_hidden, id);
-    if (m.set(int.parse(id), 'visible', _isHidden(ws, id) ? 1 : 0)) ws.reread();
+    if (ws.inside!.set(int.parse(id), 'visible', _isHidden(ws, id) ? 1 : 0)) ws.reread();
   }
 
   double _lift = 0; // how far a label row has been carried up or down
@@ -281,14 +254,13 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
   /// Joined: the work area carried is the document's when the hand lets go (one step).
   void _workLetGo() {
     final m = _ws?.inside;
-    if (_workDrag != null && m != null && m.setWork(_workIn / Ws.fps, _workOut / Ws.fps)) _ws!.reread();
+    if (_workDrag != null && m!.setWork(_workIn / Ws.fps, _workOut / Ws.fps)) _ws!.reread();
     _workDrag = null;
   }
 
-  /// The marks on the ruler: joined, the document's own (moments with a name); else the sample's.
+  /// The marks on the ruler: the document's own (moments with a name).
   List<(int, String)> _marksOf(Ws ws) {
-    final m = ws.inside;
-    return m == null ? _markers : [for (final (at, name) in _ws!.marks) ((at * Ws.fps).round(), name)];
+    return [for (final (at, name) in _ws!.marks) ((at * Ws.fps).round(), name)];
   }
 
   void _overview(Offset p, double w) {
@@ -296,16 +268,14 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
     setState(() => _scroll = _clampScroll(f - _visible / 2));
   }
 
-  void _flip(Set<String> s, String id) => setState(() => s.contains(id) ? s.remove(id) : s.add(id));
 
   // Joined: solo and lock are the document's (After Effects keeps both in its project): while any thing is solo only
   // those are seen; a locked thing is not changed (the inside refuses, and says so). Else the sample's own sets.
-  bool _isSolo(Ws ws, String id) => ws.inside == null ? _solo.contains(id) : ws.layers.any((l) => l.id == id && l.solo);
-  bool _isLocked(Ws ws, String id) => ws.inside == null ? _locked.contains(id) : ws.layers.any((l) => l.id == id && l.locked);
+  bool _isSolo(Ws ws, String id) => ws.layers.any((l) => l.id == id && l.solo);
+  bool _isLocked(Ws ws, String id) => ws.layers.any((l) => l.id == id && l.locked);
   bool _anySolo(Ws ws) => ws.layers.any((l) => _isSolo(ws, l.id));
-  void _flag(Ws ws, Set<String> s, String name, String id) {
-    final m = ws.inside;
-    if (m == null) return _flip(s, id);
+  void _flag(Ws ws, String name, String id) {
+    final m = ws.inside!;
     if (m.set(int.parse(id), name, (name == 'solo' ? _isSolo(ws, id) : _isLocked(ws, id)) ? 0 : 1)) ws.reread();
   }
 
@@ -313,7 +283,7 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
 
   @override
   Widget build(BuildContext context) {
-    if (_ws?.inside != null && _workDrag == null) {   // (joined: the document's work area)
+    if (_workDrag == null) {   // (the document's work area)
       final (from, to) = _ws!.work;
       _workIn = (from * Ws.fps).round();
       _workOut = (to * Ws.fps).round();
@@ -347,7 +317,7 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _Header(ws: ws, loop: ws.inside?.looping ?? _loop, zoom: _zoom, onToggle: _toggle, onStep: _step, onLoop: () => setState(() => ws.inside == null ? _loop = !_loop : ws.inside!.looping = !ws.inside!.looping), onZoom: _setZoom),
+              _Header(ws: ws, loop: ws.inside!.looping, zoom: _zoom, onToggle: _toggle, onStep: _step, onLoop: () => setState(() => ws.inside!.looping = !ws.inside!.looping), onZoom: _setZoom),
               Expanded(
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -391,11 +361,9 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
                         // Joined: a row carried up or down is the thing brought nearer or further back, by as many rows as it was carried.
                         child: GestureDetector(
                           dragStartBehavior: DragStartBehavior.down, // (all of the way it was carried counts, from where the hand came down)
-                          onVerticalDragStart: ws.inside == null ? null : (_) => _lift = 0,
-                          onVerticalDragUpdate: ws.inside == null ? null : (d) => _lift += d.delta.dy,
-                          onVerticalDragEnd: ws.inside == null
-                              ? null
-                              : (_) {
+                          onVerticalDragStart: (_) => _lift = 0,
+                          onVerticalDragUpdate: (d) => _lift += d.delta.dy,
+                          onVerticalDragEnd: (_) {
                                   final by = (_lift / WtM.row).round();
                                   if (by != 0 && ws.inside!.raise(int.parse(ws.layers[i].id), -by)) ws.reread();
                                 },
@@ -406,8 +374,8 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
                             solo: _isSolo(ws, ws.layers[i].id),
                             onSelect: () => ws.select(ws.layers[i].id),
                             onEye: () => _eye(ws, ws.layers[i].id),
-                            onSolo: () => _flag(ws, _solo, 'solo', ws.layers[i].id),
-                            onLock: () => _flag(ws, _locked, 'lock', ws.layers[i].id),
+                            onSolo: () => _flag(ws, 'solo', ws.layers[i].id),
+                            onLock: () => _flag(ws, 'lock', ws.layers[i].id),
                           ),
                         ),
                       ),
