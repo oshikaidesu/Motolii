@@ -93,6 +93,8 @@ void main() {
     final also = <String, Rect Function()>{
       'Make the selected card look out of focus.': () => t.getRect(find.byType(DockSearch)),
       'Tilt the selected card, as you would tilt a picture on a wall.': knob,
+      // (and the Depth desk's lens cone, pulled across, is the camera's zoom too)
+      'Get a closer view of the scene through the camera without moving it.': () => t.getRect(find.byWidgetPredicate((w) => w.runtimeType.toString() == '_Diagram').first),
       'Make the light shine stronger.': () { // (the strength rail at the right of the Light card's drawing)
         final box = t.getRect(find.byType(LightDrawing));
         return Rect.fromLTRB(box.right - 28, box.top + 8, box.right, box.top + LightDrawing.height - 6);

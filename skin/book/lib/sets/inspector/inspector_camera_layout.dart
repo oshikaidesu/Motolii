@@ -1,4 +1,7 @@
+import 'dart:math' as math;
+
 import 'package:flutter/widgets.dart';
+import 'package:lab_book/tokens.dart';
 import 'package:lab_book/sets/inspector/inspector_rows_prop_row.dart';
 import 'package:lab_book/sets/inspector/inspector_rows_sect.dart';
 import '../../parts/controls.dart';
@@ -118,6 +121,7 @@ class CameraGroup extends StatelessWidget {
             PropRow(
               id: 'v_distance',
               label: 'Distance',
+              lead: _CamGlyph(zoom: false),
               cells: [
                 NumField(
                   id: 'v_distance',
@@ -132,6 +136,7 @@ class CameraGroup extends StatelessWidget {
             PropRow(
               id: 'v_zoom',
               label: 'Zoom',
+              lead: _CamGlyph(zoom: true),
               cells: [
                 NumField(
                   id: 'v_zoom',
@@ -285,4 +290,45 @@ class LayoutGroup extends StatelessWidget {
       ],
     );
   }
+}
+
+/// The camera's framing as a drawing of its value: zoom, the lens's view narrowing as it grows; distance, the camera
+/// further from the point it looks at (the Depth desk's own picture, small).
+class _CamGlyph extends StatelessWidget {
+  const _CamGlyph({required this.zoom});
+  final bool zoom;
+  @override
+  Widget build(BuildContext context) {
+    final doc = Ctx.of(context).doc;
+    return CustomPaint(size: const Size(24, 20), painter: _CamPaint(zoom, doc.get(zoom ? 'v_zoom' : 'v_distance')));
+  }
+}
+
+class _CamPaint extends CustomPainter {
+  const _CamPaint(this.zoom, this.v);
+  final bool zoom;
+  final double? v;
+  @override
+  void paint(Canvas c, Size s) {
+    final ink = Paint()
+      ..color = Grey.g76
+      ..strokeWidth = 1.3
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
+    final eye = Offset(4, s.height / 2);
+    c.drawRect(Rect.fromCenter(center: eye, width: 5, height: 6), Paint()..color = Grey.g76); // (the camera)
+    if (zoom) {
+      final half = math.atan(.9 / ((v ?? 100) / 100).clamp(.1, 10)); // (100%: a wide view; more: narrower)
+      final d = Offset(math.cos(half), math.sin(half)) * 19;
+      c.drawLine(eye, eye + Offset(d.dx, -d.dy), ink);
+      c.drawLine(eye, eye + d, ink);
+    } else {
+      final far = 6 + 14 * ((math.log((v ?? 600).clamp(10, 10000)) - math.log(10)) / (math.log(10000) - math.log(10))); // (further: the point it looks at further off)
+      c.drawLine(eye, eye + Offset(far, 0), ink..strokeWidth = 1);
+      c.drawCircle(eye + Offset(far, 0), 2.2, Paint()..color = Grey.g76);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_CamPaint o) => o.v != v || o.zoom != zoom;
 }

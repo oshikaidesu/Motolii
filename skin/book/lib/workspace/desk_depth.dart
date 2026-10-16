@@ -126,6 +126,7 @@ class _DeskDepthState extends State<DeskDepth> {
                       lens.focus = z.clamp(100.0, _zMax);
                       lens.target = id;
                     }),
+                    onFocal: (f) => edit(() => lens.focal = f.clamp(8.0, 600.0)), // (the cone's edge pulled: a narrower view is a longer lens)
                   ),
                 ),
               ),
@@ -215,9 +216,10 @@ class _LensNumbers extends StatelessWidget {
 
 /// The top view. Drag the focus line up and down, or tap a slab to focus on that layer.
 class _Diagram extends StatefulWidget {
-  const _Diagram({required this.lens, required this.onFocus});
+  const _Diagram({required this.lens, required this.onFocus, required this.onFocal});
   final _Lens lens;
   final void Function(double z, String? id) onFocus;
+  final void Function(double focal) onFocal;
   @override
   State<_Diagram> createState() => _DiagramState();
 }
@@ -263,6 +265,11 @@ class _DiagramState extends State<_Diagram> {
               if (_drag) widget.onFocus(m.z(e.localPosition.dy), null);
             },
             onVerticalDragEnd: (_) => setState(() => _drag = false),
+            // (the cone's edge, pulled across, opens or closes the view: the lens's own length, Transform's manner)
+            onHorizontalDragUpdate: (e) {
+              final d = e.localPosition - m.eye;
+              if (d.dy < -8) widget.onFocal(18 / math.tan(math.atan2(d.dx.abs(), -d.dy).clamp(.02, 1.5)));
+            },
             child: CustomPaint(
               size: box.biggest,
               painter: _DepthPainter(slabs: slabs, focal: lens.focal, focus: lens.focus, near: d.near, far: d.far, target: lens.target, hot: _hot || _drag),
@@ -336,6 +343,13 @@ class _DepthPainter extends CustomPainter {
     c.drawRect(Rect.fromLTRB(0, fy, s.width, ny), fill..color = Grey.g20);
     c.restore();
     c.drawPath(cone, line..color = Grey.g38);
+    // (a knob on the cone's edge: pulled across, it opens or closes the view)
+    final knobZ = _zMax * .45, knob = m.at(knobZ * math.tan(half), knobZ);
+    c.drawCircle(knob, 6, Paint()..color = WsT.toneCamera);
+    c.drawCircle(knob, 6, Paint()
+      ..color = WsT.card
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5);
     c.restore();
     // The focus line and its tag.
     final y = m.at(0, focus).dy;
