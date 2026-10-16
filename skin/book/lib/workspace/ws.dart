@@ -359,6 +359,9 @@ class Ws extends ChangeNotifier {
   ({bool things, Set<(int, String)> values})? lastChange;
 
   int _afters = 0; // (tickets still looked at: the document is read again once, when the last of them is done)
+
+  /// Whether changes told to the inside are not all done yet (the window shows them before the document has them).
+  bool get waiting => _afters > 0;
   void after(int ticket, [void Function(bool done, String why)? then]) {
     int? answer;
     var waited = 0;

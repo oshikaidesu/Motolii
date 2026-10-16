@@ -409,6 +409,7 @@ static const DocShown doc_shown[] = {
     {"clip_invert", "onoff", "", "Invert", 0, 1, nullptr},
     {"clip_feather", "", "px", "Feather", 0, 100, nullptr},
     {"connect", "thing", "", "Join", 0, 0, nullptr},
+    {"parent", "thing", "", "Parent", 0, 0, nullptr},   // (the thing it goes with: shown by its name)
     {"connect_to", "thing", "", "With", 0, 0, nullptr},
     {"follow", "thing", "", "Follow", 0, 0, nullptr},
     {"connect_reach", "stage", "px", "Reach", 0, 2, nullptr},

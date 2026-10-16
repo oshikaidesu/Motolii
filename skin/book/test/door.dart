@@ -6,6 +6,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lab_book/motolii.dart' show motoliiDir;
 import 'package:lab_book/workspace/door.dart';
+import 'package:lab_book/sets/inspector/inspector_rows_prop_row.dart' show PropRow;
 import 'package:lab_book/workspace/timeline.dart' show WsTimeline;
 
 export 'package:lab_book/motolii.dart' show motoliiDir;
@@ -37,17 +38,35 @@ List<String> windowWords(WidgetTester t) {
   final hud = find.descendant(of: find.byWidgetPredicate((w) => w.runtimeType.toString() == '_Hud'), matching: find.byType(Text)).evaluate().toSet();
   return [
     for (final e in find.byType(Text).evaluate())
-      if (!hud.contains(e)) (e.widget as Text).data ?? (e.widget as Text).textSpan?.toPlainText() ?? '',
+      if (!hud.contains(e)) '${_rowOf(e)}${(e.widget as Text).data ?? (e.widget as Text).textSpan?.toPlainText() ?? ''}',
     for (final e in find.byType(EditableText).evaluate()) (e.widget as EditableText).controller.text,
   ].where((w) => !w.startsWith('Saved ') && !w.startsWith('Not taken')).toList()..sort();
+}
+
+/// The row a word lies in, if any ('opacity: '): a word told with where it is.
+String _rowOf(Element e) {
+  var row = '';
+  e.visitAncestorElements((a) {
+    if (a.widget is PropRow) {
+      row = '${(a.widget as PropRow).id}: ';
+      return false;
+    }
+    return true;
+  });
+  return row;
 }
 
 /// The window is the document's alone: closed and opened again on the same document, at the same thing, moment, keys
 /// and desk tool, it shows the same words. What differs was held by the window, not the document.
 Future<void> expectSameAfterReopen(WidgetTester t, {List<WsPane> extra = const [], List<DeskTool> tools = const []}) async {
-  final ws = wsOf(t)..reread();   // (what a test changed in the inside itself, past the window, read as the window reads a hand's)
+  final ws = wsOf(t);
+  for (var i = 0; i < 60 && ws.waiting; i++) {   // (the changes a hand told, done: as a hand sees the window once it rests)
+    await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+    await t.pump();
+  }
+  ws.reread();   // (what a test changed in the inside itself, past the window, read as the window reads a hand's)
   await t.pumpAndSettle();
-  final selected = ws.selected, frame = ws.frame, keys = ws.keys.toList(), desk = ws.deskManual, shelf = ws.shelf, ink = ws.ink, edge = ws.edge, aim = ws.aim, view = Map.of(ws.view), doc = openedDocument!;
+  final selected = ws.selected, frame = ws.frame, keys = ws.keys.toList(), desk = ws.deskManual, shelf = ws.shelf, ink = ws.ink, edge = ws.edge, aim = ws.aim, animating = ws.animating, view = Map.of(ws.view), doc = openedDocument!;
   final before = windowWords(t);
   await closeWorkspace(t);
   final again = await openWorkspace(t, extra: extra, tools: tools, document: doc, view: view);
@@ -62,10 +81,15 @@ Future<void> expectSameAfterReopen(WidgetTester t, {List<WsPane> extra = const [
     ..ink = ink
     ..edge = edge
     ..aim = aim
+    ..animating = animating   // (Animate all: how the hand works now, not the document's)
     ..reread();   // (the window told to look again: a view put back that equals nothing changed tells nobody)
   await t.pumpAndSettle();
   final after = windowWords(t);
-  final lost = [...before]..removeWhere(after.contains), gained = [...after]..removeWhere(before.contains);
+  // (each word as many times as it shows: a None more, a name fewer)
+  final lost = [...before], gained = <String>[];
+  for (final w in after) {
+    if (!lost.remove(w)) gained.add(w);
+  }
   for (final w in [for (final w in lost) '- $w', for (final w in gained) '+ $w']) {
     debugPrint('REOPEN\t${t.testDescription.split(':').first}\t$w');
   }

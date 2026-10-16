@@ -748,7 +748,7 @@ class _InspectorSeatState extends State<_InspectorSeat> {
     final m = ws.inside, c = ws.lastChange, t = int.tryParse(ws.selected ?? '') ?? (ws.selected == null ? 0 : null);
     if (m == null || c == null || c.things || t == null || const bool.fromEnvironment('NOPOUR')) return false;
     for (final (thing, name) in c.values) {
-      if (name == 'name' || (thing == t && (m.shaping.contains(name) || m.range(t, name) == null))) return false; // (a name changed anywhere: things are named on cards; a word: it is not watched)
+      if (name == 'name' || (thing == t && (m.shaping.contains(name) || m.range(t, name) == null || m.shown(name)?.look == 'thing'))) return false; // (another thing: shown by its name, a word) // (a name changed anywhere: things are named on cards; a word: it is not watched)
     }
     return true;
   }
