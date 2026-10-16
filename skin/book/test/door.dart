@@ -114,6 +114,16 @@ Future<void> pick(WidgetTester t, String id, String word) async {
   await t.pumpAndSettle();
 }
 
+/// The changes a hand told the inside, all done (as the window shows them once it rests).
+Future<void> settled(WidgetTester t, Ws ws) async {
+  await t.pumpAndSettle();
+  for (var i = 0; i < 60 && ws.waiting; i++) {
+    await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+    await t.pump();
+  }
+  await t.pumpAndSettle();
+}
+
 /// The window's state, as a pane reads it with WsScope.of.
 Ws wsOf(WidgetTester t) => WsScope.read(t.element(find.byType(WsTimeline)));
 

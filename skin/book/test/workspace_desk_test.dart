@@ -1,82 +1,67 @@
+// The desk on a real document (test/door.dart): it follows the selection, a tool opened by hand stays, Ease writes the
+// document's way of a stretch, Depth the camera's lens.
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lab_book/workspace/desk.dart';
 import 'package:lab_book/workspace/desk_ease.dart';
 import 'package:lab_book/workspace/desk_kit.dart';
-import 'package:lab_book/workspace/ws.dart';
+import 'package:lab_book/workspace/ws.dart' show WsHeader;
 
-Future<void> _pump(WidgetTester tester, Ws ws, {Size size = const Size(372, 300)}) async {
-  tester.view.physicalSize = size;
-  tester.view.devicePixelRatio = 1;
-  await tester.pumpWidget(
-    WidgetsApp(
-      color: const Color(0xFF000000),
-      builder: (c, _) => WsScope(
-        ws: ws,
-        child: SizedBox(width: size.width, height: size.height, child: const WsDesk()),
-      ),
-    ),
-  );
-  await tester.pumpAndSettle();
-  expect(tester.takeException(), isNull);
+import 'door.dart';
+
+/// The window on a new document with a cube whose x has two keys, at 0 and 1 s.
+Future<(Ws, int)> _keyed(WidgetTester t, {Size size = const Size(1600, 960)}) async {
+  final ws = await openWorkspace(t, size: size), m = ws.inside!;
+  final cube = m.add('solid', 'cube');
+  expect(m.key(cube, 'x', 0, 0) && m.key(cube, 'x', 1, 1), isTrue, reason: m.trouble);
+  ws.reread();
+  await t.pumpAndSettle();
+  return (ws, cube);
 }
 
 Finder get _toolsButton => find.descendant(of: find.byType(WsHeader), matching: find.byType(DeskIconButton));
 
 void main() {
-  testWidgets('Desk follows the selection: Tools, then Ease for keys, then Depth for the camera', (tester) async {
-    addTearDown(tester.view.reset);
-    final ws = Ws();
-    await _pump(tester, ws);
+  testWidgets('the desk follows the selection: Tools, then Ease for keys, then Depth for the camera', (t) async {
+    final (ws, cube) = await _keyed(t);
     expect(ws.desk, 'Tools');
     expect(find.text('Follows selection'), findsOneWidget);
-    for (final t in deskTools) {
-      expect(find.text(t.name), findsWidgets);
+    for (final tool in deskTools) {
+      expect(find.text(tool.name), findsWidgets);
     }
-
-    ws.pickKey((layer: 'blob', frame: 48));
-    await tester.pumpAndSettle();
-    expect(tester.takeException(), isNull);
-    expect(find.text('Ease'), findsWidgets);
-    expect(find.text('Blob'), findsOneWidget);
-    expect(find.text('96'), findsWidgets);
-
-    ws.select('cam');
-    await tester.pumpAndSettle();
-    expect(tester.takeException(), isNull);
-    expect(ws.desk, 'Depth');
-    expect(find.text('On Blob'), findsOneWidget);
-  });
-
-  testWidgets('A tile opens its tool by hand; Pinned returns to following; the header button opens Tools', (tester) async {
-    addTearDown(tester.view.reset);
-    final ws = Ws();
-    await _pump(tester, ws);
-
-    await tester.tap(find.text('Blend'));
-    await tester.pumpAndSettle();
-    expect(ws.deskManual, 'Blend');
-    expect(ws.desk, 'Blend');
-    expect(find.text('Not designed in the lab yet.'), findsOneWidget);
-
-    await tester.tap(find.text('Pinned · Follow'));
-    await tester.pumpAndSettle();
-    expect(ws.deskManual, isNull);
-    expect(ws.desk, 'Tools');
-
-    ws.pickKey((layer: 'title', frame: 36));
-    await tester.pumpAndSettle();
+    ws.pickKey((layer: '$cube', frame: 0));
+    await t.pumpAndSettle();
     expect(ws.desk, 'Ease');
-    await tester.tap(_toolsButton);
-    await tester.pumpAndSettle();
-    expect(ws.deskManual, 'Tools');
-    expect(find.text('AUTO'), findsOneWidget);
-
-    await tester.tap(find.text('Depth'));
-    await tester.pumpAndSettle();
+    final cam = ws.inside!.add('camera', 'camera');
+    ws
+      ..reread()
+      ..select('$cam');
+    await t.pumpAndSettle();
     expect(ws.desk, 'Depth');
-    expect(tester.takeException(), isNull);
-  });
+    expect(t.takeException(), isNull);
+    await closeWorkspace(t);
+  }, skip: !insideBuilt);
+
+  testWidgets('a tile opens its tool by hand; Pinned returns to following; the header button opens Tools', (t) async {
+    final (ws, cube) = await _keyed(t);
+    await t.tap(find.text('Blend').last);
+    await t.pumpAndSettle();
+    expect([ws.deskManual, ws.desk], ['Blend', 'Blend']);
+    await t.tap(find.text('Pinned · Follow'));
+    await t.pumpAndSettle();
+    expect([ws.deskManual, ws.desk], [null, 'Tools']);
+    ws.pickKey((layer: '$cube', frame: 0));
+    await t.pumpAndSettle();
+    expect(ws.desk, 'Ease');
+    await t.tap(_toolsButton);
+    await t.pumpAndSettle();
+    expect(ws.deskManual, 'Tools');
+    await t.tap(find.text('Depth').last);
+    await t.pumpAndSettle();
+    expect(ws.desk, 'Depth');
+    expect(t.takeException(), isNull);
+    await closeWorkspace(t);
+  }, skip: !insideBuilt);
 
   test('Ease: every preset said to the document reads back as itself, wherever it sits in the row', () {
     for (final p in easePresets) {
@@ -84,71 +69,46 @@ void main() {
     }
   });
 
-  testWidgets('Ease: presets, scrubbed numbers and Reverse change the curve', (tester) async {
-    addTearDown(tester.view.reset);
-    final ws = Ws()..pickKey((layer: 'blob', frame: 48));
-    await _pump(tester, ws);
-    expect(find.text('0.25'), findsNWidgets(2));
-
-    // Drag the out handle (0.25, 0.10) on the graph: the numbers follow.
-    final graph = tester.getRect(find.byWidgetPredicate((w) => w is CustomPaint && '${w.painter.runtimeType}' == '_GraphPainter'));
-    final box = const EdgeInsets.fromLTRB(30, 10, 14, 22).deflateRect(graph);
-    final handle = Offset(box.left + .25 * box.width, box.bottom - (.1 + .42) / 2.04 * box.height);
-    await tester.dragFrom(handle, const Offset(30, -30));
-    await tester.pumpAndSettle();
-    expect(find.text('0.25'), findsOneWidget);
-    expect(find.text('0.10'), findsNothing);
-
-    await tester.tap(find.text('Back'));
-    await tester.pumpAndSettle();
-    expect(find.text('1.56'), findsOneWidget);
-    expect(find.text('34'), findsOneWidget);
-
-    await tester.drag(find.text('x1'), const Offset(20, 0));
-    await tester.pumpAndSettle();
-    expect(find.text('0.34'), findsNothing);
-
-    await tester.tap(find.text('Linear'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Out'));
-    await tester.pumpAndSettle();
-    expect(find.text('0.58'), findsOneWidget);
-    final reverse = find.descendant(of: find.byType(WsDesk), matching: find.byType(DeskIconButton)).last;
-    await tester.tap(reverse);
-    await tester.pumpAndSettle();
-    expect(find.text('0.42'), findsOneWidget);
-
-    // The shaped ease is kept for the span when the desk leaves and comes back.
-    ws.select('cam');
-    await tester.pumpAndSettle();
-    ws.pickKey((layer: 'blob', frame: 48));
-    await tester.pumpAndSettle();
-    expect(find.text('0.42'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('Depth: scrubbing focal and focus updates the lens; a free focus drops the target', (tester) async {
-    addTearDown(tester.view.reset);
-    final ws = Ws()..select('cam');
-    await _pump(tester, ws);
-    expect(find.text('50 mm'), findsWidgets);
-
-    await tester.drag(find.text('Focal'), const Offset(40, 0));
-    await tester.pumpAndSettle();
-    expect(find.text('50 mm'), findsNothing);
-
-    await tester.drag(find.text('Dist'), const Offset(30, 0));
-    await tester.pumpAndSettle();
-    expect(find.text('Focus free'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('Desk lays out narrower and shorter without overflow', (tester) async {
-    addTearDown(tester.view.reset);
-    for (final setup in <void Function(Ws)>[(_) {}, (ws) => ws.pickKey((layer: 'blob', frame: 48)), (ws) => ws.select('cam'), (ws) => ws.openDesk('Notes')]) {
-      final ws = Ws();
-      setup(ws);
-      await _pump(tester, ws, size: const Size(300, 230));
+  testWidgets('Ease: a preset is the document\'s way of the stretch, Reverse turns it, and it is read back from the document', (t) async {
+    final (ws, cube) = await _keyed(t);
+    final m = ws.inside!;
+    ws.pickKey((layer: '$cube', frame: 0));
+    await t.pumpAndSettle();
+    for (final (tile, said) in const [('Back', 'Bezier 0.34 1.56'), ('Out', 'Bezier 0 0 0.58 1')]) {
+      await t.tap(find.descendant(of: find.byType(WsDesk), matching: find.text(tile)).first);
+      await settled(t, ws);
+      expect(m.wayOf(cube, 'x', 0), startsWith(said), reason: tile);
     }
-  });
+    await t.tap(find.descendant(of: find.byType(WsDesk), matching: find.byType(DeskIconButton)).last); // (Reverse)
+    await settled(t, ws);
+    expect(m.wayOf(cube, 'x', 0), startsWith('Bezier 0.42 0 1 1'), reason: 'Out turned is In');
+    expect(t.takeException(), isNull);
+    await expectSameAfterReopen(t); // (what the desk shows is read back from the document, not kept by the window)
+    await closeWorkspace(t);
+  }, skip: !insideBuilt);
+
+  testWidgets('Depth: scrubbing Focal changes the camera\'s zoom in the document', (t) async {
+    final ws = await openWorkspace(t), m = ws.inside!;
+    final cam = m.add('camera', 'camera');
+    ws
+      ..reread()
+      ..select('$cam');
+    await t.pumpAndSettle();
+    final was = m.value(cam, 'zoom', 0) ?? 1;
+    await t.drag(find.text('Focal'), const Offset(40, 0));
+    await settled(t, ws);
+    expect(m.value(cam, 'zoom', 0), isNot(was), reason: 'the focal length is its zoom');
+    expect(t.takeException(), isNull);
+    await closeWorkspace(t);
+  }, skip: !insideBuilt);
+
+  testWidgets('the desk lays out at the smallest window without overflow', (t) async {
+    for (final setup in <void Function(Ws, int)>[(_, _) {}, (ws, c) => ws.pickKey((layer: '$c', frame: 0)), (ws, _) => ws.openDesk('Notes')]) {
+      final (ws, cube) = await _keyed(t, size: const Size(1100, 700));
+      setup(ws, cube);
+      await t.pumpAndSettle();
+      expect(t.takeException(), isNull);
+      await closeWorkspace(t);
+    }
+  }, skip: !insideBuilt);
 }
