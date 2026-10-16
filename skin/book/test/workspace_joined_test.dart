@@ -982,11 +982,11 @@ void main() {
     await t.pumpAndSettle();
     final fx = fxCatalog.where((f) => fxValues.containsKey(f.name)).length;
     expect(fx, greaterThan(3));
-    expect(find.text('$fx of ${fxCatalog.length} work'), findsOneWidget);
+    expect(find.text('$fx ready'), findsOneWidget);
     ws.shelf = 'Create';
     await t.pumpAndSettle();
     final r = ws.inside!.recipes.length; // (a recipe is a file: the shelf grows by what is in recipes/)
-    expect(find.text('${18 + r} of ${30 + r} work'), findsOneWidget);
+    expect(find.text('${18 + r} ready'), findsOneWidget);
     expect(t.takeException(), isNull);
     await expectSameAfterReopen(t);
     await _close(t);

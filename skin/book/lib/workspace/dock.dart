@@ -115,7 +115,7 @@ class _WsShelfState extends State<WsShelf> {
                         ? _facts[name] ?? ''
                         : switch (name) { // (joined: what the inside has: the fonts it sets, the effects it does, the colours the document uses, the tiles that make)
                             'Fonts' => '${fontsOffered ?? '…'} fonts',
-                            'Effects' => '${fxCatalog.where((f) => fxValues.containsKey(f.name)).length} of ${fxCatalog.length} work',
+                            'Effects' => '${fxCatalog.where((f) => fxValues.containsKey(f.name)).length} ready', // (joined: the shelf shows only these)
                             'Colors' => '${usedColours(ws).values.toSet().length} used here',
                             'Create' => createFact(ws),
                             _ => _facts[name] ?? '',

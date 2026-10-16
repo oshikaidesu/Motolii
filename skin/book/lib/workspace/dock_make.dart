@@ -79,7 +79,7 @@ Map<String, Color> usedColours(Ws ws) {
 /// Joined: how many of the Create shelf's tiles make or lay out something of the document, of all it shows.
 String createFact(Ws ws) {
   final recipes = ws.inside!.recipes.length;
-  return '${_asked.length + _laid.length + recipes} of ${[..._makes, _solids, _lights].fold<int>(0, (s, e) => s + e.$2.length) + recipes} work';
+  return '${_asked.length + _laid.length + recipes} ready'; // (joined: the shelf shows only these)
 }
 
 /// Joined: the inside's recipes, pictures in one call (as Cavalry's tutorials build them), each a tile.
@@ -471,7 +471,13 @@ class CreateShelf extends StatelessWidget {
   final DockCtx c;
   @override
   Widget build(BuildContext context) {
-    final joined = c.ws.inside != null, makes = joined ? [_recipesOf(c.ws), ..._makes, _solids, _lights] : _makes;
+    final joined = c.ws.inside != null;
+    final makes = joined
+        ? [
+            _recipesOf(c.ws),
+            for (final (g, items) in [..._makes, _solids, _lights]) (g, items.where((m) => _asked.containsKey(m.name) || _laid.containsKey(m.name)).toList()), // (joined: only tiles that make or lay out something of the document)
+          ].where((e) => e.$2.isNotEmpty).toList()
+        : _makes;
     final groups = [
       for (final (g, items) in makes)
         if (c.chip == 'All' || c.chip == g) (g, items.where((m) => c.hit(m.name)).toList()),
@@ -522,8 +528,6 @@ class CreateShelf extends StatelessWidget {
             title: '${sel.name} layer',
             meta: c.mem.trouble[sel.name] ?? 'At ${c.ws.timecode()} · ${sel.what}',
             action: _laid.containsKey(sel.name) ? 'Lay out' : 'Create',
-            done: !_asked.containsKey(sel.name) && !_laid.containsKey(sel.name) && !c.ws.inside!.recipes.any((r) => r.$1 == sel.name),
-            doneLabel: 'No seat yet',
             fresh: !_laid.containsKey(sel.name), // (a tile makes a new thing; a tile of copies lays out the picked one)
             onAction: () => _make(c, sel.name),
           )
