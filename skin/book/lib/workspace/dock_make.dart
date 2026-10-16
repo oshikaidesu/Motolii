@@ -413,8 +413,8 @@ final _lights = (
     _Make('Spot', DockG.light, WsT.toneCamera, '', 'A cone of light'),
   ],
 );
-const _asked = {
-  'Text': ('text', '/System/Library/Fonts/Supplemental/Arial Unicode.ttf'),
+final _asked = {
+  'Text': ('text', wsTextFont),
   'Solid': ('shape', 'solid'), // (a flat colour as large as the stage: the inside makes it so)
   'Rectangle': ('shape', 'rect'),
   'Ellipse': ('shape', 'circle'),

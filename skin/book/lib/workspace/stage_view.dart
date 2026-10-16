@@ -259,7 +259,7 @@ class _StageViewState extends State<StageView> implements StageHandles {
     final x = ((kind == 'text' || tiny ? a.dx : mid.dx) - c.width / 2) / p, y = (c.height / 2 - (kind == 'text' || tiny ? a.dy : mid.dy)) / p;
     final cut = widget.mask ? int.tryParse(ws.selected ?? '') : null;
     final made = m.together(() {
-      final t = m.add(kind == 'text' ? '' : 'shape', kind == 'text' ? '/System/Library/Fonts/Supplemental/Arial Unicode.ttf' : kind); // (a text in the font the Create shelf's Text has)
+      final t = m.add(kind == 'text' ? '' : 'shape', kind == 'text' ? wsTextFont : kind); // (a text in the font the Create shelf's Text has)
       if (t == 0 || !m.set(t, 'x', x) || !m.set(t, 'y', y)) return 0;
       if (ws.ink.isNotEmpty && !m.say(t, 'fill', ws.ink)) return 0; // (the drawing inks)
       if (ws.edge.isNotEmpty && kind != 'line' && !(m.say(t, 'stroke', ws.edge) && m.set(t, 'stroke_width', 6))) return 0;

@@ -3,6 +3,7 @@
 // Tone and manner come from the Inspector's Pop rules (sets/inspector_parts.dart): containers square and tiled edge to edge,
 // what you touch or read round, colour flat and opaque, one lime accent, each kind of thing wearing its own hue.
 import 'dart:developer' show Timeline, TimelineTask;
+import 'dart:io' show Platform;
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 
@@ -479,6 +480,9 @@ const fxValues = <String, (String, Object)>{
   'Duotone': ('tint', 1),
   'Gradient Map': ('tritone', 1),
 };
+
+/// The font a new text is set in, a font every machine of its kind has (one place: the Create shelf and the stage's tool).
+final wsTextFont = Platform.isWindows ? 'C:/Windows/Fonts/arial.ttf' : '/System/Library/Fonts/Supplemental/Arial Unicode.ttf';
 
 class WsScope extends InheritedNotifier<Ws> {
   const WsScope({super.key, required Ws ws, required super.child}) : super(notifier: ws);
