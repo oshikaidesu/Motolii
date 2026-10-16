@@ -1,109 +1,109 @@
+// The stage on a real document (a window's state joined to the inside): it selects what is clicked where the inside
+// says it lies on the picture, repaints at any frame and view, its tools switch the options strip, it fits small seats.
+import 'dart:io';
+
+import 'package:flutter/services.dart' show MethodChannel;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lab_book/motolii.dart';
 import 'package:lab_book/parts/glyphs.dart';
 import 'package:lab_book/workspace/stage.dart';
-import 'package:lab_book/workspace/stage_art.dart';
-import 'package:lab_book/workspace/ws.dart';
+import 'package:lab_book/workspace/stage_art.dart' show WsArt;
 
-Future<Ws> _pump(WidgetTester tester, Size size) async {
-  tester.view.physicalSize = size;
-  tester.view.devicePixelRatio = 1;
-  addTearDown(tester.view.reset);
-  final ws = Ws();
-  await tester.pumpWidget(
+import 'door.dart';
+
+Ws _joined() {
+  final m = Motolii.open('${Directory.systemTemp.createTempSync('stage').path}/stage.motolii')!;
+  addTearDown(m.close);
+  return Ws()..join(m);
+}
+
+Future<void> _stage(WidgetTester t, Ws ws, Size size) async {
+  t.view.physicalSize = size;
+  t.view.devicePixelRatio = 1;
+  addTearDown(t.view.reset);
+  t.binding.defaultBinaryMessenger.setMockMethodCallHandler(const MethodChannel('motolii/stage'), (_) async => -1);
+  await t.pumpWidget(
     WidgetsApp(
       color: const Color(0xFF000000),
       builder: (_, _) => WsScope(
         ws: ws,
-        child: Align(
-          alignment: Alignment.topLeft,
-          child: SizedBox(width: size.width, height: size.height, child: const WsStage()),
-        ),
+        child: Align(alignment: Alignment.topLeft, child: SizedBox(width: size.width, height: size.height, child: const WsStage())),
       ),
     ),
   );
-  return ws;
+  await t.pumpAndSettle();
 }
 
-/// The screen point of a document point, through the camera, on the composition as laid out.
-Offset _at(WidgetTester tester, Ws ws, Offset doc, {bool camera = true}) {
-  final comp = tester.getRect(find.byKey(const ValueKey('ws-stage-comp')));
-  return comp.topLeft + WsArt.toView(ArtScene.of(ws, camera: camera), doc) * (comp.width / WsArt.comp.width);
+/// Where a thing lies on the screen: the inside's place for it on the picture, through the composition as laid out.
+Offset _on(WidgetTester t, Motolii m, int thing) {
+  final comp = t.getRect(find.byKey(const ValueKey('ws-stage-comp'))), f = m.frame(thing)!;
+  return comp.topLeft + Offset(f[0], f[1]) * (comp.width / WsArt.comp.width);
 }
 
 void main() {
-  testWidgets('stage lays out at reference size and selects by clicking the artwork', (tester) async {
-    final ws = await _pump(tester, const Size(924, 616));
-    expect(tester.takeException(), isNull);
-    expect(ws.selected, 'blob');
+  testWidgets('the stage selects what is clicked, where the inside says it lies', (t) async {
+    final ws = _joined(), m = ws.inside!;
+    final rect = m.add('shape', 'rect');
+    ws.reread();
+    await _stage(t, ws, const Size(924, 616));
+    ws.select(null);
+    await t.pump();
+    await t.tapAt(_on(t, m, rect));
+    await t.pump();
+    expect(ws.selected, '$rect');
+    final comp = t.getRect(find.byKey(const ValueKey('ws-stage-comp')));
+    await t.tapAt(comp.topLeft + const Offset(6, 6));
+    await t.pump();
+    expect(ws.selected, isNull, reason: 'nothing there');
+    expect(t.takeException(), isNull);
+    await t.pumpWidget(const SizedBox());
+  }, skip: !insideBuilt);
 
-    final scene = ArtScene.of(ws, camera: true);
-    final grid = [
-      for (var y = 100.0; y < 1000; y += 20)
-        for (var x = 100.0; x < 1840; x += 20) Offset(x, y),
-    ];
-    Offset spot(String? id) => grid.firstWhere((p) => WsArt.hit(scene, p) == id);
-    await tester.tapAt(_at(tester, ws, spot(null)));
-    expect(ws.selected, isNull);
-
-    await tester.tapAt(_at(tester, ws, const Offset(260, 700)));
-    expect(ws.selected, 'title');
-
-    for (final id in ['ring', 'confetti', 'blob']) {
-      await tester.tapAt(_at(tester, ws, spot(id)));
-      expect(ws.selected, id);
-    }
-
-    final comp = tester.getRect(find.byKey(const ValueKey('ws-stage-comp')));
-    await tester.tapAt(comp.topLeft - const Offset(6, 6));
-    expect(ws.selected, isNull);
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('frame changes, view controls and tools repaint without errors', (tester) async {
-    final ws = await _pump(tester, const Size(924, 616));
-    for (final f in [0, 12, 30, 60, 100, 150, 205, 240]) {
+  testWidgets('frame changes, view controls and the camera switch repaint without errors', (t) async {
+    final ws = _joined(), m = ws.inside!;
+    final rect = m.add('shape', 'rect');
+    expect(m.set(rect, 'start', 2), isTrue, reason: m.trouble);
+    ws.reread();
+    await _stage(t, ws, const Size(924, 616));
+    for (final f in [0, 12, 30, 60, 100, 150]) {
       ws.frame = f;
-      await tester.pump();
+      await t.pump();
     }
-    expect(find.text('Not on this frame'), findsNothing);
-    ws.frame = 230;
-    ws.select('title');
-    await tester.pump();
-    expect(find.text('Not on this frame'), findsOneWidget);
-
-    ws.frame = 100;
-    await tester.tap(find.text('100%'));
-    await tester.pump();
-    await tester.tap(find.text('Grid'));
-    await tester.tap(find.text('Safe'));
-    await tester.tap(find.text('Camera'));
-    await tester.pump();
+    ws
+      ..frame = 0
+      ..select('$rect');
+    await t.pump();
+    expect(find.text('Not on this frame'), findsOneWidget, reason: 'it comes on at 2 s');
+    await t.tap(find.text('100%'));
+    await t.pump();
+    await t.tap(find.text('Grid'));
+    await t.tap(find.text('Safe'));
+    await t.tap(find.text('Camera'));
+    await t.pump();
     expect(find.text('Free'), findsOneWidget);
+    expect(t.takeException(), isNull);
+    await t.pumpWidget(const SizedBox());
+  }, skip: !insideBuilt);
 
-    await tester.tap(find.text('50%'));
-    await tester.pump();
-    final cam = WsArt.cameraBox(ArtScene.of(ws, camera: false));
-    await tester.tapAt(_at(tester, ws, cam.corners.first + const Offset(400, 0), camera: false));
-    expect(ws.selected, 'cam');
-
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('tool column switches the options strip', (tester) async {
-    await _pump(tester, const Size(924, 616));
+  testWidgets('the tool column switches the options strip', (t) async {
+    final ws = _joined();
+    await _stage(t, ws, const Size(924, 616));
     expect(find.text('SELECT'), findsOneWidget);
     for (final (g, name) in const [(G.rect, 'RECTANGLE'), (G.pen, 'PEN'), (G.text, 'TEXT')]) {
-      await tester.tap(find.byWidgetPredicate((w) => w is Glyph && w.kind == g));
-      await tester.pump();
+      await t.tap(find.byWidgetPredicate((w) => w is Glyph && w.kind == g));
+      await t.pump();
       expect(find.text(name), findsOneWidget);
     }
-  });
+    await t.pumpWidget(const SizedBox());
+  }, skip: !insideBuilt);
 
-  testWidgets('stage fits a narrower, shorter seat', (tester) async {
-    await _pump(tester, const Size(640, 400));
-    expect(tester.takeException(), isNull);
-    await _pump(tester, const Size(520, 300));
-    expect(tester.takeException(), isNull);
-  });
+  testWidgets('the stage fits a narrower, shorter seat', (t) async {
+    final ws = _joined();
+    for (final s in const [Size(640, 400), Size(520, 300)]) {
+      await _stage(t, ws, s);
+      expect(t.takeException(), isNull, reason: 'at $s');
+    }
+    await t.pumpWidget(const SizedBox());
+  }, skip: !insideBuilt);
 }
