@@ -10,7 +10,15 @@ Workspace(document: path, extra: [
 ```
 - 足したパネルは Inspector の横にタブで並ぶ。本家のファイルは 1 行も変えない。
 - パネルの中では `WsScope.of(context)` が窓の状態（`Ws`）：`inside` が書類（`Motolii`）、`selected` が選ばれた物、`frame` が今のコマ。値は `inside.value(thing, name, seconds)`、変えるのは `inside.set(...)`、キーは `inside.keyHere(...)`。
-- 例：`test/workspace_window_test.dart` の「a pane of your own」。
+- 気をつける 4 つ：選ばれた物 `selected` は文字なので `int.parse` してから書類に渡す。今の秒は `frame / Ws.fps`。物の名前は `inside.word(t, 'name')`。書類を変えたら `ws.reread()`（窓の他のパネルが読み直す）。
+- 例：`test/workspace_window_test.dart` の「a pane of your own」（書類なし）。本物の書類を開いて試すなら `test/workspace_joined_test.dart` の `_pump`。
+
+## 自分のプリセット（Ease の動き方）を足す
+窓の一覧ではなく書類の動き方として足す。足した物は Ease の desk にタイルで出て、書類と一緒に保存される。
+```dart
+ws.inside!.define('Snappy', 'a + (b - a) * bezier(u, .2, 0, 0, 1)');   // (a: 前のキーの値、b: 次のキーの値、u: 区間の 0〜1)
+```
+- 例：`test/workspace_joined_test.dart` の「a preset of your own」。
 
 ## 開き方・確かめ方
 ```bash
@@ -64,5 +72,5 @@ $F/flutter test                                  # 中身とつないだ確か�
 - 区切りごとにコミットする(履歴が無いのが一番怖い、が利用者の方針)。
 
 ## まだ無いもの
-- desk の道具とプリセットを外から足す入口（今は desk_kit.dart の一覧と desk.dart の switch）。
+- desk の道具を外から足す入口（今は desk_kit.dart の一覧と desk.dart の switch）。
 - 見本と中身の二股（`inside == null`）が残っている（TASKS.md 24 番）。

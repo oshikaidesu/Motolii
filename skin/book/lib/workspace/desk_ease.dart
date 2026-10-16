@@ -134,12 +134,17 @@ Map<String, double> keysAt(Ws ws, EaseSpan span) {
 
 /// Joined: the ways of the document that the sample's eight tiles have no seat for (Elastic, Cyclic, Random, Steps,
 /// ElasticSteps, and any defined in the document), each a tile of its own: its curve is the inside's own working of it.
-final _unseatedOf = Expando<List<Ease>>();
+/// (worked out again only when the document's ways are not the ones they were: a way defined since shows at once)
+final _unseatedOf = Expando<(String, List<Ease>)>();
 List<Ease> unseated(Ws ws) {
   final m = ws.inside;
   if (m == null) return const [];
-  return _unseatedOf[m] ??= [
-    for (final name in m.wayNames)
-      if (!const ['Hold', 'Linear', 'Bezier', 'Bounce'].contains(name)) Ease(EaseKind.bezier, Offset.zero, const Offset(1, 1), name, [for (var i = 0; i <= 32; i++) m.wayAt(name, i / 32)]),
+  final names = m.wayNames, said = names.join(' ');
+  if (_unseatedOf[m] case (final was, final tiles) when was == said) return tiles;
+  final tiles = [
+    for (final name in names)
+      if (name != 'Bezier' && easePresets.every((p) => p.name != name)) Ease(EaseKind.bezier, Offset.zero, const Offset(1, 1), name, [for (var i = 0; i <= 32; i++) m.wayAt(name, i / 32)]),
   ];
+  _unseatedOf[m] = (said, tiles);
+  return tiles;
 }

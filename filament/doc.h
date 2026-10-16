@@ -1740,6 +1740,11 @@ static bool doc_size_is(sqlite3* file, int wide, int high) {
 static Doc* doc_open(Stage& s, const char* path) {
     Doc* d = new Doc;
     if (sqlite3_open(path, &d->file) != SQLITE_OK) return nullptr;
+    // (a way defined in the document may ask how far a cubic bezier ease is at u, by its two handles, as the nine kinds'
+    //  Bezier goes: bezier(u, x1, y1, x2, y2))
+    sqlite3_create_function(d->file, "bezier", 5, SQLITE_UTF8 | SQLITE_DETERMINISTIC, nullptr, [](sqlite3_context* c, int, sqlite3_value** v) {
+        sqlite3_result_double(c, interp_bezier(interp_clamp(sqlite3_value_double(v[1]), 0.0, 1.0), sqlite3_value_double(v[2]), interp_clamp(sqlite3_value_double(v[3]), 0.0, 1.0), sqlite3_value_double(v[4]), sqlite3_value_double(v[0])));
+    }, nullptr, nullptr);
     sqlite3_busy_timeout(d->file, 2000);   // (another program at the same document is waited for)
     // (a key's `way` is how the stretch from it to the next key goes; `way` the table holds the ways defined in this document)
     if (sqlite3_exec(d->file, "create table if not exists fact(thing integer, name text, at numeric, value, way text, primary key(thing, name, at)) without rowid;"

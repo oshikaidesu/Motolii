@@ -106,6 +106,7 @@ class Motolii {
   late final _spent = _lib.lookupFunction<_S Function(_P), _S Function(_P)>('motolii_spent');
   late final _range = _lib.lookupFunction<Int32 Function(_P, Int32, _S, Pointer<Double>, Pointer<Double>), int Function(_P, int, _S, Pointer<Double>, Pointer<Double>)>('motolii_range');
   late final _words = _lib.lookupFunction<_S Function(_P, Int32, _S), _S Function(_P, int, _S)>('motolii_words');
+  late final _define = _lib.lookupFunction<Int32 Function(_P, _S, _S), int Function(_P, _S, _S)>('motolii_define');
   late final _wayNames = _lib.lookupFunction<_S Function(_P), _S Function(_P)>('motolii_way_names');
   late final _wayAt = _lib.lookupFunction<Double Function(_P, _S, Double), double Function(_P, _S, double)>('motolii_way_at');
   late final _kindOf = _lib.lookupFunction<_S Function(_S), _S Function(_S)>('motolii_kind_of');
@@ -409,6 +410,10 @@ class Motolii {
   Future<String?> thumbnail(String film) => _thumbnails[film] ??= _thumbnail(libPath, film);
 
   /// The names of the ways a stretch may go, and how one of the nine kinds goes at [u] of the way through (0 to 1).
+  /// A way of this document's own, by name: how far it is (`a` the one key's value, `b` the next's, `u` from 0 to 1
+  /// through the stretch, `p1`..`p4` its numbers; `bezier(u, x1, y1, x2, y2)` an ease by its two handles). It is then
+  /// one of [wayNames], a tile of the Ease desk, and saved with the document.
+  bool define(String way, String expression) => _with([way, expression], (s) => _define(_m, s[0], s[1])) != 0;
   List<String> get wayNames => _wayNames(_m).toDartString().split(' ').where((w) => w.isNotEmpty).toList();
   double wayAt(String way, double u) => _with([way], (s) => _wayAt(_m, s[0], u));
 

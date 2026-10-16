@@ -19,6 +19,7 @@ import 'package:lab_book/workspace/dock_parts.dart' show DockFooter, DockHover, 
 import 'package:lab_book/workspace/fx_catalog.dart' show fxCatalog;
 import 'package:lab_book/workspace/timeline.dart';
 import 'package:lab_book/workspace/workspace.dart';
+import 'package:lab_book/workspace/desk_ease.dart';
 import 'package:lab_book/workspace/ws.dart';
 
 final _built = File('$motoliiDir/out/libmotolii.dylib').existsSync();
@@ -255,6 +256,19 @@ void main() {
     expect(m.undo() && m.value(cube, 'clip', 0) == 0, isTrue, reason: 'one step back: the clip');
     expect(t.takeException(), isNull);
     await _close(t);
+  }, skip: !_built);
+
+  testWidgets('a preset of your own is a way of the document: define it, and the Ease desk has its tile and the stretch goes by it', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    expect(m.define('Snappy', 'a + (b - a) * bezier(u, .2, 0, 0, 1)'), isTrue, reason: m.trouble);
+    expect(m.wayNames, contains('Snappy'));
+    expect(unseated(ws).map((e) => e.name), contains('Snappy'), reason: 'a tile at once, nothing of the window changed');
+    for (final u in [.1, .3, .5, .8]) {
+      expect(m.wayAt('Snappy', u), closeTo(bezierY(const Offset(.2, 0), const Offset(0, 1), u), 1e-3), reason: 'at $u');
+    }
+    final box = m.add('solid', 'cube');
+    expect(m.key(box, 'x', 0, 0) && m.key(box, 'x', 1, 2) && m.way(box, 'x', 0, 'Snappy'), isTrue, reason: m.trouble);
+    expect(m.value(box, 'x', .5), closeTo(2 * bezierY(const Offset(.2, 0), const Offset(0, 1), .5), 1e-3));
   }, skip: !_built);
 
   testWidgets('round 2 of the judges: a thing put aside is in the document; every way has a seat; a new text has a word; acts within acts', (t) async {
