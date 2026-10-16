@@ -583,7 +583,7 @@ void main() {
     await _close(t);
   }, skip: !_built);
 
-  testWidgets('the Effects shelf: Gaussian Blur and Drop Shadow are ThorVG\'s own, put on and taken off; the rest have no seat', (t) async {
+  testWidgets('the Effects shelf: Gaussian Blur and Drop Shadow are ThorVG\'s own, put on and taken off; the rest are not on the shelf', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final rect = m.add('shape', 'rect');
     ws
@@ -641,8 +641,12 @@ void main() {
     await t.pumpAndSettle();
     expect([m.keyMoments(rect, 'trim'), m.value(rect, 'trim', 0)], [isEmpty, 0], reason: 'taken off with its keys');
 
-    await pick('Twirl');
-    expect(find.descendant(of: find.byType(DockFooter), matching: find.text('No seat yet')), findsNWidgets(2), reason: 'what it is to the document, and its button');
+    final none = fxCatalog.map((f) => f.name).firstWhere((n) => !fxValues.containsKey(n) && m.effects.every((e) => e.$1 != n) && m.animators.every((e) => e.$1 != n)); // (one of the sample's the inside does not do)
+    await t.enterText(find.descendant(of: find.byType(DockSearch), matching: find.byType(EditableText)), none);
+    await t.pumpAndSettle();
+    expect(find.text(none), findsOneWidget, reason: 'only the search box\'s own words: $none, which the inside does not do, is not on the shelf');
+    await t.enterText(find.descendant(of: find.byType(DockSearch), matching: find.byType(EditableText)), '');
+    await t.pumpAndSettle();
     expect(t.takeException(), isNull);
     await expectSameAfterReopen(t);
     await _close(t);

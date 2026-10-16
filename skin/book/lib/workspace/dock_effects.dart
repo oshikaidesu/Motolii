@@ -36,6 +36,7 @@ class EffectsShelf extends StatelessWidget {
   bool _has(FxDef f, String g, String t) => g == _collection ? c.starred(f.name) : fxHas(f, g, t);
 
   bool _keep(FxDef f, {String? except}) =>
+      (c.ws.inside == null || fxValues.containsKey(f.name)) && // (joined: only what the inside does; a row that does nothing is not shown)
       c.hit(f.name) && c.mem.filter.entries.every((e) => e.key == except || e.value.isEmpty || e.value.any((t) => _has(f, e.key, t)));
 
   void _toggle(String g, String t, bool add) => c.set(() {
