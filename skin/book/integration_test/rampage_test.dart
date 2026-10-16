@@ -340,7 +340,7 @@ void main() {
             if (held[key] case final shown?
                 when (shown - value).abs() > 0.051 && !key.startsWith('cam.'))
               reds.add(
-                '$what: the card shows $key $shown, the document $value',
+                '$what: the card shows $key $shown, the document $value${Ctx.read(t.element(find.byType(InspectorPanel))).doc.inGesture ? ' (a hand still on, by the inspector)' : ''}',
               );
           }
           judging.add((j0, Timeline.now));
