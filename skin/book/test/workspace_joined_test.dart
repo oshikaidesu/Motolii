@@ -68,6 +68,7 @@ void main() {
     expect(m.undo(), isTrue);
     expect(m.word(text, 'text'), 'Text');
     expect(t.takeException(), isNull);
+    await expectSameAfterReopen(t);
     await _close(t);
   }, skip: !_built);
 
@@ -123,6 +124,7 @@ void main() {
     expect(m.redo(), isTrue);
     expect([m.value(film, 'x', 0), m.value(film, 'y', 0)], [2, 3]);
     expect(t.takeException(), isNull);
+    await expectSameAfterReopen(t);
     await _close(t);
   }, skip: !_built);
 
@@ -145,6 +147,7 @@ void main() {
     expect(m.undo(), isTrue, reason: 'the step before it is the cube\'s own making');
     expect(m.things, isEmpty);
     expect(t.takeException(), isNull);
+    await expectSameAfterReopen(t);
     await _close(t);
   }, skip: !_built);
 
@@ -170,6 +173,7 @@ void main() {
     expect(m.undo() && m.value(cube, 'start', 0) == 0, isTrue, reason: 'and the slide as one');
     expect(tail, greaterThan(tracks.left));
     expect(t.takeException(), isNull);
+    await expectSameAfterReopen(t);
     await _close(t);
   }, skip: !_built);
 
@@ -199,6 +203,7 @@ void main() {
     await t.pumpAndSettle();
     expect(ws.inside!.size, (1080, 1920), reason: 'and redo makes it tall again');
     expect(t.takeException(), isNull);
+    await expectSameAfterReopen(t);
     await _close(t);
   }, skip: !_built);
 
@@ -243,6 +248,7 @@ void main() {
     expect(t.widget<OnOff>(seat('Ghost')).on, isFalse, reason: 'nothing is behind it: it goes back');
     expect(m.undo() && m.value(cube, 'clip', 0) == 0, isTrue, reason: 'one step back: the clip');
     expect(t.takeException(), isNull);
+    await expectSameAfterReopen(t);
     await _close(t);
   }, skip: !_built);
 
@@ -299,6 +305,7 @@ void main() {
     expect(m.hold(text) && m.carry('place', 100, 0) && m.letGo(false), isTrue, reason: m.trouble);
     expect(m.value(text, 'x', 2), 1);
     expect(t.takeException(), isNull);
+    await expectSameAfterReopen(t);
     await _close(t);
   }, skip: !_built);
 
@@ -345,6 +352,7 @@ void main() {
     expect(mp4.lengthSync(), greaterThan(1000));
     mp4.deleteSync();
     expect(t.takeException(), isNull);
+    await expectSameAfterReopen(t);
     await _close(t);
   }, skip: !_built);
 
@@ -388,6 +396,7 @@ void main() {
     expect(edgeOn[2], greaterThan(faceOn[2] * 1.2));
     expect(edgeOn[4], 0);
     expect(t.takeException(), isNull);
+    await expectSameAfterReopen(t);
     await _close(t);
   }, skip: !_built);
 
@@ -445,6 +454,7 @@ void main() {
     expect(m.say(rect, 'stroke', 'grey'), isFalse);
     expect(m.trouble, contains('six digits'));
     expect(t.takeException(), isNull);
+    await expectSameAfterReopen(t);
     await _close(t);
   }, skip: !_built);
 
@@ -468,6 +478,7 @@ void main() {
     expect(after[1], greaterThan(before[1] + 10), reason: 'and below');
     expect(m.undo() && m.value(rect, 'anchor_x', 0) == 0, isTrue, reason: 'one step');
     expect(t.takeException(), isNull);
+    await expectSameAfterReopen(t);
     await _close(t);
   }, skip: !_built);
 
@@ -497,6 +508,7 @@ void main() {
     expect(m.set(cube, 'parent', 0), isTrue);
     expect(m.frame(cube)![0], closeTo(m.frame(cube)![0], 1));
     expect(t.takeException(), isNull);
+    await expectSameAfterReopen(t);
     await _close(t);
   }, skip: !_built);
 
@@ -526,6 +538,7 @@ void main() {
     expect(m.value(text, 'align', 0), .5, reason: m.trouble);
     expect(find.descendant(of: seat, matching: find.text('Justify')), findsNothing, reason: 'not offered: ThorVG has no justified lines');
     expect(t.takeException(), isNull);
+    await expectSameAfterReopen(t);
     await _close(t);
   }, skip: !_built);
 
@@ -612,6 +625,7 @@ void main() {
     final on = t.widget<SpacePlate>(find.byWidgetPredicate((w) => w is SpacePlate && w.space == Space.d3));
     expect(on.on, isTrue, reason: 'a solid thing is 3D');
     expect(t.takeException(), isNull);
+    await expectSameAfterReopen(t);
     await _close(t);
   }, skip: !_built);
 
@@ -697,6 +711,7 @@ void main() {
     expect(aperture, inExclusiveRange(1.4, 22), reason: 'the f-number the hand left');
     expect(m.undo() && m.value(camera, 'aperture', 0) == 0, isTrue, reason: 'one step');
     expect(t.takeException(), isNull);
+    await expectSameAfterReopen(t);
     await _close(t);
   }, skip: !_built);
 
@@ -742,6 +757,7 @@ void main() {
     await t.pumpAndSettle();
     expect(m.mark(2, '') && m.marks.length == 1, isTrue, reason: 'a mark said with nothing is taken away');
     expect(t.takeException(), isNull);
+    await expectSameAfterReopen(t);
     await _close(t);
   }, skip: !_built);
 
@@ -762,6 +778,7 @@ void main() {
     await t.pumpAndSettle();
     expect(m.keyingNow, isFalse);
     expect(t.takeException(), isNull);
+    await expectSameAfterReopen(t);
     await _close(t);
   }, skip: !_built);
 
@@ -855,6 +872,7 @@ void main() {
     m.looping = false;
     expect(m.looping, isFalse);
     expect(t.takeException(), isNull);
+    await expectSameAfterReopen(t);
     await _close(t);
   }, skip: !_built);
 
@@ -917,6 +935,7 @@ void main() {
     final r = ws.inside!.recipes.length; // (a recipe is a file: the shelf grows by what is in recipes/)
     expect(find.text('${18 + r} of ${30 + r} work'), findsOneWidget);
     expect(t.takeException(), isNull);
+    await expectSameAfterReopen(t);
     await _close(t);
   }, skip: !_built);
 
@@ -940,6 +959,7 @@ void main() {
     expect([m.value(cube, 'scale_x', 0), m.value(cube, 'scale_y', 0)], [1, 1], reason: 'z alone');
     expect(m.value(cube, 'scale_z', 0), isNot(1), reason: m.trouble);
     expect(t.takeException(), isNull);
+    await expectSameAfterReopen(t);
     await _close(t);
   }, skip: !_built);
 
@@ -1034,6 +1054,7 @@ void main() {
     expect([ws.fxOf('$a'), m.word(a, 'shadow')], [['Glow'], ''], reason: 'taken off the document');
     expect([for (final e in find.byType(EffectCard).evaluate()) (e.widget as EffectCard).fx.name], ['Glow']);
     expect(t.takeException(), isNull);
+    await expectSameAfterReopen(t);
     await _close(t);
   }, skip: !_built);
 
@@ -1046,6 +1067,7 @@ void main() {
     expect(DateTime.now().difference(at).inSeconds, lessThan(5), reason: 'the change is in the file already');
     expect(find.text('Saved ${at.hour.toString().padLeft(2, '0')}:${at.minute.toString().padLeft(2, '0')}'), findsOneWidget);
     expect(t.takeException(), isNull);
+    await expectSameAfterReopen(t);
     await _close(t);
   }, skip: !_built);
 
@@ -1063,6 +1085,7 @@ void main() {
     expect(find.descendant(of: find.byType(InspHeader), matching: find.text('Solid')), findsOneWidget);
     expect(find.byType(FillStroke), findsOneWidget, reason: 'a solid\'s fill is a colour or glass');
     expect(t.takeException(), isNull);
+    await expectSameAfterReopen(t);
     await _close(t);
   }, skip: !_built);
 
@@ -1108,6 +1131,7 @@ void main() {
     expect(m.say(cube, 'fill', 'ff3366') && m.cards(cube).map((c) => c.$1).join(' ') == 'Surface Lit Physics', isTrue);
     expect(find.byWidgetPredicate((w) => w is NumField && w.id == 'v_metallic'), findsOneWidget);
     expect(t.takeException(), isNull);
+    await expectSameAfterReopen(t);
     await _close(t);
   }, skip: !_built);
 
@@ -1201,6 +1225,7 @@ void main() {
     expect(m.say(fox, 'animation', 'Run') && m.set(fox, 'speed', 2), isTrue, reason: m.trouble);
     expect(m.cards(fox).firstWhere((c) => c.$1 == 'Play').$2, ['animation', 'speed']);
     expect(t.takeException(), isNull);
+    await expectSameAfterReopen(t);
     await _close(t);
   }, skip: !_built);
 
@@ -1257,6 +1282,7 @@ void main() {
     await t.pumpAndSettle();
     expect(m.value(dots, 'js_reach', 0), isNot(1.0), reason: 'the knob is the document\'s: ${ws.notice}');
     expect(t.takeException(), isNull);
+    await expectSameAfterReopen(t);
     await _close(t);
   }, skip: !_built);
 
@@ -1324,6 +1350,7 @@ void main() {
       await t.pumpAndSettle();
     }
     expect(m.value(0, 'bloom', 0), greaterThan(0.45), reason: 'the second drag began from 45, not from the document\'s 0.45 read as hundredths');
+    await expectSameAfterReopen(t);
     await _close(t);
   }, skip: !_built);
 
@@ -1347,6 +1374,7 @@ void main() {
     await t.pumpAndSettle();
     expect(t.state<ScrollableState>(list).position.pixels, scrolled, reason: 'the inspector stays where it was');
     expect(m.value(text, 'letter_spacing', 0), greaterThan(was), reason: 'the number went up');
+    await expectSameAfterReopen(t);
     await _close(t);
   }, skip: !_built);
 
@@ -1371,6 +1399,7 @@ void main() {
       expect(m.keyMoments(c, 'scale_x'), isNotEmpty, reason: 'Animate keys it');
     }
     ws.animating = false;
+    await expectSameAfterReopen(t);
     await _close(t);
   }, skip: !_built);
 
@@ -1390,6 +1419,7 @@ void main() {
     await t.tap(find.descendant(of: follow, matching: find.textContaining(RegExp('cube', caseSensitive: false))));
     await t.pumpAndSettle();
     expect(m.value(0, 'follow', 0), cube, reason: m.trouble);
+    await expectSameAfterReopen(t);
     await _close(t);
   }, skip: !_built);
 
@@ -1415,6 +1445,7 @@ void main() {
     expect(m.things, [ring, cube]);
     expect(m.word(cube, 'fill'), 'glass', reason: 'it comes back as it was: glass is its fill');
     expect(t.takeException(), isNull);
+    await expectSameAfterReopen(t);
     await _close(t);
   }, skip: !_built);
 }
