@@ -13,13 +13,16 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:lab_book/motolii.dart';
-import 'package:lab_book/sets/inspector/inspector_parts.dart' show AnchorCube, AnchorGeometry, Hov, InspectorPanel, NumField, OnOff, PanelLink, Space, SpacePlate, TextGroup, Chooser;
+import 'package:lab_book/sets/inspector/inspector_parts.dart' show AnchorCube, AnchorGeometry, Ctx, Hov, NumField, OnOff, PanelLink, Space, SpacePlate, TextGroup, Chooser;
 import 'package:lab_book/sets/inspector/inspector_rows_prop_row.dart' show PropRow;
 import 'package:lab_book/workspace/dock_parts.dart' show DockHover, DockSearch;
 import 'package:lab_book/workspace/timeline.dart';
 import 'package:lab_book/workspace/workspace.dart' show Workspace;
 import 'package:lab_book/workspace/ws.dart';
 
+import 'package:lab_book/sets/inspector/inspector_direct_transform.dart' show DirectSurface;
+import 'package:lab_book/sets/inspector/inspector_direct_transform_canvas.dart' show TransformCanvas;
+import 'package:lab_book/sets/inspector/inspector_direct_transform_layout.dart' show TransformLayout;
 import '../test/door.dart' show seen;
 
 const _font = '$motoliiDir/out/arial_black.ttf';
@@ -29,6 +32,10 @@ void main() {
 
   testWidgets('first clicks: the window as a stranger sees it, task by task', (t) async {
     t.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.menu, (_) async => null);
+    // (a window tall enough that the inspector shows every card of a thing unscrolled: where a list is scrolled to would
+    //  tell where the answer lies)
+    t.view.physicalSize = Size(t.view.physicalSize.width, t.view.physicalSize.width * 1.6);
+    addTearDown(t.view.resetPhysicalSize);
     final doc = '${Directory.systemTemp.createTempSync('firstclick').path}/firstclick.motolii';
     await t.pumpWidget(WidgetsApp(color: const Color(0xFF000000), builder: (c, _) => Workspace(document: doc)));
     await t.pumpAndSettle();
@@ -75,7 +82,16 @@ void main() {
     ];
 
     // (another right first click: with the words hidden, a blur is found by typing its name in the shelf's search)
-    final also = <String, Finder>{'Make the selected card look out of focus.': find.byType(DockSearch)};
+    // (and a card is tilted by the round knob above it on the Transform card's own drawing, as well as by its number)
+    Rect knob() {
+      final box = t.getRect(find.byType(TransformCanvas)), doc = Ctx.read(t.element(find.byType(TransformCanvas))).doc;
+      final at = TransformLayout(Size(box.width, DirectSurface.height), Map.of(doc.v), space: doc.space).knob;
+      return Rect.fromCenter(center: box.topLeft + const Offset(0, 4) + at, width: 16, height: 16);
+    }
+    final also = <String, Rect Function()>{
+      'Make the selected card look out of focus.': () => t.getRect(find.byType(DockSearch)),
+      'Tilt the selected card, as you would tilt a picture on a wall.': knob,
+    };
     final out = Directory('$motoliiDir/../reports/firstclick')..createSync(recursive: true);
     final dpr = t.view.devicePixelRatio, written = <Map<String, Object>>[];
     for (final (i, (task, thing, before, control, point)) in tasks.indexed) {
@@ -90,7 +106,7 @@ void main() {
         if ((e as StatefulElement).state case final ScrollableState l when l.position.hasPixels) l.position.jumpTo(l.position.minScrollExtent);
       }
       await t.pumpAndSettle();
-      final view = t.getRect(find.byType(InspectorPanel));
+      final view = Offset.zero & t.view.physicalSize / dpr; // (only a control off the window is scrolled to)
       if (control.evaluate().isEmpty || !view.contains(t.getRect(control.first).center)) {
         await seen(t, control);
         await Scrollable.ensureVisible(t.element(control.first), alignment: .5);
@@ -124,7 +140,7 @@ void main() {
         for (final b in all)
           if (!all.any((o) => o != b && b.contains(o.topLeft) && b.contains(o.bottomRight - const Offset(.01, .01)))) [b.left * dpr, b.top * dpr, b.right * dpr, b.bottom * dpr],
       ];
-      written.add({'parts': parts, 'n': i + 1, 'task': task, 'picture': name, 'rect': [r.left * dpr, r.top * dpr, r.right * dpr, r.bottom * dpr], 'words': words, if (also[task] case final a?) 'also': [for (final x in [t.getRect(a.first)]) [x.left * dpr, x.top * dpr, x.right * dpr, x.bottom * dpr]]});
+      written.add({'parts': parts, 'n': i + 1, 'task': task, 'picture': name, 'rect': [r.left * dpr, r.top * dpr, r.right * dpr, r.bottom * dpr], 'words': words, if (also[task] case final a?) 'also': [for (final x in [a()]) [x.left * dpr, x.top * dpr, x.right * dpr, x.bottom * dpr]]});
     }
     File('${out.path}/tasks.json').writeAsStringSync(const JsonEncoder.withIndent('  ').convert(written));
   });
