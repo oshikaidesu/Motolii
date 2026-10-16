@@ -14,7 +14,6 @@ import 'package:lab_book/sets/inspector/inspector_parts_insp_host.dart';
 import '../sets/inspector/inspector_parts.dart';
 import 'desk.dart';
 import 'dock.dart';
-import 'dock_make.dart' show usedColours;
 import 'dock_glyphs.dart';
 import 'panes.dart';
 import 'desk_kit.dart';
@@ -273,7 +272,6 @@ Kind _kindOf(WsLayer? l) => switch (l?.kind) {
   _ => Kind.shape,
 };
 
-String _hex(Color c) => '#${(c.toARGB32() & 0xFFFFFF).toRadixString(16).padLeft(6, '0').toUpperCase()}';
 
 /// The paint each layer wears on the stage, so the Inspector's Fill names the colour you see.
 
@@ -282,10 +280,9 @@ Map<String, String> _words(Ws ws, String? id) {
   final m = ws.inside, t = id == null ? 0 : int.tryParse(id); // (nothing picked: the stage's own cards)
   if (m == null || t == null) return const {};
   if (t == 0) return _cardColours(m, 0);
-  final blend = m.word(t, 'blend'), stroke = m.word(t, 'stroke');
+  final blend = m.word(t, 'blend');
   return {
     ..._cardColours(m, t),
-    if (m.value(t, 'stroke_width', 0) != null) 'stroke': stroke.isEmpty ? 'None' : '#${stroke.toUpperCase()}',
     'blend': blend.isEmpty ? 'Normal' : blend.replaceRange(0, 1, blend[0].toUpperCase()),
     // (a flat thing's space is the document's word; a solid thing has none: it is 3D)
     'space': m.words(t, 'space').isEmpty ? 'd3' : _spaces.entries.firstWhere((e) => e.value == m.word(t, 'space'), orElse: () => _spaces.entries.first).key,
@@ -344,7 +341,6 @@ Map<String, List<String>> _choices(Ws ws, String? id) {
     'camTarget': ['None', ..._others(ws, t).keys], // (a camera looks at the thing it goes with)
     'align': _aligned, // (Justify ThorVG has not)
     // (an edge in a colour the document has: this thing's own, and those its things are filled with)
-    'stroke': {'None', if (m.word(t, 'stroke') case final s when s.isNotEmpty) '#${s.toUpperCase()}', for (final c in usedColours(ws).values) _hex(c)}.toList(),
   };
 }
 
@@ -383,8 +379,6 @@ bool _say(Ws ws, String? id, Map<String, String> changed) {
         m.words(t, 'space').isEmpty ? all = all && e.value == 'd3' : say('space', _spaces[e.value] ?? e.value); // (a solid is 3D and only that)
       case 'camTarget' || 'parent':
         set('parent', (_others(ws, t)[e.value] ?? 0).toDouble()); // (it goes with that one, and stays where it is)
-      case 'stroke':
-        say('stroke', e.value == 'None' ? '' : e.value.replaceFirst('#', '').toLowerCase()); // (None: no edge)
       case final k when k.startsWith('v_'):
         say(k.substring(2), e.value); // (a card of the inside's own: the value of that name)
       default: // (a seat the inside has nothing behind yet: the inspector keeps its own word)
@@ -395,13 +389,6 @@ bool _say(Ws ws, String? id, Map<String, String> changed) {
   return all;
 }
 
-/// What the Inspector's Fill names: the document's word for the thing (a colour, or the material Glass).
-String? _fillWord(Ws ws, String? id) {
-  final m = ws.inside;
-  if (m == null) return null;
-  final t = int.tryParse(id ?? ''), f = t == null ? '' : m.word(t, 'fill');
-  return f.isEmpty ? 'None' : (f == 'glass' ? 'Glass' : '#${f.toUpperCase()}'); // (nothing said: nothing is named, not the last thing's fill)
-}
 
 /// The inspector's numbers and the document's: an inspector id and the document's value it shows (how it is read, the
 /// inside says: Motolii.reading).
@@ -416,7 +403,6 @@ const _seats = <(String, String)>[
   ('rot.y', 'rotate_y'),
   ('rot.z', 'rotate'),
   ('op', 'opacity'),
-  ('stroke.w', 'stroke_width'),
   ('anchor.x', 'anchor_x'),
   ('anchor.y', 'anchor_y'),
   ('anchor.z', 'anchor_z'),
@@ -498,7 +484,7 @@ Map<String, String> _cardColours(Motolii m, int t) => {
             ? m.word(t, n).split('/').last // (a file by its name)
             : m.shown(n)?.look == 'numbers'
             ? m.word(t, n) // (numbers, one for each copy, as they are)
-            : m.word(t, n).split(' ').where((c) => c.isNotEmpty).map((c) => '#${c.toUpperCase()}').join(' '), // (a colour, or colours in their order)
+            : m.word(t, n).split(' ').where((c) => c.isNotEmpty).map((c) => int.tryParse(c, radix: 16) != null && c.length == 6 ? '#${c.toUpperCase()}' : c.replaceRange(0, 1, c[0].toUpperCase())).join(' '), // (a colour, or colours in their order; a word that is not one, a material, as it is: Glass)
 };
 
 /// Joined: the cards the inside shows a thing's values on beyond the sample's (motolii_cards), each as Params in the
@@ -809,7 +795,7 @@ class _InspectorSeatState extends State<_InspectorSeat> {
         onRoute: ws.route,
         onAim: (at) => ws.aim = at.startsWith('v_') ? at.substring(2) : null, // (a colour link of a card is aimed at that value)
         values: Ws.timed('transform', () => wsTransform(ws, l?.id)),
-        strs: Ws.timed('words', () => {'fill': ?_fillWord(ws, l?.id), ..._words(ws, l?.id)}),
+        strs: Ws.timed('words', () => _words(ws, l?.id)),
         onWords: (changed) => _say(ws, l?.id, changed),
         onAnimateAll: (on) => ws.animating = on,
         animating: ws.animating,

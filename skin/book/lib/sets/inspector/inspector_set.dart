@@ -431,25 +431,6 @@ WidgetbookComponent inspectorSetSet() => WidgetbookComponent(
       width: 372,
     ),
     uc(
-      'Fill and stroke — hand-over',
-      (c) => _host(
-        c,
-        Kind.shape,
-        Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const FillStroke(),
-            const Cap(
-              'The field shows the value; the tool that edits it opens aimed at this slot of this layer (I1). No popup. 0 stroke reads None (E3).',
-            ),
-          ],
-        ),
-        lockedKnob: true,
-      ),
-      width: 372,
-    ),
-    uc(
       'Empty state — nothing selected',
       (c) => _host(
         c,
