@@ -21,10 +21,8 @@ class WsDesk extends StatelessWidget {
           _DeskHeader(name: name),
           Expanded(
             child: switch (name) {
-              'Ease' => const DeskEase(),
-              'Depth' => const DeskDepth(),
               'Tools' => const _Catalog(),
-              _ => _Placeholder(name: name),
+              _ => deskTool(ws, name).build?.call() ?? _Placeholder(name: name),
             },
           ),
         ],
@@ -71,7 +69,7 @@ class _Catalog extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, box) {
         final w = box.maxWidth - WsT.gap * 2, h = box.maxHeight - WsT.gap * 2;
-        final cols = wsCols(w, _cell, gap: WsT.gap, min: 2), rows = (deskTools.length / cols).ceil();
+        final cols = wsCols(w, _cell, gap: WsT.gap, min: 2), rows = (WsScope.of(context).tools.length / cols).ceil();
         final tile = ((h - WsT.gap * (rows - 1)) / rows).clamp(_minTile, _maxTile), cw = wsCell(w, cols, gap: WsT.gap);
         return ListView(
           padding: const EdgeInsets.all(WsT.gap),
@@ -80,7 +78,7 @@ class _Catalog extends StatelessWidget {
               spacing: WsT.gap,
               runSpacing: WsT.gap,
               children: [
-                for (final t in deskTools)
+                for (final t in WsScope.of(context).tools)
                   SizedBox(
                     width: cw,
                     height: tile,
@@ -152,7 +150,7 @@ class _Placeholder extends StatelessWidget {
   final String name;
   @override
   Widget build(BuildContext context) {
-    final ws = WsScope.read(context), tool = deskTool(name);
+    final ws = WsScope.read(context), tool = deskTool(ws, name);
     return Padding(
       padding: const EdgeInsets.only(top: WsT.gutter),
       child: Row(

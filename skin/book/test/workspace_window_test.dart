@@ -1,6 +1,7 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lab_book/tokens.dart';
+import 'package:lab_book/workspace/desk_kit.dart';
 import 'package:lab_book/workspace/panes.dart';
 import 'package:lab_book/workspace/timeline.dart';
 import 'package:lab_book/workspace/workspace.dart';
@@ -44,6 +45,21 @@ void main() {
     expect(find.text('picked: ring'), findsOneWidget, reason: 'it reads the window as the panes of the window do');
     expect(t.takeException(), isNull);
     expect(ws.selected, 'ring');
+  });
+
+  testWidgets('a desk tool of your own joins the desk through Workspace(tools:), no file of the window changed', (t) async {
+    addTearDown(t.view.reset);
+    t.view.physicalSize = const Size(1600, 960);
+    t.view.devicePixelRatio = 1;
+    const mine = DeskTool('Snap', Color(0xFF55AA88), 'Picked thing', build: _Snap.new);
+    await t.pumpWidget(WidgetsApp(color: const Color(0xFF000000), builder: (c, _) => const Workspace(tools: [mine])));
+    await t.pumpAndSettle();
+    final ws = WsScope.read(t.element(find.byType(WsTimeline)));
+    expect(ws.tools.map((x) => x.name), contains('Snap'), reason: 'after the window\'s own');
+    ws.openDesk('Snap');
+    await t.pumpAndSettle();
+    expect(find.text('my snap tool'), findsOneWidget, reason: 'the desk holds what the tool builds');
+    expect(t.takeException(), isNull);
   });
 
   testWidgets('selection reaches the Inspector; its colour link opens the dock shelf', (t) async {
@@ -106,4 +122,10 @@ void main() {
     }
     expect(t.takeException(), isNull);
   });
+}
+
+class _Snap extends StatelessWidget {
+  const _Snap();
+  @override
+  Widget build(BuildContext context) => const Text('my snap tool');
 }

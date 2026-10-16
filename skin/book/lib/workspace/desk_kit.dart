@@ -4,18 +4,23 @@ import 'package:flutter/widgets.dart';
 
 import '../sets/inspector/inspector_parts.dart' show Hov, Pop;
 import '../tokens.dart';
+import 'desk_depth.dart';
+import 'desk_ease.dart';
 import 'ws.dart';
 
 /// One tool the desk can hold. [acts] is what it works on, said in two words.
+/// A tool of the desk: its name, its hue, what it acts on, and what the desk holds while it is open (none yet: a card
+/// that says what it will act on). Tools of your own: Workspace(tools: [DeskTool(...)]).
 class DeskTool {
-  const DeskTool(this.name, this.tone, this.acts);
+  const DeskTool(this.name, this.tone, this.acts, {this.build});
   final String name, acts;
   final Color tone;
+  final Widget Function()? build;
 }
 
 const deskTools = [
-  DeskTool('Ease', Pop.toneTime, 'Picked keys'),
-  DeskTool('Depth', WsT.toneCamera, 'Camera'),
+  DeskTool('Ease', Pop.toneTime, 'Picked keys', build: DeskEase.new),
+  DeskTool('Depth', WsT.toneCamera, 'Camera', build: DeskDepth.new),
   DeskTool('Blend', Pop.toneBlend, 'Layer stack'),
   DeskTool('Align', Pop.toneLayout, 'Selection'),
   DeskTool('Sequence', Pop.tonePlace, 'Layers in time'),
@@ -28,7 +33,7 @@ const deskTools = [
   DeskTool('Links', Pop.toneLink, 'Relations'),
 ];
 
-DeskTool deskTool(String name) => deskTools.firstWhere((t) => t.name == name, orElse: () => DeskTool(name, Grey.g63, ''));
+DeskTool deskTool(Ws ws, String name) => ws.tools.firstWhere((t) => t.name == name, orElse: () => DeskTool(name, Grey.g63, ''));
 
 /// What the selection alone would put on the desk (Ws.desk without a hand-opened tool).
 String deskAuto(Ws ws) => ws.keys.isNotEmpty ? 'Ease' : (ws.layer?.kind == WsKind.camera ? 'Depth' : 'Tools');
@@ -40,12 +45,12 @@ class DeskSticker extends StatelessWidget {
   final double size;
   @override
   Widget build(BuildContext context) {
-    final tone = name == 'Tools' ? Grey.g76 : deskTool(name).tone;
+    final tone = name == 'Tools' ? Grey.g76 : deskTool(WsScope.of(context), name).tone, own = name != 'Tools' && deskTools.every((t) => t.name != name);
     return Container(
       width: size,
       height: size,
       decoration: BoxDecoration(color: tone, borderRadius: BorderRadius.circular(size * .3)),
-      child: CustomPaint(painter: DeskGlyph(name, WsT.onAccent)),
+      child: own ? Center(child: Text(name.characters.first, style: T.micro(WsT.onAccent))) : CustomPaint(painter: DeskGlyph(name, WsT.onAccent)), // (a tool of your own: its first letter)
     );
   }
 }

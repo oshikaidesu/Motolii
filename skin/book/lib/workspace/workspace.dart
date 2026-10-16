@@ -17,6 +17,7 @@ import 'dock.dart';
 import 'dock_make.dart' show usedColours;
 import 'dock_glyphs.dart';
 import 'panes.dart';
+import 'desk_kit.dart';
 import 'stage.dart';
 import 'stage_art.dart';
 import 'timeline.dart';
@@ -25,7 +26,7 @@ import '../motolii.dart';
 import 'ws.dart';
 
 class Workspace extends StatefulWidget {
-  const Workspace({super.key, this.document, this.extra = const []});
+  const Workspace({super.key, this.document, this.extra = const [], this.tools = const []});
 
   /// A document of the inside (motolii.dart) to join the window to: its stage is then the inside's own picture.
   /// null: the sample, with its stand-in art.
@@ -34,12 +35,15 @@ class Workspace extends StatefulWidget {
   /// Panes of your own, beside the window's: each joins the Inspector's tabs. A pane reads and changes the document
   /// through [WsScope.of] (its `inside` is the document, `selected` the picked thing, `frame` the moment).
   final List<WsPane> extra;
+
+  /// Desk tools of your own, after the window's (a DeskTool with its `build`).
+  final List<DeskTool> tools;
   @override
   State<Workspace> createState() => _WorkspaceState();
 }
 
 class _WorkspaceState extends State<Workspace> {
-  final _ws = Ws();
+  late final _ws = Ws()..tools = [...deskTools, ...widget.tools];
   Motolii? _inside;
 
   String? _doc; // (the document that is open: the one the window was given, or one made or opened from the menu)

@@ -13,6 +13,15 @@ Workspace(document: path, extra: [
 - 気をつける 4 つ：選ばれた物 `selected` は文字なので `int.parse` してから書類に渡す。今の秒は `frame / Ws.fps`。物の名前は `inside.word(t, 'name')`。書類を変えたら `ws.reread()`（窓の他のパネルが読み直す）。
 - 例：`test/workspace_window_test.dart` の「a pane of your own」（書類なし）。本物の書類を開いて試すなら `test/workspace_joined_test.dart` の `_pump`。
 
+## 自分の desk の道具を足す
+```dart
+Workspace(document: path, tools: [
+  DeskTool('Snap', Color(0xFF55AA88), 'Picked thing', build: MySnap.new),   // (名前、色、何に効くか、中身)
+])
+```
+- 窓の道具の後ろに並び、選ぶと desk がその `build` を出す。アイコンは頭文字。中では パネルと同じく `WsScope.of(context)`。
+- 例：`test/workspace_window_test.dart` の「a desk tool of your own」。
+
 ## 自分のプリセット（Ease の動き方）を足す
 窓の一覧ではなく書類の動き方として足す。足した物は Ease の desk にタイルで出て、書類と一緒に保存される。
 ```dart
@@ -72,5 +81,4 @@ $F/flutter test                                  # 中身とつないだ確か�
 - 区切りごとにコミットする(履歴が無いのが一番怖い、が利用者の方針)。
 
 ## まだ無いもの
-- desk の道具を外から足す入口（今は desk_kit.dart の一覧と desk.dart の switch）。
 - 見本と中身の二股（`inside == null`）が残っている（TASKS.md 24 番）。

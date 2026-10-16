@@ -8,6 +8,7 @@ import 'package:flutter/widgets.dart';
 
 import '../motolii.dart';
 import '../tokens.dart';
+import 'desk_kit.dart' show DeskTool, deskTools;
 import 'stage_art.dart' show WsArt;
 
 /// The window's own sizes and colours. A seat names one of these; it never types a number that is the window's business.
@@ -271,6 +272,9 @@ class Ws extends ChangeNotifier {
 
   /// What the user opened in the desk by hand; null lets the desk follow the selection.
   String? deskManual;
+
+  /// The desk's tools: the window's own, then any of your own (Workspace(tools:)).
+  List<DeskTool> tools = deskTools;
   void openDesk(String? name) {
     deskManual = name;
     notifyListeners();
