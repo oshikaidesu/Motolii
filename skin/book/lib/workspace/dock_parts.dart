@@ -50,7 +50,7 @@ class DockCtx {
   bool hit(String name) => query.isEmpty || name.toLowerCase().contains(query.toLowerCase());
   bool applied(String id) => mem.applied.contains('$shelf:$id');
   void apply(String id) => set(() => mem.applied.add('$shelf:$id'));
-  Set<String> get _stars => ws.inside == null ? mem.starred : mem.starredHere;
+  Set<String> get _stars => mem.starredHere;
   bool starred(String id) => _stars.contains(id);
   void star(String id) => set(() => _stars.contains(id) ? _stars.remove(id) : _stars.add(id));
   void toggle(Set<String> s, String id) => set(() => s.contains(id) ? s.remove(id) : s.add(id));

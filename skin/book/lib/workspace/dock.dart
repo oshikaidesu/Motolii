@@ -56,7 +56,7 @@ class _WsShelfState extends State<WsShelf> {
     final ws = _ws!;
     if (ws.rev != _rev) {
       _rev = ws.rev;
-      final shows = ws.inside == null ? ws.rev : _showing(ws);
+      final shows = _showing(ws);
       if (shows != _shows) {
         _shows = shows;
         _seen = null;
@@ -111,15 +111,13 @@ class _WsShelfState extends State<WsShelf> {
                 child: ValueListenableBuilder<int>(
                   valueListenable: dockRead,
                   builder: (context, _, _) => Text(
-                    ws.inside == null
-                        ? _facts[name] ?? ''
-                        : switch (name) { // (joined: what the inside has: the fonts it sets, the effects it does, the colours the document uses, the tiles that make)
-                            'Fonts' => '${fontsOffered ?? '…'} fonts',
-                            'Effects' => '${fxCatalog.where((f) => fxValues.containsKey(f.name)).length} ready', // (joined: the shelf shows only these)
-                            'Colors' => '${usedColours(ws).values.toSet().length} used here',
-                            'Create' => createFact(ws),
-                            _ => _facts[name] ?? '',
-                          },
+                    switch (name) { // (what the inside has: the fonts it sets, the effects it does, the colours the document uses, the tiles that make)
+                      'Fonts' => '${fontsOffered ?? '…'} fonts',
+                      'Effects' => '${fxCatalog.where((f) => fxValues.containsKey(f.name)).length} ready',
+                      'Colors' => '${usedColours(ws).values.toSet().length} used here',
+                      'Create' => createFact(ws),
+                      _ => _facts[name] ?? '',
+                    },
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: T.label(Grey.g56),
@@ -130,7 +128,7 @@ class _WsShelfState extends State<WsShelf> {
         ),
         DockSearch(
           controller: _search,
-          hint: name == 'Fonts' && ws.inside != null ? 'Search fonts' : hint,
+          hint: name == 'Fonts' ? 'Search fonts' : hint,
           trailing: name == 'Effects'
               ? DockFilterToggle(open: _mem.filtersOpen, active: fxActiveFilters(_mem), onTap: () => setState(() => _mem.filtersOpen = !_mem.filtersOpen))
               : null,

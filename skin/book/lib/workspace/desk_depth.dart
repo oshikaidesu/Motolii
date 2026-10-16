@@ -8,22 +8,13 @@ import '../tokens.dart';
 import 'desk_kit.dart';
 import 'ws.dart';
 
-/// Where each layer sits seen from above, in comp px: x of its centre, its depth z, its width.
-const _place = <String, ({double x, double z, double w})>{
-  'title': (x: 0, z: 520, w: 760),
-  'confetti': (x: -260, z: 820, w: 1100),
-  'blob': (x: -220, z: 1120, w: 520),
-  'ring': (x: 330, z: 1480, w: 440),
-  'chips': (x: 80, z: 1880, w: 760),
-  'bg': (x: 0, z: 2700, w: 2300),
-};
 
 const _zMax = 3000.0;
 
 /// The lens, kept per document so leaving the desk and coming back keeps it.
 class _Lens {
   double focal = 50, focus = 1120, fstop = 2.8;
-  String? target = 'blob';
+  String? target;
 
   double get fov => 2 * math.atan(36 / (2 * focal));
 
@@ -68,15 +59,13 @@ void _carryLens(Ws ws, int camera, _Lens lens) {
 
 typedef _Slab = ({String id, String name, Color tone, double x, double z, double w});
 
-/// Each thing seen from above: joined, where it is (across, and how far from the eye); else the sample's places.
+/// Each thing seen from above: where it is (across, and how far from the eye).
 List<_Slab> _slabsOf(Ws ws) {
-  final m = ws.inside, eye = m == null ? null : _lensOf(ws, _Lens())?.eye;
+  final m = ws.inside!, eye = _lensOf(ws, _Lens())?.eye;
   return [
     for (final l in ws.layers)
-      if (m != null && eye != null && l.kind != WsKind.camera)
+      if (eye != null && l.kind != WsKind.camera)
         (id: l.id, name: l.name, tone: wsTone(l.kind), x: (m.value(int.parse(l.id), 'x', 0) ?? 0) * m.point, z: eye - (m.value(int.parse(l.id), 'z', 0) ?? 0) * m.point, w: m.frame(int.parse(l.id))?[2] ?? 200)
-      else if (_place[l.id] case final p?)
-        (id: l.id, name: l.name, tone: wsTone(l.kind), x: p.x, z: p.z, w: p.w),
   ];
 }
 
