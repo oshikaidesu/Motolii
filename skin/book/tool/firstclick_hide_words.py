@@ -4,7 +4,7 @@
 import json, os
 from PIL import Image, ImageDraw
 
-here = os.path.join(os.path.dirname(__file__), '..', '..', '..', 'reports', 'firstclick')
+here = os.path.join(os.path.dirname(__file__), '..', '..', '..', 'reports', os.environ.get('FC_DIR', 'firstclick'))  # (FC_DIR=firstclick_b: another set of tasks)
 for t in json.load(open(os.path.join(here, 'tasks.json'))):
     im = Image.open(os.path.join(here, t['picture'])).convert('RGB')
     d = ImageDraw.Draw(im)

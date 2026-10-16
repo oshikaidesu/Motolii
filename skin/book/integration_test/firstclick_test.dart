@@ -13,7 +13,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:lab_book/motolii.dart';
-import 'package:lab_book/sets/inspector/inspector_parts.dart' show AnchorCube, AnchorGeometry, CopiesDrawing, LdTile, copiesRowOf, Ctx, Hov, LightDrawing, NumField, OnOff, PanelLink, Space, SpacePlate, TextGroup, Chooser;
+import 'package:lab_book/sets/inspector/inspector_parts.dart' show AnchorCube, AnchorGeometry, ValuesCard, CopiesDrawing, LdTile, copiesRowOf, Ctx, Hov, LightDrawing, NumField, OnOff, PanelLink, Space, SpacePlate, TextGroup, Chooser;
 import 'package:lab_book/sets/inspector/inspector_rows_prop_row.dart' show PropRow;
 import 'package:lab_book/workspace/dock_parts.dart' show DockHover, DockSearch;
 import 'package:lab_book/workspace/timeline.dart';
@@ -34,7 +34,7 @@ void main() {
     t.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.menu, (_) async => null);
     // (a window tall enough that the inspector shows every card of a thing unscrolled: where a list is scrolled to would
     //  tell where the answer lies)
-    t.view.physicalSize = Size(t.view.physicalSize.width, t.view.physicalSize.width * 1.6);
+    t.view.physicalSize = Size(t.view.physicalSize.width, t.view.physicalSize.width * (const String.fromEnvironment('SET', defaultValue: 'a') == 'a' ? 1.6 : 3.2)); // (set B reaches cards further down)
     addTearDown(t.view.resetPhysicalSize);
     final doc = '${Directory.systemTemp.createTempSync('firstclick').path}/firstclick.motolii';
     await t.pumpWidget(WidgetsApp(color: const Color(0xFF000000), builder: (c, _) => Workspace(document: doc)));
@@ -82,6 +82,25 @@ void main() {
       ('Make the light shine stronger.', sun, null, num('v_intensity'), null),
       ('Get a closer view of the scene through the camera without moving it.', camera, null, num('v_zoom'), null),
     ];
+    // (set B: tasks the window was never tuned on, to tell whether it is understood or only taught to these twenty)
+    final b = <(String, int, void Function()?, Finder, Rect Function(Rect)?)>[
+      ('Move the selected card a little to the right.', rect, null, num('v_x'), null),
+      ('Make the selected card twice as big.', rect, null, num('v_scale_x'), null),
+      ('Lay the repeated cards out in rows of three.', rect, null, num('v_copy_columns'), null),
+      ('Make the corners of the selected card round.', rect, null, num('v_round'), null),
+      ('Make the selected card sway like a flag in the wind.', rect, null, find.byWidgetPredicate((w) => w is ValuesCard && w.card.name == 'Wave'), null),
+      ('Make the selected card a solid block that pokes out toward you.', rect, null, find.byWidgetPredicate((w) => w is SpacePlate && w.space == Space.d3), null),
+      ('Spread the letters of the writing further apart.', text, null, num('v_letter_spacing'), null),
+      ('Make the letters of the writing lean forward.', text, null, num('v_italic'), null),
+      ('Line the writing up on the right.', text, null, find.descendant(of: row('v_align'), matching: find.byWidgetPredicate((w) => w is Text && w.data?.toLowerCase() == 'right')), null),
+      ('Make the shadows the light casts softer.', sun, null, num('v_shadow_softness'), null),
+      ('Make the camera keep looking at the box.', camera, null, chooser('v_parent'), null),
+      ('Tilt the camera so it looks down on the scene.', camera, null, num('v_rotate_x'), null),
+      ('Move the camera further back from what it looks at.', camera, null, num('v_distance'), null),
+      ('Make the selected box look like polished metal.', cube, null, num('v_metallic'), null),
+      ('Make the selected box bounce when it falls.', cube, null, num('v_bounce'), null),
+    ];
+    final set = const String.fromEnvironment('SET', defaultValue: 'a');
 
     // (another right first click: with the words hidden, a blur is found by typing its name in the shelf's search)
     // (and a card is tilted by the round knob above it on the Transform card's own drawing, as well as by its number)
@@ -115,9 +134,9 @@ void main() {
         return [Rect.fromLTRB(box.right - 28, box.top + 8, box.right, box.top + LightDrawing.height - 6)];
       },
     };
-    final out = Directory('$motoliiDir/../reports/firstclick')..createSync(recursive: true);
+    final out = Directory('$motoliiDir/../reports/firstclick${set == 'a' ? '' : '_$set'}')..createSync(recursive: true);
     final dpr = t.view.devicePixelRatio, written = <Map<String, Object>>[];
-    for (final (i, (task, thing, before, control, point)) in tasks.indexed) {
+    for (final (i, (task, thing, before, control, point)) in (set == 'a' ? tasks : b).indexed) {
       before?.call();
       ws
         ..reread()

@@ -6,7 +6,7 @@
 import json, math, os, sys
 from collections import Counter
 
-here = os.path.join(os.path.dirname(__file__), '..', '..', '..', 'reports', 'firstclick')
+here = os.path.join(os.path.dirname(__file__), '..', '..', '..', 'reports', os.environ.get('FC_DIR', 'firstclick'))  # (FC_DIR=firstclick_b: another set of tasks)
 tasks = json.load(open(os.path.join(here, 'tasks.json')))
 said = [json.load(open(p)) for p in sys.argv[1:]]
 pad = 6  # (a click a few pixels off a control's edge is on it)
