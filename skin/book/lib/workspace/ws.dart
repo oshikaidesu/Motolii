@@ -304,23 +304,18 @@ class Ws extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Effects kept on each layer, in stack order (layer id -> effect names). Joined: the shelf's effects the document
-  /// has on the thing (a value said, and not nought).
-  final _fx = <String, List<String>>{};
+  /// The shelf's effects the document has on the thing (a value said, and not nought), in stack order.
   List<String> fxOf(String? id) {
-    if (_inside case final m?) {
-      final t = int.tryParse(id ?? '');
-      if (t == null) return const [];
-      if (_fxKeptAt != rev) { // (the effects on a thing change with the document: asked once a reading, not each picture of the stage, three questions an effect a thing)
-        _fxKept.clear();
-        _fxKeptAt = rev;
-      }
-      return _fxKept.putIfAbsent(t, () => List.unmodifiable([
-        for (final e in fxValues.entries)
-          if (_on(m, t, e.value.$1)) e.key,
-      ]));
+    final m = _inside, t = int.tryParse(id ?? '');
+    if (m == null || t == null) return const [];
+    if (_fxKeptAt != rev) { // (the effects on a thing change with the document: asked once a reading, not each picture of the stage, three questions an effect a thing)
+      _fxKept.clear();
+      _fxKeptAt = rev;
     }
-    return List.unmodifiable(_fx[id] ?? const <String>[]);
+    return _fxKept.putIfAbsent(t, () => List.unmodifiable([
+      for (final e in fxValues.entries)
+        if (_on(m, t, e.value.$1)) e.key,
+    ]));
   }
 
   final _fxKept = <int, List<String>>{};
@@ -430,31 +425,6 @@ class Ws extends ChangeNotifier {
     reread();
     return done;
   }
-
-  /// The effect being tried on the selected layer: the renderer draws it as if added; Add keeps it, Esc drops it.
-  String? _trial;
-  String? get trial => canTry ? _trial : null;
-  bool get canTry => _inside != null
-      ? false // (joined: the inside has no effects yet, so there is nothing to try on)
-      : switch (layer?.kind) {
-    null || WsKind.audio || WsKind.camera => false,
-    _ => true,
-  };
-  void tryFx(String? name) {
-    if (name == _trial) return;
-    _trial = name;
-    notifyListeners();
-  }
-
-  void keepFx() {
-    final l = layer, t = trial;
-    if (l == null || t == null) return;
-    (_fx[l.id] ??= []).add(t);
-    _trial = null;
-    notifyListeners();
-  }
-
-  void dropFx() => tryFx(null);
 
   String timecode([int? f]) {
     final v = f ?? _frame, s = v ~/ fps, fr = v % fps;

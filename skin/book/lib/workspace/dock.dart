@@ -62,7 +62,7 @@ class _WsShelfState extends State<WsShelf> {
         _seen = null;
       }
     }
-    final now = (_shows, ws.selected, ws.trial); // (what a shelf shows of the window: its part of the document, what is picked, what is tried on)
+    final now = (_shows, ws.selected); // (what a shelf shows of the window: its part of the document, what is picked)
     if (_due || now == _seen) return;
     _seen = now;
     _due = true;

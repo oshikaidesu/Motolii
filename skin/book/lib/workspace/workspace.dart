@@ -188,20 +188,6 @@ class _WorkspaceState extends State<Workspace> {
     super.dispose();
   }
 
-  /// Enter keeps a try-on and Esc drops it, wherever focus is in the window.
-  KeyEventResult _key(FocusNode _, KeyEvent e) {
-    if (e is! KeyDownEvent || _ws.trial == null) return KeyEventResult.ignored;
-    switch (e.logicalKey) {
-      case LogicalKeyboardKey.escape:
-        _ws.dropFx();
-      case LogicalKeyboardKey.enter || LogicalKeyboardKey.numpadEnter:
-        _ws.keepFx();
-      default:
-        return KeyEventResult.ignored;
-    }
-    return KeyEventResult.handled;
-  }
-
   /// The panes drag their tabs on an overlay; the window brings its own so it works under any host.
   late final _entry = OverlayEntry(
     maintainState: true,
@@ -222,7 +208,6 @@ class _WorkspaceState extends State<Workspace> {
       ws: _ws,
       child: Focus(
         autofocus: true,
-        onKeyEvent: _key,
         child: ColoredBox(
           color: WsT.ground,
           child: Overlay(initialEntries: [_entry]),

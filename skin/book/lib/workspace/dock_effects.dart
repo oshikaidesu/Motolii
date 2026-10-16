@@ -36,7 +36,7 @@ class EffectsShelf extends StatelessWidget {
   bool _has(FxDef f, String g, String t) => g == _collection ? c.starred(f.name) : fxHas(f, g, t);
 
   bool _keep(FxDef f, {String? except}) =>
-      (c.ws.inside == null || fxValues.containsKey(f.name)) && // (joined: only what the inside does; a row that does nothing is not shown)
+      fxValues.containsKey(f.name) && // (only what the inside does; a row that does nothing is not shown)
       c.hit(f.name) && c.mem.filter.entries.every((e) => e.key == except || e.value.isEmpty || e.value.any((t) => _has(f, e.key, t)));
 
   void _toggle(String g, String t, bool add) => c.set(() {
@@ -52,11 +52,7 @@ class EffectsShelf extends StatelessWidget {
     }
   });
 
-  void _pick(Ws ws, String name) {
-    if (c.sel == name && ws.trial == name) return ws.dropFx();
-    c.pick(name);
-    ws.tryFx(name);
-  }
+  void _pick(Ws ws, String name) => c.pick(name);
 
   @override
   Widget build(BuildContext context) {
@@ -114,7 +110,7 @@ class EffectsShelf extends StatelessWidget {
             children: [
               DockSection(fam.label, count: items.length, hue: fxHue(fam), folded: folded, onTap: () => c.toggle(c.mem.folded, fam.label)),
               if (!folded)
-                for (final f in items) _FxRow(f, c, on: ws.fxOf(ws.selected).contains(f.name), trying: ws.trial == f.name, onTap: () => _pick(ws, f.name)),
+                for (final f in items) _FxRow(f, c, on: ws.fxOf(ws.selected).contains(f.name), onTap: () => _pick(ws, f.name)),
             ],
           ),
         ),
@@ -177,10 +173,10 @@ class EffectsShelf extends StatelessWidget {
 
 /// A row is words only: the name, what it does, ON when the selected layer carries it, the star.
 class _FxRow extends StatelessWidget {
-  const _FxRow(this.f, this.c, {required this.on, required this.trying, required this.onTap});
+  const _FxRow(this.f, this.c, {required this.on, required this.onTap});
   final FxDef f;
   final DockCtx c;
-  final bool on, trying;
+  final bool on;
   final VoidCallback onTap;
   @override
   Widget build(BuildContext context) {
@@ -205,10 +201,9 @@ class _FxRow extends StatelessWidget {
             ),
             const SizedBox(width: 6),
             Expanded(
-              // (joined: who does it: ThorVG, for the six the inside has; the sample's analysis says nothing of the document)
-              child: Text(c.ws.inside == null ? f.desc : 'ThorVG', maxLines: 1, overflow: TextOverflow.ellipsis, style: T.label(dockInk(sel, Grey.g56))),
+              // (who does it: ThorVG, for the six the inside has)
+              child: Text('ThorVG', maxLines: 1, overflow: TextOverflow.ellipsis, style: T.label(dockInk(sel, Grey.g56))),
             ),
-            if (trying) ...[DockTag('TRY', hue: sel ? null : WsT.accent), const SizedBox(width: 2)],
             if (on) ...[DockTag('ON', hue: sel ? null : WsT.accent), const SizedBox(width: 2)],
             if (star || h || sel) DockStar(on: star, ink: sel ? WsT.onAccent : null, onTap: () => c.star(f.name)) else const SizedBox(width: 20),
           ],
@@ -260,18 +255,11 @@ class _FxFooter extends StatelessWidget {
   @override
   Widget build(BuildContext context) => DockFooter(
     title: f.name,
-    meta: ws.inside == null ? [f.family.label, f.seat, f.time, f.inputs, ...f.looks].join(' · ') : _said(ws, f.name),
-    // (joined: an effect goes on or comes off the picked thing)
-    action: ws.inside != null && done ? 'Remove' : 'Add',
-    done: ws.inside != null ? ws.selected == null : done,
-    doneLabel: ws.inside != null ? 'Pick a thing' : 'Added',
-    onAction: ws.inside != null
-        ? () => ws.fxToggle(f.name)
-        : ws.canTry
-        ? () {
-            ws.tryFx(f.name);
-            ws.keepFx();
-          }
-        : null,
+    meta: _said(ws, f.name),
+    // (an effect goes on or comes off the picked thing)
+    action: done ? 'Remove' : 'Add',
+    done: ws.selected == null,
+    doneLabel: 'Pick a thing',
+    onAction: () => ws.fxToggle(f.name),
   );
 }
