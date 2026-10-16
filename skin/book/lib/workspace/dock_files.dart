@@ -725,7 +725,7 @@ class _Footer extends StatelessWidget {
         meta: c.mem.trouble[n.id] ?? (layer != null ? 'In use · ${_metaOf(n)}' : _metaOf(n)),
         action: can ? 'Place' : 'Select',
         done: !can && layer == null,
-        doneLabel: 'No seat yet',
+        doneLabel: 'Folder', // (joined, the shelf lists only folders and files the inside can place: what cannot be placed is a folder)
         fresh: can, // (placed, it is a new thing)
         onAction: () => can ? _place(c, n) : c.ws.select(layer),
       );
