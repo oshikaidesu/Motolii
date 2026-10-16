@@ -146,7 +146,7 @@ class _TextGroupState extends State<TextGroup> {
 
   @override
   Widget build(BuildContext context) {
-    final x = Ctx.of(context), doc = x.doc, ed = Ed(x.cfg.ed);
+    final x = Ctx.of(context), doc = x.doc;
     if (!_f.hasFocus && _c.text != (doc.s2['v_text'] ?? ''))
       _c.text = doc.s2['v_text'] ?? ''; // (out of the box it is the text the host has now: another thing picked, an undo)
     const aligns = ['Left', 'Centre', 'Right']; // (ThorVG lines up between 0 and 1: these are its three steps, in hundredths 0, 50, 100)
@@ -169,7 +169,7 @@ class _TextGroupState extends State<TextGroup> {
                 decoration: BoxDecoration(
                   color: x.cfg.look == Look.quiet ? Grey.g13 : Grey.g07,
                   borderRadius: BorderRadius.circular(4),
-                  border: Border.all(color: _f.hasFocus ? Grey.g63 : (x.cfg.look == Look.quiet && x.cfg.ed == Editorial.a ? const Color(0x00000000) : ed.rule)),
+                  border: Border.all(color: _f.hasFocus ? Grey.g63 : Grey.g26), // (a box you type in, seen as one even with nothing written)
                 ),
                 child: EditableText(
                   controller: _c,

@@ -157,7 +157,7 @@ class _FxLook extends CustomPainter {
       case 'Gaussian Blur':
         c.drawRect(r, Paint()
           ..color = ink
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.2));
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3.5)); // (soft all round: nothing sharp left)
       case 'Drop Shadow':
         c.drawRect(r.shift(const Offset(2, 2)), Paint()
           ..color = const Color(0xFF000000)

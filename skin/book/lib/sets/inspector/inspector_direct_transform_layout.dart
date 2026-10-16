@@ -74,7 +74,7 @@ class TransformLayout {
   /// The zone under [p] (with the handle index for scale and rotation), front to back.
   (TransformZone, int)? pick(Offset p) {
     if ((p - knob).distance <= 8) return (TransformZone.rotate, 0);
-    if ((p - liftKnob).distance <= 8) return (TransformZone.lift, 0);
+    if (deep && (p - liftKnob).distance <= 8) return (TransformZone.lift, 0); // (a 2D thing has no depth to pull: its order says what is in front)
     for (final axis in const [1, 2]) {
       if ((p - tiltKnob(axis)).distance <= 7) {
         return (TransformZone.rotate, axis);

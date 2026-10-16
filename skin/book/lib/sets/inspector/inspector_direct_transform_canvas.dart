@@ -269,8 +269,9 @@ class _CanvasPaint extends CustomPainter {
     final on = hot == TransformZone.lift;
     c.drawLine(Offset(x, top + 6), Offset(x, bottom - 4), line(Grey.g26, 2));
     c.drawLine(Offset(x - 3, size.height / 2), Offset(x + 3, size.height / 2), line(Grey.g38));
-    c.drawRect(Rect.fromCenter(center: Offset(x, top), width: 8, height: 8), line(Grey.g56));
-    c.drawRect(Rect.fromCenter(center: Offset(x, bottom), width: 3, height: 3), line(Grey.g56));
+    c.drawRect(Rect.fromCenter(center: Offset(x, top), width: 8, height: 8), line(g.deep ? Grey.g56 : Grey.g26));
+    c.drawRect(Rect.fromCenter(center: Offset(x, bottom), width: 3, height: 3), line(g.deep ? Grey.g56 : Grey.g26));
+    if (!g.deep) return; // (2D: no depth to pull, the rail only shows where it would be)
     c.drawLine(Offset(x, size.height / 2), g.liftKnob, line(lift, 2));
     c.drawCircle(g.liftKnob, on ? 6 : 5, fill(lift));
   }
