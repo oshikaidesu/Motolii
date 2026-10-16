@@ -35,8 +35,6 @@ const deskTools = [
 
 DeskTool deskTool(Ws ws, String name) => ws.tools.firstWhere((t) => t.name == name, orElse: () => DeskTool(name, Grey.g63, ''));
 
-/// What the selection alone would put on the desk (Ws.desk without a hand-opened tool).
-String deskAuto(Ws ws) => ws.keys.isNotEmpty ? 'Ease' : (ws.layer?.kind == WsKind.camera ? 'Depth' : 'Tools');
 
 /// A tool's sticker: a flat tile of its hue with the glyph knocked out in dark ink.
 class DeskSticker extends StatelessWidget {

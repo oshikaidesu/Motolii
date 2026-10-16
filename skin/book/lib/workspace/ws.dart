@@ -291,7 +291,10 @@ class Ws extends ChangeNotifier {
   }
 
   /// The desk follows the selection (Motolii panels/desk.dart): keys picked -> Ease, a camera -> Depth, else Tools.
-  String get desk => deskManual ?? (_keys.isNotEmpty ? 'Ease' : (layer?.kind == WsKind.camera ? 'Depth' : 'Tools'));
+  String get desk => deskManual ?? deskAuto;
+
+  /// What the selection alone would put on the desk: keys picked, Ease; a camera, Depth; else the Tools catalog.
+  String get deskAuto => _keys.isNotEmpty ? 'Ease' : (layer?.kind == WsKind.camera ? 'Depth' : 'Tools');
 
   /// Joined: the value of the picked thing (or of the stage, with nothing picked) a colour picked on the Colors shelf is
   /// said to, when a card's colour link aimed it there; null: the fill.

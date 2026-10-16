@@ -63,7 +63,7 @@ class _Catalog extends StatelessWidget {
   static const _cell = 104.0, _minTile = 62.0, _maxTile = 92.0;
   @override
   Widget build(BuildContext context) {
-    final ws = WsScope.of(context), auto = deskAuto(ws);
+    final ws = WsScope.of(context), auto = ws.deskAuto;
     return LayoutBuilder(
       builder: (context, box) {
         final w = box.maxWidth - WsT.gap * 2, h = box.maxHeight - WsT.gap * 2;
