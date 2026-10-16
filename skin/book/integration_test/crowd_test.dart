@@ -11,6 +11,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
+import 'package:lab_book/sets/inspector/inspector_parts.dart' show NumField;
 import 'package:lab_book/workspace/timeline.dart';
 import 'package:lab_book/workspace/workspace.dart' show Workspace;
 import 'package:lab_book/workspace/ws.dart';
@@ -19,6 +20,7 @@ const _seconds = int.fromEnvironment('SECONDS', defaultValue: 600);
 const _films = String.fromEnvironment('FILMS', defaultValue: '/Users/motolii_maker/motolii/filament/out/vid');
 const _copies = int.fromEnvironment('COPIES', defaultValue: 3);   // (each film so many times: 0, none)
 const _effects = int.fromEnvironment('EFFECTS');   // (so many whole-screen effects over the stage, the shelf's first ones)
+const _hand = bool.fromEnvironment('HAND');   // (a hand on the picked cube's x the whole time: dragged to and fro, let go every three seconds)
 
 void main() {
   final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -61,11 +63,32 @@ void main() {
       ws.playing = false;
       return;
     }
+    TestGesture? hand;
+    Offset? knobAt;
+    if (_hand) {
+      final cube = m.add('solid', 'cube');
+      ws
+        ..reread()
+        ..select('$cube');
+      await t.pump(const Duration(milliseconds: 100));   // (not settled: it plays, and never rests)
+      final knob = find.byWidgetPredicate((w) => w is NumField && w.id == 'pos.x');
+      await t.ensureVisible(knob.first);
+      await t.pump(const Duration(milliseconds: 100));
+      knobAt = t.getCenter(knob.first);
+    }
     final clock = Stopwatch()..start();
-    var drawn = m.frames, minute = 0, lateAll = 0, leftAll = 0;
+    var drawn = m.frames, minute = 0, lateAll = 0, leftAll = 0, step = 0;
     var from = 0;
     final rss = <int>[];
     while (clock.elapsedMilliseconds < _seconds * 1000) {
+      if (knobAt != null) {
+        if (step % 180 == 0) {
+          await hand?.up();
+          hand = await t.startGesture(knobAt);
+        }
+        await hand!.moveBy(Offset(step % 60 < 30 ? 2 : -2, 0));
+        step++;
+      }
       await t.pump(const Duration(milliseconds: 16));
       if (clock.elapsedMilliseconds >= (minute + 1) * 60000 || clock.elapsedMilliseconds >= _seconds * 1000) {
         minute++;
@@ -84,6 +107,7 @@ void main() {
         drawn = nowDrawn;
       }
     }
+    await hand?.up();
     ws.playing = false;
     debugPrint('CROWD inside: ${m.spent}');
     debugPrint('CROWD in all: window late $lateAll, inside left out $leftAll after the first minute, memory ${rss.first} -> ${rss.last} MB');
