@@ -7,43 +7,31 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lab_book/motolii.dart';
+
+import 'door.dart';
 import 'package:lab_book/parts/controls.dart' show Segmented;
 import 'package:lab_book/sets/inspector/inspector_effects_effect_card.dart';
 import 'package:lab_book/sets/inspector/inspector_parts.dart' show Ctx, Chooser, AnchorCube, AnchorGeometry, LinkMark, EffectCard, ValuesCard, FillStroke, InspHeader, KeyS, NumField, OnOff, PropRow, Space, SpacePlate, TextGroup;
 import 'package:lab_book/sets/inspector/inspector_rows_prop_row.dart';
-import 'package:lab_book/workspace/dock_effects.dart' show EffectsShelf;
 import 'package:lab_book/workspace/dock_fonts.dart';
 import 'package:lab_book/workspace/dock_make.dart' show CreateShelf;
 import 'package:lab_book/workspace/desk_kit.dart' show DeskScrub;
 import 'package:lab_book/workspace/dock_parts.dart' show DockFooter, DockHover, DockSearch;
 import 'package:lab_book/workspace/fx_catalog.dart' show fxCatalog;
-import 'package:lab_book/workspace/timeline.dart';
 import 'package:lab_book/workspace/workspace.dart';
 import 'package:lab_book/workspace/desk_ease.dart';
 import 'package:lab_book/workspace/ws.dart';
 
-final _built = File('$motoliiDir/out/libmotolii.dylib').existsSync();
+final _built = insideBuilt;
 const _font = '$motoliiDir/out/arial_black.ttf';
 
-/// The window on a new, empty document (no picture of the stage is asked for: the seat's texture is the runner's).
 Future<Ws> _pump(WidgetTester t) async {
-  t.view.physicalSize = const Size(1600, 960);
-  t.view.devicePixelRatio = 1;
-  t.binding.defaultBinaryMessenger.setMockMethodCallHandler(const MethodChannel('motolii/stage'), (_) async => -1);
-  t.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.menu, (_) async => null); // (the system's menu bar is not there in a test)
-  final doc = '${Directory.systemTemp.createTempSync('joined').path}/joined.motolii';
-  await t.pumpWidget(WidgetsApp(color: const Color(0xFF000000), builder: (c, _) => Workspace(document: doc)));
-  await t.pumpAndSettle();
-  final ws = WsScope.read(t.element(find.byType(WsTimeline)));
+  final ws = await openWorkspace(t);
   expect(ws.inside, isNotNull, reason: 'the inside opened');
   return ws;
 }
 
-/// The window taken down, so the inside is closed before the next test opens it.
-Future<void> _close(WidgetTester t) async {
-  await t.pumpWidget(const SizedBox());
-  t.view.reset();
-}
+Future<void> _close(WidgetTester t) => closeWorkspace(t);
 
 void main() {
   testWidgets('a text typed in the inspector is the document\'s text when the box is left; undo takes it back', (t) async {

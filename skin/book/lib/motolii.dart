@@ -214,7 +214,6 @@ class Motolii {
   /// How long a thing is on, in seconds; below 0: for good.
   double lasts(int thing) => _lasts(_m, thing);
 
-  /// The moments of a value's keys (none if the value stays).
   late final _thingKeys = _lib.lookupFunction<Int32 Function(_P, Int32, Pointer<Double>, Int32), int Function(_P, int, Pointer<Double>, int)>('motolii_thing_key_moments');
 
   /// Every moment a key of any of a thing's values stands at, each once, in time: one call (a timeline bar's marks).
@@ -230,6 +229,7 @@ class Motolii {
     }
   }
 
+  /// The moments of a value's keys (none if the value stays): how many keys it has is their count.
   List<double> keyMoments(int thing, String name) => _with([name], (s) {
     const room = 256;
     final out = malloc<Double>(room);

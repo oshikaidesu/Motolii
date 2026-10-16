@@ -4,8 +4,6 @@ import 'package:flutter/widgets.dart';
 
 import '../sets/inspector/inspector_parts.dart' show Hov;
 import '../tokens.dart';
-import 'desk_depth.dart';
-import 'desk_ease.dart';
 import 'desk_kit.dart';
 import 'ws.dart';
 
