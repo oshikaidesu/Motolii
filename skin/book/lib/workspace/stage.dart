@@ -33,9 +33,19 @@ class _Stage extends StatefulWidget {
 }
 
 class _StageState extends State<_Stage> {
-  int _zoom = 0, _tool = 0;
-  bool _safe = true, _grid = false, _camera = true;
-  final _opts = <String, int>{};
+  // (how the stage looks: the window's view, so any pane may read it and the window opened again shows the same)
+  Ws get _ws => WsScope.read(context);
+  int get _zoom => _ws.viewOf('stage.zoom', 0);
+  set _zoom(int v) => _ws.setView('stage.zoom', v);
+  int get _tool => _ws.viewOf('stage.tool', 0);
+  set _tool(int v) => _ws.setView('stage.tool', v);
+  bool get _safe => _ws.viewOf('stage.safe', true);
+  set _safe(bool v) => _ws.setView('stage.safe', v);
+  bool get _grid => _ws.viewOf('stage.grid', false);
+  set _grid(bool v) => _ws.setView('stage.grid', v);
+  bool get _camera => _ws.viewOf('stage.camera', true);
+  set _camera(bool v) => _ws.setView('stage.camera', v);
+  Map<String, int> get _opts => _ws.view.putIfAbsent('stage.options', () => <String, int>{}) as Map<String, int>;
   final _cursor = ValueNotifier<Offset?>(null);
   final _focus = FocusNode(debugLabel: 'stage');
 

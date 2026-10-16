@@ -270,6 +270,16 @@ class Ws extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// How the window looks, by name ('stage.tool', 'fold.Transform'...): what a pane keeps of itself that is not the
+  /// document's. Any pane may read it; the window opened again on the same document at the same view shows the same.
+  final view = <String, Object?>{};
+  T viewOf<T>(String name, T otherwise) => view[name] as T? ?? otherwise;
+  void setView(String name, Object? value) {
+    if (view[name] == value) return;
+    view[name] = value;
+    notifyListeners();
+  }
+
   /// What the user opened in the desk by hand; null lets the desk follow the selection.
   String? deskManual;
 

@@ -42,10 +42,11 @@ List<String> windowWords(WidgetTester t) => [
 Future<void> expectSameAfterReopen(WidgetTester t, {List<WsPane> extra = const [], List<DeskTool> tools = const []}) async {
   final ws = wsOf(t)..reread();   // (what a test changed in the inside itself, past the window, read as the window reads a hand's)
   await t.pumpAndSettle();
-  final selected = ws.selected, frame = ws.frame, keys = ws.keys.toList(), desk = ws.deskManual, shelf = ws.shelf, ink = ws.ink, edge = ws.edge, aim = ws.aim, doc = openedDocument!;
+  final selected = ws.selected, frame = ws.frame, keys = ws.keys.toList(), desk = ws.deskManual, shelf = ws.shelf, ink = ws.ink, edge = ws.edge, aim = ws.aim, view = Map.of(ws.view), doc = openedDocument!;
   final before = windowWords(t);
   await closeWorkspace(t);
   final again = await openWorkspace(t, extra: extra, tools: tools, document: doc);
+  again.view.addAll(view);   // (first: what is done next tells the window to look again)
   again.select(selected);
   for (final k in keys) {
     again.pickKey(k, add: true);
@@ -56,7 +57,8 @@ Future<void> expectSameAfterReopen(WidgetTester t, {List<WsPane> extra = const [
     ..shelf = shelf
     ..ink = ink
     ..edge = edge
-    ..aim = aim;
+    ..aim = aim
+    ..reread();   // (the window told to look again: a view put back that equals nothing changed tells nobody)
   await t.pumpAndSettle();
   final after = windowWords(t);
   final lost = [...before]..removeWhere(after.contains), gained = [...after]..removeWhere(before.contains);

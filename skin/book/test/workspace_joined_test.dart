@@ -817,6 +817,7 @@ void main() {
     expect(box[3], closeTo(stage.height * .2 * k, 12), reason: 'and as high');
     expect(m.undo() && m.things.isEmpty, isTrue, reason: 'one step');
     expect(t.takeException(), isNull);
+    await expectSameAfterReopen(t);
     await _close(t);
   }, skip: !_built);
 
@@ -913,6 +914,7 @@ void main() {
     expect([m.value(a, 'clip', 0), m.value(cut, 'opacity', 0)], [1, 0], reason: 'it is clipped by it, which is not seen itself');
     expect(m.undo() && m.things.length == 2 && m.value(a, 'clip', 0) == 0, isTrue, reason: 'one step');
     expect(t.takeException(), isNull);
+    await expectSameAfterReopen(t);
     await _close(t);
   }, skip: !_built);
 
