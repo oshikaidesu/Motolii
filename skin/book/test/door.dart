@@ -31,11 +31,16 @@ Future<Ws> openWorkspace(WidgetTester t, {List<WsPane> extra = const [], List<De
 String? openedDocument;
 
 /// Every word the window shows now (each text and each field), sorted: the window as a hand sees it; not the words of
-/// a moment (when it was saved, a change refused just now).
-List<String> windowWords(WidgetTester t) => [
-  for (final e in find.byType(Text).evaluate()) (e.widget as Text).data ?? (e.widget as Text).textSpan?.toPlainText() ?? '',
-  for (final e in find.byType(EditableText).evaluate()) (e.widget as EditableText).controller.text,
-].where((w) => !w.startsWith('Saved ') && !w.startsWith('Not taken')).toList()..sort();
+/// a moment (when it was saved, a change refused just now, where the mouse is).
+List<String> windowWords(WidgetTester t) {
+  // (nor where the mouse is: the stage's readout of it, under the hand of the moment)
+  final hud = find.descendant(of: find.byWidgetPredicate((w) => w.runtimeType.toString() == '_Hud'), matching: find.byType(Text)).evaluate().toSet();
+  return [
+    for (final e in find.byType(Text).evaluate())
+      if (!hud.contains(e)) (e.widget as Text).data ?? (e.widget as Text).textSpan?.toPlainText() ?? '',
+    for (final e in find.byType(EditableText).evaluate()) (e.widget as EditableText).controller.text,
+  ].where((w) => !w.startsWith('Saved ') && !w.startsWith('Not taken')).toList()..sort();
+}
 
 /// The window is the document's alone: closed and opened again on the same document, at the same thing, moment, keys
 /// and desk tool, it shows the same words. What differs was held by the window, not the document.

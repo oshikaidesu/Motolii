@@ -802,6 +802,7 @@ void main() {
     expect(m.undo() && m.guides.isEmpty, isTrue, reason: 'one step');
     expect(m.guide('x', 150, true) && m.guide('x', 150, false) && m.guides.isEmpty, isTrue);
     expect(t.takeException(), isNull);
+    await expectSameAfterReopen(t);
     await _close(t);
   }, skip: !_built);
 
