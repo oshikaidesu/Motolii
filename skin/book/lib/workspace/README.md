@@ -25,11 +25,13 @@ Workspace(document: path, tools: [
 - 例：`test/workspace_window_test.dart` の「a desk tool of your own」。
 
 ## 自分のプリセット（Ease の動き方）を足す
-窓の一覧ではなく書類の動き方として足す。足した物は Ease の desk にタイルで出て、書類と一緒に保存される。
-```dart
-ws.inside!.define('Snappy', 'a + (b - a) * bezier(u, .2, 0, 0, 1)');   // (a: 前のキーの値、b: 次のキーの値、u: 区間の 0〜1)
+プリセットは利用者の持ち物（スクリプトと同じ）。`filament/ways/` にファイルを 1 つ置くと、どの書類でも Ease の desk にタイルで出る。
 ```
-- 例：`test/workspace_joined_test.dart` の「a preset of your own」。
+// Snappy: fast away from the first key, a long soft landing          (1 行目：名前、コロンの後は説明)
+a + (b - a) * bezier(u, .2, 0, 0, 1)                                 (a: 前のキーの値、b: 次のキーの値、u: 区間の 0〜1)
+```
+- キーに当てると、その式が書類に書き込まれる（書類を人に渡しても同じに動く）。当てるのと書き込むのは 1 歩（undo 1 回）。
+- 例：`filament/ways/snappy.way`、`test/workspace_joined_test.dart` の「a preset of your own」。
 
 ## 開き方・確かめ方
 ```bash

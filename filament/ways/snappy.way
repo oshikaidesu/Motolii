@@ -1,0 +1,2 @@
+// Snappy: fast away from the first key, a long soft landing on the next (a bezier of 0.2 0, 0 1)
+a + (b - a) * bezier(u, .2, 0, 0, 1)

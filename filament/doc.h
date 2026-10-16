@@ -38,6 +38,7 @@
 #include <filesystem>
 #include <mutex>
 #include <dlfcn.h>
+#include <fstream>
 #include "solid.h"
 #include "video.h"
 #include <filament/Skybox.h>
@@ -2153,6 +2154,34 @@ static std::string doc_folder_names(const char* folder, const char* extension) {
         std::string first, name = f.stem().string();
         if (std::getline(in, first) && first.rfind("// ", 0) == 0 && first.find(':') != std::string::npos) name = first.substr(3, first.find(':') - 3);
         all += (all.empty() ? "" : "\n") + name + "\t" + f.string();
+    }
+    return all;
+}
+// The ways a maker keeps of their own, as the shelf's recipes are kept: a file each in ways/, beside recipes/ (one put
+// there is a tile of the Ease desk at once). Its first line says its name before the colon; the rest is how far it is, as
+// a way defined in a document says it (doc_define: a, b, u, p1..p4, bezier(u, x1, y1, x2, y2)). Put on a key, it is
+// written into the document, so the document goes as it did wherever it is opened.
+static const std::map<std::string, std::string>& doc_own_ways() {
+    static std::map<std::string, std::string> all;
+    static std::filesystem::file_time_type was{};
+    static std::chrono::steady_clock::time_point looked{};
+    if (!doc_folder_moved("ways", was, looked)) return all;
+    all.clear();
+    Dl_info lib{};
+    dladdr((const void*)&doc_own_ways, &lib);
+    std::error_code wrong;
+    const std::filesystem::path dir = std::filesystem::weakly_canonical(lib.dli_fname ? lib.dli_fname : ".", wrong).parent_path().parent_path() / "ways";
+    for (const auto& e : std::filesystem::directory_iterator(dir, wrong)) {
+        if (e.path().extension() != ".way") continue;
+        std::ifstream in(e.path());
+        std::string line, name, goes;
+        while (std::getline(in, line)) {
+            if (line.rfind("//", 0) != 0) { goes += line + " "; continue; }
+            if (name.empty() && line.find(':') != std::string::npos) name = line.substr(2, line.find(':') - 2);
+        }
+        name.erase(0, name.find_first_not_of(' '));
+        if (name.empty()) name = e.path().stem().string();
+        if (goes.find_first_not_of(' ') != std::string::npos) all[name] = goes;
     }
     return all;
 }

@@ -298,7 +298,18 @@ int motolii_say(Motolii* m, int thing, const char* name, const char* word) { ret
 int motolii_key(Motolii* m, int thing, const char* name, double at, double number) { return by_hand(m, [=] { return changes(m, (int)(doc_key(doc(m), thing, name, at, number))); }); }
 int motolii_unkey(Motolii* m, int thing, const char* name, double at) { return by_hand(m, [=] { return changes(m, (int)(doc_unkey(doc(m), thing, name, at))); }); }
 int motolii_keys(Motolii* m, int thing, const char* name) { return by_look(m, [=] { return (int)(doc_keys(doc(m), thing, name)); }); }
-int motolii_way(Motolii* m, int thing, const char* name, double at, const char* way) { return by_hand(m, [=] { return changes(m, (int)(doc_way(doc(m), thing, name, at, way))); }); }
+int motolii_way(Motolii* m, int thing, const char* name, double at, const char* way) {
+    return by_hand(m, [=] {
+        Doc& d = doc(m);
+        bool here = false;
+        doc_rows(d, sqlite3_mprintf("select 1 from way where name = %Q", way), [&](sqlite3_stmt*) { here = true; });
+        const auto own = doc_own_ways().find(way);
+        if (here || own == doc_own_ways().end()) return changes(m, (int)(doc_way(d, thing, name, at, way)));
+        doc_act(d);   // (the maker's own way: written into the document and put on the key, one step)
+        if (!doc_define(d, way, own->second.c_str()) || !doc_way(d, thing, name, at, way)) d.act_ok = false;
+        return changes(m, (int)doc_acted(d));
+    });
+}
 int motolii_define(Motolii* m, const char* way, const char* expression) { return by_hand(m, [=] { return changes(m, (int)(doc_define(doc(m), way, expression))); }); }
 const char* motolii_ways(Motolii* m) { return by_look(m, [m] { return (m->listed = doc_ways(*m->d)).c_str(); }); }
 int motolii_value(Motolii* m, int thing, const char* name, double at, double* is) { return by_look(m, [=] { return (int)(doc_value(doc(m), thing, name, at, is)); }); }
@@ -383,14 +394,26 @@ const char* motolii_way_names(Motolii* m) {
     return by_look(m, [=] {
         m->word.clear();
         for (const auto& kind : interp_kinds) m->word += std::string(m->word.empty() ? "" : " ") + kind.name;
-        doc_rows(*m->d, sqlite3_mprintf("select name from way order by name"), [&](sqlite3_stmt* row) { m->word += std::string(" ") + (const char*)sqlite3_column_text(row, 0); });
+        std::set<std::string> here;
+        doc_rows(*m->d, sqlite3_mprintf("select name from way order by name"), [&](sqlite3_stmt* row) { here.insert((const char*)sqlite3_column_text(row, 0)); m->word += std::string(" ") + (const char*)sqlite3_column_text(row, 0); });
+        for (const auto& [name, goes] : doc_own_ways()) if (!here.count(name)) m->word += " " + name;   // (then the maker's own, not yet in this document)
         return m->word.c_str();
     });
 }
 double motolii_way_at(Motolii* m, const char* way, double u) {
     Interp kind;
     if (interp_said(way, &kind) == 0) return interp_ease(kind, u);
-    return by_look(m, [=] { return doc_went_by(*m->d, way, u, u, 1.0, 0.0, 1.0); });   // (one defined in the document: as between a key of 0 and a key of 1, a second apart)
+    return by_look(m, [=] {
+        bool here = false;
+        doc_rows(*m->d, sqlite3_mprintf("select 1 from way where name = %Q", way), [&](sqlite3_stmt*) { here = true; });
+        const auto own = doc_own_ways().find(way);
+        if (!here && own != doc_own_ways().end()) {   // (the maker's own, not yet in this document: as its file says it)
+            const double p[4] = {1, 1, 1, 1};
+            sqlite3_stmt* goes = doc_goes(*m->d, own->second);
+            return goes ? doc_went(goes, u, u, 1.0, 0.0, 1.0, p) : u;
+        }
+        return doc_went_by(*m->d, way, u, u, 1.0, 0.0, 1.0);   // (one defined in the document: as between a key of 0 and a key of 1, a second apart)
+    });
 }
 // A film's first picture as a small .png: GStreamer's own line for it (decode, scale, into a .png), held at its first
 // picture, which is taken and written. It asks nothing of a stage, so a shell may call it from another thread.
