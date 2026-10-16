@@ -47,6 +47,10 @@ bool _off(Element e) {
   return off;
 }
 
+/// A control brought into the middle of what shows it, as a hand looks at what it works (at an edge, a header that
+/// stays put lay over it, and the hand could not reach it).
+Future<void> _intoView(WidgetTester t, Finder f) => Scrollable.ensureVisible(t.element(f), alignment: .5);
+
 void main() {
   final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
   binding.framePolicy = LiveTestWidgetsFlutterBindingFramePolicy.fullyLive;
@@ -226,7 +230,7 @@ void main() {
               // (one way, and if that moved nothing (a value at its end), the other way: then the preview is judged)
               Offset from;
               if (what.startsWith('knob')) {
-                await t.ensureVisible(where.first);
+                await _intoView(t, where.first);
               await t.pump(); // (ensureVisible only scrolls: the place is laid out again at the next picture)
                 from = t.getCenter(where.first);
               } else {
@@ -256,7 +260,7 @@ void main() {
                   '$what: nothing moves until the hand lets go (no preview)',
                 );
             } else if (what.startsWith('segments')) {
-              await t.ensureVisible(where.first);
+              await _intoView(t, where.first);
               await t.pump(); // (ensureVisible only scrolls: the place is laid out again at the next picture)
               final seg = t.widget(where.first) as Segmented,
                   n = seg.items.length;
@@ -282,7 +286,7 @@ void main() {
                 );
               }
             } else if (what.startsWith('menu')) {
-              await t.ensureVisible(where.first);
+              await _intoView(t, where.first);
               await t.pump(); // (ensureVisible only scrolls: the place is laid out again at the next picture)
               final chooser = t.widget(where.first) as Chooser;
               await t.tap(where.first);
@@ -290,14 +294,20 @@ void main() {
               final pick = chooser.options[r.nextInt(chooser.options.length)];
               final option = find.text(pick);
               if (option.evaluate().length > 1) {
-                await t.ensureVisible(option.last); // (a long list scrolls within: the word found is brought into view first)
+                // (the word in the list that floats over the rest: the same word may be a row of the timeline beneath it)
+                final words = [for (var i = option.evaluate().length - 1; i >= 0; i--) option.at(i)];
+                final top = words.firstWhere((w) {
+                  final box = t.renderObject(w);
+                  return t.hitTestOnBinding(t.getCenter(w)).path.any((e) => e.target == box);
+                }, orElse: () => option.last);
+                await t.ensureVisible(top); // (a long list scrolls within: the word found is brought into view first)
                 await t.pump();
-                await t.tap(option.last);
+                await t.tap(top);
               } else {
                 await t.tap(where.first); // (nothing to pick: the menu closed again, so it does not cover the next hand)
               }
             } else {
-              await t.ensureVisible(where.first);
+              await _intoView(t, where.first);
               await t.pump(); // (ensureVisible only scrolls: the place is laid out again at the next picture)
               await t.tap(where.first);
             }
