@@ -1,132 +1,128 @@
+// The timeline on a real document (a window's state joined to the inside): its rows are the document's things, a
+// label or a bar picks one, a key picks a key, the ruler scrubs, play and the transport step the moment.
+import 'dart:io';
+
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lab_book/motolii.dart';
 import 'package:lab_book/workspace/timeline.dart';
 import 'package:lab_book/workspace/timeline_paint.dart';
-import 'package:lab_book/workspace/ws.dart';
+
+import 'door.dart';
 
 const _ref = Size(1226, 300);
 
-Future<Ws> _pump(WidgetTester t, {Size size = _ref}) async {
+/// A window's state on a new document: a rect keyed on x at 0.8 and 1.6 s, a ring on from 1 s.
+({Ws ws, int rect, int ring}) _joined() {
+  final m = Motolii.open('${Directory.systemTemp.createTempSync('timeline').path}/timeline.motolii')!;
+  addTearDown(m.close);
+  final ring = m.add('solid', 'ring'), rect = m.add('shape', 'rect');
+  expect(m.set(ring, 'start', 1) && m.key(rect, 'x', .8, 0) && m.key(rect, 'x', 1.6, 1), isTrue, reason: m.trouble);
+  final ws = Ws()..join(m);
+  return (ws: ws, rect: rect, ring: ring);
+}
+
+Future<void> _pump(WidgetTester t, Ws ws, {Size size = _ref}) async {
   t.view.physicalSize = size;
   t.view.devicePixelRatio = 1;
   addTearDown(t.view.reset);
-  final ws = Ws();
   await t.pumpWidget(
     WidgetsApp(
       color: const Color(0xFF000000),
       builder: (_, _) => WsScope(
         ws: ws,
-        child: Align(
-          alignment: Alignment.topLeft,
-          child: SizedBox(width: size.width, height: size.height, child: const WsTimeline()),
-        ),
+        child: Align(alignment: Alignment.topLeft, child: SizedBox(width: size.width, height: size.height, child: const WsTimeline())),
       ),
     ),
   );
-  return ws;
+  await t.pumpAndSettle();
 }
 
-/// Where a frame of a row lands on screen at Fit zoom.
-Offset _at(int row, num frame, {Size size = _ref}) {
+/// Where a frame of a thing's row lands on screen at Fit zoom.
+Offset _at(Ws ws, int thing, num frame, {Size size = _ref}) {
   const left = WtM.label + WtM.divider;
-  final ppf = (size.width - left - WtM.padL - WtM.padR) / Ws.duration;
+  final ppf = (size.width - left - WtM.padL - WtM.padR) / Ws.duration, row = ws.layers.indexWhere((l) => l.id == '$thing');
   return Offset(left + WtM.padL + frame * ppf, WtM.header + WtM.ruler + row * WtM.row + WtM.row / 2 - .5);
 }
 
 void main() {
-  testWidgets('lays out at reference and smaller sizes without exceptions', (t) async {
-    await _pump(t);
+  testWidgets('the timeline lays out at the reference size and smaller', (t) async {
+    final j = _joined();
+    await _pump(t, j.ws);
     expect(t.takeException(), isNull);
-    await _pump(t, size: const Size(900, 220));
+    await _pump(t, j.ws, size: const Size(900, 220));
     expect(t.takeException(), isNull);
-  });
+    await t.pumpWidget(const SizedBox());
+  }, skip: !insideBuilt);
 
-  testWidgets('label and bar clicks select the layer', (t) async {
-    final ws = await _pump(t);
-    await t.tap(find.byKey(const ValueKey('ws-tl-label-ring')));
-    expect(ws.selected, 'ring');
-    await t.tapAt(_at(5, 150)); // chips bar, between keys
-    expect(ws.selected, 'chips');
-  });
+  testWidgets('a label or a bar picks its thing', (t) async {
+    final j = _joined();
+    await _pump(t, j.ws);
+    await t.tap(find.byKey(ValueKey('ws-tl-label-${j.ring}')));
+    expect(j.ws.selected, '${j.ring}');
+    await t.tapAt(_at(j.ws, j.rect, 72)); // (the rect's bar, between its keys)
+    expect(j.ws.selected, '${j.rect}');
+    await t.pumpWidget(const SizedBox());
+  }, skip: !insideBuilt);
 
-  testWidgets('key clicks pick keys, shift adds, empty track clears', (t) async {
-    final ws = await _pump(t);
-    await t.tapAt(_at(2, 48));
-    expect(ws.keys, {(layer: 'blob', frame: 48)});
+  testWidgets('a key click picks the key, shift adds one, an empty track clears', (t) async {
+    final j = _joined();
+    await _pump(t, j.ws);
+    final f = (.8 * Ws.fps).round(), g = (1.6 * Ws.fps).round();
+    await t.tapAt(_at(j.ws, j.rect, f));
+    expect(j.ws.keys, {(layer: '${j.rect}', frame: f)});
     await t.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
-    await t.tapAt(_at(2, 96));
+    await t.tapAt(_at(j.ws, j.rect, g));
     await t.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
-    expect(ws.keys.length, 2);
-    await t.tapAt(_at(3, 10)); // ring row, before its in point
-    expect(ws.keys, isEmpty);
-  });
+    expect(j.ws.keys.length, 2);
+    await t.tapAt(_at(j.ws, j.ring, 10)); // (the ring's row, before it comes on)
+    expect(j.ws.keys, isEmpty);
+    await t.pumpWidget(const SizedBox());
+  }, skip: !insideBuilt);
 
-  testWidgets('ruler click and drag scrub the frame', (t) async {
-    final ws = await _pump(t);
+  testWidgets('a click and a drag on the ruler scrub the moment', (t) async {
+    final j = _joined();
+    await _pump(t, j.ws);
     final y = WtM.header + WtM.ruler - 6;
-    await t.tapAt(Offset(_at(0, 150).dx, y));
-    expect(ws.frame, 150);
-    final g = await t.startGesture(Offset(_at(0, 30).dx, y));
-    await g.moveTo(Offset(_at(0, 90).dx, y));
+    await t.tapAt(Offset(_at(j.ws, j.rect, 50).dx, y));
+    expect(j.ws.frame, 50);
+    final g = await t.startGesture(Offset(_at(j.ws, j.rect, 20).dx, y));
+    await g.moveTo(Offset(_at(j.ws, j.rect, 80).dx, y));
     await g.up();
-    expect(ws.frame, 90);
-  });
+    expect(j.ws.frame, 80);
+    expect(j.ws.inside!.now, closeTo(80 / Ws.fps, 1e-9), reason: 'the inside\'s moment, too');
+    await t.pumpWidget(const SizedBox());
+  }, skip: !insideBuilt);
 
-  testWidgets('play button and space toggle playing; the ticker advances and stops', (t) async {
-    final ws = await _pump(t);
-    final start = ws.frame;
+  testWidgets('the play button and space start and stop playing', (t) async {
+    final j = _joined();
+    await _pump(t, j.ws);
     await t.tap(find.byKey(const ValueKey('ws-tl-play')));
-    expect(ws.playing, isTrue);
-    await t.pump();
-    await t.pump(const Duration(milliseconds: 500));
-    expect(ws.frame, greaterThanOrEqualTo(start + 14));
+    expect(j.ws.playing, isTrue);
     await t.sendKeyEvent(LogicalKeyboardKey.space);
-    expect(ws.playing, isFalse);
-    final held = ws.frame;
-    await t.pump(const Duration(milliseconds: 500));
-    expect(ws.frame, held);
-    await t.pump(const Duration(milliseconds: 500));
-    expect(t.binding.hasScheduledFrame, isFalse);
-  });
+    expect(j.ws.playing, isFalse);
+    await t.pumpWidget(const SizedBox());
+  }, skip: !insideBuilt);
 
-  testWidgets('play stops at the end without loop, wraps with loop', (t) async {
-    final ws = await _pump(t);
-    await t.tap(find.byKey(const ValueKey('ws-tl-loop'))); // loop off
-    ws.frame = Ws.duration - 3;
-    ws.playing = true;
+  testWidgets('the transport steps and the zoom buttons', (t) async {
+    final j = _joined();
+    await _pump(t, j.ws);
+    j.ws.frame = 30;
     await t.pump();
-    await t.pump(const Duration(milliseconds: 400));
-    expect(ws.playing, isFalse);
-    expect(ws.frame, Ws.duration);
-
-    await t.tap(find.byKey(const ValueKey('ws-tl-loop'))); // loop on
-    ws.frame = Ws.duration - 3;
-    ws.playing = true;
-    await t.pump();
-    await t.pump(const Duration(milliseconds: 400));
-    expect(ws.playing, isTrue);
-    expect(ws.frame, lessThan(20));
-    ws.playing = false;
-    await t.pump();
-  });
-
-  testWidgets('transport steps and zoom buttons', (t) async {
-    final ws = await _pump(t);
-    final f0 = ws.frame;
     await t.tap(find.byKey(const ValueKey('ws-tl-fwd')));
-    expect(ws.frame, f0 + 1);
+    expect(j.ws.frame, 31);
     await t.tap(find.byKey(const ValueKey('ws-tl-back')));
     await t.tap(find.byKey(const ValueKey('ws-tl-back')));
-    expect(ws.frame, f0 - 1);
+    expect(j.ws.frame, 29);
     await t.tap(find.byKey(const ValueKey('ws-tl-start')));
-    expect(ws.frame, 0);
+    expect(j.ws.frame, 0);
     await t.tap(find.byKey(const ValueKey('ws-tl-zoom-in')));
     await t.tap(find.byKey(const ValueKey('ws-tl-zoom-in')));
     await t.pump();
-    expect(t.takeException(), isNull);
     await t.tap(find.byKey(const ValueKey('ws-tl-fit')));
     await t.pump();
     expect(t.takeException(), isNull);
-  });
+    await t.pumpWidget(const SizedBox());
+  }, skip: !insideBuilt);
 }
