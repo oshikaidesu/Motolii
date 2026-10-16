@@ -89,7 +89,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
         if (pop) ...[
           // contract: one stack, After Effects style: transform, material, then effects piled below; every titled card folds on its own.
           const SizedBox(height: Pop.gap),
-          if (k == Kind.camera) const CameraGroup() else if (doc.seat('pos.x')) const DirectTransform(), // (a camera has its own card in place of Transform, as the tabs have it; a host with Transform cards of its own has no seat for the sample's)
+          if (k == Kind.camera) ...[if (doc.seat('cam.t.x')) const CameraGroup()] else if (doc.seat('pos.x')) const DirectTransform(), // (a camera has its own card in place of Transform, as the tabs have it; a host with Transform cards of its own has no seat for the sample's)
           if (k == Kind.text && doc.seat('text')) const TextGroup(),
           if ((k == Kind.shape || k == Kind.text) && doc.seat('fill')) const FillStroke(),
           for (final c in doc.cards) ValuesCard(c), // (the host's own: what it has beyond the sample's cards)

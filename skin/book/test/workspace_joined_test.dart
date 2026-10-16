@@ -1068,11 +1068,11 @@ void main() {
       ..select('$cam');
     await t.pumpAndSettle();
     final ids = {for (final e in find.byType(NumField).evaluate()) (e.widget as NumField).id};
-    expect(ids, containsAll(['cam.t.x', 'cam.dist', 'cam.zoom']));
-    expect(ids.intersection({'scale.x', 'op', 'depth'}), isEmpty, reason: 'a camera has none of these');
-    expect([for (final e in find.byType(ValuesCard).evaluate()) (e.widget as ValuesCard).card.name], ['Projection'], reason: 'its lens: orthographic, shifted');
+    expect(ids, containsAll(['v_x', 'v_distance', 'v_zoom']), reason: 'the inside\'s Camera card, as After Effects\' camera');
+    expect(ids.intersection({'v_scale_x', 'v_opacity', 'depth'}), isEmpty, reason: 'a camera has none of these');
+    expect([for (final e in find.byType(ValuesCard).evaluate()) (e.widget as ValuesCard).card.name], ['Camera', 'Projection'], reason: 'where it is and looks, then its lens: orthographic, shifted');
     expect(m.say(cam, 'projection', 'orthographic') && m.key(cam, 'shift_y', 0, 0.2), isTrue, reason: m.trouble);
-    final dist = find.byWidgetPredicate((w) => w is NumField && w.id == 'cam.dist');
+    final dist = find.byWidgetPredicate((w) => w is NumField && w.id == 'v_distance');
     await t.ensureVisible(dist);
     await t.drag(dist, const Offset(60, 0));
     await t.pumpAndSettle();

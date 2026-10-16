@@ -413,6 +413,7 @@ static const DocShown doc_shown[] = {
     {"scale_x", "share", "%", "Scale X", 0, 4, nullptr}, {"scale_y", "share", "%", "Scale Y", 0, 4, nullptr}, {"scale_z", "share", "%", "Scale Z", 0, 4, nullptr},
     {"rotate", "angle", "°", "Rotation", -180, 180, nullptr}, {"rotate_x", "angle", "°", "X Rotation", -180, 180, nullptr}, {"rotate_y", "angle", "°", "Y Rotation", -180, 180, nullptr},
     {"opacity", "share", "%", "Opacity", 0, 1, nullptr},
+    {"distance", "", "px", "Distance", 0.05, 4, nullptr}, {"zoom", "share", "%", "Zoom", 0.1, 4, nullptr},
     {"anchor_x", "", "%", "Anchor X", -1, 1, "Anchor"}, {"anchor_y", "", "%", "Anchor Y", -1, 1, "Anchor"}, {"anchor_z", "", "%", "Anchor Z", -1, 1, "Anchor"},
     {"parent", "thing", "", "Parent", 0, 0, nullptr},   // (the thing it goes with: shown by its name)
     {"connect_to", "thing", "", "With", 0, 0, nullptr},
@@ -540,6 +541,7 @@ static std::vector<DocScript*> doc_scripts_on(Doc& d, int thing) {
 }
 static const DocCard doc_cards[] = {
     {"Transform", "space parent anchor_x anchor_y anchor_z x y z scale_x scale_y scale_z rotate_x rotate_y rotate opacity", "kind", "!camera"},   // (After Effects' Transform group: where it is, how large, how turned, how seen; each its own value)
+    {"Camera", "parent x y z rotate_x rotate_y rotate distance zoom", "kind", "camera"},   // (After Effects' camera: what it looks at, where it is and how turned, how far its eye is, its zoom)
     {"Type", "split letter_spacing line_spacing italic wrap wrap_at"},
     {"Gradient", "gradient gradient_angle gradient_scale gradient_spread", "fill", "~ "},
     {"Copies", "copies copy_columns copy_x copy_y copy_rotate copy_rotate_x copy_rotate_y copy_turn copy_size copy_wide copy_z tall copy_tall stagger stagger_from copy_fill copy_fill_way"},

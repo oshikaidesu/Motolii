@@ -463,7 +463,7 @@ Set<String> _seatsOf(Set<String> names) => {
   ...names,
   // (where it is, how large, turned and seen is the inside's own Transform card now, as After Effects' group: not the sample's)
   for (final s in _seats)
-    if (names.contains(s.$2) && !const ['pos.', 'scale.', 'rot.', 'anchor.'].any(s.$1.startsWith) && s.$1 != 'op') s.$1,
+    if (names.contains(s.$2) && !const ['pos.', 'scale.', 'rot.', 'anchor.', 'cam.'].any(s.$1.startsWith) && s.$1 != 'op') s.$1, // (a camera's too: the inside's Camera card)
   'parent',
   'depth',
 };
