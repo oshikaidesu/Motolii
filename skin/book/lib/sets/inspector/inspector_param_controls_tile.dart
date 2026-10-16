@@ -90,6 +90,7 @@ class ParamTile extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.only(bottom: 3),
             child: Row(
+              key: ValueKey('toggle:$id'), // (found by its value's id)
               children: [
                 IgnorePointer(
                   child: Opacity(

@@ -93,7 +93,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
           if (k == Kind.text && doc.seat('text')) const TextGroup(),
           if ((k == Kind.shape || k == Kind.text) && doc.seat('fill')) const FillStroke(),
           for (final c in doc.cards) ValuesCard(c), // (the host's own: what it has beyond the sample's cards)
-          if (k != Kind.camera && (doc.seat('blend') || doc.seat('clip'))) const BlendRows(),
+          if (k != Kind.camera && doc.seat('sample.blend') && (doc.seat('blend') || doc.seat('clip'))) const BlendRows(), // (a host with a Blending card of its own gives no seat for the sample's)
           PopGroupLabel('Effects', count: Ctx.of(context).doc.fxOrder.length),
           const EffectsStack(),
         ] else if (cfg.tabs) ...[

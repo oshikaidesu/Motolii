@@ -239,13 +239,17 @@ void main() {
     await t.pumpAndSettle();
     expect(m.things, [rect, cube], reason: 'one step back: the order');
 
-    Finder seat(String label) => find.descendant(of: find.ancestor(of: find.text(label), matching: find.byType(PropRow)), matching: find.byType(OnOff));
-    await t.ensureVisible(seat('Clip to below'));
+    final clip = find.byKey(const ValueKey('toggle:v_clip')); // (the inside's Blending card)
+    await t.ensureVisible(clip);
     await t.pumpAndSettle();
-    await t.tap(seat('Clip to below'));
+    await t.tap(clip);
     await t.pumpAndSettle();
     expect(m.value(cube, 'clip', 0), 1, reason: 'the seat is the document\'s clip');
-    expect(t.widget<OnOff>(seat('Clip to below')).on, isTrue);
+    for (var i = 0; i < 20 && ws.waiting; i++) {
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+      await t.pump();
+    }
+    expect(find.descendant(of: clip, matching: find.text('On')), findsOneWidget);
     expect(find.byWidgetPredicate((w) => w is PropRow && w.id == 'ghost'), findsNothing, reason: 'the document has no ghost: no switch that moves nothing');
     expect(m.undo() && m.value(cube, 'clip', 0) == 0, isTrue, reason: 'one step back: the clip');
     expect(t.takeException(), isNull);
@@ -1218,11 +1222,11 @@ void main() {
     await t.pumpAndSettle();
     expect(find.descendant(of: find.byType(ValuesCard), matching: find.text('Surface')), findsOneWidget, reason: 'Filament\'s own surface of a solid');
     expect(m.say(cube, 'fill', 'glass'), isTrue, reason: m.trouble);
-    expect(m.cards(cube).map((c) => c.$1), ['Transform', 'Glass', 'Lit', 'Physics'], reason: 'filled with glass: the glass\'s own card, not the surface\'s');
+    expect(m.cards(cube).map((c) => c.$1), ['Transform', 'Blending', 'Glass', 'Lit', 'Physics'], reason: 'filled with glass: the glass\'s own card, not the surface\'s');
     expect(m.cards(rect).map((c) => c.$1).contains('Matte'), isFalse, reason: 'not clipped: no matte to say how');
     expect(m.set(rect, 'clip', 1) && m.cards(rect).map((c) => c.$1).contains('Matte'), isTrue);
     expect(m.set(cube, 'ior', 2.2) && m.value(cube, 'ior', 0) == 2.2, isTrue, reason: m.trouble);
-    expect(m.say(cube, 'fill', 'ff3366') && m.cards(cube).map((c) => c.$1).join(' ') == 'Transform Surface Lit Physics', isTrue);
+    expect(m.say(cube, 'fill', 'ff3366') && m.cards(cube).map((c) => c.$1).join(' ') == 'Transform Blending Surface Lit Physics', isTrue);
     expect(find.byWidgetPredicate((w) => w is NumField && w.id == 'v_metallic'), findsOneWidget);
     expect(t.takeException(), isNull);
     await expectSameAfterReopen(t);
