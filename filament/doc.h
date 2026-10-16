@@ -1998,8 +1998,8 @@ static int doc_keys(Doc& d, int thing, const char* name, double at = -1.0) {   /
 }
 // What a hand does to a value at a moment, as the document's own rules (a shell does not work them out):
 // put: the value changed there. Every change is being keyed (d.keying): a key there, and if it is the value's first, what
-//      it was stays as a key where the keying began. Not being keyed: a value with keys is moved whole (every key by as
-//      much), a value without is the value that stays.
+//      it was stays as a key where the keying began. Not being keyed: a value with keys gets a key there (as After
+//      Effects keys a property that has keyframes, wherever it is changed), a value without is the value that stays.
 // key_here: a key at that moment holding what the value is there (nothing, if it has one there).
 // raise: brought nearer or further back among the things.
 // stay: its keys are taken away, and it stays what it is at that moment.
@@ -2007,18 +2007,10 @@ static int doc_keys(Doc& d, int thing, const char* name, double at = -1.0) {   /
 // moving: the names of the values of a thing that can take keys.
 static double doc_usual(const char* name);
 static bool doc_set(Doc& d, int thing, const char* name, double is);
-static bool doc_put(Doc& d, int thing, const char* name, double at, double is) {   // (the past repository's own rule: motolii-edit, place_checked)
+static bool doc_put(Doc& d, int thing, const char* name, double at, double is) {   // (After Effects' rule; the past repository moved a keyed value whole: motolii-edit, place_checked)
     if (!doc_knows(d, thing, name, &is)) return false;
     const bool keyed = doc_keys(d, thing, name) > 0;
-    if (keyed && !d.keying) {   // (a movement that is not being keyed is moved whole: every key by as much)
-        const double by = is - doc_number(d, thing, name, at, doc_usual(name));
-        double ends[2] = {is, is};   // (its lowest and highest keys, carried: each must still be something the value can be)
-        doc_rows(d, sqlite3_mprintf("select min(value) + %!.17g, max(value) + %!.17g from fact where thing = %d and name = %Q", by, by, thing, name),
-                 [&](sqlite3_stmt* row) { ends[0] = sqlite3_column_double(row, 0), ends[1] = sqlite3_column_double(row, 1); });
-        if (!doc_knows(d, thing, name, &ends[0]) || !doc_knows(d, thing, name, &ends[1])) return false;
-        return by == 0.0 || doc_change(d, sqlite3_mprintf("update fact set value = value + %!.17g where thing = %d and name = %Q", by, thing, name));
-    }
-    if (keyed) return doc_key(d, thing, name, at, is);
+    if (keyed) return doc_key(d, thing, name, at, is);   // (a value with keys: a key there, whether every change is keyed or not)
     if (!d.keying) return doc_set(d, thing, name, is);
     // (its first key while every change is keyed: what it was stays, as a key where the keying began, so it travels from there)
     const double was = doc_number(d, thing, name, d.keying_from, doc_usual(name));

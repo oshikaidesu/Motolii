@@ -99,8 +99,8 @@ void main() {
     expect(m.put(film, 'opacity', .5, .25), isTrue, reason: m.trouble); // (it has keys and changes are being keyed: a key there)
     expect(m.keyed(film, 'opacity', .5), 2);
     m.keying(false);
-    expect(m.put(film, 'opacity', 0, .5), isFalse, reason: 'not being keyed the whole movement is carried: its last key would be 1.5');
-    expect(m.value(film, 'opacity', 0), 0);
+    expect(m.put(film, 'opacity', 0, .5), isTrue, reason: m.trouble); // (not being keyed, a value with keys still gets a key there, as After Effects keys it)
+    expect([m.value(film, 'opacity', 0), m.keyed(film, 'opacity', 0)], [.5, 2]);
     expect(m.put(film, 'x', .5, 1), isTrue, reason: m.trouble); // (it has none: the value that stays)
     expect(m.keyed(film, 'x', .5), 0);
 
@@ -417,7 +417,7 @@ void main() {
     await _close(t);
   }, skip: !_built);
 
-  testWidgets('round 3 of the judges: a thing put aside is not held; Animate all travels from where it was; a movement not being keyed is carried whole', (t) async {
+  testWidgets('round 3 of the judges: a thing put aside is not held; Animate all travels from where it was; a value with keys changed not being keyed gets a key there', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final cube = m.add('solid', 'cube');
     expect(m.set(cube, 'visible', 0), isTrue, reason: m.trouble);
@@ -444,11 +444,12 @@ void main() {
     expect(m.redo(), isTrue);
     m.keying(false);
 
-    // (not being keyed: the whole movement is carried, every key by as much)
+    // (not being keyed: a value with keys gets a key where it is changed, the others as they were (After Effects))
     expect(m.at(1), isTrue);
+    final was = [m.value(cube, 'x', 0), m.value(cube, 'x', 2)];
     expect(m.put(cube, 'x', 1, 2.5), isTrue, reason: m.trouble);
-    expect([m.value(cube, 'x', 0), m.value(cube, 'x', 1), m.value(cube, 'x', 2)], [1, 2.5, 4]);
-    expect(m.keyed(cube, 'x', 1), 1, reason: 'no key was made');
+    expect([m.value(cube, 'x', 0), m.value(cube, 'x', 1), m.value(cube, 'x', 2)], [was[0], 2.5, was[1]]);
+    expect(m.keyed(cube, 'x', 1), 2, reason: 'a key was made there');
 
     // (the frame of a thing turned about Y is the box of what it covers: a cube seen edge-on is wider than face-on)
     final faceOn = m.frame(cube)!;
