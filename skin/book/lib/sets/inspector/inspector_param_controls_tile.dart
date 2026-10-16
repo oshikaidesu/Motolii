@@ -7,6 +7,7 @@ import 'package:lab_book/parts/controls.dart';
 import 'package:lab_book/sets/inspector/inspector_param_controls_angle_dial.dart';
 import 'package:lab_book/sets/inspector/inspector_param_controls_gauge.dart';
 import 'package:lab_book/sets/inspector/inspector_parts.dart';
+import 'package:lab_book/sets/inspector/inspector_value_marks.dart';
 import 'package:lab_book/tokens.dart';
 
 /// One parameter as a block: the name on top, the number large under it, a picture of the value in the top-right corner.
@@ -27,7 +28,7 @@ class ParamTile extends StatelessWidget {
       child: NumField(
         id: fid,
         caption: caption ?? p.label,
-        glyph: glyph,
+        glyph: valueMarks[id] == null ? glyph : ValueMarkGlyph(valueMarks[id]!, Ctx.of(context).doc.get(id)), // (a value the window knows: drawn as what it does)
         glyphOwnsPointer: owns,
         glyphTall: tall,
         unit: p.unit,

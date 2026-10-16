@@ -26,6 +26,7 @@ export 'inspector_rows.dart';
 export 'inspector_small.dart';
 export 'inspector_state.dart';
 export 'inspector_transform_rows.dart';
+export 'inspector_value_marks.dart';
 export 'param_infer.dart';
 
 // ---- 0. open values -------------------------------------------------------------------------------------------------

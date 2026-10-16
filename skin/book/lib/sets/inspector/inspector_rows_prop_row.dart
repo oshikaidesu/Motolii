@@ -2,6 +2,7 @@
 import 'package:flutter/foundation.dart' show ValueListenable, listEquals;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
+import 'package:lab_book/sets/inspector/inspector_value_marks.dart';
 import 'package:lab_book/sets/inspector/inspector_parts.dart';
 import 'package:lab_book/tokens.dart';
 
@@ -75,7 +76,7 @@ class _PropRowState extends State<PropRow> {
         mixedAny = ids.any((i) => doc.get(i) == null),
         ks = doc.keys[widget.id] ?? KeyS.off;
     final active = doc.directHover == widget.id;
-    final mark = widget.lead ?? RowMark.of(context, widget.id);
+    final mark = widget.lead ?? RowMark.of(context, widget.id) ?? (valueMarks[widget.id] == null ? null : ValueMarkGlyph(valueMarks[widget.id]!, doc.get(widget.id)));
     final pop = Pop.on(context);
     final units = widget.cells.whereType<NumField>().map((f) => f.unit).toSet();
     final shared = pop && units.length == 1 ? units.single : null;

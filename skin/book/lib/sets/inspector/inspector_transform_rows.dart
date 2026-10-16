@@ -43,17 +43,18 @@ class SpaceRow extends StatelessWidget {
 }
 
 /// A space as a picture and its name: flat square, tilted card, cube.
-class SpacePlate extends StatelessWidget {
-  const SpacePlate(this.space, {super.key, required this.on, required this.onTap});
-  final Space space;
+/// One of a few choices as a plate: its glyph says it, its word only names it (a hand finds it with the words hidden).
+class GlyphPlate extends StatelessWidget {
+  const GlyphPlate(this.label, this.glyph, {super.key, required this.on, required this.onTap});
+  final String label;
+  final void Function(Canvas c, Paint stroke) glyph; // (drawn in a 16 x 14 box)
   final bool on;
   final VoidCallback onTap;
-  static const names = {Space.d2: '2D', Space.d25: '2.5D', Space.d3: '3D'};
   @override
   Widget build(BuildContext context) => Semantics(
     button: true,
     selected: on,
-    label: names[space],
+    label: label,
     child: Hov(
       onTap: onTap,
       builder: (_, h) {
@@ -71,15 +72,53 @@ class SpacePlate extends StatelessWidget {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              CustomPaint(size: const Size(16, 14), painter: _SpacePaint(space, ink)),
+              CustomPaint(size: const Size(16, 14), painter: _GlyphPaint(glyph, ink)),
               const SizedBox(width: 6),
-              Text(names[space]!, style: pop ? T.micro(on ? Pop.onAccent : Grey.g76).copyWith(fontWeight: FontWeight.w700) : T.label(on ? Grey.g95 : Grey.g63)),
+              Flexible( // (narrow, the word gives way; the glyph stays)
+                child: Text(label, maxLines: 1, overflow: TextOverflow.clip, softWrap: false, style: pop ? T.micro(on ? Pop.onAccent : Grey.g76).copyWith(fontWeight: FontWeight.w700) : T.label(on ? Grey.g95 : Grey.g63)),
+              ),
             ],
           ),
         );
       },
     ),
   );
+}
+
+class _GlyphPaint extends CustomPainter {
+  const _GlyphPaint(this.glyph, this.ink);
+  final void Function(Canvas c, Paint stroke) glyph;
+  final Color ink;
+  @override
+  void paint(Canvas c, Size s) => glyph(
+    c,
+    Paint()
+      ..color = ink
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.2
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round,
+  );
+  @override
+  bool shouldRepaint(_GlyphPaint o) => o.ink != ink || o.glyph != glyph;
+}
+
+/// Lines of type set left, centred or right (0, .5, 1: ThorVG's own): the glyph of a text's alignment.
+void Function(Canvas, Paint) alignGlyph(double at) => (c, st) {
+  for (final (y, w) in const [(2.5, 14.0), (7.0, 9.0), (11.5, 12.0)]) {
+    final x = 1 + (14 - w) * at;
+    c.drawLine(Offset(x, y), Offset(x + w, y), st);
+  }
+};
+
+class SpacePlate extends StatelessWidget {
+  const SpacePlate(this.space, {super.key, required this.on, required this.onTap});
+  final Space space;
+  final bool on;
+  final VoidCallback onTap;
+  static const names = {Space.d2: '2D', Space.d25: '2.5D', Space.d3: '3D'};
+  @override
+  Widget build(BuildContext context) => GlyphPlate(names[space]!, (c, st) => _SpacePaint(space, st.color).paint(c, const Size(16, 14)), on: on, onTap: onTap);
 }
 
 class _SpacePaint extends CustomPainter {
