@@ -3,7 +3,7 @@
 Widgetbook の `Workspace › Workspace › Live`（route `/?path=workspace/workspace/live`）が本物の窓。書類は C++ の中身（`../motolii.dart` の `Motolii`、各メソッドが `motolii_*` の C 呼び出し 1 つ）にあり、Stage の絵も中身（Filament）が描く。窓は見せて、手を書類に渡すだけ。`.../workspace/window` は中身なしの見本。
 
 ## 自分のパネルを足す（入口はここだけ）
-`import 'package:lab_book/workspace/door.dart';` の 1 行で、下の全部（`Workspace`、`WsPane`、`DeskTool`、`Ws`・`WsScope`、`Motolii`）が使える。
+`import 'package:lab_book/workspace/door.dart';` の 1 行で、下の全部（`Workspace`、`WsPane`（アイコンは `DockG` か null）、`DeskTool`、`Ws`・`WsScope`、`Motolii`、Ease のタイル `unseated`）が使える。テストでは `test/door.dart`。中身が組まれていないと書類を使うテストは飛ばされ、`test/inside_built_test.dart` が赤になる。
 ```dart
 Workspace(document: path, extra: [
   WsPane('Notes', null, () => const MyNotes()),   // (名前、アイコン（null なら頭文字）、中身)
