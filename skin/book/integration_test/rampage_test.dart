@@ -24,6 +24,8 @@ import 'package:lab_book/workspace/timeline.dart';
 import 'package:lab_book/workspace/workspace.dart' show Workspace, wsTransform;
 import 'package:lab_book/workspace/ws.dart';
 
+import '../test/door.dart' show expectSameAfterReopen, openedDocument;
+
 const _font = '$motoliiDir/out/arial_black.ttf';
 const _seed = int.fromEnvironment('SEED', defaultValue: 7),
     _acts = int.fromEnvironment('ACTS', defaultValue: 400);
@@ -446,6 +448,8 @@ void main() {
         'RAMPAGE ${report['pictures']} pictures, late ${report['late (over 16.7 ms)']}, median ${pc(0.5).toStringAsFixed(2)} ms, 99th ${pc(0.99).toStringAsFixed(2)} ms, most ${(spans.isEmpty ? 0 : spans.last).toStringAsFixed(2)} ms; ${reds.length} red',
       );
       if (trace) return; // (a run that only traces where the time goes: its report written whatever it found)
+      openedDocument = doc;
+      await expectSameAfterReopen(t); // (the window is the document's alone: what the rampage left, opened again on the same document, shows the same)
     expect(reds, isEmpty);
       expect(late, 0, reason: 'pictures over a sixtieth of a second');
     },
