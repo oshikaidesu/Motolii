@@ -1,6 +1,6 @@
 # Workspace — Motolii の窓（2026-10-16）
 
-Widgetbook の `Workspace › Workspace › Live`（route `/?path=workspace/workspace/live`）が本物の窓。書類は C++ の中身（`../motolii.dart` の `Motolii`、各メソッドが `motolii_*` の C 呼び出し 1 つ）にあり、Stage の絵も中身（Filament）が描く。窓は見せて、手を書類に渡すだけ。`.../workspace/window` は中身なしの見本。
+Widgetbook の `Workspace › Workspace › Live`（route `/?path=workspace/workspace/live`）が本物の窓。書類は C++ の中身（`../motolii.dart` の `Motolii`、各メソッドが `motolii_*` の C 呼び出し 1 つ）にあり、Stage の絵も中身（Filament）が描く。窓は見せて、手を書類に渡すだけ。書類を渡さずに開くと無題の書類を開く（AE と同じ）。
 
 ## 自分のパネルを足す（入口はここだけ）
 `import 'package:lab_book/workspace/door.dart';` の 1 行で、下の全部（`Workspace`、`WsPane`（アイコンは `DockG` か null）、`DeskTool`、`Ws`・`WsScope`、`Motolii`、Ease のタイル `unseated`）が使える。テストでは `test/door.dart`。中身が組まれていないと書類を使うテストは飛ばされ、`test/inside_built_test.dart` が赤になる。
@@ -13,7 +13,7 @@ Workspace(document: path, extra: [
 - パネルの中では `WsScope.of(context)` が窓の状態（`Ws`）：`inside` が書類（`Motolii`）、`selected` が選ばれた物、`frame` が今のコマ。値は `inside.value(thing, name, seconds)`、変えるのは `inside.set(...)`、キーは `inside.keyHere(...)`。
 - 物を絵の上で動かす（画素で）：`inside.hold(t)`、`inside.carry('place', 10, 0)`、`inside.letGo(true)`（手で引いたのと同じ 1 歩）。値をそのまま変えるのは `inside.set(t, name, value)`（書類の単位）。キーの数は `inside.keyMoments(t, name).length`。
 - 気をつける 4 つ：選ばれた物 `selected` は文字なので `int.parse` してから書類に渡す。今の秒は `frame / Ws.fps`。物の名前は `inside.word(t, 'name')`。書類を変えたら `ws.reread()`（窓の他のパネルが読み直す）。
-- 例：`test/workspace_window_test.dart` の「a pane of your own」（書類なし）。本物の書類で試すなら `import 'door.dart';`（`test/door.dart`）の `openWorkspace(tester, extra: [...], tools: [...])` と `wsOf(tester)`、`closeWorkspace`、`skip: !insideBuilt`。
+- 例：`test/workspace_window_test.dart` の「a pane of your own」（書類なし）。本物の書類で試すなら `import 'door.dart';`（`test/door.dart`）の `openWorkspace(tester, extra: [...], tools: [...])` と `wsOf(tester)`、`closeWorkspace`、`skip: !insideBuilt`。Inspector は見えているカードしか作らないので、下のカードは `seen(tester, finder)` でスクロールして出す（カードの名前の一覧は `inspectorCards(tester)`）。
 
 ## 自分の desk の道具を足す
 ```dart
@@ -25,13 +25,20 @@ Workspace(document: path, tools: [
 - 例：`test/workspace_window_test.dart` の「a desk tool of your own」。
 
 ## 自分のプリセット（Ease の動き方）を足す
-プリセットは利用者の持ち物（スクリプトと同じ）。利用者のフォルダ（Mac：`~/Library/Application Support/Motolii/ways`、Windows：`%APPDATA%\\Motolii\\ways`、`MOTOLII_WAYS` で差し替え）にファイルを 1 つ置くと、どの書類でも Ease の desk にタイルで出る。本体が持って来る見本は `filament/ways/`。
+プリセットは利用者の持ち物（スクリプトと同じ）。利用者のフォルダ（下の「利用者のフォルダ」）の `ways/` にファイルを 1 つ置くと、どの書類でも Ease の desk にタイルで出る。本体が持って来る見本は `filament/ways/`。式で使えるもの：`a`（前のキーの値）、`b`（次のキーの値）、`u`（区間の 0〜1）、`p1`〜`p4`（区間に付けた数）、`bezier(u, x1, y1, x2, y2)`。
 ```
 // Snappy: fast away from the first key, a long soft landing          (1 行目：名前、コロンの後は説明)
 a + (b - a) * bezier(u, .2, 0, 0, 1)                                 (a: 前のキーの値、b: 次のキーの値、u: 区間の 0〜1)
 ```
 - キーに当てると、その式が書類に書き込まれる（書類を人に渡しても同じに動く）。当てるのと書き込むのは 1 歩（undo 1 回）。
-- 例：`filament/ways/snappy.way`、`test/workspace_joined_test.dart` の「a preset is in the maker's own folder」（テストは `MOTOLII_WAYS` を一時フォルダにする）。
+- 例：`filament/ways/snappy.way`、`test/workspace_joined_test.dart` の「a preset is in the maker's own folder」（テストは `MOTOLII_OWN` を一時フォルダにする）。
+
+## 利用者のフォルダ（スクリプト・エフェクト・動き・プリセット）
+Mac：`~/Library/Application Support/Motolii/`、Windows：`%APPDATA%\\Motolii\\`（`MOTOLII_OWN` で差し替え）。中のフォルダごとに、置いた瞬間に出る（本体の見本は `filament/` の同じ名前のフォルダ。同じ名前なら利用者のが勝つ）。
+- `recipes/*.js`：1 回で絵を作るスクリプト。Create 棚にタイルで出て、つまみは物の **Script** カードに出る。頭の書き方は `filament/script.h` の先頭（AviUtl2 と同じ `// --track@名前:ラベル,最小,最大,初め,刻み`、`--check@`、`--select@`）、例は `filament/recipes/`。
+- `effects/*.wgsl`：画面全体のエフェクト（Effects 棚）。`animators/*.js`：物に付ける動き。
+- `ways/*.way`：Ease のプリセット（上）。
+- どれも本家のファイルは 1 行も変えない。カードの名前を自分で付ける（例：Wobble）のはまだできない（Script と出る）。
 
 ## 開き方・確かめ方
 ```bash
