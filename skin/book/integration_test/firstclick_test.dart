@@ -46,6 +46,8 @@ void main() {
       ..say(rect, 'fill', 'ff3366')
       ..say(text, 'text', 'Hello')
       ..say(cube, 'name', 'Box')
+      ..say(rect, 'stroke', 'ffffff') // (every state a task needs, set once before any picture: pictures of one thing are the same, so none tells by a changed pixel)
+      ..set(rect, 'copies', 5)
       ..set(cube, 'x', 2.5) // (the things side by side, as a stranger's stage would have them: none hides another)
       ..set(text, 'y', -1.6);
     ws
@@ -68,9 +70,9 @@ void main() {
       ('Let the selected card sit deeper in the scene, while it stays a flat card.', rect, null, find.byWidgetPredicate((w) => w is SpacePlate && w.space == Space.d25), null),
       ('Make the selected card blue.', rect, null, row('v_fill'), null),
       ('Draw a line all round the edge of the selected card.', rect, null, row('v_stroke'), null),
-      ('Make the line round the selected card heavier.', rect, () => m.say(rect, 'stroke', 'ffffff'), num('v_stroke_width'), null),
+      ('Make the line round the selected card heavier.', rect, null, num('v_stroke_width'), null),
       ('Turn the selected card into ten cards.', rect, null, num('v_copies'), null),
-      ('Push the repeated cards further apart, left to right.', rect, () => m.set(rect, 'copies', 5), num('v_copy_x'), null),
+      ('Push the repeated cards further apart, left to right.', rect, null, num('v_copy_x'), null),
       ('Make the selected card look out of focus.', rect, null, find.ancestor(of: find.text('Gaussian Blur'), matching: find.byType(DockHover)), null),
       ('Change the words that are written.', text, null, find.descendant(of: find.byType(TextGroup), matching: find.byType(EditableText)), null),
       ('Put each line of the writing in the middle.', text, null, find.descendant(of: row('v_align'), matching: find.byWidgetPredicate((w) => w is Text && w.data?.toLowerCase() == 'centre')), null),
