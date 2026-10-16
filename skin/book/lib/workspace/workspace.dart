@@ -229,7 +229,8 @@ class _WorkspaceState extends State<Workspace> {
         ),
       ),
     );
-    return _inside == null ? window : PlatformMenuBar(menus: _menus(), child: window);
+    if (_ws.inside == null) return ColoredBox(color: WsT.ground); // (the document still opening: no seat is built on nothing)
+    return PlatformMenuBar(menus: _menus(), child: window);
   }
 }
 

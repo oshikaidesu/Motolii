@@ -81,21 +81,10 @@ class WsLayer {
 /// A key the user picked: which layer, which frame.
 typedef WsKey = ({String layer, int frame});
 
-/// The shared mock document. Every seat listens to this and nothing else; a seat never keeps a copy of what is here.
+/// The window's state: the document's things as rows (read again from the inside), what is picked, the moment, the
+/// view. Every seat listens to this and nothing else; a seat never keeps a copy of what is here.
 /// contract: changes notify once per user action; nothing here ticks while idle (play advances only while [playing]).
 class Ws extends ChangeNotifier {
-  Ws() {
-    layers.addAll([
-      WsLayer('cam', 'Camera', WsKind.camera, 0, 240, [0, 120, 240]),
-      WsLayer('title', 'CODA', WsKind.text, 12, 228, [12, 36, 180, 204]),
-      WsLayer('blob', 'Blob', WsKind.shape, 0, 240, [0, 48, 96, 144]),
-      WsLayer('ring', 'Ring', WsKind.shape, 24, 200, [24, 60, 120]),
-      WsLayer('confetti', 'Confetti', WsKind.particles, 40, 240, [40, 90]),
-      WsLayer('chips', 'Chips', WsKind.group, 60, 220, [60, 100, 160]),
-      WsLayer('bg', 'Background', WsKind.image, 0, 240, const []),
-      WsLayer('music', 'Beat.wav', WsKind.audio, 0, 240, const []),
-    ]);
-  }
 
   final layers = <WsLayer>[];
 
@@ -217,7 +206,7 @@ class Ws extends ChangeNotifier {
     notifyListeners();
   }
 
-  String? _sel = 'blob';
+  String? _sel; // (nothing picked, as a document opens)
   String? get selected => _sel;
   WsLayer? get layer => layers.where((l) => l.id == _sel).firstOrNull;
   void select(String? id) {
