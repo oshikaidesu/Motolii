@@ -19,7 +19,6 @@ import 'package:lab_book/workspace/dock_fonts.dart';
 import 'package:lab_book/workspace/dock_make.dart' show CreateShelf;
 import 'package:lab_book/workspace/desk_kit.dart' show DeskScrub;
 import 'package:lab_book/workspace/dock_parts.dart' show DockFooter, DockHover, DockSearch;
-import 'package:lab_book/workspace/fx_catalog.dart' show fxCatalog;
 import 'package:lab_book/workspace/workspace.dart';
 import 'package:lab_book/workspace/desk_ease.dart';
 import 'package:lab_book/workspace/ws.dart';
@@ -681,7 +680,7 @@ void main() {
     await t.pumpAndSettle();
     expect([m.keyMoments(rect, 'trim'), m.value(rect, 'trim', 0)], [isEmpty, 0], reason: 'taken off with its keys');
 
-    final none = fxCatalog.map((f) => f.name).firstWhere((n) => !m.thingEffects.any((e) => e.$1 == n) && m.effects.every((e) => e.$1 != n) && m.animators.every((e) => e.$1 != n)); // (one of the sample's the inside does not do)
+    const none = 'Extrude'; // (one After Effects has and the inside does not)
     await t.enterText(find.descendant(of: find.byType(DockSearch), matching: find.byType(EditableText)), none);
     await t.pumpAndSettle();
     expect(find.text(none), findsOneWidget, reason: 'only the search box\'s own words: $none, which the inside does not do, is not on the shelf');

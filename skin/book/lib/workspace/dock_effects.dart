@@ -1,188 +1,75 @@
-// The Effects shelf: a plain list by family, narrowed by the filter band (what the shader declares, what the author tagged).
-// No thumbnails: picking a row tries the effect on the selected layer, on the stage, through the real renderer. Add keeps it.
+// The Effects shelf: what the inside does, in three plain lists: the effects a thing may be given (picked, its foot puts
+// it on or takes it off), the whole-screen effects (on the stage, in their order), the motions (one at a time).
 import 'package:flutter/widgets.dart';
 
 import '../sets/inspector/inspector_parts.dart' show Pop;
 import '../tokens.dart';
-import 'dock_filters.dart';
 import 'dock_parts.dart';
-import 'fx_catalog.dart';
 import 'ws.dart';
-
-const _collection = 'Collection', _starred = 'Starred';
-
-/// From this shelf width the filter band stands beside the list, full height, instead of above it.
-const _besideFrom = 560.0;
-
-Color fxHue(FxFamily f) => switch (f) {
-  FxFamily.blur => Pop.toneLayout,
-  FxFamily.light => Pop.toneOutput,
-  FxFamily.color => Pop.toneFill,
-  FxFamily.stylize => Pop.toneBlend,
-  FxFamily.distort => Pop.toneLink,
-  FxFamily.space => Pop.toneSolid,
-  FxFamily.path => Pop.tonePath,
-  FxFamily.place => Pop.tonePlace,
-  FxFamily.time => Pop.toneTime,
-};
-
-/// How many filters are on in the Effects band (for the toggle beside the search).
-int fxActiveFilters(DockMem m) => m.filter.values.where((s) => s.isNotEmpty).length;
 
 class EffectsShelf extends StatelessWidget {
   const EffectsShelf(this.c, {super.key});
   final DockCtx c;
 
-  bool _has(FxDef f, String g, String t) => g == _collection ? c.starred(f.name) : fxHas(f, g, t);
-
-  bool _keep(FxDef f, {String? except}) =>
-      (c.ws.inside?.thingEffects.any((e) => e.$1 == f.name) ?? false) && // (only what the inside does; a row that does nothing is not shown)
-      c.hit(f.name) && c.mem.filter.entries.every((e) => e.key == except || e.value.isEmpty || e.value.any((t) => _has(f, e.key, t)));
-
-  void _toggle(String g, String t, bool add) => c.set(() {
-    final s = c.mem.filter.putIfAbsent(g, () => <String>{});
-    if (add) {
-      s.contains(t) ? s.remove(t) : s.add(t);
-    } else if (s.length == 1 && s.contains(t)) {
-      s.clear();
-    } else {
-      s
-        ..clear()
-        ..add(t);
-    }
-  });
-
-  void _pick(Ws ws, String name) => c.pick(name);
-
   @override
   Widget build(BuildContext context) {
-    final ws = c.ws, shown = fxCatalog.where((f) => _keep(f)).toList();
+    final ws = c.ws, m = ws.inside;
     final blocks = <Widget>[], weights = <double>[];
-    // (joined: the inside's whole-screen effects first, each on the stage or not: effects/*.wgsl, its knobs on the stage's card)
-    final screen = [for (final e in ws.inside?.effects ?? const <(String, String)>[]) if (c.hit(e.$1)) e];
-    if (screen.isNotEmpty) {
-      final folded = c.query.isEmpty && c.mem.folded.contains('Screen');
-      final on = ws.screenFx;
+    void section(String title, Color hue, List<Widget> rows) {
+      if (rows.isEmpty) return;
+      final folded = c.query.isEmpty && c.mem.folded.contains(title);
       blocks.add(
         Padding(
           padding: const EdgeInsets.only(bottom: WsT.gutter),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              DockSection('Screen', count: screen.length, hue: Pop.toneOutput, folded: folded, onTap: () => c.toggle(c.mem.folded, 'Screen')),
-              if (!folded)
-                for (final e in screen) _ScreenRow(e.$1, on: on.indexOf(e.$2), onTap: () => ws.screenToggle(e.$2)),
+              DockSection(title, count: rows.length, hue: hue, folded: folded, onTap: () => c.toggle(c.mem.folded, title)),
+              if (!folded) ...rows,
             ],
           ),
         ),
       );
-      weights.add(1.0 + (folded ? 0 : screen.length));
+      weights.add(1.0 + (folded ? 0 : rows.length));
     }
-    // (joined: the inside's motions, Cavalry's Animators, one at a time on the picked thing: animators/*.js)
-    final motions = [for (final e in ws.inside?.animators ?? const <(String, String)>[]) if (c.hit(e.$1)) e];
-    if (motions.isNotEmpty && ws.selected != null) {
-      final folded = c.query.isEmpty && c.mem.folded.contains('Motion');
-      final has = ws.motion;
-      blocks.add(
-        Padding(
-          padding: const EdgeInsets.only(bottom: WsT.gutter),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              DockSection('Motion', count: motions.length, hue: Pop.toneOutput, folded: folded, onTap: () => c.toggle(c.mem.folded, 'Motion')),
-              if (!folded)
-                for (final e in motions) _ScreenRow(e.$1, of: 'motion', on: has == e.$2 ? 0 : -1, onTap: () => ws.motionToggle(e.$2)),
-            ],
-          ),
-        ),
-      );
-      weights.add(1.0 + (folded ? 0 : motions.length));
+
+    final on = ws.fxOf(ws.selected), things = [for (final (name, _) in m?.thingEffects ?? const <(String, String)>[]) if (c.hit(name)) name];
+    section('Effects', Pop.toneBlend, [for (final n in things) _FxRow(n, c, on: on.contains(n))]);
+    // (the inside's whole-screen effects, each on the stage or not: effects/*.wgsl, its knobs on the stage's card)
+    final screen = ws.screenFx;
+    section('Screen', Pop.toneOutput, [
+      for (final e in m?.effects ?? const <(String, String)>[])
+        if (c.hit(e.$1)) _ScreenRow(e.$1, on: screen.indexOf(e.$2), onTap: () => ws.screenToggle(e.$2)),
+    ]);
+    // (the inside's motions, Cavalry's Animators, one at a time on the picked thing: animators/*.js)
+    if (ws.selected != null) {
+      section('Motion', Pop.toneOutput, [
+        for (final e in m?.animators ?? const <(String, String)>[])
+          if (c.hit(e.$1)) _ScreenRow(e.$1, of: 'motion', on: ws.motion == e.$2 ? 0 : -1, onTap: () => ws.motionToggle(e.$2)),
+      ]);
     }
-    for (final fam in FxFamily.values) {
-      final items = shown.where((f) => f.family == fam).toList();
-      if (items.isEmpty) continue;
-      final folded = c.query.isEmpty && c.mem.folded.contains(fam.label);
-      blocks.add(
-        Padding(
-          padding: const EdgeInsets.only(bottom: WsT.gutter),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              DockSection(fam.label, count: items.length, hue: fxHue(fam), folded: folded, onTap: () => c.toggle(c.mem.folded, fam.label)),
-              if (!folded)
-                for (final f in items) _FxRow(f, c, on: ws.fxOf(ws.selected).contains(f.name), onTap: () => _pick(ws, f.name)),
-            ],
-          ),
-        ),
-      );
-      weights.add(1.0 + (folded ? 0 : items.length));
-    }
-    final sel = shown.where((f) => f.name == c.sel).firstOrNull;
-    final groups = [
-      (_collection, const [_starred]),
-      for (final g in fxGroups) (g, fxTagsOf(g)),
-    ];
-    final list = blocks.isEmpty ? DockEmpty(c.query.isEmpty ? 'these filters' : c.query) : DockMasonry(minColumn: 260, weights: weights, children: blocks);
-    final footer = sel == null ? null : _FxFooter(sel, ws: ws, done: ws.fxOf(ws.selected).contains(sel.name));
-    return LayoutBuilder(
-      builder: (context, box) {
-        final band = DockFilterBand(
-          groups: groups,
-          chosen: c.mem.filter,
-          folded: c.mem.filterFolds,
-          results: shown.length,
-          count: (g, t) => fxCatalog.where((f) => _keep(f, except: g) && _has(f, g, t)).length,
-          onFold: (g) => c.toggle(c.mem.filterFolds, g),
-          onToggle: _toggle,
-          onClear: () => c.set(c.mem.filter.clear),
-        );
-        if (c.mem.filtersOpen && box.maxWidth >= _besideFrom) {
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    SizedBox(width: 250, child: band),
-                    ColoredBox(
-                      color: WsT.ground,
-                      child: SizedBox(width: WsT.gutter),
-                    ),
-                    Expanded(child: list),
-                  ],
-                ),
-              ),
-              ?footer,
-            ],
-          );
-        }
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (c.mem.filtersOpen)
-              DockResizable(height: c.mem.filterHeight, max: box.maxHeight - 96, onHeight: (h) => c.set(() => c.mem.filterHeight = h), child: band),
-            Expanded(child: list),
-            ?footer,
-          ],
-        );
-      },
+    final sel = things.contains(c.sel) ? c.sel : null;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Expanded(child: blocks.isEmpty ? DockEmpty(c.query) : DockMasonry(minColumn: 260, weights: weights, children: blocks)),
+        if (sel != null) _FxFooter(sel, ws: ws, done: on.contains(sel)),
+      ],
     );
   }
 }
 
-/// A row is words only: the name, what it does, ON when the selected layer carries it, the star.
+/// A row is words only: the name, who does it, ON when the picked thing carries it, the star.
 class _FxRow extends StatelessWidget {
-  const _FxRow(this.f, this.c, {required this.on, required this.onTap});
-  final FxDef f;
+  const _FxRow(this.name, this.c, {required this.on});
+  final String name;
   final DockCtx c;
   final bool on;
-  final VoidCallback onTap;
   @override
   Widget build(BuildContext context) {
-    final sel = c.sel == f.name, star = c.starred(f.name);
+    final sel = c.sel == name, star = c.starred(name);
     return DockHover(
-      onTap: onTap,
+      onTap: () => c.pick(name),
       builder: (context, h) => AnimatedContainer(
         duration: Mo.dur,
         curve: Mo.ease,
@@ -192,20 +79,12 @@ class _FxRow extends StatelessWidget {
         child: Row(
           children: [
             Flexible(
-              child: Text(
-                f.name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: T.name(dockInk(sel)).copyWith(fontWeight: sel ? FontWeight.w700 : FontWeight.w500),
-              ),
+              child: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis, style: T.name(dockInk(sel)).copyWith(fontWeight: sel ? FontWeight.w700 : FontWeight.w500)),
             ),
             const SizedBox(width: 6),
-            Expanded(
-              // (who does it: ThorVG, for the six the inside has)
-              child: Text('ThorVG', maxLines: 1, overflow: TextOverflow.ellipsis, style: T.label(dockInk(sel, Grey.g56))),
-            ),
+            Expanded(child: Text('ThorVG', maxLines: 1, overflow: TextOverflow.ellipsis, style: T.label(dockInk(sel, Grey.g56)))),
             if (on) ...[DockTag('ON', hue: sel ? null : WsT.accent), const SizedBox(width: 2)],
-            if (star || h || sel) DockStar(on: star, ink: sel ? WsT.onAccent : null, onTap: () => c.star(f.name)) else const SizedBox(width: 20),
+            if (star || h || sel) DockStar(on: star, ink: sel ? WsT.onAccent : null, onTap: () => c.star(name)) else const SizedBox(width: 20),
           ],
         ),
       ),
@@ -248,18 +127,18 @@ String _said(Ws ws, String name) {
 
 /// The foot: the picked effect, what the analysis says about it, and Add (keeps the try-on, or adds straight away).
 class _FxFooter extends StatelessWidget {
-  const _FxFooter(this.f, {required this.ws, required this.done});
-  final FxDef f;
+  const _FxFooter(this.name, {required this.ws, required this.done});
+  final String name;
   final Ws ws;
   final bool done;
   @override
   Widget build(BuildContext context) => DockFooter(
-    title: f.name,
-    meta: _said(ws, f.name),
+    title: name,
+    meta: _said(ws, name),
     // (an effect goes on or comes off the picked thing)
     action: done ? 'Remove' : 'Add',
     done: ws.selected == null,
     doneLabel: 'Pick a thing',
-    onAction: () => ws.fxToggle(f.name),
+    onAction: () => ws.fxToggle(name),
   );
 }

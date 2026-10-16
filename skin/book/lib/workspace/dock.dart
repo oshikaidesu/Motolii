@@ -6,7 +6,6 @@ import 'package:flutter/widgets.dart';
 import '../tokens.dart';
 import 'dock_effects.dart';
 import 'dock_files.dart';
-import 'dock_filters.dart';
 import 'dock_fonts.dart';
 import 'dock_glyphs.dart';
 import 'dock_make.dart';
@@ -128,9 +127,6 @@ class _WsShelfState extends State<WsShelf> {
         DockSearch(
           controller: _search,
           hint: name == 'Fonts' ? 'Search fonts' : hint,
-          trailing: name == 'Effects'
-              ? DockFilterToggle(open: _mem.filtersOpen, active: fxActiveFilters(_mem), onTap: () => setState(() => _mem.filtersOpen = !_mem.filtersOpen))
-              : null,
         ),
         Expanded(
           child: switch (name) {

@@ -6,8 +6,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
 import '../tokens.dart';
-import 'fx_catalog.dart';
-import 'stage_fx.dart';
 import 'ws.dart';
 
 /// The poster's own inks: flat, saturated, opaque. They belong to the picture, never to the chrome.
@@ -45,7 +43,6 @@ class ArtScene {
       guidesX = [for (final (a, at) in ws.guides) if (a == 'x') at],
       guidesY = [for (final (a, at) in ws.guides) if (a == 'y') at],
       layers = List.unmodifiable([for (final l in ws.layers) ArtLayer(l)]),
-      fx = const {}, // (the stage is the inside's own picture: no stand-in art's effects)
       rev = ws.rev,
       boxes = Map.unmodifiable({
               for (final l in ws.layers)
@@ -61,15 +58,12 @@ class ArtScene {
   final bool camera;
   final List<ArtLayer> layers;
 
-  /// The effect families on each layer, kept ones first and the one being tried last.
-  final Map<String, List<FxFamily>> fx;
   ArtLayer? layer(String? id) => layers.where((l) => l.id == id).firstOrNull;
-  String get _fxSig => fx.entries.map((e) => '${e.key}:${e.value.map((f) => f.index).join(',')}').join(';');
   @override
   bool operator ==(Object other) =>
-      other is ArtScene && other.frame == frame && other.rev == rev && other.camera == camera && listEquals(other.layers, layers) && other._fxSig == _fxSig;
+      other is ArtScene && other.frame == frame && other.rev == rev && other.camera == camera && listEquals(other.layers, layers);
   @override
-  int get hashCode => Object.hash(frame, camera, Object.hashAll(layers), _fxSig);
+  int get hashCode => Object.hash(frame, camera, Object.hashAll(layers));
 }
 
 /// A layer's box in document px: centre, unscaled size, scale, rotation and its anchor.
@@ -331,20 +325,9 @@ abstract final class WsArt {
         }
       }
 
-      final fams = s.fx[id] ?? const [], box = fams.isEmpty ? null : boxOf(s, id);
-      box == null ? at(c, 0) : paintFx(c, fams, _bounds(box), at);
+      at(c, 0);
     }
     c.restore();
-  }
-
-  static Rect _bounds(ArtBox b) {
-    final cs = b.corners;
-    return Rect.fromLTRB(
-      cs.map((p) => p.dx).reduce(math.min),
-      cs.map((p) => p.dy).reduce(math.min),
-      cs.map((p) => p.dx).reduce(math.max),
-      cs.map((p) => p.dy).reduce(math.max),
-    );
   }
 
   static void _paintBg(Canvas c, int f) {

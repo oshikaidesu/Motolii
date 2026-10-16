@@ -25,11 +25,6 @@ class DockMem {
   String folder = 'Footage';
   double treeHeight = 132;
 
-  /// The Effects filter band: open or not, which groups are folded, what is chosen per group.
-  bool filtersOpen = false;
-  double filterHeight = dockFilterHeight;
-  final filterFolds = <String>{'Seat', 'Parameters', 'Origin'};
-  final filter = <String, Set<String>>{};
 }
 
 /// One build's view of the dock for a shelf body: the memory, the search text, the document, and how to change local state.

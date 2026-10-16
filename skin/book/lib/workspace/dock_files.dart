@@ -6,7 +6,7 @@ import 'package:flutter/widgets.dart';
 
 import '../sets/inspector/inspector_parts.dart' show Pop;
 import '../tokens.dart';
-import 'dock_filters.dart';
+import 'dock_resizable.dart';
 import 'dock_glyphs.dart';
 import 'dock_parts.dart';
 import 'ws.dart';
