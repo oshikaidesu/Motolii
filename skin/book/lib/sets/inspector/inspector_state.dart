@@ -210,6 +210,10 @@ class Doc extends ChangeNotifier {
   /// The effects the cards are made from: the host's, or the sample's.
   final List<Fx> fxDefs;
   bool animateAll = false, link = true;
+
+  /// Whether an edit marks its own key (the sample's rule, D2); off where a host owns the keys (joined: the document
+  /// keys what a hand changes, and a mark told besides was a second key, made before the change, with the old value).
+  bool marksEdits = true;
   /// The layer's space, kept as a word with the others so that a host is told of it (d2, d25, d3).
   Space get space => Space.values.where((s) => s.name == s2['space']).firstOrNull ?? Space.d2;
   set space(Space s) => s2['space'] = s.name;
@@ -375,7 +379,7 @@ class Doc extends ChangeNotifier {
   void _touch(String id) {
     if (_gesture == null) _undo.clear();
     final p = propOf(id);
-    if (animateAll || (keys[p] ?? KeyS.off) != KeyS.off) keys[p] = KeyS.at;
+    if (marksEdits && (animateAll || (keys[p] ?? KeyS.off) != KeyS.off)) keys[p] = KeyS.at;
   }
 
   void setKey(String prop, KeyS s) {

@@ -115,6 +115,7 @@ class _InspHostState extends State<InspHost> {
   Doc _make() {
     final d = Doc(widget.kind, count: widget.count, effects: widget.effects, fx: widget.fx, cards: widget.cards ?? const [])
       ..title = widget.title
+      ..marksEdits = widget.onKey == null   // (a host told of keys keys what a hand changes itself)
       ..kindWord = widget.kindWord
       ..seats = widget.seats
       ..onFxRemove = widget.onFxRemove

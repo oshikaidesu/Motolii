@@ -250,6 +250,31 @@ void main() {
     await _close(t);
   }, skip: !_built);
 
+  testWidgets('with Animate on, a knob of a thing with keys is keyed where the hand let go, with what the hand made: the window marks no key of its own', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    final box = m.add('shape', 'rect');
+    ws
+      ..reread()
+      ..select('$box');
+    ws.fxToggle('Trim Paths'); // (trim keyed: the thing has keys)
+    ws.frame = 15;
+    ws.animating = true;
+    await t.pumpAndSettle();
+    final knob = find.byWidgetPredicate((w) => w is NumField && w.id == 'v_trim_offset');
+    await t.ensureVisible(knob.first);
+    await t.pumpAndSettle();
+    await t.dragFrom(t.getCenter(knob.first), const Offset(-60, 0));
+    await t.pumpAndSettle();
+    for (var i = 0; i < 40 && m.keyMoments(box, 'trim_offset').isEmpty; i++) {
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+      await t.pump();
+    }
+    expect(m.keyMoments(box, 'trim_offset'), [.25], reason: 'one key, where the hand let go');
+    expect(m.value(box, 'trim_offset', .25), closeTo(-.6, 1e-9), reason: 'holding what the hand made, not what was before');
+    await expectSameAfterReopen(t);
+    await _close(t);
+  }, skip: !_built);
+
   testWidgets('two whole-screen effects with a knob of one name are two values: Posterize\'s gamma and Boxinator\'s', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     String file(String name) => m.effects.firstWhere((e) => e.$2.contains(name)).$2;
