@@ -983,6 +983,7 @@ void main() {
     await t.pumpAndSettle();
     expect(m.value(cam, 'distance', 0), isNot(anyOf(isNull, 1.0)), reason: 'the distance is the document\'s: ${ws.notice}');
     expect(t.takeException(), isNull);
+    await expectSameAfterReopen(t);
     await _close(t);
   }, skip: !_built);
 

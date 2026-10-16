@@ -420,10 +420,9 @@ int motolii_thumbnail(const char* film, const char* png, int wide) {
 int motolii_together(Motolii* m, int on) { return by_hand(m, [=] { return on ? (doc_act(*m->d), 1) : (m->d->act ? (int)doc_acted(*m->d) : 0); }); }
 const char* motolii_way_of(Motolii* m, int thing, const char* name, double at) { return by_look(m, [=] { return (m->word = doc_way_of(*m->d, thing, name, at)).c_str(); }); }
 // How many points of the picture one unit of the stage is, where things stand when their z is 0.
-static double point_of(Motolii* m) {   // (points of the picture to one unit of the stage, at its middle)
-    const math::mat4 eye = m->s->camera->getProjectionMatrix() * m->s->camera->getViewMatrix();
-    const math::double4 a = eye * math::double4{0, 0, 0, 1}, b = eye * math::double4{1, 0, 0, 1};
-    return 0.5 * (b.x / b.w - a.x / a.w) * m->s->w;
+static double point_of(Motolii* m) {   // (points of the picture to one unit of the stage, at its middle, as the stage's own eye sees it:
+    // 6 units off with 30 degrees up and down (motolii_open): the document's scale, whatever camera the stage looks through now)
+    return m->s->h / (2.0 * 6.0 * std::tan(15.0 * TAU / 360.0));
 }
 double motolii_point(Motolii* m) { return by_look(m, [=] { return point_of(m); }); }
 // How a hand reads a thing's value: as the value times `times`, and `from` more ("times from"). Places are counted in
