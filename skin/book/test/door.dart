@@ -17,8 +17,8 @@ export 'package:lab_book/workspace/door.dart';
 final insideBuilt = File('$motoliiDir/out/libmotolii.dylib').existsSync();
 
 /// The window on a new, empty document (or [document]), with your panes and desk tools; its state.
-Future<Ws> openWorkspace(WidgetTester t, {List<WsPane> extra = const [], List<DeskTool> tools = const [], String? document, Map<String, Object?> view = const {}}) async {
-  t.view.physicalSize = const Size(1600, 960);
+Future<Ws> openWorkspace(WidgetTester t, {List<WsPane> extra = const [], List<DeskTool> tools = const [], String? document, Map<String, Object?> view = const {}, Size size = const Size(1600, 960)}) async {
+  t.view.physicalSize = size;
   t.view.devicePixelRatio = 1;
   t.binding.defaultBinaryMessenger.setMockMethodCallHandler(const MethodChannel('motolii/stage'), (_) async => -1);   // (no picture of the stage: the seat's texture is the runner's)
   t.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.menu, (_) async => null);   // (the system's menu bar is not there in a test)
