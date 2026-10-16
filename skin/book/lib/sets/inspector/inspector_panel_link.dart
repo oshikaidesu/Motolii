@@ -16,9 +16,9 @@ enum LinkTo {
 /// One cell: what is set now, and where it is chosen.
 /// contract: a tap only asks for the panel (`route` in Doc, the lab's stand-in); the choice made there comes back as the value.
 class PanelLink extends StatelessWidget {
-  const PanelLink({super.key, required this.to, required this.value, this.lead, this.label});
+  const PanelLink({super.key, required this.to, required this.value, this.lead, this.label, this.id = ''});
   final LinkTo to;
-  final String value;
+  final String value, id; // (id: the slot it is aimed at, as a block tile's link is)
   final String? label;
   final Widget? lead;
 
@@ -26,9 +26,14 @@ class PanelLink extends StatelessWidget {
   Widget build(BuildContext context) {
     final x = Ctx.of(context), off = x.cfg.locked;
     return Hov(
-      key: ValueKey('link:${to.name}:${label ?? ''}'),
+      key: ValueKey('link:${to.name}:${id.isEmpty ? label ?? '' : id}'),
       cursor: off ? SystemMouseCursors.basic : SystemMouseCursors.click,
-      onTap: off ? null : () => x.doc.str('route', to.route),
+      onTap: off
+          ? null
+          : () {
+              x.doc.s2['route.at'] = id;
+              x.doc.str('route', to.route);
+            },
       builder: (_, h) => Container(
         height: Pop.cell,
         padding: const EdgeInsets.only(left: 8, right: 6),

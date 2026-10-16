@@ -64,7 +64,7 @@ class ParagraphCard extends StatelessWidget {
 
 const _paraMore = [
   paraGroupP,
-  Param(id: 'anchor', label: 'Anchor offset', look: ParamLook.point, type: WType.vec2, min: -500, max: 500, unit: 'px'),
+  Param(id: 'v_anchor', label: 'Anchor offset', look: ParamLook.point, type: WType.vec2, min: -500, max: 500, unit: 'px'),
   Param(id: 'autospace', label: 'Autospace', look: ParamLook.toggle, type: WType.u32, min: 0, max: 1, def: 1),
   Param(id: 'hangFirst', label: 'Hang first', look: ParamLook.toggle, type: WType.u32, min: 0, max: 1),
   Param(id: 'hangLast', label: 'Hang last', look: ParamLook.toggle, type: WType.u32, min: 0, max: 1),

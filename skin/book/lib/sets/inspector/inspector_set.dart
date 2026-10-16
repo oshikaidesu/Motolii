@@ -172,26 +172,26 @@ WidgetbookComponent inspectorSetSet() => WidgetbookComponent(
               title: 'Try every gesture',
               children: [
                 PropRow(
-                  id: 'op',
+                  id: 'v_opacity',
                   label: 'Opacity',
                   cells: [
-                    NumField(id: 'op', unit: '%', min: 0, max: 100, perPx: .5),
+                    NumField(id: 'v_opacity', unit: '%', min: 0, max: 100, perPx: .5),
                   ],
                 ),
                 PropRow(
-                  id: 'pos',
+                  id: 'v_position',
                   label: 'Position',
-                  ids: ['pos.x', 'pos.y'],
+                  ids: ['v_x', 'v_y'],
                   cells: [
                     NumField(
-                      id: 'pos.x',
+                      id: 'v_x',
                       label: 'X',
                       unit: 'px',
                       decimals: 1,
                       axis: Color(0xFFE974AB),
                     ),
                     NumField(
-                      id: 'pos.y',
+                      id: 'v_y',
                       label: 'Y',
                       unit: 'px',
                       decimals: 1,
@@ -200,11 +200,11 @@ WidgetbookComponent inspectorSetSet() => WidgetbookComponent(
                   ],
                 ),
                 PropRow(
-                  id: 'rot',
+                  id: 'v_rotate',
                   label: 'Rotation',
                   cells: [
                     NumField(
-                      id: 'rot.z',
+                      id: 'v_rotate',
                       unit: '°',
                       decimals: 1,
                       perPx: .5,
@@ -250,7 +250,7 @@ WidgetbookComponent inspectorSetSet() => WidgetbookComponent(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   NumField(
-                    id: 'op',
+                    id: 'v_opacity',
                     label: 'Opacity',
                     unit: '%',
                     min: 0,
@@ -258,7 +258,7 @@ WidgetbookComponent inspectorSetSet() => WidgetbookComponent(
                   ),
                   SizedBox(height: 6),
                   NumField(
-                    id: 'pos.x',
+                    id: 'v_x',
                     label: 'Mixed',
                     unit: 'px',
                     decimals: 1,
@@ -272,7 +272,7 @@ WidgetbookComponent inspectorSetSet() => WidgetbookComponent(
                   ),
                   SizedBox(height: 6),
                   NumField(
-                    id: 'rot.z',
+                    id: 'v_rotate',
                     label: 'Rot',
                     unit: '°',
                     decimals: 1,
@@ -280,7 +280,7 @@ WidgetbookComponent inspectorSetSet() => WidgetbookComponent(
                   ),
                   SizedBox(height: 6),
                   NumField(
-                    id: 'scale.y',
+                    id: 'v_scale_y',
                     label: 'Scale',
                     unit: '%',
                     decimals: 2,
@@ -342,23 +342,23 @@ WidgetbookComponent inspectorSetSet() => WidgetbookComponent(
               title: 'Live rows',
               children: [
                 PropRow(
-                  id: 'pos',
+                  id: 'v_position',
                   label: 'Position',
-                  ids: ['pos.x', 'pos.y'],
+                  ids: ['v_x', 'v_y'],
                   cells: [
-                    NumField(id: 'pos.x', label: 'X', decimals: 1),
-                    NumField(id: 'pos.y', label: 'Y', decimals: 1),
+                    NumField(id: 'v_x', label: 'X', decimals: 1),
+                    NumField(id: 'v_y', label: 'Y', decimals: 1),
                   ],
                 ),
                 PropRow(
-                  id: 'rot',
+                  id: 'v_rotate',
                   label: 'Rotation',
-                  cells: [NumField(id: 'rot.z', unit: '°', decimals: 1)],
+                  cells: [NumField(id: 'v_rotate', unit: '°', decimals: 1)],
                 ),
                 PropRow(
-                  id: 'op',
+                  id: 'v_opacity',
                   label: 'Opacity',
-                  cells: [NumField(id: 'op', unit: '%', min: 0, max: 100)],
+                  cells: [NumField(id: 'v_opacity', unit: '%', min: 0, max: 100)],
                 ),
               ],
             ),

@@ -95,12 +95,12 @@ const _taRange = [
   Param(id: 'offset', label: 'Offset', look: ParamLook.bipolar, type: WType.f32, min: -100, max: 100, unit: '%'),
 ];
 const _taProps = [
-  Param(id: 'pos', label: 'Position', look: ParamLook.point, type: WType.vec2, min: -200, max: 200, unit: 'px'),
+  Param(id: 'v_position', label: 'Position', look: ParamLook.point, type: WType.vec2, min: -200, max: 200, unit: 'px'),
   Param(id: 'opacity', label: 'Opacity', look: ParamLook.percent, type: WType.f32, min: 0, max: 100, def: 100, unit: '%'),
-  Param(id: 'rot', label: 'Rotation', look: ParamLook.angle, type: WType.f32, min: -360, max: 360, unit: '°'),
-  Param(id: 'scale', label: 'Scale', look: ParamLook.size, type: WType.vec2, min: 0, max: 400, def: 100, defY: 100, unit: '%'),
+  Param(id: 'v_rotate', label: 'Rotation', look: ParamLook.angle, type: WType.f32, min: -360, max: 360, unit: '°'),
+  Param(id: 'v_scale', label: 'Scale', look: ParamLook.size, type: WType.vec2, min: 0, max: 400, def: 100, defY: 100, unit: '%'),
   Param(id: 'track', label: 'Tracking', look: ParamLook.bipolar, type: WType.f32, min: -200, max: 200),
-  Param(id: 'fill', label: 'Fill', look: ParamLook.colour, type: WType.vec4),
+  Param(id: 'v_fill', label: 'Fill', look: ParamLook.colour, type: WType.vec4),
   Param(id: 'wght', label: 'Weight (wght)', look: ParamLook.bipolar, type: WType.f32, min: -400, max: 400),
   Param(id: 'line', label: 'Line spacing', look: ParamLook.bipolar, type: WType.f32, min: -100, max: 100, unit: 'px'),
 ];

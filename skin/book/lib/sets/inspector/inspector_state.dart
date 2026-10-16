@@ -20,10 +20,10 @@ enum Kind { shape, text, camera, group, several, none }
 enum Space { d2, d25, d3 }
 
 const pickGrid = [
-  ['pos.x', 'pos.y', 'pos.z'],
-  ['scale.x', 'scale.y', 'scale.z'],
-  ['rot.x', 'rot.y', 'rot.z'],
-  ['op'],
+  ['v_x', 'v_y', 'v_z'],
+  ['v_scale_x', 'v_scale_y', 'v_scale_z'],
+  ['v_rotate_x', 'v_rotate_y', 'v_rotate'],
+  ['v_opacity'],
   ['depth'],
 ];
 
@@ -100,7 +100,9 @@ class Ed {
   };
 }
 
-String propOf(String id) => RegExp(r'\.[xyz]$').hasMatch(id) ? id.substring(0, id.length - 2) : id;
+/// The property a value is part of, whose key mark is theirs together: a document's x, y, z are its position; its
+/// scale_x .. scale_z its scale, rotate_x, rotate_y and rotate its rotation, anchor_x .. anchor_z its anchor.
+String propOf(String id) => RegExp(r'^v_[xyz]$').hasMatch(id) ? 'v_position' : RegExp(r'^(v_\w+?)_[xyz]$').firstMatch(id)?.group(1) ?? id;
 
 /// A pure-Dart mock of the selected layer(s). Not the product's model; only enough to make every control really do its job.
 class Doc extends ChangeNotifier {
@@ -110,30 +112,30 @@ class Doc extends ChangeNotifier {
       d[id] = v;
     }
 
-    s('pos.x', 960);
-    s('pos.y', 540);
-    s('pos.z', 0);
-    s('scale.x', 100);
-    s('scale.y', 100);
-    s('scale.z', 100);
-    s('rot.x', 0);
-    s('rot.y', 0);
-    s('rot.z', 0);
-    s('anchor.x', 50);
-    s('anchor.y', 50);
-    s('anchor.z', 0);
-    s('op', 100);
+    s('v_x', 960);
+    s('v_y', 540);
+    s('v_z', 0);
+    s('v_scale_x', 100);
+    s('v_scale_y', 100);
+    s('v_scale_z', 100);
+    s('v_rotate_x', 0);
+    s('v_rotate_y', 0);
+    s('v_rotate', 0);
+    s('v_anchor_x', 50);
+    s('v_anchor_y', 50);
+    s('v_anchor_z', 0);
+    s('v_opacity', 100);
     s('depth', 0);
-    s('cam.t.x', 960);
-    s('cam.t.y', 540);
-    s('cam.t.z', 0);
-    s('cam.pitch', 12);
-    s('cam.yaw', -20);
-    s('cam.dist', 1800);
-    s('cam.zoom', 100);
-    s('cam.roll', 0);
-    s('text.size', 48);
-    s('stroke.w', 2);
+    s('v_x', 960);
+    s('v_y', 540);
+    s('v_z', 0);
+    s('v_rotate_x', 12);
+    s('v_rotate_y', -20);
+    s('v_distance', 1800);
+    s('v_zoom', 100);
+    s('v_rotate', 0);
+    s('v_size', 48);
+    s('v_stroke_width', 2);
     s('lay.cols', 3);
     s('lay.rows', 2);
     s('lay.gap', 8);
@@ -153,23 +155,23 @@ class Doc extends ChangeNotifier {
       }
     }
     fxOrder.addAll(fx == null ? kEffects.take(effects).map((f) => f.id) : fx.map((f) => f.id));
-    v['pos.x'] = 420.5;
-    v['op'] = 62;
-    v['rot.z'] = 450;
+    v['v_x'] = 420.5;
+    v['v_opacity'] = 62;
+    v['v_rotate'] = 450;
     v['blur_radius'] = 24;
-    keys['pos'] = KeyS.at;
-    keys['rot'] = KeyS.anim;
-    s2['parent'] = 'None';
-    s2['blend'] = 'Normal';
-    s2['camTarget'] = 'None';
-    s2['text.content'] = 'Hero title\nSmall move changes everything.';
-    s2['font'] = 'Inter Display';
-    s2['align'] = 'Left';
+    keys['v_position'] = KeyS.at;
+    keys['v_rotate'] = KeyS.anim;
+    s2['v_parent'] = 'None';
+    s2['v_blend'] = 'Normal';
+    s2['v_parent'] = 'None';
+    s2['v_text'] = 'Hero title\nSmall move changes everything.';
+    s2['v_file'] = 'Inter Display';
+    s2['v_align'] = 'Left';
     s2['size'] = 'Hug';
-    s2['fill'] = '#D9D2C3';
-    s2['stroke'] = 'None';
+    s2['v_fill'] = '#D9D2C3';
+    s2['v_stroke'] = 'None';
     b['ghost'] = false;
-    b['clip'] = false;
+    b['v_clip'] = false;
     b['lay.on'] = true;
     b['lay.ignore'] = false;
     if (kind == Kind.several) {
@@ -177,10 +179,10 @@ class Doc extends ChangeNotifier {
       for (final e in v.entries) {
         multi[e.key] = List.filled(count, e.value);
       }
-      m('pos.x', [120, 360, -40]);
-      m('op', [100, 62, 100]);
-      m('rot.z', [0, 0, 0]);
-      m('scale.x', [100, 100, 80]);
+      m('v_x', [120, 360, -40]);
+      m('v_opacity', [100, 62, 100]);
+      m('v_rotate', [0, 0, 0]);
+      m('v_scale_x', [100, 100, 80]);
     }
   }
 
@@ -214,8 +216,9 @@ class Doc extends ChangeNotifier {
   /// keys what a hand changes, and a mark told besides was a second key, made before the change, with the old value).
   bool marksEdits = true;
   /// The layer's space, kept as a word with the others so that a host is told of it (d2, d25, d3).
-  Space get space => Space.values.where((s) => s.name == s2['space']).firstOrNull ?? Space.d2;
-  set space(Space s) => s2['space'] = s.name;
+  Space get space => _spaceWords.entries.where((e) => e.value == s2['v_space']).firstOrNull?.key ?? Space.d3; // (no word: a solid, 3D only)
+  set space(Space s) => s2['v_space'] = _spaceWords[s]!;
+  static const _spaceWords = {Space.d2: '2d', Space.d25: '2.5d', Space.d3: '3d'}; // (the document's words for the three plates)
   String? directHover;
   String query = '';
 

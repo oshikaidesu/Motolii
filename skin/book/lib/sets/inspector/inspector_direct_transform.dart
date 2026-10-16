@@ -1,0 +1,100 @@
+import 'dart:math' as math;
+
+import 'package:flutter/widgets.dart';
+import 'package:lab_book/sets/inspector/inspector_direct_transform_canvas.dart';
+import 'package:lab_book/sets/inspector/inspector_direct_transform_value_glyph.dart';
+import 'package:lab_book/sets/inspector/inspector_rows_sect.dart';
+
+import 'inspector_parts.dart';
+
+/// What a point on the canvas grabs. Each zone edits one Transform row.
+/// The colour is the zone's name: the canvas part and its row wear the same one.
+enum TransformZone {
+  move('v_position', Color(0xFF3D6BFF)),
+  scale('v_scale', Color(0xFFB3C66B)),
+  rotate('v_rotate', Color(0xFFFF6A2B)),
+  pivot('v_anchor', Color(0xFFB57CFF)),
+  lift('v_position', Color(0xFF8FB0FF));
+
+  const TransformZone(this.prop, this.color);
+  final String prop;
+  final Color color;
+}
+
+
+abstract final class DirectSurface {
+  // surface: one canvas for the whole Transform block, sized to keep the rows below it on screen.
+  static const height = 124.0;
+  static const objectWidth = 64.0, objectHeight = 40.0, handle = 7.0;
+  static const stem = 20.0, knob = 6.0, turnArc = 11.0;
+  static const tiltStem = 16.0, rail = 12.0, zReach = 1000.0;
+}
+
+class DirectTransform extends StatelessWidget {
+  const DirectTransform({super.key, this.titled = false, this.first = true});
+  final bool titled, first;
+
+  @override
+  Widget build(BuildContext context) {
+    final doc = Ctx.of(context).doc;
+    return RowMark(
+      marks: const {
+        'v_position': ValueGlyph(ValueShape.position),
+        'v_scale': ValueGlyph(ValueShape.scale),
+        'v_rotate': ValueGlyph(ValueShape.rotation),
+        'v_opacity': ValueGlyph(ValueShape.opacity),
+        'depth': ValueGlyph(ValueShape.depth),
+        'v_parent': ValueGlyph(ValueShape.parent),
+      },
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Sect(
+            title: 'Transform',
+            first: first,
+            tone: Pop.toneTransform,
+            keyIds: const ['v_position', 'v_scale', 'v_rotate'],
+            mark: CardMark.transform,
+            brief: ['${brief(doc.get('v_x'))}, ${brief(doc.get('v_y'))}', '${brief(doc.get('v_scale_x'))}%', '${brief(doc.get('v_rotate'))}°'],
+            children: const [
+              SpaceRow(),
+              TransformCanvas(),
+              SizedBox(height: Pop.titleGap),
+              AxisColumns(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [AxisHeader(), PosRow(), ScaleRow(), RotRow()],
+                ),
+              ),
+            ],
+          ),
+          const AnchorCard(),
+          Sect(
+            title: 'Layer',
+            tone: Pop.toneLayer,
+            keyIds: const ['v_opacity'],
+            mark: CardMark.layer,
+            brief: [if (doc.seat('v_opacity')) '${brief(doc.get('v_opacity'), 0)}%', if (doc.s2['v_parent'] case final p? when p != 'None') p],
+            children: const [LayerTiles()],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+enum ValueShape {
+  position(TransformZone.move),
+  scale(TransformZone.scale),
+  rotation(TransformZone.rotate),
+  opacity(null),
+  depth(null),
+  parent(null);
+
+  const ValueShape(this.zone);
+  final TransformZone? zone;
+}
+
+Offset rotate(Offset p, double angle) => Offset(p.dx * math.cos(angle) - p.dy * math.sin(angle), p.dx * math.sin(angle) + p.dy * math.cos(angle));

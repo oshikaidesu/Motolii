@@ -13,7 +13,7 @@ import 'package:lab_book/motolii.dart';
 
 import 'door.dart';
 import 'package:lab_book/parts/controls.dart' show Segmented;
-import 'package:lab_book/sets/inspector/inspector_parts.dart' show Ctx, Chooser, AnchorCube, AnchorGeometry, LinkMark, ValuesCard, InspHeader, KeyS, NumField, OnOff, PropRow, Space, SpacePlate, TextGroup;
+import 'package:lab_book/sets/inspector/inspector_parts.dart' show Ctx, Chooser, AnchorCube, AnchorGeometry, LinkMark, ValuesCard, FillStroke, InspHeader, KeyS, NumField, OnOff, PropRow, Space, SpacePlate, TextGroup;
 import 'package:lab_book/sets/inspector/inspector_rows_prop_row.dart';
 import 'package:lab_book/workspace/dock_fonts.dart';
 import 'package:lab_book/workspace/dock_make.dart' show CreateShelf;
@@ -44,7 +44,7 @@ void main() {
       ..select('$text');
     await t.pumpAndSettle();
 
-    final box = find.byKey(const ValueKey('words:v_text'));
+    final box = find.descendant(of: find.byType(TextGroup), matching: find.byType(EditableText));
     expect(box, findsOneWidget);
     await seen(t, box);
     await t.tap(box);
@@ -236,7 +236,7 @@ void main() {
     await t.pumpAndSettle();
     expect(m.things, [rect, cube], reason: 'one step back: the order');
 
-    final clip = find.byKey(const ValueKey('toggle:v_clip')); // (the inside's Blending card)
+    final clip = find.descendant(of: find.byWidgetPredicate((w) => w is PropRow && w.id == 'v_clip'), matching: find.byType(OnOff)); // (the Blending card's switch)
     await seen(t, clip);
     await t.tap(clip);
     await t.pumpAndSettle();
@@ -526,7 +526,7 @@ void main() {
     expect(m.say(rect, 'stroke', 'ff3366'), isTrue, reason: m.trouble);
     ws.reread();
     await t.pumpAndSettle();
-    expect(find.descendant(of: find.byType(ValuesCard), matching: find.text('#FF3366')), findsWidgets, reason: 'the edge shown as the document says it');
+    expect(find.descendant(of: find.byType(FillStroke), matching: find.text('#FF3366')), findsWidgets, reason: 'the edge shown as the document says it');
     expect(m.word(rect, 'stroke'), 'ff3366', reason: m.trouble);
     expect(m.set(rect, 'stroke_width', 6), isTrue, reason: m.trouble);
     expect(wsTransform(ws, '$rect')['v_stroke_width'], 6, reason: 'the width is shown as the document says it');
@@ -553,26 +553,15 @@ void main() {
     await t.pumpAndSettle();
     final before = m.frame(rect)!;
     expect([before[0], before[1]], [closeTo(960, 1), closeTo(540, 1)]);
-    Finder knob(String id) => find.byWidgetPredicate((w) => w is NumField && w.id == id);
-    if (knob('v_anchor_x').evaluate().isEmpty) { // (the inside's Transform card keeps its anchor in a fold of that name)
-      await seen(t, find.text('Anchor').first);
-      await t.tap(find.text('Anchor').first);
-      await t.pumpAndSettle();
-    }
-    for (final (id, by) in const [('v_anchor_x', Offset(-400, 0)), ('v_anchor_y', Offset(-400, 0))]) { // (its left, then its top: hundredths of its box from its top left)
-      await seen(t, knob(id));
-      await t.drag(knob(id), by);
-      await t.pumpAndSettle();
-    }
-    for (var i = 0; i < 20 && ws.waiting; i++) {
-      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
-      await t.pump();
-    }
-    expect([m.value(rect, 'anchor_x', 0), m.value(rect, 'anchor_y', 0)], [-1, 1], reason: 'its top left corner: ${m.trouble}');
+    await seen(t, find.byType(AnchorCube)); // (the Anchor card's box: 27 points, one click each)
+    final box = t.getRect(find.byType(AnchorCube));
+    await t.tapAt(box.topLeft + AnchorGeometry(box.size).at(0, 0, 0)); // (its top left corner)
+    await settled(t, ws);
+    expect([m.value(rect, 'anchor_x', 0), m.value(rect, 'anchor_y', 0), m.value(rect, 'anchor_z', 0)], [-1, 1, 0], reason: 'its top left corner: ${m.trouble}');
     final after = m.frame(rect)!;
     expect(after[0], greaterThan(before[0] + 10), reason: 'its top left corner is where it stands now: it lies right of there');
     expect(after[1], greaterThan(before[1] + 10), reason: 'and below');
-    expect(m.undo() && m.value(rect, 'anchor_y', 0) == 0 && m.value(rect, 'anchor_x', 0) == -1, isTrue, reason: 'one step a hand');
+    expect(m.undo() && m.value(rect, 'anchor_x', 0) == 0 && m.value(rect, 'anchor_y', 0) == 0, isTrue, reason: 'one step');
     expect(t.takeException(), isNull);
     await expectSameAfterReopen(t);
     await _close(t);
@@ -608,7 +597,7 @@ void main() {
       ..reread()
       ..select('$text');
     await t.pumpAndSettle();
-    final box = find.byKey(const ValueKey('words:v_text'));
+    final box = find.descendant(of: find.byType(TextGroup), matching: find.byType(EditableText));
     await seen(t, box);
     await t.tap(box);
     await t.enterText(box, 'MOTOLII\nmakes moves');
@@ -617,7 +606,11 @@ void main() {
     expect(m.word(text, 'text'), 'MOTOLII\nmakes moves', reason: m.trouble);
     expect(ws.layer?.name, 'MOTOLII makes moves', reason: 'listed on one line');
     expect(wsTransform(ws, '$text')['v_size'], closeTo(.5 * m.point, .1), reason: 'its size in points of the picture');
-    expect(find.descendant(of: find.byType(ValuesCard), matching: find.text('Align')), findsOneWidget, reason: 'its alignment, in hundredths (ThorVG lines it up anywhere between)');
+    final centre = find.descendant(of: find.byWidgetPredicate((w) => w is PropRow && w.id == 'v_align'), matching: find.byWidgetPredicate((w) => w is Text && w.data?.toLowerCase() == 'centre')); // (buttons say it in capitals)
+    await seen(t, centre);
+    await t.tap(centre);
+    await settled(t, ws);
+    expect(m.value(text, 'align', 0), .5, reason: 'Centre is ThorVG\'s half way: ${m.trouble}');
     expect(t.takeException(), isNull);
     await expectSameAfterReopen(t);
     await _close(t);
@@ -698,7 +691,10 @@ void main() {
       ..reread()
       ..select('$rect');
     await t.pumpAndSettle();
-    await pick(t, 'v_space', '2.5d'); // (the inside's Transform card: the document's own words)
+    final plate = find.byWidgetPredicate((w) => w is SpacePlate && w.space == Space.d25); // (the Transform card's three plates)
+    await seen(t, plate);
+    await t.tap(plate);
+    await settled(t, ws);
     expect(m.word(rect, 'space'), '2.5d', reason: m.trouble);
     expect(m.undo() && m.word(rect, 'space').isEmpty, isTrue, reason: 'one step');
     ws.select('$ring');
@@ -1039,7 +1035,7 @@ void main() {
     await t.pumpAndSettle();
     await t.drag(knob('v_scale_z'), const Offset(60, 0));
     await t.pumpAndSettle();
-    expect([m.value(cube, 'scale_x', 0), m.value(cube, 'scale_y', 0)], [1, 1], reason: 'z alone');
+    expect([m.value(cube, 'scale_x', 0), m.value(cube, 'scale_y', 0)], [m.value(cube, 'scale_z', 0), m.value(cube, 'scale_z', 0)], reason: 'linked, as After Effects\' scale is at first: all three together');
     expect(m.value(cube, 'scale_z', 0), isNot(1), reason: m.trouble);
     expect(t.takeException(), isNull);
     await expectSameAfterReopen(t);
@@ -1077,7 +1073,7 @@ void main() {
       ..reread()
       ..select('$a');
     await t.pumpAndSettle();
-    final box = find.byKey(const ValueKey('words:v_text'));
+    final box = find.descendant(of: find.byType(TextGroup), matching: find.byType(EditableText));
     expect((t.widget(box) as EditableText).controller.text, 'first');
     ws.select('$b');
     await t.pumpAndSettle();
@@ -1146,11 +1142,11 @@ void main() {
       ..select('$film');
     await t.pumpAndSettle();
     expect(find.descendant(of: find.byType(InspHeader), matching: find.text('Film')), findsOneWidget);
-    expect(find.descendant(of: find.byType(ValuesCard), matching: find.text('Fill')), findsNothing, reason: 'a film has no fill: ${m.values(film)}');
+    expect(find.byType(FillStroke), findsNothing, reason: 'a film has no fill: ${m.values(film)}');
     ws.select('$cube');
     await t.pumpAndSettle();
     expect(find.descendant(of: find.byType(InspHeader), matching: find.text('Solid')), findsOneWidget);
-    expect(find.descendant(of: find.byType(ValuesCard), matching: find.text('Fill')), findsWidgets, reason: 'a solid\'s fill is a colour or glass');
+    expect(find.byType(FillStroke), findsOneWidget, reason: 'a solid\'s fill is a colour or glass');
     expect(t.takeException(), isNull);
     await expectSameAfterReopen(t);
     await _close(t);

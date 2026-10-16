@@ -15,7 +15,7 @@ const paraGroupP = Param(id: 'grouping', label: 'Anchor grouping', look: ParamLo
 
 
 String taWord(Doc d) {
-  final t = (d.s2['text.content'] ?? '').split('\n').first.trim();
+  final t = (d.s2['v_text'] ?? '').split('\n').first.trim();
   return t.isEmpty ? _taSample : (t.length > 22 ? t.substring(0, 22) : t);
 }
 

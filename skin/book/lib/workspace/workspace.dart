@@ -278,7 +278,26 @@ Kind _kindOf(WsLayer? l) => switch (l?.kind) {
 Map<String, String> _words(Ws ws, String? id) {
   final m = ws.inside, t = id == null ? 0 : int.tryParse(id); // (nothing picked: the stage's own cards)
   if (m == null || t == null) return const {};
-  return _cardColours(m, t);
+  return {
+    ..._cardColours(m, t),
+    for (final (_, names) in m.cards(t))
+      for (final n in names)
+        if (m.shown(n)?.look == 'thing')
+          'v_$n': _others(ws, t).entries.where((e) => e.value == (m.value(t, n, 0) ?? 0)).firstOrNull?.key ?? 'None' // (another thing, by its name)
+        else if (m.words(t, n).isNotEmpty)
+          'v_$n': m.word(t, n).isEmpty ? m.words(t, n).first : m.word(t, n), // (one of its words; none said: the first, as it comes)
+  };
+}
+
+/// What a card's value may be, for a hand-drawn card's chooser: its words, or another thing by name (None first).
+Map<String, List<String>> _choices(Ws ws, String? id) {
+  final m = ws.inside, t = id == null ? 0 : int.tryParse(id);
+  if (m == null || t == null) return const {};
+  return {
+    for (final (_, names) in m.cards(t))
+      for (final n in names)
+        if (m.shown(n)?.look == 'thing') 'v_$n': ['None', ..._others(ws, t).keys] else if (m.words(t, n).isNotEmpty) 'v_$n': m.words(t, n),
+  };
 }
 
 /// How the inspector is looked at (its folds, an effect's Advanced shown): the window's view, not the document's.
@@ -323,7 +342,11 @@ bool _say(Ws ws, String? id, Map<String, String> changed) {
   //  words go back to the document's own when it is read)
   m.later('together', number: 1);
   for (final e in changed.entries) {
-    if (e.key.startsWith('v_')) m.later('say', thing: t, name: e.key.substring(2), word: e.value); // (a card's value of that name)
+    if (!e.key.startsWith('v_')) continue;
+    final n = e.key.substring(2);
+    m.shown(n)?.look == 'thing'
+        ? m.later('set', thing: t, name: n, number: (_others(ws, t)[e.value] ?? 0).toDouble()) // (another thing, told by its name: it goes with that one)
+        : m.later('say', thing: t, name: n, word: e.value); // (a card's value of that name)
   }
   ws.after(m.later('together'), (done, no) => _told(ws, done ? null : no));
   return true;
@@ -332,7 +355,7 @@ bool _say(Ws ws, String? id, Map<String, String> changed) {
 
 /// The seats a thing has: the document's own names, and the inspector's numbers whose value it holds (a light has no
 /// scale and no opacity, a flat thing no scale z: those are not shown).
-Set<String> _seatsOf(Set<String> names) => {...names, 'parent', 'depth'};
+Set<String> _seatsOf(Set<String> names) => {...names, for (final n in names) 'v_$n', 'depth'}; // (a hand-drawn card asks by the value's id, 'v_x')
 
 
 /// Joined: the colours on the inside's own cards, as the inspector writes a colour (none said: a dash).
@@ -495,9 +518,11 @@ Map<String, KeyS> _keyMarks(Ws ws, String? id) {
   final m = ws.inside, t = id == null ? 0 : int.tryParse(id);
   if (m == null || t == null) return const {};
   final at = ws.frame / Ws.fps;
+  final marks = {for (final MapEntry(:key, :value) in _keyable(ws, t).entries) key: KeyS.values[m.keyed(t, value, at)]};
   return {
-    // (the cards' own numbers that take keys: the inside's cards, and the effects' fields)
-    for (final MapEntry(:key, :value) in _keyable(ws, t).entries) key: KeyS.values[m.keyed(t, value, at)],
+    ...marks,
+    for (final key in marks.keys) // (a property's mark is the most of its values': a key on any, keyed)
+      if (propOf(key) != key) propOf(key): marks.entries.where((e) => propOf(e.key) == propOf(key)).map((e) => e.value).reduce((a, b) => b.index > a.index ? b : a),
   };
 }
 
@@ -518,7 +543,7 @@ void _mark(Ws ws, String? id, String prop, KeyS mark) {
   final at = ws.frame / Ws.fps, has = m.values(t).toSet();
   // (only the values it has: a flat thing has no scale_z, and a key asked of it was refused and took the whole step,
   //  the number let go of with it, back: with Animate on, a flat thing's first scale was lost)
-  for (final n in [?_keyable(ws, t)[prop]].where(has.contains)) {
+  for (final n in [for (final MapEntry(:key, :value) in _keyable(ws, t).entries) if (key == prop || propOf(key) == prop) value].where(has.contains)) {
     switch (mark) {
       case KeyS.at:
         m.keyHere(t, n, at);
@@ -640,6 +665,7 @@ class _InspectorSeatState extends State<_InspectorSeat> {
         onAim: (at) => ws.aim = at.startsWith('v_') ? at.substring(2) : null, // (a colour link of a card is aimed at that value)
         values: Ws.timed('transform', () => wsTransform(ws, l?.id)),
         strs: Ws.timed('words', () => _words(ws, l?.id)),
+        choices: Ws.timed('choices', () => _choices(ws, l?.id)),
         onWords: (changed) => _say(ws, l?.id, changed),
         onAnimateAll: (on) => ws.animating = on,
         animating: ws.animating,
