@@ -57,7 +57,7 @@ void main() {
   WidgetController.hitTestWarningShouldBeFatal = true;
 
   testWidgets(
-    'the window rampaged: everything moves, the cards agree with the document, 60 a second',
+    _judge ? 'the window rampaged: everything moves, the cards agree with the document' : 'the window rampaged by the hand alone: 60 a second',
     (t) async {
       final timings = <FrameTiming>[];
       void took(List<FrameTiming> ts) => timings.addAll(ts);
@@ -244,10 +244,9 @@ void main() {
               under = [for (final e in t.hitTestOnBinding(from).path.take(6)) e.target.runtimeType.toString().replaceAll('Render', '')].join('<') + ' sel ${ws.selected}';
               var seen = await dragSeen(from, by);
               await settle();
-              if (_all(
-                    m,
-                    at(),
-                  ).entries.every((e) => before[e.key] == e.value)) { // (the document unmoved: a value at its end, pushed past it; the window may show the hand a moment longer, that is not a move)
+              final r0 = Timeline.now, unmoved = _all(m, at()).entries.every((e) => before[e.key] == e.value);
+              judging.add((r0, Timeline.now)); // (the test's own reading, whether to go the other way: not the window's time)
+              if (unmoved) { // (the document unmoved: a value at its end, pushed past it; the window may show the hand a moment longer, that is not a move)
                 seen = await dragSeen(
                   what.startsWith('knob') ? t.getCenter(where.first) : from,
                   -by * 2,
@@ -460,8 +459,11 @@ void main() {
       if (trace) return; // (a run that only traces where the time goes: its report written whatever it found)
       openedDocument = doc;
       await expectSameAfterReopen(t); // (the window is the document's alone: what the rampage left, opened again on the same document, shows the same)
-    expect(reds, isEmpty);
-      expect(late, 0, reason: 'pictures over a sixtieth of a second');
+      // (one run, one job: judged, it checks that every control moves the document and the cards agree; its own reading
+      //  of the whole document after each act waits behind the inside's pictures, so its pictures are no measure. Not
+      //  judged (JUDGE=false), the hand alone: then every picture must be in time)
+      if (_judge) expect(reds, isEmpty);
+      if (!_judge) expect(late, 0, reason: 'pictures over a sixtieth of a second, the hand alone');
     },
     semanticsEnabled: false, // (a user's window builds no accessibility tree unless asked: the test should not either)
   );
