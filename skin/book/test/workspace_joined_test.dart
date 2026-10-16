@@ -46,7 +46,7 @@ void main() {
       ..select('$text');
     await t.pumpAndSettle();
 
-    final box = find.descendant(of: find.byType(TextGroup), matching: find.byType(EditableText));
+    final box = find.byKey(const ValueKey('words:v_text'));
     expect(box, findsOneWidget);
     await t.ensureVisible(box);
     await t.pumpAndSettle();
@@ -607,14 +607,14 @@ void main() {
     await _close(t);
   }, skip: !_built);
 
-  testWidgets('a text of two lines, and Alignment: Left, Centre, Right are ThorVG\'s own; Justify it has not', (t) async {
+  testWidgets('a text of two lines, its size and its alignment are the inside\'s Text card', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final text = m.add('text', _font);
     ws
       ..reread()
       ..select('$text');
     await t.pumpAndSettle();
-    final box = find.descendant(of: find.byType(TextGroup), matching: find.byType(EditableText));
+    final box = find.byKey(const ValueKey('words:v_text'));
     await t.ensureVisible(box);
     await t.pumpAndSettle();
     await t.tap(box);
@@ -623,15 +623,8 @@ void main() {
     await t.pumpAndSettle();
     expect(m.word(text, 'text'), 'MOTOLII\nmakes moves', reason: m.trouble);
     expect(ws.layer?.name, 'MOTOLII makes moves', reason: 'listed on one line');
-    expect(wsTransform(ws, '$text')['text.size'], closeTo(.5 * m.point, .1), reason: 'its size in points of the picture');
-    final seat = find.byWidgetPredicate((w) => w is PropRow && w.id == 'align');
-    await t.ensureVisible(seat);
-    await t.pumpAndSettle();
-    final row = t.getRect(find.descendant(of: seat, matching: find.byType(Segmented))); // (three marks in a row: Left, Centre, Right)
-    await t.tapAt(Offset(row.left + row.width * 1.5 / 3, row.center.dy));
-    await t.pumpAndSettle();
-    expect(m.value(text, 'align', 0), .5, reason: m.trouble);
-    expect(find.descendant(of: seat, matching: find.text('Justify')), findsNothing, reason: 'not offered: ThorVG has no justified lines');
+    expect(wsTransform(ws, '$text')['v_size'], closeTo(.5 * m.point, .1), reason: 'its size in points of the picture');
+    expect(find.descendant(of: find.byType(ValuesCard), matching: find.text('Align')), findsOneWidget, reason: 'its alignment, in hundredths (ThorVG lines it up anywhere between)');
     expect(t.takeException(), isNull);
     await expectSameAfterReopen(t);
     await _close(t);
@@ -1095,7 +1088,7 @@ void main() {
       ..reread()
       ..select('$a');
     await t.pumpAndSettle();
-    final box = find.descendant(of: find.byType(TextGroup), matching: find.byType(EditableText));
+    final box = find.byKey(const ValueKey('words:v_text'));
     expect((t.widget(box) as EditableText).controller.text, 'first');
     ws.select('$b');
     await t.pumpAndSettle();
@@ -1105,7 +1098,6 @@ void main() {
     FocusManager.instance.primaryFocus?.unfocus();
     await t.pumpAndSettle();
     expect([m.word(a, 'text'), m.word(b, 'text')], ['first', 'second'], reason: 'in and out of the box writes nothing stale');
-    expect(find.text('Justify'), findsNothing, reason: 'ThorVG has not');
     expect(find.byWidgetPredicate((w) => w is NumField && w.id == 'v_x'), findsOneWidget); // (the inside's Transform card)
     await t.tap(find.text('Transform').first);
     await t.pumpAndSettle();

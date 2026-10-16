@@ -285,11 +285,6 @@ Map<String, String> _words(Ws ws, String? id) {
   final blend = m.word(t, 'blend'), stroke = m.word(t, 'stroke');
   return {
     ..._cardColours(m, t),
-    if (m.word(t, 'kind') == 'text') ...{
-      'text.content': m.word(t, 'text'),
-      'font': m.word(t, 'file').split('/').last,
-      'align': _aligned[((m.value(t, 'align', 0) ?? 0) * 2).round().clamp(0, 2)],
-    },
     if (m.value(t, 'stroke_width', 0) != null) 'stroke': stroke.isEmpty ? 'None' : '#${stroke.toUpperCase()}',
     'blend': blend.isEmpty ? 'Normal' : blend.replaceRange(0, 1, blend[0].toUpperCase()),
     // (a flat thing's space is the document's word; a solid thing has none: it is 3D)
@@ -382,11 +377,6 @@ bool _say(Ws ws, String? id, Map<String, String> changed) {
   m.later('together', number: 1);
   for (final e in changed.entries) {
     switch (e.key) {
-      case 'text.content':
-        say('text', e.value); // (its lines too)
-      case 'align':
-        final i = _aligned.indexOf(e.value);
-        i >= 0 ? set('align', i / 2) : all = false; // (Left, Centre, Right: ThorVG's 0, 0.5, 1; Justify it has not)
       case 'blend':
         say('blend', e.value.toLowerCase());
       case 'space':
@@ -427,7 +417,6 @@ const _seats = <(String, String)>[
   ('rot.z', 'rotate'),
   ('op', 'opacity'),
   ('stroke.w', 'stroke_width'),
-  ('text.size', 'size'),
   ('anchor.x', 'anchor_x'),
   ('anchor.y', 'anchor_y'),
   ('anchor.z', 'anchor_z'),
@@ -501,8 +490,12 @@ Map<String, String> _cardColours(Motolii m, int t) => {
   for (final (_, names) in m.cards(t))
     for (final n in names)
       if (m.words(t, n).isEmpty && m.range(t, n) == null)
-        'v_$n': m.word(t, n).isEmpty || m.word(t, n) == 'none'
+        'v_$n': m.shown(n)?.look == 'words'
+            ? m.word(t, n) // (words as they are, to be typed over)
+            : m.word(t, n).isEmpty || m.word(t, n) == 'none'
             ? '—'
+            : m.shown(n)?.look == 'file'
+            ? m.word(t, n).split('/').last // (a file by its name)
             : m.shown(n)?.look == 'numbers'
             ? m.word(t, n) // (numbers, one for each copy, as they are)
             : m.word(t, n).split(' ').where((c) => c.isNotEmpty).map((c) => '#${c.toUpperCase()}').join(' '), // (a colour, or colours in their order)
@@ -550,7 +543,7 @@ List<Fx> _makeCards(Ws ws, Motolii m, int t) {
       final whole = sh?.look == 'count' || sh?.look == 'onoff' || sh?.look == 'seed';
       return '  /// $label $ui @range($lo, $hi) @unit(${sh?.unit ?? ''}) @default(${_shown(m, t, n, m.value(t, n, at) ?? lo0)})\n  $n: ${whole ? 'u32' : 'f32'},';
     }
-    return '  /// $label${sh?.look == 'numbers' || sh?.look == 'colours' ? ' @unit(${sh!.look})' : ''}\n  $n: vec3<f32>,'; // (any word: colours, six digits each, given from the Colors shelf; or numbers, one for each copy)
+    return '  /// $label${const ['numbers', 'colours', 'words', 'file'].contains(sh?.look) ? ' @unit(${sh!.look})' : ''}\n  $n: vec3<f32>,'; // (any word: colours, six digits each, given from the Colors shelf; or numbers, one for each copy)
   }
 
   return [

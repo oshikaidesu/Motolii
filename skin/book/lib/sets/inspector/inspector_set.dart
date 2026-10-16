@@ -372,25 +372,6 @@ WidgetbookComponent inspectorSetSet() => WidgetbookComponent(
       width: 372,
     ),
     uc(
-      'Blend, ghost, clip to below',
-      (c) => _host(
-        c,
-        Kind.shape,
-        Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const BlendRows(first: true),
-            const Cap(
-              'How this layer composites with those below, in one small block (G1). Blend opens a searchable chooser; Ghost and Clip to below are On/Off words with a switch (G2). Not shown for a camera.',
-            ),
-          ],
-        ),
-        lockedKnob: true,
-      ),
-      width: 372,
-    ),
-    uc(
       'Effect — parameters, enable, Advanced',
       (c) => _host(
         c,
@@ -442,26 +423,6 @@ WidgetbookComponent inspectorSetSet() => WidgetbookComponent(
             const RelationsBlock(first: true),
             const Cap(
               'One relation open as its card (the lab\'s RelationCard), the others one row each; clicking a row opens it. Hue only on the relation mark. Maybe: a driven row says who drives it (I4), see the next case.',
-            ),
-          ],
-        ),
-        lockedKnob: true,
-      ),
-      width: 372,
-    ),
-    uc(
-      'Text layer group',
-      (c) => _host(
-        c,
-        Kind.text,
-        Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const TextGroup(),
-            const FillStroke(),
-            const Cap(
-              'Text is edited as text and applies when you leave the box; Esc restores. Font and colours hand over to their tool, aimed at this slot (A3, I1).',
             ),
           ],
         ),

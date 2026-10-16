@@ -315,12 +315,16 @@ static const DocValue doc_values[] = {
 struct DocCard { const char* title; const char* names; const char* when = nullptr; const char* is = nullptr; };   // (shown only while `when` is `is`; "!...": is not; "~...": has it in it)
 // How a value is shown to a hand (a shell draws its knob by this, nothing of its own): its look (count: a whole number;
 // onoff; angle; stage: a length of the stage, shown in points of the picture; down: one up the stage, shown down it as the picture counts; share: 0 to 1, shown in hundredths;
-// colour, colours, numbers: words of those; thing: another thing; seed; none: as its range says), the unit it is read
+// colour, colours, numbers: words of those; words: any, typed; file: a file, given from a shelf; thing: another thing; seed; none: as its range says), the unit it is read
 // in, a name in plain words, the span its knob covers (the value itself may go further, as its range says) and
 // the name of the fold it lies in on its card, if it is folded away (named by what the fold holds; a card's first
 // row holds eight at most, as on Ableton's Push).
 struct DocShown { const char* name; const char* look; const char* unit; const char* label; double low, high; const char* fold; };
 static const DocShown doc_shown[] = {
+    {"text", "words", "", "Text", 0, 0, nullptr},
+    {"file", "file", "", "Font", 0, 0, nullptr},
+    {"size", "", "px", "Size", 0, 2, nullptr},
+    {"align", "share", "%", "Align", 0, 1, nullptr},
     {"split", "", "", "Split", 0, 0, nullptr},
     {"letter_spacing", "", "×", "Tracking", 0, 3, nullptr},
     {"line_spacing", "", "×", "Line gap", 0, 3, nullptr},
@@ -541,6 +545,7 @@ static std::vector<DocScript*> doc_scripts_on(Doc& d, int thing) {
     return all;
 }
 static const DocCard doc_cards[] = {
+    {"Text", "text file size align", "kind", "text"},   // (After Effects' Source Text and Character, Cavalry's Text Shape: what it says, in which font, how large, which way it lines up)
     {"Transform", "space parent anchor_x anchor_y anchor_z x y z scale_x scale_y scale_z rotate_x rotate_y rotate opacity", "kind", "!camera"},   // (After Effects' Transform group: where it is, how large, how turned, how seen; each its own value)
     {"Camera", "parent x y z rotate_x rotate_y rotate distance zoom", "kind", "camera"},   // (After Effects' camera: what it looks at, where it is and how turned, how far its eye is, its zoom)
     {"Blending", "blend clip"},   // (After Effects' layer mode and its track matte, in its simplest: drawn over what lies below as it says, or only inside the one before it)

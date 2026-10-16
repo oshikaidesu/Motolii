@@ -53,7 +53,6 @@ class _InspectorPanelState extends State<InspectorPanel> {
         const InspHeader(),
         // contract: one stack, After Effects style: the host's cards (Transform first), the material, then effects piled below; every titled card folds on its own.
         const SizedBox(height: Pop.gap),
-        if (k == Kind.text && doc.seat('text')) const TextGroup(),
         if ((k == Kind.shape || k == Kind.text) && doc.seat('fill')) const FillStroke(),
         for (final c in doc.cards) ValuesCard(c), // (the host's own cards)
         PopGroupLabel('Effects', count: Ctx.of(context).doc.fxOrder.length),
