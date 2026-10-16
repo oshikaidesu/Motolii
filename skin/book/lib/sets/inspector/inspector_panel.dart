@@ -2,6 +2,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import '../../tokens.dart';
 import 'inspector_direct_transform.dart';
+import 'inspector_copies.dart';
 import 'inspector_light.dart';
 import 'inspector_parts.dart';
 
@@ -16,6 +17,7 @@ final inspectorCards = <String, Widget Function(Fx card)>{
   'Fill': (_) => const FillStroke(),
   'Blending': (_) => const BlendRows(),
   'Light': (c) => ValuesCard(c, top: const LightDrawing()), // (its values as tiles, under a drawing of the light you pull)
+  'Copies': (c) => ValuesCard(c, top: const CopiesDrawing()), // (and the copies as they lie)
 };
 
 /// The Inspector: one scrolling stack of the host's cards. Needs an InspHost above it.

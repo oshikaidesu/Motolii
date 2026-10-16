@@ -12,6 +12,7 @@ export 'inspector_anchor.dart';
 export 'inspector_badges.dart';
 export 'inspector_camera_layout.dart';
 export 'inspector_choosers_header.dart';
+export 'inspector_copies.dart';
 export 'inspector_effects.dart';
 export 'inspector_layer_tiles.dart';
 export 'inspector_light.dart';

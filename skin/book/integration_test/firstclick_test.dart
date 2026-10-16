@@ -13,7 +13,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:lab_book/motolii.dart';
-import 'package:lab_book/sets/inspector/inspector_parts.dart' show AnchorCube, AnchorGeometry, Ctx, Hov, LightDrawing, NumField, OnOff, PanelLink, Space, SpacePlate, TextGroup, Chooser;
+import 'package:lab_book/sets/inspector/inspector_parts.dart' show AnchorCube, AnchorGeometry, CopiesDrawing, copiesRowOf, Ctx, Hov, LightDrawing, NumField, OnOff, PanelLink, Space, SpacePlate, TextGroup, Chooser;
 import 'package:lab_book/sets/inspector/inspector_rows_prop_row.dart' show PropRow;
 import 'package:lab_book/workspace/dock_parts.dart' show DockHover, DockSearch;
 import 'package:lab_book/workspace/timeline.dart';
@@ -90,11 +90,18 @@ void main() {
       final at = TransformLayout(Size(box.width, DirectSurface.height), Map.of(doc.v), space: doc.space).knob;
       return Rect.fromCenter(center: box.topLeft + const Offset(0, 4) + at, width: 16, height: 16);
     }
+    Rect copiesKnob(bool count) {
+      final box = t.getRect(find.byType(CopiesDrawing)), g = copiesRowOf(Ctx.read(t.element(find.byType(CopiesDrawing))).doc, Size(box.width, CopiesDrawing.height));
+      return Rect.fromCenter(center: box.topLeft + (count ? g.countKnob : g.gapKnob), width: 22, height: 22);
+    }
     final also = <String, Rect Function()>{
       'Make the selected card look out of focus.': () => t.getRect(find.byType(DockSearch)),
       'Tilt the selected card, as you would tilt a picture on a wall.': knob,
       // (and the Depth desk's lens cone, pulled across, is the camera's zoom too)
       'Get a closer view of the scene through the camera without moving it.': () => t.getRect(find.byWidgetPredicate((w) => w.runtimeType.toString() == '_Diagram').first),
+      // (and the Copies card's drawing: its + for how many, its second copy's knob for how far apart)
+      'Turn the selected card into ten cards.': () => copiesKnob(true),
+      'Push the repeated cards further apart, left to right.': () => copiesKnob(false),
       'Make the light shine stronger.': () { // (the strength rail at the right of the Light card's drawing)
         final box = t.getRect(find.byType(LightDrawing));
         return Rect.fromLTRB(box.right - 28, box.top + 8, box.right, box.top + LightDrawing.height - 6);
