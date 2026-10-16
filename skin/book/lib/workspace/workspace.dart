@@ -19,7 +19,6 @@ import 'dock_glyphs.dart';
 import 'panes.dart';
 import 'desk_kit.dart';
 import 'stage.dart';
-import 'stage_art.dart';
 import 'timeline.dart';
 import 'top_bar.dart';
 import '../motolii.dart';
@@ -277,7 +276,6 @@ Kind _kindOf(WsLayer? l) => switch (l?.kind) {
 String _hex(Color c) => '#${(c.toARGB32() & 0xFFFFFF).toRadixString(16).padLeft(6, '0').toUpperCase()}';
 
 /// The paint each layer wears on the stage, so the Inspector's Fill names the colour you see.
-const _fills = {'blob': ArtInk.orange, 'ring': ArtInk.lime, 'title': ArtInk.cream, 'chips': ArtInk.pink, 'confetti': ArtInk.pink, 'bg': ArtInk.blue};
 
 /// Joined: the picked thing's words in the inspector's ids (a text's content; how it lies on what is behind), and a change of them told to the document.
 Map<String, String> _words(Ws ws, String? id) {
@@ -407,10 +405,10 @@ bool _say(Ws ws, String? id, Map<String, String> changed) {
   return all;
 }
 
-/// What the Inspector's Fill names: joined, the document's word for the thing (a colour, or the material Glass); else the sample's paint.
-String? _fillWord(Ws ws, String? id, Color? sample) {
+/// What the Inspector's Fill names: the document's word for the thing (a colour, or the material Glass).
+String? _fillWord(Ws ws, String? id) {
   final m = ws.inside;
-  if (m == null) return sample == null ? null : _hex(sample);
+  if (m == null) return null;
   final t = int.tryParse(id ?? ''), f = t == null ? '' : m.word(t, 'fill');
   return f.isEmpty ? 'None' : (f == 'glass' ? 'Glass' : '#${f.toUpperCase()}'); // (nothing said: nothing is named, not the last thing's fill)
 }
@@ -590,7 +588,7 @@ Map<String, double> wsPlace(Ws ws, String id) {
 
 /// The selected layer's transform as the stage draws it at this frame, in the Inspector's ids.
 Map<String, double> wsTransform(Ws ws, String? id) {
-  if (ws.inside case final m?) {   // (joined: the document's own values, as the inspector counts them)
+  if (ws.inside case final m?) {   // (the document's own values, as the inspector counts them)
     final t = int.tryParse(id ?? '');
     if (id == null) { // (nothing picked: the stage's own cards, thing 0)
       final at = ws.frame / Ws.fps;
@@ -609,10 +607,7 @@ Map<String, double> wsTransform(Ws ws, String? id) {
         for (final MapEntry(:key, value: n) in fields.entries) key: _shown(m, t, n, m.value(t, n, at) ?? 0), // (the effects' numbers, as the inside says a hand reads them)
     };
   }
-  final b = WsArt.boxOf(ArtScene.of(ws, camera: true), id);
-  if (b == null) return const {};
-  final s = (b.scale * 1000).roundToDouble() / 10, r = (b.rot * 180 / math.pi * 10).roundToDouble() / 10;
-  return {'pos.x': b.anchor.dx.roundToDouble(), 'pos.y': b.anchor.dy.roundToDouble(), 'scale.x': s, 'scale.y': s, 'rot.z': r};
+  return const {};
 }
 
 (String, double)? _asDocument(Ws ws, String id, double x) {
@@ -801,46 +796,42 @@ class _InspectorSeatState extends State<_InspectorSeat> {
 
   @override
   Widget build(BuildContext context) {
-    final ws = WsScope.read(context), l = ws.layer, k = _kindOf(l), fill = _fills[l?.id];
+    final ws = WsScope.read(context), l = ws.layer, k = _kindOf(l), m = ws.inside!;
     return LayoutBuilder(
       builder: (context, box) => InspHost(
         key: ValueKey(k),
         cfg: const Cfg(),
         kind: k,
         effects: 2,
-        fx: Ws.timed('fx cards', () => _fxCards(ws, l?.id)), // (joined: the effects the document has on it, each a card)
+        fx: Ws.timed('fx cards', () => _fxCards(ws, l?.id)), // (the effects the document has on it, each a card)
         kindWord: _kindWord(ws, l?.id),
         cards: Ws.timed('value cards', () => _valueCards(ws, l?.id)),
-        onFxRemove: ws.inside == null ? null : (v) => ws.fxToggle(fxValues.entries.firstWhere((e) => e.value.$1 == v).key), // (taken off the document, as the shelf's Remove)
-        onFxMove: ws.inside == null
-            ? null
-            : () {
-                _told(ws, 'the effects have no order in the document: '); // (ThorVG lays them in its own)
-                return false;
-              },
-        seats: Ws.timed('seats', () => ws.inside == null || int.tryParse(l?.id ?? '') == null ? null : _seatsOf(ws.inside!.values(int.parse(l!.id)).toSet())), // (joined: a card of values the thing has not is not shown)
+        onFxRemove: (v) => ws.fxToggle(fxValues.entries.firstWhere((e) => e.value.$1 == v).key), // (taken off the document, as the shelf's Remove)
+        onFxMove: () {
+          _told(ws, 'the effects have no order in the document: '); // (ThorVG lays them in its own)
+          return false;
+        },
+        seats: Ws.timed('seats', () => int.tryParse(l?.id ?? '') == null ? null : _seatsOf(m.values(int.parse(l!.id)).toSet())), // (a card of values the thing has not is not shown)
         title: l?.name,
         onRoute: ws.route,
-        onAim: (at) => ws.aim = ws.inside != null && at.startsWith('v_') ? at.substring(2) : null, // (joined: a colour link of a card is aimed at that value)
+        onAim: (at) => ws.aim = at.startsWith('v_') ? at.substring(2) : null, // (a colour link of a card is aimed at that value)
         values: Ws.timed('transform', () => wsTransform(ws, l?.id)),
-        strs: Ws.timed('words', () => {'fill': ?_fillWord(ws, l?.id, fill), ..._words(ws, l?.id)}),
-        onWords: ws.inside == null ? null : (changed) => _say(ws, l?.id, changed),
-        onAnimateAll: ws.inside == null ? null : (on) => ws.animating = on,
-        animating: ws.inside == null ? null : ws.animating,
+        strs: Ws.timed('words', () => {'fill': ?_fillWord(ws, l?.id), ..._words(ws, l?.id)}),
+        onWords: (changed) => _say(ws, l?.id, changed),
+        onAnimateAll: (on) => ws.animating = on,
+        animating: ws.animating,
         choices: Ws.timed('choices', () => _choices(ws, l?.id)),
         flags: Ws.timed('flags', () => _flags(ws, l?.id)),
-        onFlags: ws.inside == null ? null : (changed) => _flag(ws, l?.id, changed),
+        onFlags: (changed) => _flag(ws, l?.id, changed),
         keyMarks: Ws.timed('key marks', () => _keyMarks(ws, l?.id)),
-        onValues: ws.inside == null ? null : (changed, {required live}) => _write(ws, l?.id, changed, live: live),
-        onDrop: ws.inside == null ? null : () => ws.inside!.letGo(false),
-        onKey: ws.inside == null ? null : (prop, mark) => _mark(ws, l?.id, prop, mark),
-        together: ws.inside == null
-            ? null
-            : (tells) { // (one step, asked without waiting: begun and ended in the inside's queue around what is told)
-                ws.inside!.later('together', number: 1);
-                tells();
-                ws.after(ws.inside!.later('together'));
-              },
+        onValues: (changed, {required live}) => _write(ws, l?.id, changed, live: live),
+        onDrop: () => m.letGo(false),
+        onKey: (prop, mark) => _mark(ws, l?.id, prop, mark),
+        together: (tells) { // (one step, asked without waiting: begun and ended in the inside's queue around what is told)
+          m.later('together', number: 1);
+          tells();
+          ws.after(m.later('together'));
+        },
         live: _live,
         child: _panelOf(box), // (the same panel while the pane keeps its size: built again only by what it reads, Ctx)
       ),
