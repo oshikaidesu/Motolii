@@ -405,12 +405,16 @@ class LayerTiles extends StatelessWidget {
       LdCell(
         _Revealed(
           id: 'v_parent',
-          child: LdTile(
-            label: 'Parent',
-            glyph: const ValueGlyph(ValueShape.parent),
-            child: SizedBox(
-              height: 22,
-              child: Chooser(id: 'v_parent', options: doc.choices['v_parent'] ?? layers, searchable: true, enabled: on),
+          child: GestureDetector( // (the whole tile, its chain too, opens the list of things to go with)
+            behavior: HitTestBehavior.translucent,
+            onTap: () => _parent.currentState?.open(),
+            child: LdTile(
+              label: 'Parent',
+              glyph: const ValueGlyph(ValueShape.parent),
+              child: SizedBox(
+                height: 22,
+                child: Chooser(key: _parent, id: 'v_parent', options: doc.choices['v_parent'] ?? layers, searchable: true, enabled: on),
+              ),
             ),
           ),
         ),
@@ -420,6 +424,8 @@ class LayerTiles extends StatelessWidget {
 }
 
 /// Brings a block on screen when its property shortcut fires (I2), as [PropRow] does for a row.
+final _parent = GlobalKey<ChooserState>();
+
 class _Revealed extends StatefulWidget {
   const _Revealed({required this.id, required this.child});
   final String id;

@@ -13,7 +13,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:lab_book/motolii.dart';
-import 'package:lab_book/sets/inspector/inspector_parts.dart' show AnchorCube, AnchorGeometry, CopiesDrawing, copiesRowOf, Ctx, Hov, LightDrawing, NumField, OnOff, PanelLink, Space, SpacePlate, TextGroup, Chooser;
+import 'package:lab_book/sets/inspector/inspector_parts.dart' show AnchorCube, AnchorGeometry, CopiesDrawing, LdTile, copiesRowOf, Ctx, Hov, LightDrawing, NumField, OnOff, PanelLink, Space, SpacePlate, TextGroup, Chooser;
 import 'package:lab_book/sets/inspector/inspector_rows_prop_row.dart' show PropRow;
 import 'package:lab_book/workspace/dock_parts.dart' show DockHover, DockSearch;
 import 'package:lab_book/workspace/timeline.dart';
@@ -64,7 +64,7 @@ void main() {
       ('Tilt the selected card, as you would tilt a picture on a wall.', rect, null, num('v_rotate'), null),
       ('Make the selected card turn and grow around its bottom-left corner instead of its middle.', rect, null, find.byType(AnchorCube),
           (box) => Rect.fromCenter(center: box.topLeft + AnchorGeometry(box.size).at(0, 100, 0), width: 20, height: 20)),
-      ('Make the selected card go along with the box whenever the box moves.', rect, null, chooser('v_parent'), null),
+      ('Make the selected card go along with the box whenever the box moves.', rect, null, find.ancestor(of: chooser('v_parent'), matching: find.byType(LdTile)).first, null),
       ('Make the selected card lighten what lies under it, like a projector\'s light, instead of covering it.', rect, null, chooser('v_blend'), null),
       ('Let the selected card be seen only through the thing just beneath it.', rect, null, find.descendant(of: row('v_clip'), matching: find.byType(OnOff)), null),
       ('Let the selected card sit deeper in the scene, while it stays a flat card.', rect, null, find.byWidgetPredicate((w) => w is SpacePlate && w.space == Space.d25), null),
@@ -94,17 +94,25 @@ void main() {
       final box = t.getRect(find.byType(CopiesDrawing)), g = copiesRowOf(Ctx.read(t.element(find.byType(CopiesDrawing))).doc, Size(box.width, CopiesDrawing.height));
       return Rect.fromCenter(center: box.topLeft + (count ? g.countKnob : g.gapKnob), width: 22, height: 22);
     }
-    final also = <String, Rect Function()>{
-      'Make the selected card look out of focus.': () => t.getRect(find.byType(DockSearch)),
-      'Tilt the selected card, as you would tilt a picture on a wall.': knob,
+    final also = <String, List<Rect> Function()>{
+      'Make the selected card look out of focus.': () => [t.getRect(find.byType(DockSearch))],
+      'Tilt the selected card, as you would tilt a picture on a wall.': () => [knob()],
       // (and the Depth desk's lens cone, pulled across, is the camera's zoom too)
-      'Get a closer view of the scene through the camera without moving it.': () => t.getRect(find.byWidgetPredicate((w) => w.runtimeType.toString() == '_Diagram').first),
+      'Get a closer view of the scene through the camera without moving it.': () => [t.getRect(find.byWidgetPredicate((w) => w.runtimeType.toString() == '_Diagram').first)],
       // (and the Copies card's drawing: its + for how many, its second copy's knob for how far apart)
-      'Turn the selected card into ten cards.': () => copiesKnob(true),
-      'Push the repeated cards further apart, left to right.': () => copiesKnob(false),
+      'Turn the selected card into ten cards.': () => [copiesKnob(true)],
+      'Push the repeated cards further apart, left to right.': () => [copiesKnob(false)],
+      // (and a card's turning point is any bottom-left point of the box (front, middle or back: a flat card has no depth),
+      //  or the point on the Transform card's drawing, pulled there)
+      'Make the selected card turn and grow around its bottom-left corner instead of its middle.': () {
+        final box = t.getRect(find.byType(AnchorCube)), g = AnchorGeometry(box.size);
+        final canvas = t.getRect(find.byType(TransformCanvas)), doc = Ctx.read(t.element(find.byType(TransformCanvas))).doc;
+        final pivot = TransformLayout(Size(canvas.width, DirectSurface.height), Map.of(doc.v), space: doc.space).pivot;
+        return [Rect.fromPoints(box.topLeft + g.at(0, 100, -50), box.topLeft + g.at(0, 100, 50)).inflate(10), Rect.fromCenter(center: canvas.topLeft + const Offset(0, 4) + pivot, width: 16, height: 16)];
+      },
       'Make the light shine stronger.': () { // (the strength rail at the right of the Light card's drawing)
         final box = t.getRect(find.byType(LightDrawing));
-        return Rect.fromLTRB(box.right - 28, box.top + 8, box.right, box.top + LightDrawing.height - 6);
+        return [Rect.fromLTRB(box.right - 28, box.top + 8, box.right, box.top + LightDrawing.height - 6)];
       },
     };
     final out = Directory('$motoliiDir/../reports/firstclick')..createSync(recursive: true);
@@ -155,7 +163,7 @@ void main() {
         for (final b in all)
           if (!all.any((o) => o != b && b.contains(o.topLeft) && b.contains(o.bottomRight - const Offset(.01, .01)))) [b.left * dpr, b.top * dpr, b.right * dpr, b.bottom * dpr],
       ];
-      written.add({'parts': parts, 'n': i + 1, 'task': task, 'picture': name, 'rect': [r.left * dpr, r.top * dpr, r.right * dpr, r.bottom * dpr], 'words': words, if (also[task] case final a?) 'also': [for (final x in [a()]) [x.left * dpr, x.top * dpr, x.right * dpr, x.bottom * dpr]]});
+      written.add({'parts': parts, 'n': i + 1, 'task': task, 'picture': name, 'rect': [r.left * dpr, r.top * dpr, r.right * dpr, r.bottom * dpr], 'words': words, if (also[task] case final a?) 'also': [for (final x in a()) [x.left * dpr, x.top * dpr, x.right * dpr, x.bottom * dpr]]});
     }
     File('${out.path}/tasks.json').writeAsStringSync(const JsonEncoder.withIndent('  ').convert(written));
   });

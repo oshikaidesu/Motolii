@@ -16,10 +16,15 @@ class Chooser extends StatefulWidget {
   final List<String> options;
   final bool searchable, enabled;
   @override
-  State<Chooser> createState() => _ChooserState();
+  State<Chooser> createState() => ChooserState();
 }
 
-class _ChooserState extends State<Chooser> {
+class ChooserState extends State<Chooser> {
+  /// Opened from outside: a tile around it, tapped anywhere (its glyph, its name), opens its list.
+  void open() {
+    if (widget.enabled && !_open) _set(true);
+  }
+
   bool _open = false, _up = false;
   final _q = TextEditingController();
   final _qf = FocusNode(debugLabel: 'chooser-q');
