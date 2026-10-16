@@ -24,7 +24,7 @@ index 920a5f2..b1ecd72 100644
      return len;
  }
 diff --git a/src/renderer/gpu_engine/tvgGpuCommon.cpp b/src/renderer/gpu_engine/tvgGpuCommon.cpp
-index 8447d6a..c1f14df 100644
+index 8447d6a..2a9ef4a 100644
 --- a/src/renderer/gpu_engine/tvgGpuCommon.cpp
 +++ b/src/renderer/gpu_engine/tvgGpuCommon.cpp
 @@ -720,6 +720,13 @@ void StrokeDashPath::segment(Segment seg, float len, RenderPath& out, bool allow
@@ -36,7 +36,7 @@ index 8447d6a..c1f14df 100644
 +    auto period = 0.0f, len = 0.0f;
 +    for (uint32_t i = 0; i < dash.count; ++i) period += dash.pattern[i];
 +    for (uint32_t i = 1; i < in.pts.count; ++i) len += tvg::length(in.pts[i] - in.pts[i - 1]);
-+    if (!(period > 0.0f) || !(len < 1e5f * period)) return false;
++    if (!(period > 0.0f) || !(len < 1e4f * period)) return false;
 +
      this->transform = transform;
      this->applyTransform = (transform && !tvg::identity(transform));

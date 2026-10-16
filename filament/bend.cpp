@@ -73,7 +73,11 @@ void tvg_bend(tvg::Shape* shape, const tvg::PathCommand* cmds, uint32_t cmdsCnt,
     delete chain;
     const RenderPath& bent = any ? out : in;
     if (!numbers(bent.pts.data, bent.pts.count)) return;
-    if (fine > 0.f) curves(cut, bent.cmds.data, bent.cmds.count, bent.pts.data, false, fine);   // (cut after it is bent: the operators see its whole lines)
+    // (cut after it is bent: the operators see its whole lines; into 20000 pieces at most, as fine as that lets it be:
+    //  a long zigzag cut fine once made more triangles than the GPU's staging had room for)
+    float along = 0.f;
+    for (uint32_t i = 1; i < bent.pts.count; ++i) along += length(bent.pts[i] - bent.pts[i - 1]);
+    if (fine > 0.f) curves(cut, bent.cmds.data, bent.cmds.count, bent.pts.data, false, std::max(fine, along / 20000.f));
     const RenderPath& to = fine > 0.f ? cut : bent;
     shape->appendPath(to.cmds.data, to.cmds.count, to.pts.data, to.pts.count);
 }

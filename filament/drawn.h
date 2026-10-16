@@ -112,7 +112,11 @@ static void bend_at(Stage& s, Drawn* d, float round, float bloat, float zigzag, 
     door::on_driver(s.engine, [d, is] {
         const float high = d->plainHigh, side = d->plainSide;
         tvg_bend(d->shape, d->plain.data(), (uint32_t)d->plain.size(), d->plainAt.data(), (uint32_t)d->plainAt.size(), std::clamp(is[0], 0.f, 0.5f) * side,
-                 100.f * std::clamp(is[1], -1.f, 1.f), is[2] * high, (int)std::clamp(is[3], 0.f, 100.f), is[4] > 0.5f, is[5] * high, d->fine);
+                 100.f * std::clamp(is[1], -1.f, 1.f), std::clamp(is[2], -4.f, 4.f) * high, (int)std::clamp(is[3], 0.f, 100.f), is[4] > 0.5f, std::clamp(is[5], -4.f, 4.f) * high, d->fine);
+        // (a shape bent to more than sixty-four times its picture is not drawn: none of it would be seen, and ThorVG's own
+        //  measuring, dashing and staging of so much once took the window down)
+        float x = 0.f, y = 0.f, w = 0.f, h = 0.f;
+        if (d->shape->bounds(&x, &y, &w, &h) == tvg::Result::Success && !(std::max(w, h) < 64.f * std::max(1.f, d->pictureHigh))) d->shape->reset();
         d->canvas->update();
         d->canvas->draw(true);
         d->canvas->sync();
