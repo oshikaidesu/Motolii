@@ -1,6 +1,7 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lab_book/tokens.dart';
+import 'package:lab_book/workspace/panes.dart';
 import 'package:lab_book/workspace/timeline.dart';
 import 'package:lab_book/workspace/workspace.dart';
 import 'package:lab_book/workspace/ws.dart';
@@ -26,6 +27,23 @@ void main() {
     for (final shelf in const ['Media', 'Effects', 'Fonts', 'Colors', 'Create']) {
       expect(find.bySemanticsLabel(shelf), findsOneWidget, reason: 'an icon tab per shelf');
     }
+  });
+
+  testWidgets('a pane of your own joins the window through Workspace(extra:), no file of the window changed', (t) async {
+    addTearDown(t.view.reset);
+    t.view.physicalSize = const Size(1600, 960);
+    t.view.devicePixelRatio = 1;
+    final notes = WsPane('Notes', null, () => Builder(builder: (c) => Text('picked: ${WsScope.of(c).selected}')));
+    await t.pumpWidget(WidgetsApp(color: const Color(0xFF000000), builder: (c, _) => Workspace(extra: [notes])));
+    await t.pumpAndSettle();
+    expect(find.text('Notes'), findsWidgets, reason: 'its tab, beside the Inspector');
+    await t.tap(find.text('Notes').first);
+    await t.pumpAndSettle();
+    final ws = WsScope.read(t.element(find.byType(WsTimeline)))..select('ring');
+    await t.pumpAndSettle();
+    expect(find.text('picked: ring'), findsOneWidget, reason: 'it reads the window as the panes of the window do');
+    expect(t.takeException(), isNull);
+    expect(ws.selected, 'ring');
   });
 
   testWidgets('selection reaches the Inspector; its colour link opens the dock shelf', (t) async {

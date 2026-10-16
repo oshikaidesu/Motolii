@@ -1,77 +1,26 @@
-# Workspace — 見た目の見本(2026-10-04)
+# Workspace — Motolii の窓（2026-10-16）
 
-Widgetbook の `Workspace › Workspace › Window`。lab の部品を 1 枚の窓に集めた、**今の見本**。Motolii の製品の窓ではない。
-製品の窓は Motolii の `scripts/motolii-ui.sh dev`。Stage の席だけが rerun の絵で、ほかの席は Document を見るだけ。ここはその見た目を並べる場所で、Stage の絵は代用、作品は保存されない。
-見本の中で迷ったら、この窓とこの文書に合わせる。`Archive` の棚(`sets/studies/` と `parts/` の草案)は、さらに古い検討。
+Widgetbook の `Workspace › Workspace › Live`（route `/?path=workspace/workspace/live`）が本物の窓。書類は C++ の中身（`../motolii.dart` の `Motolii`、各メソッドが `motolii_*` の C 呼び出し 1 つ）にあり、Stage の絵も中身（Filament）が描く。窓は見せて、手を書類に渡すだけ。`.../workspace/window` は中身なしの見本。
 
+## 自分のパネルを足す（入口はここだけ）
+```dart
+Workspace(document: path, extra: [
+  WsPane('Notes', null, () => const MyNotes()),   // (名前、アイコン（null なら頭文字）、中身)
+])
 ```
-┌ Top bar ─────────────────────────────────────────────────────────────┐
-├ Dock ─────┬ Stage ───────────────────────────────┬ Inspector ─────────┤
-│ rail│shelf│ tools│ viewport (art + HUD + trial bar)│ InspHost(Pop)     │
-├───────────┴──────────────────────────────────────┼ Desk ──────────────┤
-│ Timeline                                          │ Tools/Ease/Depth  │
-└───────────────────────────────────────────────────┴───────────────────┘
-```
-
-## 前提(取り違えやすいこと)
-- **本物の Stage は Rust が描く**(wgpu / vello / 3DGS)。ここの Stage の絵(`stage_art.dart`)と効果の見た目(`stage_fx.dart`)は代用品。Flutter が担うのは、絵の上に重ねる操作の層(選択枠、ハンドル、定規、HUD、試し表示の帯)だけ。
-- **Motolii 本体(`/Users/motolii_maker/rust_ae/Motolii/motolii`)は読むだけ**。手本にしたのは、本体の `ui/lib/panels/browser/`(Effects 棚、フィルター帯)と、`crates/motolii-render/src/compositor/effects/catalog.rs`(shader の静的解析で何がわかるか)。
-- 窓の文字は英語。会話と文書は日本語。
+- 足したパネルは Inspector の横にタブで並ぶ。本家のファイルは 1 行も変えない。
+- パネルの中では `WsScope.of(context)` が窓の状態（`Ws`）：`inside` が書類（`Motolii`）、`selected` が選ばれた物、`frame` が今のコマ。値は `inside.value(thing, name, seconds)`、変えるのは `inside.set(...)`、キーは `inside.keyHere(...)`。
+- 例：`test/workspace_window_test.dart` の「a pane of your own」。
 
 ## 開き方・確かめ方
 ```bash
-cd /Users/motolii_maker/rust_ae/design-sense-lab/book
-F=/Users/motolii_maker/Documents/Motolii-probes/toolchains/flutter/bin
-$F/flutter run -d web-server --web-hostname 127.0.0.1 --web-port 8732   # 最初の 1 回は落ちやすい。落ちたらもう一度
-# → http://127.0.0.1:8732/#/?path=workspace/workspace/window   (起動時の初期ページ)
-$F/flutter analyze lib test
-$F/flutter test                                  # Workspace は test/workspace_*_test.dart
-$F/dart format -l 160 <自分が触ったファイル>        # glob で全体にかけない
+cd skin/book
+F=~/rust_ae/Motolii/.tools/flutter/bin
+$F/flutter build macos --debug '--dart-define=LAB_ROUTE=/?path=workspace/workspace/live'
+$F/flutter analyze lib test integration_test
+$F/flutter test                                  # 中身とつないだ確かめは test/workspace_joined_test.dart
 ```
-- web のデバッグ版は、最初の表示に 20〜40 秒かかる(白いままでも待つ)。
-- 実寸の静止画は、テストの中で `RepaintBoundary.toImage(pixelRatio: 2)` で撮る。文字は `FontLoader` で SFNS を `Inter` / `.AppleSystemUIFont`、SFNSMono を `Menlo` として読み込む(`tester.runAsync` の中で)。撮影用のテストは使い終わったら消す。
-
-## ファイルの地図(1 ファイル = 1 つの責任)
-| ファイル | 責任 |
-|---|---|
-| `ws.dart` | **共有の状態 `Ws`** と**窓のトークン `WsT`**。全部の席がこれだけを読む |
-| `workspace.dart` | 窓の組み立て(5 枚のペインと初期配置 `_preset`)、縮小(最小 1280×800 を切ったら 1600×960 を縮める)、Enter/Esc、Inspector の席(Stage の値を Inspector に渡す) |
-| `panes.dart` | ペインの入れ物 `WsPanes`。pub の `docking` に載せる(タブのドラッグで並べ替え・分割、仕切りでサイズ変更)。タブの記号と見た目(`WsT` から)、棚のタブと `Ws.shelf` の行き来 |
-| `top_bar.dart` | ロゴ、プロジェクト名、モード(Edit/Animate/Export)、Render |
-| `dock.dart` | 棚 1 枚 = ペイン 1 枚の `WsShelf`(Media / Effects / Fonts / Colors / Create)と棚の一覧 `dockShelves`。見出し、検索欄、Effects のときだけフィルターのボタン |
-| `dock_parts.dart` | 棚の共通部品と、棚ごとの記憶 `DockMem`(選択、畳み、星、フィルター、帯の高さ) |
-| `dock_effects.dart` | Effects 棚(文字だけの一覧、試し表示、Add) |
-| `dock_filters.dart` | フィルター帯 `DockFilterBand`、ボタン、高さを変える `DockResizable` |
-| `fx_catalog.dart` | 効果のカタログ `FxDef`(解析で読む値 + 作者が書く `@tags` / `@preview`)。Dock と Stage が読む |
-| `dock_files.dart` | Media の棚 = ファイルブラウザー(AEViewer 2 型)。場所とフォルダの木 + 開いているフォルダの中身(サムネイル / リスト)。広いと木が左、狭いと木が上(高さはドラッグ) |
-| `dock_media.dart` | 素材の目録 `mediaAssets` とサムネイルの絵(`MediaThumb` / `PopArt`) |
-| `dock_fonts.dart` / `dock_make.dart` | Fonts / Colors・Create の棚 |
-| `dock_glyphs.dart` | 記号(棚、ペインのタブ、効果の系統、ファイルの種類) |
-| `stage.dart` | Stage の席(ヘッダー、道具の列、オプション列、試し表示の帯の置き場) |
-| `stage_view.dart` | ビューポート(定規、ガイド、選択、HUD、ナビゲーター) |
-| `stage_art.dart` | 絵(`ArtScene` = 1 フレームの純関数)と、当たり判定・箱 `WsArt.boxOf` |
-| `stage_fx.dart` | 効果の代用の見た目(系統ごとに 1 つ) |
-| `stage_trial.dart` | 試し表示の帯(TRYING … / Cancel Esc / Add Enter) |
-| `timeline.dart` / `timeline_paint.dart` | Timeline の席と描画 |
-| `desk.dart` / `desk_ease.dart` / `desk_depth.dart` / `desk_kit.dart` | Desk(選択に追従: キー → Ease、カメラ → Depth、他 → Tools) |
-
-Inspector は `../sets/inspector/`(`inspector_parts.dart` が入口、`InspHost` と Pop のトークン)。book 全体の地図は [`../../README.md`](../../README.md)。
-
-## 共有の状態 `Ws`(ws.dart)
-席どうしは直接話さない。**`Ws` を読み、`Ws` に書く**。`WsScope.of(context)` で購読、`WsScope.read(context)` で読むだけ。
-
-| 持つもの | API |
-|---|---|
-| レイヤー(仮の作品 CODA、8 枚) | `layers`, `fps = 30`, `duration = 240` |
-| 選択 | `selected`, `layer`, `select(id)` |
-| キー | `keys`, `pickKey(k, add:)`, `clearKeys()` |
-| 時刻と再生 | `frame`(初期 112), `playing` |
-| Dock の棚 | `shelf`(`Media` / `Effects` / `Fonts` / `Colors` / `Create`) |
-| Desk | `desk`(追従の結果), `openDesk(name)`, `deskManual` |
-| よそのパネルへの誘導 | `route('Browser › Colors' / 'Browser › Fonts' / 'Ease')` |
-| 効果 | `fxOf(id)`(確定済み), `trial`(試し中), `canTry`, `tryFx(name)`, `keepFx()`, `dropFx()` |
-
-規則: 操作 1 回につき通知 1 回。**何もしていない間は何も回さない**(再生中だけ進む)。
+- 窓の文字は英語。会話と文書は日本語。
 
 ## トンマナ(Pop)
 - 値は `WsT`(窓)と `Pop`(Inspector、`sets/inspector/inspector_parts.dart`)と `Grey` / `T`(`tokens.dart`)から取る。**数値を直書きしない**。
@@ -114,8 +63,6 @@ Inspector は `../sets/inspector/`(`inspector_parts.dart` が入口、`InspHost`
 - `lib/sets/inspector_gui_set.dart` は利用者の作業中のファイル。触らず、コミットにも含めない。
 - 区切りごとにコミットする(履歴が無いのが一番怖い、が利用者の方針)。
 
-## まだ無いもの(候補。入れるかどうかは利用者が決める)
-- 確定した効果を Inspector の効果スタックに名前で出す(今の `InspHost` は効果を件数でしか受け取れない)。
-- `Ws` に足す候補: ループと作業範囲、レイヤーごとの表示・ロック・ソロ、マーカー、Ease とレンズの値、レイヤーの奥行き、Blend への誘導、コンポのサイズの定数。
-- 本体とはつながっていない(FFI も実データも無い)。
-- テーマの選択は保存されない(起動すると Dark)。Widgetbook の他のページには Light が無い。
+## まだ無いもの
+- desk の道具とプリセットを外から足す入口（今は desk_kit.dart の一覧と desk.dart の switch）。
+- 見本と中身の二股（`inside == null`）が残っている（TASKS.md 24 番）。

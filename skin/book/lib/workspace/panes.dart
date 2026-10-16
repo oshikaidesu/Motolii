@@ -13,7 +13,7 @@ import 'ws.dart';
 class WsPane {
   const WsPane(this.name, this.glyph, this.build, {this.minSize = 160, this.iconOnly = false});
   final String name;
-  final DockG glyph;
+  final DockG? glyph;   // (none: the pane's first letter)
   final Widget Function() build;
   final double minSize;
   final bool iconOnly;
@@ -82,7 +82,7 @@ class _WsPanesState extends State<WsPanes> {
         button: true,
         child: Padding(
           padding: EdgeInsets.only(right: p.iconOnly ? 0 : 5),
-          child: DockGlyph(p.glyph, size: 12, color: status == TabStatus.selected ? Grey.g95 : Grey.g56),
+          child: p.glyph == null ? Text(p.name.characters.first, style: T.micro(status == TabStatus.selected ? Grey.g95 : Grey.g56)) : DockGlyph(p.glyph!, size: 12, color: status == TabStatus.selected ? Grey.g95 : Grey.g56),
         ),
       ),
       widget: WsSeat(child: p.build()),

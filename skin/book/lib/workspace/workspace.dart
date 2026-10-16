@@ -25,11 +25,15 @@ import '../motolii.dart';
 import 'ws.dart';
 
 class Workspace extends StatefulWidget {
-  const Workspace({super.key, this.document});
+  const Workspace({super.key, this.document, this.extra = const []});
 
   /// A document of the inside (motolii.dart) to join the window to: its stage is then the inside's own picture.
   /// null: the sample, with its stand-in art.
   final String? document;
+
+  /// Panes of your own, beside the window's: each joins the Inspector's tabs. A pane reads and changes the document
+  /// through [WsScope.of] (its `inside` is the document, `selected` the picked thing, `frame` the moment).
+  final List<WsPane> extra;
   @override
   State<Workspace> createState() => _WorkspaceState();
 }
@@ -194,7 +198,7 @@ class _WorkspaceState extends State<Workspace> {
     maintainState: true,
     builder: (context) => LayoutBuilder(
       builder: (context, box) {
-        const window = _Window();
+        final window = _Window(widget.extra);
         if (box.maxWidth >= WsT.minWindow.width && box.maxHeight >= WsT.minWindow.height) return window;
         return FittedBox(
           child: SizedBox.fromSize(size: WsT.refWindow, child: window),
@@ -221,7 +225,8 @@ class _WorkspaceState extends State<Workspace> {
 }
 
 class _Window extends StatelessWidget {
-  const _Window();
+  const _Window(this.extra);
+  final List<WsPane> extra;
   @override
   Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -229,7 +234,7 @@ class _Window extends StatelessWidget {
       const SizedBox(height: WsT.topBar, child: WsTopBar()),
       const SizedBox(height: WsT.gutter),
       Expanded(
-        child: WsPanes(panes: _panes, preset: _preset, shelves: {for (final s in dockShelves) s.$1}),
+        child: WsPanes(panes: [..._panes, ...extra], preset: (item) => _preset(item, extra), shelves: {for (final s in dockShelves) s.$1}),
       ),
     ],
   );
@@ -249,7 +254,7 @@ const _strip = 22.0;
 /// The reference arrangement: the browser shelves (one strip of tabs) | Stage over Timeline on the left, Inspector over Desk on the right.
 /// Side and lower panes start at their reference sizes in px and the panes without one share what is left.
 /// contract: give the filling panes no weight; `multi_split_view` turns sizes into weights and would scale them against any weight given.
-DockingArea _preset(DockingItem Function(String name, {double? size, double? weight}) item) => DockingRow([
+DockingArea _preset(DockingItem Function(String name, {double? size, double? weight}) item, List<WsPane> extra) => DockingRow([
   DockingColumn([
     DockingRow([
       DockingTabs([for (final (name, _, _) in dockShelves) item(name)], size: WsT.dock),
@@ -257,7 +262,7 @@ DockingArea _preset(DockingItem Function(String name, {double? size, double? wei
     ]),
     item('Timeline', size: WsT.lower + _strip),
   ]),
-  DockingColumn([item('Inspector'), item('Desk', size: WsT.lower + _strip)], size: WsT.inspector, minimalSize: 340),
+  DockingColumn([extra.isEmpty ? item('Inspector') : DockingTabs([item('Inspector'), for (final p in extra) item(p.name)]), item('Desk', size: WsT.lower + _strip)], size: WsT.inspector, minimalSize: 340),
 ]);
 
 /// Joined: the document's word for what a thing is, where the inspector's kinds have none (film, picture, solid).
