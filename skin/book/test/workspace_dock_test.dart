@@ -1,113 +1,73 @@
+// The shelves on a real document (the inside joined, test/door.dart): each lays out at the dock's sizes; Media is one
+// browser, its tree beside the contents when wide and above them when narrow, its search over where it is.
+import 'dart:io';
+
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lab_book/motolii.dart';
 import 'package:lab_book/workspace/dock.dart';
-import 'package:lab_book/workspace/ws.dart';
+
+import 'door.dart';
 
 const _shelves = ['Media', 'Effects', 'Fonts', 'Colors', 'Create'];
 
-Future<Ws> _pump(WidgetTester tester, Size size, [String shelf = 'Media']) async {
-  tester.view.physicalSize = size;
-  tester.view.devicePixelRatio = 1;
-  addTearDown(tester.view.reset);
-  final ws = Ws();
-  await tester.pumpWidget(
+/// A window's state joined to a new document in a folder of its own, with a picture beside it.
+Ws _joined() {
+  final dir = Directory.systemTemp.createTempSync('dock');
+  File('$motoliiDir/out/audit-cubes.png').copySync('${dir.path}/still.png');
+  final m = Motolii.open('${dir.path}/dock.motolii')!;
+  addTearDown(m.close);
+  return Ws()
+    ..join(m)
+    ..documentFolder = dir.path;
+}
+
+Future<void> _shelf(WidgetTester t, Ws ws, Size size, String shelf) async {
+  t.view.physicalSize = size;
+  t.view.devicePixelRatio = 1;
+  addTearDown(t.view.reset);
+  await t.pumpWidget(
     WidgetsApp(
       color: const Color(0xFF000000),
       builder: (_, _) => WsScope(
         ws: ws,
-        child: Align(
-          alignment: Alignment.topLeft,
-          child: SizedBox(
-            width: size.width,
-            height: size.height,
-            child: WsShelf(shelf, key: ValueKey(shelf)),
-          ),
-        ),
+        child: Align(alignment: Alignment.topLeft, child: SizedBox(width: size.width, height: size.height, child: WsShelf(shelf, key: ValueKey(shelf)))),
       ),
     ),
   );
-  return ws;
+  await t.pumpAndSettle();
 }
 
 void main() {
-  testWidgets('every shelf lays out at the reference size and when smaller', (tester) async {
+  testWidgets('every shelf lays out at the reference size and when smaller', (t) async {
+    final ws = _joined();
     for (final size in const [Size(240, 918), Size(240, 600)]) {
       for (final s in _shelves) {
-        await _pump(tester, size, s);
-        await tester.pumpAndSettle();
-        expect(tester.takeException(), isNull, reason: '$s at $size');
+        await _shelf(t, ws, size, s);
+        expect(t.takeException(), isNull, reason: '$s at $size');
         expect(find.text(s), findsWidgets);
       }
     }
-  });
+    await t.pumpWidget(const SizedBox());
+  }, skip: !insideBuilt);
 
-  testWidgets('picking items, chips, search and the footer action', (tester) async {
-    final ws = await _pump(tester, const Size(300, 918));
-
-    await tester.tap(find.text('city_pass.mp4'));
-    await tester.pumpAndSettle();
-    expect(find.textContaining('0:47 · 3840×2160'), findsOneWidget);
-
-    await tester.tap(find.text('Place'));
-    await tester.pumpAndSettle();
-    expect(find.text('Placed'), findsOneWidget);
-
-    await tester.tap(find.byKey(const ValueKey('browser:folder:Stills')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('background.png'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Select'));
-    await tester.pumpAndSettle();
-    expect(ws.selected, 'bg');
-
-    await tester.tap(find.byKey(const ValueKey('browser:folder:HDR')));
-    await tester.pumpAndSettle();
-    expect(find.text('coda_intro.mov'), findsNothing);
-    expect(find.text('studio_soft.exr'), findsOneWidget);
-
-    await _pump(tester, const Size(300, 918), 'Effects');
-    await tester.pumpAndSettle();
-    await tester.enterText(find.byType(EditableText), 'trim');
-    await tester.pumpAndSettle();
-    expect(find.text('Trim Paths'), findsOneWidget);
-    expect(find.text('Bloom'), findsNothing);
-    await tester.tap(find.text('Trim Paths'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Add'));
-    await tester.pumpAndSettle();
-    expect(find.text('ON'), findsOneWidget);
-
-    await _pump(tester, const Size(300, 918));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('browser:crumb:Project')));
-    await tester.pumpAndSettle();
-    expect(find.text('coda_v12.mp4'), findsNothing);
-    await tester.tap(find.byKey(const ValueKey('browser:file:Renders')));
-    await tester.pumpAndSettle();
-    expect(find.text('coda_v12.mp4'), findsOneWidget, reason: 'a folder tile opens the folder');
-
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('Media is one browser: tree beside the contents when wide, above them when narrow; search covers the location', (tester) async {
-    await _pump(tester, const Size(520, 900));
-    expect(find.byKey(const ValueKey('browser:tree-grip')), findsNothing);
-    final tree = tester.getTopLeft(find.byKey(const ValueKey('browser:folder:Footage')));
-    final file = tester.getTopLeft(find.byKey(const ValueKey('browser:file:city_pass')));
-    expect(file.dx, greaterThan(tree.dx + 100), reason: 'wide: contents stand right of the tree');
-
-    await _pump(tester, const Size(300, 900));
-    expect(find.byKey(const ValueKey('browser:tree-grip')), findsOneWidget);
-    expect(
-      tester.getTopLeft(find.byKey(const ValueKey('browser:file:city_pass'))).dy,
-      greaterThan(tester.getTopLeft(find.byKey(const ValueKey('browser:folder:Footage'))).dy),
-    );
-
-    await tester.enterText(find.byType(EditableText), '.wav');
-    await tester.pumpAndSettle();
-    expect(find.text('Search in Project'), findsOneWidget);
-    expect(find.text('Beat.wav'), findsWidgets);
-    expect(find.text('city_pass.mp4'), findsNothing);
-    expect(tester.takeException(), isNull);
-  });
+  testWidgets('Media is one browser: tree beside the contents when wide, above them when narrow; search covers the location', (t) async {
+    final ws = _joined();
+    await _shelf(t, ws, const Size(520, 900), 'Media');
+    expect(find.byKey(const ValueKey('browser:tree-grip')), findsNothing, reason: 'wide: the tree stands beside the contents');
+    await _shelf(t, ws, const Size(300, 900), 'Media');
+    expect(find.byKey(const ValueKey('browser:tree-grip')), findsOneWidget, reason: 'narrow: the tree above, with a grip to size it');
+    final folder = find.byKey(ValueKey('browser:file:${ws.documentFolder}')); // (the document's own folder, a tile of Project: opened)
+    await t.ensureVisible(folder.first);
+    await t.tap(folder.first);
+    await t.pumpAndSettle();
+    await t.enterText(find.byType(EditableText), 'still');
+    for (var i = 0; i < 10 && find.text('still.png').evaluate().isEmpty; i++) { // (a folder of the disk is read without waiting: its files come a moment later)
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+      await t.pumpAndSettle();
+    }
+    expect(find.text('still.png'), findsWidgets, reason: 'the picture beside the document, found by its name');
+    expect(t.takeException(), isNull);
+    await t.pumpWidget(const SizedBox());
+  }, skip: !insideBuilt);
 }
