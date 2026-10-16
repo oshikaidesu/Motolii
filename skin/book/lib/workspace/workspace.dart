@@ -56,7 +56,7 @@ class _WorkspaceState extends State<Workspace> {
   @override
   void initState() {
     super.initState();
-    if (widget.document case final doc?) _join(doc);
+    _join(widget.document ?? '${Directory.systemTemp.createTempSync('motolii').path}/Untitled.motolii'); // (no document given: a new one, as After Effects opens an untitled project)
   }
 
   /// Another document in place of the open one (made, if there is none at that place).
