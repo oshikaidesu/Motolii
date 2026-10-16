@@ -13,9 +13,12 @@
 // curve cut in pieces no longer than `fine` (0: whole), for what bends it as it is drawn.
 static void curves(RenderPath& into, const PathCommand* cmds, uint32_t cmdsCnt, const Point* pts, bool sharp, float fine) {
     Point start{}, at{};
+    // (how many pieces a stretch is cut into: by `fine`, at most 1024, and one where its length is no number: a shape
+    //  carried far out or a fine near nothing once asked for more pieces than memory has)
+    const auto cut = [&](float along) { return fine > 0.f && std::isfinite(along) ? (int)std::min(1024.f, std::max(1.f, std::ceil(along / fine))) : 1; };
     const auto line = [&](const Point& to) {
         const Point from = at;
-        const int pieces = fine > 0.f ? std::max(1, (int)std::ceil(length(to - from) / fine)) : 1;
+        const int pieces = cut(length(to - from));
         for (int k = 1; k <= pieces; ++k) {
             const Point a = from + (to - from) * ((float)(k - 1) / (float)pieces), b = from + (to - from) * ((float)k / (float)pieces);
             if (sharp) into.cubicTo(a, b, b);
@@ -24,7 +27,7 @@ static void curves(RenderPath& into, const PathCommand* cmds, uint32_t cmdsCnt, 
     };
     const auto curve = [&](const Point& c1, const Point& c2, const Point& to) {
         const Point c0 = at;
-        const int pieces = fine > 0.f ? std::max(1, (int)std::ceil((length(c1 - c0) + length(c2 - c1) + length(to - c2)) / fine)) : 1;
+        const int pieces = cut(length(c1 - c0) + length(c2 - c1) + length(to - c2));
         if (pieces == 1) return into.cubicTo(c1, c2, to);
         const auto on = [&](float t) {   // (where it is at t, and which way it goes there)
             const float u = 1.f - t;
@@ -46,8 +49,17 @@ static void curves(RenderPath& into, const PathCommand* cmds, uint32_t cmdsCnt, 
     }
 }
 
+// (whether every point is a number: one carried to no number, a shape pushed far past its knobs, sends ThorVG's own
+//  measuring round for ever; such a shape is not drawn)
+static bool numbers(const Point* p, uint32_t n) {
+    for (uint32_t i = 0; i < n; ++i) if (!std::isfinite(p[i].x) || !std::isfinite(p[i].y)) return false;
+    return true;
+}
+
 void tvg_bend(tvg::Shape* shape, const tvg::PathCommand* cmds, uint32_t cmdsCnt, const tvg::Point* pts, uint32_t ptsCnt,
               float round, float bloat, float zigzag, int ridges, bool smooth, float offset, float fine) {
+    shape->reset();
+    if (!numbers(pts, ptsCnt) || !std::isfinite(round + bloat + zigzag + offset + fine)) return;
     LottieModifier* chain = nullptr;
     const auto on = [&](LottieModifier* m) { chain = chain ? chain->decorate(m) : m; };   // (the one put on last is done first; offset goes to the end)
     if (zigzag != 0.f) on(new LottieZigZagModifier(zigzag, ridges, smooth ? LottieZigZagModifier::Smooth : LottieZigZagModifier::Corner));
@@ -60,9 +72,9 @@ void tvg_bend(tvg::Shape* shape, const tvg::PathCommand* cmds, uint32_t cmdsCnt,
     if (chain) chain->path(in, out, nullptr);
     delete chain;
     const RenderPath& bent = any ? out : in;
+    if (!numbers(bent.pts.data, bent.pts.count)) return;
     if (fine > 0.f) curves(cut, bent.cmds.data, bent.cmds.count, bent.pts.data, false, fine);   // (cut after it is bent: the operators see its whole lines)
     const RenderPath& to = fine > 0.f ? cut : bent;
-    shape->reset();
     shape->appendPath(to.cmds.data, to.cmds.count, to.pts.data, to.pts.count);
 }
 
@@ -71,6 +83,8 @@ void tvg_bend(tvg::Shape* shape, const tvg::PathCommand* cmds, uint32_t cmdsCnt,
 // the part from `from` to `to` of its length (After Effects' trim paths, as ThorVG's trimpath goes round past 1).
 void tvg_edge(const tvg::PathCommand* cmds, uint32_t cmdsCnt, const tvg::Point* pts, uint32_t ptsCnt, float width, int cap, int join, float dash, float dashFrom,
               float from, float to, std::vector<float>& xy, std::vector<uint32_t>& idx) {
+    xy.clear(), idx.clear();
+    if (!numbers(pts, ptsCnt) || !std::isfinite(width + dash + dashFrom + from + to)) return;
     RenderShape rs;
     for (uint32_t i = 0; i < cmdsCnt; ++i) rs.path.cmds.push(cmds[i]);
     for (uint32_t i = 0; i < ptsCnt; ++i) rs.path.pts.push(pts[i]);

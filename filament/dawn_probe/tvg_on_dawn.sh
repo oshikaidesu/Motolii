@@ -10,7 +10,7 @@ cd "$(dirname "$0")/.."
 F=$PWD/third_party/filament_src
 T=$PWD/third_party/thorvg_src
 [ -d $T ] || git -c core.hooksPath=/dev/null clone -q --depth 1 --branch v1.1.2 https://github.com/thorvg/thorvg $T
-git -C $T diff --quiet && git -C $T apply $PWD/dawn_probe/thorvg_z.patch $PWD/dawn_probe/thorvg_wg_upload.patch $PWD/dawn_probe/thorvg_bend.patch
+git -C $T diff --quiet && git -C $T apply $PWD/dawn_probe/thorvg_z.patch $PWD/dawn_probe/thorvg_wg_upload.patch $PWD/dawn_probe/thorvg_bend.patch $PWD/dawn_probe/thorvg_length.patch
 mkdir -p $T/dawn_pc
 cat > $T/dawn_pc/wgpu_native.pc <<PC
 Name: wgpu_native

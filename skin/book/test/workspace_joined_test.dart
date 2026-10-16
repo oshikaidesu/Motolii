@@ -243,11 +243,22 @@ void main() {
     await t.pumpAndSettle();
     expect(m.value(cube, 'clip', 0), 1, reason: 'the seat is the document\'s clip');
     expect(t.widget<OnOff>(seat('Clip to below')).on, isTrue);
-    await t.tap(seat('Ghost'));
-    await t.pumpAndSettle();
-    expect(t.widget<OnOff>(seat('Ghost')).on, isFalse, reason: 'nothing is behind it: it goes back');
+    expect(find.byWidgetPredicate((w) => w is PropRow && w.id == 'ghost'), findsNothing, reason: 'the document has no ghost: no switch that moves nothing');
     expect(m.undo() && m.value(cube, 'clip', 0) == 0, isTrue, reason: 'one step back: the clip');
     expect(t.takeException(), isNull);
+    await expectSameAfterReopen(t);
+    await _close(t);
+  }, skip: !_built);
+
+  testWidgets('two whole-screen effects with a knob of one name are two values: Posterize\'s gamma and Boxinator\'s', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    String file(String name) => m.effects.firstWhere((e) => e.$2.contains(name)).$2;
+    expect(m.say(0, 'script', '${file('posterize')} ${file('boxinator')}'), isTrue, reason: m.trouble);
+    final names = m.values(0).where((n) => n.endsWith('_gamma')).toList()..sort();
+    expect(names, ['js_isf_boxinator_gamma', 'js_isf_posterize_gamma']);
+    expect([m.value(0, names[0], 0), m.value(0, names[1], 0)], [-.3, 1.25], reason: 'each as its own head says');
+    expect(m.set(0, 'js_isf_posterize_gamma', 1.5), isTrue, reason: m.trouble);
+    expect([m.value(0, names[0], 0), m.value(0, names[1], 0)], [-.3, 1.5], reason: 'the other stays');
     await expectSameAfterReopen(t);
     await _close(t);
   }, skip: !_built);
@@ -998,7 +1009,7 @@ void main() {
     await _close(t);
   }, skip: !_built);
 
-  testWidgets('the inspector\'s own: a card folds and stays folded; Ghost the document has not says so; the text box is the picked text\'s', (t) async {
+  testWidgets('the inspector\'s own: a card folds and stays folded; Ghost the document has not is not shown; the text box is the picked text\'s', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     const font = '/System/Library/Fonts/Supplemental/Arial Unicode.ttf';
     final a = m.add('text', font), b = m.add('text', font);
@@ -1022,12 +1033,7 @@ void main() {
     await t.tap(find.text('Transform').first);
     await t.pumpAndSettle();
     expect(find.byWidgetPredicate((w) => w is NumField && w.id == 'pos.x'), findsNothing, reason: 'folded, and it stays so');
-    final ghost = find.descendant(of: find.byWidgetPredicate((w) => w is PropRow && w.id == 'ghost'), matching: find.byType(OnOff));
-    await t.ensureVisible(ghost);
-    await t.tap(ghost);
-    await t.pumpAndSettle();
-    expect((t.widget(ghost) as OnOff).on, isFalse, reason: 'it goes back');
-    expect(ws.notice, startsWith('Not taken: the document has no ghost'));
+    expect(find.byWidgetPredicate((w) => w is PropRow && w.id == 'ghost'), findsNothing, reason: 'Ghost the document has not is not shown');
     expect(t.takeException(), isNull);
     await expectSameAfterReopen(t);
     await _close(t);
@@ -1318,8 +1324,9 @@ void main() {
     await t.pumpAndSettle();
     expect(m.word(0, 'script'), kaleido.$2, reason: m.trouble);
     expect(find.descendant(of: row, matching: find.text('ON 1')), findsOneWidget);
-    expect(m.cards(0).firstWhere((c) => c.$1 == 'Script').$2, containsAll(['js_sides', 'js_angle']));
-    expect(m.set(0, 'js_sides', 3), isTrue, reason: m.trouble);
+    final own = 'js_${kaleido.$2.split('/').last.replaceAll('.wgsl', '')}_'; // (a whole-screen effect's knobs: named by the effect too)
+    expect(m.cards(0).firstWhere((c) => c.$1 == 'Script').$2, containsAll(['${own}sides', '${own}angle']));
+    expect(m.set(0, '${own}sides', 3), isTrue, reason: m.trouble);
     await t.tap(row);
     await t.pumpAndSettle();
     expect(ws.screenFx, isEmpty, reason: 'taken off');

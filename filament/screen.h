@@ -12,6 +12,9 @@
 #include <regex>
 #include <sstream>
 
+// A knob's value now, asked by the effect's file and the knob's name (two effects may each have a knob of one name).
+using ScreenNumbers = std::function<double(const std::string& file, const std::string& knob, double usual)>;
+
 struct ScreenFx {
     std::string file, trouble;
     std::vector<ScriptKnob> knobs;
@@ -143,7 +146,7 @@ static Texture* screen_picture(Stage& s) {
     return Texture::Builder().width((uint32_t)s.w).height((uint32_t)s.h).levels(1).format(Texture::InternalFormat::RGBA8)
         .usage(Texture::Usage::COLOR_ATTACHMENT | Texture::Usage::SAMPLEABLE).build(*s.engine);
 }
-static void screen_knobs(Stage& s, ScreenFx& fx, const std::function<double(const std::string&, double)>& numbers, int pass = 0) {
+static void screen_knobs(Stage& s, ScreenFx& fx, const ScreenNumbers& numbers, int pass = 0) {
     std::vector<float> at(fx.bytes / 4, 0.f);
     for (const ScreenFx::Field& f : fx.fields) {
         float v[4] = {0, 0, 0, 0};
@@ -160,7 +163,7 @@ static void screen_knobs(Stage& s, ScreenFx& fx, const std::function<double(cons
                 const std::string k = f.floats == 1 ? f.name : f.name + "_" + "xyzw"[i];
                 double usual = 0;
                 for (const ScriptKnob& one : fx.knobs) if (one.name == k) usual = one.usual;
-                v[i] = (float)numbers(k, usual);
+                v[i] = (float)numbers(fx.file, k, usual);
             }
         for (uint32_t i = 0; i < f.floats; ++i) {
             if (f.whole) { const int32_t w = (int32_t)std::lround(v[i]); std::memcpy(&at[f.at / 4 + i], &w, 4); }
@@ -197,7 +200,7 @@ static door::Screen* screen_copy(Stage& s, ScreenStack& st) {   // (a picture pu
 }
 // One effect drawn: reading `from` (the stage's picture or the effect before's), drawing to `to`, through its passes;
 // its own pictures in order: `from`, then each target (ISF's) or the stage's past frames (the array).
-static void screen_draw(Stage& s, ScreenStack& st, ScreenFx& fx, Texture* from, RenderTarget* to, const std::function<double(const std::string&, double)>& numbers) {
+static void screen_draw(Stage& s, ScreenStack& st, ScreenFx& fx, Texture* from, RenderTarget* to, const ScreenNumbers& numbers) {
     screen_targets(s, fx);
     if (fx.historyFrames) {   // (this frame written into the next layer of the past frames, before it is read)
         if (!fx.history) {
@@ -262,7 +265,7 @@ static bool screen_moved(const ScreenStack& st) {
     for (const ScreenFx* fx : st.fx) if (screen_stamp(fx->file) != fx->stamp) return true;
     return false;
 }
-static void screen_effects(Stage& s, ScreenStack& st, const std::string& files, std::function<double(const std::string&, double)> numbers) {
+static void screen_effects(Stage& s, ScreenStack& st, const std::string& files, ScreenNumbers numbers) {
     if (st.files == files) return;
     st.files = files;
     s.over = nullptr;   // (what there was let go: the stage draws to the screen again)

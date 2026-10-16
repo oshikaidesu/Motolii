@@ -1,0 +1,43 @@
+diff --git a/src/common/tvgMath.cpp b/src/common/tvgMath.cpp
+index 920a5f2..b1ecd72 100644
+--- a/src/common/tvgMath.cpp
++++ b/src/common/tvgMath.cpp
+@@ -43,15 +43,17 @@ static float _length(const Point& pt1, const Point& pt2)
+ 
+ 
+ template<typename LengthFunc>
+-float _bezLength(const Bezier& cur, LengthFunc lineLengthFunc)
++float _bezLength(const Bezier& cur, LengthFunc lineLengthFunc, int depth = 0)
+ {
+     Bezier left, right;
+     auto len = lineLengthFunc(cur.start, cur.ctrl1) + lineLengthFunc(cur.ctrl1, cur.ctrl2) + lineLengthFunc(cur.ctrl2, cur.end);
+     auto chord = lineLengthFunc(cur.start, cur.end);
+ 
+-    if (fabsf(len - chord) > BEZIER_EPSILON) {
++    // (a near-enough length is as near as its size lets a float be: far out, an absolute 1e-2 is never reached, and the split goes on for ever)
++    // (and at most 16 halvings deep, far finer than a picture shows: a curve of no numbers once split for ever)
++    if (depth < 16 && fabsf(len - chord) > std::max(BEZIER_EPSILON, len * 1e-6f)) {
+         cur.split(left, right);
+-        return _bezLength(left, lineLengthFunc) + _bezLength(right, lineLengthFunc);
++        return _bezLength(left, lineLengthFunc, depth + 1) + _bezLength(right, lineLengthFunc, depth + 1);
+     }
+     return len;
+ }
+diff --git a/src/renderer/gpu_engine/tvgGpuCommon.cpp b/src/renderer/gpu_engine/tvgGpuCommon.cpp
+index 8447d6a..c1f14df 100644
+--- a/src/renderer/gpu_engine/tvgGpuCommon.cpp
++++ b/src/renderer/gpu_engine/tvgGpuCommon.cpp
+@@ -720,6 +720,13 @@ void StrokeDashPath::segment(Segment seg, float len, RenderPath& out, bool allow
+ // allowDot: zero length segment with non-butt cap still should be rendered as a point - only the caps are visible
+ bool StrokeDashPath::gen(const RenderPath& in, RenderPath& out, bool allowDot, const Matrix* transform)
+ {
++    // (a path far longer than its dashes, a shape carried far out with its dashes as they were, is not dashed: more
++    //  dashes than memory has were once asked for; it is drawn whole)
++    auto period = 0.0f, len = 0.0f;
++    for (uint32_t i = 0; i < dash.count; ++i) period += dash.pattern[i];
++    for (uint32_t i = 1; i < in.pts.count; ++i) len += tvg::length(in.pts[i] - in.pts[i - 1]);
++    if (!(period > 0.0f) || !(len < 1e5f * period)) return false;
++
+     this->transform = transform;
+     this->applyTransform = (transform && !tvg::identity(transform));
+ 

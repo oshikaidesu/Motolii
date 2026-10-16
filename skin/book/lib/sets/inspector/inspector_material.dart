@@ -2,6 +2,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:lab_book/sets/inspector/inspector_rows_prop_row.dart';
 import 'package:lab_book/sets/inspector/inspector_rows_sect.dart';
+
 import '../../parts/controls.dart';
 import '../../tokens.dart';
 import 'inspector_parts.dart';
@@ -29,17 +30,18 @@ class BlendRows extends StatelessWidget {
           keyable: false,
           cells: [Chooser(id: 'blend', options: doc.choices['blend'] ?? _blends)],
         ),
-        PropRow(
-          id: 'ghost',
-          label: 'Ghost',
-          keyable: false,
-          cells: [
-            Align(
-              alignment: Alignment.centerLeft,
-              child: OnOff(on: doc.b['ghost'] ?? false, onChanged: (v) => doc.flag('ghost', v)),
-            ),
-          ],
-        ),
+        if (doc.seat('ghost')) // (a seat the document has not, joined, is not shown: a switch that moves nothing is not a switch)
+          PropRow(
+            id: 'ghost',
+            label: 'Ghost',
+            keyable: false,
+            cells: [
+              Align(
+                alignment: Alignment.centerLeft,
+                child: OnOff(on: doc.b['ghost'] ?? false, onChanged: (v) => doc.flag('ghost', v)),
+              ),
+            ],
+          ),
         PropRow(
           id: 'clip',
           label: 'Clip to below',
@@ -143,7 +145,8 @@ class _TextGroupState extends State<TextGroup> {
   @override
   Widget build(BuildContext context) {
     final x = Ctx.of(context), doc = x.doc, ed = Ed(x.cfg.ed);
-    if (!_f.hasFocus && _c.text != (doc.s2['text.content'] ?? '')) _c.text = doc.s2['text.content'] ?? ''; // (out of the box it is the text the host has now: another thing picked, an undo)
+    if (!_f.hasFocus && _c.text != (doc.s2['text.content'] ?? ''))
+      _c.text = doc.s2['text.content'] ?? ''; // (out of the box it is the text the host has now: another thing picked, an undo)
     final aligns = doc.choices['align'] ?? const ['Left', 'Centre', 'Right', 'Justify'];
     return Sect(
       title: 'Text',

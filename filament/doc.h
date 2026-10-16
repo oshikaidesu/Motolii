@@ -492,8 +492,12 @@ static const DocShown* doc_shown_of(const char* name) {
         for (const DocShown& one : script.shown) if (!strcmp(one.name, name)) return &one;
     return nullptr;
 }
+// A whole-screen effect's knob in the document: its file's name before the knob's, as several lie on one stage and two
+// may each have a knob of one name (Posterize's gamma and Boxinator's are not one value).
+static std::string doc_screen_knob(const std::string& file, const std::string& knob) { return "js_" + std::filesystem::path(file).stem().string() + "_" + knob; }
 static DocScript* doc_script_of(const std::string& file) {
     if (file.empty() || file == "none") return nullptr;
+    const bool screen = std::filesystem::path(file).extension() == ".wgsl";   // (a whole-screen effect's knobs: named by the effect too)
     DocScript& s = doc_scripts()[file];
     const auto now = std::chrono::steady_clock::now();
     if (s.stamp >= 0 && now - s.looked < std::chrono::milliseconds(250)) return &s;
@@ -505,7 +509,7 @@ static DocScript* doc_script_of(const std::string& file) {
         s = DocScript{};
         s.stamp = stamp, s.looked = now, s.knobs = script_knobs(file);
         doc_scripts_made()++;   // (what was worked out from the old one is forgotten)
-        for (const ScriptKnob& k : s.knobs) s.names.push_back("js_" + k.name);
+        for (const ScriptKnob& k : s.knobs) s.names.push_back(screen ? doc_screen_knob(file, k.name) : "js_" + k.name);
         for (size_t i = 0; i < s.knobs.size(); ++i) {   // (the names are all made first: what points into them stays put)
             const ScriptKnob& k = s.knobs[i];
             s.values.push_back(DocValue{s.names[i].c_str(), "picture text shape stage", k.kind == "select" ? 0.0 : k.low, k.kind == "select" ? 0.0 : k.high, k.kind == "track", k.kind == "select" ? k.words.c_str() : nullptr});
@@ -1056,7 +1060,7 @@ static void doc_look(Doc& d) {
         room->setIntensity(d.roomLight * (float)doc_number(d, 0, "environment", 0, 1));
         room->setRotation(math::mat3f::rotation((float)(doc_number(d, 0, "environment_rotate", 0, 0) * (double)TAU / 360.0), math::float3{0, 1, 0}));
     }
-    screen_effects(s, d.screen, doc_word(d, 0, "script"), [&d](const std::string& name, double usual) {
+    screen_effects(s, d.screen, doc_word(d, 0, "script"), [&d](const std::string& file, const std::string& name, double usual) {
         std::lock_guard<std::recursive_mutex> hold(d.lock);   // (asked while the picture is drawn, when the hand does not hold it)
         // (a mouse's knob, where the followed thing is on the picture: pointer as the web says it, -1 to 1 and up; the
         //  others from the top left, 0 to 1, as the effects' own uv)
@@ -1070,7 +1074,7 @@ static void doc_look(Doc& d) {
                     const double at = across ? frame[0] / d.stage->w : frame[1] / d.stage->h;
                     return !strcmp(mouse, "pointer") ? (across ? 2.0 * at - 1.0 : 1.0 - 2.0 * at) : at;
                 }
-        return doc_number(d, 0, ("js_" + name).c_str(), d.stage->now, usual);
+        return doc_number(d, 0, doc_screen_knob(file, name).c_str(), d.stage->now, usual);
     });
     const std::string behind = doc_word(d, 0, "background");
     if (doc_word(d, 0, "behind") == "room") {   // (the room itself behind everything, as bright as it lights the stage: its own picture, made once a room)
