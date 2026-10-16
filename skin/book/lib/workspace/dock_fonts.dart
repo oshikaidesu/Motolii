@@ -12,31 +12,11 @@ import 'ws.dart';
 // ---------------------------------------------------------------- fonts
 
 class _Font {
-  const _Font(this.family, this.kind, this.styles, {this.weight = FontWeight.w500, this.italic = false, this.path});
-  final String family, kind;
-  final String? path; // (joined: the font's file)
-  final int styles;
-  final FontWeight weight;
-  final bool italic;
+  const _Font(this.family, {this.path});
+  final String family;
+  final String? path; // (the font's file)
 }
 
-const _fonts = <_Font>[
-  _Font('Avenir Next', 'Sans', 12, weight: FontWeight.w700),
-  _Font('Helvetica Neue', 'Sans', 14),
-  _Font('Futura', 'Display', 6, weight: FontWeight.w700),
-  _Font('Gill Sans', 'Sans', 6),
-  _Font('Optima', 'Sans', 5),
-  _Font('Didot', 'Serif', 3, italic: true),
-  _Font('Georgia', 'Serif', 4),
-  _Font('Baskerville', 'Serif', 6),
-  _Font('Hoefler Text', 'Serif', 5),
-  _Font('Bodoni 72', 'Display', 4, weight: FontWeight.w700),
-  _Font('Rockwell', 'Display', 4, weight: FontWeight.w700),
-  _Font('Copperplate', 'Display', 3),
-  _Font('American Typewriter', 'Mono', 5),
-  _Font('Menlo', 'Mono', 4),
-  _Font('Courier New', 'Mono', 4),
-];
 
 /// Joined: the font files of this machine that the inside sets words in (.ttf), and those beside the document: read
 /// once, without waiting. A font is called by its file's name.
@@ -63,7 +43,7 @@ Future<void> fontsRead(Ws ws) => _reading ??= Zone.root.run<Future<void>>(() asy
   }
   final sets = await ws.inside!.setting(files, _sample);
   _disk = [
-    for (final f in sets) _Font(f.split('/').last.substring(0, f.split('/').last.length - 4), '', 1, path: f),
+    for (final f in sets) _Font(f.split('/').last.substring(0, f.split('/').last.length - 4), path: f),
   ]..sort((a, b) => a.family.toLowerCase().compareTo(b.family.toLowerCase()));
   dockRead.value++;
 });
@@ -79,7 +59,6 @@ void _setFont(DockCtx c, _Font f) {
 }
 
 const _sample = 'Motion for more relations';
-const _usedFont = 'Avenir Next';
 
 class FontsShelf extends StatelessWidget {
   const FontsShelf(this.c, {super.key});
@@ -88,21 +67,20 @@ class FontsShelf extends StatelessWidget {
   Widget build(BuildContext context) => ValueListenableBuilder<int>(valueListenable: dockRead, builder: (context, _, _) => _shelf(context));
 
   Widget _shelf(BuildContext context) {
-    final m = c.ws.inside, fonts = m == null ? _fonts : _diskFonts(c.ws);
-    final title = c.ws.layers.where((l) => l.id == 'title').firstOrNull;
-    // (joined: which text of the document is set in which font file)
+    final m = c.ws.inside;
+    if (m == null) return const SizedBox.shrink();
+    final fonts = _diskFonts(c.ws);
+    // (which text of the document is set in which font file)
     final setIn = {
-      if (m != null)
-        for (final l in c.ws.layers)
-          if (m.word(int.parse(l.id), 'kind') == 'text') m.whole(m.word(int.parse(l.id), 'file')): l,
+      for (final l in c.ws.layers)
+        if (m.word(int.parse(l.id), 'kind') == 'text') m.whole(m.word(int.parse(l.id), 'file')): l,
     };
-    bool used(_Font f) => m == null ? f.family == _usedFont || c.applied(f.family) : setIn.containsKey(f.path);
+    bool used(_Font f) => setIn.containsKey(f.path);
     final hits = fonts.where((f) => c.hit(f.family)).toList();
     bool keep(_Font f) => switch (c.chip) {
-      'All' => true,
       'Used' => used(f),
       'Starred' => c.starred(f.family),
-      final k => f.kind == k,
+      _ => true,
     };
     final list = hits.where(keep).toList();
     final sel = fonts.where((f) => f.family == c.sel).firstOrNull;
@@ -114,7 +92,6 @@ class FontsShelf extends StatelessWidget {
           [
             ('All', hits.length),
             ('Used', hits.where(used).length),
-            for (final k in const ['Sans', 'Serif', 'Display', 'Mono']) (k, hits.where((f) => f.kind == k).length),
             ('Starred', hits.where((f) => c.starred(f.family)).length),
           ],
           active: c.chip,
@@ -125,7 +102,7 @@ class FontsShelf extends StatelessWidget {
               ? DockEmpty(c.query)
               : LayoutBuilder(
                   builder: (context, box) {
-                    String? usedBy(_Font f) => m == null ? (f.family == _usedFont ? title?.name : null) : setIn[f.path]?.name;
+                    String? usedBy(_Font f) => setIn[f.path]?.name;
                     if (box.maxWidth < 440) {
                       return ListView(
                         padding: EdgeInsets.zero,
@@ -160,13 +137,13 @@ class FontsShelf extends StatelessWidget {
               child: Text('Aa', style: _face(sel, 15, WsT.onAccent)),
             ),
             title: sel.family,
-            meta: m == null ? '${sel.kind} · ${sel.styles} styles · Latin' : c.mem.trouble[sel.family] ?? 'TTF · ${File(sel.path!).parent.path.split('/').last}',
-            // (joined: the picked text is set in it; with no text picked, a new text is)
-            action: m != null && m.word(int.tryParse(c.ws.selected ?? '') ?? 0, 'kind') != 'text' ? 'Place' : 'Apply',
-            done: m != null ? onText : c.applied(sel.family) || sel.family == _usedFont,
+            meta: c.mem.trouble[sel.family] ?? 'TTF · ${File(sel.path!).parent.path.split('/').last}',
+            // (the picked text is set in it; with no text picked, a new text is)
+            action: m.word(int.tryParse(c.ws.selected ?? '') ?? 0, 'kind') != 'text' ? 'Place' : 'Apply',
+            done: onText,
             doneLabel: 'In use',
-            fresh: m != null && m.word(int.tryParse(c.ws.selected ?? '') ?? 0, 'kind') != 'text', // (no text picked: a new text)
-            onAction: m != null ? () => _setFont(c, sel) : () => c.apply(sel.family),
+            fresh: m.word(int.tryParse(c.ws.selected ?? '') ?? 0, 'kind') != 'text', // (no text picked: a new text)
+            onAction: () => _setFont(c, sel),
           ),
       ],
     );
@@ -177,8 +154,6 @@ TextStyle _face(_Font f, double size, Color c) => TextStyle(
   fontFamily: f.family,
   fontFamilyFallback: const ['.AppleSystemUIFont'],
   fontSize: size,
-  fontWeight: f.weight,
-  fontStyle: f.italic ? FontStyle.italic : FontStyle.normal,
   color: T.ink(c),
   height: 1.1,
   decoration: TextDecoration.none,
@@ -215,10 +190,7 @@ class _FontRow extends StatelessWidget {
                       Flexible(
                         child: Text(f.family, maxLines: 1, overflow: TextOverflow.ellipsis, style: T.label(dockInk(sel, Grey.g76))),
                       ),
-                      Flexible(
-                        child: Text('  ·  ${f.styles} styles', maxLines: 1, overflow: TextOverflow.ellipsis, style: T.label(dockInk(sel, Grey.g56))),
-                      ),
-                      if (usedBy != null || c.applied(f.family)) ...[const SizedBox(width: 6), DockTag(usedBy ?? 'Used', hue: sel ? null : WsT.toneText)],
+                      if (usedBy case final u?) ...[const SizedBox(width: 6), DockTag(u, hue: sel ? null : WsT.toneText)],
                     ],
                   ),
                 ],
@@ -254,9 +226,7 @@ class _FontCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                Expanded(
-                  child: Text(f.kind.toUpperCase(), style: T.micro(dockInk(sel, Grey.g56)).copyWith(fontWeight: FontWeight.w700, letterSpacing: .8)),
-                ),
+                const Spacer(),
                 if (star || h || sel) DockStar(on: star, ink: sel ? WsT.onAccent : null, onTap: () => c.star(f.family)) else const SizedBox(height: 20),
               ],
             ),
@@ -268,8 +238,7 @@ class _FontCard extends StatelessWidget {
                 Flexible(
                   child: Text(f.family, maxLines: 1, overflow: TextOverflow.ellipsis, style: T.label(dockInk(sel, Grey.g76))),
                 ),
-                Text('  ·  ${f.styles}', style: T.label(dockInk(sel, Grey.g56))),
-                if (usedBy != null || c.applied(f.family)) ...[const SizedBox(width: 6), DockTag(usedBy ?? 'Used', hue: sel ? null : WsT.toneText)],
+                if (usedBy case final u?) ...[const SizedBox(width: 6), DockTag(u, hue: sel ? null : WsT.toneText)],
               ],
             ),
           ],

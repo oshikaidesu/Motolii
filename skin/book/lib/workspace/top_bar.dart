@@ -7,14 +7,8 @@ import '../tokens.dart';
 import 'stage_art.dart' show WsArt;
 import 'ws.dart';
 
-class WsTopBar extends StatefulWidget {
+class WsTopBar extends StatelessWidget {
   const WsTopBar({super.key});
-  @override
-  State<WsTopBar> createState() => _WsTopBarState();
-}
-
-class _WsTopBarState extends State<WsTopBar> {
-  int _mode = 0;
 
   @override
   Widget build(BuildContext context) {
@@ -28,11 +22,11 @@ class _WsTopBarState extends State<WsTopBar> {
           const SizedBox(width: 14),
           const _UndoRedo(),
           const SizedBox(width: 14),
-          Text(ws.document ?? 'CODA Teaser', style: T.name(Grey.g95).copyWith(fontWeight: FontWeight.w600)),
+          Text(ws.document ?? '', style: T.name(Grey.g95).copyWith(fontWeight: FontWeight.w600)),
           const SizedBox(width: 6),
           Text('/', style: T.name(Grey.g44)),
           const SizedBox(width: 6),
-          Text(ws.inside == null ? 'Main comp' : ws.layer?.name ?? 'Stage', style: T.name(Grey.g76)), // (joined: where the hand is: the picked thing, or the stage itself)
+          Text(ws.layer?.name ?? 'Stage', style: T.name(Grey.g76)), // (where the hand is: the picked thing, or the stage itself)
           const SizedBox(width: 10),
           // Joined: the document's own size; a tap goes to the next of the usual three (wide, tall, square) and the document is opened again at it.
           GestureDetector(
@@ -51,13 +45,11 @@ class _WsTopBarState extends State<WsTopBar> {
           const SizedBox(width: 4),
           _Chip(ws.timecode(Ws.duration)),
           const Spacer(),
-          // (joined: Edit and Animate are whether every change is keyed, the inside's one truth; Export writes the work area as a film, lit while it is written)
-          ws.inside == null
-              ? _Modes(index: _mode, onPick: (i) => setState(() => _mode = i))
-              : _Modes(
-                  index: (ws.notice ?? '').startsWith('Writing') ? 2 : (ws.animating ? 1 : 0),
-                  onPick: (i) => i == 2 ? ws.onRender?.call() : ws.animating = i == 1,
-                ),
+          // (Edit and Animate are whether every change is keyed, the inside's one truth; Export writes the work area as a film, lit while it is written)
+          _Modes(
+            index: (ws.notice ?? '').startsWith('Writing') ? 2 : (ws.animating ? 1 : 0),
+            onPick: (i) => i == 2 ? ws.onRender?.call() : ws.animating = i == 1,
+          ),
           const Spacer(),
           const _ShadeSwitch(),
           const SizedBox(width: 10),
@@ -162,7 +154,7 @@ class _UndoRedo extends StatelessWidget {
     children: [
       for (final flip in [false, true])
         _Hover(
-          // (joined: a step of the document back, or forward again)
+          // (a step of the document back, or forward again)
           onTap: () {
             final ws = WsScope.read(context), m = ws.inside;
             if (m == null) return;
@@ -260,10 +252,10 @@ class _ShadePaint extends CustomPainter {
   bool shouldRepaint(_ShadePaint o) => o.c != c;
 }
 
-/// Joined: when the document's file was last written (a change is written as it is made); else the sample's word.
+/// When the document's file was last written (a change is written as it is made).
 String _savedAt(Ws ws) {
   final f = File('${ws.documentFolder}/${ws.document}');
-  if (ws.inside == null || ws.document == null || !f.existsSync()) return 'Saved';
+  if (ws.document == null || !f.existsSync()) return 'Saved';
   final t = f.lastModifiedSync();
   return 'Saved ${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
 }

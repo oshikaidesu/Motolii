@@ -20,7 +20,7 @@ class SpanStrip extends StatelessWidget {
     return DeskStrip(
       left: [
         if (s == null)
-          Text(ws.inside == null ? 'No keys picked · shapes new keys' : 'No keys picked · pick a key on the timeline', style: T.label(Grey.g63)) // (joined: a way is of the stretch after a key; with none picked it is of nothing)
+          Text('No keys picked · pick a key on the timeline', style: T.label(Grey.g63)) // (a way is of the stretch after a key; with none picked it is of nothing)
         else ...[
           DeskLayerChip(s.layer.name, wsTone(s.layer.kind)),
           const SizedBox(width: 8),
