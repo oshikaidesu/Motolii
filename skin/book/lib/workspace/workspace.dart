@@ -614,7 +614,7 @@ Map<String, double> wsTransform(Ws ws, String? id) {
         for (final n in names)
           'v_$n': _onCard(ws, m, t, n, at),
       for (final fields in _fxFields(ws, id).values)
-        for (final MapEntry(:key, value: n) in fields.entries) key: m.value(t, n, at) ?? 0, // (the effects' numbers, as they are)
+        for (final MapEntry(:key, value: n) in fields.entries) key: _shown(m, t, n, m.value(t, n, at) ?? 0), // (the effects' numbers, as the inside says a hand reads them)
     };
   }
   final b = WsArt.boxOf(ArtScene.of(ws, camera: true), id);
@@ -632,7 +632,7 @@ Map<String, double> wsTransform(Ws ws, String? id) {
   if (seat == null && id.startsWith('v_')) return (id.substring(2), x / _shownTimes(ws.inside!, id.substring(2))); // (a card of the inside's own: the value of that name, in the document's own units)
   if (seat == null) {
     for (final fields in _fxFields(ws, ws.selected).values) {
-      if (fields[id] case final n?) return (n, x); // (an effect's number: the document's, as it is)
+      if (fields[id] case final n?) return (n, _unshown(ws.inside!, int.tryParse(ws.selected ?? '') ?? 0, n, x)); // (an effect's number: as the inside says a hand reads it (trim in hundredths))
     }
   }
   return seat == null ? null : (seat.$2, _unshown(ws.inside!, int.tryParse(ws.selected ?? '') ?? 0, seat.$2, x));

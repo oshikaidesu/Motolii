@@ -295,6 +295,30 @@ void main() {
     await _close(t);
   }, skip: !_built);
 
+  testWidgets('an effect\'s knob reads as the inside says (Trim in hundredths) and a keyed one is keyed where the hand let go', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    final box = m.add('shape', 'rect');
+    ws
+      ..reread()
+      ..select('$box');
+    ws.fxToggle('Trim Paths'); // (keys: 1 at 0, 0 at 1 s)
+    ws.frame = 90;
+    await t.pumpAndSettle();
+    final knob = find.byWidgetPredicate((w) => w is NumField && w.id == 'trim_amount');
+    await t.ensureVisible(knob.first);
+    await t.pumpAndSettle();
+    await t.dragFrom(t.getCenter(knob.first), const Offset(60, 0));
+    await t.pumpAndSettle();
+    for (var i = 0; i < 20 && ws.waiting; i++) {
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+      await t.pump();
+    }
+    expect(m.keyMoments(box, 'trim'), [0, 1, 1.5], reason: 'a key where the hand let go, the others as they were');
+    expect(m.value(box, 'trim', 1.5), greaterThan(0), reason: 'what the hand made, in the document\'s own units (0 to 1)');
+    await expectSameAfterReopen(t);
+    await _close(t);
+  }, skip: !_built);
+
   testWidgets('two whole-screen effects with a knob of one name are two values: Posterize\'s gamma and Boxinator\'s', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     String file(String name) => m.effects.firstWhere((e) => e.$2.contains(name)).$2;
