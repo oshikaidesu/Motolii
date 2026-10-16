@@ -18,5 +18,4 @@ export 'inspector_idea_gallery.dart';
 export 'inspector_idea_layer.dart';
 export 'inspector_idea_layout.dart';
 export 'inspector_idea_paths.dart';
-export 'inspector_idea_placement.dart';
 export 'inspector_idea_text.dart';

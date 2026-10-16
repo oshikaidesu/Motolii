@@ -7,7 +7,6 @@ import 'package:lab_book/sets/inspector/inspector_rows_sect.dart';
 import 'package:widgetbook/widgetbook.dart';
 
 import '../../kit.dart';
-import '../../tokens.dart';
 import 'inspector_host_gallery.dart';
 import 'inspector_idea_gallery.dart';
 import 'inspector_parts.dart';
@@ -373,94 +372,6 @@ WidgetbookComponent inspectorSetSet() => WidgetbookComponent(
       width: 372,
     ),
     uc(
-      'Transform group',
-      (c) => _host(
-        c,
-        Kind.shape,
-        Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const TransformGroup(),
-            const Cap(
-              'Fixed order, every row has the same columns so X/Y/Z line up (B1). 2D / 2.5D / 3D reveals Z, the other rotation axes and Depth without changing a value (B2). A third value stacks under the first two when the cell is narrow (H1). Axis ticks reuse family hues. [open] axis colours',
-            ),
-          ],
-        ),
-        lockedKnob: true,
-      ),
-      width: 372,
-    ),
-    uc(
-      'Scale with linked proportions',
-      (c) => _host(
-        c,
-        Kind.shape,
-        Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Sect(
-              first: true,
-              title: 'Scale',
-              children: [ScaleRow(), SpaceRow()],
-            ),
-            const Cap(
-              'Link on: a factor applies to every axis (set X to double and Y doubles). Toggling Link changes nothing in the artwork. Off: only the touched axis moves. If an axis is 0, typing a value sets both (E1).',
-            ),
-          ],
-        ),
-        lockedKnob: true,
-      ),
-      width: 372,
-    ),
-    uc(
-      'Anchor and parent',
-      (c) => _host(
-        c,
-        Kind.shape,
-        Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Sect(
-              first: true,
-              title: 'Pivot and parent',
-              children: [AnchorRow(), ParentRow()],
-            ),
-            const Cap(
-              'Nine points, one click (B4); a typed value outside them reads Custom. Hover preview on the Stage is a maybe-card (I3). The parent is chosen from a searchable list, never by cycling (G3). Neither moves the layer visually.',
-            ),
-          ],
-        ),
-        lockedKnob: true,
-      ),
-      width: 372,
-    ),
-    uc(
-      'Opacity and depth',
-      (c) => _host(
-        c,
-        Kind.shape,
-        Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Sect(
-              first: true,
-              title: 'Opacity and depth',
-              children: [SpaceRow(), OpacityRow(), DepthRow()],
-            ),
-            const Cap(
-              'Opacity reads 0-100 %, display only. Depth appears only outside 2D (switch Space to 2.5D) and reads Flat at 0 (B6, E3).',
-            ),
-          ],
-        ),
-        lockedKnob: true,
-      ),
-      width: 372,
-    ),
-    uc(
       'Blend, ghost, clip to below',
       (c) => _host(
         c,
@@ -520,48 +431,6 @@ WidgetbookComponent inspectorSetSet() => WidgetbookComponent(
       height: 720,
     ),
     uc(
-      'Camera group',
-      (c) => _host(
-        c,
-        Kind.camera,
-        Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const CameraGroup(),
-            const Cap(
-              'Target, Orbit, Framing, Roll (A4). Pick a target layer: the point fields disable and say why. Maybe: a group key mark keys a whole group (D4).',
-            ),
-          ],
-        ),
-        lockedKnob: true,
-      ),
-      width: 372,
-    ),
-    uc('Layout group (maybe)', (c) {
-      final k = _cfg(c).maybe;
-      return _host(
-        c,
-        Kind.group,
-        Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (k)
-              const LayoutGroup(first: true)
-            else
-              const Cap(
-                'A5 is a Maybe card (does the new tool have auto-layout?). Turn on "Show maybe-features".',
-              ),
-            const Cap(
-              'Layout off dims everything but its switch. The size number counts only when Size is Fixed. A child can opt out.',
-            ),
-          ],
-        ),
-        lockedKnob: true,
-      );
-    }, width: 372),
-    uc(
       'Relations section',
       (c) => _host(
         c,
@@ -580,50 +449,6 @@ WidgetbookComponent inspectorSetSet() => WidgetbookComponent(
       ),
       width: 372,
     ),
-    uc('Driven value (maybe)', (c) {
-      final on = _cfg(c).maybe;
-      return _host(
-        c,
-        Kind.shape,
-        Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Sect(
-              first: true,
-              title: 'Transform',
-              children: [
-                const PosRow(),
-                PropRow(
-                  id: 'rot',
-                  label: 'Rotation',
-                  rel: Fam.face,
-                  relName: 'Jewel 02',
-                  cells: const [NumField(id: 'rot.z', unit: '°', decimals: 1)],
-                ),
-                PropRow(
-                  id: 'scale',
-                  label: 'Scale',
-                  rel: Fam.stagger,
-                  relName: 'Field',
-                  ids: const ['scale.x', 'scale.y'],
-                  cells: const [
-                    NumField(id: 'scale.x', label: 'X', unit: '%'),
-                    NumField(id: 'scale.y', label: 'Y', unit: '%'),
-                  ],
-                ),
-              ],
-            ),
-            Cap(
-              on
-                  ? 'A mark names the driver; the value cannot be edited here and says so (I4).'
-                  : 'I4 is a Maybe card. Turn on "Show maybe-features".',
-            ),
-          ],
-        ),
-        lockedKnob: true,
-      );
-    }, width: 372),
     uc(
       'Text layer group',
       (c) => _host(
@@ -682,38 +507,13 @@ WidgetbookComponent inspectorSetSet() => WidgetbookComponent(
       width: 372,
     ),
     uc(
-      'Mixed values — several selected',
-      (c) => _host(
-        c,
-        Kind.several,
-        Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const InspHeader(),
-            const Sect(
-              first: true,
-              title: 'Transform',
-              children: [PosRow(), ScaleRow(), OpacityRow()],
-            ),
-            const Cap(
-              '"3 layers". A value that differs shows —, never one layer\'s number. A scrub moves each by the same amount; a typed value sets all to that absolute value (A7). Position X, Scale X and Opacity are mixed here.',
-            ),
-          ],
-        ),
-        count: 3,
-        lockedKnob: true,
-      ),
-      width: 372,
-    ),
-    uc(
       'Inspector — direct manipulation prototype',
       (c) {
         final kind = _kindKnob(c);
         return _host(
           c,
           kind,
-          const InspectorPanel(directTransform: true),
+          const InspectorPanel(),
           count: 3,
           lockedKnob: true,
         );
@@ -729,7 +529,7 @@ WidgetbookComponent inspectorSetSet() => WidgetbookComponent(
         const _BothWays(
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
-            children: [InspectorPanel(directTransform: true, height: 1400), SizedBox(width: 16), HostGallery()],
+            children: [InspectorPanel(height: 1400), SizedBox(width: 16), HostGallery()],
           ),
         ),
         count: 3,

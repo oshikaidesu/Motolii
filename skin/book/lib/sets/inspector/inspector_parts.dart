@@ -8,9 +8,7 @@ import '../../tokens.dart';
 import 'inspector_state.dart';
 
 export 'inspector_advanced.dart';
-export 'inspector_anchor.dart';
 export 'inspector_badges.dart';
-export 'inspector_camera_layout.dart';
 export 'inspector_choosers_header.dart';
 export 'inspector_effects.dart';
 export 'inspector_layer_tiles.dart';
@@ -23,7 +21,6 @@ export 'inspector_relations.dart';
 export 'inspector_rows.dart';
 export 'inspector_small.dart';
 export 'inspector_state.dart';
-export 'inspector_transform_rows.dart';
 export 'param_infer.dart';
 
 // ---- 0. open values -------------------------------------------------------------------------------------------------

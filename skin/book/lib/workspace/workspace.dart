@@ -770,7 +770,7 @@ class _InspectorSeatState extends State<_InspectorSeat> {
   (Size, InspectorPanel)? _panel;
   InspectorPanel _panelOf(BoxConstraints box) {
     final size = Size(box.maxWidth, box.maxHeight);
-    if (_panel?.$1 != size) _panel = (size, InspectorPanel(directTransform: true, width: box.maxWidth, height: box.maxHeight));
+    if (_panel?.$1 != size) _panel = (size, InspectorPanel(width: box.maxWidth, height: box.maxHeight));
     return _panel!.$2;
   }
 

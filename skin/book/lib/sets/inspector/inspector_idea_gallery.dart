@@ -11,7 +11,6 @@ class IdeaGallery extends StatelessWidget {
     ('Text', TextIdeas()),
     ('Path operations', PathIdeas()),
     ('Layout (CSS)', LayoutIdeas()),
-    ('Placement and anchor', PlacementIdeas()),
     ('Masks, time, links', LayerIdeas()),
   ];
 
