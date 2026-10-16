@@ -118,7 +118,9 @@ class _PropRowState extends State<PropRow> {
             Row(
               children: [
                 if (mark != null)
-                  Padding(
+                  _Scrub( // (the row's mark is its handle too: pulled sideways, its number moves, as Figma's field glyphs)
+                    field: cellsOn ? widget.cells.whereType<NumField>().where((f) => f.id == widget.id).firstOrNull : null,
+                    child: Padding(
                     padding: const EdgeInsets.only(right: 6),
                     child: Opacity(
                       opacity: cellsOn ? 1 : .4,
@@ -132,6 +134,7 @@ class _PropRowState extends State<PropRow> {
                             )
                           : mark,
                     ),
+                  ),
                   )
                 else if (pop)
                   const SizedBox(width: 34),
@@ -282,3 +285,29 @@ bool _fits(String s, TextStyle style, double w) =>
       textDirection: TextDirection.ltr,
     )..layout()).width <=
     w;
+
+/// A row's mark pulled sideways scrubs the row's own number, as its field does (nothing, when the row has none).
+class _Scrub extends StatelessWidget {
+  const _Scrub({required this.field, required this.child});
+  final NumField? field;
+  final Widget child;
+  @override
+  Widget build(BuildContext context) {
+    final f = field;
+    if (f == null) return child;
+    final doc = Ctx.read(context).doc;
+    return MouseRegion(
+      cursor: SystemMouseCursors.resizeLeftRight,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onHorizontalDragStart: (_) => doc.beginGesture(),
+        onHorizontalDragUpdate: (d) {
+          final v = (doc.get(f.id) ?? 0) + d.delta.dx * f.perPx;
+          doc.set(f.id, v.clamp(f.min ?? -double.infinity, f.max ?? double.infinity));
+        },
+        onHorizontalDragEnd: (_) => doc.endGesture(),
+        child: child,
+      ),
+    );
+  }
+}

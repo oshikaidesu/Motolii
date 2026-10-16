@@ -85,12 +85,14 @@ class FillStroke extends StatelessWidget {
         PropRow(
           id: 'v_stroke',
           label: 'Stroke',
+          lead: const _LineGlyph(weight: false),
           keyable: false,
           cells: [PanelLink(to: LinkTo.colors, id: 'v_stroke', value: doc.s2['v_stroke'] ?? '—', lead: LinkSwatch(doc.s2['v_stroke'] ?? '—'))],
         ),
         PropRow(
           id: 'v_stroke_width',
           label: 'Stroke width',
+          lead: const _LineGlyph(weight: true),
           enabled: !none,
           cells: [NumField(id: 'v_stroke_width', unit: 'px', decimals: 1, min: 0, max: 64, perPx: .1)],
         ),
@@ -254,4 +256,35 @@ class _MixPaint extends CustomPainter {
 
   @override
   bool shouldRepaint(_MixPaint o) => o.how != how || o.clip != clip;
+}
+
+/// The edge, drawn: a square's outline (its colour), or three lines heavier each (how wide: the line-weight mark every
+/// drawing program shows).
+class _LineGlyph extends StatelessWidget {
+  const _LineGlyph({required this.weight});
+  final bool weight;
+  @override
+  Widget build(BuildContext context) => CustomPaint(size: const Size(24, 20), painter: _LinePaint(weight));
+}
+
+class _LinePaint extends CustomPainter {
+  const _LinePaint(this.weight);
+  final bool weight;
+  @override
+  void paint(Canvas c, Size s) {
+    final ink = Paint()
+      ..color = Grey.g76
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
+    if (!weight) {
+      c.drawRect(const Rect.fromLTWH(5, 4, 13, 12), ink..strokeWidth = 2);
+      return;
+    }
+    for (final (y, w) in const [(5.0, 1.0), (10.0, 2.2), (15.5, 3.6)]) {
+      c.drawLine(Offset(4, y), Offset(20, y), ink..strokeWidth = w);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_LinePaint o) => o.weight != weight;
 }

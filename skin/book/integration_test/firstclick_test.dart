@@ -163,7 +163,11 @@ void main() {
         for (final b in all)
           if (!all.any((o) => o != b && b.contains(o.topLeft) && b.contains(o.bottomRight - const Offset(.01, .01)))) [b.left * dpr, b.top * dpr, b.right * dpr, b.bottom * dpr],
       ];
-      written.add({'parts': parts, 'n': i + 1, 'task': task, 'picture': name, 'rect': [r.left * dpr, r.top * dpr, r.right * dpr, r.bottom * dpr], 'words': words, if (also[task] case final a?) 'also': [for (final x in a()) [x.left * dpr, x.top * dpr, x.right * dpr, x.bottom * dpr]]});
+      // (a row's mark scrubs the row's own number: a click on it is a right first click too)
+      final w = control.evaluate().first.widget;
+      final scrub = w is NumField ? find.descendant(of: row(w.id), matching: find.byWidgetPredicate((x) => x.runtimeType.toString() == '_Scrub')) : null;
+      final more = [...?also[task]?.call(), if (scrub != null && scrub.evaluate().isNotEmpty) t.getRect(scrub.first)];
+      written.add({'parts': parts, 'n': i + 1, 'task': task, 'picture': name, 'rect': [r.left * dpr, r.top * dpr, r.right * dpr, r.bottom * dpr], 'words': words, if (more.isNotEmpty) 'also': [for (final x in more) [x.left * dpr, x.top * dpr, x.right * dpr, x.bottom * dpr]]});
     }
     File('${out.path}/tasks.json').writeAsStringSync(const JsonEncoder.withIndent('  ').convert(written));
   });
