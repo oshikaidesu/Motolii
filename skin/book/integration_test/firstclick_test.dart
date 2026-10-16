@@ -13,7 +13,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:lab_book/motolii.dart';
-import 'package:lab_book/sets/inspector/inspector_parts.dart' show AnchorCube, AnchorGeometry, Ctx, Hov, NumField, OnOff, PanelLink, Space, SpacePlate, TextGroup, Chooser;
+import 'package:lab_book/sets/inspector/inspector_parts.dart' show AnchorCube, AnchorGeometry, Ctx, Hov, LightDrawing, NumField, OnOff, PanelLink, Space, SpacePlate, TextGroup, Chooser;
 import 'package:lab_book/sets/inspector/inspector_rows_prop_row.dart' show PropRow;
 import 'package:lab_book/workspace/dock_parts.dart' show DockHover, DockSearch;
 import 'package:lab_book/workspace/timeline.dart';
@@ -93,6 +93,10 @@ void main() {
     final also = <String, Rect Function()>{
       'Make the selected card look out of focus.': () => t.getRect(find.byType(DockSearch)),
       'Tilt the selected card, as you would tilt a picture on a wall.': knob,
+      'Make the light shine stronger.': () { // (the strength rail at the right of the Light card's drawing)
+        final box = t.getRect(find.byType(LightDrawing));
+        return Rect.fromLTRB(box.right - 28, box.top + 8, box.right, box.top + LightDrawing.height - 6);
+      },
     };
     final out = Directory('$motoliiDir/../reports/firstclick')..createSync(recursive: true);
     final dpr = t.view.devicePixelRatio, written = <Map<String, Object>>[];

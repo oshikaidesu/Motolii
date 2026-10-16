@@ -101,8 +101,9 @@ class _ParamSearchState extends State<ParamSearch> {
 
 /// A card of the host's own values, in the effects' manner: its Params, each field a value (keyed `v_` and its name).
 class ValuesCard extends StatelessWidget {
-  const ValuesCard(this.card, {super.key});
+  const ValuesCard(this.card, {super.key, this.top});
   final Fx card;
+  final Widget? top; // (a drawing of what the values make, above them: the window's own for a card it knows)
   @override
   Widget build(BuildContext context) {
     final x = Ctx.of(context), doc = x.doc, ed = Ed(x.cfg.ed), k = 'v.${card.name}', adv = doc.b['$k.adv'] ?? false;
@@ -113,6 +114,7 @@ class ValuesCard extends StatelessWidget {
       tone: card.tone,
       mark: card.mark,
       children: [
+        ?top,
         ParamGrid('v', heroes),
         if (rest.isNotEmpty) ...[
           Padding(

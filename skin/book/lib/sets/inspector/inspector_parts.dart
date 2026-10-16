@@ -14,6 +14,7 @@ export 'inspector_camera_layout.dart';
 export 'inspector_choosers_header.dart';
 export 'inspector_effects.dart';
 export 'inspector_layer_tiles.dart';
+export 'inspector_light.dart';
 export 'inspector_material.dart';
 export 'inspector_number_field.dart';
 export 'inspector_panel.dart';

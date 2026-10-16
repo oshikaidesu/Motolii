@@ -280,6 +280,7 @@ Map<String, String> _words(Ws ws, String? id) {
   if (m == null || t == null) return const {};
   return {
     ..._cardColours(m, t),
+    if (m.word(t, 'kind') == 'light') 'light': m.word(t, 'file'), // (which light it is: a sun, a point, a spot; the Light card draws it so)
     for (final (_, names) in m.cards(t))
       for (final n in names)
         if (m.shown(n)?.look == 'thing')
