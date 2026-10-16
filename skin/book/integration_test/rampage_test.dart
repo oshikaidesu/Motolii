@@ -49,6 +49,8 @@ bool _off(Element e) {
 
 /// A control brought into the middle of what shows it, as a hand looks at what it works (at an edge, a header that
 /// stays put lay over it, and the hand could not reach it).
+var _toldFirst = false;   // (the first card that disagreed is told with the acts before it)
+
 Future<void> _intoView(WidgetTester t, Finder f) => Scrollable.ensureVisible(t.element(f), alignment: .5);
 
 void main() {
@@ -338,10 +340,15 @@ void main() {
               held = Ctx.read(t.element(find.byType(InspectorPanel))).doc.v;
           for (final MapEntry(:key, :value) in told.entries) {
             if (held[key] case final shown?
-                when (shown - value).abs() > 0.051 && !key.startsWith('cam.'))
+                when (shown - value).abs() > 0.051 && !key.startsWith('cam.')) {
+              if (!_toldFirst) {
+                _toldFirst = true;
+                debugPrint('MISMATCH-FIRST at act $act ($what), sel ${ws.selected}, the acts before: ${acted.reversed.take(5).map((a) => a.$2).toList()}');
+              }
               reds.add(
                 '$what: the card shows $key $shown, the document $value${Ctx.read(t.element(find.byType(InspectorPanel))).doc.inGesture ? ' (a hand still on, by the inspector)' : ''}',
               );
+            }
           }
           judging.add((j0, Timeline.now));
           if (act % 40 == 39) {

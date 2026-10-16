@@ -269,7 +269,7 @@ class _InspHostState extends State<InspHost> {
     if (doc.inGesture) return; // (never under a hand)
     _seen.addAll(values);
     _seenKeys.addAll(marks);
-    doc.showAt(values, marks);
+    if (doc.showAt(values, marks) && mounted) setState(() => _tick++); // (a value no field watches, a choice, changed: shown by building again)
   }
 
   @override

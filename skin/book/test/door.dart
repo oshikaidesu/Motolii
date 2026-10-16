@@ -106,7 +106,8 @@ Future<void> pick(WidgetTester t, String id, String word) async {
   if (menu.evaluate().isNotEmpty) {
     await t.tap(on);
     await t.pumpAndSettle();
-    await t.tap(find.text(word).last);
+    final words = find.text(word); // (the word in the list that floats over the rest: a thing's name is also a row of the timeline beneath it)
+    await t.tap([for (var i = words.evaluate().length - 1; i >= 0; i--) words.at(i)].firstWhere((w) => t.hitTestOnBinding(t.getCenter(w)).path.any((e) => e.target == t.renderObject(w)), orElse: () => words.last));
   } else {
     await t.tap(find.descendant(of: on, matching: find.byWidgetPredicate((w) => w is Text && w.data?.toLowerCase() == word.toLowerCase()))); // (buttons say it in capitals)
   }
