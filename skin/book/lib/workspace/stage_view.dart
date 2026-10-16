@@ -135,7 +135,7 @@ class _StageViewState extends State<StageView> implements StageHandles {
   Offset _doc(_View v, Offset local) => WsArt.toDoc(widget.scene, v.toComp(local));
 
   String? _hit(_View v, Offset local) {
-    if (!v.comp.contains(local) && widget.scene.camera && widget.scene.boxes == null) return null; // (joined: a thing that lies off the picture can still be held by its frame and carried back)
+    // (a thing that lies off the picture can still be held by its frame and carried back)
     final d = _doc(v, local), id = WsArt.hit(widget.scene, d), m = WsScope.read(context).inside;
     if (widget.group && m != null && id != null) { // (Group: the outermost of the things it goes with, by the document's parent)
       var t = int.parse(id);
@@ -144,9 +144,7 @@ class _StageViewState extends State<StageView> implements StageHandles {
       }
       return '$t';
     }
-    if (id != null || widget.scene.camera || widget.scene.boxes != null) return id; // (joined: there is no sample camera frame to take hold of)
-    final cam = WsArt.cameraBox(widget.scene), tol = 8 / v.s;
-    return cam.contains(d, tol) && !cam.contains(d, -tol) ? 'cam' : null;
+    return id;
   }
 
   // Joined: a thing held on the stage, carried, and let go. The stage only says how far the hand has gone, in points of
@@ -166,7 +164,7 @@ class _StageViewState extends State<StageView> implements StageHandles {
 
   void _snapFrom(String id) {
     final boxes = widget.scene.boxes, m = WsScope.read(context).inside;
-    final held = boxes?[id];
+    final held = boxes[id];
     if (!widget.snap || held == null || m == null) return _snapTo = null;
     int top(int t) {
       for (var p = (m.value(t, 'parent', 0) ?? 0).round(), n = 0; p > 0 && n < 64; p = (m.value(t, 'parent', 0) ?? 0).round(), n++) {
@@ -182,7 +180,7 @@ class _StageViewState extends State<StageView> implements StageHandles {
     for (final g in widget.scene.guidesY) {
       ys.add((g, g));
     }
-    for (final MapEntry(:key, :value) in boxes!.entries) {
+    for (final MapEntry(:key, :value) in boxes.entries) {
       if (top(int.parse(key)) == mine) continue;
       final r = _bounds(value);
       xs.add((r.left, r.right));
@@ -484,7 +482,7 @@ class _Navigator extends StatelessWidget {
         fit: StackFit.expand,
         children: [
           if (texture != null) Texture(textureId: texture!, filterQuality: FilterQuality.medium),
-          CustomPaint(painter: _MapPainter(scene, Rect.fromPoints(view.toComp(view.area.topLeft), view.toComp(view.area.bottomRight)), art: texture == null)),
+          CustomPaint(painter: _MapPainter(scene, Rect.fromPoints(view.toComp(view.area.topLeft), view.toComp(view.area.bottomRight)))),
         ],
       ),
     );
@@ -492,17 +490,15 @@ class _Navigator extends StatelessWidget {
 }
 
 class _MapPainter extends CustomPainter {
-  _MapPainter(this.scene, this.shown, {this.art = true});
+  _MapPainter(this.scene, this.shown);
   final ArtScene scene;
   final Rect shown;
-  final bool art;
   @override
   void paint(Canvas c, Size s) {
     final k = s.width / WsArt.comp.width;
     c.save();
     c.clipRect(Offset.zero & s);
     c.scale(k);
-    if (art) WsArt.paint(c, scene);
     c.restore();
     final r = Rect.fromLTRB(shown.left * k, shown.top * k, shown.right * k, shown.bottom * k).intersect(Offset.zero & s);
     c.drawRect(
@@ -569,13 +565,6 @@ class _ViewPainter extends CustomPainter {
     }
     c.save();
     c.clipRect(comp);
-    if (part == _Part.all) {
-      c.save();
-      c.translate(v.o.dx, v.o.dy);
-      c.scale(v.s);
-      WsArt.paint(c, scene);
-      c.restore();
-    }
     if (grid) _grid(c, comp);
     if (safe) _safe(c, comp);
     c.restore();
@@ -583,14 +572,13 @@ class _ViewPainter extends CustomPainter {
     if (met.$1 case final x?) c.drawLine(Offset(v.toScreen(Offset(x, 0)).dx, v.area.top), Offset(v.toScreen(Offset(x, 0)).dx, v.area.bottom), _line(WsT.accent));
     if (met.$2 case final y?) c.drawLine(Offset(v.area.left, v.toScreen(Offset(0, y)).dy), Offset(v.area.right, v.toScreen(Offset(0, y)).dy), _line(WsT.accent));
     if (pivots) {
-      for (final MapEntry(:key, :value) in (scene.boxes ?? const <String, ArtBox>{}).entries) {
+      for (final MapEntry(:key, :value) in scene.boxes.entries) {
         if (key == sel) continue;
         final a = _scr(value.anchor);
         c.drawCircle(a, 3.5, _line(Grey.g00, 3));
         c.drawCircle(a, 3.5, _line(Grey.g91, 1.2));
       }
     }
-    if (!scene.camera && scene.layer('cam') != null) _camera(c);
     if (WsArt.boxOf(scene, hover) case final b?) _legible(c, _boxPath(b), wsTone(scene.layer(hover)!.kind), 1);
     if (WsArt.boxOf(scene, sel) case final b?) _selection(c, b, scene.layer(sel)!);
     c.restore();
@@ -646,18 +634,6 @@ class _ViewPainter extends CustomPainter {
       final y = v.toScreen(Offset(0, gy)).dy.roundToDouble() + .5;
       c.drawLine(Offset(v.area.left, y), Offset(v.area.right, y), p);
     }
-  }
-
-  void _camera(Canvas c) {
-    final b = WsArt.cameraBox(scene), pts = [for (final p in b.corners) v.toScreen(p)];
-    final dash = _line(WsT.toneCamera, 1.5);
-    for (var i = 0; i < 4; i++) {
-      final a = pts[i], z = pts[(i + 1) % 4], len = (z - a).distance, dir = (z - a) / len;
-      for (var t = 0.0; t < len; t += 10) {
-        c.drawLine(a + dir * t, a + dir * math.min(t + 6, len), dash);
-      }
-    }
-    if (sel != 'cam') _tag(c, pts[0], 'Camera', WsT.toneCamera, WsT.onAccent, null);
   }
 
   void _selection(Canvas c, ArtBox b, ArtLayer l) {
