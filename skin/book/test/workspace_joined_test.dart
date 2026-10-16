@@ -48,8 +48,7 @@ void main() {
 
     final box = find.byKey(const ValueKey('words:v_text'));
     expect(box, findsOneWidget);
-    await t.ensureVisible(box);
-    await t.pumpAndSettle();
+    await seen(t, box);
     await t.tap(box);
     await t.pump();
     // (Edit > Undo while a text box has the keys is the box's own undo, not the document's)
@@ -240,8 +239,7 @@ void main() {
     expect(m.things, [rect, cube], reason: 'one step back: the order');
 
     final clip = find.byKey(const ValueKey('toggle:v_clip')); // (the inside's Blending card)
-    await t.ensureVisible(clip);
-    await t.pumpAndSettle();
+    await seen(t, clip);
     await t.tap(clip);
     await t.pumpAndSettle();
     expect(m.value(cube, 'clip', 0), 1, reason: 'the seat is the document\'s clip');
@@ -268,8 +266,7 @@ void main() {
     ws.animating = true;
     await t.pumpAndSettle();
     final knob = find.byWidgetPredicate((w) => w is NumField && w.id == 'v_trim_offset');
-    await t.ensureVisible(knob.first);
-    await t.pumpAndSettle();
+    await seen(t, knob);
     await t.dragFrom(t.getCenter(knob.first), const Offset(-60, 0));
     await t.pumpAndSettle();
     for (var i = 0; i < 40 && m.keyMoments(box, 'trim_offset').isEmpty; i++) {
@@ -283,10 +280,11 @@ void main() {
   }, skip: !_built);
 
   testWidgets('a preset is in the maker\'s own folder, not the program\'s: one put there is a tile at once', (t) async {
-    final own = Directory.systemTemp.createTempSync('ways');
-    File('${own.path}/brisk.way').writeAsStringSync('// Brisk: quick and done\na + (b - a) * bezier(u, .5, 0, .2, 1)\n');
+    final own = Directory.systemTemp.createTempSync('own');
+    Directory('${own.path}/ways').createSync();
+    File('${own.path}/ways/brisk.way').writeAsStringSync('// Brisk: quick and done\na + (b - a) * bezier(u, .5, 0, .2, 1)\n');
     final setenv = DynamicLibrary.process().lookupFunction<Int32 Function(Pointer<Utf8>, Pointer<Utf8>, Int32), int Function(Pointer<Utf8>, Pointer<Utf8>, int)>('setenv');
-    final name = 'MOTOLII_WAYS'.toNativeUtf8(), path = own.path.toNativeUtf8();
+    final name = 'MOTOLII_OWN'.toNativeUtf8(), path = own.path.toNativeUtf8();
     setenv(name, path, 1); // (the maker's folder here: a test does not write into the real one)
     malloc
       ..free(name)
@@ -309,8 +307,7 @@ void main() {
     ws.frame = 90;
     await t.pumpAndSettle();
     final knob = find.byWidgetPredicate((w) => w is NumField && w.id == 'trim_amount');
-    await t.ensureVisible(knob.first);
-    await t.pumpAndSettle();
+    await seen(t, knob);
     await t.dragFrom(t.getCenter(knob.first), const Offset(60, 0));
     await t.pumpAndSettle();
     for (var i = 0; i < 20 && ws.waiting; i++) {
@@ -524,8 +521,7 @@ void main() {
       ..select('$rect');
     await t.pumpAndSettle();
     final link = find.byKey(const ValueKey('link:colors:v_stroke'));
-    await t.ensureVisible(link);
-    await t.pumpAndSettle();
+    await seen(t, link);
     await t.tap(link);
     await t.pumpAndSettle();
     expect(ws.aim, 'stroke', reason: 'the Colors shelf is aimed at its edge, as at a fill');
@@ -561,14 +557,12 @@ void main() {
     expect([before[0], before[1]], [closeTo(960, 1), closeTo(540, 1)]);
     Finder knob(String id) => find.byWidgetPredicate((w) => w is NumField && w.id == id);
     if (knob('v_anchor_x').evaluate().isEmpty) { // (the inside's Transform card keeps its anchor in a fold of that name)
-      await t.ensureVisible(find.text('Anchor').first);
-      await t.pumpAndSettle();
+      await seen(t, find.text('Anchor').first);
       await t.tap(find.text('Anchor').first);
       await t.pumpAndSettle();
     }
     for (final (id, by) in const [('v_anchor_x', Offset(-400, 0)), ('v_anchor_y', Offset(-400, 0))]) { // (its left, then its top: hundredths of its box from its top left)
-      await t.ensureVisible(knob(id));
-      await t.pumpAndSettle();
+      await seen(t, knob(id));
       await t.drag(knob(id), by);
       await t.pumpAndSettle();
     }
@@ -617,8 +611,7 @@ void main() {
       ..select('$text');
     await t.pumpAndSettle();
     final box = find.byKey(const ValueKey('words:v_text'));
-    await t.ensureVisible(box);
-    await t.pumpAndSettle();
+    await seen(t, box);
     await t.tap(box);
     await t.enterText(box, 'MOTOLII\nmakes moves');
     FocusManager.instance.primaryFocus?.unfocus();
@@ -644,8 +637,7 @@ void main() {
       await t.enterText(find.descendant(of: find.byType(DockSearch), matching: find.byType(EditableText)), name); // (the shelf's own search: the row is in sight)
       await t.pumpAndSettle();
       final row = find.text(name).last; // (the first is the search box's own words)
-      await t.ensureVisible(row);
-      await t.pumpAndSettle();
+      await seen(t, row);
       await t.tap(row);
       await t.pumpAndSettle();
     }
@@ -759,8 +751,7 @@ void main() {
 
     await search('Radial');
     final tile = find.descendant(of: find.byType(CreateShelf), matching: find.text('Radial')).first;
-    await t.ensureVisible(tile);
-    await t.pumpAndSettle();
+    await seen(t, tile);
     await t.tap(tile);
     await t.pump(const Duration(milliseconds: 400)); // (two presses would make it: one is known when the second does not come)
     await t.pumpAndSettle();
@@ -771,8 +762,7 @@ void main() {
     expect(m.set(star, 'copies', 1001), isFalse, reason: 'a thousand at most');
     await search('Grid');
     final grid = find.descendant(of: find.byType(CreateShelf), matching: find.text('Grid')).first;
-    await t.ensureVisible(grid);
-    await t.pumpAndSettle();
+    await seen(t, grid);
     await t.tap(grid);
     await t.pump(const Duration(milliseconds: 400)); // (two presses would make it: one is known when the second does not come)
     await t.pumpAndSettle();
@@ -796,7 +786,7 @@ void main() {
     expect(find.text('45 mm'), findsWidgets, reason: 'zoom 1 on Filament\'s 24 mm film');
     expect(find.text('On ${m.word(cube, 'name')}'), findsOneWidget, reason: 'the focus is on what lies where it looks: the document says so, not the window');
     final stop = find.widgetWithText(DeskScrub, 'Aperture');
-    await t.ensureVisible(stop);
+    await seen(t, stop);
     await t.drag(stop, const Offset(-80, 0));
     await t.pumpAndSettle();
     final aperture = m.value(camera, 'aperture', 0)!;
@@ -819,8 +809,7 @@ void main() {
     await t.enterText(find.descendant(of: find.byType(DockSearch), matching: find.byType(EditableText)), 'gradient');
     await t.pumpAndSettle();
     final tile = find.byWidgetPredicate((w) => w.runtimeType.toString() == '_Grad').at(1); // (the second saved gradient: Hot pink)
-    await t.ensureVisible(tile);
-    await t.pumpAndSettle();
+    await seen(t, tile);
     await t.tap(tile);
     await t.pumpAndSettle();
     await t.tap(find.descendant(of: find.byType(DockFooter), matching: find.text('Fill')));
@@ -925,7 +914,7 @@ void main() {
     await t.enterText(find.descendant(of: find.byType(DockSearch), matching: find.byType(EditableText)), 'gradient');
     await t.pumpAndSettle();
     final tile = find.byWidgetPredicate((w) => w.runtimeType.toString() == '_Grad').first;
-    await t.ensureVisible(tile);
+    await seen(t, tile);
     await t.tap(tile);
     await t.pumpAndSettle();
     await t.tap(find.descendant(of: find.byType(DockFooter), matching: find.text('Fill')));
@@ -1048,7 +1037,7 @@ void main() {
     expect(knob('depth'), findsNothing, reason: 'no Depth knob: a thing\'s thickness is its scale z');
     ws.select('$cube');
     await t.pumpAndSettle();
-    await t.ensureVisible(knob('v_scale_z')); // (the inside's Transform card: each axis its own number)
+    await seen(t, knob('v_scale_z')); // (the inside's Transform card: each axis its own number)
     await t.pumpAndSettle();
     await t.drag(knob('v_scale_z'), const Offset(60, 0));
     await t.pumpAndSettle();
@@ -1069,10 +1058,10 @@ void main() {
     final ids = {for (final e in find.byType(NumField).evaluate()) (e.widget as NumField).id};
     expect(ids, containsAll(['v_x', 'v_distance', 'v_zoom']), reason: 'the inside\'s Camera card, as After Effects\' camera');
     expect(ids.intersection({'v_scale_x', 'v_opacity', 'depth'}), isEmpty, reason: 'a camera has none of these');
-    expect([for (final e in find.byType(ValuesCard).evaluate()) (e.widget as ValuesCard).card.name], ['Camera', 'Projection'], reason: 'where it is and looks, then its lens: orthographic, shifted');
+    expect(inspectorCards(t), ['Camera', 'Projection'], reason: 'where it is and looks, then its lens: orthographic, shifted');
     expect(m.say(cam, 'projection', 'orthographic') && m.key(cam, 'shift_y', 0, 0.2), isTrue, reason: m.trouble);
     final dist = find.byWidgetPredicate((w) => w is NumField && w.id == 'v_distance');
-    await t.ensureVisible(dist);
+    await seen(t, dist);
     await t.drag(dist, const Offset(60, 0));
     await t.pumpAndSettle();
     expect(m.value(cam, 'distance', 0), isNot(anyOf(isNull, 1.0)), reason: 'the distance is the document\'s: ${ws.notice}');
@@ -1119,12 +1108,13 @@ void main() {
     await t.pumpAndSettle();
     expect(ws.fxToggle('Drop Shadow') && ws.fxToggle('Glow'), isTrue, reason: m.trouble);
     await t.pumpAndSettle();
-    final cards = [for (final e in find.byType(EffectCard).evaluate()) (e.widget as EffectCard).fx.name];
+    final cards = inspectorEffects(t);
     expect(cards, ['Drop Shadow', 'Glow']);
+    await seen(t, find.byType(EffectCard)); // (the effects lie below the cards: scrolled to)
     final ids = {for (final e in find.byType(NumField).evaluate()) (e.widget as NumField).id};
     expect(ids, containsAll(['shadow_distance', 'shadow_angle', 'shadow_blur', 'shadow_opacity', 'glow_blur', 'glow_opacity']));
     final far = find.byWidgetPredicate((w) => w is NumField && w.id == 'shadow_distance'), was = m.value(a, 'shadow_distance', 0);
-    await t.ensureVisible(far);
+    await seen(t, far);
     await t.drag(far, const Offset(40, 0));
     await t.pumpAndSettle();
     expect(m.value(a, 'shadow_distance', 0), isNot(was), reason: 'the distance is the document\'s: ${ws.notice}');
@@ -1133,7 +1123,7 @@ void main() {
     ws.reread();
     await t.pumpAndSettle();
     final more = find.descendant(of: find.byType(EffectCard).first, matching: find.text('More'));
-    await t.ensureVisible(more);
+    await seen(t, more);
     await t.tap(more);
     await t.pumpAndSettle();
     await t.tap(find.text('Move later'));
@@ -1144,7 +1134,7 @@ void main() {
     await t.tap(find.text('Remove'));
     await t.pumpAndSettle();
     expect([ws.fxOf('$a'), m.word(a, 'shadow')], [['Glow'], ''], reason: 'taken off the document');
-    expect([for (final e in find.byType(EffectCard).evaluate()) (e.widget as EffectCard).fx.name], ['Glow']);
+    expect(inspectorEffects(t), ['Glow']);
     expect(t.takeException(), isNull);
     await expectSameAfterReopen(t);
     await _close(t);
@@ -1189,22 +1179,24 @@ void main() {
       ..reread()
       ..select('$text');
     await t.pumpAndSettle();
+    await seen(t, find.descendant(of: find.byType(ValuesCard), matching: find.text('Type')));
     expect(find.descendant(of: find.byType(ValuesCard), matching: find.text('Type')), findsOneWidget);
     expect(m.cards(text).map((c) => c.$1).contains('Gradient'), isFalse, reason: 'one colour: no ramp to turn');
     expect(m.say(text, 'fill', 'ff3366 1b2fd8') && m.cards(text).map((c) => c.$1).contains('Gradient'), isTrue, reason: 'two: its ramp');
     expect(m.say(text, 'fill', 'ffffff'), isTrue);
     final wide = m.frame(text)![2], letters = find.byWidgetPredicate((w) => w is NumField && w.id == 'v_letter_spacing');
     expect(letters, findsOneWidget);
-    await t.ensureVisible(letters);
+    await seen(t, letters);
     await t.drag(letters, const Offset(80, 0));
     await t.pumpAndSettle();
     expect(m.value(text, 'letter_spacing', 0), greaterThan(1), reason: 'the letters further apart: ${ws.notice}');
     expect(m.frame(text)![2], greaterThan(wide), reason: 'and the words wider on the stage');
     ws.select('$rect');
     await t.pumpAndSettle();
+    await seen(t, find.descendant(of: find.byType(ValuesCard), matching: find.text('Line')));
     expect(find.descendant(of: find.byType(ValuesCard), matching: find.text('Line')), findsOneWidget);
     final round = find.descendant(of: find.byType(ValuesCard), matching: find.text('ROUND')).first; // (the ends: butt, round, square, as the sample's segments write them)
-    await t.ensureVisible(round);
+    await seen(t, round);
     await t.tap(round);
     await t.pumpAndSettle();
     expect(m.word(rect, 'cap'), 'round', reason: m.trouble);
@@ -1234,10 +1226,10 @@ void main() {
       ..reread()
       ..select(null);
     await t.pumpAndSettle();
-    final titles = [for (final e in find.byType(ValuesCard).evaluate()) (e.widget as ValuesCard).card.name];
+    final titles = inspectorCards(t);
     expect(titles, ['Grade', 'Lens', 'Room', 'Physics']);
     final bloom = find.byWidgetPredicate((w) => w is NumField && w.id == 'v_bloom');
-    await t.ensureVisible(bloom);
+    await seen(t, bloom);
     await t.drag(bloom, const Offset(60, 0));
     await t.pumpAndSettle();
     expect(m.value(0, 'bloom', 0), greaterThan(0), reason: 'the stage glows: ${ws.notice}');
@@ -1268,7 +1260,7 @@ void main() {
     await t.enterText(find.descendant(of: find.byType(DockSearch), matching: find.byType(EditableText)), 'Spot');
     await t.pumpAndSettle();
     final tile = find.descendant(of: find.byType(CreateShelf), matching: find.text('Spot')).first;
-    await t.ensureVisible(tile);
+    await seen(t, tile);
     await t.tap(tile);
     await t.pump(const Duration(milliseconds: 400)); // (two presses would make it: one is known when the second does not come)
     await t.pumpAndSettle();
@@ -1277,7 +1269,7 @@ void main() {
     final spot = int.parse(ws.selected!);
     expect([m.word(spot, 'kind'), m.word(spot, 'file')], ['light', 'spot'], reason: m.trouble);
     expect(find.descendant(of: find.byType(InspHeader), matching: find.text('Light')), findsOneWidget);
-    expect([for (final e in find.byType(ValuesCard).evaluate()) (e.widget as ValuesCard).card.name], ['Fill', 'Transform', 'Light'], reason: 'its colour, where it is and how it is turned, as After Effects\' lights have, then its own');
+    expect(inspectorCards(t), ['Fill', 'Transform', 'Light'], reason: 'its colour, where it is and how it is turned, as After Effects\' lights have, then its own');
     expect(m.set(spot, 'shadows', 1) && m.say(spot, 'fill', 'ffb36b') && m.set(spot, 'cone', 20), isTrue, reason: m.trouble);
     expect(m.set(spot, 'shadows', 2), isFalse, reason: 'shadows is 0 or 1');
     expect(m.key(spot, 'intensity', 0, 0) && m.key(spot, 'intensity', 1, 3), isTrue, reason: 'its strength moves: ${m.trouble}');
@@ -1289,7 +1281,7 @@ void main() {
       ..reread();
     await t.pumpAndSettle();
     final strong = find.byWidgetPredicate((w) => w is NumField && w.id == 'v_intensity');
-    await t.ensureVisible(strong);
+    await seen(t, strong);
     await t.drag(strong, const Offset(40, 0));
     await t.pumpAndSettle();
     expect(m.keyMoments(spot, 'intensity'), [0], reason: 'a key where the playhead is: ${ws.notice}');
@@ -1309,7 +1301,7 @@ void main() {
       ..select('$pic');
     await t.pumpAndSettle();
     expect(m.words(pic, 'marker'), ['all', 'Start', 'End'], reason: 'its file\'s own names');
-    expect([for (final e in find.byType(ValuesCard).evaluate()) (e.widget as ValuesCard).card.name], contains('Play'));
+    expect(inspectorCards(t), contains('Play'));
     expect(m.say(pic, 'marker', 'Start') && m.word(pic, 'marker') == 'Start', isTrue, reason: m.trouble);
     // (a 3D file plays one of its own movements, at its speed)
     final fox = m.add('solid', '$motoliiDir/third_party/filament_src/third_party/models/Fox/Fox.glb');
@@ -1333,7 +1325,7 @@ void main() {
     await t.enterText(find.descendant(of: find.byType(DockSearch), matching: find.byType(EditableText)), 'Iris');
     await t.pumpAndSettle();
     final tile = find.descendant(of: find.byType(CreateShelf), matching: find.text('Iris')).first;
-    await t.ensureVisible(tile);
+    await seen(t, tile);
     await t.tap(tile);
     await t.pump(const Duration(milliseconds: 400)); // (a tile that makes on two presses knows one only when the second is not coming)
     await t.pumpAndSettle();
@@ -1341,7 +1333,7 @@ void main() {
     await t.pumpAndSettle();
     final iris = int.parse(ws.selected!);
     expect([m.value(iris, 'copies', 0), m.word(iris, 'copy_fill')], [120, 'ff3366 ffd166 1b2fd8 22c55e ff3366'], reason: m.trouble);
-    expect([for (final e in find.byType(ValuesCard).evaluate()) (e.widget as ValuesCard).card.name], containsAll(['Copies', 'Wave']));
+    expect(inspectorCards(t), containsAll(['Copies', 'Wave']));
     expect(m.undo() && m.things.isEmpty, isTrue, reason: 'one step');
     // (two presses on the tile make it at once, without the foot's button)
     await t.tap(tile);
@@ -1369,10 +1361,11 @@ void main() {
       ..reread()
       ..select('$dots');
     await t.pumpAndSettle();
-    expect([for (final e in find.byType(ValuesCard).evaluate()) (e.widget as ValuesCard).card.name], contains('Script'));
+    expect(inspectorCards(t), contains('Script'));
     final knob = find.byWidgetPredicate((w) => w is NumField && w.id.contains('js_reach'));
+    await seen(t, knob);
     expect(knob, findsOneWidget, reason: 'ids: ${[for (final e in find.byType(NumField).evaluate()) (e.widget as NumField).id]}');
-    await t.ensureVisible(knob);
+    await seen(t, knob);
     await t.drag(knob, const Offset(60, 0));
     await t.pumpAndSettle();
     expect(m.value(dots, 'js_reach', 0), isNot(1.0), reason: 'the knob is the document\'s: ${ws.notice}');
@@ -1439,7 +1432,7 @@ void main() {
     ws..reread()..select(null);
     await t.pumpAndSettle();
     final bloom = find.byWidgetPredicate((w) => w is NumField && w.id == 'v_bloom');
-    await t.ensureVisible(bloom);
+    await seen(t, bloom);
     await t.pump();
     for (final by in const [Offset(90, 0), Offset(45, 40)]) {
       final g = await t.startGesture(t.getCenter(bloom));
@@ -1458,8 +1451,7 @@ void main() {
     ws..reread()..select('$text');
     await t.pumpAndSettle();
     final bloom = find.byWidgetPredicate((w) => w is NumField && w.id == 'v_letter_spacing');
-    await t.ensureVisible(bloom);
-    await t.pumpAndSettle();
+    await seen(t, bloom);
     final list = find.ancestor(of: bloom, matching: find.byType(Scrollable)).first;
     final scrolled = t.state<ScrollableState>(list).position.pixels, was = m.value(text, 'letter_spacing', 0) ?? 1;
     expect(t.state<ScrollableState>(list).position.maxScrollExtent, greaterThan(0), reason: 'the inspector is longer than its pane');
@@ -1483,8 +1475,7 @@ void main() {
     ws.animating = true;
     await t.pumpAndSettle();
     final k = find.byWidgetPredicate((w) => w is NumField && w.id == 'v_scale_x'); // (the inside's Transform card)
-    await t.ensureVisible(k);
-    await t.pumpAndSettle();
+    await seen(t, k);
     var was = m.value(c, 'scale_x', ws.frame / Ws.fps)!;
     for (final (by, more) in const [(Offset(40, 0), true), (Offset(-80, 0), false)]) {
       final g = await t.startGesture(t.getCenter(k));
@@ -1519,8 +1510,7 @@ void main() {
     await t.pumpAndSettle();
     expect(find.byWidgetPredicate((w) => w is NumField && w.id == 'v_follow'), findsNothing, reason: 'not a knob of numbers');
     final follow = find.byWidgetPredicate((w) => w is Segmented && w.items.contains('Cube')); // (a few things: a segmented choice, None first, by their names)
-    await t.ensureVisible(follow);
-    await t.pumpAndSettle();
+    await seen(t, follow);
     await t.tap(find.descendant(of: follow, matching: find.textContaining(RegExp('cube', caseSensitive: false))));
     await t.pumpAndSettle();
     expect(m.value(0, 'follow', 0), cube, reason: m.trouble);

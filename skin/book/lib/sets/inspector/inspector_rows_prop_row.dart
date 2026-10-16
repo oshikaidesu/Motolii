@@ -35,7 +35,7 @@ class PropRow extends StatefulWidget {
 }
 
 class _PropRowState extends State<PropRow> {
-  bool _menu = false, _was = false;
+  bool _menu = false;
 
   // (its key mark and whether it differs from as it comes, at a new moment: told alone, as its fields are)
   final _watching = <ValueListenable<int>>[];
@@ -74,19 +74,12 @@ class _PropRowState extends State<PropRow> {
     final changed = ids.any((i) => doc.changed(i) && (Role.grey || doc.get(i) != null)),
         mixedAny = ids.any((i) => doc.get(i) == null),
         ks = doc.keys[widget.id] ?? KeyS.off;
-    final active = doc.revealed == widget.id || doc.directHover == widget.id;
+    final active = doc.directHover == widget.id;
     final mark = widget.lead ?? RowMark.of(context, widget.id);
     final pop = Pop.on(context);
     final units = widget.cells.whereType<NumField>().map((f) => f.unit).toSet();
     final shared = pop && units.length == 1 ? units.single : null;
     final unit = shared != null && _fits('${ed.lab(widget.label)} $shared', ed.labStyle(Grey.g63), labelWPop - 34 - 16) ? shared : null;
-    final revealed = doc.revealed == widget.id;
-    if (revealed && !_was) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) Scrollable.ensureVisible(context, alignment: .2, duration: const Duration(milliseconds: 160), curve: Curves.easeOut);
-      });
-    }
-    _was = revealed;
     final locked = cfg.locked;
     final showRel = cfg.maybe && widget.rel != null;
     final cellsOn = widget.enabled && !showRel && !locked;

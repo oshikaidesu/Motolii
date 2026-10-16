@@ -2083,20 +2083,41 @@ static bool doc_raise(Doc& d, int thing, int places) {
     return doc_change(d, all);
 }
 // Pictures in one call (what Cavalry's tutorials build from a shape, a duplicator and a behaviour or two, each named):
-// a file each in recipes/, beside the out/ this library is in (a file put there is on the shelf at once). Its head:
+// a file each in recipes/ (doc_folders: the library's, the maker's own; a file put there is on the shelf at once). Its head:
 // "// Name: what it makes", "// make kind file", then a thing's values, one to a line: "set name number",
 // "say name words", "key name seconds number", "then kind file" for another thing; its knobs as script.h says.
 // Code below the head is the first thing's script.
 struct DocRecipe { std::string name, what, path; std::vector<std::string> lines; bool code = false; };
 static std::vector<DocRecipe> doc_recipes_read();
-// Whether a folder of this library's files (recipes, effects) is to be read again: a file put in or taken out (the
-// folder's time), else every two seconds (a file written over). A window asks at every build.
-static bool doc_folder_moved(const char* folder, std::filesystem::file_time_type& was, std::chrono::steady_clock::time_point& looked) {
+// The folders a kind of file is read from: the library's own (beside the out/ this library is in), then the maker's
+// own, as a maker's scripts and presets are theirs (MOTOLII_OWN, or %APPDATA%/Motolii on Windows, or
+// ~/Library/Application Support/Motolii on a Mac), each with a folder of that kind in it. The maker's of a name stands.
+static std::vector<std::filesystem::path> doc_folders(const char* folder) {
     Dl_info lib{};
-    dladdr((const void*)&doc_folder_moved, &lib);
+    dladdr((const void*)&doc_folders, &lib);
     std::error_code wrong;
-    static const std::filesystem::path home = std::filesystem::weakly_canonical(lib.dli_fname ? lib.dli_fname : ".", wrong).parent_path().parent_path();
-    const auto stamp = std::filesystem::last_write_time(home / folder, wrong);
+    std::vector<std::filesystem::path> at{std::filesystem::weakly_canonical(lib.dli_fname ? lib.dli_fname : ".", wrong).parent_path().parent_path() / folder};
+    if (const char* own = std::getenv("MOTOLII_OWN")) at.push_back(std::filesystem::path(own) / folder);
+    else if (const char* app = std::getenv("APPDATA")) at.push_back(std::filesystem::path(app) / "Motolii" / folder);
+    else if (const char* home = std::getenv("HOME")) at.push_back(std::filesystem::path(home) / "Library" / "Application Support" / "Motolii" / folder);
+    return at;
+}
+// The files of that kind in those folders, by their name (the maker's after the library's: theirs of a name stands).
+static std::vector<std::filesystem::path> doc_folder_files(const char* folder, const char* extension) {
+    std::map<std::string, std::filesystem::path> by;
+    std::error_code wrong;
+    for (const auto& dir : doc_folders(folder))
+        for (const auto& e : std::filesystem::directory_iterator(dir, wrong)) if (e.path().extension() == extension) by[e.path().filename().string()] = e.path();
+    std::vector<std::filesystem::path> files;
+    for (const auto& [_, f] : by) files.push_back(f);
+    return files;
+}
+// Whether a kind of file is to be read again: a file put in or taken out of either folder (its time), else every two
+// seconds (a file written over). A window asks at every build.
+static bool doc_folder_moved(const char* folder, std::filesystem::file_time_type& was, std::chrono::steady_clock::time_point& looked) {
+    std::error_code wrong;
+    std::filesystem::file_time_type stamp{};
+    for (const auto& dir : doc_folders(folder)) stamp = std::max(stamp, std::filesystem::last_write_time(dir, wrong));
     const auto now = std::chrono::steady_clock::now();
     if (stamp == was && now - looked < std::chrono::seconds(2)) return false;
     was = stamp, looked = now;
@@ -2110,15 +2131,8 @@ static std::vector<DocRecipe> doc_recipes() {
     return all;
 }
 static std::vector<DocRecipe> doc_recipes_read() {
-    Dl_info lib{};
-    dladdr((const void*)&doc_recipes_read, &lib);
-    std::error_code wrong;
-    const std::filesystem::path dir = std::filesystem::weakly_canonical(lib.dli_fname ? lib.dli_fname : ".", wrong).parent_path().parent_path() / "recipes";
-    std::vector<std::filesystem::path> files;
-    for (const auto& e : std::filesystem::directory_iterator(dir, wrong)) if (e.path().extension() == ".js") files.push_back(e.path());
-    std::sort(files.begin(), files.end());
     std::vector<DocRecipe> all;
-    for (const auto& f : files) {
+    for (const auto& f : doc_folder_files("recipes", ".js")) {
         DocRecipe r;
         r.path = f.string();
         std::ifstream in(f);
@@ -2147,9 +2161,7 @@ static bool doc_files_moved(Doc& d) {
     if (doc_scripts_made() != before) moved = true, d.scripted.clear();
     return moved;
 }
-// The whole-screen effects on the shelf (screen.h): a file each in effects/, beside recipes/ (one put there is on the
-// shelf at once), "name\tpath" one to a line, the name what its head's first line says before its colon.
-// The files of a folder beside the library ("name\tpath", one to a line): the whole-screen effects (effects/*.wgsl),
+// The files of a kind in its folders (doc_folders) ("name\tpath", one to a line): the whole-screen effects (effects/*.wgsl),
 // the motions a thing may be given (animators/*.js); a file's name as its first line says it, before the colon.
 static std::string doc_folder_names(const char* folder, const char* extension) {
     struct Seen { std::string all; std::filesystem::file_time_type was{}; std::chrono::steady_clock::time_point looked{}; };
@@ -2158,14 +2170,7 @@ static std::string doc_folder_names(const char* folder, const char* extension) {
     std::string& all = one.all;
     if (!doc_folder_moved(folder, one.was, one.looked)) return all;
     all.clear();
-    Dl_info lib{};
-    dladdr((const void*)&doc_folder_names, &lib);
-    std::error_code wrong;
-    const std::filesystem::path dir = std::filesystem::weakly_canonical(lib.dli_fname ? lib.dli_fname : ".", wrong).parent_path().parent_path() / folder;
-    std::vector<std::filesystem::path> files;
-    for (const auto& e : std::filesystem::directory_iterator(dir, wrong)) if (e.path().extension() == extension) files.push_back(e.path());
-    std::sort(files.begin(), files.end());
-    for (const auto& f : files) {
+    for (const auto& f : doc_folder_files(folder, extension)) {
         std::ifstream in(f);
         std::string first, name = f.stem().string();
         if (std::getline(in, first) && first.rfind("// ", 0) == 0 && first.find(':') != std::string::npos) name = first.substr(3, first.find(':') - 3);
@@ -2173,22 +2178,11 @@ static std::string doc_folder_names(const char* folder, const char* extension) {
     }
     return all;
 }
-// The ways a maker keeps of their own, as a maker's scripts are theirs: a file each in their own folder (MOTOLII_WAYS, or
-// on a Mac ~/Library/Application Support/Motolii/ways, on Windows %APPDATA%/Motolii/ways), and the few the library comes
-// with in ways/ beside recipes/ (one put in either is a tile of the Ease desk at once). Its first line says its name
+// The ways a maker keeps of their own, as a maker's scripts are theirs: a file each in ways/ of their own folder
+// (doc_folders), and the few the library comes with (one put in either is a tile of the Ease desk at once). Its first line says its name
 // before the colon; the rest is how far it is, as a way defined in a document says it (doc_define: a, b, u, p1..p4,
 // bezier(u, x1, y1, x2, y2)). Put on a key, it is written into the document, so the document goes as it did wherever it
 // is opened. The maker's own of a name goes before the library's.
-static std::vector<std::filesystem::path> doc_ways_folders() {
-    Dl_info lib{};
-    dladdr((const void*)&doc_ways_folders, &lib);
-    std::error_code wrong;
-    std::vector<std::filesystem::path> at{std::filesystem::weakly_canonical(lib.dli_fname ? lib.dli_fname : ".", wrong).parent_path().parent_path() / "ways"};
-    if (const char* own = std::getenv("MOTOLII_WAYS")) at.push_back(own);
-    else if (const char* app = std::getenv("APPDATA")) at.push_back(std::filesystem::path(app) / "Motolii" / "ways");
-    else if (const char* home = std::getenv("HOME")) at.push_back(std::filesystem::path(home) / "Library" / "Application Support" / "Motolii" / "ways");
-    return at;
-}
 static const std::map<std::string, std::string>& doc_own_ways() {
     static std::map<std::string, std::string> all;
     static std::chrono::steady_clock::time_point looked{};
@@ -2197,7 +2191,7 @@ static const std::map<std::string, std::string>& doc_own_ways() {
     looked = now;
     all.clear();
     std::error_code wrong;
-    for (const auto& dir : doc_ways_folders())
+    for (const auto& dir : doc_folders("ways"))
         for (const auto& e : std::filesystem::directory_iterator(dir, wrong)) {
             if (e.path().extension() != ".way") continue;
             std::ifstream in(e.path());

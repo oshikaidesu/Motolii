@@ -6,7 +6,7 @@
 import 'dart:developer' show Timeline;
 import 'dart:io';
 import 'dart:math' as math;
-import 'dart:ui' show FramePhase, FrameTiming, ImageByteFormat;
+import 'dart:ui' show FramePhase, FrameTiming, ImageByteFormat, PointerDeviceKind;
 
 import 'package:flutter/rendering.dart' show OffsetLayer;
 import 'package:flutter/scheduler.dart';
@@ -221,6 +221,7 @@ void main() {
                 if ((Offset.zero & t.getSize(find.byType(StageView))).deflate(4).contains(at) && // (a hand takes only what it sees: a thing fallen off the picture has its handles there too)
                     !_onBody((t.state(find.byType(StageView)) as StageHandles).handles, name, at))
                   ('handle $name', find.byType(StageView)),
+            if (panel.evaluate().isNotEmpty) ('wheel', panel), // (the inspector scrolled as a wheel scrolls it: it builds only the cards in sight)
           ];
           judging.add((l0, Timeline.now));
           if (ledger.isEmpty) continue;
@@ -233,7 +234,11 @@ void main() {
           var under = ''; // (what the hand's first touch landed on: told with a red)
           judging.add((j0, Timeline.now));
           try {
-            if (what.startsWith('knob') || what.startsWith('handle')) {
+            if (what == 'wheel') {
+              final g = TestPointer(1, PointerDeviceKind.mouse);
+              await t.sendEventToBinding(g.hover(t.getCenter(where)));
+              await t.sendEventToBinding(g.scroll(Offset(0, (r.nextBool() ? 1 : -1) * (120 + r.nextInt(480)).toDouble())));
+            } else if (what.startsWith('knob') || what.startsWith('handle')) {
               // (one way, and if that moved nothing (a value at its end), the other way: then the preview is judged)
               Offset from;
               if (what.startsWith('knob')) {
@@ -337,9 +342,9 @@ void main() {
             for (final k in {...before.keys, ...after.keys})
               if (before[k] != after[k]) k,
           };
-          if (moved.isEmpty && was == now && !what.startsWith('menu'))
+          if (moved.isEmpty && was == now && !what.startsWith('menu') && what != 'wheel')
             reds.add('$what: moves nothing');
-          if (moved.isEmpty && was == now && !what.startsWith('menu')) debugPrint('RED-UNDER $what: ${what.startsWith('knob') && where.evaluate().isNotEmpty ? 'wide ${t.getSize(where.first).width.toStringAsFixed(0)} editing ${find.descendant(of: where.first, matching: find.byType(EditableText)).evaluate().isNotEmpty} held ${Ctx.read(t.element(where.first)).doc.get((t.widget(where.first) as NumField).id)} worked ${worked[what.split(' ').take(2).join(' ')]}' : ''} $under | trouble "${m.trouble}" notice "${ws.notice}" animating ${ws.animating} keys ${what.startsWith('knob v_') ? m.keyMoments(int.tryParse(ws.selected ?? '') ?? 0, what.substring(7)).length : -1} value ${what.startsWith('knob v_') ? m.word(int.tryParse(ws.selected ?? '') ?? 0, what.substring(7)) : ''}');
+          if (moved.isEmpty && was == now && !what.startsWith('menu') && what != 'wheel') debugPrint('RED-UNDER $what: ${what.startsWith('knob') && where.evaluate().isNotEmpty ? 'wide ${t.getSize(where.first).width.toStringAsFixed(0)} editing ${find.descendant(of: where.first, matching: find.byType(EditableText)).evaluate().isNotEmpty} held ${Ctx.read(t.element(where.first)).doc.get((t.widget(where.first) as NumField).id)} worked ${worked[what.split(' ').take(2).join(' ')]}' : ''} $under | trouble "${m.trouble}" notice "${ws.notice}" animating ${ws.animating} keys ${what.startsWith('knob v_') ? m.keyMoments(int.tryParse(ws.selected ?? '') ?? 0, what.substring(7)).length : -1} value ${what.startsWith('knob v_') ? m.word(int.tryParse(ws.selected ?? '') ?? 0, what.substring(7)) : ''}');
           // (the cards agree with the document: each number the inspector holds is what the document makes of it now)
           final told = wsTransform(ws, ws.selected),
               held = Ctx.read(t.element(find.byType(InspectorPanel))).doc.v;

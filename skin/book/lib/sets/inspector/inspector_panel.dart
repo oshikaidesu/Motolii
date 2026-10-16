@@ -23,26 +23,6 @@ class _InspectorPanelState extends State<InspectorPanel> {
     super.dispose();
   }
 
-  KeyEventResult _key(FocusNode n, KeyEvent e) {
-    if (e is! KeyDownEvent) return KeyEventResult.ignored;
-    final doc = Ctx.read(context).doc;
-    if (doc.kind == Kind.camera || doc.kind == Kind.none) return KeyEventResult.ignored;
-    final k = HardwareKeyboard.instance;
-    if (k.isShiftPressed || k.isControlPressed || k.isAltPressed || k.isMetaPressed) return KeyEventResult.ignored;
-    final f = FocusManager.instance.primaryFocus;
-    if (f?.context?.findAncestorWidgetOfExactType<EditableText>() != null) return KeyEventResult.ignored;
-    final id = {
-      LogicalKeyboardKey.keyP: 'pos',
-      LogicalKeyboardKey.keyS: 'scale',
-      LogicalKeyboardKey.keyR: 'rot',
-      LogicalKeyboardKey.keyT: 'op',
-      LogicalKeyboardKey.keyA: 'anchor',
-    }[e.logicalKey];
-    if (id == null) return KeyEventResult.ignored;
-    doc.reveal(id);
-    return KeyEventResult.handled;
-  }
-
   @override
   Widget build(BuildContext context) {
     final doc = Ctx.of(context).doc, k = doc.kind;
@@ -60,7 +40,6 @@ class _InspectorPanelState extends State<InspectorPanel> {
     ];
     final panel = Focus(
       focusNode: _node,
-      onKeyEvent: _key,
       child: Listener(
         onPointerDown: (_) => WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted && !_node.hasFocus) _node.requestFocus();
@@ -69,11 +48,8 @@ class _InspectorPanelState extends State<InspectorPanel> {
           width: widget.width,
           height: widget.height,
           color: Grey.g07,
-          child: SingleChildScrollView(
-            controller: _scroll,
-            padding: const EdgeInsets.all(Pop.gap),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: body),
-          ),
+          // (only the cards in sight are built: a stage with seventy effects on it builds as one with seven)
+          child: ListView(controller: _scroll, padding: const EdgeInsets.all(Pop.gap), children: body),
         ),
       ),
     );

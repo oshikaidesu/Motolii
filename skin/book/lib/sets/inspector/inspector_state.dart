@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/foundation.dart' show ValueListenable, ValueNotifier, listEquals, mapEquals, setEquals;
 import 'package:flutter/services.dart';
@@ -217,14 +216,11 @@ class Doc extends ChangeNotifier {
   /// The layer's space, kept as a word with the others so that a host is told of it (d2, d25, d3).
   Space get space => Space.values.where((s) => s.name == s2['space']).firstOrNull ?? Space.d2;
   set space(Space s) => s2['space'] = s.name;
-  String? revealed;
   String? directHover;
   String query = '';
-  Timer? _t;
 
   @override
   void dispose() {
-    _t?.cancel();
     for (final w in _watched.values) {
       w.dispose();
     }
@@ -411,16 +407,7 @@ class Doc extends ChangeNotifier {
     flags.forEach((id, x) => b.putIfAbsent(id, () => x));
   }
 
-  /// I2: a property shortcut reveals and marks the row for a moment.
-  void reveal(String prop) {
-    revealed = prop;
-    _t?.cancel();
-    _t = Timer(const Duration(milliseconds: 1600), () {
-      revealed = null;
-      notifyListeners();
-    });
-    notifyListeners();
-  }
+
 
   /// Fields picked together; Shift-click spans a rectangle on [pickGrid] like a spreadsheet.
   final Set<String> picked = {};

@@ -6,7 +6,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lab_book/motolii.dart' show motoliiDir;
 import 'package:lab_book/workspace/door.dart';
-import 'package:lab_book/sets/inspector/inspector_parts.dart' show Chooser;
+import 'package:lab_book/sets/inspector/inspector_parts.dart' show Chooser, Ctx, InspectorPanel;
 import 'package:lab_book/sets/inspector/inspector_rows_prop_row.dart' show PropRow;
 import 'package:lab_book/workspace/timeline.dart' show WsTimeline;
 
@@ -57,6 +57,30 @@ String _rowOf(Element e) {
   return row;
 }
 
+/// The inspector's list, for scrolling it (it builds only the cards in sight).
+Finder get inspectorList => find.descendant(of: find.byType(InspectorPanel), matching: find.byType(Scrollable)).first;
+
+/// The cards the inspector lists, by name, in sight or not; and its effects' cards, by name.
+List<String> inspectorCards(WidgetTester t) => [for (final c in Ctx.read(t.element(find.byType(InspectorPanel))).doc.cards) c.name];
+List<String> inspectorEffects(WidgetTester t) {
+  final doc = Ctx.read(t.element(find.byType(InspectorPanel))).doc;
+  return [for (final id in doc.fxOrder) doc.fxDefs.firstWhere((f) => f.id == id).name];
+}
+
+/// What [f] finds, brought into sight as a hand scrolls to it: the inspector builds only the cards in sight, so one
+/// further down is not there until the list is scrolled to it.
+Future<void> seen(WidgetTester t, Finder f) async {
+  if (f.evaluate().isEmpty && inspectorList.evaluate().isNotEmpty) {
+    final at = t.state<ScrollableState>(inspectorList).position; // (moved as a wheel moves it: a drag would land on a knob and scrub it)
+    for (var y = 0.0; f.evaluate().isEmpty && y <= at.maxScrollExtent + 120; y += 120) {
+      at.jumpTo(y.clamp(0, at.maxScrollExtent));
+      await t.pump();
+    }
+  }
+  await t.ensureVisible(f.first);
+  await t.pumpAndSettle();
+}
+
 /// The window is the document's alone: closed and opened again on the same document, at the same thing, moment, keys
 /// and desk tool, it shows the same words. What differs was held by the window, not the document.
 Future<void> expectSameAfterReopen(WidgetTester t, {List<WsPane> extra = const [], List<DeskTool> tools = const []}) async {
@@ -66,6 +90,8 @@ Future<void> expectSameAfterReopen(WidgetTester t, {List<WsPane> extra = const [
     await t.pump();
   }
   ws.reread();   // (what a test changed in the inside itself, past the window, read as the window reads a hand's)
+  await t.pumpAndSettle();
+  if (inspectorList.evaluate().isNotEmpty) t.state<ScrollableState>(inspectorList).position.jumpTo(0);   // (the cards seen from the top, as a window opened again shows them)
   await t.pumpAndSettle();
   final selected = ws.selected, frame = ws.frame, keys = ws.keys.toList(), desk = ws.deskManual, shelf = ws.shelf, ink = ws.ink, edge = ws.edge, aim = ws.aim, animating = ws.animating, view = Map.of(ws.view), doc = openedDocument!;
   final before = windowWords(t);
@@ -100,9 +126,8 @@ Future<void> expectSameAfterReopen(WidgetTester t, {List<WsPane> extra = const [
 /// A word picked on a card's choice of that id, as a hand picks it: among its buttons (four or fewer) or from its menu.
 Future<void> pick(WidgetTester t, String id, String word) async {
   final menu = find.byWidgetPredicate((w) => w is Chooser && w.id == id), buttons = find.byKey(ValueKey('choice:$id'));
+  await seen(t, menu.evaluate().isNotEmpty ? menu : buttons);
   final on = menu.evaluate().isNotEmpty ? menu.first : buttons.first;
-  await t.ensureVisible(on);
-  await t.pumpAndSettle();
   if (menu.evaluate().isNotEmpty) {
     await t.tap(on);
     await t.pumpAndSettle();
