@@ -49,6 +49,10 @@ bool _off(Element e) {
 
 /// A control brought into the middle of what shows it, as a hand looks at what it works (at an edge, a header that
 /// stays put lay over it, and the hand could not reach it).
+/// The anchor on the body's middle is the body, as After Effects' selection takes it there (the anchor alone is Pan
+/// Behind's to move): not a handle of its own for the hand.
+bool _onBody(Map<String, Offset> handles, String name, Offset at) => name == 'anchor' && handles['body'] != null && (handles['body']! - at).distance < 8;
+
 var _toldFirst = false;   // (the first card that disagreed is told with the acts before it)
 
 Future<void> _intoView(WidgetTester t, Finder f) => Scrollable.ensureVisible(t.element(f), alignment: .5);
@@ -214,7 +218,8 @@ void main() {
               for (final MapEntry(key: name, value: at) in (t.state(
                 find.byType(StageView),
               ) as StageHandles).handles.entries)
-                if ((Offset.zero & t.getSize(find.byType(StageView))).deflate(4).contains(at)) // (a hand takes only what it sees: a thing fallen off the picture has its handles there too)
+                if ((Offset.zero & t.getSize(find.byType(StageView))).deflate(4).contains(at) && // (a hand takes only what it sees: a thing fallen off the picture has its handles there too)
+                    !_onBody((t.state(find.byType(StageView)) as StageHandles).handles, name, at))
                   ('handle $name', find.byType(StageView)),
           ];
           judging.add((l0, Timeline.now));
