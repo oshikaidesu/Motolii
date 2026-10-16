@@ -64,11 +64,10 @@ void _fill(DockCtx c, String word) {
   if (done) c.ws.reread();
 }
 
-/// The colours of the things, each by the thing's name: joined, what the document's things are filled with (a ramp by
-/// its first); else the sample's layer hues.
+/// The colours of the things, each by the thing's name: what the document's things are filled with (a ramp by its first).
 Map<String, Color> usedColours(Ws ws) {
   final m = ws.inside;
-  if (m == null) return {for (final l in ws.layers) l.name: wsTone(l.kind)};
+  if (m == null) return const {};
   return {
     for (final l in ws.layers)
       if (m.word(int.parse(l.id), 'fill').split(' ').first case final f when f.length == 6)
@@ -76,10 +75,10 @@ Map<String, Color> usedColours(Ws ws) {
   };
 }
 
-/// Joined: how many of the Create shelf's tiles make or lay out something of the document, of all it shows.
+/// How many of the Create shelf's tiles make or lay out something of the document, of all it shows.
 String createFact(Ws ws) {
   final recipes = ws.inside!.recipes.length;
-  return '${_asked.length + _laid.length + recipes} ready'; // (joined: the shelf shows only these)
+  return '${_asked.length + _laid.length + recipes} ready'; // (the shelf shows only these)
 }
 
 /// Joined: the inside's recipes, pictures in one call (as Cavalry's tutorials build them), each a tile.
@@ -107,9 +106,8 @@ class ColorsShelf extends StatelessWidget {
         );
       },
     );
-    final joined = c.ws.inside != null;
     final blocks = <(Widget, double)>[
-      if (joined && chip == 'All' && c.hit('glass material'))
+      if (chip == 'All' && c.hit('glass material'))
         (
           block([
             DockSection('Materials', count: 1, hue: _glass.hue),
@@ -168,7 +166,7 @@ class ColorsShelf extends StatelessWidget {
               ? DockEmpty(c.query)
               : DockMasonry(minColumn: 300, weights: [for (final b in blocks) b.$2], children: [for (final b in blocks) b.$1]),
         ),
-        if (joined && c.sel == _glass.name)
+        if (c.sel == _glass.name)
           DockFooter(
             preview: DockBadge(_glass.g, _glass.hue, size: 34),
             title: _glass.name,
@@ -176,23 +174,13 @@ class ColorsShelf extends StatelessWidget {
             action: 'Fill',
             onAction: () => _fill(c, 'glass'),
           )
-        else if (joined && sel != null)
+        else if (sel != null)
           DockFooter(
             preview: ColoredBox(color: sel.$2),
             title: _hex(sel.$2),
             meta: c.mem.trouble['fill'] ?? (c.ws.aim == null ? sel.$1 : 'to ${c.ws.aim}'),
             action: c.ws.aim == null ? 'Fill' : 'Set',
             onAction: () => _fill(c, _wordOf(c.sel) ?? _hex(sel.$2).substring(1).toLowerCase()),
-          )
-        else if (sel != null)
-          DockFooter(
-            preview: ColoredBox(color: sel.$2),
-            title: _hex(sel.$2),
-            meta: sel.$1,
-            action: 'Fill',
-            done: c.applied(c.sel!),
-            doneLabel: 'Filled',
-            onAction: () => c.apply(c.sel!),
           ),
       ],
     );
@@ -353,12 +341,8 @@ final _makes = <(String, List<_Make>)>[
       _Make('Shape', DockG.shape, WsT.toneShape, 'Q', 'Vector shape layer'),
       _Make('Text', DockG.text, WsT.toneText, 'T', 'Type layer'),
       _Make('Camera', DockG.camera, WsT.toneCamera, '⇧C', '3D camera, 50 mm'),
-      _Make('Particles', DockG.particles, WsT.toneParticles, '⇧P', 'Emitter layer'),
       _Make('Solid', DockG.solid, WsT.toneImage, '⌘Y', 'Flat colour, comp size'),
-      _Make('Adjustment', DockG.adjust, Pop.toneLayout, '⌥⌘Y', 'Effects for layers below'),
       _Make('Null', DockG.nullObj, Grey.g76, '⇧N', 'Invisible parent'),
-      _Make('Group', DockG.group, WsT.toneGroup, '⌘G', 'Nest layers'),
-      _Make('Audio', DockG.audio, WsT.toneAudio, '', 'Sound layer'),
     ],
   ),
   (
@@ -369,7 +353,6 @@ final _makes = <(String, List<_Make>)>[
       _Make('Polygon', DockG.polygon, WsT.toneShape, '', 'Sides · Roundness'),
       _Make('Star', DockG.star, WsT.toneShape, '', 'Points · Inner radius'),
       _Make('Line', DockG.line, WsT.toneShape, 'L', 'Open path'),
-      _Make('Pen Path', DockG.pen, WsT.toneShape, 'P', 'Draw freely'),
     ],
   ),
   (
@@ -380,20 +363,9 @@ final _makes = <(String, List<_Make>)>[
       _Make('Radial', DockG.radial, Pop.tonePlace, '', 'Around a centre'),
     ],
   ),
-  (
-    'Templates',
-    [
-      _Make('Title Card', DockG.text, Pop.toneTextAnim, '', 'Kinetic title, 3 s'),
-      _Make('Lower Third', DockG.rect, Pop.toneTextAnim, '', 'Name + role bar'),
-      _Make('Logo Sting', DockG.star, Pop.toneTextAnim, '', 'Burst reveal, 2 s'),
-      _Make('Countdown', DockG.time, Pop.toneTextAnim, '', '5 → 1 numbers'),
-      _Make('Confetti', DockG.particles, Pop.toneTextAnim, '', 'Particle preset'),
-      _Make('Grid Intro', DockG.stylize, Pop.toneTextAnim, '', 'Tiles fly in'),
-    ],
-  ),
 ];
 
-/// Joined: the inside's own 3D shapes, which the sample's tiles do not name, and how a tile is asked of it (kind, then its file or shape).
+/// The inside's own 3D shapes, and how a tile is asked of it (kind, then its file or shape).
 /// What a solid is made of (a colour, glass) is not a tile here: it is its fill, given on the Colors shelf.
 final _solids = (
   '3D',
@@ -404,7 +376,7 @@ final _solids = (
   ],
 );
 
-/// Joined: Filament's own lights, things of the document: placed and turned as any thing, they light the solid things.
+/// Filament's own lights, things of the document: placed and turned as any thing, they light the solid things.
 final _lights = (
   'Light',
   [
@@ -431,7 +403,7 @@ final _asked = {
   'Spot': ('light', 'spot'),
 };
 
-/// Joined: the tiles that lay the picked thing out in copies (the document's copies, as After Effects' repeater), and
+/// The tiles that lay the picked thing out in copies (the document's copies, as After Effects' repeater), and
 /// what each tells it: in a row, side by side and a little smaller each time; round a centre below it.
 const _laid = <String, Map<String, double>>{
   'Repeater': {'copies': 5, 'copy_x': 1.3, 'copy_size': .92},
@@ -471,13 +443,12 @@ class CreateShelf extends StatelessWidget {
   final DockCtx c;
   @override
   Widget build(BuildContext context) {
-    final joined = c.ws.inside != null;
-    final makes = joined
-        ? [
-            _recipesOf(c.ws),
-            for (final (g, items) in [..._makes, _solids, _lights]) (g, items.where((m) => _asked.containsKey(m.name) || _laid.containsKey(m.name)).toList()), // (joined: only tiles that make or lay out something of the document)
-          ].where((e) => e.$2.isNotEmpty).toList()
-        : _makes;
+    final makes = [
+      _recipesOf(c.ws),
+      ..._makes,
+      _solids,
+      _lights,
+    ].where((e) => e.$2.isNotEmpty).toList();
     final groups = [
       for (final (g, items) in makes)
         if (c.chip == 'All' || c.chip == g) (g, items.where((m) => c.hit(m.name)).toList()),
@@ -522,7 +493,7 @@ class CreateShelf extends StatelessWidget {
                   ],
                 ),
         ),
-        if (sel != null && joined)
+        if (sel != null)
           DockFooter(
             preview: DockBadge(sel.g, sel.hue, size: 34),
             title: '${sel.name} layer',
@@ -530,16 +501,6 @@ class CreateShelf extends StatelessWidget {
             action: _laid.containsKey(sel.name) ? 'Lay out' : 'Create',
             fresh: !_laid.containsKey(sel.name), // (a tile makes a new thing; a tile of copies lays out the picked one)
             onAction: () => _make(c, sel.name),
-          )
-        else if (sel != null)
-          DockFooter(
-            preview: DockBadge(sel.g, sel.hue, size: 34),
-            title: '${sel.name} layer',
-            meta: 'At ${c.ws.timecode()} · ${sel.what}',
-            action: 'Create',
-            done: c.applied(sel.name),
-            doneLabel: 'Created',
-            onAction: () => c.apply(sel.name),
           ),
       ],
     );
@@ -553,10 +514,11 @@ class _MakeTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final sel = c.sel == m.name;
-    final makes = c.ws.inside != null && (_asked.containsKey(m.name) || _laid.containsKey(m.name) || c.ws.inside!.recipes.any((r) => r.$1 == m.name));
+    final inside = c.ws.inside;
+    final makes = inside != null && (_asked.containsKey(m.name) || _laid.containsKey(m.name) || inside.recipes.any((r) => r.$1 == m.name));
     return DockHover(
       onTap: () => c.pick(m.name),
-      onDoubleTap: makes ? () => _make(c, m.name) : null, // (joined: two presses make it, one step)
+      onDoubleTap: makes ? () => _make(c, m.name) : null, // (two presses make it, one step)
       builder: (context, h) => AnimatedContainer(
         duration: Mo.dur,
         curve: Mo.ease,
@@ -582,11 +544,6 @@ class _MakeTile extends StatelessWidget {
                 style: T.name(dockInk(sel, Grey.g95)).copyWith(fontWeight: FontWeight.w700),
               ),
             ),
-            if (c.applied(m.name))
-              Align(
-                alignment: const Alignment(1, .95),
-                child: DockTag('+1', hue: sel ? null : WsT.accent),
-              ),
           ],
         ),
       ),
