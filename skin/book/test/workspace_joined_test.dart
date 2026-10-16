@@ -736,7 +736,7 @@ void main() {
     ws.reread();
     expect(ws.layers.first.kind, WsKind.camera);
     final seen = wsTransform(ws, '$camera');
-    expect([seen['cam.yaw'], seen['cam.zoom'], seen['cam.dist']], [30, 200, closeTo(1.5 * 6 * m.point, .1)], reason: 'the Camera card says the document');
+    expect([seen['v_rotate_y'], seen['v_zoom'], seen['v_distance']], [30, 200, closeTo(1.5 * 6 * m.point, .1)], reason: 'the Camera card says the document');
     expect(m.set(m.things[1], 'points', 8) && m.set(m.things[1], 'inner', .7), isTrue, reason: m.trouble);
     expect(m.set(m.things[0], 'points', 2), isFalse, reason: 'a polygon has three points at least');
     expect(t.takeException(), isNull);

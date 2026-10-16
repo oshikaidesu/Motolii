@@ -483,9 +483,9 @@ class _Readout extends StatelessWidget {
         else ...[
           // (the same numbers as the inspector's, which are the document's)
           if (wsPlace(ws, l.id) case final at) ...[
-            pair('P', '${at['pos.x']?.round()}, ${at['pos.y']?.round()}'),
-            pair('S', '${at['scale.y']?.round()}%'),
-            pair('R', '${at['rot.z']?.round()}°'),
+            pair('P', '${at['x']?.round()}, ${at['y']?.round()}'),
+            pair('S', '${at['scale_y']?.round()}%'),
+            pair('R', '${at['rotate']?.round()}°'),
           ],
         ],
       ],

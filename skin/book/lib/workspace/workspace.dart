@@ -279,69 +279,24 @@ Kind _kindOf(WsLayer? l) => switch (l?.kind) {
 Map<String, String> _words(Ws ws, String? id) {
   final m = ws.inside, t = id == null ? 0 : int.tryParse(id); // (nothing picked: the stage's own cards)
   if (m == null || t == null) return const {};
-  if (t == 0) return _cardColours(m, 0);
-  final blend = m.word(t, 'blend');
-  return {
-    ..._cardColours(m, t),
-    'blend': blend.isEmpty ? 'Normal' : blend.replaceRange(0, 1, blend[0].toUpperCase()),
-    // (a flat thing's space is the document's word; a solid thing has none: it is 3D)
-    'space': m.words(t, 'space').isEmpty ? 'd3' : _spaces.entries.firstWhere((e) => e.value == m.word(t, 'space'), orElse: () => _spaces.entries.first).key,
-    'camTarget': _others(ws, t).entries.where((e) => e.value == (m.value(t, 'parent', 0) ?? 0)).firstOrNull?.key ?? 'None',
-    'parent': _others(ws, t).entries.where((e) => e.value == (m.value(t, 'parent', 0) ?? 0)).firstOrNull?.key ?? 'None',
-  };
+  return _cardColours(m, t);
 }
 
-const _aligned = ['Left', 'Centre', 'Right'];
-const _spaces = {'d2': '2d', 'd25': '2.5d', 'd3': '3d'}; // (the inspector's three plates and the document's words; 3d a flat thing has not)
-
-/// Joined: the on/off seats the document has something behind (Clip to below: seen only inside the frame of the thing
-/// before it), and a change of them told to it. A seat with nothing behind it is not taken, and goes back.
-Map<String, bool> _flags(Ws ws, String? id) {
-  final m = ws.inside, t = int.tryParse(id ?? '');
-  if (m == null) return const {};
-  return {
-    for (final e in ws.view.entries)
-      if (e.key.startsWith('inspector.') && e.value is bool) e.key.substring(10): e.value as bool, // (how the inspector is looked at: the window's view)
-    if (t != null) ...{'clip': (m.value(t, 'clip', 0) ?? 0) > .5, 'ghost': false},
-  };
-}
+/// How the inspector is looked at (its folds, an effect's Advanced shown): the window's view, not the document's.
+Map<String, bool> _flags(Ws ws, String? id) => {
+  for (final e in ws.view.entries)
+    if (e.key.startsWith('inspector.') && e.value is bool) e.key.substring(10): e.value as bool,
+};
 
 bool _flag(Ws ws, String? id, Map<String, bool> changed) {
-  final m = ws.inside!, t = int.tryParse(id ?? '');
-  // (a card folded or opened, its Advanced shown: how the inspector is looked at, the window's view, not the document's)
   bool looked(String k) => k.endsWith('.open') || k.endsWith('.adv') || k.startsWith('fold.');
   for (final e in changed.entries) {
     if (looked(e.key)) ws.view['inspector.${e.key}'] = e.value;
   }
-  final told = {for (final e in changed.entries) if (!looked(e.key)) e.key: e.value};
-  if (told.isEmpty) return true;
-  if (t == null) return false;
-  String? why;
-  for (final e in told.entries) {
-    if (e.key != 'clip') {
-      why ??= 'the document has no ${e.key.endsWith('.on') ? 'bypass' : e.key}: '; // (Ghost; an effect switched off and kept)
-    } else if (!m.set(t, 'clip', e.value ? 1 : 0)) {
-      why ??= m.trouble;
-    }
-  }
-  final all = why == null;
-  _told(ws, why);
-  ws.reread();
-  return all;
-}
-
-/// Joined: what the choosers offer is what the document has words for (a thing with no blend lies as it comes: Normal).
-Map<String, List<String>> _choices(Ws ws, String? id) {
-  final m = ws.inside, t = int.tryParse(id ?? '');
-  if (m == null || t == null) return const {};
-  final blends = m.words(t, 'blend');
-  return {
-    'blend': blends.isEmpty ? const ['Normal'] : [for (final w in blends) w.replaceRange(0, 1, w[0].toUpperCase())],
-    'parent': ['None', ..._others(ws, t).keys],
-    'camTarget': ['None', ..._others(ws, t).keys], // (a camera looks at the thing it goes with)
-    'align': _aligned, // (Justify ThorVG has not)
-    // (an edge in a colour the document has: this thing's own, and those its things are filled with)
-  };
+  final other = changed.keys.where((k) => !looked(k)).firstOrNull;
+  if (other == null) return true;
+  _told(ws, 'the document has no ${other.endsWith('.on') ? 'bypass' : other}: '); // (an effect switched off and kept)
+  return false;
 }
 
 /// Joined: the other things by the names the timeline shows (a name two things share is told apart by its number).
@@ -367,71 +322,18 @@ bool _say(Ws ws, String? id, Map<String, String> changed) {
   if (t == null) return false;
   // (asked without waiting, one step: the window goes on while the inside works it, then reads it again; refused, the
   //  words go back to the document's own when it is read)
-  var all = true;
-  int say(String name, String word) => m.later('say', thing: t, name: name, word: word);
-  int set(String name, double number) => m.later('set', thing: t, name: name, number: number);
   m.later('together', number: 1);
   for (final e in changed.entries) {
-    switch (e.key) {
-      case 'blend':
-        say('blend', e.value.toLowerCase());
-      case 'space':
-        m.words(t, 'space').isEmpty ? all = all && e.value == 'd3' : say('space', _spaces[e.value] ?? e.value); // (a solid is 3D and only that)
-      case 'camTarget' || 'parent':
-        set('parent', (_others(ws, t)[e.value] ?? 0).toDouble()); // (it goes with that one, and stays where it is)
-      case final k when k.startsWith('v_'):
-        say(k.substring(2), e.value); // (a card of the inside's own: the value of that name)
-      default: // (a seat the inside has nothing behind yet: the inspector keeps its own word)
-    }
+    if (e.key.startsWith('v_')) m.later('say', thing: t, name: e.key.substring(2), word: e.value); // (a card's value of that name)
   }
   ws.after(m.later('together'), (done, no) => _told(ws, done ? null : no));
-  if (!all) _told(ws, 'that is not one of its words');
-  return all;
+  return true;
 }
 
 
-/// The inspector's numbers and the document's: an inspector id and the document's value it shows (how it is read, the
-/// inside says: Motolii.reading).
-const _seats = <(String, String)>[
-  ('pos.x', 'x'),
-  ('pos.y', 'y'),
-  ('pos.z', 'z'),
-  ('scale.x', 'scale_x'),
-  ('scale.y', 'scale_y'),
-  ('scale.z', 'scale_z'),
-  ('rot.x', 'rotate_x'),
-  ('rot.y', 'rotate_y'),
-  ('rot.z', 'rotate'),
-  ('op', 'opacity'),
-  ('anchor.x', 'anchor_x'),
-  ('anchor.y', 'anchor_y'),
-  ('anchor.z', 'anchor_z'),
-  ('cam.t.x', 'x'),
-  ('cam.t.y', 'y'),
-  ('cam.t.z', 'z'),
-  ('cam.pitch', 'rotate_x'),
-  ('cam.yaw', 'rotate_y'),
-  ('cam.roll', 'rotate'),
-  ('cam.dist', 'distance'),
-  ('cam.zoom', 'zoom'),
-];
-
 /// The seats a thing has: the document's own names, and the inspector's numbers whose value it holds (a light has no
 /// scale and no opacity, a flat thing no scale z: those are not shown).
-Set<String> _seatsOf(Set<String> names) => {
-  ...names,
-  // (where it is, how large, turned and seen is the inside's own Transform card now, as After Effects' group: not the sample's)
-  for (final s in _seats)
-    if (names.contains(s.$2) && !const ['pos.', 'scale.', 'rot.', 'anchor.', 'cam.'].any(s.$1.startsWith) && s.$1 != 'op') s.$1, // (a camera's too: the inside's Camera card)
-  'parent',
-  'depth',
-};
-
-/// The document's values behind an inspector property (pos, scale, rot, op): its key mark is theirs.
-List<String> _namesOf(String prop) => {
-  for (final s in _seats)
-    if (s.$1.split('.').first == prop) s.$2,
-}.toList();
+Set<String> _seatsOf(Set<String> names) => {...names, 'parent', 'depth'};
 
 /// Joined: the numbers of each effect on a thing, as the inside has them: an inspector id (the effect's value, '_', the
 /// card's field) and the document's value behind it. Its own amount is the field 'amount' (blur, tint); the rest are
@@ -562,7 +464,7 @@ Map<String, double> wsPlace(Ws ws, String id) {
   if (m == null || t == null) return const {};
   final at = ws.frame / Ws.fps;
   double r1(double x) => (x * 10).roundToDouble() / 10 + 0;
-  return {for (final s in _seats) s.$1: r1(_shown(m, t, s.$2, m.value(t, s.$2, at) ?? (s.$2 == 'opacity' || s.$2.startsWith('scale_') ? 1 : 0)))};
+  return {for (final n in const ['x', 'y', 'scale_y', 'rotate']) n: r1(_shown(m, t, n, m.value(t, n, at) ?? (n == 'scale_y' ? 1 : 0)))};
 }
 
 /// The selected layer's transform as the stage draws it at this frame, in the Inspector's ids.
@@ -577,7 +479,6 @@ Map<String, double> wsTransform(Ws ws, String? id) {
     final at = ws.frame / Ws.fps;
     double r1(double x) => (x * 10).roundToDouble() / 10 + 0; // (+ 0: no minus nought)
     return {
-      for (final s in _seats) s.$1: r1(_shown(m, t, s.$2, m.value(t, s.$2, at) ?? (s.$2 == 'opacity' || s.$2.startsWith('scale_') ? 1 : 0))), // (a thing that has no opacity is all there, no scale as it is)
       'depth': r1(m.frame(t)?[7] ?? 0), // (how deep it is in points of the picture: a flat thing is Flat)
       for (final (_, names) in m.cards(t))
         for (final n in names)
@@ -590,18 +491,15 @@ Map<String, double> wsTransform(Ws ws, String? id) {
 }
 
 (String, double)? _asDocument(Ws ws, String id, double x) {
-  final seat = _seats.where((s) => s.$1 == id).firstOrNull;
-  if (seat == null && id.startsWith('v_') && ws.inside!.shown(id.substring(2))?.look == 'thing') { // (another thing: None, then the others by their place)
+  if (id.startsWith('v_') && ws.inside!.shown(id.substring(2))?.look == 'thing') { // (another thing: None, then the others by their place)
     final others = _others(ws, int.tryParse(ws.selected ?? '') ?? 0).values.toList(), i = x.round();
     return (id.substring(2), i >= 1 && i <= others.length ? others[i - 1].toDouble() : 0);
   }
-  if (seat == null && id.startsWith('v_')) return (id.substring(2), _unshown(ws.inside!, int.tryParse(ws.selected ?? '') ?? 0, id.substring(2), x)); // (a card of the inside's own: the value of that name, in the document's own units)
-  if (seat == null) {
-    for (final fields in _fxFields(ws, ws.selected).values) {
-      if (fields[id] case final n?) return (n, _unshown(ws.inside!, int.tryParse(ws.selected ?? '') ?? 0, n, x)); // (an effect's number: as the inside says a hand reads it (trim in hundredths))
-    }
+  if (id.startsWith('v_')) return (id.substring(2), _unshown(ws.inside!, int.tryParse(ws.selected ?? '') ?? 0, id.substring(2), x)); // (a card of the inside's own: the value of that name, in the document's own units)
+  for (final fields in _fxFields(ws, ws.selected).values) {
+    if (fields[id] case final n?) return (n, _unshown(ws.inside!, int.tryParse(ws.selected ?? '') ?? 0, n, x)); // (an effect's number: as the inside says a hand reads it (trim in hundredths))
   }
-  return seat == null ? null : (seat.$2, _unshown(ws.inside!, int.tryParse(ws.selected ?? '') ?? 0, seat.$2, x));
+  return null;
 }
 
 /// Joined: what was changed in the inspector is a thing held and its numbers carried (the inside's one form of a
@@ -641,8 +539,6 @@ Map<String, KeyS> _keyMarks(Ws ws, String? id) {
   if (m == null || t == null) return const {};
   final at = ws.frame / Ws.fps;
   return {
-    if (t > 0)
-      for (final p in const ['pos', 'scale', 'rot', 'op', 'anchor']) p: KeyS.values[_namesOf(p).map((n) => m.keyed(t, n, at)).reduce(math.max)],
     // (the cards' own numbers that take keys: the inside's cards, and the effects' fields)
     for (final MapEntry(:key, :value) in _keyable(ws, t).entries) key: KeyS.values[m.keyed(t, value, at)],
   };
@@ -668,7 +564,7 @@ void _mark(Ws ws, String? id, String prop, KeyS mark) {
   final at = ws.frame / Ws.fps, has = m.values(t).toSet();
   // (only the values it has: a flat thing has no scale_z, and a key asked of it was refused and took the whole step,
   //  the number let go of with it, back: with Animate on, a flat thing's first scale was lost)
-  for (final n in [..._namesOf(prop), ?_keyable(ws, t)[prop]].where(has.contains)) {
+  for (final n in [?_keyable(ws, t)[prop]].where(has.contains)) {
     switch (mark) {
       case KeyS.at:
         m.keyHere(t, n, at);
@@ -799,7 +695,6 @@ class _InspectorSeatState extends State<_InspectorSeat> {
         onWords: (changed) => _say(ws, l?.id, changed),
         onAnimateAll: (on) => ws.animating = on,
         animating: ws.animating,
-        choices: Ws.timed('choices', () => _choices(ws, l?.id)),
         flags: Ws.timed('flags', () => _flags(ws, l?.id)),
         onFlags: (changed) => _flag(ws, l?.id, changed),
         keyMarks: Ws.timed('key marks', () => _keyMarks(ws, l?.id)),
