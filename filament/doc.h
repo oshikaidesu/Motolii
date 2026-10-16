@@ -2162,32 +2162,43 @@ static std::string doc_folder_names(const char* folder, const char* extension) {
     }
     return all;
 }
-// The ways a maker keeps of their own, as the shelf's recipes are kept: a file each in ways/, beside recipes/ (one put
-// there is a tile of the Ease desk at once). Its first line says its name before the colon; the rest is how far it is, as
-// a way defined in a document says it (doc_define: a, b, u, p1..p4, bezier(u, x1, y1, x2, y2)). Put on a key, it is
-// written into the document, so the document goes as it did wherever it is opened.
+// The ways a maker keeps of their own, as a maker's scripts are theirs: a file each in their own folder (MOTOLII_WAYS, or
+// on a Mac ~/Library/Application Support/Motolii/ways, on Windows %APPDATA%/Motolii/ways), and the few the library comes
+// with in ways/ beside recipes/ (one put in either is a tile of the Ease desk at once). Its first line says its name
+// before the colon; the rest is how far it is, as a way defined in a document says it (doc_define: a, b, u, p1..p4,
+// bezier(u, x1, y1, x2, y2)). Put on a key, it is written into the document, so the document goes as it did wherever it
+// is opened. The maker's own of a name goes before the library's.
+static std::vector<std::filesystem::path> doc_ways_folders() {
+    Dl_info lib{};
+    dladdr((const void*)&doc_ways_folders, &lib);
+    std::error_code wrong;
+    std::vector<std::filesystem::path> at{std::filesystem::weakly_canonical(lib.dli_fname ? lib.dli_fname : ".", wrong).parent_path().parent_path() / "ways"};
+    if (const char* own = std::getenv("MOTOLII_WAYS")) at.push_back(own);
+    else if (const char* app = std::getenv("APPDATA")) at.push_back(std::filesystem::path(app) / "Motolii" / "ways");
+    else if (const char* home = std::getenv("HOME")) at.push_back(std::filesystem::path(home) / "Library" / "Application Support" / "Motolii" / "ways");
+    return at;
+}
 static const std::map<std::string, std::string>& doc_own_ways() {
     static std::map<std::string, std::string> all;
-    static std::filesystem::file_time_type was{};
     static std::chrono::steady_clock::time_point looked{};
-    if (!doc_folder_moved("ways", was, looked)) return all;
+    const auto now = std::chrono::steady_clock::now();
+    if (looked != std::chrono::steady_clock::time_point{} && now - looked < std::chrono::milliseconds(500)) return all;   // (looked at again at most twice a second: a file put there shows at once)
+    looked = now;
     all.clear();
-    Dl_info lib{};
-    dladdr((const void*)&doc_own_ways, &lib);
     std::error_code wrong;
-    const std::filesystem::path dir = std::filesystem::weakly_canonical(lib.dli_fname ? lib.dli_fname : ".", wrong).parent_path().parent_path() / "ways";
-    for (const auto& e : std::filesystem::directory_iterator(dir, wrong)) {
-        if (e.path().extension() != ".way") continue;
-        std::ifstream in(e.path());
-        std::string line, name, goes;
-        while (std::getline(in, line)) {
-            if (line.rfind("//", 0) != 0) { goes += line + " "; continue; }
-            if (name.empty() && line.find(':') != std::string::npos) name = line.substr(2, line.find(':') - 2);
+    for (const auto& dir : doc_ways_folders())
+        for (const auto& e : std::filesystem::directory_iterator(dir, wrong)) {
+            if (e.path().extension() != ".way") continue;
+            std::ifstream in(e.path());
+            std::string line, name, goes;
+            while (std::getline(in, line)) {
+                if (line.rfind("//", 0) != 0) { goes += line + " "; continue; }
+                if (name.empty() && line.find(':') != std::string::npos) name = line.substr(2, line.find(':') - 2);
+            }
+            name.erase(0, name.find_first_not_of(' '));
+            if (name.empty()) name = e.path().stem().string();
+            if (goes.find_first_not_of(' ') != std::string::npos) all[name] = goes;   // (the maker's folder is read last: theirs of a name stands)
         }
-        name.erase(0, name.find_first_not_of(' '));
-        if (name.empty()) name = e.path().stem().string();
-        if (goes.find_first_not_of(' ') != std::string::npos) all[name] = goes;
-    }
     return all;
 }
 // The recipe of that name made at the stage's present moment, one step (0: not made, d.trouble says why).

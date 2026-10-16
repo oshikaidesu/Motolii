@@ -1,7 +1,10 @@
 // The window joined to the real inside (filament/out/libmotolii.dylib, built by filament/edit.sh), driven as a hand
 // would drive it: what a seat does reaches the document, and one act is one step back. Where the inside is not
 // built these are skipped.
+import 'dart:ffi';
 import 'dart:io';
+
+import 'package:ffi/ffi.dart';
 
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -271,6 +274,23 @@ void main() {
     }
     expect(m.keyMoments(box, 'trim_offset'), [.25], reason: 'one key, where the hand let go');
     expect(m.value(box, 'trim_offset', .25), closeTo(-.6, 1e-9), reason: 'holding what the hand made, not what was before');
+    await expectSameAfterReopen(t);
+    await _close(t);
+  }, skip: !_built);
+
+  testWidgets('a preset is in the maker\'s own folder, not the program\'s: one put there is a tile at once', (t) async {
+    final own = Directory.systemTemp.createTempSync('ways');
+    File('${own.path}/brisk.way').writeAsStringSync('// Brisk: quick and done\na + (b - a) * bezier(u, .5, 0, .2, 1)\n');
+    final setenv = DynamicLibrary.process().lookupFunction<Int32 Function(Pointer<Utf8>, Pointer<Utf8>, Int32), int Function(Pointer<Utf8>, Pointer<Utf8>, int)>('setenv');
+    final name = 'MOTOLII_WAYS'.toNativeUtf8(), path = own.path.toNativeUtf8();
+    setenv(name, path, 1); // (the maker's folder here: a test does not write into the real one)
+    malloc
+      ..free(name)
+      ..free(path);
+    final ws = await _pump(t), m = ws.inside!;
+    await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 600))); // (the folders are looked at again twice a second)
+    expect(m.wayNames, containsAll(['Brisk', 'Snappy']), reason: 'the maker\'s own and the one the program comes with');
+    expect(unseated(ws).map((e) => e.name), contains('Brisk'));
     await expectSameAfterReopen(t);
     await _close(t);
   }, skip: !_built);
