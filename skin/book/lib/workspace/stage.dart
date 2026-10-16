@@ -282,8 +282,8 @@ class _Swatches extends StatelessWidget {
   const _Swatches();
   @override
   Widget build(BuildContext context) {
-    final ws = WsScope.of(context), p = ws.inside == null ? null : _paintOf(ws);
-    final fill = ws.inside == null ? ArtInk.orange : p?.fill ?? WsT.body, stroke = ws.inside == null ? ArtInk.cream : p?.stroke ?? WsT.line;
+    final ws = WsScope.of(context), p = _paintOf(ws);
+    final fill = p.fill ?? WsT.body, stroke = p.stroke ?? WsT.line;
     return SizedBox(
     width: 26,
     height: 26,
@@ -354,9 +354,7 @@ class _OptionsStrip extends StatelessWidget {
   }
 
   List<Widget> _items() {
-    final p = ws.inside == null ? null : _paintOf(ws);
-    if (p != null) return _joined(ws, p);
-    return _sample();
+    return _joined(ws, _paintOf(ws));
   }
 
   /// Joined: the tool's own settings (how it draws or carries), and the picked thing's values as the document has them.
@@ -380,37 +378,7 @@ class _OptionsStrip extends StatelessWidget {
     ],
   };
 
-  List<Widget> _sample() => switch (tool) {
-    0 => [
-      _seg('sel.level', const ['Layer', 'Group']),
-      _flag('sel.snap', 'Snap', initial: true),
-      _flag('sel.pivot', 'Pivots'),
-    ],
-    1 => [
-      _seg('move.axis', const ['Free', 'X', 'Y']),
-      _flag('move.snap', 'Snap', initial: true),
-    ],
-    2 => [
-      const _Field('Fill', swatch: ArtInk.orange),
-      const _Field('Stroke', value: '0 px'),
-      const _Field('Radius', value: '24'),
-      _seg('rect.mode', const ['Shape', 'Mask']),
-    ],
-    3 => [
-      const _Field('Fill', swatch: ArtInk.pink),
-      const _Field('Stroke', value: '0 px'),
-      _seg('ell.from', const ['Corner', 'Centre']),
-    ],
-    4 => [
-      _seg('pen.mode', const ['Path', 'Mask']),
-      _flag('pen.close', 'Close path', initial: true),
-    ],
-    _ => [
-      const _Field('Font', value: 'Inter Black'),
-      const _Field('Size', value: '410'),
-      _seg('text.align', const ['L', 'C', 'R']),
-    ],
-  };
+
 
   @override
   Widget build(BuildContext context) {
@@ -514,17 +482,13 @@ class _Readout extends StatelessWidget {
             padding: const EdgeInsets.only(left: 10),
             child: Text(l.kind == WsKind.audio ? 'No picture' : 'Not on this frame', style: T.label(Grey.g56)),
           )
-        else if (ws.inside != null) ...[
-          // (joined: the same numbers as the inspector's, which are the document's)
+        else ...[
+          // (the same numbers as the inspector's, which are the document's)
           if (wsPlace(ws, l.id) case final at) ...[
             pair('P', '${at['pos.x']?.round()}, ${at['pos.y']?.round()}'),
             pair('S', '${at['scale.y']?.round()}%'),
             pair('R', '${at['rot.z']?.round()}°'),
           ],
-        ] else ...[
-          pair('P', '${box.anchor.dx.round()}, ${box.anchor.dy.round()}'),
-          pair('S', '${(box.scale * 100).round()}%'),
-          pair('R', '${(box.rot * 180 / 3.141592653589793).round()}°'),
         ],
       ],
     );

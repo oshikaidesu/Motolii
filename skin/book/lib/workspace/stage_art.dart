@@ -37,25 +37,17 @@ class ArtLayer {
 class ArtScene {
   final String title;
 
-  /// The guides, in composition px: joined, the document's own; else the sample's (its title's left margin and baseline).
+  /// The guides, in composition px: the document's own.
   final List<double> guidesX, guidesY;
   ArtScene.of(Ws ws, {required this.camera})
     : frame = ws.frame,
       title = ws.document == null ? 'CODA_main' : ws.document!.replaceFirst(RegExp(r'\.motolii$'), ''), // (joined: the document's own name)
-      guidesX = ws.inside == null ? const [150.0, 1770.0] : [for (final (a, at) in ws.guides) if (a == 'x') at],
-      guidesY = ws.inside == null ? const [812.0] : [for (final (a, at) in ws.guides) if (a == 'y') at],
+      guidesX = [for (final (a, at) in ws.guides) if (a == 'x') at],
+      guidesY = [for (final (a, at) in ws.guides) if (a == 'y') at],
       layers = List.unmodifiable([for (final l in ws.layers) ArtLayer(l)]),
-      fx = ws.inside != null
-          ? const {} // (joined: the stage is the inside's own picture; the families are the sample's stand-in art, for its own layers)
-          : Map.unmodifiable({
-        for (final l in ws.layers)
-          if ([...ws.fxOf(l.id), if (l.id == ws.selected) ?ws.trial] case final names when names.isNotEmpty)
-            l.id: List<FxFamily>.unmodifiable([for (final n in names) ?fxNamed(n)?.family]),
-      }),
+      fx = const {}, // (the stage is the inside's own picture: no stand-in art's effects)
       rev = ws.rev,
-      boxes = ws.inside == null
-          ? null
-          : Map.unmodifiable({
+      boxes = Map.unmodifiable({
               for (final l in ws.layers)
                 if (ws.inside!.frame(int.parse(l.id)) case final f?) l.id: ArtBox(Offset(f[0], f[1]), Size(f[2], f[3]), rot: f[4] * math.pi / 180, anchor: Offset(f[5], f[6])),
             });

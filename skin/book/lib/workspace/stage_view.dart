@@ -280,7 +280,7 @@ class _StageViewState extends State<StageView> implements StageHandles {
   }
 
   void _hold(_View v, Offset local) {
-    if (widget.make != null && WsScope.read(context).inside != null) {
+    if (widget.make != null) {
       setState(() => _drawFrom = local);
       return;
     }
@@ -368,7 +368,7 @@ class _StageViewState extends State<StageView> implements StageHandles {
             behavior: HitTestBehavior.opaque,
             onTapUp: (d) {
               widget.onPoke?.call();
-              if (widget.make != null && WsScope.read(context).inside != null) return _draw(v, _drawFrom = d.localPosition); // (only come down: one as it comes, there)
+              if (widget.make != null) return _draw(v, _drawFrom = d.localPosition); // (only come down: one as it comes, there)
               WsScope.read(context).select(_hit(v, d.localPosition));
             },
             dragStartBehavior: DragStartBehavior.down, // (a thing is held where the hand came down, not where it had got to when the drag was known for one)
