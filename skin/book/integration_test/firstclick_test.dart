@@ -15,7 +15,7 @@ import 'package:integration_test/integration_test.dart';
 import 'package:lab_book/motolii.dart';
 import 'package:lab_book/sets/inspector/inspector_parts.dart' show AnchorCube, AnchorGeometry, InspectorPanel, NumField, OnOff, Space, SpacePlate, TextGroup, Chooser;
 import 'package:lab_book/sets/inspector/inspector_rows_prop_row.dart' show PropRow;
-import 'package:lab_book/workspace/dock_parts.dart' show DockHover;
+import 'package:lab_book/workspace/dock_parts.dart' show DockHover, DockSearch;
 import 'package:lab_book/workspace/timeline.dart';
 import 'package:lab_book/workspace/workspace.dart' show Workspace;
 import 'package:lab_book/workspace/ws.dart';
@@ -74,6 +74,8 @@ void main() {
       ('Zoom the selected camera in.', camera, null, num('v_zoom'), null),
     ];
 
+    // (another right first click: with the words hidden, a blur is found by typing its name in the shelf's search)
+    final also = <String, Finder>{'Add a blur to the selected layer.': find.byType(DockSearch)};
     final out = Directory('$motoliiDir/../reports/firstclick')..createSync(recursive: true);
     final dpr = t.view.devicePixelRatio, written = <Map<String, Object>>[];
     for (final (i, (task, thing, before, control, point)) in tasks.indexed) {
@@ -108,7 +110,7 @@ void main() {
           if (e.renderObject case final RenderBox b when b.hasSize && b.attached)
             if (MatrixUtils.transformRect(b.getTransformTo(null), Offset.zero & b.size) case final w when !w.isEmpty) [w.left * dpr, w.top * dpr, w.right * dpr, w.bottom * dpr],
       ];
-      written.add({'n': i + 1, 'task': task, 'picture': name, 'rect': [r.left * dpr, r.top * dpr, r.right * dpr, r.bottom * dpr], 'words': words});
+      written.add({'n': i + 1, 'task': task, 'picture': name, 'rect': [r.left * dpr, r.top * dpr, r.right * dpr, r.bottom * dpr], 'words': words, if (also[task] case final a?) 'also': [for (final x in [t.getRect(a.first)]) [x.left * dpr, x.top * dpr, x.right * dpr, x.bottom * dpr]]});
     }
     File('${out.path}/tasks.json').writeAsStringSync(const JsonEncoder.withIndent('  ').convert(written));
   });

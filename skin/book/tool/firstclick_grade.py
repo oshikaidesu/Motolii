@@ -15,8 +15,7 @@ for path in sys.argv[1:]:
         a = said.get(n, [])
         x, y = (a + [-1, -1])[:2]
         how = a[2] if len(a) > 2 else 'lost'  # (not said how sure: counted as lost)
-        l, top, r, b = t['rect']
-        hit = l - pad <= x <= r + pad and top - pad <= y <= b + pad
+        hit = any(l - pad <= x <= r + pad and top - pad <= y <= b + pad for l, top, r, b in [t['rect'], *t.get('also', [])])  # (a task may have more than one right first click)
         hits += hit
         sure += hit and how == 'sure'
         if not (hit and how == 'sure'): print(f'  {"miss" if not hit else how} {n}: {t["task"]}')
