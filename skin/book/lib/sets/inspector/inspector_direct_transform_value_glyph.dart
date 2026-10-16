@@ -53,10 +53,17 @@ class _GlyphPaint extends CustomPainter {
     }
     switch (shape) {
       case ValueShape.position:
-        final f = Rect.fromCenter(center: mid, width: 20, height: 11.25);
-        c.drawRect(f, rim);
-        final p = Offset(f.left + (v[0] / 1920).clamp(0, 1) * f.width, f.top + (v[1] / 1080).clamp(0, 1) * f.height);
-        c.drawCircle(p, 2.5, solid);
+        // (the four-way arrows every hand knows for moving a thing: a dot in a frame read as its turning point)
+        final arm = Paint()
+          ..color = ink
+          ..strokeWidth = 1.4
+          ..strokeCap = StrokeCap.round;
+        for (var i = 0; i < 4; i++) {
+          final d = Offset(math.cos(i * math.pi / 2), math.sin(i * math.pi / 2)), tip = mid + d * 8, side = Offset(-d.dy, d.dx) * 2.5;
+          c.drawLine(mid, tip, arm);
+          c.drawLine(tip, tip - d * 2.5 + side, arm);
+          c.drawLine(tip, tip - d * 2.5 - side, arm);
+        }
       case ValueShape.scale:
         // only the proportion shows: a uniform scale keeps the square
         const side = 14.0;
