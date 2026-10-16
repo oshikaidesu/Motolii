@@ -1,6 +1,7 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lab_book/workspace/desk.dart';
+import 'package:lab_book/workspace/desk_ease.dart';
 import 'package:lab_book/workspace/desk_kit.dart';
 import 'package:lab_book/workspace/ws.dart';
 
@@ -75,6 +76,12 @@ void main() {
     await tester.pumpAndSettle();
     expect(ws.desk, 'Depth');
     expect(tester.takeException(), isNull);
+  });
+
+  test('Ease: every preset said to the document reads back as itself, wherever it sits in the row', () {
+    for (final p in easePresets) {
+      expect(heard(said(p)).at(.3), closeTo(p.at(.3), 1e-9), reason: p.name);
+    }
   });
 
   testWidgets('Ease: presets, scrubbed numbers and Reverse change the curve', (tester) async {

@@ -50,6 +50,9 @@ const easePresets = [
 ];
 
 /// A way of the document that has no seat on this desk yet (Elastic, Random, Steps...): it is carried by its own words, as its name.
+/// A preset by its name (never by its place in the row: a tile added anywhere leaves the others as they are).
+Ease easePreset(String name) => easePresets.firstWhere((p) => p.name == name);
+
 bool easeOther(Ease e) => e.name != null && easePresets.every((p) => p.name != e.name);
 String? easeName(Ease e) => easeOther(e) ? e.name : easePresets.where((p) => p == e).firstOrNull?.name;
 
@@ -105,15 +108,15 @@ class DeskEase extends StatefulWidget {
 String said(Ease e) => easeOther(e) ? e.name! : switch (e.kind) {
   EaseKind.hold => 'Hold',
   EaseKind.bounce => 'Bounce',
-  EaseKind.bezier => e == easePresets.first ? 'Linear' : 'Bezier ${e.p1.dx} ${e.p1.dy} ${e.p2.dx} ${e.p2.dy}',
+  EaseKind.bezier => e == easePreset('Linear') ? 'Linear' : 'Bezier ${e.p1.dx} ${e.p1.dy} ${e.p2.dx} ${e.p2.dy}',
 };
 Ease heard(String said) {
   // (the inside says a way back in one form: the kind's name, then all its numbers)
   final w = said.split(' '), n = [for (final x in w.skip(1)) double.tryParse(x) ?? 0];
   return switch (w.first) {
-    'Hold' => easePresets.last,
-    'Linear' => easePresets.first,
-    'Bounce' => easePresets[6],
+    'Hold' => easePreset('Hold'),
+    'Linear' => easePreset('Linear'),
+    'Bounce' => easePreset('Bounce'),
     'Bezier' when n.length == 4 => Ease(EaseKind.bezier, Offset(n[0], n[1]), Offset(n[2], n[3])),
     _ => Ease(EaseKind.bezier, Offset.zero, const Offset(1, 1), said), // (a kind with no seat here yet: its own words, over a straight line)
   };

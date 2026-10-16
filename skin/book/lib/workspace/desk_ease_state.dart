@@ -31,7 +31,7 @@ class DeskEaseState extends State<DeskEase> {
     final ws = WsScope.of(context), span = easeSpan(ws), store = eases[ws] ??= {}, id = spanId(span);
     if (ws.inside case final m?) {
       final at = span == null ? const <String, double>{} : keysAt(ws, span);
-      var ease = _pending ?? (at.isEmpty ? easePresets.first : heard(m.wayOf(int.parse(span!.layer.id), at.keys.first, at.values.first)));
+      var ease = _pending ?? (at.isEmpty ? easePreset('Linear') : heard(m.wayOf(int.parse(span!.layer.id), at.keys.first, at.values.first)));
       if (easeOther(ease) && ease.drawn == null) {
         // (no seat for this kind: its curve is read off the document, the value itself between the two keys)
         final t = int.parse(span!.layer.id), name = at.keys.first, from = at.values.first;
@@ -59,7 +59,7 @@ class DeskEaseState extends State<DeskEase> {
         child: _body(ws, span, ease, set),
       );
     }
-    final ease = store[id] ?? easePresets[1];
+    final ease = store[id] ?? easePreset('Ease');
     return _body(ws, span, ease, (e) => setState(() => store[id] = e));
   }
 
