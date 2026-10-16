@@ -17,6 +17,8 @@ import 'package:lab_book/workspace/ws.dart';
 
 const _seconds = int.fromEnvironment('SECONDS', defaultValue: 600);
 const _films = String.fromEnvironment('FILMS', defaultValue: '/Users/motolii_maker/motolii/filament/out/vid');
+const _copies = int.fromEnvironment('COPIES', defaultValue: 3);   // (each film so many times: 0, none)
+const _effects = int.fromEnvironment('EFFECTS');   // (so many whole-screen effects over the stage, the shelf's first ones)
 
 void main() {
   final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -30,7 +32,7 @@ void main() {
     final ws = WsScope.read(t.element(find.byType(WsTimeline))), m = ws.inside!;
     final files = (Directory(_films).listSync().whereType<File>().map((f) => f.path).where((p) => p.endsWith('.mp4')).toList()..sort());
     var n = 0;
-    for (var k = 0; k < 3; k++) {
+    for (var k = 0; k < _copies; k++) {
       for (final f in files) {
         final thing = m.add('film', f);
         if (thing == 0) continue;
@@ -40,7 +42,11 @@ void main() {
         n++;
       }
     }
-    debugPrint('CROWD $n films');
+    if (_effects > 0) {
+      final on = m.effects.take(_effects).map((e) => e.$2).join(' ');
+      expect(m.say(0, 'script', on), isTrue, reason: m.trouble);
+    }
+    debugPrint('CROWD $n films, $_effects whole-screen effects');
     ws.reread();
     await t.pumpAndSettle();
     final timings = <FrameTiming>[];
