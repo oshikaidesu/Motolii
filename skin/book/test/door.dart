@@ -91,7 +91,9 @@ Future<void> expectSameAfterReopen(WidgetTester t, {List<WsPane> extra = const [
   }
   ws.reread();   // (what a test changed in the inside itself, past the window, read as the window reads a hand's)
   await t.pumpAndSettle();
-  if (inspectorList.evaluate().isNotEmpty) t.state<ScrollableState>(inspectorList).position.jumpTo(0);   // (the cards seen from the top, as a window opened again shows them)
+  for (final e in find.byType(Scrollable).evaluate()) {   // (every list seen from its top, as a window opened again shows it: where a list is scrolled to is the hand's, not the document's)
+    if ((e as StatefulElement).state case final ScrollableState l when l.position.hasPixels) l.position.jumpTo(l.position.minScrollExtent);
+  }
   await t.pumpAndSettle();
   final selected = ws.selected, frame = ws.frame, keys = ws.keys.toList(), desk = ws.deskManual, shelf = ws.shelf, ink = ws.ink, edge = ws.edge, aim = ws.aim, animating = ws.animating, view = Map.of(ws.view), doc = openedDocument!;
   final before = windowWords(t);
