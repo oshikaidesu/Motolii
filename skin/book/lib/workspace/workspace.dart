@@ -26,7 +26,7 @@ import '../motolii.dart';
 import 'ws.dart';
 
 class Workspace extends StatefulWidget {
-  const Workspace({super.key, this.document, this.extra = const [], this.tools = const []});
+  const Workspace({super.key, this.document, this.extra = const [], this.tools = const [], this.view = const {}});
 
   /// A document of the inside (motolii.dart) to join the window to: its stage is then the inside's own picture.
   /// null: the sample, with its stand-in art.
@@ -38,12 +38,17 @@ class Workspace extends StatefulWidget {
 
   /// Desk tools of your own, after the window's (a DeskTool with its `build`).
   final List<DeskTool> tools;
+
+  /// How the window looks when it opens (Ws.view: as it was left, say).
+  final Map<String, Object?> view;
   @override
   State<Workspace> createState() => _WorkspaceState();
 }
 
 class _WorkspaceState extends State<Workspace> {
-  late final _ws = Ws()..tools = [...deskTools, ...widget.tools];
+  late final _ws = Ws()
+    ..tools = [...deskTools, ...widget.tools]
+    ..view.addAll(widget.view);
   Motolii? _inside;
 
   String? _doc; // (the document that is open: the one the window was given, or one made or opened from the menu)
@@ -317,16 +322,24 @@ const _spaces = {'d2': '2d', 'd25': '2.5d', 'd3': '3d'}; // (the inspector's thr
 /// before it), and a change of them told to it. A seat with nothing behind it is not taken, and goes back.
 Map<String, bool> _flags(Ws ws, String? id) {
   final m = ws.inside, t = int.tryParse(id ?? '');
-  if (m == null || t == null) return const {};
-  return {'clip': (m.value(t, 'clip', 0) ?? 0) > .5, 'ghost': false};
+  if (m == null) return const {};
+  return {
+    for (final e in ws.view.entries)
+      if (e.key.startsWith('inspector.') && e.value is bool) e.key.substring(10): e.value as bool, // (how the inspector is looked at: the window's view)
+    if (t != null) ...{'clip': (m.value(t, 'clip', 0) ?? 0) > .5, 'ghost': false},
+  };
 }
 
 bool _flag(Ws ws, String? id, Map<String, bool> changed) {
   final m = ws.inside!, t = int.tryParse(id ?? '');
-  if (t == null) return false;
-  // (a card folded or opened, its Advanced shown: how the inspector is looked at, its own, not the document's)
-  final told = {for (final e in changed.entries) if (!(e.key.endsWith('.open') || e.key.endsWith('.adv') || e.key.startsWith('fold.'))) e.key: e.value};
+  // (a card folded or opened, its Advanced shown: how the inspector is looked at, the window's view, not the document's)
+  bool looked(String k) => k.endsWith('.open') || k.endsWith('.adv') || k.startsWith('fold.');
+  for (final e in changed.entries) {
+    if (looked(e.key)) ws.view['inspector.${e.key}'] = e.value;
+  }
+  final told = {for (final e in changed.entries) if (!looked(e.key)) e.key: e.value};
   if (told.isEmpty) return true;
+  if (t == null) return false;
   String? why;
   for (final e in told.entries) {
     if (e.key != 'clip') {

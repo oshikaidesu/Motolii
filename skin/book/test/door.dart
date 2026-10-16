@@ -15,14 +15,14 @@ export 'package:lab_book/workspace/door.dart';
 final insideBuilt = File('$motoliiDir/out/libmotolii.dylib').existsSync();
 
 /// The window on a new, empty document (or [document]), with your panes and desk tools; its state.
-Future<Ws> openWorkspace(WidgetTester t, {List<WsPane> extra = const [], List<DeskTool> tools = const [], String? document}) async {
+Future<Ws> openWorkspace(WidgetTester t, {List<WsPane> extra = const [], List<DeskTool> tools = const [], String? document, Map<String, Object?> view = const {}}) async {
   t.view.physicalSize = const Size(1600, 960);
   t.view.devicePixelRatio = 1;
   t.binding.defaultBinaryMessenger.setMockMethodCallHandler(const MethodChannel('motolii/stage'), (_) async => -1);   // (no picture of the stage: the seat's texture is the runner's)
   t.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.menu, (_) async => null);   // (the system's menu bar is not there in a test)
   final doc = document ?? '${Directory.systemTemp.createTempSync('door').path}/door.motolii';
   openedDocument = doc;
-  await t.pumpWidget(WidgetsApp(color: const Color(0xFF000000), builder: (c, _) => Workspace(document: doc, extra: extra, tools: tools)));
+  await t.pumpWidget(WidgetsApp(color: const Color(0xFF000000), builder: (c, _) => Workspace(document: doc, extra: extra, tools: tools, view: view)));
   await t.pumpAndSettle();
   return wsOf(t);
 }
@@ -45,8 +45,7 @@ Future<void> expectSameAfterReopen(WidgetTester t, {List<WsPane> extra = const [
   final selected = ws.selected, frame = ws.frame, keys = ws.keys.toList(), desk = ws.deskManual, shelf = ws.shelf, ink = ws.ink, edge = ws.edge, aim = ws.aim, view = Map.of(ws.view), doc = openedDocument!;
   final before = windowWords(t);
   await closeWorkspace(t);
-  final again = await openWorkspace(t, extra: extra, tools: tools, document: doc);
-  again.view.addAll(view);   // (first: what is done next tells the window to look again)
+  final again = await openWorkspace(t, extra: extra, tools: tools, document: doc, view: view);
   again.select(selected);
   for (final k in keys) {
     again.pickKey(k, add: true);

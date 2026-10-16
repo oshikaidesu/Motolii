@@ -33,8 +33,10 @@ class WsShelf extends StatefulWidget {
 }
 
 class _WsShelfState extends State<WsShelf> {
-  final _mem = DockMem();
-  late final _search = TextEditingController()..addListener(() => setState(() {}));
+  // (what the shelf keeps of itself, its picks, folds and search: the window's view, so it is the same when opened again)
+  DockMem get _mem => WsScope.read(context).view.putIfAbsent('dock.${widget.name}', DockMem.new) as DockMem;
+  late final TextEditingController _search = TextEditingController(text: WsScope.read(context).viewOf('dock.${widget.name}.search', ''))
+    ..addListener(() => setState(() => WsScope.read(context).view['dock.${widget.name}.search'] = _search.text));
 
   // (the shelf follows the document a picture after the hand: a change made, the inspector and the stage are built in
   //  that picture and the shelf in the next, once for all the changes since. It was half of each picture's work)

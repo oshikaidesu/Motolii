@@ -603,6 +603,7 @@ void main() {
     await pick('Twirl');
     expect(find.descendant(of: find.byType(DockFooter), matching: find.text('No seat yet')), findsNWidgets(2), reason: 'what it is to the document, and its button');
     expect(t.takeException(), isNull);
+    await expectSameAfterReopen(t);
     await _close(t);
   }, skip: !_built);
 
@@ -650,6 +651,7 @@ void main() {
     expect(m.set(m.things[1], 'points', 8) && m.set(m.things[1], 'inner', .7), isTrue, reason: m.trouble);
     expect(m.set(m.things[0], 'points', 2), isFalse, reason: 'a polygon has three points at least');
     expect(t.takeException(), isNull);
+    await expectSameAfterReopen(t);
     await _close(t);
   }, skip: !_built);
 
@@ -689,6 +691,7 @@ void main() {
     await t.pumpAndSettle();
     expect([m.value(star, 'copies', 0), m.value(star, 'copy_columns', 0)], [9, 3], reason: m.trouble);
     expect(t.takeException(), isNull, reason: 'an anchor outside the box is named Custom');
+    await expectSameAfterReopen(t);
     await _close(t);
   }, skip: !_built);
 
@@ -736,6 +739,7 @@ void main() {
     expect(m.word(rect, 'fill'), 'e974ab f08a5d efcb4e', reason: m.trouble);
     expect(m.say(m.add('solid', 'cube'), 'fill', 'e974ab f08a5d'), isFalse, reason: 'a solid is filled with one colour');
     expect(t.takeException(), isNull);
+    await expectSameAfterReopen(t);
     await _close(t);
   }, skip: !_built);
 
@@ -853,6 +857,7 @@ void main() {
     await t.pumpAndSettle();
     expect(m.value(rect, 'y', 0), y, reason: 'carried along X only');
     expect(t.takeException(), isNull);
+    await expectSameAfterReopen(t);
     await _close(t);
   }, skip: !_built);
 
@@ -1018,6 +1023,7 @@ void main() {
     expect((t.widget(ghost) as OnOff).on, isFalse, reason: 'it goes back');
     expect(ws.notice, startsWith('Not taken: the document has no ghost'));
     expect(t.takeException(), isNull);
+    await expectSameAfterReopen(t);
     await _close(t);
   }, skip: !_built);
 
@@ -1165,6 +1171,7 @@ void main() {
     expect(m.say(0, 'tone_mapper', 'agx') && m.word(0, 'tone_mapper') == 'agx', isTrue, reason: m.trouble);
     expect(m.say(0, 'tone_mapper', 'sepia'), isFalse, reason: 'one of Filament\'s own');
     expect(t.takeException(), isNull);
+    await expectSameAfterReopen(t);
     await _close(t);
   }, skip: !_built);
 
@@ -1206,6 +1213,7 @@ void main() {
     expect(wsKeyMarks(ws, '$spot')['v_intensity'], KeyS.at);
     ws.animating = false;
     expect(t.takeException(), isNull);
+    await expectSameAfterReopen(t);
     await _close(t);
   }, skip: !_built);
 
@@ -1261,6 +1269,7 @@ void main() {
     expect(m.word(m.things.single, 'name'), 'Iris');
     expect(m.make('Nope'), 0);
     expect(t.takeException(), isNull);
+    await expectSameAfterReopen(t);
     await _close(t);
   }, skip: !_built);
 
@@ -1309,6 +1318,7 @@ void main() {
     await t.pumpAndSettle();
     expect(ws.screenFx, isEmpty, reason: 'taken off');
     expect(t.takeException(), isNull);
+    await expectSameAfterReopen(t);
     await _close(t);
   }, skip: !_built);
 
@@ -1335,6 +1345,7 @@ void main() {
     await t.pumpAndSettle();
     expect(ws.motion, isEmpty, reason: 'taken off');
     expect(t.takeException(), isNull);
+    await expectSameAfterReopen(t);
     await _close(t);
   }, skip: !_built);
 

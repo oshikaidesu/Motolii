@@ -6,6 +6,7 @@ FL=~/rust_ae/Motolii/.tools/flutter/bin/flutter
 T=test/workspace_joined_test.dart; LOG=${REOPEN_LOG:-$(mktemp)}
 perl -0pi -e 's/^ +await expectSameAfterReopen\(t\);\n//mg; s/^( +)await _close\(t\);/$1await expectSameAfterReopen(t);\n$1await _close(t);/mg' $T
 $FL test $T > $LOG 2>&1
+grep -qE "^[0-9:]+ \+[0-9]+.*(All tests passed|Some tests failed)" $LOG || { echo "the checks did not run:"; tail -20 $LOG; git checkout -q -- $T; exit 1; }   # (a check that never ran says nothing differs)
 grep "^REOPEN	" $LOG | cut -f2 | sort -u > $LOG.red
 python3 - "$T" "$LOG.red" <<'P'
 import re, sys
