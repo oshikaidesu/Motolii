@@ -143,10 +143,13 @@ class Ws extends ChangeNotifier {
 
   /// Where the window's building spends its time (for the rampage's report): a name and the time it took, summed.
   static final spent = <String, Duration>{};
+  /// The longest each named part took at once.
+  static final slowest = <String, Duration>{};
   static T timed<T>(String name, T Function() does) {
     final w = Stopwatch()..start();
     final made = Timeline.timeSync(name, does); // (named in Flutter's own timeline too: frames_test TRACE)
     spent[name] = (spent[name] ?? Duration.zero) + w.elapsed;
+    if (w.elapsed > (slowest[name] ?? Duration.zero)) slowest[name] = w.elapsed;
     return made;
   }
 

@@ -378,7 +378,7 @@ void main() {
           in (Ws.spent.entries.toList()
             ..sort((a, b) => b.value.compareTo(a.value)))) {
         // ignore: avoid_print
-        print('SPENT $key ${value.inMilliseconds} ms');
+        print('SPENT $key ${value.inMilliseconds} ms, at most ${((Ws.slowest[key]?.inMicroseconds ?? 0) / 1000).toStringAsFixed(1)} ms at once');
       }
 
       bool judged(FrameTiming f) {
