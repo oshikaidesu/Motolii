@@ -1,5 +1,5 @@
 // The window's first-click test (how a stranger finds a control: Bailey and Wolfson's first click): each task a picture
-// of the real window, the task in plain words, and where its right control lies on the picture. A judge who has never
+// of the real window, the task as a goal in plain words (no name the window uses for its controls), and where its right control lies on the picture. A judge who has never
 // seen the window says where they would click first; reports/firstclick/grade.py counts the clicks inside.
 //   flutter drive --profile -d macos --driver=test_driver/integration_test.dart --target=integration_test/firstclick_test.dart
 // Writes reports/firstclick/NN.png and tasks.json (rects in the picture's own pixels).
@@ -13,7 +13,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:lab_book/motolii.dart';
-import 'package:lab_book/sets/inspector/inspector_parts.dart' show AnchorCube, AnchorGeometry, InspectorPanel, NumField, OnOff, Space, SpacePlate, TextGroup, Chooser;
+import 'package:lab_book/sets/inspector/inspector_parts.dart' show AnchorCube, AnchorGeometry, Hov, InspectorPanel, NumField, OnOff, PanelLink, Space, SpacePlate, TextGroup, Chooser;
 import 'package:lab_book/sets/inspector/inspector_rows_prop_row.dart' show PropRow;
 import 'package:lab_book/workspace/dock_parts.dart' show DockHover, DockSearch;
 import 'package:lab_book/workspace/timeline.dart';
@@ -51,31 +51,31 @@ void main() {
     Finder chooser(String id) => find.byWidgetPredicate((w) => w is Chooser && w.id == id);
     // (the task, the thing picked, what to do first, the right control; for a point of a control (the anchor box's corner), where in it)
     final tasks = <(String, int, void Function()?, Finder, Rect Function(Rect)?)>[
-      ('Make the selected layer half transparent.', rect, null, num('v_opacity'), null),
-      ('Rotate the selected layer by 45 degrees.', rect, null, num('v_rotate'), null),
-      ('Move the selected layer\'s anchor point to its bottom-left corner.', rect, null, find.byType(AnchorCube),
+      ('Let what is behind the selected card show through it a little.', rect, null, num('v_opacity'), null),
+      ('Tilt the selected card, as you would tilt a picture on a wall.', rect, null, num('v_rotate'), null),
+      ('Make the selected card turn and grow around its bottom-left corner instead of its middle.', rect, null, find.byType(AnchorCube),
           (box) => Rect.fromCenter(center: box.topLeft + AnchorGeometry(box.size).at(0, 100, 0), width: 20, height: 20)),
-      ('Make the selected layer follow the layer called "Box" when it moves.', rect, null, chooser('v_parent'), null),
-      ('Set the selected layer\'s blend mode to Screen.', rect, null, chooser('v_blend'), null),
-      ('Show the selected layer only where the layer below it is.', rect, null, find.descendant(of: row('v_clip'), matching: find.byType(OnOff)), null),
-      ('Put the selected layer in 3D space, so it can sit at a depth (but stays flat).', rect, null, find.byWidgetPredicate((w) => w is SpacePlate && w.space == Space.d25), null),
-      ('Change the selected layer\'s colour.', rect, null, row('v_fill'), null),
-      ('Give the selected layer an outline.', rect, null, row('v_stroke'), null),
-      ('Make the outline of the selected layer thicker.', rect, () => m.say(rect, 'stroke', 'ffffff'), num('v_stroke_width'), null),
-      ('Make 10 copies of the selected layer.', rect, null, num('v_copies'), null),
-      ('Spread the copies of the selected layer further apart, sideways.', rect, () => m.set(rect, 'copies', 5), num('v_copy_x'), null),
-      ('Add a blur to the selected layer.', rect, null, find.ancestor(of: find.text('Gaussian Blur'), matching: find.byType(DockHover)), null),
-      ('Change what the selected text says.', text, null, find.descendant(of: find.byType(TextGroup), matching: find.byType(EditableText)), null),
-      ('Centre the lines of the selected text.', text, null, find.descendant(of: row('v_align'), matching: find.byWidgetPredicate((w) => w is Text && w.data?.toLowerCase() == 'centre')), null),
-      ('Change the font of the selected text.', text, null, row('v_file'), null),
-      ('Make the selected text bigger.', text, null, num('v_size'), null),
-      ('Make the selected cube glass.', cube, null, row('v_fill'), null),
-      ('Make the selected light brighter.', sun, null, num('v_intensity'), null),
-      ('Zoom the selected camera in.', camera, null, num('v_zoom'), null),
+      ('Make the selected card go along with the box whenever the box moves.', rect, null, chooser('v_parent'), null),
+      ('Make the selected card lighten what lies under it, like a projector\'s light, instead of covering it.', rect, null, chooser('v_blend'), null),
+      ('Let the selected card be seen only through the thing just beneath it.', rect, null, find.descendant(of: row('v_clip'), matching: find.byType(OnOff)), null),
+      ('Let the selected card sit deeper in the scene, while it stays a flat card.', rect, null, find.byWidgetPredicate((w) => w is SpacePlate && w.space == Space.d25), null),
+      ('Make the selected card blue.', rect, null, row('v_fill'), null),
+      ('Draw a line all round the edge of the selected card.', rect, null, row('v_stroke'), null),
+      ('Make the line round the selected card heavier.', rect, () => m.say(rect, 'stroke', 'ffffff'), num('v_stroke_width'), null),
+      ('Turn the selected card into ten cards.', rect, null, num('v_copies'), null),
+      ('Push the repeated cards further apart, left to right.', rect, () => m.set(rect, 'copies', 5), num('v_copy_x'), null),
+      ('Make the selected card look out of focus.', rect, null, find.ancestor(of: find.text('Gaussian Blur'), matching: find.byType(DockHover)), null),
+      ('Change the words that are written.', text, null, find.descendant(of: find.byType(TextGroup), matching: find.byType(EditableText)), null),
+      ('Put each line of the writing in the middle.', text, null, find.descendant(of: row('v_align'), matching: find.byWidgetPredicate((w) => w is Text && w.data?.toLowerCase() == 'centre')), null),
+      ('Make the letters look different, in another style of lettering.', text, null, row('v_file'), null),
+      ('Make the writing larger.', text, null, num('v_size'), null),
+      ('Make the selected box look like it is made of glass.', cube, null, row('v_fill'), null),
+      ('Make the light shine stronger.', sun, null, num('v_intensity'), null),
+      ('Get a closer view of the scene through the camera without moving it.', camera, null, num('v_zoom'), null),
     ];
 
     // (another right first click: with the words hidden, a blur is found by typing its name in the shelf's search)
-    final also = <String, Finder>{'Add a blur to the selected layer.': find.byType(DockSearch)};
+    final also = <String, Finder>{'Make the selected card look out of focus.': find.byType(DockSearch)};
     final out = Directory('$motoliiDir/../reports/firstclick')..createSync(recursive: true);
     final dpr = t.view.devicePixelRatio, written = <Map<String, Object>>[];
     for (final (i, (task, thing, before, control, point)) in tasks.indexed) {
@@ -110,7 +110,21 @@ void main() {
           if (e.renderObject case final RenderBox b when b.hasSize && b.attached)
             if (MatrixUtils.transformRect(b.getTransformTo(null), Offset.zero & b.size) case final w when !w.isEmpty) [w.left * dpr, w.top * dpr, w.right * dpr, w.bottom * dpr],
       ];
-      written.add({'n': i + 1, 'task': task, 'picture': name, 'rect': [r.left * dpr, r.top * dpr, r.right * dpr, r.bottom * dpr], 'words': words, if (also[task] case final a?) 'also': [for (final x in [t.getRect(a.first)]) [x.left * dpr, x.top * dpr, x.right * dpr, x.bottom * dpr]]});
+      // (every part a hand may press, the innermost of those nested: a random click's chance of the right one is the baseline)
+      Rect? partOf(Element e) {
+        final o = e.renderObject;
+        return o is RenderBox && o.hasSize && o.attached ? MatrixUtils.transformRect(o.getTransformTo(null), Offset.zero & o.size) : null;
+      }
+      final all = {
+        for (final type in const [NumField, Chooser, OnOff, SpacePlate, PanelLink, EditableText, DockHover, DockSearch, AnchorCube, Hov])
+          for (final e in find.byType(type).evaluate())
+            if (partOf(e) case final b? when !b.isEmpty && (Offset.zero & t.view.physicalSize / dpr).overlaps(b)) b,
+      };
+      final parts = [
+        for (final b in all)
+          if (!all.any((o) => o != b && b.contains(o.topLeft) && b.contains(o.bottomRight - const Offset(.01, .01)))) [b.left * dpr, b.top * dpr, b.right * dpr, b.bottom * dpr],
+      ];
+      written.add({'parts': parts, 'n': i + 1, 'task': task, 'picture': name, 'rect': [r.left * dpr, r.top * dpr, r.right * dpr, r.bottom * dpr], 'words': words, if (also[task] case final a?) 'also': [for (final x in [t.getRect(a.first)]) [x.left * dpr, x.top * dpr, x.right * dpr, x.bottom * dpr]]});
     }
     File('${out.path}/tasks.json').writeAsStringSync(const JsonEncoder.withIndent('  ').convert(written));
   });
