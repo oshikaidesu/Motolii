@@ -544,7 +544,7 @@ void main() {
     await _close(t);
   }, skip: !_built);
 
-  testWidgets('the Anchor box points into the thing: it turns and grows about that point, and it is where it stands', (t) async {
+  testWidgets('the Anchor points into the thing: it turns and grows about that point, and it is where it stands', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final rect = m.add('shape', 'rect');
     ws
@@ -553,16 +553,28 @@ void main() {
     await t.pumpAndSettle();
     final before = m.frame(rect)!;
     expect([before[0], before[1]], [closeTo(960, 1), closeTo(540, 1)]);
-    await t.ensureVisible(find.byType(AnchorCube));
-    await t.pumpAndSettle();
-    final box = t.getRect(find.byType(AnchorCube));
-    await t.tapAt(box.topLeft + AnchorGeometry(box.size).at(0, 0, 0)); // (its top left corner)
-    await t.pumpAndSettle();
-    expect([m.value(rect, 'anchor_x', 0), m.value(rect, 'anchor_y', 0), m.value(rect, 'anchor_z', 0)], [-1, 1, 0], reason: m.trouble);
+    Finder knob(String id) => find.byWidgetPredicate((w) => w is NumField && w.id == id);
+    if (knob('v_anchor_x').evaluate().isEmpty) { // (the inside's Transform card keeps its anchor in a fold of that name)
+      await t.ensureVisible(find.text('Anchor').first);
+      await t.pumpAndSettle();
+      await t.tap(find.text('Anchor').first);
+      await t.pumpAndSettle();
+    }
+    for (final (id, by) in const [('v_anchor_x', Offset(-400, 0)), ('v_anchor_y', Offset(-400, 0))]) { // (its left, then its top: hundredths of its box from its top left)
+      await t.ensureVisible(knob(id));
+      await t.pumpAndSettle();
+      await t.drag(knob(id), by);
+      await t.pumpAndSettle();
+    }
+    for (var i = 0; i < 20 && ws.waiting; i++) {
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+      await t.pump();
+    }
+    expect([m.value(rect, 'anchor_x', 0), m.value(rect, 'anchor_y', 0)], [-1, 1], reason: 'its top left corner: ${m.trouble}');
     final after = m.frame(rect)!;
     expect(after[0], greaterThan(before[0] + 10), reason: 'its top left corner is where it stands now: it lies right of there');
     expect(after[1], greaterThan(before[1] + 10), reason: 'and below');
-    expect(m.undo() && m.value(rect, 'anchor_x', 0) == 0, isTrue, reason: 'one step');
+    expect(m.undo() && m.value(rect, 'anchor_y', 0) == 0 && m.value(rect, 'anchor_x', 0) == -1, isTrue, reason: 'one step a hand');
     expect(t.takeException(), isNull);
     await expectSameAfterReopen(t);
     await _close(t);
@@ -577,14 +589,7 @@ void main() {
       ..select('$cube');
     await t.pumpAndSettle();
     final before = m.frame(cube)!;
-    final seat = find.byWidgetPredicate((w) => w is PropRow && w.id == 'parent');
-    final chooser = seat.evaluate().isEmpty ? find.text('None').first : find.descendant(of: seat, matching: find.text('None'));
-    await t.ensureVisible(chooser);
-    await t.pumpAndSettle();
-    await t.tap(chooser);
-    await t.pumpAndSettle();
-    await t.tap(find.text('Rect').last);
-    await t.pumpAndSettle();
+    await pick(t, 'v_parent', 'Rect'); // (the inside's Transform card: Parent, another thing)
     expect(m.value(cube, 'parent', 0), rect, reason: m.trouble);
     final given = m.frame(cube)!;
     expect([given[0], given[1]], [closeTo(before[0], 1), closeTo(before[1], 1)], reason: 'it did not move when it was given a parent');
@@ -704,17 +709,12 @@ void main() {
       ..reread()
       ..select('$rect');
     await t.pumpAndSettle();
-    final plate = find.byWidgetPredicate((w) => w is SpacePlate && w.space == Space.d25);
-    await t.ensureVisible(plate);
-    await t.pumpAndSettle();
-    await t.tap(plate);
-    await t.pumpAndSettle();
+    await pick(t, 'v_space', '2.5d'); // (the inside's Transform card: the document's own words)
     expect(m.word(rect, 'space'), '2.5d', reason: m.trouble);
     expect(m.undo() && m.word(rect, 'space').isEmpty, isTrue, reason: 'one step');
     ws.select('$ring');
     await t.pumpAndSettle();
-    final on = t.widget<SpacePlate>(find.byWidgetPredicate((w) => w is SpacePlate && w.space == Space.d3));
-    expect(on.on, isTrue, reason: 'a solid thing is 3D');
+    expect(find.byKey(const ValueKey('choice:v_space')), findsNothing, reason: 'a solid thing is 3D, and only that');
     expect(t.takeException(), isNull);
     await expectSameAfterReopen(t);
     await _close(t);
@@ -1045,14 +1045,13 @@ void main() {
       ..select('$a');
     await t.pumpAndSettle();
     Finder knob(String id) => find.byWidgetPredicate((w) => w is NumField && w.id == id);
-    expect(knob('scale.z'), findsNothing, reason: 'a flat thing: no depth to scale yet');
+    expect(knob('v_scale_z'), findsNothing, reason: 'a flat thing: no depth to scale yet');
     expect(knob('depth'), findsNothing, reason: 'no Depth knob: a thing\'s thickness is its scale z');
     ws.select('$cube');
     await t.pumpAndSettle();
-    await t.tap(find.byType(LinkMark).first); // (each axis on its own)
+    await t.ensureVisible(knob('v_scale_z')); // (the inside's Transform card: each axis its own number)
     await t.pumpAndSettle();
-    await t.ensureVisible(knob('scale.z'));
-    await t.drag(knob('scale.z'), const Offset(60, 0));
+    await t.drag(knob('v_scale_z'), const Offset(60, 0));
     await t.pumpAndSettle();
     expect([m.value(cube, 'scale_x', 0), m.value(cube, 'scale_y', 0)], [1, 1], reason: 'z alone');
     expect(m.value(cube, 'scale_z', 0), isNot(1), reason: m.trouble);
@@ -1103,10 +1102,10 @@ void main() {
     await t.pumpAndSettle();
     expect([m.word(a, 'text'), m.word(b, 'text')], ['first', 'second'], reason: 'in and out of the box writes nothing stale');
     expect(find.text('Justify'), findsNothing, reason: 'ThorVG has not');
-    expect(find.byWidgetPredicate((w) => w is NumField && w.id == 'pos.x'), findsOneWidget);
+    expect(find.byWidgetPredicate((w) => w is NumField && w.id == 'v_x'), findsOneWidget); // (the inside's Transform card)
     await t.tap(find.text('Transform').first);
     await t.pumpAndSettle();
-    expect(find.byWidgetPredicate((w) => w is NumField && w.id == 'pos.x'), findsNothing, reason: 'folded, and it stays so');
+    expect(find.byWidgetPredicate((w) => w is NumField && w.id == 'v_x'), findsNothing, reason: 'folded, and it stays so');
     expect(find.byWidgetPredicate((w) => w is PropRow && w.id == 'ghost'), findsNothing, reason: 'Ghost the document has not is not shown');
     expect(t.takeException(), isNull);
     await expectSameAfterReopen(t);
@@ -1219,11 +1218,11 @@ void main() {
     await t.pumpAndSettle();
     expect(find.descendant(of: find.byType(ValuesCard), matching: find.text('Surface')), findsOneWidget, reason: 'Filament\'s own surface of a solid');
     expect(m.say(cube, 'fill', 'glass'), isTrue, reason: m.trouble);
-    expect(m.cards(cube).map((c) => c.$1), ['Glass', 'Lit', 'Physics'], reason: 'filled with glass: the glass\'s own card, not the surface\'s');
+    expect(m.cards(cube).map((c) => c.$1), ['Transform', 'Glass', 'Lit', 'Physics'], reason: 'filled with glass: the glass\'s own card, not the surface\'s');
     expect(m.cards(rect).map((c) => c.$1).contains('Matte'), isFalse, reason: 'not clipped: no matte to say how');
     expect(m.set(rect, 'clip', 1) && m.cards(rect).map((c) => c.$1).contains('Matte'), isTrue);
     expect(m.set(cube, 'ior', 2.2) && m.value(cube, 'ior', 0) == 2.2, isTrue, reason: m.trouble);
-    expect(m.say(cube, 'fill', 'ff3366') && m.cards(cube).map((c) => c.$1).join(' ') == 'Surface Lit Physics', isTrue);
+    expect(m.say(cube, 'fill', 'ff3366') && m.cards(cube).map((c) => c.$1).join(' ') == 'Transform Surface Lit Physics', isTrue);
     expect(find.byWidgetPredicate((w) => w is NumField && w.id == 'v_metallic'), findsOneWidget);
     expect(t.takeException(), isNull);
     await expectSameAfterReopen(t);
@@ -1280,7 +1279,7 @@ void main() {
     final spot = int.parse(ws.selected!);
     expect([m.word(spot, 'kind'), m.word(spot, 'file')], ['light', 'spot'], reason: m.trouble);
     expect(find.descendant(of: find.byType(InspHeader), matching: find.text('Light')), findsOneWidget);
-    expect([for (final e in find.byType(ValuesCard).evaluate()) (e.widget as ValuesCard).card.name], ['Light']);
+    expect([for (final e in find.byType(ValuesCard).evaluate()) (e.widget as ValuesCard).card.name], ['Transform', 'Light'], reason: 'where it is and how it is turned, as After Effects\' lights have, then its own');
     expect(m.set(spot, 'shadows', 1) && m.say(spot, 'fill', 'ffb36b') && m.set(spot, 'cone', 20), isTrue, reason: m.trouble);
     expect(m.set(spot, 'shadows', 2), isFalse, reason: 'shadows is 0 or 1');
     expect(m.key(spot, 'intensity', 0, 0) && m.key(spot, 'intensity', 1, 3), isTrue, reason: 'its strength moves: ${m.trouble}');
@@ -1485,10 +1484,11 @@ void main() {
     ws..reread()..select('$c');
     ws.animating = true;
     await t.pumpAndSettle();
-    final k = find.byWidgetPredicate((w) => w is NumField && w.id == 'scale.x');
+    final k = find.byWidgetPredicate((w) => w is NumField && w.id == 'v_scale_x'); // (the inside's Transform card)
     await t.ensureVisible(k);
     await t.pumpAndSettle();
-    for (final (by, want) in const [(Offset(40, 30), 1.4), (Offset(-80, 0), 0.6)]) {
+    var was = m.value(c, 'scale_x', ws.frame / Ws.fps)!;
+    for (final (by, more) in const [(Offset(40, 0), true), (Offset(-80, 0), false)]) {
       final g = await t.startGesture(t.getCenter(k));
       for (var i = 1; i <= 3; ++i) {
         await g.moveBy(by / 3);
@@ -1496,8 +1496,14 @@ void main() {
       }
       await g.up();
       await t.pumpAndSettle();
-      expect(m.value(c, 'scale_x', ws.frame / Ws.fps), closeTo(want, 1e-6), reason: 'dragged by $by');
+      for (var i = 0; i < 20 && ws.waiting; i++) {
+        await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+        await t.pump();
+      }
+      final now = m.value(c, 'scale_x', ws.frame / Ws.fps)!;
+      expect(more ? now > was : now < was, isTrue, reason: 'dragged by $by: $was to $now, from the first drag');
       expect(m.keyMoments(c, 'scale_x'), isNotEmpty, reason: 'Animate keys it');
+      was = now;
     }
     ws.animating = false;
     await expectSameAfterReopen(t);

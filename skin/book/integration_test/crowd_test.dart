@@ -71,7 +71,7 @@ void main() {
         ..reread()
         ..select('$cube');
       await t.pump(const Duration(milliseconds: 100));   // (not settled: it plays, and never rests)
-      final knob = find.byWidgetPredicate((w) => w is NumField && w.id == 'pos.x');
+      final knob = find.byWidgetPredicate((w) => w is NumField && w.id == 'v_x');
       await t.ensureVisible(knob.first);
       await t.pump(const Duration(milliseconds: 100));
       knobAt = t.getCenter(knob.first);

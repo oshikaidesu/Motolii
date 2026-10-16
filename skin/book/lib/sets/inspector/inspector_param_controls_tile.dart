@@ -109,6 +109,7 @@ class ParamTile extends StatelessWidget {
             height: 22,
             child: p.options.length <= 4
                 ? Dis(
+                    key: ValueKey('choice:$id'), // (found by its value's id, as a menu of more is)
                     child: Segmented(
                       items: p.options,
                       index: (v ?? 0).round().clamp(0, p.options.length - 1),

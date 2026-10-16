@@ -6,6 +6,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lab_book/motolii.dart' show motoliiDir;
 import 'package:lab_book/workspace/door.dart';
+import 'package:lab_book/sets/inspector/inspector_parts.dart' show Chooser;
 import 'package:lab_book/sets/inspector/inspector_rows_prop_row.dart' show PropRow;
 import 'package:lab_book/workspace/timeline.dart' show WsTimeline;
 
@@ -94,6 +95,22 @@ Future<void> expectSameAfterReopen(WidgetTester t, {List<WsPane> extra = const [
     debugPrint('REOPEN\t${t.testDescription.split(':').first}\t$w');
   }
   expect([for (final w in lost) '- $w', for (final w in gained) '+ $w'], isEmpty, reason: 'what the window showed (-) and shows (+) when opened again on the same document');
+}
+
+/// A word picked on a card's choice of that id, as a hand picks it: among its buttons (four or fewer) or from its menu.
+Future<void> pick(WidgetTester t, String id, String word) async {
+  final menu = find.byWidgetPredicate((w) => w is Chooser && w.id == id), buttons = find.byKey(ValueKey('choice:$id'));
+  final on = menu.evaluate().isNotEmpty ? menu.first : buttons.first;
+  await t.ensureVisible(on);
+  await t.pumpAndSettle();
+  if (menu.evaluate().isNotEmpty) {
+    await t.tap(on);
+    await t.pumpAndSettle();
+    await t.tap(find.text(word).last);
+  } else {
+    await t.tap(find.descendant(of: on, matching: find.byWidgetPredicate((w) => w is Text && w.data?.toLowerCase() == word.toLowerCase()))); // (buttons say it in capitals)
+  }
+  await t.pumpAndSettle();
 }
 
 /// The window's state, as a pane reads it with WsScope.of.

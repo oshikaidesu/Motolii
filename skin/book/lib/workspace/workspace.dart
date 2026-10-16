@@ -459,7 +459,14 @@ const _seats = <(String, String)>[
 
 /// The seats a thing has: the document's own names, and the inspector's numbers whose value it holds (a light has no
 /// scale and no opacity, a flat thing no scale z: those are not shown).
-Set<String> _seatsOf(Set<String> names) => {...names, for (final s in _seats) if (names.contains(s.$2)) s.$1, 'parent', 'depth'};
+Set<String> _seatsOf(Set<String> names) => {
+  ...names,
+  // (where it is, how large, turned and seen is the inside's own Transform card now, as After Effects' group: not the sample's)
+  for (final s in _seats)
+    if (names.contains(s.$2) && !const ['pos.', 'scale.', 'rot.', 'anchor.'].any(s.$1.startsWith) && s.$1 != 'op') s.$1,
+  'parent',
+  'depth',
+};
 
 /// The document's values behind an inspector property (pos, scale, rot, op): its key mark is theirs.
 List<String> _namesOf(String prop) => {
@@ -537,7 +544,7 @@ final _cardsMade = <int, (String, List<Fx>, Motolii)>{};
 List<Fx> _makeCards(Ws ws, Motolii m, int t) {
   final at = ws.frame / Ws.fps;
   String field(String n) {
-    final sh = m.shown(n), k = _shownTimes(m, n), label = '@label(${sh?.label ?? n.replaceAll('_', ' ').replaceRange(0, 1, n[0].toUpperCase())})';
+    final sh = m.shown(n), label = '@label(${sh?.label ?? n.replaceAll('_', ' ').replaceRange(0, 1, n[0].toUpperCase())})';
     if (sh?.look == 'thing') {
       // (another thing, by the names the timeline shows: None, then the others; its number is the document's)
       final others = _others(ws, t), at = others.values.toList().indexOf((m.value(t, n, 0) ?? 0).round());
@@ -547,7 +554,7 @@ List<Fx> _makeCards(Ws ws, Motolii m, int t) {
       return '  /// $label @enum(${words.join(', ')}) @default(${math.max(0, words.indexOf(m.word(t, n)))})\n  $n: u32,';
     }
     if (m.range(t, n) case (final lo0, final hi0)) {
-      final a = (sh != null && sh.high > sh.low ? sh.low : lo0) * k, b = (sh != null && sh.high > sh.low ? sh.high : hi0) * k, lo = math.min(a, b), hi = math.max(a, b);
+      final a = _shown(m, t, n, sh != null && sh.high > sh.low ? sh.low : lo0), b = _shown(m, t, n, sh != null && sh.high > sh.low ? sh.high : hi0), lo = math.min(a, b), hi = math.max(a, b);
       final ui = switch (sh?.look) {
         'onoff' => '@toggle',
         'angle' => '@ui(angle)',
@@ -557,7 +564,7 @@ List<Fx> _makeCards(Ws ws, Motolii m, int t) {
         _ => lo < 0 && hi > 0 ? '@ui(bipolar)' : '@ui(bar)',
       };
       final whole = sh?.look == 'count' || sh?.look == 'onoff' || sh?.look == 'seed';
-      return '  /// $label $ui @range($lo, $hi) @unit(${sh?.unit ?? ''}) @default(${(m.value(t, n, at) ?? lo0) * k})\n  $n: ${whole ? 'u32' : 'f32'},';
+      return '  /// $label $ui @range($lo, $hi) @unit(${sh?.unit ?? ''}) @default(${_shown(m, t, n, m.value(t, n, at) ?? lo0)})\n  $n: ${whole ? 'u32' : 'f32'},';
     }
     return '  /// $label${sh?.look == 'numbers' || sh?.look == 'colours' ? ' @unit(${sh!.look})' : ''}\n  $n: vec3<f32>,'; // (any word: colours, six digits each, given from the Colors shelf; or numbers, one for each copy)
   }
@@ -579,9 +586,8 @@ List<Fx> _makeCards(Ws ws, Motolii m, int t) {
 /// A value of the inside's own cards as the inspector counts it: another thing by its place (None first), a number
 /// in the card's units, a word by its place among those it may be (the stage's and a thing's alike).
 double _onCard(Ws ws, Motolii m, int t, String n, double at) =>
-    m.shown(n)?.look == 'thing' ? (_others(ws, t).values.toList().indexOf((m.value(t, n, 0) ?? 0).round()) + 1).toDouble() : m.words(t, n).isEmpty ? (m.value(t, n, at) ?? 0) * _shownTimes(m, n) : math.max(0, m.words(t, n).indexOf(m.word(t, n))).toDouble(); // (the inside's own cards: a number as it is, a word by its place among those it may be)
+    m.shown(n)?.look == 'thing' ? (_others(ws, t).values.toList().indexOf((m.value(t, n, 0) ?? 0).round()) + 1).toDouble() : m.words(t, n).isEmpty ? _shown(m, t, n, m.value(t, n, at) ?? 0) : math.max(0, m.words(t, n).indexOf(m.word(t, n))).toDouble(); // (the inside's own cards: a number as it is, a word by its place among those it may be)
 
-double _shownTimes(Motolii m, String n) => m.reading(0, n).$1;
 /// A value as a hand reads it, and back (Motolii.reading).
 double _shown(Motolii m, int t, String n, double v) { final (k, f) = m.reading(t, n); return v * k + f; }
 double _unshown(Motolii m, int t, String n, double x) { final (k, f) = m.reading(t, n); return (x - f) / k; }
@@ -629,7 +635,7 @@ Map<String, double> wsTransform(Ws ws, String? id) {
     final others = _others(ws, int.tryParse(ws.selected ?? '') ?? 0).values.toList(), i = x.round();
     return (id.substring(2), i >= 1 && i <= others.length ? others[i - 1].toDouble() : 0);
   }
-  if (seat == null && id.startsWith('v_')) return (id.substring(2), x / _shownTimes(ws.inside!, id.substring(2))); // (a card of the inside's own: the value of that name, in the document's own units)
+  if (seat == null && id.startsWith('v_')) return (id.substring(2), _unshown(ws.inside!, int.tryParse(ws.selected ?? '') ?? 0, id.substring(2), x)); // (a card of the inside's own: the value of that name, in the document's own units)
   if (seat == null) {
     for (final fields in _fxFields(ws, ws.selected).values) {
       if (fields[id] case final n?) return (n, _unshown(ws.inside!, int.tryParse(ws.selected ?? '') ?? 0, n, x)); // (an effect's number: as the inside says a hand reads it (trim in hundredths))
