@@ -8,7 +8,6 @@ import 'dart:math' as math;
 import 'package:docking/docking.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
-import 'package:lab_book/sets/inspector/inspector_effects_k_effects.dart';
 import 'package:lab_book/sets/inspector/inspector_parts_insp_host.dart';
 
 import '../sets/inspector/inspector_parts.dart';
@@ -335,43 +334,6 @@ bool _say(Ws ws, String? id, Map<String, String> changed) {
 /// scale and no opacity, a flat thing no scale z: those are not shown).
 Set<String> _seatsOf(Set<String> names) => {...names, 'parent', 'depth'};
 
-/// Joined: the numbers of each effect on a thing, as the inside has them: an inspector id (the effect's value, '_', the
-/// card's field) and the document's value behind it. Its own amount is the field 'amount' (blur, tint); the rest are
-/// the values named after it (shadow_distance: the shadow card's distance).
-Map<String, Map<String, String>> _fxFields(Ws ws, String? id) {
-  final m = ws.inside, t = int.tryParse(id ?? '');
-  if (m == null || t == null) return const {};
-  final has = m.values(t);
-  return {
-    for (final name in ws.fxOf(id))
-      if (fxValues[name]?.$1 case final v?)
-        v: {
-          for (final n in has)
-            if ((n == v || n.startsWith('${v}_')) && m.range(t, n) != null) '${v}_${n == v ? 'amount' : n.substring(v.length + 1)}': n,
-        },
-  };
-}
-
-/// Joined: each effect on a thing as a card, in the sample's own manner: its Params, one field a number of the
-/// document, the inside's range, what it is now as its default.
-List<Fx>? _fxCards(Ws ws, String? id) {
-  final m = ws.inside, t = int.tryParse(id ?? '');
-  if (m == null || t == null) return null;
-  final fields = _fxFields(ws, id), at = ws.frame / Ws.fps;
-  return [
-    for (final name in ws.fxOf(id))
-      if (fxValues[name]?.$1 case final v? when fields[v] != null)
-        () {
-          final mark = switch (v) { 'blur' => CardMark.blur, 'glow' => CardMark.glow, _ => CardMark.shader };
-          final params = [
-            for (final MapEntry(:key, value: n) in fields[v]!.entries)
-              if (m.range(t, n) case (final lo, final hi))
-                '  /// @range($lo, $hi) @default(${m.value(t, n, at) ?? lo})\n  ${key.substring(v.length + 1)}: f32,',
-          ];
-          return Fx(v, name, 'struct Params {\n${params.join('\n')}\n}', tone: kEffects.firstWhere((f) => f.mark == mark, orElse: () => kEffects.first).tone, mark: mark);
-        }(),
-  ];
-}
 
 /// Joined: the colours on the inside's own cards, as the inspector writes a colour (none said: a dash).
 Map<String, String> _cardColours(Motolii m, int t) => {
@@ -483,8 +445,6 @@ Map<String, double> wsTransform(Ws ws, String? id) {
       for (final (_, names) in m.cards(t))
         for (final n in names)
           'v_$n': _onCard(ws, m, t, n, at),
-      for (final fields in _fxFields(ws, id).values)
-        for (final MapEntry(:key, value: n) in fields.entries) key: _shown(m, t, n, m.value(t, n, at) ?? 0), // (the effects' numbers, as the inside says a hand reads them)
     };
   }
   return const {};
@@ -496,9 +456,6 @@ Map<String, double> wsTransform(Ws ws, String? id) {
     return (id.substring(2), i >= 1 && i <= others.length ? others[i - 1].toDouble() : 0);
   }
   if (id.startsWith('v_')) return (id.substring(2), _unshown(ws.inside!, int.tryParse(ws.selected ?? '') ?? 0, id.substring(2), x)); // (a card of the inside's own: the value of that name, in the document's own units)
-  for (final fields in _fxFields(ws, ws.selected).values) {
-    if (fields[id] case final n?) return (n, _unshown(ws.inside!, int.tryParse(ws.selected ?? '') ?? 0, n, x)); // (an effect's number: as the inside says a hand reads it (trim in hundredths))
-  }
   return null;
 }
 
@@ -551,9 +508,6 @@ Map<String, String> _keyable(Ws ws, int t) {
     for (final (_, names) in m.cards(t))
       for (final n in names)
         if (moving.contains(n)) 'v_$n': n,
-    for (final fields in (t > 0 ? _fxFields(ws, '$t') : const <String, Map<String, String>>{}).values)
-      for (final MapEntry(:key, :value) in fields.entries)
-        if (moving.contains(value)) key: value,
   };
 }
 
@@ -677,15 +631,9 @@ class _InspectorSeatState extends State<_InspectorSeat> {
         key: ValueKey(k),
         cfg: const Cfg(),
         kind: k,
-        effects: 2,
-        fx: Ws.timed('fx cards', () => _fxCards(ws, l?.id)), // (the effects the document has on it, each a card)
+        fx: const [], // (an effect is one of the inside's cards, shown while it is on)
         kindWord: _kindWord(ws, l?.id),
         cards: Ws.timed('value cards', () => _valueCards(ws, l?.id)),
-        onFxRemove: (v) => ws.fxToggle(fxValues.entries.firstWhere((e) => e.value.$1 == v).key), // (taken off the document, as the shelf's Remove)
-        onFxMove: () {
-          _told(ws, 'the effects have no order in the document: '); // (ThorVG lays them in its own)
-          return false;
-        },
         seats: Ws.timed('seats', () => int.tryParse(l?.id ?? '') == null ? null : _seatsOf(m.values(int.parse(l!.id)).toSet())), // (a card of values the thing has not is not shown)
         title: l?.name,
         onRoute: ws.route,

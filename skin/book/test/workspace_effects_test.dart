@@ -4,7 +4,6 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lab_book/workspace/dock_effects.dart' show EffectsShelf;
 import 'package:lab_book/workspace/fx_catalog.dart';
-import 'package:lab_book/workspace/ws.dart' show fxValues;
 
 import 'door.dart';
 
@@ -27,7 +26,7 @@ void main() {
     expect(find.byKey(const ValueKey('browser:filters')), findsNothing);
     await _tap(t, find.byKey(const ValueKey('browser:filters-toggle')));
     expect(find.byKey(const ValueKey('browser:filters')), findsOneWidget);
-    final rows = [for (final f in fxCatalog) if (fxValues.containsKey(f.name)) f.name]; // (what the inside does)
+    final rows = [for (final f in fxCatalog) if (wsOf(t).inside!.thingEffects.any((e) => e.$1 == f.name)) f.name]; // (what the inside does)
     await _tap(t, find.byKey(const ValueKey('browser:filter:Time:Uses time'))); // (none of them uses time)
     expect(find.text(rows.first), findsNothing, reason: 'narrowed away');
     await _tap(t, find.byKey(const ValueKey('browser:filters-clear')));

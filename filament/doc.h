@@ -564,7 +564,7 @@ static const DocCard doc_cards[] = {
     {"Matte", "clip_matte clip_invert clip_feather", "clip", "1"},
     {"Connect", "connect connect_to connect_reach"},
     {"Line", "cap join dash dash_offset"},
-    {"Path", "round trim trim_begin trim_offset bloat offset zigzag zigzag_ridges zigzag_smooth", "kind", "shape"},   // (its path made anew: After Effects' shape operators, ThorVG's own)
+    {"Path", "round bloat offset zigzag zigzag_ridges zigzag_smooth", "kind", "shape"},   // (its path made anew: After Effects' shape operators, ThorVG's own)
     {"Deform", "warp bend twist pinch skew squash wiggle stretch bend_direction pin_tl_x pin_tl_y pin_tr_x pin_tr_y pin_bl_x pin_bl_y pin_br_x pin_br_y warp_width warp_angle warp_speed skew_axis wiggle_detail wiggle_speed", "kind", "shape"},   // (its points moved as it is drawn: Cavalry's deformers)
     {"Surface", "shading metallic roughness reflectance clear_coat clear_coat_roughness sheen anisotropy thickness emissive", "fill", "!glass"},
     {"Glass", "ior dispersion swim dark vivid", "fill", "glass"},
@@ -575,6 +575,12 @@ static const DocCard doc_cards[] = {
     {"Lens", "bloom ambient_occlusion reflections lens_flare vignette vignette_color fog fog_color anti_aliasing"},
     {"Room", "room environment environment_rotate behind background"},
     {"Physics", "physics bounce friction gravity"},
+    {"Trim Paths", "trim trim_begin trim_offset", "trim", "+"},   // (After Effects' shape operator: added from the shelf)
+    {"Gaussian Blur", "blur blur_direction", "blur", "+"},   // (the effects (doc_effects), each its card while it is on, as After Effects' Effect Controls)
+    {"Drop Shadow", "shadow shadow_distance shadow_angle shadow_blur shadow_opacity", "shadow", "+"},
+    {"Glow", "glow glow_blur glow_opacity", "glow", "+"},
+    {"Duotone", "tint tint_black tint_white", "tint", "+"},
+    {"Gradient Map", "tritone tritone_shadow tritone_midtone tritone_highlight", "tritone", "+"},
 };
 static bool doc_among(const std::string& words, const std::string& one) { return (" " + words + " ").find(" " + one + " ") != std::string::npos; }
 
@@ -2297,11 +2303,14 @@ static std::string doc_has(Doc& d, int thing) {
     return names;
 }
 // The cards of a thing: "title: name name; title: name" (those of its values its kind has; a card with none, left out).
+static bool doc_on(Doc& d, int thing, const char* name);
 static std::string doc_cards_of(Doc& d, int thing) {
     const std::string has = " " + doc_has(d, thing) + " ";
     std::string all;
     for (const DocCard& card : doc_cards) {
-        if (card.when && card.is[0] == '~') {   // (a ramp's card while the fill has more colours than one)
+        if (card.when && card.is[0] == '+') {   // (an effect's card while it is on: doc_on)
+            if (!doc_on(d, thing, card.when)) continue;
+        } else if (card.when && card.is[0] == '~') {   // (a ramp's card while the fill has more colours than one)
             if (doc_word(d, thing, card.when).find(card.is + 1) == std::string::npos) continue;
         } else if (card.when) {   // (a card for one fill and not another, or while it is clipped)
             const std::string w = doc_word(d, thing, card.when), want = card.is[0] == '!' ? card.is + 1 : card.is;
@@ -2335,6 +2344,45 @@ static bool doc_range(Doc& d, int thing, const char* name, double* low, double* 
     for (const DocValue& one : doc_values)
         if (!strcmp(one.name, name) && doc_among(one.kinds, kind) && !one.words) return *low = one.low, *high = one.high, true;
     if (const DocValue* v = doc_script_value(d, thing, name); v && !v->words) return *low = v->low, *high = v->high, true;
+    return false;
+}
+// Whether a value is on: keyed, or said and not nought (a colour said is on, black too).
+static bool doc_on(Doc& d, int thing, const char* name) {
+    if (doc_keys(d, thing, name)) return true;
+    const std::string w = doc_word(d, thing, name);
+    double low = 0, high = 0;
+    return !w.empty() && (!doc_range(d, thing, name, &low, &high) || std::atof(w.c_str()) != 0);
+}
+// The effects a thing may be given (the Effects shelf; their cards are doc_cards' "+" rows): a name, the value that puts
+// it on (ThorVG's own), and what it is told then: a number, a word, or keys from that moment ("keys 0 1 1 0": 1 now,
+// 0 a second on: Trim Paths drawn on, as After Effects' is mostly used).
+struct DocEffect { const char* name; const char* value; const char* on; bool word; };
+static const DocEffect doc_effects[] = {
+    {"Gaussian Blur", "blur", "12", false}, {"Drop Shadow", "shadow", "000000", true}, {"Glow", "glow", "ffd166", true},
+    {"Trim Paths", "trim", "keys 0 1 1 0", false}, {"Duotone", "tint", "1", false}, {"Gradient Map", "tritone", "1", false},
+};
+// The shelf's effects, "name\tvalue" one to a line.
+static std::string doc_effect_names() {
+    std::string all;
+    for (const DocEffect& e : doc_effects) all += (all.empty() ? "" : "\n") + std::string(e.name) + "\t" + e.value;
+    return all;
+}
+// An effect put on a thing at a moment, or taken off it if it is on (unsaid, its keys too), one step.
+static bool doc_effect(Doc& d, int thing, const char* name, double at) {
+    for (const DocEffect& e : doc_effects) {
+        if (strcmp(e.name, name)) continue;
+        const bool on = doc_on(d, thing, e.value);
+        doc_act(d);
+        bool ok;
+        if (on) ok = doc_knows(d, thing, e.value) && doc_change(d, sqlite3_mprintf("delete from fact where thing = %d and name = %Q", thing, e.value));   // (unsaid: as it was before it was put on)
+        else if (!strncmp(e.on, "keys ", 5)) {
+            double a0 = 0, v0 = 0, a1 = 0, v1 = 0;
+            ok = std::sscanf(e.on + 5, "%lf %lf %lf %lf", &a0, &v0, &a1, &v1) == 4 && doc_key(d, thing, e.value, at + a0, v0) && doc_key(d, thing, e.value, at + a1, v1);
+        } else ok = e.word ? doc_say(d, thing, e.value, e.on) : doc_set(d, thing, e.value, std::atof(e.on));
+        if (!ok) d.act_ok = false;
+        return doc_acted(d);
+    }
+    d.trouble = std::string("no effect is called ") + name;
     return false;
 }
 static bool doc_unkey(Doc& d, int thing, const char* name, double at) {

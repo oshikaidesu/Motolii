@@ -31,11 +31,9 @@ class _InspectorPanelState extends State<InspectorPanel> {
         const EmptyState()
       else ...[
         const InspHeader(),
-        // contract: one stack, After Effects style: the host's cards (Transform first), the material, then effects piled below; every titled card folds on its own.
+        // contract: one stack, After Effects style: the host's cards, Transform first and the effects on it last; every titled card folds on its own.
         const SizedBox(height: Pop.gap),
         for (final c in doc.cards) ValuesCard(c), // (the host's own cards)
-        PopGroupLabel('Effects', count: Ctx.of(context).doc.fxOrder.length),
-        const EffectsStack(),
       ],
     ];
     final panel = Focus(

@@ -52,6 +52,10 @@ int motolii_keys(Motolii* m, int thing, const char* name);         /* how many k
    (the numbers said with it); it is taken only if it begins at a and ends at b. */
 int motolii_way(Motolii* m, int thing, const char* name, double at, const char* way);
 int motolii_define(Motolii* m, const char* way, const char* expression);
+/* The effects a thing may be given, "name\tvalue" one to a line (until the next call); one put on a thing at a moment,
+   or taken off if it is on (its keys too), one step. Its card shows while it is on (motolii_cards). */
+const char* motolii_effect_names(Motolii* m);
+int motolii_effect(Motolii* m, int thing, const char* name, double at);
 const char* motolii_way_of(Motolii* m, int thing, const char* name, double at);   /* the way of the stretch that begins at that key, as it is said ("": no key there; until the next call) */
 const char* motolii_ways(Motolii* m);
 const char* motolii_way_names(Motolii* m);                         /* the names alone, with spaces between: the nine kinds, then the ways defined here (until the next call) */

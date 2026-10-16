@@ -36,7 +36,7 @@ class EffectsShelf extends StatelessWidget {
   bool _has(FxDef f, String g, String t) => g == _collection ? c.starred(f.name) : fxHas(f, g, t);
 
   bool _keep(FxDef f, {String? except}) =>
-      fxValues.containsKey(f.name) && // (only what the inside does; a row that does nothing is not shown)
+      (c.ws.inside?.thingEffects.any((e) => e.$1 == f.name) ?? false) && // (only what the inside does; a row that does nothing is not shown)
       c.hit(f.name) && c.mem.filter.entries.every((e) => e.key == except || e.value.isEmpty || e.value.any((t) => _has(f, e.key, t)));
 
   void _toggle(String g, String t, bool add) => c.set(() {
@@ -241,7 +241,7 @@ class _ScreenRow extends StatelessWidget {
 
 /// Joined: the document's value an effect is, and what the picked thing has for it now.
 String _said(Ws ws, String name) {
-  final v = fxValues[name]!.$1, t = int.tryParse(ws.selected ?? ''), m = ws.inside!; // (joined, the shelf shows only what the inside does)
+  final m = ws.inside!, v = m.thingEffects.firstWhere((e) => e.$1 == name).$2, t = int.tryParse(ws.selected ?? ''); // (the shelf shows only what the inside does)
   final now = t == null ? '' : m.word(t, v);
   return now.isEmpty ? '$v · none on it' : '$v · $now';
 }

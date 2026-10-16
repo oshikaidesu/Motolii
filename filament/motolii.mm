@@ -310,6 +310,8 @@ int motolii_way(Motolii* m, int thing, const char* name, double at, const char* 
         return changes(m, (int)doc_acted(d));
     });
 }
+const char* motolii_effect_names(Motolii* m) { return by_look(m, [m] { return (m->listed = doc_effect_names()).c_str(); }); }
+int motolii_effect(Motolii* m, int thing, const char* name, double at) { return by_hand(m, [=] { return changes(m, (int)(doc_effect(doc(m), thing, name, at))); }); }
 int motolii_define(Motolii* m, const char* way, const char* expression) { return by_hand(m, [=] { return changes(m, (int)(doc_define(doc(m), way, expression))); }); }
 const char* motolii_ways(Motolii* m) { return by_look(m, [m] { return (m->listed = doc_ways(*m->d)).c_str(); }); }
 int motolii_value(Motolii* m, int thing, const char* name, double at, double* is) { return by_look(m, [=] { return (int)(doc_value(doc(m), thing, name, at, is)); }); }

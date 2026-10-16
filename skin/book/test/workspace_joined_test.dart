@@ -13,8 +13,7 @@ import 'package:lab_book/motolii.dart';
 
 import 'door.dart';
 import 'package:lab_book/parts/controls.dart' show Segmented;
-import 'package:lab_book/sets/inspector/inspector_effects_effect_card.dart';
-import 'package:lab_book/sets/inspector/inspector_parts.dart' show Ctx, Chooser, AnchorCube, AnchorGeometry, LinkMark, EffectCard, ValuesCard, InspHeader, KeyS, NumField, OnOff, PropRow, Space, SpacePlate, TextGroup;
+import 'package:lab_book/sets/inspector/inspector_parts.dart' show Ctx, Chooser, AnchorCube, AnchorGeometry, LinkMark, ValuesCard, InspHeader, KeyS, NumField, OnOff, PropRow, Space, SpacePlate, TextGroup;
 import 'package:lab_book/sets/inspector/inspector_rows_prop_row.dart';
 import 'package:lab_book/workspace/dock_fonts.dart';
 import 'package:lab_book/workspace/dock_make.dart' show CreateShelf;
@@ -306,7 +305,7 @@ void main() {
     ws.fxToggle('Trim Paths'); // (keys: 1 at 0, 0 at 1 s)
     ws.frame = 90;
     await t.pumpAndSettle();
-    final knob = find.byWidgetPredicate((w) => w is NumField && w.id == 'trim_amount');
+    final knob = find.byWidgetPredicate((w) => w is NumField && w.id == 'v_trim');
     await seen(t, knob);
     await t.dragFrom(t.getCenter(knob.first), const Offset(60, 0));
     await t.pumpAndSettle();
@@ -647,7 +646,7 @@ void main() {
     await t.pumpAndSettle();
     expect(m.value(rect, 'blur', 0), 12, reason: m.trouble);
     expect(ws.fxOf('$rect'), ['Gaussian Blur']);
-    expect(wsTransform(ws, '$rect')['blur_amount'], 12, reason: 'the Blur card says the document\'s blur');
+    expect(wsTransform(ws, '$rect')['v_blur'], 12, reason: 'the Blur card says the document\'s blur');
     await t.tap(find.text('Remove'));
     await t.pumpAndSettle();
     expect(m.value(rect, 'blur', 0), 0);
@@ -682,7 +681,7 @@ void main() {
     await t.pumpAndSettle();
     expect([m.keyMoments(rect, 'trim'), m.value(rect, 'trim', 0)], [isEmpty, 0], reason: 'taken off with its keys');
 
-    final none = fxCatalog.map((f) => f.name).firstWhere((n) => !fxValues.containsKey(n) && m.effects.every((e) => e.$1 != n) && m.animators.every((e) => e.$1 != n)); // (one of the sample's the inside does not do)
+    final none = fxCatalog.map((f) => f.name).firstWhere((n) => !m.thingEffects.any((e) => e.$1 == n) && m.effects.every((e) => e.$1 != n) && m.animators.every((e) => e.$1 != n)); // (one of the sample's the inside does not do)
     await t.enterText(find.descendant(of: find.byType(DockSearch), matching: find.byType(EditableText)), none);
     await t.pumpAndSettle();
     expect(find.text(none), findsOneWidget, reason: 'only the search box\'s own words: $none, which the inside does not do, is not on the shelf');
@@ -1013,7 +1012,7 @@ void main() {
     expect(find.text('1 used here'), findsOneWidget);
     ws.shelf = 'Effects';
     await t.pumpAndSettle();
-    final fx = fxCatalog.where((f) => fxValues.containsKey(f.name)).length;
+    final fx = m.thingEffects.length + m.effects.length;
     expect(fx, greaterThan(3));
     expect(find.text('$fx ready'), findsOneWidget);
     ws.shelf = 'Create';
@@ -1108,33 +1107,20 @@ void main() {
     await t.pumpAndSettle();
     expect(ws.fxToggle('Drop Shadow') && ws.fxToggle('Glow'), isTrue, reason: m.trouble);
     await t.pumpAndSettle();
-    final cards = inspectorEffects(t);
-    expect(cards, ['Drop Shadow', 'Glow']);
-    await seen(t, find.byType(EffectCard)); // (the effects lie below the cards: scrolled to)
-    final ids = {for (final e in find.byType(NumField).evaluate()) (e.widget as NumField).id};
-    expect(ids, containsAll(['shadow_distance', 'shadow_angle', 'shadow_blur', 'shadow_opacity', 'glow_blur', 'glow_opacity']));
-    final far = find.byWidgetPredicate((w) => w is NumField && w.id == 'shadow_distance'), was = m.value(a, 'shadow_distance', 0);
+    expect(inspectorCards(t), containsAll(['Drop Shadow', 'Glow']), reason: 'an effect on it is one of its cards');
+    final far = find.byWidgetPredicate((w) => w is NumField && w.id == 'v_shadow_distance'), was = m.value(a, 'shadow_distance', 0);
     await seen(t, far);
+    final ids = {for (final e in find.byType(NumField).evaluate()) (e.widget as NumField).id};
+    expect(ids, containsAll(['v_shadow_distance', 'v_shadow_angle', 'v_shadow_blur', 'v_shadow_opacity']));
     await t.drag(far, const Offset(40, 0));
     await t.pumpAndSettle();
     expect(m.value(a, 'shadow_distance', 0), isNot(was), reason: 'the distance is the document\'s: ${ws.notice}');
     expect(m.undo(), isTrue);
     expect(m.value(a, 'shadow_distance', 0), was, reason: 'one step');
-    ws.reread();
-    await t.pumpAndSettle();
-    final more = find.descendant(of: find.byType(EffectCard).first, matching: find.text('More'));
-    await seen(t, more);
-    await t.tap(more);
-    await t.pumpAndSettle();
-    await t.tap(find.text('Move later'));
-    await t.pumpAndSettle();
-    expect(ws.notice, startsWith('Not taken: the effects have no order'));
-    if (find.text('Remove').evaluate().isEmpty) await t.tap(more); // (the menu closes once used)
-    await t.pumpAndSettle();
-    await t.tap(find.text('Remove'));
+    expect(ws.fxToggle('Drop Shadow'), isTrue, reason: m.trouble); // (taken off as the shelf's Remove takes it)
     await t.pumpAndSettle();
     expect([ws.fxOf('$a'), m.word(a, 'shadow')], [['Glow'], ''], reason: 'taken off the document');
-    expect(inspectorEffects(t), ['Glow']);
+    expect(inspectorCards(t).contains('Drop Shadow'), isFalse);
     expect(t.takeException(), isNull);
     await expectSameAfterReopen(t);
     await _close(t);

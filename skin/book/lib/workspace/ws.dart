@@ -304,22 +304,13 @@ class Ws extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// The shelf's effects the document has on the thing (a value said, and not nought), in stack order.
+  /// The shelf's effects on the thing: those whose card the inside shows (an effect's card shows while it is on).
   List<String> fxOf(String? id) {
     final m = _inside, t = int.tryParse(id ?? '');
     if (m == null || t == null) return const [];
-    if (_fxKeptAt != rev) { // (the effects on a thing change with the document: asked once a reading, not each picture of the stage, three questions an effect a thing)
-      _fxKept.clear();
-      _fxKeptAt = rev;
-    }
-    return _fxKept.putIfAbsent(t, () => List.unmodifiable([
-      for (final e in fxValues.entries)
-        if (_on(m, t, e.value.$1)) e.key,
-    ]));
+    final shown = {for (final (title, _) in m.cards(t)) title};
+    return [for (final (name, _) in m.thingEffects) if (shown.contains(name)) name];
   }
-
-  final _fxKept = <int, List<String>>{};
-  int _fxKeptAt = -1;
 
   /// Joined: whether every change a hand makes is keyed (the top bar's Animate, the inspector's Animate all: one truth, the inside's).
   bool get animating => _inside?.keyingNow ?? false;
@@ -337,11 +328,6 @@ class Ws extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Joined: whether a value that puts an effect on a thing is on (keyed, or said and not nought).
-  static bool _on(Motolii m, int t, String name) {
-    final w = m.word(t, name);
-    return m.keyMoments(t, name).isNotEmpty || (w.isNotEmpty && (m.range(t, name) == null || (double.tryParse(w) ?? 1) != 0)); // (a colour said is on, black too; a number, when not nought)
-  }
 
   /// Joined: a change asked without waiting ([Motolii.later]): looked at once a picture till the inside has done it, then
   /// the document read again and [then] told (done or not, and why not). The window never stands still for the inside.
@@ -412,19 +398,13 @@ class Ws extends ChangeNotifier {
 
   /// Joined: an effect of the shelf put on the picked thing as it comes, or taken off (one step either way).
   bool fxToggle(String name) {
-    final m = _inside, t = int.tryParse(selected ?? ''), v = fxValues[name];
-    if (m == null || t == null || v == null) return false;
-    final on = fxOf(selected).contains(name);
-    final at = frame / fps;
-    final done = switch (v.$2) {
-      _ when on && v.$2 is! String => m.set(t, v.$1, 0), // (taken off: its keys too)
-      final num n => m.set(t, v.$1, n.toDouble()),
-      final List<(double, double)> keys => m.together(() => keys.every((k) => m.key(t, v.$1, at + k.$1, k.$2))),
-      final w => m.say(t, v.$1, on ? '' : '$w'),
-    };
+    final m = _inside, t = int.tryParse(selected ?? '');
+    if (m == null || t == null) return false;
+    final done = m.effect(t, name, frame / fps);
     reread();
     return done;
   }
+
 
   String timecode([int? f]) {
     final v = f ?? _frame, s = v ~/ fps, fr = v % fps;
@@ -432,16 +412,6 @@ class Ws extends ChangeNotifier {
   }
 }
 
-/// Joined: the shelf's effects the inside has, by the document's value that puts each on a thing (ThorVG's own), and
-/// what it is told as it is put on (the sample's Blur radius; After Effects' black shadow; all of the two or three colours).
-const fxValues = <String, (String, Object)>{
-  'Gaussian Blur': ('blur', 12),
-  'Drop Shadow': ('shadow', '000000'),
-  'Glow': ('glow', 'ffd166'), // (a warm light all round)
-  'Trim Paths': ('trim', [(0.0, 1.0), (1.0, 0.0)]), // (drawn on from here, in a second: keys as After Effects' trim paths is mostly used)
-  'Duotone': ('tint', 1),
-  'Gradient Map': ('tritone', 1),
-};
 
 /// The font a new text is set in, a font every machine of its kind has (one place: the Create shelf and the stage's tool).
 final wsTextFont = Platform.isWindows ? 'C:/Windows/Fonts/arial.ttf' : '/System/Library/Fonts/Supplemental/Arial Unicode.ttf';

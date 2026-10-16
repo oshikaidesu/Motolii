@@ -109,6 +109,8 @@ class Motolii {
   late final _ways = _lib.lookupFunction<_S Function(_P), _S Function(_P)>('motolii_ways');
   late final _define = _lib.lookupFunction<Int32 Function(_P, _S, _S), int Function(_P, _S, _S)>('motolii_define');
   late final _wayNames = _lib.lookupFunction<_S Function(_P), _S Function(_P)>('motolii_way_names');
+  late final _effectNames = _lib.lookupFunction<_S Function(_P), _S Function(_P)>('motolii_effect_names');
+  late final _effect = _lib.lookupFunction<Int32 Function(_P, Int32, _S, Double), int Function(_P, int, _S, double)>('motolii_effect');
   late final _wayAt = _lib.lookupFunction<Double Function(_P, _S, Double), double Function(_P, _S, double)>('motolii_way_at');
   late final _kindOf = _lib.lookupFunction<_S Function(_S), _S Function(_S)>('motolii_kind_of');
   late final _together = _lib.lookupFunction<Int32 Function(_P, Int32), int Function(_P, int)>('motolii_together');
@@ -418,6 +420,16 @@ class Motolii {
   /// The ways a stretch may go, as the document says them: the nine kinds with their numbers, the named ones, and
   /// each defined here ('; defined here: Snappy').
   String get ways => _ways(_m).toDartString();
+
+  /// The effects a thing may be given, by name, with the value that puts each on (the Effects shelf); its card shows
+  /// while it is on ([cards]).
+  List<(String, String)> get thingEffects => [
+    for (final l in _effectNames(_m).toDartString().split('\n'))
+      if (l.contains('\t')) (l.split('\t').first, l.split('\t').last),
+  ];
+
+  /// An effect put on a thing at a moment, or taken off if it is on (its keys too), one step.
+  bool effect(int thing, String name, double at) => _with([name], (s) => _effect(_m, thing, s[0], at)) != 0;
 
   List<String> get wayNames => _wayNames(_m).toDartString().split(' ').where((w) => w.isNotEmpty).toList();
   double wayAt(String way, double u) => _with([way], (s) => _wayAt(_m, s[0], u));
