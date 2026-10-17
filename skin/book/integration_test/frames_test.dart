@@ -2,10 +2,12 @@
 // document (fifteen recipes) played, a knob dragged to and fro, and the playhead moved back and forth, twenty seconds
 // each. Red: any picture of the window that took longer than a sixtieth of a second.
 //   flutter drive --profile -d macos --driver=test_driver/integration_test.dart --target=integration_test/frames_test.dart
+import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' show FramePhase;
 
 import 'package:flutter/rendering.dart' show debugProfileLayoutsEnabled;
+import 'package:flutter/widgets.dart' show debugProfileBuildsEnabled;
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -68,8 +70,11 @@ void main() {
     ws.playing = true;
     if (const bool.fromEnvironment('TRACE')) { // (TRACE: Flutter's own timeline of the playing, every widget's build and the collector, into build/integration_response_data.json)
       debugProfileLayoutsEnabled = true;
+      debugProfileBuildsEnabled = true;
       await binding.traceAction(() => phase('playing', (_) async {}), reportKey: 'timeline', streams: const ['Dart', 'Embedder', 'GC']);
+      File('/tmp/motolii_playing_timeline.json').writeAsStringSync(jsonEncode(binding.reportData!['timeline'])); // (kept even when the test fails)
       debugProfileLayoutsEnabled = false;
+      debugProfileBuildsEnabled = false;
     } else {
       await phase('playing', (_) async {});
     }
