@@ -135,14 +135,13 @@ static int posted(Motolii* m, const std::string& kind, std::function<void()> doe
     m->asked_now.notify_one();
     return 1;
 }
-// A read the window asks for its copy (motolii_dont_wait): if the hand holds the document longer than a millisecond, not
-// waited for: refused (motolii_refused says so), and the window shows what it read before, asking again a picture later.
+// A read the window asks for its copy (motolii_dont_wait): if the hand holds the document, not waited for: refused (motolii_refused says so), and the window shows what it read before, asking again a picture later.
 static thread_local bool dont_wait = false, refused = false;
 template <class Does> static auto by_look(Motolii* m, Does does, const char* who = __builtin_FUNCTION()) -> decltype(does()) {
     const auto asked = std::chrono::steady_clock::now();
     std::unique_lock<std::recursive_timed_mutex> hold(m->d->lock, std::defer_lock);
     if (dont_wait) {
-        if (!hold.try_lock_for(std::chrono::milliseconds(1))) {
+        if (!hold.try_lock()) {   // (tried once: a timed try may wake later than asked)
             refused = true;
             if constexpr (std::is_pointer_v<decltype(does())>) return (decltype(does()))"";
             else return decltype(does()){};

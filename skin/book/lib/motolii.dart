@@ -297,7 +297,8 @@ class Motolii {
   /// A thing's frame on the picture at the stage's moment: its middle (x, y), how wide, how high (points of the picture,
   /// from the top left), how far it is turned (degrees, clockwise as seen), the point it turns about (x, y), and how deep
   /// it is (0: flat). null: there is no such thing.
-  List<double>? frame(int thing) {
+  List<double>? frame(int thing) => _asked(('frame', thing), _atMoment, _atMoment, () => _frameNow(thing));   // (the hand busy: where it was a picture ago)
+  List<double>? _frameNow(int thing) {
     final out = malloc<Double>(8);
     final ok = _frame(_m, thing, out) != 0, f = [for (var i = 0; i < 8; i++) out[i]];
     malloc.free(out);
@@ -305,7 +306,8 @@ class Motolii {
   }
 
   /// What of a thing is seen: the upright box of its outline on the picture (points from the top left). null: not shown.
-  Rect? seen(int thing) {
+  Rect? seen(int thing) => _asked(('seen', thing), _atMoment, _atMoment, () => _seenNow(thing));
+  Rect? _seenNow(int thing) {
     final out = malloc<Double>(4);
     final ok = _seen(_m, thing, out) != 0, r = Rect.fromLTRB(out[0], out[1], out[2], out[3]);
     malloc.free(out);
@@ -315,7 +317,8 @@ class Motolii {
   /// How a thing moves over a while, as the stage places it (its wave and all): [n] moments from [from] to before [to],
   /// four numbers each: where it is (x, y, units of the stage), how far turned (degrees), how large (a share). null: no
   /// such thing. Asked once when its values change, for a small preview that then plays by itself (motolii_path).
-  List<double>? path(int thing, {int copy = 0, double from = 0, required double to, int n = 60}) {
+  List<double>? path(int thing, {int copy = 0, double from = 0, required double to, int n = 60}) => _keptCarried(('path', thing, copy, from, to, n), () => _pathNow(thing, copy: copy, from: from, to: to, n: n));   // (the same while the document and what a hand carries are)
+  List<double>? _pathNow(int thing, {int copy = 0, double from = 0, required double to, int n = 60}) {
     final out = malloc<Double>(4 * n);
     final got = _path(_m, thing, copy, from, to, n, out), p = [for (var i = 0; i < 4 * got; i++) out[i]];
     malloc.free(out);
@@ -366,7 +369,7 @@ class Motolii {
   bool put(int thing, String name, double at, double number) => _with([name], (s) => _put(_m, thing, s[0], at, number)) != 0;
   bool keyHere(int thing, String name, double at) => _with([name], (s) => _keyHere(_m, thing, s[0], at)) != 0;
   bool stay(int thing, String name, double at) => _with([name], (s) => _stay(_m, thing, s[0], at)) != 0;
-  int keyed(int thing, String name, double at) => _with([name], (s) => _keyed(_m, thing, s[0], at));
+  int keyed(int thing, String name, double at) => _asked(('keyed', thing, name), _atMoment, _atMoment, () => _with([name], (s) => _keyed(_m, thing, s[0], at)));   // (the hand busy: as it was a picture ago)
 
   /// The size of the stage the document is open on; and the size it is to be when it is next opened (close, open again).
   late final (int, int) size = () {
@@ -431,6 +434,11 @@ class Motolii {
   /// How loud a film's sound is at [n] moments of the document from [from] to before [to], where its film shows them
   /// (dB; -100 silent or not shown). null: its sound not read yet ([loudness] reads it); empty: no sound.
   List<double>? loudnessOver(int thing, double from, double to, int n) {
+    final key = ('loudness', thing, from, to, n), v = _kept(key, () => _loudnessOverNow(thing, from, to, n));
+    if (v == null) _copy.remove(key);   // (its sound not read yet: asked again, not kept as none)
+    return v;
+  }
+  List<double>? _loudnessOverNow(int thing, double from, double to, int n) {
     final out = malloc<Float>(n < 1 ? 1 : n), got = _loudnessOver(_m, thing, from, to, n, out);
     final all = got < 0 ? null : [for (var i = 0; i < got; i++) out[i].toDouble()];
     malloc.free(out);
@@ -439,7 +447,8 @@ class Motolii {
 
   /// Where a film's sound strikes (grows [rise] dB louder at once): the document's moments where it shows them, or
   /// [own] the film's own seconds. Asked once its loudness has been read ([loudness]).
-  List<double> strikes(int thing, double rise, {bool own = false}) {
+  List<double> strikes(int thing, double rise, {bool own = false}) => _kept(('strikes', thing, rise, own), () => _strikesNow(thing, rise, own: own));
+  List<double> _strikesNow(int thing, double rise, {bool own = false}) {
     final n = _strikes(_m, thing, rise, own ? 1 : 0, nullptr, 0), out = malloc<Double>(n < 1 ? 1 : n);
     final got = _strikes(_m, thing, rise, own ? 1 : 0, out, n), all = [for (var i = 0; i < got && i < n; i++) out[i]];
     malloc.free(out);

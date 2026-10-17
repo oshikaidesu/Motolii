@@ -97,6 +97,7 @@ class Ws extends ChangeNotifier {
   Motolii? get inside => _inside;
   void join(Motolii inside) {
     _inside = inside;
+    inside.shaping;   // (read once, at the opening: what a card is made by)
     var asking = false;
     inside.again = () {   // (a read put off while the hand was busy: the seats look again a picture later, once)
       if (asking) return;

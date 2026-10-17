@@ -386,6 +386,43 @@ void main() {
     for (final (k, b) in beats.indexed) {
       expect(b, closeTo(k * .5, .03));
     }
+    // Keys (keys.dart, the window's own table): Space plays and stops, the arrows step a frame, with Shift ten; while
+    // words are typed, Space is the words'.
+    Future<void> press(LogicalKeyboardKey l, PhysicalKeyboardKey p) async {
+      await t.sendKeyDownEvent(l, platform: 'macos', physicalKey: p);
+      await t.sendKeyUpEvent(l, platform: 'macos', physicalKey: p);
+    }
+    FocusManager.instance.primaryFocus?.unfocus();
+    ws
+      ..playing = false
+      ..frame = 30;
+    await t.pump();
+    await press(LogicalKeyboardKey.space, PhysicalKeyboardKey.space);
+    await t.pump();
+    final played = ws.playing;
+    await press(LogicalKeyboardKey.space, PhysicalKeyboardKey.space);
+    await t.pump();
+    final stopped = !ws.playing;
+    ws.frame = 30;
+    await t.pump();
+    await press(LogicalKeyboardKey.arrowRight, PhysicalKeyboardKey.arrowRight);
+    await t.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft, platform: 'macos', physicalKey: PhysicalKeyboardKey.shiftLeft);
+    await press(LogicalKeyboardKey.arrowRight, PhysicalKeyboardKey.arrowRight);
+    await t.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft, platform: 'macos', physicalKey: PhysicalKeyboardKey.shiftLeft);
+    await t.pump();
+    final stepped = ws.frame;
+    final search = find.descendant(of: find.byType(WsShelf), matching: find.byType(EditableText)).first;
+    await t.tap(search);
+    await t.pump();
+    await press(LogicalKeyboardKey.space, PhysicalKeyboardKey.space);
+    await t.pump();
+    final typedPlays = ws.playing;
+    FocusManager.instance.primaryFocus?.unfocus();
+    report.add('Keys: Space played $played and stopped $stopped; right, shift+right: frame $stepped (want 41); Space while typing played $typedPlays (want false)');
+    expect(played, true);
+    expect(stopped, true);
+    expect(stepped, 41);
+    expect(typedPlays, false);
     File('${out.path}/report.txt').writeAsStringSync(report.join('\n'));
     expect(made, 2);
     expect(named.first, 'Drop');

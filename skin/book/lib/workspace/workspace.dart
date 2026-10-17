@@ -6,7 +6,6 @@ import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:docking/docking.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:lab_book/sets/inspector/inspector_parts_insp_host.dart';
 
@@ -18,6 +17,7 @@ import 'dock.dart';
 import 'dock_glyphs.dart';
 import 'panes.dart';
 import 'desk_kit.dart';
+import 'keys.dart';
 import 'stage.dart';
 import 'timeline.dart';
 import 'top_bar.dart';
@@ -55,6 +55,7 @@ class _WorkspaceState extends State<Workspace> {
   @override
   void initState() {
     super.initState();
+    FocusManager.instance.addListener(_keepKeys);
     _join(widget.document ?? '${Directory.systemTemp.createTempSync('motolii').path}/Untitled.motolii'); // (no document given: a new one, as After Effects opens an untitled project)
   }
 
@@ -100,8 +101,53 @@ class _WorkspaceState extends State<Workspace> {
 
   /// The window's menus, in the system's own menu bar: what the sample window has no seat for (a new document,
   /// another document, the film written out) and what the keyboard does elsewhere (undo, redo, take a thing out).
+  // The window holds the focus when nothing in it does (a field left, a pane closed): its keys are heard there.
+  final _windowFocus = FocusNode(debugLabel: 'window');
+  void _keepKeys() {
+    final now = FocusManager.instance.primaryFocus;
+    final above = now == null || (now is FocusScopeNode && _windowFocus.ancestors.contains(now));   // (fallen out of the window)
+    if (!mounted || !above || _windowFocus.context == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && !_windowFocus.hasFocus) _windowFocus.requestFocus();
+    });
+  }
+
+  /// The window's commands by name (keys.dart: the keys that say them, the window's own and the maker's file).
+  late final _keymap = Keymap.load();
+  Map<String, VoidCallback> _commands() {
+    final m = _inside!, ws = _ws;
+    void step(int by) {
+      ws.playing = false;
+      ws.frame = ws.frame + by;
+    }
+
+    return {
+      'file.new': () => _open(_fresh()),
+      'file.render': _render,
+      'edit.undo': () => _typed(const UndoTextIntent(SelectionChangedCause.keyboard)) ? null : ws.after(m.later('undo')),
+      'edit.redo': () => _typed(const RedoTextIntent(SelectionChangedCause.keyboard)) ? null : ws.after(m.later('redo')),
+      'edit.cut': () => _typed(const CopySelectionTextIntent.cut(SelectionChangedCause.keyboard)),
+      'edit.copy': () => _typed(CopySelectionTextIntent.copy),
+      'edit.paste': () => _typed(const PasteTextIntent(SelectionChangedCause.keyboard)),
+      'edit.selectAll': () => _typed(const SelectAllTextIntent(SelectionChangedCause.keyboard)),
+      'thing.remove': () {
+        final t = int.tryParse(ws.selected ?? '');
+        if (t != null) ws.after(m.later('remove', thing: t));   // (without waiting; undo brings it back)
+      },
+      'layers.sequence': () => ws.after(m.later('sequence')),   // (After Effects' Keyframe Assistant: one after another, from the top)
+      'play.toggle': () => ws.playing = !ws.playing,
+      'frame.previous': () => step(-1),
+      'frame.next': () => step(1),
+      'frame.back10': () => step(-10),
+      'frame.forward10': () => step(10),
+      'frame.first': () => step(-ws.frame),
+      'frame.last': () => step(Ws.duration - ws.frame),
+    };
+  }
+
   List<PlatformMenuItem> _menus() {
-    final m = _inside!;
+    final does = _commands();
+    PlatformMenuItem item(String label, String command) => PlatformMenuItem(label: label, shortcut: _keymap.keyOf(command), onSelected: does[command]);
     return [
       PlatformMenu(
         label: 'lab_book',
@@ -112,11 +158,11 @@ class _WorkspaceState extends State<Workspace> {
         menus: [
           PlatformMenuItemGroup(
             members: [
-              PlatformMenuItem(label: 'New Document', shortcut: const SingleActivator(LogicalKeyboardKey.keyN, meta: true), onSelected: () => _open(_fresh())),
+              item('New Document', 'file.new'),
               PlatformMenu(label: 'Open', menus: [for (final f in _beside) PlatformMenuItem(label: f.split('/').last, onSelected: f == _doc ? null : () => _open(f))]),
             ],
           ),
-          PlatformMenuItem(label: 'Render', shortcut: const SingleActivator(LogicalKeyboardKey.keyR, meta: true), onSelected: _render),
+          item('Render', 'file.render'),
         ],
       ),
       PlatformMenu(
@@ -124,32 +170,26 @@ class _WorkspaceState extends State<Workspace> {
         menus: [
           PlatformMenuItemGroup(
             members: [
-              PlatformMenuItem(label: 'Undo', shortcut: const SingleActivator(LogicalKeyboardKey.keyZ, meta: true), onSelected: () => _typed(const UndoTextIntent(SelectionChangedCause.keyboard)) ? null : _ws.after(m.later('undo'))),
-              PlatformMenuItem(label: 'Redo', shortcut: const SingleActivator(LogicalKeyboardKey.keyZ, meta: true, shift: true), onSelected: () => _typed(const RedoTextIntent(SelectionChangedCause.keyboard)) ? null : _ws.after(m.later('redo'))),
+              item('Undo', 'edit.undo'),
+              item('Redo', 'edit.redo'),
             ],
           ),
           // (the system's own Edit menu went when these menus came: what a text box does is given back to it)
           PlatformMenuItemGroup(
             members: [
-              PlatformMenuItem(label: 'Cut', shortcut: const SingleActivator(LogicalKeyboardKey.keyX, meta: true), onSelected: () => _typed(const CopySelectionTextIntent.cut(SelectionChangedCause.keyboard))),
-              PlatformMenuItem(label: 'Copy', shortcut: const SingleActivator(LogicalKeyboardKey.keyC, meta: true), onSelected: () => _typed(CopySelectionTextIntent.copy)),
-              PlatformMenuItem(label: 'Paste', shortcut: const SingleActivator(LogicalKeyboardKey.keyV, meta: true), onSelected: () => _typed(const PasteTextIntent(SelectionChangedCause.keyboard))),
-              PlatformMenuItem(label: 'Select All', shortcut: const SingleActivator(LogicalKeyboardKey.keyA, meta: true), onSelected: () => _typed(const SelectAllTextIntent(SelectionChangedCause.keyboard))),
+              item('Cut', 'edit.cut'),
+              item('Copy', 'edit.copy'),
+              item('Paste', 'edit.paste'),
+              item('Select All', 'edit.selectAll'),
             ],
           ),
-          PlatformMenuItem(
-            label: 'Remove',
-            onSelected: () {
-              final t = int.tryParse(_ws.selected ?? '');
-              if (t != null) _ws.after(m.later('remove', thing: t));   // (without waiting)
-            },
-          ),
+          item('Remove', 'thing.remove'),
         ],
       ),
       PlatformMenu(
         label: 'Animation',
         menus: [
-          PlatformMenuItem(label: 'Sequence Layers', onSelected: () => _ws.after(m.later('sequence'))),   // (After Effects' Keyframe Assistant: one after another, from the top)
+          item('Sequence Layers', 'layers.sequence'),
         ],
       ),
     ];
@@ -184,6 +224,8 @@ class _WorkspaceState extends State<Workspace> {
 
   @override
   void dispose() {
+    FocusManager.instance.removeListener(_keepKeys);
+    _windowFocus.dispose();
     _inside?.close();
     _ws.dispose();
     super.dispose();
@@ -208,6 +250,7 @@ class _WorkspaceState extends State<Workspace> {
     final window = WsScope(
       ws: _ws,
       child: Focus(
+        focusNode: _windowFocus,
         autofocus: true,
         child: ColoredBox(
           color: WsT.ground,
@@ -216,7 +259,7 @@ class _WorkspaceState extends State<Workspace> {
       ),
     );
     if (_ws.inside == null) return ColoredBox(color: WsT.ground); // (the document still opening: no seat is built on nothing)
-    return PlatformMenuBar(menus: _menus(), child: window);
+    return PlatformMenuBar(menus: _menus(), child: WsKeys(keymap: _keymap, commands: _commands(), child: window));
   }
 }
 

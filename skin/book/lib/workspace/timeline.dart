@@ -122,29 +122,6 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
 
   // ---------------------------------------------------------------- input
 
-  KeyEventResult _key(FocusNode n, KeyEvent e) {
-    if (e is! KeyDownEvent && e is! KeyRepeatEvent) return KeyEventResult.ignored;
-    final k = e.logicalKey, ws = _ws!;
-    if (k == LogicalKeyboardKey.space && e is KeyDownEvent) {
-      _toggle();
-    } else if (k == LogicalKeyboardKey.delete || k == LogicalKeyboardKey.backspace) {
-      // The picked thing is taken out of the document (undo brings it back).
-      final t = int.tryParse(ws.selected ?? '');
-      if (t != null) ws.after(ws.inside!.later('remove', thing: t));   // (without waiting)
-    } else if (k == LogicalKeyboardKey.arrowLeft) {
-      _step(HardwareKeyboard.instance.isShiftPressed ? -10 : -1);
-    } else if (k == LogicalKeyboardKey.arrowRight) {
-      _step(HardwareKeyboard.instance.isShiftPressed ? 10 : 1);
-    } else if (k == LogicalKeyboardKey.home) {
-      _step(-ws.frame);
-    } else if (k == LogicalKeyboardKey.end) {
-      _step(Ws.duration - ws.frame);
-    } else {
-      return KeyEventResult.ignored;
-    }
-    return KeyEventResult.handled;
-  }
-
   void _trackDown(Offset p) {
     final ws = _ws!, v = _view;
     final i = ((p.dy + _vscroll) / WtM.row).floor();
@@ -420,7 +397,6 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
     ];
     return Focus(
       focusNode: _focus,
-      onKeyEvent: _key,
       child: Listener(
         onPointerDown: (_) => _focus.requestFocus(),
         child: ColoredBox(
