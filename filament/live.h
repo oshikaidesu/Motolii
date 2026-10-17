@@ -148,23 +148,6 @@ static void desk_marks(Stage& s, Live* l, int i) {
                 dot(knob, 2.75f);
             }
             for (float2 c : f.c) square(c, 2.75f);   // (the corners a hand pulls it larger by)
-            static const bool lettered = tvg::Text::load("/System/Library/Fonts/SFNS.ttf") == tvg::Result::Success;   // (the system's own letters; none: no tag)
-            if (lettered && !k.name.empty()) {   // (its name on a tag just over its frame's top left, kept within the desk)
-                float2 low = f.c[0];
-                for (float2 c : f.c) low = min(low, c);
-                tvg::Text* words = tvg::Text::gen();
-                words->font("SFNS"), words->size(10.f * pt), words->text(k.name.c_str()), words->fill(0x15, 0x17, 0x0D);
-                float bx = 0, by = 0, bw = 0, bh = 0;
-                words->bounds(&bx, &by, &bw, &bh);
-                const float pad = 5.f * pt, high = 16.f * pt, wide = bw + 2.f * pad;
-                const float x = std::clamp(low.x, 4.f * pt, std::max(4.f * pt, (float)k.w - wide - 4.f * pt)), y = std::clamp(low.y - high - 4.f * pt, 4.f * pt, std::max(4.f * pt, (float)k.h - high - 4.f * pt));
-                tvg::Shape* tag = tvg::Shape::gen();
-                tag->appendRect(x, y, wide, high, 3.f * pt, 3.f * pt);
-                tag->fill(0xB3, 0xC6, 0x6B, 235);
-                canvas->add(tag);
-                words->translate(x + pad - bx, y + 0.5f * (high - bh) - by);
-                canvas->add(words);
-            }
             tvg::Shape* ring = tvg::Shape::gen();   // (the point it turns about: a small ring and four short ticks)
             ring->appendCircle(f.pivot.x, f.pivot.y, 4.f * pt, 4.f * pt);
             ring->strokeWidth(1.f * pt), ring->strokeFill(0xB3, 0xC6, 0x6B, 200);
