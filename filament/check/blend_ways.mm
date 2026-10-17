@@ -18,7 +18,7 @@ int main(int argc, char** argv) {
     const int under = motolii_add(m, "shape", "rect"), over = motolii_add(m, "shape", "rect");
     motolii_say(m, under, "fill", "cc4d33"), motolii_set(m, under, "x", -0.3);
     motolii_say(m, over, "fill", "3380e6"), motolii_set(m, over, "x", 0.3);
-    const char* ways[] = {"normal", "multiply", "screen", "darken", "lighten", "overlay", "soft_light", "hard_light", "color_dodge", "color_burn", "difference", "exclusion", "hue", "saturation", "color", "luminosity"};
+    const char* ways[] = {"normal", "multiply", "screen", "darken", "lighten", "overlay", "soft_light", "hard_light", "color_dodge", "color_burn", "difference", "exclusion", "hue", "saturation", "color", "luminosity", "linear_burn", "linear_light", "vivid_light", "pin_light", "darker_color", "lighter_color", "subtract", "divide", "add"};
     for (const char* w : ways) {
         printf("%-12s said %d ", w, motolii_say(m, over, "blend", w));
         usleep(300000);

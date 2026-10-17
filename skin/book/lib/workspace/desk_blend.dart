@@ -59,13 +59,17 @@ class _RowState extends State<_Row> {
             ),
           ),
           if (ways.isNotEmpty) ...[
+            SizedBox(width: 74, child: Text(now.replaceAll('_', ' '), maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.right, style: T.micro(now == 'normal' ? Grey.g56 : Grey.g91))),   // (its way, named: two ways can look alike small)
+            const SizedBox(width: 4),
             DeskIconButton(key: ValueKey('blend.${l.id}'), size: 24, on: _open, glyph: (ink) => _Way(now, ink), onTap: () => setState(() => _open = !_open)),
             const SizedBox(width: 8),
             SizedBox(width: 64, height: 18, child: _Opacity(key: ValueKey('opacity.${l.id}'), thing: t!, value: opacity)),
             const SizedBox(width: 6),
-            DeskIconButton(key: ValueKey('clip.${l.id}'), size: 24, on: clip, glyph: (ink) => _Clip(ink), onTap: () {
-              if (m!.set(t, 'clip', clip ? 0 : 1)) ws.reread();
-            }),
+            if (l == ws.layers.last) const SizedBox(width: 24)   // (the back-most: nothing under it to clip to)
+            else
+              DeskIconButton(key: ValueKey('clip.${l.id}'), size: 24, on: clip, glyph: (ink) => _Clip(ink), onTap: () {
+                if (m!.set(t, 'clip', clip ? 0 : 1)) ws.reread();
+              }),
           ],
         ],
       ),
@@ -76,6 +80,9 @@ class _RowState extends State<_Row> {
     final groups = <List<String>>[[], [], [], [], [], []];
     for (final w in ways) {
       groups[_group(w)].add(w);
+    }
+    for (final (k, g) in groups.indexed) {
+      g.sort((x, y) => _order[k].indexOf(x).compareTo(_order[k].indexOf(y)));
     }
     return Padding(
       padding: const EdgeInsets.only(bottom: 3),
@@ -114,14 +121,17 @@ class _RowState extends State<_Row> {
 }
 
 /// Which of After Effects' groups a way is in (0 normal, 1 darker, 2 lighter, 3 contrast, 4 difference, 5 colour).
-int _group(String w) => switch (w) {
-  'darken' || 'multiply' || 'color_burn' => 1,
-  'lighten' || 'screen' || 'add' || 'color_dodge' => 2,
-  'overlay' || 'soft_light' || 'hard_light' => 3,
-  'difference' || 'exclusion' => 4,
-  'hue' || 'saturation' || 'color' || 'luminosity' => 5,
-  _ => 0,
-};
+int _group(String w) => _order.indexWhere((g) => g.contains(w)).clamp(0, 5);
+
+/// After Effects' groups and its order within each (a way the inside names that is in none: with normal).
+const _order = [
+  ['normal'],
+  ['darken', 'multiply', 'color_burn', 'linear_burn', 'darker_color'],
+  ['add', 'lighten', 'screen', 'color_dodge', 'lighter_color'],
+  ['overlay', 'soft_light', 'hard_light', 'linear_light', 'vivid_light', 'pin_light'],
+  ['difference', 'exclusion', 'subtract', 'divide'],
+  ['hue', 'saturation', 'color', 'luminosity'],
+];
 
 /// How much of it is there: a bar filled so far, pulled across (held and carried while pulled, one step when let go).
 class _Opacity extends StatefulWidget {
@@ -154,7 +164,7 @@ class _OpacityState extends State<_Opacity> {
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, box) => Listener(
       onPointerDown: (e) => e.buttons == kPrimaryButton ? _to(e.localPosition.dx, box.maxWidth) : null,
-      onPointerMove: (e) => _to(e.localPosition.dx, box.maxWidth),
+      onPointerMove: (e) => _held != null ? _to(e.localPosition.dx, box.maxWidth) : null,   // (only a drag that began with the first button)
       onPointerUp: (_) => _letGo(),
       onPointerCancel: (_) => _letGo(),
       child: CustomPaint(painter: _Bar(_held ?? widget.value)),
@@ -187,10 +197,12 @@ class _Way extends CustomPainter {
   final Color ink;
   static const _under = Color(0xFFCC4D33), _over = Color(0xFF3380E6);
   static const _meets = <String, Color>{
-    'normal': Color(0xFF3380E6), 'add': Color(0xFFFFCDFF), 'multiply': Color(0xFF27222D), 'screen': Color(0xFFCE8FE7),
+    'normal': Color(0xFF3380E6), 'add': Color(0xFFD193EA), 'multiply': Color(0xFF27222D), 'screen': Color(0xFFCE8FE7),
     'darken': Color(0xFF334D33), 'lighten': Color(0xFFCC80E6), 'overlay': Color(0xFFAD4D5C), 'soft_light': Color(0xFFB34D66),
     'hard_light': Color(0xFF524ED7), 'color_dodge': Color(0xFFFF9BFF), 'color_burn': Color(0xFF00001D), 'difference': Color(0xFF9933B3),
     'exclusion': Color(0xFFAD80BD), 'hue': Color(0xFF397AD2), 'saturation': Color(0xFFDC4729), 'color': Color(0xFF2F7CE2), 'luminosity': Color(0xFFD05137),
+    'linear_burn': Color(0xFF00001A), 'linear_light': Color(0xFF334EFF), 'vivid_light': Color(0xFF804DFF), 'pin_light': Color(0xFF664DCD),
+    'darker_color': Color(0xFFCC4D33), 'lighter_color': Color(0xFF3380E6), 'subtract': Color(0xFF990000), 'divide': Color(0xFFFF9939),
   };
   @override
   void paint(Canvas c, Size s) {

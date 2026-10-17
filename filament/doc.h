@@ -159,7 +159,7 @@ static const DocValue doc_values[] = {
     {"points", "shape", 3, 100, false, nullptr}, {"inner", "shape", 0.01, 1, false, nullptr}, {"round", "shape", 0, 0.5, true, nullptr},   // (a polygon's or star's points, a star's inner points, its corners rounded)
     {"start", doc_kinds, 0, 1e6, false, nullptr}, {"duration", doc_kinds, 1e-3, 1e6, false, nullptr},
     {"begin", "film", 0, 1e6, false, nullptr}, {"speed", "film solid", -100, 100, false, nullptr}, {"keyed", "film", 0, 1, false, nullptr},
-    {"blend", "film picture text shape", 0, 0, false, "normal add multiply screen darken lighten overlay soft_light hard_light color_dodge color_burn difference exclusion hue saturation color luminosity"}, {"file", "film picture solid text", 0, 0, false, ""}, {"shape", "solid", 0, 0, false, doc_shapes},
+    {"blend", "film picture text shape", 0, 0, false, "normal add multiply screen darken lighten overlay soft_light hard_light color_dodge color_burn difference exclusion hue saturation color luminosity linear_burn linear_light vivid_light pin_light darker_color lighter_color subtract divide"}, {"file", "film picture solid text", 0, 0, false, ""}, {"shape", "solid", 0, 0, false, doc_shapes},
     {"text", "text", 0, 0, false, ""}, {"fill", "text solid shape light", 0, 0, false, ""},
     {"marker", "picture", 0, 0, false, ""},   // (an After Effects file: which of its named stretches it plays, over and over; all: the whole of it)
     {"name", doc_kinds, 0, 0, false, ""},   // (what it is called where things are listed; not said: by what it is)
@@ -701,8 +701,9 @@ static std::string doc_word(Doc& d, int thing, const char* name) {
 // A way of lying on what is under that reads what is under (the W3C's compositing, After Effects' and ThorVG's): its
 // number in flat.mat's blendWay (0: one the GPU's own blending does: normal, add, multiply, screen).
 static int doc_blend_way(const std::string& word) {
-    static const char* const ways[] = {"darken", "lighten", "overlay", "soft_light", "hard_light", "color_dodge", "color_burn", "difference", "exclusion", "hue", "saturation", "color", "luminosity"};
-    for (int i = 0; i < 13; ++i) if (word == ways[i]) return i + 1;
+    static const char* const ways[] = {"darken", "lighten", "overlay", "soft_light", "hard_light", "color_dodge", "color_burn", "difference", "exclusion", "hue", "saturation", "color", "luminosity",
+                                       "linear_burn", "linear_light", "vivid_light", "pin_light", "darker_color", "lighter_color", "subtract", "divide"};
+    for (int i = 0; i < 21; ++i) if (word == ways[i]) return i + 1;
     return 0;
 }
 static void doc_looks(Stage& s, const Doc::Shown& t, const std::function<void(MaterialInstance*)>& each) {
@@ -1323,11 +1324,21 @@ static void doc_moment(Doc& d, double now) {
     if (std::find(sorts.begin(), sorts.end(), 2) != sorts.end())   // (as large as what the views draw into: the desk's when it is drawn there, else the stage's)
         backdrop_as(s, s.desk.w && !s.over ? s.desk.w : (uint32_t)s.w, s.desk.w && !s.over ? s.desk.h : (uint32_t)s.h);
     for (size_t i = 0; i < lies.size(); ++i)   // (those that read what is under: which way, and the picture of it)
-        if (runOf[i] >= 0 && sorts[(size_t)runOf[i]] == 2)
-            doc_looks(s, *lies[i].shown, [&](MaterialInstance* look) {
-                look->setParameter("blendWay", (float)doc_blend_way(doc_word(d, lies[i].thing, "blend")));
-                if (s.backdrop) look->setParameter("backdrop", s.backdrop, TextureSampler(TextureSampler::MinFilter::NEAREST, TextureSampler::MagFilter::NEAREST));
-            });
+        if (runOf[i] >= 0 && sorts[(size_t)runOf[i]] == 2) {   // (every part of it: its fill, its edge, each copy's own look)
+            const Doc::Shown& t = *lies[i].shown;
+            const Mesh* sheet = t.film ? t.film->sheet : t.drawn ? t.drawn->sheet : nullptr;
+            auto& faces = s.engine->getRenderableManager();
+            const float way = (float)doc_blend_way(doc_word(d, lies[i].thing, "blend"));
+            for (const Stage::Made& made : s.made) {
+                if (!sheet || made.of != sheet || made.matte) continue;
+                const auto one = faces.getInstance(made.thing);
+                for (size_t part = 0; part < faces.getPrimitiveCount(one); ++part) {
+                    MaterialInstance* look = faces.getMaterialInstanceAt(one, part);
+                    look->setParameter("blendWay", way);
+                    if (s.backdrop) look->setParameter("backdrop", s.backdrop, TextureSampler(TextureSampler::MinFilter::NEAREST, TextureSampler::MagFilter::NEAREST));
+                }
+            }
+        }
     View::DepthOfFieldOptions lens = s.view->getDepthOfFieldOptions();   // (the camera's lens, on the stage's own view when solid things are in it)
     if (lens.enabled != (d.blurred && (base == 1 || (!sorts.empty() && sorts[0]))))
         lens.enabled = !lens.enabled, s.view->setDepthOfFieldOptions(lens);
@@ -1580,6 +1591,11 @@ static bool doc_match(Doc& d) {
     std::map<int, std::string> told;   // every thing of the document, and all that its making goes by
     doc_rows(d, sqlite3_mprintf("select thing, group_concat(name || '=' || value, ' ') from (select * from fact where thing > 0 and name in (%s) order by thing, name) group by thing", doc_making),
              [&](sqlite3_stmt* row) { told[sqlite3_column_int(row, 0)] = (const char*)sqlite3_column_text(row, 1); });
+    for (auto& [thing, of] : told)   // (one way that reads what is under is made as any other: going from one to another tells the look, it makes nothing again)
+        if (const size_t at = of.find("blend="); at != std::string::npos) {
+            const size_t end = of.find(' ', at);
+            if (doc_blend_way(of.substr(at + 6, end == std::string::npos ? std::string::npos : end - at - 6))) of.replace(at + 6, (end == std::string::npos ? of.size() : end) - at - 6, "*");
+        }
     if (const auto held = told.find(d.held.thing); held != told.end())   // (what a hand carries of its making shows too: it is made again as it would be)
         for (const auto& [name, is] : d.held.tried)
             if (strstr(doc_making, ("'" + name + "'").c_str())) {   // (one that moves is drawn again each moment anyway (doc_moment): made again only as it comes on or goes off)
