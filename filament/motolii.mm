@@ -161,14 +161,16 @@ static void motolii_hand(Motolii* m, std::string document, int wide, int high, s
             std::lock_guard<std::recursive_mutex> holding(m->d->lock);
             if (doc_files_moved(*m->d)) m->changed = true;
         }   // (a shader or a script saved: drawn again)
-        if (!todo.empty()) {   // (the document may change: what was set down for the window is put aside)
-            m->peek.seq.fetch_add(1, std::memory_order_acq_rel);
-            m->peek.thing = -1;
-            m->peek.seq.fetch_add(1, std::memory_order_release);
-        }
         {
             std::lock_guard<std::recursive_mutex> holding(m->d->lock);
+            const long rows = sqlite3_total_changes(m->d->file);
+            const auto held = m->d->held.tried;
             for (auto& does : todo) does();
+            if (sqlite3_total_changes(m->d->file) != rows || m->d->held.tried != held) {   // (the document changed, or what a hand carries: what was set down for the window is put aside; a moment asked, a pick, play: it stays)
+                m->peek.seq.fetch_add(1, std::memory_order_acq_rel);
+                m->peek.thing = -1;
+                m->peek.seq.fetch_add(1, std::memory_order_release);
+            }
         }
         if (!m->playing) for (auto& [who, h] : m->heard) if (h.on) gst_element_set_state(h.bin, GST_STATE_PAUSED), h.on = false;   // (the stage stopped: so does its sound)
         const bool ready = !m->live || live_ready(*m->s, m->live);   // (the picture begun before, offered once the GPU has finished it)
@@ -386,6 +388,15 @@ const char* motolii_spent(Motolii* m) {
 }
 int motolii_play(Motolii* m, int playing) { return posted(m, "play", [m, playing] { m->playing = playing != 0; }); }
 double motolii_now(Motolii* m) { return m->now; }
+double motolii_drawn_at(Motolii* m) {   // (the moment of the picture last set down, as the window counts it: what it reads there is waiting for it)
+    for (;;) {
+        const uint64_t before = m->peek.seq.load(std::memory_order_acquire);
+        if (before & 1) continue;
+        const double at = m->peek.at;
+        std::atomic_thread_fence(std::memory_order_acquire);
+        if (m->peek.seq.load(std::memory_order_relaxed) == before) return at;
+    }
+}
 
 int motolii_add(Motolii* m, const char* kind, const char* file) { return by_hand(m, [=] { return changes(m, (int)(doc_add(doc(m), kind, file))); }); }
 int motolii_remove(Motolii* m, int thing) { return by_hand(m, [=] { return changes(m, (int)(doc_remove(doc(m), thing))); }); }

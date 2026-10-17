@@ -65,7 +65,7 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
   void _tick(Duration e) => Timeline.timeSync('ws tick', () => _tickNow(e)); // (named in Flutter's timeline: frames_test TRACE)
   void _tickNow(Duration e) {
     final ws = _ws!;
-    _last = (ws.inside!.now * Ws.fps).round().clamp(0, Ws.duration); // (the inside keeps the clock, the playhead shows its moment)
+    _last = (ws.inside!.drawnAt * Ws.fps).round().clamp(0, Ws.duration); // (the inside keeps the clock, the playhead shows the moment of the picture it drew last)
     ws.frame = _last;
   }
 

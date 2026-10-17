@@ -182,6 +182,7 @@ unsigned long long motolii_desk_frames(Motolii* m);
 unsigned long long motolii_frames(Motolii* m);
 int motolii_play(Motolii* m, int playing);                         /* time goes on by the clock (and round again at the end), or stands */
 double motolii_now(Motolii* m);                                    /* the stage's moment */
+double motolii_drawn_at(Motolii* m);   /* the moment of the last moment told the stage, at a frame of the document's rate: the window's playhead while it plays (what it reads there is set down, not waited for) */
 void motolii_timed(Motolii* m, int pictures);                      /* played by the clock for that many pictures: says on its output what it cost and what was left out */
 #ifdef __cplusplus
 }

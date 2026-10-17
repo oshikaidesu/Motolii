@@ -73,6 +73,7 @@ class Motolii {
   late final _pick = _lib.lookupFunction<Int32 Function(_P, Int32, Int32), int Function(_P, int, int)>('motolii_pick');
   late final _play = _lib.lookupFunction<Int32 Function(_P, Int32), int Function(_P, int)>('motolii_play');
   late final _now = _lib.lookupFunction<Double Function(_P), double Function(_P)>('motolii_now');
+  late final _drawnAt = _lib.lookupFunction<Double Function(_P), double Function(_P)>('motolii_drawn_at');
   late final _at = _lib.lookupFunction<Int32 Function(_P, Double), int Function(_P, double)>('motolii_at');
   late final _seconds = _lib.lookupFunction<Double Function(_P), double Function(_P)>('motolii_seconds');
   late final _add = _lib.lookupFunction<Int32 Function(_P, _S, _S), int Function(_P, _S, _S)>('motolii_add');
@@ -216,6 +217,10 @@ class Motolii {
   }
 
   double get now => _now(_m);
+
+  /// The moment of the picture the stage last drew, at a frame: where a playhead is while it plays (what is read there
+  /// is set down, not waited for).
+  double get drawnAt => _drawnAt(_m);
   double get seconds => _seconds(_m);
   late final _rate = _lib.lookupFunction<Int32 Function(_P), int Function(_P)>('motolii_rate');
 

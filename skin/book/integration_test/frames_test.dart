@@ -80,14 +80,29 @@ void main() {
     }
     ws.playing = false;
 
-    final knob = find.byWidgetPredicate((w) => w is NumField && w.id == (const bool.fromEnvironment('NONE') ? 'v_exposure' : 'pos.x'));
+    final knob = find.byWidgetPredicate((w) => w is NumField && w.id == (const bool.fromEnvironment('NONE') ? 'v_exposure' : 'v_x'));
     await t.ensureVisible(knob);
     await t.pump();
     final g = await t.startGesture(t.getCenter(knob));
-    await phase('a knob dragged', (f) async => g.moveBy(Offset((f ~/ 60).isEven ? 3 : -3, 0)));
+    Future<void> traced(String what, Future<void> Function(int) step) async { // (TRACE: Flutter's own timeline of it, kept in /tmp)
+      if (!const bool.fromEnvironment('TRACE')) return phase(what, step);
+      debugProfileBuildsEnabled = true;
+      await binding.traceAction(() => phase(what, step), reportKey: 'timeline', streams: const ['Dart', 'Embedder', 'GC']);
+      debugProfileBuildsEnabled = false;
+      File('/tmp/motolii_${what.replaceAll(' ', '_')}_timeline.json').writeAsStringSync(jsonEncode(binding.reportData!['timeline']));
+    }
+
+    final moves = <double>[];
+    await traced('a knob dragged', (f) async {
+      final w = Stopwatch()..start();
+      await g.moveBy(Offset((f ~/ 60).isEven ? 3 : -3, 0));
+      moves.add(w.elapsedMicroseconds / 1000);
+    });
+    moves.sort();
+    debugPrint('FRAMES a move of the hand took: median ${moves[moves.length ~/ 2].toStringAsFixed(2)} ms, 90th ${moves[(moves.length * .9).floor()].toStringAsFixed(2)} ms, most ${moves.last.toStringAsFixed(2)} ms');
     await g.up();
 
-    await phase('the playhead moved', (f) async => ws.frame = (f * 3) % (Ws.fps * 8));
+    await traced('the playhead moved', (f) async => ws.frame = (f * 3) % (Ws.fps * 8));
 
     if (const bool.fromEnvironment('LETGO')) { // (LETGO: a knob taken, moved and let go again and again, Flutter's own timeline of it with each widget's build, for reading)
       Future<void> letGos() async {

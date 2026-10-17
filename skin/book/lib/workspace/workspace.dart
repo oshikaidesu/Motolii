@@ -391,6 +391,7 @@ List<Fx>? _valueCards(Ws ws, String? id) {
   return cards;
 }
 final _cardsMade = <int, (String, List<Fx>, Motolii)>{};
+int? _holding; // (the thing a hand on the inspector holds now: held once, carried at every step, let go when it lets go)
 
 List<Fx> _makeCards(Ws ws, Motolii m, int t) {
   final at = ws.frame / Ws.fps;
@@ -443,12 +444,16 @@ double _onCard(Ws ws, Motolii m, int t, String n, double at) =>
 double _shown(Motolii m, int t, String n, double v) { final (k, f) = m.reading(t, n); return v * k + f; }
 double _unshown(Motolii m, int t, String n, double x) { final (k, f) = m.reading(t, n); return (x - f) / k; }
 
+// (the moment of the picture on the stage, at a frame: what is read there was set down by the inside as it drew it,
+//  not waited for while it tells the stage a moment the playhead has just been put at)
+double _drawn(Ws ws) => ws.inside?.drawnAt ?? ws.frame / Ws.fps;
+
 /// Joined: only where a thing is, how large and how turned (the inspector's seats), as the stage's readout shows them:
 /// not the cards' hundreds of numbers [wsTransform] reads.
 Map<String, double> wsPlace(Ws ws, String id) {
   final m = ws.inside, t = int.tryParse(id);
   if (m == null || t == null) return const {};
-  final at = ws.frame / Ws.fps;
+  final at = _drawn(ws);
   double r1(double x) => (x * 10).roundToDouble() / 10 + 0;
   return {for (final n in const ['x', 'y', 'scale_y', 'rotate']) n: r1(_shown(m, t, n, m.value(t, n, at) ?? (n == 'scale_y' ? 1 : 0)))};
 }
@@ -458,11 +463,11 @@ Map<String, double> wsTransform(Ws ws, String? id) {
   if (ws.inside case final m?) {   // (the document's own values, as the inspector counts them)
     final t = int.tryParse(id ?? '');
     if (id == null) { // (nothing picked: the stage's own cards, thing 0)
-      final at = ws.frame / Ws.fps;
+      final at = _drawn(ws);
       return {for (final (_, names) in m.cards(0)) for (final n in names) 'v_$n': _onCard(ws, m, 0, n, at)};
     }
     if (t == null) return const {};
-    final at = ws.frame / Ws.fps;
+    final at = _drawn(ws);
     double r1(double x) => (x * 10).roundToDouble() / 10 + 0; // (+ 0: no minus nought)
     return {
       'depth': r1(m.frame(t)?[7] ?? 0), // (how deep it is in points of the picture: a flat thing is Flat)
@@ -496,7 +501,8 @@ void _write(Ws ws, String? id, Map<String, double> changed, {required bool live}
     changed = {for (final e in changed.entries) if (!said.containsKey(e.key)) e.key: e.value};
     if (changed.isEmpty) return ws.reread();
   }
-  if (t == null || !m.hold(t)) return;
+  if (t == null || (_holding != t && !m.hold(t))) return; // (held once a hand: each step after only carries)
+  _holding = live ? t : null;
   String? why;
   for (final e in changed.entries) {
     final to = _asDocument(ws, e.key, e.value);
@@ -506,7 +512,6 @@ void _write(Ws ws, String? id, Map<String, double> changed, {required bool live}
   if (live) {
     if (ws.playing) ws.playing = false; // (a hand on a value stops the play: what is changed is changed at one moment)
     if (why != null) _told(ws, why);
-    ws.shown(); // (what it carries shows: the stage's boxes look again, as when a hand carries it on the stage)
   } else {
     ws.after(m.later('let_go', number: 1), (done, no) => _told(ws, why ?? (done ? null : no))); // (the hand let go: the window does not wait for the step)
   }
@@ -519,7 +524,7 @@ Map<String, KeyS> wsKeyMarks(Ws ws, String? id) => _keyMarks(ws, id);
 Map<String, KeyS> _keyMarks(Ws ws, String? id) {
   final m = ws.inside, t = id == null ? 0 : int.tryParse(id);
   if (m == null || t == null) return const {};
-  final at = ws.frame / Ws.fps;
+  final at = _drawn(ws);
   final marks = {for (final MapEntry(:key, :value) in _keyable(ws, t).entries) key: KeyS.values[m.keyed(t, value, at)]};
   return {
     ...marks,
