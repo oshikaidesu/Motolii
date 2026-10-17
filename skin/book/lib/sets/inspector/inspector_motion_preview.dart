@@ -1,7 +1,8 @@
 // A card's motion preview, in the manner of Good Boy Ninja's Wiggle: a small box where a plain square moves as the
-// thing will (sways, falls and bounces, drifts), played over and over while a hand is on it or pulls the card's numbers
-// below it, and at rest otherwise. How it moves is the inside's (Motolii.path, asked once when the card's values
+// thing will (sways, falls and bounces, drifts) along the whole of its way drawn faint; played while a hand is on it and
+// a little while after a number of the card changes, at rest otherwise. How it moves is the inside's (Motolii.path, asked once when the card's values
 // change); the window only plays it back.
+import 'dart:async' show Timer;
 import 'dart:math' as math;
 
 import 'package:flutter/widgets.dart';
@@ -23,8 +24,16 @@ class _MotionPreviewState extends State<MotionPreview> with SingleTickerProvider
   String _asked = '';
   List<double>? _path;
   bool _over = false, _moves = false;
+  DateTime _changed = DateTime(0); // (a number of the card changed: it plays a while by itself)
+  double _round = 2;
+  final _later = <Timer>[]; // (the asks and the stop after a change: let go with the card)
 
-  void _play(bool touched) { // (only while touched: still otherwise, no frames asked for)
+  void _after(int ms, void Function() does) => _later
+    ..removeWhere((t) => !t.isActive)
+    ..add(Timer(Duration(milliseconds: ms), () => mounted ? does() : null));
+
+  void _play() { // (while a hand is on it, or a little while after a number changed: still otherwise, no frames asked for)
+    final touched = _over || DateTime.now().difference(_changed).inMilliseconds < (_round * 2000).clamp(1500, 4000);
     if (touched && _moves) {
       if (!_clock.isAnimating) _clock.repeat();
     } else if (_clock.isAnimating || _clock.value != 0) {
@@ -34,8 +43,21 @@ class _MotionPreviewState extends State<MotionPreview> with SingleTickerProvider
     }
   }
 
+  void _ask(Doc doc) { // (how it moves, as the inside has it now)
+    if (!mounted) return;
+    final p = doc.onPath?.call(_round, MotionPreview.samples);
+    setState(() {
+      _path = p;
+      _moves = p != null && [for (var i = 0; i + 3 < p.length; i += 4) (p[i] - p[0]).abs() + (p[i + 1] - p[1]).abs() + (p[i + 2] - p[2]).abs() + (p[i + 3] - p[3]).abs()].any((d) => d > 1e-6);
+    });
+    _play();
+  }
+
   @override
   void dispose() {
+    for (final t in _later) {
+      t.cancel();
+    }
     _clock.dispose();
     super.dispose();
   }
@@ -47,18 +69,34 @@ class _MotionPreviewState extends State<MotionPreview> with SingleTickerProvider
     final speed = widget.card == 'Wave' ? (doc.get('v_wave_speed') ?? 1).abs() : 0.0;
     final round = speed > 0 ? (1 / speed).clamp(.25, 4.0) : 2.0; // (one round of a wave; two seconds of anything else)
     final asked = [for (final id in ids) doc.get(id)].join(' ');
-    if (asked != _asked) { // (asked again only when a number of the card changed: the preview then plays by itself)
+    if (asked != _asked) { // (a number of the card changed: asked again once the inside has it, then played a while)
+      final first = _asked.isEmpty;
       _asked = asked;
-      final p = _path = doc.onPath?.call(round, MotionPreview.samples);
-      _moves = p != null && [for (var i = 0; i + 3 < p.length; i += 4) (p[i] - p[0]).abs() + (p[i + 1] - p[1]).abs() + (p[i + 2] - p[2]).abs() + (p[i + 3] - p[3]).abs()].any((d) => d > 1e-6);
+      _round = round;
       _clock.duration = Duration(milliseconds: (round * 1000).round());
+      if (!first) _changed = DateTime.now();
+      if (first) {
+        _path ??= doc.onPath?.call(round, MotionPreview.samples);
+        final p = _path;
+        _moves = p != null && [for (var i = 0; i + 3 < p.length; i += 4) (p[i] - p[0]).abs() + (p[i + 1] - p[1]).abs() + (p[i + 2] - p[2]).abs() + (p[i + 3] - p[3]).abs()].any((d) => d > 1e-6);
+      } else {
+        _after(60, () => _ask(doc)); // (what the hand set reaches the inside in its queue)
+        _after(250, () => _ask(doc));
+        _after((round * 2000).clamp(1500, 4000).round() + 50, _play); // (still again after a while)
+      }
     }
-    _play(_over || doc.inGesture);
+    _play();
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
       child: MouseRegion(
-        onEnter: (_) => _play(_over = true),
-        onExit: (_) => _play(_over = false),
+        onEnter: (_) {
+          _over = true;
+          _play();
+        },
+        onExit: (_) {
+          _over = false;
+          _play();
+        },
         child: SizedBox(height: MotionPreview.height, child: CustomPaint(size: Size.infinite, painter: _MotionPaint(_path, _clock))),
       ),
     );
@@ -92,6 +130,29 @@ class _MotionPaint extends CustomPainter {
       at = on(p[4 * i], p[4 * i + 1]);
       turn = -(p[4 * i + 2] - p[2]) * math.pi / 180;
       size = p[3] == 0 ? 1 : (p[4 * i + 3] / p[3]).clamp(.2, 3.0);
+      // (the whole of its way, drawn always: the line it goes along, and a few of its moments, faint, each as turned and
+      //  as large as it is then: what a number changes shows as a changed shape, still or playing)
+      final line = Path()..moveTo(on(p[0], p[1]).dx, on(p[0], p[1]).dy);
+      for (var j = 1; j < n; j++) {
+        line.lineTo(on(p[4 * j], p[4 * j + 1]).dx, on(p[4 * j], p[4 * j + 1]).dy);
+      }
+      c.drawPath(line, Paint()
+        ..color = Grey.g26
+        ..strokeWidth = 1.2
+        ..style = PaintingStyle.stroke);
+      const ghosts = 8;
+      for (var g = 0; g < ghosts; g++) {
+        final j = (g * n / ghosts).floor(), o = on(p[4 * j], p[4 * j + 1]);
+        c.save();
+        c.translate(o.dx, o.dy);
+        c.rotate(-(p[4 * j + 2] - p[2]) * math.pi / 180);
+        c.scale(p[3] == 0 ? 1 : (p[4 * j + 3] / p[3]).clamp(.2, 3.0));
+        c.drawRRect(RRect.fromRectAndRadius(Rect.fromCircle(center: Offset.zero, radius: half), const Radius.circular(4)), Paint()
+          ..color = Pop.accent.withValues(alpha: .14)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.2);
+        c.restore();
+      }
     }
     final faint = Paint()
       ..color = Grey.g26
