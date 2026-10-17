@@ -225,7 +225,7 @@ static void solo_aim(Stage& s, const std::vector<utils::Entity>& parts, const do
     Camera* eye = &s.solo->getCamera();
     const double aspect = (double)s.w / (double)s.h, cx = frame[0] / s.w * 2.0 - 1.0, cy = 1.0 - frame[1] / s.h * 2.0;
     const double round = std::hypot(frame[2], frame[3]);   // (as wide as it may be turned any way: its frame's diagonal)
-    const double ex = 0.8 * std::max({round / s.w, round / s.h / aspect, 0.02}), ey = ex * aspect;   // (half the square's width and height in the stage's picture)
+    const double ex = 1.1 * std::max(round / s.w, 0.01), ey = ex * aspect;   // (the square's half width and height on the stage's picture (-1 to 1 across): its diagonal and a little room, whichever way it is)
     math::mat4 closer;   // (the stage's picture, moved and grown so its frame fills the square)
     closer[0][0] = 1.0 / ex, closer[1][1] = 1.0 / ey, closer[3][0] = -cx / ex, closer[3][1] = -cy / ey;
     eye->setModelMatrix(s.camera->getModelMatrix());

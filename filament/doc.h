@@ -1507,11 +1507,22 @@ static void doc_moment(Doc& d, double now) {
 // The stage made to match the document: a thing the document has and the stage has not is made (by the kit's own
 // call for its kind), one the stage has and the document has not is taken off, one whose making is told otherwise now
 // is made again. false: a thing could not be made (d.trouble says which, and why).
+// All that a thing's making goes by: one changed, the thing is made again (doc_match), carried by a hand too (doc_carry).
+static const char* const doc_making = "'kind','file','shape','blend','keyed','space','begin','duration','speed','text','fill','wide','points','inner','round','bloat','zigzag','offset','warp','clip','stroke','stroke_width','align','blur','shadow','shadow_distance','shadow_angle','shadow_blur','shadow_opacity','glow','glow_blur','glow_opacity','copies','tint','tint_black','tint_white','tritone','tritone_shadow','tritone_midtone','tritone_highlight','letter_spacing','line_spacing','italic','cap','join','dash','dash_offset','metallic','roughness','reflectance','clear_coat','clear_coat_roughness','falloff','shadows','shadow_softness','contact_shadows','sheen','anisotropy','shading','thickness','light_group','script','gradient','gradient_angle','gradient_scale','gradient_spread','wrap','wrap_at','split','ior','dispersion','swim','dark','vivid','marker'";
 static bool doc_match(Doc& d) {
     Stage& s = *d.stage;
     std::map<int, std::string> told;   // every thing of the document, and all that its making goes by
-    doc_rows(d, sqlite3_mprintf("select thing, group_concat(name || '=' || value, ' ') from (select * from fact where thing > 0 and name in ('kind','file','shape','blend','keyed','space','begin','duration','speed','text','fill','wide','points','inner','round','bloat','zigzag','offset','warp','clip','stroke','stroke_width','align','blur','shadow','shadow_distance','shadow_angle','shadow_blur','shadow_opacity','glow','glow_blur','glow_opacity','copies','tint','tint_black','tint_white','tritone','tritone_shadow','tritone_midtone','tritone_highlight','letter_spacing','line_spacing','italic','cap','join','dash','dash_offset','metallic','roughness','reflectance','clear_coat','clear_coat_roughness','falloff','shadows','shadow_softness','contact_shadows','sheen','anisotropy','shading','thickness','light_group','script','gradient','gradient_angle','gradient_scale','gradient_spread','wrap','wrap_at','split','ior','dispersion','swim','dark','vivid','marker') order by thing, name) group by thing"),
+    doc_rows(d, sqlite3_mprintf("select thing, group_concat(name || '=' || value, ' ') from (select * from fact where thing > 0 and name in (%s) order by thing, name) group by thing", doc_making),
              [&](sqlite3_stmt* row) { told[sqlite3_column_int(row, 0)] = (const char*)sqlite3_column_text(row, 1); });
+    if (const auto held = told.find(d.held.thing); held != told.end())   // (what a hand carries of its making shows too: it is made again as it would be)
+        for (const auto& [name, is] : d.held.tried)
+            if (strstr(doc_making, ("'" + name + "'").c_str())) {   // (one that moves is drawn again each moment anyway (doc_moment): made again only as it comes on or goes off)
+                bool moves = false;
+                for (const DocValue& one : doc_values) moves = moves || (one.moves && name == one.name);
+                const auto from = d.held.from.find(name);
+                if (!moves) held->second += " " + name + "~" + std::to_string(is);
+                else if (from != d.held.from.end() && (from->second != 0.0) != (is != 0.0)) held->second += " " + name + "~" + (is != 0.0 ? "on" : "off");
+            }
     for (auto it = d.shown.begin(); it != d.shown.end();) {
         const auto still = told.find(it->first);
         if (still != told.end() && still->second == it->second.of) { ++it; continue; }
@@ -2598,7 +2609,11 @@ static bool doc_carry(Doc& d, const char* by, double a, double b) {
     } else if (!strcmp(by, "tail")) {
         const double start = was("start"), lasts = was("duration");
         ok = tries("duration", std::max(1e-3, (lasts > 0.0 ? lasts : doc_seconds(d) - start) + a));
-    } else ok = tries(by, a);
+    } else {
+        was(by);   // (as it was: whether it comes on or goes off, carried)
+        ok = tries(by, a);
+        if (ok && strstr(doc_making, ("'" + std::string(by) + "'").c_str())) ok = doc_match(d);   // (a value it is made by: made again with it now, not when let go)
+    }
     doc_moment(d, now);
     return ok;
 }
@@ -2606,7 +2621,7 @@ static bool doc_let_go(Doc& d, bool keep) {
     const Doc::Held h = d.held;
     d.held = Doc::Held{};
     if (h.thing < 0) return d.trouble = "nothing is held", false;
-    if (!keep || h.tried.empty()) return doc_moment(d, d.stage->now), true;
+    if (!keep || h.tried.empty()) return doc_match(d), doc_moment(d, d.stage->now), true;   // (made again as the document has it)
     doc_act(d);   // (all that was carried is one step: a value that takes keys by the rule of a value changed at a moment, any other as the value it is)
     for (const auto& [name, is] : h.tried) {
         bool moves = false;
