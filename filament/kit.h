@@ -119,7 +119,7 @@ struct Stage {
     // doc_frame gives them) and of the one under the hand; `point`: desk pixels a point of the screen the marks are sized in.
     struct { uint32_t w = 0, h = 0; double x = 0, y = 0, scale = 1, point = 2; math::mat4 was, wasCulled;
              bool picked = false, hovered = false, knob = true; double pick[8] = {}, hover[8] = {};
-             int pickOutline = 0, hoverOutline = 0; double pickAround[16] = {}, hoverAround[16] = {}; } desk;   // (their outlines: doc_outline)
+             int pickOutline = 0, hoverOutline = 0; double pickAround[128] = {}, hoverAround[128] = {}; } desk;   // (their outlines: doc_outline)
     std::vector<View*> layers;   // further pictures laid over the stage's own view, in order (layer_view); the first `layered` of them are drawn
     size_t layered = 0;
     std::function<void()> over;   // drawn last, over all of them (a whole-screen effect: screen.h)
