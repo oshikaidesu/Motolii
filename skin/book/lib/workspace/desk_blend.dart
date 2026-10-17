@@ -21,13 +21,20 @@ class DeskBlend extends StatelessWidget {
   }
 }
 
-class _Row extends StatelessWidget {
+class _Row extends StatefulWidget {
   const _Row(this.l, {required this.picked});
   final WsLayer l;
   final bool picked;
   @override
+  State<_Row> createState() => _RowState();
+}
+
+class _RowState extends State<_Row> {
+  bool _open = false;
+  String? _hover;
+  @override
   Widget build(BuildContext context) {
-    final ws = WsScope.of(context), m = ws.inside, t = int.tryParse(l.id);
+    final l = widget.l, ws = WsScope.of(context), m = ws.inside, t = int.tryParse(l.id);
     final ways = m == null || t == null ? const <String>[] : m.words(t, 'blend');
     final now = ways.isEmpty ? '' : (m!.word(t!, 'blend').isEmpty ? ways.first : m.word(t, 'blend'));
     final clip = ways.isNotEmpty && (m!.value(t!, 'clip', 0) ?? 0) > 0.5;
@@ -36,11 +43,10 @@ class _Row extends StatelessWidget {
       if (m != null && t != null && m.say(t, name, word)) ws.reread();
     }
 
-    return Container(
+    final row = Container(
       height: 34,
-      margin: const EdgeInsets.only(bottom: 3),
       padding: const EdgeInsets.symmetric(horizontal: 6),
-      decoration: BoxDecoration(color: picked ? WsT.well : null, borderRadius: BorderRadius.circular(5)),
+      decoration: BoxDecoration(color: widget.picked ? WsT.well : null, borderRadius: BorderRadius.circular(5)),
       child: Row(
         children: [
           Container(width: 4, height: 18, decoration: BoxDecoration(color: wsTone(l.kind), borderRadius: BorderRadius.circular(2))),
@@ -53,11 +59,7 @@ class _Row extends StatelessWidget {
             ),
           ),
           if (ways.isNotEmpty) ...[
-            for (final w in ways)
-              Padding(
-                padding: const EdgeInsets.only(left: 2),
-                child: DeskIconButton(key: ValueKey('blend.${l.id}.$w'), size: 24, on: w == now, glyph: (ink) => _Way(w, ink), onTap: () => say('blend', w)),
-              ),
+            DeskIconButton(key: ValueKey('blend.${l.id}'), size: 24, on: _open, glyph: (ink) => _Way(now, ink), onTap: () => setState(() => _open = !_open)),
             const SizedBox(width: 8),
             SizedBox(width: 64, height: 18, child: _Opacity(key: ValueKey('opacity.${l.id}'), thing: t!, value: opacity)),
             const SizedBox(width: 6),
@@ -68,8 +70,58 @@ class _Row extends StatelessWidget {
         ],
       ),
     );
+    if (!_open || ways.isEmpty) return Padding(padding: const EdgeInsets.only(bottom: 3), child: row);
+    // (every way, in After Effects' groups: normal; darker; lighter; contrast; difference; colour. The way under the
+    //  hand, or the one it lies, named once under them)
+    final groups = <List<String>>[[], [], [], [], [], []];
+    for (final w in ways) {
+      groups[_group(w)].add(w);
+    }
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 3),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          row,
+          Padding(
+            padding: const EdgeInsets.fromLTRB(18, 4, 6, 2),
+            child: Wrap(
+              spacing: 2,
+              runSpacing: 2,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                for (final (k, g) in groups.indexed)
+                  if (g.isNotEmpty) ...[
+                    if (k > 0) const SizedBox(width: 8),
+                    for (final w in g)
+                      MouseRegion(
+                        onEnter: (_) => setState(() => _hover = w),
+                        onExit: (_) => setState(() => _hover = null),
+                        child: DeskIconButton(key: ValueKey('blend.${l.id}.$w'), size: 26, on: w == now, glyph: (ink) => _Way(w, ink), onTap: () => say('blend', w)),
+                      ),
+                  ],
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 2, 6, 4),
+            child: Text((_hover ?? now).replaceAll('_', ' '), style: T.micro(Grey.g76)),
+          ),
+        ],
+      ),
+    );
   }
 }
+
+/// Which of After Effects' groups a way is in (0 normal, 1 darker, 2 lighter, 3 contrast, 4 difference, 5 colour).
+int _group(String w) => switch (w) {
+  'darken' || 'multiply' || 'color_burn' => 1,
+  'lighten' || 'screen' || 'add' || 'color_dodge' => 2,
+  'overlay' || 'soft_light' || 'hard_light' => 3,
+  'difference' || 'exclusion' => 4,
+  'hue' || 'saturation' || 'color' || 'luminosity' => 5,
+  _ => 0,
+};
 
 /// How much of it is there: a bar filled so far, pulled across (held and carried while pulled, one step when let go).
 class _Opacity extends StatefulWidget {
@@ -127,30 +179,26 @@ class _Bar extends CustomPainter {
   bool shouldRepaint(_Bar o) => o.v != v;
 }
 
-/// A way of lying on what is under, drawn as what it does: two discs, their overlap as the way makes it.
+/// A way of lying on what is under, drawn as what it does: a warm disc under, a cool one over, where they meet the
+/// colour the inside draws for that way (check/blend_ways: the same two colours, as drawn).
 class _Way extends CustomPainter {
   _Way(this.way, this.ink);
   final String way;
   final Color ink;
+  static const _under = Color(0xFFCC4D33), _over = Color(0xFF3380E6);
+  static const _meets = <String, Color>{
+    'normal': Color(0xFF3380E6), 'add': Color(0xFFFFCDFF), 'multiply': Color(0xFF27222D), 'screen': Color(0xFFCE8FE7),
+    'darken': Color(0xFF334D33), 'lighten': Color(0xFFCC80E6), 'overlay': Color(0xFFAD4D5C), 'soft_light': Color(0xFFB34D66),
+    'hard_light': Color(0xFF524ED7), 'color_dodge': Color(0xFFFF9BFF), 'color_burn': Color(0xFF00001D), 'difference': Color(0xFF9933B3),
+    'exclusion': Color(0xFFAD80BD), 'hue': Color(0xFF397AD2), 'saturation': Color(0xFFDC4729), 'color': Color(0xFF2F7CE2), 'luminosity': Color(0xFFD05137),
+  };
   @override
   void paint(Canvas c, Size s) {
-    final r = s.shortestSide * .26, a = Offset(s.width * .38, s.height / 2), b = Offset(s.width * .62, s.height / 2);
-    final under = Paint()..color = ink.withValues(alpha: .45), over = Paint()..color = ink.withValues(alpha: .45);
-    c.drawCircle(a, r, under);
+    final r = s.shortestSide * .27, a = Offset(s.width * .38, s.height / 2), b = Offset(s.width * .62, s.height / 2);
+    c.drawCircle(a, r, Paint()..color = _under);
+    c.drawCircle(b, r, Paint()..color = _over);
     final lens = Path.combine(PathOperation.intersect, Path()..addOval(Rect.fromCircle(center: a, radius: r)), Path()..addOval(Rect.fromCircle(center: b, radius: r)));
-    switch (way) {
-      case 'add': // (where they meet: brighter than either)
-        c.drawCircle(b, r, over);
-        c.drawPath(lens, Paint()..color = ink);
-      case 'multiply': // (where they meet: darker than either)
-        c.drawCircle(b, r, over);
-        c.drawPath(lens, Paint()..color = Grey.g00);
-      case 'screen': // (where they meet: lighter, softly)
-        c.drawCircle(b, r, over);
-        c.drawPath(lens, Paint()..color = ink.withValues(alpha: .75));
-      default: // (normal: the one over hides the one under)
-        c.drawCircle(b, r, Paint()..color = ink);
-    }
+    c.drawPath(lens, Paint()..color = _meets[way] ?? _over);
   }
 
   @override

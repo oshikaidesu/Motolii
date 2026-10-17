@@ -128,7 +128,9 @@ void main() {
 
     // Blend: the rect made to add, the circle cleared half, the cube (no blend) only named.
     await open('Blend');
-    await t.tap(find.byKey(ValueKey('blend.$a.add')));
+    await t.tap(find.byKey(ValueKey('blend.$a')));   // (its way's glyph: every way opens under the row)
+    await t.pump();
+    await t.tap(find.byKey(ValueKey('blend.$a.overlay')));
     await t.pump();
     final bar = find.byKey(ValueKey('opacity.$b'));
     final r = t.getRect(bar);
@@ -144,8 +146,8 @@ void main() {
     await t.pump();
     await shoot('Blend');
     final opacity = m.value(b, 'opacity', 0) ?? 1;
-    report.add('Blend: rect blend ${m.word(a, 'blend')} (want add); circle opacity ${opacity.toStringAsFixed(2)} (want about 0.5); circle clip ${m.value(b, 'clip', 0)} (want 1); cube has a blend row: ${find.byKey(ValueKey('blend.$c.add')).evaluate().isNotEmpty} (want false)');
-    expect(m.word(a, 'blend'), 'add');
+    report.add('Blend: rect blend ${m.word(a, 'blend')} (want overlay); circle opacity ${opacity.toStringAsFixed(2)} (want about 0.5); circle clip ${m.value(b, 'clip', 0)} (want 1); cube has a blend row: ${find.byKey(ValueKey('blend.$c')).evaluate().isNotEmpty} (want false)');
+    expect(m.word(a, 'blend'), 'overlay');
     expect(opacity, inInclusiveRange(0.35, 0.65));
     expect(m.value(b, 'clip', 0), 1);
     File('${out.path}/report.txt').writeAsStringSync(report.join('\n'));

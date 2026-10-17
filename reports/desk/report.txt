@@ -1,4 +1,4 @@
 Markers: + twice made 2 (want 2); names after writing over the first: [Drop, M2] (want Drop first); after x: 1 (want 1)
 Markers at frame 7: named [Odd] (want [Odd]); after x: 0 left (want 0)
 Markers moved: (0.5, Drop) -> [(1.9, Drop)] (want the same name, later)
-Blend: rect blend add (want add); circle opacity 0.47 (want about 0.5); circle clip 1.0 (want 1); cube has a blend row: false (want false)
+Blend: rect blend overlay (want overlay); circle opacity 0.47 (want about 0.5); circle clip 1.0 (want 1); cube has a blend row: false (want false)
