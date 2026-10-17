@@ -205,6 +205,7 @@ static void motolii_hand(Motolii* m, std::string document, int wide, int high, s
                 k.picked = m->pick > 0 && doc_frame(*m->d, m->pick, m->now, k.pick);
                 k.hovered = m->hover > 0 && m->hover != m->pick && doc_frame(*m->d, m->hover, m->now, k.hover);
                 k.knob = doc_word(*m->d, m->pick, "kind") != "camera";
+                k.name = k.picked ? doc_name(*m->d, m->pick) : std::string();
             }
             {   // (set down for the window: the picked thing at the frame it counts this moment in)
                 auto& p = m->peek;
