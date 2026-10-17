@@ -38,6 +38,12 @@
   - 残り：遅れ 1／3620。つまみを引き始めて約7秒で1回、描く前に 25ms。その時メインスレッドも描画スレッドも暇（macOS の sample で確認、`SAMPLE=true`）。試験の合成ジェスチャーの歩調と見られる、未確認。
 - **OpenTimelineIO**（ユーザーの「既製品ありそう」）：書類の形にはしない（編集ソフトの形で、キー・親子・3D の置き場が無い）。書き出しと読み込みの口として使える。調べた表は会話の記録にある。手を付けるかはユーザー次第。
 
+- **裏側（10/17 深夜、ループ）**：
+  - **ショートカット**：`keys.dart`。操作に名前（file.new、edit.undo、play.toggle、frame.next、thing.remove…）、既定の表の上に `~/.motolii/keybindings.json`（VS Code の形、`-` で外す）。Flutter の Shortcuts/Actions。メニューも同じ表のキーを出す。文字を打ってる間は修飾キー無しのキーは文字の方へ。焦点が窓の外に落ちたら窓が拾い直す。
+  - **カラーテーマ**：`theme.dart`。Ableton の .ask の形（`<ChosenDefault Value="#b3c66b"/>`）、`~/.motolii/theme.xml` を開いた時と書き換えた時に読む。書いてない役割は窓の既定。役割名：Ableton（ChosenDefault、ControlOnForeground、Clip1-7）、キーの印は Blender（Keyframe）、灰色の段は窓の段の名前（Grey00〜100）。ひな形 `skin/book/themes/Default Dark.xml`・`Default Light.xml`。まだ役割になってない色：インスペクタの Pop、Role、部品に直書きの色 187か所。
+  - **キーをまとめて入れる口**：`motolii_key_many`、1万本 43 ms（1本ずつは 1.21 ms）。
+  - **GPU（止めた、判断待ち）**：15レシピ 13〜15 ms。アンチエイリアスの種類では変わらない。重いのは画面いっぱいを何枚も重ねる絵（Op star は星30枚）で、平らな物は全部半透明として奥から塗っている。2D の重なりは深度でなく順番で決めているので、不透明な物を深度で弾く（隠れた所を塗らない）には、2D の重ね順を深度に写す作りの変更が要る。
+
 ## 今の状態（2026-10-15 夜）
 
 10/14 夜に決めた 0〜8 の順は、ほぼ済んだ。経過の全文は `reports/tasks_log_2026-10-15.md`。
