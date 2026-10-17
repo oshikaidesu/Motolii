@@ -138,14 +138,26 @@ class _StageViewState extends State<StageView> implements StageHandles {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || _toldDesk != v) return;
       final m = _deskOf!;
-      if (!m.desk((v.area.width * dpr).round(), (v.area.height * dpr).round(), (v.o.dx - v.area.left) * dpr, (v.o.dy - v.area.top) * dpr, v.s * dpr)) return;
+      if (!m.desk((v.area.width * dpr).round(), (v.area.height * dpr).round(), (v.o.dx - v.area.left) * dpr, (v.o.dy - v.area.top) * dpr, v.s * dpr, dpr)) return;
+      _toldPick = null;
       if (_desk == null) m.deskTexture().then((id) => mounted && id >= 0 ? setState(() => _desk = id) : null);
     });
   }
 
+  // Joined, the desk on: which thing is picked and which is under the hand, told when it changes (the inside marks them).
+  (int, int)? _toldPick;
+  void _pickTo() {
+    final m = _deskOf;
+    if (_desk == null || m == null) return;
+    final now = (int.tryParse(widget.selected ?? '') ?? 0, int.tryParse(_hover ?? '') ?? 0);
+    if (now == _toldPick) return;
+    _toldPick = now;
+    m.pick(now.$1, now.$2);
+  }
+
   @override
   void dispose() {
-    _deskOf?.desk(0, 0, 0, 0, 0); // (the stage's own picture again)
+    _deskOf?.desk(0, 0, 0, 0, 0, 0); // (the stage's own picture again)
     super.dispose();
   }
 
@@ -376,6 +388,7 @@ class _StageViewState extends State<StageView> implements StageHandles {
     builder: (context, box) {
       final v = _shown = _view(box.biggest), scene = widget.scene;
       _deskTo(v);
+      _pickTo();
       return Listener(
         onPointerSignal: (e) => _scroll(e, v),
         child: MouseRegion(
@@ -416,10 +429,9 @@ class _StageViewState extends State<StageView> implements StageHandles {
                     painter: _ViewPainter(scene, v, widget.selected, _hover == widget.selected ? null : _hover, grid: widget.grid, safe: widget.safe, part: widget.texture == null ? _Part.all : _Part.under, pivots: widget.pivots, met: _met),
                   ),
                 ),
-                if (_desk case final desk? when widget.texture != null) ...[ // (the whole pane as the inside draws it; off the stage, covered half way)
-                  Positioned.fromRect(rect: v.area, child: IgnorePointer(child: Texture(textureId: desk, filterQuality: FilterQuality.medium))),
-                  Positioned.fill(child: IgnorePointer(child: CustomPaint(painter: _OffStage(v)))),
-                ] else
+                if (_desk case final desk? when widget.texture != null) // (the whole pane as the inside draws it: off the stage covered half way, the picked thing marked)
+                  Positioned.fromRect(rect: v.area, child: IgnorePointer(child: Texture(textureId: desk, filterQuality: FilterQuality.medium)))
+                else
                 Positioned.fromRect(
                   rect: v.comp,
                   child: IgnorePointer(
@@ -436,7 +448,7 @@ class _StageViewState extends State<StageView> implements StageHandles {
                 if (widget.texture != null)
                   IgnorePointer(
                     child: CustomPaint(
-                      painter: _ViewPainter(scene, v, widget.selected, _hover == widget.selected ? null : _hover, grid: widget.grid, safe: widget.safe, part: _Part.over, pivots: widget.pivots, met: _met),
+                      painter: _ViewPainter(scene, v, widget.selected, _hover == widget.selected ? null : _hover, grid: widget.grid, safe: widget.safe, part: _Part.over, pivots: widget.pivots, met: _met, marked: _desk != null),
                     ),
                   ),
                 IgnorePointer(child: CustomPaint(painter: _RulerPainter(v, widget.cursor, scene))),
@@ -565,21 +577,13 @@ TextPainter _tp(String t, TextStyle s) => TextPainter(
 
 /// What one painter draws: everything (the stand-in art too), or, when the inside's picture sits in the composition,
 /// what lies under it (the surround, the captions) and what lies over it (grid, guides, the selection).
-/// What lies off the stage on the desk, covered half way: the stage's own frame reads as the picture.
-class _OffStage extends CustomPainter {
-  _OffStage(this.v);
-  final _View v;
-  @override
-  void paint(Canvas c, Size s) =>
-      c.drawPath(Path.combine(PathOperation.difference, Path()..addRect(v.area), Path()..addRect(v.comp)), Paint()..color = _V.surround.withValues(alpha: .55));
-  @override
-  bool shouldRepaint(_OffStage o) => o.v != v;
-}
-
 enum _Part { all, under, over }
 
 class _ViewPainter extends CustomPainter {
-  _ViewPainter(this.scene, this.v, this.sel, this.hover, {required this.grid, required this.safe, this.part = _Part.all, this.pivots = false, this.met = (null, null)});
+  _ViewPainter(this.scene, this.v, this.sel, this.hover, {required this.grid, required this.safe, this.part = _Part.all, this.pivots = false, this.met = (null, null), this.marked = false});
+
+  /// The inside marks the picked thing and the one under the hand on its desk: not drawn here.
+  final bool marked;
   final _Part part;
 
   /// Joined: every thing's point it turns about shown (Pivots), and the lines a carried thing has stuck to (Snap).
@@ -620,6 +624,7 @@ class _ViewPainter extends CustomPainter {
         c.drawCircle(a, 3.5, _line(Grey.g91, 1.2));
       }
     }
+    if (marked) return c.restore();
     if (WsArt.boxOf(scene, hover) case final b?) _legible(c, _boxPath(b), wsTone(scene.layer(hover)!.kind), 1);
     if (WsArt.boxOf(scene, sel) case final b?) _selection(c, b, scene.layer(sel)!);
     c.restore();
@@ -731,7 +736,7 @@ class _ViewPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_ViewPainter o) => o.scene != scene || o.v != v || o.sel != sel || o.hover != hover || o.grid != grid || o.safe != safe || o.part != part || o.pivots != pivots || o.met != met;
+  bool shouldRepaint(_ViewPainter o) => o.scene != scene || o.v != v || o.sel != sel || o.hover != hover || o.grid != grid || o.safe != safe || o.part != part || o.pivots != pivots || o.met != met || o.marked != marked;
 }
 
 // ---- rulers -----------------------------------------------------------------------------------------------------------

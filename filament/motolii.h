@@ -173,8 +173,10 @@ void* motolii_solo_front(Motolii* m);
 unsigned long long motolii_solo_frames(Motolii* m);
 /* The desk: the editing window's whole stage pane, w x h pixels, the picture drawn there instead of on the stage's own
    buffer (motolii_front keeps its last), the stage lying with its top left at x, y, `scale` pixels a point of it, and
-   what lies off the stage seen round it. w 0: off. Made again when its size changes. 1: on. */
-int motolii_desk(Motolii* m, int w, int h, double x, double y, double scale);
+   what lies off the stage seen round it, the picked thing marked over it (`point`: pixels a point of the screen the
+   marks are sized in). w 0: off. Made again when its size changes. 1: on. */
+int motolii_desk(Motolii* m, int w, int h, double x, double y, double scale, double point);
+int motolii_pick(Motolii* m, int thing, int hover);   /* the thing picked in the window (0: none) and the one under its hand: marked on the desk */
 void* motolii_desk_front(Motolii* m);
 unsigned long long motolii_desk_frames(Motolii* m);
 unsigned long long motolii_frames(Motolii* m);

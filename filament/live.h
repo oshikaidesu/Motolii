@@ -23,6 +23,7 @@ struct Live {
     Fence* pending = nullptr;          // the picture begun and not yet finished by the GPU, and which buffer it is in
     int pendingIn = -1;
     Live* solo = nullptr;              // a card's small picture of one thing alone (kit.h solo_view), drawn in the same frame, finished with it
+    void* marks[N] = {};               // (a desk's: ThorVG's canvas on each buffer, the marks drawn over the picture: desk_marks)
     Live* desk = nullptr;              // the editing window's whole stage pane (kit.h desk_lay): while it is on, the stage is drawn there, not here
 };
 
@@ -68,6 +69,7 @@ static Live* live_open(Stage& s, uint32_t w = 0, uint32_t h = 0) {   // (0: the 
 static void live_close(Stage& s, Live* l) {
     if (!l) return;
     s.engine->flushAndWait();
+    door::on_driver(s.engine, [l] { for (void* c : l->marks) delete reinterpret_cast<tvg::WgCanvas*>(c); });
     for (int i = 0; i < Live::N; ++i) {
         if (l->target[i]) s.engine->destroy(l->target[i]);
         if (l->seen[i]) s.engine->destroy(l->seen[i]);
@@ -83,6 +85,79 @@ static void live_close(Stage& s, Live* l) {
     for (CVPixelBufferRef b : l->buffer) if (b) CVPixelBufferRelease(b);   // (a shell holding one keeps it till it lets go)
     if (l->pending) s.engine->destroy(l->pending);
     delete l;
+}
+
+// The marks over the desk's picture (and the cover over what lies off the stage, under them), drawn by ThorVG into the same buffer after Filament's picture and not clearing
+// it, on the same device and queue (drawn.h's way): the picked thing's frame, its four corners, the knob it turns by,
+// the point it turns about; the frame of the one under the hand, thin. As the window's own marks were (stage_view.dart).
+static void desk_marks(Stage& s, Live* l, int i) {
+    const auto k = s.desk;
+
+    void *device = door::device(s.engine), *instance = door::instance(s.engine);
+    const int s_w = s.w, s_h = s.h;
+    door::on_driver(s.engine, [l, i, k, device, instance, s_w, s_h] {
+        auto& canvas = reinterpret_cast<tvg::WgCanvas*&>(l->marks[i]);
+        if (!canvas) {
+            tvg::Initializer::init(0);   // (as drawn.h: counted, once is enough)
+            canvas = tvg::WgCanvas::gen();
+            if (!canvas || canvas->target(device, instance, l->shared[i], k.w, k.h, tvg::ColorSpace::ABGR8888S, 2) != tvg::Result::Success) return;   // (2: drawn over: thorvg_over.patch)
+        }
+        canvas->remove();
+        const float pt = (float)k.point;
+        const auto at = [&](double x, double y) { return float2{(float)(x * k.scale + k.x), (float)(y * k.scale + k.y)}; };
+        struct Frame { float2 c[4], top, mid, pivot; };
+        const auto frame = [&](const double* f) {   // (its corners as seen: turned clockwise about its middle)
+            const double turn = f[4] * 3.14159265358979 / 180.0, cs = std::cos(turn), sn = std::sin(turn);
+            const auto local = [&](double u, double v) { const double x = u * 0.5 * f[2], y = v * 0.5 * f[3]; return at(f[0] + x * cs - y * sn, f[1] + x * sn + y * cs); };
+            return Frame{{local(-1, -1), local(1, -1), local(1, 1), local(-1, 1)}, local(0, -1), at(f[0], f[1]), at(f[5], f[6])};
+        };
+        const auto line = [&](std::initializer_list<float2> pts, bool closed, float width, uint8_t r, uint8_t g, uint8_t b) {
+            tvg::Shape* sh = tvg::Shape::gen();
+            bool first = true;
+            for (float2 p : pts) { if (first) sh->moveTo(p.x, p.y); else sh->lineTo(p.x, p.y); first = false; }
+            if (closed) sh->close();
+            sh->strokeWidth(width * pt), sh->strokeFill(r, g, b, 255);
+            canvas->add(sh);
+        };
+        const auto legible = [&](std::initializer_list<float2> pts, bool closed, float width) { line(pts, closed, width + 2.f, 0, 0, 0), line(pts, closed, width, 0xB3, 0xC6, 0x6B); };
+        const auto dot = [&](float2 c, float r, bool lit) { tvg::Shape* sh = tvg::Shape::gen(); sh->appendCircle(c.x, c.y, r * pt, r * pt); lit ? sh->fill(0xB3, 0xC6, 0x6B, 255) : sh->fill(0, 0, 0, 255); canvas->add(sh); };
+        const auto square = [&](float2 c, float half, bool lit) { tvg::Shape* sh = tvg::Shape::gen(); sh->appendRect(c.x - half * pt, c.y - half * pt, 2.f * half * pt, 2.f * half * pt); lit ? sh->fill(0xB3, 0xC6, 0x6B, 255) : sh->fill(0, 0, 0, 255); canvas->add(sh); };
+        tvg::Shape* off = tvg::Shape::gen();   // (what lies off the stage, covered half way: the stage's own frame reads as the picture)
+        off->appendRect(0, 0, (float)k.w, (float)k.h);
+        off->appendRect((float)k.x, (float)k.y, (float)(s_w * k.scale), (float)(s_h * k.scale), 0, 0, false);
+        off->fill(0x19, 0x19, 0x19, 140);   // (the window's surround, Grey.g10, half way)
+        canvas->add(off);
+        if (k.hovered) {
+            const Frame f = frame(k.hover);
+            line({f.c[0], f.c[1], f.c[2], f.c[3]}, true, 3.f, 0, 0, 0), line({f.c[0], f.c[1], f.c[2], f.c[3]}, true, 1.f, 0xE6, 0xE6, 0xE6);
+        }
+        if (k.picked) {
+            const Frame f = frame(k.pick);
+            legible({f.c[0], f.c[1], f.c[2], f.c[3]}, true, 1.5f);
+            if (k.knob) {   // (the knob it is turned by, a stem's length out from the middle of its top edge)
+                float2 n = f.top - f.mid;
+                const float len = length(n);
+                n = len < 1.f ? float2{0.f, -1.f} : n / len;
+                const float2 knob = f.top + n * 18.f * pt;
+                legible({f.top, knob}, false, 1.f);
+                dot(knob, 4.5f, false), dot(knob, 3.5f, true);
+            }
+            for (float2 c : f.c) square(c, 4.5f, false), square(c, 3.5f, true);
+            for (const auto& [width, lit] : {std::pair{3.5f, false}, std::pair{1.5f, true}}) {   // (the point it turns about: a ring and four ticks)
+                tvg::Shape* ring = tvg::Shape::gen();
+                ring->appendCircle(f.pivot.x, f.pivot.y, 6.f * pt, 6.f * pt);
+                ring->strokeWidth(width * pt), lit ? ring->strokeFill(0xB3, 0xC6, 0x6B, 255) : ring->strokeFill(0, 0, 0, 255);
+                canvas->add(ring);
+            }
+            for (float2 d : {float2{1, 0}, float2{-1, 0}, float2{0, 1}, float2{0, -1}}) {
+                line({f.pivot + d * 3.f * pt, f.pivot + d * 10.f * pt}, false, 3.f, 0, 0, 0);
+                line({f.pivot + d * 3.f * pt, f.pivot + d * 10.f * pt}, false, 1.2f, 0xB3, 0xC6, 0x6B);
+            }
+        }
+        canvas->update();
+        canvas->draw(true);   // (its own picture cleared; the buffer drawn over, not replaced: target type 2, thorvg_over.patch)
+        canvas->sync();
+    });
 }
 
 // The stage's picture as it now is, drawn into the next buffer; it is the front one once the GPU has finished it.
@@ -102,6 +177,7 @@ static void live_draw(Stage& s, Live* l) {
         solo->pendingIn = solo->next;
         solo->next = (solo->next + 1) % Live::N;
     }
+    if (desk) desk_marks(s, desk, desk->next);
     if (desk) {
         desk_lay(s, false);
         desk->pendingIn = desk->next;

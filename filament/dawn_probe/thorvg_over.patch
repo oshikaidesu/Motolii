@@ -1,0 +1,95 @@
+--- a/src/renderer/gpu_engine/wg/tvgWgPipelines.h
++++ b/src/renderer/gpu_engine/wg/tvgWgPipelines.h
+@@ -103,6 +103,7 @@
+     WGPURenderPipeline scene_compose[11]{};
+     // pipeline blit
+     WGPURenderPipeline blit{};
++    WGPURenderPipeline blit_over{};   // (Motolii: over what the target texture holds, premultiplied: target type 2)
+     WGPURenderPipeline blit_unpremultiplied{};
+     // effects
+     WGPURenderPipeline gaussian_vert{};
+--- a/src/renderer/gpu_engine/wg/tvgWgPipelines.cpp
++++ b/src/renderer/gpu_engine/wg/tvgWgPipelines.cpp
+@@ -488,6 +488,13 @@
+         shader_blit, "vs_main", "fs_main",
+         layout_blit, vertexBufferLayoutsImage, 2,
+         WGPUColorWriteMask_All, context.format, blendStateSrc,  // must be preferred screen pixel format
++        depthStencilStateScene, multisampleStateX1);
++
++    blit_over = createRenderPipeline(
++        context.device, "The render pipeline blit over",
++        shader_blit, "vs_main", "fs_main",
++        layout_blit, vertexBufferLayoutsImage, 2,
++        WGPUColorWriteMask_All, context.format, blendStateNrm,
+         depthStencilStateScene, multisampleStateX1);
+ 
+     // TODO: either premultiplied blit or unpremultplied bit used.
+@@ -555,6 +562,7 @@
+     // pipeline blit
+     releaseRenderPipeline(blit_unpremultiplied);
+     releaseRenderPipeline(blit);
++    releaseRenderPipeline(blit_over);
+     // pipelines compose
+     for (uint32_t i = 0; i < 11; i++)
+         releaseRenderPipeline(scene_compose[i]);
+--- a/src/renderer/gpu_engine/wg/tvgWgCompositor.h
++++ b/src/renderer/gpu_engine/wg/tvgWgCompositor.h
+@@ -142,7 +142,7 @@
+     void composeScene(WgContext& context, WgRenderTarget* src, WgRenderTarget* mask, WgCompose* compose);
+ 
+     // blit render target to texture view (f.e. screen buffer)
+-    void blit(WgContext& context, WGPUCommandEncoder encoder, WgRenderTarget* src, WGPUTextureView dstView, bool premultiplied);
++    void blit(WgContext& context, WGPUCommandEncoder encoder, WgRenderTarget* src, WGPUTextureView dstView, bool premultiplied, bool over = false);
+ 
+     // effects
+     bool gaussianBlur(WgContext& context, WgRenderTarget* dst, const RenderEffectGaussianBlur* params, const WgCompose* compose);
+--- a/src/renderer/gpu_engine/wg/tvgWgCompositor.cpp
++++ b/src/renderer/gpu_engine/wg/tvgWgCompositor.cpp
+@@ -506,7 +506,7 @@
+     drawMeshImage(context, &meshDataBlit);
+ }
+ 
+-void WgCompositor::blit(WgContext& context, WGPUCommandEncoder encoder, WgRenderTarget* src, WGPUTextureView dstView, bool premultiplied)
++void WgCompositor::blit(WgContext& context, WGPUCommandEncoder encoder, WgRenderTarget* src, WGPUTextureView dstView, bool premultiplied, bool over)
+ {
+     const WGPURenderPassDepthStencilAttachment depthStencilAttachment{
+         .view = texViewDepthStencil,
+@@ -524,7 +524,7 @@
+     const WGPURenderPassDescriptor renderPassDesc{ .colorAttachmentCount = 1, .colorAttachments = &colorAttachment, .depthStencilAttachment = &depthStencilAttachment };
+     renderPassEncoder = wgpuCommandEncoderBeginRenderPass(encoder, &renderPassDesc);
+     wgpuRenderPassEncoderSetBindGroup(renderPassEncoder, 0, src->bindGroupTexture, 0, nullptr);
+-    wgpuRenderPassEncoderSetPipeline(renderPassEncoder, premultiplied ? pipelines.blit : pipelines.blit_unpremultiplied);
++    wgpuRenderPassEncoderSetPipeline(renderPassEncoder, over ? pipelines.blit_over : premultiplied ? pipelines.blit : pipelines.blit_unpremultiplied);
+     drawMeshImage(context, &meshDataBlit);
+     wgpuRenderPassEncoderEnd(renderPassEncoder);
+     wgpuRenderPassEncoderRelease(renderPassEncoder);
+--- a/src/renderer/gpu_engine/wg/tvgWgRenderer.h
++++ b/src/renderer/gpu_engine/wg/tvgWgRenderer.h
+@@ -117,6 +117,7 @@
+ 
+     // gpu handles
+     WGPUTexture targetTexture{};
++    bool targetOver = false;   // (Motolii: target type 2, a texture drawn over, not replaced)
+     WGPUSurfaceTexture surfaceTexture{};
+     WGPUSurface surface{};
+ };
+--- a/src/renderer/gpu_engine/wg/tvgWgRenderer.cpp
++++ b/src/renderer/gpu_engine/wg/tvgWgRenderer.cpp
+@@ -485,7 +485,7 @@
+         auto dstTextureView = mContext.createTextureView(dstTexture);
+         auto commandEncoder = mContext.createCommandEncoder();
+         // show root offscreen buffer
+-        mCompositor.blit(mContext, commandEncoder, &mRenderTargetRoot, dstTextureView, mTargetSurface.premultiplied);
++        mCompositor.blit(mContext, commandEncoder, &mRenderTargetRoot, dstTextureView, mTargetSurface.premultiplied, targetOver);
+         mContext.submitCommandEncoder(commandEncoder);
+         mContext.releaseCommandEncoder(commandEncoder);
+         mContext.releaseTextureView(dstTextureView);
+@@ -530,7 +530,7 @@
+ 
+     // configure surface (must be called after context creation)
+     if (type == 0) surfaceConfigure((WGPUSurface)target, mContext, w, h, cs);
+-    else targetTexture = (WGPUTexture)target;
++    else targetTexture = (WGPUTexture)target, targetOver = type == 2;
+ 
+     return Result::Success;
+ }

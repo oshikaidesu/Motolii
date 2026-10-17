@@ -69,7 +69,8 @@ class Motolii {
 
   late final _live = _lib.lookupFunction<Int32 Function(_P), int Function(_P)>('motolii_live');
   late final _solo = _lib.lookupFunction<Int32 Function(_P, Int32, Int32), int Function(_P, int, int)>('motolii_solo');
-  late final _desk = _lib.lookupFunction<Int32 Function(_P, Int32, Int32, Double, Double, Double), int Function(_P, int, int, double, double, double)>('motolii_desk');
+  late final _desk = _lib.lookupFunction<Int32 Function(_P, Int32, Int32, Double, Double, Double, Double), int Function(_P, int, int, double, double, double, double)>('motolii_desk');
+  late final _pick = _lib.lookupFunction<Int32 Function(_P, Int32, Int32), int Function(_P, int, int)>('motolii_pick');
   late final _play = _lib.lookupFunction<Int32 Function(_P, Int32), int Function(_P, int)>('motolii_play');
   late final _now = _lib.lookupFunction<Double Function(_P), double Function(_P)>('motolii_now');
   late final _at = _lib.lookupFunction<Int32 Function(_P, Double), int Function(_P, double)>('motolii_at');
@@ -158,8 +159,12 @@ class Motolii {
   int? _soloId;
 
   /// The desk: the stage pane's whole picture, [w] x [h] pixels, the stage lying at [x], [y] (its top left) [scale]
-  /// pixels a point, what lies off it seen round it (motolii_desk). [w] 0: off, the stage's own picture again.
-  bool desk(int w, int h, double x, double y, double scale) => _desk(_m, w, h, x, y, scale) != 0;
+  /// pixels a point, what lies off it seen round it, the picked thing marked over it ([point]: pixels a point of the
+  /// screen) (motolii_desk). [w] 0: off, the stage's own picture again.
+  bool desk(int w, int h, double x, double y, double scale, double point) => _desk(_m, w, h, x, y, scale, point) != 0;
+
+  /// The thing picked in the window and the one under its hand (0: none): the desk marks them (motolii_pick).
+  void pick(int thing, int hover) => _pick(_m, thing, hover);
 
   /// The desk's picture as a Flutter texture (-1: none).
   Future<int> deskTexture() async => _deskId ??= await _channel.invokeMethod<int>('start', {'lib': libPath, 'handle': _m.address, 'front': 'motolii_desk_front', 'frames': 'motolii_desk_frames'}) ?? -1;

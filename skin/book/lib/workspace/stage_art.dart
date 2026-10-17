@@ -5,6 +5,7 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
+import '../motolii.dart' show Motolii;
 import 'ws.dart';
 
 /// The poster's own inks: flat, saturated, opaque. They belong to the picture, never to the chrome.
@@ -43,13 +44,20 @@ class ArtScene {
       guidesY = [for (final (a, at) in ws.guides) if (a == 'y') at],
       layers = List.unmodifiable([for (final l in ws.layers) ArtLayer(l)]),
       rev = ws.rev,
-      boxes = Map.unmodifiable({
-              for (final l in ws.layers)
-                if (ws.inside!.frame(int.parse(l.id)) case final f?) l.id: ArtBox(Offset(f[0], f[1]), Size(f[2], f[3]), rot: f[4] * math.pi / 180, anchor: Offset(f[5], f[6])),
-            });
+      _inside = ws.inside;
 
-  /// Each thing's frame on the picture as the inside sees it at this moment.
-  final Map<String, ArtBox> boxes;
+  final Motolii? _inside;
+  final _asked = <String, ArtBox?>{};
+
+  /// A thing's frame on the picture as the inside sees it at this moment, asked when it is wanted (a hand on the
+  /// stage, the picked one's line), not for every thing at every picture: null, not shown.
+  ArtBox? box(String id) => _asked.putIfAbsent(id, () {
+    final f = _inside?.frame(int.tryParse(id) ?? -1);
+    return f == null ? null : ArtBox(Offset(f[0], f[1]), Size(f[2], f[3]), rot: f[4] * math.pi / 180, anchor: Offset(f[5], f[6]));
+  });
+
+  /// Every thing's frame, asked now.
+  Map<String, ArtBox> get boxes => {for (final l in layers) if (box(l.id) case final b?) l.id: b};
 
   /// How many times the joined document has been read again: a change at the same frame is another scene.
   final int rev;
@@ -97,12 +105,12 @@ abstract final class WsArt {
 
   /// The box the stage frames when [id] is selected, or null when the layer has no picture at this frame (the inside
   /// gives a frame only to what it shows: whether it is on is its, not counted again here in frames).
-  static ArtBox? boxOf(ArtScene s, String? id) => s.layer(id) == null ? null : s.boxes[id];
+  static ArtBox? boxOf(ArtScene s, String? id) => s.layer(id) == null ? null : s.box(id!);
 
   /// The topmost layer under [p] (document px), or null. The background is locked: a click on it means "nothing".
   static String? hit(ArtScene s, Offset p) {
     for (final l in s.layers) {   // (the thing in front, of those whose real frame the point is in; the first row is the nearest thing)
-      if (s.boxes[l.id]?.contains(p) ?? false) return l.id;
+      if (s.box(l.id)?.contains(p) ?? false) return l.id;
     }
     return null;
   }

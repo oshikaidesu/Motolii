@@ -20,6 +20,7 @@ struct Motolii {
     Doc* d = nullptr;
     Live* live = nullptr;
     int solo = 0;   // the thing a card shows alone (motolii_solo), 0: none
+    int pick = 0, hover = 0;   // the thing picked in the window and the one under its hand: marked on the desk (motolii_pick)
     std::map<const void*, Heard> heard;   // the things' sound heard as the live stage plays (heard.h)
     std::string trouble, listed, word;
     std::thread hand;
@@ -172,6 +173,12 @@ static void motolii_hand(Motolii* m, std::string document, int wide, int high, s
             m->s->later = &films;
             time_is(*m->s, m->now);
             m->s->later = nullptr;
+            if (m->s->desk.w) {   // (the marks on the desk: where the picked thing and the one under the hand are now, as drawn)
+                auto& k = m->s->desk;
+                k.picked = m->pick > 0 && doc_frame(*m->d, m->pick, m->now, k.pick);
+                k.hovered = m->hover > 0 && m->hover != m->pick && doc_frame(*m->d, m->hover, m->now, k.hover);
+                k.knob = doc_word(*m->d, m->pick, "kind") != "camera";
+            }
             if (m->s->solo) {   // (the thing a card shows alone: its parts as they now are, the eye on its frame)
                 double frame[8];
                 std::vector<utils::Entity> parts;
@@ -256,7 +263,8 @@ int motolii_solo(Motolii* m, int thing, int side) {
 void* motolii_solo_front(Motolii* m) { return m->live && m->live->solo ? live_front(m->live->solo) : nullptr; }
 unsigned long long motolii_solo_frames(Motolii* m) { return m->live && m->live->solo ? m->live->solo->frames.load() : 0; }
 unsigned long long motolii_frames(Motolii* m) { return m->live ? m->live->frames.load() : 0; }
-int motolii_desk(Motolii* m, int w, int h, double x, double y, double scale) {
+int motolii_pick(Motolii* m, int thing, int hover) { return by_hand(m, [=] { m->pick = thing, m->hover = hover, m->changed = true; return 1; }); }
+int motolii_desk(Motolii* m, int w, int h, double x, double y, double scale, double point) {
     return by_hand(m, [=] {
         if (!m->live) return 0;
         Stage& s = *m->s;
@@ -267,7 +275,7 @@ int motolii_desk(Motolii* m, int w, int h, double x, double y, double scale) {
             live_close(s, was);
             m->live->desk = live_open(s, (uint32_t)w, (uint32_t)h);
         }
-        s.desk.w = (uint32_t)w, s.desk.h = (uint32_t)h, s.desk.x = x, s.desk.y = y, s.desk.scale = scale;
+        s.desk.w = (uint32_t)w, s.desk.h = (uint32_t)h, s.desk.x = x, s.desk.y = y, s.desk.scale = scale, s.desk.point = point;
         m->changed = true;
         return m->live->desk ? 1 : 0;
     });
