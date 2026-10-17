@@ -17,6 +17,7 @@ class _DeskNotesState extends State<DeskNotes> {
   final _words = TextEditingController();
   final _focus = FocusNode();
   int? _of;   // (whose note the field holds)
+  (int, List<(WsLayer, String)>)? _noted;
 
   @override
   void initState() {
@@ -43,14 +44,20 @@ class _DeskNotesState extends State<DeskNotes> {
   Widget build(BuildContext context) {
     final ws = WsScope.of(context), m = ws.inside, t = int.tryParse(ws.selected ?? '');
     if (m == null) return const SizedBox.shrink();
-    if (t != _of) {   // (another thing picked: the one before told what was written, the field holds this one's)
-      if (_focus.hasFocus) _say();
+    if (t != _of) {   // (another thing picked: the one before told what was written, after this picture, the field holds this one's)
+      if (_focus.hasFocus && _of != null) {
+        final (was, words) = (_of!, _words.text);
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (words != m.word(was, 'note') && m.say(was, 'note', words)) ws.reread();
+        });
+      }
       _of = t;
       _words.text = t == null ? '' : m.word(t, 'note');
     } else if (!_focus.hasFocus && t != null && _words.text != m.word(t, 'note')) {
       _words.text = m.word(t, 'note');   // (undone, or said elsewhere)
     }
-    final noted = [for (final l in ws.layers) if (m.word(int.parse(l.id), 'note') case final n when n.isNotEmpty) (l, n)];
+    if (_noted?.$1 != ws.reads) _noted = (ws.reads, [for (final l in ws.layers) if (m.word(int.parse(l.id), 'note') case final n when n.isNotEmpty) (l, n)]);   // (asked again when the document is read again, not each picture)
+    final noted = _noted!.$2;
     return ListView(
       padding: const EdgeInsets.all(WsT.gap),
       children: [

@@ -1,6 +1,6 @@
 // The desk's Audio tool: a film's sound as how loud it is through its length (the inside reads it with GStreamer's own
-// level, as After Effects' Convert Audio to Keyframes does), and where it strikes: grows so many dB louder at once (a
-// drum, a clap), shown as ticks along the document's time. Marks puts a mark named beat at each, those it put before
+// level, as After Effects' Convert Audio to Keyframes does, on another isolate), and where it strikes: grows so many dB
+// louder at once (a drum, a clap), ticks on the same time. Marks puts a mark named beat at each, those it put before
 // taken away first: one step. The film is the picked one, else the first that has sound.
 import 'package:flutter/widgets.dart';
 
@@ -16,23 +16,30 @@ class DeskAudio extends StatefulWidget {
 
 class _DeskAudioState extends State<DeskAudio> {
   double _rise = 9;
-  (int, int, double, List<double>, List<double>)? _kept;   // (thing, document change, rise: its loudness and strikes)
+  final _loud = <int, List<double>>{};   // (each film's loudness, once read: read on another isolate)
+  final _asked = <int>{};
+
+  List<double>? _of(Ws ws, int t) {
+    if (_loud[t] case final l?) return l;
+    if (_asked.add(t)) ws.inside!.loudness(t).then((l) => mounted ? setState(() => _loud[t] = l) : null);
+    return null;
+  }
 
   @override
   Widget build(BuildContext context) {
     final ws = WsScope.of(context), m = ws.inside;
     if (m == null) return const SizedBox.shrink();
     bool film(String id) => m.word(int.parse(id), 'kind') == 'film';
-    final picked = ws.selected != null && film(ws.selected!) ? ws.selected : null;
-    final layer = ws.layers.where((l) => l.id == picked).firstOrNull ??
-        ws.layers.where((l) => film(l.id) && (_kept?.$1 == int.parse(l.id) ? _kept!.$4.isNotEmpty : m.loudness(int.parse(l.id)).isNotEmpty)).firstOrNull;
-    final t = layer == null ? null : int.parse(layer.id);
-    if (t != null && (_kept?.$1 != t || _kept?.$2 != ws.rev || _kept?.$3 != _rise)) _kept = (t, ws.rev, _rise, m.loudness(t), m.strikes(t, _rise));
-    final (loud, strikes) = t == null ? (const <double>[], const <double>[]) : (_kept!.$4, _kept!.$5);
+    // (the picked film, else the first film: its sound read once it is shown here)
+    final layer = ws.layers.where((l) => l.id == ws.selected && film(l.id)).firstOrNull ?? ws.layers.where((l) => film(l.id)).firstOrNull;
+    final t = layer == null ? null : int.parse(layer.id), loud = t == null ? null : _of(ws, t);
+    final ready = t != null && loud != null && loud.isNotEmpty;
+    final own = ready ? m.strikes(t, _rise, own: true) : const <double>[];
     void mark() {
+      final at = m.strikes(t!, _rise);
       final ok = m.together(() => [
         for (final (at, name) in m.marks) if (name == 'beat') m.mark(at, ''),
-        for (final at in strikes) m.mark(at, 'beat'),
+        for (final s in at) m.mark((s * Ws.fps).round() / Ws.fps, 'beat'),   // (on a frame, as the timeline counts)
       ].every((ok) => ok));
       if (ok) ws.reread();
     }
@@ -46,65 +53,51 @@ class _DeskAudioState extends State<DeskAudio> {
             const SizedBox(width: 8),
             SizedBox(
               width: 130,
-              child: DeskScrub(key: const ValueKey('audio.rise'), label: 'Rise', value: _rise, min: 3, max: 30, perPx: .1, enabled: t != null, onChanged: (v) => setState(() => _rise = v.roundToDouble()), format: (v) => '${v.round()} dB'),
+              child: DeskScrub(key: const ValueKey('audio.rise'), label: 'Rise', value: _rise, min: 3, max: 30, perPx: .1, enabled: ready, onChanged: (v) => setState(() => _rise = v.roundToDouble()), format: (v) => '${v.round()} dB'),
             ),
           ],
-          right: [DeskIconButton(key: const ValueKey('audio.marks'), size: 28, glyph: (ink) => _Beats(ink), onTap: () => strikes.isEmpty ? null : mark())],
+          right: [DeskIconButton(key: const ValueKey('audio.marks'), size: 28, glyph: (ink) => _Beats(ink), onTap: () => ready ? mark() : null)],
         ),
         const SizedBox(height: 8),
-        SizedBox(height: 70, child: CustomPaint(painter: _Loud(loud))),
-        const SizedBox(height: 4),
-        SizedBox(height: 18, child: CustomPaint(painter: _Ticks(strikes, m.seconds, ws.frame / Ws.fps))),
+        Opacity(opacity: t == null || (loud != null && loud.isEmpty) ? .35 : 1, child: SizedBox(height: 78, child: CustomPaint(painter: _Loud(loud ?? const [], own)))),   // (no film, or one with no sound)
       ],
     );
   }
 }
 
-/// How loud, through the film's own length: -60 dB at the bottom, full at the top.
+/// How loud, through the film's own length (-60 dB at the bottom, full at the top), and where it strikes, ticks on
+/// the same time.
 class _Loud extends CustomPainter {
-  _Loud(this.db);
-  final List<double> db;
+  _Loud(this.db, this.strikes);
+  final List<double> db, strikes;
   @override
   void paint(Canvas c, Size s) {
     c.drawRRect(RRect.fromRectAndRadius(Offset.zero & s, const Radius.circular(5)), Paint()..color = WsT.well);
     if (db.length < 2) return;
+    final step = (db.length / s.width).ceil().clamp(1, 1 << 20);   // (no more points than the strip is wide: the loudest of each)
     final p = Path()..moveTo(0, s.height);
-    for (final (i, v) in db.indexed) {
+    for (var i = 0; i < db.length; i += step) {
+      var v = -100.0;
+      for (var k = i; k < i + step && k < db.length; k++) {
+        if (db[k] > v) v = db[k];
+      }
       p.lineTo(s.width * i / (db.length - 1), s.height * (1 - ((v + 60) / 60).clamp(0.0, 1.0)));
     }
     p
       ..lineTo(s.width, s.height)
       ..close();
     c.drawPath(p, Paint()..color = WsT.toneAudio.withValues(alpha: .75));
-  }
-
-  @override
-  bool shouldRepaint(_Loud o) => o.db != db;
-}
-
-/// Where it strikes, along the document's time; the playhead a line.
-class _Ticks extends CustomPainter {
-  _Ticks(this.at, this.seconds, this.now);
-  final List<double> at;
-  final double seconds, now;
-  @override
-  void paint(Canvas c, Size s) {
-    c.drawRRect(RRect.fromRectAndRadius(Offset.zero & s, const Radius.circular(4)), Paint()..color = WsT.well);
     final tick = Paint()
-      ..color = Grey.g91
+      ..color = Grey.g95
       ..strokeWidth = 1.2;
-    for (final a in at) {
-      final x = s.width * a / seconds;
-      c.drawLine(Offset(x, 3), Offset(x, s.height - 3), tick);
+    for (final a in strikes) {
+      final x = s.width * a * 100 / (db.length - 1);
+      c.drawLine(Offset(x, s.height - 8), Offset(x, s.height), tick);
     }
-    final x = s.width * now / seconds;
-    c.drawLine(Offset(x, 0), Offset(x, s.height), Paint()
-      ..color = WsT.accent
-      ..strokeWidth = 1);
   }
 
   @override
-  bool shouldRepaint(_Ticks o) => true;
+  bool shouldRepaint(_Loud o) => o.db != db || o.strikes.length != strikes.length;
 }
 
 /// Marks at the strikes: three ticks under a drum's stroke.

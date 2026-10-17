@@ -396,21 +396,26 @@ class Motolii {
       if (line.indexOf(' ') case final i when i > 0) (double.parse(line.substring(0, i)), line.substring(i + 1)),
   ];
   bool mark(double at, String word) => _with([word], (s) => _mark(_m, at, s[0])) != 0;
-  late final _loudness = _lib.lookupFunction<Int32 Function(_P, Int32, Pointer<Float>, Int32), int Function(_P, int, Pointer<Float>, int)>('motolii_loudness');
-  late final _strikes = _lib.lookupFunction<Int32 Function(_P, Int32, Double, Pointer<Double>, Int32), int Function(_P, int, double, Pointer<Double>, int)>('motolii_strikes');
+  late final _strikes = _lib.lookupFunction<Int32 Function(_P, Int32, Double, Int32, Pointer<Double>, Int32), int Function(_P, int, double, int, Pointer<Double>, int)>('motolii_strikes');
 
-  /// A film's sound: its loudness (dB, 0 at full) 100 times a second of its own (none: no sound, or not a film).
-  List<double> loudness(int thing) {
-    final n = _loudness(_m, thing, nullptr, 0), out = malloc<Float>(n < 1 ? 1 : n);
-    final got = _loudness(_m, thing, out, n), all = [for (var i = 0; i < got && i < n; i++) out[i].toDouble()];
-    malloc.free(out);
-    return all;
+  /// A film's sound: its loudness (dB, 0 at full) 100 times a second of its own (none: no sound, or not a film). Read
+  /// on another isolate, the file decoded once: the window does not wait.
+  Future<List<double>> loudness(int thing) {
+    final lib = libPath, at = _m.address;
+    return Isolate.run(() {
+      final ask = DynamicLibrary.open(lib).lookupFunction<Int32 Function(Pointer<Void>, Int32, Pointer<Float>, Int32), int Function(Pointer<Void>, int, Pointer<Float>, int)>('motolii_loudness');
+      final m = Pointer<Void>.fromAddress(at), n = ask(m, thing, nullptr, 0), out = malloc<Float>(n < 1 ? 1 : n);
+      final got = ask(m, thing, out, n), all = [for (var i = 0; i < got && i < n; i++) out[i].toDouble()];
+      malloc.free(out);
+      return all;
+    });
   }
 
-  /// The moments of the document where a film's sound strikes (grows [rise] dB louder at once), where it shows them.
-  List<double> strikes(int thing, double rise) {
-    final n = _strikes(_m, thing, rise, nullptr, 0), out = malloc<Double>(n < 1 ? 1 : n);
-    final got = _strikes(_m, thing, rise, out, n), all = [for (var i = 0; i < got && i < n; i++) out[i]];
+  /// Where a film's sound strikes (grows [rise] dB louder at once): the document's moments where it shows them, or
+  /// [own] the film's own seconds. Asked once its loudness has been read ([loudness]).
+  List<double> strikes(int thing, double rise, {bool own = false}) {
+    final n = _strikes(_m, thing, rise, own ? 1 : 0, nullptr, 0), out = malloc<Double>(n < 1 ? 1 : n);
+    final got = _strikes(_m, thing, rise, own ? 1 : 0, out, n), all = [for (var i = 0; i < got && i < n; i++) out[i]];
     malloc.free(out);
     return all;
   }

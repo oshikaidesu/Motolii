@@ -388,6 +388,8 @@ void main() {
       ..reread()
       ..select('$clicks');
     await open('Audio');
+    await wait(1000);   // (its sound read on another isolate)
+    await t.pump();
     await t.tap(find.byKey(const ValueKey('audio.marks')));
     await t.pump();
     await wait(100);

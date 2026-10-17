@@ -504,15 +504,19 @@ int motolii_loudness(Motolii* m, int thing, float* db, int room) {
     for (int i = 0; i < room && i < (int)all.size(); ++i) db[i] = all[(size_t)i];
     return (int)all.size();
 }
-int motolii_strikes(Motolii* m, int thing, double rise, double* at, int room) {
+int motolii_strikes(Motolii* m, int thing, double rise, int own, double* at, int room) {
     const std::string file = by_look(m, [=] { return doc_knows(doc(m), thing) && doc_word(*m->d, thing, "kind") == "film" ? doc_word(*m->d, thing, "file") : std::string(); });
     if (file.empty()) return 0;
-    const std::vector<double> own = sound_strikes(loudness_of(file), 100.0, rise);
+    const std::vector<double> struck = sound_strikes(loudness_of(file), 100.0, rise);
+    if (own) {   // (in the film's own seconds, as its loudness is counted)
+        for (int i = 0; i < room && i < (int)struck.size(); ++i) at[i] = struck[(size_t)i];
+        return (int)struck.size();
+    }
     return by_look(m, [&] {   // (the film's own seconds to the document's: from its start, from where it begins, at its speed, while it lasts)
         Doc& d = *m->d;
         const double start = doc_number(d, thing, "start", 0, 0), begin = doc_number(d, thing, "begin", 0, 0), speed = doc_number(d, thing, "speed", 0, 1), lasts = doc_number(d, thing, "duration", 0, -1);
         int n = 0;
-        for (const double t : own) {
+        for (const double t : struck) {
             const double when = speed == 0.0 ? -1.0 : start + (t - begin) / speed;
             if (when < start || (lasts > 0.0 && when >= start + lasts)) continue;
             if (n < room) at[n] = when;
