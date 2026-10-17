@@ -29,6 +29,8 @@
 //            text                   a text's: what it says (to the end of the line)
 //            fill                   what its surface is: a text's colour as six digits (ff3366); a solid's: a colour, or the material glass
 #include "drawn.h"
+#include <string_view>
+#include <unordered_map>
 #include "motion.h"
 #include "interp.h"
 #include "physics.h"
@@ -85,7 +87,8 @@ struct Doc {
     // A thing held by a hand (doc_hold): what of it is carried shows at once and is not yet the document's.
     struct Held { int thing = -1; std::map<std::string, double> from, tried; } held;   // (-1: nothing held; 0 is the stage, which a hand may hold by a value of its own)
     struct Keys { std::vector<double> at, value; std::vector<Interp> interp; std::vector<std::string> own; };   // (own: a way defined in the document, where the stretch is not one of the nine kinds)
-    std::map<std::pair<int, std::string>, Keys> moving;   // a value's keys, and the way of the stretch after each; read from the facts when first asked for, forgotten at every change
+    struct NameHash { using is_transparent = void; size_t operator()(std::string_view n) const { return std::hash<std::string_view>{}(n); } };   // (a name looked up as it is said, no string made for it)
+    std::unordered_map<int, std::unordered_map<std::string, Keys, NameHash, std::equal_to<>>> moving;   // a value's keys, and the way of the stretch after each, by thing and name; read from the facts when first asked for, forgotten at every change
     std::map<int, std::pair<float2, float>> halves;   // a thing's half size and depth (doc_half), worked out once a moment: its copies all ask it
     std::map<std::pair<int, std::string>, std::string> words;   // a value's word, the same way
     std::map<std::pair<int, std::string>, std::vector<double>> keyed;   // the moments of a value's keys, the same way
@@ -652,8 +655,9 @@ static double doc_went_by(Doc& d, const std::string& own, double u, double t, do
 static double doc_number(Doc& d, int thing, const char* name, double at, double otherwise) {
     if (d.held.thing == thing)   // (what a hand is carrying shows in place of the document's own)
         if (const auto tried = d.held.tried.find(name); tried != d.held.tried.end()) return tried->second;
-    auto found = d.moving.find({thing, name});
-    if (found == d.moving.end()) {
+    auto& of = d.moving[thing];
+    auto found = of.find(std::string_view(name));
+    if (found == of.end()) {
         Doc::Keys keys;
         doc_rows(d, sqlite3_mprintf("select at, value, coalesce(way, '') from fact where thing = %d and name = %Q order by at", thing, name), [&](sqlite3_stmt* row) {
             keys.at.push_back(sqlite3_column_double(row, 0));
@@ -664,7 +668,7 @@ static double doc_number(Doc& d, int thing, const char* name, double at, double 
             keys.interp.push_back(kind);
             keys.own.push_back(of_the_nine ? "" : way);
         });
-        found = d.moving.emplace(std::make_pair(thing, std::string(name)), keys).first;
+        found = of.emplace(std::string(name), std::move(keys)).first;
     }
     const Doc::Keys& k = found->second;
     if (k.at.empty()) return otherwise;
