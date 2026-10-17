@@ -256,6 +256,24 @@ int motolii_solo(Motolii* m, int thing, int side) {
 void* motolii_solo_front(Motolii* m) { return m->live && m->live->solo ? live_front(m->live->solo) : nullptr; }
 unsigned long long motolii_solo_frames(Motolii* m) { return m->live && m->live->solo ? m->live->solo->frames.load() : 0; }
 unsigned long long motolii_frames(Motolii* m) { return m->live ? m->live->frames.load() : 0; }
+int motolii_desk(Motolii* m, int w, int h, double x, double y, double scale) {
+    return by_hand(m, [=] {
+        if (!m->live) return 0;
+        Stage& s = *m->s;
+        if (w < 16 || h < 16 || scale <= 0.0) return s.desk.w = 0, m->changed = true, 0;
+        if (!m->live->desk || s.desk.w != (uint32_t)w || s.desk.h != (uint32_t)h) {   // (made again at its new size)
+            Live* was = m->live->desk;
+            m->live->desk = nullptr;
+            live_close(s, was);
+            m->live->desk = live_open(s, (uint32_t)w, (uint32_t)h);
+        }
+        s.desk.w = (uint32_t)w, s.desk.h = (uint32_t)h, s.desk.x = x, s.desk.y = y, s.desk.scale = scale;
+        m->changed = true;
+        return m->live->desk ? 1 : 0;
+    });
+}
+void* motolii_desk_front(Motolii* m) { return m->live && m->live->desk ? live_front(m->live->desk) : nullptr; }
+unsigned long long motolii_desk_frames(Motolii* m) { return m->live && m->live->desk ? m->live->desk->frames.load() : 0; }
 int motolii_loop(Motolii* m, int on) {   // (on below 0: only asks: answered at once, not queued behind the hand's picture)
     if (on < 0) return (int)m->loop.load();
     return by_hand(m, [=] { m->loop = on != 0; return (int)m->loop; });

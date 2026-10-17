@@ -113,6 +113,9 @@ struct Stage {
     std::vector<Made> made;   // every thing put on the stage: of which mesh, at which of that mesh's places (a film moves them: `move`)
     View* solo = nullptr;              // one thing alone, a card's small picture of it (solo_view): its own scene, an eye riding the stage's
     std::vector<utils::Entity> soloIn; // what is in that scene now
+    // The desk: the editing window's whole stage pane (w, h pixels: 0, none), the picture there as on the stage but seen
+    // further back, the stage's own lying at x, y (its top left) so many pixels a point; what lies off it is seen too.
+    struct { uint32_t w = 0, h = 0; double x = 0, y = 0, scale = 1; math::mat4 was, wasCulled; } desk;
     std::vector<View*> layers;   // further pictures laid over the stage's own view, in order (layer_view); the first `layered` of them are drawn
     size_t layered = 0;
     std::function<void()> over;   // drawn last, over all of them (a whole-screen effect: screen.h)
@@ -189,6 +192,23 @@ static View* layer_view(Stage& s, size_t k, bool flat) {
     shade.enabled = shade.enabled && !flat;
     s.layers[k]->setAmbientOcclusionOptions(shade);
     return s.layers[k];
+}
+
+// The stage's pictures laid out on the desk (on: before they are drawn) or on the stage again (off: after): the views the
+// stage's eye sees by, their viewport the desk's, the eye's projection moved and shrunk so the stage lies where the desk
+// says (as solo_aim brings it closer). The floor's, the mattes' and the solo's own eyes are left as they are.
+static void desk_lay(Stage& s, bool on) {
+    const Viewport at = on ? Viewport{0, 0, s.desk.w, s.desk.h} : Viewport{0, 0, (uint32_t)s.w, (uint32_t)s.h};
+    for (View* v : {s.view, s.view_behind, s.view_through}) if (v) v->setViewport(at);
+    for (View* v : s.layers) v->setViewport(at);
+    const double near = s.camera->getNear(), far = s.camera->getCullingFar();
+    if (!on) return s.camera->setCustomProjection(s.desk.was, s.desk.wasCulled, near, far);
+    s.desk.was = s.camera->getProjectionMatrix(), s.desk.wasCulled = s.camera->getCullingProjectionMatrix();
+    const double wide = s.w * s.desk.scale, high = s.h * s.desk.scale;
+    math::mat4 further;   // (the stage's -1..1 to where it lies on the desk's)
+    further[0][0] = wide / s.desk.w, further[1][1] = high / s.desk.h;
+    further[3][0] = 2.0 * (s.desk.x + 0.5 * wide) / s.desk.w - 1.0, further[3][1] = 1.0 - 2.0 * (s.desk.y + 0.5 * high) / s.desk.h;
+    s.camera->setCustomProjection(further * s.desk.was, further * s.desk.wasCulled, near, far);
 }
 
 // One thing alone, as After Effects' solo, for a card's small picture: a view as the stage's own is (its grading, its

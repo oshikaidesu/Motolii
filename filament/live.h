@@ -23,6 +23,7 @@ struct Live {
     Fence* pending = nullptr;          // the picture begun and not yet finished by the GPU, and which buffer it is in
     int pendingIn = -1;
     Live* solo = nullptr;              // a card's small picture of one thing alone (kit.h solo_view), drawn in the same frame, finished with it
+    Live* desk = nullptr;              // the editing window's whole stage pane (kit.h desk_lay): while it is on, the stage is drawn there, not here
 };
 
 static Live* live_open(Stage& s, uint32_t w = 0, uint32_t h = 0) {   // (0: the stage's own size)
@@ -63,9 +64,32 @@ static Live* live_open(Stage& s, uint32_t w = 0, uint32_t h = 0) {   // (0: the 
     return l;
 }
 
+// Its buffers done away with, once the GPU has finished with them (a desk made again at another size: the old one).
+static void live_close(Stage& s, Live* l) {
+    if (!l) return;
+    s.engine->flushAndWait();
+    for (int i = 0; i < Live::N; ++i) {
+        if (l->target[i]) s.engine->destroy(l->target[i]);
+        if (l->seen[i]) s.engine->destroy(l->seen[i]);
+    }
+    s.engine->flushAndWait();
+    door::on_driver(s.engine, [l] {
+        for (int i = 0; i < Live::N; ++i) {
+            if (l->shared[i]) wgpuTextureRelease(l->shared[i]);
+            if (l->lent[i]) wgpuSharedTextureMemoryRelease(l->lent[i]);
+        }
+    });
+    s.engine->flushAndWait();
+    for (CVPixelBufferRef b : l->buffer) if (b) CVPixelBufferRelease(b);   // (a shell holding one keeps it till it lets go)
+    if (l->pending) s.engine->destroy(l->pending);
+    delete l;
+}
+
 // The stage's picture as it now is, drawn into the next buffer; it is the front one once the GPU has finished it.
 static void live_draw(Stage& s, Live* l) {
-    s.out = l->target[l->next];
+    Live* desk = l->desk && s.desk.w ? l->desk : nullptr;
+    s.out = desk ? desk->target[desk->next] : l->target[l->next];
+    if (desk) desk_lay(s, true);
     if (!s.over) {   // (with a whole-screen effect the stage draws to its own picture and the effect to this one: screen.h)
         s.view->setRenderTarget(s.out);
         for (View* v : s.layers) v->setRenderTarget(s.out);   // (the pictures laid over it go to the same place)
@@ -78,6 +102,11 @@ static void live_draw(Stage& s, Live* l) {
         solo->pendingIn = solo->next;
         solo->next = (solo->next + 1) % Live::N;
     }
+    if (desk) {
+        desk_lay(s, false);
+        desk->pendingIn = desk->next;
+        desk->next = (desk->next + 1) % Live::N;
+    }
     l->pending = s.engine->createFence();   // (not waited for: the hand goes back to what it is asked; live_ready offers it once done)
     s.engine->flush();
     l->pendingIn = l->next;
@@ -86,7 +115,8 @@ static void live_draw(Stage& s, Live* l) {
         for (View* v : s.layers) v->setRenderTarget(nullptr);
     }
     s.out = nullptr;
-    l->next = (l->next + 1) % Live::N;
+    if (desk) l->pendingIn = -1;   // (the stage's own buffer was not drawn: its last picture stays the front)
+    else l->next = (l->next + 1) % Live::N;
 }
 // Whether the picture begun last is finished (then it is offered to the shell, the front): the hand asks this rather
 // than waiting for the GPU, and begins no other picture till it is (Thermion's way: research_notes/flutter_native_kin.md).
@@ -95,8 +125,9 @@ static bool live_ready(Stage& s, Live* l) {
     if (l->pending->wait(Fence::Mode::DONT_FLUSH, 0) != Fence::FenceStatus::CONDITION_SATISFIED) return false;
     s.engine->destroy(l->pending);
     l->pending = nullptr;
-    l->front = l->pendingIn;
+    if (l->pendingIn >= 0) l->front = l->pendingIn;
     ++l->frames;
+    if (Live* desk = l->desk; desk && desk->pendingIn >= 0) desk->front = desk->pendingIn, desk->pendingIn = -1, ++desk->frames;
     if (Live* solo = l->solo; solo && solo->pendingIn >= 0) solo->front = solo->pendingIn, solo->pendingIn = -1, ++solo->frames;   // (finished with the stage's)
     return true;
 }

@@ -77,5 +77,16 @@ void main() {
     await hand.up();
     await wait(300);
     await shoot('drag_let_go');
+
+    final off = m.add('shape', 'rect'); // (half off the stage: seen on the desk round it, its box whole)
+    m
+      ..say(off, 'fill', 'ffaa22')
+      ..set(off, 'x', 3.1)
+      ..set(off, 'y', 1.7);
+    ws
+      ..reread()
+      ..select('$off');
+    await wait(400);
+    await shoot('off_stage');
   });
 }

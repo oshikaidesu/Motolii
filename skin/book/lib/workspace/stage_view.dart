@@ -7,6 +7,7 @@ import 'package:flutter/widgets.dart';
 
 import '../tokens.dart';
 import 'stage_art.dart';
+import '../motolii.dart' show Motolii;
 import 'ws.dart';
 
 /// Zoom steps of the header chip: fit, then fixed scales.
@@ -122,6 +123,30 @@ class _StageViewState extends State<StageView> implements StageHandles {
   void didUpdateWidget(StageView o) {
     super.didUpdateWidget(o);
     if (o.zoom != widget.zoom) _pan = Offset.zero;
+  }
+
+  // Joined: the inside draws the whole pane (the desk), the stage lying in it where this view puts it; told again when
+  // that changes (after the frame: the inside is not asked while building).
+  int? _desk;
+  _View? _toldDesk;
+  Motolii? _deskOf;
+  void _deskTo(_View v) {
+    if (widget.texture == null || v == _toldDesk) return;
+    _toldDesk = v;
+    final m = WsScope.read(context).inside, dpr = MediaQuery.devicePixelRatioOf(context);
+    if ((_deskOf = m) == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _toldDesk != v) return;
+      final m = _deskOf!;
+      if (!m.desk((v.area.width * dpr).round(), (v.area.height * dpr).round(), (v.o.dx - v.area.left) * dpr, (v.o.dy - v.area.top) * dpr, v.s * dpr)) return;
+      if (_desk == null) m.deskTexture().then((id) => mounted && id >= 0 ? setState(() => _desk = id) : null);
+    });
+  }
+
+  @override
+  void dispose() {
+    _deskOf?.desk(0, 0, 0, 0, 0); // (the stage's own picture again)
+    super.dispose();
   }
 
   _View _view(Size size) {
@@ -350,6 +375,7 @@ class _StageViewState extends State<StageView> implements StageHandles {
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, box) {
       final v = _shown = _view(box.biggest), scene = widget.scene;
+      _deskTo(v);
       return Listener(
         onPointerSignal: (e) => _scroll(e, v),
         child: MouseRegion(
@@ -390,6 +416,10 @@ class _StageViewState extends State<StageView> implements StageHandles {
                     painter: _ViewPainter(scene, v, widget.selected, _hover == widget.selected ? null : _hover, grid: widget.grid, safe: widget.safe, part: widget.texture == null ? _Part.all : _Part.under, pivots: widget.pivots, met: _met),
                   ),
                 ),
+                if (_desk case final desk? when widget.texture != null) ...[ // (the whole pane as the inside draws it; off the stage, covered half way)
+                  Positioned.fromRect(rect: v.area, child: IgnorePointer(child: Texture(textureId: desk, filterQuality: FilterQuality.medium))),
+                  Positioned.fill(child: IgnorePointer(child: CustomPaint(painter: _OffStage(v)))),
+                ] else
                 Positioned.fromRect(
                   rect: v.comp,
                   child: IgnorePointer(
@@ -535,6 +565,17 @@ TextPainter _tp(String t, TextStyle s) => TextPainter(
 
 /// What one painter draws: everything (the stand-in art too), or, when the inside's picture sits in the composition,
 /// what lies under it (the surround, the captions) and what lies over it (grid, guides, the selection).
+/// What lies off the stage on the desk, covered half way: the stage's own frame reads as the picture.
+class _OffStage extends CustomPainter {
+  _OffStage(this.v);
+  final _View v;
+  @override
+  void paint(Canvas c, Size s) =>
+      c.drawPath(Path.combine(PathOperation.difference, Path()..addRect(v.area), Path()..addRect(v.comp)), Paint()..color = _V.surround.withValues(alpha: .55));
+  @override
+  bool shouldRepaint(_OffStage o) => o.v != v;
+}
+
 enum _Part { all, under, over }
 
 class _ViewPainter extends CustomPainter {

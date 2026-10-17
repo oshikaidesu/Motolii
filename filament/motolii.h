@@ -171,6 +171,12 @@ void* motolii_front(Motolii* m);
 int motolii_solo(Motolii* m, int thing, int side);
 void* motolii_solo_front(Motolii* m);
 unsigned long long motolii_solo_frames(Motolii* m);
+/* The desk: the editing window's whole stage pane, w x h pixels, the picture drawn there instead of on the stage's own
+   buffer (motolii_front keeps its last), the stage lying with its top left at x, y, `scale` pixels a point of it, and
+   what lies off the stage seen round it. w 0: off. Made again when its size changes. 1: on. */
+int motolii_desk(Motolii* m, int w, int h, double x, double y, double scale);
+void* motolii_desk_front(Motolii* m);
+unsigned long long motolii_desk_frames(Motolii* m);
 unsigned long long motolii_frames(Motolii* m);
 int motolii_play(Motolii* m, int playing);                         /* time goes on by the clock (and round again at the end), or stands */
 double motolii_now(Motolii* m);                                    /* the stage's moment */
