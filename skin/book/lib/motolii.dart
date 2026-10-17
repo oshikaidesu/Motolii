@@ -468,19 +468,19 @@ class Motolii {
   List<String> values(int thing) => _kept(('values', thing), () => _values(_m, thing).toDartString().split(' ').where((n) => n.isNotEmpty).toList());
 
   /// Pictures in one call: each recipe's name and what it makes.
-  List<(String, String)> get recipes => _kept('recipes', () => [
+  List<(String, String)> get recipes => _folders.putIfAbsent('recipes', () => [
     for (final line in _recipes(_m).toDartString().split('\n'))
       if (line.indexOf('\t') case final at when at > 0) (line.substring(0, at), line.substring(at + 1)),
   ]);
 
   /// The whole-screen effects on the shelf: each one's name and file (the stage's script is the files of those on it).
-  List<(String, String)> get effects => _kept('effects', () => [
+  List<(String, String)> get effects => _folders.putIfAbsent('effects', () => [
     for (final line in _effects(_m).toDartString().split('\n'))
       if (line.indexOf('\t') case final at when at > 0) (line.substring(0, at), line.substring(at + 1)),
   ]);
 
   /// The motions a thing may be given (Cavalry's Animators): each one's name and file (a thing's script is the file of the one it has).
-  List<(String, String)> get animators => _kept('animators', () => [
+  List<(String, String)> get animators => _folders.putIfAbsent('animators', () => [
     for (final line in _animators(_m).toDartString().split('\n'))
       if (line.indexOf('\t') case final at when at > 0) (line.substring(0, at), line.substring(at + 1)),
   ]);
@@ -530,6 +530,8 @@ class Motolii {
   /// without waiting for the inside (motolii_revision). A read the copy holds is never asked again.
   late final _revision = _lib.lookupFunction<Int64 Function(_P), int Function(_P)>('motolii_revision', isLeaf: true);
   late final _carried = _lib.lookupFunction<Int64 Function(_P), int Function(_P)>('motolii_carried', isLeaf: true);
+  /// What the folders hold (recipes, effects, animators): not the document's, read once.
+  final _folders = <String, List<(String, String)>>{};
   final _copy = <Object, Object?>{}, _copyCarried = <Object, Object?>{}, _was = <Object, Object?>{}, _wasCarried = <Object, Object?>{};
   int _copyAt = -1, _carriedAt = -1;
   T _kept<T>(Object key, T Function() ask) {

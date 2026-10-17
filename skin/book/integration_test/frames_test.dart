@@ -72,7 +72,7 @@ void main() {
     }
 
     ws.playing = true;
-    if (const bool.fromEnvironment('TRACE')) { // (TRACE: Flutter's own timeline of the playing, every widget's build and the collector, into build/integration_response_data.json)
+    if (const bool.fromEnvironment('TRACE_PLAYING')) { // (TRACE_PLAYING: Flutter's own timeline of the playing, every widget's build and the collector: heavy, a gigabyte and more)
       debugProfileLayoutsEnabled = true;
       debugProfileBuildsEnabled = true;
       await binding.traceAction(() => phase('playing', (_) async {}), reportKey: 'timeline', streams: const ['Dart', 'Embedder', 'GC']);
@@ -90,7 +90,10 @@ void main() {
     final g = await t.startGesture(t.getCenter(knob));
     Future<void> traced(String what, Future<void> Function(int) step) async { // (TRACE: Flutter's own timeline of it, kept in /tmp)
       if (!const bool.fromEnvironment('TRACE')) return phase(what, step);
+      debugProfileBuildsEnabled = true;
+      debugProfileBuildsEnabledUserWidgets = true;   // (only the window's own widgets named: light enough to leave the frames as they are)
       await binding.traceAction(() => phase(what, step), reportKey: 'timeline', streams: const ['Dart', 'Embedder', 'GC']);
+      debugProfileBuildsEnabled = false;
       File('/tmp/motolii_${what.replaceAll(' ', '_')}_timeline.json').writeAsStringSync(jsonEncode(binding.reportData!['timeline']));
     }
 
