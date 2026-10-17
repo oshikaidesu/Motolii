@@ -2,6 +2,7 @@
 // document (fifteen recipes) played, a knob dragged to and fro, and the playhead moved back and forth, twenty seconds
 // each. Red: any picture of the window that took longer than a sixtieth of a second.
 //   flutter drive --profile -d macos --driver=test_driver/integration_test.dart --target=integration_test/frames_test.dart
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' show FramePhase;
@@ -99,6 +100,7 @@ void main() {
 
     final moves = <double>[];
     await traced('a knob dragged', (f) async {
+      if (f == 400 && const bool.fromEnvironment('SAMPLE')) unawaited(Process.start('sample', ['$pid', '2', '1', '-file', '/tmp/motolii_knob_sample.txt']));   // (SAMPLE: the main thread's stacks where a late picture comes, every millisecond)
       final w = Stopwatch()..start();
       await g.moveBy(Offset((f ~/ 60).isEven ? 3 : -3, 0));
       moves.add(w.elapsedMicroseconds / 1000);
