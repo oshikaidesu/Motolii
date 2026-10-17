@@ -241,7 +241,10 @@ class Motolii {
   bool key(int thing, String name, double at, double number) => _with([name], (s) => _key(_m, thing, s[0], at, number)) != 0;
   bool unkey(int thing, String name, double at) => _with([name], (s) => _unkey(_m, thing, s[0], at)) != 0;
   bool way(int thing, String name, double at, String way) => _with([name, way], (s) => _way(_m, thing, s[0], at, s[1])) != 0;
-  double? value(int thing, String name, double at) => _with([name], (s) {
+  double? value(int thing, String name, double at) => moving(thing).contains(name)
+      ? _valueAt(thing, name, at)
+      : _kept(('value', thing, name), () => _valueAt(thing, name, at));   // (a value that takes no keys is the same at every moment: kept in the copy)
+  double? _valueAt(int thing, String name, double at) => _with([name], (s) {
     final out = malloc<Double>();
     final ok = _value(_m, thing, s[0], at, out) != 0, v = out.value;
     malloc.free(out);

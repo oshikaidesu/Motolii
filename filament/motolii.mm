@@ -59,7 +59,7 @@ struct Motolii {
     std::atomic<double> now{0.0};
     std::map<std::string, std::pair<long, double>> by_door;   // (what each call has cost, by its name: for measuring)
     std::map<std::string, double> worst;                      // (and its slowest once)
-    std::atomic<long> revision{0};   // (how many times the document has changed: read by anyone, without the document's lock)
+    std::atomic<long> revision{0};   // (how many times what the window sees has changed, the document or what a hand carries: read by anyone, without the document's lock)
     std::map<std::string, std::array<double, 4>> window;     // (a call from the window's own thread, by name: how many, waited in all, waited at most, took in all: what the window waits on)
     double read_waited = 0, read_waited_most = 0; long read_waits = 0;
     std::map<std::string, std::pair<double, long>> rounds;   // (a call through the hand: its longest wait for the answer, and how many waited over 4 ms)   // (reads waiting for the document: in all, the longest, how many waited over 2 ms)
@@ -183,7 +183,7 @@ static void motolii_hand(Motolii* m, std::string document, int wide, int high, s
             const auto held = m->d->held.tried;
             for (auto& does : todo) does();
             if (sqlite3_total_changes(m->d->file) != rows || m->d->held.tried != held) {   // (the document changed, or what a hand carries: what was set down for the window is put aside; a moment asked, a pick, play: it stays)
-                if (sqlite3_total_changes(m->d->file) != rows) m->revision.fetch_add(1, std::memory_order_release);
+                m->revision.fetch_add(1, std::memory_order_release);   // (what the window sees changed: the document, or what a hand carries)
                 m->peek.seq.fetch_add(1, std::memory_order_acq_rel);
                 m->peek.thing = -1;
                 m->peek.seq.fetch_add(1, std::memory_order_release);
