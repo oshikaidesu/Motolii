@@ -95,13 +95,7 @@ struct Doc {
     struct HeardWordHash { size_t operator()(const std::pair<int, const char*>& k) const { return std::hash<int>{}(k.first) * 31u ^ std::hash<const void*>{}(k.second); } };
     std::unordered_map<std::pair<int, const char*>, std::string, HeardWordHash> heardWords;   // (and its words so, and a thing's copy_tall as numbers)
     std::unordered_map<int, std::vector<double>> talls;
-    std::map<int, std::pair<float2, float>> halves;
-    // Where each thing and its copies were put at a frame, kept while the document stays as it is (After Effects keeps
-    // its pictures for a RAM preview; this keeps where things are): played round again, nothing is worked out again.
-    // Forgotten at every change, while a hand carries something, when a script is saved again; so much at most.
-    struct Posed { math::mat4 place; std::vector<mat4f> at; std::vector<ScriptCopy> scripted; bool full = false; };
-    std::unordered_map<int64_t, std::unordered_map<int, Posed>> posed;
-    size_t posedMany = 0; int posedScripts = -1;   // a thing's half size and depth (doc_half), worked out once a moment: its copies all ask it
+    std::map<int, std::pair<float2, float>> halves;   // a thing's half size and depth (doc_half), worked out once a moment: its copies all ask it
     std::map<std::pair<int, std::string>, std::string> words;   // a value's word, the same way
     std::map<std::pair<int, std::string>, std::vector<double>> keyed;   // the moments of a value's keys, the same way
     std::map<std::string, sqlite3_stmt*> named, goes;     // a way by its name, and by its expression: made ready once (SQLite works it out)
@@ -612,7 +606,7 @@ static bool doc_rows(Doc& d, char* ask, const std::function<void(sqlite3_stmt*)>
 }
 static void doc_forget(Doc& d) {
     d.phys_stale = true, d.scripted.clear();   // (the world made again only if what it is made of changed: doc_physics)
-    d.moving.clear(), d.words.clear(), d.keyed.clear(), d.halves.clear(), d.heard.clear(), d.heardWords.clear(), d.talls.clear(), d.posed.clear(), d.posedMany = 0;
+    d.moving.clear(), d.words.clear(), d.keyed.clear(), d.halves.clear(), d.heard.clear(), d.heardWords.clear(), d.talls.clear();
     d.named.clear();
     d.laid.clear();
 }
@@ -1221,17 +1215,6 @@ static bool doc_fx(Doc& d, int thing, double at, bool most, double units, DrawnF
     return ok;
 }
 
-// What was kept of a thing at this moment, if the moment is a frame and nothing forbids keeping (null: work it out).
-static Doc::Posed* doc_posed(Doc& d, int thing, double now) {
-    const double frames = now * 60.0;
-    if (std::fabs(frames - std::round(frames)) > 1e-6 || d.held.thing >= 0) return nullptr;
-    if (d.posedScripts != doc_scripts_made()) d.posed.clear(), d.posedMany = 0, d.posedScripts = doc_scripts_made();
-    auto& at = d.posed[std::llround(frames)];
-    const auto found = at.find(thing);
-    if (found != at.end()) return &found->second;
-    if (d.posedMany > 2000000) return nullptr;   // (some 128 MB of places at most)
-    return &at[thing];
-}
 static void doc_moment(Doc& d, double now) {
     Stage& s = *d.stage;
     d.halves.clear(), d.heard.clear(), d.heardWords.clear(), d.talls.clear();   // (made again since: a flat thing's sheet is as large as its picture now; doc_place's values asked anew)
@@ -1386,12 +1369,7 @@ static void doc_moment(Doc& d, double now) {
         if (t.drawn && t.drawn->shape)
             bend_at(s, t.drawn, (float)doc_number(d, thing, "round", now, 0), (float)doc_number(d, thing, "bloat", now, 0), (float)doc_number(d, thing, "zigzag", now, 0),
                     (float)doc_number(d, thing, "zigzag_ridges", now, 5), (float)doc_number(d, thing, "zigzag_smooth", now, 0), (float)doc_number(d, thing, "offset", now, 0));
-        Doc::Posed* kept = doc_posed(d, thing, now);
-        if (kept && kept->full && !kept->scripted.empty()) {   // (a script's answers as kept: its copies' clearness reads them)
-            Doc::Scripted& sc = d.scripted[thing];
-            sc.copies = kept->scripted, sc.at = now, sc.made = doc_scripts_made();
-        }
-        const mat4f place = mat4f(kept && kept->full ? kept->place : doc_place(d, thing, now));
+        const mat4f place = mat4f(doc_place(d, thing, now));
         const bool staggered = doc_staggered(d, thing, now);   // (each copy, the first too, as late as its order says, waving as its place in the wave says)
         const std::vector<math::mat4> joins = doc_number(d, thing, "connect", 0, 0) != 0.0 ? doc_joins(d, thing, now) : std::vector<math::mat4>{};   // (a joining thing: its copies lie between another's)
         if (t.solid) solid_to(s, t.solid, place);
@@ -1400,12 +1378,7 @@ static void doc_moment(Doc& d, double now) {
             std::vector<float> far;   // (how far off each copy is from the eye: those further off drawn first, within the thing's own place)
             const mat4f eye = mat4f(s.camera->getViewMatrix());
             move(s, m, [&](int nth, const mat4f&) {
-                mat4f at;
-                if (kept && kept->full && (size_t)nth < kept->at.size()) at = kept->at[(size_t)nth];
-                else {
-                    at = nth || staggered ? mat4f(doc_place(d, thing, now, 0, nth, staggered)) : place;
-                    if (kept && !kept->full) { if ((size_t)nth >= kept->at.size()) kept->at.resize((size_t)nth + 1); kept->at[(size_t)nth] = at; }
-                }
+                const mat4f at = nth || staggered ? mat4f(doc_place(d, thing, now, 0, nth, staggered)) : place;
                 if ((size_t)nth >= far.size()) far.resize((size_t)nth + 1, 0.f);
                 far[(size_t)nth] = -(eye * at[3]).z;
                 return at;
@@ -1423,11 +1396,6 @@ static void doc_moment(Doc& d, double now) {
                     for (size_t part = 0; part < faces.getPrimitiveCount(one); ++part) faces.setBlendOrderAt(one, part, (uint16_t)(t.lies * 128 + place_of[(size_t)made.nth]));
                 }
             }
-        }
-        if (kept && !kept->full) {   // (kept now, for this frame's next time)
-            kept->place = math::mat4(place), kept->full = true;
-            if (const auto sc = d.scripted.find(thing); sc != d.scripted.end() && sc->second.at == now) kept->scripted = sc->second.copies;
-            d.posedMany += kept->at.size() + 1;
         }
         if (MaterialInstance* look = t.film ? t.film->look : t.drawn ? t.drawn->look : nullptr) look->setParameter("opacity", (float)doc_number(d, thing, "opacity", now, 1));
         if (t.drawn && t.drawn->edgeLook) t.drawn->edgeLook->setParameter("opacity", (float)doc_number(d, thing, "opacity", now, 1));
