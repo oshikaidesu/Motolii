@@ -1792,7 +1792,7 @@ static std::string doc_guides(Doc& d) {   // (a line each: x or y, a space, wher
     std::string all;
     doc_rows(d, sqlite3_mprintf("select substr(name, 7), at from fact where thing = 0 and name in ('guide_x', 'guide_y') order by name, at"), [&](sqlite3_stmt* row) {
         char line[60];
-        std::snprintf(line, sizeof line, "%s %.6g\n", (const char*)sqlite3_column_text(row, 0), sqlite3_column_double(row, 1));
+        std::snprintf(line, sizeof line, "%s %.17g\n", (const char*)sqlite3_column_text(row, 0), sqlite3_column_double(row, 1));   // (all of it: a guide is found again by where it is)
         all += line;
     });
     return all;
@@ -1801,7 +1801,7 @@ static std::string doc_marks(Doc& d) {   // (a line each, in time: the moment, a
     std::string all;
     doc_rows(d, sqlite3_mprintf("select at, value from fact where thing = 0 and name = 'mark' order by at"), [&](sqlite3_stmt* row) {
         char at[40];
-        std::snprintf(at, sizeof at, "%.6g ", sqlite3_column_double(row, 0));
+        std::snprintf(at, sizeof at, "%.17g ", sqlite3_column_double(row, 0));   // (all of it: a mark is found again by its moment, to the last digit)
         all += at + std::string((const char*)sqlite3_column_text(row, 1)) + "\n";
     });
     return all;

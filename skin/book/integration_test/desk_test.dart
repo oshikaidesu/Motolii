@@ -89,6 +89,42 @@ void main() {
     await t.tap(cross);
     await t.pump();
     report.add('Markers: + twice made $made (want 2); names after writing over the first: $named (want Drop first); after x: ${ws.marks.length} (want 1)');
+    // (the reviewer's: a mark at a frame that is no round number of seconds is named and taken away all the same)
+    ws.frame = 7;
+    await t.pump();
+    await t.tap(plus);
+    await t.pump();
+    final odd = ws.marks.firstWhere((m) => (m.$1 * Ws.fps).round() == 7);
+    final oddField = find.descendant(of: find.byKey(ValueKey(odd.$1)), matching: find.byType(EditableText));
+    await t.tap(oddField);
+    await t.pump();
+    (t.widget(oddField) as EditableText).controller.text = 'Odd';
+    FocusManager.instance.primaryFocus?.unfocus();
+    await t.pump();
+    await wait(100);
+    await t.pump();
+    final oddNamed = ws.marks.where((m) => (m.$1 * Ws.fps).round() == 7).map((m) => m.$2).toList();
+    await t.tap(find.descendant(of: find.byKey(ValueKey(ws.marks.firstWhere((m) => (m.$1 * Ws.fps).round() == 7).$1)), matching: find.byKey(const ValueKey('mark.remove'))));
+    await t.pump();
+    final oddLeft = ws.marks.where((m) => (m.$1 * Ws.fps).round() == 7).length;
+    report.add('Markers at frame 7: named $oddNamed (want [Odd]); after x: $oddLeft left (want 0)');
+    expect(oddNamed, ['Odd']);
+    expect(oddLeft, 0);
+    // (a tick carried along the strip: the mark moved, its name kept)
+    final strip = t.getRect(find.descendant(of: find.byType(WsDesk), matching: find.byWidgetPredicate((w) => w.runtimeType.toString() == '_Strip')));
+    final keep = ws.marks.first, fromX = strip.left + 8 + (strip.width - 16) * (keep.$1 / (Ws.duration / Ws.fps));
+    final drag = await t.startGesture(Offset(fromX, strip.center.dy), kind: PointerDeviceKind.mouse);
+    for (var i = 0; i < 10; i++) {
+      await drag.moveBy(const Offset(6, 0));
+      await t.pump(const Duration(milliseconds: 16));
+    }
+    await drag.up();
+    await t.pump();
+    await wait(100);
+    report.add('Markers moved: $keep -> ${ws.marks} (want the same name, later)');
+    expect(ws.marks.length, 1);
+    expect(ws.marks.first.$2, keep.$2);
+    expect(ws.marks.first.$1, greaterThan(keep.$1));
 
     // Blend: the rect made to add, the circle cleared half, the cube (no blend) only named.
     await open('Blend');
