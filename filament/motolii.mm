@@ -61,7 +61,9 @@ struct Motolii {
     std::map<std::string, double> worst;                      // (and its slowest once)
     int made = 0;   // (the thing the last add or make asked later made: a later call for thing -1 means it)
     std::atomic<long> revision{0};   // (how many times the document has changed: read by anyone, without the document's lock)
-    std::atomic<long> carried{0};    // (and how many times what a hand carries has: values a window shows while a hand is on them)
+    std::atomic<long> carried{0};
+    std::atomic<bool> watching{false};   // (motolii_watch: the window's thread may not wait on the hand; what did is kept in `broke`)
+    std::vector<std::string> broke;    // (and how many times what a hand carries has: values a window shows while a hand is on them)
     std::map<std::string, std::array<double, 4>> window;     // (a call from the window's own thread, by name: how many, waited in all, waited at most, took in all: what the window waits on)
     double read_waited = 0, read_waited_most = 0; long read_waits = 0;
     std::map<std::string, std::pair<double, long>> rounds;   // (a call through the hand: its longest wait for the answer, and how many waited over 4 ms)   // (reads waiting for the document: in all, the longest, how many waited over 2 ms)
@@ -92,6 +94,7 @@ template <class Does> static auto asked(Motolii* m, Does does, bool changes, con
     auto out = done.get();
     const double round = std::chrono::duration<double>(std::chrono::steady_clock::now() - sent).count();   // (the shell waited this long for the hand: in the queue and at work)
     { std::lock_guard<std::mutex> hold(m->asked_lock); auto& r = m->rounds[who]; r.first = std::max(r.first, round), r.second += round > 0.004;
+      if (pthread_main_np() && m->watching) { char why[160]; std::snprintf(why, sizeof why, "%s waited %.1f ms for the hand (a change the window may only send: motolii_later)", who, 1e3 * round); m->broke.push_back(why); }
       if (pthread_main_np()) { auto& w = m->window[who]; w[0]++, w[1] += round, w[2] = std::max(w[2], round), w[3] += round; } }
     return out;
 }
@@ -153,6 +156,7 @@ template <class Does> static auto by_look(Motolii* m, Does does, const char* who
     auto& door = m->by_door[who];
     door.first++, door.second += took, m->worst[who] = std::max(m->worst[who], took);
     if (pthread_main_np()) { auto& w = m->window[who]; w[0]++, w[1] += waited, w[2] = std::max(w[2], waited), w[3] += took; }
+    if (pthread_main_np() && m->watching && waited > 0.002) { char why[160]; std::snprintf(why, sizeof why, "%s waited %.1f ms for the document", who, 1e3 * waited); std::lock_guard<std::mutex> h(m->asked_lock); m->broke.push_back(why); }
     return out;
 }
 
@@ -358,7 +362,8 @@ void* motolii_desk_front(Motolii* m) { return m->live && m->live->desk ? live_fr
 unsigned long long motolii_desk_frames(Motolii* m) { return m->live && m->live->desk ? m->live->desk->frames.load() : 0; }
 int motolii_loop(Motolii* m, int on) {   // (on below 0: only asks: answered at once, not queued behind the hand's picture)
     if (on < 0) return (int)m->loop.load();
-    return by_hand(m, [=] { m->loop = on != 0; return (int)m->loop; });
+    m->loop = on != 0;   // (said at once: the hand reads it as it goes round)
+    return on != 0;
 }
 // What the document's steps changed since this was last asked, a line each: "things" first when a thing came or went,
 // then "thing name" for each value; asking forgets them. And the names of the values that change what cards a thing
@@ -503,7 +508,8 @@ int motolii_path(Motolii* m, int thing, int copy, double from, double to, int n,
 }
 int motolii_keying(Motolii* m, int on) {   // (on below 0: only says whether every change is keyed: a read, answered at once, not queued behind the hand's picture)
     if (on < 0) return (int)m->keying.load();
-    return by_hand(m, [=] { m->d->keying = on != 0, m->d->keying_from = m->now; m->keying = m->d->keying; return (int)m->d->keying; });
+    m->keying = on != 0;   // (said at once; the document told in the hand's turn, without waiting)
+    return posted(m, "keying", [m, on] { m->d->keying = on != 0, m->d->keying_from = m->now; m->keying = m->d->keying; }), on != 0;
 }
 int motolii_hold(Motolii* m, int thing) { return by_hand(m, [=] { return (int)doc_hold(doc(m), thing); }); }
 int motolii_carry(Motolii* m, const char* by, double a, double b) { return posted(m, std::string("carry ") + by, [m, by = std::string(by), a, b] { doc_carry(doc(m), by.c_str(), a, b); }); }   // (refused: said when it is let go)
@@ -583,7 +589,7 @@ int motolii_guide(Motolii* m, const char* axis, double at, int on) { return by_h
 const char* motolii_guides(Motolii* m) { return by_look(m, [=] { return (m->word = doc_guides(*m->d)).c_str(); }); }
 const char* motolii_marks(Motolii* m) { return by_look(m, [=] { return (m->word = doc_marks(*m->d)).c_str(); }); }
 int motolii_fits(Motolii* m) {
-    return by_hand(m, [=] {
+    return by_look(m, [=] {   // (a read: the document's size against the stage's)
         int wide = m->s->w, high = m->s->h;
         doc_rows(*m->d, sqlite3_mprintf("select name, value from fact where thing = 0 and name in ('wide', 'high')"),
                  [&](sqlite3_stmt* row) { (strcmp((const char*)sqlite3_column_text(row, 0), "wide") ? high : wide) = sqlite3_column_int(row, 1); });
@@ -817,8 +823,18 @@ int motolii_still(Motolii* m, const char* png) {
 int motolii_rate(Motolii*) { return RATE; }
 long motolii_revision(Motolii* m) { return m->revision.load(std::memory_order_acquire); }   // (no lock taken: a window keeps its copy while this stays)
 long motolii_carried(Motolii* m) { return m->carried.load(std::memory_order_acquire); }
-void motolii_dont_wait(Motolii*, int on) { dont_wait = on != 0, refused = false; }   // (this thread's reads, from now: refused rather than waited for)
+void motolii_dont_wait(Motolii*, int on) { dont_wait = on != 0; if (on) refused = false; }   // (this thread's reads, from now: refused rather than waited for)
 int motolii_refused(Motolii*) { const int was = refused; refused = false; return was; }   // (whether a read since was refused)
+// The window's thread watched (Chromium's ThreadRestrictions, in the manner of its DisallowBlocking): while on, any
+// change it waits for and any read that waits on the document over 2 ms is kept, named and timed; motolii_broken says
+// them all ("" none), one to a line. Turned on, what was kept before is forgotten.
+void motolii_watch(Motolii* m, int on) { std::lock_guard<std::mutex> h(m->asked_lock); if (on) m->broke.clear(); m->watching = on != 0; }
+const char* motolii_broken(Motolii* m) {
+    std::lock_guard<std::mutex> h(m->asked_lock);
+    m->listed.clear();
+    for (const std::string& one : m->broke) m->listed += (m->listed.empty() ? "" : "\n") + one;
+    return m->listed.c_str();
+}
 int motolii_sequence(Motolii* m, double overlap) { return by_hand(m, [=] { return changes(m, (int)doc_sequence(doc(m), overlap, RATE)); }); }
 int motolii_write(Motolii* m, const char* mp4) {
     return by_hand(m, [m, mp4] {

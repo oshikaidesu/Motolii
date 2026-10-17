@@ -388,7 +388,8 @@ class Motolii {
   late final _marks = _lib.lookupFunction<_S Function(_P), _S Function(_P)>('motolii_marks');
 
   /// The work area, in seconds: the stretch played round and written as a film (not said: all of it); a change is a step.
-  (double, double) get work {
+  (double, double) get work => _kept('work', _workNow);
+  (double, double) _workNow() {
     final at = malloc<Double>(2);
     _workOf(_m, at, at + 1);
     final w = (at[0], at[1]);
@@ -447,14 +448,14 @@ class Motolii {
   late final _guides = _lib.lookupFunction<_S Function(_P), _S Function(_P)>('motolii_guides');
 
   /// The guides: lines across the picture, 'x' upright and 'y' level, at so many points from its left or top.
-  List<(String, double)> get guides => [
+  List<(String, double)> get guides => _kept('guides', () => [
     for (final line in _guides(_m).toDartString().split('\n'))
       if (line.length > 2) (line[0], double.parse(line.substring(2))),
-  ];
+  ]);
   bool guide(String axis, double at, bool on) => _with([axis], (s) => _guide(_m, s[0], at, on ? 1 : 0)) != 0;
 
   /// Whether the stage is the size the document says now (not, after [resize] or an undo of one: open it again).
-  bool get fits => _fits(_m) != 0;
+  bool get fits => _kept('fits', () => _fits(_m) != 0);
 
   /// A thing brought [places] places nearer among the things (below 0: further back).
   bool raise(int thing, int places) => _raise(_m, thing, places) != 0;
@@ -478,10 +479,10 @@ class Motolii {
   ]);
 
   /// The motions a thing may be given (Cavalry's Animators): each one's name and file (a thing's script is the file of the one it has).
-  List<(String, String)> get animators => [
+  List<(String, String)> get animators => _kept('animators', () => [
     for (final line in _animators(_m).toDartString().split('\n'))
       if (line.indexOf('\t') case final at when at > 0) (line.substring(0, at), line.substring(at + 1)),
-  ];
+  ]);
 
   /// What the inside's hand has spent its time on (for measuring).
   String get spent => _spent(_m).toDartString();
@@ -504,7 +505,8 @@ class Motolii {
   final _shownOf = <String, Shown?>{};
 
   /// A number value's lowest and highest (null: the thing has no such number).
-  (double, double)? range(int thing, String name) {
+  (double, double)? range(int thing, String name) => _kept(('range', thing, name), () => _rangeNow(thing, name));
+  (double, double)? _rangeNow(int thing, String name) {
     final lo = malloc<Double>(), hi = malloc<Double>();
     final ok = _with([name], (s) => _range(_m, thing, s[0], lo, hi)) != 0, r = (lo.value, hi.value);
     malloc
@@ -574,6 +576,13 @@ class Motolii {
   /// What the window does when a read was put off (the hand busy): ask again a picture later.
   void Function()? again;
 
+  /// The window's thread watched: while on, a change it waits for, or a read that waits on the document over 2 ms, is
+  /// kept; [broken] says each, one to a line ('' none). Turned on, what was kept is forgotten.
+  late final _watch = _lib.lookupFunction<Void Function(_P, Int32), void Function(_P, int)>('motolii_watch');
+  late final _broken = _lib.lookupFunction<_S Function(_P), _S Function(_P)>('motolii_broken');
+  void watch(bool on) => _watch(_m, on ? 1 : 0);
+  String get broken => _broken(_m).toDartString();
+
   /// A film's first picture, small, as a .png file (null: none could be made). Made once and on another isolate: the
   /// window does not wait.
   Future<String?> thumbnail(String film) => _thumbnails[film] ??= _thumbnail(libPath, film);
@@ -585,14 +594,14 @@ class Motolii {
   bool define(String way, String expression) => _with([way, expression], (s) => _define(_m, s[0], s[1])) != 0;
   /// The ways a stretch may go, as the document says them: the nine kinds with their numbers, the named ones, and
   /// each defined here ('; defined here: Snappy').
-  String get ways => _ways(_m).toDartString();
+  String get ways => _kept('ways', () => _ways(_m).toDartString());
 
   /// The effects a thing may be given, by name, with the value that puts each on (the Effects shelf); its card shows
   /// while it is on ([cards]).
-  List<(String, String)> get thingEffects => [
+  List<(String, String)> get thingEffects => _kept('thingEffects', () => [
     for (final l in _effectNames(_m).toDartString().split('\n'))
       if (l.contains('\t')) (l.split('\t').first, l.split('\t').last),
-  ];
+  ]);
 
   /// An effect put on a thing at a moment, or taken off if it is on (its keys too), one step.
   bool effect(int thing, String name, double at) => _with([name], (s) => _effect(_m, thing, s[0], at)) != 0;
@@ -620,7 +629,7 @@ class Motolii {
   }
 
   /// The way of the stretch that begins at a value's key, as it is said ('': no key there).
-  String wayOf(int thing, String name, double at) => _with([name], (s) => _wayOf(_m, thing, s[0], at).toDartString());
+  String wayOf(int thing, String name, double at) => _kept(('wayOf', thing, name, at), () => _with([name], (s) => _wayOf(_m, thing, s[0], at).toDartString()));
 
   /// Points of the picture to one unit of the stage, at z 0.
   late final double point = _point(_m);

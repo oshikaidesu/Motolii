@@ -42,17 +42,20 @@ void main() {
     final timings = <FrameTiming>[];
     void took(List<FrameTiming> ts) => timings.addAll(ts);
     SchedulerBinding.instance.addTimingsCallback(took);
-    final report = <String>[];
+    final report = <String>[], broke = <String>[];   // (broke: where the window's thread waited on the inside)
     var late = 0;
     Future<void> phase(String what, Future<void> Function(int frame) step) async {
       debugPrint('INSIDE before $what: ${ws.inside!.spent}');
       Ws.spent.clear();
       final from = timings.length, clock = Stopwatch()..start();
+      ws.inside!.watch(true);   // (the window's thread may not wait on the inside: what did is kept)
       for (var f = 0; clock.elapsedMilliseconds < _seconds * 1000; f++) {
         await step(f);
         await t.pump(const Duration(milliseconds: 16));
       }
       await t.pump(const Duration(milliseconds: 100));
+      ws.inside!.watch(false);
+      if (ws.inside!.broken case final b when b.isNotEmpty) broke.add('$what:\n$b');
       final spans = [for (final f in timings.skip(from)) f.totalSpan.inMicroseconds / 1000.0]..sort();
       final over = spans.where((s) => s > 1000 / 60).length;
       debugPrint('FRAMES $what: the late ones at ${[for (final (i, f) in timings.skip(from).indexed) if (f.totalSpan.inMicroseconds > 1000000 / 60) '#$i ${(f.totalSpan.inMicroseconds / 1000).toStringAsFixed(0)} ms (build ${(f.buildDuration.inMicroseconds / 1000).toStringAsFixed(0)}, waited ${((f.timestampInMicroseconds(FramePhase.buildStart) - f.timestampInMicroseconds(FramePhase.vsyncStart)) / 1000).toStringAsFixed(0)})'].join(', ')}');
@@ -158,6 +161,8 @@ void main() {
     }
     SchedulerBinding.instance.removeTimingsCallback(took);
     debugPrint('FRAMES all: late $late');
+    debugPrint('WAITED ON THE INSIDE: ${broke.isEmpty ? 'never' : broke.join('\n')}');
+    expect(broke, isEmpty, reason: broke.join('\n'));   // (the rule: the window never waits on the inside)
     if (!const bool.fromEnvironment('TRACE')) expect(late, 0, reason: report.join('\n')); // (a traced run is for reading: its timeline is written only if it passes)
   });
 }
