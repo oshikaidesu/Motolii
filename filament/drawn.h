@@ -18,6 +18,7 @@
 // tint: how much its darks and lights are made two colours (0: not at all); tritone: how much its darks, middles and
 // lights are made three (0: not at all).
 struct DrawnFx { bool split = false;   // (a text's letters each a copy of their own)
+    bool together = false;   // (its copies drawn in one go, each an instance of one thing: none coloured or cleared each of its own, kit.h add_parts)
     float letters = 1.f, lines = 1.f, italic = 0.f, wrapWidth = 0.f; int wrap = 0;   // (a text's lines broken in a box so many of its letters' heights wide, ThorVG's layout and wrap; 0: as typed)
     float dash = 0.f, dashFrom = 0.f; int cap = -1, join = -1;   // (ThorVG's own: Text::spacing, italic; Shape::strokeDash, strokeCap, strokeJoin; -1: as it comes)
     float blur = 0.f; int blurWay = 0; float overHigh = 1.f; float4 shadow{0.f}; float fall = 0.f, way = 0.f, soft = 0.f; float tint = 0.f; float3 tints[2]{}; float tritone = 0.f; float3 tones[3]{}; float4 glow{0.f}; float glowSoft = 0.f; int copies = 1;
@@ -270,7 +271,7 @@ static Drawn* drawn(Stage& s, const std::function<tvg::Paint*(Drawn*, int*, int*
     if (d->frames > 1.f)   // (a film: it goes on by itself as the stage's time does, round and round)
         s.playing[d] = [&s, d](double now) { picture_at(s, d, std::fmod((float)now + d->starts, d->seconds)); };
     if (!shown) return d;
-    d->look = add(s, d->sheet, flat_laid(lay).c_str(), std::vector<mat4f>((size_t)std::max(1, d->letters.empty() ? fx.copies : (int)d->letters.size()), place));   // (split into letters: a copy each)
+    d->look = add(s, d->sheet, flat_laid(lay).c_str(), std::vector<mat4f>((size_t)std::max(1, d->letters.empty() ? fx.copies : (int)d->letters.size()), place), 1, false, 1, 4, fx.together && d->letters.empty());   // (split into letters: a copy each)
     if (!d->look) return nullptr;
     d->look->setParameter("picture", d->texture, TextureSampler(TextureSampler::MinFilter::LINEAR, TextureSampler::MagFilter::LINEAR));
     return d;
@@ -591,7 +592,7 @@ static Drawn* flat_mesh(Stage& s, const char* form, float wide, const mat4f& pla
     const std::vector<uint32_t> ends = shape_cut(d, 0.f, 1.f, true);
     d->cut = true, d->wideBy = wide;
     d->wash = float4{Color::toLinear<ACCURATE>(sRGBColor{colour}), 1.f};
-    const std::vector<MaterialInstance*> looks = add_parts(s, d->sheet, flat_laid(lay).c_str(), std::vector<mat4f>((size_t)std::max(1, fx.copies), place), ends);
+    const std::vector<MaterialInstance*> looks = add_parts(s, d->sheet, flat_laid(lay).c_str(), std::vector<mat4f>((size_t)std::max(1, fx.copies), place), ends, 1, false, 1, 4, fx.together);
     if (looks.empty()) return nullptr;
     d->look = looks[0];
     d->edgeLook = looks.size() > 1 ? looks[1] : nullptr;

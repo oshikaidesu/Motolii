@@ -508,6 +508,7 @@ struct DocScript {
     std::vector<DocValue> values;
     std::vector<DocShown> shown;
     std::unique_ptr<Script> run;
+    bool clears = false;   // (its copies may each be as clear as it says: its text says opacity; drawn each of its own, not in one go)
 };
 static std::map<std::string, DocScript>& doc_scripts() { static std::map<std::string, DocScript> all; return all; }
 static int& doc_scripts_made() { static int made = 0; return made; }
@@ -541,6 +542,7 @@ static DocScript* doc_script_of(const std::string& file) {
             s.shown.push_back(DocShown{s.names[i].c_str(), k.kind == "check" ? "onoff" : "", "", k.label.c_str(), k.low, k.high, nullptr});
         }
         if (std::filesystem::path(file).extension() != ".wgsl") s.run = std::make_unique<Script>(file);   // (a .wgsl is drawn, not run: screen.h)
+        { std::ifstream in(file); std::stringstream text; text << in.rdbuf(); s.clears = text.str().find("opacity") != std::string::npos; }
     }
     return &s;
 }
@@ -1377,12 +1379,14 @@ static void doc_moment(Doc& d, double now) {
         else {
             std::vector<float> far;   // (how far off each copy is from the eye: those further off drawn first, within the thing's own place)
             const mat4f eye = mat4f(s.camera->getViewMatrix());
+            const std::string fills = doc_word(d, thing, "copy_fill");
+            const bool flatThing = !lies[i].solid && (fills.empty() || fills == "none");   // (coloured along their order: drawn in it, not by how far off)
             move(s, m, [&](int nth, const mat4f&) {
                 const mat4f at = nth || staggered ? mat4f(doc_place(d, thing, now, 0, nth, staggered)) : place;
                 if ((size_t)nth >= far.size()) far.resize((size_t)nth + 1, 0.f);
                 far[(size_t)nth] = -(eye * at[3]).z;
                 return at;
-            });
+            }, flatThing ? &eye : nullptr);   // (copies drawn in one go: those further off first, as each copy's own order does it below)
             if (far.size() > 1 && !lies[i].solid && t.lies >= 0) {
                 std::vector<size_t> order(far.size());
                 for (size_t k = 0; k < order.size(); ++k) order[k] = k;
@@ -1415,7 +1419,14 @@ static void doc_moment(Doc& d, double now) {
                     if (made.of != m || made.matte) continue;
                     MaterialInstance*& own = d.copyLooks[made.thing.getId()];
                     if (!own) own = MaterialInstance::duplicate(main), faces.setMaterialInstanceAt(faces.getInstance(made.thing), 0, own);
-                    if (ramp.size() >= 2 && doc_word(d, thing, "copy_fill_way") == "cycle") own->setParameter("wash", float4{ramp[(size_t)made.nth % ramp.size()], 1.f});   // (one each in turn)
+                    if (made.many) {   // (drawn with others in one go: the ramp and where this draw's first copy lies along it, flat.mat colours each)
+                        float4 colours[8] = {};
+                        for (size_t k = 0; k < ramp.size() && k < 8; ++k) colours[k] = float4{ramp[k], 1.f};
+                        own->setParameter("ramp", colours, 8);
+                        own->setParameter("rampOf", ramp.size() >= 2 ? float4{(float)made.nth, (float)n, (float)std::min<size_t>(ramp.size(), 8), doc_word(d, thing, "copy_fill_way") == "cycle" ? 1.f : 0.f} : float4{0.f});
+                        if (ramp.size() < 2) own->setParameter("wash", t.drawn ? t.drawn->wash : float4{0.f});
+                    }
+                    else if (ramp.size() >= 2 && doc_word(d, thing, "copy_fill_way") == "cycle") own->setParameter("wash", float4{ramp[(size_t)made.nth % ramp.size()], 1.f});   // (one each in turn)
                     else if (ramp.size() >= 2) {
                         const float along = n > 1 ? (float)made.nth / (float)(n - 1) * (float)(ramp.size() - 1) : 0.f;
                         const size_t i = std::min((size_t)along, ramp.size() - 2);
@@ -1541,7 +1552,7 @@ static void doc_moment(Doc& d, double now) {
 // call for its kind), one the stage has and the document has not is taken off, one whose making is told otherwise now
 // is made again. false: a thing could not be made (d.trouble says which, and why).
 // All that a thing's making goes by: one changed, the thing is made again (doc_match), carried by a hand too (doc_carry).
-static const char* const doc_making = "'kind','file','shape','blend','keyed','space','begin','duration','speed','text','fill','wide','points','inner','round','bloat','zigzag','offset','warp','clip','stroke','stroke_width','align','blur','shadow','shadow_distance','shadow_angle','shadow_blur','shadow_opacity','glow','glow_blur','glow_opacity','copies','tint','tint_black','tint_white','tritone','tritone_shadow','tritone_midtone','tritone_highlight','letter_spacing','line_spacing','italic','cap','join','dash','dash_offset','metallic','roughness','reflectance','clear_coat','clear_coat_roughness','falloff','shadows','shadow_softness','contact_shadows','sheen','anisotropy','shading','thickness','light_group','script','gradient','gradient_angle','gradient_scale','gradient_spread','wrap','wrap_at','split','ior','dispersion','swim','dark','vivid','marker'";
+static const char* const doc_making = "'kind','file','shape','blend','keyed','space','begin','duration','speed','text','fill','wide','points','inner','round','bloat','zigzag','offset','warp','clip','stroke','stroke_width','align','blur','shadow','shadow_distance','shadow_angle','shadow_blur','shadow_opacity','glow','glow_blur','glow_opacity','copies','tint','tint_black','tint_white','tritone','tritone_shadow','tritone_midtone','tritone_highlight','letter_spacing','line_spacing','italic','cap','join','dash','dash_offset','metallic','roughness','reflectance','clear_coat','clear_coat_roughness','falloff','shadows','shadow_softness','contact_shadows','sheen','anisotropy','shading','thickness','light_group','script','copy_fill','gradient','gradient_angle','gradient_scale','gradient_spread','wrap','wrap_at','split','ior','dispersion','swim','dark','vivid','marker'";
 static bool doc_match(Doc& d) {
     Stage& s = *d.stage;
     std::map<int, std::string> told;   // every thing of the document, and all that its making goes by
@@ -1611,6 +1622,14 @@ static bool doc_match(Doc& d) {
         fx.radial = doc_word(d, thing, "gradient") == "radial", fx.rampAngle = (float)doc_number(d, thing, "gradient_angle", 0, 0), fx.rampScale = (float)doc_number(d, thing, "gradient_scale", 0, 1);
         fx.spread = doc_word(d, thing, "gradient_spread") == "reflect" ? 1 : doc_word(d, thing, "gradient_spread") == "repeat" ? 2 : 0;
         fx.copies = (int)doc_number(d, thing, "copies", 0, 1);
+        {   // (its copies drawn in one go where none is cleared of its own (no script that says opacity) and their colours are a ramp flat.mat knows; a picture's own 3D layers neither)
+            const std::string fills = doc_word(d, thing, "copy_fill"), script = doc_word(d, thing, "script");
+            std::istringstream said(fills);
+            int colours = 0;
+            for (std::string one; said >> one && one != "none";) ++colours;
+            const DocScript* sc = doc_script_of(script);
+            fx.together = fx.copies > 1 && (kind == "shape" || kind == "text") && colours <= 8 && !(sc && sc->clears);   // (eight colours at most: flat.mat's ramp)
+        }
         fx.wrapWidth = (float)doc_number(d, thing, "wrap_at", 0, 0);
         const std::string split = doc_word(d, thing, "split"), script = doc_word(d, thing, "script");
         fx.split = split == "letters" || (split.empty() && !script.empty() && script != "none");   // (a text given a script moves letter by letter, as Cavalry's are, unless said none)

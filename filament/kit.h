@@ -5,6 +5,7 @@
 #include <filament/ColorGrading.h>
 #include <filament/Engine.h>
 #include <filament/IndexBuffer.h>
+#include <filament/InstanceBuffer.h>
 #include <filament/IndirectLight.h>
 #include <filament/LightManager.h>
 #include <filament/Material.h>
@@ -99,7 +100,8 @@ struct Stage {
     std::map<const void*, std::function<Sound()>> sounding;   // what is heard, each under its own thing: asked when a film is written
     std::map<const void*, std::function<void(double)>> playing;   // what goes on by itself as the stage's time does (films, pictures), each under its own thing
     std::vector<std::function<void()>> said_after;      // a word of their own after each line of `clock` and `soak`
-    struct Made { utils::Entity thing; const Mesh* of; int nth; mat4f place; bool matte = false; };   // (matte: the shape a matte is cut by, in that matte's own scene)
+    struct Made { utils::Entity thing; const Mesh* of; int nth; mat4f place; bool matte = false;   // (matte: the shape a matte is cut by, in that matte's own scene)
+                  InstanceBuffer* many = nullptr; int count = 1; };   // (all its places drawn in one go, Filament's own instancing: each place an instance of the one thing; `move` tells them all at once)
     utils::Entity sun;                     // the sun, where there is one (paper_and_sun), and all that goes by its direction: `sun_to`
     std::vector<MaterialInstance*> by_sun;
     struct Matte { Scene* scene; View* view; Texture* picture; bool soft; Camera* eye; utils::Entity on; mat4f onPlace; };
@@ -297,7 +299,7 @@ static Material* material(Stage& s, const char* filamat) {
 // A mesh in the scene, once at each place, its triangles in parts (`ends`: where each part's indices end; none: one
 // part), each part a look of its own of the same material (Filament's own: a renderable of so many primitives).
 static std::vector<MaterialInstance*> add_parts(Stage& s, Mesh* m, const char* filamat, std::vector<mat4f> places, std::vector<uint32_t> ends,
-                                                uint8_t layer = 1, bool shadows = false, int copies = 1, int order = 4) {
+                                                uint8_t layer = 1, bool shadows = false, int copies = 1, int order = 4, bool together = false) {
     Material* mat = material(s, filamat);
     if (!mat) return {};
     if (ends.empty()) ends = {(uint32_t)m->idx.size()};
@@ -331,23 +333,38 @@ static std::vector<MaterialInstance*> add_parts(Stage& s, Mesh* m, const char* f
     }
     float3 low = n ? m->pos[0] : float3{0.f}, high = low;   // (Filament wants a thing's rough size if it casts or takes shadows)
     for (const float3& p : m->pos) { low = min(low, p); high = max(high, p); }
+    // (together: its places drawn in groups of as many as Filament draws in one go (64), each place an instance of one
+    //  thing; a GPU pays for each draw, not for each triangle: a thousand copies are sixteen draws, not a thousand)
+    //  One of two parts (a fill and its edge) is not: Filament draws a part for all its instances before the next part, so
+    //  every edge would lie over every fill, where one copy's fill hid the edge of the one under it.)
+    const size_t group = together && places.size() > 1 && ends.size() == 1 ? std::min<size_t>(places.size(), s.engine->getMaxAutomaticInstances()) : 1;
     for (const mat4f& place : places) {
+        const size_t at = (size_t)(&place - places.data());
+        if (at % group) continue;
+        const size_t count = std::min(group, places.size() - at);
+        InstanceBuffer* many = nullptr;
+        if (group > 1) {
+            many = InstanceBuffer::Builder(count).build(*s.engine);
+            many->setLocalTransforms(places.data() + at, count);
+        }
         utils::Entity e = utils::EntityManager::get().create();
-        s.engine->getTransformManager().create(e, {}, place);
+        s.engine->getTransformManager().create(e, {}, many ? mat4f{} : place);
         RenderableManager::Builder b(ends.size());
         for (size_t k = 0; k < ends.size(); ++k) {
             const uint32_t from = k ? ends[k - 1] : 0;
             b.geometry(k, RenderableManager::PrimitiveType::TRIANGLES, vb, ib, from, ends[k] - from).material(k, looks[k]);
         }
-        b.boundingBox({(low + high) * 0.5f, max((high - low) * 0.5f, float3{1e-3f})}).culling(false).castShadows(shadows).receiveShadows(shadows).layerMask(0xFF, layer).instances((size_t)copies).priority((uint8_t)order).build(*s.engine, e);
+        b.boundingBox({(low + high) * 0.5f, max((high - low) * 0.5f, float3{1e-3f})}).culling(false).castShadows(shadows).receiveShadows(shadows).layerMask(0xFF, layer);
+        if (many) b.instances(count, many); else b.instances((size_t)copies);
+        b.priority((uint8_t)order).build(*s.engine, e);
         s.scene->addEntity(e);
-        s.made.push_back({e, m, (int)(&place - places.data()), place});
+        s.made.push_back({e, m, (int)at, place, false, many, (int)count});
     }
     return looks;
 }
 static MaterialInstance* add(Stage& s, Mesh* m, const char* filamat, std::vector<mat4f> places = {mat4f{}}, uint8_t layer = 1,
-                             bool shadows = false, int copies = 1, int order = 4) {
-    const std::vector<MaterialInstance*> looks = add_parts(s, m, filamat, places, {}, layer, shadows, copies, order);
+                             bool shadows = false, int copies = 1, int order = 4, bool together = false) {
+    const std::vector<MaterialInstance*> looks = add_parts(s, m, filamat, places, {}, layer, shadows, copies, order, together);
     return looks.empty() ? nullptr : looks[0];
 }
 
@@ -955,6 +972,7 @@ static void take_off(Stage& s, const Mesh* m) {
         look = looks.getMaterialInstanceAt(looks.getInstance(s.made[i].thing), 0);
         s.scene->remove(s.made[i].thing);
         s.engine->destroy(s.made[i].thing);
+        if (s.made[i].many) s.engine->destroy(s.made[i].many);   // (after the thing that draws by it)
         s.made.erase(s.made.begin() + (long)i);
     }
     if (!look) return;
@@ -964,10 +982,16 @@ static void take_off(Stage& s, const Mesh* m) {
 
 // A film moves things between its pictures: every thing made of mesh `m` goes where `to` says (told which of the
 // mesh's places it is, and that place). Poses only: nothing is worked out here that a picture is made of.
-static void move(Stage& s, const Mesh* m, const std::function<mat4f(int, const mat4f&)>& to) {
+static void move(Stage& s, const Mesh* m, const std::function<mat4f(int, const mat4f&)>& to, const mat4f* eye = nullptr) {
     auto& tm = s.engine->getTransformManager();
-    for (const Stage::Made& d : s.made)
-        if (d.of == m) tm.setTransform(tm.getInstance(d.thing), to(d.nth, d.place));
+    for (const Stage::Made& d : s.made) {
+        if (d.of != m) continue;
+        if (!d.many) { tm.setTransform(tm.getInstance(d.thing), to(d.nth, d.place)); continue; }
+        std::vector<mat4f> all((size_t)d.count);   // (a group drawn in one go: its places told at once, those further off first when an eye is given, as flat things lie)
+        for (int k = 0; k < d.count; ++k) all[(size_t)k] = to(d.nth + k, d.place);
+        if (eye) std::stable_sort(all.begin(), all.end(), [eye](const mat4f& a, const mat4f& b) { return (*eye * a[3]).z < (*eye * b[3]).z; });
+        d.many->setLocalTransforms(all.data(), all.size());
+    }
 }
 
 // A film of the stage, 60 pictures a second, written by ffmpeg. Before each picture `pose` is told how far through
