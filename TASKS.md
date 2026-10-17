@@ -50,6 +50,7 @@
 - **重ねの作り**：よそ（Filament 自身、他のエンジン）は重ねを1つのビューにまとめ、順番はチャンネルと priority、ブレンドの順で決め、仕上げは最後に1回。Filament は channels 8つ、`setBlendOrderAt`、`setChannelDepthClearEnabled` を持ってる。下の絵を読むブレンドは Mac なら Dawn の FramebufferFetch（Filament の WebGPU は今 `isFrameBufferFetchSupported()` が false）、Windows は四角だけ写す。
 - **SVG を Filament に**：three.js・Unity・Unreal・Godot・Blender はどれも決まった細かさで刻むか、絵にして貼るだけ。画面に合わせて刻み直すのは Skia（2D）だけで、今の Wang の式と同じ。寄っても縁がくっきりの描き方は Slug（特許は 2026年3月に公開、シェーダーは MIT/Apache、2次曲線だけ、遠近つきの板でも効く、弱い GPU の重さは誰も測ってない）。ThorVG の WebGPU の刻みは内部の部品で、外に出せるのは線の刻みだけ。Filament にはベクターも文字も無い。
 - **リグ（骨とメッシュの補間）**：Filament は骨 256本（`setBones`）、モーフ 256（`setMorphWeights`）、gltfio を持ってる。読む形は Rive（MIT、変形後の頂点が取れる）、Inochi2D（BSD、試作段階）。Spine は企業向けの許しが要る。Live2D は審査が要るので避ける。DragonBones は止まってる。
+- **使い手が測った Filament と ThorVG**（英・日・中・韓、10/18）：PC の 1080p で「2D 数千個＋3D 少し」を測った人はいない。持ち主の道どおりなら 60コマ毎秒は出てる（ThorVG は GPU で描いて 800レイヤーの Lottie が M1 で 60、Filament は 4千三角形の球が GTX 1080 の 1080 で 1.5 ms、中くらいのスマホで VRM 1体 60）。遅い例は全部道を外れた時：Filament は頂点 200万（Pixel 9 Pro で 25 ms、86万に減らして 13.5）、draw call 数千（開発者「1コマ 500〜1000 まで」）、重なりの塗り直し（depth prepass が無い）、仕上げと描き先の作り直し。ThorVG は CPU で大きく描く、マット、毎コマ絵にして送る、Windows の GL（8 fps）、M1 の WebGPU が GL の 1/3.5（Lottie、1900四方、原因未解明）。
 - **AviUtl の人が許してる事**（日本語圏）：重い所のプレビューがカクつくのは当たり前（「書き出して確かめる」）。間引いて表示（Q キー）、範囲を先に溜めて再生（RAM プレビュー）。書き出しは動画の長さの数倍待つ（未確認）。AviUtl2 は DirectX 11.3 が要る。何 fps 出るかの数字は見つからず。
 
 ## 今の状態（2026-10-15 夜）
