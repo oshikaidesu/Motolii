@@ -6,6 +6,7 @@ import '../sets/inspector/inspector_parts.dart' show Hov, Pop;
 import '../tokens.dart';
 import 'desk_depth.dart';
 import 'desk_ease.dart';
+import 'desk_markers.dart';
 import 'ws.dart';
 
 /// One tool the desk can hold. [acts] is what it works on, said in two words.
@@ -28,7 +29,7 @@ const deskTools = [
   DeskTool('Wiggle', Pop.toneParticles, 'Noise'),
   DeskTool('Color', Pop.toneSolid, 'Swatches'),
   DeskTool('Audio', WsT.toneAudio, 'Beat markers'),
-  DeskTool('Markers', Pop.toneTextAnim, 'Comp time'),
+  DeskTool('Markers', Pop.toneTextAnim, 'Comp time', build: DeskMarkers.new),
   DeskTool('Notes', Pop.toneText, 'Comments'),
   DeskTool('Links', Pop.toneLink, 'Relations'),
 ];
