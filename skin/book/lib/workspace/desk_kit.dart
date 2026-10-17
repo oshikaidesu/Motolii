@@ -4,6 +4,7 @@ import 'package:flutter/widgets.dart';
 
 import '../sets/inspector/inspector_parts.dart' show Hov, Pop;
 import '../tokens.dart';
+import 'desk_blend.dart';
 import 'desk_depth.dart';
 import 'desk_ease.dart';
 import 'desk_markers.dart';
@@ -22,7 +23,7 @@ class DeskTool {
 const deskTools = [
   DeskTool('Ease', Pop.toneTime, 'Picked keys', build: DeskEase.new),
   DeskTool('Depth', WsT.toneCamera, 'Camera', build: DeskDepth.new),
-  DeskTool('Blend', Pop.toneBlend, 'Layer stack'),
+  DeskTool('Blend', Pop.toneBlend, 'Layer stack', build: DeskBlend.new),
   DeskTool('Align', Pop.toneLayout, 'Selection'),
   DeskTool('Sequence', Pop.tonePlace, 'Layers in time'),
   DeskTool('Path', Pop.tonePath, 'Motion path'),

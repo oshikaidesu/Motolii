@@ -1,1 +1,2 @@
 Markers: + twice made 2 (want 2); names after writing over the first: [Drop, M2] (want Drop first); after x: 1 (want 1)
+Blend: rect blend add (want add); circle opacity 0.47 (want about 0.5); circle clip 1.0 (want 1); cube has a blend row: false (want false)

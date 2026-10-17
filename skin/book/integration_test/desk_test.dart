@@ -89,6 +89,29 @@ void main() {
     await t.tap(cross);
     await t.pump();
     report.add('Markers: + twice made $made (want 2); names after writing over the first: $named (want Drop first); after x: ${ws.marks.length} (want 1)');
+
+    // Blend: the rect made to add, the circle cleared half, the cube (no blend) only named.
+    await open('Blend');
+    await t.tap(find.byKey(ValueKey('blend.$a.add')));
+    await t.pump();
+    final bar = find.byKey(ValueKey('opacity.$b'));
+    final r = t.getRect(bar);
+    final hand = await t.startGesture(r.centerRight - const Offset(2, 0), kind: PointerDeviceKind.mouse);
+    for (var i = 0; i < 8; i++) {
+      await hand.moveBy(Offset(-r.width / 16, 0));
+      await t.pump(const Duration(milliseconds: 16));
+    }
+    await hand.up();
+    await t.pump();
+    await wait(150);
+    await t.tap(find.byKey(ValueKey('clip.$b')));
+    await t.pump();
+    await shoot('Blend');
+    final opacity = m.value(b, 'opacity', 0) ?? 1;
+    report.add('Blend: rect blend ${m.word(a, 'blend')} (want add); circle opacity ${opacity.toStringAsFixed(2)} (want about 0.5); circle clip ${m.value(b, 'clip', 0)} (want 1); cube has a blend row: ${find.byKey(ValueKey('blend.$c.add')).evaluate().isNotEmpty} (want false)');
+    expect(m.word(a, 'blend'), 'add');
+    expect(opacity, inInclusiveRange(0.35, 0.65));
+    expect(m.value(b, 'clip', 0), 1);
     File('${out.path}/report.txt').writeAsStringSync(report.join('\n'));
     expect(made, 2);
     expect(named.first, 'Drop');
