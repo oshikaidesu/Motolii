@@ -5,6 +5,8 @@
 #include "heard.h"
 #include "motolii.h"
 #include <set>
+#include <sstream>
+#include <atomic>
 #include <condition_variable>
 #include <deque>
 #include <future>
@@ -15,12 +17,27 @@
 // One hand does everything that touches the engine: it opens the stage, runs each call as it comes (the caller waits
 // for it), and, when the stage is live, draws a picture whenever something has changed or time is going on. The clock
 // is the inside's own: the shell is told a picture is finished, it never asks for one to be drawn.
+static const int RATE = 60;   // (pictures a second of a written film: the kit's `film` writes that many)
 struct Motolii {
     Stage* s = nullptr;
     Doc* d = nullptr;
     Live* live = nullptr;
     int solo = 0;   // the thing a card shows alone (motolii_solo), 0: none
     int pick = 0, hover = 0;   // the thing picked in the window and the one under its hand: marked on the desk (motolii_pick)
+    // What the window reads of the picked thing at every picture (its cards' values, which have keys there, its frame),
+    // set down by the hand after each moment, at the frame the window counts it in, and looked at without the document
+    // (a seqlock: odd while it is written). A change to the document puts it aside till the next moment.
+    struct Peek {
+        std::atomic<uint64_t> seq{0};
+        int thing = -1, count = 0;
+        double at = 0;
+        bool shown = false;
+        double frame[8] = {};
+        static constexpr int most = 192;
+        char names[most][32] = {};
+        double values[most] = {};
+        signed char has[most] = {}, keyed[most] = {};
+    } peek;
     std::map<const void*, Heard> heard;   // the things' sound heard as the live stage plays (heard.h)
     std::string trouble, listed, word;
     std::thread hand;
@@ -144,6 +161,11 @@ static void motolii_hand(Motolii* m, std::string document, int wide, int high, s
             std::lock_guard<std::recursive_mutex> holding(m->d->lock);
             if (doc_files_moved(*m->d)) m->changed = true;
         }   // (a shader or a script saved: drawn again)
+        if (!todo.empty()) {   // (the document may change: what was set down for the window is put aside)
+            m->peek.seq.fetch_add(1, std::memory_order_acq_rel);
+            m->peek.thing = -1;
+            m->peek.seq.fetch_add(1, std::memory_order_release);
+        }
         {
             std::lock_guard<std::recursive_mutex> holding(m->d->lock);
             for (auto& does : todo) does();
@@ -178,6 +200,27 @@ static void motolii_hand(Motolii* m, std::string document, int wide, int high, s
                 k.picked = m->pick > 0 && doc_frame(*m->d, m->pick, m->now, k.pick);
                 k.hovered = m->hover > 0 && m->hover != m->pick && doc_frame(*m->d, m->hover, m->now, k.hover);
                 k.knob = doc_word(*m->d, m->pick, "kind") != "camera";
+            }
+            {   // (set down for the window: the picked thing at the frame it counts this moment in)
+                auto& p = m->peek;
+                const double at = std::round(m->now * RATE) / RATE;
+                p.seq.fetch_add(1, std::memory_order_acq_rel);
+                p.thing = -1, p.count = 0, p.at = at;
+                if (m->pick > 0 && doc_knows(*m->d, m->pick)) {
+                    p.shown = doc_frame(*m->d, m->pick, m->now, p.frame);
+                    std::istringstream cards(doc_cards_of(*m->d, m->pick));
+                    for (std::string name; cards >> name && p.count < Motolii::Peek::most;) {
+                        if (!name.empty() && name.back() == ';') name.pop_back();   // ("Card: a b; Next: c": the cards' names end in ':')
+                        if (name.empty() || name.back() == ':' || name.size() >= sizeof p.names[0] || !std::islower((unsigned char)name[0])) continue;
+                        double is = 0;
+                        const int i = p.count++;
+                        std::strcpy(p.names[i], name.c_str());
+                        p.has[i] = doc_value(*m->d, m->pick, name.c_str(), at, &is) ? 1 : 0, p.values[i] = is;
+                        p.keyed[i] = (signed char)doc_keyed(*m->d, m->pick, name.c_str(), at);
+                    }
+                    p.thing = m->pick;
+                }
+                p.seq.fetch_add(1, std::memory_order_release);
             }
             if (m->s->solo) {   // (the thing a card shows alone: its parts as they now are, the eye on its frame)
                 double frame[8];
@@ -367,7 +410,22 @@ const char* motolii_effect_names(Motolii* m) { return by_look(m, [m] { return (m
 int motolii_effect(Motolii* m, int thing, const char* name, double at) { return by_hand(m, [=] { return changes(m, (int)(doc_effect(doc(m), thing, name, at))); }); }
 int motolii_define(Motolii* m, const char* way, const char* expression) { return by_hand(m, [=] { return changes(m, (int)(doc_define(doc(m), way, expression))); }); }
 const char* motolii_ways(Motolii* m) { return by_look(m, [m] { return (m->listed = doc_ways(*m->d)).c_str(); }); }
-int motolii_value(Motolii* m, int thing, const char* name, double at, double* is) { return by_look(m, [=] { return (int)(doc_value(doc(m), thing, name, at, is)); }); }
+// A look at what the hand set down for the window (Motolii::Peek), without the document: true if it holds that thing
+// at that moment, and `read` found what was asked in it, all of it set down at once.
+template <class Read> static bool peeked(Motolii* m, int thing, double at, Read read) {
+    auto& p = m->peek;
+    const uint64_t before = p.seq.load(std::memory_order_acquire);
+    if (before & 1 || p.thing != thing || p.thing <= 0 || std::fabs(p.at - at) > 1e-9) return false;
+    const bool found = read(p);
+    std::atomic_thread_fence(std::memory_order_acquire);
+    return found && p.seq.load(std::memory_order_relaxed) == before;
+}
+static int peek_at(const Motolii::Peek& p, const char* name) { for (int i = 0; i < p.count; ++i) if (!std::strcmp(p.names[i], name)) return i; return -1; }
+int motolii_value(Motolii* m, int thing, const char* name, double at, double* is) {
+    int got = 0;
+    if (peeked(m, thing, at, [&](const Motolii::Peek& p) { const int i = peek_at(p, name); return i >= 0 && ((got = p.has[i]), *is = p.values[i], true); })) return got;
+    return by_look(m, [=] { return (int)(doc_value(doc(m), thing, name, at, is)); });
+}
 int motolii_things(Motolii* m, int* things, int room) {
     return by_look(m, [=] { const std::vector<int> all = doc_things(*m->d); for (int i = 0; i < room && i < (int)all.size(); ++i) things[i] = all[(size_t)i]; return (int)all.size(); });
 }
@@ -378,7 +436,11 @@ int motolii_key_moments(Motolii* m, int thing, const char* name, double* at, int
 }
 // A thing's frame on the picture at the stage's moment, as the stage's own eye sees it: its middle, how wide and how
 // high (points of the picture, from the top left), and how far it is turned (degrees, clockwise as seen).
-int motolii_frame(Motolii* m, int thing, double* frame) { return by_look(m, [=] { return (int)(doc_knows(doc(m), thing) && doc_frame(*m->d, thing, m->now, frame)); }); }
+int motolii_frame(Motolii* m, int thing, double* frame) {
+    int shown = 0;
+    if (peeked(m, thing, m->peek.at, [&](const Motolii::Peek& p) { shown = p.shown; std::memcpy(frame, p.frame, sizeof p.frame); return true; })) return shown;   // (the moment set down: the frame is as last drawn)
+    return by_look(m, [=] { return (int)(doc_knows(doc(m), thing) && doc_frame(*m->d, thing, m->now, frame)); });
+}
 int motolii_path(Motolii* m, int thing, int copy, double from, double to, int n, double* path) {
     return by_look(m, [=] {
         if (!doc_knows(doc(m), thing) || n < 1) return 0;
@@ -423,7 +485,11 @@ int motolii_fits(Motolii* m) {
 int motolii_size_of(Motolii* m, int* wide, int* high) { return by_look(m, [=] { return *wide = m->s->w, *high = m->s->h, 1; }); }
 int motolii_raise(Motolii* m, int thing, int places) { return by_hand(m, [=] { return changes(m, (int)doc_raise(doc(m), thing, places)); }); }
 int motolii_stay(Motolii* m, int thing, const char* name, double at) { return by_hand(m, [=] { return changes(m, (int)doc_stay(doc(m), thing, name, at)); }); }
-int motolii_keyed(Motolii* m, int thing, const char* name, double at) { return by_look(m, [=] { return doc_keyed(*m->d, thing, name, at); }); }
+int motolii_keyed(Motolii* m, int thing, const char* name, double at) {
+    int keyed = 0;
+    if (peeked(m, thing, at, [&](const Motolii::Peek& p) { const int i = peek_at(p, name); return i >= 0 && (keyed = p.keyed[i], true); })) return keyed;
+    return by_look(m, [=] { return doc_keyed(*m->d, thing, name, at); });
+}
 const char* motolii_words(Motolii* m, int thing, const char* name) { return by_look(m, [=] { return (m->word = doc_words(*m->d, thing, name)).c_str(); }); }
 // Every moment a key of any of a thing's values that take keys stands at, each once and in time: a timeline's bar
 // marks in one call (asked a value at a time, a document of fifteen recipes was hundreds of calls each reading).
@@ -607,7 +673,6 @@ int motolii_still(Motolii* m, const char* png) {
         return told(m, shoot(*m->s, png), "the file could not be written");
     });
 }
-static const int RATE = 60;   // (pictures a second of a written film: the kit's `film` writes that many)
 int motolii_rate(Motolii*) { return RATE; }
 int motolii_write(Motolii* m, const char* mp4) {
     return by_hand(m, [m, mp4] {

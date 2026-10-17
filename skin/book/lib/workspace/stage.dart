@@ -319,7 +319,18 @@ class _Swatches extends StatelessWidget {
 Color? _colourOf(String word) => word.split(' ').first.length == 6 ? (int.tryParse(word.split(' ').first, radix: 16) == null ? null : Color(0xFF000000 | int.parse(word.split(' ').first, radix: 16))) : null;
 
 /// Joined: what the picked thing is painted with and how it is set (or, nothing picked, the inks a drawn thing gets).
+// (read once a reading of the document and a pick: the strip is built at every picture while it plays, these do not
+//  change with the moment, and a read then waits for the inside telling the stage its moment)
+(Object, ({Color? fill, Color? stroke, String width, String round, String font, String size, int align}))? _paintRead;
 ({Color? fill, Color? stroke, String width, String round, String font, String size, int align}) _paintOf(Ws ws) {
+  final key = (ws.rev, ws.selected, ws.ink, ws.edge);
+  if (_paintRead case (final k, final p) when k == key) return p;
+  final p = _paintNow(ws);
+  _paintRead = (key, p);
+  return p;
+}
+
+({Color? fill, Color? stroke, String width, String round, String font, String size, int align}) _paintNow(Ws ws) {
   final m = ws.inside!, t = int.tryParse(ws.selected ?? '');
   if (t == null) return (fill: _colourOf(ws.ink), stroke: _colourOf(ws.edge), width: ws.edge.isEmpty ? 'None' : '6 px', round: '0%', font: '—', size: '—', align: 0);
   final w = m.value(t, 'stroke_width', 0), r = m.value(t, 'round', 0), text = m.word(t, 'kind') == 'text';
