@@ -14,7 +14,7 @@ class EaseNumbers extends StatelessWidget {
   final ValueChanged<Ease> onChanged;
   @override
   Widget build(BuildContext context) {
-    final bez = ease.kind == EaseKind.bezier, e = ease;
+    final bez = ease.kind == EaseKind.bezier && !easeOther(ease), e = ease;   // (a way defined in the document: no handles of a bezier to scrub)
     String slope(Offset h, Offset k) => (h.dx - k.dx).abs() < 1e-3 ? '∞' : ((h.dy - k.dy) / (h.dx - k.dx)).abs().toStringAsFixed(2);
     Widget end(String title, double influence, String speed, {String? caption}) => Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -52,13 +52,12 @@ class EaseNumbers extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              DeskCaption(words.first),
-              const SizedBox(height: 4),
-              for (final (j, (name, lo, hi)) in own.indexed) ...[
+              for (final (j, (name, lo0, hi0)) in own.indexed)
+                if ((now[j] < lo0 ? now[j] : lo0, now[j] > hi0 ? now[j] : hi0) case (final lo, final hi)) ...[   // (a number said beyond a hand's reach stays as it is until moved)
                 DeskScrub(
                   key: ValueKey('ease.number.$name'),
                   label: name.replaceAll('_', ' '),
-                  value: now[j].clamp(lo, hi),
+                  value: now[j],
                   min: lo,
                   max: hi,
                   perPx: (hi - lo) / 200,

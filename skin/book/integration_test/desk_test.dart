@@ -265,6 +265,23 @@ void main() {
     expect(along.first, closeTo(0, 1e-6));
     expect(along.last, closeTo(1, 1e-6));
     expect(strays, greaterThan(.02));
+    // (the reviewer's: from a kind with no seat back to Linear; its tile tapped again keeps its numbers; undone, back)
+    await t.tap(find.byKey(const ValueKey('ease.Random')));
+    await t.pump();
+    await wait(100);
+    final kept = m.wayOf(a, 'opacity', 0);
+    await t.tap(find.byKey(const ValueKey('ease.Linear')));
+    await t.pump();
+    await wait(100);
+    final straight = m.wayOf(a, 'opacity', 0);
+    m.undo();
+    ws.reread();
+    await t.pump();
+    final back = m.wayOf(a, 'opacity', 0);
+    report.add('Ease back: Random tapped again $kept (want $thrown); Linear tapped $straight (want Linear); undone $back (want $thrown)');
+    expect(kept, thrown);
+    expect(straight, 'Linear');
+    expect(back, thrown);
 
     // Path: the circle carried by two keys from the left to the right and up; turned the way it goes, its frame turns
     // as its way does (up and to the right: about 45 degrees, counted clockwise as seen: -45).

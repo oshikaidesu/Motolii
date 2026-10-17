@@ -19,12 +19,18 @@ class DeskEaseState extends State<DeskEase> {
     final e = _pending;
     _pending = null;
     if (e == null || span == null) return;
-    final m = ws.inside!, t = int.parse(span.layer.id), at = keysAt(ws, span);
-    // (as it already goes: nothing is told, so a way's own numbers that have no seat here are not written over)
-    final was = at.isEmpty ? null : heard(m.wayOf(t, at.keys.first, at.values.first));
-    if (was != null && e == was && (!easeOther(e) || e.name == was.name)) return;
-    final done = m.together(() => [for (final k in at.entries) m.way(t, k.key, k.value, said(e))].every((ok) => ok));
-    setState(() => _trouble = at.isEmpty ? 'No key where the stretch begins' : (done ? null : m.trouble));
+    final m = ws.inside!, to = said(e);
+    // (every picked key's stretch, on whatever bar it is: each value keyed there; one step)
+    final all = [
+      for (final k in ws.keys)
+        if (ws.layers.where((l) => l.id == k.layer).firstOrNull case final l?)
+          for (final at in keysAt(ws, (layer: l, from: k.frame, to: k.frame, picked: k.frame)).entries) (int.parse(l.id), at.key, at.value),
+    ];
+    // (as it already goes, each: nothing is told, so a way's own numbers that have no seat here are not written over)
+    final told = [for (final (t, name, at) in all) if (said(heard(m.wayOf(t, name, at))) != to) (t, name, at)];
+    if (told.isEmpty) return setState(() => _trouble = all.isEmpty ? 'No key where the stretch begins' : null);
+    final done = m.together(() => [for (final (t, name, at) in told) m.way(t, name, at, to)].every((ok) => ok));
+    setState(() => _trouble = done ? null : m.trouble);
   }
 
   @override

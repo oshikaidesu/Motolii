@@ -26,7 +26,7 @@ class Presets extends StatelessWidget {
         for (final (i, p) in tiles.indexed) ...[
           if (i > 0) const SizedBox(width: 3),
           Expanded(
-            child: _PresetTile(p, key: ValueKey('ease.${p.name}'), on: on(p), onTap: () => onPick(p)),
+            child: _PresetTile(p, key: ValueKey('ease.${p.name}'), on: on(p), onTap: () => on(p) ? null : onPick(p)),   // (the one it is already: its own numbers kept)
           ),
         ],
       ],

@@ -6,7 +6,7 @@ import 'package:lab_book/workspace/desk_ease_state.dart';
 
 import 'ws.dart';
 
-enum EaseKind { bezier, bounce, hold }
+enum EaseKind { bezier, hold }
 
 /// One ease: a kind, and the two bezier handles (kept even while another kind shows, so grabbing a handle returns to bezier).
 class Ease {
@@ -20,7 +20,6 @@ class Ease {
 
   double at(double x) => drawn != null ? _along(drawn!, x) : switch (kind) {
     EaseKind.bezier => bezierY(p1, p2, x),
-    EaseKind.bounce => _bounce(x),
     EaseKind.hold => x < 1 ? 0 : 1,
   };
 
@@ -45,7 +44,6 @@ const easePresets = [
   Ease(EaseKind.bezier, Offset(0, 0), Offset(.58, 1), 'Out'),
   Ease(EaseKind.bezier, Offset(.42, 0), Offset(.58, 1), 'In-out'),
   Ease(EaseKind.bezier, Offset(.34, 1.56), Offset(.64, 1), 'Back'),
-  Ease(EaseKind.bounce, Offset(.25, .1), Offset(.25, 1), 'Bounce'),
   Ease(EaseKind.hold, Offset(.25, .1), Offset(.25, 1), 'Hold'),
 ];
 
@@ -69,14 +67,6 @@ double bezierY(Offset p1, Offset p2, double x) {
   }
   final u = (lo + hi) / 2;
   return 3 * (1 - u) * (1 - u) * u * p1.dy + 3 * (1 - u) * u * u * p2.dy + u * u * u;
-}
-
-double _bounce(double x) {
-  const n = 7.5625, d = 2.75;
-  if (x < 1 / d) return n * x * x;
-  if (x < 2 / d) return n * (x -= 1.5 / d) * x + .75;
-  if (x < 2.5 / d) return n * (x -= 2.25 / d) * x + .9375;
-  return n * (x -= 2.625 / d) * x + .984375;
 }
 
 /// The stretch of time the ease shapes: the first picked key and the layer's next key.
@@ -107,7 +97,6 @@ class DeskEase extends StatefulWidget {
 /// Joined: an ease as the document says a stretch's way (three of its nine kinds have a seat on this desk), and back.
 String said(Ease e) => easeOther(e) ? e.name! : switch (e.kind) {
   EaseKind.hold => 'Hold',
-  EaseKind.bounce => 'Bounce',
   EaseKind.bezier => e == easePreset('Linear') ? 'Linear' : 'Bezier ${e.p1.dx} ${e.p1.dy} ${e.p2.dx} ${e.p2.dy}',
 };
 Ease heard(String said) {
@@ -116,7 +105,6 @@ Ease heard(String said) {
   return switch (w.first) {
     'Hold' => easePreset('Hold'),
     'Linear' => easePreset('Linear'),
-    'Bounce' => easePreset('Bounce'),
     'Bezier' when n.length == 4 => Ease(EaseKind.bezier, Offset(n[0], n[1]), Offset(n[2], n[3])),
     _ => Ease(EaseKind.bezier, Offset.zero, const Offset(1, 1), said), // (a kind with no seat here yet: its own words, over a straight line)
   };
