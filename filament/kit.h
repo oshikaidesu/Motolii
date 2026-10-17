@@ -151,7 +151,7 @@ static Stage open_stage(int w, int h) {
     s.view->setScreenSpaceRefractionEnabled(true);
     s.view->setVisibleLayers(0x03, 0x03);
     Renderer::ClearOptions clear{};
-    clear.clearColor = {0, 0, 0, 1};
+    clear.clearColor = {0, 0, 0, 0};   // (clear, not black: the stage's own view covers all of it anyway, and a card's picture of one thing alone shows the card where it is not)
     clear.clear = true;
     s.renderer->setClearOptions(clear);
     s.behind = Texture::Builder().width(w).height(h).levels(1).usage(Texture::Usage::COLOR_ATTACHMENT | Texture::Usage::SAMPLEABLE)
