@@ -84,6 +84,7 @@ class Motolii {
   late final _lasts = _lib.lookupFunction<Double Function(_P, Int32), double Function(_P, int)>('motolii_lasts');
   late final _keyMoments = _lib.lookupFunction<Int32 Function(_P, Int32, _S, Pointer<Double>, Int32), int Function(_P, int, _S, Pointer<Double>, int)>('motolii_key_moments');
   late final _frame = _lib.lookupFunction<Int32 Function(_P, Int32, Pointer<Double>), int Function(_P, int, Pointer<Double>)>('motolii_frame');
+  late final _path = _lib.lookupFunction<Int32 Function(_P, Int32, Int32, Double, Double, Int32, Pointer<Double>), int Function(_P, int, int, double, double, int, Pointer<Double>)>('motolii_path');
   late final _keying = _lib.lookupFunction<Int32 Function(_P, Int32), int Function(_P, int)>('motolii_keying');
   late final _hold = _lib.lookupFunction<Int32 Function(_P, Int32), int Function(_P, int)>('motolii_hold');
   late final _carry = _lib.lookupFunction<Int32 Function(_P, _S, Double, Double), int Function(_P, _S, double, double)>('motolii_carry');
@@ -248,6 +249,16 @@ class Motolii {
     final ok = _frame(_m, thing, out) != 0, f = [for (var i = 0; i < 8; i++) out[i]];
     malloc.free(out);
     return ok ? f : null;
+  }
+
+  /// How a thing moves over a while, as the stage places it (its wave and all): [n] moments from [from] to before [to],
+  /// four numbers each: where it is (x, y, units of the stage), how far turned (degrees), how large (a share). null: no
+  /// such thing. Asked once when its values change, for a small preview that then plays by itself (motolii_path).
+  List<double>? path(int thing, {int copy = 0, double from = 0, required double to, int n = 60}) {
+    final out = malloc<Double>(4 * n);
+    final got = _path(_m, thing, copy, from, to, n, out), p = [for (var i = 0; i < 4 * got; i++) out[i]];
+    malloc.free(out);
+    return got > 0 ? p : null;
   }
 
   /// A thing held by a hand, carried, and let go (motolii.h): the one form of everything a hand drags. [by] is

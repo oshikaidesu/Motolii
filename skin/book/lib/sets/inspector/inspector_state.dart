@@ -462,6 +462,9 @@ class Doc extends ChangeNotifier {
   bool Function(String id)? onFxRemove;
   bool Function()? onFxMove;
 
+  /// The host's answer to how the thing moves over a while (see Motolii.path): four numbers a moment; null: it has none.
+  List<double>? Function(double to, int n)? onPath;
+
   void moveFx(String id, int by) {
     if (!(onFxMove?.call() ?? true)) return;
     final i = fxOrder.indexOf(id), j = i + by;

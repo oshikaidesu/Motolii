@@ -326,6 +326,17 @@ int motolii_key_moments(Motolii* m, int thing, const char* name, double* at, int
 // A thing's frame on the picture at the stage's moment, as the stage's own eye sees it: its middle, how wide and how
 // high (points of the picture, from the top left), and how far it is turned (degrees, clockwise as seen).
 int motolii_frame(Motolii* m, int thing, double* frame) { return by_look(m, [=] { return (int)(doc_knows(doc(m), thing) && doc_frame(*m->d, thing, m->now, frame)); }); }
+int motolii_path(Motolii* m, int thing, int copy, double from, double to, int n, double* path) {
+    return by_look(m, [=] {
+        if (!doc_knows(doc(m), thing) || n < 1) return 0;
+        for (int i = 0; i < n; ++i) {   // (the stage's own placing, at moments of the preview's own: the stage's moment stays)
+            const math::mat4 p = doc_place(*m->d, thing, from + (to - from) * i / n, 0, copy, true);
+            path[4 * i] = p[3][0], path[4 * i + 1] = p[3][1];
+            path[4 * i + 2] = std::atan2(p[0][1], p[0][0]) * 360.0 / (double)TAU, path[4 * i + 3] = length(p[0].xyz);
+        }
+        return n;
+    });
+}
 int motolii_keying(Motolii* m, int on) {   // (on below 0: only says whether every change is keyed: a read, answered at once, not queued behind the hand's picture)
     if (on < 0) return (int)m->keying.load();
     return by_hand(m, [=] { m->d->keying = on != 0, m->d->keying_from = m->now; m->keying = m->d->keying; return (int)m->d->keying; });

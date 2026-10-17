@@ -74,6 +74,10 @@ int motolii_thing_key_moments(Motolii* m, int thing, double* at, int room);   /*
 /* A thing's frame on the picture at the stage's moment: frame[0..4] = its middle (x, y), how wide, how high (points
    of the picture, from the top left), how far it is turned (degrees, clockwise as seen); frame[5..6] = the point it turns about (x, y); frame[7] = how deep it is (0: flat). 0: there is no such thing. */
 int motolii_frame(Motolii* m, int thing, double* frame);
+/* How a thing moves over a while, as its copy is placed (its wave, scattering, copies' rows and keys all told), n moments
+   from `from` to before `to`: path[4i..4i+3] = where it is (x, y, units of the stage), how far it is turned (degrees) and
+   how large (a share of its own size). For a shell's small preview that plays by itself. 0: there is no such thing. */
+int motolii_path(Motolii* m, int thing, int copy, double from, double to, int n, double* path);
 /* A thing held by a hand, carried, and let go: the one form of everything a hand drags. What is carried shows at once
    and is not the document's until it is let go; then it is one step (keep 0: nothing happened). The reckoning is the
    inside's: a shell says where the hand is, never what the document is to hold.
