@@ -70,6 +70,20 @@ void main() {
         await shoot('$k');
       }
       await mouse.moveTo(Offset.zero); // (the hand off: still again)
+      if (card == 'Wave') { // (pulled across: it sways wider, the inside told so)
+        final before = m.value(thing, 'wave_x', 0);
+        final hand = await t.startGesture(t.getCenter(preview.first), kind: PointerDeviceKind.mouse);
+        for (var i = 0; i < 10; i++) {
+          await hand.moveBy(const Offset(6, 0));
+          await t.pump(const Duration(milliseconds: 16));
+        }
+        await hand.up();
+        for (var i = 0; i < 6; i++) {
+          await t.pump(const Duration(milliseconds: 50));
+        }
+        await shoot('pulled');
+        File('${out.path}/Wave_pulled.txt').writeAsStringSync('wave_x $before -> ${m.value(thing, 'wave_x', 0)}');
+      }
       final r = t.getRect(preview.first);
       File('${out.path}/${card}_rect.txt').writeAsStringSync('${r.left * dpr} ${r.top * dpr} ${r.right * dpr} ${r.bottom * dpr}');
     }

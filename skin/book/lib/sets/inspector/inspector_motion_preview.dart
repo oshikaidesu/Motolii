@@ -14,7 +14,7 @@ class MotionPreview extends StatefulWidget {
 
   /// The card whose values it shows (its values, when they change, are asked again).
   final String card;
-  static const height = 96.0, samples = 60;
+  static const samples = 60;
   @override
   State<MotionPreview> createState() => _MotionPreviewState();
 }
@@ -25,7 +25,7 @@ class _MotionPreviewState extends State<MotionPreview> with SingleTickerProvider
   List<double>? _path;
   bool _over = false, _moves = false;
   DateTime _changed = DateTime(0); // (a number of the card changed: it plays a while by itself)
-  double _round = 2;
+  double _round = 2, _unit = .2;
   final _later = <Timer>[]; // (the asks and the stop after a change: let go with the card)
 
   void _after(int ms, void Function() does) => _later
@@ -86,9 +86,7 @@ class _MotionPreviewState extends State<MotionPreview> with SingleTickerProvider
       }
     }
     _play();
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
-      child: MouseRegion(
+    return MouseRegion(
         onEnter: (_) {
           _over = true;
           _play();
@@ -97,11 +95,55 @@ class _MotionPreviewState extends State<MotionPreview> with SingleTickerProvider
           _over = false;
           _play();
         },
-        child: SizedBox(height: MotionPreview.height, child: CustomPaint(size: Size.infinite, painter: _MotionPaint(_path, _clock))),
-      ),
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onPanStart: (d) {
+            final p = _path, box = context.size;
+            _unit = p != null && p.length >= 8 && box != null ? _fit(p, box).k : .2; // (points of the box a point of the picture, as it lies when the hand takes it: kept while held)
+            doc.beginGesture();
+          },
+          onPanUpdate: (d) {
+            final pull = _pulls[widget.card];
+            void by((String, bool)? to, double points) {
+              if (to == null) return;
+              final (id, units) = to;
+              final now = doc.get('v_$id') ?? 0;
+              doc.set('v_$id', now + (units ? points / _unit : points * .5));
+            }
+
+            by(pull?.across, d.delta.dx);
+            by(pull?.up, -d.delta.dy);
+          },
+          onPanEnd: (_) => doc.endGesture(),
+          child: CustomPaint(size: Size.infinite, painter: _MotionPaint(_path, _clock)),
+        ),
     );
   }
 }
+
+/// Where the whole of its way lies in a box of size [s]: its middle (points of the picture) and how many points of the
+/// box a point of the picture is. A small move moves little: one as wide as half a wide picture fills the box.
+({double mx, double my, double k}) _fit(List<double> p, Size s) {
+  const pad = 17.0;
+  final n = p.length ~/ 4;
+  var x0 = p[0], x1 = p[0], y0 = p[1], y1 = p[1];
+  for (var k = 0; k < n; k++) {
+    x0 = math.min(x0, p[4 * k]);
+    x1 = math.max(x1, p[4 * k]);
+    y0 = math.min(y0, p[4 * k + 1]);
+    y1 = math.max(y1, p[4 * k + 1]);
+  }
+  final k = math.min((s.width / 2 - pad) / math.max((x1 - x0) / 2, 480.0), (s.height / 2 - pad) / math.max((y1 - y0) / 2, 480.0 * (s.height / s.width)));
+  return (mx: (x0 + x1) / 2, my: (y0 + y1) / 2, k: k);
+}
+
+/// What a hand pulling the preview changes, by card: across and up and down, each a value and how it reads the pull
+/// (a length: as far as the picture goes under the hand; degrees or a share: half a point a point).
+const _pulls = <String, ({(String, bool)? across, (String, bool)? up})>{
+  'Wave': (across: ('wave_x', true), up: ('wave_rotate', false)), // (how wide it sways; how far it tips)
+  'Physics': (across: ('bounce', false), up: ('y', true)), // (how much it bounces; how high it falls from)
+  'Scatter': (across: ('drift_x', true), up: ('drift_y', true)), // (how fast it drifts, and which way)
+};
 
 class _MotionPaint extends CustomPainter {
   _MotionPaint(this.path, this.clock) : super(repaint: clock);
@@ -111,21 +153,13 @@ class _MotionPaint extends CustomPainter {
   @override
   void paint(Canvas c, Size s) {
     c.drawRRect(RRect.fromRectAndRadius(Offset.zero & s, const Radius.circular(8)), Paint()..color = Grey.g07);
-    const half = 11.0, pad = half + 6;
+    const half = 11.0;
     var at = s.center(Offset.zero), rest = at, turn = 0.0, size = 1.0;
     final p = path;
     if (p != null && p.length >= 8) {
       final n = p.length ~/ 4, i = (clock.value * n).floor() % n;
-      var x0 = p[0], x1 = p[0], y0 = p[1], y1 = p[1]; // (where it goes, all of it: the box shows the whole of it)
-      for (var k = 0; k < n; k++) {
-        x0 = math.min(x0, p[4 * k]);
-        x1 = math.max(x1, p[4 * k]);
-        y0 = math.min(y0, p[4 * k + 1]);
-        y1 = math.max(y1, p[4 * k + 1]);
-      }
-      // (a small move moves little: as wide as half the stage fills the box; the stage's y goes up)
-      final k = math.min((s.width / 2 - pad) / math.max((x1 - x0) / 2, 3.0), (s.height / 2 - pad) / math.max((y1 - y0) / 2, 3.0 * (s.height / s.width)));
-      Offset on(double x, double y) => s.center(Offset.zero) + Offset((x - (x0 + x1) / 2) * k, -(y - (y0 + y1) / 2) * k);
+      final f = _fit(p, s); // (where it goes, all of it: the box shows the whole of it; the stage's y goes up)
+      Offset on(double x, double y) => s.center(Offset.zero) + Offset((x - f.mx) * f.k, -(y - f.my) * f.k);
       rest = on(p[0], p[1]);
       at = on(p[4 * i], p[4 * i + 1]);
       turn = -(p[4 * i + 2] - p[2]) * math.pi / 180;

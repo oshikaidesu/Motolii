@@ -663,7 +663,9 @@ class _InspectorSeatState extends State<_InspectorSeat> {
         seats: Ws.timed('seats', () => int.tryParse(l?.id ?? '') == null ? null : _seatsOf(m.values(int.parse(l!.id)).toSet())), // (a card of values the thing has not is not shown)
         title: l?.name,
         onRoute: ws.route,
-        onPath: int.tryParse(l?.id ?? '') == null ? null : (to, n) => m.path(int.parse(l!.id), to: to, n: n), // (the wave card's preview asks once, then plays by itself)
+        onPath: int.tryParse(l?.id ?? '') == null
+            ? null
+            : (to, n) => m.path(int.parse(l!.id), to: to, n: n)?.indexed.map((e) => e.$1 % 4 < 2 ? e.$2 * m.point : e.$2).toList(), // (where it is in points of the picture, as the card's numbers are) // (the wave card's preview asks once, then plays by itself)
         onAim: (at) => ws.aim = at.startsWith('v_') ? at.substring(2) : null, // (a colour link of a card is aimed at that value)
         values: Ws.timed('transform', () => wsTransform(ws, l?.id)),
         strs: Ws.timed('words', () => _words(ws, l?.id)),

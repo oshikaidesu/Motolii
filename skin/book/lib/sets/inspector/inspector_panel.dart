@@ -19,9 +19,9 @@ final inspectorCards = <String, Widget Function(Fx card)>{
   'Blending': (_) => const BlendRows(),
   'Light': (c) => ValuesCard(c, top: const LightDrawing()), // (its values as tiles, under a drawing of the light you pull)
   'Copies': (c) => ValuesCard(c, top: const CopiesDrawing()), // (and the copies as they lie)
-  'Wave': (c) => ValuesCard(c, top: const MotionPreview('Wave')), // (and a square moving as the thing will, while touched: Good Boy Ninja's Wiggle)
-  'Physics': (c) => ValuesCard(c, top: const MotionPreview('Physics')), // (falling and bouncing)
-  'Scatter': (c) => ValuesCard(c, top: const MotionPreview('Scatter')), // (drifting)
+  'Wave': (c) => ValuesCard(c, side: const MotionPreview('Wave')), // (and a square moving as the thing will, while touched: Good Boy Ninja's Wiggle)
+  'Physics': (c) => ValuesCard(c, side: const MotionPreview('Physics')), // (falling and bouncing)
+  'Scatter': (c) => ValuesCard(c, side: const MotionPreview('Scatter')), // (drifting)
 };
 
 /// The Inspector: one scrolling stack of the host's cards. Needs an InspHost above it.
