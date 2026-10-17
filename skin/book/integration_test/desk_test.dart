@@ -266,6 +266,29 @@ void main() {
     expect(along.last, closeTo(1, 1e-6));
     expect(strays, greaterThan(.02));
 
+    // Path: the circle carried by two keys from the left to the right and up; turned the way it goes, its frame turns
+    // as its way does (up and to the right: about 45 degrees, counted clockwise as seen: -45).
+    m
+      ..set(b, 'rotate', 0)
+      ..key(b, 'x', 0, -3)
+      ..key(b, 'y', 0, -1)
+      ..key(b, 'x', 1, 1)
+      ..key(b, 'y', 1, 3);
+    ws
+      ..reread()
+      ..select('$b');
+    ws.frame = 30;
+    await open('Path');
+    await t.tap(find.byKey(const ValueKey('path.orient')));
+    await t.pump();
+    await wait(150);
+    await t.pump();
+    final turned = m.frame(b)?[4];
+    await shoot('Path');
+    report.add('Path: orient ${m.value(b, 'orient', 0)} (want 1); frame turned ${turned?.toStringAsFixed(1)} (want about -45, up to the right)');
+    expect(m.value(b, 'orient', 0), 1);
+    expect(turned, closeTo(-45, 3));
+
     // Color: the circle given the rect's colour, then its edge the same.
     ws.select('$b');
     await open('Color');

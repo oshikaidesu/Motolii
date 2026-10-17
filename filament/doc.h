@@ -129,6 +129,7 @@ struct DocValue { const char* name; const char* kinds; double low, high; bool mo
 static const DocValue doc_values[] = {
     {"x", doc_kinds, -1e4, 1e4, true, nullptr}, {"y", doc_kinds, -1e4, 1e4, true, nullptr}, {"z", doc_kinds, -1e4, 1e4, true, nullptr},
     {"rotate", doc_kinds, -1e6, 1e6, true, nullptr}, {"rotate_x", doc_kinds, -1e6, 1e6, true, nullptr}, {"rotate_y", doc_kinds, -1e6, 1e6, true, nullptr},
+    {"orient", "film picture text solid shape", 0, 1, false, nullptr},   // (turned the way it is going along its path, its rotate added: After Effects' Auto-Orient)
     // (how many times as wide, as high and as deep as its size makes it, each on its own as After Effects' Scale: below 0
     //  turned over; a flat thing has no depth to scale yet, its thickness to come as its scale_z)
     {"scale_x", doc_drawn, -1e4, 1e4, true, nullptr},
@@ -869,6 +870,16 @@ static bool doc_physics(Doc& d, int thing, double now, PhysPose* pose, int copy 
 static bool doc_staggered(Doc& d, int thing, double now) {
     return doc_members(d, thing) > 1 || doc_number(d, thing, "stagger", 0, 0) > 0.0 || doc_number(d, thing, "wave_x", now, 0) != 0.0 || doc_number(d, thing, "wave_y", now, 0) != 0.0 || doc_number(d, thing, "wave_rotate", now, 0) != 0.0 || doc_number(d, thing, "wave_size", now, 0) != 0.0 || doc_number(d, thing, "field_radius", now, 0) > 0.0 || doc_number(d, thing, "scatter_x", now, 0) > 0.0 || doc_number(d, thing, "scatter_y", now, 0) > 0.0 || doc_number(d, thing, "scatter_rotate", now, 0) > 0.0 || doc_number(d, thing, "scatter_size", now, 0) > 0.0;
 }
+// How far a thing that turns the way it goes (orient) is turned by it at a moment, radians about z: the way its keys
+// carry it then; standing still, the way it last went or will go. 0 for any other.
+static double doc_heading(Doc& d, int thing, double now) {
+    if (doc_literal(d, thing, "orient", 0, 0) <= 0.5) return 0.0;
+    for (const double step : {1.0 / 240.0, 1.0 / 30.0, 1.0 / 4.0, 2.0}) {
+        const double ax = doc_literal(d, thing, "x", now - step, 0), ay = doc_literal(d, thing, "y", now - step, 0), bx = doc_literal(d, thing, "x", now + step, 0), by = doc_literal(d, thing, "y", now + step, 0);
+        if (std::hypot(bx - ax, by - ay) > 1e-6) return std::atan2(by - ay, bx - ax);
+    }
+    return 0.0;
+}
 static math::mat4 doc_place(Doc& d, int thing, double now, int deeper, int copy, bool member) {
     const double said = now;   // (the moment itself: a wave goes on at it, whatever the copy's delay)
     if (member) now -= doc_delay(d, thing, copy);   // (a member of its copies: as it was so much earlier)
@@ -981,8 +992,9 @@ static math::mat4 doc_place(Doc& d, int thing, double now, int deeper, int copy,
                    math::mat4::translation(math::double3{-doc_letter_middle(d, thing, member ? copy : -1), 0, 0});
         }
     }
+    const math::mat4 heading = math::mat4::rotation(doc_heading(d, thing, now), math::double3{0, 0, 1});
     math::mat4 place = doc_above(d, thing, now, deeper) * math::mat4::translation(math::double3{doc_literal(d, thing, "x", now, 0), doc_literal(d, thing, "y", now, 0), doc_literal(d, thing, "z", now, 0)}) *
-                       turned("rotate", {0, 0, 1}) * turned("rotate_y", {0, 1, 0}) * turned("rotate_x", {1, 0, 0}) * math::mat4::translation(shift) * math::mat4::scaling(doc_literal(d, thing, "size", now, 1)) *
+                       heading * turned("rotate", {0, 0, 1}) * turned("rotate_y", {0, 1, 0}) * turned("rotate_x", {1, 0, 0}) * math::mat4::translation(shift) * math::mat4::scaling(doc_literal(d, thing, "size", now, 1)) *
                        math::mat4::scaling(math::double3{doc_literal(d, thing, "scale_x", now, 1), doc_literal(d, thing, "scale_y", now, 1), doc_literal(d, thing, "scale_z", now, 1)}) *
                        own * math::mat4::translation(-anchor);
     const double reach = member ? doc_literal(d, thing, "field_radius", said, 0) : 0.0;
@@ -2606,7 +2618,7 @@ static bool doc_frame(Doc& d, int thing, double now, double* frame) {
     const math::double2 middle = doc_seen(d, (doc_shown_at(d, thing, now) * math::double4{0, 0, 0, 1}).xyz);   // (its own middle, wherever its anchor is)
     const double sx = doc_number(d, thing, "scale_x", now, 1), sy = doc_number(d, thing, "scale_y", now, 1), sz = doc_number(d, thing, "scale_z", now, 1);
     frame[0] = middle.x, frame[1] = middle.y, frame[2] = 2.0 * half.x * size * std::fabs(sx) * point, frame[3] = 2.0 * half.y * size * std::fabs(sy) * point;
-    frame[4] = -doc_number(d, thing, "rotate", now, 0);
+    frame[4] = -doc_number(d, thing, "rotate", now, 0) - doc_heading(d, thing, now) * 360.0 / (double)TAU;
     const math::double3 anchor{doc_number(d, thing, "anchor_x", now, 0) * half.x, doc_number(d, thing, "anchor_y", now, 0) * half.y, 0.0};
     const math::double2 pivot = doc_seen(d, (doc_shown_at(d, thing, now) * math::double4{anchor, 1.0}).xyz);   // (the point it turns about)
     frame[5] = pivot.x, frame[6] = pivot.y, frame[7] = 2.0 * deep * size * std::fabs(sz) * point;   // (and how deep it is: a flat thing, 0)

@@ -10,6 +10,7 @@ import 'desk_color.dart';
 import 'desk_depth.dart';
 import 'desk_ease.dart';
 import 'desk_markers.dart';
+import 'desk_path.dart';
 import 'desk_sequence.dart';
 import 'ws.dart';
 
@@ -29,7 +30,7 @@ const deskTools = [
   DeskTool('Blend', Pop.toneBlend, 'Layer stack', build: DeskBlend.new),
   DeskTool('Align', Pop.toneLayout, 'Selection', build: DeskAlign.new),
   DeskTool('Sequence', Pop.tonePlace, 'Layers in time', build: DeskSequence.new),
-  DeskTool('Path', Pop.tonePath, 'Motion path'),
+  DeskTool('Path', Pop.tonePath, 'Motion path', build: DeskPath.new),
   DeskTool('Color', Pop.toneSolid, 'Swatches', build: DeskColor.new),
   DeskTool('Audio', WsT.toneAudio, 'Beat markers'),
   DeskTool('Markers', Pop.toneTextAnim, 'Comp time', build: DeskMarkers.new),
