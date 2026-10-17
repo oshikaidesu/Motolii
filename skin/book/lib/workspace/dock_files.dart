@@ -139,11 +139,8 @@ String? _layerOf(FileNode n, DockCtx c) => _used(c.ws)[n.id];
 
 /// A file put on the stage as a new thing, picked. Not done: the foot of the shelf says why.
 void _place(DockCtx c, FileNode n) {
-  final m = c.ws.inside!, made = m.add('', n.id); // (the inside makes of it what the file is)
-  c.set(() => made == 0 ? c.mem.trouble[n.id] = m.trouble : c.mem.trouble.remove(n.id));
-  if (made == 0) return;
-  c.ws.reread();
-  c.ws.select('$made');
+  final m = c.ws.inside!; // (the inside makes of it what the file is; without waiting, picked once made)
+  c.ws.after(m.later('add', word: n.id), (done, why) => c.set(() => done ? c.mem.trouble.remove(n.id) : c.mem.trouble[n.id] = why), (made) => c.ws.select('$made'));
 }
 
 String _kindOf(FileNode n) => switch (n.g) {

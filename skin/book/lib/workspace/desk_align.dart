@@ -18,23 +18,16 @@ class DeskAlign extends StatelessWidget {
 
   /// Put against `side` (0 left, 1 across the middle, 2 right; 3 top, 4 down the middle, 5 bottom): moved as a hand
   /// moves it, twice at most (a thing in depth or turned towards the eye is seen otherwise where it has gone).
-  static void align(Ws ws, int side) {
-    final m = ws.inside, t = int.tryParse(ws.selected ?? '');
-    if (m == null || t == null) return;
+  static void align(Ws ws, int side, [int pass = 0]) {
+    final m = ws.inside, t = int.tryParse(ws.selected ?? ''), r = t == null ? null : m?.seen(t);
+    if (m == null || t == null || r == null) return;
     final pic = WsArt.comp;
-    var moved = false;
-    for (var pass = 0; pass < 2; pass++) {
-      final r = m.seen(t);
-      if (r == null) break;
-      final dx = switch (side) { 0 => -r.left, 1 => pic.width / 2 - r.center.dx, 2 => pic.width - r.right, _ => 0.0 };
-      final dy = switch (side) { 3 => -r.top, 4 => pic.height / 2 - r.center.dy, 5 => pic.height - r.bottom, _ => 0.0 };
-      if (dx.abs() < .25 && dy.abs() < .25) break;
-      if (!m.hold(t)) break;
-      m.carry('place', dx, dy);
-      if (!m.letGo(true)) break;
-      moved = true;
-    }
-    if (moved) ws.reread();
+    final dx = switch (side) { 0 => -r.left, 1 => pic.width / 2 - r.center.dx, 2 => pic.width - r.right, _ => 0.0 };
+    final dy = switch (side) { 3 => -r.top, 4 => pic.height / 2 - r.center.dy, 5 => pic.height - r.bottom, _ => 0.0 };
+    if (dx.abs() < .25 && dy.abs() < .25) return;
+    m.later('hold', thing: t);   // (moved as a hand moves it, without waiting; once more if a thing in depth is seen elsewhere where it went)
+    m.carry('place', dx, dy);
+    ws.after(m.later('let_go', number: 1), (done, _) => done && pass == 0 ? align(ws, side, 1) : null);
   }
 
   @override

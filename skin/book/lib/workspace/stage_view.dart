@@ -272,8 +272,10 @@ class _StageViewState extends State<StageView> implements StageHandles {
     _pulling = null;
     if (p == null || m == null) return;
     final over = p.axis == 'y' ? local.dy < _V.ruler : local.dx < _V.ruler, at = v.toComp(local);
-    final done = m.together(() => (p.was == null || m.guide(p.axis, p.was!, false)) && (over || m.guide(p.axis, ((p.axis == 'x' ? at.dx : at.dy)).roundToDouble(), true)));
-    if (done) ws.reread();
+    m.later('together', number: 1);   // (one step, without waiting)
+    if (p.was != null) m.later('guide', name: p.axis, number: p.was!, word: 'off');
+    if (!over) m.later('guide', name: p.axis, number: ((p.axis == 'x' ? at.dx : at.dy)).roundToDouble());
+    ws.after(m.later('together'));
   }
 
   Offset? _last;
@@ -293,25 +295,41 @@ class _StageViewState extends State<StageView> implements StageHandles {
     final mid = centred ? a : (a + b) / 2, d = centred ? (b - a) * 2 : b - a, tiny = d.distance < 6 / v.s;
     final x = ((kind == 'text' || tiny ? a.dx : mid.dx) - c.width / 2) / p, y = (c.height / 2 - (kind == 'text' || tiny ? a.dy : mid.dy)) / p;
     final cut = widget.mask ? int.tryParse(ws.selected ?? '') : null;
-    final made = m.together(() {
-      final t = m.add(kind == 'text' ? '' : 'shape', kind == 'text' ? wsTextFont : kind); // (a text in the font the Create shelf's Text has)
-      if (t == 0 || !m.set(t, 'x', x) || !m.set(t, 'y', y)) return 0;
-      if (ws.ink.isNotEmpty && !m.say(t, 'fill', ws.ink)) return 0; // (the drawing inks)
-      if (ws.edge.isNotEmpty && kind != 'line' && !(m.say(t, 'stroke', ws.edge) && m.set(t, 'stroke_width', 6))) return 0;
-      if (cut != null) { // (Mask: it lies just behind the picked thing, and that one is clipped by it)
-        final all = m.things;
-        if (!all.contains(cut) || !m.raise(t, all.indexOf(cut) - all.indexOf(t)) || !m.set(cut, 'clip', 1) || !m.set(t, 'opacity', 0)) return 0; // (not seen itself: it only cuts, as After Effects' matte)
+    // (one step, asked without waiting: the new thing is the one the add made (thing -1), picked once it is there)
+    final before = m.things.length;
+    m.later('together', number: 1);
+    var made = 0;
+    ws.after(m.later('add', name: kind == 'text' ? '' : 'shape', word: kind == 'text' ? wsTextFont : kind), null, (t) => made = t);   // (a text in the font the Create shelf's Text has)
+    m
+      ..later('set', thing: -1, name: 'x', number: x)
+      ..later('set', thing: -1, name: 'y', number: y);
+    if (ws.ink.isNotEmpty) m.later('say', thing: -1, name: 'fill', word: ws.ink); // (the drawing inks)
+    if (ws.edge.isNotEmpty && kind != 'line') {
+      m
+        ..later('say', thing: -1, name: 'stroke', word: ws.edge)
+        ..later('set', thing: -1, name: 'stroke_width', number: 6);
+    }
+    if (cut != null) { // (Mask: it lies just behind the picked thing, and that one is clipped by it; not seen itself: it only cuts, as After Effects' matte)
+      final all = m.things;
+      if (all.contains(cut)) {
+        m
+          ..later('raise', thing: -1, number: (all.indexOf(cut) - before).toDouble())
+          ..later('set', thing: cut, name: 'clip', number: 1)
+          ..later('set', thing: -1, name: 'opacity', number: 0);
       }
-      if (tiny || kind == 'text') return t;
-      final ok = switch (kind) {
-        'line' => m.set(t, 'wide', d.distance / p / .04) && m.set(t, 'rotate', math.atan2(d.dy, d.dx) * 180 / math.pi), // (a line is a twenty-fifth of a unit thick: as long as drawn, turned as drawn)
-        _ => m.set(t, 'size', d.dy.abs() / p) && m.set(t, 'wide', d.dx.abs() / math.max(d.dy.abs(), 1e-3)),
-      };
-      return ok ? t : 0;
-    });
-    if (made == 0) return;
-    ws.reread();
-    ws.select('$made');
+    }
+    if (!tiny && kind != 'text') {
+      if (kind == 'line') {   // (a line is a twenty-fifth of a unit thick: as long as drawn, turned as drawn)
+        m
+          ..later('set', thing: -1, name: 'wide', number: d.distance / p / .04)
+          ..later('set', thing: -1, name: 'rotate', number: math.atan2(d.dy, d.dx) * 180 / math.pi);
+      } else {
+        m
+          ..later('set', thing: -1, name: 'size', number: d.dy.abs() / p)
+          ..later('set', thing: -1, name: 'wide', number: d.dx.abs() / math.max(d.dy.abs(), 1e-3));
+      }
+    }
+    ws.after(m.later('together'), (done, _) => done && made > 0 ? ws.select('$made') : null);
   }
 
   void _hold(_View v, Offset local) {
@@ -373,7 +391,7 @@ class _StageViewState extends State<StageView> implements StageHandles {
     _snapTo = null;
     if (_met != (null, null)) setState(() => _met = (null, null));
     if (h == null || m == null) return;
-    m.letGo(keep && h.moved) && keep && h.moved ? ws.reread() : ws.shown();
+    ws.after(m.later('let_go', number: keep && h.moved ? 1 : 0));   // (let go without waiting: the document read again once the inside has it)
   }
 
   void _scroll(PointerSignalEvent e, _View v) {

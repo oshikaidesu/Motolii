@@ -95,7 +95,7 @@ class _DeskDepthState extends State<DeskDepth> {
       onPointerUp: joined == null
           ? null
           : (_) {
-              if (ws.inside!.letGo(true)) ws.reread();
+              ws.after(ws.inside!.later('let_go', number: 1));   // (without waiting)
             },
       child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,

@@ -51,11 +51,9 @@ Future<void> fontsRead(Ws ws) => _reading ??= Zone.root.run<Future<void>>(() asy
 /// Joined: the font given to the picked text; with no text picked, a new text set in it.
 void _setFont(DockCtx c, _Font f) {
   final m = c.ws.inside!, t = int.tryParse(c.ws.selected ?? '');
-  final made = t != null && m.word(t, 'kind') == 'text' ? (m.say(t, 'file', f.path!) ? t : 0) : m.add('text', f.path!);
-  c.set(() => made == 0 ? c.mem.trouble[f.family] = m.trouble : c.mem.trouble.remove(f.family));
-  if (made == 0) return;
-  c.ws.reread();
-  c.ws.select('$made');
+  void told(bool done, String why) => c.set(() => done ? c.mem.trouble.remove(f.family) : c.mem.trouble[f.family] = why);
+  if (t != null && m.word(t, 'kind') == 'text') return c.ws.after(m.later('say', thing: t, name: 'file', word: f.path!), told);   // (without waiting)
+  c.ws.after(m.later('add', name: 'text', word: f.path!), told, (made) => c.ws.select('$made'));
 }
 
 const _sample = 'Motion for more relations';

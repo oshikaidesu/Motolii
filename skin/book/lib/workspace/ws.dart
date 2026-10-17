@@ -348,7 +348,7 @@ class Ws extends ChangeNotifier {
 
   /// Whether changes told to the inside are not all done yet (the window shows them before the document has them).
   bool get waiting => _afters > 0;
-  void after(int ticket, [void Function(bool done, String why)? then]) {
+  void after(int ticket, [void Function(bool done, String why)? then, void Function(int answer)? got]) {
     int? answer;
     var waited = 0;
     _afters++;
@@ -364,7 +364,8 @@ class Ws extends ChangeNotifier {
         return;
       }
       final a = answer!;
-      then?.call(a == 1, a == 1 ? '' : m.answerWhy);
+      then?.call(a >= 1, a >= 1 ? '' : m.answerWhy);
+      if (a >= 1) got?.call(a);   // (an add's or a make's answer: the new thing)
       if (--_afters == 0) reread();
     }
 
@@ -397,21 +398,17 @@ class Ws extends ChangeNotifier {
   }
 
   /// Joined: a motion given to the picked thing in place of the one it had, or taken off (one step either way).
-  bool motionToggle(String file) {
+  void motionToggle(String file) {
     final m = _inside, t = int.tryParse(selected ?? '');
-    if (m == null || t == null) return false;
-    final done = m.say(t, 'script', motion == file ? 'none' : file);
-    reread();
-    return done;
+    if (m == null || t == null) return;
+    after(m.later('say', thing: t, name: 'script', word: motion == file ? 'none' : file));   // (without waiting)
   }
 
   /// Joined: an effect of the shelf put on the picked thing as it comes, or taken off (one step either way).
-  bool fxToggle(String name) {
+  void fxToggle(String name) {
     final m = _inside, t = int.tryParse(selected ?? '');
-    if (m == null || t == null) return false;
-    final done = m.effect(t, name, frame / fps);
-    reread();
-    return done;
+    if (m == null || t == null) return;
+    after(m.later('effect', thing: t, name: name, number: frame / fps));   // (without waiting)
   }
 
 

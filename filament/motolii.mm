@@ -59,6 +59,7 @@ struct Motolii {
     std::atomic<double> now{0.0};
     std::map<std::string, std::pair<long, double>> by_door;   // (what each call has cost, by its name: for measuring)
     std::map<std::string, double> worst;                      // (and its slowest once)
+    int made = 0;   // (the thing the last add or make asked later made: a later call for thing -1 means it)
     std::atomic<long> revision{0};   // (how many times what the window sees has changed, the document or what a hand carries: read by anyone, without the document's lock)
     std::map<std::string, std::array<double, 4>> window;     // (a call from the window's own thread, by name: how many, waited in all, waited at most, took in all: what the window waits on)
     double read_waited = 0, read_waited_most = 0; long read_waits = 0;
@@ -429,18 +430,17 @@ int motolii_say(Motolii* m, int thing, const char* name, const char* word) { ret
 int motolii_key(Motolii* m, int thing, const char* name, double at, double number) { return by_hand(m, [=] { return changes(m, (int)(doc_key(doc(m), thing, name, at, number))); }); }
 int motolii_unkey(Motolii* m, int thing, const char* name, double at) { return by_hand(m, [=] { return changes(m, (int)(doc_unkey(doc(m), thing, name, at))); }); }
 int motolii_keys(Motolii* m, int thing, const char* name) { return by_look(m, [=] { return (int)(doc_keys(doc(m), thing, name)); }); }
-int motolii_way(Motolii* m, int thing, const char* name, double at, const char* way) {
-    return by_hand(m, [=] {
-        Doc& d = doc(m);
-        bool here = false;
-        doc_rows(d, sqlite3_mprintf("select 1 from way where name = %Q", way), [&](sqlite3_stmt*) { here = true; });
-        const auto own = doc_own_ways().find(way);
-        if (here || own == doc_own_ways().end()) return changes(m, (int)(doc_way(d, thing, name, at, way)));
-        doc_act(d);   // (the maker's own way: written into the document and put on the key, one step)
-        if (!doc_define(d, way, own->second.c_str()) || !doc_way(d, thing, name, at, way)) d.act_ok = false;
-        return changes(m, (int)doc_acted(d));
-    });
+static int way_is(Motolii* m, int thing, const char* name, double at, const char* way) {   // (on the hand)
+    Doc& d = doc(m);
+    bool here = false;
+    doc_rows(d, sqlite3_mprintf("select 1 from way where name = %Q", way), [&](sqlite3_stmt*) { here = true; });
+    const auto own = doc_own_ways().find(way);
+    if (here || own == doc_own_ways().end()) return changes(m, (int)(doc_way(d, thing, name, at, way)));
+    doc_act(d);   // (the maker's own way: written into the document and put on the key, one step)
+    if (!doc_define(d, way, own->second.c_str()) || !doc_way(d, thing, name, at, way)) d.act_ok = false;
+    return changes(m, (int)doc_acted(d));
 }
+int motolii_way(Motolii* m, int thing, const char* name, double at, const char* way) { return by_hand(m, [=] { return way_is(m, thing, name, at, way); }); }
 const char* motolii_effect_names(Motolii* m) { return by_look(m, [m] { return (m->listed = doc_effect_names()).c_str(); }); }
 int motolii_effect(Motolii* m, int thing, const char* name, double at) { return by_hand(m, [=] { return changes(m, (int)(doc_effect(doc(m), thing, name, at))); }); }
 int motolii_define(Motolii* m, const char* way, const char* expression) { return by_hand(m, [=] { return changes(m, (int)(doc_define(doc(m), way, expression))); }); }
@@ -725,15 +725,20 @@ const char* motolii_reading(Motolii* m, int thing, const char* name) {
 }
 // A change asked without waiting (a shell's hand that must not stand still while the hand works it): queued in order
 // behind every other, a ticket said at once; motolii_answer says whether it is done (-1 not yet, 0 refused: then
-// motolii_answer_why says why, 1 done). The calls: say, set, let_go (number: keep), undo, redo, together (number:
-// begin 1, end 0: the end's answer is the step's).
+// motolii_answer_why says why, 1 done; for add and make, the new thing). The calls: say, set, let_go (number: keep),
+// undo, redo, together (number: begin 1, end 0: the end's answer is the step's), add (name: kind, word: file), make
+// (word: recipe), remove, mark (number: at, word), guide (name: axis, number: at, word "off" takes it away), work
+// (number: from, word: to), raise (number: places), sequence (number: overlap), key_here, unkey, stay (number: at), way
+// (number: at, word: way), effect (number: at), hold (a hand takes hold of it). A thing -1: the one the last add or make made.
 int motolii_later(Motolii* m, const char* call, int thing, const char* name, const char* word, double number) {
     const std::string c = call ? call : "", n = name ? name : "", w = word ? word : "";
     int ticket = 0;
     {
         std::lock_guard<std::mutex> hold(m->asked_lock);
         ticket = ++m->tickets;
-        m->asked.push_back([m, c, n, w, thing, number, ticket] {
+        m->asked.push_back([m, c, n, w, thing = thing, number, ticket]() mutable {
+            if (thing == -1) thing = m->made;   // (the thing the last add or make asked later made)
+            const long rows = sqlite3_total_changes(m->d->file);
             int ok = 0;
             if (c == "say") ok = changes(m, (int)doc_say(doc(m), thing, n.c_str(), w.c_str()));
             else if (c == "set") ok = changes(m, (int)doc_set(doc(m), thing, n.c_str(), number));
@@ -741,7 +746,22 @@ int motolii_later(Motolii* m, const char* call, int thing, const char* name, con
             else if (c == "undo") ok = (int)doc_undo(doc(m));
             else if (c == "redo") ok = (int)doc_redo(doc(m));
             else if (c == "together") ok = number != 0.0 ? (doc_act(*m->d), 1) : (m->d->act ? (int)doc_acted(*m->d) : 0);
-            else m->trouble = "a change asked later is one of: say, set, let_go, undo, redo, together";
+            else if (c == "add") ok = m->made = changes(m, doc_add(doc(m), n.c_str(), w.c_str()));   // (name: the kind, word: the file; the answer is the new thing)
+            else if (c == "make") ok = m->made = changes(m, doc_make(doc(m), w.c_str()));
+            else if (c == "remove") ok = changes(m, (int)doc_remove(doc(m), thing));
+            else if (c == "mark") ok = changes(m, (int)doc_mark(doc(m), number, w.c_str()));
+            else if (c == "guide") ok = changes(m, (int)doc_guide(doc(m), n.c_str(), number, w != "off"));
+            else if (c == "work") ok = changes(m, (int)doc_work_is(doc(m), number, std::atof(w.c_str())));
+            else if (c == "raise") ok = changes(m, (int)doc_raise(doc(m), thing, (int)number));
+            else if (c == "sequence") ok = changes(m, (int)doc_sequence(doc(m), number, RATE));
+            else if (c == "key_here") ok = changes(m, (int)doc_key_here(doc(m), thing, n.c_str(), number));
+            else if (c == "unkey") ok = changes(m, (int)doc_unkey(doc(m), thing, n.c_str(), number));
+            else if (c == "stay") ok = changes(m, (int)doc_stay(doc(m), thing, n.c_str(), number));
+            else if (c == "way") ok = way_is(m, thing, n.c_str(), number, w.c_str());
+            else if (c == "effect") ok = changes(m, (int)doc_effect(doc(m), thing, n.c_str(), number));
+            else if (c == "hold") ok = (int)doc_hold(doc(m), thing);   // (a hand takes hold: what it carries next is this thing's)
+            else m->trouble = "a change asked later is one of: say, set, hold, let_go, undo, redo, together, add, make, remove, mark, guide, work, raise, sequence, key_here, unkey, stay, way, effect";
+            if (sqlite3_total_changes(m->d->file) != rows) m->revision.fetch_add(1, std::memory_order_release);   // (counted before the answer: the window reads again what is so now)
             m->changed = true;
             std::lock_guard<std::mutex> hold(m->asked_lock);
             m->answers[ticket] = {ok, ok ? std::string() : std::string(motolii_trouble(m))};

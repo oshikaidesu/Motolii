@@ -381,7 +381,7 @@ class _OptionsStrip extends StatelessWidget {
         index: p.align,
         onChanged: (i) { // (the picked text's lines laid so: the document's align)
           final t = int.tryParse(ws.selected ?? '');
-          if (t != null && ws.inside!.set(t, 'align', i / 2)) ws.reread();
+          if (t != null) ws.after(ws.inside!.later('set', thing: t, name: 'align', number: i / 2));   // (without waiting)
         },
       ),
     ],

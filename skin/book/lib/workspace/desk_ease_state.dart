@@ -29,8 +29,11 @@ class DeskEaseState extends State<DeskEase> {
     // (as it already goes, each: nothing is told, so a way's own numbers that have no seat here are not written over)
     final told = [for (final (t, name, at) in all) if (said(heard(m.wayOf(t, name, at))) != to) (t, name, at)];
     if (told.isEmpty) return setState(() => _trouble = all.isEmpty ? 'No key where the stretch begins' : null);
-    final done = m.together(() => [for (final (t, name, at) in told) m.way(t, name, at, to)].every((ok) => ok));
-    setState(() => _trouble = done ? null : m.trouble);
+    m.later('together', number: 1);   // (one step, without waiting)
+    for (final (t, name, at) in told) {
+      m.later('way', thing: t, name: name, number: at, word: to);
+    }
+    ws.after(m.later('together'), (done, why) => mounted ? setState(() => _trouble = done ? null : why) : null);
   }
 
   @override

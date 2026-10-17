@@ -130,7 +130,7 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
     } else if (k == LogicalKeyboardKey.delete || k == LogicalKeyboardKey.backspace) {
       // The picked thing is taken out of the document (undo brings it back).
       final t = int.tryParse(ws.selected ?? '');
-      if (t != null && ws.inside!.remove(t)) ws.reread();
+      if (t != null) ws.after(ws.inside!.later('remove', thing: t));   // (without waiting)
     } else if (k == LogicalKeyboardKey.arrowLeft) {
       _step(HardwareKeyboard.instance.isShiftPressed ? -10 : -1);
     } else if (k == LogicalKeyboardKey.arrowRight) {
@@ -203,14 +203,13 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
     final h = _bar, ws = _ws!, m = ws.inside;
     _bar = null;
     if (h == null || m == null) return;
-    m.letGo(keep && h.moved);
-    ws.reread();
+    ws.after(m.later('let_go', number: keep && h.moved ? 1 : 0));   // (let go without waiting)
   }
 
   // The eye of a row. Joined: the thing is put aside in the document (visible 0) and is not on the stage; one step.
   bool _isHidden(Ws ws, String id) => ws.layers.any((l) => l.id == id && l.hidden);   // (as last read: no call to the inside while a row is built)
   void _eye(Ws ws, String id) {
-    if (ws.inside!.set(int.parse(id), 'visible', _isHidden(ws, id) ? 1 : 0)) ws.reread();
+    ws.after(ws.inside!.later('set', thing: int.parse(id), name: 'visible', number: _isHidden(ws, id) ? 1 : 0));
   }
 
   double _lift = 0; // how far a label row has been carried up or down
@@ -253,14 +252,14 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
     while (marks.any((k) => k.$2 == 'M$n')) {
       n++;
     }
-    if (m.mark(at, 'M$n')) ws.reread();
+    ws.after(m.later('mark', number: at, word: 'M$n'));
   }
 
   void _named() {
     final was = _naming, ws = _ws!, words = _markWords.text.trim();
     if (was == null) return;
     setState(() => _naming = null);
-    if (words.isNotEmpty && words != was.$2 && (ws.inside?.mark(was.$1, words) ?? false)) ws.reread();
+    if (words.isNotEmpty && words != was.$2 && ws.inside != null) ws.after(ws.inside!.later('mark', number: was.$1, word: words));
   }
 
   void _rulerDown(Offset p) {
@@ -316,12 +315,18 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
     if (_markHeld case (final at, final name)?) {
       _markHeld = null;
       final to = _markTo / Ws.fps;
-      final ok = _markOff ? m!.mark(at, '') : (to - at).abs() >= 0.5 / Ws.fps && m!.together(() => m.mark(at, '') && m.mark(to, name));
+      if (_markOff) {
+        _ws!.after(m!.later('mark', number: at));
+      } else if ((to - at).abs() >= 0.5 / Ws.fps) {   // (moved: one step, its name kept)
+        m!.later('together', number: 1);
+        m.later('mark', number: at);
+        m.later('mark', number: to, word: name);
+        _ws!.after(m.later('together'));
+      }
       setState(() {});
-      if (ok) _ws!.reread();
       return;
     }
-    if (_workDrag != null && m!.setWork(_workIn / Ws.fps, _workOut / Ws.fps)) _ws!.reread();
+    if (_workDrag != null) _ws!.after(m!.later('work', number: _workIn / Ws.fps, word: '${_workOut / Ws.fps}'));
     _workDrag = null;
   }
 
@@ -347,7 +352,7 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
   bool _anySolo(Ws ws) => ws.layers.any((l) => _isSolo(ws, l.id));
   void _flag(Ws ws, String name, String id) {
     final m = ws.inside!;
-    if (m.set(int.parse(id), name, (name == 'solo' ? _isSolo(ws, id) : _isLocked(ws, id)) ? 0 : 1)) ws.reread();
+    ws.after(m.later('set', thing: int.parse(id), name: name, number: (name == 'solo' ? _isSolo(ws, id) : _isLocked(ws, id)) ? 0 : 1));
   }
 
   // ---------------------------------------------------------------- build
@@ -470,7 +475,7 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
                           onVerticalDragUpdate: (d) => _lift += d.delta.dy,
                           onVerticalDragEnd: (_) {
                                   final by = (_lift / WtM.row).round();
-                                  if (by != 0 && ws.inside!.raise(int.parse(ws.layers[i].id), -by)) ws.reread();
+                                  if (by != 0) ws.after(ws.inside!.later('raise', thing: int.parse(ws.layers[i].id), number: -by.toDouble()));
                                 },
                           child: _LabelRow(
                             index: i,

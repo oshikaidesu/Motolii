@@ -49,9 +49,7 @@ final _glass = _Make('Glass', DockG.radial, WsT.toneShape, '', 'Material · thic
 void _fill(DockCtx c, String word) {
   final m = c.ws.inside!, t = int.tryParse(c.ws.selected ?? '');
   if (c.ws.aim case final aim?) { // (a card's colour link aimed it: said to that value, of the picked thing or of the stage)
-    final done = m.say(t ?? 0, aim, word);
-    c.set(() => done ? c.mem.trouble.remove('fill') : c.mem.trouble['fill'] = m.trouble);
-    if (done) c.ws.reread();
+    c.ws.after(m.later('say', thing: t ?? 0, name: aim, word: word), (done, why) => c.set(() => done ? c.mem.trouble.remove('fill') : c.mem.trouble['fill'] = why));   // (without waiting)
     return;
   }
   if (t == null) { // (nothing picked: the drawing tools' ink, what a thing drawn next is filled with)
@@ -59,9 +57,7 @@ void _fill(DockCtx c, String word) {
     c.ws.reread();
     return;
   }
-  final done = m.say(t, 'fill', word);
-  c.set(() => done ? c.mem.trouble.remove('fill') : c.mem.trouble['fill'] = m.trouble);
-  if (done) c.ws.reread();
+  c.ws.after(m.later('say', thing: t, name: 'fill', word: word), (done, why) => c.set(() => done ? c.mem.trouble.remove('fill') : c.mem.trouble['fill'] = why));   // (without waiting)
 }
 
 /// The colours of the things, each by the thing's name: what the document's things are filled with (a ramp by its first).
@@ -416,26 +412,21 @@ const _laid = <String, Map<String, double>>{
 void _make(DockCtx c, String name) {
   final m = c.ws.inside!;
   if (m.recipes.any((r) => r.$1 == name)) { // (a picture in one call: one step, and it is picked)
-    final made = m.make(name);
-    c.set(() => made == 0 ? c.mem.trouble[name] = m.trouble : c.mem.trouble.remove(name));
-    if (made == 0) return;
-    c.ws.reread();
-    c.ws.select('$made');
+    c.ws.after(m.later('make', word: name), (done, why) => c.set(() => done ? c.mem.trouble.remove(name) : c.mem.trouble[name] = why), (made) => c.ws.select('$made'));   // (without waiting: picked once made)
     return;
   }
   if (_laid[name] case final told?) {
     final t = int.tryParse(c.ws.selected ?? '');
-    final done = t != null && m.together(() => told.entries.every((e) => m.set(t, e.key, e.value)));
-    c.set(() => done ? c.mem.trouble.remove(name) : c.mem.trouble[name] = t == null ? 'Pick a thing to lay out' : m.trouble);
-    c.ws.reread();
+    if (t == null) return c.set(() => c.mem.trouble[name] = 'Pick a thing to lay out');
+    m.later('together', number: 1);   // (one step, without waiting)
+    for (final e in told.entries) {
+      m.later('set', thing: t, name: e.key, number: e.value.toDouble());
+    }
+    c.ws.after(m.later('together'), (done, why) => c.set(() => done ? c.mem.trouble.remove(name) : c.mem.trouble[name] = why));
     return;
   }
   final asked = _asked[name]!;
-  final made = m.add(asked.$1, asked.$2);
-  c.set(() => made == 0 ? c.mem.trouble[name] = m.trouble : c.mem.trouble.remove(name));
-  if (made == 0) return;
-  c.ws.reread();
-  c.ws.select('$made');
+  c.ws.after(m.later('add', name: asked.$1, word: asked.$2), (done, why) => c.set(() => done ? c.mem.trouble.remove(name) : c.mem.trouble[name] = why), (made) => c.ws.select('$made'));   // (without waiting: picked once made)
 }
 
 class CreateShelf extends StatelessWidget {

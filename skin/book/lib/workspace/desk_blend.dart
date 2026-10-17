@@ -40,7 +40,7 @@ class _RowState extends State<_Row> {
     final clip = ways.isNotEmpty && (m!.value(t!, 'clip', 0) ?? 0) > 0.5;
     final opacity = ways.isEmpty ? 1.0 : (m!.value(t!, 'opacity', ws.frame / Ws.fps) ?? 1).clamp(0.0, 1.0);
     void say(String name, String word) {
-      if (m != null && t != null && m.say(t, name, word)) ws.reread();
+      if (m != null && t != null) ws.after(m.later('say', thing: t, name: name, word: word));
     }
 
     final row = Container(
@@ -68,7 +68,7 @@ class _RowState extends State<_Row> {
             if (l == ws.layers.last) const SizedBox(width: 24)   // (the back-most: nothing under it to clip to)
             else
               DeskIconButton(key: ValueKey('clip.${l.id}'), size: 24, on: clip, glyph: (ink) => _Clip(ink), onTap: () {
-                if (m!.set(t, 'clip', clip ? 0 : 1)) ws.reread();
+                ws.after(m!.later('set', thing: t, name: 'clip', number: clip ? 0 : 1));
               }),
           ],
         ],
@@ -157,7 +157,7 @@ class _OpacityState extends State<_Opacity> {
     final ws = WsScope.read(context);
     if (_held == null) return;
     _held = null;
-    if (ws.inside?.letGo(true) ?? false) ws.reread();
+    if (ws.inside case final m?) ws.after(m.later('let_go', number: 1));
   }
 
   @override

@@ -102,10 +102,6 @@ class _WorkspaceState extends State<Workspace> {
   /// another document, the film written out) and what the keyboard does elsewhere (undo, redo, take a thing out).
   List<PlatformMenuItem> _menus() {
     final m = _inside!;
-    void then(bool done) {
-      if (done) _ws.reread();
-    }
-
     return [
       PlatformMenu(
         label: 'lab_book',
@@ -145,7 +141,7 @@ class _WorkspaceState extends State<Workspace> {
             label: 'Remove',
             onSelected: () {
               final t = int.tryParse(_ws.selected ?? '');
-              then(t != null && m.remove(t));
+              if (t != null) _ws.after(m.later('remove', thing: t));   // (without waiting)
             },
           ),
         ],
@@ -153,7 +149,7 @@ class _WorkspaceState extends State<Workspace> {
       PlatformMenu(
         label: 'Animation',
         menus: [
-          PlatformMenuItem(label: 'Sequence Layers', onSelected: () => then(m.sequence(0))),   // (After Effects' Keyframe Assistant: one after another, from the top)
+          PlatformMenuItem(label: 'Sequence Layers', onSelected: () => _ws.after(m.later('sequence'))),   // (After Effects' Keyframe Assistant: one after another, from the top)
         ],
       ),
     ];
@@ -506,10 +502,14 @@ void _write(Ws ws, String? id, Map<String, double> changed, {required bool live}
   final said = {for (final e in changed.entries) if (t != null && e.key.startsWith('v_') && m.words(t, e.key.substring(2)).isNotEmpty) e.key: e.value};
   if (said.isNotEmpty) {
     if (live) return;
-    final ok = m.together(() => said.entries.every((e) => m.say(t!, e.key.substring(2), m.words(t, e.key.substring(2))[e.value.round().clamp(0, m.words(t, e.key.substring(2)).length - 1)])));
-    _told(ws, ok ? null : m.trouble);
+    m.later('together', number: 1);   // (one step, without waiting)
+    for (final e in said.entries) {
+      final ways = m.words(t!, e.key.substring(2));
+      m.later('say', thing: t, name: e.key.substring(2), word: ways[e.value.round().clamp(0, ways.length - 1)]);
+    }
+    ws.after(m.later('together'), (done, why) => _told(ws, done ? null : why));
     changed = {for (final e in changed.entries) if (!said.containsKey(e.key)) e.key: e.value};
-    if (changed.isEmpty) return ws.reread();
+    if (changed.isEmpty) return;
   }
   if (t == null || (_holding != t && !m.hold(t))) return; // (held once a hand: each step after only carries)
   _holding = live ? t : null;
@@ -561,17 +561,11 @@ void _mark(Ws ws, String? id, String prop, KeyS mark) {
   final at = ws.frame / Ws.fps, has = m.values(t).toSet();
   // (only the values it has: a flat thing has no scale_z, and a key asked of it was refused and took the whole step,
   //  the number let go of with it, back: with Animate on, a flat thing's first scale was lost)
+  m.later('together', number: 1);   // (one step, without waiting)
   for (final n in [for (final MapEntry(:key, :value) in _keyable(ws, t).entries) if (key == prop || propOf(key) == prop) value].where(has.contains)) {
-    switch (mark) {
-      case KeyS.at:
-        m.keyHere(t, n, at);
-      case KeyS.anim:
-        m.unkey(t, n, at);
-      case KeyS.off:
-        m.stay(t, n, at);
-    }
+    m.later(switch (mark) { KeyS.at => 'key_here', KeyS.anim => 'unkey', KeyS.off => 'stay' }, thing: t, name: n, number: at);
   }
-  ws.reread();
+  ws.after(m.later('together'));
 }
 
 /// The Inspector of the lab, fed by the workspace's selection; its panel links open the dock's shelves or the desk.
@@ -701,7 +695,7 @@ class _InspectorSeatState extends State<_InspectorSeat> {
         onFlags: (changed) => _flag(ws, l?.id, changed),
         keyMarks: Ws.timed('key marks', () => _keyMarks(ws, l?.id)),
         onValues: (changed, {required live}) => _write(ws, l?.id, changed, live: live),
-        onDrop: () => m.letGo(false),
+        onDrop: () => ws.after(m.later('let_go')),   // (put down unchanged, without waiting)
         onKey: (prop, mark) => _mark(ws, l?.id, prop, mark),
         together: (tells) { // (one step, asked without waiting: begun and ended in the inside's queue around what is told)
           m.later('together', number: 1);
