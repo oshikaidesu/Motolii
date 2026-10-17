@@ -9,6 +9,7 @@ import 'desk_blend.dart';
 import 'desk_depth.dart';
 import 'desk_ease.dart';
 import 'desk_markers.dart';
+import 'desk_sequence.dart';
 import 'ws.dart';
 
 /// One tool the desk can hold. [acts] is what it works on, said in two words.
@@ -26,7 +27,7 @@ const deskTools = [
   DeskTool('Depth', WsT.toneCamera, 'Camera', build: DeskDepth.new),
   DeskTool('Blend', Pop.toneBlend, 'Layer stack', build: DeskBlend.new),
   DeskTool('Align', Pop.toneLayout, 'Selection', build: DeskAlign.new),
-  DeskTool('Sequence', Pop.tonePlace, 'Layers in time'),
+  DeskTool('Sequence', Pop.tonePlace, 'Layers in time', build: DeskSequence.new),
   DeskTool('Path', Pop.tonePath, 'Motion path'),
   DeskTool('Wiggle', Pop.toneParticles, 'Noise'),
   DeskTool('Color', Pop.toneSolid, 'Swatches'),

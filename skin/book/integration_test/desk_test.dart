@@ -175,6 +175,19 @@ void main() {
     expect(left, closeTo(0, 1));
     expect(middle, closeTo(960, 1));
     expect(bottom, closeTo(1080, 1));
+
+    // Sequence: from the back, overlapping by none: each begins where the one before ends.
+    await open('Sequence');
+    await t.tap(find.byKey(const ValueKey('sequence.apply')));
+    await t.pump();
+    await wait(150);
+    await shoot('Sequence');
+    final order = [for (final l in ws.layers.reversed) int.parse(l.id)];
+    final starts = [for (final id in order) m.value(id, 'start', 0) ?? 0], lasts = [for (final id in order) m.lasts(id)];
+    report.add('Sequence: starts $starts, lasts $lasts (want each start where the one before ends)');
+    for (var k = 1; k < order.length; k++) {
+      expect(starts[k], closeTo(starts[k - 1] + lasts[k - 1], 1e-6));
+    }
     File('${out.path}/report.txt').writeAsStringSync(report.join('\n'));
     expect(made, 2);
     expect(named.first, 'Drop');
