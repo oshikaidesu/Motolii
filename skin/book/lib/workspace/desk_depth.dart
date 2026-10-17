@@ -50,7 +50,7 @@ const _filmMm = 12 / 0.2679491924311227;
 /// Joined: the lens as the desk now has it, carried on the camera (shown at once; the document's when the hand lets go).
 void _carryLens(Ws ws, int camera, _Lens lens) {
   final m = ws.inside!, p = m.point;
-  if (!m.hold(camera)) return;
+  m.take(camera);
   m
     ..carry('zoom', lens.focal / _filmMm)
     ..carry('aperture', lens.fstop)

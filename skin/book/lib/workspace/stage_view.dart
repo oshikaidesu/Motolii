@@ -349,7 +349,8 @@ class _StageViewState extends State<StageView> implements StageHandles {
         near = d;
         by = switch (key.split(' ').first) { 'corner' => 'scale', 'turn' => 'turn', 'anchor' => 'pivot', _ => null };
       }
-      if (by != null && m.hold(picked)) {
+      if (by != null) {
+        m.take(picked);
         final at = _doc(v, local); // (points of the picture, as the inside counts them)
         m.carry('grip', at.dx, at.dy);
         if (ws.playing) ws.playing = false;
@@ -359,7 +360,8 @@ class _StageViewState extends State<StageView> implements StageHandles {
     }
     if (_pull(v, local)) return; // (a guide out of a ruler, or one taken hold of: after the handles, which lie over everything)
     final id = m == null ? null : _hit(v, local), t = int.tryParse(id ?? '');
-    if (m == null || t == null || !m.hold(t)) return;
+    if (m == null || t == null) return;
+    m.take(t);
     ws.select(id);
     if (ws.playing) ws.playing = false; // (a hand on a thing stops the play)
     _held = (from: local, moved: false, by: null);

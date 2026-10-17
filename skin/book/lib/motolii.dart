@@ -223,7 +223,7 @@ class Motolii {
   /// The moment of the picture the stage last drew, at a frame: where a playhead is while it plays (what is read there
   /// is set down, not waited for).
   double get drawnAt => _drawnAt(_m);
-  double get seconds => _kept('seconds', () => _seconds(_m));
+  double get seconds => _keptCarried('seconds', () => _seconds(_m));
   late final _rate = _lib.lookupFunction<Int32 Function(_P), int Function(_P)>('motolii_rate');
 
   /// How many pictures a second a film written of the document has: what a frame is.
@@ -243,7 +243,7 @@ class Motolii {
   bool way(int thing, String name, double at, String way) => _with([name, way], (s) => _way(_m, thing, s[0], at, s[1])) != 0;
   double? value(int thing, String name, double at) => moving(thing).contains(name)
       ? _valueAt(thing, name, at)
-      : _kept(('value', thing, name), () => _valueAt(thing, name, at));   // (a value that takes no keys is the same at every moment: kept in the copy)
+      : _keptCarried(('value', thing, name), () => _valueAt(thing, name, at));   // (a value that takes no keys is the same at every moment: kept in the copy)
   double? _valueAt(int thing, String name, double at) => _with([name], (s) {
     final out = malloc<Double>();
     final ok = _value(_m, thing, s[0], at, out) != 0, v = out.value;
@@ -267,7 +267,7 @@ class Motolii {
   String word(int thing, String name) => _kept(('word', thing, name), () => _with([name], (s) => _word(_m, thing, s[0]).toDartString()));
 
   /// How long a thing is on, in seconds; below 0: for good.
-  double lasts(int thing) => _kept(('lasts', thing), () => _lasts(_m, thing));
+  double lasts(int thing) => _keptCarried(('lasts', thing), () => _lasts(_m, thing));
 
   late final _thingKeys = _lib.lookupFunction<Int32 Function(_P, Int32, Pointer<Double>, Int32), int Function(_P, int, Pointer<Double>, int)>('motolii_thing_key_moments');
 
@@ -353,6 +353,9 @@ class Motolii {
   /// Whether the inside is telling the stage a moment just now: a reading made now would wait for it (asked at once).
   bool get busy => _busy(_m) != 0;
   bool hold(int thing) => _hold(_m, thing) != 0;
+
+  /// A hand takes hold, without waiting (the window's way: refused, its let go says why).
+  void take(int thing) => later('hold', thing: thing);
   bool carry(String by, double a, [double b = 0]) => _with([by], (s) => _carry(_m, s[0], a, b)) != 0;
   bool letGo(bool keep) => _letGo(_m, keep ? 1 : 0) != 0;
 
@@ -515,20 +518,40 @@ class Motolii {
 
   /// The words a value may be, kept till the document is read again ([forget]): what a value may be changes with the
   /// document (a thing's kind, a script's select), not with each picture's reading of the inspector.
-  void forget() => _copy.clear();
+  void forget() {
+    _copy.clear();
+    _copyCarried.clear();
+  }
 
   /// The window's copy of what it read of the document, kept while the document stays as it was: its revision, read
   /// without waiting for the inside (motolii_revision). A read the copy holds is never asked again.
   late final _revision = _lib.lookupFunction<Int64 Function(_P), int Function(_P)>('motolii_revision', isLeaf: true);
-  final _copy = <Object, Object?>{};
-  int _copyAt = -1;
+  late final _carried = _lib.lookupFunction<Int64 Function(_P), int Function(_P)>('motolii_carried', isLeaf: true);
+  final _copy = <Object, Object?>{}, _copyCarried = <Object, Object?>{};
+  int _copyAt = -1, _carriedAt = -1;
   T _kept<T>(Object key, T Function() ask) {
     final r = _revision(_m);
     if (r != _copyAt) {
       _copy.clear();
+      _copyCarried.clear();
       _copyAt = r;
     }
     return _copy.putIfAbsent(key, ask) as T;
+  }
+
+  /// And what a hand's carrying changes too (a value that takes no keys, how long a thing lasts): kept while neither moves.
+  T _keptCarried<T>(Object key, T Function() ask) {
+    final r = _revision(_m), c = _carried(_m);
+    if (r != _copyAt) {
+      _copy.clear();
+      _copyCarried.clear();
+      _copyAt = r;
+    }
+    if (c != _carriedAt) {
+      _copyCarried.clear();
+      _carriedAt = c;
+    }
+    return _copyCarried.putIfAbsent(key, ask) as T;
   }
 
   /// A film's first picture, small, as a .png file (null: none could be made). Made once and on another isolate: the

@@ -148,7 +148,7 @@ class _OpacityState extends State<_Opacity> {
     final m = WsScope.read(context).inside;
     if (m == null) return;
     final v = (x / wide).clamp(0.0, 1.0);
-    if (_held == null && !m.hold(widget.thing)) return;
+    if (_held == null) m.take(widget.thing);
     setState(() => _held = v);
     m.carry('opacity', v);
   }

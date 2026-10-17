@@ -511,7 +511,8 @@ void _write(Ws ws, String? id, Map<String, double> changed, {required bool live}
     changed = {for (final e in changed.entries) if (!said.containsKey(e.key)) e.key: e.value};
     if (changed.isEmpty) return;
   }
-  if (t == null || (_holding != t && !m.hold(t))) return; // (held once a hand: each step after only carries)
+  if (t == null) return;
+  if (_holding != t) m.take(t); // (held once a hand: each step after only carries)
   _holding = live ? t : null;
   String? why;
   for (final e in changed.entries) {

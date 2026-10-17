@@ -185,7 +185,8 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
     final i = ((p.dy + _vscroll) / WtM.row).floor();
     if (m == null || i < 0 || i >= ws.layers.length) return;
     final l = ws.layers[i], a = v.x(l.inF), b = v.x(l.outF);
-    if (_isLocked(_ws!, l.id) || p.dx < a - 6 || p.dx > b + 6 || !m.hold(int.parse(l.id))) return;
+    if (_isLocked(_ws!, l.id) || p.dx < a - 6 || p.dx > b + 6) return;
+    m.take(int.parse(l.id));
     ws.select(l.id);
     if (ws.playing) ws.playing = false;
     _bar = (id: l.id, part: (p.dx - b).abs() <= 6 ? 'tail' : ((p.dx - a).abs() <= 6 ? 'head' : 'bar'), grab: v.frameAt(p.dx), moved: false);
