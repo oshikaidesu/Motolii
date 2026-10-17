@@ -92,6 +92,9 @@ struct Doc {
     std::unordered_map<int, std::unordered_map<std::string, Keys, NameHash, std::equal_to<>>> moving;   // a value's keys, and the way of the stretch after each, by thing and name; read from the facts when first asked for, forgotten at every change
     struct HeardHash { size_t operator()(const std::tuple<int, const char*, double>& k) const { return std::hash<int>{}(std::get<0>(k)) * 31u ^ std::hash<const void*>{}(std::get<1>(k)) * 17u ^ std::hash<double>{}(std::get<2>(k)); } };
     std::unordered_map<std::tuple<int, const char*, double>, double, HeardHash> heard;   // doc_place's own values within this moment, by thing, the name's place in the program (a literal: it never says another name) and when; its copies ask the same: forgotten as the moment begins and at every change
+    struct HeardWordHash { size_t operator()(const std::pair<int, const char*>& k) const { return std::hash<int>{}(k.first) * 31u ^ std::hash<const void*>{}(k.second); } };
+    std::unordered_map<std::pair<int, const char*>, std::string, HeardWordHash> heardWords;   // (and its words so, and a thing's copy_tall as numbers)
+    std::unordered_map<int, std::vector<double>> talls;
     std::map<int, std::pair<float2, float>> halves;   // a thing's half size and depth (doc_half), worked out once a moment: its copies all ask it
     std::map<std::pair<int, std::string>, std::string> words;   // a value's word, the same way
     std::map<std::pair<int, std::string>, std::vector<double>> keyed;   // the moments of a value's keys, the same way
@@ -603,7 +606,7 @@ static bool doc_rows(Doc& d, char* ask, const std::function<void(sqlite3_stmt*)>
 }
 static void doc_forget(Doc& d) {
     d.phys_stale = true, d.scripted.clear();   // (the world made again only if what it is made of changed: doc_physics)
-    d.moving.clear(), d.words.clear(), d.keyed.clear(), d.halves.clear(), d.heard.clear();
+    d.moving.clear(), d.words.clear(), d.keyed.clear(), d.halves.clear(), d.heard.clear(), d.heardWords.clear(), d.talls.clear();
     d.named.clear();
     d.laid.clear();
 }
@@ -737,24 +740,39 @@ static void doc_copy_looks_off(Doc& d, const Mesh* m, MaterialInstance* main) {
     }
 }
 // How many members a thing has in their order: a text split into letters, a letter each; else its copies.
+// A value doc_place reads, by a name written in the program (a literal: its place in memory says which name, ever):
+// worked out once a moment for all of a thing's copies (they ask the same at the same moment), not while a hand carries it.
+static double doc_literal(Doc& d, int thing, const char* literal, double at, double otherwise) {
+    if (d.held.thing == thing) return doc_number(d, thing, literal, at, otherwise);
+    const auto key = std::make_tuple(thing, literal, at);
+    if (const auto kept = d.heard.find(key); kept != d.heard.end()) return kept->second;
+    const double is = doc_number(d, thing, literal, at, otherwise);
+    if (d.heard.size() < 100000) d.heard.emplace(key, is);
+    return is;
+}
+static const std::string& doc_literal_word(Doc& d, int thing, const char* literal) {   // (a word so, kept the same way)
+    const auto key = std::make_pair(thing, literal);
+    if (const auto kept = d.heardWords.find(key); kept != d.heardWords.end()) return kept->second;
+    return d.heardWords.emplace(key, doc_word(d, thing, literal)).first->second;
+}
 static int doc_members(Doc& d, int thing) {
     const auto t = d.shown.find(thing);
     if (t != d.shown.end() && t->second.drawn && !t->second.drawn->letters.empty()) return (int)t->second.drawn->letters.size();
-    return std::max(1, (int)doc_number(d, thing, "copies", 0, 1));
+    return std::max(1, (int)doc_literal(d, thing, "copies", 0, 1));
 }
 // How much later a thing's nth copy moves than it is said to (the past repository's order law, GSAP's stagger: the
 // stagger spread over them by their order: from the start, from the centre out, from the end, from the edges in).
 static double doc_delay(Doc& d, int thing, int nth) {
-    const double stagger = doc_number(d, thing, "stagger", 0, 0);
+    const double stagger = doc_literal(d, thing, "stagger", 0, 0);
     const int n = doc_members(d, thing);
     if (stagger <= 0.0 || n < 2) return 0.0;
     const double along = (double)nth / (double)(n - 1), centre = std::fabs(along - 0.5) * 2.0;
-    const std::string from = doc_word(d, thing, "stagger_from");
+    const std::string& from = doc_literal_word(d, thing, "stagger_from");
     return stagger * (from == "centre" ? centre : from == "end" ? 1.0 - along : from == "edges" ? 1.0 - centre : along);
 }
 // Where the thing it goes with is (its parent's place; none, or one not there any more: as the stage is).
 static math::mat4 doc_above(Doc& d, int thing, double now, int deeper = 0) {
-    const int parent = (int)doc_number(d, thing, "parent", 0, 0);
+    const int parent = (int)doc_literal(d, thing, "parent", 0, 0);
     return parent && d.shown.count(parent) && deeper < 64 ? doc_place(d, parent, now, deeper + 1) : math::mat4{};   // (64: a document written elsewhere with a ring of parents still ends)
 }
 // Where a split text's letter has its middle across the thing, in its own units (0: not a letter of one).
@@ -841,16 +859,6 @@ static bool doc_physics(Doc& d, int thing, double now, PhysPose* pose, int copy 
 static bool doc_staggered(Doc& d, int thing, double now) {
     return doc_members(d, thing) > 1 || doc_number(d, thing, "stagger", 0, 0) > 0.0 || doc_number(d, thing, "wave_x", now, 0) != 0.0 || doc_number(d, thing, "wave_y", now, 0) != 0.0 || doc_number(d, thing, "wave_rotate", now, 0) != 0.0 || doc_number(d, thing, "wave_size", now, 0) != 0.0 || doc_number(d, thing, "field_radius", now, 0) > 0.0 || doc_number(d, thing, "scatter_x", now, 0) > 0.0 || doc_number(d, thing, "scatter_y", now, 0) > 0.0 || doc_number(d, thing, "scatter_rotate", now, 0) > 0.0 || doc_number(d, thing, "scatter_size", now, 0) > 0.0;
 }
-// A value doc_place reads, by a name written in the program (a literal: its place in memory says which name, ever):
-// worked out once a moment for all of a thing's copies (they ask the same at the same moment), not while a hand carries it.
-static double doc_literal(Doc& d, int thing, const char* literal, double at, double otherwise) {
-    if (d.held.thing == thing) return doc_number(d, thing, literal, at, otherwise);
-    const auto key = std::make_tuple(thing, literal, at);
-    if (const auto kept = d.heard.find(key); kept != d.heard.end()) return kept->second;
-    const double is = doc_number(d, thing, literal, at, otherwise);
-    if (d.heard.size() < 100000) d.heard.emplace(key, is);
-    return is;
-}
 static math::mat4 doc_place(Doc& d, int thing, double now, int deeper, int copy, bool member) {
     const double said = now;   // (the moment itself: a wave goes on at it, whatever the copy's delay)
     if (member) now -= doc_delay(d, thing, copy);   // (a member of its copies: as it was so much earlier)
@@ -916,7 +924,7 @@ static math::mat4 doc_place(Doc& d, int thing, double now, int deeper, int copy,
               math::mat4::scaling(std::max(0.0, 1.0 + w * doc_literal(d, thing, "wave_size", said, 0)));
     }
     if (member)   // (a recipe as code: each copy where the thing's script says, on top of what its copies' values say)
-        if (DocScript* sc = doc_script_of(doc_word(d, thing, "script")); sc && sc->run && sc->run->ok()) {
+        if (DocScript* sc = doc_script_of(doc_literal_word(d, thing, "script")); sc && sc->run && sc->run->ok()) {
             Doc::Scripted& kept = d.scripted[thing];
             if (kept.at != said || kept.made != doc_scripts_made() || (int)kept.copies.size() != n) {   // (every copy at once, the knobs read once)
                 std::map<std::string, double> numbers;
@@ -940,9 +948,14 @@ static math::mat4 doc_place(Doc& d, int thing, double now, int deeper, int copy,
         }
     double tall = doc_literal(d, thing, "tall", now, 1);   // (taller, its anchor staying: a copy as its number in copy_tall says too)
     if (member) {
-        std::istringstream said(doc_word(d, thing, "copy_tall"));
-        std::vector<double> each;
-        for (std::string one; said >> one && one != "none";) each.push_back(std::atof(one.c_str()));
+        auto found = d.talls.find(thing);
+        if (found == d.talls.end()) {   // (read once a moment)
+            std::istringstream said(doc_literal_word(d, thing, "copy_tall"));
+            std::vector<double> all;
+            for (std::string one; said >> one && one != "none";) all.push_back(std::atof(one.c_str()));
+            found = d.talls.emplace(thing, std::move(all)).first;
+        }
+        const std::vector<double>& each = found->second;
         if (!each.empty()) tall *= each[(size_t)copy % each.size()];
     }
     own = own * math::mat4::scaling(math::double3{1.0, tall, 1.0});
@@ -1204,7 +1217,7 @@ static bool doc_fx(Doc& d, int thing, double at, bool most, double units, DrawnF
 
 static void doc_moment(Doc& d, double now) {
     Stage& s = *d.stage;
-    d.halves.clear(), d.heard.clear();   // (made again since: a flat thing's sheet is as large as its picture now; doc_place's values asked anew)
+    d.halves.clear(), d.heard.clear(), d.heardWords.clear(), d.talls.clear();   // (made again since: a flat thing's sheet is as large as its picture now; doc_place's values asked anew)
     const std::vector<int> lie = doc_laid(d);
     // Each thing as it is now, in the order they lie: whether it is on, and whether it is a solid thing.
     struct Lies { int thing; Doc::Shown* shown; bool on, solid; double since; };
