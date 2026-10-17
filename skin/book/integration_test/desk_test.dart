@@ -306,22 +306,30 @@ void main() {
     expect(m.value(b, 'orient', 0), 1);
     expect(turned, closeTo(-45, 3));
 
-    // Color: the circle given the rect's colour, then its edge the same.
+    // Color (the dock's Colors shelf at the desk): the circle given the rect's colour from Used here, then, the
+    // stroke card's link aiming, its edge the same.
     ws.select('$b');
     await open('Color');
-    await t.tap(find.byKey(const ValueKey('swatch.ff3366')));
+    Finder swatch(int argb) => find.descendant(of: find.byType(WsDesk), matching: find.byWidgetPredicate((w) => w is Container && w.decoration is BoxDecoration && (w.decoration! as BoxDecoration).color == Color(argb))).first;
+    Finder button(String word) => find.descendant(of: find.byType(WsDesk), matching: find.text(word)).last;
+    await t.tap(swatch(0xFFFF3366));
+    await t.pump();
+    await t.tap(button('Fill'));
     await t.pump();
     await wait(100);
     final filled = m.word(b, 'fill');
-    await t.tap(find.byKey(const ValueKey('color.edge')));
+    ws.aim = 'stroke';
     await t.pump();
-    await t.tap(find.byKey(const ValueKey('swatch.33aaff')));
+    await t.tap(swatch(0xFFFF3366));
+    await t.pump();
+    await t.tap(button('Set'));
     await t.pump();
     await wait(100);
+    ws.aim = null;
     await shoot('Color');
-    report.add('Color: circle fill $filled (want ff3366), edge ${m.word(b, 'stroke')} (want 33aaff)');
+    report.add('Color: circle fill $filled (want ff3366), edge ${m.word(b, 'stroke')} (want ff3366)');
     expect(filled, 'ff3366');
-    expect(m.word(b, 'stroke'), '33aaff');
+    expect(m.word(b, 'stroke'), 'ff3366');
     File('${out.path}/report.txt').writeAsStringSync(report.join('\n'));
     expect(made, 2);
     expect(named.first, 'Drop');
