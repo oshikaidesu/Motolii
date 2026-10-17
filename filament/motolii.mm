@@ -12,6 +12,8 @@
 #include <future>
 #include <mutex>
 #include <thread>
+#include <pthread.h>
+#include <sys/qos.h>
 #include <unistd.h>
 
 // One hand does everything that touches the engine: it opens the stage, runs each call as it comes (the caller waits
@@ -130,6 +132,7 @@ template <class Does> static auto by_look(Motolii* m, Does does, const char* who
 }
 
 static void motolii_hand(Motolii* m, std::string document, int wide, int high, std::promise<bool>* opened) {
+    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);   // (the hand makes the pictures a window shows: macOS's own word for that, on its fast cores)
     const bool says = doc_size(document.c_str(), &wide, &high);   // (a document that says its own size is opened at it)
     m->s = new Stage(open_stage(wide, high));
     m->s->camera->lookAt({0.f, 0.f, 6.f}, {0.f, 0.f, 0.f}, {0, 1, 0});

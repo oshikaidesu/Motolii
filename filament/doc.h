@@ -86,6 +86,7 @@ struct Doc {
     struct Held { int thing = -1; std::map<std::string, double> from, tried; } held;   // (-1: nothing held; 0 is the stage, which a hand may hold by a value of its own)
     struct Keys { std::vector<double> at, value; std::vector<Interp> interp; std::vector<std::string> own; };   // (own: a way defined in the document, where the stretch is not one of the nine kinds)
     std::map<std::pair<int, std::string>, Keys> moving;   // a value's keys, and the way of the stretch after each; read from the facts when first asked for, forgotten at every change
+    std::map<int, std::pair<float2, float>> halves;   // a thing's half size and depth (doc_half), worked out once a moment: its copies all ask it
     std::map<std::pair<int, std::string>, std::string> words;   // a value's word, the same way
     std::map<std::pair<int, std::string>, std::vector<double>> keyed;   // the moments of a value's keys, the same way
     std::map<std::string, sqlite3_stmt*> named, goes;     // a way by its name, and by its expression: made ready once (SQLite works it out)
@@ -596,7 +597,7 @@ static bool doc_rows(Doc& d, char* ask, const std::function<void(sqlite3_stmt*)>
 }
 static void doc_forget(Doc& d) {
     d.phys_stale = true, d.scripted.clear();   // (the world made again only if what it is made of changed: doc_physics)
-    d.moving.clear(), d.words.clear(), d.keyed.clear();
+    d.moving.clear(), d.words.clear(), d.keyed.clear(), d.halves.clear();
     d.named.clear();
     d.laid.clear();
 }
@@ -1186,6 +1187,7 @@ static bool doc_fx(Doc& d, int thing, double at, bool most, double units, DrawnF
 
 static void doc_moment(Doc& d, double now) {
     Stage& s = *d.stage;
+    d.halves.clear();   // (made again since: a flat thing's sheet is as large as its picture now)
     const std::vector<int> lie = doc_laid(d);
     // Each thing as it is now, in the order they lie: whether it is on, and whether it is a solid thing.
     struct Lies { int thing; Doc::Shown* shown; bool on, solid; double since; };
@@ -2466,7 +2468,16 @@ static std::vector<double> doc_key_moments(Doc& d, int thing, const char* name) 
 
 // Half of how wide and how high a thing is at size 1, before it is placed (a sheet: the sheet's; a solid: its
 // bounds'): what a shell draws a thing's frame from.
+static bool doc_half_now(Doc& d, int thing, float2* half, float* deep);
 static bool doc_half(Doc& d, int thing, float2* half, float* deep) {   // (deep: half of how far it reaches towards the eye and away; a flat thing: 0)
+    if (const auto kept = d.halves.find(thing); kept != d.halves.end()) return *half = kept->second.first, deep ? *deep = kept->second.second : 0.f, true;
+    float far = 0.f;
+    if (!doc_half_now(d, thing, half, &far)) return false;
+    d.halves[thing] = {*half, far};
+    if (deep) *deep = far;
+    return true;
+}
+static bool doc_half_now(Doc& d, int thing, float2* half, float* deep) {
     const auto shown = d.shown.find(thing);
     if (shown == d.shown.end()) return false;
     const Doc::Shown& t = shown->second;
