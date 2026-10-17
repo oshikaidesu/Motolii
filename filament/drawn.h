@@ -483,7 +483,7 @@ static void flat_path(Drawn* d, tvg::Shape* shape, const char* form, int w, int 
     d->plain.assign(cmds, cmds + cmdsCnt), d->plainAt.assign(pts, pts + ptsCnt);
     d->plainHigh = (float)h, d->plainSide = std::min((float)w, (float)h) - 2.f * in;
     d->fine = fine;
-    if ((round > 0.f && strcmp(form, "line")) || d->fine > 0.f)
+    if ((round > 0.f && strcmp(form, "line")) || d->fine != 0.f)
         tvg_bend(shape, d->plain.data(), cmdsCnt, d->plainAt.data(), ptsCnt, strcmp(form, "line") ? std::clamp(round, 0.f, 0.5f) * d->plainSide : 0.f, 0.f, 0.f, 0, false, 0.f, d->fine), d->bent[0] = round;
 }
 
@@ -580,14 +580,14 @@ static std::vector<uint32_t> shape_cut(Drawn* d, float trimFrom, float trimTo, b
 // own: forty of them waving cost a quarter of the time as ThorVG pictures do (check/shape_mesh.sh). No ramp, no effects:
 // those are `flat`'s. edge: its colour, and how wide (a share of its height; inside its frame, as `flat`'s).
 static Drawn* flat_mesh(Stage& s, const char* form, float wide, const mat4f& place, float high, float3 colour, const char* lay = nullptr, float4 edge = float4{0.f},
-                        const DrawnFx& fx = {}, int points = 6, float inner = 0.5f, float round = 0.f) {
+                        const DrawnFx& fx = {}, int points = 6, float inner = 0.5f, float round = 0.f, bool bends = true) {
     const int h = 1024, w = std::max(2, (int)std::lround(1024.f * wide));   // (points to make its path in: its own, as fine as it is)
     Drawn* d = new Drawn;
     d->fx = fx, d->cutW = (float)w, d->sheetHigh = high, d->hollow = fx.hollow;
     const float in = 0.5f * std::min(edge.w * (float)h, 0.5f * (float)std::min(w, h));   // (half its edge: the path set in by that, as `flat` does)
     d->edgeWide = 2.f * in;
     d->outline = tvg::Shape::gen();
-    flat_path(d, d->outline, form, w, h, in, points, inner, round, (float)h / 64.f);
+    flat_path(d, d->outline, form, w, h, in, points, inner, round, (bends ? 1.f : -1.f) * (float)h / 64.f);   // (bent as it is drawn: cut fine all along; not: only its curves, its straight lines whole)
     d->sheet = new Mesh;
     const std::vector<uint32_t> ends = shape_cut(d, 0.f, 1.f, true);
     d->cut = true, d->wideBy = wide;

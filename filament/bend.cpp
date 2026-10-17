@@ -5,20 +5,24 @@
 #include "tvgLottieModifier.h"
 #include "tvgGpuCommon.h"
 #include "tvgWgTessellator.h"
+#include <cmath>
 #include <vector>
 
 // A path as curves only, as an After Effects path is (a line a straight curve, a closed path back to its start: what
 // the operators know), into `into`; `sharp`: a line's handles on its ends, as After Effects writes them (its round
 // corners look for that, its pucker and bloat bend from it), else even along it (a zig zag's ridges); each line and
-// curve cut in pieces no longer than `fine` (0: whole), for what bends it as it is drawn.
+// curve cut in pieces no longer than `fine` (0: whole), for what bends it as it is drawn; `fine` below 0: only its
+// curves so cut, its straight lines kept whole (nothing bends it: a curve need only look round).
 static void curves(RenderPath& into, const PathCommand* cmds, uint32_t cmdsCnt, const Point* pts, bool sharp, float fine) {
     Point start{}, at{};
+    const bool linesWhole = fine < 0.f;
+    fine = std::fabs(fine);
     // (how many pieces a stretch is cut into: by `fine`, at most 1024, and one where its length is no number: a shape
     //  carried far out or a fine near nothing once asked for more pieces than memory has)
     const auto cut = [&](float along) { return fine > 0.f && std::isfinite(along) ? (int)std::min(1024.f, std::max(1.f, std::ceil(along / fine))) : 1; };
     const auto line = [&](const Point& to) {
         const Point from = at;
-        const int pieces = cut(length(to - from));
+        const int pieces = linesWhole ? 1 : cut(length(to - from));
         for (int k = 1; k <= pieces; ++k) {
             const Point a = from + (to - from) * ((float)(k - 1) / (float)pieces), b = from + (to - from) * ((float)k / (float)pieces);
             if (sharp) into.cubicTo(a, b, b);
@@ -59,7 +63,7 @@ static bool numbers(const Point* p, uint32_t n) {
 void tvg_bend(tvg::Shape* shape, const tvg::PathCommand* cmds, uint32_t cmdsCnt, const tvg::Point* pts, uint32_t ptsCnt,
               float round, float bloat, float zigzag, int ridges, bool smooth, float offset, float fine) {
     shape->reset();
-    if (!numbers(pts, ptsCnt) || !std::isfinite(round + bloat + zigzag + offset + fine)) return;
+    if (!numbers(pts, ptsCnt) || !std::isfinite(round + bloat + zigzag + offset + fine)) return;   // (fine below 0: curves cut, lines whole)
     LottieModifier* chain = nullptr;
     const auto on = [&](LottieModifier* m) { chain = chain ? chain->decorate(m) : m; };   // (the one put on last is done first; offset goes to the end)
     if (zigzag != 0.f) on(new LottieZigZagModifier(zigzag, ridges, smooth ? LottieZigZagModifier::Smooth : LottieZigZagModifier::Corner));
@@ -77,8 +81,8 @@ void tvg_bend(tvg::Shape* shape, const tvg::PathCommand* cmds, uint32_t cmdsCnt,
     //  a long zigzag cut fine once made more triangles than the GPU's staging had room for)
     float along = 0.f;
     for (uint32_t i = 1; i < bent.pts.count; ++i) along += length(bent.pts[i] - bent.pts[i - 1]);
-    if (fine > 0.f) curves(cut, bent.cmds.data, bent.cmds.count, bent.pts.data, false, std::max(fine, along / 20000.f));
-    const RenderPath& to = fine > 0.f ? cut : bent;
+    if (fine != 0.f) curves(cut, bent.cmds.data, bent.cmds.count, bent.pts.data, false, std::copysign(std::max(std::fabs(fine), along / 20000.f), fine));
+    const RenderPath& to = fine != 0.f ? cut : bent;
     shape->appendPath(to.cmds.data, to.cmds.count, to.pts.data, to.pts.count);
 }
 

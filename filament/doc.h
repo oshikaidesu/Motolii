@@ -1617,6 +1617,16 @@ static void doc_moment(Doc& d, double now) {
 // is made again. false: a thing could not be made (d.trouble says which, and why).
 // All that a thing's making goes by: one changed, the thing is made again (doc_match), carried by a hand too (doc_carry).
 static const char* const doc_making = "'kind','file','shape','blend','keyed','space','begin','duration','speed','text','fill','wide','points','inner','round','bloat','zigzag','offset','warp','clip','stroke','stroke_width','align','blur','shadow','shadow_distance','shadow_angle','shadow_blur','shadow_opacity','glow','glow_blur','glow_opacity','copies','tint','tint_black','tint_white','tritone','tritone_shadow','tritone_midtone','tritone_highlight','letter_spacing','line_spacing','italic','cap','join','dash','dash_offset','metallic','roughness','reflectance','clear_coat','clear_coat_roughness','falloff','shadows','shadow_softness','contact_shadows','sheen','anisotropy','shading','thickness','light_group','script','copy_fill','gradient','gradient_angle','gradient_scale','gradient_spread','wrap','wrap_at','split','ior','dispersion','swim','dark','vivid','marker'";
+// The values that move a flat shape's points as it is drawn (flat.mat's vertex stage): a shape with any of them cut
+// fine all along, one with none only round its curves (a long line in four points, not two thousand).
+static const char* const doc_bending = "'warp','bend','twist','pinch','skew','squash','wiggle','stretch','pin_tl_x','pin_tl_y','pin_tr_x','pin_tr_y','pin_bl_x','pin_bl_y','pin_br_x','pin_br_y'";
+static bool doc_bends(Doc& d, int thing) {
+    bool any = false;
+    doc_rows(d, sqlite3_mprintf("select 1 from fact where thing = %d and name in (%s) and (value <> 0 or at <> 0) limit 1", thing, doc_bending), [&](sqlite3_stmt*) { any = true; });
+    if (d.held.thing == thing)
+        for (const auto& [name, is] : d.held.tried) any = any || (is != 0.0 && strstr(doc_bending, ("'" + name + "'").c_str()));
+    return any;
+}
 static bool doc_match(Doc& d) {
     Stage& s = *d.stage;
     std::map<int, std::string> told;   // every thing of the document, and all that its making goes by
@@ -1627,6 +1637,7 @@ static bool doc_match(Doc& d) {
             const size_t end = of.find(' ', at);
             if (doc_blend_way(of.substr(at + 6, end == std::string::npos ? std::string::npos : end - at - 6))) of.replace(at + 6, (end == std::string::npos ? of.size() : end) - at - 6, "*");
         }
+    for (auto& [thing, of] : told) of += doc_bends(d, thing) ? " bent=1" : " bent=0";   // (bent or not: cut fine, or only round its curves)
     if (const auto held = told.find(d.held.thing); held != told.end())   // (what a hand carries of its making shows too: it is made again as it would be)
         for (const auto& [name, is] : d.held.tried)
             if (strstr(doc_making, ("'" + name + "'").c_str())) {   // (one that moves is drawn again each moment anyway (doc_moment): made again only as it comes on or goes off)
@@ -1770,7 +1781,7 @@ static bool doc_match(Doc& d) {
                 const bool plain = !wave && shape != "null" && fx.ramp.size() < 2 && fx.blur <= 0.f && fx.shadow.w <= 0.f && fx.glow.w <= 0.f && fx.tint <= 0.f && fx.tritone <= 0.f;
                 if (plain)
                     made.drawn = flat_mesh(s, shape.c_str(), (float)doc_number(d, thing, "wide", 0, line ? 25 : 1), mat4f{}, high, fill.empty() ? float3{0xd9, 0xd2, 0xc3} / 255.f : colour, lay,
-                                           float4{edge.xyz, edge.w / high}, fx.over(high), (int)doc_number(d, thing, "points", 0, shape == "star" ? 5 : 6), (float)doc_number(d, thing, "inner", 0, 0.5), (float)doc_number(d, thing, "round", 0, 0));
+                                           float4{edge.xyz, edge.w / high}, fx.over(high), (int)doc_number(d, thing, "points", 0, shape == "star" ? 5 : 6), (float)doc_number(d, thing, "inner", 0, 0.5), (float)doc_number(d, thing, "round", 0, 0), doc_bends(d, thing));
                 else made.drawn = flat(s, shape.c_str(), (float)doc_number(d, thing, "wide", 0, line ? 25 : wave ? 10 : 1), mat4f{}, high, fill.empty() ? float3{0xd9, 0xd2, 0xc3} / 255.f : colour, lay,
                                   float4{edge.xyz, edge.w / high}, fx.over(high),
                                   (int)doc_number(d, thing, "points", 0, shape == "star" ? 5 : wave ? 4 : 6), (float)doc_number(d, thing, "inner", 0, 0.5), (float)doc_number(d, thing, "round", 0, 0));
