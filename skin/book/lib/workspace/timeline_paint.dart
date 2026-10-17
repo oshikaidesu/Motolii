@@ -45,8 +45,12 @@ class WtRow {
     this.selected = false,
     this.dim = false,
     this.locked = false,
+    this.wave,
   });
   final String name;
+
+  /// How loud its sound is at each frame of its bar (dB, the inside's reading; null: no sound to show).
+  final List<double>? wave;
   final WsKind kind;
   final int inF, outF;
   final List<int> keys;
@@ -63,7 +67,8 @@ class WtRow {
       setEquals(other.picked, picked) &&
       other.selected == selected &&
       other.dim == dim &&
-      other.locked == locked;
+      other.locked == locked &&
+      identical(other.wave, wave);   // (read once a change: the same list until the document changes)
   @override
   int get hashCode => Object.hash(name, kind, inF, outF, Object.hashAll(keys), Object.hashAllUnordered(picked), selected, dim, locked);
 }
@@ -99,10 +104,13 @@ void _vLines(Canvas c, WtView v, int fps, double w, double top, double bottom, {
 // ---------------------------------------------------------------- ruler
 
 class WtRulerPainter extends CustomPainter {
-  const WtRulerPainter({required this.view, required this.fps, required this.workIn, required this.workOut, required this.markers});
+  const WtRulerPainter({required this.view, required this.fps, required this.workIn, required this.workOut, required this.markers, this.beats = const []});
   final WtView view;
   final int fps, workIn, workOut;
   final List<(int, String)> markers;
+
+  /// Where the films' sound strikes (their Beats), frames: a short tick each at the ruler's foot.
+  final List<int> beats;
 
   @override
   void paint(Canvas c, Size s) {
@@ -118,6 +126,10 @@ class WtRulerPainter extends CustomPainter {
     }
 
     final mj = tpMajor(view.ppf, fps), fn = tpFine(view.ppf, fps, mj), bottom = s.height - 1;
+    for (final f in beats) {
+      final x = view.x(f).roundToDouble();
+      if (x >= 0 && x <= s.width) c.drawRect(Rect.fromLTWH(x, bottom - 7, 2, 7), p..color = WsT.toneAudio);
+    }
     final flags = <(Rect, TextPainter)>[];
     for (final (f, name) in markers) {
       final x = view.x(f).roundToDouble();
@@ -168,7 +180,7 @@ class WtRulerPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(WtRulerPainter o) => o.view != view || o.fps != fps || o.workIn != workIn || o.workOut != workOut || o.markers != markers;
+  bool shouldRepaint(WtRulerPainter o) => o.view != view || o.fps != fps || o.workIn != workIn || o.workOut != workOut || o.markers != markers || !identical(o.beats, beats);
 }
 
 // ---------------------------------------------------------------- tracks
@@ -177,14 +189,6 @@ Color wtBand(int i, bool selected) => selected ? Grey.g20 : (i.isEven ? Grey.g10
 
 /// The bar's fill: the kind's hue, a step quieter when not selected; a hidden or soloed-out layer drops to grey.
 Color wtBarFill(WtRow r) => r.dim ? Grey.g26 : (r.selected ? wsTone(r.kind) : Color.lerp(wsTone(r.kind), Grey.g07, .22)!);
-
-/// The waveform's loudness at a frame: a kick every half second, a softer off-beat, a little grain.
-double wtWave(double f) {
-  final beat = (f % 15) / 15, off = ((f + 7.5) % 15) / 15;
-  final kick = math.exp(-beat * 5.5), snare = math.exp(-off * 7) * .45;
-  final grain = .5 + .5 * math.sin(f * 2.3) * math.sin(f * .71 + 1.3);
-  return (.12 + .7 * kick + snare + .18 * grain).clamp(.08, 1.0);
-}
 
 class WtTracksPainter extends CustomPainter {
   const WtTracksPainter({required this.rows, required this.view, required this.fps, required this.vscroll});
@@ -222,11 +226,11 @@ class WtTracksPainter extends CustomPainter {
     c.clipRRect(rr);
     c.drawRect(Rect.fromLTWH(x0, bar.top, 3, bar.height), p..color = grip);
     c.drawRect(Rect.fromLTWH(x1 - 3, bar.top, 3, bar.height), p..color = grip);
-    if (r.kind == WsKind.audio) _wave(c, bar, ink);
+    if (r.wave case final w?) _wave(c, bar, ink, fill, r.inF, w);
     final nameX = math.max(x0 + 8, 6.0);
     final t = _text(r.name, T.name(ink).copyWith(fontWeight: FontWeight.w700));
     if (nameX + 20 < x1) {
-      if (r.kind == WsKind.audio) c.drawRRect(RRect.fromLTRBR(nameX - 4, cy - 6.5, nameX + t.width + 4, cy + 6.5, const Radius.circular(3)), p..color = fill);
+      if (r.wave != null) c.drawRRect(RRect.fromLTRBR(nameX - 4, cy - 6.5, nameX + t.width + 4, cy + 6.5, const Radius.circular(3)), p..color = fill);
       c.save();
       c.clipRect(Rect.fromLTRB(nameX, bar.top, x1 - 6, bar.bottom));
       t.paint(c, Offset(nameX, cy - t.height / 2));
@@ -288,12 +292,18 @@ class WtTracksPainter extends CustomPainter {
     }
   }
 
-  void _wave(Canvas c, Rect bar, Color ink) {
-    final p = Paint()..color = Color.lerp(wtBarFill(rows.firstWhere((e) => e.kind == WsKind.audio)), ink, .7)!;
+  /// Its sound as the inside reads it: -60 dB to full across the bar's height, the loudest of each two points.
+  void _wave(Canvas c, Rect bar, Color ink, Color fill, int inF, List<double> db) {
+    final p = Paint()..color = Color.lerp(fill, ink, .7)!;
     final h = bar.height - 4, cy = bar.center.dy;
-    for (var x = bar.left + 4; x < bar.right - 4; x += 2) {
-      final a = wtWave(view.frameAt(x));
-      c.drawRect(Rect.fromCenter(center: Offset(x.roundToDouble(), cy), width: 1, height: (a * h).roundToDouble().clamp(1, h)), p);
+    for (var x = math.max(bar.left + 4, 0.0); x < bar.right - 4; x += 2) {
+      final a0 = view.frameAt(x).floor() - inF, a1 = view.frameAt(x + 2).ceil() - inF;
+      var loud = -100.0;
+      for (var k = math.max(a0, 0); k <= a1 && k < db.length; k++) {
+        if (db[k] > loud) loud = db[k];
+      }
+      final a = ((loud + 60) / 60).clamp(0.0, 1.0);
+      if (a > 0) c.drawRect(Rect.fromCenter(center: Offset(x.roundToDouble(), cy), width: 1, height: (a * h).roundToDouble().clamp(1, h)), p);
     }
   }
 

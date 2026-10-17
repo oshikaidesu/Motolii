@@ -416,6 +416,17 @@ class Motolii {
     });
   }
 
+  late final _loudnessOver = _lib.lookupFunction<Int32 Function(_P, Int32, Double, Double, Int32, Pointer<Float>), int Function(_P, int, double, double, int, Pointer<Float>)>('motolii_loudness_over');
+
+  /// How loud a film's sound is at [n] moments of the document from [from] to before [to], where its film shows them
+  /// (dB; -100 silent or not shown). null: its sound not read yet ([loudness] reads it); empty: no sound.
+  List<double>? loudnessOver(int thing, double from, double to, int n) {
+    final out = malloc<Float>(n < 1 ? 1 : n), got = _loudnessOver(_m, thing, from, to, n, out);
+    final all = got < 0 ? null : [for (var i = 0; i < got; i++) out[i].toDouble()];
+    malloc.free(out);
+    return all;
+  }
+
   /// Where a film's sound strikes (grows [rise] dB louder at once): the document's moments where it shows them, or
   /// [own] the film's own seconds. Asked once its loudness has been read ([loudness]).
   List<double> strikes(int thing, double rise, {bool own = false}) {

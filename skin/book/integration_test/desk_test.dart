@@ -2,6 +2,7 @@
 // used the way a hand would: what it says it does is checked in the document, not on the screen alone.
 //   flutter drive --profile -d macos --driver=test_driver/integration_test.dart --target=integration_test/desk_test.dart
 import 'dart:io';
+import 'dart:math' as math;
 import 'dart:ui' show ImageByteFormat;
 
 import 'package:flutter/gestures.dart' show PointerDeviceKind;
@@ -359,25 +360,28 @@ void main() {
     report.add('Color: circle fill $filled (want ff3366), edge ${m.word(b, 'stroke')} (want ff3366)');
     expect(filled, 'ff3366');
     expect(m.word(b, 'stroke'), 'ff3366');
-    // Audio: a film of clicks every half second for 4 s, from the document's start: Marks puts a beat at each; asked
-    // again, the beats it put before are not put twice.
+    // Sound: a film of clicks every half second for 4 s, from the document's start: its bar shows its loudness (the clicks
+    // loud, between them silent); its Beats (the inspector's Sound card) put where it strikes on the ruler.
     final clicks = m.add('film', '$motoliiDir/check/beats.mp4');
-    m.set(clicks, 'start', 0);
+    m
+      ..set(clicks, 'start', 0)
+      ..set(clicks, 'beats', 9);
     ws
       ..reread()
       ..select('$clicks');
-    await open('Audio');
-    await wait(1000);   // (its sound read on another isolate)
     await t.pump();
-    await t.tap(find.byKey(const ValueKey('audio.marks')));
+    await wait(1200);   // (its sound read on another isolate)
     await t.pump();
     await wait(100);
-    await t.tap(find.byKey(const ValueKey('audio.marks')));
     await t.pump();
-    await wait(100);
-    await shoot('Audio');
-    final beats = [for (final (at, name) in m.marks) if (name == 'beat') at];
-    report.add('Audio: beats ${beats.map((b) => b.toStringAsFixed(2)).join(' ')} (want 0.00 0.50 ... 3.50, 8 of them)');
+    await shoot('Sound');
+    final wave = m.loudnessOver(clicks, 0, 1, 60) ?? const <double>[];
+    final beats = m.strikes(clicks, m.value(clicks, 'beats', 0) ?? 0);
+    final card = find.text('Beats').evaluate().isNotEmpty;
+    report.add('Sound: the inspector shows Beats: $card; bar loudest ${wave.reduce(math.max).toStringAsFixed(1)} dB, quietest ${wave.reduce(math.min).toStringAsFixed(1)} dB in the first second; beats ${beats.map((b) => b.toStringAsFixed(2)).join(' ')} (want 0.00 0.50 ... 3.50)');
+    expect(card, true);
+    expect(wave.reduce(math.max), greaterThan(-20));
+    expect(wave.reduce(math.min), lessThan(-60));
     expect(beats.length, 8);
     for (final (k, b) in beats.indexed) {
       expect(b, closeTo(k * .5, .03));
@@ -385,6 +389,6 @@ void main() {
     File('${out.path}/report.txt').writeAsStringSync(report.join('\n'));
     expect(made, 2);
     expect(named.first, 'Drop');
-    expect(ws.marks.where((m) => m.$2 != 'beat').length, 1);
+    expect(ws.marks.length, 1);
   });
 }

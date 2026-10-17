@@ -5,7 +5,6 @@ import 'package:flutter/widgets.dart';
 import '../sets/inspector/inspector_parts.dart' show Hov, Pop;
 import '../tokens.dart';
 import 'desk_align.dart';
-import 'desk_audio.dart';
 import 'desk_blend.dart';
 import 'desk_color.dart';
 import 'desk_links.dart';
@@ -28,7 +27,6 @@ const deskTools = [
   DeskTool('Align', Pop.toneLayout, 'Selection', build: DeskAlign.new),
   DeskTool('Path', Pop.tonePath, 'Motion path', build: DeskPath.new),
   DeskTool('Color', Pop.toneSolid, 'Swatches', build: DeskColor.new),
-  DeskTool('Audio', WsT.toneAudio, 'Beat markers', build: DeskAudio.new),
   DeskTool('Notes', Pop.toneText, 'Comments', build: DeskNotes.new),
   DeskTool('Links', Pop.toneLink, 'Relations', build: DeskLinks.new),
 ];

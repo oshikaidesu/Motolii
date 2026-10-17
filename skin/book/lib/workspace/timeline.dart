@@ -352,6 +352,39 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
 
   // ---------------------------------------------------------------- build
 
+  // The films' beats (their Beats value, the inside's strikes), asked again only when the document changes.
+  (int, List<int>)? _beats;
+  List<int> _beatsOf(Ws ws) {
+    final m = ws.inside;
+    if (m == null) return const [];
+    if (_beats case (final r, final b) when r == ws.reads) return b;
+    final all = <int>[];
+    for (final l in ws.layers) {
+      final t = int.tryParse(l.id), rise = t == null ? 0.0 : m.value(t, 'beats', 0) ?? 0;
+      if (rise > 0 && _waveOf(ws, l) != null) all.addAll([for (final at in m.strikes(t!, rise)) (at * Ws.fps).round()]);   // (only once its sound is read)
+    }
+    _beats = (ws.reads, all);
+    return all;
+  }
+
+  // A film's sound on its bar: read once on another isolate (the inside keeps it), then laid on the document's frames
+  // where the film shows them, asked again only when the document changes.
+  final _waves = <String, (int, int, int, List<double>?)>{};   // (thing: document read, from, to, loudness a frame)
+  final _asked = <String>{};
+  List<double>? _waveOf(Ws ws, WsLayer l) {
+    final m = ws.inside, t = int.tryParse(l.id);
+    if (m == null || t == null || m.word(t, 'kind') != 'film') return null;
+    if (_waves[l.id] case (final r, final a, final b, final w) when r == ws.reads && a == l.inF && b == l.outF) return w;
+    final w = m.loudnessOver(t, l.inF / Ws.fps, l.outF / Ws.fps, l.outF - l.inF);
+    if (w == null) {
+      if (_asked.add(l.id)) m.loudness(t).then((_) => mounted ? setState(() => (_waves.remove(l.id), _beats = null)) : null);
+      return null;
+    }
+    _waves[l.id] = (ws.reads, l.inF, l.outF, w.isEmpty ? null : w);
+    _beats = null;   // (its sound now read: the beats asked again)
+    return _waves[l.id]!.$4;
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_workDrag == null) {   // (the document's work area)
@@ -361,7 +394,7 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
     }
     final ws = WsScope.of(context);
     final sel = ws.selected, picks = ws.keys;
-    final rows = [
+    final rows = <WtRow>[
       for (final l in ws.layers)
         WtRow(
           name: l.name,
@@ -376,6 +409,7 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
           selected: l.id == sel,
           dim: _isHidden(ws, l.id) || (_anySolo(ws) && !_isSolo(ws, l.id)),
           locked: _isLocked(ws, l.id),
+          wave: _waveOf(ws, l),
         ),
     ];
     return Focus(
@@ -484,7 +518,7 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
                 child: SizedBox(
                   height: WtM.ruler,
                   child: CustomPaint(
-                    painter: WtRulerPainter(view: v, fps: Ws.fps, workIn: _workIn, workOut: _workOut, markers: _marksOf(_ws!)),
+                    painter: WtRulerPainter(view: v, fps: Ws.fps, workIn: _workIn, workOut: _workOut, markers: _marksOf(_ws!), beats: _beatsOf(ws)),
                   ),
                 ),
               ),

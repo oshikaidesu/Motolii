@@ -489,25 +489,47 @@ int motolii_work(Motolii* m, double from, double to) { return by_hand(m, [=] { r
 int motolii_work_of(Motolii* m, double* from, double* to) { return by_look(m, [=] { return doc_work(*m->d, from, to), 1; }); }
 // A film's sound: how loud it is, 100 times a second of its own (read once a file, as fast as it decodes), and the
 // moments of the document it strikes (grows `rise` dB louder at once), where its film shows them.
-static const std::vector<float>& loudness_of(const std::string& file) {
+static const std::vector<float>* loudness_of(const std::string& file, bool read_it = true) {   // (not read_it: only if read already)
     static std::map<std::string, std::vector<float>> read;
     static std::mutex one;
     std::lock_guard<std::mutex> hold(one);
     auto found = read.find(file);
-    if (found == read.end()) found = read.emplace(file, sound_loudness(file.c_str(), 100.0)).first;
-    return found->second;
+    if (found == read.end()) {
+        if (!read_it) return nullptr;
+        found = read.emplace(file, sound_loudness(file.c_str(), 100.0)).first;
+    }
+    return &found->second;
 }
 int motolii_loudness(Motolii* m, int thing, float* db, int room) {
     const std::string file = by_look(m, [=] { return doc_knows(doc(m), thing) && doc_word(*m->d, thing, "kind") == "film" ? doc_word(*m->d, thing, "file") : std::string(); });
     if (file.empty()) return 0;
-    const std::vector<float>& all = loudness_of(file);
+    const std::vector<float>& all = *loudness_of(file);
     for (int i = 0; i < room && i < (int)all.size(); ++i) db[i] = all[(size_t)i];
     return (int)all.size();
+}
+// How loud a film's sound is at n moments of the document from `from` to before `to`, where its film shows them (dB;
+// -100 where it is silent or not shown). -1: its sound is not read yet (motolii_loudness reads it), 0: no sound.
+int motolii_loudness_over(Motolii* m, int thing, double from, double to, int n, float* db) {
+    const std::string file = by_look(m, [=] { return doc_knows(doc(m), thing) && doc_word(*m->d, thing, "kind") == "film" ? doc_word(*m->d, thing, "file") : std::string(); });
+    if (file.empty()) return 0;
+    const std::vector<float>* all = loudness_of(file, false);
+    if (!all) return -1;
+    if (all->empty()) return 0;
+    return by_look(m, [&] {   // (the document's moment to the film's own: from its start, from where it begins, at its speed)
+        Doc& d = *m->d;
+        const double start = doc_number(d, thing, "start", 0, 0), begin = doc_number(d, thing, "begin", 0, 0), speed = doc_number(d, thing, "speed", 0, 1), lasts = doc_number(d, thing, "duration", 0, -1);
+        for (int i = 0; i < n; ++i) {
+            const double s = from + (to - from) * i / n, own = begin + (s - start) * speed;
+            const long k = std::lround(own * 100.0);
+            db[i] = s < start || (lasts > 0.0 && s >= start + lasts) || k < 0 || k >= (long)all->size() ? -100.f : (*all)[(size_t)k];
+        }
+        return n;
+    });
 }
 int motolii_strikes(Motolii* m, int thing, double rise, int own, double* at, int room) {
     const std::string file = by_look(m, [=] { return doc_knows(doc(m), thing) && doc_word(*m->d, thing, "kind") == "film" ? doc_word(*m->d, thing, "file") : std::string(); });
     if (file.empty()) return 0;
-    const std::vector<double> struck = sound_strikes(loudness_of(file), 100.0, rise);
+    const std::vector<double> struck = sound_strikes(*loudness_of(file), 100.0, rise);
     if (own) {   // (in the film's own seconds, as its loudness is counted)
         for (int i = 0; i < room && i < (int)struck.size(); ++i) at[i] = struck[(size_t)i];
         return (int)struck.size();

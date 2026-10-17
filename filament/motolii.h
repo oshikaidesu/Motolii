@@ -32,7 +32,8 @@ int motolii_mark(Motolii* m, double at, const char* word);
    holds; 0: no sound, or not a film); and the moments of the document where it strikes (grows `rise` dB louder within
    30 ms), as many as there are, where its film shows them. Read once a file, as fast as it decodes. */
 int motolii_loudness(Motolii* m, int thing, float* db, int room);
-int motolii_strikes(Motolii* m, int thing, double rise, int own, double* at, int room);   /* own: in the film's own seconds instead */
+int motolii_strikes(Motolii* m, int thing, double rise, int own, double* at, int room);
+int motolii_loudness_over(Motolii* m, int thing, double from, double to, int n, float* db);   /* loudness at n moments of the document, where the film shows them (-100: silent or not shown); -1: not read yet, 0: no sound */   /* own: in the film's own seconds instead */
 const char* motolii_marks(Motolii* m);
 /* The guides: lines across the picture, x upright and y level, at so many points from its left or top; a change is a
    step. motolii_guides: a line each, "x 150" (until the next call). */

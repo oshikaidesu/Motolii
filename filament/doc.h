@@ -160,6 +160,7 @@ static const DocValue doc_values[] = {
     {"points", "shape", 3, 100, false, nullptr}, {"inner", "shape", 0.01, 1, false, nullptr}, {"round", "shape", 0, 0.5, true, nullptr},   // (a polygon's or star's points, a star's inner points, its corners rounded)
     {"start", doc_kinds, 0, 1e6, false, nullptr}, {"duration", doc_kinds, 1e-3, 1e6, false, nullptr},
     {"begin", "film", 0, 1e6, false, nullptr}, {"speed", "film solid", -100, 100, false, nullptr}, {"keyed", "film", 0, 1, false, nullptr},
+    {"beats", "film", 0, 60, false, nullptr},   // (where its sound strikes: louder by so many dB at once; 0, none shown)
     {"blend", "film picture text shape", 0, 0, false, "normal add multiply screen darken lighten overlay soft_light hard_light color_dodge color_burn difference exclusion hue saturation color luminosity linear_burn linear_light vivid_light pin_light darker_color lighter_color subtract divide"}, {"file", "film picture solid text", 0, 0, false, ""}, {"shape", "solid", 0, 0, false, doc_shapes},
     {"text", "text", 0, 0, false, ""}, {"fill", "text solid shape light", 0, 0, false, ""},
     {"marker", "picture", 0, 0, false, ""},   // (an After Effects file: which of its named stretches it plays, over and over; all: the whole of it)
@@ -424,6 +425,7 @@ static const DocShown doc_shown[] = {
     {"marker", "", "", "Part", 0, 0, nullptr},
     {"animation", "", "", "Movement", 0, 0, nullptr},
     {"speed", "", "×", "Speed", -4, 4, nullptr},
+    {"beats", "", "dB", "Beats", 0, 30, nullptr},
     {"clip_matte", "", "", "Cut by", 0, 0, nullptr},
     {"clip_invert", "onoff", "", "Invert", 0, 1, nullptr},
     {"clip_feather", "", "px", "Feather", 0, 100, nullptr},
@@ -575,6 +577,7 @@ static const DocCard doc_cards[] = {
     {"Scatter", "scatter_x scatter_y scatter_z scatter_rotate scatter_size seed drift_x drift_y"},
     {"Shine", "emissive", "kind", "!solid"},   // (a flat thing lit from within: past 1, the stage's bloom takes it up where it lies in the stage's own view; laid over a solid thing, a picture of its own is clear round it and keeps no halo: ThorVG's glow does that)
     {"Play", "marker animation speed"},
+    {"Sound", "beats", "kind", "film"},   // (its beats: shown on the timeline's ruler where it strikes)
     {"Matte", "clip_matte clip_invert clip_feather", "clip", "1"},
     {"Connect", "connect connect_to connect_reach"},
     {"Line", "cap join dash dash_offset"},
