@@ -8,8 +8,6 @@ import 'desk_align.dart';
 import 'desk_audio.dart';
 import 'desk_blend.dart';
 import 'desk_color.dart';
-import 'desk_depth.dart';
-import 'desk_ease.dart';
 import 'desk_markers.dart';
 import 'desk_links.dart';
 import 'desk_notes.dart';
@@ -28,8 +26,6 @@ class DeskTool {
 }
 
 const deskTools = [
-  DeskTool('Ease', Pop.toneTime, 'Picked keys', build: DeskEase.new),
-  DeskTool('Depth', WsT.toneCamera, 'Camera', build: DeskDepth.new),
   DeskTool('Blend', Pop.toneBlend, 'Layer stack', build: DeskBlend.new),
   DeskTool('Align', Pop.toneLayout, 'Selection', build: DeskAlign.new),
   DeskTool('Sequence', Pop.tonePlace, 'Layers in time', build: DeskSequence.new),

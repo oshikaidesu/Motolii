@@ -284,14 +284,21 @@ class Ws extends ChangeNotifier {
   List<DeskTool> tools = deskTools;
   void openDesk(String? name) {
     deskManual = name;
+    front('Desk');
+  }
+
+  /// A pane brought to the front of its tabs (the panes follow: panes.dart).
+  void front(String pane) {
+    fronted = (pane, (fronted?.$2 ?? 0) + 1);
     notifyListeners();
   }
+  (String, int)? fronted;
 
   /// The desk follows the selection (Motolii panels/desk.dart): keys picked -> Ease, a camera -> Depth, else Tools.
   String get desk => deskManual ?? deskAuto;
 
   /// What the selection alone would put on the desk: keys picked, Ease; a camera, Depth; else the Tools catalog.
-  String get deskAuto => _keys.isNotEmpty ? 'Ease' : (layer?.kind == WsKind.camera ? 'Depth' : 'Tools');
+  String get deskAuto => 'Tools';   // (Ease and Camera are panes of their own now)
 
   /// Joined: the value of the picked thing (or of the stage, with nothing picked) a colour picked on the Colors shelf is
   /// said to, when a card's colour link aimed it there; null: the fill.
@@ -300,8 +307,6 @@ class Ws extends ChangeNotifier {
   /// A panel link elsewhere asked for a panel (fonts, colours, ease): the dock or desk shows it.
   void route(String to) {
     switch (to) {
-      case 'Ease':
-        deskManual = 'Ease';
       case final s when s.startsWith('Browser'):
         _shelf = s.split('›').last.trim();
     }

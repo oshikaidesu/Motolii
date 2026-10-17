@@ -12,6 +12,8 @@ import 'package:lab_book/sets/inspector/inspector_parts_insp_host.dart';
 
 import '../sets/inspector/inspector_parts.dart';
 import 'desk.dart';
+import 'desk_depth.dart';
+import 'desk_ease.dart';
 import 'dock.dart';
 import 'dock_glyphs.dart';
 import 'panes.dart';
@@ -237,13 +239,15 @@ final _panes = [
   WsPane('Stage', DockG.stage, () => const WsStage(), minSize: 320),
   WsPane('Inspector', DockG.inspector, () => const _InspectorSeat(), minSize: 200),
   WsPane('Timeline', DockG.timeline, () => const WsTimeline(), minSize: 160),
+  WsPane('Ease', DockG.time, () => const DeskEase(), minSize: 260),
+  WsPane('Camera', DockG.camera, () => const DeskDepth(), minSize: WsT.lower),
   WsPane('Desk', DockG.desk, () => const WsDesk(), minSize: WsT.lower),
 ];
 
 /// A pane's tab strip, added on top of the reference heights so the seats keep theirs.
 const _strip = 22.0;
 
-/// The reference arrangement: the browser shelves (one strip of tabs) | Stage over Timeline on the left, Inspector over Desk on the right.
+/// The reference arrangement: the browser shelves (one strip of tabs) | Stage over Timeline and Ease on the left, Inspector over Camera on the right.
 /// Side and lower panes start at their reference sizes in px and the panes without one share what is left.
 /// contract: give the filling panes no weight; `multi_split_view` turns sizes into weights and would scale them against any weight given.
 DockingArea _preset(DockingItem Function(String name, {double? size, double? weight}) item, List<WsPane> extra) => DockingRow([
@@ -252,9 +256,9 @@ DockingArea _preset(DockingItem Function(String name, {double? size, double? wei
       DockingTabs([for (final (name, _, _) in dockShelves) item(name)], size: WsT.dock),
       item('Stage'),
     ]),
-    item('Timeline', size: WsT.lower + _strip),
+    DockingRow([item('Timeline'), item('Ease', size: WsT.inspector)], size: WsT.lower + _strip),   // (the stretch between two keys, beside the keys)
   ]),
-  DockingColumn([extra.isEmpty ? item('Inspector') : DockingTabs([item('Inspector'), for (final p in extra) item(p.name)]), item('Desk', size: WsT.lower + _strip)], size: WsT.inspector, minimalSize: 340),
+  DockingColumn([extra.isEmpty ? item('Inspector') : DockingTabs([item('Inspector'), for (final p in extra) item(p.name)]), DockingTabs([item('Camera'), item('Desk')], size: WsT.lower + _strip)], size: WsT.inspector, minimalSize: 340),   // (the camera, whatever is picked)
 ]);
 
 /// Joined: the document's word for what a thing is, where the inspector's kinds have none (film, picture, solid).

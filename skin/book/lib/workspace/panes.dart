@@ -54,10 +54,19 @@ class _WsPanesState extends State<WsPanes> {
     super.dispose();
   }
 
+  (String, int)? _fronted;
   void _follow() {
+    if (_ws!.fronted case final f? when f != _fronted) {   // (a pane asked to the front)
+      _fronted = f;
+      _toFront(f.$1);
+    }
     final s = _ws!.shelf;
     if (s == _shelf) return;
     _shelf = s;
+    _toFront(s);
+  }
+
+  void _toFront(String s) {
     final tabs = _layout.findDockingTabsWithItem(s);
     if (tabs == null) return;
     final i = [for (var k = 0; k < tabs.childrenCount; k++) tabs.childAt(k).id].indexOf(s);
