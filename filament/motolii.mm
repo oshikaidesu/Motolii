@@ -162,7 +162,7 @@ static void motolii_hand(Motolii* m, std::string document, int wide, int high, s
         }
         if (todo.empty() && m->live && !m->playing && !m->changed) {
             std::lock_guard<std::recursive_mutex> holding(m->d->lock);
-            if (doc_files_moved(*m->d)) m->changed = true;
+            if (doc_files_moved(*m->d)) m->changed = true, m->d->posed.clear(), m->d->posedMany = 0;   // (and where things were kept is forgotten: their shapes may differ)
         }   // (a shader or a script saved: drawn again)
         {
             std::lock_guard<std::recursive_mutex> holding(m->d->lock);
@@ -198,7 +198,7 @@ static void motolii_hand(Motolii* m, std::string document, int wide, int high, s
             std::lock_guard<std::recursive_mutex> holding(m->d->lock);
             m->telling = true;
             m->s->later = &films;
-            time_is(*m->s, m->now);
+            time_is(*m->s, m->playing ? std::round(m->now * RATE) / RATE : (double)m->now);   // (playing: at its frame, as a written film is; where things were at a frame is kept, doc_posed)
             m->s->later = nullptr;
             if (m->s->desk.w) {   // (the marks on the desk: where the picked thing and the one under the hand are now, as drawn)
                 auto& k = m->s->desk;
