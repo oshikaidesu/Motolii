@@ -55,6 +55,7 @@ void main() {
       await t.pump(const Duration(milliseconds: 100));
       final spans = [for (final f in timings.skip(from)) f.totalSpan.inMicroseconds / 1000.0]..sort();
       final over = spans.where((s) => s > 1000 / 60).length;
+      debugPrint('FRAMES $what: the late ones at ${[for (final (i, f) in timings.skip(from).indexed) if (f.totalSpan.inMicroseconds > 1000000 / 60) '#$i ${(f.totalSpan.inMicroseconds / 1000).toStringAsFixed(0)} ms (build ${(f.buildDuration.inMicroseconds / 1000).toStringAsFixed(0)}, waited ${((f.timestampInMicroseconds(FramePhase.buildStart) - f.timestampInMicroseconds(FramePhase.vsyncStart)) / 1000).toStringAsFixed(0)})'].join(', ')}');
       late += over;
       report.add('$what: ${spans.length} pictures, late $over, median ${spans.isEmpty ? 0 : spans[spans.length ~/ 2].toStringAsFixed(2)} ms, '
           '99th ${spans.isEmpty ? 0 : spans[(spans.length * 0.99).floor().clamp(0, spans.length - 1)].toStringAsFixed(2)} ms, most ${spans.isEmpty ? 0 : spans.last.toStringAsFixed(2)} ms');
@@ -86,9 +87,7 @@ void main() {
     final g = await t.startGesture(t.getCenter(knob));
     Future<void> traced(String what, Future<void> Function(int) step) async { // (TRACE: Flutter's own timeline of it, kept in /tmp)
       if (!const bool.fromEnvironment('TRACE')) return phase(what, step);
-      debugProfileBuildsEnabled = true;
       await binding.traceAction(() => phase(what, step), reportKey: 'timeline', streams: const ['Dart', 'Embedder', 'GC']);
-      debugProfileBuildsEnabled = false;
       File('/tmp/motolii_${what.replaceAll(' ', '_')}_timeline.json').writeAsStringSync(jsonEncode(binding.reportData!['timeline']));
     }
 
