@@ -131,9 +131,19 @@ static int posted(Motolii* m, const std::string& kind, std::function<void()> doe
     m->asked_now.notify_one();
     return 1;
 }
+// A read the window asks for its copy (motolii_dont_wait): if the hand holds the document longer than a millisecond, not
+// waited for: refused (motolii_refused says so), and the window shows what it read before, asking again a picture later.
+static thread_local bool dont_wait = false, refused = false;
 template <class Does> static auto by_look(Motolii* m, Does does, const char* who = __builtin_FUNCTION()) -> decltype(does()) {
     const auto asked = std::chrono::steady_clock::now();
-    std::lock_guard<std::recursive_mutex> hold(m->d->lock);
+    std::unique_lock<std::recursive_timed_mutex> hold(m->d->lock, std::defer_lock);
+    if (dont_wait) {
+        if (!hold.try_lock_for(std::chrono::milliseconds(1))) {
+            refused = true;
+            if constexpr (std::is_pointer_v<decltype(does())>) return (decltype(does()))"";
+            else return decltype(does()){};
+        }
+    } else hold.lock();
     const auto t0 = std::chrono::steady_clock::now();
     const double waited = std::chrono::duration<double>(t0 - asked).count();   // (a read waits while the hand holds the document: telling a moment, making a change)
     m->read_waited += waited, m->read_waited_most = std::max(m->read_waited_most, waited), m->read_waits += waited > 0.002;
@@ -176,11 +186,11 @@ static void motolii_hand(Motolii* m, std::string document, int wide, int high, s
             todo.swap(m->asked);
         }
         if (todo.empty() && m->live && !m->playing && !m->changed) {
-            std::lock_guard<std::recursive_mutex> holding(m->d->lock);
+            std::lock_guard<std::recursive_timed_mutex> holding(m->d->lock);
             if (doc_files_moved(*m->d)) m->changed = true;
         }   // (a shader or a script saved: drawn again)
         {
-            std::lock_guard<std::recursive_mutex> holding(m->d->lock);
+            std::lock_guard<std::recursive_timed_mutex> holding(m->d->lock);
             const long rows = sqlite3_total_changes(m->d->file);
             const auto held = m->d->held.tried;
             for (auto& does : todo) does();
@@ -199,7 +209,7 @@ static void motolii_hand(Motolii* m, std::string document, int wide, int high, s
         if (!todo.empty()) due = std::min(std::max(due, t + std::chrono::milliseconds(3)), drawn + std::chrono::milliseconds(33));
         if (!m->live || t < due || !(m->playing || m->changed) || !ready) { last = m->playing || !ready ? last : t; continue; }   // (not ready: no other picture is begun till it is)
         if (m->playing) {   // (time goes on by the clock, and round again at the document's end)
-            std::lock_guard<std::recursive_mutex> holding(m->d->lock);
+            std::lock_guard<std::recursive_timed_mutex> holding(m->d->lock);
             const double runs = doc_seconds(*m->d), on = m->now + std::chrono::duration<double>(t - last).count();
             double from = 0.0, to = runs;
             doc_work(*m->d, &from, &to);   // (round and round within the work area)
@@ -211,7 +221,7 @@ static void motolii_hand(Motolii* m, std::string document, int wide, int high, s
         std::vector<std::function<void()>> films;   // (what the moment asks of the films: done once the document is let go)
         std::map<const void*, Stage::Sound> sounds;
         {
-            std::lock_guard<std::recursive_mutex> holding(m->d->lock);
+            std::lock_guard<std::recursive_timed_mutex> holding(m->d->lock);
             m->telling = true;
             m->s->later = &films;
             time_is(*m->s, m->now);
@@ -807,6 +817,8 @@ int motolii_still(Motolii* m, const char* png) {
 int motolii_rate(Motolii*) { return RATE; }
 long motolii_revision(Motolii* m) { return m->revision.load(std::memory_order_acquire); }   // (no lock taken: a window keeps its copy while this stays)
 long motolii_carried(Motolii* m) { return m->carried.load(std::memory_order_acquire); }
+void motolii_dont_wait(Motolii*, int on) { dont_wait = on != 0, refused = false; }   // (this thread's reads, from now: refused rather than waited for)
+int motolii_refused(Motolii*) { const int was = refused; refused = false; return was; }   // (whether a read since was refused)
 int motolii_sequence(Motolii* m, double overlap) { return by_hand(m, [=] { return changes(m, (int)doc_sequence(doc(m), overlap, RATE)); }); }
 int motolii_write(Motolii* m, const char* mp4) {
     return by_hand(m, [m, mp4] {
@@ -821,7 +833,7 @@ int motolii_write(Motolii* m, const char* mp4) {
         //  the document is read then, not changed, and the picture being written is told its moment again after)
         m->d->lock.unlock();   // (held by the hand that asked this: let go while each picture is drawn, as when it is live)
         const int ok = told(m, film(*m->s, mp4, pictures, [m, pictures, from](float done) {
-            std::lock_guard<std::recursive_mutex> holding(m->d->lock);
+            std::lock_guard<std::recursive_timed_mutex> holding(m->d->lock);
             std::deque<std::function<void()>> todo;
             { std::lock_guard<std::mutex> hold(m->asked_lock); todo.swap(m->asked); }
             for (auto& does : todo) does();

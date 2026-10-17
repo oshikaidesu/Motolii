@@ -527,32 +527,52 @@ class Motolii {
   /// without waiting for the inside (motolii_revision). A read the copy holds is never asked again.
   late final _revision = _lib.lookupFunction<Int64 Function(_P), int Function(_P)>('motolii_revision', isLeaf: true);
   late final _carried = _lib.lookupFunction<Int64 Function(_P), int Function(_P)>('motolii_carried', isLeaf: true);
-  final _copy = <Object, Object?>{}, _copyCarried = <Object, Object?>{};
+  final _copy = <Object, Object?>{}, _copyCarried = <Object, Object?>{}, _was = <Object, Object?>{}, _wasCarried = <Object, Object?>{};
   int _copyAt = -1, _carriedAt = -1;
   T _kept<T>(Object key, T Function() ask) {
     final r = _revision(_m);
     if (r != _copyAt) {
+      _was.addAll(_copy);   // (what was read before: shown while the hand is too busy to be asked)
       _copy.clear();
+      _wasCarried.addAll(_copyCarried);
       _copyCarried.clear();
       _copyAt = r;
     }
-    return _copy.putIfAbsent(key, ask) as T;
+    if (_copy.containsKey(key)) return _copy[key] as T;
+    return _asked(key, _copy, _was, ask);
   }
 
   /// And what a hand's carrying changes too (a value that takes no keys, how long a thing lasts): kept while neither moves.
   T _keptCarried<T>(Object key, T Function() ask) {
-    final r = _revision(_m), c = _carried(_m);
-    if (r != _copyAt) {
-      _copy.clear();
-      _copyCarried.clear();
-      _copyAt = r;
-    }
+    _kept('', () => null);   // (the document's revision looked at first)
+    final c = _carried(_m);
     if (c != _carriedAt) {
+      _wasCarried.addAll(_copyCarried);
       _copyCarried.clear();
       _carriedAt = c;
     }
-    return _copyCarried.putIfAbsent(key, ask) as T;
+    if (_copyCarried.containsKey(key)) return _copyCarried[key] as T;
+    return _asked(key, _copyCarried, _wasCarried, ask);
   }
+
+  // Asked without waiting (motolii_dont_wait): the hand busy with the document, what was read before is shown and it is
+  // asked again a picture later ([again]); never read before, waited for, once.
+  late final _dontWait = _lib.lookupFunction<Void Function(_P, Int32), void Function(_P, int)>('motolii_dont_wait', isLeaf: true);
+  late final _refused = _lib.lookupFunction<Int32 Function(_P), int Function(_P)>('motolii_refused', isLeaf: true);
+  T _asked<T>(Object key, Map<Object, Object?> into, Map<Object, Object?> was, T Function() ask) {
+    _dontWait(_m, 1);
+    final v = ask();
+    _dontWait(_m, 0);
+    if (_refused(_m) == 0) return into[key] = v;
+    if (was.containsKey(key)) {
+      again?.call();
+      return was[key] as T;
+    }
+    return into[key] = ask();
+  }
+
+  /// What the window does when a read was put off (the hand busy): ask again a picture later.
+  void Function()? again;
 
   /// A film's first picture, small, as a .png file (null: none could be made). Made once and on another isolate: the
   /// window does not wait.

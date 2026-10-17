@@ -50,7 +50,7 @@
 #include <sqlite3.h>
 
 struct Doc {
-    std::recursive_mutex lock;   // held by whoever reads or changes it: a shell's reads need not wait for a picture being drawn (motolii.mm)
+    std::recursive_timed_mutex lock;   // held by whoever reads or changes it: a shell's reads need not wait for a picture being drawn (motolii.mm)
     sqlite3* file = nullptr;
     Stage* stage = nullptr;
     std::string trouble;   // why the last call that was not done was not
@@ -435,6 +435,7 @@ static const DocShown doc_shown[] = {
     {"rotate", "angle", "°", "Rotation", -180, 180, nullptr}, {"rotate_x", "angle", "°", "X Rotation", -180, 180, nullptr}, {"rotate_y", "angle", "°", "Y Rotation", -180, 180, nullptr},
     {"opacity", "share", "%", "Opacity", 0, 1, nullptr},
     {"blend", "", "", "Blend", 0, 0, nullptr}, {"clip", "onoff", "", "Clip to below", 0, 1, nullptr},
+    {"orient", "onoff", "", "Auto-orient", 0, 1, nullptr}, {"note", "words", "", "Note", 0, 0, nullptr},
     {"distance", "", "px", "Distance", 0.05, 4, nullptr}, {"zoom", "share", "%", "Zoom", 0.1, 4, nullptr},
     {"anchor_x", "", "%", "Anchor X", -1, 1, "Anchor"}, {"anchor_y", "", "%", "Anchor Y", -1, 1, "Anchor"}, {"anchor_z", "", "%", "Anchor Z", -1, 1, "Anchor"},
     {"parent", "thing", "", "Parent", 0, 0, nullptr},   // (the thing it goes with: shown by its name)
@@ -576,6 +577,7 @@ static const DocCard doc_cards[] = {
     {"Field", "field_x field_y field_z field_radius field_band field_size field_rotate field_push"},
     {"Scatter", "scatter_x scatter_y scatter_z scatter_rotate scatter_size seed drift_x drift_y"},
     {"Shine", "emissive", "kind", "!solid"},   // (a flat thing lit from within: past 1, the stage's bloom takes it up where it lies in the stage's own view; laid over a solid thing, a picture of its own is clear round it and keeps no halo: ThorVG's glow does that)
+    {"Motion", "orient", "kind", "!camera"},   // (how it goes along its way: turned the way it is going, After Effects' Auto-Orient)
     {"Play", "marker animation speed"},
     {"Sound", "beats", "kind", "film"},   // (its beats: shown on the timeline's ruler where it strikes)
     {"Matte", "clip_matte clip_invert clip_feather", "clip", "1"},
@@ -592,6 +594,7 @@ static const DocCard doc_cards[] = {
     {"Lens", "bloom ambient_occlusion reflections lens_flare vignette vignette_color fog fog_color anti_aliasing"},
     {"Room", "room environment environment_rotate behind background"},
     {"Physics", "physics bounce friction gravity"},
+    {"Note", "note"},   // (what a maker wrote of it: After Effects' layer comment)
     {"Trim Paths", "trim trim_begin trim_offset", "trim", "+"},   // (After Effects' shape operator: added from the shelf)
     {"Gaussian Blur", "blur blur_direction", "blur", "+"},   // (the effects (doc_effects), each its card while it is on, as After Effects' Effect Controls)
     {"Drop Shadow", "shadow shadow_distance shadow_angle shadow_blur shadow_opacity", "shadow", "+"},
@@ -1162,7 +1165,7 @@ static void doc_look(Doc& d) {
         room->setRotation(math::mat3f::rotation((float)(doc_number(d, 0, "environment_rotate", 0, 0) * (double)TAU / 360.0), math::float3{0, 1, 0}));
     }
     screen_effects(s, d.screen, doc_word(d, 0, "script"), [&d](const std::string& file, const std::string& name, double usual) {
-        std::lock_guard<std::recursive_mutex> hold(d.lock);   // (asked while the picture is drawn, when the hand does not hold it)
+        std::lock_guard<std::recursive_timed_mutex> hold(d.lock);   // (asked while the picture is drawn, when the hand does not hold it)
         // (a mouse's knob, where the followed thing is on the picture: pointer as the web says it, -1 to 1 and up; the
         //  others from the top left, 0 to 1, as the effects' own uv)
         static const char* const mice[] = {"pointer", "center", "mouse", "point"};

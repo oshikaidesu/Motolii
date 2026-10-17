@@ -167,6 +167,8 @@ int motolii_write(Motolii* m, const char* mp4);                    /* the whole 
 int motolii_rate(Motolii* m);                                      /* how many pictures a second that film has (a shell that counts in frames counts in these) */
 long motolii_revision(Motolii* m);   /* how many times the document (or what a hand carries) has changed, read without waiting: a shell keeps its copy of what it read while this stays the same */
 long motolii_carried(Motolii* m);   /* how many times what a hand carries has changed (its values shown while it is on them), read without waiting */
+void motolii_dont_wait(Motolii* m, int on);   /* this thread's reads from now on are refused rather than waited for, if the hand holds the document longer than a millisecond */
+int motolii_refused(Motolii* m);   /* whether a read since was refused (and forgets it) */
 int motolii_sequence(Motolii* m, double overlap);   /* Sequence Layers: the things that have a length and stand on their own, from the front, one after another (less `overlap` seconds), on frames, keys moved with them; one step */
 const char* motolii_list(Motolii* m);                              /* every fact of the document, a line each (until the next call) */
 /* The stage's picture as it is drawn, for a shell to show without a copy. The inside keeps its own clock: it draws
