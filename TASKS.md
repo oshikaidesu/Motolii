@@ -27,7 +27,8 @@
 - **ブレンド 25種**（AE の並びと同じ）：normal add multiply screen は GPU の合成、残り21種は下の絵を写して W3C の式（`check/blend_ways.mm`：式と一致）。1種につき画面1枚の写しがかかる。3D の物はまだ無い。
 - **デスクを全部埋めた**（12個、どれも中身に繋いで `integration_test/desk_test.dart` で書類の値を確かめる。壊し役の審査つき）：
   - Ease（席の無い種類＝Elastic・Cyclic・Random・Steps・ElasticSteps・Bounce は自分の数字をスクラブ、範囲は過去倉庫の値。ウィグルはここの Random）、Depth、Blend、Align（見えてる輪郭の箱で寄せる `motolii_seen`）、Sequence（バーごと動かす＝キーも一緒、`bar` の let go）、Path（軌跡と自動方向 `orient`）、Color（ドックの Colors 棚をそのまま）、Audio（GStreamer の level で音量、急に大きくなる所に beat マーク `sound.h`）、Markers、Notes（物ごとのメモ `note`）、Links（指す値を弧で、点タップで親付け。親付けはキーを全部持っていく、輪は拒否）。
-  - 審査の点（直す前）：Align 5、Sequence 3、Ease 4、Color 3、Path 3、Links 4。指摘の重い物は直して試験に足した。Notes・Audio は審査中。
+  - 審査の点（直す前）：Align 5、Sequence 3、Ease 4、Color 3、Path 3、Links 4、Notes 4、Audio 3。指摘の重い物は直して試験に足した。残り：音だけのファイル（wav/mp3）は物にならない、逆再生の拍、拍は音量だけで見る、Path でキーを動かせない、Color に自由な色選び無し（ドックの棚と同じ）。
+- **宿題の残り2つ（40分で止めた）**：窓の遅れは 2／3618（つまみ中に描く前 34 ms 待ち1枚、再生ヘッドの段の最初の組み立て 21 ms 1枚）。GPU は窓を閉じて15レシピで 13.3〜15.6 ms（持ち時間 12）。1個ずつ：何も無い書類で 2.8〜3.0 ms（床）、重いのは Plexus（線900本で約3.6 ms、64個ずつまとめ描き済み）、Maze 6.5、Op star 6.4。ガラス用の「後ろの絵」を読む物が無い時に描かないようにしても変わらず（戻した）。床の正体（MSAA 4倍・FXAA・後処理のどれか）は未確認。
 
 ## 今の状態（2026-10-15 夜）
 
