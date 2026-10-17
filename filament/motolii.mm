@@ -59,6 +59,7 @@ struct Motolii {
     std::atomic<double> now{0.0};
     std::map<std::string, std::pair<long, double>> by_door;   // (what each call has cost, by its name: for measuring)
     std::map<std::string, double> worst;                      // (and its slowest once)
+    std::atomic<long> revision{0};   // (how many times the document has changed: read by anyone, without the document's lock)
     std::map<std::string, std::array<double, 4>> window;     // (a call from the window's own thread, by name: how many, waited in all, waited at most, took in all: what the window waits on)
     double read_waited = 0, read_waited_most = 0; long read_waits = 0;
     std::map<std::string, std::pair<double, long>> rounds;   // (a call through the hand: its longest wait for the answer, and how many waited over 4 ms)   // (reads waiting for the document: in all, the longest, how many waited over 2 ms)
@@ -94,7 +95,15 @@ template <class Does> static auto asked(Motolii* m, Does does, bool changes, con
 }
 // Asked of the hand: by_hand for what may change what is seen (the stage is drawn again after), by_look for what only
 // reads (nothing drawn again: a shell that reads its cards a hundred times a picture never waits on a hundred pictures).
-template <class Does> static auto by_hand(Motolii* m, Does does, const char* who = __builtin_FUNCTION()) -> decltype(does()) { return asked(m, does, true, who); }
+template <class Does> static auto by_hand(Motolii* m, Does does, const char* who = __builtin_FUNCTION()) -> decltype(does()) {
+    return asked(m, [m, does] {   // (the document changed: its revision counted before the asker hears the answer, so a copy it keeps is never read stale)
+        const auto now = [m] { return m->d ? (long)sqlite3_total_changes(m->d->file) : 0L; };
+        const long rows = now();
+        auto out = does();
+        if (now() != rows) m->revision.fetch_add(1, std::memory_order_release);
+        return out;
+    }, true, who);
+}
 // A read is not queued behind the hand: it is done at once, on the asker's own thread, while it holds the document
 // (the hand holds it only while it changes the document or tells it a moment, never while a picture is drawn), so a
 // shell's hundreds of reads a build never wait on a picture. (The Flutter kin read so: research_notes/flutter_native_kin.md)
@@ -174,6 +183,7 @@ static void motolii_hand(Motolii* m, std::string document, int wide, int high, s
             const auto held = m->d->held.tried;
             for (auto& does : todo) does();
             if (sqlite3_total_changes(m->d->file) != rows || m->d->held.tried != held) {   // (the document changed, or what a hand carries: what was set down for the window is put aside; a moment asked, a pick, play: it stays)
+                if (sqlite3_total_changes(m->d->file) != rows) m->revision.fetch_add(1, std::memory_order_release);
                 m->peek.seq.fetch_add(1, std::memory_order_acq_rel);
                 m->peek.thing = -1;
                 m->peek.seq.fetch_add(1, std::memory_order_release);
@@ -774,6 +784,7 @@ int motolii_still(Motolii* m, const char* png) {
     });
 }
 int motolii_rate(Motolii*) { return RATE; }
+long motolii_revision(Motolii* m) { return m->revision.load(std::memory_order_acquire); }   // (no lock taken: a window keeps its copy while this stays)
 int motolii_sequence(Motolii* m, double overlap) { return by_hand(m, [=] { return changes(m, (int)doc_sequence(doc(m), overlap, RATE)); }); }
 int motolii_write(Motolii* m, const char* mp4) {
     return by_hand(m, [m, mp4] {

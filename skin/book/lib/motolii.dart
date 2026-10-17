@@ -223,7 +223,7 @@ class Motolii {
   /// The moment of the picture the stage last drew, at a frame: where a playhead is while it plays (what is read there
   /// is set down, not waited for).
   double get drawnAt => _drawnAt(_m);
-  double get seconds => _seconds(_m);
+  double get seconds => _kept('seconds', () => _seconds(_m));
   late final _rate = _lib.lookupFunction<Int32 Function(_P), int Function(_P)>('motolii_rate');
 
   /// How many pictures a second a film written of the document has: what a frame is.
@@ -248,7 +248,8 @@ class Motolii {
     return ok ? v : null;
   });
   /// The numbers of the things there are.
-  List<int> get things {
+  List<int> get things => _kept('things', _thingsNow);
+  List<int> _thingsNow() {
     var room = 64;
     while (true) {
       final out = malloc<Int32>(room);
@@ -260,15 +261,16 @@ class Motolii {
   }
 
   /// A thing's word by name (kind, file, shape, blend, text, fill); '' if it has none.
-  String word(int thing, String name) => _with([name], (s) => _word(_m, thing, s[0]).toDartString());
+  String word(int thing, String name) => _kept(('word', thing, name), () => _with([name], (s) => _word(_m, thing, s[0]).toDartString()));
 
   /// How long a thing is on, in seconds; below 0: for good.
-  double lasts(int thing) => _lasts(_m, thing);
+  double lasts(int thing) => _kept(('lasts', thing), () => _lasts(_m, thing));
 
   late final _thingKeys = _lib.lookupFunction<Int32 Function(_P, Int32, Pointer<Double>, Int32), int Function(_P, int, Pointer<Double>, int)>('motolii_thing_key_moments');
 
   /// Every moment a key of any of a thing's values stands at, each once, in time: one call (a timeline bar's marks).
-  List<double> thingKeyMoments(int thing) {
+  List<double> thingKeyMoments(int thing) => _kept(('thingKeys', thing), () => _thingKeyMomentsNow(thing));
+  List<double> _thingKeyMomentsNow(int thing) {
     var room = 256;
     for (;;) {
       final out = malloc<Double>(room);
@@ -281,13 +283,13 @@ class Motolii {
   }
 
   /// The moments of a value's keys (none if the value stays): how many keys it has is their count.
-  List<double> keyMoments(int thing, String name) => _with([name], (s) {
+  List<double> keyMoments(int thing, String name) => _kept(('keys', thing, name), () => _with([name], (s) {
     const room = 256;
     final out = malloc<Double>(room);
     final n = _keyMoments(_m, thing, s[0], out, room), all = [for (var i = 0; i < n && i < room; i++) out[i]];
     malloc.free(out);
     return all;
-  });
+  }));
   /// A thing's frame on the picture at the stage's moment: its middle (x, y), how wide, how high (points of the picture,
   /// from the top left), how far it is turned (degrees, clockwise as seen), the point it turns about (x, y), and how deep
   /// it is (0: flat). null: there is no such thing.
@@ -396,10 +398,10 @@ class Motolii {
   set looping(bool on) => _loopIs(_m, on ? 1 : 0);
 
   /// The marks: moments with a name, in time; a mark said with '' is taken away.
-  List<(double, String)> get marks => [
+  List<(double, String)> get marks => _kept('marks', () => [
     for (final line in _marks(_m).toDartString().split('\n'))
       if (line.indexOf(' ') case final i when i > 0) (double.parse(line.substring(0, i)), line.substring(i + 1)),
-  ];
+  ]);
   bool mark(double at, String word) => _with([word], (s) => _mark(_m, at, s[0])) != 0;
   late final _strikes = _lib.lookupFunction<Int32 Function(_P, Int32, Double, Int32, Pointer<Double>, Int32), int Function(_P, int, double, int, Pointer<Double>, int)>('motolii_strikes');
 
@@ -452,22 +454,22 @@ class Motolii {
   bool raise(int thing, int places) => _raise(_m, thing, places) != 0;
 
   /// The names of a thing's values that take keys.
-  List<String> moving(int thing) => _moving(_m, thing).toDartString().split(' ').where((n) => n.isNotEmpty).toList();
+  List<String> moving(int thing) => _kept(('moving', thing), () => _moving(_m, thing).toDartString().split(' ').where((n) => n.isNotEmpty).toList());
 
   /// The names of all a thing's values.
-  List<String> values(int thing) => _values(_m, thing).toDartString().split(' ').where((n) => n.isNotEmpty).toList();
+  List<String> values(int thing) => _kept(('values', thing), () => _values(_m, thing).toDartString().split(' ').where((n) => n.isNotEmpty).toList());
 
   /// Pictures in one call: each recipe's name and what it makes.
-  List<(String, String)> get recipes => [
+  List<(String, String)> get recipes => _kept('recipes', () => [
     for (final line in _recipes(_m).toDartString().split('\n'))
       if (line.indexOf('\t') case final at when at > 0) (line.substring(0, at), line.substring(at + 1)),
-  ];
+  ]);
 
   /// The whole-screen effects on the shelf: each one's name and file (the stage's script is the files of those on it).
-  List<(String, String)> get effects => [
+  List<(String, String)> get effects => _kept('effects', () => [
     for (final line in _effects(_m).toDartString().split('\n'))
       if (line.indexOf('\t') case final at when at > 0) (line.substring(0, at), line.substring(at + 1)),
-  ];
+  ]);
 
   /// The motions a thing may be given (Cavalry's Animators): each one's name and file (a thing's script is the file of the one it has).
   List<(String, String)> get animators => [
@@ -482,10 +484,10 @@ class Motolii {
   int make(String recipe) => _with([recipe], (s) => _make(_m, s[0]));
 
   /// The cards a maker sees a thing's values on, besides where it is and its fill: each a title and the values on it.
-  List<(String, List<String>)> cards(int thing) => [
+  List<(String, List<String>)> cards(int thing) => _kept(('cards', thing), () => [
     for (final c in _cards(_m, thing).toDartString().split('; '))
       if (c.indexOf(': ') case final at when at > 0) (c.substring(0, at), c.substring(at + 2).split(' ')),
-  ];
+  ]);
 
   /// How a value is shown to a hand, as the inside says (null: as its range says): its look, the unit it is read in,
   /// its name in plain words, the span its knob covers (in the document's units) and the fold it lies in.
@@ -506,12 +508,25 @@ class Motolii {
   }
 
   /// The words a value of a thing may be (a blend's): none if any word will do, or the thing has no such value.
-  List<String> words(int thing, String name) => _wordsKept.putIfAbsent((thing, name), () => _with([name], (s) => _words(_m, thing, s[0]).toDartString()).split(' ').where((w) => w.isNotEmpty).toList());
+  List<String> words(int thing, String name) => _kept(('words', thing, name), () => _with([name], (s) => _words(_m, thing, s[0]).toDartString()).split(' ').where((w) => w.isNotEmpty).toList());
 
   /// The words a value may be, kept till the document is read again ([forget]): what a value may be changes with the
   /// document (a thing's kind, a script's select), not with each picture's reading of the inspector.
-  final _wordsKept = <(int, String), List<String>>{};
-  void forget() => _wordsKept.clear();
+  void forget() => _copy.clear();
+
+  /// The window's copy of what it read of the document, kept while the document stays as it was: its revision, read
+  /// without waiting for the inside (motolii_revision). A read the copy holds is never asked again.
+  late final _revision = _lib.lookupFunction<Int64 Function(_P), int Function(_P)>('motolii_revision', isLeaf: true);
+  final _copy = <Object, Object?>{};
+  int _copyAt = -1;
+  T _kept<T>(Object key, T Function() ask) {
+    final r = _revision(_m);
+    if (r != _copyAt) {
+      _copy.clear();
+      _copyAt = r;
+    }
+    return _copy.putIfAbsent(key, ask) as T;
+  }
 
   /// A film's first picture, small, as a .png file (null: none could be made). Made once and on another isolate: the
   /// window does not wait.
@@ -536,7 +551,7 @@ class Motolii {
   /// An effect put on a thing at a moment, or taken off if it is on (its keys too), one step.
   bool effect(int thing, String name, double at) => _with([name], (s) => _effect(_m, thing, s[0], at)) != 0;
 
-  List<String> get wayNames => _wayNames(_m).toDartString().split(' ').where((w) => w.isNotEmpty).toList();
+  List<String> get wayNames => _kept('wayNames', () => _wayNames(_m).toDartString().split(' ').where((w) => w.isNotEmpty).toList());
   /// A kind's numbers as a hand takes them: each one's name, lowest and highest (none: a kind without, or one defined).
   List<(String, double, double)> wayNumbers(String kind) {
     final w = _with([kind], (s) => _wayNumbers(_m, s[0]).toDartString()).split(' ').where((x) => x.isNotEmpty).toList();

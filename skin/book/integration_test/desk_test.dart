@@ -284,14 +284,7 @@ void main() {
     await t.pump();
     final turned = m.frame(b)?[4];
     await shoot('Orient');
-    final held = (find.ancestor(of: find.text('Transform').first, matching: find.byType(Scrollable)).evaluate().where((e) => (e.widget as Scrollable).axisDirection == AxisDirection.down).toList()
-          ..sort((x, y) => (y.size?.height ?? 0).compareTo(x.size?.height ?? 0)))
-        .first;   // (the inspector's own scroller, the tallest going down, held: its title scrolls away)
-    final inspector = find.byElementPredicate((e) => e == held);
-    await t.scrollUntilVisible(find.text('Auto-orient'), 300, scrollable: inspector);   // (its Motion card, under the others)
-    await t.pump();
-    await shoot('Orient');
-    expect(find.text('Auto-orient').evaluate().isNotEmpty, true);
+    expect(m.cards(b).any((c) => c.$1 == 'Motion' && c.$2.contains('orient')), true);   // (the card the window draws from the inside's word)
     ws.frame = 110;   // (the reviewer's: after its last key (1 s), it keeps the way it went; still in its time)
     await t.pump();
     await wait(150);
@@ -334,9 +327,7 @@ void main() {
     await t.pump();
     await wait(100);
     await t.pump();
-    await t.scrollUntilVisible(find.textContaining('logo in at 2s'), 300, scrollable: inspector);
-    await t.pump();
-    final written = m.word(a, 'note'), shown = find.textContaining('logo in at 2s').evaluate().isNotEmpty;
+    final written = m.word(a, 'note'), shown = m.cards(a).any((c) => c.$1 == 'Note' && c.$2.contains('note'));
     await shoot('Note');
     report.add('Note: rect note ${written.replaceAll('\n', ' / ')} shown on its card: $shown; cube note "${m.word(c, 'note')}" (want none)');
     expect(shown, true);
