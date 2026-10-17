@@ -33,6 +33,9 @@ public:
     // (n0, n1...), time and frame, giving a Canvalry PointCloud whose points are in pixels (`unit` stage units a pixel).
     std::vector<ScriptCopy> copies(int n, double t, const std::map<std::string, double>& numbers, const std::map<std::string, std::string>& words, double unit);
 private:
+    void knobs(const std::map<std::string, double>& numbers, const std::map<std::string, std::string>& words);   // (told the script's knobs object)
+    ScriptCopy ask(int i, int n, double t);   // (each() with the knobs as last told)
+
     struct Own;
     std::unique_ptr<Own> own;
 };

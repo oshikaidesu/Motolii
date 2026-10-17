@@ -125,8 +125,9 @@ const std::string& Script::trouble() const { return own->trouble; }
 std::vector<ScriptCopy> Script::copies(int n, double t, const std::map<std::string, double>& numbers, const std::map<std::string, std::string>& words, double unit) {
     std::vector<ScriptCopy> all((size_t)std::max(n, 0));
     if (!ok()) return all;
-    if (!own->whole) {
-        for (int i = 0; i < n; ++i) all[(size_t)i] = each(i, n, t, numbers, words);
+    if (!own->whole) {   // (the knobs told once, then each copy asked)
+        knobs(numbers, words);
+        for (int i = 0; i < n; ++i) all[(size_t)i] = ask(i, n, t);
         return all;
     }
     JSContext* cx = own->cx;
@@ -165,11 +166,18 @@ std::vector<ScriptCopy> Script::copies(int n, double t, const std::map<std::stri
 }
 
 ScriptCopy Script::each(int i, int n, double t, const std::map<std::string, double>& numbers, const std::map<std::string, std::string>& words) {
-    ScriptCopy c;
-    if (!ok() || own->whole) return c;
+    if (!ok() || own->whole) return ScriptCopy{};
+    knobs(numbers, words);
+    return ask(i, n, t);
+}
+void Script::knobs(const std::map<std::string, double>& numbers, const std::map<std::string, std::string>& words) {
     JSContext* cx = own->cx;
     for (const auto& [name, v] : numbers) JS_SetPropertyStr(cx, own->knobs, name.c_str(), JS_NewFloat64(cx, v));
     for (const auto& [name, w] : words) JS_SetPropertyStr(cx, own->knobs, name.c_str(), JS_NewString(cx, w.c_str()));
+}
+ScriptCopy Script::ask(int i, int n, double t) {   // (each(), the knobs as last told)
+    ScriptCopy c;
+    JSContext* cx = own->cx;
     JSValue args[4] = {JS_NewInt32(cx, i), JS_NewInt32(cx, n), JS_NewFloat64(cx, t), JS_DupValue(cx, own->knobs)};
     JSValue out = JS_Call(cx, own->each, JS_UNDEFINED, 4, args);
     JS_FreeValue(cx, args[3]);
