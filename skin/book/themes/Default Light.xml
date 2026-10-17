@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Motolii>
+	<Theme>
+		<Grey00 Value="#cfd0d4ff"/>
+		<Grey07 Value="#f2f2f4ff"/>
+		<Grey10 Value="#ececefff"/>
+		<Grey13 Value="#ffffffff"/>
+		<Grey15 Value="#eaeaedff"/>
+		<Grey20 Value="#dedfe3ff"/>
+		<Grey26 Value="#d2d3d8ff"/>
+		<Grey38 Value="#b4b5bcff"/>
+		<Grey44 Value="#9c9da5ff"/>
+		<Grey56 Value="#7a7b84ff"/>
+		<Grey63 Value="#696a73ff"/>
+		<Grey76 Value="#4a4b53ff"/>
+		<Grey91 Value="#22232aff"/>
+		<Grey95 Value="#121318ff"/>
+		<Grey100 Value="#000000ff"/>
+		<BandA Value="#fafafbff"/>
+		<BandB Value="#f0f0f3ff"/>
+		<RowLine Value="#e3e4e8ff"/>
+		<Glaze9 Value="#0000000f"/>
+		<Glaze15 Value="#0000001a"/>
+		<ChosenDefault Value="#b3c66bff"/>
+		<ControlOnForeground Value="#15170dff"/>
+		<Keyframe Value="#f2c94cff"/>
+		<Clip1 Value="#f08a5dff"/>
+		<Clip2 Value="#d9d2c3ff"/>
+		<Clip3 Value="#7fb8b0ff"/>
+		<Clip4 Value="#a7b4c8ff"/>
+		<Clip5 Value="#b0a6f0ff"/>
+		<Clip6 Value="#f2a65aff"/>
+		<Clip7 Value="#5cc8e8ff"/>
+	</Theme>
+</Motolii>

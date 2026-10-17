@@ -10,6 +10,7 @@ import 'package:flutter/widgets.dart';
 import 'package:lab_book/sets/inspector/inspector_parts_insp_host.dart';
 
 import '../sets/inspector/inspector_parts.dart';
+import '../theme.dart';
 import 'desk.dart';
 import 'desk_depth.dart';
 import 'desk_ease.dart';
@@ -56,6 +57,7 @@ class _WorkspaceState extends State<Workspace> {
   void initState() {
     super.initState();
     FocusManager.instance.addListener(_keepKeys);
+    ColorTheme.watch(() => WidgetsBinding.instance.reassembleApplication());   // (the theme file: read, and read again when written; the window built again in place)
     _join(widget.document ?? '${Directory.systemTemp.createTempSync('motolii').path}/Untitled.motolii'); // (no document given: a new one, as After Effects opens an untitled project)
   }
 

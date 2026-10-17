@@ -1,6 +1,8 @@
 // Every value here is read from ../DESIGN.md (the tag in the comment says where it came from). A part names a token; it never picks a number.
 import 'package:flutter/widgets.dart';
 
+import 'theme.dart';
+
 /// The one motion of the book: 120 ms, ease-out, started the moment the input lands. Every state change (hover, select, drop) uses this and nothing else.
 abstract final class Mo {
   static const dur = Duration(milliseconds: 120);
@@ -26,28 +28,28 @@ enum Shade { dark, light }
 abstract final class Grey {
   static final shade = ValueNotifier<Shade>(Shade.dark);
   static bool get light => shade.value == Shade.light;
-  static Color _p(Color dark, Color light) => Grey.light ? light : dark;
+  static Color _p(String role, Color dark, Color light) => ColorTheme.of(role, Grey.light ? light : dark);   // (the theme file's, else the shade's own)
 
-  static Color get g00 => _p(N.g00, const Color(0xFFCFD0D4));
-  static Color get g07 => _p(N.g07, const Color(0xFFF2F2F4));
-  static Color get g10 => _p(N.g10, const Color(0xFFECECEF));
-  static Color get g13 => _p(N.g13, const Color(0xFFFFFFFF));
-  static Color get g15 => _p(N.g15, const Color(0xFFEAEAED));
-  static Color get g20 => _p(N.g20, const Color(0xFFDEDFE3));
-  static Color get g26 => _p(N.g26, const Color(0xFFD2D3D8));
-  static Color get g38 => _p(N.g38, const Color(0xFFB4B5BC));
-  static Color get g44 => _p(N.g44, const Color(0xFF9C9DA5));
-  static Color get g56 => _p(N.g56, const Color(0xFF7A7B84));
-  static Color get g63 => _p(N.g63, const Color(0xFF696A73));
-  static Color get g76 => _p(N.g76, const Color(0xFF4A4B53));
-  static Color get g91 => _p(N.g91, const Color(0xFF22232A));
-  static Color get g95 => _p(N.g95, const Color(0xFF121318));
-  static Color get g100 => _p(N.g100, const Color(0xFF000000));
-  static Color get bandA => _p(N.bandA, const Color(0xFFFAFAFB));
-  static Color get bandB => _p(N.bandB, const Color(0xFFF0F0F3));
-  static Color get rowLine => _p(N.rowLine, const Color(0xFFE3E4E8));
-  static Color get glaze9 => _p(N.glaze9, const Color(0x0F000000));
-  static Color get glaze15 => _p(N.glaze15, const Color(0x1A000000));
+  static Color get g00 => _p('Grey00', N.g00, const Color(0xFFCFD0D4));
+  static Color get g07 => _p('Grey07', N.g07, const Color(0xFFF2F2F4));
+  static Color get g10 => _p('Grey10', N.g10, const Color(0xFFECECEF));
+  static Color get g13 => _p('Grey13', N.g13, const Color(0xFFFFFFFF));
+  static Color get g15 => _p('Grey15', N.g15, const Color(0xFFEAEAED));
+  static Color get g20 => _p('Grey20', N.g20, const Color(0xFFDEDFE3));
+  static Color get g26 => _p('Grey26', N.g26, const Color(0xFFD2D3D8));
+  static Color get g38 => _p('Grey38', N.g38, const Color(0xFFB4B5BC));
+  static Color get g44 => _p('Grey44', N.g44, const Color(0xFF9C9DA5));
+  static Color get g56 => _p('Grey56', N.g56, const Color(0xFF7A7B84));
+  static Color get g63 => _p('Grey63', N.g63, const Color(0xFF696A73));
+  static Color get g76 => _p('Grey76', N.g76, const Color(0xFF4A4B53));
+  static Color get g91 => _p('Grey91', N.g91, const Color(0xFF22232A));
+  static Color get g95 => _p('Grey95', N.g95, const Color(0xFF121318));
+  static Color get g100 => _p('Grey100', N.g100, const Color(0xFF000000));
+  static Color get bandA => _p('BandA', N.bandA, const Color(0xFFFAFAFB));
+  static Color get bandB => _p('BandB', N.bandB, const Color(0xFFF0F0F3));
+  static Color get rowLine => _p('RowLine', N.rowLine, const Color(0xFFE3E4E8));
+  static Color get glaze9 => _p('Glaze9', N.glaze9, const Color(0x0F000000));
+  static Color get glaze15 => _p('Glaze15', N.glaze15, const Color(0x1A000000));
 }
 
 /// A relation family: the colour a relation carries everywhere. [code] identity.dart

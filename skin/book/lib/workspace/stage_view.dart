@@ -22,7 +22,8 @@ abstract final class _V {
   static Color get rulerGround => Grey.g13;
   static Color get rulerSpan => Grey.g15;
   static Color get tick => Grey.g38;
-  static const guide = WsT.toneAudio, overlay = Color(0x40FFFFFF), safe = Color(0x99F6EFDD);
+  static Color get guide => WsT.toneAudio;
+  static const overlay = Color(0x40FFFFFF), safe = Color(0x99F6EFDD);
 }
 
 

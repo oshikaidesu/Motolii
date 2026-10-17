@@ -271,7 +271,7 @@ class _Saved extends StatelessWidget {
       Container(
         width: 6,
         height: 6,
-        decoration: const BoxDecoration(color: WsT.accent, shape: BoxShape.circle),
+        decoration: BoxDecoration(color: WsT.accent, shape: BoxShape.circle),
       ),
       const SizedBox(width: 6),
       ConstrainedBox(

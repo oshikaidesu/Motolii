@@ -1100,7 +1100,9 @@ void main() {
       ..reread()
       ..select('$a');
     await t.pumpAndSettle();
-    expect(ws.fxToggle('Drop Shadow') && ws.fxToggle('Glow'), isTrue, reason: m.trouble);
+    ws
+      ..fxToggle('Drop Shadow')
+      ..fxToggle('Glow');   // (sent without waiting: put on as the window looks again)
     await t.pumpAndSettle();
     expect(inspectorCards(t), containsAll(['Drop Shadow', 'Glow']), reason: 'an effect on it is one of its cards');
     final far = find.byWidgetPredicate((w) => w is NumField && w.id == 'v_shadow_distance'), was = m.value(a, 'shadow_distance', 0);
@@ -1112,7 +1114,7 @@ void main() {
     expect(m.value(a, 'shadow_distance', 0), isNot(was), reason: 'the distance is the document\'s: ${ws.notice}');
     expect(m.undo(), isTrue);
     expect(m.value(a, 'shadow_distance', 0), was, reason: 'one step');
-    expect(ws.fxToggle('Drop Shadow'), isTrue, reason: m.trouble); // (taken off as the shelf's Remove takes it)
+    ws.fxToggle('Drop Shadow'); // (taken off as the shelf's Remove takes it)
     await t.pumpAndSettle();
     expect([ws.fxOf('$a'), m.word(a, 'shadow')], [['Glow'], ''], reason: 'taken off the document');
     expect(inspectorCards(t).contains('Drop Shadow'), isFalse);

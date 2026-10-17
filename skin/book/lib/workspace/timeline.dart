@@ -836,7 +836,7 @@ class _LabelRowState extends State<_LabelRow> {
           padding: const EdgeInsets.only(bottom: 1),
           child: Stack(
             children: [
-              if (sel) const Positioned(left: 0, top: 0, bottom: 0, width: 3, child: ColoredBox(color: WsT.accent)),
+              if (sel) Positioned(left: 0, top: 0, bottom: 0, width: 3, child: ColoredBox(color: WsT.accent)),
               Padding(
                 padding: const EdgeInsets.only(left: 8, right: 6),
                 child: Row(

@@ -8,6 +8,7 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 
 import '../motolii.dart';
+import '../theme.dart';
 import '../tokens.dart';
 import 'desk_kit.dart' show DeskTool, deskTools;
 import 'stage_art.dart' show WsArt;
@@ -36,7 +37,10 @@ abstract final class WsT {
   static Color get line => Grey.g20;
 
   /// The one accent (same as the Inspector's) and the ink drawn on it.
-  static const accent = Color(0xFFB3C66B), accentHot = Color(0xFFC5D67E), onAccent = Color(0xFF15170D), keyDot = Color(0xFFF2C94C);
+  static Color get accent => ColorTheme.of('ChosenDefault', const Color(0xFFB3C66B));   // (the theme's roles: Ableton's names, the key mark Blender's)
+  static Color get accentHot => Color.lerp(accent, const Color(0xFFFFFFFF), .14)!;
+  static Color get onAccent => ColorTheme.of('ControlOnForeground', const Color(0xFF15170D));
+  static Color get keyDot => ColorTheme.of('Keyframe', const Color(0xFFF2C94C));
 
   /// The accent drawn as a line or text on a ground. Lime reads on dark but vanishes on white, so the light shade inks it darker; fills stay [accent].
   static Color get accentInk => Grey.light ? const Color(0xFF6B7A1E) : accent;
@@ -48,8 +52,13 @@ abstract final class WsT {
   static const inset = 8.0, gap = 4.0;
 
   /// Hues per kind of layer / asset, shared by timeline bars, browser tiles and the stage's artwork, so a thing keeps its colour everywhere.
-  static const toneShape = Color(0xFFF08A5D), toneText = Color(0xFFD9D2C3), toneImage = Color(0xFF7FB8B0);
-  static const toneCamera = Color(0xFFA7B4C8), toneGroup = Color(0xFFB0A6F0), toneParticles = Color(0xFFF2A65A), toneAudio = Color(0xFF5CC8E8);
+  static Color get toneShape => ColorTheme.of('Clip1', const Color(0xFFF08A5D));   // (a layer's kind: Ableton's clip colours)
+  static Color get toneText => ColorTheme.of('Clip2', const Color(0xFFD9D2C3));
+  static Color get toneImage => ColorTheme.of('Clip3', const Color(0xFF7FB8B0));
+  static Color get toneCamera => ColorTheme.of('Clip4', const Color(0xFFA7B4C8));
+  static Color get toneGroup => ColorTheme.of('Clip5', const Color(0xFFB0A6F0));
+  static Color get toneParticles => ColorTheme.of('Clip6', const Color(0xFFF2A65A));
+  static Color get toneAudio => ColorTheme.of('Clip7', const Color(0xFF5CC8E8));
 
   /// The playhead line: the accent, so "now" is the loudest line in the window. Its head is an [accent] fill.
   static Color get playhead => accentInk;

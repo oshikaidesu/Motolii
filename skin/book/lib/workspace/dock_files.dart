@@ -582,7 +582,7 @@ class _InUse extends StatelessWidget {
     height: 14,
     alignment: Alignment.center,
     decoration: BoxDecoration(color: WsT.accent, borderRadius: BorderRadius.circular(WsT.chipRadius)),
-    child: const DockGlyph(DockG.link, size: 10, color: WsT.onAccent),
+    child: DockGlyph(DockG.link, size: 10, color: WsT.onAccent),
   );
 }
 

@@ -166,7 +166,7 @@ class _LensNumbers extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const DeskCaption('Lens', tone: WsT.toneCamera),
+              DeskCaption('Lens', tone: WsT.toneCamera),
               const SizedBox(height: 4),
               DeskScrub(
                 label: 'Focal',
@@ -190,7 +190,7 @@ class _LensNumbers extends StatelessWidget {
                 onChanged: (v) => onEdit(() => lens.fstop = v),
               ),
               const SizedBox(height: 10),
-              const DeskCaption('Focus', tone: WsT.accent),
+              DeskCaption('Focus', tone: WsT.accent),
               const SizedBox(height: 4),
               DeskScrub(
                 label: 'Dist',

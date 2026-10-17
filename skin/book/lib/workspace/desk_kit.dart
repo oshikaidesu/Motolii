@@ -217,7 +217,7 @@ class DeskScrub extends StatefulWidget {
     required this.onChanged,
     required this.format,
     this.perPx = 1,
-    this.tone = WsT.accent,
+    this.tone,
     this.enabled = true,
     this.pad = 7,
   });
@@ -225,7 +225,7 @@ class DeskScrub extends StatefulWidget {
   final double value, min, max, perPx, pad;
   final ValueChanged<double> onChanged;
   final String Function(double) format;
-  final Color tone;
+  final Color? tone;   // (none: the theme's ChosenDefault)
   final bool enabled;
   @override
   State<DeskScrub> createState() => _DeskScrubState();
@@ -262,7 +262,7 @@ class _DeskScrubState extends State<DeskScrub> {
                     alignment: Alignment.centerLeft,
                     widthFactor: f,
                     child: DecoratedBox(
-                      decoration: BoxDecoration(color: _drag ? WsT.accent : w.tone, borderRadius: BorderRadius.circular(1)),
+                      decoration: BoxDecoration(color: _drag ? WsT.accent : w.tone ?? WsT.accent, borderRadius: BorderRadius.circular(1)),
                     ),
                   ),
                 ),
