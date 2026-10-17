@@ -150,6 +150,31 @@ void main() {
     expect(m.word(a, 'blend'), 'overlay');
     expect(opacity, inInclusiveRange(0.35, 0.65));
     expect(m.value(b, 'clip', 0), 1);
+
+    // Align: the rect against the picture's left edge, then across its middle, then its bottom.
+    ws.select('$a');
+    await open('Align');
+    Rect seen() {
+      final f = m.frame(a)!;
+      return Rect.fromCenter(center: Offset(f[0], f[1]), width: f[2], height: f[3]);
+    }
+    await t.tap(find.byKey(const ValueKey('align.0')));
+    await t.pump();
+    await wait(150);
+    final left = seen().left;
+    await t.tap(find.byKey(const ValueKey('align.1')));
+    await t.pump();
+    await wait(150);
+    final middle = seen().center.dx;
+    await t.tap(find.byKey(const ValueKey('align.5')));
+    await t.pump();
+    await wait(150);
+    final bottom = seen().bottom;
+    await shoot('Align');
+    report.add('Align: left edge at ${left.toStringAsFixed(1)} (want 0); middle at ${middle.toStringAsFixed(1)} (want 960); bottom at ${bottom.toStringAsFixed(1)} (want 1080)');
+    expect(left, closeTo(0, 1));
+    expect(middle, closeTo(960, 1));
+    expect(bottom, closeTo(1080, 1));
     File('${out.path}/report.txt').writeAsStringSync(report.join('\n'));
     expect(made, 2);
     expect(named.first, 'Drop');
