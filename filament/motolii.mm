@@ -444,6 +444,13 @@ int motolii_remove(Motolii* m, int thing) { return by_hand(m, [=] { return chang
 int motolii_set(Motolii* m, int thing, const char* name, double number) { return by_hand(m, [=] { return changes(m, (int)(doc_set(doc(m), thing, name, number))); }); }
 int motolii_say(Motolii* m, int thing, const char* name, const char* word) { return by_hand(m, [=] { return changes(m, (int)(doc_say(doc(m), thing, name, word))); }); }
 int motolii_key(Motolii* m, int thing, const char* name, double at, double number) { return by_hand(m, [=] { return changes(m, (int)(doc_key(doc(m), thing, name, at, number))); }); }
+// Many keys of one value in one call and one step (a world's motion baked into keys, a film's beats...): asked of the
+// hand once, made one act, the stage made again once at its end.
+int motolii_key_many(Motolii* m, int thing, const char* name, int n, const double* at, const double* number) {
+    return by_hand(m, [=] {
+        return changes(m, (int)doc_key_many(doc(m), thing, name, n, at, number));
+    });
+}
 int motolii_unkey(Motolii* m, int thing, const char* name, double at) { return by_hand(m, [=] { return changes(m, (int)(doc_unkey(doc(m), thing, name, at))); }); }
 int motolii_keys(Motolii* m, int thing, const char* name) { return by_look(m, [=] { return (int)(doc_keys(doc(m), thing, name)); }); }
 static int way_is(Motolii* m, int thing, const char* name, double at, const char* way) {   // (on the hand)

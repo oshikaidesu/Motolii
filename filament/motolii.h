@@ -50,6 +50,7 @@ int motolii_remove(Motolii* m, int thing);
 int motolii_set(Motolii* m, int thing, const char* name, double number);          /* a value that stays */
 int motolii_say(Motolii* m, int thing, const char* name, const char* word);       /* a word */
 int motolii_key(Motolii* m, int thing, const char* name, double at, double number);   /* a key at a moment */
+int motolii_key_many(Motolii* m, int thing, const char* name, int n, const double* at, const double* number);   /* n keys of one value in one call and one step (at[i], number[i]) */
 int motolii_unkey(Motolii* m, int thing, const char* name, double at);
 int motolii_keys(Motolii* m, int thing, const char* name);         /* how many keys a value has */
 /* The stretch from the key at a moment to the next key is itself defined: how the value goes there. A way is a name

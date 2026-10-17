@@ -2150,6 +2150,32 @@ static bool doc_key(Doc& d, int thing, const char* name, double at, double is) {
     return doc_change(d, sqlite3_mprintf("%z insert into fact(thing, name, at, value, way) values(%d, %Q, %!.17g, %!.17g, %s) on conflict do update set value = excluded.value, way = coalesce(way, excluded.way)",
                                          stayed ? sqlite3_mprintf("delete from fact where thing = %d and name = %Q;", thing, name) : sqlite3_mprintf(""), thing, name, at, is, at == 0.0 ? "'Linear'" : "null"), true);
 }
+// Many keys of one value at once (doc_key's rule, asked once: the value that stayed goes when keys come), one statement
+// made ready and said again for each; one act, the stage made again at its end.
+static bool doc_key_many(Doc& d, int thing, const char* name, int n, const double* at, const double* is) {
+    for (int i = 0; i < n; ++i) {
+        double v = is[i];
+        if (!(at[i] >= 0.0 && at[i] <= 1e6)) return d.trouble = "a key is at a moment of the stage: from 0 to 1000000 seconds", false;
+        if (!doc_knows(d, thing, name, &v, nullptr, true)) return false;
+    }
+    if (n <= 0) return true;
+    doc_act(d);
+    const bool stayed = !doc_keys(d, thing, name, -1.0) && std::any_of(at, at + n, [](double a) { return a != 0.0; });
+    if (stayed) doc_change(d, sqlite3_mprintf("delete from fact where thing = %d and name = %Q", thing, name), true);
+    sqlite3_stmt* put = nullptr;
+    bool ok = d.act_ok && sqlite3_prepare_v2(d.file, "insert into fact(thing, name, at, value, way) values(?, ?, ?, ?, ?) on conflict do update set value = excluded.value, way = coalesce(way, excluded.way)", -1, &put, nullptr) == SQLITE_OK;
+    for (int i = 0; ok && i < n; ++i) {
+        sqlite3_reset(put);
+        sqlite3_bind_int(put, 1, thing), sqlite3_bind_text(put, 2, name, -1, SQLITE_STATIC), sqlite3_bind_double(put, 3, at[i]), sqlite3_bind_double(put, 4, is[i]);
+        if (at[i] == 0.0) sqlite3_bind_text(put, 5, "Linear", -1, SQLITE_STATIC);
+        else sqlite3_bind_null(put, 5);
+        ok = sqlite3_step(put) == SQLITE_DONE;
+    }
+    if (!ok) d.trouble = sqlite3_errmsg(d.file), d.act_ok = false;
+    sqlite3_finalize(put);
+    d.act_unmatched = true;   // (matched once, when the act ends)
+    return doc_acted(d) && ok;
+}
 static int doc_keys(Doc& d, int thing, const char* name, double at = -1.0) {   // (how many keys a value has; or whether it has one at a moment)
     int n = 0;
     doc_rows(d, at < 0.0 ? sqlite3_mprintf("select count(*) from fact where thing = %d and name = %Q and " DOC_KEYED, thing, name, thing, name)

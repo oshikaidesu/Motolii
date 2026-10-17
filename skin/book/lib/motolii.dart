@@ -239,6 +239,21 @@ class Motolii {
   bool set(int thing, String name, double number) => _with([name], (s) => _set(_m, thing, s[0], number)) != 0;
   bool say(int thing, String name, String word) => _with([name, word], (s) => _say(_m, thing, s[0], s[1])) != 0;
   bool key(int thing, String name, double at, double number) => _with([name], (s) => _key(_m, thing, s[0], at, number)) != 0;
+  late final _keyMany = _lib.lookupFunction<Int32 Function(_P, Int32, _S, Int32, Pointer<Double>, Pointer<Double>), int Function(_P, int, _S, int, Pointer<Double>, Pointer<Double>)>('motolii_key_many');
+
+  /// Many keys of one value in one call and one step (a baked motion, beats): [at] and [numbers] side by side.
+  bool keyMany(int thing, String name, List<double> at, List<double> numbers) {
+    final n = at.length < numbers.length ? at.length : numbers.length, a = malloc<Double>(n < 1 ? 1 : n), v = malloc<Double>(n < 1 ? 1 : n);
+    for (var i = 0; i < n; i++) {
+      a[i] = at[i];
+      v[i] = numbers[i];
+    }
+    final ok = _with([name], (s) => _keyMany(_m, thing, s[0], n, a, v)) != 0;
+    malloc
+      ..free(a)
+      ..free(v);
+    return ok;
+  }
   bool unkey(int thing, String name, double at) => _with([name], (s) => _unkey(_m, thing, s[0], at)) != 0;
   bool way(int thing, String name, double at, String way) => _with([name, way], (s) => _way(_m, thing, s[0], at, s[1])) != 0;
   double? value(int thing, String name, double at) => moving(thing).contains(name)
