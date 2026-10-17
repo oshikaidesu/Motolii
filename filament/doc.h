@@ -2531,6 +2531,28 @@ static bool doc_covers(Doc& d, int thing, double now, double* box) {
     return true;
 }
 
+// A thing's outline on the picture at a moment: the corners of its box as the stage's eye sees them, and the polygon
+// round them all (a convex hull, Andrew's way): a cube's own outline, a flat thing's tilted four corners; nothing of
+// it lies outside. Points of the picture from the top left, in order round it; how many (0: not shown).
+static int doc_outline(Doc& d, int thing, double now, double* xy) {
+    float2 half{0.f};
+    float deep = 0.f;
+    if (!doc_half(d, thing, &half, &deep) || !d.shown[thing].in) return 0;
+    const math::mat4 place = doc_shown_at(d, thing, now);
+    std::vector<math::double2> p;
+    for (int corner = 0; corner < (deep > 0.f ? 8 : 4); ++corner)
+        p.push_back(doc_seen(d, (place * math::double4{corner & 1 ? half.x : -half.x, corner & 2 ? half.y : -half.y, corner & 4 ? deep : -deep, 1.0}).xyz));
+    std::sort(p.begin(), p.end(), [](const math::double2& a, const math::double2& b) { return a.x < b.x || (a.x == b.x && a.y < b.y); });
+    const auto turn = [](const math::double2& o, const math::double2& a, const math::double2& b) { return (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x); };
+    std::vector<math::double2> hull(2 * p.size());
+    size_t k = 0;
+    for (size_t i = 0; i < p.size(); ++i) { while (k >= 2 && turn(hull[k - 2], hull[k - 1], p[i]) <= 0) --k; hull[k++] = p[i]; }
+    for (size_t i = p.size() - 1, t = k + 1; i > 0; --i) { while (k >= t && turn(hull[k - 2], hull[k - 1], p[i - 1]) <= 0) --k; hull[k++] = p[i - 1]; }
+    const int n = (int)std::min<size_t>(k > 0 ? k - 1 : 0, 8);
+    for (int i = 0; i < n; ++i) xy[2 * i] = hull[(size_t)i].x, xy[2 * i + 1] = hull[(size_t)i].y;
+    return n;
+}
+
 static double doc_usual(const char* name) {
     if (!strncmp(name, "js_", 3))   // (a knob of a script: as its head says it comes)
         for (const auto& [file, sc] : doc_scripts())

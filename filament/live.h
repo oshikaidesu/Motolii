@@ -111,48 +111,48 @@ static void desk_marks(Stage& s, Live* l, int i) {
             const auto local = [&](double u, double v) { const double x = u * 0.5 * f[2], y = v * 0.5 * f[3]; return at(f[0] + x * cs - y * sn, f[1] + x * sn + y * cs); };
             return Frame{{local(-1, -1), local(1, -1), local(1, 1), local(-1, 1)}, local(0, -1), at(f[0], f[1]), at(f[5], f[6])};
         };
-        const auto line = [&](std::initializer_list<float2> pts, bool closed, float width, uint8_t r, uint8_t g, uint8_t b) {
+        // (quiet: no dark edging, thin lines, small knobs, a little see-through; the accent is the window's own)
+        const auto line = [&](std::initializer_list<float2> pts, bool closed, float width, uint8_t a) {
             tvg::Shape* sh = tvg::Shape::gen();
             bool first = true;
             for (float2 p : pts) { if (first) sh->moveTo(p.x, p.y); else sh->lineTo(p.x, p.y); first = false; }
             if (closed) sh->close();
-            sh->strokeWidth(width * pt), sh->strokeFill(r, g, b, 255);
+            sh->strokeWidth(width * pt), sh->strokeFill(0xB3, 0xC6, 0x6B, a), sh->strokeCap(tvg::StrokeCap::Round);
             canvas->add(sh);
         };
-        const auto legible = [&](std::initializer_list<float2> pts, bool closed, float width) { line(pts, closed, width + 2.f, 0, 0, 0), line(pts, closed, width, 0xB3, 0xC6, 0x6B); };
-        const auto dot = [&](float2 c, float r, bool lit) { tvg::Shape* sh = tvg::Shape::gen(); sh->appendCircle(c.x, c.y, r * pt, r * pt); lit ? sh->fill(0xB3, 0xC6, 0x6B, 255) : sh->fill(0, 0, 0, 255); canvas->add(sh); };
-        const auto square = [&](float2 c, float half, bool lit) { tvg::Shape* sh = tvg::Shape::gen(); sh->appendRect(c.x - half * pt, c.y - half * pt, 2.f * half * pt, 2.f * half * pt); lit ? sh->fill(0xB3, 0xC6, 0x6B, 255) : sh->fill(0, 0, 0, 255); canvas->add(sh); };
+        const auto around = [&](const double* xy, int n, float width, uint8_t r, uint8_t g, uint8_t b, uint8_t a) {   // (an outline: doc_outline's points round it)
+            tvg::Shape* sh = tvg::Shape::gen();
+            for (int i = 0; i < n; ++i) { const float2 p = at(xy[2 * i], xy[2 * i + 1]); if (i) sh->lineTo(p.x, p.y); else sh->moveTo(p.x, p.y); }
+            sh->close();
+            sh->strokeWidth(width * pt), sh->strokeFill(r, g, b, a), sh->strokeJoin(tvg::StrokeJoin::Round);
+            canvas->add(sh);
+        };
+        const auto dot = [&](float2 c, float r) { tvg::Shape* sh = tvg::Shape::gen(); sh->appendCircle(c.x, c.y, r * pt, r * pt); sh->fill(0xB3, 0xC6, 0x6B, 230); canvas->add(sh); };
+        const auto square = [&](float2 c, float half) { tvg::Shape* sh = tvg::Shape::gen(); sh->appendRect(c.x - half * pt, c.y - half * pt, 2.f * half * pt, 2.f * half * pt, 0.6f * pt, 0.6f * pt); sh->fill(0xB3, 0xC6, 0x6B, 230); canvas->add(sh); };
         tvg::Shape* off = tvg::Shape::gen();   // (what lies off the stage, covered half way: the stage's own frame reads as the picture)
         off->appendRect(0, 0, (float)k.w, (float)k.h);
         off->appendRect((float)k.x, (float)k.y, (float)(s_w * k.scale), (float)(s_h * k.scale), 0, 0, false);
         off->fill(0x19, 0x19, 0x19, 140);   // (the window's surround, Grey.g10, half way)
         canvas->add(off);
-        if (k.hovered) {
-            const Frame f = frame(k.hover);
-            line({f.c[0], f.c[1], f.c[2], f.c[3]}, true, 3.f, 0, 0, 0), line({f.c[0], f.c[1], f.c[2], f.c[3]}, true, 1.f, 0xE6, 0xE6, 0xE6);
-        }
+        if (k.hovered && k.hoverOutline > 2) around(k.hoverAround, k.hoverOutline, 1.f, 0xE6, 0xE6, 0xE6, 150);
         if (k.picked) {
             const Frame f = frame(k.pick);
-            legible({f.c[0], f.c[1], f.c[2], f.c[3]}, true, 1.5f);
+            line({f.c[0], f.c[1], f.c[2], f.c[3]}, true, 0.75f, 55);   // (the frame its corners pull, faint)
+            if (k.pickOutline > 2) around(k.pickAround, k.pickOutline, 1.f, 0xB3, 0xC6, 0x6B, 220);   // (its outline as seen)
             if (k.knob) {   // (the knob it is turned by, a stem's length out from the middle of its top edge)
                 float2 n = f.top - f.mid;
                 const float len = length(n);
                 n = len < 1.f ? float2{0.f, -1.f} : n / len;
-                const float2 knob = f.top + n * 18.f * pt;
-                legible({f.top, knob}, false, 1.f);
-                dot(knob, 4.5f, false), dot(knob, 3.5f, true);
+                const float2 knob = f.top + n * 14.f * pt;
+                line({f.top, knob}, false, 0.75f, 140);
+                dot(knob, 2.75f);
             }
-            for (float2 c : f.c) square(c, 4.5f, false), square(c, 3.5f, true);
-            for (const auto& [width, lit] : {std::pair{3.5f, false}, std::pair{1.5f, true}}) {   // (the point it turns about: a ring and four ticks)
-                tvg::Shape* ring = tvg::Shape::gen();
-                ring->appendCircle(f.pivot.x, f.pivot.y, 6.f * pt, 6.f * pt);
-                ring->strokeWidth(width * pt), lit ? ring->strokeFill(0xB3, 0xC6, 0x6B, 255) : ring->strokeFill(0, 0, 0, 255);
-                canvas->add(ring);
-            }
-            for (float2 d : {float2{1, 0}, float2{-1, 0}, float2{0, 1}, float2{0, -1}}) {
-                line({f.pivot + d * 3.f * pt, f.pivot + d * 10.f * pt}, false, 3.f, 0, 0, 0);
-                line({f.pivot + d * 3.f * pt, f.pivot + d * 10.f * pt}, false, 1.2f, 0xB3, 0xC6, 0x6B);
-            }
+            for (float2 c : f.c) square(c, 2.75f);
+            tvg::Shape* ring = tvg::Shape::gen();   // (the point it turns about: a small ring and four short ticks)
+            ring->appendCircle(f.pivot.x, f.pivot.y, 4.f * pt, 4.f * pt);
+            ring->strokeWidth(1.f * pt), ring->strokeFill(0xB3, 0xC6, 0x6B, 200);
+            canvas->add(ring);
+            for (float2 d : {float2{1, 0}, float2{-1, 0}, float2{0, 1}, float2{0, -1}}) line({f.pivot + d * 2.f * pt, f.pivot + d * 7.f * pt}, false, 1.f, 200);
         }
         canvas->update();
         canvas->draw(true);   // (its own picture cleared; the buffer drawn over, not replaced: target type 2, thorvg_over.patch)

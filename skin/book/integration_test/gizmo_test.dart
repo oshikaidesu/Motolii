@@ -88,5 +88,16 @@ void main() {
       ..select('$off');
     await wait(400);
     await shoot('off_stage');
+
+    final tilted = m.add('solid', 'cube'); // (turned two ways: its outline as seen, not a box round it)
+    m
+      ..set(tilted, 'x', -2)
+      ..set(tilted, 'rotate_x', 25)
+      ..set(tilted, 'rotate_y', 35);
+    ws
+      ..reread()
+      ..select('$tilted');
+    await wait(400);
+    await shoot('tilted');
   });
 }
