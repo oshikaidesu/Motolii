@@ -1,4 +1,5 @@
 // The window's top bar: who and what (wordmark, project, comp), the mode, and the one loud action (Render).
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/widgets.dart';
@@ -53,6 +54,7 @@ class WsTopBar extends StatelessWidget {
           const Spacer(),
           const _ShadeSwitch(),
           const SizedBox(width: 10),
+          const _Waited(),
           const _Saved(),
           const SizedBox(width: 12),
           const _Render(),
@@ -294,4 +296,81 @@ class _Render extends StatelessWidget {
       child: Text('Render', style: T.name(WsT.onAccent).copyWith(fontWeight: FontWeight.w800)),
     ),
   );
+}
+
+/// How many times the window waited on the inside (the rule: never), a red dot and the count only when it did; a tap
+/// lists each, named and timed.
+class _Waited extends StatefulWidget {
+  const _Waited();
+  @override
+  State<_Waited> createState() => _WaitedState();
+}
+
+class _WaitedState extends State<_Waited> {
+  final _open = OverlayPortalController(), _at = LayerLink();
+  late final Timer _look;
+  int _count = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _look = Timer.periodic(const Duration(milliseconds: 500), (_) {   // (read without waiting: the inside's count)
+      final n = WsScope.read(context).inside?.brokenCount ?? 0;
+      if (n != _count && mounted) setState(() => _count = n);
+    });
+  }
+
+  @override
+  void dispose() {
+    _look.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_count == 0) return const SizedBox.shrink();
+    final lines = _open.isShowing ? (WsScope.of(context).inside?.broken ?? '').split('\n').reversed.take(40).toList() : const <String>[];
+    return CompositedTransformTarget(
+      link: _at,
+      child: OverlayPortal(
+        controller: _open,
+        overlayChildBuilder: (_) => CompositedTransformFollower(
+          link: _at,
+          targetAnchor: Alignment.bottomRight,
+          followerAnchor: Alignment.topRight,
+          offset: const Offset(0, 6),
+          child: Align(
+            alignment: Alignment.topRight,
+            child: GestureDetector(
+              onTap: () => setState(_open.hide),
+              child: Container(
+                width: 420,
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(color: WsT.card, borderRadius: BorderRadius.circular(6), border: Border.all(color: Grey.g26)),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [for (final l in lines) Text(l, maxLines: 1, overflow: TextOverflow.ellipsis, style: T.micro(Grey.g76))],
+                ),
+              ),
+            ),
+          ),
+        ),
+        child: _Hover(
+          onTap: () => setState(_open.toggle),
+          builder: (h) => Padding(
+            padding: const EdgeInsets.only(right: 10),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(width: 6, height: 6, decoration: const BoxDecoration(color: Color(0xFFE5484D), shape: BoxShape.circle)),
+                const SizedBox(width: 5),
+                Text('$_count', style: T.label(h ? Grey.g91 : Grey.g63)),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }

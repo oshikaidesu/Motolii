@@ -585,6 +585,8 @@ class Motolii {
   late final _broken = _lib.lookupFunction<_S Function(_P), _S Function(_P)>('motolii_broken');
   void watch(bool on) => _watch(_m, on ? 1 : 0);
   String get broken => _broken(_m).toDartString();
+  late final _brokenCount = _lib.lookupFunction<Int64 Function(_P), int Function(_P)>('motolii_broken_count', isLeaf: true);
+  int get brokenCount => _brokenCount(_m);   // (how many times since watched: read without waiting)
 
   /// A film's first picture, small, as a .png file (null: none could be made). Made once and on another isolate: the
   /// window does not wait.

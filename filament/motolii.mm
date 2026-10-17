@@ -62,8 +62,9 @@ struct Motolii {
     int made = 0;   // (the thing the last add or make asked later made: a later call for thing -1 means it)
     std::atomic<long> revision{0};   // (how many times the document has changed: read by anyone, without the document's lock)
     std::atomic<long> carried{0};
-    std::atomic<bool> watching{false};   // (motolii_watch: the window's thread may not wait on the hand; what did is kept in `broke`)
-    std::vector<std::string> broke;    // (and how many times what a hand carries has: values a window shows while a hand is on them)
+    std::atomic<bool> watching{true};   // (motolii_watch: the window's thread may not wait on the hand; what did is kept in `broke`, the last 200; watched from the start)
+    std::deque<std::string> broke;
+    std::atomic<long> broken{0};   // (how many times, since watched)    // (and how many times what a hand carries has: values a window shows while a hand is on them)
     std::map<std::string, std::array<double, 4>> window;     // (a call from the window's own thread, by name: how many, waited in all, waited at most, took in all: what the window waits on)
     double read_waited = 0, read_waited_most = 0; long read_waits = 0;
     std::map<std::string, std::pair<double, long>> rounds;   // (a call through the hand: its longest wait for the answer, and how many waited over 4 ms)   // (reads waiting for the document: in all, the longest, how many waited over 2 ms)
@@ -94,7 +95,7 @@ template <class Does> static auto asked(Motolii* m, Does does, bool changes, con
     auto out = done.get();
     const double round = std::chrono::duration<double>(std::chrono::steady_clock::now() - sent).count();   // (the shell waited this long for the hand: in the queue and at work)
     { std::lock_guard<std::mutex> hold(m->asked_lock); auto& r = m->rounds[who]; r.first = std::max(r.first, round), r.second += round > 0.004;
-      if (pthread_main_np() && m->watching) { char why[160]; std::snprintf(why, sizeof why, "%s waited %.1f ms for the hand (a change the window may only send: motolii_later)", who, 1e3 * round); m->broke.push_back(why); }
+      if (pthread_main_np() && m->watching) { char why[160]; std::snprintf(why, sizeof why, "%s waited %.1f ms for the hand (a change the window may only send: motolii_later)", who, 1e3 * round); m->broke.push_back(why); if (m->broke.size() > 200) m->broke.pop_front(); m->broken++; }
       if (pthread_main_np()) { auto& w = m->window[who]; w[0]++, w[1] += round, w[2] = std::max(w[2], round), w[3] += round; } }
     return out;
 }
@@ -156,7 +157,7 @@ template <class Does> static auto by_look(Motolii* m, Does does, const char* who
     auto& door = m->by_door[who];
     door.first++, door.second += took, m->worst[who] = std::max(m->worst[who], took);
     if (pthread_main_np()) { auto& w = m->window[who]; w[0]++, w[1] += waited, w[2] = std::max(w[2], waited), w[3] += took; }
-    if (pthread_main_np() && m->watching && waited > 0.002) { char why[160]; std::snprintf(why, sizeof why, "%s waited %.1f ms for the document", who, 1e3 * waited); std::lock_guard<std::mutex> h(m->asked_lock); m->broke.push_back(why); }
+    if (pthread_main_np() && m->watching && waited > 0.002) { char why[160]; std::snprintf(why, sizeof why, "%s waited %.1f ms for the document", who, 1e3 * waited); std::lock_guard<std::mutex> h(m->asked_lock); m->broke.push_back(why); if (m->broke.size() > 200) m->broke.pop_front(); m->broken++; }
     return out;
 }
 
@@ -827,8 +828,9 @@ void motolii_dont_wait(Motolii*, int on) { dont_wait = on != 0; if (on) refused 
 int motolii_refused(Motolii*) { const int was = refused; refused = false; return was; }   // (whether a read since was refused)
 // The window's thread watched (Chromium's ThreadRestrictions, in the manner of its DisallowBlocking): while on, any
 // change it waits for and any read that waits on the document over 2 ms is kept, named and timed; motolii_broken says
-// them all ("" none), one to a line. Turned on, what was kept before is forgotten.
-void motolii_watch(Motolii* m, int on) { std::lock_guard<std::mutex> h(m->asked_lock); if (on) m->broke.clear(); m->watching = on != 0; }
+// them all ("" none), one to a line, the last 200. Watched from the opening; turned on again, what was kept is forgotten.
+void motolii_watch(Motolii* m, int on) { std::lock_guard<std::mutex> h(m->asked_lock); if (on) m->broke.clear(), m->broken = 0; m->watching = on != 0; }
+long motolii_broken_count(Motolii* m) { return m->broken.load(); }   // (no lock: a window may ask it every picture)
 const char* motolii_broken(Motolii* m) {
     std::lock_guard<std::mutex> h(m->asked_lock);
     m->listed.clear();
