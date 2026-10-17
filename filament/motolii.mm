@@ -59,6 +59,7 @@ struct Motolii {
     std::atomic<double> now{0.0};
     std::map<std::string, std::pair<long, double>> by_door;   // (what each call has cost, by its name: for measuring)
     std::map<std::string, double> worst;                      // (and its slowest once)
+    std::map<std::string, std::array<double, 4>> window;     // (a call from the window's own thread, by name: how many, waited in all, waited at most, took in all: what the window waits on)
     double read_waited = 0, read_waited_most = 0; long read_waits = 0;
     std::map<std::string, std::pair<double, long>> rounds;   // (a call through the hand: its longest wait for the answer, and how many waited over 4 ms)   // (reads waiting for the document: in all, the longest, how many waited over 2 ms)
     double budget = std::getenv("MOTOLII_BUDGET") ? std::atof(std::getenv("MOTOLII_BUDGET")) : 12.0;   // (the milliseconds the GPU may take for a live picture, of the 16.7 a picture has)
@@ -87,7 +88,8 @@ template <class Does> static auto asked(Motolii* m, Does does, bool changes, con
     const auto sent = std::chrono::steady_clock::now();
     auto out = done.get();
     const double round = std::chrono::duration<double>(std::chrono::steady_clock::now() - sent).count();   // (the shell waited this long for the hand: in the queue and at work)
-    { std::lock_guard<std::mutex> hold(m->asked_lock); auto& r = m->rounds[who]; r.first = std::max(r.first, round), r.second += round > 0.004; }
+    { std::lock_guard<std::mutex> hold(m->asked_lock); auto& r = m->rounds[who]; r.first = std::max(r.first, round), r.second += round > 0.004;
+      if (pthread_main_np()) { auto& w = m->window[who]; w[0]++, w[1] += round, w[2] = std::max(w[2], round), w[3] += round; } }
     return out;
 }
 // Asked of the hand: by_hand for what may change what is seen (the stage is drawn again after), by_look for what only
@@ -129,6 +131,7 @@ template <class Does> static auto by_look(Motolii* m, Does does, const char* who
     m->spent[1] += took, m->many[1]++;
     auto& door = m->by_door[who];
     door.first++, door.second += took, m->worst[who] = std::max(m->worst[who], took);
+    if (pthread_main_np()) { auto& w = m->window[who]; w[0]++, w[1] += waited, w[2] = std::max(w[2], waited), w[3] += took; }
     return out;
 }
 
@@ -385,6 +388,13 @@ const char* motolii_spent(Motolii* m) {
         char waits[260];
         std::snprintf(waits, sizeof waits, "; reads waited for the document %.0f ms, the longest %.1f ms, %ld over 2 ms; the GPU took %.1f ms a picture, at most %.1f, of %.0f it may", 1e3 * m->read_waited, 1e3 * m->read_waited_most, m->read_waits, m->gpu_ms, m->gpu_most, m->budget);
         m->word += waits;
+        {   // (what the window's own thread asked, the most waited on first)
+            std::lock_guard<std::mutex> hold(m->asked_lock);
+            std::vector<std::pair<std::string, std::array<double, 4>>> all(m->window.begin(), m->window.end());
+            std::sort(all.begin(), all.end(), [](const auto& a, const auto& b) { return a.second[1] + a.second[3] > b.second[1] + b.second[3]; });
+            m->word += "; FROM THE WINDOW";
+            for (const auto& [name, w] : all) { char one[200]; std::snprintf(one, sizeof one, "; %s %.0f calls, waited %.1f ms (most %.2f), took %.1f ms", name.c_str(), w[0], 1e3 * w[1], 1e3 * w[2], 1e3 * w[3]); m->word += one; }
+        }
         { std::lock_guard<std::mutex> hold(m->asked_lock); for (const auto& [name, r] : m->rounds) if (r.second) { char one[160]; std::snprintf(one, sizeof one, "; %s waited for the hand up to %.1f ms, %ld over 4 ms", name.c_str(), 1e3 * r.first, r.second); m->word += one; } }
         for (size_t i = 0; i < doors.size() && i < 20; ++i) m->word += "; " + doors[i].second;   // (the dearest calls)
         return m->word.c_str();
@@ -745,14 +755,13 @@ int motolii_redo(Motolii* m) { return by_hand(m, [=] { return (int)(doc_redo(doc
 
 double motolii_seconds(Motolii* m) { return by_look(m, [m] { return doc_seconds(*m->d); }); }
 int motolii_at(Motolii* m, double seconds) {
-    const bool within = by_look(m, [m, seconds] {   // (said at once: past the document's ends it is refused, as before)
-        char runs[80];
-        std::snprintf(runs, sizeof runs, "the document runs from 0 to %.2f seconds", doc_seconds(*m->d));
-        return told(m, seconds >= 0.0 && seconds <= doc_seconds(*m->d), runs);
+    // (sent, not waited for: the window reads what was drawn, at the moment it was drawn (motolii_drawn_at and the peek),
+    //  so it need not wait for the hand to tell this one; a later one still waiting replaces it. Past the document's
+    //  ends it is refused there, and said in the trouble)
+    return posted(m, "at", [m, seconds] {
+        if (!(seconds >= 0.0 && seconds <= doc_seconds(*m->d))) { char runs[80]; std::snprintf(runs, sizeof runs, "the document runs from 0 to %.2f seconds", doc_seconds(*m->d)); m->d->trouble = runs; return; }
+        m->now = seconds; m->telling = true; time_is(*m->s, seconds); m->telling = false;
     });
-    // (waited for: a shell that puts the playhead reads that moment next, everywhere at once, and so waits once here
-    //  rather than at each reading; posted, every reading of the picture met the hand telling it)
-    return within && by_hand(m, [m, seconds] { m->now = seconds; m->telling = true; time_is(*m->s, seconds); m->telling = false; return 1; });
 }
 static bool ends(const char* name, const char* with) { return strlen(name) > strlen(with) && !strcmp(name + strlen(name) - strlen(with), with); }
 static bool placed(const char* name) { return std::filesystem::is_directory(std::filesystem::absolute(name).parent_path()); }

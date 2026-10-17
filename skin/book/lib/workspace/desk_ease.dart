@@ -2,6 +2,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/widgets.dart';
+import 'package:lab_book/motolii.dart';
 import 'package:lab_book/workspace/desk_ease_state.dart';
 
 import 'ws.dart';
@@ -113,6 +114,14 @@ Ease heard(String said) {
 /// Joined: the values of the span's thing that have a key where the span begins, each with that key's own moment.
 Map<String, double> keysAt(Ws ws, EaseSpan span) {
   final m = ws.inside!, t = int.parse(span.layer.id);
+  // (asked again only when the document is read again: not each picture a playing stage shows)
+  if (_keysAtOf[ws] case (final r, final id, final f, final at) when r == ws.reads && id == span.layer.id && f == span.from) return at;
+  final at = _keysAt(m, t, span);
+  _keysAtOf[ws] = (ws.reads, span.layer.id, span.from, at);
+  return at;
+}
+final _keysAtOf = Expando<(int, String, int, Map<String, double>)>();
+Map<String, double> _keysAt(Motolii m, int t, EaseSpan span) {
   return {
     for (final name in m.moving(t))
       for (final s in m.keyMoments(t, name))
@@ -127,8 +136,8 @@ final _unseatedOf = Expando<(String, List<Ease>)>();
 List<Ease> unseated(Ws ws) {
   final m = ws.inside;
   if (m == null) return const [];
-  final names = m.wayNames, said = names.join(' ');
-  if (_unseatedOf[m] case (final was, final tiles) when was == said) return tiles;
+  if (_unseatedOf[m] case (final was, final tiles) when was == '${ws.reads}') return tiles;   // (the ways asked again only when the document is read again)
+  final names = m.wayNames, said = '${ws.reads}';
   final tiles = [
     for (final name in names)
       if (name != 'Bezier' && easePresets.every((p) => p.name != name)) Ease(EaseKind.bezier, Offset.zero, const Offset(1, 1), name, [for (var i = 0; i <= 32; i++) m.wayAt(name, i / 32)]),

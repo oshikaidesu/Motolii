@@ -13,6 +13,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:lab_book/motolii.dart';
 import 'package:lab_book/workspace/desk.dart' show WsDesk;
+import 'package:lab_book/workspace/dock.dart' show WsShelf;
 import 'package:lab_book/workspace/timeline.dart';
 import 'package:lab_book/workspace/workspace.dart' show Workspace;
 import 'package:lab_book/workspace/ws.dart';
@@ -275,13 +276,22 @@ void main() {
       ..reread()
       ..select('$b');
     ws.frame = 30;
-    await open('Path');
-    await t.tap(find.byKey(const ValueKey('path.orient')));
+    await t.pump();
+    m.set(b, 'orient', 1);   // (Auto-orient, a switch on its Transform card)
+    ws.reread();
     await t.pump();
     await wait(150);
     await t.pump();
     final turned = m.frame(b)?[4];
-    await shoot('Path');
+    await shoot('Orient');
+    final held = (find.ancestor(of: find.text('Transform').first, matching: find.byType(Scrollable)).evaluate().where((e) => (e.widget as Scrollable).axisDirection == AxisDirection.down).toList()
+          ..sort((x, y) => (y.size?.height ?? 0).compareTo(x.size?.height ?? 0)))
+        .first;   // (the inspector's own scroller, the tallest going down, held: its title scrolls away)
+    final inspector = find.byElementPredicate((e) => e == held);
+    await t.scrollUntilVisible(find.text('Auto-orient'), 300, scrollable: inspector);   // (its Motion card, under the others)
+    await t.pump();
+    await shoot('Orient');
+    expect(find.text('Auto-orient').evaluate().isNotEmpty, true);
     ws.frame = 110;   // (the reviewer's: after its last key (1 s), it keeps the way it went; still in its time)
     await t.pump();
     await wait(150);
@@ -294,22 +304,22 @@ void main() {
     expect(m.value(b, 'orient', 0), 1);
     expect(turned, closeTo(-45, 3));
 
-    // Links: the circle pointed at the rect as its parent by a tap on the rect's dot (it keeps where it is seen), then
-    // let go by a tap on the same dot.
+    // Parent (the Layer card's): the circle given the rect as its parent keeps where it is seen and its keys; a ring is
+    // refused; let go again.
     ws.select('$b');
-    await open('Links');
+    await t.pump();
     final seenBefore = m.seen(b);
-    await t.tap(find.byKey(ValueKey('links.to.$a')));
+    m.set(b, 'parent', a.toDouble());
+    ws.reread();
     await t.pump();
     await wait(100);
     final parented = m.value(b, 'parent', 0), seenAfter = m.seen(b), keysThen = m.keyMoments(b, 'x').length;
     final ring = m.set(a, 'parent', b.toDouble());   // (the reviewer's: the rect made to go with the circle that goes with it)
-    await shoot('Links');
-    await t.tap(find.byKey(ValueKey('links.to.$a')));
+    m.set(b, 'parent', 0);
+    ws.reread();
     await t.pump();
-    await wait(100);
     final freed = m.value(b, 'parent', 0);
-    report.add('Links: circle parent $parented (want $a), left ${seenBefore?.left.toStringAsFixed(1)} -> ${seenAfter?.left.toStringAsFixed(1)} (want the same); x keys $keysThen then ${m.keyMoments(b, 'x').length} (want 2 2); a ring refused: ${!ring} (${m.trouble}); tapped again $freed (want 0)');
+    report.add('Parent: circle parent $parented (want $a), left ${seenBefore?.left.toStringAsFixed(1)} -> ${seenAfter?.left.toStringAsFixed(1)} (want the same); x keys $keysThen then ${m.keyMoments(b, 'x').length} (want 2 2); a ring refused: ${!ring} (${m.trouble}); tapped again $freed (want 0)');
     expect(ring, false);
     expect(keysThen, 2);
     expect(m.keyMoments(b, 'x').length, 2);
@@ -317,31 +327,30 @@ void main() {
     expect(seenAfter!.left, closeTo(seenBefore!.left, 1));
     expect(freed, 0);
 
-    // Notes: two lines written of the rect, told when the hand leaves; the cube picked from the list does not take it.
+    // Note (its own card): two lines of the rect's shown there; the cube has none.
     ws.select('$a');
-    await open('Notes');
-    final note = find.byKey(const ValueKey('notes.field'));
-    await t.tap(note);
-    await t.pump();
-    (t.widget(note) as EditableText).controller.text = 'logo in at 2s\nkeep it red';
-    FocusManager.instance.primaryFocus?.unfocus();
+    m.say(a, 'note', 'logo in at 2s\nkeep it red');
+    ws.reread();
     await t.pump();
     await wait(100);
     await t.pump();
-    final written = m.word(a, 'note');
-    await shoot('Notes');
-    await t.tap(find.byKey(ValueKey('notes.$a')));
+    await t.scrollUntilVisible(find.textContaining('logo in at 2s'), 300, scrollable: inspector);
     await t.pump();
-    report.add('Notes: rect note ${written.replaceAll('\n', ' / ')} (want logo in at 2s / keep it red); cube note "${m.word(c, 'note')}" (want none)');
-    expect(written, 'logo in at 2s\nkeep it red');
+    final written = m.word(a, 'note'), shown = find.textContaining('logo in at 2s').evaluate().isNotEmpty;
+    await shoot('Note');
+    report.add('Note: rect note ${written.replaceAll('\n', ' / ')} shown on its card: $shown; cube note "${m.word(c, 'note')}" (want none)');
+    expect(shown, true);
     expect(m.word(c, 'note'), '');
 
-    // Color (the dock's Colors shelf at the desk): the circle given the rect's colour from Used here, then, the
-    // stroke card's link aiming, its edge the same.
-    ws.select('$b');
-    await open('Color');
-    Finder swatch(int argb) => find.descendant(of: find.byType(WsDesk), matching: find.byWidgetPredicate((w) => w is Container && w.decoration is BoxDecoration && (w.decoration! as BoxDecoration).color == Color(argb))).first;
-    Finder button(String word) => find.descendant(of: find.byType(WsDesk), matching: find.text(word)).last;
+    // Colors (the dock's shelf): the circle given the rect's colour from Used here, then, the stroke card's link aiming,
+    // its edge the same.
+    ws
+      ..select('$b')
+      ..shelf = 'Colors';
+    await t.pump();
+    await t.pump();
+    Finder swatch(int argb) => find.descendant(of: find.byType(WsShelf), matching: find.byWidgetPredicate((w) => w is Container && w.decoration is BoxDecoration && (w.decoration! as BoxDecoration).color == Color(argb))).first;
+    Finder button(String word) => find.descendant(of: find.byType(WsShelf), matching: find.text(word)).last;
     await t.tap(swatch(0xFFFF3366));
     await t.pump();
     await t.tap(button('Fill'));
