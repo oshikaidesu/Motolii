@@ -1,13 +1,43 @@
 // A card's motion preview, in the manner of Good Boy Ninja's Wiggle: a small box where a plain square moves as the
-// thing will (sways, falls and bounces, drifts) along the whole of its way drawn faint; played while a hand is on it and
-// a little while after a number of the card changes, at rest otherwise. How it moves is the inside's (Motolii.path, asked once when the card's values
+// thing will (sways, falls and bounces, drifts) along the whole of its way drawn faint; played while a hand is anywhere on
+// its card and a little while after a number of the card changes, at rest otherwise; pulled by hand, it sets them. How it moves is the inside's (Motolii.path, asked once when the card's values
 // change); the window only plays it back.
 import 'dart:async' show Timer;
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/widgets.dart';
 import 'package:lab_book/sets/inspector/inspector_parts.dart';
 import 'package:lab_book/tokens.dart';
+
+/// A hand anywhere on a card (its name, its preview, its tiles): the card's preview plays while it is there.
+class CardOver extends StatefulWidget {
+  const CardOver({super.key, required this.child});
+  final Widget child;
+  static ValueListenable<bool>? of(BuildContext context) => context.dependOnInheritedWidgetOfExactType<_Over>()?.notifier;
+  @override
+  State<CardOver> createState() => _CardOverState();
+}
+
+class _CardOverState extends State<CardOver> {
+  final _on = ValueNotifier(false);
+  @override
+  void dispose() {
+    _on.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => MouseRegion(
+    onEnter: (_) => _on.value = true,
+    onExit: (_) => _on.value = false,
+    child: _Over(notifier: _on, child: widget.child),
+  );
+}
+
+class _Over extends InheritedNotifier<ValueNotifier<bool>> {
+  const _Over({required super.notifier, required super.child});
+}
 
 class MotionPreview extends StatefulWidget {
   const MotionPreview(this.card, {super.key});
@@ -85,17 +115,9 @@ class _MotionPreviewState extends State<MotionPreview> with SingleTickerProvider
         _after((round * 2000).clamp(1500, 4000).round() + 50, _play); // (still again after a while)
       }
     }
+    _over = CardOver.of(context)?.value ?? false; // (a hand on the card, anywhere: it plays)
     _play();
-    return MouseRegion(
-        onEnter: (_) {
-          _over = true;
-          _play();
-        },
-        onExit: (_) {
-          _over = false;
-          _play();
-        },
-        child: GestureDetector(
+    return GestureDetector(
           behavior: HitTestBehavior.opaque,
           onPanStart: (d) {
             final p = _path, box = context.size;
@@ -116,8 +138,7 @@ class _MotionPreviewState extends State<MotionPreview> with SingleTickerProvider
           },
           onPanEnd: (_) => doc.endGesture(),
           child: CustomPaint(size: Size.infinite, painter: _MotionPaint(_path, _clock)),
-        ),
-    );
+        );
   }
 }
 

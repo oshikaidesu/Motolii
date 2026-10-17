@@ -4,6 +4,7 @@ import 'package:lab_book/sets/inspector/inspector_effects_effect_card.dart';
 import 'package:lab_book/sets/inspector/inspector_rows_sect.dart';
 
 import '../../tokens.dart';
+import 'inspector_motion_preview.dart' show CardOver;
 import 'inspector_parts.dart';
 
 // ---- 10. effects ------------------------------------------------------------------------------------------------------
@@ -111,7 +112,7 @@ class ValuesCard extends StatelessWidget {
     final x = Ctx.of(context), doc = x.doc, ed = Ed(x.cfg.ed), k = 'v.${card.name}', adv = doc.b['$k.adv'] ?? false;
     final heroes = [for (final p in card.params) if (!p.advanced) p], rest = [for (final p in card.params) if (p.advanced) p];
     // (the first row, then the rest folded under the name of what they are; the fold says nothing more than its glyph)
-    return Sect(
+    final sect = Sect(
       title: card.name,
       tone: card.tone,
       mark: card.mark,
@@ -168,5 +169,6 @@ class ValuesCard extends StatelessWidget {
         ],
       ],
     );
+    return side == null ? sect : CardOver(child: sect); // (a hand anywhere on the card plays its preview)
   }
 }
