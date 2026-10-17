@@ -330,7 +330,8 @@ int motolii_path(Motolii* m, int thing, int copy, double from, double to, int n,
     return by_look(m, [=] {
         if (!doc_knows(doc(m), thing) || n < 1) return 0;
         for (int i = 0; i < n; ++i) {   // (the stage's own placing, at moments of the preview's own: the stage's moment stays)
-            const math::mat4 p = doc_place(*m->d, thing, from + (to - from) * i / n, 0, copy, true);
+            const double at = from + (to - from) * i / n;
+            const math::mat4 p = doc_place(*m->d, thing, at, 0, copy, copy > 0 || doc_staggered(*m->d, thing, at));   // (as a copy, or as itself, as the stage places it)
             path[4 * i] = p[3][0], path[4 * i + 1] = p[3][1];
             path[4 * i + 2] = std::atan2(p[0][1], p[0][0]) * 360.0 / (double)TAU, path[4 * i + 3] = length(p[0].xyz);
         }

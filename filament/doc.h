@@ -827,6 +827,11 @@ static bool doc_physics(Doc& d, int thing, double now, PhysPose* pose, int copy 
     *pose = d.phys->pose((int)index, (int)std::lround(now * 60.0));
     return true;
 }
+// Whether the stage places a thing as a member of its copies (each copy, the first too, as late as its order says, waving
+// as its place in the wave says), or as itself: the stage and whoever asks how it moves (motolii_path) place it alike.
+static bool doc_staggered(Doc& d, int thing, double now) {
+    return doc_members(d, thing) > 1 || doc_number(d, thing, "stagger", 0, 0) > 0.0 || doc_number(d, thing, "wave_x", now, 0) != 0.0 || doc_number(d, thing, "wave_y", now, 0) != 0.0 || doc_number(d, thing, "wave_rotate", now, 0) != 0.0 || doc_number(d, thing, "wave_size", now, 0) != 0.0 || doc_number(d, thing, "field_radius", now, 0) > 0.0 || doc_number(d, thing, "scatter_x", now, 0) > 0.0 || doc_number(d, thing, "scatter_y", now, 0) > 0.0 || doc_number(d, thing, "scatter_rotate", now, 0) > 0.0 || doc_number(d, thing, "scatter_size", now, 0) > 0.0;
+}
 static math::mat4 doc_place(Doc& d, int thing, double now, int deeper, int copy, bool member) {
     const double said = now;   // (the moment itself: a wave goes on at it, whatever the copy's delay)
     if (member) now -= doc_delay(d, thing, copy);   // (a member of its copies: as it was so much earlier)
@@ -1332,9 +1337,7 @@ static void doc_moment(Doc& d, double now) {
             bend_at(s, t.drawn, (float)doc_number(d, thing, "round", now, 0), (float)doc_number(d, thing, "bloat", now, 0), (float)doc_number(d, thing, "zigzag", now, 0),
                     (float)doc_number(d, thing, "zigzag_ridges", now, 5), (float)doc_number(d, thing, "zigzag_smooth", now, 0), (float)doc_number(d, thing, "offset", now, 0));
         const mat4f place = mat4f(doc_place(d, thing, now));
-        const bool staggered = doc_members(d, thing) > 1 || doc_number(d, thing, "stagger", 0, 0) > 0.0 || doc_number(d, thing, "wave_x", now, 0) != 0.0 || doc_number(d, thing, "wave_y", now, 0) != 0.0
-                            || doc_number(d, thing, "wave_rotate", now, 0) != 0.0 || doc_number(d, thing, "wave_size", now, 0) != 0.0 || doc_number(d, thing, "field_radius", now, 0) > 0.0
-                            || doc_number(d, thing, "scatter_x", now, 0) > 0.0 || doc_number(d, thing, "scatter_y", now, 0) > 0.0 || doc_number(d, thing, "scatter_rotate", now, 0) > 0.0 || doc_number(d, thing, "scatter_size", now, 0) > 0.0;   // (each copy, the first too, as late as its order says, waving as its place in the wave says)
+        const bool staggered = doc_staggered(d, thing, now);   // (each copy, the first too, as late as its order says, waving as its place in the wave says)
         const std::vector<math::mat4> joins = doc_number(d, thing, "connect", 0, 0) != 0.0 ? doc_joins(d, thing, now) : std::vector<math::mat4>{};   // (a joining thing: its copies lie between another's)
         if (t.solid) solid_to(s, t.solid, place);
         else if (doc_number(d, thing, "connect", 0, 0) != 0.0) move(s, m, [&](int nth, const mat4f&) { return (size_t)nth < joins.size() ? mat4f(joins[(size_t)nth]) : mat4f::scaling(float3{0.f}); });

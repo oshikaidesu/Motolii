@@ -5,7 +5,7 @@ import 'inspector_direct_transform.dart';
 import 'inspector_copies.dart';
 import 'inspector_light.dart';
 import 'inspector_parts.dart';
-import 'inspector_wave.dart';
+import 'inspector_motion_preview.dart';
 
 // ---- 13. the whole panel ----------------------------------------------------------------------------------------------
 /// The cards the window knows and draws by hand, by the inside's card name (Transform, Camera, Text, Fill, Blending):
@@ -19,7 +19,9 @@ final inspectorCards = <String, Widget Function(Fx card)>{
   'Blending': (_) => const BlendRows(),
   'Light': (c) => ValuesCard(c, top: const LightDrawing()), // (its values as tiles, under a drawing of the light you pull)
   'Copies': (c) => ValuesCard(c, top: const CopiesDrawing()), // (and the copies as they lie)
-  'Wave': (c) => ValuesCard(c, top: const WavePreview()), // (and a face that sways as the thing will, played over and over: Good Boy Ninja's Wiggle)
+  'Wave': (c) => ValuesCard(c, top: const MotionPreview('Wave')), // (and a square moving as the thing will, while touched: Good Boy Ninja's Wiggle)
+  'Physics': (c) => ValuesCard(c, top: const MotionPreview('Physics')), // (falling and bouncing)
+  'Scatter': (c) => ValuesCard(c, top: const MotionPreview('Scatter')), // (drifting)
 };
 
 /// The Inspector: one scrolling stack of the host's cards. Needs an InspHost above it.
