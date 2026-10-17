@@ -123,6 +123,7 @@ void main() {
         debugProfileBuildsEnabledUserWidgets = true; // (only the window's own widgets named: Flutter's own are many and slow the reading)
         await binding.traceAction(letGos, reportKey: 'timeline', streams: const ['Dart', 'Embedder']);
         debugProfileBuildsEnabled = false;
+        File('/tmp/motolii_let_go_timeline.json').writeAsStringSync(jsonEncode(binding.reportData!['timeline']));
       } else {
         final from = timings.length; // (the timings are being gathered already: see addTimingsCallback above)
         await letGos();

@@ -128,7 +128,6 @@ static void desk_marks(Stage& s, Live* l, int i) {
             canvas->add(sh);
         };
         const auto dot = [&](float2 c, float r) { tvg::Shape* sh = tvg::Shape::gen(); sh->appendCircle(c.x, c.y, r * pt, r * pt); sh->fill(0xB3, 0xC6, 0x6B, 230); canvas->add(sh); };
-        const auto square = [&](float2 c, float half) { tvg::Shape* sh = tvg::Shape::gen(); sh->appendRect(c.x - half * pt, c.y - half * pt, 2.f * half * pt, 2.f * half * pt, 0.6f * pt, 0.6f * pt); sh->fill(0xB3, 0xC6, 0x6B, 230); canvas->add(sh); };
         tvg::Shape* off = tvg::Shape::gen();   // (what lies off the stage, covered half way: the stage's own frame reads as the picture)
         off->appendRect(0, 0, (float)k.w, (float)k.h);
         off->appendRect((float)k.x, (float)k.y, (float)(s_w * k.scale), (float)(s_h * k.scale), 0, 0, false);
@@ -137,17 +136,15 @@ static void desk_marks(Stage& s, Live* l, int i) {
         if (k.hovered && k.hoverOutline > 2) around(k.hoverAround, k.hoverOutline, 1.f, 0xE6, 0xE6, 0xE6, 150);
         if (k.picked) {
             const Frame f = frame(k.pick);
-            line({f.c[0], f.c[1], f.c[2], f.c[3]}, true, 0.75f, 55);   // (the frame its corners pull, faint)
             if (k.pickOutline > 2) around(k.pickAround, k.pickOutline, 1.f, 0xB3, 0xC6, 0x6B, 220);   // (its outline as seen)
             if (k.knob) {   // (the knob it is turned by, a stem's length out from the middle of its top edge)
                 float2 n = f.top - f.mid;
                 const float len = length(n);
                 n = len < 1.f ? float2{0.f, -1.f} : n / len;
-                const float2 knob = f.top + n * 14.f * pt;
+                const float2 knob = f.top + n * 18.f * pt;   // (where the window takes hold of it: stage_view.dart _V.stem)
                 line({f.top, knob}, false, 0.75f, 140);
                 dot(knob, 2.75f);
             }
-            for (float2 c : f.c) square(c, 2.75f);
             tvg::Shape* ring = tvg::Shape::gen();   // (the point it turns about: a small ring and four short ticks)
             ring->appendCircle(f.pivot.x, f.pivot.y, 4.f * pt, 4.f * pt);
             ring->strokeWidth(1.f * pt), ring->strokeFill(0xB3, 0xC6, 0x6B, 200);
