@@ -242,8 +242,9 @@ class Motolii {
   bool unkey(int thing, String name, double at) => _with([name], (s) => _unkey(_m, thing, s[0], at)) != 0;
   bool way(int thing, String name, double at, String way) => _with([name, way], (s) => _way(_m, thing, s[0], at, s[1])) != 0;
   double? value(int thing, String name, double at) => moving(thing).contains(name)
-      ? _valueAt(thing, name, at)
-      : _keptCarried(('value', thing, name), () => _valueAt(thing, name, at));   // (a value that takes no keys is the same at every moment: kept in the copy)
+      ? _asked(('value', thing, name), _atMoment, _atMoment, () => _valueAt(thing, name, at))   // (at a moment: the hand busy, what it was a picture ago, asked again)
+      : _keptCarried(('value', thing, name), () => _valueAt(thing, name, at));
+  final _atMoment = <Object, Object?>{};   // (each moving value's last reading)   // (a value that takes no keys is the same at every moment: kept in the copy)
   double? _valueAt(int thing, String name, double at) => _with([name], (s) {
     final out = malloc<Double>();
     final ok = _value(_m, thing, s[0], at, out) != 0, v = out.value;
@@ -613,7 +614,7 @@ class Motolii {
     return [for (var i = 0; i + 2 < w.length; i += 3) (w[i], double.parse(w[i + 1]), double.parse(w[i + 2]))];
   }
 
-  double wayAt(String way, double u) => _with([way], (s) => _wayAt(_m, s[0], u));
+  double wayAt(String way, double u) => _kept(('wayAt', way, u), () => _with([way], (s) => _wayAt(_m, s[0], u)));
 
   /// What kind of thing a file makes ('': none).
   String kindOf(String file) => _with([file], (s) => _kindOf(s[0]).toDartString());

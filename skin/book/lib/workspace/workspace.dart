@@ -538,11 +538,12 @@ Map<String, KeyS> _keyMarks(Ws ws, String? id) {
   if (m == null || t == null) return const {};
   final at = _drawn(ws);
   final marks = {for (final MapEntry(:key, :value) in _keyable(ws, t).entries) key: KeyS.values[m.keyed(t, value, at)]};
-  return {
-    ...marks,
-    for (final key in marks.keys) // (a property's mark is the most of its values': a key on any, keyed)
-      if (propOf(key) != key) propOf(key): marks.entries.where((e) => propOf(e.key) == propOf(key)).map((e) => e.value).reduce((a, b) => b.index > a.index ? b : a),
-  };
+  final props = <String, KeyS>{};   // (a property's mark is the most of its values': a key on any, keyed)
+  for (final MapEntry(:key, :value) in marks.entries) {
+    final p = propOf(key);
+    if (p != key && (props[p] == null || value.index > props[p]!.index)) props[p] = value;
+  }
+  return {...marks, ...props};
 }
 
 /// Joined: the fields of the cards whose values take keys, by the inspector's id and the document's name.

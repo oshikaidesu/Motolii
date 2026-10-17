@@ -102,7 +102,8 @@ class Ed {
 
 /// The property a value is part of, whose key mark is theirs together: a document's x, y, z are its position; its
 /// scale_x .. scale_z its scale, rotate_x, rotate_y and rotate its rotation, anchor_x .. anchor_z its anchor.
-String propOf(String id) => RegExp(r'^v_[xyz]$').hasMatch(id) ? 'v_position' : RegExp(r'^(v_\w+?)_[xyz]$').firstMatch(id)?.group(1) ?? id;
+String propOf(String id) => _place.hasMatch(id) ? 'v_position' : _axis.firstMatch(id)?.group(1) ?? id;
+final _place = RegExp(r'^v_[xyz]$'), _axis = RegExp(r'^(v_\w+?)_[xyz]$');   // (made once: asked hundreds of times a picture)
 
 /// A pure-Dart mock of the selected layer(s). Not the product's model; only enough to make every control really do its job.
 class Doc extends ChangeNotifier {
