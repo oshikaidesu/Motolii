@@ -127,6 +127,7 @@ static void desk_marks(Stage& s, Live* l, int i) {
             sh->strokeWidth(width * pt), sh->strokeFill(r, g, b, a), sh->strokeJoin(tvg::StrokeJoin::Round);
             canvas->add(sh);
         };
+        const auto square = [&](float2 c, float half) { tvg::Shape* sh = tvg::Shape::gen(); sh->appendRect(c.x - half * pt, c.y - half * pt, 2.f * half * pt, 2.f * half * pt, 0.6f * pt, 0.6f * pt); sh->fill(0xB3, 0xC6, 0x6B, 230); canvas->add(sh); };
         const auto dot = [&](float2 c, float r) { tvg::Shape* sh = tvg::Shape::gen(); sh->appendCircle(c.x, c.y, r * pt, r * pt); sh->fill(0xB3, 0xC6, 0x6B, 230); canvas->add(sh); };
         tvg::Shape* off = tvg::Shape::gen();   // (what lies off the stage, covered half way: the stage's own frame reads as the picture)
         off->appendRect(0, 0, (float)k.w, (float)k.h);
@@ -145,6 +146,7 @@ static void desk_marks(Stage& s, Live* l, int i) {
                 line({f.top, knob}, false, 0.75f, 140);
                 dot(knob, 2.75f);
             }
+            for (float2 c : f.c) square(c, 2.75f);   // (the corners a hand pulls it larger by; no line between them)
             tvg::Shape* ring = tvg::Shape::gen();   // (the point it turns about: a small ring and four short ticks)
             ring->appendCircle(f.pivot.x, f.pivot.y, 4.f * pt, 4.f * pt);
             ring->strokeWidth(1.f * pt), ring->strokeFill(0xB3, 0xC6, 0x6B, 200);
