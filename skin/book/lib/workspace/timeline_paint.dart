@@ -76,6 +76,9 @@ bool _listEq<E>(List<E> a, List<E> b) {
   return true;
 }
 
+/// How wide a mark's flag on the ruler is, its name in it (the ruler draws it so; a hand finds it so).
+double wtFlagWidth(String name) => _text(name, T.micro(Grey.g13).copyWith(fontWeight: FontWeight.w700)).width + 8;
+
 TextPainter _text(String s, TextStyle st) => TextPainter(
   text: TextSpan(text: s, style: st),
   textDirection: TextDirection.ltr,

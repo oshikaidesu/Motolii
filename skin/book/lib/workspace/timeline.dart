@@ -45,6 +45,8 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
     _ws?.removeListener(_changed);
     _ticker.dispose();
     _focus.dispose();
+    _markWords.dispose();
+    _markFocus.dispose();
     super.dispose();
   }
 
@@ -216,9 +218,60 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
   int? _workDrag; // 0 in, 1 out, 2 both, null scrub
   double _workGrab = 0;
 
+  // The document's marks on the ruler, as After Effects' composition markers: a double click where there is none puts
+  // one there (named by its order), on one names it; one is carried along by its flag (its name kept), and carried off
+  // the ruler, up or down, it is taken away. Each one step.
+  (double, String)? _markHeld;
+  int _markTo = 0;
+  bool _markOff = false;
+  (double, String)? _naming;
+  final _markWords = TextEditingController();
+  late final FocusNode _markFocus = FocusNode()..addListener(() => _markFocus.hasFocus ? null : _named());   // (the field left: the name said)
+
+  /// The mark whose flag is under the hand, if any.
+  (double, String)? _flagAt(Offset p) {
+    if (p.dy < WtM.band + 1 || p.dy > WtM.band + 15) return null;
+    for (final m in _ws!.marks.reversed) {
+      final x = _view.x((m.$1 * Ws.fps).round());
+      if (p.dx >= x - 2 && p.dx <= x + wtFlagWidth(m.$2)) return m;
+    }
+    return null;
+  }
+
+  void _rulerTwice(Offset p) {
+    final ws = _ws!, m = ws.inside;
+    if (m == null) return;
+    if (_flagAt(p) case final flag?) {
+      setState(() => _naming = flag);
+      _markWords.text = flag.$2;
+      _markFocus.requestFocus();
+      return;
+    }
+    final at = _view.frameAt(p.dx).round().clamp(0, Ws.duration) / Ws.fps, marks = ws.marks;
+    if (marks.any((k) => (k.$1 - at).abs() < 0.5 / Ws.fps)) return;
+    var n = marks.length + 1;
+    while (marks.any((k) => k.$2 == 'M$n')) {
+      n++;
+    }
+    if (m.mark(at, 'M$n')) ws.reread();
+  }
+
+  void _named() {
+    final was = _naming, ws = _ws!, words = _markWords.text.trim();
+    if (was == null) return;
+    setState(() => _naming = null);
+    if (words.isNotEmpty && words != was.$2 && (ws.inside?.mark(was.$1, words) ?? false)) ws.reread();
+  }
+
   void _rulerDown(Offset p) {
     final v = _view, f = v.frameAt(p.dx);
     _workDrag = null;
+    if (_flagAt(p) case final flag?) {
+      _markHeld = flag;
+      _markTo = (flag.$1 * Ws.fps).round();
+      _markOff = false;
+      return;
+    }
     if (p.dy <= WtM.band + 2) {
       final a = v.x(_workIn), b = v.x(_workOut);
       if ((p.dx - a).abs() <= 6) {
@@ -235,6 +288,12 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
 
   void _rulerMove(Offset p) {
     final f = _view.frameAt(p.dx).round();
+    if (_markHeld != null) {
+      return setState(() {
+        _markTo = f.clamp(0, Ws.duration);
+        _markOff = p.dy < -WtM.ruler * .6 || p.dy > WtM.ruler * 1.6;   // (carried off the ruler: taken away when let go)
+      });
+    }
     switch (_workDrag) {
       case 0:
         setState(() => _workIn = f.clamp(0, _workOut - 2));
@@ -254,13 +313,25 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
   /// Joined: the work area carried is the document's when the hand lets go (one step).
   void _workLetGo() {
     final m = _ws?.inside;
+    if (_markHeld case (final at, final name)?) {
+      _markHeld = null;
+      final to = _markTo / Ws.fps;
+      final ok = _markOff ? m!.mark(at, '') : (to - at).abs() >= 0.5 / Ws.fps && m!.together(() => m.mark(at, '') && m.mark(to, name));
+      setState(() {});
+      if (ok) _ws!.reread();
+      return;
+    }
     if (_workDrag != null && m!.setWork(_workIn / Ws.fps, _workOut / Ws.fps)) _ws!.reread();
     _workDrag = null;
   }
 
   /// The marks on the ruler: the document's own (moments with a name).
   List<(int, String)> _marksOf(Ws ws) {
-    return [for (final (at, name) in _ws!.marks) ((at * Ws.fps).round(), name)];
+    return [
+      for (final (at, name) in _ws!.marks)
+        if ((at, name) != _markHeld) ((at * Ws.fps).round(), name)
+        else if (!_markOff) (_markTo, name),   // (the one carried: where the hand has it; off the ruler, gone)
+    ];
   }
 
   void _overview(Offset p, double w) {
@@ -404,6 +475,8 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
               GestureDetector(
                 key: const ValueKey('ws-tl-ruler'),
                 behavior: HitTestBehavior.opaque,
+                onDoubleTapDown: (d) => _rulerTwice(d.localPosition),
+                onDoubleTap: () {},
                 onPanDown: (d) => _rulerDown(d.localPosition),
                 onPanUpdate: (d) => _rulerMove(d.localPosition),
                 onPanEnd: (_) => _workLetGo(),
@@ -454,6 +527,27 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
               ),
             ),
           ),
+          if (_naming case (final at, _)?)   // (a mark's name written over its flag)
+            Positioned(
+              left: v.x((at * Ws.fps).round()),
+              top: WtM.band + 1,
+              width: 120,
+              height: 15,
+              child: Container(
+                color: Grey.g91,
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: EditableText(
+                  key: const ValueKey('ws-tl-mark-name'),
+                  controller: _markWords,
+                  focusNode: _markFocus,
+                  style: T.micro(Grey.g13).copyWith(fontWeight: FontWeight.w700),
+                  cursorColor: Grey.g13,
+                  backgroundCursorColor: Grey.g38,
+                  maxLines: 1,
+                  onSubmitted: (_) => _markFocus.unfocus(),
+                ),
+              ),
+            ),
         ],
       );
     },

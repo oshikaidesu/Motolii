@@ -47,8 +47,10 @@ void main() {
       final root = t.binding.renderViews.first.layer! as OffsetLayer;
       final png = await (await root.toImage(Offset.zero & t.view.physicalSize)).toByteData(format: ImageByteFormat.png);
       File('${out.path}/$name.png').writeAsBytesSync(png!.buffer.asUint8List());
-      final r = t.getRect(find.byType(WsDesk)), dpr = t.view.devicePixelRatio;
-      File('${out.path}/desk_rect.txt').writeAsStringSync('${r.left * dpr} ${r.top * dpr} ${r.right * dpr} ${r.bottom * dpr}');
+      if (find.byType(WsDesk).evaluate().isNotEmpty) {
+        final r = t.getRect(find.byType(WsDesk)), dpr = t.view.devicePixelRatio;
+        File('${out.path}/desk_rect.txt').writeAsStringSync('${r.left * dpr} ${r.top * dpr} ${r.right * dpr} ${r.bottom * dpr}');
+      }
     }
 
     Future<void> open(String tool) async {
@@ -61,70 +63,50 @@ void main() {
     final mouse = await t.createGesture(kind: PointerDeviceKind.mouse);
     await mouse.addPointer(location: Offset.zero);
 
-    // Markers: + at two moments, a name written over, one taken away.
-    await open('Markers');
-    final plus = find.byKey(const ValueKey('marks.add'));
-    ws.frame = 30;
-    await t.pump();
-    await t.tap(plus);
-    await t.pump();
-    ws.frame = 90;
-    await t.pump();
-    await t.tap(plus);
-    await t.pump();
+    // Markers, on the timeline's ruler (After Effects' composition markers): a double click puts one, twice; a double
+    // click on a flag names it; a flag carried later keeps its name; one carried off the ruler is gone.
+    final ruler = t.getRect(find.byKey(const ValueKey('ws-tl-ruler')));
+    Future<void> twice(Offset p) async {
+      await t.tapAt(p);
+      await t.pump(const Duration(milliseconds: 60));
+      await t.tapAt(p);
+      await t.pump(const Duration(milliseconds: 400));
+      await wait(50);
+      await t.pump();
+    }
+    final a1 = Offset(ruler.left + ruler.width * .3, ruler.top + 16), a2 = Offset(ruler.left + ruler.width * .6, ruler.top + 16);
+    await twice(a1);
+    await twice(a2);
     final made = ws.marks.length;
-    final field = find.descendant(of: find.byType(WsDesk), matching: find.byType(EditableText)).first;
-    await t.tap(field);
-    await t.pump();
-    (t.widget(field) as EditableText).controller.text = 'Drop'; // (as typed: the window's own text input does not reach a test's)
-    await t.testTextInput.receiveAction(TextInputAction.done);
-    await t.pump();
-    FocusManager.instance.primaryFocus?.unfocus(); // (the field left: its name is said)
+    await twice(a1 + const Offset(4, 0));   // (on the first one's flag: its name written over)
+    (t.widget(find.byKey(const ValueKey('ws-tl-mark-name'))) as EditableText).controller.text = 'Drop';
+    FocusManager.instance.primaryFocus?.unfocus();
     await t.pump();
     await wait(100);
     await t.pump();
     final named = ws.marks.map((m) => m.$2).toList();
     await shoot('Markers');
-    final cross = find.byKey(const ValueKey('mark.remove')).last;
-    await t.tap(cross);
-    await t.pump();
-    report.add('Markers: + twice made $made (want 2); names after writing over the first: $named (want Drop first); after x: ${ws.marks.length} (want 1)');
-    // (the reviewer's: a mark at a frame that is no round number of seconds is named and taken away all the same)
-    ws.frame = 7;
-    await t.pump();
-    await t.tap(plus);
-    await t.pump();
-    final odd = ws.marks.firstWhere((m) => (m.$1 * Ws.fps).round() == 7);
-    final oddField = find.descendant(of: find.byKey(ValueKey(odd.$1)), matching: find.byType(EditableText));
-    await t.tap(oddField);
-    await t.pump();
-    (t.widget(oddField) as EditableText).controller.text = 'Odd';
-    FocusManager.instance.primaryFocus?.unfocus();
-    await t.pump();
-    await wait(100);
-    await t.pump();
-    final oddNamed = ws.marks.where((m) => (m.$1 * Ws.fps).round() == 7).map((m) => m.$2).toList();
-    await t.tap(find.descendant(of: find.byKey(ValueKey(ws.marks.firstWhere((m) => (m.$1 * Ws.fps).round() == 7).$1)), matching: find.byKey(const ValueKey('mark.remove'))));
-    await t.pump();
-    final oddLeft = ws.marks.where((m) => (m.$1 * Ws.fps).round() == 7).length;
-    report.add('Markers at frame 7: named $oddNamed (want [Odd]); after x: $oddLeft left (want 0)');
-    expect(oddNamed, ['Odd']);
-    expect(oddLeft, 0);
-    // (a tick carried along the strip: the mark moved, its name kept)
-    final strip = t.getRect(find.descendant(of: find.byType(WsDesk), matching: find.byWidgetPredicate((w) => w.runtimeType.toString() == '_Strip')));
-    final keep = ws.marks.first, fromX = strip.left + 8 + (strip.width - 16) * (keep.$1 / (Ws.duration / Ws.fps));
-    final drag = await t.startGesture(Offset(fromX, strip.center.dy), kind: PointerDeviceKind.mouse);
-    for (var i = 0; i < 10; i++) {
-      await drag.moveBy(const Offset(6, 0));
-      await t.pump(const Duration(milliseconds: 16));
+    Future<void> carry(Offset from, Offset by) async {
+      final g = await t.startGesture(from, kind: PointerDeviceKind.mouse);
+      for (var i = 0; i < 10; i++) {
+        await g.moveBy(by / 10);
+        await t.pump(const Duration(milliseconds: 16));
+      }
+      await g.up();
+      await t.pump();
+      await wait(100);
+      await t.pump();
     }
-    await drag.up();
-    await t.pump();
-    await wait(100);
-    report.add('Markers moved: $keep -> ${ws.marks} (want the same name, later)');
+    final keep = ws.marks.first;
+    await carry(a1 + const Offset(4, 0), const Offset(40, 0));
+    final moved = ws.marks.first;
+    await carry(a2 + const Offset(4, 0), const Offset(0, 60));   // (the second, carried down off the ruler)
+    report.add('Markers: double clicks made $made (want 2); named $named (want Drop first); carried ${keep.$1.toStringAsFixed(2)} -> ${moved.$1.toStringAsFixed(2)} ${moved.$2} (want later, Drop); one carried off: ${ws.marks.length} left (want 1)');
+    expect(made, 2);
+    expect(named.first, 'Drop');
+    expect(moved.$2, 'Drop');
+    expect(moved.$1, greaterThan(keep.$1));
     expect(ws.marks.length, 1);
-    expect(ws.marks.first.$2, keep.$2);
-    expect(ws.marks.first.$1, greaterThan(keep.$1));
 
     // Blend: the rect made to add, the circle cleared half, the cube (no blend) only named.
     await open('Blend');
