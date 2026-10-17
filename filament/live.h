@@ -120,13 +120,6 @@ static void desk_marks(Stage& s, Live* l, int i) {
             sh->strokeWidth(width * pt), sh->strokeFill(0xB3, 0xC6, 0x6B, a), sh->strokeCap(tvg::StrokeCap::Round);
             canvas->add(sh);
         };
-        const auto around = [&](const double* xy, int n, float width, uint8_t r, uint8_t g, uint8_t b, uint8_t a) {   // (an outline: doc_outline's points round it)
-            tvg::Shape* sh = tvg::Shape::gen();
-            for (int i = 0; i < n; ++i) { const float2 p = at(xy[2 * i], xy[2 * i + 1]); if (i) sh->lineTo(p.x, p.y); else sh->moveTo(p.x, p.y); }
-            sh->close();
-            sh->strokeWidth(width * pt), sh->strokeFill(r, g, b, a), sh->strokeJoin(tvg::StrokeJoin::Round);
-            canvas->add(sh);
-        };
         const auto square = [&](float2 c, float half) { tvg::Shape* sh = tvg::Shape::gen(); sh->appendRect(c.x - half * pt, c.y - half * pt, 2.f * half * pt, 2.f * half * pt, 0.6f * pt, 0.6f * pt); sh->fill(0xB3, 0xC6, 0x6B, 230); canvas->add(sh); };
         const auto dot = [&](float2 c, float r) { tvg::Shape* sh = tvg::Shape::gen(); sh->appendCircle(c.x, c.y, r * pt, r * pt); sh->fill(0xB3, 0xC6, 0x6B, 230); canvas->add(sh); };
         tvg::Shape* off = tvg::Shape::gen();   // (what lies off the stage, covered half way: the stage's own frame reads as the picture)
@@ -134,10 +127,18 @@ static void desk_marks(Stage& s, Live* l, int i) {
         off->appendRect((float)k.x, (float)k.y, (float)(s_w * k.scale), (float)(s_h * k.scale), 0, 0, false);
         off->fill(0x19, 0x19, 0x19, 140);   // (the window's surround, Grey.g10, half way)
         canvas->add(off);
-        if (k.hovered && k.hoverOutline > 2) around(k.hoverAround, k.hoverOutline, 1.f, 0xE6, 0xE6, 0xE6, 150);
+        if (k.hovered) {   // (the one under the hand: its frame, thin and pale)
+            const Frame f = frame(k.hover);
+            tvg::Shape* sh = tvg::Shape::gen();
+            sh->moveTo(f.c[0].x, f.c[0].y);
+            for (int i = 1; i < 4; ++i) sh->lineTo(f.c[i].x, f.c[i].y);
+            sh->close();
+            sh->strokeWidth(1.f * pt), sh->strokeFill(0xE6, 0xE6, 0xE6, 150);
+            canvas->add(sh);
+        }
         if (k.picked) {
             const Frame f = frame(k.pick);
-            if (k.pickOutline > 2) around(k.pickAround, k.pickOutline, 1.f, 0xB3, 0xC6, 0x6B, 220);   // (its outline as seen)
+            line({f.c[0], f.c[1], f.c[2], f.c[3]}, true, 1.f, 220);   // (its frame, the corners joined)
             if (k.knob) {   // (the knob it is turned by, a stem's length out from the middle of its top edge)
                 float2 n = f.top - f.mid;
                 const float len = length(n);
@@ -146,7 +147,7 @@ static void desk_marks(Stage& s, Live* l, int i) {
                 line({f.top, knob}, false, 0.75f, 140);
                 dot(knob, 2.75f);
             }
-            for (float2 c : f.c) square(c, 2.75f);   // (the corners a hand pulls it larger by; no line between them)
+            for (float2 c : f.c) square(c, 2.75f);   // (the corners a hand pulls it larger by)
             tvg::Shape* ring = tvg::Shape::gen();   // (the point it turns about: a small ring and four short ticks)
             ring->appendCircle(f.pivot.x, f.pivot.y, 4.f * pt, 4.f * pt);
             ring->strokeWidth(1.f * pt), ring->strokeFill(0xB3, 0xC6, 0x6B, 200);

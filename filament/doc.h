@@ -708,6 +708,7 @@ static void doc_parts(Stage& s, const Doc::Shown& t, const std::function<void(Re
     doc_entities(s, t, [&](utils::Entity e) { each(faces, faces.getInstance(e)); });
 }
 static bool doc_covers(Doc& d, int thing, double now, double* box);
+static int doc_outline(Doc& d, int thing, double now, double* xy);
 static bool doc_half(Doc& d, int thing, float2* half, float* deep = nullptr);
 // Where a thing is at a moment, as a matrix: moved, turned about z, y and x, made its size, all about its anchor (a
 // point of its own box: 0 its middle, 1 its edge on that side; the past repository's `anchor`, keyed as it was).
@@ -2512,8 +2513,15 @@ static bool doc_frame(Doc& d, int thing, double now, double* frame) {
     const math::double2 pivot = doc_seen(d, (doc_shown_at(d, thing, now) * math::double4{anchor, 1.0}).xyz);   // (the point it turns about)
     frame[5] = pivot.x, frame[6] = pivot.y, frame[7] = 2.0 * deep * size * std::fabs(sz) * point;   // (and how deep it is: a flat thing, 0)
     double box[4];   // (turned about another line than the eye's, its frame is the upright box of what it covers)
-    if ((doc_number(d, thing, "rotate_x", now, 0) != 0.0 || doc_number(d, thing, "rotate_y", now, 0) != 0.0 || doc_number(d, thing, "parent", 0, 0) != 0.0) && doc_covers(d, thing, now, box))
-        frame[2] = box[2], frame[3] = box[3], frame[4] = 0.0;   // (as wide and high as that box; its middle stays the thing's own)
+    if (doc_number(d, thing, "rotate_x", now, 0) != 0.0 || doc_number(d, thing, "rotate_y", now, 0) != 0.0 || doc_number(d, thing, "parent", 0, 0) != 0.0) {
+        double around[128];   // (as wide and high as what it covers: its own points where they are at hand, doc_outline)
+        const int n = doc_outline(d, thing, now, around);
+        if (n > 2) {
+            double x0 = around[0], x1 = x0, y0 = around[1], y1 = y0;
+            for (int i = 1; i < n; ++i) x0 = std::min(x0, around[2 * i]), x1 = std::max(x1, around[2 * i]), y0 = std::min(y0, around[2 * i + 1]), y1 = std::max(y1, around[2 * i + 1]);
+            frame[2] = 2.0 * std::max(frame[0] - x0, x1 - frame[0]), frame[3] = 2.0 * std::max(frame[1] - y0, y1 - frame[1]), frame[4] = 0.0;   // (its middle stays the thing's own: as far each way as what it covers goes on its farther side)
+        } else if (doc_covers(d, thing, now, box)) frame[2] = box[2], frame[3] = box[3], frame[4] = 0.0;
+    }
     return true;
 }
 // The upright box of the picture a thing covers at a moment, however it is turned or leans: left, top, wide, high.
