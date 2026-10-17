@@ -10,6 +10,7 @@ import 'desk_color.dart';
 import 'desk_depth.dart';
 import 'desk_ease.dart';
 import 'desk_markers.dart';
+import 'desk_links.dart';
 import 'desk_path.dart';
 import 'desk_sequence.dart';
 import 'ws.dart';
@@ -35,7 +36,7 @@ const deskTools = [
   DeskTool('Audio', WsT.toneAudio, 'Beat markers'),
   DeskTool('Markers', Pop.toneTextAnim, 'Comp time', build: DeskMarkers.new),
   DeskTool('Notes', Pop.toneText, 'Comments'),
-  DeskTool('Links', Pop.toneLink, 'Relations'),
+  DeskTool('Links', Pop.toneLink, 'Relations', build: DeskLinks.new),
 ];
 
 DeskTool deskTool(Ws ws, String name) => ws.tools.firstWhere((t) => t.name == name, orElse: () => DeskTool(name, Grey.g63, ''));

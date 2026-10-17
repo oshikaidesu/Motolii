@@ -306,6 +306,25 @@ void main() {
     expect(m.value(b, 'orient', 0), 1);
     expect(turned, closeTo(-45, 3));
 
+    // Links: the circle pointed at the rect as its parent by a tap on the rect's dot (it keeps where it is seen), then
+    // let go by a tap on the same dot.
+    ws.select('$b');
+    await open('Links');
+    final seenBefore = m.seen(b);
+    await t.tap(find.byKey(ValueKey('links.to.$a')));
+    await t.pump();
+    await wait(100);
+    final parented = m.value(b, 'parent', 0), seenAfter = m.seen(b);
+    await shoot('Links');
+    await t.tap(find.byKey(ValueKey('links.to.$a')));
+    await t.pump();
+    await wait(100);
+    final freed = m.value(b, 'parent', 0);
+    report.add('Links: circle parent $parented (want $a), left ${seenBefore?.left.toStringAsFixed(1)} -> ${seenAfter?.left.toStringAsFixed(1)} (want the same); tapped again $freed (want 0)');
+    expect(parented, a);
+    expect(seenAfter!.left, closeTo(seenBefore!.left, 1));
+    expect(freed, 0);
+
     // Color (the dock's Colors shelf at the desk): the circle given the rect's colour from Used here, then, the
     // stroke card's link aiming, its edge the same.
     ws.select('$b');
