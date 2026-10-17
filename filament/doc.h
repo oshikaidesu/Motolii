@@ -159,7 +159,7 @@ static const DocValue doc_values[] = {
     {"points", "shape", 3, 100, false, nullptr}, {"inner", "shape", 0.01, 1, false, nullptr}, {"round", "shape", 0, 0.5, true, nullptr},   // (a polygon's or star's points, a star's inner points, its corners rounded)
     {"start", doc_kinds, 0, 1e6, false, nullptr}, {"duration", doc_kinds, 1e-3, 1e6, false, nullptr},
     {"begin", "film", 0, 1e6, false, nullptr}, {"speed", "film solid", -100, 100, false, nullptr}, {"keyed", "film", 0, 1, false, nullptr},
-    {"blend", "film picture text shape", 0, 0, false, "normal add multiply screen"}, {"file", "film picture solid text", 0, 0, false, ""}, {"shape", "solid", 0, 0, false, doc_shapes},
+    {"blend", "film picture text shape", 0, 0, false, "normal add multiply screen darken lighten overlay soft_light hard_light color_dodge color_burn difference exclusion hue saturation color luminosity"}, {"file", "film picture solid text", 0, 0, false, ""}, {"shape", "solid", 0, 0, false, doc_shapes},
     {"text", "text", 0, 0, false, ""}, {"fill", "text solid shape light", 0, 0, false, ""},
     {"marker", "picture", 0, 0, false, ""},   // (an After Effects file: which of its named stretches it plays, over and over; all: the whole of it)
     {"name", doc_kinds, 0, 0, false, ""},   // (what it is called where things are listed; not said: by what it is)
@@ -698,6 +698,13 @@ static std::string doc_word(Doc& d, int thing, const char* name) {
 }
 
 // Every look of a thing as it is on the stage (a sheet's one; a kit shape's, as many as it is drawn by; every face of a 3D file).
+// A way of lying on what is under that reads what is under (the W3C's compositing, After Effects' and ThorVG's): its
+// number in flat.mat's blendWay (0: one the GPU's own blending does: normal, add, multiply, screen).
+static int doc_blend_way(const std::string& word) {
+    static const char* const ways[] = {"darken", "lighten", "overlay", "soft_light", "hard_light", "color_dodge", "color_burn", "difference", "exclusion", "hue", "saturation", "color", "luminosity"};
+    for (int i = 0; i < 13; ++i) if (word == ways[i]) return i + 1;
+    return 0;
+}
 static void doc_looks(Stage& s, const Doc::Shown& t, const std::function<void(MaterialInstance*)>& each) {
     auto& faces = s.engine->getRenderableManager();
     if (t.film) each(t.film->look);
@@ -1219,6 +1226,7 @@ static bool doc_fx(Doc& d, int thing, double at, bool most, double units, DrawnF
 
 static void doc_moment(Doc& d, double now) {
     Stage& s = *d.stage;
+    screen_copier(s);   // (once: the kit copies what lies under a picture that reads it)
     d.halves.clear(), d.heard.clear(), d.heardWords.clear(), d.talls.clear();   // (made again since: a flat thing's sheet is as large as its picture now; doc_place's values asked anew)
     const std::vector<int> lie = doc_laid(d);
     // Each thing as it is now, in the order they lie: whether it is on, and whether it is a solid thing.
@@ -1280,10 +1288,14 @@ static void doc_moment(Doc& d, double now) {
     std::vector<int> runOf(lies.size(), -1), sorts;
     for (size_t i = 0; i < lies.size(); ++i) {
         if (!lies[i].on || lies[i].shown->camera || !lies[i].shown->light.isNull()) continue;   // (a camera or a light is in no run: nothing of it is drawn)
-        if (sorts.empty() || sorts.back() != (int)lies[i].solid) sorts.push_back((int)lies[i].solid);
+        // (a flat thing that reads what is under (doc_blend_way) is a run of its own, drawn once all under it is: the
+        //  kit copies the picture so far before it, kit.h pictures_of; never the first run, which has nothing under it)
+        const int sort = lies[i].solid ? 1 : doc_blend_way(doc_word(d, lies[i].thing, "blend")) ? 2 : 0;
+        if (sort == 2 && sorts.empty()) sorts.push_back(0);
+        if (sorts.empty() || sorts.back() != sort || sort == 2) sorts.push_back(sort);
         runOf[i] = (int)sorts.size() - 1;
     }
-    const int base = sorts.size() > 1 && !sorts[0] ? 1 : 0;   // (the last run in the stage's own view)
+    const int base = sorts.size() > 1 && sorts[0] == 0 && sorts[1] == 1 ? 1 : 0;   // (the last run in the stage's own view: flat things under the first solid ones)
     for (size_t i = 0; i < lies.size(); ++i) {
         if (runOf[i] < 0) continue;
         const int run = runOf[i];
@@ -1306,6 +1318,16 @@ static void doc_moment(Doc& d, double now) {
         t.run = run, t.lies = (int)i;
     }
     s.layered = sorts.size() > (size_t)base + 1 ? sorts.size() - (size_t)base - 1 : 0;
+    s.backdropBefore.assign(s.layered, 0);
+    for (size_t k = 0; k < s.layered; ++k) s.backdropBefore[k] = sorts[k + (size_t)base + 1] == 2;
+    if (std::find(sorts.begin(), sorts.end(), 2) != sorts.end())   // (as large as what the views draw into: the desk's when it is drawn there, else the stage's)
+        backdrop_as(s, s.desk.w && !s.over ? s.desk.w : (uint32_t)s.w, s.desk.w && !s.over ? s.desk.h : (uint32_t)s.h);
+    for (size_t i = 0; i < lies.size(); ++i)   // (those that read what is under: which way, and the picture of it)
+        if (runOf[i] >= 0 && sorts[(size_t)runOf[i]] == 2)
+            doc_looks(s, *lies[i].shown, [&](MaterialInstance* look) {
+                look->setParameter("blendWay", (float)doc_blend_way(doc_word(d, lies[i].thing, "blend")));
+                if (s.backdrop) look->setParameter("backdrop", s.backdrop, TextureSampler(TextureSampler::MinFilter::NEAREST, TextureSampler::MagFilter::NEAREST));
+            });
     View::DepthOfFieldOptions lens = s.view->getDepthOfFieldOptions();   // (the camera's lens, on the stage's own view when solid things are in it)
     if (lens.enabled != (d.blurred && (base == 1 || (!sorts.empty() && sorts[0]))))
         lens.enabled = !lens.enabled, s.view->setDepthOfFieldOptions(lens);
@@ -1593,7 +1615,7 @@ static bool doc_match(Doc& d) {
         if (d.shown.count(thing)) continue;
         Doc::Shown made{of};
         const std::string kind = doc_word(d, thing, "kind"), file = doc_word(d, thing, "file"), laid = doc_word(d, thing, "blend"), shape = doc_word(d, thing, "shape");
-        const char* lay = laid.empty() || laid == "normal" ? nullptr : laid.c_str();
+        const char* lay = laid.empty() || laid == "normal" || doc_blend_way(laid) ? nullptr : laid.c_str();   // (one that reads what is under: drawn as normal, flat.mat mixes it)
         std::string why = "it could not be read";
         const std::string fill = doc_word(d, thing, "fill");
         // (a fill is a colour, six digits; or, of a text or a flat shape, two colours or more: a ramp down it)

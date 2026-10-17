@@ -200,6 +200,11 @@ static door::Screen* screen_copy(Stage& s, ScreenStack& st) {   // (a picture pu
 }
 // A picture put on another where `at` says (left, bottom, wide, high), as it is; all else of it clear (the desk's
 // stage, its whole-screen effects drawn as a written film has them: live.h).
+static void screen_place(Stage& s, Texture* from, RenderTarget* to, uint32_t w, uint32_t h, const int* at);
+// The kit's copier (a picture as it is, to another or to the screen): what lies under a picture that reads it.
+static void screen_copier(Stage& s) {
+    if (!s.copyDoor) s.copyDoor = [&s](Texture* from, RenderTarget* to) { screen_place(s, from, to, from->getWidth(), from->getHeight(), nullptr); };
+}
 static void screen_place(Stage& s, Texture* from, RenderTarget* to, uint32_t w, uint32_t h, const int* at) {
     static std::map<Engine*, door::Screen*> copies;
     door::Screen*& copy = copies[s.engine];
@@ -281,6 +286,7 @@ static void screen_effects(Stage& s, ScreenStack& st, const std::string& files, 
     if (st.files == files) return;
     st.files = files;
     s.over = nullptr;   // (what there was let go: the stage draws to the screen again)
+    s.drawnInto = nullptr;
     s.view->setRenderTarget(nullptr);
     for (View* v : s.layers) v->setRenderTarget(nullptr);
     st.fx.clear();
@@ -309,6 +315,7 @@ static void screen_effects(Stage& s, ScreenStack& st, const std::string& files, 
         if (!st.between[k]) st.between[k] = screen_picture(s), st.betweenTarget[k] = RenderTarget::Builder().texture(RenderTarget::AttachmentPoint::COLOR, st.between[k]).build(*s.engine);
     s.view->setRenderTarget(st.target);
     for (View* v : s.layers) v->setRenderTarget(st.target);
+    s.drawnInto = st.shot;   // (what lies under a picture that reads it is copied from here)
     s.over = [&s, &st, numbers] {
         for (size_t i = 0; i < st.fx.size(); ++i) {
             screen_fresh(s, *st.fx[i]);

@@ -125,6 +125,14 @@ struct Stage {
     size_t layered = 0;
     std::function<void()> over;   // drawn last, over all of them (a whole-screen effect: screen.h)
     std::function<void()> lastly;   // and after everything, in the same frame (the desk: its stage's picture placed on it, live.h)
+    // A picture laid over that reads what is under it (doc.h doc_blend_way): before it, the picture so far is copied to
+    // `backdrop` for its material to read. drawnInto: the picture the views draw into (live.h, screen.h); none (the
+    // screen, a written film): they draw into `composed` instead while one reads, and it is put on the screen at the end.
+    std::vector<char> backdropBefore;
+    Texture* drawnInto = nullptr;
+    Texture* backdrop = nullptr; RenderTarget* backdropTarget = nullptr;
+    Texture* composed = nullptr; Texture* composedDepth = nullptr; RenderTarget* composedTarget = nullptr;
+    std::function<void(Texture*, RenderTarget*)> copyDoor;   // (a picture copied as it is: screen.h gives it; to none, the screen)
     RenderTarget* out = nullptr;   // where the picture goes at last (none: the screen; the window's live picture: live.h)
 };
 
@@ -330,6 +338,7 @@ static std::vector<MaterialInstance*> add_parts(Stage& s, Mesh* m, const char* f
             mi->setParameter("matteUse", float4{0.f});
             mi->setParameter("matteSoft", float4{0.f});
         }
+        if (mat->hasParameter("backdrop")) mi->setParameter("backdrop", white_point(s), TextureSampler());   // (none read until doc.h says which)
         looks.push_back(mi);
     }
     float3 low = n ? m->pos[0] : float3{0.f}, high = low;   // (Filament wants a thing's rough size if it casts or takes shadows)
@@ -934,6 +943,16 @@ static bool begins(Stage& s) {
 
 // All the pictures of one frame, the helper pictures first (between Filament's beginFrame and endFrame). Every way
 // of drawing the stage goes through here.
+// The picture of what lies under a picture that reads it, as large as what the views draw into (the stage's, or the
+// desk's): made when the moment is told (doc.h), so the looks that read it are told it before the frame begins.
+static Texture* backdrop_as(Stage& s, uint32_t w, uint32_t h) {
+    if (s.backdrop && s.backdrop->getWidth() == w && s.backdrop->getHeight() == h) return s.backdrop;
+    if (s.backdropTarget) s.engine->destroy(s.backdropTarget);
+    if (s.backdrop) s.engine->destroy(s.backdrop);
+    s.backdrop = Texture::Builder().width(w).height(h).levels(1).usage(Texture::Usage::COLOR_ATTACHMENT | Texture::Usage::SAMPLEABLE).format(Texture::InternalFormat::RGBA8).build(*s.engine);
+    s.backdropTarget = RenderTarget::Builder().texture(RenderTarget::AttachmentPoint::COLOR, s.backdrop).build(*s.engine);
+    return s.backdrop;
+}
 static void pictures_of(Stage& s) {
     for (Stage::Matte& m : s.mattes) {
         s.renderer->render(m.view);
@@ -942,8 +961,30 @@ static void pictures_of(Stage& s) {
     if (s.view_floor) s.renderer->render(s.view_floor);
     s.renderer->render(s.view_behind);
     if (s.view_through) s.renderer->render(s.view_through);
+    const bool reads = std::any_of(s.backdropBefore.begin(), s.backdropBefore.end(), [](char b) { return b != 0; });
+    Texture* into = s.drawnInto;
+    const bool routed = reads && !into;   // (drawn for the screen: into a picture of its own first, so what is under can be copied)
+    if (routed) {
+        if (!s.composed) {
+            s.composed = Texture::Builder().width((uint32_t)s.w).height((uint32_t)s.h).levels(1).usage(Texture::Usage::COLOR_ATTACHMENT | Texture::Usage::SAMPLEABLE).format(Texture::InternalFormat::RGBA8).build(*s.engine);
+            s.composedDepth = Texture::Builder().width((uint32_t)s.w).height((uint32_t)s.h).levels(1).usage(Texture::Usage::DEPTH_ATTACHMENT).format(Texture::InternalFormat::DEPTH24).build(*s.engine);
+            s.composedTarget = RenderTarget::Builder().texture(RenderTarget::AttachmentPoint::COLOR, s.composed).texture(RenderTarget::AttachmentPoint::DEPTH, s.composedDepth).build(*s.engine);
+        }
+        into = s.composed;
+        s.view->setRenderTarget(s.composedTarget);
+        for (View* v : s.layers) v->setRenderTarget(s.composedTarget);
+    }
+    if (reads && into) backdrop_as(s, into->getWidth(), into->getHeight());   // (made before, as the moment was told: doc.h; here only if the size has moved since)
     s.renderer->render(s.view);
-    for (size_t k = 0; k < s.layered && k < s.layers.size(); ++k) s.renderer->render(s.layers[k]);
+    for (size_t k = 0; k < s.layered && k < s.layers.size(); ++k) {
+        if (k < s.backdropBefore.size() && s.backdropBefore[k] && into && s.copyDoor) s.copyDoor(into, s.backdropTarget);   // (what is under it, as it is now)
+        s.renderer->render(s.layers[k]);
+    }
+    if (routed) {
+        if (s.copyDoor) s.copyDoor(s.composed, nullptr);   // (put on the screen, as it would have been drawn there)
+        s.view->setRenderTarget(nullptr);
+        for (View* v : s.layers) v->setRenderTarget(nullptr);
+    }
     if (s.over) s.over();
     if (s.solo && s.solo->getRenderTarget()) s.renderer->render(s.solo);   // (a card's picture of one thing alone, into its own buffer: live.h)
     if (s.lastly) s.lastly();
