@@ -40,6 +40,39 @@ class EaseNumbers extends StatelessWidget {
         Expanded(child: b),
       ],
     );
+    // (a kind with no seat here: each of its own numbers to scrub, as far as a hand takes it; said back as the kind and all of them)
+    final words = easeOther(e) ? e.name!.split(' ') : const <String>[], inside = WsScope.of(context).inside;
+    final own = words.isEmpty || inside == null ? const <(String, double, double)>[] : inside.wayNumbers(words.first);
+    if (own.isNotEmpty) {
+      final now = words.length == own.length + 1 ? [for (final w in words.skip(1)) double.tryParse(w) ?? 0] : [for (final n in own) (n.$2 + n.$3) / 2];
+      return ColoredBox(
+        color: WsT.card,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(WsT.inset, 7, WsT.inset, WsT.inset),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              DeskCaption(words.first),
+              const SizedBox(height: 4),
+              for (final (j, (name, lo, hi)) in own.indexed) ...[
+                DeskScrub(
+                  key: ValueKey('ease.number.$name'),
+                  label: name.replaceAll('_', ' '),
+                  value: now[j].clamp(lo, hi),
+                  min: lo,
+                  max: hi,
+                  perPx: (hi - lo) / 200,
+                  pad: 5,
+                  format: (v) => hi - lo > 50 ? v.round().toString() : v.toStringAsFixed(2),
+                  onChanged: (v) => onChanged(Ease(e.kind, e.p1, e.p2, [words.first, for (final (k, x) in now.indexed) k == j ? (hi - lo > 50 ? v.roundToDouble() : v) : x].join(' '))),
+                ),
+                const SizedBox(height: 2),
+              ],
+            ],
+          ),
+        ),
+      );
+    }
     return ColoredBox(
       color: WsT.card,
       child: LayoutBuilder(

@@ -116,6 +116,7 @@ class Motolii {
   late final _ways = _lib.lookupFunction<_S Function(_P), _S Function(_P)>('motolii_ways');
   late final _define = _lib.lookupFunction<Int32 Function(_P, _S, _S), int Function(_P, _S, _S)>('motolii_define');
   late final _wayNames = _lib.lookupFunction<_S Function(_P), _S Function(_P)>('motolii_way_names');
+  late final _wayNumbers = _lib.lookupFunction<_S Function(_P, _S), _S Function(_P, _S)>('motolii_way_numbers');
   late final _effectNames = _lib.lookupFunction<_S Function(_P), _S Function(_P)>('motolii_effect_names');
   late final _effect = _lib.lookupFunction<Int32 Function(_P, Int32, _S, Double), int Function(_P, int, _S, double)>('motolii_effect');
   late final _wayAt = _lib.lookupFunction<Double Function(_P, _S, Double), double Function(_P, _S, double)>('motolii_way_at');
@@ -497,6 +498,12 @@ class Motolii {
   bool effect(int thing, String name, double at) => _with([name], (s) => _effect(_m, thing, s[0], at)) != 0;
 
   List<String> get wayNames => _wayNames(_m).toDartString().split(' ').where((w) => w.isNotEmpty).toList();
+  /// A kind's numbers as a hand takes them: each one's name, lowest and highest (none: a kind without, or one defined).
+  List<(String, double, double)> wayNumbers(String kind) {
+    final w = _with([kind], (s) => _wayNumbers(_m, s[0]).toDartString()).split(' ').where((x) => x.isNotEmpty).toList();
+    return [for (var i = 0; i + 2 < w.length; i += 3) (w[i], double.parse(w[i + 1]), double.parse(w[i + 2]))];
+  }
+
   double wayAt(String way, double u) => _with([way], (s) => _wayAt(_m, s[0], u));
 
   /// What kind of thing a file makes ('': none).

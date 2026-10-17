@@ -26,7 +26,7 @@ class Presets extends StatelessWidget {
         for (final (i, p) in tiles.indexed) ...[
           if (i > 0) const SizedBox(width: 3),
           Expanded(
-            child: _PresetTile(p, on: on(p), onTap: () => onPick(p)),
+            child: _PresetTile(p, key: ValueKey('ease.${p.name}'), on: on(p), onTap: () => onPick(p)),
           ),
         ],
       ],
@@ -44,7 +44,7 @@ class Presets extends StatelessWidget {
 }
 
 class _PresetTile extends StatelessWidget {
-  const _PresetTile(this.ease, {required this.on, required this.onTap});
+  const _PresetTile(this.ease, {super.key, required this.on, required this.onTap});
   final Ease ease;
   final bool on;
   final VoidCallback onTap;

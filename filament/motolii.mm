@@ -539,6 +539,20 @@ const char* motolii_kind_of(const char* file) { return doc_kind_of(file); }
 int motolii_sets(const char* font, const char* words) { return type_sets(font, words) ? 1 : 0; }
 // The names of the ways a stretch may go (the nine kinds, then the ways defined in this document), with spaces between;
 // and how one of the nine goes: how far it is, from 0 at its beginning to 1 at its end, at `u` of the way through.
+// A kind's numbers as a hand takes them: each one's name, how low and how high ("seed 1 999 grain 0 0.5 ..."); none: "".
+const char* motolii_way_numbers(Motolii* m, const char* kind) {
+    return by_look(m, [=] {
+        m->word.clear();
+        for (const auto& k : interp_kinds) {
+            if (strcasecmp(k.name, kind)) continue;
+            std::istringstream names(k.names);
+            std::string name;
+            char one[96];
+            for (int j = 0; j < k.numbers && names >> name; ++j) std::snprintf(one, sizeof one, "%s%s %.9g %.9g", m->word.empty() ? "" : " ", name.c_str(), k.lo[j], k.hi[j]), m->word += one;
+        }
+        return m->word.c_str();
+    });
+}
 const char* motolii_way_names(Motolii* m) {
     return by_look(m, [=] {
         m->word.clear();

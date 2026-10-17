@@ -229,6 +229,43 @@ void main() {
     report.add('Sequence undone: rect start ${m.value(a, 'start', 0)}, keys ${m.keyMoments(a, 'opacity')} (want 0, 0.0 0.5)');
     expect(m.keyMoments(a, 'opacity')[0], closeTo(0, 1e-6));
 
+    // Ease, a kind with no seat of its own (the stretch shaken: Random): the rect's opacity stretch (its key at 0 to
+    // the one at 0.5) given it from its tile, then its own numbers scrubbed (how far it strays, its seed); still at both
+    // keys, other than straight between.
+    ws.pickKey((layer: '$a', frame: 0));
+    await open('Ease');
+    await t.tap(find.byKey(const ValueKey('ease.Random')));
+    await t.pump();
+    await wait(100);
+    await t.pump();
+    final given = m.wayOf(a, 'opacity', 0);
+    Future<void> scrub(String name, double by) async {
+      final r = t.getRect(find.byKey(ValueKey('ease.number.$name')));
+      final g = await t.startGesture(r.center, kind: PointerDeviceKind.mouse);
+      for (var i = 0; i < 10; i++) {
+        await g.moveBy(Offset(by / 10, 0));
+        await t.pump(const Duration(milliseconds: 16));
+      }
+      await g.up();
+      await t.pump();
+      await wait(100);
+      await t.pump();
+    }
+    await scrub('center_v', 40);
+    final shaken = m.wayOf(a, 'opacity', 0);
+    await scrub('seed', 30);
+    final thrown = m.wayOf(a, 'opacity', 0);
+    await shoot('Ease_random');
+    final along = [for (var i = 0; i <= 20; i++) m.value(a, 'opacity', 0.5 * i / 20) ?? 0];
+    final strays = [for (final (i, v) in along.indexed) (v - i / 20).abs()].reduce((x, y) => x > y ? x : y);
+    report.add('Ease Random: $given, then center_v scrubbed $shaken, then seed $thrown (want each different); at the keys ${along.first.toStringAsFixed(3)} ${along.last.toStringAsFixed(3)} (want 0 1); strays up to ${strays.toStringAsFixed(3)} (want > 0.02)');
+    expect(given.startsWith('Random '), true);
+    expect(shaken != given, true);
+    expect(thrown != shaken, true);
+    expect(along.first, closeTo(0, 1e-6));
+    expect(along.last, closeTo(1, 1e-6));
+    expect(strays, greaterThan(.02));
+
     // Color: the circle given the rect's colour, then its edge the same.
     ws.select('$b');
     await open('Color');

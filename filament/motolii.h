@@ -59,6 +59,7 @@ int motolii_effect(Motolii* m, int thing, const char* name, double at);
 const char* motolii_way_of(Motolii* m, int thing, const char* name, double at);   /* the way of the stretch that begins at that key, as it is said ("": no key there; until the next call) */
 const char* motolii_ways(Motolii* m);
 const char* motolii_way_names(Motolii* m);                         /* the names alone, with spaces between: the nine kinds, then the ways defined here (until the next call) */
+const char* motolii_way_numbers(Motolii* m, const char* kind);   /* a kind's numbers as a hand takes them: name, lowest, highest for each ("seed 1 999 grain 0 0.5 ..."); "" for a kind with none or a way defined in the document */
 double motolii_way_at(Motolii* m, const char* way, double u);      /* how a way goes, one of the nine kinds or one defined in the document: how far (0 at its beginning, 1 at its end) at u of the way through */                              /* the names of the ways the document knows (until the next call) */
 int motolii_value(Motolii* m, int thing, const char* name, double at, double* is);   /* a value at a moment, as the stage is told it */
 /* What a shell reads to draw its lists. motolii_things: the numbers of the things there are (as many as there is room

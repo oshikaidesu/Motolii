@@ -30,7 +30,6 @@ const deskTools = [
   DeskTool('Align', Pop.toneLayout, 'Selection', build: DeskAlign.new),
   DeskTool('Sequence', Pop.tonePlace, 'Layers in time', build: DeskSequence.new),
   DeskTool('Path', Pop.tonePath, 'Motion path'),
-  DeskTool('Wiggle', Pop.toneParticles, 'Noise'),
   DeskTool('Color', Pop.toneSolid, 'Swatches', build: DeskColor.new),
   DeskTool('Audio', WsT.toneAudio, 'Beat markers'),
   DeskTool('Markers', Pop.toneTextAnim, 'Comp time', build: DeskMarkers.new),
@@ -118,17 +117,6 @@ class DeskGlyph extends CustomPainter {
         );
         c.drawCircle(p(4, 15), 2 * u, fill);
         c.drawRRect(bar(14, 2.5, 4, 4), fill);
-      case 'Wiggle':
-        c.drawPath(
-          Path()
-            ..moveTo(3 * u, 10 * u)
-            ..lineTo(6 * u, 5 * u)
-            ..lineTo(9 * u, 14 * u)
-            ..lineTo(12 * u, 6 * u)
-            ..lineTo(15 * u, 13 * u)
-            ..lineTo(17 * u, 9 * u),
-          line,
-        );
       case 'Color':
         c.drawCircle(p(7, 7.5), 3.2 * u, fill);
         c.drawCircle(p(13, 7.5), 3.2 * u, line..strokeWidth = 1.4 * u);

@@ -207,7 +207,7 @@ class _GraphPainter extends CustomPainter {
       }
     }
     // Name of the shape, top-left inside the box.
-    final name = easeName(ease) ?? 'Custom';
+    final name = (easeName(ease) ?? 'Custom').split(' ').first;   // (a kind with its numbers: its name; the numbers stand beside)
     deskText(c, name.toUpperCase(), Offset(g.left + 6, g.top + 5), T.micro(Grey.g76).copyWith(fontWeight: FontWeight.w700, letterSpacing: 1));
   }
 

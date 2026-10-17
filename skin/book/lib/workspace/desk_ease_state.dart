@@ -21,7 +21,8 @@ class DeskEaseState extends State<DeskEase> {
     if (e == null || span == null) return;
     final m = ws.inside!, t = int.parse(span.layer.id), at = keysAt(ws, span);
     // (as it already goes: nothing is told, so a way's own numbers that have no seat here are not written over)
-    if (at.isNotEmpty && e == heard(m.wayOf(t, at.keys.first, at.values.first))) return;
+    final was = at.isEmpty ? null : heard(m.wayOf(t, at.keys.first, at.values.first));
+    if (was != null && e == was && (!easeOther(e) || e.name == was.name)) return;
     final done = m.together(() => [for (final k in at.entries) m.way(t, k.key, k.value, said(e))].every((ok) => ok));
     setState(() => _trouble = at.isEmpty ? 'No key where the stretch begins' : (done ? null : m.trouble));
   }
@@ -33,13 +34,8 @@ class DeskEaseState extends State<DeskEase> {
       final at = span == null ? const <String, double>{} : keysAt(ws, span);
       var ease = _pending ?? (at.isEmpty ? easePreset('Linear') : heard(m.wayOf(int.parse(span!.layer.id), at.keys.first, at.values.first)));
       if (easeOther(ease) && ease.drawn == null) {
-        // (no seat for this kind: its curve is read off the document, the value itself between the two keys)
-        final t = int.parse(span!.layer.id), name = at.keys.first, from = at.values.first;
-        final to = m.keyMoments(t, name).where((s) => s > from).firstOrNull;
-        final a = m.value(t, name, from), b = to == null ? null : m.value(t, name, to);
-        if (to != null && a != null && b != null && (b - a).abs() > 1e-9) {
-          ease = Ease(ease.kind, ease.p1, ease.p2, ease.name, [for (var i = 0; i <= 48; i++) ((m.value(t, name, from + (to - from) * i / 48) ?? a) - a) / (b - a)]);
-        }
+        // (no seat for this kind: its curve is the inside's own working of it, as said now)
+        ease = Ease(ease.kind, ease.p1, ease.p2, ease.name, [for (var i = 0; i <= 48; i++) m.wayAt(ease.name!, i / 48)]);
       }
       void set(Ease e) {
         setState(() => _pending = e);

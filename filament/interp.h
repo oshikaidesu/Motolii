@@ -13,16 +13,17 @@ struct Interp {
 };
 // name, how many numbers, their names, and the usual numbers when none are said: the past repository's own, as it
 // found them good on the machine (rust_ae/Motolii, motolii/ui/native/src/editor/ease_kinds.rs).
-static const struct { const char* name; int numbers; const char* names; double usual[5]; } interp_kinds[] = {
-    {"Hold", 0, "", {}},
-    {"Linear", 0, "", {}},
-    {"Bezier", 4, "x1 y1 x2 y2", {0.42, 0.0, 0.58, 1.0}},
-    {"Bounce", 2, "first_dip dip", {0.27, 0.2}},
-    {"Elastic", 3, "limit period damp", {1.5, 0.3, 0.35}},
-    {"Cyclic", 4, "period peak linear envelope_end", {2.0 / 7.0, 0.5, 0.0, 0.0}},
-    {"Random", 5, "seed grain center_u center_v bias", {500.0, 0.15, 0.5, 0.75, 0.5}},
-    {"Steps", 2, "width smooth", {0.178, 0.0}},
-    {"ElasticSteps", 2, "width elasticity", {0.2, 0.5}},
+// lo / hi: how far a hand takes each number, the past skin's own (motolii/ui/native/src/editor/ease_kinds.rs, its handles' clamps).
+static const struct { const char* name; int numbers; const char* names; double usual[5], lo[5], hi[5]; } interp_kinds[] = {
+    {"Hold", 0, "", {}, {}, {}},
+    {"Linear", 0, "", {}, {}, {}},
+    {"Bezier", 4, "x1 y1 x2 y2", {0.42, 0.0, 0.58, 1.0}, {0, -0.4, 0, -0.4}, {1, 1.6, 1, 1.6}},
+    {"Bounce", 2, "first_dip dip", {0.27, 0.2}, {0.06, 0}, {0.7, 0.9}},
+    {"Elastic", 3, "limit period damp", {1.5, 0.3, 0.35}, {1.02, 0.12, 0}, {2, 0.7, 0.97}},
+    {"Cyclic", 4, "period peak linear envelope_end", {2.0 / 7.0, 0.5, 0.0, 0.0}, {0.08, 0.02, 0, 0}, {0.95, 0.98, 1, 0.95}},
+    {"Random", 5, "seed grain center_u center_v bias", {500.0, 0.15, 0.5, 0.75, 0.5}, {1, 0, 0.05, -0.2, 0}, {999, 0.5, 0.95, 1.2, 1}},
+    {"Steps", 2, "width smooth", {0.178, 0.0}, {0.06, 0}, {0.5, 0.45}},
+    {"ElasticSteps", 2, "width elasticity", {0.2, 0.5}, {0.09, 0}, {0.5, 1}},
 };
 
 static double interp_smoothstep(double edge0, double edge1, double x) {
