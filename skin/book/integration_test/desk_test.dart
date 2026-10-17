@@ -325,6 +325,25 @@ void main() {
     expect(seenAfter!.left, closeTo(seenBefore!.left, 1));
     expect(freed, 0);
 
+    // Notes: two lines written of the rect, told when the hand leaves; the cube picked from the list does not take it.
+    ws.select('$a');
+    await open('Notes');
+    final note = find.byKey(const ValueKey('notes.field'));
+    await t.tap(note);
+    await t.pump();
+    (t.widget(note) as EditableText).controller.text = 'logo in at 2s\nkeep it red';
+    FocusManager.instance.primaryFocus?.unfocus();
+    await t.pump();
+    await wait(100);
+    await t.pump();
+    final written = m.word(a, 'note');
+    await shoot('Notes');
+    await t.tap(find.byKey(ValueKey('notes.$a')));
+    await t.pump();
+    report.add('Notes: rect note ${written.replaceAll('\n', ' / ')} (want logo in at 2s / keep it red); cube note "${m.word(c, 'note')}" (want none)');
+    expect(written, 'logo in at 2s\nkeep it red');
+    expect(m.word(c, 'note'), '');
+
     // Color (the dock's Colors shelf at the desk): the circle given the rect's colour from Used here, then, the
     // stroke card's link aiming, its edge the same.
     ws.select('$b');

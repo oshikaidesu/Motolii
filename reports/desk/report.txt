@@ -10,4 +10,5 @@ Ease Random: Random 500 0.15 0.5 0.75 0.5, then center_v scrubbed Random 500 0.1
 Ease back: Random tapped again Random 650 0.15 0.5 1.03 0.5 (want Random 650 0.15 0.5 1.03 0.5); Linear tapped Linear (want Linear); undone Random 650 0.15 0.5 1.03 0.5 (want Random 650 0.15 0.5 1.03 0.5)
 Path: orient 1.0 (want 1); frame turned -45.0 (want about -45, up to the right)
 Links: circle parent 1.0 (want 1), left 386.6 -> 386.6 (want the same); tapped again 0.0 (want 0)
+Notes: rect note logo in at 2s / keep it red (want logo in at 2s / keep it red); cube note "" (want none)
 Color: circle fill ff3366 (want ff3366), edge ff3366 (want ff3366)

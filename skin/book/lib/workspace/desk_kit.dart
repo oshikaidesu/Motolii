@@ -11,6 +11,7 @@ import 'desk_depth.dart';
 import 'desk_ease.dart';
 import 'desk_markers.dart';
 import 'desk_links.dart';
+import 'desk_notes.dart';
 import 'desk_path.dart';
 import 'desk_sequence.dart';
 import 'ws.dart';
@@ -35,7 +36,7 @@ const deskTools = [
   DeskTool('Color', Pop.toneSolid, 'Swatches', build: DeskColor.new),
   DeskTool('Audio', WsT.toneAudio, 'Beat markers'),
   DeskTool('Markers', Pop.toneTextAnim, 'Comp time', build: DeskMarkers.new),
-  DeskTool('Notes', Pop.toneText, 'Comments'),
+  DeskTool('Notes', Pop.toneText, 'Comments', build: DeskNotes.new),
   DeskTool('Links', Pop.toneLink, 'Relations', build: DeskLinks.new),
 ];
 
