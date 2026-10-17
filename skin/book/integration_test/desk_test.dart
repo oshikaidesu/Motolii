@@ -188,6 +188,23 @@ void main() {
     for (var k = 1; k < order.length; k++) {
       expect(starts[k], closeTo(starts[k - 1] + lasts[k - 1], 1e-6));
     }
+
+    // Color: the circle given the rect's colour, then its edge the same.
+    ws.select('$b');
+    await open('Color');
+    await t.tap(find.byKey(const ValueKey('swatch.ff3366')));
+    await t.pump();
+    await wait(100);
+    final filled = m.word(b, 'fill');
+    await t.tap(find.byKey(const ValueKey('color.edge')));
+    await t.pump();
+    await t.tap(find.byKey(const ValueKey('swatch.33aaff')));
+    await t.pump();
+    await wait(100);
+    await shoot('Color');
+    report.add('Color: circle fill $filled (want ff3366), edge ${m.word(b, 'stroke')} (want 33aaff)');
+    expect(filled, 'ff3366');
+    expect(m.word(b, 'stroke'), '33aaff');
     File('${out.path}/report.txt').writeAsStringSync(report.join('\n'));
     expect(made, 2);
     expect(named.first, 'Drop');

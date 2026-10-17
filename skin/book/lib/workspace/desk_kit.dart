@@ -6,6 +6,7 @@ import '../sets/inspector/inspector_parts.dart' show Hov, Pop;
 import '../tokens.dart';
 import 'desk_align.dart';
 import 'desk_blend.dart';
+import 'desk_color.dart';
 import 'desk_depth.dart';
 import 'desk_ease.dart';
 import 'desk_markers.dart';
@@ -30,7 +31,7 @@ const deskTools = [
   DeskTool('Sequence', Pop.tonePlace, 'Layers in time', build: DeskSequence.new),
   DeskTool('Path', Pop.tonePath, 'Motion path'),
   DeskTool('Wiggle', Pop.toneParticles, 'Noise'),
-  DeskTool('Color', Pop.toneSolid, 'Swatches'),
+  DeskTool('Color', Pop.toneSolid, 'Swatches', build: DeskColor.new),
   DeskTool('Audio', WsT.toneAudio, 'Beat markers'),
   DeskTool('Markers', Pop.toneTextAnim, 'Comp time', build: DeskMarkers.new),
   DeskTool('Notes', Pop.toneText, 'Comments'),
