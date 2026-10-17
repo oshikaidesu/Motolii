@@ -126,6 +126,10 @@ class Ws extends ChangeNotifier {
   /// How many times the document has been read again.
   int rev = 0;
 
+  /// A value carried by a hand (the inspector's): only what shows the picked thing's numbers looks again, not the
+  /// window (a step of a drag tells no other listener: [shown] at every step was 27 ms of the window's time).
+  final carried = ValueNotifier<int>(0);
+
   /// How many times the document has been read again (not counting what a hand only carries): what is made from its
   /// shape (the cards) is made again when this moves.
   int reads = 0;

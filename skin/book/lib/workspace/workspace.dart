@@ -512,6 +512,7 @@ void _write(Ws ws, String? id, Map<String, double> changed, {required bool live}
   if (live) {
     if (ws.playing) ws.playing = false; // (a hand on a value stops the play: what is changed is changed at one moment)
     if (why != null) _told(ws, why);
+    ws.carried.value++; // (the stage's readout follows the hand)
   } else {
     ws.after(m.later('let_go', number: 1), (done, no) => _told(ws, why ?? (done ? null : no))); // (the hand let go: the window does not wait for the step)
   }

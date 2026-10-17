@@ -420,7 +420,7 @@ class _OptionsStrip extends StatelessWidget {
             ),
           ),
           const SizedBox(width: WsT.inset),
-          _Readout(scene: scene, layer: layer),
+          ValueListenableBuilder<int>(valueListenable: ws.carried, builder: (_, _, _) => _Readout(scene: scene, layer: layer)), // (and while a hand carries a value)
         ],
       ),
     );
