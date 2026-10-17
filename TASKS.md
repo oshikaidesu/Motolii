@@ -6,7 +6,7 @@
 **作る前に `ASSETS.md`（資産台帳）を見る。** 手元と過去の倉庫に在る物の一覧。
 経過の全文は `reports/tasks_log_2026-10-15.md`、`reports/tasks_log_2026-10-14.md`（前の日の分は git の履歴）。
 
-最終更新：2026-10-16 朝
+最終更新：2026-10-17 夜
 
 ## 目標（ユーザー、10/14）
 
@@ -22,6 +22,12 @@
 - **中身の1時刻**（15レシピ）：14.5 → 6.5 ms（物の大きさを1時刻1回 5fec92b、値の覚えをハッシュ表に 586e1ec）。手のスレッドは性能コア（QoS）。
 - **評価の照合**（ノード式の7つの良さ）：要る物だけ計算 ×、変わった所だけ △（SQLite のセッションで変わった所は分かるのに全部捨てている）、範囲 △、使い回し ○、並列 ×、相手がはっきり △（clip は順番任せ）、別の時刻 ○。
 - **調整レイヤーの考え**：古いのは「下の全部」という範囲の決め方。グループの効果（色はグループの物それぞれの材質へ配る、ぼかし類は見えてる所の型で1回だけ：Unreal の Custom Stencil、Nuke の Cryptomatte）と背景コピー（裏に見えてる絵を形の中で加工）で、畳まずに埋める。グループはまだ無い。
+
+- **コピーをまとめて1回で描く**（Filament の InstanceBuffer、64個ずつ）：15レシピの GPU 41.7 → 約14 ms。縁取りの無い形だけ。
+- **ブレンド 25種**（AE の並びと同じ）：normal add multiply screen は GPU の合成、残り21種は下の絵を写して W3C の式（`check/blend_ways.mm`：式と一致）。1種につき画面1枚の写しがかかる。3D の物はまだ無い。
+- **デスクを全部埋めた**（12個、どれも中身に繋いで `integration_test/desk_test.dart` で書類の値を確かめる。壊し役の審査つき）：
+  - Ease（席の無い種類＝Elastic・Cyclic・Random・Steps・ElasticSteps・Bounce は自分の数字をスクラブ、範囲は過去倉庫の値。ウィグルはここの Random）、Depth、Blend、Align（見えてる輪郭の箱で寄せる `motolii_seen`）、Sequence（バーごと動かす＝キーも一緒、`bar` の let go）、Path（軌跡と自動方向 `orient`）、Color（ドックの Colors 棚をそのまま）、Audio（GStreamer の level で音量、急に大きくなる所に beat マーク `sound.h`）、Markers、Notes（物ごとのメモ `note`）、Links（指す値を弧で、点タップで親付け。親付けはキーを全部持っていく、輪は拒否）。
+  - 審査の点（直す前）：Align 5、Sequence 3、Ease 4、Color 3、Path 3、Links 4。指摘の重い物は直して試験に足した。Notes・Audio は審査中。
 
 ## 今の状態（2026-10-15 夜）
 
