@@ -743,6 +743,7 @@ int motolii_still(Motolii* m, const char* png) {
     });
 }
 int motolii_rate(Motolii*) { return RATE; }
+int motolii_sequence(Motolii* m, double overlap) { return by_hand(m, [=] { return changes(m, (int)doc_sequence(doc(m), overlap, RATE)); }); }
 int motolii_write(Motolii* m, const char* mp4) {
     return by_hand(m, [m, mp4] {
         doc(m);

@@ -372,6 +372,11 @@ class Motolii {
   late final _work = _lib.lookupFunction<Int32 Function(_P, Double, Double), int Function(_P, double, double)>('motolii_work');
   late final _workOf = _lib.lookupFunction<Int32 Function(_P, Pointer<Double>, Pointer<Double>), int Function(_P, Pointer<Double>, Pointer<Double>)>('motolii_work_of');
   late final _mark = _lib.lookupFunction<Int32 Function(_P, Double, _S), int Function(_P, double, _S)>('motolii_mark');
+  late final _sequence = _lib.lookupFunction<Int32 Function(_P, Double), int Function(_P, double)>('motolii_sequence');
+
+  /// Sequence Layers: the things that have a length and stand on their own, from the front, one after another
+  /// ([overlap] seconds over each other), on frames, their keys with them; one step ([trouble] says why not).
+  bool sequence(double overlap) => _sequence(_m, overlap) != 0;
   late final _marks = _lib.lookupFunction<_S Function(_P), _S Function(_P)>('motolii_marks');
 
   /// The work area, in seconds: the stretch played round and written as a film (not said: all of it); a change is a step.

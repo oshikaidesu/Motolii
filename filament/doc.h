@@ -2809,6 +2809,12 @@ static bool doc_carry(Doc& d, const char* by, double a, double b) {
     doc_moment(d, now);
     return ok;
 }
+// A thing's keys moved by so many seconds, every value's that has keys (as After Effects moves a layer's).
+static bool doc_keys_by(Doc& d, int thing, double by) {
+    return doc_change(d, sqlite3_mprintf("update fact set at = at + %!.17g where thing = %d and name in (select name from fact where thing = %d group by name having count(*) > 1 or max(at) <> 0 or max(way) is not null);"
+                                         "update fact set at = at - 1e7 where thing = %d and at >= 5e6", 1e7 + by, thing, thing, thing));   // (by way of far off: no key lands on one not yet moved)
+}
+static double doc_lasts(Doc& d, int thing);
 static bool doc_let_go(Doc& d, bool keep) {
     const Doc::Held h = d.held;
     d.held = Doc::Held{};
@@ -2821,12 +2827,32 @@ static bool doc_let_go(Doc& d, bool keep) {
         if (!(moves ? doc_put(d, h.thing, name.c_str(), d.stage->now, is) : doc_set(d, h.thing, name.c_str(), is))) break;
     }
     const auto bar = h.from.find(" bar"), start = h.tried.find("start");
-    if (bar != h.from.end() && start != h.tried.end() && start->second != h.from.at("start")) {   // (as After Effects moves a layer: its keys by as much, every value's that has keys)
-        const double by = start->second - h.from.at("start");
-        doc_change(d, sqlite3_mprintf("update fact set at = at + %!.17g where thing = %d and name in (select name from fact where thing = %d group by name having count(*) > 1 or max(at) <> 0 or max(way) is not null);"
-                                      "update fact set at = at - 1e7 where thing = %d and at >= 5e6", 1e7 + by, h.thing, h.thing, h.thing));   // (by way of far off: no key lands on one not yet moved)
-    }
+    if (bar != h.from.end() && start != h.tried.end() && start->second != h.from.at("start")) doc_keys_by(d, h.thing, start->second - h.from.at("start"));
     return doc_acted(d);
+}
+// Sequence Layers (After Effects' Keyframe Assistant): the things that have a length and stand on their own (shown,
+// not locked, going with no other, not a camera or a light), from the front of the stack, each beginning where the
+// one before ends less `overlap` seconds, on a frame of `rate`, never before the one before; the first where it is.
+// Each moved whole, its keys with it. One step.
+static bool doc_sequence(Doc& d, double overlap, double rate) {
+    std::vector<int> order;
+    const std::vector<int> laid = doc_laid(d);
+    for (auto t = laid.rbegin(); t != laid.rend(); ++t) {
+        const std::string kind = doc_word(d, *t, "kind");
+        if (kind != "camera" && kind != "light" && doc_number(d, *t, "visible", 0, 1) > 0.5 && doc_number(d, *t, "lock", 0, 0) <= 0.5 && doc_number(d, *t, "parent", 0, 0) == 0.0 && doc_lasts(d, *t) > 0.0) order.push_back(*t);
+    }
+    if (order.size() < 2) return d.trouble = "two things that have a length are needed to follow one another", false;
+    const auto frame = [&](double s) { return std::round(s * rate) / rate; };
+    double at = frame(doc_number(d, order[0], "start", 0, 0));
+    doc_act(d);
+    bool ok = true;
+    for (const int t : order) {
+        const double was = doc_number(d, t, "start", 0, 0), lasts = doc_lasts(d, t);
+        if (std::fabs(at - was) > 1e-9) ok = ok && doc_set(d, t, "start", at) && doc_keys_by(d, t, at - was);
+        at = std::max(at, frame(at + lasts - overlap));
+    }
+    if (!ok) d.act_ok = false;
+    return doc_acted(d) && ok;
 }
 static bool doc_undo(Doc& d) { return doc_step(d, true); }
 static bool doc_redo(Doc& d) { return doc_step(d, false); }

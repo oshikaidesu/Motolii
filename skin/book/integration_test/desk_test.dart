@@ -136,10 +136,7 @@ void main() {
     // Align: the rect against the picture's left edge, then across its middle, then its bottom.
     ws.select('$a');
     await open('Align');
-    Rect seen() {
-      final f = m.frame(a)!;
-      return Rect.fromCenter(center: Offset(f[0], f[1]), width: f[2], height: f[3]);
-    }
+    Rect seen() => m.seen(a)!;   // (asked of the inside itself, not the peek: the moment just changed)
     await t.tap(find.byKey(const ValueKey('align.0')));
     await t.pump();
     await wait(150);
@@ -193,8 +190,8 @@ void main() {
       ..key(a, 'opacity', 0.5, 1);
     ws.reread();
     final groundWas = m.value(ground, 'start', 0) ?? 0;
-    await open('Sequence');
-    await t.tap(find.byKey(const ValueKey('sequence.apply')));
+    m.sequence(0);   // (the Animation menu's Sequence Layers)
+    ws.reread();
     await t.pump();
     await wait(150);
     await shoot('Sequence');

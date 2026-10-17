@@ -150,6 +150,12 @@ class _WorkspaceState extends State<Workspace> {
           ),
         ],
       ),
+      PlatformMenu(
+        label: 'Animation',
+        menus: [
+          PlatformMenuItem(label: 'Sequence Layers', onSelected: () => then(m.sequence(0))),   // (After Effects' Keyframe Assistant: one after another, from the top)
+        ],
+      ),
     ];
   }
 

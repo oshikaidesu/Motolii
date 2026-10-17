@@ -11,7 +11,6 @@ import 'desk_color.dart';
 import 'desk_links.dart';
 import 'desk_notes.dart';
 import 'desk_path.dart';
-import 'desk_sequence.dart';
 import 'ws.dart';
 
 /// One tool the desk can hold. [acts] is what it works on, said in two words.
@@ -27,7 +26,6 @@ class DeskTool {
 const deskTools = [
   DeskTool('Blend', Pop.toneBlend, 'Layer stack', build: DeskBlend.new),
   DeskTool('Align', Pop.toneLayout, 'Selection', build: DeskAlign.new),
-  DeskTool('Sequence', Pop.tonePlace, 'Layers in time', build: DeskSequence.new),
   DeskTool('Path', Pop.tonePath, 'Motion path', build: DeskPath.new),
   DeskTool('Color', Pop.toneSolid, 'Swatches', build: DeskColor.new),
   DeskTool('Audio', WsT.toneAudio, 'Beat markers', build: DeskAudio.new),
