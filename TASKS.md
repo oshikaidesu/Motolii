@@ -42,7 +42,7 @@
   - **ショートカット**：`keys.dart`。操作に名前（file.new、edit.undo、play.toggle、frame.next、thing.remove…）、既定の表の上に `~/.motolii/keybindings.json`（VS Code の形、`-` で外す）。Flutter の Shortcuts/Actions。メニューも同じ表のキーを出す。文字を打ってる間は修飾キー無しのキーは文字の方へ。焦点が窓の外に落ちたら窓が拾い直す。
   - **カラーテーマ**：`theme.dart`。Ableton の .ask の形（`<ChosenDefault Value="#b3c66b"/>`）、`~/.motolii/theme.xml` を開いた時と書き換えた時に読む。書いてない役割は窓の既定。役割名：Ableton（ChosenDefault、ControlOnForeground、Clip1-7）、キーの印は Blender（Keyframe）、灰色の段は窓の段の名前（Grey00〜100）。ひな形 `skin/book/themes/Default Dark.xml`・`Default Light.xml`。まだ役割になってない色：インスペクタの Pop、Role、部品に直書きの色 187か所。
   - **キーをまとめて入れる口**：`motolii_key_many`、1万本 43 ms（1本ずつは 1.21 ms）。
-  - **GPU（止めた、判断待ち）**：15レシピ 13〜15 ms。アンチエイリアスの種類では変わらない。重いのは画面いっぱいを何枚も重ねる絵（Op star は星30枚）で、平らな物は全部半透明として奥から塗っている。2D の重なりは深度でなく順番で決めているので、不透明な物を深度で弾く（隠れた所を塗らない）には、2D の重ね順を深度に写す作りの変更が要る。
+  - **GPU（通った、10/18）**：15レシピ、窓を閉じて 13.3〜15.6 → **10.1 ms**（3回、最大 10.5）、窓の中で 17.6 → 5.1 ms。Instruments の Metal System Trace（`xcrun xctrace record --template 'Metal System Trace'`）で測って分かった：重さは塗りでなく頂点（1回の描画に 860万頂点）。曲げの無い平らな形は曲線の曲がり具合だけ刻む（Wang の式、`bend.cpp`）：線 2272→78、点 224→76、計 68万。ガラスの「後ろの絵」は読む物がある時だけ。重ね順を深度に写す案は試して効かなかった（Op star は塗りすぎではなかった）。絵：輪の縁が1ピクセル動く所が全体の0.5%、4倍で並べて見分けつかず。
 
 ## 今の状態（2026-10-15 夜）
 
