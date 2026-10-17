@@ -28,7 +28,7 @@ void main() {
     await t.pumpWidget(WidgetsApp(color: const Color(0xFF000000), builder: (c, _) => Workspace(document: doc)));
     await t.pumpAndSettle();
     final ws = WsScope.read(t.element(find.byType(WsTimeline))), m = ws.inside!;
-    final sway = m.add('shape', 'rect'), fall = m.add('solid', 'cube'), floor = m.add('solid', 'cube'), drift = m.add('shape', 'rect');
+    final sway = m.add('shape', 'rect'), fall = m.add('solid', 'cube'), floor = m.add('solid', 'cube'), drift = m.add('shape', 'rect'), field = m.add('shape', 'rect');
     m
       ..set(sway, 'wave_x', 1.2)
       ..set(sway, 'wave_rotate', 25)
@@ -40,11 +40,16 @@ void main() {
       ..set(floor, 'y', -1.5)
       ..set(floor, 'scale_x', 600)
       ..set(drift, 'scatter_x', 2)
-      ..set(drift, 'drift_x', 1);
+      ..set(drift, 'drift_x', 1)
+      ..set(field, 'copies', 8)
+      ..set(field, 'copy_x', 0.5)
+      ..set(field, 'field_radius', 1.2)
+      ..set(field, 'field_size', 1.5)
+      ..set(field, 'field_rotate', 45);
     final out = Directory('$motoliiDir/../reports/wave_preview')..createSync(recursive: true);
     final dpr = t.view.devicePixelRatio, mouse = await t.createGesture(kind: PointerDeviceKind.mouse);
     await mouse.addPointer(location: Offset.zero);
-    for (final (card, thing) in [('Wave', sway), ('Physics', fall), ('Scatter', drift)]) {
+    for (final (card, thing) in [('Wave', sway), ('Physics', fall), ('Scatter', drift), ('Field', field)]) {
       ws
         ..reread()
         ..select('$thing');

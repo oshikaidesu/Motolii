@@ -61,7 +61,7 @@ class InspHost extends StatefulWidget {
   final bool Function()? onFxMove;
 
   /// How the thing moves over a while, as the host places it (see [Doc.onPath]).
-  final List<double>? Function(double to, int n)? onPath;
+  final List<double>? Function(double to, int n, int copy)? onPath;
 
   /// The host's own cards of values (see [Doc.cards]).
   final List<Fx>? cards;

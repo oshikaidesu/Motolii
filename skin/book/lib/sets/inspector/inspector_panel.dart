@@ -22,6 +22,8 @@ final inspectorCards = <String, Widget Function(Fx card)>{
   'Wave': (c) => ValuesCard(c, side: const MotionPreview('Wave')), // (and a square moving as the thing will, while touched: Good Boy Ninja's Wiggle)
   'Physics': (c) => ValuesCard(c, side: const MotionPreview('Physics')), // (falling and bouncing)
   'Scatter': (c) => ValuesCard(c, side: const MotionPreview('Scatter')), // (drifting)
+  'Field': (c) => ValuesCard(c, side: const MotionPreview('Field')), // (its copies, grown and turned as near the field as they lie)
+  'Connect': (c) => ValuesCard(c, side: const MotionPreview('Connect')), // (its copies, where they lie)
 };
 
 /// The Inspector: one scrolling stack of the host's cards. Needs an InspHost above it.
