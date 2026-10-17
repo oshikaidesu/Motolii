@@ -16,6 +16,7 @@ class DeskLinks extends StatefulWidget {
 
 class _DeskLinksState extends State<DeskLinks> {
   String _way = 'parent';
+  String? _trouble;
   static const _row = 26.0;
 
   @override
@@ -36,7 +37,9 @@ class _DeskLinksState extends State<DeskLinks> {
     final names = {for (final w in {...ways, for (final k in links) k.$3}) w: m.shown(w)?.label ?? w};
     void point(int to) {
       if (picked == null || way == null || to == picked) return;
-      if (m.set(picked, way, now == to ? 0 : to.toDouble())) ws.reread();
+      final ok = m.set(picked, way, now == to ? 0 : to.toDouble());
+      setState(() => _trouble = ok ? null : m.trouble);   // (a ring, a lock: said)
+      if (ok) ws.reread();
     }
 
     return ListView(
@@ -60,6 +63,7 @@ class _DeskLinksState extends State<DeskLinks> {
               ),
           ],
         ),
+        if (_trouble case final why?) Padding(padding: const EdgeInsets.only(top: 4), child: Text(why, maxLines: 1, overflow: TextOverflow.ellipsis, style: T.label(Grey.g63))),
         const SizedBox(height: 8),
         SizedBox(
           height: _row * rows.length,
@@ -108,7 +112,7 @@ class _DeskLinksState extends State<DeskLinks> {
   }
 
   /// A way of pointing's own colour, by its place among the ways shown.
-  static Color _tone(String w, List<String> ways) => const [WsT.accent, Color(0xFF7FB8B0), Color(0xFFF08A5D), Color(0xFFE974AB)][ways.indexOf(w).clamp(0, 3)];
+  static Color _tone(String w, [List<String>? _]) => switch (w) { 'parent' => WsT.accent, 'connect' => const Color(0xFF7FB8B0), 'connect_to' => const Color(0xFFF08A5D), _ => const Color(0xFFE974AB) };   // (each way of pointing its own colour, whatever is picked)
 }
 
 /// Each link an arc on the left, from the row that points to the row it points at, an arrowhead there.

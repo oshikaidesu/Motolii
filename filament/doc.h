@@ -873,12 +873,24 @@ static bool doc_staggered(Doc& d, int thing, double now) {
 }
 // How far a thing that turns the way it goes (orient) is turned by it at a moment, radians about z: the way its keys
 // carry it then; standing still, the way it last went or will go. 0 for any other.
+static std::vector<double> doc_key_moments(Doc& d, int thing, const char* name);
 static double doc_heading(Doc& d, int thing, double now) {
     if (doc_literal(d, thing, "orient", 0, 0) <= 0.5) return 0.0;
-    for (const double step : {1.0 / 240.0, 1.0 / 30.0, 1.0 / 4.0, 2.0}) {
-        const double ax = doc_literal(d, thing, "x", now - step, 0), ay = doc_literal(d, thing, "y", now - step, 0), bx = doc_literal(d, thing, "x", now + step, 0), by = doc_literal(d, thing, "y", now + step, 0);
-        if (std::hypot(bx - ax, by - ay) > 1e-6) return std::atan2(by - ay, bx - ax);
-    }
+    const auto going = [&](double from, double to, double* heading) {
+        const double ax = doc_literal(d, thing, "x", from, 0), ay = doc_literal(d, thing, "y", from, 0), bx = doc_literal(d, thing, "x", to, 0), by = doc_literal(d, thing, "y", to, 0);
+        return std::hypot(bx - ax, by - ay) > 1e-6 && (*heading = std::atan2(by - ay, bx - ax), true);
+    };
+    double heading = 0.0;
+    for (const double step : {1.0 / 240.0, 1.0 / 30.0})
+        if (going(now - step, now + step, &heading)) return heading;
+    // (standing still: the way it went as it came to the last key before, else the way it will go from the first after)
+    std::vector<double> keys = doc_key_moments(d, thing, "x"), more = doc_key_moments(d, thing, "y");
+    keys.insert(keys.end(), more.begin(), more.end());
+    std::sort(keys.begin(), keys.end());
+    for (auto k = keys.rbegin(); k != keys.rend(); ++k)
+        if (*k <= now && going(*k - 1.0 / 60.0, *k, &heading)) return heading;
+    for (const double k : keys)
+        if (k >= now && going(k, k + 1.0 / 60.0, &heading)) return heading;
     return 0.0;
 }
 static math::mat4 doc_place(Doc& d, int thing, double now, int deeper, int copy, bool member) {
@@ -2165,8 +2177,11 @@ static bool doc_put(Doc& d, int thing, const char* name, double at, double is) {
 // After Effects does: where it is, how far it is turned about the eye's line and how large are said again as the new
 // parent sees them (a value with keys is moved whole, by the rule of doc_put; a keyed size is left as it is). A parent
 // that leans, turned about x or y, is not undone in the turn: only where the thing is takes it in.
+static std::vector<double> doc_key_moments(Doc& d, int thing, const char* name);
 static bool doc_parent(Doc& d, int thing, double to) {
     if (!doc_knows(d, thing, "parent", &to)) return false;
+    for (int up = (int)to, n = 0; up && n < 64; up = (int)doc_number(d, up, "parent", 0, 0), ++n)   // (a ring of things each going with the next goes nowhere)
+        if (up == thing) return d.trouble = "it would go with itself (that one goes with it already)", false;
     const double now = d.stage->now;
     const auto chain = [&](int up, double* turn, double* size) {   // (how far the parents turn it, and how large they make it)
         *turn = 0.0, *size = 1.0;
@@ -2175,16 +2190,27 @@ static bool doc_parent(Doc& d, int thing, double to) {
     double turnWas, sizeWas, turnTo, sizeTo;
     chain((int)doc_number(d, thing, "parent", 0, 0), &turnWas, &sizeWas);
     chain((int)to, &turnTo, &sizeTo);
-    const math::double4 world = doc_above(d, thing, now) * math::double4{doc_number(d, thing, "x", now, 0), doc_number(d, thing, "y", now, 0), doc_number(d, thing, "z", now, 0), 1.0};
-    const double turn = doc_number(d, thing, "rotate", now, 0), size = doc_number(d, thing, "size", now, 1);
+    // (where it stands at each of its place's keys, and now: every one of them taken over as the hand sees it now, as
+    //  After Effects moves a layer's keys whole when it is parented; none is added)
+    const char* const xyz[] = {"x", "y", "z"};
+    std::map<double, math::double4> stood;
+    stood[now] = {doc_number(d, thing, "x", now, 0), doc_number(d, thing, "y", now, 0), doc_number(d, thing, "z", now, 0), 1.0};
+    for (const char* name : xyz)
+        for (const double at : doc_key_moments(d, thing, name)) stood[at] = {doc_number(d, thing, "x", at, 0), doc_number(d, thing, "y", at, 0), doc_number(d, thing, "z", at, 0), 1.0};
+    const math::mat4 was = doc_above(d, thing, now);
+    const double size = doc_number(d, thing, "size", now, 1);
     doc_act(d);
-    const bool keying = d.keying;
-    d.keying = false;   // (said again, not keyed)
     bool ok = doc_change(d, sqlite3_mprintf("insert into fact(thing, name, at, value) values(%d, 'parent', 0.0, %!.17g) on conflict do update set value = excluded.value", thing, to));
-    const math::double3 here = (inverse(doc_above(d, thing, now)) * world).xyz;
-    ok = ok && doc_put(d, thing, "x", now, here.x) && doc_put(d, thing, "y", now, here.y) && doc_put(d, thing, "z", now, here.z) && doc_put(d, thing, "rotate", now, turn + turnWas - turnTo);
+    const math::mat4 into = inverse(doc_above(d, thing, now)) * was;
+    for (int k = 0; ok && k < 3; ++k) {
+        const std::vector<double> keys = doc_key_moments(d, thing, xyz[k]);
+        if (keys.empty()) ok = doc_set(d, thing, xyz[k], (into * stood[now])[k]);
+        for (const double at : keys) ok = ok && doc_change(d, sqlite3_mprintf("update fact set value = %!.17g where thing = %d and name = %Q and at = %!.17g", (into * stood[at])[k], thing, xyz[k], at));
+    }
+    const double turnBy = turnWas - turnTo;
+    if (ok && turnBy != 0.0) ok = doc_keys(d, thing, "rotate") ? doc_change(d, sqlite3_mprintf("update fact set value = value + %!.17g where thing = %d and name = 'rotate'", turnBy, thing))
+                                                               : doc_set(d, thing, "rotate", doc_number(d, thing, "rotate", now, 0) + turnBy);
     if (ok && !doc_keys(d, thing, "size")) ok = doc_set(d, thing, "size", std::clamp(size * sizeWas / sizeTo, 1e-3, 1e4));
-    d.keying = keying;
     return doc_acted(d) && ok;
 }
 static bool doc_key_here(Doc& d, int thing, const char* name, double at) {

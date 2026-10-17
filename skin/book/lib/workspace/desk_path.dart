@@ -20,7 +20,7 @@ class DeskPath extends StatelessWidget {
     final live = m != null && t != null && m.word(t, 'kind') != 'camera' && m.word(t, 'kind') != 'light';
     var way = const <Offset>[], keys = const <Offset>[];
     Offset? now;
-    var orient = false;
+    var orient = false, canTurn = false;
     if (live) {
       final from = m.value(t, 'start', 0) ?? 0, lasts = m.lasts(t), to = lasts > 0 ? from + lasts : m.seconds;
       Offset seen(double x, double y) => WsArt.centre + Offset(x * m.point, -y * m.point);   // (units of the stage to points of the picture)
@@ -30,11 +30,14 @@ class DeskPath extends StatelessWidget {
       }
 
       if (_kept?.$1 != t || _kept?.$2 != ws.rev) {   // (asked again only when the document has changed: not each frame it plays)
-        _kept = (t, ws.rev, at(from, to, 180), [for (final k in {...m.keyMoments(t, 'x'), ...m.keyMoments(t, 'y')}) ...at(k, k + 1e-4, 1)]);
+        _kept = (t, ws.rev, [...at(from, to, ((to - from) * Ws.fps).round().clamp(60, 7200)), ...at(to, to + 1e-4, 1)],   // (a point a frame, to its very end)
+             [for (final k in {...m.keyMoments(t, 'x'), ...m.keyMoments(t, 'y')}) ...at(k, k + 1e-4, 1)]);
       }
       (_, _, way, keys) = _kept!;
-      now = at(ws.frame / Ws.fps, ws.frame / Ws.fps + 1e-4, 1).firstOrNull;
+      final s = ws.frame / Ws.fps;
+      now = s < from || s > to ? null : at(s, s + 1e-4, 1).firstOrNull;   // (outside its time: nowhere)
       orient = (m.value(t, 'orient', 0) ?? 0) > .5;
+      canTurn = m.range(t, 'orient') != null;
     }
     return ListView(
       padding: const EdgeInsets.all(WsT.gap),
@@ -42,6 +45,7 @@ class DeskPath extends StatelessWidget {
         DeskStrip(
           left: [if (ws.layer case final l?) DeskLayerChip(l.name, wsTone(l.kind))],
           right: [
+            if (canTurn)
             DeskIconButton(
               key: const ValueKey('path.orient'),
               size: 28,

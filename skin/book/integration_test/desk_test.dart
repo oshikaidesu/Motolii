@@ -302,6 +302,14 @@ void main() {
     await t.pump();
     final turned = m.frame(b)?[4];
     await shoot('Path');
+    ws.frame = 110;   // (the reviewer's: after its last key (1 s), it keeps the way it went; still in its time)
+    await t.pump();
+    await wait(150);
+    final still = m.frame(b)?[4];
+    ws.frame = 30;
+    await t.pump();
+    report.add('Path still at 1.8 s: turned ${still?.toStringAsFixed(1)} (want -45)');
+    expect(still, closeTo(-45, 3));
     report.add('Path: orient ${m.value(b, 'orient', 0)} (want 1); frame turned ${turned?.toStringAsFixed(1)} (want about -45, up to the right)');
     expect(m.value(b, 'orient', 0), 1);
     expect(turned, closeTo(-45, 3));
@@ -314,13 +322,17 @@ void main() {
     await t.tap(find.byKey(ValueKey('links.to.$a')));
     await t.pump();
     await wait(100);
-    final parented = m.value(b, 'parent', 0), seenAfter = m.seen(b);
+    final parented = m.value(b, 'parent', 0), seenAfter = m.seen(b), keysThen = m.keyMoments(b, 'x').length;
+    final ring = m.set(a, 'parent', b.toDouble());   // (the reviewer's: the rect made to go with the circle that goes with it)
     await shoot('Links');
     await t.tap(find.byKey(ValueKey('links.to.$a')));
     await t.pump();
     await wait(100);
     final freed = m.value(b, 'parent', 0);
-    report.add('Links: circle parent $parented (want $a), left ${seenBefore?.left.toStringAsFixed(1)} -> ${seenAfter?.left.toStringAsFixed(1)} (want the same); tapped again $freed (want 0)');
+    report.add('Links: circle parent $parented (want $a), left ${seenBefore?.left.toStringAsFixed(1)} -> ${seenAfter?.left.toStringAsFixed(1)} (want the same); x keys $keysThen then ${m.keyMoments(b, 'x').length} (want 2 2); a ring refused: ${!ring} (${m.trouble}); tapped again $freed (want 0)');
+    expect(ring, false);
+    expect(keysThen, 2);
+    expect(m.keyMoments(b, 'x').length, 2);
     expect(parented, a);
     expect(seenAfter!.left, closeTo(seenBefore!.left, 1));
     expect(freed, 0);
