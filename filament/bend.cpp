@@ -31,7 +31,11 @@ static void curves(RenderPath& into, const PathCommand* cmds, uint32_t cmdsCnt, 
     };
     const auto curve = [&](const Point& c1, const Point& c2, const Point& to) {
         const Point c0 = at;
-        const int pieces = cut(length(c1 - c0) + length(c2 - c1) + length(to - c2));
+        // (nothing bends it: as many pieces as its bending asks, Wang's formula, within a 32nd of `fine`: a straight one
+        //  whole, a round one as round as it looks; bent: by its length, so that what bends it has points all along)
+        const Point dd1 = c0 - c1 * 2.f + c2, dd2 = c1 - c2 * 2.f + to;
+        const float bendsBy = std::max(length(dd1), length(dd2));
+        const int pieces = linesWhole ? (int)std::clamp(std::ceil(std::sqrt(0.75f * bendsBy / (fine / 32.f))), 1.f, 1024.f) : cut(length(c1 - c0) + length(c2 - c1) + length(to - c2));
         if (pieces == 1) return into.cubicTo(c1, c2, to);
         const auto on = [&](float t) {   // (where it is at t, and which way it goes there)
             const float u = 1.f - t;

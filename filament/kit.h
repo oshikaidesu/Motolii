@@ -84,6 +84,7 @@ struct Stage {
     Camera* film;        // the film's own camera: the same, unless another eye looks (god_view); mattes in the film's picture are taken by it
     View* view_behind;   // the same scene without the glass (layer 2), drawn first into `behind`: what a block shows
     Texture* behind;
+    bool behindRead = false;   // whether anything reads `behind` (glass, the paper): until then it is not drawn
     View* view_through = nullptr; // the glass's far faces alone (layer 8), drawn second into `through`: which way they face (far_side.mat)
     Texture* through = nullptr;
     Texture* through_depth = nullptr;   // how far away those far faces are: thick_glass.mat's near faces measure the glass by it
@@ -450,6 +451,7 @@ static MaterialInstance* glass_blocks(Stage& s, std::vector<mat4f> places, float
     MaterialInstance* mi = add(s, cube(round), "glassbox.filamat", places, 2, shadows);
     if (!mi) return nullptr;
     mi->setParameter("backdrop", s.behind, TextureSampler(TextureSampler::MinFilter::LINEAR, TextureSampler::MagFilter::LINEAR, TextureSampler::WrapMode::CLAMP_TO_EDGE));
+    s.behindRead = true;
     mi->setParameter("ior", 1.5f);
     mi->setParameter("reach", 0.5f);
     mi->setParameter("sceneMix", 1.f);
@@ -608,6 +610,7 @@ static bool paper_and_sun(Stage& s, const Sunlit& lit) {
     if (!paper || !copy) return false;
     s.view_behind->setVisibleLayers(0x10, 0x10);
     copy->setParameter("behind", s.behind, TextureSampler(TextureSampler::MinFilter::NEAREST, TextureSampler::MagFilter::NEAREST, TextureSampler::WrapMode::CLAMP_TO_EDGE));
+    s.behindRead = true;
     paper->setParameter("color", lit.paper);
     paper->setParameter("grain", lit.grain);
     paper->setParameter("sunlight", s.sunlight, TextureSampler(TextureSampler::MinFilter::LINEAR, TextureSampler::MagFilter::LINEAR, TextureSampler::WrapMode::CLAMP_TO_EDGE));
@@ -785,6 +788,7 @@ static MaterialInstance* thick_glass(Stage& s, Mesh* m, std::vector<mat4f> place
     const TextureSampler smooth(TextureSampler::MinFilter::LINEAR, TextureSampler::MagFilter::LINEAR, TextureSampler::WrapMode::CLAMP_TO_EDGE);
     const TextureSampler exact(TextureSampler::MinFilter::NEAREST, TextureSampler::MagFilter::NEAREST, TextureSampler::WrapMode::CLAMP_TO_EDGE);
     front->setParameter("behind", s.behind, smooth);
+    s.behindRead = true;
     front->setParameter("farSide", s.through, smooth);
     front->setParameter("farDepth", s.through_depth, exact);
     // How deep the solid is as a rule: four times its volume over its surface (a ball: two thirds of its width; a bar:
@@ -959,7 +963,7 @@ static void pictures_of(Stage& s) {
         if (m.soft) m.picture->generateMipmaps(*s.engine);
     }
     if (s.view_floor) s.renderer->render(s.view_floor);
-    s.renderer->render(s.view_behind);
+    if (s.behindRead) s.renderer->render(s.view_behind);   // (the picture of what is behind: only once glass or the paper reads it; a whole pass of every thing's points)
     if (s.view_through) s.renderer->render(s.view_through);
     const bool reads = std::any_of(s.backdropBefore.begin(), s.backdropBefore.end(), [](char b) { return b != 0; });
     Texture* into = s.drawnInto;
