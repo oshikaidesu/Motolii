@@ -163,8 +163,16 @@ static void desk_marks(Stage& s, Live* l, int i) {
 // The stage's picture as it now is, drawn into the next buffer; it is the front one once the GPU has finished it.
 static void live_draw(Stage& s, Live* l) {
     Live* desk = l->desk && s.desk.w ? l->desk : nullptr;
-    s.out = desk ? desk->target[desk->next] : l->target[l->next];
-    if (desk) desk_lay(s, true);
+    // (with whole-screen effects the stage's picture is drawn as a written film has it, then placed on the desk where the
+    //  stage lies: an effect is the picture's, what lies off the stage is not in it)
+    const bool placed = desk && s.over;
+    s.out = desk && !placed ? desk->target[desk->next] : l->target[l->next];
+    if (desk && !placed) desk_lay(s, true);
+    if (placed) {
+        const int i = l->next, j = desk->next;
+        const int at[4] = {(int)std::lround(s.desk.x), (int)std::lround((double)s.desk.h - s.desk.y - s.h * s.desk.scale), (int)std::lround(s.w * s.desk.scale), (int)std::lround(s.h * s.desk.scale)};
+        s.lastly = [&s, l, desk, i, j, at] { screen_place(s, l->seen[i], desk->target[j], s.desk.w, s.desk.h, at); };
+    }
     if (!s.over) {   // (with a whole-screen effect the stage draws to its own picture and the effect to this one: screen.h)
         s.view->setRenderTarget(s.out);
         for (View* v : s.layers) v->setRenderTarget(s.out);   // (the pictures laid over it go to the same place)
@@ -177,9 +185,10 @@ static void live_draw(Stage& s, Live* l) {
         solo->pendingIn = solo->next;
         solo->next = (solo->next + 1) % Live::N;
     }
+    s.lastly = nullptr;
     if (desk) desk_marks(s, desk, desk->next);
     if (desk) {
-        desk_lay(s, false);
+        if (!placed) desk_lay(s, false);
         desk->pendingIn = desk->next;
         desk->next = (desk->next + 1) % Live::N;
     }
@@ -191,7 +200,7 @@ static void live_draw(Stage& s, Live* l) {
         for (View* v : s.layers) v->setRenderTarget(nullptr);
     }
     s.out = nullptr;
-    if (desk) l->pendingIn = -1;   // (the stage's own buffer was not drawn: its last picture stays the front)
+    if (desk && !placed) l->pendingIn = -1;   // (the stage's own buffer was not drawn: its last picture stays the front)
     else l->next = (l->next + 1) % Live::N;
 }
 // Whether the picture begun last is finished (then it is offered to the shell, the front): the hand asks this rather

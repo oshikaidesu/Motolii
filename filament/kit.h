@@ -124,6 +124,7 @@ struct Stage {
     std::vector<View*> layers;   // further pictures laid over the stage's own view, in order (layer_view); the first `layered` of them are drawn
     size_t layered = 0;
     std::function<void()> over;   // drawn last, over all of them (a whole-screen effect: screen.h)
+    std::function<void()> lastly;   // and after everything, in the same frame (the desk: its stage's picture placed on it, live.h)
     RenderTarget* out = nullptr;   // where the picture goes at last (none: the screen; the window's live picture: live.h)
 };
 
@@ -945,6 +946,7 @@ static void pictures_of(Stage& s) {
     for (size_t k = 0; k < s.layered && k < s.layers.size(); ++k) s.renderer->render(s.layers[k]);
     if (s.over) s.over();
     if (s.solo && s.solo->getRenderTarget()) s.renderer->render(s.solo);   // (a card's picture of one thing alone, into its own buffer: live.h)
+    if (s.lastly) s.lastly();
 }
 
 static void draw(Stage& s, std::vector<uint8_t>* pic = nullptr, bool wait = true) {

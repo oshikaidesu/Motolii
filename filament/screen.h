@@ -198,6 +198,18 @@ static door::Screen* screen_copy(Stage& s, ScreenStack& st) {   // (a picture pu
     }
     return st.copy;
 }
+// A picture put on another where `at` says (left, bottom, wide, high), as it is; all else of it clear (the desk's
+// stage, its whole-screen effects drawn as a written film has them: live.h).
+static void screen_place(Stage& s, Texture* from, RenderTarget* to, uint32_t w, uint32_t h, const int* at) {
+    static std::map<Engine*, door::Screen*> copies;
+    door::Screen*& copy = copies[s.engine];
+    if (!copy) {
+        static const char* const same = "@group(0) @binding(0) var picture: texture_2d<f32>;\n@group(0) @binding(1) var near: sampler;\n"
+                                        "@fragment fn main(@builtin(position) frag: vec4f, @location(0) uv: vec2f) -> @location(0) vec4f { return textureSampleLevel(picture, near, uv, 0.0); }\n";
+        copy = door::screen(s.engine, "place", same, 0);
+    }
+    if (copy) door::draw(s.engine, copy, from, to, w, h, at);
+}
 // One effect drawn: reading `from` (the stage's picture or the effect before's), drawing to `to`, through its passes;
 // its own pictures in order: `from`, then each target (ISF's) or the stage's past frames (the array).
 static void screen_draw(Stage& s, ScreenStack& st, ScreenFx& fx, Texture* from, RenderTarget* to, const ScreenNumbers& numbers) {
