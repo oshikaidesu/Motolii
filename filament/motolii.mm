@@ -455,6 +455,8 @@ int motolii_frame(Motolii* m, int thing, double* frame) {
     if (peeked(m, thing, m->peek.at, [&](const Motolii::Peek& p) { shown = p.shown; std::memcpy(frame, p.frame, sizeof p.frame); return true; })) return shown;   // (the moment set down: the frame is as last drawn)
     return by_look(m, [=] { return (int)(doc_knows(doc(m), thing) && doc_frame(*m->d, thing, m->now, frame)); });
 }
+// What of a thing is seen at the stage's moment: the upright box of its outline on the picture (left, top, right, bottom).
+int motolii_seen(Motolii* m, int thing, double* box) { return by_look(m, [=] { return (int)(doc_knows(doc(m), thing) && doc_seen_box(*m->d, thing, m->now, box)); }); }
 int motolii_path(Motolii* m, int thing, int copy, double from, double to, int n, double* path) {
     return by_look(m, [=] {
         if (!doc_knows(doc(m), thing) || n < 1) return 0;

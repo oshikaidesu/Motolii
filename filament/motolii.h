@@ -74,6 +74,7 @@ int motolii_thing_key_moments(Motolii* m, int thing, double* at, int room);   /*
 /* A thing's frame on the picture at the stage's moment: frame[0..4] = its middle (x, y), how wide, how high (points
    of the picture, from the top left), how far it is turned (degrees, clockwise as seen); frame[5..6] = the point it turns about (x, y); frame[7] = how deep it is (0: flat). 0: there is no such thing. */
 int motolii_frame(Motolii* m, int thing, double* frame);
+int motolii_seen(Motolii* m, int thing, double* box);   /* what of it is seen: the upright box of its outline on the picture, box[0..3] = left, top, right, bottom (points from the top left). 0: not shown */
 /* How a thing moves over a while, as its copy is placed (its wave, scattering, copies' rows and keys all told), n moments
    from `from` to before `to`: path[4i..4i+3] = where it is (x, y, units of the stage), how far it is turned (degrees) and
    how large (a share of its own size). For a shell's small preview that plays by itself. 0: there is no such thing. */

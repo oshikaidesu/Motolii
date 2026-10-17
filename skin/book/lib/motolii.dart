@@ -89,6 +89,7 @@ class Motolii {
   late final _lasts = _lib.lookupFunction<Double Function(_P, Int32), double Function(_P, int)>('motolii_lasts');
   late final _keyMoments = _lib.lookupFunction<Int32 Function(_P, Int32, _S, Pointer<Double>, Int32), int Function(_P, int, _S, Pointer<Double>, int)>('motolii_key_moments');
   late final _frame = _lib.lookupFunction<Int32 Function(_P, Int32, Pointer<Double>), int Function(_P, int, Pointer<Double>)>('motolii_frame');
+  late final _seen = _lib.lookupFunction<Int32 Function(_P, Int32, Pointer<Double>), int Function(_P, int, Pointer<Double>)>('motolii_seen');
   late final _path = _lib.lookupFunction<Int32 Function(_P, Int32, Int32, Double, Double, Int32, Pointer<Double>), int Function(_P, int, int, double, double, int, Pointer<Double>)>('motolii_path');
   late final _keying = _lib.lookupFunction<Int32 Function(_P, Int32), int Function(_P, int)>('motolii_keying');
   late final _hold = _lib.lookupFunction<Int32 Function(_P, Int32), int Function(_P, int)>('motolii_hold');
@@ -294,6 +295,14 @@ class Motolii {
     final ok = _frame(_m, thing, out) != 0, f = [for (var i = 0; i < 8; i++) out[i]];
     malloc.free(out);
     return ok ? f : null;
+  }
+
+  /// What of a thing is seen: the upright box of its outline on the picture (points from the top left). null: not shown.
+  Rect? seen(int thing) {
+    final out = malloc<Double>(4);
+    final ok = _seen(_m, thing, out) != 0, r = Rect.fromLTRB(out[0], out[1], out[2], out[3]);
+    malloc.free(out);
+    return ok ? r : null;
   }
 
   /// How a thing moves over a while, as the stage places it (its wave and all): [n] moments from [from] to before [to],

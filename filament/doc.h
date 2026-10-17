@@ -2622,6 +2622,21 @@ static bool doc_frame(Doc& d, int thing, double now, double* frame) {
     }
     return true;
 }
+// What of a thing is seen at a moment: the upright box of its outline on the picture (its own points where they are at
+// hand, else its box's corners), left, top, right, bottom in points of the picture. false: it is not shown.
+static bool doc_seen_box(Doc& d, int thing, double now, double* box) {
+    double around[128], cover[4];
+    if (!d.shown[thing].in) return false;
+    const int n = doc_outline(d, thing, now, around);
+    if (n > 2) {
+        box[0] = box[2] = around[0], box[1] = box[3] = around[1];
+        for (int i = 1; i < n; ++i) box[0] = std::min(box[0], around[2 * i]), box[2] = std::max(box[2], around[2 * i]), box[1] = std::min(box[1], around[2 * i + 1]), box[3] = std::max(box[3], around[2 * i + 1]);
+        return true;
+    }
+    if (!doc_covers(d, thing, now, cover)) return false;
+    box[0] = cover[0], box[1] = cover[1], box[2] = cover[0] + cover[2], box[3] = cover[1] + cover[3];
+    return true;
+}
 // The upright box of the picture a thing covers at a moment, however it is turned or leans: left, top, wide, high.
 static bool doc_covers(Doc& d, int thing, double now, double* box) {
     float2 half{0.f};
@@ -2738,6 +2753,7 @@ static bool doc_carry(Doc& d, const char* by, double a, double b) {
             ok = ok && tries("x", was("x") + move.x) && tries("y", was("y") + move.y);
         }
     } else if (!strcmp(by, "bar")) {
+        h.from[" bar"] = 1.0;   // (the whole layer moved in time: its keys go with it when it is let go)
         ok = tries("start", std::max(0.0, was("start") + a));
     } else if (!strcmp(by, "head")) {
         const double start = was("start"), lasts = was("duration"), to = std::clamp(start + a, 0.0, lasts > 0.0 ? start + lasts - 1e-3 : 1e6);
@@ -2764,6 +2780,12 @@ static bool doc_let_go(Doc& d, bool keep) {
         bool moves = false;
         for (const DocValue& one : doc_values) moves = moves || (one.moves && name == one.name);
         if (!(moves ? doc_put(d, h.thing, name.c_str(), d.stage->now, is) : doc_set(d, h.thing, name.c_str(), is))) break;
+    }
+    const auto bar = h.from.find(" bar"), start = h.tried.find("start");
+    if (bar != h.from.end() && start != h.tried.end() && start->second != h.from.at("start")) {   // (as After Effects moves a layer: its keys by as much, every value's that has keys)
+        const double by = start->second - h.from.at("start");
+        doc_change(d, sqlite3_mprintf("update fact set at = at + %!.17g where thing = %d and name in (select name from fact where thing = %d group by name having count(*) > 1 or max(at) <> 0 or max(way) is not null);"
+                                      "update fact set at = at - 1e7 where thing = %d and at >= 5e6", 1e7 + by, h.thing, h.thing, h.thing));   // (by way of far off: no key lands on one not yet moved)
     }
     return doc_acted(d);
 }

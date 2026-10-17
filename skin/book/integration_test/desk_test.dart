@@ -175,19 +175,59 @@ void main() {
     expect(left, closeTo(0, 1));
     expect(middle, closeTo(960, 1));
     expect(bottom, closeTo(1080, 1));
+    // (the reviewer's: a circle turned 45 degrees touches the edge by its round side, not its box's corner; a cube
+    //  turned towards the eye by what of it is seen)
+    m
+      ..set(b, 'rotate', 45)
+      ..set(c, 'rotate_y', 35)
+      ..set(c, 'rotate_x', 20);
+    ws
+      ..reread()
+      ..select('$b');
+    await open('Align');
+    await t.tap(find.byKey(const ValueKey('align.0')));
+    await t.pump();
+    await wait(150);
+    final round = m.seen(b)!.left;
+    ws.select('$c');
+    await open('Align');
+    await t.tap(find.byKey(const ValueKey('align.2')));
+    await t.pump();
+    await wait(150);
+    final cube = m.seen(c)!.right;
+    report.add('Align turned: circle left ${round.toStringAsFixed(1)} (want 0); tilted cube right ${cube.toStringAsFixed(1)} (want 1920)');
+    expect(round, closeTo(0, 1.5));
+    expect(cube, closeTo(1920, 1.5));
 
-    // Sequence: from the back, overlapping by none: each begins where the one before ends.
+    // Sequence: from the front, overlapping by none: each begins where the one before ends, the first where it is, keys
+    // going with their layer; one that runs for good (a ground) stays.
+    final ground = m.add('shape', 'rect');
+    m
+      ..set(a, 'duration', 1)
+      ..set(b, 'duration', 2)
+      ..set(c, 'duration', 1.5)
+      ..set(c, 'start', 0.5)
+      ..key(a, 'opacity', 0, 0)
+      ..key(a, 'opacity', 0.5, 1);
+    ws.reread();
+    final groundWas = m.value(ground, 'start', 0) ?? 0;
     await open('Sequence');
     await t.tap(find.byKey(const ValueKey('sequence.apply')));
     await t.pump();
     await wait(150);
     await shoot('Sequence');
-    final order = [for (final l in ws.layers.reversed) int.parse(l.id)];
-    final starts = [for (final id in order) m.value(id, 'start', 0) ?? 0], lasts = [for (final id in order) m.lasts(id)];
-    report.add('Sequence: starts $starts, lasts $lasts (want each start where the one before ends)');
-    for (var k = 1; k < order.length; k++) {
-      expect(starts[k], closeTo(starts[k - 1] + lasts[k - 1], 1e-6));
-    }
+    final starts = [for (final id in [c, b, a, ground]) m.value(id, 'start', 0) ?? 0], keysOfA = m.keyMoments(a, 'opacity');
+    report.add('Sequence: starts cube, circle, rect, ground $starts (want 0.5, 2.0, 4.0, the ground as it was: ${groundWas.toStringAsFixed(3)}); rect keys $keysOfA (want 4.0, 4.5)');
+    expect(starts[0], closeTo(0.5, 1e-6));
+    expect(starts[1], closeTo(2.0, 1e-6));
+    expect(starts[2], closeTo(4.0, 1e-6));
+    expect(starts[3], groundWas);
+    expect(keysOfA[0], closeTo(4.0, 1e-6));
+    expect(keysOfA[1], closeTo(4.5, 1e-6));
+    m.undo();
+    ws.reread();
+    report.add('Sequence undone: rect start ${m.value(a, 'start', 0)}, keys ${m.keyMoments(a, 'opacity')} (want 0, 0.0 0.5)');
+    expect(m.keyMoments(a, 'opacity')[0], closeTo(0, 1e-6));
 
     // Color: the circle given the rect's colour, then its edge the same.
     ws.select('$b');
