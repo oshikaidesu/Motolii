@@ -111,6 +111,8 @@ struct Stage {
     std::map<std::string, Material*> materials;    // each material file, read and built once
     void* solids = nullptr; void* solidPictures = nullptr;   // Filament's reader of 3D files and its reader of their pictures (solid.h)
     std::vector<Made> made;   // every thing put on the stage: of which mesh, at which of that mesh's places (a film moves them: `move`)
+    View* solo = nullptr;              // one thing alone, a card's small picture of it (solo_view): its own scene, an eye riding the stage's
+    std::vector<utils::Entity> soloIn; // what is in that scene now
     std::vector<View*> layers;   // further pictures laid over the stage's own view, in order (layer_view); the first `layered` of them are drawn
     size_t layered = 0;
     std::function<void()> over;   // drawn last, over all of them (a whole-screen effect: screen.h)
@@ -187,6 +189,47 @@ static View* layer_view(Stage& s, size_t k, bool flat) {
     shade.enabled = shade.enabled && !flat;
     s.layers[k]->setAmbientOcclusionOptions(shade);
     return s.layers[k];
+}
+
+// One thing alone, as After Effects' solo, for a card's small picture: a view as the stage's own is (its grading, its
+// anti-aliasing, the room's light), of a scene of its own that the thing's parts are put in too (Filament draws a part in
+// every scene it is in), seen by an eye that rides the stage's and looks closer (solo_aim).
+static View* solo_view(Stage& s, uint32_t side) {
+    if (!s.solo) {
+        View* v = s.engine->createView();
+        v->setScene(s.engine->createScene());
+        v->setCamera(s.engine->createCamera(utils::EntityManager::get().create()));
+        v->setDithering(View::Dithering::NONE);
+        v->setAntiAliasing(s.view->getAntiAliasing());
+        v->setMultiSampleAntiAliasingOptions(s.view->getMultiSampleAntiAliasingOptions());
+        v->setColorGrading(const_cast<ColorGrading*>(s.view->getColorGrading()));   // (the same one: Filament hands it out read-only)
+        v->setBloomOptions(s.view->getBloomOptions());
+        v->setScreenSpaceRefractionEnabled(false);
+        v->setBlendMode(View::BlendMode::TRANSLUCENT);   // (where it is not, clear: the card shows through)
+        s.solo = v;
+    }
+    s.solo->setViewport({0, 0, side, side});
+    return s.solo;
+}
+// What the solo view shows: the thing's parts (each), the stage's lights and room, its eye where the stage's is, looking
+// at the thing's frame on the picture (x, y the middle, w, h: points of the picture), a little room round it, square.
+static void solo_aim(Stage& s, const std::vector<utils::Entity>& parts, const double* frame) {
+    Scene* in = s.solo->getScene();
+    for (utils::Entity e : s.soloIn) in->remove(e);
+    s.soloIn.clear();
+    auto& lights = s.engine->getLightManager();
+    s.scene->forEach([&](utils::Entity e) { if (lights.hasComponent(e)) s.soloIn.push_back(e); });   // (lit as on the stage)
+    for (utils::Entity e : parts) s.soloIn.push_back(e);
+    for (utils::Entity e : s.soloIn) in->addEntity(e);
+    in->setIndirectLight(s.scene->getIndirectLight());
+    Camera* eye = &s.solo->getCamera();
+    const double aspect = (double)s.w / (double)s.h, cx = frame[0] / s.w * 2.0 - 1.0, cy = 1.0 - frame[1] / s.h * 2.0;
+    const double round = std::hypot(frame[2], frame[3]);   // (as wide as it may be turned any way: its frame's diagonal)
+    const double ex = 0.8 * std::max({round / s.w, round / s.h / aspect, 0.02}), ey = ex * aspect;   // (half the square's width and height in the stage's picture)
+    math::mat4 closer;   // (the stage's picture, moved and grown so its frame fills the square)
+    closer[0][0] = 1.0 / ex, closer[1][1] = 1.0 / ey, closer[3][0] = -cx / ex, closer[3][1] = -cy / ey;
+    eye->setModelMatrix(s.camera->getModelMatrix());
+    eye->setCustomProjection(closer * s.camera->getProjectionMatrix(), s.camera->getNear(), s.camera->getCullingFar());
 }
 
 // The room the glass mirrors and is lit by: one of the studios that come with Filament, made into a .ktx by cmgen.
@@ -861,6 +904,7 @@ static void pictures_of(Stage& s) {
     s.renderer->render(s.view);
     for (size_t k = 0; k < s.layered && k < s.layers.size(); ++k) s.renderer->render(s.layers[k]);
     if (s.over) s.over();
+    if (s.solo && s.solo->getRenderTarget()) s.renderer->render(s.solo);   // (a card's picture of one thing alone, into its own buffer: live.h)
 }
 
 static void draw(Stage& s, std::vector<uint8_t>* pic = nullptr, bool wait = true) {

@@ -466,6 +466,9 @@ class Doc extends ChangeNotifier {
   /// moment; null: it has none.
   List<double>? Function(double to, int n, int copy)? onPath;
 
+  /// The host's small picture of the thing alone ([side] points square), as a texture while [on] (see Motolii.solo).
+  Future<int> Function(int side, bool on)? onSolo;
+
   void moveFx(String id, int by) {
     if (!(onFxMove?.call() ?? true)) return;
     final i = fxOrder.indexOf(id), j = i + by;

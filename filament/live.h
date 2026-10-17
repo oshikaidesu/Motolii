@@ -22,15 +22,16 @@ struct Live {
     double waited = 0;   // seconds spent waiting for the GPU to finish them (for measuring)
     Fence* pending = nullptr;          // the picture begun and not yet finished by the GPU, and which buffer it is in
     int pendingIn = -1;
+    Live* solo = nullptr;              // a card's small picture of one thing alone (kit.h solo_view), drawn in the same frame, finished with it
 };
 
-static Live* live_open(Stage& s) {
+static Live* live_open(Stage& s, uint32_t w = 0, uint32_t h = 0) {   // (0: the stage's own size)
     Live* l = new Live;
+    if (!w) w = (uint32_t)s.w, h = (uint32_t)s.h;
     NSDictionary* like = @{(id)kCVPixelBufferIOSurfacePropertiesKey : @{}, (id)kCVPixelBufferMetalCompatibilityKey : @YES};
     for (CVPixelBufferRef& b : l->buffer)
-        if (CVPixelBufferCreate(kCFAllocatorDefault, (size_t)s.w, (size_t)s.h, kCVPixelFormatType_32BGRA, (__bridge CFDictionaryRef)like, &b) != kCVReturnSuccess) return nullptr;
+        if (CVPixelBufferCreate(kCFAllocatorDefault, (size_t)w, (size_t)h, kCVPixelFormatType_32BGRA, (__bridge CFDictionaryRef)like, &b) != kCVReturnSuccess) return nullptr;
     Engine* engine = s.engine;
-    const uint32_t w = (uint32_t)s.w, h = (uint32_t)s.h;
     door::on_driver(engine, [l, engine, w, h] {
         for (int i = 0; i < Live::N; ++i) {
             WGPUSharedTextureMemoryIOSurfaceDescriptor from{};
@@ -69,7 +70,14 @@ static void live_draw(Stage& s, Live* l) {
         s.view->setRenderTarget(s.out);
         for (View* v : s.layers) v->setRenderTarget(s.out);   // (the pictures laid over it go to the same place)
     }
+    Live* solo = l->solo && s.solo && !s.soloIn.empty() ? l->solo : nullptr;   // (one thing alone too, while a card shows it)
+    if (solo) s.solo->setRenderTarget(solo->target[solo->next]);
     draw(s, nullptr, false);
+    if (solo) {
+        s.solo->setRenderTarget(nullptr);
+        solo->pendingIn = solo->next;
+        solo->next = (solo->next + 1) % Live::N;
+    }
     l->pending = s.engine->createFence();   // (not waited for: the hand goes back to what it is asked; live_ready offers it once done)
     s.engine->flush();
     l->pendingIn = l->next;
@@ -89,6 +97,7 @@ static bool live_ready(Stage& s, Live* l) {
     l->pending = nullptr;
     l->front = l->pendingIn;
     ++l->frames;
+    if (Live* solo = l->solo; solo && solo->pendingIn >= 0) solo->front = solo->pendingIn, solo->pendingIn = -1, ++solo->frames;   // (finished with the stage's)
     return true;
 }
 

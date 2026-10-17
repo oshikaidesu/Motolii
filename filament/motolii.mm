@@ -19,6 +19,7 @@ struct Motolii {
     Stage* s = nullptr;
     Doc* d = nullptr;
     Live* live = nullptr;
+    int solo = 0;   // the thing a card shows alone (motolii_solo), 0: none
     std::map<const void*, Heard> heard;   // the things' sound heard as the live stage plays (heard.h)
     std::string trouble, listed, word;
     std::thread hand;
@@ -171,6 +172,17 @@ static void motolii_hand(Motolii* m, std::string document, int wide, int high, s
             m->s->later = &films;
             time_is(*m->s, m->now);
             m->s->later = nullptr;
+            if (m->s->solo) {   // (the thing a card shows alone: its parts as they now are, the eye on its frame)
+                double frame[8];
+                std::vector<utils::Entity> parts;
+                const auto it = m->d->shown.find(m->solo);
+                if (m->solo && it != m->d->shown.end() && doc_frame(*m->d, m->solo, m->now, frame)) doc_entities(*m->s, it->second, [&](utils::Entity e) { parts.push_back(e); });
+                if (!parts.empty()) solo_aim(*m->s, parts, frame);
+                else {
+                    for (utils::Entity e : m->s->soloIn) m->s->solo->getScene()->remove(e);
+                    m->s->soloIn.clear();
+                }
+            }
             m->telling = false;
             sounds = heard_told(*m->s);   // (where each sound is to be: read of the document)
         }
@@ -228,6 +240,21 @@ static int changes(Motolii* m, int done) {
 // The stage's picture, live: started once; then the last finished picture and how many there have been (any thread).
 int motolii_live(Motolii* m) { return by_hand(m, [m] { return m->live || (m->live = live_open(*m->s)) ? 1 : 0; }); }
 void* motolii_front(Motolii* m) { return m->live ? live_front(m->live) : nullptr; }
+int motolii_solo(Motolii* m, int thing, int side) {
+    return by_hand(m, [=] {
+        if (!m->live) return 0;
+        if (thing > 0 && !m->live->solo) {   // (side 0: the size it already has; switching only)
+            if (side < 16) return 0;   // (made once, the first time a card asks: the stage's buffers carry it along)
+            solo_view(*m->s, (uint32_t)side);
+            m->live->solo = live_open(*m->s, (uint32_t)side, (uint32_t)side);
+        }
+        m->solo = thing;
+        m->changed = true;
+        return m->live->solo ? 1 : 0;
+    });
+}
+void* motolii_solo_front(Motolii* m) { return m->live && m->live->solo ? live_front(m->live->solo) : nullptr; }
+unsigned long long motolii_solo_frames(Motolii* m) { return m->live && m->live->solo ? m->live->solo->frames.load() : 0; }
 unsigned long long motolii_frames(Motolii* m) { return m->live ? m->live->frames.load() : 0; }
 int motolii_loop(Motolii* m, int on) {   // (on below 0: only asks: answered at once, not queued behind the hand's picture)
     if (on < 0) return (int)m->loop.load();

@@ -164,6 +164,13 @@ const char* motolii_list(Motolii* m);                              /* every fact
    pictures have been finished) may be called from any thread. */
 int motolii_live(Motolii* m);
 void* motolii_front(Motolii* m);
+/* One thing alone, for a card's small picture of it (After Effects' solo, in a picture of its own: the stage is not
+   changed): drawn with the stage's own pictures, side by side points, square, the eye on the thing's frame. thing 0:
+   none. 1 if it can be shown (the stage is live). Its picture and count as motolii_front and motolii_frames give the
+   stage's. */
+int motolii_solo(Motolii* m, int thing, int side);
+void* motolii_solo_front(Motolii* m);
+unsigned long long motolii_solo_frames(Motolii* m);
 unsigned long long motolii_frames(Motolii* m);
 int motolii_play(Motolii* m, int playing);                         /* time goes on by the clock (and round again at the end), or stands */
 double motolii_now(Motolii* m);                                    /* the stage's moment */

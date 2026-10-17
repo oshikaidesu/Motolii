@@ -11,6 +11,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:lab_book/motolii.dart';
+import 'package:lab_book/sets/inspector/inspector_look_preview.dart' show LookPreview;
 import 'package:lab_book/sets/inspector/inspector_motion_preview.dart' show MotionPreview;
 import 'package:lab_book/workspace/timeline.dart';
 import 'package:lab_book/workspace/workspace.dart' show Workspace;
@@ -49,14 +50,21 @@ void main() {
     final out = Directory('$motoliiDir/../reports/wave_preview')..createSync(recursive: true);
     final dpr = t.view.devicePixelRatio, mouse = await t.createGesture(kind: PointerDeviceKind.mouse);
     await mouse.addPointer(location: Offset.zero);
-    for (final (card, thing) in [('Wave', sway), ('Physics', fall), ('Scatter', drift), ('Field', field)]) {
+    final bent = m.add('shape', 'rect');
+    m
+      ..say(bent, 'fill', 'ffaa22')
+      ..set(bent, 'x', 4)
+      ..set(bent, 'round', 30)
+      ..set(bent, 'zigzag', 0.2)
+      ..set(bent, 'rotate', 15);
+    for (final (card, thing) in [('Wave', sway), ('Physics', fall), ('Scatter', drift), ('Field', field), ('Path', bent)]) {
       ws
         ..reread()
         ..select('$thing');
       for (var i = 0; i < 20; i++) {
         await t.pump(const Duration(milliseconds: 50));
       }
-      final preview = find.byWidgetPredicate((w) => w is MotionPreview && w.card == card);
+      final preview = card == 'Path' ? find.byType(LookPreview) : find.byWidgetPredicate((w) => w is MotionPreview && w.card == card);
       await seen(t, preview);
       await Scrollable.ensureVisible(t.element(preview.first), alignment: .3);
       Future<void> shoot(String name) async {

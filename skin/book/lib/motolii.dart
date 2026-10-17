@@ -2,6 +2,7 @@
 // sets/glass_live.dart calls the old glass. The skin holds no document: it holds this handle and the numbers of things.
 // One call = one change = one step of undo. A call that is not done returns false and [trouble] says why.
 // macOS only, Debug build only (the Debug entitlements have the sandbox off so that the library can be loaded).
+import 'dart:math' as math;
 import 'dart:ffi';
 import 'dart:io';
 import 'dart:isolate';
@@ -67,6 +68,7 @@ class Motolii {
   }
 
   late final _live = _lib.lookupFunction<Int32 Function(_P), int Function(_P)>('motolii_live');
+  late final _solo = _lib.lookupFunction<Int32 Function(_P, Int32, Int32), int Function(_P, int, int)>('motolii_solo');
   late final _play = _lib.lookupFunction<Int32 Function(_P, Int32), int Function(_P, int)>('motolii_play');
   late final _now = _lib.lookupFunction<Double Function(_P), double Function(_P)>('motolii_now');
   late final _at = _lib.lookupFunction<Int32 Function(_P, Double), int Function(_P, double)>('motolii_at');
@@ -143,6 +145,30 @@ class Motolii {
     if (_live(_m) == 0) return -1;
     return await _channel.invokeMethod<int>('start', {'lib': libPath, 'handle': _m.address}) ?? -1;
   }
+
+  /// A card's small picture of one thing alone ([side] points square, the eye on its frame), as a Flutter texture drawn
+  /// with the stage's own pictures (motolii_solo). Shown while some card asks for it ([soloShow]); none drawn otherwise.
+  /// -1: none.
+  Future<int> soloTexture(int thing, int side) async {
+    if (_live(_m) == 0 || _solo(_m, thing, side) == 0) return -1;
+    return _soloId ??= await _channel.invokeMethod<int>('start', {'lib': libPath, 'handle': _m.address, 'front': 'motolii_solo_front', 'frames': 'motolii_solo_frames'}) ?? -1;
+  }
+
+  int? _soloId;
+  int _soloAsked = 0;
+
+  /// One card more (or, [on] false, fewer) shows [thing] alone: drawn while any does.
+  void soloShow(int thing, int side, {bool on = true}) {
+    _soloAsked = math.max(0, _soloAsked + (on ? 1 : -1));
+    _solo(_m, _soloOf = _soloAsked > 0 ? thing : 0, side);
+  }
+
+  /// The thing picked now: the one shown alone, while a card shows one.
+  void soloFollow(int thing) {
+    if (_soloAsked > 0 && thing != _soloOf) _solo(_m, _soloOf = thing, 0);
+  }
+
+  int _soloOf = 0;
 
   String get trouble => _trouble(_m).toDartString();
   String get list => _list(_m).toDartString();

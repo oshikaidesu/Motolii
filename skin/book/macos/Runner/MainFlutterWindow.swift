@@ -97,12 +97,14 @@ enum GlassTexture {
 /// The present inside's stage (motolii/filament/out/libmotolii.dylib, motolii.h). The Dart side opens the document
 /// itself (dart:ffi) and makes it live; here the library is only asked for its last finished picture and how many
 /// there have been (the inside keeps the clock).
-/// Channel "motolii/stage", method "start" {lib, handle (the Motolii* as a number)} -> texture id, or -1.
+/// Channel "motolii/stage", method "start" {lib, handle (the Motolii* as a number), and which picture: front and frames,
+/// the names of its two calls ("motolii_front" and "motolii_frames", the stage's own, unless told)} -> texture id, or -1.
+/// Each picture its own texture: the stage's, and a card's small one of a thing alone ("motolii_solo_front").
 enum StageTexture {
   private typealias FrontFn = @convention(c) (UnsafeMutableRawPointer?) -> UnsafeMutableRawPointer?
   private typealias FramesFn = @convention(c) (UnsafeMutableRawPointer?) -> UInt64
 
-  private static var shared: LiveTexture?
+  private static var shared: [String: LiveTexture] = [:]
 
   static func attach(to controller: FlutterViewController) {
     let registrar = controller.registrar(forPlugin: "MotoliiStage")
@@ -112,13 +114,14 @@ enum StageTexture {
         result(FlutterMethodNotImplemented)
         return
       }
-      shared?.stop()
-      shared = nil
-      if let h = dlopen(lib, RTLD_NOW), let f = dlsym(h, "motolii_front"), let n = dlsym(h, "motolii_frames") {
+      let frontName = a["front"] as? String ?? "motolii_front", framesName = a["frames"] as? String ?? "motolii_frames"
+      shared[frontName]?.stop()
+      shared[frontName] = nil
+      if let h = dlopen(lib, RTLD_NOW), let f = dlsym(h, frontName), let n = dlsym(h, framesName) {
         let front = unsafeBitCast(f, to: FrontFn.self), frames = unsafeBitCast(n, to: FramesFn.self), inside = UnsafeMutableRawPointer(bitPattern: handle)
-        shared = LiveTexture(textures: registrar.textures, front: { front(inside) }, frames: { frames(inside) })
+        shared[frontName] = LiveTexture(textures: registrar.textures, front: { front(inside) }, frames: { frames(inside) })
       }
-      result(shared?.id ?? -1)
+      result(shared[frontName]?.id ?? -1)
     }
   }
 }

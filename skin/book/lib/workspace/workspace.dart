@@ -652,6 +652,7 @@ class _InspectorSeatState extends State<_InspectorSeat> {
   @override
   Widget build(BuildContext context) {
     final ws = WsScope.read(context), l = ws.layer, k = _kindOf(l), m = ws.inside!;
+    if (int.tryParse(l?.id ?? '') case final t?) m.soloFollow(t); // (the thing picked is the one shown alone)
     return LayoutBuilder(
       builder: (context, box) => InspHost(
         key: ValueKey(k),
@@ -666,6 +667,12 @@ class _InspectorSeatState extends State<_InspectorSeat> {
         onPath: int.tryParse(l?.id ?? '') == null
             ? null
             : (to, n, copy) => m.path(int.parse(l!.id), copy: copy, to: to, n: n)?.indexed.map((e) => e.$1 % 4 < 2 ? e.$2 * m.point : e.$2).toList(), // (where it is in points of the picture, as the card's numbers are) // (the wave card's preview asks once, then plays by itself)
+        onSolo: int.tryParse(l?.id ?? '') == null
+            ? null
+            : (side, on) {
+                m.soloShow(int.parse(l!.id), side, on: on);
+                return on ? m.soloTexture(int.parse(l.id), side) : Future.value(-1);
+              }, // (a look card's picture of the thing alone)
         onAim: (at) => ws.aim = at.startsWith('v_') ? at.substring(2) : null, // (a colour link of a card is aimed at that value)
         values: Ws.timed('transform', () => wsTransform(ws, l?.id)),
         strs: Ws.timed('words', () => _words(ws, l?.id)),
