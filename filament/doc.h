@@ -31,6 +31,7 @@
 #include "drawn.h"
 #include <string_view>
 #include <unordered_map>
+#include <tuple>
 #include "motion.h"
 #include "interp.h"
 #include "physics.h"
@@ -89,6 +90,8 @@ struct Doc {
     struct Keys { std::vector<double> at, value; std::vector<Interp> interp; std::vector<std::string> own; };   // (own: a way defined in the document, where the stretch is not one of the nine kinds)
     struct NameHash { using is_transparent = void; size_t operator()(std::string_view n) const { return std::hash<std::string_view>{}(n); } };   // (a name looked up as it is said, no string made for it)
     std::unordered_map<int, std::unordered_map<std::string, Keys, NameHash, std::equal_to<>>> moving;   // a value's keys, and the way of the stretch after each, by thing and name; read from the facts when first asked for, forgotten at every change
+    struct HeardHash { size_t operator()(const std::tuple<int, const char*, double>& k) const { return std::hash<int>{}(std::get<0>(k)) * 31u ^ std::hash<const void*>{}(std::get<1>(k)) * 17u ^ std::hash<double>{}(std::get<2>(k)); } };
+    std::unordered_map<std::tuple<int, const char*, double>, double, HeardHash> heard;   // doc_place's own values within this moment, by thing, the name's place in the program (a literal: it never says another name) and when; its copies ask the same: forgotten as the moment begins and at every change
     std::map<int, std::pair<float2, float>> halves;   // a thing's half size and depth (doc_half), worked out once a moment: its copies all ask it
     std::map<std::pair<int, std::string>, std::string> words;   // a value's word, the same way
     std::map<std::pair<int, std::string>, std::vector<double>> keyed;   // the moments of a value's keys, the same way
@@ -600,7 +603,7 @@ static bool doc_rows(Doc& d, char* ask, const std::function<void(sqlite3_stmt*)>
 }
 static void doc_forget(Doc& d) {
     d.phys_stale = true, d.scripted.clear();   // (the world made again only if what it is made of changed: doc_physics)
-    d.moving.clear(), d.words.clear(), d.keyed.clear(), d.halves.clear();
+    d.moving.clear(), d.words.clear(), d.keyed.clear(), d.halves.clear(), d.heard.clear();
     d.named.clear();
     d.laid.clear();
 }
@@ -838,14 +841,24 @@ static bool doc_physics(Doc& d, int thing, double now, PhysPose* pose, int copy 
 static bool doc_staggered(Doc& d, int thing, double now) {
     return doc_members(d, thing) > 1 || doc_number(d, thing, "stagger", 0, 0) > 0.0 || doc_number(d, thing, "wave_x", now, 0) != 0.0 || doc_number(d, thing, "wave_y", now, 0) != 0.0 || doc_number(d, thing, "wave_rotate", now, 0) != 0.0 || doc_number(d, thing, "wave_size", now, 0) != 0.0 || doc_number(d, thing, "field_radius", now, 0) > 0.0 || doc_number(d, thing, "scatter_x", now, 0) > 0.0 || doc_number(d, thing, "scatter_y", now, 0) > 0.0 || doc_number(d, thing, "scatter_rotate", now, 0) > 0.0 || doc_number(d, thing, "scatter_size", now, 0) > 0.0;
 }
+// A value doc_place reads, by a name written in the program (a literal: its place in memory says which name, ever):
+// worked out once a moment for all of a thing's copies (they ask the same at the same moment), not while a hand carries it.
+static double doc_literal(Doc& d, int thing, const char* literal, double at, double otherwise) {
+    if (d.held.thing == thing) return doc_number(d, thing, literal, at, otherwise);
+    const auto key = std::make_tuple(thing, literal, at);
+    if (const auto kept = d.heard.find(key); kept != d.heard.end()) return kept->second;
+    const double is = doc_number(d, thing, literal, at, otherwise);
+    if (d.heard.size() < 100000) d.heard.emplace(key, is);
+    return is;
+}
 static math::mat4 doc_place(Doc& d, int thing, double now, int deeper, int copy, bool member) {
     const double said = now;   // (the moment itself: a wave goes on at it, whatever the copy's delay)
     if (member) now -= doc_delay(d, thing, copy);   // (a member of its copies: as it was so much earlier)
-    const auto turned = [&](const char* name, math::double3 about) { return math::mat4::rotation(doc_number(d, thing, name, now, 0) * (double)TAU / 360.0, about); };
+    const auto turned = [&](const char* name, math::double3 about) { return math::mat4::rotation(doc_literal(d, thing, name, now, 0) * (double)TAU / 360.0, about); };
     float2 half{0.5f};
     float deep = 0.f;
     doc_half(d, thing, &half, &deep);
-    const math::double3 anchor{doc_number(d, thing, "anchor_x", now, 0) * half.x, doc_number(d, thing, "anchor_y", now, 0) * half.y, doc_number(d, thing, "anchor_z", now, 0) * deep};
+    const math::double3 anchor{doc_literal(d, thing, "anchor_x", now, 0) * half.x, doc_literal(d, thing, "anchor_y", now, 0) * half.y, doc_literal(d, thing, "anchor_z", now, 0) * deep};
     // A member of its copies is moved, scattered and waved in units of the stage (so a larger thing is not further
     // apart), its copies laid about the thing's own place (its middle where the rows' middle is); then turned and sized
     // as its copy, its scattering and its wave say, about its anchor.
@@ -853,36 +866,36 @@ static math::mat4 doc_place(Doc& d, int thing, double now, int deeper, int copy,
     math::double3 shift{0.0};
     math::mat4 own;
     if (member) {
-        const int columns = (int)doc_number(d, thing, "copy_columns", 0, 0);
+        const int columns = (int)doc_literal(d, thing, "copy_columns", 0, 0);
         const double along = columns > 0 ? copy % columns : copy, down = columns > 0 ? copy / columns : copy;
         const double alongMid = columns > 0 ? (std::min(n, columns) - 1) * 0.5 : (n - 1) * 0.5, downMid = columns > 0 ? (std::ceil((double)n / columns) - 1) * 0.5 : (n - 1) * 0.5;
-        shift += math::double3{(along - alongMid) * doc_number(d, thing, "copy_x", now, 0), (down - downMid) * doc_number(d, thing, "copy_y", now, 0), (copy - (n - 1) * 0.5) * doc_number(d, thing, "copy_z", now, 0)};
-        own = math::mat4::rotation(copy * (doc_number(d, thing, "copy_turn", now, 0) / n + doc_number(d, thing, "copy_rotate", now, 0)) * (double)TAU / 360.0, math::double3{0, 0, 1}) *
-              math::mat4::scaling(std::pow(doc_number(d, thing, "copy_size", now, 1), copy)) *
-              math::mat4::scaling(math::double3{n > 1 ? std::pow(doc_number(d, thing, "copy_wide", now, 1), (double)copy / (n - 1)) : 1.0, 1.0, 1.0});
-        if (const double ty = doc_number(d, thing, "copy_rotate_y", now, 0), tx = doc_number(d, thing, "copy_rotate_x", now, 0); tx != 0.0 || ty != 0.0)   // (turned out of the picture's plane too, each more than the one before)
+        shift += math::double3{(along - alongMid) * doc_literal(d, thing, "copy_x", now, 0), (down - downMid) * doc_literal(d, thing, "copy_y", now, 0), (copy - (n - 1) * 0.5) * doc_literal(d, thing, "copy_z", now, 0)};
+        own = math::mat4::rotation(copy * (doc_literal(d, thing, "copy_turn", now, 0) / n + doc_literal(d, thing, "copy_rotate", now, 0)) * (double)TAU / 360.0, math::double3{0, 0, 1}) *
+              math::mat4::scaling(std::pow(doc_literal(d, thing, "copy_size", now, 1), copy)) *
+              math::mat4::scaling(math::double3{n > 1 ? std::pow(doc_literal(d, thing, "copy_wide", now, 1), (double)copy / (n - 1)) : 1.0, 1.0, 1.0});
+        if (const double ty = doc_literal(d, thing, "copy_rotate_y", now, 0), tx = doc_literal(d, thing, "copy_rotate_x", now, 0); tx != 0.0 || ty != 0.0)   // (turned out of the picture's plane too, each more than the one before)
             own = math::mat4::rotation(copy * ty * (double)TAU / 360.0, math::double3{0, 1, 0}) * math::mat4::rotation(copy * tx * (double)TAU / 360.0, math::double3{1, 0, 0}) * own;
         // (scattered: each copy its own way, from the seed and its number; the same each time)
-        const double sx = doc_number(d, thing, "scatter_x", now, 0), sy = doc_number(d, thing, "scatter_y", now, 0), sr = doc_number(d, thing, "scatter_rotate", now, 0), ss = doc_number(d, thing, "scatter_size", now, 0);
-        const uint32_t seed = (uint32_t)doc_number(d, thing, "seed", 0, 0);
+        const double sx = doc_literal(d, thing, "scatter_x", now, 0), sy = doc_literal(d, thing, "scatter_y", now, 0), sr = doc_literal(d, thing, "scatter_rotate", now, 0), ss = doc_literal(d, thing, "scatter_size", now, 0);
+        const uint32_t seed = (uint32_t)doc_literal(d, thing, "seed", 0, 0);
         const auto roll = [&](uint32_t k) {   // (-1 to 1: a hash of the seed, the copy and which roll)
             uint32_t h = seed * 0x9E3779B9u ^ ((uint32_t)copy + 1u) * 0x85EBCA6Bu ^ k * 0xC2B2AE35u;
             h ^= h >> 16, h *= 0x7FEB352Du, h ^= h >> 15, h *= 0x846CA68Bu, h ^= h >> 16;
             return (double)h / 2147483647.5 - 1.0;
         };
-        if (const double sz = doc_number(d, thing, "scatter_z", now, 0); sz != 0.0) shift.z += sz * roll(5);
+        if (const double sz = doc_literal(d, thing, "scatter_z", now, 0); sz != 0.0) shift.z += sz * roll(5);
         if (sx != 0.0 || sy != 0.0 || sr != 0.0 || ss != 0.0) {
             const auto round = [](double v, double edge) { return edge > 0.0 ? v - 2.0 * edge * std::floor((v + edge) / (2.0 * edge)) : v; };   // (flowing past the edge: back at the other)
             const auto whole = [&](double drift, double edge) { const double k = edge > 0.0 ? std::round(drift * d.round / (2.0 * edge)) : 0.0; return k != 0.0 ? k * 2.0 * edge / d.round : drift; };   // (round the scattering a whole number of times in the document)
-            shift += math::double3{round(sx * roll(1) + whole(doc_number(d, thing, "drift_x", 0, 0), sx) * now, sx), round(sy * roll(2) + whole(doc_number(d, thing, "drift_y", 0, 0), sy) * now, sy), 0.0};
+            shift += math::double3{round(sx * roll(1) + whole(doc_literal(d, thing, "drift_x", 0, 0), sx) * now, sx), round(sy * roll(2) + whole(doc_literal(d, thing, "drift_y", 0, 0), sy) * now, sy), 0.0};
             own = own * math::mat4::rotation(sr * roll(3) * (double)TAU / 360.0, math::double3{0, 0, 1}) * math::mat4::scaling(std::max(0.0, 1.0 + ss * roll(4)));
         }
         // (a wave through it: each copy so far behind the one before, at its own moment, a copy staggered so much later)
-        const double said_speed = doc_number(d, thing, "wave_speed", said, 1), noisy = doc_number(d, thing, "wave_noise", said, 0);
+        const double said_speed = doc_literal(d, thing, "wave_speed", said, 1), noisy = doc_literal(d, thing, "wave_noise", said, 0);
         const double turns = std::round(said_speed * d.round), speed = turns > 0.0 ? turns / d.round : said_speed;   // (a whole number of times round in the document: its film loops)
-        double w = std::sin((double)TAU * (speed * now - doc_number(d, thing, "wave_phase", said, 0) * copy / n));
+        double w = std::sin((double)TAU * (speed * now - doc_literal(d, thing, "wave_phase", said, 0) * copy / n));
         if (noisy > 0.0) {   // (a smooth noise: random values at the corners of a lattice, eased between; its own for each copy, or, with a scale, read where the copy lies)
-            const double scale = doc_number(d, thing, "noise_scale", said, 0);
+            const double scale = doc_literal(d, thing, "noise_scale", said, 0);
             const auto at = [&](int64_t i, int64_t j, int64_t k) {
                 const int64_t ring = turns > 0.0 ? (int64_t)turns * 2 : 0;   // (round in time as the wave is: the lattice's last row is its first)
                 if (ring > 0) k = ((k % ring) + ring) % ring;
@@ -897,10 +910,10 @@ static math::mat4 doc_place(Doc& d, int thing, double now, int deeper, int copy,
                 sum += at((int64_t)f.x + (c & 1), (int64_t)f.y + ((c >> 1) & 1), (int64_t)f.z + ((c >> 2) & 1)) * ((c & 1) ? e.x : 1.0 - e.x) * ((c & 2) ? e.y : 1.0 - e.y) * ((c & 4) ? e.z : 1.0 - e.z);
             w = w * (1.0 - noisy) + noisy * sum;
         }
-        shift += math::double3{doc_number(d, thing, "wave_x", said, 0), doc_number(d, thing, "wave_y", said, 0), 0.0} * w;
-        shift.z += doc_number(d, thing, "wave_z", said, 0) * std::cos((double)TAU * (speed * now - doc_number(d, thing, "wave_phase", said, 0) * copy / n));   // (a quarter round after: round and round with up and down)
-        own = own * math::mat4::rotation(w * doc_number(d, thing, "wave_rotate", said, 0) * (double)TAU / 360.0, math::double3{0, 0, 1}) *
-              math::mat4::scaling(std::max(0.0, 1.0 + w * doc_number(d, thing, "wave_size", said, 0)));
+        shift += math::double3{doc_literal(d, thing, "wave_x", said, 0), doc_literal(d, thing, "wave_y", said, 0), 0.0} * w;
+        shift.z += doc_literal(d, thing, "wave_z", said, 0) * std::cos((double)TAU * (speed * now - doc_literal(d, thing, "wave_phase", said, 0) * copy / n));   // (a quarter round after: round and round with up and down)
+        own = own * math::mat4::rotation(w * doc_literal(d, thing, "wave_rotate", said, 0) * (double)TAU / 360.0, math::double3{0, 0, 1}) *
+              math::mat4::scaling(std::max(0.0, 1.0 + w * doc_literal(d, thing, "wave_size", said, 0)));
     }
     if (member)   // (a recipe as code: each copy where the thing's script says, on top of what its copies' values say)
         if (DocScript* sc = doc_script_of(doc_word(d, thing, "script")); sc && sc->run && sc->run->ok()) {
@@ -916,8 +929,8 @@ static math::mat4 doc_place(Doc& d, int thing, double now, int deeper, int copy,
                     else numbers[sc->knobs[i].name] = doc_number(d, thing, sc->names[i].c_str(), said, sc->knobs[i].usual);
                 }
                 kept.at = said, kept.made = doc_scripts_made();
-                const double begins = doc_number(d, thing, "start", 0, 0);
-                numbers["duration"] = doc_number(d, thing, "duration", 0, -1);   // (how long the thing lasts: an Out ends before it)
+                const double begins = doc_literal(d, thing, "start", 0, 0);
+                numbers["duration"] = doc_literal(d, thing, "duration", 0, -1);   // (how long the thing lasts: an Out ends before it)
                 kept.copies = sc->run->copies(n, said - begins, numbers, words, (double)d.stage->h / std::max(1.0, doc_number(d, 0, "high", 0, 1080) * doc_point(d, thing, said)));   // (a pixel of the document, where the thing stands)
             }
             const ScriptCopy c = copy < n ? kept.copies[(size_t)copy] : ScriptCopy{};
@@ -925,7 +938,7 @@ static math::mat4 doc_place(Doc& d, int thing, double now, int deeper, int copy,
             own = own * math::mat4::rotation(c.rotate * (double)TAU / 360.0, math::double3{0, 0, 1}) * math::mat4::rotation(c.rotate_y * (double)TAU / 360.0, math::double3{0, 1, 0}) *
                   math::mat4::rotation(c.rotate_x * (double)TAU / 360.0, math::double3{1, 0, 0}) * math::mat4::scaling(c.size);
         }
-    double tall = doc_number(d, thing, "tall", now, 1);   // (taller, its anchor staying: a copy as its number in copy_tall says too)
+    double tall = doc_literal(d, thing, "tall", now, 1);   // (taller, its anchor staying: a copy as its number in copy_tall says too)
     if (member) {
         std::istringstream said(doc_word(d, thing, "copy_tall"));
         std::vector<double> each;
@@ -940,26 +953,26 @@ static math::mat4 doc_place(Doc& d, int thing, double now, int deeper, int copy,
         if (doc_physics(d, thing, now, &pose, member ? copy : -1)) {
             const math::quat q{pose.turn[3], pose.turn[0], pose.turn[1], pose.turn[2]};
             return math::mat4::translation(math::double3{pose.at[0], pose.at[1], pose.at[2]}) * math::mat4(math::mat3(math::quat(q))) *
-                   math::mat4::scaling(doc_number(d, thing, "size", now, 1)) *
-                   math::mat4::scaling(math::double3{doc_number(d, thing, "scale_x", now, 1), doc_number(d, thing, "scale_y", now, 1), doc_number(d, thing, "scale_z", now, 1)}) *
+                   math::mat4::scaling(doc_literal(d, thing, "size", now, 1)) *
+                   math::mat4::scaling(math::double3{doc_literal(d, thing, "scale_x", now, 1), doc_literal(d, thing, "scale_y", now, 1), doc_literal(d, thing, "scale_z", now, 1)}) *
                    math::mat4::translation(math::double3{-doc_letter_middle(d, thing, member ? copy : -1), 0, 0});
         }
     }
-    math::mat4 place = doc_above(d, thing, now, deeper) * math::mat4::translation(math::double3{doc_number(d, thing, "x", now, 0), doc_number(d, thing, "y", now, 0), doc_number(d, thing, "z", now, 0)}) *
-                       turned("rotate", {0, 0, 1}) * turned("rotate_y", {0, 1, 0}) * turned("rotate_x", {1, 0, 0}) * math::mat4::translation(shift) * math::mat4::scaling(doc_number(d, thing, "size", now, 1)) *
-                       math::mat4::scaling(math::double3{doc_number(d, thing, "scale_x", now, 1), doc_number(d, thing, "scale_y", now, 1), doc_number(d, thing, "scale_z", now, 1)}) *
+    math::mat4 place = doc_above(d, thing, now, deeper) * math::mat4::translation(math::double3{doc_literal(d, thing, "x", now, 0), doc_literal(d, thing, "y", now, 0), doc_literal(d, thing, "z", now, 0)}) *
+                       turned("rotate", {0, 0, 1}) * turned("rotate_y", {0, 1, 0}) * turned("rotate_x", {1, 0, 0}) * math::mat4::translation(shift) * math::mat4::scaling(doc_literal(d, thing, "size", now, 1)) *
+                       math::mat4::scaling(math::double3{doc_literal(d, thing, "scale_x", now, 1), doc_literal(d, thing, "scale_y", now, 1), doc_literal(d, thing, "scale_z", now, 1)}) *
                        own * math::mat4::translation(-anchor);
-    const double reach = member ? doc_number(d, thing, "field_radius", said, 0) : 0.0;
+    const double reach = member ? doc_literal(d, thing, "field_radius", said, 0) : 0.0;
     if (reach > 0.0) {   // (within the field: larger and turned about where it is seen, its picture's middle, as near the field's middle as it is)
         const math::double3 at = (place * math::double4{0.0, 0.0, 0.0, 1.0}).xyz;
-        const math::double3 middle{doc_number(d, thing, "field_x", said, 0), doc_number(d, thing, "field_y", said, 0), doc_number(d, thing, "field_z", said, 0)};   // (a ball: near and far measured too)
-        const double from = length(at - middle), band = doc_number(d, thing, "field_band", said, 0);
+        const math::double3 middle{doc_literal(d, thing, "field_x", said, 0), doc_literal(d, thing, "field_y", said, 0), doc_literal(d, thing, "field_z", said, 0)};   // (a ball: near and far measured too)
+        const double from = length(at - middle), band = doc_literal(d, thing, "field_band", said, 0);
         const double near = std::clamp(band > 0.0 ? 1.0 - std::fabs(from - reach) / band : 1.0 - from / reach, 0.0, 1.0), k = near * near * (3.0 - 2.0 * near);
         const math::double3 away = at - middle;
-        const double r = length(away), by = doc_number(d, thing, "field_push", said, 0);   // (pushed out as if from a hole that wide: the nearest ones all end about as far out, the hole round however they lay)
+        const double r = length(away), by = doc_literal(d, thing, "field_push", said, 0);   // (pushed out as if from a hole that wide: the nearest ones all end about as far out, the hole round however they lay)
         const math::double3 push = r > 1e-9 ? normalize(away) * (by > 0.0 ? k * (std::sqrt(r * r + by * by) - r) : k * by) : math::double3{0.0};
-        place = math::mat4::translation(push) * math::mat4::translation(at) * math::mat4::rotation(k * doc_number(d, thing, "field_rotate", said, 0) * (double)TAU / 360.0, math::double3{0, 0, 1}) *
-                math::mat4::scaling(std::max(0.0, 1.0 + k * doc_number(d, thing, "field_size", said, 0))) * math::mat4::translation(-at) * place;
+        place = math::mat4::translation(push) * math::mat4::translation(at) * math::mat4::rotation(k * doc_literal(d, thing, "field_rotate", said, 0) * (double)TAU / 360.0, math::double3{0, 0, 1}) *
+                math::mat4::scaling(std::max(0.0, 1.0 + k * doc_literal(d, thing, "field_size", said, 0))) * math::mat4::translation(-at) * place;
     }
     // (the user's three tags: 2D sticks to the camera; 2.5D stays in the world, smaller far, but keeps the angle it
     //  was given on the screen; 3D, and a solid, is filmed as it is)
@@ -1191,7 +1204,7 @@ static bool doc_fx(Doc& d, int thing, double at, bool most, double units, DrawnF
 
 static void doc_moment(Doc& d, double now) {
     Stage& s = *d.stage;
-    d.halves.clear();   // (made again since: a flat thing's sheet is as large as its picture now)
+    d.halves.clear(), d.heard.clear();   // (made again since: a flat thing's sheet is as large as its picture now; doc_place's values asked anew)
     const std::vector<int> lie = doc_laid(d);
     // Each thing as it is now, in the order they lie: whether it is on, and whether it is a solid thing.
     struct Lies { int thing; Doc::Shown* shown; bool on, solid; double since; };
