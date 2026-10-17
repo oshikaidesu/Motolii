@@ -95,13 +95,14 @@ abstract final class WsArt {
   /// Where the camera frames, in document px: the whole picture.
   static ArtBox cameraBox(ArtScene s) => ArtBox(centre, comp);
 
-  /// The box the stage frames when [id] is selected, or null when the layer has no picture at this frame.
-  static ArtBox? boxOf(ArtScene s, String? id) => s.layer(id)?.live(s.frame) ?? false ? s.boxes[id] : null;
+  /// The box the stage frames when [id] is selected, or null when the layer has no picture at this frame (the inside
+  /// gives a frame only to what it shows: whether it is on is its, not counted again here in frames).
+  static ArtBox? boxOf(ArtScene s, String? id) => s.layer(id) == null ? null : s.boxes[id];
 
   /// The topmost layer under [p] (document px), or null. The background is locked: a click on it means "nothing".
   static String? hit(ArtScene s, Offset p) {
     for (final l in s.layers) {   // (the thing in front, of those whose real frame the point is in; the first row is the nearest thing)
-      if (l.live(s.frame) && (s.boxes[l.id]?.contains(p) ?? false)) return l.id;
+      if (s.boxes[l.id]?.contains(p) ?? false) return l.id;
     }
     return null;
   }

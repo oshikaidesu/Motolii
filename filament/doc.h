@@ -2494,6 +2494,9 @@ static double doc_point(Doc& d, int thing, double now) {
     const math::double3 at = (doc_above(d, thing, now) * math::double4{doc_number(d, thing, "x", now, 0), doc_number(d, thing, "y", now, 0), doc_number(d, thing, "z", now, 0), 1.0}).xyz;
     return doc_seen(d, at + math::double3{1, 0, 0}).x - doc_seen(d, at).x;
 }
+// Where a thing is seen at a moment: as the stage places it (a thing alone that waves or is late, as the member it is
+// drawn as); one with copies, where they are laid about.
+static math::mat4 doc_shown_at(Doc& d, int thing, double now) { return doc_place(d, thing, now, 0, 0, doc_members(d, thing) == 1 && doc_staggered(d, thing, now)); }
 // A thing's frame on the picture at a moment, as the stage's own eye sees it: its middle, how wide and how high (points
 // of the picture, from the top left), and how far it is turned (degrees, clockwise as seen). false: it is not shown.
 static bool doc_frame(Doc& d, int thing, double now, double* frame) {
@@ -2501,12 +2504,12 @@ static bool doc_frame(Doc& d, int thing, double now, double* frame) {
     float deep = 0.f;
     if (!doc_half(d, thing, &half, &deep) || !d.shown[thing].in) return false;   // (a thing that is not on, or is put aside, has no frame: a hand cannot take hold of what is not seen)
     const double size = doc_number(d, thing, "size", now, 1), point = doc_point(d, thing, now);
-    const math::double2 middle = doc_seen(d, (doc_place(d, thing, now) * math::double4{0, 0, 0, 1}).xyz);   // (its own middle, wherever its anchor is)
+    const math::double2 middle = doc_seen(d, (doc_shown_at(d, thing, now) * math::double4{0, 0, 0, 1}).xyz);   // (its own middle, wherever its anchor is)
     const double sx = doc_number(d, thing, "scale_x", now, 1), sy = doc_number(d, thing, "scale_y", now, 1), sz = doc_number(d, thing, "scale_z", now, 1);
     frame[0] = middle.x, frame[1] = middle.y, frame[2] = 2.0 * half.x * size * std::fabs(sx) * point, frame[3] = 2.0 * half.y * size * std::fabs(sy) * point;
     frame[4] = -doc_number(d, thing, "rotate", now, 0);
     const math::double3 anchor{doc_number(d, thing, "anchor_x", now, 0) * half.x, doc_number(d, thing, "anchor_y", now, 0) * half.y, 0.0};
-    const math::double2 pivot = doc_seen(d, (doc_place(d, thing, now) * math::double4{anchor, 1.0}).xyz);   // (the point it turns about)
+    const math::double2 pivot = doc_seen(d, (doc_shown_at(d, thing, now) * math::double4{anchor, 1.0}).xyz);   // (the point it turns about)
     frame[5] = pivot.x, frame[6] = pivot.y, frame[7] = 2.0 * deep * size * std::fabs(sz) * point;   // (and how deep it is: a flat thing, 0)
     double box[4];   // (turned about another line than the eye's, its frame is the upright box of what it covers)
     if ((doc_number(d, thing, "rotate_x", now, 0) != 0.0 || doc_number(d, thing, "rotate_y", now, 0) != 0.0 || doc_number(d, thing, "parent", 0, 0) != 0.0) && doc_covers(d, thing, now, box))
@@ -2518,7 +2521,7 @@ static bool doc_covers(Doc& d, int thing, double now, double* box) {
     float2 half{0.f};
     float deep = 0.f;
     if (!doc_half(d, thing, &half, &deep)) return false;
-    const math::mat4 place = doc_place(d, thing, now);
+    const math::mat4 place = doc_shown_at(d, thing, now);
     math::double2 low{1e12}, high{-1e12};
     for (int corner = 0; corner < 8; ++corner) {
         const math::double2 at = doc_seen(d, (place * math::double4{corner & 1 ? half.x : -half.x, corner & 2 ? half.y : -half.y, corner & 4 ? deep : -deep, 1.0}).xyz);
