@@ -396,6 +396,24 @@ class Motolii {
       if (line.indexOf(' ') case final i when i > 0) (double.parse(line.substring(0, i)), line.substring(i + 1)),
   ];
   bool mark(double at, String word) => _with([word], (s) => _mark(_m, at, s[0])) != 0;
+  late final _loudness = _lib.lookupFunction<Int32 Function(_P, Int32, Pointer<Float>, Int32), int Function(_P, int, Pointer<Float>, int)>('motolii_loudness');
+  late final _strikes = _lib.lookupFunction<Int32 Function(_P, Int32, Double, Pointer<Double>, Int32), int Function(_P, int, double, Pointer<Double>, int)>('motolii_strikes');
+
+  /// A film's sound: its loudness (dB, 0 at full) 100 times a second of its own (none: no sound, or not a film).
+  List<double> loudness(int thing) {
+    final n = _loudness(_m, thing, nullptr, 0), out = malloc<Float>(n < 1 ? 1 : n);
+    final got = _loudness(_m, thing, out, n), all = [for (var i = 0; i < got && i < n; i++) out[i].toDouble()];
+    malloc.free(out);
+    return all;
+  }
+
+  /// The moments of the document where a film's sound strikes (grows [rise] dB louder at once), where it shows them.
+  List<double> strikes(int thing, double rise) {
+    final n = _strikes(_m, thing, rise, nullptr, 0), out = malloc<Double>(n < 1 ? 1 : n);
+    final got = _strikes(_m, thing, rise, out, n), all = [for (var i = 0; i < got && i < n; i++) out[i]];
+    malloc.free(out);
+    return all;
+  }
   late final _guide = _lib.lookupFunction<Int32 Function(_P, _S, Double, Int32), int Function(_P, _S, double, int)>('motolii_guide');
   late final _guides = _lib.lookupFunction<_S Function(_P), _S Function(_P)>('motolii_guides');
 

@@ -380,9 +380,30 @@ void main() {
     report.add('Color: circle fill $filled (want ff3366), edge ${m.word(b, 'stroke')} (want ff3366)');
     expect(filled, 'ff3366');
     expect(m.word(b, 'stroke'), 'ff3366');
+    // Audio: a film of clicks every half second for 4 s, from the document's start: Marks puts a beat at each; asked
+    // again, the beats it put before are not put twice.
+    final clicks = m.add('film', '$motoliiDir/check/beats.mp4');
+    m.set(clicks, 'start', 0);
+    ws
+      ..reread()
+      ..select('$clicks');
+    await open('Audio');
+    await t.tap(find.byKey(const ValueKey('audio.marks')));
+    await t.pump();
+    await wait(100);
+    await t.tap(find.byKey(const ValueKey('audio.marks')));
+    await t.pump();
+    await wait(100);
+    await shoot('Audio');
+    final beats = [for (final (at, name) in m.marks) if (name == 'beat') at];
+    report.add('Audio: beats ${beats.map((b) => b.toStringAsFixed(2)).join(' ')} (want 0.00 0.50 ... 3.50, 8 of them)');
+    expect(beats.length, 8);
+    for (final (k, b) in beats.indexed) {
+      expect(b, closeTo(k * .5, .03));
+    }
     File('${out.path}/report.txt').writeAsStringSync(report.join('\n'));
     expect(made, 2);
     expect(named.first, 'Drop');
-    expect(ws.marks.length, 1);
+    expect(ws.marks.where((m) => m.$2 != 'beat').length, 1);
   });
 }

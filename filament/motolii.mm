@@ -3,6 +3,7 @@
 #include "doc.h"
 #include "live.h"
 #include "heard.h"
+#include "sound.h"
 #include "motolii.h"
 #include <set>
 #include <sstream>
@@ -486,6 +487,40 @@ int motolii_size(Motolii* m, int wide, int high) {
 }
 int motolii_work(Motolii* m, double from, double to) { return by_hand(m, [=] { return changes(m, (int)doc_work_is(doc(m), from, to)); }); }
 int motolii_work_of(Motolii* m, double* from, double* to) { return by_look(m, [=] { return doc_work(*m->d, from, to), 1; }); }
+// A film's sound: how loud it is, 100 times a second of its own (read once a file, as fast as it decodes), and the
+// moments of the document it strikes (grows `rise` dB louder at once), where its film shows them.
+static const std::vector<float>& loudness_of(const std::string& file) {
+    static std::map<std::string, std::vector<float>> read;
+    static std::mutex one;
+    std::lock_guard<std::mutex> hold(one);
+    auto found = read.find(file);
+    if (found == read.end()) found = read.emplace(file, sound_loudness(file.c_str(), 100.0)).first;
+    return found->second;
+}
+int motolii_loudness(Motolii* m, int thing, float* db, int room) {
+    const std::string file = by_look(m, [=] { return doc_knows(doc(m), thing) && doc_word(*m->d, thing, "kind") == "film" ? doc_word(*m->d, thing, "file") : std::string(); });
+    if (file.empty()) return 0;
+    const std::vector<float>& all = loudness_of(file);
+    for (int i = 0; i < room && i < (int)all.size(); ++i) db[i] = all[(size_t)i];
+    return (int)all.size();
+}
+int motolii_strikes(Motolii* m, int thing, double rise, double* at, int room) {
+    const std::string file = by_look(m, [=] { return doc_knows(doc(m), thing) && doc_word(*m->d, thing, "kind") == "film" ? doc_word(*m->d, thing, "file") : std::string(); });
+    if (file.empty()) return 0;
+    const std::vector<double> own = sound_strikes(loudness_of(file), 100.0, rise);
+    return by_look(m, [&] {   // (the film's own seconds to the document's: from its start, from where it begins, at its speed, while it lasts)
+        Doc& d = *m->d;
+        const double start = doc_number(d, thing, "start", 0, 0), begin = doc_number(d, thing, "begin", 0, 0), speed = doc_number(d, thing, "speed", 0, 1), lasts = doc_number(d, thing, "duration", 0, -1);
+        int n = 0;
+        for (const double t : own) {
+            const double when = speed == 0.0 ? -1.0 : start + (t - begin) / speed;
+            if (when < start || (lasts > 0.0 && when >= start + lasts)) continue;
+            if (n < room) at[n] = when;
+            ++n;
+        }
+        return n;
+    });
+}
 int motolii_mark(Motolii* m, double at, const char* word) { return by_hand(m, [=] { return changes(m, (int)doc_mark(doc(m), at, word)); }); }
 int motolii_guide(Motolii* m, const char* axis, double at, int on) { return by_hand(m, [=] { return changes(m, (int)doc_guide(doc(m), axis, at, on != 0)); }); }
 const char* motolii_guides(Motolii* m) { return by_look(m, [=] { return (m->word = doc_guides(*m->d)).c_str(); }); }

@@ -55,6 +55,7 @@
 |---|---|---|
 | 舞台と道具箱（物を置く、ガラス、型、時間、絵と動画の書き出し、測る） | `filament/kit.h` | 今の土台で動く |
 | 動画（GStreamer。どの形式でも、切り出し・速さ・逆再生、色、音、コピーなしで板に） | `filament/video.h` | 今の土台で動く（Mac だけ） |
+| 音の大きさと拍（GStreamer の level。10ms ごとの音量、急に大きくなる所＝拍。机の Audio） | `filament/sound.h` | 今の土台で動く |
 | AEの絵・写真・打った文字（ThorVG） | `filament/drawn.h` | 今の土台で動く |
 | **形を三角形にして Filament で描く**（試作）：libtess2（SGI Free B）で輪郭を三角形に、材質で色と頂点の曲げ、View の MSAA。星40個の波で 11.56 → 3.03 ms／コマ | `filament/libtess2.sh`、`filament/shape.mat`、`filament/check/shape_mesh.mm`、`filament/check/shape_mesh.sh` | 書類の形はこれで描く（`filament/drawn.h` の `flat_mesh`：塗りは libtess2、線は ThorVG の stroker を `filament/bend.cpp` の tvg_edge から。グラデ・効果つきは今まで通り ThorVG の絵） |
 | **形の曲げ（AE のシェイプ操作）**：形の値 round（どの形にも、キー可）・bloat（パンク・膨張）・zigzag／zigzag_ridges／zigzag_smooth・offset（パスのオフセット）。中身は ThorVG の Lottie 読みの部品そのまま。三角形の形の点を動かす曲げ（warp・bend・twist・pinch・skew・squash・wiggle）は `filament/flat.mat` の頂点の段、ThorVG の絵の warp は ThorVG の頂点シェーダーへのパッチ `filament/dawn_probe/thorvg_bend.patch`（`WgCanvas::bend`）、`filament/drawn.h` の `warp_at`。Skia の道まわりは `filament/skia.sh`（未接続） | `filament/bend.cpp`、`filament/drawn.h` の `bend_at`、部品は `filament/third_party/thorvg_src/src/loaders/lottie/tvgLottieModifier.cpp` | 今の土台で動く（4つ毎コマ曲げて +1.4 ms） |
