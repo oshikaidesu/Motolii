@@ -10,6 +10,8 @@
 #include "include/core/SkStrokeRec.h"
 #include "include/core/SkString.h"
 #include "include/core/SkContourMeasure.h"
+#include "include/core/SkRegion.h"
+#include "include/core/SkMatrix.h"
 #include "include/effects/SkDiscretePathEffect.h"
 #include <vector>
 
@@ -349,8 +351,8 @@ int sk_along(const tvg::PathCommand* cmds, uint32_t cmdsCnt, const tvg::Point* p
     return (int)out.size() / 3;
 }
 
-// A path made of squares `cell` across, one where a grid's square has its middle inside it (Skia's own contains), as
-// Cavalry's Voxelize. At most 256 squares a side.
+// A path made of squares `cell` across, one where a grid's square has its middle inside it, as Cavalry's Voxelize:
+// the path scan-converted on that grid by Skia's own SkRegion (a pixel is in where its middle is). At most 256 a side.
 bool sk_voxel(const tvg::PathCommand* cmds, uint32_t cmdsCnt, const tvg::Point* pts, float cell, std::vector<tvg::PathCommand>& outCmds, std::vector<tvg::Point>& outPts) {
     outCmds.clear(), outPts.clear();
     const SkPath path = sk_of(cmds, cmdsCnt, pts);
@@ -358,11 +360,15 @@ bool sk_voxel(const tvg::PathCommand* cmds, uint32_t cmdsCnt, const tvg::Point* 
     if (box.isEmpty() || cell <= 0.f) return false;
     cell = std::max(cell, std::max(box.width(), box.height()) / 256.f);
     const float x0 = std::floor(box.fLeft / cell) * cell, y0 = std::floor(box.fTop / cell) * cell;
-    for (float y = y0; y < box.fBottom; y += cell)
-        for (float x = x0; x < box.fRight; x += cell)
-            if (path.contains(x + 0.5f * cell, y + 0.5f * cell)) {
+    const SkPath grid = path.makeTransform(SkMatrix::Translate(-x0, -y0).postScale(1.f / cell, 1.f / cell));   // (a square one pixel)
+    SkRegion in;
+    in.setPath(grid, SkRegion(SkIRect::MakeWH((int)std::ceil((box.fRight - x0) / cell) + 1, (int)std::ceil((box.fBottom - y0) / cell) + 1)));
+    for (SkRegion::Iterator it(in); !it.done(); it.next())
+        for (int y = it.rect().fTop; y < it.rect().fBottom; ++y)
+            for (int x = it.rect().fLeft; x < it.rect().fRight; ++x) {
+                const float px = x0 + (float)x * cell, py = y0 + (float)y * cell;
                 outCmds.insert(outCmds.end(), {tvg::PathCommand::MoveTo, tvg::PathCommand::LineTo, tvg::PathCommand::LineTo, tvg::PathCommand::LineTo, tvg::PathCommand::Close});
-                outPts.insert(outPts.end(), {{x, y}, {x + cell, y}, {x + cell, y + cell}, {x, y + cell}});
+                outPts.insert(outPts.end(), {{px, py}, {px + cell, py}, {px + cell, py + cell}, {px, py + cell}});
             }
     return !outCmds.empty();
 }

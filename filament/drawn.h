@@ -906,7 +906,15 @@ static std::vector<uint32_t> shape_cut(Drawn* d, float trimFrom, float trimTo, b
     const auto none = [&] { if (m.pos.empty()) point(0.5f * w, 0.5f * h); for (int k = 0; k < 3; ++k) m.idx.push_back(0); };
     if (refill || m.idx.empty()) {
         m.pos.clear(), m.nrm.clear(), m.uv.clear(), m.idx.clear();
-        if (!d->hollow) {   // (its outline: its pieces are short, so a curve is its end)
+        if (!d->hollow && d->bent[9] > 0.f) {   // (made of squares: each is two triangles as it is, nothing to cut)
+            for (uint32_t c = 0, p = 0; c < cmdsCnt; ++c)
+                if (cmds[c] == tvg::PathCommand::MoveTo && c + 3 < cmdsCnt) {
+                    const uint32_t k = (uint32_t)m.pos.size();
+                    for (uint32_t i = 0; i < 4; ++i) point(pts[p + i].x, pts[p + i].y);
+                    m.idx.insert(m.idx.end(), {k, k + 1, k + 2, k, k + 2, k + 3});
+                    p += 4, c += 3;
+                }
+        } else if (!d->hollow) {   // (its outline: its pieces are short, so a curve is its end)
             TESStesselator* t = tessNewTess(nullptr);
             std::vector<float2> ring;
             const auto end = [&] { if (ring.size() > 2) tessAddContour(t, 2, ring.data(), sizeof(float2), (int)ring.size()); ring.clear(); };
