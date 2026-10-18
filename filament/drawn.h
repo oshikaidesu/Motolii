@@ -770,6 +770,15 @@ static void flat_path(Drawn* d, tvg::Shape* shape, const char* form, int w, int 
             k ? shape->lineTo(x, y) : shape->moveTo(x, y);
         }
     }
+    else if (!strcmp(form, "spiral")) {   // (a line winding out from its middle, as Cavalry's spiral: so many turns (points), from `inner` of the way out)
+        const float turns = (float)std::clamp(points, 1, 50), from = std::clamp(inner, 0.f, 0.95f);
+        const int n = (int)(96.f * turns);
+        for (int k = 0; k <= n; ++k) {
+            const float u = (float)k / (float)n, a = -0.25f * TAU + TAU * turns * u, r = from + (1.f - from) * u;
+            const float x = cx + (rx - thick) * r * std::cos(a), y = cy + (ry - thick) * r * std::sin(a);
+            k ? shape->lineTo(x, y) : shape->moveTo(x, y);
+        }
+    }
     else if (!strcmp(form, "ring") || !strcmp(form, "arc")) {   // (a ring: its hole `inner` of the way out; an arc: so many degrees of it (points), `inner` thick, from straight up clockwise)
         const bool arc = !strcmp(form, "arc");
         const float hole = arc ? 1.f - std::clamp(inner, 0.02f, 1.f) : std::clamp(inner, 0.f, 0.98f), sweep = arc ? TAU * std::clamp((float)points, 1.f, 360.f) / 360.f : TAU;
@@ -850,7 +859,7 @@ static Drawn* flat(Stage& s, const char* form, float wide, const mat4f& place, f
         shape->fill((uint8_t)std::lround(255.f * colour.x), (uint8_t)std::lround(255.f * colour.y), (uint8_t)std::lround(255.f * colour.z), strcmp(form, "null") && !fx.hollow ? 255 : 0);
         if (fx.ramp.size() > 1 && strcmp(form, "null")) shape->fill(ramp_of(fx.ramp, (float)*w, (float)*h, fx.radial, fx.rampAngle, fx.rampScale, fx.spread));
         if (in > 0.f) shape->strokeWidth(2.f * in), shape->strokeFill((uint8_t)std::lround(255.f * edge.x), (uint8_t)std::lround(255.f * edge.y), (uint8_t)std::lround(255.f * edge.z));
-        if (!strcmp(form, "wave")) {   // (only its line is seen: in its edge's colour, or its fill's; round at its ends)
+        if (!strcmp(form, "wave") || !strcmp(form, "spiral")) {   // (only its line is seen: in its edge's colour, or its fill's; round at its ends)
             const float3 ink = in > 0.f ? float3{edge.x, edge.y, edge.z} : colour;
             shape->fill(0, 0, 0, 0);
             shape->strokeWidth(thick), shape->strokeFill((uint8_t)std::lround(255.f * ink.x), (uint8_t)std::lround(255.f * ink.y), (uint8_t)std::lround(255.f * ink.z));
