@@ -263,6 +263,7 @@ static const DocValue doc_values[] = {
     {"rough", "shape", 0, 0.5, true, nullptr},
     {"rough_detail", "shape", 0.005, 1, true, nullptr},
     // (turned into another shape so far, Cavalry's Morph: 0 itself, 1 the other where it lies)
+    {"fill_rule", "shape", 0, 0, false, "nonzero evenodd"},   // (where its outlines lie over each other: filled, or a hole every other time, SVG's and Cavalry's fill rule)
     {"morph", "shape", 0, 1, true, nullptr},
     // (its path another's track, Cavalry's Trails: whose, and over how many seconds back)
     {"trail", "shape", 0, 1e9, false, nullptr},
@@ -473,6 +474,7 @@ static const DocShown doc_shown[] = {
     {"rough_detail", "share", "%", "Detail", 0.005, 0.2, nullptr},
     {"trail", "thing", "", "Trail", 0, 0, nullptr},
     {"trail_length", "", "s", "Trail length", 0.05, 4, nullptr},
+    {"fill_rule", "", "", "Fill rule", 0, 0, nullptr},
     {"morph", "share", "%", "Morph", 0, 1, nullptr},
     {"morph_to", "thing", "", "Into", 0, 0, nullptr},
     {"morph_steps", "", "", "Steps", 0, 32, nullptr},
@@ -1741,7 +1743,7 @@ static void doc_moment(Doc& d, double now) {
 // call for its kind), one the stage has and the document has not is taken off, one whose making is told otherwise now
 // is made again. false: a thing could not be made (d.trouble says which, and why).
 // All that a thing's making goes by: one changed, the thing is made again (doc_match), carried by a hand too (doc_carry).
-static const char* const doc_making = "'kind','file','shape','path','blend','keyed','space','begin','duration','speed','text','fill','wide','points','inner','round','bloat','zigzag','offset','warp','clip','stroke','stroke_width','align','blur','shadow','shadow_distance','shadow_angle','shadow_blur','shadow_opacity','glow','glow_blur','glow_opacity','copies','tint','tint_black','tint_white','tritone','tritone_shadow','tritone_midtone','tritone_highlight','letter_spacing','line_spacing','italic','cap','join','heads','head_size','head_shape','dash','dash_offset','metallic','roughness','reflectance','clear_coat','clear_coat_roughness','falloff','shadows','shadow_softness','contact_shadows','sheen','anisotropy','shading','thickness','light_group','script','copy_fill','gradient','gradient_angle','gradient_scale','gradient_spread','wrap','wrap_at','split','ior','dispersion','swim','dark','vivid','marker'";
+static const char* const doc_making = "'kind','file','shape','path','blend','keyed','space','begin','duration','speed','text','fill','fill_rule','wide','points','inner','round','bloat','zigzag','offset','warp','clip','stroke','stroke_width','align','blur','shadow','shadow_distance','shadow_angle','shadow_blur','shadow_opacity','glow','glow_blur','glow_opacity','copies','tint','tint_black','tint_white','tritone','tritone_shadow','tritone_midtone','tritone_highlight','letter_spacing','line_spacing','italic','cap','join','heads','head_size','head_shape','dash','dash_offset','metallic','roughness','reflectance','clear_coat','clear_coat_roughness','falloff','shadows','shadow_softness','contact_shadows','sheen','anisotropy','shading','thickness','light_group','script','copy_fill','gradient','gradient_angle','gradient_scale','gradient_spread','wrap','wrap_at','split','ior','dispersion','swim','dark','vivid','marker'";
 // The values that move a flat shape's points as it is drawn (flat.mat's vertex stage): a shape with any of them cut
 // fine all along, one with none only round its curves (a long line in four points, not two thousand).
 static const char* const doc_bending = "'warp','bend','twist','pinch','skew','squash','wiggle','stretch','pin_tl_x','pin_tl_y','pin_tr_x','pin_tr_y','pin_bl_x','pin_bl_y','pin_br_x','pin_br_y'";
@@ -1903,6 +1905,7 @@ static bool doc_match(Doc& d) {
             } else {   // (a line is long and thin as it comes: 25 times as long as it is thick, a tenth of a unit thick)
                 const bool line = shape == "line", wave = shape == "wave";   // (a wave: a line waving, ten times as long as it is high)
                 fx.hollow = fill == "none";   // (filled with nothing: its edge alone, a frame)
+                fx.evenOdd = doc_word(d, thing, "fill_rule") == "evenodd";
                 const float high = line ? 0.04f : wave ? 0.3f : 1.f;
                 // (its outline alone, in one colour: cut into triangles and drawn by Filament as the scene's other things
                 //  are, flat_mesh; with an edge, a ramp, a dash, effects, a trim or a bend made on the CPU: ThorVG's picture)

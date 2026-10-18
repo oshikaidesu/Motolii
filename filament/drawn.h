@@ -32,6 +32,7 @@ struct DrawnFx { bool split = false;   // (a text's letters each a copy of their
     float blur = 0.f; int blurWay = 0; float overHigh = 1.f; float4 shadow{0.f}; float fall = 0.f, way = 0.f, soft = 0.f; float tint = 0.f; float3 tints[2]{}; float tritone = 0.f; float3 tones[3]{}; float4 glow{0.f}; float glowSoft = 0.f; int copies = 1;
                  std::vector<float3> ramp;   // (two colours or more: it is filled from the first at its top to the last at its bottom, ThorVG's linear gradient)
                  bool hollow = false;   // (a flat shape filled with nothing: only its edge is seen)
+                 bool evenOdd = false;  // (where its outlines lie over each other, a hole every other time: SVG's fill-rule evenodd; else nonzero)
                  float reach = 0.f;     // (how far a bent shape goes out past its box at its most, a share of its height (bend_at): the picture larger all round by that)
                  bool radial = false; float rampAngle = 0.f, rampScale = 1.f; int spread = 0;   // (or from its middle out, ThorVG's radial gradient; turned so far, clockwise; so long, as a share of its reach; past its ends padded, reflected or repeated)
                  DrawnFx over(float high) const {   // (the same for a thing `high` units high: its lengths as shares of that)
@@ -929,7 +930,7 @@ static std::vector<uint32_t> shape_cut(Drawn* d, float trimFrom, float trimTo, b
                 case tvg::PathCommand::Close: end(); break;
             }
             end();
-            if (tessTesselate(t, TESS_WINDING_NONZERO, TESS_POLYGONS, 3, 2, nullptr)) {
+            if (tessTesselate(t, d->fx.evenOdd ? TESS_WINDING_ODD : TESS_WINDING_NONZERO, TESS_POLYGONS, 3, 2, nullptr)) {
                 const TESSreal* v = tessGetVertices(t);
                 for (int i = 0; i < tessGetVertexCount(t); ++i) point(v[2 * i], v[2 * i + 1]);
                 const TESSindex* e = tessGetElements(t);
