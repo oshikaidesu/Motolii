@@ -16,7 +16,7 @@ static const char* const calls =
     "  add film <file> | add picture <an After Effects file, a .jpg, a .png> | add text <font.ttf> | add solid <file.glb>|ring|gem|cube   (say N fill glass: it is glass)\n"
     "  pen <thing, 0: new> <x> <y> [<handle x> <handle y>] (points of the picture) | points <thing> | handles <thing> | hold <thing> | carry <by> <a> <b> | let_go 1|0 | remove <thing> | set <thing> <name> <number> | say <thing> <name> <word> | key <thing> <name> <at> <number> | unkey <thing> <name> <at>\n"
     "  way <thing> <name> <at> <a way, and its numbers> | ways | define <a way's name> <its expression> | value <thing> <name> <at>\n"
-    "  make <recipe> | recipes | together on|off | undo | redo | list | at <seconds> | still <file.png> | write <file.mp4> | time\n";
+    "  make <recipe> | recipes | together on|off | undo | redo | list | at <seconds> | still <file.png> | write <file.mp4> | time [pictures]\n";
 
 int main(int argc, char** argv) {
     if (argc < 2) return std::printf("FAIL edit <document>\n"), 1;
@@ -65,7 +65,7 @@ int main(int argc, char** argv) {
         else if (call == "at" && w.size() == 2) { const double at = number(1); if (numbers) ok = motolii_at(m, at); }
         else if (call == "still" && w.size() >= 2) ok = motolii_still(m, rest(1).c_str());
         else if (call == "write" && w.size() >= 2) ok = motolii_write(m, rest(1).c_str());
-        else if (call == "time" && w.size() == 1) motolii_timed(m, 120);
+        else if (call == "time" && w.size() <= 2) { const double n = w.size() == 2 ? number(1) : 120; if (numbers) motolii_timed(m, (int)n); }   // (so many pictures, 1/60 s apart: more for a steadier number)
         else if (call == "help") { std::printf("%s", calls); continue; }
         else if (call == "list" && w.size() == 1) { std::printf("%s  (the document runs %.2f seconds)\n", motolii_list(m), motolii_seconds(m)); continue; }
         else known = false;

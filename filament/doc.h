@@ -1676,7 +1676,7 @@ static void doc_moment(Doc& d, double now) {
         const bool shaped = a && a->drawn && (t.drawn || t.film || t.look);   // (a solid too, by its own look: the kit's glass, or its plain look made to be cut)
         Doc::Cut& cut = d.cuts[thing];
         MaterialInstance* const own = t.film ? t.film->look : t.drawn ? t.drawn->look : t.look;
-        const std::string how = doc_word(d, thing, "clip_matte") + " " + std::to_string(doc_number(d, thing, "clip_invert", 0, 0)) + " " + std::to_string(doc_number(d, thing, "clip_feather", 0, 0));
+        const std::string how = shaped ? doc_word(d, thing, "clip_matte") + " " + std::to_string(doc_number(d, thing, "clip_invert", 0, 0)) + " " + std::to_string(doc_number(d, thing, "clip_feather", 0, 0)) : std::string();   // (said only for one that is cut)
         if (shaped && (cut.from != before || cut.by != a->drawn || cut.how != how)) {   // (its matte takes that picture's shape, at that thing's place, cut as it is said)
             if (cut.look) {   // (what cut its look before is let go of first)
                 std::erase_if(s.cuts, [&](const Stage::Cut& c) { return c.look == cut.look; });
