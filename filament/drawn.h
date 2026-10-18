@@ -28,7 +28,7 @@ struct DrawnFx { bool split = false;   // (a text's letters each a copy of their
     bool together = false;   // (its copies drawn in one go, each an instance of one thing: none coloured or cleared each of its own, kit.h add_parts)
     float letters = 1.f, lines = 1.f, italic = 0.f, wrapWidth = 0.f; int wrap = 0;   // (a text's lines broken in a box so many of its letters' heights wide, ThorVG's layout and wrap; 0: as typed)
     float dash = 0.f, dashFrom = 0.f; int cap = -1, join = -1;   // (ThorVG's own: Text::spacing, italic; Shape::strokeDash, strokeCap, strokeJoin; -1: as it comes)
-    int heads = 0; float headSize = 4.f;   // (arrow heads on an open edge's ends, as Cavalry's basicArrowHead: 1 its end, 2 its start, 3 both; so many times its edge long)
+    int heads = 0; float headSize = 4.f; int headShape = 0;   // (heads on an open edge's ends, as Cavalry's: 1 its end, 2 its start, 3 both; so many times its edge long; 0 arrow, 1 circle, 2 box, 3 chevron, 4 bar)
     float blur = 0.f; int blurWay = 0; float overHigh = 1.f; float4 shadow{0.f}; float fall = 0.f, way = 0.f, soft = 0.f; float tint = 0.f; float3 tints[2]{}; float tritone = 0.f; float3 tones[3]{}; float4 glow{0.f}; float glowSoft = 0.f; int copies = 1;
                  std::vector<float3> ramp;   // (two colours or more: it is filled from the first at its top to the last at its bottom, ThorVG's linear gradient)
                  bool hollow = false;   // (a flat shape filled with nothing: only its edge is seen)
@@ -939,10 +939,25 @@ static std::vector<uint32_t> shape_cut(Drawn* d, float trimFrom, float trimTo, b
             if (len < 1e-4f) return;
             dx /= len, dy /= len;
             const uint32_t k = (uint32_t)m.pos.size();
-            point(at.x + 0.5f * l * dx, at.y + 0.5f * l * dy);
-            point(at.x - 0.5f * l * dx - 0.4f * l * dy, at.y - 0.5f * l * dy + 0.4f * l * dx);
-            point(at.x - 0.5f * l * dx + 0.4f * l * dy, at.y - 0.5f * l * dy - 0.4f * l * dx);
-            m.idx.insert(m.idx.end(), {k, k + 1, k + 2});
+            const auto put = [&](float along, float across) { point(at.x + along * l * dx - across * l * dy, at.y + along * l * dy + across * l * dx); };   // (in its own ways: along the line, across it; in its lengths)
+            const auto quad = [&](uint32_t a) { m.idx.insert(m.idx.end(), {a, a + 1, a + 2, a, a + 2, a + 3}); };
+            switch (d->fx.headShape) {
+                case 1: {   // (a round on its end: as Cavalry's circleHead)
+                    put(0.f, 0.f);
+                    for (int i = 0; i <= 24; ++i) put(0.4f * std::cos(TAU * (float)i / 24.f), 0.4f * std::sin(TAU * (float)i / 24.f));
+                    for (uint32_t i = 0; i < 24; ++i) m.idx.insert(m.idx.end(), {k, k + 1 + i, k + 2 + i});
+                    break;
+                }
+                case 2: put(0.35f, -0.35f), put(0.35f, 0.35f), put(-0.35f, 0.35f), put(-0.35f, -0.35f), quad(k); break;   // (a square: boxHead)
+                case 3: {   // (an open V, as thick as its edge: chevronHead)
+                    const float w = 0.5f * d->edgeWide / l;
+                    put(0.5f, w), put(0.5f, -w), put(-0.4f, -0.45f - w), put(-0.4f, -0.45f + w), quad(k);
+                    put(0.5f, -w), put(0.5f, w), put(-0.4f, 0.45f + w), put(-0.4f, 0.45f - w), quad(k + 4);
+                    break;
+                }
+                case 4: put(0.f + 0.5f * d->edgeWide / l, -0.45f), put(0.f + 0.5f * d->edgeWide / l, 0.45f), put(-0.5f * d->edgeWide / l, 0.45f), put(-0.5f * d->edgeWide / l, -0.45f), quad(k); break;   // (a bar across its end)
+                default: put(0.5f, 0.f), put(-0.5f, 0.4f), put(-0.5f, -0.4f), m.idx.insert(m.idx.end(), {k, k + 1, k + 2});   // (a triangle: basicArrowHead)
+            }
         };
         std::vector<float> ends;
         for (int k = 0, n = sk_ends(cmds, cmdsCnt, pts, trimFrom, trimTo, ends); k < n; ++k) {

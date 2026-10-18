@@ -296,6 +296,7 @@ static const DocValue doc_values[] = {
     // (arrow heads on its edge's open ends, Cavalry's basicArrowHead: which ends, and so many times its edge long)
     {"heads", "shape", 0, 0, false, "none end start both"},
     {"head_size", "shape", 0.5, 40, false, nullptr},
+    {"head_shape", "shape", 0, 0, false, "arrow circle box chevron bar"},
     {"dash", "shape", 0, 1000, false, nullptr}, {"dash_offset", "shape", -1e4, 1e4, false, nullptr},
     // (Filament's own surface of a solid in a colour: how metal, how rough, how much it reflects, a clear coat over it
     //  and how rough that is, and how much it lights itself: 1 its colour itself on the picture, more brighter still)
@@ -464,6 +465,7 @@ static const DocShown doc_shown[] = {
     {"cap", "", "", "Ends", 0, 0, nullptr},
     {"heads", "", "", "Heads", 0, 0, nullptr},
     {"head_size", "", "×", "Head", 0.5, 12, nullptr},
+    {"head_shape", "", "", "Head shape", 0, 0, nullptr},
     {"join", "", "", "Corners", 0, 0, nullptr},
     {"dash", "", "px", "Dash", 0, 100, nullptr},
     {"dash_offset", "", "px", "Offset", -100, 100, nullptr},
@@ -1660,7 +1662,7 @@ static void doc_moment(Doc& d, double now) {
 // call for its kind), one the stage has and the document has not is taken off, one whose making is told otherwise now
 // is made again. false: a thing could not be made (d.trouble says which, and why).
 // All that a thing's making goes by: one changed, the thing is made again (doc_match), carried by a hand too (doc_carry).
-static const char* const doc_making = "'kind','file','shape','path','blend','keyed','space','begin','duration','speed','text','fill','wide','points','inner','round','bloat','zigzag','offset','warp','clip','stroke','stroke_width','align','blur','shadow','shadow_distance','shadow_angle','shadow_blur','shadow_opacity','glow','glow_blur','glow_opacity','copies','tint','tint_black','tint_white','tritone','tritone_shadow','tritone_midtone','tritone_highlight','letter_spacing','line_spacing','italic','cap','join','heads','head_size','dash','dash_offset','metallic','roughness','reflectance','clear_coat','clear_coat_roughness','falloff','shadows','shadow_softness','contact_shadows','sheen','anisotropy','shading','thickness','light_group','script','copy_fill','gradient','gradient_angle','gradient_scale','gradient_spread','wrap','wrap_at','split','ior','dispersion','swim','dark','vivid','marker'";
+static const char* const doc_making = "'kind','file','shape','path','blend','keyed','space','begin','duration','speed','text','fill','wide','points','inner','round','bloat','zigzag','offset','warp','clip','stroke','stroke_width','align','blur','shadow','shadow_distance','shadow_angle','shadow_blur','shadow_opacity','glow','glow_blur','glow_opacity','copies','tint','tint_black','tint_white','tritone','tritone_shadow','tritone_midtone','tritone_highlight','letter_spacing','line_spacing','italic','cap','join','heads','head_size','head_shape','dash','dash_offset','metallic','roughness','reflectance','clear_coat','clear_coat_roughness','falloff','shadows','shadow_softness','contact_shadows','sheen','anisotropy','shading','thickness','light_group','script','copy_fill','gradient','gradient_angle','gradient_scale','gradient_spread','wrap','wrap_at','split','ior','dispersion','swim','dark','vivid','marker'";
 // The values that move a flat shape's points as it is drawn (flat.mat's vertex stage): a shape with any of them cut
 // fine all along, one with none only round its curves (a long line in four points, not two thousand).
 static const char* const doc_bending = "'warp','bend','twist','pinch','skew','squash','wiggle','stretch','pin_tl_x','pin_tl_y','pin_tr_x','pin_tr_y','pin_bl_x','pin_bl_y','pin_br_x','pin_br_y'";
@@ -1763,7 +1765,7 @@ static bool doc_match(Doc& d) {
         fx.letters = (float)doc_number(d, thing, "letter_spacing", 0, 1), fx.lines = (float)doc_number(d, thing, "line_spacing", 0, 1), fx.italic = (float)doc_number(d, thing, "italic", 0, 0);
         const auto which = [&](const char* name, const char* words) { const std::string w = doc_word(d, thing, name); if (w.empty()) return -1; int n = 0; for (const char* at = words; *at; ++n) { const size_t len = strcspn(at, " "); if (w == std::string(at, len)) return n; at += len + (at[len] ? 1 : 0); } return -1; };
         fx.cap = which("cap", "butt round square"), fx.join = which("join", "miter round bevel");   // (ThorVG's StrokeCap and StrokeJoin, in its order)
-        fx.heads = std::max(0, which("heads", "none end start both")), fx.headSize = (float)doc_number(d, thing, "head_size", 0, 4);
+        fx.heads = std::max(0, which("heads", "none end start both")), fx.headSize = (float)doc_number(d, thing, "head_size", 0, 4), fx.headShape = std::max(0, which("head_shape", "arrow circle box chevron bar"));
         fx.dash = (float)(doc_number(d, thing, "dash", 0, 0) / units), fx.dashFrom = (float)(doc_number(d, thing, "dash_offset", 0, 0) / units);
         bool fxOk = doc_fx(d, thing, 0.0, true, units, fx, why);   // (made as large as its effects reach at their most; each moment tells them as they are then)
         made.units = units;
