@@ -1126,10 +1126,12 @@ static void clock(Stage& s, int pictures, const std::function<void(float)>& pose
     // And by the clock, as a screen asks for them: on every tick Filament is asked once whether it will draw (it says
     // no when it is behind), nothing is waited for. Pictures drawn and pictures left out, at 60, 120 and 240 a second.
     for (int rate : {60, 120, 240}) {
-        int drawn = 0, left_out = 0;
+        int drawn = 0, left_out = 0, late = 0;   // (late: begun a whole tick after its time, the moment's own work too slow; Filament does not count those)
         const auto start = std::chrono::steady_clock::now();
         for (int i = 0; i < 2 * rate; ++i) {   // two seconds
-            std::this_thread::sleep_until(start + std::chrono::microseconds((long long)i * 1000000 / rate));
+            const auto due = start + std::chrono::microseconds((long long)i * 1000000 / rate);
+            if (std::chrono::steady_clock::now() > due + std::chrono::microseconds(1000000 / rate)) ++late;
+            std::this_thread::sleep_until(due);
             time_is(s, (double)i / (double)rate);
             pose((float)(i % (pictures * rate / 60)) / (float)(pictures * rate / 60));
             if (!begins(s)) { ++left_out; continue; }
@@ -1139,8 +1141,8 @@ static void clock(Stage& s, int pictures, const std::function<void(float)>& pose
         }
         const auto asked = std::chrono::steady_clock::now();
         s.engine->flushAndWait();
-        std::printf("at %d a second: %d drawn, %d left out; the last was done %.1f ms after it was asked for\n", rate, drawn, left_out,
-                    std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - asked).count());
+        std::printf("at %d a second: %d drawn, %d left out, %d late; the last was done %.1f ms after it was asked for, the two seconds took %.2f\n", rate, drawn, left_out, late,
+                    std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - asked).count(), std::chrono::duration<double>(asked - start).count());
         for (const auto& word : s.said_after) word();
     }
 }
