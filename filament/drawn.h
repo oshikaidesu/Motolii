@@ -28,6 +28,7 @@ struct DrawnFx { bool split = false;   // (a text's letters each a copy of their
     bool together = false;   // (its copies drawn in one go, each an instance of one thing: none coloured or cleared each of its own, kit.h add_parts)
     float letters = 1.f, lines = 1.f, italic = 0.f, wrapWidth = 0.f; int wrap = 0;   // (a text's lines broken in a box so many of its letters' heights wide, ThorVG's layout and wrap; 0: as typed)
     float dash = 0.f, dashFrom = 0.f; int cap = -1, join = -1;   // (ThorVG's own: Text::spacing, italic; Shape::strokeDash, strokeCap, strokeJoin; -1: as it comes)
+    int heads = 0; float headSize = 4.f;   // (arrow heads on an open edge's ends, as Cavalry's basicArrowHead: 1 its end, 2 its start, 3 both; so many times its edge long)
     float blur = 0.f; int blurWay = 0; float overHigh = 1.f; float4 shadow{0.f}; float fall = 0.f, way = 0.f, soft = 0.f; float tint = 0.f; float3 tints[2]{}; float tritone = 0.f; float3 tones[3]{}; float4 glow{0.f}; float glowSoft = 0.f; int copies = 1;
                  std::vector<float3> ramp;   // (two colours or more: it is filled from the first at its top to the last at its bottom, ThorVG's linear gradient)
                  bool hollow = false;   // (a flat shape filled with nothing: only its edge is seen)
@@ -758,6 +759,7 @@ static Drawn* type(Stage& s, const char* words, const char* fontFile, const mat4
 // rectangle, circle, polygon, star, line or wave; its corners rounded (a share of its shorter side), its lines and curves
 // cut in pieces no longer than `fine` points (0: as they are), for what bends it as it is drawn. Kept as made in `d`.
 bool sk_svg(const char* data, std::vector<tvg::PathCommand>& cmds, std::vector<tvg::Point>& pts);
+int sk_ends(const tvg::PathCommand* cmds, uint32_t cmdsCnt, const tvg::Point* pts, float from, float to, std::vector<float>& out);
 static void flat_path(Drawn* d, tvg::Shape* shape, const char* form, int w, int h, float in, int points, float inner, float round, float fine) {
     const float cx = 0.5f * (float)w, cy = 0.5f * (float)h, rx = cx - in, ry = cy - in;
     const float thick = in > 0.f ? 2.f * in : 0.08f * (float)h;   // (a wave's line: its stroke, or a share of its height)
@@ -930,6 +932,25 @@ static std::vector<uint32_t> shape_cut(Drawn* d, float trimFrom, float trimTo, b
     const uint32_t base = (uint32_t)m.pos.size();
     for (size_t i = 0; i < xy.size(); i += 2) point(xy[i], xy[i + 1]);
     for (uint32_t i : idx) m.idx.push_back(base + i);
+    if (d->fx.heads) {   // (an arrow head on each open outline's end, its start, or both, where its trim leaves them: a triangle in its edge's colour, pointing the way the line goes)
+        const auto head = [&](tvg::Point at, tvg::Point back) {
+            float dx = at.x - back.x, dy = at.y - back.y;
+            const float len = std::hypot(dx, dy), l = d->fx.headSize * d->edgeWide;
+            if (len < 1e-4f) return;
+            dx /= len, dy /= len;
+            const uint32_t k = (uint32_t)m.pos.size();
+            point(at.x + 0.5f * l * dx, at.y + 0.5f * l * dy);
+            point(at.x - 0.5f * l * dx - 0.4f * l * dy, at.y - 0.5f * l * dy + 0.4f * l * dx);
+            point(at.x - 0.5f * l * dx + 0.4f * l * dy, at.y - 0.5f * l * dy - 0.4f * l * dx);
+            m.idx.insert(m.idx.end(), {k, k + 1, k + 2});
+        };
+        std::vector<float> ends;
+        for (int k = 0, n = sk_ends(cmds, cmdsCnt, pts, trimFrom, trimTo, ends); k < n; ++k) {
+            const float* e = &ends[8 * (size_t)k];
+            if (d->fx.heads & 1) head({e[0], e[1]}, {e[0] - e[2], e[1] - e[3]});
+            if (d->fx.heads & 2) head({e[4], e[5]}, {e[4] - e[6], e[5] - e[7]});
+        }
+    }
     if (idx.empty()) none();
     return {d->fillEnd, (uint32_t)m.idx.size()};
 }

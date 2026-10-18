@@ -288,3 +288,20 @@ int sk_svg_edit(const char* data, float x, float y, float reach, std::string& ou
     out = SkParsePath::ToSVGString(sk_path(all)).c_str();
     return 2;
 }
+
+// Each open outline's two ends as its trim leaves them (from, to: shares of its own length, as ThorVG trims each
+// outline), where they are and the way the line goes there (Skia's contour measure): 8 numbers an outline, its end
+// (x, y, dx, dy) then its start (x, y, dx, dy, pointing back out of it).
+int sk_ends(const tvg::PathCommand* cmds, uint32_t cmdsCnt, const tvg::Point* pts, float from, float to, std::vector<float>& out) {
+    out.clear();
+    if (to < from) std::swap(from, to);
+    from = std::clamp(from, 0.f, 1.f), to = std::clamp(to, 0.f, 1.f);
+    SkContourMeasureIter it(sk_of(cmds, cmdsCnt, pts), false);
+    while (const sk_sp<SkContourMeasure> c = it.next()) {
+        if (c->isClosed() || to - from < 1e-4f) continue;
+        SkPoint e, s; SkVector et, st;
+        if (!c->getPosTan(c->length() * to, &e, &et) || !c->getPosTan(c->length() * from, &s, &st)) continue;
+        out.insert(out.end(), {e.fX, e.fY, et.fX, et.fY, s.fX, s.fY, -st.fX, -st.fY});
+    }
+    return (int)out.size() / 8;
+}
