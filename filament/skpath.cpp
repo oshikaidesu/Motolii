@@ -305,3 +305,21 @@ int sk_ends(const tvg::PathCommand* cmds, uint32_t cmdsCnt, const tvg::Point* pt
     }
     return (int)out.size() / 8;
 }
+
+// A path walked again at `n` even steps an outline (Skia's contour measure), straight between, as Cavalry's Resample
+// Path: a round made a polygon, every outline as finely pointed as every other.
+bool sk_resample(const tvg::PathCommand* cmds, uint32_t cmdsCnt, const tvg::Point* pts, int n, std::vector<tvg::PathCommand>& outCmds, std::vector<tvg::Point>& outPts) {
+    outCmds.clear(), outPts.clear();
+    SkContourMeasureIter it(sk_of(cmds, cmdsCnt, pts), false);
+    while (const sk_sp<SkContourMeasure> c = it.next()) {
+        const int steps = c->isClosed() ? n : n - 1;
+        for (int i = 0; i <= steps; ++i) {
+            if (c->isClosed() && i == steps) break;
+            SkPoint p;
+            if (!c->getPosTan(c->length() * (float)i / (float)std::max(1, steps), &p, nullptr)) continue;
+            outCmds.push_back(i ? tvg::PathCommand::LineTo : tvg::PathCommand::MoveTo), outPts.push_back({p.fX, p.fY});
+        }
+        if (c->isClosed()) outCmds.push_back(tvg::PathCommand::Close);
+    }
+    return !outCmds.empty();
+}

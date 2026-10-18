@@ -81,7 +81,7 @@ struct Drawn {
     tvg::Matrix fit{1, 0, 0, 0, 1, 0, 0, 0, 1};
     tvg::LottieAnimation* lottie = nullptr;   // (its film, when it is an After Effects file: what says its layers' poses)
     std::vector<uint32_t> deep;   // (an After Effects file's 3D layers: not drawn in its own picture, each a sheet of its own where it is: picture_deep)
-    std::array<float, 8> bent{};   // (as last bent: round, bloat, zigzag, ridges, smooth, offset; roughened: how far, how fine)
+    std::array<float, 9> bent{};   // (as last bent: round, bloat, zigzag, ridges, smooth, offset; roughened: how far, how fine; walked again at so many points)
     // Another shape's path in this one's points, and what is done with it: put together (how: skpath.cpp's op; -1 none),
     // or turned into (much: how far, 0 not; how above 1: so many steps from itself to it, all at once, a blend).
     struct Other {
@@ -138,7 +138,7 @@ static void trim_at(Stage& s, Drawn* d, float cut, float begin = 0.f, float offs
 void tvg_bend(tvg::Shape* shape, const tvg::PathCommand* cmds, uint32_t cmdsCnt, const tvg::Point* pts, uint32_t ptsCnt,
               float round, float bloat, float zigzag, int ridges, bool smooth, float offset, float fine);
 static void bend_at(Stage& s, Drawn* d, float round, float bloat, float zigzag, float ridges, float smooth, float offset) {
-    const std::array<float, 8> is{round, bloat, zigzag, ridges, smooth, offset, 0.f, 0.f};
+    const std::array<float, 9> is{round, bloat, zigzag, ridges, smooth, offset, 0.f, 0.f, 0.f};
     if (!d->shape || d->plain.empty() || is == d->bent) return;
     d->bent = is;
     kept_drop(s, d);
@@ -1006,6 +1006,7 @@ static Drawn* flat_mesh(Stage& s, const char* form, float wide, const mat4f& pla
 }
 
 bool sk_rough(const tvg::PathCommand* cmds, uint32_t cmdsCnt, const tvg::Point* pts, float apart, float far, uint32_t seed, std::vector<tvg::PathCommand>& outCmds, std::vector<tvg::Point>& outPts);
+bool sk_resample(const tvg::PathCommand* cmds, uint32_t cmdsCnt, const tvg::Point* pts, int n, std::vector<tvg::PathCommand>& outCmds, std::vector<tvg::Point>& outPts);
 bool sk_morph(const tvg::PathCommand* ac, uint32_t acn, const tvg::Point* ap, const tvg::PathCommand* bc, uint32_t bcn, const tvg::Point* bp, float t,
               std::vector<tvg::PathCommand>& cmds, std::vector<tvg::Point>& pts);
 bool sk_op(int op, const tvg::PathCommand* ac, uint32_t acn, const tvg::Point* ap, const tvg::PathCommand* bc, uint32_t bcn, const tvg::Point* bp,
@@ -1015,7 +1016,7 @@ bool sk_op(int op, const tvg::PathCommand* ac, uint32_t acn, const tvg::Point* a
 // paths on its edge (off its end, off its beginning, slid along), its operators (round, bloat, zig zag, offset: bend.cpp),
 // then put together with another shape's path (`join`: Skia's path operation, skpath.cpp; -1 none; `by`/`at` that path
 // in this one's points), as Cavalry's Boolean.
-static void cut_at(Stage& s, Drawn* d, float3 trim, const std::array<float, 8>& bend, Drawn::Other join = {}, Drawn::Other morph = {}, Drawn::Other trace = {}) {
+static void cut_at(Stage& s, Drawn* d, float3 trim, const std::array<float, 9>& bend, Drawn::Other join = {}, Drawn::Other morph = {}, Drawn::Other trace = {}) {
     if (join.how < 0 || join.by.empty()) join = {};
     if (morph.much <= 0.f || morph.by.empty()) morph = {};
     if (trace.by.empty()) trace = {};
@@ -1027,8 +1028,13 @@ static void cut_at(Stage& s, Drawn* d, float3 trim, const std::array<float, 8>& 
         d->bent = bend, d->joined = join, d->morphed = morph, d->traced = trace;
         const float high = d->plainHigh;
         const bool traces = !trace.by.empty();   // (tracing another: its track is its path, as Cavalry's Trails)
-        tvg_bend(d->outline, traces ? trace.by.data() : d->plain.data(), traces ? (uint32_t)trace.by.size() : (uint32_t)d->plain.size(), traces ? trace.at.data() : d->plainAt.data(),
-                 traces ? (uint32_t)trace.at.size() : (uint32_t)d->plainAt.size(), std::clamp(bend[0], 0.f, 0.5f) * d->plainSide,
+        std::vector<tvg::PathCommand> pathBy = traces ? trace.by : d->plain;
+        std::vector<tvg::Point> pathAt = traces ? trace.at : d->plainAt;
+        if (bend[8] >= 2.f) {   // (walked again at so many points an outline, straight between, before its operators: Cavalry's Resample Path)
+            std::vector<tvg::PathCommand> c; std::vector<tvg::Point> p;
+            if (sk_resample(pathBy.data(), (uint32_t)pathBy.size(), pathAt.data(), std::min((int)bend[8], 2048), c, p)) pathBy = std::move(c), pathAt = std::move(p);
+        }
+        tvg_bend(d->outline, pathBy.data(), (uint32_t)pathBy.size(), pathAt.data(), (uint32_t)pathAt.size(), std::clamp(bend[0], 0.f, 0.5f) * d->plainSide,
                  100.f * std::clamp(bend[1], -1.f, 1.f), bend[2] * high, (int)std::clamp(bend[3], 0.f, 100.f), bend[4] > 0.5f, bend[5] * high, d->fine);
         if (bend[6] > 0.f) {   // (roughened, as Illustrator's Roughen and After Effects' Roughen Edges: Skia's own discrete path effect, so far out, a point so often)
             const tvg::PathCommand* cmds; const tvg::Point* pts; uint32_t cmdsCnt = 0, ptsCnt = 0;

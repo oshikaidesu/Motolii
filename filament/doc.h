@@ -253,6 +253,7 @@ static const DocValue doc_values[] = {
     {"boolean", "shape", 0, 0, false, "union subtract intersect exclude"},
     {"boolean_with", "shape", 0, 1e9, false, nullptr},   // (that other shape, seen where it lies; 0: none)
     // (roughened, Illustrator's Roughen: so far out (a share of its height), a point so often (the same))
+    {"resample", "shape", 0, 2048, true, nullptr},   // (walked again at so many points an outline, straight between, Cavalry's Resample Path: a round a polygon; 0: as made)
     {"rough", "shape", 0, 0.5, true, nullptr},
     {"rough_detail", "shape", 0.005, 1, true, nullptr},
     // (turned into another shape so far, Cavalry's Morph: 0 itself, 1 the other where it lies)
@@ -458,6 +459,7 @@ static const DocShown doc_shown[] = {
     {"anchor_x", "", "%", "Anchor X", -1, 1, "Anchor"}, {"anchor_y", "", "%", "Anchor Y", -1, 1, "Anchor"}, {"anchor_z", "", "%", "Anchor Z", -1, 1, "Anchor"},
     {"parent", "thing", "", "Parent", 0, 0, nullptr},   // (the thing it goes with: shown by its name)
     {"connect_to", "thing", "", "With", 0, 0, nullptr},
+    {"resample", "", "", "Points", 0, 64, nullptr},
     {"rough", "share", "%", "Rough", 0, 0.2, nullptr},
     {"rough_detail", "share", "%", "Detail", 0.005, 0.2, nullptr},
     {"trail", "thing", "", "Trail", 0, 0, nullptr},
@@ -1493,7 +1495,7 @@ static void doc_moment(Doc& d, double now) {
                 }
             }
             cut_at(s, t.drawn, float3{num("trim", 0), num("trim_begin", 0), num("trim_offset", 0)},   // (its path anew, if it is told otherwise: cut again)
-                   {num("round", 0), num("bloat", 0), num("zigzag", 0), num("zigzag_ridges", 5), num("zigzag_smooth", 0), num("offset", 0), num("rough", 0), num("rough_detail", 0.03)}, join, morph, trace);
+                   {num("round", 0), num("bloat", 0), num("zigzag", 0), num("zigzag_ridges", 5), num("zigzag_smooth", 0), num("offset", 0), num("rough", 0), num("rough_detail", 0.03), std::round(num("resample", 0))}, join, morph, trace);
             for (const Stage::Made& made : s.made)
                 if (made.of == t.drawn->sheet)
                     if (const auto own = d.copyLooks.find(made.thing.getId()); own != d.copyLooks.end()) own->second->setParameter("bends", bends, 7);
