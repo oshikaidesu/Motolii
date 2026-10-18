@@ -1,6 +1,6 @@
 // skpath.cpp: Skia's own path operations on a flat shape's path (Cavalry draws its shapes' paths with the same):
 // union, difference, intersection, exclusion of two paths (SkPathOps, its Boolean), and a path read from SVG's path
-// data (SkParsePath), a path roughened (SkDiscretePathEffect). Apart from the rest because Skia's headers bring its names in; out come three calls (drawn.h).
+// data (SkParsePath), a path roughened (SkDiscretePathEffect), a path's points moved. Apart from the rest because Skia's headers bring its names in; out come its calls (drawn.h).
 // Built by skia.sh.
 #include "thorvg.h"
 #include "include/core/SkPath.h"
@@ -8,6 +8,7 @@
 #include "include/pathops/SkPathOps.h"
 #include "include/utils/SkParsePath.h"
 #include "include/core/SkStrokeRec.h"
+#include "include/core/SkString.h"
 #include "include/effects/SkDiscretePathEffect.h"
 #include <vector>
 
@@ -78,4 +79,48 @@ bool sk_rough(const tvg::PathCommand* cmds, uint32_t cmdsCnt, const tvg::Point* 
     SkPathBuilder made;
     SkStrokeRec fill(SkStrokeRec::kFill_InitStyle);
     return SkDiscretePathEffect::Make(apart, far, seed)->filterPath(&made, sk_of(cmds, cmdsCnt, pts), &fill) && tvg_of(made.detach(), outCmds, outPts);
+}
+
+// The points a path goes through (each stretch's end, its handles not), as SVG's path data has them: xy two a point.
+int sk_svg_anchors(const char* data, std::vector<float>& xy) {
+    xy.clear();
+    const std::optional<SkPath> made = SkParsePath::FromSVGString(data);
+    if (!made) return 0;
+    SkPathIter it = made->iter();
+    while (const std::optional<SkPathIter::Rec> r = it.next())
+        if (r->fVerb != SkPathVerb::kClose) xy.push_back(r->fPoints.back().fX), xy.push_back(r->fPoints.back().fY);
+    return (int)xy.size() / 2;
+}
+
+// A path with its nth point (and any point lying where it does: a closed path's first and last) moved by dx, dy, its
+// handles on either side going with it, as a pen tool moves a point; written again as SVG's path data (Skia's own).
+bool sk_svg_move(const char* data, int nth, float dx, float dy, std::string& out) {
+    std::vector<float> xy;
+    if (nth < 0 || nth >= sk_svg_anchors(data, xy)) return false;
+    const SkPoint was{xy[2 * nth], xy[2 * nth + 1]}, by{dx, dy};
+    const auto here = [&](SkPoint p) { return SkPoint::Distance(p, was) < 1e-4f; };
+    SkPathBuilder b;
+    bool after = false;   // (the stretch after a moved point: its first handle goes too)
+    const SkPath path = *SkParsePath::FromSVGString(data);   // (kept: its iterator reads it)
+    SkPathIter it = path.iter();
+    while (const std::optional<SkPathIter::Rec> r = it.next()) {
+        std::vector<SkPoint> p(r->fPoints.begin(), r->fPoints.end());
+        const bool moved = r->fVerb != SkPathVerb::kClose && here(p.back());
+        if (after && p.size() > 2) p[1] += by;
+        if (moved) {
+            p.back() += by;
+            if (r->fVerb == SkPathVerb::kCubic) p[2] += by;
+        }
+        after = moved;
+        switch (r->fVerb) {
+            case SkPathVerb::kMove: b.moveTo(p[0]); break;
+            case SkPathVerb::kLine: b.lineTo(p[1]); break;
+            case SkPathVerb::kQuad: b.quadTo(p[1], p[2]); break;
+            case SkPathVerb::kConic: b.conicTo(p[1], p[2], r->conicWeight()); break;
+            case SkPathVerb::kCubic: b.cubicTo(p[1], p[2], p[3]); break;
+            case SkPathVerb::kClose: b.close(); break;
+        }
+    }
+    out = SkParsePath::ToSVGString(b.detach()).c_str();
+    return true;
 }

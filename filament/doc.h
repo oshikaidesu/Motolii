@@ -86,7 +86,7 @@ struct Doc {
     double round = 8.0;                 // how long the document is, as last shown: waves, noise and drifts go round in it a whole number of times (a film loops)
     sqlite3_session* acting = nullptr;  // SQLite's own record of what the open act changes
     // A thing held by a hand (doc_hold): what of it is carried shows at once and is not yet the document's.
-    struct Held { int thing = -1; std::map<std::string, double> from, tried; } held;   // (-1: nothing held; 0 is the stage, which a hand may hold by a value of its own)
+    struct Held { int thing = -1; std::map<std::string, double> from, tried; std::map<std::string, std::string> said; } held;   // (said: a word carried, a path's points moved)   // (-1: nothing held; 0 is the stage, which a hand may hold by a value of its own)
     struct Keys { std::vector<double> at, value; std::vector<Interp> interp; std::vector<std::string> own; };   // (own: a way defined in the document, where the stretch is not one of the nine kinds)
     struct NameHash { using is_transparent = void; size_t operator()(std::string_view n) const { return std::hash<std::string_view>{}(n); } };   // (a name looked up as it is said, no string made for it)
     std::unordered_map<int, std::unordered_map<std::string, Keys, NameHash, std::equal_to<>>> moving;   // a value's keys, and the way of the stretch after each, by thing and name; read from the facts when first asked for, forgotten at every change
@@ -708,6 +708,8 @@ static double doc_number(Doc& d, int thing, const char* name, double at, double 
 }
 static std::string doc_word(Doc& d, int thing, const char* name) {
     if (thing == 0 && !strcmp(name, "kind")) return "stage";   // (thing 0 is the stage: its values are the whole picture's)
+    if (d.held.thing == thing)   // (what a hand is carrying shows in place of the document's own)
+        if (const auto said = d.held.said.find(name); said != d.held.said.end()) return said->second;
     const auto known = d.words.find({thing, name});   // (asked again and again between changes: the document asked once)
     if (known != d.words.end()) return known->second;
     std::string is;
@@ -1666,6 +1668,8 @@ static bool doc_match(Doc& d) {
         }
     for (auto& [thing, of] : told) of += doc_bends(d, thing) ? " bent=1" : " bent=0";   // (bent or not: cut fine, or only round its curves)
     if (const auto held = told.find(d.held.thing); held != told.end())   // (what a hand carries of its making shows too: it is made again as it would be)
+        for (const auto& [name, is] : d.held.said) if (name[0] != ' ') held->second += " " + name + "~" + is;
+    if (const auto held = told.find(d.held.thing); held != told.end())
         for (const auto& [name, is] : d.held.tried)
             if (strstr(doc_making, ("'" + name + "'").c_str())) {   // (one that moves is drawn again each moment anyway (doc_moment): made again only as it comes on or goes off)
                 bool moves = false;
@@ -2732,6 +2736,34 @@ static bool doc_frame(Doc& d, int thing, double now, double* frame) {
     }
     return true;
 }
+// A path shape's own plane as the picture shows it: its middle and its two ways, seen; a point of the picture on it
+// (own: its height 1, from its middle, down as SVG goes) and back (at).
+struct DocPlane {
+    math::double2 o, ex, ey;
+    double det;
+    bool seen;
+    DocPlane(Doc& d, int thing, double now) {
+        const math::mat4 at = doc_shown_at(d, thing, now);
+        o = doc_seen(d, (at * math::double4{0, 0, 0, 1}).xyz), ex = doc_seen(d, (at * math::double4{1, 0, 0, 1}).xyz) - o, ey = doc_seen(d, (at * math::double4{0, 1, 0, 1}).xyz) - o;
+        det = ex.x * ey.y - ex.y * ey.x, seen = std::fabs(det) > 1e-9;
+    }
+    math::double2 own(double px, double py) const { const double u = px - o.x, v = py - o.y; return {(u * ey.y - v * ey.x) / det, -(ex.x * v - ex.y * u) / det}; }
+    math::double2 at(double fx, double fy) const { return o + ex * fx - ey * fy; }
+};
+int sk_svg_anchors(const char* data, std::vector<float>& xy);
+bool sk_svg_move(const char* data, int nth, float dx, float dy, std::string& out);
+// A path shape's points as the picture shows them (x, y two a point, points of the picture from the top left; its handles not).
+static int doc_points(Doc& d, int thing, double now, double* xy, int room) {
+    if (!doc_knows(d, thing) || doc_word(d, thing, "shape") != "path") return 0;
+    std::vector<float> own;
+    const int n = sk_svg_anchors(doc_word(d, thing, "path").c_str(), own);
+    const DocPlane plane(d, thing, now);
+    for (int i = 0; i < n && i < room; ++i) {
+        const math::double2 p = plane.at(own[2 * i], own[2 * i + 1]);
+        xy[2 * i] = p.x, xy[2 * i + 1] = p.y;
+    }
+    return n;
+}
 // A pen on the stage: a point put where the hand is (x, y: points of the picture from its top left), its handle drawn
 // out by hx, hy (points; 0, 0: a corner), on a path shape's own path (its `path`, SVG's path data): a line to it, or a
 // curve through it as Illustrator's pen makes one (SVG's S: the point before smooth, its handle turned through). On
@@ -2744,14 +2776,10 @@ static int doc_pen(Doc& d, int thing, double x, double y, double hx, double hy) 
     if (!thing) thing = doc_add(d, "shape", "path");
     if (thing && (!doc_knows(d, thing) || doc_word(d, thing, "shape") != "path")) d.trouble = "a pen draws on a path shape", thing = 0;
     std::string path = thing ? doc_word(d, thing, "path") : "";
-    const math::mat4 at = doc_shown_at(d, thing, now);   // (its own plane on the picture: its middle and its two ways, seen)
-    const math::double2 o = doc_seen(d, (at * math::double4{0, 0, 0, 1}).xyz), ex = doc_seen(d, (at * math::double4{1, 0, 0, 1}).xyz) - o, ey = doc_seen(d, (at * math::double4{0, 1, 0, 1}).xyz) - o;
-    const double det = ex.x * ey.y - ex.y * ey.x;
-    if (thing && std::fabs(det) < 1e-9) d.trouble = "the shape is seen edge on", thing = 0;
-    const auto own = [&](double px, double py) {   // (a point of the picture on its plane: its height 1, from its middle, down as SVG goes)
-        const double u = px - o.x, v = py - o.y;
-        return math::double2{(u * ey.y - v * ey.x) / det, -(ex.x * v - ex.y * u) / det};
-    };
+    const DocPlane plane(d, thing, now);
+    const math::double2 o = plane.o, ex = plane.ex, ey = plane.ey;
+    if (thing && !plane.seen) d.trouble = "the shape is seen edge on", thing = 0;
+    const auto own = [&](double px, double py) { return plane.own(px, py); };
     char said[200] = "";
     if (thing) {
         const math::double2 p = own(x, y), in = own(x - hx, y - hy);
@@ -2849,6 +2877,8 @@ static bool doc_value(Doc& d, int thing, const char* name, double at, double* is
 //   by "bar"    its bar slid on the timeline: a = how many seconds later (when it comes on)
 //   by "head", "tail"  its bar cut at an end: a = how many seconds later that end is (a film cut at its head goes on
 //               showing at each moment what it showed there)
+//   by "point"  a path shape's point nearest where the hand took hold ("grip" first), moved as far as the hand has gone
+//               (a, b: points of the picture), its handles with it
 //   by a value's name  that number carried: a = what it is now
 static bool doc_hold(Doc& d, int thing) {
     if (!doc_knows(d, thing)) return false;
@@ -2900,6 +2930,23 @@ static bool doc_carry(Doc& d, const char* by, double a, double b) {
             const math::double3 move = inverse(doc_above(d, h.thing, now).upperLeft()) * math::double3{a / point, -b / point, 0.0};
             ok = ok && tries("x", was("x") + move.x) && tries("y", was("y") + move.y);
         }
+    } else if (!strcmp(by, "point")) {   // (a path shape's point nearest where the hand took hold (grip), moved as far as the hand has gone: a, b)
+        if (!h.from.count(" grip x")) return d.trouble = "the hand has not said where it took hold (grip)", false;
+        if (!h.said.count(" path")) {   // (which point, and the path as it was: once, with the hold)
+            std::vector<double> xy(2048);
+            const int n = std::min(1024, doc_points(d, h.thing, now, xy.data(), 1024));
+            int nearest = -1;
+            for (int i = 0; i < n; ++i)
+                if (std::hypot(xy[2 * i] - h.from[" grip x"], xy[2 * i + 1] - h.from[" grip y"]) < (nearest < 0 ? 12.0 : std::hypot(xy[2 * nearest] - h.from[" grip x"], xy[2 * nearest + 1] - h.from[" grip y"]))) nearest = i;
+            if (nearest < 0) return d.trouble = "no point of its path where the hand took hold", false;
+            h.from[" point"] = nearest, h.said[" path"] = doc_word(d, h.thing, "path");
+        }
+        const DocPlane plane(d, h.thing, now);
+        const math::double2 from = plane.own(h.from[" grip x"], h.from[" grip y"]), to = plane.own(h.from[" grip x"] + a, h.from[" grip y"] + b);
+        std::string moved;
+        if (!plane.seen || !sk_svg_move(h.said[" path"].c_str(), (int)h.from[" point"], (float)(to.x - from.x), (float)(to.y - from.y), moved)) return d.trouble = "its point could not be moved", false;
+        h.said["path"] = moved;
+        ok = doc_match(d);   // (made again with it now, as a value it is made by)
     } else if (!strcmp(by, "bar")) {
         h.from[" bar"] = 1.0;   // (the whole layer moved in time: its keys go with it when it is let go)
         ok = tries("start", std::max(0.0, was("start") + a));
@@ -2928,13 +2975,14 @@ static bool doc_let_go(Doc& d, bool keep) {
     const Doc::Held h = d.held;
     d.held = Doc::Held{};
     if (h.thing < 0) return d.trouble = "nothing is held", false;
-    if (!keep || h.tried.empty()) return doc_match(d), doc_moment(d, d.stage->now), true;   // (made again as the document has it)
+    if (!keep || (h.tried.empty() && h.said.empty())) return doc_match(d), doc_moment(d, d.stage->now), true;   // (made again as the document has it)
     doc_act(d);   // (all that was carried is one step: a value that takes keys by the rule of a value changed at a moment, any other as the value it is)
     for (const auto& [name, is] : h.tried) {
         bool moves = false;
         for (const DocValue& one : doc_values) moves = moves || (one.moves && name == one.name);
         if (!(moves ? doc_put(d, h.thing, name.c_str(), d.stage->now, is) : doc_set(d, h.thing, name.c_str(), is))) break;
     }
+    for (const auto& [name, is] : h.said) if (name[0] != ' ' && !doc_say(d, h.thing, name.c_str(), is.c_str())) break;   // (' path': what it was, kept with the hold)
     const auto bar = h.from.find(" bar"), start = h.tried.find("start");
     if (bar != h.from.end() && start != h.tried.end() && start->second != h.from.at("start")) doc_keys_by(d, h.thing, start->second - h.from.at("start"));
     return doc_acted(d);

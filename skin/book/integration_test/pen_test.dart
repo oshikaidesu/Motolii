@@ -67,6 +67,20 @@ void main() {
     // ignore: avoid_print
     print('PEN things ${made.length}: ${paths.join(' | ')}');
     await shoot('pen');
+    // (then its point taken hold of with the Select tool and moved: the path holds it there)
+    await t.tap(find.byKey(const ValueKey('ws-tool-0')));
+    ws.select('${made[0]}');
+    await wait(300);
+    final was = m.word(made[0], 'path'), at = m.points(made[0]);
+    await drag(const Offset(-90, -10), const Offset(-40, 0));
+    await wait(400);
+    ws.reread();
+    final now = m.word(made[0], 'path'), moved = m.points(made[0]);
+    // ignore: avoid_print
+    print('POINT before ${at.length}: ${at.take(3).join(' ')} after ${moved.length}: ${moved.take(3).join(' ')}');
+    await shoot('point_moved');
+    expect(now != was, true);
+    expect(moved.length == at.length && (moved[1] - at[1]).dx < -20 && (moved[1] - at[1]).dy.abs() < 5 && (moved[0] - at[0]).distance < 1, true);
     expect(made.length, 2);
     expect(paths[0].startsWith('M') && paths[0].endsWith('Z') && paths[0].contains('S'), true);
     expect(paths[1].contains('L'), true);

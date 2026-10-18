@@ -90,6 +90,7 @@ class Motolii {
   late final _keyMoments = _lib.lookupFunction<Int32 Function(_P, Int32, _S, Pointer<Double>, Int32), int Function(_P, int, _S, Pointer<Double>, int)>('motolii_key_moments');
   late final _frame = _lib.lookupFunction<Int32 Function(_P, Int32, Pointer<Double>), int Function(_P, int, Pointer<Double>)>('motolii_frame');
   late final _seen = _lib.lookupFunction<Int32 Function(_P, Int32, Pointer<Double>), int Function(_P, int, Pointer<Double>)>('motolii_seen');
+  late final _points = _lib.lookupFunction<Int32 Function(_P, Int32, Pointer<Double>, Int32), int Function(_P, int, Pointer<Double>, int)>('motolii_points');
   late final _path = _lib.lookupFunction<Int32 Function(_P, Int32, Int32, Double, Double, Int32, Pointer<Double>), int Function(_P, int, int, double, double, int, Pointer<Double>)>('motolii_path');
   late final _keying = _lib.lookupFunction<Int32 Function(_P, Int32), int Function(_P, int)>('motolii_keying');
   late final _hold = _lib.lookupFunction<Int32 Function(_P, Int32), int Function(_P, int)>('motolii_hold');
@@ -322,6 +323,13 @@ class Motolii {
 
   /// What of a thing is seen: the upright box of its outline on the picture (points from the top left). null: not shown.
   Rect? seen(int thing) => _asked(('seen', thing), _atMoment, _atMoment, () => _seenNow(thing));
+
+  /// A path shape's points where the picture shows them (points from the top left; its handles not); empty: none.
+  List<Offset> points(int thing) => _asked(('points', thing), _atMoment, _atMoment, () {
+        final out = malloc<Double>(512), n = math.min(_points(_m, thing, out, 256), 256), at = [for (var i = 0; i < n; i++) Offset(out[2 * i], out[2 * i + 1])];
+        malloc.free(out);
+        return at;
+      });
   Rect? _seenNow(int thing) {
     final out = malloc<Double>(4);
     final ok = _seen(_m, thing, out) != 0, r = Rect.fromLTRB(out[0], out[1], out[2], out[3]);

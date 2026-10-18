@@ -2,6 +2,7 @@
 // contract: paints only when the scene, the selection, the hover or the view changes; the pointer readout repaints the rulers alone.
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
 
@@ -344,7 +345,7 @@ class _StageViewState extends State<StageView> implements StageHandles {
     _drawFrom = null;
     setState(() {});
     if (m == null) return;
-    final a = v.toComp(down), h = v.toComp(up) - a;
+    final a = _doc(v, down), h = _doc(v, up) - a;
     final first = !_penning;
     _penning = true;
     if (first) m.later('together', number: 1);
@@ -377,6 +378,12 @@ class _StageViewState extends State<StageView> implements StageHandles {
         if (d > near) continue;
         near = d;
         by = switch (key.split(' ').first) { 'corner' => 'scale', 'turn' => 'turn', 'anchor' => 'pivot', _ => null };
+      }
+      for (final p in m.points(picked)) { // (a path's own point: moved by itself, its handles with it)
+        final d = (v.toScreen(WsArt.toView(widget.scene, p)) - local).distance;
+        if (d > near) continue;
+        near = d;
+        by = 'point';
       }
       if (by != null) {
         m.take(picked);
@@ -490,6 +497,8 @@ class _StageViewState extends State<StageView> implements StageHandles {
                         : ClipRect(key: const ValueKey('ws-stage-comp'), child: Texture(textureId: widget.texture!, filterQuality: FilterQuality.medium)),
                   ),
                 ),
+                if (int.tryParse(widget.selected ?? '') case final picked? when WsScope.read(context).inside != null) // (the picked path's own points, to be taken hold of)
+                  IgnorePointer(child: CustomPaint(size: Size.infinite, painter: _PointsPainter([for (final p in WsScope.read(context).inside!.points(picked)) v.toScreen(WsArt.toView(widget.scene, p))]))),
                 if (_drawFrom case final from? when _last != null && widget.make == 'pen') // (the pen's handle being drawn out: through its point, both ways)
                   IgnorePointer(child: CustomPaint(size: Size.infinite, painter: _HandlePainter(from, _last!)))
                 else if (_drawFrom case final from? when _last != null) // (what is being drawn: its box)
@@ -630,6 +639,22 @@ TextPainter _tp(String t, TextStyle s) => TextPainter(
 /// What one painter draws: everything (the stand-in art too), or, when the inside's picture sits in the composition,
 /// what lies under it (the surround, the captions) and what lies over it (grid, guides, the selection).
 enum _Part { all, under, over }
+
+class _PointsPainter extends CustomPainter {
+  _PointsPainter(this.at);
+  final List<Offset> at;
+  @override
+  void paint(Canvas c, Size _) {
+    final edge = Paint()..color = WsT.accent..style = PaintingStyle.stroke..strokeWidth = 1, inside = Paint()..color = const Color(0xFFFFFFFF);
+    for (final p in at) {
+      final r = Rect.fromCenter(center: p, width: 6, height: 6);
+      c..drawRect(r, inside)..drawRect(r, edge);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_PointsPainter o) => !listEquals(o.at, at);
+}
 
 class _HandlePainter extends CustomPainter {
   _HandlePainter(this.at, this.out);
