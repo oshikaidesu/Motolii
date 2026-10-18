@@ -823,10 +823,17 @@ static double doc_seconds(Doc& d);
 // A thing's copies given back its own look, their own looks done away with (no longer coloured each, or taken off).
 // What a behaviour gives the nth of n copies at a moment (Cavalry's stagger, oscillator, noise and random, its names):
 // from its minimum to its maximum.
+static int doc_driven_by(Doc& d, int thing, const char* name);
 static double doc_behaviour_at(Doc& d, int by, int copy, int n, double t) {
+    static int depth = 0;   // (behaviours given by behaviours, as Cavalry chains them: so deep at most, a ring of them stops)
+    struct Deeper { Deeper() { ++depth; } ~Deeper() { --depth; } } deeper;
+    const auto knob = [&](const char* name, double otherwise) {   // (one of its knobs: given by another behaviour, that one's for this copy)
+        if (depth < 4) if (const int other = doc_driven_by(d, by, name); other && other != by) return doc_behaviour_at(d, other, copy, n, t);
+        return doc_number(d, by, name, t, otherwise);
+    };
     const std::string type = doc_word(d, by, "file");
-    const double lo = doc_number(d, by, "minimum", t, 0), hi = doc_number(d, by, "maximum", t, 1), offset = doc_number(d, by, "offset", t, 0);
-    const double frequency = doc_number(d, by, "frequency", t, 1), apart = doc_number(d, by, "stagger", t, 0) / 360.0;
+    const double lo = knob("minimum", 0), hi = knob("maximum", 1), offset = knob("offset", 0);
+    const double frequency = knob("frequency", 1), apart = knob("stagger", 0) / 360.0;
     const uint32_t seed = (uint32_t)doc_number(d, by, "seed", 0, 0);
     const auto hash = [&](int64_t k) {   // (0 to 1: the seed and k)
         uint32_t h = seed * 0x9E3779B9u ^ (uint32_t)k * 0x85EBCA6Bu ^ 0xC2B2AE35u;
@@ -841,7 +848,7 @@ static double doc_behaviour_at(Doc& d, int by, int copy, int n, double t) {
         u = hash((int64_t)f) * (1.0 - e) + hash((int64_t)f + 1) * e;
     }
     else if (type == "random") u = hash(copy + 1);
-    const double step = doc_number(d, by, "step", t, 0), v = lo + (hi - lo) * u;
+    const double step = knob("step", 0), v = lo + (hi - lo) * u;
     return step > 0.0 ? std::round(v / step) * step : v;
 }
 // The behaviour a value of a thing is connected to (`<name>_by`), 0 none.
@@ -2359,8 +2366,8 @@ static bool doc_knows(Doc& d, int thing, const char* name = nullptr, const doubl
     const DocValue* v = nullptr;
     for (const DocValue& one : doc_values)
         if (!strcmp(one.name, name) && doc_among(one.kinds, kind)) { v = &one; break; }
-    static const DocValue by{"_by", doc_kinds, 0, 1e9, false, nullptr};   // (a value connected to a behaviour: `<name>_by` = that behaviour, 0 none)
-    if (!v && strlen(name) > 3 && !strcmp(name + strlen(name) - 3, "_by") && kind != "behaviour") {
+    static const DocValue by{"_by", "film picture text solid shape camera light behaviour", 0, 1e9, false, nullptr};   // (a value connected to a behaviour: `<name>_by` = that behaviour, 0 none)
+    if (!v && strlen(name) > 3 && !strcmp(name + strlen(name) - 3, "_by")) {
         const std::string base(name, strlen(name) - 3);
         for (const DocValue& one : doc_values)
             if (base == one.name && doc_among(one.kinds, kind) && !one.words) v = &by;
