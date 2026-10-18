@@ -90,10 +90,9 @@ struct Doc {
     struct Keys { std::vector<double> at, value; std::vector<Interp> interp; std::vector<std::string> own; };   // (own: a way defined in the document, where the stretch is not one of the nine kinds)
     struct NameHash { using is_transparent = void; size_t operator()(std::string_view n) const { return std::hash<std::string_view>{}(n); } };   // (a name looked up as it is said, no string made for it)
     std::unordered_map<int, std::unordered_map<std::string, Keys, NameHash, std::equal_to<>>> moving;   // a value's keys, and the way of the stretch after each, by thing and name; read from the facts when first asked for, forgotten at every change
-    struct HeardHash { size_t operator()(const std::tuple<int, const char*, double>& k) const { return std::hash<int>{}(std::get<0>(k)) * 31u ^ std::hash<const void*>{}(std::get<1>(k)) * 17u ^ std::hash<double>{}(std::get<2>(k)); } };
-    std::unordered_map<std::tuple<int, const char*, double>, double, HeardHash> heard;   // doc_place's own values within this moment, by thing, the name's place in the program (a literal: it never says another name) and when; its copies ask the same: forgotten as the moment begins and at every change
     struct HeardWordHash { size_t operator()(const std::pair<int, const char*>& k) const { return std::hash<int>{}(k.first) * 31u ^ std::hash<const void*>{}(k.second); } };
     std::unordered_map<std::pair<int, const char*>, std::string, HeardWordHash> heardWords;   // (and its words so, and a thing's copy_tall as numbers)
+    std::unordered_map<std::pair<int, const char*>, const Keys*, HeardWordHash> literals;   // where doc_place's own values have their keys, by thing and the name's place in the program (a literal: it never says another name): found once, forgotten at every change
     std::unordered_map<int, std::vector<double>> talls;
     std::map<int, std::pair<float2, float>> halves;   // a thing's half size and depth (doc_half), worked out once a moment: its copies all ask it
     std::map<std::pair<int, std::string>, std::string> words;   // a value's word, the same way
@@ -119,6 +118,7 @@ struct Doc {
     std::map<int, Shown> shown;   // the things as they are on the stage, and what each was made of
     struct Along { double at = -1.0, key = 0.0; const void* of = nullptr; std::vector<float> each; };   // (a thing's copies laid on another's outline: where, worked out once a moment)
     std::map<int, Along> along;
+    std::map<std::tuple<int, double, long long>, math::double3> tracks;   // (where a thing was at a tick of a trail's own grid: worked out once, forgotten at every change)
 };
 // What a thing may be told, by name: which kinds of thing have it, a number between which two (or one of which
 // words), and whether it can move (take keys).
@@ -657,8 +657,8 @@ static bool doc_rows(Doc& d, char* ask, const std::function<void(sqlite3_stmt*)>
 }
 static void doc_forget(Doc& d) {
     d.phys_stale = true, d.scripted.clear();   // (the world made again only if what it is made of changed: doc_physics)
-    d.moving.clear(), d.words.clear(), d.keyed.clear(), d.halves.clear(), d.heard.clear(), d.heardWords.clear(), d.talls.clear();
-    d.named.clear();
+    d.moving.clear(), d.literals.clear(), d.words.clear(), d.keyed.clear(), d.halves.clear(), d.heardWords.clear(), d.talls.clear();
+    d.named.clear(), d.tracks.clear();
     d.laid.clear();
 }
 // The things in the order they lie, the one furthest back first: by `order` where it is said, else as they were made.
@@ -709,9 +709,15 @@ static double doc_went_by(Doc& d, const std::string& own, double u, double t, do
 
 // A value at a moment: `otherwise` where the document does not say; where it has keys, the value the stretch it is in
 // gives (before the first key and after the last: theirs). A stretch goes the way said for it (not said: Linear).
+static double doc_keys_at(Doc& d, const Doc::Keys& k, double at, double otherwise);
+// Where a value's keys are kept (read from the facts once, as doc_number reads them): kept until the document changes.
+static const Doc::Keys& doc_keys_of(Doc& d, int thing, const char* name);
 static double doc_number(Doc& d, int thing, const char* name, double at, double otherwise) {
     if (d.held.thing == thing)   // (what a hand is carrying shows in place of the document's own)
         if (const auto tried = d.held.tried.find(name); tried != d.held.tried.end()) return tried->second;
+    return doc_keys_at(d, doc_keys_of(d, thing, name), at, otherwise);
+}
+static const Doc::Keys& doc_keys_of(Doc& d, int thing, const char* name) {
     auto& of = d.moving[thing];
     auto found = of.find(std::string_view(name));
     if (found == of.end()) {
@@ -727,7 +733,10 @@ static double doc_number(Doc& d, int thing, const char* name, double at, double 
         });
         found = of.emplace(std::string(name), std::move(keys)).first;
     }
-    const Doc::Keys& k = found->second;
+    return found->second;
+}
+// A value from its keys at a moment (doc_number's own reckoning: before the first key and after the last, theirs).
+static double doc_keys_at(Doc& d, const Doc::Keys& k, double at, double otherwise) {
     if (k.at.empty()) return otherwise;
     if (k.at.size() == 1 || at <= k.at.front()) return k.value.front();
     if (at >= k.at.back()) return k.value.back();
@@ -804,14 +813,14 @@ static void doc_copy_looks_off(Doc& d, const Mesh* m, MaterialInstance* main) {
 }
 // How many members a thing has in their order: a text split into letters, a letter each; else its copies.
 // A value doc_place reads, by a name written in the program (a literal: its place in memory says which name, ever):
-// worked out once a moment for all of a thing's copies (they ask the same at the same moment), not while a hand carries it.
+// where its keys are is found once and held until the document changes (as Beutl and Skottie hold a property), each
+// moment reckoned from them; a value with no keys or one is its number at once. Not while a hand carries it.
 static double doc_literal(Doc& d, int thing, const char* literal, double at, double otherwise) {
     if (d.held.thing == thing) return doc_number(d, thing, literal, at, otherwise);
-    const auto key = std::make_tuple(thing, literal, at);
-    if (const auto kept = d.heard.find(key); kept != d.heard.end()) return kept->second;
-    const double is = doc_number(d, thing, literal, at, otherwise);
-    if (d.heard.size() < 100000) d.heard.emplace(key, is);
-    return is;
+    const auto key = std::make_pair(thing, literal);
+    auto kept = d.literals.find(key);
+    if (kept == d.literals.end()) kept = d.literals.emplace(key, &doc_keys_of(d, thing, literal)).first;
+    return doc_keys_at(d, *kept->second, at, otherwise);
 }
 static const std::string& doc_literal_word(Doc& d, int thing, const char* literal) {   // (a word so, kept the same way)
     const auto key = std::make_pair(thing, literal);
@@ -1328,7 +1337,7 @@ static bool doc_fx(Doc& d, int thing, double at, bool most, double units, DrawnF
 static void doc_moment(Doc& d, double now) {
     Stage& s = *d.stage;
     screen_copier(s);   // (once: the kit copies what lies under a picture that reads it)
-    d.halves.clear(), d.heard.clear(), d.heardWords.clear(), d.talls.clear();   // (made again since: a flat thing's sheet is as large as its picture now; doc_place's values asked anew)
+    d.halves.clear(), d.talls.clear();   // (made again since: a flat thing's sheet is as large as its picture now)
     const std::vector<int> lie = doc_laid(d);
     // Each thing as it is now, in the order they lie: whether it is on, and whether it is a solid thing.
     struct Lies { int thing; Doc::Shown* shown; bool on, solid; double since; };
@@ -1523,11 +1532,24 @@ static void doc_moment(Doc& d, double now) {
                 const math::mat4 back = inverse(doc_place(d, thing, now));
                 const double length = std::max(1e-3, doc_number(d, thing, "trail_length", now, 1));
                 const Drawn* a = t.drawn;
-                for (int k = 0; k <= 64; ++k) {
-                    const math::double4 on = back * doc_shown_at(d, with, now - length * (1.0 - k / 64.0)) * math::double4{0, 0, 0, 1};
-                    trace.by.push_back(k ? tvg::PathCommand::LineTo : tvg::PathCommand::MoveTo);
+                // (on a grid of 64 ticks over its length, fixed in time: a tick worked out once is kept, so a moment only works out
+                //  the ticks new since; its ends where the other was then and is now)
+                const double step = length / 64.0, last = std::floor(now / step);
+                if (d.tracks.size() > 200000) d.tracks.clear();
+                const auto was = [&](double t, long long tick) {
+                    if (tick < 0) return (doc_shown_at(d, with, t) * math::double4{0, 0, 0, 1}).xyz;
+                    auto found = d.tracks.find({with, step, tick});
+                    if (found == d.tracks.end()) found = d.tracks.emplace(std::make_tuple(with, step, tick), (doc_shown_at(d, with, t) * math::double4{0, 0, 0, 1}).xyz).first;
+                    return found->second;
+                };
+                const auto put = [&](math::double3 world) {
+                    const math::double4 on = back * math::double4{world, 1.0};
+                    trace.by.push_back(trace.by.empty() ? tvg::PathCommand::MoveTo : tvg::PathCommand::LineTo);
                     trace.at.push_back({(float)(on.x / a->sheetHigh * a->plainHigh + 0.5 * a->cutW), (float)(0.5 * a->plainHigh - on.y / a->sheetHigh * a->plainHigh)});
-                }
+                };
+                put(was(now - length, -1));
+                for (long long k = (long long)last - 63; k <= (long long)last; ++k) if ((double)k * step > now - length) put(was((double)k * step, k));
+                put(was(now, -1));
             }
             cut_at(s, t.drawn, float3{num("trim", 0), num("trim_begin", 0), num("trim_offset", 0)},   // (its path anew, if it is told otherwise: cut again)
                    {num("round", 0), num("bloat", 0), num("zigzag", 0), num("zigzag_ridges", 5), num("zigzag_smooth", 0), num("offset", 0), num("rough", 0), num("rough_detail", 0.03), std::round(num("resample", 0)), num("voxel", 0)}, join, morph, trace);

@@ -386,10 +386,17 @@ static void reshape(Stage& s, Mesh* m, const std::vector<uint32_t>& ends) {
     IndexBuffer* oldIb = m->ib;
     const size_t n = m->pos.size();
     if (!n || m->idx.empty()) return;
-    auto* frames = geometry::SurfaceOrientation::Builder().vertexCount(n).normals(m->nrm.data()).build();
     m->quat.resize(n);
-    frames->getQuats(m->quat.data(), n);
-    delete frames;
+    if (std::all_of(m->nrm.begin(), m->nrm.end(), [&](const float3& v) { return v == m->nrm[0]; })) {   // (all facing one way, a flat shape: one frame for every point)
+        auto* frames = geometry::SurfaceOrientation::Builder().vertexCount(1).normals(m->nrm.data()).build();
+        frames->getQuats(m->quat.data(), 1);
+        delete frames;
+        std::fill(m->quat.begin() + 1, m->quat.end(), m->quat[0]);
+    } else {
+        auto* frames = geometry::SurfaceOrientation::Builder().vertexCount(n).normals(m->nrm.data()).build();
+        frames->getQuats(m->quat.data(), n);
+        delete frames;
+    }
     m->vb = VertexBuffer::Builder().vertexCount((uint32_t)n).bufferCount(3)
                 .attribute(VertexAttribute::POSITION, 0, VertexBuffer::AttributeType::FLOAT3)
                 .attribute(VertexAttribute::TANGENTS, 1, VertexBuffer::AttributeType::FLOAT4)
