@@ -761,6 +761,47 @@ static void flat_path(Drawn* d, tvg::Shape* shape, const char* form, int w, int 
             k ? shape->lineTo(x, y) : shape->moveTo(x, y);
         }
     }
+    else if (!strcmp(form, "ring") || !strcmp(form, "arc")) {   // (a ring: its hole `inner` of the way out; an arc: so many degrees of it (points), `inner` thick, from straight up clockwise)
+        const bool arc = !strcmp(form, "arc");
+        const float hole = arc ? 1.f - std::clamp(inner, 0.02f, 1.f) : std::clamp(inner, 0.f, 0.98f), sweep = arc ? TAU * std::clamp((float)points, 1.f, 360.f) / 360.f : TAU;
+        const int n = std::max(8, (int)(96.f * sweep / TAU));
+        for (int k = 0; k <= n; ++k) {   // (round the outside, then back round the inside: the hole a contour of its own the other way)
+            const float a = -0.25f * TAU + sweep * (float)k / (float)n;
+            k ? shape->lineTo(cx + rx * std::cos(a), cy + ry * std::sin(a)) : shape->moveTo(cx + rx * std::cos(a), cy + ry * std::sin(a));
+        }
+        if (!arc) shape->close();
+        if (hole > 0.f) {
+            for (int k = n; k >= 0; --k) {
+                const float a = -0.25f * TAU + sweep * (float)k / (float)n;
+                (k == n && !arc) ? shape->moveTo(cx + rx * hole * std::cos(a), cy + ry * hole * std::sin(a)) : shape->lineTo(cx + rx * hole * std::cos(a), cy + ry * hole * std::sin(a));
+            }
+        }
+        shape->close();
+    }
+    else if (!strcmp(form, "arrow")) {   // (pointing right: its shaft `inner` of its height thick, its head a third of its length)
+        const float shaft = 0.5f * ry * std::clamp(inner, 0.05f, 1.f), head = (float)w - in - std::min(2.f * rx / 3.f, 1.2f * ry);
+        const float pts[][2] = {{in, cy - shaft}, {head, cy - shaft}, {head, in}, {(float)w - in, cy}, {head, (float)h - in}, {head, cy + shaft}, {in, cy + shaft}};
+        for (int k = 0; k < 7; ++k) k ? shape->lineTo(pts[k][0], pts[k][1]) : shape->moveTo(pts[k][0], pts[k][1]);
+        shape->close();
+    }
+    else if (!strcmp(form, "squircle")) {   // (a superellipse, |x|^p + |y|^p = 1: points its power, 2 an ellipse, higher squarer)
+        const float p = std::clamp((float)points, 2.f, 40.f);
+        for (int k = 0; k < 128; ++k) {
+            const float a = TAU * (float)k / 128.f, c = std::cos(a), sn = std::sin(a);
+            const float x = cx + rx * std::copysign(std::pow(std::fabs(c), 2.f / p), c), y = cy + ry * std::copysign(std::pow(std::fabs(sn), 2.f / p), sn);
+            k ? shape->lineTo(x, y) : shape->moveTo(x, y);
+        }
+        shape->close();
+    }
+    else if (!strcmp(form, "cog")) {   // (a cogwheel: so many teeth (points), each `inner` of its radius deep, flat topped)
+        const int teeth = std::clamp(points, 3, 100), n = 4 * teeth;
+        const float deep = 1.f - std::clamp(inner, 0.02f, 0.9f);
+        for (int k = 0; k < n; ++k) {   // (a tooth: rising, top, falling, bottom: four corners)
+            const float a0 = -0.25f * TAU + TAU * (float)k / (float)n, r = (k % 4 == 1 || k % 4 == 2) ? 1.f : deep;
+            k ? shape->lineTo(cx + rx * r * std::cos(a0), cy + ry * r * std::sin(a0)) : shape->moveTo(cx + rx * r * std::cos(a0), cy + ry * r * std::sin(a0));
+        }
+        shape->close();
+    }
     else if (!strcmp(form, "polygon") || !strcmp(form, "star")) {
         const bool star = !strcmp(form, "star");
         const int n = std::clamp(points, 3, 100) * (star ? 2 : 1);
