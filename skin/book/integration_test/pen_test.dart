@@ -98,6 +98,17 @@ void main() {
     print('HANDLE ${handlesWas.length} handles, $handleMoved moved; points the same: ${listEq(pointsNow, pointsWas)}');
     await shoot('handle_moved');
     expect(m.word(made[0], 'path') != pathWas && handleMoved == 1 && listEq(pointsNow, pointsWas), true);
+    // (and the pen on that closed path's top point: taken away)
+    await t.tap(find.byKey(const ValueKey('ws-tool-4')));
+    await t.pump();
+    final before2 = m.points(made[0]).length, things2 = m.things.length;
+    await tap(const Offset(0, -80));
+    await wait(400);
+    ws.reread();
+    // ignore: avoid_print
+    print('DELETE points ${before2} -> ${m.points(made[0]).length}, things ${things2} -> ${m.things.length}');
+    await shoot('point_deleted');
+    expect(m.points(made[0]).length == before2 - 1 && m.things.length == things2, true);
     expect(made.length, 2);
     expect(paths[0].startsWith('M') && paths[0].endsWith('Z') && paths[0].contains('S'), true);
     expect(paths[1].contains('L'), true);

@@ -213,3 +213,78 @@ bool sk_svg_move_handle(const char* data, int nth, float dx, float dy, std::stri
     out = SkParsePath::ToSVGString(b.detach()).c_str();
     return true;
 }
+
+// A path as its points, each with the handle it comes in by and the one it leaves by (a line's on its ends), a
+// contour each, and whether it is closed; and back. What a pen adds a point to or takes one from.
+struct SkNode { SkPoint in, at, out; };
+using SkNodes = std::vector<std::pair<std::vector<SkNode>, bool>>;
+static SkNodes sk_nodes(const SkPath& path) {
+    SkNodes all;
+    SkPathIter it = path.iter();
+    while (const std::optional<SkPathIter::Rec> r = it.next()) {
+        const SkSpan<const SkPoint> p = r->fPoints;
+        if (r->fVerb == SkPathVerb::kMove) { all.push_back({{{p[0], p[0], p[0]}}, false}); continue; }
+        if (all.empty()) continue;
+        std::vector<SkNode>& n = all.back().first;
+        switch (r->fVerb) {
+            case SkPathVerb::kLine: n.push_back({p[1], p[1], p[1]}); break;
+            case SkPathVerb::kQuad: case SkPathVerb::kConic:   // (a quad as the cubic it is)
+                n.back().out = p[0] + (p[1] - p[0]) * (2.f / 3.f), n.push_back({p[2] + (p[1] - p[2]) * (2.f / 3.f), p[2], p[2]}); break;
+            case SkPathVerb::kCubic: n.back().out = p[1], n.push_back({p[2], p[3], p[3]}); break;
+            case SkPathVerb::kClose:
+                if (n.size() > 1 && SkPoint::Distance(n.back().at, n.front().at) < 1e-4f) n.front().in = n.back().in, n.pop_back();   // (its last point its first again: one)
+                all.back().second = true;
+                break;
+            default: break;
+        }
+    }
+    return all;
+}
+static SkPath sk_path(const SkNodes& all) {
+    SkPathBuilder b;
+    for (const auto& [n, closed] : all) {
+        if (n.empty()) continue;
+        b.moveTo(n[0].at);
+        for (size_t i = 1; i < n.size(); ++i) b.cubicTo(n[i - 1].out, n[i].in, n[i].at);
+        if (closed) b.cubicTo(n.back().out, n[0].in, n[0].at), b.close();
+    }
+    return b.detach();
+}
+
+// A pen on a path: on one of its points (within `reach`), that point taken away; on its outline, a point put there,
+// the curve split where it lies (de Casteljau: the same curve); else nothing (0). 1 taken, 2 put.
+int sk_svg_edit(const char* data, float x, float y, float reach, std::string& out) {
+    const std::optional<SkPath> made = SkParsePath::FromSVGString(data);
+    if (!made) return 0;
+    SkNodes all = sk_nodes(*made);
+    const SkPoint hand{x, y};
+    for (auto& [n, closed] : all)
+        for (size_t i = 0; i < n.size(); ++i)
+            if (SkPoint::Distance(n[i].at, hand) < reach) {
+                n.erase(n.begin() + (long)i);
+                if (n.size() < 2) n.clear();
+                out = SkParsePath::ToSVGString(sk_path(all)).c_str();
+                return 1;
+            }
+    float best = reach, at = 0.f;
+    int contour = -1;
+    size_t seg = 0;
+    const auto on = [](SkPoint a, SkPoint b, SkPoint c, SkPoint d, float t) { const float u = 1.f - t; return a * (u * u * u) + b * (3.f * u * u * t) + c * (3.f * u * t * t) + d * (t * t * t); };
+    for (size_t k = 0; k < all.size(); ++k) {
+        const auto& [n, closed] = all[k];
+        for (size_t i = 0; i + (closed ? 0 : 1) < n.size(); ++i) {
+            const SkNode &a = n[i], &b = n[(i + 1) % n.size()];
+            for (int s = 1; s < 128; ++s)
+                if (const float t = (float)s / 128.f, far = SkPoint::Distance(on(a.at, a.out, b.in, b.at, t), hand); far < best) best = far, at = t, contour = (int)k, seg = i;
+        }
+    }
+    if (contour < 0) return 0;
+    std::vector<SkNode>& n = all[(size_t)contour].first;
+    SkNode &a = n[seg], &b = n[(seg + 1) % n.size()];
+    const auto mix = [&](SkPoint p, SkPoint q) { return p + (q - p) * at; };
+    const SkPoint ab = mix(a.at, a.out), bc = mix(a.out, b.in), cd = mix(b.in, b.at), abc = mix(ab, bc), bcd = mix(bc, cd), mid = mix(abc, bcd);
+    a.out = ab, b.in = cd;
+    n.insert(n.begin() + (long)seg + 1, SkNode{abc, mid, bcd});
+    out = SkParsePath::ToSVGString(sk_path(all)).c_str();
+    return 2;
+}

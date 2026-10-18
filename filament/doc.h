@@ -2764,6 +2764,7 @@ int sk_svg_anchors(const char* data, std::vector<float>& xy);
 bool sk_svg_move(const char* data, int nth, float dx, float dy, std::string& out);
 int sk_svg_handles(const char* data, std::vector<float>& xy, std::vector<float>* of = nullptr);
 bool sk_svg_move_handle(const char* data, int nth, float dx, float dy, std::string& out);
+int sk_svg_edit(const char* data, float x, float y, float reach, std::string& out);
 // A path shape's points as the picture shows them (x, y two a point, points of the picture from the top left; its handles not).
 // handles: its curves' handles instead; of: and the point each is the handle of (of[2i], of[2i+1]).
 static int doc_points(Doc& d, int thing, double now, double* xy, int room, bool handles = false, double* of = nullptr) {
@@ -2782,14 +2783,24 @@ static int doc_points(Doc& d, int thing, double now, double* xy, int room, bool 
 // A pen on the stage: a point put where the hand is (x, y: points of the picture from its top left), its handle drawn
 // out by hx, hy (points; 0, 0: a corner), on a path shape's own path (its `path`, SVG's path data): a line to it, or a
 // curve through it as Illustrator's pen makes one (SVG's S: the point before smooth, its handle turned through). On
-// its first point again: closed, and the next point begins another. thing 0: a new path shape, begun there, one step with its
+// its first point again: closed; then on one of its points that point is taken away, on its outline a point is put
+// there, elsewhere another is begun (Illustrator's pen adds and deletes so). thing 0: a new path shape, begun there, one step with its
 // first point. Its number (0: not).
 static int doc_pen(Doc& d, int thing, double x, double y, double hx, double hy) {
     const double now = d.stage->now;
     doc_act(d);
-    if (thing && doc_knows(d, thing) && doc_word(d, thing, "shape") == "path" && !doc_word(d, thing, "path").empty() && doc_word(d, thing, "path").back() == 'Z') thing = 0;   // (closed: the pen begins another)
+    if (thing && (!doc_knows(d, thing) || doc_word(d, thing, "shape") != "path")) thing = 0;   // (not a path: the pen begins one)
+    if (const std::string was = thing ? doc_word(d, thing, "path") : ""; !was.empty() && was.back() == 'Z') {   // (closed: on one of its points, it is taken away; on its outline, one is put there; else the pen begins another)
+        const DocPlane plane(d, thing, now);
+        const math::double2 p = plane.own(x, y);
+        std::string edited;
+        if (plane.seen && sk_svg_edit(was.c_str(), (float)p.x, (float)p.y, (float)(8.0 / std::max(1e-9, length(plane.ex))), edited)) {
+            if (!doc_say(d, thing, "path", edited.c_str())) d.act_ok = false;
+            return doc_acted(d) ? thing : 0;
+        }
+        thing = 0;
+    }
     if (!thing) thing = doc_add(d, "shape", "path");
-    if (thing && (!doc_knows(d, thing) || doc_word(d, thing, "shape") != "path")) d.trouble = "a pen draws on a path shape", thing = 0;
     std::string path = thing ? doc_word(d, thing, "path") : "";
     const DocPlane plane(d, thing, now);
     const math::double2 o = plane.o, ex = plane.ex, ey = plane.ey;

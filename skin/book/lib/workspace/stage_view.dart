@@ -336,8 +336,8 @@ class _StageViewState extends State<StageView> implements StageHandles {
   }
 
   // Joined: the pen: a point where the hand came down, its handle drawn out as far as the hand was dragged (a tap: a
-  // corner). Its first begins a path shape, the rest go on the one the pen made (thing -1); the inside reckons all of
-  // it (closing on the first point, and beginning another after) from where the hand is.
+  // corner). Its first goes to the picked thing, the rest to the one the pen made (thing -1); the inside reckons all of
+  // it (a new path begun, closed on its first point, a point put on or taken off a closed one) from where the hand is.
   bool _penning = false;
 
   void _pen(_View v, Offset down, Offset up) {
@@ -350,7 +350,7 @@ class _StageViewState extends State<StageView> implements StageHandles {
     _penning = true;
     if (first) m.later('together', number: 1);
     var made = 0;
-    ws.after(m.later('pen', thing: first ? 0 : -1, word: '${a.dx} ${a.dy} ${h.dx} ${h.dy}'), null, (t) => made = t);
+    ws.after(m.later('pen', thing: first ? int.tryParse(widget.selected ?? '') ?? 0 : -1, word: '${a.dx} ${a.dy} ${h.dx} ${h.dy}'), null, (t) => made = t); // (first on the picked thing: a closed path gains or loses a point, anything else begins a new one)
     if (first) {
       if (ws.ink.isNotEmpty) m.later('say', thing: -1, name: 'fill', word: ws.ink);
       if (ws.edge.isNotEmpty) {
