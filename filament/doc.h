@@ -61,7 +61,9 @@ struct Doc {
     std::set<std::pair<int, std::string>> changed;   // the values changed since a shell last asked (motolii_changes), each (thing, name), from each step's own changeset
     bool things_changed = false;        // and whether a thing came or went since
     std::map<uint32_t, MaterialInstance*> copyLooks, copyEdges;   // (copyEdges: the same for its edge, its second part)
-    std::map<std::pair<int, std::string>, int> drivers;   // a value's behaviour (`<name>_by`), by thing and name: found once, forgotten at every change   // a copy's own look (its thing's look duplicated, by the copy's entity), while its copies are coloured each their own
+    std::map<std::pair<int, std::string>, int> drivers;   // a value's behaviour (`<name>_by`), by thing and name: found once, forgotten at every change
+    std::unordered_map<int, bool> connects;   // whether a thing has any value connected to a behaviour: asked once, forgotten at every change
+    int ctxCopy = 0, ctxN = 1;   // which of how many copies doc_place is placing now: what a behaviour gives is that copy's   // a copy's own look (its thing's look duplicated, by the copy's entity), while its copies are coloured each their own
     float roomLight = 0.f;              // the room's own light, as the stage was opened with it
     std::string roomIs;                 // which room lights it now (doc_look)
     Skybox* sky = nullptr;              // the room behind everything, once it is said
@@ -273,7 +275,8 @@ static const DocValue doc_values[] = {
     {"frequency", "behaviour", 0, 1000, true, nullptr},
     {"offset", "behaviour", -1e6, 1e6, true, nullptr},
     {"stagger", "behaviour", -1e6, 1e6, true, nullptr},
-    {"seed", "behaviour", 0, 1e9, false, nullptr},   // (where its outlines lie over each other: filled, or a hole every other time, SVG's and Cavalry's fill rule)
+    {"seed", "behaviour", 0, 1e9, false, nullptr},
+    {"step", "behaviour", 0, 1e6, true, nullptr},   // (what it gives rounded to so many: 90, a quarter turn at a time; 0 not)   // (where its outlines lie over each other: filled, or a hole every other time, SVG's and Cavalry's fill rule)
     {"morph", "shape", 0, 1, true, nullptr},
     // (its path another's track, Cavalry's Trails: whose, and over how many seconds back)
     {"trail", "shape", 0, 1e9, false, nullptr},
@@ -670,7 +673,7 @@ static bool doc_rows(Doc& d, char* ask, const std::function<void(sqlite3_stmt*)>
 static void doc_forget(Doc& d) {
     d.phys_stale = true, d.scripted.clear();   // (the world made again only if what it is made of changed: doc_physics)
     d.moving.clear(), d.literals.clear(), d.words.clear(), d.keyed.clear(), d.halves.clear(), d.heardWords.clear(), d.talls.clear();
-    d.named.clear(), d.tracks.clear(), d.drivers.clear();
+    d.named.clear(), d.tracks.clear(), d.drivers.clear(), d.connects.clear();
     d.laid.clear();
 }
 // The things in the order they lie, the one furthest back first: by `order` where it is said, else as they were made.
@@ -831,10 +834,18 @@ static double doc_behaviour_at(Doc& d, int by, int copy, int n, double t) {
         u = hash((int64_t)f) * (1.0 - e) + hash((int64_t)f + 1) * e;
     }
     else if (type == "random") u = hash(copy + 1);
-    return lo + (hi - lo) * u;
+    const double step = doc_number(d, by, "step", t, 0), v = lo + (hi - lo) * u;
+    return step > 0.0 ? std::round(v / step) * step : v;
 }
 // The behaviour a value of a thing is connected to (`<name>_by`), 0 none.
+static bool doc_connects(Doc& d, int thing) {
+    if (const auto known = d.connects.find(thing); known != d.connects.end()) return known->second;
+    bool any = false;
+    doc_rows(d, sqlite3_mprintf("select 1 from fact where thing = %d and name glob '*_by' and value <> 0 limit 1", thing), [&](sqlite3_stmt*) { any = true; });
+    return d.connects.emplace(thing, any).first->second;
+}
 static int doc_driven_by(Doc& d, int thing, const char* name) {
+    if (!doc_connects(d, thing)) return 0;
     const auto key = std::make_pair(thing, std::string(name));
     if (const auto known = d.drivers.find(key); known != d.drivers.end()) return known->second;
     int by = (int)doc_number(d, thing, (std::string(name) + "_by").c_str(), 0, 0);
@@ -866,6 +877,7 @@ static void doc_copy_looks_off(Doc& d, const Mesh* m, MaterialInstance* main) {
 // moment reckoned from them; a value with no keys or one is its number at once. Not while a hand carries it.
 static double doc_literal(Doc& d, int thing, const char* literal, double at, double otherwise) {
     if (d.held.thing == thing) return doc_number(d, thing, literal, at, otherwise);
+    if (const int by = doc_driven_by(d, thing, literal)) return doc_behaviour_at(d, by, d.ctxCopy, d.ctxN, at);   // (given by a behaviour: the copy being placed's own)
     const auto key = std::make_pair(thing, literal);
     auto kept = d.literals.find(key);
     if (kept == d.literals.end()) kept = d.literals.emplace(key, &doc_keys_of(d, thing, literal)).first;
@@ -1004,6 +1016,11 @@ static double doc_heading(Doc& d, int thing, double now) {
 }
 static math::mat4 doc_place(Doc& d, int thing, double now, int deeper, int copy, bool member) {
     const double said = now;   // (the moment itself: a wave goes on at it, whatever the copy's delay)
+    struct Placing { Doc& d; int copy, n; ~Placing() { d.ctxCopy = copy, d.ctxN = n; } } was{d, d.ctxCopy, d.ctxN};   // (which copy, as it was before: told back after)
+    {
+        const int many = member ? doc_members(d, thing) : 1;
+        d.ctxCopy = member ? copy : 0, d.ctxN = many;
+    }
     if (member) now -= doc_delay(d, thing, copy);   // (a member of its copies: as it was so much earlier)
     const auto turned = [&](const char* name, math::double3 about) { return math::mat4::rotation(doc_literal(d, thing, name, now, 0) * (double)TAU / 360.0, about); };
     float2 half{0.5f};
@@ -1021,8 +1038,10 @@ static math::mat4 doc_place(Doc& d, int thing, double now, int deeper, int copy,
         const double along = columns > 0 ? copy % columns : copy, down = columns > 0 ? copy / columns : copy;
         const double alongMid = columns > 0 ? (std::min(n, columns) - 1) * 0.5 : (n - 1) * 0.5, downMid = columns > 0 ? (std::ceil((double)n / columns) - 1) * 0.5 : (n - 1) * 0.5;
         shift += math::double3{(along - alongMid) * doc_literal(d, thing, "copy_x", now, 0), (down - downMid) * doc_literal(d, thing, "copy_y", now, 0), (copy - (n - 1) * 0.5) * doc_literal(d, thing, "copy_z", now, 0)};
-        own = math::mat4::rotation(copy * (doc_literal(d, thing, "copy_turn", now, 0) / n + doc_literal(d, thing, "copy_rotate", now, 0)) * (double)TAU / 360.0, math::double3{0, 0, 1}) *
-              math::mat4::scaling(std::pow(doc_literal(d, thing, "copy_size", now, 1), copy)) *
+        // (each copy turned and sized more than the one before; given by a behaviour, each copy its own turn and size as it gives)
+        const bool turnsEach = doc_driven_by(d, thing, "copy_rotate"), sizesEach = doc_driven_by(d, thing, "copy_size");
+        own = math::mat4::rotation((copy * doc_literal(d, thing, "copy_turn", now, 0) / n + (turnsEach ? 1 : copy) * doc_literal(d, thing, "copy_rotate", now, 0)) * (double)TAU / 360.0, math::double3{0, 0, 1}) *
+              math::mat4::scaling(sizesEach ? doc_literal(d, thing, "copy_size", now, 1) : std::pow(doc_literal(d, thing, "copy_size", now, 1), copy)) *
               math::mat4::scaling(math::double3{n > 1 ? std::pow(doc_literal(d, thing, "copy_wide", now, 1), (double)copy / (n - 1)) : 1.0, 1.0, 1.0});
         if (const double ty = doc_literal(d, thing, "copy_rotate_y", now, 0), tx = doc_literal(d, thing, "copy_rotate_x", now, 0); tx != 0.0 || ty != 0.0)   // (turned out of the picture's plane too, each more than the one before)
             own = math::mat4::rotation(copy * ty * (double)TAU / 360.0, math::double3{0, 1, 0}) * math::mat4::rotation(copy * tx * (double)TAU / 360.0, math::double3{1, 0, 0}) * own;
