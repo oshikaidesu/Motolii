@@ -3,6 +3,7 @@
 import 'dart:io';
 import 'dart:ui' show ImageByteFormat;
 
+import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/rendering.dart' show OffsetLayer;
 import 'package:flutter/services.dart' show LogicalKeyboardKey, PhysicalKeyboardKey, TextInputAction;
 import 'package:flutter/widgets.dart';
@@ -116,8 +117,10 @@ void main() {
           await g.up();
           await shot('colour_card_on_shelf');
         case '束ねる':
-          var g = await t.startGesture(tile('半径'));
-          await t.pump(const Duration(milliseconds: 500));
+          var g = await t.startGesture(tile('半径'), kind: PointerDeviceKind.mouse); // (a mouse, trembling a pixel while it holds: still a hold)
+          await t.pump(const Duration(milliseconds: 120));
+          await g.moveBy(const Offset(1, 0));
+          await t.pump(const Duration(milliseconds: 400));
           for (var k = 1; k <= 12; k++) {
             await g.moveTo(Offset.lerp(tile('半径'), tile('大きさ'), k / 12)!);
             await t.pump(const Duration(milliseconds: 16));

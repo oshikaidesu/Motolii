@@ -136,8 +136,9 @@ class CardTable extends ChangeNotifier {
   double _bundleShare = 0;
 
   /// Kept before a change (a drag keeps once, at its start): ⌘Z / the back arrow takes it back.
+  bool _redoAtRisk = false; // a mark was made: the first real change after it clears what could be redone
   void mark() {
-    _redo.clear();
+    _redoAtRisk = _redo.isNotEmpty;
     _undo.add(_Snap(this));
     if (_undo.length > 200) _undo.removeAt(0);
   }
@@ -250,6 +251,10 @@ class CardTable extends ChangeNotifier {
 
   void _changed({bool keepFlash = false}) {
     if (!keepFlash) flash = null;
+    if (_redoAtRisk && _undo.isNotEmpty && !_undo.last.same(_Snap(this))) {
+      _redo.clear();
+      _redoAtRisk = false;
+    }
     notifyListeners();
   }
 
@@ -595,7 +600,7 @@ class _Stage extends StatefulWidget {
 const _ringVals = ['size', 'radius', 'spin', 'hue']; // up, right, down, left
 
 class _StageState extends State<_Stage> {
-  Offset? anchor, at; // the ring's place (it opens where the hand rests a moment), the hand's
+  Offset? anchor, at, restAt; // the ring's place (it opens where the hand rests, pushed inside the stage), the hand's, where it rested
   int? aim;
   Timer? rest;
 
@@ -611,7 +616,7 @@ class _StageState extends State<_Stage> {
     at = p;
     if (anchor == null && restFrom != null && (p - restFrom!).distance < 6) return; // (a hand trembling is a hand resting)
     restFrom = p;
-    if (anchor != null && (p - anchor!).distance > 110) {
+    if (anchor != null && (p - (restAt ?? anchor!)).distance > 110) {
       setState(() => anchor = aim = null);
       t.hover(null);
     }
@@ -620,6 +625,7 @@ class _StageState extends State<_Stage> {
       rest = Timer(const Duration(milliseconds: 250), () {
         final box = context.findRenderObject() as RenderBox?;
         if (mounted && at != null && box != null) {
+          restAt = at;
           setState(() => anchor = Offset(at!.dx.clamp(118, math.max(118, box.size.width - 118)), at!.dy.clamp(88, math.max(88, box.size.height - 88)))); // (the whole ring inside the stage)
         }
       });
@@ -633,7 +639,7 @@ class _StageState extends State<_Stage> {
 
   Offset _local(Offset global) => (context.findRenderObject()! as RenderBox).globalToLocal(global);
   int? _aimAt(Offset p) {
-    final d = p - anchor!;
+    final d = p - (restAt ?? anchor!); // (the way the hand went from where it rested: a ring pushed in from the edge picks nothing by itself)
     if (d.distance < 28) return null;
     final k = d.dx.abs() > d.dy.abs() ? (d.dx > 0 ? 1 : 3) : (d.dy < 0 ? 0 : 2);
     return t.valOr(_ringVals[k]) == null ? null : k;
@@ -1104,7 +1110,7 @@ class _Tile extends StatelessWidget {
       final edge = over?.c ?? (tying ? Pop.accent : (may && waiting != null ? waiting.withValues(alpha: .45) : const Color(0x00000000)));
       final width = over != null ? (d != null && d.beh == over ? math.min(d.width + .15, 1.0) : (d?.width ?? .2)) : d?.width;
       // (the name strip is where the tile is held up and carried, to tie it to another; the rest scrubs, the number types)
-      final label = LongPressDraggable<Val>(
+      final label = !CardTable.canDrive(v) ? Text(v.label, maxLines: 1, overflow: TextOverflow.ellipsis, style: T.micro(Grey.g44).copyWith(height: 1.1)) : LongPressDraggable<Val>(
         data: v,
         delay: const Duration(milliseconds: 300),
         dragAnchorStrategy: pointerDragAnchorStrategy,
@@ -1131,16 +1137,23 @@ class _Tile extends StatelessWidget {
           ]),
         )),
       );
-      return MouseRegion(cursor: SystemMouseCursors.resizeLeftRight, child: GestureDetector(
-        onHorizontalDragStart: (_) {
-          if (t.editing == v.id) t.type(null);
-          t.mark();
-          t.scrubbing = true;
-        },
-        onHorizontalDragEnd: (_) => t.scrubbing = false,
-        onHorizontalDragCancel: () => t.scrubbing = false,
-        onHorizontalDragUpdate: (e) => t.set(v, v.v + e.delta.dx / 180 * (v.hi - v.lo)),
-        child: TweenAnimationBuilder<double>(
+      // (the number and its line scrub sideways; the name strip above only lifts: a mouse's first pixel never takes the hold away)
+      Widget scrub(Widget child) => MouseRegion(
+        cursor: SystemMouseCursors.resizeLeftRight,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onHorizontalDragStart: (_) {
+            if (t.editing == v.id) t.type(null);
+            t.mark();
+            t.scrubbing = true;
+          },
+          onHorizontalDragEnd: (_) => t.scrubbing = false,
+          onHorizontalDragCancel: () => t.scrubbing = false,
+          onHorizontalDragUpdate: (e) => t.set(v, v.v + e.delta.dx / 180 * (v.hi - v.lo)),
+          child: child,
+        ),
+      );
+      return (TweenAnimationBuilder<double>(
           key: ValueKey(t.flash == v.id ? t.flashN : -1),
           tween: Tween(begin: t.flash == v.id ? 1 : 0, end: 0),
           duration: const Duration(milliseconds: 420),
@@ -1156,6 +1169,7 @@ class _Tile extends StatelessWidget {
             child: Stack(children: [
               Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
                 Padding(padding: const EdgeInsets.only(right: 24), child: label),
+                scrub(Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
                 t.editing == v.id
                     ? _NumEdit(t, v)
                     : GestureDetector(
@@ -1168,7 +1182,9 @@ class _Tile extends StatelessWidget {
                           ],
                         ]),
                       ),
-                SizedBox(height: 4, child: d != null || over != null ? _Spread(t, v, (over ?? d!.beh).c) : null),
+                const SizedBox(height: 3),
+                SizedBox(height: 4, width: double.infinity, child: d != null || over != null ? _Spread(t, v, (over ?? d!.beh).c) : null),
+                ])),
               ]),
               // (the right edge is one column of marks: what drives it on top, its bundle under; nothing sits on the words)
               if (d != null) Positioned(right: 0, top: 0, child: _DriveChip(t, v.id, d)),
@@ -1191,8 +1207,7 @@ class _Tile extends StatelessWidget {
               if (over != null && d?.beh != over) Positioned(right: 0, top: 0, child: Opacity(opacity: .6, child: _Chip(over))),
             ]),
           ),
-        ),
-      ));
+        ));
     });
   }
 }
@@ -1371,7 +1386,12 @@ class _DriveKnobs extends StatelessWidget {
   Widget build(BuildContext context) {
     Widget knob(String label, String said, String key, String initial, void Function(double) keep, void Function(double dx) on) => Expanded(
       child: GestureDetector(
-        onHorizontalDragStart: (_) => t.mark(),
+        onHorizontalDragStart: (_) {
+          t.mark();
+          t.scrubbing = true;
+        },
+        onHorizontalDragEnd: (_) => t.scrubbing = false,
+        onHorizontalDragCancel: () => t.scrubbing = false,
         onHorizontalDragUpdate: (e) => on(e.delta.dx),
         child: Container(
           height: 38,
@@ -1448,7 +1468,7 @@ class _BundleTile extends StatelessWidget {
   final List<Val> vals;
   @override
   Widget build(BuildContext context) => DragTarget<Val>(
-    onWillAcceptWithDetails: (e) => !vals.contains(e.data),
+    onWillAcceptWithDetails: (e) => !vals.contains(e.data) && CardTable.canDrive(e.data),
     onAcceptWithDetails: (e) => t.tie(e.data, vals.first),
     builder: (context, cand, _) => GestureDetector(
     onHorizontalDragStart: (_) {
