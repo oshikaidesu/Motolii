@@ -2,6 +2,7 @@
 import 'package:flutter/widgets.dart';
 import 'package:widgetbook/widgetbook.dart';
 
+import 'agent_hand.dart';
 import 'cards_table.dart';
 
 class _Keep extends StatefulWidget {
@@ -21,7 +22,7 @@ class _KeepState extends State<_Keep> {
   }
 
   @override
-  Widget build(BuildContext context) => CardsTable(t);
+  Widget build(BuildContext context) => AgentHand(t, child: CardsTable(t)); // (a tester's hand, only when AGENT_DIR is given)
 }
 
 /// The ring with its wave up (40 px), so what the wave card does shows.
@@ -49,3 +50,9 @@ WidgetbookComponent cardsSet() => WidgetbookComponent(
   name: 'Cards',
   useCases: [for (final (name, make, tag) in cardUses) WidgetbookUseCase(name: name, builder: (c) => _Keep(make, tag))],
 );
+
+/// A tester's window: one page of the table filling the window (AGENT_PAGE, else Link), its hand reading AGENT_DIR.
+Widget cardsAgentPage(String page) {
+  final use = cardUses.firstWhere((u) => u.$1 == page, orElse: () => cardUses.last);
+  return _Keep(use.$2, use.$3);
+}

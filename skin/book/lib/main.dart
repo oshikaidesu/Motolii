@@ -1,5 +1,7 @@
 // The lab's Widgetbook. Parts are in lib/parts and read lib/tokens.dart, which reads ../DESIGN.md.
 // An open design question is a knob ("Look": concept / quiet / glow): the owner picks in the real window.
+import 'dart:io' show Platform;
+
 import 'package:flutter/material.dart' show ThemeMode, ThemeData, Brightness;
 import 'package:flutter/widgets.dart';
 import 'package:widgetbook/widgetbook.dart';
@@ -28,7 +30,13 @@ import 'tokens.dart';
 import 'words_addon.dart';
 import 'workspace/workspace.dart';
 
-void main() => runApp(const LabBook());
+void main() {
+  // a tester's window (AGENT_DIR): only the cards table, the whole window, driven by its inbox
+  if (Platform.environment['AGENT_DIR'] != null) {
+    return runApp(WidgetsApp(color: const Color(0xFF000000), builder: (c, _) => cardsAgentPage(Platform.environment['AGENT_PAGE'] ?? 'Link')));
+  }
+  runApp(const LabBook());
+}
 
 /// The page the window opens on. Another one: --dart-define=LAB_ROUTE=/?path=glass/glass/live
 const _route = String.fromEnvironment('LAB_ROUTE', defaultValue: '/?path=workspace/workspace/window');
