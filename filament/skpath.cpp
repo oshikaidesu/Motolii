@@ -404,3 +404,35 @@ bool sk_voxel(const tvg::PathCommand* cmds, uint32_t cmdsCnt, const tvg::Point* 
             }
     return !outCmds.empty();
 }
+
+// Whether a point lies inside a path (Skia's own contains, its winding) and how far it is from its outline (the nearest
+// of its stretches, a curve walked in 16 steps), in the path's own units.
+bool sk_inside(const tvg::PathCommand* cmds, uint32_t cmdsCnt, const tvg::Point* pts, float x, float y, float* far) {
+    const SkPath path = sk_of(cmds, cmdsCnt, pts);
+    const SkPoint at{x, y};
+    float best = 1e30f;
+    const auto seg = [&](SkPoint a, SkPoint b) {
+        const SkVector ab = b - a, ap = at - a;
+        const float l2 = ab.fX * ab.fX + ab.fY * ab.fY, u = l2 > 0.f ? std::clamp((ap.fX * ab.fX + ap.fY * ab.fY) / l2, 0.f, 1.f) : 0.f;
+        best = std::min(best, SkPoint::Distance(at, a + ab * u));
+    };
+    SkPathIter it = path.iter();
+    while (const std::optional<SkPathIter::Rec> r = it.next()) {
+        const SkSpan<const SkPoint> p = r->fPoints;
+        switch (r->fVerb) {
+            case SkPathVerb::kLine: case SkPathVerb::kClose: seg(p[0], p[1]); break;
+            case SkPathVerb::kQuad: case SkPathVerb::kConic: case SkPathVerb::kCubic: {
+                const auto on = [&](float t) {
+                    const float u = 1.f - t;
+                    if (p.size() == 4) return p[0] * (u * u * u) + p[1] * (3.f * u * u * t) + p[2] * (3.f * u * t * t) + p[3] * (t * t * t);
+                    return p[0] * (u * u) + p[1] * (2.f * u * t) + p[2] * (t * t);
+                };
+                for (int i = 0; i < 16; ++i) seg(on((float)i / 16.f), on((float)(i + 1) / 16.f));
+                break;
+            }
+            default: break;
+        }
+    }
+    if (far) *far = best;
+    return path.contains(x, y);
+}

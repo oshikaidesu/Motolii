@@ -63,7 +63,8 @@ struct Doc {
     std::map<uint32_t, MaterialInstance*> copyLooks, copyEdges;   // (copyEdges: the same for its edge, its second part)
     std::map<std::pair<int, std::string>, int> drivers;   // a value's behaviour (`<name>_by`), by thing and name: found once, forgotten at every change
     std::unordered_map<int, bool> connects;   // whether a thing has any value connected to a behaviour: asked once, forgotten at every change
-    int ctxCopy = 0, ctxN = 1;   // which of how many copies doc_place is placing now: what a behaviour gives is that copy's   // a copy's own look (its thing's look duplicated, by the copy's entity), while its copies are coloured each their own
+    int ctxCopy = 0, ctxN = 1;   // which of how many copies doc_place is placing now: what a behaviour gives is that copy's
+    bool ctxHasAt = false; math::double3 ctxAt{0.0};   // (and where that copy lies on the stage, laid out, once doc_place knows: what a behaviour's falloff weighs)   // a copy's own look (its thing's look duplicated, by the copy's entity), while its copies are coloured each their own
     float roomLight = 0.f;              // the room's own light, as the stage was opened with it
     std::string roomIs;                 // which room lights it now (doc_look)
     Skybox* sky = nullptr;              // the room behind everything, once it is said
@@ -276,7 +277,12 @@ static const DocValue doc_values[] = {
     {"offset", "behaviour", -1e6, 1e6, true, nullptr},
     {"stagger", "behaviour", -1e6, 1e6, true, nullptr},
     {"seed", "behaviour", 0, 1e9, false, nullptr},
-    {"step", "behaviour", 0, 1e6, true, nullptr},   // (what it gives rounded to so many: 90, a quarter turn at a time; 0 not)   // (where its outlines lie over each other: filled, or a hole every other time, SVG's and Cavalry's fill rule)
+    {"step", "behaviour", 0, 1e6, true, nullptr},   // (what it gives rounded to so many: 90, a quarter turn at a time; 0 not)
+    // (where it works, Cavalry's falloff: inside a shape (any shape, seen or not, moving or not) all of it, outside none, between over
+    //  falloff_soft units of the stage; inverted, the other way: elsewhere, the value is the thing's own)
+    {"falloff", "behaviour", 0, 1e9, false, nullptr},
+    {"falloff_soft", "behaviour", 0, 1e4, true, nullptr},
+    {"falloff_invert", "behaviour", 0, 1, false, nullptr},   // (where its outlines lie over each other: filled, or a hole every other time, SVG's and Cavalry's fill rule)
     {"morph", "shape", 0, 1, true, nullptr},
     // (its path another's track, Cavalry's Trails: whose, and over how many seconds back)
     {"trail", "shape", 0, 1e9, false, nullptr},
@@ -852,6 +858,33 @@ static int doc_driven_by(Doc& d, int thing, const char* name) {
     if (by && doc_word(d, by, "kind") != "behaviour") by = 0;
     return d.drivers.emplace(key, by).first->second;
 }
+bool sk_inside(const tvg::PathCommand* cmds, uint32_t cmdsCnt, const tvg::Point* pts, float x, float y, float* far);
+static math::mat4 doc_place(Doc& d, int thing, double now, int deeper, int copy, bool member);
+// How much of a behaviour works at a place on the stage: its falloff's shape (where it lies now, as shape_cut lays its
+// outline), all inside, none outside past falloff_soft; 1 with no falloff.
+static double doc_falloff_at(Doc& d, int by, math::double3 at, double t) {
+    const int f = (int)doc_number(d, by, "falloff", 0, 0);
+    if (!f) return 1.0;
+    const auto found = d.shown.find(f);
+    const Drawn* b = found == d.shown.end() ? nullptr : found->second.drawn;
+    if (!b || !b->cut || !b->outline) return 1.0;
+    const math::double4 on = inverse(doc_place(d, f, t, 0, 0, false)) * math::double4{at, 1.0};
+    const tvg::PathCommand* cmds; const tvg::Point* pts; uint32_t cmdsCnt = 0, ptsCnt = 0;
+    b->outline->path(&cmds, &cmdsCnt, &pts, &ptsCnt);
+    float far = 0.f;
+    const bool inside = sk_inside(cmds, cmdsCnt, pts, (float)(on.x / b->sheetHigh * b->plainHigh + 0.5 * b->cutW), (float)(0.5 * b->plainHigh - on.y / b->sheetHigh * b->plainHigh), &far);
+    const double soft = doc_number(d, by, "falloff_soft", t, 0), away = far / b->plainHigh * b->sheetHigh;
+    const double w = inside ? 1.0 : soft > 0.0 ? std::max(0.0, 1.0 - away / soft) : 0.0;
+    return doc_number(d, by, "falloff_invert", 0, 0) > 0.5 ? 1.0 - w : w;
+}
+// A value given by a behaviour to a copy: what it gives, weighed by its falloff where the copy lies (`at`, if known)
+// against the value's own.
+static double doc_given(Doc& d, int by, int copy, int n, double t, double own, const math::double3* at) {
+    const double v = doc_behaviour_at(d, by, copy, n, t);
+    if (!at) return v;
+    const double w = doc_falloff_at(d, by, *at, t);
+    return own + (v - own) * w;
+}
 static void doc_copy_looks_off(Doc& d, const Mesh* m, MaterialInstance* main) {
     Stage& s = *d.stage;
     auto& faces = s.engine->getRenderableManager();
@@ -877,7 +910,10 @@ static void doc_copy_looks_off(Doc& d, const Mesh* m, MaterialInstance* main) {
 // moment reckoned from them; a value with no keys or one is its number at once. Not while a hand carries it.
 static double doc_literal(Doc& d, int thing, const char* literal, double at, double otherwise) {
     if (d.held.thing == thing) return doc_number(d, thing, literal, at, otherwise);
-    if (const int by = doc_driven_by(d, thing, literal)) return doc_behaviour_at(d, by, d.ctxCopy, d.ctxN, at);   // (given by a behaviour: the copy being placed's own)
+    if (const int by = doc_driven_by(d, thing, literal)) {   // (given by a behaviour: the copy being placed's own, where it lies weighed by its falloff)
+        const double own = doc_keys_at(d, doc_keys_of(d, thing, literal), at, otherwise);
+        return doc_given(d, by, d.ctxCopy, d.ctxN, at, own, d.ctxHasAt ? &d.ctxAt : nullptr);
+    }
     const auto key = std::make_pair(thing, literal);
     auto kept = d.literals.find(key);
     if (kept == d.literals.end()) kept = d.literals.emplace(key, &doc_keys_of(d, thing, literal)).first;
@@ -1016,10 +1052,10 @@ static double doc_heading(Doc& d, int thing, double now) {
 }
 static math::mat4 doc_place(Doc& d, int thing, double now, int deeper, int copy, bool member) {
     const double said = now;   // (the moment itself: a wave goes on at it, whatever the copy's delay)
-    struct Placing { Doc& d; int copy, n; ~Placing() { d.ctxCopy = copy, d.ctxN = n; } } was{d, d.ctxCopy, d.ctxN};   // (which copy, as it was before: told back after)
+    struct Placing { Doc& d; int copy, n; bool hasAt; math::double3 at; ~Placing() { d.ctxCopy = copy, d.ctxN = n, d.ctxHasAt = hasAt, d.ctxAt = at; } } was{d, d.ctxCopy, d.ctxN, d.ctxHasAt, d.ctxAt};   // (which copy, as it was before: told back after)
     {
         const int many = member ? doc_members(d, thing) : 1;
-        d.ctxCopy = member ? copy : 0, d.ctxN = many;
+        d.ctxCopy = member ? copy : 0, d.ctxN = many, d.ctxHasAt = false;
     }
     if (member) now -= doc_delay(d, thing, copy);   // (a member of its copies: as it was so much earlier)
     const auto turned = [&](const char* name, math::double3 about) { return math::mat4::rotation(doc_literal(d, thing, name, now, 0) * (double)TAU / 360.0, about); };
@@ -1038,6 +1074,10 @@ static math::mat4 doc_place(Doc& d, int thing, double now, int deeper, int copy,
         const double along = columns > 0 ? copy % columns : copy, down = columns > 0 ? copy / columns : copy;
         const double alongMid = columns > 0 ? (std::min(n, columns) - 1) * 0.5 : (n - 1) * 0.5, downMid = columns > 0 ? (std::ceil((double)n / columns) - 1) * 0.5 : (n - 1) * 0.5;
         shift += math::double3{(along - alongMid) * doc_literal(d, thing, "copy_x", now, 0), (down - downMid) * doc_literal(d, thing, "copy_y", now, 0), (copy - (n - 1) * 0.5) * doc_literal(d, thing, "copy_z", now, 0)};
+        if (doc_connects(d, thing)) {   // (where this copy lies, laid out in its rows, on the stage: what a falloff weighs; its own values, unconnected)
+            d.ctxAt = (doc_above(d, thing, now, deeper) * math::double4{doc_number(d, thing, "x", now, 0) + shift.x, doc_number(d, thing, "y", now, 0) + shift.y, doc_number(d, thing, "z", now, 0) + shift.z, 1.0}).xyz;
+            d.ctxHasAt = true;
+        }
         // (each copy turned and sized more than the one before; given by a behaviour, each copy its own turn and size as it gives)
         const bool turnsEach = doc_driven_by(d, thing, "copy_rotate"), sizesEach = doc_driven_by(d, thing, "copy_size");
         own = math::mat4::rotation((copy * doc_literal(d, thing, "copy_turn", now, 0) / n + (turnsEach ? 1 : copy) * doc_literal(d, thing, "copy_rotate", now, 0)) * (double)TAU / 360.0, math::double3{0, 0, 1}) *
@@ -1556,9 +1596,9 @@ static void doc_moment(Doc& d, double now) {
             const auto num = [&](const char* name, double otherwise) { return (float)doc_number(d, thing, name, now, otherwise); };
             const float deg = (float)(TAU / 360.0), since = (float)lies[i].since;
             bool driven = false;   // (a bend given each copy by a behaviour: each copy's own look told its own)
-            const auto bendsOf = [&](int copy, int n, float4* bends) {
+            const auto bendsOf = [&](int copy, int n, float4* bends, const math::double3* where = nullptr) {
                 const auto at = [&](const char* name, double otherwise) {
-                    if (const int by = doc_driven_by(d, thing, name)) return driven = true, (float)doc_behaviour_at(d, by, copy, n, now);
+                    if (const int by = doc_driven_by(d, thing, name)) return driven = true, (float)doc_given(d, by, copy, n, now, num(name, otherwise), where);
                     return num(name, otherwise);
                 };
                 const float4 all[7] = {{at("warp", 0), at("warp_width", 0.5), at("warp_speed", 1) * since, at("warp_angle", 0) * deg},
@@ -1638,7 +1678,8 @@ static void doc_moment(Doc& d, double now) {
                 if (made.of != t.drawn->sheet || made.matte) continue;
                 if (driven && !made.many) {   // (each copy its own bends, in its own look and its edge's)
                     float4 own[7];
-                    bendsOf(std::max(0, made.nth), members, own);
+                    const math::double3 where{made.place[3].x, made.place[3].y, made.place[3].z};   // (where this copy lies: what a falloff weighs)
+                    bendsOf(std::max(0, made.nth), members, own, &where);
                     if (own[4].z == 0.f) own[4] = bends[4];
                     const auto one = faces.getInstance(made.thing);
                     MaterialInstance*& look = d.copyLooks[made.thing.getId()];
