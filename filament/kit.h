@@ -61,7 +61,16 @@ struct Mesh {
     std::vector<quatf> quat;
     VertexBuffer* vb = nullptr;   // (as last put in the scene: add_parts, reshape)
     IndexBuffer* ib = nullptr;
+    uint32_t vbRoom = 0, ibRoom = 0;   // (how many points and indices they hold: written again in place while they fit)
 };
+
+// What a buffer is told, copied: Filament reads it later, on its own thread, and lets it go when it has (its callback),
+// so the mesh may be made again meanwhile.
+static backend::BufferDescriptor copied(const void* from, size_t bytes) {
+    void* copy = malloc(bytes);
+    memcpy(copy, from, bytes);
+    return backend::BufferDescriptor(copy, bytes, [](void* buffer, size_t, void*) { free(buffer); });
+}
 
 static std::vector<uint8_t> load_file(const char* path) {
     std::ifstream in(path, std::ios::binary);
@@ -322,12 +331,12 @@ static std::vector<MaterialInstance*> add_parts(Stage& s, Mesh* m, const char* f
                            .attribute(VertexAttribute::POSITION, 0, VertexBuffer::AttributeType::FLOAT3)
                            .attribute(VertexAttribute::TANGENTS, 1, VertexBuffer::AttributeType::FLOAT4)
                            .attribute(VertexAttribute::UV0, 2, VertexBuffer::AttributeType::FLOAT2).build(*s.engine);
-    vb->setBufferAt(*s.engine, 0, VertexBuffer::BufferDescriptor(m->pos.data(), n * sizeof(float3)));
-    vb->setBufferAt(*s.engine, 1, VertexBuffer::BufferDescriptor(m->quat.data(), n * sizeof(quatf)));
-    vb->setBufferAt(*s.engine, 2, VertexBuffer::BufferDescriptor(m->uv.data(), n * sizeof(float2)));
+    vb->setBufferAt(*s.engine, 0, copied(m->pos.data(), n * sizeof(float3)));
+    vb->setBufferAt(*s.engine, 1, copied(m->quat.data(), n * sizeof(quatf)));
+    vb->setBufferAt(*s.engine, 2, copied(m->uv.data(), n * sizeof(float2)));
     IndexBuffer* ib = IndexBuffer::Builder().indexCount((uint32_t)std::max<size_t>(1, m->idx.size())).bufferType(IndexBuffer::IndexType::UINT).build(*s.engine);
-    if (!m->idx.empty()) ib->setBuffer(*s.engine, IndexBuffer::BufferDescriptor(m->idx.data(), m->idx.size() * sizeof(uint32_t)));
-    m->vb = vb, m->ib = ib;
+    if (!m->idx.empty()) ib->setBuffer(*s.engine, copied(m->idx.data(), m->idx.size() * sizeof(uint32_t)));
+    m->vb = vb, m->ib = ib, m->vbRoom = (uint32_t)n, m->ibRoom = (uint32_t)std::max<size_t>(1, m->idx.size());
     std::vector<MaterialInstance*> looks;
     for (size_t k = 0; k < ends.size(); ++k) {
         MaterialInstance* mi = mat->createInstance();
@@ -381,9 +390,11 @@ static MaterialInstance* add(Stage& s, Mesh* m, const char* filamat, std::vector
 
 // A mesh in the scene made anew (its points and triangles changed, as many or not): new buffers for every place it is
 // at, its parts' ends as told; the old ones let go (Filament keeps them until no picture uses them).
+// A mesh made again, put in the buffers it has while it fits them (as Rive and Live2D write theirs again, not make new
+// ones), else in new ones a quarter larger than it needs (Rive's growth).
 static void reshape(Stage& s, Mesh* m, const std::vector<uint32_t>& ends) {
-    VertexBuffer* oldVb = m->vb;
-    IndexBuffer* oldIb = m->ib;
+    VertexBuffer* oldVb = nullptr;
+    IndexBuffer* oldIb = nullptr;
     const size_t n = m->pos.size();
     if (!n || m->idx.empty()) return;
     m->quat.resize(n);
@@ -397,15 +408,21 @@ static void reshape(Stage& s, Mesh* m, const std::vector<uint32_t>& ends) {
         frames->getQuats(m->quat.data(), n);
         delete frames;
     }
-    m->vb = VertexBuffer::Builder().vertexCount((uint32_t)n).bufferCount(3)
-                .attribute(VertexAttribute::POSITION, 0, VertexBuffer::AttributeType::FLOAT3)
-                .attribute(VertexAttribute::TANGENTS, 1, VertexBuffer::AttributeType::FLOAT4)
-                .attribute(VertexAttribute::UV0, 2, VertexBuffer::AttributeType::FLOAT2).build(*s.engine);
-    m->vb->setBufferAt(*s.engine, 0, VertexBuffer::BufferDescriptor(m->pos.data(), n * sizeof(float3)));
-    m->vb->setBufferAt(*s.engine, 1, VertexBuffer::BufferDescriptor(m->quat.data(), n * sizeof(quatf)));
-    m->vb->setBufferAt(*s.engine, 2, VertexBuffer::BufferDescriptor(m->uv.data(), n * sizeof(float2)));
-    m->ib = IndexBuffer::Builder().indexCount((uint32_t)m->idx.size()).bufferType(IndexBuffer::IndexType::UINT).build(*s.engine);
-    m->ib->setBuffer(*s.engine, IndexBuffer::BufferDescriptor(m->idx.data(), m->idx.size() * sizeof(uint32_t)));
+    if (!m->vb || n > m->vbRoom) {
+        oldVb = m->vb, m->vbRoom = (uint32_t)(n + n / 4 + 16);
+        m->vb = VertexBuffer::Builder().vertexCount(m->vbRoom).bufferCount(3)
+                    .attribute(VertexAttribute::POSITION, 0, VertexBuffer::AttributeType::FLOAT3)
+                    .attribute(VertexAttribute::TANGENTS, 1, VertexBuffer::AttributeType::FLOAT4)
+                    .attribute(VertexAttribute::UV0, 2, VertexBuffer::AttributeType::FLOAT2).build(*s.engine);
+    }
+    if (!m->ib || m->idx.size() > m->ibRoom) {
+        oldIb = m->ib, m->ibRoom = (uint32_t)(m->idx.size() + m->idx.size() / 4 + 48);
+        m->ib = IndexBuffer::Builder().indexCount(m->ibRoom).bufferType(IndexBuffer::IndexType::UINT).build(*s.engine);
+    }
+    m->vb->setBufferAt(*s.engine, 0, copied(m->pos.data(), n * sizeof(float3)));
+    m->vb->setBufferAt(*s.engine, 1, copied(m->quat.data(), n * sizeof(quatf)));
+    m->vb->setBufferAt(*s.engine, 2, copied(m->uv.data(), n * sizeof(float2)));
+    m->ib->setBuffer(*s.engine, copied(m->idx.data(), m->idx.size() * sizeof(uint32_t)));
     auto& faces = s.engine->getRenderableManager();
     for (const Stage::Made& made : s.made) {
         if (made.of != m) continue;
