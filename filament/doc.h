@@ -248,7 +248,10 @@ static const DocValue doc_values[] = {
     {"copy_tall", "picture text shape", 0, 0, false, ""},   // (and its copies each so many times as tall again, in their order, going round: numbers, a bar chart's data; none: all as tall)
     {"connect", "shape", 0, 1e9, false, nullptr},   // (the thing whose copies its own copies join, one each from one to another: lines between dots; 0: none)
     {"connect_to", "shape", 0, 1e9, false, nullptr},   // (and another: the first's nth copy joined to this one's nth, rungs between two strands; 0: within the first)
-    {"connect_reach", "shape", 0, 1e4, true, nullptr},   // (only those nearer than this, in units of the stage, finer the further apart: a plexus; 0: each to the next in their order)
+    {"connect_reach", "shape", 0, 1e4, true, nullptr},
+    // (put together with another shape, Cavalry's Boolean: its own less that one, where both are, either, either but not both)
+    {"boolean", "shape", 0, 0, false, "union subtract intersect exclude"},
+    {"boolean_with", "shape", 0, 1e9, false, nullptr},   // (that other shape, seen where it lies; 0: none)   // (only those nearer than this, in units of the stage, finer the further apart: a plexus; 0: each to the next in their order)
     // (a wave through it and its copies, Cavalry's oscillator: so far across and up (units), so far turned (degrees),
     //  so much larger (a share), so many times a second, each copy so far behind the one before (turns spread over all)
     {"wave_x", "picture text shape", -1e3, 1e3, true, nullptr}, {"wave_y", "picture text shape", -1e3, 1e3, true, nullptr},
@@ -440,6 +443,8 @@ static const DocShown doc_shown[] = {
     {"anchor_x", "", "%", "Anchor X", -1, 1, "Anchor"}, {"anchor_y", "", "%", "Anchor Y", -1, 1, "Anchor"}, {"anchor_z", "", "%", "Anchor Z", -1, 1, "Anchor"},
     {"parent", "thing", "", "Parent", 0, 0, nullptr},   // (the thing it goes with: shown by its name)
     {"connect_to", "thing", "", "With", 0, 0, nullptr},
+    {"boolean", "", "", "Boolean", 0, 0, nullptr},
+    {"boolean_with", "thing", "", "Shape", 0, 0, nullptr},
     {"follow", "thing", "", "Follow", 0, 0, nullptr},
     {"connect_reach", "stage", "px", "Reach", 0, 2, nullptr},
     {"cap", "", "", "Ends", 0, 0, nullptr},
@@ -1422,8 +1427,24 @@ static void doc_moment(Doc& d, double now) {
             }
             t.drawn->look->setParameter("bends", bends, 7);
             if (t.drawn->edgeLook) t.drawn->edgeLook->setParameter("bends", bends, 7);
+            int join = -1;   // (put together with another shape: its path, as it is now, in this one's points; Skia's op in skpath.cpp's order)
+            std::vector<tvg::PathCommand> by; std::vector<tvg::Point> at;
+            const std::string how = doc_word(d, thing, "boolean");
+            const int with = (int)doc_number(d, thing, "boolean_with", 0, 0);
+            for (int k = 0; k < 4; ++k) if (how == std::array<const char*, 4>{"subtract", "intersect", "union", "exclude"}[(size_t)k]) join = k;
+            if (const auto other = d.shown.find(with); join >= 0 && with != thing && other != d.shown.end() && other->second.drawn && other->second.drawn->cut) {
+                const Drawn* a = t.drawn; const Drawn* b = other->second.drawn;
+                const math::mat4 to = inverse(doc_place(d, thing, now)) * doc_place(d, with, now);
+                const tvg::PathCommand* cmds; const tvg::Point* pts; uint32_t cmdsCnt = 0, ptsCnt = 0;
+                b->outline->path(&cmds, &cmdsCnt, &pts, &ptsCnt);
+                by.assign(cmds, cmds + cmdsCnt);
+                for (uint32_t k = 0; k < ptsCnt; ++k) {   // (its points on its sheet, where they lie on this one's, back into this one's points: as shape_cut lays them)
+                    const math::double4 on = to * math::double4{(pts[k].x - 0.5 * b->cutW) / b->plainHigh * b->sheetHigh, (0.5 * b->plainHigh - pts[k].y) / b->plainHigh * b->sheetHigh, 0.0, 1.0};
+                    at.push_back({(float)(on.x / a->sheetHigh * a->plainHigh + 0.5 * a->cutW), (float)(0.5 * a->plainHigh - on.y / a->sheetHigh * a->plainHigh)});
+                }
+            }
             cut_at(s, t.drawn, float3{num("trim", 0), num("trim_begin", 0), num("trim_offset", 0)},   // (its path anew, if it is told otherwise: cut again)
-                   {num("round", 0), num("bloat", 0), num("zigzag", 0), num("zigzag_ridges", 5), num("zigzag_smooth", 0), num("offset", 0)});
+                   {num("round", 0), num("bloat", 0), num("zigzag", 0), num("zigzag_ridges", 5), num("zigzag_smooth", 0), num("offset", 0)}, join, by, at);
             for (const Stage::Made& made : s.made)
                 if (made.of == t.drawn->sheet)
                     if (const auto own = d.copyLooks.find(made.thing.getId()); own != d.copyLooks.end()) own->second->setParameter("bends", bends, 7);

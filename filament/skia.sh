@@ -14,4 +14,5 @@ K=$PWD/third_party/skia_src
     skia_use_harfbuzz=false skia_use_icu=false skia_use_libjpeg_turbo_encode=false skia_use_libjpeg_turbo_decode=false skia_use_libpng_encode=false
     skia_use_libpng_decode=false skia_use_libwebp_encode=false skia_use_libwebp_decode=false skia_use_piex=false skia_use_xps=false skia_use_zlib=false
     skia_enable_spirv_validation=false skia_use_lua=false skia_use_wuffs=false skia_enable_fontmgr_empty=true' > /dev/null)
-ninja -C $K/out/path skia > /dev/null
+ninja -C $K/out/path skia pathops > /dev/null
+ar rcs $K/out/path/libpathops.a $K/out/path/obj/src/pathops/*.o   # (its path ops, a part of its own: union, difference, intersection, xor; Cavalry's Boolean)

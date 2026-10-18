@@ -81,6 +81,7 @@ struct Drawn {
     tvg::LottieAnimation* lottie = nullptr;   // (its film, when it is an After Effects file: what says its layers' poses)
     std::vector<uint32_t> deep;   // (an After Effects file's 3D layers: not drawn in its own picture, each a sheet of its own where it is: picture_deep)
     std::array<float, 6> bent{};   // (as last bent: round, bloat, zigzag, ridges, smooth, offset)
+    int joined = -1; std::vector<tvg::PathCommand> joinedBy; std::vector<tvg::Point> joinedAt;   // (as last put together with another shape: how (skpath.cpp), its path in this one's points)
     std::vector<std::string> markers;  // an After Effects file's named stretches (ThorVG's Lottie markers)
     std::vector<float2> letters;       // a text split into its letters: where each lies across the picture (shares of its width); its copies show one each
     float fromFrame = 0.f, toFrame = 0.f;   // the stretch it plays, when one is named (frames of the file)
@@ -938,17 +939,34 @@ static Drawn* flat_mesh(Stage& s, const char* form, float wide, const mat4f& pla
     return d;
 }
 
+bool sk_op(int op, const tvg::PathCommand* ac, uint32_t acn, const tvg::Point* ap, const tvg::PathCommand* bc, uint32_t bcn, const tvg::Point* bp,
+           std::vector<tvg::PathCommand>& cmds, std::vector<tvg::Point>& pts);
+
 // A flat shape in triangles cut anew for the frame that comes next, if its path is told otherwise: After Effects' trim
-// paths on its edge (off its end, off its beginning, slid along), its operators (round, bloat, zig zag, offset: bend.cpp).
-static void cut_at(Stage& s, Drawn* d, float3 trim, const std::array<float, 6>& bend) {
-    if (!d->cut || !d->outline || (trim == d->trimmed && bend == d->bent)) return;
+// paths on its edge (off its end, off its beginning, slid along), its operators (round, bloat, zig zag, offset: bend.cpp),
+// then put together with another shape's path (`join`: Skia's path operation, skpath.cpp; -1 none; `by`/`at` that path
+// in this one's points), as Cavalry's Boolean.
+static void cut_at(Stage& s, Drawn* d, float3 trim, const std::array<float, 6>& bend, int join = -1,
+                   const std::vector<tvg::PathCommand>& by = {}, const std::vector<tvg::Point>& at = {}) {
+    if (join < 0 || by.empty()) join = -1;
+    const bool joins = join != d->joined || (join >= 0 && (by != d->joinedBy || at.size() != d->joinedAt.size() ||
+                                                            !std::equal(at.begin(), at.end(), d->joinedAt.begin(), [](tvg::Point a, tvg::Point b) { return a.x == b.x && a.y == b.y; })));
+    if (!d->cut || !d->outline || (trim == d->trimmed && bend == d->bent && !joins)) return;
     d->trimmed = trim;
-    const bool refill = bend != d->bent;
+    const bool refill = bend != d->bent || joins;
     if (refill) {
-        d->bent = bend;
+        d->bent = bend, d->joined = join, d->joinedBy = by, d->joinedAt = at;
         const float high = d->plainHigh;
         tvg_bend(d->outline, d->plain.data(), (uint32_t)d->plain.size(), d->plainAt.data(), (uint32_t)d->plainAt.size(), std::clamp(bend[0], 0.f, 0.5f) * d->plainSide,
                  100.f * std::clamp(bend[1], -1.f, 1.f), bend[2] * high, (int)std::clamp(bend[3], 0.f, 100.f), bend[4] > 0.5f, bend[5] * high, d->fine);
+        if (join >= 0) {
+            const tvg::PathCommand* cmds; const tvg::Point* pts; uint32_t cmdsCnt = 0, ptsCnt = 0;
+            d->outline->path(&cmds, &cmdsCnt, &pts, &ptsCnt);
+            std::vector<tvg::PathCommand> c; std::vector<tvg::Point> p;
+            sk_op(join, cmds, cmdsCnt, pts, by.data(), (uint32_t)by.size(), at.data(), c, p);
+            d->outline->reset();
+            if (!c.empty()) d->outline->appendPath(c.data(), (uint32_t)c.size(), p.data(), (uint32_t)p.size());
+        }
     }
     const float from = std::clamp(trim.y, 0.f, 1.f) + trim.z, to = 1.f - std::clamp(trim.x, 0.f, 1.f) + trim.z;
     reshape(s, d->sheet, shape_cut(d, from, to, refill));
