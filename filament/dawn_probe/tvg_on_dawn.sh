@@ -1,6 +1,6 @@
 #!/bin/zsh
 # ThorVG's WebGPU engine on the Dawn that Filament's WebGPU backend is built with (dawn_probe/build.sh first).
-# ThorVG: its official source at the version we use, fetched once into third_party/thorvg_src, with thorvg_z.patch
+# ThorVG: its official source at the commit of its main we use, fetched once into third_party/thorvg_src, with thorvg_z.patch
 # (a 3D layer's third number kept and said: LottieAnimation::pose, for motion.h; nothing drawn changes) and
 # thorvg_over.patch (a texture target of type 2 is drawn over, not replaced: the desk's marks on its picture, live.h), and built
 # against Dawn's webgpu.h: its build asks pkg-config for `wgpu_native`, and is given a file of that name that points at Dawn.
@@ -9,7 +9,7 @@ set -e
 cd "$(dirname "$0")/.."
 F=$PWD/third_party/filament_src
 T=$PWD/third_party/thorvg_src
-[ -d $T ] || git -c core.hooksPath=/dev/null clone -q --depth 1 --branch v1.1.3 https://github.com/thorvg/thorvg $T
+[ -d $T ] || { git init -q $T && git -C $T -c core.hooksPath=/dev/null fetch -q --depth 1 https://github.com/thorvg/thorvg 920324543b0377d14f34ebcd561f27590ddb55de && git -C $T checkout -q FETCH_HEAD; }
 git -C $T diff --quiet && git -C $T apply $PWD/dawn_probe/thorvg_z.patch $PWD/dawn_probe/thorvg_wg_upload.patch $PWD/dawn_probe/thorvg_length.patch $PWD/dawn_probe/thorvg_over.patch
 mkdir -p $T/dawn_pc
 cat > $T/dawn_pc/wgpu_native.pc <<PC
@@ -21,6 +21,7 @@ Libs: -L$F/out/wgpu_install/lib/arm64 -lwebgpu_dawn
 PC
 [ -f $T/build_dawn/build.ninja ] || PKG_CONFIG_PATH=$T/dawn_pc meson setup $T/build_dawn $T -Dengines=cpu,wg -Dloaders=svg,lottie,ttf,png,jpg -Dextra=lottie_exp \
     -Dthreads=true -Dstatic=true -Ddefault_library=static -Dbuildtype=release > /dev/null
+PKG_CONFIG_PATH=$T/dawn_pc meson configure $T/build_dawn -Dengines=cpu,wg -Dextra=lottie_exp > /dev/null   # (a source whose options changed makes meson set itself up again with ThorVG's own defaults: the CPU engine alone)
 ninja -C $T/build_dawn > /dev/null
 clang++ -std=c++20 -O2 -I $T/inc -I $F/third_party/dawn/include -I $F/out/wgpu/third_party/dawn/gen/include dawn_probe/tvg_on_dawn.cpp \
     $T/build_dawn/src/libthorvg-1.a -L $F/out/wgpu_install/lib/arm64 -lwebgpu_dawn \
