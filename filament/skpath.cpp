@@ -348,3 +348,21 @@ int sk_along(const tvg::PathCommand* cmds, uint32_t cmdsCnt, const tvg::Point* p
     }
     return (int)out.size() / 3;
 }
+
+// A path made of squares `cell` across, one where a grid's square has its middle inside it (Skia's own contains), as
+// Cavalry's Voxelize. At most 256 squares a side.
+bool sk_voxel(const tvg::PathCommand* cmds, uint32_t cmdsCnt, const tvg::Point* pts, float cell, std::vector<tvg::PathCommand>& outCmds, std::vector<tvg::Point>& outPts) {
+    outCmds.clear(), outPts.clear();
+    const SkPath path = sk_of(cmds, cmdsCnt, pts);
+    const SkRect box = path.getBounds();
+    if (box.isEmpty() || cell <= 0.f) return false;
+    cell = std::max(cell, std::max(box.width(), box.height()) / 256.f);
+    const float x0 = std::floor(box.fLeft / cell) * cell, y0 = std::floor(box.fTop / cell) * cell;
+    for (float y = y0; y < box.fBottom; y += cell)
+        for (float x = x0; x < box.fRight; x += cell)
+            if (path.contains(x + 0.5f * cell, y + 0.5f * cell)) {
+                outCmds.insert(outCmds.end(), {tvg::PathCommand::MoveTo, tvg::PathCommand::LineTo, tvg::PathCommand::LineTo, tvg::PathCommand::LineTo, tvg::PathCommand::Close});
+                outPts.insert(outPts.end(), {{x, y}, {x + cell, y}, {x + cell, y + cell}, {x, y + cell}});
+            }
+    return !outCmds.empty();
+}
