@@ -60,7 +60,8 @@ struct Doc {
     std::string graded;                 // the stage's grade as last made (doc_look): made again only when it is told otherwise
     std::set<std::pair<int, std::string>> changed;   // the values changed since a shell last asked (motolii_changes), each (thing, name), from each step's own changeset
     bool things_changed = false;        // and whether a thing came or went since
-    std::map<uint32_t, MaterialInstance*> copyLooks;   // a copy's own look (its thing's look duplicated, by the copy's entity), while its copies are coloured each their own
+    std::map<uint32_t, MaterialInstance*> copyLooks, copyEdges;   // (copyEdges: the same for its edge, its second part)
+    std::map<std::pair<int, std::string>, int> drivers;   // a value's behaviour (`<name>_by`), by thing and name: found once, forgotten at every change   // a copy's own look (its thing's look duplicated, by the copy's entity), while its copies are coloured each their own
     float roomLight = 0.f;              // the room's own light, as the stage was opened with it
     std::string roomIs;                 // which room lights it now (doc_look)
     Skybox* sky = nullptr;              // the room behind everything, once it is said
@@ -98,7 +99,7 @@ struct Doc {
     std::map<std::pair<int, std::string>, std::string> words;   // a value's word, the same way
     std::map<std::pair<int, std::string>, std::vector<double>> keyed;   // the moments of a value's keys, the same way
     std::map<std::string, sqlite3_stmt*> named, goes;     // a way by its name, and by its expression: made ready once (SQLite works it out)
-    struct Shown { std::string of; Video* film = nullptr; Drawn* drawn = nullptr; Solid* solid = nullptr; Mesh* shape = nullptr; bool in = true, clipped = false, camera = false; int run = -1, lies = -1;
+    struct Shown { std::string of; Video* film = nullptr; Drawn* drawn = nullptr; Solid* solid = nullptr; Mesh* shape = nullptr; bool in = true, clipped = false, camera = false, drivenLooks = false; int run = -1, lies = -1;
                    utils::Entity light;   // (a light, Filament's own: in every scene of the stage while it is on)
                    double units = 1.0;    // (a flat thing's: points of the picture to a unit of the stage as it was made, which its effects are counted in)
                    int space = 3;
@@ -263,7 +264,16 @@ static const DocValue doc_values[] = {
     {"rough", "shape", 0, 0.5, true, nullptr},
     {"rough_detail", "shape", 0.005, 1, true, nullptr},
     // (turned into another shape so far, Cavalry's Morph: 0 itself, 1 the other where it lies)
-    {"fill_rule", "shape", 0, 0, false, "nonzero evenodd"},   // (where its outlines lie over each other: filled, or a hole every other time, SVG's and Cavalry's fill rule)
+    {"fill_rule", "shape", 0, 0, false, "nonzero evenodd"},
+    // (a behaviour, Cavalry's: a value it gives each copy of what it is connected to (`<name>_by` = it), by the copy's number
+    //  and the moment: from minimum to maximum in their order (stagger), waving (oscillator: so many times a second, offset
+    //  a share of a wave, stagger degrees of a wave between copies), a smooth noise, or at random by its seed)
+    {"minimum", "behaviour", -1e6, 1e6, true, nullptr},
+    {"maximum", "behaviour", -1e6, 1e6, true, nullptr},
+    {"frequency", "behaviour", 0, 1000, true, nullptr},
+    {"offset", "behaviour", -1e6, 1e6, true, nullptr},
+    {"stagger", "behaviour", -1e6, 1e6, true, nullptr},
+    {"seed", "behaviour", 0, 1e9, false, nullptr},   // (where its outlines lie over each other: filled, or a hole every other time, SVG's and Cavalry's fill rule)
     {"morph", "shape", 0, 1, true, nullptr},
     // (its path another's track, Cavalry's Trails: whose, and over how many seconds back)
     {"trail", "shape", 0, 1e9, false, nullptr},
@@ -660,7 +670,7 @@ static bool doc_rows(Doc& d, char* ask, const std::function<void(sqlite3_stmt*)>
 static void doc_forget(Doc& d) {
     d.phys_stale = true, d.scripted.clear();   // (the world made again only if what it is made of changed: doc_physics)
     d.moving.clear(), d.literals.clear(), d.words.clear(), d.keyed.clear(), d.halves.clear(), d.heardWords.clear(), d.talls.clear();
-    d.named.clear(), d.tracks.clear();
+    d.named.clear(), d.tracks.clear(), d.drivers.clear();
     d.laid.clear();
 }
 // The things in the order they lie, the one furthest back first: by `order` where it is said, else as they were made.
@@ -801,6 +811,36 @@ int sk_along(const tvg::PathCommand* cmds, uint32_t cmdsCnt, const tvg::Point* p
 static double doc_point(Doc& d, int thing, double now);
 static double doc_seconds(Doc& d);
 // A thing's copies given back its own look, their own looks done away with (no longer coloured each, or taken off).
+// What a behaviour gives the nth of n copies at a moment (Cavalry's stagger, oscillator, noise and random, its names):
+// from its minimum to its maximum.
+static double doc_behaviour_at(Doc& d, int by, int copy, int n, double t) {
+    const std::string type = doc_word(d, by, "file");
+    const double lo = doc_number(d, by, "minimum", t, 0), hi = doc_number(d, by, "maximum", t, 1), offset = doc_number(d, by, "offset", t, 0);
+    const double frequency = doc_number(d, by, "frequency", t, 1), apart = doc_number(d, by, "stagger", t, 0) / 360.0;
+    const uint32_t seed = (uint32_t)doc_number(d, by, "seed", 0, 0);
+    const auto hash = [&](int64_t k) {   // (0 to 1: the seed and k)
+        uint32_t h = seed * 0x9E3779B9u ^ (uint32_t)k * 0x85EBCA6Bu ^ 0xC2B2AE35u;
+        h ^= h >> 16, h *= 0x7FEB352Du, h ^= h >> 15, h *= 0x846CA68Bu, h ^= h >> 16;
+        return (double)h / 4294967295.0;
+    };
+    double u = 0.0;
+    if (type == "stagger") u = std::clamp((n > 1 ? (double)copy / (n - 1) : 0.0) + offset, 0.0, 1.0);   // (in their order)
+    else if (type == "oscillator") u = 0.5 + 0.5 * std::sin((double)TAU * (frequency * t + offset + apart * copy));
+    else if (type == "noise") {   // (a smooth noise along time, each copy so far along it)
+        const double x = frequency * t + offset + apart * copy * 4.0, f = std::floor(x), e = (x - f) * (x - f) * (3.0 - 2.0 * (x - f));
+        u = hash((int64_t)f) * (1.0 - e) + hash((int64_t)f + 1) * e;
+    }
+    else if (type == "random") u = hash(copy + 1);
+    return lo + (hi - lo) * u;
+}
+// The behaviour a value of a thing is connected to (`<name>_by`), 0 none.
+static int doc_driven_by(Doc& d, int thing, const char* name) {
+    const auto key = std::make_pair(thing, std::string(name));
+    if (const auto known = d.drivers.find(key); known != d.drivers.end()) return known->second;
+    int by = (int)doc_number(d, thing, (std::string(name) + "_by").c_str(), 0, 0);
+    if (by && doc_word(d, by, "kind") != "behaviour") by = 0;
+    return d.drivers.emplace(key, by).first->second;
+}
 static void doc_copy_looks_off(Doc& d, const Mesh* m, MaterialInstance* main) {
     Stage& s = *d.stage;
     auto& faces = s.engine->getRenderableManager();
@@ -811,6 +851,13 @@ static void doc_copy_looks_off(Doc& d, const Mesh* m, MaterialInstance* main) {
         if (main) faces.setMaterialInstanceAt(faces.getInstance(made.thing), 0, main);
         s.engine->destroy(found->second);
         d.copyLooks.erase(found);
+        if (const auto edge = d.copyEdges.find(made.thing.getId()); edge != d.copyEdges.end()) {   // (its edge's own too, back to the thing's edge look)
+            const Doc::Shown* t = nullptr;
+            for (const auto& [id, one] : d.shown) if (one.drawn && one.drawn->sheet == m) t = &one;
+            if (t && t->drawn->edgeLook) faces.setMaterialInstanceAt(faces.getInstance(made.thing), 1, t->drawn->edgeLook);
+            s.engine->destroy(edge->second);
+            d.copyEdges.erase(edge);
+        }
     }
 }
 // How many members a thing has in their order: a text split into letters, a letter each; else its copies.
@@ -1489,13 +1536,23 @@ static void doc_moment(Doc& d, double now) {
         if (t.drawn && t.drawn->cut) {   // (a shape in triangles: bent in its look, and its copies' own looks, nothing drawn again)
             const auto num = [&](const char* name, double otherwise) { return (float)doc_number(d, thing, name, now, otherwise); };
             const float deg = (float)(TAU / 360.0), since = (float)lies[i].since;
-            float4 bends[7] = {{num("warp", 0), num("warp_width", 0.5), num("warp_speed", 1) * since, num("warp_angle", 0) * deg},
-                                     {num("bend", 0) * deg, doc_word(d, thing, "bend_direction") == "vertical" ? 1.f : 0.f, num("twist", 0) * deg, num("pinch", 0)},
-                                     {num("skew", 0) * deg, num("skew_axis", 0) * deg, num("squash", 0), 0.5f * t.drawn->wideBy},
-                                     {num("wiggle", 0), num("wiggle_detail", 3), num("wiggle_speed", 1) * since, num("seed", 0) * 7.31f},
-                                     {0.f, 0.f, num("stretch", 0), 0.f},
-                                     {num("pin_tl_x", 0), num("pin_tl_y", 0), num("pin_tr_x", 0), num("pin_tr_y", 0)},
-                                     {num("pin_bl_x", 0), num("pin_bl_y", 0), num("pin_br_x", 0), num("pin_br_y", 0)}};
+            bool driven = false;   // (a bend given each copy by a behaviour: each copy's own look told its own)
+            const auto bendsOf = [&](int copy, int n, float4* bends) {
+                const auto at = [&](const char* name, double otherwise) {
+                    if (const int by = doc_driven_by(d, thing, name)) return driven = true, (float)doc_behaviour_at(d, by, copy, n, now);
+                    return num(name, otherwise);
+                };
+                const float4 all[7] = {{at("warp", 0), at("warp_width", 0.5), at("warp_speed", 1) * since, at("warp_angle", 0) * deg},
+                                       {at("bend", 0) * deg, doc_word(d, thing, "bend_direction") == "vertical" ? 1.f : 0.f, at("twist", 0) * deg, at("pinch", 0)},
+                                       {at("skew", 0) * deg, at("skew_axis", 0) * deg, at("squash", 0), 0.5f * t.drawn->wideBy},
+                                       {at("wiggle", 0), at("wiggle_detail", 3), at("wiggle_speed", 1) * since, num("seed", 0) * 7.31f},
+                                       {0.f, 0.f, num("stretch", 0), 0.f},
+                                       {at("pin_tl_x", 0), at("pin_tl_y", 0), at("pin_tr_x", 0), at("pin_tr_y", 0)},
+                                       {at("pin_bl_x", 0), at("pin_bl_y", 0), at("pin_br_x", 0), at("pin_br_y", 0)}};
+                std::copy(all, all + 7, bends);
+            };
+            float4 bends[7];
+            bendsOf(0, 1, bends);
             if (bends[4].z != 0.f) {   // (how it moves: where its middle was a sixtieth of a second ago, seen as it is now turned and sized)
                 const math::mat4 was = doc_place(d, thing, now - 1.0 / 60.0), is = doc_place(d, thing, now);
                 const math::float4 back = inverse(is) * was * math::float4{0, 0, 0, 1};
@@ -1555,9 +1612,26 @@ static void doc_moment(Doc& d, double now) {
             }
             cut_at(s, t.drawn, float3{num("trim", 0), num("trim_begin", 0), num("trim_offset", 0)},   // (its path anew, if it is told otherwise: cut again)
                    {num("round", 0), num("bloat", 0), num("zigzag", 0), num("zigzag_ridges", 5), num("zigzag_smooth", 0), num("offset", 0), num("rough", 0), num("rough_detail", 0.03), std::round(num("resample", 0)), num("voxel", 0)}, join, morph, trace);
-            for (const Stage::Made& made : s.made)
-                if (made.of == t.drawn->sheet)
-                    if (const auto own = d.copyLooks.find(made.thing.getId()); own != d.copyLooks.end()) own->second->setParameter("bends", bends, 7);
+            t.drivenLooks = driven;
+            const int members = driven ? doc_members(d, thing) : 1;
+            auto& faces = s.engine->getRenderableManager();
+            for (const Stage::Made& made : s.made) {
+                if (made.of != t.drawn->sheet || made.matte) continue;
+                if (driven && !made.many) {   // (each copy its own bends, in its own look and its edge's)
+                    float4 own[7];
+                    bendsOf(std::max(0, made.nth), members, own);
+                    if (own[4].z == 0.f) own[4] = bends[4];
+                    const auto one = faces.getInstance(made.thing);
+                    MaterialInstance*& look = d.copyLooks[made.thing.getId()];
+                    if (!look) look = MaterialInstance::duplicate(t.drawn->look), faces.setMaterialInstanceAt(one, 0, look);
+                    look->setParameter("bends", own, 7);
+                    if (t.drawn->edgeLook && faces.getPrimitiveCount(one) > 1) {
+                        MaterialInstance*& edge = d.copyEdges[made.thing.getId()];
+                        if (!edge) edge = MaterialInstance::duplicate(t.drawn->edgeLook), faces.setMaterialInstanceAt(one, 1, edge);
+                        edge->setParameter("bends", own, 7);
+                    }
+                } else if (const auto own = d.copyLooks.find(made.thing.getId()); own != d.copyLooks.end()) own->second->setParameter("bends", bends, 7);
+            }
         }
         if (t.drawn && t.drawn->shape)
             bend_at(s, t.drawn, (float)doc_number(d, thing, "round", now, 0), (float)doc_number(d, thing, "bloat", now, 0), (float)doc_number(d, thing, "zigzag", now, 0),
@@ -1602,7 +1676,7 @@ static void doc_moment(Doc& d, double now) {
             const std::vector<float2>& letters = t.drawn ? t.drawn->letters : std::vector<float2>{};
             const auto scripted = d.scripted.find(thing);   // (a script's copies each as clear as it says)
             const bool clears = scripted != d.scripted.end() && std::any_of(scripted->second.copies.begin(), scripted->second.copies.end(), [](const ScriptCopy& c) { return c.opacity != 1.0; });
-            if (ramp.size() < 2 && letters.empty() && !clears) doc_copy_looks_off(d, m, main);
+            if (ramp.size() < 2 && letters.empty() && !clears && !t.drivenLooks) doc_copy_looks_off(d, m, main);
             else {
                 auto& faces = s.engine->getRenderableManager();
                 const int n = doc_members(d, thing);
@@ -1749,7 +1823,8 @@ static const char* const doc_making = "'kind','file','shape','path','blend','key
 static const char* const doc_bending = "'warp','bend','twist','pinch','skew','squash','wiggle','stretch','pin_tl_x','pin_tl_y','pin_tr_x','pin_tr_y','pin_bl_x','pin_bl_y','pin_br_x','pin_br_y'";
 static bool doc_bends(Doc& d, int thing) {
     bool any = false;
-    doc_rows(d, sqlite3_mprintf("select 1 from fact where thing = %d and name in (%s) and (value <> 0 or at <> 0) limit 1", thing, doc_bending), [&](sqlite3_stmt*) { any = true; });
+    doc_rows(d, sqlite3_mprintf("select 1 from fact where thing = %d and (name in (%s) or (name glob '*_by' and substr(name, 1, length(name) - 3) in (%s))) and (value <> 0 or at <> 0) limit 1", thing, doc_bending, doc_bending),
+             [&](sqlite3_stmt*) { any = true; });   // (a bend given by a behaviour bends it too)
     if (d.held.thing == thing)
         for (const auto& [name, is] : d.held.tried) any = any || (is != 0.0 && strstr(doc_bending, ("'" + name + "'").c_str()));
     return any;
@@ -1757,7 +1832,7 @@ static bool doc_bends(Doc& d, int thing) {
 static bool doc_match(Doc& d) {
     Stage& s = *d.stage;
     std::map<int, std::string> told;   // every thing of the document, and all that its making goes by
-    doc_rows(d, sqlite3_mprintf("select thing, group_concat(name || '=' || value, ' ') from (select * from fact where thing > 0 and name in (%s) order by thing, name) group by thing", doc_making),
+    doc_rows(d, sqlite3_mprintf("select thing, group_concat(name || '=' || value, ' ') from (select * from fact where thing > 0 and (name in (%s) or name glob '*_by') order by thing, name) group by thing", doc_making),
              [&](sqlite3_stmt* row) { told[sqlite3_column_int(row, 0)] = (const char*)sqlite3_column_text(row, 1); });
     for (auto& [thing, of] : told)   // (one way that reads what is under is made as any other: going from one to another tells the look, it makes nothing again)
         if (const size_t at = of.find("blend="); at != std::string::npos) {
@@ -1781,11 +1856,11 @@ static bool doc_match(Doc& d) {
         if (still != told.end() && still->second == it->second.of) { ++it; continue; }
         if (it->second.scene && it->second.scene != s.scene)   // (out of the scene of its run first: the kit takes things out of the stage's own only)
             doc_entities(s, it->second, [&](utils::Entity e) { it->second.scene->remove(e); });
+        if (const Mesh* m = it->second.film ? it->second.film->sheet : it->second.drawn ? it->second.drawn->sheet : nullptr)   // (its copies' own looks first, while its copies are still known)
+            doc_copy_looks_off(d, m, it->second.film ? it->second.film->look : it->second.drawn->look);
         if (const Mesh* m = it->second.film ? it->second.film->sheet : it->second.drawn ? it->second.drawn->sheet : it->second.shape)   // (and the shape it cuts a matte by: done away with first)
             doc_unshape(s, [m](const Stage::Made& made) { return made.of == m; });
         if (it->second.film) video_off(s, it->second.film);
-        if (const Mesh* m = it->second.film ? it->second.film->sheet : it->second.drawn ? it->second.drawn->sheet : nullptr)   // (its copies' own looks first)
-            doc_copy_looks_off(d, m, it->second.film ? it->second.film->look : it->second.drawn->look);
         if (it->second.drawn) picture_off(s, it->second.drawn);
         for (const auto& deep : it->second.deep) picture_off(s, deep.sheet);
         if (it->second.solid) solid_off(s, it->second.solid);
@@ -1837,7 +1912,9 @@ static bool doc_match(Doc& d) {
             int colours = 0;
             for (std::string one; said >> one && one != "none";) ++colours;
             const DocScript* sc = doc_script_of(script);
-            fx.together = fx.copies > 1 && (kind == "shape" || kind == "text") && colours <= 8 && !(sc && sc->clears);   // (eight colours at most: flat.mat's ramp)
+            bool connected = false;   // (a value given each copy by a behaviour: each copy its own look, not drawn in one go)
+            doc_rows(d, sqlite3_mprintf("select 1 from fact where thing = %d and name glob '*_by' and value <> 0 limit 1", thing), [&](sqlite3_stmt*) { connected = true; });
+            fx.together = fx.copies > 1 && (kind == "shape" || kind == "text") && colours <= 8 && !(sc && sc->clears) && !connected;   // (eight colours at most: flat.mat's ramp)
         }
         fx.wrapWidth = (float)doc_number(d, thing, "wrap_at", 0, 0);
         const std::string split = doc_word(d, thing, "split"), script = doc_word(d, thing, "script");
@@ -1851,7 +1928,8 @@ static bool doc_match(Doc& d) {
         bool fxOk = doc_fx(d, thing, 0.0, true, units, fx, why);   // (made as large as its effects reach at their most; each moment tells them as they are then)
         made.units = units;
         if (doc_among("film picture text shape", kind)) made.space = doc_word(d, thing, "space") == "2.5d" ? 25 : 2;
-        if (kind == "camera") made.camera = true;   // (nothing of it is seen: it is how the rest is)
+        if (kind == "behaviour") {}   // (nothing of it is seen: it says how values of others go)
+        else if (kind == "camera") made.camera = true;   // (nothing of it is seen: it is how the rest is)
         else if (kind == "light") {   // (Filament's own light, made as the document says; placed and told how strong at each moment)
             const LightManager::Type type = file == "sun" ? LightManager::Type::SUN : file == "spot" ? LightManager::Type::FOCUSED_SPOT : LightManager::Type::POINT;
             if (!doc_among("sun point spot", file.c_str())) why = "a light is a sun, a point or a spot";
@@ -1946,7 +2024,7 @@ static bool doc_match(Doc& d) {
             else if ((made.solid = solid(s, file.c_str(), mat4f{}, 1.f)) && rgb >= 0) solid_fill(s, made.solid, colour, surface, model);
             if (made.solid) s.playing.erase(made.solid);   // (the document tells it its moment)
         } else why = std::string("its kind is one of: ") + doc_kinds;
-        if (!made.film && !made.drawn && !made.solid && !made.shape && !made.camera && made.light.isNull()) { d.trouble = why + ": the " + kind + " " + std::filesystem::path(file + shape).filename().string() + " could not be made"; all = false; continue; }
+        if (!made.film && !made.drawn && !made.solid && !made.shape && !made.camera && made.light.isNull() && kind != "behaviour") { d.trouble = why + ": the " + kind + " " + std::filesystem::path(file + shape).filename().string() + " could not be made"; all = false; continue; }
         d.shown[thing] = made;
         if (made.solid || made.shape) {   // (a solid thing casts a shadow from a light that throws them, and takes one)
             const int group = (int)doc_number(d, thing, "light_group", 0, 0);
@@ -2191,6 +2269,13 @@ static bool doc_knows(Doc& d, int thing, const char* name = nullptr, const doubl
     const DocValue* v = nullptr;
     for (const DocValue& one : doc_values)
         if (!strcmp(one.name, name) && doc_among(one.kinds, kind)) { v = &one; break; }
+    static const DocValue by{"_by", doc_kinds, 0, 1e9, false, nullptr};   // (a value connected to a behaviour: `<name>_by` = that behaviour, 0 none)
+    if (!v && strlen(name) > 3 && !strcmp(name + strlen(name) - 3, "_by") && kind != "behaviour") {
+        const std::string base(name, strlen(name) - 3);
+        for (const DocValue& one : doc_values)
+            if (base == one.name && doc_among(one.kinds, kind) && !one.words) v = &by;
+        if (v && number && *number != 0.0 && (*number != std::floor(*number) || doc_word(d, (int)*number, "kind") != "behaviour")) return d.trouble = std::string(name) + " is a behaviour that is there", false;
+    }
     if (!v && !strncmp(name, "js_", 3) && doc_among("picture text shape stage", kind))   // (a knob of the thing's script)
         for (const DocScript* sc : doc_scripts_on(d, thing))
             for (const DocValue& one : sc->values)
@@ -2260,7 +2345,8 @@ static const char* doc_kind_of(const char* file) {
 static int doc_add(Doc& d, const char* kind, const char* file) {
     if (!*kind) kind = doc_kind_of(file);   // (not said: what the file makes)
     if (!*kind) return d.trouble = std::string("no kind of thing is made from ") + file, 0;
-    if (!doc_among(doc_kinds, kind)) return d.trouble = std::string("a thing is one of: ") + doc_kinds, 0;
+    if (!doc_among(doc_kinds, kind) && strcmp(kind, "behaviour")) return d.trouble = std::string("a thing is one of: ") + doc_kinds + " behaviour", 0;
+    if (!strcmp(kind, "behaviour") && !doc_among("stagger oscillator noise random", file)) return d.trouble = "a behaviour is a stagger, an oscillator, a noise or a random", 0;
     if (!strcmp(kind, "light") && !doc_among("sun point spot", file)) return d.trouble = "a light is a sun, a point or a spot", 0;
     // (it comes on at the stage's present moment)
     if (!doc_change(d, sqlite3_mprintf("insert into thing default values; insert into fact(thing, name, at, value) values(last_insert_rowid(), 'kind', 0.0, %Q); insert into fact(thing, name, at, value) values(last_insert_rowid(), %Q, 0.0, %Q); insert into fact(thing, name, at, value) select id, 'start', 0.0, %!.17g from thing where %d order by id desc limit 1%s",
