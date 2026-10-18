@@ -34,6 +34,16 @@ struct DrawnFx { bool split = false;   // (a text's letters each a copy of their
 
 struct Drawn {
     tvg::WgCanvas* canvas = nullptr;   // (touched on the driver thread only)
+    WGPUTexture made = nullptr;        // (the texture it draws into, which a frame kept is copied from; the same)
+    // A film's frames as drawn, kept on the GPU, so that a frame drawn once is shown again, not drawn again (After
+    // Effects' RAM preview, a layer's own; kept_drop throws them away when what it draws changes): by frame (main
+    // thread), and the copies just made (the driver thread puts them in `keeping`, the main thread takes them)
+    std::map<int, Texture*> kept;
+    std::vector<WGPUTexture> keptMade;   // (each kept frame's own texture, let go of when they are thrown away: Filament takes it later, on its thread)
+    std::mutex keepingLock;
+    std::vector<std::pair<int, WGPUTexture>> keeping;
+    int shownAt = -1;
+    std::atomic<int> keepAge{0};       // (one more each time its kept frames are thrown away: a copy made before is not kept)
     tvg::Animation* film = nullptr;    // (the same)
     Texture* texture = nullptr;        // what Filament reads
     Mesh* sheet = nullptr;             // the thing in the scene: moved like any other (kit.h: move)
@@ -69,6 +79,8 @@ struct Drawn {
     DrawnFx fx;                        // its effects as last told
 };
 
+static void kept_drop(Stage& s, Drawn* d);
+
 // ThorVG's own effects on its scene, in the order they are laid: its colours first (tint, tritone), then its shadow,
 // its glow, and last its blur; lengths as shares of `tall` points.
 static void effects_on(const std::vector<tvg::Scene*>& chain, const DrawnFx& fx, float tall) {
@@ -92,6 +104,7 @@ static void trim_at(Stage& s, Drawn* d, float cut, float begin = 0.f, float offs
     const float3 is{cut, begin, offset};
     if (!d->shape || (is == d->trimmed)) return;
     d->trimmed = is;
+    kept_drop(s, d);
     door::on_driver(s.engine, [d, cut, begin, offset] {
         d->shape->trimpath(std::clamp(begin, 0.f, 1.f) + offset, 1.f - std::clamp(cut, 0.f, 1.f) + offset);
         d->canvas->update();
@@ -109,6 +122,7 @@ static void bend_at(Stage& s, Drawn* d, float round, float bloat, float zigzag, 
     const std::array<float, 6> is{round, bloat, zigzag, ridges, smooth, offset};
     if (!d->shape || d->plain.empty() || is == d->bent) return;
     d->bent = is;
+    kept_drop(s, d);
     door::on_driver(s.engine, [d, is] {
         const float high = d->plainHigh, side = d->plainSide;
         tvg_bend(d->shape, d->plain.data(), (uint32_t)d->plain.size(), d->plainAt.data(), (uint32_t)d->plainAt.size(), std::clamp(is[0], 0.f, 0.5f) * side,
@@ -133,6 +147,7 @@ static void fx_at(Stage& s, Drawn* d, const DrawnFx& told) {
         && (fx.glow == was.glow) && fx.glowSoft == was.glowSoft && (fx.tints[0] == was.tints[0]) && (fx.tints[1] == was.tints[1]) && (fx.tones[0] == was.tones[0]) && (fx.tones[1] == was.tones[1]) && (fx.tones[2] == was.tones[2]))
         return;
     d->fx = fx;
+    kept_drop(s, d);
     door::on_driver(s.engine, [d, fx] {
         effects_on(d->effects, fx, d->tall);
         d->canvas->update();
@@ -149,18 +164,82 @@ static void font(Stage& s, const char* path) {
     });
 }
 
+// The frames a film keeps, thrown away (what it draws has changed); all films' kept frames are held to so many bytes.
+static std::atomic<size_t> kept_bytes{0};
+static constexpr size_t kept_most = size_t(4) << 30;
+static void kept_drop(Stage& s, Drawn* d) {
+    {
+        std::lock_guard<std::mutex> hold(d->keepingLock);
+        for (auto& [at, made] : d->keeping) d->kept[at] = nullptr, wgpuTextureRelease(made);
+        d->keeping.clear();
+    }
+    const size_t one = d->made ? 4 * (size_t)wgpuTextureGetWidth(d->made) * wgpuTextureGetHeight(d->made) : 0;
+    for (auto& [at, texture] : d->kept) {
+        if (texture) s.engine->destroy(texture);
+        kept_bytes -= one;
+    }
+    d->kept.clear();
+    door::on_driver(s.engine, [made = std::move(d->keptMade)] { for (WGPUTexture t : made) wgpuTextureRelease(t); });   // (after Filament has taken and let go of them)
+    d->keptMade.clear();
+    d->shownAt = -1;
+    ++d->keepAge;
+    if (d->look) d->look->setParameter("picture", d->texture, TextureSampler(TextureSampler::MinFilter::LINEAR, TextureSampler::MagFilter::LINEAR));
+}
+
 // A film at its moment, `seconds` from its start (after its end it holds its last picture), for the frame that comes next:
 // at its own frames, as After Effects plays it, so that a moment within the frame already drawn draws nothing again
 // (ThorVG's frame() says when the frame is the same; the ThorVG author's own advice for Lottie on a GPU, Godot #91580).
 static void picture_at(Stage& s, Drawn* d, float seconds) {
-    door::on_driver(s.engine, [d, seconds] {
-        const float at = std::floor(std::min(seconds / d->seconds * d->frames, d->frames - 1.f) + 1e-3f);
-        if (d->film->frame(d->fromFrame + at) != tvg::Result::Success) return;
-        for (uint32_t id : d->deep)   // (its 3D layers are sheets of their own: not drawn flat here)
-            if (const tvg::Paint* one = d->film->picture()->paint(id)) const_cast<tvg::Paint*>(one)->visible(false);
-        d->canvas->update();
-        d->canvas->draw(true);
-        d->canvas->sync();
+    const int at = (int)std::floor(std::min(seconds / d->seconds * d->frames, d->frames - 1.f) + 1e-3f);
+    if (at == d->shownAt) return;
+    d->shownAt = at;
+    const TextureSampler smooth(TextureSampler::MinFilter::LINEAR, TextureSampler::MagFilter::LINEAR);
+    {   // (the copies the driver thread has made since, taken as Filament's)
+        std::lock_guard<std::mutex> hold(d->keepingLock);
+        for (auto& [frame, made] : d->keeping) {
+            d->kept[frame] = Texture::Builder().width(wgpuTextureGetWidth(made)).height(wgpuTextureGetHeight(made)).levels(1).sampler(Texture::Sampler::SAMPLER_2D)
+                                 .format(Texture::InternalFormat::RGBA8).usage(Texture::Usage::SAMPLEABLE).import((intptr_t)made).build(*s.engine);
+            d->keptMade.push_back(made);
+        }
+        d->keeping.clear();
+    }
+    if (const auto k = d->kept.find(at); k != d->kept.end() && k->second) {   // (drawn before: shown as kept)
+        if (d->look) d->look->setParameter("picture", k->second, smooth);
+        return;
+    }
+    if (d->look) d->look->setParameter("picture", d->texture, smooth);
+    const bool keep = d->look && d->kept.find(at) == d->kept.end() && kept_bytes < kept_most;
+    if (keep) d->kept[at] = nullptr, kept_bytes += 4 * (size_t)wgpuTextureGetWidth(d->made) * wgpuTextureGetHeight(d->made);   // (being kept)
+    door::on_driver(s.engine, [&s, d, at, keep, age = d->keepAge.load()] {
+        if (d->film->frame(d->fromFrame + (float)at) == tvg::Result::Success) {
+            for (uint32_t id : d->deep)   // (its 3D layers are sheets of their own: not drawn flat here)
+                if (const tvg::Paint* one = d->film->picture()->paint(id)) const_cast<tvg::Paint*>(one)->visible(false);
+            d->canvas->update();
+            d->canvas->draw(true);
+            d->canvas->sync();
+        }
+        if (!keep) return;
+        // (and copied, on the GPU, to a texture of its own that keeps it)
+        const WGPUDevice device = (WGPUDevice)door::device(s.engine);
+        WGPUTextureDescriptor like{};
+        like.size = {wgpuTextureGetWidth(d->made), wgpuTextureGetHeight(d->made), 1};
+        like.format = wgpuTextureGetFormat(d->made);
+        like.usage = WGPUTextureUsage_TextureBinding | WGPUTextureUsage_CopyDst;
+        like.dimension = WGPUTextureDimension_2D;
+        like.mipLevelCount = 1;
+        like.sampleCount = 1;
+        const WGPUTexture copy = wgpuDeviceCreateTexture(device, &like);
+        WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(device, nullptr);
+        WGPUTexelCopyTextureInfo from{}, to{};
+        from.texture = d->made, to.texture = copy;
+        wgpuCommandEncoderCopyTextureToTexture(encoder, &from, &to, &like.size);
+        WGPUCommandBuffer commands = wgpuCommandEncoderFinish(encoder, nullptr);
+        wgpuQueueSubmit(wgpuDeviceGetQueue(device), 1, &commands);
+        wgpuCommandBufferRelease(commands);
+        wgpuCommandEncoderRelease(encoder);
+        std::lock_guard<std::mutex> hold(d->keepingLock);
+        if (age == d->keepAge) d->keeping.push_back({at, copy});
+        else wgpuTextureRelease(copy);   // (what it draws changed while this was drawn)
     });
 }
 
@@ -219,6 +298,7 @@ static Drawn* drawn(Stage& s, const std::function<tvg::Paint*(Drawn*, int*, int*
         like.mipLevelCount = 1;
         like.sampleCount = 1;
         made = wgpuDeviceCreateTexture((WGPUDevice)door::device(s.engine), &like);
+        d->made = made;
         d->canvas = tvg::WgCanvas::gen();
         if (!d->canvas || d->canvas->target(door::device(s.engine), door::instance(s.engine), made, (uint32_t)w, (uint32_t)h, tvg::ColorSpace::ABGR8888S, 1) != tvg::Result::Success) return;
         if (ground.x >= 0.f) {
@@ -682,6 +762,8 @@ static void picture_off(Stage& s, Drawn* d) {
     take_off(s, d->sheet);
     door::on_driver(s.engine, [d] { delete d->canvas; delete d->film; });
     s.engine->flushAndWait();
+    d->look = nullptr;
+    kept_drop(s, d);
     if (d->texture) s.engine->destroy(d->texture);
     delete d;
 }
