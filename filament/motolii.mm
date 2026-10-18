@@ -53,6 +53,8 @@ struct Motolii {
     std::string answered_why;                                    // (the last answer's why, told to the shell)   // (posted and not done yet, by what it is: a later one of the same takes its place)
     bool closing = false, changed = true;
     std::atomic<bool> playing{false};
+    std::chrono::steady_clock::time_point stirred{};   // (the hand's last stir: something asked, or playing, or changed)
+    bool ahead = false;                                  // (films' frames ahead being kept while the hand rests: picture_ahead)
     std::atomic<bool> loop{true};   // (play goes round the work area; not: it stops at its end. Atomic: asked without the document)
     std::atomic<bool> keying{false};   // (the document's own, mirrored: asked each picture without waiting for the document)
     std::atomic<bool> telling{false};  // (the hand is telling the stage a moment, the document held: a shell reading now would wait)
@@ -185,7 +187,7 @@ static void motolii_hand(Motolii* m, std::string document, int wide, int high, s
             const bool goes = m->live && (m->playing || m->changed), begun = m->live && m->live->pending;   // (begun: a picture the GPU has not finished)
             if (begun) m->asked_now.wait_for(hold, std::chrono::milliseconds(1), [m] { return !m->asked.empty() || m->closing; });   // (looked at again a moment later)
             else if (goes) m->asked_now.wait_until(hold, due, [m] { return !m->asked.empty() || m->closing; });
-            else m->asked_now.wait_for(hold, std::chrono::milliseconds(500), [m] { return !m->asked.empty() || m->closing || (m->live && (m->playing || m->changed)); });   // (twice a second: a file written over)
+            else m->asked_now.wait_for(hold, std::chrono::milliseconds(m->ahead ? 15 : 500), [m] { return !m->asked.empty() || m->closing || (m->live && (m->playing || m->changed)); });   // (twice a second: a file written over; often, while frames ahead are kept)
             if (m->closing) break;
             todo.swap(m->asked);
         }
@@ -208,6 +210,16 @@ static void motolii_hand(Motolii* m, std::string document, int wide, int high, s
         if (!m->playing) for (auto& [who, h] : m->heard) if (h.on) gst_element_set_state(h.bin, GST_STATE_PAUSED), h.on = false;   // (the stage stopped: so does its sound)
         const bool ready = !m->live || live_ready(*m->s, m->live);   // (the picture begun before, offered once the GPU has finished it)
         const auto t = std::chrono::steady_clock::now();
+        if (!todo.empty() || m->playing || m->changed) m->stirred = t;
+        m->ahead = false;
+        if (m->live && ready && todo.empty() && !m->playing && !m->changed && t - m->stirred > std::chrono::milliseconds(300)) {   // (the hand rests: a few of each film's frames ahead kept, as Final Cut Pro renders once the hand stops)
+            std::lock_guard<std::recursive_timed_mutex> holding(m->d->lock);
+            int begun = 0;
+            for (auto& [thing, shown] : m->d->shown)
+                if (shown.drawn) begun += picture_ahead(*m->s, shown.drawn, 2);
+            if (begun) m->s->engine->flush();
+            m->ahead = begun > 0;
+        }
         // (asked something: a shell that writes reads next, so the picture waits a moment for it rather than it for a
         //  whole picture; never more than two pictures' time since the last was drawn)
         if (!todo.empty()) due = std::min(std::max(due, t + std::chrono::milliseconds(3)), drawn + std::chrono::milliseconds(33));

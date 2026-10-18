@@ -12,8 +12,15 @@
 #include <webgpu/webgpu.h>
 
 #include <array>
+#include <set>
+#include <condition_variable>
+#include <cstring>
+#include <deque>
 #include <filesystem>
 #include <fstream>
+#include <mutex>
+#include <thread>
+#include "third_party/filament_src/third_party/zstd/lib/zstd.h"
 
 // tint: how much its darks and lights are made two colours (0: not at all); tritone: how much its darks, middles and
 // lights are made three (0: not at all).
@@ -43,6 +50,9 @@ struct Drawn {
     std::mutex keepingLock;
     std::vector<std::pair<int, WGPUTexture>> keeping;
     int shownAt = -1;
+    int madeAt = -1;                   // (the frame its own texture holds; driver thread only)
+    std::set<int> ahead;               // (frames being put onto disk only, while the hand rests: picture_ahead; main thread)
+    std::string keyBase;               // (what its frames are known by on disk: its file as it is; none, not kept on disk)
     std::atomic<int> keepAge{0};       // (one more each time its kept frames are thrown away: a copy made before is not kept)
     tvg::Animation* film = nullptr;    // (the same)
     Texture* texture = nullptr;        // what Filament reads
@@ -164,9 +174,145 @@ static void font(Stage& s, const char* path) {
     });
 }
 
+// Kept frames on disk too (~/Library/Caches/Motolii/frames), so that a document opened again shows a film's frames drawn
+// before without drawing them: compressed by zstd (as Filament builds it), a file a frame, named by a hash of what made
+// it (its file as it is, how large it is drawn, its effects, its stretch, the frame), as Nuke names its cache by what goes
+// in; past 20 GB the oldest files go, as the folder is first used.
+static const std::filesystem::path& kept_dir() {
+    static const std::filesystem::path dir = [] {
+        const char* home = std::getenv("HOME");
+        const std::filesystem::path p = std::filesystem::path(home ? home : "/tmp") / "Library/Caches/Motolii/frames";
+        std::error_code e;
+        std::filesystem::create_directories(p, e);
+        std::thread([p] {
+            std::vector<std::pair<std::filesystem::file_time_type, std::filesystem::path>> files;
+            uintmax_t total = 0;
+            std::error_code e;
+            for (const auto& f : std::filesystem::directory_iterator(p, e))
+                if (f.is_regular_file(e)) files.push_back({f.last_write_time(e), f.path()}), total += f.file_size(e);
+            std::sort(files.begin(), files.end());
+            for (const auto& [when, f] : files) {
+                if (total <= (uintmax_t(20) << 30)) break;
+                total -= std::filesystem::file_size(f, e);
+                std::filesystem::remove(f, e);
+            }
+        }).detach();
+        return p;
+    }();
+    return dir;
+}
+static std::filesystem::path kept_file(const Drawn* d, int at) {
+    if (d->keyBase.empty() || !d->made) return {};
+    std::string all = d->keyBase;
+    const auto add = [&](float v) { all += "|" + std::to_string(v); };
+    const DrawnFx& f = d->fx;
+    add((float)wgpuTextureGetWidth(d->made)), add((float)wgpuTextureGetHeight(d->made));
+    for (float v : {f.blur, (float)f.blurWay, f.shadow.x, f.shadow.y, f.shadow.z, f.shadow.w, f.fall, f.way, f.soft, f.tint, f.tritone, f.glow.x, f.glow.y, f.glow.z, f.glow.w, f.glowSoft, d->fromFrame, d->toFrame}) add(v);
+    for (const float3& c : f.tints) add(c.x), add(c.y), add(c.z);
+    for (const float3& c : f.tones) add(c.x), add(c.y), add(c.z);
+    for (uint32_t id : d->deep) add((float)id);
+    uint64_t hash = 1469598103934665603ull;   // (FNV-1a)
+    for (unsigned char c : all) hash = (hash ^ c) * 1099511628211ull;
+    char name[64];
+    std::snprintf(name, sizeof name, "%016llx_%05d.zst", (unsigned long long)hash, at);
+    return kept_dir() / name;
+}
+static std::mutex kept_writing_lock;
+static std::condition_variable kept_writing_wake;
+static std::deque<std::pair<std::filesystem::path, std::vector<uint8_t>>> kept_writing;
+static std::atomic<int> kept_unwritten{0};   // (frames on their way to disk: read back or waiting to be written)
+static void kept_write(std::filesystem::path file, std::vector<uint8_t> pixels) {   // (on a thread of its own: compressed, written, then named)
+    static std::once_flag started;
+    std::call_once(started, [] {
+        std::thread([] {
+            for (;;) {
+                std::unique_lock<std::mutex> hold(kept_writing_lock);
+                kept_writing_wake.wait(hold, [] { return !kept_writing.empty(); });
+                auto job = std::move(kept_writing.front());
+                kept_writing.pop_front();
+                hold.unlock();
+                std::vector<uint8_t> packed(ZSTD_compressBound(job.second.size()));
+                const size_t n = ZSTD_compress(packed.data(), packed.size(), job.second.data(), job.second.size(), 1);
+                if (ZSTD_isError(n)) { --kept_unwritten; continue; }
+                std::filesystem::path part = job.first;
+                part += ".part";
+                if (FILE* f = std::fopen(part.c_str(), "wb")) {
+                    const bool whole = std::fwrite(packed.data(), 1, n, f) == n;
+                    std::fclose(f);
+                    std::error_code e;
+                    if (whole) std::filesystem::rename(part, job.first, e);
+                    else std::filesystem::remove(part, e);
+                }
+                --kept_unwritten;
+            }
+        }).detach();
+        std::atexit([] {   // (what is on its way is written before the program ends, for at most ten seconds)
+            for (int i = 0; i < 1000 && kept_unwritten > 0; ++i) std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        });
+    });
+    {
+        std::lock_guard<std::mutex> hold(kept_writing_lock);
+        kept_writing.push_back({std::move(file), std::move(pixels)});
+    }
+    kept_writing_wake.notify_one();
+}
+static bool kept_read(const std::filesystem::path& file, std::vector<uint8_t>& pixels, size_t size) {
+    FILE* f = file.empty() ? nullptr : std::fopen(file.c_str(), "rb");
+    if (!f) return false;
+    std::fseek(f, 0, SEEK_END);
+    std::vector<uint8_t> packed((size_t)std::max(0L, std::ftell(f)));
+    std::fseek(f, 0, SEEK_SET);
+    const bool whole = std::fread(packed.data(), 1, packed.size(), f) == packed.size();
+    std::fclose(f);
+    pixels.resize(size);
+    const size_t n = whole ? ZSTD_decompress(pixels.data(), size, packed.data(), packed.size()) : 0;
+    return whole && !ZSTD_isError(n) && n == size;
+}
+// A kept frame's texture read back to the CPU (as the GPU finishes it: Dawn's MapAsync) and written to disk.
+struct KeptReadBack { WGPUBuffer buffer; uint32_t w, h, row; std::filesystem::path file; };
+static KeptReadBack* kept_read_back(WGPUDevice device, WGPUCommandEncoder encoder, WGPUTexture texture, std::filesystem::path file) {
+    const uint32_t w = wgpuTextureGetWidth(texture), h = wgpuTextureGetHeight(texture), row = (4 * w + 255) / 256 * 256;
+    WGPUBufferDescriptor like{};
+    like.size = (uint64_t)row * h;
+    like.usage = WGPUBufferUsage_CopyDst | WGPUBufferUsage_MapRead;
+    const WGPUBuffer buffer = wgpuDeviceCreateBuffer(device, &like);
+    WGPUTexelCopyTextureInfo from{};
+    from.texture = texture;
+    WGPUTexelCopyBufferInfo to{};
+    to.buffer = buffer;
+    to.layout.bytesPerRow = row, to.layout.rowsPerImage = h;
+    const WGPUExtent3D size{w, h, 1};
+    wgpuCommandEncoderCopyTextureToBuffer(encoder, &from, &to, &size);
+    ++kept_unwritten;
+    return new KeptReadBack{buffer, w, h, row, std::move(file)};
+}
+static void kept_map(KeptReadBack* job) {   // (once the encoder that copies it is submitted)
+    WGPUBufferMapCallbackInfo done{};
+    done.mode = WGPUCallbackMode_AllowSpontaneous;
+    done.callback = [](WGPUMapAsyncStatus status, WGPUStringView, void* one, void*) {
+        auto* job = (KeptReadBack*)one;
+        if (status == WGPUMapAsyncStatus_Success) {
+            const auto* at = (const uint8_t*)wgpuBufferGetConstMappedRange(job->buffer, 0, (size_t)job->row * job->h);
+            std::vector<uint8_t> pixels((size_t)4 * job->w * job->h);
+            if (at)
+                for (uint32_t y = 0; y < job->h; ++y) std::memcpy(pixels.data() + (size_t)4 * job->w * y, at + (size_t)job->row * y, (size_t)4 * job->w);
+            wgpuBufferUnmap(job->buffer);
+            if (at) kept_write(std::move(job->file), std::move(pixels));
+            else --kept_unwritten;
+        } else {
+            --kept_unwritten;
+        }
+        wgpuBufferRelease(job->buffer);
+        delete job;
+    };
+    done.userdata1 = job;
+    wgpuBufferMapAsync(job->buffer, WGPUMapMode_Read, 0, (size_t)job->row * job->h, done);
+}
+
 // The frames a film keeps, thrown away (what it draws has changed); all films' kept frames are held to so many bytes.
 static std::atomic<size_t> kept_bytes{0};
 static constexpr size_t kept_most = size_t(2) << 30;   // (2 GB)
+static size_t kept_one(const Drawn* d) { return d->made ? 4 * (size_t)wgpuTextureGetWidth(d->made) * wgpuTextureGetHeight(d->made) : 0; }
 static void kept_drop(Stage& s, Drawn* d) {
     {
         std::lock_guard<std::mutex> hold(d->keepingLock);
@@ -179,6 +325,7 @@ static void kept_drop(Stage& s, Drawn* d) {
         kept_bytes -= one;
     }
     d->kept.clear();
+    d->ahead.clear();
     door::on_driver(s.engine, [made = std::move(d->keptMade)] { for (WGPUTexture t : made) wgpuTextureRelease(t); });   // (after Filament has taken and let go of them)
     d->keptMade.clear();
     d->shownAt = -1;
@@ -186,61 +333,140 @@ static void kept_drop(Stage& s, Drawn* d) {
     if (d->look) d->look->setParameter("picture", d->texture, TextureSampler(TextureSampler::MinFilter::LINEAR, TextureSampler::MagFilter::LINEAR));
 }
 
+// The kept frames the driver thread has made since, taken as Filament's (main thread).
+static void kept_take(Stage& s, Drawn* d) {
+    std::lock_guard<std::mutex> hold(d->keepingLock);
+    for (auto& [frame, made] : d->keeping) {
+        d->kept[frame] = Texture::Builder().width(wgpuTextureGetWidth(made)).height(wgpuTextureGetHeight(made)).levels(1).sampler(Texture::Sampler::SAMPLER_2D)
+                             .format(Texture::InternalFormat::RGBA8).usage(Texture::Usage::SAMPLEABLE).import((intptr_t)made).build(*s.engine);
+        d->keptMade.push_back(made);
+    }
+    d->keeping.clear();
+}
+// A frame read from disk put up (driver thread): into the texture it draws into (`shown`: it is what is seen now) and,
+// if `keep`, into one of its own that keeps it.
+static void kept_put(Stage& s, Drawn* d, int at, const std::vector<uint8_t>& pixels, bool shown, bool keep, int age) {
+    const uint32_t w = wgpuTextureGetWidth(d->made), h = wgpuTextureGetHeight(d->made);
+    const WGPUDevice device = (WGPUDevice)door::device(s.engine);
+    WGPUTextureDescriptor like{};
+    like.size = {w, h, 1};
+    like.format = wgpuTextureGetFormat(d->made);
+    like.usage = WGPUTextureUsage_TextureBinding | WGPUTextureUsage_CopyDst | WGPUTextureUsage_CopySrc;
+    like.dimension = WGPUTextureDimension_2D;
+    like.mipLevelCount = 1;
+    like.sampleCount = 1;
+    const WGPUTexture copy = keep ? wgpuDeviceCreateTexture(device, &like) : nullptr;
+    WGPUTexelCopyBufferLayout rows{};
+    rows.bytesPerRow = 4 * w, rows.rowsPerImage = h;
+    for (WGPUTexture t : {shown ? d->made : nullptr, copy}) {
+        if (!t) continue;
+        WGPUTexelCopyTextureInfo to{};
+        to.texture = t;
+        wgpuQueueWriteTexture(wgpuDeviceGetQueue(device), &to, pixels.data(), pixels.size(), &rows, &like.size);
+    }
+    if (shown) d->madeAt = at;
+    if (!copy) return;
+    std::lock_guard<std::mutex> hold(d->keepingLock);
+    if (age == d->keepAge) d->keeping.push_back({at, copy});
+    else wgpuTextureRelease(copy);
+}
+// A frame drawn by ThorVG into the texture it draws into (driver thread), and, if `keep`, copied on the GPU to a
+// texture of its own that keeps it; and onto disk, once, if `file` is not there yet.
+static void kept_draw(Stage& s, Drawn* d, int at, bool keep, const std::filesystem::path& file, int age) {
+    if (d->film->frame(d->fromFrame + (float)at) == tvg::Result::Success || d->madeAt != at) {
+        for (uint32_t id : d->deep)   // (its 3D layers are sheets of their own: not drawn flat here)
+            if (const tvg::Paint* one = d->film->picture()->paint(id)) const_cast<tvg::Paint*>(one)->visible(false);
+        d->canvas->update();
+        d->canvas->draw(true);
+        d->canvas->sync();
+        d->madeAt = at;
+    }
+    std::error_code e;
+    const bool toDisk = d->look && !file.empty() && !std::filesystem::exists(file, e);
+    if (!keep && !toDisk) return;
+    const WGPUDevice device = (WGPUDevice)door::device(s.engine);
+    WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(device, nullptr);
+    WGPUTexture copy = nullptr;
+    if (keep) {
+        WGPUTextureDescriptor like{};
+        like.size = {wgpuTextureGetWidth(d->made), wgpuTextureGetHeight(d->made), 1};
+        like.format = wgpuTextureGetFormat(d->made);
+        like.usage = WGPUTextureUsage_TextureBinding | WGPUTextureUsage_CopyDst | WGPUTextureUsage_CopySrc;
+        like.dimension = WGPUTextureDimension_2D;
+        like.mipLevelCount = 1;
+        like.sampleCount = 1;
+        copy = wgpuDeviceCreateTexture(device, &like);
+        WGPUTexelCopyTextureInfo from{}, to{};
+        from.texture = d->made, to.texture = copy;
+        wgpuCommandEncoderCopyTextureToTexture(encoder, &from, &to, &like.size);
+    }
+    KeptReadBack* back = toDisk ? kept_read_back(device, encoder, copy ? copy : d->made, file) : nullptr;
+    WGPUCommandBuffer commands = wgpuCommandEncoderFinish(encoder, nullptr);
+    wgpuQueueSubmit(wgpuDeviceGetQueue(device), 1, &commands);
+    wgpuCommandBufferRelease(commands);
+    wgpuCommandEncoderRelease(encoder);
+    if (back) kept_map(back);
+    if (!copy) return;
+    std::lock_guard<std::mutex> hold(d->keepingLock);
+    if (age == d->keepAge) d->keeping.push_back({at, copy});
+    else wgpuTextureRelease(copy);   // (what it draws changed while this was drawn)
+}
+
 // A film at its moment, `seconds` from its start (after its end it holds its last picture), for the frame that comes next:
 // at its own frames, as After Effects plays it, so that a moment within the frame already drawn draws nothing again
 // (ThorVG's frame() says when the frame is the same; the ThorVG author's own advice for Lottie on a GPU, Godot #91580).
+// A frame drawn once is shown again from where it was kept, on the GPU or on disk.
 static void picture_at(Stage& s, Drawn* d, float seconds) {
     const int at = (int)std::floor(std::min(seconds / d->seconds * d->frames, d->frames - 1.f) + 1e-3f);
     if (at == d->shownAt) return;
     d->shownAt = at;
     const TextureSampler smooth(TextureSampler::MinFilter::LINEAR, TextureSampler::MagFilter::LINEAR);
-    {   // (the copies the driver thread has made since, taken as Filament's)
-        std::lock_guard<std::mutex> hold(d->keepingLock);
-        for (auto& [frame, made] : d->keeping) {
-            d->kept[frame] = Texture::Builder().width(wgpuTextureGetWidth(made)).height(wgpuTextureGetHeight(made)).levels(1).sampler(Texture::Sampler::SAMPLER_2D)
-                                 .format(Texture::InternalFormat::RGBA8).usage(Texture::Usage::SAMPLEABLE).import((intptr_t)made).build(*s.engine);
-            d->keptMade.push_back(made);
-        }
-        d->keeping.clear();
-    }
+    kept_take(s, d);
     if (const auto k = d->kept.find(at); k != d->kept.end() && k->second) {   // (drawn before: shown as kept)
         if (d->look) d->look->setParameter("picture", k->second, smooth);
         return;
     }
     if (d->look) d->look->setParameter("picture", d->texture, smooth);
     const bool keep = d->look && d->kept.find(at) == d->kept.end() && kept_bytes < kept_most;
-    if (keep) d->kept[at] = nullptr, kept_bytes += 4 * (size_t)wgpuTextureGetWidth(d->made) * wgpuTextureGetHeight(d->made);   // (being kept)
-    door::on_driver(s.engine, [&s, d, at, keep, age = d->keepAge.load()] {
-        if (d->film->frame(d->fromFrame + (float)at) == tvg::Result::Success) {
-            for (uint32_t id : d->deep)   // (its 3D layers are sheets of their own: not drawn flat here)
-                if (const tvg::Paint* one = d->film->picture()->paint(id)) const_cast<tvg::Paint*>(one)->visible(false);
-            d->canvas->update();
-            d->canvas->draw(true);
-            d->canvas->sync();
-        }
-        if (!keep) return;
-        // (and copied, on the GPU, to a texture of its own that keeps it)
-        const WGPUDevice device = (WGPUDevice)door::device(s.engine);
-        WGPUTextureDescriptor like{};
-        like.size = {wgpuTextureGetWidth(d->made), wgpuTextureGetHeight(d->made), 1};
-        like.format = wgpuTextureGetFormat(d->made);
-        like.usage = WGPUTextureUsage_TextureBinding | WGPUTextureUsage_CopyDst;
-        like.dimension = WGPUTextureDimension_2D;
-        like.mipLevelCount = 1;
-        like.sampleCount = 1;
-        const WGPUTexture copy = wgpuDeviceCreateTexture(device, &like);
-        WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(device, nullptr);
-        WGPUTexelCopyTextureInfo from{}, to{};
-        from.texture = d->made, to.texture = copy;
-        wgpuCommandEncoderCopyTextureToTexture(encoder, &from, &to, &like.size);
-        WGPUCommandBuffer commands = wgpuCommandEncoderFinish(encoder, nullptr);
-        wgpuQueueSubmit(wgpuDeviceGetQueue(device), 1, &commands);
-        wgpuCommandBufferRelease(commands);
-        wgpuCommandEncoderRelease(encoder);
-        std::lock_guard<std::mutex> hold(d->keepingLock);
-        if (age == d->keepAge) d->keeping.push_back({at, copy});
-        else wgpuTextureRelease(copy);   // (what it draws changed while this was drawn)
-    });
+    if (keep) d->kept[at] = nullptr, kept_bytes += kept_one(d);   // (being kept)
+    const std::filesystem::path file = kept_file(d, at);
+    auto pixels = std::make_shared<std::vector<uint8_t>>();
+    if (d->look && kept_read(file, *pixels, kept_one(d)))   // (drawn before, on disk: put up as it is, not drawn)
+        door::on_driver(s.engine, [&s, d, at, pixels, keep, age = d->keepAge.load()] { kept_put(s, d, at, *pixels, true, keep, age); });
+    else
+        door::on_driver(s.engine, [&s, d, at, keep, file, age = d->keepAge.load()] { kept_draw(s, d, at, keep, file, age); });
+}
+
+// While the hand rests: a few of a film's frames after the one shown, kept before they are asked for (as Final Cut
+// Pro renders once the hand stops, Resolve's smart cache, After Effects' Cache Frames When Idle): read from disk if
+// there, else drawn into the texture it draws into (free while the frame shown is shown from a kept one). How many were
+// begun (0: nothing more can be done for it now).
+static int picture_ahead(Stage& s, Drawn* d, int many) {
+    if (!d->look || !d->film || d->frames <= 1.f || d->shownAt < 0 || !d->made) return 0;
+    kept_take(s, d);
+    const auto now = d->kept.find(d->shownAt);
+    if (now == d->kept.end() || !now->second) return 0;   // (the frame shown is not yet shown from a kept one: the texture it draws into is in use)
+    d->look->setParameter("picture", now->second, TextureSampler(TextureSampler::MinFilter::LINEAR, TextureSampler::MagFilter::LINEAR));
+    const int frames = (int)d->frames;
+    int begun = 0;
+    std::error_code e;
+    for (int i = 1; i < frames && begun < many; ++i) {
+        const int at = (d->shownAt + i) % frames;
+        if (d->kept.count(at) || d->ahead.count(at)) continue;
+        const std::filesystem::path file = kept_file(d, at);
+        const bool keep = kept_bytes + kept_one(d) <= kept_most;
+        const bool onDisk = !file.empty() && std::filesystem::exists(file, e);
+        if (!keep && (onDisk || file.empty())) continue;   // (no room on the GPU, and on disk already: nothing to do)
+        if (keep) d->kept[at] = nullptr, kept_bytes += kept_one(d);
+        else d->ahead.insert(at);   // (only onto disk: not asked again while it is written)
+        auto pixels = std::make_shared<std::vector<uint8_t>>();
+        if (onDisk && kept_read(file, *pixels, kept_one(d)))
+            door::on_driver(s.engine, [&s, d, at, pixels, age = d->keepAge.load()] { kept_put(s, d, at, *pixels, false, true, age); });
+        else
+            door::on_driver(s.engine, [&s, d, at, keep, file, age = d->keepAge.load()] { kept_draw(s, d, at, keep, file, age); });
+        ++begun;
+    }
+    return begun;
 }
 
 // What `picture` and `type` share: something of ThorVG's (made by `paints` on Filament's own thread, which says how
@@ -293,7 +519,7 @@ static Drawn* drawn(Stage& s, const std::function<tvg::Paint*(Drawn*, int*, int*
         WGPUTextureDescriptor like{};
         like.size = {(uint32_t)w, (uint32_t)h, 1};
         like.format = WGPUTextureFormat_BGRA8Unorm;   // (what ThorVG's last step writes)
-        like.usage = WGPUTextureUsage_RenderAttachment | WGPUTextureUsage_TextureBinding | WGPUTextureUsage_CopySrc;
+        like.usage = WGPUTextureUsage_RenderAttachment | WGPUTextureUsage_TextureBinding | WGPUTextureUsage_CopySrc | WGPUTextureUsage_CopyDst;   // (CopyDst: a frame kept on disk is put up in it)
         like.dimension = WGPUTextureDimension_2D;
         like.mipLevelCount = 1;
         like.sampleCount = 1;
@@ -369,7 +595,7 @@ static Drawn* picture(Stage& s, const char* file, const mat4f& place, float high
     if (!std::filesystem::is_regular_file(file)) return nullptr;   // (ThorVG ends the program on a folder)
     const std::string ext = std::filesystem::path(file).extension().string();
     const bool lottie = ext == ".json" || ext == ".lot";
-    return drawn(s, [&](Drawn* d, int* w, int* h) -> tvg::Paint* {
+    Drawn* made = drawn(s, [&](Drawn* d, int* w, int* h) -> tvg::Paint* {
         tvg::LottieAnimation* own = lottie ? tvg::LottieAnimation::gen() : nullptr;
         d->film = own ? own : tvg::Animation::gen();
         d->lottie = own;
@@ -402,6 +628,12 @@ static Drawn* picture(Stage& s, const char* file, const mat4f& place, float high
         p->size((float)*w, (float)*h);
         return p;
     }, place, high, ground, shown, lay, fx);
+    if (made && made->frames > 1.f) {   // (its kept frames known on disk by its file as it is now: kept_file)
+        std::error_code e;
+        made->keyBase = std::filesystem::absolute(file, e).string() + "|" + std::to_string(std::filesystem::file_size(file, e)) + "|" +
+                        std::to_string((long long)std::filesystem::last_write_time(file, e).time_since_epoch().count());
+    }
+    return made;
 }
 
 // Words put in the scene, set by ThorVG in the font of `fontFile` (a .ttf): a sheet `high` tall for each line, as
