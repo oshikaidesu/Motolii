@@ -129,6 +129,12 @@ class LinkMark {
   final String id;
 }
 
+/// What is carried when a value's "→n" mark is picked up (to the hand: every thing following it lets go).
+class Takers {
+  const Takers(this.id);
+  final String id;
+}
+
 /// What is carried when a bundle's mark is picked up (a value leaving or joining a bundle, not a value card).
 class Tie {
   const Tie(this.v);
@@ -386,6 +392,18 @@ class CardTable extends ChangeNotifier {
       flashN++;
     }
     _changed(keepFlash: true);
+  }
+
+  /// Every thing following this value of the picked thing lets go of it (one undo step for all).
+  void unlinkTakers(String id) {
+    final from = ValRef(cur, id), all = takers(id);
+    if (all.isEmpty) return;
+    mark();
+    for (final (th, key) in all) {
+      if (th.links[key]?.from == from) th.links.remove(key);
+    }
+    if (open != null && links[open] == null && drives[open] == null) open = null;
+    _changed();
   }
 
   void unlink(String id) {
@@ -1522,10 +1540,27 @@ class _Tile extends StatelessWidget {
           child: Row(children: [
             if (CardTable.canDrive(v)) ...[SizedBox(width: 6, height: 10, child: CustomPaint(painter: _Grip(Grey.g56))), const SizedBox(width: 4)], // (held here, the tile's value is carried)
             Flexible(child: Text(v.label, maxLines: 1, overflow: TextOverflow.ellipsis, style: T.micro(CardTable.canDrive(v) ? Grey.g63 : Grey.g44).copyWith(height: 1.1))),
-            if (t.takers(v.id).isNotEmpty) // (other things follow this value: how many; tapped, they light on the stage)
+            if (t.takers(v.id).isNotEmpty) // (other things follow this value: how many; tapped, they light on the stage; carried to the hand, all let go)
               GestureDetector(
                 onTap: () => t.showTakers(v.id),
-                child: Text(' →${t.takers(v.id).length == 1 ? t.takers(v.id).first.$1.short : t.takers(v.id).length}', style: T.micro(Pop.accentInk)),
+                child: Draggable<Takers>(
+                  data: Takers(v.id),
+                  dragAnchorStrategy: pointerDragAnchorStrategy,
+                  feedback: Transform.translate(
+                    offset: const Offset(-10, -8),
+                    child: _Lifted(Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                      decoration: BoxDecoration(color: Grey.g26, borderRadius: BorderRadius.circular(5), border: Border.all(color: Pop.accent)),
+                      child: Text('→${t.takers(v.id).length}', style: T.micro(Pop.accentInk)),
+                    )),
+                  ),
+                  onDragStarted: () => t.carry(Takers(v.id)),
+                  onDragEnd: (_) => t.carry(null),
+                  child: MouseRegion(
+                    cursor: SystemMouseCursors.grab,
+                    child: Text(' →${t.takers(v.id).length == 1 ? t.takers(v.id).first.$1.short : t.takers(v.id).length}', style: T.micro(Pop.accentInk)),
+                  ),
+                ),
               ),
           ]),
         )),
@@ -2107,18 +2142,19 @@ class _Hand extends StatelessWidget {
   final CardTable t;
   @override
   Widget build(BuildContext context) => DragTarget<Object>(
-    onWillAcceptWithDetails: (e) => (e.data is CardM && t.cards.contains(e.data)) || e.data is String || e.data is LinkMark || e.data is Tie || e.data is Val || e.data is ValRef,
+    onWillAcceptWithDetails: (e) => (e.data is CardM && t.cards.contains(e.data)) || e.data is String || e.data is LinkMark || e.data is Takers || e.data is Tie || e.data is Val || e.data is ValRef,
     onAcceptWithDetails: (e) => switch (e.data) {
       CardM c => t.shelve(c),
       String id => t.lift(id),
       LinkMark m => t.unlink(m.id),
+      Takers k => t.unlinkTakers(k.id),
       Tie tie => t.untieOne(tie.v),
       Val v => t.keep(ValRef(t.cur, v.id)), // (a value carried here stays as a card, to lay on another thing)
       ValRef r => t.drop(r), // (a value card carried back: it leaves the hand)
       _ => null,
     },
     builder: (context, cand, _) {
-      final held = t.carrying, letGo = held is String || held is LinkMark || held is Tie || held is ValRef, waiting = (held is CardM && t.cards.contains(held)) || letGo || held is Val;
+      final held = t.carrying, letGo = held is String || held is LinkMark || held is Takers || held is Tie || held is ValRef, waiting = (held is CardM && t.cards.contains(held)) || letGo || held is Val;
       return AnimatedContainer(
         duration: Mo.dur,
         padding: const EdgeInsets.fromLTRB(Pop.inset, 8, Pop.inset, 10),

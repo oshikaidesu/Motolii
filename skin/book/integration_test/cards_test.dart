@@ -215,6 +215,11 @@ void main() {
           await shot('square_5_ring_aims_size');
           await g.up();
           await shot('square_5_size_follows_ring_size');
+          final g2 = await carry(t.getCenter(find.text(' →3').first), hand('Random'));
+          await shot('ring_radius_followers_carried_to_hand');
+          await g2.up();
+          await shot('all_three_let_go');
+          expect(find.text(' →3'), findsNothing); // (the "→3" carried to the hand: all three followers let go)
       }
     }
   });
