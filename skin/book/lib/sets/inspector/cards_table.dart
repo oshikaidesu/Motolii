@@ -15,6 +15,7 @@ import 'package:flutter/services.dart' show LogicalKeyboardKey;
 import 'package:flutter/widgets.dart';
 
 import '../../tokens.dart';
+import '../../parts/controls.dart' show Segmented;
 import 'inspector_parts.dart' show Pop;
 
 // ---------------------------------------------------------------- the model
@@ -50,12 +51,16 @@ enum Beh {
   final String word;
   final Color c;
 
-  double at(double t, int i, int n) => switch (this) {
-    Beh.sway => math.sin(2 * math.pi * (t * .55 + i / math.max(n, 1))),
-    Beh.stagger => n <= 1 ? 0 : i / (n - 1) * 2 - 1,
-    Beh.noise => _noise(t * .7 + i * 3.17),
-    Beh.random => _hash(i * 7.0 + 1) * 2 - 1,
-  };
+  /// [from]: where a stagger starts (0 the first copy, 1 the middle, 2 the last); [seed]: which roll a noise or a random is.
+  double at(double t, int i, int n, {double seed = 0, int from = 0}) {
+    final f = n <= 1 ? 0.0 : i / (n - 1);
+    return switch (this) {
+      Beh.sway => math.sin(2 * math.pi * (t * .55 + i / math.max(n, 1))),
+      Beh.stagger => switch (from) { 1 => (f - .5).abs() * 4 - 1, 2 => 1 - f * 2, _ => f * 2 - 1 },
+      Beh.noise => _noise(t * .7 + i * 3.17 + seed * 13.1),
+      Beh.random => _hash(i * 7.0 + 1 + seed * 17.3) * 2 - 1,
+    };
+  }
 }
 
 double _hash(double x) {
@@ -72,14 +77,22 @@ double _noise(double x) {
 class Drive {
   Drive(this.beh);
   final Beh beh;
-  double width = .2, speed = 1, clock = 0;
+  double width = .2, speed = 1, clock = 0, seed = 0;
+  int from = 0; // a stagger's start: 0 the first, 1 the middle, 2 the last
+  double at(int i, int n) => beh.at(clock, i, n, seed: seed, from: from);
+  Drive copy() => Drive(beh)
+    ..width = width
+    ..speed = speed
+    ..clock = clock
+    ..seed = seed
+    ..from = from;
 }
 
 /// What the table is, kept before each change so the change can be taken back.
 class _Snap {
   _Snap(CardTable t)
     : values = {for (final c in [...t.cards, ...t.shelf]) for (final v in c.all) v: v.v},
-      drives = {for (final e in t.drives.entries) e.key: Drive(e.value.beh)..width = e.value.width..speed = e.value.speed..clock = e.value.clock},
+      drives = {for (final e in t.drives.entries) e.key: e.value.copy()},
       bundles = [for (final b in t.bundles) [...b]],
       cards = [...t.cards],
       shelf = [...t.shelf],
@@ -108,13 +121,15 @@ class CardTable extends ChangeNotifier {
   String? editing; // the number being typed: a value's id, or w:/s: + id for a behaviour's width/speed
   String? touched; // the value last scrubbed or typed: a hand card tapped (not carried) goes there
   (CardM, bool)? insertMark; // a card carried over another: the line above (false) or under (true) it
-  final _undo = <_Snap>[];
+  final _undo = <_Snap>[], _redo = <_Snap>[];
+  final refusing = ValueNotifier<bool>(false); // the hand is over a place that does not take what it holds: the card in the air says so
   Map<Val, double> _bundleStart = {};
   Val? bundleStop; // the value at its end that holds the whole bundle still
   double _bundleShare = 0;
 
   /// Kept before a change (a drag keeps once, at its start): ⌘Z / the back arrow takes it back.
   void mark() {
+    _redo.clear();
     _undo.add(_Snap(this));
     if (_undo.length > 200) _undo.removeAt(0);
   }
@@ -124,7 +139,18 @@ class CardTable extends ChangeNotifier {
     if (carrying != null) return; // (a hand holding something: nothing is taken back under it)
     if (editing != null) return type(null); // (typing: back is leaving the number as it was)
     if (_undo.isEmpty) return;
-    final s = _undo.removeLast();
+    _redo.add(_Snap(this));
+    _restore(_undo.removeLast());
+  }
+
+  bool get canRedo => _redo.isNotEmpty;
+  void redo() {
+    if (carrying != null || editing != null || _redo.isEmpty) return;
+    _undo.add(_Snap(this));
+    _restore(_redo.removeLast());
+  }
+
+  void _restore(_Snap s) {
     s.values.forEach((v, x) => v.v = x);
     for (final e in s.drives.entries) {
       final now = drives[e.key];
@@ -201,9 +227,9 @@ class CardTable extends ChangeNotifier {
     final d = drives[id], p = preview, span = v.hi - v.lo;
     var x = v.v;
     if (p != null && p.$1 == id) {
-      x += d != null && d.beh == p.$2 ? d.beh.at(d.clock, i, n) * span * math.min(d.width + .15, 1) : p.$2.at(clock, i, n) * span * .2;
+      x += d != null && d.beh == p.$2 ? d.at(i, n) * span * math.min(d.width + .15, 1) : p.$2.at(clock, i, n) * span * .2;
     } else if (d != null) {
-      x += d.beh.at(d.clock, i, n) * span * d.width;
+      x += d.at(i, n) * span * d.width;
     }
     return v.fit(x);
   }
@@ -239,6 +265,8 @@ class CardTable extends ChangeNotifier {
     mark();
     final first = copiesFirst;
     cards.remove(c);
+    shelf.remove(c); // (a shelf card goes in where it is let go)
+    cardPreview = null;
     cards.insert(cards.indexOf(onto) + (under ? 1 : 0), c);
     if (first != copiesFirst) orderN++;
     _changed();
@@ -246,6 +274,7 @@ class CardTable extends ChangeNotifier {
 
   void carry(Object? o) {
     carrying = o;
+    refusing.value = false;
     if (o == null) {
       preview = null;
       cardPreview = null;
@@ -302,9 +331,11 @@ class CardTable extends ChangeNotifier {
     _changed();
   }
 
-  void setDrive(Drive d, {double? width, double? speed}) {
+  void setDrive(Drive d, {double? width, double? speed, double? seed, int? from}) {
     if (width != null) d.width = width.clamp(0.0, 1.0);
     if (speed != null) d.speed = speed.clamp(.1, 4.0);
+    if (seed != null) d.seed = seed.clamp(0.0, 99.0);
+    if (from != null) d.from = from;
     _changed();
   }
 
@@ -404,6 +435,18 @@ class CardTable extends ChangeNotifier {
     _changed();
   }
 
+  /// The wave's tag pressed: the wave and the copies change places, so what is done first turns round.
+  void swapOrder() {
+    final a = cards.indexWhere((c) => c.name == '複製'), b = cards.indexWhere((c) => c.name == '波');
+    if (a < 0 || b < 0) return;
+    mark();
+    final ca = cards[a];
+    cards[a] = cards[b];
+    cards[b] = ca;
+    orderN++;
+    _changed();
+  }
+
   /// Which comes first, the copies or the wave: wave first = the ring waves as one; copies first = each copy waves on its own.
   bool get copiesFirst {
     final a = cards.indexWhere((c) => c.name == '複製'), b = cards.indexWhere((c) => c.name == '波');
@@ -486,6 +529,7 @@ class _CardsTableState extends State<CardsTable> with SingleTickerProviderStateM
   Widget _table(BuildContext context) => CallbackShortcuts(
     bindings: {
       const SingleActivator(LogicalKeyboardKey.keyZ, meta: true): widget.t.undo,
+      const SingleActivator(LogicalKeyboardKey.keyZ, meta: true, shift: true): widget.t.redo,
       const SingleActivator(LogicalKeyboardKey.keyZ, control: true): widget.t.undo,
     },
     child: Focus(autofocus: true, child: ListenableBuilder(
@@ -605,7 +649,7 @@ class _StageState extends State<_Stage> {
       _leave();
     },
     builder: (context, cand, _) {
-      final waiting = t.carrying is CardM && !t.cards.contains(t.carrying);
+      final waiting = (t.carrying is CardM && !t.cards.contains(t.carrying)) || t.carrying is Beh; // (the stage takes these)
       final b = cand.whereType<Beh>().firstOrNull;
       return ClipRect(
         child: CustomPaint(
@@ -731,6 +775,17 @@ class _Inspector extends StatelessWidget {
             child: CustomPaint(painter: _Back(t.canUndo ? Grey.g91 : Grey.g38)),
           ),
         ),
+        const SizedBox(width: 2),
+        GestureDetector(
+          onTap: t.canRedo ? t.redo : null,
+          child: Container(
+            width: 26,
+            height: 22,
+            padding: const EdgeInsets.all(5),
+            decoration: BoxDecoration(color: t.canRedo ? Pop.well : null, borderRadius: BorderRadius.circular(6)),
+            child: Transform.flip(flipX: true, child: CustomPaint(painter: _Back(t.canRedo ? Grey.g91 : Grey.g38))),
+          ),
+        ),
       ]),
     ),
     for (final (i, b) in t.bundles.indexed) _BundleTile(t, i, b),
@@ -757,7 +812,7 @@ class _CardSlot extends StatelessWidget {
   final int i;
   @override
   Widget build(BuildContext context) => DragTarget<CardM>(
-    onWillAcceptWithDetails: (e) => t.cards.contains(e.data) && e.data != c,
+    onWillAcceptWithDetails: (e) => (t.cards.contains(e.data) || t.shelf.contains(e.data)) && e.data != c,
     onMove: (e) {
       final box = context.findRenderObject() as RenderBox?;
       if (box == null || e.data == c) return;
@@ -792,7 +847,7 @@ class _Card extends StatelessWidget {
       square,
       const SizedBox(width: 8),
       GestureDetector(onTap: c.down ? null : () => t.flip(c), child: Text(c.name, style: T.title(c.down ? Grey.g44 : Grey.g95))),
-      if (c.name == '波' && !c.down) ...[const SizedBox(width: 8), _Tag(t.copiesFirst ? '1つずつ' : '輪ごと')],
+      if (c.name == '波' && !c.down) ...[const SizedBox(width: 8), GestureDetector(onTap: t.swapOrder, child: _Tag(t.copiesFirst ? '1つずつ' : '輪ごと'))],
       const Spacer(),
       if (!c.down) _IconButton(_Ic.flip, on: c.flipped, onTap: () => t.flip(c)),
       const SizedBox(width: 2),
@@ -932,10 +987,9 @@ class _IcPaint extends CustomPainter {
   void paint(Canvas cv, Size s) {
     final w = s.width, h = s.height, st = Paint()..color = c..style = PaintingStyle.stroke..strokeWidth = 1.3..strokeCap = StrokeCap.round..strokeJoin = StrokeJoin.round;
     switch (ic) {
-      case _Ic.flip: // turn over: a round arrow
-        cv.drawArc(Rect.fromLTWH(w * .1, h * .1, w * .8, h * .8), -math.pi * .35, math.pi * 1.55, false, st);
-        final tip = Offset(w * .5 + w * .4 * math.cos(-math.pi * .35), h * .5 + h * .4 * math.sin(-math.pi * .35));
-        cv.drawPath(Path()..moveTo(tip.dx - w * .28, tip.dy - h * .05)..lineTo(tip.dx, tip.dy)..lineTo(tip.dx + w * .02, tip.dy - h * .3), st);
+      case _Ic.flip: // the back: a card with another behind it
+        cv.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(w * .32, 0, w * .62, h * .72), const Radius.circular(1.5)), Paint()..color = c.withValues(alpha: .45));
+        cv.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(w * .06, h * .28, w * .62, h * .72), const Radius.circular(1.5)), st);
       case _Ic.eye || _Ic.eyeOff:
         final p = Path()
           ..moveTo(0, h * .5)
@@ -978,7 +1032,7 @@ class _ValDrop extends StatelessWidget {
   bool _ok(Object? o) => switch (o) {
     Beh() => CardTable.canDrive(v),
     String() => CardTable.canDrive(v),
-    Val() => o != v,
+    Val() => o != v && CardTable.canDrive(o) && CardTable.canDrive(v), // (a count is neither moved nor tied)
     _ => false,
   };
   @override
@@ -986,9 +1040,13 @@ class _ValDrop extends StatelessWidget {
     onWillAcceptWithDetails: (e) {
       final ok = _ok(e.data);
       if (ok && e.data is Beh) t.hover((v.id, e.data as Beh));
+      t.refusing.value = !ok;
       return ok;
     },
-    onLeave: (_) => t.hover(null),
+    onLeave: (_) {
+      t.hover(null);
+      t.refusing.value = false;
+    },
     onAcceptWithDetails: (e) => switch (e.data) {
       Beh b => t.lay(v.id, b),
       String from => t.moveDrive(from, v.id),
@@ -1038,7 +1096,10 @@ class _Tile extends StatelessWidget {
         ),
         child: SizedBox(
           width: double.infinity,
-          child: Text(v.label, maxLines: 1, overflow: TextOverflow.ellipsis, style: T.micro(CardTable.canDrive(v) ? Grey.g63 : Grey.g44).copyWith(height: 1.1)),
+          child: Row(children: [
+            if (CardTable.canDrive(v)) ...[SizedBox(width: 4, height: 8, child: CustomPaint(painter: _Grip(Grey.g38))), const SizedBox(width: 3)], // (held here, the tile lifts)
+            Flexible(child: Text(v.label, maxLines: 1, overflow: TextOverflow.ellipsis, style: T.micro(CardTable.canDrive(v) ? Grey.g63 : Grey.g44).copyWith(height: 1.1))),
+          ]),
         ),
       );
       return GestureDetector(
@@ -1062,20 +1123,29 @@ class _Tile extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(Pop.tilePad, 5, 5, 4),
             child: Stack(children: [
               Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                Padding(padding: const EdgeInsets.only(right: 22), child: label),
+                Padding(padding: const EdgeInsets.only(right: 24), child: label),
                 t.editing == v.id
                     ? _NumEdit(t, v)
-                    : GestureDetector(onTap: () => t.type(v.id), child: Text(sayVal(v, v.v), style: T.value(Grey.g95).copyWith(fontSize: 15, fontWeight: FontWeight.w600))),
+                    : GestureDetector(
+                        onTap: () => t.type(v.id),
+                        child: Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                          Text(sayVal(v, v.v), style: T.value(Grey.g95).copyWith(fontSize: 15, fontWeight: FontWeight.w600)),
+                          if (width != null) ...[
+                            const SizedBox(width: 4),
+                            Flexible(child: Text('±${(width * (v.hi - v.lo)).toStringAsFixed(v.dec)}${v.unit}', maxLines: 1, overflow: TextOverflow.clip, style: T.micro((over ?? d!.beh).c).copyWith(fontSize: 9))),
+                          ],
+                        ]),
+                      ),
                 SizedBox(height: 4, child: d != null || over != null ? _Spread(t, v, (over ?? d!.beh).c) : null),
               ]),
+              // (the right edge is one column of marks: what drives it on top, its bundle under; nothing sits on the words)
               if (d != null) Positioned(right: 0, top: 0, child: _DriveChip(t, v.id, d)),
               if (d == null && over == null && !((held is Beh || held is String) && !CardTable.canDrive(v))) Positioned(right: 1, top: 2, child: _Gauge((v.v - v.lo) / (v.hi - v.lo))),
               if (t.touched == v.id && t.carrying == null) Positioned(left: 0, right: 30, bottom: -3, height: 1.5, child: ColoredBox(color: Pop.accent.withValues(alpha: .7))),
-              if (width != null) Positioned(right: 0, bottom: 6, child: Text('±${(width * (v.hi - v.lo)).toStringAsFixed(v.dec)}', style: T.micro((over ?? d!.beh).c))),
               if (tied != null)
                 Positioned(
-                  right: d != null ? 24 : 18,
-                  top: 1,
+                  right: 0,
+                  top: 20,
                   child: Draggable<Val>( // (the bundle's mark carried: onto another value it ties there, onto the hand it lets this one out)
                     data: v,
                     dragAnchorStrategy: pointerDragAnchorStrategy,
@@ -1238,6 +1308,7 @@ class _BackRow extends StatelessWidget {
           if (over != null && d?.beh != over) ...[const SizedBox(width: 6), Opacity(opacity: .6, child: _Chip(over, small: true))],
           const Spacer(),
           if (d != null || over != null) SizedBox(width: 60, height: 4, child: _Spread(t, v, (over ?? d!.beh).c)),
+          if (d != null) ...[const SizedBox(width: 4), Text('±${(d.width * (v.hi - v.lo)).toStringAsFixed(v.dec)}${v.unit}', style: T.micro(d.beh.c).copyWith(fontSize: 9))],
           const SizedBox(width: 8),
           if (t.bundleOf(v) != null) ...[GestureDetector(onDoubleTap: () => t.untieOne(v), child: _TieMark(t.bundleOf(v)!)), const SizedBox(width: 6)],
           SizedBox(
@@ -1277,23 +1348,45 @@ class _DriveKnobs extends StatelessWidget {
         ),
       ),
     );
+    final span = v.hi - v.lo;
     return Padding(
       padding: const EdgeInsets.only(top: Pop.tileGap),
-      child: Row(children: [
-        _Chip(d.beh),
-        const SizedBox(width: 4),
-        SizedBox(width: 56, child: Text(v.label, maxLines: 1, overflow: TextOverflow.ellipsis, style: T.micro(Grey.g76))),
-        knob('幅', '±${(d.width * (v.hi - v.lo)).toStringAsFixed(v.dec)}${v.unit}', 'w:${v.id}', (d.width * (v.hi - v.lo)).toStringAsFixed(v.dec),
-            (x) => t..mark()..setDrive(d, width: x.abs() / (v.hi - v.lo)), (dx) => t.setDrive(d, width: d.width + dx / 300)),
-        const SizedBox(width: Pop.tileGap),
-        if (d.beh == Beh.sway || d.beh == Beh.noise)
-          knob('速さ', d.speed.toStringAsFixed(2), 's:${v.id}', d.speed.toStringAsFixed(2), (x) => t..mark()..setDrive(d, speed: x), (dx) => t.setDrive(d, speed: d.speed + dx / 80))
-        else
-          const Spacer(),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        SizedBox(
+          height: 18,
+          child: Row(children: [
+            _Chip(d.beh, small: true),
+            const SizedBox(width: 5),
+            Text('${d.beh.word} → ${v.label}', style: T.micro(Grey.g76)),
+          ]),
+        ),
+        const SizedBox(height: 3),
+        Row(children: [
+          knob('幅', '±${(d.width * span).toStringAsFixed(v.dec)}${v.unit}', 'w:${v.id}', (d.width * span).toStringAsFixed(v.dec),
+              (x) => t..mark()..setDrive(d, width: x.abs() / span), (dx) => t.setDrive(d, width: d.width + dx / 300)),
+          if (d.beh == Beh.sway || d.beh == Beh.noise) ...[
+            const SizedBox(width: Pop.tileGap),
+            knob('速さ', d.speed.toStringAsFixed(2), 's:${v.id}', d.speed.toStringAsFixed(2), (x) => t..mark()..setDrive(d, speed: x), (dx) => t.setDrive(d, speed: d.speed + dx / 80)),
+          ],
+          if (d.beh == Beh.noise || d.beh == Beh.random) ...[
+            const SizedBox(width: Pop.tileGap),
+            knob('シード', d.seed.round().toString(), 'r:${v.id}', d.seed.round().toString(), (x) => t..mark()..setDrive(d, seed: x), (dx) => t.setDrive(d, seed: d.seed + dx / 8)),
+          ],
+          if (d.beh == Beh.stagger) ...[
+            const SizedBox(width: Pop.tileGap),
+            Expanded(
+              child: SizedBox(
+                height: 38,
+                child: Center(child: Segmented(items: const ['端', '中', '逆'], index: d.from, expand: true, onChanged: (k) => t..mark()..setDrive(d, from: k))),
+              ),
+            ),
+          ],
+        ]),
       ]),
     );
   }
 }
+
 
 /// A value's mark when it is tied into a bundle: which bundle.
 class _TieMark extends StatelessWidget {
@@ -1302,9 +1395,10 @@ class _TieMark extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(
     height: 16,
-    padding: const EdgeInsets.symmetric(horizontal: 4),
+    constraints: const BoxConstraints(minWidth: 16),
+    padding: const EdgeInsets.symmetric(horizontal: 3),
     decoration: BoxDecoration(border: Border.all(color: Pop.accent), borderRadius: BorderRadius.circular(8)),
-    child: Center(child: Text('束${i + 1}', style: T.micro(Pop.accentInk).copyWith(fontSize: 9))),
+    child: Center(child: Text('束${i + 1}', style: T.micro(Pop.accentInk).copyWith(fontSize: 8))),
   );
 }
 
@@ -1399,7 +1493,10 @@ class _DriveChip extends StatelessWidget {
     child: Draggable<String>(
       data: id,
       dragAnchorStrategy: pointerDragAnchorStrategy,
-      feedback: Transform.translate(offset: const Offset(-9, -9), child: _Lifted(_Chip(d.beh))),
+      feedback: ValueListenableBuilder<bool>(
+        valueListenable: t.refusing,
+        builder: (context, no, _) => Transform.translate(offset: const Offset(-9, -9), child: _Lifted(no ? _Refused(_Chip(d.beh)) : _Chip(d.beh))),
+      ),
       childWhenDragging: Opacity(opacity: .3, child: _Chip(d.beh, small: small)),
       onDragStarted: () => t.carry(id),
       onDragEnd: (_) => t.carry(null),
@@ -1423,6 +1520,17 @@ class _Chip extends StatelessWidget {
     decoration: BoxDecoration(color: b.c, borderRadius: BorderRadius.circular(9)),
     child: CustomPaint(painter: BehGlyph(b, N.g07)),
   );
+}
+
+/// A card in the air over a place that does not take it: greyed, crossed.
+class _Refused extends StatelessWidget {
+  const _Refused(this.child);
+  final Widget child;
+  @override
+  Widget build(BuildContext context) => Stack(alignment: Alignment.center, children: [
+    Opacity(opacity: .4, child: child),
+    SizedBox.square(dimension: 14, child: CustomPaint(painter: _Cross(C.danger))),
+  ]);
 }
 
 /// A card in the air: lifted, a little turned, with a shadow under it.
@@ -1468,6 +1576,7 @@ class _Hand extends StatelessWidget {
           SizedBox(
             width: double.infinity,
             child: Wrap(spacing: 0, runSpacing: 6, children: [
+              if (t.shelf.isEmpty) Container(width: 90, height: 34, decoration: BoxDecoration(borderRadius: BorderRadius.circular(6), border: Border.all(color: Grey.g26))), // (the shelf, empty: still where cards come back to)
               for (final c in t.shelf)
                 Padding(
                   padding: const EdgeInsets.only(right: 8),
@@ -1533,9 +1642,11 @@ class _HandCard extends StatelessWidget {
     child: Draggable<Beh>(
     data: b,
     dragAnchorStrategy: pointerDragAnchorStrategy,
-    feedback: ValueListenableBuilder<bool>( // (its mark is the fingertip: what is under it takes it)
-      valueListenable: t.ringOpen,
-      builder: (context, ring, _) => ring ? Transform.translate(offset: const Offset(-9, -9), child: _Chip(b)) : Transform.translate(offset: const Offset(-20, -20), child: _Lifted(face(lifted: true))),
+    feedback: ListenableBuilder( // (its mark is the fingertip: what is under it takes it)
+      listenable: Listenable.merge([t.ringOpen, t.refusing]),
+      builder: (context, _) => t.ringOpen.value
+          ? Transform.translate(offset: const Offset(-9, -9), child: _Chip(b))
+          : Transform.translate(offset: const Offset(-20, -20), child: _Lifted(t.refusing.value ? _Refused(face(lifted: true)) : face(lifted: true))),
     ),
     childWhenDragging: face(),
     onDragStarted: () => t.carry(b),

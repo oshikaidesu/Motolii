@@ -75,7 +75,7 @@ void main() {
           await shot('noise_carried_to_hand');
           await g.up();
           await shot('noise_back_in_hand');
-          await t.tapAt(const Offset(1280 - 8 - 13, 15));
+          await t.tapAt(const Offset(1280 - 8 - 26 - 2 - 13, 15));
           await shot('undo_brings_noise_back');
           await t.tap(find.text('180px').first);
           await t.pump(const Duration(milliseconds: 200));
@@ -85,6 +85,10 @@ void main() {
           await shot('radius_typed_240');
           await t.tap(find.text('ずれ').last);
           await shot('tapped_stagger_goes_on_radius');
+          await t.tapAt(chip('大きさ'));
+          await t.pump(const Duration(milliseconds: 200));
+          await t.tap(find.text('中').first);
+          await shot('stagger_starts_from_the_middle');
         case '裏返す':
           final row = t.getCenter(find.text('1つずつの大きさ').first);
           final g = await carry(hand('揺れ'), row);
