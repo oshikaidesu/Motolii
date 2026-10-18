@@ -7,6 +7,7 @@
 //   says "each" or "whole"); a card turned face down (off); a shelf card thrown on the stage is worn, its corner pulled back to the
 //   shelf takes it off; a tile held and dropped on another ties them into one bundle.
 // A mock: not joined to the inside. Sizes and colours are the inspector's own (Pop).
+import 'dart:async' show Timer;
 import 'dart:math' as math;
 
 import 'package:flutter/scheduler.dart';
@@ -102,6 +103,7 @@ class CardTable extends ChangeNotifier {
   String? flash, open; // the value a card was just laid on (lit once); the value whose behaviour's knobs are open
   int flashN = 0, orderN = 0; // orderN: bumped when the cards are reordered (they light in the order they are done)
   Object? carrying; // what the hand holds now: the places it may go are outlined
+  final ringOpen = ValueNotifier<bool>(false); // the stage's value ring is open: the card in the air shrinks to its mark, the ring stays readable
   double clock = 0, waveClock = 0; // seconds; the wave's own, run at its speed (a speed changed never jumps the wave)
   String? editing; // the value whose number is being typed
   final _undo = <_Snap>[];
@@ -481,29 +483,135 @@ class _Time extends InheritedWidget {
 
 // ---------------------------------------------------------------- the stage
 
-class _Stage extends StatelessWidget {
+/// The stage takes a shelf card (worn) and a behaviour card: where a behaviour comes in, a ring of the values most often moved
+/// opens; the way the hand goes from there picks the value (shown before it is let go), the middle lets go of nothing.
+class _Stage extends StatefulWidget {
   const _Stage(this.t);
   final CardTable t;
   @override
-  Widget build(BuildContext context) => DragTarget<CardM>(
+  State<_Stage> createState() => _StageState();
+}
+
+const _ringVals = ['size', 'radius', 'spin', 'hue']; // up, right, down, left
+
+class _StageState extends State<_Stage> {
+  Offset? anchor, at; // the ring's place (it opens where the hand rests a moment), the hand's
+  int? aim;
+  Timer? rest;
+
+  @override
+  void dispose() {
+    rest?.cancel();
+    super.dispose();
+  }
+
+  /// The hand moved: with no ring open, the ring waits for it to rest (0.25 s); far from an open ring, the ring closes and waits again.
+  void _moved(Offset p, Beh b) {
+    at = p;
+    if (anchor != null && (p - anchor!).distance > 110) {
+      setState(() => anchor = aim = null);
+      t.hover(null);
+    }
+    if (anchor == null) {
+      rest?.cancel();
+      rest = Timer(const Duration(milliseconds: 250), () {
+        if (mounted && at != null) setState(() => anchor = at);
+      });
+      return;
+    }
+    final a = _aimAt(p);
+    if (a != aim) setState(() => aim = a);
+    t.hover(a == null ? null : (_ringVals[a], b));
+  }
+  CardTable get t => widget.t;
+
+  Offset _local(Offset global) => (context.findRenderObject()! as RenderBox).globalToLocal(global);
+  int? _aimAt(Offset p) {
+    final d = p - anchor!;
+    if (d.distance < 28) return null;
+    final k = d.dx.abs() > d.dy.abs() ? (d.dx > 0 ? 1 : 3) : (d.dy < 0 ? 0 : 2);
+    return t.valOr(_ringVals[k]) == null ? null : k;
+  }
+
+  void _leave() {
+    rest?.cancel();
+    setState(() => anchor = aim = at = null);
+    t.hover(null);
+    t.holdCard(null);
+  }
+
+  @override
+  @override
+  void setState(VoidCallback fn) {
+    super.setState(fn);
+    t.ringOpen.value = anchor != null;
+  }
+
+  @override
+  Widget build(BuildContext context) => DragTarget<Object>(
     onWillAcceptWithDetails: (e) {
-      if (t.cards.contains(e.data)) return false;
-      t.holdCard(e.data);
-      return true;
+      if (e.data is CardM && !t.cards.contains(e.data)) {
+        t.holdCard(e.data as CardM);
+        return true;
+      }
+      if (e.data is Beh) {
+        _moved(_local(e.offset), e.data as Beh);
+        return true;
+      }
+      return false;
     },
-    onLeave: (_) => t.holdCard(null),
-    onAcceptWithDetails: (e) => t.wear(e.data),
+    onMove: (e) {
+      if (e.data is Beh) _moved(_local(e.offset), e.data as Beh);
+    },
+    onLeave: (_) => _leave(),
+    onAcceptWithDetails: (e) {
+      if (e.data is CardM) t.wear(e.data as CardM);
+      if (e.data is Beh && aim != null) t.lay(_ringVals[aim!], e.data as Beh);
+      _leave();
+    },
     builder: (context, cand, _) {
       final waiting = t.carrying is CardM && !t.cards.contains(t.carrying);
+      final b = cand.whereType<Beh>().firstOrNull;
       return ClipRect(
         child: CustomPaint(
           painter: _Ring(t, _Time.of(context)),
           foregroundPainter: waiting ? _Frame(cand.isNotEmpty) : null,
-          child: const SizedBox.expand(),
+          child: Stack(children: [
+            const SizedBox.expand(),
+            if (b != null && anchor != null)
+              Positioned(left: anchor!.dx - 110, top: anchor!.dy - 80, width: 220, height: 160, child: _ValueRing(t, b, aim)),
+          ]),
         ),
       );
     },
   );
+}
+
+/// The ring a behaviour card opens on the stage: four values around the place it came in, the one aimed at lit in its colour.
+class _ValueRing extends StatelessWidget {
+  const _ValueRing(this.t, this.b, this.aim);
+  final CardTable t;
+  final Beh b;
+  final int? aim;
+  @override
+  Widget build(BuildContext context) {
+    Widget pill(int k) {
+      final v = t.valOr(_ringVals[k]), on = aim == k;
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+        decoration: BoxDecoration(color: on ? b.c : Grey.g13.withValues(alpha: .92), borderRadius: BorderRadius.circular(12), border: Border.all(color: on ? b.c : Grey.g38)),
+        child: Text(v?.label ?? '—', style: T.name(on ? N.g07 : (v == null ? Grey.g44 : Grey.g91))),
+      );
+    }
+
+    return Stack(alignment: Alignment.center, children: [
+      Container(width: 22, height: 22, decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: Grey.g44))),
+      Align(alignment: Alignment.topCenter, child: pill(0)),
+      Align(alignment: Alignment.centerRight, child: pill(1)),
+      Align(alignment: Alignment.bottomCenter, child: pill(2)),
+      Align(alignment: Alignment.centerLeft, child: pill(3)),
+    ]);
+  }
 }
 
 /// The stage's edge while a shelf card is carried: the stage takes it.
@@ -1333,7 +1441,10 @@ class _HandCard extends StatelessWidget {
   Widget build(BuildContext context) => Draggable<Beh>(
     data: b,
     dragAnchorStrategy: pointerDragAnchorStrategy,
-    feedback: Transform.translate(offset: const Offset(-20, -20), child: _Lifted(face(lifted: true))), // (its mark is the fingertip: what is under it takes it)
+    feedback: ValueListenableBuilder<bool>( // (its mark is the fingertip: what is under it takes it)
+      valueListenable: t.ringOpen,
+      builder: (context, ring, _) => ring ? Transform.translate(offset: const Offset(-9, -9), child: _Chip(b)) : Transform.translate(offset: const Offset(-20, -20), child: _Lifted(face(lifted: true))),
+    ),
     childWhenDragging: face(),
     onDragStarted: () => t.carry(b),
     onDragEnd: (_) => t.carry(null),

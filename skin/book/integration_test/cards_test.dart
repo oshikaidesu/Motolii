@@ -130,6 +130,25 @@ void main() {
           }
           await g.up();
           await shot('spin_joins_bundle');
+        case '舞台に落とす':
+          var g = await carry(hand('揺れ'), const Offset(420, 420));
+          await t.pump(const Duration(milliseconds: 400)); // (the hand rests: the ring opens)
+          await shot('sway_rests_ring_opens');
+          await g.moveBy(const Offset(70, 0));
+          await t.pump(const Duration(milliseconds: 400));
+          await shot('sway_ring_aims_radius');
+          await g.moveBy(const Offset(-70, -70));
+          await t.pump(const Duration(milliseconds: 400));
+          await shot('sway_ring_aims_size');
+          await g.up();
+          await shot('sway_on_size_from_stage');
+          g = await carry(hand('ランダム'), const Offset(500, 400));
+          await t.pump(const Duration(milliseconds: 400));
+          await g.moveBy(const Offset(-70, 0));
+          await t.pump(const Duration(milliseconds: 300));
+          await shot('random_ring_aims_hue');
+          await g.up();
+          await shot('random_on_hue');
         case '伏せる':
           await t.tapAt(Offset(1280 - 8 - 4 - 12, t.getCenter(find.text('波').first).dy));
           await shot('wave_face_up_again');
