@@ -251,7 +251,8 @@ static const DocValue doc_values[] = {
     {"scatter_z", "picture text shape", 0, 1e4, true, nullptr},   // (scattered so far towards the eye and away)
     {"copy_turn", "picture text shape", -1e5, 1e5, true, nullptr},   // (how far its copies turn in all, spread evenly over them: 360 fills a round; copy_rotate's turn each on top)
     {"tall", "picture text shape", 0, 1e3, true, nullptr},   // (how many times as tall as it is, its anchor staying where it is: a bar growing up from its foot)
-    {"copy_tall", "picture text shape", 0, 0, false, ""},   // (and its copies each so many times as tall again, in their order, going round: numbers, a bar chart's data; none: all as tall)
+    {"copy_tall", "picture text shape", 0, 0, false, ""},
+    {"copy_fill_at", "picture text shape", 0, 1, true, nullptr},   // (where along copy_fill each copy's colour is, given by a behaviour (copy_fill_at_by): 0 its first, 1 its last; not given, their order)   // (and its copies each so many times as tall again, in their order, going round: numbers, a bar chart's data; none: all as tall)
     // (its copies laid on another shape's outline, each turned the way it goes, Cavalry's Duplicator on a shape; and slid along it, a share of its length)
     {"copy_on", "picture text shape", 0, 1e9, false, nullptr},
     {"copy_on_offset", "picture text shape", -1e4, 1e4, true, nullptr},
@@ -1748,7 +1749,8 @@ static void doc_moment(Doc& d, double now) {
             const std::vector<float2>& letters = t.drawn ? t.drawn->letters : std::vector<float2>{};
             const auto scripted = d.scripted.find(thing);   // (a script's copies each as clear as it says)
             const bool clears = scripted != d.scripted.end() && std::any_of(scripted->second.copies.begin(), scripted->second.copies.end(), [](const ScriptCopy& c) { return c.opacity != 1.0; });
-            if (ramp.size() < 2 && letters.empty() && !clears && !t.drivenLooks) doc_copy_looks_off(d, m, main);
+            const bool clearEach = doc_driven_by(d, thing, "opacity") != 0, pickEach = doc_driven_by(d, thing, "copy_fill_at") != 0;   // (given each copy by a behaviour)
+            if (ramp.size() < 2 && letters.empty() && !clears && !t.drivenLooks && !clearEach && !pickEach) doc_copy_looks_off(d, m, main);
             else {
                 auto& faces = s.engine->getRenderableManager();
                 const int n = doc_members(d, thing);
@@ -1764,14 +1766,30 @@ static void doc_moment(Doc& d, double now) {
                         if (ramp.size() < 2) own->setParameter("wash", t.drawn ? t.drawn->wash : float4{0.f});
                     }
                     else if (ramp.size() >= 2 && doc_word(d, thing, "copy_fill_way") == "cycle") own->setParameter("wash", float4{ramp[(size_t)made.nth % ramp.size()], 1.f});   // (one each in turn)
-                    else if (ramp.size() >= 2) {
-                        const float along = n > 1 ? (float)made.nth / (float)(n - 1) * (float)(ramp.size() - 1) : 0.f;
+                    else if (ramp.size() >= 2) {   // (along the ramp in their order; or where a behaviour says, copy_fill_at, 0 its first colour, 1 its last)
+                        const math::double3 where{made.place[3].x, made.place[3].y, made.place[3].z};
+                        const double order = n > 1 ? (double)made.nth / (double)(n - 1) : 0.0;
+                        const double pick = pickEach ? std::clamp(doc_given(d, doc_driven_by(d, thing, "copy_fill_at"), made.nth, n, now, order, &where), 0.0, 1.0) : order;
+                        const float along = (float)pick * (float)(ramp.size() - 1);
                         const size_t i = std::min((size_t)along, ramp.size() - 2);
                         own->setParameter("wash", float4{mix(ramp[i], ramp[i + 1], along - (float)i), 1.f});
                     } else own->setParameter("wash", t.drawn ? t.drawn->wash : float4{0.f});   // (its own: a shape cut in triangles is filled by it)
                     if ((size_t)made.nth < letters.size()) own->setParameter("window", float4{letters[(size_t)made.nth].x, letters[(size_t)made.nth].y, 1.f, 0.f});   // (its own letter)
                     const double clear = scripted != d.scripted.end() && (size_t)made.nth < scripted->second.copies.size() ? scripted->second.copies[(size_t)made.nth].opacity : 1.0;
-                    own->setParameter("opacity", (float)(doc_number(d, thing, "opacity", now, 1) * std::clamp(clear, 0.0, 1.0)));
+                    const math::double3 here{made.place[3].x, made.place[3].y, made.place[3].z};
+                    const double opacity = clearEach ? std::clamp(doc_given(d, doc_driven_by(d, thing, "opacity"), made.nth, n, now, doc_number(d, thing, "opacity", now, 1), &here), 0.0, 1.0) : doc_number(d, thing, "opacity", now, 1);
+                    own->setParameter("opacity", (float)(opacity * std::clamp(clear, 0.0, 1.0)));
+                    if (t.drawn && t.drawn->edgeLook && !made.many) {   // (its edge's own look: a frame alone (filled with nothing) coloured each as its fill would be; each as clear)
+                        const auto one = faces.getInstance(made.thing);
+                        if (faces.getPrimitiveCount(one) > 1) {
+                            MaterialInstance*& edge = d.copyEdges[made.thing.getId()];
+                            if (!edge) edge = MaterialInstance::duplicate(t.drawn->edgeLook), faces.setMaterialInstanceAt(one, 1, edge);
+                            if (t.drawn->hollow && ramp.size() >= 2) {
+                                edge->setParameter("wash", own->getParameter<float4>("wash"));
+                            }
+                            edge->setParameter("opacity", (float)(opacity * std::clamp(clear, 0.0, 1.0)));
+                        }
+                    }
                     own->setParameter("glowing", (float)doc_number(d, thing, "emissive", now, 0));
                 }
             }
