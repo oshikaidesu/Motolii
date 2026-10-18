@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:ui' show ImageByteFormat;
 
 import 'package:flutter/rendering.dart' show OffsetLayer;
+import 'package:flutter/services.dart' show TextInputAction;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
@@ -14,6 +15,7 @@ void main() {
 
   testWidgets('cards by hand, shot', (t) async {
     t.view.physicalSize = const Size(2560, 1640);
+    t.testTextInput.register(); // (typing goes through the test's own keyboard, as a hand's would)
     addTearDown(t.view.resetPhysicalSize);
     late Directory out;
     var n = 0;
@@ -56,6 +58,7 @@ void main() {
           g = await carry(hand('ずれ'), tile('数'));
           await shot('stagger_refused_by_count');
           await g.up();
+          await t.pump(const Duration(milliseconds: 200));
           await (await carry(hand('ずれ'), tile('大きさ'))).up();
           await shot('stagger_on_size');
           await (await carry(hand('ノイズ'), tile('半径'))).up();
@@ -72,6 +75,14 @@ void main() {
           await shot('noise_carried_to_hand');
           await g.up();
           await shot('noise_back_in_hand');
+          await t.tapAt(const Offset(1280 - 8 - 13, 15));
+          await shot('undo_brings_noise_back');
+          await t.tap(find.text('180px').first);
+          await t.pump(const Duration(milliseconds: 200));
+          await t.enterText(find.byType(EditableText), '240');
+          await shot('typing_radius');
+          await t.testTextInput.receiveAction(TextInputAction.done);
+          await shot('radius_typed_240');
         case '裏返す':
           final row = t.getCenter(find.text('1つずつの大きさ').first);
           final g = await carry(hand('揺れ'), row);
@@ -108,7 +119,7 @@ void main() {
           await shot('radius_lifted_over_size');
           await g.up();
           await shot('tied_radius_and_size');
-          final bundle = t.getCenter(find.textContaining('＋').first);
+          final bundle = t.getCenter(find.text('束1').first) + const Offset(120, 0);
           await (await carry(bundle, bundle + const Offset(-160, 0))).up();
           await shot('bundle_scrubbed_left');
           g = await t.startGesture(tile('1つずつ回す'));
