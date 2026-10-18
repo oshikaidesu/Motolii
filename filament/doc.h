@@ -257,6 +257,9 @@ static const DocValue doc_values[] = {
     {"rough_detail", "shape", 0.005, 1, true, nullptr},
     // (turned into another shape so far, Cavalry's Morph: 0 itself, 1 the other where it lies)
     {"morph", "shape", 0, 1, true, nullptr},
+    // (its path another's track, Cavalry's Trails: whose, and over how many seconds back)
+    {"trail", "shape", 0, 1e9, false, nullptr},
+    {"trail_length", "shape", 0.001, 60, true, nullptr},
     {"morph_to", "shape", 0, 1e9, false, nullptr},
     {"path", "shape", 0, 0, false, ""},   // (a path shape's own path, drawn by a pen: SVG's path data, in its height from its middle, down as SVG goes)   // (only those nearer than this, in units of the stage, finer the further apart: a plexus; 0: each to the next in their order)
     // (a wave through it and its copies, Cavalry's oscillator: so far across and up (units), so far turned (degrees),
@@ -456,6 +459,8 @@ static const DocShown doc_shown[] = {
     {"connect_to", "thing", "", "With", 0, 0, nullptr},
     {"rough", "share", "%", "Rough", 0, 0.2, nullptr},
     {"rough_detail", "share", "%", "Detail", 0.005, 0.2, nullptr},
+    {"trail", "thing", "", "Trail", 0, 0, nullptr},
+    {"trail_length", "", "s", "Trail length", 0.05, 4, nullptr},
     {"morph", "share", "%", "Morph", 0, 1, nullptr},
     {"morph_to", "thing", "", "Into", 0, 0, nullptr},
     {"boolean", "", "", "Boolean", 0, 0, nullptr},
@@ -767,6 +772,7 @@ static bool doc_half(Doc& d, int thing, float2* half, float* deep = nullptr);
 // Where a thing is at a moment, as a matrix: moved, turned about z, y and x, made its size, all about its anchor (a
 // point of its own box: 0 its middle, 1 its edge on that side; the past repository's `anchor`, keyed as it was).
 static math::mat4 doc_place(Doc& d, int thing, double now, int deeper = 0, int copy = 0, bool member = false);
+static math::mat4 doc_shown_at(Doc& d, int thing, double now);
 static double doc_point(Doc& d, int thing, double now);
 static double doc_seconds(Doc& d);
 // A thing's copies given back its own look, their own looks done away with (no longer coloured each, or taken off).
@@ -1472,8 +1478,19 @@ static void doc_moment(Doc& d, double now) {
             for (int k = 0; k < 4; ++k)
                 if (how == std::array<const char*, 4>{"subtract", "intersect", "union", "exclude"}[(size_t)k]) join = other((int)doc_number(d, thing, "boolean_with", 0, 0), true), join.how = k;
             if (const float much = num("morph", 0); much > 0.f) morph = other((int)doc_number(d, thing, "morph_to", 0, 0), false), morph.much = much;
+            Drawn::Other trace;   // (another's track over the last so many seconds, its middle where it was, as Cavalry's Trails: this one's path)
+            if (const int with = (int)doc_number(d, thing, "trail", 0, 0); with && with != thing && d.shown.count(with)) {
+                const math::mat4 back = inverse(doc_place(d, thing, now));
+                const double length = std::max(1e-3, doc_number(d, thing, "trail_length", now, 1));
+                const Drawn* a = t.drawn;
+                for (int k = 0; k <= 64; ++k) {
+                    const math::double4 on = back * doc_shown_at(d, with, now - length * (1.0 - k / 64.0)) * math::double4{0, 0, 0, 1};
+                    trace.by.push_back(k ? tvg::PathCommand::LineTo : tvg::PathCommand::MoveTo);
+                    trace.at.push_back({(float)(on.x / a->sheetHigh * a->plainHigh + 0.5 * a->cutW), (float)(0.5 * a->plainHigh - on.y / a->sheetHigh * a->plainHigh)});
+                }
+            }
             cut_at(s, t.drawn, float3{num("trim", 0), num("trim_begin", 0), num("trim_offset", 0)},   // (its path anew, if it is told otherwise: cut again)
-                   {num("round", 0), num("bloat", 0), num("zigzag", 0), num("zigzag_ridges", 5), num("zigzag_smooth", 0), num("offset", 0), num("rough", 0), num("rough_detail", 0.03)}, join, morph);
+                   {num("round", 0), num("bloat", 0), num("zigzag", 0), num("zigzag_ridges", 5), num("zigzag_smooth", 0), num("offset", 0), num("rough", 0), num("rough_detail", 0.03)}, join, morph, trace);
             for (const Stage::Made& made : s.made)
                 if (made.of == t.drawn->sheet)
                     if (const auto own = d.copyLooks.find(made.thing.getId()); own != d.copyLooks.end()) own->second->setParameter("bends", bends, 7);

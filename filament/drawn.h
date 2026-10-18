@@ -89,7 +89,7 @@ struct Drawn {
         bool operator==(const Other& o) const {
             return how == o.how && much == o.much && by == o.by && at.size() == o.at.size() && std::equal(at.begin(), at.end(), o.at.begin(), [](tvg::Point a, tvg::Point b) { return a.x == b.x && a.y == b.y; });
         }
-    } joined, morphed;   // (as last put together with, as last turned into)
+    } joined, morphed, traced;   // (as last put together with, as last turned into, as last tracing: its whole path another's track)
     std::vector<std::string> markers;  // an After Effects file's named stretches (ThorVG's Lottie markers)
     std::vector<float2> letters;       // a text split into its letters: where each lies across the picture (shares of its width); its copies show one each
     float fromFrame = 0.f, toFrame = 0.f;   // the stretch it plays, when one is named (frames of the file)
@@ -1015,17 +1015,20 @@ bool sk_op(int op, const tvg::PathCommand* ac, uint32_t acn, const tvg::Point* a
 // paths on its edge (off its end, off its beginning, slid along), its operators (round, bloat, zig zag, offset: bend.cpp),
 // then put together with another shape's path (`join`: Skia's path operation, skpath.cpp; -1 none; `by`/`at` that path
 // in this one's points), as Cavalry's Boolean.
-static void cut_at(Stage& s, Drawn* d, float3 trim, const std::array<float, 8>& bend, Drawn::Other join = {}, Drawn::Other morph = {}) {
+static void cut_at(Stage& s, Drawn* d, float3 trim, const std::array<float, 8>& bend, Drawn::Other join = {}, Drawn::Other morph = {}, Drawn::Other trace = {}) {
     if (join.how < 0 || join.by.empty()) join = {};
     if (morph.much <= 0.f || morph.by.empty()) morph = {};
-    const bool joins = !(join == d->joined) || !(morph == d->morphed);
+    if (trace.by.empty()) trace = {};
+    const bool joins = !(join == d->joined) || !(morph == d->morphed) || !(trace == d->traced);
     if (!d->cut || !d->outline || (trim == d->trimmed && bend == d->bent && !joins)) return;
     d->trimmed = trim;
     const bool refill = bend != d->bent || joins;
     if (refill) {
-        d->bent = bend, d->joined = join, d->morphed = morph;
+        d->bent = bend, d->joined = join, d->morphed = morph, d->traced = trace;
         const float high = d->plainHigh;
-        tvg_bend(d->outline, d->plain.data(), (uint32_t)d->plain.size(), d->plainAt.data(), (uint32_t)d->plainAt.size(), std::clamp(bend[0], 0.f, 0.5f) * d->plainSide,
+        const bool traces = !trace.by.empty();   // (tracing another: its track is its path, as Cavalry's Trails)
+        tvg_bend(d->outline, traces ? trace.by.data() : d->plain.data(), traces ? (uint32_t)trace.by.size() : (uint32_t)d->plain.size(), traces ? trace.at.data() : d->plainAt.data(),
+                 traces ? (uint32_t)trace.at.size() : (uint32_t)d->plainAt.size(), std::clamp(bend[0], 0.f, 0.5f) * d->plainSide,
                  100.f * std::clamp(bend[1], -1.f, 1.f), bend[2] * high, (int)std::clamp(bend[3], 0.f, 100.f), bend[4] > 0.5f, bend[5] * high, d->fine);
         if (bend[6] > 0.f) {   // (roughened, as Illustrator's Roughen and After Effects' Roughen Edges: Skia's own discrete path effect, so far out, a point so often)
             const tvg::PathCommand* cmds; const tvg::Point* pts; uint32_t cmdsCnt = 0, ptsCnt = 0;
