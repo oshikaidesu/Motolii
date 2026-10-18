@@ -14,7 +14,7 @@
 
 static const char* const calls =
     "  add film <file> | add picture <an After Effects file, a .jpg, a .png> | add text <font.ttf> | add solid <file.glb>|ring|gem|cube   (say N fill glass: it is glass)\n"
-    "  remove <thing> | set <thing> <name> <number> | say <thing> <name> <word> | key <thing> <name> <at> <number> | unkey <thing> <name> <at>\n"
+    "  pen <thing, 0: new> <x> <y> [<handle x> <handle y>] (points of the picture) | remove <thing> | set <thing> <name> <number> | say <thing> <name> <word> | key <thing> <name> <at> <number> | unkey <thing> <name> <at>\n"
     "  way <thing> <name> <at> <a way, and its numbers> | ways | define <a way's name> <its expression> | value <thing> <name> <at>\n"
     "  make <recipe> | recipes | together on|off | undo | redo | list | at <seconds> | still <file.png> | write <file.mp4> | time\n";
 
@@ -44,6 +44,7 @@ int main(int argc, char** argv) {
             const double is = number(3);
             if (numbers && (ok = motolii_set(m, n, w[2].c_str(), is)) && keys) std::printf("(its %d keys are gone: it stays at that)\n", keys);
         }
+        else if (call == "pen" && (w.size() == 4 || w.size() == 6)) { const int n = thing(); const double x = number(2), y = number(3), hx = w.size() == 6 ? number(4) : 0, hy = w.size() == 6 ? number(5) : 0; if (numbers && (ok = motolii_pen(m, n, x, y, hx, hy))) std::printf("thing %d\n", ok); }
         else if (call == "say" && w.size() >= 3) { const int n = thing(); if (numbers) ok = motolii_say(m, n, w[2].c_str(), w.size() > 3 ? rest(3).c_str() : ""); }   // (a text's words are the rest of the line; none: said empty)
         else if (call == "key" && w.size() == 5) { const int n = thing(); const double at = number(3), is = number(4); if (numbers) ok = motolii_key(m, n, w[2].c_str(), at, is); }
         else if (call == "unkey" && w.size() == 4) { const int n = thing(); const double at = number(3); if (numbers) ok = motolii_unkey(m, n, w[2].c_str(), at); }

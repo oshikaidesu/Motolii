@@ -2727,6 +2727,42 @@ static bool doc_frame(Doc& d, int thing, double now, double* frame) {
     }
     return true;
 }
+// A pen on the stage: a point put where the hand is (x, y: points of the picture from its top left), its handle drawn
+// out by hx, hy (points; 0, 0: a corner), on a path shape's own path (its `path`, SVG's path data): a line to it, or a
+// curve through it as Illustrator's pen makes one (SVG's S: the point before smooth, its handle turned through). On
+// its first point again: closed. thing 0: a new path shape, begun there, one step with its first point. Its number (0: not).
+static int doc_pen(Doc& d, int thing, double x, double y, double hx, double hy) {
+    const double now = d.stage->now;
+    doc_act(d);
+    if (!thing) thing = doc_add(d, "shape", "path");
+    if (thing && (!doc_knows(d, thing) || doc_word(d, thing, "shape") != "path")) d.trouble = "a pen draws on a path shape", thing = 0;
+    std::string path = thing ? doc_word(d, thing, "path") : "";
+    const math::mat4 at = doc_shown_at(d, thing, now);   // (its own plane on the picture: its middle and its two ways, seen)
+    const math::double2 o = doc_seen(d, (at * math::double4{0, 0, 0, 1}).xyz), ex = doc_seen(d, (at * math::double4{1, 0, 0, 1}).xyz) - o, ey = doc_seen(d, (at * math::double4{0, 1, 0, 1}).xyz) - o;
+    const double det = ex.x * ey.y - ex.y * ey.x;
+    if (thing && std::fabs(det) < 1e-9) d.trouble = "the shape is seen edge on", thing = 0;
+    const auto own = [&](double px, double py) {   // (a point of the picture on its plane: its height 1, from its middle, down as SVG goes)
+        const double u = px - o.x, v = py - o.y;
+        return math::double2{(u * ey.y - v * ey.x) / det, -(ex.x * v - ex.y * u) / det};
+    };
+    char said[200] = "";
+    if (thing) {
+        const math::double2 p = own(x, y), in = own(x - hx, y - hy);
+        double fx = 0.0, fy = 0.0;
+        const size_t last = path.find_last_of("MLSCZ");
+        const bool smooth = last != std::string::npos && (path[last] == 'S' || path[last] == 'C'), handle = hx != 0.0 || hy != 0.0;
+        const bool closes = std::sscanf(path.c_str(), "M%lf %lf", &fx, &fy) == 2 && path.find_first_of("LSC") != std::string::npos && last != std::string::npos && path[last] != 'Z' &&
+                            length(o + ex * fx - ey * fy - math::double2{x, y}) < 8.0;   // (back on its first point, as the hand sees it)
+        if (path.empty()) std::snprintf(said, sizeof said, "M%.4f %.4f", p.x, p.y);
+        else if (closes) std::snprintf(said, sizeof said, smooth || handle ? " S%.4f %.4f %.4f %.4f Z" : " Z", handle ? own(o.x + ex.x * fx - ey.x * fy - hx, o.y + ex.y * fx - ey.y * fy - hy).x : fx,
+                                       handle ? own(o.x + ex.x * fx - ey.x * fy - hx, o.y + ex.y * fx - ey.y * fy - hy).y : fy, fx, fy);
+        else if (!smooth && !handle) std::snprintf(said, sizeof said, " L%.4f %.4f", p.x, p.y);
+        else std::snprintf(said, sizeof said, " S%.4f %.4f %.4f %.4f", in.x, in.y, p.x, p.y);
+        if (!doc_say(d, thing, "path", (path + said).c_str())) thing = 0;
+    }
+    if (!thing) d.act_ok = false;
+    return doc_acted(d) ? thing : 0;
+}
 // What of a thing is seen at a moment: the upright box of its outline on the picture (its own points where they are at
 // hand, else its box's corners), left, top, right, bottom in points of the picture. false: it is not shown.
 static bool doc_seen_box(Doc& d, int thing, double now, double* box) {
