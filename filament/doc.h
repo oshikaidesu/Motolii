@@ -1638,7 +1638,7 @@ static void doc_moment(Doc& d, double now) {
 // call for its kind), one the stage has and the document has not is taken off, one whose making is told otherwise now
 // is made again. false: a thing could not be made (d.trouble says which, and why).
 // All that a thing's making goes by: one changed, the thing is made again (doc_match), carried by a hand too (doc_carry).
-static const char* const doc_making = "'kind','file','shape','blend','keyed','space','begin','duration','speed','text','fill','wide','points','inner','round','bloat','zigzag','offset','warp','clip','stroke','stroke_width','align','blur','shadow','shadow_distance','shadow_angle','shadow_blur','shadow_opacity','glow','glow_blur','glow_opacity','copies','tint','tint_black','tint_white','tritone','tritone_shadow','tritone_midtone','tritone_highlight','letter_spacing','line_spacing','italic','cap','join','dash','dash_offset','metallic','roughness','reflectance','clear_coat','clear_coat_roughness','falloff','shadows','shadow_softness','contact_shadows','sheen','anisotropy','shading','thickness','light_group','script','copy_fill','gradient','gradient_angle','gradient_scale','gradient_spread','wrap','wrap_at','split','ior','dispersion','swim','dark','vivid','marker'";
+static const char* const doc_making = "'kind','file','shape','path','blend','keyed','space','begin','duration','speed','text','fill','wide','points','inner','round','bloat','zigzag','offset','warp','clip','stroke','stroke_width','align','blur','shadow','shadow_distance','shadow_angle','shadow_blur','shadow_opacity','glow','glow_blur','glow_opacity','copies','tint','tint_black','tint_white','tritone','tritone_shadow','tritone_midtone','tritone_highlight','letter_spacing','line_spacing','italic','cap','join','dash','dash_offset','metallic','roughness','reflectance','clear_coat','clear_coat_roughness','falloff','shadows','shadow_softness','contact_shadows','sheen','anisotropy','shading','thickness','light_group','script','copy_fill','gradient','gradient_angle','gradient_scale','gradient_spread','wrap','wrap_at','split','ior','dispersion','swim','dark','vivid','marker'";
 // The values that move a flat shape's points as it is drawn (flat.mat's vertex stage): a shape with any of them cut
 // fine all along, one with none only round its curves (a long line in four points, not two thousand).
 static const char* const doc_bending = "'warp','bend','twist','pinch','skew','squash','wiggle','stretch','pin_tl_x','pin_tl_y','pin_tr_x','pin_tr_y','pin_bl_x','pin_bl_y','pin_br_x','pin_br_y'";
@@ -1800,7 +1800,7 @@ static bool doc_match(Doc& d) {
                 const float high = line ? 0.04f : wave ? 0.3f : 1.f;
                 // (its outline alone, in one colour: cut into triangles and drawn by Filament as the scene's other things
                 //  are, flat_mesh; with an edge, a ramp, a dash, effects, a trim or a bend made on the CPU: ThorVG's picture)
-                const std::string form = shape == "path" ? doc_word(d, thing, "path") : shape;   // (a path shape: its own path is its form)
+                const std::string drawn = doc_word(d, thing, "path"), form = shape != "path" ? shape : drawn.empty() ? "M0 0" : drawn;   // (a path shape: its own path is its form; none yet: nothing)
                 const bool plain = !wave && shape != "null" && fx.ramp.size() < 2 && fx.blur <= 0.f && fx.shadow.w <= 0.f && fx.glow.w <= 0.f && fx.tint <= 0.f && fx.tritone <= 0.f;
                 if (plain)
                     made.drawn = flat_mesh(s, form.c_str(), (float)doc_number(d, thing, "wide", 0, line ? 25 : 1), mat4f{}, high, fill.empty() ? float3{0xd9, 0xd2, 0xc3} / 255.f : colour, lay,
@@ -2730,10 +2730,12 @@ static bool doc_frame(Doc& d, int thing, double now, double* frame) {
 // A pen on the stage: a point put where the hand is (x, y: points of the picture from its top left), its handle drawn
 // out by hx, hy (points; 0, 0: a corner), on a path shape's own path (its `path`, SVG's path data): a line to it, or a
 // curve through it as Illustrator's pen makes one (SVG's S: the point before smooth, its handle turned through). On
-// its first point again: closed. thing 0: a new path shape, begun there, one step with its first point. Its number (0: not).
+// its first point again: closed, and the next point begins another. thing 0: a new path shape, begun there, one step with its
+// first point. Its number (0: not).
 static int doc_pen(Doc& d, int thing, double x, double y, double hx, double hy) {
     const double now = d.stage->now;
     doc_act(d);
+    if (thing && doc_knows(d, thing) && doc_word(d, thing, "shape") == "path" && !doc_word(d, thing, "path").empty() && doc_word(d, thing, "path").back() == 'Z') thing = 0;   // (closed: the pen begins another)
     if (!thing) thing = doc_add(d, "shape", "path");
     if (thing && (!doc_knows(d, thing) || doc_word(d, thing, "shape") != "path")) d.trouble = "a pen draws on a path shape", thing = 0;
     std::string path = thing ? doc_word(d, thing, "path") : "";

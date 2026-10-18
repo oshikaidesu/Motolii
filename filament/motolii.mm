@@ -796,8 +796,13 @@ int motolii_later(Motolii* m, const char* call, int thing, const char* name, con
             else if (c == "stay") ok = changes(m, (int)doc_stay(doc(m), thing, n.c_str(), number));
             else if (c == "way") ok = way_is(m, thing, n.c_str(), number, w.c_str());
             else if (c == "effect") ok = changes(m, (int)doc_effect(doc(m), thing, n.c_str(), number));
+            else if (c == "pen") {   // (word: where the hand is and its handle, "x y hx hy", points of the picture; the answer is the path shape)
+                double x = 0.0, y = 0.0, hx = 0.0, hy = 0.0;
+                std::sscanf(w.c_str(), "%lf %lf %lf %lf", &x, &y, &hx, &hy);
+                ok = m->made = changes(m, doc_pen(doc(m), thing, x, y, hx, hy));
+            }
             else if (c == "hold") ok = (int)doc_hold(doc(m), thing);   // (a hand takes hold: what it carries next is this thing's)
-            else m->trouble = "a change asked later is one of: say, set, hold, let_go, undo, redo, together, add, make, remove, mark, guide, work, raise, sequence, key_here, unkey, stay, way, effect";
+            else m->trouble = "a change asked later is one of: say, set, hold, let_go, undo, redo, together, add, make, pen, remove, mark, guide, work, raise, sequence, key_here, unkey, stay, way, effect";
             if (sqlite3_total_changes(m->d->file) != rows) m->revision.fetch_add(1, std::memory_order_release);   // (counted before the answer: the window reads again what is so now)
             m->changed = true;
             std::lock_guard<std::mutex> hold(m->asked_lock);

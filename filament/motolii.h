@@ -50,7 +50,7 @@ int motolii_remove(Motolii* m, int thing);
 int motolii_set(Motolii* m, int thing, const char* name, double number);          /* a value that stays */
 int motolii_say(Motolii* m, int thing, const char* name, const char* word);
 /* A pen: a point where the hand is (points of the picture from the top left), its handle drawn out by hx, hy (0, 0: a
-   corner), on a path shape's path; on its first point again, closed. thing 0: a new path shape begun there. Its number (0: not). */
+   corner), on a path shape's path; on its first point again, closed (the next point begins another). thing 0: a new path shape begun there. Its number (0: not). */
 int motolii_pen(Motolii* m, int thing, double x, double y, double hx, double hy);       /* a word */
 int motolii_key(Motolii* m, int thing, const char* name, double at, double number);   /* a key at a moment */
 int motolii_key_many(Motolii* m, int thing, const char* name, int n, const double* at, const double* number);   /* n keys of one value in one call and one step (at[i], number[i]) */

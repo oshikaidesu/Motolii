@@ -124,6 +124,7 @@ class _StageViewState extends State<StageView> implements StageHandles {
   void didUpdateWidget(StageView o) {
     super.didUpdateWidget(o);
     if (o.zoom != widget.zoom) _pan = Offset.zero;
+    if (o.make != widget.make) _penning = false; // (another tool: the pen's next point begins a new shape)
   }
 
   // Joined: the inside draws the whole pane (the desk), the stage lying in it where this view puts it; told again when
@@ -333,6 +334,33 @@ class _StageViewState extends State<StageView> implements StageHandles {
     ws.after(m.later('together'), (done, _) => done && made > 0 ? ws.select('$made') : null);
   }
 
+  // Joined: the pen: a point where the hand came down, its handle drawn out as far as the hand was dragged (a tap: a
+  // corner). Its first begins a path shape, the rest go on the one the pen made (thing -1); the inside reckons all of
+  // it (closing on the first point, and beginning another after) from where the hand is.
+  bool _penning = false;
+
+  void _pen(_View v, Offset down, Offset up) {
+    final ws = WsScope.read(context), m = ws.inside;
+    _drawFrom = null;
+    setState(() {});
+    if (m == null) return;
+    final a = v.toComp(down), h = v.toComp(up) - a;
+    final first = !_penning;
+    _penning = true;
+    if (first) m.later('together', number: 1);
+    var made = 0;
+    ws.after(m.later('pen', thing: first ? 0 : -1, word: '${a.dx} ${a.dy} ${h.dx} ${h.dy}'), null, (t) => made = t);
+    if (first) {
+      if (ws.ink.isNotEmpty) m.later('say', thing: -1, name: 'fill', word: ws.ink);
+      if (ws.edge.isNotEmpty) {
+        m
+          ..later('say', thing: -1, name: 'stroke', word: ws.edge)
+          ..later('set', thing: -1, name: 'stroke_width', number: 6);
+      }
+      ws.after(m.later('together'), (done, _) => done && made > 0 ? ws.select('$made') : null);
+    }
+  }
+
   void _hold(_View v, Offset local) {
     if (widget.make != null) {
       setState(() => _drawFrom = local);
@@ -426,6 +454,7 @@ class _StageViewState extends State<StageView> implements StageHandles {
             behavior: HitTestBehavior.opaque,
             onTapUp: (d) {
               widget.onPoke?.call();
+              if (widget.make == 'pen') return _pen(v, d.localPosition, d.localPosition); // (a tap: a corner)
               if (widget.make != null) return _draw(v, _drawFrom = d.localPosition); // (only come down: one as it comes, there)
               WsScope.read(context).select(_hit(v, d.localPosition));
             },
@@ -437,7 +466,7 @@ class _StageViewState extends State<StageView> implements StageHandles {
                 ? (widget.cursor.value = v.toComp(_last = d.localPosition))
                 : _carry(v, _last = d.localPosition),
             onPanEnd: (_) => _drawFrom != null
-                ? _draw(v, _last ?? _drawFrom!)
+                ? (widget.make == 'pen' ? _pen(v, _drawFrom!, _last ?? _drawFrom!) : _draw(v, _last ?? _drawFrom!))
                 : _pulling != null
                 ? _pullLetGo(v, _last!)
                 : _letGo(),
@@ -461,7 +490,9 @@ class _StageViewState extends State<StageView> implements StageHandles {
                         : ClipRect(key: const ValueKey('ws-stage-comp'), child: Texture(textureId: widget.texture!, filterQuality: FilterQuality.medium)),
                   ),
                 ),
-                if (_drawFrom case final from? when _last != null) // (what is being drawn: its box)
+                if (_drawFrom case final from? when _last != null && widget.make == 'pen') // (the pen's handle being drawn out: through its point, both ways)
+                  IgnorePointer(child: CustomPaint(size: Size.infinite, painter: _HandlePainter(from, _last!)))
+                else if (_drawFrom case final from? when _last != null) // (what is being drawn: its box)
                   Positioned.fromRect(
                     rect: Rect.fromPoints(from, _last!),
                     child: IgnorePointer(child: DecoratedBox(decoration: BoxDecoration(border: Border.all(color: WsT.accent)))),
@@ -599,6 +630,21 @@ TextPainter _tp(String t, TextStyle s) => TextPainter(
 /// What one painter draws: everything (the stand-in art too), or, when the inside's picture sits in the composition,
 /// what lies under it (the surround, the captions) and what lies over it (grid, guides, the selection).
 enum _Part { all, under, over }
+
+class _HandlePainter extends CustomPainter {
+  _HandlePainter(this.at, this.out);
+  final Offset at, out;
+  @override
+  void paint(Canvas c, Size _) {
+    final line = Paint()..color = WsT.accent..strokeWidth = 1, dot = Paint()..color = WsT.accent;
+    c.drawLine(at * 2 - out, out, line);
+    for (final p in [at * 2 - out, out]) c.drawCircle(p, 3, dot);
+    c.drawRect(Rect.fromCenter(center: at, width: 6, height: 6), dot);
+  }
+
+  @override
+  bool shouldRepaint(_HandlePainter o) => o.at != at || o.out != out;
+}
 
 class _ViewPainter extends CustomPainter {
   _ViewPainter(this.scene, this.v, this.sel, this.hover, {required this.grid, required this.safe, this.part = _Part.all, this.pivots = false, this.met = (null, null), this.marked = false});
