@@ -261,6 +261,7 @@ static const DocValue doc_values[] = {
     {"trail", "shape", 0, 1e9, false, nullptr},
     {"trail_length", "shape", 0.001, 60, true, nullptr},
     {"morph_to", "shape", 0, 1e9, false, nullptr},
+    {"morph_steps", "shape", 0, 64, false, nullptr},   // (and so many steps from itself to it all at once, a blend; 0 or 1: none)
     {"path", "shape", 0, 0, false, ""},   // (a path shape's own path, drawn by a pen: SVG's path data, in its height from its middle, down as SVG goes)   // (only those nearer than this, in units of the stage, finer the further apart: a plexus; 0: each to the next in their order)
     // (a wave through it and its copies, Cavalry's oscillator: so far across and up (units), so far turned (degrees),
     //  so much larger (a share), so many times a second, each copy so far behind the one before (turns spread over all)
@@ -463,6 +464,7 @@ static const DocShown doc_shown[] = {
     {"trail_length", "", "s", "Trail length", 0.05, 4, nullptr},
     {"morph", "share", "%", "Morph", 0, 1, nullptr},
     {"morph_to", "thing", "", "Into", 0, 0, nullptr},
+    {"morph_steps", "", "", "Steps", 0, 32, nullptr},
     {"boolean", "", "", "Boolean", 0, 0, nullptr},
     {"boolean_with", "thing", "", "Shape", 0, 0, nullptr},
     {"follow", "thing", "", "Follow", 0, 0, nullptr},
@@ -1478,6 +1480,7 @@ static void doc_moment(Doc& d, double now) {
             for (int k = 0; k < 4; ++k)
                 if (how == std::array<const char*, 4>{"subtract", "intersect", "union", "exclude"}[(size_t)k]) join = other((int)doc_number(d, thing, "boolean_with", 0, 0), true), join.how = k;
             if (const float much = num("morph", 0); much > 0.f) morph = other((int)doc_number(d, thing, "morph_to", 0, 0), false), morph.much = much;
+            if (const int steps = (int)doc_number(d, thing, "morph_steps", 0, 0); steps > 1) morph = other((int)doc_number(d, thing, "morph_to", 0, 0), false), morph.much = 1.f, morph.how = std::min(steps, 64);   // (a blend: every step at once)
             Drawn::Other trace;   // (another's track over the last so many seconds, its middle where it was, as Cavalry's Trails: this one's path)
             if (const int with = (int)doc_number(d, thing, "trail", 0, 0); with && with != thing && d.shown.count(with)) {
                 const math::mat4 back = inverse(doc_place(d, thing, now));

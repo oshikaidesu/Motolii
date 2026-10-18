@@ -83,7 +83,7 @@ struct Drawn {
     std::vector<uint32_t> deep;   // (an After Effects file's 3D layers: not drawn in its own picture, each a sheet of its own where it is: picture_deep)
     std::array<float, 8> bent{};   // (as last bent: round, bloat, zigzag, ridges, smooth, offset; roughened: how far, how fine)
     // Another shape's path in this one's points, and what is done with it: put together (how: skpath.cpp's op; -1 none),
-    // or turned into (much: how far, 0 not).
+    // or turned into (much: how far, 0 not; how above 1: so many steps from itself to it, all at once, a blend).
     struct Other {
         int how = -1; float much = 0.f; std::vector<tvg::PathCommand> by; std::vector<tvg::Point> at;
         bool operator==(const Other& o) const {
@@ -1041,7 +1041,13 @@ static void cut_at(Stage& s, Drawn* d, float3 trim, const std::array<float, 8>& 
             const tvg::PathCommand* cmds; const tvg::Point* pts; uint32_t cmdsCnt = 0, ptsCnt = 0;
             d->outline->path(&cmds, &cmdsCnt, &pts, &ptsCnt);
             std::vector<tvg::PathCommand> c; std::vector<tvg::Point> p;
-            if (sk_morph(cmds, cmdsCnt, pts, morph.by.data(), (uint32_t)morph.by.size(), morph.at.data(), std::min(morph.much, 1.f), c, p))
+            if (morph.how > 1) {   // (a blend, as Illustrator's and Cavalry's: every step from itself to the other, evenly, in one path)
+                std::vector<tvg::PathCommand> all; std::vector<tvg::Point> at;
+                for (int k = 0; k < morph.how; ++k)
+                    if (sk_morph(cmds, cmdsCnt, pts, morph.by.data(), (uint32_t)morph.by.size(), morph.at.data(), (float)k / (float)(morph.how - 1), c, p))
+                        all.insert(all.end(), c.begin(), c.end()), at.insert(at.end(), p.begin(), p.end());
+                if (!all.empty()) d->outline->reset(), d->outline->appendPath(all.data(), (uint32_t)all.size(), at.data(), (uint32_t)at.size());
+            } else if (sk_morph(cmds, cmdsCnt, pts, morph.by.data(), (uint32_t)morph.by.size(), morph.at.data(), std::min(morph.much, 1.f), c, p))
                 d->outline->reset(), d->outline->appendPath(c.data(), (uint32_t)c.size(), p.data(), (uint32_t)p.size());
         }
         if (join.how >= 0) {
