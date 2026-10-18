@@ -90,6 +90,10 @@ struct Drawn {
             return how == o.how && much == o.much && by == o.by && at.size() == o.at.size() && std::equal(at.begin(), at.end(), o.at.begin(), [](tvg::Point a, tvg::Point b) { return a.x == b.x && a.y == b.y; });
         }
     } joined, morphed, traced;   // (as last put together with, as last turned into, as last tracing: its whole path another's track)
+    // Its paths as cut before, by what they were cut from (as PAG keeps a frame's shapes and Beutl a path by its version):
+    // a moment cut once is not cut again while they are kept (all shapes' together at most cuts_most).
+    struct Cut { std::vector<tvg::PathCommand> by; std::vector<tvg::Point> at; std::vector<float3> pos; std::vector<float2> uv; std::vector<uint32_t> idx, ends; uint32_t fillPoints, fillEnd; size_t bytes; };
+    struct Cuts { std::unordered_map<uint64_t, Cut> all; std::deque<uint64_t> order; size_t bytes = 0; ~Cuts(); } cuts;
     std::vector<std::string> markers;  // an After Effects file's named stretches (ThorVG's Lottie markers)
     std::vector<float2> letters;       // a text split into its letters: where each lies across the picture (shares of its width); its copies show one each
     float fromFrame = 0.f, toFrame = 0.f;   // the stretch it plays, when one is named (frames of the file)
@@ -1025,12 +1029,34 @@ bool sk_op(int op, const tvg::PathCommand* ac, uint32_t acn, const tvg::Point* a
 // paths on its edge (off its end, off its beginning, slid along), its operators (round, bloat, zig zag, offset: bend.cpp),
 // then put together with another shape's path (`join`: Skia's path operation, skpath.cpp; -1 none; `by`/`at` that path
 // in this one's points), as Cavalry's Boolean.
+static std::atomic<size_t> cuts_held{0};
+static constexpr size_t cuts_most = 256ull << 20;
+Drawn::Cuts::~Cuts() { cuts_held -= bytes; }
+static uint64_t cut_key(float3 trim, const std::array<float, 10>& bend, const Drawn::Other& join, const Drawn::Other& morph, const Drawn::Other& trace) {
+    uint64_t h = 1469598103934665603ull;   // (FNV-1a over everything it is cut from)
+    const auto mix = [&](const void* p, size_t n) { for (size_t i = 0; i < n; ++i) h = (h ^ ((const uint8_t*)p)[i]) * 1099511628211ull; };
+    mix(&trim, sizeof trim), mix(bend.data(), sizeof bend);
+    for (const Drawn::Other* o : {&join, &morph, &trace})
+        mix(&o->how, sizeof o->how), mix(&o->much, sizeof o->much), mix(o->by.data(), o->by.size() * sizeof(tvg::PathCommand)), mix(o->at.data(), o->at.size() * sizeof(tvg::Point));
+    return h;
+}
 static void cut_at(Stage& s, Drawn* d, float3 trim, const std::array<float, 10>& bend, Drawn::Other join = {}, Drawn::Other morph = {}, Drawn::Other trace = {}) {
     if (join.how < 0 || join.by.empty()) join = {};
     if (morph.much <= 0.f || morph.by.empty()) morph = {};
     if (trace.by.empty()) trace = {};
     const bool joins = !(join == d->joined) || !(morph == d->morphed) || !(trace == d->traced);
     if (!d->cut || !d->outline || (trim == d->trimmed && bend == d->bent && !joins)) return;
+    const uint64_t key = cut_key(trim, bend, join, morph, trace);
+    if (const auto kept = d->cuts.all.find(key); kept != d->cuts.all.end()) {   // (cut so before: as it was)
+        const Drawn::Cut& c = kept->second;
+        d->trimmed = trim, d->bent = bend, d->joined = std::move(join), d->morphed = std::move(morph), d->traced = std::move(trace);
+        d->outline->reset(), d->outline->appendPath(c.by.data(), (uint32_t)c.by.size(), c.at.data(), (uint32_t)c.at.size());
+        Mesh& m = *d->sheet;
+        m.pos = c.pos, m.uv = c.uv, m.idx = c.idx, m.nrm.assign(m.pos.size(), float3{0, 0, 1});
+        d->fillPoints = c.fillPoints, d->fillEnd = c.fillEnd;
+        reshape(s, d->sheet, c.ends);
+        return;
+    }
     d->trimmed = trim;
     const bool refill = bend != d->bent || joins;
     if (refill) {
@@ -1083,7 +1109,25 @@ static void cut_at(Stage& s, Drawn* d, float3 trim, const std::array<float, 10>&
         }
     }
     const float from = std::clamp(trim.y, 0.f, 1.f) + trim.z, to = 1.f - std::clamp(trim.x, 0.f, 1.f) + trim.z;
-    reshape(s, d->sheet, shape_cut(d, from, to, refill));
+    const std::vector<uint32_t> ends = shape_cut(d, from, to, refill);
+    reshape(s, d->sheet, ends);
+    Drawn::Cut c;   // (kept, while there is room: the oldest of its own let go first)
+    const tvg::PathCommand* cmds; const tvg::Point* pts; uint32_t cmdsCnt = 0, ptsCnt = 0;
+    d->outline->path(&cmds, &cmdsCnt, &pts, &ptsCnt);
+    const Mesh& m = *d->sheet;
+    c.bytes = cmdsCnt * sizeof *cmds + ptsCnt * sizeof *pts + m.pos.size() * (sizeof(float3) + sizeof(float2)) + m.idx.size() * sizeof(uint32_t) + 128;
+    while (cuts_held + c.bytes > cuts_most && !d->cuts.order.empty()) {
+        const auto old = d->cuts.all.find(d->cuts.order.front());
+        d->cuts.order.pop_front();
+        if (old == d->cuts.all.end()) continue;
+        d->cuts.bytes -= old->second.bytes, cuts_held -= old->second.bytes;
+        d->cuts.all.erase(old);
+    }
+    if (cuts_held + c.bytes > cuts_most) return;
+    c.by.assign(cmds, cmds + cmdsCnt), c.at.assign(pts, pts + ptsCnt), c.pos = m.pos, c.uv = m.uv, c.idx = m.idx, c.ends = ends, c.fillPoints = d->fillPoints, c.fillEnd = d->fillEnd;
+    d->cuts.bytes += c.bytes, cuts_held += c.bytes;
+    d->cuts.order.push_back(key);
+    d->cuts.all.emplace(key, std::move(c));
 }
 
 // One layer of an After Effects file drawn alone, in its own space: its place and turn left out (they are its sheet's,
