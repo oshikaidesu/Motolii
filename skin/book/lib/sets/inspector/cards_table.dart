@@ -344,6 +344,14 @@ class CardTable extends ChangeNotifier {
     return v.fit(x);
   }
 
+  ValRef? litFrom; // the value whose followers are lit on the stage now (its "→n" mark tapped), until litUntil
+  double litUntil = 0;
+  void showTakers(String id) {
+    litFrom = ValRef(cur, id);
+    litUntil = clock + 1.4;
+    notifyListeners();
+  }
+
   /// Who takes this value of the picked thing: the other things' values linked to it.
   List<(ThingM, String)> takers(String id) => [
     for (final th in things)
@@ -974,7 +982,11 @@ class _StageState extends State<_Stage> {
           child: CustomPaint(
             painter: _Ring(t, _Time.of(context)),
             foregroundPainter: waiting
-                ? _Frame(cand.isNotEmpty, [
+                ? _Frame(cand.isNotEmpty, faint: [
+                    if (held is Val || held is ValRef)
+                      for (final th in t.things)
+                        if (!(held is Val && th == t.cur) && !(held is ValRef && held.thing == th)) _box(th),
+                  ], things: [
                     if (under != null && anchor == null) _box(under!),
                     if (overEmpty != null) // (over the empty stage: every thing that would follow)
                       for (final th in t.things)
@@ -1038,15 +1050,23 @@ class _ValueRing extends StatelessWidget {
 
 /// The stage's edge while a shelf card is carried: the stage takes it.
 class _Frame extends CustomPainter {
-  _Frame(this.over, [this.things = const []]);
+  _Frame(this.over, {this.things = const [], this.faint = const []});
   final bool over;
-  final List<Rect> things; // the things a carried value would go to, lit
+  final List<Rect> things, faint; // the things a carried value would go to, lit; the others that could take it, faintly
   @override
   void paint(Canvas c, Size s) {
     c.drawRRect(
       RRect.fromRectAndRadius((Offset.zero & s).deflate(10), const Radius.circular(10)),
       Paint()..color = Pop.accent.withValues(alpha: over ? .9 : .35)..style = PaintingStyle.stroke..strokeWidth = over ? 2 : 1,
     );
+    for (final r in faint) {
+      final rr = RRect.fromRectAndRadius(r.inflate(6), const Radius.circular(10));
+      for (final m in (Path()..addRRect(rr)).computeMetrics()) { // (dashed: could take it)
+        for (var d = 0.0; d < m.length; d += 10) {
+          c.drawPath(m.extractPath(d, d + 5), Paint()..color = Pop.accent.withValues(alpha: .45)..style = PaintingStyle.stroke..strokeWidth = 1);
+        }
+      }
+    }
     for (final r in things) {
       c.drawRRect(RRect.fromRectAndRadius(r.inflate(6), const Radius.circular(10)), Paint()..color = Pop.accent.withValues(alpha: .18));
       c.drawRRect(RRect.fromRectAndRadius(r.inflate(6), const Radius.circular(10)), Paint()..color = Pop.accent..style = PaintingStyle.stroke..strokeWidth = 2);
@@ -1069,8 +1089,11 @@ class _Ring extends CustomPainter {
       if (t.things.length > 1) { // (each thing's name under it: what the names over the panel point at)
         final m = size.center((th.base + Offset(t.at('posX', 0, 1, of: th), t.at('posY', 0, 1, of: th))) * k);
         final r = (th.ring ? t.at('radius', 0, 1, of: th) + t.at('size', 0, 1, of: th) / 2 : t.at('size', 0, 1, of: th) * .72) * k;
-        final tp = TextPainter(text: TextSpan(text: th.short, style: T.micro(th == t.cur ? Pop.accentInk : Grey.g56).copyWith(fontSize: 11)), textDirection: TextDirection.ltr)..layout();
+        final from = {for (final l in th.links.values) l.from.thing.short}, takers = t.things.where((o) => o.links.values.any((l) => l.from.thing == th)).length;
+        final said = '${th.short}${from.isEmpty ? '' : ' ↗${from.length == 1 ? from.first : from.length}'}${takers == 0 ? '' : ' →$takers'}'; // (follows whom, is followed by how many)
+        final tp = TextPainter(text: TextSpan(text: said, style: T.micro(th == t.cur ? Pop.accentInk : Grey.g56).copyWith(fontSize: 11)), textDirection: TextDirection.ltr)..layout();
         tp.paint(c, m + Offset(-tp.width / 2, r + 8));
+        if (t.litFrom != null && t.clock < t.litUntil && th.links.values.any((l) => l.from == t.litFrom)) _picked(c, Rect.fromCircle(center: m, radius: r + 6)); // (the followers of a tapped "→n")
       }
     }
   }
@@ -1497,10 +1520,13 @@ class _Tile extends StatelessWidget {
         child: MouseRegion(cursor: CardTable.canDrive(v) ? SystemMouseCursors.grab : MouseCursor.defer, child: SizedBox(
           width: double.infinity,
           child: Row(children: [
-            if (CardTable.canDrive(v)) ...[SizedBox(width: 4, height: 8, child: CustomPaint(painter: _Grip(Grey.g38))), const SizedBox(width: 3)], // (held here, the tile lifts)
+            if (CardTable.canDrive(v)) ...[SizedBox(width: 6, height: 10, child: CustomPaint(painter: _Grip(Grey.g56))), const SizedBox(width: 4)], // (held here, the tile's value is carried)
             Flexible(child: Text(v.label, maxLines: 1, overflow: TextOverflow.ellipsis, style: T.micro(CardTable.canDrive(v) ? Grey.g63 : Grey.g44).copyWith(height: 1.1))),
-            if (t.takers(v.id).isNotEmpty) // (other things follow this value: how many)
-              Text(' →${t.takers(v.id).length == 1 ? t.takers(v.id).first.$1.short : t.takers(v.id).length}', style: T.micro(Pop.accentInk)),
+            if (t.takers(v.id).isNotEmpty) // (other things follow this value: how many; tapped, they light on the stage)
+              GestureDetector(
+                onTap: () => t.showTakers(v.id),
+                child: Text(' →${t.takers(v.id).length == 1 ? t.takers(v.id).first.$1.short : t.takers(v.id).length}', style: T.micro(Pop.accentInk)),
+              ),
           ]),
         )),
       );
