@@ -811,6 +811,12 @@ static void flat_path(Drawn* d, tvg::Shape* shape, const char* form, int w, int 
         for (int k = 0; k < 7; ++k) k ? shape->lineTo(pts[k][0], pts[k][1]) : shape->moveTo(pts[k][0], pts[k][1]);
         shape->close();
     }
+    else if (!strcmp(form, "chamfer")) {   // (a rect with its corners cut straight, as Cavalry's rectangle with chamfer: `inner` of its shorter half cut off each)
+        const float c = std::clamp(inner, 0.f, 1.f) * std::min(rx, ry), x0 = in, y0 = in, x1 = (float)w - in, y1 = (float)h - in;
+        const float pts[][2] = {{x0 + c, y0}, {x1 - c, y0}, {x1, y0 + c}, {x1, y1 - c}, {x1 - c, y1}, {x0 + c, y1}, {x0, y1 - c}, {x0, y0 + c}};
+        for (int k = 0; k < 8; ++k) k ? shape->lineTo(pts[k][0], pts[k][1]) : shape->moveTo(pts[k][0], pts[k][1]);
+        shape->close();
+    }
     else if (!strcmp(form, "squircle")) {   // (a superellipse, |x|^p + |y|^p = 1: points its power, 2 an ellipse, higher squarer)
         const float p = std::clamp((float)points, 2.f, 40.f);
         for (int k = 0; k < 128; ++k) {
