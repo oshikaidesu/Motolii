@@ -72,6 +72,39 @@ void main() {
           await shot('carrying_wave_down');
           await g.up();
           await shot('copies_now_first');
+        case '投げる':
+          var g = await carry(hand('散らす'), const Offset(400, 400));
+          await t.pump(const Duration(milliseconds: 400));
+          await shot('scatter_held_over_stage');
+          await g.up();
+          await shot('scatter_worn');
+          await (await carry(hand('波'), const Offset(1100, 600))).up();
+          await shot('wave_dropped_on_inspector');
+          g = await carry(t.getCenter(find.text('色').first) + const Offset(-22, 0), t.getCenter(find.text('揺れ').last));
+          await shot('colour_card_carried_to_shelf');
+          await g.up();
+          await shot('colour_card_on_shelf');
+        case '束ねる':
+          var g = await t.startGesture(tile('半径'));
+          await t.pump(const Duration(milliseconds: 500));
+          for (var k = 1; k <= 12; k++) {
+            await g.moveTo(Offset.lerp(tile('半径'), tile('大きさ'), k / 12)!);
+            await t.pump(const Duration(milliseconds: 16));
+          }
+          await shot('radius_lifted_over_size');
+          await g.up();
+          await shot('tied_radius_and_size');
+          final bundle = t.getCenter(find.textContaining('＋').first);
+          await (await carry(bundle, bundle + const Offset(-160, 0))).up();
+          await shot('bundle_scrubbed_left');
+          g = await t.startGesture(tile('1つずつ回す'));
+          await t.pump(const Duration(milliseconds: 500));
+          for (var k = 1; k <= 12; k++) {
+            await g.moveTo(Offset.lerp(tile('1つずつ回す'), tile('大きさ'), k / 12)!);
+            await t.pump(const Duration(milliseconds: 16));
+          }
+          await g.up();
+          await shot('spin_joins_bundle');
         case '伏せる':
           await t.tap(find.text('伏せ').at(2));
           await shot('wave_face_up_again');

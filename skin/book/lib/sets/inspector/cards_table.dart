@@ -68,22 +68,30 @@ class Drive {
 }
 
 class CardTable extends ChangeNotifier {
-  CardTable(this.cards, {this.hand = const [Beh.sway, Beh.stagger, Beh.noise, Beh.random]});
+  CardTable(this.cards, {this.hand = const [Beh.sway, Beh.stagger, Beh.noise, Beh.random], List<CardM>? shelf}) : shelf = shelf ?? [];
   final List<CardM> cards;
   final List<Beh> hand;
+  final List<CardM> shelf; // cards the thing does not wear yet: thrown on the stage, they join it
   final drives = <String, Drive>{};
+  final bundles = <List<Val>>[]; // values tied into one: scrubbing the bundle moves them all
+  CardM? cardPreview; // a shelf card held over the stage: worn before it is let go
   (String, Beh)? preview; // a card hovering over a value: shown before it is let go
   String? flash; // the value a card was just laid on (its tile lights once)
 
-  Val val(String id) => [for (final c in cards) ...c.front].firstWhere((v) => v.id == id);
+  List<CardM> get worn => [...cards, ?cardPreview];
+  Val val(String id) => [for (final c in worn) ...c.front].firstWhere((v) => v.id == id);
   CardM? cardOf(String id) {
-    for (final c in cards) {
+    for (final c in worn) {
       if (c.front.any((v) => v.id == id)) return c;
     }
     return null;
   }
 
-  bool has(String id) => cards.any((c) => c.front.any((v) => v.id == id));
+  bool has(String id) => worn.any((c) => c.front.any((v) => v.id == id));
+  int? bundleOf(Val v) {
+    final i = bundles.indexWhere((b) => b.contains(v));
+    return i < 0 ? null : i;
+  }
 
   /// The value at a moment for one copy: its number, moved by what drives it (and by a hovering card), nothing if its card is down.
   double at(String id, double t, int i, int n, {double fallback = 0}) {
@@ -137,6 +145,60 @@ class CardTable extends ChangeNotifier {
     notifyListeners();
   }
 
+  void holdCard(CardM? c) {
+    if (c == cardPreview) return;
+    cardPreview = c;
+    notifyListeners();
+  }
+
+  /// A shelf card let go on the stage (or the inspector): the thing wears it, last.
+  void wear(CardM c) {
+    shelf.remove(c);
+    if (!cards.contains(c)) cards.add(c);
+    cardPreview = null;
+    notifyListeners();
+  }
+
+  /// A card put back on the shelf: the thing no longer wears it (what drove its values goes with it).
+  void shelve(CardM c) {
+    if (!cards.remove(c)) return;
+    for (final v in c.front) {
+      drives.remove(v.id);
+    }
+    bundles.removeWhere((b) => b.any(c.front.contains));
+    shelf.add(c);
+    notifyListeners();
+  }
+
+  /// One value let go on another: they become one bundle (or the value joins the other's bundle).
+  void tie(Val a, Val b) {
+    if (a == b) return;
+    final ia = bundleOf(a), ib = bundleOf(b);
+    if (ia != null && ia == ib) return;
+    if (ib != null) {
+      if (ia != null) bundles.removeAt(ia);
+      bundles[bundleOf(b)!].add(a);
+    } else if (ia != null) {
+      bundles[ia].add(b);
+    } else {
+      bundles.add([b, a]);
+    }
+    notifyListeners();
+  }
+
+  void untie(int i) {
+    bundles.removeAt(i);
+    notifyListeners();
+  }
+
+  /// A bundle scrubbed: each of its values moves the same share of its own range.
+  void scrubBundle(int i, double share) {
+    for (final v in bundles[i]) {
+      v.v = (v.v + share * (v.hi - v.lo)).clamp(v.lo, v.hi);
+    }
+    notifyListeners();
+  }
+
   void move(int from, int to) {
     final c = cards.removeAt(from);
     cards.insert(to, c);
@@ -151,7 +213,17 @@ class CardTable extends ChangeNotifier {
 }
 
 /// The ring's cards as the window shows a shape with copies today (labels in plain Japanese).
-CardTable starRing({bool wave = true}) => CardTable([
+CardM waveCard() => CardM('波', Pop.tonePath, [
+  Val('waveH', '高さ', 0, 0, 90, unit: 'px'),
+  Val('waveS', '速さ', 1, 0, 4, dec: 2),
+], back: const ['波 X', '波 Z', '波で回す', '波で大きく', '位相', 'ゆらぎ', 'ゆらぎの細かさ']);
+
+CardM scatterCard() => CardM('散らす', Pop.toneParticles, [
+  Val('scatter', '広さ', 50, 0, 120, unit: 'px'),
+  Val('scatterTurn', '回して散らす', 0, 0, 180, unit: '°'),
+], back: const ['散らす X', '散らす Y', '散らす Z', '大きさで散らす', 'シード', '流れ X', '流れ Y']);
+
+CardTable starRing({bool wave = true}) => CardTable(shelf: [scatterCard(), if (!wave) waveCard()], [
   CardM('見た目', Pop.toneLayer, [
     Val('size', '大きさ', 44, 10, 120, unit: 'px'),
     Val('turn', '回転', 0, 0, 360, unit: '°'),
@@ -162,11 +234,7 @@ CardTable starRing({bool wave = true}) => CardTable([
     Val('radius', '半径', 180, 20, 300, unit: 'px'),
     Val('spin', '1つずつ回す', 30, 0, 180, unit: '°'),
   ], back: const ['列', '間隔 X', '間隔 Y', '回転 X', '回転 Y', '大きさ', '幅', '奥行き', '高さ', '遅れ', '遅れの起点', '色の並び', '色の流れ']),
-  if (wave)
-    CardM('波', Pop.tonePath, [
-      Val('waveH', '高さ', 0, 0, 90, unit: 'px'),
-      Val('waveS', '速さ', 1, 0, 4, dec: 2),
-    ], back: const ['波 X', '波 Z', '波で回す', '波で大きく', '位相', 'ゆらぎ', 'ゆらぎの細かさ']),
+  if (wave) waveCard(),
   CardM('色', Pop.toneFill, [
     Val('hue', '色相', 72, 0, 360, unit: '°'),
     Val('light', '明るさ', 62, 20, 90, unit: '%'),
@@ -245,13 +313,22 @@ class _Stage extends StatelessWidget {
   final CardTable t;
   final String tag;
   @override
-  Widget build(BuildContext context) => ClipRect(
+  Widget build(BuildContext context) => DragTarget<CardM>(
+    onWillAcceptWithDetails: (e) {
+      if (t.cards.contains(e.data)) return false;
+      t.holdCard(e.data);
+      return true;
+    },
+    onLeave: (_) => t.holdCard(null),
+    onAcceptWithDetails: (e) => t.wear(e.data),
+    builder: (context, cand, _) => ClipRect(
     child: CustomPaint(
       painter: _Ring(t, _Time.of(context)),
       child: Align(
         alignment: Alignment.topLeft,
         child: Padding(padding: const EdgeInsets.all(14), child: Text(tag, style: T.micro(N.g76))),
       ),
+    ),
     ),
   );
 }
@@ -269,10 +346,10 @@ class _Ring extends CustomPainter {
       final waveH = v('waveH', 0), waveS = v('waveS', 1);
       final phase = t.copiesFirst ? i / n * 2 * math.pi : 0.0; // (copies first: each copy waves on its own)
       final a = 2 * math.pi * i / n + v('turn', 0) * math.pi / 180 - math.pi / 2;
-      final r = v('radius', 0);
-      final p = m + (Offset.fromDirection(a, r) + Offset(0, -waveH * math.sin(s * waveS * 2.4 - phase))) * k;
+      final r = v('radius', 0), h = _hash(i * 3.3 + .7) * 2 * math.pi;
+      final p = m + (Offset.fromDirection(a, r) + Offset(0, -waveH * math.sin(s * waveS * 2.4 - phase)) + Offset.fromDirection(h, v('scatter', 0) * _hash(i + .3))) * k;
       final col = HSLColor.fromAHSL(v('opacity', 100) / 100, v('hue', 72) % 360, .62, v('light', 62) / 100).toColor();
-      c.drawPath(_star(p, v('size', 44) * k / 2, v('turn', 0) * math.pi / 180 + i * v('spin', 0) * math.pi / 180), Paint()..color = col);
+      c.drawPath(_star(p, v('size', 44) * k / 2, v('turn', 0) * math.pi / 180 + i * v('spin', 0) * math.pi / 180 + (_hash(i * 1.9) * 2 - 1) * v('scatterTurn', 0) * math.pi / 180), Paint()..color = col);
     }
   }
 
@@ -295,7 +372,18 @@ class _Inspector extends StatelessWidget {
   const _Inspector(this.t);
   final CardTable t;
   @override
-  Widget build(BuildContext context) => ReorderableList(
+  Widget build(BuildContext context) => Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+    for (final (i, b) in t.bundles.indexed) _BundleTile(t, i, b),
+    Expanded(
+      child: DragTarget<CardM>(
+        onWillAcceptWithDetails: (e) => !t.cards.contains(e.data),
+        onAcceptWithDetails: (e) => t.wear(e.data),
+        builder: (context, cand, _) => _list(context),
+      ),
+    ),
+  ]);
+
+  Widget _list(BuildContext context) => ReorderableList(
     padding: const EdgeInsets.all(Pop.inset),
     itemCount: t.cards.length,
     onReorderItem: t.move,
@@ -332,7 +420,12 @@ class _Card extends StatelessWidget {
         ReorderableDragStartListener(
           index: i,
           child: Row(children: [
-            Container(width: 14, height: 14, decoration: BoxDecoration(color: c.down ? Grey.g26 : c.tone, borderRadius: BorderRadius.circular(3))),
+            Draggable<CardM>(
+              data: c,
+              feedback: _Lifted(_CardStub(c, wide: true)),
+              childWhenDragging: Container(width: 14, height: 14, decoration: BoxDecoration(border: Border.all(color: c.tone), borderRadius: BorderRadius.circular(3))),
+              child: Container(width: 14, height: 14, decoration: BoxDecoration(color: c.down ? Grey.g26 : c.tone, borderRadius: BorderRadius.circular(3))),
+            ),
             const SizedBox(width: 8),
             Text(c.name, style: T.title(c.down ? Grey.g44 : Grey.g95)),
           ]),
@@ -422,16 +515,31 @@ class _TileState extends State<_Tile> {
   @override
   Widget build(BuildContext context) {
     final t = widget.t, v = widget.v, d = t.drives[v.id], time = _Time.of(context);
-    return DragTarget<Beh>(
+    final tied = t.bundleOf(v);
+    return DragTarget<Object>(
       onWillAcceptWithDetails: (e) {
-        t.hover((v.id, e.data));
-        return true;
+        if (e.data is Beh) t.hover((v.id, e.data as Beh));
+        return e.data is Beh || (e.data is Val && e.data != v);
       },
       onLeave: (_) => t.hover(null),
-      onAcceptWithDetails: (e) => t.lay(v.id, e.data),
-      builder: (context, cand, _) {
-        final over = cand.isNotEmpty ? cand.first : null;
-        return GestureDetector(
+      onAcceptWithDetails: (e) => e.data is Beh ? t.lay(v.id, e.data as Beh) : t.tie(e.data as Val, v),
+      builder: (context, cands, _) {
+        final over = cands.whereType<Beh>().firstOrNull;
+        final tying = cands.whereType<Val>().isNotEmpty;
+        return LongPressDraggable<Val>(
+          data: v,
+          delay: const Duration(milliseconds: 300),
+          feedback: _Lifted(Container(
+            width: 104,
+            height: Pop.tile,
+            padding: const EdgeInsets.fromLTRB(Pop.tilePad, 6, 6, 4),
+            decoration: BoxDecoration(color: Grey.g20, borderRadius: BorderRadius.circular(6), border: Border.all(color: Pop.accent)),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+              Text(v.label, style: T.micro(Grey.g76)),
+              Text(sayVal(v, v.v), style: T.value(Grey.g95).copyWith(fontSize: 15, fontWeight: FontWeight.w600)),
+            ]),
+          )),
+          child: GestureDetector(
           onHorizontalDragUpdate: (e) => t.set(v, v.v + e.delta.dx / 180 * (v.hi - v.lo)),
           child: TweenAnimationBuilder<double>(
             key: ValueKey(t.flash == v.id ? d?.power : 0),
@@ -443,7 +551,7 @@ class _TileState extends State<_Tile> {
               decoration: BoxDecoration(
                 color: Color.lerp(over != null ? Grey.g20 : Pop.well, (d?.beh.c ?? Pop.accent), glow * .35),
                 borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: over != null ? over.c : const Color(0x00000000), width: 1.5),
+                border: Border.all(color: over != null ? over.c : (tying ? Pop.accent : const Color(0x00000000)), width: 1.5),
               ),
               padding: const EdgeInsets.fromLTRB(Pop.tilePad, 6, 6, 4),
               child: Stack(children: [
@@ -458,14 +566,88 @@ class _TileState extends State<_Tile> {
                   ),
                 ]),
                 if (d != null) Positioned(right: 0, top: 0, child: _LiftChip(t, v.id, d)),
+                if (tied != null) Positioned(right: d != null ? 26 : 0, top: 1, child: _TieMark(tied)),
                 if (over != null && d?.beh != over) Positioned(right: 0, top: 0, child: Opacity(opacity: .6, child: _Chip(over))),
               ]),
             ),
+          ),
           ),
         );
       },
     );
   }
+}
+
+/// A value's mark when it is tied into a bundle: which bundle.
+class _TieMark extends StatelessWidget {
+  const _TieMark(this.i);
+  final int i;
+  @override
+  Widget build(BuildContext context) => Container(
+    height: 16,
+    padding: const EdgeInsets.symmetric(horizontal: 4),
+    decoration: BoxDecoration(border: Border.all(color: Pop.accent), borderRadius: BorderRadius.circular(8)),
+    child: Center(child: Text('束${i + 1}', style: T.micro(Pop.accentInk).copyWith(fontSize: 9))),
+  );
+}
+
+/// A bundle of values, over the cards: scrubbed sideways it moves all of them; its mark pulled off unties it.
+class _BundleTile extends StatelessWidget {
+  const _BundleTile(this.t, this.i, this.vals);
+  final CardTable t;
+  final int i;
+  final List<Val> vals;
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+    onHorizontalDragUpdate: (e) => t.scrubBundle(i, e.delta.dx / 260),
+    onDoubleTap: () => t.untie(i),
+    child: Container(
+      height: Pop.tile,
+      margin: const EdgeInsets.fromLTRB(Pop.inset, Pop.inset, Pop.inset, 0),
+      padding: const EdgeInsets.symmetric(horizontal: Pop.tilePad),
+      decoration: BoxDecoration(color: Pop.card, borderRadius: BorderRadius.circular(6), border: Border.all(color: Pop.accent)),
+      child: Row(children: [
+        _TieMark(i),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(vals.map((v) => v.label).join(' ＋ '), maxLines: 1, overflow: TextOverflow.ellipsis, style: T.name(Grey.g91)),
+        ),
+        for (final v in vals) ...[
+          const SizedBox(width: 6),
+          SizedBox(width: 34, height: 4, child: _Bar((v.v - v.lo) / (v.hi - v.lo))),
+        ],
+      ]),
+    ),
+  );
+}
+
+class _Bar extends StatelessWidget {
+  const _Bar(this.f);
+  final double f;
+  @override
+  Widget build(BuildContext context) => Stack(children: [
+    Positioned.fill(child: ColoredBox(color: Grey.g26)),
+    FractionallySizedBox(widthFactor: f.clamp(0.0, 1.0), child: const ColoredBox(color: Pop.accent)),
+  ]);
+}
+
+/// A card as it lies on the shelf (or flies): its colour and its name.
+class _CardStub extends StatelessWidget {
+  const _CardStub(this.c, {this.wide = false});
+  final CardM c;
+  final bool wide;
+  @override
+  Widget build(BuildContext context) => Container(
+    width: wide ? 150 : null,
+    height: 34,
+    padding: const EdgeInsets.symmetric(horizontal: 8),
+    decoration: BoxDecoration(color: Pop.card, borderRadius: BorderRadius.circular(6), border: Border.all(color: Grey.g26)),
+    child: Row(mainAxisSize: MainAxisSize.min, children: [
+      Container(width: 12, height: 12, decoration: BoxDecoration(color: c.tone, borderRadius: BorderRadius.circular(3))),
+      const SizedBox(width: 7),
+      Text(c.name, style: T.name(Grey.g95)),
+    ]),
+  );
 }
 
 /// The behaviour on a value: dragged off the tile, it lets go of it.
@@ -523,10 +705,38 @@ class _Hand extends StatelessWidget {
   const _Hand(this.t);
   final CardTable t;
   @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.fromLTRB(Pop.inset, 8, Pop.inset, 10),
-    decoration: BoxDecoration(color: Grey.g07, border: Border(top: BorderSide(color: Grey.g20))),
-    child: Row(children: [for (final b in t.hand) Expanded(child: Padding(padding: const EdgeInsets.symmetric(horizontal: 2), child: _HandCard(b)))]),
+  Widget build(BuildContext context) => DragTarget<CardM>(
+    onWillAcceptWithDetails: (e) => t.cards.contains(e.data),
+    onAcceptWithDetails: (e) => t.shelve(e.data),
+    builder: (context, cand, _) => AnimatedContainer(
+      duration: Mo.dur,
+      padding: const EdgeInsets.fromLTRB(Pop.inset, 8, Pop.inset, 10),
+      decoration: BoxDecoration(color: cand.isNotEmpty ? Grey.g13 : Grey.g07, border: Border(top: BorderSide(color: cand.isNotEmpty ? Pop.accent : Grey.g20))),
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        if (t.shelf.isNotEmpty || cand.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: SizedBox(
+              height: 34,
+              child: Row(children: [
+                for (final c in t.shelf)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 6),
+                    child: Draggable<CardM>(
+                      data: c,
+                      dragAnchorStrategy: pointerDragAnchorStrategy,
+                      feedback: Transform.translate(offset: const Offset(-75, -17), child: _Lifted(_CardStub(c, wide: true))),
+                      childWhenDragging: Opacity(opacity: .35, child: _CardStub(c)),
+                      onDraggableCanceled: (_, _) => t.holdCard(null),
+                      child: _CardStub(c),
+                    ),
+                  ),
+              ]),
+            ),
+          ),
+        Row(children: [for (final b in t.hand) Expanded(child: Padding(padding: const EdgeInsets.symmetric(horizontal: 2), child: _HandCard(b)))]),
+      ]),
+    ),
   );
 }
 

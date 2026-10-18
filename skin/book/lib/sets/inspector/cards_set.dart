@@ -39,6 +39,8 @@ final cardUses = <(String, CardTable Function(), String)>[
   ('裏返す', () => starRing()..cards[1].flipped = true, '裏返すと全部の数値'),
   ('順番', _waveFirst, 'カードの順番が効く順（波が先＝輪ごと、複製が先＝1つずつ）'),
   ('伏せる', () => _waving()..cards[2].down = true, '伏せたカードは効かない'),
+  ('投げる', () => starRing(wave: false), '棚のカードを舞台に投げると付く（乗せただけで先に見える）、カードの角を掴んで棚に戻すと外れる'),
+  ('束ねる', starRing, 'タイルを長押しで持ち上げて別のタイルに落とすと束になる、束をこすると全部動く（ダブルタップでほどく）'),
 ];
 
 WidgetbookComponent cardsSet() => WidgetbookComponent(
