@@ -337,7 +337,7 @@ class CardTable extends ChangeNotifier {
     final l = th.links[id];
     if (l != null && depth < 4) {
       final src = l.from.thing, m = src.ring ? at('count', 0, 1, of: src, fallback: 1).round() : 1;
-      x += at(l.from.id, i % math.max(m, 1), m, of: src, depth: depth + 1) * l.scale + l.add; // (a ring of links stops four deep)
+      x += at(l.from.id, i % math.max(m, 1), m, of: src, depth: depth + 1) * l.scale + l.add - v.v; // (the other's value in place of its own, as After Effects' pick whip; a ring of links stops four deep)
     }
     return v.fit(x);
   }
@@ -774,6 +774,7 @@ class _StageState extends State<_Stage> {
   int? aim;
   Timer? rest;
   ThingM? target; // the thing the ring opened over: a behaviour goes on the picked thing, a value on another thing
+  ThingM? under; // a value carried over another thing: let go now, that thing's value of the same name follows it
   CardTable get t => widget.t;
 
   @override
@@ -792,6 +793,12 @@ class _StageState extends State<_Stage> {
     final box = context.findRenderObject()! as RenderBox, k = _k;
     final c = box.size.center(Offset.zero) + (th.base + Offset(t.at('posX', 0, 1, of: th), t.at('posY', 0, 1, of: th))) * k;
     return (c, (th.ring ? t.at('radius', 0, 1, of: th) + t.at('size', 0, 1, of: th) : t.at('size', 0, 1, of: th) * .8) * k);
+  }
+
+  /// The box round a thing on the stage (to light the one a value would go to).
+  Rect _box(ThingM th) {
+    final (c, r) = _place(th);
+    return Rect.fromCircle(center: c, radius: r);
   }
 
   ThingM? _thingAt(Offset p, {ThingM? not}) {
@@ -817,6 +824,10 @@ class _StageState extends State<_Stage> {
   /// The hand moved: with no ring open, the ring waits for it to rest (0.25 s); far from an open ring, the ring closes and waits again.
   void _moved(Offset p, Object o) {
     at = p;
+    if (o is Val || o is ValRef) {
+      final th = _for(o, p);
+      if (th != under) setState(() => under = th);
+    }
     if (anchor == null && restFrom != null && (p - restFrom!).distance < 6) return; // (a hand trembling is a hand resting)
     restFrom = p;
     if (anchor != null && (p - (restAt ?? anchor!)).distance > 110) {
@@ -854,7 +865,7 @@ class _StageState extends State<_Stage> {
   void _leave() {
     rest?.cancel();
     restFrom = null;
-    setState(() => anchor = aim = at = target = null);
+    setState(() => anchor = aim = at = target = under = null);
     t.hover(null);
     t.holdCard(null);
   }
@@ -874,6 +885,10 @@ class _StageState extends State<_Stage> {
         t.link(id, ValRef(t.cur, v.id), on: target);
       case ValRef r when id != null:
         t.link(id, r, on: target);
+      case Val v when anchor == null && under != null && t.valOr(v.id, of: under) != null: // (let go on a thing at once: its value of the same name)
+        t.link(v.id, ValRef(t.cur, v.id), on: under);
+      case ValRef r when anchor == null && under != null && t.valOr(r.id, of: under) != null:
+        t.link(r.id, r, on: under);
     }
   }
 
@@ -912,7 +927,7 @@ class _StageState extends State<_Stage> {
         return ClipRect(
           child: CustomPaint(
             painter: _Ring(t, _Time.of(context)),
-            foregroundPainter: waiting ? _Frame(cand.isNotEmpty) : null,
+            foregroundPainter: waiting ? _Frame(cand.isNotEmpty, under == null || anchor != null ? null : _box(under!)) : null,
             child: Stack(children: [
               const SizedBox.expand(),
               if (o != null && anchor != null && target != null)
@@ -956,15 +971,23 @@ class _ValueRing extends StatelessWidget {
 
 /// The stage's edge while a shelf card is carried: the stage takes it.
 class _Frame extends CustomPainter {
-  _Frame(this.over);
+  _Frame(this.over, [this.thing]);
   final bool over;
+  final Rect? thing; // the thing a carried value would go to, lit
   @override
-  void paint(Canvas c, Size s) => c.drawRRect(
-    RRect.fromRectAndRadius((Offset.zero & s).deflate(10), const Radius.circular(10)),
-    Paint()..color = Pop.accent.withValues(alpha: over ? .9 : .35)..style = PaintingStyle.stroke..strokeWidth = over ? 2 : 1,
-  );
+  void paint(Canvas c, Size s) {
+    c.drawRRect(
+      RRect.fromRectAndRadius((Offset.zero & s).deflate(10), const Radius.circular(10)),
+      Paint()..color = Pop.accent.withValues(alpha: over ? .9 : .35)..style = PaintingStyle.stroke..strokeWidth = over ? 2 : 1,
+    );
+    if (thing != null) {
+      c.drawRRect(RRect.fromRectAndRadius(thing!.inflate(6), const Radius.circular(10)), Paint()..color = Pop.accent.withValues(alpha: .18));
+      c.drawRRect(RRect.fromRectAndRadius(thing!.inflate(6), const Radius.circular(10)), Paint()..color = Pop.accent..style = PaintingStyle.stroke..strokeWidth = 2);
+    }
+  }
+
   @override
-  bool shouldRepaint(_Frame o) => o.over != over;
+  bool shouldRepaint(_Frame o) => o.over != over || o.thing != thing;
 }
 
 class _Ring extends CustomPainter {
@@ -976,6 +999,12 @@ class _Ring extends CustomPainter {
     final k = math.min(size.width, size.height) / 720;
     for (final th in t.things) {
       th.ring ? _ring(c, size, k, th) : _square(c, size, k, th);
+      if (t.things.length > 1) { // (each thing's name under it: what the names over the panel point at)
+        final m = size.center((th.base + Offset(t.at('posX', 0, 1, of: th), t.at('posY', 0, 1, of: th))) * k);
+        final r = (th.ring ? t.at('radius', 0, 1, of: th) + t.at('size', 0, 1, of: th) / 2 : t.at('size', 0, 1, of: th) * .72) * k;
+        final tp = TextPainter(text: TextSpan(text: th.short, style: T.micro(th == t.cur ? Pop.accentInk : Grey.g56).copyWith(fontSize: 11)), textDirection: TextDirection.ltr)..layout();
+        tp.paint(c, m + Offset(-tp.width / 2, r + 8));
+      }
     }
   }
 
@@ -1380,9 +1409,8 @@ class _Tile extends StatelessWidget {
       final edge = over?.c ?? (tying ? Pop.accent : (may && waiting != null ? waiting.withValues(alpha: .45) : const Color(0x00000000)));
       final width = over != null ? (d != null && d.beh == over ? math.min(d.width + .15, 1.0) : (d?.width ?? .2)) : d?.width;
       // (the name strip is where the tile is held up and carried, to tie it to another; the rest scrubs, the number types)
-      final label = !CardTable.canDrive(v) ? Text(v.label, maxLines: 1, overflow: TextOverflow.ellipsis, style: T.micro(Grey.g44).copyWith(height: 1.1)) : LongPressDraggable<Val>(
+      final label = !CardTable.canDrive(v) ? Text(v.label, maxLines: 1, overflow: TextOverflow.ellipsis, style: T.micro(Grey.g44).copyWith(height: 1.1)) : Draggable<Val>( // (the name strip carries the value at once; the number below scrubs)
         data: v,
-        delay: const Duration(milliseconds: 300),
         dragAnchorStrategy: pointerDragAnchorStrategy,
         onDragStarted: () => t.carry(v),
         onDragEnd: (_) => t.carry(null),
@@ -1447,7 +1475,12 @@ class _Tile extends StatelessWidget {
                     : GestureDetector(
                         onTap: () => t.type(v.id),
                         child: Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                          Text(sayVal(v, v.v), style: T.value(Grey.g95).copyWith(fontSize: 15, fontWeight: FontWeight.w600)),
+                          t.links[v.id] == null
+                              ? Text(sayVal(v, v.v), style: T.value(Grey.g95).copyWith(fontSize: 15, fontWeight: FontWeight.w600))
+                              : ValueListenableBuilder<double>( // (following another's value: its number is what it is now)
+                                  valueListenable: _Time.of(context),
+                                  builder: (context, _, _) => Text(sayVal(v, t.at(v.id, 0, 1)), style: T.value(Pop.accentInk).copyWith(fontSize: 15, fontWeight: FontWeight.w600)),
+                                ),
                           if (width != null) ...[
                             const SizedBox(width: 4),
                             Flexible(child: Text('±${(width * (v.hi - v.lo)).toStringAsFixed(v.dec)}${v.unit}', maxLines: 1, overflow: TextOverflow.clip, style: T.micro((over ?? d!.beh).c).copyWith(fontSize: 9))),
