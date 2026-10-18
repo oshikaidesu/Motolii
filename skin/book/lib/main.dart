@@ -14,6 +14,7 @@ import 'motolii.dart';
 import 'sets/glass_live.dart';
 import 'sets/inspector_gui_set.dart';
 import 'sets/inspector/inspector_set.dart';
+import 'sets/inspector/plans_set.dart';
 import 'sets/foundations/inputs.dart';
 import 'sets/panels/media_set.dart';
 import 'sets/foundations/navigation.dart';
@@ -60,6 +61,7 @@ class LabBook extends StatelessWidget {
           ),
         ],
       ),
+      WidgetbookCategory(name: 'インスペクタ案', children: [inspectorPlansSet()]),
       WidgetbookCategory(name: 'Glass', children: [glassLiveSet()]),
       WidgetbookCategory(
         name: 'Parts',
