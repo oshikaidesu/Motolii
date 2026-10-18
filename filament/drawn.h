@@ -166,7 +166,7 @@ static void font(Stage& s, const char* path) {
 
 // The frames a film keeps, thrown away (what it draws has changed); all films' kept frames are held to so many bytes.
 static std::atomic<size_t> kept_bytes{0};
-static constexpr size_t kept_most = size_t(4) << 30;
+static constexpr size_t kept_most = size_t(2) << 30;   // (2 GB)
 static void kept_drop(Stage& s, Drawn* d) {
     {
         std::lock_guard<std::mutex> hold(d->keepingLock);
