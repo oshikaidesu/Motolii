@@ -83,6 +83,8 @@ void main() {
           await shot('typing_radius');
           await t.testTextInput.receiveAction(TextInputAction.done);
           await shot('radius_typed_240');
+          await t.tap(find.text('ずれ').last);
+          await shot('tapped_stagger_goes_on_radius');
         case '裏返す':
           final row = t.getCenter(find.text('1つずつの大きさ').first);
           final g = await carry(hand('揺れ'), row);
@@ -125,11 +127,12 @@ void main() {
           g = await t.startGesture(tile('1つずつ回す'));
           await t.pump(const Duration(milliseconds: 500));
           for (var k = 1; k <= 12; k++) {
-            await g.moveTo(Offset.lerp(tile('1つずつ回す'), tile('大きさ'), k / 12)!);
+            await g.moveTo(Offset.lerp(tile('1つずつ回す'), t.getCenter(find.text('大きさ').last), k / 12)!);
             await t.pump(const Duration(milliseconds: 16));
           }
           await g.up();
           await shot('spin_joins_bundle');
+          expect(find.text('束1').evaluate().length, greaterThanOrEqualTo(4)); // (the bundle strip and three values' marks)
         case '舞台に落とす':
           var g = await carry(hand('揺れ'), const Offset(420, 420));
           await t.pump(const Duration(milliseconds: 400)); // (the hand rests: the ring opens)
