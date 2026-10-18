@@ -111,12 +111,14 @@ class ValRef {
   int get hashCode => Object.hash(thing, id);
 }
 
-/// A value moved by another's: its own number plus the other's times [scale], plus [add].
+/// A value moved by another's: from the moment it is made, it moves by what the other moves (times [scale]), plus [add];
+/// so nothing jumps when it is made, and each keeps its own look while they move together.
 class Link {
-  Link(this.from);
+  Link(this.from, this.from0);
   final ValRef from;
+  final double from0; // the other's number when it was made
   double scale = 1, add = 0;
-  Link copy() => Link(from)
+  Link copy() => Link(from, from0)
     ..scale = scale
     ..add = add;
 }
@@ -337,7 +339,7 @@ class CardTable extends ChangeNotifier {
     final l = th.links[id];
     if (l != null && depth < 4) {
       final src = l.from.thing, m = src.ring ? at('count', 0, 1, of: src, fallback: 1).round() : 1;
-      x += at(l.from.id, i % math.max(m, 1), m, of: src, depth: depth + 1) * l.scale + l.add - v.v; // (the other's value in place of its own, as After Effects' pick whip; a ring of links stops four deep)
+      x += (at(l.from.id, i % math.max(m, 1), m, of: src, depth: depth + 1) - l.from0) * l.scale + l.add; // (by what the other moved since; a ring of links stops four deep)
     }
     return v.fit(x);
   }
@@ -354,11 +356,26 @@ class CardTable extends ChangeNotifier {
     final th = on ?? cur;
     if (from.thing == th && from.id == id) return;
     mark();
-    th.links[id] = Link(from);
+    th.links[id] = Link(from, valOr(from.id, of: from.thing)?.v ?? 0);
     if (th == cur) {
       flash = id;
       flashN++;
       touched = id;
+    }
+    _changed(keepFlash: true);
+  }
+
+  /// A value let go on the empty stage: every other thing with a value of that name follows it (one undo step for all).
+  void linkAll(String id, ValRef from) {
+    final all = [for (final th in things) if (!(th == from.thing && id == from.id) && valOr(id, of: th) != null) th];
+    if (all.isEmpty) return;
+    mark();
+    for (final th in all) {
+      th.links[id] = Link(from, valOr(from.id, of: from.thing)?.v ?? 0);
+    }
+    if (all.contains(cur)) {
+      flash = id;
+      flashN++;
     }
     _changed(keepFlash: true);
   }
@@ -775,6 +792,14 @@ class _StageState extends State<_Stage> {
   Timer? rest;
   ThingM? target; // the thing the ring opened over: a behaviour goes on the picked thing, a value on another thing
   ThingM? under; // a value carried over another thing: let go now, that thing's value of the same name follows it
+  ValRef? pending; // a value let go on a thing without a value of its name: the ring stays open there, to be tapped
+  String? overEmpty; // a value carried over the empty stage: let go now, every thing with that value follows it
+
+  static ValRef? _ref(Object? o, CardTable t) => switch (o) {
+    Val v => ValRef(t.cur, v.id),
+    ValRef r => r,
+    _ => null,
+  };
   CardTable get t => widget.t;
 
   @override
@@ -825,8 +850,13 @@ class _StageState extends State<_Stage> {
   void _moved(Offset p, Object o) {
     at = p;
     if (o is Val || o is ValRef) {
-      final th = _for(o, p);
-      if (th != under) setState(() => under = th);
+      final th = _for(o, p), empty = th == null && _thingAt(p) == null ? _ref(o, t)!.id : null;
+      if (th != under || empty != overEmpty) {
+        setState(() {
+          under = th;
+          overEmpty = empty;
+        });
+      }
     }
     if (anchor == null && restFrom != null && (p - restFrom!).distance < 6) return; // (a hand trembling is a hand resting)
     restFrom = p;
@@ -865,7 +895,7 @@ class _StageState extends State<_Stage> {
   void _leave() {
     rest?.cancel();
     restFrom = null;
-    setState(() => anchor = aim = at = target = under = null);
+    setState(() => anchor = aim = at = target = under = overEmpty = null);
     t.hover(null);
     t.holdCard(null);
   }
@@ -885,16 +915,29 @@ class _StageState extends State<_Stage> {
         t.link(id, ValRef(t.cur, v.id), on: target);
       case ValRef r when id != null:
         t.link(id, r, on: target);
-      case Val v when anchor == null && under != null && t.valOr(v.id, of: under) != null: // (let go on a thing at once: its value of the same name)
-        t.link(v.id, ValRef(t.cur, v.id), on: under);
-      case ValRef r when anchor == null && under != null && t.valOr(r.id, of: under) != null:
-        t.link(r.id, r, on: under);
+      case Val() || ValRef() when anchor == null && under != null:
+        final r = _ref(o, t)!;
+        if (t.valOr(r.id, of: under) != null) {
+          t.link(r.id, r, on: under); // (let go on a thing at once: its value of the same name)
+        } else {
+          final box = context.findRenderObject()! as RenderBox, p = at ?? box.size.center(Offset.zero);
+          pending = r; // (none of that name there: its ring opens and waits for a tap)
+          target = under;
+          restAt = p;
+          anchor = Offset(p.dx.clamp(118, math.max(118, box.size.width - 118)), p.dy.clamp(88, math.max(88, box.size.height - 88)));
+        }
+      case Val() || ValRef() when anchor == null && overEmpty != null:
+        t.linkAll(overEmpty!, _ref(o, t)!); // (let go on the empty stage: every thing with that value)
     }
   }
 
   @override
   Widget build(BuildContext context) => GestureDetector(
-    onTapUp: (e) { // (a thing tapped on the stage is picked)
+    onTapUp: (e) { // (a thing tapped on the stage is picked; a waiting ring is closed)
+      if (pending != null) {
+        pending = null;
+        return _leave();
+      }
       final th = _thingAt(e.localPosition);
       if (th != null) t.select(t.things.indexOf(th));
     },
@@ -917,7 +960,10 @@ class _StageState extends State<_Stage> {
       onAcceptWithDetails: (e) {
         if (e.data is CardM) t.wear(e.data as CardM);
         _let(e.data);
-        _leave();
+        if (pending == null) return _leave();
+        rest?.cancel();
+        setState(() => aim = under = overEmpty = null); // (the ring stays, waiting for a tap)
+        t.hover(null);
       },
       builder: (context, cand, _) {
         final held = t.carrying;
@@ -927,11 +973,29 @@ class _StageState extends State<_Stage> {
         return ClipRect(
           child: CustomPaint(
             painter: _Ring(t, _Time.of(context)),
-            foregroundPainter: waiting ? _Frame(cand.isNotEmpty, under == null || anchor != null ? null : _box(under!)) : null,
+            foregroundPainter: waiting
+                ? _Frame(cand.isNotEmpty, [
+                    if (under != null && anchor == null) _box(under!),
+                    if (overEmpty != null) // (over the empty stage: every thing that would follow)
+                      for (final th in t.things)
+                        if (t.valOr(overEmpty!, of: th) != null && !(th == t.cur && t.carrying is Val) && !(t.carrying is ValRef && (t.carrying as ValRef).thing == th)) _box(th),
+                  ])
+                : null,
             child: Stack(children: [
               const SizedBox.expand(),
-              if (o != null && anchor != null && target != null)
-                Positioned(left: anchor!.dx - 110, top: anchor!.dy - 80, width: 220, height: 160, child: _ValueRing(t, target!, colour, aim)),
+              if ((o != null || pending != null) && anchor != null && target != null)
+                Positioned(
+                  left: anchor!.dx - 110,
+                  top: anchor!.dy - 80,
+                  width: 220,
+                  height: 160,
+                  child: _ValueRing(t, target!, colour, aim, onPick: pending == null ? null : (k) {
+                    final id = _ringValsOf(target!)[k];
+                    if (t.valOr(id, of: target) != null) t.link(id, pending!, on: target);
+                    pending = null;
+                    _leave();
+                  }),
+                ),
             ]),
           ),
         );
@@ -942,11 +1006,12 @@ class _StageState extends State<_Stage> {
 
 /// The ring a carried card opens on the stage: four values of the thing around the place it rested, the one aimed at lit.
 class _ValueRing extends StatelessWidget {
-  const _ValueRing(this.t, this.th, this.c, this.aim);
+  const _ValueRing(this.t, this.th, this.c, this.aim, {this.onPick});
   final CardTable t;
   final ThingM th;
   final Color c;
   final int? aim;
+  final void Function(int)? onPick; // a ring left open after a drop: its values are tapped
   @override
   Widget build(BuildContext context) {
     Widget pill(int k) {
@@ -958,36 +1023,38 @@ class _ValueRing extends StatelessWidget {
       );
     }
 
+    Widget pick(int k) => onPick == null ? pill(k) : GestureDetector(onTap: () => onPick!(k), child: MouseRegion(cursor: SystemMouseCursors.click, child: pill(k)));
+
     return Stack(alignment: Alignment.center, children: [
       Container(width: 22, height: 22, decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: Grey.g44))),
       if (t.things.length > 1) Positioned(top: 62, child: Text(th.name, style: T.micro(Grey.g63))),
-      Align(alignment: Alignment.topCenter, child: pill(0)),
-      Align(alignment: Alignment.centerRight, child: pill(1)),
-      Align(alignment: Alignment.bottomCenter, child: pill(2)),
-      Align(alignment: Alignment.centerLeft, child: pill(3)),
+      Align(alignment: Alignment.topCenter, child: pick(0)),
+      Align(alignment: Alignment.centerRight, child: pick(1)),
+      Align(alignment: Alignment.bottomCenter, child: pick(2)),
+      Align(alignment: Alignment.centerLeft, child: pick(3)),
     ]);
   }
 }
 
 /// The stage's edge while a shelf card is carried: the stage takes it.
 class _Frame extends CustomPainter {
-  _Frame(this.over, [this.thing]);
+  _Frame(this.over, [this.things = const []]);
   final bool over;
-  final Rect? thing; // the thing a carried value would go to, lit
+  final List<Rect> things; // the things a carried value would go to, lit
   @override
   void paint(Canvas c, Size s) {
     c.drawRRect(
       RRect.fromRectAndRadius((Offset.zero & s).deflate(10), const Radius.circular(10)),
       Paint()..color = Pop.accent.withValues(alpha: over ? .9 : .35)..style = PaintingStyle.stroke..strokeWidth = over ? 2 : 1,
     );
-    if (thing != null) {
-      c.drawRRect(RRect.fromRectAndRadius(thing!.inflate(6), const Radius.circular(10)), Paint()..color = Pop.accent.withValues(alpha: .18));
-      c.drawRRect(RRect.fromRectAndRadius(thing!.inflate(6), const Radius.circular(10)), Paint()..color = Pop.accent..style = PaintingStyle.stroke..strokeWidth = 2);
+    for (final r in things) {
+      c.drawRRect(RRect.fromRectAndRadius(r.inflate(6), const Radius.circular(10)), Paint()..color = Pop.accent.withValues(alpha: .18));
+      c.drawRRect(RRect.fromRectAndRadius(r.inflate(6), const Radius.circular(10)), Paint()..color = Pop.accent..style = PaintingStyle.stroke..strokeWidth = 2);
     }
   }
 
   @override
-  bool shouldRepaint(_Frame o) => o.over != over || o.thing != thing;
+  bool shouldRepaint(_Frame o) => true;
 }
 
 class _Ring extends CustomPainter {
@@ -2038,7 +2105,7 @@ class _Hand extends StatelessWidget {
           SizedBox(
             width: double.infinity,
             child: Wrap(spacing: 0, runSpacing: 6, children: [
-              if (t.shelf.isEmpty) Container(width: 90, height: 34, decoration: BoxDecoration(borderRadius: BorderRadius.circular(6), border: Border.all(color: Grey.g26))), // (the shelf, empty: still where cards come back to)
+              if (t.shelf.isEmpty && held is CardM) Container(width: 90, height: 34, decoration: BoxDecoration(borderRadius: BorderRadius.circular(6), border: Border.all(color: Grey.g26))), // (the shelf, empty: shown only while a card could come back to it)
               for (final c in t.shelf)
                 Padding(
                   padding: const EdgeInsets.only(right: 8),

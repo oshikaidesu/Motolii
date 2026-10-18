@@ -18,6 +18,7 @@ How you act — you have no mouse, only this:
 
 Rules:
 - Do NOT read any source code, any file outside {DIR}, any report or note. Only the pictures. Do not search the web.
+- Any helper file or script you make goes INSIDE {DIR} only (other testers work beside you in other folders; never write anywhere else).
 - One action per line, one line at a time; always look at the result before deciding the next.
 - Stop when the goal is done (you can see it working in a picture), or after 40 actions, whichever first.
 - Be honest: a real new user does not know hidden tricks. If you guess, say it was a guess.

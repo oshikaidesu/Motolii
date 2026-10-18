@@ -33,7 +33,7 @@ class _AgentHandState extends State<AgentHand> {
   final _shot = GlobalKey();
   final _dir = Platform.environment['AGENT_DIR'];
   Timer? _poll;
-  int _read = 0, _n = 0, _pointer = 1000;
+  int _n = 0, _pointer = 1000;
   bool _busy = false;
 
   @override
@@ -53,13 +53,16 @@ class _AgentHandState extends State<AgentHand> {
     super.dispose();
   }
 
+  /// Lines read are taken out of the inbox at once: a tester may append or overwrite, either is read once.
   Future<void> _check() async {
     if (_busy) return;
-    final lines = File('$_dir/inbox.txt').readAsLinesSync().where((l) => l.trim().isNotEmpty).toList();
-    if (lines.length <= _read) return;
+    final f = File('$_dir/inbox.txt');
+    final lines = f.readAsLinesSync().where((l) => l.trim().isNotEmpty).toList();
+    if (lines.isEmpty) return;
+    f.writeAsStringSync('');
     _busy = true;
-    while (_read < lines.length) {
-      await _do(lines[_read++].trim());
+    for (final l in lines) {
+      await _do(l.trim());
     }
     _busy = false;
   }
