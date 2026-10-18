@@ -1434,13 +1434,17 @@ static void doc_moment(Doc& d, double now) {
             for (int k = 0; k < 4; ++k) if (how == std::array<const char*, 4>{"subtract", "intersect", "union", "exclude"}[(size_t)k]) join = k;
             if (const auto other = d.shown.find(with); join >= 0 && with != thing && other != d.shown.end() && other->second.drawn && other->second.drawn->cut) {
                 const Drawn* a = t.drawn; const Drawn* b = other->second.drawn;
-                const math::mat4 to = inverse(doc_place(d, thing, now)) * doc_place(d, with, now);
+                const math::mat4 back = inverse(doc_place(d, thing, now));
                 const tvg::PathCommand* cmds; const tvg::Point* pts; uint32_t cmdsCnt = 0, ptsCnt = 0;
                 b->outline->path(&cmds, &cmdsCnt, &pts, &ptsCnt);
-                by.assign(cmds, cmds + cmdsCnt);
-                for (uint32_t k = 0; k < ptsCnt; ++k) {   // (its points on its sheet, where they lie on this one's, back into this one's points: as shape_cut lays them)
-                    const math::double4 on = to * math::double4{(pts[k].x - 0.5 * b->cutW) / b->plainHigh * b->sheetHigh, (0.5 * b->plainHigh - pts[k].y) / b->plainHigh * b->sheetHigh, 0.0, 1.0};
-                    at.push_back({(float)(on.x / a->sheetHigh * a->plainHigh + 0.5 * a->cutW), (float)(0.5 * a->plainHigh - on.y / a->sheetHigh * a->plainHigh)});
+                const int many = doc_members(d, with);
+                for (int copy = 0; copy < many; ++copy) {   // (and each of its copies: a plate cut by a whole grid of them)
+                    const math::mat4 to = back * (many > 1 ? doc_place(d, with, now, 0, copy, true) : doc_place(d, with, now));
+                    by.insert(by.end(), cmds, cmds + cmdsCnt);
+                    for (uint32_t k = 0; k < ptsCnt; ++k) {   // (its points on its sheet, where they lie on this one's, back into this one's points: as shape_cut lays them)
+                        const math::double4 on = to * math::double4{(pts[k].x - 0.5 * b->cutW) / b->plainHigh * b->sheetHigh, (0.5 * b->plainHigh - pts[k].y) / b->plainHigh * b->sheetHigh, 0.0, 1.0};
+                        at.push_back({(float)(on.x / a->sheetHigh * a->plainHigh + 0.5 * a->cutW), (float)(0.5 * a->plainHigh - on.y / a->sheetHigh * a->plainHigh)});
+                    }
                 }
             }
             cut_at(s, t.drawn, float3{num("trim", 0), num("trim_begin", 0), num("trim_offset", 0)},   // (its path anew, if it is told otherwise: cut again)

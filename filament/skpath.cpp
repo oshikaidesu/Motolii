@@ -23,7 +23,9 @@ static SkPath sk_of(const tvg::PathCommand* cmds, uint32_t cmdsCnt, const tvg::P
 bool sk_op(int op, const tvg::PathCommand* ac, uint32_t acn, const tvg::Point* ap, const tvg::PathCommand* bc, uint32_t bcn, const tvg::Point* bp,
            std::vector<tvg::PathCommand>& cmds, std::vector<tvg::Point>& pts) {
     cmds.clear(), pts.clear();
-    std::optional<SkPath> made = Op(sk_of(ac, acn, ap), sk_of(bc, bcn, bp), (SkPathOp)op);
+    const SkPath b = sk_of(bc, bcn, bp);
+    const std::optional<SkPath> one = Simplify(b);   // (its pieces, if many and over each other, made one first)
+    std::optional<SkPath> made = Op(sk_of(ac, acn, ap), one ? *one : b, (SkPathOp)op);
     if (made && made->getFillType() != SkPathFillType::kWinding) made = AsWinding(*made);   // (as it is filled: by its winding, as the shape is cut)
     if (!made || made->isEmpty()) return false;
     const auto cubic = [&](SkPoint a, SkPoint q, SkPoint e) {   // (a quad as the cubic it is)
