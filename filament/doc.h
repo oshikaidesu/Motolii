@@ -117,6 +117,8 @@ struct Doc {
     struct Cut { int matte = -1, from = 0; const Drawn* by = nullptr; MaterialInstance* look = nullptr; std::string how; };   // (how: by its clearness or its light, the other way about, how soft: as last cut)
     std::map<int, Cut> cuts;
     std::map<int, Shown> shown;   // the things as they are on the stage, and what each was made of
+    struct Along { double at = -1.0, key = 0.0; const void* of = nullptr; std::vector<float> each; };   // (a thing's copies laid on another's outline: where, worked out once a moment)
+    std::map<int, Along> along;
 };
 // What a thing may be told, by name: which kinds of thing have it, a number between which two (or one of which
 // words), and whether it can move (take keys).
@@ -246,6 +248,9 @@ static const DocValue doc_values[] = {
     {"copy_turn", "picture text shape", -1e5, 1e5, true, nullptr},   // (how far its copies turn in all, spread evenly over them: 360 fills a round; copy_rotate's turn each on top)
     {"tall", "picture text shape", 0, 1e3, true, nullptr},   // (how many times as tall as it is, its anchor staying where it is: a bar growing up from its foot)
     {"copy_tall", "picture text shape", 0, 0, false, ""},   // (and its copies each so many times as tall again, in their order, going round: numbers, a bar chart's data; none: all as tall)
+    // (its copies laid on another shape's outline, each turned the way it goes, Cavalry's Duplicator on a shape; and slid along it, a share of its length)
+    {"copy_on", "picture text shape", 0, 1e9, false, nullptr},
+    {"copy_on_offset", "picture text shape", -1e4, 1e4, true, nullptr},
     {"connect", "shape", 0, 1e9, false, nullptr},   // (the thing whose copies its own copies join, one each from one to another: lines between dots; 0: none)
     {"connect_to", "shape", 0, 1e9, false, nullptr},   // (and another: the first's nth copy joined to this one's nth, rungs between two strands; 0: within the first)
     {"connect_reach", "shape", 0, 1e4, true, nullptr},
@@ -448,6 +453,8 @@ static const DocShown doc_shown[] = {
     {"clip_matte", "", "", "Cut by", 0, 0, nullptr},
     {"clip_invert", "onoff", "", "Invert", 0, 1, nullptr},
     {"clip_feather", "", "px", "Feather", 0, 100, nullptr},
+    {"copy_on", "thing", "", "On", 0, 0, nullptr},
+    {"copy_on_offset", "share", "%", "Slide", -1, 1, nullptr},
     {"connect", "thing", "", "Join", 0, 0, nullptr},
     {"x", "", "px", "Position X", -4, 4, nullptr}, {"y", "", "px", "Position Y", -3, 3, nullptr}, {"z", "", "px", "Position Z", -6, 6, nullptr},   // (in points of the picture from its top left: motolii_reading)
     {"scale_x", "share", "%", "Scale X", 0, 4, nullptr}, {"scale_y", "share", "%", "Scale Y", 0, 4, nullptr}, {"scale_z", "share", "%", "Scale Z", 0, 4, nullptr},
@@ -777,6 +784,7 @@ static bool doc_half(Doc& d, int thing, float2* half, float* deep = nullptr);
 // point of its own box: 0 its middle, 1 its edge on that side; the past repository's `anchor`, keyed as it was).
 static math::mat4 doc_place(Doc& d, int thing, double now, int deeper = 0, int copy = 0, bool member = false);
 static math::mat4 doc_shown_at(Doc& d, int thing, double now);
+int sk_along(const tvg::PathCommand* cmds, uint32_t cmdsCnt, const tvg::Point* pts, int n, float from, std::vector<float>& out);
 static double doc_point(Doc& d, int thing, double now);
 static double doc_seconds(Doc& d);
 // A thing's copies given back its own look, their own looks done away with (no longer coloured each, or taken off).
@@ -1047,6 +1055,31 @@ static math::mat4 doc_place(Doc& d, int thing, double now, int deeper, int copy,
         }
     }
     const math::mat4 heading = math::mat4::rotation(doc_heading(d, thing, now), math::double3{0, 0, 1});
+    if (member)   // (laid on another shape's outline, evenly, each turned the way it goes there, as Cavalry's Duplicator on a shape)
+        if (const int on = (int)doc_literal(d, thing, "copy_on", 0, 0); on && on != thing && doc_number(d, on, "copy_on", 0, 0) == 0.0) {
+            const auto found = d.shown.find(on);
+            const Drawn* b = found == d.shown.end() ? nullptr : found->second.drawn;
+            if (b && b->cut && b->outline) {
+                const tvg::PathCommand* cmds; const tvg::Point* pts; uint32_t cmdsCnt = 0, ptsCnt = 0;
+                b->outline->path(&cmds, &cmdsCnt, &pts, &ptsCnt);
+                const double from = doc_literal(d, thing, "copy_on_offset", said, 0);
+                Doc::Along& kept = d.along[thing];
+                const double key = (double)ptsCnt + (ptsCnt ? pts[0].x * 1e-3 + pts[ptsCnt - 1].y * 1e-6 : 0.0) + n * 1e3 + from;
+                if (kept.at != said || kept.key != key || kept.of != b) kept.at = said, kept.key = key, kept.of = b, sk_along(cmds, cmdsCnt, pts, n, (float)from, kept.each);
+                if ((size_t)copy * 3 + 2 < kept.each.size()) {
+                    const float* e = &kept.each[(size_t)copy * 3];
+                    const math::mat4 there = doc_place(d, on, now);   // (its outline's place on the stage: as shape_cut lays it)
+                    const math::double4 world = there * math::double4{(e[0] - 0.5 * b->cutW) / b->plainHigh * b->sheetHigh, (0.5 * b->plainHigh - e[1]) / b->plainHigh * b->sheetHigh, 0.0, 1.0};
+                    const math::double3 way = there.upperLeft() * math::double3{std::cos(e[2]), -std::sin(e[2]), 0.0};
+                    const math::mat4 frame = doc_above(d, thing, now, deeper) * math::mat4::translation(math::double3{doc_literal(d, thing, "x", now, 0), doc_literal(d, thing, "y", now, 0), doc_literal(d, thing, "z", now, 0)}) *
+                                             heading * turned("rotate", {0, 0, 1}) * turned("rotate_y", {0, 1, 0}) * turned("rotate_x", {1, 0, 0});
+                    const math::mat4 back = inverse(frame);
+                    shift = (back * world).xyz;   // (where it lies, in the thing's own turned frame: its rows and scatter left out)
+                    const math::double3 w = back.upperLeft() * way;
+                    own = math::mat4::rotation(std::atan2(w.y, w.x), math::double3{0, 0, 1}) * own;
+                }
+            }
+        }
     math::mat4 place = doc_above(d, thing, now, deeper) * math::mat4::translation(math::double3{doc_literal(d, thing, "x", now, 0), doc_literal(d, thing, "y", now, 0), doc_literal(d, thing, "z", now, 0)}) *
                        heading * turned("rotate", {0, 0, 1}) * turned("rotate_y", {0, 1, 0}) * turned("rotate_x", {1, 0, 0}) * math::mat4::translation(shift) * math::mat4::scaling(doc_literal(d, thing, "size", now, 1)) *
                        math::mat4::scaling(math::double3{doc_literal(d, thing, "scale_x", now, 1), doc_literal(d, thing, "scale_y", now, 1), doc_literal(d, thing, "scale_z", now, 1)}) *

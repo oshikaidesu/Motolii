@@ -323,3 +323,28 @@ bool sk_resample(const tvg::PathCommand* cmds, uint32_t cmdsCnt, const tvg::Poin
     }
     return !outCmds.empty();
 }
+
+// `n` places along a path, evenly by its length (all its outlines one after another; a closed path's last place not
+// on its first), slid on by `from` (a share of its length, going round): x, y and the way it goes there (radians), three
+// numbers a place (Skia's contour measure), as Cavalry's Duplicator on a shape's outline.
+int sk_along(const tvg::PathCommand* cmds, uint32_t cmdsCnt, const tvg::Point* pts, int n, float from, std::vector<float>& out) {
+    out.clear();
+    std::vector<sk_sp<SkContourMeasure>> all;
+    float total = 0.f;
+    bool closed = true;
+    SkContourMeasureIter it(sk_of(cmds, cmdsCnt, pts), false);
+    while (sk_sp<SkContourMeasure> c = it.next()) total += c->length(), closed = closed && c->isClosed(), all.push_back(std::move(c));
+    if (all.empty() || total <= 0.f || n < 1) return 0;
+    for (int i = 0; i < n; ++i) {
+        float at = (float)i / (float)(closed || n < 2 ? n : n - 1) + from;
+        at = closed ? at - std::floor(at) : std::clamp(at, 0.f, 1.f);
+        float d = at * total;
+        for (const sk_sp<SkContourMeasure>& c : all) {
+            if (d > c->length() && &c != &all.back()) { d -= c->length(); continue; }
+            SkPoint p; SkVector t;
+            if (c->getPosTan(std::min(d, c->length()), &p, &t)) out.insert(out.end(), {p.fX, p.fY, std::atan2(t.fY, t.fX)});
+            break;
+        }
+    }
+    return (int)out.size() / 3;
+}
