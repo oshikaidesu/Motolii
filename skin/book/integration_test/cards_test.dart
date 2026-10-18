@@ -48,31 +48,31 @@ void main() {
       await t.pump(const Duration(milliseconds: 500));
       await shot('start');
       switch (name) {
-        case '重ねる':
-          var g = await carry(hand('揺れ'), tile('半径'));
+        case 'Lay':
+          var g = await carry(hand('Oscillator'), tile('Radius'));
           await t.pump(const Duration(milliseconds: 600));
-          await shot('sway_hovering_over_radius');
+          await shot('oscillator_hovering_over_radius');
           await g.up();
-          await shot('sway_laid_on_radius');
-          await (await carry(hand('揺れ'), tile('半径'))).up();
-          await shot('sway_again_wider');
-          g = await carry(hand('ずれ'), tile('数'));
+          await shot('oscillator_laid_on_radius');
+          await (await carry(hand('Oscillator'), tile('Radius'))).up();
+          await shot('oscillator_again_wider');
+          g = await carry(hand('Stagger'), tile('Count'));
           await shot('stagger_refused_by_count');
           await g.up();
           await t.pump(const Duration(milliseconds: 200));
-          await (await carry(hand('ずれ'), tile('大きさ'))).up();
+          await (await carry(hand('Stagger'), tile('Size'))).up();
           await shot('stagger_on_size');
-          await (await carry(hand('ノイズ'), tile('半径'))).up();
-          await shot('noise_swaps_sway');
+          await (await carry(hand('Noise'), tile('Radius'))).up();
+          await shot('noise_swaps_oscillator');
           Offset chip(String label) => tileBox(label).topRight + const Offset(-12, 10);
-          await t.tapAt(chip('半径'));
+          await t.tapAt(chip('Radius'));
           await shot('noise_knobs_open');
-          final width = t.getCenter(find.text('幅').first);
+          final width = t.getCenter(find.text('Amount').first);
           await (await carry(width, width + const Offset(-25, 0))).up();
           await shot('noise_narrower');
-          await (await carry(chip('半径'), tile('1つずつ回す'))).up();
-          await shot('noise_moved_to_spin');
-          g = await carry(chip('1つずつ回す'), hand('ランダム'));
+          await (await carry(chip('Radius'), tile('Turn each'))).up();
+          await shot('noise_moved_to_turn_each');
+          g = await carry(chip('Turn each'), hand('Random'));
           await shot('noise_carried_to_hand');
           await g.up();
           await shot('noise_back_in_hand');
@@ -84,90 +84,137 @@ void main() {
           await shot('typing_radius');
           await t.testTextInput.receiveAction(TextInputAction.done);
           await shot('radius_typed_240');
-          await t.tap(find.text('ずれ').last);
+          await t.tap(find.text('Stagger').last);
           await shot('tapped_stagger_goes_on_radius');
-          await t.tapAt(chip('大きさ'));
+          await t.tapAt(chip('Size'));
           await t.pump(const Duration(milliseconds: 200));
-          await t.tap(find.text('中').first);
+          await t.tap(find.text('MID').first);
           await shot('stagger_starts_from_the_middle');
-        case '裏返す':
-          final row = t.getCenter(find.text('1つずつの大きさ').first);
-          final g = await carry(hand('揺れ'), row);
-          await shot('sway_over_a_back_row');
+        case 'Flip':
+          final row = t.getCenter(find.text('Copy scale').first);
+          final g = await carry(hand('Oscillator'), row);
+          await shot('oscillator_over_a_back_row');
           await g.up();
-          await shot('sway_on_a_back_row');
-          await (await carry(hand('ずれ'), t.getCenter(find.text('位置 X').first))).up();
+          await shot('oscillator_on_a_back_row');
+          await (await carry(hand('Stagger'), t.getCenter(find.text('Position X').first))).up();
           await shot('stagger_on_position_x');
-        case '順番':
-          final name = t.getRect(find.text('波').first), grip = Offset(name.left - 8 - 14 - 9, name.center.dy);
+        case 'Order':
+          final name = t.getRect(find.text('Wave').first), grip = Offset(name.left - 8 - 14 - 9, name.center.dy);
           final g = await carry(grip, grip + const Offset(0, 150));
           await shot('carrying_wave_down');
           await g.up();
           await shot('copies_now_first');
-        case '投げる':
-          var g = await carry(hand('散らす'), const Offset(400, 400));
+        case 'Throw':
+          var g = await carry(hand('Scatter'), const Offset(400, 400));
           await t.pump(const Duration(milliseconds: 400));
           await shot('scatter_held_over_stage');
           await g.up();
           await shot('scatter_worn');
-          await (await carry(hand('波'), const Offset(1100, 600))).up();
+          await (await carry(hand('Wave'), const Offset(1100, 600))).up();
           await shot('wave_dropped_on_inspector');
-          g = await carry(t.getCenter(find.text('色').first) + const Offset(-22, 0), t.getCenter(find.text('揺れ').last));
-          await shot('colour_card_carried_to_shelf');
+          g = await carry(t.getCenter(find.text('Fill').first) + const Offset(-22, 0), t.getCenter(find.text('Oscillator').last));
+          await shot('fill_card_carried_to_shelf');
           await g.up();
-          await shot('colour_card_on_shelf');
-        case '束ねる':
-          var g = await t.startGesture(tile('半径'), kind: PointerDeviceKind.mouse); // (a mouse, trembling a pixel while it holds: still a hold)
+          await shot('fill_card_on_shelf');
+        case 'Group':
+          var g = await t.startGesture(tile('Radius'), kind: PointerDeviceKind.mouse); // (a mouse, trembling a pixel while it holds: still a hold)
           await t.pump(const Duration(milliseconds: 120));
           await g.moveBy(const Offset(1, 0));
           await t.pump(const Duration(milliseconds: 400));
           for (var k = 1; k <= 12; k++) {
-            await g.moveTo(Offset.lerp(tile('半径'), tile('大きさ'), k / 12)!);
+            await g.moveTo(Offset.lerp(tile('Radius'), tile('Size'), k / 12)!);
             await t.pump(const Duration(milliseconds: 16));
           }
           await shot('radius_lifted_over_size');
           await g.up();
-          await shot('tied_radius_and_size');
-          final bundle = t.getCenter(find.text('束1').first) + const Offset(120, 0);
-          await (await carry(bundle, bundle + const Offset(-160, 0))).up();
-          await shot('bundle_scrubbed_left');
-          g = await t.startGesture(tile('1つずつ回す'));
+          await shot('grouped_radius_and_size');
+          final group = t.getCenter(find.text('G1').first) + const Offset(120, 0);
+          await (await carry(group, group + const Offset(-160, 0))).up();
+          await shot('group_scrubbed_left');
+          g = await t.startGesture(tile('Turn each'));
           await t.pump(const Duration(milliseconds: 500));
           for (var k = 1; k <= 12; k++) {
-            await g.moveTo(Offset.lerp(tile('1つずつ回す'), t.getCenter(find.text('大きさ').last), k / 12)!);
+            await g.moveTo(Offset.lerp(tile('Turn each'), t.getCenter(find.text('Size').last), k / 12)!);
             await t.pump(const Duration(milliseconds: 16));
           }
           await g.up();
-          await shot('spin_joins_bundle');
-          expect(find.text('束1').evaluate().length, greaterThanOrEqualTo(4)); // (the bundle strip and three values' marks)
-          final marks = find.text('束1').evaluate().length;
+          await shot('turn_each_joins_group');
+          expect(find.text('G1').evaluate().length, greaterThanOrEqualTo(4)); // (the group strip and three values' marks)
+          final marks = find.text('G1').evaluate().length;
           await t.sendKeyDownEvent(LogicalKeyboardKey.metaLeft, physicalKey: PhysicalKeyboardKey.metaLeft, platform: 'macos'); // (profile builds keep no key names: the physical key is given)
           await t.sendKeyEvent(LogicalKeyboardKey.keyZ, physicalKey: PhysicalKeyboardKey.keyZ, platform: 'macos');
           await t.sendKeyUpEvent(LogicalKeyboardKey.metaLeft, physicalKey: PhysicalKeyboardKey.metaLeft, platform: 'macos');
-          await shot('cmd_z_unties_spin');
-          expect(find.text('束1').evaluate().length, marks - 1); // (⌘Z reaches the table: the last tie is taken back)
-        case '舞台に落とす':
-          var g = await carry(hand('揺れ'), const Offset(420, 420));
+          await shot('cmd_z_ungroups_turn_each');
+          expect(find.text('G1').evaluate().length, marks - 1); // (⌘Z reaches the table: the last tie is taken back)
+        case 'Stage ring':
+          var g = await carry(hand('Oscillator'), const Offset(420, 420));
           await t.pump(const Duration(milliseconds: 400)); // (the hand rests: the ring opens)
-          await shot('sway_rests_ring_opens');
+          await shot('oscillator_rests_ring_opens');
           await g.moveBy(const Offset(70, 0));
           await t.pump(const Duration(milliseconds: 400));
-          await shot('sway_ring_aims_radius');
+          await shot('oscillator_ring_aims_radius');
           await g.moveBy(const Offset(-70, -70));
           await t.pump(const Duration(milliseconds: 400));
-          await shot('sway_ring_aims_size');
+          await shot('oscillator_ring_aims_size');
           await g.up();
-          await shot('sway_on_size_from_stage');
-          g = await carry(hand('ランダム'), const Offset(500, 400));
+          await shot('oscillator_on_size_from_stage');
+          g = await carry(hand('Random'), const Offset(500, 400));
           await t.pump(const Duration(milliseconds: 400));
           await g.moveBy(const Offset(-70, 0));
           await t.pump(const Duration(milliseconds: 300));
           await shot('random_ring_aims_hue');
           await g.up();
           await shot('random_on_hue');
-        case '伏せる':
-          await t.tapAt(Offset(1280 - 8 - 4 - 12, t.getCenter(find.text('波').first).dy));
+        case 'Face down':
+          await t.tapAt(Offset(1280 - 8 - 4 - 12, t.getCenter(find.text('Wave').first).dy));
           await shot('wave_face_up_again');
+        case 'Link':
+          // the ring's radius breathes; the squares' rotation follows it: kept in the hand, laid on one, tapped on the next ones
+          Offset at(double x, double y) => Offset(460 + x * 820 / 720, 410 + y * 820 / 720); // (a place on the stage, as the things are placed)
+          await (await carry(hand('Oscillator'), tile('Radius'))).up();
+          await shot('ring_radius_breathes');
+          var g = await t.startGesture(tile('Radius'), kind: PointerDeviceKind.mouse);
+          await t.pump(const Duration(milliseconds: 450));
+          for (var k = 1; k <= 12; k++) {
+            await g.moveTo(Offset.lerp(tile('Radius'), hand('Random'), k / 12)!);
+            await t.pump(const Duration(milliseconds: 16));
+          }
+          await shot('ring_radius_carried_to_hand');
+          await g.up();
+          await shot('ring_radius_kept_in_hand');
+          await t.tapAt(at(190, -220));
+          await shot('square_1_picked');
+          await (await carry(hand('Radius'), tile('Rotation'))).up();
+          await shot('square_1_rotation_follows_ring_radius');
+          for (final y in [0.0, 220.0]) {
+            await t.tapAt(at(190, y));
+            await t.pump(const Duration(milliseconds: 150));
+            await t.tap(find.text('Radius').last); // (the hand card tapped: onto the same value of the thing now picked)
+            await t.pump(const Duration(milliseconds: 150));
+          }
+          await shot('squares_2_3_follow_by_a_tap_each');
+          await t.tapAt(tileBox('Rotation').topRight + const Offset(-12, 10));
+          await t.pump(const Duration(milliseconds: 200));
+          await shot('link_mark_tapped');
+          final scale = t.getCenter(find.text('Scale').first);
+          await (await carry(scale, scale + const Offset(-60, 0))).up();
+          await shot('square_3_link_scale_turned_down');
+          await t.tap(find.text('R').first);
+          await shot('ring_picked_shows_three_follow');
+          expect(find.text(' →3'), findsWidgets); // (the ring's radius says three things follow it)
+          g = await t.startGesture(tile('Size'), kind: PointerDeviceKind.mouse);
+          await t.pump(const Duration(milliseconds: 450));
+          for (var k = 1; k <= 14; k++) {
+            await g.moveTo(Offset.lerp(tile('Size'), at(340, 0), k / 14)!);
+            await t.pump(const Duration(milliseconds: 16));
+          }
+          await t.pump(const Duration(milliseconds: 400));
+          await shot('ring_size_rests_on_square_5_ring_opens');
+          await g.moveBy(const Offset(0, -70));
+          await t.pump(const Duration(milliseconds: 300));
+          await shot('square_5_ring_aims_size');
+          await g.up();
+          await shot('square_5_size_follows_ring_size');
       }
     }
   });

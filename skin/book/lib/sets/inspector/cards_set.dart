@@ -29,22 +29,23 @@ CardTable _waving() => starRing()..valOr('waveH')!.v = 40;
 
 /// The same, the wave card laid before the copies.
 CardTable _waveFirst() {
-  final t = _waving(), w = t.cards.firstWhere((c) => c.name == '波');
+  final t = _waving(), w = t.cards.firstWhere((c) => c.name == 'Wave');
   return t..cards.remove(w)..cards.insert(1, w);
 }
 
-/// The use cases, in the order the night made them.
+/// The use cases, in the order they were made; each is the whole table, only its start differs.
 final cardUses = <(String, CardTable Function(), String)>[
-  ('重ねる', starRing, '手札のカードを値に重ねる（乗せただけで先に効く・同じカードでもっと強く・違うカードで入れ替え・引きはがして外す）'),
-  ('裏返す', () => starRing()..cards[0].flipped = true..cards[1].flipped = true, '裏返すと全部の数値'),
-  ('順番', _waveFirst, 'カードの順番が効く順（波が先＝輪ごと、複製が先＝1つずつ）'),
-  ('伏せる', () => _waving()..cards[2].down = true, '伏せたカードは効かない'),
-  ('投げる', () => starRing(wave: false), '棚のカードを舞台に投げると付く（乗せただけで先に見える）、カードの角を掴んで棚に戻すと外れる'),
-  ('舞台に落とす', starRing, '手札を星に落とすと、入った所に値の輪が出て、向きで選ぶ'),
-  ('束ねる', starRing, 'タイルを長押しで持ち上げて別のタイルに落とすと束になる、束をこすると全部動く（ダブルタップでほどく）'),
+  ('Lay', starRing, 'a hand card laid on a value: shown while it hovers, the same again wider, another swaps it, its mark carried off'),
+  ('Flip', () => starRing()..cards[0].flipped = true..cards[1].flipped = true, 'a card turned over: every number'),
+  ('Order', _waveFirst, 'the order of the cards is what is done first (wave first: the whole ring; copies first: each copy)'),
+  ('Face down', () => _waving()..cards[2].down = true, 'a card face down does nothing'),
+  ('Throw', () => starRing(wave: false), 'a shelf card thrown on the stage is worn; its head carried to the shelf takes it off'),
+  ('Stage ring', starRing, 'a hand card resting on the stage opens a ring of values; the way the hand goes picks one'),
+  ('Group', starRing, 'a tile held by its name and dropped on another ties them; the group scrubs them all'),
+  ('Link', manyThings, "one thing's value moves many others': kept in the hand, laid on one thing's value, then tapped on the next things; or carried onto a thing on the stage"),
 ];
 
 WidgetbookComponent cardsSet() => WidgetbookComponent(
-  name: 'カード',
+  name: 'Cards',
   useCases: [for (final (name, make, tag) in cardUses) WidgetbookUseCase(name: name, builder: (c) => _Keep(make, tag))],
 );
