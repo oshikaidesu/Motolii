@@ -1596,9 +1596,20 @@ static void doc_moment(Doc& d, double now) {
             const auto num = [&](const char* name, double otherwise) { return (float)doc_number(d, thing, name, now, otherwise); };
             const float deg = (float)(TAU / 360.0), since = (float)lies[i].since;
             bool driven = false;   // (a bend given each copy by a behaviour: each copy's own look told its own)
+            float4 region{0.f};   // (a bend's behaviour's falloff, point by point in the look: a round where its shape lies, as large as it is)
             const auto bendsOf = [&](int copy, int n, float4* bends, const math::double3* where = nullptr) {
                 const auto at = [&](const char* name, double otherwise) {
-                    if (const int by = doc_driven_by(d, thing, name)) return driven = true, (float)doc_given(d, by, copy, n, now, num(name, otherwise), where);
+                    if (const int by = doc_driven_by(d, thing, name)) {
+                        driven = true;
+                        if (const int f = (int)doc_number(d, by, "falloff", 0, 0); f && d.shown.count(f) && d.shown[f].drawn) {   // (weighed point by point, not copy by copy)
+                            const math::mat4 there = doc_place(d, f, now, 0, 0, false);
+                            const math::double4 middle = there * math::double4{0, 0, 0, 1};
+                            const double r = length((there * math::double4{0.5 * d.shown[f].drawn->sheetHigh, 0, 0, 0}).xyz), soft = doc_number(d, by, "falloff_soft", now, 0);
+                            region = float4{(float)middle.x, (float)middle.y, (float)r, (float)(doc_number(d, by, "falloff_invert", 0, 0) > 0.5 ? -std::max(soft, 1e-4) : soft)};
+                            return (float)doc_behaviour_at(d, by, copy, n, now);
+                        }
+                        return (float)doc_given(d, by, copy, n, now, num(name, otherwise), where);
+                    }
                     return num(name, otherwise);
                 };
                 const float4 all[7] = {{at("warp", 0), at("warp_width", 0.5), at("warp_speed", 1) * since, at("warp_angle", 0) * deg},
@@ -1609,16 +1620,17 @@ static void doc_moment(Doc& d, double now) {
                                        {at("pin_tl_x", 0), at("pin_tl_y", 0), at("pin_tr_x", 0), at("pin_tr_y", 0)},
                                        {at("pin_bl_x", 0), at("pin_bl_y", 0), at("pin_br_x", 0), at("pin_br_y", 0)}};
                 std::copy(all, all + 7, bends);
+                bends[7] = region;
             };
-            float4 bends[7];
+            float4 bends[8];
             bendsOf(0, 1, bends);
             if (bends[4].z != 0.f) {   // (how it moves: where its middle was a sixtieth of a second ago, seen as it is now turned and sized)
                 const math::mat4 was = doc_place(d, thing, now - 1.0 / 60.0), is = doc_place(d, thing, now);
                 const math::float4 back = inverse(is) * was * math::float4{0, 0, 0, 1};
                 bends[4].x = (float)(-60.0 * back.x), bends[4].y = (float)(-60.0 * back.y);
             }
-            t.drawn->look->setParameter("bends", bends, 7);
-            if (t.drawn->edgeLook) t.drawn->edgeLook->setParameter("bends", bends, 7);
+            t.drawn->look->setParameter("bends", bends, 8);
+            if (t.drawn->edgeLook) t.drawn->edgeLook->setParameter("bends", bends, 8);
             // (another shape's path as it is now, where it lies, in this one's points: as shape_cut lays them; and each of its copies, `all`)
             const auto other = [&](int with, bool all) {
                 Drawn::Other o;
@@ -1677,20 +1689,20 @@ static void doc_moment(Doc& d, double now) {
             for (const Stage::Made& made : s.made) {
                 if (made.of != t.drawn->sheet || made.matte) continue;
                 if (driven && !made.many) {   // (each copy its own bends, in its own look and its edge's)
-                    float4 own[7];
+                    float4 own[8];
                     const math::double3 where{made.place[3].x, made.place[3].y, made.place[3].z};   // (where this copy lies: what a falloff weighs)
                     bendsOf(std::max(0, made.nth), members, own, &where);
                     if (own[4].z == 0.f) own[4] = bends[4];
                     const auto one = faces.getInstance(made.thing);
                     MaterialInstance*& look = d.copyLooks[made.thing.getId()];
                     if (!look) look = MaterialInstance::duplicate(t.drawn->look), faces.setMaterialInstanceAt(one, 0, look);
-                    look->setParameter("bends", own, 7);
+                    look->setParameter("bends", own, 8);
                     if (t.drawn->edgeLook && faces.getPrimitiveCount(one) > 1) {
                         MaterialInstance*& edge = d.copyEdges[made.thing.getId()];
                         if (!edge) edge = MaterialInstance::duplicate(t.drawn->edgeLook), faces.setMaterialInstanceAt(one, 1, edge);
-                        edge->setParameter("bends", own, 7);
+                        edge->setParameter("bends", own, 8);
                     }
-                } else if (const auto own = d.copyLooks.find(made.thing.getId()); own != d.copyLooks.end()) own->second->setParameter("bends", bends, 7);
+                } else if (const auto own = d.copyLooks.find(made.thing.getId()); own != d.copyLooks.end()) own->second->setParameter("bends", bends, 8);
             }
         }
         if (t.drawn && t.drawn->shape)

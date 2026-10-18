@@ -35,7 +35,7 @@ material {
         // [3] After Effects' wiggle paths: how far, how fine (waves to its height), how far on in time, its seed;
         // [4] Cavalry's motion stretch: which way it moves and how fast (its own units a second, as it is turned), how much it stretches for that;
         // [5] [6] After Effects' corner pin: how far its corners are moved (top left, top right; bottom left, bottom right)
-        { type : float4[7], name : bends },
+        { type : float4[8], name : bends },
         // a film's own look, as ThorVG's effects give a picture theirs: [0] how far it is blurred (across, up: shares of
         // the picture), how much its darks and lights are made two colours, how much three; [1] [2] the two (tint);
         // [3] [4] [5] the three (tritone: shadow, middle, highlight). All 0: as it is.
@@ -84,7 +84,13 @@ vertex {
             p = way * dot(p, way) * along + side * dot(p, side) / along;
         }
         if (wig.x != 0.0) p += wig.x * vec2(bendNoise(vec3(p0 * wig.y, wig.z + wig.w)), bendNoise(vec3(p0 * wig.y + 17.3, wig.z + wig.w + 5.1)));
-        material.worldPosition.xyz += mulMat3x3Float3(getWorldFromModelMatrix(), vec3(p - p0, 0.0));
+        vec4 region = materialParams.bends[7];   // (where the bends work, a behaviour's falloff, Cavalry's, point by point: centre on the stage, radius, soft (below 0: the other way))
+        float w = 1.0;
+        if (region.z > 0.0) {
+            w = 1.0 - smoothstep(region.z, region.z + abs(region.w) + 1e-5, distance(material.worldPosition.xy, region.xy));
+            if (region.w < 0.0) w = 1.0 - w;
+        }
+        material.worldPosition.xyz += mulMat3x3Float3(getWorldFromModelMatrix(), vec3(p - p0, 0.0)) * w;
     }
 }
 
