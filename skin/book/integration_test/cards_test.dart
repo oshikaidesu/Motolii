@@ -52,23 +52,37 @@ void main() {
           await g.up();
           await shot('sway_laid_on_radius');
           await (await carry(hand('揺れ'), tile('半径'))).up();
-          await shot('sway_again_x2');
+          await shot('sway_again_wider');
+          g = await carry(hand('ずれ'), tile('数'));
+          await shot('stagger_refused_by_count');
+          await g.up();
           await (await carry(hand('ずれ'), tile('大きさ'))).up();
           await shot('stagger_on_size');
           await (await carry(hand('ノイズ'), tile('半径'))).up();
           await shot('noise_swaps_sway');
-          final chip = tileBox('半径').topRight + const Offset(-12, 10);
-          g = await carry(chip, const Offset(300, 300));
-          await shot('pulling_noise_off');
+          Offset chip(String label) => tileBox(label).topRight + const Offset(-12, 10);
+          await t.tapAt(chip('半径'));
+          await shot('noise_knobs_open');
+          final width = t.getCenter(find.text('幅').first);
+          await (await carry(width, width + const Offset(-25, 0))).up();
+          await shot('noise_narrower');
+          await (await carry(chip('半径'), tile('1つずつ回す'))).up();
+          await shot('noise_moved_to_spin');
+          g = await carry(chip('1つずつ回す'), hand('ランダム'));
+          await shot('noise_carried_to_hand');
           await g.up();
-          await shot('noise_off');
+          await shot('noise_back_in_hand');
         case '裏返す':
-          await t.tap(find.text('表').first);
-          await shot('flipped_back_to_front');
-          await t.tap(find.text('裏').first);
-          await shot('first_card_flipped');
+          final row = t.getCenter(find.text('1つずつの大きさ').first);
+          final g = await carry(hand('揺れ'), row);
+          await shot('sway_over_a_back_row');
+          await g.up();
+          await shot('sway_on_a_back_row');
+          await (await carry(hand('ずれ'), t.getCenter(find.text('位置 X').first))).up();
+          await shot('stagger_on_position_x');
         case '順番':
-          final g = await carry(t.getCenter(find.text('波').first), t.getCenter(find.text('波').first) + const Offset(0, 150));
+          final name = t.getRect(find.text('波').first), grip = Offset(name.left - 8 - 14 - 9, name.center.dy);
+          final g = await carry(grip, grip + const Offset(0, 150));
           await shot('carrying_wave_down');
           await g.up();
           await shot('copies_now_first');
@@ -106,7 +120,7 @@ void main() {
           await g.up();
           await shot('spin_joins_bundle');
         case '伏せる':
-          await t.tap(find.text('伏せ').at(2));
+          await t.tapAt(Offset(1280 - 8 - 4 - 12, t.getCenter(find.text('波').first).dy));
           await shot('wave_face_up_again');
       }
     }

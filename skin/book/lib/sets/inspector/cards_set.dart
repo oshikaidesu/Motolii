@@ -21,11 +21,11 @@ class _KeepState extends State<_Keep> {
   }
 
   @override
-  Widget build(BuildContext context) => CardsTable(t, tag: widget.tag);
+  Widget build(BuildContext context) => CardsTable(t);
 }
 
 /// The ring with its wave up (40 px), so what the wave card does shows.
-CardTable _waving() => starRing()..val('waveH').v = 40;
+CardTable _waving() => starRing()..valOr('waveH')!.v = 40;
 
 /// The same, the wave card laid before the copies.
 CardTable _waveFirst() {
@@ -36,7 +36,7 @@ CardTable _waveFirst() {
 /// The use cases, in the order the night made them.
 final cardUses = <(String, CardTable Function(), String)>[
   ('重ねる', starRing, '手札のカードを値に重ねる（乗せただけで先に効く・同じカードでもっと強く・違うカードで入れ替え・引きはがして外す）'),
-  ('裏返す', () => starRing()..cards[1].flipped = true, '裏返すと全部の数値'),
+  ('裏返す', () => starRing()..cards[0].flipped = true..cards[1].flipped = true, '裏返すと全部の数値'),
   ('順番', _waveFirst, 'カードの順番が効く順（波が先＝輪ごと、複製が先＝1つずつ）'),
   ('伏せる', () => _waving()..cards[2].down = true, '伏せたカードは効かない'),
   ('投げる', () => starRing(wave: false), '棚のカードを舞台に投げると付く（乗せただけで先に見える）、カードの角を掴んで棚に戻すと外れる'),
