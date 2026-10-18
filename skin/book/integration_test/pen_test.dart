@@ -15,6 +15,8 @@ import 'package:lab_book/workspace/timeline.dart';
 import 'package:lab_book/workspace/workspace.dart' show Workspace;
 import 'package:lab_book/workspace/ws.dart';
 
+bool listEq(List<Offset> a, List<Offset> b) => a.length == b.length && [for (var i = 0; i < a.length; i++) (a[i] - b[i]).distance < 0.5].every((e) => e);
+
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized().framePolicy = LiveTestWidgetsFlutterBindingFramePolicy.fullyLive;
 
@@ -81,6 +83,21 @@ void main() {
     await shoot('point_moved');
     expect(now != was, true);
     expect(moved.length == at.length && (moved[1] - at[1]).dx < -20 && (moved[1] - at[1]).dy.abs() < 5 && (moved[0] - at[0]).distance < 1, true);
+    // (and a handle dragged down: the left point's lower handle, where the pen drew it out and the point took it: the
+    //  curve bends, its points stay)
+    final pathWas = m.word(made[0], 'path'), pointsWas = m.points(made[0]), handlesWas = m.handles(made[0]);
+    await drag(const Offset(-130, 40), const Offset(0, 40));
+    await wait(400);
+    ws.reread();
+    final pointsNow = m.points(made[0]), handlesNow = m.handles(made[0]);
+    var handleMoved = 0;
+    for (var i = 0; i < handlesNow.length && i < handlesWas.length; i++) {
+      if ((handlesNow[i].$1 - handlesWas[i].$1).distance > 10) handleMoved++;
+    }
+    // ignore: avoid_print
+    print('HANDLE ${handlesWas.length} handles, $handleMoved moved; points the same: ${listEq(pointsNow, pointsWas)}');
+    await shoot('handle_moved');
+    expect(m.word(made[0], 'path') != pathWas && handleMoved == 1 && listEq(pointsNow, pointsWas), true);
     expect(made.length, 2);
     expect(paths[0].startsWith('M') && paths[0].endsWith('Z') && paths[0].contains('S'), true);
     expect(paths[1].contains('L'), true);

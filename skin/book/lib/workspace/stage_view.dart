@@ -379,7 +379,7 @@ class _StageViewState extends State<StageView> implements StageHandles {
         near = d;
         by = switch (key.split(' ').first) { 'corner' => 'scale', 'turn' => 'turn', 'anchor' => 'pivot', _ => null };
       }
-      for (final p in m.points(picked)) { // (a path's own point: moved by itself, its handles with it)
+      for (final p in [...m.points(picked), for (final (h, _) in m.handles(picked)) h]) { // (a path's own point, moved with its handles; or a handle alone: the inside takes the nearest)
         final d = (v.toScreen(WsArt.toView(widget.scene, p)) - local).distance;
         if (d > near) continue;
         near = d;
@@ -498,7 +498,8 @@ class _StageViewState extends State<StageView> implements StageHandles {
                   ),
                 ),
                 if (int.tryParse(widget.selected ?? '') case final picked? when WsScope.read(context).inside != null) // (the picked path's own points, to be taken hold of)
-                  IgnorePointer(child: CustomPaint(size: Size.infinite, painter: _PointsPainter([for (final p in WsScope.read(context).inside!.points(picked)) v.toScreen(WsArt.toView(widget.scene, p))]))),
+                  IgnorePointer(child: CustomPaint(size: Size.infinite, painter: _PointsPainter([for (final p in WsScope.read(context).inside!.points(picked)) v.toScreen(WsArt.toView(widget.scene, p))],
+                      [for (final (h, o) in WsScope.read(context).inside!.handles(picked)) (v.toScreen(WsArt.toView(widget.scene, h)), v.toScreen(WsArt.toView(widget.scene, o)))]))),
                 if (_drawFrom case final from? when _last != null && widget.make == 'pen') // (the pen's handle being drawn out: through its point, both ways)
                   IgnorePointer(child: CustomPaint(size: Size.infinite, painter: _HandlePainter(from, _last!)))
                 else if (_drawFrom case final from? when _last != null) // (what is being drawn: its box)
@@ -641,11 +642,16 @@ TextPainter _tp(String t, TextStyle s) => TextPainter(
 enum _Part { all, under, over }
 
 class _PointsPainter extends CustomPainter {
-  _PointsPainter(this.at);
+  _PointsPainter(this.at, this.handles);
   final List<Offset> at;
+  final List<(Offset, Offset)> handles;
   @override
   void paint(Canvas c, Size _) {
     final edge = Paint()..color = WsT.accent..style = PaintingStyle.stroke..strokeWidth = 1, inside = Paint()..color = const Color(0xFFFFFFFF);
+    for (final (h, o) in handles) {
+      if ((h - o).distance < 1) continue; // (a handle lying on its point: none to see)
+      c..drawLine(o, h, edge)..drawCircle(h, 3, inside)..drawCircle(h, 3, edge);
+    }
     for (final p in at) {
       final r = Rect.fromCenter(center: p, width: 6, height: 6);
       c..drawRect(r, inside)..drawRect(r, edge);
@@ -653,7 +659,7 @@ class _PointsPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_PointsPainter o) => !listEquals(o.at, at);
+  bool shouldRepaint(_PointsPainter o) => !listEquals(o.at, at) || !listEquals(o.handles, handles);
 }
 
 class _HandlePainter extends CustomPainter {

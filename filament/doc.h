@@ -2762,15 +2762,20 @@ struct DocPlane {
 };
 int sk_svg_anchors(const char* data, std::vector<float>& xy);
 bool sk_svg_move(const char* data, int nth, float dx, float dy, std::string& out);
+int sk_svg_handles(const char* data, std::vector<float>& xy, std::vector<float>* of = nullptr);
+bool sk_svg_move_handle(const char* data, int nth, float dx, float dy, std::string& out);
 // A path shape's points as the picture shows them (x, y two a point, points of the picture from the top left; its handles not).
-static int doc_points(Doc& d, int thing, double now, double* xy, int room) {
+// handles: its curves' handles instead; of: and the point each is the handle of (of[2i], of[2i+1]).
+static int doc_points(Doc& d, int thing, double now, double* xy, int room, bool handles = false, double* of = nullptr) {
     if (!doc_knows(d, thing) || doc_word(d, thing, "shape") != "path") return 0;
-    std::vector<float> own;
-    const int n = sk_svg_anchors(doc_word(d, thing, "path").c_str(), own);
+    std::vector<float> own, owner;
+    const std::string path = doc_word(d, thing, "path");
+    const int n = handles ? sk_svg_handles(path.c_str(), own, &owner) : sk_svg_anchors(path.c_str(), own);
     const DocPlane plane(d, thing, now);
     for (int i = 0; i < n && i < room; ++i) {
         const math::double2 p = plane.at(own[2 * i], own[2 * i + 1]);
         xy[2 * i] = p.x, xy[2 * i + 1] = p.y;
+        if (of) { const math::double2 o = plane.at(owner[2 * i], owner[2 * i + 1]); of[2 * i] = o.x, of[2 * i + 1] = o.y; }
     }
     return n;
 }
@@ -2887,8 +2892,8 @@ static bool doc_value(Doc& d, int thing, const char* name, double at, double* is
 //   by "bar"    its bar slid on the timeline: a = how many seconds later (when it comes on)
 //   by "head", "tail"  its bar cut at an end: a = how many seconds later that end is (a film cut at its head goes on
 //               showing at each moment what it showed there)
-//   by "point"  a path shape's point nearest where the hand took hold ("grip" first), moved as far as the hand has gone
-//               (a, b: points of the picture), its handles with it
+//   by "point"  a path shape's point or handle nearest where the hand took hold ("grip" first), moved as far as the
+//               hand has gone (a, b: points of the picture); a point's handles with it
 //   by a value's name  that number carried: a = what it is now
 static bool doc_hold(Doc& d, int thing) {
     if (!doc_knows(d, thing)) return false;
@@ -2943,18 +2948,21 @@ static bool doc_carry(Doc& d, const char* by, double a, double b) {
     } else if (!strcmp(by, "point")) {   // (a path shape's point nearest where the hand took hold (grip), moved as far as the hand has gone: a, b)
         if (!h.from.count(" grip x")) return d.trouble = "the hand has not said where it took hold (grip)", false;
         if (!h.said.count(" path")) {   // (which point, and the path as it was: once, with the hold)
-            std::vector<double> xy(2048);
-            const int n = std::min(1024, doc_points(d, h.thing, now, xy.data(), 1024));
             int nearest = -1;
-            for (int i = 0; i < n; ++i)
-                if (std::hypot(xy[2 * i] - h.from[" grip x"], xy[2 * i + 1] - h.from[" grip y"]) < (nearest < 0 ? 12.0 : std::hypot(xy[2 * nearest] - h.from[" grip x"], xy[2 * nearest + 1] - h.from[" grip y"]))) nearest = i;
+            double near = 12.0;
+            for (const bool handles : {false, true}) {   // (its points first: a handle lying on its point is the point)
+                std::vector<double> xy(2048);
+                const int n = std::min(1024, doc_points(d, h.thing, now, xy.data(), 1024, handles));
+                for (int i = 0; i < n; ++i)
+                    if (const double far = std::hypot(xy[2 * i] - h.from[" grip x"], xy[2 * i + 1] - h.from[" grip y"]); far < near - 0.5) near = far, nearest = i, h.from[" handle"] = handles;
+            }
             if (nearest < 0) return d.trouble = "no point of its path where the hand took hold", false;
             h.from[" point"] = nearest, h.said[" path"] = doc_word(d, h.thing, "path");
         }
         const DocPlane plane(d, h.thing, now);
         const math::double2 from = plane.own(h.from[" grip x"], h.from[" grip y"]), to = plane.own(h.from[" grip x"] + a, h.from[" grip y"] + b);
         std::string moved;
-        if (!plane.seen || !sk_svg_move(h.said[" path"].c_str(), (int)h.from[" point"], (float)(to.x - from.x), (float)(to.y - from.y), moved)) return d.trouble = "its point could not be moved", false;
+        if (!plane.seen || !(h.from[" handle"] != 0.0 ? sk_svg_move_handle : sk_svg_move)(h.said[" path"].c_str(), (int)h.from[" point"], (float)(to.x - from.x), (float)(to.y - from.y), moved)) return d.trouble = "its point could not be moved", false;
         h.said["path"] = moved;
         ok = doc_match(d);   // (made again with it now, as a value it is made by)
     } else if (!strcmp(by, "bar")) {

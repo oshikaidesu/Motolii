@@ -170,3 +170,46 @@ bool sk_morph(const tvg::PathCommand* ac, uint32_t acn, const tvg::Point* ap, co
     }
     return !cmds.empty();
 }
+
+// A path's handles (each curve's control points, in order), as SVG's path data has them: xy two a handle; `of`, if
+// asked, the point each is the handle of (a curve's first, the point it leaves; its last, the point it comes to).
+int sk_svg_handles(const char* data, std::vector<float>& xy, std::vector<float>* of = nullptr) {
+    xy.clear();
+    if (of) of->clear();
+    const std::optional<SkPath> made = SkParsePath::FromSVGString(data);
+    if (!made) return 0;
+    SkPathIter it = made->iter();
+    while (const std::optional<SkPathIter::Rec> r = it.next())
+        if (r->fVerb == SkPathVerb::kCubic || r->fVerb == SkPathVerb::kQuad || r->fVerb == SkPathVerb::kConic)
+            for (size_t i = 1; i + 1 < r->fPoints.size(); ++i) {
+                xy.push_back(r->fPoints[i].fX), xy.push_back(r->fPoints[i].fY);
+                const SkPoint owner = i == 1 && r->fPoints.size() == 4 ? r->fPoints.front() : r->fPoints.back();
+                if (of) of->push_back(owner.fX), of->push_back(owner.fY);
+            }
+    return (int)xy.size() / 2;
+}
+
+// A path with its nth handle moved by dx, dy, the rest as they were; written again as SVG's path data.
+bool sk_svg_move_handle(const char* data, int nth, float dx, float dy, std::string& out) {
+    std::vector<float> xy;
+    if (nth < 0 || nth >= sk_svg_handles(data, xy)) return false;
+    const SkPath path = *SkParsePath::FromSVGString(data);   // (kept: its iterator reads it)
+    SkPathBuilder b;
+    int k = 0;
+    SkPathIter it = path.iter();
+    while (const std::optional<SkPathIter::Rec> r = it.next()) {
+        std::vector<SkPoint> p(r->fPoints.begin(), r->fPoints.end());
+        if (r->fVerb == SkPathVerb::kCubic || r->fVerb == SkPathVerb::kQuad || r->fVerb == SkPathVerb::kConic)
+            for (size_t i = 1; i + 1 < p.size(); ++i, ++k) if (k == nth) p[i] += SkPoint{dx, dy};
+        switch (r->fVerb) {
+            case SkPathVerb::kMove: b.moveTo(p[0]); break;
+            case SkPathVerb::kLine: b.lineTo(p[1]); break;
+            case SkPathVerb::kQuad: b.quadTo(p[1], p[2]); break;
+            case SkPathVerb::kConic: b.conicTo(p[1], p[2], r->conicWeight()); break;
+            case SkPathVerb::kCubic: b.cubicTo(p[1], p[2], p[3]); break;
+            case SkPathVerb::kClose: b.close(); break;
+        }
+    }
+    out = SkParsePath::ToSVGString(b.detach()).c_str();
+    return true;
+}

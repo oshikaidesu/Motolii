@@ -91,6 +91,7 @@ class Motolii {
   late final _frame = _lib.lookupFunction<Int32 Function(_P, Int32, Pointer<Double>), int Function(_P, int, Pointer<Double>)>('motolii_frame');
   late final _seen = _lib.lookupFunction<Int32 Function(_P, Int32, Pointer<Double>), int Function(_P, int, Pointer<Double>)>('motolii_seen');
   late final _points = _lib.lookupFunction<Int32 Function(_P, Int32, Pointer<Double>, Int32), int Function(_P, int, Pointer<Double>, int)>('motolii_points');
+  late final _handles = _lib.lookupFunction<Int32 Function(_P, Int32, Pointer<Double>, Pointer<Double>, Int32), int Function(_P, int, Pointer<Double>, Pointer<Double>, int)>('motolii_handles');
   late final _path = _lib.lookupFunction<Int32 Function(_P, Int32, Int32, Double, Double, Int32, Pointer<Double>), int Function(_P, int, int, double, double, int, Pointer<Double>)>('motolii_path');
   late final _keying = _lib.lookupFunction<Int32 Function(_P, Int32), int Function(_P, int)>('motolii_keying');
   late final _hold = _lib.lookupFunction<Int32 Function(_P, Int32), int Function(_P, int)>('motolii_hold');
@@ -328,6 +329,15 @@ class Motolii {
   List<Offset> points(int thing) => _asked(('points', thing), _atMoment, _atMoment, () {
         final out = malloc<Double>(512), n = math.min(_points(_m, thing, out, 256), 256), at = [for (var i = 0; i < n; i++) Offset(out[2 * i], out[2 * i + 1])];
         malloc.free(out);
+        return at;
+      });
+
+  /// Its curves' handles the same way, each with the point it is the handle of.
+  List<(Offset, Offset)> handles(int thing) => _asked(('handles', thing), _atMoment, _atMoment, () {
+        final out = malloc<Double>(512), of = malloc<Double>(512), n = math.min(_handles(_m, thing, out, of, 256), 256);
+        final at = [for (var i = 0; i < n; i++) (Offset(out[2 * i], out[2 * i + 1]), Offset(of[2 * i], of[2 * i + 1]))];
+        malloc.free(out);
+        malloc.free(of);
         return at;
       });
   Rect? _seenNow(int thing) {

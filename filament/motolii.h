@@ -55,7 +55,8 @@ int motolii_pen(Motolii* m, int thing, double x, double y, double hx, double hy)
 /* A path shape's points where the picture shows them (xy[2i], xy[2i+1]: points from the top left; its handles not), as
    many as there are (room: how many xy holds). One is moved by a hand: motolii_hold, carry "grip" where it took hold,
    carry "point" by how far it has gone, motolii_let_go. */
-int motolii_points(Motolii* m, int thing, double* xy, int room);       /* a word */
+int motolii_points(Motolii* m, int thing, double* xy, int room);
+int motolii_handles(Motolii* m, int thing, double* xy, double* of, int room);   /* and its curves' handles, the same way, of: the point each is the handle of (may be null); carry "point" takes whichever lies nearest */       /* a word */
 int motolii_key(Motolii* m, int thing, const char* name, double at, double number);   /* a key at a moment */
 int motolii_key_many(Motolii* m, int thing, const char* name, int n, const double* at, const double* number);   /* n keys of one value in one call and one step (at[i], number[i]) */
 int motolii_unkey(Motolii* m, int thing, const char* name, double at);
