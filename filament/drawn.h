@@ -149,10 +149,13 @@ static void font(Stage& s, const char* path) {
     });
 }
 
-// A film at its moment, `seconds` from its start (after its end it holds its last picture), for the frame that comes next.
+// A film at its moment, `seconds` from its start (after its end it holds its last picture), for the frame that comes next:
+// at its own frames, as After Effects plays it, so that a moment within the frame already drawn draws nothing again
+// (ThorVG's frame() says when the frame is the same; the ThorVG author's own advice for Lottie on a GPU, Godot #91580).
 static void picture_at(Stage& s, Drawn* d, float seconds) {
     door::on_driver(s.engine, [d, seconds] {
-        d->film->frame(d->fromFrame + std::min(seconds / d->seconds * d->frames, d->frames - 1.f));
+        const float at = std::floor(std::min(seconds / d->seconds * d->frames, d->frames - 1.f) + 1e-3f);
+        if (d->film->frame(d->fromFrame + at) != tvg::Result::Success) return;
         for (uint32_t id : d->deep)   // (its 3D layers are sheets of their own: not drawn flat here)
             if (const tvg::Paint* one = d->film->picture()->paint(id)) const_cast<tvg::Paint*>(one)->visible(false);
         d->canvas->update();

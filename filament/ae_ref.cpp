@@ -25,7 +25,7 @@ int main(int argc, char** argv) {
     canvas->add(film->picture());
     const float frames = film->totalFrame();
     for (int i = 5; i < argc; ++i) {
-        film->frame(std::min((float)atof(argv[i]) * frames, frames - 1.f));
+        film->frame(std::floor(std::min((float)atof(argv[i]) * frames, frames - 1.f) + 1e-3f));   // (at the file's own frames, as drawn.h picture_at plays it)
         canvas->update();
         canvas->draw(true);
         canvas->sync();

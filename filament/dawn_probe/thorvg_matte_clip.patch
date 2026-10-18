@@ -1,0 +1,52 @@
+diff --git a/src/loaders/lottie/tvgLottieBuilder.cpp b/src/loaders/lottie/tvgLottieBuilder.cpp
+index 94f93f1..54a7261 100644
+--- a/src/loaders/lottie/tvgLottieBuilder.cpp
++++ b/src/loaders/lottie/tvgLottieBuilder.cpp
+@@ -1422,6 +1422,30 @@ void LottieBuilder::updateMasks(LottieLayer* layer, float frameNo)
+ }
+ 
+ 
++//A clipper standing for an alpha matte that is one opaque, unstroked solid shape and nothing else (Motolii, thorvg_matte_clip.patch)
++static Shape* _matteClipper(LottieLayer* target)
++{
++    if (target->type != LottieLayer::Shape || target->masks.count > 0 || !target->effects.empty() || target->matteTarget || target->blendMethod != BlendMethod::Normal) return nullptr;
++    Paint* paint = target->scene;
++    auto m = paint->transform();
++    while (true) {
++        if (paint->opacity() < 255 || PAINT(paint)->clipper || PAINT(paint)->maskData) return nullptr;
++        if (paint->type() != Type::Scene) break;
++        auto& paints = static_cast<Scene*>(paint)->paints();
++        if (paints.size() != 1) return nullptr;
++        paint = paints.front();
++        m = m * paint->transform();
++    }
++    if (paint->type() != Type::Shape) return nullptr;
++    auto shape = static_cast<Shape*>(paint);
++    uint8_t a = 0;
++    if (shape->fill() || shape->fill(nullptr, nullptr, nullptr, &a) != Result::Success || a < 255 || shape->strokeWidth() > 0.0f) return nullptr;
++    auto clipper = static_cast<Shape*>(shape->duplicate());
++    clipper->transform(m);
++    return clipper;
++}
++
++
+ bool LottieBuilder::updateMatte(LottieComposition* comp, float frameNo, LottieLayer* layer)
+ {
+     auto target = layer->matteTarget;
+@@ -1430,7 +1454,15 @@ bool LottieBuilder::updateMatte(LottieComposition* comp, float frameNo, LottieLa
+     updateLayer(comp, nullptr, target, frameNo);
+ 
+     if (target->scene) {
+-        layer->scene->mask(target->scene, layer->matteType);
++        //Cheaper. Replace the alpha matte of one opaque shape with a clipper, as a single mask is (updateMasks);
++        //not on a precomp, whose one clipper is its own viewport (updatePrecomp)
++        if (auto clipper = (layer->matteType == MaskMethod::Alpha && layer->type != LottieLayer::Precomp) ? _matteClipper(target) : nullptr) {
++            layer->scene->clip(clipper);
++            Paint::rel(target->scene);
++            target->scene = nullptr;
++        } else {
++            layer->scene->mask(target->scene, layer->matteType);
++        }
+     } else if (layer->matteType == MaskMethod::Alpha || layer->matteType == MaskMethod::Luma) {
+         //matte target is not exist. alpha blending definitely bring an invisible result
+         Paint::rel(layer->scene);
