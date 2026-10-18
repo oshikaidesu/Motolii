@@ -11,7 +11,7 @@ import 'dart:async' show Timer;
 import 'dart:math' as math;
 
 import 'package:flutter/scheduler.dart';
-import 'package:flutter/services.dart' show LogicalKeyboardKey;
+import 'package:flutter/services.dart' show LogicalKeyboardKey, MouseCursor, SystemMouseCursors;
 import 'package:flutter/widgets.dart';
 
 import '../../tokens.dart';
@@ -893,7 +893,7 @@ class _Card extends StatelessWidget {
         t.markInsert(null);
         t.carry(null);
       },
-      child: Container(height: 30, color: const Color(0x00000000), child: row),
+      child: MouseRegion(cursor: SystemMouseCursors.grab, child: Container(height: 30, color: const Color(0x00000000), child: row)),
     );
     final opened = t.open != null && c.all.any((v) => v.id == t.open) ? t.drives[t.open] : null;
     final body = c.flipped
@@ -1015,9 +1015,9 @@ class _IcPaint extends CustomPainter {
   void paint(Canvas cv, Size s) {
     final w = s.width, h = s.height, st = Paint()..color = c..style = PaintingStyle.stroke..strokeWidth = 1.3..strokeCap = StrokeCap.round..strokeJoin = StrokeJoin.round;
     switch (ic) {
-      case _Ic.flip: // the back: a card with another behind it
-        cv.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(w * .32, 0, w * .62, h * .72), const Radius.circular(1.5)), Paint()..color = c.withValues(alpha: .45));
-        cv.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(w * .06, h * .28, w * .62, h * .72), const Radius.circular(1.5)), st);
+      case _Ic.flip: // a card half turned over: its near edge tall, its far edge short
+        cv.drawPath(Path()..moveTo(w * .15, 0)..lineTo(w * .85, h * .2)..lineTo(w * .85, h * .8)..lineTo(w * .15, h)..close(), st);
+        cv.drawLine(Offset(w * .5, h * .1), Offset(w * .5, h * .9), st..color = c.withValues(alpha: .5));
       case _Ic.eye || _Ic.eyeOff:
         final p = Path()
           ..moveTo(0, h * .5)
@@ -1097,7 +1097,8 @@ class _Tile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final d = t.drives[v.id], tied = t.bundleOf(v);
-    return _ValDrop(t, v, (context, over, tying, may) {
+    return _ValDrop(t, v, (context, overHere, tying, may) {
+      final over = overHere ?? (t.preview?.$1 == v.id ? t.preview!.$2 : null); // (aimed at from the stage's ring: lit here too)
       final held = t.carrying;
       final waiting = held is Beh ? held.c : (held is String ? t.drives[held]?.beh.c : Pop.accent);
       final edge = over?.c ?? (tying ? Pop.accent : (may && waiting != null ? waiting.withValues(alpha: .45) : const Color(0x00000000)));
@@ -1122,15 +1123,15 @@ class _Tile extends StatelessWidget {
             ]),
           )),
         ),
-        child: SizedBox(
+        child: MouseRegion(cursor: CardTable.canDrive(v) ? SystemMouseCursors.grab : MouseCursor.defer, child: SizedBox(
           width: double.infinity,
           child: Row(children: [
             if (CardTable.canDrive(v)) ...[SizedBox(width: 4, height: 8, child: CustomPaint(painter: _Grip(Grey.g38))), const SizedBox(width: 3)], // (held here, the tile lifts)
             Flexible(child: Text(v.label, maxLines: 1, overflow: TextOverflow.ellipsis, style: T.micro(CardTable.canDrive(v) ? Grey.g63 : Grey.g44).copyWith(height: 1.1))),
           ]),
-        ),
+        )),
       );
-      return GestureDetector(
+      return MouseRegion(cursor: SystemMouseCursors.resizeLeftRight, child: GestureDetector(
         onHorizontalDragStart: (_) {
           if (t.editing == v.id) t.type(null);
           t.mark();
@@ -1149,7 +1150,7 @@ class _Tile extends StatelessWidget {
             decoration: BoxDecoration(
               color: Color.lerp(over != null ? Grey.g20 : Pop.well, (d?.beh.c ?? Pop.accent), glow * .35),
               borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: edge, width: 1.5),
+              border: Border.all(color: edge.a == 0 && t.touched == v.id ? Pop.accent.withValues(alpha: .45) : edge, width: 1.5), // (the last touched: where a tapped hand card goes)
             ),
             padding: const EdgeInsets.fromLTRB(Pop.tilePad, 5, 5, 4),
             child: Stack(children: [
@@ -1172,7 +1173,6 @@ class _Tile extends StatelessWidget {
               // (the right edge is one column of marks: what drives it on top, its bundle under; nothing sits on the words)
               if (d != null) Positioned(right: 0, top: 0, child: _DriveChip(t, v.id, d)),
               if (d == null && over == null && !((held is Beh || held is String) && !CardTable.canDrive(v))) Positioned(right: 1, top: 2, child: _Gauge((v.v - v.lo) / (v.hi - v.lo))),
-              if (t.touched == v.id && t.carrying == null) Positioned(left: 0, right: 30, bottom: -3, height: 1.5, child: ColoredBox(color: Pop.accent.withValues(alpha: .7))),
               if (tied != null)
                 Positioned(
                   right: 0,
@@ -1192,7 +1192,7 @@ class _Tile extends StatelessWidget {
             ]),
           ),
         ),
-      );
+      ));
     });
   }
 }
@@ -1641,11 +1641,11 @@ class _Hand extends StatelessWidget {
           if (held is String || (held is Val && t.bundleOf(held) != null))
             Positioned.fill(
               child: Container(
-                decoration: BoxDecoration(color: Grey.g07.withValues(alpha: .88), borderRadius: BorderRadius.circular(8), border: Border.all(color: cand.isNotEmpty ? C.danger : Grey.g38)),
+                decoration: BoxDecoration(color: Grey.g07.withValues(alpha: .88), borderRadius: BorderRadius.circular(8), border: Border.all(color: cand.isNotEmpty ? Pop.accent : Grey.g38)),
                 child: Center(child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  SizedBox.square(dimension: 14, child: CustomPaint(painter: _Cross(cand.isNotEmpty ? C.danger : Grey.g76))),
+                  SizedBox.square(dimension: 14, child: CustomPaint(painter: _Down(cand.isNotEmpty ? Pop.accent : Grey.g76))),
                   const SizedBox(width: 8),
-                  Text('外す', style: T.name(cand.isNotEmpty ? C.danger : Grey.g76)),
+                  Text('外す', style: T.name(cand.isNotEmpty ? Pop.accent : Grey.g76)),
                 ])),
               ),
             ),
@@ -1699,7 +1699,7 @@ class _HandCard extends StatelessWidget {
     childWhenDragging: face(),
     onDragStarted: () => t.carry(b),
     onDragEnd: (_) => t.carry(null),
-    child: face(),
+    child: MouseRegion(cursor: SystemMouseCursors.grab, child: face()),
   ),
     ),
   );
@@ -1718,6 +1718,22 @@ class _Back extends CustomPainter {
 
   @override
   bool shouldRepaint(_Back o) => o.c != c;
+}
+
+/// Down into the hand: what is carried back is let go.
+class _Down extends CustomPainter {
+  const _Down(this.c);
+  final Color c;
+  @override
+  void paint(Canvas cv, Size s) {
+    final w = s.width, h = s.height, st = Paint()..color = c..style = PaintingStyle.stroke..strokeWidth = 1.6..strokeCap = StrokeCap.round..strokeJoin = StrokeJoin.round;
+    cv.drawLine(Offset(w * .5, 0), Offset(w * .5, h * .62), st);
+    cv.drawPath(Path()..moveTo(w * .22, h * .36)..lineTo(w * .5, h * .64)..lineTo(w * .78, h * .36), st);
+    cv.drawPath(Path()..moveTo(0, h * .7)..lineTo(0, h)..lineTo(w, h)..lineTo(w, h * .7), st);
+  }
+
+  @override
+  bool shouldRepaint(_Down o) => o.c != c;
 }
 
 class _Cross extends CustomPainter {
