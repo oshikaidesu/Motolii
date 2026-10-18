@@ -191,26 +191,58 @@ int sk_svg_handles(const char* data, std::vector<float>& xy, std::vector<float>*
     return (int)xy.size() / 2;
 }
 
-// A path with its nth handle moved by dx, dy, the rest as they were; written again as SVG's path data.
+// A path with its nth handle moved by dx, dy; the handle on the other side of its point turned with it if the two lay
+// in one line through it (a smooth point, as a pen tool keeps it smooth), as long as it was; written again as SVG's data.
 bool sk_svg_move_handle(const char* data, int nth, float dx, float dy, std::string& out) {
     std::vector<float> xy;
     if (nth < 0 || nth >= sk_svg_handles(data, xy)) return false;
     const SkPath path = *SkParsePath::FromSVGString(data);   // (kept: its iterator reads it)
-    SkPathBuilder b;
-    int k = 0;
+    struct Rec { SkPathVerb verb; std::vector<SkPoint> p; float w; };
+    std::vector<Rec> all;
     SkPathIter it = path.iter();
-    while (const std::optional<SkPathIter::Rec> r = it.next()) {
-        std::vector<SkPoint> p(r->fPoints.begin(), r->fPoints.end());
-        if (r->fVerb == SkPathVerb::kCubic || r->fVerb == SkPathVerb::kQuad || r->fVerb == SkPathVerb::kConic)
-            for (size_t i = 1; i + 1 < p.size(); ++i, ++k) if (k == nth) p[i] += SkPoint{dx, dy};
-        switch (r->fVerb) {
-            case SkPathVerb::kMove: b.moveTo(p[0]); break;
-            case SkPathVerb::kLine: b.lineTo(p[1]); break;
-            case SkPathVerb::kQuad: b.quadTo(p[1], p[2]); break;
-            case SkPathVerb::kConic: b.conicTo(p[1], p[2], r->conicWeight()); break;
-            case SkPathVerb::kCubic: b.cubicTo(p[1], p[2], p[3]); break;
-            case SkPathVerb::kClose: b.close(); break;
+    while (const std::optional<SkPathIter::Rec> r = it.next())
+        all.push_back({r->fVerb, std::vector<SkPoint>(r->fPoints.begin(), r->fPoints.end()), r->fVerb == SkPathVerb::kConic ? r->conicWeight() : 1.f});
+    const auto curved = [&](size_t v) { return all[v].verb == SkPathVerb::kCubic; };
+    size_t hv = 0, hp = 0;   // (the handle: which stretch, which of its points)
+    for (size_t v = 0, k = 0; v < all.size(); ++v)
+        if (all[v].verb == SkPathVerb::kCubic || all[v].verb == SkPathVerb::kQuad || all[v].verb == SkPathVerb::kConic)
+            for (size_t i = 1; i + 1 < all[v].p.size(); ++i, ++k) if ((int)k == nth) hv = v, hp = i;
+    const SkPoint was = all[hv].p[hp];
+    all[hv].p[hp] += SkPoint{dx, dy};
+    if (curved(hv)) {   // (the other side of its point: the stretch before's last handle, or the next's first, round a closed outline)
+        size_t first = hv, last = hv;
+        while (first > 0 && all[first].verb != SkPathVerb::kMove) --first;
+        while (last + 1 < all.size() && all[last + 1].verb != SkPathVerb::kMove) ++last;
+        while (last > first && all[last].verb == SkPathVerb::kClose) --last;
+        const bool closed = last + 1 < all.size() && all[last + 1].verb == SkPathVerb::kClose;
+        size_t ov = SIZE_MAX, op = 0;
+        SkPoint at{};
+        if (hp == 2) {   // (its last handle: the point it comes to, and the next stretch's first)
+            at = all[hv].p[3];
+            size_t next = hv + 1 <= last ? hv + 1 : (closed && SkPoint::Distance(at, all[first].p[0]) < 1e-4f ? first + 1 : SIZE_MAX);
+            if (next != SIZE_MAX && next <= last && curved(next)) ov = next, op = 1;
+        } else {   // (its first: the point it leaves, and the stretch before's last)
+            at = all[hv].p[0];
+            size_t before = hv - 1 > first ? hv - 1 : (closed && SkPoint::Distance(all[last].p.back(), at) < 1e-4f ? last : SIZE_MAX);
+            if (before != SIZE_MAX && before > first && curved(before)) ov = before, op = 2;
         }
+        if (ov != SIZE_MAX) {
+            SkVector a = was - at, b = all[ov].p[op] - at;
+            const float la = a.length(), lb = b.length();
+            if (la > 1e-6f && lb > 1e-6f && (a.fX * b.fX + a.fY * b.fY) / (la * lb) < -0.985f) {   // (in one line through it, within ten degrees)
+                SkVector now = all[hv].p[hp] - at;
+                if (now.length() > 1e-6f) all[ov].p[op] = at - now * (lb / now.length());
+            }
+        }
+    }
+    SkPathBuilder b;
+    for (const Rec& r : all) switch (r.verb) {
+        case SkPathVerb::kMove: b.moveTo(r.p[0]); break;
+        case SkPathVerb::kLine: b.lineTo(r.p[1]); break;
+        case SkPathVerb::kQuad: b.quadTo(r.p[1], r.p[2]); break;
+        case SkPathVerb::kConic: b.conicTo(r.p[1], r.p[2], r.w); break;
+        case SkPathVerb::kCubic: b.cubicTo(r.p[1], r.p[2], r.p[3]); break;
+        case SkPathVerb::kClose: b.close(); break;
     }
     out = SkParsePath::ToSVGString(b.detach()).c_str();
     return true;
