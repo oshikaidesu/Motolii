@@ -1,12 +1,14 @@
 // skpath.cpp: Skia's own path operations on a flat shape's path (Cavalry draws its shapes' paths with the same):
 // union, difference, intersection, exclusion of two paths (SkPathOps, its Boolean), and a path read from SVG's path
-// data (SkParsePath). Apart from the rest because Skia's headers bring its names in; out come two calls (drawn.h).
+// data (SkParsePath), a path roughened (SkDiscretePathEffect). Apart from the rest because Skia's headers bring its names in; out come three calls (drawn.h).
 // Built by skia.sh.
 #include "thorvg.h"
 #include "include/core/SkPath.h"
 #include "include/core/SkPathBuilder.h"
 #include "include/pathops/SkPathOps.h"
 #include "include/utils/SkParsePath.h"
+#include "include/core/SkStrokeRec.h"
+#include "include/effects/SkDiscretePathEffect.h"
 #include <vector>
 
 static SkPath sk_of(const tvg::PathCommand* cmds, uint32_t cmdsCnt, const tvg::Point* pts) {
@@ -67,4 +69,13 @@ bool sk_svg(const char* data, std::vector<tvg::PathCommand>& cmds, std::vector<t
     cmds.clear(), pts.clear();
     const std::optional<SkPath> made = SkParsePath::FromSVGString(data);
     return made && !made->isEmpty() && tvg_of(*made, cmds, pts);
+}
+
+// A path roughened (Skia's discrete path effect): cut in pieces `apart` long, each end pushed up to `far` off at random.
+bool sk_rough(const tvg::PathCommand* cmds, uint32_t cmdsCnt, const tvg::Point* pts, float apart, float far, uint32_t seed,
+              std::vector<tvg::PathCommand>& outCmds, std::vector<tvg::Point>& outPts) {
+    outCmds.clear(), outPts.clear();
+    SkPathBuilder made;
+    SkStrokeRec fill(SkStrokeRec::kFill_InitStyle);
+    return SkDiscretePathEffect::Make(apart, far, seed)->filterPath(&made, sk_of(cmds, cmdsCnt, pts), &fill) && tvg_of(made.detach(), outCmds, outPts);
 }

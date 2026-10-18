@@ -80,7 +80,7 @@ struct Drawn {
     tvg::Matrix fit{1, 0, 0, 0, 1, 0, 0, 0, 1};
     tvg::LottieAnimation* lottie = nullptr;   // (its film, when it is an After Effects file: what says its layers' poses)
     std::vector<uint32_t> deep;   // (an After Effects file's 3D layers: not drawn in its own picture, each a sheet of its own where it is: picture_deep)
-    std::array<float, 6> bent{};   // (as last bent: round, bloat, zigzag, ridges, smooth, offset)
+    std::array<float, 8> bent{};   // (as last bent: round, bloat, zigzag, ridges, smooth, offset; roughened: how far, how fine)
     int joined = -1; std::vector<tvg::PathCommand> joinedBy; std::vector<tvg::Point> joinedAt;   // (as last put together with another shape: how (skpath.cpp), its path in this one's points)
     std::vector<std::string> markers;  // an After Effects file's named stretches (ThorVG's Lottie markers)
     std::vector<float2> letters;       // a text split into its letters: where each lies across the picture (shares of its width); its copies show one each
@@ -130,7 +130,7 @@ static void trim_at(Stage& s, Drawn* d, float cut, float begin = 0.f, float offs
 void tvg_bend(tvg::Shape* shape, const tvg::PathCommand* cmds, uint32_t cmdsCnt, const tvg::Point* pts, uint32_t ptsCnt,
               float round, float bloat, float zigzag, int ridges, bool smooth, float offset, float fine);
 static void bend_at(Stage& s, Drawn* d, float round, float bloat, float zigzag, float ridges, float smooth, float offset) {
-    const std::array<float, 6> is{round, bloat, zigzag, ridges, smooth, offset};
+    const std::array<float, 8> is{round, bloat, zigzag, ridges, smooth, offset, 0.f, 0.f};
     if (!d->shape || d->plain.empty() || is == d->bent) return;
     d->bent = is;
     kept_drop(s, d);
@@ -947,6 +947,7 @@ static Drawn* flat_mesh(Stage& s, const char* form, float wide, const mat4f& pla
     return d;
 }
 
+bool sk_rough(const tvg::PathCommand* cmds, uint32_t cmdsCnt, const tvg::Point* pts, float apart, float far, uint32_t seed, std::vector<tvg::PathCommand>& outCmds, std::vector<tvg::Point>& outPts);
 bool sk_op(int op, const tvg::PathCommand* ac, uint32_t acn, const tvg::Point* ap, const tvg::PathCommand* bc, uint32_t bcn, const tvg::Point* bp,
            std::vector<tvg::PathCommand>& cmds, std::vector<tvg::Point>& pts);
 
@@ -954,7 +955,7 @@ bool sk_op(int op, const tvg::PathCommand* ac, uint32_t acn, const tvg::Point* a
 // paths on its edge (off its end, off its beginning, slid along), its operators (round, bloat, zig zag, offset: bend.cpp),
 // then put together with another shape's path (`join`: Skia's path operation, skpath.cpp; -1 none; `by`/`at` that path
 // in this one's points), as Cavalry's Boolean.
-static void cut_at(Stage& s, Drawn* d, float3 trim, const std::array<float, 6>& bend, int join = -1,
+static void cut_at(Stage& s, Drawn* d, float3 trim, const std::array<float, 8>& bend, int join = -1,
                    const std::vector<tvg::PathCommand>& by = {}, const std::vector<tvg::Point>& at = {}) {
     if (join < 0 || by.empty()) join = -1;
     const bool joins = join != d->joined || (join >= 0 && (by != d->joinedBy || at.size() != d->joinedAt.size() ||
@@ -967,6 +968,13 @@ static void cut_at(Stage& s, Drawn* d, float3 trim, const std::array<float, 6>& 
         const float high = d->plainHigh;
         tvg_bend(d->outline, d->plain.data(), (uint32_t)d->plain.size(), d->plainAt.data(), (uint32_t)d->plainAt.size(), std::clamp(bend[0], 0.f, 0.5f) * d->plainSide,
                  100.f * std::clamp(bend[1], -1.f, 1.f), bend[2] * high, (int)std::clamp(bend[3], 0.f, 100.f), bend[4] > 0.5f, bend[5] * high, d->fine);
+        if (bend[6] > 0.f) {   // (roughened, as Illustrator's Roughen and After Effects' Roughen Edges: Skia's own discrete path effect, so far out, a point so often)
+            const tvg::PathCommand* cmds; const tvg::Point* pts; uint32_t cmdsCnt = 0, ptsCnt = 0;
+            d->outline->path(&cmds, &cmdsCnt, &pts, &ptsCnt);
+            std::vector<tvg::PathCommand> c; std::vector<tvg::Point> p;
+            if (sk_rough(cmds, cmdsCnt, pts, std::max(bend[7], 0.005f) * high, std::min(bend[6], 0.5f) * high, 0, c, p))
+                d->outline->reset(), d->outline->appendPath(c.data(), (uint32_t)c.size(), p.data(), (uint32_t)p.size());
+        }
         if (join >= 0) {
             const tvg::PathCommand* cmds; const tvg::Point* pts; uint32_t cmdsCnt = 0, ptsCnt = 0;
             d->outline->path(&cmds, &cmdsCnt, &pts, &ptsCnt);

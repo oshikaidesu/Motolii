@@ -252,6 +252,9 @@ static const DocValue doc_values[] = {
     // (put together with another shape, Cavalry's Boolean: its own less that one, where both are, either, either but not both)
     {"boolean", "shape", 0, 0, false, "union subtract intersect exclude"},
     {"boolean_with", "shape", 0, 1e9, false, nullptr},   // (that other shape, seen where it lies; 0: none)
+    // (roughened, Illustrator's Roughen: so far out (a share of its height), a point so often (the same))
+    {"rough", "shape", 0, 0.5, true, nullptr},
+    {"rough_detail", "shape", 0.005, 1, true, nullptr},
     {"path", "shape", 0, 0, false, ""},   // (a path shape's own path, drawn by a pen: SVG's path data, in its height from its middle, down as SVG goes)   // (only those nearer than this, in units of the stage, finer the further apart: a plexus; 0: each to the next in their order)
     // (a wave through it and its copies, Cavalry's oscillator: so far across and up (units), so far turned (degrees),
     //  so much larger (a share), so many times a second, each copy so far behind the one before (turns spread over all)
@@ -444,6 +447,8 @@ static const DocShown doc_shown[] = {
     {"anchor_x", "", "%", "Anchor X", -1, 1, "Anchor"}, {"anchor_y", "", "%", "Anchor Y", -1, 1, "Anchor"}, {"anchor_z", "", "%", "Anchor Z", -1, 1, "Anchor"},
     {"parent", "thing", "", "Parent", 0, 0, nullptr},   // (the thing it goes with: shown by its name)
     {"connect_to", "thing", "", "With", 0, 0, nullptr},
+    {"rough", "share", "%", "Rough", 0, 0.2, nullptr},
+    {"rough_detail", "share", "%", "Detail", 0.005, 0.2, nullptr},
     {"boolean", "", "", "Boolean", 0, 0, nullptr},
     {"boolean_with", "thing", "", "Shape", 0, 0, nullptr},
     {"follow", "thing", "", "Follow", 0, 0, nullptr},
@@ -1449,7 +1454,7 @@ static void doc_moment(Doc& d, double now) {
                 }
             }
             cut_at(s, t.drawn, float3{num("trim", 0), num("trim_begin", 0), num("trim_offset", 0)},   // (its path anew, if it is told otherwise: cut again)
-                   {num("round", 0), num("bloat", 0), num("zigzag", 0), num("zigzag_ridges", 5), num("zigzag_smooth", 0), num("offset", 0)}, join, by, at);
+                   {num("round", 0), num("bloat", 0), num("zigzag", 0), num("zigzag_ridges", 5), num("zigzag_smooth", 0), num("offset", 0), num("rough", 0), num("rough_detail", 0.03)}, join, by, at);
             for (const Stage::Made& made : s.made)
                 if (made.of == t.drawn->sheet)
                     if (const auto own = d.copyLooks.find(made.thing.getId()); own != d.copyLooks.end()) own->second->setParameter("bends", bends, 7);
