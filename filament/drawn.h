@@ -25,7 +25,6 @@ struct DrawnFx { bool split = false;   // (a text's letters each a copy of their
                  std::vector<float3> ramp;   // (two colours or more: it is filled from the first at its top to the last at its bottom, ThorVG's linear gradient)
                  bool hollow = false;   // (a flat shape filled with nothing: only its edge is seen)
                  float reach = 0.f;     // (how far a bent shape goes out past its box at its most, a share of its height (bend_at): the picture larger all round by that)
-                 bool warped = false;   // (a flat shape warped as it is drawn (warp_at): its lines made of pieces, so that they bend)
                  bool radial = false; float rampAngle = 0.f, rampScale = 1.f; int spread = 0;   // (or from its middle out, ThorVG's radial gradient; turned so far, clockwise; so long, as a share of its reach; past its ends padded, reflected or repeated)
                  DrawnFx over(float high) const {   // (the same for a thing `high` units high: its lengths as shares of that)
                      DrawnFx f = *this;
@@ -46,7 +45,7 @@ struct Drawn {
     std::vector<tvg::PathCommand> plain; std::vector<tvg::Point> plainAt;   // (its path as made, before it is bent (bend_at))
     float plainHigh = 0.f, plainSide = 0.f;   // (and how high it was drawn and its shorter side, in its own points)
     float pictureHigh = 0.f;   // (how high its picture is, room and all, in the same points)
-    float fine = 0.f;          // (its lines cut in pieces no longer than so many points, if it is warped as it is drawn (warp_at))
+    float fine = 0.f;          // (its lines cut in pieces no longer than so many points)
     bool cut = false;          // (a flat shape drawn by Filament as its own triangles (flat_mesh): no picture, no canvas; bent in its look)
     float4 wash{0.f};          // (its own colour laid over its look, as a copy's is: a shape cut in triangles is filled so)
     float wideBy = 1.f;        // (how many times as wide as it is high: what its bends are counted across)
@@ -62,28 +61,28 @@ struct Drawn {
     tvg::LottieAnimation* lottie = nullptr;   // (its film, when it is an After Effects file: what says its layers' poses)
     std::vector<uint32_t> deep;   // (an After Effects file's 3D layers: not drawn in its own picture, each a sheet of its own where it is: picture_deep)
     std::array<float, 6> bent{};   // (as last bent: round, bloat, zigzag, ridges, smooth, offset)
-    std::array<float, 48> warped{};   // (as last warped on the GPU (warp_at): ThorVG's WgCanvas::bend, thorvg_bend.patch)
     std::vector<std::string> markers;  // an After Effects file's named stretches (ThorVG's Lottie markers)
     std::vector<float2> letters;       // a text split into its letters: where each lies across the picture (shares of its width); its copies show one each
     float fromFrame = 0.f, toFrame = 0.f;   // the stretch it plays, when one is named (frames of the file)
-    std::vector<tvg::Scene*> effects;  // ThorVG's scenes its effects are on, one an effect, each over the one before (a scene draws one; driver thread only)
+    std::vector<tvg::Scene*> effects;  // ThorVG's scene its effects are on (driver thread only)
     float tall = 0.f;                  // how high it was drawn, in its own points: what its effects' lengths are shares of
     DrawnFx fx;                        // its effects as last told
 };
 
-// ThorVG's own effects, one on each scene of the chain (a scene draws only the last it is given), in the order they
-// are laid: its colours first (tint, tritone), then its shadow, its glow, and last its blur; lengths as shares of `tall` points.
+// ThorVG's own effects on its scene, in the order they are laid: its colours first (tint, tritone), then its shadow,
+// its glow, and last its blur; lengths as shares of `tall` points.
 static void effects_on(const std::vector<tvg::Scene*>& chain, const DrawnFx& fx, float tall) {
     const float blur = fx.blur * tall, fall = fx.fall * tall, soft = fx.soft * tall, glowSoft = fx.glowSoft * tall;
     const auto c = [](float v) { return (int)std::lround(255.f * v); };
-    for (tvg::Scene* scene : chain) scene->add(tvg::SceneEffect::Clear);
-    if (fx.tint > 0.f) chain[0]->add(tvg::SceneEffect::Tint, c(fx.tints[0].x), c(fx.tints[0].y), c(fx.tints[0].z), c(fx.tints[1].x), c(fx.tints[1].y), c(fx.tints[1].z), (double)(100.f * fx.tint));
+    tvg::Scene* on = chain[0];
+    on->add(tvg::SceneEffect::Clear);
+    if (fx.tint > 0.f) on->add(tvg::SceneEffect::Tint, c(fx.tints[0].x), c(fx.tints[0].y), c(fx.tints[0].z), c(fx.tints[1].x), c(fx.tints[1].y), c(fx.tints[1].z), (double)(100.f * fx.tint));
     if (fx.tritone > 0.f)
-        chain[1]->add(tvg::SceneEffect::Tritone, c(fx.tones[0].x), c(fx.tones[0].y), c(fx.tones[0].z), c(fx.tones[1].x), c(fx.tones[1].y), c(fx.tones[1].z), c(fx.tones[2].x), c(fx.tones[2].y), c(fx.tones[2].z), c(1.f - fx.tritone));
-    if (fx.shadow.w > 0.f) chain[2]->add(tvg::SceneEffect::DropShadow, c(fx.shadow.x), c(fx.shadow.y), c(fx.shadow.z), c(fx.shadow.w), (double)fx.way, (double)fall, (double)std::max(soft, 0.01f), 75);
+        on->add(tvg::SceneEffect::Tritone, c(fx.tones[0].x), c(fx.tones[0].y), c(fx.tones[0].z), c(fx.tones[1].x), c(fx.tones[1].y), c(fx.tones[1].z), c(fx.tones[2].x), c(fx.tones[2].y), c(fx.tones[2].z), c(1.f - fx.tritone));
+    if (fx.shadow.w > 0.f) on->add(tvg::SceneEffect::DropShadow, c(fx.shadow.x), c(fx.shadow.y), c(fx.shadow.z), c(fx.shadow.w), (double)fx.way, (double)fall, (double)std::max(soft, 0.01f), 75);
     if (fx.glow.w > 0.f)   // (a glow is ThorVG's drop shadow that does not fall: a light all round it)
-        chain[3]->add(tvg::SceneEffect::DropShadow, c(fx.glow.x), c(fx.glow.y), c(fx.glow.z), c(fx.glow.w), 0.0, 0.0, (double)std::max(glowSoft, 0.01f), 75);
-    if (blur > 0.f) chain[4]->add(tvg::SceneEffect::GaussianBlur, (double)blur, fx.blurWay, 0, 75);   // (its way: both, across, up and down)
+        on->add(tvg::SceneEffect::DropShadow, c(fx.glow.x), c(fx.glow.y), c(fx.glow.z), c(fx.glow.w), 0.0, 0.0, (double)std::max(glowSoft, 0.01f), 75);
+    if (blur > 0.f) on->add(tvg::SceneEffect::GaussianBlur, (double)blur, fx.blurWay, 0, 75);   // (its way: both, across, up and down)
 }
 
 // A flat shape with so much of its path cut off the end and so much off its beginning, the part left slid along it by
@@ -118,22 +117,6 @@ static void bend_at(Stage& s, Drawn* d, float round, float bloat, float zigzag, 
         //  measuring, dashing and staging of so much once took the window down)
         float x = 0.f, y = 0.f, w = 0.f, h = 0.f;
         if (d->shape->bounds(&x, &y, &w, &h) == tvg::Result::Success && !(std::max(w, h) < 64.f * std::max(1.f, d->pictureHigh))) d->shape->reset();
-        d->canvas->update();
-        d->canvas->draw(true);
-        d->canvas->sync();
-    });
-}
-
-// A flat thing warped as it is drawn, on the GPU (ThorVG's WgCanvas::bend, thorvg_bend.patch): nothing of its shape is
-// made again, only drawn again for the frame that comes next, if it is warped anew. After Effects' wave warp: so high
-// and so long a wave (shares of its height), running at an angle (degrees), gone so far along (in waves).
-static void warp_at(Stage& s, Drawn* d, float high, float wide, float angle, float along) {
-    std::array<float, 48> is{};
-    if (high != 0.f) is[1] = 1.f, is[4] = 1.f, is[5] = high * d->plainHigh / d->pictureHigh, is[6] = wide * d->plainHigh / d->pictureHigh, is[7] = along, is[8] = angle * (float)TAU / 360.f;
-    if (!d->canvas || is == d->warped) return;
-    d->warped = is;
-    door::on_driver(s.engine, [d, is] {
-        d->canvas->bend(is.data(), (uint32_t)is.size());
         d->canvas->update();
         d->canvas->draw(true);
         d->canvas->sync();
@@ -206,12 +189,10 @@ static Drawn* drawn(Stage& s, const std::function<tvg::Paint*(Drawn*, int*, int*
             const float blur = fx.blur * tall, fall = fx.fall * tall, soft = fx.soft * tall;
             const float glowSoft = fx.glowSoft * tall;
             const int room = (int)std::ceil(std::max({3.f * blur, fx.shadow.w > 0.f ? fall + 3.f * soft : 0.f, fx.glow.w > 0.f ? 3.f * glowSoft : 0.f}));
-            for (int k = 0; k < 5; ++k) {   // (a scene an effect, each over the one before)
-                tvg::Scene* scene = tvg::Scene::gen();
-                scene->add(p);
-                d->effects.push_back(scene);
-                p = scene;
-            }
+            tvg::Scene* scene = tvg::Scene::gen();   // (one scene takes them all, in order)
+            scene->add(p);
+            d->effects.push_back(scene);
+            p = scene;
             p->translate((float)room, (float)room);
             effects_on(d->effects, fx, tall);
             d->tall = tall, d->fx = fx;   // (told again at each moment: those that move are drawn again)
@@ -243,7 +224,6 @@ static Drawn* drawn(Stage& s, const std::function<tvg::Paint*(Drawn*, int*, int*
             under->fill((uint8_t)std::lround(255.f * ground.x), (uint8_t)std::lround(255.f * ground.y), (uint8_t)std::lround(255.f * ground.z), 255);
             d->canvas->add(under);
         }
-        if (fx.warped) d->canvas->bend(nullptr, 0);   // (its boxes made nets before it is first drawn, so that they bend with it)
         d->canvas->add(p);
         owned = true;
         if (d->film) d->frames = d->film->totalFrame(), d->seconds = d->film->duration();
@@ -501,7 +481,7 @@ static Drawn* flat(Stage& s, const char* form, float wide, const mat4f& place, f
         const float in = 0.5f * std::min(edge.w * (float)*h, 0.5f * (float)std::min(*w, *h));   // (half the stroke: the path is set in by that, so all of it is seen)
         const float thick = in > 0.f ? 2.f * in : 0.08f * (float)*h;   // (a wave's line: its stroke, or a share of its height)
         tvg::Shape* shape = d->shape = tvg::Shape::gen();
-        flat_path(d, shape, form, *w, *h, in, points, inner, round, fx.warped ? (float)*h / 64.f : 0.f);
+        flat_path(d, shape, form, *w, *h, in, points, inner, round, 0.f);
         shape->fill((uint8_t)std::lround(255.f * colour.x), (uint8_t)std::lround(255.f * colour.y), (uint8_t)std::lround(255.f * colour.z), strcmp(form, "null") && !fx.hollow ? 255 : 0);
         if (fx.ramp.size() > 1 && strcmp(form, "null")) shape->fill(ramp_of(fx.ramp, (float)*w, (float)*h, fx.radial, fx.rampAngle, fx.rampScale, fx.spread));
         if (in > 0.f) shape->strokeWidth(2.f * in), shape->strokeFill((uint8_t)std::lround(255.f * edge.x), (uint8_t)std::lround(255.f * edge.y), (uint8_t)std::lround(255.f * edge.z));

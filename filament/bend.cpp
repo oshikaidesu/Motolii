@@ -69,11 +69,11 @@ void tvg_bend(tvg::Shape* shape, const tvg::PathCommand* cmds, uint32_t cmdsCnt,
     shape->reset();
     if (!numbers(pts, ptsCnt) || !std::isfinite(round + bloat + zigzag + offset + fine)) return;   // (fine below 0: curves cut, lines whole)
     LottieModifier* chain = nullptr;
-    const auto on = [&](LottieModifier* m) { chain = chain ? chain->decorate(m) : m; };   // (the one put on last is done first; offset goes to the end)
+    const auto on = [&](LottieModifier* m) { m->next = chain, chain = m; };   // (as ThorVG's builder chains them: the one put on last is done first; so offset, put on first, is done last)
+    if (offset != 0.f) on(new LottieOffsetModifier(offset));
     if (zigzag != 0.f) on(new LottieZigZagModifier(zigzag, ridges, smooth ? LottieZigZagModifier::Smooth : LottieZigZagModifier::Corner));
     if (bloat != 0.f) on(new LottiePuckerBloatModifier(bloat));
     if (round > 0.f) on(new LottieRoundnessModifier(round));
-    if (offset != 0.f) on(new LottieOffsetModifier(offset));
     RenderPath in, out, cut;
     curves(in, cmds, cmdsCnt, pts, round > 0.f || bloat != 0.f, 0.f);
     const bool any = chain;

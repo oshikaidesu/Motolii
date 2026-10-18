@@ -58,7 +58,7 @@
 | 音の大きさと拍（GStreamer の level。10ms ごとの音量、急に大きくなる所＝拍。机の Audio） | `filament/sound.h` | 今の土台で動く |
 | AEの絵・写真・打った文字（ThorVG） | `filament/drawn.h` | 今の土台で動く |
 | **形を三角形にして Filament で描く**（試作）：libtess2（SGI Free B）で輪郭を三角形に、材質で色と頂点の曲げ、View の MSAA。星40個の波で 11.56 → 3.03 ms／コマ | `filament/libtess2.sh`、`filament/shape.mat`、`filament/check/shape_mesh.mm`、`filament/check/shape_mesh.sh` | 書類の形はこれで描く（`filament/drawn.h` の `flat_mesh`：塗りは libtess2、線は ThorVG の stroker を `filament/bend.cpp` の tvg_edge から。グラデ・効果つきは今まで通り ThorVG の絵） |
-| **形の曲げ（AE のシェイプ操作）**：形の値 round（どの形にも、キー可）・bloat（パンク・膨張）・zigzag／zigzag_ridges／zigzag_smooth・offset（パスのオフセット）。中身は ThorVG の Lottie 読みの部品そのまま。三角形の形の点を動かす曲げ（warp・bend・twist・pinch・skew・squash・wiggle）は `filament/flat.mat` の頂点の段、ThorVG の絵の warp は ThorVG の頂点シェーダーへのパッチ `filament/dawn_probe/thorvg_bend.patch`（`WgCanvas::bend`）、`filament/drawn.h` の `warp_at`。Skia の道まわりは `filament/skia.sh`（未接続） | `filament/bend.cpp`、`filament/drawn.h` の `bend_at`、部品は `filament/third_party/thorvg_src/src/loaders/lottie/tvgLottieModifier.cpp` | 今の土台で動く（4つ毎コマ曲げて +1.4 ms） |
+| **形の曲げ（AE のシェイプ操作）**：形の値 round（どの形にも、キー可）・bloat（パンク・膨張）・zigzag／zigzag_ridges／zigzag_smooth・offset（パスのオフセット）。中身は ThorVG の Lottie 読みの部品そのまま。三角形の形の点を動かす曲げ（warp・bend・twist・pinch・skew・squash・wiggle）は `filament/flat.mat` の頂点の段、ThorVG の絵（効果やグラデつきの形）の warp は無い（10/18、ThorVG v1.1.3 に上げた時に自前の warp のパッチを捨てた）。Skia の道まわりは `filament/skia.sh`（未接続） | `filament/bend.cpp`、`filament/drawn.h` の `bend_at`、部品は `filament/third_party/thorvg_src/src/loaders/lottie/tvgLottieModifier.cpp` | 今の土台で動く（4つ毎コマ曲げて +1.4 ms） |
 | 3Dのファイル（Filament の gltfio） | `filament/solid.h` | 今の土台で動く |
 | AEの動きを物に渡す（3Dレイヤー、カメラ） | `filament/motion.h`、ThorVG へのパッチ | 今の土台で動く |
 | 間の定義9種類（過去の倉庫の写し） | `filament/interp.h` | 今の土台で動く（倉庫の式と差 0） |
@@ -75,7 +75,7 @@
 | 板の材質（色抜き、型、重ね方4つ、動画の色） | `filament/flat.mat`、`matte.mat`、`matte.glsl` | 今の土台で動く |
 | 場面の見本：民衆、人形劇、マスク、重ね方、壁、AE再生、AEの動き、文書 | `filament/neko.mm`、`puppet.mm`、`mask.mm`、`lay.mm`、`wall.mm`、`ae.mm`、`led.mm`（開くのは `filament/neko.sh`、`puppet.sh`、`lay.sh`、`led.sh`。led の動きは `filament/led.json`、3Dシェイプレイヤーつきは `filament/led_card.json`） | 今の土台で動く。動画は `reports/show/` |
 | ビルド：今の土台用。Filament と ThorVG を Dawn で作る手順、Filament の中に仕事を入れる口、計算の口の確かめ | `filament/dawn_probe/`（場面を作るのは `kit_wgpu.sh`、ThorVG は `tvg_on_dawn.sh`） | 今の土台で動く |
-| 人の物への手入れ：Filament（計算の口、機械を借りる口、外の絵を受ける口、動画の共有の機能）、ThorVG（3つ目の数 z、4 MiB を超える書き込みを分けて書く） | `filament/dawn_probe/filament_dawn_compute.patch`、`thorvg_z.patch`、`thorvg_wg_upload.patch`、`gpu_door.h`、`gpu_door.cpp` | 今の土台で動く。ThorVG の物は本家に送らない |
+| 人の物への手入れ：Filament（計算の口、機械を借りる口、外の絵を受ける口、動画の共有の機能）、ThorVG v1.1.3（3つ目の数 z、4 MiB を超える書き込みを分けて書く、曲線の長さと破線の不具合よけ、デスクの印を重ねて描く over） | `filament/dawn_probe/filament_dawn_compute.patch`、`thorvg_z.patch`、`thorvg_wg_upload.patch`、`gpu_door.h`、`gpu_door.cpp` | 今の土台で動く。ThorVG の物は本家に送らない |
 
 ## 4. ガラスと光（残すと決まっている）
 
