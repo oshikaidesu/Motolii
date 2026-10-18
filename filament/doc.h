@@ -102,7 +102,7 @@ struct Doc {
     std::map<std::pair<int, std::string>, std::string> words;   // a value's word, the same way
     std::map<std::pair<int, std::string>, std::vector<double>> keyed;   // the moments of a value's keys, the same way
     std::map<std::string, sqlite3_stmt*> named, goes;     // a way by its name, and by its expression: made ready once (SQLite works it out)
-    struct Shown { std::string of; Video* film = nullptr; Drawn* drawn = nullptr; Solid* solid = nullptr; Mesh* shape = nullptr; bool in = true, clipped = false, camera = false, drivenLooks = false; int run = -1, lies = -1;
+    struct Shown { std::string of; Video* film = nullptr; Drawn* drawn = nullptr; Solid* solid = nullptr; Mesh* shape = nullptr; bool in = true, clipped = false, camera = false, drivenLooks = false, behaviour = false; int run = -1, lies = -1;
                    utils::Entity light;   // (a light, Filament's own: in every scene of the stage while it is on)
                    double units = 1.0;    // (a flat thing's: points of the picture to a unit of the stage as it was made, which its effects are counted in)
                    int space = 3;
@@ -1506,7 +1506,7 @@ static void doc_moment(Doc& d, double now) {
     // thing's looks neither ask nor write depth.
     std::vector<int> runOf(lies.size(), -1), sorts;
     for (size_t i = 0; i < lies.size(); ++i) {
-        if (!lies[i].on || lies[i].shown->camera || !lies[i].shown->light.isNull()) continue;   // (a camera or a light is in no run: nothing of it is drawn)
+        if (!lies[i].on || lies[i].shown->camera || lies[i].shown->behaviour || !lies[i].shown->light.isNull()) continue;   // (a camera, a behaviour or a light is in no run: nothing of it is drawn)
         // (a flat thing that reads what is under (doc_blend_way) is a run of its own, drawn once all under it is: the
         //  kit copies the picture so far before it, kit.h pictures_of; never the first run, which has nothing under it)
         const int sort = lies[i].solid ? 1 : doc_blend_way(doc_word(d, lies[i].thing, "blend")) ? 2 : 0;
@@ -2018,7 +2018,7 @@ static bool doc_match(Doc& d) {
         bool fxOk = doc_fx(d, thing, 0.0, true, units, fx, why);   // (made as large as its effects reach at their most; each moment tells them as they are then)
         made.units = units;
         if (doc_among("film picture text shape", kind)) made.space = doc_word(d, thing, "space") == "2.5d" ? 25 : 2;
-        if (kind == "behaviour") {}   // (nothing of it is seen: it says how values of others go)
+        if (kind == "behaviour") made.behaviour = true;   // (nothing of it is seen: it says how values of others go)
         else if (kind == "camera") made.camera = true;   // (nothing of it is seen: it is how the rest is)
         else if (kind == "light") {   // (Filament's own light, made as the document says; placed and told how strong at each moment)
             const LightManager::Type type = file == "sun" ? LightManager::Type::SUN : file == "spot" ? LightManager::Type::FOCUSED_SPOT : LightManager::Type::POINT;
