@@ -97,6 +97,14 @@ class _Snap {
       cards = [...t.cards],
       shelf = [...t.shelf],
       faces = {for (final c in [...t.cards, ...t.shelf]) c: (c.flipped, c.down)};
+  /// Nothing to take back between these two: an undo step that would change nothing is skipped.
+  bool same(_Snap o) =>
+      values.length == o.values.length && values.entries.every((e) => o.values[e.key] == e.value) &&
+      drives.length == o.drives.length && drives.entries.every((e) { final d = o.drives[e.key]; return d != null && d.beh == e.value.beh && d.width == e.value.width && d.speed == e.value.speed && d.seed == e.value.seed && d.from == e.value.from; }) &&
+      bundles.length == o.bundles.length && [for (var i = 0; i < bundles.length; i++) i].every((i) => bundles[i].length == o.bundles[i].length && bundles[i].every(o.bundles[i].contains)) &&
+      cards.length == o.cards.length && [for (var i = 0; i < cards.length; i++) i].every((i) => cards[i] == o.cards[i]) &&
+      shelf.length == o.shelf.length && shelf.every(o.shelf.contains) &&
+      faces.entries.every((e) => o.faces[e.key] == e.value);
   final Map<Val, double> values;
   final Map<String, Drive> drives;
   final List<List<Val>> bundles;
@@ -135,22 +143,28 @@ class CardTable extends ChangeNotifier {
   }
 
   bool get canUndo => _undo.isNotEmpty;
+  bool scrubbing = false; // a value or a bundle being scrubbed now: nothing is taken back under the hand
   void undo() {
-    if (carrying != null) return; // (a hand holding something: nothing is taken back under it)
+    if (carrying != null || scrubbing) return; // (a hand holding something: nothing is taken back under it)
     if (editing != null) return type(null); // (typing: back is leaving the number as it was)
+    final now = _Snap(this);
+    while (_undo.isNotEmpty && _undo.last.same(now)) {
+      _undo.removeLast(); // (a step that changed nothing: not one to spend a ⌘Z on)
+    }
     if (_undo.isEmpty) return;
-    _redo.add(_Snap(this));
+    _redo.add(now);
     _restore(_undo.removeLast());
   }
 
   bool get canRedo => _redo.isNotEmpty;
   void redo() {
-    if (carrying != null || editing != null || _redo.isEmpty) return;
+    if (carrying != null || scrubbing || editing != null || _redo.isEmpty) return;
     _undo.add(_Snap(this));
     _restore(_redo.removeLast());
   }
 
   void _restore(_Snap s) {
+    bundleStop = null;
     s.values.forEach((v, x) => v.v = x);
     for (final e in s.drives.entries) {
       final now = drives[e.key];
@@ -246,9 +260,14 @@ class CardTable extends ChangeNotifier {
   }
 
   /// A hand card tapped: it goes on the value last touched (After Effects' "pick, then apply").
+  int nopeN = 0; // a hand card tapped with nowhere to go: it shakes (nopeN counts, nope says which)
+  Beh? nope;
   void tapLay(Beh b) {
     final v = touched == null ? null : valOr(touched!);
-    if (v != null && canDrive(v)) lay(v.id, b);
+    if (v != null && canDrive(v) && cards.contains(cardOf(v.id)) && !cardOf(v.id)!.down) return lay(v.id, b);
+    nope = b;
+    nopeN++;
+    notifyListeners();
   }
 
   void markInsert((CardM, bool)? m) {
@@ -261,7 +280,8 @@ class CardTable extends ChangeNotifier {
   /// that changes what is done first (the copies and the wave).
   void moveCard(CardM c, CardM onto, bool under) {
     insertMark = null;
-    if (c == onto) return _changed();
+    final at = cards.indexOf(c), to = cards.indexOf(onto) + (under ? 1 : 0);
+    if (c == onto || (at >= 0 && (to == at || to == at + 1))) return _changed(); // (let go where it already is)
     mark();
     final first = copiesFirst;
     cards.remove(c);
@@ -303,6 +323,7 @@ class CardTable extends ChangeNotifier {
     preview = null;
     flash = id;
     flashN++;
+    touched = id;
     _changed(keepFlash: true);
   }
 
@@ -585,8 +606,11 @@ class _StageState extends State<_Stage> {
   }
 
   /// The hand moved: with no ring open, the ring waits for it to rest (0.25 s); far from an open ring, the ring closes and waits again.
+  Offset? restFrom;
   void _moved(Offset p, Beh b) {
     at = p;
+    if (anchor == null && restFrom != null && (p - restFrom!).distance < 6) return; // (a hand trembling is a hand resting)
+    restFrom = p;
     if (anchor != null && (p - anchor!).distance > 110) {
       setState(() => anchor = aim = null);
       t.hover(null);
@@ -594,7 +618,10 @@ class _StageState extends State<_Stage> {
     if (anchor == null) {
       rest?.cancel();
       rest = Timer(const Duration(milliseconds: 250), () {
-        if (mounted && at != null) setState(() => anchor = at);
+        final box = context.findRenderObject() as RenderBox?;
+        if (mounted && at != null && box != null) {
+          setState(() => anchor = Offset(at!.dx.clamp(118, math.max(118, box.size.width - 118)), at!.dy.clamp(88, math.max(88, box.size.height - 88)))); // (the whole ring inside the stage)
+        }
       });
       return;
     }
@@ -614,6 +641,7 @@ class _StageState extends State<_Stage> {
 
   void _leave() {
     rest?.cancel();
+    restFrom = null;
     setState(() => anchor = aim = at = null);
     t.hover(null);
     t.holdCard(null);
@@ -645,7 +673,7 @@ class _StageState extends State<_Stage> {
     onLeave: (_) => _leave(),
     onAcceptWithDetails: (e) {
       if (e.data is CardM) t.wear(e.data as CardM);
-      if (e.data is Beh && aim != null) t.lay(_ringVals[aim!], e.data as Beh);
+      if (e.data is Beh) aim != null ? t.lay(_ringVals[aim!], e.data as Beh) : (anchor == null ? t.tapLay(e.data as Beh) : null); // (thrown before the ring opens: as a tap; let go in its middle: nothing)
       _leave();
     },
     builder: (context, cand, _) {
@@ -815,7 +843,7 @@ class _CardSlot extends StatelessWidget {
     onWillAcceptWithDetails: (e) => (t.cards.contains(e.data) || t.shelf.contains(e.data)) && e.data != c,
     onMove: (e) {
       final box = context.findRenderObject() as RenderBox?;
-      if (box == null || e.data == c) return;
+      if (box == null || e.data == c || !(t.cards.contains(e.data) || t.shelf.contains(e.data))) return;
       t.markInsert((c, box.globalToLocal(e.offset).dy > box.size.height / 2));
     },
     onLeave: (_) => t.markInsert(null),
@@ -1106,7 +1134,10 @@ class _Tile extends StatelessWidget {
         onHorizontalDragStart: (_) {
           if (t.editing == v.id) t.type(null);
           t.mark();
+          t.scrubbing = true;
         },
+        onHorizontalDragEnd: (_) => t.scrubbing = false,
+        onHorizontalDragCancel: () => t.scrubbing = false,
         onHorizontalDragUpdate: (e) => t.set(v, v.v + e.delta.dx / 180 * (v.hi - v.lo)),
         child: TweenAnimationBuilder<double>(
           key: ValueKey(t.flash == v.id ? t.flashN : -1),
@@ -1191,7 +1222,7 @@ class _NumEditState extends State<_NumEdit> {
 
   void _keep() {
     final half = String.fromCharCodes(c.text.runes.map((r) => r >= 0xFF10 && r <= 0xFF19 ? r - 0xFEE0 : (r == 0xFF0E ? 0x2E : (r == 0xFF0D || r == 0x2212 ? 0x2D : r))));
-    final m = RegExp(r'-?\d+(\.\d+)?').firstMatch(half), x = m == null ? null : double.tryParse(m[0]!);
+    final m = RegExp(r'-?(\d+\.?\d*|\.\d+)').firstMatch(half), x = m == null ? null : double.tryParse(m[0]!.replaceFirst(RegExp(r'^(-?)\.'), r'$10.'));
     if (x == null) return setState(() => bad = true); // (not a number: the field stays, red, until it is one or left)
     widget.keep(x);
     widget.t.type(null);
@@ -1204,6 +1235,10 @@ class _NumEditState extends State<_NumEdit> {
       onKeyEvent: (_, e) {
         if (e.logicalKey.keyLabel == 'Escape') {
           widget.t.type(null);
+          return KeyEventResult.handled;
+        }
+        if (e.logicalKey.keyLabel == 'Tab') {
+          _keep();
           return KeyEventResult.handled;
         }
         return KeyEventResult.ignored;
@@ -1291,7 +1326,10 @@ class _BackRow extends StatelessWidget {
       onHorizontalDragStart: (_) {
         if (t.editing == v.id) t.type(null);
         t.mark();
+        t.scrubbing = true;
       },
+      onHorizontalDragEnd: (_) => t.scrubbing = false,
+      onHorizontalDragCancel: () => t.scrubbing = false,
       onHorizontalDragUpdate: (e) => t.set(v, v.v + e.delta.dx / 220 * (v.hi - v.lo)),
       child: Container(
         height: 22,
@@ -1413,7 +1451,12 @@ class _BundleTile extends StatelessWidget {
     onWillAcceptWithDetails: (e) => !vals.contains(e.data),
     onAcceptWithDetails: (e) => t.tie(e.data, vals.first),
     builder: (context, cand, _) => GestureDetector(
-    onHorizontalDragStart: (_) => t.startBundle(i),
+    onHorizontalDragStart: (_) {
+      t.startBundle(i);
+      t.scrubbing = true;
+    },
+    onHorizontalDragEnd: (_) => t.scrubbing = false,
+    onHorizontalDragCancel: () => t.scrubbing = false,
     onHorizontalDragUpdate: (e) => t.scrubBundle(i, e.delta.dx / 260),
     onDoubleTap: () => t.untie(i),
     child: Container(
@@ -1639,7 +1682,12 @@ class _HandCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) => GestureDetector(
     onTap: () => t.tapLay(b),
-    child: Draggable<Beh>(
+    child: TweenAnimationBuilder<double>(
+      key: ValueKey(t.nope == b ? t.nopeN : -1),
+      tween: Tween(begin: t.nope == b && t.nopeN > 0 ? 1 : 0, end: 0),
+      duration: const Duration(milliseconds: 360),
+      builder: (context, k, ch) => Transform.translate(offset: Offset(math.sin(k * math.pi * 6) * 5 * k, 0), child: ch), // (no value to go on: a shake, as a "no")
+      child: Draggable<Beh>(
     data: b,
     dragAnchorStrategy: pointerDragAnchorStrategy,
     feedback: ListenableBuilder( // (its mark is the fingertip: what is under it takes it)
@@ -1653,6 +1701,7 @@ class _HandCard extends StatelessWidget {
     onDragEnd: (_) => t.carry(null),
     child: face(),
   ),
+    ),
   );
 }
 

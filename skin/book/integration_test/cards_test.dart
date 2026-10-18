@@ -4,7 +4,7 @@ import 'dart:io';
 import 'dart:ui' show ImageByteFormat;
 
 import 'package:flutter/rendering.dart' show OffsetLayer;
-import 'package:flutter/services.dart' show TextInputAction;
+import 'package:flutter/services.dart' show LogicalKeyboardKey, PhysicalKeyboardKey, TextInputAction;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
@@ -137,6 +137,12 @@ void main() {
           await g.up();
           await shot('spin_joins_bundle');
           expect(find.text('束1').evaluate().length, greaterThanOrEqualTo(4)); // (the bundle strip and three values' marks)
+          final marks = find.text('束1').evaluate().length;
+          await t.sendKeyDownEvent(LogicalKeyboardKey.metaLeft, physicalKey: PhysicalKeyboardKey.metaLeft, platform: 'macos'); // (profile builds keep no key names: the physical key is given)
+          await t.sendKeyEvent(LogicalKeyboardKey.keyZ, physicalKey: PhysicalKeyboardKey.keyZ, platform: 'macos');
+          await t.sendKeyUpEvent(LogicalKeyboardKey.metaLeft, physicalKey: PhysicalKeyboardKey.metaLeft, platform: 'macos');
+          await shot('cmd_z_unties_spin');
+          expect(find.text('束1').evaluate().length, marks - 1); // (⌘Z reaches the table: the last tie is taken back)
         case '舞台に落とす':
           var g = await carry(hand('揺れ'), const Offset(420, 420));
           await t.pump(const Duration(milliseconds: 400)); // (the hand rests: the ring opens)
