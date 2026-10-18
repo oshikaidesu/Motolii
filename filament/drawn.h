@@ -750,10 +750,18 @@ static Drawn* type(Stage& s, const char* words, const char* fontFile, const mat4
 // A flat shape's path, as `flat` draws it in a picture w by h points, set in by `in` (half its stroke): ThorVG's own
 // rectangle, circle, polygon, star, line or wave; its corners rounded (a share of its shorter side), its lines and curves
 // cut in pieces no longer than `fine` points (0: as they are), for what bends it as it is drawn. Kept as made in `d`.
+bool sk_svg(const char* data, std::vector<tvg::PathCommand>& cmds, std::vector<tvg::Point>& pts);
 static void flat_path(Drawn* d, tvg::Shape* shape, const char* form, int w, int h, float in, int points, float inner, float round, float fine) {
     const float cx = 0.5f * (float)w, cy = 0.5f * (float)h, rx = cx - in, ry = cy - in;
     const float thick = in > 0.f ? 2.f * in : 0.08f * (float)h;   // (a wave's line: its stroke, or a share of its height)
-    if (!strcmp(form, "circle")) shape->appendCircle(cx, cy, rx, ry);
+    if (form[0] == 'M' || form[0] == 'm') {   // (a path of its own, drawn by a pen: SVG's path data, in its height from its middle, down as SVG goes; Skia reads it)
+        std::vector<tvg::PathCommand> c; std::vector<tvg::Point> p;
+        if (sk_svg(form, c, p)) {
+            for (tvg::Point& at : p) at = {cx + at.x * (float)h, cy + at.y * (float)h};
+            shape->appendPath(c.data(), (uint32_t)c.size(), p.data(), (uint32_t)p.size());
+        }
+    }
+    else if (!strcmp(form, "circle")) shape->appendCircle(cx, cy, rx, ry);
     else if (!strcmp(form, "wave")) {   // (a line waving across it: so many times along (points), so far up and down (inner, a share of its half height))
         const int cycles = std::clamp(points, 1, 100), n = 48 * cycles;
         const float amp = (cy - thick) * std::clamp(inner, 0.f, 1.f);

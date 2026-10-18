@@ -1,10 +1,12 @@
 // skpath.cpp: Skia's own path operations on a flat shape's path (Cavalry draws its shapes' paths with the same):
-// union, difference, intersection, exclusion of two paths (SkPathOps, its Boolean). Apart from the rest because Skia's
-// headers bring its names in; out comes one call (drawn.h). Built by skia.sh.
+// union, difference, intersection, exclusion of two paths (SkPathOps, its Boolean), and a path read from SVG's path
+// data (SkParsePath). Apart from the rest because Skia's headers bring its names in; out come two calls (drawn.h).
+// Built by skia.sh.
 #include "thorvg.h"
 #include "include/core/SkPath.h"
 #include "include/core/SkPathBuilder.h"
 #include "include/pathops/SkPathOps.h"
+#include "include/utils/SkParsePath.h"
 #include <vector>
 
 static SkPath sk_of(const tvg::PathCommand* cmds, uint32_t cmdsCnt, const tvg::Point* pts) {
@@ -18,23 +20,15 @@ static SkPath sk_of(const tvg::PathCommand* cmds, uint32_t cmdsCnt, const tvg::P
     return b.detach();
 }
 
-// `op`: 0 A less B, 1 where both are, 2 either, 3 either but not both (Skia's SkPathOp, in its order). Out: its path
-// in ThorVG's commands, a quad or conic as a cubic (what ThorVG knows); false: nothing left.
-bool sk_op(int op, const tvg::PathCommand* ac, uint32_t acn, const tvg::Point* ap, const tvg::PathCommand* bc, uint32_t bcn, const tvg::Point* bp,
-           std::vector<tvg::PathCommand>& cmds, std::vector<tvg::Point>& pts) {
-    cmds.clear(), pts.clear();
-    const SkPath b = sk_of(bc, bcn, bp);
-    const std::optional<SkPath> one = Simplify(b);   // (its pieces, if many and over each other, made one first)
-    std::optional<SkPath> made = Op(sk_of(ac, acn, ap), one ? *one : b, (SkPathOp)op);
-    if (made && made->getFillType() != SkPathFillType::kWinding) made = AsWinding(*made);   // (as it is filled: by its winding, as the shape is cut)
-    if (!made || made->isEmpty()) return false;
+// Skia's path in ThorVG's commands, a quad or conic as a cubic (what ThorVG knows).
+static bool tvg_of(const SkPath& made, std::vector<tvg::PathCommand>& cmds, std::vector<tvg::Point>& pts) {
     const auto cubic = [&](SkPoint a, SkPoint q, SkPoint e) {   // (a quad as the cubic it is)
         cmds.push_back(tvg::PathCommand::CubicTo);
         pts.push_back({a.fX + 2.f / 3.f * (q.fX - a.fX), a.fY + 2.f / 3.f * (q.fY - a.fY)});
         pts.push_back({e.fX + 2.f / 3.f * (q.fX - e.fX), e.fY + 2.f / 3.f * (q.fY - e.fY)});
         pts.push_back({e.fX, e.fY});
     };
-    SkPathIter it = made->iter();
+    SkPathIter it = made.iter();
     while (const std::optional<SkPathIter::Rec> r = it.next()) {
         const SkSpan<const SkPoint> p = r->fPoints;
         switch (r->fVerb) {
@@ -55,4 +49,22 @@ bool sk_op(int op, const tvg::PathCommand* ac, uint32_t acn, const tvg::Point* a
         }
     }
     return !cmds.empty();
+}
+
+// `op`: 0 A less B, 1 where both are, 2 either, 3 either but not both (Skia's SkPathOp, in its order). false: nothing left.
+bool sk_op(int op, const tvg::PathCommand* ac, uint32_t acn, const tvg::Point* ap, const tvg::PathCommand* bc, uint32_t bcn, const tvg::Point* bp,
+           std::vector<tvg::PathCommand>& cmds, std::vector<tvg::Point>& pts) {
+    cmds.clear(), pts.clear();
+    const SkPath b = sk_of(bc, bcn, bp);
+    const std::optional<SkPath> one = Simplify(b);   // (its pieces, if many and over each other, made one first)
+    std::optional<SkPath> made = Op(sk_of(ac, acn, ap), one ? *one : b, (SkPathOp)op);
+    if (made && made->getFillType() != SkPathFillType::kWinding) made = AsWinding(*made);   // (as it is filled: by its winding, as the shape is cut)
+    return made && !made->isEmpty() && tvg_of(*made, cmds, pts);
+}
+
+// A path from SVG's path data ("M0 0 L1 1 C... Z"). false: none read.
+bool sk_svg(const char* data, std::vector<tvg::PathCommand>& cmds, std::vector<tvg::Point>& pts) {
+    cmds.clear(), pts.clear();
+    const std::optional<SkPath> made = SkParsePath::FromSVGString(data);
+    return made && !made->isEmpty() && tvg_of(*made, cmds, pts);
 }

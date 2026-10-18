@@ -156,7 +156,7 @@ static const DocValue doc_values[] = {
     //  luma mattes), the other way about (inverted), its edge so soft, in points of the screen)
     {"clip_matte", "film picture text shape", 0, 0, false, "alpha luma"}, {"clip_invert", "film picture text shape", 0, 1, false, nullptr}, {"clip_feather", "film picture text shape", 0, 500, false, nullptr},   // (a solid is cut by a box, not a matte)
     {"solo", doc_kinds, 0, 1, false, nullptr}, {"lock", doc_kinds, 0, 1, false, nullptr},   // (After Effects' own: while any thing is solo only those are seen; a locked thing is not changed)
-    {"visible", doc_kinds, 0, 1, false, nullptr}, {"order", doc_kinds, -1e9, 1e9, false, nullptr}, {"wide", "shape", 1e-3, 1e3, false, nullptr}, {"shape", "shape", 0, 0, false, "rect circle solid polygon star line wave null ring arc arrow squircle cog"},
+    {"visible", doc_kinds, 0, 1, false, nullptr}, {"order", doc_kinds, -1e9, 1e9, false, nullptr}, {"wide", "shape", 1e-3, 1e3, false, nullptr}, {"shape", "shape", 0, 0, false, "rect circle solid polygon star line wave null ring arc arrow squircle cog path"},
     {"points", "shape", 1, 360, false, nullptr}, {"inner", "shape", 0.01, 1, false, nullptr}, {"round", "shape", 0, 0.5, true, nullptr},   // (a polygon's or star's points, a star's inner points, its corners rounded)
     {"start", doc_kinds, 0, 1e6, false, nullptr}, {"duration", doc_kinds, 1e-3, 1e6, false, nullptr},
     {"begin", "film", 0, 1e6, false, nullptr}, {"speed", "film solid", -100, 100, false, nullptr}, {"keyed", "film", 0, 1, false, nullptr},
@@ -251,7 +251,8 @@ static const DocValue doc_values[] = {
     {"connect_reach", "shape", 0, 1e4, true, nullptr},
     // (put together with another shape, Cavalry's Boolean: its own less that one, where both are, either, either but not both)
     {"boolean", "shape", 0, 0, false, "union subtract intersect exclude"},
-    {"boolean_with", "shape", 0, 1e9, false, nullptr},   // (that other shape, seen where it lies; 0: none)   // (only those nearer than this, in units of the stage, finer the further apart: a plexus; 0: each to the next in their order)
+    {"boolean_with", "shape", 0, 1e9, false, nullptr},   // (that other shape, seen where it lies; 0: none)
+    {"path", "shape", 0, 0, false, ""},   // (a path shape's own path, drawn by a pen: SVG's path data, in its height from its middle, down as SVG goes)   // (only those nearer than this, in units of the stage, finer the further apart: a plexus; 0: each to the next in their order)
     // (a wave through it and its copies, Cavalry's oscillator: so far across and up (units), so far turned (degrees),
     //  so much larger (a share), so many times a second, each copy so far behind the one before (turns spread over all)
     {"wave_x", "picture text shape", -1e3, 1e3, true, nullptr}, {"wave_y", "picture text shape", -1e3, 1e3, true, nullptr},
@@ -1799,11 +1800,12 @@ static bool doc_match(Doc& d) {
                 const float high = line ? 0.04f : wave ? 0.3f : 1.f;
                 // (its outline alone, in one colour: cut into triangles and drawn by Filament as the scene's other things
                 //  are, flat_mesh; with an edge, a ramp, a dash, effects, a trim or a bend made on the CPU: ThorVG's picture)
+                const std::string form = shape == "path" ? doc_word(d, thing, "path") : shape;   // (a path shape: its own path is its form)
                 const bool plain = !wave && shape != "null" && fx.ramp.size() < 2 && fx.blur <= 0.f && fx.shadow.w <= 0.f && fx.glow.w <= 0.f && fx.tint <= 0.f && fx.tritone <= 0.f;
                 if (plain)
-                    made.drawn = flat_mesh(s, shape.c_str(), (float)doc_number(d, thing, "wide", 0, line ? 25 : 1), mat4f{}, high, fill.empty() ? float3{0xd9, 0xd2, 0xc3} / 255.f : colour, lay,
+                    made.drawn = flat_mesh(s, form.c_str(), (float)doc_number(d, thing, "wide", 0, line ? 25 : 1), mat4f{}, high, fill.empty() ? float3{0xd9, 0xd2, 0xc3} / 255.f : colour, lay,
                                            float4{edge.xyz, edge.w / high}, fx.over(high), (int)doc_number(d, thing, "points", 0, shape == "star" ? 5 : shape == "arc" ? 270 : shape == "squircle" ? 4 : shape == "cog" ? 12 : 6), (float)doc_number(d, thing, "inner", 0, shape == "cog" ? 0.2 : shape == "arc" ? 0.3 : 0.5), (float)doc_number(d, thing, "round", 0, 0), doc_bends(d, thing));
-                else made.drawn = flat(s, shape.c_str(), (float)doc_number(d, thing, "wide", 0, line ? 25 : wave ? 10 : 1), mat4f{}, high, fill.empty() ? float3{0xd9, 0xd2, 0xc3} / 255.f : colour, lay,
+                else made.drawn = flat(s, form.c_str(), (float)doc_number(d, thing, "wide", 0, line ? 25 : wave ? 10 : 1), mat4f{}, high, fill.empty() ? float3{0xd9, 0xd2, 0xc3} / 255.f : colour, lay,
                                   float4{edge.xyz, edge.w / high}, fx.over(high),
                                   (int)doc_number(d, thing, "points", 0, shape == "star" ? 5 : shape == "arc" ? 270 : shape == "squircle" ? 4 : shape == "cog" ? 12 : wave ? 4 : 6), (float)doc_number(d, thing, "inner", 0, shape == "cog" ? 0.2 : shape == "arc" ? 0.3 : 0.5), (float)doc_number(d, thing, "round", 0, 0));
             }
@@ -2141,7 +2143,7 @@ static const char* doc_kind_of(const char* file) {
     std::string end = std::filesystem::path(file).extension().string();
     for (char& c : end) c = (char)std::tolower((unsigned char)c);
     if (doc_among(doc_shapes, file)) return "solid";
-    if (doc_among("rect circle polygon star line null ring arc arrow squircle cog", file)) return "shape";
+    if (doc_among("rect circle polygon star line null ring arc arrow squircle cog path", file)) return "shape";
     for (const auto& one : made)
         if (end.size() > 1 && doc_among(one.ends, end.substr(1))) return one.kind;
     return "";
