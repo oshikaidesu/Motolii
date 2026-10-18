@@ -81,7 +81,14 @@ struct Drawn {
     tvg::LottieAnimation* lottie = nullptr;   // (its film, when it is an After Effects file: what says its layers' poses)
     std::vector<uint32_t> deep;   // (an After Effects file's 3D layers: not drawn in its own picture, each a sheet of its own where it is: picture_deep)
     std::array<float, 8> bent{};   // (as last bent: round, bloat, zigzag, ridges, smooth, offset; roughened: how far, how fine)
-    int joined = -1; std::vector<tvg::PathCommand> joinedBy; std::vector<tvg::Point> joinedAt;   // (as last put together with another shape: how (skpath.cpp), its path in this one's points)
+    // Another shape's path in this one's points, and what is done with it: put together (how: skpath.cpp's op; -1 none),
+    // or turned into (much: how far, 0 not).
+    struct Other {
+        int how = -1; float much = 0.f; std::vector<tvg::PathCommand> by; std::vector<tvg::Point> at;
+        bool operator==(const Other& o) const {
+            return how == o.how && much == o.much && by == o.by && at.size() == o.at.size() && std::equal(at.begin(), at.end(), o.at.begin(), [](tvg::Point a, tvg::Point b) { return a.x == b.x && a.y == b.y; });
+        }
+    } joined, morphed;   // (as last put together with, as last turned into)
     std::vector<std::string> markers;  // an After Effects file's named stretches (ThorVG's Lottie markers)
     std::vector<float2> letters;       // a text split into its letters: where each lies across the picture (shares of its width); its copies show one each
     float fromFrame = 0.f, toFrame = 0.f;   // the stretch it plays, when one is named (frames of the file)
@@ -957,6 +964,8 @@ static Drawn* flat_mesh(Stage& s, const char* form, float wide, const mat4f& pla
 }
 
 bool sk_rough(const tvg::PathCommand* cmds, uint32_t cmdsCnt, const tvg::Point* pts, float apart, float far, uint32_t seed, std::vector<tvg::PathCommand>& outCmds, std::vector<tvg::Point>& outPts);
+bool sk_morph(const tvg::PathCommand* ac, uint32_t acn, const tvg::Point* ap, const tvg::PathCommand* bc, uint32_t bcn, const tvg::Point* bp, float t,
+              std::vector<tvg::PathCommand>& cmds, std::vector<tvg::Point>& pts);
 bool sk_op(int op, const tvg::PathCommand* ac, uint32_t acn, const tvg::Point* ap, const tvg::PathCommand* bc, uint32_t bcn, const tvg::Point* bp,
            std::vector<tvg::PathCommand>& cmds, std::vector<tvg::Point>& pts);
 
@@ -964,16 +973,15 @@ bool sk_op(int op, const tvg::PathCommand* ac, uint32_t acn, const tvg::Point* a
 // paths on its edge (off its end, off its beginning, slid along), its operators (round, bloat, zig zag, offset: bend.cpp),
 // then put together with another shape's path (`join`: Skia's path operation, skpath.cpp; -1 none; `by`/`at` that path
 // in this one's points), as Cavalry's Boolean.
-static void cut_at(Stage& s, Drawn* d, float3 trim, const std::array<float, 8>& bend, int join = -1,
-                   const std::vector<tvg::PathCommand>& by = {}, const std::vector<tvg::Point>& at = {}) {
-    if (join < 0 || by.empty()) join = -1;
-    const bool joins = join != d->joined || (join >= 0 && (by != d->joinedBy || at.size() != d->joinedAt.size() ||
-                                                            !std::equal(at.begin(), at.end(), d->joinedAt.begin(), [](tvg::Point a, tvg::Point b) { return a.x == b.x && a.y == b.y; })));
+static void cut_at(Stage& s, Drawn* d, float3 trim, const std::array<float, 8>& bend, Drawn::Other join = {}, Drawn::Other morph = {}) {
+    if (join.how < 0 || join.by.empty()) join = {};
+    if (morph.much <= 0.f || morph.by.empty()) morph = {};
+    const bool joins = !(join == d->joined) || !(morph == d->morphed);
     if (!d->cut || !d->outline || (trim == d->trimmed && bend == d->bent && !joins)) return;
     d->trimmed = trim;
     const bool refill = bend != d->bent || joins;
     if (refill) {
-        d->bent = bend, d->joined = join, d->joinedBy = by, d->joinedAt = at;
+        d->bent = bend, d->joined = join, d->morphed = morph;
         const float high = d->plainHigh;
         tvg_bend(d->outline, d->plain.data(), (uint32_t)d->plain.size(), d->plainAt.data(), (uint32_t)d->plainAt.size(), std::clamp(bend[0], 0.f, 0.5f) * d->plainSide,
                  100.f * std::clamp(bend[1], -1.f, 1.f), bend[2] * high, (int)std::clamp(bend[3], 0.f, 100.f), bend[4] > 0.5f, bend[5] * high, d->fine);
@@ -984,11 +992,18 @@ static void cut_at(Stage& s, Drawn* d, float3 trim, const std::array<float, 8>& 
             if (sk_rough(cmds, cmdsCnt, pts, std::max(bend[7], 0.005f) * high, std::min(bend[6], 0.5f) * high, 0, c, p))
                 d->outline->reset(), d->outline->appendPath(c.data(), (uint32_t)c.size(), p.data(), (uint32_t)p.size());
         }
-        if (join >= 0) {
+        if (morph.much > 0.f) {   // (turned into the other so far, as Cavalry's Morph: both walked at even steps, point to point)
             const tvg::PathCommand* cmds; const tvg::Point* pts; uint32_t cmdsCnt = 0, ptsCnt = 0;
             d->outline->path(&cmds, &cmdsCnt, &pts, &ptsCnt);
             std::vector<tvg::PathCommand> c; std::vector<tvg::Point> p;
-            sk_op(join, cmds, cmdsCnt, pts, by.data(), (uint32_t)by.size(), at.data(), c, p);
+            if (sk_morph(cmds, cmdsCnt, pts, morph.by.data(), (uint32_t)morph.by.size(), morph.at.data(), std::min(morph.much, 1.f), c, p))
+                d->outline->reset(), d->outline->appendPath(c.data(), (uint32_t)c.size(), p.data(), (uint32_t)p.size());
+        }
+        if (join.how >= 0) {
+            const tvg::PathCommand* cmds; const tvg::Point* pts; uint32_t cmdsCnt = 0, ptsCnt = 0;
+            d->outline->path(&cmds, &cmdsCnt, &pts, &ptsCnt);
+            std::vector<tvg::PathCommand> c; std::vector<tvg::Point> p;
+            sk_op(join.how, cmds, cmdsCnt, pts, join.by.data(), (uint32_t)join.by.size(), join.at.data(), c, p);
             d->outline->reset();
             if (!c.empty()) d->outline->appendPath(c.data(), (uint32_t)c.size(), p.data(), (uint32_t)p.size());
         }

@@ -9,6 +9,7 @@
 #include "include/utils/SkParsePath.h"
 #include "include/core/SkStrokeRec.h"
 #include "include/core/SkString.h"
+#include "include/core/SkContourMeasure.h"
 #include "include/effects/SkDiscretePathEffect.h"
 #include <vector>
 
@@ -123,4 +124,49 @@ bool sk_svg_move(const char* data, int nth, float dx, float dy, std::string& out
     }
     out = SkParsePath::ToSVGString(b.detach()).c_str();
     return true;
+}
+
+// A path turned `t` of the way into another, as Cavalry's Morph: each outline walked at 256 even steps (Skia's contour
+// measure), the other's turned the same way round and started where it lies nearest, point to point between; an
+// outline one has and the other has not, kept until half way.
+bool sk_morph(const tvg::PathCommand* ac, uint32_t acn, const tvg::Point* ap, const tvg::PathCommand* bc, uint32_t bcn, const tvg::Point* bp, float t,
+              std::vector<tvg::PathCommand>& cmds, std::vector<tvg::Point>& pts) {
+    constexpr int N = 256;
+    cmds.clear(), pts.clear();
+    const auto walk = [](const SkPath& path) {
+        std::vector<std::pair<std::vector<SkPoint>, bool>> all;
+        SkContourMeasureIter it(path, false);
+        while (const sk_sp<SkContourMeasure> c = it.next()) {
+            std::vector<SkPoint> p(N);
+            for (int i = 0; i < N; ++i) (void)c->getPosTan(c->length() * (float)i / (float)(c->isClosed() ? N : N - 1), &p[i], nullptr);
+            all.push_back({p, c->isClosed()});
+        }
+        return all;
+    };
+    const auto a = walk(sk_of(ac, acn, ap)), b = walk(sk_of(bc, bcn, bp));
+    const auto put = [&](const std::vector<SkPoint>& p, bool closed) {
+        for (int i = 0; i < N; ++i) cmds.push_back(i ? tvg::PathCommand::LineTo : tvg::PathCommand::MoveTo), pts.push_back({p[i].fX, p[i].fY});
+        if (closed) cmds.push_back(tvg::PathCommand::Close);
+    };
+    const auto area = [](const std::vector<SkPoint>& p) { double s = 0; for (int i = 0; i < N; ++i) s += (double)p[i].fX * p[(i + 1) % N].fY - (double)p[(i + 1) % N].fX * p[i].fY; return s; };
+    for (size_t k = 0; k < std::max(a.size(), b.size()); ++k) {
+        if (k >= b.size()) { if (t < 0.5f) put(a[k].first, a[k].second); continue; }
+        if (k >= a.size()) { if (t >= 0.5f) put(b[k].first, b[k].second); continue; }
+        const std::vector<SkPoint>& p = a[k].first;
+        std::vector<SkPoint> q = b[k].first;
+        int shift = 0;
+        if (a[k].second && b[k].second) {   // (two rounds: the same way round, from the nearest start)
+            if ((area(p) < 0) != (area(q) < 0)) std::reverse(q.begin(), q.end());
+            double best = 1e300;
+            for (int s = 0; s < N; ++s) {
+                double sum = 0;
+                for (int i = 0; i < N && sum < best; i += 4) { const SkPoint e = p[i] - q[(i + s) % N]; sum += (double)e.fX * e.fX + (double)e.fY * e.fY; }
+                if (sum < best) best = sum, shift = s;
+            }
+        }
+        std::vector<SkPoint> m(N);
+        for (int i = 0; i < N; ++i) m[i] = p[i] + (q[(i + shift) % N] - p[i]) * t;
+        put(m, a[k].second || b[k].second);
+    }
+    return !cmds.empty();
 }

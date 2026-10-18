@@ -255,6 +255,9 @@ static const DocValue doc_values[] = {
     // (roughened, Illustrator's Roughen: so far out (a share of its height), a point so often (the same))
     {"rough", "shape", 0, 0.5, true, nullptr},
     {"rough_detail", "shape", 0.005, 1, true, nullptr},
+    // (turned into another shape so far, Cavalry's Morph: 0 itself, 1 the other where it lies)
+    {"morph", "shape", 0, 1, true, nullptr},
+    {"morph_to", "shape", 0, 1e9, false, nullptr},
     {"path", "shape", 0, 0, false, ""},   // (a path shape's own path, drawn by a pen: SVG's path data, in its height from its middle, down as SVG goes)   // (only those nearer than this, in units of the stage, finer the further apart: a plexus; 0: each to the next in their order)
     // (a wave through it and its copies, Cavalry's oscillator: so far across and up (units), so far turned (degrees),
     //  so much larger (a share), so many times a second, each copy so far behind the one before (turns spread over all)
@@ -449,6 +452,8 @@ static const DocShown doc_shown[] = {
     {"connect_to", "thing", "", "With", 0, 0, nullptr},
     {"rough", "share", "%", "Rough", 0, 0.2, nullptr},
     {"rough_detail", "share", "%", "Detail", 0.005, 0.2, nullptr},
+    {"morph", "share", "%", "Morph", 0, 1, nullptr},
+    {"morph_to", "thing", "", "Into", 0, 0, nullptr},
     {"boolean", "", "", "Boolean", 0, 0, nullptr},
     {"boolean_with", "thing", "", "Shape", 0, 0, nullptr},
     {"follow", "thing", "", "Follow", 0, 0, nullptr},
@@ -1435,28 +1440,33 @@ static void doc_moment(Doc& d, double now) {
             }
             t.drawn->look->setParameter("bends", bends, 7);
             if (t.drawn->edgeLook) t.drawn->edgeLook->setParameter("bends", bends, 7);
-            int join = -1;   // (put together with another shape: its path, as it is now, in this one's points; Skia's op in skpath.cpp's order)
-            std::vector<tvg::PathCommand> by; std::vector<tvg::Point> at;
-            const std::string how = doc_word(d, thing, "boolean");
-            const int with = (int)doc_number(d, thing, "boolean_with", 0, 0);
-            for (int k = 0; k < 4; ++k) if (how == std::array<const char*, 4>{"subtract", "intersect", "union", "exclude"}[(size_t)k]) join = k;
-            if (const auto other = d.shown.find(with); join >= 0 && with != thing && other != d.shown.end() && other->second.drawn && other->second.drawn->cut) {
-                const Drawn* a = t.drawn; const Drawn* b = other->second.drawn;
+            // (another shape's path as it is now, where it lies, in this one's points: as shape_cut lays them; and each of its copies, `all`)
+            const auto other = [&](int with, bool all) {
+                Drawn::Other o;
+                const auto found = d.shown.find(with);
+                if (with == thing || found == d.shown.end() || !found->second.drawn || !found->second.drawn->cut) return o;
+                const Drawn* a = t.drawn; const Drawn* b = found->second.drawn;
                 const math::mat4 back = inverse(doc_place(d, thing, now));
                 const tvg::PathCommand* cmds; const tvg::Point* pts; uint32_t cmdsCnt = 0, ptsCnt = 0;
                 b->outline->path(&cmds, &cmdsCnt, &pts, &ptsCnt);
-                const int many = doc_members(d, with);
-                for (int copy = 0; copy < many; ++copy) {   // (and each of its copies: a plate cut by a whole grid of them)
+                const int many = all ? doc_members(d, with) : 1;
+                for (int copy = 0; copy < many; ++copy) {   // (a plate cut by a whole grid of them)
                     const math::mat4 to = back * (many > 1 ? doc_place(d, with, now, 0, copy, true) : doc_place(d, with, now));
-                    by.insert(by.end(), cmds, cmds + cmdsCnt);
-                    for (uint32_t k = 0; k < ptsCnt; ++k) {   // (its points on its sheet, where they lie on this one's, back into this one's points: as shape_cut lays them)
+                    o.by.insert(o.by.end(), cmds, cmds + cmdsCnt);
+                    for (uint32_t k = 0; k < ptsCnt; ++k) {
                         const math::double4 on = to * math::double4{(pts[k].x - 0.5 * b->cutW) / b->plainHigh * b->sheetHigh, (0.5 * b->plainHigh - pts[k].y) / b->plainHigh * b->sheetHigh, 0.0, 1.0};
-                        at.push_back({(float)(on.x / a->sheetHigh * a->plainHigh + 0.5 * a->cutW), (float)(0.5 * a->plainHigh - on.y / a->sheetHigh * a->plainHigh)});
+                        o.at.push_back({(float)(on.x / a->sheetHigh * a->plainHigh + 0.5 * a->cutW), (float)(0.5 * a->plainHigh - on.y / a->sheetHigh * a->plainHigh)});
                     }
                 }
-            }
+                return o;
+            };
+            Drawn::Other join, morph;   // (put together with another, Skia's op in skpath.cpp's order; turned into another, so far)
+            const std::string how = doc_word(d, thing, "boolean");
+            for (int k = 0; k < 4; ++k)
+                if (how == std::array<const char*, 4>{"subtract", "intersect", "union", "exclude"}[(size_t)k]) join = other((int)doc_number(d, thing, "boolean_with", 0, 0), true), join.how = k;
+            if (const float much = num("morph", 0); much > 0.f) morph = other((int)doc_number(d, thing, "morph_to", 0, 0), false), morph.much = much;
             cut_at(s, t.drawn, float3{num("trim", 0), num("trim_begin", 0), num("trim_offset", 0)},   // (its path anew, if it is told otherwise: cut again)
-                   {num("round", 0), num("bloat", 0), num("zigzag", 0), num("zigzag_ridges", 5), num("zigzag_smooth", 0), num("offset", 0), num("rough", 0), num("rough_detail", 0.03)}, join, by, at);
+                   {num("round", 0), num("bloat", 0), num("zigzag", 0), num("zigzag_ridges", 5), num("zigzag_smooth", 0), num("offset", 0), num("rough", 0), num("rough_detail", 0.03)}, join, morph);
             for (const Stage::Made& made : s.made)
                 if (made.of == t.drawn->sheet)
                     if (const auto own = d.copyLooks.find(made.thing.getId()); own != d.copyLooks.end()) own->second->setParameter("bends", bends, 7);
