@@ -1,0 +1,32 @@
+say 0 background 15102a
+say 0 script ../../effects/fine_grain.wgsl
+add solid cube
+say 1 fill 3a7bff
+set 1 size 1.0
+set 1 y 0.45
+key 1 rotate_y 0 0
+key 1 rotate_y 6 180
+key 1 rotate_x 0 25
+key 1 rotate_x 6 -25
+say 1 fx ../../effects/stuck_dots.wgsl
+add solid ball
+say 2 fill ff4f6d
+set 2 size 0.7
+set 2 y -0.55
+key 2 x 0 -0.45
+key 2 x 3 0.45
+key 2 x 6 -0.45
+say 2 fx ../../effects/stuck_dots.wgsl
+set 2 js_stuck_dots_cell 7
+add text ../arial_black.ttf
+say 3 text CHROMA
+say 3 fill f6f1e7
+set 3 size 0.22
+set 3 y -0.05
+say 3 fx ../../effects/chroma.wgsl
+set 3 js_chroma_amount 60
+at 1
+still out/dots_1.png
+at 4
+still out/dots_4.png
+write out/show_dots.mp4

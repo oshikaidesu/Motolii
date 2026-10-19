@@ -1567,6 +1567,11 @@ static void doc_moment(Doc& d, double now) {
             thing_effects(s, st, doc_word(d, thing, "fx"));
             const ScreenNumbers numbers = [&d, thing](const std::string& file, const std::string& name, double usual) {
                 std::lock_guard<std::recursive_timed_mutex> hold(d.lock);   // (asked while the picture is drawn)
+                if (name == "origin_x" || name == "origin_y" || name == "turn" || name == "extent") {   // (where the thing is on the picture now, how turned, how large: an effect's pattern stuck to it)
+                    double frame[8];
+                    if (!doc_frame(d, thing, d.stage->now, frame)) return usual;
+                    return name == "origin_x" ? frame[0] : name == "origin_y" ? frame[1] : name == "turn" ? frame[4] : std::max(frame[2], frame[3]);
+                }
                 return doc_number(d, thing, doc_screen_knob(file, name).c_str(), d.stage->now, usual);
             };
             const std::string laid = doc_word(d, thing, "blend");   // (its way of lying on what is under, taken last: the W3C's 1-21, then add, multiply, screen)
