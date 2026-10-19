@@ -1521,7 +1521,6 @@ class _Tile extends StatelessWidget {
       final tagged = t.tags[v.id] != null || (CardTable.canDrive(v) && over == null && t.things.length > 1); // (a tag's mark shows: its own, or an empty one)
       final waiting = held is Beh ? held.c : (held is String ? t.drives[held]?.beh.c : Pop.accent);
       final edge = over?.c ?? (tying ? Pop.accent : (may && waiting != null ? waiting.withValues(alpha: .45) : const Color(0x00000000)));
-      final width = over != null ? (d != null && d.beh == over ? math.min(d.width + .15, 1.0) : (d?.width ?? .2)) : d?.width;
       // (the name strip is where the tile is held up and carried, to tie it to another; the rest scrubs, the number types)
       final label = !CardTable.canDrive(v) ? Text(v.label, maxLines: 1, overflow: TextOverflow.ellipsis, style: T.micro(Grey.g44).copyWith(height: 1.1)) : Draggable<Val>( // (the name strip carries the value at once; the number below scrubs)
         data: v,
@@ -1592,20 +1591,13 @@ class _Tile extends StatelessWidget {
                                   valueListenable: _Time.of(context),
                                   builder: (context, _, _) => Text(sayVal(v, t.at(v.id, 0, 1)), style: T.value(t.tags[v.id]!.tag.c).copyWith(fontSize: 15, fontWeight: FontWeight.w600)),
                                 ),
-                          if (width != null) ...[
-                            const SizedBox(width: 4),
-                            Flexible(child: Text('±${(width * (v.hi - v.lo)).toStringAsFixed(v.dec)}${v.unit}', maxLines: 1, overflow: TextOverflow.clip, style: T.micro((over ?? d!.beh).c).copyWith(fontSize: 9))),
-                          ],
                         ]),
                       ),
-                const SizedBox(height: 3),
-                SizedBox(height: 4, width: double.infinity, child: d != null || over != null ? _Spread(t, v, (over ?? d!.beh).c) : null),
                 ])),
               ]),
-              // (the right edge is one column of marks: what drives it on top, its bundle under; nothing sits on the words)
-              if (d != null) Positioned(right: tagged ? 21 : 0, top: 0, child: _DriveChip(t, v.id, d)),
+              // (a tile holds its name, its number, and top right what moves it and its tag: nothing else)
+              if (d != null) Positioned(right: tagged ? 21 : 0, top: 0, child: _DriveChip(t, v.id, d)), // (which behaviour: tapped, its knobs; carried, it moves)
               if (tagged) Positioned(right: 0, top: 0, child: _TagMark(t, v.id, t.tags[v.id]?.tag)), // (its tag, or an empty tag waiting: carried onto another thing, both wear one)
-              if (d == null && over == null && t.tags[v.id] == null && !(CardTable.canDrive(v) && t.things.length > 1) && !((held is Beh || held is String) && !CardTable.canDrive(v))) Positioned(right: 1, top: 2, child: IgnorePointer(child: _Gauge((v.v - v.lo) / (v.hi - v.lo)))),
               if (tied != null)
                 Positioned(
                   right: 0,
@@ -1621,7 +1613,7 @@ class _Tile extends StatelessWidget {
                   ),
                 ),
               if ((held is Beh || held is String) && !CardTable.canDrive(v)) Positioned(right: 2, top: 3, child: SizedBox.square(dimension: 10, child: CustomPaint(painter: _Cross(Grey.g56)))),
-              if (over != null && d?.beh != over) Positioned(right: 0, top: 0, child: Opacity(opacity: .6, child: _Chip(over))),
+              if (over != null && d?.beh != over) Positioned(right: tagged ? 21 : 0, top: 0, child: Opacity(opacity: .6, child: _Chip(over))),
             ]),
           ),
         ));
@@ -1690,60 +1682,41 @@ class _NumEditState extends State<_NumEdit> {
   );
 }
 
-/// Today's small picture of a value in a tile's corner: bars filled as far as the value is along its range.
-class _Gauge extends StatelessWidget {
-  const _Gauge(this.f);
-  final double f;
-  @override
-  Widget build(BuildContext context) => SizedBox(width: 16, height: 11, child: CustomPaint(painter: _GaugePaint(f.clamp(0.0, 1.0))));
-}
-
-class _GaugePaint extends CustomPainter {
-  const _GaugePaint(this.f);
-  final double f;
-  @override
-  void paint(Canvas c, Size s) {
-    for (var k = 0; k < 4; k++) {
-      final h = s.height * (k + 1) / 4, on = f >= (k + .5) / 4;
-      c.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(k * s.width / 4, s.height - h, s.width / 4 - 1.5, h), const Radius.circular(1)), Paint()..color = on ? Grey.g76 : Grey.g26);
-    }
-  }
-
-  @override
-  bool shouldRepaint(_GaugePaint o) => o.f != f;
-}
-
-/// Where each copy's value is now, as one short line per copy along the value's range ("all different" shows as lines apart),
-/// with the number itself as a grey line.
-class _Spread extends StatelessWidget {
-  const _Spread(this.t, this.v, this.c);
+/// What a behaviour does to a value, drawn as itself, shape filling the height: across the copies now (a ring: one dot a copy, as on
+/// the stage), or across the last two seconds (one thing). Shown large under the card while its knobs are open.
+class _TracePaint extends CustomPainter {
+  _TracePaint(this.t, this.d, this.over, this.time) : super(repaint: time);
   final CardTable t;
-  final Val v;
-  final Color c;
-  @override
-  Widget build(BuildContext context) => CustomPaint(painter: _SpreadPaint(t, v, c, _Time.of(context)), size: Size.infinite);
-}
-
-class _SpreadPaint extends CustomPainter {
-  _SpreadPaint(this.t, this.v, this.c, this.time) : super(repaint: time);
-  final CardTable t;
-  final Val v;
-  final Color c;
+  final Drive? d;
+  final Beh? over;
   final ValueNotifier<double> time;
   @override
   void paint(Canvas cv, Size s) {
-    final n = t.at('count', 0, 1, fallback: 12).round(), lo = v.lo, hi = v.hi;
-    cv.drawRect(Rect.fromLTWH(0, s.height - 1, s.width, 1), Paint()..color = Grey.g26);
-    final base = (v.v - lo) / (hi - lo) * s.width;
-    cv.drawRect(Rect.fromLTWH(base - .5, 0, 1, s.height), Paint()..color = Grey.g76);
-    for (var i = 0; i < n; i++) {
-      final x = (t.at(v.id, i, n) - lo) / (hi - lo) * s.width;
-      cv.drawRect(Rect.fromLTWH(x - .75, 0, 1.5, s.height), Paint()..color = c.withValues(alpha: .8));
+    final d = this.d, b = over ?? d!.beh, same = d != null && d.beh == b;
+    final clock = same ? d.clock : t.clock, speed = same ? d.speed : 1.0, seed = same ? d.seed : 0.0, from = same ? d.from : 0;
+    final n = t.cur.ring ? t.at('count', 0, 1, fallback: 1).round() : 1;
+    final ys = n > 1
+        ? [for (var i = 0; i < n; i++) b.at(clock, i, n, seed: seed, from: from)] // (every copy, now)
+        : [for (var k = 0; k <= 30; k++) b.at(clock - (30 - k) / 30 * 2 * speed, 0, 1, seed: seed, from: from)]; // (the last two seconds)
+    final mid = s.height / 2, amp = s.height / 2 - 4;
+    cv.drawLine(Offset(0, mid), Offset(s.width, mid), Paint()..color = Grey.g26..strokeWidth = 1);
+    Offset p(int k) => Offset(2 + (s.width - 4) * (ys.length == 1 ? .5 : k / (ys.length - 1)), mid - ys[k] * amp);
+    final line = Path()..moveTo(p(0).dx, p(0).dy);
+    for (var k = 1; k < ys.length; k++) {
+      line.lineTo(p(k).dx, p(k).dy);
+    }
+    cv.drawPath(line, Paint()..color = b.c.withValues(alpha: n > 1 ? .5 : 1)..style = PaintingStyle.stroke..strokeWidth = 1.6..strokeJoin = StrokeJoin.round);
+    if (n > 1) {
+      for (var k = 0; k < ys.length; k++) {
+        cv.drawCircle(p(k), 2.6, Paint()..color = b.c);
+      }
+    } else {
+      cv.drawCircle(p(ys.length - 1), 3.2, Paint()..color = b.c); // (now)
     }
   }
 
   @override
-  bool shouldRepaint(_SpreadPaint o) => true;
+  bool shouldRepaint(_TracePaint o) => true;
 }
 
 /// A value on the back of a card: a row, scrubbed sideways, taking a behaviour like a tile.
@@ -1774,11 +1747,9 @@ class _BackRow extends StatelessWidget {
         ),
         child: Row(children: [
           Text(v.label, style: T.label(CardTable.canDrive(v) ? Grey.g63 : Grey.g44)),
-          if (d != null) ...[const SizedBox(width: 6), _DriveChip(t, v.id, d, small: true)],
+          if (d != null) ...[const SizedBox(width: 6), _DriveChip(t, v.id, d)],
           if (over != null && d?.beh != over) ...[const SizedBox(width: 6), Opacity(opacity: .6, child: _Chip(over, small: true))],
           const Spacer(),
-          if (d != null || over != null) SizedBox(width: 60, height: 4, child: _Spread(t, v, (over ?? d!.beh).c)),
-          if (d != null) ...[const SizedBox(width: 4), Text('±${(d.width * (v.hi - v.lo)).toStringAsFixed(v.dec)}${v.unit}', style: T.micro(d.beh.c).copyWith(fontSize: 9))],
           const SizedBox(width: 8),
           if (t.bundleOf(v) != null) ...[GestureDetector(onDoubleTap: () => t.untieOne(v), child: _TieMark(t.bundleOf(v)!)), const SizedBox(width: 6)],
           SizedBox(
@@ -1836,6 +1807,13 @@ class _DriveKnobs extends StatelessWidget {
           ]),
         ),
         const SizedBox(height: 3),
+        Container( // (how it moves, large: the shape, and where each copy is on it now)
+          height: 40,
+          width: double.infinity,
+          margin: const EdgeInsets.only(bottom: Pop.tileGap),
+          decoration: BoxDecoration(color: Pop.well, borderRadius: BorderRadius.circular(6)),
+          child: CustomPaint(painter: _TracePaint(t, d, null, _Time.of(context))),
+        ),
         Row(children: [
           knob('Amount', '±${(d.width * span).toStringAsFixed(v.dec)}${v.unit}', 'w:${v.id}', (d.width * span).toStringAsFixed(v.dec),
               (x) => t..mark()..setDrive(d, width: x.abs() / span), (dx) => t.setDrive(d, width: d.width + dx / 300)),
@@ -1871,7 +1849,7 @@ class _TagMark extends StatelessWidget {
   final String id;
   final Tag? g;
   Widget face({bool lifted = false}) => g == null
-      ? SizedBox(width: 18, height: 18, child: CustomPaint(painter: _EmptyTag(lifted ? Pop.accent : Grey.g44)))
+      ? SizedBox(width: 18, height: 18, child: CustomPaint(painter: _EmptyTag(lifted ? Pop.accent : Grey.g38)))
       : Container(
           height: 18,
           constraints: const BoxConstraints(minWidth: 18),
@@ -2035,11 +2013,10 @@ class _CardStub extends StatelessWidget {
 
 /// The behaviour on a value: tapped, its knobs open; carried to another value, it moves there; dropped on the hand, it lets go.
 class _DriveChip extends StatelessWidget {
-  const _DriveChip(this.t, this.id, this.d, {this.small = false});
+  const _DriveChip(this.t, this.id, this.d);
   final CardTable t;
   final String id;
   final Drive d;
-  final bool small;
   @override
   Widget build(BuildContext context) => GestureDetector(
     onTap: () => t.toggleOpen(id),
@@ -2050,12 +2027,12 @@ class _DriveChip extends StatelessWidget {
         valueListenable: t.refusing,
         builder: (context, no, _) => Transform.translate(offset: const Offset(-9, -9), child: _Lifted(no ? _Refused(_Chip(d.beh)) : _Chip(d.beh))),
       ),
-      childWhenDragging: Opacity(opacity: .3, child: _Chip(d.beh, small: small)),
+      childWhenDragging: Opacity(opacity: .3, child: _Chip(d.beh)),
       onDragStarted: () => t.carry(id),
       onDragEnd: (_) => t.carry(null),
       child: Container(
         decoration: BoxDecoration(borderRadius: BorderRadius.circular(9), border: Border.all(color: t.open == id ? Grey.g95 : const Color(0x00000000))),
-        child: _Chip(d.beh, small: small),
+        child: _Chip(d.beh),
       ),
     ),
   );
