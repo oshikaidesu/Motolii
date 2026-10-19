@@ -46,7 +46,7 @@ class _EffectCardState extends State<EffectCard> {
           : null,
       builder: (_, h) => Container(
         height: 22,
-        padding: const EdgeInsets.symmetric(horizontal: 8),
+        padding: EdgeInsets.symmetric(horizontal: Shape.s(8)),
         color: h && ok ? Grey.g15 : null,
         alignment: Alignment.centerLeft,
         child: Row(
@@ -92,7 +92,7 @@ class _EffectCardState extends State<EffectCard> {
             Hov(
               onTap: () => setState(() => _menu = !_menu),
               builder: (_, h) => Padding(
-                padding: const EdgeInsets.only(right: 12),
+                padding: EdgeInsets.only(right: Shape.s(12)),
                 child: Text('More', style: T.label(_menu || h ? Grey.g95 : Grey.g56)),
               ),
             ),
@@ -102,7 +102,7 @@ class _EffectCardState extends State<EffectCard> {
       children: [
         if (_menu)
           Container(
-            margin: const EdgeInsets.only(bottom: 4),
+            margin: EdgeInsets.only(bottom: Shape.s(4)),
             decoration: BoxDecoration(
               color: Grey.g13,
               borderRadius: BorderRadius.all(Shape.r(4)),
@@ -123,7 +123,7 @@ class _EffectCardState extends State<EffectCard> {
         Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: pairs(heroes)),
         if (rest.isNotEmpty) ...[
           Padding(
-            padding: const EdgeInsets.only(top: 4),
+            padding: EdgeInsets.only(top: Shape.s(4)),
             child: Hov(
               onTap: () => doc.flag('$k.adv', !adv),
               builder: (_, h) => Container(
@@ -180,7 +180,7 @@ class _DragGhost extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     width: 220,
     height: Pop.titleH + Pop.insetY * 2,
-    padding: const EdgeInsets.symmetric(horizontal: Pop.inset),
+    padding: EdgeInsets.symmetric(horizontal: Pop.inset),
     decoration: BoxDecoration(
       color: Grey.g20,
       boxShadow: [BoxShadow(color: Color(0x99000000), blurRadius: 14, offset: Offset(0, 6))],

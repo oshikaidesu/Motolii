@@ -38,7 +38,7 @@ class EffectsStack extends StatelessWidget {
         if (x.cfg.maybe) const ParamSearch(),
         if (none)
           Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8),
+            padding: EdgeInsets.symmetric(vertical: Shape.s(8)),
             child: Text('No parameter matches', style: T.label(Grey.g56)),
           )
         else
@@ -70,8 +70,8 @@ class _ParamSearchState extends State<ParamSearch> {
     final x = Ctx.of(context), ed = Ed(x.cfg.ed);
     return Container(
       height: cellH,
-      margin: const EdgeInsets.only(bottom: 4),
-      padding: const EdgeInsets.symmetric(horizontal: 8),
+      margin: EdgeInsets.only(bottom: Shape.s(4)),
+      padding: EdgeInsets.symmetric(horizontal: Shape.s(8)),
       alignment: Alignment.centerLeft,
       decoration: BoxDecoration(
         color: Grey.g13,
@@ -149,7 +149,7 @@ class ValuesCard extends StatelessWidget {
           ParamGrid('v', heroes),
         if (rest.isNotEmpty) ...[
           Padding(
-            padding: const EdgeInsets.only(top: 4),
+            padding: EdgeInsets.only(top: Shape.s(4)),
             child: Hov(
               onTap: () => doc.flag('$k.adv', !adv),
               builder: (_, h) => Container(

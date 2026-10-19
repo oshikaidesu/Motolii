@@ -140,7 +140,7 @@ class _Seg extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(
     height: 20,
-    padding: const EdgeInsets.all(2),
+    padding: EdgeInsets.all(Shape.s(2)),
     decoration: BoxDecoration(color: WsT.well, borderRadius: BorderRadius.all(Shape.r(WsT.radius))),
     child: Row(
       mainAxisSize: MainAxisSize.min,
@@ -150,7 +150,7 @@ class _Seg extends StatelessWidget {
             onTap: () => onChanged(i),
             builder: (_, h) => Container(
               height: 16,
-              padding: const EdgeInsets.symmetric(horizontal: 7),
+              padding: EdgeInsets.symmetric(horizontal: Shape.s(7)),
               alignment: Alignment.center,
               decoration: BoxDecoration(color: i == index ? WsT.accent : (h ? WsT.raised : WsT.well), borderRadius: BorderRadius.all(Shape.r(WsT.chipRadius))),
               child: Text(items[i], style: T.label(i == index ? WsT.onAccent : (h ? Grey.g95 : Grey.g76)).copyWith(fontWeight: FontWeight.w600)),
@@ -178,7 +178,7 @@ class _Toggle extends StatelessWidget {
       final mark = on ? WsT.accent : (h ? Grey.g91 : Grey.g56);
       return Container(
         height: 20,
-        padding: const EdgeInsets.only(left: 6, right: 8),
+        padding: EdgeInsets.only(left: Shape.s(6), right: Shape.s(8)),
         decoration: BoxDecoration(color: on ? Grey.g26 : (h ? WsT.raised : WsT.well), borderRadius: BorderRadius.all(Shape.r(WsT.radius))),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -240,16 +240,16 @@ class _ToolColumn extends StatelessWidget {
         alignment: Alignment.topCenter,
         maxHeight: double.infinity,
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 6),
+          padding: EdgeInsets.symmetric(vertical: Shape.s(6)),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               for (var i = 0; i < _tools.length; i++) ...[
-                if (i == 2 || i == 4) Container(width: 20, height: 1, margin: const EdgeInsets.symmetric(vertical: 5), color: WsT.line),
+                if (i == 2 || i == 4) Container(width: 20, height: 1, margin: EdgeInsets.symmetric(vertical: Shape.s(5)), color: WsT.line),
                 if (i != 0 && i != 2 && i != 4) const SizedBox(height: 3),
                 _ToolButton(key: ValueKey('ws-tool-$i'), glyph: _tools[i].$1, on: i == active, onTap: () => onChanged(i)),
               ],
-              Container(width: 20, height: 1, margin: const EdgeInsets.symmetric(vertical: 8), color: WsT.line),
+              Container(width: 20, height: 1, margin: EdgeInsets.symmetric(vertical: Shape.s(8)), color: WsT.line),
               const _Swatches(),   // (joined: the picked thing's fill and stroke, or the inks a drawn thing gets)
             ],
           ),
@@ -396,7 +396,7 @@ class _OptionsStrip extends StatelessWidget {
     final items = _items();
     return Container(
       height: WsT.header,
-      padding: const EdgeInsets.symmetric(horizontal: WsT.inset),
+      padding: EdgeInsets.symmetric(horizontal: WsT.inset),
       decoration: BoxDecoration(
         color: WsT.body,
         border: Border(top: BorderSide(color: WsT.line)),
@@ -438,7 +438,7 @@ class _Field extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(
     height: 20,
-    padding: const EdgeInsets.symmetric(horizontal: 7),
+    padding: EdgeInsets.symmetric(horizontal: Shape.s(7)),
     decoration: BoxDecoration(color: WsT.well, borderRadius: BorderRadius.all(Shape.r(WsT.radius))),
     child: Row(
       mainAxisSize: MainAxisSize.min,
@@ -468,7 +468,7 @@ class _Readout extends StatelessWidget {
     final l = layer, box = WsArt.boxOf(scene, l?.id), ws = WsScope.of(context);
     if (l == null) return Text('Nothing selected', style: T.label(Grey.g56));
     Widget pair(String k, String v) => Padding(
-      padding: const EdgeInsets.only(left: 10),
+      padding: EdgeInsets.only(left: Shape.s(10)),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -490,7 +490,7 @@ class _Readout extends StatelessWidget {
         Text(l.name, style: T.name(Grey.g95).copyWith(fontWeight: FontWeight.w600)),
         if (box == null)
           Padding(
-            padding: const EdgeInsets.only(left: 10),
+            padding: EdgeInsets.only(left: Shape.s(10)),
             child: Text(l.kind == WsKind.audio ? 'No picture' : 'Not on this frame', style: T.label(Grey.g56)),
           )
         else ...[

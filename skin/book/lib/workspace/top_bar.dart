@@ -17,7 +17,7 @@ class WsTopBar extends StatelessWidget {
     final ws = WsScope.of(context);
     return Container(
       color: WsT.body,
-      padding: const EdgeInsets.symmetric(horizontal: 10),
+      padding: EdgeInsets.symmetric(horizontal: Shape.s(10)),
       child: Row(
         children: [
           const _Wordmark(),
@@ -91,7 +91,7 @@ class _Chip extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(
     height: 20,
-    padding: const EdgeInsets.symmetric(horizontal: 7),
+    padding: EdgeInsets.symmetric(horizontal: Shape.s(7)),
     alignment: Alignment.center,
     decoration: BoxDecoration(color: WsT.well, borderRadius: BorderRadius.all(Shape.r(WsT.chipRadius))),
     child: Text(text, style: T.value(Grey.g76).copyWith(fontSize: T.px(10))),
@@ -126,7 +126,7 @@ class _Modes extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(
     height: 26,
-    padding: const EdgeInsets.all(2),
+    padding: EdgeInsets.all(Shape.s(2)),
     decoration: BoxDecoration(color: WsT.well, borderRadius: BorderRadius.all(Shape.r(WsT.radius))),
     child: Row(
       mainAxisSize: MainAxisSize.min,
@@ -293,7 +293,7 @@ class _Render extends StatelessWidget {
     onTap: WsScope.of(context).onRender,
     builder: (h) => Container(
       height: 26,
-      padding: const EdgeInsets.symmetric(horizontal: 14),
+      padding: EdgeInsets.symmetric(horizontal: Shape.s(14)),
       alignment: Alignment.center,
       decoration: BoxDecoration(color: h ? WsT.accentHot : WsT.accent, borderRadius: BorderRadius.all(Shape.r(13))),
       child: Text('Render', style: T.name(WsT.onAccent).copyWith(fontWeight: FontWeight.w800)),
@@ -348,7 +348,7 @@ class _WaitedState extends State<_Waited> {
               onTap: () => setState(_open.hide),
               child: Container(
                 width: 420,
-                padding: const EdgeInsets.all(10),
+                padding: EdgeInsets.all(Shape.s(10)),
                 decoration: BoxDecoration(color: WsT.card, borderRadius: BorderRadius.all(Shape.r(6)), border: Border.all(color: Grey.g26)),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -362,7 +362,7 @@ class _WaitedState extends State<_Waited> {
         child: _Hover(
           onTap: () => setState(_open.toggle),
           builder: (h) => Padding(
-            padding: const EdgeInsets.only(right: 10),
+            padding: EdgeInsets.only(right: Shape.s(10)),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [

@@ -43,7 +43,7 @@ class _RelationsBlockState extends State<RelationsBlock> {
                 Expanded(child: Text(f.name, style: T.name(on[f.name]! && !locked ? Grey.g95 : Grey.g56))),
                 if (f.name == open)
                   Padding(
-                    padding: const EdgeInsets.only(right: 12),
+                    padding: EdgeInsets.only(right: Shape.s(12)),
                     child: Text('Open', style: T.label(Grey.g56)),
                   ),
                 OnOff(on: on[f.name]!, onChanged: (v) => setState(() => on[f.name] = v)),
@@ -53,7 +53,7 @@ class _RelationsBlockState extends State<RelationsBlock> {
         ),
         if (f.name == open)
           Padding(
-            padding: const EdgeInsets.only(top: 4, bottom: 6),
+            padding: EdgeInsets.only(top: Shape.s(4), bottom: Shape.s(6)),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -77,7 +77,7 @@ class _RelationsBlockState extends State<RelationsBlock> {
                   cells: [NumField(id: 'rel.f', unit: '%', min: 0, max: 100, perPx: .5)],
                 ),
                 Padding(
-                  padding: const EdgeInsets.only(top: 6),
+                  padding: EdgeInsets.only(top: Shape.s(6)),
                   child: Opacity(
                     opacity: on[f.name]! && !locked ? 1 : .5,
                     child: Align(alignment: Alignment.centerLeft, child: Gadget(f, size: 72)),

@@ -33,7 +33,7 @@ class ValueWell extends StatelessWidget {
               borderRadius: BorderRadius.all(Shape.r(4)),
             ))),
             Positioned(left: 0, top: 4, bottom: 4, width: 2, child: DecoratedBox(decoration: BoxDecoration(color: fam.c, borderRadius: BorderRadius.all(Shape.r(1))))),
-            Positioned.fill(child: Padding(padding: const EdgeInsets.symmetric(horizontal: 9), child: Flex(direction: Axis.horizontal, crossAxisAlignment: CrossAxisAlignment.center, children: [
+            Positioned.fill(child: Padding(padding: EdgeInsets.symmetric(horizontal: Shape.s(9)), child: Flex(direction: Axis.horizontal, crossAxisAlignment: CrossAxisAlignment.center, children: [
               Text(label, style: T.label(Grey.g76)),
               const Spacer(),
               Text(value.toStringAsFixed(decimals), style: T.value(Grey.g95)),
@@ -60,7 +60,7 @@ class PillSwitch extends StatelessWidget {
           curve: Curves.easeOut,
           width: 28,
           height: 16,
-          padding: const EdgeInsets.all(2),
+          padding: EdgeInsets.all(Shape.s(2)),
           alignment: on ? Alignment.centerRight : Alignment.centerLeft,
           decoration: BoxDecoration(
             color: on ? Role.of(C.mode.withValues(alpha: .30), Grey.g20) : Grey.g20,
@@ -88,7 +88,7 @@ class Segmented extends StatelessWidget {
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 120),
             curve: Curves.easeOut,
-            padding: EdgeInsets.symmetric(horizontal: expand ? 6 : 12),
+            padding: EdgeInsets.symmetric(horizontal: expand ? Shape.s(6) : Shape.s(12)),
             alignment: Alignment.center,
             decoration: BoxDecoration(
               color: i == index ? Grey.g20 : null,
@@ -100,7 +100,7 @@ class Segmented extends StatelessWidget {
         );
     return Container(
       height: 26,
-      padding: const EdgeInsets.all(2),
+      padding: EdgeInsets.all(Shape.s(2)),
       decoration: BoxDecoration(color: Grey.g07, borderRadius: BorderRadius.all(Shape.r(7))),
       child: Flex(direction: Axis.horizontal, mainAxisSize: expand ? MainAxisSize.max : MainAxisSize.min, children: [
         for (var i = 0; i < items.length; i++) expand ? Expanded(child: seg(i)) : seg(i),

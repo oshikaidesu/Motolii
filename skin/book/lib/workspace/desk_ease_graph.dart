@@ -24,7 +24,7 @@ class _EaseGraphState extends State<EaseGraph> {
   static const _ymin = -.42, _ymax = 1.62;
 
   static Rect _box(Size s) {
-    final r = const EdgeInsets.fromLTRB(30, 10, 14, 22).deflateRect(Offset.zero & s);
+    final r = EdgeInsets.fromLTRB(Shape.s(30), Shape.s(10), Shape.s(14), Shape.s(22)).deflateRect(Offset.zero & s);
     return Rect.fromLTRB(r.left, r.top, math.max(r.left + 1, r.right), math.max(r.top + 1, r.bottom));
   }
 

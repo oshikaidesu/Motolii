@@ -261,7 +261,7 @@ class BriefChip extends StatelessWidget {
     final sw = swatch(text);
     return Container(
       height: 16,
-      padding: const EdgeInsets.symmetric(horizontal: 6),
+      padding: EdgeInsets.symmetric(horizontal: Shape.s(6)),
       alignment: Alignment.center,
       decoration: BoxDecoration(color: dim ? Grey.g15 : Grey.g20, borderRadius: BorderRadius.all(Shape.r(8))),
       child: Row(

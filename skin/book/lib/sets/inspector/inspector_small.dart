@@ -11,7 +11,7 @@ class Cap extends StatelessWidget {
   final Color? color;
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(top: 6),
+    padding: EdgeInsets.only(top: Shape.s(6)),
     child: Text(text, style: T.label(color ?? Grey.g56).copyWith(height: 1.3)),
   );
 }
@@ -209,7 +209,7 @@ class PopSwitch extends StatelessWidget {
       curve: Curves.easeOut,
       width: 28,
       height: 16,
-      padding: const EdgeInsets.all(2),
+      padding: EdgeInsets.all(Shape.s(2)),
       alignment: on ? Alignment.centerRight : Alignment.centerLeft,
       decoration: BoxDecoration(color: on ? Pop.accent : Grey.g26, borderRadius: BorderRadius.all(Shape.r(8))),
       child: Container(
@@ -234,7 +234,7 @@ class Chip extends StatelessWidget {
       opacity: enabled ? 1 : .4,
       child: Container(
         height: 20,
-        padding: const EdgeInsets.symmetric(horizontal: 7),
+        padding: EdgeInsets.symmetric(horizontal: Shape.s(7)),
         alignment: Alignment.center,
         decoration: BoxDecoration(
           color: on ? Grey.g20 : (h ? Grey.g15 : null),

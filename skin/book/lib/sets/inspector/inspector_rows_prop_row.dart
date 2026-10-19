@@ -122,14 +122,14 @@ class _PropRowState extends State<PropRow> {
                   _Scrub( // (the row's mark is its handle too: pulled sideways, its number moves, as Figma's field glyphs)
                     field: cellsOn ? widget.cells.whereType<NumField>().where((f) => f.id == widget.id).firstOrNull : null,
                     child: Padding(
-                    padding: const EdgeInsets.only(right: 6),
+                    padding: EdgeInsets.only(right: Shape.s(6)),
                     child: Opacity(
                       opacity: cellsOn ? 1 : .4,
                       child: pop
                           ? Container(
                               width: 28,
                               height: Pop.cell,
-                              padding: const EdgeInsets.all(2),
+                              padding: EdgeInsets.all(Shape.s(2)),
                               decoration: BoxDecoration(color: active ? Grey.g20 : null, borderRadius: BorderRadius.all(Shape.r(7))),
                               child: FittedBox(child: mark),
                             )
@@ -152,13 +152,13 @@ class _PropRowState extends State<PropRow> {
                 ?widget.trail,
                 if (unit != null) ...[
                   Padding(
-                    padding: const EdgeInsets.only(right: 8),
+                    padding: EdgeInsets.only(right: Shape.s(8)),
                     child: Text(unit, style: T.label(Grey.g44)),
                   ),
                 ],
                 if (showRel)
                   Padding(
-                    padding: const EdgeInsets.only(left: 4),
+                    padding: EdgeInsets.only(left: Shape.s(4)),
                     child: Container(
                       width: 5,
                       height: 5,
@@ -167,7 +167,7 @@ class _PropRowState extends State<PropRow> {
                   ),
               ],
             ),
-            if (widget.under != null) Padding(padding: const EdgeInsets.only(top: 4, bottom: 2), child: widget.under),
+            if (widget.under != null) Padding(padding: EdgeInsets.only(top: Shape.s(4), bottom: Shape.s(2)), child: widget.under),
           ],
         );
         Widget item(String s, bool ok, String why, VoidCallback go) => Hov(
@@ -180,7 +180,7 @@ class _PropRowState extends State<PropRow> {
               : null,
           builder: (_, h) => Container(
             height: 22,
-            padding: const EdgeInsets.symmetric(horizontal: 8),
+            padding: EdgeInsets.symmetric(horizontal: Shape.s(8)),
             color: h && ok ? Grey.g15 : null,
             child: Row(
               children: [
@@ -202,7 +202,7 @@ class _PropRowState extends State<PropRow> {
             children: [
               Container(
                 constraints: BoxConstraints(minHeight: pop ? Pop.row : ed.row),
-                padding: const EdgeInsets.symmetric(vertical: 1),
+                padding: EdgeInsets.symmetric(vertical: Shape.s(1)),
                 decoration: pop
                     ? BoxDecoration(color: active ? Grey.g15 : null, borderRadius: BorderRadius.all(Shape.r(6)))
                     : BoxDecoration(
@@ -241,12 +241,12 @@ class _PropRowState extends State<PropRow> {
               ),
               if (widget.note != null)
                 Padding(
-                  padding: EdgeInsets.only(left: lw, bottom: 2),
+                  padding: EdgeInsets.only(left: lw, bottom: Shape.s(2)),
                   child: Text(widget.note!, style: T.label(Grey.g56)),
                 ),
               if (showRel)
                 Padding(
-                  padding: EdgeInsets.only(left: lw, bottom: 2),
+                  padding: EdgeInsets.only(left: lw, bottom: Shape.s(2)),
                   child: Text(
                     'Driven by ${widget.rel!.name}${widget.relName != null ? ' · ${widget.relName}' : ''}. Edit it in Relations.',
                     style: T.label(Role.linkedFor(widget.rel)),
@@ -254,7 +254,7 @@ class _PropRowState extends State<PropRow> {
                 ),
               if (_menu)
                 Container(
-                  margin: const EdgeInsets.only(left: 0, top: 2, bottom: 4),
+                  margin: EdgeInsets.only(left: Shape.s(0), top: Shape.s(2), bottom: Shape.s(4)),
                   decoration: BoxDecoration(
                     color: Grey.g13,
                     borderRadius: BorderRadius.all(Shape.r(4)),

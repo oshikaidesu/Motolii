@@ -162,7 +162,7 @@ class RelationCard extends StatelessWidget {
   final ValueChanged<bool>? onToggle;
   @override
   Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.all(12),
+        padding: EdgeInsets.all(Shape.s(12)),
         decoration: BoxDecoration(
           color: look == Look.quiet ? Grey.g13 : const Color(0xFF1B1B1D),
           borderRadius: BorderRadius.all(Shape.r(10)),

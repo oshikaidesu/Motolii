@@ -65,7 +65,7 @@ class _TransformCanvasState extends State<TransformCanvas> {
   Widget build(BuildContext context) {
     final x = Ctx.of(context);
     return Padding(
-      padding: const EdgeInsets.only(top: 4),
+      padding: EdgeInsets.only(top: Shape.s(4)),
       child: SizedBox(
         height: DirectSurface.height,
         child: LayoutBuilder(

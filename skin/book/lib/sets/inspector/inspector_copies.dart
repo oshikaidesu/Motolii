@@ -27,7 +27,7 @@ class _CopiesDrawingState extends State<CopiesDrawing> {
 
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
+      padding: EdgeInsets.only(bottom: Shape.s(6)),
       child: SizedBox(
         height: CopiesDrawing.height,
         child: LayoutBuilder(

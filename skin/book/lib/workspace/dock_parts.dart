@@ -85,7 +85,7 @@ class DockChips extends StatelessWidget {
     height: 28,
     child: SingleChildScrollView(
       scrollDirection: Axis.horizontal,
-      padding: const EdgeInsets.fromLTRB(WsT.inset, 2, WsT.inset, 6),
+      padding: EdgeInsets.fromLTRB(WsT.inset, Shape.s(2), WsT.inset, Shape.s(6)),
       child: Row(
         children: [
           for (final (name, n) in chips) ...[
@@ -97,7 +97,7 @@ class DockChips extends StatelessWidget {
                   duration: Mo.dur,
                   curve: Mo.ease,
                   height: 20,
-                  padding: const EdgeInsets.symmetric(horizontal: 7),
+                  padding: EdgeInsets.symmetric(horizontal: Shape.s(7)),
                   decoration: BoxDecoration(color: on ? WsT.accent : (h ? WsT.raised : WsT.well), borderRadius: BorderRadius.all(Shape.r(WsT.radius))),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -132,7 +132,7 @@ class DockSection extends StatelessWidget {
     builder: (context, h) => Container(
       height: 24,
       color: h && onTap != null ? WsT.raised : WsT.card,
-      padding: const EdgeInsets.symmetric(horizontal: WsT.inset),
+      padding: EdgeInsets.symmetric(horizontal: WsT.inset),
       child: Row(
         children: [
           if (folded != null) ...[
@@ -177,7 +177,7 @@ class DockTag extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(
     height: edge ? 16 : 14,
-    padding: const EdgeInsets.symmetric(horizontal: 4),
+    padding: EdgeInsets.symmetric(horizontal: Shape.s(4)),
     alignment: Alignment.center,
     decoration: BoxDecoration(
       color: hue ?? WsT.raised,
@@ -218,7 +218,7 @@ class DockIconButton extends StatelessWidget {
       curve: Mo.ease,
       width: 20,
       height: 20,
-      margin: const EdgeInsets.only(left: 2),
+      margin: EdgeInsets.only(left: Shape.s(2)),
       alignment: Alignment.center,
       decoration: BoxDecoration(color: on ? WsT.raised : (h ? WsT.card : null), borderRadius: BorderRadius.all(Shape.r(WsT.chipRadius))),
       child: DockGlyph(g, size: 11, color: on || h ? Grey.g95 : Grey.g63),
@@ -251,7 +251,7 @@ class DockFooter extends StatelessWidget {
     final ws = WsScope.of(context), l = fresh ? null : ws.layer;
     return Container(
       height: 52,
-      padding: const EdgeInsets.symmetric(horizontal: WsT.inset),
+      padding: EdgeInsets.symmetric(horizontal: WsT.inset),
       decoration: BoxDecoration(
         color: WsT.card,
         border: Border(
@@ -302,7 +302,7 @@ class DockFooter extends StatelessWidget {
               duration: Mo.dur,
               curve: Mo.ease,
               height: 24,
-              padding: const EdgeInsets.symmetric(horizontal: 10),
+              padding: EdgeInsets.symmetric(horizontal: Shape.s(10)),
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 color: done ? WsT.raised : WsT.accent,
@@ -355,7 +355,7 @@ class _DockSearchState extends State<DockSearch> {
         duration: Mo.dur,
         curve: Mo.ease,
         height: 24,
-        padding: const EdgeInsets.symmetric(horizontal: 7),
+        padding: EdgeInsets.symmetric(horizontal: Shape.s(7)),
         decoration: BoxDecoration(
           color: WsT.well,
           borderRadius: BorderRadius.all(Shape.r(WsT.radius)),
@@ -396,7 +396,7 @@ class _DockSearchState extends State<DockSearch> {
       ),
     );
     return Padding(
-      padding: const EdgeInsets.fromLTRB(WsT.inset, 6, WsT.inset, 4),
+      padding: EdgeInsets.fromLTRB(WsT.inset, Shape.s(6), WsT.inset, Shape.s(4)),
       child: Row(
         children: [
           Expanded(child: well),
@@ -413,7 +413,7 @@ class DockEmpty extends StatelessWidget {
   final String query;
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.all(24),
+    padding: EdgeInsets.all(Shape.s(24)),
     child: Text('Nothing matches “$query”', textAlign: TextAlign.center, style: T.label(Grey.g63)),
   );
 }

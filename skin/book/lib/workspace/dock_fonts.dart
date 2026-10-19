@@ -171,8 +171,8 @@ class _FontRow extends StatelessWidget {
         duration: Mo.dur,
         curve: Mo.ease,
         height: 46,
-        margin: const EdgeInsets.only(bottom: WsT.gutter),
-        padding: const EdgeInsets.only(left: WsT.inset, right: 4),
+        margin: EdgeInsets.only(bottom: WsT.gutter),
+        padding: EdgeInsets.only(left: WsT.inset, right: Shape.s(4)),
         color: dockFill(sel, h, WsT.card),
         child: Row(
           children: [
@@ -217,7 +217,7 @@ class _FontCard extends StatelessWidget {
         duration: Mo.dur,
         curve: Mo.ease,
         height: 96,
-        padding: const EdgeInsets.fromLTRB(WsT.inset, 8, 4, 8),
+        padding: EdgeInsets.fromLTRB(WsT.inset, Shape.s(8), Shape.s(4), Shape.s(8)),
         color: dockFill(sel, h, WsT.card),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,

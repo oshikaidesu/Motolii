@@ -70,7 +70,7 @@ class _Catalog extends StatelessWidget {
         final cols = wsCols(w, _cell, gap: WsT.gap, min: 2), rows = (WsScope.of(context).tools.length / cols).ceil();
         final tile = ((h - WsT.gap * (rows - 1)) / rows).clamp(_minTile, _maxTile), cw = wsCell(w, cols, gap: WsT.gap);
         return ListView(
-          padding: const EdgeInsets.all(WsT.gap),
+          padding: EdgeInsets.all(WsT.gap),
           children: [
             Wrap(
               spacing: WsT.gap,
@@ -100,7 +100,7 @@ class _ToolTile extends StatelessWidget {
   Widget build(BuildContext context) => Hov(
     onTap: onTap,
     builder: (_, h) => Container(
-      padding: const EdgeInsets.fromLTRB(7, 7, 6, 7),
+      padding: EdgeInsets.fromLTRB(Shape.s(7), Shape.s(7), Shape.s(6), Shape.s(7)),
       decoration: BoxDecoration(color: h ? WsT.raised : WsT.card, borderRadius: BorderRadius.all(Shape.r(WsT.radius))),
       child: LayoutBuilder(
         builder: (context, box) => Column(
@@ -118,7 +118,7 @@ class _ToolTile extends StatelessWidget {
                       alignment: Alignment.topRight,
                       child: Container(
                         height: 14,
-                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        padding: EdgeInsets.symmetric(horizontal: Shape.s(4)),
                         alignment: Alignment.center,
                         decoration: BoxDecoration(color: WsT.accent, borderRadius: BorderRadius.all(Shape.r(WsT.chipRadius))),
                         child: Text('AUTO', style: T.micro(WsT.onAccent).copyWith(fontSize: T.px(9), fontWeight: FontWeight.w700, letterSpacing: .6)),
@@ -150,14 +150,14 @@ class _Placeholder extends StatelessWidget {
   Widget build(BuildContext context) {
     final ws = WsScope.read(context), tool = deskTool(ws, name);
     return Padding(
-      padding: const EdgeInsets.only(top: WsT.gutter),
+      padding: EdgeInsets.only(top: WsT.gutter),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Expanded(
             child: Container(
               color: WsT.card,
-              padding: const EdgeInsets.fromLTRB(WsT.inset * 1.5, WsT.inset * 1.5, WsT.inset, WsT.inset),
+              padding: EdgeInsets.fromLTRB(WsT.inset * Shape.s(1.5), WsT.inset * Shape.s(1.5), WsT.inset, WsT.inset),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [

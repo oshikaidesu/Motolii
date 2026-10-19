@@ -53,7 +53,7 @@ class ParamGrid extends StatelessWidget {
       }
 
       return Padding(
-        padding: const EdgeInsets.only(top: 4),
+        padding: EdgeInsets.only(top: Shape.s(4)),
         child: Column(
           children: [
             for (var i = 0; i < rows.length; i++) ...[if (i > 0) const SizedBox(height: g), row(rows[i], i == rows.length - 1)],

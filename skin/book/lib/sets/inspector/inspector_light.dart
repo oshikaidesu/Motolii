@@ -39,7 +39,7 @@ class _LightDrawingState extends State<LightDrawing> {
 
     final spot = doc.s2['light'] == 'spot', point = doc.s2['light'] == 'point'; // (else a sun)
     return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
+      padding: EdgeInsets.only(bottom: Shape.s(6)),
       child: SizedBox(
         height: LightDrawing.height,
         child: LayoutBuilder(

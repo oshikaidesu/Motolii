@@ -161,7 +161,7 @@ class DeskChip extends StatelessWidget {
     cursor: onTap == null ? MouseCursor.defer : SystemMouseCursors.click,
     builder: (_, h) => Container(
       height: 18,
-      padding: const EdgeInsets.symmetric(horizontal: 6),
+      padding: EdgeInsets.symmetric(horizontal: Shape.s(6)),
       decoration: BoxDecoration(color: on ? WsT.accent : (h && onTap != null ? WsT.raised : WsT.well), borderRadius: BorderRadius.all(Shape.r(WsT.chipRadius))),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -304,7 +304,7 @@ class DeskStrip extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     height: 26,
     color: WsT.card,
-    padding: const EdgeInsets.symmetric(horizontal: WsT.inset),
+    padding: EdgeInsets.symmetric(horizontal: WsT.inset),
     child: Row(
       children: [
         Expanded(
@@ -329,7 +329,7 @@ class DeskLayerChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(
     height: 16,
-    padding: const EdgeInsets.symmetric(horizontal: 6),
+    padding: EdgeInsets.symmetric(horizontal: Shape.s(6)),
     alignment: Alignment.center,
     decoration: BoxDecoration(color: tone, borderRadius: BorderRadius.all(Shape.r(WsT.chipRadius))),
     child: Text(name, style: T.micro(WsT.onAccent).copyWith(fontWeight: FontWeight.w700)),

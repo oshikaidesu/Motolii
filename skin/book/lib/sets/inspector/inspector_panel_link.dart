@@ -36,7 +36,7 @@ class PanelLink extends StatelessWidget {
             },
       builder: (_, h) => Container(
         height: Pop.cell,
-        padding: const EdgeInsets.only(left: 8, right: 6),
+        padding: EdgeInsets.only(left: Shape.s(8), right: Shape.s(6)),
         decoration: BoxDecoration(color: h && !off ? Grey.g20 : Pop.well, borderRadius: BorderRadius.all(Shape.r(6))),
         child: Row(
           children: [

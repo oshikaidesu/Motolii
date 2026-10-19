@@ -70,7 +70,7 @@ class ParamTile extends StatelessWidget {
                 child: Center(child: glyph),
               ),
             Padding(
-              padding: EdgeInsets.fromLTRB(Pop.tilePad, 6, glyph != null ? Pop.glyph + Pop.tilePad : Pop.tilePad, 4),
+              padding: EdgeInsets.fromLTRB(Pop.tilePad, Shape.s(6), glyph != null ? Pop.glyph + Pop.tilePad : Pop.tilePad, Shape.s(4)),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -90,7 +90,7 @@ class ParamTile extends StatelessWidget {
         return shell(
           onTap: () => doc.set(id, b ? 0 : 1),
           Padding(
-            padding: const EdgeInsets.only(bottom: 3),
+            padding: EdgeInsets.only(bottom: Shape.s(3)),
             child: Row(
               key: ValueKey('toggle:$id'), // (found by its value's id)
               children: [
@@ -128,7 +128,7 @@ class ParamTile extends StatelessWidget {
         return shell(_Words(id: id, on: on), tall: true);
       case ParamLook.colour when p.unit == 'file':
         // a file, given from a shelf (the text's font: the Fonts shelf), as a colour is given from the Colors shelf
-        return shell(Padding(padding: const EdgeInsets.only(bottom: 3), child: LinkLine(to: LinkTo.fonts, value: doc.s2[id] ?? '—', id: id)));
+        return shell(Padding(padding: EdgeInsets.only(bottom: Shape.s(3)), child: LinkLine(to: LinkTo.fonts, value: doc.s2[id] ?? '—', id: id)));
       case ParamLook.colour when p.unit == 'numbers':
         // numbers, one for each in their order (a bar chart's heights): bars a hand drags up and down, said when let go
         return shell(_Heights(id: id, on: on));
@@ -137,7 +137,7 @@ class ParamTile extends StatelessWidget {
         return shell(
           glyph: all.length > 1 ? _Ramp(all) : Swatch(doc.s2[id]),
           Padding(
-            padding: const EdgeInsets.only(bottom: 3),
+            padding: EdgeInsets.only(bottom: Shape.s(3)),
             child: LinkLine(to: LinkTo.colors, value: all.length > 1 ? '${all.length}' : doc.s2[id] ?? '—', id: id), // (colours in their order: how many, the strip shows which)
           ),
         );

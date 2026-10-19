@@ -15,7 +15,7 @@ class DeskBlend extends StatelessWidget {
   Widget build(BuildContext context) {
     final ws = WsScope.of(context);
     return ListView(
-      padding: const EdgeInsets.symmetric(horizontal: WsT.gap, vertical: 6),
+      padding: EdgeInsets.symmetric(horizontal: WsT.gap, vertical: Shape.s(6)),
       children: [for (final l in ws.layers) _Row(l, picked: l.id == ws.selected)],
     );
   }
@@ -45,7 +45,7 @@ class _RowState extends State<_Row> {
 
     final row = Container(
       height: 34,
-      padding: const EdgeInsets.symmetric(horizontal: 6),
+      padding: EdgeInsets.symmetric(horizontal: Shape.s(6)),
       decoration: BoxDecoration(color: widget.picked ? WsT.well : null, borderRadius: BorderRadius.all(Shape.r(5))),
       child: Row(
         children: [
@@ -74,7 +74,7 @@ class _RowState extends State<_Row> {
         ],
       ),
     );
-    if (!_open || ways.isEmpty) return Padding(padding: const EdgeInsets.only(bottom: 3), child: row);
+    if (!_open || ways.isEmpty) return Padding(padding: EdgeInsets.only(bottom: Shape.s(3)), child: row);
     // (every way, in After Effects' groups: normal; darker; lighter; contrast; difference; colour. The way under the
     //  hand, or the one it lies, named once under them)
     final groups = <List<String>>[[], [], [], [], [], []];
@@ -85,13 +85,13 @@ class _RowState extends State<_Row> {
       g.sort((x, y) => _order[k].indexOf(x).compareTo(_order[k].indexOf(y)));
     }
     return Padding(
-      padding: const EdgeInsets.only(bottom: 3),
+      padding: EdgeInsets.only(bottom: Shape.s(3)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           row,
           Padding(
-            padding: const EdgeInsets.fromLTRB(18, 4, 6, 2),
+            padding: EdgeInsets.fromLTRB(Shape.s(18), Shape.s(4), Shape.s(6), Shape.s(2)),
             child: Wrap(
               spacing: 2,
               runSpacing: 2,
@@ -111,7 +111,7 @@ class _RowState extends State<_Row> {
             ),
           ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 2, 6, 4),
+            padding: EdgeInsets.fromLTRB(Shape.s(20), Shape.s(2), Shape.s(6), Shape.s(4)),
             child: Text((_hover ?? now).replaceAll('_', ' '), style: T.micro(Grey.g76)),
           ),
         ],

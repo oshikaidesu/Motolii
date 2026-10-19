@@ -20,7 +20,7 @@ class EffectsShelf extends StatelessWidget {
       final folded = c.query.isEmpty && c.mem.folded.contains(title);
       blocks.add(
         Padding(
-          padding: const EdgeInsets.only(bottom: WsT.gutter),
+          padding: EdgeInsets.only(bottom: WsT.gutter),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -74,7 +74,7 @@ class _FxRow extends StatelessWidget {
         duration: Mo.dur,
         curve: Mo.ease,
         height: 24,
-        padding: const EdgeInsets.only(left: 8, right: 4),
+        padding: EdgeInsets.only(left: Shape.s(8), right: Shape.s(4)),
         color: dockFill(sel, h),
         child: Row(
           children: [
@@ -108,7 +108,7 @@ class _ScreenRow extends StatelessWidget {
       duration: Mo.dur,
       curve: Mo.ease,
       height: 24,
-      padding: const EdgeInsets.only(left: 22, right: 4),
+      padding: EdgeInsets.only(left: Shape.s(22), right: Shape.s(4)),
       color: dockFill(false, h),
       child: Row(
         children: [

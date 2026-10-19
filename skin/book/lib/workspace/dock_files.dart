@@ -263,7 +263,7 @@ class _Tree extends StatelessWidget {
     }
     return ColoredBox(
       color: WsT.body,
-      child: ListView(padding: const EdgeInsets.symmetric(vertical: 2), children: rows),
+      child: ListView(padding: EdgeInsets.symmetric(vertical: Shape.s(2)), children: rows),
     );
   }
 }
@@ -284,7 +284,7 @@ class _FolderRow extends StatelessWidget {
         duration: Mo.dur,
         curve: Mo.ease,
         height: 22,
-        padding: EdgeInsets.only(left: 4 + depth * 12.0, right: WsT.inset),
+        padding: EdgeInsets.only(left: Shape.s(4) + depth * Shape.s(12.0), right: WsT.inset),
         color: dockFill(here, h),
         child: Row(
           children: [
@@ -374,7 +374,7 @@ class _Contents extends StatelessWidget {
                   builder: (context, box) {
                     final cols = (box.maxWidth / 78).floor().clamp(2, 8), w = (box.maxWidth - WsT.gutter * (cols - 1)) / cols;
                     return ListView(
-                      padding: const EdgeInsets.only(top: WsT.gutter),
+                      padding: EdgeInsets.only(top: WsT.gutter),
                       children: [
                         Wrap(
                           spacing: WsT.gutter,
@@ -402,7 +402,7 @@ class _Crumbs extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     height: 24,
     color: WsT.card,
-    padding: const EdgeInsets.symmetric(horizontal: WsT.inset),
+    padding: EdgeInsets.symmetric(horizontal: WsT.inset),
     child: Row(
       children: [
         if (searching)
@@ -416,7 +416,7 @@ class _Crumbs extends StatelessWidget {
                 for (final (i, n) in path.indexed) ...[
                   if (i > 0)
                     Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 5),
+                      padding: EdgeInsets.symmetric(horizontal: Shape.s(5)),
                       child: DockGlyph(DockG.chevron, size: 6, color: Grey.g56),
                     ),
                   Flexible(
@@ -514,7 +514,7 @@ class _Tile extends StatelessWidget {
             duration: Mo.dur,
             curve: Mo.ease,
             height: 18,
-            padding: const EdgeInsets.symmetric(horizontal: 4),
+            padding: EdgeInsets.symmetric(horizontal: Shape.s(4)),
             alignment: Alignment.centerLeft,
             color: dockFill(sel, h, WsT.card),
             child: Text(
@@ -548,8 +548,8 @@ class _Row extends StatelessWidget {
         duration: Mo.dur,
         curve: Mo.ease,
         height: 34,
-        margin: const EdgeInsets.only(top: WsT.gutter),
-        padding: const EdgeInsets.only(left: 4, right: WsT.inset),
+        margin: EdgeInsets.only(top: WsT.gutter),
+        padding: EdgeInsets.only(left: Shape.s(4), right: WsT.inset),
         color: dockFill(sel, h, WsT.body),
         child: Row(
           children: [

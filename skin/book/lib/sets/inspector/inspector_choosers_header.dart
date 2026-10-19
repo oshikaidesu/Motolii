@@ -63,7 +63,7 @@ class ChooserState extends State<Chooser> {
         if (o.toLowerCase().contains(_q.text.toLowerCase())) o,
     ];
     return Container(
-      padding: const EdgeInsets.all(3),
+      padding: EdgeInsets.all(Shape.s(3)),
       decoration: BoxDecoration(
         color: Grey.g15,
         borderRadius: BorderRadius.all(Shape.r(8)),
@@ -77,8 +77,8 @@ class ChooserState extends State<Chooser> {
           if (widget.searchable)
             Container(
               height: 24,
-              margin: const EdgeInsets.only(bottom: 3),
-              padding: const EdgeInsets.symmetric(horizontal: 8),
+              margin: EdgeInsets.only(bottom: Shape.s(3)),
+              padding: EdgeInsets.symmetric(horizontal: Shape.s(8)),
               decoration: BoxDecoration(color: Grey.g10, borderRadius: BorderRadius.all(Shape.r(5))),
               alignment: Alignment.centerLeft,
               child: Stack(
@@ -104,7 +104,7 @@ class ChooserState extends State<Chooser> {
             height: math.min(math.max(hits.length, 1), _maxItems) * _itemH,
             child: hits.isEmpty
                 ? Padding(
-                    padding: const EdgeInsets.all(6),
+                    padding: EdgeInsets.all(Shape.s(6)),
                     child: Text('No match', style: T.label(Grey.g56)),
                   )
                 : ListView.builder(
@@ -116,7 +116,7 @@ class ChooserState extends State<Chooser> {
                       return Hov(
                         onTap: () => pick(o),
                         builder: (_, h) => Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          padding: EdgeInsets.symmetric(horizontal: Shape.s(8)),
                           decoration: BoxDecoration(color: h ? Grey.g26 : (sel ? Grey.g20 : null), borderRadius: BorderRadius.all(Shape.r(5))),
                           alignment: Alignment.centerLeft,
                           child: Row(
@@ -155,7 +155,7 @@ class ChooserState extends State<Chooser> {
       onTap: () => _set(!_open),
       builder: (_, h) => Container(
         height: Pop.on(context) ? Pop.cell : cellH,
-        padding: const EdgeInsets.symmetric(horizontal: 8),
+        padding: EdgeInsets.symmetric(horizontal: Shape.s(8)),
         decoration: Pop.on(context)
             ? BoxDecoration(
                 color: h || _open ? Grey.g10 : Pop.well,
@@ -245,7 +245,7 @@ class InspHeader extends StatelessWidget {
     if (Pop.on(context)) {
       return Container(
         height: 34,
-        padding: const EdgeInsets.symmetric(horizontal: Pop.inset),
+        padding: EdgeInsets.symmetric(horizontal: Pop.inset),
         color: Pop.card,
         child: Row(
           children: [
@@ -283,7 +283,7 @@ class InspHeader extends StatelessWidget {
       );
     }
     return Padding(
-      padding: const EdgeInsets.only(bottom: 4),
+      padding: EdgeInsets.only(bottom: Shape.s(4)),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
@@ -344,7 +344,7 @@ class EmptyState extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         Padding(
-          padding: const EdgeInsets.only(top: 4, bottom: 8),
+          padding: EdgeInsets.only(top: Shape.s(4), bottom: Shape.s(8)),
           child: Text('Nothing selected', style: T.label(Grey.g56).copyWith(height: 1.4)),
         ),
         for (final c in x.doc.cards) ValuesCard(c), // (the host's own: the whole picture's values)

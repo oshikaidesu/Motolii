@@ -160,14 +160,14 @@ class _TextGroupState extends State<TextGroup> {
       hint: (doc.s2['v_text'] ?? '').replaceAll('\n', ' '),
       children: [
         Padding(
-          padding: const EdgeInsets.symmetric(vertical: 2),
+          padding: EdgeInsets.symmetric(vertical: Shape.s(2)),
           child: Opacity(
             opacity: x.cfg.locked ? .5 : 1,
             child: IgnorePointer(
               ignoring: x.cfg.locked,
               child: Container(
                 constraints: const BoxConstraints(minHeight: 48),
-                padding: const EdgeInsets.all(8),
+                padding: EdgeInsets.all(Shape.s(8)),
                 decoration: BoxDecoration(
                   color: x.cfg.look == Look.quiet ? Grey.g13 : Grey.g07,
                   borderRadius: BorderRadius.all(Shape.r(4)),

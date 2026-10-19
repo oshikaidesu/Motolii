@@ -140,6 +140,9 @@ abstract final class Shape {
 
   /// A corner of today's [x] px, as round as the skin says.
   static Radius r(double x) => Radius.circular(x * corner);
+
+  /// A margin of today's [x] px, as airy as the skin says (`Spacing`).
+  static double s(double x) => x * ColorTheme.number('Spacing', 1);
 }
 
 abstract final class T {

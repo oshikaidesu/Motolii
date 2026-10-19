@@ -162,7 +162,7 @@ class _LensNumbers extends StatelessWidget {
       child: LayoutBuilder(
         builder: (context, box) => SingleChildScrollView(
           physics: const NeverScrollableScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(WsT.inset, 7, WsT.inset, WsT.inset),
+          padding: EdgeInsets.fromLTRB(WsT.inset, Shape.s(7), WsT.inset, WsT.inset),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [

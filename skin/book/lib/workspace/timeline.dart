@@ -551,7 +551,7 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
               height: 15,
               child: Container(
                 color: Grey.g91,
-                padding: const EdgeInsets.symmetric(horizontal: 4),
+                padding: EdgeInsets.symmetric(horizontal: Shape.s(4)),
                 child: EditableText(
                   key: const ValueKey('ws-tl-mark-name'),
                   controller: _markWords,
@@ -596,7 +596,7 @@ class _Header extends StatelessWidget {
     final picked = ws.keys.length, layer = ws.layer;
     return Container(
       height: WtM.header,
-      padding: const EdgeInsets.symmetric(horizontal: WsT.inset),
+      padding: EdgeInsets.symmetric(horizontal: WsT.inset),
       decoration: BoxDecoration(
         color: WsT.body,
         border: Border(bottom: BorderSide(color: WsT.line)),
@@ -717,7 +717,7 @@ class _Chip extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(
     height: 20,
-    padding: const EdgeInsets.symmetric(horizontal: 7),
+    padding: EdgeInsets.symmetric(horizontal: Shape.s(7)),
     alignment: Alignment.center,
     decoration: BoxDecoration(color: WsT.well, borderRadius: BorderRadius.all(Shape.r(WsT.radius))),
     child: Text(text, style: mono ? T.value(Grey.g91).copyWith(fontSize: T.px(10.5)) : T.micro(Grey.g91).copyWith(fontWeight: FontWeight.w600)),
@@ -774,7 +774,7 @@ class _LabelHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(
     height: WtM.ruler,
-    padding: const EdgeInsets.only(left: 8, right: 6),
+    padding: EdgeInsets.only(left: Shape.s(8), right: Shape.s(6)),
     decoration: BoxDecoration(
       color: Grey.g10,
       border: Border(bottom: BorderSide(color: WsT.line)),
@@ -833,12 +833,12 @@ class _LabelRowState extends State<_LabelRow> {
         onTap: widget.onSelect,
         child: Container(
           color: bg,
-          padding: const EdgeInsets.only(bottom: 1),
+          padding: EdgeInsets.only(bottom: Shape.s(1)),
           child: Stack(
             children: [
               if (sel) Positioned(left: 0, top: 0, bottom: 0, width: 3, child: ColoredBox(color: WsT.accent)),
               Padding(
-                padding: const EdgeInsets.only(left: 8, right: 6),
+                padding: EdgeInsets.only(left: Shape.s(8), right: Shape.s(6)),
                 child: Row(
                   children: [
                     SizedBox(width: 14, child: Text('${widget.index + 1}', style: T.value(sel ? Grey.g91 : Grey.g56).copyWith(fontSize: T.px(10)))),

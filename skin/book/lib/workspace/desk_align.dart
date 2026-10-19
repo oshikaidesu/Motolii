@@ -43,13 +43,13 @@ class DeskAlign extends StatelessWidget {
       _ => (r.bottom - pic.height).abs() < .5,
     };
     return ListView(
-      padding: const EdgeInsets.all(WsT.gap),
+      padding: EdgeInsets.all(WsT.gap),
       children: [
         if (ws.layer case final l?) DeskStrip(left: [DeskLayerChip(l.name, wsTone(l.kind))]),
         const SizedBox(height: 8),
         for (final row in const [[0, 1, 2], [3, 4, 5]])
           Padding(
-            padding: const EdgeInsets.only(bottom: 4),
+            padding: EdgeInsets.only(bottom: Shape.s(4)),
             child: Opacity(
               opacity: r == null ? .35 : 1,   // (nothing picked that is seen: nothing to put anywhere)
               child: Row(

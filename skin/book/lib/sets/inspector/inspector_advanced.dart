@@ -20,7 +20,7 @@ class AdvancedFold extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Padding(
-          padding: const EdgeInsets.only(top: 6),
+          padding: EdgeInsets.only(top: Shape.s(6)),
           child: Hov(
             key: ValueKey('adv:$id'),
             onTap: () => doc.flag(id, !adv),

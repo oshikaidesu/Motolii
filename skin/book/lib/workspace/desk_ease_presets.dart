@@ -20,7 +20,7 @@ class Presets extends StatelessWidget {
   Widget _row(List<Ease> tiles, bool Function(Ease) on) => Container(
     height: 50,
     color: WsT.card,
-    padding: const EdgeInsets.all(5),
+    padding: EdgeInsets.all(Shape.s(5)),
     child: Row(
       children: [
         for (final (i, p) in tiles.indexed) ...[
@@ -55,7 +55,7 @@ class _PresetTile extends StatelessWidget {
       final ink = on ? WsT.onAccent : (h ? Grey.g95 : Grey.g76);
       return Container(
         decoration: BoxDecoration(color: on ? WsT.accent : (h ? WsT.raised : WsT.well), borderRadius: BorderRadius.all(Shape.r(WsT.radius))),
-        padding: const EdgeInsets.fromLTRB(2, 5, 2, 4),
+        padding: EdgeInsets.fromLTRB(Shape.s(2), Shape.s(5), Shape.s(2), Shape.s(4)),
         child: Column(
           children: [
             Expanded(

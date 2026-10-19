@@ -5,6 +5,7 @@
 	<Theme>
 		<Shade Value="light"/>
 		<Corner Value="3.5"/>
+		<Spacing Value="1.25"/>
 		<TextScale Value="1.08"/>
 		<FontSans Value="Avenir Next"/>
 		<Parts Value="labs/parts"/>

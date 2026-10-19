@@ -126,7 +126,7 @@ class TypeBadge extends StatelessWidget {
   final Kind kind;
   @override
   Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+        padding: EdgeInsets.symmetric(horizontal: Shape.s(4), vertical: Shape.s(3)),
         decoration: BoxDecoration(color: Grey.g00.withValues(alpha: .6), borderRadius: BorderRadius.all(Shape.r(3))),
         child: Text(kind.badge, style: T.micro(Grey.g91).copyWith(letterSpacing: .4)),
       );
@@ -137,7 +137,7 @@ class TimePill extends StatelessWidget {
   final String text;
   @override
   Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+        padding: EdgeInsets.symmetric(horizontal: Shape.s(4), vertical: Shape.s(3)),
         decoration: BoxDecoration(color: Grey.g00.withValues(alpha: .6), borderRadius: BorderRadius.all(Shape.r(3))),
         child: Text(text, style: T.value(Grey.g91).copyWith(fontSize: T.px(10))),
       );
@@ -288,7 +288,7 @@ class Pill extends StatelessWidget {
   final Color? fill; // (none: the skin's grey)
   @override
   Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+        padding: EdgeInsets.symmetric(horizontal: Shape.s(6), vertical: Shape.s(3)),
         decoration: BoxDecoration(color: fill ?? Grey.g20, borderRadius: BorderRadius.all(Shape.r(6))),
         child: Text(text, style: T.micro(Grey.g76)),
       );
@@ -307,7 +307,7 @@ class QuietButton extends StatelessWidget {
           duration: kFast,
           curve: kEase,
           height: 24,
-          padding: const EdgeInsets.symmetric(horizontal: 12),
+          padding: EdgeInsets.symmetric(horizontal: Shape.s(12)),
           decoration: BoxDecoration(color: primary ? (hover ? Grey.g26 : Grey.g20) : (hover ? Grey.g20 : Grey.g13), borderRadius: BorderRadius.all(Shape.r(4)), border: Border.all(color: focus ? Grey.g56 : (primary ? Grey.g26 : Grey.g20))),
           child: Center(widthFactor: 1, child: Text(text, style: T.label(Grey.g91).copyWith(fontWeight: FontWeight.w500))),
         ),
@@ -320,5 +320,5 @@ class Tick extends StatelessWidget {
   final bool on;
   final double height;
   @override
-  Widget build(BuildContext context) => AnimatedContainer(duration: kFast, curve: kEase, width: 2, height: height, margin: const EdgeInsets.only(right: 4), decoration: BoxDecoration(color: on ? Grey.g95 : const Color(0x00000000), borderRadius: BorderRadius.all(Shape.r(1))));
+  Widget build(BuildContext context) => AnimatedContainer(duration: kFast, curve: kEase, width: 2, height: height, margin: EdgeInsets.only(right: Shape.s(4)), decoration: BoxDecoration(color: on ? Grey.g95 : const Color(0x00000000), borderRadius: BorderRadius.all(Shape.r(1))));
 }

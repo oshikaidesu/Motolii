@@ -59,7 +59,7 @@ class Sect extends StatelessWidget {
                     const Spacer(),
                   if (!open && hint != null)
                     Padding(
-                      padding: const EdgeInsets.only(right: 8),
+                      padding: EdgeInsets.only(right: Shape.s(8)),
                       child: Text(hint!, style: T.label(Grey.g56)),
                     ),
                   ?trailing,
@@ -89,14 +89,14 @@ class Sect extends StatelessWidget {
         return Padding(
           padding: EdgeInsets.only(bottom: ed.gap),
           child: Container(
-            padding: const EdgeInsets.fromLTRB(8, 4, 8, 6),
+            padding: EdgeInsets.fromLTRB(Shape.s(8), Shape.s(4), Shape.s(8), Shape.s(6)),
             decoration: BoxDecoration(color: Grey.g13, borderRadius: BorderRadius.all(Shape.r(6))),
             child: col([?head, ...body]),
           ),
         );
       case Editorial.c:
         return Padding(
-          padding: EdgeInsets.only(top: first ? 0 : ed.gap),
+          padding: EdgeInsets.only(top: first ? Shape.s(0) : ed.gap),
           child: col([
             if (head != null) ...[head, const SizedBox(height: 2), const Rule(), const SizedBox(height: 6)],
             ...body,
@@ -136,7 +136,7 @@ class _PopCard extends StatelessWidget {
         Container(
           width: 5,
           height: 5,
-          margin: const EdgeInsets.only(left: 6),
+          margin: EdgeInsets.only(left: Shape.s(6)),
           decoration: BoxDecoration(color: keys == KeyS.at ? Pop.keyDot : Pop.keyDot.withValues(alpha: .5), shape: BoxShape.circle),
         ),
     ];
@@ -158,7 +158,7 @@ class _PopCard extends StatelessWidget {
                   Expanded(
                     child: brief
                         ? Padding(
-                            padding: const EdgeInsets.only(right: 8),
+                            padding: EdgeInsets.only(right: Shape.s(8)),
                             child: LayoutBuilder(
                               builder: (context, box) {
                                 var used = 0.0;
@@ -191,7 +191,7 @@ class _PopCard extends StatelessWidget {
           );
     final body = open ? s.children : const <Widget>[];
     final content = Padding(
-      padding: const EdgeInsets.symmetric(horizontal: Pop.inset, vertical: Pop.insetY),
+      padding: EdgeInsets.symmetric(horizontal: Pop.inset, vertical: Pop.insetY),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
@@ -203,7 +203,7 @@ class _PopCard extends StatelessWidget {
       ),
     );
     return Padding(
-      padding: const EdgeInsets.only(bottom: Pop.gap),
+      padding: EdgeInsets.only(bottom: Pop.gap),
       child: ColoredBox(color: Pop.card, child: content),
     );
   }

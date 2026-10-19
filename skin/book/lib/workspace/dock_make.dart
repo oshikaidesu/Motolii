@@ -90,7 +90,7 @@ class ColorsShelf extends StatelessWidget {
     final chip = c.chip;
     final pals = _pals.where((p) => c.hit(p.name) && (chip == 'All' || (chip == 'Saved' ? p.saved : chip == 'Starter' && !p.saved))).toList();
     Widget block(List<Widget> kids) => Padding(
-      padding: const EdgeInsets.only(bottom: WsT.gutter),
+      padding: EdgeInsets.only(bottom: WsT.gutter),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: kids),
     );
     Widget grid(double cell, List<Widget> items) => LayoutBuilder(
@@ -214,9 +214,9 @@ class _PalCard extends StatelessWidget {
   final DockCtx c;
   @override
   Widget build(BuildContext context) => Container(
-    margin: const EdgeInsets.only(top: WsT.gutter),
+    margin: EdgeInsets.only(top: WsT.gutter),
     color: WsT.card,
-    padding: const EdgeInsets.fromLTRB(WsT.inset, 6, WsT.inset, WsT.inset),
+    padding: EdgeInsets.fromLTRB(WsT.inset, Shape.s(6), WsT.inset, WsT.inset),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -247,7 +247,7 @@ class _Strip extends StatelessWidget {
   final bool pad;
   @override
   Widget build(BuildContext context) => Padding(
-    padding: EdgeInsets.fromLTRB(pad ? WsT.inset : 0, pad ? gap : 0, pad ? WsT.inset : 0, 0),
+    padding: EdgeInsets.fromLTRB(pad ? WsT.inset : Shape.s(0), pad ? gap : Shape.s(0), pad ? WsT.inset : Shape.s(0), Shape.s(0)),
     child: SizedBox(
       height: height,
       child: Row(
@@ -296,8 +296,8 @@ class _Grad extends StatelessWidget {
         duration: Mo.dur,
         curve: Mo.ease,
         height: 28,
-        margin: const EdgeInsets.only(top: WsT.gutter),
-        padding: const EdgeInsets.symmetric(horizontal: WsT.inset),
+        margin: EdgeInsets.only(top: WsT.gutter),
+        padding: EdgeInsets.symmetric(horizontal: WsT.inset),
         color: dockFill(sel, h, WsT.card),
         child: Row(
           children: [
@@ -462,7 +462,7 @@ class CreateShelf extends StatelessWidget {
                   children: [
                     for (final (g, items) in groups)
                       Padding(
-                        padding: const EdgeInsets.only(bottom: WsT.gutter),
+                        padding: EdgeInsets.only(bottom: WsT.gutter),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
@@ -513,7 +513,7 @@ class _MakeTile extends StatelessWidget {
       builder: (context, h) => AnimatedContainer(
         duration: Mo.dur,
         curve: Mo.ease,
-        padding: const EdgeInsets.all(7),
+        padding: EdgeInsets.all(Shape.s(7)),
         color: sel ? WsT.accent : (h ? WsT.raised : WsT.card),
         child: Stack(
           children: [

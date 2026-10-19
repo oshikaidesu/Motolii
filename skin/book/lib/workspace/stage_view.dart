@@ -542,13 +542,13 @@ class _Hud extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(
     height: _V.hud,
-    padding: const EdgeInsets.symmetric(horizontal: 8),
+    padding: EdgeInsets.symmetric(horizontal: Shape.s(8)),
     decoration: BoxDecoration(color: WsT.card, borderRadius: BorderRadius.all(Shape.r(WsT.radius))),
     child: Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         Text('${(scale * 100).round()}%', style: T.value(Grey.g95)),
-        Container(width: 1, height: 10, margin: const EdgeInsets.symmetric(horizontal: 8), color: WsT.line),
+        Container(width: 1, height: 10, margin: EdgeInsets.symmetric(horizontal: Shape.s(8)), color: WsT.line),
         ValueListenableBuilder<Offset?>(
           valueListenable: cursor,
           builder: (_, p, _) => Row(
@@ -580,7 +580,7 @@ class _Navigator extends StatelessWidget {
     return Container(
       width: _V.mapW + 8,
       height: h + 8,
-      padding: const EdgeInsets.all(4),
+      padding: EdgeInsets.all(Shape.s(4)),
       color: WsT.card,
       child: Stack(
         fit: StackFit.expand,

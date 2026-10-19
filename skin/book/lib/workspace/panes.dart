@@ -90,7 +90,7 @@ class _WsPanesState extends State<WsPanes> {
         label: name,
         button: true,
         child: Padding(
-          padding: EdgeInsets.only(right: p.iconOnly ? 0 : 5),
+          padding: EdgeInsets.only(right: p.iconOnly ? Shape.s(0) : Shape.s(5)),
           child: p.glyph == null ? Text(p.name.characters.first, style: T.micro(status == TabStatus.selected ? Grey.g95 : Grey.g56)) : DockGlyph(p.glyph!, size: 12, color: status == TabStatus.selected ? Grey.g95 : Grey.g56),
         ),
       ),
@@ -131,7 +131,7 @@ TabbedViewThemeData _tabs() {
     ..normalButtonColor = Grey.g56
     ..hoverButtonColor = Grey.g91;
   t.tab
-    ..padding = const EdgeInsets.fromLTRB(10, 5, 10, 5)
+    ..padding = EdgeInsets.fromLTRB(Shape.s(10), Shape.s(5), Shape.s(10), Shape.s(5))
     ..margin = EdgeInsets.zero
     ..innerBottomBorder = null
     ..innerTopBorder = null
