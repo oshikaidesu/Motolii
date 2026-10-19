@@ -139,6 +139,7 @@ struct Stage {
     // `backdrop` for its material to read. drawnInto: the picture the views draw into (live.h, screen.h); none (the
     // screen, a written film): they draw into `composed` instead while one reads, and it is put on the screen at the end.
     std::vector<char> backdropBefore;
+    std::vector<std::function<void(View*)>> layerDraw;   // a layer drawn by a hand of its own instead (a thing with effects of its own: screen.h thing_effects_draw)
     Texture* drawnInto = nullptr;
     Texture* backdrop = nullptr; RenderTarget* backdropTarget = nullptr;
     Texture* composed = nullptr; Texture* composedDepth = nullptr; RenderTarget* composedTarget = nullptr;
@@ -1006,7 +1007,8 @@ static void pictures_of(Stage& s) {
     s.renderer->render(s.view);
     for (size_t k = 0; k < s.layered && k < s.layers.size(); ++k) {
         if (k < s.backdropBefore.size() && s.backdropBefore[k] && into && s.copyDoor) s.copyDoor(into, s.backdropTarget);   // (what is under it, as it is now)
-        s.renderer->render(s.layers[k]);
+        if (k < s.layerDraw.size() && s.layerDraw[k]) s.layerDraw[k](s.layers[k]);
+        else s.renderer->render(s.layers[k]);
     }
     if (routed) {
         if (s.copyDoor) s.copyDoor(s.composed, nullptr);   // (put on the screen, as it would have been drawn there)

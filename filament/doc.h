@@ -84,6 +84,7 @@ struct Doc {
     struct Scripted { double at = -1; int made = -1; std::vector<ScriptCopy> copies; };
     std::map<int, Scripted> scripted;
     ScreenStack screen;                 // the stage's whole-screen effects, its script .wgsl files one over another (screen.h)   // each thing's copies as its script said them, at one moment (worked out once a picture)
+    std::map<int, ScreenStack> fx;      // each thing's own effects (its fx: .wgsl files), as the camera sees it (screen.h thing_effects)
     bool phys_keyed = false;            // reading where a thing's keys put it (not where the world has it)
     bool writing = false;               // it is being written as a film: it is read, not changed, until that is done
     double written_from = 0.0;          // the moment of the document that a film being written begins at (its work area's start)
@@ -146,6 +147,8 @@ static const DocValue doc_values[] = {
     {"physics", doc_drawn, 0, 0, false, "none moves still"},
     // (a recipe as code: a JavaScript file that says where each copy is (script.h); its head's knobs are values of the thing, named js_ and the knob's name)
     {"script", "picture text shape stage", 0, 0, false, ""},   // (the stage's: a whole-screen effect, a .wgsl file: screen.h)
+    // (a thing's own effects, After Effects' effects on a layer: the whole-screen ones' .wgsl files, one over another, on the thing as the camera sees it)
+    {"fx", "film picture text shape solid", 0, 0, false, ""},
     {"bounce", doc_drawn, 0, 1, false, nullptr},
     {"friction", doc_drawn, 0, 2, false, nullptr},
     {"gravity", "stage", -100, 100, false, nullptr},
@@ -606,7 +609,7 @@ static DocScript* doc_script_of(const std::string& file) {
         for (const ScriptKnob& k : s.knobs) s.names.push_back(screen ? doc_screen_knob(file, k.name) : "js_" + k.name);
         for (size_t i = 0; i < s.knobs.size(); ++i) {   // (the names are all made first: what points into them stays put)
             const ScriptKnob& k = s.knobs[i];
-            s.values.push_back(DocValue{s.names[i].c_str(), "picture text shape stage", k.kind == "select" ? 0.0 : k.low, k.kind == "select" ? 0.0 : k.high, k.kind == "track", k.kind == "select" ? k.words.c_str() : nullptr});
+            s.values.push_back(DocValue{s.names[i].c_str(), "film picture text shape solid stage", k.kind == "select" ? 0.0 : k.low, k.kind == "select" ? 0.0 : k.high, k.kind == "track", k.kind == "select" ? k.words.c_str() : nullptr});
             s.shown.push_back(DocShown{s.names[i].c_str(), k.kind == "check" ? "onoff" : "", "", k.label.c_str(), k.low, k.high, nullptr});
         }
         if (std::filesystem::path(file).extension() != ".wgsl") s.run = std::make_unique<Script>(file);   // (a .wgsl is drawn, not run: screen.h)
@@ -614,13 +617,16 @@ static DocScript* doc_script_of(const std::string& file) {
     }
     return &s;
 }
-// A thing's scripts: its one (a path may have spaces), or the stage's effects, one over another (paths with spaces between).
+// A thing's scripts: its one (a path may have spaces) and its own effects (paths with spaces between), or the stage's
+// effects, one over another.
 static std::string doc_word(Doc& d, int thing, const char* name);
 static std::vector<DocScript*> doc_scripts_on(Doc& d, int thing) {
     const std::string said = doc_word(d, thing, "script");
     std::vector<DocScript*> all;
     if (thing != 0) {
         if (DocScript* sc = doc_script_of(said)) all.push_back(sc);
+        std::istringstream fx(doc_word(d, thing, "fx"));
+        for (std::string file; fx >> file;) if (DocScript* sc = doc_script_of(file)) all.push_back(sc);
         return all;
     }
     std::istringstream each(said);
@@ -1516,9 +1522,12 @@ static void doc_moment(Doc& d, double now) {
         if (!lies[i].on || lies[i].shown->camera || lies[i].shown->behaviour || !lies[i].shown->light.isNull()) continue;   // (a camera, a behaviour or a light is in no run: nothing of it is drawn)
         // (a flat thing that reads what is under (doc_blend_way) is a run of its own, drawn once all under it is: the
         //  kit copies the picture so far before it, kit.h pictures_of; never the first run, which has nothing under it)
-        const int sort = lies[i].solid ? 1 : doc_blend_way(doc_word(d, lies[i].thing, "blend")) ? 2 : 0;
-        if (sort == 2 && sorts.empty()) sorts.push_back(0);
-        if (sorts.empty() || sorts.back() != sort || sort == 2) sorts.push_back(sort);
+        // (a thing with effects of its own is a run of its own too, drawn alone and then given them: screen.h thing_effects_draw;
+        //  never the first run either, the stage's own view, which draws what is behind everything)
+        const std::string fx = doc_word(d, lies[i].thing, "fx");
+        const int sort = !fx.empty() && fx != "none" ? 3 : lies[i].solid ? 1 : doc_blend_way(doc_word(d, lies[i].thing, "blend")) ? 2 : 0;
+        if (sort >= 2 && sorts.empty()) sorts.push_back(0);
+        if (sorts.empty() || sorts.back() != sort || sort >= 2) sorts.push_back(sort);
         runOf[i] = (int)sorts.size() - 1;
     }
     const int base = sorts.size() > 1 && sorts[0] == 0 && sorts[1] == 1 ? 1 : 0;   // (the last run in the stage's own view: flat things under the first solid ones)
@@ -1546,6 +1555,18 @@ static void doc_moment(Doc& d, double now) {
     s.layered = sorts.size() > (size_t)base + 1 ? sorts.size() - (size_t)base - 1 : 0;
     s.backdropBefore.assign(s.layered, 0);
     for (size_t k = 0; k < s.layered; ++k) s.backdropBefore[k] = sorts[k + (size_t)base + 1] == 2;
+    s.layerDraw.assign(s.layered, nullptr);
+    for (size_t i = 0; i < lies.size(); ++i)   // (those with effects of their own: their run drawn by their effects)
+        if (runOf[i] > base && sorts[(size_t)runOf[i]] == 3) {
+            const int thing = lies[i].thing;
+            ScreenStack& st = d.fx[thing];
+            thing_effects(s, st, doc_word(d, thing, "fx"));
+            const ScreenNumbers numbers = [&d, thing](const std::string& file, const std::string& name, double usual) {
+                std::lock_guard<std::recursive_timed_mutex> hold(d.lock);   // (asked while the picture is drawn)
+                return doc_number(d, thing, doc_screen_knob(file, name).c_str(), d.stage->now, usual);
+            };
+            s.layerDraw[(size_t)(runOf[i] - base - 1)] = [&s, &st, numbers](View* v) { thing_effects_draw(s, st, v, numbers); };
+        }
     if (std::find(sorts.begin(), sorts.end(), 2) != sorts.end())   // (as large as what the views draw into: the desk's when it is drawn there, else the stage's)
         backdrop_as(s, s.desk.w && !s.over ? s.desk.w : (uint32_t)s.w, s.desk.w && !s.over ? s.desk.h : (uint32_t)s.h);
     for (size_t i = 0; i < lies.size(); ++i)   // (those that read what is under: which way, and the picture of it)

@@ -1,0 +1,13 @@
+add picture ../../third_party/thorvg_example/res/lottie/gradient_background.json
+set 1 z -1
+set 1 size 4.2
+add solid ring
+set 2 x -0.5
+add film ../vid/happy.mp4
+set 3 size 1.2
+set 3 x 0.6
+still out/fx_0.png
+say 2 fx ../../effects/halftone.wgsl
+still out/fx_1.png
+say 3 fx ../../effects/isf_bad_tv.wgsl
+still out/fx_2.png

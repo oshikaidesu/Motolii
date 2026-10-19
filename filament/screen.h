@@ -217,7 +217,10 @@ static void screen_place(Stage& s, Texture* from, RenderTarget* to, uint32_t w, 
 }
 // One effect drawn: reading `from` (the stage's picture or the effect before's), drawing to `to`, through its passes;
 // its own pictures in order: `from`, then each target (ISF's) or the stage's past frames (the array).
-static void screen_draw(Stage& s, ScreenStack& st, ScreenFx& fx, Texture* from, RenderTarget* to, const ScreenNumbers& numbers) {
+// w, h: as large as what it draws into (the stage, unless a thing's own picture says otherwise); over: its last laid over
+// what `to` holds (a thing's effects, over what is under the thing), not drawn in its place.
+static void screen_draw(Stage& s, ScreenStack& st, ScreenFx& fx, Texture* from, RenderTarget* to, const ScreenNumbers& numbers, uint32_t w = 0, uint32_t h = 0, bool over = false) {
+    if (!w) w = (uint32_t)s.w, h = (uint32_t)s.h;
     screen_targets(s, fx);
     if (fx.historyFrames) {   // (this frame written into the next layer of the past frames, before it is read)
         if (!fx.history) {
@@ -239,14 +242,14 @@ static void screen_draw(Stage& s, ScreenStack& st, ScreenFx& fx, Texture* from, 
     if (fx.passes.empty()) {
         gather();
         screen_knobs(s, fx, numbers);
-        door::draw(s.engine, fx.door, read.data(), to, (uint32_t)s.w, (uint32_t)s.h);
+        door::draw(s.engine, fx.door, read.data(), to, w, h, 0, nullptr, over);
         return;
     }
     for (size_t p = 0; p < fx.passes.size(); ++p) {
         gather();
         screen_knobs(s, fx, numbers, (int)p);
         const int t = fx.passes[p];
-        if (t < 0) { door::draw(s.engine, fx.door, read.data(), to, (uint32_t)s.w, (uint32_t)s.h, (int)p); continue; }
+        if (t < 0) { door::draw(s.engine, fx.door, read.data(), to, w, h, (int)p, nullptr, over); continue; }
         ScreenFx::Target& into = fx.targets[(size_t)t];
         const int back = 1 - into.front;
         door::draw(s.engine, fx.door, read.data(), into.into[back], into.w, into.h, (int)p);
@@ -254,7 +257,7 @@ static void screen_draw(Stage& s, ScreenStack& st, ScreenFx& fx, Texture* from, 
     }
     if (fx.passes.back() >= 0) {   // (its last pass drew into its own picture: that is what it shows)
         const ScreenFx::Target& last = fx.targets[(size_t)fx.passes.back()];
-        door::draw(s.engine, screen_copy(s, st), last.picture[last.front], to, (uint32_t)s.w, (uint32_t)s.h);
+        door::draw(s.engine, screen_copy(s, st), &last.picture[last.front], to, w, h, 0, nullptr, over);
     }
 }
 // An effect whose file was written over made again where it stands (looked at four times a second at most): a shader
@@ -324,4 +327,75 @@ static void screen_effects(Stage& s, ScreenStack& st, const std::string& files, 
             screen_draw(s, st, *st.fx[i], from, to, numbers);
         }
     };
+}
+
+// A thing's own effects (its "fx": .wgsl files, paths with spaces between), After Effects' effects on a layer, seen as the
+// camera sees the thing: its run (a view of its own, doc.h) drawn alone into a picture of its own, as large as the view
+// draws, each effect over it in turn (the files as they are: the whole-screen ones), and the last laid over what is under
+// it, where the view would have drawn. Its own stack: an effect's passes and past frames are the thing's.
+static void thing_effects(Stage& s, ScreenStack& st, const std::string& files) {
+    if (st.files == files) return;
+    st.files = files;
+    st.fx.clear();
+    std::istringstream each(files);
+    for (std::string file; each >> file;) {
+        if (file == "none") continue;
+        ScreenFx*& made = st.made[file];
+        if (!made) {
+            made = new ScreenFx;
+            made->file = file;
+            std::string code;
+            if (!screen_read(*made, code)) { std::fprintf(stderr, "%s\n", made->trouble.c_str()); continue; }
+            made->door = door::screen(s.engine, file.c_str(), code.c_str(), made->bytes, &made->trouble, made->pictures, made->layered);
+            if (!made->door) std::fprintf(stderr, "the effect %s is not taken: %s\n", file.c_str(), made->trouble.c_str());
+            made->stamp = screen_stamp(file);
+        }
+        if (made->door) st.fx.push_back(made);
+    }
+}
+static void thing_effects_draw(Stage& s, ScreenStack& st, View* v, const ScreenNumbers& numbers) {
+    if (st.fx.empty()) return s.renderer->render(v);
+    const Viewport vp = v->getViewport();
+    const uint32_t w = (uint32_t)std::max(1, vp.left + (int)vp.width), h = (uint32_t)std::max(1, vp.bottom + (int)vp.height);
+    if (!st.shot || st.shot->getWidth() != w || st.shot->getHeight() != h) {   // (its pictures as large as the view draws; made again when that moves)
+        for (Texture*& t : {std::ref(st.shot), std::ref(st.depth), std::ref(st.between[0]), std::ref(st.between[1])}) if (t) s.engine->destroy(t), t = nullptr;
+        for (RenderTarget*& r : {std::ref(st.target), std::ref(st.betweenTarget[0]), std::ref(st.betweenTarget[1])}) if (r) s.engine->destroy(r), r = nullptr;
+        const auto picture = [&] { return Texture::Builder().width(w).height(h).levels(1).format(Texture::InternalFormat::RGBA8).usage(Texture::Usage::COLOR_ATTACHMENT | Texture::Usage::SAMPLEABLE).build(*s.engine); };
+        st.shot = picture();
+        st.depth = Texture::Builder().width(w).height(h).levels(1).usage(Texture::Usage::DEPTH_ATTACHMENT).format(Texture::InternalFormat::DEPTH24).build(*s.engine);
+        st.target = RenderTarget::Builder().texture(RenderTarget::AttachmentPoint::COLOR, st.shot).texture(RenderTarget::AttachmentPoint::DEPTH, st.depth).build(*s.engine);
+        for (int k = 0; k < 2; ++k) st.between[k] = picture(), st.betweenTarget[k] = RenderTarget::Builder().texture(RenderTarget::AttachmentPoint::COLOR, st.between[k]).build(*s.engine);
+    }
+    RenderTarget* const was = v->getRenderTarget();
+    const Renderer::ClearOptions clearWas = s.renderer->getClearOptions();
+    Renderer::ClearOptions clear = clearWas;
+    clear.clearColor = {0, 0, 0, 0}, clear.clear = true, clear.discard = true;   // (the thing alone, on nothing)
+    s.renderer->setClearOptions(clear);
+    v->setRenderTarget(st.target);
+    s.renderer->render(v);
+    v->setRenderTarget(was);
+    s.renderer->setClearOptions(clearWas);
+    for (size_t i = 0; i < st.fx.size(); ++i) {   // (each into a picture between: the effects take the whole picture as theirs, and fill what is clear)
+        screen_fresh(s, *st.fx[i]);
+        Texture* from = i == 0 ? st.shot : st.between[(i - 1) % 2];
+        screen_draw(s, st, *st.fx[i], from, st.betweenTarget[i % 2], numbers, w, h);
+    }
+    // (then laid over what is under, cut to the thing's own shape as it was drawn alone: Unreal's custom stencil; what an
+    //  effect paints where the thing is not is let go)
+    static std::map<Engine*, door::Screen*> cuts;
+    door::Screen*& cut = cuts[s.engine];
+    if (!cut) {
+        static const char* const shape =
+            "@group(0) @binding(0) var made: texture_2d<f32>;\n@group(0) @binding(1) var near: sampler;\n"
+            "@group(0) @binding(2) var alone: texture_2d<f32>;\n@group(0) @binding(3) var near2: sampler;\n"
+            "@fragment fn main(@builtin(position) frag: vec4f, @location(0) uv: vec2f) -> @location(0) vec4f {\n"
+            "  let a = textureSampleLevel(alone, near2, uv, 0.0).a;\n"
+            "  let c = textureSampleLevel(made, near, uv, 0.0);\n"
+            "  return vec4f(c.rgb * a, a);\n}\n";
+        std::string why;
+        cut = door::screen(s.engine, "cut", shape, 0, &why, 2);
+        if (!cut) std::fprintf(stderr, "the cut to a thing's shape is not made: %s\n", why.c_str());
+    }
+    Texture* const read[2] = {st.between[(st.fx.size() - 1) % 2], st.shot};
+    if (cut) door::draw(s.engine, cut, read, was, w, h, 0, nullptr, true);
 }

@@ -129,7 +129,7 @@ void knobs(Engine* engine, Screen* s, const void* data, uint32_t bytes, int pass
     driver(engine).updateBufferObject(to, BufferDescriptor(copy, s->knobBytes, [](void* p, size_t, void*) { std::free(p); }), 0);
 }
 
-void draw(Engine* engine, Screen* s, Texture* const* from, RenderTarget* to, uint32_t w, uint32_t h, int pass, const int* at) {
+void draw(Engine* engine, Screen* s, Texture* const* from, RenderTarget* to, uint32_t w, uint32_t h, int pass, const int* at, bool over) {
     DriverApi& d = driver(engine);
     std::vector<TextureHandle> read;
     for (int i = 0; i < s->pictures; ++i) read.push_back(downcast(from[i])->getHwHandle());
@@ -146,7 +146,7 @@ void draw(Engine* engine, Screen* s, Texture* const* from, RenderTarget* to, uin
     }
     RenderPassParams params{};
     params.viewport = at ? backend::Viewport{at[0], at[1], (uint32_t)at[2], (uint32_t)at[3]} : backend::Viewport{0, 0, w, h};
-    params.flags.discardStart = TargetBufferFlags::ALL;
+    params.flags.discardStart = over ? TargetBufferFlags::NONE : TargetBufferFlags::ALL;   // (laid over: what is there is kept)
     if (at) params.flags.clear = TargetBufferFlags::COLOR, params.clearColor = {0.f, 0.f, 0.f, 0.f};   // (only there: all else clear)
     PipelineState pipeline{};
     pipeline.program = s->program;
@@ -155,6 +155,10 @@ void draw(Engine* engine, Screen* s, Texture* const* from, RenderTarget* to, uin
     pipeline.rasterState.depthWrite = false;
     pipeline.rasterState.depthFunc = RasterState::DepthFunc::A;
     pipeline.rasterState.colorWrite = true;
+    if (over) {   // (Filament's own way of laying a translucent picture over: premultiplied, the one on top over what is under)
+        pipeline.rasterState.blendFunctionSrcRGB = BlendFunction::ONE, pipeline.rasterState.blendFunctionSrcAlpha = BlendFunction::ONE;
+        pipeline.rasterState.blendFunctionDstRGB = BlendFunction::ONE_MINUS_SRC_ALPHA, pipeline.rasterState.blendFunctionDstAlpha = BlendFunction::ONE_MINUS_SRC_ALPHA;
+    }
     d.bindDescriptorSet(set, 0, {});
     d.beginRenderPass(to ? downcast(to)->getHwHandle() : downcast(engine)->getDefaultRenderTarget(), params);   // (none: the screen, as the frame's swap chain is)
     d.draw(pipeline, downcast(engine)->getFullScreenRenderPrimitive(), 0, 3, 1);

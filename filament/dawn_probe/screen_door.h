@@ -25,7 +25,7 @@ struct Screen;
 // `layered`: which pictures are arrays of layers (bit k: picture k is a `texture_2d_array<f32>`, a stage's past frames).
 Screen* screen(filament::Engine*, const char* name, const char* fragment, uint32_t knobBytes, std::string* why = nullptr, int pictures = 1, unsigned layered = 0);
 void knobs(filament::Engine*, Screen*, const void* data, uint32_t bytes, int pass = 0);
-void draw(filament::Engine*, Screen*, filament::Texture* const* from, filament::RenderTarget* to, uint32_t w, uint32_t h, int pass = 0, const int* at = nullptr);   // to null: the screen; at: only there (left, bottom, wide, high), the rest cleared
+void draw(filament::Engine*, Screen*, filament::Texture* const* from, filament::RenderTarget* to, uint32_t w, uint32_t h, int pass = 0, const int* at = nullptr, bool over = false);   // to null: the screen; at: only there (left, bottom, wide, high), the rest cleared; over: laid over what `to` holds (its alpha premultiplied, as Filament's own pictures are), not drawn in its place
 inline void draw(filament::Engine* e, Screen* s, filament::Texture* from, filament::RenderTarget* to, uint32_t w, uint32_t h, const int* at = nullptr) { draw(e, s, &from, to, w, h, 0, at); }
 void drop(filament::Engine*, Screen*);
 }  // namespace door
