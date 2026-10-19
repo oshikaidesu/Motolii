@@ -1,0 +1,37 @@
+say 0 background 0a0716
+set 0 duration 8
+add solid ring
+set 1 size 1.25
+set 1 emissive 1.5
+set 1 rotate_x 62
+set 1 y 0.35
+say 1 fill ff6a3d
+say 1 fx ../../effects/isf_god_rays.wgsl
+set 1 js_isf_god_rays_lightPositionOnScreen_y 0.42
+key 1 rotate 0 0
+key 1 rotate 8 360
+add film ../vid/happy.mp4
+set 2 keyed 1
+set 2 size 1.9
+set 2 y -1.05
+key 2 x 0 -0.35
+key 2 x 4 0.35
+key 2 x 8 -0.35
+say 2 fx ../../effects/datamosh.wgsl
+add text ../arial_black.ttf
+say 3 text MOTOLII
+set 3 size 0.27
+set 3 y 0.3
+say 3 fill behind
+say 3 fx ../../effects/halftone.wgsl ../../effects/rgbshift.wgsl
+set 3 js_halftone_radius 7
+add text ../arial_black.ttf
+say 4 text MUSIC VIDEO
+set 4 size 0.12
+set 4 y -0.38
+say 4 fill f4efe6
+at 2
+still out/mv_2.png
+at 5
+still out/mv_5.png
+write out/show_mv.mp4

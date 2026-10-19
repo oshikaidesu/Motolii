@@ -1,4 +1,5 @@
 // Datamosh: newomp4/phosphor's luma_half, motion and mosh shaders (MIT, Copyright (c) 2026 Owen, github.com/newomp4/phosphor) as one effect's passes in WGSL: the picture drawn last moved along each block's motion and not drawn afresh, as a P-frame decoded against the wrong reference; afresh every so many frames
+// --spill (on a thing: what it makes where the thing is not is light on what is under)
 // --pass@mv:0,1,s0.0625,s0.0625
 // --pass@mosh:1,1,s1,s1
 // --pass@luma:1,1,s0.5,s0.5
