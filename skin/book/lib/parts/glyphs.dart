@@ -9,12 +9,12 @@ import '../tokens.dart';
 enum G { select, move, rect, ellipse, pen, text, image, camera, repeater, grid, circle, spiral, shape, effect, media }
 
 class Glyph extends StatelessWidget {
-  const Glyph(this.kind, {super.key, this.size = 18, this.color = N.g63});
+  const Glyph(this.kind, {super.key, this.size = 18, this.color});
   final G kind;
   final double size;
-  final Color color;
+  final Color? color; // (none: the skin's quiet grey)
   @override
-  Widget build(BuildContext context) => SizedBox.square(dimension: size, child: CustomPaint(painter: _GlyphPainter(kind, color)));
+  Widget build(BuildContext context) => SizedBox.square(dimension: size, child: CustomPaint(painter: _GlyphPainter(kind, color ?? Grey.g63)));
 }
 
 class _GlyphPainter extends CustomPainter {

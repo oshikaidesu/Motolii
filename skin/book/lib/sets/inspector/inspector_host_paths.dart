@@ -333,7 +333,7 @@ class _OpDrop extends StatelessWidget {
                 top: below ? null : -Pop.gap,
                 bottom: below ? 0 : null,
                 height: 2,
-                child: const ColoredBox(color: Pop.tonePath),
+                child: ColoredBox(color: Pop.tonePath),
               ),
           ],
         );

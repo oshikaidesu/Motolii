@@ -68,11 +68,11 @@ class ArtPainter extends CustomPainter {
     final w = size.width, h = size.height, r = Offset.zero & size;
     final rnd = math.Random(seed);
     final a = Fam.all[seed % 6].c, b = Fam.all[(seed * 5 + 2) % 6].c;
-    canvas.drawRect(r, Paint()..shader = const LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [N.g10, N.g13]).createShader(r));
+    canvas.drawRect(r, Paint()..shader = LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Grey.g10, Grey.g13]).createShader(r));
     switch (style) {
       case ArtStyle.sky:
-        canvas.drawRect(r, Paint()..shader = LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [a.withValues(alpha: .3), b.withValues(alpha: .35), N.g13.withValues(alpha: 0)], stops: const [0, .62, 1]).createShader(r));
-        canvas.drawCircle(Offset(w * (.25 + .5 * rnd.nextDouble()), h * .5), h * .13, Paint()..color = N.g95.withValues(alpha: .85)..maskFilter = const MaskFilter.blur(BlurStyle.normal, 1.5));
+        canvas.drawRect(r, Paint()..shader = LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [a.withValues(alpha: .3), b.withValues(alpha: .35), Grey.g13.withValues(alpha: 0)], stops: const [0, .62, 1]).createShader(r));
+        canvas.drawCircle(Offset(w * (.25 + .5 * rnd.nextDouble()), h * .5), h * .13, Paint()..color = Grey.g95.withValues(alpha: .85)..maskFilter = const MaskFilter.blur(BlurStyle.normal, 1.5));
         for (var layer = 0; layer < 2; layer++) {
           final p = Path()..moveTo(0, h);
           const n = 9;
@@ -80,11 +80,11 @@ class ArtPainter extends CustomPainter {
             p.lineTo(w * i / n, h * (.72 - .16 * rnd.nextDouble() - layer * .1 + (layer == 0 ? .08 : 0)));
           }
           p..lineTo(w, h)..close();
-          canvas.drawPath(p, Paint()..color = (layer == 0 ? N.g10 : N.g07).withValues(alpha: .92));
+          canvas.drawPath(p, Paint()..color = (layer == 0 ? Grey.g10 : Grey.g07).withValues(alpha: .92));
         }
       case ArtStyle.gradient:
         canvas.drawRect(r, Paint()..shader = LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [a.withValues(alpha: .35), b.withValues(alpha: .25)]).createShader(r));
-        canvas.drawRect(r, Paint()..shader = LinearGradient(begin: Alignment.bottomCenter, end: Alignment.topCenter, colors: [N.g00.withValues(alpha: .35), N.g00.withValues(alpha: 0)]).createShader(r));
+        canvas.drawRect(r, Paint()..shader = LinearGradient(begin: Alignment.bottomCenter, end: Alignment.topCenter, colors: [Grey.g00.withValues(alpha: .35), Grey.g00.withValues(alpha: 0)]).createShader(r));
       case ArtStyle.abstract:
         for (var i = 0; i < 4; i++) {
           final c = Fam.all[(seed + i * 2) % 6].c;
@@ -93,7 +93,7 @@ class ArtPainter extends CustomPainter {
       case ArtStyle.wave:
         canvas.drawRect(r, Paint()..shader = LinearGradient(begin: Alignment.centerLeft, end: Alignment.centerRight, colors: [a.withValues(alpha: .25), b.withValues(alpha: .25)]).createShader(r));
         final bars = math.max(8, (w / 3).floor());
-        final p = Paint()..color = N.g91.withValues(alpha: .8)..strokeWidth = 1.2;
+        final p = Paint()..color = Grey.g91.withValues(alpha: .8)..strokeWidth = 1.2;
         for (var i = 0; i < bars; i++) {
           final x = w * (i + .5) / bars;
           final env = math.sin(math.pi * i / bars);
@@ -103,11 +103,11 @@ class ArtPainter extends CustomPainter {
       case ArtStyle.solid:
         final c = Offset(w / 2, h / 2), rad = math.min(w, h) * .3;
         canvas.drawCircle(c, rad * 1.5, Paint()..color = a.withValues(alpha: .2)..maskFilter = MaskFilter.blur(BlurStyle.normal, rad * .6));
-        canvas.drawCircle(c, rad, Paint()..shader = RadialGradient(center: const Alignment(-.4, -.45), radius: 1, colors: [N.g95.withValues(alpha: .85), b.withValues(alpha: .35), N.g07]).createShader(Rect.fromCircle(center: c, radius: rad)));
-        canvas.drawOval(Rect.fromCenter(center: c, width: rad * 3, height: rad * .7), Paint()..style = PaintingStyle.stroke..strokeWidth = 1..color = N.g76.withValues(alpha: .5));
+        canvas.drawCircle(c, rad, Paint()..shader = RadialGradient(center: const Alignment(-.4, -.45), radius: 1, colors: [Grey.g95.withValues(alpha: .85), b.withValues(alpha: .35), Grey.g07]).createShader(Rect.fromCircle(center: c, radius: rad)));
+        canvas.drawOval(Rect.fromCenter(center: c, width: rad * 3, height: rad * .7), Paint()..style = PaintingStyle.stroke..strokeWidth = 1..color = Grey.g76.withValues(alpha: .5));
     }
     if (style == ArtStyle.wave) return;
-    canvas.drawRect(r, Paint()..shader = ui.Gradient.radial(Offset(w / 2, h / 2), math.max(w, h) * .8, [N.g00.withValues(alpha: 0), N.g00.withValues(alpha: .25)]));
+    canvas.drawRect(r, Paint()..shader = ui.Gradient.radial(Offset(w / 2, h / 2), math.max(w, h) * .8, [Grey.g00.withValues(alpha: 0), Grey.g00.withValues(alpha: .25)]));
   }
 
   @override
@@ -127,8 +127,8 @@ class TypeBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(
         padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
-        decoration: BoxDecoration(color: N.g00.withValues(alpha: .6), borderRadius: BorderRadius.all(Shape.r(3))),
-        child: Text(kind.badge, style: T.micro(N.g91).copyWith(letterSpacing: .4)),
+        decoration: BoxDecoration(color: Grey.g00.withValues(alpha: .6), borderRadius: BorderRadius.all(Shape.r(3))),
+        child: Text(kind.badge, style: T.micro(Grey.g91).copyWith(letterSpacing: .4)),
       );
 }
 
@@ -138,8 +138,8 @@ class TimePill extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(
         padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
-        decoration: BoxDecoration(color: N.g00.withValues(alpha: .6), borderRadius: BorderRadius.all(Shape.r(3))),
-        child: Text(text, style: T.value(N.g91).copyWith(fontSize: T.px(10))),
+        decoration: BoxDecoration(color: Grey.g00.withValues(alpha: .6), borderRadius: BorderRadius.all(Shape.r(3))),
+        child: Text(text, style: T.value(Grey.g91).copyWith(fontSize: T.px(10))),
       );
 }
 
@@ -233,7 +233,7 @@ class StarButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Press(
         onTap: () => onChanged?.call(!on),
-        builder: (context, hover, focus, _) => SizedBox(width: 24, height: 24, child: Center(child: glyph(size, (c, s) => drawStar(c, s, on ? N.g95 : (hover || focus ? N.g76 : N.g44), on), [on, hover, focus]))),
+        builder: (context, hover, focus, _) => SizedBox(width: 24, height: 24, child: Center(child: glyph(size, (c, s) => drawStar(c, s, on ? Grey.g95 : (hover || focus ? Grey.g76 : Grey.g44), on), [on, hover, focus]))),
       );
 }
 
@@ -258,9 +258,9 @@ class DashedBox extends CustomPainter {
 
 /// A thin horizontal slider: the track is grey, the value is the brightest thing.
 class MiniSlider extends StatelessWidget {
-  const MiniSlider({super.key, required this.value, required this.onChanged, this.min = 0, this.max = 1, this.width = 88, this.track = N.g26});
+  const MiniSlider({super.key, required this.value, required this.onChanged, this.min = 0, this.max = 1, this.width = 88, this.track});
   final double value, min, max, width;
-  final Color track;
+  final Color? track; // (none: the skin's grey)
   final ValueChanged<double> onChanged;
   @override
   Widget build(BuildContext context) {
@@ -273,9 +273,9 @@ class MiniSlider extends StatelessWidget {
         onPanDown: (d) => set(d.localPosition),
         onPanUpdate: (d) => set(d.localPosition),
         child: SizedBox(width: width, height: 20, child: Stack(alignment: Alignment.centerLeft, children: [
-          Container(height: 2, decoration: BoxDecoration(color: track, borderRadius: BorderRadius.all(Shape.r(1)))),
-          Container(width: width * t, height: 2, decoration: BoxDecoration(color: N.g56, borderRadius: BorderRadius.all(Shape.r(1)))),
-          Positioned(left: (width - 10) * t, child: Container(width: 10, height: 10, decoration: const BoxDecoration(color: N.g95, shape: BoxShape.circle))),
+          Container(height: 2, decoration: BoxDecoration(color: track ?? Grey.g26, borderRadius: BorderRadius.all(Shape.r(1)))),
+          Container(width: width * t, height: 2, decoration: BoxDecoration(color: Grey.g56, borderRadius: BorderRadius.all(Shape.r(1)))),
+          Positioned(left: (width - 10) * t, child: Container(width: 10, height: 10, decoration: BoxDecoration(color: Grey.g95, shape: BoxShape.circle))),
         ])),
       ),
     );
@@ -283,14 +283,14 @@ class MiniSlider extends StatelessWidget {
 }
 
 class Pill extends StatelessWidget {
-  const Pill(this.text, {super.key, this.fill = N.g20});
+  const Pill(this.text, {super.key, this.fill});
   final String text;
-  final Color fill;
+  final Color? fill; // (none: the skin's grey)
   @override
   Widget build(BuildContext context) => Container(
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-        decoration: BoxDecoration(color: fill, borderRadius: BorderRadius.all(Shape.r(6))),
-        child: Text(text, style: T.micro(N.g76)),
+        decoration: BoxDecoration(color: fill ?? Grey.g20, borderRadius: BorderRadius.all(Shape.r(6))),
+        child: Text(text, style: T.micro(Grey.g76)),
       );
 }
 
@@ -308,8 +308,8 @@ class QuietButton extends StatelessWidget {
           curve: kEase,
           height: 24,
           padding: const EdgeInsets.symmetric(horizontal: 12),
-          decoration: BoxDecoration(color: primary ? (hover ? N.g26 : N.g20) : (hover ? N.g20 : N.g13), borderRadius: BorderRadius.all(Shape.r(4)), border: Border.all(color: focus ? N.g56 : (primary ? N.g26 : N.g20))),
-          child: Center(widthFactor: 1, child: Text(text, style: T.label(N.g91).copyWith(fontWeight: FontWeight.w500))),
+          decoration: BoxDecoration(color: primary ? (hover ? Grey.g26 : Grey.g20) : (hover ? Grey.g20 : Grey.g13), borderRadius: BorderRadius.all(Shape.r(4)), border: Border.all(color: focus ? Grey.g56 : (primary ? Grey.g26 : Grey.g20))),
+          child: Center(widthFactor: 1, child: Text(text, style: T.label(Grey.g91).copyWith(fontWeight: FontWeight.w500))),
         ),
       );
 }
@@ -320,5 +320,5 @@ class Tick extends StatelessWidget {
   final bool on;
   final double height;
   @override
-  Widget build(BuildContext context) => AnimatedContainer(duration: kFast, curve: kEase, width: 2, height: height, margin: const EdgeInsets.only(right: 4), decoration: BoxDecoration(color: on ? N.g95 : const Color(0x00000000), borderRadius: BorderRadius.all(Shape.r(1))));
+  Widget build(BuildContext context) => AnimatedContainer(duration: kFast, curve: kEase, width: 2, height: height, margin: const EdgeInsets.only(right: 4), decoration: BoxDecoration(color: on ? Grey.g95 : const Color(0x00000000), borderRadius: BorderRadius.all(Shape.r(1))));
 }

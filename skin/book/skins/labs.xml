@@ -24,5 +24,23 @@
 		<ChosenDefault Value="#8fa1ff"/>
 		<ControlOnForeground Value="#000000"/>
 		<Keyframe Value="#f0965f"/>
+		<AxisX Value="#ee9562"/>
+		<AxisY Value="#5fd88a"/>
+		<AxisZ Value="#6e8ef7"/>
+		<Clip1 Value="#ee9562"/>
+		<Clip2 Value="#d9d97a"/>
+		<Clip3 Value="#7ee6b4"/>
+		<Clip4 Value="#b9c0d6"/>
+		<Clip5 Value="#8e96f2"/>
+		<Clip6 Value="#f5bff3"/>
+		<Clip7 Value="#6e8ef7"/>
+		<ToneTransform Value="#6e8ef7"/>
+		<ToneLayer Value="#b9c0d6"/>
+		<ToneText Value="#dceb73"/>
+		<ToneFill Value="#ee9562"/>
+		<ToneBlend Value="#7ee6b4"/>
+		<TonePlace Value="#f9f04a"/>
+		<TonePath Value="#8e96f2"/>
+		<ToneSolid Value="#f5bff3"/>
 	</Theme>
 </Motolii>

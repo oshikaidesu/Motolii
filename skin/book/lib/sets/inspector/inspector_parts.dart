@@ -4,6 +4,7 @@
 
 import 'package:flutter/widgets.dart';
 
+import '../../theme.dart';
 import '../../tokens.dart';
 import 'inspector_state.dart';
 
@@ -41,8 +42,10 @@ const labelW = 88.0, labelWNarrow = 76.0, labelWPop = 104.0;
 // [open] the width of the key mark's and reset mark's columns.
 const keyW = 22.0, resetW = 18.0;
 // [open] axis colours: X / Y / Z ticks reuse relation-family hues (the only hue outside relations).
-const axX = Color(0xFFE974AB), axY = Color(0xFF7DD5B1), axZ = Color(0xFF4781E5);
-const axesParts = [axX, axY, axZ];
+Color get axX => ColorTheme.of('AxisX', const Color(0xFFE974AB)); // (the skin's axis colours: Blender's names)
+Color get axY => ColorTheme.of('AxisY', const Color(0xFF7DD5B1));
+Color get axZ => ColorTheme.of('AxisZ', const Color(0xFF4781E5));
+List<Color> get axesParts => [axX, axY, axZ];
 // [open] two clicks within this are a double click.
 const dblParts = Duration(milliseconds: 320);
 
@@ -96,14 +99,24 @@ class Pop extends InheritedWidget {
 
   /// Each card wears its kind as a colour, so a folded stack reads by hue before it reads by word.
   /// The layer's own cards are muted; effects are saturated, since they are the ones that pile up.
-  static const toneTransform = Color(0xFF6F9CF0), toneLayer = Color(0xFF9AA4B2), toneText = Color(0xFFD9D2C3);
-  static const toneFill = Color(0xFFD9A47A), toneBlend = Color(0xFF7FB8B0);
+  static Color get toneTransform => ColorTheme.of('ToneTransform', const Color(0xFF6F9CF0));
+  static Color get toneLayer => ColorTheme.of('ToneLayer', const Color(0xFF9AA4B2));
+  static Color get toneText => ColorTheme.of('ToneText', const Color(0xFFD9D2C3));
+  static Color get toneFill => ColorTheme.of('ToneFill', const Color(0xFFD9A47A));
+  static Color get toneBlend => ColorTheme.of('ToneBlend', const Color(0xFF7FB8B0));
 
   /// Host features (no shader): one hue per family, so a Repeater and a Trim Paths never read as the same kind of card.
-  static const tonePlace = Color(0xFFF08A5D), tonePath = Color(0xFF5CC8E8), toneSolid = Color(0xFFC9A0DC);
-  static const toneTextAnim = Color(0xFFE8C76A), toneMask = Color(0xFF8FBF73), toneTime = Color(0xFFE58FB4);
-  static const toneLayout = Color(0xFF7C9CBF), toneParticles = Color(0xFFF2A65A), toneCamera = Color(0xFFA7B4C8);
-  static const toneOutput = Color(0xFF6FD6C2), toneLink = Color(0xFFB0A6F0);
+  static Color get tonePlace => ColorTheme.of('TonePlace', const Color(0xFFF08A5D));
+  static Color get tonePath => ColorTheme.of('TonePath', const Color(0xFF5CC8E8));
+  static Color get toneSolid => ColorTheme.of('ToneSolid', const Color(0xFFC9A0DC));
+  static Color get toneTextAnim => ColorTheme.of('ToneTextAnim', const Color(0xFFE8C76A));
+  static Color get toneMask => ColorTheme.of('ToneMask', const Color(0xFF8FBF73));
+  static Color get toneTime => ColorTheme.of('ToneTime', const Color(0xFFE58FB4));
+  static Color get toneLayout => ColorTheme.of('ToneLayout', const Color(0xFF7C9CBF));
+  static Color get toneParticles => ColorTheme.of('ToneParticles', const Color(0xFFF2A65A));
+  static Color get toneCamera => ColorTheme.of('ToneCamera', const Color(0xFFA7B4C8));
+  static Color get toneOutput => ColorTheme.of('ToneOutput', const Color(0xFF6FD6C2));
+  static Color get toneLink => ColorTheme.of('ToneLink', const Color(0xFFB0A6F0));
   @override
   bool updateShouldNotify(Pop old) => false;
 }

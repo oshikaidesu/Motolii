@@ -27,16 +27,16 @@ class ValueWell extends StatelessWidget {
         child: SizedBox(
           height: 22,
           child: Stack(children: [
-            Positioned.fill(child: DecoratedBox(decoration: BoxDecoration(color: N.g07, borderRadius: BorderRadius.all(Shape.r(4)), border: Border.all(color: N.g20)))),
+            Positioned.fill(child: DecoratedBox(decoration: BoxDecoration(color: Grey.g07, borderRadius: BorderRadius.all(Shape.r(4)), border: Border.all(color: Grey.g20)))),
             Positioned(left: 0, top: 0, bottom: 0, width: box.maxWidth * t, child: DecoratedBox(decoration: BoxDecoration(
               gradient: LinearGradient(colors: [fam.c.withValues(alpha: .28), fam.c.withValues(alpha: .55)]),
               borderRadius: BorderRadius.all(Shape.r(4)),
             ))),
             Positioned(left: 0, top: 4, bottom: 4, width: 2, child: DecoratedBox(decoration: BoxDecoration(color: fam.c, borderRadius: BorderRadius.all(Shape.r(1))))),
             Positioned.fill(child: Padding(padding: const EdgeInsets.symmetric(horizontal: 9), child: Flex(direction: Axis.horizontal, crossAxisAlignment: CrossAxisAlignment.center, children: [
-              Text(label, style: T.label(N.g76)),
+              Text(label, style: T.label(Grey.g76)),
               const Spacer(),
-              Text(value.toStringAsFixed(decimals), style: T.value(N.g95)),
+              Text(value.toStringAsFixed(decimals), style: T.value(Grey.g95)),
             ]))),
           ]),
         ),
@@ -63,11 +63,11 @@ class PillSwitch extends StatelessWidget {
           padding: const EdgeInsets.all(2),
           alignment: on ? Alignment.centerRight : Alignment.centerLeft,
           decoration: BoxDecoration(
-            color: on ? Role.of(C.mode.withValues(alpha: .30), N.g20) : N.g20,
+            color: on ? Role.of(C.mode.withValues(alpha: .30), Grey.g20) : Grey.g20,
             borderRadius: BorderRadius.all(Shape.r(8)),
-            border: Border.all(color: on ? Role.of(Role.selected.withValues(alpha: .85), Role.mode) : N.g26, width: 1),
+            border: Border.all(color: on ? Role.of(Role.selected.withValues(alpha: .85), Role.mode) : Grey.g26, width: 1),
           ),
-          child: Container(width: 10, height: 10, decoration: BoxDecoration(color: on ? Role.of(N.g95, Role.mode) : N.g56, shape: BoxShape.circle)),
+          child: Container(width: 10, height: 10, decoration: BoxDecoration(color: on ? Role.of(Grey.g95, Role.mode) : Grey.g56, shape: BoxShape.circle)),
         ),
       );
 }
@@ -91,17 +91,17 @@ class Segmented extends StatelessWidget {
             padding: EdgeInsets.symmetric(horizontal: expand ? 6 : 12),
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              color: i == index ? N.g20 : null,
+              color: i == index ? Grey.g20 : null,
               borderRadius: BorderRadius.all(Shape.r(5)),
               border: Border(bottom: BorderSide(color: i == index ? (accent ?? Role.selected) : const Color(0x00000000), width: 1)),
             ),
-            child: FittedBox(fit: BoxFit.scaleDown, child: Text(items[i].toUpperCase(), maxLines: 1, softWrap: false, style: T.micro(i == index ? N.g95 : N.g63).copyWith(letterSpacing: .4))),
+            child: FittedBox(fit: BoxFit.scaleDown, child: Text(items[i].toUpperCase(), maxLines: 1, softWrap: false, style: T.micro(i == index ? Grey.g95 : Grey.g63).copyWith(letterSpacing: .4))),
           ),
         );
     return Container(
       height: 26,
       padding: const EdgeInsets.all(2),
-      decoration: BoxDecoration(color: N.g07, borderRadius: BorderRadius.all(Shape.r(7))),
+      decoration: BoxDecoration(color: Grey.g07, borderRadius: BorderRadius.all(Shape.r(7))),
       child: Flex(direction: Axis.horizontal, mainAxisSize: expand ? MainAxisSize.max : MainAxisSize.min, children: [
         for (var i = 0; i < items.length; i++) expand ? Expanded(child: seg(i)) : seg(i),
       ]),
@@ -125,10 +125,10 @@ class Tool extends StatelessWidget {
           height: size,
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            color: fill ?? (on ? N.g20 : N.g13),
+            color: fill ?? (on ? Grey.g20 : Grey.g13),
             shape: round ? BoxShape.circle : BoxShape.rectangle,
             borderRadius: round ? null : BorderRadius.all(Shape.r(6)),
-            border: Border.all(color: on ? N.g44 : N.g20, width: 1),
+            border: Border.all(color: on ? Grey.g44 : Grey.g20, width: 1),
           ),
           child: child,
         ),

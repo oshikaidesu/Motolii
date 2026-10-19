@@ -19,7 +19,7 @@ class DeskTool {
   final Widget Function()? build;
 }
 
-const deskTools = [
+final deskTools = [
   DeskTool('Blend', Pop.toneBlend, 'Layer stack', build: DeskBlend.new),
   DeskTool('Align', Pop.toneLayout, 'Selection', build: DeskAlign.new),
 ];

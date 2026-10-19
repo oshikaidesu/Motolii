@@ -125,7 +125,7 @@ class _LiChip extends StatelessWidget {
 
 // ---- A. Mask stage --------------------------------------------------------------------------------------------------
 const _liModes = ['Add', 'Subtract', 'Intersect', 'Difference'], _liModeWords = ['Add', 'Sub', 'Inter', 'Diff'];
-const _liMaskNames = ['Ellipse', 'Box'], _liMaskTones = [Pop.toneMask, Color(0xFFE8C76A)];
+final _liMaskNames = ['Ellipse', 'Box'], _liMaskTones = [Pop.toneMask, Color(0xFFE8C76A)];
 
 /// contract: points are stored 0..1 of the layer's box; feather and expansion in layer px, the layer being [_liLayerW] wide.
 const _liStageH = 168.0, _liLayerW = 800.0, _liRingGap = 6.0;
@@ -1290,7 +1290,7 @@ void _liLayer(Canvas c, Rect r, int i) {
       )..layout();
       tp.paint(c, r.center - Offset(tp.width / 2, tp.height / 2));
     case 1:
-      const cols = [Pop.toneTime, Pop.tonePlace, Pop.toneTextAnim, Pop.tonePath, Pop.toneSolid];
+      final cols = [Pop.toneTime, Pop.tonePlace, Pop.toneTextAnim, Pop.tonePath, Pop.toneSolid];
       final w = r.width / 6;
       c.save();
       c.clipRect(r);

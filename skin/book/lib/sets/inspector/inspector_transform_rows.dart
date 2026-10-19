@@ -154,7 +154,7 @@ class PosRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // 2D is a layer held to the camera, not a layer without Z: Z shows in every space
-    return const PropRow(
+    return PropRow(
       id: 'v_position',
       label: 'Position',
       ids: ['v_x', 'v_y', 'v_z'],
@@ -215,7 +215,7 @@ class RotRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // contract: rotation keeps its turns, typed 450 stays 450 and reads "1x 90" (B5).
-    return const PropRow(
+    return PropRow(
       id: 'v_rotate',
       label: 'Rotation',
       ids: ['v_rotate_x', 'v_rotate_y', 'v_rotate'],
@@ -233,7 +233,7 @@ const anchorNames = ['Top left', 'Top', 'Top right', 'Left', 'Centre', 'Right', 
 class AnchorRow extends StatelessWidget {
   const AnchorRow({super.key});
   @override
-  Widget build(BuildContext context) => const PropRow(
+  Widget build(BuildContext context) => PropRow(
     id: 'v_anchor',
     label: 'Anchor',
     ids: ['v_anchor_x', 'v_anchor_y'],
@@ -373,7 +373,7 @@ class OpacityRow extends StatelessWidget {
   const OpacityRow({super.key});
   @override
   // contract: opacity is 0-100 %, display only (0.5 stored reads 50 %); the fill shows where it sits in its range (B6, E2).
-  Widget build(BuildContext context) => const PropRow(
+  Widget build(BuildContext context) => PropRow(
     id: 'v_opacity',
     label: 'Opacity',
     cells: [NumField(id: 'v_opacity', unit: '%', decimals: 0, min: 0, max: 100, perPx: .5)],
@@ -384,7 +384,7 @@ class DepthRow extends StatelessWidget {
   const DepthRow({super.key});
   @override
   // contract: 0 reads as the word "Flat" (E3).
-  Widget build(BuildContext context) => const PropRow(
+  Widget build(BuildContext context) => PropRow(
     id: 'depth',
     label: 'Depth',
     cells: [NumField(id: 'depth', unit: 'px', decimals: 0, zeroWord: 'Flat')],

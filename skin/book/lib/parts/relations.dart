@@ -60,18 +60,18 @@ class RelationTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final filled = look == Look.concept;
-    final ink = filled ? N.g07 : N.g91;
+    final ink = filled ? Grey.g07 : Grey.g91;
     return Container(
       width: width,
       height: height,
       decoration: BoxDecoration(
-        color: filled ? fam.c : N.g13,
+        color: filled ? fam.c : Grey.g13,
         borderRadius: BorderRadius.all(Shape.r(8)),
-        border: Border.all(color: look == Look.glow ? fam.c.withValues(alpha: .45) : (filled ? const Color(0x00000000) : N.g20), width: 1),
+        border: Border.all(color: look == Look.glow ? fam.c.withValues(alpha: .45) : (filled ? const Color(0x00000000) : Grey.g20), width: 1),
         boxShadow: look == Look.glow ? [BoxShadow(color: fam.c.withValues(alpha: .22), blurRadius: 16)] : null,
       ),
       child: Flex(direction: Axis.vertical, mainAxisAlignment: MainAxisAlignment.center, children: [
-        FamIcon(fam, color: filled ? N.g07 : fam.c),
+        FamIcon(fam, color: filled ? Grey.g07 : fam.c),
         const SizedBox(height: 7),
         Text(fam.name, style: T.name(ink).copyWith(fontSize: T.px(10.5))),
       ]),
@@ -97,7 +97,7 @@ class _Gadget extends CustomPainter {
     Paint line([double a = 1, double sw = 1.2]) => Paint()..color = c.withValues(alpha: a)..style = PaintingStyle.stroke..strokeWidth = sw;
     void handle(Offset o) {
       cv.drawCircle(o, 6, Paint()..color = c);
-      cv.drawCircle(o, 6, Paint()..color = N.g100..style = PaintingStyle.stroke..strokeWidth = 1.5);
+      cv.drawCircle(o, 6, Paint()..color = Grey.g100..style = PaintingStyle.stroke..strokeWidth = 1.5);
     }
 
     switch (fam.name) {
@@ -137,7 +137,7 @@ class _Gadget extends CustomPainter {
           }
         }
         handle(Offset(w * .14, w * .72));
-        cv.drawPath(Path()..moveTo(w * .76, w * .34)..lineTo(w * .9, w * .24)..lineTo(w * .8, w * .18)..close(), Paint()..color = N.g95);
+        cv.drawPath(Path()..moveTo(w * .76, w * .34)..lineTo(w * .9, w * .24)..lineTo(w * .8, w * .18)..close(), Paint()..color = Grey.g95);
       default: // Attach
         final a = Offset(w * .3, w * .62), b = Offset(w * .7, w * .38);
         cv.drawLine(a, b, line(.9, 1.4));
@@ -164,9 +164,9 @@ class RelationCard extends StatelessWidget {
   Widget build(BuildContext context) => Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: look == Look.quiet ? N.g13 : const Color(0xFF1B1B1D),
+          color: look == Look.quiet ? Grey.g13 : const Color(0xFF1B1B1D),
           borderRadius: BorderRadius.all(Shape.r(10)),
-          border: Border.all(color: look == Look.glow ? fam.c.withValues(alpha: .4) : N.g20),
+          border: Border.all(color: look == Look.glow ? fam.c.withValues(alpha: .4) : Grey.g20),
           boxShadow: look == Look.glow ? [BoxShadow(color: fam.c.withValues(alpha: .16), blurRadius: 24)] : null,
         ),
         child: Flex(direction: Axis.vertical, crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
@@ -176,7 +176,7 @@ class RelationCard extends StatelessWidget {
             Flex(direction: Axis.vertical, crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
               Text(fam.name, style: T.title()),
               const SizedBox(height: 4),
-              Text(fam.jp, style: T.label(N.g56)),
+              Text(fam.jp, style: T.label(Grey.g56)),
             ]),
             const Spacer(),
             PillSwitch(on: on, fam: fam, onChanged: onToggle),
