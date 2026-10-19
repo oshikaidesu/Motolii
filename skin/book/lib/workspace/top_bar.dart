@@ -25,7 +25,7 @@ class WsTopBar extends StatelessWidget {
           SizedBox(width: Shape.s(14)),
           const _UndoRedo(),
           SizedBox(width: Shape.s(14)),
-          Text(ws.document ?? '', style: T.name(Grey.g95).copyWith(fontWeight: FontWeight.w600)),
+          Flexible(child: Text(ws.document ?? '', maxLines: 1, overflow: TextOverflow.ellipsis, style: T.name(Grey.g95).copyWith(fontWeight: FontWeight.w600))), // (a long name gives way, not the bar)
           SizedBox(width: Shape.s(6)),
           Text('/', style: T.name(Grey.g44)),
           SizedBox(width: Shape.s(6)),

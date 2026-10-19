@@ -8,6 +8,7 @@ import 'package:lab_book/motolii.dart' show motoliiDir;
 import 'package:lab_book/workspace/door.dart';
 import 'package:lab_book/sets/inspector/inspector_parts.dart' show Chooser, Ctx, InspectorPanel;
 import 'package:lab_book/sets/inspector/inspector_rows_prop_row.dart' show PropRow;
+import 'package:lab_book/theme.dart' show ColorTheme;
 import 'package:lab_book/workspace/timeline.dart' show WsTimeline;
 
 export 'package:lab_book/motolii.dart' show motoliiDir;
@@ -24,6 +25,7 @@ Future<Ws> openWorkspace(WidgetTester t, {List<WsPane> extra = const [], List<De
   t.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.menu, (_) async => null);   // (the system's menu bar is not there in a test)
   final doc = document ?? '${Directory.systemTemp.createTempSync('door').path}/door.motolii';
   openedDocument = doc;
+  ColorTheme.at = '${Directory.systemTemp.path}/motolii_test_no_theme.xml'; // (the window's own skin, whatever the home folder wears)
   await t.pumpWidget(WidgetsApp(color: const Color(0xFF000000), builder: (c, _) => Workspace(document: doc, extra: extra, tools: tools, view: view)));
   await t.pumpAndSettle();
   return wsOf(t);

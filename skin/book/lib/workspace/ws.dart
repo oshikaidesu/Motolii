@@ -396,19 +396,23 @@ class Ws extends ChangeNotifier {
       ..ensureVisualUpdate();
   }
 
-  /// Joined: the whole-screen effects on the stage (the files its script says, nearest the picture first).
-  List<String> get screenFx => [
-    for (final f in (_inside?.word(0, 'script') ?? '').split(' '))
-      if (f.isNotEmpty && f != 'none') f,
-  ];
+  /// Joined: the effects on the picked thing (its fx: as the camera sees it, After Effects' effects on a layer), or with
+  /// nothing picked on the whole stage (its script), nearest the picture first.
+  List<String> get screenFx {
+    final t = int.tryParse(selected ?? '');
+    return [
+      for (final f in (_inside?.word(t ?? 0, t == null ? 'script' : 'fx') ?? '').split(' '))
+        if (f.isNotEmpty && f != 'none') f,
+    ];
+  }
 
-  /// Joined: a whole-screen effect put over the others on the stage, or taken off (one step either way).
+  /// Joined: an effect put over the others on the picked thing (none picked: the whole stage), or taken off (one step either way).
   bool screenToggle(String file) {
-    final m = _inside;
+    final m = _inside, t = int.tryParse(selected ?? '');
     if (m == null) return false;
     final now = screenFx, on = now.remove(file);
     if (!on) now.add(file);
-    after(m.later('say', name: 'script', word: now.isEmpty ? 'none' : now.join(' '))); // (an effect's shader made: the window does not wait for it)
+    after(m.later('say', thing: t ?? 0, name: t == null ? 'script' : 'fx', word: now.isEmpty ? 'none' : now.join(' '))); // (an effect's shader made: the window does not wait for it)
     return true;
   }
 

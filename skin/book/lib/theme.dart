@@ -25,6 +25,10 @@ abstract final class ColorTheme {
   /// The roles that are numbers or words (the skin's shapes and type): every `<Name Value="..."/>` that is not a colour.
   static final words = ValueNotifier<Map<String, String>>(const {});
 
+  /// The theme file the window reads unless told another (none: the home folder's; a test's window sets one of its own, so
+  /// what the person who runs it wears does not move the test).
+  static String? at;
+
   /// A role's colour: the theme's, else [usual].
   static Color of(String role, Color usual) => roles.value[role] ?? usual;
 
@@ -37,7 +41,7 @@ abstract final class ColorTheme {
   /// The theme file read (not there, or not readable: the window's own colours and shapes).
   static void load([String? path]) {
     try {
-      final file = File(path ?? '${Platform.environment['HOME']}/.motolii/theme.xml');
+      final file = File(path ?? at ?? '${Platform.environment['HOME']}/.motolii/theme.xml');
       folder = file.parent.path;
       final xml = file.readAsStringSync();
       roles.value = parse(xml);
@@ -74,7 +78,7 @@ abstract final class ColorTheme {
   /// The theme file read now, and again whenever it is written ([changed]: the window built again in place).
   static StreamSubscription<FileSystemEvent>? _watching;
   static void watch(void Function() changed, [String? path]) {
-    final file = File(path ?? '${Platform.environment['HOME']}/.motolii/theme.xml');
+    final file = File(path ?? at ?? '${Platform.environment['HOME']}/.motolii/theme.xml');
     load(file.path);
     _watching?.cancel();
     try {

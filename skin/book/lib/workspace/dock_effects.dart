@@ -33,12 +33,12 @@ class EffectsShelf extends StatelessWidget {
       weights.add(1.0 + (folded ? 0 : rows.length));
     }
 
+    // (one list: with a thing picked, every effect goes on it, as the camera sees it; with none, the shaders go on the whole stage)
     final on = ws.fxOf(ws.selected), things = [for (final (name, _) in m?.thingEffects ?? const <(String, String)>[]) if (c.hit(name)) name];
-    section('Effects', Pop.toneBlend, [for (final n in things) _FxRow(n, c, on: on.contains(n))]);
-    // (the inside's whole-screen effects, each on the stage or not: effects/*.wgsl, its knobs on the stage's card)
-    final screen = ws.screenFx;
-    section('Screen', Pop.toneOutput, [
-      for (final e in m?.effects ?? const <(String, String)>[])
+    final screen = ws.screenFx, picked = int.tryParse(ws.selected ?? '') != null;
+    section(picked ? 'Effects' : 'Screen', picked ? Pop.toneBlend : Pop.toneOutput, [
+      if (picked) for (final n in things) _FxRow(n, c, on: on.contains(n)),
+      for (final e in m?.effects ?? const <(String, String)>[])   // (effects/*.wgsl, their knobs on the card of what they are on)
         if (c.hit(e.$1)) _ScreenRow(e.$1, on: screen.indexOf(e.$2), onTap: () => ws.screenToggle(e.$2)),
     ]);
     // (the inside's motions, Cavalry's Animators, one at a time on the picked thing: animators/*.js)

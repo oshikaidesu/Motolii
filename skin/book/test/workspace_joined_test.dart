@@ -1382,6 +1382,31 @@ void main() {
     await _close(t);
   }, skip: !_built);
 
+  testWidgets('with a thing picked, an effect of the list goes on it (as the camera sees it, its fx), not on the whole stage; a press takes it off', (t) async {
+    final ws = await _pump(t), m = ws.inside!;
+    final cube = m.add('solid', 'cube');
+    final half = m.effects.firstWhere((e) => e.$2.endsWith('/halftone.wgsl'));
+    ws
+      ..reread()
+      ..select('$cube')
+      ..shelf = 'Effects';
+    await t.pumpAndSettle();
+    final row = find.byKey(ValueKey('ws-screen-${half.$1}'));
+    await t.enterText(find.descendant(of: find.byType(DockSearch), matching: find.byType(EditableText)), half.$1);
+    await t.pumpAndSettle();
+    await t.tap(row);
+    await t.pumpAndSettle();
+    expect(m.word(cube, 'fx'), half.$2, reason: m.trouble);
+    expect(m.word(0, 'script'), anyOf('', 'none'), reason: 'the whole stage is left as it was');
+    expect(find.descendant(of: row, matching: find.text('ON 1')), findsOneWidget);
+    await t.tap(row);
+    await t.pumpAndSettle();
+    expect(ws.screenFx, isEmpty, reason: 'taken off');
+    expect(t.takeException(), isNull);
+    await expectSameAfterReopen(t);
+    await _close(t);
+  }, skip: !_built);
+
   testWidgets('a motion is a file: the Effects shelf lists animators/ for the picked thing, a press gives it (a text then moves letter by letter), its knobs on its card, a press takes it off', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final text = m.add('text', '/System/Library/Fonts/Supplemental/Arial Black.ttf');
