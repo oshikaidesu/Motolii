@@ -199,6 +199,12 @@ void main() {
           await cmdZ();
           await shot('cmd_z_puts_it_back');
           expect(find.textContaining(' · Rotation'), findsNWidgets(3));
+          final g = await carry(tile('Rotation'), at(340, -220)); // (carried onto square 4 and rested there: its ring opens; let go with nothing aimed)
+          await t.pump(const Duration(milliseconds: 600));
+          await shot('rotation_rests_on_square_4_ring_opens');
+          await g.up();
+          await shot('square_4_rotation_wears_b');
+          expect(find.text('B'), findsWidgets); // (a rest before letting go still puts the tag on: the same-named value)
           await t.tapAt(at(190, 0));
           await shot('square_2_picked_its_rotation_wears_a');
       }

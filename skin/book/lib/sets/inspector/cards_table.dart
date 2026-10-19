@@ -943,10 +943,13 @@ class _StageState extends State<_Stage> {
         t.join(id, ValRef(t.cur, v.id), on: target);
       case ValRef r when id != null:
         t.join(id, r, on: target);
-      case Val() || ValRef() when anchor == null && under != null:
-        final r = _ref(o, t)!;
-        if (t.valOr(r.id, of: under) != null) {
-          t.join(r.id, r, on: under); // (let go on a thing at once: its value of the same name)
+      case Val() || ValRef() when (under ?? target) != null:
+        final r = _ref(o, t)!, th = under ?? target!;
+        if (t.valOr(r.id, of: th) != null) {
+          t.join(r.id, r, on: th); // (let go on a thing, at once or after its ring opened with nothing aimed: its value of the same name)
+        } else if (anchor != null) {
+          pending = r; // (its ring is open already: it stays, waiting for a tap)
+          target = th;
         } else {
           final box = context.findRenderObject()! as RenderBox, p = at ?? box.size.center(Offset.zero);
           pending = r; // (none of that name there: its ring opens and waits for a tap)
@@ -1114,7 +1117,7 @@ class _Ring extends CustomPainter {
         )..layout();
         tp.paint(c, m + Offset(-tp.width / 2, r + 8));
         if (t.litTag != null && t.clock < t.litUntil && worn.contains(t.litTag)) { // (the wearers of a tag just put on, or of a tapped mark)
-          c.drawRRect(RRect.fromRectAndRadius(Rect.fromCircle(center: m, radius: r + 16), const Radius.circular(10)), Paint()..color = t.litTag!.c..style = PaintingStyle.stroke..strokeWidth = 2);
+          c.drawRRect(RRect.fromRectAndRadius(Rect.fromCircle(center: m, radius: r + 4), const Radius.circular(10)), Paint()..color = t.litTag!.c..style = PaintingStyle.stroke..strokeWidth = 2);
         }
       }
     }
