@@ -2,6 +2,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/widgets.dart';
+import '../parts/skin_parts.dart';
 
 enum DockG {
   media,
@@ -75,6 +76,7 @@ class _P extends CustomPainter {
 
   @override
   void paint(Canvas cv, Size s) {
+    if (SkinParts.draw(cv, s, 'dock.${g.name}', c)) return; // (the skin's own picture, if it brings one)
     final w = s.width;
     final st = Paint()
       ..color = c

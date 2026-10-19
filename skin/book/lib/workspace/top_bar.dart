@@ -3,6 +3,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/widgets.dart';
+import '../parts/skin_parts.dart';
 
 import '../tokens.dart';
 import 'stage_art.dart' show WsArt;
@@ -182,6 +183,7 @@ class _UndoPaint extends CustomPainter {
   final Color c;
   @override
   void paint(Canvas canvas, Size s) {
+    if (SkinParts.draw(canvas, s, 'undo', c)) return; // (the skin's own picture, if it brings one)
     final p = Paint()
       ..color = c
       ..style = PaintingStyle.stroke
@@ -238,6 +240,7 @@ class _ShadePaint extends CustomPainter {
   final Color c;
   @override
   void paint(Canvas canvas, Size s) {
+    if (SkinParts.draw(canvas, s, 'shade', c)) return; // (the skin's own picture, if it brings one)
     final r = Rect.fromLTWH(.7, .7, s.width - 1.4, s.height - 1.4);
     canvas
       ..drawOval(

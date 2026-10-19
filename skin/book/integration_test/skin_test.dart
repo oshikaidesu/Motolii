@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
+import 'package:lab_book/parts/skin_parts.dart';
 import 'package:lab_book/theme.dart';
 import 'package:lab_book/workspace/timeline.dart';
 import 'package:lab_book/workspace/workspace.dart' show Workspace;
@@ -29,6 +30,7 @@ void main() {
       m.add(k, f);
     }
     Future<void> shot(String name) async {
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 600))); // (the skin's pictures read from disk)
       for (var k = 0; k < 20; k++) {
         await t.pump(const Duration(milliseconds: 50));
       }
@@ -45,5 +47,6 @@ void main() {
     t.binding.reassembleApplication();
     await shot('labs');
     expect(ColorTheme.number('Corner', 1), 3.5); // (the skin's numbers were read)
+    expect(SkinParts.count, 8); // (and its drawn parts, from the folder it names beside it)
   });
 }

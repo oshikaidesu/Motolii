@@ -2,6 +2,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/widgets.dart';
+import '../../parts/skin_parts.dart';
 
 import '../../parts/controls.dart' show Look;
 import '../../tokens.dart';
@@ -51,6 +52,7 @@ class TpGlyphPainter extends CustomPainter {
 
   @override
   void paint(Canvas c, Size s) {
+    if (SkinParts.draw(c, s, 'tp.${g.name}', color)) return; // (the skin's own picture, if it brings one)
     c.translate(s.width / 2, s.height / 2);
     c.scale(s.shortestSide / 12);
     final line = Paint()..style = PaintingStyle.stroke..strokeWidth = 1.2..strokeCap = StrokeCap.round..strokeJoin = StrokeJoin.round..color = color;

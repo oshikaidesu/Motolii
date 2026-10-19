@@ -2,6 +2,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/widgets.dart';
+import 'skin_parts.dart';
 
 import '../tokens.dart';
 
@@ -22,6 +23,7 @@ class _GlyphPainter extends CustomPainter {
   final Color color;
   @override
   void paint(Canvas c, Size s) {
+    if (SkinParts.draw(c, s, 'glyph.${kind.name}', color)) return; // (the skin's own picture, if it brings one)
     final w = s.width, st = Paint()..color = color..style = PaintingStyle.stroke..strokeWidth = w * .08..strokeCap = StrokeCap.round..strokeJoin = StrokeJoin.round, fl = Paint()..color = color;
     Offset p(double x, double y) => Offset(x * w, y * w);
     switch (kind) {

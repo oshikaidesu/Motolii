@@ -7,6 +7,7 @@
 		<Corner Value="3.5"/>
 		<TextScale Value="1.08"/>
 		<FontSans Value="Avenir Next"/>
+		<Parts Value="labs/parts"/>
 		<Grey00 Value="#e6e6e6"/>
 		<Grey07 Value="#ffffff"/>
 		<Grey10 Value="#fafafa"/>

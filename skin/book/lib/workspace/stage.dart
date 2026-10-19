@@ -2,6 +2,7 @@
 // The picture is the work (stage_art.dart); the chrome around it stays grey and round, with the accent only on what is on.
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
+import '../parts/skin_parts.dart';
 
 import '../parts/glyphs.dart';
 import '../tokens.dart';
@@ -198,6 +199,7 @@ class _IconPainter extends CustomPainter {
   final Color c;
   @override
   void paint(Canvas cv, Size s) {
+    if (SkinParts.draw(cv, s, 'stage.${icon.name}', c)) return; // (the skin's own picture, if it brings one)
     final p = Paint()
       ..color = c
       ..style = PaintingStyle.stroke

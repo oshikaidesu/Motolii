@@ -1,6 +1,7 @@
 // The desk's shared small things: the tool catalog (name, hue, what it acts on), each tool's painted glyph, and the round
 // touchables the desk's bodies use (chip, icon button, scrub field, readout).
 import 'package:flutter/widgets.dart';
+import '../parts/skin_parts.dart';
 
 import '../sets/inspector/inspector_parts.dart' show Hov, Pop;
 import '../tokens.dart';
@@ -51,6 +52,7 @@ class DeskGlyph extends CustomPainter {
 
   @override
   void paint(Canvas c, Size s) {
+    if (SkinParts.draw(c, s, 'desk.${name.toLowerCase().replaceAll(' ', '-')}', ink)) return; // (the skin's own picture, if it brings one)
     final u = s.width / 20;
     Offset p(double x, double y) => Offset(x * u, y * u);
     final fill = Paint()..color = ink;

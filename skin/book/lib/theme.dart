@@ -37,7 +37,9 @@ abstract final class ColorTheme {
   /// The theme file read (not there, or not readable: the window's own colours and shapes).
   static void load([String? path]) {
     try {
-      final xml = File(path ?? '${Platform.environment['HOME']}/.motolii/theme.xml').readAsStringSync();
+      final file = File(path ?? '${Platform.environment['HOME']}/.motolii/theme.xml');
+      folder = file.parent.path;
+      final xml = file.readAsStringSync();
       roles.value = parse(xml);
       words.value = {
         for (final m in RegExp(r'<(\w+)\s+Value="([^"#][^"]*)"\s*/>').allMatches(xml)) m.group(1)!: m.group(2)!,
@@ -50,6 +52,10 @@ abstract final class ColorTheme {
     shadeSaid.value = switch (words.value['Shade']) { 'light' => true, 'dark' => false, _ => null };
   }
 
+  /// The folder of the theme file read last: a place a role names is read from here unless it is whole (`/...`) or from home (`~/...`).
+  static String folder = '';
+  static String place(String w) => w.isEmpty || w.startsWith('/') ? w : (w.startsWith('~/') ? '${Platform.environment['HOME']}${w.substring(1)}' : '$folder/$w');
+
   /// The shade the theme asks for (null: it says none; the window's own switch decides).
   static final shadeSaid = ValueNotifier<bool?>(null);
 
@@ -57,7 +63,7 @@ abstract final class ColorTheme {
   static void _fonts() {
     for (final e in words.value.entries.where((e) => e.key.startsWith('Font') && e.key.endsWith('File'))) {
       final family = words.value[e.key.substring(0, e.key.length - 4)];
-      final path = e.value.startsWith('~/') ? '${Platform.environment['HOME']}${e.value.substring(1)}' : e.value;
+      final path = place(e.value);
       if (family == null || !File(path).existsSync()) continue;
       FontLoader(family)
         ..addFont(File(path).readAsBytes().then((b) => ByteData.sublistView(b)))
