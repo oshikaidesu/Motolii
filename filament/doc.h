@@ -1518,6 +1518,7 @@ static void doc_moment(Doc& d, double now) {
     // layer_view; flat things there are sharp). The order within a run of flat things is the blend order, and a flat
     // thing's looks neither ask nor write depth.
     std::vector<int> runOf(lies.size(), -1), sorts;
+    std::vector<char> runReads;   // (whether a run reads what is under it: a blend that reads, or one with effects of its own that does)
     for (size_t i = 0; i < lies.size(); ++i) {
         if (!lies[i].on || lies[i].shown->camera || lies[i].shown->behaviour || !lies[i].shown->light.isNull()) continue;   // (a camera, a behaviour or a light is in no run: nothing of it is drawn)
         // (a flat thing that reads what is under (doc_blend_way) is a run of its own, drawn once all under it is: the
@@ -1525,9 +1526,12 @@ static void doc_moment(Doc& d, double now) {
         // (a thing with effects of its own is a run of its own too, drawn alone and then given them: screen.h thing_effects_draw;
         //  never the first run either, the stage's own view, which draws what is behind everything)
         const std::string fx = doc_word(d, lies[i].thing, "fx");
-        const int sort = !fx.empty() && fx != "none" ? 3 : lies[i].solid ? 1 : doc_blend_way(doc_word(d, lies[i].thing, "blend")) ? 2 : 0;
-        if (sort >= 2 && sorts.empty()) sorts.push_back(0);
-        if (sorts.empty() || sorts.back() != sort || sort >= 2) sorts.push_back(sort);
+        const std::string laidOn = doc_word(d, lies[i].thing, "blend");
+        const bool laysOwn = !fx.empty() && fx != "none" && !laidOn.empty() && laidOn != "normal";   // (with effects of its own, any way but normal is taken last, over what is under: screen.h)
+        const bool reads = !lies[i].solid && (doc_blend_way(laidOn) || laysOwn || doc_word(d, lies[i].thing, "fill") == "behind");   // (a blend that reads, or a fill of what is behind)
+        const int sort = !fx.empty() && fx != "none" ? 3 : lies[i].solid ? 1 : reads ? 2 : 0;
+        if (sort >= 2 && sorts.empty()) sorts.push_back(0), runReads.push_back(0);
+        if (sorts.empty() || sorts.back() != sort || sort >= 2) sorts.push_back(sort), runReads.push_back(reads);
         runOf[i] = (int)sorts.size() - 1;
     }
     const int base = sorts.size() > 1 && sorts[0] == 0 && sorts[1] == 1 ? 1 : 0;   // (the last run in the stage's own view: flat things under the first solid ones)
@@ -1554,7 +1558,7 @@ static void doc_moment(Doc& d, double now) {
     }
     s.layered = sorts.size() > (size_t)base + 1 ? sorts.size() - (size_t)base - 1 : 0;
     s.backdropBefore.assign(s.layered, 0);
-    for (size_t k = 0; k < s.layered; ++k) s.backdropBefore[k] = sorts[k + (size_t)base + 1] == 2;
+    for (size_t k = 0; k < s.layered; ++k) s.backdropBefore[k] = sorts[k + (size_t)base + 1] == 2 || (sorts[k + (size_t)base + 1] == 3 && k + (size_t)base + 1 < runReads.size() && runReads[k + (size_t)base + 1]);
     s.layerDraw.assign(s.layered, nullptr);
     for (size_t i = 0; i < lies.size(); ++i)   // (those with effects of their own: their run drawn by their effects)
         if (runOf[i] > base && sorts[(size_t)runOf[i]] == 3) {
@@ -1565,12 +1569,14 @@ static void doc_moment(Doc& d, double now) {
                 std::lock_guard<std::recursive_timed_mutex> hold(d.lock);   // (asked while the picture is drawn)
                 return doc_number(d, thing, doc_screen_knob(file, name).c_str(), d.stage->now, usual);
             };
-            s.layerDraw[(size_t)(runOf[i] - base - 1)] = [&s, &st, numbers](View* v) { thing_effects_draw(s, st, v, numbers); };
+            const std::string laid = doc_word(d, thing, "blend");   // (its way of lying on what is under, taken last: the W3C's 1-21, then add, multiply, screen)
+            const int way = doc_blend_way(laid) ? doc_blend_way(laid) : laid == "add" ? 22 : laid == "multiply" ? 23 : laid == "screen" ? 24 : 0;
+            s.layerDraw[(size_t)(runOf[i] - base - 1)] = [&s, &st, numbers, way](View* v) { thing_effects_draw(s, st, v, numbers, way); };
         }
-    if (std::find(sorts.begin(), sorts.end(), 2) != sorts.end())   // (as large as what the views draw into: the desk's when it is drawn there, else the stage's)
+    if (std::find(s.backdropBefore.begin(), s.backdropBefore.end(), (char)1) != s.backdropBefore.end())   // (as large as what the views draw into: the desk's when it is drawn there, else the stage's)
         backdrop_as(s, s.desk.w && !s.over ? s.desk.w : (uint32_t)s.w, s.desk.w && !s.over ? s.desk.h : (uint32_t)s.h);
     for (size_t i = 0; i < lies.size(); ++i)   // (those that read what is under: which way, and the picture of it)
-        if (runOf[i] >= 0 && sorts[(size_t)runOf[i]] == 2) {   // (every part of it: its fill, its edge, each copy's own look)
+        if (runOf[i] >= 0 && (sorts[(size_t)runOf[i]] == 2 || (sorts[(size_t)runOf[i]] == 3 && runReads[(size_t)runOf[i]]))) {   // (every part of it: its fill, its edge, each copy's own look)
             const Doc::Shown& t = *lies[i].shown;
             const Mesh* sheet = t.film ? t.film->sheet : t.drawn ? t.drawn->sheet : nullptr;
             auto& faces = s.engine->getRenderableManager();
@@ -1580,7 +1586,8 @@ static void doc_moment(Doc& d, double now) {
                 const auto one = faces.getInstance(made.thing);
                 for (size_t part = 0; part < faces.getPrimitiveCount(one); ++part) {
                     MaterialInstance* look = faces.getMaterialInstanceAt(one, part);
-                    look->setParameter("blendWay", way);
+                    look->setParameter("blendWay", sorts[(size_t)runOf[i]] == 3 ? 0.f : way);   // (with effects of its own: its way taken once they are on)
+                    look->setParameter("behind", doc_word(d, lies[i].thing, "fill") == "behind" ? 1.f : 0.f);
                     if (s.backdrop) look->setParameter("backdrop", s.backdrop, TextureSampler(TextureSampler::MinFilter::NEAREST, TextureSampler::MagFilter::NEAREST));
                 }
             }
@@ -1935,7 +1942,7 @@ static void doc_moment(Doc& d, double now) {
 // call for its kind), one the stage has and the document has not is taken off, one whose making is told otherwise now
 // is made again. false: a thing could not be made (d.trouble says which, and why).
 // All that a thing's making goes by: one changed, the thing is made again (doc_match), carried by a hand too (doc_carry).
-static const char* const doc_making = "'kind','file','shape','path','blend','keyed','space','begin','duration','speed','text','fill','fill_rule','wide','points','inner','round','bloat','zigzag','offset','warp','clip','stroke','stroke_width','align','blur','shadow','shadow_distance','shadow_angle','shadow_blur','shadow_opacity','glow','glow_blur','glow_opacity','copies','tint','tint_black','tint_white','tritone','tritone_shadow','tritone_midtone','tritone_highlight','letter_spacing','line_spacing','italic','cap','join','heads','head_size','head_shape','dash','dash_offset','metallic','roughness','reflectance','clear_coat','clear_coat_roughness','falloff','shadows','shadow_softness','contact_shadows','sheen','anisotropy','shading','thickness','light_group','script','copy_fill','gradient','gradient_angle','gradient_scale','gradient_spread','wrap','wrap_at','split','ior','dispersion','swim','dark','vivid','marker'";
+static const char* const doc_making = "'kind','file','shape','path','blend','fx','keyed','space','begin','duration','speed','text','fill','fill_rule','wide','points','inner','round','bloat','zigzag','offset','warp','clip','stroke','stroke_width','align','blur','shadow','shadow_distance','shadow_angle','shadow_blur','shadow_opacity','glow','glow_blur','glow_opacity','copies','tint','tint_black','tint_white','tritone','tritone_shadow','tritone_midtone','tritone_highlight','letter_spacing','line_spacing','italic','cap','join','heads','head_size','head_shape','dash','dash_offset','metallic','roughness','reflectance','clear_coat','clear_coat_roughness','falloff','shadows','shadow_softness','contact_shadows','sheen','anisotropy','shading','thickness','light_group','script','copy_fill','gradient','gradient_angle','gradient_scale','gradient_spread','wrap','wrap_at','split','ior','dispersion','swim','dark','vivid','marker'";
 // The values that move a flat shape's points as it is drawn (flat.mat's vertex stage): a shape with any of them cut
 // fine all along, one with none only round its curves (a long line in four points, not two thousand).
 static const char* const doc_bending = "'warp','bend','twist','pinch','skew','squash','wiggle','stretch','pin_tl_x','pin_tl_y','pin_tr_x','pin_tr_y','pin_bl_x','pin_bl_y','pin_br_x','pin_br_y'";
@@ -1995,7 +2002,9 @@ static bool doc_match(Doc& d) {
         if (d.shown.count(thing)) continue;
         Doc::Shown made{of};
         const std::string kind = doc_word(d, thing, "kind"), file = doc_word(d, thing, "file"), laid = doc_word(d, thing, "blend"), shape = doc_word(d, thing, "shape");
-        const char* lay = laid.empty() || laid == "normal" || doc_blend_way(laid) ? nullptr : laid.c_str();   // (one that reads what is under: drawn as normal, flat.mat mixes it)
+        const std::string ownFx = doc_word(d, thing, "fx");
+        const bool effected = !ownFx.empty() && ownFx != "none";   // (with effects of its own: drawn alone as normal, its way of lying on what is under taken once they are on: screen.h)
+        const char* lay = effected || laid.empty() || laid == "normal" || doc_blend_way(laid) ? nullptr : laid.c_str();   // (one that reads what is under: drawn as normal, flat.mat mixes it)
         std::string why = "it could not be read";
         const std::string fill = doc_word(d, thing, "fill");
         // (a fill is a colour, six digits; or, of a text or a flat shape, two colours or more: a ramp down it)
@@ -2090,10 +2099,10 @@ static bool doc_match(Doc& d) {
             }
         } else if (kind == "text") {   // (words in a font: said by `say N text ...`; until then, the font's own name)
             const std::string words = doc_word(d, thing, "text");
-            if (!fill.empty() && rgb < 0) why = "a text's fill is six digits, as ff3366";
+            if (!fill.empty() && fill != "behind" && rgb < 0) why = "a text's fill is six digits, as ff3366, or behind (what is behind it)";
             else if ((stroke.empty() || edgeRgb >= 0) && fxOk) made.drawn = type(s, words.empty() ? std::filesystem::path(file).stem().string().c_str() : words.c_str(), file.c_str(), mat4f{}, 1.f, fill.empty() ? float3{0x11 / 255.f} : colour, lay, edge, (float)doc_number(d, thing, "align", 0, 0), fx);
         } else if (kind == "shape") {   // (a flat shape in one colour: ThorVG's own rectangle or circle)
-            if (!fill.empty() && fill != "none" && rgb < 0) why = "a shape's fill is six digits, as ff3366, or none";
+            if (!fill.empty() && fill != "none" && fill != "behind" && rgb < 0) why = "a shape's fill is six digits, as ff3366, none, or behind (what is behind it)";
             else if ((!stroke.empty() && edgeRgb < 0) || !fxOk) {}
             else if (shape == "solid") {   // (a flat colour as large as the stage, where it stands at first: as wide to its height, and as high in the stage's units)
                 const float high = (float)(2.0 * up.w / up.y);
@@ -2882,6 +2891,7 @@ struct DocEffect { const char* name; const char* value; const char* on; bool wor
 static const DocEffect doc_effects[] = {
     {"Gaussian Blur", "blur", "12", false}, {"Drop Shadow", "shadow", "000000", true}, {"Glow", "glow", "ffd166", true},
     {"Trim Paths", "trim", "keys 0 1 1 0", false}, {"Duotone", "tint", "1", false}, {"Gradient Map", "tritone", "1", false},
+    {"Background Copy", "fill", "behind", true},   // (its fill what is behind it: the effects on it then work on the background in its shape, and it still lies on what is under as its blend says; After Effects' adjustment layer as one more effect)
 };
 // The shelf's effects, "name\tvalue" one to a line.
 static std::string doc_effect_names() {
@@ -2893,7 +2903,7 @@ static std::string doc_effect_names() {
 static bool doc_effect(Doc& d, int thing, const char* name, double at) {
     for (const DocEffect& e : doc_effects) {
         if (strcmp(e.name, name)) continue;
-        const bool on = doc_on(d, thing, e.value);
+        const bool on = !strcmp(e.value, "fill") ? doc_word(d, thing, "fill") == e.on : doc_on(d, thing, e.value);   // (a fill: on when it is this one)
         doc_act(d);
         bool ok;
         if (on) ok = doc_knows(d, thing, e.value) && doc_change(d, sqlite3_mprintf("delete from fact where thing = %d and name = %Q", thing, e.value));   // (unsaid: as it was before it was put on)

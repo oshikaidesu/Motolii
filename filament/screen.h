@@ -141,6 +141,7 @@ struct ScreenStack {
     Texture* between[2] = {nullptr, nullptr};
     RenderTarget* betweenTarget[2] = {nullptr, nullptr};
     door::Screen* copy = nullptr;   // a picture put out as it is (an effect whose last pass draws into its own picture)
+    door::Screen* lay = nullptr;    // a thing's effects laid on what is under it in its way (its knobs its own: thing_effects_draw)
 };
 static Texture* screen_picture(Stage& s) {
     return Texture::Builder().width((uint32_t)s.w).height((uint32_t)s.h).levels(1).format(Texture::InternalFormat::RGBA8)
@@ -353,7 +354,56 @@ static void thing_effects(Stage& s, ScreenStack& st, const std::string& files) {
         if (made->door) st.fx.push_back(made);
     }
 }
-static void thing_effects_draw(Stage& s, ScreenStack& st, View* v, const ScreenNumbers& numbers) {
+// way: how it lies on what is under once its effects are on (0 as it is; the W3C's 1-21, then add, multiply, screen): as
+// After Effects takes a layer's effects first and its mode last, reading what is under (kit.h backdrop).
+static const char* const thing_lay_shader = R"WGSL(struct Knobs { way: f32, a: f32, b: f32, c: f32 };
+@group(0) @binding(0) var made: texture_2d<f32>;
+@group(0) @binding(1) var near0: sampler;
+@group(0) @binding(2) var alone: texture_2d<f32>;
+@group(0) @binding(3) var near1: sampler;
+@group(0) @binding(4) var under: texture_2d<f32>;
+@group(0) @binding(5) var near2: sampler;
+@group(0) @binding(6) var<uniform> k: Knobs;
+fn lum(c: vec3f) -> f32 { return dot(c, vec3f(0.3, 0.59, 0.11)); }
+fn clipc(c0: vec3f) -> vec3f {
+  var c = c0; let l = lum(c); let n = min(c.r, min(c.g, c.b)); let x = max(c.r, max(c.g, c.b));
+  if (n < 0.0) { c = l + (c - l) * l / max(l - n, 1e-5); }
+  if (x > 1.0) { c = l + (c - l) * (1.0 - l) / max(x - l, 1e-5); }
+  return c;
+}
+fn setLum(c: vec3f, l: f32) -> vec3f { return clipc(c + (l - lum(c))); }
+fn sat(c: vec3f) -> f32 { return max(c.r, max(c.g, c.b)) - min(c.r, min(c.g, c.b)); }
+fn setSat(c: vec3f, s: f32) -> vec3f { let n = min(c.r, min(c.g, c.b)); let x = max(c.r, max(c.g, c.b)); if (x > n) { return (c - n) * s / (x - n); } return vec3f(0.0); }
+fn soft(b: vec3f, s: vec3f) -> vec3f {
+  let d = mix(sqrt(b), ((16.0 * b - 12.0) * b + 4.0) * b, step(b, vec3f(0.25)));
+  return mix(b + (2.0 * s - 1.0) * (d - b), b - (1.0 - 2.0 * s) * b * (1.0 - b), step(s, vec3f(0.5)));
+}
+fn hard(b: vec3f, s: vec3f) -> vec3f { return mix(1.0 - (1.0 - b) * (1.0 - (2.0 * s - 1.0)), b * 2.0 * s, step(s, vec3f(0.5))); }
+fn dodge(b: vec3f, s: vec3f) -> vec3f { return mix(min(vec3f(1.0), b / max(1.0 - s, vec3f(1e-5))), vec3f(1.0), step(vec3f(1.0), s)) * step(vec3f(1e-5), b); }
+fn burn(b: vec3f, s: vec3f) -> vec3f { return mix(1.0 - min(vec3f(1.0), (1.0 - b) / max(s, vec3f(1e-5))), vec3f(0.0), step(s, vec3f(0.0))) * step(b, vec3f(0.99999)) + step(vec3f(0.99999), b); }
+fn way(w: i32, b: vec3f, s: vec3f) -> vec3f {
+  switch w {
+    case 1: { return min(b, s); } case 2: { return max(b, s); } case 3: { return hard(s, b); } case 4: { return soft(b, s); }
+    case 5: { return hard(b, s); } case 6: { return dodge(b, s); } case 7: { return burn(b, s); } case 8: { return abs(b - s); }
+    case 9: { return b + s - 2.0 * b * s; } case 10: { return setLum(setSat(s, sat(b)), lum(b)); } case 11: { return setLum(setSat(b, sat(s)), lum(b)); }
+    case 12: { return setLum(s, lum(b)); } case 13: { return setLum(b, lum(s)); } case 14: { return b + s - 1.0; } case 15: { return b + 2.0 * s - 1.0; }
+    case 16: { return mix(dodge(b, 2.0 * s - 1.0), burn(b, 2.0 * s), step(s, vec3f(0.5))); } case 17: { return mix(max(b, 2.0 * s - 1.0), min(b, 2.0 * s), step(s, vec3f(0.5))); }
+    case 18: { if (lum(s) < lum(b)) { return s; } return b; } case 19: { if (lum(s) > lum(b)) { return s; } return b; }
+    case 20: { return b - s; } case 21: { return mix(b / max(s, vec3f(1e-5)), vec3f(1.0), step(s, vec3f(0.0))); }
+    case 22: { return b + s; } case 23: { return b * s; } case 24: { return b + s - b * s; }
+    default: { return s; }
+  }
+}
+@fragment fn main(@builtin(position) frag: vec4f, @location(0) uv: vec2f) -> @location(0) vec4f {
+  let a = textureSampleLevel(alone, near1, uv, 0.0).a;
+  let c = textureSampleLevel(made, near0, uv, 0.0);
+  let u = textureSampleLevel(under, near2, uv, 0.0);
+  let b = select(vec3f(0.0), u.rgb / max(u.a, 1e-5), u.a > 1e-4);
+  let mixed = clamp(way(i32(k.way + 0.5), b, clamp(c.rgb, vec3f(0.0), vec3f(1.0))), vec3f(0.0), vec3f(1.0));
+  return vec4f(mixed * a, a);
+}
+)WGSL";
+static void thing_effects_draw(Stage& s, ScreenStack& st, View* v, const ScreenNumbers& numbers, int way = 0) {
     if (st.fx.empty()) return s.renderer->render(v);
     const Viewport vp = v->getViewport();
     const uint32_t w = (uint32_t)std::max(1, vp.left + (int)vp.width), h = (uint32_t)std::max(1, vp.bottom + (int)vp.height);
@@ -395,6 +445,20 @@ static void thing_effects_draw(Stage& s, ScreenStack& st, View* v, const ScreenN
         std::string why;
         cut = door::screen(s.engine, "cut", shape, 0, &why, 2);
         if (!cut) std::fprintf(stderr, "the cut to a thing's shape is not made: %s\n", why.c_str());
+    }
+    if (way && s.backdrop) {   // (in its way, reading what is under)
+        if (!st.lay) {
+            std::string why;
+            st.lay = door::screen(s.engine, "lay", thing_lay_shader, 16, &why, 3);
+            if (!st.lay) std::fprintf(stderr, "a thing's way of lying with effects is not made: %s\n", why.c_str());
+        }
+        if (st.lay) {
+            const float knobs[4] = {(float)way, 0, 0, 0};
+            door::knobs(s.engine, st.lay, knobs, sizeof knobs);
+            Texture* const read[3] = {st.between[(st.fx.size() - 1) % 2], st.shot, s.backdrop};
+            door::draw(s.engine, st.lay, read, was, w, h, 0, nullptr, true);
+            return;
+        }
     }
     Texture* const read[2] = {st.between[(st.fx.size() - 1) % 2], st.shot};
     if (cut) door::draw(s.engine, cut, read, was, w, h, 0, nullptr, true);

@@ -19,6 +19,7 @@ material {
         { type : float4, name : wash },      // a colour laid over it where it is drawn, and how much (a copy's own, from a ramp along the copies; 0: none)
         { type : sampler2d, name : backdrop },   // what lies under it as drawn so far, when its way of lying reads it (kit.h pictures_of)
         { type : float, name : blendWay },       // that way (doc.h doc_blend_way: 1 darken ... 13 luminosity; 0: the GPU's own blending)
+        { type : float, name : behind },         // 1: its fill is what is behind it, as it is (doc.h: fill behind, a copy of the background; then its blend as said)
         { type : float4[8], name : ramp },   // its copies' colours from the first to the last (copy_fill), when they are drawn in one go
         { type : float4, name : rampOf },    // which copy the first of this one draw is, how many copies there are, how many colours, 1: one each in turn (0 copies: none)
         { type : float4, name : window },    // the part of the picture across this copy shows, from x to y of its width, when z is 1 (a text's letter of its own)
@@ -205,6 +206,10 @@ fragment {
         }
         material.baseColor.rgb = mix(material.baseColor.rgb, wash.rgb * material.baseColor.a, wash.a);   // (a copy's own colour, where it is drawn)
         material.baseColor.rgb *= 1.0 + materialParams.glowing;   // (a neon: its own colour, brighter than white)
+        if (materialParams.behind > 0.5 && material.baseColor.a > 1e-4) {   // (its fill what is behind it, where it is: a copy of the background in its shape)
+            vec4 behind = textureLod(materialParams_backdrop, uvToRenderTargetUV(getNormalizedViewportCoord().xy), 0.0);
+            material.baseColor.rgb = toLight(behind.a > 1e-4 ? behind.rgb / behind.a : vec3(0.0)) * material.baseColor.a;
+        }
         if (materialParams.blendWay > 0.5 && material.baseColor.a > 1e-4) {   // (laid on what is under by reading it: the way's colour where it is, as much of it as it is there)
             vec4 below = textureLod(materialParams_backdrop, uvToRenderTargetUV(getNormalizedViewportCoord().xy), 0.0);
             vec3 under = below.a > 1e-4 ? below.rgb / below.a : vec3(0.0);   // (as it is where it is there; where nothing is under, as itself: the W3C's (1 - ab) Cs + ab B)
