@@ -79,11 +79,11 @@ class _StageState extends State<_Stage> {
             '',
             trailing: [
               _Seg(items: stageZooms, index: _zoom, onChanged: (i) => setState(() => _zoom = i)),
-              const SizedBox(width: 6),
+              SizedBox(width: Shape.s(6)),
               _Toggle(label: 'Safe', icon: _Icon.safe, on: _safe, onTap: () => setState(() => _safe = !_safe)),
-              const SizedBox(width: WsT.gap),
+              SizedBox(width: WsT.gap),
               _Toggle(label: 'Grid', icon: _Icon.grid, on: _grid, onTap: () => setState(() => _grid = !_grid)),
-              const SizedBox(width: 6),
+              SizedBox(width: Shape.s(6)),
               _Toggle(label: _camera ? 'Camera' : 'Free', glyph: G.camera, on: _camera, onTap: () => setState(() => _camera = !_camera)),
             ],
           ),
@@ -184,7 +184,7 @@ class _Toggle extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             if (glyph case final g?) Glyph(g, size: 14, color: mark) else CustomPaint(size: const Size.square(12), painter: _IconPainter(icon!, mark)),
-            const SizedBox(width: 5),
+            SizedBox(width: Shape.s(5)),
             Text(label, style: T.label(on || h ? Grey.g95 : Grey.g63).copyWith(fontWeight: FontWeight.w600)),
           ],
         ),
@@ -246,7 +246,7 @@ class _ToolColumn extends StatelessWidget {
             children: [
               for (var i = 0; i < _tools.length; i++) ...[
                 if (i == 2 || i == 4) Container(width: 20, height: 1, margin: EdgeInsets.symmetric(vertical: Shape.s(5)), color: WsT.line),
-                if (i != 0 && i != 2 && i != 4) const SizedBox(height: 3),
+                if (i != 0 && i != 2 && i != 4) SizedBox(height: Shape.s(3)),
                 _ToolButton(key: ValueKey('ws-tool-$i'), glyph: _tools[i].$1, on: i == active, onTap: () => onChanged(i)),
               ],
               Container(width: 20, height: 1, margin: EdgeInsets.symmetric(vertical: Shape.s(8)), color: WsT.line),
@@ -415,13 +415,13 @@ class _OptionsStrip extends StatelessWidget {
                       width: 62,
                       child: Text(_tools[tool].$2.toUpperCase(), style: T.micro(Grey.g56).copyWith(fontWeight: FontWeight.w700, letterSpacing: 1)),
                     ),
-                    for (var i = 0; i < items.length; i++) ...[if (i > 0) const SizedBox(width: 6), items[i]],
+                    for (var i = 0; i < items.length; i++) ...[if (i > 0) SizedBox(width: Shape.s(6)), items[i]],
                   ],
                 ),
               ),
             ),
           ),
-          const SizedBox(width: WsT.inset),
+          SizedBox(width: WsT.inset),
           ValueListenableBuilder<int>(valueListenable: ws.carried, builder: (_, _, _) => _Readout(scene: scene, layer: layer)), // (and while a hand carries a value)
         ],
       ),
@@ -444,7 +444,7 @@ class _Field extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         Text(label, style: T.micro(Grey.g56)),
-        const SizedBox(width: 6),
+        SizedBox(width: Shape.s(6)),
         if (swatch case final s?)
           Container(
             width: 22,
@@ -473,7 +473,7 @@ class _Readout extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(k, style: T.micro(Grey.g56)),
-          const SizedBox(width: 4),
+          SizedBox(width: Shape.s(4)),
           Text(v, style: T.value(Grey.g91)),
         ],
       ),
@@ -486,7 +486,7 @@ class _Readout extends StatelessWidget {
           height: 8,
           decoration: BoxDecoration(color: wsTone(l.kind), borderRadius: BorderRadius.all(Shape.r(2))),
         ),
-        const SizedBox(width: 6),
+        SizedBox(width: Shape.s(6)),
         Text(l.name, style: T.name(Grey.g95).copyWith(fontWeight: FontWeight.w600)),
         if (box == null)
           Padding(

@@ -40,12 +40,12 @@ class PanelLink extends StatelessWidget {
         decoration: BoxDecoration(color: h && !off ? Grey.g20 : Pop.well, borderRadius: BorderRadius.all(Shape.r(6))),
         child: Row(
           children: [
-            if (label case final l?) ...[Text(l, style: T.label(Grey.g63)), const SizedBox(width: 8)],
-            if (lead case final w?) ...[w, const SizedBox(width: 6)],
+            if (label case final l?) ...[Text(l, style: T.label(Grey.g63)), SizedBox(width: Shape.s(8))],
+            if (lead case final w?) ...[w, SizedBox(width: Shape.s(6))],
             Expanded(
               child: Text(value, style: T.value(Grey.g95), maxLines: 1, overflow: TextOverflow.ellipsis),
             ),
-            if (to.shelf != label) ...[Text(to.shelf, style: T.label(h && !off ? Grey.g95 : Grey.g56)), const SizedBox(width: 2)],
+            if (to.shelf != label) ...[Text(to.shelf, style: T.label(h && !off ? Grey.g95 : Grey.g56)), SizedBox(width: Shape.s(2))],
             CustomPaint(size: const Size(8, 8), painter: _LinkArrowPaint(h && !off ? Grey.g95 : Grey.g56)),
           ],
         ),
@@ -79,7 +79,7 @@ class LinkLine extends StatelessWidget {
               child: Text(value, maxLines: 1, overflow: TextOverflow.ellipsis, style: blockValue(off ? Grey.g56 : Grey.g95)),
             ),
             Text(to.shelf, style: T.micro(h && !off ? Grey.g95 : Grey.g56)),
-            const SizedBox(width: 2),
+            SizedBox(width: Shape.s(2)),
             CustomPaint(size: const Size(7, 7), painter: _LinkArrowPaint(h && !off ? Grey.g95 : Grey.g56)),
           ],
         ),

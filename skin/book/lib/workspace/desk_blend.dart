@@ -50,7 +50,7 @@ class _RowState extends State<_Row> {
       child: Row(
         children: [
           Container(width: 4, height: 18, decoration: BoxDecoration(color: wsTone(l.kind), borderRadius: BorderRadius.all(Shape.r(2)))),
-          const SizedBox(width: 8),
+          SizedBox(width: Shape.s(8)),
           Expanded(
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
@@ -60,12 +60,12 @@ class _RowState extends State<_Row> {
           ),
           if (ways.isNotEmpty) ...[
             SizedBox(width: 74, child: Text(now.replaceAll('_', ' '), maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.right, style: T.micro(now == 'normal' ? Grey.g56 : Grey.g91))),   // (its way, named: two ways can look alike small)
-            const SizedBox(width: 4),
+            SizedBox(width: Shape.s(4)),
             DeskIconButton(key: ValueKey('blend.${l.id}'), size: 24, on: _open, glyph: (ink) => _Way(now, ink), onTap: () => setState(() => _open = !_open)),
-            const SizedBox(width: 8),
+            SizedBox(width: Shape.s(8)),
             SizedBox(width: 64, height: 18, child: _Opacity(key: ValueKey('opacity.${l.id}'), thing: t!, value: opacity)),
-            const SizedBox(width: 6),
-            if (l == ws.layers.last) const SizedBox(width: 24)   // (the back-most: nothing under it to clip to)
+            SizedBox(width: Shape.s(6)),
+            if (l == ws.layers.last) SizedBox(width: Shape.s(24))   // (the back-most: nothing under it to clip to)
             else
               DeskIconButton(key: ValueKey('clip.${l.id}'), size: 24, on: clip, glyph: (ink) => _Clip(ink), onTap: () {
                 ws.after(m!.later('set', thing: t, name: 'clip', number: clip ? 0 : 1));
@@ -99,7 +99,7 @@ class _RowState extends State<_Row> {
               children: [
                 for (final (k, g) in groups.indexed)
                   if (g.isNotEmpty) ...[
-                    if (k > 0) const SizedBox(width: 8),
+                    if (k > 0) SizedBox(width: Shape.s(8)),
                     for (final w in g)
                       MouseRegion(
                         onEnter: (_) => setState(() => _hover = w),

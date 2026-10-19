@@ -225,11 +225,11 @@ class _PalCard extends StatelessWidget {
             Expanded(
               child: Text(p.name, style: T.name(Grey.g95).copyWith(fontWeight: FontWeight.w700)),
             ),
-            if (p.saved) ...[const DockTag('SAVED'), const SizedBox(width: 6)],
+            if (p.saved) ...[const DockTag('SAVED'), SizedBox(width: Shape.s(6))],
             Text('${p.colors.length}', style: T.value(Grey.g56).copyWith(fontSize: T.px(10))),
           ],
         ),
-        const SizedBox(height: 6),
+        SizedBox(height: Shape.s(6)),
         _Strip(p.id, p.colors, c, height: 26, pad: false),
       ],
     ),
@@ -309,7 +309,7 @@ class _Grad extends StatelessWidget {
                 borderRadius: BorderRadius.all(Shape.r(WsT.chipRadius)),
               ),
             ),
-            const SizedBox(width: 8),
+            SizedBox(width: Shape.s(8)),
             Expanded(
               child: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis, style: T.name(dockInk(sel))),
             ),

@@ -275,7 +275,7 @@ class _Window extends StatelessWidget {
   Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
-      const SizedBox(height: WsT.topBar, child: WsTopBar()),
+      SizedBox(height: WsT.topBar, child: WsTopBar()),
       const SizedBox(height: WsT.gutter),
       Expanded(
         child: WsPanes(panes: [..._panes, ...extra], preset: (item) => _preset(item, extra), shelves: {for (final s in dockShelves) s.$1}),

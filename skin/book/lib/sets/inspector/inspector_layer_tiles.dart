@@ -14,7 +14,7 @@ class LdGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, box) {
-      const g = Pop.tileGap;
+      final g = Pop.tileGap;
       final cols = math.max(1, ((box.maxWidth + g) / (Pop.tileMin + g)).floor());
       final rows = <List<LdCell>>[[]];
       var used = 0;
@@ -31,8 +31,8 @@ class LdGrid extends StatelessWidget {
         final filled = cs.fold<int>(0, (a, c) => a + math.min(c.span, cols));
         return Row(
           children: [
-            for (var i = 0; i < cs.length; i++) ...[if (i > 0) const SizedBox(width: g), Expanded(flex: math.min(cs[i].span, cols), child: cs[i].child)],
-            if (last && filled < cols) ...[const SizedBox(width: g), Spacer(flex: cols - filled)],
+            for (var i = 0; i < cs.length; i++) ...[if (i > 0) SizedBox(width: g), Expanded(flex: math.min(cs[i].span, cols), child: cs[i].child)],
+            if (last && filled < cols) ...[SizedBox(width: g), Spacer(flex: cols - filled)],
           ],
         );
       }
@@ -41,7 +41,7 @@ class LdGrid extends StatelessWidget {
         padding: EdgeInsets.only(top: Shape.s(4)),
         child: Column(
           children: [
-            for (var i = 0; i < rows.length; i++) ...[if (i > 0) const SizedBox(height: g), row(rows[i], i == rows.length - 1)],
+            for (var i = 0; i < rows.length; i++) ...[if (i > 0) SizedBox(height: g), row(rows[i], i == rows.length - 1)],
           ],
         ),
       );
@@ -58,12 +58,13 @@ class LdCell {
 
 /// A block's skeleton: name top-left, the control along the bottom, an optional picture top-right (as [ParamTile]).
 class LdTile extends StatelessWidget {
-  const LdTile({super.key, required this.label, required this.child, this.glyph, this.onTap, this.glyphW = Pop.glyph});
+  const LdTile({super.key, required this.label, required this.child, this.glyph, this.onTap, double? glyphW}) : _glyphW = glyphW;
   final String label;
   final Widget child;
   final Widget? glyph;
   final VoidCallback? onTap;
-  final double glyphW;
+  final double? _glyphW;
+  double get glyphW => _glyphW ?? Pop.glyph; // (none: the skin's glyph size)
   @override
   Widget build(BuildContext context) {
     final on = !Ctx.of(context).cfg.locked && !RowOff.offOf(context);

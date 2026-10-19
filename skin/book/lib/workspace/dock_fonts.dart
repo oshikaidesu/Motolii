@@ -182,19 +182,19 @@ class _FontRow extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(_sample, maxLines: 1, softWrap: false, overflow: TextOverflow.fade, style: _face(f, 17, dockInk(sel, Grey.g95))),
-                  const SizedBox(height: 5),
+                  SizedBox(height: Shape.s(5)),
                   Row(
                     children: [
                       Flexible(
                         child: Text(f.family, maxLines: 1, overflow: TextOverflow.ellipsis, style: T.label(dockInk(sel, Grey.g76))),
                       ),
-                      if (usedBy case final u?) ...[const SizedBox(width: 6), DockTag(u, hue: sel ? null : WsT.toneText)],
+                      if (usedBy case final u?) ...[SizedBox(width: Shape.s(6)), DockTag(u, hue: sel ? null : WsT.toneText)],
                     ],
                   ),
                 ],
               ),
             ),
-            if (star || h || sel) DockStar(on: star, ink: sel ? WsT.onAccent : null, onTap: () => c.star(f.family)) else const SizedBox(width: 20),
+            if (star || h || sel) DockStar(on: star, ink: sel ? WsT.onAccent : null, onTap: () => c.star(f.family)) else SizedBox(width: Shape.s(20)),
           ],
         ),
       ),
@@ -225,7 +225,7 @@ class _FontCard extends StatelessWidget {
             Row(
               children: [
                 const Spacer(),
-                if (star || h || sel) DockStar(on: star, ink: sel ? WsT.onAccent : null, onTap: () => c.star(f.family)) else const SizedBox(height: 20),
+                if (star || h || sel) DockStar(on: star, ink: sel ? WsT.onAccent : null, onTap: () => c.star(f.family)) else SizedBox(height: Shape.s(20)),
               ],
             ),
             const Spacer(),
@@ -236,7 +236,7 @@ class _FontCard extends StatelessWidget {
                 Flexible(
                   child: Text(f.family, maxLines: 1, overflow: TextOverflow.ellipsis, style: T.label(dockInk(sel, Grey.g76))),
                 ),
-                if (usedBy case final u?) ...[const SizedBox(width: 6), DockTag(u, hue: sel ? null : WsT.toneText)],
+                if (usedBy case final u?) ...[SizedBox(width: Shape.s(6)), DockTag(u, hue: sel ? null : WsT.toneText)],
               ],
             ),
           ],

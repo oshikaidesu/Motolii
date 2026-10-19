@@ -33,7 +33,7 @@ class ParticlesCard extends StatelessWidget {
         const PtHead('Emit'),
         const ParamGrid('pt', ptEmit),
         const PtHead('Motion'),
-        const Padding(
+        Padding(
           padding: EdgeInsets.only(top: 4),
           child: Row(
             children: [
@@ -48,8 +48,8 @@ class ParticlesCard extends StatelessWidget {
         const PtHead('Over life'),
         const PtRamp(),
         const ParamGrid('pt', ptLife),
-        const SizedBox(height: Pop.tileGap),
-        const Row(
+        SizedBox(height: Pop.tileGap),
+        Row(
           children: [
             Expanded(child: PtColour('pt_color', 'Color')),
             SizedBox(width: Pop.tileGap),

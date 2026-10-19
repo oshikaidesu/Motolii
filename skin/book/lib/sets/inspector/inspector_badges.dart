@@ -273,7 +273,7 @@ class BriefChip extends StatelessWidget {
               height: 8,
               decoration: BoxDecoration(color: sw, shape: BoxShape.circle),
             ),
-            const SizedBox(width: 4),
+            SizedBox(width: Shape.s(4)),
           ],
           Flexible(
             child: Text(

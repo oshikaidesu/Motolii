@@ -39,7 +39,7 @@ class _RelationsBlockState extends State<RelationsBlock> {
                   height: 6,
                   decoration: BoxDecoration(color: on[f.name]! ? f.c : Grey.g38, shape: BoxShape.circle),
                 ),
-                const SizedBox(width: 10),
+                SizedBox(width: Shape.s(10)),
                 Expanded(child: Text(f.name, style: T.name(on[f.name]! && !locked ? Grey.g95 : Grey.g56))),
                 if (f.name == open)
                   Padding(

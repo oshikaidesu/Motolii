@@ -24,7 +24,7 @@ class Presets extends StatelessWidget {
     child: Row(
       children: [
         for (final (i, p) in tiles.indexed) ...[
-          if (i > 0) const SizedBox(width: 3),
+          if (i > 0) SizedBox(width: Shape.s(3)),
           Expanded(
             child: _PresetTile(p, key: ValueKey('ease.${p.name}'), on: on(p), onTap: () => on(p) ? null : onPick(p)),   // (the one it is already: its own numbers kept)
           ),
@@ -61,7 +61,7 @@ class _PresetTile extends StatelessWidget {
             Expanded(
               child: CustomPaint(size: Size.infinite, painter: _Thumb(ease, ink, on ? WsT.onAccent : Grey.g38)),
             ),
-            const SizedBox(height: 3),
+            SizedBox(height: Shape.s(3)),
             Text(
               ease.name ?? '',
               maxLines: 1,

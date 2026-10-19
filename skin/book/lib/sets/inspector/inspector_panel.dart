@@ -105,7 +105,7 @@ class PopGroupLabel extends StatelessWidget {
     child: Row(
       children: [
         Text(text.toUpperCase(), style: T.micro(Grey.g56).copyWith(fontWeight: FontWeight.w700, letterSpacing: .6)),
-        if (count != null) ...[const SizedBox(width: 6), Text('$count', style: T.micro(Grey.g44).copyWith(fontWeight: FontWeight.w700))],
+        if (count != null) ...[SizedBox(width: Shape.s(6)), Text('$count', style: T.micro(Grey.g44).copyWith(fontWeight: FontWeight.w700))],
       ],
     ),
   );

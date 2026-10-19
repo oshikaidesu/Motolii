@@ -702,7 +702,7 @@ class _LdMini extends StatelessWidget {
   final _LdMiniKind kind;
   final double v;
   @override
-  Widget build(BuildContext context) => CustomPaint(size: const Size(Pop.glyph, Pop.glyph), painter: _LdMiniPaint(kind, v));
+  Widget build(BuildContext context) => CustomPaint(size: Size(Pop.glyph, Pop.glyph), painter: _LdMiniPaint(kind, v));
 }
 
 class _LdMiniPaint extends CustomPainter {

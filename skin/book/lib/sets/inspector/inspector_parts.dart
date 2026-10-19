@@ -95,7 +95,11 @@ class Pop extends InheritedWidget {
   static const row = 24.0, cell = 22.0;
 
   /// A parameter block: name on top, value large at the bottom, its picture in the top-right corner; text always starts at the same x.
-  static const tile = 46.0, tileMin = 112.0, tileGap = 4.0, glyph = 22.0, tilePad = 8.0;
+  static double get tile => Shape.z(46); // (the skin's Size and Spacing)
+  static double get tileMin => Shape.z(112);
+  static double get glyph => Shape.z(22);
+  static double get tileGap => Shape.s(4);
+  static double get tilePad => Shape.s(8);
 
   /// Each card wears its kind as a colour, so a folded stack reads by hue before it reads by word.
   /// The layer's own cards are muted; effects are saturated, since they are the ones that pile up.

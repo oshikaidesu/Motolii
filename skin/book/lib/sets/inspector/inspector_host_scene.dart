@@ -32,7 +32,7 @@ class _ScGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, box) {
-      const g = Pop.tileGap;
+      final g = Pop.tileGap;
       final cols = math.max(1, ((box.maxWidth + g) / (Pop.tileMin + g)).floor());
       final rows = <List<(int, Widget)>>[[]];
       var used = 0;
@@ -49,8 +49,8 @@ class _ScGrid extends StatelessWidget {
         final filled = cs.fold<int>(0, (a, c) => a + c.$1);
         return Row(
           children: [
-            for (var i = 0; i < cs.length; i++) ...[if (i > 0) const SizedBox(width: g), Expanded(flex: cs[i].$1, child: cs[i].$2)],
-            if (last && filled < cols) ...[const SizedBox(width: g), Spacer(flex: cols - filled)],
+            for (var i = 0; i < cs.length; i++) ...[if (i > 0) SizedBox(width: g), Expanded(flex: cs[i].$1, child: cs[i].$2)],
+            if (last && filled < cols) ...[SizedBox(width: g), Spacer(flex: cols - filled)],
           ],
         );
       }
@@ -59,7 +59,7 @@ class _ScGrid extends StatelessWidget {
         padding: EdgeInsets.only(top: top),
         child: Column(
           children: [
-            for (var i = 0; i < rows.length; i++) ...[if (i > 0) const SizedBox(height: g), row(rows[i], i == rows.length - 1)],
+            for (var i = 0; i < rows.length; i++) ...[if (i > 0) SizedBox(height: g), row(rows[i], i == rows.length - 1)],
           ],
         ),
       );
@@ -197,7 +197,7 @@ class SceneCard extends StatelessWidget {
               'Projection',
               glyph: Hov(
                 onTap: Ctx.of(context).cfg.locked ? null : () => doc.set('sc_projection', ((m + 1) % 3).toDouble()),
-                builder: (_, h) => CustomPaint(size: const Size.square(Pop.glyph), painter: _ScProjPaint(m, h)),
+                builder: (_, h) => CustomPaint(size: Size.square(Pop.glyph), painter: _ScProjPaint(m, h)),
               ),
               Dis(
                 child: Segmented(items: _scProj, index: m, expand: true, onChanged: (i) => doc.set('sc_projection', i.toDouble())),
@@ -305,14 +305,14 @@ class HostCameraCard extends StatelessWidget {
       ],
       children: [
         _ScShell('Target', const Chooser(id: 'hc_target', options: _hcTargets, searchable: true)),
-        const SizedBox(height: Pop.tileGap),
+        SizedBox(height: Pop.tileGap),
         SizedBox(
           height: Pop.tile * 2 + Pop.tileGap,
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const _ScOrbit(),
-              const SizedBox(width: Pop.tileGap),
+              SizedBox(width: Pop.tileGap),
               Expanded(
                 child: _ScGrid(top: 0, [
                   for (final p in [_hcPan, _hcTilt, _hcDist, _hcRoll]) _scT('hc', p),
@@ -335,7 +335,7 @@ class HostCameraCard extends StatelessWidget {
               .25,
               fov,
               _hcBaseFov,
-              glyph: CustomPaint(size: const Size.square(Pop.glyph), painter: _ScFovPaint(doc.get('hc_fov') ?? _hcBaseFov)),
+              glyph: CustomPaint(size: Size.square(Pop.glyph), painter: _ScFovPaint(doc.get('hc_fov') ?? _hcBaseFov)),
             ),
           ),
           if (free) ...[_scT('hc', _hcCenter), _scT('hc', _hcZ)],
@@ -360,10 +360,10 @@ class _ScOrbit extends StatefulWidget {
 
 class _ScOrbitState extends State<_ScOrbit> {
   bool _drag = false, _hot = false;
-  static const _w = Pop.tile * 2 + Pop.tileGap;
+  static final _w = Pop.tile * 2 + Pop.tileGap;
 
   void _put(Doc doc, Offset p) {
-    final d = p - const Offset(_w / 2, _w / 2), r = (d.distance / (_w / 2 - 8)).clamp(.05, 1.0);
+    final d = p - Offset(_w / 2, _w / 2), r = (d.distance / (_w / 2 - 8)).clamp(.05, 1.0);
     if (d.distance < 2) return;
     final cur = doc.get('hc_pan') ?? 0, th = math.atan2(-d.dx, d.dy) * 180 / math.pi;
     var dd = (th - cur) % 360;
@@ -527,7 +527,7 @@ class ExtrudeCard extends StatelessWidget {
                   min: 0,
                   perPx: .5,
                   enabled: on,
-                  glyph: CustomPaint(size: const Size.square(Pop.glyph), painter: _ScSolidPaint(d, on)),
+                  glyph: CustomPaint(size: Size.square(Pop.glyph), painter: _ScSolidPaint(d, on)),
                 ),
               ),
             ),
@@ -600,7 +600,7 @@ class BevelCard extends StatelessWidget {
                   min: 0,
                   perPx: .25,
                   enabled: on,
-                  glyph: CustomPaint(size: const Size.square(Pop.glyph), painter: _ScBevelPaint(r, chamfer ? 1 : n, on)),
+                  glyph: CustomPaint(size: Size.square(Pop.glyph), painter: _ScBevelPaint(r, chamfer ? 1 : n, on)),
                 ),
               ),
             ),

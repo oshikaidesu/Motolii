@@ -186,7 +186,7 @@ class OnOff extends StatelessWidget {
             width: 20,
             child: Text(on ? 'On' : 'Off', textAlign: TextAlign.right, style: T.label(live && on ? Grey.g95 : Grey.g56)),
           ),
-          const SizedBox(width: 8),
+          SizedBox(width: Shape.s(8)),
           Opacity(
             opacity: live ? 1 : .5,
             child: Pop.on(context) ? PopSwitch(on: on, onChanged: onChanged) : PillSwitch(on: on, onChanged: onChanged),

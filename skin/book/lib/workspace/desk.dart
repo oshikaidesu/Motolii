@@ -47,7 +47,7 @@ class _DeskHeader extends StatelessWidget {
               DeskChip(label: wide ? 'Pinned · Follow' : 'Pinned', dot: Grey.g76, onTap: () => ws.openDesk(null))
             else
               DeskChip(label: wide ? 'Follows selection' : 'Follows', dot: WsT.accent),
-            const SizedBox(width: WsT.gap),
+            SizedBox(width: WsT.gap),
             DeskIconButton(glyph: (ink) => DeskGlyph('Tools', ink), on: name == 'Tools', onTap: () => ws.openDesk(name == 'Tools' && pinned ? null : 'Tools')),
           ],
         );
@@ -134,7 +134,7 @@ class _ToolTile extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
               style: T.name(h ? Grey.g100 : Grey.g95).copyWith(fontSize: T.px(12), fontWeight: FontWeight.w700),
             ),
-            if (box.maxHeight >= 54) ...[const SizedBox(height: 3), Text(tool.acts, maxLines: 1, overflow: TextOverflow.ellipsis, style: T.label(Grey.g56))],
+            if (box.maxHeight >= 54) ...[SizedBox(height: Shape.s(3)), Text(tool.acts, maxLines: 1, overflow: TextOverflow.ellipsis, style: T.label(Grey.g56))],
           ],
         ),
       ),
@@ -162,15 +162,15 @@ class _Placeholder extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text('DESK TOOL', style: T.micro(tool.tone).copyWith(fontWeight: FontWeight.w700, letterSpacing: 1.4)),
-                  const SizedBox(height: 6),
+                  SizedBox(height: Shape.s(6)),
                   FittedBox(
                     fit: BoxFit.scaleDown,
                     alignment: Alignment.centerLeft,
                     child: Text(name, style: T.title(Grey.g95).copyWith(fontSize: T.px(34), fontWeight: FontWeight.w800, letterSpacing: -1, height: 1)),
                   ),
-                  const SizedBox(height: 10),
+                  SizedBox(height: Shape.s(10)),
                   Text('Works on ${tool.acts.toLowerCase()}.', style: T.label(Grey.g76).copyWith(fontSize: T.px(11))),
-                  const SizedBox(height: 5),
+                  SizedBox(height: Shape.s(5)),
                   Text('Not designed in the lab yet.', style: T.label(Grey.g56)),
                   const Spacer(),
                   Wrap(

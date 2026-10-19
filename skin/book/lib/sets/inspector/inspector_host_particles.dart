@@ -108,7 +108,7 @@ class PtColour extends StatelessWidget {
         children: [
           Positioned(right: Pop.tilePad - 3, top: 4, width: Pop.glyph, height: Pop.glyph, child: Swatch(x.doc.s2[id])),
           Padding(
-            padding: const EdgeInsets.fromLTRB(Pop.tilePad, 6, Pop.glyph + Pop.tilePad, 3),
+            padding: EdgeInsets.fromLTRB(Pop.tilePad, 6, Pop.glyph + Pop.tilePad, 3),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               mainAxisAlignment: MainAxisAlignment.spaceBetween,

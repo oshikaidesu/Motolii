@@ -606,33 +606,33 @@ class _Header extends StatelessWidget {
           final roomy = box.maxWidth >= 1000, mid = box.maxWidth >= 820;
           return Row(
             children: [
-              if (mid) ...[_Chip(ws.document?.replaceFirst(RegExp(r'\.motolii$'), '') ?? 'Main', mono: false), const SizedBox(width: 12)], // (joined: the document's name)
+              if (mid) ...[_Chip(ws.document?.replaceFirst(RegExp(r'\.motolii$'), '') ?? 'Main', mono: false), SizedBox(width: Shape.s(12))], // (joined: the document's name)
               _Btn(TpGlyph.toStart, key: const ValueKey('ws-tl-start'), onTap: () => onStep(-ws.frame)),
-              const SizedBox(width: 2),
+              SizedBox(width: Shape.s(2)),
               _Btn(TpGlyph.stepBack, key: const ValueKey('ws-tl-back'), onTap: () => onStep(-1)),
-              const SizedBox(width: 2),
+              SizedBox(width: Shape.s(2)),
               _Btn(ws.playing ? TpGlyph.pause : TpGlyph.play, key: const ValueKey('ws-tl-play'), width: 34, on: ws.playing, rest: WsT.accent, onTap: onToggle),
-              const SizedBox(width: 2),
+              SizedBox(width: Shape.s(2)),
               _Btn(TpGlyph.stepFwd, key: const ValueKey('ws-tl-fwd'), onTap: () => onStep(1)),
-              const SizedBox(width: 2),
+              SizedBox(width: Shape.s(2)),
               _Btn(TpGlyph.loop, key: const ValueKey('ws-tl-loop'), on: loop, onTap: onLoop),
-              const SizedBox(width: 12),
+              SizedBox(width: Shape.s(12)),
               Text(tc[0], style: big.copyWith(color: T.ink(Grey.g56))),
               Text(':', style: big.copyWith(color: T.ink(Grey.g56))),
               Text(tc[1], style: big),
               Text(':', style: big.copyWith(color: T.ink(Grey.g56))),
               Text(tc[2], style: big.copyWith(color: T.ink(WsT.accent))),
-              const SizedBox(width: 8),
-              if (roomy) ...[Text('/ ${ws.timecode(Ws.duration)}', style: T.value(Grey.g56)), const SizedBox(width: 10)],
+              SizedBox(width: Shape.s(8)),
+              if (roomy) ...[Text('/ ${ws.timecode(Ws.duration)}', style: T.value(Grey.g56)), SizedBox(width: Shape.s(10))],
               _Chip('${Ws.fps} fps'),
-              const SizedBox(width: 12),
+              SizedBox(width: Shape.s(12)),
               if (mid && layer != null)
                 Flexible(
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       WtKindChip(layer.kind),
-                      const SizedBox(width: 6),
+                      SizedBox(width: Shape.s(6)),
                       Flexible(
                         child: Text(
                           picked > 0 ? '${layer.name}  ·  $picked key${picked == 1 ? '' : 's'}' : '${layer.name}  ·  ${layer.keys.length} keys',
@@ -646,11 +646,11 @@ class _Header extends StatelessWidget {
                 ),
               const Spacer(),
               _Btn(TpGlyph.minus, key: const ValueKey('ws-tl-zoom-out'), size: 22, onTap: () => onZoom(zoom / 1.5)),
-              const SizedBox(width: 4),
+              SizedBox(width: Shape.s(4)),
               _ZoomSlider(zoom: zoom, onZoom: onZoom),
-              const SizedBox(width: 4),
+              SizedBox(width: Shape.s(4)),
               _Btn(TpGlyph.plus, key: const ValueKey('ws-tl-zoom-in'), size: 22, onTap: () => onZoom(zoom * 1.5)),
-              const SizedBox(width: 4),
+              SizedBox(width: Shape.s(4)),
               _Btn(TpGlyph.fit, key: const ValueKey('ws-tl-fit'), size: 22, width: 46, label: 'Fit', lit: zoom <= 1.001, onTap: () => onZoom(1)),
             ],
           );
@@ -701,7 +701,7 @@ class _BtnState extends State<_Btn> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               CustomPaint(size: const Size.square(11), painter: TpGlyphPainter(widget.g, ink)),
-              if (widget.label case final l?) ...[const SizedBox(width: 4), Text(l, style: T.micro(ink).copyWith(fontWeight: FontWeight.w700))],
+              if (widget.label case final l?) ...[SizedBox(width: Shape.s(4)), Text(l, style: T.micro(ink).copyWith(fontWeight: FontWeight.w700))],
             ],
           ),
         ),
@@ -782,9 +782,9 @@ class _LabelHeader extends StatelessWidget {
     child: Row(
       children: [
         Text('#', style: T.micro(Grey.g56)),
-        const SizedBox(width: 12),
+        SizedBox(width: Shape.s(12)),
         Text('LAYER', style: T.micro(Grey.g63).copyWith(letterSpacing: 1)),
-        const SizedBox(width: 6),
+        SizedBox(width: Shape.s(6)),
         Text('$count', style: T.value(Grey.g56).copyWith(fontSize: T.px(10))),
         const Spacer(),
         for (final g in const [TpGlyph.eye, TpGlyph.solo, TpGlyph.lock])
@@ -842,9 +842,9 @@ class _LabelRowState extends State<_LabelRow> {
                 child: Row(
                   children: [
                     SizedBox(width: 14, child: Text('${widget.index + 1}', style: T.value(sel ? Grey.g91 : Grey.g56).copyWith(fontSize: T.px(10)))),
-                    const SizedBox(width: 6),
+                    SizedBox(width: Shape.s(6)),
                     WtKindChip(r.kind, dim: r.dim),
-                    const SizedBox(width: 7),
+                    SizedBox(width: Shape.s(7)),
                     Expanded(
                       child: Text(
                         r.name,

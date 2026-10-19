@@ -24,7 +24,7 @@ class _PlGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, box) {
-      const g = Pop.tileGap;
+      final g = Pop.tileGap;
       final cols = math.max(1, ((box.maxWidth + g) / (Pop.tileMin + g)).floor());
       final rows = <(List<(int, Widget)>, bool)>[];
       for (final run in runs.where((r) => r.isNotEmpty)) {
@@ -46,8 +46,8 @@ class _PlGrid extends StatelessWidget {
         return Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            for (final (i, (s, w)) in items.indexed) ...[if (i > 0) const SizedBox(width: g), Expanded(flex: s, child: w)],
-            if (last && filled < cols) ...[const SizedBox(width: g), Spacer(flex: cols - filled)],
+            for (final (i, (s, w)) in items.indexed) ...[if (i > 0) SizedBox(width: g), Expanded(flex: s, child: w)],
+            if (last && filled < cols) ...[SizedBox(width: g), Spacer(flex: cols - filled)],
           ],
         );
       }
@@ -58,7 +58,7 @@ class _PlGrid extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            for (final (i, (r, last)) in rows.indexed) ...[if (i > 0) const SizedBox(height: g), line(r, last)],
+            for (final (i, (r, last)) in rows.indexed) ...[if (i > 0) SizedBox(height: g), line(r, last)],
           ],
         ),
       );
@@ -127,7 +127,7 @@ class _PlShell extends StatelessWidget {
       child: Stack(
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(Pop.tilePad, 6, Pop.tilePad, 4),
+            padding: EdgeInsets.fromLTRB(Pop.tilePad, 6, Pop.tilePad, 4),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.spaceBetween,

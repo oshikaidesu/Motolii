@@ -484,7 +484,7 @@ class _Overlay extends CustomPainter {
       if (flash > 0) c.drawRect(Rect.fromLTWH(x - 2, TL.ruler, 5, s.height - TL.ruler), p..color = C.mode.withValues(alpha: flash * .6));
       c.drawRect(Rect.fromLTWH(x, TL.ruler, 1, s.height - TL.ruler), p..color = N.g100.withValues(alpha: .9));
     }
-    final m = marquee?.shift(const Offset(0, TL.ruler));
+    final m = marquee?.shift(Offset(0, TL.ruler));
     if (m != null) {
       c.drawRect(m, p..color = C.mode.withValues(alpha: .2));
       c.drawRect(m.deflate(.5), Paint()..style = PaintingStyle.stroke..strokeWidth = 1..color = Role.selected);

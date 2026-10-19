@@ -21,7 +21,7 @@ class EaseNumbers extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         DeskCaption(title, trailing: caption),
-        const SizedBox(height: 4),
+        SizedBox(height: Shape.s(4)),
         Row(
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
@@ -36,7 +36,7 @@ class EaseNumbers extends StatelessWidget {
     Widget pair(DeskScrub a, DeskScrub b) => Row(
       children: [
         Expanded(child: a),
-        const SizedBox(width: 2),
+        SizedBox(width: Shape.s(2)),
         Expanded(child: b),
       ],
     );
@@ -65,7 +65,7 @@ class EaseNumbers extends StatelessWidget {
                   format: (v) => hi - lo > 50 ? v.round().toString() : v.toStringAsFixed(2),
                   onChanged: (v) => onChanged(Ease(e.kind, e.p1, e.p2, [words.first, for (final (k, x) in now.indexed) k == j ? (hi - lo > 50 ? v.roundToDouble() : v) : x].join(' '))),
                 ),
-                const SizedBox(height: 2),
+                SizedBox(height: Shape.s(2)),
               ],
             ],
           ),
@@ -82,12 +82,12 @@ class EaseNumbers extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               end('Out', e.p1.dx, slope(e.p1, Offset.zero), caption: 'infl · speed'),
-              const SizedBox(height: 10),
+              SizedBox(height: Shape.s(10)),
               end('In', 1 - e.p2.dx, slope(e.p2, const Offset(1, 1))),
               if (box.maxHeight >= 170) ...[
-                const SizedBox(height: 10),
+                SizedBox(height: Shape.s(10)),
                 const DeskCaption('Bezier'),
-                const SizedBox(height: 4),
+                SizedBox(height: Shape.s(4)),
                 pair(
                   DeskScrub(
                     label: 'x1',
@@ -112,7 +112,7 @@ class EaseNumbers extends StatelessWidget {
                     onChanged: (v) => onChanged(e.withHandles(Offset(e.p1.dx, v), e.p2)),
                   ),
                 ),
-                const SizedBox(height: 2),
+                SizedBox(height: Shape.s(2)),
                 pair(
                   DeskScrub(
                     label: 'x2',

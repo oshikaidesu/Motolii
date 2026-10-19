@@ -1603,7 +1603,7 @@ class _Tile extends StatelessWidget {
           child: _Lifted(Container(
             width: 104,
             height: Pop.tile,
-            padding: const EdgeInsets.fromLTRB(Pop.tilePad, 6, 6, 4),
+            padding: EdgeInsets.fromLTRB(Pop.tilePad, 6, 6, 4),
             decoration: BoxDecoration(color: Grey.g20, borderRadius: BorderRadius.circular(6), border: Border.all(color: Pop.accent)),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
               Text(v.label, style: T.micro(Grey.g76)),
@@ -1646,7 +1646,7 @@ class _Tile extends StatelessWidget {
               borderRadius: BorderRadius.circular(6),
               border: Border.all(color: edge.a == 0 ? (t.tags[v.id]?.tag.c ?? (t.touched == v.id ? Pop.accent.withValues(alpha: .45) : edge)) : edge, width: 1.5), // (wearing a tag: its colour; else the last touched, where a tapped hand card goes)
             ),
-            padding: const EdgeInsets.fromLTRB(Pop.tilePad, 5, 5, 4),
+            padding: EdgeInsets.fromLTRB(Pop.tilePad, 5, 5, 4),
             child: Stack(children: [
               Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
                 Padding(padding: EdgeInsets.only(right: tagged && d != null ? 45 : 24), child: label),
@@ -1854,7 +1854,7 @@ class _DriveKnobs extends StatelessWidget {
         onHorizontalDragUpdate: (e) => on(e.delta.dx),
         child: Container(
           height: 38,
-          padding: const EdgeInsets.fromLTRB(Pop.tilePad, 5, 6, 4),
+          padding: EdgeInsets.fromLTRB(Pop.tilePad, 5, 6, 4),
           decoration: BoxDecoration(color: Pop.well, borderRadius: BorderRadius.circular(6), border: Border.all(color: d.beh.c.withValues(alpha: .6))),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
             Text(label, style: T.micro(Grey.g63)),
@@ -1867,12 +1867,12 @@ class _DriveKnobs extends StatelessWidget {
     );
     final span = v.hi - v.lo;
     return Padding(
-      padding: const EdgeInsets.only(top: Pop.tileGap),
+      padding: EdgeInsets.only(top: Pop.tileGap),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Container( // (how it moves, large: the shape, and where each copy is on it now)
           height: 40,
           width: double.infinity,
-          margin: const EdgeInsets.only(bottom: Pop.tileGap),
+          margin: EdgeInsets.only(bottom: Pop.tileGap),
           decoration: BoxDecoration(color: Pop.well, borderRadius: BorderRadius.circular(6)),
           child: CustomPaint(painter: _TracePaint(t, d, null, _Time.of(context))),
         ),
@@ -1880,15 +1880,15 @@ class _DriveKnobs extends StatelessWidget {
           knob('Amount', '±${(d.width * span).toStringAsFixed(v.dec)}${v.unit}', 'w:${v.id}', (d.width * span).toStringAsFixed(v.dec),
               (x) => t..mark()..setDrive(d, width: x.abs() / span), (dx) => t.setDrive(d, width: d.width + dx / 300)),
           if (d.beh == Beh.sway || d.beh == Beh.noise) ...[
-            const SizedBox(width: Pop.tileGap),
+            SizedBox(width: Pop.tileGap),
             knob('Speed', d.speed.toStringAsFixed(2), 's:${v.id}', d.speed.toStringAsFixed(2), (x) => t..mark()..setDrive(d, speed: x), (dx) => t.setDrive(d, speed: d.speed + dx / 80)),
           ],
           if (d.beh == Beh.noise || d.beh == Beh.random) ...[
-            const SizedBox(width: Pop.tileGap),
+            SizedBox(width: Pop.tileGap),
             knob('Seed', d.seed.round().toString(), 'r:${v.id}', d.seed.round().toString(), (x) => t..mark()..setDrive(d, seed: x), (dx) => t.setDrive(d, seed: d.seed + dx / 8)),
           ],
           if (d.beh == Beh.stagger) ...[
-            const SizedBox(width: Pop.tileGap),
+            SizedBox(width: Pop.tileGap),
             Expanded(
               child: SizedBox(
                 height: 38,
@@ -1955,13 +1955,13 @@ class _Wearers extends StatelessWidget {
   final Tag g;
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(top: Pop.tileGap),
+    padding: EdgeInsets.only(top: Pop.tileGap),
     child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       for (final (th, id) in t.wearers(g))
         Container(
           height: 26,
           margin: const EdgeInsets.only(top: 2),
-          padding: const EdgeInsets.only(left: Pop.tilePad),
+          padding: EdgeInsets.only(left: Pop.tilePad),
           decoration: BoxDecoration(color: Pop.well, borderRadius: BorderRadius.circular(6), border: Border(left: BorderSide(color: g.c, width: 3))),
           child: Row(children: [
             Expanded(child: Text(t.nameOf(th, id), maxLines: 1, overflow: TextOverflow.ellipsis, style: T.micro(th == t.cur ? Grey.g95 : Grey.g76))),
@@ -2012,7 +2012,7 @@ class _BundleTile extends StatelessWidget {
     child: Container(
       height: Pop.tile,
       margin: const EdgeInsets.fromLTRB(Pop.inset, Pop.inset, Pop.inset, 0),
-      padding: const EdgeInsets.symmetric(horizontal: Pop.tilePad),
+      padding: EdgeInsets.symmetric(horizontal: Pop.tilePad),
       decoration: BoxDecoration(color: cand.isNotEmpty ? Grey.g20 : Pop.card, borderRadius: BorderRadius.circular(6), border: Border.all(color: Pop.accent, width: cand.isNotEmpty ? 2 : 1)),
       child: Row(children: [
         _TieMark(i),

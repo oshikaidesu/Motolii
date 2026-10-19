@@ -103,13 +103,13 @@ class DockChips extends StatelessWidget {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(name, style: T.micro(on ? WsT.onAccent : Grey.g91).copyWith(fontWeight: on ? FontWeight.w700 : FontWeight.w500)),
-                      if (n != null) ...[const SizedBox(width: 4), Text('$n', style: T.value(on ? WsT.onAccent : Grey.g56).copyWith(fontSize: T.px(10)))],
+                      if (n != null) ...[SizedBox(width: Shape.s(4)), Text('$n', style: T.value(on ? WsT.onAccent : Grey.g56).copyWith(fontSize: T.px(10)))],
                     ],
                   ),
                 );
               },
             ),
-            const SizedBox(width: WsT.gap),
+            SizedBox(width: WsT.gap),
           ],
         ],
       ),
@@ -142,14 +142,14 @@ class DockSection extends StatelessWidget {
               curve: Mo.ease,
               child: DockGlyph(DockG.chevron, size: 8, color: Grey.g63),
             ),
-            const SizedBox(width: 6),
+            SizedBox(width: Shape.s(6)),
           ],
           Container(
             width: 8,
             height: 8,
             decoration: BoxDecoration(color: hue ?? Grey.g56, borderRadius: BorderRadius.all(Shape.r(2))),
           ),
-          const SizedBox(width: 6),
+          SizedBox(width: Shape.s(6)),
           Expanded(
             child: Text(
               title.toUpperCase(),
@@ -260,7 +260,7 @@ class DockFooter extends StatelessWidget {
       ),
       child: Row(
         children: [
-          if (preview case final p?) ...[SizedBox.square(dimension: 34, child: p), const SizedBox(width: 8)],
+          if (preview case final p?) ...[SizedBox.square(dimension: 34, child: p), SizedBox(width: Shape.s(8))],
           Expanded(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -272,9 +272,9 @@ class DockFooter extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: T.name(Grey.g95).copyWith(fontWeight: FontWeight.w600),
                 ),
-                const SizedBox(height: 4),
+                SizedBox(height: Shape.s(4)),
                 Text(meta, maxLines: 1, overflow: TextOverflow.ellipsis, style: T.label(Grey.g63)),
-                const SizedBox(height: 4),
+                SizedBox(height: Shape.s(4)),
                 Row(
                   children: [
                     Text('to ', style: T.label(Grey.g56)),
@@ -284,7 +284,7 @@ class DockFooter extends StatelessWidget {
                         height: 6,
                         decoration: BoxDecoration(color: wsTone(l.kind), borderRadius: BorderRadius.all(Shape.r(1))),
                       ),
-                      const SizedBox(width: 4),
+                      SizedBox(width: Shape.s(4)),
                       Flexible(
                         child: Text(l.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: T.label(Grey.g91)),
                       ),
@@ -295,7 +295,7 @@ class DockFooter extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(width: 6),
+          SizedBox(width: Shape.s(6)),
           DockHover(
             onTap: done ? null : onAction,
             builder: (context, h) => AnimatedContainer(
@@ -364,7 +364,7 @@ class _DockSearchState extends State<DockSearch> {
         child: Row(
           children: [
             DockGlyph(DockG.search, size: 11, color: _focus.hasFocus ? WsT.accentInk : Grey.g56),
-            const SizedBox(width: 6),
+            SizedBox(width: Shape.s(6)),
             Expanded(
               child: Stack(
                 alignment: Alignment.centerLeft,
@@ -400,7 +400,7 @@ class _DockSearchState extends State<DockSearch> {
       child: Row(
         children: [
           Expanded(child: well),
-          if (widget.trailing case final t?) ...[const SizedBox(width: WsT.gap), t],
+          if (widget.trailing case final t?) ...[SizedBox(width: WsT.gap), t],
         ],
       ),
     );

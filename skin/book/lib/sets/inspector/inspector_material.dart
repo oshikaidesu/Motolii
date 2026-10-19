@@ -207,7 +207,7 @@ class _TextGroupState extends State<TextGroup> {
             Row(
               children: [
                 for (final (i, w) in aligns.indexed) ...[
-                  if (i > 0) const SizedBox(width: 4),
+                  if (i > 0) SizedBox(width: Shape.s(4)),
                   Expanded(
                     child: GlyphPlate(w, alignGlyph(i / 2), on: ((doc.get('v_align') ?? 0) / 50).round() == i, onTap: () => doc.set('v_align', i * 50.0)), // (lines set left, centred, right: the glyph says it)
                   ),

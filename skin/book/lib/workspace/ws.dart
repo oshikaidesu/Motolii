@@ -19,13 +19,14 @@ abstract final class WsT {
   static const gutter = 2.0;
 
   /// A seat's header strip (title, tabs, small actions).
-  static const header = 28.0;
+  static double get header => Shape.z(28);
 
   /// The stage's tool column.
-  static const rail = 40.0;
+  static double get rail => Shape.z(40);
 
   /// Seat widths and the lower band's height, at the reference window (1600 x 960).
-  static const dock = 300.0, inspector = 372.0, lower = 300.0, topBar = 40.0;
+  static const dock = 300.0, inspector = 372.0, lower = 300.0;
+  static double get topBar => Shape.z(40);
   static const minWindow = Size(1280, 800), refWindow = Size(1600, 960);
 
   /// Grounds: the gutter, a seat's body, a card or row inside it, a well (field) inside that.
@@ -49,7 +50,8 @@ abstract final class WsT {
   static const radius = 6.0, chipRadius = 4.0;
 
   /// Paddings inside a seat.
-  static const inset = 8.0, gap = 4.0;
+  static double get inset => Shape.s(8);
+  static double get gap => Shape.s(4);
 
   /// Hues per kind of layer / asset, shared by timeline bars, browser tiles and the stage's artwork, so a thing keeps its colour everywhere.
   static Color get toneShape => ColorTheme.of('Clip1', const Color(0xFFF08A5D));   // (a layer's kind: Ableton's clip colours)
@@ -457,14 +459,14 @@ class WsHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(
     height: WsT.header,
-    padding: const EdgeInsets.symmetric(horizontal: WsT.inset),
+    padding: EdgeInsets.symmetric(horizontal: WsT.inset),
     decoration: BoxDecoration(
       color: WsT.body,
       border: Border(bottom: BorderSide(color: WsT.line)),
     ),
     child: Row(
       children: [
-        if (leading case final l?) ...[l, const SizedBox(width: 6)],
+        if (leading case final l?) ...[l, SizedBox(width: Shape.s(6))],
         if (title.isNotEmpty) Text(title, style: T.name(Grey.g95).copyWith(fontWeight: FontWeight.w700)),
         const Spacer(),
         ...trailing,

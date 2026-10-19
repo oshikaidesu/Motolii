@@ -101,7 +101,7 @@ class _PropRowState extends State<PropRow> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   cellsRow(widget.cells.take(2).toList()),
-                  const SizedBox(height: 4),
+                  SizedBox(height: Shape.s(4)),
                   Row(
                     children: [
                       Expanded(child: widget.cells[2]),
@@ -138,7 +138,7 @@ class _PropRowState extends State<PropRow> {
                   ),
                   )
                 else if (pop)
-                  const SizedBox(width: 34),
+                  SizedBox(width: Shape.s(34)),
                 (unit != null ? Expanded.new : Flexible.new)(
                   child: Text(
                     ed.lab(widget.label),

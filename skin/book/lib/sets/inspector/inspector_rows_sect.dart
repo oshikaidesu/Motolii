@@ -98,7 +98,7 @@ class Sect extends StatelessWidget {
         return Padding(
           padding: EdgeInsets.only(top: first ? Shape.s(0) : ed.gap),
           child: col([
-            if (head != null) ...[head, const SizedBox(height: 2), const Rule(), const SizedBox(height: 6)],
+            if (head != null) ...[head, SizedBox(height: Shape.s(2)), const Rule(), SizedBox(height: Shape.s(6))],
             ...body,
           ]),
         );
@@ -120,7 +120,7 @@ class _PopCard extends StatelessWidget {
     List<Widget> lead(bool h) => [
       // the mark sits centred in its box, and the gap after it equals the card's inset, so it has the same air on both sides
       if (toggle != null) ...[FoldMark(open: open, hot: h), const SizedBox(width: Pop.inset)],
-      if (s.mark != null && tone != null) ...[ToneBadge(s.mark!, tone, dim: s.dim), const SizedBox(width: 6)],
+      if (s.mark != null && tone != null) ...[ToneBadge(s.mark!, tone, dim: s.dim), SizedBox(width: Shape.s(6))],
       if (title != null)
         Flexible(
           child: Text(
@@ -176,7 +176,7 @@ class _PopCard extends StatelessWidget {
                                 }
                                 return Row(
                                   children: [
-                                    for (final (i, t) in fit.indexed) ...[if (i > 0) const SizedBox(width: 4), BriefChip(t, dim: s.dim)],
+                                    for (final (i, t) in fit.indexed) ...[if (i > 0) SizedBox(width: Shape.s(4)), BriefChip(t, dim: s.dim)],
                                   ],
                                 );
                               },

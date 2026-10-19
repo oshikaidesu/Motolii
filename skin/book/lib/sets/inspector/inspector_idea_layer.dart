@@ -99,7 +99,7 @@ Widget _liRow(List<Widget> xs) => Padding(
   padding: const EdgeInsets.only(top: 4),
   child: Row(
     children: [
-      for (var i = 0; i < xs.length; i++) ...[if (i > 0) const SizedBox(width: Pop.tileGap), Expanded(child: xs[i])],
+      for (var i = 0; i < xs.length; i++) ...[if (i > 0) SizedBox(width: Pop.tileGap), Expanded(child: xs[i])],
     ],
   ),
 );

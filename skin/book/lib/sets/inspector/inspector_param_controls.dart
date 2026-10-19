@@ -22,7 +22,7 @@ class ParamGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, box) {
-      const g = Pop.tileGap;
+      final g = Pop.tileGap;
       final cols = math.max(1, ((box.maxWidth + g) / (Pop.tileMin + g)).floor());
       final rows = <List<Param>>[[]];
       var used = 0;
@@ -41,13 +41,13 @@ class ParamGrid extends StatelessWidget {
         return Row(
           children: [
             for (var i = 0; i < ps.length; i++) ...[
-              if (i > 0) const SizedBox(width: g),
+              if (i > 0) SizedBox(width: g),
               Expanded(
                 flex: math.min(span(ps[i]), cols),
                 child: RowOff(off: !enabled, narrow: false, child: ParamTile(fx, ps[i])),
               ),
             ],
-            if (last && filled < cols) ...[const SizedBox(width: g), Spacer(flex: cols - filled)],
+            if (last && filled < cols) ...[SizedBox(width: g), Spacer(flex: cols - filled)],
           ],
         );
       }
@@ -56,7 +56,7 @@ class ParamGrid extends StatelessWidget {
         padding: EdgeInsets.only(top: Shape.s(4)),
         child: Column(
           children: [
-            for (var i = 0; i < rows.length; i++) ...[if (i > 0) const SizedBox(height: g), row(rows[i], i == rows.length - 1)],
+            for (var i = 0; i < rows.length; i++) ...[if (i > 0) SizedBox(height: g), row(rows[i], i == rows.length - 1)],
           ],
         ),
       );
@@ -123,7 +123,7 @@ class Steps extends StatelessWidget {
       );
     }
 
-    return Column(mainAxisSize: MainAxisSize.min, children: [btn('+', 1), const SizedBox(height: 2), btn('−', -1)]);
+    return Column(mainAxisSize: MainAxisSize.min, children: [btn('+', 1), SizedBox(height: Shape.s(2)), btn('−', -1)]);
   }
 }
 

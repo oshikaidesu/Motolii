@@ -79,14 +79,14 @@ class _FxRow extends StatelessWidget {
         child: Row(
           children: [
             CustomPaint(size: const Size(18, 16), painter: _FxLook(name)), // (what it does, drawn: found with the words hidden)
-            const SizedBox(width: 6),
+            SizedBox(width: Shape.s(6)),
             Flexible(
               child: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis, style: T.name(dockInk(sel)).copyWith(fontWeight: sel ? FontWeight.w700 : FontWeight.w500)),
             ),
-            const SizedBox(width: 6),
+            SizedBox(width: Shape.s(6)),
             Expanded(child: Text('ThorVG', maxLines: 1, overflow: TextOverflow.ellipsis, style: T.label(dockInk(sel, Grey.g56)))),
-            if (on) ...[DockTag('ON', hue: sel ? null : WsT.accent), const SizedBox(width: 2)],
-            if (star || h || sel) DockStar(on: star, ink: sel ? WsT.onAccent : null, onTap: () => c.star(name)) else const SizedBox(width: 20),
+            if (on) ...[DockTag('ON', hue: sel ? null : WsT.accent), SizedBox(width: Shape.s(2))],
+            if (star || h || sel) DockStar(on: star, ink: sel ? WsT.onAccent : null, onTap: () => c.star(name)) else SizedBox(width: Shape.s(20)),
           ],
         ),
       ),
@@ -113,7 +113,7 @@ class _ScreenRow extends StatelessWidget {
       child: Row(
         children: [
           Expanded(child: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis, style: T.name(dockInk(false)).copyWith(fontWeight: FontWeight.w500))),
-          if (on >= 0) ...[DockTag(of == 'screen' ? 'ON ${on + 1}' : 'ON', hue: WsT.accent), const SizedBox(width: 2)],
+          if (on >= 0) ...[DockTag(of == 'screen' ? 'ON ${on + 1}' : 'ON', hue: WsT.accent), SizedBox(width: Shape.s(2))],
         ],
       ),
     ),

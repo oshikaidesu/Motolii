@@ -143,6 +143,9 @@ abstract final class Shape {
 
   /// A margin of today's [x] px, as airy as the skin says (`Spacing`).
   static double s(double x) => x * ColorTheme.number('Spacing', 1);
+
+  /// A part's size of today's [x] px (a row's height, a strip, a rail), as large as the skin says (`Size`).
+  static double z(double x) => x * ColorTheme.number('Size', 1);
 }
 
 abstract final class T {
@@ -209,8 +212,12 @@ abstract final class T {
 
 /// [decided] the timeline's proportions: every size of a row is a fraction of the row.
 abstract final class TL {
-  static const height = 23.0, label = 180.0, ruler = 20.0;
-  static const bar = height * .87, radius = height * .09, key = height * .33;
+  static double get height => Shape.z(23); // (the skin's Size)
+  static double get label => Shape.z(180);
+  static double get ruler => Shape.z(20);
+  static double get bar => height * .87;
+  static double get key => height * .33;
+  static const radius = 23 * .09;
 }
 
 /// [proposal] research/pop-magazine.md section 7: one knob (0..3) drives every seasoning parameter. Dose 0 is today's calm tone; each step only adds.

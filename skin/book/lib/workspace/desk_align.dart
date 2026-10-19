@@ -46,7 +46,7 @@ class DeskAlign extends StatelessWidget {
       padding: EdgeInsets.all(WsT.gap),
       children: [
         if (ws.layer case final l?) DeskStrip(left: [DeskLayerChip(l.name, wsTone(l.kind))]),
-        const SizedBox(height: 8),
+        SizedBox(height: Shape.s(8)),
         for (final row in const [[0, 1, 2], [3, 4, 5]])
           Padding(
             padding: EdgeInsets.only(bottom: Shape.s(4)),
@@ -56,7 +56,7 @@ class DeskAlign extends StatelessWidget {
                 children: [
                   for (final side in row) ...[
                     DeskIconButton(key: ValueKey('align.$side'), size: 36, on: at(side), glyph: (ink) => _Side(side, ink), onTap: () => r == null ? null : align(ws, side)),
-                    const SizedBox(width: 4),
+                    SizedBox(width: Shape.s(4)),
                   ],
                 ],
               ),

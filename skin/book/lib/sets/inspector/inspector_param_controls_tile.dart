@@ -100,7 +100,7 @@ class ParamTile extends StatelessWidget {
                     child: PopSwitch(on: b, onChanged: (_) {}),
                   ),
                 ),
-                const SizedBox(width: 6),
+                SizedBox(width: Shape.s(6)),
                 Text(b ? 'On' : 'Off', style: T.label(on ? Grey.g76 : Grey.g56)),
               ],
             ),
@@ -182,11 +182,11 @@ class ParamTile extends StatelessWidget {
         return Row(
           children: [
             _PadGlyph(id: id, p: p, size: !point),
-            const SizedBox(width: Pop.tileGap),
+            SizedBox(width: Pop.tileGap),
             Expanded(
               child: _num(context, sub: 'x', caption: '${p.label} ${point ? 'X' : 'W'}'),
             ),
-            const SizedBox(width: Pop.tileGap),
+            SizedBox(width: Pop.tileGap),
             Expanded(
               child: _num(context, sub: 'y', caption: point ? 'Y' : 'H'),
             ),

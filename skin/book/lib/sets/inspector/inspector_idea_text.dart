@@ -266,19 +266,19 @@ class _TxEditState extends State<_TxEdit> {
             Expanded(
               child: PanelLink(to: LinkTo.fonts, value: doc.s2['tx_font'] ?? 'Inter'),
             ),
-            const SizedBox(width: Pop.tileGap),
+            SizedBox(width: Pop.tileGap),
             const _TxAlign(),
           ],
         ),
-        const SizedBox(height: Pop.tileGap),
+        SizedBox(height: Pop.tileGap),
         Row(
           children: [
             Expanded(child: _txField(doc, 'tx_sz', 'sz', first.size, edit)),
-            const SizedBox(width: Pop.tileGap),
+            SizedBox(width: Pop.tileGap),
             Expanded(child: _txField(doc, 'tx_w', 'w', first.w, edit)),
           ],
         ),
-        const SizedBox(height: Pop.tileGap),
+        SizedBox(height: Pop.tileGap),
         PanelLink(to: LinkTo.colors, label: 'Fill', value: first.fill, lead: LinkSwatch(first.fill)),
       ],
     );

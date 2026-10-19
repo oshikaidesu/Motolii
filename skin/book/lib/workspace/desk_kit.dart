@@ -172,7 +172,7 @@ class DeskChip extends StatelessWidget {
               height: 6,
               decoration: BoxDecoration(color: on ? WsT.onAccent : dot, shape: BoxShape.circle),
             ),
-            const SizedBox(width: 5),
+            SizedBox(width: Shape.s(5)),
           ],
           Flexible(
             child: Text(
@@ -274,7 +274,7 @@ class _DeskScrubState extends State<DeskScrub> {
                 child: Row(
                   children: [
                     Text(w.label, style: T.label(w.enabled ? Grey.g63 : Grey.g56)),
-                    const SizedBox(width: 4),
+                    SizedBox(width: Shape.s(4)),
                     Expanded(
                       child: Text(
                         w.format(w.value),
@@ -314,7 +314,7 @@ class DeskStrip extends StatelessWidget {
             child: Row(children: left),
           ),
         ),
-        if (right.isNotEmpty) const SizedBox(width: WsT.gap),
+        if (right.isNotEmpty) SizedBox(width: WsT.gap),
         ...right,
       ],
     ),
@@ -347,9 +347,9 @@ class DeskCaption extends StatelessWidget {
     height: 14,
     child: Row(
       children: [
-        if (tone != null) ...[Container(width: 3, height: 10, color: tone), const SizedBox(width: 5)],
+        if (tone != null) ...[Container(width: 3, height: 10, color: tone), SizedBox(width: Shape.s(5))],
         Text(text.toUpperCase(), style: T.micro(Grey.g76).copyWith(letterSpacing: 1, fontWeight: FontWeight.w700)),
-        const SizedBox(width: 6),
+        SizedBox(width: Shape.s(6)),
         Expanded(
           child: Text(
             trailing ?? '',
@@ -381,10 +381,10 @@ class DeskReadout extends StatelessWidget {
         textBaseline: TextBaseline.alphabetic,
         children: [
           Text(value, style: T.value(ink ?? Grey.g95).copyWith(fontSize: T.px(18), fontWeight: FontWeight.w700, letterSpacing: -.5)),
-          if (unit.isNotEmpty) ...[const SizedBox(width: 2), Text(unit, style: T.label(Grey.g63))],
+          if (unit.isNotEmpty) ...[SizedBox(width: Shape.s(2)), Text(unit, style: T.label(Grey.g63))],
         ],
       ),
-      if (sub != null) ...[const SizedBox(height: 3), Text(sub!, style: T.label(Grey.g56))],
+      if (sub != null) ...[SizedBox(height: Shape.s(3)), Text(sub!, style: T.label(Grey.g56))],
     ],
   );
 }

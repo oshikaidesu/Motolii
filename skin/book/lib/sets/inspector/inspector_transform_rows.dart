@@ -23,7 +23,7 @@ class SpaceRow extends StatelessWidget {
         Row(
           children: [
             for (final s in Space.values) ...[
-              if (s != Space.d2) const SizedBox(width: 4),
+              if (s != Space.d2) SizedBox(width: Shape.s(4)),
               Expanded(
                 child: SpacePlate(
                   s,
@@ -73,7 +73,7 @@ class GlyphPlate extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               CustomPaint(size: const Size(16, 14), painter: _GlyphPaint(glyph, ink)),
-              const SizedBox(width: 6),
+              SizedBox(width: Shape.s(6)),
               Flexible( // (narrow, the word gives way; the glyph stays)
                 child: Text(label, maxLines: 1, overflow: TextOverflow.clip, softWrap: false, style: pop ? T.micro(on ? Pop.onAccent : Grey.g76).copyWith(fontWeight: FontWeight.w700) : T.label(on ? Grey.g95 : Grey.g63)),
               ),

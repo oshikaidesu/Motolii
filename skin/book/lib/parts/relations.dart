@@ -72,7 +72,7 @@ class RelationTile extends StatelessWidget {
       ),
       child: Flex(direction: Axis.vertical, mainAxisAlignment: MainAxisAlignment.center, children: [
         FamIcon(fam, color: filled ? Grey.g07 : fam.c),
-        const SizedBox(height: 7),
+        SizedBox(height: Shape.s(7)),
         Text(fam.name, style: T.name(ink).copyWith(fontSize: T.px(10.5))),
       ]),
     );
@@ -172,24 +172,24 @@ class RelationCard extends StatelessWidget {
         child: Flex(direction: Axis.vertical, crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
           Flex(direction: Axis.horizontal, crossAxisAlignment: CrossAxisAlignment.center, children: [
             Container(width: 10, height: 10, decoration: BoxDecoration(color: fam.c, shape: BoxShape.circle)),
-            const SizedBox(width: 9),
+            SizedBox(width: Shape.s(9)),
             Flex(direction: Axis.vertical, crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
               Text(fam.name, style: T.title()),
-              const SizedBox(height: 4),
+              SizedBox(height: Shape.s(4)),
               Text(fam.jp, style: T.label(Grey.g56)),
             ]),
             const Spacer(),
             PillSwitch(on: on, fam: fam, onChanged: onToggle),
           ]),
-          const SizedBox(height: 12),
+          SizedBox(height: Shape.s(12)),
           Flex(direction: Axis.horizontal, crossAxisAlignment: CrossAxisAlignment.start, children: [
             Gadget(fam, size: 132),
-            const SizedBox(width: 12),
+            SizedBox(width: Shape.s(12)),
             Expanded(child: Flex(direction: Axis.vertical, mainAxisSize: MainAxisSize.min, children: [
               ValueWell(label: 'Density', value: density, fam: fam),
-              const SizedBox(height: 6),
+              SizedBox(height: Shape.s(6)),
               ValueWell(label: 'Spread', value: spread, fam: fam),
-              const SizedBox(height: 6),
+              SizedBox(height: Shape.s(6)),
               ValueWell(label: 'Falloff', value: .36, fam: fam),
             ])),
           ]),

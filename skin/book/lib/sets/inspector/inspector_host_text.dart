@@ -29,7 +29,7 @@ class TaGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, box) {
-      const g = Pop.tileGap;
+      final g = Pop.tileGap;
       final cols = math.max(1, ((box.maxWidth + g) / (Pop.tileMin + g)).floor());
       final rows = <List<(int, Widget)>>[[]];
       var used = 0;
@@ -46,8 +46,8 @@ class TaGrid extends StatelessWidget {
         final filled = r.fold<int>(0, (a, it) => a + it.$1);
         return Row(
           children: [
-            for (final (i, (s, w)) in r.indexed) ...[if (i > 0) const SizedBox(width: g), Expanded(flex: s, child: w)],
-            if (last && filled < cols) ...[const SizedBox(width: g), Spacer(flex: cols - filled)],
+            for (final (i, (s, w)) in r.indexed) ...[if (i > 0) SizedBox(width: g), Expanded(flex: s, child: w)],
+            if (last && filled < cols) ...[SizedBox(width: g), Spacer(flex: cols - filled)],
           ],
         );
       }
@@ -59,7 +59,7 @@ class TaGrid extends StatelessWidget {
           narrow: false,
           child: Column(
             children: [
-              for (var i = 0; i < rows.length; i++) ...[if (i > 0) const SizedBox(height: g), row(rows[i], i == rows.length - 1)],
+              for (var i = 0; i < rows.length; i++) ...[if (i > 0) SizedBox(height: g), row(rows[i], i == rows.length - 1)],
             ],
           ),
         ),
@@ -94,7 +94,7 @@ class TaBlock extends StatelessWidget {
               child: Center(child: glyph),
             ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(Pop.tilePad, 6, Pop.tilePad, 4),
+            padding: EdgeInsets.fromLTRB(Pop.tilePad, 6, Pop.tilePad, 4),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               mainAxisAlignment: MainAxisAlignment.spaceBetween,

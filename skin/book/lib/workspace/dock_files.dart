@@ -305,7 +305,7 @@ class _FolderRow extends StatelessWidget {
               ),
             ),
             DockGlyph(DockG.folder, size: 12, color: here ? WsT.onAccent : (depth == 0 ? WsT.accentInk : Grey.g63)),
-            const SizedBox(width: 6),
+            SizedBox(width: Shape.s(6)),
             Expanded(
               child: Text(
                 n.name,
@@ -554,19 +554,19 @@ class _Row extends StatelessWidget {
         child: Row(
           children: [
             SizedBox(width: 40, height: 28, child: _Art(n)),
-            const SizedBox(width: 8),
+            SizedBox(width: Shape.s(8)),
             Expanded(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(n.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: T.name(dockInk(sel))),
-                  const SizedBox(height: 4),
+                  SizedBox(height: Shape.s(4)),
                   Text(meta, maxLines: 1, overflow: TextOverflow.ellipsis, style: T.label(dockInk(sel, Grey.g63))),
                 ],
               ),
             ),
-            if (_inUse(n, c)) ...[const _InUse(), const SizedBox(width: 6)],
+            if (_inUse(n, c)) ...[const _InUse(), SizedBox(width: Shape.s(6))],
           ],
         ),
       ),

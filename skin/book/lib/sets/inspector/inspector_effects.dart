@@ -103,7 +103,7 @@ class _ParamSearchState extends State<ParamSearch> {
 
 /// A card of the host's own values, in the effects' manner: its Params, each field a value (keyed `v_` and its name).
 class ValuesCard extends StatelessWidget {
-  const ValuesCard(this.card, {super.key, this.top, this.side});
+  ValuesCard(this.card, {super.key, this.top, this.side});
   final Fx card;
   final Widget? top; // (a drawing of what the values make, above them: the window's own for a card it knows)
   final Widget? side; // (or a square one beside the first of them, Good Boy Ninja's Wiggle's way: its tiles to its right, the rest under both)
@@ -121,9 +121,9 @@ class ValuesCard extends StatelessWidget {
         if (side case final square?)
           LayoutBuilder(
             builder: (context, box) {
-              const g = Pop.tileGap, edge = Pop.tile * 3 + g * 2; // (the square as high as three rows of tiles)
+              final g = Pop.tileGap, edge = Pop.tile * 3 + g * 2; // (the square as high as three rows of tiles)
               final right = box.maxWidth - edge - g, cols = ((right + g) / (Pop.tileMin + g)).floor();
-              if (cols < 1) return Column(children: [SizedBox(height: edge, child: square), const SizedBox(height: g), ParamGrid('v', heroes)]); // (too narrow: above them)
+              if (cols < 1) return Column(children: [SizedBox(height: edge, child: square), SizedBox(height: g), ParamGrid('v', heroes)]); // (too narrow: above them)
               var n = 0, room = cols * 3; // (as many tiles as three rows beside it hold)
               for (final p in heroes) {
                 room -= math.min(ParamGrid.span(p), cols);
@@ -136,11 +136,11 @@ class ValuesCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       SizedBox.square(dimension: edge, child: square),
-                      const SizedBox(width: g),
+                      SizedBox(width: g),
                       Expanded(child: ParamGrid('v', heroes.take(n).toList())),
                     ],
                   ),
-                  if (n < heroes.length) ...[const SizedBox(height: g), ParamGrid('v', heroes.skip(n).toList())],
+                  if (n < heroes.length) ...[SizedBox(height: g), ParamGrid('v', heroes.skip(n).toList())],
                 ],
               );
             },

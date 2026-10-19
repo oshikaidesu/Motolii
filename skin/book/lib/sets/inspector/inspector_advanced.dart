@@ -32,7 +32,7 @@ class AdvancedFold extends StatelessWidget {
               child: Row(
                 children: [
                   FoldMark(open: adv, hot: h),
-                  const SizedBox(width: 6),
+                  SizedBox(width: Shape.s(6)),
                   Text('Advanced', style: ed.labStyle(h || adv ? Grey.g95 : Grey.g63)),
                   const Spacer(),
                   if (!adv) Text(summary ?? '${children.length} more', style: T.label(Grey.g56)),
@@ -41,7 +41,7 @@ class AdvancedFold extends StatelessWidget {
             ),
           ),
         ),
-        if (adv) ...[const SizedBox(height: 4), ...children],
+        if (adv) ...[SizedBox(height: Shape.s(4)), ...children],
       ],
     );
   }

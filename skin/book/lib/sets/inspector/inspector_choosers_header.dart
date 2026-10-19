@@ -256,7 +256,7 @@ class InspHeader extends StatelessWidget {
               decoration: BoxDecoration(color: x.cfg.locked ? Grey.g26 : Pop.accent, borderRadius: BorderRadius.all(Shape.r(6))),
               child: glyph == null ? null : Glyph(glyph, size: 13, color: x.cfg.locked ? Grey.g76 : Pop.onAccent),
             ),
-            const SizedBox(width: 8),
+            SizedBox(width: Shape.s(8)),
             Flexible(
               child: Text(
                 doc.name,
@@ -265,11 +265,11 @@ class InspHeader extends StatelessWidget {
                 style: T.title(x.cfg.locked ? Grey.g76 : Grey.g100).copyWith(fontSize: T.px(13), fontWeight: FontWeight.w700, height: 1),
               ),
             ),
-            const SizedBox(width: 6),
+            SizedBox(width: Shape.s(6)),
             Text((doc.kind == Kind.several ? 'Several' : word) + (x.cfg.locked ? ' · Locked' : ''), maxLines: 1, style: T.label(Grey.g56)),
             const Spacer(),
             Text('Animate all', style: T.label(Grey.g63)),
-            const SizedBox(width: 6),
+            SizedBox(width: Shape.s(6)),
             OnOff(
               on: doc.animateAll,
               enabled: !x.cfg.locked,
@@ -287,7 +287,7 @@ class InspHeader extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          if (glyph != null) ...[Glyph(glyph, size: 16, color: Grey.g76), const SizedBox(width: 8)],
+          if (glyph != null) ...[Glyph(glyph, size: 16, color: Grey.g76), SizedBox(width: Shape.s(8))],
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -299,7 +299,7 @@ class InspHeader extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: ed.kickStyle(Grey.g56),
                 ),
-                const SizedBox(height: 4),
+                SizedBox(height: Shape.s(4)),
                 Text(
                   doc.name,
                   maxLines: 1,
@@ -309,14 +309,14 @@ class InspHeader extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(width: 8),
+          SizedBox(width: Shape.s(8)),
           // contract: while on, editing an unkeyed value writes its first key at the playhead (D2).
           Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             mainAxisSize: MainAxisSize.min,
             children: [
               Text('Animate all', style: T.label(x.cfg.locked ? Grey.g56 : (doc.animateAll ? Grey.g95 : Grey.g63))),
-              const SizedBox(height: 4),
+              SizedBox(height: Shape.s(4)),
               OnOff(
                 on: doc.animateAll,
                 enabled: !x.cfg.locked,
@@ -374,7 +374,7 @@ class EmptyState extends StatelessWidget {
             ],
           )
         else
-          const SizedBox(height: 1),
+          SizedBox(height: Shape.s(1)),
         if (!x.cfg.maybe) Container(height: 1, color: ed.rule),
       ],
     );

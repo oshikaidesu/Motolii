@@ -105,7 +105,7 @@ WidgetbookComponent timelinePartsSet() => WidgetbookComponent(name: 'timeline_pa
 
 Fam _fam(BuildContext c, String label, Fam initial) => c.knobs.object.dropdown<Fam>(label: label, options: Fam.all, initialOption: initial, labelBuilder: (f) => f.name);
 
-Widget _band(int i, Widget child, {double h = TL.height}) => Container(height: h, decoration: BoxDecoration(color: i.isEven ? N.bandA : N.bandB, border: const Border(bottom: BorderSide(color: N.rowLine))), child: child);
+Widget _band(int i, Widget child, {double? h}) => Container(height: h ?? TL.height, decoration: BoxDecoration(color: i.isEven ? N.bandA : N.bandB, border: const Border(bottom: BorderSide(color: N.rowLine))), child: child);
 
 Size _measure(String t, TextStyle s) {
   final tp = TextPainter(text: TextSpan(text: t, style: s), textDirection: TextDirection.ltr)..layout();
@@ -472,7 +472,7 @@ class _WorkArea extends StatelessWidget {
   Widget build(BuildContext context) => TpValue<(int, int)>(
         initial: (a, b),
         builder: (context, v, set) {
-          const ppf = 6.0, fps = 30, grab = 8.0, top = TL.ruler;
+          final ppf = 6.0, fps = 30, grab = 8.0, top = TL.ruler;
           final x0 = v.$1 * ppf, x1 = v.$2 * ppf;
           int fr(double dx) => (dx / ppf).round();
           Widget handle(double x, bool left) => Positioned(
@@ -489,7 +489,7 @@ class _WorkArea extends StatelessWidget {
                 ),
               );
           return Stack(children: [
-            Positioned(top: 0, left: 0, right: 0, height: TL.ruler, child: CustomPaint(painter: const _RulerPainter(ppf, fps))),
+            Positioned(top: 0, left: 0, right: 0, height: TL.ruler, child: CustomPaint(painter: _RulerPainter(ppf, fps))),
             Positioned(top: top, left: 0, right: 0, height: 14, child: const ColoredBox(color: N.g13)),
             Positioned(
               top: top,
@@ -769,7 +769,7 @@ class _PropLanesState extends State<_PropLanes> {
   @override
   Widget build(BuildContext context) => Column(children: [
         Row(children: [
-          const SizedBox(width: TL.label),
+          SizedBox(width: TL.label),
           Expanded(child: SizedBox(height: TL.ruler, child: CustomPaint(painter: _RulerPainter(widget.ppf, 30)))),
         ]),
         for (var l = 0; l < 2; l++)
@@ -1164,7 +1164,7 @@ class _ContextState extends State<_Context> {
           SizedBox(
             height: 16,
             child: Row(children: [
-              const SizedBox(width: TL.label),
+              SizedBox(width: TL.label),
               Expanded(
                 child: ClipRect(
                   child: Stack(children: [
@@ -1196,7 +1196,7 @@ class _ContextState extends State<_Context> {
                 ]),
               ),
             ),
-          Expanded(child: Row(children: [const SizedBox(width: TL.label), Expanded(child: CustomPaint(size: Size.infinite, painter: TpLanePainter(fam: Fam.face, showBar: false, ppf: ppf)))])),
+          Expanded(child: Row(children: [SizedBox(width: TL.label), Expanded(child: CustomPaint(size: Size.infinite, painter: TpLanePainter(fam: Fam.face, showBar: false, ppf: ppf)))])),
         ]),
         Positioned(left: TL.label + marker * ppf, top: TL.ruler, bottom: 0, width: 1, child: IgnorePointer(child: ColoredBox(color: N.g63.withValues(alpha: .4)))),
         Positioned(

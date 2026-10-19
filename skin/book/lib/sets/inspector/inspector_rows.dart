@@ -83,7 +83,7 @@ class AxisHeader extends StatelessWidget {
               child: Row(
                 children: [
                   for (final (i, a) in const [(0, 'X'), (1, 'Y'), (2, 'Z')]) ...[
-                    if (i > 0) const SizedBox(width: 4),
+                    if (i > 0) SizedBox(width: Shape.s(4)),
                     Expanded(
                       child: Text(
                         a,

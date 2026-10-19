@@ -188,7 +188,7 @@ class _DragGhost extends StatelessWidget {
     child: Row(
       children: [
         ToneBadge(fx.mark, fx.tone),
-        const SizedBox(width: 6),
+        SizedBox(width: Shape.s(6)),
         Text(fx.name, style: T.title(Grey.g95).copyWith(fontSize: T.px(12), fontWeight: FontWeight.w700)),
       ],
     ),

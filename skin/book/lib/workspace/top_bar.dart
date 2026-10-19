@@ -22,15 +22,15 @@ class WsTopBar extends StatelessWidget {
       child: Row(
         children: [
           const _Wordmark(),
-          const SizedBox(width: 14),
+          SizedBox(width: Shape.s(14)),
           const _UndoRedo(),
-          const SizedBox(width: 14),
+          SizedBox(width: Shape.s(14)),
           Text(ws.document ?? '', style: T.name(Grey.g95).copyWith(fontWeight: FontWeight.w600)),
-          const SizedBox(width: 6),
+          SizedBox(width: Shape.s(6)),
           Text('/', style: T.name(Grey.g44)),
-          const SizedBox(width: 6),
+          SizedBox(width: Shape.s(6)),
           Text(ws.layer?.name ?? 'Stage', style: T.name(Grey.g76)), // (where the hand is: the picked thing, or the stage itself)
-          const SizedBox(width: 10),
+          SizedBox(width: Shape.s(10)),
           // Joined: the document's own size; a tap goes to the next of the usual three (wide, tall, square) and the document is opened again at it.
           GestureDetector(
             key: const ValueKey('ws-top-size'),
@@ -43,9 +43,9 @@ class WsTopBar extends StatelessWidget {
                   },
             child: _Chip('${WsArt.comp.width.round()} × ${WsArt.comp.height.round()}'),
           ),
-          const SizedBox(width: 4),
+          SizedBox(width: Shape.s(4)),
           _Chip('${Ws.fps} fps'),
-          const SizedBox(width: 4),
+          SizedBox(width: Shape.s(4)),
           _Chip(ws.timecode(Ws.duration)),
           const Spacer(),
           // (Edit and Animate are whether every change is keyed, the inside's one truth; Export writes the work area as a film, lit while it is written)
@@ -56,10 +56,10 @@ class WsTopBar extends StatelessWidget {
           const Spacer(),
           const WsZoomReadout(),
           const _ShadeSwitch(),
-          const SizedBox(width: 10),
+          SizedBox(width: Shape.s(10)),
           const _Waited(),
           const _Saved(),
-          const SizedBox(width: 12),
+          SizedBox(width: Shape.s(12)),
           const _Render(),
         ],
       ),
@@ -81,7 +81,7 @@ class _Wordmark extends StatelessWidget {
         color: WsT.accent,
         child: Text('M', style: T.title(WsT.onAccent).copyWith(fontSize: T.px(14), fontWeight: FontWeight.w900, height: 1)),
       ),
-      const SizedBox(width: 8),
+      SizedBox(width: Shape.s(8)),
       Text('Motolii', style: T.title(Grey.g95).copyWith(fontSize: T.px(14), fontWeight: FontWeight.w800, letterSpacing: -.2)),
     ],
   );
@@ -278,7 +278,7 @@ class _Saved extends StatelessWidget {
         height: 6,
         decoration: BoxDecoration(color: WsT.accent, shape: BoxShape.circle),
       ),
-      const SizedBox(width: 6),
+      SizedBox(width: Shape.s(6)),
       ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 260),
         child: Text(WsScope.of(context).notice ?? _savedAt(WsScope.of(context)), maxLines: 1, overflow: TextOverflow.ellipsis, style: T.label(Grey.g63)),
@@ -369,7 +369,7 @@ class _WaitedState extends State<_Waited> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Container(width: 6, height: 6, decoration: const BoxDecoration(color: Color(0xFFE5484D), shape: BoxShape.circle)),
-                const SizedBox(width: 5),
+                SizedBox(width: Shape.s(5)),
                 Text('$_count', style: T.label(h ? Grey.g91 : Grey.g63)),
               ],
             ),

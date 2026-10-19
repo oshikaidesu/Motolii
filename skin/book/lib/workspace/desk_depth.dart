@@ -103,11 +103,11 @@ class _DeskDepthState extends State<DeskDepth> {
         DeskStrip(
           left: [
             DeskLayerChip(cam?.name ?? 'Camera', WsT.toneCamera),
-            const SizedBox(width: 8),
+            SizedBox(width: Shape.s(8)),
             Text('${lens.focal.round()} mm', style: T.value(Grey.g91)),
-            const SizedBox(width: 8),
+            SizedBox(width: Shape.s(8)),
             Text('f/${lens.fstop.toStringAsFixed(1)}', style: T.value(Grey.g91)),
-            const SizedBox(width: 8),
+            SizedBox(width: Shape.s(8)),
             Text('${(lens.fov * 180 / math.pi).toStringAsFixed(1)}° view', style: T.label(Grey.g56)),
           ],
           right: [DeskChip(label: target == null ? 'Focus free' : 'On ${target.name}', dot: target == null ? Grey.g56 : wsTone(target.kind))],
@@ -167,7 +167,7 @@ class _LensNumbers extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               DeskCaption('Lens', tone: WsT.toneCamera),
-              const SizedBox(height: 4),
+              SizedBox(height: Shape.s(4)),
               DeskScrub(
                 label: 'Focal',
                 value: lens.focal,
@@ -178,7 +178,7 @@ class _LensNumbers extends StatelessWidget {
                 format: (v) => '${v.round()} mm',
                 onChanged: (v) => onEdit(() => lens.focal = v),
               ),
-              const SizedBox(height: 2),
+              SizedBox(height: Shape.s(2)),
               DeskScrub(
                 label: 'Aperture',
                 value: lens.fstop,
@@ -189,9 +189,9 @@ class _LensNumbers extends StatelessWidget {
                 format: (v) => 'f/${v.toStringAsFixed(1)}',
                 onChanged: (v) => onEdit(() => lens.fstop = v),
               ),
-              const SizedBox(height: 10),
+              SizedBox(height: Shape.s(10)),
               DeskCaption('Focus', tone: WsT.accent),
-              const SizedBox(height: 4),
+              SizedBox(height: Shape.s(4)),
               DeskScrub(
                 label: 'Dist',
                 value: lens.focus,
@@ -204,8 +204,8 @@ class _LensNumbers extends StatelessWidget {
                   lens.target = null;
                 }),
               ),
-              if (box.maxHeight >= 170) ...[const SizedBox(height: 6), DeskReadout(value: far(d.far - d.near), unit: 'px', sub: 'depth of field')],
-              if (box.maxHeight >= 214) ...[const SizedBox(height: 7), pair('Near', far(d.near)), const SizedBox(height: 4), pair('Far', far(d.far))],
+              if (box.maxHeight >= 170) ...[SizedBox(height: Shape.s(6)), DeskReadout(value: far(d.far - d.near), unit: 'px', sub: 'depth of field')],
+              if (box.maxHeight >= 214) ...[SizedBox(height: Shape.s(7)), pair('Near', far(d.near)), SizedBox(height: Shape.s(4)), pair('Far', far(d.far))],
             ],
           ),
         ),
