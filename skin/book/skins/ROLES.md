@@ -36,7 +36,7 @@
 |---|---|
 | `BandA` `BandB` | 行の縞（交互） |
 | `RowLine` | 行の間の線 |
-| `Clip1` `Clip2` `Clip3` `Clip4` `Clip5` `Clip6` `Clip7` | 層の種類の色：1 形、2 文字、3 画像・動画、4 カメラ、5 グループ、6 粒子、7 音 |
+| `Clip1` `Clip2` `Clip3` `Clip4` `Clip5` `Clip6` `Clip7` | 層の種類の色：1 形、2 文字、3 画像・動画、4 カメラ、5 グループ、6 粒子、7 音。タイムラインの帯のほか、その種類の札や印（Camera パネルの「Camera」の札は 4、作る棚の印）にも使う |
 | `Keyframe` | キーの印 |
 
 ### 差し色
@@ -50,6 +50,9 @@
 | 名前 | 窓のどこ |
 |---|---|
 | `AxisX` `AxisY` `AxisZ` | 軸の色（X・Y・Z の印、ハンドル） |
+| `HandleMove` `HandleScale` `HandleRotate` `HandlePivot` `HandleLift` | 動かすハンドルの色（移動・拡大・回転・基準点・持ち上げ）。インスペクタの変形の図、基準点の札、光や複製のつまみも同じ色 |
+| `Alert` | 知らせの赤い点（上の帯） |
+| `Shadow` | 浮いている物（開いた選びの一覧、つかんだ札）の影 |
 | `Glaze9` `Glaze15` | タイムラインのコマの縦線（薄く重ねる線：細かい方・太い方） |
 | `ToneTransform` `ToneLayer` `ToneText` `ToneFill` `ToneBlend` `TonePlace` `TonePath` `ToneSolid` `ToneTextAnim` `ToneMask` `ToneTime` `ToneLayout` `ToneParticles` `ToneCamera` `ToneOutput` `ToneLink` | インスペクタの札の種類ごとの印の色（変形、層、文字、塗り、合成、配置、パス、立体、文字の動き、マスク、時間、並べ方、粒子、カメラ、書き出し、つながり） |
 

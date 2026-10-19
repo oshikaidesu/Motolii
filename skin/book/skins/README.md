@@ -39,7 +39,7 @@
 skins/shoot.sh ~/.motolii/skins/my_skin
 ```
 
-窓全体をその革で撮って、フォルダに `preview.png` を書く（2分ほど）。フォルダの外には何も書かない。いくつでも並べて渡せる。
+窓全体をその革で撮って、フォルダに `preview.png` を書く（2分ほど）。撮る書類には立体・光・形・文字・カメラ・アニメの層とキーが入っているので、層の色・縞・キーの印も写る。フォルダの外には何も書かない。いくつでも並べて渡せる。
 
 - 書かなかった名前は、窓のいつもの値のまま。全部の色が値つきで並んだ一覧が欲しいときは [../themes/Default Dark.xml](../themes/Default%20Dark.xml)・[../themes/Default Light.xml](../themes/Default%20Light.xml)（`skin/book/themes/`）。
 
@@ -50,7 +50,7 @@ skins/shoot.sh ~/.motolii/skins/my_skin
 - **Background / Foreground**：パネルの地の色と文字の色。書いた色がそのまま地と文字になり、ほかの灰色の段（すき間・札・入力欄・線・薄い文字…）はこの2色の間に作られる。明るい地なら明るい革になる（`Shade` は要らない）。
 - **Grey00〜Grey100**：灰色の段を1つずつ決めたいとき（書いた段だけ上書き）。どの段が窓のどこかは [ROLES.md](ROLES.md) の表。[labs](labs/theme.xml) が段を1つずつ書いた例。
 - **ChosenDefault**：差し色（選んだ物・押している物・Render の塗り）。その上の文字は **ControlOnForeground**。
-- **Clip1〜7**：タイムラインの層の帯の色（1 形、2 文字、3 画像・動画、4 カメラ、5 グループ、6 粒子、7 音）。**Keyframe**：キーの印。**AxisX/Y/Z**：軸の色。
+- **Clip1〜7**：層の種類の色（1 形、2 文字、3 画像・動画、4 カメラ、5 グループ、6 粒子、7 音）。タイムラインの帯と、その種類の札や印に使う。**Keyframe**：キーの印。**AxisX/Y/Z**：軸の色。
 - **Tone…**：インスペクタの札ごとの色（変形・塗り・効果…）。
 
 ## 4. 形（数）

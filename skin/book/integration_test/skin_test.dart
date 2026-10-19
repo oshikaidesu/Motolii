@@ -25,12 +25,22 @@ void main() {
     final out = Directory('/Users/motolii_maker/motolii/reports/skins')..createSync(recursive: true);
     final doc = '${Directory.systemTemp.createTempSync('skin').path}/skin.motolii';
     WsZoom.set(1, keep: false); // (shot at 100%, whatever this Mac's window.xml keeps)
+    ColorTheme.at = '${Directory.systemTemp.createTempSync('skin').path}/none.xml'; // (opened in the window's own skin, not the one this Mac wears)
     await t.pumpWidget(WidgetsApp(color: const Color(0xFF000000), builder: (c, _) => Workspace(document: doc)));
     await t.pumpAndSettle();
-    final m = WsScope.read(t.element(find.byType(WsTimeline))).inside!;
-    for (final (k, f) in [('solid', 'cube'), ('solid', 'ring'), ('light', 'sun')]) {
-      m.add(k, f);
+    final ws = WsScope.read(t.element(find.byType(WsTimeline))), m = ws.inside!;
+    // (one thing of each kind the timeline colours, and keys, so every Clip colour, the bands and the key marks are in the picture)
+    const f = '/Users/motolii_maker/motolii/filament';
+    final cube = m.add('solid', 'cube');
+    for (final (k, w) in [('solid', 'ring'), ('light', 'sun'), ('shape', 'circle'), ('text', '/System/Library/Fonts/Supplemental/Arial Black.ttf'), ('camera', 'camera'), ('picture', '$f/third_party/thorvg_example/res/lottie/swinging.json')]) {
+      m.add(k, w);
     }
+    m.key(cube, 'x', 0, -200);
+    m.key(cube, 'x', 2, 200);
+    ws
+      ..reread()
+      ..select('$cube'); // (picked: the inspector shows its cards, each in its kind's colour)
+    await t.pumpAndSettle();
     Future<void> shot(String theme, String png) async {
       ColorTheme.watch(() => t.binding.reassembleApplication(), theme);
       t.binding.reassembleApplication();

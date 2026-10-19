@@ -1,5 +1,6 @@
 // What follows the pointer while an effect is dragged: the folded head, lifted.
 import 'package:flutter/widgets.dart';
+import 'package:lab_book/theme.dart';
 import 'package:lab_book/sets/inspector/inspector_parts.dart';
 import 'package:lab_book/sets/inspector/inspector_rows_sect.dart';
 import 'package:lab_book/tokens.dart';
@@ -183,7 +184,7 @@ class _DragGhost extends StatelessWidget {
     padding: EdgeInsets.symmetric(horizontal: Pop.inset),
     decoration: BoxDecoration(
       color: Grey.g20,
-      boxShadow: [BoxShadow(color: Color(0x99000000), blurRadius: 14, offset: Offset(0, 6))],
+      boxShadow: [BoxShadow(color: ColorTheme.of('Shadow', const Color(0x99000000)), blurRadius: 14, offset: const Offset(0, 6))],
     ),
     child: Row(
       children: [

@@ -355,4 +355,4 @@ class _CanvasPaint extends CustomPainter {
 }
 
 /// Rotation handles by index: 0 turns about Z (the knob), 1 tilts about X, 2 about Y.
-const _tiltInks = [Color(0xFFFF6A2B), Color(0xFFE974AB), Color(0xFF7DD5B1)];
+List<Color> get _tiltInks => [TransformZone.rotate.color, axX, axY];

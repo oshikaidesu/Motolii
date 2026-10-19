@@ -6,6 +6,7 @@ import 'package:flutter/widgets.dart';
 import '../parts/skin_parts.dart';
 import 'zoom.dart';
 
+import '../theme.dart';
 import '../tokens.dart';
 import 'stage_art.dart' show WsArt;
 import 'ws.dart';
@@ -368,7 +369,7 @@ class _WaitedState extends State<_Waited> {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Container(width: 6, height: 6, decoration: const BoxDecoration(color: Color(0xFFE5484D), shape: BoxShape.circle)),
+                Container(width: 6, height: 6, decoration: BoxDecoration(color: ColorTheme.of('Alert', const Color(0xFFE5484D)), shape: BoxShape.circle)),
                 SizedBox(width: Shape.s(5)),
                 Text('$_count', style: T.label(h ? Grey.g91 : Grey.g63)),
               ],

@@ -10,10 +10,12 @@ import 'inspector_parts.dart';
 // ---- 10. effects ------------------------------------------------------------------------------------------------------
 /// An effect as a plugin ships it: a name and a WGSL uniform struct. Its rows are whatever [readParams] makes of the struct.
 class Fx {
-  Fx(this.id, this.name, this.wgsl, {required this.tone, required this.mark, this.vendor});
+  Fx(this.id, this.name, this.wgsl, {Color? tone, Color Function()? toneOf, required this.mark, this.vendor}) : _tone = tone, _toneOf = toneOf;
   final String id, name, wgsl;
   final String? vendor;
-  final Color tone;
+  final Color? _tone;
+  final Color Function()? _toneOf; // (a skin's colour: read when drawn, so a card made before the skin changed wears the new one)
+  Color get tone => _toneOf?.call() ?? _tone!;
   final CardMark mark;
   late final List<Decl> decls = parseWgsl(wgsl);
   late final List<Param> params = [for (final d in decls) infer(d)];

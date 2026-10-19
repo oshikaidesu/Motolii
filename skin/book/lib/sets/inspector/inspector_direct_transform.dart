@@ -5,20 +5,22 @@ import 'package:lab_book/sets/inspector/inspector_direct_transform_canvas.dart';
 import 'package:lab_book/sets/inspector/inspector_direct_transform_value_glyph.dart';
 import 'package:lab_book/sets/inspector/inspector_rows_sect.dart';
 
+import '../../theme.dart';
 import 'inspector_parts.dart';
 
 /// What a point on the canvas grabs. Each zone edits one Transform row.
 /// The colour is the zone's name: the canvas part and its row wear the same one.
 enum TransformZone {
-  move('v_position', Color(0xFF3D6BFF)),
-  scale('v_scale', Color(0xFFB3C66B)),
-  rotate('v_rotate', Color(0xFFFF6A2B)),
-  pivot('v_anchor', Color(0xFFB57CFF)),
-  lift('v_position', Color(0xFF8FB0FF));
+  move('v_position', 'HandleMove', Color(0xFF3D6BFF)),
+  scale('v_scale', 'HandleScale', Color(0xFFB3C66B)),
+  rotate('v_rotate', 'HandleRotate', Color(0xFFFF6A2B)),
+  pivot('v_anchor', 'HandlePivot', Color(0xFFB57CFF)),
+  lift('v_position', 'HandleLift', Color(0xFF8FB0FF));
 
-  const TransformZone(this.prop, this.color);
-  final String prop;
-  final Color color;
+  const TransformZone(this.prop, this.role, this.usual);
+  final String prop, role;
+  final Color usual;
+  Color get color => ColorTheme.of(role, usual); // (the skin's handle colours)
 }
 
 

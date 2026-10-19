@@ -4,6 +4,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/widgets.dart';
+import 'package:lab_book/sets/inspector/inspector_direct_transform.dart' show TransformZone;
 import 'package:lab_book/sets/inspector/inspector_parts.dart';
 import 'package:lab_book/tokens.dart';
 
@@ -164,8 +165,8 @@ class _LightPaint extends CustomPainter {
     }
 
     knob(g.strengthKnob, _Knob.strength, warm);
-    if (g.spot || g.point) knob(g.reachKnob, _Knob.reach, const Color(0xFF8FB8FF));
-    if (g.spot) knob(g.coneKnob, _Knob.cone, const Color(0xFFB57CFF));
+    if (g.spot || g.point) knob(g.reachKnob, _Knob.reach, TransformZone.lift.color);
+    if (g.spot) knob(g.coneKnob, _Knob.cone, TransformZone.pivot.color);
   }
 
   @override

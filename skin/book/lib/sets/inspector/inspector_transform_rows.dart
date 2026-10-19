@@ -351,7 +351,7 @@ class _AnchorPaint extends CustomPainter {
     }
     final a = at;
     if (a == null) return;
-    final ink = !on ? Grey.g56 : (hot ? const Color(0xFFB57CFF) : Grey.g95);
+    final ink = !on ? Grey.g56 : (hot ? TransformZone.pivot.color : Grey.g95);
     final p = point(a), k = s.height / 18;
     c.drawCircle(p, 3.2 * k, Paint()..color = Grey.g07);
     c.drawCircle(

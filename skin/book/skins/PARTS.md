@@ -3,14 +3,19 @@
 theme.xml に `<Parts Value="フォルダ"/>` を書くと、そのフォルダにある `名前.svg` が、窓のその絵の代わりに描かれる（フォルダは theme.xml から見た場所でも、~/ からでも、絶対の場所でもよい）。
 色は、窓がその場所で使っている色に塗り直される（SVG の形だけが使われる）。無い名前は、窓のいつもの絵のまま。
 
+- 枠は `viewBox="0 0 24 24"`。窓ではおよそ 12〜22 画素に縮めて描かれる（`Size` で変わる）ので、線の太さは 24 の枠で 1.5〜2 がちょうどいい。
+- 塗りの形も、線だけの形（`fill="none"` と `stroke`）も、どちらも塗り直される。塗り直す色はその場所の色：ふだんは文字の灰色、押している時や再生中は差し色（`ChosenInk`）。
+- 印は枠いっぱいに描かれる。いつもの印と大きさをそろえたいときは、24 の枠の中で 2〜3 の余白を残す。
+- ここに載っているのは、窓に今出ている印だけ（窓が描かない名前は `test/skin_names_test.dart` が落とす）。
+
 ## 道具（glyph.）
-`glyph.select` `glyph.move` `glyph.rect` `glyph.ellipse` `glyph.pen` `glyph.text` `glyph.image` `glyph.camera` `glyph.repeater` `glyph.grid` `glyph.circle` `glyph.spiral` `glyph.shape` `glyph.effect` `glyph.media`
+`glyph.select` `glyph.move` `glyph.rect` `glyph.ellipse` `glyph.pen` `glyph.text` `glyph.image` `glyph.camera` `glyph.grid` `glyph.circle` `glyph.shape`
 
 ## タイムライン（tp.）
-`tp.eye` `tp.eyeOff` `tp.solo` `tp.lock` `tp.unlock` `tp.caretR` `tp.caretD` `tp.stopwatch` `tp.play` `tp.pause` `tp.stop` `tp.toStart` `tp.toEnd` `tp.stepBack` `tp.stepFwd` `tp.loop` `tp.fit` `tp.plus` `tp.minus` `tp.keyOutline` `tp.keyFilled`
+`tp.eye` `tp.eyeOff` `tp.solo` `tp.lock` `tp.unlock` `tp.play` `tp.pause` `tp.toStart` `tp.stepBack` `tp.stepFwd` `tp.loop` `tp.fit` `tp.plus` `tp.minus` `tp.keyFilled`
 
 ## ドック（dock.）
-`dock.media` `dock.effects` `dock.fonts` `dock.colors` `dock.files` `dock.create` `dock.search` `dock.close` `dock.chevron` `dock.grid` `dock.list` `dock.sort` `dock.filter` `dock.plus` `dock.light` `dock.blur` `dock.distort` `dock.colour` `dock.stylize` `dock.copies` `dock.paths` `dock.text` `dock.particles` `dock.masks` `dock.time` `dock.shape` `dock.camera` `dock.nullObj` `dock.solid` `dock.adjust` `dock.group` `dock.rect` `dock.ellipse` `dock.polygon` `dock.star` `dock.line` `dock.pen` `dock.radial` `dock.folder` `dock.comp` `dock.image` `dock.audio` `dock.video` `dock.font` `dock.doc` `dock.link` `dock.stage` `dock.inspector` `dock.timeline` `dock.desk`
+`dock.media` `dock.effects` `dock.fonts` `dock.colors` `dock.create` `dock.search` `dock.close` `dock.chevron` `dock.grid` `dock.list` `dock.plus` `dock.light` `dock.stylize` `dock.copies` `dock.text` `dock.time` `dock.shape` `dock.camera` `dock.nullObj` `dock.solid` `dock.rect` `dock.ellipse` `dock.polygon` `dock.star` `dock.line` `dock.radial` `dock.folder` `dock.comp` `dock.image` `dock.audio` `dock.video` `dock.font` `dock.link` `dock.stage` `dock.inspector` `dock.timeline` `dock.desk`
 
 ## 机の道具（desk.）
 `desk.tools` `desk.blend` `desk.align`

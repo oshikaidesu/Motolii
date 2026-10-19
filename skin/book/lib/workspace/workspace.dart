@@ -502,7 +502,7 @@ List<Fx> _makeCards(Ws ws, Motolii m, int t) {
           '  // @advanced($fold)',
           for (final n in names) if (m.shown(n)?.fold == fold) field(n),
         ],
-      ].join('\n')}\n}', tone: Pop.toneLayer, mark: CardMark.layer),
+      ].join('\n')}\n}', toneOf: () => Pop.toneLayer, mark: CardMark.layer),
   ];
 }
 

@@ -233,10 +233,10 @@ class _CubePaint extends CustomPainter {
         ..shader = LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [const Color(0xFF3D6BFF).withValues(alpha: .34), const Color(0xFF8FB0FF).withValues(alpha: .16)],
+          colors: [TransformZone.move.color.withValues(alpha: .34), TransformZone.lift.color.withValues(alpha: .16)],
         ).createShader(front.getBounds()),
     );
-    c.drawPath(front, line(const Color(0xFF8FB0FF).withValues(alpha: .7)));
+    c.drawPath(front, line(TransformZone.lift.color.withValues(alpha: .7)));
 
     for (final q in g.points) {
       final isNear = q == near, d = g.depth(q.$1, q.$2, q.$3), k = ((d + 1.2) / 2.4).clamp(0.0, 1.0);
@@ -252,7 +252,7 @@ class _CubePaint extends CustomPainter {
     }
 
     final tp = TextPainter(
-      text: TextSpan(text: 'FRONT', style: T.micro(const Color(0xFF8FB0FF))),
+      text: TextSpan(text: 'FRONT', style: T.micro(TransformZone.lift.color)),
       textDirection: TextDirection.ltr,
     )..layout();
     final base = p(50, 100, -50), up = p(50, 0, -50);

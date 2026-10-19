@@ -4,6 +4,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/widgets.dart';
+import 'package:lab_book/sets/inspector/inspector_direct_transform.dart' show TransformZone;
 import 'package:lab_book/sets/inspector/inspector_parts.dart';
 import 'package:lab_book/tokens.dart';
 
@@ -120,7 +121,7 @@ class _CopiesPaint extends CustomPainter {
     if (g.count > 1) { // (the second copy's knob: pulled, the copies stand further apart, or closer)
       final k = g.gapKnob;
       c.drawLine(k + const Offset(-8, 0), k + const Offset(8, 0), ink..color = Grey.g56);
-      c.drawCircle(k, held == _Knob.gap ? 6.5 : 5, Paint()..color = held == _Knob.gap ? Pop.accent : const Color(0xFF8FB8FF));
+      c.drawCircle(k, held == _Knob.gap ? 6.5 : 5, Paint()..color = held == _Knob.gap ? Pop.accent : TransformZone.lift.color);
     }
   }
 

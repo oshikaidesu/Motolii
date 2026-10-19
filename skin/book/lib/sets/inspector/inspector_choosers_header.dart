@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
+import 'package:lab_book/theme.dart';
 import 'package:lab_book/sets/inspector/inspector_rows_prop_row.dart';
 import 'package:lab_book/sets/inspector/inspector_rows_sect.dart';
 import '../../parts/controls.dart';
@@ -68,7 +69,7 @@ class ChooserState extends State<Chooser> {
         color: Grey.g15,
         borderRadius: BorderRadius.all(Shape.r(8)),
         border: Border.all(color: Grey.g26),
-        boxShadow: const [BoxShadow(color: Color(0x99000000), blurRadius: 16, offset: Offset(0, 6))],
+        boxShadow: [BoxShadow(color: ColorTheme.of('Shadow', const Color(0x99000000)), blurRadius: 16, offset: const Offset(0, 6))],
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
