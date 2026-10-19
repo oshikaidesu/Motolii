@@ -888,7 +888,7 @@ class _StageState extends State<_Stage> {
     }
     if (anchor == null && restFrom != null && (p - restFrom!).distance < 6) return; // (a hand trembling is a hand resting)
     restFrom = p;
-    if (anchor != null && (p - (restAt ?? anchor!)).distance > 110) {
+    if (anchor != null && (p - (restAt ?? anchor!)).distance > 160) {
       setState(() => anchor = aim = target = null);
       t.hover(null);
     }
@@ -913,6 +913,72 @@ class _StageState extends State<_Stage> {
   }
 
   Offset _local(Offset global) => (context.findRenderObject()! as RenderBox).globalToLocal(global);
+
+  /// Where each of the four holes sits: just outside the thing, then slid along the hole's side until its words clear the neighbours.
+  /// A hole that lands on the next square cannot be read (Cultist: the mark of what a hole accepts has to stay a mark).
+  List<Offset> _seats(ThingM th) {
+    final (c, r) = _place(th);
+    final stage = context.findRenderObject()! as RenderBox;
+    Offset seat(int k) {
+      final dir = const [Offset(0, -1), Offset(1, 0), Offset(0, 1), Offset(-1, 0)][k];
+      final perp = Offset(-dir.dy, dir.dx);
+      final wide = k.isEven;
+      final hw = wide ? 58.0 : 52.0, hh = 15.0;
+      final origin = c + dir * (r + (wide ? hh : hw) + 12);
+      Rect box(Offset p) => Rect.fromCenter(center: p, width: hw * 2, height: hh * 2);
+      bool clear(Offset p) {
+        final b = box(p);
+        if (b.overlaps(Rect.fromCircle(center: c, radius: r * .62))) return false;
+        for (final o in t.things) {
+          if (o != th && b.overlaps(_box(o).inflate(8))) return false;
+        }
+        return true;
+      }
+
+      Offset pick(Offset p) => Offset(p.dx.clamp(64, math.max(64, stage.size.width - 64)), p.dy.clamp(22, math.max(22, stage.size.height - 22)));
+      // A clear seat can sit on the next square's column. Walk it back toward this thing and keep the last step that still clears.
+      Offset hug(Offset p) {
+        final goal = c + dir * (r * .55 + (wide ? hh : hw) + 8);
+        var best = p;
+        for (var i = 1; i <= 8; i++) {
+          final q = Offset.lerp(p, goal, i / 8)!;
+          if (!clear(q)) break;
+          best = q;
+        }
+        return best;
+      }
+
+      if (clear(origin)) return pick(origin);
+      for (var n = 1; n <= 12; n++) {
+        final d = n * 14.0, a = origin + perp * d, b = origin - perp * d;
+        final aOk = clear(a), bOk = clear(b);
+        if (!aOk && !bOk) continue;
+        if (aOk && bOk) {
+          double room(Offset q) {
+            var m = double.infinity;
+            for (final o in t.things) {
+              if (o == th) continue;
+              m = math.min(m, (q - _place(o).$1).distance);
+            }
+            return m;
+          }
+
+          final ra = room(a), rb = room(b);
+          if ((ra - rb).abs() > 8) return pick(hug(ra > rb ? a : b));
+          var away = Offset.zero; // (the neighbours' side: the hole takes the other one)
+          for (final o in t.things) {
+            if (o != th) away += _place(o).$1 - c;
+          }
+          return pick(hug(away.dx * perp.dx + away.dy * perp.dy > 0 ? b : a));
+        }
+        return pick(hug(aOk ? a : b));
+      }
+      return pick(origin);
+    }
+
+    return [for (var k = 0; k < 4; k++) seat(k)];
+  }
+
   int? _aimAt(Offset p) {
     final d = p - (restAt ?? anchor!); // (the way the hand went from where it rested: a ring pushed in from the edge picks nothing by itself)
     if (d.distance < 28 || target == null) return null;
@@ -1014,18 +1080,12 @@ class _StageState extends State<_Stage> {
             child: Stack(children: [
               const SizedBox.expand(),
               if ((o != null || pending != null) && anchor != null && target != null)
-                Positioned(
-                  left: anchor!.dx - 110,
-                  top: anchor!.dy - 80,
-                  width: 220,
-                  height: 160,
-                  child: _ValueRing(t, target!, colour, aim, onPick: pending == null ? null : (k) {
-                    final id = _ringValsOf(target!)[k];
-                    if (t.valOr(id, of: target) != null) t.join(id, pending!, on: target);
-                    pending = null;
-                    _leave();
-                  }),
-                ),
+                Positioned.fill(child: _ValueRing(t, target!, colour, aim, _seats(target!), _place(target!).$1, onPick: pending == null ? null : (k) {
+                  final id = _ringValsOf(target!)[k];
+                  if (t.valOr(id, of: target) != null) t.join(id, pending!, on: target);
+                  pending = null;
+                  _leave();
+                })),
             ]),
           ),
         );
@@ -1034,13 +1094,15 @@ class _StageState extends State<_Stage> {
   );
 }
 
-/// The ring a carried card opens on the stage: four values of the thing around the place it rested, the one aimed at lit.
+/// The ring a carried card opens on the stage: four values of the thing, each just off it and off its neighbours, the one aimed at lit.
 class _ValueRing extends StatelessWidget {
-  const _ValueRing(this.t, this.th, this.c, this.aim, {this.onPick});
+  const _ValueRing(this.t, this.th, this.c, this.aim, this.seats, this.heart, {this.onPick});
   final CardTable t;
   final ThingM th;
   final Color c;
   final int? aim;
+  final List<Offset> seats;
+  final Offset heart;
   final void Function(int)? onPick; // a ring left open after a drop: its values are tapped
   @override
   Widget build(BuildContext context) {
@@ -1055,13 +1117,10 @@ class _ValueRing extends StatelessWidget {
 
     Widget pick(int k) => onPick == null ? pill(k) : GestureDetector(onTap: () => onPick!(k), child: MouseRegion(cursor: SystemMouseCursors.click, child: pill(k)));
 
-    return Stack(alignment: Alignment.center, children: [
-      Container(width: 22, height: 22, decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: Grey.g44))),
-      if (t.things.length > 1) Positioned(top: 62, child: Text(th.name, style: T.micro(Grey.g63))),
-      Align(alignment: Alignment.topCenter, child: pick(0)),
-      Align(alignment: Alignment.centerRight, child: pick(1)),
-      Align(alignment: Alignment.bottomCenter, child: pick(2)),
-      Align(alignment: Alignment.centerLeft, child: pick(3)),
+    return Stack(children: [
+      Positioned(left: heart.dx - 11, top: heart.dy - 11, child: Container(width: 22, height: 22, decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: Grey.g44)))),
+      for (var k = 0; k < 4; k++)
+        Positioned(left: seats[k].dx, top: seats[k].dy, child: FractionalTranslation(translation: const Offset(-.5, -.5), child: pick(k))),
     ]);
   }
 }
