@@ -36,6 +36,7 @@ abstract final class SkinParts {
       }
     }
     if (dir != _dir) return; // (the theme moved on while these were read)
+    if (next.isEmpty && _pics.isEmpty) return; // (no pictures before or now: nothing to paint again)
     for (final p in _pics.values) {
       p.picture.dispose();
     }
