@@ -1,4 +1,5 @@
 // Kaleidoscope Tile: ISF-Files' Kaleidoscope Tile.fs (MIT, Copyright (c) 2018 Vidvox, github.com/Vidvox/ISF-Files; by VIDVOX), its GLSL made WGSL by naga (filament/effects/from_isf.py)
+// --spill (on a thing: what it makes where the thing is not is light on what is under)
 // --track@size:size,0,2,0.5,0.001
 // --track@sides:sides,1,32,6,0.001
 // --track@rotation:rotation,0,1,0.125,0.001

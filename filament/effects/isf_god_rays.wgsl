@@ -1,4 +1,5 @@
 // God Rays: ISF-Files' God Rays.fs (MIT, Copyright (c) 2018 Vidvox, github.com/Vidvox/ISF-Files; by VIDVOX), its GLSL made WGSL by naga (filament/effects/from_isf.py)
+// --spill (on a thing: what it makes where the thing is not is light on what is under)
 // --track@lightDirDOTviewDir:lightDirDOTviewDir,0,1,0.5,0.001
 // --track@lightPositionOnScreen_x:lightPositionOnScreen x,0,1,0.5,0.001
 // --track@lightPositionOnScreen_y:lightPositionOnScreen y,0,1,0.5,0.001

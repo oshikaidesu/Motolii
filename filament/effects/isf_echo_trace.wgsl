@@ -1,4 +1,5 @@
 // Echo Trace: ISF-Files' Echo Trace.fs (MIT, Copyright (c) 2018 Vidvox, github.com/Vidvox/ISF-Files; by VIDVOX), its GLSL made WGSL by naga (filament/effects/from_isf.py)
+// --spill (on a thing: what it makes where the thing is not is light on what is under)
 // --track@thresh:Threshold,0,1,0,0.001
 // --track@gain:Gain,0,2,1,0.001
 // --check@hardCutoff_on:Hard Cutoff,1

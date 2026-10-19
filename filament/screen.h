@@ -23,6 +23,7 @@ struct ScreenFx {
     uint32_t bytes = 0;
     door::Screen* door = nullptr;
     int pictures = 1;   // the stage's picture, then each target's (ISF's passes)
+    bool spill = false;   // its head says // --spill: on a thing, what it makes where the thing is not is light laid on what is under (rays, trails, a shifted copy)
     // ISF's passes, drawn in turn (knob `pass`): into a target of the effect's own (kept, its last picture read the
     // next frame, when persistent; finer when float; a share of the stage's size or so many points), or, the last, out.
     struct Target { std::string name; bool kept = false, fine = false; double share[2] = {1, 1}; int points[2] = {0, 0}; Texture* picture[2] = {nullptr, nullptr}; RenderTarget* into[2] = {nullptr, nullptr}; int front = 0; uint32_t w = 0, h = 0; };
@@ -80,6 +81,7 @@ static bool screen_read(ScreenFx& fx, std::string& code) {
             if (const size_t c = line.find(':', h); c != std::string::npos) fx.historyShare = std::clamp(std::atof(line.c_str() + c + 1), 0.05, 1.0);
             continue;
         }
+        if (line.find("--spill") != std::string::npos) { fx.spill = true; continue; }
         const size_t p = line.find("--pass@"), colon = line.find(':', p);
         if (p == std::string::npos || colon == std::string::npos) continue;
         const std::string name = line.substr(p + 7, colon - p - 7);
@@ -279,7 +281,7 @@ static void screen_fresh(Stage& s, ScreenFx& fx) {
     door::drop(s.engine, fx.door);
     screen_targets(s, fx, true);
     fx.knobs = again.knobs, fx.fields = again.fields, fx.bytes = again.bytes, fx.door = made;
-    fx.pictures = again.pictures, fx.targets = again.targets, fx.passes = again.passes, fx.layered = again.layered;   // (the past frames kept as they are if their count stays)
+    fx.pictures = again.pictures, fx.targets = again.targets, fx.passes = again.passes, fx.layered = again.layered, fx.spill = again.spill;   // (the past frames kept as they are if their count stays)
 }
 // Whether a file of the stage's effects has been written over since it was made (what wakes a stage that is not drawing).
 static bool screen_moved(const ScreenStack& st) {
@@ -399,8 +401,10 @@ fn way(w: i32, b: vec3f, s: vec3f) -> vec3f {
   let c = textureSampleLevel(made, near0, uv, 0.0);
   let u = textureSampleLevel(under, near2, uv, 0.0);
   let b = select(vec3f(0.0), u.rgb / max(u.a, 1e-5), u.a > 1e-4);
-  let mixed = clamp(way(i32(k.way + 0.5), b, clamp(c.rgb, vec3f(0.0), vec3f(1.0))), vec3f(0.0), vec3f(1.0));
-  return vec4f(mixed * a, a);
+  var mixed = clamp(c.rgb, vec3f(0.0), vec3f(1.0));
+  if (k.way > 0.5) { mixed = clamp(way(i32(k.way + 0.5), b, mixed), vec3f(0.0), vec3f(1.0)); }
+  // (where the thing is not: what the effects made there laid on as light, when they throw it (k.a, their heads' --spill))
+  return vec4f(mixed * a + max(c.rgb, vec3f(0.0)) * (1.0 - a) * k.a, a);
 }
 )WGSL";
 static void thing_effects_draw(Stage& s, ScreenStack& st, View* v, const ScreenNumbers& numbers, int way = 0) {
@@ -430,36 +434,16 @@ static void thing_effects_draw(Stage& s, ScreenStack& st, View* v, const ScreenN
         Texture* from = i == 0 ? st.shot : st.between[(i - 1) % 2];
         screen_draw(s, st, *st.fx[i], from, st.betweenTarget[i % 2], numbers, w, h);
     }
-    // (then laid over what is under, cut to the thing's own shape as it was drawn alone: Unreal's custom stencil; what an
-    //  effect paints where the thing is not is let go)
-    static std::map<Engine*, door::Screen*> cuts;
-    door::Screen*& cut = cuts[s.engine];
-    if (!cut) {
-        static const char* const shape =
-            "@group(0) @binding(0) var made: texture_2d<f32>;\n@group(0) @binding(1) var near: sampler;\n"
-            "@group(0) @binding(2) var alone: texture_2d<f32>;\n@group(0) @binding(3) var near2: sampler;\n"
-            "@fragment fn main(@builtin(position) frag: vec4f, @location(0) uv: vec2f) -> @location(0) vec4f {\n"
-            "  let a = textureSampleLevel(alone, near2, uv, 0.0).a;\n"
-            "  let c = textureSampleLevel(made, near, uv, 0.0);\n"
-            "  return vec4f(c.rgb * a, a);\n}\n";
+    // (then laid over what is under: in its shape as it was drawn alone (Unreal's custom stencil), in its way of lying on
+    //  what is under (reading it, kit.h backdrop); outside it, only light, when an effect throws it)
+    if (!st.lay) {
         std::string why;
-        cut = door::screen(s.engine, "cut", shape, 0, &why, 2);
-        if (!cut) std::fprintf(stderr, "the cut to a thing's shape is not made: %s\n", why.c_str());
+        st.lay = door::screen(s.engine, "lay", thing_lay_shader, 16, &why, 3);
+        if (!st.lay) { std::fprintf(stderr, "a thing's way of lying with effects is not made: %s\n", why.c_str()); return; }
     }
-    if (way && s.backdrop) {   // (in its way, reading what is under)
-        if (!st.lay) {
-            std::string why;
-            st.lay = door::screen(s.engine, "lay", thing_lay_shader, 16, &why, 3);
-            if (!st.lay) std::fprintf(stderr, "a thing's way of lying with effects is not made: %s\n", why.c_str());
-        }
-        if (st.lay) {
-            const float knobs[4] = {(float)way, 0, 0, 0};
-            door::knobs(s.engine, st.lay, knobs, sizeof knobs);
-            Texture* const read[3] = {st.between[(st.fx.size() - 1) % 2], st.shot, s.backdrop};
-            door::draw(s.engine, st.lay, read, was, w, h, 0, nullptr, true);
-            return;
-        }
-    }
-    Texture* const read[2] = {st.between[(st.fx.size() - 1) % 2], st.shot};
-    if (cut) door::draw(s.engine, cut, read, was, w, h, 0, nullptr, true);
+    const bool spill = std::any_of(st.fx.begin(), st.fx.end(), [](const ScreenFx* f) { return f->spill; });
+    const float knobs[4] = {(float)(s.backdrop ? way : 0), spill ? 1.f : 0.f, 0, 0};
+    door::knobs(s.engine, st.lay, knobs, sizeof knobs);
+    Texture* const read[3] = {st.between[(st.fx.size() - 1) % 2], st.shot, way && s.backdrop ? s.backdrop : st.shot};
+    door::draw(s.engine, st.lay, read, was, w, h, 0, nullptr, true);
 }

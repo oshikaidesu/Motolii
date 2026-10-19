@@ -1,4 +1,5 @@
 // Time Glitch RGB: ISF-Files' Time Glitch RGB.fs (MIT, Copyright (c) 2018 Vidvox, github.com/Vidvox/ISF-Files; by VIDVOX), its GLSL made WGSL by naga (filament/effects/from_isf.py)
+// --spill (on a thing: what it makes where the thing is not is light on what is under)
 // --track@inputDelay_x:Buffer r,0,1,0.25,0.001
 // --track@inputDelay_y:Buffer g,0,1,0.5,0.001
 // --track@inputDelay_z:Buffer b,0,1,0.75,0.001
