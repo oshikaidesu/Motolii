@@ -1518,6 +1518,7 @@ class _Tile extends StatelessWidget {
     return _ValDrop(t, v, (context, overHere, tying, may) {
       final over = overHere ?? (t.preview?.$1 == v.id ? t.preview!.$2 : null); // (aimed at from the stage's ring: lit here too)
       final held = t.carrying;
+      final tagged = t.tags[v.id] != null || (CardTable.canDrive(v) && over == null && t.things.length > 1); // (a tag's mark shows: its own, or an empty one)
       final waiting = held is Beh ? held.c : (held is String ? t.drives[held]?.beh.c : Pop.accent);
       final edge = over?.c ?? (tying ? Pop.accent : (may && waiting != null ? waiting.withValues(alpha: .45) : const Color(0x00000000)));
       final width = over != null ? (d != null && d.beh == over ? math.min(d.width + .15, 1.0) : (d?.width ?? .2)) : d?.width;
@@ -1543,7 +1544,6 @@ class _Tile extends StatelessWidget {
         child: MouseRegion(cursor: CardTable.canDrive(v) ? SystemMouseCursors.grab : MouseCursor.defer, child: SizedBox(
           width: double.infinity,
           child: Row(children: [
-            if (CardTable.canDrive(v)) ...[SizedBox(width: 6, height: 10, child: CustomPaint(painter: _Grip(Grey.g56))), const SizedBox(width: 4)], // (held here, the tile's value is carried)
             Flexible(child: Text(v.label, maxLines: 1, overflow: TextOverflow.ellipsis, style: T.micro(CardTable.canDrive(v) ? Grey.g63 : Grey.g44).copyWith(height: 1.1))),
           ]),
         )),
@@ -1579,7 +1579,7 @@ class _Tile extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(Pop.tilePad, 5, 5, 4),
             child: Stack(children: [
               Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                Padding(padding: const EdgeInsets.only(right: 24), child: label),
+                Padding(padding: EdgeInsets.only(right: tagged && d != null ? 45 : 24), child: label),
                 scrub(Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
                 t.editing == v.id
                     ? _NumEdit(t, v)
@@ -1603,9 +1603,9 @@ class _Tile extends StatelessWidget {
                 ])),
               ]),
               // (the right edge is one column of marks: what drives it on top, its bundle under; nothing sits on the words)
-              if (d != null) Positioned(right: 0, top: 0, child: _DriveChip(t, v.id, d)),
-              if (t.tags[v.id] != null) Positioned(right: 0, top: d != null ? 21 : 0, child: _TagMark(t, v.id, t.tags[v.id]!.tag)),
-              if (d == null && over == null && t.tags[v.id] == null && !((held is Beh || held is String) && !CardTable.canDrive(v))) Positioned(right: 1, top: 2, child: IgnorePointer(child: _Gauge((v.v - v.lo) / (v.hi - v.lo)))),
+              if (d != null) Positioned(right: tagged ? 21 : 0, top: 0, child: _DriveChip(t, v.id, d)),
+              if (tagged) Positioned(right: 0, top: 0, child: _TagMark(t, v.id, t.tags[v.id]?.tag)), // (its tag, or an empty tag waiting: carried onto another thing, both wear one)
+              if (d == null && over == null && t.tags[v.id] == null && !(CardTable.canDrive(v) && t.things.length > 1) && !((held is Beh || held is String) && !CardTable.canDrive(v))) Positioned(right: 1, top: 2, child: IgnorePointer(child: _Gauge((v.v - v.lo) / (v.hi - v.lo)))),
               if (tied != null)
                 Positioned(
                   right: 0,
@@ -1863,32 +1863,49 @@ class _DriveKnobs extends StatelessWidget {
 }
 
 
-/// A tag on a value: its letter in its colour. Tapped, the values wearing it are listed (each with ×) and light on the stage;
-/// carried onto another thing, that thing's value of the same name puts it on.
+/// A tag on a value: its letter in its colour, or an empty tag (none yet). Carried onto another thing, that thing's value of the
+/// same name wears it too. Tapped, the values wearing it are listed (each with ×) and light on the stage.
 class _TagMark extends StatelessWidget {
   const _TagMark(this.t, this.id, this.g);
   final CardTable t;
   final String id;
-  final Tag g;
-  Widget face() => Container(
-    height: 18,
-    constraints: const BoxConstraints(minWidth: 18),
-    padding: const EdgeInsets.symmetric(horizontal: 4),
-    decoration: BoxDecoration(color: g.c, borderRadius: BorderRadius.circular(5), border: Border.all(color: t.openTag == id ? Grey.g95 : g.c)),
-    child: Center(child: Text(g.letter, style: T.micro(N.g07).copyWith(fontSize: 10, fontWeight: FontWeight.w700))),
-  );
+  final Tag? g;
+  Widget face({bool lifted = false}) => g == null
+      ? SizedBox(width: 18, height: 18, child: CustomPaint(painter: _EmptyTag(lifted ? Pop.accent : Grey.g44)))
+      : Container(
+          height: 18,
+          constraints: const BoxConstraints(minWidth: 18),
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          decoration: BoxDecoration(color: g!.c, borderRadius: BorderRadius.circular(5), border: Border.all(color: t.openTag == id ? Grey.g95 : g!.c)),
+          child: Center(child: Text(g!.letter, style: T.micro(N.g07).copyWith(fontSize: 10, fontWeight: FontWeight.w700))),
+        );
   @override
   Widget build(BuildContext context) => GestureDetector(
-    onTap: () => t.showTag(id),
+    onTap: g == null ? null : () => t.showTag(id),
     child: Draggable<Val>(
       data: t.valOr(id)!,
       dragAnchorStrategy: pointerDragAnchorStrategy,
-      feedback: Transform.translate(offset: const Offset(-9, -9), child: _Lifted(face())),
+      feedback: Transform.translate(offset: const Offset(-9, -9), child: _Lifted(face(lifted: true))),
       onDragStarted: () => t.carry(t.valOr(id)),
       onDragEnd: (_) => t.carry(null),
       child: MouseRegion(cursor: SystemMouseCursors.grab, child: face()),
     ),
   );
+}
+
+/// An empty tag: a luggage tag's outline with its hole, waiting to be carried.
+class _EmptyTag extends CustomPainter {
+  const _EmptyTag(this.c);
+  final Color c;
+  @override
+  void paint(Canvas cv, Size s) {
+    final w = s.width, h = s.height, st = Paint()..color = c..style = PaintingStyle.stroke..strokeWidth = 1.2..strokeJoin = StrokeJoin.round;
+    cv.drawPath(Path()..moveTo(w * .3, h * .1)..lineTo(w * .92, h * .1)..lineTo(w * .92, h * .9)..lineTo(w * .3, h * .9)..lineTo(w * .06, h * .5)..close(), st);
+    cv.drawCircle(Offset(w * .34, h * .5), w * .08, st);
+  }
+
+  @override
+  bool shouldRepaint(_EmptyTag o) => o.c != c;
 }
 
 /// Under the card while a tag's mark is open: every value wearing it, each with × to take it off (it stays where it is now).

@@ -179,8 +179,10 @@ void main() {
           }
           await (await carry(hand('Oscillator'), tile('Radius'))).up();
           await shot('ring_radius_breathes');
+          final tagOfRadius = tileBox('Radius').topRight + const Offset(-14, 14); // (beside its behaviour's mark: the empty tag, then tag A)
+          await shot('radius_has_an_empty_tag');
           for (final y in [-220.0, 0.0, 220.0]) {
-            final g = await carry(tile('Radius'), at(190, y));
+            final g = await carry(tagOfRadius, at(190, y));
             await t.pump(const Duration(milliseconds: 100));
             await g.up();
             await t.pump(const Duration(milliseconds: 300));
