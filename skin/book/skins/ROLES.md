@@ -6,8 +6,8 @@
 `AxisX` `AxisY` `AxisZ` `BandA` `BandB` `ChosenDefault` `ChosenInk` `Clip1` `Clip2` `Clip3` `Clip4` `Clip5` `Clip6` `Clip7` `ControlOnForeground` `Glaze15` `Glaze9` `Grey00` `Grey07` `Grey10` `Grey100` `Grey13` `Grey15` `Grey20` `Grey26` `Grey38` `Grey44` `Grey56` `Grey63` `Grey76` `Grey91` `Grey95` `Keyframe` `RowLine` `ToneBlend` `ToneCamera` `ToneFill` `ToneLayer` `ToneLayout` `ToneLink` `ToneMask` `ToneOutput` `ToneParticles` `TonePath` `TonePlace` `ToneSolid` `ToneText` `ToneTextAnim` `ToneTime` `ToneTransform`
 
 ## 数
-`Corner` `TextScale`
-（Corner＝角の丸みが何倍か、TextScale＝文字の大きさが何倍か）
+`Corner` `Spacing` `TextScale`
+（Corner＝角の丸みが何倍か、Spacing＝余白が何倍か、TextScale＝文字の大きさが何倍か）
 
 ## 言葉
 `FontMono` `FontSans` `Parts` `Shade`
