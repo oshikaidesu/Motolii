@@ -1170,10 +1170,22 @@ class _Ring extends CustomPainter {
         final tp = TextPainter(
           text: TextSpan(style: T.micro(th == t.cur ? Pop.accentInk : Grey.g56).copyWith(fontSize: 11), children: [
             TextSpan(text: th.short),
-            for (final g in worn) TextSpan(text: ' ${g.letter}', style: TextStyle(color: g.c, fontWeight: FontWeight.w700)),
+            for (final g in worn) ...[
+              TextSpan(text: ' ${g.letter}', style: TextStyle(color: g.c, fontWeight: FontWeight.w700)),
+              // (Apparatus: the other end's name sits with the mark, the number stays on the tile)
+              TextSpan(
+                text: ' ${[
+                  for (final e in th.tags.entries)
+                    if (e.value.tag == g) t.valOr(e.key, of: th)?.label ?? e.key,
+                ].join(' ')}',
+                style: TextStyle(color: g.c),
+              ),
+            ],
           ]),
           textDirection: TextDirection.ltr,
-        )..layout();
+          maxLines: 1,
+          ellipsis: '…',
+        )..layout(maxWidth: 150);
         tp.paint(c, m + Offset(-tp.width / 2, r + 8));
         if (t.litTag != null && t.clock < t.litUntil && worn.contains(t.litTag)) { // (the wearers of a tag just put on, or of a tapped mark)
           c.drawRRect(RRect.fromRectAndRadius(Rect.fromCircle(center: m, radius: r + 4), const Radius.circular(10)), Paint()..color = t.litTag!.c..style = PaintingStyle.stroke..strokeWidth = 2);
