@@ -8,6 +8,7 @@ import 'dart:math' as math;
 import 'package:docking/docking.dart';
 import 'package:flutter/widgets.dart';
 import '../parts/skin_parts.dart';
+import 'zoom.dart';
 import 'package:lab_book/sets/inspector/inspector_parts_insp_host.dart';
 
 import '../sets/inspector/inspector_parts.dart';
@@ -242,8 +243,8 @@ class _WorkspaceState extends State<Workspace> {
       builder: (context, box) {
         final window = _Window(widget.extra);
         if (box.maxWidth >= WsT.minWindow.width && box.maxHeight >= WsT.minWindow.height) return window;
-        return FittedBox(
-          child: SizedBox.fromSize(size: WsT.refWindow, child: window),
+        return FittedBox( // (laid out no smaller than the least window, shrunk only as far as that needs: a zoomed window stays zoomed)
+          child: SizedBox(width: math.max(box.maxWidth, WsT.minWindow.width), height: math.max(box.maxHeight, WsT.minWindow.height), child: window),
         );
       },
     ),
@@ -263,7 +264,7 @@ class _WorkspaceState extends State<Workspace> {
       ),
     );
     if (_ws.inside == null) return ColoredBox(color: WsT.ground); // (the document still opening: no seat is built on nothing)
-    return PlatformMenuBar(menus: _menus(), child: WsKeys(keymap: _keymap, commands: _commands(), child: window));
+    return PlatformMenuBar(menus: _menus(), child: WsKeys(keymap: _keymap, commands: _commands(), child: WsZoomed(child: window)));
   }
 }
 

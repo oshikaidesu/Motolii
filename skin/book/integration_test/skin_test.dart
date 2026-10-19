@@ -14,6 +14,7 @@ import 'package:lab_book/theme.dart';
 import 'package:lab_book/workspace/timeline.dart';
 import 'package:lab_book/workspace/workspace.dart' show Workspace;
 import 'package:lab_book/workspace/ws.dart';
+import 'package:lab_book/workspace/zoom.dart';
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -46,6 +47,10 @@ void main() {
     ColorTheme.watch(() => t.binding.reassembleApplication(), '/Users/motolii_maker/motolii/skin/book/skins/labs.xml');
     t.binding.reassembleApplication();
     await shot('labs');
+    WsZoom.set(1.25, keep: false); // (the whole window 125%: not kept, the home folder's window.xml stays as it is)
+    await shot('labs_zoom125');
+    expect(find.text('125%'), findsOneWidget);
+    WsZoom.set(1, keep: false);
     expect(ColorTheme.number('Corner', 1), 3.5); // (the skin's numbers were read)
     expect(SkinParts.count, 8); // (and its drawn parts, from the folder it names beside it)
   });

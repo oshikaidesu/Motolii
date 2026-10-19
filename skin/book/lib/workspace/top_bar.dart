@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:flutter/widgets.dart';
 import '../parts/skin_parts.dart';
+import 'zoom.dart';
 
 import '../tokens.dart';
 import 'stage_art.dart' show WsArt;
@@ -53,6 +54,7 @@ class WsTopBar extends StatelessWidget {
             onPick: (i) => i == 2 ? ws.onRender?.call() : ws.animating = i == 1,
           ),
           const Spacer(),
+          const WsZoomReadout(),
           const _ShadeSwitch(),
           const SizedBox(width: 10),
           const _Waited(),
