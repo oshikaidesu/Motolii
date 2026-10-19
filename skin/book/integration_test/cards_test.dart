@@ -169,57 +169,38 @@ void main() {
           await t.tapAt(Offset(1280 - 8 - 4 - 12, t.getCenter(find.text('Wave').first).dy));
           await shot('wave_face_up_again');
         case 'Link':
-          // the ring's radius breathes; the squares' rotation follows it: kept in the hand, laid on one, tapped on the next ones
+          // the ring's radius breathes; carried onto three squares (their Rotation picked on the ring that opens there), all wear one tag
           Offset at(double x, double y) => Offset(460 + x * 820 / 720, 410 + y * 820 / 720); // (a place on the stage, as the things are placed)
+          Offset onStage(String word) => find.text(word).evaluate().map((e) => t.getCenter(find.byElementPredicate((x) => x == e))).firstWhere((p) => p.dx < 900);
+          Future<void> cmdZ() async {
+            await t.sendKeyDownEvent(LogicalKeyboardKey.metaLeft, physicalKey: PhysicalKeyboardKey.metaLeft, platform: 'macos');
+            await t.sendKeyEvent(LogicalKeyboardKey.keyZ, physicalKey: PhysicalKeyboardKey.keyZ, platform: 'macos');
+            await t.sendKeyUpEvent(LogicalKeyboardKey.metaLeft, physicalKey: PhysicalKeyboardKey.metaLeft, platform: 'macos');
+          }
           await (await carry(hand('Oscillator'), tile('Radius'))).up();
           await shot('ring_radius_breathes');
-          var g = await t.startGesture(tile('Radius'), kind: PointerDeviceKind.mouse);
-          await t.pump(const Duration(milliseconds: 450));
-          for (var k = 1; k <= 12; k++) {
-            await g.moveTo(Offset.lerp(tile('Radius'), hand('Random'), k / 12)!);
-            await t.pump(const Duration(milliseconds: 16));
+          for (final y in [-220.0, 0.0, 220.0]) {
+            final g = await carry(tile('Radius'), at(190, y));
+            await t.pump(const Duration(milliseconds: 100));
+            await g.up();
+            await t.pump(const Duration(milliseconds: 300));
+            if (y == -220) await shot('radius_let_go_on_square_1_ring_waits');
+            await t.tapAt(onStage('Rotation')); // (the ring opened on the square: its Rotation picked)
+            await t.pump(const Duration(milliseconds: 200));
           }
-          await shot('ring_radius_carried_to_hand');
-          await g.up();
-          await shot('ring_radius_kept_in_hand');
-          await t.tapAt(at(190, -220));
-          await shot('square_1_picked');
-          await (await carry(hand('Radius'), tile('Rotation'))).up();
-          await shot('square_1_rotation_follows_ring_radius');
-          for (final y in [0.0, 220.0]) {
-            await t.tapAt(at(190, y));
-            await t.pump(const Duration(milliseconds: 150));
-            await t.tap(find.text('Radius').last); // (the hand card tapped: onto the same value of the thing now picked)
-            await t.pump(const Duration(milliseconds: 150));
-          }
-          await shot('squares_2_3_follow_by_a_tap_each');
-          await t.tapAt(tileBox('Rotation').topRight + const Offset(-12, 10));
-          await t.pump(const Duration(milliseconds: 200));
-          await shot('link_mark_tapped');
-          final scale = t.getCenter(find.text('Scale').first);
-          await (await carry(scale, scale + const Offset(-60, 0))).up();
-          await shot('square_3_link_scale_turned_down');
-          await t.tap(find.text('R').first);
-          await shot('ring_picked_shows_three_follow');
-          expect(find.text(' →3'), findsWidgets); // (the ring's radius says three things follow it)
-          g = await t.startGesture(tile('Size'), kind: PointerDeviceKind.mouse);
-          await t.pump(const Duration(milliseconds: 450));
-          for (var k = 1; k <= 14; k++) {
-            await g.moveTo(Offset.lerp(tile('Size'), at(340, 0), k / 14)!);
-            await t.pump(const Duration(milliseconds: 16));
-          }
-          await t.pump(const Duration(milliseconds: 400));
-          await shot('ring_size_rests_on_square_5_ring_opens');
-          await g.moveBy(const Offset(0, -70));
-          await t.pump(const Duration(milliseconds: 300));
-          await shot('square_5_ring_aims_size');
-          await g.up();
-          await shot('square_5_size_follows_ring_size');
-          final g2 = await carry(t.getCenter(find.text(' →3').first), hand('Random'));
-          await shot('ring_radius_followers_carried_to_hand');
-          await g2.up();
-          await shot('all_three_let_go');
-          expect(find.text(' →3'), findsNothing); // (the "→3" carried to the hand: all three followers let go)
+          await shot('three_squares_wear_the_ring_radius_tag');
+          expect(find.text('A'), findsWidgets); // (the ring's radius wears tag A)
+          await t.tap(find.text('A').first);
+          await shot('tag_a_wearers_listed');
+          expect(find.textContaining(' · Rotation'), findsNWidgets(3));
+          await t.tapAt(t.getRect(find.text('Square 2 · Rotation')).centerRight + const Offset(13, 0));
+          await shot('square_2_takes_the_tag_off');
+          expect(find.textContaining(' · Rotation'), findsNWidgets(2));
+          await cmdZ();
+          await shot('cmd_z_puts_it_back');
+          expect(find.textContaining(' · Rotation'), findsNWidgets(3));
+          await t.tapAt(at(190, 0));
+          await shot('square_2_picked_its_rotation_wears_a');
       }
     }
   });

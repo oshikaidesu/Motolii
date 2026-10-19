@@ -43,7 +43,7 @@ final cardUses = <(String, CardTable Function(), String)>[
   ('Throw', () => starRing(wave: false), 'a shelf card thrown on the stage is worn; its head carried to the shelf takes it off'),
   ('Stage ring', starRing, 'a hand card resting on the stage opens a ring of values; the way the hand goes picks one'),
   ('Group', starRing, 'a tile held by its name and dropped on another ties them; the group scrubs them all'),
-  ('Link', manyThings, "one thing's value moves many others': kept in the hand, laid on one thing's value, then tapped on the next things; or carried onto a thing on the stage"),
+  ('Link', manyThings, "a value's name carried onto other things on the stage: they wear one tag and move together; the tag's mark lists them, × takes one off"),
 ];
 
 WidgetbookComponent cardsSet() => WidgetbookComponent(

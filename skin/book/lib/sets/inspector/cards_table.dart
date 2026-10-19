@@ -96,7 +96,7 @@ class ThingM {
   final Offset base; // where it stands on the stage
   final List<CardM> cards, shelf;
   final drives = <String, Drive>{};
-  final links = <String, Link>{}; // a value moved by another thing's value (After Effects' pick whip, Cavalry's connection)
+  final tags = <String, Member>{}; // values wearing a tag: every value with the same tag moves by what any of them moves
   final bundles = <List<Val>>[];
 }
 
@@ -111,28 +111,26 @@ class ValRef {
   int get hashCode => Object.hash(thing, id);
 }
 
-/// A value moved by another's: from the moment it is made, it moves by what the other moves (times [scale]), plus [add];
-/// so nothing jumps when it is made, and each keeps its own look while they move together.
-class Link {
-  Link(this.from, this.from0);
-  final ValRef from;
-  final double from0; // the other's number when it was made
-  double scale = 1, add = 0;
-  Link copy() => Link(from, from0)
-    ..scale = scale
-    ..add = add;
+/// A tag (a CSS variable, a name in RealitySketch): values wearing the same tag move together. It has a letter and a colour.
+class Tag {
+  Tag(this.n);
+  final int n;
+  @override
+  bool operator ==(Object other) => other is Tag && other.n == n;
+  @override
+  int get hashCode => n;
+  String get letter => String.fromCharCode(65 + n % 26);
+  Color get c => HSLColor.fromAHSL(1, (40 + n * 137.5) % 360, .62, .62).toColor();
 }
 
-/// What is carried when a link's mark is picked up (to the hand: the value stops following).
-class LinkMark {
-  const LinkMark(this.id);
-  final String id;
-}
-
-/// What is carried when a value's "→n" mark is picked up (to the hand: every thing following it lets go).
-class Takers {
-  const Takers(this.id);
-  final String id;
+/// A value wearing a tag: it moves by what every other wearer moved since it put the tag on ([own0], [rest]): nothing jumps then,
+/// and each keeps its own look while they move together (Para's "remember the difference").
+class Member {
+  Member(this.tag, this.own0, this.rest);
+  final Tag tag;
+  final double own0; // its own number (without the tag) when it put the tag on
+  double rest; // what the others had moved then, taken off (and what a wearer leaving had moved, kept)
+  Member copy() => Member(tag, own0, rest);
 }
 
 /// What is carried when a bundle's mark is picked up (a value leaving or joining a bundle, not a value card).
@@ -154,7 +152,7 @@ class _Snap {
             cards: [...th.cards],
             shelf: [...th.shelf],
             drives: {for (final e in th.drives.entries) e.key: e.value.copy()},
-            links: {for (final e in th.links.entries) e.key: e.value.copy()},
+            tags: {for (final e in th.tags.entries) e.key: e.value.copy()},
             bundles: [for (final b in th.bundles) [...b]],
           ),
       };
@@ -162,7 +160,7 @@ class _Snap {
   final Map<Val, double> values;
   final Map<CardM, (bool, bool)> faces;
   final List<Object> hand;
-  final Map<ThingM, ({List<CardM> cards, List<CardM> shelf, Map<String, Drive> drives, Map<String, Link> links, List<List<Val>> bundles})> per;
+  final Map<ThingM, ({List<CardM> cards, List<CardM> shelf, Map<String, Drive> drives, Map<String, Member> tags, List<List<Val>> bundles})> per;
 
   static bool _list<X>(List<X> a, List<X> b) => a.length == b.length && [for (var i = 0; i < a.length; i++) i].every((i) => a[i] == b[i]);
 
@@ -176,7 +174,7 @@ class _Snap {
         if (b == null) return false;
         return _list(a.cards, b.cards) && a.shelf.length == b.shelf.length && a.shelf.every(b.shelf.contains) &&
             a.drives.length == b.drives.length && a.drives.entries.every((d) { final x = b.drives[d.key]; return x != null && x.beh == d.value.beh && x.width == d.value.width && x.speed == d.value.speed && x.seed == d.value.seed && x.from == d.value.from; }) &&
-            a.links.length == b.links.length && a.links.entries.every((l) { final x = b.links[l.key]; return x != null && x.from == l.value.from && x.scale == l.value.scale && x.add == l.value.add; }) &&
+            a.tags.length == b.tags.length && a.tags.entries.every((l) { final x = b.tags[l.key]; return x != null && x.tag == l.value.tag && x.own0 == l.value.own0 && x.rest == l.value.rest; }) &&
             a.bundles.length == b.bundles.length && [for (var i = 0; i < a.bundles.length; i++) i].every((i) => a.bundles[i].length == b.bundles[i].length && a.bundles[i].every(b.bundles[i].contains));
       });
 }
@@ -190,11 +188,11 @@ class CardTable extends ChangeNotifier {
   List<CardM> get cards => cur.cards;
   List<CardM> get shelf => cur.shelf; // cards the thing does not wear yet: thrown on the stage, they join it
   Map<String, Drive> get drives => cur.drives;
-  Map<String, Link> get links => cur.links;
+  Map<String, Member> get tags => cur.tags;
   List<List<Val>> get bundles => cur.bundles; // values tied into one: scrubbing the bundle moves them all
   (String, Beh)? preview; // a behaviour hovering over a value: shown before it is let go
   CardM? cardPreview; // a shelf card held over the stage: worn before it is let go
-  String? flash, open; // the value a card was just laid on (lit once); the value whose behaviour's (or link's) knobs are open
+  String? flash, open, openTag; // the value a card was just laid on (lit once); the value whose behaviour's knobs are open; whose tag's wearers are listed
   int flashN = 0, orderN = 0; // orderN: bumped when the cards are reordered (they light in the order they are done)
   Object? carrying; // what the hand holds now: the places it may go are outlined
   final ringOpen = ValueNotifier<bool>(false); // the stage's value ring is open: the card in the air shrinks to its mark, the ring stays readable
@@ -256,9 +254,9 @@ class CardTable extends ChangeNotifier {
       th.drives
         ..clear()
         ..addAll(p.drives);
-      th.links
+      th.tags
         ..clear()
-        ..addAll(p.links);
+        ..addAll(p.tags);
       th.bundles
         ..clear()
         ..addAll(p.bundles);
@@ -272,7 +270,8 @@ class CardTable extends ChangeNotifier {
     sel = s.sel;
     preview = null;
     cardPreview = null;
-    if (open != null && drives[open] == null && links[open] == null) open = null;
+    if (open != null && drives[open] == null) open = null;
+    if (openTag != null && tags[openTag] == null) openTag = null;
     editing = null;
     _changed();
   }
@@ -287,7 +286,7 @@ class CardTable extends ChangeNotifier {
   void select(int i) {
     if (i == sel || i < 0 || i >= things.length) return;
     sel = i;
-    open = editing = null;
+    open = openTag = editing = null;
     if (touched != null && valOr(touched!) == null) touched = null; // (the same value of the next thing: tapping a hand card there goes on it too)
     preview = null;
     cardPreview = null;
@@ -331,7 +330,7 @@ class CardTable extends ChangeNotifier {
   static bool canDrive(Val v) => v.perCopy;
 
   /// The value at this moment for one copy of a thing (the picked one unless [of]): its number, moved by what drives it and by
-  /// what it is linked to; a hovering card shows what letting go would do. The fallback if its card is not worn or is face down.
+  /// what its tag's other wearers moved; a hovering card shows what letting go would do. The fallback if its card is not worn or is face down.
   double at(String id, int i, int n, {double fallback = 0, ThingM? of, int depth = 0}) {
     final th = of ?? cur, v = valOr(id, of: th), card = cardOf(id, of: th);
     if (v == null || card == null || card.down) return fallback;
@@ -342,35 +341,60 @@ class CardTable extends ChangeNotifier {
     } else if (d != null) {
       x += d.at(i, n) * span * d.width;
     }
-    final l = th.links[id];
-    if (l != null && depth < 4) {
-      final src = l.from.thing, m = src.ring ? at('count', 0, 1, of: src, fallback: 1).round() : 1;
-      x += (at(l.from.id, i % math.max(m, 1), m, of: src, depth: depth + 1) - l.from0) * l.scale + l.add; // (by what the other moved since; a ring of links stops four deep)
-    }
+    final m = depth == 0 ? th.tags[id] : null;
+    if (m != null) x += _others(m.tag, th, id, i) - m.rest; // (by what the other wearers moved since it put the tag on)
     return v.fit(x);
   }
 
-  ValRef? litFrom; // the value whose followers are lit on the stage now (its "→n" mark tapped), until litUntil
-  double litUntil = 0;
-  void showTakers(String id) {
-    litFrom = ValRef(cur, id);
-    litUntil = clock + 1.4;
-    notifyListeners();
+  /// What every other wearer of a tag has moved since it put the tag on (its own motion, without tags), for copy [i].
+  double _others(Tag g, ThingM th, String id, int i) {
+    var s = 0.0;
+    for (final o in things) {
+      for (final e in o.tags.entries) {
+        if (e.value.tag != g || (o == th && e.key == id)) continue;
+        final n = o.ring ? at('count', 0, 1, of: o, fallback: 1, depth: 1).round() : 1;
+        s += at(e.key, i % math.max(n, 1), n, of: o, depth: 1) - e.value.own0;
+      }
+    }
+    return s;
   }
 
-  /// Who takes this value of the picked thing: the other things' values linked to it.
-  List<(ThingM, String)> takers(String id) => [
+  Tag? litTag; // the tag whose wearers are lit on the stage now (its mark tapped, or just put on), until litUntil
+  double litUntil = 0;
+
+  /// Every value wearing this tag, on every thing.
+  List<(ThingM, String)> wearers(Tag g) => [
     for (final th in things)
-      for (final e in th.links.entries)
-        if (e.value.from == ValRef(cur, id)) (th, e.key),
+      for (final e in th.tags.entries)
+        if (e.value.tag == g) (th, e.key),
   ];
 
-  /// A value card laid on a value (of the picked thing, or of [on]): that value follows it.
-  void link(String id, ValRef from, {ThingM? on}) {
-    final th = on ?? cur;
-    if (from.thing == th && from.id == id) return;
+  Tag _newTag() {
+    final used = {for (final th in things) for (final m in th.tags.values) m.tag.n};
+    var n = 0;
+    while (used.contains(n)) {
+      n++;
+    }
+    return Tag(n);
+  }
+
+  void _wear(ThingM th, String id, Tag g) {
+    th.tags[id] = Member(g, at(id, 0, 1, of: th, depth: 1), 0);
+    th.tags[id]!.rest = _others(g, th, id, 0);
+  }
+
+  /// A value carried onto another thing's value: both wear one tag (the carried one's, or a new one) and move together from now on.
+  void join(String id, ValRef from, {ThingM? on}) {
+    final th = on ?? cur, have = from.thing.tags[from.id]?.tag;
+    if ((from.thing == th && from.id == id) || valOr(id, of: th) == null || valOr(from.id, of: from.thing) == null) return;
+    if (have != null && th.tags[id]?.tag == have) return;
     mark();
-    th.links[id] = Link(from, valOr(from.id, of: from.thing)?.v ?? 0);
+    if (th.tags[id] != null) _takeOff(th, id);
+    final g = from.thing.tags[from.id]?.tag ?? _newTag();
+    if (from.thing.tags[from.id] == null) _wear(from.thing, from.id, g);
+    _wear(th, id, g);
+    litTag = g;
+    litUntil = clock + 1.4;
     if (th == cur) {
       flash = id;
       flashN++;
@@ -379,51 +403,36 @@ class CardTable extends ChangeNotifier {
     _changed(keepFlash: true);
   }
 
-  /// A value let go on the empty stage: every other thing with a value of that name follows it (one undo step for all).
-  void linkAll(String id, ValRef from) {
-    final all = [for (final th in things) if (!(th == from.thing && id == from.id) && valOr(id, of: th) != null) th];
-    if (all.isEmpty) return;
-    mark();
-    for (final th in all) {
-      th.links[id] = Link(from, valOr(from.id, of: from.thing)?.v ?? 0);
+  /// A value takes its tag off: it stays where it is now, and so do the others (a tag left on one value alone comes off too).
+  void _takeOff(ThingM th, String id) {
+    final m = th.tags[id], v = valOr(id, of: th);
+    if (m == null) return;
+    final moved = at(id, 0, 1, of: th, depth: 1) - m.own0;
+    if (v != null) v.v = v.fit(v.v + _others(m.tag, th, id, 0) - m.rest);
+    th.tags.remove(id);
+    final left = wearers(m.tag);
+    for (final (o, k) in left) {
+      o.tags[k]!.rest -= moved; // (what it had moved stays with the others)
     }
-    if (all.contains(cur)) {
-      flash = id;
-      flashN++;
-    }
-    _changed(keepFlash: true);
+    if (left.length == 1) _takeOff(left.first.$1, left.first.$2);
   }
 
-  /// Every thing following this value of the picked thing lets go of it (one undo step for all).
-  void unlinkTakers(String id) {
-    final from = ValRef(cur, id), all = takers(id);
-    if (all.isEmpty) return;
+  void takeOff(ThingM th, String id) {
+    if (th.tags[id] == null) return;
     mark();
-    for (final (th, key) in all) {
-      if (th.links[key]?.from == from) th.links.remove(key);
-    }
-    if (open != null && links[open] == null && drives[open] == null) open = null;
+    _takeOff(th, id);
+    if (openTag != null && tags[openTag] == null) openTag = null;
     _changed();
   }
 
-  void unlink(String id) {
-    mark();
-    links.remove(id);
-    if (open == id) open = null;
-    _changed();
-  }
-
-  void setLink(Link l, {double? scale, double? add}) {
-    if (scale != null) l.scale = scale.clamp(-10.0, 10.0);
-    if (add != null) l.add = add;
-    _changed();
-  }
-
-  /// A value of the picked thing carried to the hand: kept there as a card, to be laid on another thing's value.
-  void keep(ValRef r) {
-    if (hand.contains(r)) return;
-    mark();
-    hand.add(r);
+  /// A tag's mark tapped: its wearers are listed under the card and lit on the stage.
+  void showTag(String id) {
+    openTag = openTag == id ? null : id;
+    final m = tags[id];
+    if (m != null) {
+      litTag = m.tag;
+      litUntil = clock + 1.4;
+    }
     _changed();
   }
 
@@ -434,7 +443,7 @@ class CardTable extends ChangeNotifier {
     _changed();
   }
 
-  String nameOf(ValRef r) => '${r.thing.name} · ${valOr(r.id, of: r.thing)?.label ?? r.id}';
+  String nameOf(ThingM th, String id) => '${th.name} · ${valOr(id, of: th)?.label ?? id}';
 
   void _changed({bool keepFlash = false}) {
     if (!keepFlash) flash = null;
@@ -458,7 +467,6 @@ class CardTable extends ChangeNotifier {
     final v = touched == null ? null : valOr(touched!);
     final ok = v != null && cards.contains(cardOf(v.id)) && !cardOf(v.id)!.down;
     if (ok && b is Beh && canDrive(v)) return lay(v.id, b);
-    if (ok && b is ValRef && !(b.thing == cur && b.id == v.id)) return link(v.id, b);
     nope = b;
     nopeN++;
     notifyListeners();
@@ -817,9 +825,8 @@ class _StageState extends State<_Stage> {
   int? aim;
   Timer? rest;
   ThingM? target; // the thing the ring opened over: a behaviour goes on the picked thing, a value on another thing
-  ThingM? under; // a value carried over another thing: let go now, that thing's value of the same name follows it
+  ThingM? under; // a value carried over another thing: let go now, that thing's value of the same name wears its tag
   ValRef? pending; // a value let go on a thing without a value of its name: the ring stays open there, to be tapped
-  String? overEmpty; // a value carried over the empty stage: let go now, every thing with that value follows it
 
   static ValRef? _ref(Object? o, CardTable t) => switch (o) {
     Val v => ValRef(t.cur, v.id),
@@ -876,13 +883,8 @@ class _StageState extends State<_Stage> {
   void _moved(Offset p, Object o) {
     at = p;
     if (o is Val || o is ValRef) {
-      final th = _for(o, p), empty = th == null && _thingAt(p) == null ? _ref(o, t)!.id : null;
-      if (th != under || empty != overEmpty) {
-        setState(() {
-          under = th;
-          overEmpty = empty;
-        });
-      }
+      final th = _for(o, p);
+      if (th != under) setState(() => under = th);
     }
     if (anchor == null && restFrom != null && (p - restFrom!).distance < 6) return; // (a hand trembling is a hand resting)
     restFrom = p;
@@ -921,7 +923,7 @@ class _StageState extends State<_Stage> {
   void _leave() {
     rest?.cancel();
     restFrom = null;
-    setState(() => anchor = aim = at = target = under = overEmpty = null);
+    setState(() => anchor = aim = at = target = under = null);
     t.hover(null);
     t.holdCard(null);
   }
@@ -938,13 +940,13 @@ class _StageState extends State<_Stage> {
       case Beh b:
         id != null ? t.lay(id, b) : (anchor == null ? t.tapLay(b) : null); // (thrown before the ring opens: as a tap; let go in its middle: nothing)
       case Val v when id != null:
-        t.link(id, ValRef(t.cur, v.id), on: target);
+        t.join(id, ValRef(t.cur, v.id), on: target);
       case ValRef r when id != null:
-        t.link(id, r, on: target);
+        t.join(id, r, on: target);
       case Val() || ValRef() when anchor == null && under != null:
         final r = _ref(o, t)!;
         if (t.valOr(r.id, of: under) != null) {
-          t.link(r.id, r, on: under); // (let go on a thing at once: its value of the same name)
+          t.join(r.id, r, on: under); // (let go on a thing at once: its value of the same name)
         } else {
           final box = context.findRenderObject()! as RenderBox, p = at ?? box.size.center(Offset.zero);
           pending = r; // (none of that name there: its ring opens and waits for a tap)
@@ -952,8 +954,6 @@ class _StageState extends State<_Stage> {
           restAt = p;
           anchor = Offset(p.dx.clamp(118, math.max(118, box.size.width - 118)), p.dy.clamp(88, math.max(88, box.size.height - 88)));
         }
-      case Val() || ValRef() when anchor == null && overEmpty != null:
-        t.linkAll(overEmpty!, _ref(o, t)!); // (let go on the empty stage: every thing with that value)
     }
   }
 
@@ -988,7 +988,7 @@ class _StageState extends State<_Stage> {
         _let(e.data);
         if (pending == null) return _leave();
         rest?.cancel();
-        setState(() => aim = under = overEmpty = null); // (the ring stays, waiting for a tap)
+        setState(() => aim = under = null); // (the ring stays, waiting for a tap)
         t.hover(null);
       },
       builder: (context, cand, _) {
@@ -1006,9 +1006,6 @@ class _StageState extends State<_Stage> {
                         if (!(held is Val && th == t.cur) && !(held is ValRef && held.thing == th)) _box(th),
                   ], things: [
                     if (under != null && anchor == null) _box(under!),
-                    if (overEmpty != null) // (over the empty stage: every thing that would follow)
-                      for (final th in t.things)
-                        if (t.valOr(overEmpty!, of: th) != null && !(th == t.cur && t.carrying is Val) && !(t.carrying is ValRef && (t.carrying as ValRef).thing == th)) _box(th),
                   ])
                 : null,
             child: Stack(children: [
@@ -1021,7 +1018,7 @@ class _StageState extends State<_Stage> {
                   height: 160,
                   child: _ValueRing(t, target!, colour, aim, onPick: pending == null ? null : (k) {
                     final id = _ringValsOf(target!)[k];
-                    if (t.valOr(id, of: target) != null) t.link(id, pending!, on: target);
+                    if (t.valOr(id, of: target) != null) t.join(id, pending!, on: target);
                     pending = null;
                     _leave();
                   }),
@@ -1107,11 +1104,18 @@ class _Ring extends CustomPainter {
       if (t.things.length > 1) { // (each thing's name under it: what the names over the panel point at)
         final m = size.center((th.base + Offset(t.at('posX', 0, 1, of: th), t.at('posY', 0, 1, of: th))) * k);
         final r = (th.ring ? t.at('radius', 0, 1, of: th) + t.at('size', 0, 1, of: th) / 2 : t.at('size', 0, 1, of: th) * .72) * k;
-        final from = {for (final l in th.links.values) l.from.thing.short}, takers = t.things.where((o) => o.links.values.any((l) => l.from.thing == th)).length;
-        final said = '${th.short}${from.isEmpty ? '' : ' ↗${from.length == 1 ? from.first : from.length}'}${takers == 0 ? '' : ' →$takers'}'; // (follows whom, is followed by how many)
-        final tp = TextPainter(text: TextSpan(text: said, style: T.micro(th == t.cur ? Pop.accentInk : Grey.g56).copyWith(fontSize: 11)), textDirection: TextDirection.ltr)..layout();
+        final worn = {for (final g in th.tags.values) g.tag}.toList()..sort((a, b) => a.n - b.n); // (the tags it wears, as their letters in their colours)
+        final tp = TextPainter(
+          text: TextSpan(style: T.micro(th == t.cur ? Pop.accentInk : Grey.g56).copyWith(fontSize: 11), children: [
+            TextSpan(text: th.short),
+            for (final g in worn) TextSpan(text: ' ${g.letter}', style: TextStyle(color: g.c, fontWeight: FontWeight.w700)),
+          ]),
+          textDirection: TextDirection.ltr,
+        )..layout();
         tp.paint(c, m + Offset(-tp.width / 2, r + 8));
-        if (t.litFrom != null && t.clock < t.litUntil && th.links.values.any((l) => l.from == t.litFrom)) _picked(c, Rect.fromCircle(center: m, radius: r + 6)); // (the followers of a tapped "→n")
+        if (t.litTag != null && t.clock < t.litUntil && worn.contains(t.litTag)) { // (the wearers of a tag just put on, or of a tapped mark)
+          c.drawRRect(RRect.fromRectAndRadius(Rect.fromCircle(center: m, radius: r + 16), const Radius.circular(10)), Paint()..color = t.litTag!.c..style = PaintingStyle.stroke..strokeWidth = 2);
+        }
       }
     }
   }
@@ -1340,7 +1344,7 @@ class _Card extends StatelessWidget {
                     ),
                     if (!c.flipped) _MarkRow(t, c.back, prefix: 'Back'),
                     if (opened != null) _DriveKnobs(t, t.valOr(t.open!)!, opened),
-                    if (t.open != null && c.all.any((v) => v.id == t.open) && t.links[t.open] != null) _LinkKnobs(t, t.valOr(t.open!)!, t.links[t.open]!),
+                    if (t.openTag != null && c.all.any((v) => v.id == t.openTag) && t.tags[t.openTag] != null) _Wearers(t, t.tags[t.openTag]!.tag),
                   ]),
           ),
         ]),
@@ -1469,7 +1473,6 @@ class _ValDrop extends StatelessWidget {
   bool _ok(Object? o) => switch (o) {
     Beh() => CardTable.canDrive(v),
     String() => CardTable.canDrive(v),
-    ValRef r => !(r.thing == t.cur && r.id == v.id), // (another value: this one follows it)
     Tie tie => tie.v != v && CardTable.canDrive(v),
     Val() => o != v && CardTable.canDrive(o) && CardTable.canDrive(v), // (a count is neither moved nor tied)
     _ => false,
@@ -1489,7 +1492,6 @@ class _ValDrop extends StatelessWidget {
     onAcceptWithDetails: (e) => switch (e.data) {
       Beh b => t.lay(v.id, b),
       String from => t.moveDrive(from, v.id),
-      ValRef r => t.link(v.id, r),
       Tie tie => t.tie(tie.v, v),
       Val a => t.tie(a, v),
       _ => null,
@@ -1540,28 +1542,6 @@ class _Tile extends StatelessWidget {
           child: Row(children: [
             if (CardTable.canDrive(v)) ...[SizedBox(width: 6, height: 10, child: CustomPaint(painter: _Grip(Grey.g56))), const SizedBox(width: 4)], // (held here, the tile's value is carried)
             Flexible(child: Text(v.label, maxLines: 1, overflow: TextOverflow.ellipsis, style: T.micro(CardTable.canDrive(v) ? Grey.g63 : Grey.g44).copyWith(height: 1.1))),
-            if (t.takers(v.id).isNotEmpty) // (other things follow this value: how many; tapped, they light on the stage; carried to the hand, all let go)
-              GestureDetector(
-                onTap: () => t.showTakers(v.id),
-                child: Draggable<Takers>(
-                  data: Takers(v.id),
-                  dragAnchorStrategy: pointerDragAnchorStrategy,
-                  feedback: Transform.translate(
-                    offset: const Offset(-10, -8),
-                    child: _Lifted(Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                      decoration: BoxDecoration(color: Grey.g26, borderRadius: BorderRadius.circular(5), border: Border.all(color: Pop.accent)),
-                      child: Text('→${t.takers(v.id).length}', style: T.micro(Pop.accentInk)),
-                    )),
-                  ),
-                  onDragStarted: () => t.carry(Takers(v.id)),
-                  onDragEnd: (_) => t.carry(null),
-                  child: MouseRegion(
-                    cursor: SystemMouseCursors.grab,
-                    child: Text(' →${t.takers(v.id).length == 1 ? t.takers(v.id).first.$1.short : t.takers(v.id).length}', style: T.micro(Pop.accentInk)),
-                  ),
-                ),
-              ),
           ]),
         )),
       );
@@ -1591,7 +1571,7 @@ class _Tile extends StatelessWidget {
             decoration: BoxDecoration(
               color: Color.lerp(over != null ? Grey.g20 : Pop.well, (d?.beh.c ?? Pop.accent), glow * .35),
               borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: edge.a == 0 && t.touched == v.id ? Pop.accent.withValues(alpha: .45) : edge, width: 1.5), // (the last touched: where a tapped hand card goes)
+              border: Border.all(color: edge.a == 0 ? (t.tags[v.id]?.tag.c ?? (t.touched == v.id ? Pop.accent.withValues(alpha: .45) : edge)) : edge, width: 1.5), // (wearing a tag: its colour; else the last touched, where a tapped hand card goes)
             ),
             padding: const EdgeInsets.fromLTRB(Pop.tilePad, 5, 5, 4),
             child: Stack(children: [
@@ -1603,11 +1583,11 @@ class _Tile extends StatelessWidget {
                     : GestureDetector(
                         onTap: () => t.type(v.id),
                         child: Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                          t.links[v.id] == null
+                          t.tags[v.id] == null
                               ? Text(sayVal(v, v.v), style: T.value(Grey.g95).copyWith(fontSize: 15, fontWeight: FontWeight.w600))
                               : ValueListenableBuilder<double>( // (following another's value: its number is what it is now)
                                   valueListenable: _Time.of(context),
-                                  builder: (context, _, _) => Text(sayVal(v, t.at(v.id, 0, 1)), style: T.value(Pop.accentInk).copyWith(fontSize: 15, fontWeight: FontWeight.w600)),
+                                  builder: (context, _, _) => Text(sayVal(v, t.at(v.id, 0, 1)), style: T.value(t.tags[v.id]!.tag.c).copyWith(fontSize: 15, fontWeight: FontWeight.w600)),
                                 ),
                           if (width != null) ...[
                             const SizedBox(width: 4),
@@ -1621,8 +1601,8 @@ class _Tile extends StatelessWidget {
               ]),
               // (the right edge is one column of marks: what drives it on top, its bundle under; nothing sits on the words)
               if (d != null) Positioned(right: 0, top: 0, child: _DriveChip(t, v.id, d)),
-              if (t.links[v.id] != null) Positioned(right: 0, top: d != null ? 21 : 0, child: _LinkChip(t, v.id, t.links[v.id]!)),
-              if (d == null && over == null && t.links[v.id] == null && !((held is Beh || held is String) && !CardTable.canDrive(v))) Positioned(right: 1, top: 2, child: IgnorePointer(child: _Gauge((v.v - v.lo) / (v.hi - v.lo)))),
+              if (t.tags[v.id] != null) Positioned(right: 0, top: d != null ? 21 : 0, child: _TagMark(t, v.id, t.tags[v.id]!.tag)),
+              if (d == null && over == null && t.tags[v.id] == null && !((held is Beh || held is String) && !CardTable.canDrive(v))) Positioned(right: 1, top: 2, child: IgnorePointer(child: _Gauge((v.v - v.lo) / (v.hi - v.lo)))),
               if (tied != null)
                 Positioned(
                   right: 0,
@@ -1880,94 +1860,60 @@ class _DriveKnobs extends StatelessWidget {
 }
 
 
-/// A value following another thing's value: tapped, its knobs open; carried to the hand, it stops following.
-class _LinkChip extends StatelessWidget {
-  const _LinkChip(this.t, this.id, this.l);
+/// A tag on a value: its letter in its colour. Tapped, the values wearing it are listed (each with ×) and light on the stage;
+/// carried onto another thing, that thing's value of the same name puts it on.
+class _TagMark extends StatelessWidget {
+  const _TagMark(this.t, this.id, this.g);
   final CardTable t;
   final String id;
-  final Link l;
+  final Tag g;
   Widget face() => Container(
     height: 18,
+    constraints: const BoxConstraints(minWidth: 18),
     padding: const EdgeInsets.symmetric(horizontal: 4),
-    decoration: BoxDecoration(color: Grey.g26, borderRadius: BorderRadius.circular(5), border: Border.all(color: t.open == id ? Grey.g95 : Pop.accent)),
-    child: Row(mainAxisSize: MainAxisSize.min, children: [
-      SizedBox.square(dimension: 8, child: CustomPaint(painter: _Arrow(Pop.accent))),
-      const SizedBox(width: 2),
-      Text(l.from.thing.short, style: T.micro(Grey.g95).copyWith(fontSize: 9)),
-    ]),
+    decoration: BoxDecoration(color: g.c, borderRadius: BorderRadius.circular(5), border: Border.all(color: t.openTag == id ? Grey.g95 : g.c)),
+    child: Center(child: Text(g.letter, style: T.micro(N.g07).copyWith(fontSize: 10, fontWeight: FontWeight.w700))),
   );
   @override
   Widget build(BuildContext context) => GestureDetector(
-    onTap: () => t.toggleOpen(id),
-    child: Draggable<LinkMark>(
-      data: LinkMark(id),
+    onTap: () => t.showTag(id),
+    child: Draggable<Val>(
+      data: t.valOr(id)!,
       dragAnchorStrategy: pointerDragAnchorStrategy,
       feedback: Transform.translate(offset: const Offset(-9, -9), child: _Lifted(face())),
-      childWhenDragging: Opacity(opacity: .3, child: face()),
-      onDragStarted: () => t.carry(LinkMark(id)),
+      onDragStarted: () => t.carry(t.valOr(id)),
       onDragEnd: (_) => t.carry(null),
       child: MouseRegion(cursor: SystemMouseCursors.grab, child: face()),
     ),
   );
 }
 
-class _Arrow extends CustomPainter {
-  const _Arrow(this.c);
-  final Color c;
-  @override
-  void paint(Canvas cv, Size s) {
-    final st = Paint()..color = c..style = PaintingStyle.stroke..strokeWidth = 1.4..strokeCap = StrokeCap.round..strokeJoin = StrokeJoin.round;
-    cv.drawLine(Offset(0, s.height), Offset(s.width, 0), st);
-    cv.drawPath(Path()..moveTo(s.width * .35, 0)..lineTo(s.width, 0)..lineTo(s.width, s.height * .65), st);
-  }
-
-  @override
-  bool shouldRepaint(_Arrow o) => o.c != c;
-}
-
-/// A link's own knobs, under the card while its mark is open: how much of the other value (×), and how much more (+).
-class _LinkKnobs extends StatelessWidget {
-  const _LinkKnobs(this.t, this.v, this.l);
+/// Under the card while a tag's mark is open: every value wearing it, each with × to take it off (it stays where it is now).
+class _Wearers extends StatelessWidget {
+  const _Wearers(this.t, this.g);
   final CardTable t;
-  final Val v;
-  final Link l;
+  final Tag g;
   @override
-  Widget build(BuildContext context) {
-    Widget knob(String label, String said, String key, String initial, void Function(double) keep, void Function(double dx) on) => Expanded(
-      child: GestureDetector(
-        onHorizontalDragStart: (_) {
-          t.mark();
-          t.scrubbing = true;
-        },
-        onHorizontalDragEnd: (_) => t.scrubbing = false,
-        onHorizontalDragCancel: () => t.scrubbing = false,
-        onHorizontalDragUpdate: (e) => on(e.delta.dx),
-        child: Container(
-          height: 38,
-          padding: const EdgeInsets.fromLTRB(Pop.tilePad, 5, 6, 4),
-          decoration: BoxDecoration(color: Pop.well, borderRadius: BorderRadius.circular(6), border: Border.all(color: Pop.accent.withValues(alpha: .6))),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-            Text(label, style: T.micro(Grey.g63)),
-            t.editing == key
-                ? _NumEdit.of(t, initial, keep, small: true)
-                : GestureDetector(onTap: () => t.type(key), child: Text(said, style: T.value(Pop.accentInk).copyWith(fontSize: 13, fontWeight: FontWeight.w600))),
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(top: Pop.tileGap),
+    child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      for (final (th, id) in t.wearers(g))
+        Container(
+          height: 26,
+          margin: const EdgeInsets.only(top: 2),
+          padding: const EdgeInsets.only(left: Pop.tilePad),
+          decoration: BoxDecoration(color: Pop.well, borderRadius: BorderRadius.circular(6), border: Border(left: BorderSide(color: g.c, width: 3))),
+          child: Row(children: [
+            Expanded(child: Text(t.nameOf(th, id), maxLines: 1, overflow: TextOverflow.ellipsis, style: T.micro(th == t.cur ? Grey.g95 : Grey.g76))),
+            GestureDetector(
+              onTap: () => t.takeOff(th, id),
+              behavior: HitTestBehavior.opaque,
+              child: MouseRegion(cursor: SystemMouseCursors.click, child: SizedBox(width: 26, height: 26, child: Center(child: SizedBox.square(dimension: 9, child: CustomPaint(painter: _Cross(Grey.g76)))))),
+            ),
           ]),
         ),
-      ),
-    );
-    return Padding(
-      padding: const EdgeInsets.only(top: Pop.tileGap),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        SizedBox(height: 18, child: Text('${t.nameOf(l.from)}  →  ${v.label}', style: T.micro(Grey.g76))),
-        const SizedBox(height: 3),
-        Row(children: [
-          knob('Scale', '×${l.scale.toStringAsFixed(2)}', 'k:${v.id}', l.scale.toStringAsFixed(2), (x) => t..mark()..setLink(l, scale: x), (dx) => t.setLink(l, scale: l.scale + dx / 100)),
-          const SizedBox(width: Pop.tileGap),
-          knob('Offset', '${l.add >= 0 ? '+' : ''}${l.add.toStringAsFixed(v.dec)}${v.unit}', 'a:${v.id}', l.add.toStringAsFixed(v.dec), (x) => t..mark()..setLink(l, add: x), (dx) => t.setLink(l, add: l.add + dx / 200 * (v.hi - v.lo))),
-        ]),
-      ]),
-    );
-  }
+    ]),
+  );
 }
 
 /// A value's mark when it is tied into a bundle: which bundle.
@@ -2142,19 +2088,15 @@ class _Hand extends StatelessWidget {
   final CardTable t;
   @override
   Widget build(BuildContext context) => DragTarget<Object>(
-    onWillAcceptWithDetails: (e) => (e.data is CardM && t.cards.contains(e.data)) || e.data is String || e.data is LinkMark || e.data is Takers || e.data is Tie || e.data is Val || e.data is ValRef,
+    onWillAcceptWithDetails: (e) => (e.data is CardM && t.cards.contains(e.data)) || e.data is String || e.data is Tie,
     onAcceptWithDetails: (e) => switch (e.data) {
       CardM c => t.shelve(c),
       String id => t.lift(id),
-      LinkMark m => t.unlink(m.id),
-      Takers k => t.unlinkTakers(k.id),
       Tie tie => t.untieOne(tie.v),
-      Val v => t.keep(ValRef(t.cur, v.id)), // (a value carried here stays as a card, to lay on another thing)
-      ValRef r => t.drop(r), // (a value card carried back: it leaves the hand)
       _ => null,
     },
     builder: (context, cand, _) {
-      final held = t.carrying, letGo = held is String || held is LinkMark || held is Takers || held is Tie || held is ValRef, waiting = (held is CardM && t.cards.contains(held)) || letGo || held is Val;
+      final held = t.carrying, letGo = held is String || held is Tie, waiting = (held is CardM && t.cards.contains(held)) || letGo;
       return AnimatedContainer(
         duration: Mo.dur,
         padding: const EdgeInsets.fromLTRB(Pop.inset, 8, Pop.inset, 10),
@@ -2186,17 +2128,17 @@ class _Hand extends StatelessWidget {
           const SizedBox(height: 8),
           Row(children: [
             for (final b in t.hand)
-              Expanded(child: Padding(padding: const EdgeInsets.symmetric(horizontal: 3), child: b is Beh ? _HandCard(t, b) : _ValCard(t, b as ValRef))),
+              Expanded(child: Padding(padding: const EdgeInsets.symmetric(horizontal: 3), child: _HandCard(t, b as Beh))),
           ]),
           ]),
-          if (letGo || held is Val)
+          if (letGo)
             Positioned.fill(
               child: Container(
                 decoration: BoxDecoration(color: Grey.g07.withValues(alpha: .88), borderRadius: BorderRadius.circular(8), border: Border.all(color: cand.isNotEmpty ? Pop.accent : Grey.g38)),
                 child: Center(child: Row(mainAxisSize: MainAxisSize.min, children: [
                   SizedBox.square(dimension: 14, child: CustomPaint(painter: _Down(cand.isNotEmpty ? Pop.accent : Grey.g76))),
                   const SizedBox(width: 8),
-                  Text(letGo ? 'Remove' : 'Keep in hand', style: T.name(cand.isNotEmpty ? Pop.accent : Grey.g76)),
+                  Text('Remove', style: T.name(cand.isNotEmpty ? Pop.accent : Grey.g76)),
                 ])),
               ),
             ),
@@ -2299,62 +2241,6 @@ class _Cross extends CustomPainter {
 
   @override
   bool shouldRepaint(_Cross o) => o.c != c;
-}
-
-/// A value of a thing, kept in the hand: laid on another thing's value (or tapped, onto the last touched one), that value follows it.
-/// Carried back onto the hand, it leaves it.
-class _ValCard extends StatelessWidget {
-  const _ValCard(this.t, this.r);
-  final CardTable t;
-  final ValRef r;
-  Widget face({bool lifted = false}) => Container(
-    height: 64,
-    width: lifted ? 80 : null,
-    padding: const EdgeInsets.all(8),
-    decoration: BoxDecoration(
-      color: Grey.g13,
-      borderRadius: BorderRadius.circular(8),
-      border: Border.all(color: lifted ? Pop.accent : Grey.g26),
-      boxShadow: const [BoxShadow(color: Color(0x66000000), offset: Offset(2, 2))],
-    ),
-    child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-      Row(children: [
-        Container(
-          width: 24,
-          height: 24,
-          decoration: BoxDecoration(border: Border.all(color: Pop.accent), borderRadius: BorderRadius.circular(6)),
-          child: Center(child: Text(r.thing.short, style: T.micro(Pop.accentInk).copyWith(fontSize: 10))),
-        ),
-        const SizedBox(width: 4),
-        SizedBox.square(dimension: 9, child: CustomPaint(painter: _Arrow(Pop.accent))),
-      ]),
-      Text(t.valOr(r.id, of: r.thing)?.label ?? r.id, maxLines: 1, overflow: TextOverflow.ellipsis, style: T.name(Grey.g95)),
-    ]),
-  );
-  @override
-  Widget build(BuildContext context) => GestureDetector(
-    onTap: () => t.tapLay(r),
-    child: TweenAnimationBuilder<double>(
-      key: ValueKey(t.nope == r ? t.nopeN : -1),
-      tween: Tween(begin: t.nope == r && t.nopeN > 0 ? 1 : 0, end: 0),
-      duration: const Duration(milliseconds: 360),
-      builder: (context, k, ch) => Transform.translate(offset: Offset(math.sin(k * math.pi * 6) * 5 * k, 0), child: ch),
-      child: Draggable<ValRef>(
-        data: r,
-        dragAnchorStrategy: pointerDragAnchorStrategy,
-        feedback: ListenableBuilder(
-          listenable: Listenable.merge([t.ringOpen, t.refusing]),
-          builder: (context, _) => t.ringOpen.value
-              ? Transform.translate(offset: const Offset(-12, -12), child: face(lifted: true))
-              : Transform.translate(offset: const Offset(-20, -20), child: _Lifted(t.refusing.value ? _Refused(face(lifted: true)) : face(lifted: true))),
-        ),
-        childWhenDragging: face(),
-        onDragStarted: () => t.carry(r),
-        onDragEnd: (_) => t.carry(null),
-        child: MouseRegion(cursor: SystemMouseCursors.grab, child: face()),
-      ),
-    ),
-  );
 }
 
 /// What a behaviour does, drawn: a wave, a staircase, a wobble, scattered dots.
