@@ -1,0 +1,158 @@
+say 0 background 120c22
+say 0 script ../../effects/fine_grain.wgsl
+set 0 js_fine_grain_amount 0.12
+add shape circle
+say 1 fill ff3fa4ff ff3fa400 ff3fa400
+set 1 gradient radial
+set 1 size 3.2
+set 1 y 0.2
+say 1 fx ../../effects/grain.wgsl
+set 1 js_grain_size 1.4
+add shape circle
+say 2 fill ffd23f
+set 2 size 0.05
+set 2 copies 48
+set 2 copy_columns 8
+set 2 copy_x 0.22
+set 2 copy_y 0.22
+set 2 y -1.05
+set 2 wave_y 0.06
+set 2 wave_speed 1.2
+set 2 stagger 1.5
+say 2 fx ../../effects/stuck_dots.wgsl
+add solid ring
+say 3 fill ff6a3d
+set 3 size 0.9
+set 3 emissive 1.6
+set 3 y 0.95
+key 3 rotate_x 0 60
+key 3 rotate_x 8 420
+say 3 fx ../../effects/isf_god_rays.wgsl
+add solid cube
+say 4 fill 3a7bff
+set 4 size 0.55
+set 4 x -0.55
+set 4 y 0.25
+key 4 rotate_y 0 0
+key 4 rotate_y 8 270
+key 4 rotate_x 0 30
+key 4 rotate_x 8 -30
+say 4 fx ../../effects/stuck_dots.wgsl
+add solid gem
+say 5 fill glass
+set 5 size 0.6
+set 5 x 0.55
+set 5 y 0.3
+key 5 rotate_y 0 0
+key 5 rotate_y 8 -200
+add solid ball
+say 6 fill 9cff57
+set 6 size 0.35
+set 6 x 0.1
+set 6 y -0.25
+key 6 y 0 -0.15
+key 6 y 2 -0.35
+key 6 y 4 -0.15
+key 6 y 6 -0.35
+key 6 y 8 -0.15
+say 6 fx ../../effects/chroma.wgsl
+set 6 js_chroma_amount 40
+add solid cube
+say 7 fill 7a4dff
+set 7 size 0.3
+set 7 x -0.65
+set 7 y -0.45
+key 7 rotate 0 0
+key 7 rotate 8 360
+say 7 fx ../../effects/isf_noise_pixellate.wgsl
+add shape star
+say 8 fill ffe14a
+set 8 size 0.28
+set 8 points 5
+set 8 x 0.66
+set 8 y -0.35
+set 8 copies 5
+set 8 copy_rotate 72
+set 8 copy_x 0.0
+key 8 rotate 0 0
+key 8 rotate 8 180
+say 8 fx ../../effects/grain.wgsl
+say 8 fill ffe14aff ff7b00ff ff7b0000
+set 8 js_grain_size 1.3
+add shape cog
+say 9 fill 34e0c8
+set 9 size 0.42
+set 9 points 12
+set 9 x -0.62
+set 9 y 1.05
+key 9 rotate 0 0
+key 9 rotate 8 -240
+say 9 fx ../../effects/technicolor.wgsl
+add shape spiral
+say 10 fill none
+say 10 stroke f6f1e7
+set 10 stroke_width 6
+set 10 size 0.5
+set 10 x 0.62
+set 10 y 1.15
+key 10 rotate 0 0
+key 10 rotate 8 300
+say 10 fx ../../effects/isf_twirl.wgsl
+add shape rect
+say 11 fill behind
+set 11 round 0.25
+set 11 size 0.55
+set 11 wide 1.5
+set 11 x 0.0
+set 11 y 0.45
+key 11 x 0 -0.25
+key 11 x 4 0.25
+key 11 x 8 -0.25
+say 11 fx ../../effects/isf_twirl.wgsl
+add shape arrow
+say 12 fill ff4f6d
+set 12 size 0.22
+set 12 x -0.15
+set 12 y -0.75
+key 12 rotate 0 -30
+key 12 rotate 4 30
+key 12 rotate 8 -30
+say 12 fx ../../effects/rgbshift.wgsl
+add film ../vid/happy.mp4
+set 13 keyed 1
+set 13 size 1.1
+set 13 y -1.2
+key 13 x 0 -0.4
+key 13 x 4 0.4
+key 13 x 8 -0.4
+say 13 fx ../../effects/datamosh.wgsl
+add film ../vid/popcat.mp4
+set 14 keyed 1
+set 14 size 0.55
+set 14 x 0.6
+set 14 y -0.95
+say 14 fx ../../effects/isf_rgb_trails_3_0.wgsl
+add film ../vid/swinging.mp4
+set 15 keyed 1
+set 15 size 0.6
+set 15 x -0.6
+set 15 y -1.0
+say 15 fx ../../effects/isf_echo_trace.wgsl
+add text ../arial_black.ttf
+say 16 text MOTOLII
+say 16 fill f6f1e7
+set 16 size 0.2
+set 16 y 0.62
+say 16 fx ../../effects/chroma.wgsl
+set 16 js_chroma_amount 70
+add text ../arial_bold.ttf
+say 17 text NEW VIDEO 10.19
+say 17 fill ffd23f
+set 17 size 0.07
+set 17 y -0.6
+say 17 fx ../../effects/isf_dither_bayer.wgsl
+at 1.5
+still out/crowd_1.png
+at 5
+still out/crowd_5.png
+write out/show_crowd.mp4
