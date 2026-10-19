@@ -33,7 +33,7 @@ abstract final class Grey {
 
   /// A step of the shade's own ramp moved onto the skin's `Background` and `Foreground` (neither said: as it is), so a skin
   /// names two colours and every grey follows: the step's tone sits between theirs where the shade's own body (Grey07) and
-  /// text (Grey95) put it (Material's HCT, so equal tones look equally light), its colour mixed between them; the body is the
+  /// text (Grey95) put it (Material's HCT, so equal tones look equally light), its colour the nearer one's; the body is the
   /// Background itself and the text the Foreground itself.
   static Color _made(Color own) {
     final bg = ColorTheme.roles.value['Background'], fg = ColorTheme.roles.value['Foreground'];
@@ -42,8 +42,8 @@ abstract final class Grey {
       final body = light ? const Color(0xFFF2F2F4) : N.g07, text = light ? const Color(0xFF121318) : N.g95;
       final b = bg ?? body, f = fg ?? text, tb = Hct.fromInt(b.toARGB32()).tone, tf = Hct.fromInt(f.toARGB32()).tone;
       final t = (Hct.fromInt(own.toARGB32()).tone - Hct.fromInt(body.toARGB32()).tone) / (Hct.fromInt(text.toARGB32()).tone - Hct.fromInt(body.toARGB32()).tone);
-      final mix = Hct.fromInt(Color.lerp(b, f, t.clamp(0.0, 1.0))!.toARGB32());
-      final made = t == 0 ? b : (t == 1 ? f : Color(Hct.from(mix.hue, mix.chroma, (tb + (tf - tb) * t).clamp(0.0, 100.0)).toInt()));
+      final side = Hct.fromInt((t < .5 ? b : f).toARGB32()); // (grounds wear the background's colour, inks the foreground's: never a muddy mix of two strong ones)
+      final made = t == 0 ? b : (t == 1 ? f : Color(Hct.from(side.hue, side.chroma, (tb + (tf - tb) * t).clamp(0.0, 100.0)).toInt()));
       return made.withAlpha((own.a * 255).round());
     });
   }

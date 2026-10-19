@@ -71,7 +71,7 @@ skins/shoot.sh ~/.motolii/skins/my_skin
 <FontMono Value="JetBrains Mono"/>
 ```
 
-Mac に入っている書体なら名前だけでよい。入っていない書体は、ファイルを革のフォルダに入れて場所も書く。
+Mac に入っている書体なら名前だけでよい。幅の広い書体（Monaco など）は、決め打ちの幅の所で文字が切れることがある。撮って確かめて、切れたら `TextScale` を少し下げる。入っていない書体は、ファイルを革のフォルダに入れて場所も書く。
 
 ```xml
 <FontSans Value="Inter"/>

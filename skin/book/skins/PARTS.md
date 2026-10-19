@@ -8,13 +8,29 @@ theme.xml に `<Parts Value="フォルダ"/>` を書くと、そのフォルダ�
 - 印は枠いっぱいに描かれる。いつもの印と大きさをそろえたいときは、24 の枠の中で 2〜3 の余白を残す。
 - ここに載っているのは、窓に今出ている印だけ（窓が描かない名前は `test/skin_names_test.dart` が落とす）。
 
-## 道具（glyph.）
-`glyph.select` `glyph.move` `glyph.rect` `glyph.ellipse` `glyph.pen` `glyph.text` `glyph.image` `glyph.camera` `glyph.grid` `glyph.circle` `glyph.shape`
+## 道具（glyph.）：舞台の左の縦の道具の列
+| 名前 | 印 |
+|---|---|
+| `glyph.select` | 選ぶ（矢印） |
+| `glyph.move` | 動かす（十字の矢印） |
+| `glyph.rect` `glyph.ellipse` `glyph.circle` `glyph.shape` | 四角・楕円・円・形を描く |
+| `glyph.pen` | ペン |
+| `glyph.text` | 文字 |
+| `glyph.image` `glyph.camera` `glyph.grid` | 画像・カメラ・格子 |
 
-## タイムライン（tp.）
-`tp.eye` `tp.eyeOff` `tp.solo` `tp.lock` `tp.unlock` `tp.play` `tp.pause` `tp.toStart` `tp.stepBack` `tp.stepFwd` `tp.loop` `tp.fit` `tp.plus` `tp.minus` `tp.keyFilled`
+## タイムライン（tp.）：タイムラインの上の帯と、層の行
+| 名前 | 印 |
+|---|---|
+| `tp.play` `tp.pause` | 再生・一時停止 |
+| `tp.toStart` `tp.stepBack` `tp.stepFwd` | 頭へ・1コマ戻る・1コマ進む |
+| `tp.loop` | くり返し |
+| `tp.fit` `tp.plus` `tp.minus` | 全体を収める・時間を広げる・縮める |
+| `tp.eye` `tp.eyeOff` | 層の行の「見える・見えない」 |
+| `tp.solo` | 層の行の「これだけ見る」 |
+| `tp.lock` `tp.unlock` | 層の行の「触れない・触れる」 |
+| `tp.keyFilled` | キーの印 |
 
-## ドック（dock.）
+## ドック（dock.）：パネルの見出しの印、作る棚・効果の棚の印（名前が中身のまま：`dock.media` はメディアのパネル、`dock.star` は星の形を作る）
 `dock.media` `dock.effects` `dock.fonts` `dock.colors` `dock.create` `dock.search` `dock.close` `dock.chevron` `dock.grid` `dock.list` `dock.plus` `dock.light` `dock.stylize` `dock.copies` `dock.text` `dock.time` `dock.shape` `dock.camera` `dock.nullObj` `dock.solid` `dock.rect` `dock.ellipse` `dock.polygon` `dock.star` `dock.line` `dock.radial` `dock.folder` `dock.comp` `dock.image` `dock.audio` `dock.video` `dock.font` `dock.link` `dock.stage` `dock.inspector` `dock.timeline` `dock.desk`
 
 ## 机の道具（desk.）
