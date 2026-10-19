@@ -34,7 +34,7 @@ final valueMarks = <String, ValueMark>{
   },
   'v_round': (c, s, v, ink) { // (a square whose corners are as round as the roundness)
     final r = 7 * ((v ?? 0) / 50).clamp(0.0, 1.0); // (shown in hundredths, up to half)
-    c.drawRRect(RRect.fromRectAndRadius(Rect.fromCenter(center: s.center(Offset.zero), width: 14, height: 14), Radius.circular(r)), _line(ink)..strokeWidth = 1.8);
+    c.drawRRect(RRect.fromRectAndRadius(Rect.fromCenter(center: s.center(Offset.zero), width: Shape.z(14), height: Shape.z(14)), Radius.circular(r)), _line(ink)..strokeWidth = 1.8);
   },
   for (final id in const ['v_wave_x', 'v_wave_y', 'v_wave_z', 'v_wave_rotate', 'v_wave_size', 'v_warp'])
     id: (c, s, v, ink) { // (a wave, as tall as the sway)
@@ -69,10 +69,10 @@ final valueMarks = <String, ValueMark>{
   },
   'v_shadow_softness': (c, s, v, ink) { // (a block's shadow, as soft as the softness)
     final soft = ((v ?? 0) / 100).clamp(0.0, 1.0);
-    c.drawOval(Rect.fromCenter(center: Offset(s.width / 2 + 2, s.height - 5), width: 14 + 4 * soft, height: 4), Paint()
+    c.drawOval(Rect.fromCenter(center: Offset(s.width / 2 + 2, s.height - 5), width: Shape.z(14) + 4 * soft, height: Shape.z(4)), Paint()
       ..color = const Color(0xFF000000)
       ..maskFilter = MaskFilter.blur(BlurStyle.normal, .4 + 3 * soft));
-    c.drawRect(Rect.fromCenter(center: Offset(s.width / 2, s.height / 2 - 2), width: 9, height: 9), Paint()..color = ink);
+    c.drawRect(Rect.fromCenter(center: Offset(s.width / 2, s.height / 2 - 2), width: Shape.z(9), height: Shape.z(9)), Paint()..color = ink);
   },
   'v_copy_columns': (c, s, v, ink) { // (copies in rows of so many)
     final n = (v ?? 0).round().clamp(0, 4), cols = n == 0 ? 4 : n;

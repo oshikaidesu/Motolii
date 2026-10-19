@@ -160,7 +160,7 @@ class DeskChip extends StatelessWidget {
     onTap: onTap,
     cursor: onTap == null ? MouseCursor.defer : SystemMouseCursors.click,
     builder: (_, h) => Container(
-      height: 18,
+      height: Shape.z(18),
       padding: EdgeInsets.symmetric(horizontal: Shape.s(6)),
       decoration: BoxDecoration(color: on ? WsT.accent : (h && onTap != null ? WsT.raised : WsT.well), borderRadius: BorderRadius.all(Shape.r(WsT.chipRadius))),
       child: Row(
@@ -168,8 +168,8 @@ class DeskChip extends StatelessWidget {
         children: [
           if (dot != null) ...[
             Container(
-              width: 6,
-              height: 6,
+              width: Shape.z(6),
+              height: Shape.z(6),
               decoration: BoxDecoration(color: on ? WsT.onAccent : dot, shape: BoxShape.circle),
             ),
             SizedBox(width: Shape.s(5)),
@@ -249,7 +249,7 @@ class _DeskScrubState extends State<DeskScrub> {
         onHorizontalDragUpdate: w.enabled ? (d) => w.onChanged((w.value + d.delta.dx * w.perPx).clamp(w.min, w.max)) : null,
         onHorizontalDragEnd: w.enabled ? (_) => setState(() => _drag = false) : null,
         child: Container(
-          height: 22,
+          height: Shape.z(22),
           decoration: BoxDecoration(color: live && w.enabled ? WsT.raised : WsT.well, borderRadius: BorderRadius.all(Shape.r(WsT.radius))),
           clipBehavior: Clip.antiAlias,
           child: Stack(
@@ -259,7 +259,7 @@ class _DeskScrubState extends State<DeskScrub> {
                   left: 4,
                   right: 4,
                   bottom: 2,
-                  height: 2,
+                  height: Shape.z(2),
                   child: FractionallySizedBox(
                     alignment: Alignment.centerLeft,
                     widthFactor: f,
@@ -276,13 +276,14 @@ class _DeskScrubState extends State<DeskScrub> {
                     Text(w.label, style: T.label(w.enabled ? Grey.g63 : Grey.g56)),
                     SizedBox(width: Shape.s(4)),
                     Expanded(
-                      child: Text(
-                        w.format(w.value),
-                        maxLines: 1,
-                        softWrap: false,
-                        overflow: TextOverflow.clip,
-                        textAlign: TextAlign.right,
-                        style: T.value(w.enabled ? (_drag ? Grey.g100 : Grey.g91) : Grey.g56).copyWith(fontSize: T.px(10.5)),
+                      child: FittedBox( // (a number wider than its field is drawn smaller, never cut)
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerRight,
+                        child: Text(
+                          w.format(w.value),
+                          maxLines: 1,
+                          style: T.value(w.enabled ? (_drag ? Grey.g100 : Grey.g91) : Grey.g56).copyWith(fontSize: T.px(10.5)),
+                        ),
                       ),
                     ),
                   ],
@@ -302,7 +303,7 @@ class DeskStrip extends StatelessWidget {
   final List<Widget> left, right;
   @override
   Widget build(BuildContext context) => Container(
-    height: 26,
+    height: Shape.z(26),
     color: WsT.card,
     padding: EdgeInsets.symmetric(horizontal: WsT.inset),
     child: Row(
@@ -328,7 +329,7 @@ class DeskLayerChip extends StatelessWidget {
   final Color tone;
   @override
   Widget build(BuildContext context) => Container(
-    height: 16,
+    height: Shape.z(16),
     padding: EdgeInsets.symmetric(horizontal: Shape.s(6)),
     alignment: Alignment.center,
     decoration: BoxDecoration(color: tone, borderRadius: BorderRadius.all(Shape.r(WsT.chipRadius))),
@@ -344,20 +345,17 @@ class DeskCaption extends StatelessWidget {
   final String? trailing;
   @override
   Widget build(BuildContext context) => SizedBox(
-    height: 14,
+    height: Shape.z(14),
     child: Row(
       children: [
-        if (tone != null) ...[Container(width: 3, height: 10, color: tone), SizedBox(width: Shape.s(5))],
+        if (tone != null) ...[Container(width: Shape.z(3), height: Shape.z(10), color: tone), SizedBox(width: Shape.s(5))],
         Text(text.toUpperCase(), style: T.micro(Grey.g76).copyWith(letterSpacing: 1, fontWeight: FontWeight.w700)),
         SizedBox(width: Shape.s(6)),
         Expanded(
-          child: Text(
-            trailing ?? '',
-            maxLines: 1,
-            softWrap: false,
-            overflow: TextOverflow.fade,
-            textAlign: TextAlign.right,
-            style: T.value(Grey.g56).copyWith(fontSize: T.px(10)),
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerRight,
+            child: Text(trailing ?? '', maxLines: 1, style: T.value(Grey.g56).copyWith(fontSize: T.px(10))),
           ),
         ),
       ],

@@ -133,7 +133,7 @@ class LinkMark extends StatelessWidget {
     child: Hov(
       onTap: enabled ? onTap : null,
       builder: (_, h) => SizedBox(
-        width: 18,
+        width: Shape.z(18),
         height: cellH,
         child: CustomPaint(painter: _LinkPaint(on, h && enabled, enabled)),
       ),
@@ -183,7 +183,7 @@ class OnOff extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           SizedBox(
-            width: 20,
+            width: Shape.z(20),
             child: Text(on ? 'On' : 'Off', textAlign: TextAlign.right, style: T.label(live && on ? Grey.g95 : Grey.g56)),
           ),
           SizedBox(width: Shape.s(8)),
@@ -207,14 +207,14 @@ class PopSwitch extends StatelessWidget {
     child: AnimatedContainer(
       duration: const Duration(milliseconds: 120),
       curve: Curves.easeOut,
-      width: 28,
-      height: 16,
+      width: Shape.z(28),
+      height: Shape.z(16),
       padding: EdgeInsets.all(Shape.s(2)),
       alignment: on ? Alignment.centerRight : Alignment.centerLeft,
       decoration: BoxDecoration(color: on ? Pop.accent : Grey.g26, borderRadius: BorderRadius.all(Shape.r(8))),
       child: Container(
-        width: 12,
-        height: 12,
+        width: Shape.z(12),
+        height: Shape.z(12),
         decoration: BoxDecoration(color: on ? Pop.onAccent : Grey.g63, shape: BoxShape.circle),
       ),
     ),
@@ -233,7 +233,7 @@ class Chip extends StatelessWidget {
     builder: (_, h) => Opacity(
       opacity: enabled ? 1 : .4,
       child: Container(
-        height: 20,
+        height: Shape.z(20),
         padding: EdgeInsets.symmetric(horizontal: Shape.s(7)),
         alignment: Alignment.center,
         decoration: BoxDecoration(

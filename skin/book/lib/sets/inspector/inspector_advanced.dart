@@ -25,7 +25,7 @@ class AdvancedFold extends StatelessWidget {
             key: ValueKey('adv:$id'),
             onTap: () => doc.flag(id, !adv),
             builder: (_, h) => Container(
-              height: 24,
+              height: Shape.z(24),
               decoration: BoxDecoration(
                 border: Border(top: BorderSide(color: ed.rule)),
               ),

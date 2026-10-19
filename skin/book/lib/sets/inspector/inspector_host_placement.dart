@@ -442,11 +442,11 @@ class _RepMatrix extends StatelessWidget {
               height: 14,
               child: Row(
                 children: [
-                  const SizedBox(width: labelWPop),
+                  SizedBox(width: labelWPop),
                   head('Each'),
                   const SizedBox(width: 4),
                   head('Random'),
-                  if (cfg.resetArrow) const SizedBox(width: resetW),
+                  if (cfg.resetArrow) SizedBox(width: resetW),
                 ],
               ),
             ),
@@ -462,7 +462,7 @@ class _RepMatrix extends StatelessWidget {
               if (r.each case final e?)
                 NumField(id: e, unit: r.unit, decimals: r.dec, min: r.lo, max: r.hi, perPx: r.perPx, step: r.dec > 0 ? .1 : 1, bipolar: r.lo != null)
               else
-                const SizedBox(height: Pop.cell),
+                SizedBox(height: Pop.cell),
               NumField(id: r.rand, unit: r.unit, decimals: r.dec, min: 0, max: r.rhi, perPx: r.perPx, step: r.dec > 0 ? .1 : 1),
             ],
           ),

@@ -77,7 +77,7 @@ class ChooserState extends State<Chooser> {
         children: [
           if (widget.searchable)
             Container(
-              height: 24,
+              height: Shape.z(24),
               margin: EdgeInsets.only(bottom: Shape.s(3)),
               padding: EdgeInsets.symmetric(horizontal: Shape.s(8)),
               decoration: BoxDecoration(color: Grey.g10, borderRadius: BorderRadius.all(Shape.r(5))),
@@ -127,8 +127,8 @@ class ChooserState extends State<Chooser> {
                               ),
                               if (sel)
                                 Container(
-                                  width: 5,
-                                  height: 5,
+                                  width: Shape.z(5),
+                                  height: Shape.z(5),
                                   decoration: BoxDecoration(color: Grey.g95, shape: BoxShape.circle),
                                 ),
                             ],
@@ -245,25 +245,28 @@ class InspHeader extends StatelessWidget {
     };
     if (Pop.on(context)) {
       return Container(
-        height: 34,
+        height: Shape.z(34),
         padding: EdgeInsets.symmetric(horizontal: Pop.inset),
         color: Pop.card,
         child: Row(
           children: [
             Container(
-              width: 22,
-              height: 22,
+              width: Shape.z(22),
+              height: Shape.z(22),
               alignment: Alignment.center,
               decoration: BoxDecoration(color: x.cfg.locked ? Grey.g26 : Pop.accent, borderRadius: BorderRadius.all(Shape.r(6))),
-              child: glyph == null ? null : Glyph(glyph, size: 13, color: x.cfg.locked ? Grey.g76 : Pop.onAccent),
+              child: glyph == null ? null : Glyph(glyph, size: Shape.z(13), color: x.cfg.locked ? Grey.g76 : Pop.onAccent),
             ),
             SizedBox(width: Shape.s(8)),
             Flexible(
-              child: Text(
-                doc.name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: T.title(x.cfg.locked ? Grey.g76 : Grey.g100).copyWith(fontSize: T.px(13), fontWeight: FontWeight.w700, height: 1),
+              child: FittedBox( // (drawn smaller, never cut)
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  doc.name,
+                  maxLines: 1,
+                  style: T.title(x.cfg.locked ? Grey.g76 : Grey.g100).copyWith(fontSize: T.px(13), fontWeight: FontWeight.w700, height: 1),
+                ),
               ),
             ),
             SizedBox(width: Shape.s(6)),
@@ -288,7 +291,7 @@ class InspHeader extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          if (glyph != null) ...[Glyph(glyph, size: 16, color: Grey.g76), SizedBox(width: Shape.s(8))],
+          if (glyph != null) ...[Glyph(glyph, size: Shape.z(16), color: Grey.g76), SizedBox(width: Shape.s(8))],
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,

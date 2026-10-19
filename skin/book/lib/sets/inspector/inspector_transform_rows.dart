@@ -451,7 +451,7 @@ class LayerTiles extends StatelessWidget {
               label: 'Parent',
               glyph: const ValueGlyph(ValueShape.parent),
               child: SizedBox(
-                height: 22,
+                height: Shape.z(22),
                 child: Chooser(key: _parent, id: 'v_parent', options: doc.choices['v_parent'] ?? layers, searchable: true, enabled: on),
               ),
             ),

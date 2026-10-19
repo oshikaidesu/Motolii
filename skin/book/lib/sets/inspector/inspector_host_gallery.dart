@@ -21,7 +21,7 @@ class HostGallery extends StatelessWidget {
     final panel = Pop(
       child: Container(
         color: Grey.g07,
-        padding: const EdgeInsets.all(Pop.gap),
+        padding: EdgeInsets.all(Pop.gap),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [

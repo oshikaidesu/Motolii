@@ -62,12 +62,12 @@ class _DockResizableState extends State<DockResizable> {
             onVerticalDragEnd: (_) => setState(() => _drag = false),
             onDoubleTap: () => widget.onHeight(widget.reset),
             child: Container(
-              height: 7,
+              height: Shape.z(7),
               color: lit ? WsT.raised : WsT.ground,
               alignment: Alignment.center,
               child: Container(
-                width: 28,
-                height: 3,
+                width: Shape.z(28),
+                height: Shape.z(3),
                 decoration: BoxDecoration(color: lit ? WsT.accent : Grey.g38, borderRadius: BorderRadius.all(Shape.r(1.5))),
               ),
             ),

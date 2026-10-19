@@ -32,15 +32,18 @@ export 'param_infer.dart';
 
 // ---- 0. open values -------------------------------------------------------------------------------------------------
 // [open] a value cell's height (the lab's ValueWell is 22; rows are 24 on the 4px rhythm; B uses 22).
-const cellH = 22.0;
+double get cellH => Shape.z(22);
 // [open] one narrowing rule for the whole panel (H1): a cell narrower than _wUnit drops its unit, narrower than _wTight drops decimals (never to a false 0).
 const wUnit = 72.0, wTight = 60.0;
 // [open] a third value stacks under the first two when a cell would be narrower than this.
 const stack3 = 72.0;
 // [open] the label column (wide / narrow panel).
-const labelW = 88.0, labelWNarrow = 76.0, labelWPop = 104.0;
+double get labelW => Shape.z(88);
+double get labelWNarrow => Shape.z(76);
+double get labelWPop => Shape.z(104);
 // [open] the width of the key mark's and reset mark's columns.
-const keyW = 22.0, resetW = 18.0;
+double get keyW => Shape.z(22);
+double get resetW => Shape.z(18);
 // [open] axis colours: X / Y / Z ticks reuse relation-family hues (the only hue outside relations).
 Color get axX => ColorTheme.of('AxisX', const Color(0xFFE974AB)); // (the skin's axis colours: Blender's names)
 Color get axY => ColorTheme.of('AxisY', const Color(0xFF7DD5B1));
@@ -91,8 +94,13 @@ class Pop extends InheritedWidget {
   /// Tight on purpose: the panel is read as a list, so more rows on screen beats air.
   /// Shape carries meaning: containers (cards, the canvas) are square and tile edge to edge; what you touch or read (fields, chips, badges, switches) is round.
   /// Colour is flat and opaque, never a tint laid over grey.
-  static const inset = 8.0, insetY = 6.0, titleGap = 4.0, gap = 2.0, titleH = 16.0;
-  static const row = 24.0, cell = 22.0;
+  static double get inset => Shape.s(8.0);
+  static double get insetY => Shape.s(6.0);
+  static double get titleGap => Shape.s(4.0);
+  static double get gap => Shape.s(2.0);
+  static double get titleH => Shape.z(16.0);
+  static double get row => Shape.z(24.0);
+  static double get cell => Shape.z(22.0);
 
   /// A parameter block: name on top, value large at the bottom, its picture in the top-right corner; text always starts at the same x.
   static double get tile => Shape.z(46); // (the skin's Size and Spacing)

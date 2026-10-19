@@ -6,6 +6,7 @@ import 'package:lab_book/sets/inspector/inspector_direct_transform_value_glyph.d
 import 'package:lab_book/sets/inspector/inspector_rows_sect.dart';
 
 import '../../theme.dart';
+import '../../tokens.dart';
 import 'inspector_parts.dart';
 
 /// What a point on the canvas grabs. Each zone edits one Transform row.
@@ -26,7 +27,7 @@ enum TransformZone {
 
 abstract final class DirectSurface {
   // surface: one canvas for the whole Transform block, sized to keep the rows below it on screen.
-  static const height = 124.0;
+  static double get height => Shape.z(124.0);
   static const objectWidth = 64.0, objectHeight = 40.0, handle = 7.0;
   static const stem = 20.0, knob = 6.0, turnArc = 11.0;
   static const tiltStem = 16.0, rail = 12.0, zReach = 1000.0;
@@ -59,7 +60,7 @@ class DirectTransform extends StatelessWidget {
             keyIds: const ['v_position', 'v_scale', 'v_rotate'],
             mark: CardMark.transform,
             brief: ['${brief(doc.get('v_x'))}, ${brief(doc.get('v_y'))}', '${brief(doc.get('v_scale_x'))}%', '${brief(doc.get('v_rotate'))}°'],
-            children: const [
+            children: [
               SpaceRow(),
               TransformCanvas(),
               SizedBox(height: Pop.titleGap),

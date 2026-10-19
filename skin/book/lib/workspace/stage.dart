@@ -139,7 +139,7 @@ class _Seg extends StatelessWidget {
   final ValueChanged<int> onChanged;
   @override
   Widget build(BuildContext context) => Container(
-    height: 20,
+    height: Shape.z(20),
     padding: EdgeInsets.all(Shape.s(2)),
     decoration: BoxDecoration(color: WsT.well, borderRadius: BorderRadius.all(Shape.r(WsT.radius))),
     child: Row(
@@ -149,7 +149,7 @@ class _Seg extends StatelessWidget {
           _Hov(
             onTap: () => onChanged(i),
             builder: (_, h) => Container(
-              height: 16,
+              height: Shape.z(16),
               padding: EdgeInsets.symmetric(horizontal: Shape.s(7)),
               alignment: Alignment.center,
               decoration: BoxDecoration(color: i == index ? WsT.accent : (h ? WsT.raised : WsT.well), borderRadius: BorderRadius.all(Shape.r(WsT.chipRadius))),
@@ -177,13 +177,13 @@ class _Toggle extends StatelessWidget {
     builder: (_, h) {
       final mark = on ? WsT.accent : (h ? Grey.g91 : Grey.g56);
       return Container(
-        height: 20,
+        height: Shape.z(20),
         padding: EdgeInsets.only(left: Shape.s(6), right: Shape.s(8)),
         decoration: BoxDecoration(color: on ? Grey.g26 : (h ? WsT.raised : WsT.well), borderRadius: BorderRadius.all(Shape.r(WsT.radius))),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (glyph case final g?) Glyph(g, size: 14, color: mark) else CustomPaint(size: const Size.square(12), painter: _IconPainter(icon!, mark)),
+            if (glyph case final g?) Glyph(g, size: Shape.z(14), color: mark) else CustomPaint(size: const Size.square(12), painter: _IconPainter(icon!, mark)),
             SizedBox(width: Shape.s(5)),
             Text(label, style: T.label(on || h ? Grey.g95 : Grey.g63).copyWith(fontWeight: FontWeight.w600)),
           ],
@@ -245,11 +245,11 @@ class _ToolColumn extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               for (var i = 0; i < _tools.length; i++) ...[
-                if (i == 2 || i == 4) Container(width: 20, height: 1, margin: EdgeInsets.symmetric(vertical: Shape.s(5)), color: WsT.line),
+                if (i == 2 || i == 4) Container(width: Shape.z(20), height: 1, margin: EdgeInsets.symmetric(vertical: Shape.s(5)), color: WsT.line),
                 if (i != 0 && i != 2 && i != 4) SizedBox(height: Shape.s(3)),
                 _ToolButton(key: ValueKey('ws-tool-$i'), glyph: _tools[i].$1, on: i == active, onTap: () => onChanged(i)),
               ],
-              Container(width: 20, height: 1, margin: EdgeInsets.symmetric(vertical: Shape.s(8)), color: WsT.line),
+              Container(width: Shape.z(20), height: 1, margin: EdgeInsets.symmetric(vertical: Shape.s(8)), color: WsT.line),
               const _Swatches(),   // (joined: the picked thing's fill and stroke, or the inks a drawn thing gets)
             ],
           ),
@@ -268,11 +268,11 @@ class _ToolButton extends StatelessWidget {
   Widget build(BuildContext context) => _Hov(
     onTap: onTap,
     builder: (_, h) => Container(
-      width: 28,
-      height: 28,
+      width: Shape.z(28),
+      height: Shape.z(28),
       alignment: Alignment.center,
       decoration: BoxDecoration(color: on ? WsT.accent : (h ? WsT.raised : WsT.body), borderRadius: BorderRadius.all(Shape.r(WsT.radius))),
-      child: Glyph(glyph, size: 16, color: on ? WsT.onAccent : (h ? Grey.g95 : Grey.g63)),
+      child: Glyph(glyph, size: Shape.z(16), color: on ? WsT.onAccent : (h ? Grey.g95 : Grey.g63)),
     ),
   );
 }
@@ -285,16 +285,16 @@ class _Swatches extends StatelessWidget {
     final ws = WsScope.of(context), p = _paintOf(ws);
     final fill = p.fill ?? WsT.body, stroke = p.stroke ?? WsT.line;
     return SizedBox(
-    width: 26,
-    height: 26,
+    width: Shape.z(26),
+    height: Shape.z(26),
     child: Stack(
       children: [
         Positioned(
           right: 0,
           bottom: 0,
           child: Container(
-            width: 16,
-            height: 16,
+            width: Shape.z(16),
+            height: Shape.z(16),
             decoration: BoxDecoration(
               color: WsT.body,
               borderRadius: BorderRadius.all(Shape.r(WsT.chipRadius)),
@@ -303,8 +303,8 @@ class _Swatches extends StatelessWidget {
           ),
         ),
         Container(
-          width: 16,
-          height: 16,
+          width: Shape.z(16),
+          height: Shape.z(16),
           decoration: BoxDecoration(
             color: fill,
             borderRadius: BorderRadius.all(Shape.r(WsT.chipRadius)),
@@ -412,7 +412,7 @@ class _OptionsStrip extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     SizedBox(
-                      width: 62,
+                      width: Shape.z(62),
                       child: Text(_tools[tool].$2.toUpperCase(), style: T.micro(Grey.g56).copyWith(fontWeight: FontWeight.w700, letterSpacing: 1)),
                     ),
                     for (var i = 0; i < items.length; i++) ...[if (i > 0) SizedBox(width: Shape.s(6)), items[i]],
@@ -437,7 +437,7 @@ class _Field extends StatelessWidget {
   final Color? swatch;
   @override
   Widget build(BuildContext context) => Container(
-    height: 20,
+    height: Shape.z(20),
     padding: EdgeInsets.symmetric(horizontal: Shape.s(7)),
     decoration: BoxDecoration(color: WsT.well, borderRadius: BorderRadius.all(Shape.r(WsT.radius))),
     child: Row(
@@ -447,8 +447,8 @@ class _Field extends StatelessWidget {
         SizedBox(width: Shape.s(6)),
         if (swatch case final s?)
           Container(
-            width: 22,
-            height: 12,
+            width: Shape.z(22),
+            height: Shape.z(12),
             decoration: BoxDecoration(color: s, borderRadius: BorderRadius.all(Shape.r(3))),
           )
         else
@@ -482,8 +482,8 @@ class _Readout extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         Container(
-          width: 8,
-          height: 8,
+          width: Shape.z(8),
+          height: Shape.z(8),
           decoration: BoxDecoration(color: wsTone(l.kind), borderRadius: BorderRadius.all(Shape.r(2))),
         ),
         SizedBox(width: Shape.s(6)),

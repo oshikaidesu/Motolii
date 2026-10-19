@@ -233,7 +233,7 @@ class StarButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Press(
         onTap: () => onChanged?.call(!on),
-        builder: (context, hover, focus, _) => SizedBox(width: 24, height: 24, child: Center(child: glyph(size, (c, s) => drawStar(c, s, on ? Grey.g95 : (hover || focus ? Grey.g76 : Grey.g44), on), [on, hover, focus]))),
+        builder: (context, hover, focus, _) => SizedBox(width: Shape.z(24), height: Shape.z(24), child: Center(child: glyph(size, (c, s) => drawStar(c, s, on ? Grey.g95 : (hover || focus ? Grey.g76 : Grey.g44), on), [on, hover, focus]))),
       );
 }
 
@@ -272,10 +272,10 @@ class MiniSlider extends StatelessWidget {
         behavior: HitTestBehavior.opaque,
         onPanDown: (d) => set(d.localPosition),
         onPanUpdate: (d) => set(d.localPosition),
-        child: SizedBox(width: width, height: 20, child: Stack(alignment: Alignment.centerLeft, children: [
-          Container(height: 2, decoration: BoxDecoration(color: track ?? Grey.g26, borderRadius: BorderRadius.all(Shape.r(1)))),
-          Container(width: width * t, height: 2, decoration: BoxDecoration(color: Grey.g56, borderRadius: BorderRadius.all(Shape.r(1)))),
-          Positioned(left: (width - 10) * t, child: Container(width: 10, height: 10, decoration: BoxDecoration(color: Grey.g95, shape: BoxShape.circle))),
+        child: SizedBox(width: width, height: Shape.z(20), child: Stack(alignment: Alignment.centerLeft, children: [
+          Container(height: Shape.z(2), decoration: BoxDecoration(color: track ?? Grey.g26, borderRadius: BorderRadius.all(Shape.r(1)))),
+          Container(width: width * t, height: Shape.z(2), decoration: BoxDecoration(color: Grey.g56, borderRadius: BorderRadius.all(Shape.r(1)))),
+          Positioned(left: (width - 10) * t, child: Container(width: Shape.z(10), height: Shape.z(10), decoration: BoxDecoration(color: Grey.g95, shape: BoxShape.circle))),
         ])),
       ),
     );
@@ -306,7 +306,7 @@ class QuietButton extends StatelessWidget {
         builder: (context, hover, focus, _) => AnimatedContainer(
           duration: kFast,
           curve: kEase,
-          height: 24,
+          height: Shape.z(24),
           padding: EdgeInsets.symmetric(horizontal: Shape.s(12)),
           decoration: BoxDecoration(color: primary ? (hover ? Grey.g26 : Grey.g20) : (hover ? Grey.g20 : Grey.g13), borderRadius: BorderRadius.all(Shape.r(4)), border: Border.all(color: focus ? Grey.g56 : (primary ? Grey.g26 : Grey.g20))),
           child: Center(widthFactor: 1, child: Text(text, style: T.label(Grey.g91).copyWith(fontWeight: FontWeight.w500))),
@@ -320,5 +320,5 @@ class Tick extends StatelessWidget {
   final bool on;
   final double height;
   @override
-  Widget build(BuildContext context) => AnimatedContainer(duration: kFast, curve: kEase, width: 2, height: height, margin: EdgeInsets.only(right: Shape.s(4)), decoration: BoxDecoration(color: on ? Grey.g95 : const Color(0x00000000), borderRadius: BorderRadius.all(Shape.r(1))));
+  Widget build(BuildContext context) => AnimatedContainer(duration: kFast, curve: kEase, width: Shape.z(2), height: height, margin: EdgeInsets.only(right: Shape.s(4)), decoration: BoxDecoration(color: on ? Grey.g95 : const Color(0x00000000), borderRadius: BorderRadius.all(Shape.r(1))));
 }

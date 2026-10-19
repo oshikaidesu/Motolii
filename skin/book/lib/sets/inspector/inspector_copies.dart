@@ -10,7 +10,7 @@ import 'package:lab_book/tokens.dart';
 
 class CopiesDrawing extends StatefulWidget {
   const CopiesDrawing({super.key});
-  static const height = 84.0;
+  static double get height => Shape.z(84.0);
   @override
   State<CopiesDrawing> createState() => _CopiesDrawingState();
 }

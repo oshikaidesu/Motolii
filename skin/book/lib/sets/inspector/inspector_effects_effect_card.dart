@@ -46,14 +46,14 @@ class _EffectCardState extends State<EffectCard> {
             }
           : null,
       builder: (_, h) => Container(
-        height: 22,
+        height: Shape.z(22),
         padding: EdgeInsets.symmetric(horizontal: Shape.s(8)),
         color: h && ok ? Grey.g15 : null,
         alignment: Alignment.centerLeft,
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (danger && ok) ...[const ErrMark(size: 10, gap: 5)],
+            if (danger && ok) ...[ErrMark(size: Shape.z(10), gap: 5)],
             Text(s, style: T.name(!ok ? Grey.g56 : (danger ? Role.error : Grey.g91))),
           ],
         ),
@@ -128,7 +128,7 @@ class _EffectCardState extends State<EffectCard> {
             child: Hov(
               onTap: () => doc.flag('$k.adv', !adv),
               builder: (_, h) => Container(
-                height: 24,
+                height: Shape.z(24),
                 decoration: BoxDecoration(
                   border: Border(top: BorderSide(color: ed.rule)),
                 ),
@@ -163,7 +163,7 @@ class _EffectCardState extends State<EffectCard> {
                 right: 0,
                 top: below ? null : -Pop.gap,
                 bottom: below ? 0 : null,
-                height: 2,
+                height: Shape.z(2),
                 child: ColoredBox(color: fx.tone),
               ),
           ],
@@ -179,7 +179,7 @@ class _DragGhost extends StatelessWidget {
   final Fx fx;
   @override
   Widget build(BuildContext context) => Container(
-    width: 220,
+    width: Shape.z(220),
     height: Pop.titleH + Pop.insetY * 2,
     padding: EdgeInsets.symmetric(horizontal: Pop.inset),
     decoration: BoxDecoration(

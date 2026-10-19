@@ -44,12 +44,12 @@ class _RowState extends State<_Row> {
     }
 
     final row = Container(
-      height: 34,
+      height: Shape.z(34),
       padding: EdgeInsets.symmetric(horizontal: Shape.s(6)),
       decoration: BoxDecoration(color: widget.picked ? WsT.well : null, borderRadius: BorderRadius.all(Shape.r(5))),
       child: Row(
         children: [
-          Container(width: 4, height: 18, decoration: BoxDecoration(color: wsTone(l.kind), borderRadius: BorderRadius.all(Shape.r(2)))),
+          Container(width: Shape.z(4), height: Shape.z(18), decoration: BoxDecoration(color: wsTone(l.kind), borderRadius: BorderRadius.all(Shape.r(2)))),
           SizedBox(width: Shape.s(8)),
           Expanded(
             child: GestureDetector(
@@ -59,15 +59,15 @@ class _RowState extends State<_Row> {
             ),
           ),
           if (ways.isNotEmpty) ...[
-            SizedBox(width: 74, child: Text(now.replaceAll('_', ' '), maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.right, style: T.micro(now == 'normal' ? Grey.g56 : Grey.g91))),   // (its way, named: two ways can look alike small)
+            SizedBox(width: Shape.z(74), child: Text(now.replaceAll('_', ' '), maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.right, style: T.micro(now == 'normal' ? Grey.g56 : Grey.g91))),   // (its way, named: two ways can look alike small)
             SizedBox(width: Shape.s(4)),
-            DeskIconButton(key: ValueKey('blend.${l.id}'), size: 24, on: _open, glyph: (ink) => _Way(now, ink), onTap: () => setState(() => _open = !_open)),
+            DeskIconButton(key: ValueKey('blend.${l.id}'), size: Shape.z(24), on: _open, glyph: (ink) => _Way(now, ink), onTap: () => setState(() => _open = !_open)),
             SizedBox(width: Shape.s(8)),
-            SizedBox(width: 64, height: 18, child: _Opacity(key: ValueKey('opacity.${l.id}'), thing: t!, value: opacity)),
+            SizedBox(width: Shape.z(64), height: Shape.z(18), child: _Opacity(key: ValueKey('opacity.${l.id}'), thing: t!, value: opacity)),
             SizedBox(width: Shape.s(6)),
             if (l == ws.layers.last) SizedBox(width: Shape.s(24))   // (the back-most: nothing under it to clip to)
             else
-              DeskIconButton(key: ValueKey('clip.${l.id}'), size: 24, on: clip, glyph: (ink) => _Clip(ink), onTap: () {
+              DeskIconButton(key: ValueKey('clip.${l.id}'), size: Shape.z(24), on: clip, glyph: (ink) => _Clip(ink), onTap: () {
                 ws.after(m!.later('set', thing: t, name: 'clip', number: clip ? 0 : 1));
               }),
           ],
@@ -104,7 +104,7 @@ class _RowState extends State<_Row> {
                       MouseRegion(
                         onEnter: (_) => setState(() => _hover = w),
                         onExit: (_) => setState(() => _hover = null),
-                        child: DeskIconButton(key: ValueKey('blend.${l.id}.$w'), size: 26, on: w == now, glyph: (ink) => _Way(w, ink), onTap: () => say('blend', w)),
+                        child: DeskIconButton(key: ValueKey('blend.${l.id}.$w'), size: Shape.z(26), on: w == now, glyph: (ink) => _Way(w, ink), onTap: () => say('blend', w)),
                       ),
                   ],
               ],

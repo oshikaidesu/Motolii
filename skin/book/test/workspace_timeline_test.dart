@@ -29,10 +29,10 @@ Future<void> _pump(WidgetTester t, Ws ws, {Size size = _ref}) async {
   addTearDown(t.view.reset);
   await t.pumpWidget(
     WidgetsApp(
-      color: const Color(0xFF000000),
+      color: Color(0xFF000000),
       builder: (_, _) => WsScope(
         ws: ws,
-        child: Align(alignment: Alignment.topLeft, child: SizedBox(width: size.width, height: size.height, child: const WsTimeline())),
+        child: Align(alignment: Alignment.topLeft, child: SizedBox(width: size.width, height: size.height, child: WsTimeline())),
       ),
     ),
   );
@@ -41,7 +41,7 @@ Future<void> _pump(WidgetTester t, Ws ws, {Size size = _ref}) async {
 
 /// Where a frame of a thing's row lands on screen at Fit zoom.
 Offset _at(Ws ws, int thing, num frame, {Size size = _ref}) {
-  const left = WtM.label + WtM.divider;
+  final left = WtM.label + WtM.divider;
   final ppf = (size.width - left - WtM.padL - WtM.padR) / Ws.duration, row = ws.layers.indexWhere((l) => l.id == '$thing');
   return Offset(left + WtM.padL + frame * ppf, WtM.header + WtM.ruler + row * WtM.row + WtM.row / 2 - .5);
 }

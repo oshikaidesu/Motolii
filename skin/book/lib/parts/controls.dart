@@ -25,14 +25,14 @@ class ValueWell extends StatelessWidget {
         onPanDown: (d) => set(d.localPosition),
         onPanUpdate: (d) => set(d.localPosition),
         child: SizedBox(
-          height: 22,
+          height: Shape.z(22),
           child: Stack(children: [
             Positioned.fill(child: DecoratedBox(decoration: BoxDecoration(color: Grey.g07, borderRadius: BorderRadius.all(Shape.r(4)), border: Border.all(color: Grey.g20)))),
             Positioned(left: 0, top: 0, bottom: 0, width: box.maxWidth * t, child: DecoratedBox(decoration: BoxDecoration(
               gradient: LinearGradient(colors: [fam.c.withValues(alpha: .28), fam.c.withValues(alpha: .55)]),
               borderRadius: BorderRadius.all(Shape.r(4)),
             ))),
-            Positioned(left: 0, top: 4, bottom: 4, width: 2, child: DecoratedBox(decoration: BoxDecoration(color: fam.c, borderRadius: BorderRadius.all(Shape.r(1))))),
+            Positioned(left: 0, top: 4, bottom: 4, width: Shape.z(2), child: DecoratedBox(decoration: BoxDecoration(color: fam.c, borderRadius: BorderRadius.all(Shape.r(1))))),
             Positioned.fill(child: Padding(padding: EdgeInsets.symmetric(horizontal: Shape.s(9)), child: Flex(direction: Axis.horizontal, crossAxisAlignment: CrossAxisAlignment.center, children: [
               Text(label, style: T.label(Grey.g76)),
               const Spacer(),
@@ -58,8 +58,8 @@ class PillSwitch extends StatelessWidget {
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 120),
           curve: Curves.easeOut,
-          width: 28,
-          height: 16,
+          width: Shape.z(28),
+          height: Shape.z(16),
           padding: EdgeInsets.all(Shape.s(2)),
           alignment: on ? Alignment.centerRight : Alignment.centerLeft,
           decoration: BoxDecoration(
@@ -67,7 +67,7 @@ class PillSwitch extends StatelessWidget {
             borderRadius: BorderRadius.all(Shape.r(8)),
             border: Border.all(color: on ? Role.of(Role.selected.withValues(alpha: .85), Role.mode) : Grey.g26, width: 1),
           ),
-          child: Container(width: 10, height: 10, decoration: BoxDecoration(color: on ? Role.of(Grey.g95, Role.mode) : Grey.g56, shape: BoxShape.circle)),
+          child: Container(width: Shape.z(10), height: Shape.z(10), decoration: BoxDecoration(color: on ? Role.of(Grey.g95, Role.mode) : Grey.g56, shape: BoxShape.circle)),
         ),
       );
 }
@@ -99,7 +99,7 @@ class Segmented extends StatelessWidget {
           ),
         );
     return Container(
-      height: 26,
+      height: Shape.z(26),
       padding: EdgeInsets.all(Shape.s(2)),
       decoration: BoxDecoration(color: Grey.g07, borderRadius: BorderRadius.all(Shape.r(7))),
       child: Flex(direction: Axis.horizontal, mainAxisSize: expand ? MainAxisSize.max : MainAxisSize.min, children: [

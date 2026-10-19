@@ -43,7 +43,7 @@ class _WsZoomReadoutState extends State<WsZoomReadout> {
         onHorizontalDragEnd: (_) => WsZoom.set(WsZoom.value.value),
         onDoubleTap: () => WsZoom.set(1),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+          padding: EdgeInsets.symmetric(horizontal: Shape.s(4), vertical: Shape.s(4)),
           child: Text('${(z * 100).round()}%', style: T.micro(z == 1 ? Grey.g56 : Grey.g91)),
         ),
       ),

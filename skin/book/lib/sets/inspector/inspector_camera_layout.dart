@@ -316,7 +316,7 @@ class _CamPaint extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round;
     final eye = Offset(4, s.height / 2);
-    c.drawRect(Rect.fromCenter(center: eye, width: 5, height: 6), Paint()..color = Grey.g76); // (the camera)
+    c.drawRect(Rect.fromCenter(center: eye, width: Shape.z(5), height: Shape.z(6)), Paint()..color = Grey.g76); // (the camera)
     if (zoom) {
       final half = math.atan(.9 / ((v ?? 100) / 100).clamp(.1, 10)); // (100%: a wide view; more: narrower)
       final d = Offset(math.cos(half), math.sin(half)) * 19;

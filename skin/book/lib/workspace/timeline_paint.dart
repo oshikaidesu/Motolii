@@ -11,11 +11,22 @@ import 'ws.dart';
 
 /// The timeline seat's own sizes.
 abstract final class WtM {
-  static const header = 32.0, label = 200.0, ruler = 30.0, row = 24.0, overview = 12.0, divider = 1.0;
+  static const divider = 1.0;
+  static double get header => Shape.z(32.0);
+  static double get label => Shape.z(200.0);
+  static double get ruler => Shape.z(30.0);
+  static double get row => Shape.z(24.0);
+  static double get overview => Shape.z(12.0);
 
   /// The work-area band on top of the ruler, and the room left of frame 0 / right of the last frame.
-  static const band = 9.0, padL = 10.0, padR = 14.0;
-  static const bar = 18.0, barRadius = 4.0, key = 4.5, keyPicked = 6.0, chip = 14.0;
+  static double get band => Shape.z(9.0);
+  static double get padL => Shape.s(10.0);
+  static double get padR => Shape.s(14.0);
+  static const barRadius = 4.0;
+  static double get bar => Shape.z(18.0);
+  static double get key => Shape.z(4.5);
+  static double get keyPicked => Shape.z(6.0);
+  static double get chip => Shape.z(14.0);
   static const maxZoom = 16.0;
 }
 
@@ -327,7 +338,7 @@ class WtPlayheadPainter extends CustomPainter {
     final p = Paint()..color = WsT.playhead;
     final t = _text('$frame', T.value(WsT.onAccent).copyWith(fontSize: T.px(10), fontWeight: FontWeight.w700));
     final w = math.max(t.width + 10, 22.0), cx = (x + .5).clamp(w / 2, s.width - w / 2);
-    final pill = RRect.fromRectAndRadius(Rect.fromCenter(center: Offset(cx, headTop + 8), width: w, height: 15), Shape.r(4));
+    final pill = RRect.fromRectAndRadius(Rect.fromCenter(center: Offset(cx, headTop + 8), width: w, height: Shape.z(15)), Shape.r(4));
     c.drawRect(Rect.fromLTWH(x, headTop + 8, 1, s.height - headTop - 8), p);
     p.color = WsT.accent;
     c.drawRRect(pill, p);

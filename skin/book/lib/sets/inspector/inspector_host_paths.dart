@@ -151,8 +151,8 @@ class PathOpsStack extends StatelessWidget {
         if (order.isEmpty)
           Container(
             color: Pop.card,
-            margin: const EdgeInsets.only(bottom: Pop.gap),
-            padding: const EdgeInsets.symmetric(horizontal: Pop.inset, vertical: Pop.insetY),
+            margin: EdgeInsets.only(bottom: Pop.gap),
+            padding: EdgeInsets.symmetric(horizontal: Pop.inset, vertical: Pop.insetY),
             child: Text('No path operations. The path is drawn as built.', style: T.label(Grey.g56)),
           ),
         for (final (i, s) in order.indexed)
@@ -266,7 +266,7 @@ class _OpLine extends StatelessWidget {
             width: briefX,
             child: Row(
               children: [
-                const SizedBox(width: 8 + Pop.inset),
+                SizedBox(width: 8 + Pop.inset),
                 ToneBadge(CardMark.path, Pop.tonePath, dim: dim),
                 const SizedBox(width: 6),
                 Flexible(
@@ -292,11 +292,11 @@ class _OpLine extends StatelessWidget {
       ),
     );
     return Padding(
-      padding: const EdgeInsets.only(bottom: Pop.gap),
+      padding: EdgeInsets.only(bottom: Pop.gap),
       child: ColoredBox(
         color: Pop.card,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: Pop.inset, vertical: Pop.insetY),
+          padding: EdgeInsets.symmetric(horizontal: Pop.inset, vertical: Pop.insetY),
           child: wrap(head) ?? head,
         ),
       ),
@@ -349,7 +349,7 @@ class _OpGhost extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     width: 220,
     height: Pop.titleH + Pop.insetY * 2,
-    padding: const EdgeInsets.symmetric(horizontal: Pop.inset),
+    padding: EdgeInsets.symmetric(horizontal: Pop.inset),
     decoration: BoxDecoration(
       color: Grey.g20,
       boxShadow: [BoxShadow(color: Color(0x99000000), blurRadius: 14, offset: Offset(0, 6))],
@@ -515,7 +515,7 @@ class _AddOp extends StatelessWidget {
         builder: (_, h) => Container(
           height: Pop.row,
           color: h || open ? Grey.g15 : Pop.card,
-          padding: const EdgeInsets.symmetric(horizontal: Pop.inset),
+          padding: EdgeInsets.symmetric(horizontal: Pop.inset),
           child: Row(
             children: [
               SizedBox(

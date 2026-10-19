@@ -19,7 +19,7 @@ class IdeaGallery extends StatelessWidget {
     final board = Pop(
       child: Container(
         color: Grey.g07,
-        padding: const EdgeInsets.all(Pop.gap),
+        padding: EdgeInsets.all(Pop.gap),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -45,7 +45,7 @@ class IdeaLabel extends StatelessWidget {
   final String letter, name, pitch;
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(Pop.inset, 14, Pop.inset, 6),
+    padding: EdgeInsets.fromLTRB(Pop.inset, 14, Pop.inset, 6),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [

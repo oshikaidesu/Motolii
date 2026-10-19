@@ -211,7 +211,7 @@ class MediaShelf extends StatelessWidget {
           return Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              SizedBox(width: 160, child: _Tree(c)),
+              SizedBox(width: Shape.z(160), child: _Tree(c)),
               ColoredBox(
                 color: WsT.ground,
                 child: SizedBox(width: WsT.gutter),
@@ -283,7 +283,7 @@ class _FolderRow extends StatelessWidget {
       builder: (context, h) => AnimatedContainer(
         duration: Mo.dur,
         curve: Mo.ease,
-        height: 22,
+        height: Shape.z(22),
         padding: EdgeInsets.only(left: Shape.s(4) + depth * Shape.s(12.0), right: WsT.inset),
         color: dockFill(here, h),
         child: Row(
@@ -292,19 +292,19 @@ class _FolderRow extends StatelessWidget {
               behavior: HitTestBehavior.opaque,
               onTap: hasSubs ? () => c.toggle(c.mem.open, n.id) : null,
               child: SizedBox(
-                width: 14,
-                height: 22,
+                width: Shape.z(14),
+                height: Shape.z(22),
                 child: hasSubs
                     ? AnimatedRotation(
                         turns: open ? .25 : 0,
                         duration: Mo.dur,
                         curve: Mo.ease,
-                        child: DockGlyph(DockG.chevron, size: 7, color: dockInk(here, Grey.g63)),
+                        child: DockGlyph(DockG.chevron, size: Shape.z(7), color: dockInk(here, Grey.g63)),
                       )
                     : null,
               ),
             ),
-            DockGlyph(DockG.folder, size: 12, color: here ? WsT.onAccent : (depth == 0 ? WsT.accentInk : Grey.g63)),
+            DockGlyph(DockG.folder, size: Shape.z(12), color: here ? WsT.onAccent : (depth == 0 ? WsT.accentInk : Grey.g63)),
             SizedBox(width: Shape.s(6)),
             Expanded(
               child: Text(
@@ -400,7 +400,7 @@ class _Crumbs extends StatelessWidget {
   final bool searching;
   @override
   Widget build(BuildContext context) => Container(
-    height: 24,
+    height: Shape.z(24),
     color: WsT.card,
     padding: EdgeInsets.symmetric(horizontal: WsT.inset),
     child: Row(
@@ -417,7 +417,7 @@ class _Crumbs extends StatelessWidget {
                   if (i > 0)
                     Padding(
                       padding: EdgeInsets.symmetric(horizontal: Shape.s(5)),
-                      child: DockGlyph(DockG.chevron, size: 6, color: Grey.g56),
+                      child: DockGlyph(DockG.chevron, size: Shape.z(6), color: Grey.g56),
                     ),
                   Flexible(
                     child: GestureDetector(
@@ -451,7 +451,7 @@ class _Art extends StatelessWidget {
     if (n.disk && (n.g == DockG.video || n.g == DockG.image)) {
       // A file of the disk shows its own picture: a film its first one (the inside makes it), a photo itself (Flutter
       // reads it); what has none to show (a vector picture, until it is made) is a flat tile with its kind's mark.
-      final flat = Container(color: WsT.well, alignment: Alignment.center, child: DockBadge(n.g, Grey.g63, size: 26));
+      final flat = Container(color: WsT.well, alignment: Alignment.center, child: DockBadge(n.g, Grey.g63, size: Shape.z(26)));
       if (n.g == DockG.video) {
         return FutureBuilder<String?>(
           future: _thumbnailOf?.call(n.id),
@@ -470,9 +470,9 @@ class _Art extends StatelessWidget {
       DockG.folder => Container(
         color: WsT.well,
         alignment: Alignment.center,
-        child: DockGlyph(DockG.folder, size: 26, color: WsT.accentInk),
+        child: DockGlyph(DockG.folder, size: Shape.z(26), color: WsT.accentInk),
       ),
-      _ => Container(color: WsT.well, alignment: Alignment.center, child: DockBadge(n.g, n.g == DockG.comp ? WsT.accent : Grey.g63, size: 26)),
+      _ => Container(color: WsT.well, alignment: Alignment.center, child: DockBadge(n.g, n.g == DockG.comp ? WsT.accent : Grey.g63, size: Shape.z(26))),
     };
   }
 }
@@ -513,15 +513,17 @@ class _Tile extends StatelessWidget {
           AnimatedContainer(
             duration: Mo.dur,
             curve: Mo.ease,
-            height: 18,
+            height: Shape.z(18),
             padding: EdgeInsets.symmetric(horizontal: Shape.s(4)),
             alignment: Alignment.centerLeft,
             color: dockFill(sel, h, WsT.card),
-            child: Text(
-              n.name,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: T.micro(dockInk(sel, n.folder ? Grey.g91 : Grey.g76)).copyWith(fontWeight: sel || n.folder ? FontWeight.w700 : FontWeight.w500),
+            child: FittedBox( // (a name wider than its tile is drawn smaller, never cut)
+              fit: BoxFit.scaleDown,
+              child: Text(
+                n.name,
+                maxLines: 1,
+                style: T.micro(dockInk(sel, n.folder ? Grey.g91 : Grey.g76)).copyWith(fontWeight: sel || n.folder ? FontWeight.w700 : FontWeight.w500),
+              ),
             ),
           ),
         ],
@@ -547,13 +549,13 @@ class _Row extends StatelessWidget {
       builder: (context, h) => AnimatedContainer(
         duration: Mo.dur,
         curve: Mo.ease,
-        height: 34,
+        height: Shape.z(34),
         margin: EdgeInsets.only(top: WsT.gutter),
         padding: EdgeInsets.only(left: Shape.s(4), right: WsT.inset),
         color: dockFill(sel, h, WsT.body),
         child: Row(
           children: [
-            SizedBox(width: 40, height: 28, child: _Art(n)),
+            SizedBox(width: Shape.z(40), height: Shape.z(28), child: _Art(n)),
             SizedBox(width: Shape.s(8)),
             Expanded(
               child: Column(
@@ -578,11 +580,11 @@ class _InUse extends StatelessWidget {
   const _InUse();
   @override
   Widget build(BuildContext context) => Container(
-    width: 14,
-    height: 14,
+    width: Shape.z(14),
+    height: Shape.z(14),
     alignment: Alignment.center,
     decoration: BoxDecoration(color: WsT.accent, borderRadius: BorderRadius.all(Shape.r(WsT.chipRadius))),
-    child: DockGlyph(DockG.link, size: 10, color: WsT.onAccent),
+    child: DockGlyph(DockG.link, size: Shape.z(10), color: WsT.onAccent),
   );
 }
 

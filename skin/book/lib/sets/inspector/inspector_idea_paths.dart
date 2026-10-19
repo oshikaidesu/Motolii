@@ -1162,8 +1162,8 @@ class _PiB extends StatelessWidget {
       children: [
         Container(
           color: Pop.card,
-          margin: const EdgeInsets.only(bottom: Pop.gap),
-          padding: const EdgeInsets.symmetric(horizontal: Pop.inset, vertical: Pop.insetY),
+          margin: EdgeInsets.only(bottom: Pop.gap),
+          padding: EdgeInsets.symmetric(horizontal: Pop.inset, vertical: Pop.insetY),
           child: fit ? frames : SingleChildScrollView(scrollDirection: Axis.horizontal, child: frames),
         ),
         for (final (i, s) in order.indexed) _PiBCard(s, _piTitle(order, s), ins[i], after(i), key: ValueKey('pi_b_$s')),

@@ -547,8 +547,8 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
             Positioned(
               left: v.x((at * Ws.fps).round()),
               top: WtM.band + 1,
-              width: 120,
-              height: 15,
+              width: Shape.z(120),
+              height: Shape.z(15),
               child: Container(
                 color: Grey.g91,
                 padding: EdgeInsets.symmetric(horizontal: Shape.s(4)),
@@ -611,7 +611,7 @@ class _Header extends StatelessWidget {
               SizedBox(width: Shape.s(2)),
               _Btn(TpGlyph.stepBack, key: const ValueKey('ws-tl-back'), onTap: () => onStep(-1)),
               SizedBox(width: Shape.s(2)),
-              _Btn(ws.playing ? TpGlyph.pause : TpGlyph.play, key: const ValueKey('ws-tl-play'), width: 34, on: ws.playing, rest: WsT.accent, onTap: onToggle),
+              _Btn(ws.playing ? TpGlyph.pause : TpGlyph.play, key: const ValueKey('ws-tl-play'), width: Shape.z(34), on: ws.playing, rest: WsT.accent, onTap: onToggle),
               SizedBox(width: Shape.s(2)),
               _Btn(TpGlyph.stepFwd, key: const ValueKey('ws-tl-fwd'), onTap: () => onStep(1)),
               SizedBox(width: Shape.s(2)),
@@ -634,24 +634,27 @@ class _Header extends StatelessWidget {
                       WtKindChip(layer.kind),
                       SizedBox(width: Shape.s(6)),
                       Flexible(
-                        child: Text(
-                          picked > 0 ? '${layer.name}  ·  $picked key${picked == 1 ? '' : 's'}' : '${layer.name}  ·  ${layer.keys.length} keys',
-                          style: T.label(Grey.g76),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                        child: FittedBox( // (drawn smaller, never cut)
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            picked > 0 ? '${layer.name}  ·  $picked key${picked == 1 ? '' : 's'}' : '${layer.name}  ·  ${layer.keys.length} keys',
+                            style: T.label(Grey.g76),
+                            maxLines: 1,
+                          ),
                         ),
                       ),
                     ],
                   ),
                 ),
               const Spacer(),
-              _Btn(TpGlyph.minus, key: const ValueKey('ws-tl-zoom-out'), size: 22, onTap: () => onZoom(zoom / 1.5)),
+              _Btn(TpGlyph.minus, key: const ValueKey('ws-tl-zoom-out'), size: Shape.z(22), onTap: () => onZoom(zoom / 1.5)),
               SizedBox(width: Shape.s(4)),
               _ZoomSlider(zoom: zoom, onZoom: onZoom),
               SizedBox(width: Shape.s(4)),
-              _Btn(TpGlyph.plus, key: const ValueKey('ws-tl-zoom-in'), size: 22, onTap: () => onZoom(zoom * 1.5)),
+              _Btn(TpGlyph.plus, key: const ValueKey('ws-tl-zoom-in'), size: Shape.z(22), onTap: () => onZoom(zoom * 1.5)),
               SizedBox(width: Shape.s(4)),
-              _Btn(TpGlyph.fit, key: const ValueKey('ws-tl-fit'), size: 22, width: 46, label: 'Fit', lit: zoom <= 1.001, onTap: () => onZoom(1)),
+              _Btn(TpGlyph.fit, key: const ValueKey('ws-tl-fit'), size: Shape.z(22), width: Shape.z(46), label: 'Fit', lit: zoom <= 1.001, onTap: () => onZoom(1)),
             ],
           );
         },
@@ -716,7 +719,7 @@ class _Chip extends StatelessWidget {
   final bool mono;
   @override
   Widget build(BuildContext context) => Container(
-    height: 20,
+    height: Shape.z(20),
     padding: EdgeInsets.symmetric(horizontal: Shape.s(7)),
     alignment: Alignment.center,
     decoration: BoxDecoration(color: WsT.well, borderRadius: BorderRadius.all(Shape.r(WsT.radius))),
@@ -728,7 +731,7 @@ class _ZoomSlider extends StatelessWidget {
   const _ZoomSlider({required this.zoom, required this.onZoom});
   final double zoom;
   final void Function(double z, {int? anchor}) onZoom;
-  static const w = 96.0;
+  static double get w => Shape.z(96.0);
   @override
   Widget build(BuildContext context) {
     final t = math.log(zoom) / math.log(WtM.maxZoom);
@@ -742,7 +745,7 @@ class _ZoomSlider extends StatelessWidget {
         onPanUpdate: (d) => at(d.localPosition),
         child: SizedBox(
           width: w,
-          height: 22,
+          height: Shape.z(22),
           child: CustomPaint(painter: _ZoomTrack(t)),
         ),
       ),
@@ -789,7 +792,7 @@ class _LabelHeader extends StatelessWidget {
         const Spacer(),
         for (final g in const [TpGlyph.eye, TpGlyph.solo, TpGlyph.lock])
           SizedBox(
-            width: 20,
+            width: Shape.z(20),
             child: Center(
               child: CustomPaint(size: const Size.square(10), painter: TpGlyphPainter(g, g == TpGlyph.solo && solo ? WsT.accent : Grey.g56)),
             ),
@@ -836,7 +839,7 @@ class _LabelRowState extends State<_LabelRow> {
           padding: EdgeInsets.only(bottom: Shape.s(1)),
           child: Stack(
             children: [
-              if (sel) Positioned(left: 0, top: 0, bottom: 0, width: 3, child: ColoredBox(color: WsT.accent)),
+              if (sel) Positioned(left: 0, top: 0, bottom: 0, width: Shape.z(3), child: ColoredBox(color: WsT.accent)),
               Padding(
                 padding: EdgeInsets.only(left: Shape.s(8), right: Shape.s(6)),
                 child: Row(
@@ -878,12 +881,12 @@ class _Toggle extends StatelessWidget {
     behavior: HitTestBehavior.opaque,
     onTap: onTap,
     child: SizedBox(
-      width: 20,
+      width: Shape.z(20),
       height: WtM.row - 1,
       child: Center(
         child: Container(
-          width: 17,
-          height: 17,
+          width: Shape.z(17),
+          height: Shape.z(17),
           alignment: Alignment.center,
           decoration: BoxDecoration(color: on ? WsT.accent : (strong ? Grey.g26 : null), borderRadius: BorderRadius.all(Shape.r(WsT.chipRadius))),
           child: CustomPaint(size: const Size.square(10), painter: TpGlyphPainter(g, on ? WsT.onAccent : (strong ? Grey.g95 : (lit ? Grey.g76 : Grey.g38)))),

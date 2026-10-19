@@ -132,7 +132,7 @@ class _DeskDepthState extends State<DeskDepth> {
               ),
               const SizedBox(width: WsT.gutter),
               SizedBox(
-                width: 128,
+                width: Shape.z(128),
                 child: _LensNumbers(lens: lens, onEdit: edit),
               ),
             ],
@@ -293,7 +293,7 @@ class _Map {
   late final Offset eye;
   Offset at(double x, double z) => Offset(eye.dx + x * scale, eye.dy - z * scale);
   double z(double y) => (eye.dy - y) / scale;
-  Rect slab(double x, double z, double w) => Rect.fromCenter(center: at(x, z), width: w * scale, height: 6);
+  Rect slab(double x, double z, double w) => Rect.fromCenter(center: at(x, z), width: w * scale, height: Shape.z(6));
 }
 
 class _DepthPainter extends CustomPainter {
@@ -408,7 +408,7 @@ class _DepthPainter extends CustomPainter {
     // The camera body at the cone's tip.
     final e = m.eye;
     c.drawRRect(
-      RRect.fromRectAndRadius(Rect.fromCenter(center: e + const Offset(0, 9), width: 18, height: 12), Shape.r(3)),
+      RRect.fromRectAndRadius(Rect.fromCenter(center: e + const Offset(0, 9), width: Shape.z(18), height: Shape.z(12)), Shape.r(3)),
       fill..color = WsT.toneCamera,
     );
     c.drawPath(

@@ -55,7 +55,7 @@ class DeskAlign extends StatelessWidget {
               child: Row(
                 children: [
                   for (final side in row) ...[
-                    DeskIconButton(key: ValueKey('align.$side'), size: 36, on: at(side), glyph: (ink) => _Side(side, ink), onTap: () => r == null ? null : align(ws, side)),
+                    DeskIconButton(key: ValueKey('align.$side'), size: Shape.z(36), on: at(side), glyph: (ink) => _Side(side, ink), onTap: () => r == null ? null : align(ws, side)),
                     SizedBox(width: Shape.s(4)),
                   ],
                 ],

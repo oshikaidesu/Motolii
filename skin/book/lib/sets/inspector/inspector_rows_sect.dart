@@ -48,7 +48,7 @@ class Sect extends StatelessWidget {
             behavior: HitTestBehavior.opaque,
             onTap: onToggle,
             child: SizedBox(
-              height: 24,
+              height: Shape.z(24),
               child: Row(
                 children: [
                   if (title != null)
@@ -119,7 +119,7 @@ class _PopCard extends StatelessWidget {
     final brief = !open && chips.isNotEmpty;
     List<Widget> lead(bool h) => [
       // the mark sits centred in its box, and the gap after it equals the card's inset, so it has the same air on both sides
-      if (toggle != null) ...[FoldMark(open: open, hot: h), const SizedBox(width: Pop.inset)],
+      if (toggle != null) ...[FoldMark(open: open, hot: h), SizedBox(width: Pop.inset)],
       if (s.mark != null && tone != null) ...[ToneBadge(s.mark!, tone, dim: s.dim), SizedBox(width: Shape.s(6))],
       if (title != null)
         Flexible(
@@ -134,8 +134,8 @@ class _PopCard extends StatelessWidget {
         ),
       if (!open && keys != KeyS.off)
         Container(
-          width: 5,
-          height: 5,
+          width: Shape.z(5),
+          height: Shape.z(5),
           margin: EdgeInsets.only(left: Shape.s(6)),
           decoration: BoxDecoration(color: keys == KeyS.at ? Pop.keyDot : Pop.keyDot.withValues(alpha: .5), shape: BoxShape.circle),
         ),
@@ -197,7 +197,7 @@ class _PopCard extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           if (head != null) s.headWrap?.call(head) ?? head,
-          if (head != null && body.isNotEmpty) const SizedBox(height: Pop.titleGap),
+          if (head != null && body.isNotEmpty) SizedBox(height: Pop.titleGap),
           ...body,
         ],
       ),

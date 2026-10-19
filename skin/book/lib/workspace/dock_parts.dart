@@ -82,7 +82,7 @@ class DockChips extends StatelessWidget {
   final ValueChanged<String> onPick;
   @override
   Widget build(BuildContext context) => SizedBox(
-    height: 28,
+    height: Shape.z(28),
     child: SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       padding: EdgeInsets.fromLTRB(WsT.inset, Shape.s(2), WsT.inset, Shape.s(6)),
@@ -96,7 +96,7 @@ class DockChips extends StatelessWidget {
                 return AnimatedContainer(
                   duration: Mo.dur,
                   curve: Mo.ease,
-                  height: 20,
+                  height: Shape.z(20),
                   padding: EdgeInsets.symmetric(horizontal: Shape.s(7)),
                   decoration: BoxDecoration(color: on ? WsT.accent : (h ? WsT.raised : WsT.well), borderRadius: BorderRadius.all(Shape.r(WsT.radius))),
                   child: Row(
@@ -130,7 +130,7 @@ class DockSection extends StatelessWidget {
   Widget build(BuildContext context) => DockHover(
     onTap: onTap,
     builder: (context, h) => Container(
-      height: 24,
+      height: Shape.z(24),
       color: h && onTap != null ? WsT.raised : WsT.card,
       padding: EdgeInsets.symmetric(horizontal: WsT.inset),
       child: Row(
@@ -140,13 +140,13 @@ class DockSection extends StatelessWidget {
               turns: folded! ? 0 : .25,
               duration: Mo.dur,
               curve: Mo.ease,
-              child: DockGlyph(DockG.chevron, size: 8, color: Grey.g63),
+              child: DockGlyph(DockG.chevron, size: Shape.z(8), color: Grey.g63),
             ),
             SizedBox(width: Shape.s(6)),
           ],
           Container(
-            width: 8,
-            height: 8,
+            width: Shape.z(8),
+            height: Shape.z(8),
             decoration: BoxDecoration(color: hue ?? Grey.g56, borderRadius: BorderRadius.all(Shape.r(2))),
           ),
           SizedBox(width: Shape.s(6)),
@@ -216,12 +216,12 @@ class DockIconButton extends StatelessWidget {
     builder: (context, h) => AnimatedContainer(
       duration: Mo.dur,
       curve: Mo.ease,
-      width: 20,
-      height: 20,
+      width: Shape.z(20),
+      height: Shape.z(20),
       margin: EdgeInsets.only(left: Shape.s(2)),
       alignment: Alignment.center,
       decoration: BoxDecoration(color: on ? WsT.raised : (h ? WsT.card : null), borderRadius: BorderRadius.all(Shape.r(WsT.chipRadius))),
-      child: DockGlyph(g, size: 11, color: on || h ? Grey.g95 : Grey.g63),
+      child: DockGlyph(g, size: Shape.z(11), color: on || h ? Grey.g95 : Grey.g63),
     ),
   );
 }
@@ -250,7 +250,7 @@ class DockFooter extends StatelessWidget {
   Widget build(BuildContext context) {
     final ws = WsScope.of(context), l = fresh ? null : ws.layer;
     return Container(
-      height: 52,
+      height: Shape.z(52),
       padding: EdgeInsets.symmetric(horizontal: WsT.inset),
       decoration: BoxDecoration(
         color: WsT.card,
@@ -260,7 +260,7 @@ class DockFooter extends StatelessWidget {
       ),
       child: Row(
         children: [
-          if (preview case final p?) ...[SizedBox.square(dimension: 34, child: p), SizedBox(width: Shape.s(8))],
+          if (preview case final p?) ...[SizedBox.square(dimension: Shape.z(34), child: p), SizedBox(width: Shape.s(8))],
           Expanded(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -273,15 +273,15 @@ class DockFooter extends StatelessWidget {
                   style: T.name(Grey.g95).copyWith(fontWeight: FontWeight.w600),
                 ),
                 SizedBox(height: Shape.s(4)),
-                Text(meta, maxLines: 1, overflow: TextOverflow.ellipsis, style: T.label(Grey.g63)),
+                Text(meta, maxLines: 2, overflow: TextOverflow.ellipsis, style: T.label(Grey.g63)), // (two lines of whole words before anything is left out)
                 SizedBox(height: Shape.s(4)),
                 Row(
                   children: [
                     Text('to ', style: T.label(Grey.g56)),
                     if (l != null) ...[
                       Container(
-                        width: 6,
-                        height: 6,
+                        width: Shape.z(6),
+                        height: Shape.z(6),
                         decoration: BoxDecoration(color: wsTone(l.kind), borderRadius: BorderRadius.all(Shape.r(1))),
                       ),
                       SizedBox(width: Shape.s(4)),
@@ -301,7 +301,7 @@ class DockFooter extends StatelessWidget {
             builder: (context, h) => AnimatedContainer(
               duration: Mo.dur,
               curve: Mo.ease,
-              height: 24,
+              height: Shape.z(24),
               padding: EdgeInsets.symmetric(horizontal: Shape.s(10)),
               alignment: Alignment.center,
               decoration: BoxDecoration(
@@ -354,7 +354,7 @@ class _DockSearchState extends State<DockSearch> {
       child: AnimatedContainer(
         duration: Mo.dur,
         curve: Mo.ease,
-        height: 24,
+        height: Shape.z(24),
         padding: EdgeInsets.symmetric(horizontal: Shape.s(7)),
         decoration: BoxDecoration(
           color: WsT.well,
@@ -363,7 +363,7 @@ class _DockSearchState extends State<DockSearch> {
         ),
         child: Row(
           children: [
-            DockGlyph(DockG.search, size: 11, color: _focus.hasFocus ? WsT.accentInk : Grey.g56),
+            DockGlyph(DockG.search, size: Shape.z(11), color: _focus.hasFocus ? WsT.accentInk : Grey.g56),
             SizedBox(width: Shape.s(6)),
             Expanded(
               child: Stack(
@@ -389,7 +389,7 @@ class _DockSearchState extends State<DockSearch> {
             if (c.text.isNotEmpty)
               DockHover(
                 onTap: c.clear,
-                builder: (context, h) => DockGlyph(DockG.close, size: 10, color: h ? Grey.g95 : Grey.g63),
+                builder: (context, h) => DockGlyph(DockG.close, size: Shape.z(10), color: h ? Grey.g95 : Grey.g63),
               ),
           ],
         ),
@@ -429,7 +429,7 @@ class DockStar extends StatelessWidget {
     onTap: onTap,
     builder: (context, h) {
       final col = ink ?? (on ? Pop.keyDot : (h ? Grey.g91 : Grey.g56));
-      return SizedBox(width: 20, height: 20, child: Center(child: glyph(11, (cv, s) => drawStar(cv, s, col, on), [col, on])));
+      return SizedBox(width: Shape.z(20), height: Shape.z(20), child: Center(child: glyph(11, (cv, s) => drawStar(cv, s, col, on), [col, on])));
     },
   );
 }

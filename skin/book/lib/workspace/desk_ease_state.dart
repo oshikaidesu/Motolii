@@ -87,7 +87,7 @@ class DeskEaseState extends State<DeskEase> {
               ),
               const SizedBox(width: WsT.gutter),
               SizedBox(
-                width: 128,
+                width: Shape.z(128),
                 child: EaseNumbers(ease: ease, span: span, onChanged: set),
               ),
             ],

@@ -109,7 +109,7 @@ class ParamTile extends StatelessWidget {
       case ParamLook.choice:
         return shell(
           SizedBox(
-            height: 22,
+            height: Shape.z(22),
             child: p.options.length <= 4
                 ? Dis(
                     key: ValueKey('choice:$id'), // (found by its value's id, as a menu of more is)
@@ -203,8 +203,8 @@ class _Ramp extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Center(
     child: Container(
-      width: 16,
-      height: 16,
+      width: Shape.z(16),
+      height: Shape.z(16),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.all(Shape.r(3)),
         border: Border.all(color: Grey.g44, width: .5),
@@ -297,7 +297,7 @@ class _HeightsState extends State<_Heights> {
   Widget build(BuildContext context) {
     final doc = Ctx.of(context).doc, v = _held ?? _said(doc);
     return SizedBox(
-      height: 24,
+      height: Shape.z(24),
       child: LayoutBuilder(
         builder: (_, box) {
           final size = Size(box.maxWidth, 24);

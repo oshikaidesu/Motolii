@@ -39,7 +39,7 @@ class SpanStrip extends StatelessWidget {
       ],
       right: [
         if (s != null) ...[DeskChip(label: ws.timecode(s.from)), SizedBox(width: WsT.gap)],
-        DeskIconButton(size: 18, glyph: (ink) => _ReverseGlyph(ink), onTap: onReverse),
+        DeskIconButton(size: Shape.z(18), glyph: (ink) => _ReverseGlyph(ink), onTap: onReverse),
       ],
     );
   }
@@ -83,7 +83,7 @@ class _KeyMark extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Transform.rotate(
     angle: math.pi / 4,
-    child: Container(width: 6, height: 6, color: WsT.keyDot),
+    child: Container(width: Shape.z(6), height: Shape.z(6), color: WsT.keyDot),
   );
 }
 

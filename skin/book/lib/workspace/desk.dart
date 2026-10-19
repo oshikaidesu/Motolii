@@ -109,7 +109,7 @@ class _ToolTile extends StatelessWidget {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                DeskSticker(tool.name, size: 26),
+                DeskSticker(tool.name, size: Shape.z(26)),
                 const Spacer(),
                 if (auto)
                   Flexible(
@@ -117,7 +117,7 @@ class _ToolTile extends StatelessWidget {
                       fit: BoxFit.scaleDown,
                       alignment: Alignment.topRight,
                       child: Container(
-                        height: 14,
+                        height: Shape.z(14),
                         padding: EdgeInsets.symmetric(horizontal: Shape.s(4)),
                         alignment: Alignment.center,
                         decoration: BoxDecoration(color: WsT.accent, borderRadius: BorderRadius.all(Shape.r(WsT.chipRadius))),

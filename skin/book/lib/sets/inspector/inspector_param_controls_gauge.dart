@@ -44,7 +44,7 @@ class _GaugePaint extends CustomPainter {
         c.drawArc(r, -math.pi / 2, 2 * math.pi * t.clamp(-1.0, 1.0), true, lit);
         if (t.abs() > 1) c.drawCircle(o, 8, line..color = Grey.g91);
       case GaugeKind.up || GaugeKind.down:
-        final box = Rect.fromCenter(center: o, width: 8, height: 18);
+        final box = Rect.fromCenter(center: o, width: Shape.z(8), height: Shape.z(18));
         c.drawRRect(RRect.fromRectAndRadius(box, Shape.r(2)), dim);
         final h = box.height * _t(v);
         final fill = kind == GaugeKind.up
@@ -55,11 +55,11 @@ class _GaugePaint extends CustomPainter {
         c.drawLine(Offset(o.dx - 2.5, tip + (kind == GaugeKind.up ? 2.5 : -2.5)), Offset(o.dx, tip), line);
         c.drawLine(Offset(o.dx + 2.5, tip + (kind == GaugeKind.up ? 2.5 : -2.5)), Offset(o.dx, tip), line);
       case GaugeKind.across:
-        final box = Rect.fromCenter(center: o, width: 18, height: 8);
+        final box = Rect.fromCenter(center: o, width: Shape.z(18), height: Shape.z(8));
         c.drawRRect(RRect.fromRectAndRadius(box, Shape.r(2)), dim);
         c.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(box.left, box.top, box.width * _t(v), box.height), Shape.r(2)), lit);
       case GaugeKind.centre:
-        final box = Rect.fromCenter(center: o, width: 18, height: 8);
+        final box = Rect.fromCenter(center: o, width: Shape.z(18), height: Shape.z(8));
         c.drawRRect(RRect.fromRectAndRadius(box, Shape.r(2)), dim);
         final z = box.left + box.width * _t(0), at = box.left + box.width * _t(v);
         c.drawRect(Rect.fromLTRB(math.min(z, at), box.top, math.max(z, at), box.bottom), lit);
@@ -86,7 +86,7 @@ class _GaugePaint extends CustomPainter {
           c.drawCircle(Offset(cx, cy), 1.6, i <= k ? lit : dim);
         }
       case GaugeKind.point:
-        final box = Rect.fromCenter(center: o, width: 18, height: 18);
+        final box = Rect.fromCenter(center: o, width: Shape.z(18), height: Shape.z(18));
         c.drawRRect(RRect.fromRectAndRadius(box, Shape.r(3)), dim);
         final px = box.left + box.width * _t(x), py = box.top + box.height * _t(y);
         c.drawLine(Offset(px, box.top), Offset(px, box.bottom), line);

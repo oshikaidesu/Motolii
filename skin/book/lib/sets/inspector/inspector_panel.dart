@@ -70,7 +70,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
       else ...[
         const InspHeader(),
         // contract: one stack, After Effects style: the host's cards, Transform first and the effects on it last; every titled card folds on its own.
-        const SizedBox(height: Pop.gap),
+        SizedBox(height: Pop.gap),
         for (final c in doc.cards) inspectorCards[c.name]?.call(c) ?? ValuesCard(c), // (a card the window knows, drawn by hand; one it does not (an effect, a script's knobs), drawn from what the inside says)
       ],
     ];
@@ -85,7 +85,7 @@ class _InspectorPanelState extends State<InspectorPanel> {
           height: widget.height,
           color: Grey.g07,
           // (only the cards in sight are built: a stage with seventy effects on it builds as one with seven)
-          child: ListView(controller: _scroll, padding: const EdgeInsets.all(Pop.gap), children: body),
+          child: ListView(controller: _scroll, padding: EdgeInsets.all(Pop.gap), children: body),
         ),
       ),
     );
@@ -101,7 +101,7 @@ class PopGroupLabel extends StatelessWidget {
   final int? count;
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(Pop.inset, Pop.insetY, Pop.inset, Pop.gap),
+    padding: EdgeInsets.fromLTRB(Pop.inset, Pop.insetY, Pop.inset, Pop.gap),
     child: Row(
       children: [
         Text(text.toUpperCase(), style: T.micro(Grey.g56).copyWith(fontWeight: FontWeight.w700, letterSpacing: .6)),

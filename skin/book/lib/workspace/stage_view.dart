@@ -17,8 +17,14 @@ const _fixed = [0.0, .5, 1.0];
 
 /// Viewport sizes: the ruler band, the margin a fit leaves around the composition, the HUD pill and the navigator.
 abstract final class _V {
-  static const ruler = 16.0, fitMargin = 28.0, hud = 22.0, mapW = 136.0, pad = 8.0;
-  static const handle = 7.0, stem = 18.0, tagH = 16.0;
+  static double get ruler => Shape.z(16.0);
+  static double get fitMargin => Shape.s(28.0);
+  static double get hud => Shape.z(22.0);
+  static double get mapW => Shape.z(136.0);
+  static double get pad => Shape.s(8.0);
+  static double get handle => Shape.z(7.0);
+  static double get stem => Shape.z(18.0);
+  static double get tagH => Shape.z(16.0);
   static Color get surround => Grey.g10;
   static Color get rulerGround => Grey.g13;
   static Color get rulerSpan => Grey.g15;
@@ -539,7 +545,7 @@ class _StageViewState extends State<StageView> implements StageHandles {
 
 /// The pill at the bottom-left of the viewport: zoom and where the pointer is, in composition px.
 class _Hud extends StatelessWidget {
-  const _Hud({required this.scale, required this.cursor});
+  _Hud({required this.scale, required this.cursor});
   final double scale;
   final ValueNotifier<Offset?> cursor;
   @override
@@ -551,16 +557,16 @@ class _Hud extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         Text('${(scale * 100).round()}%', style: T.value(Grey.g95)),
-        Container(width: 1, height: 10, margin: EdgeInsets.symmetric(horizontal: Shape.s(8)), color: WsT.line),
+        Container(width: 1, height: Shape.z(10), margin: EdgeInsets.symmetric(horizontal: Shape.s(8)), color: WsT.line),
         ValueListenableBuilder<Offset?>(
           valueListenable: cursor,
           builder: (_, p, _) => Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               Text('X ', style: T.micro(Grey.g56)),
-              SizedBox(width: 34, child: Text(p == null ? '—' : '${p.dx.round()}', style: T.value(p == null ? Grey.g56 : Grey.g91))),
+              SizedBox(width: Shape.z(34), child: Text(p == null ? '—' : '${p.dx.round()}', style: T.value(p == null ? Grey.g56 : Grey.g91))),
               Text('Y ', style: T.micro(Grey.g56)),
-              SizedBox(width: 34, child: Text(p == null ? '—' : '${p.dy.round()}', style: T.value(p == null ? Grey.g56 : Grey.g91))),
+              SizedBox(width: Shape.z(34), child: Text(p == null ? '—' : '${p.dy.round()}', style: T.value(p == null ? Grey.g56 : Grey.g91))),
             ],
           ),
         ),
@@ -656,7 +662,7 @@ class _PointsPainter extends CustomPainter {
       c..drawLine(o, h, edge)..drawCircle(h, 3, inside)..drawCircle(h, 3, edge);
     }
     for (final p in at) {
-      final r = Rect.fromCenter(center: p, width: 6, height: 6);
+      final r = Rect.fromCenter(center: p, width: Shape.z(6), height: Shape.z(6));
       c..drawRect(r, inside)..drawRect(r, edge);
     }
   }
@@ -673,7 +679,7 @@ class _HandlePainter extends CustomPainter {
     final line = Paint()..color = WsT.accent..strokeWidth = 1, dot = Paint()..color = WsT.accent;
     c.drawLine(at * 2 - out, out, line);
     for (final p in [at * 2 - out, out]) c.drawCircle(p, 3, dot);
-    c.drawRect(Rect.fromCenter(center: at, width: 6, height: 6), dot);
+    c.drawRect(Rect.fromCenter(center: at, width: Shape.z(6), height: Shape.z(6)), dot);
   }
 
   @override
@@ -849,7 +855,7 @@ class _RulerPainter extends CustomPainter {
   final ValueNotifier<Offset?> cursor;
 
   static double _step(double s) {
-    for (final st in const [25.0, 50.0, 100.0, 200.0, 250.0, 500.0, 1000.0]) {
+    for (final st in [25.0, 50.0, 100.0, 200.0, 250.0, 500.0, 1000.0]) {
       if (st * s >= 56) return st;
     }
     return 2000;
@@ -857,7 +863,7 @@ class _RulerPainter extends CustomPainter {
 
   @override
   void paint(Canvas c, Size size) {
-    const r = _V.ruler;
+    final r = _V.ruler;
     final comp = v.comp, bg = Paint()..color = _V.rulerGround, span = Paint()..color = _V.rulerSpan;
     c.drawRect(Rect.fromLTWH(0, 0, size.width, r), bg);
     c.drawRect(Rect.fromLTWH(0, 0, r, size.height), bg);
@@ -913,7 +919,7 @@ class _RulerPainter extends CustomPainter {
       if (s.dx > r) c.drawLine(Offset(s.dx, 0), Offset(s.dx, r), hot);
       if (s.dy > r) c.drawLine(Offset(0, s.dy), Offset(r, s.dy), hot);
     }
-    c.drawRect(const Rect.fromLTWH(0, 0, r, r), bg);
+    c.drawRect(Rect.fromLTWH(0, 0, r, r), bg);
   }
 
   @override

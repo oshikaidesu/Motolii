@@ -76,8 +76,8 @@ class _Wordmark extends StatelessWidget {
     mainAxisSize: MainAxisSize.min,
     children: [
       Container(
-        width: 22,
-        height: 22,
+        width: Shape.z(22),
+        height: Shape.z(22),
         alignment: Alignment.center,
         color: WsT.accent,
         child: Text('M', style: T.title(WsT.onAccent).copyWith(fontSize: T.px(14), fontWeight: FontWeight.w900, height: 1)),
@@ -93,7 +93,7 @@ class _Chip extends StatelessWidget {
   final String text;
   @override
   Widget build(BuildContext context) => Container(
-    height: 20,
+    height: Shape.z(20),
     padding: EdgeInsets.symmetric(horizontal: Shape.s(7)),
     alignment: Alignment.center,
     decoration: BoxDecoration(color: WsT.well, borderRadius: BorderRadius.all(Shape.r(WsT.chipRadius))),
@@ -128,7 +128,7 @@ class _Modes extends StatelessWidget {
   static const items = ['Edit', 'Animate', 'Export'];
   @override
   Widget build(BuildContext context) => Container(
-    height: 26,
+    height: Shape.z(26),
     padding: EdgeInsets.all(Shape.s(2)),
     decoration: BoxDecoration(color: WsT.well, borderRadius: BorderRadius.all(Shape.r(WsT.radius))),
     child: Row(
@@ -138,7 +138,7 @@ class _Modes extends StatelessWidget {
           _Hover(
             onTap: () => onPick(i),
             builder: (h) => Container(
-              width: 76,
+              width: Shape.z(76),
               alignment: Alignment.center,
               decoration: BoxDecoration(color: i == index ? WsT.accent : (h ? WsT.raised : null), borderRadius: BorderRadius.all(Shape.r(WsT.radius - 2))),
               child: Text(
@@ -167,8 +167,8 @@ class _UndoRedo extends StatelessWidget {
             ws.after(m.later(flip ? 'redo' : 'undo')); // (the window does not wait for the step)
           },
           builder: (h) => Container(
-            width: 24,
-            height: 24,
+            width: Shape.z(24),
+            height: Shape.z(24),
             alignment: Alignment.center,
             decoration: BoxDecoration(color: h ? WsT.raised : null, borderRadius: BorderRadius.all(Shape.r(WsT.radius))),
             child: Transform.flip(
@@ -228,8 +228,8 @@ class _ShadeSwitch extends StatelessWidget {
     key: const ValueKey('ws-shade'),
     onTap: flip,
     builder: (h) => Container(
-      width: 24,
-      height: 24,
+      width: Shape.z(24),
+      height: Shape.z(24),
       alignment: Alignment.center,
       decoration: BoxDecoration(color: h ? WsT.raised : null, borderRadius: BorderRadius.all(Shape.r(WsT.radius))),
       child: CustomPaint(size: const Size(12, 12), painter: _ShadePaint(h ? Grey.g95 : Grey.g63)),
@@ -275,13 +275,13 @@ class _Saved extends StatelessWidget {
     mainAxisSize: MainAxisSize.min,
     children: [
       Container(
-        width: 6,
-        height: 6,
+        width: Shape.z(6),
+        height: Shape.z(6),
         decoration: BoxDecoration(color: WsT.accent, shape: BoxShape.circle),
       ),
       SizedBox(width: Shape.s(6)),
       ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 260),
+        constraints: BoxConstraints(maxWidth: Shape.z(260)),
         child: Text(WsScope.of(context).notice ?? _savedAt(WsScope.of(context)), maxLines: 1, overflow: TextOverflow.ellipsis, style: T.label(Grey.g63)),
       ),
     ],
@@ -295,7 +295,7 @@ class _Render extends StatelessWidget {
   Widget build(BuildContext context) => _Hover(
     onTap: WsScope.of(context).onRender,
     builder: (h) => Container(
-      height: 26,
+      height: Shape.z(26),
       padding: EdgeInsets.symmetric(horizontal: Shape.s(14)),
       alignment: Alignment.center,
       decoration: BoxDecoration(color: h ? WsT.accentHot : WsT.accent, borderRadius: BorderRadius.all(Shape.r(13))),
@@ -350,7 +350,7 @@ class _WaitedState extends State<_Waited> {
             child: GestureDetector(
               onTap: () => setState(_open.hide),
               child: Container(
-                width: 420,
+                width: Shape.z(420),
                 padding: EdgeInsets.all(Shape.s(10)),
                 decoration: BoxDecoration(color: WsT.card, borderRadius: BorderRadius.all(Shape.r(6)), border: Border.all(color: Grey.g26)),
                 child: Column(
@@ -369,7 +369,7 @@ class _WaitedState extends State<_Waited> {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Container(width: 6, height: 6, decoration: BoxDecoration(color: ColorTheme.of('Alert', const Color(0xFFE5484D)), shape: BoxShape.circle)),
+                Container(width: Shape.z(6), height: Shape.z(6), decoration: BoxDecoration(color: ColorTheme.of('Alert', const Color(0xFFE5484D)), shape: BoxShape.circle)),
                 SizedBox(width: Shape.s(5)),
                 Text('$_count', style: T.label(h ? Grey.g91 : Grey.g63)),
               ],

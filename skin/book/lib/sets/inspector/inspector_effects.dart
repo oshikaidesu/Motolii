@@ -155,7 +155,7 @@ class ValuesCard extends StatelessWidget {
             child: Hov(
               onTap: () => doc.flag('$k.adv', !adv),
               builder: (_, h) => Container(
-                height: 24,
+                height: Shape.z(24),
                 decoration: BoxDecoration(border: Border(top: BorderSide(color: ed.rule))),
                 child: Row(
                   children: [

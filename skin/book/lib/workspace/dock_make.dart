@@ -1,4 +1,5 @@
 // The making shelves: Colors (pop palettes, a swatch field, saved gradients) and Create (tiles for every new layer, shape and copier).
+import 'package:auto_size_text/auto_size_text.dart';
 import 'package:flutter/widgets.dart';
 
 import '../sets/inspector/inspector_parts.dart' show Pop;
@@ -110,7 +111,7 @@ class ColorsShelf extends StatelessWidget {
             const SizedBox(height: WsT.gutter),
             Align(
               alignment: Alignment.centerLeft,
-              child: SizedBox(width: 74, height: 70, child: _MakeTile(_glass, c)),
+              child: SizedBox(width: Shape.z(74), height: Shape.z(70), child: _MakeTile(_glass, c)),
             ),
           ]),
           1.6,
@@ -138,7 +139,7 @@ class ColorsShelf extends StatelessWidget {
           block([
             DockSection('Swatches', count: 60, hue: Fam.face.c),
             const SizedBox(height: WsT.gutter),
-            for (final (j, row) in _field.indexed) _Strip('field-$j', row, c, height: 18, gap: 1),
+            for (final (j, row) in _field.indexed) _Strip('field-$j', row, c, height: Shape.z(18), gap: 1),
           ]),
           4.0,
         ),
@@ -164,7 +165,7 @@ class ColorsShelf extends StatelessWidget {
         ),
         if (c.sel == _glass.name)
           DockFooter(
-            preview: DockBadge(_glass.g, _glass.hue, size: 34),
+            preview: DockBadge(_glass.g, _glass.hue, size: Shape.z(34)),
             title: _glass.name,
             meta: c.mem.trouble['fill'] ?? _glass.what,
             action: 'Fill',
@@ -230,7 +231,7 @@ class _PalCard extends StatelessWidget {
           ],
         ),
         SizedBox(height: Shape.s(6)),
-        _Strip(p.id, p.colors, c, height: 26, pad: false),
+        _Strip(p.id, p.colors, c, height: Shape.z(26), pad: false),
       ],
     ),
   );
@@ -295,15 +296,15 @@ class _Grad extends StatelessWidget {
       builder: (context, h) => AnimatedContainer(
         duration: Mo.dur,
         curve: Mo.ease,
-        height: 28,
+        height: Shape.z(28),
         margin: EdgeInsets.only(top: WsT.gutter),
         padding: EdgeInsets.symmetric(horizontal: WsT.inset),
         color: dockFill(sel, h, WsT.card),
         child: Row(
           children: [
             Container(
-              width: 64,
-              height: 16,
+              width: Shape.z(64),
+              height: Shape.z(16),
               decoration: BoxDecoration(
                 gradient: LinearGradient(colors: colors),
                 borderRadius: BorderRadius.all(Shape.r(WsT.chipRadius)),
@@ -474,7 +475,7 @@ class CreateShelf extends StatelessWidget {
                                 return Wrap(
                                   spacing: WsT.gutter,
                                   runSpacing: WsT.gutter,
-                                  children: [for (final m in items) SizedBox(width: w, height: 70, child: _MakeTile(m, c))],
+                                  children: [for (final m in items) SizedBox(width: w, height: Shape.z(70), child: _MakeTile(m, c))],
                                 );
                               },
                             ),
@@ -486,7 +487,7 @@ class CreateShelf extends StatelessWidget {
         ),
         if (sel != null)
           DockFooter(
-            preview: DockBadge(sel.g, sel.hue, size: 34),
+            preview: DockBadge(sel.g, sel.hue, size: Shape.z(34)),
             title: '${sel.name} layer',
             meta: c.mem.trouble[sel.name] ?? 'At ${c.ws.timecode()} · ${sel.what}',
             action: _laid.containsKey(sel.name) ? 'Lay out' : 'Create',
@@ -519,7 +520,7 @@ class _MakeTile extends StatelessWidget {
           children: [
             Align(
               alignment: Alignment.topLeft,
-              child: DockGlyph(m.g, size: 26, color: sel ? WsT.onAccent : m.hue),
+              child: DockGlyph(m.g, size: Shape.z(26), color: sel ? WsT.onAccent : m.hue),
             ),
             if (m.key.isNotEmpty)
               Align(
@@ -528,10 +529,12 @@ class _MakeTile extends StatelessWidget {
               ),
             Align(
               alignment: Alignment.bottomLeft,
-              child: Text(
+              child: AutoSizeText( // (a long name on two lines of whole words, as Finder's icons have it; smaller rather than a word broken)
                 m.name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+                maxLines: 2,
+                wrapWords: false,
+                minFontSize: 6,
+                stepGranularity: .5,
                 style: T.name(dockInk(sel, Grey.g95)).copyWith(fontWeight: FontWeight.w700),
               ),
             ),

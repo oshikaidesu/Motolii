@@ -343,7 +343,10 @@ class NumFieldState extends State<NumField> {
         Widget valueText() {
           if (v == null) return Text(Role.grey ? 'Mixed' : '— Mixed', style: T.label(Role.of(Grey.g76, Role.info)));
           if (word != null) return Text(word, style: T.label(on ? Grey.g76 : Grey.g56));
-          return Text.rich(
+          return FittedBox( // (a number wider than its field is drawn smaller, never cut)
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text.rich(
             TextSpan(
               children: [
                 TextSpan(
@@ -359,7 +362,7 @@ class NumFieldState extends State<NumField> {
             ),
             maxLines: 1,
             softWrap: false,
-            overflow: TextOverflow.clip,
+          ),
           );
         }
 
@@ -400,7 +403,7 @@ class NumFieldState extends State<NumField> {
                   Positioned(
                     left: (w - 2) * math.min(t, _zeroAt),
                     bottom: 0,
-                    height: 2,
+                    height: Shape.z(2),
                     width: math.max(1, (w - 2) * (t - _zeroAt).abs()),
                     child: ColoredBox(color: on ? Grey.g56 : Grey.g44),
                   )
@@ -408,7 +411,7 @@ class NumFieldState extends State<NumField> {
                   Positioned(
                     left: 0,
                     bottom: 0,
-                    height: 2,
+                    height: Shape.z(2),
                     width: math.max(0, (w - 2) * t),
                     child: ColoredBox(color: look == Look.glow ? Role.selected : (on ? Grey.g56 : Grey.g44)),
                   ),
@@ -419,12 +422,12 @@ class NumFieldState extends State<NumField> {
                     bottom: block ? 7 : null,
                     right: block ? Pop.tilePad : 3,
                     child: Container(
-                      width: 4,
-                      height: 4,
+                      width: Shape.z(4),
+                      height: Shape.z(4),
                       decoration: BoxDecoration(color: row.keys == KeyS.at ? Pop.keyDot : Pop.keyDot.withValues(alpha: .4), shape: BoxShape.circle),
                     ),
                   ),
-                if (widget.axis != null && !pop) Positioned(left: 0, top: 5, bottom: 5, width: 2, child: ColoredBox(color: widget.axis!)),
+                if (widget.axis != null && !pop) Positioned(left: 0, top: 5, bottom: 5, width: Shape.z(2), child: ColoredBox(color: widget.axis!)),
                 if (widget.glyph != null)
                   Positioned(
                     right: widget.glyphTall ? 4 : Pop.tilePad - 3,
@@ -442,10 +445,10 @@ class NumFieldState extends State<NumField> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text(widget.caption!, maxLines: 1, overflow: TextOverflow.ellipsis, style: T.micro(on ? Grey.g63 : Grey.g44).copyWith(height: 1.1)),
+                          FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerLeft, child: Text(widget.caption!, maxLines: 1, style: T.micro(on ? Grey.g63 : Grey.g44).copyWith(height: 1.1))),
                           if (_editing)
                             SizedBox(
-                              height: 18,
+                              height: Shape.z(18),
                               child: EditableText(
                                 controller: _ctl,
                                 focusNode: _ef,
@@ -463,7 +466,7 @@ class NumFieldState extends State<NumField> {
                             )
                           else
                             SizedBox(
-                              height: 18,
+                              height: Shape.z(18),
                               child: Align(alignment: Alignment.centerLeft, child: valueText()),
                             ),
                         ],

@@ -1262,7 +1262,7 @@ class _Inspector extends StatelessWidget {
   Widget build(BuildContext context) => Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
     Container(
       height: 30,
-      padding: const EdgeInsets.symmetric(horizontal: Pop.inset),
+      padding: EdgeInsets.symmetric(horizontal: Pop.inset),
       decoration: BoxDecoration(border: Border(bottom: BorderSide(color: Grey.g20))),
       child: Row(children: [
         Expanded(child: SingleChildScrollView(scrollDirection: Axis.horizontal, child: Row(children: [
@@ -1313,7 +1313,7 @@ class _Inspector extends StatelessWidget {
   ]);
 
   Widget _list(BuildContext context) => ListView(
-    padding: const EdgeInsets.all(Pop.inset),
+    padding: EdgeInsets.all(Pop.inset),
     children: [for (final (i, c) in t.cards.indexed) _CardSlot(t, c, i, key: ValueKey(c.name))],
   );
 }
@@ -1337,7 +1337,7 @@ class _CardSlot extends StatelessWidget {
     builder: (context, cand, _) {
       final m = t.insertMark, line = m != null && m.$1 == c ? m.$2 : null;
       return Padding(
-        padding: const EdgeInsets.only(bottom: Pop.gap * 3),
+        padding: EdgeInsets.only(bottom: Pop.gap * 3),
         child: Stack(clipBehavior: Clip.none, children: [
           _Card(t, c, i),
           if (line != null)
@@ -1406,7 +1406,7 @@ class _Card extends StatelessWidget {
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           head,
           Padding(
-            padding: const EdgeInsets.fromLTRB(Pop.inset, 0, Pop.inset, Pop.insetY + 2),
+            padding: EdgeInsets.fromLTRB(Pop.inset, 0, Pop.inset, Pop.insetY + 2),
             child: c.down
                 ? _MarkRow(t, c.all)
                 : Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -2011,7 +2011,7 @@ class _BundleTile extends StatelessWidget {
     onDoubleTap: () => t.untie(i),
     child: Container(
       height: Pop.tile,
-      margin: const EdgeInsets.fromLTRB(Pop.inset, Pop.inset, Pop.inset, 0),
+      margin: EdgeInsets.fromLTRB(Pop.inset, Pop.inset, Pop.inset, 0),
       padding: EdgeInsets.symmetric(horizontal: Pop.tilePad),
       decoration: BoxDecoration(color: cand.isNotEmpty ? Grey.g20 : Pop.card, borderRadius: BorderRadius.circular(6), border: Border.all(color: Pop.accent, width: cand.isNotEmpty ? 2 : 1)),
       child: Row(children: [
@@ -2158,7 +2158,7 @@ class _Hand extends StatelessWidget {
       final held = t.carrying, letGo = held is String || held is Tie, waiting = (held is CardM && t.cards.contains(held)) || letGo;
       return AnimatedContainer(
         duration: Mo.dur,
-        padding: const EdgeInsets.fromLTRB(Pop.inset, 8, Pop.inset, 10),
+        padding: EdgeInsets.fromLTRB(Pop.inset, 8, Pop.inset, 10),
         decoration: BoxDecoration(
           color: cand.isNotEmpty ? Grey.g13 : Grey.g07,
           border: Border(top: BorderSide(color: cand.isNotEmpty ? Pop.accent : (waiting ? Pop.accent.withValues(alpha: .4) : Grey.g20), width: waiting ? 2 : 1)),

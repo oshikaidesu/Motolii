@@ -171,7 +171,7 @@ class RelationCard extends StatelessWidget {
         ),
         child: Flex(direction: Axis.vertical, crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
           Flex(direction: Axis.horizontal, crossAxisAlignment: CrossAxisAlignment.center, children: [
-            Container(width: 10, height: 10, decoration: BoxDecoration(color: fam.c, shape: BoxShape.circle)),
+            Container(width: Shape.z(10), height: Shape.z(10), decoration: BoxDecoration(color: fam.c, shape: BoxShape.circle)),
             SizedBox(width: Shape.s(9)),
             Flex(direction: Axis.vertical, crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
               Text(fam.name, style: T.title()),
@@ -183,7 +183,7 @@ class RelationCard extends StatelessWidget {
           ]),
           SizedBox(height: Shape.s(12)),
           Flex(direction: Axis.horizontal, crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Gadget(fam, size: 132),
+            Gadget(fam, size: Shape.z(132)),
             SizedBox(width: Shape.s(12)),
             Expanded(child: Flex(direction: Axis.vertical, mainAxisSize: MainAxisSize.min, children: [
               ValueWell(label: 'Density', value: density, fam: fam),

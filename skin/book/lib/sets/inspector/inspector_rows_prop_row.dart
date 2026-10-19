@@ -127,7 +127,7 @@ class _PropRowState extends State<PropRow> {
                       opacity: cellsOn ? 1 : .4,
                       child: pop
                           ? Container(
-                              width: 28,
+                              width: Shape.z(28),
                               height: Pop.cell,
                               padding: EdgeInsets.all(Shape.s(2)),
                               decoration: BoxDecoration(color: active ? Grey.g20 : null, borderRadius: BorderRadius.all(Shape.r(7))),
@@ -140,12 +140,15 @@ class _PropRowState extends State<PropRow> {
                 else if (pop)
                   SizedBox(width: Shape.s(34)),
                 (unit != null ? Expanded.new : Flexible.new)(
-                  child: Text(
-                    ed.lab(widget.label),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: ed.labStyle(
-                      !cellsOn ? Grey.g56 : (changed ? Role.of(Grey.g95, Role.changed) : (mixedAny ? Role.of(Grey.g63, Role.info) : Grey.g63)),
+                  child: FittedBox( // (a label wider than its column is drawn smaller, never cut)
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      ed.lab(widget.label),
+                      maxLines: 1,
+                      style: ed.labStyle(
+                        !cellsOn ? Grey.g56 : (changed ? Role.of(Grey.g95, Role.changed) : (mixedAny ? Role.of(Grey.g63, Role.info) : Grey.g63)),
+                      ),
                     ),
                   ),
                 ),
@@ -160,8 +163,8 @@ class _PropRowState extends State<PropRow> {
                   Padding(
                     padding: EdgeInsets.only(left: Shape.s(4)),
                     child: Container(
-                      width: 5,
-                      height: 5,
+                      width: Shape.z(5),
+                      height: Shape.z(5),
                       decoration: BoxDecoration(color: widget.rel!.c, shape: BoxShape.circle),
                     ),
                   ),
@@ -179,7 +182,7 @@ class _PropRowState extends State<PropRow> {
                 }
               : null,
           builder: (_, h) => Container(
-            height: 22,
+            height: Shape.z(22),
             padding: EdgeInsets.symmetric(horizontal: Shape.s(8)),
             color: h && ok ? Grey.g15 : null,
             child: Row(
@@ -234,7 +237,7 @@ class _PropRowState extends State<PropRow> {
                         onTap: () => doc.setKey(widget.id, ks == KeyS.at ? KeyS.anim : KeyS.at),
                       )
                     else
-                      const SizedBox(width: keyW),
+                      SizedBox(width: keyW),
                     if (cfg.resetArrow) ResetMark(show: (changed || mixedAny) && !locked, onTap: () => doc.resetIds(ids)),
                   ],
                 ),

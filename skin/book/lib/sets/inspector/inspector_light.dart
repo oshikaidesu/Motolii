@@ -12,7 +12,7 @@ import 'package:lab_book/tokens.dart';
 /// strength, the ring's knob for how far it reaches, the cone's edge for how wide it opens.
 class LightDrawing extends StatefulWidget {
   const LightDrawing({super.key});
-  static const height = 112.0;
+  static double get height => Shape.z(112.0);
   @override
   State<LightDrawing> createState() => _LightDrawingState();
 }
@@ -82,7 +82,7 @@ class _Light {
   final Size size;
   final bool spot, point;
   final double strength, reach, cone; // (each on its range, 0 to 1)
-  static const rail = 14.0;
+  static double get rail => Shape.z(14.0);
   double get railX => size.width - rail;
   double get railTop => 18;
   double get railBottom => size.height - 16;

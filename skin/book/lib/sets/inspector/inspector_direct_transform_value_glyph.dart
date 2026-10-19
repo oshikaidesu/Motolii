@@ -11,7 +11,7 @@ import 'package:lab_book/tokens.dart';
 class ValueGlyph extends StatelessWidget {
   const ValueGlyph(this.shape, {super.key});
   final ValueShape shape;
-  static const size = 20.0;
+  static double get size => Shape.z(20.0);
 
   @override
   Widget build(BuildContext context) {
@@ -27,7 +27,7 @@ class ValueGlyph extends StatelessWidget {
     final values = shape == ValueShape.parent ? [(doc.s2['v_parent'] ?? 'None') == 'None' ? 0.0 : 1.0] : [for (final id in ids) doc.get(id)];
     final hot = shape.zone != null && doc.directHover == shape.zone!.prop;
     return CustomPaint(
-      size: const Size(24, size),
+      size: Size(24, size),
       painter: _GlyphPaint(shape, values.contains(null) ? null : values.cast<double>(), hot ? shape.zone!.color : Grey.g76),
     );
   }
@@ -89,7 +89,7 @@ class _GlyphPaint extends CustomPainter {
           c.drawCircle(Offset(s.width - 1.5, 2 + i * 4.0), 1.2, solid);
         }
       case ValueShape.opacity:
-        final r = Rect.fromCenter(center: mid, width: 14, height: 14);
+        final r = Rect.fromCenter(center: mid, width: Shape.z(14), height: Shape.z(14));
         const cell = 3.5;
         for (var y = 0; y < 4; y++) {
           for (var x = 0; x < 4; x++) {
@@ -100,7 +100,7 @@ class _GlyphPaint extends CustomPainter {
         c.drawRect(r, rim);
       case ValueShape.depth:
         final off = (v[0] / 25).clamp(0.0, 5.0);
-        final front = Rect.fromCenter(center: mid + Offset(-off / 2, off / 2), width: 11, height: 11);
+        final front = Rect.fromCenter(center: mid + Offset(-off / 2, off / 2), width: Shape.z(11), height: Shape.z(11));
         if (off > 0) c.drawRect(front.shift(Offset(off, -off)), rim);
         c.drawRect(front, solid..color = ink.withValues(alpha: .85));
       case ValueShape.parent:
@@ -113,7 +113,7 @@ class _GlyphPaint extends CustomPainter {
           c.save();
           c.translate(mid.dx + at.dx, mid.dy + at.dy);
           c.rotate(-math.pi / 4);
-          c.drawRRect(RRect.fromRectAndRadius(Rect.fromCenter(center: Offset.zero, width: 11, height: 6), Shape.r(3)), ring);
+          c.drawRRect(RRect.fromRectAndRadius(Rect.fromCenter(center: Offset.zero, width: Shape.z(11), height: Shape.z(6)), Shape.r(3)), ring);
           c.restore();
         }
     }

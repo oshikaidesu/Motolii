@@ -91,7 +91,7 @@ class _WsPanesState extends State<WsPanes> {
         button: true,
         child: Padding(
           padding: EdgeInsets.only(right: p.iconOnly ? Shape.s(0) : Shape.s(5)),
-          child: p.glyph == null ? Text(p.name.characters.first, style: T.micro(status == TabStatus.selected ? Grey.g95 : Grey.g56)) : DockGlyph(p.glyph!, size: 12, color: status == TabStatus.selected ? Grey.g95 : Grey.g56),
+          child: p.glyph == null ? Text(p.name.characters.first, style: T.micro(status == TabStatus.selected ? Grey.g95 : Grey.g56)) : DockGlyph(p.glyph!, size: Shape.z(12), color: status == TabStatus.selected ? Grey.g95 : Grey.g56),
         ),
       ),
       widget: WsSeat(child: p.build()),

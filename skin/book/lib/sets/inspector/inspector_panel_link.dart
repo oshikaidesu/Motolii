@@ -72,7 +72,7 @@ class LinkLine extends StatelessWidget {
               x.doc.str('route', to.route);
             },
       builder: (_, h) => SizedBox(
-        height: 18,
+        height: Shape.z(18),
         child: Row(
           children: [
             Expanded(
@@ -94,8 +94,8 @@ class LinkSwatch extends StatelessWidget {
   final String hex;
   @override
   Widget build(BuildContext context) => Container(
-    width: 14,
-    height: 14,
+    width: Shape.z(14),
+    height: Shape.z(14),
     decoration: BoxDecoration(
       color: hexControls(hex) ?? Grey.g95,
       borderRadius: BorderRadius.all(Shape.r(3)),

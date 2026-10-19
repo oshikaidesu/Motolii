@@ -170,7 +170,7 @@ class _FontRow extends StatelessWidget {
       builder: (context, h) => AnimatedContainer(
         duration: Mo.dur,
         curve: Mo.ease,
-        height: 46,
+        height: Shape.z(46),
         margin: EdgeInsets.only(bottom: WsT.gutter),
         padding: EdgeInsets.only(left: WsT.inset, right: Shape.s(4)),
         color: dockFill(sel, h, WsT.card),
@@ -181,7 +181,7 @@ class _FontRow extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(_sample, maxLines: 1, softWrap: false, overflow: TextOverflow.fade, style: _face(f, 17, dockInk(sel, Grey.g95))),
+                  FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerLeft, child: Text(_sample, maxLines: 1, style: _face(f, 17, dockInk(sel, Grey.g95)))),
                   SizedBox(height: Shape.s(5)),
                   Row(
                     children: [
@@ -216,7 +216,7 @@ class _FontCard extends StatelessWidget {
       builder: (context, h) => AnimatedContainer(
         duration: Mo.dur,
         curve: Mo.ease,
-        height: 96,
+        height: Shape.z(96),
         padding: EdgeInsets.fromLTRB(WsT.inset, Shape.s(8), Shape.s(4), Shape.s(8)),
         color: dockFill(sel, h, WsT.card),
         child: Column(

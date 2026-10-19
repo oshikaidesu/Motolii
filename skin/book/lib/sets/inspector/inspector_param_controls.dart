@@ -87,8 +87,8 @@ class Swatch extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Center(
     child: Container(
-      width: 16,
-      height: 16,
+      width: Shape.z(16),
+      height: Shape.z(16),
       decoration: BoxDecoration(
         color: hexControls(hex) ?? Grey.g26,
         borderRadius: BorderRadius.all(Shape.r(4)),
@@ -154,7 +154,7 @@ class _DicePaint extends CustomPainter {
   final int face;
   @override
   void paint(Canvas c, Size s) {
-    final r = Rect.fromCenter(center: s.center(Offset.zero), width: 16, height: 16);
+    final r = Rect.fromCenter(center: s.center(Offset.zero), width: Shape.z(16), height: Shape.z(16));
     c.drawRRect(RRect.fromRectAndRadius(r, Shape.r(4)), Paint()..color = hot ? Grey.g95 : Grey.g76);
     const pips = {
       1: [(0, 0)],

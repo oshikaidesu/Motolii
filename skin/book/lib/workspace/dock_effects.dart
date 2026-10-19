@@ -73,7 +73,7 @@ class _FxRow extends StatelessWidget {
       builder: (context, h) => AnimatedContainer(
         duration: Mo.dur,
         curve: Mo.ease,
-        height: 24,
+        height: Shape.z(24),
         padding: EdgeInsets.only(left: Shape.s(8), right: Shape.s(4)),
         color: dockFill(sel, h),
         child: Row(
@@ -81,7 +81,7 @@ class _FxRow extends StatelessWidget {
             CustomPaint(size: const Size(18, 16), painter: _FxLook(name)), // (what it does, drawn: found with the words hidden)
             SizedBox(width: Shape.s(6)),
             Flexible(
-              child: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis, style: T.name(dockInk(sel)).copyWith(fontWeight: sel ? FontWeight.w700 : FontWeight.w500)),
+              child: FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerLeft, child: Text(name, maxLines: 1, style: T.name(dockInk(sel)).copyWith(fontWeight: sel ? FontWeight.w700 : FontWeight.w500))),
             ),
             SizedBox(width: Shape.s(6)),
             Expanded(child: Text('ThorVG', maxLines: 1, overflow: TextOverflow.ellipsis, style: T.label(dockInk(sel, Grey.g56)))),
@@ -107,12 +107,12 @@ class _ScreenRow extends StatelessWidget {
     builder: (context, h) => AnimatedContainer(
       duration: Mo.dur,
       curve: Mo.ease,
-      height: 24,
+      height: Shape.z(24),
       padding: EdgeInsets.only(left: Shape.s(22), right: Shape.s(4)),
       color: dockFill(false, h),
       child: Row(
         children: [
-          Expanded(child: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis, style: T.name(dockInk(false)).copyWith(fontWeight: FontWeight.w500))),
+          Expanded(child: FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerLeft, child: Text(name, maxLines: 1, style: T.name(dockInk(false)).copyWith(fontWeight: FontWeight.w500)))),
           if (on >= 0) ...[DockTag(of == 'screen' ? 'ON ${on + 1}' : 'ON', hue: WsT.accent), SizedBox(width: Shape.s(2))],
         ],
       ),

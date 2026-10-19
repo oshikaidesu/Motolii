@@ -57,7 +57,7 @@ class AnchorCard extends StatelessWidget {
 /// contract: a click snaps the anchor to the nearest of 27 points (3 across × 3 down × front, middle, back); one undo each.
 class AnchorCube extends StatefulWidget {
   const AnchorCube({super.key});
-  static const height = 116.0;
+  static double get height => Shape.z(116.0);
   @override
   State<AnchorCube> createState() => _AnchorCubeState();
 }

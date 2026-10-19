@@ -18,7 +18,7 @@ class Presets extends StatelessWidget {
   final List<Ease> more;
 
   Widget _row(List<Ease> tiles, bool Function(Ease) on) => Container(
-    height: 50,
+    height: Shape.z(50),
     color: WsT.card,
     padding: EdgeInsets.all(Shape.s(5)),
     child: Row(
@@ -62,12 +62,13 @@ class _PresetTile extends StatelessWidget {
               child: CustomPaint(size: Size.infinite, painter: _Thumb(ease, ink, on ? WsT.onAccent : Grey.g38)),
             ),
             SizedBox(height: Shape.s(3)),
-            Text(
-              ease.name ?? '',
-              maxLines: 1,
-              softWrap: false,
-              overflow: TextOverflow.fade,
-              style: T.micro(ink).copyWith(fontSize: T.px(9.5), fontWeight: on ? FontWeight.w700 : FontWeight.w500),
+            FittedBox( // (a name wider than its tile is drawn smaller, never cut)
+              fit: BoxFit.scaleDown,
+              child: Text(
+                ease.name ?? '',
+                maxLines: 1,
+                style: T.micro(ink).copyWith(fontSize: T.px(9.5), fontWeight: on ? FontWeight.w700 : FontWeight.w500),
+              ),
             ),
           ],
         ),

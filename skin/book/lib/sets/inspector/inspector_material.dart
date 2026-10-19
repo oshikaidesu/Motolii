@@ -166,7 +166,7 @@ class _TextGroupState extends State<TextGroup> {
             child: IgnorePointer(
               ignoring: x.cfg.locked,
               child: Container(
-                constraints: const BoxConstraints(minHeight: 48),
+                constraints: BoxConstraints(minHeight: Shape.z(48)),
                 padding: EdgeInsets.all(Shape.s(8)),
                 decoration: BoxDecoration(
                   color: x.cfg.look == Look.quiet ? Grey.g13 : Grey.g07,

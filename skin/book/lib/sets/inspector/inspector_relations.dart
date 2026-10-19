@@ -27,7 +27,7 @@ class _RelationsBlockState extends State<RelationsBlock> {
         Hov(
           onTap: () => setState(() => open = f.name),
           builder: (_, h) => Container(
-            height: 30,
+            height: Shape.z(30),
             decoration: BoxDecoration(
               border: Border(bottom: BorderSide(color: ed.rule)),
               color: h && !locked ? Grey.g13 : null,
@@ -35,8 +35,8 @@ class _RelationsBlockState extends State<RelationsBlock> {
             child: Row(
               children: [
                 Container(
-                  width: 6,
-                  height: 6,
+                  width: Shape.z(6),
+                  height: Shape.z(6),
                   decoration: BoxDecoration(color: on[f.name]! ? f.c : Grey.g38, shape: BoxShape.circle),
                 ),
                 SizedBox(width: Shape.s(10)),
@@ -80,7 +80,7 @@ class _RelationsBlockState extends State<RelationsBlock> {
                   padding: EdgeInsets.only(top: Shape.s(6)),
                   child: Opacity(
                     opacity: on[f.name]! && !locked ? 1 : .5,
-                    child: Align(alignment: Alignment.centerLeft, child: Gadget(f, size: 72)),
+                    child: Align(alignment: Alignment.centerLeft, child: Gadget(f, size: Shape.z(72))),
                   ),
                 ),
               ],
@@ -89,7 +89,7 @@ class _RelationsBlockState extends State<RelationsBlock> {
       ],
       Hov(
         builder: (_, h) => Container(
-          height: 28,
+          height: Shape.z(28),
           alignment: Alignment.centerLeft,
           child: Text('Add relation', style: T.name(h && !locked ? Grey.g95 : Grey.g63)),
         ),

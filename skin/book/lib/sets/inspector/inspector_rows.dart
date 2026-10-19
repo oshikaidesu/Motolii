@@ -75,10 +75,10 @@ class AxisHeader extends StatelessWidget {
     final cfg = Ctx.of(context).cfg;
     return LayoutBuilder(
       builder: (context, box) => SizedBox(
-        height: 16,
+        height: Shape.z(16),
         child: Row(
           children: [
-            const SizedBox(width: labelWPop),
+            SizedBox(width: labelWPop),
             Expanded(
               child: Row(
                 children: [
@@ -95,7 +95,7 @@ class AxisHeader extends StatelessWidget {
                 ],
               ),
             ),
-            if (cfg.resetArrow) const SizedBox(width: resetW),
+            if (cfg.resetArrow) SizedBox(width: resetW),
           ],
         ),
       ),

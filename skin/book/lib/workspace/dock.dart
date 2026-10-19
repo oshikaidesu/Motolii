@@ -105,7 +105,7 @@ class _WsShelfState extends State<WsShelf> {
               DockIconButton(DockG.list, on: _mem.mediaList, onTap: () => setState(() => _mem.mediaList = true)),
             ] else
               ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 88),
+                constraints: BoxConstraints(maxWidth: Shape.z(88)),
                 child: ValueListenableBuilder<int>(
                   valueListenable: dockRead,
                   builder: (context, _, _) => Text(
