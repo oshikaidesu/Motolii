@@ -1869,15 +1869,6 @@ class _DriveKnobs extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(top: Pop.tileGap),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        SizedBox(
-          height: 18,
-          child: Row(children: [
-            _Chip(d.beh, small: true),
-            const SizedBox(width: 5),
-            Text('${d.beh.word} → ${v.label}', style: T.micro(Grey.g76)),
-          ]),
-        ),
-        const SizedBox(height: 3),
         Container( // (how it moves, large: the shape, and where each copy is on it now)
           height: 40,
           width: double.infinity,
