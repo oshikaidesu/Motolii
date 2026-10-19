@@ -18,7 +18,7 @@ thing("solid", "ring", "say @ fill ff6a3d", "set @ size 0.9", "set @ emissive 1.
 thing("solid", "cube", "say @ fill 3a7bff", "set @ size 0.55", "set @ x -0.55", "set @ y 0.25", *keys("rotate_y", (0, 0), (8, 270)), *keys("rotate_x", (0, 30), (8, -30)), fx("stuck_dots"))
 thing("solid", "gem", "say @ fill glass", "set @ size 0.6", "set @ x 0.55", "set @ y 0.3", *keys("rotate_y", (0, 0), (8, -200)))
 thing("solid", "ball", "say @ fill 9cff57", "set @ size 0.35", "set @ x 0.1", "set @ y -0.25", *keys("y", (0, -0.15), (2, -0.35), (4, -0.15), (6, -0.35), (8, -0.15)), fx("chroma"), "set @ js_chroma_amount 40")
-thing("solid", "cube", "say @ fill 7a4dff", "set @ size 0.3", "set @ x -0.65", "set @ y -0.45", *keys("rotate", (0, 0), (8, 360)), fx("isf_noise_pixellate"))
+thing("solid", "cube", "say @ fill 7a4dff", "set @ size 0.3", "set @ x -0.65", "set @ y -0.45", *keys("rotate", (0, 0), (8, 360)), fx("isf_multi_pixellate"))
 # shapes
 thing("shape", "star", "say @ fill ffe14a", "set @ size 0.28", "set @ points 5", "set @ x 0.66", "set @ y -0.35", "set @ copies 5", "set @ copy_rotate 72", "set @ copy_x 0.0",
       *keys("rotate", (0, 0), (8, 180)), fx("grain"), "say @ fill ffe14aff ff7b00ff ff7b0000", "set @ js_grain_size 1.3")

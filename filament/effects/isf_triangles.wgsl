@@ -1,4 +1,5 @@
 // Triangles: ISF-Files' Triangles.fs (MIT, Copyright (c) 2018 Vidvox, github.com/Vidvox/ISF-Files; by VIDVOX), its GLSL made WGSL by naga (filament/effects/from_isf.py)
+// --alpha (on a thing: its cells are its shape, each as clear as what it gathered)
 // --track@cell_size:cell_size,0.001,0.5,0.125,0.001
 // --track@style:style,0,1,0,1
 

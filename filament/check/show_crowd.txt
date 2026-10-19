@@ -64,7 +64,7 @@ set 7 x -0.65
 set 7 y -0.45
 key 7 rotate 0 0
 key 7 rotate 8 360
-say 7 fx ../../effects/isf_noise_pixellate.wgsl
+say 7 fx ../../effects/isf_multi_pixellate.wgsl
 add shape star
 say 8 fill ffe14a
 set 8 size 0.28

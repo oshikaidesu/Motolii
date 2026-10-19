@@ -400,10 +400,10 @@ fn way(w: i32, b: vec3f, s: vec3f) -> vec3f {
 }
 @fragment fn main(@builtin(position) frag: vec4f, @location(0) uv: vec2f) -> @location(0) vec4f {
   let c = textureSampleLevel(made, near0, uv, 0.0);
-  let a = select(textureSampleLevel(alone, near1, uv, 0.0).a, clamp(c.a, 0.0, 1.0), k.b > 0.5);   // (its shape, or the effects' own see-through: grains)
+  let a = select(textureSampleLevel(alone, near1, uv, 0.0).a, step(0.5, c.a), k.b > 0.5);   // (its shape, or the effects' own see-through: grains, cells; a cell there or not, as a mosaic's are)
   let u = textureSampleLevel(under, near2, uv, 0.0);
   let b = select(vec3f(0.0), u.rgb / max(u.a, 1e-5), u.a > 1e-4);
-  var mixed = clamp(c.rgb, vec3f(0.0), vec3f(1.0));
+  var mixed = clamp(select(c.rgb, c.rgb / max(c.a, 1e-4), k.b > 0.5), vec3f(0.0), vec3f(1.0));   // (its own see-through: its colour as it is where it is there)
   if (k.way > 0.5) { mixed = clamp(way(i32(k.way + 0.5), b, mixed), vec3f(0.0), vec3f(1.0)); }
   // (where the thing is not: what the effects made there laid on as light, when they throw it (k.a, their heads' --spill))
   return vec4f(mixed * a + max(c.rgb, vec3f(0.0)) * (1.0 - a) * k.a, a);
