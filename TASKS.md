@@ -40,7 +40,7 @@
 
 - **裏側（10/17 深夜、ループ）**：
   - **ショートカット**：`keys.dart`。操作に名前（file.new、edit.undo、play.toggle、frame.next、thing.remove…）、既定の表の上に `~/.motolii/keybindings.json`（VS Code の形、`-` で外す）。Flutter の Shortcuts/Actions。メニューも同じ表のキーを出す。文字を打ってる間は修飾キー無しのキーは文字の方へ。焦点が窓の外に落ちたら窓が拾い直す。
-  - **カラーテーマ**：`theme.dart`。Ableton の .ask の形（`<ChosenDefault Value="#b3c66b"/>`）、`~/.motolii/theme.xml` を開いた時と書き換えた時に読む。書いてない役割は窓の既定。役割名：Ableton（ChosenDefault、ControlOnForeground、Clip1-7）、キーの印は Blender（Keyframe）、灰色の段は窓の段の名前（Grey00〜100）。ひな形 `skin/book/themes/Default Dark.xml`・`Default Light.xml`。まだ役割になってない色：インスペクタの Pop、Role、部品に直書きの色 187か所。
+  - **カラーテーマ**：`theme.dart`。Ableton の .ask の形（`<ChosenDefault Value="#b3c66b"/>`）、着ているスキン（`~/.motolii/skins/<名前>/theme.xml`、名前は `~/.motolii/window.xml`）を開いた時と書き換えた時に読む。書いてない役割は窓の既定。役割名：Ableton（ChosenDefault、ControlOnForeground、Clip1-7）、キーの印は Blender（Keyframe）、灰色の段は窓の段の名前（Grey00〜100）。ひな形 `skin/book/themes/Default Dark.xml`・`Default Light.xml`。まだ役割になってない色：インスペクタの Pop、Role、部品に直書きの色 187か所。
   - **キーをまとめて入れる口**：`motolii_key_many`、1万本 43 ms（1本ずつは 1.21 ms）。
   - **GPU（通った、10/18）**：15レシピ、窓を閉じて 13.3〜15.6 → **10.1 ms**（3回、最大 10.5）、窓の中で 17.6 → 5.1 ms。Instruments の Metal System Trace（`xcrun xctrace record --template 'Metal System Trace'`）で測って分かった：重さは塗りでなく頂点（1回の描画に 860万頂点）。曲げの無い平らな形は曲線の曲がり具合だけ刻む（Wang の式、`bend.cpp`）：線 2272→78、点 224→76、計 68万。ガラスの「後ろの絵」は読む物がある時だけ。重ね順を深度に写す案は試して効かなかった（Op star は塗りすぎではなかった）。絵：輪の縁が1ピクセル動く所が全体の0.5%、4倍で並べて見分けつかず。
 
@@ -133,7 +133,7 @@
 | 29 | リグ：Rive のファイルを読んで、骨とメッシュの補間が Filament の骨・モーフで動く | 調べだけ（10/18） |
 | 30 | デスクの残り：Blend はインスペクタでサムネイルのポップアップ、Align はインスペクタの頭に。デスクのタブを消す | 手つかず |
 | 31 | 色の役割の残り：インスペクタの Pop、Role、部品に直書きの色 187か所がテーマで変わる | ほぼ（10/19、43 に吸収）：差し色・カード見出しの色・軸の色・共通部品の暗い色の表 N は theme の名前に。残りは作品の中身の色（配色の見本、効果の見本の絵）で、革の対象外 |
-| 43 | 革（スキン）：`~/.motolii/theme.xml` 1枚を差し替えると、中身はそのままで窓全体の見た目が変わる（色・明暗・角の丸み・余白・部品の大きさ・文字の大きさ・書体・印の絵）。見本 `skin/book/skins/labs.xml`（Google Labs 風）で `integration_test/skin_test.dart` が撮る（`reports/skins/`） | ほぼ（10/19、51b6651〜0351add）：名前の一覧 `skins/ROLES.md`（色50・数4・言葉4）、絵の名前 `skins/PARTS.md`（SVG、KDE の作法）。窓全体の倍率 50〜200% を1%刻み（上の帯の「100%」をこする、`~/.motolii/window.xml`）。並べ方は革に持たせない（ドックでやる、ユーザー 10/19）。残り：直書きの部品の大きさ（約300か所、主な行・帯・列は済み）、手描きのデータの絵（目盛り・曲線）の線の太さ、革を窓の中で選ぶ・作る道具、配る場所。調べ `research_notes/skins/SUMMARY.md` |
+| 43 | 革（スキン）：人でも LLM でも、`~/.motolii/skins/<名前>/theme.xml` を書いて、撮って見て、直せる。中身はそのままで窓全体の見た目が変わる（色・明暗・角の丸み・余白・部品の大きさ・文字の大きさ・書体・印の絵）。`Background`・`Foreground`・差し色の3色で灰色の段が全部作られる（Material の HCT を借用）。View › Skin で選ぶ。`skins/shoot.sh <フォルダ>` がそのフォルダに preview.png を書く。手引き `skin/book/skins/README.md`、名前の一覧 `skins/ROLES.md`（窓のどこかの表つき、コードと食い違うと `test/skin_names_test.dart` が落ちる） | ほぼ（10/20）：外の LLM に手引きだけで作らせて採点（1回目 6/10）。残り：直書きの部品の大きさ（約300か所、主な行・帯・列は済み）、手描きのデータの絵（目盛り・曲線）の線の太さ、配る場所。調べ `research_notes/skins/SUMMARY.md` |
 | 44 | 効果は物に付く（After Effects の層の効果、ただしカメラから見た平面：網点は画面にまっすぐ）：物を選んで効果の一覧を押すとその物だけにかかり、何も選んでいなければ舞台全体。立体・写真・文字・形・動画のどれでも | 一歩目（10/19、9478b3c・ea744f8）：物の fx に .wgsl を並べると、その物の層を自分の絵に描いて効果をかけ、物の形で切り抜いて重ねる（`check/thing_fx.txt`、`reports/screen/thing_fx.png`）。背景をコピー（b86f2f4）：調整レイヤーは作らず、塗り behind（後ろに見えている絵）＋効果＋重ね方を1つの物に同時に持つ（効果が先、重ね方が後）。残り：はみ出す効果（光のにじみ）の余白、写真・動画は塗りを持たないので背景のコピーにならない、効果を付けた立体は他の立体とめり込まない（1枚の層）、物ごとに描画1回と効果の分だけ重くなる（測っていない） |
 | 32 | 書き出しを OpenTimelineIO で（タイムラインを外の編集ソフトへ） | 手つかず。要るかはきみの判断 |
 | 4 | 今日の動画（led、mask）が Windows でも同じ絵で60コマ毎秒で出る | 手つかず（機械が無い）。今の土台の道筋は `filament/WINDOWS.md` の頭に書いた（読んだだけ） |

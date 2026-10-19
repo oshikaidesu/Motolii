@@ -3,7 +3,7 @@
 //     <ChosenDefault Value="#b3c66b"/>
 //     <Grey07 Value="#131313"/>
 //   </Theme></Motolii>
-// read from ~/.motolii/theme.xml; a role the file does not say is the window's own (VS Code's manner). The meaning
+// read from the skin the window wears (~/.motolii/skins/<name>/theme.xml, the name kept in window.xml); a role the file does not say is the window's own (VS Code's manner). The meaning
 // roles keep Ableton's names (ChosenDefault, ChosenPlay, ChosenRecord, Alert, SelectionBackground, ControlOnForeground,
 // Clip1-16), the key mark Blender's (Keyframe); the grey ramp keeps the window's own step names (Grey00 ... Grey100),
 // each step a role in both shades (ground, body, card, well, raised, lines, quiet text, text, strong text).
@@ -17,6 +17,8 @@ import 'dart:typed_data' show ByteData;
 
 import 'package:flutter/services.dart' show FontLoader;
 import 'package:flutter/widgets.dart';
+
+import 'window_file.dart';
 
 abstract final class ColorTheme {
   /// The roles the theme file says (none: the window's own colours). The window is built again when they change.
@@ -38,10 +40,36 @@ abstract final class ColorTheme {
   /// A role's word: the theme's, else [usual].
   static String word(String role, String usual) => words.value[role] ?? usual;
 
+  /// The skins: each a folder in ~/.motolii/skins with its theme.xml beside what it brings (pictures, fonts).
+  static String get skins => '${Platform.environment['HOME']}/.motolii/skins';
+
+  /// The skins there, by name.
+  static List<String> skinNames() {
+    try {
+      return [for (final d in Directory(skins).listSync().whereType<Directory>()) if (File('${d.path}/theme.xml').existsSync()) d.uri.pathSegments[d.uri.pathSegments.length - 2]]..sort();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /// The skin worn (none: the window's own).
+  static String? get skin => switch (WindowFile.get('Skin')) { final s? when s.isNotEmpty => s, _ => null };
+
+  static String get _worn => at ?? (skin == null ? '' : '$skins/$skin/theme.xml');
+
+  /// Another skin worn (none: the window's own), kept for the next time.
+  static void wear(String? name) {
+    WindowFile.set('Skin', name);
+    if (_changed case final c?) watch(c);
+    _changed?.call();
+  }
+
+  static void Function()? _changed;
+
   /// The theme file read (not there, or not readable: the window's own colours and shapes).
   static void load([String? path]) {
     try {
-      final file = File(path ?? at ?? '${Platform.environment['HOME']}/.motolii/theme.xml');
+      final file = File(path ?? _worn);
       folder = file.parent.path;
       final xml = file.readAsStringSync();
       roles.value = parse(xml);
@@ -53,7 +81,7 @@ abstract final class ColorTheme {
       words.value = const {};
     }
     _fonts();
-    shadeSaid.value = switch (words.value['Shade']) { 'light' => true, 'dark' => false, _ => null };
+    shadeSaid.value = switch (words.value['Shade']) { 'light' => true, 'dark' => false, _ => switch (roles.value['Background']) { final b? => b.computeLuminance() > .18, _ => null } };   // (unsaid: a light background is a light skin)
   }
 
   /// The folder of the theme file read last: a place a role names is read from here unless it is whole (`/...`) or from home (`~/...`).
@@ -78,9 +106,11 @@ abstract final class ColorTheme {
   /// The theme file read now, and again whenever it is written ([changed]: the window built again in place).
   static StreamSubscription<FileSystemEvent>? _watching;
   static void watch(void Function() changed, [String? path]) {
-    final file = File(path ?? at ?? '${Platform.environment['HOME']}/.motolii/theme.xml');
+    _changed = changed;
+    final file = File(path ?? _worn);
     load(file.path);
     _watching?.cancel();
+    if (file.path.isEmpty) return;   // (the window's own: nothing to watch)
     try {
       file.parent.createSync(recursive: true);
       _watching = file.parent.watch().where((e) => e.path == file.path).listen((_) {

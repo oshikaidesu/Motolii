@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- A skin in the manner of a bright lab page: white ground, black type, round pills, pastel marks.
-     Copy it to ~/.motolii/theme.xml (the window reads it again the moment it is written). -->
+     Copy the folder into ~/.motolii/skins and choose it in View > Skin (the window reads it again the moment it is written). -->
 <Motolii>
 	<Theme>
 		<Shade Value="light"/>
@@ -9,7 +9,7 @@
 		<Size Value="1.15"/>
 		<TextScale Value="1.08"/>
 		<FontSans Value="Avenir Next"/>
-		<Parts Value="labs/parts"/>
+		<Parts Value="parts"/>
 		<Grey00 Value="#e6e6e6"/>
 		<Grey07 Value="#ffffff"/>
 		<Grey10 Value="#fafafa"/>

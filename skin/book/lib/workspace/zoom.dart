@@ -1,32 +1,18 @@
 // The whole window drawn larger or smaller in 1% steps (Ableton's Zoom Display, a browser's ⌘+ / ⌘−): laid out in a box
 // 1/zoom the window's size and drawn zoom times larger, so every part grows alike, stays sharp (Flutter draws vectors) and
 // takes the hand where it is drawn; the stage is told the finer pixels. Kept in ~/.motolii/window.xml, beside the theme.
-import 'dart:io';
-
 import 'package:flutter/widgets.dart';
 
 import '../tokens.dart';
+import '../window_file.dart';
 
 abstract final class WsZoom {
-  static File get _file => File('${Platform.environment['HOME']}/.motolii/window.xml');
-  static final value = ValueNotifier<double>(_read());
-
-  static double _read() {
-    try {
-      return double.parse(RegExp(r'<Zoom\s+Value="([0-9.]+)"').firstMatch(_file.readAsStringSync())!.group(1)!).clamp(.5, 2.0);
-    } catch (_) {
-      return 1;
-    }
-  }
+  static final value = ValueNotifier<double>((double.tryParse(WindowFile.get('Zoom') ?? '') ?? 1).clamp(.5, 2.0));
 
   /// The zoom set (to the nearest 1%, 50% to 200%) and, unless [keep] is false, kept for the next time.
   static void set(double z, {bool keep = true}) {
     value.value = ((z * 100).round() / 100).clamp(.5, 2.0);
-    if (!keep) return;
-    try {
-      _file.parent.createSync(recursive: true);
-      _file.writeAsStringSync('<?xml version="1.0" encoding="UTF-8"?>\n<Motolii>\n\t<Window>\n\t\t<Zoom Value="${value.value.toStringAsFixed(2)}"/>\n\t</Window>\n</Motolii>\n');
-    } catch (_) {}
+    if (keep) WindowFile.set('Zoom', value.value.toStringAsFixed(2));
   }
 
   static void by(int percent) => set(value.value + percent / 100);

@@ -1,5 +1,6 @@
 // Every value here is read from ../DESIGN.md (the tag in the comment says where it came from). A part names a token; it never picks a number.
 import 'package:flutter/widgets.dart';
+import 'package:material_color_utilities/hct/hct.dart';
 
 import 'theme.dart';
 
@@ -28,7 +29,26 @@ enum Shade { dark, light }
 abstract final class Grey {
   static final shade = ValueNotifier<Shade>(Shade.dark);
   static bool get light => ColorTheme.shadeSaid.value ?? shade.value == Shade.light;   // (a skin that names its shade has it)
-  static Color _p(String role, Color dark, Color light) => ColorTheme.of(role, Grey.light ? light : dark);   // (the theme file's, else the shade's own)
+  static Color _p(String role, Color dark, Color light) => ColorTheme.of(role, _made(Grey.light ? light : dark));   // (the theme file's, else the shade's own)
+
+  /// A step of the shade's own ramp moved onto the skin's `Background` and `Foreground` (neither said: as it is), so a skin
+  /// names two colours and every grey follows: the step's tone sits between theirs where the shade's own body (Grey07) and
+  /// text (Grey95) put it (Material's HCT, so equal tones look equally light), its colour mixed between them; the body is the
+  /// Background itself and the text the Foreground itself.
+  static Color _made(Color own) {
+    final bg = ColorTheme.roles.value['Background'], fg = ColorTheme.roles.value['Foreground'];
+    if (bg == null && fg == null) return own;
+    return _madeOnce.putIfAbsent((own, bg, fg, light), () {
+      final body = light ? const Color(0xFFF2F2F4) : N.g07, text = light ? const Color(0xFF121318) : N.g95;
+      final b = bg ?? body, f = fg ?? text, tb = Hct.fromInt(b.toARGB32()).tone, tf = Hct.fromInt(f.toARGB32()).tone;
+      final t = (Hct.fromInt(own.toARGB32()).tone - Hct.fromInt(body.toARGB32()).tone) / (Hct.fromInt(text.toARGB32()).tone - Hct.fromInt(body.toARGB32()).tone);
+      final mix = Hct.fromInt(Color.lerp(b, f, t.clamp(0.0, 1.0))!.toARGB32());
+      final made = t == 0 ? b : (t == 1 ? f : Color(Hct.from(mix.hue, mix.chroma, (tb + (tf - tb) * t).clamp(0.0, 100.0)).toInt()));
+      return made.withAlpha((own.a * 255).round());
+    });
+  }
+
+  static final _madeOnce = <(Color, Color?, Color?, bool), Color>{};
 
   static Color get g00 => _p('Grey00', N.g00, const Color(0xFFCFD0D4));
   static Color get g07 => _p('Grey07', N.g07, const Color(0xFFF2F2F4));
@@ -45,9 +65,9 @@ abstract final class Grey {
   static Color get g91 => _p('Grey91', N.g91, const Color(0xFF22232A));
   static Color get g95 => _p('Grey95', N.g95, const Color(0xFF121318));
   static Color get g100 => _p('Grey100', N.g100, const Color(0xFF000000));
-  static Color get bandA => _p('BandA', N.bandA, const Color(0xFFFAFAFB));
-  static Color get bandB => _p('BandB', N.bandB, const Color(0xFFF0F0F3));
-  static Color get rowLine => _p('RowLine', N.rowLine, const Color(0xFFE3E4E8));
+  static Color get bandA => ColorTheme.of('BandA', g10);   // (the timeline's rows, in turn, and the line between them)
+  static Color get bandB => ColorTheme.of('BandB', g13);
+  static Color get rowLine => ColorTheme.of('RowLine', g10);
   static Color get glaze9 => _p('Glaze9', N.glaze9, const Color(0x0F000000));
   static Color get glaze15 => _p('Glaze15', N.glaze15, const Color(0x1A000000));
 }

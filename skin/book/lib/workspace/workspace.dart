@@ -150,6 +150,8 @@ class _WorkspaceState extends State<Workspace> {
     };
   }
 
+  void _wear(String? skin) => setState(() => ColorTheme.wear(skin));   // (the menus again too: the one worn is the one not offered)
+
   List<PlatformMenuItem> _menus() {
     final does = _commands();
     PlatformMenuItem item(String label, String command) => PlatformMenuItem(label: label, shortcut: _keymap.keyOf(command), onSelected: does[command]);
@@ -189,6 +191,23 @@ class _WorkspaceState extends State<Workspace> {
             ],
           ),
           item('Remove', 'thing.remove'),
+        ],
+      ),
+      PlatformMenu(
+        label: 'View',
+        menus: [
+          PlatformMenu(
+            label: 'Skin',
+            menus: [
+              PlatformMenuItemGroup(
+                members: [
+                  PlatformMenuItem(label: 'Default', onSelected: ColorTheme.skin == null ? null : () => _wear(null)),
+                  for (final n in ColorTheme.skinNames()) PlatformMenuItem(label: n, onSelected: n == ColorTheme.skin ? null : () => _wear(n)),
+                ],
+              ),
+              PlatformMenuItem(label: 'Show Skins Folder', onSelected: () => Process.run('open', [(Directory(ColorTheme.skins)..createSync(recursive: true)).path])),
+            ],
+          ),
         ],
       ),
       PlatformMenu(

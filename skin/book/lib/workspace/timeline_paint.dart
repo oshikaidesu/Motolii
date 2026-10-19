@@ -185,7 +185,7 @@ class WtRulerPainter extends CustomPainter {
 
 // ---------------------------------------------------------------- tracks
 
-Color wtBand(int i, bool selected) => selected ? Grey.g20 : (i.isEven ? Grey.g10 : Grey.g13);
+Color wtBand(int i, bool selected) => selected ? Grey.g20 : (i.isEven ? Grey.bandA : Grey.bandB);
 
 /// The bar's fill: the kind's hue, a step quieter when not selected; a hidden or soloed-out layer drops to grey.
 Color wtBarFill(WtRow r) => r.dim ? Grey.g26 : (r.selected ? wsTone(r.kind) : Color.lerp(wsTone(r.kind), Grey.g07, .22)!);
@@ -206,6 +206,7 @@ class WtTracksPainter extends CustomPainter {
       final top = i * WtM.row - vscroll;
       if (top > s.height || top + WtM.row < 0) continue;
       c.drawRect(Rect.fromLTWH(0, top, s.width, WtM.row - 1), p..color = wtBand(i, rows[i].selected));
+      c.drawRect(Rect.fromLTWH(0, top + WtM.row - 1, s.width, 1), p..color = Grey.rowLine);
     }
     if (end < s.width) c.drawRect(Rect.fromLTRB(end, 0, s.width, s.height), p..color = WsT.body);
     _vLines(c, view, fps, math.min(s.width, end), 0, s.height, major: Grey.g20, fine: Grey.g15);

@@ -16,9 +16,9 @@
 		<Grey91 Value="#e7e7e7ff"/>
 		<Grey95 Value="#f2f2f2ff"/>
 		<Grey100 Value="#ffffffff"/>
-		<BandA Value="#1e1e1eff"/>
-		<BandB Value="#2a2a2aff"/>
-		<RowLine Value="#161616ff"/>
+		<BandA Value="#191919ff"/>
+		<BandB Value="#202020ff"/>
+		<RowLine Value="#191919ff"/>
 		<Glaze9 Value="#ffffff17"/>
 		<Glaze15 Value="#ffffff29"/>
 		<ChosenDefault Value="#b3c66bff"/>

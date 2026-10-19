@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Paper: three colours and one shape; every grey of the window is made from Background and Foreground. -->
+<Motolii>
+	<Theme>
+		<Background Value="#f1ead9"/>
+		<Foreground Value="#2b2118"/>
+		<ChosenDefault Value="#e0452b"/>
+		<Corner Value="0"/>
+		<FontSans Value="Georgia"/>
+	</Theme>
+</Motolii>
