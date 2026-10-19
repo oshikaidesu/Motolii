@@ -133,13 +133,16 @@ class _StageViewState extends State<StageView> implements StageHandles {
   int? _desk;
   _View? _toldDesk;
   Motolii? _deskOf;
+  double? _toldDpr;
   void _deskTo(_View v) {
-    if (widget.texture == null || v == _toldDesk) return;
+    final dpr = MediaQuery.devicePixelRatioOf(context);
+    if (widget.texture == null || (v == _toldDesk && dpr == _toldDpr)) return; // (told again when the window's zoom changes its pixels too)
     _toldDesk = v;
-    final m = WsScope.read(context).inside, dpr = MediaQuery.devicePixelRatioOf(context);
+    _toldDpr = dpr;
+    final m = WsScope.read(context).inside;
     if ((_deskOf = m) == null) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || _toldDesk != v) return;
+      if (!mounted || _toldDesk != v || _toldDpr != dpr) return;
       final m = _deskOf!;
       if (!m.desk((v.area.width * dpr).round(), (v.area.height * dpr).round(), (v.o.dx - v.area.left) * dpr, (v.o.dy - v.area.top) * dpr, v.s * dpr, dpr)) return;
       _toldPick = null;
