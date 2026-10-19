@@ -160,7 +160,7 @@ class DeskChip extends StatelessWidget {
     builder: (_, h) => Container(
       height: 18,
       padding: const EdgeInsets.symmetric(horizontal: 6),
-      decoration: BoxDecoration(color: on ? WsT.accent : (h && onTap != null ? WsT.raised : WsT.well), borderRadius: BorderRadius.circular(WsT.chipRadius)),
+      decoration: BoxDecoration(color: on ? WsT.accent : (h && onTap != null ? WsT.raised : WsT.well), borderRadius: BorderRadius.all(Shape.r(WsT.chipRadius))),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -200,7 +200,7 @@ class DeskIconButton extends StatelessWidget {
     builder: (_, h) => Container(
       width: size,
       height: size,
-      decoration: BoxDecoration(color: on ? WsT.accent : (h ? WsT.raised : WsT.well), borderRadius: BorderRadius.circular(WsT.radius)),
+      decoration: BoxDecoration(color: on ? WsT.accent : (h ? WsT.raised : WsT.well), borderRadius: BorderRadius.all(Shape.r(WsT.radius))),
       child: CustomPaint(painter: glyph(on ? WsT.onAccent : (h ? Grey.g95 : Grey.g76))),
     ),
   );
@@ -248,7 +248,7 @@ class _DeskScrubState extends State<DeskScrub> {
         onHorizontalDragEnd: w.enabled ? (_) => setState(() => _drag = false) : null,
         child: Container(
           height: 22,
-          decoration: BoxDecoration(color: live && w.enabled ? WsT.raised : WsT.well, borderRadius: BorderRadius.circular(WsT.radius)),
+          decoration: BoxDecoration(color: live && w.enabled ? WsT.raised : WsT.well, borderRadius: BorderRadius.all(Shape.r(WsT.radius))),
           clipBehavior: Clip.antiAlias,
           child: Stack(
             children: [
@@ -262,7 +262,7 @@ class _DeskScrubState extends State<DeskScrub> {
                     alignment: Alignment.centerLeft,
                     widthFactor: f,
                     child: DecoratedBox(
-                      decoration: BoxDecoration(color: _drag ? WsT.accent : w.tone ?? WsT.accent, borderRadius: BorderRadius.circular(1)),
+                      decoration: BoxDecoration(color: _drag ? WsT.accent : w.tone ?? WsT.accent, borderRadius: BorderRadius.all(Shape.r(1))),
                     ),
                   ),
                 ),
@@ -280,7 +280,7 @@ class _DeskScrubState extends State<DeskScrub> {
                         softWrap: false,
                         overflow: TextOverflow.clip,
                         textAlign: TextAlign.right,
-                        style: T.value(w.enabled ? (_drag ? Grey.g100 : Grey.g91) : Grey.g56).copyWith(fontSize: 10.5),
+                        style: T.value(w.enabled ? (_drag ? Grey.g100 : Grey.g91) : Grey.g56).copyWith(fontSize: T.px(10.5)),
                       ),
                     ),
                   ],
@@ -329,7 +329,7 @@ class DeskLayerChip extends StatelessWidget {
     height: 16,
     padding: const EdgeInsets.symmetric(horizontal: 6),
     alignment: Alignment.center,
-    decoration: BoxDecoration(color: tone, borderRadius: BorderRadius.circular(WsT.chipRadius)),
+    decoration: BoxDecoration(color: tone, borderRadius: BorderRadius.all(Shape.r(WsT.chipRadius))),
     child: Text(name, style: T.micro(WsT.onAccent).copyWith(fontWeight: FontWeight.w700)),
   );
 }
@@ -355,7 +355,7 @@ class DeskCaption extends StatelessWidget {
             softWrap: false,
             overflow: TextOverflow.fade,
             textAlign: TextAlign.right,
-            style: T.value(Grey.g56).copyWith(fontSize: 10),
+            style: T.value(Grey.g56).copyWith(fontSize: T.px(10)),
           ),
         ),
       ],
@@ -378,7 +378,7 @@ class DeskReadout extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.baseline,
         textBaseline: TextBaseline.alphabetic,
         children: [
-          Text(value, style: T.value(ink ?? Grey.g95).copyWith(fontSize: 18, fontWeight: FontWeight.w700, letterSpacing: -.5)),
+          Text(value, style: T.value(ink ?? Grey.g95).copyWith(fontSize: T.px(18), fontWeight: FontWeight.w700, letterSpacing: -.5)),
           if (unit.isNotEmpty) ...[const SizedBox(width: 2), Text(unit, style: T.label(Grey.g63))],
         ],
       ),

@@ -133,7 +133,7 @@ class _TransformCanvasState extends State<TransformCanvas> {
                           width: 22,
                           height: 22,
                           alignment: Alignment.center,
-                          decoration: BoxDecoration(color: h ? Grey.g20 : Grey.g13, borderRadius: BorderRadius.circular(5)),
+                          decoration: BoxDecoration(color: h ? Grey.g20 : Grey.g13, borderRadius: BorderRadius.all(Shape.r(5))),
                           child: CustomPaint(size: const Size.square(12), painter: _UndoPaint(h ? Grey.g100 : Grey.g76)),
                         ),
                       ),
@@ -282,7 +282,7 @@ class _CanvasPaint extends CustomPainter {
     c.drawLine(g.tiltBase(axis), k, line(color, 1.5));
     final on = hot == TransformZone.rotate && hotIndex == axis;
     final r = Rect.fromCenter(center: k, width: axis == 1 ? 7 : (on ? 13 : 11), height: axis == 1 ? (on ? 13 : 11) : 7);
-    c.drawRRect(RRect.fromRectAndRadius(r, const Radius.circular(3.5)), fill(color));
+    c.drawRRect(RRect.fromRectAndRadius(r, Shape.r(3.5)), fill(color));
   }
 
   @override
@@ -315,7 +315,7 @@ class _CanvasPaint extends CustomPainter {
     for (final (i, p) in g.handles.indexed) {
       final side = (i < 4 ? DirectSurface.handle : DirectSurface.handle - 2) + (scaleHot ? 2 : 0);
       final r = Rect.fromCenter(center: p, width: side, height: side);
-      c.drawRRect(RRect.fromRectAndRadius(r, const Radius.circular(1.5)), fill(scale));
+      c.drawRRect(RRect.fromRectAndRadius(r, Shape.r(1.5)), fill(scale));
     }
     tilt(c, 1);
     tilt(c, 2);

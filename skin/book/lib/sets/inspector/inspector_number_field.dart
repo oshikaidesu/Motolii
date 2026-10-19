@@ -4,7 +4,7 @@ import 'package:lab_book/sets/inspector/inspector_number_field_num_field_state.d
 
 import '../../tokens.dart';
 
-TextStyle blockValue(Color c) => T.value(c).copyWith(fontSize: 14, fontWeight: FontWeight.w600, height: 1.1);
+TextStyle blockValue(Color c) => T.value(c).copyWith(fontSize: T.px(14), fontWeight: FontWeight.w600, height: 1.1);
 
 class NumField extends StatefulWidget {
   const NumField({

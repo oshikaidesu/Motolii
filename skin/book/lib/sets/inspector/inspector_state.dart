@@ -90,13 +90,13 @@ class Ed {
   TextStyle headStyle() => switch (e) {
     Editorial.a => T.micro(Grey.g56).copyWith(letterSpacing: 1.0),
     Editorial.b => T.name(Grey.g63),
-    Editorial.c => T.title(Grey.g91).copyWith(fontSize: 13, fontWeight: FontWeight.w400),
+    Editorial.c => T.title(Grey.g91).copyWith(fontSize: T.px(13), fontWeight: FontWeight.w400),
   };
   TextStyle labStyle(Color c) => e == Editorial.c ? T.label(c).copyWith(letterSpacing: .3) : T.label(c);
   TextStyle nameStyle() => switch (e) {
-    Editorial.a => T.title().copyWith(fontSize: 14, fontWeight: FontWeight.w500),
-    Editorial.b => T.title().copyWith(fontSize: 13, fontWeight: FontWeight.w500),
-    Editorial.c => T.title().copyWith(fontSize: 17, fontWeight: FontWeight.w300),
+    Editorial.a => T.title().copyWith(fontSize: T.px(14), fontWeight: FontWeight.w500),
+    Editorial.b => T.title().copyWith(fontSize: T.px(13), fontWeight: FontWeight.w500),
+    Editorial.c => T.title().copyWith(fontSize: T.px(17), fontWeight: FontWeight.w300),
   };
 }
 

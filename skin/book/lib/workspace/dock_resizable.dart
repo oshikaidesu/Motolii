@@ -68,7 +68,7 @@ class _DockResizableState extends State<DockResizable> {
               child: Container(
                 width: 28,
                 height: 3,
-                decoration: BoxDecoration(color: lit ? WsT.accent : Grey.g38, borderRadius: BorderRadius.circular(1.5)),
+                decoration: BoxDecoration(color: lit ? WsT.accent : Grey.g38, borderRadius: BorderRadius.all(Shape.r(1.5))),
               ),
             ),
           ),

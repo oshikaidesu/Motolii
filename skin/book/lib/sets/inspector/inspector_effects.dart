@@ -75,7 +75,7 @@ class _ParamSearchState extends State<ParamSearch> {
       alignment: Alignment.centerLeft,
       decoration: BoxDecoration(
         color: Grey.g13,
-        borderRadius: BorderRadius.circular(4),
+        borderRadius: BorderRadius.all(Shape.r(4)),
         border: Border.all(color: ed.rule),
       ),
       child: Stack(

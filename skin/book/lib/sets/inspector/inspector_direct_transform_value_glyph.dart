@@ -113,7 +113,7 @@ class _GlyphPaint extends CustomPainter {
           c.save();
           c.translate(mid.dx + at.dx, mid.dy + at.dy);
           c.rotate(-math.pi / 4);
-          c.drawRRect(RRect.fromRectAndRadius(Rect.fromCenter(center: Offset.zero, width: 11, height: 6), const Radius.circular(3)), ring);
+          c.drawRRect(RRect.fromRectAndRadius(Rect.fromCenter(center: Offset.zero, width: 11, height: 6), Shape.r(3)), ring);
           c.restore();
         }
     }

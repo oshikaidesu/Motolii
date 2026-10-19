@@ -140,7 +140,7 @@ class _Seg extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     height: 20,
     padding: const EdgeInsets.all(2),
-    decoration: BoxDecoration(color: WsT.well, borderRadius: BorderRadius.circular(WsT.radius)),
+    decoration: BoxDecoration(color: WsT.well, borderRadius: BorderRadius.all(Shape.r(WsT.radius))),
     child: Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -151,7 +151,7 @@ class _Seg extends StatelessWidget {
               height: 16,
               padding: const EdgeInsets.symmetric(horizontal: 7),
               alignment: Alignment.center,
-              decoration: BoxDecoration(color: i == index ? WsT.accent : (h ? WsT.raised : WsT.well), borderRadius: BorderRadius.circular(WsT.chipRadius)),
+              decoration: BoxDecoration(color: i == index ? WsT.accent : (h ? WsT.raised : WsT.well), borderRadius: BorderRadius.all(Shape.r(WsT.chipRadius))),
               child: Text(items[i], style: T.label(i == index ? WsT.onAccent : (h ? Grey.g95 : Grey.g76)).copyWith(fontWeight: FontWeight.w600)),
             ),
           ),
@@ -178,7 +178,7 @@ class _Toggle extends StatelessWidget {
       return Container(
         height: 20,
         padding: const EdgeInsets.only(left: 6, right: 8),
-        decoration: BoxDecoration(color: on ? Grey.g26 : (h ? WsT.raised : WsT.well), borderRadius: BorderRadius.circular(WsT.radius)),
+        decoration: BoxDecoration(color: on ? Grey.g26 : (h ? WsT.raised : WsT.well), borderRadius: BorderRadius.all(Shape.r(WsT.radius))),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -269,7 +269,7 @@ class _ToolButton extends StatelessWidget {
       width: 28,
       height: 28,
       alignment: Alignment.center,
-      decoration: BoxDecoration(color: on ? WsT.accent : (h ? WsT.raised : WsT.body), borderRadius: BorderRadius.circular(WsT.radius)),
+      decoration: BoxDecoration(color: on ? WsT.accent : (h ? WsT.raised : WsT.body), borderRadius: BorderRadius.all(Shape.r(WsT.radius))),
       child: Glyph(glyph, size: 16, color: on ? WsT.onAccent : (h ? Grey.g95 : Grey.g63)),
     ),
   );
@@ -295,7 +295,7 @@ class _Swatches extends StatelessWidget {
             height: 16,
             decoration: BoxDecoration(
               color: WsT.body,
-              borderRadius: BorderRadius.circular(WsT.chipRadius),
+              borderRadius: BorderRadius.all(Shape.r(WsT.chipRadius)),
               border: Border.all(color: stroke, width: 3),
             ),
           ),
@@ -305,7 +305,7 @@ class _Swatches extends StatelessWidget {
           height: 16,
           decoration: BoxDecoration(
             color: fill,
-            borderRadius: BorderRadius.circular(WsT.chipRadius),
+            borderRadius: BorderRadius.all(Shape.r(WsT.chipRadius)),
             border: Border.all(color: WsT.body),
           ),
         ),
@@ -437,7 +437,7 @@ class _Field extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     height: 20,
     padding: const EdgeInsets.symmetric(horizontal: 7),
-    decoration: BoxDecoration(color: WsT.well, borderRadius: BorderRadius.circular(WsT.radius)),
+    decoration: BoxDecoration(color: WsT.well, borderRadius: BorderRadius.all(Shape.r(WsT.radius))),
     child: Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -447,7 +447,7 @@ class _Field extends StatelessWidget {
           Container(
             width: 22,
             height: 12,
-            decoration: BoxDecoration(color: s, borderRadius: BorderRadius.circular(3)),
+            decoration: BoxDecoration(color: s, borderRadius: BorderRadius.all(Shape.r(3))),
           )
         else
           Text(value ?? '', style: T.value(Grey.g91)),
@@ -482,7 +482,7 @@ class _Readout extends StatelessWidget {
         Container(
           width: 8,
           height: 8,
-          decoration: BoxDecoration(color: wsTone(l.kind), borderRadius: BorderRadius.circular(2)),
+          decoration: BoxDecoration(color: wsTone(l.kind), borderRadius: BorderRadius.all(Shape.r(2))),
         ),
         const SizedBox(width: 6),
         Text(l.name, style: T.name(Grey.g95).copyWith(fontWeight: FontWeight.w600)),

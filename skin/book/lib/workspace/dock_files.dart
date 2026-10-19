@@ -314,7 +314,7 @@ class _FolderRow extends StatelessWidget {
                 style: T.name(dockInk(here, depth == 0 ? Grey.g95 : Grey.g91)).copyWith(fontWeight: depth == 0 || here ? FontWeight.w600 : FontWeight.w400),
               ),
             ),
-            if (files > 0) Text('$files', style: T.value(dockInk(here, Grey.g56)).copyWith(fontSize: 10)),
+            if (files > 0) Text('$files', style: T.value(dockInk(here, Grey.g56)).copyWith(fontSize: T.px(10))),
           ],
         ),
       ),
@@ -465,7 +465,7 @@ class _Art extends StatelessWidget {
       DockG.font => Container(
         color: WsT.toneText,
         alignment: Alignment.center,
-        child: Text('Aa', style: T.title(WsT.onAccent).copyWith(fontSize: 18, fontWeight: FontWeight.w700)),
+        child: Text('Aa', style: T.title(WsT.onAccent).copyWith(fontSize: T.px(18), fontWeight: FontWeight.w700)),
       ),
       DockG.folder => Container(
         color: WsT.well,
@@ -499,7 +499,7 @@ class _Tile extends StatelessWidget {
               children: [
                 _Art(n),
                 if (t != null) Positioned(left: 3, top: 3, child: DockTag(t.badge, hue: t.hue, edge: true)),
-                if (n.folder && n.listed) Positioned(right: 4, bottom: 3, child: Text('${n.kids.length}', style: T.value(Grey.g63).copyWith(fontSize: 10))),
+                if (n.folder && n.listed) Positioned(right: 4, bottom: 3, child: Text('${n.kids.length}', style: T.value(Grey.g63).copyWith(fontSize: T.px(10)))),
                 if (_inUse(n, c)) const Positioned(right: 3, top: 3, child: _InUse()),
                 if (sel || h)
                   DecoratedBox(
@@ -581,7 +581,7 @@ class _InUse extends StatelessWidget {
     width: 14,
     height: 14,
     alignment: Alignment.center,
-    decoration: BoxDecoration(color: WsT.accent, borderRadius: BorderRadius.circular(WsT.chipRadius)),
+    decoration: BoxDecoration(color: WsT.accent, borderRadius: BorderRadius.all(Shape.r(WsT.chipRadius))),
     child: DockGlyph(DockG.link, size: 10, color: WsT.onAccent),
   );
 }

@@ -37,7 +37,7 @@ class PanelLink extends StatelessWidget {
       builder: (_, h) => Container(
         height: Pop.cell,
         padding: const EdgeInsets.only(left: 8, right: 6),
-        decoration: BoxDecoration(color: h && !off ? Grey.g20 : Pop.well, borderRadius: BorderRadius.circular(6)),
+        decoration: BoxDecoration(color: h && !off ? Grey.g20 : Pop.well, borderRadius: BorderRadius.all(Shape.r(6))),
         child: Row(
           children: [
             if (label case final l?) ...[Text(l, style: T.label(Grey.g63)), const SizedBox(width: 8)],
@@ -98,7 +98,7 @@ class LinkSwatch extends StatelessWidget {
     height: 14,
     decoration: BoxDecoration(
       color: hexControls(hex) ?? Grey.g95,
-      borderRadius: BorderRadius.circular(3),
+      borderRadius: BorderRadius.all(Shape.r(3)),
       border: Border.all(color: Grey.g38),
     ),
   );

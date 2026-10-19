@@ -154,7 +154,7 @@ class _LensNumbers extends StatelessWidget {
     Widget pair(String a, String b) => Row(
       children: [
         Expanded(child: Text(a, style: T.label(Grey.g56))),
-        Text(b, style: T.value(Grey.g91).copyWith(fontSize: 10.5)),
+        Text(b, style: T.value(Grey.g91).copyWith(fontSize: T.px(10.5))),
       ],
     );
     return ColoredBox(
@@ -317,7 +317,7 @@ class _DepthPainter extends CustomPainter {
     final line = Paint()
       ..strokeWidth = 1
       ..style = PaintingStyle.stroke;
-    final lab = T.value(Grey.g56).copyWith(fontSize: 9.5);
+    final lab = T.value(Grey.g56).copyWith(fontSize: T.px(9.5));
     // Depth rulings every 500 px, labelled every 1000.
     for (var z = 0.0; z <= _zMax; z += 500) {
       final y = m.at(0, z).dy.floorToDouble() + .5;
@@ -363,7 +363,7 @@ class _DepthPainter extends CustomPainter {
     for (final sl in slabs) {
       final r = m.slab(sl.x, sl.z, sl.w), sharp = sl.z >= near && sl.z <= far, on = sl.id == target;
       final col = sharp ? sl.tone : Color.lerp(sl.tone, WsT.card, .55)!;
-      final rr = RRect.fromRectAndRadius(r, const Radius.circular(2));
+      final rr = RRect.fromRectAndRadius(r, Shape.r(2));
       c.drawRRect(rr, fill..color = col);
       if (on) {
         c.drawRRect(
@@ -397,18 +397,18 @@ class _DepthPainter extends CustomPainter {
     final tp = TextPainter(
       text: TextSpan(
         text: tag,
-        style: T.value(WsT.onAccent).copyWith(fontSize: 10, fontWeight: FontWeight.w700),
+        style: T.value(WsT.onAccent).copyWith(fontSize: T.px(10), fontWeight: FontWeight.w700),
       ),
       textDirection: TextDirection.ltr,
     )..layout();
-    final tr = RRect.fromRectAndRadius(Rect.fromLTWH(s.width - 48, y - 8, 42, 16), const Radius.circular(WsT.chipRadius));
+    final tr = RRect.fromRectAndRadius(Rect.fromLTWH(s.width - 48, y - 8, 42, 16), Shape.r(WsT.chipRadius));
     c.drawRRect(tr, fill..color = WsT.accent);
     tp.paint(c, tr.center - Offset(tp.width / 2, tp.height / 2));
     tp.dispose();
     // The camera body at the cone's tip.
     final e = m.eye;
     c.drawRRect(
-      RRect.fromRectAndRadius(Rect.fromCenter(center: e + const Offset(0, 9), width: 18, height: 12), const Radius.circular(3)),
+      RRect.fromRectAndRadius(Rect.fromCenter(center: e + const Offset(0, 9), width: 18, height: 12), Shape.r(3)),
       fill..color = WsT.toneCamera,
     );
     c.drawPath(

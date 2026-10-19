@@ -27,7 +27,7 @@ enum Shade { dark, light }
 /// brightest and text the darkest. Dark is exactly [N].
 abstract final class Grey {
   static final shade = ValueNotifier<Shade>(Shade.dark);
-  static bool get light => shade.value == Shade.light;
+  static bool get light => ColorTheme.shadeSaid.value ?? shade.value == Shade.light;   // (a skin that names its shade has it)
   static Color _p(String role, Color dark, Color light) => ColorTheme.of(role, Grey.light ? light : dark);   // (the theme file's, else the shade's own)
 
   static Color get g00 => _p('Grey00', N.g00, const Color(0xFFCFD0D4));
@@ -121,8 +121,33 @@ abstract final class Role {
   static Color get disabled => N.g44;
 }
 
+/// The window's one accent, from the skin (the theme's roles: Ableton's names, the key mark Blender's): a fill, the ink drawn on
+/// it, the key mark, and the accent as a line or text (in the light shade made deep enough to read on white, unless the skin names it).
+abstract final class Accent {
+  static Color get fill => ColorTheme.of('ChosenDefault', const Color(0xFFB3C66B));
+  static Color get on => ColorTheme.of('ControlOnForeground', const Color(0xFF15170D));
+  static Color get key => ColorTheme.of('Keyframe', const Color(0xFFF2C94C));
+  static Color get ink {
+    if (!Grey.light) return ColorTheme.of('ChosenInk', fill);
+    final h = HSLColor.fromColor(fill);
+    return ColorTheme.of('ChosenInk', h.withLightness(h.lightness.clamp(0, .34)).toColor());
+  }
+}
+
+/// The skin's shapes (theme file roles; a role it does not say is the window's own): how round every corner is.
+abstract final class Shape {
+  static double get corner => ColorTheme.number('Corner', 1);
+
+  /// A corner of today's [x] px, as round as the skin says.
+  static Radius r(double x) => Radius.circular(x * corner);
+}
+
 abstract final class T {
-  static const sans = 'Inter', mono = 'Menlo';
+  static String get sans => ColorTheme.word('FontSans', 'Inter');
+  static String get mono => ColorTheme.word('FontMono', 'Menlo');
+
+  /// A type size of today's [x] px, as large as the skin says.
+  static double px(double x) => x * ColorTheme.number('TextScale', 1);
 
   /// No text is dimmer than g56 nor smaller than 10 px (precedents: Adobe Spectrum's smallest UI text is 10 px; critique 2026-10-02: 87 of 126 use cases had 9 px / g44 captions).
   /// Only DIM text on a dark ground is lifted (luminance between g26 and g56); in the light shade, text paler than Grey.g56 is darkened to it. Dark INK (g00..g20, the text on a light fill such as the playhead head) is left alone: lifting it to g56 made it unreadable (critique pass 3).
@@ -141,7 +166,7 @@ abstract final class T {
   static TextStyle name([Color? c]) => TextStyle(
     fontFamily: sans,
     fontFamilyFallback: const ['.AppleSystemUIFont'],
-    fontSize: 11,
+    fontSize: px(11),
     fontWeight: FontWeight.w500,
     color: ink(c ?? Grey.g91),
     height: 1,
@@ -151,7 +176,7 @@ abstract final class T {
   static TextStyle label([Color? c]) => TextStyle(
     fontFamily: sans,
     fontFamilyFallback: const ['.AppleSystemUIFont'],
-    fontSize: 10,
+    fontSize: px(10),
     color: ink(c ?? Grey.g63),
     height: 1,
     letterSpacing: .1,
@@ -160,18 +185,18 @@ abstract final class T {
   static TextStyle micro([Color? c]) => TextStyle(
     fontFamily: sans,
     fontFamilyFallback: const ['.AppleSystemUIFont'],
-    fontSize: 10,
+    fontSize: px(10),
     fontWeight: FontWeight.w500,
     color: ink(c ?? Grey.g63),
     height: 1,
     letterSpacing: .15,
     decoration: TextDecoration.none,
   );
-  static TextStyle value([Color? c]) => TextStyle(fontFamily: mono, fontSize: 11, color: ink(c ?? Grey.g91), height: 1, decoration: TextDecoration.none);
+  static TextStyle value([Color? c]) => TextStyle(fontFamily: mono, fontSize: px(11), color: ink(c ?? Grey.g91), height: 1, decoration: TextDecoration.none);
   static TextStyle title([Color? c]) => TextStyle(
     fontFamily: sans,
     fontFamilyFallback: const ['.AppleSystemUIFont'],
-    fontSize: 13,
+    fontSize: px(13),
     fontWeight: FontWeight.w600,
     color: ink(c ?? Grey.g95),
     height: 1.1,

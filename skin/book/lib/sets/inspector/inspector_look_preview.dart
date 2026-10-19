@@ -32,7 +32,7 @@ class _LookPreviewState extends State<LookPreview> {
 
   @override
   Widget build(BuildContext context) => ClipRRect(
-    borderRadius: BorderRadius.circular(8),
+    borderRadius: BorderRadius.all(Shape.r(8)),
     child: ColoredBox(
       color: Grey.g07,
       child: _texture < 0 ? const SizedBox.expand() : Texture(textureId: _texture, filterQuality: FilterQuality.medium),

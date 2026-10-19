@@ -105,11 +105,11 @@ Widget _liRow(List<Widget> xs) => Padding(
 );
 
 class _LiChip extends StatelessWidget {
-  const _LiChip(this.text, {required this.on, this.onTap, this.tone = Pop.accent});
+  const _LiChip(this.text, {required this.on, this.onTap, this.tone});
   final String text;
   final bool on;
   final VoidCallback? onTap;
-  final Color tone;
+  final Color? tone; // (none: the skin's accent)
   @override
   Widget build(BuildContext context) => Hov(
     onTap: onTap,
@@ -117,7 +117,7 @@ class _LiChip extends StatelessWidget {
       height: 18,
       padding: const EdgeInsets.symmetric(horizontal: 7),
       alignment: Alignment.center,
-      decoration: BoxDecoration(color: on ? tone : (h ? Grey.g26 : Grey.g20), borderRadius: BorderRadius.circular(9)),
+      decoration: BoxDecoration(color: on ? (tone ?? Pop.accent) : (h ? Grey.g26 : Grey.g20), borderRadius: BorderRadius.circular(9)),
       child: Text(text, maxLines: 1, style: T.label(on ? Pop.onAccent : (h ? Grey.g95 : Grey.g76)).copyWith(fontWeight: FontWeight.w600)),
     ),
   );

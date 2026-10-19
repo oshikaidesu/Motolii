@@ -91,7 +91,7 @@ class Swatch extends StatelessWidget {
       height: 16,
       decoration: BoxDecoration(
         color: hexControls(hex) ?? Grey.g26,
-        borderRadius: BorderRadius.circular(4),
+        borderRadius: BorderRadius.all(Shape.r(4)),
         border: Border.all(color: Grey.g38),
       ),
     ),
@@ -117,7 +117,7 @@ class Steps extends StatelessWidget {
           width: Pop.glyph,
           height: (Pop.tile - 2 - 8 - 2) / 2,
           alignment: Alignment.center,
-          decoration: BoxDecoration(color: h && ok ? Grey.g38 : Grey.g20, borderRadius: BorderRadius.circular(4)),
+          decoration: BoxDecoration(color: h && ok ? Grey.g38 : Grey.g20, borderRadius: BorderRadius.all(Shape.r(4))),
           child: Text(s, style: T.label(ok ? Grey.g91 : Grey.g44).copyWith(fontWeight: FontWeight.w700, height: 1)),
         ),
       );
@@ -155,7 +155,7 @@ class _DicePaint extends CustomPainter {
   @override
   void paint(Canvas c, Size s) {
     final r = Rect.fromCenter(center: s.center(Offset.zero), width: 16, height: 16);
-    c.drawRRect(RRect.fromRectAndRadius(r, const Radius.circular(4)), Paint()..color = hot ? Grey.g95 : Grey.g76);
+    c.drawRRect(RRect.fromRectAndRadius(r, Shape.r(4)), Paint()..color = hot ? Grey.g95 : Grey.g76);
     const pips = {
       1: [(0, 0)],
       2: [(-1, -1), (1, 1)],

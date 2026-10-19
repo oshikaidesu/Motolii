@@ -74,10 +74,12 @@ class Dis extends StatelessWidget {
 class Pop extends InheritedWidget {
   const Pop({super.key, required super.child});
   static bool on(BuildContext c) => c.getInheritedWidgetOfExactType<Pop>() != null;
-  static const accent = Color(0xFFB3C66B), onAccent = Color(0xFF15170D), keyDot = Color(0xFFF2C94C);
+  static Color get accent => Accent.fill; // (the skin's: one accent for the window)
+  static Color get onAccent => Accent.on;
+  static Color get keyDot => Accent.key;
 
-  /// The accent as a line or text on a ground: lime vanishes on white, so the light shade inks it darker. Fills stay [accent].
-  static Color get accentInk => Grey.light ? const Color(0xFF6B7A1E) : accent;
+  /// The accent as a line or text on a ground (the skin's, made deep enough to read on white). Fills stay [accent].
+  static Color get accentInk => Accent.ink;
   static Color get card => Grey.g13;
   static Color get well => Grey.g15;
 

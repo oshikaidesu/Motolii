@@ -66,14 +66,14 @@ class RelationTile extends StatelessWidget {
       height: height,
       decoration: BoxDecoration(
         color: filled ? fam.c : N.g13,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.all(Shape.r(8)),
         border: Border.all(color: look == Look.glow ? fam.c.withValues(alpha: .45) : (filled ? const Color(0x00000000) : N.g20), width: 1),
         boxShadow: look == Look.glow ? [BoxShadow(color: fam.c.withValues(alpha: .22), blurRadius: 16)] : null,
       ),
       child: Flex(direction: Axis.vertical, mainAxisAlignment: MainAxisAlignment.center, children: [
         FamIcon(fam, color: filled ? N.g07 : fam.c),
         const SizedBox(height: 7),
-        Text(fam.name, style: T.name(ink).copyWith(fontSize: 10.5)),
+        Text(fam.name, style: T.name(ink).copyWith(fontSize: T.px(10.5))),
       ]),
     );
   }
@@ -165,7 +165,7 @@ class RelationCard extends StatelessWidget {
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: look == Look.quiet ? N.g13 : const Color(0xFF1B1B1D),
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.all(Shape.r(10)),
           border: Border.all(color: look == Look.glow ? fam.c.withValues(alpha: .4) : N.g20),
           boxShadow: look == Look.glow ? [BoxShadow(color: fam.c.withValues(alpha: .16), blurRadius: 24)] : null,
         ),

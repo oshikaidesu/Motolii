@@ -45,22 +45,22 @@ class _GaugePaint extends CustomPainter {
         if (t.abs() > 1) c.drawCircle(o, 8, line..color = Grey.g91);
       case GaugeKind.up || GaugeKind.down:
         final box = Rect.fromCenter(center: o, width: 8, height: 18);
-        c.drawRRect(RRect.fromRectAndRadius(box, const Radius.circular(2)), dim);
+        c.drawRRect(RRect.fromRectAndRadius(box, Shape.r(2)), dim);
         final h = box.height * _t(v);
         final fill = kind == GaugeKind.up
             ? Rect.fromLTRB(box.left, box.bottom - h, box.right, box.bottom)
             : Rect.fromLTRB(box.left, box.top, box.right, box.top + h);
-        c.drawRRect(RRect.fromRectAndRadius(fill, const Radius.circular(2)), lit);
+        c.drawRRect(RRect.fromRectAndRadius(fill, Shape.r(2)), lit);
         final tip = kind == GaugeKind.up ? box.top - 1 : box.bottom + 1;
         c.drawLine(Offset(o.dx - 2.5, tip + (kind == GaugeKind.up ? 2.5 : -2.5)), Offset(o.dx, tip), line);
         c.drawLine(Offset(o.dx + 2.5, tip + (kind == GaugeKind.up ? 2.5 : -2.5)), Offset(o.dx, tip), line);
       case GaugeKind.across:
         final box = Rect.fromCenter(center: o, width: 18, height: 8);
-        c.drawRRect(RRect.fromRectAndRadius(box, const Radius.circular(2)), dim);
-        c.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(box.left, box.top, box.width * _t(v), box.height), const Radius.circular(2)), lit);
+        c.drawRRect(RRect.fromRectAndRadius(box, Shape.r(2)), dim);
+        c.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(box.left, box.top, box.width * _t(v), box.height), Shape.r(2)), lit);
       case GaugeKind.centre:
         final box = Rect.fromCenter(center: o, width: 18, height: 8);
-        c.drawRRect(RRect.fromRectAndRadius(box, const Radius.circular(2)), dim);
+        c.drawRRect(RRect.fromRectAndRadius(box, Shape.r(2)), dim);
         final z = box.left + box.width * _t(0), at = box.left + box.width * _t(v);
         c.drawRect(Rect.fromLTRB(math.min(z, at), box.top, math.max(z, at), box.bottom), lit);
         c.drawLine(Offset(z, box.top - 2), Offset(z, box.bottom + 2), line);
@@ -69,7 +69,7 @@ class _GaugePaint extends CustomPainter {
         for (var i = 0; i < 5; i++) {
           final h = 4.0 + i * 3;
           final r = Rect.fromLTWH(o.dx - 9 + i * 3.8, o.dy + 8 - h, 2.6, h);
-          c.drawRRect(RRect.fromRectAndRadius(r, const Radius.circular(1)), (i + .5) / 5 <= t ? lit : dim);
+          c.drawRRect(RRect.fromRectAndRadius(r, Shape.r(1)), (i + .5) / 5 <= t ? lit : dim);
         }
       case GaugeKind.free:
         c.drawLine(Offset(o.dx - 7, o.dy), Offset(o.dx + 7, o.dy), line);
@@ -87,7 +87,7 @@ class _GaugePaint extends CustomPainter {
         }
       case GaugeKind.point:
         final box = Rect.fromCenter(center: o, width: 18, height: 18);
-        c.drawRRect(RRect.fromRectAndRadius(box, const Radius.circular(3)), dim);
+        c.drawRRect(RRect.fromRectAndRadius(box, Shape.r(3)), dim);
         final px = box.left + box.width * _t(x), py = box.top + box.height * _t(y);
         c.drawLine(Offset(px, box.top), Offset(px, box.bottom), line);
         c.drawLine(Offset(box.left, py), Offset(box.right, py), line);
@@ -95,7 +95,7 @@ class _GaugePaint extends CustomPainter {
       case GaugeKind.box:
         final mx = math.max(x ?? 1, y ?? 1).abs();
         final w = mx == 0 ? 0.0 : 18 * (x ?? 0).abs() / mx, h = mx == 0 ? 0.0 : 18 * (y ?? 0).abs() / mx;
-        c.drawRRect(RRect.fromRectAndRadius(Rect.fromCenter(center: o, width: math.max(w, 1.5), height: math.max(h, 1.5)), const Radius.circular(2)), lit);
+        c.drawRRect(RRect.fromRectAndRadius(Rect.fromCenter(center: o, width: math.max(w, 1.5), height: math.max(h, 1.5)), Shape.r(2)), lit);
     }
   }
 

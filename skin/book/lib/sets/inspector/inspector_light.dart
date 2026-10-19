@@ -104,13 +104,13 @@ class _LightPaint extends CustomPainter {
 
   @override
   void paint(Canvas c, Size s) {
-    c.drawRRect(RRect.fromRectAndRadius(Offset.zero & s, const Radius.circular(8)), Paint()..color = Grey.g07);
+    c.drawRRect(RRect.fromRectAndRadius(Offset.zero & s, Shape.r(8)), Paint()..color = Grey.g07);
     final glow = warm.withValues(alpha: .12 + .55 * g.strength), line = Paint()
       ..color = warm.withValues(alpha: .35 + .6 * g.strength)
       ..strokeWidth = 1.6
       ..strokeCap = StrokeCap.round;
     c.save();
-    c.clipRRect(RRect.fromRectAndRadius(Rect.fromLTWH(0, 0, s.width - _Light.rail * 2, s.height), const Radius.circular(8)));
+    c.clipRRect(RRect.fromRectAndRadius(Rect.fromLTWH(0, 0, s.width - _Light.rail * 2, s.height), Shape.r(8)));
     if (g.spot) {
       // (a cone as wide as it opens, as bright as it is strong, as long as it reaches)
       final path = Path()

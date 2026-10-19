@@ -105,7 +105,7 @@ class _EffectCardState extends State<EffectCard> {
             margin: const EdgeInsets.only(bottom: 4),
             decoration: BoxDecoration(
               color: Grey.g13,
-              borderRadius: BorderRadius.circular(4),
+              borderRadius: BorderRadius.all(Shape.r(4)),
               border: Border.all(color: ed.rule),
             ),
             child: Column(
@@ -189,7 +189,7 @@ class _DragGhost extends StatelessWidget {
       children: [
         ToneBadge(fx.mark, fx.tone),
         const SizedBox(width: 6),
-        Text(fx.name, style: T.title(Grey.g95).copyWith(fontSize: 12, fontWeight: FontWeight.w700)),
+        Text(fx.name, style: T.title(Grey.g95).copyWith(fontSize: T.px(12), fontWeight: FontWeight.w700)),
       ],
     ),
   );

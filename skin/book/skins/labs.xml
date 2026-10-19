@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- A skin in the manner of a bright lab page: white ground, black type, round pills, pastel marks.
+     Copy it to ~/.motolii/theme.xml (the window reads it again the moment it is written). -->
+<Motolii>
+	<Theme>
+		<Shade Value="light"/>
+		<Corner Value="3.5"/>
+		<TextScale Value="1.08"/>
+		<FontSans Value="Avenir Next"/>
+		<Grey00 Value="#e6e6e6"/>
+		<Grey07 Value="#ffffff"/>
+		<Grey10 Value="#fafafa"/>
+		<Grey13 Value="#ffffff"/>
+		<Grey15 Value="#f3f3f3"/>
+		<Grey20 Value="#e4e4e4"/>
+		<Grey26 Value="#d4d4d4"/>
+		<Grey91 Value="#111111"/>
+		<Grey95 Value="#000000"/>
+		<Grey100 Value="#000000"/>
+		<BandA Value="#ffffff"/>
+		<BandB Value="#f6f6f6"/>
+		<RowLine Value="#ececec"/>
+		<ChosenDefault Value="#8fa1ff"/>
+		<ControlOnForeground Value="#000000"/>
+		<Keyframe Value="#f0965f"/>
+	</Theme>
+</Motolii>

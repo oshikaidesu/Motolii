@@ -66,7 +66,7 @@ class ChooserState extends State<Chooser> {
       padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
         color: Grey.g15,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.all(Shape.r(8)),
         border: Border.all(color: Grey.g26),
         boxShadow: const [BoxShadow(color: Color(0x99000000), blurRadius: 16, offset: Offset(0, 6))],
       ),
@@ -79,7 +79,7 @@ class ChooserState extends State<Chooser> {
               height: 24,
               margin: const EdgeInsets.only(bottom: 3),
               padding: const EdgeInsets.symmetric(horizontal: 8),
-              decoration: BoxDecoration(color: Grey.g10, borderRadius: BorderRadius.circular(5)),
+              decoration: BoxDecoration(color: Grey.g10, borderRadius: BorderRadius.all(Shape.r(5))),
               alignment: Alignment.centerLeft,
               child: Stack(
                 alignment: Alignment.centerLeft,
@@ -117,7 +117,7 @@ class ChooserState extends State<Chooser> {
                         onTap: () => pick(o),
                         builder: (_, h) => Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8),
-                          decoration: BoxDecoration(color: h ? Grey.g26 : (sel ? Grey.g20 : null), borderRadius: BorderRadius.circular(5)),
+                          decoration: BoxDecoration(color: h ? Grey.g26 : (sel ? Grey.g20 : null), borderRadius: BorderRadius.all(Shape.r(5))),
                           alignment: Alignment.centerLeft,
                           child: Row(
                             children: [
@@ -159,12 +159,12 @@ class ChooserState extends State<Chooser> {
         decoration: Pop.on(context)
             ? BoxDecoration(
                 color: h || _open ? Grey.g10 : Pop.well,
-                borderRadius: BorderRadius.circular(6),
+                borderRadius: BorderRadius.all(Shape.r(6)),
                 border: Border.all(color: _open ? Grey.g63 : const Color(0x00000000)),
               )
             : BoxDecoration(
                 color: !on ? Grey.g10 : (x.cfg.look == Look.quiet ? Grey.g13 : Grey.g07),
-                borderRadius: BorderRadius.circular(4),
+                borderRadius: BorderRadius.all(Shape.r(4)),
                 border: Border.all(
                   color: _open ? Grey.g63 : (h && on ? Grey.g38 : (x.cfg.look == Look.quiet && x.cfg.ed == Editorial.a ? const Color(0x00000000) : ed.rule)),
                 ),
@@ -253,7 +253,7 @@ class InspHeader extends StatelessWidget {
               width: 22,
               height: 22,
               alignment: Alignment.center,
-              decoration: BoxDecoration(color: x.cfg.locked ? Grey.g26 : Pop.accent, borderRadius: BorderRadius.circular(6)),
+              decoration: BoxDecoration(color: x.cfg.locked ? Grey.g26 : Pop.accent, borderRadius: BorderRadius.all(Shape.r(6))),
               child: glyph == null ? null : Glyph(glyph, size: 13, color: x.cfg.locked ? Grey.g76 : Pop.onAccent),
             ),
             const SizedBox(width: 8),
@@ -262,7 +262,7 @@ class InspHeader extends StatelessWidget {
                 doc.name,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: T.title(x.cfg.locked ? Grey.g76 : Grey.g100).copyWith(fontSize: 13, fontWeight: FontWeight.w700, height: 1),
+                style: T.title(x.cfg.locked ? Grey.g76 : Grey.g100).copyWith(fontSize: T.px(13), fontWeight: FontWeight.w700, height: 1),
               ),
             ),
             const SizedBox(width: 6),

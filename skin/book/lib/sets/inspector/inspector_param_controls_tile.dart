@@ -58,7 +58,7 @@ class ParamTile extends StatelessWidget {
       onTap: on ? onTap : null,
       builder: (_, h) => Container(
         height: tall ? Pop.tile * 2 + Pop.tileGap : Pop.tile,
-        decoration: BoxDecoration(color: h && onTap != null && on ? Grey.g20 : Pop.well, borderRadius: BorderRadius.circular(6)),
+        decoration: BoxDecoration(color: h && onTap != null && on ? Grey.g20 : Pop.well, borderRadius: BorderRadius.all(Shape.r(6))),
         child: Stack(
           children: [
             if (glyph != null)
@@ -206,7 +206,7 @@ class _Ramp extends StatelessWidget {
       width: 16,
       height: 16,
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(3),
+        borderRadius: BorderRadius.all(Shape.r(3)),
         border: Border.all(color: Grey.g44, width: .5),
         gradient: LinearGradient(colors: [for (final h in hexes) hexControls(h)!]),
       ),
@@ -260,7 +260,7 @@ class _PadGlyphState extends State<_PadGlyph> {
         child: Container(
           width: Pop.tile,
           height: Pop.tile,
-          decoration: BoxDecoration(color: _drag || _hot ? Grey.g20 : Pop.well, borderRadius: BorderRadius.circular(6)),
+          decoration: BoxDecoration(color: _drag || _hot ? Grey.g20 : Pop.well, borderRadius: BorderRadius.all(Shape.r(6))),
           child: FittedBox(
             child: Gauge(widget.size ? GaugeKind.box : GaugeKind.point, null, p, x: doc.get(ix), y: doc.get(iy)),
           ),
@@ -342,7 +342,7 @@ class _BarsPaint extends CustomPainter {
     final w = s.width / v.length, paint = Paint()..color = on ? Grey.g76 : Grey.g44;
     for (var i = 0; i < v.length; i++) {
       final h = (v[i] / top).clamp(0.0, 1.0) * s.height;
-      c.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(i * w + w * .15, s.height - h, w * .7, h), const Radius.circular(1.5)), paint);
+      c.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(i * w + w * .15, s.height - h, w * .7, h), Shape.r(1.5)), paint);
     }
   }
 

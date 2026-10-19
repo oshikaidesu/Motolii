@@ -188,7 +188,7 @@ class _MotionPaint extends CustomPainter {
 
   @override
   void paint(Canvas c, Size s) {
-    c.drawRRect(RRect.fromRectAndRadius(Offset.zero & s, const Radius.circular(8)), Paint()..color = Grey.g07);
+    c.drawRRect(RRect.fromRectAndRadius(Offset.zero & s, Shape.r(8)), Paint()..color = Grey.g07);
     if (paths.isEmpty) return;
     final f = _fit(paths, s); // (where they go, all of it: the box shows the whole of it; the stage's y goes up)
     Offset on(double x, double y) => s.center(Offset.zero) + Offset((x - f.mx) * f.k, -(y - f.my) * f.k);

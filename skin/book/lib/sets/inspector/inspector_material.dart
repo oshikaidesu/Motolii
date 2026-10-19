@@ -170,7 +170,7 @@ class _TextGroupState extends State<TextGroup> {
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
                   color: x.cfg.look == Look.quiet ? Grey.g13 : Grey.g07,
-                  borderRadius: BorderRadius.circular(4),
+                  borderRadius: BorderRadius.all(Shape.r(4)),
                   border: Border.all(color: _f.hasFocus ? Grey.g63 : Grey.g26), // (a box you type in, seen as one even with nothing written)
                 ),
                 child: EditableText(

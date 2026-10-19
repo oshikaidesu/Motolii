@@ -1341,7 +1341,7 @@ class _CardSlot extends StatelessWidget {
         child: Stack(clipBehavior: Clip.none, children: [
           _Card(t, c, i),
           if (line != null)
-            Positioned(left: 0, right: 0, top: line ? null : -4, bottom: line ? -4 : null, height: 2, child: const ColoredBox(color: Pop.accent)),
+            Positioned(left: 0, right: 0, top: line ? null : -4, bottom: line ? -4 : null, height: 2, child: ColoredBox(color: Pop.accent)),
         ]),
       );
     },
@@ -2045,7 +2045,7 @@ class _Bar extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Stack(children: [
     Positioned.fill(child: ColoredBox(color: Grey.g26)),
-    FractionallySizedBox(widthFactor: f.clamp(0.0, 1.0), child: const ColoredBox(color: Pop.accent)),
+    FractionallySizedBox(widthFactor: f.clamp(0.0, 1.0), child: ColoredBox(color: Pop.accent)),
   ]);
 }
 

@@ -101,7 +101,7 @@ class _ToolTile extends StatelessWidget {
     onTap: onTap,
     builder: (_, h) => Container(
       padding: const EdgeInsets.fromLTRB(7, 7, 6, 7),
-      decoration: BoxDecoration(color: h ? WsT.raised : WsT.card, borderRadius: BorderRadius.circular(WsT.radius)),
+      decoration: BoxDecoration(color: h ? WsT.raised : WsT.card, borderRadius: BorderRadius.all(Shape.r(WsT.radius))),
       child: LayoutBuilder(
         builder: (context, box) => Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -120,8 +120,8 @@ class _ToolTile extends StatelessWidget {
                         height: 14,
                         padding: const EdgeInsets.symmetric(horizontal: 4),
                         alignment: Alignment.center,
-                        decoration: BoxDecoration(color: WsT.accent, borderRadius: BorderRadius.circular(WsT.chipRadius)),
-                        child: Text('AUTO', style: T.micro(WsT.onAccent).copyWith(fontSize: 9, fontWeight: FontWeight.w700, letterSpacing: .6)),
+                        decoration: BoxDecoration(color: WsT.accent, borderRadius: BorderRadius.all(Shape.r(WsT.chipRadius))),
+                        child: Text('AUTO', style: T.micro(WsT.onAccent).copyWith(fontSize: T.px(9), fontWeight: FontWeight.w700, letterSpacing: .6)),
                       ),
                     ),
                   ),
@@ -132,7 +132,7 @@ class _ToolTile extends StatelessWidget {
               tool.name,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: T.name(h ? Grey.g100 : Grey.g95).copyWith(fontSize: 12, fontWeight: FontWeight.w700),
+              style: T.name(h ? Grey.g100 : Grey.g95).copyWith(fontSize: T.px(12), fontWeight: FontWeight.w700),
             ),
             if (box.maxHeight >= 54) ...[const SizedBox(height: 3), Text(tool.acts, maxLines: 1, overflow: TextOverflow.ellipsis, style: T.label(Grey.g56))],
           ],
@@ -166,10 +166,10 @@ class _Placeholder extends StatelessWidget {
                   FittedBox(
                     fit: BoxFit.scaleDown,
                     alignment: Alignment.centerLeft,
-                    child: Text(name, style: T.title(Grey.g95).copyWith(fontSize: 34, fontWeight: FontWeight.w800, letterSpacing: -1, height: 1)),
+                    child: Text(name, style: T.title(Grey.g95).copyWith(fontSize: T.px(34), fontWeight: FontWeight.w800, letterSpacing: -1, height: 1)),
                   ),
                   const SizedBox(height: 10),
-                  Text('Works on ${tool.acts.toLowerCase()}.', style: T.label(Grey.g76).copyWith(fontSize: 11)),
+                  Text('Works on ${tool.acts.toLowerCase()}.', style: T.label(Grey.g76).copyWith(fontSize: T.px(11))),
                   const SizedBox(height: 5),
                   Text('Not designed in the lab yet.', style: T.label(Grey.g56)),
                   const Spacer(),

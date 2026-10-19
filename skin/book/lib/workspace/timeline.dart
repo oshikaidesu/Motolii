@@ -592,7 +592,7 @@ class _Header extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tc = ws.timecode().split(':');
-    final big = T.value(Grey.g95).copyWith(fontSize: 17, fontWeight: FontWeight.w600, fontFeatures: const [FontFeature.tabularFigures()]);
+    final big = T.value(Grey.g95).copyWith(fontSize: T.px(17), fontWeight: FontWeight.w600, fontFeatures: const [FontFeature.tabularFigures()]);
     final picked = ws.keys.length, layer = ws.layer;
     return Container(
       height: WtM.header,
@@ -696,7 +696,7 @@ class _BtnState extends State<_Btn> {
           curve: Mo.ease,
           width: widget.width ?? widget.size,
           height: widget.size,
-          decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(WsT.radius)),
+          decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.all(Shape.r(WsT.radius))),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
@@ -719,8 +719,8 @@ class _Chip extends StatelessWidget {
     height: 20,
     padding: const EdgeInsets.symmetric(horizontal: 7),
     alignment: Alignment.center,
-    decoration: BoxDecoration(color: WsT.well, borderRadius: BorderRadius.circular(WsT.radius)),
-    child: Text(text, style: mono ? T.value(Grey.g91).copyWith(fontSize: 10.5) : T.micro(Grey.g91).copyWith(fontWeight: FontWeight.w600)),
+    decoration: BoxDecoration(color: WsT.well, borderRadius: BorderRadius.all(Shape.r(WsT.radius))),
+    child: Text(text, style: mono ? T.value(Grey.g91).copyWith(fontSize: T.px(10.5)) : T.micro(Grey.g91).copyWith(fontWeight: FontWeight.w600)),
   );
 }
 
@@ -756,8 +756,8 @@ class _ZoomTrack extends CustomPainter {
   @override
   void paint(Canvas c, Size s) {
     final cy = s.height / 2, x = 6 + (s.width - 12) * t, p = Paint();
-    c.drawRRect(RRect.fromLTRBR(0, cy - 3, s.width, cy + 3, const Radius.circular(3)), p..color = WsT.well);
-    c.drawRRect(RRect.fromLTRBR(0, cy - 3, x, cy + 3, const Radius.circular(3)), p..color = Grey.g44);
+    c.drawRRect(RRect.fromLTRBR(0, cy - 3, s.width, cy + 3, Shape.r(3)), p..color = WsT.well);
+    c.drawRRect(RRect.fromLTRBR(0, cy - 3, x, cy + 3, Shape.r(3)), p..color = Grey.g44);
     c.drawCircle(Offset(x, cy), 6, p..color = Grey.g91);
   }
 
@@ -785,7 +785,7 @@ class _LabelHeader extends StatelessWidget {
         const SizedBox(width: 12),
         Text('LAYER', style: T.micro(Grey.g63).copyWith(letterSpacing: 1)),
         const SizedBox(width: 6),
-        Text('$count', style: T.value(Grey.g56).copyWith(fontSize: 10)),
+        Text('$count', style: T.value(Grey.g56).copyWith(fontSize: T.px(10))),
         const Spacer(),
         for (final g in const [TpGlyph.eye, TpGlyph.solo, TpGlyph.lock])
           SizedBox(
@@ -841,7 +841,7 @@ class _LabelRowState extends State<_LabelRow> {
                 padding: const EdgeInsets.only(left: 8, right: 6),
                 child: Row(
                   children: [
-                    SizedBox(width: 14, child: Text('${widget.index + 1}', style: T.value(sel ? Grey.g91 : Grey.g56).copyWith(fontSize: 10))),
+                    SizedBox(width: 14, child: Text('${widget.index + 1}', style: T.value(sel ? Grey.g91 : Grey.g56).copyWith(fontSize: T.px(10)))),
                     const SizedBox(width: 6),
                     WtKindChip(r.kind, dim: r.dim),
                     const SizedBox(width: 7),
@@ -885,7 +885,7 @@ class _Toggle extends StatelessWidget {
           width: 17,
           height: 17,
           alignment: Alignment.center,
-          decoration: BoxDecoration(color: on ? WsT.accent : (strong ? Grey.g26 : null), borderRadius: BorderRadius.circular(WsT.chipRadius)),
+          decoration: BoxDecoration(color: on ? WsT.accent : (strong ? Grey.g26 : null), borderRadius: BorderRadius.all(Shape.r(WsT.chipRadius))),
           child: CustomPaint(size: const Size.square(10), painter: TpGlyphPainter(g, on ? WsT.onAccent : (strong ? Grey.g95 : (lit ? Grey.g76 : Grey.g38)))),
         ),
       ),

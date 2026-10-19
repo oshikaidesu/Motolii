@@ -226,7 +226,7 @@ class _PalCard extends StatelessWidget {
               child: Text(p.name, style: T.name(Grey.g95).copyWith(fontWeight: FontWeight.w700)),
             ),
             if (p.saved) ...[const DockTag('SAVED'), const SizedBox(width: 6)],
-            Text('${p.colors.length}', style: T.value(Grey.g56).copyWith(fontSize: 10)),
+            Text('${p.colors.length}', style: T.value(Grey.g56).copyWith(fontSize: T.px(10))),
           ],
         ),
         const SizedBox(height: 6),
@@ -268,7 +268,7 @@ class _Strip extends StatelessWidget {
                     foregroundDecoration: sel
                         ? BoxDecoration(
                             border: Border.all(color: Grey.g07),
-                            borderRadius: BorderRadius.circular(1),
+                            borderRadius: BorderRadius.all(Shape.r(1)),
                           )
                         : null,
                   );
@@ -306,7 +306,7 @@ class _Grad extends StatelessWidget {
               height: 16,
               decoration: BoxDecoration(
                 gradient: LinearGradient(colors: colors),
-                borderRadius: BorderRadius.circular(WsT.chipRadius),
+                borderRadius: BorderRadius.all(Shape.r(WsT.chipRadius)),
               ),
             ),
             const SizedBox(width: 8),

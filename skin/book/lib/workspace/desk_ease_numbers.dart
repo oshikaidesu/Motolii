@@ -27,7 +27,7 @@ class EaseNumbers extends StatelessWidget {
           children: [
             DeskReadout(value: bez ? (influence * 100).toStringAsFixed(0) : '—', unit: bez ? '%' : '', ink: bez ? Grey.g95 : Grey.g56),
             const Spacer(),
-            Text(bez ? '$speed×' : '—', style: T.value(Grey.g76).copyWith(fontSize: 11)),
+            Text(bez ? '$speed×' : '—', style: T.value(Grey.g76).copyWith(fontSize: T.px(11))),
           ],
         ),
       ],

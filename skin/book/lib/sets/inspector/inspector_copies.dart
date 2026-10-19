@@ -94,13 +94,13 @@ class _CopiesPaint extends CustomPainter {
 
   @override
   void paint(Canvas c, Size s) {
-    c.drawRRect(RRect.fromRectAndRadius(Offset.zero & s, const Radius.circular(8)), Paint()..color = Grey.g07);
+    c.drawRRect(RRect.fromRectAndRadius(Offset.zero & s, Shape.r(8)), Paint()..color = Grey.g07);
     for (var i = g.shown - 1; i >= 0; i--) { // (the thing first, its copies after, each turned and grown one more)
       final at = g.at(i), k = math.pow(g.grow, i).toDouble().clamp(.3, 2.0);
       c.save();
       c.translate(at.dx, at.dy);
       c.rotate(g.turn * i * math.pi / 180);
-      final r = RRect.fromRectAndRadius(Rect.fromCenter(center: Offset.zero, width: CopiesRow.cell * k, height: CopiesRow.cell * k), const Radius.circular(3));
+      final r = RRect.fromRectAndRadius(Rect.fromCenter(center: Offset.zero, width: CopiesRow.cell * k, height: CopiesRow.cell * k), Shape.r(3));
       c.drawRRect(r, Paint()..color = (i == 0 ? Pop.tonePlace : Pop.tonePlace.withValues(alpha: .55)));
       c.drawRRect(r, Paint()
         ..color = Grey.g07

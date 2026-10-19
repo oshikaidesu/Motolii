@@ -63,10 +63,10 @@ class GlyphPlate extends StatelessWidget {
         return Container(
           height: pop ? 22 : 26,
           decoration: pop
-              ? BoxDecoration(color: on ? Pop.accent : (h ? Grey.g20 : Pop.well), borderRadius: BorderRadius.circular(11))
+              ? BoxDecoration(color: on ? Pop.accent : (h ? Grey.g20 : Pop.well), borderRadius: BorderRadius.all(Shape.r(11)))
               : BoxDecoration(
                   color: on ? Grey.g20 : (h ? Grey.g15 : Grey.g13),
-                  borderRadius: BorderRadius.circular(5),
+                  borderRadius: BorderRadius.all(Shape.r(5)),
                   border: Border(bottom: BorderSide(color: on ? Role.selected : const Color(0x00000000))),
                 ),
           child: Row(
@@ -339,9 +339,9 @@ class _AnchorPaint extends CustomPainter {
   void paint(Canvas c, Size s) {
     final box = (Offset.zero & s).deflate(1.5), inner = box.deflate((s.height / 18 - 1) * 7);
     Offset point(Offset pct) => inner.topLeft + Offset(pct.dx / 100 * inner.width, pct.dy / 100 * inner.height);
-    c.drawRRect(RRect.fromRectAndRadius(box, const Radius.circular(2)), Paint()..color = on && hot ? Grey.g15 : Grey.g10);
+    c.drawRRect(RRect.fromRectAndRadius(box, Shape.r(2)), Paint()..color = on && hot ? Grey.g15 : Grey.g10);
     c.drawRRect(
-      RRect.fromRectAndRadius(box, const Radius.circular(2)),
+      RRect.fromRectAndRadius(box, Shape.r(2)),
       Paint()
         ..color = Grey.g44
         ..style = PaintingStyle.stroke,

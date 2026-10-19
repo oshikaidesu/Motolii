@@ -70,7 +70,7 @@ class TpGlyphPainter extends CustomPainter {
         c.drawCircle(Offset.zero, 1.8, fill);
       case TpGlyph.lock:
       case TpGlyph.unlock:
-        c.drawRRect(RRect.fromLTRBR(-3.6, 0, 3.6, 5.2, const Radius.circular(1.2)), line);
+        c.drawRRect(RRect.fromLTRBR(-3.6, 0, 3.6, 5.2, Shape.r(1.2)), line);
         final sh = Path()..moveTo(-2.3, 0)..lineTo(-2.3, -1.8)..arcTo(Rect.fromCircle(center: const Offset(0, -1.8), radius: 2.3), math.pi, math.pi, false);
         if (g == TpGlyph.lock) sh.lineTo(2.3, 0);
         c.drawPath(sh, line);
@@ -88,7 +88,7 @@ class TpGlyphPainter extends CustomPainter {
         c.drawRect(const Rect.fromLTRB(-3.6, -4.4, -1, 4.4), fill);
         c.drawRect(const Rect.fromLTRB(1, -4.4, 3.6, 4.4), fill);
       case TpGlyph.stop:
-        c.drawRRect(RRect.fromLTRBR(-4, -4, 4, 4, const Radius.circular(1)), fill);
+        c.drawRRect(RRect.fromLTRBR(-4, -4, 4, 4, Shape.r(1)), fill);
       case TpGlyph.toStart:
         c.drawRect(const Rect.fromLTRB(-5, -4.6, -3.8, 4.6), fill);
         c.drawPath(tri(5, -4.6, -2.2, 0, 5, 4.6), fill);
@@ -100,7 +100,7 @@ class TpGlyphPainter extends CustomPainter {
       case TpGlyph.stepFwd:
         c.drawPath(tri(-3, -4.2, 3, 0, -3, 4.2), fill);
       case TpGlyph.loop:
-        c.drawRRect(RRect.fromLTRBR(-5, -3, 5, 3, const Radius.circular(3)), line);
+        c.drawRRect(RRect.fromLTRBR(-5, -3, 5, 3, Shape.r(3)), line);
         c.drawPath(tri(1.5, -5.6, 4.6, -3, 1.5, -.4), fill);
       case TpGlyph.fit:
         for (final sx in const [-1.0, 1.0]) {
@@ -202,7 +202,7 @@ class TpIconButton extends StatelessWidget {
             width: size,
             height: size,
             alignment: Alignment.center,
-            decoration: BoxDecoration(color: d ? N.g20 : (h ? N.g15 : const Color(0x00262626)), borderRadius: BorderRadius.circular(3)),
+            decoration: BoxDecoration(color: d ? N.g20 : (h ? N.g15 : const Color(0x00262626)), borderRadius: BorderRadius.all(Shape.r(3))),
             child: TpGlyphView(g, ink, size: glyph),
           );
         },
@@ -250,7 +250,7 @@ void tpSeg(Canvas c, Offset m, TpInterp k, [double sc = 1]) {
   c.save();
   c.translate(m.dx, m.dy);
   c.scale(sc);
-  c.drawRRect(RRect.fromLTRBR(-6, -5, 6, 5, const Radius.circular(2)), Paint()..color = N.g07.withValues(alpha: .92));
+  c.drawRRect(RRect.fromLTRBR(-6, -5, 6, 5, Shape.r(2)), Paint()..color = N.g07.withValues(alpha: .92));
   final l = Paint()..style = PaintingStyle.stroke..strokeWidth = 1..strokeCap = StrokeCap.round..strokeJoin = StrokeJoin.round..color = N.g95;
   final path = Path()..moveTo(-3.5, 2.5);
   switch (k) {
@@ -286,7 +286,7 @@ Color tpBarColor(Fam f, {bool selected = false, bool hover = false, Look look = 
 }
 
 void tpBar(Canvas c, Rect r, Fam f, TpBar kind, {bool hover = false, Look look = Look.concept, double cut = 20}) {
-  final p = Paint(), rr = RRect.fromRectAndRadius(r, const Radius.circular(TL.radius));
+  final p = Paint(), rr = RRect.fromRectAndRadius(r, Shape.r(TL.radius));
   final edges = look != Look.quiet;
   void rim(Rect rect) {
     c.drawRect(Rect.fromLTWH(rect.left, rect.top, rect.width, 1), p..color = N.g100.withValues(alpha: .16));
@@ -299,7 +299,7 @@ void tpBar(Canvas c, Rect r, Fam f, TpBar kind, {bool hover = false, Look look =
       c.drawRRect(rr.deflate(.5), Paint()..style = PaintingStyle.stroke..strokeWidth = 1..color = f.c.withValues(alpha: .55));
     case TpBar.group:
       final top = Rect.fromLTRB(r.left, r.top, r.right, r.top + r.height * .5);
-      c.drawRRect(RRect.fromRectAndRadius(top, const Radius.circular(TL.radius)), p..color = tpBarColor(f, hover: hover, look: look));
+      c.drawRRect(RRect.fromRectAndRadius(top, Shape.r(TL.radius)), p..color = tpBarColor(f, hover: hover, look: look));
       for (final x in [r.left, r.right - 2]) {
         c.drawRect(Rect.fromLTWH(x, r.top, 2, r.height), p..color = tpBarColor(f, hover: hover, look: look));
       }
@@ -326,7 +326,7 @@ void tpBar(Canvas c, Rect r, Fam f, TpBar kind, {bool hover = false, Look look =
     case TpBar.selected:
       if (kind == TpBar.trimmed) {
         final src = Rect.fromLTRB(r.left - cut, r.top + 3, r.right + cut, r.bottom - 3);
-        c.drawRRect(RRect.fromRectAndRadius(src, const Radius.circular(TL.radius)), p..color = f.c.withValues(alpha: .16));
+        c.drawRRect(RRect.fromRectAndRadius(src, Shape.r(TL.radius)), p..color = f.c.withValues(alpha: .16));
       }
       final sel = kind == TpBar.selected;
       if (sel && look == Look.glow) {

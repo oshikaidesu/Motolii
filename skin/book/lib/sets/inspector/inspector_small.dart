@@ -114,7 +114,7 @@ class ResetMark extends StatelessWidget {
     child: show
         ? Hov(
             onTap: onTap,
-            builder: (_, h) => Center(child: Text('↺', style: T.label(h ? Grey.g95 : Grey.g56).copyWith(fontSize: 12))),
+            builder: (_, h) => Center(child: Text('↺', style: T.label(h ? Grey.g95 : Grey.g56).copyWith(fontSize: T.px(12)))),
           )
         : null,
   );
@@ -157,7 +157,7 @@ class _LinkPaint extends CustomPainter {
     const link = Size(7, 4.5);
     for (final dir in const [-1.0, 1.0]) {
       final r = Rect.fromCenter(center: o + Offset(dir * (link.width / 2 - 1.2 + gap), 0), width: link.width, height: link.height);
-      c.drawRRect(RRect.fromRectAndRadius(r, const Radius.circular(2.25)), st);
+      c.drawRRect(RRect.fromRectAndRadius(r, Shape.r(2.25)), st);
     }
     if (!on) {
       c.drawLine(o + const Offset(-1, -4.5), o + const Offset(0, -3), st);
@@ -211,7 +211,7 @@ class PopSwitch extends StatelessWidget {
       height: 16,
       padding: const EdgeInsets.all(2),
       alignment: on ? Alignment.centerRight : Alignment.centerLeft,
-      decoration: BoxDecoration(color: on ? Pop.accent : Grey.g26, borderRadius: BorderRadius.circular(8)),
+      decoration: BoxDecoration(color: on ? Pop.accent : Grey.g26, borderRadius: BorderRadius.all(Shape.r(8))),
       child: Container(
         width: 12,
         height: 12,
@@ -238,7 +238,7 @@ class Chip extends StatelessWidget {
         alignment: Alignment.center,
         decoration: BoxDecoration(
           color: on ? Grey.g20 : (h ? Grey.g15 : null),
-          borderRadius: BorderRadius.circular(5),
+          borderRadius: BorderRadius.all(Shape.r(5)),
           border: Border(bottom: BorderSide(color: on ? Role.selected : const Color(0x00000000))),
         ),
         child: Text(text, style: T.label(on ? Grey.g95 : Grey.g63)),

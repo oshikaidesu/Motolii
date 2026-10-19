@@ -44,7 +44,7 @@ class AnchorCard extends StatelessWidget {
                 height: Pop.titleH,
                 padding: const EdgeInsets.symmetric(horizontal: 7),
                 alignment: Alignment.center,
-                decoration: BoxDecoration(color: h ? Grey.g26 : Pop.well, borderRadius: BorderRadius.circular(8)),
+                decoration: BoxDecoration(color: h ? Grey.g26 : Pop.well, borderRadius: BorderRadius.all(Shape.r(8))),
                 child: Text('Centre', style: T.label(h ? Grey.g95 : Grey.g76)),
               ),
             ),

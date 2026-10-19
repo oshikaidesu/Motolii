@@ -46,10 +46,10 @@ class _RowState extends State<_Row> {
     final row = Container(
       height: 34,
       padding: const EdgeInsets.symmetric(horizontal: 6),
-      decoration: BoxDecoration(color: widget.picked ? WsT.well : null, borderRadius: BorderRadius.circular(5)),
+      decoration: BoxDecoration(color: widget.picked ? WsT.well : null, borderRadius: BorderRadius.all(Shape.r(5))),
       child: Row(
         children: [
-          Container(width: 4, height: 18, decoration: BoxDecoration(color: wsTone(l.kind), borderRadius: BorderRadius.circular(2))),
+          Container(width: 4, height: 18, decoration: BoxDecoration(color: wsTone(l.kind), borderRadius: BorderRadius.all(Shape.r(2)))),
           const SizedBox(width: 8),
           Expanded(
             child: GestureDetector(
@@ -177,7 +177,7 @@ class _Bar extends CustomPainter {
   final double v;
   @override
   void paint(Canvas c, Size s) {
-    final r = RRect.fromRectAndRadius(Offset.zero & s, const Radius.circular(4));
+    final r = RRect.fromRectAndRadius(Offset.zero & s, Shape.r(4));
     c.drawRRect(r, Paint()..color = WsT.well);
     c.save();
     c.clipRRect(r);

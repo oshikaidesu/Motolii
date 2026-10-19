@@ -127,7 +127,7 @@ class TypeBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(
         padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
-        decoration: BoxDecoration(color: N.g00.withValues(alpha: .6), borderRadius: BorderRadius.circular(3)),
+        decoration: BoxDecoration(color: N.g00.withValues(alpha: .6), borderRadius: BorderRadius.all(Shape.r(3))),
         child: Text(kind.badge, style: T.micro(N.g91).copyWith(letterSpacing: .4)),
       );
 }
@@ -138,8 +138,8 @@ class TimePill extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(
         padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
-        decoration: BoxDecoration(color: N.g00.withValues(alpha: .6), borderRadius: BorderRadius.circular(3)),
-        child: Text(text, style: T.value(N.g91).copyWith(fontSize: 10)),
+        decoration: BoxDecoration(color: N.g00.withValues(alpha: .6), borderRadius: BorderRadius.all(Shape.r(3))),
+        child: Text(text, style: T.value(N.g91).copyWith(fontSize: T.px(10))),
       );
 }
 
@@ -273,8 +273,8 @@ class MiniSlider extends StatelessWidget {
         onPanDown: (d) => set(d.localPosition),
         onPanUpdate: (d) => set(d.localPosition),
         child: SizedBox(width: width, height: 20, child: Stack(alignment: Alignment.centerLeft, children: [
-          Container(height: 2, decoration: BoxDecoration(color: track, borderRadius: BorderRadius.circular(1))),
-          Container(width: width * t, height: 2, decoration: BoxDecoration(color: N.g56, borderRadius: BorderRadius.circular(1))),
+          Container(height: 2, decoration: BoxDecoration(color: track, borderRadius: BorderRadius.all(Shape.r(1)))),
+          Container(width: width * t, height: 2, decoration: BoxDecoration(color: N.g56, borderRadius: BorderRadius.all(Shape.r(1)))),
           Positioned(left: (width - 10) * t, child: Container(width: 10, height: 10, decoration: const BoxDecoration(color: N.g95, shape: BoxShape.circle))),
         ])),
       ),
@@ -289,7 +289,7 @@ class Pill extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-        decoration: BoxDecoration(color: fill, borderRadius: BorderRadius.circular(6)),
+        decoration: BoxDecoration(color: fill, borderRadius: BorderRadius.all(Shape.r(6))),
         child: Text(text, style: T.micro(N.g76)),
       );
 }
@@ -308,7 +308,7 @@ class QuietButton extends StatelessWidget {
           curve: kEase,
           height: 24,
           padding: const EdgeInsets.symmetric(horizontal: 12),
-          decoration: BoxDecoration(color: primary ? (hover ? N.g26 : N.g20) : (hover ? N.g20 : N.g13), borderRadius: BorderRadius.circular(4), border: Border.all(color: focus ? N.g56 : (primary ? N.g26 : N.g20))),
+          decoration: BoxDecoration(color: primary ? (hover ? N.g26 : N.g20) : (hover ? N.g20 : N.g13), borderRadius: BorderRadius.all(Shape.r(4)), border: Border.all(color: focus ? N.g56 : (primary ? N.g26 : N.g20))),
           child: Center(widthFactor: 1, child: Text(text, style: T.label(N.g91).copyWith(fontWeight: FontWeight.w500))),
         ),
       );
@@ -320,5 +320,5 @@ class Tick extends StatelessWidget {
   final bool on;
   final double height;
   @override
-  Widget build(BuildContext context) => AnimatedContainer(duration: kFast, curve: kEase, width: 2, height: height, margin: const EdgeInsets.only(right: 4), decoration: BoxDecoration(color: on ? N.g95 : const Color(0x00000000), borderRadius: BorderRadius.circular(1)));
+  Widget build(BuildContext context) => AnimatedContainer(duration: kFast, curve: kEase, width: 2, height: height, margin: const EdgeInsets.only(right: 4), decoration: BoxDecoration(color: on ? N.g95 : const Color(0x00000000), borderRadius: BorderRadius.all(Shape.r(1))));
 }

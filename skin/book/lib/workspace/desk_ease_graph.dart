@@ -108,7 +108,7 @@ class _GraphPainter extends CustomPainter {
       if (y < g.top || y > g.bottom) continue;
       c.drawLine(Offset(g.left, y), Offset(g.right, y), grid..color = i == 0 || i == 4 ? Grey.g38 : Grey.g15);
     }
-    final lab = T.label(Grey.g56).copyWith(fontSize: 10);
+    final lab = T.label(Grey.g56).copyWith(fontSize: T.px(10));
     deskText(c, '100', Offset(g.left - 5, b.dy), lab, ax: 1, ay: .5);
     deskText(c, '50', Offset(g.left - 5, px(const Offset(0, .5)).dy), lab, ax: 1, ay: .5);
     deskText(c, '0', Offset(g.left - 5, a.dy), lab, ax: 1, ay: .5);
@@ -121,7 +121,7 @@ class _GraphPainter extends CustomPainter {
         final x = g.left + g.width * (f - from!) / span;
         c.drawLine(Offset(x, g.bottom), Offset(x, g.bottom + 3), grid..color = Grey.g38);
         if (f == from || f == to || (to! - f) >= step * .6) {
-          deskText(c, '$f', Offset(x, g.bottom + 6), T.value(Grey.g63).copyWith(fontSize: 9.5), ax: f == from ? 0 : (f == to ? 1 : .5));
+          deskText(c, '$f', Offset(x, g.bottom + 6), T.value(Grey.g63).copyWith(fontSize: T.px(9.5)), ax: f == from ? 0 : (f == to ? 1 : .5));
         }
       }
     } else {
@@ -200,7 +200,7 @@ class _GraphPainter extends CustomPainter {
           c,
           '${v.dx.toStringAsFixed(2)}, ${v.dy.toStringAsFixed(2)}',
           o + Offset(i == 0 ? 9 : -9, -9),
-          T.value(Grey.g95).copyWith(fontSize: 10),
+          T.value(Grey.g95).copyWith(fontSize: T.px(10)),
           ax: i == 0 ? 0 : 1,
           ay: 1,
         );

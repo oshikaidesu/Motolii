@@ -543,7 +543,7 @@ class _Hud extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     height: _V.hud,
     padding: const EdgeInsets.symmetric(horizontal: 8),
-    decoration: BoxDecoration(color: WsT.card, borderRadius: BorderRadius.circular(WsT.radius)),
+    decoration: BoxDecoration(color: WsT.card, borderRadius: BorderRadius.all(Shape.r(WsT.radius))),
     child: Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -821,7 +821,7 @@ class _ViewPainter extends CustomPainter {
       o.dx.clamp(v.area.left + 4, math.max(v.area.left + 4, v.area.right - w - 4)),
       o.dy.clamp(v.area.top + 4, math.max(v.area.top + 4, v.area.bottom - _V.tagH - 4)),
     );
-    final r = RRect.fromRectAndRadius(Rect.fromLTWH(o.dx, o.dy, w, _V.tagH), const Radius.circular(WsT.chipRadius));
+    final r = RRect.fromRectAndRadius(Rect.fromLTWH(o.dx, o.dy, w, _V.tagH), Shape.r(WsT.chipRadius));
     c.drawRRect(r.inflate(1), Paint()..color = Grey.g00);
     c.drawRRect(r, Paint()..color = fill);
     var x = o.dx + 6;

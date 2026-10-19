@@ -120,9 +120,9 @@ class WtRulerPainter extends CustomPainter {
     if (end < s.width) c.drawRect(Rect.fromLTRB(end, WtM.band, s.width, s.height), p..color = Grey.g07);
 
     final a = view.x(workIn), b = view.x(workOut);
-    c.drawRRect(RRect.fromLTRBR(a, 2, b, WtM.band - 1, const Radius.circular(3)), p..color = Grey.g38);
+    c.drawRRect(RRect.fromLTRBR(a, 2, b, WtM.band - 1, Shape.r(3)), p..color = Grey.g38);
     for (final x in [a, b - 4]) {
-      c.drawRRect(RRect.fromLTRBR(x, 1, x + 4, WtM.band, const Radius.circular(2)), p..color = Grey.g76);
+      c.drawRRect(RRect.fromLTRBR(x, 1, x + 4, WtM.band, Shape.r(2)), p..color = Grey.g76);
     }
 
     final mj = tpMajor(view.ppf, fps), fn = tpFine(view.ppf, fps, mj), bottom = s.height - 1;
@@ -154,7 +154,7 @@ class WtRulerPainter extends CustomPainter {
       if (isMajor) {
         if (flags.any((m) => m.$1.inflate(3).overlaps(Rect.fromLTWH(x + 3, WtM.band + 2, 24, 12)))) continue;
         final sec = f ~/ fps, fr = (f % fps).round();
-        final t = _text(mj >= fps ? '${sec}s' : '$sec:${fr.toString().padLeft(2, '0')}', T.value(Grey.g76).copyWith(fontSize: 10));
+        final t = _text(mj >= fps ? '${sec}s' : '$sec:${fr.toString().padLeft(2, '0')}', T.value(Grey.g76).copyWith(fontSize: T.px(10)));
         t.paint(c, Offset(x + 3, WtM.band + 3));
         t.dispose();
       }
@@ -230,7 +230,7 @@ class WtTracksPainter extends CustomPainter {
     final nameX = math.max(x0 + 8, 6.0);
     final t = _text(r.name, T.name(ink).copyWith(fontWeight: FontWeight.w700));
     if (nameX + 20 < x1) {
-      if (r.wave != null) c.drawRRect(RRect.fromLTRBR(nameX - 4, cy - 6.5, nameX + t.width + 4, cy + 6.5, const Radius.circular(3)), p..color = fill);
+      if (r.wave != null) c.drawRRect(RRect.fromLTRBR(nameX - 4, cy - 6.5, nameX + t.width + 4, cy + 6.5, Shape.r(3)), p..color = fill);
       c.save();
       c.clipRect(Rect.fromLTRB(nameX, bar.top, x1 - 6, bar.bottom));
       t.paint(c, Offset(nameX, cy - t.height / 2));
@@ -324,9 +324,9 @@ class WtPlayheadPainter extends CustomPainter {
     final x = view.x(frame).roundToDouble();
     if (x < -40 || x > s.width + 40) return;
     final p = Paint()..color = WsT.playhead;
-    final t = _text('$frame', T.value(WsT.onAccent).copyWith(fontSize: 10, fontWeight: FontWeight.w700));
+    final t = _text('$frame', T.value(WsT.onAccent).copyWith(fontSize: T.px(10), fontWeight: FontWeight.w700));
     final w = math.max(t.width + 10, 22.0), cx = (x + .5).clamp(w / 2, s.width - w / 2);
-    final pill = RRect.fromRectAndRadius(Rect.fromCenter(center: Offset(cx, headTop + 8), width: w, height: 15), const Radius.circular(4));
+    final pill = RRect.fromRectAndRadius(Rect.fromCenter(center: Offset(cx, headTop + 8), width: w, height: 15), Shape.r(4));
     c.drawRect(Rect.fromLTWH(x, headTop + 8, 1, s.height - headTop - 8), p);
     p.color = WsT.accent;
     c.drawRRect(pill, p);
@@ -359,8 +359,8 @@ class WtOverviewPainter extends CustomPainter {
     final p = Paint(), w = s.width - 8;
     double x(double f) => 4 + f / Ws.duration * w;
     c.drawRect(Offset.zero & s, p..color = WsT.body);
-    c.drawRRect(RRect.fromLTRBR(4, 3, s.width - 4, s.height - 3, const Radius.circular(3)), p..color = Grey.g13);
-    c.drawRRect(RRect.fromLTRBR(x(from), 3, math.max(x(to), x(from) + 12), s.height - 3, const Radius.circular(3)), p..color = hot ? Grey.g44 : Grey.g26);
+    c.drawRRect(RRect.fromLTRBR(4, 3, s.width - 4, s.height - 3, Shape.r(3)), p..color = Grey.g13);
+    c.drawRRect(RRect.fromLTRBR(x(from), 3, math.max(x(to), x(from) + 12), s.height - 3, Shape.r(3)), p..color = hot ? Grey.g44 : Grey.g26);
     c.drawRect(Rect.fromLTWH(x(frame.toDouble()).roundToDouble(), 2, 2, s.height - 4), p..color = WsT.playhead);
   }
 
@@ -379,7 +379,7 @@ class WtKindChip extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     width: WtM.chip,
     height: WtM.chip,
-    decoration: BoxDecoration(color: dim ? Grey.g26 : wsTone(kind), borderRadius: BorderRadius.circular(3)),
+    decoration: BoxDecoration(color: dim ? Grey.g26 : wsTone(kind), borderRadius: BorderRadius.all(Shape.r(3))),
     child: CustomPaint(painter: _KindPainter(kind, dim ? Grey.g56 : WsT.onAccent)),
   );
 }
@@ -417,7 +417,7 @@ class _KindPainter extends CustomPainter {
         );
         c.drawCircle(o(.68, .28), w * .09, f);
       case WsKind.camera:
-        c.drawRRect(RRect.fromLTRBR(w * .16, w * .32, w * .64, w * .7, const Radius.circular(1.5)), f);
+        c.drawRRect(RRect.fromLTRBR(w * .16, w * .32, w * .64, w * .7, Shape.r(1.5)), f);
         c.drawPath(
           Path()
             ..moveTo(w * .66, w * .51)

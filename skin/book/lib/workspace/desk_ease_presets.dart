@@ -54,7 +54,7 @@ class _PresetTile extends StatelessWidget {
     builder: (_, h) {
       final ink = on ? WsT.onAccent : (h ? Grey.g95 : Grey.g76);
       return Container(
-        decoration: BoxDecoration(color: on ? WsT.accent : (h ? WsT.raised : WsT.well), borderRadius: BorderRadius.circular(WsT.radius)),
+        decoration: BoxDecoration(color: on ? WsT.accent : (h ? WsT.raised : WsT.well), borderRadius: BorderRadius.all(Shape.r(WsT.radius))),
         padding: const EdgeInsets.fromLTRB(2, 5, 2, 4),
         child: Column(
           children: [
@@ -67,7 +67,7 @@ class _PresetTile extends StatelessWidget {
               maxLines: 1,
               softWrap: false,
               overflow: TextOverflow.fade,
-              style: T.micro(ink).copyWith(fontSize: 9.5, fontWeight: on ? FontWeight.w700 : FontWeight.w500),
+              style: T.micro(ink).copyWith(fontSize: T.px(9.5), fontWeight: on ? FontWeight.w700 : FontWeight.w500),
             ),
           ],
         ),

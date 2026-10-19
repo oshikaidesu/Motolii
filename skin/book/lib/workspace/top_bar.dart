@@ -76,10 +76,10 @@ class _Wordmark extends StatelessWidget {
         height: 22,
         alignment: Alignment.center,
         color: WsT.accent,
-        child: Text('M', style: T.title(WsT.onAccent).copyWith(fontSize: 14, fontWeight: FontWeight.w900, height: 1)),
+        child: Text('M', style: T.title(WsT.onAccent).copyWith(fontSize: T.px(14), fontWeight: FontWeight.w900, height: 1)),
       ),
       const SizedBox(width: 8),
-      Text('Motolii', style: T.title(Grey.g95).copyWith(fontSize: 14, fontWeight: FontWeight.w800, letterSpacing: -.2)),
+      Text('Motolii', style: T.title(Grey.g95).copyWith(fontSize: T.px(14), fontWeight: FontWeight.w800, letterSpacing: -.2)),
     ],
   );
 }
@@ -92,8 +92,8 @@ class _Chip extends StatelessWidget {
     height: 20,
     padding: const EdgeInsets.symmetric(horizontal: 7),
     alignment: Alignment.center,
-    decoration: BoxDecoration(color: WsT.well, borderRadius: BorderRadius.circular(WsT.chipRadius)),
-    child: Text(text, style: T.value(Grey.g76).copyWith(fontSize: 10)),
+    decoration: BoxDecoration(color: WsT.well, borderRadius: BorderRadius.all(Shape.r(WsT.chipRadius))),
+    child: Text(text, style: T.value(Grey.g76).copyWith(fontSize: T.px(10))),
   );
 }
 
@@ -126,7 +126,7 @@ class _Modes extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     height: 26,
     padding: const EdgeInsets.all(2),
-    decoration: BoxDecoration(color: WsT.well, borderRadius: BorderRadius.circular(WsT.radius)),
+    decoration: BoxDecoration(color: WsT.well, borderRadius: BorderRadius.all(Shape.r(WsT.radius))),
     child: Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -136,7 +136,7 @@ class _Modes extends StatelessWidget {
             builder: (h) => Container(
               width: 76,
               alignment: Alignment.center,
-              decoration: BoxDecoration(color: i == index ? WsT.accent : (h ? WsT.raised : null), borderRadius: BorderRadius.circular(WsT.radius - 2)),
+              decoration: BoxDecoration(color: i == index ? WsT.accent : (h ? WsT.raised : null), borderRadius: BorderRadius.all(Shape.r(WsT.radius - 2))),
               child: Text(
                 s,
                 style: T.name(i == index ? WsT.onAccent : (h ? Grey.g95 : Grey.g76)).copyWith(fontWeight: i == index ? FontWeight.w700 : FontWeight.w500),
@@ -166,7 +166,7 @@ class _UndoRedo extends StatelessWidget {
             width: 24,
             height: 24,
             alignment: Alignment.center,
-            decoration: BoxDecoration(color: h ? WsT.raised : null, borderRadius: BorderRadius.circular(WsT.radius)),
+            decoration: BoxDecoration(color: h ? WsT.raised : null, borderRadius: BorderRadius.all(Shape.r(WsT.radius))),
             child: Transform.flip(
               flipX: flip,
               child: CustomPaint(size: const Size(12, 10), painter: _UndoPaint(h ? Grey.g95 : Grey.g63)),
@@ -193,7 +193,7 @@ class _UndoPaint extends CustomPainter {
         Path()
           ..moveTo(1, 4)
           ..lineTo(8, 4)
-          ..arcToPoint(Offset(8, s.height - 1), radius: const Radius.circular(3.2))
+          ..arcToPoint(Offset(8, s.height - 1), radius: Shape.r(3.2))
           ..lineTo(4, s.height - 1),
         p,
       )
@@ -226,7 +226,7 @@ class _ShadeSwitch extends StatelessWidget {
       width: 24,
       height: 24,
       alignment: Alignment.center,
-      decoration: BoxDecoration(color: h ? WsT.raised : null, borderRadius: BorderRadius.circular(WsT.radius)),
+      decoration: BoxDecoration(color: h ? WsT.raised : null, borderRadius: BorderRadius.all(Shape.r(WsT.radius))),
       child: CustomPaint(size: const Size(12, 12), painter: _ShadePaint(h ? Grey.g95 : Grey.g63)),
     ),
   );
@@ -292,7 +292,7 @@ class _Render extends StatelessWidget {
       height: 26,
       padding: const EdgeInsets.symmetric(horizontal: 14),
       alignment: Alignment.center,
-      decoration: BoxDecoration(color: h ? WsT.accentHot : WsT.accent, borderRadius: BorderRadius.circular(13)),
+      decoration: BoxDecoration(color: h ? WsT.accentHot : WsT.accent, borderRadius: BorderRadius.all(Shape.r(13))),
       child: Text('Render', style: T.name(WsT.onAccent).copyWith(fontWeight: FontWeight.w800)),
     ),
   );
@@ -346,7 +346,7 @@ class _WaitedState extends State<_Waited> {
               child: Container(
                 width: 420,
                 padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(color: WsT.card, borderRadius: BorderRadius.circular(6), border: Border.all(color: Grey.g26)),
+                decoration: BoxDecoration(color: WsT.card, borderRadius: BorderRadius.all(Shape.r(6)), border: Border.all(color: Grey.g26)),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,

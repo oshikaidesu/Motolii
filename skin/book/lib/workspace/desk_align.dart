@@ -2,6 +2,7 @@
 // upright box of its outline, as the inside sees it). Moved as a hand moves it on the stage (held, carried by so many points of
 // the picture, let go: one step), so the inside reckons it into its own units, through its parent's turn.
 import 'package:flutter/widgets.dart';
+import '../tokens.dart';
 
 import 'desk_kit.dart';
 import 'stage_art.dart' show WsArt;
@@ -83,11 +84,11 @@ class _Side extends CustomPainter {
     if (across) {
       c.drawLine(Offset(edge, s.height * .15), Offset(edge, s.height * .85), line);
       final w = s.width * .32, left = k == 0 ? edge : k == 1 ? edge - w / 2 : edge - w;
-      c.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(left, s.height * .32, w, s.height * .36), const Radius.circular(1.5)), box);
+      c.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(left, s.height * .32, w, s.height * .36), Shape.r(1.5)), box);
     } else {
       c.drawLine(Offset(s.width * .15, edge), Offset(s.width * .85, edge), line);
       final h = s.height * .32, top = k == 0 ? edge : k == 1 ? edge - h / 2 : edge - h;
-      c.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(s.width * .32, top, s.width * .36, h), const Radius.circular(1.5)), box);
+      c.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(s.width * .32, top, s.width * .36, h), Shape.r(1.5)), box);
     }
   }
 

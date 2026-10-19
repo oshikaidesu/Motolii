@@ -98,12 +98,12 @@ class DockChips extends StatelessWidget {
                   curve: Mo.ease,
                   height: 20,
                   padding: const EdgeInsets.symmetric(horizontal: 7),
-                  decoration: BoxDecoration(color: on ? WsT.accent : (h ? WsT.raised : WsT.well), borderRadius: BorderRadius.circular(WsT.radius)),
+                  decoration: BoxDecoration(color: on ? WsT.accent : (h ? WsT.raised : WsT.well), borderRadius: BorderRadius.all(Shape.r(WsT.radius))),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(name, style: T.micro(on ? WsT.onAccent : Grey.g91).copyWith(fontWeight: on ? FontWeight.w700 : FontWeight.w500)),
-                      if (n != null) ...[const SizedBox(width: 4), Text('$n', style: T.value(on ? WsT.onAccent : Grey.g56).copyWith(fontSize: 10))],
+                      if (n != null) ...[const SizedBox(width: 4), Text('$n', style: T.value(on ? WsT.onAccent : Grey.g56).copyWith(fontSize: T.px(10)))],
                     ],
                   ),
                 );
@@ -147,7 +147,7 @@ class DockSection extends StatelessWidget {
           Container(
             width: 8,
             height: 8,
-            decoration: BoxDecoration(color: hue ?? Grey.g56, borderRadius: BorderRadius.circular(2)),
+            decoration: BoxDecoration(color: hue ?? Grey.g56, borderRadius: BorderRadius.all(Shape.r(2))),
           ),
           const SizedBox(width: 6),
           Expanded(
@@ -159,7 +159,7 @@ class DockSection extends StatelessWidget {
             ),
           ),
           ?trailing,
-          if (count != null) Text('$count', style: T.value(Grey.g56).copyWith(fontSize: 10)),
+          if (count != null) Text('$count', style: T.value(Grey.g56).copyWith(fontSize: T.px(10))),
         ],
       ),
     ),
@@ -181,7 +181,7 @@ class DockTag extends StatelessWidget {
     alignment: Alignment.center,
     decoration: BoxDecoration(
       color: hue ?? WsT.raised,
-      borderRadius: BorderRadius.circular(WsT.chipRadius),
+      borderRadius: BorderRadius.all(Shape.r(WsT.chipRadius)),
       border: edge ? Border.all(color: WsT.onAccent, width: 1.5) : null,
     ),
     child: Text(text, style: T.micro(hue == null ? Grey.g76 : WsT.onAccent).copyWith(fontWeight: FontWeight.w700, letterSpacing: .4, height: 1)),
@@ -200,7 +200,7 @@ class DockBadge extends StatelessWidget {
     width: size,
     height: size,
     alignment: Alignment.center,
-    decoration: BoxDecoration(color: inverted ? WsT.onAccent : hue, borderRadius: BorderRadius.circular(WsT.chipRadius)),
+    decoration: BoxDecoration(color: inverted ? WsT.onAccent : hue, borderRadius: BorderRadius.all(Shape.r(WsT.chipRadius))),
     child: DockGlyph(g, size: size * .62, color: inverted ? WsT.accent : WsT.onAccent),
   );
 }
@@ -220,7 +220,7 @@ class DockIconButton extends StatelessWidget {
       height: 20,
       margin: const EdgeInsets.only(left: 2),
       alignment: Alignment.center,
-      decoration: BoxDecoration(color: on ? WsT.raised : (h ? WsT.card : null), borderRadius: BorderRadius.circular(WsT.chipRadius)),
+      decoration: BoxDecoration(color: on ? WsT.raised : (h ? WsT.card : null), borderRadius: BorderRadius.all(Shape.r(WsT.chipRadius))),
       child: DockGlyph(g, size: 11, color: on || h ? Grey.g95 : Grey.g63),
     ),
   );
@@ -282,7 +282,7 @@ class DockFooter extends StatelessWidget {
                       Container(
                         width: 6,
                         height: 6,
-                        decoration: BoxDecoration(color: wsTone(l.kind), borderRadius: BorderRadius.circular(1)),
+                        decoration: BoxDecoration(color: wsTone(l.kind), borderRadius: BorderRadius.all(Shape.r(1))),
                       ),
                       const SizedBox(width: 4),
                       Flexible(
@@ -306,7 +306,7 @@ class DockFooter extends StatelessWidget {
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 color: done ? WsT.raised : WsT.accent,
-                borderRadius: BorderRadius.circular(WsT.radius),
+                borderRadius: BorderRadius.all(Shape.r(WsT.radius)),
                 border: Border.all(color: h && !done ? Grey.g95 : const Color(0x00000000)),
               ),
               child: Text(done ? doneLabel : action, style: T.name(done ? Grey.g76 : WsT.onAccent).copyWith(fontWeight: FontWeight.w700)),
@@ -358,7 +358,7 @@ class _DockSearchState extends State<DockSearch> {
         padding: const EdgeInsets.symmetric(horizontal: 7),
         decoration: BoxDecoration(
           color: WsT.well,
-          borderRadius: BorderRadius.circular(WsT.radius),
+          borderRadius: BorderRadius.all(Shape.r(WsT.radius)),
           border: Border.all(color: _focus.hasFocus ? WsT.accentInk : WsT.well),
         ),
         child: Row(

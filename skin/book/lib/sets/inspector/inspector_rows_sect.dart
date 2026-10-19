@@ -90,7 +90,7 @@ class Sect extends StatelessWidget {
           padding: EdgeInsets.only(bottom: ed.gap),
           child: Container(
             padding: const EdgeInsets.fromLTRB(8, 4, 8, 6),
-            decoration: BoxDecoration(color: Grey.g13, borderRadius: BorderRadius.circular(6)),
+            decoration: BoxDecoration(color: Grey.g13, borderRadius: BorderRadius.all(Shape.r(6))),
             child: col([?head, ...body]),
           ),
         );
@@ -129,7 +129,7 @@ class _PopCard extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
             style: T
                 .title(s.dim ? Grey.g56 : (h && toggle != null ? Grey.g100 : Grey.g95))
-                .copyWith(fontSize: 12, fontWeight: FontWeight.w700, decoration: s.dim ? TextDecoration.lineThrough : null),
+                .copyWith(fontSize: T.px(12), fontWeight: FontWeight.w700, decoration: s.dim ? TextDecoration.lineThrough : null),
           ),
         ),
       if (!open && keys != KeyS.off)

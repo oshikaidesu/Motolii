@@ -130,7 +130,7 @@ class _PropRowState extends State<PropRow> {
                               width: 28,
                               height: Pop.cell,
                               padding: const EdgeInsets.all(2),
-                              decoration: BoxDecoration(color: active ? Grey.g20 : null, borderRadius: BorderRadius.circular(7)),
+                              decoration: BoxDecoration(color: active ? Grey.g20 : null, borderRadius: BorderRadius.all(Shape.r(7))),
                               child: FittedBox(child: mark),
                             )
                           : mark,
@@ -204,7 +204,7 @@ class _PropRowState extends State<PropRow> {
                 constraints: BoxConstraints(minHeight: pop ? Pop.row : ed.row),
                 padding: const EdgeInsets.symmetric(vertical: 1),
                 decoration: pop
-                    ? BoxDecoration(color: active ? Grey.g15 : null, borderRadius: BorderRadius.circular(6))
+                    ? BoxDecoration(color: active ? Grey.g15 : null, borderRadius: BorderRadius.all(Shape.r(6)))
                     : BoxDecoration(
                         color: active ? Grey.g20 : null,
                         border: active ? Border(left: BorderSide(color: Grey.g95, width: 2)) : null,
@@ -257,7 +257,7 @@ class _PropRowState extends State<PropRow> {
                   margin: const EdgeInsets.only(left: 0, top: 2, bottom: 4),
                   decoration: BoxDecoration(
                     color: Grey.g13,
-                    borderRadius: BorderRadius.circular(4),
+                    borderRadius: BorderRadius.all(Shape.r(4)),
                     border: Border.all(color: ed.rule),
                   ),
                   child: Column(

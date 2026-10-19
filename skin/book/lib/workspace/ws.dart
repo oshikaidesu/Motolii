@@ -37,13 +37,13 @@ abstract final class WsT {
   static Color get line => Grey.g20;
 
   /// The one accent (same as the Inspector's) and the ink drawn on it.
-  static Color get accent => ColorTheme.of('ChosenDefault', const Color(0xFFB3C66B));   // (the theme's roles: Ableton's names, the key mark Blender's)
+  static Color get accent => Accent.fill;
   static Color get accentHot => Color.lerp(accent, const Color(0xFFFFFFFF), .14)!;
-  static Color get onAccent => ColorTheme.of('ControlOnForeground', const Color(0xFF15170D));
-  static Color get keyDot => ColorTheme.of('Keyframe', const Color(0xFFF2C94C));
+  static Color get onAccent => Accent.on;
+  static Color get keyDot => Accent.key;
 
   /// The accent drawn as a line or text on a ground. Lime reads on dark but vanishes on white, so the light shade inks it darker; fills stay [accent].
-  static Color get accentInk => Grey.light ? const Color(0xFF6B7A1E) : accent;
+  static Color get accentInk => Accent.ink;
 
   /// Round things you touch: fields, chips, tabs, buttons.
   static const radius = 6.0, chipRadius = 4.0;

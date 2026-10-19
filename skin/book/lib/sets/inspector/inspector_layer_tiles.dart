@@ -72,7 +72,7 @@ class LdTile extends StatelessWidget {
       cursor: onTap != null && on ? SystemMouseCursors.click : SystemMouseCursors.basic,
       builder: (_, h) => Container(
         height: Pop.tile,
-        decoration: BoxDecoration(color: h && onTap != null && on ? Grey.g20 : Pop.well, borderRadius: BorderRadius.circular(6)),
+        decoration: BoxDecoration(color: h && onTap != null && on ? Grey.g20 : Pop.well, borderRadius: BorderRadius.all(Shape.r(6))),
         child: Stack(
           children: [
             if (glyph != null)
