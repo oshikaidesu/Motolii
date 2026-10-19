@@ -2007,17 +2007,21 @@ static bool doc_match(Doc& d) {
         const char* lay = effected || laid.empty() || laid == "normal" || doc_blend_way(laid) ? nullptr : laid.c_str();   // (one that reads what is under: drawn as normal, flat.mat mixes it)
         std::string why = "it could not be read";
         const std::string fill = doc_word(d, thing, "fill");
-        // (a fill is a colour, six digits; or, of a text or a flat shape, two colours or more: a ramp down it)
-        std::vector<float3> ramp;
+        // (a fill is a colour, six digits; or, of a text or a flat shape, two colours or more: a ramp down it, each of
+        //  them six digits or eight, the last two how much of it is there: a colour fading to clear)
+        std::vector<float4> ramp;
         long rgb = -1;
         {
             std::istringstream said(fill);
             for (std::string one; said >> one;) {
-                const long c = one.size() == 6 && one.find_first_not_of("0123456789abcdefABCDEF") == std::string::npos ? std::strtol(one.c_str(), nullptr, 16) : -1;
+                const bool hex = (one.size() == 6 || one.size() == 8) && one.find_first_not_of("0123456789abcdefABCDEF") == std::string::npos;
+                const long c = hex ? std::strtol(one.substr(0, 6).c_str(), nullptr, 16) : -1;
                 if (c < 0) { ramp.clear(), rgb = -1; break; }
                 if (ramp.empty()) rgb = c;
-                ramp.push_back(float3{(float)((c >> 16) & 255), (float)((c >> 8) & 255), (float)(c & 255)} / 255.f);
+                const float there = one.size() == 8 ? (float)std::strtol(one.substr(6).c_str(), nullptr, 16) / 255.f : 1.f;
+                ramp.push_back(float4{(float)((c >> 16) & 255) / 255.f, (float)((c >> 8) & 255) / 255.f, (float)(c & 255) / 255.f, there});
             }
+            if (ramp.size() == 1 && ramp[0].w < 1.f) ramp.clear(), rgb = -1;   // (eight digits only down a ramp)
         }
         const float3 colour = float3{(float)((rgb >> 16) & 255), (float)((rgb >> 8) & 255), (float)(rgb & 255)} / 255.f;
         // (an edge, ThorVG's stroke: its colour said as a fill is, and its width as a share of the thing's own height,

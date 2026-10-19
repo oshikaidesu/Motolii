@@ -1,0 +1,428 @@
+say 0 background f2eee5
+add shape rect
+say 1 fill f6d740
+set 1 size 0.4927
+set 1 wide 2.0100
+set 1 round 0.2
+set 1 x 0.1552
+set 1 y 0.5593
+add shape rect
+say 2 fill f6d740
+set 2 size 1.3600
+set 2 wide 0.3170
+set 2 round 0.12
+set 2 x -0.5383
+set 2 y -0.3597
+add shape rect
+say 3 fill f6d740
+set 3 size 0.4730
+set 3 wide 1.0156
+set 3 round 0.16
+set 3 x -0.1121
+set 3 y -0.8032
+add shape rect
+say 4 fill f6d740
+set 4 size 0.2956
+set 4 wide 0.8333
+set 4 round 0.0
+set 4 x -0.2907
+set 4 y 0.2464
+add shape rect
+say 5 fill f6d740
+set 5 size 0.2045
+set 5 wide 0.8675
+set 5 round 0.2
+set 5 x 0.5617
+set 5 y 0.4151
+say 5 fill 1fb27aff 1fb27a00 1fb27a00
+set 5 gradient_angle 0
+say 5 fx ../../effects/grain.wgsl
+set 5 js_grain_size 1.3
+add shape circle
+say 6 fill ef4b26
+set 6 size 0.4780
+set 6 x -0.2365
+set 6 y 0.8007
+add shape circle
+say 7 fill 121212ff 12121200 12121200
+set 7 size 0.4780
+set 7 x -0.2365
+set 7 y 0.8007
+set 7 gradient_angle 225
+say 7 fx ../../effects/grain.wgsl
+set 7 js_grain_size 1.3
+add shape rect
+say 8 fill f4a2cf
+set 8 size 0.4854
+set 8 wide 0.8629
+set 8 round 0.1
+set 8 x -0.1306
+set 8 y 0.5580
+add shape rect
+say 9 fill 2f63dfff 2f63df00 2f63df00
+set 9 size 0.4854
+set 9 wide 0.8629
+set 9 round 0.1
+set 9 x -0.1306
+set 9 y 0.5580
+set 9 gradient_angle 270
+say 9 fx ../../effects/grain.wgsl
+set 9 js_grain_size 1.3
+add shape circle
+say 10 fill f4a2cf
+set 10 size 0.4927
+set 10 x 0.2464
+set 10 y 0.4730
+add shape circle
+say 11 fill 2f63dfff 2f63df00 2f63df00
+set 11 size 0.4927
+set 11 x 0.2464
+set 11 y 0.4730
+set 11 gradient_angle 90
+say 11 fx ../../effects/grain.wgsl
+set 11 js_grain_size 1.3
+add shape circle
+say 12 fill 12121200 ef4b26ff
+set 12 size 0.4927
+set 12 x 0.2464
+set 12 y 0.4730
+set 12 gradient_angle 0
+say 12 fx ../../effects/grain.wgsl
+set 12 js_grain_size 1.3
+add shape rect
+say 13 fill 1fb27a
+set 13 size 0.1922
+set 13 wide 1.0000
+set 13 round 0.3
+set 13 x -0.6825
+set 13 y 0.6923
+set 13 rotate 45
+add shape rect
+say 14 fill 1fb27a
+set 14 size 0.2217
+set 14 wide 0.4667
+set 14 round 0.0
+set 14 x -0.6825
+set 14 y 0.5051
+add shape circle
+say 15 fill 1fb27a
+set 15 size 0.3055
+set 15 x -0.6849
+set 15 y 0.2956
+add shape circle
+say 16 fill 2f63df00 2f63dfff 121212ff
+set 16 size 0.3055
+set 16 x -0.6849
+set 16 y 0.2956
+set 16 gradient_angle 90
+say 16 fx ../../effects/grain.wgsl
+set 16 js_grain_size 1.3
+add shape circle
+say 17 fill ef4b26
+set 17 size 0.4829
+set 17 x -0.3351
+set 17 y -0.0985
+add shape circle
+say 18 fill 121212ff 12121200 12121200
+set 18 size 0.4829
+set 18 x -0.3351
+set 18 y -0.0985
+set 18 gradient_angle 0
+say 18 fx ../../effects/grain.wgsl
+set 18 js_grain_size 1.3
+add shape circle
+say 19 fill 2f63df
+set 19 size 0.4681
+set 19 x -0.1059
+set 19 y -0.0862
+add shape circle
+say 20 fill 2f63df
+set 20 size 0.4681
+set 20 x 0.2267
+set 20 y -0.0493
+add shape rect
+say 21 fill 2f63df
+set 21 size 0.4558
+set 21 wide 1.6865
+set 21 round 0.25
+set 21 x 0.0690
+set 21 y -0.0924
+add shape circle
+say 22 fill 2f63df
+set 22 size 0.4829
+set 22 x 0.0419
+set 22 y -0.5667
+add shape circle
+say 23 fill 121212ff 12121200
+set 23 size 0.4829
+set 23 x 0.0419
+set 23 y -0.5667
+set 23 gradient_angle 315
+say 23 fx ../../effects/grain.wgsl
+set 23 js_grain_size 1.3
+add shape rect
+say 24 fill f4a2cf
+set 24 size 0.2464
+set 24 wide 1.3000
+set 24 round 0.15
+set 24 x -0.0320
+set 24 y -0.6898
+add shape rect
+say 25 fill f4a2cf00 ef4b26ff
+set 25 size 0.2464
+set 25 wide 1.3000
+set 25 round 0.15
+set 25 x -0.0320
+set 25 y -0.6898
+set 25 gradient_angle 0
+say 25 fx ../../effects/grain.wgsl
+set 25 js_grain_size 1.3
+add shape rect
+say 26 fill f4a2cf
+set 26 size 0.5839
+set 26 wide 0.7089
+set 26 round 0.08
+set 26 x 0.5322
+set 26 y -0.3043
+add shape rect
+say 27 fill f4a2cf00 ef4b2600 ef4b26ff
+set 27 size 0.5839
+set 27 wide 0.7089
+set 27 round 0.08
+set 27 x 0.5322
+set 27 y -0.3043
+set 27 gradient_angle 0
+say 27 fx ../../effects/grain.wgsl
+set 27 js_grain_size 1.3
+add shape circle
+say 28 fill 1fb27aff 1fb27a00
+set 28 size 0.2956
+set 28 x 0.4730
+set 28 y -0.1478
+set 28 gradient_angle 270
+say 28 fx ../../effects/grain.wgsl
+set 28 js_grain_size 1.3
+add shape rect
+say 29 fill 1fb27a
+set 29 size 0.2710
+set 29 wide 1.0273
+set 29 round 0.15
+set 29 x 0.6985
+set 29 y -0.6159
+add shape rect
+say 30 fill 121212ff 12121200
+set 30 size 0.2710
+set 30 wide 1.0273
+set 30 round 0.15
+set 30 x 0.6985
+set 30 y -0.6159
+set 30 gradient_angle 270
+say 30 fx ../../effects/grain.wgsl
+set 30 js_grain_size 1.3
+add shape circle
+say 31 fill 1fb27a
+set 31 size 0.2956
+set 31 x 0.4435
+set 31 y -0.8919
+add shape rect
+say 32 fill 1fb27a
+set 32 size 0.3006
+set 32 wide 0.9426
+set 32 round 0.2
+set 32 x 0.4546
+set 32 y -0.8401
+add shape circle
+say 33 fill 2f63df00 2f63dfff
+set 33 size 0.2956
+set 33 x 0.4435
+set 33 y -0.8919
+set 33 gradient_angle 0
+say 33 fx ../../effects/grain.wgsl
+set 33 js_grain_size 1.3
+add shape rect
+say 34 fill 1fb27a00 1fb27aff
+set 34 size 0.5962
+set 34 wide 0.7231
+set 34 round 0.12
+set 34 x -0.5383
+set 34 y -0.7416
+set 34 gradient_angle 0
+say 34 fx ../../effects/grain.wgsl
+set 34 js_grain_size 1.3
+add shape rect
+say 35 fill 1fb27a00 1fb27aff
+set 35 size 0.3006
+set 35 wide 1.5984
+set 35 round 0.16
+set 35 x -0.1121
+set 35 y -0.8894
+set 35 gradient_angle 0
+say 35 fx ../../effects/grain.wgsl
+set 35 js_grain_size 1.3
+pen 0 655.9 409.7
+pen 36 861.4 409.7
+pen 36 861.4 616.6
+pen 36 655.9 616.6
+pen 36 655.9 409.7
+say 36 fill none
+say 36 stroke 121212
+set 36 stroke_width 3
+pen 0 892.2 838.2
+pen 37 1024.2 838.2
+pen 37 1024.2 1073.0
+pen 37 892.2 1073.0
+pen 37 892.2 838.2
+say 37 fill none
+say 37 stroke 121212
+set 37 stroke_width 3
+pen 0 48.4 1102.3
+pen 38 179.0 1102.3
+pen 38 179.0 1232.9
+pen 38 48.4 1232.9
+pen 38 48.4 1102.3
+say 38 fill none
+say 38 stroke 121212
+set 38 stroke_width 3
+pen 0 877.5 648.9
+pen 39 1012.5 519.8
+pen 39 939.1 622.5
+pen 39 968.5 625.4
+pen 39 953.8 681.2
+pen 39 1012.5 703.2
+say 39 fill none
+say 39 stroke 121212
+set 39 stroke_width 3
+pen 0 41.1 1001.1
+pen 40 110.1 938.0
+pen 40 117.4 974.7
+pen 40 139.4 945.3
+pen 40 164.3 967.3
+say 40 fill none
+say 40 stroke 121212
+set 40 stroke_width 3
+pen 0 413.8 1202.1
+pen 41 631.0 1059.8
+pen 41 645.7 1084.7
+pen 41 675.0 1070.1
+pen 41 692.6 1092.1
+say 41 fill none
+say 41 stroke 121212
+set 41 stroke_width 3
+pen 0 836.4 1547.0
+pen 42 924.5 1488.3
+pen 42 917.1 1517.6
+pen 42 939.1 1502.9
+say 42 fill none
+say 42 stroke 121212
+set 42 stroke_width 3
+pen 0 187.8 1458.9
+pen 43 283.2 1458.9
+say 43 fill none
+say 43 stroke 121212
+set 43 stroke_width 2.4
+pen 0 187.8 1458.9
+pen 44 275.9 1495.4
+say 44 fill none
+say 44 stroke 121212
+set 44 stroke_width 2.4
+pen 0 187.8 1458.9
+pen 45 255.3 1526.4
+say 45 fill none
+say 45 stroke 121212
+set 45 stroke_width 2.4
+pen 0 187.8 1458.9
+pen 46 224.3 1547.0
+say 46 fill none
+say 46 stroke 121212
+set 46 stroke_width 2.4
+pen 0 187.8 1458.9
+pen 47 187.8 1554.3
+say 47 fill none
+say 47 stroke 121212
+set 47 stroke_width 2.4
+pen 0 187.8 1458.9
+pen 48 151.3 1547.0
+say 48 fill none
+say 48 stroke 121212
+set 48 stroke_width 2.4
+pen 0 187.8 1458.9
+pen 49 120.4 1526.4
+say 49 fill none
+say 49 stroke 121212
+set 49 stroke_width 2.4
+pen 0 187.8 1458.9
+pen 50 99.7 1495.4
+say 50 fill none
+say 50 stroke 121212
+set 50 stroke_width 2.4
+pen 0 187.8 1458.9
+pen 51 92.4 1458.9
+say 51 fill none
+say 51 stroke 121212
+set 51 stroke_width 2.4
+pen 0 187.8 1458.9
+pen 52 99.7 1422.4
+say 52 fill none
+say 52 stroke 121212
+set 52 stroke_width 2.4
+pen 0 187.8 1458.9
+pen 53 120.4 1391.5
+say 53 fill none
+say 53 stroke 121212
+set 53 stroke_width 2.4
+pen 0 187.8 1458.9
+pen 54 151.3 1370.8
+say 54 fill none
+say 54 stroke 121212
+set 54 stroke_width 2.4
+pen 0 187.8 1458.9
+pen 55 187.8 1363.5
+say 55 fill none
+say 55 stroke 121212
+set 55 stroke_width 2.4
+pen 0 187.8 1458.9
+pen 56 224.3 1370.8
+say 56 fill none
+say 56 stroke 121212
+set 56 stroke_width 2.4
+pen 0 187.8 1458.9
+pen 57 255.3 1391.5
+say 57 fill none
+say 57 stroke 121212
+set 57 stroke_width 2.4
+pen 0 187.8 1458.9
+pen 58 275.9 1422.4
+say 58 fill none
+say 58 stroke 121212
+set 58 stroke_width 2.4
+add text ../arial_bold.ttf
+say 59 text Shape
+say 59 fill 121212
+set 59 size 0.1133
+set 59 x -0.6997
+set 59 y 1.0397
+add text ../arial_bold.ttf
+say 60 text Studies
+say 60 fill 121212
+set 60 size 0.1133
+set 60 x 0.6406
+set 60 y 1.0397
+add text ../arial_bold.ttf
+say 61 text #086
+say 61 fill 121212
+set 61 size 0.0345
+set 61 x -0.8327
+set 61 y -1.0446
+add text ../arial_bold.ttf
+say 62 text 10/19/2026
+say 62 fill 121212
+set 62 size 0.0345
+set 62 x -0.7638
+set 62 y -1.0840
+add text ../arial_bold.ttf
+say 63 text motolii
+say 63 fill 121212
+set 63 size 0.0370
+set 63 x 0.7687
+set 63 y -1.0791
+still out/poster_0.png

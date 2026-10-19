@@ -23,7 +23,8 @@ struct ScreenFx {
     uint32_t bytes = 0;
     door::Screen* door = nullptr;
     int pictures = 1;   // the stage's picture, then each target's (ISF's passes)
-    bool spill = false;   // its head says // --spill: on a thing, what it makes where the thing is not is light laid on what is under (rays, trails, a shifted copy)
+    bool spill = false;
+    bool alpha = false;   // its head says // --alpha: on a thing, its own see-through is what it lays (grains), not the thing's shape   // its head says // --spill: on a thing, what it makes where the thing is not is light laid on what is under (rays, trails, a shifted copy)
     // ISF's passes, drawn in turn (knob `pass`): into a target of the effect's own (kept, its last picture read the
     // next frame, when persistent; finer when float; a share of the stage's size or so many points), or, the last, out.
     struct Target { std::string name; bool kept = false, fine = false; double share[2] = {1, 1}; int points[2] = {0, 0}; Texture* picture[2] = {nullptr, nullptr}; RenderTarget* into[2] = {nullptr, nullptr}; int front = 0; uint32_t w = 0, h = 0; };
@@ -82,6 +83,7 @@ static bool screen_read(ScreenFx& fx, std::string& code) {
             continue;
         }
         if (line.find("--spill") != std::string::npos) { fx.spill = true; continue; }
+        if (line.find("--alpha") != std::string::npos) { fx.alpha = true; continue; }
         const size_t p = line.find("--pass@"), colon = line.find(':', p);
         if (p == std::string::npos || colon == std::string::npos) continue;
         const std::string name = line.substr(p + 7, colon - p - 7);
@@ -281,7 +283,7 @@ static void screen_fresh(Stage& s, ScreenFx& fx) {
     door::drop(s.engine, fx.door);
     screen_targets(s, fx, true);
     fx.knobs = again.knobs, fx.fields = again.fields, fx.bytes = again.bytes, fx.door = made;
-    fx.pictures = again.pictures, fx.targets = again.targets, fx.passes = again.passes, fx.layered = again.layered, fx.spill = again.spill;   // (the past frames kept as they are if their count stays)
+    fx.pictures = again.pictures, fx.targets = again.targets, fx.passes = again.passes, fx.layered = again.layered, fx.spill = again.spill, fx.alpha = again.alpha;   // (the past frames kept as they are if their count stays)
 }
 // Whether a file of the stage's effects has been written over since it was made (what wakes a stage that is not drawing).
 static bool screen_moved(const ScreenStack& st) {
@@ -397,8 +399,8 @@ fn way(w: i32, b: vec3f, s: vec3f) -> vec3f {
   }
 }
 @fragment fn main(@builtin(position) frag: vec4f, @location(0) uv: vec2f) -> @location(0) vec4f {
-  let a = textureSampleLevel(alone, near1, uv, 0.0).a;
   let c = textureSampleLevel(made, near0, uv, 0.0);
+  let a = select(textureSampleLevel(alone, near1, uv, 0.0).a, clamp(c.a, 0.0, 1.0), k.b > 0.5);   // (its shape, or the effects' own see-through: grains)
   let u = textureSampleLevel(under, near2, uv, 0.0);
   let b = select(vec3f(0.0), u.rgb / max(u.a, 1e-5), u.a > 1e-4);
   var mixed = clamp(c.rgb, vec3f(0.0), vec3f(1.0));
@@ -442,7 +444,8 @@ static void thing_effects_draw(Stage& s, ScreenStack& st, View* v, const ScreenN
         if (!st.lay) { std::fprintf(stderr, "a thing's way of lying with effects is not made: %s\n", why.c_str()); return; }
     }
     const bool spill = std::any_of(st.fx.begin(), st.fx.end(), [](const ScreenFx* f) { return f->spill; });
-    const float knobs[4] = {(float)(s.backdrop ? way : 0), spill ? 1.f : 0.f, 0, 0};
+    const bool own = st.fx.back()->alpha;   // (the last effect lays its own see-through)
+    const float knobs[4] = {(float)(s.backdrop ? way : 0), spill ? 1.f : 0.f, own ? 1.f : 0.f, 0};
     door::knobs(s.engine, st.lay, knobs, sizeof knobs);
     Texture* const read[3] = {st.between[(st.fx.size() - 1) % 2], st.shot, way && s.backdrop ? s.backdrop : st.shot};
     door::draw(s.engine, st.lay, read, was, w, h, 0, nullptr, true);

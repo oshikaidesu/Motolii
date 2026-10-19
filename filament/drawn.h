@@ -30,7 +30,7 @@ struct DrawnFx { bool split = false;   // (a text's letters each a copy of their
     float dash = 0.f, dashFrom = 0.f; int cap = -1, join = -1;   // (ThorVG's own: Text::spacing, italic; Shape::strokeDash, strokeCap, strokeJoin; -1: as it comes)
     int heads = 0; float headSize = 4.f; int headShape = 0;   // (heads on an open edge's ends, as Cavalry's: 1 its end, 2 its start, 3 both; so many times its edge long; 0 arrow, 1 circle, 2 box, 3 chevron, 4 bar)
     float blur = 0.f; int blurWay = 0; float overHigh = 1.f; float4 shadow{0.f}; float fall = 0.f, way = 0.f, soft = 0.f; float tint = 0.f; float3 tints[2]{}; float tritone = 0.f; float3 tones[3]{}; float4 glow{0.f}; float glowSoft = 0.f; int copies = 1;
-                 std::vector<float3> ramp;   // (two colours or more: it is filled from the first at its top to the last at its bottom, ThorVG's linear gradient)
+                 std::vector<float4> ramp;   // (two colours or more: it is filled from the first at its top to the last at its bottom, ThorVG's linear gradient)
                  bool hollow = false;   // (a flat shape filled with nothing: only its edge is seen)
                  bool evenOdd = false;  // (where its outlines lie over each other, a hole every other time: SVG's fill-rule evenodd; else nonzero)
                  float reach = 0.f;     // (how far a bent shape goes out past its box at its most, a share of its height (bend_at): the picture larger all round by that)
@@ -653,7 +653,7 @@ static Drawn* picture(Stage& s, const char* file, const mat4f& place, float high
 // Words put in the scene, set by ThorVG in the font of `fontFile` (a .ttf): a sheet `high` tall for each line, as
 // wide as the words make it, its middle at `place`.
 // The colours of a ramp as ThorVG's linear gradient, from the first at y0 to the last at y1 (evenly spaced).
-static tvg::Fill* ramp_of(const std::vector<float3>& ramp, float w, float h, bool radial = false, float angle = 0.f, float scale = 1.f, int spread = 0) {
+static tvg::Fill* ramp_of(const std::vector<float4>& ramp, float w, float h, bool radial = false, float angle = 0.f, float scale = 1.f, int spread = 0) {
     tvg::Fill* g = nullptr;
     const float cx = 0.5f * w, cy = 0.5f * h, k = std::max(scale, 0.01f);
     if (radial) {   // (from its middle out to its corners)
@@ -670,7 +670,7 @@ static tvg::Fill* ramp_of(const std::vector<float3>& ramp, float w, float h, boo
     g->spread((tvg::FillSpread)std::clamp(spread, 0, 2));
     std::vector<tvg::Fill::ColorStop> stops;
     for (size_t i = 0; i < ramp.size(); ++i)
-        stops.push_back({(float)i / (float)(ramp.size() - 1), (uint8_t)std::lround(255.f * ramp[i].x), (uint8_t)std::lround(255.f * ramp[i].y), (uint8_t)std::lround(255.f * ramp[i].z), 255});
+        stops.push_back({(float)i / (float)(ramp.size() - 1), (uint8_t)std::lround(255.f * ramp[i].x), (uint8_t)std::lround(255.f * ramp[i].y), (uint8_t)std::lround(255.f * ramp[i].z), (uint8_t)std::lround(255.f * ramp[i].w)});   // (a colour's own see-through: eight digits)
     g->colorStops(stops.data(), (uint32_t)stops.size());
     return g;
 }
