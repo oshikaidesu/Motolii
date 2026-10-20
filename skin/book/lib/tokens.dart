@@ -193,7 +193,6 @@ abstract final class T {
     fontFamily: sans,
     fontFamilyFallback: const ['.AppleSystemUIFont'],
     fontSize: px(11),
-    fontWeight: FontWeight.w500,
     color: ink(c ?? Grey.g91),
     height: 1,
     letterSpacing: .05,

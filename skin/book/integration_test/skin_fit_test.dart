@@ -86,7 +86,10 @@ void main() {
     final was = FlutterError.onError;
     for (final MapEntry(key: name, value: roles) in _skins.entries) {
       final overflows = <String>[];
-      FlutterError.onError = (e) => overflows.add(e.exceptionAsString().split('\n').first); // (counted, not thrown: every skin is looked at)
+      FlutterError.onError = (e) { // (an overflow is counted, not thrown: every skin is looked at; any other error fails the test as usual)
+        final s = e.exceptionAsString();
+        s.contains('overflowed') ? overflows.add(s.split('\n').first) : was?.call(e);
+      };
       File('${dir.path}/$name.xml').writeAsStringSync('<Motolii><Theme>$roles</Theme></Motolii>');
       ColorTheme.watch(() => t.binding.reassembleApplication(), '${dir.path}/$name.xml');
       t.binding.reassembleApplication();

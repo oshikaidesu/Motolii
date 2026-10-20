@@ -7,7 +7,10 @@ import '../tokens.dart';
 import '../window_file.dart';
 
 abstract final class WsZoom {
-  static final value = ValueNotifier<double>((double.tryParse(WindowFile.get('Zoom') ?? '') ?? 1).clamp(.5, 2.0));
+  /// The zoom a window opens at and a double tap returns to: at 100% the parts read too large (user, 2026-10-20).
+  static const usual = .88;
+
+  static final value = ValueNotifier<double>((double.tryParse(WindowFile.get('Zoom') ?? '') ?? usual).clamp(.5, 2.0));
 
   /// The zoom set (to the nearest 1%, 50% to 200%) and, unless [keep] is false, kept for the next time.
   static void set(double z, {bool keep = true}) {
@@ -18,7 +21,7 @@ abstract final class WsZoom {
   static void by(int percent) => set(value.value + percent / 100);
 }
 
-/// The zoom in the top bar, quiet: scrubbed sideways it moves 1% every 3 px (kept when let go), tapped twice it is 100% again.
+/// The zoom in the top bar, quiet: scrubbed sideways it moves 1% every 3 px (kept when let go), tapped twice it is the usual zoom again.
 class WsZoomReadout extends StatefulWidget {
   const WsZoomReadout({super.key});
   @override
@@ -41,10 +44,10 @@ class _WsZoomReadoutState extends State<WsZoomReadout> {
         },
         onHorizontalDragUpdate: (e) => WsZoom.set(_from + ((_dx += e.delta.dx) / 3).round() / 100, keep: false),
         onHorizontalDragEnd: (_) => WsZoom.set(WsZoom.value.value),
-        onDoubleTap: () => WsZoom.set(1),
+        onDoubleTap: () => WsZoom.set(WsZoom.usual),
         child: Padding(
           padding: EdgeInsets.symmetric(horizontal: Shape.s(4), vertical: Shape.s(4)),
-          child: Text('${(z * 100).round()}%', style: T.micro(z == 1 ? Grey.g56 : Grey.g91)),
+          child: Text('${(z * 100).round()}%', style: T.micro(z == WsZoom.usual ? Grey.g56 : Grey.g91)),
         ),
       ),
     ),
