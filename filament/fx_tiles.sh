@@ -15,6 +15,9 @@ doc=$(mktemp -d)/tiles.motolii
     echo "at 1.4"
     for f in $fx; do
         echo "say 0 script $PWD/$f"
+        n=$(sed -n 's/.*--history@\([0-9]*\).*/\1/p' $f | head -1)   # (an effect of what was: as many pictures before as its head says it keeps, one a frame)
+        for (( k = ${n:-0}; k > 0; k-- )); do echo "at $(( 1.4 - k / 60.0 ))"; echo "still $doc.warm.png"; done
+        echo "at 1.4"
         echo "still $PWD/${f:r}.png"
     done
     echo "say 0 script none"
