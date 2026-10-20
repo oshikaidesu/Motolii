@@ -1,5 +1,6 @@
 // Content-Aware Scale: Photoshop's, as a moving picture: real seams, each running unbroken from one edge to the other, the cheapest taken out until the picture is as narrow (then as low) as it is kept, in the middle (Stretch draws it across the frame again); Melt turns the cost round: what matters goes first. All seams at once, as Huang et al., "Real-time content-aware image resizing" (Science in China F, 2009): each two neighbouring rows matched (a point goes straight on or changes place with its neighbour), so every point lies on one seam; a seam's cost the importance along it, mixed with the last frame's (Steady); the matching found here in pieces of 16 points, not over the whole row; on a quarter picture
 // --label:Distort
+// (not in a build given to others before 2027-03-06: seam carving itself is MERL's US7477800 until then; research_notes/content_aware_scale_2026-10-20.md)
 // --pass@e:0,1,s0.25,s0.25
 // --pass@link:0,1,s0.25,s0.25
 // --pass@label:0,1,s0.25,s0.25
