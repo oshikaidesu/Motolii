@@ -1,4 +1,5 @@
 // False Color: ISF-Files' False Color.fs (MIT, Copyright (c) 2018 Vidvox, github.com/Vidvox/ISF-Files; by zoidberg), its GLSL made WGSL by naga (filament/effects/from_isf.py)
+// --label:Color
 // --track@brightColor_x:brightColor r,0,1,1.0,0.001
 // --track@brightColor_y:brightColor g,0,1,0.9,0.001
 // --track@brightColor_z:brightColor b,0,1,0.8,0.001

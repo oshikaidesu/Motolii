@@ -1,4 +1,5 @@
 // RGBShift: three.js's RGBShiftShader.js (MIT, Copyright (c) 2010-2026 three.js authors, github.com/mrdoob/three.js), its GLSL made WGSL by naga (filament/effects/from_three.py)
+// --label:Glitch
 // --spill (on a thing: what it makes where the thing is not is light on what is under)
 // --track@amount:amount,0.0,1.0,0.005,0.001
 // --track@angle:angle,0.0,1.0,0.0,0.001

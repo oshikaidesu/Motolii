@@ -1,4 +1,5 @@
 // Sine Warp Tile: ISF-Files' Sine Warp Tile.fs (MIT, Copyright (c) 2018 Vidvox, github.com/Vidvox/ISF-Files; by VIDVOX), its GLSL made WGSL by naga (filament/effects/from_isf.py)
+// --label:Distort
 // --track@size:size,0,0.5,0.5,0.001
 // --track@rotation:rotation,0,1,0,0.001
 // --track@angle:angle,0,1,0,0.001

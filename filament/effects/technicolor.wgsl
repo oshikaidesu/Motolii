@@ -1,4 +1,5 @@
 // Technicolor: three.js's TechnicolorShader.js (MIT, Copyright (c) 2010-2026 three.js authors, github.com/mrdoob/three.js), its GLSL made WGSL by naga (filament/effects/from_three.py)
+// --label:Color
 
 struct FragmentOutput {
     @location(0) three_FragColor: vec4<f32>,

@@ -1,4 +1,5 @@
 // Trio Tone: ISF-Files' Trio Tone.fs (MIT, Copyright (c) 2018 Vidvox, github.com/Vidvox/ISF-Files; by VIDVOX), its GLSL made WGSL by naga (filament/effects/from_isf.py)
+// --label:Color
 // --track@darkColor_x:darkColor r,0,1,0.0,0.001
 // --track@darkColor_y:darkColor g,0,1,0.164,0.001
 // --track@darkColor_z:darkColor b,0,1,1.0,0.001

@@ -1,4 +1,5 @@
 // Cubic Warp: ISF-Files' Cubic Warp.fs (MIT, Copyright (c) 2018 Vidvox, github.com/Vidvox/ISF-Files; by carter rosenberg), its GLSL made WGSL by naga (filament/effects/from_isf.py)
+// --label:Distort
 // --track@level:level,0,100,1,0.001
 // --track@center_x:center x,0,1,0.5,0.001
 // --track@center_y:center y,0,1,0.5,0.001

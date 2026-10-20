@@ -1,4 +1,5 @@
 // Meta Image: ISF-Files' Meta Image.fs (MIT, Copyright (c) 2018 Vidvox, github.com/Vidvox/ISF-Files; by Toneburst), its GLSL made WGSL by naga (filament/effects/from_isf.py)
+// --label:Distort
 // --track@cell_size:cell_size,0.001,1.0,0.125,0.001
 // --track@zoom_tile:zoom_tile,0.0,2.0,1.0,0.001
 // --track@mixAmt:mix,0.0,1.0,0.5,0.001

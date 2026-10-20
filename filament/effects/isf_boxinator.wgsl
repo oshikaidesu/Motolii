@@ -1,4 +1,5 @@
 // Boxinator: ISF-Files' Boxinator.fs (MIT, Copyright (c) 2018 Vidvox, github.com/Vidvox/ISF-Files; by mojovideotech), its GLSL made WGSL by naga (filament/effects/from_isf.py)
+// --label:Stylize
 // --track@rate:rate,0.0,10.0,2.5,0.001
 // --track@edge:edge,0.0,0.01,0.001,0.001
 // --track@blend:blend,-1.0,1.0,0.95,0.001

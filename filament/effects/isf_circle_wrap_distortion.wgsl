@@ -1,4 +1,5 @@
 // Circle Wrap Distortion: ISF-Files' Circle Wrap Distortion.fs (MIT, Copyright (c) 2018 Vidvox, github.com/Vidvox/ISF-Files; VIDVOX), its GLSL made WGSL by naga (filament/effects/from_isf.py)
+// --label:Distort
 // --track@inputAngle:inputAngle,0,1,0.5,0.001
 // --track@inputRadius:inputRadius,0,2,1,0.001
 // --track@inputCenter_x:inputCenter x,0,1,0.5,0.001

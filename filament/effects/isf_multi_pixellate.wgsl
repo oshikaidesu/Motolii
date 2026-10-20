@@ -1,4 +1,5 @@
 // Multi-Pixellate: ISF-Files' Multi-Pixellate.fs (MIT, Copyright (c) 2018 Vidvox, github.com/Vidvox/ISF-Files; by VIDVOX), its GLSL made WGSL by naga (filament/effects/from_isf.py)
+// --label:Stylize
 // --alpha (on a thing: its cells are its shape, each as clear as what it gathered)
 // --track@cell_size:cell_size,0.001,0.5,0.125,0.001
 // --track@min_cell_size:min_cell_size,0.001,0.5,0.05000000074505806,0.001

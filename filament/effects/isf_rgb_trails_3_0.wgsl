@@ -1,4 +1,5 @@
 // RGB Trails 3.0: ISF-Files' RGB Trails 3.0.fs (MIT, Copyright (c) 2018 Vidvox, github.com/Vidvox/ISF-Files; by zoidberg), its GLSL made WGSL by naga (filament/effects/from_isf.py)
+// --label:Time
 // --spill (on a thing: what it makes where the thing is not is light on what is under)
 // --track@rWeight:rWeight,0,1,0,0.001
 // --track@gWeight:gWeight,0,1,0,0.001

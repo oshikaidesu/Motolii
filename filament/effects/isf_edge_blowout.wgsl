@@ -1,4 +1,5 @@
 // Edge Blowout: ISF-Files' Edge Blowout.fs (MIT, Copyright (c) 2018 Vidvox, github.com/Vidvox/ISF-Files; VIDVOX), its GLSL made WGSL by naga (filament/effects/from_isf.py)
+// --label:Light
 // --track@leftEdge:Left Edge,0,1,0.25,0.001
 // --track@rightEdge:Right Edge,0,1,0.75,0.001
 // --track@bottomEdge:Bottom Edge,0,1,0.25,0.001

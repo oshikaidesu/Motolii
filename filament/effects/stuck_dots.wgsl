@@ -1,4 +1,5 @@
 // Stuck Dots: a thing's own shade as dots stuck to it, as Spider-Verse's halftone moves with its character: lit places a
+// --label:Stylize
 // flat colour, shaded ones dots of a darker ink growing with the shade, the grid at the thing's place and turned with it
 // --track@cell:Cell,2,40,9,0.1
 // --track@angle:Angle,-90,90,22,0.1

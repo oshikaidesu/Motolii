@@ -1,4 +1,5 @@
 // Sepia: three.js's SepiaShader.js (MIT, Copyright (c) 2010-2026 three.js authors, github.com/mrdoob/three.js), its GLSL made WGSL by naga (filament/effects/from_three.py)
+// --label:Color
 // --track@amount:amount,0.0,4.0,1.0,0.001
 
 struct Knobs {

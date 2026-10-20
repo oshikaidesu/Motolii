@@ -1,4 +1,5 @@
 // Halftone: three.js's HalftoneShader.js (MIT, Copyright (c) 2010-2026 three.js authors, github.com/mrdoob/three.js), its GLSL made WGSL by naga (filament/effects/from_three.py)
+// --label:Stylize
 // --track@radius:radius,0.0,16.0,4.0,0.001
 // --track@rotateR:rotateR,0.0,1.0,0.0,0.001
 // --track@rotateG:rotateG,0.0,1.0,0.0,0.001

@@ -1,4 +1,5 @@
 // CRT finish: vgpu's particle-orbit post.wgsl (MIT, Copyright (c) 2025 Vercel, Inc., github.com/vercel-labs/vgpu), its two other pictures (bloom, radiance) taken out
+// --label:Film
 // --track@pointer:Parallax,-1,1,0,0.01
 
 // CRT finish over the composite.

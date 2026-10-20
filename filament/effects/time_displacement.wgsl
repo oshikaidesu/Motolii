@@ -1,4 +1,5 @@
 // Time Displacement: keijiro/SlitScanCam's shader (Unlicense, public domain, github.com/keijiro/SlitScanCam) in WGSL: each point of the picture as it was so many frames ago, further back across the picture; or eight past frames, each its own hue
+// --label:Time
 // --history@60:0.5
 // --track@axis:Across or down,0,1,0,0.01
 // --track@reach:How far back,0,1,1,0.01

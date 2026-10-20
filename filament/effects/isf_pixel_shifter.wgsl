@@ -1,4 +1,5 @@
 // Pixel Shifter: ISF-Files' Pixel Shifter.fs (MIT, Copyright (c) 2018 Vidvox, github.com/Vidvox/ISF-Files; by VIDVOX), its GLSL made WGSL by naga (filament/effects/from_isf.py)
+// --label:Glitch
 // --track@hPhase:Horizontal Phase,0,1,0,0.001
 // --track@hFrequency:Horizontal Frequency,-16,16,1,0.001
 // --track@hRandom:Horizontal Random,0,1,0,0.001

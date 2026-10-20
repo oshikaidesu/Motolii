@@ -1,4 +1,5 @@
 // Grain: a thing's see-through turned to grains, as a riso print's grainy gradient: each point wholly there or wholly not, as likely as it was there (a colour to clear down a ramp becomes grains thinning out)
+// --label:Film
 // --alpha (on a thing: its own see-through is what it lays, the grains)
 // --track@size:Grain size,1,12,2,0.1
 // --track@seed:Seed,0,100,0,1

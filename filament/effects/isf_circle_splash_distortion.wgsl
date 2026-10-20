@@ -1,4 +1,5 @@
 // Circle Splash Distortion: ISF-Files' Circle Splash Distortion.fs (MIT, Copyright (c) 2018 Vidvox, github.com/Vidvox/ISF-Files; by VIDVOX), its GLSL made WGSL by naga (filament/effects/from_isf.py)
+// --label:Distort
 // --track@radius:radius,0,0.75,0.125,0.001
 // --track@streaks:streaks,0,1,0,0.001
 // --track@center_x:center x,0,1,0.5,0.001

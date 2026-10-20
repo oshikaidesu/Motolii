@@ -67,7 +67,7 @@ int motolii_keys(Motolii* m, int thing, const char* name);         /* how many k
    (the numbers said with it); it is taken only if it begins at a and ends at b. */
 int motolii_way(Motolii* m, int thing, const char* name, double at, const char* way);
 int motolii_define(Motolii* m, const char* way, const char* expression);
-/* The effects a thing may be given, "name\tvalue" one to a line (until the next call); one put on a thing at a moment,
+/* The effects a thing may be given, "name\tvalue\tlabel" one to a line (label: what it is for, the shelf's kind) (until the next call); one put on a thing at a moment,
    or taken off if it is on (its keys too), one step. Its card shows while it is on (motolii_cards). */
 const char* motolii_effect_names(Motolii* m);
 int motolii_effect(Motolii* m, int thing, const char* name, double at);
@@ -139,10 +139,10 @@ const char* motolii_shown(Motolii* m, const char* name);
    the next call); motolii_make makes one at the stage's present moment, as one step, and says the new thing (0: not). */
 const char* motolii_recipes(Motolii* m);
 int motolii_make(Motolii* m, const char* recipe);
-/* The whole-screen effects on the shelf ("name\tpath", one to a line, until the next call): the stage's script is the
+/* The whole-screen effects on the shelf ("name\tpath\tlabel", one to a line, label as the file's "// --label:" says, until the next call): the stage's script is the
    paths of those on it, with spaces between, the first nearest the picture. */
 const char* motolii_effects(Motolii* m);
-/* The motions a thing may be given (Cavalry's Animators: "name\tpath", one to a line, until the next call): a thing's
+/* The motions a thing may be given (Cavalry's Animators: "name\tpath\tlabel", one to a line, until the next call): a thing's
    script is the path of the one it has (a text given one moves letter by letter). */
 const char* motolii_animators(Motolii* m);
 /* What the inside's hand has spent its time on since it was opened (a line of words, for measuring). */

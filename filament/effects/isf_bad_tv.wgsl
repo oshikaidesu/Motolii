@@ -1,4 +1,5 @@
 // Bad TV: ISF-Files' Bad TV.fs (MIT, Copyright (c) 2018 Vidvox, github.com/Vidvox/ISF-Files; by VIDVOX), its GLSL made WGSL by naga (filament/effects/from_isf.py)
+// --label:Glitch
 // --track@noiseLevel:noiseLevel,0.0,1.0,0.5,0.001
 // --track@distortion1:distortion1,0.0,5.0,1.0,0.001
 // --track@distortion2:distortion2,0.0,5.0,5.0,0.001

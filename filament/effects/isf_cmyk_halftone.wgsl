@@ -1,4 +1,5 @@
 // CMYK Halftone: ISF-Files' CMYK Halftone.fs (MIT, Copyright (c) 2018 Vidvox, github.com/Vidvox/ISF-Files; by zoidberg), its GLSL made WGSL by naga (filament/effects/from_isf.py)
+// --label:Stylize
 // --track@gridSize:gridSize,1,256,45,0.001
 // --track@smoothing:smoothing,0,1,0.15,0.001
 

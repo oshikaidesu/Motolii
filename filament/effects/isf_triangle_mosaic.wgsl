@@ -1,4 +1,5 @@
 // Triangle Mosaic: ISF-Files' Triangle Mosaic.fs (MIT, Copyright (c) 2018 Vidvox, github.com/Vidvox/ISF-Files; by VIDVOX), its GLSL made WGSL by naga (filament/effects/from_isf.py)
+// --label:Stylize
 // --alpha (on a thing: its cells are its shape, each as clear as what it gathered)
 // --track@cellSize:Cell Size,0.005,0.25,0.025,0.001
 // --track@jitter:Jitter,0.0,1.0,0.5,0.001

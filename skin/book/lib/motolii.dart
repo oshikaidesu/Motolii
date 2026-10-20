@@ -516,16 +516,30 @@ class Motolii {
   ]);
 
   /// The whole-screen effects on the shelf: each one's name and file (the stage's script is the files of those on it).
-  List<(String, String)> get effects => _folders.putIfAbsent('effects', () => [
-    for (final line in _effects(_m).toDartString().split('\n'))
-      if (line.indexOf('\t') case final at when at > 0) (line.substring(0, at), line.substring(at + 1)),
-  ]);
+  List<(String, String)> get effects => _folders.putIfAbsent('effects', () => _labelled(_effects(_m).toDartString()));
 
   /// The motions a thing may be given (Cavalry's Animators): each one's name and file (a thing's script is the file of the one it has).
-  List<(String, String)> get animators => _folders.putIfAbsent('animators', () => [
-    for (final line in _animators(_m).toDartString().split('\n'))
-      if (line.indexOf('\t') case final at when at > 0) (line.substring(0, at), line.substring(at + 1)),
-  ]);
+  List<(String, String)> get animators => _folders.putIfAbsent('animators', () => _labelled(_animators(_m).toDartString()));
+
+  /// What an effect (of a thing or of the whole screen) or a motion is for, as the inside says: the shelf's kind ('' none said).
+  String label(String name) {
+    effects;
+    thingEffects;
+    return _labels[name] ?? '';
+  }
+
+  final _labels = <String, String>{};
+
+  /// "name\tfile\tlabel" lines: the names and files, the labels kept for [label].
+  List<(String, String)> _labelled(String lines) {
+    final out = <(String, String)>[];
+    for (final w in [for (final l in lines.split('\n')) l.split('\t')]) {
+      if (w.length < 2 || w[0].isEmpty) continue;
+      out.add((w[0], w[1]));
+      if (w.length > 2) _labels[w[0]] = w[2];
+    }
+    return out;
+  }
 
   /// What the inside's hand has spent its time on (for measuring).
   String get spent => _spent(_m).toDartString();
@@ -645,10 +659,7 @@ class Motolii {
 
   /// The effects a thing may be given, by name, with the value that puts each on (the Effects shelf); its card shows
   /// while it is on ([cards]).
-  List<(String, String)> get thingEffects => _kept('thingEffects', () => [
-    for (final l in _effectNames(_m).toDartString().split('\n'))
-      if (l.contains('\t')) (l.split('\t').first, l.split('\t').last),
-  ]);
+  List<(String, String)> get thingEffects => _kept('thingEffects', () => _labelled(_effectNames(_m).toDartString()));
 
   /// An effect put on a thing at a moment, or taken off if it is on (its keys too), one step.
   bool effect(int thing, String name, double at) => _with([name], (s) => _effect(_m, thing, s[0], at)) != 0;

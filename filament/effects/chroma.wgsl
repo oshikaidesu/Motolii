@@ -1,4 +1,5 @@
 // Chroma: a lens's colour fringe, wild: red and blue drawn apart from green, more the further from the middle (a
+// --label:Glitch
 // thing's middle, on a thing; the picture's, on the stage), spilling past the edges as light
 // --spill (on a thing: what it makes where the thing is not is light on what is under)
 // --track@amount:Amount,0,160,48,0.1

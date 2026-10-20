@@ -1,4 +1,5 @@
 // Twirl: ISF-Files' Twirl.fs (MIT, Copyright (c) 2018 Vidvox, github.com/Vidvox/ISF-Files; by VIDVOX), its GLSL made WGSL by naga (filament/effects/from_isf.py)
+// --label:Distort
 // --spill (on a thing: what it makes where the thing is not is light on what is under)
 // --track@radius:radius,0,1,5,0.001
 // --track@amount:amount,-10,10,0,0.001

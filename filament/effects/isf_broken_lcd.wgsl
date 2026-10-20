@@ -1,4 +1,5 @@
 // Broken LCD: ISF-Files' Broken LCD.fs (MIT, Copyright (c) 2018 Vidvox, github.com/Vidvox/ISF-Files; VIDVOX), its GLSL made WGSL by naga (filament/effects/from_isf.py)
+// --label:Glitch
 // --track@flickerLevel:flickerLevel,0,1,0,0.001
 // --track@patternStyle:Pattern Style,0,1,0,1
 // --track@glitchBrightness:Glitch Thickness,0,4,3,0.001

@@ -1,4 +1,5 @@
 // Slit Scan: ISF-Files' Slit Scan.fs (MIT, Copyright (c) 2018 Vidvox, github.com/Vidvox/ISF-Files; by VIDVOX), its GLSL made WGSL by naga (filament/effects/from_isf.py)
+// --label:Time
 // --track@spacing:spacing,0,1.5,1,0.001
 // --track@line_width:line_width,0,1,0.33,0.001
 // --track@angle:angle,-1,1,0.25,0.001

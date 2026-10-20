@@ -2707,8 +2707,9 @@ static bool doc_files_moved(Doc& d) {
     if (doc_scripts_made() != before) moved = true, d.scripted.clear();
     return moved;
 }
-// The files of a kind in its folders (doc_folders) ("name\tpath", one to a line): the whole-screen effects (effects/*.wgsl),
-// the motions a thing may be given (animators/*.js); a file's name as its first line says it, before the colon.
+// The files of a kind in its folders (doc_folders) ("name\tpath\tlabel", one to a line): the whole-screen effects (effects/*.wgsl),
+// the motions a thing may be given (animators/*.js); a file's name as its first line says it, before the colon; its label
+// (what it is for, the shelf's kind) as a head line "// --label:Distort" says it (AviUtl's --label:, its script's menu).
 static std::string doc_folder_names(const char* folder, const char* extension) {
     struct Seen { std::string all; std::filesystem::file_time_type was{}; std::chrono::steady_clock::time_point looked{}; };
     static std::map<std::string, Seen> seen;
@@ -2718,9 +2719,11 @@ static std::string doc_folder_names(const char* folder, const char* extension) {
     all.clear();
     for (const auto& f : doc_folder_files(folder, extension)) {
         std::ifstream in(f);
-        std::string first, name = f.stem().string();
+        std::string first, name = f.stem().string(), label;
         if (std::getline(in, first) && first.rfind("// ", 0) == 0 && first.find(':') != std::string::npos) name = first.substr(3, first.find(':') - 3);
-        all += (all.empty() ? "" : "\n") + name + "\t" + f.string();
+        for (std::string line; label.empty() && std::getline(in, line) && line.rfind("//", 0) == 0;)
+            if (const size_t at = line.find("--label:"); at != std::string::npos) label = line.substr(at + 8);
+        all += (all.empty() ? "" : "\n") + name + "\t" + f.string() + "\t" + label;
     }
     return all;
 }
@@ -2896,16 +2899,16 @@ static bool doc_on(Doc& d, int thing, const char* name) {
 // The effects a thing may be given (the Effects shelf; their cards are doc_cards' "+" rows): a name, the value that puts
 // it on (ThorVG's own), and what it is told then: a number, a word, or keys from that moment ("keys 0 1 1 0": 1 now,
 // 0 a second on: Trim Paths drawn on, as After Effects' is mostly used).
-struct DocEffect { const char* name; const char* value; const char* on; bool word; };
+struct DocEffect { const char* name; const char* value; const char* on; bool word; const char* label; };   // (label: what it is for, as an effect file's --label: says)
 static const DocEffect doc_effects[] = {
-    {"Gaussian Blur", "blur", "12", false}, {"Drop Shadow", "shadow", "000000", true}, {"Glow", "glow", "ffd166", true},
-    {"Trim Paths", "trim", "keys 0 1 1 0", false}, {"Duotone", "tint", "1", false}, {"Gradient Map", "tritone", "1", false},
-    {"Background Copy", "fill", "behind", true},   // (its fill what is behind it: the effects on it then work on the background in its shape, and it still lies on what is under as its blend says; After Effects' adjustment layer as one more effect)
+    {"Gaussian Blur", "blur", "12", false, "Light"}, {"Drop Shadow", "shadow", "000000", true, "Light"}, {"Glow", "glow", "ffd166", true, "Light"},
+    {"Trim Paths", "trim", "keys 0 1 1 0", false, "Path"}, {"Duotone", "tint", "1", false, "Color"}, {"Gradient Map", "tritone", "1", false, "Color"},
+    {"Background Copy", "fill", "behind", true, "Utility"},   // (its fill what is behind it: the effects on it then work on the background in its shape, and it still lies on what is under as its blend says; After Effects' adjustment layer as one more effect)
 };
-// The shelf's effects, "name\tvalue" one to a line.
+// The shelf's effects, "name\tvalue\tlabel" one to a line.
 static std::string doc_effect_names() {
     std::string all;
-    for (const DocEffect& e : doc_effects) all += (all.empty() ? "" : "\n") + std::string(e.name) + "\t" + e.value;
+    for (const DocEffect& e : doc_effects) all += (all.empty() ? "" : "\n") + std::string(e.name) + "\t" + e.value + "\t" + e.label;
     return all;
 }
 // An effect put on a thing at a moment, or taken off it if it is on (unsaid, its keys too), one step.

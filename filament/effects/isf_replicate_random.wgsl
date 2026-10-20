@@ -1,4 +1,5 @@
 // Replicate Random: ISF-Files' Replicate Random.fs (MIT, Copyright (c) 2018 Vidvox, github.com/Vidvox/ISF-Files), its GLSL made WGSL by naga (filament/effects/from_isf.py)
+// --label:Distort
 // --spill (on a thing: what it makes where the thing is not is light on what is under)
 // --track@randomSeed:randomSeed,0,1,0,0.001
 // --track@repetitions:repetitions,1,15,5,0.001

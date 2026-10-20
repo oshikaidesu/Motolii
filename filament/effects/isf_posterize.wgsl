@@ -1,4 +1,5 @@
 // Posterize: ISF-Files' Posterize.fs (MIT, Copyright (c) 2018 Vidvox, github.com/Vidvox/ISF-Files; VIDVOX), its GLSL made WGSL by naga (filament/effects/from_isf.py)
+// --label:Color
 // --track@gamma:Gamma,0.5,2,1.25,0.001
 // --track@numColors:Quality,3,32,6,0.001
 

@@ -1,4 +1,5 @@
 // Collage: ISF-Files' Collage.fs (MIT, Copyright (c) 2018 Vidvox, github.com/Vidvox/ISF-Files; by VIDVOX), its GLSL made WGSL by naga (filament/effects/from_isf.py)
+// --label:Distort
 // --track@seed:seed,0.01,1,0.5,0.001
 // --track@cell_size:cell_size,0.01,1,0.125,0.001
 // --check@allow_flips_h_on:allow_flips_h,1
