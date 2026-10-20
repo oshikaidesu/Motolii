@@ -58,7 +58,7 @@
 
 ## 数
 `Corner` `Size` `Spacing` `TextScale`
-（どれも「いつもの何倍か」。Corner＝角の丸み、Size＝部品（行・帯・列・札）の大きさ、Spacing＝余白とすき間、TextScale＝文字の大きさ）
+（どれも「いつもの何倍か」。Corner＝角の丸み 0〜10、Size＝部品の大きさ 0.85〜1.5、Spacing＝余白とすき間 0〜2、TextScale＝文字の大きさ 0.85〜1.3。範囲の外は端に収める）
 
 ## 言葉
 `FontMono` `FontSans` `Parts` `Shade`

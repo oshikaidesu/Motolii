@@ -156,16 +156,16 @@ abstract final class Accent {
 
 /// The skin's shapes (theme file roles; a role it does not say is the window's own): how round every corner is.
 abstract final class Shape {
-  static double get corner => ColorTheme.number('Corner', 1);
+  static double get corner => ColorTheme.number('Corner', 1).clamp(0, 10);   // (any number a skin says is held to what the window can draw)
 
   /// A corner of today's [x] px, as round as the skin says.
   static Radius r(double x) => Radius.circular(x * corner);
 
   /// A margin of today's [x] px, as airy as the skin says (`Spacing`).
-  static double s(double x) => x * ColorTheme.number('Spacing', 1);
+  static double s(double x) => x * ColorTheme.number('Spacing', 1).clamp(0, 2);   // (more than twice the air pushes the dock's tabs out of the window)
 
   /// A part's size of today's [x] px (a row's height, a strip, a rail), as large as the skin says (`Size`).
-  static double z(double x) => x * ColorTheme.number('Size', 1);
+  static double z(double x) => x * ColorTheme.number('Size', 1).clamp(.85, 1.5);   // (smaller parts than this leave no room for the words)
 }
 
 abstract final class T {
@@ -173,7 +173,7 @@ abstract final class T {
   static String get mono => ColorTheme.word('FontMono', 'Menlo');
 
   /// A type size of today's [x] px, as large as the skin says.
-  static double px(double x) => x * ColorTheme.number('TextScale', 1);
+  static double px(double x) => x * ColorTheme.number('TextScale', 1).clamp(.85, 1.3);
 
   /// No text is dimmer than g56 nor smaller than 10 px (precedents: Adobe Spectrum's smallest UI text is 10 px; critique 2026-10-02: 87 of 126 use cases had 9 px / g44 captions).
   /// Only DIM text on a dark ground is lifted (luminance between g26 and g56); in the light shade, text paler than Grey.g56 is darkened to it. Dark INK (g00..g20, the text on a light fill such as the playhead head) is left alone: lifting it to g56 made it unreadable (critique pass 3).

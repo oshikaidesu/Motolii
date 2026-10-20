@@ -35,7 +35,7 @@ abstract final class ColorTheme {
   static Color of(String role, Color usual) => roles.value[role] ?? usual;
 
   /// A role's number: the theme's, else [usual].
-  static double number(String role, double usual) => double.tryParse(words.value[role] ?? '') ?? usual;
+  static double number(String role, double usual) => switch (double.tryParse(words.value[role] ?? '')) { final n? when n.isFinite => n, _ => usual };   // (NaN or Infinity said: the usual)
 
   /// A role's word: the theme's, else [usual].
   static String word(String role, String usual) => words.value[role] ?? usual;

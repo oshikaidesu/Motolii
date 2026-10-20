@@ -21,6 +21,17 @@ const _skins = {
   'type 1.25': '<TextScale Value="1.25"/>',
   'wide font': '<FontSans Value="Monaco"/><FontMono Value="Monaco"/>',
   'air 1.5': '<Spacing Value="1.5"/>',
+  'not numbers': '<Size Value="NaN"/><Spacing Value="Infinity"/><TextScale Value="big"/><Corner Value="-Infinity"/>',
+  'size -3': '<Size Value="-3"/>',
+  'type 0': '<TextScale Value="0"/>',
+  'size 40': '<Size Value="40"/>',
+  'type 40': '<TextScale Value="40"/>',
+  'air 2': '<Spacing Value="2"/>',
+  'air 40': '<Spacing Value="40"/>',
+  'corner -2': '<Corner Value="-2"/>',
+  'bad colour': '<Background Value="#zzzzzz"/>',
+  'no font': '<FontSans Value="No Such Font"/>',
+  'no parts': '<Parts Value="/nowhere"/>',
   'all at once': '<Size Value="1.25"/><TextScale Value="1.2"/><Spacing Value="1.3"/><FontSans Value="Monaco"/><FontMono Value="Monaco"/>',
 };
 
@@ -83,6 +94,10 @@ void main() {
       // (every shelf in front, and each kind of thing picked, then nothing: the window's states, each looked at)
       final cut = <String>{};
       for (final shelf in const ['Media', 'Create', 'Effects', 'Fonts', 'Colors']) {
+        if (find.bySemanticsLabel(shelf).evaluate().isEmpty) { // (a shelf's tab pushed out of the window: the skin broke it)
+          FlutterError.onError = was;
+          fail('$name: the $shelf tab is not in the window');
+        }
         await t.tap(find.bySemanticsLabel(shelf));
         await t.pump();
         expect(ws.shelf, shelf); // (that shelf is in front)
@@ -102,6 +117,7 @@ void main() {
     }
     // ignore: avoid_print
     print('fit:\n${report.join('\n')}');
+    File('/Users/motolii_maker/motolii/reports/skins/fit.txt').writeAsStringSync('${report.join('\n')}\n'); // (the same, kept)
     semantics.dispose();
     expect(report.where((l) => !l.startsWith(' ') && !l.endsWith(': 0 cut, 0 overflow')), isEmpty);
   });
