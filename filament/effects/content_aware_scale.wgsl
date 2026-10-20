@@ -1,4 +1,4 @@
-// Content-Aware Scale: Photoshop's, as a moving picture: each row squeezed where little is going on and kept where much is, then drawn across the whole frame again, so what matters swells and the rest thins (Melt turns it round: what matters goes first, the meme's crumple). Greisen et al., "Algorithm and VLSI Architecture for Real-Time 1080p60 Video Retargeting" (Disney Research, 2012): a column's share min(a x its importance, 1), a found by halving until the shares fill the width kept, a blended with the last frame's; done here per row, on a quarter picture
+// Content-Aware Scale: Photoshop's, as a moving picture: each row squeezed where little is going on and kept where much is, the row as narrow as it is kept, in the middle (Stretch draws it across the frame again); Crush takes the thinned columns out whole, each row its own, the seams' crumple (Melt turns it round: what matters goes first). Greisen et al., "Algorithm and VLSI Architecture for Real-Time 1080p60 Video Retargeting" (Disney Research, 2012): a column's share min(a x its importance, 1), a found by halving until the shares fill the width kept, a blended with the last frame's; done here per row, on a quarter picture
 // --label:Distort
 // --pass@e:0,1,s0.25,s0.25
 // --pass@band:0,1,s0.25,s0.25
@@ -9,6 +9,8 @@
 // --track@melt:Melt,0,1,0,0.01
 // --track@hold:Hold together (rows),0,24,3,1
 // --track@steady:Steady,0,0.95,0.7,0.01
+// --track@crush:Crush,0,1,0.85,0.01
+// --track@stretch:Stretch,0,1,0,0.01
 
 @group(0) @binding(0) var picture: texture_2d<f32>;
 @group(0) @binding(1) var pictureNear: sampler;
@@ -20,13 +22,13 @@
 @group(0) @binding(7) var scaleNear: sampler;
 @group(0) @binding(8) var source: texture_2d<f32>;
 @group(0) @binding(9) var sourceNear: sampler;
-struct Knobs { passindex: f32, frame: f32, keep: f32, melt: f32, hold: f32, steady: f32 }
+struct Knobs { passindex: f32, frame: f32, keep: f32, melt: f32, hold: f32, steady: f32, crush: f32, stretch: f32 }
 @group(0) @binding(10) var<uniform> knobs: Knobs;
 
 fn luma(uv: vec2f) -> f32 { return dot(textureSampleLevel(picture, pictureNear, uv, 0.0).rgb, vec3f(0.299, 0.587, 0.114)); }
 
-// (a column's share of the row at that scale: never more than its own width)
-fn share(row: i32, x: i32, a: f32) -> f32 { return min(a * textureLoad(band, vec2i(x, row), 0).r, 1.0); }
+// (a column's share of the row at that scale: never more than its own width; crushed, a thin one goes to nothing, as a seam taken out)
+fn share(row: i32, x: i32, a: f32) -> f32 { return pow(min(a * textureLoad(band, vec2i(x, row), 0).r, 1.0), 1.0 + 24.0 * knobs.crush); }
 
 @fragment fn fs_main(@builtin(position) frag: vec4f, @location(0) uv: vec2f) -> @location(0) vec4f {
   let which = i32(knobs.passindex);
@@ -77,8 +79,11 @@ fn share(row: i32, x: i32, a: f32) -> f32 { return min(a * textureLoad(band, vec
     }
     return vec4f(src / f32(size.x), 0.0, 0.0, 1.0);
   }
-  // (the picture, each point taken from where its row says, the squeezed row drawn across the whole frame again)
-  let q = uv * vec2f(size) - 0.5;
+  // (the picture, each point taken from where its row says: the squeezed row in the middle, as wide as kept, or stretched across again)
+  let wide = mix(knobs.keep, 1.0, knobs.stretch);
+  let across = (uv.x - 0.5) / wide + 0.5;
+  if (across < 0.0 || across > 1.0) { return vec4f(0.0); }
+  let q = vec2f(across, uv.y) * vec2f(size) - 0.5;
   let i = vec2i(floor(q));
   let f = fract(q);
   let row0 = clamp(i.y, 0, size.y - 1);
