@@ -523,20 +523,28 @@ class Motolii {
 
   /// What an effect (of a thing or of the whole screen) or a motion is for, as the inside says: the shelf's kind ('' none said).
   String label(String name) {
-    effects;
-    thingEffects;
+    _said();
     return _labels[name] ?? '';
   }
 
-  final _labels = <String, String>{};
+  /// An effect's (or a motion's) picture for its tile, as the inside says: what it does to a sample ('' none).
+  String picture(String name) {
+    _said();
+    return _pictures[name] ?? '';
+  }
 
-  /// "name\tfile\tlabel" lines: the names and files, the labels kept for [label].
+  void _said() => (effects, thingEffects);   // (both lists read: their labels and pictures with them)
+
+  final _labels = <String, String>{}, _pictures = <String, String>{};
+
+  /// "name\tfile\tlabel\tpicture" lines: the names and files, the labels and pictures kept for [label] and [picture].
   List<(String, String)> _labelled(String lines) {
     final out = <(String, String)>[];
     for (final w in [for (final l in lines.split('\n')) l.split('\t')]) {
       if (w.length < 2 || w[0].isEmpty) continue;
       out.add((w[0], w[1]));
       if (w.length > 2) _labels[w[0]] = w[2];
+      if (w.length > 3) _pictures[w[0]] = w[3];
     }
     return out;
   }

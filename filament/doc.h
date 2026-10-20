@@ -2707,9 +2707,10 @@ static bool doc_files_moved(Doc& d) {
     if (doc_scripts_made() != before) moved = true, d.scripted.clear();
     return moved;
 }
-// The files of a kind in its folders (doc_folders) ("name\tpath\tlabel", one to a line): the whole-screen effects (effects/*.wgsl),
+// The files of a kind in its folders (doc_folders) ("name\tpath\tlabel\tpicture", one to a line): the whole-screen effects (effects/*.wgsl),
 // the motions a thing may be given (animators/*.js); a file's name as its first line says it, before the colon; its label
-// (what it is for, the shelf's kind) as a head line "// --label:Distort" says it (AviUtl's --label:, its script's menu).
+// (what it is for, the shelf's kind) as a head line "// --label:Distort" says it (AviUtl's --label:, its script's menu); its
+// picture for the shelf the .png beside it, if there is one ("" none).
 static std::string doc_folder_names(const char* folder, const char* extension) {
     struct Seen { std::string all; std::filesystem::file_time_type was{}; std::chrono::steady_clock::time_point looked{}; };
     static std::map<std::string, Seen> seen;
@@ -2723,7 +2724,9 @@ static std::string doc_folder_names(const char* folder, const char* extension) {
         if (std::getline(in, first) && first.rfind("// ", 0) == 0 && first.find(':') != std::string::npos) name = first.substr(3, first.find(':') - 3);
         for (std::string line; label.empty() && std::getline(in, line) && line.rfind("//", 0) == 0;)
             if (const size_t at = line.find("--label:"); at != std::string::npos) label = line.substr(at + 8);
-        all += (all.empty() ? "" : "\n") + name + "\t" + f.string() + "\t" + label;
+        std::error_code wrong;
+        const std::filesystem::path picture = std::filesystem::path(f).replace_extension(".png");
+        all += (all.empty() ? "" : "\n") + name + "\t" + f.string() + "\t" + label + "\t" + (std::filesystem::exists(picture, wrong) ? picture.string() : "");
     }
     return all;
 }
@@ -2905,10 +2908,14 @@ static const DocEffect doc_effects[] = {
     {"Trim Paths", "trim", "keys 0 1 1 0", false, "Path"}, {"Duotone", "tint", "1", false, "Color"}, {"Gradient Map", "tritone", "1", false, "Color"},
     {"Background Copy", "fill", "behind", true, "Utility"},   // (its fill what is behind it: the effects on it then work on the background in its shape, and it still lies on what is under as its blend says; After Effects' adjustment layer as one more effect)
 };
-// The shelf's effects, "name\tvalue\tlabel" one to a line.
+// The shelf's effects, "name\tvalue\tlabel\tpicture" one to a line (picture: thing_<value>.png in the library's effects/, "" none).
 static std::string doc_effect_names() {
     std::string all;
-    for (const DocEffect& e : doc_effects) all += (all.empty() ? "" : "\n") + std::string(e.name) + "\t" + e.value + "\t" + e.label;
+    std::error_code wrong;
+    for (const DocEffect& e : doc_effects) {
+        const std::filesystem::path picture = doc_folders("effects").front() / ("thing_" + std::string(e.value) + ".png");
+        all += (all.empty() ? "" : "\n") + std::string(e.name) + "\t" + e.value + "\t" + e.label + "\t" + (std::filesystem::exists(picture, wrong) ? picture.string() : "");
+    }
     return all;
 }
 // An effect put on a thing at a moment, or taken off it if it is on (unsaid, its keys too), one step.

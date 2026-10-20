@@ -20,9 +20,9 @@ class EffectsShelf extends StatelessWidget {
     final on = ws.fxOf(ws.selected), screen = ws.screenFx, picked = int.tryParse(ws.selected ?? '') != null;
     // (a thing's own effects and motions go on a picked thing only; the whole-screen ones on it, or on the stage)
     final all = [
-      if (picked) for (final (n, _) in m.thingEffects) (n, m.label(n), _Tile(n, look: _FxLook(n), on: on.contains(n) ? 'ON' : null, picked: c.sel == n, onTap: () => c.pick(n), star: c)),
+      if (picked) for (final (n, _) in m.thingEffects) (n, m.label(n), _Tile(n, file: m.picture(n), look: _FxLook(n), on: on.contains(n) ? 'ON' : null, picked: c.sel == n, onTap: () => c.pick(n), star: c)),
       for (final (n, f) in m.effects)
-        (n, m.label(n), _Tile(n, key: ValueKey('ws-screen-$n'), file: f, on: screen.contains(f) ? 'ON ${screen.indexOf(f) + 1}' : null, onTap: () => ws.screenToggle(f))),
+        (n, m.label(n), _Tile(n, key: ValueKey('ws-screen-$n'), file: m.picture(n), on: screen.contains(f) ? 'ON ${screen.indexOf(f) + 1}' : null, onTap: () => ws.screenToggle(f))),
       if (picked)
         for (final (n, f) in m.animators) (n, 'Motion', _Tile(n, key: ValueKey('ws-motion-$n'), on: ws.motion == f ? 'ON' : null, onTap: () => ws.motionToggle(f))),
     ].where((e) => c.hit(e.$1)).toList();
@@ -54,8 +54,8 @@ class EffectsShelf extends StatelessWidget {
   }
 }
 
-/// One tile, whatever draws it: what it does to a sample (a whole-screen effect's .png beside its .wgsl, made by
-/// filament/fx_tiles.sh; a thing's effect its small drawing; none: a plain tile), its name, ON (and its place among
+/// One tile, whatever draws it: what it does to a sample (the picture the inside says, made by filament/fx_tiles.sh;
+/// without one, a thing's effect its small drawing, else a plain tile), its name, ON (and its place among
 /// those on the stage) when it is on, the star for a thing's effect.
 class _Tile extends StatelessWidget {
   const _Tile(this.name, {super.key, this.file, this.look, required this.on, required this.onTap, this.picked = false, this.star});
@@ -77,8 +77,8 @@ class _Tile extends StatelessWidget {
             fit: StackFit.expand,
             children: [
               ColoredBox(color: WsT.card),
-              if (file != null)
-                Image.file(File(file!.replaceFirst(RegExp(r'\.wgsl$'), '.png')), fit: BoxFit.cover, cacheWidth: 256, errorBuilder: (_, _, _) => const SizedBox())
+              if (file case final f? when f.isNotEmpty)
+                Image.file(File(f), fit: BoxFit.cover, cacheWidth: 256, errorBuilder: (_, _, _) => const SizedBox())
               else if (look != null)
                 FittedBox(child: CustomPaint(size: const Size(18, 16), painter: look)),
               if (on case final o?) Positioned(left: 3, top: 3, child: DockTag(o, hue: WsT.accent, edge: true)),
