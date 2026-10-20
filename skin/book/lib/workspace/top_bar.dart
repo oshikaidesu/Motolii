@@ -294,12 +294,16 @@ class _Render extends StatelessWidget {
   @override
   Widget build(BuildContext context) => _Hover(
     onTap: WsScope.of(context).onRender,
-    builder: (h) => Container(
-      height: Shape.z(26),
-      padding: EdgeInsets.symmetric(horizontal: Shape.s(14)),
-      alignment: Alignment.center,
-      decoration: BoxDecoration(color: h ? WsT.accentHot : WsT.accent, borderRadius: BorderRadius.all(Shape.r(13))),
-      child: Text('Render', style: T.name(WsT.onAccent).copyWith(fontWeight: FontWeight.w800)),
+    builder: (h) => SkinFrame(
+      'render',
+      hover: h,
+      usual: BoxDecoration(color: h ? WsT.accentHot : WsT.accent, borderRadius: BorderRadius.all(Shape.r(13))),
+      child: Container(
+        height: Shape.z(26),
+        padding: EdgeInsets.symmetric(horizontal: Shape.s(14)),
+        alignment: Alignment.center,
+        child: Text('Render', style: T.name(WsT.onAccent).copyWith(fontWeight: FontWeight.w800)),
+      ),
     ),
   );
 }

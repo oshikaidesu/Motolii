@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Streets: in the manner of an open-world crime game's menus. Black boxes, white type, money green, square corners;
+     the Render button and the inspector's cards wear frames of their own (parts/frame.*.svg). -->
+<Motolii>
+	<Theme>
+		<Background Value="#0b0b0b"/>
+		<Foreground Value="#f4f4f4"/>
+		<ChosenDefault Value="#3fa34d"/>
+		<ControlOnForeground Value="#ffffff"/>
+		<Keyframe Value="#f0c000"/>
+		<Clip1 Value="#5da9e9"/>
+		<Clip2 Value="#f0c000"/>
+		<Clip3 Value="#72cc72"/>
+		<Clip4 Value="#e04545"/>
+		<Clip5 Value="#a07cd8"/>
+		<Clip6 Value="#e08a2a"/>
+		<Clip7 Value="#f05a9e"/>
+		<Corner Value="0"/>
+		<Size Value="1.05"/>
+		<FontSans Value="Avenir Next Condensed"/>
+		<Parts Value="parts"/>
+	</Theme>
+</Motolii>

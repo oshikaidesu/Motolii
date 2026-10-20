@@ -1,5 +1,6 @@
 // A group: a heading and its rows. How groups are told apart is the Editorial knob: A a rule above, B a grey step, C a rule under a large heading.
 import 'package:flutter/widgets.dart';
+import 'package:lab_book/parts/skin_parts.dart';
 import 'package:lab_book/sets/inspector/inspector_parts.dart';
 import 'package:lab_book/tokens.dart';
 
@@ -204,7 +205,7 @@ class _PopCard extends StatelessWidget {
     );
     return Padding(
       padding: EdgeInsets.only(bottom: Pop.gap),
-      child: ColoredBox(color: Pop.card, child: content),
+      child: SkinFrame('card', usual: BoxDecoration(color: Pop.card), child: content), // (the skin's card frame, if it brings one)
     );
   }
 }

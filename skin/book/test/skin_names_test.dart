@@ -36,6 +36,10 @@ void main() {
         for (final m in RegExp('\\b${e.value}\\.(\\w+)\\b').allMatches(code.replaceAll(RegExp('case ${e.value}\\.\\w+'), ''))) '${e.key}.${m.group(1)}',
     };
     final listed = {for (final m in RegExp(r'`((?:tp|glyph|dock|stage)\.\w+)`').allMatches(File('skins/PARTS.md').readAsStringSync())) m.group(1)!};
+    // (frames: the parts that wear one, each named in SkinFrame('...'); a listed frame may add .hover or .on)
+    final framed = {for (final m in RegExp(r"SkinFrame\(\s*'(\w+)'").allMatches(code)) 'frame.${m.group(1)}'};
+    final framesListed = {for (final m in RegExp(r'`(frame\.\w+)(?:\.(?:hover|on))?`').allMatches(File('skins/PARTS.md').readAsStringSync())) m.group(1)!};
+    expect(framesListed, framed, reason: 'PARTS.md frames are the parts that wear one');
     expect(listed.difference(drawn), isEmpty, reason: 'listed but never drawn');
     expect(drawn.difference(listed).where((n) => !n.endsWith('.values') && !n.endsWith('.name')), isEmpty, reason: 'drawn but not listed');
   });
