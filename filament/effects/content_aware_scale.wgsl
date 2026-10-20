@@ -1,104 +1,145 @@
-// Content-Aware Scale: Photoshop's, as a moving picture: each row squeezed where little is going on and kept where much is, then each column of that the same way, the picture as narrow and as low as it is kept, in the middle (Stretch draws it across the frame again); Crush takes the thinned lines out whole, each its own, the seams' crumple (Melt turns it round: what matters goes first). Greisen et al., "Algorithm and VLSI Architecture for Real-Time 1080p60 Video Retargeting" (Disney Research, 2012): a column's share min(a x its importance, 1), a found by halving until the shares fill what is kept, a blended with the last frame's; done here per row, then per column, on a quarter picture
+// Content-Aware Scale: Photoshop's, as a moving picture: real seams, each running unbroken from one edge to the other, the cheapest taken out until the picture is as narrow (then as low) as it is kept, in the middle (Stretch draws it across the frame again); Melt turns the cost round: what matters goes first. All seams at once, as Huang et al., "Real-time content-aware image resizing" (Science in China F, 2009): each two neighbouring rows matched (a point goes straight on or changes place with its neighbour), so every point lies on one seam; a seam's cost the importance along it, mixed with the last frame's (Steady); the matching found here in pieces of 16 points, not over the whole row; on a quarter picture
 // --label:Distort
 // --pass@e:0,1,s0.25,s0.25
-// --pass@band:0,1,s0.25,s0.25
-// --pass@scale:1,1,a1,s0.25
+// --pass@link:0,1,s0.25,s0.25
+// --pass@label:0,1,s0.25,s0.25
+// --pass@cost:1,1,s0.25,a1
+// --pass@rank:0,1,s0.25,a1
+// --pass@flag:0,1,s0.25,s0.25
 // --pass@source:0,1,s0.25,s0.25
 // --pass@wide:0,1,s0.25,s0.25
-// --pass@e2:0,1,s0.25,s0.25
-// --pass@band2:0,1,s0.25,s0.25
-// --pass@scale2:1,1,s0.25,a1
+// --pass@e:0,1,s0.25,s0.25
+// --pass@link:0,1,s0.25,s0.25
+// --pass@label:0,1,s0.25,s0.25
+// --pass@cost2:1,1,a1,s0.25
+// --pass@rank2:0,1,a1,s0.25
+// --pass@flag:0,1,s0.25,s0.25
 // --pass@source2:0,1,s0.25,s0.25
 // --pass@:0,0,s1,s1
 // --track@keep:Keep width,0.1,1,0.5,0.01
 // --track@keep_y:Keep height,0.1,1,0.6,0.01
 // --track@melt:Melt,0,1,0,0.01
-// --track@hold:Hold together (lines),0,24,3,1
 // --track@steady:Steady,0,0.95,0.7,0.01
-// --track@crush:Crush,0,1,0.85,0.01
 // --track@stretch:Stretch,0,1,0,0.01
 
 @group(0) @binding(0) var picture: texture_2d<f32>;
 @group(0) @binding(1) var pictureNear: sampler;
 @group(0) @binding(2) var e: texture_2d<f32>;
 @group(0) @binding(3) var eNear: sampler;
-@group(0) @binding(4) var band: texture_2d<f32>;
-@group(0) @binding(5) var bandNear: sampler;
-@group(0) @binding(6) var scale: texture_2d<f32>;
-@group(0) @binding(7) var scaleNear: sampler;
-@group(0) @binding(8) var source: texture_2d<f32>;
-@group(0) @binding(9) var sourceNear: sampler;
-@group(0) @binding(10) var wide: texture_2d<f32>;
-@group(0) @binding(11) var wideNear: sampler;
-@group(0) @binding(12) var e2: texture_2d<f32>;
-@group(0) @binding(13) var e2Near: sampler;
-@group(0) @binding(14) var band2: texture_2d<f32>;
-@group(0) @binding(15) var band2Near: sampler;
-@group(0) @binding(16) var scale2: texture_2d<f32>;
-@group(0) @binding(17) var scale2Near: sampler;
-@group(0) @binding(18) var source2: texture_2d<f32>;
-@group(0) @binding(19) var source2Near: sampler;
-struct Knobs { passindex: f32, frame: f32, keep: f32, keep_y: f32, melt: f32, hold: f32, steady: f32, crush: f32, stretch: f32 }
-@group(0) @binding(20) var<uniform> knobs: Knobs;
+@group(0) @binding(4) var link: texture_2d<f32>;
+@group(0) @binding(5) var linkNear: sampler;
+@group(0) @binding(6) var label: texture_2d<f32>;
+@group(0) @binding(7) var labelNear: sampler;
+@group(0) @binding(8) var cost: texture_2d<f32>;
+@group(0) @binding(9) var costNear: sampler;
+@group(0) @binding(10) var rank: texture_2d<f32>;
+@group(0) @binding(11) var rankNear: sampler;
+@group(0) @binding(12) var flag: texture_2d<f32>;
+@group(0) @binding(13) var flagNear: sampler;
+@group(0) @binding(14) var source: texture_2d<f32>;
+@group(0) @binding(15) var sourceNear: sampler;
+@group(0) @binding(16) var wide: texture_2d<f32>;
+@group(0) @binding(17) var wideNear: sampler;
+@group(0) @binding(18) var cost2: texture_2d<f32>;
+@group(0) @binding(19) var cost2Near: sampler;
+@group(0) @binding(20) var rank2: texture_2d<f32>;
+@group(0) @binding(21) var rank2Near: sampler;
+@group(0) @binding(22) var source2: texture_2d<f32>;
+@group(0) @binding(23) var source2Near: sampler;
+struct Knobs { passindex: f32, frame: f32, keep: f32, keep_y: f32, melt: f32, steady: f32, stretch: f32 }
+@group(0) @binding(24) var<uniform> knobs: Knobs;
 
-// (a place on a line: along it, and which line; rows run across (axis 0), columns down (axis 1))
-fn at(axis: i32, along: i32, line: i32) -> vec2i { return select(vec2i(line, along), vec2i(along, line), axis == 0); }
+const PIECE = 16;
 
-// (a share of the line at that scale: never more than its own width; crushed, a thin one goes to nothing, as a seam taken out)
-fn share(b: texture_2d<f32>, axis: i32, along: i32, line: i32, a: f32) -> f32 {
-  return pow(min(a * textureLoad(b, at(axis, along, line), 0).r, 1.0), 1.0 + 24.0 * knobs.crush);
-}
+// (a point of a line: how far along it, and which line; seams across the picture's width run down (axis 0), seams across its height run across (axis 1))
+fn pt(axis: i32, along: i32, line: i32) -> vec2i { return select(vec2i(line, along), vec2i(along, line), axis == 0); }
+fn val(t: texture_2d<f32>, axis: i32, along: i32, line: i32) -> f32 { return textureLoad(t, pt(axis, along, line), 0).r; }
 
-// (what is going on: the picture's edges)
-fn edges(t: texture_2d<f32>, s: sampler, uv: vec2f, d: vec2f) -> f32 {
+// (what matters at a point: the picture's edges there; Melt: the quiet matters, what is busy goes first)
+fn importance(t: texture_2d<f32>, s: sampler, uv: vec2f, d: vec2f) -> f32 {
   let w = vec3f(0.299, 0.587, 0.114);
   let gx = dot(textureSampleLevel(t, s, uv + vec2f(d.x, 0.0), 0.0).rgb - textureSampleLevel(t, s, uv - vec2f(d.x, 0.0), 0.0).rgb, w);
   let gy = dot(textureSampleLevel(t, s, uv + vec2f(0.0, d.y), 0.0).rgb - textureSampleLevel(t, s, uv - vec2f(0.0, d.y), 0.0).rgb, w);
-  return abs(gx) + abs(gy);
+  return pow(abs(gx) + abs(gy) + 0.02, 1.0 - 2.0 * knobs.melt);
 }
 
-// (importance: the edges of the lines round it, so neighbouring lines go alike; Melt: the quiet matters, what is busy goes)
-fn importance(t: texture_2d<f32>, axis: i32, p: vec2i, size: vec2i) -> f32 {
-  let h = i32(knobs.hold);
-  let across = select(p.x, p.y, axis == 0);
-  let most = select(size.x, size.y, axis == 0) - 1;
-  var sum = 0.0;
-  for (var k = -h; k <= h; k++) {
-    let q = clamp(across + k, 0, most);
-    sum += textureLoad(t, select(vec2i(q, p.y), vec2i(p.x, q), axis == 0), 0).r;
+// (where a point of line r goes on line r + 1: straight on, or changed with a neighbour, so what is alike goes on alike;
+// the best matching of its piece of 16, the pieces set a little further on each line so seams pass between them)
+fn linked(axis: i32, x: i32, r: i32, n: i32, lines: i32) -> i32 {
+  if (r >= lines - 1) { return x; }
+  let o = (r * 7) % PIECE;
+  let s = max(((x - o + PIECE) / PIECE) * PIECE - PIECE + o, 0);
+  let t = min(s + PIECE, n);
+  var best: array<f32, 17>;
+  var swapped: array<bool, 17>;
+  best[0] = 0.0;
+  for (var k = 1; k <= t - s; k++) {
+    let i = s + k - 1;
+    best[k] = best[k - 1] + abs(val(e, axis, i, r) - val(e, axis, i, r + 1));
+    swapped[k] = false;
+    if (k >= 2) {
+      let c = best[k - 2] + abs(val(e, axis, i - 1, r) - val(e, axis, i, r + 1)) + abs(val(e, axis, i, r) - val(e, axis, i - 1, r + 1)) + 0.01;
+      if (c < best[k]) { best[k] = c; swapped[k] = true; }
+    }
   }
-  return pow(sum / f32(2 * h + 1) + 0.02, 1.0 - 2.0 * knobs.melt);
-}
-
-// (each line's scale a, halved in its logarithm until the shares fill what is kept; the last frame's mixed in; and what they fill then)
-fn scaled(b: texture_2d<f32>, last: vec4f, axis: i32, line: i32, n: i32, keep: f32) -> vec4f {
-  let want = keep * f32(n);
-  var lo = -16.0;
-  var hi = 16.0;
-  for (var i = 0; i < 16; i++) {
-    let mid = 0.5 * (lo + hi);
-    var filled = 0.0;
-    for (var x = 0; x < n; x++) { filled += share(b, axis, x, line, exp(mid)); }
-    if (filled < want) { lo = mid; } else { hi = mid; }
+  var k = t - s;
+  loop {
+    if (k <= 0) { break; }
+    let i = s + k - 1;
+    if (swapped[k]) {
+      if (x == i) { return i - 1; }
+      if (x == i - 1) { return i; }
+      k -= 2;
+    } else {
+      if (x == i) { return i; }
+      k -= 1;
+    }
   }
-  var la = 0.5 * (lo + hi);
-  if (last.g > 0.5 && knobs.frame > 0.0) { la = mix(la, last.r, knobs.steady); }
-  var total = 0.0;
-  for (var x = 0; x < n; x++) { total += share(b, axis, x, line, exp(la)); }
-  return vec4f(la, 1.0, total, 1.0);
+  return x;
 }
 
-// (where a place of the squeezed line comes from: walked along the shares, as a share of the line)
-fn taken(b: texture_2d<f32>, said: vec4f, axis: i32, place: i32, line: i32, n: i32) -> f32 {
-  let a = exp(said.r);
-  let goal = (f32(place) + 0.5) / f32(n) * said.b;
-  var gone = 0.0;
+// (the seam a point lies on: named by where it begins, found by going back up the lines; a change of places undoes itself)
+fn seam(axis: i32, x: i32, line: i32) -> i32 {
+  var at = x;
+  for (var r = line - 1; r >= 0; r--) { at = i32(val(link, axis, at, r)); }
+  return at;
+}
+
+// (a seam's cost: what matters along it, from one edge to the other)
+fn along(axis: i32, s: i32, lines: i32) -> f32 {
+  var at = s;
+  var sum = val(e, axis, at, 0);
+  for (var r = 0; r < lines - 1; r++) {
+    at = i32(val(link, axis, at, r));
+    sum += val(e, axis, at, r + 1);
+  }
+  return sum;
+}
+
+// (how many seams cost less than this one: the cheapest goes first)
+fn ranked(c: texture_2d<f32>, axis: i32, s: i32, n: i32) -> f32 {
+  let mine = val(c, axis, s, 0);
+  var below = 0;
+  for (var t = 0; t < n; t++) {
+    let theirs = val(c, axis, t, 0);
+    if (theirs < mine || (theirs == mine && t < s)) { below++; }
+  }
+  return f32(below);
+}
+
+// (where a place of the line left comes from: between the points kept, as a share of the line)
+fn taken(axis: i32, place: i32, line: i32, n: i32, kept: i32) -> f32 {
+  let goal = clamp((f32(place) + 0.5) / f32(n) * f32(kept) - 0.5, 0.0, f32(kept - 1));
+  let k0 = i32(floor(goal));
+  var count = 0;
+  var p0 = 0.0;
   for (var x = 0; x < n; x++) {
-    let w = share(b, axis, x, line, a);
-    if (gone + w >= goal) { return (f32(x) + (goal - gone) / max(w, 1e-6)) / f32(n); }
-    gone += w;
+    if (val(flag, axis, x, line) < 0.5) { continue; }
+    if (count == k0) { p0 = f32(x); }
+    if (count == k0 + 1) { return (mix(p0, f32(x), fract(goal)) + 0.5) / f32(n); }
+    count++;
   }
-  return 1.0;
+  return (p0 + 0.5) / f32(n);
 }
 
 // (a map read between its places, as the picture is drawn finer than it)
@@ -114,21 +155,42 @@ fn between(t: texture_2d<f32>, uv: vec2f) -> f32 {
   return mix(top, low, f.y);
 }
 
+fn one(v: f32) -> vec4f { return vec4f(v, 0.0, 0.0, 1.0); }
+
 @fragment fn fs_main(@builtin(position) frag: vec4f, @location(0) uv: vec2f) -> @location(0) vec4f {
   let which = i32(knobs.passindex);
   let p = vec2i(frag.xy);
   let size = vec2i(textureDimensions(e));
   let d = 1.0 / vec2f(size);
+  let axis = select(0, 1, which >= 8);
+  let n = select(size.x, size.y, axis == 1);       // (points along a line)
+  let lines = select(size.y, size.x, axis == 1);
+  let x = select(p.x, p.y, axis == 1);             // (this point: along its line, and its line)
+  let r = select(p.y, p.x, axis == 1);
+  let kept = max(1, i32(round(select(knobs.keep, knobs.keep_y, axis == 1) * f32(n))));
   switch which {
-    case 0: { return vec4f(edges(picture, pictureNear, uv, d), 0.0, 0.0, 1.0); }
-    case 1: { return vec4f(importance(e, 0, p, size), 0.0, 0.0, 1.0); }
-    case 2: { return scaled(band, textureLoad(scale, vec2i(0, p.y), 0), 0, p.y, size.x, knobs.keep); }
-    case 3: { return vec4f(taken(band, textureLoad(scale, vec2i(0, p.y), 0), 0, p.x, p.y, size.x), 0.0, 0.0, 1.0); }
-    case 4: { return textureSampleLevel(picture, pictureNear, vec2f(between(source, uv), uv.y), 0.0); }   // (the rows squeezed, for the columns to see)
-    case 5: { return vec4f(edges(wide, wideNear, uv, d), 0.0, 0.0, 1.0); }
-    case 6: { return vec4f(importance(e2, 1, p, size), 0.0, 0.0, 1.0); }
-    case 7: { return scaled(band2, textureLoad(scale2, vec2i(p.x, 0), 0), 1, p.x, size.y, knobs.keep_y); }
-    case 8: { return vec4f(taken(band2, textureLoad(scale2, vec2i(p.x, 0), 0), 1, p.y, p.x, size.y), 0.0, 0.0, 1.0); }
+    case 0: { return one(importance(picture, pictureNear, uv, d)); }
+    case 8: { return one(importance(wide, wideNear, uv, d)); }
+    case 1, 9: { return one(f32(linked(axis, x, r, n, lines))); }
+    case 2, 10: { return one(f32(seam(axis, x, r))); }
+    case 3: {
+      let last = textureLoad(cost, p, 0);
+      var c = along(0, x, lines);
+      if (last.g > 0.5 && knobs.frame > 0.0) { c = mix(c, last.r, knobs.steady); }
+      return vec4f(c, 1.0, 0.0, 1.0);
+    }
+    case 11: {
+      let last = textureLoad(cost2, p, 0);
+      var c = along(1, x, lines);
+      if (last.g > 0.5 && knobs.frame > 0.0) { c = mix(c, last.r, knobs.steady); }
+      return vec4f(c, 1.0, 0.0, 1.0);
+    }
+    case 4: { return one(ranked(cost, 0, x, n)); }
+    case 12: { return one(ranked(cost2, 1, x, n)); }
+    case 5: { return one(select(0.0, 1.0, val(rank, 0, i32(val(label, 0, x, r)), 0) >= f32(n - kept))); }
+    case 13: { return one(select(0.0, 1.0, val(rank2, 1, i32(val(label, 1, x, r)), 0) >= f32(n - kept))); }
+    case 6, 14: { return one(taken(axis, x, r, n, kept)); }
+    case 7: { return textureSampleLevel(picture, pictureNear, vec2f(between(source, uv), uv.y), 0.0); }   // (the seams across its width taken out, for the others to be found in)
     default: {}
   }
   // (the picture: each point's height from its column, then its place across from that row; in the middle, as wide and as high as kept, or stretched)
