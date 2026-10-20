@@ -1,5 +1,7 @@
 // The Effects shelf: what the inside does, in three plain lists: the effects a thing may be given (picked, its foot puts
 // it on or takes it off), the whole-screen effects (on the stage, in their order), the motions (one at a time).
+import 'dart:io';
+
 import 'package:flutter/widgets.dart';
 
 import '../sets/inspector/inspector_parts.dart' show Pop;
@@ -15,7 +17,7 @@ class EffectsShelf extends StatelessWidget {
   Widget build(BuildContext context) {
     final ws = c.ws, m = ws.inside;
     final blocks = <Widget>[], weights = <double>[];
-    void section(String title, Color hue, List<Widget> rows) {
+    void section(String title, Color hue, List<Widget> rows, {double? weight}) {
       if (rows.isEmpty) return;
       final folded = c.query.isEmpty && c.mem.folded.contains(title);
       blocks.add(
@@ -30,17 +32,27 @@ class EffectsShelf extends StatelessWidget {
           ),
         ),
       );
-      weights.add(1.0 + (folded ? 0 : rows.length));
+      weights.add(1.0 + (folded ? 0 : weight ?? rows.length));
     }
 
     // (one list: with a thing picked, every effect goes on it, as the camera sees it; with none, the shaders go on the whole stage)
     final on = ws.fxOf(ws.selected), things = [for (final (name, _) in m?.thingEffects ?? const <(String, String)>[]) if (c.hit(name)) name];
     final screen = ws.screenFx, picked = int.tryParse(ws.selected ?? '') != null;
+    final shaders = [for (final e in m?.effects ?? const <(String, String)>[]) if (c.hit(e.$1)) e];   // (effects/*.wgsl, their knobs on the card of what they are on)
     section(picked ? 'Effects' : 'Screen', picked ? Pop.toneBlend : Pop.toneOutput, [
       if (picked) for (final n in things) _FxRow(n, c, on: on.contains(n)),
-      for (final e in m?.effects ?? const <(String, String)>[])   // (effects/*.wgsl, their knobs on the card of what they are on)
-        if (c.hit(e.$1)) _ScreenRow(e.$1, on: screen.indexOf(e.$2), onTap: () => ws.screenToggle(e.$2)),
-    ]);
+      if (shaders.isNotEmpty)
+        LayoutBuilder(
+          builder: (context, box) {
+            final cols = wsCols(box.maxWidth, Shape.z(84)), w = wsCell(box.maxWidth, cols);
+            return Wrap(
+              spacing: WsT.gutter,
+              runSpacing: WsT.gutter,
+              children: [for (final e in shaders) SizedBox(width: w, child: _ScreenTile(e.$1, e.$2, on: screen.indexOf(e.$2), onTap: () => ws.screenToggle(e.$2)))],
+            );
+          },
+        ),
+    ], weight: (picked ? things.length : 0) + shaders.length * 1.4);
     // (the inside's motions, Cavalry's Animators, one at a time on the picked thing: animators/*.js)
     if (ws.selected != null) {
       section('Motion', Pop.toneOutput, [
@@ -116,6 +128,43 @@ class _ScreenRow extends StatelessWidget {
           if (on >= 0) ...[DockTag(of == 'screen' ? 'ON ${on + 1}' : 'ON', hue: WsT.accent), SizedBox(width: Shape.s(2))],
         ],
       ),
+    ),
+  );
+}
+
+/// A whole-screen effect as a tile: what it does to the Poster recipe (the .png beside its .wgsl, made by
+/// filament/fx_tiles.sh; none: a plain tile), its name, and its place among those on (1 nearest the picture).
+class _ScreenTile extends StatelessWidget {
+  const _ScreenTile(this.name, this.path, {required this.on, required this.onTap});
+  final String name, path;
+  final int on;
+  final VoidCallback onTap;
+  @override
+  Widget build(BuildContext context) => DockHover(
+    key: ValueKey('ws-screen-$name'),
+    onTap: onTap,
+    builder: (context, h) => Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        AspectRatio(
+          aspectRatio: 1,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              Image.file(File(path.replaceFirst(RegExp(r'\.wgsl$'), '.png')), fit: BoxFit.cover, cacheWidth: 256, errorBuilder: (_, _, _) => ColoredBox(color: WsT.card)),
+              if (on >= 0) Positioned(left: 3, top: 3, child: DockTag('ON ${on + 1}', hue: WsT.accent, edge: true)),
+              if (on >= 0 || h) DecoratedBox(decoration: BoxDecoration(border: Border.all(color: on >= 0 ? WsT.accentInk : Grey.g76, width: on >= 0 ? 2 : 1))),
+            ],
+          ),
+        ),
+        Container(
+          height: Shape.z(18),
+          padding: EdgeInsets.symmetric(horizontal: Shape.s(4)),
+          alignment: Alignment.centerLeft,
+          color: dockFill(false, h, WsT.card),
+          child: FittedBox(fit: BoxFit.scaleDown, child: Text(name, maxLines: 1, style: T.micro(dockInk(false, Grey.g76)))), // (a name wider than its tile is drawn smaller, never cut)
+        ),
+      ],
     ),
   );
 }

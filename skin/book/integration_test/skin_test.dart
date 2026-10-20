@@ -40,6 +40,7 @@ void main() {
     ws
       ..reread()
       ..select('$cube'); // (picked: the inspector shows its cards, each in its kind's colour)
+    if (const String.fromEnvironment('SHELF') case final s when s.isNotEmpty) ws.shelf = s; // (that shelf in front: --dart-define=SHELF=Effects)
     await t.pumpAndSettle();
     Future<void> shot(String theme, String png) async {
       ColorTheme.watch(() => t.binding.reassembleApplication(), theme);
