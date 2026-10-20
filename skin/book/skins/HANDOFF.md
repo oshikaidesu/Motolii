@@ -24,7 +24,8 @@ Motolii の窓（Flutter、`skin/book`）の見た目は、中身（書類・動
 | `lib/forms/forms.dart` | **フォームの約束**：渡す物（Spec）と、フォームが書く関数、登録表 `forms` |
 | `lib/forms/own.dart` | いつもの見た目のフォーム（前からの見た目をそのまま移した） |
 | `lib/forms/poster.dart` | 見本：スイスの幾何学ポスター風 |
-| `skins/<名前>/` | リポジトリの見本の革（labs、paper、streets、poster） |
+| `lib/forms/lighttable.dart` | 見本：フィルムのライトテーブル風（外の AI が HANDOFF だけで書いた、7/10） |
+| `skins/<名前>/` | リポジトリの見本の革（labs、paper、streets、poster、lighttable） |
 | `skins/shoot.sh` | 革のフォルダを渡すと、その革を着た窓を撮って `preview.png` を書く |
 | `live.sh` | 窓を開いたまま、`lib/` の .dart を保存した瞬間に描き直す（状態は保つ） |
 | `test/skin_names_test.dart` | ROLES.md・PARTS.md と、コードが読む名前・描く印・枠が食い違ったら落ちる |
@@ -47,12 +48,34 @@ Motolii の窓（Flutter、`skin/book`）の見た目は、中身（書類・動
 | `onOff(context, SwitchSpec)` | `on`、`onChanged`、`enabled` | オン・オフ（Animate all など） |
 | `card(context, CardSpec)` | `title`、`tone`（札の種類の色）、`open`、`onToggle`、`trailing`、`body`（行）、`head` と `own`（窓のいつもの組み立て） | インスペクタの札1枚 |
 
+約束の細かい所：
+- `ChoiceSpec.glyphs` の関数は `(Canvas c, Paint stroke)`。**Paint はフォームが作って渡す**（色・太さ・塗りか線かはフォームが決める）。印は 16×14 の箱に描かれるので、大きく描くなら `c.scale()` してから呼ぶ。
+- `CardSpec.head`：窓のいつもの見出しの行（開閉の印・種類の印・題・キーの点・畳んだ時の要約・`trailing` が組み立て済み）。自分の見出しを作るなら捨ててよい。ただし **`title` が null でも `head` がある札**（`trailing` だけの札）がある。その時は `head` を出す。
+- `CardSpec.own`：見出しと行を余白で包んだ、外枠なしの札の中身全部。「外枠だけ変えたい」なら `own` を自分の枠で包むだけでよい（`own.dart` がそう）。
+- 見た目の動き（`AnimatedContainer`、`TweenAnimationBuilder` など）は自由。手の受け取り（`GestureDetector`、`MouseRegion`、`Listener`）だけは書かず naked_ui に任せる。
+
+### 使える材料
+
+| 種類 | 名前 | 中身 |
+|---|---|---|
+| 文字の型 | `T.title()` `T.name()` `T.label()` `T.micro()` | 書体は革の `FontSans`。見出し・名前・小さな言葉・極小 |
+| 文字の型 | `T.value()` | 書体は革の `FontMono`（等幅）。数と時間に |
+| 文字の大きさ | `T.px(11)` | 革の TextScale を掛けた大きさ（`.copyWith(fontSize: T.px(n))`） |
+| 書体の名前 | `T.sans` `T.mono` | 革が言う書体の名前 |
+| 色 | `Grey.g00`〜`Grey.g100`、`Grey.bandA` など | 灰色の段（どの段が窓のどこかは [ROLES.md](ROLES.md) の表）。革の Background・Foreground から作られる |
+| 色 | `WsT.accent` `WsT.onAccent` `Pop.accentInk` | 差し色、その上の文字、地の上に線や文字で使う差し色（`lib/workspace/ws.dart`、`lib/sets/inspector/inspector_parts.dart`） |
+| 色 | `axX` `axY` `axZ`、Spec の `tone` | 軸の色、札の種類の色 |
+| 形 | `Shape.r(n)` | 角の丸み（`Radius`、革の Corner を掛ける） |
+| 形 | `Shape.s(n)` `Shape.z(n)` | 余白・大きさ（革の Spacing・Size を掛ける） |
+
+フォームが自分の色を持つのも自由（`poster.dart` は自分の色の定数を持つ）。革の色に合わせたい所だけ上の材料を使う。
+
 ### 手順
 1. `lib/forms/<名前>.dart` に `class XForms extends Forms` を書き、5つの関数を全部書く（`poster.dart` が見本、240行）。
 2. `lib/forms/forms.dart` の `forms` に `'<名前>': XForms()` を1行足し、import する。
 3. 革のフォルダの `theme.xml` に `<Forms Value="<名前>"/>` と書く（色は同じ theme.xml で）。
-4. 見る：`./live.sh` で窓を開き、View › Skin でその革を着て、フォームのファイルを保存するたびに描き直るのを見る。窓を開かずに見るなら `skins/shoot.sh skins/<名前>`（2分ほど、`preview.png`）。
-5. 確かめる：`skin_fit_test.dart` の `_skins` に `'<名前>': '<Forms Value="<名前>"/>'` を足して流す（切れ0・はみ出し0）。`flutter test` で新しい落ちが無いこと（下の「落とし穴」）。
+4. 見る：`./live.sh` で窓を開き、View › Skin でその革を着て、フォームのファイルを保存するたびに描き直るのを見る。窓を開かずに見るなら `skins/shoot.sh skins/<名前>`（2分ほど、`preview.png`）。shoot.sh は手を乗せた時・押した時を撮らないので、そこは live.sh の窓で手で確かめる。
+5. 確かめる：`skin_fit_test.dart` の `_skins` に `'<名前>': '<Forms Value="<名前>"/>'` を足して流す（切れ0・はみ出し0）。色は文字の収まりに効かないので、書くのはフォームと書体（と Size・TextScale を変えるならそれ）だけでよい。`flutter test` で新しい落ちが無いこと（下の「落とし穴」）。
 
 ### 守ること
 - 大きさは `Shape.z()`、余白は `Shape.s()`、文字は `T.name()` などの `T.*` と `T.px()` を通す（革の Size・Spacing・TextScale が効くように）。
@@ -79,9 +102,9 @@ Anthropic 公式の考え方（[frontend-design スキル](https://github.com/an
 
 > `skin/book/skins/README.md` と `ROLES.md` を読んで、`~/.motolii/skins/<名前>/theme.xml` に「（欲しい見た目）」の革を書いて。`skin/book/skins/shoot.sh ~/.motolii/skins/<名前>` で撮って `preview.png` を見て、直して、また撮る。読めない文字や差し色の埋もれがなくなるまで。
 
-**フォーム**（組み立てから変える）：
+**フォーム**（組み立てから変える）。頼む前に：フォームが届くのは今は5つの部品（§3 の表）だけ。数の欄・層の行・小さな切り替えなど残りは、革の色と書体で合わせるところまで（§7）。
 
-> `skin/book/skins/HANDOFF.md` を読んで、`lib/forms/<名前>.dart` に「（欲しい見た目）」のフォームを書き、登録して、`skin/book/skins/<名前>/theme.xml` で着る革を作って。先に色4〜6個・書体・ASCII の配置図を書いて「ありがちな所」を直してから書くこと。`skins/shoot.sh skins/<名前>` で撮って見て直す。最後に skin_fit_test に足して流し、切れ0・はみ出し0を確かめる。
+> `skin/book/skins/HANDOFF.md` を読んで、`lib/forms/<名前>.dart` に「（欲しい見た目）」のフォームを書き、登録して、`skin/book/skins/<名前>/theme.xml` で着る革を作って。先に色4〜6個・書体・ASCII の配置図を書いて「ありがちな所」を直してから書くこと。フォームが届くのは5つの部品だけなので、残りの部品は革の色と書体で合わせる。`skins/shoot.sh skins/<名前>` で撮って見て直す。最後に skin_fit_test に足して流して切れ0・はみ出し0を、`flutter test` で新しい落ち0を確かめる。
 
 ## 6. 落とし穴（踏んだ物）
 
@@ -102,4 +125,4 @@ Anthropic 公式の考え方（[frontend-design スキル](https://github.com/an
 
 ## 8. 履歴
 
-`1cb2a1f` 手引き → `2029eeb` 革はフォルダ1つ・2色で灰色の段・shoot.sh・名前の照合 → `55e0252` `b634831` 外の LLM の指摘 → `67d9a9b` 直書きの大きさ0・文字は切らない → `62bcd6e` 無茶な値の守り → `a4adeb8` 枠（9分割） → `5e9b232` ヘッドレス UI（フォーム）
+`1cb2a1f` 手引き → `2029eeb` 革はフォルダ1つ・2色で灰色の段・shoot.sh・名前の照合 → `55e0252` `b634831` 外の LLM の指摘 → `67d9a9b` 直書きの大きさ0・文字は切らない → `62bcd6e` 無茶な値の守り → `a4adeb8` 枠（9分割） → `5e9b232` ヘッドレス UI（フォーム） → `8ae378c` この引き継ぎ → 外の AI がこれだけでライトテーブルのフォームを書いた（7/10、指摘は §3 の約束の細かい所・使える材料・§5 に反映）

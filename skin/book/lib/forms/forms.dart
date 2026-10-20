@@ -6,11 +6,12 @@
 import 'package:flutter/widgets.dart';
 
 import '../theme.dart';
+import 'lighttable.dart';
 import 'own.dart';
 import 'poster.dart';
 
 /// Every form the window knows, by the name a skin says.
-const forms = <String, Forms>{'own': OwnForms(), 'poster': PosterForms()};
+const forms = <String, Forms>{'own': OwnForms(), 'poster': PosterForms(), 'lighttable': LightTableForms()};
 
 /// One loud action (Render).
 class ActionSpec {

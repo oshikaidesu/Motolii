@@ -226,7 +226,7 @@ class PosterForms extends Forms {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (c.title != null) head,
+          if (c.title != null) head else ?c.head, // (a card with no title may still have a head: what sits at its end)
           if (c.open && c.body.isNotEmpty)
             Padding(
               padding: EdgeInsets.symmetric(horizontal: Shape.s(10), vertical: Shape.s(8)),

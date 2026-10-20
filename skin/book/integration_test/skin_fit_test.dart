@@ -34,6 +34,7 @@ const _skins = {
   'no parts': '<Parts Value="/nowhere"/>',
   'poster forms': '<Forms Value="poster"/><FontSans Value="Helvetica Neue"/>',
   'poster big': '<Forms Value="poster"/><FontSans Value="Helvetica Neue"/><Size Value="1.3"/><TextScale Value="1.2"/>',
+  'lighttable forms': '<Forms Value="lighttable"/><FontSans Value="Avenir Next Condensed"/><FontMono Value="PT Mono"/>',
   'all at once': '<Size Value="1.25"/><TextScale Value="1.2"/><Spacing Value="1.3"/><FontSans Value="Monaco"/><FontMono Value="Monaco"/>',
 };
 
