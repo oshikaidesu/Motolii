@@ -15,4 +15,6 @@ corner -2: 0 cut, 0 overflow
 bad colour: 0 cut, 0 overflow
 no font: 0 cut, 0 overflow
 no parts: 0 cut, 0 overflow
+poster forms: 0 cut, 0 overflow
+poster big: 0 cut, 0 overflow
 all at once: 0 cut, 0 overflow

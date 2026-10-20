@@ -3,6 +3,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/widgets.dart';
+import '../forms/forms.dart';
 import '../parts/skin_parts.dart';
 import 'zoom.dart';
 
@@ -127,29 +128,7 @@ class _Modes extends StatelessWidget {
   final ValueChanged<int> onPick;
   static const items = ['Edit', 'Animate', 'Export'];
   @override
-  Widget build(BuildContext context) => Container(
-    height: Shape.z(26),
-    padding: EdgeInsets.all(Shape.s(2)),
-    decoration: BoxDecoration(color: WsT.well, borderRadius: BorderRadius.all(Shape.r(WsT.radius))),
-    child: Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        for (final (i, s) in items.indexed)
-          _Hover(
-            onTap: () => onPick(i),
-            builder: (h) => Container(
-              width: Shape.z(76),
-              alignment: Alignment.center,
-              decoration: BoxDecoration(color: i == index ? WsT.accent : (h ? WsT.raised : null), borderRadius: BorderRadius.all(Shape.r(WsT.radius - 2))),
-              child: Text(
-                s,
-                style: T.name(i == index ? WsT.onAccent : (h ? Grey.g95 : Grey.g76)).copyWith(fontWeight: i == index ? FontWeight.w700 : FontWeight.w500),
-              ),
-            ),
-          ),
-      ],
-    ),
-  );
+  Widget build(BuildContext context) => Forms.worn.tabs(context, ChoiceSpec(labels: items, selected: index, onSelect: onPick)); // (as the skin's forms draw it)
 }
 
 class _UndoRedo extends StatelessWidget {
@@ -292,20 +271,7 @@ class _Saved extends StatelessWidget {
 class _Render extends StatelessWidget {
   const _Render();
   @override
-  Widget build(BuildContext context) => _Hover(
-    onTap: WsScope.of(context).onRender,
-    builder: (h) => SkinFrame(
-      'render',
-      hover: h,
-      usual: BoxDecoration(color: h ? WsT.accentHot : WsT.accent, borderRadius: BorderRadius.all(Shape.r(13))),
-      child: Container(
-        height: Shape.z(26),
-        padding: EdgeInsets.symmetric(horizontal: Shape.s(14)),
-        alignment: Alignment.center,
-        child: Text('Render', style: T.name(WsT.onAccent).copyWith(fontWeight: FontWeight.w800)),
-      ),
-    ),
-  );
+  Widget build(BuildContext context) => Forms.worn.action(context, ActionSpec('Render', WsScope.of(context).onRender)); // (as the skin's forms draw it)
 }
 
 /// How many times the window waited on the inside (the rule: never), a red dot and the count only when it did; a tap

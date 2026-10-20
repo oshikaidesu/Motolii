@@ -13,7 +13,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:lab_book/motolii.dart';
-import 'package:lab_book/sets/inspector/inspector_parts.dart' show AnchorCube, AnchorGeometry, ValuesCard, CopiesDrawing, LdTile, copiesRowOf, Ctx, Hov, LightDrawing, NumField, OnOff, PanelLink, Space, SpacePlate, TextGroup, Chooser;
+import 'package:lab_book/sets/inspector/inspector_parts.dart' show AnchorCube, AnchorGeometry, ValuesCard, CopiesDrawing, LdTile, copiesRowOf, Ctx, Hov, LightDrawing, NumField, OnOff, PanelLink, Space, TextGroup, Chooser, GlyphPlate;
 import 'package:lab_book/sets/inspector/inspector_rows_prop_row.dart' show PropRow;
 import 'package:lab_book/workspace/dock_parts.dart' show DockHover, DockSearch;
 import 'package:lab_book/workspace/timeline.dart';
@@ -67,7 +67,7 @@ void main() {
       ('Make the selected card go along with the box whenever the box moves.', rect, null, find.ancestor(of: chooser('v_parent'), matching: find.byType(LdTile)).first, null),
       ('Make the selected card lighten what lies under it, like a projector\'s light, instead of covering it.', rect, null, chooser('v_blend'), null),
       ('Let the selected card be seen only through the thing just beneath it.', rect, null, find.descendant(of: row('v_clip'), matching: find.byType(OnOff)), null),
-      ('Let the selected card sit deeper in the scene, while it stays a flat card.', rect, null, find.byWidgetPredicate((w) => w is SpacePlate && w.space == Space.d25), null),
+      ('Let the selected card sit deeper in the scene, while it stays a flat card.', rect, null, find.byWidgetPredicate((w) => w is GlyphPlate && w.label == '2.5D'), null),
       ('Make the selected card blue.', rect, null, row('v_fill'), null),
       ('Draw a line all round the edge of the selected card.', rect, null, row('v_stroke'), null),
       ('Make the line round the selected card heavier.', rect, null, num('v_stroke_width'), null),
@@ -89,7 +89,7 @@ void main() {
       ('Lay the repeated cards out in rows of three.', rect, null, num('v_copy_columns'), null),
       ('Make the corners of the selected card round.', rect, null, num('v_round'), null),
       ('Make the selected card sway like a flag in the wind.', rect, null, find.byWidgetPredicate((w) => w is ValuesCard && w.card.name == 'Wave'), null),
-      ('Make the selected card a solid block that pokes out toward you.', rect, null, find.byWidgetPredicate((w) => w is SpacePlate && w.space == Space.d3), null),
+      ('Make the selected card a solid block that pokes out toward you.', rect, null, find.byWidgetPredicate((w) => w is GlyphPlate && w.label == '3D'), null),
       ('Spread the letters of the writing further apart.', text, null, num('v_letter_spacing'), null),
       ('Make the letters of the writing lean forward.', text, null, num('v_italic'), null),
       ('Line the writing up on the right.', text, null, find.descendant(of: row('v_align'), matching: find.byWidgetPredicate((w) => w is Text && w.data?.toLowerCase() == 'right')), null),
@@ -174,7 +174,7 @@ void main() {
         return o is RenderBox && o.hasSize && o.attached ? MatrixUtils.transformRect(o.getTransformTo(null), Offset.zero & o.size) : null;
       }
       final all = {
-        for (final type in const [NumField, Chooser, OnOff, SpacePlate, PanelLink, EditableText, DockHover, DockSearch, AnchorCube, Hov])
+        for (final type in const [NumField, Chooser, OnOff, GlyphPlate, PanelLink, EditableText, DockHover, DockSearch, AnchorCube, Hov])
           for (final e in find.byType(type).evaluate())
             if (partOf(e) case final b? when !b.isEmpty && (Offset.zero & t.view.physicalSize / dpr).overlaps(b)) b,
       };

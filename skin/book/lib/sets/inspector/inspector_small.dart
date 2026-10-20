@@ -1,5 +1,5 @@
 import 'package:flutter/widgets.dart';
-import '../../parts/controls.dart';
+import 'package:lab_book/forms/forms.dart';
 import '../../tokens.dart';
 import 'inspector_parts.dart';
 
@@ -177,23 +177,7 @@ class OnOff extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final live = enabled && !RowOff.offOf(context) && !Ctx.of(context).cfg.locked;
-    return IgnorePointer(
-      ignoring: !live,
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          SizedBox(
-            width: Shape.z(20),
-            child: Text(on ? 'On' : 'Off', textAlign: TextAlign.right, style: T.label(live && on ? Grey.g95 : Grey.g56)),
-          ),
-          SizedBox(width: Shape.s(8)),
-          Opacity(
-            opacity: live ? 1 : .5,
-            child: Pop.on(context) ? PopSwitch(on: on, onChanged: onChanged) : PillSwitch(on: on, onChanged: onChanged),
-          ),
-        ],
-      ),
-    );
+    return Forms.worn.onOff(context, SwitchSpec(on: on, onChanged: onChanged, enabled: live)); // (as the skin's forms draw it)
   }
 }
 

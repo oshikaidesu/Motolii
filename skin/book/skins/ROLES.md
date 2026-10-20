@@ -61,8 +61,9 @@
 （どれも「いつもの何倍か」。Corner＝角の丸み 0〜10、Size＝部品の大きさ 0.85〜1.5、Spacing＝余白とすき間 0〜2、TextScale＝文字の大きさ 0.85〜1.3。範囲の外は端に収める）
 
 ## 言葉
-`FontMono` `FontSans` `Parts` `Shade`
+`FontMono` `FontSans` `Forms` `Parts` `Shade`
 
+- Forms: 部品の形の組み立て方の名前（own＝いつもの、poster＝ポスター風）。中身は `lib/forms/<名前>.dart`（README の「フォーム」）
 - Shade: `light` か `dark`。Background を書けば要らない
 - FontSans / FontMono: 書体の名前。`FontSansFile` / `FontMonoFile` に書体ファイルの場所を書くと、その名前で読み込む
 - Parts: 絵の部品のフォルダ（名前は PARTS.md）。場所は theme.xml から見た相対・`~/`・絶対のどれでもよい

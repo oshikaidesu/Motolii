@@ -1,5 +1,6 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
+import 'package:lab_book/forms/forms.dart';
 import 'package:lab_book/sets/inspector/inspector_direct_transform_value_glyph.dart';
 import 'package:lab_book/sets/inspector/inspector_rows_prop_row.dart';
 import 'package:lab_book/sets/inspector/inspector_rows_sect.dart';
@@ -20,22 +21,18 @@ class SpaceRow extends StatelessWidget {
       keyable: false,
       enabled: !x.cfg.locked,
       cells: [
-        Row(
-          children: [
-            for (final s in Space.values) ...[
-              if (s != Space.d2) SizedBox(width: Shape.s(4)),
-              Expanded(
-                child: SpacePlate(
-                  s,
-                  on: doc.space == s,
-                  onTap: () {
-                    doc.space = s;
-                    doc.poke();
-                  },
-                ),
-              ),
-            ],
-          ],
+        Forms.worn.choice( // (as the skin's forms draw one of a few)
+          context,
+          ChoiceSpec(
+            labels: [for (final s in Space.values) spaceNames[s]!],
+            glyphs: [for (final s in Space.values) (c, st) => _SpacePaint(s, st.color).paint(c, const Size(16, 14))],
+            selected: Space.values.indexOf(doc.space),
+            enabled: !x.cfg.locked,
+            onSelect: (i) {
+              doc.space = Space.values[i];
+              doc.poke();
+            },
+          ),
         ),
       ],
     );
@@ -111,15 +108,8 @@ void Function(Canvas, Paint) alignGlyph(double at) => (c, st) {
   }
 };
 
-class SpacePlate extends StatelessWidget {
-  const SpacePlate(this.space, {super.key, required this.on, required this.onTap});
-  final Space space;
-  final bool on;
-  final VoidCallback onTap;
-  static const names = {Space.d2: '2D', Space.d25: '2.5D', Space.d3: '3D'};
-  @override
-  Widget build(BuildContext context) => GlyphPlate(names[space]!, (c, st) => _SpacePaint(space, st.color).paint(c, const Size(16, 14)), on: on, onTap: onTap);
-}
+/// The spaces' names.
+const spaceNames = {Space.d2: '2D', Space.d25: '2.5D', Space.d3: '3D'};
 
 class _SpacePaint extends CustomPainter {
   const _SpacePaint(this.space, this.ink);

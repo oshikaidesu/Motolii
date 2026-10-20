@@ -239,6 +239,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.4.0"
+  naked_ui:
+    dependency: "direct main"
+    description:
+      name: naked_ui
+      sha256: "5496c4a736e141a0ea80b56dbf7cc01ba0ed517d79d9b6b060c255cd13654f6f"
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.2.1"
   nested:
     dependency: transitive
     description:

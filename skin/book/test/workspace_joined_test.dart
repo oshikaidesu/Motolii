@@ -13,7 +13,7 @@ import 'package:lab_book/motolii.dart';
 
 import 'door.dart';
 import 'package:lab_book/parts/controls.dart' show Segmented;
-import 'package:lab_book/sets/inspector/inspector_parts.dart' show Ctx, Chooser, AnchorCube, AnchorGeometry, LinkMark, ValuesCard, FillStroke, InspHeader, KeyS, NumField, OnOff, PropRow, Space, SpacePlate, TextGroup;
+import 'package:lab_book/sets/inspector/inspector_parts.dart' show Ctx, Chooser, GlyphPlate, AnchorCube, AnchorGeometry, LinkMark, ValuesCard, FillStroke, InspHeader, KeyS, NumField, OnOff, PropRow, Space, TextGroup;
 import 'package:lab_book/sets/inspector/inspector_rows_prop_row.dart';
 import 'package:lab_book/workspace/dock_fonts.dart';
 import 'package:lab_book/workspace/dock_make.dart' show CreateShelf;
@@ -691,7 +691,7 @@ void main() {
       ..reread()
       ..select('$rect');
     await t.pumpAndSettle();
-    final plate = find.byWidgetPredicate((w) => w is SpacePlate && w.space == Space.d25); // (the Transform card's three plates)
+    final plate = find.byWidgetPredicate((w) => w is GlyphPlate && w.label == '2.5D'); // (the Transform card's three plates)
     await seen(t, plate);
     await t.tap(plate);
     await settled(t, ws);

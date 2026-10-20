@@ -32,6 +32,8 @@ const _skins = {
   'bad colour': '<Background Value="#zzzzzz"/>',
   'no font': '<FontSans Value="No Such Font"/>',
   'no parts': '<Parts Value="/nowhere"/>',
+  'poster forms': '<Forms Value="poster"/><FontSans Value="Helvetica Neue"/>',
+  'poster big': '<Forms Value="poster"/><FontSans Value="Helvetica Neue"/><Size Value="1.3"/><TextScale Value="1.2"/>',
   'all at once': '<Size Value="1.25"/><TextScale Value="1.2"/><Spacing Value="1.3"/><FontSans Value="Monaco"/><FontMono Value="Monaco"/>',
 };
 
