@@ -746,6 +746,64 @@ class _MarksPainter extends CustomPainter {
   bool shouldRepaint(_MarksPainter o) => true;
 }
 
+/// The relations the picked thing is in, on top of its inspector, the one that shows first (as Blender stacks a thing's
+/// constraints): each its eye, its kind and leader, × to take the thing out; pressed, that relation picked.
+class WsRelationStack extends StatelessWidget {
+  const WsRelationStack({super.key});
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(listenable: WsScope.read(context), builder: (context, _) => _built(context));   // (its own: the inspector is not built again for a value of another thing)
+
+  Widget _built(BuildContext context) {
+    final ws = WsScope.read(context), m = ws.inside, t = ws.selected;
+    if (m == null || t == null) return const SizedBox.shrink();
+    final rels = wsRelationsOf(ws), top = wsWinner(ws);
+    if (rels.isEmpty) return const SizedBox.shrink();
+    String nameOf(int i) => '${ws.layers.indexWhere((l) => l.id == '$i') + 1}. ${ws.layers.where((l) => l.id == '$i').firstOrNull?.name ?? ''}';
+    return Container(
+      key: const ValueKey('ws-relation-stack'),
+      padding: EdgeInsets.fromLTRB(Shape.s(10), Shape.s(8), Shape.s(10), Shape.s(6)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (final r in rels)
+            () {
+              final id = int.parse(r), kind = m.word(id, 'file'), on = (m.value(id, 'visible', 0) ?? 1) > .5;
+              final lead = (m.value(id, 'leader', 0) ?? 0).round(), leads = '$lead' == t;
+              final ink = r == top ? Grey.g95 : Grey.g56;
+              return GestureDetector(
+                key: ValueKey('ws-stack-$r'),
+                behavior: HitTestBehavior.opaque,
+                onTap: () => ws.select(r),
+                child: Padding(
+                  padding: EdgeInsets.symmetric(vertical: Shape.s(3)),
+                  child: Row(
+                    children: [
+                      GestureDetector(
+                        key: ValueKey('ws-stack-eye-$r'),
+                        onTap: () => ws.after(m.later('set', thing: id, name: 'visible', number: on ? 0 : 1), (_, _) => ws.reread()),
+                        child: TpGlyphView(on ? TpGlyph.eye : TpGlyph.eyeOff, ink, size: Shape.z(12)),
+                      ),
+                      SizedBox(width: Shape.s(8)),
+                      Text('${kind[0].toUpperCase()}${kind.substring(1)}', style: T.label(ink)),
+                      SizedBox(width: Shape.s(8)),
+                      Expanded(child: Text(leads ? 'leads it' : lead > 0 ? nameOf(lead) : '', maxLines: 1, overflow: TextOverflow.ellipsis, style: T.label(Grey.g56))),
+                      if (!leads)
+                        GestureDetector(
+                          key: ValueKey('ws-stack-free-$r'),
+                          onTap: () => ws.after(m.later('free', thing: int.parse(t), number: id.toDouble()), (_, _) => ws.reread()),
+                          child: Text('×', style: T.label(Grey.g56)),
+                        ),
+                    ],
+                  ),
+                ),
+              );
+            }(),
+        ],
+      ),
+    );
+  }
+}
+
 /// A word in the bar over the stage, on the panel's ground (the bar lies over the stage's surround, dark or light).
 class _Said extends StatelessWidget {
   const _Said(this.text);

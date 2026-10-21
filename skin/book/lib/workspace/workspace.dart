@@ -22,6 +22,7 @@ import 'panes.dart';
 import 'desk_kit.dart';
 import 'keys.dart';
 import 'stage.dart';
+import 'stage_view.dart' show WsRelationStack;
 import 'timeline.dart';
 import 'top_bar.dart';
 import '../motolii.dart';
@@ -395,15 +396,10 @@ bool _flag(Ws ws, String? id, Map<String, bool> changed) {
   return false;
 }
 
-/// Joined: the other things by the names the timeline shows (a name two things share is told apart by its number among
-/// them, in the order they were made: the same number however the rows move or grow).
+/// Joined: the other things by their row's number on the timeline and the name it shows there.
 Map<String, int> _others(Ws ws, int t) {
-  final rows = ws.layers.where((l) => l.id != '$t' && ws.inside?.word(int.parse(l.id), 'kind') != 'behaviour').toList()   // (things, not relations or behaviours)
-    ..sort((a, b) => int.parse(a.id).compareTo(int.parse(b.id)));
-  return {
-    for (final l in rows)
-      (rows.where((o) => o.name == l.name).length > 1 ? '${l.name} ${rows.where((o) => o.name == l.name).toList().indexOf(l) + 1}' : l.name): int.parse(l.id),
-  };
+  final rows = ws.layers.where((l) => l.id != '$t' && ws.inside?.word(int.parse(l.id), 'kind') != 'behaviour');   // (things, not relations or behaviours)
+  return {for (final l in rows) '${ws.layers.indexOf(l) + 1}. ${l.name}': int.parse(l.id)};   // (as After Effects' parent list: the row's number on the timeline, then the name)
 }
 
 /// Joined: a change the document did not take is said in the top bar, by the inside's own reason (its first clause,
@@ -746,7 +742,7 @@ class _InspectorSeatState extends State<_InspectorSeat> {
   Widget build(BuildContext context) {
     final ws = WsScope.read(context), l = ws.layer, k = _kindOf(l), m = ws.inside!;
     if (int.tryParse(l?.id ?? '') case final t?) m.soloFollow(t); // (the thing picked is the one shown alone)
-    return LayoutBuilder(
+    return Column(children: [const WsRelationStack(), Expanded(child: LayoutBuilder(
       builder: (context, box) => InspHost(
         key: ValueKey(k),
         cfg: const Cfg(),
@@ -787,6 +783,6 @@ class _InspectorSeatState extends State<_InspectorSeat> {
         live: _live,
         child: _panelOf(box), // (the same panel while the pane keeps its size: built again only by what it reads, Ctx)
       ),
-    );
+    ))]);
   }
 }
