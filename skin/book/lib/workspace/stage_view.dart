@@ -689,7 +689,7 @@ class _RelationMarks extends StatelessWidget {
                       : [
                           _Said('${kind[0].toUpperCase()}${kind.substring(1)} · ${members.length}'),
                           _RelateChip('eye', () => wsSwitch(ws), glyph: (m!.value(rel!, 'visible', 0) ?? 1) > .5 ? TpGlyph.eye : TpGlyph.eyeOff, key: const ValueKey('ws-relation-switch')), // (its eye, as on its row: shut, what it is on top of shows)
-                          _RelateChip('apply', () => wsRelease(ws), key: const ValueKey('ws-relate-release')),   // (as Blender's Apply: kept where they show, the relation gone; Delete: back to what is under it)
+                          _RelateChip('bake', () => wsRelease(ws), key: const ValueKey('ws-relate-release')),   // (baked: kept where they show, the relation gone; × and Delete: back to what is under it)
                         ],
                 ),
               ),
