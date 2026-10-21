@@ -10,9 +10,9 @@ void wsRelate(Ws ws, String kind) {
   if (m == null || ws.many.length < 2) return;
   m.later('together', number: 1);   // (one step, asked without waiting: the behaviour is the thing the add makes)
   ws.after(m.later('add', name: 'behaviour', word: kind), null, (b) => ws.select('$b'));   // (picked as soon as it is there: its card, its row)
-  m
-    ..later('set', thing: -1, name: 'strength', number: 1)   // (said, so its card shows it as it works)
-    ..later('relate', thing: -1, word: ws.many.join(' '));
+  m.later('set', thing: -1, name: 'strength', number: 1);   // (said, so its card shows it as it works)
+  if ((kind == 'follow' || kind == 'push') && ws.manyByHand) m.later('set', thing: -1, name: 'leader', number: double.parse(ws.many.first));   // (picked one by one: the first leads, as it was picked first)
+  m.later('relate', thing: -1, word: ws.many.join(' '));
   ws.after(m.later('together'), (_, _) => ws.reread());   // (made or not, the window shows what the document is)
 }
 
@@ -33,8 +33,8 @@ void wsLead(Ws ws, String id) {
 
 /// A thing added to those picked together (Shift or Cmd with a click): the one picked alone goes in with it.
 void wsPickAlso(Ws ws, String id) {
-  if (ws.many.contains(id)) return ws.pickMany({...ws.many}..remove(id));   // (picked already: one less)
-  ws.pickMany({...ws.many, if (ws.selected case final s? when !wsMembersOf(ws).contains(s) && ws.many.isEmpty && int.tryParse(s) != null) s, id});
+  if (ws.many.contains(id)) return ws.pickMany({...ws.many}..remove(id), byHand: true);   // (picked already: one less)
+  ws.pickMany({...ws.many, if (ws.selected case final s? when !wsMembersOf(ws).contains(s) && ws.many.isEmpty && int.tryParse(s) != null) s, id}, byHand: true);
 }
 
 /// One thing out of the picked relation, where it shows now (the others stay where they are).
@@ -70,4 +70,13 @@ List<String> wsRelationsOf(Ws ws) {
     r = at >= 0 && at < under.length ? int.tryParse(under[at]) ?? 0 : 0;
   }
   return all;
+}
+
+/// Joined: the picked relation on or off (its strength 1 or 0): off, what it is on top of shows (After Effects' switch on
+/// an expression); nothing is let go.
+void wsSwitch(Ws ws) {
+  final m = ws.inside, by = int.tryParse(ws.selected ?? '');
+  if (m == null || by == null) return;
+  final on = (m.value(by, 'strength', ws.frame / Ws.fps) ?? 1) > .5;
+  ws.after(m.later('set', thing: by, name: 'strength', number: on ? 0 : 1), (_, _) => ws.reread());
 }

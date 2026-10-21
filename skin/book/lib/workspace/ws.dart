@@ -247,10 +247,12 @@ class Ws extends ChangeNotifier {
 
   /// The things picked together (drawn round on the stage): what a relation is made of. Picking one alone clears them.
   final many = <String>{};
-  void pickMany(Iterable<String> ids) {
+  bool manyByHand = false;   // (picked one by one, in that order: the first leads; drawn round, they have no order)
+  void pickMany(Iterable<String> ids, {bool byHand = false}) {
     many
       ..clear()
       ..addAll(ids);
+    manyByHand = byHand;
     notifyListeners();
   }
 

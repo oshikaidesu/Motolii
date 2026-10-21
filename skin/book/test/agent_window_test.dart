@@ -13,6 +13,7 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
+import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -55,6 +56,7 @@ String _scene() {
       ..say(t, 'fill', ink);
   }
   m.close();
+  Process.runSync('sqlite3', [path, 'delete from step;']);   // (the scene is where the tester begins: undo stops there)
   return path;
 }
 
@@ -101,7 +103,7 @@ void main() {
     }
 
     Future<void> through(List<Offset> ps) async {
-      final g = await t.startGesture(ps.first, pointer: pointer++);
+      final g = await t.startGesture(ps.first, pointer: pointer++, kind: PointerDeviceKind.mouse);   // (a mouse: a drag starts within a few points, as a hand at a desk)
       for (var i = 1; i < ps.length; i++) {
         final a = ps[i - 1], b = ps[i];
         for (var k = 1; k <= 8; k++) {
@@ -131,14 +133,14 @@ void main() {
       try {
         switch (w.first) {
           case 'tap':
-            await t.tapAt(ps.first);
+            await t.tapAt(ps.first, kind: PointerDeviceKind.mouse);
           case 'doubletap':
-            await t.tapAt(ps.first);
+            await t.tapAt(ps.first, kind: PointerDeviceKind.mouse);
             await t.pump(const Duration(milliseconds: 60));
-            await t.tapAt(ps.first);
+            await t.tapAt(ps.first, kind: PointerDeviceKind.mouse);
           case 'shifttap':
             await simulateKeyDownEvent(LogicalKeyboardKey.shiftLeft);
-            await t.tapAt(ps.first);
+            await t.tapAt(ps.first, kind: PointerDeviceKind.mouse);
             await simulateKeyUpEvent(LogicalKeyboardKey.shiftLeft);
           case 'drag' || 'path':
             await through(ps);

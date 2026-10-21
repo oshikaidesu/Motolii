@@ -495,7 +495,7 @@ class _StageViewState extends State<StageView> implements StageHandles {
               if (widget.make == 'pen') return _pen(v, d.localPosition, d.localPosition); // (a tap: a corner)
               if (widget.make != null) return _draw(v, _drawFrom = d.localPosition); // (only come down: one as it comes, there)
               final hit = _hit(v, d.localPosition), ws = WsScope.read(context);
-              if (hit != null && (HardwareKeyboard.instance.isShiftPressed || HardwareKeyboard.instance.isMetaPressed)) return wsPickAlso(ws, hit); // (Shift or Cmd: one more picked together, or one less)
+              if (HardwareKeyboard.instance.isShiftPressed || HardwareKeyboard.instance.isMetaPressed) return hit == null ? null : wsPickAlso(ws, hit); // (Shift or Cmd: one more picked together, or one less; on nothing, nothing lost)
               ws.select(hit);
             },
             dragStartBehavior: DragStartBehavior.down, // (a thing is held where the hand came down, not where it had got to when the drag was known for one)
@@ -629,17 +629,16 @@ class _RelationMarks extends StatelessWidget {
             ..add(handle('centre', mid, (u) => m..carry('centre_x', u.$1)..carry('centre_y', u.$2)))
             ..add(handle('size', screen(cx + r * math.sin(turn * 2 * math.pi), cy + r * math.cos(turn * 2 * math.pi)), (u) => m.carry('radius', math.sqrt(math.pow(u.$1 - cx, 2) + math.pow(u.$2 - cy, 2)))));
         } else if (kind == 'row') {
-          final gap = val('gap', .2), n = math.max(1, m.word(rel, 'members').split(' ').length);
-          shape.add(_Shape.line(mid, screen(cx + gap * (n - 1), cy)));
-          const above = Offset(0, -30);   // (over the line, not on the things in it)
-          shape.add(_Shape.line(mid + above, screen(cx + gap, cy) + above));
+          final gap = val('gap', .2), n = math.max(1, m.word(rel, 'members').split(' ').length), half = gap * (n - 1) / 2;
+          shape.add(_Shape.line(screen(cx - half, cy), screen(cx + half, cy)));   // (a row about its middle)
+          const above = Offset(0, -30);   // (its handles over the line, not on the things in it)
           handles
             ..add(handle('centre', mid + above, (u) {
               final (_, lift) = units(above);
               final (_, zero) = units(Offset.zero);
               m..carry('centre_x', u.$1)..carry('centre_y', u.$2 - (lift - zero));
             }))
-            ..add(handle('size', screen(cx + gap, cy) + above, (u) => m.carry('gap', u.$1 - cx)));
+            ..add(handle('size', screen(cx + half, cy) + above, (u) => m.carry('gap', math.max(0, u.$1 - cx) * 2 / math.max(1, n - 1))));   // (its right end out: wider both ways)
         } else if (kind == 'push' && leader != null && on(leader) != null) {
           final l = on(leader)!, r = val('radius', .5);
           shape.add(_Shape.ring(l, r * px));
@@ -650,6 +649,9 @@ class _RelationMarks extends StatelessWidget {
         }
       }
       final tags = wsRelationsOf(ws), sel = ws.selected == null ? null : on(ws.selected!);
+      if (sel != null && m != null) // (a pusher picked: how far it reaches, while it is carried too)
+        for (final r in tags)
+          if (m.word(int.parse(r), 'file') == 'push' && '${(m.value(int.parse(r), 'leader', now) ?? 0).round()}' == ws.selected) shape.add(_Shape.ring(sel, (m.value(int.parse(r), 'radius', now) ?? .5) * m.point * v.s));
       return Stack(
         children: [
           IgnorePointer(child: CustomPaint(size: Size.infinite, painter: _MarksPainter(lasso, [...picked, for (final (_, p) in members) p], shape))),
@@ -671,7 +673,11 @@ class _RelationMarks extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: picked.length > 1
                       ? [Padding(padding: EdgeInsets.only(right: Shape.s(8)), child: Text('${picked.length} picked', style: T.label(Grey.g91))), for (final k in wsRelations) _RelateChip(k, () => wsRelate(ws, k))]
-                      : [Padding(padding: EdgeInsets.only(right: Shape.s(8)), child: Text('${kind[0].toUpperCase()}${kind.substring(1)} · ${members.length}', style: T.label(Grey.g91))), _RelateChip('release', () => wsRelease(ws))],
+                      : [
+                          Padding(padding: EdgeInsets.only(right: Shape.s(8)), child: Text('${kind[0].toUpperCase()}${kind.substring(1)} · ${members.length}', style: T.label(Grey.g91))),
+                          _RelateChip((m!.value(rel!, 'strength', now) ?? 1) > .5 ? 'on' : 'off', () => wsSwitch(ws), outlined: (m.value(rel, 'strength', now) ?? 1) <= .5, key: const ValueKey('ws-relation-switch')), // (on or off: off, what it is on top of shows)
+                          _RelateChip('release', () => wsRelease(ws)),
+                        ],
                 ),
               ),
             ),

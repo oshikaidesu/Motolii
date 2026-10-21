@@ -1015,7 +1015,7 @@ static double doc_related(Doc& d, int by, int thing, const char* name, double t,
         if (type == "around") {
             const double turn = TAU * (doc_number(d, by, "offset", t, 0) + (double)i / many), r = doc_number(d, by, "radius", t, 0.5);
             place = n == "x" ? cx + r * std::sin(turn) : cy + r * std::cos(turn);
-        } else place = n == "x" ? cx + doc_number(d, by, "gap", t, 0.2) * (double)i : cy;
+        } else place = n == "x" ? cx + doc_number(d, by, "gap", t, 0.2) * ((double)i - (many - 1) / 2.0) : cy;   // (a row about its middle: a wider gap spreads it both ways)
         return std::isnan(came) ? base + (place - base) * s : base + (place - came) * s;
     }
     if ((type == "follow" || type == "push") && d.settled) return base;
@@ -1026,7 +1026,7 @@ static double doc_related(Doc& d, int by, int thing, const char* name, double t,
         const double from = doc_literal(d, a, name, back, own), to = b ? doc_literal(d, b, name, back, own) : from, lead = from + (to - from) * hand;
         return std::isnan(came) ? base + lead * s : base + (lead - came) * s;
     }
-    if (type == "push") {   // (out of its leader's way: within radius moved out to the edge, softly; further off as it is)
+    if (type == "push") {   // (out of its leader's way: within radius moved out to its edge; further off as it is)
         const int l = leader("leader");
         if (!l || (n != "x" && n != "y")) return base;
         const double bx = n == "x" ? base : start("x", doc_keys_at(d, doc_keys_of(d, thing, "x"), t, 0)), by_ = n == "y" ? base : start("y", doc_keys_at(d, doc_keys_of(d, thing, "y"), t, 0));
@@ -1034,7 +1034,7 @@ static double doc_related(Doc& d, int by, int thing, const char* name, double t,
         double dx = bx - lx, dy = by_ - ly, far = std::hypot(dx, dy);
         if (far >= r || r <= 0.0) return base;
         if (far < 1e-6) dx = std::sin(TAU * (double)i / many), dy = std::cos(TAU * (double)i / many), far = 1e-6;
-        const double out = far + (r - far) * (r - far) / r, v = n == "x" ? lx + dx / far * out : ly + dy / far * out;
+        const double out = r, v = n == "x" ? lx + dx / far * out : ly + dy / far * out;   // (out to the edge: a clear way, not a nudge)
         return base + (v - base) * s;
     }
     return base;
@@ -2728,10 +2728,7 @@ static bool doc_relate(Doc& d, int by, const char* ids, double now) {
     for (const int t : members) cx += at[t].first / members.size(), cy += at[t].second / members.size();
     if (type == "around" || type == "row") {
         if (has("centre_x")) cx = doc_number(d, by, "centre_x", now, 0), cy = doc_number(d, by, "centre_y", now, 0);
-        else {   // (an around's middle where they stand; a row begins at the leftmost)
-            if (type == "row") for (const int t : members) cx = std::min(cx, at[t].first);
-            ok = ok && doc_set(d, by, "centre_x", cx) && doc_set(d, by, "centre_y", cy);
-        }
+        else ok = ok && doc_set(d, by, "centre_x", cx) && doc_set(d, by, "centre_y", cy);   // (its middle where they stand)
         std::sort(members.begin(), members.end(), [&](int a, int b) { return type == "around" ? std::atan2(at[a].first - cx, at[a].second - cy) < std::atan2(at[b].first - cx, at[b].second - cy) : at[a].first < at[b].first; });
         if (type == "around" && !has("radius")) {
             double r = 0;

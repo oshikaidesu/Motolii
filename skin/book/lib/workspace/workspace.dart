@@ -138,7 +138,9 @@ class _WorkspaceState extends State<Workspace> {
       'edit.selectAll': () => _typed(const SelectAllTextIntent(SelectionChangedCause.keyboard)),
       'thing.remove': () {
         final t = int.tryParse(ws.selected ?? '');
-        if (t != null) ws.after(m.later('remove', thing: t));   // (without waiting; undo brings it back)
+        if (t == null) return;
+        ws.after(m.later('remove', thing: t));   // (without waiting; undo brings it back)
+        ws.select(null);   // (nothing picked after it: a second Delete takes nothing else)
       },
       'layers.sequence': () => ws.after(m.later('sequence')),   // (After Effects' Keyframe Assistant: one after another, from the top)
       'play.toggle': () => ws.playing = !ws.playing,
