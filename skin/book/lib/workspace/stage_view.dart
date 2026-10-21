@@ -674,6 +674,8 @@ class _RelationMarks extends StatelessWidget {
             if ((kind == 'follow' || kind == 'push') && id != leader) Positioned(left: p.dx - 24, top: p.dy - 24, child: _Badge('crown', () => wsLead(ws, id), faint: true, key: ValueKey('ws-lead-$id'))), // (another's crown: that one leads, nothing moving)
           ],
           if (on(leader ?? '') case final l? when leader != null) Positioned(left: l.dx - 24, top: l.dy - 24, child: _Badge('crown', () {}, key: const ValueKey('ws-leader'))), // (the leader)
+          if (!isRelation && ws.manyByHand && ws.many.length > 1 && on(ws.many.first) != null) // (picked one by one: the first leads a Follow or a Push, shown before it is made)
+            Positioned(left: on(ws.many.first)!.dx - 24, top: on(ws.many.first)!.dy - 24, child: _Badge('crown', () {}, faint: true, key: const ValueKey('ws-leader-to-be'))),
           if (sel != null && tags.isNotEmpty) // (the relations the picked thing is in, the one on top first: a touch picks it)
             Positioned(left: sel.dx + 20, top: sel.dy + 18, child: Row(children: [for (final r in tags) _RelateChip(m!.word(int.parse(r), 'file'), () => ws.select(r), outlined: r != wsWinner(ws), key: ValueKey('ws-in-$r'))])),   // (filled: the one that shows; the rest under it, or switched off, outlined)
           if (lasso == null && (picked.length > 1 || isRelation)) // (along the top of the stage, never over a thing)
@@ -689,7 +691,8 @@ class _RelationMarks extends StatelessWidget {
                       : [
                           _Said('${kind[0].toUpperCase()}${kind.substring(1)} · ${members.length}'),
                           _RelateChip('eye', () => wsSwitch(ws), glyph: (m!.value(rel!, 'visible', 0) ?? 1) > .5 ? TpGlyph.eye : TpGlyph.eyeOff, key: const ValueKey('ws-relation-switch')), // (its eye, as on its row: shut, what it is on top of shows)
-                          _RelateChip('bake', () => wsRelease(ws), key: const ValueKey('ws-relate-release')),   // (baked: kept where they show, the relation gone; × and Delete: back to what is under it)
+                          _RelateChip('bake', () => wsRelease(ws), key: const ValueKey('ws-relate-release')),
+                          _RelateChip('delete', () => ws.after(m.later('remove', thing: rel), (_, _) => ws..select(null)..reread()), key: const ValueKey('ws-relate-delete')),   // (as Blender puts Apply and Delete side by side: gone, its things back to what is under it)   // (baked: kept where they show, the relation gone; × and Delete: back to what is under it)
                         ],
                 ),
               ),
@@ -778,11 +781,7 @@ class WsRelationStack extends StatelessWidget {
                   padding: EdgeInsets.symmetric(vertical: Shape.s(3)),
                   child: Row(
                     children: [
-                      GestureDetector(
-                        key: ValueKey('ws-stack-eye-$r'),
-                        onTap: () => ws.after(m.later('set', thing: id, name: 'visible', number: on ? 0 : 1), (_, _) => ws.reread()),
-                        child: TpGlyphView(on ? TpGlyph.eye : TpGlyph.eyeOff, ink, size: Shape.z(12)),
-                      ),
+                      Container(width: Shape.z(6), height: Shape.z(6), decoration: BoxDecoration(color: on ? ink : const Color(0x00000000), border: Border.all(color: ink), shape: BoxShape.circle)),   // (lit: switched on; its eye is on the relation's own row and bar)
                       SizedBox(width: Shape.s(8)),
                       Text('${kind[0].toUpperCase()}${kind.substring(1)}', style: T.label(ink)),
                       SizedBox(width: Shape.s(8)),

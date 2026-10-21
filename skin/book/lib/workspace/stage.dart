@@ -466,7 +466,7 @@ class _Readout extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l = layer, box = WsArt.boxOf(scene, l?.id), ws = WsScope.of(context);
-    if (l == null) return Text('Nothing selected', style: T.label(Grey.g56));
+    if (l == null) return Text(ws.many.isEmpty ? 'Nothing selected' : '${ws.many.length} picked', style: T.label(Grey.g56));   // (picked together: said so, as the bar over the stage does)
     Widget pair(String k, String v) => Padding(
       padding: EdgeInsets.only(left: Shape.s(10)),
       child: Row(

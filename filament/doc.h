@@ -3149,6 +3149,13 @@ static std::string doc_name(Doc& d, int thing) {
     if (doc_word(d, thing, "kind") == "camera") return "Camera";
     std::string is = doc_word(d, thing, "text");
     if (is.empty()) is = doc_word(d, thing, "shape");
+    if (is.empty() && doc_word(d, thing, "kind") == "behaviour") {   // (a behaviour by its kind, a second of a kind told apart by its number, as Blender's .001)
+        const std::string file = doc_word(d, thing, "file");
+        int nth = 0, all = 0;
+        for (const int t : doc_things(d))
+            if (doc_word(d, t, "kind") == "behaviour" && doc_word(d, t, "file") == file && doc_word(d, t, "name").empty()) { ++all; if (t <= thing) ++nth; }
+        return all > 1 && nth > 1 ? file + " " + std::to_string(nth) : file;
+    }
     if (is.empty()) return std::filesystem::path(doc_word(d, thing, "file")).filename().string();
     if (doc_word(d, thing, "kind") != "text") is[0] = (char)std::toupper((unsigned char)is[0]);
     std::replace(is.begin(), is.end(), '\n', ' ');   // (a text of lines is listed on one)
