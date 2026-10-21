@@ -684,9 +684,9 @@ class _RelationMarks extends StatelessWidget {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: picked.length > 1
-                      ? [Padding(padding: EdgeInsets.only(right: Shape.s(8)), child: Text('${picked.length} picked', style: T.label(Grey.g91))), for (final k in wsRelations) _RelateChip(k, () => wsRelate(ws, k))]
+                      ? [_Said('${picked.length} picked'), for (final k in wsRelations) _RelateChip(k, () => wsRelate(ws, k))]
                       : [
-                          Padding(padding: EdgeInsets.only(right: Shape.s(8)), child: Text('${kind[0].toUpperCase()}${kind.substring(1)} · ${members.length}', style: T.label(Grey.g91))),
+                          _Said('${kind[0].toUpperCase()}${kind.substring(1)} · ${members.length}'),
                           _RelateChip('eye', () => wsSwitch(ws), glyph: (m!.value(rel!, 'visible', 0) ?? 1) > .5 ? TpGlyph.eye : TpGlyph.eyeOff, key: const ValueKey('ws-relation-switch')), // (its eye, as on its row: shut, what it is on top of shows)
                           _RelateChip('release', () => wsRelease(ws)),
                         ],
@@ -741,6 +741,19 @@ class _MarksPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_MarksPainter o) => true;
+}
+
+/// A word in the bar over the stage, on the panel's ground (the bar lies over the stage's surround, dark or light).
+class _Said extends StatelessWidget {
+  const _Said(this.text);
+  final String text;
+  @override
+  Widget build(BuildContext context) => Container(
+    margin: EdgeInsets.only(right: Shape.s(6)),
+    padding: EdgeInsets.symmetric(horizontal: Shape.s(8), vertical: Shape.s(5)),
+    decoration: BoxDecoration(color: WsT.body, borderRadius: BorderRadius.all(Shape.r(12))),
+    child: Text(text, style: T.label(Grey.g91)),
+  );
 }
 
 /// What things picked together may do together, or a relation a thing is in (outlined): a word on a pill.
