@@ -287,7 +287,7 @@ static const DocValue doc_values[] = {
     //  falloff_soft units of the stage; inverted, the other way: elsewhere, the value is the thing's own)
     {"falloff", "behaviour", 0, 1e9, false, nullptr},
     {"falloff_soft", "behaviour", 0, 1e4, true, nullptr},
-    {"falloff_invert", "behaviour", 0, 1, false, nullptr},
+    {"falloff_invert", "behaviour", 0, 1, false, nullptr},   // (where its outlines lie over each other: filled, or a hole every other time, SVG's and Cavalry's fill rule)
     // (a relation, a behaviour that sets its things in relation to each other or to one of them: around a middle, in a row,
     //  following a leader (so many seconds later each, its own value as a step from the leader's; handed over to leader_b as
     //  hand goes 0 to 1), or pushed away by a leader within radius; strength how much of it works: 0 as if it were not there,
@@ -300,7 +300,7 @@ static const DocValue doc_values[] = {
     {"leader", "behaviour", 0, 1e9, false, nullptr},
     {"leader_b", "behaviour", 0, 1e9, false, nullptr},
     {"hand", "behaviour", 0, 1, true, nullptr},
-    {"lag", "behaviour", 0, 60, true, nullptr},   // (where its outlines lie over each other: filled, or a hole every other time, SVG's and Cavalry's fill rule)
+    {"lag", "behaviour", 0, 60, true, nullptr},
     {"morph", "shape", 0, 1, true, nullptr},
     // (its path another's track, Cavalry's Trails: whose, and over how many seconds back)
     {"trail", "shape", 0, 1e9, false, nullptr},
@@ -471,6 +471,15 @@ static const DocShown doc_shown[] = {
     {"field_x", "stage", "px", "At X", -3, 3, nullptr},
     {"field_y", "down", "px", "At Y", -2, 2, nullptr},
     {"field_radius", "stage", "px", "Size", 0, 4, nullptr},
+    {"strength", "share", "%", "Strength", 0, 1, nullptr},   // (a relation's: how much of it works)
+    {"radius", "stage", "px", "Radius", 0, 2, nullptr},
+    {"gap", "stage", "px", "Gap", -1, 1, nullptr},
+    {"centre_x", "stage", "px", "Centre X", -2, 2, nullptr},
+    {"centre_y", "down", "px", "Centre Y", -2, 2, nullptr},
+    {"leader", "thing", "", "Leader", 0, 0, nullptr},
+    {"leader_b", "thing", "", "Hand to", 0, 0, nullptr},
+    {"hand", "share", "%", "Handed", 0, 1, nullptr},
+    {"lag", "", "s", "Lag", 0, 1, nullptr},
     {"field_size", "share", "%", "Grow", -1, 5, nullptr},
     {"field_push", "stage", "px", "Push", -2, 2, nullptr},
     {"field_band", "stage", "px", "Ring", 0, 2, nullptr},
@@ -677,6 +686,10 @@ static const DocCard doc_cards[] = {
     {"Lens", "bloom ambient_occlusion reflections lens_flare vignette vignette_color fog fog_color anti_aliasing"},
     {"Room", "room environment environment_rotate behind background"},
     {"Physics", "physics bounce friction gravity"},
+    {"Around", "strength radius offset leader centre_x centre_y", "file", "around"},   // (a relation's card: its things round a middle, or round a leader)
+    {"Row", "strength gap leader centre_x centre_y", "file", "row"},
+    {"Follow", "strength leader lag leader_b hand", "file", "follow"},
+    {"Push", "strength leader radius", "file", "push"},
     {"Note", "note"},   // (what a maker wrote of it: After Effects' layer comment)
     {"Trim Paths", "trim trim_begin trim_offset", "trim", "+"},   // (After Effects' shape operator: added from the shelf)
     {"Gaussian Blur", "blur blur_direction", "blur", "+"},   // (the effects (doc_effects), each its card while it is on, as After Effects' Effect Controls)
