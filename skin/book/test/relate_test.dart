@@ -6,6 +6,7 @@ import 'package:flutter/services.dart' show MethodChannel;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lab_book/motolii.dart';
+import 'package:lab_book/workspace/relate.dart';
 import 'package:lab_book/workspace/stage.dart';
 
 import 'door.dart';
@@ -56,6 +57,7 @@ void main() {
       expect(m.value(i, 'x_by', 0), b.toDouble(), reason: 'thing $i connected');
     }
     expect(ws.selected, '$b', reason: 'the relation picked: its card, its row');
+    expect(wsMembersOf(ws), {for (final i in made) '$i'}, reason: 'what it moves, lit on the stage and the timeline');
     expect(ws.many, isEmpty);
 
     m.undo();   // (one step: all of it)

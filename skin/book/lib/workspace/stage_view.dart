@@ -550,10 +550,11 @@ class _StageViewState extends State<StageView> implements StageHandles {
                   builder: (context, _) {
                     final ws = WsScope.read(context);
                     final at = [for (final id in ws.many) if (scene.box(id) case final b?) v.toScreen(WsArt.toView(scene, b.c))];
+                    final moved = [for (final id in wsMembersOf(ws)) if (scene.box(id) case final b?) v.toScreen(WsArt.toView(scene, b.c))];   // (the relation picked: what it moves)
                     final corner = at.isEmpty ? null : at.reduce((a, b) => Offset(math.max(a.dx, b.dx), math.max(a.dy, b.dy)));
                     return Stack(
                       children: [
-                        IgnorePointer(child: CustomPaint(size: Size.infinite, painter: _ManyPainter(_lasso, at))),
+                        IgnorePointer(child: CustomPaint(size: Size.infinite, painter: _ManyPainter(_lasso, [...at, ...moved]))),
                         if (corner != null && at.length > 1 && _lasso == null)
                           Positioned(
                             left: math.min(corner.dx + 16, v.area.right - 280),

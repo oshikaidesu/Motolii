@@ -11,6 +11,7 @@ import 'package:flutter/widgets.dart';
 import '../sets/panels/timeline_parts_parts.dart' show TpGlyph, TpGlyphPainter;
 import '../tokens.dart';
 import 'timeline_paint.dart';
+import 'relate.dart';
 import 'ws.dart';
 
 class WsTimeline extends StatefulWidget {
@@ -376,7 +377,7 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
       _workOut = (to * Ws.fps).round();
     }
     final ws = WsScope.of(context);
-    final sel = ws.selected, picks = ws.keys;
+    final sel = ws.selected, picks = ws.keys, lit = {...ws.many, ...wsMembersOf(ws)};   // (picked together, or moved by the relation picked: lit with it)
     final rows = <WtRow>[
       for (final l in ws.layers)
         WtRow(
@@ -389,7 +390,7 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
             for (final k in picks)
               if (k.layer == l.id) k.frame,
           },
-          selected: l.id == sel,
+          selected: l.id == sel || lit.contains(l.id),
           dim: _isHidden(ws, l.id) || (_anySolo(ws) && !_isSolo(ws, l.id)),
           locked: _isLocked(ws, l.id),
           wave: _waveOf(ws, l),
@@ -459,7 +460,7 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
                             row: rows[i],
                             hidden: _isHidden(ws, ws.layers[i].id),
                             solo: _isSolo(ws, ws.layers[i].id),
-                            onSelect: () => ws.select(ws.layers[i].id),
+                            onSelect: () => HardwareKeyboard.instance.isShiftPressed || HardwareKeyboard.instance.isMetaPressed ? wsPickAlso(ws, ws.layers[i].id) : ws.select(ws.layers[i].id),   // (Shift or Cmd: one more picked together)
                             onEye: () => _eye(ws, ws.layers[i].id),
                             onSolo: () => _flag(ws, 'solo', ws.layers[i].id),
                             onLock: () => _flag(ws, 'lock', ws.layers[i].id),

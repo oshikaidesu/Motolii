@@ -57,3 +57,16 @@ void wsRelate(Ws ws, String kind) {
     ws.select('$made');   // (the relation picked: its card, its row)
   });
 }
+
+/// The things a relation moves (any of their values connected to it), when the picked thing is a relation; else none.
+/// (Read through the window's copy of the document: asked of the inside again only once it has changed.)
+Set<String> wsMembersOf(Ws ws) {
+  final m = ws.inside, sel = int.tryParse(ws.selected ?? '');
+  if (m == null || sel == null || m.word(sel, 'kind') != 'behaviour' || !wsRelations.contains(m.word(sel, 'file'))) return const {};
+  return {for (final t in m.things) if (t != sel && ((m.value(t, 'x_by', 0) ?? 0) == sel || (m.value(t, 'y_by', 0) ?? 0) == sel)) '$t'};
+}
+
+/// A thing added to those picked together (Shift or Cmd with a click): the one picked alone goes in with it.
+void wsPickAlso(Ws ws, String id) {
+  ws.pickMany({...ws.many, if (ws.selected case final s? when !wsMembersOf(ws).contains(s) && ws.many.isEmpty) s, id});
+}
