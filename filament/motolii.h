@@ -156,7 +156,8 @@ const char* motolii_changes(Motolii* m);
 const char* motolii_heard(Motolii* m);   /* each thing's sound as heard now: "file wanted is playing" a line (seconds in its file; -1 not heard): for checks */
 const char* motolii_shaping(Motolii* m);
 /* A change asked without waiting for the hand (say, set, let_go, undo, redo, together: number is let_go's keep and
-   together's begin 1 / end 0): queued in order behind all others, a ticket said at once. motolii_answer: -1 not done
+   together's begin 1 / end 0; thing -1: the thing the last add made; set with word "made": the number is that thing,
+   as a value naming a thing): queued in order behind all others, a ticket said at once. motolii_answer: -1 not done
    yet, 0 refused (motolii_answer_why says why, until the next answer), 1 done; an answer is said once. */
 int motolii_later(Motolii* m, const char* call, int thing, const char* name, const char* word, double number);
 int motolii_answer(Motolii* m, int ticket);

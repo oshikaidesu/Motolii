@@ -780,7 +780,7 @@ int motolii_later(Motolii* m, const char* call, int thing, const char* name, con
             const long rows = sqlite3_total_changes(m->d->file);
             int ok = 0;
             if (c == "say") ok = changes(m, (int)doc_say(doc(m), thing, n.c_str(), w.c_str()));
-            else if (c == "set") ok = changes(m, (int)doc_set(doc(m), thing, n.c_str(), number));
+            else if (c == "set") ok = changes(m, (int)doc_set(doc(m), thing, n.c_str(), w == "made" ? m->made : number));   // (word "made": the number is the thing the last add made, as a value that names a thing: a behaviour connected, a leader)
             else if (c == "let_go") ok = changes(m, (int)doc_let_go(doc(m), number != 0.0));
             else if (c == "undo") ok = (int)doc_undo(doc(m));
             else if (c == "redo") ok = (int)doc_redo(doc(m));

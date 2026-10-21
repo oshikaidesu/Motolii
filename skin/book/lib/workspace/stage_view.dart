@@ -9,6 +9,7 @@ import 'package:flutter/widgets.dart';
 import '../tokens.dart';
 import 'stage_art.dart';
 import '../motolii.dart' show Motolii;
+import 'relate.dart';
 import 'ws.dart';
 
 /// Zoom steps of the header chip: fit, then fixed scales.
@@ -297,6 +298,18 @@ class _StageViewState extends State<StageView> implements StageHandles {
   // comes. One step; it is picked.
   Offset? _drawFrom;
 
+  // Joined: drawn round on the stage where no thing is (no tool in hand): the things whose middles it goes round are
+  // picked together (Ws.many), and what they may do together is offered beside them (relate.dart).
+  List<Offset>? _lasso;
+
+  void _lassoLetGo(_View v) {
+    final round = _lasso, ws = WsScope.read(context);
+    setState(() => _lasso = null);
+    if (round == null || round.length < 3) return;
+    final path = Path()..addPolygon(round, true);
+    ws.pickMany([for (final l in widget.scene.layers) if (widget.scene.box(l.id) case final b? when path.contains(v.toScreen(WsArt.toView(widget.scene, b.c)))) l.id]);
+  }
+
   void _draw(_View v, Offset to) {
     final from = _drawFrom, ws = WsScope.read(context), m = ws.inside, kind = widget.make;
     _drawFrom = null;
@@ -405,6 +418,11 @@ class _StageViewState extends State<StageView> implements StageHandles {
     }
     if (_pull(v, local)) return; // (a guide out of a ruler, or one taken hold of: after the handles, which lie over everything)
     final id = m == null ? null : _hit(v, local), t = int.tryParse(id ?? '');
+    if (m != null && t == null) { // (where no thing is: drawn round)
+      ws.select(null);
+      setState(() => _lasso = [local]);
+      return;
+    }
     if (m == null || t == null) return;
     m.take(t);
     ws.select(id);
@@ -476,17 +494,21 @@ class _StageViewState extends State<StageView> implements StageHandles {
             },
             dragStartBehavior: DragStartBehavior.down, // (a thing is held where the hand came down, not where it had got to when the drag was known for one)
             onPanStart: (d) => _hold(v, _last = d.localPosition),
-            onPanUpdate: (d) => _drawFrom != null
+            onPanUpdate: (d) => _lasso != null
+                ? setState(() => _lasso!.add(d.localPosition))
+                : _drawFrom != null
                 ? setState(() => _last = d.localPosition)
                 : _pulling != null
                 ? (widget.cursor.value = v.toComp(_last = d.localPosition))
                 : _carry(v, _last = d.localPosition),
-            onPanEnd: (_) => _drawFrom != null
+            onPanEnd: (_) => _lasso != null
+                ? _lassoLetGo(v)
+                : _drawFrom != null
                 ? (widget.make == 'pen' ? _pen(v, _drawFrom!, _last ?? _drawFrom!) : _draw(v, _last ?? _drawFrom!))
                 : _pulling != null
                 ? _pullLetGo(v, _last!)
                 : _letGo(),
-            onPanCancel: () => _drawFrom != null ? setState(() => _drawFrom = null) : _pulling != null ? _pulling = null : _letGo(keep: false),
+            onPanCancel: () => _lasso != null ? setState(() => _lasso = null) : _drawFrom != null ? setState(() => _drawFrom = null) : _pulling != null ? _pulling = null : _letGo(keep: false),
             child: Stack(
               fit: StackFit.expand,
               children: [
@@ -523,6 +545,25 @@ class _StageViewState extends State<StageView> implements StageHandles {
                     ),
                   ),
                 IgnorePointer(child: CustomPaint(painter: _RulerPainter(v, widget.cursor, scene))),
+                ListenableBuilder( // (drawn round, and the things picked together: a ring each, and what they may do together beside them)
+                  listenable: WsScope.read(context),
+                  builder: (context, _) {
+                    final ws = WsScope.read(context);
+                    final at = [for (final id in ws.many) if (scene.box(id) case final b?) v.toScreen(WsArt.toView(scene, b.c))];
+                    final corner = at.isEmpty ? null : at.reduce((a, b) => Offset(math.max(a.dx, b.dx), math.max(a.dy, b.dy)));
+                    return Stack(
+                      children: [
+                        IgnorePointer(child: CustomPaint(size: Size.infinite, painter: _ManyPainter(_lasso, at))),
+                        if (corner != null && at.length > 1 && _lasso == null)
+                          Positioned(
+                            left: math.min(corner.dx + 16, v.area.right - 280),
+                            top: math.min(corner.dy + 12, v.area.bottom - 40),
+                            child: Row(children: [for (final k in wsRelations) _RelateChip(k, () => wsRelate(ws, k))]),
+                          ),
+                      ],
+                    );
+                  },
+                ),
                 Positioned(
                   left: _V.ruler + _V.pad,
                   bottom: _V.pad,
@@ -540,6 +581,45 @@ class _StageViewState extends State<StageView> implements StageHandles {
         ),
       );
     },
+  );
+}
+
+/// Drawn round: the line the hand drew; and a ring round each thing picked together.
+class _ManyPainter extends CustomPainter {
+  _ManyPainter(this.lasso, this.at);
+  final List<Offset>? lasso;
+  final List<Offset> at;
+  @override
+  void paint(Canvas c, Size s) {
+    final ink = Paint()
+      ..color = WsT.accent
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5;
+    if (lasso case final l? when l.length > 1) c.drawPath(Path()..addPolygon(l, false), ink);
+    for (final p in at) {
+      c.drawCircle(p, 14, ink);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_ManyPainter o) => true;
+}
+
+/// What things picked together may do together: a word on a dark pill, beside them.
+class _RelateChip extends StatelessWidget {
+  const _RelateChip(this.kind, this.onTap);
+  final String kind;
+  final VoidCallback onTap;
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+    key: ValueKey('ws-relate-$kind'),
+    onTap: onTap,
+    child: Container(
+      margin: EdgeInsets.only(right: Shape.s(4)),
+      padding: EdgeInsets.symmetric(horizontal: Shape.s(10), vertical: Shape.s(6)),
+      decoration: BoxDecoration(color: WsT.accent, borderRadius: BorderRadius.all(Shape.r(12))),
+      child: Text(kind[0].toUpperCase() + kind.substring(1), style: T.label(WsT.onAccent)),
+    ),
   );
 }
 

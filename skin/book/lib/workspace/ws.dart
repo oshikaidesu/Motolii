@@ -236,11 +236,21 @@ class Ws extends ChangeNotifier {
   String? get selected => _sel;
   WsLayer? get layer => layers.where((l) => l.id == _sel).firstOrNull;
   void select(String? id) {
-    if (id == _sel) return;
+    if (id == _sel && many.isEmpty) return;
     _sel = id;
+    many.clear();
     aim = null;
     _keys.clear();
     deskManual = null;
+    notifyListeners();
+  }
+
+  /// The things picked together (drawn round on the stage): what a relation is made of. Picking one alone clears them.
+  final many = <String>{};
+  void pickMany(Iterable<String> ids) {
+    many
+      ..clear()
+      ..addAll(ids);
     notifyListeners();
   }
 
