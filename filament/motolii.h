@@ -159,7 +159,7 @@ const char* motolii_shaping(Motolii* m);
 /* A change asked without waiting for the hand (say, set, let_go, undo, redo, together: number is let_go's keep and
    together's begin 1 / end 0; thing -1: the thing the last add made; set with word "made": the number is that thing,
    as a value naming a thing; relate: the things in word (numbers) put in the relation `thing` as they show now; free: the thing out of the
-   relation `number`, back to what is under it (as the relation removed); lead: the relation `thing` led by the thing `number`, nothing moving; release: the relation
+   relation `number`, back to the relation under it, or where it shows if none (as the relation removed); lead: the relation `thing` led by the thing `number`, nothing moving; release: the relation
    `thing` let go, each of its things where it shows now): queued in order behind all others, a ticket said at once. motolii_answer: -1 not done
    yet, 0 refused (motolii_answer_why says why, until the next answer), 1 done; an answer is said once. */
 int motolii_later(Motolii* m, const char* call, int thing, const char* name, const char* word, double number);

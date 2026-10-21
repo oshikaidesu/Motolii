@@ -93,14 +93,11 @@ void main() {
     for (final e in others.entries) {
       expect((where(e.key)[0] - e.value[0]).abs(), lessThan(0.5), reason: 'thing ${e.key} moved with it');
     }
-    final ring = all(), alone = {for (final i in made) i: [0.0, 0.0]};
+    final ring = all();
     await t.tap(find.byKey(ValueKey('ws-free-${made.first}')));
     await settled(t, ws);
     expect(m.value(made.first, 'x_by', 0), 0.0, reason: 'out of it');
-    alone[made.first] = where(made.first);
-    same({...ring, made.first: alone[made.first]!}, all(), 'one taken out: the others stay');
-    expect((alone[made.first]![0] - ring[made.first]![0]).abs() + (alone[made.first]![1] - ring[made.first]![1]).abs(), greaterThan(1), reason: 'back where it was before the ring, as the relation removed');
-    ring[made.first] = alone[made.first]!;
+    same(ring, all(), 'one taken out, nothing under it: it stays where it shows, as a child its parent let go');
     expect(m.word(b, 'members').split(' '), contains('_'), reason: 'its place kept empty');
     // (released: every one stays where it shows, the relation gone)
     ws.select('$b');
