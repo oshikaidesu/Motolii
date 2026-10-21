@@ -143,6 +143,8 @@ void main() {
     m.later('relate', thing: around, word: made.skip(1).take(3).join(' '));
     while (m.answer(m.later('together')) < 0) {}
     expect(m.value(made[1], 'x_by', 0), around.toDouble(), reason: 'in Around now');
+    expect(m.shows(made[1], 'x', 0)?.$2, isTrue, reason: 'a place a relation moves says so');
+    expect(m.shows(made[1], 'x', 0)!.$1, isNot(closeTo(m.value(made[1], 'x', 0)!, 1e-6)), reason: 'where it shows, not its own');
     expect(m.word(around, 'under').split(' '), everyElement('$push'), reason: 'Around starts from Push for each');
     stays(before, 'Around made at strength 0');
     final out = {for (final i in made.skip(1)) i: where(i)};
@@ -216,9 +218,16 @@ void main() {
     final members = m.word(follow, 'members').split(' ');
     expect(members, contains('${things[0]}'), reason: 'the old leader follows');
     expect(members, isNot(contains('${things[2]}')), reason: 'the new leader is not one it moves');
+    // (the leader changed as a value, from the inspector's list: the same as by its crown, nothing jumps)
+    final listed = {for (final t in things) t: where(t)};
+    wait(m.later('set', thing: follow, name: 'leader', number: things[3].toDouble()));
+    expect(m.value(follow, 'leader', 0), things[3].toDouble());
+    for (final t in things) {
+      expect((where(t)[0] - listed[t]![0]).abs() + (where(t)[1] - listed[t]![1]).abs(), lessThan(0.5), reason: 'thing $t jumped (leader set)');
+    }
     m.set(follow, 'lag', 0);
     final was = {for (final t in things) t: where(t)};
-    m.set(things[2], 'x', 0.5);   // (the new leader moved 0.3 to the right: all go with it)
+    m.set(things[3], 'x', 0.9);   // (the new leader moved 0.3 to the right: all go with it)
     for (final t in things) {
       expect(where(t)[0] - was[t]![0], greaterThan(10), reason: 'thing $t did not follow');
     }

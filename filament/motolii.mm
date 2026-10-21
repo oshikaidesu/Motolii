@@ -499,6 +499,15 @@ int motolii_value(Motolii* m, int thing, const char* name, double at, double* is
     if (peeked(m, thing, at, [&](const Motolii::Peek& p) { const int i = peek_at(p, name); return i >= 0 && ((got = p.has[i]), *is = p.values[i], true); })) return got;
     return by_look(m, [=] { return (int)(doc_value(doc(m), thing, name, at, is)); });
 }
+// A value as the stage shows it: what what drives it (a relation, a behaviour) makes of it, 2; its own, 1; none, 0.
+int motolii_shows(Motolii* m, int thing, const char* name, double at, double* is) {
+    return by_look(m, [=] {
+        if (!doc_value(*m->d, thing, name, at, is)) return 0;
+        if (!doc_driven_by(*m->d, thing, name)) return 1;
+        *is = doc_literal(*m->d, thing, doc_lasting(name), at, *is);
+        return 2;
+    });
+}
 int motolii_things(Motolii* m, int* things, int room) {
     return by_look(m, [=] { const std::vector<int> all = doc_things(*m->d); for (int i = 0; i < room && i < (int)all.size(); ++i) things[i] = all[(size_t)i]; return (int)all.size(); });
 }

@@ -19,6 +19,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lab_book/motolii.dart';
+import 'package:lab_book/workspace/ws.dart' show WsT;
 
 import 'door.dart';
 
@@ -89,10 +90,28 @@ void main() {
           final codec = await ui.instantiateImageCodec(File(still).readAsBytesSync(), targetWidth: comp.width.round(), targetHeight: comp.height.round());
           final pic = (await codec.getNextFrame()).image, px = (await pic.toByteData())!;
           final l = comp.left.round(), top = comp.top.round(), bg = win.getUint32(((top + 1) * w + l + 1) * 4);
+          // (a mark the window drew half-through in its accent: how much of it, from how far it is from the surround
+          // towards the accent, laid again over the picture rather than over the surround)
+          final b = [for (var k = 0; k < 3; k++) win.getUint8(((top + 1) * w + l + 1) * 4 + k)], acc = WsT.accent;
+          final a = [(acc.r * 255).round(), (acc.g * 255).round(), (acc.b * 255).round()], d = [for (var k = 0; k < 3; k++) a[k] - b[k]];
+          final dd = d.fold<int>(0, (s, v) => s + v * v);
           for (var y = 0; y < pic.height; y++) {
             for (var x = 0; x < pic.width; x++) {
-              final at = ((top + y) * w + l + x) * 4;
-              if (win.getUint32(at) == bg) win.setUint32(at, px.getUint32((y * pic.width + x) * 4));
+              final at = ((top + y) * w + l + x) * 4, under = (y * pic.width + x) * 4;
+              if (win.getUint32(at) == bg) {
+                win.setUint32(at, px.getUint32(under));
+                continue;
+              }
+              final p = [for (var k = 0; k < 3; k++) win.getUint8(at + k) - b[k]];
+              final f = dd == 0 ? 1.0 : ((p[0] * d[0] + p[1] * d[1] + p[2] * d[2]) / dd).clamp(0.0, 1.0);
+              var off = 0.0;
+              for (var k = 0; k < 3; k++) {
+                off += (p[k] - f * d[k]).abs();
+              }
+              if (off > 24 || f > .97) continue;   // (not a half-through accent: as the window drew it)
+              for (var k = 0; k < 3; k++) {
+                win.setUint8(at + k, (f * a[k] + (1 - f) * px.getUint8(under + k)).round().clamp(0, 255));
+              }
             }
           }
         }

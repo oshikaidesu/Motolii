@@ -2644,8 +2644,12 @@ static bool doc_remove(Doc& d, int thing) {
     return doc_knows(d, thing) && doc_change(d, sqlite3_mprintf("delete from fact where thing = %d", thing)); }
 // A value that stays (its keys, if it had any, are gone); a word; a key at a moment; a key taken away.
 static bool doc_parent(Doc& d, int thing, double to);
+static bool doc_lead(Doc& d, int by, int leader, double now);
+static bool doc_leading = false;   // (doc_lead itself writing the leader)
 static bool doc_set(Doc& d, int thing, const char* name, double is) {
     if (!strcmp(name, "parent")) return doc_parent(d, thing, is);
+    if (!strcmp(name, "leader") && !doc_leading && is >= 1 && doc_word(d, thing, "kind") == "behaviour" && doc_among("around row follow push", doc_word(d, thing, "file")) && !doc_word(d, thing, "members").empty())   // (a relation's leader changed by any hand: as its crown changes it, nothing jumps)
+        return doc_lead(d, thing, (int)is, d.stage ? d.stage->now : 0.0);
     return doc_knows(d, thing, name, &is) && doc_change(d, sqlite3_mprintf("delete from fact where thing = %d and name = %Q and at <> 0; insert into fact(thing, name, at, value) values(%d, %Q, 0.0, %!.17g) on conflict do update set value = excluded.value, way = null", thing, name, thing, name, is));
 }
 static bool doc_say(Doc& d, int thing, const char* name, const char* word) {
@@ -2766,6 +2770,7 @@ static bool doc_relate(Doc& d, int by, const char* ids, double now) {
 // a follow's start the new leader's settled place; then every thing it touches moved by as much as it would otherwise
 // jump. One step; nothing jumps.
 static bool doc_lead(Doc& d, int by, int leader, double now) {
+    struct Leading { Leading() { doc_leading = true; } ~Leading() { doc_leading = false; } } leading;
     const std::string type = doc_word(d, by, "file");
     if (doc_word(d, by, "kind") != "behaviour" || !doc_among("around row follow push", type)) return d.trouble = "that is no relation", false;
     if (!doc_knows(d, leader) || leader == by) return d.trouble = "a leader is a thing that is there", false;

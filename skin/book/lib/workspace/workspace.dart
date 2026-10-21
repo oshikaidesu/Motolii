@@ -517,8 +517,11 @@ List<Fx> _makeCards(Ws ws, Motolii m, int t) {
 /// points of the picture, a share in hundredths; else as it is).
 /// A value of the inside's own cards as the inspector counts it: another thing by its place (None first), a number
 /// in the card's units, a word by its place among those it may be (the stage's and a thing's alike).
-double _onCard(Ws ws, Motolii m, int t, String n, double at) =>
-    m.shown(n)?.look == 'thing' ? (_others(ws, t).values.toList().indexOf((m.value(t, n, 0) ?? 0).round()) + 1).toDouble() : m.words(t, n).isEmpty ? _shown(m, t, n, m.value(t, n, at) ?? 0) : math.max(0, m.words(t, n).indexOf(m.word(t, n))).toDouble(); // (the inside's own cards: a number as it is, a word by its place among those it may be)
+double _onCard(Ws ws, Motolii m, int t, String n, double at) {
+  final seen = n == 'x' || n == 'y' ? m.shows(t, n, at) : null;
+  if (seen != null && seen.$2) return _shown(m, t, n, seen.$1);   // (a place a relation moves: where it shows, as After Effects shows a value an expression drives)
+  return m.shown(n)?.look == 'thing' ? (_others(ws, t).values.toList().indexOf((m.value(t, n, 0) ?? 0).round()) + 1).toDouble() : m.words(t, n).isEmpty ? _shown(m, t, n, m.value(t, n, at) ?? 0) : math.max(0, m.words(t, n).indexOf(m.word(t, n))).toDouble(); // (the inside's own cards: a number as it is, a word by its place among those it may be)
+}
 
 /// A value as a hand reads it, and back (Motolii.reading).
 double _shown(Motolii m, int t, String n, double v) { final (k, f) = m.reading(t, n); return v * k + f; }
@@ -535,7 +538,7 @@ Map<String, double> wsPlace(Ws ws, String id) {
   if (m == null || t == null) return const {};
   final at = _drawn(ws);
   double r1(double x) => (x * 10).roundToDouble() / 10 + 0;
-  return {for (final n in const ['x', 'y', 'scale_y', 'rotate']) n: r1(_shown(m, t, n, m.value(t, n, at) ?? (n == 'scale_y' ? 1 : 0)))};
+  return {for (final n in const ['x', 'y', 'scale_y', 'rotate']) n: r1(_shown(m, t, n, (n == 'x' || n == 'y' ? m.shows(t, n, at)?.$1 : null) ?? m.value(t, n, at) ?? (n == 'scale_y' ? 1 : 0)))};   // (where it shows)
 }
 
 /// The selected layer's transform as the stage draws it at this frame, in the Inspector's ids.
@@ -564,7 +567,10 @@ Map<String, double> wsTransform(Ws ws, String? id) {
     final others = _others(ws, int.tryParse(ws.selected ?? '') ?? 0).values.toList(), i = x.round();
     return (id.substring(2), i >= 1 && i <= others.length ? others[i - 1].toDouble() : 0);
   }
-  if (id.startsWith('v_')) return (id.substring(2), _unshown(ws.inside!, int.tryParse(ws.selected ?? '') ?? 0, id.substring(2), x)); // (a card of the inside's own: the value of that name, in the document's own units)
+  final m = ws.inside!, t = int.tryParse(ws.selected ?? '') ?? 0, n = id.substring(2);
+  final seen = id.startsWith('v_') && (n == 'x' || n == 'y') ? m.shows(t, n, _drawn(ws)) : null;
+  if (seen != null && seen.$2) return (n, _unshown(m, t, n, x) - (seen.$1 - (m.value(t, n, _drawn(ws)) ?? seen.$1)));   // (shown where it shows: its own value moved as far as the hand moved that)
+  if (id.startsWith('v_')) return (n, _unshown(m, t, n, x)); // (a card of the inside's own: the value of that name, in the document's own units)
   return null;
 }
 

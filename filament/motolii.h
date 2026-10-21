@@ -77,6 +77,7 @@ const char* motolii_way_names(Motolii* m);                         /* the names 
 const char* motolii_way_numbers(Motolii* m, const char* kind);   /* a kind's numbers as a hand takes them: name, lowest, highest for each ("seed 1 999 grain 0 0.5 ..."); "" for a kind with none or a way defined in the document */
 double motolii_way_at(Motolii* m, const char* way, double u);      /* how a way goes, one of the nine kinds or one defined in the document: how far (0 at its beginning, 1 at its end) at u of the way through */                              /* the names of the ways the document knows (until the next call) */
 int motolii_value(Motolii* m, int thing, const char* name, double at, double* is);   /* a value at a moment, as the stage is told it */
+int motolii_shows(Motolii* m, int thing, const char* name, double at, double* is);   /* as the stage shows it: 2 driven (by a relation, a behaviour), 1 its own, 0 none */
 /* What a shell reads to draw its lists. motolii_things: the numbers of the things there are (as many as there is room
    for; it returns how many there are). motolii_word: a thing's word by name (kind, file, shape, blend, text, fill; ""
    if it has none; until the next call), or by "name" what it is called where things are listed (a text by its

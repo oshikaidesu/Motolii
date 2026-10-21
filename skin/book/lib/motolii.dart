@@ -272,6 +272,14 @@ class Motolii {
     malloc.free(out);
     return ok ? v : null;
   });
+  /// A value as the stage shows it (what a relation or behaviour makes of it), and whether one drives it; null: none.
+  late final _shows = _lib.lookupFunction<Int32 Function(_P, Int32, _S, Double, Pointer<Double>), int Function(_P, int, _S, double, Pointer<Double>)>('motolii_shows');
+  (double, bool)? shows(int thing, String name, double at) => _with([name], (s) {
+    final out = malloc<Double>();
+    final got = _shows(_m, thing, s[0], at, out), v = out.value;
+    malloc.free(out);
+    return got == 0 ? null : (v, got == 2);
+  });
   /// The numbers of the things there are.
   List<int> get things => _kept('things', _thingsNow);
   List<int> _thingsNow() {
