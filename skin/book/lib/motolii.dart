@@ -132,6 +132,7 @@ class Motolii {
   late final _redo = _lib.lookupFunction<Int32 Function(_P), int Function(_P)>('motolii_redo');
   late final _trouble = _lib.lookupFunction<_S Function(_P), _S Function(_P)>('motolii_trouble');
   late final _list = _lib.lookupFunction<_S Function(_P), _S Function(_P)>('motolii_list');
+  late final _still = _lib.lookupFunction<Int32 Function(_P, _S), int Function(_P, _S)>('motolii_still');
   late final _close = _lib.lookupFunction<Void Function(_P), void Function(_P)>('motolii_close');
 
   T _with<T>(List<String> words, T Function(List<_S>) call) {
@@ -191,6 +192,9 @@ class Motolii {
 
   String get trouble => _trouble(_m).toDartString();
   String get list => _list(_m).toDartString();
+
+  /// The stage as it is now, as a picture (.png): for a hand that sees only pictures (test/agent_window_test.dart).
+  bool still(String png) => _with([png], (s) => _still(_m, s[0])) != 0;
 
   /// The whole document written as a film (.mp4, with its films' sound), on another isolate: the window does not wait.
   /// The inside's one hand takes the call in its turn, from whatever thread it comes.
