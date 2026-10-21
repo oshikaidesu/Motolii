@@ -1,6 +1,8 @@
 // Joined: a relation made of the things picked together (Ws.many): a behaviour of that kind (the inside's around, row,
 // follow or push) and the things put in it as they show now (the inside's relate: their order, its middle and size,
 // a leader, what each was in before), one step, picked once made.
+import 'dart:math' as math;
+
 import 'ws.dart';
 
 const wsRelations = ['around', 'row', 'follow', 'push'];
@@ -15,9 +17,10 @@ void wsRelate(Ws ws, String kind) {
     ..later('set', thing: -1, name: 'strength', number: 1)   // (said, so its card shows it as it works)
     ..later('relate', thing: -1, word: ws.many.join(' '));
   ws.after(m.later('together'), (done, _) {
-    if (!done || made <= 0) return;
-    ws.reread();
-    ws.select('$made');   // (the relation picked: its card, its row)
+    ws.reread();   // (made or not, the window shows what the document is)
+    if (!done) return;
+    final newest = made > 0 ? made : m.things.where((t) => m.word(t, 'kind') == 'behaviour').fold(0, math.max);
+    if (newest > 0) ws.select('$newest');   // (the relation picked: its card, its row, its shape)
   });
 }
 

@@ -69,6 +69,20 @@ void main() {
       }
     }
 
+    // (its size carried by its handle on the stage: the ring grows)
+    final r0 = m.value(b, 'radius', 0)!;
+    final hand = await t.startGesture(t.getCenter(find.byKey(const ValueKey('ws-relation-size'))));   // (as a hand does: down, a moment, then away)
+    await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
+    for (var k = 1; k <= 16; k++) {   // (a finger in a test starts a drag only past 36 points)
+      await hand.moveBy(const Offset(5, 0));
+      await t.pump(const Duration(milliseconds: 16));
+    }
+    await hand.up();
+    await settled(t, ws);
+    expect(m.value(b, 'radius', 0)!, greaterThan(r0), reason: 'the ring grows as its handle goes out');
+    m.undo();
+    ws.reread();
+    await t.pumpAndSettle();
     // (one in it carried by a hand: it moves on the picture as far as the hand went, the others stay)
     final held = made[2], was = where(held), others = {for (final i in made) if (i != held) i: where(i)};
     expect(m.hold(held), isTrue, reason: m.trouble);

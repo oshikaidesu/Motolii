@@ -65,6 +65,7 @@ struct Doc {
     std::unordered_map<int, bool> connects;   // whether a thing has any value connected to a behaviour: asked once, forgotten at every change
     struct Relation { std::vector<int> members, under; std::vector<double> from; };   // (a relation's things in their order, 0 where one was taken out; for each, the relation it was in before (its result this one's start) and where it showed when it came in (x, y))
     std::unordered_map<int, Relation> relationsOf;   // found once, forgotten at every change
+    bool settled = false;   // (reckoning where things settle: relations that come and go with time (follow, push) give nothing, so a relation made while one is pushing does not keep the push)
     int ctxCopy = 0, ctxN = 1;   // which of how many copies doc_place is placing now: what a behaviour gives is that copy's
     bool ctxHasAt = false; math::double3 ctxAt{0.0};   // (and where that copy lies on the stage, laid out, once doc_place knows: what a behaviour's falloff weighs)   // a copy's own look (its thing's look duplicated, by the copy's entity), while its copies are coloured each their own
     float roomLight = 0.f;              // the room's own light, as the stage was opened with it
@@ -1017,6 +1018,7 @@ static double doc_related(Doc& d, int by, int thing, const char* name, double t,
         } else place = n == "x" ? cx + doc_number(d, by, "gap", t, 0.2) * (double)i : cy;
         return std::isnan(came) ? base + (place - base) * s : base + (place - came) * s;
     }
+    if ((type == "follow" || type == "push") && d.settled) return base;
     if (type == "follow") {   // (where its leader was so many seconds ago, each later than the one before)
         const int a = leader("leader"), b = leader("leader_b");
         if (!a) return base;
@@ -2614,8 +2616,21 @@ static int doc_add(Doc& d, const char* kind, const char* file) {
     return thing;
 }
 static bool doc_release(Doc& d, int by, double now);
+static std::vector<int> doc_things(Doc& d);
 static bool doc_remove(Doc& d, int thing) {
     if (doc_knows(d, thing) && doc_number(d, thing, "lock", 0, 0) > 0.5) return d.trouble = "it is locked", false;
+    if (doc_knows(d, thing) && doc_word(d, thing, "kind") != "behaviour") {   // (a leader taken away: what it led lets its things go where they show, as After Effects keeps a child where it is when its parent goes)
+        std::vector<int> led;
+        for (const int r : doc_things(d))
+            if (doc_word(d, r, "kind") == "behaviour" && doc_among("around row follow push", doc_word(d, r, "file")) && ((int)doc_number(d, r, "leader", 0, 0) == thing || (int)doc_number(d, r, "leader_b", 0, 0) == thing)) led.push_back(r);
+        if (!led.empty()) {
+            doc_act(d);
+            bool ok = true;
+            for (const int r : led) ok = ok && doc_release(d, r, d.stage ? d.stage->now : 0.0);
+            ok = ok && doc_change(d, sqlite3_mprintf("delete from fact where thing = %d", thing));
+            return doc_acted(d) && ok;
+        }
+    }
     if (doc_knows(d, thing) && doc_among("around row follow push", doc_word(d, thing, "file")) && doc_word(d, thing, "kind") == "behaviour") {   // (a relation taken away lets its things go where they show: nothing jumps)
         const std::vector<int>& all = doc_members_of(d, thing);
         if (std::any_of(all.begin(), all.end(), [](int t) { return t != 0; })) return doc_release(d, thing, d.stage ? d.stage->now : 0.0);
@@ -2687,8 +2702,12 @@ static bool doc_relate(Doc& d, int by, const char* ids, double now) {
     std::istringstream said(ids);
     for (std::string one; said >> one;) if (const int t = std::atoi(one.c_str()); t && t != by && doc_knows(d, t) && std::find(things.begin(), things.end(), t) == things.end()) things.push_back(t);
     if (things.empty()) return d.trouble = "no things to put in it", false;
-    std::map<int, std::pair<double, double>> at;
+    std::map<int, std::pair<double, double>> at;   // (where each settles: what follows and pushes now is not kept)
+    d.settled = true;
+    doc_forget(d);
     for (const int t : things) at[t] = {doc_literal(d, t, "x", now, 0.0), doc_literal(d, t, "y", now, 0.0)};
+    d.settled = false;
+    doc_forget(d);
     const auto has = [&](const char* name) { bool any = false; doc_rows(d, sqlite3_mprintf("select 1 from fact where thing = %d and name = %Q limit 1", by, name), [&](sqlite3_stmt*) { any = true; }); return any; };
     doc_act(d);
     bool ok = true;
@@ -2713,7 +2732,11 @@ static bool doc_relate(Doc& d, int by, const char* ids, double now) {
             for (const int t : members) r += std::hypot(at[t].first - cx, at[t].second - cy) / members.size();
             ok = ok && doc_set(d, by, "radius", std::max(r, 0.2));
         }
-        if (type == "row" && !has("gap") && members.size() > 1) ok = ok && doc_set(d, by, "gap", (at[members.back()].first - at[members.front()].first) / (members.size() - 1));
+        if (type == "row" && !has("gap") && members.size() > 1) {   // (as far apart as they stand, but never closer than the largest of them is wide)
+            double wide = 0;
+            for (const int t : members) wide = std::max(wide, doc_number(d, t, "size", now, 1) * std::max(1.0, doc_number(d, t, "wide", now, 1)));
+            ok = ok && doc_set(d, by, "gap", std::max((at[members.back()].first - at[members.front()].first) / (members.size() - 1), wide * 1.6));
+        }
     }
     std::string order, under, from;
     for (const int t : members) {
@@ -3089,7 +3112,9 @@ static bool doc_on(Doc& d, int thing, const char* name);
 static std::string doc_cards_of(Doc& d, int thing) {
     const std::string has = " " + doc_has(d, thing) + " ";
     std::string all;
+    const bool behaviour = doc_word(d, thing, "kind") == "behaviour";
     for (const DocCard& card : doc_cards) {
+        if (behaviour && !(card.when && !strcmp(card.when, "file"))) continue;   // (a behaviour: only its own card, not those of things that happen to share a name with its knobs)
         if (card.when && card.is[0] == '+') {   // (an effect's card while it is on: doc_on)
             if (!doc_on(d, thing, card.when)) continue;
         } else if (card.when && card.is[0] == '~') {   // (a ramp's card while the fill has more colours than one)
