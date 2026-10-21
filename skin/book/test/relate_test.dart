@@ -60,7 +60,32 @@ void main() {
     expect(wsMembersOf(ws), {for (final i in made) '$i'}, reason: 'what it moves, lit on the stage and the timeline');
     expect(ws.many, isEmpty);
 
-    m.undo();   // (one step: all of it)
+    // (one taken out with its ×: it stays where it shows, and so does every other)
+    List<double> where(int i) => m.frame(i)!.sublist(0, 2);
+    Map<int, List<double>> all() => {for (final i in made) i: where(i)};
+    void same(Map<int, List<double>> a, Map<int, List<double>> b, String why) {
+      for (final i in made) {
+        expect((a[i]![0] - b[i]![0]).abs() + (a[i]![1] - b[i]![1]).abs(), lessThan(0.5), reason: '$why: thing $i moved');
+      }
+    }
+
+    final ring = all();
+    await t.tap(find.byKey(ValueKey('ws-free-${made.first}')));
+    await settled(t, ws);
+    expect(m.value(made.first, 'x_by', 0), 0.0, reason: 'out of it');
+    same(ring, all(), 'one taken out');
+    expect(m.word(b, 'members').split(' '), contains('_'), reason: 'its place kept empty');
+    // (released: every one stays where it shows, the relation gone)
+    ws.select('$b');
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(const ValueKey('ws-relate-release')));
+    await settled(t, ws);
+    expect(m.things.contains(b), isFalse);
+    same(ring, all(), 'released');
+
+    m.undo();   // (each a step)
+    m.undo();
+    m.undo();
     ws.reread();
     expect(m.things.length, before);
     expect(t.takeException(), isNull);

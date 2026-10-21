@@ -40,6 +40,9 @@ void wsRelate(Ws ws, String kind) {
       knob('radius', .5);
   }
   if (leader != 0) m.later('set', thing: -1, name: 'leader', number: leader.toDouble());
+  // (their order in it: round the middle as they lie (no two cross), or from the left; a place kept when one is taken out)
+  final order = [...things]..sort((a, b) => kind == 'around' ? math.atan2(x[a]! - mx, y[a]! - my).compareTo(math.atan2(x[b]! - mx, y[b]! - my)) : x[a]!.compareTo(x[b]!));
+  m.later('say', thing: -1, name: 'members', word: order.where((i) => i != leader).join(' '));
   for (final i in things) {
     if (i == leader) continue;
     if (kind == 'follow') {   // (its place a step from its leader's: where it stands)
@@ -69,4 +72,22 @@ Set<String> wsMembersOf(Ws ws) {
 /// A thing added to those picked together (Shift or Cmd with a click): the one picked alone goes in with it.
 void wsPickAlso(Ws ws, String id) {
   ws.pickMany({...ws.many, if (ws.selected case final s? when !wsMembersOf(ws).contains(s) && ws.many.isEmpty) s, id});
+}
+
+/// One thing out of the picked relation, where it shows now (the others stay where they are).
+void wsFree(Ws ws, String id) {
+  final m = ws.inside, by = int.tryParse(ws.selected ?? ''), t = int.tryParse(id);
+  if (m == null || by == null || t == null) return;
+  ws.after(m.later('free', thing: t, number: by.toDouble()), (done, _) => done ? ws.reread() : null);
+}
+
+/// The picked relation let go: each of its things where it shows now, the relation gone.
+void wsRelease(Ws ws) {
+  final m = ws.inside, by = int.tryParse(ws.selected ?? '');
+  if (m == null || by == null) return;
+  ws.after(m.later('release', thing: by), (done, _) {
+    if (!done) return;
+    ws.reread();
+    ws.select(null);
+  });
 }

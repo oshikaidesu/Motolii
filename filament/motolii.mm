@@ -788,6 +788,8 @@ int motolii_later(Motolii* m, const char* call, int thing, const char* name, con
             else if (c == "add") ok = m->made = changes(m, doc_add(doc(m), n.c_str(), w.c_str()));   // (name: the kind, word: the file; the answer is the new thing)
             else if (c == "make") ok = m->made = changes(m, doc_make(doc(m), w.c_str()));
             else if (c == "remove") ok = changes(m, (int)doc_remove(doc(m), thing));
+            else if (c == "free") ok = changes(m, (int)doc_free(doc(m), thing, (int)number, m->now));   // (a thing out of the relation `number`, where it shows now)
+            else if (c == "release") ok = changes(m, (int)doc_release(doc(m), thing, m->now));   // (the relation `thing` let go, each of its things where it shows now)
             else if (c == "mark") ok = changes(m, (int)doc_mark(doc(m), number, w.c_str()));
             else if (c == "guide") ok = changes(m, (int)doc_guide(doc(m), n.c_str(), number, w != "off"));
             else if (c == "work") ok = changes(m, (int)doc_work_is(doc(m), number, std::atof(w.c_str())));

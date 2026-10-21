@@ -550,7 +550,9 @@ class _StageViewState extends State<StageView> implements StageHandles {
                   builder: (context, _) {
                     final ws = WsScope.read(context);
                     final at = [for (final id in ws.many) if (scene.box(id) case final b?) v.toScreen(WsArt.toView(scene, b.c))];
-                    final moved = [for (final id in wsMembersOf(ws)) if (scene.box(id) case final b?) v.toScreen(WsArt.toView(scene, b.c))];   // (the relation picked: what it moves)
+                    final members = [for (final id in wsMembersOf(ws)) if (scene.box(id) case final b?) (id, v.toScreen(WsArt.toView(scene, b.c)))];   // (the relation picked: what it moves)
+                    final moved = [for (final (_, p) in members) p];
+                    final far = moved.isEmpty ? null : moved.reduce((a, b) => Offset(math.max(a.dx, b.dx), math.max(a.dy, b.dy)));
                     final corner = at.isEmpty ? null : at.reduce((a, b) => Offset(math.max(a.dx, b.dx), math.max(a.dy, b.dy)));
                     return Stack(
                       children: [
@@ -560,6 +562,14 @@ class _StageViewState extends State<StageView> implements StageHandles {
                             left: math.min(corner.dx + 16, v.area.right - 280),
                             top: math.min(corner.dy + 12, v.area.bottom - 40),
                             child: Row(children: [for (final k in wsRelations) _RelateChip(k, () => wsRelate(ws, k))]),
+                          ),
+                        for (final (id, p) in members) // (one taken out of it where it stands: the others stay)
+                          Positioned(left: p.dx + 8, top: p.dy - 22, child: _RelateChip('×', () => wsFree(ws, id), key: ValueKey('ws-free-$id'))),
+                        if (far != null && _lasso == null)
+                          Positioned(
+                            left: math.min(far.dx + 16, v.area.right - 120),
+                            top: math.min(far.dy + 12, v.area.bottom - 40),
+                            child: _RelateChip('release', () => wsRelease(ws)),
                           ),
                       ],
                     );
@@ -608,12 +618,12 @@ class _ManyPainter extends CustomPainter {
 
 /// What things picked together may do together: a word on a dark pill, beside them.
 class _RelateChip extends StatelessWidget {
-  const _RelateChip(this.kind, this.onTap);
+  const _RelateChip(this.kind, this.onTap, {super.key});
   final String kind;
   final VoidCallback onTap;
   @override
   Widget build(BuildContext context) => GestureDetector(
-    key: ValueKey('ws-relate-$kind'),
+    key: key == null ? ValueKey('ws-relate-$kind') : null,
     onTap: onTap,
     child: Container(
       margin: EdgeInsets.only(right: Shape.s(4)),

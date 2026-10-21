@@ -301,6 +301,7 @@ static const DocValue doc_values[] = {
     {"leader_b", "behaviour", 0, 1e9, false, nullptr},
     {"hand", "behaviour", 0, 1, true, nullptr},
     {"lag", "behaviour", 0, 60, true, nullptr},
+    {"members", "behaviour", 0, 0, false, ""},   // (a relation's things in their order, by number, "_" where one was taken out: its place kept, so no other moves)
     {"morph", "shape", 0, 1, true, nullptr},
     // (its path another's track, Cavalry's Trails: whose, and over how many seconds back)
     {"trail", "shape", 0, 1e9, false, nullptr},
@@ -950,11 +951,18 @@ static void doc_copy_looks_off(Doc& d, const Mesh* m, MaterialInstance* main) {
 // where its keys are is found once and held until the document changes (as Beutl and Skottie hold a property), each
 // moment reckoned from them; a value with no keys or one is its number at once. Not while a hand carries it.
 static double doc_literal(Doc& d, int thing, const char* literal, double at, double otherwise);
-// The things connected to a behaviour (any of their values `<name>_by` = it), in the order they were made.
+// The things connected to a behaviour (any of their values `<name>_by` = it), in the order its members word says (0 where
+// one was taken out, its place kept), else in the order they were made; one connected but not in the word comes last.
 static const std::vector<int>& doc_members_of(Doc& d, int by) {
     if (const auto known = d.membersOf.find(by); known != d.membersOf.end()) return known->second;
-    std::vector<int> all;
-    doc_rows(d, sqlite3_mprintf("select distinct thing from fact where name glob '*_by' and value = %d order by thing", by), [&](sqlite3_stmt* q) { all.push_back(sqlite3_column_int(q, 0)); });
+    std::vector<int> connected, all;
+    doc_rows(d, sqlite3_mprintf("select distinct thing from fact where name glob '*_by' and value = %d order by thing", by), [&](sqlite3_stmt* q) { connected.push_back(sqlite3_column_int(q, 0)); });
+    std::istringstream said(doc_word(d, by, "members"));
+    for (std::string one; said >> one;) {
+        const int t = std::atoi(one.c_str());
+        all.push_back(std::find(connected.begin(), connected.end(), t) != connected.end() && std::find(all.begin(), all.end(), t) == all.end() ? t : 0);
+    }
+    for (const int t : connected) if (std::find(all.begin(), all.end(), t) == all.end()) all.push_back(t);
     return d.membersOf.emplace(by, std::move(all)).first->second;
 }
 // What a relation gives a value of one of its things (`own`: the thing's own value there), weighed by its strength.
@@ -2581,6 +2589,38 @@ static bool doc_set(Doc& d, int thing, const char* name, double is) {
 }
 static bool doc_say(Doc& d, int thing, const char* name, const char* word) {
     return doc_knows(d, thing, name, nullptr, word) && doc_change(d, sqlite3_mprintf("insert into fact(thing, name, at, value) values(%d, %Q, 0.0, %Q) on conflict do update set value = excluded.value", thing, name, word));
+}
+// A thing taken out of a relation where it shows at that moment: each value connected to it moved (all its keys alike)
+// by what the relation added there, then no longer connected; its place among the relation's members kept empty, so no
+// other moves. Nothing jumps.
+static bool doc_free(Doc& d, int thing, int by, double now) {
+    std::vector<std::string> names;
+    doc_rows(d, sqlite3_mprintf("select name from fact where thing = %d and name glob '*_by' and value = %d", thing, by), [&](sqlite3_stmt* q) { names.push_back((const char*)sqlite3_column_text(q, 0)); });
+    if (names.empty()) return d.trouble = "it is not in that relation", false;
+    std::string place;   // (its number in the members word made "_")
+    std::istringstream said(doc_word(d, by, "members"));
+    for (std::string one; said >> one;) place += (place.empty() ? "" : " ") + (one == std::to_string(thing) ? std::string("_") : one);
+    char* change = sqlite3_mprintf("update fact set value = %Q where thing = %d and name = 'members';", place.c_str(), by);
+    for (const std::string& n : names) {
+        const std::string base = n.substr(0, n.size() - 3);
+        const double shown = doc_literal(d, thing, base.c_str(), now, 0.0), own = doc_keys_at(d, doc_keys_of(d, thing, base.c_str()), now, 0.0);
+        change = sqlite3_mprintf("%z update fact set value = value + %!.17g where thing = %d and name = %Q; insert into fact(thing, name, at, value) select %d, %Q, 0.0, %!.17g where not exists (select 1 from fact where thing = %d and name = %Q); delete from fact where thing = %d and name = %Q;",
+                                 change, shown - own, thing, base.c_str(), thing, base.c_str(), shown - own, thing, base.c_str(), thing, n.c_str());
+    }
+    return doc_change(d, change);
+}
+// A relation let go: each of its things kept where it shows at that moment, the relation gone.
+static bool doc_remove(Doc& d, int thing);
+static void doc_act(Doc& d);
+static bool doc_acted(Doc& d);
+static bool doc_release(Doc& d, int by, double now) {
+    if (doc_word(d, by, "kind") != "behaviour") return d.trouble = "that is no relation", false;
+    const std::vector<int> all = doc_members_of(d, by);   // (a copy: freeing one forgets the list)
+    doc_act(d);   // (one step: all of them freed and the relation gone, or none of it)
+    bool ok = true;
+    for (const int t : all) if (ok && t) ok = doc_free(d, t, by, now);
+    ok = ok && doc_remove(d, by);
+    return doc_acted(d) && ok;
 }
 // A value either stays (one fact, at 0, with no way: what `set` writes) or is keyed: a key is a key even alone, and
 // a value's first key takes the place of the value that stayed (a key at 0 is marked by its way, Linear until told).
