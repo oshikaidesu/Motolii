@@ -1,6 +1,6 @@
 #!/bin/zsh
 # (a check: relations, behaviours that set things in relation to each other (around, row, follow, push), as films:
-# push (a big one goes through, the rest get out of its way), gather (strength keyed 0, 1, 0: scattered things come
+# push (a big one goes through, the rest get out of its way), morph (a ring over a row, its strength keyed: row to ring and back), gather (strength keyed 0, 1, 0: scattered things come
 # round into a ring and go again), follow (a line of followers each later than the one before), hand (a ball handed
 # from one hand to the other), orbit (a moon round a planet round a sun). Then: strength 0 draws as no relation.)
 #   check/relations.sh [out dir]      films and a sheet of frames in it (default: a new one)
@@ -55,7 +55,14 @@ small circle 4 2a62c9; both 4 1; calls+=("set 2 leader 4"); calls+=("set 2 radiu
 small circle 5 f1ece2; calls+=("set 5 size 0.06"); both 5 2
 film orbit $calls
 
-magick $out/{push,gather,follow,hand,orbit}_row.png -background '#444' -splice 0x4 -append $out/relations_sheet.png
+# morph: six things in a row, a ring over the row; the ring's strength keyed 0, 1, 0: row to ring and back, unbroken
+calls=("say 0 behind colour" "say 0 background f1ece2" "add behaviour row" "set 1 gap 0.35" "say 1 members 2 3 4 5 6 7")
+for k in {2..7}; do small $( (( k % 2 )) && echo rect || echo circle ) $k $( (( k % 3 )) && echo 151515 || echo e5432d ); calls+=("set $k x $(( (k * 37 % 19) / 9.5 - 1 ))" "set $k y $(( (k * 23 % 17) / 9.0 - 0.9 ))"); done
+calls+=("add behaviour around" "set 8 radius 0.55" "say 8 members 2 3 4 5 6 7" "say 8 under 1 1 1 1 1 1" "key 8 strength 0 0" "key 8 strength 1.5 1" "key 8 strength 2.5 1" "key 8 strength 4 0")
+for k in {2..7}; do both $k 8; done
+film morph $calls
+
+magick $out/{push,gather,follow,hand,orbit,morph}_row.png -background '#444' -splice 0x4 -append $out/relations_sheet.png
 # strength 0 is no relation: the same picture as the things alone
 print -l "add shape circle" "set 1 size 0.2" "set 1 x 0.4" "add behaviour around" "set 2 strength 0" "still $out/zero.png" "set 1 x_by 2" "set 1 y_by 2" "still $out/zero_related.png" | SIZE=$SIZE ./edit.sh $out/zero.motolii | grep -iE "NOT done"
 cmp -s $out/zero.png $out/zero_related.png && echo "ok   strength 0 draws as no relation" || { echo "FAIL strength 0 draws otherwise"; bad=1; }

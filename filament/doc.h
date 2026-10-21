@@ -2694,8 +2694,8 @@ static bool doc_free(Doc& d, int thing, int by, double now, bool stay) {
         }
     bool ok = doc_change(d, change);
     doc_forget(d);
-    for (const auto& [n, shown] : names) {   // (each value moved by what it would jump: when baked, or with nothing under it to go back to, as After Effects keeps a child where it is when its parent goes)
-        if (!ok || !(stay || !was)) break;
+    for (const auto& [n, shown] : names) {   // (each value moved by what it would jump, when baked; else as the relation at strength 0 for good: back to the one under it, or its own value, so a morph by strength and a removal agree)
+        if (!ok || !stay) break;
         const std::string base = n.substr(0, n.size() - 3);
         const double off = shown - doc_literal(d, thing, doc_lasting(base), now, 0.0);
         if (std::abs(off) < 1e-12) continue;
