@@ -149,6 +149,11 @@ void main() {
     while (m.answer(m.later('free', thing: made[1], number: around.toDouble())) < 0) {}
     expect(m.value(made[1], 'x_by', 0), push.toDouble(), reason: 'back in Push');
     stays(out, 'one out of Around');
+    // (switched off by its eye: what Push gives shows, and its strength is as it was)
+    m.set(around, 'strength', .8);
+    m.set(around, 'visible', 0);
+    stays({for (final i in made.skip(2).take(2)) i: out[i]!}, 'Around switched off');
+    expect(m.value(around, 'strength', 0), closeTo(.8, 1e-9), reason: 'off is not strength 0');
   }, skip: !insideBuilt);
 
   test('the pusher taken away (a row over the push): every thing stays where it shows', () {

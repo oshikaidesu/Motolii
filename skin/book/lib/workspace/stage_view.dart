@@ -10,6 +10,7 @@ import 'package:flutter/widgets.dart';
 import '../tokens.dart';
 import 'stage_art.dart';
 import '../motolii.dart' show Motolii;
+import '../sets/panels/timeline_parts_parts.dart' show TpGlyph, TpGlyphView;
 import 'relate.dart';
 import 'ws.dart';
 
@@ -649,9 +650,20 @@ class _RelationMarks extends StatelessWidget {
         }
       }
       final tags = wsRelationsOf(ws), sel = ws.selected == null ? null : on(ws.selected!);
-      if (sel != null && m != null) // (a pusher picked: how far it reaches, while it is carried too)
-        for (final r in tags)
-          if (m.word(int.parse(r), 'file') == 'push' && '${(m.value(int.parse(r), 'leader', now) ?? 0).round()}' == ws.selected) shape.add(_Shape.ring(sel, (m.value(int.parse(r), 'radius', now) ?? .5) * m.point * v.s));
+      if (sel != null && m != null && !isRelation) // (a thing picked: the shape of each relation it is in, its leader's ring too, while it is carried)
+        for (final r in tags.map(int.parse)) {
+          double val(String n, [double or = 0]) => m.value(r, n, now) ?? or;
+          final px = m.point * v.s, l = val('leader') > 0 ? on('${val('leader').round()}') : null;
+          switch (m.word(r, 'file')) {
+            case 'around':
+              shape.add(_Shape.ring(screen(val('centre_x'), val('centre_y')), val('radius', .5) * px));
+            case 'row':
+              final half = val('gap', .2) * (m.word(r, 'members').split(' ').length - 1) / 2;
+              shape.add(_Shape.line(screen(val('centre_x') - half, val('centre_y')), screen(val('centre_x') + half, val('centre_y'))));
+            case 'push' when l != null:
+              shape.add(_Shape.ring(l, val('radius', .5) * px));
+          }
+        }
       return Stack(
         children: [
           IgnorePointer(child: CustomPaint(size: Size.infinite, painter: _MarksPainter(lasso, [...picked, for (final (_, p) in members) p], shape))),
@@ -675,7 +687,7 @@ class _RelationMarks extends StatelessWidget {
                       ? [Padding(padding: EdgeInsets.only(right: Shape.s(8)), child: Text('${picked.length} picked', style: T.label(Grey.g91))), for (final k in wsRelations) _RelateChip(k, () => wsRelate(ws, k))]
                       : [
                           Padding(padding: EdgeInsets.only(right: Shape.s(8)), child: Text('${kind[0].toUpperCase()}${kind.substring(1)} · ${members.length}', style: T.label(Grey.g91))),
-                          _RelateChip((m!.value(rel!, 'strength', now) ?? 1) > .5 ? 'on' : 'off', () => wsSwitch(ws), outlined: (m.value(rel, 'strength', now) ?? 1) <= .5, key: const ValueKey('ws-relation-switch')), // (on or off: off, what it is on top of shows)
+                          _RelateChip('eye', () => wsSwitch(ws), glyph: (m!.value(rel!, 'visible', 0) ?? 1) > .5 ? TpGlyph.eye : TpGlyph.eyeOff, key: const ValueKey('ws-relation-switch')), // (its eye, as on its row: shut, what it is on top of shows)
                           _RelateChip('release', () => wsRelease(ws)),
                         ],
                 ),
@@ -733,10 +745,11 @@ class _MarksPainter extends CustomPainter {
 
 /// What things picked together may do together, or a relation a thing is in (outlined): a word on a pill.
 class _RelateChip extends StatelessWidget {
-  const _RelateChip(this.kind, this.onTap, {this.outlined = false, super.key});
+  const _RelateChip(this.kind, this.onTap, {this.outlined = false, this.glyph, super.key});
   final String kind;
   final VoidCallback onTap;
   final bool outlined;
+  final TpGlyph? glyph;   // (drawn instead of its word)
   @override
   Widget build(BuildContext context) => GestureDetector(
     key: key == null ? ValueKey('ws-relate-$kind') : null,
@@ -745,7 +758,7 @@ class _RelateChip extends StatelessWidget {
       margin: EdgeInsets.only(right: Shape.s(4)),
       padding: EdgeInsets.symmetric(horizontal: Shape.s(10), vertical: Shape.s(5)),
       decoration: BoxDecoration(color: outlined ? WsT.body : WsT.accent, border: outlined ? Border.all(color: WsT.accent) : null, borderRadius: BorderRadius.all(Shape.r(12))),
-      child: Text(kind[0].toUpperCase() + kind.substring(1), style: T.label(outlined ? WsT.accent : WsT.onAccent)),
+      child: glyph != null ? TpGlyphView(glyph!, WsT.onAccent, size: Shape.z(12)) : Text(kind[0].toUpperCase() + kind.substring(1), style: T.label(outlined ? WsT.accent : WsT.onAccent)),
     ),
   );
 }

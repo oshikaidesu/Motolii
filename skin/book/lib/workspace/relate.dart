@@ -77,6 +77,6 @@ List<String> wsRelationsOf(Ws ws) {
 void wsSwitch(Ws ws) {
   final m = ws.inside, by = int.tryParse(ws.selected ?? '');
   if (m == null || by == null) return;
-  final on = (m.value(by, 'strength', ws.frame / Ws.fps) ?? 1) > .5;
-  ws.after(m.later('set', thing: by, name: 'strength', number: on ? 0 : 1), (_, _) => ws.reread());
+  final on = (m.value(by, 'visible', 0) ?? 1) > .5;   // (its eye, as a row's: its strength as it was)
+  ws.after(m.later('set', thing: by, name: 'visible', number: on ? 0 : 1), (_, _) => ws.reread());
 }

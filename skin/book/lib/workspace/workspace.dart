@@ -395,11 +395,14 @@ bool _flag(Ws ws, String? id, Map<String, bool> changed) {
   return false;
 }
 
-/// Joined: the other things by the names the timeline shows (a name two things share is told apart by its number).
+/// Joined: the other things by the names the timeline shows (a name two things share is told apart by its number among
+/// them, in the order they were made: the same number however the rows move or grow).
 Map<String, int> _others(Ws ws, int t) {
-  final rows = ws.layers.where((l) => l.id != '$t' && ws.inside?.word(int.parse(l.id), 'kind') != 'behaviour');   // (things, not relations or behaviours)
+  final rows = ws.layers.where((l) => l.id != '$t' && ws.inside?.word(int.parse(l.id), 'kind') != 'behaviour').toList()   // (things, not relations or behaviours)
+    ..sort((a, b) => int.parse(a.id).compareTo(int.parse(b.id)));
   return {
-    for (final l in rows) (rows.where((o) => o.name == l.name).length > 1 ? '${l.name} ${ws.layers.indexOf(l) + 1}' : l.name): int.parse(l.id),   // (two of a name told apart by their row's number on the timeline)
+    for (final l in rows)
+      (rows.where((o) => o.name == l.name).length > 1 ? '${l.name} ${rows.where((o) => o.name == l.name).toList().indexOf(l) + 1}' : l.name): int.parse(l.id),
   };
 }
 

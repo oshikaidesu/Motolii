@@ -168,7 +168,7 @@ static const DocValue doc_values[] = {
     //  luma mattes), the other way about (inverted), its edge so soft, in points of the screen)
     {"clip_matte", "film picture text shape", 0, 0, false, "alpha luma"}, {"clip_invert", "film picture text shape", 0, 1, false, nullptr}, {"clip_feather", "film picture text shape", 0, 500, false, nullptr},   // (a solid is cut by a box, not a matte)
     {"solo", doc_kinds, 0, 1, false, nullptr}, {"lock", doc_kinds, 0, 1, false, nullptr},   // (After Effects' own: while any thing is solo only those are seen; a locked thing is not changed)
-    {"visible", doc_kinds, 0, 1, false, nullptr}, {"order", doc_kinds, -1e9, 1e9, false, nullptr}, {"wide", "shape", 1e-3, 1e3, false, nullptr}, {"shape", "shape", 0, 0, false, "rect circle solid polygon star line wave null ring arc arrow squircle cog path spiral chamfer"},
+    {"visible", "film picture text solid shape camera light behaviour", 0, 1, false, nullptr}, {"order", doc_kinds, -1e9, 1e9, false, nullptr}, {"wide", "shape", 1e-3, 1e3, false, nullptr}, {"shape", "shape", 0, 0, false, "rect circle solid polygon star line wave null ring arc arrow squircle cog path spiral chamfer"},
     {"points", "shape", 1, 360, false, nullptr}, {"inner", "shape", 0.01, 1, false, nullptr}, {"round", "shape", 0, 0.5, true, nullptr},   // (a polygon's or star's points, a star's inner points, its corners rounded)
     {"start", doc_kinds, 0, 1e6, false, nullptr}, {"duration", doc_kinds, 1e-3, 1e6, false, nullptr},
     {"begin", "film", 0, 1e6, false, nullptr}, {"speed", "film solid", -100, 100, false, nullptr}, {"keyed", "film", 0, 1, false, nullptr},
@@ -1005,6 +1005,7 @@ static double doc_related(Doc& d, int by, int thing, const char* name, double t,
     const int many = std::max(1, (int)rel.members.size()), was = rel.under.empty() ? 0 : rel.under[i];
     const auto start = [&](const char* what, double mine) { return was ? doc_related(d, was, thing, what, t, mine) : mine; };
     const double base = start(name, own), s = std::clamp(doc_number(d, by, "strength", t, 1), 0.0, 1.0);
+    if (doc_number(d, by, "visible", 0, 1) <= 0.5) return base;   // (switched off, its eye shut: what it is on top of shows, its strength kept)
     const double came = rel.from.empty() ? std::nan("") : rel.from[2 * i + (n == "y" ? 1 : 0)];
     const auto leader = [&](const char* which) { const int l = (int)doc_number(d, by, which, 0, 0); return l != thing ? l : 0; };
     if (type == "around" || type == "row") {   // (around a middle, the first at the top, each as far round as its order; or in a row from the middle, gap apart)
@@ -1026,7 +1027,7 @@ static double doc_related(Doc& d, int by, int thing, const char* name, double t,
         const double from = doc_literal(d, a, name, back, own), to = b ? doc_literal(d, b, name, back, own) : from, lead = from + (to - from) * hand;
         return std::isnan(came) ? base + lead * s : base + (lead - came) * s;
     }
-    if (type == "push") {   // (out of its leader's way: within radius moved out to its edge; further off as it is)
+    if (type == "push") {   // (out of its leader's way: within radius pressed towards its edge, the nearer still nearer; further off as it is)
         const int l = leader("leader");
         if (!l || (n != "x" && n != "y")) return base;
         const double bx = n == "x" ? base : start("x", doc_keys_at(d, doc_keys_of(d, thing, "x"), t, 0)), by_ = n == "y" ? base : start("y", doc_keys_at(d, doc_keys_of(d, thing, "y"), t, 0));
@@ -1034,7 +1035,7 @@ static double doc_related(Doc& d, int by, int thing, const char* name, double t,
         double dx = bx - lx, dy = by_ - ly, far = std::hypot(dx, dy);
         if (far >= r || r <= 0.0) return base;
         if (far < 1e-6) dx = std::sin(TAU * (double)i / many), dy = std::cos(TAU * (double)i / many), far = 1e-6;
-        const double out = r, v = n == "x" ? lx + dx / far * out : ly + dy / far * out;   // (out to the edge: a clear way, not a nudge)
+        const double out = r * (0.6 + 0.4 * far / r), v = n == "x" ? lx + dx / far * out : ly + dy / far * out;   // (into the outer part of the ring, in their order: a clear way, none piled on another)
         return base + (v - base) * s;
     }
     return base;

@@ -488,7 +488,7 @@ class _Readout extends StatelessWidget {
         ),
         SizedBox(width: Shape.s(6)),
         Text(l.name, style: T.name(Grey.g95).copyWith(fontWeight: FontWeight.w600)),
-        if (box == null)
+        if (box == null && ws.inside?.word(int.parse(l.id), 'kind') != 'behaviour')   // (a relation has no picture of its own: nothing to say)
           Padding(
             padding: EdgeInsets.only(left: Shape.s(10)),
             child: Text(l.kind == WsKind.audio ? 'No picture' : 'Not on this frame', style: T.label(Grey.g56)),
