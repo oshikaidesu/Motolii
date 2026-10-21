@@ -63,6 +63,7 @@ struct Doc {
     std::map<uint32_t, MaterialInstance*> copyLooks, copyEdges;   // (copyEdges: the same for its edge, its second part)
     std::map<std::pair<int, std::string>, int> drivers;   // a value's behaviour (`<name>_by`), by thing and name: found once, forgotten at every change
     std::unordered_map<int, bool> connects;   // whether a thing has any value connected to a behaviour: asked once, forgotten at every change
+    std::unordered_map<int, std::vector<int>> membersOf;   // the things connected to a behaviour, in their order (which is which of how many in a relation): found once, forgotten at every change
     int ctxCopy = 0, ctxN = 1;   // which of how many copies doc_place is placing now: what a behaviour gives is that copy's
     bool ctxHasAt = false; math::double3 ctxAt{0.0};   // (and where that copy lies on the stage, laid out, once doc_place knows: what a behaviour's falloff weighs)   // a copy's own look (its thing's look duplicated, by the copy's entity), while its copies are coloured each their own
     float roomLight = 0.f;              // the room's own light, as the stage was opened with it
@@ -286,7 +287,20 @@ static const DocValue doc_values[] = {
     //  falloff_soft units of the stage; inverted, the other way: elsewhere, the value is the thing's own)
     {"falloff", "behaviour", 0, 1e9, false, nullptr},
     {"falloff_soft", "behaviour", 0, 1e4, true, nullptr},
-    {"falloff_invert", "behaviour", 0, 1, false, nullptr},   // (where its outlines lie over each other: filled, or a hole every other time, SVG's and Cavalry's fill rule)
+    {"falloff_invert", "behaviour", 0, 1, false, nullptr},
+    // (a relation, a behaviour that sets its things in relation to each other or to one of them: around a middle, in a row,
+    //  following a leader (so many seconds later each, its own value as a step from the leader's; handed over to leader_b as
+    //  hand goes 0 to 1), or pushed away by a leader within radius; strength how much of it works: 0 as if it were not there,
+    //  so it is put on and taken off over time without a jump)
+    {"strength", "behaviour", 0, 1, true, nullptr},
+    {"radius", "behaviour", 0, 1e4, true, nullptr},
+    {"gap", "behaviour", -1e4, 1e4, true, nullptr},
+    {"centre_x", "behaviour", -1e6, 1e6, true, nullptr},
+    {"centre_y", "behaviour", -1e6, 1e6, true, nullptr},
+    {"leader", "behaviour", 0, 1e9, false, nullptr},
+    {"leader_b", "behaviour", 0, 1e9, false, nullptr},
+    {"hand", "behaviour", 0, 1, true, nullptr},
+    {"lag", "behaviour", 0, 60, true, nullptr},   // (where its outlines lie over each other: filled, or a hole every other time, SVG's and Cavalry's fill rule)
     {"morph", "shape", 0, 1, true, nullptr},
     // (its path another's track, Cavalry's Trails: whose, and over how many seconds back)
     {"trail", "shape", 0, 1e9, false, nullptr},
@@ -686,7 +700,7 @@ static bool doc_rows(Doc& d, char* ask, const std::function<void(sqlite3_stmt*)>
 static void doc_forget(Doc& d) {
     d.phys_stale = true, d.scripted.clear();   // (the world made again only if what it is made of changed: doc_physics)
     d.moving.clear(), d.literals.clear(), d.words.clear(), d.keyed.clear(), d.halves.clear(), d.heardWords.clear(), d.talls.clear();
-    d.named.clear(), d.tracks.clear(), d.drivers.clear(), d.connects.clear();
+    d.named.clear(), d.tracks.clear(), d.drivers.clear(), d.connects.clear(), d.membersOf.clear();
     d.laid.clear();
 }
 // The things in the order they lie, the one furthest back first: by `order` where it is said, else as they were made.
@@ -922,10 +936,60 @@ static void doc_copy_looks_off(Doc& d, const Mesh* m, MaterialInstance* main) {
 // A value doc_place reads, by a name written in the program (a literal: its place in memory says which name, ever):
 // where its keys are is found once and held until the document changes (as Beutl and Skottie hold a property), each
 // moment reckoned from them; a value with no keys or one is its number at once. Not while a hand carries it.
+static double doc_literal(Doc& d, int thing, const char* literal, double at, double otherwise);
+// The things connected to a behaviour (any of their values `<name>_by` = it), in the order they were made.
+static const std::vector<int>& doc_members_of(Doc& d, int by) {
+    if (const auto known = d.membersOf.find(by); known != d.membersOf.end()) return known->second;
+    std::vector<int> all;
+    doc_rows(d, sqlite3_mprintf("select distinct thing from fact where name glob '*_by' and value = %d order by thing", by), [&](sqlite3_stmt* q) { all.push_back(sqlite3_column_int(q, 0)); });
+    return d.membersOf.emplace(by, std::move(all)).first->second;
+}
+// What a relation gives a value of one of its things (`own`: the thing's own value there), weighed by its strength.
+static double doc_related(Doc& d, int by, int thing, const char* name, double t, double own) {
+    static int depth = 0;   // (a leader in a relation that leads back: so deep at most)
+    struct Deeper { Deeper() { ++depth; } ~Deeper() { --depth; } } deeper;
+    if (depth > 4) return own;
+    const std::string type = doc_word(d, by, "file"), n = name;
+    const std::vector<int>& all = doc_members_of(d, by);
+    const int i = (int)(std::find(all.begin(), all.end(), thing) - all.begin()), many = std::max(1, (int)all.size());
+    const auto leader = [&](const char* which) { const int l = (int)doc_number(d, by, which, 0, 0); return l != thing ? l : 0; };
+    const auto ownAt = [&](int one, const char* what) { return doc_keys_at(d, doc_keys_of(d, one, what), t, 0); };
+    double v = own;
+    if (type == "around" || type == "row") {   // (around a middle, the first at the top, each as far round as its order; or in a row from the middle, gap apart)
+        if (n != "x" && n != "y") return own;
+        const int l = leader("leader");
+        const double cx = doc_number(d, by, "centre_x", t, 0) + (l ? doc_literal(d, l, "x", t, 0) : 0.0), cy = doc_number(d, by, "centre_y", t, 0) + (l ? doc_literal(d, l, "y", t, 0) : 0.0);
+        if (type == "around") {
+            const double turn = TAU * (doc_number(d, by, "offset", t, 0) + (double)i / many), r = doc_number(d, by, "radius", t, 0.5);
+            v = n == "x" ? cx + r * std::sin(turn) : cy + r * std::cos(turn);
+        } else v = n == "x" ? cx + doc_number(d, by, "gap", t, 0.2) * i : cy;
+    } else if (type == "follow") {   // (where its leader was so many seconds ago, each later than the one before, its own value a step from there)
+        const int a = leader("leader"), b = leader("leader_b");
+        if (!a) return own;
+        const double back = t - doc_number(d, by, "lag", t, 0) * (i + 1), hand = b ? std::clamp(doc_number(d, by, "hand", t, 0), 0.0, 1.0) : 0.0;
+        const double from = doc_literal(d, a, name, back, own), to = b ? doc_literal(d, b, name, back, own) : from;
+        v = from + (to - from) * hand + own;
+    } else if (type == "push") {   // (out of its leader's way: within radius moved out to the edge, softly; further off as it is)
+        const int l = leader("leader");
+        if (!l || (n != "x" && n != "y")) return own;
+        const double lx = doc_literal(d, l, "x", t, 0), ly = doc_literal(d, l, "y", t, 0), r = doc_number(d, by, "radius", t, 0.5);
+        double dx = ownAt(thing, "x") - lx, dy = ownAt(thing, "y") - ly, far = std::hypot(dx, dy);
+        if (far >= r || r <= 0.0) return own;
+        if (far < 1e-6) dx = std::sin(TAU * i / many), dy = std::cos(TAU * i / many), far = 1e-6;
+        const double out = far + (r - far) * (r - far) / r;
+        v = n == "x" ? lx + dx / far * out : ly + dy / far * out;
+    } else return own;
+    return own + (v - own) * std::clamp(doc_number(d, by, "strength", t, 1), 0.0, 1.0);
+}
 static double doc_literal(Doc& d, int thing, const char* literal, double at, double otherwise) {
-    if (d.held.thing == thing) return doc_number(d, thing, literal, at, otherwise);
+    if (d.held.thing == thing) {   // (carried by a hand: what it carries; in a relation, still in it, the hand moving its own value)
+        const double own = doc_number(d, thing, literal, at, otherwise);
+        const int by = doc_driven_by(d, thing, literal);
+        return by && doc_among("around row follow push", doc_word(d, by, "file")) ? doc_related(d, by, thing, literal, at, own) : own;
+    }
     if (const int by = doc_driven_by(d, thing, literal)) {   // (given by a behaviour: the copy being placed's own, where it lies weighed by its falloff)
         const double own = doc_keys_at(d, doc_keys_of(d, thing, literal), at, otherwise);
+        if (doc_among("around row follow push", doc_word(d, by, "file"))) return doc_related(d, by, thing, literal, at, own);   // (a relation: by the thing's place among its things, not a copy's)
         return doc_given(d, by, d.ctxCopy, d.ctxN, at, own, d.ctxHasAt ? &d.ctxAt : nullptr);
     }
     const auto key = std::make_pair(thing, literal);
@@ -2482,7 +2546,7 @@ static int doc_add(Doc& d, const char* kind, const char* file) {
     if (!*kind) kind = doc_kind_of(file);   // (not said: what the file makes)
     if (!*kind) return d.trouble = std::string("no kind of thing is made from ") + file, 0;
     if (!doc_among(doc_kinds, kind) && strcmp(kind, "behaviour")) return d.trouble = std::string("a thing is one of: ") + doc_kinds + " behaviour", 0;
-    if (!strcmp(kind, "behaviour") && !doc_among("stagger oscillator noise random", file)) return d.trouble = "a behaviour is a stagger, an oscillator, a noise or a random", 0;
+    if (!strcmp(kind, "behaviour") && !doc_among("stagger oscillator noise random around row follow push", file)) return d.trouble = "a behaviour is a stagger, an oscillator, a noise, a random, or a relation: around, row, follow, push", 0;
     if (!strcmp(kind, "light") && !doc_among("sun point spot", file)) return d.trouble = "a light is a sun, a point or a spot", 0;
     // (it comes on at the stage's present moment)
     if (!doc_change(d, sqlite3_mprintf("insert into thing default values; insert into fact(thing, name, at, value) values(last_insert_rowid(), 'kind', 0.0, %Q); insert into fact(thing, name, at, value) values(last_insert_rowid(), %Q, 0.0, %Q); insert into fact(thing, name, at, value) select id, 'start', 0.0, %!.17g from thing where %d order by id desc limit 1%s",
