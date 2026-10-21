@@ -81,8 +81,11 @@ void main() {
         final image = await root.toImage(Offset.zero & t.view.physicalSize);
         final win = (await image.toByteData())!;
         final w = image.width;
-        final still = '$dir/stage.png';
-        if (ws.inside!.still(still) && File(still).existsSync()) {
+        final still = '$dir/stage.png', waited = ws.inside!.broken;   // (what the window waited for, kept; then the shot's own still, which waits as the window never does, forgotten)
+        if (waited.isNotEmpty) File('$dir/broken.txt').writeAsStringSync('$waited\n', mode: FileMode.append);
+        final took = ws.inside!.still(still);
+        ws.inside!.watch(true);
+        if (took && File(still).existsSync()) {
           final codec = await ui.instantiateImageCodec(File(still).readAsBytesSync(), targetWidth: comp.width.round(), targetHeight: comp.height.round());
           final pic = (await codec.getNextFrame()).image, px = (await pic.toByteData())!;
           final l = comp.left.round(), top = comp.top.round(), bg = win.getUint32(((top + 1) * w + l + 1) * 4);

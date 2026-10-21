@@ -57,6 +57,18 @@ void wsRelease(Ws ws) {
 
 /// The relations the picked thing is in, the one on top first (what its place is connected to, then what each starts
 /// from for it): shown beside it, a touch picks one.
+/// Of the relations the picked thing is in, the one that shows: the uppermost whose eye is open (null: none).
+String? wsWinner(Ws ws) {
+  final m = ws.inside, t = int.tryParse(ws.selected ?? '');
+  if (m == null || t == null) return null;
+  for (var r = (m.value(t, 'x_by', 0) ?? 0).round(), n = 0; r > 0 && n < 8 && wsRelations.contains(m.word(r, 'file')); n++) {
+    if ((m.value(r, 'visible', 0) ?? 1) > .5) return '$r';
+    final members = m.word(r, 'members').split(' '), under = m.word(r, 'under').split(' '), at = members.indexOf('$t');
+    r = at >= 0 && at < under.length ? int.tryParse(under[at]) ?? 0 : 0;
+  }
+  return null;
+}
+
 List<String> wsRelationsOf(Ws ws) {
   final m = ws.inside, t = int.tryParse(ws.selected ?? '');
   if (m == null || t == null || m.word(t, 'kind') == 'behaviour') return const [];

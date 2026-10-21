@@ -2617,6 +2617,7 @@ static int doc_add(Doc& d, const char* kind, const char* file) {
     return thing;
 }
 static bool doc_release(Doc& d, int by, double now);
+static bool doc_free(Doc& d, int thing, int by, double now, bool stay);
 static std::vector<int> doc_things(Doc& d);
 static bool doc_remove(Doc& d, int thing) {
     if (doc_knows(d, thing) && doc_number(d, thing, "lock", 0, 0) > 0.5) return d.trouble = "it is locked", false;
@@ -2632,9 +2633,13 @@ static bool doc_remove(Doc& d, int thing) {
             return doc_acted(d) && ok;
         }
     }
-    if (doc_knows(d, thing) && doc_among("around row follow push", doc_word(d, thing, "file")) && doc_word(d, thing, "kind") == "behaviour") {   // (a relation taken away lets its things go where they show: nothing jumps)
-        const std::vector<int>& all = doc_members_of(d, thing);
-        if (std::any_of(all.begin(), all.end(), [](int t) { return t != 0; })) return doc_release(d, thing, d.stage ? d.stage->now : 0.0);
+    if (doc_knows(d, thing) && doc_among("around row follow push", doc_word(d, thing, "file")) && doc_word(d, thing, "kind") == "behaviour") {   // (a relation taken away: its things back to what is under it, as a constraint deleted in Blender; release keeps them where they show)
+        const std::vector<int> all = doc_members_of(d, thing);
+        doc_act(d);
+        bool ok = true;
+        for (const int t : all) if (ok && t) ok = doc_free(d, t, thing, d.stage ? d.stage->now : 0.0, false);
+        ok = ok && doc_change(d, sqlite3_mprintf("delete from fact where thing = %d", thing));
+        return doc_acted(d) && ok;
     }
     return doc_knows(d, thing) && doc_change(d, sqlite3_mprintf("delete from fact where thing = %d", thing)); }
 // A value that stays (its keys, if it had any, are gone); a word; a key at a moment; a key taken away.
@@ -2656,7 +2661,7 @@ static const char* doc_lasting(const std::string& name) {   // (a name made at r
     static std::set<std::string> kept;
     return kept.insert(name).first->c_str();
 }
-static bool doc_free(Doc& d, int thing, int by, double now) {
+static bool doc_free(Doc& d, int thing, int by, double now, bool stay) {
     const Doc::Relation rel = doc_relation_of(d, by);   // (a copy: what follows forgets it)
     const auto at = std::find(rel.members.begin(), rel.members.end(), thing);
     if (at == rel.members.end()) return d.trouble = "it is not in that relation", false;
@@ -2685,8 +2690,8 @@ static bool doc_free(Doc& d, int thing, int by, double now) {
         }
     bool ok = doc_change(d, change);
     doc_forget(d);
-    for (const auto& [n, shown] : names) {   // (each value moved by what it would jump)
-        if (!ok) break;
+    for (const auto& [n, shown] : names) {   // (each value moved by what it would jump; not when it is to go back)
+        if (!ok || !stay) break;
         const std::string base = n.substr(0, n.size() - 3);
         const double off = shown - doc_literal(d, thing, doc_lasting(base), now, 0.0);
         if (std::abs(off) < 1e-12) continue;
@@ -2779,7 +2784,7 @@ static bool doc_lead(Doc& d, int by, int leader, double now) {
     doc_forget(d);
     doc_act(d);
     const std::vector<int>& in = doc_members_of(d, by);
-    bool ok = std::find(in.begin(), in.end(), leader) == in.end() || doc_free(d, leader, by, now);   // (the leader is not one it moves)
+    bool ok = std::find(in.begin(), in.end(), leader) == in.end() || doc_free(d, leader, by, now, true);   // (the leader is not one it moves)
     if ((type == "around" || type == "row") && ok)   // (its middle is the leader's place and a step: the step made again from the new one, so the middle stays)
         ok = doc_set(d, by, "centre_x", doc_number(d, by, "centre_x", now, 0) + wasAt.first - settles.first) && doc_set(d, by, "centre_y", doc_number(d, by, "centre_y", now, 0) + wasAt.second - settles.second);
     ok = ok && doc_set(d, by, "leader", leader);
@@ -2815,7 +2820,7 @@ static bool doc_release(Doc& d, int by, double now) {
     const std::vector<int> all = doc_members_of(d, by);   // (a copy: freeing one forgets the list)
     doc_act(d);   // (one step: all of them freed and the relation gone, or none of it)
     bool ok = true;
-    for (const int t : all) if (ok && t) ok = doc_free(d, t, by, now);
+    for (const int t : all) if (ok && t) ok = doc_free(d, t, by, now, true);
     ok = ok && doc_remove(d, by);
     return doc_acted(d) && ok;
 }

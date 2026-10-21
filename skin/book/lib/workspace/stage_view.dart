@@ -607,6 +607,7 @@ class _RelationMarks extends StatelessWidget {
       String? leader;
       if (isRelation) {
         double val(String n, [double or = 0]) => m.value(rel, n, now) ?? or;
+        final off = val('visible', 1) <= .5;
         leader = val('leader') > 0 ? '${val('leader').round()}' : null;
         final cx = val('centre_x'), cy = val('centre_y'), mid = screen(cx, cy), px = m.point * v.s;
         Widget handle(String key, Offset at, void Function((double, double) u) carry) => Positioned(   // (the middle a cross, a size an arrow out)
@@ -625,13 +626,13 @@ class _RelationMarks extends StatelessWidget {
         );
         if (kind == 'around') {
           final r = val('radius', .5), turn = val('offset') + .5 / math.max(1, members.length);
-          shape.add(_Shape.ring(mid, r * px));
+          shape.add(_Shape.ring(mid, r * px, off: off));
           handles
             ..add(handle('centre', mid, (u) => m..carry('centre_x', u.$1)..carry('centre_y', u.$2)))
             ..add(handle('size', screen(cx + r * math.sin(turn * 2 * math.pi), cy + r * math.cos(turn * 2 * math.pi)), (u) => m.carry('radius', math.sqrt(math.pow(u.$1 - cx, 2) + math.pow(u.$2 - cy, 2)))));
         } else if (kind == 'row') {
           final gap = val('gap', .2), n = math.max(1, m.word(rel, 'members').split(' ').length), half = gap * (n - 1) / 2;
-          shape.add(_Shape.line(screen(cx - half, cy), screen(cx + half, cy)));   // (a row about its middle)
+          shape.add(_Shape.line(screen(cx - half, cy), screen(cx + half, cy), off: off));   // (a row about its middle)
           const above = Offset(0, -30);   // (its handles over the line, not on the things in it)
           handles
             ..add(handle('centre', mid + above, (u) {
@@ -642,7 +643,7 @@ class _RelationMarks extends StatelessWidget {
             ..add(handle('size', screen(cx + half, cy) + above, (u) => m.carry('gap', math.max(0, u.$1 - cx) * 2 / math.max(1, n - 1))));   // (its right end out: wider both ways)
         } else if (kind == 'push' && leader != null && on(leader) != null) {
           final l = on(leader)!, r = val('radius', .5);
-          shape.add(_Shape.ring(l, r * px));
+          shape.add(_Shape.ring(l, r * px, off: off));
           handles.add(handle('size', l + Offset(r * px, 0), (u) {
             final (lx, ly) = units(l);
             m.carry('radius', math.sqrt(math.pow(u.$1 - lx, 2) + math.pow(u.$2 - ly, 2)));
@@ -653,15 +654,15 @@ class _RelationMarks extends StatelessWidget {
       if (sel != null && m != null && !isRelation) // (a thing picked: the shape of each relation it is in, its leader's ring too, while it is carried)
         for (final r in tags.map(int.parse)) {
           double val(String n, [double or = 0]) => m.value(r, n, now) ?? or;
-          final px = m.point * v.s, l = val('leader') > 0 ? on('${val('leader').round()}') : null;
+          final px = m.point * v.s, l = val('leader') > 0 ? on('${val('leader').round()}') : null, off = val('visible', 1) <= .5;
           switch (m.word(r, 'file')) {
             case 'around':
-              shape.add(_Shape.ring(screen(val('centre_x'), val('centre_y')), val('radius', .5) * px));
+              shape.add(_Shape.ring(screen(val('centre_x'), val('centre_y')), val('radius', .5) * px, off: off));
             case 'row':
               final half = val('gap', .2) * (m.word(r, 'members').split(' ').length - 1) / 2;
-              shape.add(_Shape.line(screen(val('centre_x') - half, val('centre_y')), screen(val('centre_x') + half, val('centre_y'))));
+              shape.add(_Shape.line(screen(val('centre_x') - half, val('centre_y')), screen(val('centre_x') + half, val('centre_y')), off: off));
             case 'push' when l != null:
-              shape.add(_Shape.ring(l, val('radius', .5) * px));
+              shape.add(_Shape.ring(l, val('radius', .5) * px, off: off));
           }
         }
       return Stack(
@@ -674,7 +675,7 @@ class _RelationMarks extends StatelessWidget {
           ],
           if (on(leader ?? '') case final l? when leader != null) Positioned(left: l.dx - 24, top: l.dy - 24, child: _Badge('crown', () {}, key: const ValueKey('ws-leader'))), // (the leader)
           if (sel != null && tags.isNotEmpty) // (the relations the picked thing is in, the one on top first: a touch picks it)
-            Positioned(left: sel.dx + 20, top: sel.dy + 18, child: Row(children: [for (final r in tags) _RelateChip(m!.word(int.parse(r), 'file'), () => ws.select(r), outlined: true, key: ValueKey('ws-in-$r'))])),
+            Positioned(left: sel.dx + 20, top: sel.dy + 18, child: Row(children: [for (final r in tags) _RelateChip(m!.word(int.parse(r), 'file'), () => ws.select(r), outlined: r != wsWinner(ws), key: ValueKey('ws-in-$r'))])),   // (filled: the one that shows; the rest under it, or switched off, outlined)
           if (lasso == null && (picked.length > 1 || isRelation)) // (along the top of the stage, never over a thing)
             Positioned(
               left: v.area.left,
@@ -688,7 +689,7 @@ class _RelationMarks extends StatelessWidget {
                       : [
                           _Said('${kind[0].toUpperCase()}${kind.substring(1)} · ${members.length}'),
                           _RelateChip('eye', () => wsSwitch(ws), glyph: (m!.value(rel!, 'visible', 0) ?? 1) > .5 ? TpGlyph.eye : TpGlyph.eyeOff, key: const ValueKey('ws-relation-switch')), // (its eye, as on its row: shut, what it is on top of shows)
-                          _RelateChip('release', () => wsRelease(ws)),
+                          _RelateChip('apply', () => wsRelease(ws), key: const ValueKey('ws-relate-release')),   // (as Blender's Apply: kept where they show, the relation gone; Delete: back to what is under it)
                         ],
                 ),
               ),
@@ -701,11 +702,12 @@ class _RelationMarks extends StatelessWidget {
 
 /// A relation's shape on the stage: a ring (its middle, how far) or a line.
 class _Shape {
-  _Shape.ring(this.a, this.r) : b = null;
-  _Shape.line(this.a, Offset this.b) : r = 0;
+  _Shape.ring(this.a, this.r, {this.off = false}) : b = null;
+  _Shape.line(this.a, Offset this.b, {this.off = false}) : r = 0;
   final Offset a;
   final Offset? b;
   final double r;
+  final bool off;   // (its relation's eye shut: drawn faint)
 }
 
 /// Drawn round: the line the hand drew; a ring round each thing picked together or moved by the relation picked; the
@@ -730,6 +732,7 @@ class _MarksPainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1;
     for (final sh in shape) {
+      thin.color = WsT.accent.withValues(alpha: sh.off ? .25 : .8);
       final path = sh.b == null ? (Path()..addOval(Rect.fromCircle(center: sh.a, radius: sh.r))) : (Path()..moveTo(sh.a.dx, sh.a.dy)..lineTo(sh.b!.dx, sh.b!.dy));
       for (final m in path.computeMetrics()) {
         for (var d = 0.0; d < m.length; d += 9) {

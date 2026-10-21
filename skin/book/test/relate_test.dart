@@ -154,6 +154,12 @@ void main() {
     m.set(around, 'visible', 0);
     stays({for (final i in made.skip(2).take(2)) i: out[i]!}, 'Around switched off');
     expect(m.value(around, 'strength', 0), closeTo(.8, 1e-9), reason: 'off is not strength 0');
+    // (taken away, as a constraint deleted in Blender: back to what Push gives, Push still on them)
+    m.set(around, 'visible', 1);
+    while (m.answer(m.later('remove', thing: around)) < 0) {}
+    expect(m.things.contains(around), isFalse);
+    expect(m.value(made[2], 'x_by', 0), push.toDouble(), reason: 'back in Push');
+    stays({for (final i in made.skip(2).take(2)) i: out[i]!}, 'Around taken away');
   }, skip: !insideBuilt);
 
   test('the pusher taken away (a row over the push): every thing stays where it shows', () {
