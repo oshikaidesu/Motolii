@@ -395,9 +395,9 @@ bool _flag(Ws ws, String? id, Map<String, bool> changed) {
 
 /// Joined: the other things by the names the timeline shows (a name two things share is told apart by its number).
 Map<String, int> _others(Ws ws, int t) {
-  final rows = ws.layers.where((l) => l.id != '$t');
+  final rows = ws.layers.where((l) => l.id != '$t' && ws.inside?.word(int.parse(l.id), 'kind') != 'behaviour');   // (things, not relations or behaviours)
   return {
-    for (final l in rows) (rows.where((o) => o.name == l.name).length > 1 ? '${l.name} ${l.id}' : l.name): int.parse(l.id),
+    for (final l in rows) (rows.where((o) => o.name == l.name).length > 1 ? '${l.name} ${ws.layers.indexOf(l) + 1}' : l.name): int.parse(l.id),   // (two of a name told apart by their row's number on the timeline)
   };
 }
 

@@ -692,7 +692,7 @@ static const DocCard doc_cards[] = {
     {"Room", "room environment environment_rotate behind background"},
     {"Physics", "physics bounce friction gravity"},
     {"Around", "strength radius offset leader centre_x centre_y", "file", "around"},   // (a relation's card: its things round a middle, or round a leader)
-    {"Row", "strength gap leader centre_x centre_y", "file", "row"},
+    {"Row", "strength gap centre_x centre_y", "file", "row"},
     {"Follow", "strength leader lag leader_b hand", "file", "follow"},
     {"Push", "strength leader radius", "file", "push"},
     {"Note", "note"},   // (what a maker wrote of it: After Effects' layer comment)
@@ -2720,6 +2720,8 @@ static bool doc_relate(Doc& d, int by, const char* ids, double now) {
         leader = *std::min_element(things.begin(), things.end(), [&](int a, int b) { return type == "follow" ? at[a].first < at[b].first : doc_number(d, a, "size", now, 1) > doc_number(d, b, "size", now, 1); });
         ok = ok && doc_set(d, by, "leader", leader);
     }
+    if (type == "follow" && !has("lag")) ok = ok && doc_set(d, by, "lag", 0.1);   // (said, so its card shows what it does: each a tenth of a second later)
+    if (type == "push" && !has("radius")) ok = ok && doc_set(d, by, "radius", 0.5);
     std::vector<int> members;
     for (const int t : things) if (t != leader) members.push_back(t);
     double cx = 0, cy = 0;
@@ -2755,6 +2757,57 @@ static bool doc_relate(Doc& d, int by, const char* ids, double now) {
     }
     ok = ok && doc_say(d, by, "members", order.c_str()) && doc_say(d, by, "under", under.c_str()) && doc_say(d, by, "from", from.c_str());
     for (const int t : members) ok = ok && doc_set(d, t, "x_by", by) && doc_set(d, t, "y_by", by);
+    return doc_acted(d) && ok;
+}
+// A relation led by another: the new leader out of its things if it was one, the old one in among them where it shows,
+// a follow's start the new leader's settled place; then every thing it touches moved by as much as it would otherwise
+// jump. One step; nothing jumps.
+static bool doc_lead(Doc& d, int by, int leader, double now) {
+    const std::string type = doc_word(d, by, "file");
+    if (doc_word(d, by, "kind") != "behaviour" || !doc_among("around row follow push", type)) return d.trouble = "that is no relation", false;
+    if (!doc_knows(d, leader) || leader == by) return d.trouble = "a leader is a thing that is there", false;
+    const int was = (int)doc_number(d, by, "leader", 0, 0);
+    if (was == leader) return true;
+    std::vector<int> touched;
+    for (const int t : doc_members_of(d, by)) if (t) touched.push_back(t);
+    for (const int t : {was, leader}) if (t && std::find(touched.begin(), touched.end(), t) == touched.end()) touched.push_back(t);
+    std::map<int, std::pair<double, double>> shown;
+    for (const int t : touched) shown[t] = {doc_literal(d, t, "x", now, 0.0), doc_literal(d, t, "y", now, 0.0)};
+    d.settled = true;
+    doc_forget(d);
+    const std::pair<double, double> settles = {doc_literal(d, leader, "x", now, 0.0), doc_literal(d, leader, "y", now, 0.0)};
+    const std::pair<double, double> wasAt = was ? std::make_pair(doc_literal(d, was, "x", now, 0.0), doc_literal(d, was, "y", now, 0.0)) : settles;
+    d.settled = false;
+    doc_forget(d);
+    doc_act(d);
+    const std::vector<int>& in = doc_members_of(d, by);
+    bool ok = std::find(in.begin(), in.end(), leader) == in.end() || doc_free(d, leader, by, now);   // (the leader is not one it moves)
+    if ((type == "around" || type == "row") && ok)   // (its middle is the leader's place and a step: the step made again from the new one, so the middle stays)
+        ok = doc_set(d, by, "centre_x", doc_number(d, by, "centre_x", now, 0) + wasAt.first - settles.first) && doc_set(d, by, "centre_y", doc_number(d, by, "centre_y", now, 0) + wasAt.second - settles.second);
+    ok = ok && doc_set(d, by, "leader", leader);
+    if (ok && was) {   // (the old leader in among its things, where it shows)
+        const int under = doc_driven_by(d, was, "x");
+        char add[96];
+        std::snprintf(add, sizeof add, " %.17g %.17g", type == "follow" ? settles.first : wasAt.first, type == "follow" ? settles.second : wasAt.second);
+        ok = doc_say(d, by, "members", (doc_word(d, by, "members") + " " + std::to_string(was)).c_str())
+             && doc_say(d, by, "under", (doc_word(d, by, "under") + " " + std::to_string(under && doc_among("around row follow push", doc_word(d, under, "file")) ? under : 0)).c_str())
+             && doc_say(d, by, "from", (doc_word(d, by, "from") + add).c_str()) && doc_set(d, was, "x_by", by) && doc_set(d, was, "y_by", by);
+    }
+    if (ok && type == "follow") {   // (each starts from where the new leader settles)
+        std::string from;
+        char one[64];
+        for (size_t k = 0, n = doc_members_of(d, by).size(); k < n; ++k) std::snprintf(one, sizeof one, "%s%.17g %.17g", k ? " " : "", settles.first, settles.second), from += one;
+        ok = doc_say(d, by, "from", from.c_str());
+    }
+    doc_forget(d);
+    for (const auto& [t, at] : shown) {   // (each moved by what it would jump)
+        if (!ok) break;
+        const double ox = at.first - doc_literal(d, t, "x", now, 0.0), oy = at.second - doc_literal(d, t, "y", now, 0.0);
+        for (const auto& [name, off] : {std::make_pair("x", ox), std::make_pair("y", oy)})
+            if (std::abs(off) > 1e-12)
+                ok = ok && doc_change(d, sqlite3_mprintf("update fact set value = value + %!.17g where thing = %d and name = %Q; insert into fact(thing, name, at, value) select %d, %Q, 0.0, %!.17g where not exists (select 1 from fact where thing = %d and name = %Q);", off, t, name, t, name, off, t, name));
+        doc_forget(d);
+    }
     return doc_acted(d) && ok;
 }
 // A relation let go: each of its things kept where it shows at that moment, the relation gone.

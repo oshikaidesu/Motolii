@@ -608,7 +608,7 @@ class _RelationMarks extends StatelessWidget {
         double val(String n, [double or = 0]) => m.value(rel, n, now) ?? or;
         leader = val('leader') > 0 ? '${val('leader').round()}' : null;
         final cx = val('centre_x'), cy = val('centre_y'), mid = screen(cx, cy), px = m.point * v.s;
-        Widget handle(String key, Offset at, void Function((double, double) u) carry) => Positioned(
+        Widget handle(String key, Offset at, void Function((double, double) u) carry) => Positioned(   // (the middle a cross, a size an arrow out)
           left: at.dx - 7,
           top: at.dy - 7,
           child: GestureDetector(
@@ -619,7 +619,7 @@ class _RelationMarks extends StatelessWidget {
               if (box != null) carry(units(box.globalToLocal(d.globalPosition)));
             },
             onPanEnd: (_) => ws.after(m.later('let_go', number: 1), (_, _) => ws.reread()),
-            child: Container(width: 14, height: 14, decoration: BoxDecoration(color: WsT.onAccent, shape: BoxShape.circle, border: Border.all(color: WsT.accent, width: 2))),
+            child: Container(width: 16, height: 16, decoration: BoxDecoration(color: WsT.onAccent, shape: BoxShape.circle, border: Border.all(color: WsT.accent, width: 2)), child: CustomPaint(painter: _GlyphPaint(key == 'centre' ? 'cross' : 'arrow', WsT.accent))),
           ),
         );
         if (kind == 'around') {
@@ -656,9 +656,9 @@ class _RelationMarks extends StatelessWidget {
           ...handles,
           for (final (id, p) in members) ...[
             Positioned(left: p.dx + 12, top: p.dy - 24, child: _Badge('×', () => wsFree(ws, id), key: ValueKey('ws-free-$id'))), // (one taken out of it where it stands: the others stay)
-            if ((kind == 'follow' || kind == 'push') && id != leader) Positioned(left: p.dx - 24, top: p.dy - 24, child: _Badge('♔', () => ws.after(m!.later('set', thing: rel!, name: 'leader', number: double.parse(id))), faint: true, key: ValueKey('ws-lead-$id'))),
+            if ((kind == 'follow' || kind == 'push') && id != leader) Positioned(left: p.dx - 24, top: p.dy - 24, child: _Badge('crown', () => wsLead(ws, id), faint: true, key: ValueKey('ws-lead-$id'))), // (another's crown: that one leads, nothing moving)
           ],
-          if (on(leader ?? '') case final l? when leader != null) Positioned(left: l.dx - 24, top: l.dy - 24, child: _Badge('♔', () {}, key: const ValueKey('ws-leader'))), // (the leader)
+          if (on(leader ?? '') case final l? when leader != null) Positioned(left: l.dx - 24, top: l.dy - 24, child: _Badge('crown', () {}, key: const ValueKey('ws-leader'))), // (the leader)
           if (sel != null && tags.isNotEmpty) // (the relations the picked thing is in, the one on top first: a touch picks it)
             Positioned(left: sel.dx + 20, top: sel.dy + 18, child: Row(children: [for (final r in tags) _RelateChip(m!.word(int.parse(r), 'file'), () => ws.select(r), outlined: true, key: ValueKey('ws-in-$r'))])),
           if (lasso == null && (picked.length > 1 || isRelation)) // (along the top of the stage, never over a thing)
@@ -754,13 +754,52 @@ class _Badge extends StatelessWidget {
   Widget build(BuildContext context) => GestureDetector(
     onTap: onTap,
     child: Container(
-      width: 16,
-      height: 16,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(color: faint ? WsT.body.withValues(alpha: .6) : WsT.accent, shape: BoxShape.circle),
-      child: Text(glyph, style: T.label(faint ? Grey.g63 : WsT.onAccent).copyWith(fontSize: 10, height: 1)),
+      width: 18,
+      height: 18,
+      decoration: BoxDecoration(color: faint ? WsT.body.withValues(alpha: .7) : WsT.accent, shape: BoxShape.circle),
+      child: CustomPaint(painter: _GlyphPaint(glyph == '×' ? 'x' : glyph, faint ? Grey.g63 : WsT.onAccent)),
     ),
   );
+}
+
+/// A small mark drawn, not a letter (no font has to carry it): a cross (a middle), an arrow out (a size), an x (out of
+/// it), a crown (the leader).
+class _GlyphPaint extends CustomPainter {
+  _GlyphPaint(this.what, this.ink);
+  final String what;
+  final Color ink;
+  @override
+  void paint(Canvas c, Size s) {
+    final m = s.center(Offset.zero), r = s.shortestSide * .28;
+    final pen = Paint()
+      ..color = ink
+      ..strokeWidth = 1.6
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
+    switch (what) {
+      case 'cross':
+        c
+          ..drawLine(m - Offset(r, 0), m + Offset(r, 0), pen)
+          ..drawLine(m - Offset(0, r), m + Offset(0, r), pen);
+      case 'arrow':
+        c
+          ..drawLine(m - Offset(r, 0), m + Offset(r, 0), pen)
+          ..drawLine(m + Offset(r, 0), m + Offset(r * .4, -r * .6), pen)
+          ..drawLine(m + Offset(r, 0), m + Offset(r * .4, r * .6), pen);
+      case 'x':
+        c
+          ..drawLine(m - Offset(r, r), m + Offset(r, r), pen)
+          ..drawLine(m - Offset(r, -r), m + Offset(r, -r), pen);
+      case 'crown':
+        c.drawPath(
+          Path()..addPolygon([m + Offset(-r * 1.2, r * .8), m + Offset(-r * 1.2, -r * .6), m + Offset(-r * .5, 0), m + Offset(0, -r), m + Offset(r * .5, 0), m + Offset(r * 1.2, -r * .6), m + Offset(r * 1.2, r * .8)], true),
+          Paint()..color = ink,
+        );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_GlyphPaint o) => o.what != what || o.ink != ink;
 }
 
 /// The pill at the bottom-left of the viewport: zoom and where the pointer is, in composition px.

@@ -177,4 +177,39 @@ void main() {
       expect((now[0] - before[t]![0]).abs() + (now[1] - before[t]![1]).abs(), lessThan(0.5), reason: 'thing $t jumped');
     }
   }, skip: !insideBuilt);
+
+  test('a follow led by another: nothing moves, the old leader follows, the new one leads', () {
+    final m = Motolii.open('${Directory.systemTemp.createTempSync('lead2').path}/lead2.motolii')!;
+    addTearDown(m.close);
+    final things = [for (var i = 0; i < 4; i++) m.add('shape', 'circle')];
+    for (final (i, x) in const [-0.6, -0.2, 0.2, 0.6].indexed) {
+      m
+        ..set(things[i], 'size', .12)
+        ..set(things[i], 'x', x)
+        ..set(things[i], 'y', i * .1);
+    }
+    void wait(int ticket) {
+      while (m.answer(ticket) < 0) {}
+    }
+
+    List<double> where(int t) => m.frame(t)!.sublist(0, 2);
+    final follow = m.add('behaviour', 'follow');
+    wait(m.later('relate', thing: follow, word: things.join(' ')));
+    expect(m.value(follow, 'leader', 0), things[0].toDouble(), reason: 'the leftmost leads');
+    expect(m.value(follow, 'lag', 0), closeTo(.1, 1e-9), reason: 'its lag said');
+    final before = {for (final t in things) t: where(t)};
+    wait(m.later('lead', thing: follow, number: things[2].toDouble()));
+    for (final t in things) {
+      expect((where(t)[0] - before[t]![0]).abs() + (where(t)[1] - before[t]![1]).abs(), lessThan(0.5), reason: 'thing $t jumped');
+    }
+    final members = m.word(follow, 'members').split(' ');
+    expect(members, contains('${things[0]}'), reason: 'the old leader follows');
+    expect(members, isNot(contains('${things[2]}')), reason: 'the new leader is not one it moves');
+    m.set(follow, 'lag', 0);
+    final was = {for (final t in things) t: where(t)};
+    m.set(things[2], 'x', 0.5);   // (the new leader moved 0.3 to the right: all go with it)
+    for (final t in things) {
+      expect(where(t)[0] - was[t]![0], greaterThan(10), reason: 'thing $t did not follow');
+    }
+  }, skip: !insideBuilt);
 }

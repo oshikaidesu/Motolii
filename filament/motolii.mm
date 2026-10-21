@@ -789,6 +789,7 @@ int motolii_later(Motolii* m, const char* call, int thing, const char* name, con
             else if (c == "make") ok = m->made = changes(m, doc_make(doc(m), w.c_str()));
             else if (c == "remove") ok = changes(m, (int)doc_remove(doc(m), thing));
             else if (c == "relate") ok = changes(m, (int)doc_relate(doc(m), thing, w.c_str(), m->now));   // (the things in word put in the relation `thing` as they show now)
+            else if (c == "lead") ok = changes(m, (int)doc_lead(doc(m), thing, (int)number, m->now));   // (the relation `thing` led by the thing `number`, nothing moving)
             else if (c == "free") ok = changes(m, (int)doc_free(doc(m), thing, (int)number, m->now));   // (a thing out of the relation `number`, where it shows now)
             else if (c == "release") ok = changes(m, (int)doc_release(doc(m), thing, m->now));   // (the relation `thing` let go, each of its things where it shows now)
             else if (c == "mark") ok = changes(m, (int)doc_mark(doc(m), number, w.c_str()));

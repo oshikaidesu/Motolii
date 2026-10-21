@@ -1,8 +1,6 @@
 // Joined: a relation made of the things picked together (Ws.many): a behaviour of that kind (the inside's around, row,
 // follow or push) and the things put in it as they show now (the inside's relate: their order, its middle and size,
 // a leader, what each was in before), one step, picked once made.
-import 'dart:math' as math;
-
 import 'ws.dart';
 
 const wsRelations = ['around', 'row', 'follow', 'push'];
@@ -11,17 +9,11 @@ void wsRelate(Ws ws, String kind) {
   final m = ws.inside;
   if (m == null || ws.many.length < 2) return;
   m.later('together', number: 1);   // (one step, asked without waiting: the behaviour is the thing the add makes)
-  var made = 0;
-  ws.after(m.later('add', name: 'behaviour', word: kind), null, (b) => made = b);
+  ws.after(m.later('add', name: 'behaviour', word: kind), null, (b) => ws.select('$b'));   // (picked as soon as it is there: its card, its row)
   m
     ..later('set', thing: -1, name: 'strength', number: 1)   // (said, so its card shows it as it works)
     ..later('relate', thing: -1, word: ws.many.join(' '));
-  ws.after(m.later('together'), (done, _) {
-    ws.reread();   // (made or not, the window shows what the document is)
-    if (!done) return;
-    final newest = made > 0 ? made : m.things.where((t) => m.word(t, 'kind') == 'behaviour').fold(0, math.max);
-    if (newest > 0) ws.select('$newest');   // (the relation picked: its card, its row, its shape)
-  });
+  ws.after(m.later('together'), (_, _) => ws.reread());   // (made or not, the window shows what the document is)
 }
 
 /// The things a relation moves (any of their values connected to it), when the picked thing is a relation; else none.
@@ -29,7 +21,14 @@ void wsRelate(Ws ws, String kind) {
 Set<String> wsMembersOf(Ws ws) {
   final m = ws.inside, sel = int.tryParse(ws.selected ?? '');
   if (m == null || sel == null || m.word(sel, 'kind') != 'behaviour' || !wsRelations.contains(m.word(sel, 'file'))) return const {};
-  return {for (final t in m.things) if (t != sel && ((m.value(t, 'x_by', 0) ?? 0) == sel || (m.value(t, 'y_by', 0) ?? 0) == sel)) '$t'};
+  return {for (final w in m.word(sel, 'members').split(' ')) if (int.tryParse(w) case final t? when m.things.contains(t)) '$t'};   // (its own list, in its order: one it moves through another relation counted too)
+}
+
+/// Joined: the picked relation led by another thing, nothing moving (the old leader among its things).
+void wsLead(Ws ws, String id) {
+  final m = ws.inside, by = int.tryParse(ws.selected ?? ''), t = int.tryParse(id);
+  if (m == null || by == null || t == null) return;
+  ws.after(m.later('lead', thing: by, number: t.toDouble()), (_, _) => ws.reread());
 }
 
 /// A thing added to those picked together (Shift or Cmd with a click): the one picked alone goes in with it.
@@ -61,9 +60,12 @@ void wsRelease(Ws ws) {
 List<String> wsRelationsOf(Ws ws) {
   final m = ws.inside, t = int.tryParse(ws.selected ?? '');
   if (m == null || t == null || m.word(t, 'kind') == 'behaviour') return const [];
-  final all = <String>[];
+  final all = <String>[
+    for (final r in m.things)   // (those it leads)
+      if (m.word(r, 'kind') == 'behaviour' && wsRelations.contains(m.word(r, 'file')) && (m.value(r, 'leader', 0) ?? 0).round() == t) '$r',
+  ];
   for (var r = (m.value(t, 'x_by', 0) ?? 0).round(); r > 0 && all.length < 8 && !all.contains('$r') && wsRelations.contains(m.word(r, 'file')); ) {
-    all.add('$r');
+    if (!all.contains('$r')) all.add('$r');
     final members = m.word(r, 'members').split(' '), under = m.word(r, 'under').split(' '), at = members.indexOf('$t');
     r = at >= 0 && at < under.length ? int.tryParse(under[at]) ?? 0 : 0;
   }
