@@ -19,6 +19,7 @@ import 'sets/inspector/inspector_set.dart';
 import 'sets/inspector/cards_set.dart';
 import 'sets/inspector/plans_set.dart';
 import 'sets/foundations/inputs.dart';
+import 'sets/panels/lasso_set.dart';
 import 'sets/panels/media_set.dart';
 import 'sets/foundations/navigation.dart';
 import 'sets/panels/relation_set.dart';
@@ -70,7 +71,7 @@ class LabBook extends StatelessWidget {
           ),
         ],
       ),
-      WidgetbookCategory(name: 'インスペクタ案', children: [cardsSet(), inspectorPlansSet()]),
+      WidgetbookCategory(name: 'インスペクタ案', children: [cardsSet(), inspectorPlansSet(), lassoSet()]),
       WidgetbookCategory(name: 'Glass', children: [glassLiveSet()]),
       WidgetbookCategory(
         name: 'Parts',
