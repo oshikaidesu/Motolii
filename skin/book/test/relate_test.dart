@@ -150,4 +150,31 @@ void main() {
     expect(m.value(made[1], 'x_by', 0), push.toDouble(), reason: 'back in Push');
     stays(out, 'one out of Around');
   }, skip: !insideBuilt);
+
+  test('the pusher taken away (a row over the push): every thing stays where it shows', () {
+    final m = Motolii.open('${Directory.systemTemp.createTempSync('lead').path}/lead.motolii')!;
+    addTearDown(m.close);
+    final things = [for (var i = 0; i < 6; i++) m.add('shape', 'circle')];
+    for (final (i, x) in const [-0.6, -0.3, 0.0, 0.3, 0.6, 0.05].indexed) {
+      m
+        ..set(things[i], 'size', i == 5 ? .3 : .12)
+        ..set(things[i], 'x', x)
+        ..set(things[i], 'y', i == 5 ? 0.0 : 0.1);
+    }
+    void wait(int ticket) {
+      while (m.answer(ticket) < 0) {}
+    }
+
+    final push = m.add('behaviour', 'push'), row = m.add('behaviour', 'row');
+    wait(m.later('relate', thing: push, word: things.join(' ')));
+    expect(m.value(push, 'leader', 0), things[5].toDouble(), reason: 'the largest pushes');
+    wait(m.later('relate', thing: row, word: things.take(3).join(' ')));
+    final before = {for (final t in things.take(5)) t: m.frame(t)!.sublist(0, 2)};
+    wait(m.later('remove', thing: things[5]));
+    expect(m.things.contains(push), isFalse, reason: 'what it led let go');
+    for (final t in things.take(5)) {
+      final now = m.frame(t)!;
+      expect((now[0] - before[t]![0]).abs() + (now[1] - before[t]![1]).abs(), lessThan(0.5), reason: 'thing $t jumped');
+    }
+  }, skip: !insideBuilt);
 }

@@ -2651,6 +2651,10 @@ static bool doc_say(Doc& d, int thing, const char* name, const char* word) {
 // its keys alike) by as much as it would otherwise jump. One step; nothing jumps.
 static void doc_act(Doc& d);
 static bool doc_acted(Doc& d);
+static const char* doc_lasting(const std::string& name) {   // (a name made at run time, kept where doc_literal can know it again by its place: one place for each name, ever)
+    static std::set<std::string> kept;
+    return kept.insert(name).first->c_str();
+}
 static bool doc_free(Doc& d, int thing, int by, double now) {
     const Doc::Relation rel = doc_relation_of(d, by);   // (a copy: what follows forgets it)
     const auto at = std::find(rel.members.begin(), rel.members.end(), thing);
@@ -2659,7 +2663,7 @@ static bool doc_free(Doc& d, int thing, int by, double now) {
     const int was = rel.under.empty() ? 0 : rel.under[i];
     std::vector<std::pair<std::string, double>> names;   // (each connected value and where it shows now)
     doc_rows(d, sqlite3_mprintf("select name from fact where thing = %d and name glob '*_by' and value <> 0", thing), [&](sqlite3_stmt* q) { names.push_back({(const char*)sqlite3_column_text(q, 0), 0.0}); });
-    for (auto& [n, shown] : names) { const std::string base = n.substr(0, n.size() - 3); shown = doc_literal(d, thing, base.c_str(), now, 0.0); }
+    for (auto& [n, shown] : names) shown = doc_literal(d, thing, doc_lasting(n.substr(0, n.size() - 3)), now, 0.0);
     const auto word = [&](const char* name, int r, const std::function<std::string(size_t, const std::string&)>& each) {
         std::string all;
         std::istringstream said(doc_word(d, r, name));
@@ -2683,7 +2687,7 @@ static bool doc_free(Doc& d, int thing, int by, double now) {
     for (const auto& [n, shown] : names) {   // (each value moved by what it would jump)
         if (!ok) break;
         const std::string base = n.substr(0, n.size() - 3);
-        const double off = shown - doc_literal(d, thing, base.c_str(), now, 0.0);
+        const double off = shown - doc_literal(d, thing, doc_lasting(base), now, 0.0);
         if (std::abs(off) < 1e-12) continue;
         ok = doc_change(d, sqlite3_mprintf("update fact set value = value + %!.17g where thing = %d and name = %Q; insert into fact(thing, name, at, value) select %d, %Q, 0.0, %!.17g where not exists (select 1 from fact where thing = %d and name = %Q);",
                                            off, thing, base.c_str(), thing, base.c_str(), off, thing, base.c_str()));
