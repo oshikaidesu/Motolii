@@ -63,7 +63,8 @@ struct Doc {
     std::map<uint32_t, MaterialInstance*> copyLooks, copyEdges;   // (copyEdges: the same for its edge, its second part)
     std::map<std::pair<int, std::string>, int> drivers;   // a value's behaviour (`<name>_by`), by thing and name: found once, forgotten at every change
     std::unordered_map<int, bool> connects;   // whether a thing has any value connected to a behaviour: asked once, forgotten at every change
-    std::unordered_map<int, std::vector<int>> membersOf;   // the things connected to a behaviour, in their order (which is which of how many in a relation): found once, forgotten at every change
+    struct Relation { std::vector<int> members, under; std::vector<double> from; };   // (a relation's things in their order, 0 where one was taken out; for each, the relation it was in before (its result this one's start) and where it showed when it came in (x, y))
+    std::unordered_map<int, Relation> relationsOf;   // found once, forgotten at every change
     int ctxCopy = 0, ctxN = 1;   // which of how many copies doc_place is placing now: what a behaviour gives is that copy's
     bool ctxHasAt = false; math::double3 ctxAt{0.0};   // (and where that copy lies on the stage, laid out, once doc_place knows: what a behaviour's falloff weighs)   // a copy's own look (its thing's look duplicated, by the copy's entity), while its copies are coloured each their own
     float roomLight = 0.f;              // the room's own light, as the stage was opened with it
@@ -302,6 +303,8 @@ static const DocValue doc_values[] = {
     {"hand", "behaviour", 0, 1, true, nullptr},
     {"lag", "behaviour", 0, 60, true, nullptr},
     {"members", "behaviour", 0, 0, false, ""},   // (a relation's things in their order, by number, "_" where one was taken out: its place kept, so no other moves)
+    {"under", "behaviour", 0, 0, false, ""},   // (for each of them, the relation it was in before, 0 none: this one starts from what that one gives)
+    {"from", "behaviour", 0, 0, false, ""},   // (for each of them, x and y where it showed when it came in: an around or a row adds only the step from there to its place, a follow only how far its leader has gone since)
     {"morph", "shape", 0, 1, true, nullptr},
     // (its path another's track, Cavalry's Trails: whose, and over how many seconds back)
     {"trail", "shape", 0, 1e9, false, nullptr},
@@ -714,7 +717,7 @@ static bool doc_rows(Doc& d, char* ask, const std::function<void(sqlite3_stmt*)>
 static void doc_forget(Doc& d) {
     d.phys_stale = true, d.scripted.clear();   // (the world made again only if what it is made of changed: doc_physics)
     d.moving.clear(), d.literals.clear(), d.words.clear(), d.keyed.clear(), d.halves.clear(), d.heardWords.clear(), d.talls.clear();
-    d.named.clear(), d.tracks.clear(), d.drivers.clear(), d.connects.clear(), d.membersOf.clear();
+    d.named.clear(), d.tracks.clear(), d.drivers.clear(), d.connects.clear(), d.relationsOf.clear();
     d.laid.clear();
 }
 // The things in the order they lie, the one furthest back first: by `order` where it is said, else as they were made.
@@ -951,56 +954,88 @@ static void doc_copy_looks_off(Doc& d, const Mesh* m, MaterialInstance* main) {
 // where its keys are is found once and held until the document changes (as Beutl and Skottie hold a property), each
 // moment reckoned from them; a value with no keys or one is its number at once. Not while a hand carries it.
 static double doc_literal(Doc& d, int thing, const char* literal, double at, double otherwise);
-// The things connected to a behaviour (any of their values `<name>_by` = it), in the order its members word says (0 where
-// one was taken out, its place kept), else in the order they were made; one connected but not in the word comes last.
-static const std::vector<int>& doc_members_of(Doc& d, int by) {
-    if (const auto known = d.membersOf.find(by); known != d.membersOf.end()) return known->second;
-    std::vector<int> connected, all;
+// A relation's things (any of their values `<name>_by` = it, or = a relation that starts from it for them), in the order
+// its members word says (0 where one was taken out, its place kept), else in the order they were made; with what each
+// was in before and where it showed when it came in (under and from: as many as members, else none).
+static const Doc::Relation& doc_relation_of(Doc& d, int by) {
+    if (const auto known = d.relationsOf.find(by); known != d.relationsOf.end()) return known->second;
+    static int depth = 0;   // (relations on relations: so deep at most, a ring of them stops)
+    struct Deeper { Deeper() { ++depth; } ~Deeper() { --depth; } } deeper;
+    Doc::Relation r;
+    std::vector<int> connected;
     doc_rows(d, sqlite3_mprintf("select distinct thing from fact where name glob '*_by' and value = %d order by thing", by), [&](sqlite3_stmt* q) { connected.push_back(sqlite3_column_int(q, 0)); });
-    std::istringstream said(doc_word(d, by, "members"));
-    for (std::string one; said >> one;) {
-        const int t = std::atoi(one.c_str());
-        all.push_back(std::find(connected.begin(), connected.end(), t) != connected.end() && std::find(all.begin(), all.end(), t) == all.end() ? t : 0);
+    const auto words = [&](const char* name) { std::vector<std::string> all; std::istringstream said(doc_word(d, by, name)); for (std::string one; said >> one;) all.push_back(one); return all; };
+    const std::vector<std::string> members = words("members"), under = words("under"), from = words("from");
+    const auto reaches = [&](int t) {   // (in it through a relation that starts from it)
+        for (int cur = doc_driven_by(d, t, "x") ? doc_driven_by(d, t, "x") : doc_driven_by(d, t, "y"), n = 0; cur && n < 8 && depth < 6; ++n) {
+            if (cur == by) return true;
+            const Doc::Relation& above = doc_relation_of(d, cur);
+            const auto at = std::find(above.members.begin(), above.members.end(), t);
+            cur = at == above.members.end() || above.under.empty() ? 0 : above.under[(size_t)(at - above.members.begin())];
+        }
+        return false;
+    };
+    for (size_t k = 0; k < members.size(); ++k) {
+        const int t = std::atoi(members[k].c_str());
+        const bool in = t && std::find(r.members.begin(), r.members.end(), t) == r.members.end() && (std::find(connected.begin(), connected.end(), t) != connected.end() || reaches(t));
+        r.members.push_back(in ? t : 0);
     }
-    for (const int t : connected) if (std::find(all.begin(), all.end(), t) == all.end()) all.push_back(t);
-    return d.membersOf.emplace(by, std::move(all)).first->second;
+    for (const int t : connected) if (std::find(r.members.begin(), r.members.end(), t) == r.members.end()) r.members.push_back(t);
+    if (under.size() == members.size()) for (const std::string& u : under) r.under.push_back(std::atoi(u.c_str()));
+    if (from.size() == 2 * members.size()) for (const std::string& f : from) r.from.push_back(std::atof(f.c_str()));
+    r.under.resize(r.under.empty() ? 0 : r.members.size(), 0);
+    r.from.resize(r.from.empty() ? 0 : 2 * r.members.size(), std::nan(""));
+    return d.relationsOf.emplace(by, std::move(r)).first->second;
 }
-// What a relation gives a value of one of its things (`own`: the thing's own value there), weighed by its strength.
+static const std::vector<int>& doc_members_of(Doc& d, int by) { return doc_relation_of(d, by).members; }
+// What a relation gives a value of one of its things (`own`: the thing's own value there), weighed by its strength: it
+// starts from what the relation the thing was in before gives (else its own value); an around or a row that knows where
+// the thing showed when it came in adds the step from there to its place (so a hand that moves the thing moves it), a
+// follow that knows adds how far its leader has gone since (else each puts it at its place, or at its leader's).
 static double doc_related(Doc& d, int by, int thing, const char* name, double t, double own) {
     static int depth = 0;   // (a leader in a relation that leads back: so deep at most)
     struct Deeper { Deeper() { ++depth; } ~Deeper() { --depth; } } deeper;
-    if (depth > 4) return own;
+    if (depth > 6) return own;
     const std::string type = doc_word(d, by, "file"), n = name;
-    const std::vector<int>& all = doc_members_of(d, by);
-    const int i = (int)(std::find(all.begin(), all.end(), thing) - all.begin()), many = std::max(1, (int)all.size());
+    const Doc::Relation& rel = doc_relation_of(d, by);
+    const auto found = std::find(rel.members.begin(), rel.members.end(), thing);
+    if (found == rel.members.end()) return own;
+    const size_t i = (size_t)(found - rel.members.begin());
+    const int many = std::max(1, (int)rel.members.size()), was = rel.under.empty() ? 0 : rel.under[i];
+    const auto start = [&](const char* what, double mine) { return was ? doc_related(d, was, thing, what, t, mine) : mine; };
+    const double base = start(name, own), s = std::clamp(doc_number(d, by, "strength", t, 1), 0.0, 1.0);
+    const double came = rel.from.empty() ? std::nan("") : rel.from[2 * i + (n == "y" ? 1 : 0)];
     const auto leader = [&](const char* which) { const int l = (int)doc_number(d, by, which, 0, 0); return l != thing ? l : 0; };
-    const auto ownAt = [&](int one, const char* what) { return doc_keys_at(d, doc_keys_of(d, one, what), t, 0); };
-    double v = own;
     if (type == "around" || type == "row") {   // (around a middle, the first at the top, each as far round as its order; or in a row from the middle, gap apart)
-        if (n != "x" && n != "y") return own;
+        if (n != "x" && n != "y") return base;
         const int l = leader("leader");
         const double cx = doc_number(d, by, "centre_x", t, 0) + (l ? doc_literal(d, l, "x", t, 0) : 0.0), cy = doc_number(d, by, "centre_y", t, 0) + (l ? doc_literal(d, l, "y", t, 0) : 0.0);
+        double place;
         if (type == "around") {
             const double turn = TAU * (doc_number(d, by, "offset", t, 0) + (double)i / many), r = doc_number(d, by, "radius", t, 0.5);
-            v = n == "x" ? cx + r * std::sin(turn) : cy + r * std::cos(turn);
-        } else v = n == "x" ? cx + doc_number(d, by, "gap", t, 0.2) * i : cy;
-    } else if (type == "follow") {   // (where its leader was so many seconds ago, each later than the one before, its own value a step from there)
+            place = n == "x" ? cx + r * std::sin(turn) : cy + r * std::cos(turn);
+        } else place = n == "x" ? cx + doc_number(d, by, "gap", t, 0.2) * (double)i : cy;
+        return std::isnan(came) ? base + (place - base) * s : base + (place - came) * s;
+    }
+    if (type == "follow") {   // (where its leader was so many seconds ago, each later than the one before)
         const int a = leader("leader"), b = leader("leader_b");
-        if (!a) return own;
-        const double back = t - doc_number(d, by, "lag", t, 0) * (i + 1), hand = b ? std::clamp(doc_number(d, by, "hand", t, 0), 0.0, 1.0) : 0.0;
-        const double from = doc_literal(d, a, name, back, own), to = b ? doc_literal(d, b, name, back, own) : from;
-        v = from + (to - from) * hand + own;
-    } else if (type == "push") {   // (out of its leader's way: within radius moved out to the edge, softly; further off as it is)
+        if (!a) return base;
+        const double back = t - doc_number(d, by, "lag", t, 0) * (double)(i + 1), hand = b ? std::clamp(doc_number(d, by, "hand", t, 0), 0.0, 1.0) : 0.0;
+        const double from = doc_literal(d, a, name, back, own), to = b ? doc_literal(d, b, name, back, own) : from, lead = from + (to - from) * hand;
+        return std::isnan(came) ? base + lead * s : base + (lead - came) * s;
+    }
+    if (type == "push") {   // (out of its leader's way: within radius moved out to the edge, softly; further off as it is)
         const int l = leader("leader");
-        if (!l || (n != "x" && n != "y")) return own;
+        if (!l || (n != "x" && n != "y")) return base;
+        const double bx = n == "x" ? base : start("x", doc_keys_at(d, doc_keys_of(d, thing, "x"), t, 0)), by_ = n == "y" ? base : start("y", doc_keys_at(d, doc_keys_of(d, thing, "y"), t, 0));
         const double lx = doc_literal(d, l, "x", t, 0), ly = doc_literal(d, l, "y", t, 0), r = doc_number(d, by, "radius", t, 0.5);
-        double dx = ownAt(thing, "x") - lx, dy = ownAt(thing, "y") - ly, far = std::hypot(dx, dy);
-        if (far >= r || r <= 0.0) return own;
-        if (far < 1e-6) dx = std::sin(TAU * i / many), dy = std::cos(TAU * i / many), far = 1e-6;
-        const double out = far + (r - far) * (r - far) / r;
-        v = n == "x" ? lx + dx / far * out : ly + dy / far * out;
-    } else return own;
-    return own + (v - own) * std::clamp(doc_number(d, by, "strength", t, 1), 0.0, 1.0);
+        double dx = bx - lx, dy = by_ - ly, far = std::hypot(dx, dy);
+        if (far >= r || r <= 0.0) return base;
+        if (far < 1e-6) dx = std::sin(TAU * (double)i / many), dy = std::cos(TAU * (double)i / many), far = 1e-6;
+        const double out = far + (r - far) * (r - far) / r, v = n == "x" ? lx + dx / far * out : ly + dy / far * out;
+        return base + (v - base) * s;
+    }
+    return base;
 }
 static double doc_literal(Doc& d, int thing, const char* literal, double at, double otherwise) {
     if (d.held.thing == thing) {   // (carried by a hand: what it carries; in a relation, still in it, the hand moving its own value)
@@ -2578,8 +2613,13 @@ static int doc_add(Doc& d, const char* kind, const char* file) {
     doc_rows(d, sqlite3_mprintf("select max(id) from thing"), [&](sqlite3_stmt* row) { thing = sqlite3_column_int(row, 0); });
     return thing;
 }
+static bool doc_release(Doc& d, int by, double now);
 static bool doc_remove(Doc& d, int thing) {
     if (doc_knows(d, thing) && doc_number(d, thing, "lock", 0, 0) > 0.5) return d.trouble = "it is locked", false;
+    if (doc_knows(d, thing) && doc_among("around row follow push", doc_word(d, thing, "file")) && doc_word(d, thing, "kind") == "behaviour") {   // (a relation taken away lets its things go where they show: nothing jumps)
+        const std::vector<int>& all = doc_members_of(d, thing);
+        if (std::any_of(all.begin(), all.end(), [](int t) { return t != 0; })) return doc_release(d, thing, d.stage ? d.stage->now : 0.0);
+    }
     return doc_knows(d, thing) && doc_change(d, sqlite3_mprintf("delete from fact where thing = %d", thing)); }
 // A value that stays (its keys, if it had any, are gone); a word; a key at a moment; a key taken away.
 static bool doc_parent(Doc& d, int thing, double to);
@@ -2590,29 +2630,108 @@ static bool doc_set(Doc& d, int thing, const char* name, double is) {
 static bool doc_say(Doc& d, int thing, const char* name, const char* word) {
     return doc_knows(d, thing, name, nullptr, word) && doc_change(d, sqlite3_mprintf("insert into fact(thing, name, at, value) values(%d, %Q, 0.0, %Q) on conflict do update set value = excluded.value", thing, name, word));
 }
-// A thing taken out of a relation where it shows at that moment: each value connected to it moved (all its keys alike)
-// by what the relation added there, then no longer connected; its place among the relation's members kept empty, so no
-// other moves. Nothing jumps.
+// A thing taken out of a relation where it shows at that moment: no longer in it (what its values were connected to
+// is what this one started from for it, or none; a relation that started from this one for it now starts from that),
+// its place among the relation's members kept empty so no other moves, then each of its connected values moved (all
+// its keys alike) by as much as it would otherwise jump. One step; nothing jumps.
+static void doc_act(Doc& d);
+static bool doc_acted(Doc& d);
 static bool doc_free(Doc& d, int thing, int by, double now) {
-    std::vector<std::string> names;
-    doc_rows(d, sqlite3_mprintf("select name from fact where thing = %d and name glob '*_by' and value = %d", thing, by), [&](sqlite3_stmt* q) { names.push_back((const char*)sqlite3_column_text(q, 0)); });
-    if (names.empty()) return d.trouble = "it is not in that relation", false;
-    std::string place;   // (its number in the members word made "_")
-    std::istringstream said(doc_word(d, by, "members"));
-    for (std::string one; said >> one;) place += (place.empty() ? "" : " ") + (one == std::to_string(thing) ? std::string("_") : one);
-    char* change = sqlite3_mprintf("update fact set value = %Q where thing = %d and name = 'members';", place.c_str(), by);
-    for (const std::string& n : names) {
+    const Doc::Relation rel = doc_relation_of(d, by);   // (a copy: what follows forgets it)
+    const auto at = std::find(rel.members.begin(), rel.members.end(), thing);
+    if (at == rel.members.end()) return d.trouble = "it is not in that relation", false;
+    const size_t i = (size_t)(at - rel.members.begin());
+    const int was = rel.under.empty() ? 0 : rel.under[i];
+    std::vector<std::pair<std::string, double>> names;   // (each connected value and where it shows now)
+    doc_rows(d, sqlite3_mprintf("select name from fact where thing = %d and name glob '*_by' and value <> 0", thing), [&](sqlite3_stmt* q) { names.push_back({(const char*)sqlite3_column_text(q, 0), 0.0}); });
+    for (auto& [n, shown] : names) { const std::string base = n.substr(0, n.size() - 3); shown = doc_literal(d, thing, base.c_str(), now, 0.0); }
+    const auto word = [&](const char* name, int r, const std::function<std::string(size_t, const std::string&)>& each) {
+        std::string all;
+        std::istringstream said(doc_word(d, r, name));
+        size_t k = 0;
+        for (std::string one; said >> one; ++k) all += (all.empty() ? "" : " ") + each(k, one);
+        return sqlite3_mprintf("update fact set value = %Q where thing = %d and name = %Q;", all.c_str(), r, name);
+    };
+    doc_act(d);
+    char* change = word("members", by, [&](size_t k, const std::string& one) { return k == i ? std::string("_") : one; });
+    for (const auto& [n, _] : names)   // (connected to this one: to what it started from)
+        if ((int)doc_number(d, thing, n.c_str(), 0, 0) == by)
+            change = was ? sqlite3_mprintf("%z update fact set value = %d where thing = %d and name = %Q;", change, was, thing, n.c_str()) : sqlite3_mprintf("%z delete from fact where thing = %d and name = %Q;", change, thing, n.c_str());
+    for (const auto& [r, other] : d.relationsOf)   // (a relation that started from this one for it: from that one)
+        if (r != by) {
+            const auto there = std::find(other.members.begin(), other.members.end(), thing);
+            if (there != other.members.end() && !other.under.empty() && other.under[(size_t)(there - other.members.begin())] == by)
+                change = sqlite3_mprintf("%z %z", change, word("under", r, [&](size_t k, const std::string& one) { return k == (size_t)(there - other.members.begin()) ? std::to_string(was) : one; }));
+        }
+    bool ok = doc_change(d, change);
+    doc_forget(d);
+    for (const auto& [n, shown] : names) {   // (each value moved by what it would jump)
+        if (!ok) break;
         const std::string base = n.substr(0, n.size() - 3);
-        const double shown = doc_literal(d, thing, base.c_str(), now, 0.0), own = doc_keys_at(d, doc_keys_of(d, thing, base.c_str()), now, 0.0);
-        change = sqlite3_mprintf("%z update fact set value = value + %!.17g where thing = %d and name = %Q; insert into fact(thing, name, at, value) select %d, %Q, 0.0, %!.17g where not exists (select 1 from fact where thing = %d and name = %Q); delete from fact where thing = %d and name = %Q;",
-                                 change, shown - own, thing, base.c_str(), thing, base.c_str(), shown - own, thing, base.c_str(), thing, n.c_str());
+        const double off = shown - doc_literal(d, thing, base.c_str(), now, 0.0);
+        if (std::abs(off) < 1e-12) continue;
+        ok = doc_change(d, sqlite3_mprintf("update fact set value = value + %!.17g where thing = %d and name = %Q; insert into fact(thing, name, at, value) select %d, %Q, 0.0, %!.17g where not exists (select 1 from fact where thing = %d and name = %Q);",
+                                           off, thing, base.c_str(), thing, base.c_str(), off, thing, base.c_str()));
+        doc_forget(d);
     }
-    return doc_change(d, change);
+    return doc_acted(d) && ok;
+}
+// Things put in a relation as they show now: in its order (round its middle, or from the left), each with the relation
+// it was in before (this one starts from what that gives) and where it showed (this one adds only the step from there:
+// nothing jumps when it comes in, and a hand still moves it); an around's or a row's middle and size where they stand, a
+// follow's or a push's leader (the leftmost, the largest) if none is said. Then connected. One step.
+static bool doc_relate(Doc& d, int by, const char* ids, double now) {
+    const std::string type = doc_word(d, by, "file");
+    if (doc_word(d, by, "kind") != "behaviour" || !doc_among("around row follow push", type)) return d.trouble = "that is no relation", false;
+    std::vector<int> things;
+    std::istringstream said(ids);
+    for (std::string one; said >> one;) if (const int t = std::atoi(one.c_str()); t && t != by && doc_knows(d, t) && std::find(things.begin(), things.end(), t) == things.end()) things.push_back(t);
+    if (things.empty()) return d.trouble = "no things to put in it", false;
+    std::map<int, std::pair<double, double>> at;
+    for (const int t : things) at[t] = {doc_literal(d, t, "x", now, 0.0), doc_literal(d, t, "y", now, 0.0)};
+    const auto has = [&](const char* name) { bool any = false; doc_rows(d, sqlite3_mprintf("select 1 from fact where thing = %d and name = %Q limit 1", by, name), [&](sqlite3_stmt*) { any = true; }); return any; };
+    doc_act(d);
+    bool ok = true;
+    int leader = (int)doc_number(d, by, "leader", 0, 0);
+    if (!leader && (type == "follow" || type == "push") && things.size() > 1) {
+        leader = *std::min_element(things.begin(), things.end(), [&](int a, int b) { return type == "follow" ? at[a].first < at[b].first : doc_number(d, a, "size", now, 1) > doc_number(d, b, "size", now, 1); });
+        ok = ok && doc_set(d, by, "leader", leader);
+    }
+    std::vector<int> members;
+    for (const int t : things) if (t != leader) members.push_back(t);
+    double cx = 0, cy = 0;
+    for (const int t : members) cx += at[t].first / members.size(), cy += at[t].second / members.size();
+    if (type == "around" || type == "row") {
+        if (has("centre_x")) cx = doc_number(d, by, "centre_x", now, 0), cy = doc_number(d, by, "centre_y", now, 0);
+        else {   // (an around's middle where they stand; a row begins at the leftmost)
+            if (type == "row") for (const int t : members) cx = std::min(cx, at[t].first);
+            ok = ok && doc_set(d, by, "centre_x", cx) && doc_set(d, by, "centre_y", cy);
+        }
+        std::sort(members.begin(), members.end(), [&](int a, int b) { return type == "around" ? std::atan2(at[a].first - cx, at[a].second - cy) < std::atan2(at[b].first - cx, at[b].second - cy) : at[a].first < at[b].first; });
+        if (type == "around" && !has("radius")) {
+            double r = 0;
+            for (const int t : members) r += std::hypot(at[t].first - cx, at[t].second - cy) / members.size();
+            ok = ok && doc_set(d, by, "radius", std::max(r, 0.2));
+        }
+        if (type == "row" && !has("gap") && members.size() > 1) ok = ok && doc_set(d, by, "gap", (at[members.back()].first - at[members.front()].first) / (members.size() - 1));
+    }
+    std::string order, under, from;
+    for (const int t : members) {
+        const int before = doc_driven_by(d, t, "x");
+        const bool related = before && doc_among("around row follow push", doc_word(d, before, "file"));
+        order += (order.empty() ? "" : " ") + std::to_string(t);
+        under += (under.empty() ? "" : " ") + std::to_string(related ? before : 0);
+        const std::pair<double, double> came = type == "follow" ? std::make_pair(doc_literal(d, leader, "x", now, 0.0), doc_literal(d, leader, "y", now, 0.0)) : at[t];
+        char buf[64];
+        std::snprintf(buf, sizeof buf, "%.17g %.17g", came.first, came.second);
+        from += (from.empty() ? "" : " ") + std::string(buf);
+    }
+    ok = ok && doc_say(d, by, "members", order.c_str()) && doc_say(d, by, "under", under.c_str()) && doc_say(d, by, "from", from.c_str());
+    for (const int t : members) ok = ok && doc_set(d, t, "x_by", by) && doc_set(d, t, "y_by", by);
+    return doc_acted(d) && ok;
 }
 // A relation let go: each of its things kept where it shows at that moment, the relation gone.
 static bool doc_remove(Doc& d, int thing);
-static void doc_act(Doc& d);
-static bool doc_acted(Doc& d);
 static bool doc_release(Doc& d, int by, double now) {
     if (doc_word(d, by, "kind") != "behaviour") return d.trouble = "that is no relation", false;
     const std::vector<int> all = doc_members_of(d, by);   // (a copy: freeing one forgets the list)

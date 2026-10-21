@@ -25,6 +25,7 @@ import 'stage.dart';
 import 'timeline.dart';
 import 'top_bar.dart';
 import '../motolii.dart';
+import 'relate.dart';
 import 'ws.dart';
 
 class Workspace extends StatefulWidget {
@@ -333,6 +334,7 @@ DockingArea _preset(DockingItem Function(String name, {double? size, double? wei
 /// Joined: the document's word for what a thing is, where the inspector's kinds have none (film, picture, solid).
 String? _kindWord(Ws ws, String? id) {
   final t = int.tryParse(id ?? ''), w = t == null ? '' : ws.inside?.word(t, 'kind') ?? '';
+  if (w == 'behaviour') return wsRelations.contains(ws.inside?.word(t!, 'file')) ? 'Relation' : 'Behaviour';
   return const {'film', 'picture', 'solid', 'light'}.contains(w) ? w.replaceRange(0, 1, w[0].toUpperCase()) : null;
 }
 

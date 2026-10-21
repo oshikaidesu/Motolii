@@ -69,6 +69,16 @@ void main() {
       }
     }
 
+    // (one in it carried by a hand: it moves on the picture as far as the hand went, the others stay)
+    final held = made[2], was = where(held), others = {for (final i in made) if (i != held) i: where(i)};
+    expect(m.hold(held), isTrue, reason: m.trouble);
+    m.carry('place', 30, 0);
+    m.letGo(true);
+    ws.reread();
+    expect(where(held)[0] - was[0], closeTo(30, 1.5), reason: 'a hand moves a thing in a relation');
+    for (final e in others.entries) {
+      expect((where(e.key)[0] - e.value[0]).abs(), lessThan(0.5), reason: 'thing ${e.key} moved with it');
+    }
     final ring = all();
     await t.tap(find.byKey(ValueKey('ws-free-${made.first}')));
     await settled(t, ws);
@@ -83,12 +93,47 @@ void main() {
     expect(m.things.contains(b), isFalse);
     same(ring, all(), 'released');
 
-    m.undo();   // (each a step)
-    m.undo();
-    m.undo();
+    for (var k = 0; k < 4; k++) {   // (each a step: made, carried, one out, released)
+      m.undo();
+    }
     ws.reread();
     expect(m.things.length, before);
     expect(t.takeException(), isNull);
     await t.pumpWidget(const SizedBox());
+  }, skip: !insideBuilt);
+
+  test('a relation on a relation: Around over Push starts from what Push gives; out of Around, back in Push; nothing jumps', () {
+    final m = Motolii.open('${Directory.systemTemp.createTempSync('stack').path}/stack.motolii')!;
+    addTearDown(m.close);
+    final made = [for (var i = 0; i < 5; i++) m.add('shape', 'circle')];
+    for (final (i, x) in const [-0.6, -0.2, 0.1, 0.4, 0.8].indexed) {
+      m
+        ..set(made[i], 'size', i == 0 ? .4 : .12)
+        ..set(made[i], 'x', x)
+        ..set(made[i], 'y', i.isEven ? .1 : -.1);
+    }
+    List<double> where(int i) => m.frame(i)!.sublist(0, 2);
+    void stays(Map<int, List<double>> was, String why) {
+      for (final e in was.entries) {
+        expect((where(e.key)[0] - e.value[0]).abs() + (where(e.key)[1] - e.value[1]).abs(), lessThan(0.5), reason: '$why: thing ${e.key} moved');
+      }
+    }
+
+    final push = m.add('behaviour', 'push');
+    expect(m.later('relate', thing: push, word: made.join(' ')), greaterThan(0));
+    while (m.answer(m.later('together')) < 0) {}
+    expect(m.value(made[1], 'x_by', 0), push.toDouble(), reason: 'in Push');
+    final before = {for (final i in made.skip(1)) i: where(i)};
+    final around = m.add('behaviour', 'around');
+    m.set(around, 'strength', 0);   // (none of it yet: what shows is what Push gives, if Around starts from it)
+    m.later('relate', thing: around, word: made.skip(1).take(3).join(' '));
+    while (m.answer(m.later('together')) < 0) {}
+    expect(m.value(made[1], 'x_by', 0), around.toDouble(), reason: 'in Around now');
+    expect(m.word(around, 'under').split(' '), everyElement('$push'), reason: 'Around starts from Push for each');
+    stays(before, 'Around made at strength 0');
+    final out = {for (final i in made.skip(1)) i: where(i)};
+    while (m.answer(m.later('free', thing: made[1], number: around.toDouble())) < 0) {}
+    expect(m.value(made[1], 'x_by', 0), push.toDouble(), reason: 'back in Push');
+    stays(out, 'one out of Around');
   }, skip: !insideBuilt);
 }

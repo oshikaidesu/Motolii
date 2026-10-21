@@ -38,7 +38,9 @@ Future<void> _fonts() async {
 /// Nine things on the stage: circles, squares and a star, in a few colours, here and there.
 String _scene() {
   final path = '${Directory.systemTemp.createTempSync('agent').path}/agent.motolii';
-  final m = Motolii.open(path)!;
+  final m = Motolii.open(path)!
+    ..say(0, 'behind', 'colour')
+    ..say(0, 'background', 'f1ece2');   // (on paper: a black thing is seen)
   const things = [
     ('circle', -0.9, 0.45, 'e5432d'), ('rect', -0.4, 0.55, '2a62c9'), ('circle', 0.2, 0.5, 'f7d046'),
     ('star', 0.8, 0.4, '151515'), ('circle', -0.7, -0.1, '6bbf8c'), ('rect', 0.0, 0.0, 'e5432d'),

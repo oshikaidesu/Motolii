@@ -4,6 +4,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/gestures.dart';
+import 'package:flutter/services.dart' show HardwareKeyboard;
 import 'package:flutter/widgets.dart';
 
 import '../tokens.dart';
@@ -306,7 +307,10 @@ class _StageViewState extends State<StageView> implements StageHandles {
     final round = _lasso, ws = WsScope.read(context);
     setState(() => _lasso = null);
     if (round == null || round.length < 3) return;
-    final path = Path()..addPolygon(round, true);
+    // (drawn straight, it is a box from where the hand came down to where it let go (Figma's, AE's); else the line it drew round)
+    final a = round.first, z = round.last, along = z - a;
+    final straight = along.distance > 4 && round.every((p) => ((p - a).dx * along.dy - (p - a).dy * along.dx).abs() / along.distance < 12);
+    final path = straight ? (Path()..addRect(Rect.fromPoints(a, z))) : (Path()..addPolygon(round, true));
     ws.pickMany([for (final l in widget.scene.layers) if (widget.scene.box(l.id) case final b? when path.contains(v.toScreen(WsArt.toView(widget.scene, b.c)))) l.id]);
   }
 
@@ -490,7 +494,9 @@ class _StageViewState extends State<StageView> implements StageHandles {
               widget.onPoke?.call();
               if (widget.make == 'pen') return _pen(v, d.localPosition, d.localPosition); // (a tap: a corner)
               if (widget.make != null) return _draw(v, _drawFrom = d.localPosition); // (only come down: one as it comes, there)
-              WsScope.read(context).select(_hit(v, d.localPosition));
+              final hit = _hit(v, d.localPosition), ws = WsScope.read(context);
+              if (hit != null && (HardwareKeyboard.instance.isShiftPressed || HardwareKeyboard.instance.isMetaPressed)) return wsPickAlso(ws, hit); // (Shift or Cmd: one more picked together, or one less)
+              ws.select(hit);
             },
             dragStartBehavior: DragStartBehavior.down, // (a thing is held where the hand came down, not where it had got to when the drag was known for one)
             onPanStart: (d) => _hold(v, _last = d.localPosition),
@@ -563,6 +569,13 @@ class _StageViewState extends State<StageView> implements StageHandles {
                             top: math.min(corner.dy + 12, v.area.bottom - 40),
                             child: Row(children: [for (final k in wsRelations) _RelateChip(k, () => wsRelate(ws, k))]),
                           ),
+                        if (ws.selected case final sel? when wsRelationsOf(ws).isNotEmpty) // (the relations the picked thing is in, the one on top first: a touch picks it)
+                          if (scene.box(sel) case final b?)
+                            Positioned(
+                              left: v.toScreen(WsArt.toView(scene, b.c)).dx + 20,
+                              top: v.toScreen(WsArt.toView(scene, b.c)).dy + 16,
+                              child: Row(children: [for (final r in wsRelationsOf(ws)) _RelateChip(ws.inside!.word(int.parse(r), 'file'), () => ws.select(r), key: ValueKey('ws-in-$r'))]),
+                            ),
                         for (final (id, p) in members) // (one taken out of it where it stands: the others stay)
                           Positioned(left: p.dx + 8, top: p.dy - 22, child: _RelateChip('×', () => wsFree(ws, id), key: ValueKey('ws-free-$id'))),
                         if (far != null && _lasso == null)
