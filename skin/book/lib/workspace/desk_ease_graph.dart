@@ -69,6 +69,7 @@ class _EaseGraphState extends State<EaseGraph> {
           child: CustomPaint(
             size: box.biggest,
             painter: _GraphPainter(
+              ghosts: _ghosts(WsScope.of(context), widget.span),
               ease: widget.ease,
               from: widget.span?.from,
               to: widget.span?.to,
@@ -83,8 +84,21 @@ class _EaseGraphState extends State<EaseGraph> {
   );
 }
 
+/// A relation's stretch: each of its things gets the same curve so much later, in turn (its lag times its place): as
+/// the relation spreads it, seen and not touched, in the thing's own colour, as Blender shows the curves it will not let
+/// a hand change.
+List<(double, Color)> _ghosts(Ws ws, EaseSpan? span) {
+  final m = ws.inside, t = int.tryParse(span?.layer.id ?? '');
+  if (m == null || t == null || span == null || span.to <= span.from || m.word(t, 'kind') != 'behaviour') return const [];
+  final lag = (m.value(t, 'lag', 0) ?? 0) * Ws.fps / (span.to - span.from);
+  final members = [for (final s in m.word(t, 'members').split(' ')) if (s.isNotEmpty && s != '_') s];
+  if (lag <= 0 || members.length < 2) return const [];
+  return [for (final (i, id) in members.indexed) if (i > 0) (lag * i, wsLabel(id))];
+}
+
 class _GraphPainter extends CustomPainter {
-  const _GraphPainter({required this.ease, required this.from, required this.to, required this.frame, required this.active, required this.dragging});
+  const _GraphPainter({required this.ease, required this.from, required this.to, required this.frame, required this.active, required this.dragging, this.ghosts = const []});
+  final List<(double, Color)> ghosts;   // (a relation's things: how much later each, across the stretch, and its colour)
   final Ease ease;
   final int? from, to, active;
   final int frame;
@@ -135,6 +149,19 @@ class _GraphPainter extends CustomPainter {
     // Handle stems.
     c.drawLine(a, px(ease.p1), stroke..color = bez ? Grey.g63 : Grey.g26);
     c.drawLine(b, px(ease.p2), stroke);
+    // A relation's things' copies of the curve, each so much later (thin, faint, under the one a hand shapes).
+    c.save();
+    c.clipRect(g);
+    for (final (shift, hue) in ghosts) {
+      final copy = Path()..moveTo(px(Offset(shift, 0)).dx, a.dy);
+      for (var i = 1; i <= 96; i++) {
+        final x = i / 96, o = px(Offset(x + shift, ease.at(x)));
+        copy.lineTo(o.dx, o.dy);
+      }
+      copy.lineTo(g.right + 4, b.dy);
+      c.drawPath(copy, Paint()..style = PaintingStyle.stroke..strokeWidth = 1.2..color = hue.withValues(alpha: .55));
+    }
+    c.restore();
     // The curve.
     final path = Path()..moveTo(a.dx, a.dy);
     const n = 96;
@@ -212,6 +239,6 @@ class _GraphPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_GraphPainter o) => o.ease != ease || o.from != from || o.to != to || o.frame != frame || o.active != active || o.dragging != dragging;
+  bool shouldRepaint(_GraphPainter o) => o.ease != ease || o.from != from || o.to != to || o.frame != frame || o.active != active || o.dragging != dragging || o.ghosts.length != ghosts.length || (ghosts.isNotEmpty && o.ghosts.first.$1 != ghosts.first.$1);
 }
 
