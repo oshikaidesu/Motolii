@@ -36,6 +36,9 @@ void main() {
   if (Platform.environment['AGENT_DIR'] != null) {
     return runApp(WidgetsApp(color: const Color(0xFF000000), builder: (c, _) => cardsAgentPage(Platform.environment['AGENT_PAGE'] ?? 'Link')));
   }
+  if (const bool.fromEnvironment('MOTOLII_BARE')) {   // (the window alone, the whole screen of it, without the book round it: --dart-define=MOTOLII_BARE=true)
+    return runApp(WidgetsApp(color: const Color(0xFF000000), builder: (c, _) => const Workspace(document: String.fromEnvironment('MOTOLII_DOC', defaultValue: '$motoliiDir/out/skin.motolii'))));
+  }
   runApp(const LabBook());
 }
 
