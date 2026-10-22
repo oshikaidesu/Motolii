@@ -160,7 +160,7 @@ const char* motolii_shaping(Motolii* m);
    together's begin 1 / end 0; thing -1: the thing the last add made; set with word "made": the number is that thing,
    as a value naming a thing; relate: the things in word (numbers) put in the relation `thing` as they show now; free: the thing out of the
    relation `number`, as if at strength 0 for good: back to the relation under it, or its own value; lead: the relation `thing` led by the thing `number`, nothing moving; release: the relation
-   `thing` let go, each of its things where it shows now): queued in order behind all others, a ticket said at once. motolii_answer: -1 not done
+   `thing` let go, each of its things where it shows now; key: a key of `name` at the moment in word holding number): queued in order behind all others, a ticket said at once. motolii_answer: -1 not done
    yet, 0 refused (motolii_answer_why says why, until the next answer), 1 done; an answer is said once. */
 int motolii_later(Motolii* m, const char* call, int thing, const char* name, const char* word, double number);
 int motolii_answer(Motolii* m, int ticket);

@@ -807,6 +807,7 @@ int motolii_later(Motolii* m, const char* call, int thing, const char* name, con
             else if (c == "raise") ok = changes(m, (int)doc_raise(doc(m), thing, (int)number));
             else if (c == "sequence") ok = changes(m, (int)doc_sequence(doc(m), number, RATE));
             else if (c == "key_here") ok = changes(m, (int)doc_key_here(doc(m), thing, n.c_str(), number));
+            else if (c == "key") ok = changes(m, (int)doc_key(doc(m), thing, n.c_str(), std::atof(w.c_str()), number));   // (word: the moment; number: what the key holds)
             else if (c == "unkey") ok = changes(m, (int)doc_unkey(doc(m), thing, n.c_str(), number));
             else if (c == "stay") ok = changes(m, (int)doc_stay(doc(m), thing, n.c_str(), number));
             else if (c == "way") ok = way_is(m, thing, n.c_str(), number, w.c_str());
