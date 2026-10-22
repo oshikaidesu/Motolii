@@ -27,6 +27,7 @@ import 'sets/panels/stage_set.dart';
 import 'sets/panels/timeline_parts.dart';
 import 'sets/panels/transport.dart';
 import 'sets/workflows/workflow_set.dart';
+import 'sets/relation_ideas.dart';
 import 'tokens.dart';
 import 'words_addon.dart';
 import 'workspace/workspace.dart';
@@ -75,6 +76,7 @@ class LabBook extends StatelessWidget {
         ],
       ),
       WidgetbookCategory(name: 'インスペクタ案', children: [cardsSet(), inspectorPlansSet(), lassoSet()]),
+      WidgetbookCategory(name: 'Relation', children: [relationIdeasSet()]),
       WidgetbookCategory(name: 'Glass', children: [glassLiveSet()]),
       WidgetbookCategory(
         name: 'Parts',
