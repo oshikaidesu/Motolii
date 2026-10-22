@@ -207,8 +207,9 @@ class _Map extends CustomPainter {
         ..color = hue.withValues(alpha: picked ? 1 : .7)
         ..strokeWidth = picked ? 2 : 1;
       final pts = [for (final p in v.shape(r)) v.on(p)];
-      for (var k = 0; k + 1 < pts.length; k += 2) {
-        c.drawLine(pts[k], pts[k + 1], line);   // (broken: a relation, not a thing)
+      for (var k = 0; k + 1 < pts.length; k += 2) {   // (broken: a relation, not a thing; each stretch in the colour of the thing it carries, as its row's bar)
+        if (r.members.isNotEmpty) line.color = wsLabel(r.members[(k * r.members.length / pts.length).floor().clamp(0, r.members.length - 1)]).withValues(alpha: picked ? 1 : .8);
+        c.drawLine(pts[k], pts[k + 1], line);
       }
       final lead = v.world.things[r.leader]?.$1;
       if (r.kind == 'follow' && lead != null) {

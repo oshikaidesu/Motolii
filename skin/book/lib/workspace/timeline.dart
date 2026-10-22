@@ -185,6 +185,13 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
     ws.after(m.later('let_go', number: keep && h.moved ? 1 : 0));   // (let go without waiting)
   }
 
+  // A relation's row: the label colours of the things it moves, in its order (none: a thing's row, one colour).
+  List<Color>? _mixOf(Ws ws, String id) {
+    final m = ws.inside, t = int.tryParse(id);
+    if (m == null || t == null || m.word(t, 'kind') != 'behaviour' || !wsRelations.contains(m.word(t, 'file'))) return null;
+    return [for (final s in m.word(t, 'members').split(' ')) if (s.isNotEmpty && s != '_') wsLabel(s)];
+  }
+
   // The eye of a row. Joined: the thing is put aside in the document (visible 0) and is not on the stage; one step.
   bool _isHidden(Ws ws, String id) => ws.layers.any((l) => l.id == id && l.hidden);   // (as last read: no call to the inside while a row is built)
   void _eye(Ws ws, String id) {
@@ -395,6 +402,7 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
           locked: _isLocked(ws, l.id),
           wave: _waveOf(ws, l),
           tone: l.tone,
+          mix: _mixOf(ws, l.id),
         ),
     ];
     return Focus(

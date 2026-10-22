@@ -3,6 +3,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart' show setEquals;
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/widgets.dart';
 
 import '../sets/panels/timeline_parts_parts.dart' show tpFine, tpMajor;
@@ -58,8 +59,10 @@ class WtRow {
     this.locked = false,
     this.wave,
     this.tone,
+    this.mix,
   });
   final Color? tone;   // (its label colour; none: its kind's)
+  final List<Color>? mix;   // (a relation's: its things' label colours, its bar their gradient)
   final String name;
 
   /// How loud its sound is at each frame of its bar (dB, the inside's reading; null: no sound to show).
@@ -75,6 +78,7 @@ class WtRow {
       other.name == name &&
       other.kind == kind &&
       other.tone == tone &&
+      listEquals(other.mix, mix) &&
       other.inF == inF &&
       other.outF == outF &&
       _listEq(other.keys, keys) &&
@@ -236,7 +240,12 @@ class WtTracksPainter extends CustomPainter {
     if (x1 < 0 || x0 > s.width) return;
     final bar = Rect.fromLTRB(x0, cy - WtM.bar / 2, x1, cy + WtM.bar / 2), rr = RRect.fromRectAndRadius(bar, const Radius.circular(WtM.barRadius));
     final fill = wtBarFill(r), ink = r.dim ? Grey.g56 : WsT.onAccent, grip = Color.lerp(fill, Grey.g00, .28)!;
-    c.drawRRect(rr, p..color = fill);
+    final mix = r.mix;
+    if (mix != null && mix.length > 1 && !r.dim) {   // (a relation: its things' colours side by side, blended)
+      c.drawRRect(rr, Paint()..shader = LinearGradient(colors: [for (final m in mix) r.selected ? Color.lerp(m, const Color(0xFFFFFFFF), .18)! : m]).createShader(bar));
+    } else {
+      c.drawRRect(rr, p..color = fill);
+    }
     c.save();
     c.clipRRect(rr);
     c.drawRect(Rect.fromLTWH(x0, bar.top, 3, bar.height), p..color = grip);
