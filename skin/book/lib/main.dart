@@ -30,6 +30,7 @@ import 'sets/workflows/workflow_set.dart';
 import 'sets/group_rule_tries.dart';
 import 'sets/group_hands.dart';
 import 'sets/relation_bench.dart';
+import 'sets/relation_tabs.dart';
 import 'sets/relation_ideas.dart';
 import 'tokens.dart';
 import 'words_addon.dart';
@@ -85,7 +86,7 @@ class LabBook extends StatelessWidget {
         ],
       ),
       WidgetbookCategory(name: 'インスペクタ案', children: [cardsSet(), inspectorPlansSet(), lassoSet()]),
-      WidgetbookCategory(name: 'Relation', children: [groupHandsSet(), relationBenchSet(), relationIdeasSet(), groupRuleTriesSet()]),
+      WidgetbookCategory(name: 'Relation', children: [relationTabsSet(), groupHandsSet(), relationBenchSet(), relationIdeasSet(), groupRuleTriesSet()]),
       WidgetbookCategory(name: 'Glass', children: [glassLiveSet()]),
       WidgetbookCategory(
         name: 'Parts',
