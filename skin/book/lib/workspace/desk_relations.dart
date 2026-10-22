@@ -19,6 +19,23 @@ class DeskRelations extends StatefulWidget {
 
 class _DeskRelationsState extends State<DeskRelations> {
   double _yaw = 0, _pitch = 0;   // (turned: 0, 0 is from the front, the camera's own way)
+  (int, Map<String, List<_P3>>)? _paths;   // (each thing's way through the whole stretch, as the document stood: read again when it changes)
+
+  Map<String, List<_P3>> _pathsOf(Ws ws) {
+    if (_paths?.$1 == ws.rev) return _paths!.$2;
+    final m = ws.inside, out = <String, List<_P3>>{};
+    if (m != null) {
+      const steps = 60;
+      for (final l in ws.layers) {
+        final t = int.tryParse(l.id);
+        if (t == null || m.word(t, 'kind') == 'behaviour' || m.word(t, 'kind') == 'camera') continue;
+        double v(String n, double at) => m.shows(t, n, at)?.$1 ?? m.value(t, n, at) ?? 0;
+        final way = [for (var k = 0; k <= steps; k++) (x: v('x', k / steps * Ws.duration / Ws.fps), y: v('y', k / steps * Ws.duration / Ws.fps), z: v('z', k / steps * Ws.duration / Ws.fps))];
+        if (way.any((p) => (p.x - way.first.x).abs() + (p.y - way.first.y).abs() + (p.z - way.first.z).abs() > 1e-4)) out[l.id] = way;   // (only what moves)
+      }
+    }
+    return (_paths = (ws.rev, out)).$2;
+  }
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
@@ -54,7 +71,7 @@ class _DeskRelationsState extends State<DeskRelations> {
                     }
                     if (view.hit(d.localPosition) case final id?) ws.select(id);
                   },
-                  child: CustomPaint(size: box.biggest, painter: _Map(view, ws.selected)),
+                  child: CustomPaint(size: box.biggest, painter: _Map(view, ws.selected, _pathsOf(ws))),
                 );
               }),
             ),
@@ -198,9 +215,10 @@ class _View {
 }
 
 class _Map extends CustomPainter {
-  _Map(this.v, this.selected);
+  _Map(this.v, this.selected, this.paths);
   final _View v;
   final String? selected;
+  final Map<String, List<_P3>> paths;
 
   @override
   void paint(Canvas c, Size s) {
@@ -231,6 +249,15 @@ class _Map extends CustomPainter {
       if (lead != null) c.drawCircle(v.on(lead), 9, line);   // (its leader ringed)
       for (final m in r.members) {
         if (v.world.things[m]?.$1 case final p?) c.drawCircle(v.on(p), 7, Paint()..color = hue.withValues(alpha: .25));
+      }
+    }
+    // (each moving thing's way through the stretch, in its colour, a dot each step: a morph from one relation to another
+    //  shows as the ways bending from one shape into the other, an ease as the dots closing up and spreading)
+    for (final e in paths.entries) {
+      final hue = (v.world.things[e.key]?.$2 ?? WsT.accent).withValues(alpha: e.key == selected ? .9 : .45), pts = [for (final p in e.value) v.on(p)];
+      c.drawPath(Path()..addPolygon(pts, false), Paint()..color = hue..style = PaintingStyle.stroke..strokeWidth = 1);
+      for (final p in pts) {
+        c.drawCircle(p, 1.2, Paint()..color = hue);
       }
     }
     // (the things, the picked one ringed)
