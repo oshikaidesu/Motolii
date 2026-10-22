@@ -1,9 +1,10 @@
-// Relations tab, way D "samples that move" (CapCut's In / Out / Combo tabs, Keynote's Build In / Build Out): two rows of
-// tiles, coming in above and going out below, each a little loop of five dots in turn, drawn from the very numbers it
-// tells the group (its other end, its ease), so it is read at a glance and never as a word. Tapped with things picked:
-// a move of them at the playhead; with a move picked: that move made so. Under them three pulls drawn as their effect:
-// the stairs (sideways: each later than the one before), the bar (sideways: how long), the curve (up: slowing at the
-// end; over the top: past the seat and back). Joined to the document through moves.dart.
+// Relations tab, way F "one tap" (grown from way D, the judges' best): two rows of tiles, coming in above and going out
+// below (CapCut's In / Out tabs, Keynote's Build In / Build Out), each a little loop of five dots in turn, drawn from the
+// very numbers it tells the group, so it is read at a glance and never as a word. Tapped with things picked (on the
+// stage, the timeline): a move of them at the playhead; with a move picked: that move made so, its ease kept. The last
+// tile of a row is After Effects' pick whip: tapped, then a thing tapped on the stage or the timeline, they come out
+// of that thing (go into it). Under them the stairs: pulled sideways, each later than the one before. When a move is
+// and how long is its two keys on the timeline; how it eases is the Ease desk's. Joined through moves.dart.
 import 'dart:math' as math;
 
 import 'package:flutter/scheduler.dart';
@@ -23,6 +24,9 @@ class Sample {
 
 /// The samples, the same for coming in and going out: from below, left, right, above, a point, far out, scattered,
 /// clear, edge on, all but nothing (and past the seat).
+/// The last tile of each row: the pick whip (a thing tapped next is where they come out of, or go into).
+final whip = samples.length;
+
 const samples = [
   Sample({'y': -.2, 'opacity': 0}),
   Sample({'x': -.35, 'opacity': 0}),
@@ -39,17 +43,17 @@ const samples = [
 /// Where the tab lays its parts in a box of [s]: the tiles coming in and going out (in [samples]' order), the marks
 /// beside the two rows, the three pulls (stairs, bar, curve).
 ({List<Rect> come, List<Rect> go, Rect comeMark, Rect goMark, List<Rect> pulls}) samplesLayout(Size s) {
-  const pad = 8.0, gap = 4.0, mark = 18.0, cols = 5;
-  final w = (s.width - pad * 2 - mark - gap * cols) / cols, h = math.min(52.0, w * .8);
-  List<Rect> rows(double top) => [for (var i = 0; i < samples.length; i++) Rect.fromLTWH(pad + mark + gap + (i % cols) * (w + gap), top + (i ~/ cols) * (h + gap), w, h)];
-  final rowsH = ((samples.length + cols - 1) ~/ cols) * (h + gap) - gap, come = rows(pad), goTop = pad + rowsH + 10, pullTop = goTop + rowsH + 14;
-  final pw = (s.width - pad * 2 - gap * 2) / 3;
+  const pad = 8.0, gap = 4.0, mark = 18.0;
+  final n = whip + 1, cols4 = (n + 1) ~/ 2;   // (the samples and the pick whip, in two lines a row)
+  final w = (s.width - pad * 2 - mark - gap * cols4) / cols4, h = math.min(52.0, w * .8);
+  List<Rect> rows(double top) => [for (var i = 0; i < n; i++) Rect.fromLTWH(pad + mark + gap + (i % cols4) * (w + gap), top + (i ~/ cols4) * (h + gap), w, h)];
+  final rowsH = ((n + cols4 - 1) ~/ cols4) * (h + gap) - gap, come = rows(pad), goTop = pad + rowsH + 10, pullTop = goTop + rowsH + 14;
   return (
     come: come,
     go: rows(goTop),
     comeMark: Rect.fromLTWH(pad, pad, mark, rowsH),
     goMark: Rect.fromLTWH(pad, goTop, mark, rowsH),
-    pulls: [for (var i = 0; i < 3; i++) Rect.fromLTWH(pad + i * (pw + gap), pullTop, pw, 64)],
+    pulls: [Rect.fromLTWH(pad, pullTop, s.width - pad * 2, 48)],
   );
 }
 
@@ -64,10 +68,10 @@ class _TabSamplesState extends State<TabSamples> with SingleTickerProviderStateM
   late final Ticker _ticker;
   bool _seen = false;   // (painted since the last tick: a tab behind another is kept but not painted, and its loops rest)
   double _base = 0;
-  int? _pull;   // (0 stairs, 1 bar, 2 curve, while a hand has it)
+  bool _pulling = false;   // (the stairs in a hand)
   double _from = 0, _moved = 0;
-  double? _lengthAt, _easeAt;   // (the bar and the curve: shown where the hand has them, told when let go)
   late Size _size;
+  ({bool coming, String? move})? _whip;   // (the pick whip out: the next thing tapped is where they come from, or go into)
 
   @override
   void initState() {
@@ -111,9 +115,35 @@ class _TabSamplesState extends State<TabSamples> with SingleTickerProviderStateM
     final lay = samplesLayout(_size);
     for (final (coming, tiles) in [(true, lay.come), (false, lay.go)]) {
       for (final (i, r) in tiles.indexed) {
-        if (r.contains(at)) return _take(ws, samples[i], coming);
+        if (!r.contains(at)) continue;
+        if (i < whip) return _take(ws, samples[i], coming);
+        if (_whip?.coming == coming) return setState(() => _whip = null);   // (put away)
+        final mv = _picked(ws);
+        if (_who(ws).isNotEmpty) _take(ws, samples[0], coming);   // (things picked: their move first, then the thing)
+        return setState(() => _whip = (coming: coming, move: mv?.by.toString()));
       }
     }
+  }
+
+  /// The pick whip let go on a thing (the next one picked that is not a move nor in it): they come out of it (go into
+  /// it): their middle there, gathered, small, clear; the move picked again.
+  void _whipped(Ws ws) {
+    final w = _whip, m = ws.inside, t = int.tryParse(ws.selected ?? '');
+    if (w == null || m == null || t == null) return;
+    final moves = wsMoves(ws), mv = w.move == null ? (moves.isEmpty ? null : moves.reduce((a, b) => a.by > b.by ? a : b)) : wsMoveOf(m, int.parse(w.move!));
+    if (mv == null || mv.by == t || mv.who.contains(t) || m.word(t, 'kind') == 'behaviour') return;
+    _whip = null;
+    final now = mv.away;
+    double mid(String n) => mv.who.fold(0.0, (a, o) => a + (m.value(o, n, now) ?? 0)) / mv.who.length;
+    wsMoveHold(ws, true);
+    wsMoveSet(ws, mv.by, 'x', (m.value(t, 'x', now) ?? 0) - mid('x'));
+    wsMoveSet(ws, mv.by, 'y', (m.value(t, 'y', now) ?? 0) - mid('y'));
+    for (final (n, v) in const [('spread', 0.0), ('size', .2), ('opacity', 0.0), ('scatter', 0.0)]) {
+      wsMoveSet(ws, mv.by, n, v);
+    }
+    if (mv.coming != w.coming) wsMoveTurn(ws, mv);
+    wsMoveHold(ws, false);
+    ws.select('${mv.by}');
   }
 
   /// A sample told: a new move of the things picked (they first), else the picked move made so; one step.
@@ -133,47 +163,29 @@ class _TabSamplesState extends State<TabSamples> with SingleTickerProviderStateM
       wsMoveSet(ws, at.by, e.key, e.value);
     }
     if (at.coming != coming) wsMoveTurn(ws, at);
-    wsMoveEase(ws, at, s.out, s.over);
+    if (who.isNotEmpty || s.over > 0) wsMoveEase(ws, at, s.out, s.over);   // (a move made over keeps how it eases: that is the Ease desk's)
     wsMoveHold(ws, false);
   }
 
   void _down(Ws ws, Offset at) {
-    final mv = _picked(ws), i = samplesLayout(_size).pulls.indexWhere((r) => r.contains(at));
-    if (mv == null || i < 0) return;
-    _pull = i;
+    final mv = _picked(ws);
+    if (mv == null || !samplesLayout(_size).pulls.first.contains(at)) return;
+    _pulling = true;
     _moved = 0;
-    _from = switch (i) { 0 => mv.lag, 1 => mv.length, _ => mv.over > 0 ? 1 + mv.over : mv.out };
-    if (i == 0) wsMoveHold(ws, true);
+    _from = mv.lag;
+    wsMoveHold(ws, true);
   }
 
   void _drag(Ws ws, Offset d) {
     final mv = _picked(ws);
-    if (mv == null || _pull == null) return;
-    _moved += _pull == 2 ? -d.dy : d.dx;
-    switch (_pull) {
-      case 0:
-        wsMoveSet(ws, mv.by, 'lag', (_from + _moved / 400).clamp(0.0, 1.0));
-      case 1:
-        setState(() => _lengthAt = (_from + _moved / 120).clamp(.05, 4.0));
-      case 2:
-        setState(() => _easeAt = (_from + _moved / 90).clamp(0.0, 1.6));
-    }
+    if (mv == null || !_pulling) return;
+    _moved += d.dx;
+    wsMoveSet(ws, mv.by, 'lag', (_from + _moved / 400).clamp(0.0, 1.0));
   }
 
   void _up(Ws ws) {
-    final mv = _picked(ws);
-    switch (_pull) {
-      case 0:
-        wsMoveHold(ws, false);
-      case 1 when mv != null && _lengthAt != null:
-        wsMoveTime(ws, mv, mv.start, _lengthAt!);
-      case 2 when mv != null && _easeAt != null:
-        wsMoveEase(ws, mv, math.min(1, _easeAt!), math.max(0, _easeAt! - 1));
-    }
-    setState(() {
-      _pull = null;
-      _lengthAt = _easeAt = null;
-    });
+    if (_pulling) wsMoveHold(ws, false);
+    setState(() => _pulling = false);
   }
 
   @override
@@ -182,6 +194,7 @@ class _TabSamplesState extends State<TabSamples> with SingleTickerProviderStateM
     builder: (context, _) {
       final ws = WsScope.read(context);
       if (ws.inside == null) return const SizedBox.expand();
+      if (_whip != null) WidgetsBinding.instance.addPostFrameCallback((_) => mounted ? _whipped(ws) : null);
       return LayoutBuilder(builder: (context, box) {
         _size = box.biggest;
         return GestureDetector(
@@ -210,59 +223,56 @@ class _Paint extends CustomPainter {
     h._painted();
     c.drawRect(Offset.zero & size, Paint()..color = Grey.g10);
     final lay = samplesLayout(size), live = many || mv != null, now = h._clock.value;
-    final lag = (mv?.lag ?? .08).clamp(.02, .25), length = (h._lengthAt ?? mv?.length ?? .5).clamp(.2, 1.2);   // (the loops in the picked move's time, kept short)
+    final lag = (mv?.lag ?? .08).clamp(.02, .25), length = (mv?.length ?? .5).clamp(.2, 1.2);   // (the loops in the picked move's time, kept short)
 
     for (final (coming, tiles, mark) in [(true, lay.come, lay.comeMark), (false, lay.go, lay.goMark)]) {
       _mark(c, mark, coming, live);
       for (final (i, r) in tiles.indexed) {
+        if (i == whip) {
+          _whipTile(c, r, coming, h._whip?.coming == coming, live, now);
+          continue;
+        }
         final s = samples[i], on = mv != null && mv!.coming == coming && s.end.entries.every((e) => (mv!.end[e.key]! - e.value).abs() < 1e-3);
         c.drawRRect(RRect.fromRectAndRadius(r, const Radius.circular(4)), Paint()..color = on ? Grey.g20 : Grey.g13);
         if (on) c.drawRRect(RRect.fromRectAndRadius(r.deflate(.5), const Radius.circular(4)), Paint()..color = WsT.accent..style = PaintingStyle.stroke);
         c.save();
         c.clipRRect(RRect.fromRectAndRadius(r, const Radius.circular(4)));
-        _loop(c, r, s, coming, now, lag, length, on ? WsT.accent : (live ? Grey.g76 : Grey.g44));
+        _loop(c, r, s, coming, now + i * .23, lag, length, on ? WsT.accent : (live ? Grey.g76 : Grey.g44));   // (each its own phase: seen at once, never all the same picture)
         c.restore();
       }
     }
 
     final ink = mv == null ? Grey.g26 : Grey.g76, faint = mv == null ? Grey.g20 : Grey.g38;
-    for (final (i, r) in lay.pulls.indexed) {
-      c.drawRRect(RRect.fromRectAndRadius(r, const Radius.circular(4)), Paint()..color = h._pull == i ? Grey.g20 : Grey.g13);
-    }
-    final m = mv;
-    final pLag = m?.lag ?? .08, pLength = h._lengthAt ?? m?.length ?? .6, pEase = h._easeAt ?? (m == null ? .8 : (m.over > 0 ? 1 + m.over : m.out));
-    final out = math.min(1.0, pEase), over = math.max(0.0, pEase - 1);
+    final r0 = lay.pulls.first;
+    c.drawRRect(RRect.fromRectAndRadius(r0, const Radius.circular(4)), Paint()..color = h._pulling ? Grey.g20 : Grey.g13);
 
-    // the stairs: five steps, each the lag later
-    final st = lay.pulls[0].deflate(8);
-    _text(c, pLag.toStringAsFixed(2), st.topLeft, ink, 12);
-    final kx = (st.width - 12) / 1.0, stair = Path();
-    for (var k = 0; k < 5; k++) {
-      final x = st.left + math.min(k * pLag * kx, st.width - 12), y = st.bottom - k * 6;
+    // the stairs: as many steps as the move has things, each the lag later (the same seconds across as the timeline)
+    final st = r0.deflate(8), n = math.max(2, mv?.who.length ?? 5), pLag = mv?.lag ?? .08, kx = st.width / 2.0, stair = Path();
+    for (var k = 0; k < n; k++) {
+      final x = st.left + math.min(k * pLag * kx, st.width - 10), y = st.bottom - k * (st.height - 4) / (n - 1);
       k == 0 ? stair.moveTo(x, y) : stair.lineTo(x, y);
-      stair.lineTo(x + 12, y);
-      c.drawLine(Offset(x, y), Offset(x + 12, y), Paint()..color = ink..strokeWidth = 3);
+      stair.lineTo(x + 10, y);
+      c.drawLine(Offset(x, y), Offset(x + 10, y), Paint()..color = ink..strokeWidth = 3);
     }
     c.drawPath(stair, Paint()..color = faint..style = PaintingStyle.stroke);
+  }
 
-    // the bar: as long as the move
-    final ba = lay.pulls[1].deflate(8);
-    _text(c, pLength.toStringAsFixed(2), ba.topLeft, ink, 12);
-    for (var s = 0; s <= 4; s++) {
-      final x = ba.left + s / 4 * ba.width;
-      c.drawLine(Offset(x, ba.bottom - 2), Offset(x, ba.bottom + 2), Paint()..color = faint);
+  /// The pick whip: a curl from the dots to a small frame (the thing): coming, the dots leave the frame; going, they go
+  /// into it. Out (tapped, waiting for a thing): lit.
+  void _whipTile(Canvas c, Rect r, bool coming, bool out, bool live, double now) {
+    c.drawRRect(RRect.fromRectAndRadius(r, const Radius.circular(4)), Paint()..color = out ? Grey.g26 : Grey.g13);
+    final ink = out ? WsT.accent : (live ? Grey.g76 : Grey.g44), box = Rect.fromCenter(center: r.center + Offset(-r.width * .22, 0), width: 10, height: 10);
+    c.drawRect(box, Paint()..color = ink..style = PaintingStyle.stroke..strokeWidth = 1.5);
+    final curl = Path()..moveTo(box.right + 2, box.center.dy);
+    for (var u = 0.0; u <= 1; u += .05) {
+      curl.lineTo(box.right + 2 + u * r.width * .45, box.center.dy + math.sin(u * 3 * math.pi) * 5 * (1 - u));
     }
-    c.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(ba.left, ba.bottom - 14, (pLength / 4).clamp(.01, 1) * ba.width, 8), const Radius.circular(2)), Paint()..color = ink);
-
-    // the curve: the way it eases, the seat as a line (past it: overshoot)
-    final cu = lay.pulls[2].deflate(8), seat = cu.bottom - (cu.height - 14) * .62;
-    _text(c, over > 0 ? '+${over.toStringAsFixed(2)}' : out.toStringAsFixed(2), cu.topLeft, ink, 12);
-    c.drawLine(Offset(cu.left, seat), Offset(cu.right, seat), Paint()..color = faint);
-    final way = _way(out, over), curve = Path()..moveTo(cu.left, cu.bottom);
-    for (var u = 1; u <= 24; u++) {
-      curve.lineTo(cu.left + u / 24 * cu.width, cu.bottom - _bezier(way, u / 24) * (cu.bottom - seat));
+    c.drawPath(curl, Paint()..color = ink.withValues(alpha: .6)..style = PaintingStyle.stroke);
+    final f = ((now % 1.4) / 1.1).clamp(0.0, 1.0), p = coming ? f : 1 - f;
+    for (var i = 0; i < 3; i++) {
+      final a = (i - 1) * .6, d = p * r.width * .32;
+      c.drawCircle(box.center + Offset(math.cos(a) * d, math.sin(a) * d), 2.2, Paint()..color = ink.withValues(alpha: (.3 + .7 * p).clamp(0, 1)));
     }
-    c.drawPath(curve, Paint()..color = ink..style = PaintingStyle.stroke..strokeWidth = 2);
   }
 
   /// A tile's loop: five dots in a row (their seats), each [lag] later, from the other end to the seats (coming) or
@@ -306,11 +316,6 @@ class _Paint extends CustomPainter {
       at(mid, p[0], p[2]) < u ? lo = mid : hi = mid;
     }
     return at((lo + hi) / 2, p[1], p[3]);
-  }
-
-  void _text(Canvas c, String s, Offset at, Color ink, double size) {
-    final tp = TextPainter(text: TextSpan(text: s, style: TextStyle(color: ink, fontSize: size, height: 1)), textDirection: TextDirection.ltr)..layout();
-    tp.paint(c, at);
   }
 
   @override
