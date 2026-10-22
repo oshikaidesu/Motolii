@@ -28,6 +28,7 @@ import 'sets/panels/timeline_parts.dart';
 import 'sets/panels/transport.dart';
 import 'sets/workflows/workflow_set.dart';
 import 'sets/group_rule_tries.dart';
+import 'sets/group_hands.dart';
 import 'sets/relation_bench.dart';
 import 'sets/relation_ideas.dart';
 import 'tokens.dart';
@@ -38,6 +39,9 @@ void main() {
   // a tester's window (AGENT_DIR): only the cards table, the whole window, driven by its inbox
   if (Platform.environment['AGENT_DIR'] != null) {
     return runApp(WidgetsApp(color: const Color(0xFF000000), builder: (c, _) => cardsAgentPage(Platform.environment['AGENT_PAGE'] ?? 'Link')));
+  }
+  if (const bool.fromEnvironment('MOTOLII_HANDS')) {
+    return runApp(WidgetsApp(color: const Color(0xFF000000), builder: (c, _) => const GroupHands()));
   }
   if (const bool.fromEnvironment('MOTOLII_BENCH')) {   // (the relation panels' bench alone, the whole screen: the stage, a seek bar, the panels side by side)
     return runApp(WidgetsApp(color: const Color(0xFF000000), builder: (c, _) => const RelationBench()));
@@ -81,7 +85,7 @@ class LabBook extends StatelessWidget {
         ],
       ),
       WidgetbookCategory(name: 'インスペクタ案', children: [cardsSet(), inspectorPlansSet(), lassoSet()]),
-      WidgetbookCategory(name: 'Relation', children: [relationBenchSet(), relationIdeasSet(), groupRuleTriesSet()]),
+      WidgetbookCategory(name: 'Relation', children: [groupHandsSet(), relationBenchSet(), relationIdeasSet(), groupRuleTriesSet()]),
       WidgetbookCategory(name: 'Glass', children: [glassLiveSet()]),
       WidgetbookCategory(
         name: 'Parts',
