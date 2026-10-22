@@ -49,9 +49,11 @@ WsMove? wsMoveOf(Motolii m, int by) {
 String wsMoveWay(double out, double over) => 'Bezier ${(.6 - .5 * out).toStringAsFixed(3)} 0 0.2 ${(1 + over).toStringAsFixed(3)}';
 
 /// A move made of [who]: they come in at [start] from a little below, clear, each a little later; one step, picked.
+/// Things that came in by a move already go out by this one (made later in the film, it leaves what is before alone).
 void wsMakeMove(Ws ws, List<String> who, double start) {
   final m = ws.inside;
   if (m == null || who.isEmpty) return;
+  final coming = !wsMoves(ws).any((o) => o.who.any((t) => who.contains('$t')));
   m.later('together', number: 1);
   ws.after(m.later('add', name: 'behaviour', word: 'group'), null, (b) => ws.select('$b'));
   m.later('set', thing: -1, name: 'strength', number: 1);
@@ -59,8 +61,8 @@ void wsMakeMove(Ws ws, List<String> who, double start) {
   m.later('set', thing: -1, name: 'lag', number: .08);
   m.later('set', thing: -1, name: 'y', number: -.15);
   m.later('set', thing: -1, name: 'opacity', number: 0);
-  m.later('key', thing: -1, name: 'strength', word: '$start', number: 1);
-  m.later('key', thing: -1, name: 'strength', word: '${start + .6}', number: 0);
+  m.later('key', thing: -1, name: 'strength', word: '$start', number: coming ? 1 : 0);
+  m.later('key', thing: -1, name: 'strength', word: '${start + .6}', number: coming ? 0 : 1);
   m.later('way', thing: -1, name: 'strength', number: start, word: wsMoveWay(.8, 0));
   ws.after(m.later('together'), (_, _) => ws.reread());
 }

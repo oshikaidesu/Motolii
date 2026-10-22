@@ -1,6 +1,7 @@
 // Joined: a relation made of the things picked together (Ws.many): a behaviour of that kind (the inside's around, row,
 // follow or push) and the things put in it as they show now (the inside's relate: their order, its middle and size,
 // a leader, what each was in before), one step, picked once made.
+import 'moves.dart';
 import 'ws.dart';
 
 const wsRelations = ['around', 'row', 'follow', 'push', 'group'];
@@ -8,6 +9,7 @@ const wsRelations = ['around', 'row', 'follow', 'push', 'group'];
 void wsRelate(Ws ws, String kind) {
   final m = ws.inside;
   if (m == null || ws.many.length < 2) return;
+  if (kind == 'group') return wsMakeMove(ws, ws.many.toList(), (ws.frame / Ws.fps * 10).round() / 10);   // (a group is a move: it comes in from where it is said to, at the playhead)
   m.later('together', number: 1);   // (one step, asked without waiting: the behaviour is the thing the add makes)
   ws.after(m.later('add', name: 'behaviour', word: kind), null, (b) => ws.select('$b'));   // (picked as soon as it is there: its card, its row)
   m.later('set', thing: -1, name: 'strength', number: 1);   // (said, so its card shows it as it works)

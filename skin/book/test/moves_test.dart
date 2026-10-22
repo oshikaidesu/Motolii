@@ -61,5 +61,14 @@ void main() {
     await rest();
     mv = wsMoves(ws).single;
     expect([mv.start, mv.length, mv.over], [closeTo(2.5, 1e-9), closeTo(.5, 1e-9), closeTo(.3, 1e-3)]);
+
+    wsMoveTurn(ws, mv);   // (in again)
+    await rest();
+    final before = wsShows(m, made[0], 5);
+    wsMakeMove(ws, ['${made[0]}', '${made[1]}'], 6);   // (made later of things that came in already: they go out, what is before is left alone)
+    await rest();
+    final out = wsMoves(ws).reduce((a, b) => a.by > b.by ? a : b);
+    expect(out.coming, false);
+    expect([wsShows(m, made[0], 5).y, wsShows(m, made[0], 5).opacity, wsShows(m, made[0], 7).opacity], [closeTo(before.y, 1e-6), closeTo(before.opacity, 1e-6), closeTo(0, 1e-6)]);
   }, skip: !insideBuilt);
 }

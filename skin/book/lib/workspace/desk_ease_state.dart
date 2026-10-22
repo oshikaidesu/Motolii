@@ -20,11 +20,13 @@ class DeskEaseState extends State<DeskEase> {
     _pending = null;
     if (e == null || span == null) return;
     final m = ws.inside!, to = said(e);
-    // (every picked key's stretch, on whatever bar it is: each value keyed there; one step)
+    // (every picked key's stretch, on whatever bar it is: each value keyed there; one step. A last key has no stretch
+    // after it: the one that ends at it, as the desk shows)
     final all = [
       for (final k in ws.keys)
         if (ws.layers.where((l) => l.id == k.layer).firstOrNull case final l?)
-          for (final at in keysAt(ws, (layer: l, from: k.frame, to: k.frame, picked: k.frame)).entries) (int.parse(l.id), at.key, at.value),
+          for (final at in keysAt(ws, (layer: l, from: l.keys.any((f) => f > k.frame) ? k.frame : (l.keys.where((f) => f < k.frame).fold<int?>(null, (a, f) => a == null || f > a ? f : a) ?? k.frame), to: k.frame, picked: k.frame)).entries)
+            (int.parse(l.id), at.key, at.value),
     ];
     // (as it already goes, each: nothing is told, so a way's own numbers that have no seat here are not written over)
     final told = [for (final (t, name, at) in all) if (said(heard(m.wayOf(t, name, at))) != to) (t, name, at)];
