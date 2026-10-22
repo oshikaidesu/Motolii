@@ -3,6 +3,7 @@
 // a follow's threads). Front or top, or turned by a drag; a tap picks a thing or a relation, the inspector beside it.
 import 'dart:math' as math;
 
+import 'package:flutter/gestures.dart' show PointerScrollEvent;
 import 'package:flutter/widgets.dart';
 
 import '../tokens.dart';
@@ -18,7 +19,7 @@ class DeskRelations extends StatefulWidget {
 }
 
 class _DeskRelationsState extends State<DeskRelations> {
-  double _yaw = 0, _pitch = 0;   // (turned: 0, 0 is from the front, the camera's own way)
+  double _yaw = 0, _pitch = 0, _zoom = 1;   // (turned: 0, 0 is from the front, the camera's own way; a scroll comes closer)
   (int, Map<String, List<_P3>>)? _paths;   // (each thing's way through the whole stretch, as the document stood: read again when it changes)
 
   Map<String, List<_P3>> _pathsOf(Ws ws) {
@@ -53,8 +54,12 @@ class _DeskRelationsState extends State<DeskRelations> {
             child: ColoredBox(
               color: WsT.card,
               child: LayoutBuilder(builder: (context, box) {
-                final view = _View(world, box.biggest, _yaw, _pitch);
-                return GestureDetector(
+                final view = _View(world, box.biggest, _yaw, _pitch, paths: _pathsOf(ws), zoom: _zoom);
+                return Listener(
+                  onPointerSignal: (e) {
+                    if (e is PointerScrollEvent) setState(() => _zoom = (_zoom * math.exp(-e.scrollDelta.dy / 300)).clamp(.3, 8.0));
+                  },
+                  child: GestureDetector(
                   key: const ValueKey('ws-relations-map'),
                   behavior: HitTestBehavior.opaque,
                   onPanUpdate: (d) => setState(() {
@@ -72,7 +77,7 @@ class _DeskRelationsState extends State<DeskRelations> {
                     if (view.hit(d.localPosition) case final id?) ws.select(id);
                   },
                   child: CustomPaint(size: box.biggest, painter: _Map(view, ws.selected, _pathsOf(ws))),
-                );
+                ));
               }),
             ),
           ),
@@ -134,14 +139,16 @@ class _Relation {
 
 /// The world turned and fitted to the map.
 class _View {
-  _View(this.world, this.size, double yaw, double pitch) : _cy = math.cos(yaw), _sy = math.sin(yaw), _cp = math.cos(pitch), _sp = math.sin(pitch) {
-    final all = [for (final (p, _, _) in world.things.values) _turn(p), for (final p in _frame) _turn(p), if (world.camera case final c?) _turn(c)];
-    var r = Rect.fromLTRB(-1, -1, 1, 1);
+  _View(this.world, this.size, double yaw, double pitch, {Map<String, List<_P3>> paths = const {}, double zoom = 1}) : _cy = math.cos(yaw), _sy = math.sin(yaw), _cp = math.cos(pitch), _sp = math.sin(pitch) {
+    // (fitted to the things and their ways, not to the camera's frame: what moves fills the map; a scroll comes closer)
+    final all = [for (final (p, _, _) in world.things.values) _turn(p), for (final w in paths.values) for (final p in w) _turn(p)];
+    if (all.isEmpty) all.addAll([for (final p in _frame) _turn(p)]);
+    var r = Rect.fromCenter(center: all.first, width: .2, height: .2);
     for (final p in all) {
       r = r.expandToInclude(Rect.fromCenter(center: p, width: 0, height: 0));
     }
-    _fit = r.inflate(r.longestSide * .08 + .1);
-    _scale = math.min(size.width / _fit.width, size.height / _fit.height);
+    _fit = r.inflate(r.longestSide * .08 + .05);
+    _scale = math.min(size.width / _fit.width, size.height / _fit.height) * zoom;
   }
   final _World world;
   final Size size;
