@@ -3556,7 +3556,8 @@ static double doc_usual(const char* name) {
         for (const auto& [file, sc] : doc_scripts())
             for (size_t i = 0; i < sc.names.size(); ++i)
                 if (sc.names[i] == name) return sc.knobs[i].usual;
-    return doc_among("scale_x scale_y scale_z size speed opacity wide tall visible distance zoom copies copy_size copy_wide blur_level letter_spacing line_spacing contrast saturation vibrance environment gradient_scale wave_speed slope power", name) ? 1.0 : !strcmp(name, "duration") ? -1.0
+    return doc_among("scale_x scale_y scale_z size speed opacity wide tall visible distance zoom copies copy_size copy_wide blur_level letter_spacing line_spacing contrast saturation vibrance environment gradient_scale wave_speed slope power strength", name) ? 1.0 : !strcmp(name, "duration") ? -1.0
+         : !strcmp(name, "radius") ? 0.5 : !strcmp(name, "gap") ? 0.2   // (a relation as it comes: what it works by when nothing is said)
          : !strcmp(name, "metallic") ? 0.08 : !strcmp(name, "roughness") ? 0.6 : !strcmp(name, "reflectance") ? 0.5 : !strcmp(name, "thickness") ? 0.5 : !strcmp(name, "sun_size") ? 1.09 : !strcmp(name, "sun_halo") ? 10.0   // (a solid's surface as it comes)
          : !strcmp(name, "intensity") ? 1.0 : !strcmp(name, "falloff") ? 10.0 : !strcmp(name, "cone") ? 30.0   // (a light as it comes)
          : !strcmp(name, "bounce") ? 0.3 : !strcmp(name, "friction") ? 0.5 : !strcmp(name, "gravity") ? 9.81   // (what falls and strikes, as it comes)
