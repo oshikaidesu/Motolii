@@ -111,7 +111,14 @@ void main() {
     // (the window, with the inside's own picture of the stage where the window leaves it bare: in a test the stage's
     // texture is not there, so its picture is put in under the window's marks, every point still the surround's colour)
     Future<void> shot(String line) async {
-      await settled(t, ws);
+      for (var i = 0; i < 30; i++) {   // (as a hand waits for the window to rest: some frames, and what the inside was asked done; a pane that keeps moving never settles)
+        await t.pump(const Duration(milliseconds: 16));
+      }
+      for (var i = 0; i < 60 && ws.waiting; i++) {
+        await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+        await t.pump();
+      }
+      await t.pump(const Duration(milliseconds: 16));
       final name = (n++).toString().padLeft(3, '0');
       final comp = t.getRect(find.byKey(const ValueKey('ws-stage-comp')));
       await t.runAsync(() async {
