@@ -305,6 +305,8 @@ static const DocValue doc_values[] = {
     {"leader_b", "behaviour", 0, 1e9, false, nullptr},
     {"hand", "behaviour", 0, 1, true, nullptr},
     {"lag", "behaviour", 0, 60, true, nullptr},
+    {"spread", "behaviour", -10, 10, true, nullptr},   // (a group's: its things as far from their middle as they were put, times this: 0 all at the middle, 2 twice as far out)
+    {"scatter", "behaviour", -10, 10, true, nullptr},   // (a group's: each thing so far away in its own fixed way, as a seed scatters)
     {"members", "behaviour", 0, 0, false, ""},   // (a relation's things in their order, by number, "_" where one was taken out: its place kept, so no other moves)
     {"under", "behaviour", 0, 0, false, ""},   // (for each of them, the relation it was in before, 0 none: this one starts from what that one gives)
     {"from", "behaviour", 0, 0, false, ""},   // (for each of them, x and y where it showed when it came in: an around or a row adds only the step from there to its place, a follow only how far its leader has gone since)
@@ -488,6 +490,8 @@ static const DocShown doc_shown[] = {
     {"leader_b", "thing", "", "Hand to", 0, 0, nullptr},
     {"hand", "share", "%", "Handed", 0, 1, nullptr},
     {"lag", "", "s", "Lag", 0, 1, nullptr},
+    {"spread", "share", "%", "Spread", 0, 3, nullptr},
+    {"scatter", "stage", "px", "Scatter", 0, 2, nullptr},
     {"field_size", "share", "%", "Grow", -1, 5, nullptr},
     {"field_push", "stage", "px", "Push", -2, 2, nullptr},
     {"field_band", "stage", "px", "Ring", 0, 2, nullptr},
@@ -698,7 +702,7 @@ static const DocCard doc_cards[] = {
     {"Row", "strength gap centre_x centre_y rotate rotate_y lag", "file", "row"},
     {"Follow", "strength leader lag leader_b hand", "file", "follow"},
     {"Push", "strength leader radius", "file", "push"},
-    {"Group", "strength lag x y rotate rotate_y size opacity", "file", "group"},   // (things in an order and nothing else: away by its own move, turn, size and opacity, each in turn)
+    {"Group", "strength lag x y spread scatter rotate rotate_y size opacity", "file", "group"},   // (things in an order and nothing else: away by its own move, turn, size and opacity, each in turn)
     {"Note", "note"},   // (what a maker wrote of it: After Effects' layer comment)
     {"Trim Paths", "trim trim_begin trim_offset", "trim", "+"},   // (After Effects' shape operator: added from the shelf)
     {"Gaussian Blur", "blur blur_direction", "blur", "+"},   // (the effects (doc_effects), each its card while it is on, as After Effects' Effect Controls)
@@ -1017,8 +1021,20 @@ static double doc_related(Doc& d, int by, int thing, const char* name, double t,
         return base + doc_number(d, by, name, ti, 0) * s;
     if ((type == "around" || type == "row" || type == "group") && (n == "size" || n == "opacity"))   // (its own size and opacity as a share of each one's, in turn: 0 opacity out is gone)
         return base * (1.0 + (doc_number(d, by, name, ti, 1) - 1.0) * s);
-    if (type == "group")   // (where it was put, and away by its own move as much as its strength, in turn)
-        return n == "x" || n == "y" ? base + doc_number(d, by, name, ti, 0) * s : base;
+    if (type == "group") {   // (where it was put, and away by its own move, its spread from their middle and its scatter, as much as its strength, in turn)
+        if (n != "x" && n != "y") return base;
+        const size_t axis = n == "x" ? 0 : 1;
+        double middle = 0;
+        int counted = 0;
+        for (size_t k = 0; 2 * k + axis < rel.from.size(); ++k)
+            if (!std::isnan(rel.from[2 * k + axis])) middle += rel.from[2 * k + axis], ++counted;   // (their middle where they were when they came in)
+        if (!counted)   // (not told where they came in: their own places now)
+            for (const int t : rel.members) if (t) middle += doc_literal(d, t, name, ti, 0), ++counted;
+        middle = counted ? middle / counted : base;
+        const double seed = std::sin((double)(i + 1) * (axis ? 78.233 : 12.9898)) * 43758.5453, scatter = (seed - std::floor(seed)) * 2 - 1;   // (fixed for each: the same scatter every time it is shown)
+        const double away = doc_number(d, by, name, ti, 0) + (base - middle) * (doc_number(d, by, "spread", ti, 1) - 1) + doc_number(d, by, "scatter", ti, 0) * scatter;
+        return base + away * s;
+    }
     if (type == "around" || type == "row") {   // (around a middle, the first at the top, each as far round as its order; or in a row from the middle, gap apart)
         if (n != "x" && n != "y" && n != "z") return base;
         const int l = leader("leader");
@@ -3568,7 +3584,7 @@ static double doc_usual(const char* name) {
         for (const auto& [file, sc] : doc_scripts())
             for (size_t i = 0; i < sc.names.size(); ++i)
                 if (sc.names[i] == name) return sc.knobs[i].usual;
-    return doc_among("scale_x scale_y scale_z size speed opacity wide tall visible distance zoom copies copy_size copy_wide blur_level letter_spacing line_spacing contrast saturation vibrance environment gradient_scale wave_speed slope power strength", name) ? 1.0 : !strcmp(name, "duration") ? -1.0
+    return doc_among("scale_x scale_y scale_z size speed opacity wide tall visible distance zoom copies copy_size copy_wide blur_level letter_spacing line_spacing contrast saturation vibrance environment gradient_scale wave_speed slope power strength spread", name) ? 1.0 : !strcmp(name, "duration") ? -1.0
          : !strcmp(name, "radius") ? 0.5 : !strcmp(name, "gap") ? 0.2   // (a relation as it comes: what it works by when nothing is said)
          : !strcmp(name, "metallic") ? 0.08 : !strcmp(name, "roughness") ? 0.6 : !strcmp(name, "reflectance") ? 0.5 : !strcmp(name, "thickness") ? 0.5 : !strcmp(name, "sun_size") ? 1.09 : !strcmp(name, "sun_halo") ? 10.0   // (a solid's surface as it comes)
          : !strcmp(name, "intensity") ? 1.0 : !strcmp(name, "falloff") ? 10.0 : !strcmp(name, "cone") ? 30.0   // (a light as it comes)
