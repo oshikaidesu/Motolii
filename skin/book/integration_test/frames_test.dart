@@ -36,6 +36,12 @@ void main() {
       for (final (name, what) in m.recipes.where((r) => !r.$2.contains('Canvalry')).take(15)) (name, m.make(name), what),
     ];
     debugPrint('FRAMES the document: ${made.where((r) => r.$2 != 0).length} recipes (${made.map((r) => r.$1).join(', ')})');
+    if (const bool.fromEnvironment('FX')) { // (FX: every recipe given ThorVG's blur, shadow and glow: effects piled on)
+      for (final (_, thing, _) in made) {
+        if (thing != 0) for (final fx in const ['Gaussian Blur', 'Drop Shadow', 'Glow']) m.effect(thing, fx, 0);
+      }
+      debugPrint('FRAMES effects on every recipe: blur, shadow, glow');
+    }
     ws
       ..reread()
       ..select(const bool.fromEnvironment('NONE') ? null : '${made.firstWhere((r) => r.$2 != 0).$2}'); // (NONE: nothing picked, the stage's cards: to see what the picked thing's inspector costs)

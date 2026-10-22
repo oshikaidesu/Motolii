@@ -34,10 +34,11 @@ struct DrawnFx { bool split = false;   // (a text's letters each a copy of their
                  bool hollow = false;   // (a flat shape filled with nothing: only its edge is seen)
                  bool evenOdd = false;  // (where its outlines lie over each other, a hole every other time: SVG's fill-rule evenodd; else nonzero)
                  float reach = 0.f;     // (how far a bent shape goes out past its box at its most, a share of its height (bend_at): the picture larger all round by that)
+                 float room = 0.f;      // (how far its effects may reach round it, made room for (doc_fx_room), a share of its height: changed within it, drawn again without being made again)
                  bool radial = false; float rampAngle = 0.f, rampScale = 1.f; int spread = 0;   // (or from its middle out, ThorVG's radial gradient; turned so far, clockwise; so long, as a share of its reach; past its ends padded, reflected or repeated)
                  DrawnFx over(float high) const {   // (the same for a thing `high` units high: its lengths as shares of that)
                      DrawnFx f = *this;
-                     f.blur /= high, f.fall /= high, f.soft /= high, f.glowSoft /= high, f.overHigh = high;
+                     f.blur /= high, f.fall /= high, f.soft /= high, f.glowSoft /= high, f.room /= high, f.overHigh = high;
                      return f;
                  } };
 
@@ -510,7 +511,7 @@ static Drawn* drawn(Stage& s, const std::function<tvg::Paint*(Drawn*, int*, int*
         if (fx.blur > 0.f || fx.shadow.w > 0.f || fx.tint > 0.f || fx.tritone > 0.f || fx.glow.w > 0.f) {   // (in a scene of ThorVG's, which takes the effects; the picture larger all round by as far as they reach)
             const float blur = fx.blur * tall, fall = fx.fall * tall, soft = fx.soft * tall;
             const float glowSoft = fx.glowSoft * tall;
-            const int room = (int)std::ceil(std::max({3.f * blur, fx.shadow.w > 0.f ? fall + 3.f * soft : 0.f, fx.glow.w > 0.f ? 3.f * glowSoft : 0.f}));
+            const int room = (int)std::ceil(std::max({3.f * blur, fx.shadow.w > 0.f ? fall + 3.f * soft : 0.f, fx.glow.w > 0.f ? 3.f * glowSoft : 0.f, fx.room * tall}));
             tvg::Scene* scene = tvg::Scene::gen();   // (one scene takes them all, in order)
             scene->add(p);
             d->effects.push_back(scene);

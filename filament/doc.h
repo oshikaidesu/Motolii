@@ -1573,6 +1573,7 @@ static void doc_look(Doc& d) {
 
 static int doc_keys(Doc& d, int thing, const char* name, double at);
 // A value at its most: the highest of its keys, or what it is said to be (how far a moving effect may reach).
+static double doc_fx_room(Doc& d, int thing);
 static double doc_most(Doc& d, int thing, const char* name, double otherwise) {
     double most = doc_number(d, thing, name, 0, otherwise);
     if (doc_keys(d, thing, name, -1.0)) doc_rows(d, sqlite3_mprintf("select max(value) from fact where thing = %d and name = %Q", thing, name), [&](sqlite3_stmt* row) { most = sqlite3_column_double(row, 0); });
@@ -1592,6 +1593,7 @@ static bool doc_fx(Doc& d, int thing, double at, bool most, double units, DrawnF
         *to = float3{(float)((rgb >> 16) & 255), (float)((rgb >> 8) & 255), (float)(rgb & 255)} / 255.f;
     };
     fx.blur = (float)(num("blur", 0) / units);
+    if (most) fx.room = (float)(doc_fx_room(d, thing) / units);   // (the room it is made with: a power of two, so a change within it makes nothing again)
     const std::string way = doc_word(d, thing, "blur_direction");
     fx.blurWay = way == "horizontal" ? 1 : way == "vertical" ? 2 : 0;
     if (!doc_word(d, thing, "shadow").empty()) {   // (After Effects' own drop shadow, as it comes: half of it, 135 degrees, 10 points away, 10 soft)
@@ -2105,7 +2107,20 @@ static void doc_moment(Doc& d, double now) {
 // call for its kind), one the stage has and the document has not is taken off, one whose making is told otherwise now
 // is made again. false: a thing could not be made (d.trouble says which, and why).
 // All that a thing's making goes by: one changed, the thing is made again (doc_match), carried by a hand too (doc_carry).
-static const char* const doc_making = "'kind','file','shape','path','blend','fx','keyed','space','begin','duration','speed','text','fill','fill_rule','wide','points','inner','round','bloat','zigzag','offset','warp','clip','stroke','stroke_width','align','blur','shadow','shadow_distance','shadow_angle','shadow_blur','shadow_opacity','glow','glow_blur','glow_opacity','copies','tint','tint_black','tint_white','tritone','tritone_shadow','tritone_midtone','tritone_highlight','letter_spacing','line_spacing','italic','cap','join','heads','head_size','head_shape','dash','dash_offset','metallic','roughness','reflectance','clear_coat','clear_coat_roughness','falloff','shadows','shadow_softness','contact_shadows','sheen','anisotropy','shading','thickness','light_group','script','copy_fill','gradient','gradient_angle','gradient_scale','gradient_spread','wrap','wrap_at','split','ior','dispersion','swim','dark','vivid','marker'";
+static const char* const doc_making = "'kind','file','shape','path','blend','fx','keyed','space','begin','duration','speed','text','fill','fill_rule','wide','points','inner','round','bloat','zigzag','offset','warp','clip','stroke','stroke_width','align','copies','letter_spacing','line_spacing','italic','cap','join','heads','head_size','head_shape','dash','dash_offset','metallic','roughness','reflectance','clear_coat','clear_coat_roughness','falloff','shadows','shadow_softness','contact_shadows','sheen','anisotropy','shading','thickness','light_group','script','copy_fill','gradient','gradient_angle','gradient_scale','gradient_spread','wrap','wrap_at','split','ior','dispersion','swim','dark','vivid','marker'";
+// A flat thing's effects (ThorVG's, doc_fx): told again at each moment (fx_at), never a reason to make it again. What
+// they ask of its making is only which are on and how much room round it they reach (doc_fx_room).
+static const char* const doc_fxing = "'blur','shadow','shadow_distance','shadow_angle','shadow_blur','shadow_opacity','glow','glow_blur','glow_opacity','tint','tint_black','tint_white','tritone','tritone_shadow','tritone_midtone','tritone_highlight'";
+// How far a thing's effects reach round it at their most (what is carried too), in the document's units, rounded up to
+// a power of two: the room its picture is made with, so a number changed within it is drawn again without making it
+// again (as a texture atlas keeps power-of-two room). 0: none reach.
+static double doc_fx_room(Doc& d, int thing) {
+    const auto most = [&](const char* name, double otherwise) { return std::max(doc_most(d, thing, name, otherwise), doc_number(d, thing, name, 0, otherwise)); };
+    double r = 3.0 * most("blur", 0);
+    if (!doc_word(d, thing, "shadow").empty()) r = std::max(r, most("shadow_distance", 10) + 3.0 * most("shadow_blur", 10));
+    if (!doc_word(d, thing, "glow").empty()) r = std::max(r, 3.0 * most("glow_blur", 40));
+    return r <= 0.0 ? 0.0 : std::exp2(std::ceil(std::log2(std::max(r, 1.0))));
+}
 // The values that move a flat shape's points as it is drawn (flat.mat's vertex stage): a shape with any of them cut
 // fine all along, one with none only round its curves (a long line in four points, not two thousand).
 static const char* const doc_bending = "'warp','bend','twist','pinch','skew','squash','wiggle','stretch','pin_tl_x','pin_tl_y','pin_tr_x','pin_tr_y','pin_bl_x','pin_bl_y','pin_br_x','pin_br_y'";
@@ -2128,6 +2143,11 @@ static bool doc_match(Doc& d) {
             if (doc_blend_way(of.substr(at + 6, end == std::string::npos ? std::string::npos : end - at - 6))) of.replace(at + 6, (end == std::string::npos ? of.size() : end) - at - 6, "*");
         }
     for (auto& [thing, of] : told) of += doc_bends(d, thing) ? " bent=1" : " bent=0";   // (bent or not: cut fine, or only round its curves)
+    for (auto& [thing, of] : told) {   // (its effects: which are on and the room they reach, not their numbers (doc_fxing))
+        const auto on = [&](const char* name) { return std::max(doc_most(d, thing, name, 0), doc_number(d, thing, name, 0, 0)) > 0.0; };
+        of += " fx=" + std::to_string((int)on("blur")) + (doc_word(d, thing, "shadow").empty() ? "0" : "1") + (doc_word(d, thing, "glow").empty() ? "0" : "1") + std::to_string((int)on("tint")) + std::to_string((int)on("tritone"))
+            + " room=" + std::to_string(doc_fx_room(d, thing));
+    }
     if (const auto held = told.find(d.held.thing); held != told.end())   // (what a hand carries of its making shows too: it is made again as it would be)
         for (const auto& [name, is] : d.held.said) if (name[0] != ' ') held->second += " " + name + "~" + is;
     if (const auto held = told.find(d.held.thing); held != told.end())
@@ -3701,6 +3721,7 @@ static bool doc_carry(Doc& d, const char* by, double a, double b) {
         was(by);   // (as it was: whether it comes on or goes off, carried)
         ok = tries(by, a);
         if (ok && strstr(doc_making, ("'" + std::string(by) + "'").c_str())) ok = doc_match(d);   // (a value it is made by: made again with it now, not when let go)
+        else if (ok && strstr(doc_fxing, ("'" + std::string(by) + "'").c_str())) ok = doc_match(d);   // (an effect's: made again only if it now reaches past its room)
     }
     doc_moment(d, now);
     return ok;

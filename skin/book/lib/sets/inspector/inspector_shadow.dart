@@ -76,7 +76,7 @@ Color _colour(String? word) => switch (int.tryParse((word ?? '').split(' ').firs
 };
 
 /// Where the thing, its shadow and the knob lie in the drawing. A distance is drawn so any of them fits (far ones closer
-/// together); the angle is ThorVG's (0 to the right, 90 down).
+/// together); the angle is ThorVG's, as After Effects' (0 up, round clockwise: 135 down to the right).
 class _Shadow {
   _Shadow(this.size, {required this.distance, required this.angle, required this.blur, required this.opacity, required this.colour});
   final Size size;
@@ -86,7 +86,7 @@ class _Shadow {
   Offset get middle => size.center(Offset.zero);
   double get reach => size.height / 2 - side / 2 - 4;
   double drawn(double d) => reach * (1 - math.exp(-d / far));
-  Offset get fall => Offset(math.cos(angle * math.pi / 180), math.sin(angle * math.pi / 180)) * drawn(distance);
+  Offset get fall => Offset(math.sin(angle * math.pi / 180), -math.cos(angle * math.pi / 180)) * drawn(distance);
   Rect get thing => Rect.fromCenter(center: middle, width: side, height: side);
   Rect get shadow => thing.shift(fall);
   double get softDrawn => math.min(14, blur * .25);
@@ -94,7 +94,7 @@ class _Shadow {
 
   (double, double) fallAt(Offset p) {
     final v = p - middle, r = math.min(v.distance, reach * .98);
-    return (-far * math.log(1 - r / reach), v.distance < .5 ? angle : v.direction * 180 / math.pi);
+    return (-far * math.log(1 - r / reach), v.distance < .5 ? angle : math.atan2(v.dx, -v.dy) * 180 / math.pi);
   }
 
   double softAt(Offset p) => (math.max(0, p.dx - shadow.right - 6) / .25).clamp(0, 56).toDouble();
