@@ -479,7 +479,7 @@ static const DocShown doc_shown[] = {
     {"field_radius", "stage", "px", "Size", 0, 4, nullptr},
     {"strength", "share", "%", "Strength", 0, 1, nullptr},   // (a relation's: how much of it works)
     {"radius", "stage", "px", "Radius", 0, 2, nullptr},
-    {"tilt", "angle", "°", "Tilt", -180, 180, nullptr},   // (an around's ring tipped back: 0 faces the camera, 90 lies flat)
+    {"tilt", "angle", "°", "Tilt", -90, 90, nullptr},   // (an around's ring tipped back: 0 faces the camera, 90 lies flat)
     {"gap", "stage", "px", "Gap", -1, 1, nullptr},
     {"centre_x", "stage", "px", "Centre X", -2, 2, nullptr},
     {"centre_y", "down", "px", "Centre Y", -2, 2, nullptr},
@@ -1008,7 +1008,7 @@ static double doc_related(Doc& d, int by, int thing, const char* name, double t,
     const auto start = [&](const char* what, double mine) { return was ? doc_related(d, was, thing, what, t, mine) : mine; };
     const double base = start(name, own), s = std::clamp(doc_number(d, by, "strength", t, 1), -1.0, 2.0);   // (past 1 and below 0 as an ease overshoots: a Back or an Elastic between two keys shows; held within twice)
     if (doc_number(d, by, "visible", 0, 1) <= 0.5) return base;   // (switched off, its eye shut: what it is on top of shows, its strength kept)
-    const double came = rel.from.empty() ? std::nan("") : rel.from[2 * i + (n == "y" ? 1 : 0)];
+    const double came = rel.from.empty() || (n != "x" && n != "y") ? std::nan("") : rel.from[2 * i + (n == "y" ? 1 : 0)];   // (where it showed when it came in: across and up only)
     const auto leader = [&](const char* which) { const int l = (int)doc_number(d, by, which, 0, 0); return l != thing ? l : 0; };
     if (type == "around" || type == "row") {   // (around a middle, the first at the top, each as far round as its order; or in a row from the middle, gap apart)
         if (n != "x" && n != "y" && n != "z") return base;
@@ -2797,10 +2797,10 @@ static bool doc_lead(Doc& d, int by, int leader, double now) {
     doc_act(d);
     const std::vector<int>& in = doc_members_of(d, by);
     bool ok = std::find(in.begin(), in.end(), leader) == in.end() || doc_free(d, leader, by, now, true);   // (the leader is not one it moves)
-    if ((type == "around" || type == "row") && ok)   // (its middle is the leader's place and a step: the step made again from the new one, so the middle stays)
-        ok = doc_set(d, by, "centre_x", doc_number(d, by, "centre_x", now, 0) + wasAt.first - settles.first) && doc_set(d, by, "centre_y", doc_number(d, by, "centre_y", now, 0) + wasAt.second - settles.second);
+    if ((type == "around" || type == "row") && ok)   // (its middle is its leader: the ring or the row goes round it, as planets round a sun)
+        ok = doc_set(d, by, "centre_x", 0) && doc_set(d, by, "centre_y", 0);
     ok = ok && doc_set(d, by, "leader", leader);
-    if (ok && was) {   // (the old leader in among its things, where it shows)
+    if (ok && was && type != "around" && type != "row") {   // (the old leader in among its things, where it shows; a ring's or a row's old middle stays out)
         const int under = doc_driven_by(d, was, "x");
         char add[96];
         std::snprintf(add, sizeof add, " %.17g %.17g", type == "follow" ? settles.first : wasAt.first, type == "follow" ? settles.second : wasAt.second);
@@ -2815,8 +2815,8 @@ static bool doc_lead(Doc& d, int by, int leader, double now) {
         ok = doc_say(d, by, "from", from.c_str());
     }
     doc_forget(d);
-    for (const auto& [t, at] : shown) {   // (each moved by what it would jump)
-        if (!ok) break;
+    for (const auto& [t, at] : shown) {   // (each moved by what it would jump; a ring or a row goes to its new middle)
+        if (!ok || type == "around" || type == "row") break;
         const double ox = at.first - doc_literal(d, t, "x", now, 0.0), oy = at.second - doc_literal(d, t, "y", now, 0.0);
         for (const auto& [name, off] : {std::make_pair("x", ox), std::make_pair("y", oy)})
             if (std::abs(off) > 1e-12)

@@ -609,7 +609,9 @@ class _RelationMarks extends StatelessWidget {
         double val(String n, [double or = 0]) => m.value(rel, n, now) ?? or;
         final off = val('visible', 1) <= .5;
         leader = val('leader') > 0 ? '${val('leader').round()}' : null;
-        final cx = val('centre_x'), cy = val('centre_y'), mid = screen(cx, cy), px = m.point * v.s;
+        final lead = kind == 'around' || kind == 'row' ? int.tryParse(leader ?? '') : null;   // (a ring's or a row's middle is its leader's place and its centre a step from it)
+        final lx = lead == null ? 0.0 : m.shows(lead, 'x', now)?.$1 ?? 0, ly = lead == null ? 0.0 : m.shows(lead, 'y', now)?.$1 ?? 0;
+        final cx = val('centre_x') + lx, cy = val('centre_y') + ly, mid = screen(cx, cy), px = m.point * v.s;
         Widget handle(String key, Offset at, void Function((double, double) u) carry) => Positioned(   // (the middle a cross, a size an arrow out)
           left: at.dx - 7,
           top: at.dy - 7,
@@ -625,11 +627,17 @@ class _RelationMarks extends StatelessWidget {
           ),
         );
         if (kind == 'around') {
-          final r = val('radius', .5), turn = val('offset') + .5 / math.max(1, members.length);
-          shape.add(_Shape.ring(mid, r * px, off: off));
+          final r = val('radius', .5), turn = val('offset') + .5 / math.max(1, members.length), tilt = val('tilt') * math.pi / 180;
+          if (tilt.abs() < 1e-6 || members.length < 3) {
+            shape.add(_Shape.ring(mid, r * px, off: off));
+          } else {   // (tipped back, its things in depth: drawn through where the camera shows them, in its order, round)
+            for (var k = 0; k < members.length; k++) {
+              shape.add(_Shape.line(members[k].$2, members[(k + 1) % members.length].$2, off: off));
+            }
+          }
           handles
-            ..add(handle('centre', mid, (u) => m..carry('centre_x', u.$1)..carry('centre_y', u.$2)))
-            ..add(handle('size', screen(cx + r * math.sin(turn * 2 * math.pi), cy + r * math.cos(turn * 2 * math.pi)), (u) => m.carry('radius', math.sqrt(math.pow(u.$1 - cx, 2) + math.pow(u.$2 - cy, 2)))));
+            ..add(handle('centre', mid, (u) => m..carry('centre_x', u.$1 - lx)..carry('centre_y', u.$2 - ly)))
+            ..add(handle('size', screen(cx + r * math.sin(turn * 2 * math.pi), cy + r * math.cos(turn * 2 * math.pi) * math.cos(tilt)), (u) => m.carry('radius', math.sqrt(math.pow(u.$1 - cx, 2) + math.pow((u.$2 - cy) / math.max(.2, math.cos(tilt).abs()), 2)))));
         } else if (kind == 'row') {
           final gap = val('gap', .2), n = math.max(1, m.word(rel, 'members').split(' ').length), half = gap * (n - 1) / 2;
           shape.add(_Shape.line(screen(cx - half, cy), screen(cx + half, cy), off: off));   // (a row about its middle)
@@ -638,7 +646,7 @@ class _RelationMarks extends StatelessWidget {
             ..add(handle('centre', mid + above, (u) {
               final (_, lift) = units(above);
               final (_, zero) = units(Offset.zero);
-              m..carry('centre_x', u.$1)..carry('centre_y', u.$2 - (lift - zero));
+              m..carry('centre_x', u.$1 - lx)..carry('centre_y', u.$2 - (lift - zero) - ly);
             }))
             ..add(handle('size', screen(cx + half, cy) + above, (u) => m.carry('gap', math.max(0, u.$1 - cx) * 2 / math.max(1, n - 1))));   // (its right end out: wider both ways)
         } else if (kind == 'push' && leader != null && on(leader) != null) {
@@ -674,6 +682,10 @@ class _RelationMarks extends StatelessWidget {
             if ((kind == 'follow' || kind == 'push') && id != leader) Positioned(left: p.dx - 24, top: p.dy - 24, child: _Badge('crown', () => wsLead(ws, id), faint: true, key: ValueKey('ws-lead-$id'))), // (another's crown: that one leads, nothing moving)
           ],
           if (on(leader ?? '') case final l? when leader != null) Positioned(left: l.dx - 24, top: l.dy - 24, child: _Badge('crown', () {}, key: const ValueKey('ws-leader'))), // (the leader)
+          if (isRelation && (kind == 'around' || kind == 'row')) // (a ring's or a row's middle may be a thing: a faint crown on each other one, a touch puts the middle there)
+            for (final l in ws.layers)
+              if (l.id != leader && l.id != '$rel' && !members.any((e) => e.$1 == l.id) && m.word(int.parse(l.id), 'kind') != 'behaviour' && on(l.id) != null)
+                Positioned(left: on(l.id)!.dx - 24, top: on(l.id)!.dy - 24, child: _Badge('crown', () => ws.after(m.later('set', thing: rel, name: 'leader', number: double.parse(l.id)), (_, _) => ws.reread()), faint: true, key: ValueKey('ws-lead-${l.id}'))),
           if (!isRelation && ws.manyByHand && ws.many.length > 1 && on(ws.many.first) != null) // (picked one by one: the first leads a Follow or a Push, shown before it is made)
             Positioned(left: on(ws.many.first)!.dx - 24, top: on(ws.many.first)!.dy - 24, child: _Badge('crown', () {}, faint: true, key: const ValueKey('ws-leader-to-be'))),
           if (sel != null && tags.isNotEmpty) // (the relations the picked thing is in, the one on top first: a touch picks it)
@@ -705,12 +717,13 @@ class _RelationMarks extends StatelessWidget {
 
 /// A relation's shape on the stage: a ring (its middle, how far) or a line.
 class _Shape {
-  _Shape.ring(this.a, this.r, {this.off = false}) : b = null;
-  _Shape.line(this.a, Offset this.b, {this.off = false}) : r = 0;
+  _Shape.ring(this.a, this.r, {this.off = false, this.squash = 1}) : b = null;
+  _Shape.line(this.a, Offset this.b, {this.off = false}) : r = 0, squash = 1;
   final Offset a;
   final Offset? b;
   final double r;
   final bool off;   // (its relation's eye shut: drawn faint)
+  final double squash;   // (a ring's height to its width)
 }
 
 /// Drawn round: the line the hand drew; a ring round each thing picked together or moved by the relation picked; the
@@ -736,7 +749,7 @@ class _MarksPainter extends CustomPainter {
       ..strokeWidth = 1;
     for (final sh in shape) {
       thin.color = WsT.accent.withValues(alpha: sh.off ? .25 : .8);
-      final path = sh.b == null ? (Path()..addOval(Rect.fromCircle(center: sh.a, radius: sh.r))) : (Path()..moveTo(sh.a.dx, sh.a.dy)..lineTo(sh.b!.dx, sh.b!.dy));
+      final path = sh.b == null ? (Path()..addOval(Rect.fromCenter(center: sh.a, width: 2 * sh.r, height: 2 * sh.r * sh.squash.abs()))) : (Path()..moveTo(sh.a.dx, sh.a.dy)..lineTo(sh.b!.dx, sh.b!.dy));
       for (final m in path.computeMetrics()) {
         for (var d = 0.0; d < m.length; d += 9) {
           c.drawPath(m.extractPath(d, math.min(d + 5, m.length)), thin);
