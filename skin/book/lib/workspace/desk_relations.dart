@@ -25,19 +25,11 @@ class _DeskRelationsState extends State<DeskRelations> {
     listenable: WsScope.read(context),
     builder: (context, _) {
       final ws = WsScope.read(context), world = _World.of(ws);
-      final front = _yaw == 0 && _pitch == 0, top = _yaw == 0 && _pitch == -math.pi / 2;
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           DeskStrip(
             left: [DeskLayerChip('Relations · ${world.relations.length}', WsT.toneGroup)],
-            right: [
-              DeskChip(label: 'Front', on: front, onTap: () => setState(() => _yaw = _pitch = 0)),
-              DeskChip(label: 'Top', on: top, onTap: () => setState(() {
-                _yaw = 0;
-                _pitch = -math.pi / 2;
-              })),
-            ],
           ),
           const SizedBox(height: WsT.gutter),
           Expanded(
@@ -53,6 +45,13 @@ class _DeskRelationsState extends State<DeskRelations> {
                     _pitch = (_pitch - d.delta.dy * .01).clamp(-math.pi / 2, math.pi / 2);
                   }),
                   onTapUp: (d) {
+                    if (view.axisAt(d.localPosition) case final a?) {   // (an axis of the gizmo: seen from that side, as Blender's)
+                      final (yaw, pitch) = switch (a) { 'x' => (-math.pi / 2, 0.0), 'y' => (0.0, -math.pi / 2), _ => (0.0, 0.0) };
+                      return setState(() {
+                        _yaw = yaw;
+                        _pitch = pitch;
+                      });
+                    }
                     if (view.hit(d.localPosition) case final id?) ws.select(id);
                   },
                   child: CustomPaint(size: box.biggest, painter: _Map(view, ws.selected)),
@@ -147,6 +146,18 @@ class _View {
 
   double get unit => _scale;
 
+  /// The axes gizmo in the corner, as Blender's: each axis's end, turned as the world is (x red, y green, z blue).
+  Offset get axisMiddle => Offset(size.width - 38, size.height - 38);
+  Map<String, Offset> get axisEnds => {
+    for (final (n, p) in const [('x', (x: 1.0, y: 0.0, z: 0.0)), ('y', (x: 0.0, y: 1.0, z: 0.0)), ('z', (x: 0.0, y: 0.0, z: 1.0))]) n: axisMiddle + Offset(_turn(p).dx, -_turn(p).dy) * 20,
+  };
+  String? axisAt(Offset at) {
+    for (final e in axisEnds.entries) {
+      if ((e.value - at).distance < 9) return e.key;
+    }
+    return null;
+  }
+
   /// The thing nearest the tap, else the relation whose shape passes nearest.
   String? hit(Offset at) {
     String? best;
@@ -228,6 +239,19 @@ class _Map extends CustomPainter {
       c.drawCircle(at, 4, Paint()..color = e.value.$2);
       c.drawCircle(at, 4, Paint()..color = Grey.g56..style = PaintingStyle.stroke..strokeWidth = .75);   // (a dark thing still seen on the dark map)
       if (e.key == selected) c.drawCircle(at, 8, Paint()..color = WsT.accent..style = PaintingStyle.stroke..strokeWidth = 1.5);
+    }
+    // (the axes gizmo: a line to each axis's end, a coloured ball with its letter; a touch looks from that side)
+    const hue = {'x': Color(0xFFFF3352), 'y': Color(0xFF8BDC00), 'z': Color(0xFF2890FF)};
+    final mid = v.axisMiddle;
+    for (final e in v.axisEnds.entries) {
+      c.drawLine(mid, e.value, Paint()..color = hue[e.key]!..strokeWidth = 1.5);
+      c.drawCircle(mid - (e.value - mid), 3, Paint()..color = hue[e.key]!.withValues(alpha: .4));   // (its other way, faint)
+    }
+    for (final e in v.axisEnds.entries) {
+      c.drawCircle(e.value, 7, Paint()..color = hue[e.key]!);
+      final t = TextPainter(text: TextSpan(text: e.key.toUpperCase(), style: T.micro(const Color(0xFF111111)).copyWith(fontWeight: FontWeight.w700)), textDirection: TextDirection.ltr)..layout();
+      t.paint(c, e.value - Offset(t.width / 2, t.height / 2));
+      t.dispose();
     }
   }
 
