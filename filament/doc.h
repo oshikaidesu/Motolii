@@ -132,12 +132,13 @@ struct Doc {
 // words), and whether it can move (take keys).
 static const char* const doc_kinds = "film picture text solid shape camera light";   // (the kinds of thing)
 static const char* const doc_drawn = "film picture text solid shape";          // (those that are seen)
+static const char* const doc_relations = "around row follow push group";   // (the kinds of relation: a group is the plainest, things in an order and nothing else)
 static const char* const doc_shapes = "ring gem cube ball";             // (the kit's own shapes a solid may be)
 // (whether a value is keyed, in SQLite's words: see doc_key)
 #define DOC_KEYED "(select count(*) > 1 or max(at) <> 0 or max(way) is not null from fact where thing = %d and name = %Q)"
 struct DocValue { const char* name; const char* kinds; double low, high; bool moves; const char* words; };
 static const DocValue doc_values[] = {
-    {"x", doc_kinds, -1e4, 1e4, true, nullptr}, {"y", doc_kinds, -1e4, 1e4, true, nullptr}, {"z", doc_kinds, -1e4, 1e4, true, nullptr},
+    {"x", "film picture text solid shape camera light behaviour", -1e4, 1e4, true, nullptr}, {"y", "film picture text solid shape camera light behaviour", -1e4, 1e4, true, nullptr}, {"z", doc_kinds, -1e4, 1e4, true, nullptr},   // (a group's own: how far its things are away when out)
     {"rotate", "film picture text solid shape camera light behaviour", -1e6, 1e6, true, nullptr}, {"rotate_x", "film picture text solid shape camera light behaviour", -1e6, 1e6, true, nullptr}, {"rotate_y", "film picture text solid shape camera light behaviour", -1e6, 1e6, true, nullptr},   // (a relation's own: added to each of its things in turn)
     {"orient", "film picture text solid shape", 0, 1, false, nullptr},   // (turned the way it is going along its path, its rotate added: After Effects' Auto-Orient)
     // (how many times as wide, as high and as deep as its size makes it, each on its own as After Effects' Scale: below 0
@@ -157,12 +158,12 @@ static const DocValue doc_values[] = {
     {"gravity", "stage", -100, 100, false, nullptr},
     {"follow", "stage", 0, 1e9, false, nullptr},
     // (the thing the stage's effects follow in place of a mouse: their pointer, center, mouse or point knobs are where it is on the picture; 0: none)
-    {"size", doc_drawn, 1e-3, 1e4, true, nullptr}, {"anchor_x", doc_drawn, -100, 100, true, nullptr}, {"anchor_y", doc_drawn, -100, 100, true, nullptr}, {"anchor_z", doc_drawn, -100, 100, true, nullptr},
+    {"size", "film picture text solid shape behaviour", 1e-3, 1e4, true, nullptr}, {"anchor_x", doc_drawn, -100, 100, true, nullptr}, {"anchor_y", doc_drawn, -100, 100, true, nullptr}, {"anchor_z", doc_drawn, -100, 100, true, nullptr},
     // (a camera, the past repository's: it looks at where it is, from round about it as it is turned, so far away, so near)
     {"distance", "camera", 0.01, 100, true, nullptr}, {"zoom", "camera", 0.01, 100, true, nullptr},
     // (and its lens: how far off from it things are sharp, 0 being where it looks; the f-number, 0: all sharp)
     {"focus", "camera", 0, 1e4, true, nullptr}, {"aperture", "camera", 0, 64, true, nullptr}, {"blur_level", "camera", 0, 100, true, nullptr},   // (After Effects' blur level: how many times the lens's own blur)
-    {"opacity", "film picture text shape", 0, 1, true, nullptr},
+    {"opacity", "film picture text shape behaviour", 0, 1, true, nullptr},
     {"clip", doc_drawn, 0, 1, false, nullptr},
     // (clipped by a flat thing before it, the kit's matte: by how clear that is or how light (After Effects' alpha and
     //  luma mattes), the other way about (inverted), its edge so soft, in points of the screen)
@@ -697,6 +698,7 @@ static const DocCard doc_cards[] = {
     {"Row", "strength gap centre_x centre_y rotate rotate_y lag", "file", "row"},
     {"Follow", "strength leader lag leader_b hand", "file", "follow"},
     {"Push", "strength leader radius", "file", "push"},
+    {"Group", "strength lag x y rotate rotate_y size opacity", "file", "group"},   // (things in an order and nothing else: away by its own move, turn, size and opacity, each in turn)
     {"Note", "note"},   // (what a maker wrote of it: After Effects' layer comment)
     {"Trim Paths", "trim trim_begin trim_offset", "trim", "+"},   // (After Effects' shape operator: added from the shelf)
     {"Gaussian Blur", "blur blur_direction", "blur", "+"},   // (the effects (doc_effects), each its card while it is on, as After Effects' Effect Controls)
@@ -1006,13 +1008,18 @@ static double doc_related(Doc& d, int by, int thing, const char* name, double t,
     const size_t i = (size_t)(found - rel.members.begin());
     const int many = std::max(1, (int)rel.members.size()), was = rel.under.empty() ? 0 : rel.under[i];
     const auto start = [&](const char* what, double mine) { return was ? doc_related(d, was, thing, what, t, mine) : mine; };
-    const double base = start(name, own), s = std::clamp(doc_number(d, by, "strength", t, 1), -1.0, 2.0);   // (past 1 and below 0 as an ease overshoots: a Back or an Elastic between two keys shows; held within twice)
+    const double ti = type == "follow" ? t : t - doc_number(d, by, "lag", t, 0) * (double)i;   // (in turn: each so much later than the one before, as Cavalry's stagger; a follow's lag is its own)
+    const double base = start(name, own), s = std::clamp(doc_number(d, by, "strength", ti, 1), -1.0, 2.0);   // (past 1 and below 0 as an ease overshoots: a Back or an Elastic between two keys shows; held within twice)
     if (doc_number(d, by, "visible", 0, 1) <= 0.5) return base;   // (switched off, its eye shut: what it is on top of shows, its strength kept)
     const double came = rel.from.empty() || (n != "x" && n != "y") ? std::nan("") : rel.from[2 * i + (n == "y" ? 1 : 0)];   // (where it showed when it came in: across and up only)
     const auto leader = [&](const char* which) { const int l = (int)doc_number(d, by, which, 0, 0); return l != thing ? l : 0; };
+    if ((type == "around" || type == "row" || type == "group") && (n == "rotate" || n == "rotate_x" || n == "rotate_y"))   // (its own turn added to each, in turn)
+        return base + doc_number(d, by, name, ti, 0) * s;
+    if ((type == "around" || type == "row" || type == "group") && (n == "size" || n == "opacity"))   // (its own size and opacity as a share of each one's, in turn: 0 opacity out is gone)
+        return base * (1.0 + (doc_number(d, by, name, ti, 1) - 1.0) * s);
+    if (type == "group")   // (where it was put, and away by its own move as much as its strength, in turn)
+        return n == "x" || n == "y" ? base + doc_number(d, by, name, ti, 0) * s : base;
     if (type == "around" || type == "row") {   // (around a middle, the first at the top, each as far round as its order; or in a row from the middle, gap apart)
-        if (n == "rotate" || n == "rotate_x" || n == "rotate_y")   // (its own turn added to each, each so much later than the one before: in turn, as Cavalry's stagger)
-            return base + doc_number(d, by, name, t - doc_number(d, by, "lag", t, 0) * (double)i, 0) * s;
         if (n != "x" && n != "y" && n != "z") return base;
         const int l = leader("leader");
         const double tilt = type == "around" ? doc_number(d, by, "tilt", t, 0) * TAU / 360.0 : 0.0;
@@ -1053,11 +1060,11 @@ static double doc_literal(Doc& d, int thing, const char* literal, double at, dou
     if (d.held.thing == thing) {   // (carried by a hand: what it carries; in a relation, still in it, the hand moving its own value)
         const double own = doc_number(d, thing, literal, at, otherwise);
         const int by = doc_driven_by(d, thing, literal);
-        return by && doc_among("around row follow push", doc_word(d, by, "file")) ? doc_related(d, by, thing, literal, at, own) : own;
+        return by && doc_among(doc_relations, doc_word(d, by, "file")) ? doc_related(d, by, thing, literal, at, own) : own;
     }
     if (const int by = doc_driven_by(d, thing, literal)) {   // (given by a behaviour: the copy being placed's own, where it lies weighed by its falloff)
         const double own = doc_keys_at(d, doc_keys_of(d, thing, literal), at, otherwise);
-        if (doc_among("around row follow push", doc_word(d, by, "file"))) return doc_related(d, by, thing, literal, at, own);   // (a relation: by the thing's place among its things, not a copy's)
+        if (doc_among(doc_relations, doc_word(d, by, "file"))) return doc_related(d, by, thing, literal, at, own);   // (a relation: by the thing's place among its things, not a copy's)
         return doc_given(d, by, d.ctxCopy, d.ctxN, at, own, d.ctxHasAt ? &d.ctxAt : nullptr);
     }
     const auto key = std::make_pair(thing, literal);
@@ -1949,7 +1956,10 @@ static void doc_moment(Doc& d, double now) {
                     if ((size_t)made.nth < letters.size()) own->setParameter("window", float4{letters[(size_t)made.nth].x, letters[(size_t)made.nth].y, 1.f, 0.f});   // (its own letter)
                     const double clear = scripted != d.scripted.end() && (size_t)made.nth < scripted->second.copies.size() ? scripted->second.copies[(size_t)made.nth].opacity : 1.0;
                     const math::double3 here{made.place[3].x, made.place[3].y, made.place[3].z};
-                    const double opacity = clearEach ? std::clamp(doc_given(d, doc_driven_by(d, thing, "opacity"), made.nth, n, now, doc_number(d, thing, "opacity", now, 1), &here), 0.0, 1.0) : doc_number(d, thing, "opacity", now, 1);
+                    const int clearBy = doc_driven_by(d, thing, "opacity");
+                    const double opacity = !clearEach ? doc_number(d, thing, "opacity", now, 1)
+                                         : doc_among(doc_relations, doc_word(d, clearBy, "file")) ? std::clamp(doc_literal(d, thing, "opacity", now, 1), 0.0, 1.0)   // (a relation's: by the thing's place among its things)
+                                         : std::clamp(doc_given(d, clearBy, made.nth, n, now, doc_number(d, thing, "opacity", now, 1), &here), 0.0, 1.0);
                     own->setParameter("opacity", (float)(opacity * std::clamp(clear, 0.0, 1.0)));
                     if (t.drawn && t.drawn->edgeLook && !made.many) {   // (its edge's own look: a frame alone (filled with nothing) coloured each as its fill would be; each as clear)
                         const auto one = faces.getInstance(made.thing);
@@ -2614,7 +2624,7 @@ static int doc_add(Doc& d, const char* kind, const char* file) {
     if (!*kind) kind = doc_kind_of(file);   // (not said: what the file makes)
     if (!*kind) return d.trouble = std::string("no kind of thing is made from ") + file, 0;
     if (!doc_among(doc_kinds, kind) && strcmp(kind, "behaviour")) return d.trouble = std::string("a thing is one of: ") + doc_kinds + " behaviour", 0;
-    if (!strcmp(kind, "behaviour") && !doc_among("stagger oscillator noise random around row follow push", file)) return d.trouble = "a behaviour is a stagger, an oscillator, a noise, a random, or a relation: around, row, follow, push", 0;
+    if (!strcmp(kind, "behaviour") && !doc_among("stagger oscillator noise random around row follow push group", file)) return d.trouble = "a behaviour is a stagger, an oscillator, a noise, a random, or a relation: around, row, follow, push", 0;
     if (!strcmp(kind, "light") && !doc_among("sun point spot", file)) return d.trouble = "a light is a sun, a point or a spot", 0;
     // (it comes on at the stage's present moment)
     if (!doc_change(d, sqlite3_mprintf("insert into thing default values; insert into fact(thing, name, at, value) values(last_insert_rowid(), 'kind', 0.0, %Q); insert into fact(thing, name, at, value) values(last_insert_rowid(), %Q, 0.0, %Q); insert into fact(thing, name, at, value) select id, 'start', 0.0, %!.17g from thing where %d order by id desc limit 1%s",
@@ -2633,7 +2643,7 @@ static bool doc_remove(Doc& d, int thing) {
     if (doc_knows(d, thing) && doc_word(d, thing, "kind") != "behaviour") {   // (a leader taken away: what it led lets its things go where they show, as After Effects keeps a child where it is when its parent goes)
         std::vector<int> led;
         for (const int r : doc_things(d))
-            if (doc_word(d, r, "kind") == "behaviour" && doc_among("around row follow push", doc_word(d, r, "file")) && ((int)doc_number(d, r, "leader", 0, 0) == thing || (int)doc_number(d, r, "leader_b", 0, 0) == thing)) led.push_back(r);
+            if (doc_word(d, r, "kind") == "behaviour" && doc_among(doc_relations, doc_word(d, r, "file")) && ((int)doc_number(d, r, "leader", 0, 0) == thing || (int)doc_number(d, r, "leader_b", 0, 0) == thing)) led.push_back(r);
         if (!led.empty()) {
             doc_act(d);
             bool ok = true;
@@ -2642,7 +2652,7 @@ static bool doc_remove(Doc& d, int thing) {
             return doc_acted(d) && ok;
         }
     }
-    if (doc_knows(d, thing) && doc_among("around row follow push", doc_word(d, thing, "file")) && doc_word(d, thing, "kind") == "behaviour") {   // (a relation taken away: its things back to what is under it, as a constraint deleted in Blender; release keeps them where they show)
+    if (doc_knows(d, thing) && doc_among(doc_relations, doc_word(d, thing, "file")) && doc_word(d, thing, "kind") == "behaviour") {   // (a relation taken away: its things back to what is under it, as a constraint deleted in Blender; release keeps them where they show)
         const std::vector<int> all = doc_members_of(d, thing);
         doc_act(d);
         bool ok = true;
@@ -2657,7 +2667,7 @@ static bool doc_lead(Doc& d, int by, int leader, double now);
 static bool doc_leading = false;   // (doc_lead itself writing the leader)
 static bool doc_set(Doc& d, int thing, const char* name, double is) {
     if (!strcmp(name, "parent")) return doc_parent(d, thing, is);
-    if (!strcmp(name, "leader") && !doc_leading && is >= 1 && doc_word(d, thing, "kind") == "behaviour" && doc_among("around row follow push", doc_word(d, thing, "file")) && !doc_word(d, thing, "members").empty())   // (a relation's leader changed by any hand: as its crown changes it, nothing jumps)
+    if (!strcmp(name, "leader") && !doc_leading && is >= 1 && doc_word(d, thing, "kind") == "behaviour" && doc_among(doc_relations, doc_word(d, thing, "file")) && !doc_word(d, thing, "members").empty())   // (a relation's leader changed by any hand: as its crown changes it, nothing jumps)
         return doc_lead(d, thing, (int)is, d.stage ? d.stage->now : 0.0);
     return doc_knows(d, thing, name, &is) && doc_change(d, sqlite3_mprintf("delete from fact where thing = %d and name = %Q and at <> 0; insert into fact(thing, name, at, value) values(%d, %Q, 0.0, %!.17g) on conflict do update set value = excluded.value, way = null", thing, name, thing, name, is));
 }
@@ -2720,7 +2730,7 @@ static bool doc_free(Doc& d, int thing, int by, double now, bool stay) {
 // follow's or a push's leader (the leftmost, the largest) if none is said. Then connected. One step.
 static bool doc_relate(Doc& d, int by, const char* ids, double now) {
     const std::string type = doc_word(d, by, "file");
-    if (doc_word(d, by, "kind") != "behaviour" || !doc_among("around row follow push", type)) return d.trouble = "that is no relation", false;
+    if (doc_word(d, by, "kind") != "behaviour" || !doc_among(doc_relations, type)) return d.trouble = "that is no relation", false;
     std::vector<int> things;
     std::istringstream said(ids);
     for (std::string one; said >> one;) if (const int t = std::atoi(one.c_str()); t && t != by && doc_knows(d, t) && std::find(things.begin(), things.end(), t) == things.end()) things.push_back(t);
@@ -2745,6 +2755,8 @@ static bool doc_relate(Doc& d, int by, const char* ids, double now) {
     for (const int t : things) if (t != leader) members.push_back(t);
     double cx = 0, cy = 0;
     for (const int t : members) cx += at[t].first / members.size(), cy += at[t].second / members.size();
+    if (type == "group")   // (in reading order: the top line first, each line from the left)
+        std::sort(members.begin(), members.end(), [&](int a, int b) { return std::round(at[a].second * 10) != std::round(at[b].second * 10) ? at[a].second > at[b].second : at[a].first < at[b].first; });
     if (type == "around" || type == "row") {
         if (has("centre_x")) cx = doc_number(d, by, "centre_x", now, 0), cy = doc_number(d, by, "centre_y", now, 0);
         else ok = ok && doc_set(d, by, "centre_x", cx) && doc_set(d, by, "centre_y", cy);   // (its middle where they stand)
@@ -2763,7 +2775,7 @@ static bool doc_relate(Doc& d, int by, const char* ids, double now) {
     std::string order, under, from;
     for (const int t : members) {
         const int before = doc_driven_by(d, t, "x");
-        const bool related = before && doc_among("around row follow push", doc_word(d, before, "file"));
+        const bool related = before && doc_among(doc_relations, doc_word(d, before, "file"));
         order += (order.empty() ? "" : " ") + std::to_string(t);
         under += (under.empty() ? "" : " ") + std::to_string(related ? before : 0);
         const std::pair<double, double> came = type == "follow" ? std::make_pair(doc_literal(d, leader, "x", now, 0.0), doc_literal(d, leader, "y", now, 0.0)) : at[t];
@@ -2774,8 +2786,8 @@ static bool doc_relate(Doc& d, int by, const char* ids, double now) {
     ok = ok && doc_say(d, by, "members", order.c_str()) && doc_say(d, by, "under", under.c_str()) && doc_say(d, by, "from", from.c_str());
     for (const int t : members) {
         ok = ok && doc_set(d, t, "x_by", by) && doc_set(d, t, "y_by", by) && (!doc_knows(d, t, "z") || doc_set(d, t, "z_by", by));   // (its depth too, where it has one: a ring tipped back, a leader in depth)
-        if (type == "around" || type == "row")   // (its turns too: the relation's own, given in turn)
-            for (const char* n : {"rotate", "rotate_x", "rotate_y"}) ok = ok && (!doc_knows(d, t, n) || doc_set(d, t, (std::string(n) + "_by").c_str(), by));
+        if (type == "around" || type == "row" || type == "group")   // (its turns, size and opacity too: the relation's own, given in turn)
+            for (const char* n : {"rotate", "rotate_x", "rotate_y", "size", "opacity"}) ok = ok && (!doc_knows(d, t, n) || doc_set(d, t, (std::string(n) + "_by").c_str(), by));
     }
     return doc_acted(d) && ok;
 }
@@ -2785,7 +2797,7 @@ static bool doc_relate(Doc& d, int by, const char* ids, double now) {
 static bool doc_lead(Doc& d, int by, int leader, double now) {
     struct Leading { Leading() { doc_leading = true; } ~Leading() { doc_leading = false; } } leading;
     const std::string type = doc_word(d, by, "file");
-    if (doc_word(d, by, "kind") != "behaviour" || !doc_among("around row follow push", type)) return d.trouble = "that is no relation", false;
+    if (doc_word(d, by, "kind") != "behaviour" || !doc_among(doc_relations, type)) return d.trouble = "that is no relation", false;
     if (!doc_knows(d, leader) || leader == by) return d.trouble = "a leader is a thing that is there", false;
     const int was = (int)doc_number(d, by, "leader", 0, 0);
     if (was == leader) return true;
@@ -2811,7 +2823,7 @@ static bool doc_lead(Doc& d, int by, int leader, double now) {
         char add[96];
         std::snprintf(add, sizeof add, " %.17g %.17g", type == "follow" ? settles.first : wasAt.first, type == "follow" ? settles.second : wasAt.second);
         ok = doc_say(d, by, "members", (doc_word(d, by, "members") + " " + std::to_string(was)).c_str())
-             && doc_say(d, by, "under", (doc_word(d, by, "under") + " " + std::to_string(under && doc_among("around row follow push", doc_word(d, under, "file")) ? under : 0)).c_str())
+             && doc_say(d, by, "under", (doc_word(d, by, "under") + " " + std::to_string(under && doc_among(doc_relations, doc_word(d, under, "file")) ? under : 0)).c_str())
              && doc_say(d, by, "from", (doc_word(d, by, "from") + add).c_str()) && doc_set(d, was, "x_by", by) && doc_set(d, was, "y_by", by) && (!doc_knows(d, was, "z") || doc_set(d, was, "z_by", by));
     }
     if (ok && type == "follow") {   // (each starts from where the new leader settles)

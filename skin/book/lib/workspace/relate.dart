@@ -3,7 +3,7 @@
 // a leader, what each was in before), one step, picked once made.
 import 'ws.dart';
 
-const wsRelations = ['around', 'row', 'follow', 'push'];
+const wsRelations = ['around', 'row', 'follow', 'push', 'group'];
 
 void wsRelate(Ws ws, String kind) {
   final m = ws.inside;
