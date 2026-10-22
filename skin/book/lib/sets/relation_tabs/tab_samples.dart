@@ -118,9 +118,9 @@ class _TabSamplesState extends State<TabSamples> with SingleTickerProviderStateM
         if (!r.contains(at)) continue;
         if (i < whip) return _take(ws, samples[i], coming);
         if (_whip?.coming == coming) return setState(() => _whip = null);   // (put away)
-        final mv = _picked(ws);
-        if (_who(ws).isNotEmpty) _take(ws, samples[0], coming);   // (things picked: their move first, then the thing)
-        return setState(() => _whip = (coming: coming, move: mv?.by.toString()));
+        final mv = _picked(ws), fresh = _who(ws).isNotEmpty || (mv != null && mv.coming != coming);
+        if (fresh) _take(ws, samples[0], coming);   // (things picked, or the other way round: their move first, then the thing)
+        return setState(() => _whip = (coming: coming, move: fresh ? null : mv?.by.toString()));   // (null: the move made last)
       }
     }
   }
@@ -146,16 +146,19 @@ class _TabSamplesState extends State<TabSamples> with SingleTickerProviderStateM
     ws.select('${mv.by}');
   }
 
-  /// A sample told: a new move of the things picked (they first), else the picked move made so; one step.
+  /// A sample told: a new move of the things picked (they first), else the picked move made so; one step. The other
+  /// way round from the picked move (going out of things that come in) is a move of its own from the playhead: what
+  /// came in stays.
   void _take(Ws ws, Sample s, bool coming) {
-    final who = _who(ws), mv = _picked(ws);
+    final mv = _picked(ws), who = _who(ws).isNotEmpty ? _who(ws) : (mv != null && mv.coming != coming ? [for (final t in mv.who) '$t'] : const <String>[]);
     if (who.isEmpty && mv == null) return;
     wsMoveHold(ws, true);
     final WsMove at;
     if (who.isNotEmpty) {
       final start = (ws.frame / Ws.fps * 10).round() / 10;
+      final first = !wsMoves(ws).any((o) => o.who.any((t) => who.contains('$t')));   // (as wsMakeMove: things that came in already go out)
       wsMakeMove(ws, who, start);
-      at = WsMove(-1, const [], start, .6, true, .08, wsMoveEnd, .8, 0);   // (-1: the group the last add made, as the inside reads it)
+      at = WsMove(-1, const [], start, .6, first, .08, wsMoveEnd, .8, 0);   // (-1: the group the last add made, as the inside reads it)
     } else {
       at = mv!;
     }
@@ -255,6 +258,8 @@ class _Paint extends CustomPainter {
       c.drawLine(Offset(x, y), Offset(x + 10, y), Paint()..color = ink..strokeWidth = 3);
     }
     c.drawPath(stair, Paint()..color = faint..style = PaintingStyle.stroke);
+    final tp = TextPainter(text: TextSpan(text: '${pLag.toStringAsFixed(2)} s', style: T.value(ink)), textDirection: TextDirection.ltr)..layout();
+    tp.paint(c, Offset(st.right - tp.width, st.top));
   }
 
   /// The pick whip: a curl from the dots to a small frame (the thing): coming, the dots leave the frame; going, they go
@@ -280,6 +285,18 @@ class _Paint extends CustomPainter {
   void _loop(Canvas c, Rect r, Sample s, bool coming, double now, double lag, double length, Color ink) {
     final d = r.width / 7, k = r.width * 1.1, e = s.end, way = _way(s.out, s.over);
     final period = .35 + length + 4 * lag + .7, t = now % period - .35;
+    Offset at(int i, double f) {
+      final ang = i * 2.399 + .7, amt = e['scatter']! * (.6 + .4 * ((i * .618) % 1));
+      return r.center + Offset((i - 2) * d * (1 + (e['spread']! - 1) * f) + (e['x']! + math.cos(ang) * amt) * k * f, -(e['y']! + math.sin(ang) * amt) * k * f);
+    }
+
+    for (var i = 0; i < 5; i++) {   // (each dot's way, faint: a still tile reads too)
+      final trail = Path()..moveTo(at(i, 1).dx, at(i, 1).dy);
+      for (var q = 1; q <= 8; q++) {
+        trail.lineTo(at(i, 1 - q / 8).dx, at(i, 1 - q / 8).dy);
+      }
+      c.drawPath(trail, Paint()..color = ink.withValues(alpha: .18)..style = PaintingStyle.stroke);
+    }
     for (var i = 0; i < 5; i++) {
       final u = ((t - i * lag) / length).clamp(0.0, 1.0), p = _bezier(way, u), f = coming ? 1 - p : p;   // (f: how far toward the other end)
       final ang = i * 2.399 + .7, amt = e['scatter']! * (.6 + .4 * ((i * .618) % 1));

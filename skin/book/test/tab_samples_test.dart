@@ -46,11 +46,11 @@ void main() {
     expect([mv.out, mv.over], [closeTo(samples[pop].out, 1e-3), closeTo(samples[pop].over, 1e-3)]);
     expect(ws.selected, '${mv.by}', reason: 'the new move picked');
 
-    const left = 1;   // (the picked move told going out to the left)
-    await t.tapAt(box.topLeft + lay.go[left].center);
+    const left = 1;   // (the picked move told coming from the left)
+    await t.tapAt(box.topLeft + lay.come[left].center);
     await rest();
     mv = wsMoves(ws).single;
-    expect(mv.coming, false);
+    expect(mv.coming, true);
     expect([mv.end['x'], mv.end['size'], mv.over], [closeTo(-.35, 1e-6), closeTo(1, 1e-6), closeTo(samples[pop].over, 1e-3)]);   // (its ease kept: the Ease desk's)
 
     final lag = mv.lag;
@@ -71,6 +71,15 @@ void main() {
     expect(mv.coming, true);
     expect([mv.end['spread'], mv.end['x']! + mid('x'), mv.end['y']! + mid('y')], [closeTo(0, 1e-6), closeTo(m.value(c, 'x', at)!, 1e-6), closeTo(m.value(c, 'y', at)!, 1e-6)]);
     expect(ws.selected, '${mv.by}', reason: 'the move picked again');
+
+    ws.frame = 5 * Ws.fps;   // (going out of the things that come in: a move of its own from the playhead, what came in stays)
+    await rest();
+    await t.tapAt(box.topLeft + lay.go[0].center);
+    await rest();
+    final both = wsMoves(ws)..sort((a, b) => a.by.compareTo(b.by));
+    expect(both.map((o) => o.coming), [true, false]);
+    expect(both.last.start, closeTo(5, 1e-6));
+    expect(wsShows(m, both.first.who.first, 3).opacity, closeTo(1, 1e-6), reason: 'what came in still shows before');
     expect(t.takeException(), isNull);
     await closeWorkspace(t);
   }, skip: !insideBuilt);
