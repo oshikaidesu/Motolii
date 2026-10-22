@@ -20,6 +20,9 @@ class Sample {
   final Map<String, double> own;
   final double out, over;
   Map<String, double> get end => {...wsMoveEnd, ...own};
+
+  /// The same, [f] times as far from as it comes (a tile pulled sideways: further, nearer).
+  Sample scaled(double f) => Sample({for (final e in own.entries) e.key: e.key == 'opacity' ? e.value : wsMoveEnd[e.key]! + (e.value - wsMoveEnd[e.key]!) * f}, out: out, over: over);
 }
 
 /// The samples, the same for coming in and going out: from below, left, right, above, a point, far out, scattered,
@@ -69,6 +72,8 @@ class _TabSamplesState extends State<TabSamples> with SingleTickerProviderStateM
   bool _seen = false;   // (painted since the last tick: a tab behind another is kept but not painted, and its loops rest)
   double _base = 0;
   bool _pulling = false;   // (the stairs in a hand)
+  ({bool coming, int tile})? _tile;   // (a tile pulled sideways: how far its things come from, told when let go)
+  double _far = 1;
   double _from = 0, _moved = 0;
   late Size _size;
   ({bool coming, String? move})? _whip;   // (the pick whip out: the next thing tapped is where they come from, or go into)
@@ -171,8 +176,18 @@ class _TabSamplesState extends State<TabSamples> with SingleTickerProviderStateM
   }
 
   void _down(Ws ws, Offset at) {
-    final mv = _picked(ws);
-    if (mv == null || !samplesLayout(_size).pulls.first.contains(at)) return;
+    final mv = _picked(ws), lay = samplesLayout(_size);
+    for (final (coming, tiles) in [(true, lay.come), (false, lay.go)]) {
+      for (final (i, r) in tiles.indexed) {
+        if (i < whip && r.contains(at)) {
+          return setState(() {
+            _tile = (coming: coming, tile: i);
+            _far = 1;
+          });
+        }
+      }
+    }
+    if (mv == null || !lay.pulls.first.contains(at)) return;
     _pulling = true;
     _moved = 0;
     _from = mv.lag;
@@ -180,6 +195,7 @@ class _TabSamplesState extends State<TabSamples> with SingleTickerProviderStateM
   }
 
   void _drag(Ws ws, Offset d) {
+    if (_tile != null) return setState(() => _far = (_far + d.dx / 80).clamp(.2, 4.0));
     final mv = _picked(ws);
     if (mv == null || !_pulling) return;
     _moved += d.dx;
@@ -187,6 +203,10 @@ class _TabSamplesState extends State<TabSamples> with SingleTickerProviderStateM
   }
 
   void _up(Ws ws) {
+    if (_tile case final t?) {
+      _take(ws, samples[t.tile].scaled(_far), t.coming);
+      return setState(() => _tile = null);
+    }
     if (_pulling) wsMoveHold(ws, false);
     setState(() => _pulling = false);
   }
@@ -240,7 +260,8 @@ class _Paint extends CustomPainter {
         if (on) c.drawRRect(RRect.fromRectAndRadius(r.deflate(.5), const Radius.circular(4)), Paint()..color = WsT.accent..style = PaintingStyle.stroke);
         c.save();
         c.clipRRect(RRect.fromRectAndRadius(r, const Radius.circular(4)));
-        _loop(c, r, s, coming, now + i * .23, lag, length, on ? WsT.accent : (live ? Grey.g76 : Grey.g44));   // (each its own phase: seen at once, never all the same picture)
+        final pulled = h._tile?.coming == coming && h._tile?.tile == i;
+        _loop(c, r, pulled ? s.scaled(h._far) : s, coming, now + i * .23, lag, length, on || pulled ? WsT.accent : (live ? Grey.g76 : Grey.g44));   // (each its own phase: seen at once, never all the same picture)
         c.restore();
       }
     }

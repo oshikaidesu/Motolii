@@ -39,6 +39,14 @@ void wsPickAlso(Ws ws, String id) {
   ws.pickMany({...ws.many, if (ws.selected case final s? when !wsMembersOf(ws).contains(s) && ws.many.isEmpty && int.tryParse(s) != null) s, id}, byHand: true);
 }
 
+/// Things picked from the one picked last to [id], as their rows lie (Shift on a row, After Effects' manner).
+void wsPickRange(Ws ws, String id) {
+  final ids = [for (final l in ws.layers) l.id], from = ws.many.isNotEmpty ? ws.many.last : ws.selected;
+  final a = from == null ? -1 : ids.indexOf(from), b = ids.indexOf(id);
+  if (a < 0 || b < 0) return wsPickAlso(ws, id);
+  ws.pickMany(a <= b ? ids.sublist(a, b + 1) : ids.sublist(b, a + 1).reversed, byHand: true);
+}
+
 /// One thing out of the picked relation, where it shows now (the others stay where they are).
 void wsFree(Ws ws, String id) {
   final m = ws.inside, by = int.tryParse(ws.selected ?? ''), t = int.tryParse(id);

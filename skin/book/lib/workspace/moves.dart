@@ -45,6 +45,13 @@ WsMove? wsMoveOf(Motolii m, int by) {
       bez == null ? .5 : ((.6 - bez[0]) / .5).clamp(0.0, 1.0), bez == null ? 0 : (bez[3] - 1).clamp(0.0, .6));
 }
 
+/// What a move is called on its row: which way and its things ('in · TURN IN TIME').
+String wsMoveName(Ws ws, Iterable<String> who, bool coming) {
+  final names = [for (final id in who) ws.layers.where((l) => l.id == id).firstOrNull?.name ?? id];
+  final all = names.length > 4 ? '${names.take(3).join(' ')} +${names.length - 3}' : names.join(' ');
+  return '${coming ? 'in' : 'out'} · $all';
+}
+
 /// The way a move eases, said as the inside says a stretch: a Bezier slowing as much as [out], past the seat by [over].
 String wsMoveWay(double out, double over) => 'Bezier ${(.6 - .5 * out).toStringAsFixed(3)} 0 0.2 ${(1 + over).toStringAsFixed(3)}';
 
@@ -57,6 +64,7 @@ void wsMakeMove(Ws ws, List<String> who, double start) {
   m.later('together', number: 1);
   ws.after(m.later('add', name: 'behaviour', word: 'group'), null, (b) => ws.select('$b'));
   m.later('set', thing: -1, name: 'strength', number: 1);
+  m.later('say', thing: -1, name: 'name', word: wsMoveName(ws, who, coming));
   m.later('relate', thing: -1, word: who.join(' '));
   m.later('set', thing: -1, name: 'lag', number: .08);
   m.later('set', thing: -1, name: 'y', number: -.15);
@@ -98,6 +106,7 @@ void wsMoveTurn(Ws ws, WsMove mv) {
   m.later('together', number: 1);
   m.later('key', thing: mv.by, name: 'strength', word: '${mv.start}', number: mv.coming ? 0 : 1);
   m.later('key', thing: mv.by, name: 'strength', word: '${mv.start + mv.length}', number: mv.coming ? 1 : 0);
+  if (mv.by > 0) m.later('say', thing: mv.by, name: 'name', word: wsMoveName(ws, [for (final t in mv.who) '$t'], !mv.coming));
   ws.after(m.later('together'), (_, _) => ws.reread());
 }
 

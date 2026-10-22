@@ -177,7 +177,7 @@ static const DocValue doc_values[] = {
     {"blend", "film picture text shape", 0, 0, false, "normal add multiply screen darken lighten overlay soft_light hard_light color_dodge color_burn difference exclusion hue saturation color luminosity linear_burn linear_light vivid_light pin_light darker_color lighter_color subtract divide"}, {"file", "film picture solid text", 0, 0, false, ""}, {"shape", "solid", 0, 0, false, doc_shapes},
     {"text", "text", 0, 0, false, ""}, {"fill", "text solid shape light", 0, 0, false, ""},
     {"marker", "picture", 0, 0, false, ""},   // (an After Effects file: which of its named stretches it plays, over and over; all: the whole of it)
-    {"name", doc_kinds, 0, 0, false, ""},   // (what it is called where things are listed; not said: by what it is)
+    {"name", "film picture text solid shape camera light behaviour", 0, 0, false, ""},   // (what it is called where things are listed, a behaviour too; not said: by what it is)
     {"note", doc_kinds, 0, 0, false, ""},   // (what a maker wrote of it for whoever opens the document next: After Effects' layer comment)
     {"animation", "solid", 0, 0, false, ""},   // (a 3D file: which of its own movements it plays, round and round, at its speed, from when it comes on)
     // (a light, Filament's own: made a sun, a point or a spot (its file); how strong, 1 as bright as the stage's own

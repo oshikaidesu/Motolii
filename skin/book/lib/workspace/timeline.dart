@@ -492,7 +492,9 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
                             row: rows[i],
                             hidden: _isHidden(ws, ws.layers[i].id),
                             solo: _isSolo(ws, ws.layers[i].id),
-                            onSelect: () => HardwareKeyboard.instance.isShiftPressed || HardwareKeyboard.instance.isMetaPressed ? wsPickAlso(ws, ws.layers[i].id) : ws.select(ws.layers[i].id),   // (Shift or Cmd: one more picked together)
+                            onSelect: () => HardwareKeyboard.instance.isShiftPressed
+                                ? wsPickRange(ws, ws.layers[i].id)   // (Shift: every row from the last picked to this, After Effects' manner)
+                                : HardwareKeyboard.instance.isMetaPressed ? wsPickAlso(ws, ws.layers[i].id) : ws.select(ws.layers[i].id),   // (Cmd: one more, or one less)
                             onEye: () => _eye(ws, ws.layers[i].id),
                             onSolo: () => _flag(ws, 'solo', ws.layers[i].id),
                             onLock: () => _flag(ws, 'lock', ws.layers[i].id),
