@@ -636,18 +636,18 @@ class _RelationMarks extends StatelessWidget {
             }
           }
           handles
-            ..add(handle('centre', mid, (u) => m..carry('centre_x', u.$1 - lx)..carry('centre_y', u.$2 - ly)))
+            ..addAll([if (lead == null) handle('centre', mid, (u) => m..carry('centre_x', u.$1 - lx)..carry('centre_y', u.$2 - ly))])   // (a leader is its middle: no handle over it, the leader itself is held)
             ..add(handle('size', screen(cx + r * math.sin(turn * 2 * math.pi), cy + r * math.cos(turn * 2 * math.pi) * math.cos(tilt)), (u) => m.carry('radius', math.sqrt(math.pow(u.$1 - cx, 2) + math.pow((u.$2 - cy) / math.max(.2, math.cos(tilt).abs()), 2)))));
         } else if (kind == 'row') {
           final gap = val('gap', .2), n = math.max(1, m.word(rel, 'members').split(' ').length), half = gap * (n - 1) / 2;
           shape.add(_Shape.line(screen(cx - half, cy), screen(cx + half, cy), off: off));   // (a row about its middle)
           const above = Offset(0, -30);   // (its handles over the line, not on the things in it)
           handles
-            ..add(handle('centre', mid + above, (u) {
+            ..addAll([if (lead == null) handle('centre', mid + above, (u) {
               final (_, lift) = units(above);
               final (_, zero) = units(Offset.zero);
               m..carry('centre_x', u.$1 - lx)..carry('centre_y', u.$2 - (lift - zero) - ly);
-            }))
+            })])
             ..add(handle('size', screen(cx + half, cy) + above, (u) => m.carry('gap', math.max(0, u.$1 - cx) * 2 / math.max(1, n - 1))));   // (its right end out: wider both ways)
         } else if (kind == 'push' && leader != null && on(leader) != null) {
           final l = on(leader)!, r = val('radius', .5);
@@ -664,8 +664,16 @@ class _RelationMarks extends StatelessWidget {
           double val(String n, [double or = 0]) => m.value(r, n, now) ?? or;
           final px = m.point * v.s, l = val('leader') > 0 ? on('${val('leader').round()}') : null, off = val('visible', 1) <= .5;
           switch (m.word(r, 'file')) {
-            case 'around':
-              shape.add(_Shape.ring(screen(val('centre_x'), val('centre_y')), val('radius', .5) * px, off: off));
+            case 'around':   // (round its leader, if it has one; tipped back, through where its things show)
+              final lid = val('leader') > 0 ? val('leader').round() : null, lx = lid == null ? 0.0 : m.shows(lid, 'x', now)?.$1 ?? 0, ly = lid == null ? 0.0 : m.shows(lid, 'y', now)?.$1 ?? 0;
+              final pts = [for (final s in m.word(r, 'members').split(' ')) if (on(s) case final p?) p];
+              if (val('tilt').abs() > 1e-6 && pts.length > 2) {
+                for (var k = 0; k < pts.length; k++) {
+                  shape.add(_Shape.line(pts[k], pts[(k + 1) % pts.length], off: off));
+                }
+              } else {
+                shape.add(_Shape.ring(screen(val('centre_x') + lx, val('centre_y') + ly), val('radius', .5) * px, off: off));
+              }
             case 'row':
               final half = val('gap', .2) * (m.word(r, 'members').split(' ').length - 1) / 2;
               shape.add(_Shape.line(screen(val('centre_x') - half, val('centre_y')), screen(val('centre_x') + half, val('centre_y')), off: off));
