@@ -193,13 +193,6 @@ const char* motolii_list(Motolii* m);                              /* every fact
    pictures have been finished) may be called from any thread. */
 int motolii_live(Motolii* m);
 void* motolii_front(Motolii* m);
-/* One thing alone, for a card's small picture of it (After Effects' solo, in a picture of its own: the stage is not
-   changed): drawn with the stage's own pictures, side by side points, square, the eye on the thing's frame. thing 0:
-   none. 1 if it can be shown (the stage is live). Its picture and count as motolii_front and motolii_frames give the
-   stage's. */
-int motolii_solo(Motolii* m, int thing, int side);
-void* motolii_solo_front(Motolii* m);
-unsigned long long motolii_solo_frames(Motolii* m);
 /* The desk: the editing window's whole stage pane, w x h pixels, the picture drawn there instead of on the stage's own
    buffer (motolii_front keeps its last), the stage lying with its top left at x, y, `scale` pixels a point of it, and
    what lies off the stage seen round it, the picked thing marked over it (`point`: pixels a point of the screen the

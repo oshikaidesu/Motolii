@@ -68,7 +68,6 @@ class Motolii {
   }
 
   late final _live = _lib.lookupFunction<Int32 Function(_P), int Function(_P)>('motolii_live');
-  late final _solo = _lib.lookupFunction<Int32 Function(_P, Int32, Int32), int Function(_P, int, int)>('motolii_solo');
   late final _desk = _lib.lookupFunction<Int32 Function(_P, Int32, Int32, Double, Double, Double, Double), int Function(_P, int, int, double, double, double, double)>('motolii_desk');
   late final _pick = _lib.lookupFunction<Int32 Function(_P, Int32, Int32), int Function(_P, int, int)>('motolii_pick');
   late final _play = _lib.lookupFunction<Int32 Function(_P, Int32), int Function(_P, int)>('motolii_play');
@@ -154,16 +153,6 @@ class Motolii {
     return await _channel.invokeMethod<int>('start', {'lib': libPath, 'handle': _m.address}) ?? -1;
   }
 
-  /// A card's small picture of one thing alone ([side] points square, the eye on its frame), as a Flutter texture drawn
-  /// with the stage's own pictures (motolii_solo). Shown while some card asks for it ([soloShow]); none drawn otherwise.
-  /// -1: none.
-  Future<int> soloTexture(int thing, int side) async {
-    if (_live(_m) == 0 || _solo(_m, thing, side) == 0) return -1;
-    return _soloId ??= await _channel.invokeMethod<int>('start', {'lib': libPath, 'handle': _m.address, 'front': 'motolii_solo_front', 'frames': 'motolii_solo_frames'}) ?? -1;
-  }
-
-  int? _soloId;
-
   /// The desk: the stage pane's whole picture, [w] x [h] pixels, the stage lying at [x], [y] (its top left) [scale]
   /// pixels a point, what lies off it seen round it, the picked thing marked over it ([point]: pixels a point of the
   /// screen) (motolii_desk). [w] 0: off, the stage's own picture again.
@@ -175,20 +164,6 @@ class Motolii {
   /// The desk's picture as a Flutter texture (-1: none).
   Future<int> deskTexture() async => _deskId ??= await _channel.invokeMethod<int>('start', {'lib': libPath, 'handle': _m.address, 'front': 'motolii_desk_front', 'frames': 'motolii_desk_frames'}) ?? -1;
   int? _deskId;
-  int _soloAsked = 0;
-
-  /// One card more (or, [on] false, fewer) shows [thing] alone: drawn while any does.
-  void soloShow(int thing, int side, {bool on = true}) {
-    _soloAsked = math.max(0, _soloAsked + (on ? 1 : -1));
-    _solo(_m, _soloOf = _soloAsked > 0 ? thing : 0, side);
-  }
-
-  /// The thing picked now: the one shown alone, while a card shows one.
-  void soloFollow(int thing) {
-    if (_soloAsked > 0 && thing != _soloOf) _solo(_m, _soloOf = thing, 0);
-  }
-
-  int _soloOf = 0;
 
   String get trouble => _trouble(_m).toDartString();
   String get list => _list(_m).toDartString();
@@ -236,6 +211,9 @@ class Motolii {
   int get rate => _rate(_m);
   bool play(bool on) => _play(_m, on ? 1 : 0) != 0;
   int get frames => _frames(_m); // (how many pictures the live stage has drawn: motolii_frames)
+  /// The three counters a window peeks at once a picture (Chromium's BeginFrame): the document's revision, how often what
+  /// a hand carries has changed, how many pictures the stage drew. None waits for the inside.
+  (int, int, int) get counters => (_revision(_m), _carried(_m), _frames(_m));
   bool at(double seconds) => _at(_m, seconds) != 0;
 
   /// A new thing (film, picture, text, solid) from a file (a solid: a file, or ring, gem or cube): its number, 0 if it was not made.

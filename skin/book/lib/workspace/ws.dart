@@ -119,6 +119,8 @@ class Ws extends ChangeNotifier {
   Motolii? get inside => _inside;
   void join(Motolii inside) {
     _inside = inside;
+    if (!_peeking) SchedulerBinding.instance.addPersistentFrameCallback(_peek);
+    _peeking = true;
     inside.shaping;   // (read once, at the opening: what a card is made by)
     var asking = false;
     inside.again = () {   // (a read put off while the hand was busy: the seats look again a picture later, once)
@@ -159,10 +161,6 @@ class Ws extends ChangeNotifier {
   /// How many times the document has been read again.
   int rev = 0;
 
-  /// A value carried by a hand (the inspector's): only what shows the picked thing's numbers looks again, not the
-  /// window (a step of a drag tells no other listener: [shown] at every step was 27 ms of the window's time).
-  final carried = ValueNotifier<int>(0);
-
   /// How many times the document has been read again (not counting what a hand only carries): what is made from its
   /// shape (the cards) is made again when this moves.
   int reads = 0;
@@ -191,6 +189,34 @@ class Ws extends ChangeNotifier {
     shown();
   }
 
+  /// The window peeks at the inside as Chromium's compositor does: at each picture the window draws anyway (the stage's
+  /// texture brings one whenever the inside draws), three counters are looked at; nothing is read unless one moved. A
+  /// document changed by no one the window waits for is read again; anything else the inside shows anew (a hand carrying,
+  /// a moment, a relation) is [seen]: what shows numbers reads its own again, nothing is built again.
+  bool _peeking = false, _gone = false;
+  (int, int, int)? _counted;
+  int _readRevision = -1;
+  final seen = ValueNotifier<int>(0);
+  void _peek(Duration _) {
+    final m = _inside;
+    if (m == null || _gone) return;
+    final c = m.counters, was = _counted;
+    if (c == was) return;
+    _counted = c;
+    SchedulerBinding.instance.addPostFrameCallback((_) {   // (told once the picture is out: what it marks is drawn at the next)
+      if (_gone) return;
+      if (c.$1 != _readRevision && _afters == 0) return reread();   // (not waited for by any after: read here)
+      seen.value++;
+    });
+  }
+
+  @override
+  void dispose() {
+    _gone = true;
+    seen.dispose();
+    super.dispose();
+  }
+
   /// What the inside shows changed without the document changing (a thing held and carried): the seats look again.
   void shown() {
     lastChange = null; // (not a step of the document: what it changed is not known)
@@ -205,6 +231,7 @@ class Ws extends ChangeNotifier {
     if (m == null) return;
     if (!m.fits && refit != null) return refit!(); // (the document says another size, by a hand or by undo: the host opens it again, and that reads it)
     m.forget();
+    _readRevision = m.counters.$1;
     lastChange = m.changes();
     rev++;
     reads++;

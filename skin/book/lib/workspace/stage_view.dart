@@ -445,14 +445,12 @@ class _StageViewState extends State<StageView> implements StageHandles {
       m.carry(way, gone.dx, gone.dy);
       _held = (from: h.from, moved: true, by: way);
       setState(() {});
-      ws.shown();
       return;
     }
     final by = _snapped(switch (widget.axis) { 1 => Offset(all.dx, 0), 2 => Offset(0, all.dy), _ => all }, v.s); // (the Move tool's way)
     m.carry('place', by.dx, by.dy);
     _held = (from: h.from, moved: true, by: null);
     setState(() {});
-    ws.shown();
   }
 
   void _letGo({bool keep = true}) {
@@ -524,9 +522,10 @@ class _StageViewState extends State<StageView> implements StageHandles {
                     painter: _ViewPainter(scene, v, widget.selected, _hover == widget.selected ? null : _hover, grid: widget.grid, safe: widget.safe, part: widget.texture == null ? _Part.all : _Part.under, pivots: widget.pivots, met: _met),
                   ),
                 ),
-                if (_desk case final desk? when widget.texture != null) // (the whole pane as the inside draws it: off the stage covered half way, the picked thing marked)
-                  Positioned.fromRect(rect: v.area, child: IgnorePointer(child: Texture(textureId: desk, filterQuality: FilterQuality.medium)))
-                else
+                if (_desk case final desk? when widget.texture != null) ...[ // (the whole pane as the inside draws it: off the stage covered half way, the picked thing marked)
+                  Positioned.fromRect(rect: v.area, child: IgnorePointer(child: Texture(textureId: desk, filterQuality: FilterQuality.medium))),
+                  Positioned.fromRect(rect: v.comp, child: const IgnorePointer(child: SizedBox(key: ValueKey('ws-stage-comp')))), // (where the picture lies in it)
+                ] else
                 Positioned.fromRect(
                   rect: v.comp,
                   child: IgnorePointer(

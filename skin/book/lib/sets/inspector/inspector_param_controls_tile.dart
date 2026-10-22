@@ -70,7 +70,7 @@ class ParamTile extends StatelessWidget {
                 child: Center(child: glyph),
               ),
             Padding(
-              padding: EdgeInsets.fromLTRB(Pop.tilePad, Shape.s(6), glyph != null ? Pop.glyph + Pop.tilePad : Pop.tilePad, Shape.s(4)),
+              padding: EdgeInsets.fromLTRB(Pop.tilePad, Shape.s(4), glyph != null ? Pop.glyph + Pop.tilePad : Pop.tilePad, Shape.s(3)),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,

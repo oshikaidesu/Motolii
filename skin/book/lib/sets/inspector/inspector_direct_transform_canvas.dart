@@ -22,6 +22,8 @@ class _TransformCanvasState extends State<TransformCanvas> {
   Doc? _doc;
   (TransformZone, int)? _grab, _hover;
   Offset _down = Offset.zero, _last = Offset.zero;
+  TransformHome? _home; // (where the thing stood when this drawing was opened: it is drawn from there)
+  String? _homeOf;
 
   bool _editable(Ctx x, TransformLayout g) => !x.cfg.locked && !RowOff.offOf(context) && g.ids.every((id) => x.doc.get(id) != null);
 
@@ -64,13 +66,26 @@ class _TransformCanvasState extends State<TransformCanvas> {
   @override
   Widget build(BuildContext context) {
     final x = Ctx.of(context);
+    return ListenableBuilder( // (drawn again when one of its values is told anew: a hand on the stage, a moment)
+      listenable: Listenable.merge([for (final id in TransformLayout.watched) x.doc.watch(id)]),
+      builder: (context, _) => _drawing(context, x),
+    );
+  }
+
+  Widget _drawing(BuildContext context, Ctx x) {
     return Padding(
       padding: EdgeInsets.only(top: Shape.s(4)),
       child: SizedBox(
         height: DirectSurface.height,
         child: LayoutBuilder(
           builder: (context, box) {
-            final g = TransformLayout(box.biggest, Map.of(x.doc.v), space: x.doc.space);
+            final values = Map.of(x.doc.v);
+            if (_homeOf != x.doc.title) { // (another thing: drawn from where it is)
+              _home = null;
+              _homeOf = x.doc.title;
+            }
+            var g = TransformLayout(box.biggest, values, space: x.doc.space, home: _home ??= TransformHome.of(values));
+            if (_grab == null && g.away) g = TransformLayout(box.biggest, values, space: x.doc.space, home: _home = TransformHome.of(values)); // (gone out of the frame: back in the middle)
             final mixed = g.ids.any((id) => x.doc.get(id) == null);
             final enabled = _editable(x, g);
             final own = _grab ?? _hover;
@@ -251,6 +266,8 @@ class _CanvasPaint extends CustomPainter {
           end: Alignment.bottomRight,
         ).createShader(front.getBounds()),
     );
+    // (the corner cut off, where it points up and right: the window's accent, so it reads as a mark, not a chip)
+    c.drawPath(Path()..addPolygon([for (final p in const [Offset(.45, -1), Offset(1, -1), Offset(1, -.45)]) g.world(Offset(p.dx * g.half.dx, p.dy * g.half.dy))], true), fill(Pop.accent));
     if (hot != TransformZone.move) return;
     final arrows = Grey.g100;
     final reach = math.min(g.half.dx.abs(), g.half.dy.abs()) * .7;

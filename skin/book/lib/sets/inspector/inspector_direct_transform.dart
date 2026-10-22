@@ -27,7 +27,7 @@ enum TransformZone {
 
 abstract final class DirectSurface {
   // surface: one canvas for the whole Transform block, sized to keep the rows below it on screen.
-  static double get height => Shape.z(124.0);
+  static double get height => Shape.z(108.0);
   static const objectWidth = 64.0, objectHeight = 40.0, handle = 7.0;
   static const stem = 20.0, knob = 6.0, turnArc = 11.0;
   static const tiltStem = 16.0, rail = 12.0, zReach = 1000.0;

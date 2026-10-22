@@ -86,7 +86,7 @@ class LdTile extends StatelessWidget {
                 child: glyph!,
               ),
             Padding(
-              padding: EdgeInsets.fromLTRB(Pop.tilePad, Shape.s(6), glyph != null ? glyphW + Pop.tilePad : Pop.tilePad, Shape.s(4)),
+              padding: EdgeInsets.fromLTRB(Pop.tilePad, Shape.s(4), glyph != null ? glyphW + Pop.tilePad : Pop.tilePad, Shape.s(3)),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,

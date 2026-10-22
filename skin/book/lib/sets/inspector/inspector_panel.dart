@@ -5,7 +5,6 @@ import 'inspector_direct_transform.dart';
 import 'inspector_copies.dart';
 import 'inspector_light.dart';
 import 'inspector_parts.dart';
-import 'inspector_look_preview.dart';
 import 'inspector_motion_preview.dart';
 
 // ---- 13. the whole panel ----------------------------------------------------------------------------------------------
@@ -25,21 +24,6 @@ final inspectorCards = <String, Widget Function(Fx card)>{
   'Scatter': (c) => ValuesCard(c, side: const MotionPreview('Scatter')), // (drifting)
   'Field': (c) => ValuesCard(c, side: const MotionPreview('Field')), // (its copies, grown and turned as near the field as they lie)
   'Connect': (c) => ValuesCard(c, side: const MotionPreview('Connect')), // (its copies, where they lie)
-  // (the cards of how it looks: the thing alone, as the stage draws it)
-  'Gradient': (c) => ValuesCard(c, side: const LookPreview()),
-  'Type': (c) => ValuesCard(c, side: const LookPreview()),
-  'Line': (c) => ValuesCard(c, side: const LookPreview()),
-  'Path': (c) => ValuesCard(c, side: const LookPreview()),
-  'Deform': (c) => ValuesCard(c, side: const LookPreview()),
-  'Surface': (c) => ValuesCard(c, side: const LookPreview()),
-  'Glass': (c) => ValuesCard(c, side: const LookPreview()),
-  'Shine': (c) => ValuesCard(c, side: const LookPreview()),
-  'Trim Paths': (c) => ValuesCard(c, side: const LookPreview()),
-  'Gaussian Blur': (c) => ValuesCard(c, side: const LookPreview()),
-  'Drop Shadow': (c) => ValuesCard(c, side: const LookPreview()),
-  'Glow': (c) => ValuesCard(c, side: const LookPreview()),
-  'Duotone': (c) => ValuesCard(c, side: const LookPreview()),
-  'Gradient Map': (c) => ValuesCard(c, side: const LookPreview()),
 };
 
 /// The Inspector: one scrolling stack of the host's cards. Needs an InspHost above it.

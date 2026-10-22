@@ -103,9 +103,9 @@ class Pop extends InheritedWidget {
   static double get cell => Shape.z(22.0);
 
   /// A parameter block: name on top, value large at the bottom, its picture in the top-right corner; text always starts at the same x.
-  static double get tile => Shape.z(46); // (the skin's Size and Spacing)
-  static double get tileMin => Shape.z(112);
-  static double get glyph => Shape.z(22);
+  static double get tile => Shape.z(42); // (the skin's Size and Spacing)
+  static double get tileMin => Shape.z(100);
+  static double get glyph => Shape.z(20);
   static double get tileGap => Shape.s(4);
   static double get tilePad => Shape.s(8);
 

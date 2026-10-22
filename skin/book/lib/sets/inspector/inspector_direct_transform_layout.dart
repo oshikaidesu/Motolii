@@ -7,17 +7,22 @@ import 'package:lab_book/sets/inspector/inspector_parts.dart';
 
 /// Where everything sits on a canvas of [size] for the layer values [values], seen from the front as in 2D.
 /// Every space edits the same values with the same handles; outside 2D nearer layers draw larger, and 3D shows Depth as thickness.
+/// Relative: the layer is drawn from its [home] (where it stood and how large it was when the card was opened), in the
+/// middle and at the usual size there; what moved or grew since shows as far as it went. Its turn and the ratio of its
+/// sides are always its own (they are how it looks).
 class TransformLayout {
-  TransformLayout(this.size, this.values, {this.space = Space.d2});
+  TransformLayout(this.size, this.values, {this.space = Space.d2, TransformHome? home}) : home = home ?? TransformHome.of(values);
   final Size size;
   final Map<String, double> values;
   final Space space;
+  final TransformHome home;
 
   bool get deep => space != Space.d2;
   bool get solid => space == Space.d3;
 
   /// Every value the canvas edits; any of them mixed makes it inert.
-  List<String> get ids => ['v_x', 'v_y', 'v_scale_x', 'v_scale_y', 'v_rotate', 'v_anchor_x', 'v_anchor_y', 'v_z', 'v_rotate_x', 'v_rotate_y', 'depth'];
+  List<String> get ids => watched;
+  static const watched = ['v_x', 'v_y', 'v_scale_x', 'v_scale_y', 'v_rotate', 'v_anchor_x', 'v_anchor_y', 'v_z', 'v_rotate_x', 'v_rotate_y', 'depth'];
 
   double value(String id) => values[id] ?? 0;
   double get angle => value('v_rotate') * math.pi / 180;
@@ -38,21 +43,24 @@ class TransformLayout {
   double depthScale(double zc) => deep ? _camera / math.max(300, _camera + zc) : 1;
   Offset _project(Offset flat, double zc) => frame.center + (flat - frame.center) * depthScale(zc);
 
-  Offset get half => Offset(DirectSurface.objectWidth / 2 * value('v_scale_x') / 100, DirectSurface.objectHeight / 2 * value('v_scale_y') / 100);
+  Offset get half => Offset(DirectSurface.objectWidth / 2 * value('v_scale_x') / home.size, DirectSurface.objectHeight / 2 * value('v_scale_y') / home.size);
   Offset get anchor => Offset((value('v_anchor_x') / 50 - 1) * half.dx, (value('v_anchor_y') / 50 - 1) * half.dy);
-  Offset get flatPivot => frame.topLeft + Offset(value('v_x'), value('v_y')) * compositionFactor;
-  Offset get pivot => _project(flatPivot, z);
+  Offset get flatPivot => frame.center + (Offset(value('v_x'), value('v_y')) - home.at) * compositionFactor;
+
+  /// Whether the layer has gone out of the drawing's frame (its home is then taken again where it is now).
+  bool get away => corners.any((p) => !frame.inflate(DirectSurface.handle).contains(p));
+  Offset get pivot => _project(flatPivot, z - home.z);
 
   /// A point of the layer, in canvas units at scale around the layer centre, pushed [back] units away from the viewer.
   Offset world(Offset p, [double back = 0]) {
     var (x, y, d) = (p.dx - anchor.dx, p.dy - anchor.dy, back);
     (y, d) = (y * math.cos(tiltX) - d * math.sin(tiltX), y * math.sin(tiltX) + d * math.cos(tiltX));
     (x, d) = (x * math.cos(tiltY) + d * math.sin(tiltY), -x * math.sin(tiltY) + d * math.cos(tiltY));
-    return _project(flatPivot + rotate(Offset(x, y), angle), z + d / compositionFactor);
+    return _project(flatPivot + rotate(Offset(x, y), angle), z - home.z + d / compositionFactor);
   }
 
   Offset get center => world(Offset.zero);
-  Offset local(Offset p) => rotate((p - pivot) / depthScale(z), -angle) + anchor;
+  Offset local(Offset p) => rotate((p - pivot) / depthScale(z - home.z), -angle) + anchor;
 
   static const _handlePoints = [Offset(-1, -1), Offset(1, -1), Offset(1, 1), Offset(-1, 1), Offset(-1, 0), Offset(1, 0), Offset(0, -1), Offset(0, 1)];
   List<Offset> get handles => [for (final p in _handlePoints) world(Offset(p.dx * half.dx, p.dy * half.dy))];
@@ -102,7 +110,7 @@ class TransformLayout {
     final step = now - last;
     switch (zone) {
       case TransformZone.move:
-        final delta = step / (compositionFactor * depthScale(z)) * mult;
+        final delta = step / (compositionFactor * depthScale(z - home.z)) * mult;
         return {'v_x': cur('v_x') + delta.dx, 'v_y': cur('v_y') + delta.dy};
       case TransformZone.lift:
         return {'v_z': cur('v_z') + step.dy / railHalf * DirectSurface.zReach * mult};
@@ -130,6 +138,18 @@ class TransformLayout {
         return {'v_anchor_x': anchor('v_anchor_x', delta.dx, half.dx), 'v_anchor_y': anchor('v_anchor_y', delta.dy, half.dy)};
     }
   }
+}
+
+/// Where a layer stood and how large it was when its drawing was opened (or last taken back to the middle).
+class TransformHome {
+  const TransformHome(this.at, this.size, [this.z = 0]);
+  TransformHome.of(Map<String, double> v)
+    : at = Offset(v['v_x'] ?? 0, v['v_y'] ?? 0),
+      z = v['v_z'] ?? 0,
+      size = math.max(1, math.max((v['v_scale_x'] ?? 100).abs(), (v['v_scale_y'] ?? 100).abs()));
+  final Offset at;
+  final double z;
+  final double size; // (in the same hundredths as the scale: the larger side drawn at the usual size)
 }
 
 double _wrapped(double a) => math.atan2(math.sin(a), math.cos(a));

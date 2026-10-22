@@ -17,6 +17,7 @@ import 'package:integration_test/integration_test.dart';
 import 'package:lab_book/sets/inspector/inspector_parts.dart' show NumField;
 import 'package:lab_book/workspace/timeline.dart';
 import 'package:lab_book/workspace/workspace.dart' show Workspace;
+import 'package:lab_book/workspace/stage_art.dart' show WsArt;
 import 'package:lab_book/workspace/ws.dart';
 
 const _seconds = int.fromEnvironment('SECONDS', defaultValue: 20);
@@ -110,6 +111,14 @@ void main() {
     await g.up();
 
     await traced('the playhead moved', (f) async => ws.frame = (f * 3) % (Ws.fps * 8));
+
+    // (a thing carried on the stage, to and fro: the inspector's numbers and drawing follow the hand by the window's peek)
+    if (m.frame(int.tryParse(ws.selected ?? '') ?? -1) case final box?) {
+      final stage = t.getRect(find.byKey(const ValueKey('ws-stage-comp')));
+      final h = await t.startGesture(stage.topLeft + Offset(box[0] / WsArt.comp.width * stage.width, box[1] / WsArt.comp.height * stage.height));
+      await traced('a thing carried on the stage', (f) => h.moveBy(Offset((f ~/ 60).isEven ? 3 : -3, (f ~/ 90).isEven ? 1 : -1)));
+      await h.up();
+    }
 
     if (const bool.fromEnvironment('LETGO')) { // (LETGO: a knob taken, moved and let go again and again, Flutter's own timeline of it with each widget's build, for reading)
       Future<void> letGos() async {

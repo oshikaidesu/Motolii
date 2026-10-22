@@ -601,7 +601,6 @@ void _write(Ws ws, String? id, Map<String, double> changed, {required bool live}
   if (live) {
     if (ws.playing) ws.playing = false; // (a hand on a value stops the play: what is changed is changed at one moment)
     if (why != null) _told(ws, why);
-    ws.carried.value++; // (the stage's readout follows the hand)
   } else {
     ws.after(m.later('let_go', number: 1), (done, no) => _told(ws, why ?? (done ? null : no))); // (the hand let go: the window does not wait for the step)
   }
@@ -712,6 +711,15 @@ class _InspectorSeatState extends State<_InspectorSeat> {
 
   Timer? _settle;
 
+  // (the inside showed something new while the document and the pick stayed (a hand carrying on the stage, a relation
+  //  at a moment): the numbers told to the fields that show them; nothing built again)
+  void _seenNow() {
+    final ws = _ws!;
+    if (_now(ws) != _seen || ws.selected == null || ws.playing) return; // (played: the moment's own reading above)
+    if (ws.inside?.busy ?? false) return; // (the inside is drawing: read at the next picture it shows, rather than wait)
+    _live.value = (Ws.timed('transform', () => wsTransform(ws, ws.layer?.id)), Ws.timed('key marks', () => _keyMarks(ws, ws.layer?.id)));
+  }
+
   // (the panel itself, made once a size: a new one each build would build its whole tree again, whatever changed)
   (Size, InspectorPanel)? _panel;
   InspectorPanel _panelOf(BoxConstraints box) {
@@ -726,7 +734,9 @@ class _InspectorSeatState extends State<_InspectorSeat> {
     final ws = WsScope.read(context);
     if (ws != _ws) {
       _ws?.removeListener(_changed);
+      _ws?.seen.removeListener(_seenNow);
       _ws = ws..addListener(_changed);
+      ws.seen.addListener(_seenNow);
       _seen = _now(ws);
       _frame = ws.frame;
     }
@@ -735,6 +745,7 @@ class _InspectorSeatState extends State<_InspectorSeat> {
   @override
   void dispose() {
     _ws?.removeListener(_changed);
+    _ws?.seen.removeListener(_seenNow);
     _settle?.cancel();
     _live.dispose();
     super.dispose();
@@ -743,7 +754,6 @@ class _InspectorSeatState extends State<_InspectorSeat> {
   @override
   Widget build(BuildContext context) {
     final ws = WsScope.read(context), l = ws.layer, k = _kindOf(l), m = ws.inside!;
-    if (int.tryParse(l?.id ?? '') case final t?) m.soloFollow(t); // (the thing picked is the one shown alone)
     return Column(children: [const WsRelationStack(), Expanded(child: LayoutBuilder(
       builder: (context, box) => InspHost(
         key: ValueKey(k),
@@ -758,12 +768,6 @@ class _InspectorSeatState extends State<_InspectorSeat> {
         onPath: int.tryParse(l?.id ?? '') == null
             ? null
             : (to, n, copy) => m.path(int.parse(l!.id), copy: copy, to: to, n: n)?.indexed.map((e) => e.$1 % 4 < 2 ? e.$2 * m.point : e.$2).toList(), // (where it is in points of the picture, as the card's numbers are) // (the wave card's preview asks once, then plays by itself)
-        onSolo: int.tryParse(l?.id ?? '') == null
-            ? null
-            : (side, on) {
-                m.soloShow(int.parse(l!.id), side, on: on);
-                return on ? m.soloTexture(int.parse(l.id), side) : Future.value(-1);
-              }, // (a look card's picture of the thing alone)
         onAim: (at) => ws.aim = at.startsWith('v_') ? at.substring(2) : null, // (a colour link of a card is aimed at that value)
         values: Ws.timed('transform', () => wsTransform(ws, l?.id)),
         strs: Ws.timed('words', () => _words(ws, l?.id)),

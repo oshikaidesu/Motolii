@@ -22,7 +22,6 @@ struct Live {
     double waited = 0;   // seconds spent waiting for the GPU to finish them (for measuring)
     Fence* pending = nullptr;          // the picture begun and not yet finished by the GPU, and which buffer it is in
     int pendingIn = -1;
-    Live* solo = nullptr;              // a card's small picture of one thing alone (kit.h solo_view), drawn in the same frame, finished with it
     void* marks[N] = {};               // (a desk's: ThorVG's canvas on each buffer, the marks drawn over the picture: desk_marks)
     Live* desk = nullptr;              // the editing window's whole stage pane (kit.h desk_lay): while it is on, the stage is drawn there, not here
 };
@@ -179,14 +178,7 @@ static void live_draw(Stage& s, Live* l) {
         s.view->setRenderTarget(s.out);
         for (View* v : s.layers) v->setRenderTarget(s.out);   // (the pictures laid over it go to the same place)
     }
-    Live* solo = l->solo && s.solo && !s.soloIn.empty() ? l->solo : nullptr;   // (one thing alone too, while a card shows it)
-    if (solo) s.solo->setRenderTarget(solo->target[solo->next]);
     draw(s, nullptr, false);
-    if (solo) {
-        s.solo->setRenderTarget(nullptr);
-        solo->pendingIn = solo->next;
-        solo->next = (solo->next + 1) % Live::N;
-    }
     s.lastly = nullptr;
     s.drawnInto = wasInto;
     if (desk) desk_marks(s, desk, desk->next);
@@ -216,7 +208,6 @@ static bool live_ready(Stage& s, Live* l) {
     if (l->pendingIn >= 0) l->front = l->pendingIn;
     ++l->frames;
     if (Live* desk = l->desk; desk && desk->pendingIn >= 0) desk->front = desk->pendingIn, desk->pendingIn = -1, ++desk->frames;
-    if (Live* solo = l->solo; solo && solo->pendingIn >= 0) solo->front = solo->pendingIn, solo->pendingIn = -1, ++solo->frames;   // (finished with the stage's)
     return true;
 }
 
