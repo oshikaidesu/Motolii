@@ -138,7 +138,7 @@ static const char* const doc_shapes = "ring gem cube ball";             // (the 
 struct DocValue { const char* name; const char* kinds; double low, high; bool moves; const char* words; };
 static const DocValue doc_values[] = {
     {"x", doc_kinds, -1e4, 1e4, true, nullptr}, {"y", doc_kinds, -1e4, 1e4, true, nullptr}, {"z", doc_kinds, -1e4, 1e4, true, nullptr},
-    {"rotate", doc_kinds, -1e6, 1e6, true, nullptr}, {"rotate_x", doc_kinds, -1e6, 1e6, true, nullptr}, {"rotate_y", doc_kinds, -1e6, 1e6, true, nullptr},
+    {"rotate", "film picture text solid shape camera light behaviour", -1e6, 1e6, true, nullptr}, {"rotate_x", "film picture text solid shape camera light behaviour", -1e6, 1e6, true, nullptr}, {"rotate_y", "film picture text solid shape camera light behaviour", -1e6, 1e6, true, nullptr},   // (a relation's own: added to each of its things in turn)
     {"orient", "film picture text solid shape", 0, 1, false, nullptr},   // (turned the way it is going along its path, its rotate added: After Effects' Auto-Orient)
     // (how many times as wide, as high and as deep as its size makes it, each on its own as After Effects' Scale: below 0
     //  turned over; a flat thing has no depth to scale yet, its thickness to come as its scale_z)
@@ -693,8 +693,8 @@ static const DocCard doc_cards[] = {
     {"Lens", "bloom ambient_occlusion reflections lens_flare vignette vignette_color fog fog_color anti_aliasing"},
     {"Room", "room environment environment_rotate behind background"},
     {"Physics", "physics bounce friction gravity"},
-    {"Around", "strength radius offset tilt leader centre_x centre_y", "file", "around"},   // (a relation's card: its things round a middle, or round a leader)
-    {"Row", "strength gap centre_x centre_y", "file", "row"},
+    {"Around", "strength radius offset tilt leader centre_x centre_y rotate rotate_y lag", "file", "around"},   // (a relation's card: its things round a middle, or round a leader; turned in turn, lag apart)
+    {"Row", "strength gap centre_x centre_y rotate rotate_y lag", "file", "row"},
     {"Follow", "strength leader lag leader_b hand", "file", "follow"},
     {"Push", "strength leader radius", "file", "push"},
     {"Note", "note"},   // (what a maker wrote of it: After Effects' layer comment)
@@ -1011,6 +1011,8 @@ static double doc_related(Doc& d, int by, int thing, const char* name, double t,
     const double came = rel.from.empty() || (n != "x" && n != "y") ? std::nan("") : rel.from[2 * i + (n == "y" ? 1 : 0)];   // (where it showed when it came in: across and up only)
     const auto leader = [&](const char* which) { const int l = (int)doc_number(d, by, which, 0, 0); return l != thing ? l : 0; };
     if (type == "around" || type == "row") {   // (around a middle, the first at the top, each as far round as its order; or in a row from the middle, gap apart)
+        if (n == "rotate" || n == "rotate_x" || n == "rotate_y")   // (its own turn added to each, each so much later than the one before: in turn, as Cavalry's stagger)
+            return base + doc_number(d, by, name, t - doc_number(d, by, "lag", t, 0) * (double)i, 0) * s;
         if (n != "x" && n != "y" && n != "z") return base;
         const int l = leader("leader");
         const double tilt = type == "around" ? doc_number(d, by, "tilt", t, 0) * TAU / 360.0 : 0.0;
@@ -2770,7 +2772,11 @@ static bool doc_relate(Doc& d, int by, const char* ids, double now) {
         from += (from.empty() ? "" : " ") + std::string(buf);
     }
     ok = ok && doc_say(d, by, "members", order.c_str()) && doc_say(d, by, "under", under.c_str()) && doc_say(d, by, "from", from.c_str());
-    for (const int t : members) ok = ok && doc_set(d, t, "x_by", by) && doc_set(d, t, "y_by", by) && (!doc_knows(d, t, "z") || doc_set(d, t, "z_by", by));   // (its depth too, where it has one: a ring tipped back, a leader in depth)
+    for (const int t : members) {
+        ok = ok && doc_set(d, t, "x_by", by) && doc_set(d, t, "y_by", by) && (!doc_knows(d, t, "z") || doc_set(d, t, "z_by", by));   // (its depth too, where it has one: a ring tipped back, a leader in depth)
+        if (type == "around" || type == "row")   // (its turns too: the relation's own, given in turn)
+            for (const char* n : {"rotate", "rotate_x", "rotate_y"}) ok = ok && (!doc_knows(d, t, n) || doc_set(d, t, (std::string(n) + "_by").c_str(), by));
+    }
     return doc_acted(d) && ok;
 }
 // A relation led by another: the new leader out of its things if it was one, the old one in among them where it shows,
