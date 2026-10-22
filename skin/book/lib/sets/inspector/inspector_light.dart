@@ -6,6 +6,7 @@ import 'dart:math' as math;
 import 'package:flutter/widgets.dart';
 import 'package:lab_book/sets/inspector/inspector_direct_transform.dart' show TransformZone;
 import 'package:lab_book/sets/inspector/inspector_parts.dart';
+import 'package:lab_book/sets/inspector/inspector_pulled.dart';
 import 'package:lab_book/tokens.dart';
 
 /// The light as it shines: a sun's parallel rays, a point's glow all round, a spot's cone; pull the right rail for its
@@ -56,14 +57,14 @@ class _LightDrawingState extends State<LightDrawing> {
               _Knob.cone => pull('cone', g.coneAt(p)),
               null => null,
             };
-            return GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onPanStart: (d) {
-                _held = pick(d.localPosition);
+            return Pulled(
+              takes: (at) => pick(at) != null,
+              onDown: (d) {
+                _held = pick(d);
                 if (_held != null) doc.beginGesture();
               },
-              onPanUpdate: (d) => drag(d.localPosition),
-              onPanEnd: (_) {
+              onMove: (d) => drag(d),
+              onUp: () {
                 if (_held != null) doc.endGesture();
                 setState(() => _held = null);
               },

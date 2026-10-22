@@ -3275,11 +3275,16 @@ static bool doc_on(Doc& d, int thing, const char* name) {
 }
 // The effects a thing may be given (the Effects shelf; their cards are doc_cards' "+" rows): a name, the value that puts
 // it on (ThorVG's own), and what it is told then: a number, a word, or keys from that moment ("keys 0 1 1 0": 1 now,
-// 0 a second on: Trim Paths drawn on, as After Effects' is mostly used).
-struct DocEffect { const char* name; const char* value; const char* on; bool word; const char* label; };   // (label: what it is for, as an effect file's --label: says)
+// 0 a second on: Trim Paths drawn on, as After Effects' is mostly used). [with]: the card's other values said with it, as
+// it is drawn when they are not said (doc_moment's own), so its card shows what the stage does ("name=number name:word").
+struct DocEffect { const char* name; const char* value; const char* on; bool word; const char* label; const char* with = ""; };   // (label: what it is for, as an effect file's --label: says)
 static const DocEffect doc_effects[] = {
-    {"Gaussian Blur", "blur", "12", false, "Light"}, {"Drop Shadow", "shadow", "000000", true, "Light"}, {"Glow", "glow", "ffd166", true, "Light"},
-    {"Trim Paths", "trim", "keys 0 1 1 0", false, "Path"}, {"Duotone", "tint", "1", false, "Color"}, {"Gradient Map", "tritone", "1", false, "Color"},
+    {"Gaussian Blur", "blur", "12", false, "Light"},
+    {"Drop Shadow", "shadow", "000000", true, "Light", "shadow_distance=10 shadow_angle=135 shadow_blur=10 shadow_opacity=0.5"},
+    {"Glow", "glow", "ffd166", true, "Light", "glow_blur=40 glow_opacity=1"},
+    {"Trim Paths", "trim", "keys 0 1 1 0", false, "Path"},
+    {"Duotone", "tint", "1", false, "Color", "tint_black:1b1f5c tint_white:ff8a65"},
+    {"Gradient Map", "tritone", "1", false, "Color", "tritone_shadow:1b1f5c tritone_midtone:c44569 tritone_highlight:ffd166"},
     {"Background Copy", "fill", "behind", true, "Utility"},   // (its fill what is behind it: the effects on it then work on the background in its shape, and it still lies on what is under as its blend says; After Effects' adjustment layer as one more effect)
 };
 // The shelf's effects, "name\tvalue\tlabel\tpicture" one to a line (picture: thing_<value>.png in the library's effects/, "" none).
@@ -3304,6 +3309,14 @@ static bool doc_effect(Doc& d, int thing, const char* name, double at) {
             double a0 = 0, v0 = 0, a1 = 0, v1 = 0;
             ok = std::sscanf(e.on + 5, "%lf %lf %lf %lf", &a0, &v0, &a1, &v1) == 4 && doc_key(d, thing, e.value, at + a0, v0) && doc_key(d, thing, e.value, at + a1, v1);
         } else ok = e.word ? doc_say(d, thing, e.value, e.on) : doc_set(d, thing, e.value, std::atof(e.on));
+        std::istringstream with(e.with);
+        for (std::string one; !on && ok && with >> one;) {   // (its other values, as they are drawn unsaid)
+            const size_t at_ = one.find_first_of("=:");
+            if (at_ == std::string::npos) continue;
+            const std::string n = one.substr(0, at_), v = one.substr(at_ + 1);
+            const bool said = one[at_] == '=' ? !std::isnan(doc_number(d, thing, n.c_str(), at, NAN)) : !doc_word(d, thing, n.c_str()).empty();
+            if (!said) ok = one[at_] == '=' ? doc_set(d, thing, n.c_str(), std::atof(v.c_str())) : doc_say(d, thing, n.c_str(), v.c_str());   // (one said already, by a hand or before, is left as it is)
+        }
         if (!ok) d.act_ok = false;
         return doc_acted(d);
     }

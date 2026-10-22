@@ -440,7 +440,7 @@ class NumFieldState extends State<NumField> {
                 if (block)
                   Positioned.fill(
                     child: Padding(
-                      padding: EdgeInsets.fromLTRB(Pop.tilePad, Shape.s(6), widget.glyph != null ? Pop.glyph + Pop.tilePad : Pop.tilePad, Shape.s(7)),
+                      padding: EdgeInsets.fromLTRB(Pop.tilePad, Shape.s(4), widget.glyph != null ? Pop.glyph + Pop.tilePad : Pop.tilePad, Shape.s(5)),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,

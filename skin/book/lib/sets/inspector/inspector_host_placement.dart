@@ -127,7 +127,7 @@ class _PlShell extends StatelessWidget {
       child: Stack(
         children: [
           Padding(
-            padding: EdgeInsets.fromLTRB(Pop.tilePad, 6, Pop.tilePad, 4),
+            padding: EdgeInsets.fromLTRB(Pop.tilePad, 4, Pop.tilePad, 3),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.spaceBetween,

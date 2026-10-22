@@ -6,6 +6,7 @@ import 'dart:math' as math;
 import 'package:flutter/widgets.dart';
 import 'package:lab_book/sets/inspector/inspector_direct_transform.dart' show TransformZone;
 import 'package:lab_book/sets/inspector/inspector_parts.dart';
+import 'package:lab_book/sets/inspector/inspector_pulled.dart';
 import 'package:lab_book/tokens.dart';
 
 class CopiesDrawing extends StatefulWidget {
@@ -35,22 +36,22 @@ class _CopiesDrawingState extends State<CopiesDrawing> {
           builder: (context, box) {
             final g = copiesRowOf(doc, box.biggest), count = g.count;
             _Knob? pick(Offset p) => (p - g.countKnob).distance <= 12 ? _Knob.count : (count > 1 && (p - g.gapKnob).distance <= 12 ? _Knob.gap : null);
-            return GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onPanStart: (d) {
-                _held = pick(d.localPosition);
+            return Pulled(
+              takes: (at) => pick(at) != null,
+              onDown: (d) {
+                _held = pick(d);
                 if (_held != null) doc.beginGesture();
               },
-              onPanUpdate: (d) {
+              onMove: (d) {
                 switch (_held) {
                   case _Knob.count:
-                    doc.set('v_copies', g.countAt(d.localPosition).toDouble());
+                    doc.set('v_copies', g.countAt(d).toDouble());
                   case _Knob.gap:
-                    if (param('copy_x')?.max case final top?) doc.set('v_copy_x', g.spreadAt(d.localPosition) * top);
+                    if (param('copy_x')?.max case final top?) doc.set('v_copy_x', g.spreadAt(d) * top);
                   case null:
                 }
               },
-              onPanEnd: (_) {
+              onUp: () {
                 if (_held != null) doc.endGesture();
                 setState(() => _held = null);
               },

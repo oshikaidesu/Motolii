@@ -6,6 +6,8 @@ import 'inspector_copies.dart';
 import 'inspector_light.dart';
 import 'inspector_parts.dart';
 import 'inspector_motion_preview.dart';
+import 'inspector_shadow.dart';
+import 'inspector_trim.dart';
 
 // ---- 13. the whole panel ----------------------------------------------------------------------------------------------
 /// The cards the window knows and draws by hand, by the inside's card name (Transform, Camera, Text, Fill, Blending):
@@ -24,6 +26,8 @@ final inspectorCards = <String, Widget Function(Fx card)>{
   'Scatter': (c) => ValuesCard(c, side: const MotionPreview('Scatter')), // (drifting)
   'Field': (c) => ValuesCard(c, side: const MotionPreview('Field')), // (its copies, grown and turned as near the field as they lie)
   'Connect': (c) => ValuesCard(c, side: const MotionPreview('Connect')), // (its copies, where they lie)
+  'Drop Shadow': (c) => ValuesCard(c, top: const ShadowDrawing()), // (the shadow, taken and put where it falls)
+  'Trim Paths': (c) => ValuesCard(c, top: const TrimDrawing()), // (the part of the path left, its ends taken)
 };
 
 /// The Inspector: one scrolling stack of the host's cards. Needs an InspHost above it.
