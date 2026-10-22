@@ -10,11 +10,15 @@ import '../motolii.dart';
 import '../workspace/dock_glyphs.dart';
 import '../workspace/panes.dart';
 import '../workspace/workspace.dart';
+import 'relation_tabs/tab_curve.dart';
+import 'relation_tabs/tab_draw.dart';
 import 'relation_tabs/tab_hands.dart';
 
 /// Every way of the tab, by name (one file each in relation_tabs/).
 final relationTabs = <(String, Widget Function())>[
   ('A by hand', () => const TabHands()),
+  ('B stagger curve', () => const TabCurve()),
+  ('C draw it', () => const TabDraw()),
 ];
 
 final _copies = <String, String>{};

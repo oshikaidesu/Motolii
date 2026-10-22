@@ -7,6 +7,8 @@
 //   key cmd+z | cmd+shift+z | escape | delete
 //   look                       only a shot
 //   end                        the window closed, the test over
+// With AGENT_TAB=<a way's name> the window opens on a copy of the relation try document with that way of the Relations
+// tab beside the inspector (its path in $AGENT_DIR/document.txt).
 // With AGENT_BENCH=<a document> the relation bench is opened on a copy of it instead (its path in $AGENT_DIR/document.txt).
 // Without AGENT_DIR it is skipped. Run:  AGENT_DIR=/some/dir flutter test test/agent_window_test.dart
 // The stage's picture is the window's stand-in (boxes where the inside says things lie), the words in Arial.
@@ -21,12 +23,26 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lab_book/motolii.dart';
 import 'package:lab_book/sets/relation_bench.dart';
+import 'package:lab_book/sets/relation_tabs.dart';
+import 'package:lab_book/workspace/dock_glyphs.dart';
+import 'package:lab_book/workspace/panes.dart' show WsPane;
 import 'package:lab_book/workspace/stage.dart' show WsStage;
 import 'package:lab_book/workspace/ws.dart' show WsScope, WsT;
 
 import 'door.dart';
 
-final _dir = Platform.environment['AGENT_DIR'], _bench = Platform.environment['AGENT_BENCH'];
+final _dir = Platform.environment['AGENT_DIR'], _bench = Platform.environment['AGENT_BENCH'], _tab = Platform.environment['AGENT_TAB'];
+
+/// The whole window on a copy of the relation try document, with one way of the Relations tab beside the inspector
+/// (AGENT_TAB=<its name in relationTabs>).
+Future<Ws> _openTab(WidgetTester t, String name) async {
+  final path = '${Directory.systemTemp.createTempSync('tab').path}/try.motolii';
+  File('test/data/relation_try.motolii').copySync(path);
+  Process.runSync('sqlite3', [path, 'delete from step;']);
+  File('$_dir/document.txt').writeAsStringSync(path);
+  final way = relationTabs.firstWhere((w) => w.$1 == name);
+  return openWorkspace(t, document: path, extra: [WsPane('Relations ${way.$1}', DockG.desk, way.$2)]);
+}
 
 /// The relation bench on a copy of [doc] instead of the whole window (AGENT_BENCH=<a document>): undo begins there.
 Future<Ws> _openBench(WidgetTester t, String doc) async {
@@ -86,7 +102,7 @@ void main() {
   testWidgets("a tester's hand on the window", (t) async {
     final dir = _dir!;
     await t.runAsync(_fonts);
-    final bench = _bench, ws = bench != null ? await _openBench(t, bench) : await openWorkspace(t, document: _scene());
+    final bench = _bench, tab = _tab, ws = tab != null ? await _openTab(t, tab) : bench != null ? await _openBench(t, bench) : await openWorkspace(t, document: _scene());
     final inbox = File('$dir/inbox.txt'), done = File('$dir/done.txt');
     if (!inbox.existsSync()) inbox.writeAsStringSync('');
     var n = 0, idle = 0;
