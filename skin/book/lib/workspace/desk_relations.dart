@@ -108,11 +108,12 @@ class _Relation {
   _Relation(this.id, this.kind, this.members, double Function(int, String) v)
       : radius = v(int.parse(id), 'radius'),
         gap = v(int.parse(id), 'gap'),
+        tilt = v(int.parse(id), 'tilt') * math.pi / 180,
         centre = (x: v(int.parse(id), 'centre_x'), y: v(int.parse(id), 'centre_y'), z: 0.0),
         leader = '${v(int.parse(id), 'leader').round()}';
   final String id, kind, leader;
   final List<String> members;
-  final double radius, gap;
+  final double radius, gap, tilt;
   final _P3 centre;
 }
 
@@ -172,7 +173,11 @@ class _View {
       case 'around' || 'push':
         final o = r.kind == 'push' ? lead : c;
         if (o == null) return const [];
-        return [for (var k = 0; k <= 48; k++) (x: o.x + r.radius * math.sin(k / 48 * 2 * math.pi), y: o.y + r.radius * math.cos(k / 48 * 2 * math.pi), z: o.z)];
+        final t = r.kind == 'push' ? 0.0 : r.tilt;   // (an around tipped back by its tilt)
+        return [
+          for (var k = 0; k <= 48; k++)
+            (x: o.x + r.radius * math.sin(k / 48 * 2 * math.pi), y: o.y + r.radius * math.cos(k / 48 * 2 * math.pi) * math.cos(t), z: o.z + r.radius * math.cos(k / 48 * 2 * math.pi) * math.sin(t)),
+        ];
       case 'row':
         final half = r.gap * (r.members.length - 1) / 2;
         return [for (var k = 0; k <= 12; k++) (x: c.x - half + 2 * half * k / 12, y: c.y, z: c.z)];

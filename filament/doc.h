@@ -282,6 +282,7 @@ static const DocValue doc_values[] = {
     {"maximum", "behaviour", -1e6, 1e6, true, nullptr},
     {"frequency", "behaviour", 0, 1000, true, nullptr},
     {"offset", "behaviour", -1e6, 1e6, true, nullptr},
+    {"tilt", "behaviour", -1e6, 1e6, true, nullptr},
     {"stagger", "behaviour", -1e6, 1e6, true, nullptr},
     {"seed", "behaviour", 0, 1e9, false, nullptr},
     {"step", "behaviour", 0, 1e6, true, nullptr},   // (what it gives rounded to so many: 90, a quarter turn at a time; 0 not)
@@ -478,6 +479,7 @@ static const DocShown doc_shown[] = {
     {"field_radius", "stage", "px", "Size", 0, 4, nullptr},
     {"strength", "share", "%", "Strength", 0, 1, nullptr},   // (a relation's: how much of it works)
     {"radius", "stage", "px", "Radius", 0, 2, nullptr},
+    {"tilt", "angle", "°", "Tilt", -180, 180, nullptr},   // (an around's ring tipped back: 0 faces the camera, 90 lies flat)
     {"gap", "stage", "px", "Gap", -1, 1, nullptr},
     {"centre_x", "stage", "px", "Centre X", -2, 2, nullptr},
     {"centre_y", "down", "px", "Centre Y", -2, 2, nullptr},
@@ -691,7 +693,7 @@ static const DocCard doc_cards[] = {
     {"Lens", "bloom ambient_occlusion reflections lens_flare vignette vignette_color fog fog_color anti_aliasing"},
     {"Room", "room environment environment_rotate behind background"},
     {"Physics", "physics bounce friction gravity"},
-    {"Around", "strength radius offset leader centre_x centre_y", "file", "around"},   // (a relation's card: its things round a middle, or round a leader)
+    {"Around", "strength radius offset tilt leader centre_x centre_y", "file", "around"},   // (a relation's card: its things round a middle, or round a leader)
     {"Row", "strength gap centre_x centre_y", "file", "row"},
     {"Follow", "strength leader lag leader_b hand", "file", "follow"},
     {"Push", "strength leader radius", "file", "push"},
@@ -1004,19 +1006,24 @@ static double doc_related(Doc& d, int by, int thing, const char* name, double t,
     const size_t i = (size_t)(found - rel.members.begin());
     const int many = std::max(1, (int)rel.members.size()), was = rel.under.empty() ? 0 : rel.under[i];
     const auto start = [&](const char* what, double mine) { return was ? doc_related(d, was, thing, what, t, mine) : mine; };
-    const double base = start(name, own), s = std::clamp(doc_number(d, by, "strength", t, 1), 0.0, 1.0);
+    const double base = start(name, own), s = std::clamp(doc_number(d, by, "strength", t, 1), -1.0, 2.0);   // (past 1 and below 0 as an ease overshoots: a Back or an Elastic between two keys shows; held within twice)
     if (doc_number(d, by, "visible", 0, 1) <= 0.5) return base;   // (switched off, its eye shut: what it is on top of shows, its strength kept)
     const double came = rel.from.empty() ? std::nan("") : rel.from[2 * i + (n == "y" ? 1 : 0)];
     const auto leader = [&](const char* which) { const int l = (int)doc_number(d, by, which, 0, 0); return l != thing ? l : 0; };
     if (type == "around" || type == "row") {   // (around a middle, the first at the top, each as far round as its order; or in a row from the middle, gap apart)
-        if (n != "x" && n != "y") return base;
+        if (n != "x" && n != "y" && n != "z") return base;
         const int l = leader("leader");
+        const double tilt = type == "around" ? doc_number(d, by, "tilt", t, 0) * TAU / 360.0 : 0.0;
+        if (n == "z" && tilt == 0.0 && !l) return base;   // (a ring facing the camera with no leader leaves depth alone)
         const double cx = doc_number(d, by, "centre_x", t, 0) + (l ? doc_literal(d, l, "x", t, 0) : 0.0), cy = doc_number(d, by, "centre_y", t, 0) + (l ? doc_literal(d, l, "y", t, 0) : 0.0);
         double place;
-        if (type == "around") {
+        if (type == "around") {   // (round its middle, tipped back by its tilt about the across axis; round its leader in depth too)
             const double turn = TAU * (doc_number(d, by, "offset", t, 0) + (double)i / many), r = doc_number(d, by, "radius", t, 0.5);
-            place = n == "x" ? cx + r * std::sin(turn) : cy + r * std::cos(turn);
-        } else place = n == "x" ? cx + doc_number(d, by, "gap", t, 0.2) * ((double)i - (many - 1) / 2.0) : cy;   // (a row about its middle: a wider gap spreads it both ways)
+            const double cz = l ? doc_literal(d, l, "z", t, 0) : 0.0, up = r * std::cos(turn);
+            if (n == "z") return base + (cz + up * std::sin(tilt) - base) * s;
+            place = n == "x" ? cx + r * std::sin(turn) : cy + up * std::cos(tilt);
+        } else if (n == "z") return base;
+        else place = n == "x" ? cx + doc_number(d, by, "gap", t, 0.2) * ((double)i - (many - 1) / 2.0) : cy;   // (a row about its middle: a wider gap spreads it both ways)
         return std::isnan(came) ? base + (place - base) * s : base + (place - came) * s;
     }
     if ((type == "follow" || type == "push") && d.settled) return base;
@@ -2763,7 +2770,7 @@ static bool doc_relate(Doc& d, int by, const char* ids, double now) {
         from += (from.empty() ? "" : " ") + std::string(buf);
     }
     ok = ok && doc_say(d, by, "members", order.c_str()) && doc_say(d, by, "under", under.c_str()) && doc_say(d, by, "from", from.c_str());
-    for (const int t : members) ok = ok && doc_set(d, t, "x_by", by) && doc_set(d, t, "y_by", by);
+    for (const int t : members) ok = ok && doc_set(d, t, "x_by", by) && doc_set(d, t, "y_by", by) && (!doc_knows(d, t, "z") || doc_set(d, t, "z_by", by));   // (its depth too, where it has one: a ring tipped back, a leader in depth)
     return doc_acted(d) && ok;
 }
 // A relation led by another: the new leader out of its things if it was one, the old one in among them where it shows,
@@ -2799,7 +2806,7 @@ static bool doc_lead(Doc& d, int by, int leader, double now) {
         std::snprintf(add, sizeof add, " %.17g %.17g", type == "follow" ? settles.first : wasAt.first, type == "follow" ? settles.second : wasAt.second);
         ok = doc_say(d, by, "members", (doc_word(d, by, "members") + " " + std::to_string(was)).c_str())
              && doc_say(d, by, "under", (doc_word(d, by, "under") + " " + std::to_string(under && doc_among("around row follow push", doc_word(d, under, "file")) ? under : 0)).c_str())
-             && doc_say(d, by, "from", (doc_word(d, by, "from") + add).c_str()) && doc_set(d, was, "x_by", by) && doc_set(d, was, "y_by", by);
+             && doc_say(d, by, "from", (doc_word(d, by, "from") + add).c_str()) && doc_set(d, was, "x_by", by) && doc_set(d, was, "y_by", by) && (!doc_knows(d, was, "z") || doc_set(d, was, "z_by", by));
     }
     if (ok && type == "follow") {   // (each starts from where the new leader settles)
         std::string from;
