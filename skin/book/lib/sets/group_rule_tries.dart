@@ -53,8 +53,7 @@ class _BeforeAfter extends StatelessWidget {
       return Padding(
         padding: const EdgeInsets.all(10),
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          AspectRatio(
-            aspectRatio: 1.2,
+          Expanded(   // (as tall as the pane leaves it)
             child: LayoutBuilder(builder: (context, box) {
               final s = box.biggest, k = s.width * .4, home = Offset(s.width / 2, s.height / 2), ghost = home + Offset(move.dx * k, -move.dy * k);
               final corner = ghost + Offset.fromDirection(-turn * math.pi / 180 - math.pi / 4, 26 * size);
