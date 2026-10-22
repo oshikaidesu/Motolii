@@ -15,6 +15,7 @@ import '../sets/inspector/inspector_parts.dart';
 import '../theme.dart';
 import 'desk.dart';
 import 'desk_depth.dart';
+import 'desk_relations.dart';
 import 'desk_ease.dart';
 import 'dock.dart';
 import 'dock_glyphs.dart';
@@ -315,6 +316,7 @@ final _panes = [
   WsPane('Ease', DockG.time, () => const DeskEase(), minSize: 260),
   WsPane('Camera', DockG.camera, () => const DeskDepth(), minSize: WsT.lower),
   WsPane('Desk', DockG.desk, () => const WsDesk(), minSize: WsT.lower),
+  WsPane('Relations', DockG.desk, () => const DeskRelations(), minSize: WsT.lower),
 ];
 
 /// A pane's tab strip, added on top of the reference heights so the seats keep theirs.
@@ -331,7 +333,7 @@ DockingArea _preset(DockingItem Function(String name, {double? size, double? wei
     ]),
     DockingRow([item('Timeline'), item('Ease', size: WsT.inspector)], size: WsT.lower + _strip),   // (the stretch between two keys, beside the keys)
   ]),
-  DockingColumn([extra.isEmpty ? item('Inspector') : DockingTabs([item('Inspector'), for (final p in extra) item(p.name)]), DockingTabs([item('Camera'), item('Desk')], size: WsT.lower + _strip)], size: WsT.inspector, minimalSize: 340),   // (the camera, whatever is picked)
+  DockingColumn([extra.isEmpty ? item('Inspector') : DockingTabs([item('Inspector'), for (final p in extra) item(p.name)]), DockingTabs([item('Camera'), item('Desk'), item('Relations')], size: WsT.lower + _strip)], size: WsT.inspector, minimalSize: 340),   // (the camera, whatever is picked)
 ]);
 
 /// Joined: the document's word for what a thing is, where the inspector's kinds have none (film, picture, solid).
