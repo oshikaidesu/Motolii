@@ -27,6 +27,7 @@ import 'sets/panels/stage_set.dart';
 import 'sets/panels/timeline_parts.dart';
 import 'sets/panels/transport.dart';
 import 'sets/workflows/workflow_set.dart';
+import 'sets/group_rule_tries.dart';
 import 'sets/relation_ideas.dart';
 import 'tokens.dart';
 import 'words_addon.dart';
@@ -38,7 +39,7 @@ void main() {
     return runApp(WidgetsApp(color: const Color(0xFF000000), builder: (c, _) => cardsAgentPage(Platform.environment['AGENT_PAGE'] ?? 'Link')));
   }
   if (const bool.fromEnvironment('MOTOLII_BARE')) {   // (the window alone, the whole screen of it, without the book round it: --dart-define=MOTOLII_BARE=true)
-    return runApp(WidgetsApp(color: const Color(0xFF000000), builder: (c, _) => const Workspace(document: String.fromEnvironment('MOTOLII_DOC', defaultValue: '$motoliiDir/out/skin.motolii'))));
+    return runApp(WidgetsApp(color: const Color(0xFF000000), builder: (c, _) => Workspace(document: const String.fromEnvironment('MOTOLII_DOC', defaultValue: '$motoliiDir/out/skin.motolii'), extra: const bool.fromEnvironment('MOTOLII_TRIES') ? groupRuleTryPanes() : const [])));   // (MOTOLII_TRIES: the group rule tries as tabs beside the inspector)
   }
   runApp(const LabBook());
 }
@@ -76,7 +77,7 @@ class LabBook extends StatelessWidget {
         ],
       ),
       WidgetbookCategory(name: 'インスペクタ案', children: [cardsSet(), inspectorPlansSet(), lassoSet()]),
-      WidgetbookCategory(name: 'Relation', children: [relationIdeasSet()]),
+      WidgetbookCategory(name: 'Relation', children: [relationIdeasSet(), groupRuleTriesSet()]),
       WidgetbookCategory(name: 'Glass', children: [glassLiveSet()]),
       WidgetbookCategory(
         name: 'Parts',
