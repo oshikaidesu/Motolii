@@ -7,6 +7,7 @@
 //   key cmd+z | cmd+shift+z | escape | delete
 //   look                       only a shot
 //   end                        the window closed, the test over
+// With AGENT_BENCH=<a document> the relation bench is opened on a copy of it instead (its path in $AGENT_DIR/document.txt).
 // Without AGENT_DIR it is skipped. Run:  AGENT_DIR=/some/dir flutter test test/agent_window_test.dart
 // The stage's picture is the window's stand-in (boxes where the inside says things lie), the words in Arial.
 import 'dart:io';
@@ -19,11 +20,31 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lab_book/motolii.dart';
-import 'package:lab_book/workspace/ws.dart' show WsT;
+import 'package:lab_book/sets/relation_bench.dart';
+import 'package:lab_book/workspace/stage.dart' show WsStage;
+import 'package:lab_book/workspace/ws.dart' show WsScope, WsT;
 
 import 'door.dart';
 
-final _dir = Platform.environment['AGENT_DIR'];
+final _dir = Platform.environment['AGENT_DIR'], _bench = Platform.environment['AGENT_BENCH'];
+
+/// The relation bench on a copy of [doc] instead of the whole window (AGENT_BENCH=<a document>): undo begins there.
+Future<Ws> _openBench(WidgetTester t, String doc) async {
+  final path = '${Directory.systemTemp.createTempSync('bench').path}/bench.motolii';
+  File(doc).copySync(path);
+  File('$_dir/document.txt').writeAsStringSync(path);   // (where the tester's document is, to read what they made)
+  Process.runSync('sqlite3', [path, 'delete from step;']);
+  t.view.physicalSize = const Size(1600, 960);
+  t.view.devicePixelRatio = 1;
+  t.binding.defaultBinaryMessenger.setMockMethodCallHandler(const MethodChannel('motolii/stage'), (_) async => -1);
+  await t.pumpWidget(WidgetsApp(color: const Color(0xFF000000), builder: (c, _) => RelationBench(document: path)));
+  for (var i = 0; i < 40 && find.byType(WsStage).evaluate().isEmpty; i++) {
+    await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+    await t.pump();
+  }
+  await t.pumpAndSettle();
+  return WsScope.read(t.element(find.byType(WsStage)));
+}
 
 Future<void> _fonts() async {
   Future<void> load(String family, String file) async {
@@ -65,7 +86,7 @@ void main() {
   testWidgets("a tester's hand on the window", (t) async {
     final dir = _dir!;
     await t.runAsync(_fonts);
-    final ws = await openWorkspace(t, document: _scene());
+    final bench = _bench, ws = bench != null ? await _openBench(t, bench) : await openWorkspace(t, document: _scene());
     final inbox = File('$dir/inbox.txt'), done = File('$dir/done.txt');
     if (!inbox.existsSync()) inbox.writeAsStringSync('');
     var n = 0, idle = 0;

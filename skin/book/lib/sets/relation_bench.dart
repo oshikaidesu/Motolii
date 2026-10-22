@@ -63,7 +63,7 @@ class _RelationBenchState extends State<RelationBench> {
     ws: _ws,
     child: ColoredBox(
       color: Grey.g07,
-      child: Padding(
+      child: _ws.inside == null ? const SizedBox.expand() : Padding(   // (the stage drawn once it is joined)
         padding: const EdgeInsets.all(8),
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           const Expanded(flex: 5, child: WsStage()),
