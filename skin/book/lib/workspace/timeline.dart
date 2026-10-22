@@ -394,6 +394,7 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
           dim: _isHidden(ws, l.id) || (_anySolo(ws) && !_isSolo(ws, l.id)),
           locked: _isLocked(ws, l.id),
           wave: _waveOf(ws, l),
+          tone: l.tone,
         ),
     ];
     return Focus(
@@ -632,7 +633,7 @@ class _Header extends StatelessWidget {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      WtKindChip(layer.kind),
+                      WtKindChip(layer.kind, tone: layer.tone),
                       SizedBox(width: Shape.s(6)),
                       Flexible(
                         child: FittedBox( // (drawn smaller, never cut)
@@ -847,7 +848,7 @@ class _LabelRowState extends State<_LabelRow> {
                   children: [
                     SizedBox(width: 14, child: Text('${widget.index + 1}', style: T.value(sel ? Grey.g91 : Grey.g56).copyWith(fontSize: T.px(10)))),
                     SizedBox(width: Shape.s(6)),
-                    WtKindChip(r.kind, dim: r.dim),
+                    WtKindChip(r.kind, dim: r.dim, tone: r.tone),
                     SizedBox(width: Shape.s(7)),
                     Expanded(
                       child: Text(

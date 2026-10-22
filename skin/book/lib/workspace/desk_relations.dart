@@ -81,7 +81,7 @@ class _World {
     if (m == null) return _World(const {}, null, const [], Size.zero);
     final now = ws.frame / Ws.fps, things = <String, (_P3, Color, String)>{};
     _P3? camera;
-    double v(int t, String n) => (n == 'x' || n == 'y' ? m.shows(t, n, now)?.$1 : null) ?? m.value(t, n, now) ?? 0;
+    double v(int t, String n) => (n == 'x' || n == 'y' || n == 'z' ? m.shows(t, n, now)?.$1 : null) ?? m.value(t, n, now) ?? 0;   // (a place where it shows: a relation moves depth too)
     final rels = <_Relation>[];
     for (final l in ws.layers) {
       final t = int.tryParse(l.id);
@@ -96,8 +96,7 @@ class _World {
         camera = at;
         continue;
       }
-      final fill = int.tryParse(m.word(t, 'fill'), radix: 16);
-      things[l.id] = (at, fill == null ? wsTone(l.kind) : Color(0xFF000000 | fill), l.name);
+      things[l.id] = (at, l.tone, l.name);   // (its label colour: the same as its row's)
     }
     return _World(things, camera, rels, Size(WsArt.comp.width / 2 / m.point, WsArt.comp.height / 2 / m.point));
   }
@@ -187,8 +186,6 @@ class _View {
   }
 }
 
-const _hues = [Color(0xFFD85A30), Color(0xFF7F77DD), Color(0xFF1D9E75), Color(0xFFD4537E), Color(0xFF378ADD)];
-
 class _Map extends CustomPainter {
   _Map(this.v, this.selected);
   final _View v;
@@ -204,8 +201,8 @@ class _Map extends CustomPainter {
     c.drawPath(Path()..addPolygon([for (final p in v._frame) v.on(p)], true), line);
     if (v.world.camera case final cam?) c.drawCircle(v.on(cam), 5, Paint()..color = WsT.toneCamera);
     // (each relation's shape, its threads to its things, in its own hue)
-    for (final (i, r) in v.world.relations.indexed) {
-      final hue = _hues[i % _hues.length], picked = r.id == selected;
+    for (final r in v.world.relations) {
+      final hue = wsLabel(r.id), picked = r.id == selected;   // (in its own label colour, as its row)
       line
         ..color = hue.withValues(alpha: picked ? 1 : .7)
         ..strokeWidth = picked ? 2 : 1;

@@ -1083,7 +1083,7 @@ class _ViewPainter extends CustomPainter {
       }
     }
     if (marked) return c.restore();
-    if (WsArt.boxOf(scene, hover) case final b?) _legible(c, _boxPath(b), wsTone(scene.layer(hover)!.kind), 1);
+    if (WsArt.boxOf(scene, hover) case final b?) _legible(c, _boxPath(b), wsLabel(hover!), 1);   // (in its label colour, as its row)
     if (WsArt.boxOf(scene, sel) case final b?) _selection(c, b, scene.layer(sel)!);
     c.restore();
   }

@@ -57,7 +57,9 @@ class WtRow {
     this.dim = false,
     this.locked = false,
     this.wave,
+    this.tone,
   });
+  final Color? tone;   // (its label colour; none: its kind's)
   final String name;
 
   /// How loud its sound is at each frame of its bar (dB, the inside's reading; null: no sound to show).
@@ -72,6 +74,7 @@ class WtRow {
       other is WtRow &&
       other.name == name &&
       other.kind == kind &&
+      other.tone == tone &&
       other.inF == inF &&
       other.outF == outF &&
       _listEq(other.keys, keys) &&
@@ -199,7 +202,7 @@ class WtRulerPainter extends CustomPainter {
 Color wtBand(int i, bool selected) => selected ? Grey.g20 : (i.isEven ? Grey.bandA : Grey.bandB);
 
 /// The bar's fill: the kind's hue, a step quieter when not selected; a hidden or soloed-out layer drops to grey.
-Color wtBarFill(WtRow r) => r.dim ? Grey.g26 : (r.selected ? wsTone(r.kind) : Color.lerp(wsTone(r.kind), Grey.g07, .22)!);
+Color wtBarFill(WtRow r) => r.dim ? Grey.g26 : (r.selected ? Color.lerp(r.tone ?? wsTone(r.kind), const Color(0xFFFFFFFF), .18)! : r.tone ?? wsTone(r.kind));   // (its colour as it is, as Ableton's clips; picked, a little lighter)
 
 class WtTracksPainter extends CustomPainter {
   const WtTracksPainter({required this.rows, required this.view, required this.fps, required this.vscroll});
@@ -384,14 +387,15 @@ class WtOverviewPainter extends CustomPainter {
 
 /// A layer's kind: a small square of its hue with the kind drawn in the dark ink.
 class WtKindChip extends StatelessWidget {
-  const WtKindChip(this.kind, {super.key, this.dim = false});
+  const WtKindChip(this.kind, {super.key, this.dim = false, this.tone});
+  final Color? tone;
   final WsKind kind;
   final bool dim;
   @override
   Widget build(BuildContext context) => Container(
     width: WtM.chip,
     height: WtM.chip,
-    decoration: BoxDecoration(color: dim ? Grey.g26 : wsTone(kind), borderRadius: BorderRadius.all(Shape.r(3))),
+    decoration: BoxDecoration(color: dim ? Grey.g26 : tone ?? wsTone(kind), borderRadius: BorderRadius.all(Shape.r(3))),
     child: CustomPaint(painter: _KindPainter(kind, dim ? Grey.g56 : WsT.onAccent)),
   );
 }

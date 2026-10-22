@@ -484,7 +484,7 @@ class _Readout extends StatelessWidget {
         Container(
           width: Shape.z(8),
           height: Shape.z(8),
-          decoration: BoxDecoration(color: wsTone(l.kind), borderRadius: BorderRadius.all(Shape.r(2))),
+          decoration: BoxDecoration(color: l.tone, borderRadius: BorderRadius.all(Shape.r(2))),
         ),
         SizedBox(width: Shape.s(6)),
         Text(l.name, style: T.name(Grey.g95).copyWith(fontWeight: FontWeight.w600)),
