@@ -22,6 +22,25 @@ class _DeskRelationsState extends State<DeskRelations> {
   double _yaw = 0, _pitch = 0, _zoom = 1;   // (turned: 0, 0 is from the front, the camera's own way; a scroll comes closer)
   (int, Map<String, List<_P3>>)? _paths;   // (each thing's way through the whole stretch, as the document stood: read again when it changes)
 
+  /// A picked relation's things at each of its keys' moments, in time's order: the shapes it goes through, not the way.
+  (Object, Map<String, List<_P3>>)? _stations;
+  Map<String, List<_P3>> _stationsOf(Ws ws) {
+    final m = ws.inside, r = int.tryParse(ws.selected ?? '');
+    final at = (ws.rev, ws.selected);
+    if (_stations?.$1 == at) return _stations!.$2;
+    final out = <String, List<_P3>>{};
+    if (m != null && r != null && m.word(r, 'kind') == 'behaviour') {
+      final moments = {for (final n in m.moving(r)) ...m.keyMoments(r, n)}.toList()..sort();
+      for (final s in m.word(r, 'members').split(' ')) {
+        final t = int.tryParse(s);
+        if (t == null || moments.length < 2) continue;
+        double v(String n, double a) => m.shows(t, n, a)?.$1 ?? m.value(t, n, a) ?? 0;
+        out[s] = [for (final a in moments) (x: v('x', a), y: v('y', a), z: v('z', a))];
+      }
+    }
+    return (_stations = (at, out)).$2;
+  }
+
   Map<String, List<_P3>> _pathsOf(Ws ws) {
     if (_paths?.$1 == ws.rev) return _paths!.$2;
     final m = ws.inside, out = <String, List<_P3>>{};
@@ -76,7 +95,7 @@ class _DeskRelationsState extends State<DeskRelations> {
                     }
                     if (view.hit(d.localPosition) case final id?) ws.select(id);
                   },
-                  child: CustomPaint(size: box.biggest, painter: _Map(view, ws.selected, _pathsOf(ws))),
+                  child: CustomPaint(size: box.biggest, painter: _Map(view, ws.selected, {if (_pathsOf(ws)[ws.selected] case final w?) ws.selected!: w}, _stationsOf(ws))),
                 ));
               }),
             ),
@@ -222,10 +241,10 @@ class _View {
 }
 
 class _Map extends CustomPainter {
-  _Map(this.v, this.selected, this.paths);
+  _Map(this.v, this.selected, this.paths, this.stations);
   final _View v;
   final String? selected;
-  final Map<String, List<_P3>> paths;
+  final Map<String, List<_P3>> paths, stations;   // (the picked thing's way; a picked relation's shapes at its keys)
 
   @override
   void paint(Canvas c, Size s) {
@@ -260,11 +279,18 @@ class _Map extends CustomPainter {
     }
     // (each moving thing's way through the stretch, in its colour, a dot each step: a morph from one relation to another
     //  shows as the ways bending from one shape into the other, an ease as the dots closing up and spreading)
-    for (final e in paths.entries) {
-      final hue = (v.world.things[e.key]?.$2 ?? WsT.accent).withValues(alpha: e.key == selected ? .9 : .45), pts = [for (final p in e.value) v.on(p)];
-      c.drawPath(Path()..addPolygon(pts, false), Paint()..color = hue..style = PaintingStyle.stroke..strokeWidth = 1);
+    for (final e in paths.entries) {   // (as After Effects: the picked thing's way only, a dot a step)
+      final hue = v.world.things[e.key]?.$2 ?? WsT.accent, pts = [for (final p in e.value) v.on(p)];
+      c.drawPath(Path()..addPolygon(pts, false), Paint()..color = hue.withValues(alpha: .6)..style = PaintingStyle.stroke..strokeWidth = 1);
       for (final p in pts) {
-        c.drawCircle(p, 1.2, Paint()..color = hue);
+        c.drawCircle(p, 1.4, Paint()..color = hue);
+      }
+    }
+    for (final e in stations.entries) {   // (a picked relation: where each thing stands at each of its keys, joined straight, ringed hollow)
+      final hue = v.world.things[e.key]?.$2 ?? WsT.accent, pts = [for (final p in e.value) v.on(p)];
+      c.drawPath(Path()..addPolygon(pts, false), Paint()..color = hue.withValues(alpha: .35)..style = PaintingStyle.stroke..strokeWidth = 1);
+      for (final p in pts) {
+        c.drawCircle(p, 5, Paint()..color = hue..style = PaintingStyle.stroke..strokeWidth = 1.2);
       }
     }
     // (the things, the picked one ringed)
