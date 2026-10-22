@@ -10,6 +10,7 @@ import 'package:flutter/widgets.dart';
 
 import '../sets/panels/timeline_parts_parts.dart' show TpGlyph, TpGlyphPainter;
 import '../tokens.dart';
+import 'key_drag.dart';
 import 'timeline_paint.dart';
 import 'relate.dart';
 import 'ws.dart';
@@ -158,12 +159,23 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
   // inside's, and the bar is drawn from what the inside then says.
   ({String id, String part, double grab, bool moved})? _bar;
 
+  // A key held by a hand: it (and the keys picked with it) slides in time; the playhead shows where, let go it is so.
+  ({List<WsKey> keys, int grab, int by})? _slide;
+
   void _barDown(Offset p) {
     final ws = _ws!, v = _view, m = ws.inside;
     final i = ((p.dy + _vscroll) / WtM.row).floor();
     if (m == null || i < 0 || i >= ws.layers.length) return;
     final l = ws.layers[i], a = v.x(l.inF), b = v.x(l.outF);
     if (_isLocked(_ws!, l.id) || p.dx < a - 6 || p.dx > b + 6) return;
+    for (final k in l.keys) {
+      if ((v.x(k) - p.dx).abs() > WtM.keyPicked + 2) continue;
+      final held = (layer: l.id, frame: k), all = ws.keys.contains(held) ? ws.keys.toList() : [held];
+      if (!ws.keys.contains(held)) ws.pickKey(held);
+      if (ws.playing) ws.playing = false;
+      _slide = (keys: all, grab: k, by: 0);
+      return;
+    }
     m.take(int.parse(l.id));
     ws.select(l.id);
     if (ws.playing) ws.playing = false;
@@ -171,6 +183,12 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
   }
 
   void _barMove(Offset p) {
+    if (_slide case final s?) {
+      final by = _view.frameAt(p.dx).round() - s.grab;
+      _slide = (keys: s.keys, grab: s.grab, by: by);
+      _ws!.frame = (s.grab + by).clamp(0, Ws.duration);
+      return;
+    }
     final h = _bar, ws = _ws!, m = ws.inside;
     if (h == null || m == null) return;
     m.carry(h.part, (_view.frameAt(p.dx) - h.grab).round() / Ws.fps); // (by whole frames)
@@ -179,6 +197,11 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
   }
 
   void _barUp({bool keep = true}) {
+    if (_slide case final s?) {
+      _slide = null;
+      if (keep) wsSlideKeys(_ws!, s.keys, s.by);
+      return;
+    }
     final h = _bar, ws = _ws!, m = ws.inside;
     _bar = null;
     if (h == null || m == null) return;

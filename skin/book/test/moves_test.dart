@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lab_book/motolii.dart';
+import 'package:lab_book/workspace/key_drag.dart';
 import 'package:lab_book/workspace/moves.dart';
 
 import 'door.dart';
@@ -55,5 +56,10 @@ void main() {
     await rest();
     mv = wsMoves(ws).single;
     expect([mv.out, mv.over], [closeTo(0, 1e-3), closeTo(.3, 1e-3)]);
+
+    wsSlideKeys(ws, [(layer: '${mv.by}', frame: 120)], 30);   // (the first key half a second later on the timeline: its way goes with it)
+    await rest();
+    mv = wsMoves(ws).single;
+    expect([mv.start, mv.length, mv.over], [closeTo(2.5, 1e-9), closeTo(.5, 1e-9), closeTo(.3, 1e-3)]);
   }, skip: !insideBuilt);
 }
