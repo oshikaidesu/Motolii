@@ -1208,14 +1208,14 @@ static void layer_at(Stage& s, Drawn* d, float frame) {
 }
 
 // A picture taken off the stage for good.
+// Nothing waits for it (as Filament's own destroy): what ThorVG holds, and the picture itself, go on the driver thread
+// after every frame sent before that may still draw it, since that thread runs what it is given in turn.
 static void picture_off(Stage& s, Drawn* d) {
     s.playing.erase(d);
     take_off(s, d->sheet);
-    door::on_driver(s.engine, [d] { delete d->canvas; delete d->film; });
-    s.engine->flushAndWait();
     d->look = nullptr;
     kept_drop(s, d);
     if (d->texture) s.engine->destroy(d->texture);
-    delete d;
+    door::on_driver(s.engine, [d] { delete d->canvas; delete d->film; delete d; });
 }
 
