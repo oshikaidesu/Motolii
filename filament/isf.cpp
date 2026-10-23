@@ -4,8 +4,8 @@
 // rapidjson (as Filament's assimp has it). The shader's own lines are kept; around them ISF's words (IMG_NORM_PIXEL, IMG_THIS_PIXEL,
 // isf_FragNormCoord, TIME, RENDERSIZE...) are said in plain GLSL, each picture split into a texture and a sampler, the
 // knobs gathered into one struct and written in the head (script.h: // --track@...), its passes too (// --pass@...).
-// Made once into ~/Library/Caches/Motolii/isf/<hash>.wgsl, named by the file as it is. Not taken: a vertex shader of
-// its own, a second picture read, audio.
+// Made once into ~/Library/Caches/Motolii/isf/<hash>.wgsl, named by the file as it is. Its other images are
+// other things' pictures (screen.h others); its own vertex shader is worked out at each pixel. Not taken: audio.
 #include "isf.h"
 #include <sys/stat.h>
 #include <cstdio>
@@ -25,7 +25,7 @@
 #include "src/tint/lang/spirv/reader/reader.h"
 #include "src/tint/lang/wgsl/writer/writer.h"
 
-static std::string isf_wgsl(const std::string& text, const std::string& name, std::string& why) {
+static std::string isf_wgsl(const std::string& text, const std::string& name, std::string& why, std::string vertex = "") {
     const size_t open = text.find("/*"), close = text.find("*/");
     rapidjson::Document head;
     if (open == std::string::npos || close == std::string::npos || head.Parse(text.c_str() + open + 2, close - open - 2).HasParseError() || !head.IsObject())
@@ -63,8 +63,8 @@ static std::string isf_wgsl(const std::string& text, const std::string& name, st
     for (const auto& i : inputs.GetArray()) if (str(i, "TYPE") == "image") pictures.push_back(str(i, "NAME"));
     if (pictures.empty()) return why = "makes a picture of its own (no image in): not an effect over the stage", "";
     const std::string picture = std::find(pictures.begin(), pictures.end(), "inputImage") != pictures.end() ? "inputImage" : pictures[0];
-    for (const std::string& other : pictures)
-        if (other != picture && std::regex_search(body, std::regex("\\b" + other + "\\b"))) return why = "reads a second picture (" + other + ")", "";
+    std::vector<std::string> others;   // (its other images: each another thing's picture, chosen on its card, bound after the passes' pictures)
+    for (const std::string& other : pictures) if (other != picture) others.push_back(other);
 
     const std::map<std::string, std::string> kinds = {{"float", "float"}, {"bool", "int"}, {"long", "int"}, {"event", "int"}, {"point2D", "vec2"}, {"color", "vec4"}};
     std::string glsl = "#version 450\n";
@@ -74,7 +74,9 @@ static std::string isf_wgsl(const std::string& text, const std::string& name, st
     read.insert(read.end(), targets.begin(), targets.end());
     for (size_t k = 0; k < read.size(); ++k)
         glsl += "layout(set = 0, binding = " + std::to_string(2 * k) + ") uniform texture2D isf_tex_" + read[k] + ";\nlayout(set = 0, binding = " + std::to_string(2 * k + 1) + ") uniform sampler isf_smp_" + read[k] + ";\n";
-    glsl += "layout(set = 0, binding = " + std::to_string(2 * read.size()) + ") uniform Knobs {\n  float time;\n  vec2 resolution;\n  float frame;\n  float passindex;\n";
+    for (size_t k = 0; k < others.size(); ++k)
+        glsl += "layout(set = 0, binding = " + std::to_string(2 * (read.size() + k)) + ") uniform texture2D isf_tex_" + others[k] + ";\nlayout(set = 0, binding = " + std::to_string(2 * (read.size() + k) + 1) + ") uniform sampler isf_smp_" + others[k] + ";\n";
+    glsl += "layout(set = 0, binding = " + std::to_string(2 * (read.size() + others.size())) + ") uniform Knobs {\n  float time;\n  vec2 resolution;\n  float frame;\n  float passindex;\n";
     std::string switches, lines;
     for (const auto& k : inputs.GetArray()) {
         const std::string t = str(k, "TYPE"), n = str(k, "NAME");
@@ -99,6 +101,14 @@ static std::string isf_wgsl(const std::string& text, const std::string& name, st
     }
     glsl += "};\n" + switches;
     glsl += "layout(location = 0) in vec2 isf_FragNormCoord;\nlayout(location = 0) out vec4 isf_FragColor;\n";
+    for (const std::string& n : others) {
+        std::string label = n;
+        for (const auto& i : inputs.GetArray()) if (str(i, "NAME") == n) label = str(i, "LABEL", n);
+        std::replace(label.begin(), label.end(), ',', ' ');
+        lines += "// --picture@" + n + ":" + label + "\n";
+        read.push_back(n);   // (read through ISF's words as the others are)
+    }
+    for (const std::string& n : others) glsl += "#define " + n + " sampler2D(isf_tex_" + n + ", isf_smp_" + n + ")\n";
     glsl += "#define " + picture + " sampler2D(isf_tex_" + picture + ", isf_smp_" + picture + ")\n";
     glsl += "#define TIME time\n#define RENDERSIZE resolution\n#define TIMEDELTA (1.0 / 60.0)\n#define FRAMEINDEX int(frame)\n#define PASSINDEX int(passindex)\n#define DATE vec4(0.0)\n";
     for (const std::string& n : read) glsl += "#define isf_img_" + n + " sampler2D(isf_tex_" + n + ", isf_smp_" + n + ")\n";
@@ -107,6 +117,18 @@ static std::string isf_wgsl(const std::string& text, const std::string& name, st
     body = std::regex_replace(body, std::regex(R"((\bIMG_(?:NORM_PIXEL|PIXEL|THIS_PIXEL|THIS_NORM_PIXEL|SIZE)\s*\(\s*)(\w+))"), "$1isf_img_$2");
     glsl += "#define gl_FragColor isf_FragColor\n#define texture2D texture\n#define varying //\n";
     glsl += "#define texture(i, c) textureLod(i, c, 0.0)\n";   // (WGSL samples with derivatives only where every pixel goes the same way: these read the top level anywhere)
+    if (!vertex.empty()) {   // (its own vertex shader: what it hands on (neighbours' places, mostly) worked out at each pixel instead, before the pixel's own work: the same, being straight in the place)
+        const std::regex said(R"(^[ \t]*(?:varying|out|in)[ \t]+(\w+)[ \t]+(\w+)([ \t]*\[[^\]]*\])?[ \t]*;)", std::regex::multiline);
+        std::map<std::string, std::string> handed;   // (each by its name: its type, and how many when it is a row of them)
+        for (const std::string* t : {&vertex, &body})
+            for (std::sregex_iterator m(t->begin(), t->end(), said), end; m != end; ++m) handed[(*m)[2].str() + (*m)[3].str()] = (*m)[1];
+        vertex = std::regex_replace(std::regex_replace(vertex, said, ""), std::regex(R"(\bvoid\s+main\s*\()"), "void isf_vs_main(");
+        body = std::regex_replace(std::regex_replace(body, said, ""), std::regex(R"(\bvoid\s+main\s*\()"), "void isf_fs_main(");
+        glsl += "#define isf_vertShaderInit()\nvec4 isf_vs_position;\n#define gl_Position isf_vs_position\n";
+        for (const auto& [n, type] : handed) glsl += type + " " + n + ";\n";
+        vertex = std::regex_replace(vertex, std::regex(R"(\b(IMG_(?:NORM_PIXEL|PIXEL|THIS_PIXEL|THIS_NORM_PIXEL|SIZE)\s*\(\s*)(\w+))"), "$1isf_img_$2");
+        body = std::regex_replace(vertex, std::regex(R"(^[ \t]*#version.*$)"), "") + "\n" + body + "\nvoid main() { isf_vs_main(); isf_fs_main(); }\n";
+    }
     glsl += "#line 1\n" + std::regex_replace(body, std::regex(R"(^[ \t]*#version.*$)"), "");
 
     static std::once_flag once;
@@ -149,7 +171,7 @@ std::string isf_file(const std::string& file) {
     if (std::filesystem::path(file).extension() != ".fs") return file;
     struct stat st {};
     if (stat(file.c_str(), &st) != 0) return "";
-    const std::string key = "isf 3|" + file + "|" + std::to_string(st.st_mtimespec.tv_sec) + "." + std::to_string(st.st_mtimespec.tv_nsec) + "|" + std::to_string(st.st_size);
+    const std::string key = "isf 6|" + file + "|" + std::to_string(st.st_mtimespec.tv_sec) + "." + std::to_string(st.st_mtimespec.tv_nsec) + "|" + std::to_string(st.st_size);
     static std::mutex lock;
     static std::map<std::string, std::string> made;   // (what each file as it is became: "" could not be)
     std::lock_guard<std::mutex> hold(lock);
@@ -168,7 +190,9 @@ std::string isf_file(const std::string& file) {
     text << in.rdbuf();
     std::string why;
     const std::string stem = std::filesystem::path(file).stem().string();
-    const std::string wgsl = std::filesystem::exists(std::filesystem::path(file).replace_extension(".vs"), e) ? (why = "a vertex shader of its own", "") : isf_wgsl(text.str(), stem, why);
+    std::stringstream vertex;   // (its own vertex shader, if it has one beside it)
+    if (std::ifstream vs(std::filesystem::path(file).replace_extension(".vs")); vs) vertex << vs.rdbuf();
+    const std::string wgsl = isf_wgsl(text.str(), stem, why, vertex.str());
     if (wgsl.empty()) {
         std::fprintf(stderr, "the ISF effect %s is not taken: %s\n", file.c_str(), why.substr(0, 600).c_str());
         return made[key] = "";

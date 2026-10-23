@@ -34,6 +34,8 @@ std::vector<ScriptKnob> script_knobs(const std::string& file) {
             k.step = said.size() >= 5 ? std::atof(said[4].c_str()) : 0;
         } else if (k.kind == "check") {
             k.low = 0, k.high = 1, k.usual = said.size() >= 2 ? std::atof(said[1].c_str()) : 0, k.step = 1;
+        } else if (k.kind == "picture") {   // (another thing's picture read as one of its images: the thing, by its number)
+            k.low = 0, k.high = 1e9, k.usual = 0, k.step = 1;
         } else if (k.kind == "select" && said.size() >= 2) {
             for (size_t i = 1; i < said.size(); ++i) k.words += (i > 1 ? " " : "") + said[i];
         } else continue;

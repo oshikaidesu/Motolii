@@ -663,7 +663,7 @@ static DocScript* doc_script_of(const std::string& file) {
         for (size_t i = 0; i < s.knobs.size(); ++i) {   // (the names are all made first: what points into them stays put)
             const ScriptKnob& k = s.knobs[i];
             s.values.push_back(DocValue{s.names[i].c_str(), "film picture text shape solid stage", k.kind == "select" ? 0.0 : k.low, k.kind == "select" ? 0.0 : k.high, k.kind == "track", k.kind == "select" ? k.words.c_str() : nullptr});
-            s.shown.push_back(DocShown{s.names[i].c_str(), k.kind == "check" ? "onoff" : "", "", k.label.c_str(), k.low, k.high, nullptr});
+            s.shown.push_back(DocShown{s.names[i].c_str(), k.kind == "check" ? "onoff" : k.kind == "picture" ? "thing" : "", "", k.label.c_str(), k.low, k.high, nullptr});
         }
         if (!screen) s.run = std::make_unique<Script>(file);   // (a .wgsl or an ISF .fs is drawn, not run: screen.h)
         { std::ifstream in(screen ? isf_file(file) : file); std::stringstream text; text << in.rdbuf(); s.clears = text.str().find("opacity") != std::string::npos; }
@@ -1721,6 +1721,16 @@ static void doc_moment(Doc& d, double now) {
     // takes, blurs that ground as far off); each run after those is a view of its own laid over the ones before (kit.h
     // layer_view; flat things there are sharp). The order within a run of flat things is the blend order, and a flat
     // thing's looks neither ask nor write depth.
+    // (the things another's effect reads as one of its images (ISF's images past the first): each drawn alone with its
+    //  effects, as a run of its own, and quiet, its picture given to the one that reads it: screen.h ScreenStack seen)
+    std::set<int> readBy;
+    for (const auto& one : lies)
+        for (const std::string& file : doc_fx_list(d, one.thing))
+            if (!doc_thor_letter(file))
+                if (DocScript* sc = doc_script_of(file))
+                    for (const ScriptKnob& k : sc->knobs)
+                        if (k.kind == "picture")
+                            if (const int other = (int)doc_number(d, one.thing, doc_screen_knob(file, k.name).c_str(), now, 0); other > 0 && other != one.thing) readBy.insert(other);
     std::vector<int> runOf(lies.size(), -1), sorts;
     std::vector<char> runReads;   // (whether a run reads what is under it: a blend that reads, or one with effects of its own that does)
     for (size_t i = 0; i < lies.size(); ++i) {
@@ -1729,7 +1739,7 @@ static void doc_moment(Doc& d, double now) {
         //  kit copies the picture so far before it, kit.h pictures_of; never the first run, which has nothing under it)
         // (a thing with effects of its own is a run of its own too, drawn alone and then given them: screen.h thing_effects_draw;
         //  never the first run either, the stage's own view, which draws what is behind everything)
-        const bool effected = doc_fx_files(doc_fx_list(d, lies[i].thing));
+        const bool effected = doc_fx_files(doc_fx_list(d, lies[i].thing)) || readBy.count(lies[i].thing);
         const std::string laidOn = doc_word(d, lies[i].thing, "blend");
         const bool laysOwn = effected && !laidOn.empty() && laidOn != "normal";   // (with effects of its own, any way but normal is taken last, over what is under: screen.h)
         const bool reads = !lies[i].solid && (doc_blend_way(laidOn) || laysOwn || doc_word(d, lies[i].thing, "fill") == "behind");   // (a blend that reads, or a fill of what is behind)
@@ -1769,6 +1779,12 @@ static void doc_moment(Doc& d, double now) {
             const int thing = lies[i].thing;
             ScreenStack& st = d.fx[thing];
             thing_effects(s, st, doc_fx_join(doc_fx_list(d, thing)));
+            st.quiet = readBy.count(thing) > 0;
+            const ScreenPictures pictures = [&d, thing](const std::string& file, const std::string& name) -> Texture* {
+                std::lock_guard<std::recursive_timed_mutex> hold(d.lock);
+                const auto other = d.fx.find((int)doc_number(d, thing, doc_screen_knob(file, name).c_str(), d.stage->now, 0));
+                return other != d.fx.end() && other->first != thing ? other->second.seen : nullptr;   // (drawn before it this time when it lies under it; else as it was last time)
+            };
             const ScreenNumbers numbers = [&d, thing](const std::string& file, const std::string& name, double usual) {
                 std::lock_guard<std::recursive_timed_mutex> hold(d.lock);   // (asked while the picture is drawn)
                 if (name == "origin_x" || name == "origin_y" || name == "turn" || name == "extent") {   // (where the thing is on the picture now, how turned, how large: an effect's pattern stuck to it)
@@ -1795,7 +1811,7 @@ static void doc_moment(Doc& d, double now) {
                 }
                 return fx;
             };
-            s.layerDraw[(size_t)(runOf[i] - base - 1)] = [&s, &st, numbers, way, thorFx](View* v) { thing_effects_draw(s, st, v, numbers, way, thorFx); };
+            s.layerDraw[(size_t)(runOf[i] - base - 1)] = [&s, &st, numbers, way, thorFx, pictures](View* v) { thing_effects_draw(s, st, v, numbers, way, thorFx, pictures); };
         }
     if (std::find(s.backdropBefore.begin(), s.backdropBefore.end(), (char)1) != s.backdropBefore.end())   // (as large as what the views draw into: the desk's when it is drawn there, else the stage's)
         backdrop_as(s, s.desk.w && !s.over ? s.desk.w : (uint32_t)s.w, s.desk.w && !s.over ? s.desk.h : (uint32_t)s.h);

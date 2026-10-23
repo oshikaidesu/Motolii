@@ -15,6 +15,7 @@
 
 // A knob's value now, asked by the effect's file and the knob's name (two effects may each have a knob of one name).
 using ScreenNumbers = std::function<double(const std::string& file, const std::string& knob, double usual)>;
+using ScreenPictures = std::function<Texture*(const std::string& file, const std::string& name)>;   // (another thing's picture an effect reads as one of its images, by the knob that names it)
 
 struct ScreenFx {
     std::string file, trouble;
@@ -38,6 +39,10 @@ struct ScreenFx {
     double historyShare = 1;
     Texture* history = nullptr;
     std::vector<RenderTarget*> historyInto;
+    // Its other images (// --picture@name: ISF's images past the first), each another thing's picture as the camera
+    // sees it, the thing chosen on its card: read last, after the passes' pictures and the past frames.
+    std::vector<std::string> others;
+    std::vector<Texture*> othersNow;   // (what each is this time: given before it is drawn; none, its own picture)
     uint32_t hw = 0, hh = 0;
     std::filesystem::file_time_type stamp{};       // (the file's time when it was made: written over, it is made again)
     std::chrono::steady_clock::time_point looked{};
@@ -59,21 +64,31 @@ static bool screen_read(ScreenFx& fx, std::string& code) {
     code = all.str();
     const std::regex bound(R"(@group\(\s*\d+u?\s*\)\s*@binding\(\s*\d+u?\s*\)\s*var(<\s*uniform\s*>)?\s+(\w+)\s*:\s*([A-Za-z_][\w<>]*))");
     int reads = 0;   // (the pictures it reads: the k-th at 2k, the k-th sampler at 2k+1, the knobs after them all)
-    for (std::sregex_iterator m(code.begin(), code.end(), bound), end; m != end; ++m) reads += (*m)[3].str().rfind("texture_2d", 0) == 0;   // (texture_2d and texture_2d_array alike)
+    std::vector<std::smatch> said;   // (in the order of the bindings it says, not of where they are said: Tint puts them as it likes)
+    for (std::sregex_iterator m(code.begin(), code.end(), bound), end; m != end; ++m) said.push_back(*m), reads += (*m)[3].str().rfind("texture_2d", 0) == 0;   // (texture_2d and texture_2d_array alike)
+    const auto number = [](const std::smatch& m) { const std::string all = m[0]; return std::atoi(all.c_str() + all.find("@binding(") + 9); };
+    std::vector<size_t> order(said.size());
+    for (size_t i = 0; i < order.size(); ++i) order[i] = i;
+    std::stable_sort(order.begin(), order.end(), [&](size_t a, size_t b) { return number(said[a]) < number(said[b]); });
+    std::vector<int> given(said.size(), -1);
     std::string out, knobsType;
     int pictures = 0, samplers = 0, uniforms = 0;
-    auto at = code.cbegin();
-    for (std::sregex_iterator m(code.begin(), code.end(), bound), end; m != end; ++m) {
-        const std::string type = (*m)[3];
-        int binding = -1;
+    for (size_t i : order) {
+        const std::string type = said[i][3];
+        int& binding = given[i];
         if (type.rfind("texture_2d_array", 0) == 0) fx.layered |= 1u << pictures, binding = 2 * pictures++;
         else if (type.rfind("texture_2d", 0) == 0) binding = 2 * pictures++;
         else if (type == "sampler") binding = 2 * samplers++ + 1;
-        else if ((*m)[1].matched) binding = 2 * reads, ++uniforms, knobsType = type;
+        else if (said[i][1].matched) binding = 2 * reads, ++uniforms, knobsType = type;
         if (binding < 0) return fx.trouble = "the effect has a binding of a kind it cannot be given: " + type, false;
-        out.append(at, code.cbegin() + m->position());
-        out += "@group(0) @binding(" + std::to_string(binding) + ") var" + ((*m)[1].matched ? "<uniform>" : "") + " " + (*m)[2].str() + ": " + type;
-        at = code.cbegin() + m->position() + m->length();
+    }
+    auto at = code.cbegin();
+    for (size_t i = 0; i < said.size(); ++i) {
+        const std::smatch& m = said[i];
+        const int binding = given[i];
+        out.append(at, code.cbegin() + m.position());
+        out += "@group(0) @binding(" + std::to_string(binding) + ") var" + (m[1].matched ? "<uniform>" : "") + " " + m[2].str() + ": " + m[3].str();
+        at = code.cbegin() + m.position() + m.length();
     }
     out.append(at, code.cend());
     if (pictures < 1 || samplers > pictures || uniforms > 1) return fx.trouble = "an effect reads a picture or more, a sampler for each at most, and one struct of knobs at most", false;
@@ -111,7 +126,9 @@ static bool screen_read(ScreenFx& fx, std::string& code) {
         }
         fx.passes.push_back(target);
     }
-    if (!fx.targets.empty() && (int)fx.targets.size() + 1 + (int)__builtin_popcount(fx.layered) != pictures) return fx.trouble = "its passes' pictures and the pictures it reads do not agree", false;
+    fx.others.clear();
+    for (const ScriptKnob& k : script_knobs(file)) if (k.kind == "picture") fx.others.push_back(k.name);
+    if ((!fx.targets.empty() || !fx.others.empty()) && (int)fx.targets.size() + 1 + (int)__builtin_popcount(fx.layered) + (int)fx.others.size() != pictures) return fx.trouble = "its passes' pictures, its other images and the pictures it reads do not agree", false;
     if (fx.layered && !fx.historyFrames) return fx.trouble = "it reads an array of past frames and its head does not ask for them (--history@frames:share)", false;
     code = std::regex_replace(out, std::regex(R"(\bfn\s+fs_main\s*\()"), "fn main(");
     if (!knobsType.empty()) {   // (WGSL's own rule: each as far on as its size, rounded up; vec3 as far as a vec4)
@@ -155,6 +172,11 @@ struct ScreenStack {
     std::vector<char> steps;
     void* device[3] = {nullptr, nullptr, nullptr};  // (the WGPUTextures of shot, between[0], between[1])
     tvg::WgCanvas* thor[2] = {nullptr, nullptr};    // (ThorVG drawing into each picture between)
+    // Its picture as the camera sees it, its effects on, this time: another thing's effect may read it as an image
+    // (ISF's images past the first). One read so is quiet: drawn alone, not laid on the screen (After Effects hides a
+    // layer used as a track matte), and drawn even with no effects of its own.
+    Texture* seen = nullptr;
+    bool quiet = false;
 };
 static Texture* screen_picture(Stage& s) {
     return Texture::Builder().width((uint32_t)s.w).height((uint32_t)s.h).levels(1).format(Texture::InternalFormat::RGBA8)
@@ -250,8 +272,10 @@ static void screen_draw(Stage& s, ScreenStack& st, ScreenFx& fx, Texture* from, 
     std::vector<Texture*> read((size_t)fx.pictures, from);
     const auto gather = [&] {
         size_t target = 0;
-        for (size_t k = 1; k < read.size(); ++k)
+        const size_t own = read.size() - fx.others.size();
+        for (size_t k = 1; k < own; ++k)
             read[k] = (fx.layered >> k) & 1u ? fx.history : target < fx.targets.size() ? fx.targets[target].picture[fx.targets[target].front] : from, target += !((fx.layered >> k) & 1u);
+        for (size_t k = own; k < read.size(); ++k) read[k] = k - own < fx.othersNow.size() && fx.othersNow[k - own] ? fx.othersNow[k - own] : from;   // (another thing's picture; none chosen yet, its own)
     };
     if (fx.passes.empty()) {
         gather();
@@ -435,7 +459,7 @@ fn way(w: i32, b: vec3f, s: vec3f) -> vec3f {
 }
 @fragment fn main(@builtin(position) frag: vec4f, @location(0) uv: vec2f) -> @location(0) vec4f {
   let c = textureSampleLevel(made, near0, uv, 0.0);
-  let a = select(textureSampleLevel(alone, near1, uv, 0.0).a, step(0.5, c.a), k.b > 0.5);   // (its shape, or the effects' own see-through: grains, cells; a cell there or not, as a mosaic's are)
+  let a = select(min(textureSampleLevel(alone, near1, uv, 0.0).a, c.a), step(0.5, c.a), k.b > 0.5);   // (its shape, as far as the effects leave it (a mask's), or the effects' own see-through: grains, cells; a cell there or not, as a mosaic's are)
   let u = textureSampleLevel(under, near2, uv, 0.0);
   let b = select(vec3f(0.0), u.rgb / max(u.a, 1e-5), u.a > 1e-4);
   var mixed = clamp(select(c.rgb, c.rgb / max(c.a, 1e-4), k.b > 0.5), vec3f(0.0), vec3f(1.0));   // (its own see-through: its colour as it is where it is there)
@@ -444,8 +468,8 @@ fn way(w: i32, b: vec3f, s: vec3f) -> vec3f {
   return vec4f(mixed * a + max(c.rgb, vec3f(0.0)) * (1.0 - a) * k.a, a);
 }
 )WGSL";
-static void thing_effects_draw(Stage& s, ScreenStack& st, View* v, const ScreenNumbers& numbers, int way = 0, const std::function<DrawnFx()>& thorFx = nullptr) {
-    if (st.steps.empty()) return s.renderer->render(v);
+static void thing_effects_draw(Stage& s, ScreenStack& st, View* v, const ScreenNumbers& numbers, int way = 0, const std::function<DrawnFx()>& thorFx = nullptr, const ScreenPictures& pictures = nullptr) {
+    if (st.steps.empty() && !st.quiet) return s.renderer->render(v);
     const Viewport vp = v->getViewport();
     const uint32_t w = (uint32_t)std::max(1, vp.left + (int)vp.width), h = (uint32_t)std::max(1, vp.bottom + (int)vp.height);
     if (!st.shot || st.shot->getWidth() != w || st.shot->getHeight() != h) {   // (its pictures as large as the view draws; made again when that moves)
@@ -483,14 +507,21 @@ static void thing_effects_draw(Stage& s, ScreenStack& st, View* v, const ScreenN
     s.renderer->render(v);
     v->setRenderTarget(was);
     s.renderer->setClearOptions(clearWas);
+    st.seen = st.shot;
+    if (st.steps.empty()) return;   // (quiet with no effects: only its picture, for another's)
     const float ppp = (float)vp.width / (float)std::max(1, s.w);   // (pixels of its picture a point of the stage: the desk's are fewer)
     const DrawnFx thor = thorFx && std::any_of(st.steps.begin(), st.steps.end(), [](char k) { return k != 0; }) ? thorFx() : DrawnFx{};
     for (size_t i = 0, f = 0; i < st.steps.size(); ++i) {   // (each into a picture between: the effects take the whole picture as theirs, and fill what is clear)
         Texture* from = i == 0 ? st.shot : st.between[(i - 1) % 2];
         if (st.steps[i]) { thing_thor(s, st, st.steps[i], st.device[i == 0 ? 0 : 1 + (i - 1) % 2], (int)(i % 2), w, h, thor, ppp); continue; }   // (one of ThorVG's own)
         screen_fresh(s, *st.fx[f]);
-        screen_draw(s, st, *st.fx[f++], from, st.betweenTarget[i % 2], numbers, w, h);
+        ScreenFx& one = *st.fx[f++];
+        one.othersNow.clear();
+        for (const std::string& n : one.others) one.othersNow.push_back(pictures ? pictures(one.file, n) : nullptr);
+        screen_draw(s, st, one, from, st.betweenTarget[i % 2], numbers, w, h);
     }
+    st.seen = st.between[(st.steps.size() - 1) % 2];
+    if (st.quiet) return;   // (read by another: not laid on the screen)
     // (then laid over what is under: in its shape as it was drawn alone (Unreal's custom stencil), in its way of lying on
     //  what is under (reading it, kit.h backdrop); outside it, only light, when an effect throws it)
     if (!st.lay) {

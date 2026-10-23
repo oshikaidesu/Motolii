@@ -14,7 +14,7 @@
 #include <vector>
 
 struct ScriptKnob {
-    std::string name, label, kind;   // kind: track, check or select
+    std::string name, label, kind;   // kind: track, check, select or picture (an effect's image read from another thing)
     double low = 0, high = 1, usual = 0, step = 0;
     std::string words;               // a select's words, with spaces between
 };
