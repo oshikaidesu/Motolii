@@ -2266,7 +2266,7 @@ static bool doc_match(Doc& d) {
             for (View* v : s.layers) v->getScene()->remove(it->second.light);
             s.engine->getLightManager().destroy(it->second.light), utils::EntityManager::get().destroy(it->second.light);
         }
-        if (it->second.shape) take_off(s, it->second.shape);
+        if (it->second.shape) s.playing.erase(it->second.shape), take_off(s, it->second.shape);   // (a cloud's sort goes with it)
         it = d.shown.erase(it);
     }
     bool all = true;

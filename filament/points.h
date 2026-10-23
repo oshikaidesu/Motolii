@@ -1,15 +1,25 @@
 // A point cloud as a solid thing: a .ply of points (a scan's, red green blue) or of Gaussian splats as 3DGS writes them
-// (f_dc colours, a logit opacity, log scales, a turn as a quaternion), each point a splat points.mat turns to the eye as
-// an ellipse that fades out (antimatter15/splat's way, MIT, Copyright (c) 2023 Kevin Kwok: its spread in space (the
-// covariance, worked out here once) laid on the screen, its two axes, exp(-r^2)), its own colour. A plain scan's point
-// is round, as large as its neighbours are far. Not sorted: masked, so Filament's alpha to coverage blends them by the
-// picture's samples (the stage's MSAA). All in one vertex buffer, four corners a point, drawn in one go; fitted to 1
+// (f_dc colours, a logit opacity, log scales, a turn as a quaternion), drawn as antimatter15/splat draws them (MIT,
+// Copyright (c) 2023 Kevin Kwok): each splat's data in a texture once (its middle, how much it is seen, its spread in
+// space, its colour), one square a slot that points.mat turns into the ellipse its spread makes on the screen, faded
+// out by exp(-r^2); the slots laid in order of depth by a 16-bit counting sort on a thread of its own each time the eye
+// has moved, only the table of which splat is in which slot sent again; then laid one over another from the farthest,
+// Filament's own see-through blending. A plain scan's point is round, as large as its neighbours are far. Fitted to 1
 // tall, its middle at the place, as solid.h fits a file. Its Mesh is a name only: the kit knows the thing by it.
 // (kit.h: read before this)
 #pragma once
 #include <cmath>
 #include <fstream>
 #include <sstream>
+#include <condition_variable>
+#include <thread>
+#include <memory>
+
+// (floats handed to a texture, freed by Filament once it has them)
+static backend::PixelBufferDescriptor points_pixels(std::vector<float>&& from, backend::PixelDataFormat format) {
+    auto* held = new std::vector<float>(std::move(from));
+    return backend::PixelBufferDescriptor(held->data(), held->size() * sizeof(float), format, backend::PixelDataType::FLOAT, [](void*, size_t, void* user) { delete (std::vector<float>*)user; }, held);
+}
 
 static Mesh* points(Stage& s, const char* file, std::string& why, MaterialInstance** looks = nullptr) {
     std::ifstream in(file, std::ios::binary);
@@ -67,77 +77,128 @@ static Mesh* points(Stage& s, const char* file, std::string& why, MaterialInstan
     const float tall = std::max(1e-6f, std::max({hi.y - lo.y, 0.5f * (hi.x - lo.x), 0.5f * (hi.z - lo.z)}));
     const float plain = 1.2f * std::cbrt((hi.x - lo.x) * (hi.y - lo.y) * (hi.z - lo.z) / (float)kept.size()) / tall;   // (a scan's grain: as far as its neighbours are, on the whole)
     const size_t m = kept.size();
-    struct Corner { float3 pos; float4 own; float4 spreadA; float4 spreadB; uint8_t rgba[4]; };
-    std::vector<Corner> corners(m * 4);
-    std::vector<uint32_t> idx(m * 6);
-    static const float2 c4[4] = {{-2, -2}, {2, -2}, {2, 2}, {-2, 2}};   // (two of its spread each way: past that it is all but gone)
+    // (each splat four texels: middle and how much it is seen; its spread R S S^T R^T, as fitted (y turned up, all over
+    //  `tall`); the rest of the spread and red, green; blue)
+    const uint32_t wide = 4096, rows = (uint32_t)((m * 4 + wide - 1) / wide);
+    std::vector<float> data((size_t)wide * rows * 4, 0.f);
+    std::vector<float3> middles(m);
     for (size_t k = 0; k < m; ++k) {
         const size_t i = kept[k];
         const float3 p = (float3{(float)get(x, i), (float)-get(y, i), (float)get(z, i)} - mid) / tall;
         float3 colour{1.f};
         if (r && g && b) colour = float3{(float)get(r, i), (float)get(g, i), (float)get(b, i)} / 255.f;
         else if (d0 && d1 && d2) colour = clamp(0.5f + 0.2820948f * float3{(float)get(d0, i), (float)get(d1, i), (float)get(d2, i)}, 0.f, 1.f);   // (3DGS's zero band)
-        // (its spread in space, R S S R^T, as fitted: y turned up and all over `tall`; a plain scan's round, half its gap)
         mat3f spread = mat3f(1.f) * (0.25f * plain * plain);
         if (s0 && s1 && s2) {
             float4 q = r0 && r1 && r2 && r3 ? float4{(float)get(r1, i), (float)get(r2, i), (float)get(r3, i), (float)get(r0, i)} : float4{0, 0, 0, 1};   // (x y z, then w: 3DGS writes w first)
             q = length(q) > 1e-12f ? normalize(q) : float4{0, 0, 0, 1};
-            const mat3f turn = mat3f(quatf{q.w, q.x, q.y, q.z});
             const float3 sc = float3{std::exp((float)get(s0, i)), std::exp((float)get(s1, i)), std::exp((float)get(s2, i))} / tall;
-            const mat3f m3 = turn * mat3f(float3{sc.x, 0, 0}, float3{0, sc.y, 0}, float3{0, 0, sc.z});
+            const mat3f m3 = mat3f(quatf{q.w, q.x, q.y, q.z}) * mat3f(float3{sc.x, 0, 0}, float3{0, sc.y, 0}, float3{0, 0, sc.z});
             const mat3f flip(float3{1, 0, 0}, float3{0, -1, 0}, float3{0, 0, 1});
             spread = flip * m3 * transpose(m3) * flip;
         }
         const float seen = op ? 1.f / (1.f + std::exp(-(float)get(op, i))) : 1.f;
-        const float seed = (float)(k % 100003) * 0.731f;
-        for (int c = 0; c < 4; ++c) {
-            Corner& o = corners[k * 4 + (size_t)c];
-            o.pos = p, o.own = float4{c4[c].x, c4[c].y, seen, seed};
-            o.spreadA = float4{spread[0][0], spread[0][1], spread[0][2], spread[1][1]}, o.spreadB = float4{spread[1][2], spread[2][2], 0, 0};
-            for (int j = 0; j < 3; ++j) o.rgba[j] = (uint8_t)std::lround(255.f * colour[j]);
-            o.rgba[3] = 255;
-        }
+        middles[k] = p;
+        const float four[16] = {p.x, p.y, p.z, seen, spread[0][0], spread[0][1], spread[0][2], spread[1][1], spread[1][2], spread[2][2], colour.r, colour.g, colour.b, 0, 0, 0};
+        memcpy(&data[k * 16], four, sizeof four);
+    }
+    Material* mat = material(s, "points.filamat");
+    if (!mat) return why = "points.filamat is not built", nullptr;
+    Texture* splats = Texture::Builder().width(wide).height(rows).levels(1).format(Texture::InternalFormat::RGBA32F).sampler(Texture::Sampler::SAMPLER_2D).build(*s.engine);
+    splats->setImage(*s.engine, 0, points_pixels(std::move(data), backend::PixelDataFormat::RGBA));
+    const uint32_t slotRows = (uint32_t)((m + wide - 1) / wide);
+    Texture* order = Texture::Builder().width(wide).height(slotRows).levels(1).format(Texture::InternalFormat::R32F).sampler(Texture::Sampler::SAMPLER_2D).build(*s.engine);
+    {   // (in the file's order until the first sort is in)
+        std::vector<float> first((size_t)wide * slotRows, 0.f);
+        for (size_t k = 0; k < m; ++k) first[k] = (float)k;
+        order->setImage(*s.engine, 0, points_pixels(std::move(first), backend::PixelDataFormat::R));
+    }
+    // (four corners a slot, each its corner and its slot; six indices a slot; all as they are for good)
+    std::vector<float3> corners(m * 4);
+    std::vector<uint32_t> idx(m * 6);
+    static const float2 c4[4] = {{-2, -2}, {2, -2}, {2, 2}, {-2, 2}};   // (two of its spread each way: past that it is all but gone)
+    for (size_t k = 0; k < m; ++k) {
+        for (int c = 0; c < 4; ++c) corners[k * 4 + (size_t)c] = float3{c4[c].x, c4[c].y, (float)k};
         const uint32_t v = (uint32_t)(k * 4);
         const uint32_t six[6] = {v, v + 1, v + 2, v, v + 2, v + 3};
         memcpy(&idx[k * 6], six, sizeof six);
     }
-    Material* mat = material(s, "points.filamat");
-    if (!mat) return why = "points.filamat is not built", nullptr;
-    // (in parts of at most so many splats each, a vertex buffer and its indices a part: one buffer of WebGPU holds 256 MB
-    //  at most; all of them parts of the one thing, drawn with its one look)
-    const size_t part = 1u << 19;
-    const size_t parts = (m + part - 1) / part;
-    std::vector<std::pair<VertexBuffer*, IndexBuffer*>> made;
-    for (size_t at = 0; at < m; at += part) {
-        const size_t here = std::min(part, m - at);
-        VertexBuffer* vb = VertexBuffer::Builder().vertexCount((uint32_t)(here * 4)).bufferCount(1)
-                               .attribute(VertexAttribute::POSITION, 0, VertexBuffer::AttributeType::FLOAT3, offsetof(Corner, pos), sizeof(Corner))
-                               .attribute(VertexAttribute::CUSTOM0, 0, VertexBuffer::AttributeType::FLOAT4, offsetof(Corner, own), sizeof(Corner))
-                               .attribute(VertexAttribute::CUSTOM1, 0, VertexBuffer::AttributeType::FLOAT4, offsetof(Corner, spreadA), sizeof(Corner))
-                               .attribute(VertexAttribute::CUSTOM2, 0, VertexBuffer::AttributeType::FLOAT4, offsetof(Corner, spreadB), sizeof(Corner))
-                               .attribute(VertexAttribute::COLOR, 0, VertexBuffer::AttributeType::UBYTE4, offsetof(Corner, rgba), sizeof(Corner))
-                               .normalized(VertexAttribute::COLOR).build(*s.engine);
-        vb->setBufferAt(*s.engine, 0, copied(corners.data() + at * 4, here * 4 * sizeof(Corner)));
-        std::vector<uint32_t> six(here * 6);
-        for (size_t k = 0; k < six.size(); ++k) six[k] = idx[at * 6 + k] - (uint32_t)(at * 4);
-        IndexBuffer* ib = IndexBuffer::Builder().indexCount((uint32_t)six.size()).bufferType(IndexBuffer::IndexType::UINT).build(*s.engine);
-        ib->setBuffer(*s.engine, copied(six.data(), six.size() * sizeof(uint32_t)));
-        made.push_back({vb, ib});
-    }
+    VertexBuffer* vb = VertexBuffer::Builder().vertexCount((uint32_t)corners.size()).bufferCount(1).attribute(VertexAttribute::POSITION, 0, VertexBuffer::AttributeType::FLOAT3).build(*s.engine);
+    vb->setBufferAt(*s.engine, 0, copied(corners.data(), corners.size() * sizeof(float3)));
+    IndexBuffer* ib = IndexBuffer::Builder().indexCount((uint32_t)idx.size()).bufferType(IndexBuffer::IndexType::UINT).build(*s.engine);
+    ib->setBuffer(*s.engine, copied(idx.data(), idx.size() * sizeof(uint32_t)));
     MaterialInstance* look = mat->createInstance();
-    look->setParameter("dissolve", 0.f);
-    look->setParameter("grain", 1.f);
+    TextureSampler exact(TextureSampler::MinFilter::NEAREST, TextureSampler::MagFilter::NEAREST);
+    look->setParameter("splats", splats, exact);
+    look->setParameter("order", order, exact);
     Mesh* name = new Mesh;
-    name->vb = made[0].first, name->ib = made[0].second;
+    name->vb = vb, name->ib = ib;
     utils::Entity e = utils::EntityManager::get().create();
     const float3 box = 0.5f * (hi - lo) / tall + float3{0.05f};
-    RenderableManager::Builder all(parts);
-    all.boundingBox({float3{0.f}, box * 3.f}).castShadows(false).receiveShadows(false).culling(false);
-    for (size_t k = 0; k < parts; ++k) all.geometry(k, RenderableManager::PrimitiveType::TRIANGLES, made[k].first, made[k].second, 0, made[k].second->getIndexCount()).material(k, look);
-    all.build(*s.engine, e);
+    RenderableManager::Builder(1).boundingBox({float3{0.f}, box * 3.f}).geometry(0, RenderableManager::PrimitiveType::TRIANGLES, vb, ib, 0, idx.size())
+        .material(0, look).castShadows(false).receiveShadows(false).culling(false).build(*s.engine, e);
     s.engine->getTransformManager().create(e);
     s.scene->addEntity(e);
     s.made.push_back({e, name, 0, mat4f{}});
+
+    // (the sort, antimatter15's: each splat's depth along the eye, put to 16 bits between the nearest and the farthest,
+    //  one counting pass; on a thread of its own, asked again whenever the eye has moved; farthest first here)
+    struct Sorter {
+        std::vector<float3> middles;
+        std::mutex lock;
+        std::condition_variable told;
+        float4 asked{0.f}, done{1e9f};
+        bool fresh = false, ready = false, stop = false;
+        std::vector<float> slots;
+        std::thread worker;
+    };
+    std::shared_ptr<Sorter> sort(new Sorter, [](Sorter* p) {   // (gone with the moment's hand that holds it: its thread stopped first)
+        { std::lock_guard<std::mutex> hold(p->lock); p->stop = true; }
+        p->told.notify_one();
+        p->worker.join();
+        delete p;
+    });
+    sort->middles = std::move(middles);
+    sort->worker = std::thread([sort = sort.get(), wide, slotRows] {
+        std::vector<int32_t> depth(sort->middles.size());
+        std::vector<uint32_t> counts(65536), starts(65536);
+        for (;;) {
+            float4 row;
+            {
+                std::unique_lock<std::mutex> hold(sort->lock);
+                sort->told.wait(hold, [sort] { return sort->fresh || sort->stop; });
+                if (sort->stop) return;
+                row = sort->asked, sort->fresh = false;
+            }
+            int32_t least = INT32_MAX, most = INT32_MIN;
+            for (size_t i = 0; i < depth.size(); ++i) {
+                const float3& p = sort->middles[i];
+                depth[i] = (int32_t)((row.x * p.x + row.y * p.y + row.z * p.z + row.w) * 4096.f);   // (the eye's z: farther is less)
+                least = std::min(least, depth[i]), most = std::max(most, depth[i]);
+            }
+            const float inv = 65535.f / (float)std::max(1, most - least);
+            std::fill(counts.begin(), counts.end(), 0u);
+            for (int32_t& d : depth) d = (int32_t)((float)(d - least) * inv), ++counts[(size_t)d];
+            starts[0] = 0;
+            for (size_t k = 1; k < 65536; ++k) starts[k] = starts[k - 1] + counts[k - 1];
+            std::vector<float> slots((size_t)wide * slotRows, 0.f);
+            for (size_t i = 0; i < depth.size(); ++i) slots[starts[(size_t)depth[i]]++] = (float)i;
+            std::lock_guard<std::mutex> hold(sort->lock);
+            sort->slots = std::move(slots), sort->done = row, sort->ready = true;
+        }
+    });
+    // (each moment: where the eye is against the cloud now, asked of the sort if it has moved; a finished order sent on)
+    s.playing[name] = [&s, sort, e, order, wide, slotRows](double) {
+        const auto& places = s.engine->getTransformManager();
+        const math::mat4 eye = s.camera->getViewMatrix() * math::mat4(places.getWorldTransform(places.getInstance(e)));
+        const float4 row{(float)eye[0][2], (float)eye[1][2], (float)eye[2][2], (float)eye[3][2]};
+        std::lock_guard<std::mutex> hold(sort->lock);
+        if (sort->ready) {
+            order->setImage(*s.engine, 0, points_pixels(std::move(sort->slots), backend::PixelDataFormat::R));
+            sort->ready = false;
+        }
+        if (length(row - sort->asked) > 1e-4f) sort->asked = row, sort->fresh = true, sort->told.notify_one();
+    };
     if (looks) *looks = look;
     return name;
 }

@@ -1,54 +1,62 @@
-// points.mat: a point cloud's splats (points.h), each laid on the screen as the ellipse its spread in space makes there
-// and faded out from its middle, its own colour (antimatter15/splat's vertex and fragment way, MIT, Copyright (c) 2023
-// Kevin Kwok: the covariance through the eye's own turn and the projection's slope (J W S W^T J^T), its two axes from
-// the 2x2's eigenvalues, exp(-r^2) times how much it is seen). Not sorted: masked, so with the stage's MSAA Filament's
-// alpha to coverage lays each by how much of a pixel's samples it covers. `dissolve`: each splat thrown out its own way
-// (fixed by its seed) as far as it says, the cloud coming apart as the drift of 点云飘散 does. Unlit: the colours are
-// the scan's own light.
+// points.mat: a point cloud's splats (points.h) as antimatter15/splat draws them (MIT, Copyright (c) 2023 Kevin Kwok):
+// a square a slot; the slot's splat read from the order table, its data from the splat texture; its spread laid on the
+// screen through the eye's turn and the projection's slope (J W S W^T J^T), the square stretched along the 2x2's two
+// axes, faded out by exp(-r^2) times how much it is seen; laid from the farthest with Filament's see-through blending.
+// `dissolve`: each splat thrown out its own way (fixed by which splat it is) as far as it says (点云飘散); `grain`:
+// drawn so many times its own size. Unlit: the colours are the capture's own light.
 material {
     name : points,
     shadingModel : unlit,
-    requires : [ custom0, custom1, custom2, color ],
-    variables : [ corner ],
+    variables : [ corner, tint ],
     culling : none,
-    blending : masked,
-    maskThreshold : 0.2,
+    blending : transparent,
+    depthWrite : false,
     parameters : [
-        { type : float, name : dissolve },   // how far each splat is thrown out, in the cloud's own units (it is 1 tall)
-        { type : float, name : grain }       // how large the splats are drawn against their own size (1: as they are)
+        { type : sampler2d, name : splats, precision : high },
+        { type : sampler2d, name : order, precision : high },
+        { type : float, name : dissolve },
+        { type : float, name : grain }
     ]
 }
 
 vertex {
     float hash(float n) { return fract(sin(n) * 43758.5453); }
     void materialVertex(inout MaterialVertexInputs material) {
-        vec4 c = getCustom0();   // (corner x, corner y in -2..2; how much it is seen; its seed)
-        vec4 a = getCustom1(), b = getCustom2();
-        mat3 spread = mat3(a.x, a.y, a.z, a.y, a.w, b.x, a.z, b.x, b.y);   // (in the cloud's own space)
+        vec3 c = getPosition().xyz;   // (corner x, corner y in -2..2; the slot)
+        int slot = int(c.z + 0.5);
+        int which = int(texelFetch(materialParams_order, ivec2(slot % 4096, slot / 4096), 0).r + 0.5);
+        int at = which * 4;
+        vec4 t0 = texelFetch(materialParams_splats, ivec2(at % 4096, at / 4096), 0);
+        vec4 t1 = texelFetch(materialParams_splats, ivec2((at + 1) % 4096, (at + 1) / 4096), 0);
+        vec4 t2 = texelFetch(materialParams_splats, ivec2((at + 2) % 4096, (at + 2) / 4096), 0);
+        vec4 t3 = texelFetch(materialParams_splats, ivec2((at + 3) % 4096, (at + 3) / 4096), 0);
+        mat3 spread = mat3(t1.x, t1.y, t1.z, t1.y, t1.w, t2.x, t1.z, t2.x, t2.y);
         mat4 place = getWorldFromModelMatrix();
-        vec3 way = normalize(vec3(hash(c.w * 12.9898) - 0.5, hash(c.w * 78.233) - 0.5, hash(c.w * 39.425) - 0.5) + vec3(0.0, 0.35, 0.0));
-        float far = materialParams.dissolve * (0.3 + 1.4 * hash(c.w * 7.137));
-        material.worldPosition.xyz += mulMat3x3Float3(place, way * far);
+        float seed = float(which % 100003) * 0.731;
+        vec3 way = normalize(vec3(hash(seed * 12.9898) - 0.5, hash(seed * 78.233) - 0.5, hash(seed * 39.425) - 0.5) + vec3(0.0, 0.35, 0.0));
+        float far = materialParams.dissolve * (0.3 + 1.4 * hash(seed * 7.137));
+        material.worldPosition = vec4((place * vec4(t0.xyz + way * far, 1.0)).xyz, 1.0);
         mat4 view = getViewFromWorldMatrix();
         vec3 cam = (view * vec4(material.worldPosition.xyz, 1.0)).xyz;
         float d = max(-cam.z, 1e-4);   // (Filament's eye looks down -z)
         vec4 res = getResolution();
         mat4 clip = getClipFromViewMatrix();
-        float fx = clip[0][0] * 0.5 * res.x, fy = clip[1][1] * 0.5 * res.y;   // (pixels a unit across at depth 1)
+        float fx = clip[0][0] * 0.5 * res.x, fy = clip[1][1] * 0.5 * res.y;
         mat3 W = mat3(view) * mat3(place);
         mat3 J = mat3(fx / d, 0.0, 0.0, 0.0, fy / d, 0.0, fx * cam.x / (d * d), fy * cam.y / (d * d), 0.0);
         mat3 T = J * W;
         mat3 onScreen = T * spread * transpose(T);
-        float c00 = onScreen[0][0] + 0.3, c11 = onScreen[1][1] + 0.3, c01 = onScreen[0][1];   // (a pixel's own blur at least, as 3DGS adds)
+        float c00 = onScreen[0][0] + 0.3, c11 = onScreen[1][1] + 0.3, c01 = onScreen[0][1];
         float mid = 0.5 * (c00 + c11), radius = length(vec2(0.5 * (c00 - c11), c01));
         float l1 = mid + radius, l2 = max(mid - radius, 0.1);
         vec2 along = vec2(c01, l1 - c00);
         along = dot(along, along) > 1e-12 ? normalize(along) : vec2(1.0, 0.0);
         vec2 major = min(sqrt(2.0 * l1), 1024.0) * along, minor = min(sqrt(2.0 * l2), 1024.0) * vec2(along.y, -along.x);
-        vec2 px = (c.x * major + c.y * minor) * materialParams.grain;   // (pixels from its middle on the screen)
+        vec2 px = (c.x * major + c.y * minor) * materialParams.grain;
         mat4 eye = getWorldFromViewMatrix();
-        material.worldPosition.xyz += mulMat3x3Float3(eye, vec3(px.x * d / fx, px.y * d / fy, 0.0));   // (on the plane through its middle facing the eye)
-        material.corner = vec4(c.xy, c.z, 0.0);
+        material.worldPosition.xyz += mulMat3x3Float3(eye, vec3(px.x * d / fx, px.y * d / fy, 0.0));
+        material.corner = vec4(c.xy, t0.w, 0.0);
+        material.tint = vec4(t2.z, t2.w, t3.x, 1.0);
     }
 }
 
@@ -57,7 +65,7 @@ fragment {
         prepareMaterial(material);
         float r = dot(variable_corner.xy, variable_corner.xy);
         if (r > 4.0) discard;
-        float seen = exp(-r) * variable_corner.z;
-        material.baseColor = vec4(pow(getColor().rgb, vec3(2.2)), seen);   // (the scan's colours are the screen's numbers: back to light)
+        float a = exp(-r) * variable_corner.z;
+        material.baseColor = vec4(pow(variable_tint.rgb, vec3(2.2)) * a, a);   // (premultiplied; the capture's colours are the screen's numbers: back to light)
     }
 }
