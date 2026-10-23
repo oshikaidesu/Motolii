@@ -79,6 +79,14 @@ void main() {
       debugPrint('BUILDING during $what: ${(Ws.spent.entries.toList()..sort((a, b) => b.value.compareTo(a.value))).map((e) => '${e.key} ${e.value.inMilliseconds} ms').join(', ')}; layer ${ws.layer?.name} keys ${ws.layer?.keys.length}');
     }
 
+    if (const int.fromEnvironment('KEEP') > 0) { // (KEEP=n: the hand rests n seconds first, so the pictures that would be late are kept on disk: stage_kept.h)
+      for (var i = 0; i < const int.fromEnvironment('KEEP') * 10; i++) {
+        await t.pump(const Duration(milliseconds: 100));
+        await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
+      }
+      final kept = Directory('${Platform.environment['HOME']}/Library/Caches/Motolii/frames').listSync().where((f) => f.path.contains('/stage_')).length;
+      debugPrint('FRAMES kept on disk after resting: $kept pictures (all documents)');
+    }
     ws.playing = true;
     if (const bool.fromEnvironment('TRACE_PLAYING')) { // (TRACE_PLAYING: Flutter's own timeline of the playing, every widget's build and the collector: heavy, a gigabyte and more)
       debugProfileLayoutsEnabled = true;

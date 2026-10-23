@@ -2,6 +2,7 @@
 #include "kit.h"
 #include "doc.h"
 #include "live.h"
+#include "stage_kept.h"
 #include "heard.h"
 #include "sound.h"
 #include "motolii.h"
@@ -73,6 +74,7 @@ struct Motolii {
     long judged = 0;
     double gpu_ms = 0.0, gpu_most = 0.0;   // (the GPU's middle time for the last pictures, and the most it was)
     double scale = 1.0;   // (how large the stage's views are drawn now: stage_scale)
+    StageKept kept;       // (the stage's pictures kept on disk for playing: stage_kept.h)
     double spent[4] = {0, 0, 0, 0};   // (seconds the hand spent: asked to change, asked to read, telling the moment, drawing)
     long many[4] = {0, 0, 0, 0};
 };
@@ -234,6 +236,10 @@ static void motolii_hand(Motolii* m, std::string document, int wide, int high, s
                 if (shown.drawn) begun += picture_ahead(*m->s, shown.drawn, 2);
             if (begun) m->s->engine->flush();
             m->ahead = begun > 0;
+            if (t - m->stirred > std::chrono::seconds(5) && !std::getenv("MOTOLII_KEEP_NONE")) {   // (and, five seconds on as Final Cut Pro's background render, the work area's pictures that would be late, kept on disk)
+                stage_kept_fresh(m->kept, *m->d, *m->s, m->revision.load(), RATE);
+                m->ahead = stage_kept_one(m->kept, *m->d, *m->s, RATE, m->budget) || m->ahead;
+            }
         }
         // (asked something: a shell that writes reads next, so the picture waits a moment for it rather than it for a
         //  whole picture; never more than two pictures' time since the last was drawn)
@@ -291,7 +297,11 @@ static void motolii_hand(Motolii* m, std::string document, int wide, int high, s
         for (const auto& now : films) now();   // (films put back or stepped on, while the shell reads the document)
         heard(sounds, m->heard, m->now, m->playing);   // (and their sound sought and played so)
         const auto told = std::chrono::steady_clock::now();
-        live_draw(*m->s, m->live);
+        {
+            std::lock_guard<std::recursive_timed_mutex> holding(m->d->lock);
+            stage_kept_fresh(m->kept, *m->d, *m->s, m->revision.load(), RATE);
+        }
+        if (!m->playing || !stage_kept_show(m->kept, *m->s, m->live, m->now, RATE)) live_draw(*m->s, m->live);   // (played: a picture kept is put on the stage, not drawn)
         drawn = std::chrono::steady_clock::now();
         if (++m->judged % 30 == 0) {   // (how long the GPU took for its last pictures, against the time each may have)
             std::vector<int64_t> took;

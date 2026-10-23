@@ -198,6 +198,27 @@ static void live_draw(Stage& s, Live* l) {
     if (desk && !placed) l->pendingIn = -1;   // (the stage's own buffer was not drawn: its last picture stays the front)
     else l->next = (l->next + 1) % Live::N;
 }
+
+// A picture made before (stage_kept.h) put on the stage as it is, instead of drawing it: on the desk where the stage
+// lies (what lies off it is not in the picture), its marks over it as live_draw puts them.
+static void live_show(Stage& s, Live* l, Texture* picture) {
+    Live* desk = l->desk && s.desk.w ? l->desk : nullptr;
+    while (!begins(s)) {}
+    if (desk) {
+        const int at[4] = {(int)std::lround(s.desk.x), (int)std::lround((double)s.desk.h - s.desk.y - s.h * s.desk.scale), (int)std::lround(s.w * s.desk.scale), (int)std::lround(s.h * s.desk.scale)};
+        screen_place(s, picture, desk->target[desk->next], s.desk.w, s.desk.h, at);
+    } else screen_place(s, picture, l->target[l->next], (uint32_t)s.w, (uint32_t)s.h, nullptr);
+    s.renderer->endFrame();
+    if (desk) {
+        desk_marks(s, desk, desk->next);
+        desk->pendingIn = desk->next;
+        desk->next = (desk->next + 1) % Live::N;
+    }
+    l->pending = s.engine->createFence();
+    s.engine->flush();
+    l->pendingIn = desk ? -1 : l->next;
+    if (!desk) l->next = (l->next + 1) % Live::N;
+}
 // Whether the picture begun last is finished (then it is offered to the shell, the front): the hand asks this rather
 // than waiting for the GPU, and begins no other picture till it is (Thermion's way: research_notes/flutter_native_kin.md).
 static bool live_ready(Stage& s, Live* l) {
