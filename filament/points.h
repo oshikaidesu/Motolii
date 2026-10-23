@@ -14,6 +14,8 @@
 #include <condition_variable>
 #include <thread>
 #include <memory>
+#include <dlfcn.h>
+#include "splatfx.h"
 
 // (floats handed to a texture, freed by Filament once it has them)
 static backend::PixelBufferDescriptor points_pixels(std::vector<float>&& from, backend::PixelDataFormat format) {
@@ -21,7 +23,7 @@ static backend::PixelBufferDescriptor points_pixels(std::vector<float>&& from, b
     return backend::PixelBufferDescriptor(held->data(), held->size() * sizeof(float), format, backend::PixelDataType::FLOAT, [](void*, size_t, void* user) { delete (std::vector<float>*)user; }, held);
 }
 
-static Mesh* points(Stage& s, const char* file, std::string& why, MaterialInstance** looks = nullptr) {
+static Mesh* points(Stage& s, const char* file, std::string& why, MaterialInstance** looks = nullptr, Material* with = nullptr, MaterialInstance** plainLook = nullptr, float3* bounds = nullptr) {
     std::ifstream in(file, std::ios::binary);
     std::string line, format;
     size_t n = 0;
@@ -77,32 +79,34 @@ static Mesh* points(Stage& s, const char* file, std::string& why, MaterialInstan
     const float tall = std::max(1e-6f, std::max({hi.y - lo.y, 0.5f * (hi.x - lo.x), 0.5f * (hi.z - lo.z)}));
     const float plain = 1.2f * std::cbrt((hi.x - lo.x) * (hi.y - lo.y) * (hi.z - lo.z) / (float)kept.size()) / tall;   // (a scan's grain: as far as its neighbours are, on the whole)
     const size_t m = kept.size();
-    // (each splat four texels: middle and how much it is seen; its spread R S S^T R^T, as fitted (y turned up, all over
-    //  `tall`); the rest of the spread and red, green; blue)
+    // (each splat four texels, as PlayCanvas holds a splat, so its effects read them as they are (points.mat): its middle
+    //  in the file's own units with y turned up, and how much it is seen; its turn (x y z w); its size each way, and red;
+    //  green, blue. Fitted to 1 tall only on the way out (the look's `fit`))
     const uint32_t wide = 4096, rows = (uint32_t)((m * 4 + wide - 1) / wide);
     std::vector<float> data((size_t)wide * rows * 4, 0.f);
     std::vector<float3> middles(m);
     for (size_t k = 0; k < m; ++k) {
         const size_t i = kept[k];
-        const float3 p = (float3{(float)get(x, i), (float)-get(y, i), (float)get(z, i)} - mid) / tall;
+        const float3 p{(float)get(x, i), (float)-get(y, i), (float)get(z, i)};
         float3 colour{1.f};
         if (r && g && b) colour = float3{(float)get(r, i), (float)get(g, i), (float)get(b, i)} / 255.f;
         else if (d0 && d1 && d2) colour = clamp(0.5f + 0.2820948f * float3{(float)get(d0, i), (float)get(d1, i), (float)get(d2, i)}, 0.f, 1.f);   // (3DGS's zero band)
-        mat3f spread = mat3f(1.f) * (0.25f * plain * plain);
+        float4 turn{0, 0, 0, 1};   // (x y z w)
+        float3 size{0.5f * plain * tall};   // (a plain scan's: round, half its gap)
         if (s0 && s1 && s2) {
-            float4 q = r0 && r1 && r2 && r3 ? float4{(float)get(r1, i), (float)get(r2, i), (float)get(r3, i), (float)get(r0, i)} : float4{0, 0, 0, 1};   // (x y z, then w: 3DGS writes w first)
+            float4 q = r0 && r1 && r2 && r3 ? float4{(float)get(r1, i), (float)get(r2, i), (float)get(r3, i), (float)get(r0, i)} : float4{0, 0, 0, 1};   // (3DGS writes w first)
             q = length(q) > 1e-12f ? normalize(q) : float4{0, 0, 0, 1};
-            const float3 sc = float3{std::exp((float)get(s0, i)), std::exp((float)get(s1, i)), std::exp((float)get(s2, i))} / tall;
-            const mat3f m3 = mat3f(quatf{q.w, q.x, q.y, q.z}) * mat3f(float3{sc.x, 0, 0}, float3{0, sc.y, 0}, float3{0, 0, sc.z});
-            const mat3f flip(float3{1, 0, 0}, float3{0, -1, 0}, float3{0, 0, 1});
-            spread = flip * m3 * transpose(m3) * flip;
+            turn = float4{-q.x, q.y, -q.z, q.w};   // (the same turn seen with y turned over)
+            size = float3{std::exp((float)get(s0, i)), std::exp((float)get(s1, i)), std::exp((float)get(s2, i))};
         }
         const float seen = op ? 1.f / (1.f + std::exp(-(float)get(op, i))) : 1.f;
         middles[k] = p;
-        const float four[16] = {p.x, p.y, p.z, seen, spread[0][0], spread[0][1], spread[0][2], spread[1][1], spread[1][2], spread[2][2], colour.r, colour.g, colour.b, 0, 0, 0};
+        const float four[16] = {p.x, p.y, p.z, seen, turn.x, turn.y, turn.z, turn.w, size.x, size.y, size.z, colour.r, colour.g, colour.b, 0, 0};
         memcpy(&data[k * 16], four, sizeof four);
     }
-    Material* mat = material(s, "points.filamat");
+    const mat4f fit = mat4f::scaling(float3{1.f / tall}) * mat4f::translation(-mid);
+    if (bounds) bounds[0] = lo, bounds[1] = hi;   // (its 1-99 % box in the file's own units, y up: what its effects are told it is)
+    Material* mat = with ? with : material(s, "points.filamat");   // (or the look with an effect in it: points_effect)
     if (!mat) return why = "points.filamat is not built", nullptr;
     Texture* splats = Texture::Builder().width(wide).height(rows).levels(1).format(Texture::InternalFormat::RGBA32F).sampler(Texture::Sampler::SAMPLER_2D).build(*s.engine);
     splats->setImage(*s.engine, 0, points_pixels(std::move(data), backend::PixelDataFormat::RGBA));
@@ -131,6 +135,7 @@ static Mesh* points(Stage& s, const char* file, std::string& why, MaterialInstan
     TextureSampler exact(TextureSampler::MinFilter::NEAREST, TextureSampler::MagFilter::NEAREST);
     look->setParameter("splats", splats, exact);
     look->setParameter("order", order, exact);
+    look->setParameter("fit", fit);
     Mesh* name = new Mesh;
     name->vb = vb, name->ib = ib;
     utils::Entity e = utils::EntityManager::get().create();
@@ -188,9 +193,9 @@ static Mesh* points(Stage& s, const char* file, std::string& why, MaterialInstan
         }
     });
     // (each moment: where the eye is against the cloud now, asked of the sort if it has moved; a finished order sent on)
-    s.playing[name] = [&s, sort, e, order, wide, slotRows](double) {
+    s.playing[name] = [&s, sort, e, order, wide, slotRows, fit](double) {
         const auto& places = s.engine->getTransformManager();
-        const math::mat4 eye = s.camera->getViewMatrix() * math::mat4(places.getWorldTransform(places.getInstance(e)));
+        const math::mat4 eye = s.camera->getViewMatrix() * math::mat4(places.getWorldTransform(places.getInstance(e))) * math::mat4(fit);
         const float4 row{(float)eye[0][2], (float)eye[1][2], (float)eye[2][2], (float)eye[3][2]};
         std::lock_guard<std::mutex> hold(sort->lock);
         if (sort->ready) {
@@ -200,5 +205,32 @@ static Mesh* points(Stage& s, const char* file, std::string& why, MaterialInstan
         if (length(row - sort->asked) > 1e-4f) sort->asked = row, sort->fresh = true, sort->told.notify_one();
     };
     if (looks) *looks = look;
+    if (plainLook && with)   // (with an effect: also its plain look, the same pictures, for once the effect has finished)
+        if (Material* plain = material(s, "points.filamat")) {
+            MaterialInstance* p = plain->createInstance();
+            p->setParameter("splats", splats, exact), p->setParameter("order", order, exact), p->setParameter("fit", fit);
+            p->setParameter("dissolve", 0.f), p->setParameter("grain", 1.f);
+            *plainLook = p;
+        }
     return name;
+}
+
+// The look with a PlayCanvas splat effect in it (splatfx.h): points.mat's own text (beside the library's folder, as the
+// effects folder is) with the effect's GLSL put in, built once for each effect's GLSL. nullptr, with `why`: the plain look.
+static Material* points_effect(Stage& s, const std::string& file, std::shared_ptr<SplatEffect>& fx, std::string& why) {
+    fx = std::make_shared<SplatEffect>(file);
+    if (!fx->ok()) return why = fx->trouble(), fx.reset(), nullptr;
+    static std::map<std::string, Material*> made;
+    Material*& m = made[fx->glsl()];
+    if (m) return m;
+    Dl_info lib{};
+    dladdr((const void*)&points_effect, &lib);
+    std::error_code wrong;
+    const std::filesystem::path source = std::filesystem::weakly_canonical(lib.dli_fname ? lib.dli_fname : ".", wrong).parent_path().parent_path() / "points.mat";
+    std::ifstream in(source);
+    std::stringstream text;
+    text << in.rdbuf();
+    const std::vector<uint8_t> bytes = splat_effect_look(text.str(), fx->glsl(), s.engine->getJobSystem(), why);
+    if (bytes.empty()) return nullptr;
+    return m = Material::Builder().package(bytes.data(), bytes.size()).build(*s.engine);
 }

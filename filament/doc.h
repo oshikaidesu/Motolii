@@ -109,7 +109,7 @@ struct Doc {
     std::map<std::pair<int, std::string>, std::string> words;   // a value's word, the same way
     std::map<std::pair<int, std::string>, std::vector<double>> keyed;   // the moments of a value's keys, the same way
     std::map<std::string, sqlite3_stmt*> named, goes;     // a way by its name, and by its expression: made ready once (SQLite works it out)
-    struct Shown { std::string of; Video* film = nullptr; Drawn* drawn = nullptr; Solid* solid = nullptr; Mesh* shape = nullptr; bool in = true, clipped = false, camera = false, drivenLooks = false, behaviour = false, grains = false; int run = -1, lies = -1;
+    struct Shown { std::string of; Video* film = nullptr; Drawn* drawn = nullptr; Solid* solid = nullptr; Mesh* shape = nullptr; bool in = true, clipped = false, camera = false, drivenLooks = false, behaviour = false, grains = false; std::shared_ptr<SplatEffect> splatFx; std::string splatFxFile; MaterialInstance* splatPlain = nullptr; bool splatDone = false; int run = -1, lies = -1;
                    utils::Entity light;   // (a light, Filament's own: in every scene of the stage while it is on)
                    double units = 1.0;    // (a flat thing's: points of the picture to a unit of the stage as it was made, which its effects are counted in)
                    int space = 3;
@@ -647,7 +647,7 @@ static char doc_thor_letter(const std::string& w) {
 static DocScript* doc_script_of(const std::string& file) {
     if (file.empty() || file == "none") return nullptr;
     const std::string ext = std::filesystem::path(file).extension().string();
-    const bool screen = ext == ".wgsl" || ext == ".fs";   // (a whole-screen effect's knobs: named by the effect too)
+    const bool screen = ext == ".wgsl" || ext == ".fs" || ext == ".mjs";   // (.mjs: a PlayCanvas splat effect, its knobs its attributes: splatfx.h)   // (a whole-screen effect's knobs: named by the effect too)
     DocScript& s = doc_scripts()[file];
     const auto now = std::chrono::steady_clock::now();
     if (s.stamp >= 0 && now - s.looked < std::chrono::milliseconds(250)) return &s;
@@ -657,7 +657,7 @@ static DocScript* doc_script_of(const std::string& file) {
     if (wrong) return s.stamp >= 0 ? &s : nullptr;
     if (s.stamp != stamp) {
         s = DocScript{};
-        s.stamp = stamp, s.looked = now, s.knobs = script_knobs(screen ? isf_file(file) : file);
+        s.stamp = stamp, s.looked = now, s.knobs = ext == ".mjs" ? SplatEffect(file).knobs() : script_knobs(screen ? isf_file(file) : file);
         doc_scripts_made()++;   // (what was worked out from the old one is forgotten)
         for (const ScriptKnob& k : s.knobs) s.names.push_back(screen ? doc_screen_knob(file, k.name) : "js_" + k.name);
         for (size_t i = 0; i < s.knobs.size(); ++i) {   // (the names are all made first: what points into them stays put)
@@ -1606,7 +1606,7 @@ static std::vector<std::string> doc_fx_list(Doc& d, int thing) {
 // Whether a thing's effects are laid on it as the camera sees it (one of them a file: then all of them, in turn, there:
 // screen.h thing_effects_draw), not in its own picture as ThorVG draws it.
 static bool doc_fx_files(const std::vector<std::string>& list) {
-    return std::any_of(list.begin(), list.end(), [](const std::string& w) { return !doc_thor_letter(w); });
+    return std::any_of(list.begin(), list.end(), [](const std::string& w) { return !doc_thor_letter(w) && std::filesystem::path(w).extension() != ".mjs"; });   // (a splat effect is in the cloud's own look)
 }
 static std::string doc_fx_join(const std::vector<std::string>& list) {
     std::string all;
@@ -1988,6 +1988,19 @@ static void doc_moment(Doc& d, double now) {
         const bool staggered = doc_staggered(d, thing, now);   // (each copy, the first too, as late as its order says, waving as its place in the wave says)
         const std::vector<math::mat4> joins = doc_number(d, thing, "connect", 0, 0) != 0.0 ? doc_joins(d, thing, now) : std::vector<math::mat4>{};   // (a joining thing: its copies lie between another's)
         if (t.grains && t.look) t.look->setParameter("dissolve", (float)doc_number(d, thing, "dissolve", now, 0)), t.look->setParameter("grain", (float)doc_number(d, thing, "grain", now, 1));
+        if (t.grains && t.look && t.splatFx) {   // (its effect's uniforms at its own time: the knobs as the document says them, then the effect's updateEffect)
+            const auto said = t.splatFx->uniforms(std::max(0.0, now - doc_number(d, thing, "start", 0, 0)), 1.0 / 60.0, [&](const std::string& knob, double usual) { return doc_number(d, thing, doc_screen_knob(t.splatFxFile, knob).c_str(), now, usual); });
+            for (const auto& [n, f] : said) {
+                if (f.size() == 1) t.look->setParameter(n.c_str(), f[0]);
+                else if (f.size() == 2) t.look->setParameter(n.c_str(), float2{f[0], f[1]});
+                else if (f.size() == 3) t.look->setParameter(n.c_str(), float3{f[0], f[1], f[2]});
+                else if (f.size() >= 4) t.look->setParameter(n.c_str(), float4{f[0], f[1], f[2], f[3]});
+            }
+            if (t.splatPlain && t.splatFx->finished() != t.splatDone) {   // (finished: its plain look, as PlayCanvas takes the shader off; back before it: the effect's again)
+                t.splatDone = t.splatFx->finished();
+                doc_parts(s, t, [&](RenderableManager& faces, RenderableManager::Instance one) { faces.setMaterialInstanceAt(one, 0, t.splatDone ? t.splatPlain : t.look); });
+            }
+        }
         if (t.solid) solid_to(s, t.solid, place);
         else if (doc_number(d, thing, "connect", 0, 0) != 0.0) move(s, m, [&](int nth, const mat4f&) { return (size_t)nth < joins.size() ? mat4f(joins[(size_t)nth]) : mat4f::scaling(float3{0.f}); });
         else {
@@ -2420,7 +2433,14 @@ static bool doc_match(Doc& d) {
                 if (!look) made.shape = nullptr;
                 else if (!glass) plain(look, fill.empty() ? float3{0xd9, 0xd2, 0xc3} / 255.f : colour, surface);
             } else if (std::filesystem::path(file).extension() == ".ply") {   // (a point cloud: its grains, one buffer, points.h)
-                made.shape = points(s, file.c_str(), why, &made.look);
+                for (const std::string& w : doc_fx_list(d, thing)) if (std::filesystem::path(w).extension() == ".mjs") made.splatFxFile = w;   // (a PlayCanvas splat effect on it: its look made with it)
+                std::string effectWhy;
+                Material* with = made.splatFxFile.empty() ? nullptr : points_effect(s, made.splatFxFile, made.splatFx, effectWhy);
+                if (!effectWhy.empty()) std::fprintf(stderr, "%s\n", effectWhy.c_str());
+                float3 box[2];
+                made.shape = points(s, file.c_str(), why, &made.look, with, &made.splatPlain, box);
+                if (made.splatFx)   // (a PlayCanvas effect's box, as it comes: the cloud's own)
+                    for (int c = 0; c < 3; ++c) made.splatFx->usual(std::string("aabbMin_") + "xyz"[c], box[0][c]), made.splatFx->usual(std::string("aabbMax_") + "xyz"[c], box[1][c]);
                 made.grains = made.shape != nullptr;
             } else if (glass) {   // (a file's shape as glass: its triangles alone, for the kit's glass, which draws a shape three times)
                 MaterialInstance* look = (made.shape = solid_mesh(file.c_str())) ? thick_glass(s, made.shape, {mat4f{}}) : nullptr;
@@ -3206,6 +3226,7 @@ static std::string doc_folder_names(const char* folder, const char* extension) {
             if (const size_t at = line.find("--label:"); at != std::string::npos) label = line.substr(at + 8);
         std::error_code wrong;
         const std::filesystem::path picture = std::filesystem::path(f).replace_extension(".png");
+        if (f.extension() == ".mjs") label = "Points";   // (a PlayCanvas splat effect: for a point cloud)
         all += (all.empty() ? "" : "\n") + name + "\t" + f.string() + "\t" + label + "\t" + (std::filesystem::exists(picture, wrong) ? picture.string() : "");
     }
     return all;

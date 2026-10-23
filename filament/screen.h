@@ -379,6 +379,7 @@ static void thing_effects(Stage& s, ScreenStack& st, const std::string& files) {
     for (const std::string& file : script_files(files)) {
         if (file == "none") continue;
         if (const char k = doc_thor_letter(file)) { st.steps.push_back(k); continue; }   // (one of ThorVG's own: drawn by ThorVG, in its place)
+        if (std::filesystem::path(file).extension() == ".mjs") continue;   // (a splat effect: in the cloud's own look, points.h)
         ScreenFx*& made = st.made[file];
         if (!made) {
             made = new ScreenFx;

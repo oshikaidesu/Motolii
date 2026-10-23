@@ -14,6 +14,7 @@ material {
     parameters : [
         { type : sampler2d, name : splats, precision : high },
         { type : sampler2d, name : order, precision : high },
+        { type : mat4, name : fit },
         { type : float, name : dissolve },
         { type : float, name : grain }
     ]
@@ -21,6 +22,15 @@ material {
 
 vertex {
     float hash(float n) { return fract(sin(n) * 43758.5453); }
+    // PlayCanvas's helpers for its splat effects (engine shader chunk gsplatHelpers, MIT, Copyright (c) 2011-2026 PlayCanvas Ltd.)
+    void gsplatMakeSpherical(inout vec3 scale, float size) { scale = vec3(size); }
+    float gsplatGetSizeFromScale(vec3 scale) { return sqrt((scale.x * scale.x + scale.y * scale.y + scale.z * scale.z) / 3.0); }
+    //@effect (a PlayCanvas splat effect's GLSL goes here as it is: points.h)
+#ifndef SPLAT_EFFECT
+    void modifySplatCenter(inout vec3 center) {}
+    void modifySplatRotationScale(vec3 originalCenter, vec3 modifiedCenter, inout vec4 rotation, inout vec3 scale) {}
+    void modifySplatColor(vec3 center, inout vec4 color) {}
+#endif
     void materialVertex(inout MaterialVertexInputs material) {
         vec3 c = getPosition().xyz;   // (corner x, corner y in -2..2; the slot)
         int slot = int(c.z + 0.5);
@@ -30,12 +40,25 @@ vertex {
         vec4 t1 = texelFetch(materialParams_splats, ivec2((at + 1) % 4096, (at + 1) / 4096), 0);
         vec4 t2 = texelFetch(materialParams_splats, ivec2((at + 2) % 4096, (at + 2) / 4096), 0);
         vec4 t3 = texelFetch(materialParams_splats, ivec2((at + 3) % 4096, (at + 3) / 4096), 0);
-        mat3 spread = mat3(t1.x, t1.y, t1.z, t1.y, t1.w, t2.x, t1.z, t2.x, t2.y);
-        mat4 place = getWorldFromModelMatrix();
+        // (as PlayCanvas hands a splat to its effects: middle, turn (x y z w), size, colour with how much it is seen)
+        vec3 center = t0.xyz, original = t0.xyz;
+        modifySplatCenter(center);
+        vec4 rotation = t1;
+        vec3 scale = t2.xyz;
+        modifySplatRotationScale(original, center, rotation, scale);
+        vec4 colour = vec4(t2.w, t3.x, t3.y, t0.w);
+        modifySplatColor(center, colour);
+        float x = rotation.x, y = rotation.y, z = rotation.z, w = rotation.w;
+        mat3 turn = mat3(1.0 - 2.0 * (y * y + z * z), 2.0 * (x * y + w * z), 2.0 * (x * z - w * y),
+                         2.0 * (x * y - w * z), 1.0 - 2.0 * (x * x + z * z), 2.0 * (y * z + w * x),
+                         2.0 * (x * z + w * y), 2.0 * (y * z - w * x), 1.0 - 2.0 * (x * x + y * y));
+        mat3 grown = turn * mat3(scale.x, 0.0, 0.0, 0.0, scale.y, 0.0, 0.0, 0.0, scale.z);
+        mat3 spread = grown * transpose(grown);   // (its spread in the file's own space)
+        mat4 place = getWorldFromModelMatrix() * materialParams.fit;
         float seed = float(which % 100003) * 0.731;
         vec3 way = normalize(vec3(hash(seed * 12.9898) - 0.5, hash(seed * 78.233) - 0.5, hash(seed * 39.425) - 0.5) + vec3(0.0, 0.35, 0.0));
         float far = materialParams.dissolve * (0.3 + 1.4 * hash(seed * 7.137));
-        material.worldPosition = vec4((place * vec4(t0.xyz + way * far, 1.0)).xyz, 1.0);
+        material.worldPosition = vec4((getWorldFromModelMatrix() * vec4((materialParams.fit * vec4(center, 1.0)).xyz + way * far, 1.0)).xyz, 1.0);
         mat4 view = getViewFromWorldMatrix();
         vec3 cam = (view * vec4(material.worldPosition.xyz, 1.0)).xyz;
         float d = max(-cam.z, 1e-4);   // (Filament's eye looks down -z)
@@ -55,8 +78,8 @@ vertex {
         vec2 px = (c.x * major + c.y * minor) * materialParams.grain;
         mat4 eye = getWorldFromViewMatrix();
         material.worldPosition.xyz += mulMat3x3Float3(eye, vec3(px.x * d / fx, px.y * d / fy, 0.0));
-        material.corner = vec4(c.xy, t0.w, 0.0);
-        material.tint = vec4(t2.z, t2.w, t3.x, 1.0);
+        material.corner = vec4(c.xy, clamp(colour.a, 0.0, 1.0), 0.0);
+        material.tint = vec4(max(colour.rgb, vec3(0.0)), 1.0);
     }
 }
 

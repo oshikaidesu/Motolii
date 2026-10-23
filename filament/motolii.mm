@@ -664,7 +664,7 @@ const char* motolii_moving(Motolii* m, int thing) { return by_look(m, [=] { retu
 const char* motolii_values(Motolii* m, int thing) { return by_look(m, [=] { return (m->word = doc_has(*m->d, thing)).c_str(); }); }
 int motolii_range(Motolii* m, int thing, const char* name, double* low, double* high) { return by_look(m, [=] { return (int)doc_range(*m->d, thing, name, low, high); }); }
 const char* motolii_recipes(Motolii* m) { return by_look(m, [=] { return (m->word = doc_recipe_names()).c_str(); }); }
-const char* motolii_effects(Motolii* m) { return by_look(m, [=] { return (m->word = doc_folder_names("effects", ".wgsl .fs")).c_str(); }); }
+const char* motolii_effects(Motolii* m) { return by_look(m, [=] { return (m->word = doc_folder_names("effects", ".wgsl .fs .mjs")).c_str(); }); }
 const char* motolii_animators(Motolii* m) { return by_look(m, [=] { return (m->word = doc_folder_names("animators", ".js")).c_str(); }); }
 int motolii_make(Motolii* m, const char* recipe) { return by_hand(m, [=] { return changes(m, doc_make(doc(m), recipe)); }); }
 const char* motolii_shown(Motolii* m, const char* name) {
