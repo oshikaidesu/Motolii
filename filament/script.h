@@ -8,6 +8,8 @@
 #pragma once
 #include <map>
 #include <memory>
+#include <cstring>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -17,6 +19,19 @@ struct ScriptKnob {
     std::string words;               // a select's words, with spaces between
 };
 struct ScriptCopy { double x = 0, y = 0, z = 0, size = 1, rotate = 0, rotate_x = 0, rotate_y = 0, opacity = 1; };
+
+// The files a word names in turn, with spaces between (an effect's list, the stage's): a path is one from its "/" to
+// its .wgsl, .fs or .js, spaces and all ("Application Support", an ISF effect's "Bad TV.fs"); any other word stands alone.
+inline std::vector<std::string> script_files(const std::string& word) {
+    std::vector<std::string> all;
+    std::istringstream each(word);
+    const auto ends = [](const std::string& w) { for (const char* e : {".wgsl", ".fs", ".js"}) if (w.size() >= strlen(e) && w.compare(w.size() - strlen(e), std::string::npos, e) == 0) return true; return false; };
+    for (std::string w; each >> w;) {
+        if (!all.empty() && all.back()[0] == '/' && !ends(all.back())) all.back() += " " + w;
+        else all.push_back(w);
+    }
+    return all;
+}
 
 // The knobs a file declares (read from its head; empty if it has none or cannot be read).
 std::vector<ScriptKnob> script_knobs(const std::string& file);

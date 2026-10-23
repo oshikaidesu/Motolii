@@ -36,6 +36,7 @@
 #include "interp.h"
 #include "physics.h"
 #include "script.h"
+#include "isf.h"
 #include "ways.h"
 #include "screen.h"
 #include "mosh.h"
@@ -631,7 +632,11 @@ static const DocShown* doc_shown_of(const char* name) {
 }
 // A whole-screen effect's knob in the document: its file's name before the knob's, as several lie on one stage and two
 // may each have a knob of one name (Posterize's gamma and Boxinator's are not one value).
-static std::string doc_screen_knob(const std::string& file, const std::string& knob) { return "js_" + std::filesystem::path(file).stem().string() + "_" + knob; }
+static std::string doc_screen_knob(const std::string& file, const std::string& knob) {   // (a value's name is one word: an ISF file's "Frosted Glass" says Frosted_Glass)
+    std::string stem = std::filesystem::path(file).stem().string();
+    for (char& c : stem) if (!std::isalnum((unsigned char)c) && c != '_') c = '_';
+    return "js_" + stem + "_" + knob;
+}
 // ThorVG's own effects by the value that puts each on, as a thing's list of effects names them, and their letters
 // (DrawnFx::order).
 static const char* const doc_thor_names[] = {"tint", "tritone", "shadow", "glow", "blur"};
@@ -641,7 +646,8 @@ static char doc_thor_letter(const std::string& w) {
 }
 static DocScript* doc_script_of(const std::string& file) {
     if (file.empty() || file == "none") return nullptr;
-    const bool screen = std::filesystem::path(file).extension() == ".wgsl";   // (a whole-screen effect's knobs: named by the effect too)
+    const std::string ext = std::filesystem::path(file).extension().string();
+    const bool screen = ext == ".wgsl" || ext == ".fs";   // (a whole-screen effect's knobs: named by the effect too)
     DocScript& s = doc_scripts()[file];
     const auto now = std::chrono::steady_clock::now();
     if (s.stamp >= 0 && now - s.looked < std::chrono::milliseconds(250)) return &s;
@@ -651,7 +657,7 @@ static DocScript* doc_script_of(const std::string& file) {
     if (wrong) return s.stamp >= 0 ? &s : nullptr;
     if (s.stamp != stamp) {
         s = DocScript{};
-        s.stamp = stamp, s.looked = now, s.knobs = script_knobs(file);
+        s.stamp = stamp, s.looked = now, s.knobs = script_knobs(screen ? isf_file(file) : file);
         doc_scripts_made()++;   // (what was worked out from the old one is forgotten)
         for (const ScriptKnob& k : s.knobs) s.names.push_back(screen ? doc_screen_knob(file, k.name) : "js_" + k.name);
         for (size_t i = 0; i < s.knobs.size(); ++i) {   // (the names are all made first: what points into them stays put)
@@ -659,8 +665,8 @@ static DocScript* doc_script_of(const std::string& file) {
             s.values.push_back(DocValue{s.names[i].c_str(), "film picture text shape solid stage", k.kind == "select" ? 0.0 : k.low, k.kind == "select" ? 0.0 : k.high, k.kind == "track", k.kind == "select" ? k.words.c_str() : nullptr});
             s.shown.push_back(DocShown{s.names[i].c_str(), k.kind == "check" ? "onoff" : "", "", k.label.c_str(), k.low, k.high, nullptr});
         }
-        if (std::filesystem::path(file).extension() != ".wgsl") s.run = std::make_unique<Script>(file);   // (a .wgsl is drawn, not run: screen.h)
-        { std::ifstream in(file); std::stringstream text; text << in.rdbuf(); s.clears = text.str().find("opacity") != std::string::npos; }
+        if (!screen) s.run = std::make_unique<Script>(file);   // (a .wgsl or an ISF .fs is drawn, not run: screen.h)
+        { std::ifstream in(screen ? isf_file(file) : file); std::stringstream text; text << in.rdbuf(); s.clears = text.str().find("opacity") != std::string::npos; }
     }
     return &s;
 }
@@ -672,12 +678,10 @@ static std::vector<DocScript*> doc_scripts_on(Doc& d, int thing) {
     std::vector<DocScript*> all;
     if (thing != 0) {
         if (DocScript* sc = doc_script_of(said)) all.push_back(sc);
-        std::istringstream fx(doc_word(d, thing, "fx"));
-        for (std::string file; fx >> file;) if (!doc_thor_letter(file)) if (DocScript* sc = doc_script_of(file)) all.push_back(sc);
+        for (const std::string& file : script_files(doc_word(d, thing, "fx"))) if (!doc_thor_letter(file)) if (DocScript* sc = doc_script_of(file)) all.push_back(sc);
         return all;
     }
-    std::istringstream each(said);
-    for (std::string file; each >> file;) if (DocScript* sc = doc_script_of(file)) all.push_back(sc);
+    for (const std::string& file : script_files(said)) if (DocScript* sc = doc_script_of(file)) all.push_back(sc);
     return all;
 }
 static const DocCard doc_cards[] = {
@@ -1594,8 +1598,7 @@ static bool doc_on(Doc& d, int thing, const char* name);
 // lies first, in the old order (colours, shadow, glow, blur).
 static std::vector<std::string> doc_fx_list(Doc& d, int thing) {
     std::vector<std::string> said, all;
-    std::istringstream each(doc_word(d, thing, "fx"));
-    for (std::string w; each >> w;) if (w != "none") said.push_back(w);
+    for (const std::string& w : script_files(doc_word(d, thing, "fx"))) if (w != "none") said.push_back(w);
     for (const char* n : doc_thor_names) if (std::find(said.begin(), said.end(), n) == said.end() && doc_on(d, thing, n)) all.push_back(n);
     for (const std::string& w : said) if (!doc_thor_letter(w) || doc_on(d, thing, w.c_str())) all.push_back(w);
     return all;
@@ -3111,7 +3114,8 @@ static std::vector<std::filesystem::path> doc_folder_files(const char* folder, c
     std::map<std::string, std::filesystem::path> by;
     std::error_code wrong;
     for (const auto& dir : doc_folders(folder))
-        for (const auto& e : std::filesystem::directory_iterator(dir, wrong)) if (e.path().extension() == extension) by[e.path().filename().string()] = e.path();
+        for (const auto& e : std::filesystem::directory_iterator(dir, wrong))   // (extensions: one, or a few with spaces between)
+            if ((" " + std::string(extension) + " ").find(" " + e.path().extension().string() + " ") != std::string::npos && e.path().has_extension()) by[e.path().filename().string()] = e.path();
     std::vector<std::filesystem::path> files;
     for (const auto& [_, f] : by) files.push_back(f);
     return files;
@@ -3177,7 +3181,9 @@ static std::string doc_folder_names(const char* folder, const char* extension) {
     if (!doc_folder_moved(folder, one.was, one.looked)) return all;
     all.clear();
     for (const auto& f : doc_folder_files(folder, extension)) {
-        std::ifstream in(f);
+        const std::string read = isf_file(f.string());   // (an ISF effect: its head as made WGSL; one that cannot be is not shown)
+        if (read.empty()) continue;
+        std::ifstream in(read);
         std::string first, name = f.stem().string(), label;
         if (std::getline(in, first) && first.rfind("// ", 0) == 0 && first.find(':') != std::string::npos) name = first.substr(3, first.find(':') - 3);
         for (std::string line; label.empty() && std::getline(in, line) && line.rfind("//", 0) == 0;)

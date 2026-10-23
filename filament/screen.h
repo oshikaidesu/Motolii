@@ -7,6 +7,7 @@
 #pragma once
 // (kit.h: read before this, as doc.h does)
 #include "script.h"
+#include "isf.h"
 #include "dawn_probe/screen_door.h"
 #include <fstream>
 #include <regex>
@@ -49,12 +50,14 @@ static std::filesystem::file_time_type screen_stamp(const std::string& file) {
 // The file as Filament's driver takes it: the picture at binding 0, its sampler at 1, the knobs at 2 (Filament's
 // descriptor 0 a sampled texture, 1 a uniform buffer), its entry `main`; and the knobs' struct read for where each is.
 static bool screen_read(ScreenFx& fx, std::string& code) {
-    std::ifstream in(fx.file);
+    const std::string file = isf_file(fx.file);   // (an ISF effect: the WGSL made of it)
+    if (file.empty()) return fx.trouble = "the ISF effect could not be made WGSL: " + fx.file, false;
+    std::ifstream in(file);
     if (!in) return fx.trouble = "there is no such file: " + fx.file, false;
     std::stringstream all;
     all << in.rdbuf();
     code = all.str();
-    const std::regex bound(R"(@group\(\s*\d+\s*\)\s*@binding\(\s*\d+\s*\)\s*var(<\s*uniform\s*>)?\s+(\w+)\s*:\s*([A-Za-z_][\w<>]*))");
+    const std::regex bound(R"(@group\(\s*\d+u?\s*\)\s*@binding\(\s*\d+u?\s*\)\s*var(<\s*uniform\s*>)?\s+(\w+)\s*:\s*([A-Za-z_][\w<>]*))");
     int reads = 0;   // (the pictures it reads: the k-th at 2k, the k-th sampler at 2k+1, the knobs after them all)
     for (std::sregex_iterator m(code.begin(), code.end(), bound), end; m != end; ++m) reads += (*m)[3].str().rfind("texture_2d", 0) == 0;   // (texture_2d and texture_2d_array alike)
     std::string out, knobsType;
@@ -128,7 +131,7 @@ static bool screen_read(ScreenFx& fx, std::string& code) {
         }
         fx.bytes = (end + most - 1) / most * most;
     }
-    fx.knobs = script_knobs(fx.file);
+    fx.knobs = script_knobs(file);
     return true;
 }
 
@@ -304,8 +307,7 @@ static void screen_effects(Stage& s, ScreenStack& st, const std::string& files, 
     s.view->setRenderTarget(nullptr);
     for (View* v : s.layers) v->setRenderTarget(nullptr);
     st.fx.clear();
-    std::istringstream each(files);
-    for (std::string file; each >> file;) {
+    for (const std::string& file : script_files(files)) {
         if (file == "none") continue;
         ScreenFx*& made = st.made[file];
         if (!made) {
@@ -350,8 +352,7 @@ static void thing_effects(Stage& s, ScreenStack& st, const std::string& files) {
     st.files = files;
     st.fx.clear();
     st.steps.clear();
-    std::istringstream each(files);
-    for (std::string file; each >> file;) {
+    for (const std::string& file : script_files(files)) {
         if (file == "none") continue;
         if (const char k = doc_thor_letter(file)) { st.steps.push_back(k); continue; }   // (one of ThorVG's own: drawn by ThorVG, in its place)
         ScreenFx*& made = st.made[file];

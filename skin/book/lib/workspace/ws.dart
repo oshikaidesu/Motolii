@@ -463,11 +463,12 @@ class Ws extends ChangeNotifier {
 
   /// Joined: the effects on the picked thing (its fx: as the camera sees it, After Effects' effects on a layer), or with
   /// nothing picked on the whole stage (its script), nearest the picture first.
+  static final _files = RegExp(r'/.*?\.(?:wgsl|fs|js)(?= |$)|[^ ]+'); // (as the inside reads the list: a path, spaces and all, to its extension: script.h script_files)
   List<String> get screenFx {
     final t = int.tryParse(selected ?? '');
     return [
-      for (final f in (_inside?.word(t ?? 0, t == null ? 'script' : 'fx') ?? '').split(' '))
-        if (f.isNotEmpty && f != 'none') f,
+      for (final f in _files.allMatches(_inside?.word(t ?? 0, t == null ? 'script' : 'fx') ?? '').map((m) => m[0]!))
+        if (f != 'none') f,
     ];
   }
 
