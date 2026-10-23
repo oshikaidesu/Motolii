@@ -1,37 +1,63 @@
-// points.mat: a point cloud's grains (points.h), each a little square turned to face the eye and cut round, its own
-// colour, as large as its point says. `dissolve`: each grain thrown out its own way (fixed by its seed) as far as it
-// says, the cloud coming apart as the drift of 点云飘散 does. Unlit: the colours are the scan's own light.
+// points.mat: a point cloud's splats (points.h), each laid on the screen as the ellipse its spread in space makes there
+// and faded out from its middle, its own colour (antimatter15/splat's vertex and fragment way, MIT, Copyright (c) 2023
+// Kevin Kwok: the covariance through the eye's own turn and the projection's slope (J W S W^T J^T), its two axes from
+// the 2x2's eigenvalues, exp(-r^2) times how much it is seen). Not sorted: masked, so with the stage's MSAA Filament's
+// alpha to coverage lays each by how much of a pixel's samples it covers. `dissolve`: each splat thrown out its own way
+// (fixed by its seed) as far as it says, the cloud coming apart as the drift of 点云飘散 does. Unlit: the colours are
+// the scan's own light.
 material {
     name : points,
     shadingModel : unlit,
-    requires : [ custom0, color ],
+    requires : [ custom0, custom1, custom2, color ],
     variables : [ corner ],
     culling : none,
-    blending : opaque,
+    blending : masked,
+    maskThreshold : 0.2,
     parameters : [
-        { type : float, name : dissolve },   // how far each grain is thrown out, in the cloud's own units (it is 1 tall)
-        { type : float, name : grain }       // how large the grains are drawn against their own size (1: as they are)
+        { type : float, name : dissolve },   // how far each splat is thrown out, in the cloud's own units (it is 1 tall)
+        { type : float, name : grain }       // how large the splats are drawn against their own size (1: as they are)
     ]
 }
 
 vertex {
     float hash(float n) { return fract(sin(n) * 43758.5453); }
     void materialVertex(inout MaterialVertexInputs material) {
-        vec4 c = getCustom0();   // (corner x, corner y in -1..1; the grain's half size in the cloud's units; its seed)
-        mat4 eye = getWorldFromViewMatrix();
+        vec4 c = getCustom0();   // (corner x, corner y in -2..2; how much it is seen; its seed)
+        vec4 a = getCustom1(), b = getCustom2();
+        mat3 spread = mat3(a.x, a.y, a.z, a.y, a.w, b.x, a.z, b.x, b.y);   // (in the cloud's own space)
+        mat4 place = getWorldFromModelMatrix();
         vec3 way = normalize(vec3(hash(c.w * 12.9898) - 0.5, hash(c.w * 78.233) - 0.5, hash(c.w * 39.425) - 0.5) + vec3(0.0, 0.35, 0.0));
         float far = materialParams.dissolve * (0.3 + 1.4 * hash(c.w * 7.137));
-        mat4 place = getWorldFromModelMatrix();
-        vec3 grow = (eye[0].xyz * c.x + eye[1].xyz * c.y) * c.z * materialParams.grain * length(place[0].xyz);   // (the eye's own across and up: it faces the eye)
-        material.worldPosition.xyz += mulMat3x3Float3(place, way * far) + grow;
-        material.corner = vec4(c.xy, 0.0, 0.0);
+        material.worldPosition.xyz += mulMat3x3Float3(place, way * far);
+        mat4 view = getViewFromWorldMatrix();
+        vec3 cam = (view * vec4(material.worldPosition.xyz, 1.0)).xyz;
+        float d = max(-cam.z, 1e-4);   // (Filament's eye looks down -z)
+        vec4 res = getResolution();
+        mat4 clip = getClipFromViewMatrix();
+        float fx = clip[0][0] * 0.5 * res.x, fy = clip[1][1] * 0.5 * res.y;   // (pixels a unit across at depth 1)
+        mat3 W = mat3(view) * mat3(place);
+        mat3 J = mat3(fx / d, 0.0, 0.0, 0.0, fy / d, 0.0, fx * cam.x / (d * d), fy * cam.y / (d * d), 0.0);
+        mat3 T = J * W;
+        mat3 onScreen = T * spread * transpose(T);
+        float c00 = onScreen[0][0] + 0.3, c11 = onScreen[1][1] + 0.3, c01 = onScreen[0][1];   // (a pixel's own blur at least, as 3DGS adds)
+        float mid = 0.5 * (c00 + c11), radius = length(vec2(0.5 * (c00 - c11), c01));
+        float l1 = mid + radius, l2 = max(mid - radius, 0.1);
+        vec2 along = vec2(c01, l1 - c00);
+        along = dot(along, along) > 1e-12 ? normalize(along) : vec2(1.0, 0.0);
+        vec2 major = min(sqrt(2.0 * l1), 1024.0) * along, minor = min(sqrt(2.0 * l2), 1024.0) * vec2(along.y, -along.x);
+        vec2 px = (c.x * major + c.y * minor) * materialParams.grain;   // (pixels from its middle on the screen)
+        mat4 eye = getWorldFromViewMatrix();
+        material.worldPosition.xyz += mulMat3x3Float3(eye, vec3(px.x * d / fx, px.y * d / fy, 0.0));   // (on the plane through its middle facing the eye)
+        material.corner = vec4(c.xy, c.z, 0.0);
     }
 }
 
 fragment {
     void material(inout MaterialInputs material) {
         prepareMaterial(material);
-        if (dot(variable_corner.xy, variable_corner.xy) > 1.0) discard;
-        material.baseColor = vec4(pow(getColor().rgb, vec3(2.2)), 1.0);   // (the scan's colours are the screen's numbers: back to light)
+        float r = dot(variable_corner.xy, variable_corner.xy);
+        if (r > 4.0) discard;
+        float seen = exp(-r) * variable_corner.z;
+        material.baseColor = vec4(pow(getColor().rgb, vec3(2.2)), seen);   // (the scan's colours are the screen's numbers: back to light)
     }
 }
