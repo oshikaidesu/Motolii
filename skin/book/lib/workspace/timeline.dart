@@ -11,6 +11,7 @@ import 'package:flutter/widgets.dart';
 import '../sets/panels/timeline_parts_parts.dart' show TpGlyph, TpGlyphPainter;
 import '../tokens.dart';
 import 'key_drag.dart';
+import 'timeline_kept.dart';
 import 'timeline_paint.dart';
 import 'relate.dart';
 import 'ws.dart';
@@ -536,6 +537,7 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
                   height: WtM.ruler,
                   child: CustomPaint(
                     painter: WtRulerPainter(view: v, fps: Ws.fps, workIn: _workIn, workOut: _workOut, markers: _marksOf(_ws!), beats: _beatsOf(ws)),
+                    foregroundPainter: WtKeptPainter(view: v, kept: ws.kept), // (the pictures kept on disk for playing)
                   ),
                 ),
               ),

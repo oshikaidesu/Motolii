@@ -2,6 +2,7 @@
 // This file is what every seat shares: the mock document they all read (Ws), and the window's own tokens (WsT).
 // Tone and manner come from the Inspector's Pop rules (sets/inspector_parts.dart): containers square and tiled edge to edge,
 // what you touch or read round, colour flat and opaque, one lime accent, each kind of thing wearing its own hue.
+import 'dart:async' show Timer;
 import 'dart:developer' show Timeline, TimelineTask;
 import 'dart:io' show Platform;
 import 'package:flutter/scheduler.dart';
@@ -121,6 +122,9 @@ class Ws extends ChangeNotifier {
     _inside = inside;
     if (!_peeking) SchedulerBinding.instance.addPersistentFrameCallback(_peek);
     _peeking = true;
+    _beat ??= Timer.periodic(const Duration(milliseconds: 500), (_) {   // (what changes with no picture (pictures kept on disk while the hand rests): a picture asked for, so the peek looks)
+      if (!_gone && _inside?.counters != _counted) SchedulerBinding.instance.scheduleFrame();
+    });
     inside.shaping;   // (read once, at the opening: what a card is made by)
     var asking = false;
     inside.again = () {   // (a read put off while the hand was busy: the seats look again a picture later, once)
@@ -128,7 +132,7 @@ class Ws extends ChangeNotifier {
       asking = true;
       SchedulerBinding.instance.addPostFrameCallback((_) {
         asking = false;
-        shown();
+        if (!_gone) shown();   // (the window may be closed by then)
       });
       SchedulerBinding.instance.ensureVisualUpdate();
     };
@@ -194,9 +198,14 @@ class Ws extends ChangeNotifier {
   /// document changed by no one the window waits for is read again; anything else the inside shows anew (a hand carrying,
   /// a moment, a relation) is [seen]: what shows numbers reads its own again, nothing is built again.
   bool _peeking = false, _gone = false;
-  (int, int, int)? _counted;
+  Timer? _beat;
+  (int, int, int, int)? _counted;
   int _readRevision = -1;
   final seen = ValueNotifier<int>(0);
+
+  /// The stage's pictures kept on disk for playing, as stretches of frames (the timeline marks them, as After Effects'
+  /// green line): read again only when the inside says they changed.
+  final kept = ValueNotifier<List<(int, int)>>(const []);
   void _peek(Duration _) {
     final m = _inside;
     if (m == null || _gone) return;
@@ -205,6 +214,7 @@ class Ws extends ChangeNotifier {
     _counted = c;
     SchedulerBinding.instance.addPostFrameCallback((_) {   // (told once the picture is out: what it marks is drawn at the next)
       if (_gone) return;
+      if (c.$4 != was?.$4) kept.value = m.kept;
       if (c.$1 != _readRevision && _afters == 0) return reread();   // (not waited for by any after: read here)
       seen.value++;
     });
@@ -213,7 +223,9 @@ class Ws extends ChangeNotifier {
   @override
   void dispose() {
     _gone = true;
+    _beat?.cancel();
     seen.dispose();
+    kept.dispose();
     super.dispose();
   }
 

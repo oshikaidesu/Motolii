@@ -9,6 +9,8 @@
 #include <future>
 #include <deque>
 #include <thread>
+#include <atomic>
+#include <mutex>
 
 struct StageKept {
     uint64_t key = 0;               // (the document as it is)
@@ -19,10 +21,25 @@ struct StageKept {
     Texture* into = nullptr;
     Texture* shown = nullptr;       // (a kept picture, put on the stage when played)
     std::deque<uint64_t> keys;      // (the last documents kept for: an undo back to one finds its pictures; older ones go)
+    std::atomic<long> told{0};      // (how many times what is kept has changed: a window reads it without waiting, as the revision)
+    std::mutex runsLock;
+    std::string runs;               // (the kept pictures as stretches, "from to from to", for a window to mark: After Effects' green line)
     int ahead = -1;                 // (the next picture, read from disk on a thread of its own while this one is shown)
     std::future<std::vector<uint8_t>*> next;
 };
 
+// What is kept, told again as stretches (each picture's state changed: kept, or all thrown away).
+static void stage_kept_tell(StageKept& k) {
+    std::string runs;
+    for (int i = 0; i < (int)k.state.size(); ++i) {
+        if (k.state[i] != 2 || (i > 0 && k.state[i - 1] == 2)) continue;
+        int j = i;
+        while (j + 1 < (int)k.state.size() && k.state[j + 1] == 2) ++j;
+        runs += (runs.empty() ? "" : " ") + std::to_string(i) + " " + std::to_string(j + 1);
+    }
+    { std::lock_guard<std::mutex> hold(k.runsLock); k.runs = std::move(runs); }
+    k.told.fetch_add(1, std::memory_order_release);
+}
 static uint64_t stage_kept_key(Doc& d, int w, int h) {
     uint64_t hash = 1469598103934665603ull;   // (FNV-1a, as kept frames are named)
     const auto add = [&](const std::string& s) { for (unsigned char c : s) hash = (hash ^ c) * 1099511628211ull; hash = (hash ^ 0xff) * 1099511628211ull; };
@@ -63,6 +80,11 @@ static void stage_kept_fresh(StageKept& k, Doc& d, Stage& s, long revision, int 
     }
     k.state.assign((size_t)std::max(1.0, std::ceil(doc_seconds(d) * rate)) + 1, 0);
     if (k.target) s.engine->destroy(k.target), s.engine->destroy(k.into), s.engine->destroy(k.shown), k.target = nullptr;
+    for (int i = 0; i < (int)k.state.size(); ++i) {   // (what is on disk for it already, from before: an undo back to it, or the document opened again)
+        std::error_code e;
+        if (std::filesystem::exists(stage_kept_file(k, i), e)) k.state[i] = 2;
+    }
+    stage_kept_tell(k);
 }
 
 // One picture of the work area not looked at yet, drawn as a written film draws it and kept if it took too long (the
@@ -73,8 +95,6 @@ static bool stage_kept_one(StageKept& k, Doc& d, Stage& s, int rate, double budg
     int at = -1;
     for (int i = (int)std::floor(from * rate); i < (int)std::ceil(to * rate) && i < (int)k.state.size(); ++i) {
         if (k.state[i]) continue;
-        std::error_code e;
-        if (std::filesystem::exists(stage_kept_file(k, i), e)) { k.state[i] = 2; continue; }   // (kept before, by this document as it is)
         at = i;
         break;
     }
@@ -116,6 +136,7 @@ static bool stage_kept_one(StageKept& k, Doc& d, Stage& s, int rate, double budg
         ++kept_unwritten;
         kept_write(stage_kept_file(k, at), std::move(*pixels));
         k.state[at] = 2;
+        stage_kept_tell(k);
     } else k.state[at] = 1;
     delete pixels;
     return true;
@@ -134,7 +155,7 @@ static bool stage_kept_show(StageKept& k, Stage& s, Live* l, double now, int rat
     }
     if (!pixels) pixels = read(stage_kept_file(k, at));   // (not read ahead: the play began here, or skipped)
     if (at + 1 < (int)k.state.size() && k.state[at + 1] == 2) k.ahead = at + 1, k.next = std::async(std::launch::async, read, stage_kept_file(k, at + 1));
-    if (!pixels) { k.state[at] = 0; return false; }
+    if (!pixels) { k.state[at] = 0; stage_kept_tell(k); return false; }
     if (!k.shown) k.shown = Texture::Builder().width(s.w).height(s.h).levels(1).format(Texture::InternalFormat::RGBA8).usage(Texture::Usage::SAMPLEABLE | Texture::Usage::UPLOADABLE).build(*s.engine);
     k.shown->setImage(*s.engine, 0, backend::PixelBufferDescriptor(pixels->data(), pixels->size(), backend::PixelDataFormat::RGBA, backend::PixelDataType::UBYTE,
                                                                    [](void*, size_t, void* user) { delete (std::vector<uint8_t>*)user; }, pixels));

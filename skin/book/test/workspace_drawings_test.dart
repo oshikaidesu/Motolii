@@ -13,6 +13,8 @@ void main() {
     expect(m.effect(rect, 'Drop Shadow', 0), isTrue, reason: m.trouble);
     ws..reread()..select('$rect');
     await t.pumpAndSettle();
+    await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100))); // (the effect's card: the inside's cards read once it has made the effect)
+    await t.pumpAndSettle();
     final drawing = find.byType(ShadowDrawing);
     await seen(t, drawing);
     final box = t.getRect(drawing), was = (m.value(rect, 'shadow_distance', 0) ?? 0, m.value(rect, 'shadow_blur', 0) ?? 0);
@@ -21,7 +23,11 @@ void main() {
     final angle = m.value(rect, 'shadow_angle', 0)!;
     expect(angle, inInclusiveRange(0, 90), reason: 'up and to the right (ThorVG, as After Effects: 0 up, 90 right): $angle');
     expect(m.value(rect, 'shadow_distance', 0)!, greaterThan(was.$1), reason: 'further');
+    await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100))); // (the letting go is the inside's, in its queue: taken before undo is asked)
+    await t.pumpAndSettle();
     expect(m.undo(), isTrue);
+    await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100))); // (a read the busy hand refuses shows the copy read before: asked again once it rests)
+    await t.pumpAndSettle();
     expect(m.value(rect, 'shadow_distance', 0) ?? 0, was.$1, reason: 'one step');
     await closeWorkspace(t);
   }, skip: !insideBuilt);
@@ -32,6 +38,8 @@ void main() {
     expect(m.effect(rect, 'Trim Paths', 0), isTrue, reason: m.trouble);
     m..set(rect, 'trim', .2)..set(rect, 'trim_begin', 0); // (a fifth cut off the end: the card is there while something is cut)
     ws..reread()..select('$rect');
+    await t.pumpAndSettle();
+    await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100))); // (the effect's card: the inside's cards read once it has made the effect)
     await t.pumpAndSettle();
     final drawing = find.byType(TrimDrawing);
     await seen(t, drawing);

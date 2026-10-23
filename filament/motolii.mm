@@ -354,6 +354,12 @@ static int changes(Motolii* m, int done) {
 int motolii_live(Motolii* m) { return by_hand(m, [m] { return m->live || (m->live = live_open(*m->s)) ? 1 : 0; }); }
 void* motolii_front(Motolii* m) { return m->live ? live_front(m->live) : nullptr; }
 unsigned long long motolii_frames(Motolii* m) { return m->live ? m->live->frames.load() : 0; }
+const char* motolii_kept(Motolii* m) {
+    static thread_local std::string runs;   // (the asker's own copy: the hand may tell it again meanwhile)
+    std::lock_guard<std::mutex> hold(m->kept.runsLock);
+    return (runs = m->kept.runs).c_str();
+}
+long motolii_kept_count(Motolii* m) { return m->kept.told.load(std::memory_order_acquire); }
 int motolii_pick(Motolii* m, int thing, int hover) { return by_hand(m, [=] { m->pick = thing, m->hover = hover, m->changed = true; return 1; }); }
 int motolii_desk(Motolii* m, int w, int h, double x, double y, double scale, double point) {
     return by_hand(m, [=] {

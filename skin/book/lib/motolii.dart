@@ -124,6 +124,8 @@ class Motolii {
   late final _kindOf = _lib.lookupFunction<_S Function(_S), _S Function(_S)>('motolii_kind_of');
   late final _together = _lib.lookupFunction<Int32 Function(_P, Int32), int Function(_P, int)>('motolii_together');
   late final _frames = _lib.lookupFunction<Uint64 Function(_P), int Function(_P)>('motolii_frames');
+  late final _keptCount = _lib.lookupFunction<Int64 Function(_P), int Function(_P)>('motolii_kept_count', isLeaf: true);
+  late final _keptRuns = _lib.lookupFunction<Pointer<Utf8> Function(_P), Pointer<Utf8> Function(_P)>('motolii_kept');
   late final _wayOf = _lib.lookupFunction<_S Function(_P, Int32, _S, Double), _S Function(_P, int, _S, double)>('motolii_way_of');
   late final _point = _lib.lookupFunction<Double Function(_P), double Function(_P)>('motolii_point');
   late final _reading = _lib.lookupFunction<_S Function(_P, Int32, _S), _S Function(_P, int, _S)>('motolii_reading');
@@ -213,7 +215,13 @@ class Motolii {
   int get frames => _frames(_m); // (how many pictures the live stage has drawn: motolii_frames)
   /// The three counters a window peeks at once a picture (Chromium's BeginFrame): the document's revision, how often what
   /// a hand carries has changed, how many pictures the stage drew. None waits for the inside.
-  (int, int, int) get counters => (_revision(_m), _carried(_m), _frames(_m));
+  (int, int, int, int) get counters => (_revision(_m), _carried(_m), _frames(_m), _keptCount(_m));
+
+  /// The stage's pictures kept on disk for playing, as stretches of frames [from, to) (motolii_kept).
+  List<(int, int)> get kept {
+    final n = _keptRuns(_m).toDartString().split(' ').where((w) => w.isNotEmpty).map(int.parse).toList();
+    return [for (var i = 0; i + 1 < n.length; i += 2) (n[i], n[i + 1])];
+  }
   bool at(double seconds) => _at(_m, seconds) != 0;
 
   /// A new thing (film, picture, text, solid) from a file (a solid: a file, or ring, gem or cube): its number, 0 if it was not made.

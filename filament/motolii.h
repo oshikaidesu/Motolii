@@ -202,6 +202,10 @@ int motolii_pick(Motolii* m, int thing, int hover);   /* the thing picked in the
 void* motolii_desk_front(Motolii* m);
 unsigned long long motolii_desk_frames(Motolii* m);
 unsigned long long motolii_frames(Motolii* m);
+/* The stage's pictures kept on disk for playing (stage_kept.h): as stretches of frames at motolii_rate, "from to from to"
+   ("" none), and how many times that has changed (read without waiting, as motolii_revision). */
+const char* motolii_kept(Motolii* m);
+long motolii_kept_count(Motolii* m);
 int motolii_play(Motolii* m, int playing);                         /* time goes on by the clock (and round again at the end), or stands */
 double motolii_now(Motolii* m);                                    /* the stage's moment */
 double motolii_drawn_at(Motolii* m);   /* the moment of the last moment told the stage, at a frame of the document's rate: the window's playhead while it plays (what it reads there is set down, not waited for) */
