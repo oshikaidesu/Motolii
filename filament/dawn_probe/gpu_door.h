@@ -15,4 +15,7 @@ void* instance(filament::Engine*);   // its WGPUInstance
 // `work` is queued like any other Filament call: it runs on Filament's driver thread, in order with what was asked
 // before and after it, so what it draws on the device is ready for the frame rendered after this call.
 void on_driver(filament::Engine*, std::function<void()> work);
+// What Filament has drawn so far handed to the GPU's queue now (its driver's own flush, queued in order): someone else
+// drawing on the device after it (ThorVG submits at once) then reads it done, not still waiting in Filament's encoder.
+void submit(filament::Engine*);
 }  // namespace door

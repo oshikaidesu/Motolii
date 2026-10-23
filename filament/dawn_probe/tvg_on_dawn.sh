@@ -3,7 +3,9 @@
 # ThorVG: its official source at the commit of its main we use, fetched once into third_party/thorvg_src, with thorvg_z.patch
 # (a 3D layer's third number kept and said: LottieAnimation::pose, for motion.h; nothing drawn changes) and
 # thorvg_over.patch (a texture target of type 2 is drawn over, not replaced: the desk's marks on its picture, live.h) and
-# thorvg_matte_clip.patch (an alpha matte of one opaque shape is a clipper, as ThorVG makes a single mask one), and built
+# thorvg_matte_clip.patch (an alpha matte of one opaque shape is a clipper, as ThorVG makes a single mask one) and
+# thorvg_texture.patch (Picture::load of a texture already on the device, read as it is: a thing's effects in any order,
+# ThorVG's taking the picture the step before made, stage_steps), and built
 # against Dawn's webgpu.h: its build asks pkg-config for `wgpu_native`, and is given a file of that name that points at Dawn.
 #   ./dawn_probe/tvg_on_dawn.sh            builds ThorVG (once) and the probe, runs it
 set -e
@@ -11,7 +13,7 @@ cd "$(dirname "$0")/.."
 F=$PWD/third_party/filament_src
 T=$PWD/third_party/thorvg_src
 [ -d $T ] || { git init -q $T && git -C $T -c core.hooksPath=/dev/null fetch -q --depth 1 https://github.com/thorvg/thorvg 920324543b0377d14f34ebcd561f27590ddb55de && git -C $T checkout -q FETCH_HEAD; }
-git -C $T diff --quiet && git -C $T apply $PWD/dawn_probe/thorvg_z.patch $PWD/dawn_probe/thorvg_wg_upload.patch $PWD/dawn_probe/thorvg_length.patch $PWD/dawn_probe/thorvg_over.patch $PWD/dawn_probe/thorvg_matte_clip.patch
+git -C $T diff --quiet && git -C $T apply $PWD/dawn_probe/thorvg_z.patch $PWD/dawn_probe/thorvg_wg_upload.patch $PWD/dawn_probe/thorvg_length.patch $PWD/dawn_probe/thorvg_over.patch $PWD/dawn_probe/thorvg_matte_clip.patch $PWD/dawn_probe/thorvg_texture.patch
 mkdir -p $T/dawn_pc
 cat > $T/dawn_pc/wgpu_native.pc <<PC
 Name: wgpu_native

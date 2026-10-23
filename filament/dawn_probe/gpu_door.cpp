@@ -22,4 +22,5 @@ void* instance(Engine* engine) {
     return p ? p->getInstance().Get() : nullptr;
 }
 void on_driver(Engine* engine, std::function<void()> work) { downcast(engine)->getDriverApi().queueCommand(std::move(work)); }
+void submit(Engine* engine) { downcast(engine)->getDriverApi().flush(); }
 }  // namespace door

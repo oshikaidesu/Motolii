@@ -247,7 +247,8 @@ class _WorkspaceState extends State<Workspace> {
         _open(doc);
         _inside?.at(at);
       }
-      ..join(inside);
+      ..join(inside)
+      ..beat();
     setState(() {}); // (the menus are the open document's)
   }
 
@@ -769,6 +770,8 @@ class _InspectorSeatState extends State<_InspectorSeat> {
             ? null
             : (to, n, copy) => m.path(int.parse(l!.id), copy: copy, to: to, n: n)?.indexed.map((e) => e.$1 % 4 < 2 ? e.$2 * m.point : e.$2).toList(), // (where it is in points of the picture, as the card's numbers are) // (the wave card's preview asks once, then plays by itself)
         onAim: (at) => ws.aim = at.startsWith('v_') ? at.substring(2) : null, // (a colour link of a card is aimed at that value)
+        movable: int.tryParse(l?.id ?? '') == null ? const [] : m.fxTitles(int.parse(l!.id)), // (its effects, up or down their stack)
+        onCardMove: int.tryParse(l?.id ?? '') == null ? null : (title, by) => ws.after(m.later('fx_move', thing: int.parse(l!.id), word: title, number: by.toDouble())),
         values: Ws.timed('transform', () => wsTransform(ws, l?.id)),
         strs: Ws.timed('words', () => _words(ws, l?.id)),
         choices: Ws.timed('choices', () => _choices(ws, l?.id)),

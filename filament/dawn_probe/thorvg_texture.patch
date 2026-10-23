@@ -1,0 +1,181 @@
+diff --git a/inc/thorvg.h b/inc/thorvg.h
+index 41f7f99..5dece84 100644
+--- a/inc/thorvg.h
++++ b/inc/thorvg.h
+@@ -1852,6 +1852,12 @@ struct TVG_API Picture : Paint
+      */
+     Result load(const uint32_t* data, uint32_t w, uint32_t h, ColorSpace cs, bool copy = false) noexcept;
+ 
++    /**
++     * @brief motolii: Loads a texture already on the GPU (a WGPUTexture of the WebGPU engine's device, RGBA8,
++     * premultiplied), read as it is when drawn: nothing is copied or uploaded. It must live while the picture does.
++     */
++    Result load(void* texture, uint32_t w, uint32_t h) noexcept;
++
+     /**
+      * @brief Sets the asset resolver callback for handling external resources (e.g., images and fonts).
+      *
+diff --git a/src/loaders/raw/tvgRawLoader.cpp b/src/loaders/raw/tvgRawLoader.cpp
+index 64e006a..6bfa9b9 100644
+--- a/src/loaders/raw/tvgRawLoader.cpp
++++ b/src/loaders/raw/tvgRawLoader.cpp
+@@ -49,6 +49,18 @@ bool RawLoader::open(const uint32_t* data, uint32_t w, uint32_t h, ColorSpace cs
+     return true;
+ }
+ 
++bool RawLoader::open(void* gpu, uint32_t w, uint32_t h)
++{
++    if (!gpu || w == 0 || h == 0) return false;
++    this->w = (float)w;
++    this->h = (float)h;
++    this->owner = Ownership::Borrow;
++    surface.setup(nullptr, w, w, h, sizeof(uint32_t), ColorSpace::ABGR8888);
++    surface.premultiplied = true;
++    surface.gpu = gpu;
++    return true;
++}
++
+ bool RawLoader::read()
+ {
+     Loader::read();
+diff --git a/src/loaders/raw/tvgRawLoader.h b/src/loaders/raw/tvgRawLoader.h
+index 15f2263..dffb5ba 100644
+--- a/src/loaders/raw/tvgRawLoader.h
++++ b/src/loaders/raw/tvgRawLoader.h
+@@ -30,6 +30,7 @@ struct RawLoader : BitmapLoader
+ 
+     using Loader::open;
+     bool open(const uint32_t* data, uint32_t w, uint32_t h, ColorSpace cs, Ownership owner);
++    bool open(void* gpu, uint32_t w, uint32_t h);   // motolii: a texture already on the GPU, premultiplied RGBA
+     bool read() override;
+ };
+ 
+diff --git a/src/renderer/gpu_engine/wg/tvgWgTextureMgr.cpp b/src/renderer/gpu_engine/wg/tvgWgTextureMgr.cpp
+index 98df2bf..df62bf1 100644
+--- a/src/renderer/gpu_engine/wg/tvgWgTextureMgr.cpp
++++ b/src/renderer/gpu_engine/wg/tvgWgTextureMgr.cpp
+@@ -62,6 +62,20 @@ WGPUTextureFormat WgTextureMgr::textureFormat(const RenderSurface* surface)
+ 
+ void WgTextureMgr::upload(WgContext& context, WgTextureEntry& entry, const RenderSurface* surface, FilterMethod filter)
+ {
++    if (surface->gpu) {   // motolii: a texture already on the device: taken as it is
++        if (entry.external) wgpuTextureRelease(entry.texture); else context.releaseTexture(entry.texture);
++        entry.texture = (WGPUTexture)surface->gpu;
++        entry.external = true;
++        wgpuTextureAddRef(entry.texture);
++        entry.preprocess = static_cast<WgTexPrep>(entry.preprocess & Queued);
++        context.releaseTextureView(entry.textureView);
++        entry.textureView = context.createTextureView(entry.texture);
++        context.layouts.releaseBindGroup(entry.bindGroup);
++        auto sampler = (filter == FilterMethod::Bilinear) ? context.samplerLinearClamp : context.samplerNearestClamp;
++        entry.bindGroup = context.layouts.createBindGroupTexSampled(sampler, entry.textureView);
++        return;
++    }
++    if (entry.external) wgpuTextureRelease(entry.texture), entry.texture = nullptr, entry.external = false;
+     uint8_t preprocess = entry.preprocess & Queued;
+     if (surface->channelSize == sizeof(uint32_t)) {
+         if (!surface->premultiplied) preprocess |= Premultiply;
+@@ -155,7 +169,8 @@ void WgTextureMgr::releaseEntry(WgContext& context, WgTextureEntry& entry)
+ {
+     context.layouts.releaseBindGroup(entry.bindGroup);
+     context.releaseTextureView(entry.textureView);
+-    context.releaseTexture(entry.texture);
++    if (entry.external) wgpuTextureRelease(entry.texture), entry.texture = nullptr, entry.external = false;   // motolii: lent, not ours to destroy
++    else context.releaseTexture(entry.texture);
+     entry.refCnt = 0;
+ }
+ 
+diff --git a/src/renderer/gpu_engine/wg/tvgWgTextureMgr.h b/src/renderer/gpu_engine/wg/tvgWgTextureMgr.h
+index 5431e6b..92cf154 100644
+--- a/src/renderer/gpu_engine/wg/tvgWgTextureMgr.h
++++ b/src/renderer/gpu_engine/wg/tvgWgTextureMgr.h
+@@ -43,6 +43,7 @@ struct WgTextureEntry
+     WGPUBindGroup bindGroup{};
+     WgTexPrep preprocess = PrepNone;
+     uint32_t refCnt = 0;
++    bool external = false;   // motolii: a texture lent by the caller (RenderSurface::gpu): let go of, never destroyed
+ };
+ 
+ struct WgTextureMgr
+diff --git a/src/renderer/tvgLoader.h b/src/renderer/tvgLoader.h
+index 3d94785..ebeafce 100644
+--- a/src/renderer/tvgLoader.h
++++ b/src/renderer/tvgLoader.h
+@@ -179,7 +179,7 @@ struct BitmapLoader : ImageLoader
+ 
+     RenderSurface* bitmap() override
+     {
+-        return surface.data ? &surface : nullptr;
++        return (surface.data || surface.gpu) ? &surface : nullptr;   // motolii: or a texture already on the GPU
+     }
+ };
+ 
+diff --git a/src/renderer/tvgPicture.cpp b/src/renderer/tvgPicture.cpp
+index dc1976a..36c2110 100644
+--- a/src/renderer/tvgPicture.cpp
++++ b/src/renderer/tvgPicture.cpp
+@@ -57,6 +57,12 @@ Result Picture::load(const uint32_t* data, uint32_t w, uint32_t h, ColorSpace cs
+ }
+ 
+ 
++Result Picture::load(void* texture, uint32_t w, uint32_t h) noexcept
++{
++    return to<PictureImpl>(this)->load(texture, w, h);
++}
++
++
+ Result Picture::resolver(std::function<bool(Paint* paint, const char* src, void* data)> func, void* data) noexcept
+ {
+     return to<PictureImpl>(this)->set(func, data);
+diff --git a/src/renderer/tvgPicture.h b/src/renderer/tvgPicture.h
+index b9605b0..22844ce 100644
+--- a/src/renderer/tvgPicture.h
++++ b/src/renderer/tvgPicture.h
+@@ -27,6 +27,7 @@
+ #include "tvgScene.h"
+ #include "tvgAccessor.h"
+ #include "tvgLoaderMgr.h"
++#include "tvgRawLoader.h"
+ 
+ namespace tvg
+ {
+@@ -162,6 +163,15 @@ struct PictureImpl : Picture
+         return loader ? load(loader) : Result::NonSupport;
+     }
+ 
++    Result load(void* gpu, uint32_t w, uint32_t h)   // motolii
++    {
++        if (!gpu || w == 0 || h == 0) return Result::InvalidArguments;
++        if (vector) return Result::InsufficientCondition;
++        auto loader = new RawLoader;
++        if (!loader->open(gpu, w, h)) { delete loader; return Result::InvalidArguments; }
++        return load(loader);
++    }
++
+     Result set(std::function<bool(Paint* paint, const char* src, void* data)> resolver, void* data)
+     {
+         if (loader) return Result::InsufficientCondition;
+diff --git a/src/renderer/tvgRender.cpp b/src/renderer/tvgRender.cpp
+index c934b03..4f9f194 100644
+--- a/src/renderer/tvgRender.cpp
++++ b/src/renderer/tvgRender.cpp
+@@ -37,6 +37,7 @@ RenderSurface::RenderSurface(const RenderSurface* rhs)
+     channelSize = rhs->channelSize;
+     premultiplied = rhs->premultiplied;
+     opaque = rhs->opaque;
++    gpu = rhs->gpu;
+ }
+ 
+ void RenderSurface::setup(pixel_t* data, uint32_t stride, uint32_t w, uint32_t h, uint8_t channelSize, ColorSpace cs)
+diff --git a/src/renderer/tvgRender.h b/src/renderer/tvgRender.h
+index 9f007d1..57792ef 100644
+--- a/src/renderer/tvgRender.h
++++ b/src/renderer/tvgRender.h
+@@ -88,6 +88,7 @@ struct RenderSurface
+     uint8_t channelSize = 0;
+     bool premultiplied = false;         //Alpha-premultiplied
+     bool opaque = false;                // If true, the alpha channel can be ignored.
++    void* gpu = nullptr;                // motolii: a texture already on the GPU (WGPUTexture), read as it is: nothing uploaded
+ 
+     RenderSurface() = default;
+     RenderSurface(const RenderSurface* rhs);

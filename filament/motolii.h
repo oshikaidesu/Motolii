@@ -205,6 +205,9 @@ unsigned long long motolii_frames(Motolii* m);
 /* The stage's pictures kept on disk for playing (stage_kept.h): as stretches of frames at motolii_rate, "from to from to"
    ("" none), and how many times that has changed (read without waiting, as motolii_revision). */
 const char* motolii_kept(Motolii* m);
+/* A thing's effect cards' titles in the order its effects are laid, ";" between ("" none): ThorVG's own and files' alike.
+   Moved with motolii_later "fx_move" (word: a title, number: places, up less than 0). */
+const char* motolii_fx_titles(Motolii* m, int thing);
 long motolii_kept_count(Motolii* m);
 int motolii_play(Motolii* m, int playing);                         /* time goes on by the clock (and round again at the end), or stands */
 double motolii_now(Motolii* m);                                    /* the stage's moment */

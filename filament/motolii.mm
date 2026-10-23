@@ -671,6 +671,7 @@ const char* motolii_shown(Motolii* m, const char* name) {
     });
 }
 const char* motolii_cards(Motolii* m, int thing) { return by_look(m, [=] { return (m->word = doc_cards_of(*m->d, thing)).c_str(); }); }
+const char* motolii_fx_titles(Motolii* m, int thing) { return by_look(m, [=] { return (m->word = doc_fx_titles(*m->d, thing)).c_str(); }); }
 const char* motolii_kind_of(const char* file) { return doc_kind_of(file); }
 int motolii_sets(const char* font, const char* words) { return type_sets(font, words) ? 1 : 0; }
 // The names of the ways a stretch may go (the nine kinds, then the ways defined in this document), with spaces between;
@@ -804,7 +805,9 @@ int motolii_later(Motolii* m, const char* call, int thing, const char* name, con
             else if (c == "add") ok = m->made = changes(m, doc_add(doc(m), n.c_str(), w.c_str()));   // (name: the kind, word: the file; the answer is the new thing)
             else if (c == "make") ok = m->made = changes(m, doc_make(doc(m), w.c_str()));
             else if (c == "remove") ok = changes(m, (int)doc_remove(doc(m), thing));
-            else if (c == "relate") ok = changes(m, (int)doc_relate(doc(m), thing, w.c_str(), m->now));   // (the things in word put in the relation `thing` as they show now)
+            else if (c == "relate") ok = changes(m, (int)doc_relate(doc(m), thing, w.c_str(), m->now));
+            else if (c == "fx_file") ok = changes(m, (int)doc_fx_file(doc(m), thing, w.c_str()));   // (an effect file put at the end of the thing's effects, or taken out)
+            else if (c == "fx_move") ok = changes(m, (int)doc_fx_move(doc(m), thing, w.c_str(), (int)std::lround(number)));   // (one of its effects moved up or down its list)   // (the things in word put in the relation `thing` as they show now)
             else if (c == "lead") ok = changes(m, (int)doc_lead(doc(m), thing, (int)number, m->now));   // (the relation `thing` led by the thing `number`, nothing moving)
             else if (c == "free") ok = changes(m, (int)doc_free(doc(m), thing, (int)number, m->now, false));   // (a thing out of the relation `number`: back to what is under it, as the relation deleted does; only bake keeps where it shows)
             else if (c == "release") ok = changes(m, (int)doc_release(doc(m), thing, m->now));   // (the relation `thing` let go, each of its things where it shows now)
@@ -825,7 +828,7 @@ int motolii_later(Motolii* m, const char* call, int thing, const char* name, con
                 ok = m->made = changes(m, doc_pen(doc(m), thing, x, y, hx, hy));
             }
             else if (c == "hold") ok = (int)doc_hold(doc(m), thing);   // (a hand takes hold: what it carries next is this thing's)
-            else m->trouble = "a change asked later is one of: say, set, hold, let_go, undo, redo, together, add, make, pen, remove, mark, guide, work, raise, sequence, key_here, unkey, stay, way, effect";
+            else m->trouble = "a change asked later is one of: say, set, hold, let_go, undo, redo, together, add, make, pen, remove, mark, guide, work, raise, sequence, key_here, unkey, stay, way, effect, fx_file, fx_move";
             if (sqlite3_total_changes(m->d->file) != rows) m->revision.fetch_add(1, std::memory_order_release);   // (counted before the answer: the window reads again what is so now)
             m->changed = true;
             std::lock_guard<std::mutex> hold(m->asked_lock);

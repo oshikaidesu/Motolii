@@ -146,6 +146,12 @@ struct ScreenStack {
     RenderTarget* betweenTarget[2] = {nullptr, nullptr};
     door::Screen* copy = nullptr;   // a picture put out as it is (an effect whose last pass draws into its own picture)
     door::Screen* lay = nullptr;    // a thing's effects laid on what is under it in its way (its knobs its own: thing_effects_draw)
+    // A thing's effects as steps in turn, After Effects' stack (thing_effects): 0 the next of `fx` (a file's, drawn by
+    // Filament), else one of ThorVG's own by its letter (DrawnFx::order), drawn by ThorVG reading the picture the step
+    // before made. So the pictures are the device's own, given to both: Filament draws into them, ThorVG reads and draws.
+    std::vector<char> steps;
+    void* device[3] = {nullptr, nullptr, nullptr};  // (the WGPUTextures of shot, between[0], between[1])
+    tvg::WgCanvas* thor[2] = {nullptr, nullptr};    // (ThorVG drawing into each picture between)
 };
 static Texture* screen_picture(Stage& s) {
     return Texture::Builder().width((uint32_t)s.w).height((uint32_t)s.h).levels(1).format(Texture::InternalFormat::RGBA8)
@@ -338,13 +344,16 @@ static void screen_effects(Stage& s, ScreenStack& st, const std::string& files, 
 // camera sees the thing: its run (a view of its own, doc.h) drawn alone into a picture of its own, as large as the view
 // draws, each effect over it in turn (the files as they are: the whole-screen ones), and the last laid over what is under
 // it, where the view would have drawn. Its own stack: an effect's passes and past frames are the thing's.
+static char doc_thor_letter(const std::string& w);
 static void thing_effects(Stage& s, ScreenStack& st, const std::string& files) {
     if (st.files == files) return;
     st.files = files;
     st.fx.clear();
+    st.steps.clear();
     std::istringstream each(files);
     for (std::string file; each >> file;) {
         if (file == "none") continue;
+        if (const char k = doc_thor_letter(file)) { st.steps.push_back(k); continue; }   // (one of ThorVG's own: drawn by ThorVG, in its place)
         ScreenFx*& made = st.made[file];
         if (!made) {
             made = new ScreenFx;
@@ -355,8 +364,33 @@ static void thing_effects(Stage& s, ScreenStack& st, const std::string& files) {
             if (!made->door) std::fprintf(stderr, "the effect %s is not taken: %s\n", file.c_str(), made->trouble.c_str());
             made->stamp = screen_stamp(file);
         }
-        if (made->door) st.fx.push_back(made);
+        if (made->door) st.fx.push_back(made), st.steps.push_back(0);
     }
+}
+// One of ThorVG's own effects as a step (k: its letter), on the picture `from` (the device's) drawn into picture
+// between `into` (0 or 1): a picture of the one before put in a scene of ThorVG's, the effect on the scene, drawn on the
+// driver thread in line with Filament's pictures. Its lengths are points of the stage, `ppp` pixels each.
+static void thing_thor(Stage& s, ScreenStack& st, char k, void* from, int into, uint32_t w, uint32_t h, const DrawnFx& fx, float ppp) {
+    door::submit(s.engine);   // (what Filament drew into `from` on the GPU's queue first: ThorVG hands its own drawing over at once)
+    door::on_driver(s.engine, [&s, &st, k, from, into, w, h, fx, ppp] {
+        tvg::WgCanvas*& c = st.thor[into];
+        if (!c) {
+            tvg::Initializer::init(0);
+            c = tvg::WgCanvas::gen();
+            if (c->target(door::device(s.engine), door::instance(s.engine), st.device[into + 1], w, h, tvg::ColorSpace::ABGR8888S, 1) != tvg::Result::Success) return;
+        }
+        c->remove();
+        tvg::Picture* picture = tvg::Picture::gen();
+        if (picture->load(from, w, h) != tvg::Result::Success) return tvg::Paint::rel(picture);
+        tvg::Scene* scene = tvg::Scene::gen();
+        scene->add(picture);
+        scene->add(tvg::SceneEffect::Clear);
+        effect_on(scene, k, fx, ppp);
+        c->add(scene);
+        c->update();
+        c->draw(true);
+        c->sync();
+    });
 }
 // way: how it lies on what is under once its effects are on (0 as it is; the W3C's 1-21, then add, multiply, screen): as
 // After Effects takes a layer's effects first and its mode last, reading what is under (kit.h backdrop).
@@ -409,14 +443,31 @@ fn way(w: i32, b: vec3f, s: vec3f) -> vec3f {
   return vec4f(mixed * a + max(c.rgb, vec3f(0.0)) * (1.0 - a) * k.a, a);
 }
 )WGSL";
-static void thing_effects_draw(Stage& s, ScreenStack& st, View* v, const ScreenNumbers& numbers, int way = 0) {
-    if (st.fx.empty()) return s.renderer->render(v);
+static void thing_effects_draw(Stage& s, ScreenStack& st, View* v, const ScreenNumbers& numbers, int way = 0, const std::function<DrawnFx()>& thorFx = nullptr) {
+    if (st.steps.empty()) return s.renderer->render(v);
     const Viewport vp = v->getViewport();
     const uint32_t w = (uint32_t)std::max(1, vp.left + (int)vp.width), h = (uint32_t)std::max(1, vp.bottom + (int)vp.height);
     if (!st.shot || st.shot->getWidth() != w || st.shot->getHeight() != h) {   // (its pictures as large as the view draws; made again when that moves)
         for (Texture*& t : {std::ref(st.shot), std::ref(st.depth), std::ref(st.between[0]), std::ref(st.between[1])}) if (t) s.engine->destroy(t), t = nullptr;
         for (RenderTarget*& r : {std::ref(st.target), std::ref(st.betweenTarget[0]), std::ref(st.betweenTarget[1])}) if (r) s.engine->destroy(r), r = nullptr;
-        const auto picture = [&] { return Texture::Builder().width(w).height(h).levels(1).format(Texture::InternalFormat::RGBA8).usage(Texture::Usage::COLOR_ATTACHMENT | Texture::Usage::SAMPLEABLE).build(*s.engine); };
+        door::on_driver(s.engine, [made = std::vector<void*>(st.device, st.device + 3), thor = std::vector<tvg::WgCanvas*>(st.thor, st.thor + 2)] {   // (after the pictures drawn with them)
+            for (tvg::WgCanvas* c : thor) delete c;
+            for (void* t : made) if (t) wgpuTextureRelease((WGPUTexture)t);
+        });
+        st.thor[0] = st.thor[1] = nullptr;
+        int n = 0;
+        const auto picture = [&] {   // (the device's own, so ThorVG reads and draws it too; Filament's by import)
+            WGPUTextureDescriptor like{};
+            like.size = {w, h, 1};
+            like.format = WGPUTextureFormat_BGRA8Unorm;   // (what ThorVG's last step writes, as a picture of its own is: drawn.h)
+            like.usage = WGPUTextureUsage_RenderAttachment | WGPUTextureUsage_TextureBinding | WGPUTextureUsage_CopySrc | WGPUTextureUsage_CopyDst;
+            like.dimension = WGPUTextureDimension_2D;
+            like.mipLevelCount = 1, like.sampleCount = 1;
+            static const char* const names[3] = {"thing shot", "thing between 0", "thing between 1"};
+            like.label = {names[n], WGPU_STRLEN};
+            void* made = st.device[n++] = wgpuDeviceCreateTexture((WGPUDevice)door::device(s.engine), &like);
+            return Texture::Builder().width(w).height(h).levels(1).format(Texture::InternalFormat::RGBA8).usage(Texture::Usage::COLOR_ATTACHMENT | Texture::Usage::SAMPLEABLE).import((intptr_t)made).build(*s.engine);
+        };
         st.shot = picture();
         st.depth = Texture::Builder().width(w).height(h).levels(1).usage(Texture::Usage::DEPTH_ATTACHMENT).format(Texture::InternalFormat::DEPTH24).build(*s.engine);
         st.target = RenderTarget::Builder().texture(RenderTarget::AttachmentPoint::COLOR, st.shot).texture(RenderTarget::AttachmentPoint::DEPTH, st.depth).build(*s.engine);
@@ -431,10 +482,13 @@ static void thing_effects_draw(Stage& s, ScreenStack& st, View* v, const ScreenN
     s.renderer->render(v);
     v->setRenderTarget(was);
     s.renderer->setClearOptions(clearWas);
-    for (size_t i = 0; i < st.fx.size(); ++i) {   // (each into a picture between: the effects take the whole picture as theirs, and fill what is clear)
-        screen_fresh(s, *st.fx[i]);
+    const float ppp = (float)vp.width / (float)std::max(1, s.w);   // (pixels of its picture a point of the stage: the desk's are fewer)
+    const DrawnFx thor = thorFx && std::any_of(st.steps.begin(), st.steps.end(), [](char k) { return k != 0; }) ? thorFx() : DrawnFx{};
+    for (size_t i = 0, f = 0; i < st.steps.size(); ++i) {   // (each into a picture between: the effects take the whole picture as theirs, and fill what is clear)
         Texture* from = i == 0 ? st.shot : st.between[(i - 1) % 2];
-        screen_draw(s, st, *st.fx[i], from, st.betweenTarget[i % 2], numbers, w, h);
+        if (st.steps[i]) { thing_thor(s, st, st.steps[i], st.device[i == 0 ? 0 : 1 + (i - 1) % 2], (int)(i % 2), w, h, thor, ppp); continue; }   // (one of ThorVG's own)
+        screen_fresh(s, *st.fx[f]);
+        screen_draw(s, st, *st.fx[f++], from, st.betweenTarget[i % 2], numbers, w, h);
     }
     // (then laid over what is under: in its shape as it was drawn alone (Unreal's custom stencil), in its way of lying on
     //  what is under (reading it, kit.h backdrop); outside it, only light, when an effect throws it)
@@ -444,9 +498,10 @@ static void thing_effects_draw(Stage& s, ScreenStack& st, View* v, const ScreenN
         if (!st.lay) { std::fprintf(stderr, "a thing's way of lying with effects is not made: %s\n", why.c_str()); return; }
     }
     const bool spill = std::any_of(st.fx.begin(), st.fx.end(), [](const ScreenFx* f) { return f->spill; });
-    const bool own = st.fx.back()->alpha;   // (the last effect lays its own see-through)
+    const bool spreads = std::any_of(st.steps.begin(), st.steps.end(), [](char k) { return k == 'b' || k == 's' || k == 'g'; });   // (a blur, a shadow, a glow of ThorVG's: past its shape)
+    const bool own = spreads || (!st.steps.back() && st.fx.back()->alpha);   // (the last effect lays its own see-through, or one reaches past the thing's shape)
     const float knobs[4] = {(float)(s.backdrop ? way : 0), spill ? 1.f : 0.f, own ? 1.f : 0.f, 0};
     door::knobs(s.engine, st.lay, knobs, sizeof knobs);
-    Texture* const read[3] = {st.between[(st.fx.size() - 1) % 2], st.shot, way && s.backdrop ? s.backdrop : st.shot};
+    Texture* const read[3] = {st.between[(st.steps.size() - 1) % 2], st.shot, way && s.backdrop ? s.backdrop : st.shot};
     door::draw(s.engine, st.lay, read, was, w, h, 0, nullptr, true);
 }

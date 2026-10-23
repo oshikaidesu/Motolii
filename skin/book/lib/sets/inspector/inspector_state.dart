@@ -463,6 +463,10 @@ class Doc extends ChangeNotifier {
   bool Function(String id)? onFxRemove;
   bool Function()? onFxMove;
 
+  /// The host's cards that may be moved up or down (its effects, by their titles), and what moves one so many places.
+  List<String> movable = const [];
+  void Function(String title, int by)? onCardMove;
+
   /// The host's answer to how the thing (its copy, the first is 0) moves over a while (see Motolii.path): four numbers a
   /// moment; null: it has none.
   List<double>? Function(double to, int n, int copy)? onPath;

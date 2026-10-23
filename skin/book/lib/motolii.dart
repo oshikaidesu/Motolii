@@ -106,6 +106,7 @@ class Motolii {
   late final _moving = _lib.lookupFunction<_S Function(_P, Int32), _S Function(_P, int)>('motolii_moving');
   late final _values = _lib.lookupFunction<_S Function(_P, Int32), _S Function(_P, int)>('motolii_values');
   late final _cards = _lib.lookupFunction<_S Function(_P, Int32), _S Function(_P, int)>('motolii_cards');
+  late final _fxTitles = _lib.lookupFunction<_S Function(_P, Int32), _S Function(_P, int)>('motolii_fx_titles');
   late final _shown = _lib.lookupFunction<_S Function(_P, _S), _S Function(_P, _S)>('motolii_shown');
   late final _recipes = _lib.lookupFunction<_S Function(_P), _S Function(_P)>('motolii_recipes');
   late final _make = _lib.lookupFunction<Int32 Function(_P, _S), int Function(_P, _S)>('motolii_make');
@@ -558,6 +559,9 @@ class Motolii {
     for (final c in _cards(_m, thing).toDartString().split('; '))
       if (c.indexOf(': ') case final at when at > 0) (c.substring(0, at), c.substring(at + 2).split(' ')),
   ]);
+
+  /// The titles of a thing's effect cards in the order its effects are laid (motolii_fx_titles): moved with `fx_move`.
+  List<String> fxTitles(int thing) => _kept(('fx titles', thing), () => [for (final t in _fxTitles(_m, thing).toDartString().split(';')) if (t.isNotEmpty) t]);
 
   /// How a value is shown to a hand, as the inside says (null: as its range says): its look, the unit it is read in,
   /// its name in plain words, the span its knob covers (in the document's units) and the fold it lies in.

@@ -627,6 +627,13 @@ static const DocShown* doc_shown_of(const char* name) {
 // A whole-screen effect's knob in the document: its file's name before the knob's, as several lie on one stage and two
 // may each have a knob of one name (Posterize's gamma and Boxinator's are not one value).
 static std::string doc_screen_knob(const std::string& file, const std::string& knob) { return "js_" + std::filesystem::path(file).stem().string() + "_" + knob; }
+// ThorVG's own effects by the value that puts each on, as a thing's list of effects names them, and their letters
+// (DrawnFx::order).
+static const char* const doc_thor_names[] = {"tint", "tritone", "shadow", "glow", "blur"};
+static char doc_thor_letter(const std::string& w) {
+    for (int i = 0; i < 5; ++i) if (w == doc_thor_names[i]) return "trsgb"[i];
+    return 0;
+}
 static DocScript* doc_script_of(const std::string& file) {
     if (file.empty() || file == "none") return nullptr;
     const bool screen = std::filesystem::path(file).extension() == ".wgsl";   // (a whole-screen effect's knobs: named by the effect too)
@@ -661,7 +668,7 @@ static std::vector<DocScript*> doc_scripts_on(Doc& d, int thing) {
     if (thing != 0) {
         if (DocScript* sc = doc_script_of(said)) all.push_back(sc);
         std::istringstream fx(doc_word(d, thing, "fx"));
-        for (std::string file; fx >> file;) if (DocScript* sc = doc_script_of(file)) all.push_back(sc);
+        for (std::string file; fx >> file;) if (!doc_thor_letter(file)) if (DocScript* sc = doc_script_of(file)) all.push_back(sc);
         return all;
     }
     std::istringstream each(said);
@@ -1574,6 +1581,28 @@ static void doc_look(Doc& d) {
 static int doc_keys(Doc& d, int thing, const char* name, double at);
 // A value at its most: the highest of its keys, or what it is said to be (how far a moving effect may reach).
 static double doc_fx_room(Doc& d, int thing);
+static bool doc_on(Doc& d, int thing, const char* name);
+// A thing's effects in the order they are laid, After Effects' stack: its "fx" names them in turn, files (.wgsl) and
+// ThorVG's own alike (doc_thor_names), any order; one of ThorVG's that is on and not named (a document from before)
+// lies first, in the old order (colours, shadow, glow, blur).
+static std::vector<std::string> doc_fx_list(Doc& d, int thing) {
+    std::vector<std::string> said, all;
+    std::istringstream each(doc_word(d, thing, "fx"));
+    for (std::string w; each >> w;) if (w != "none") said.push_back(w);
+    for (const char* n : doc_thor_names) if (std::find(said.begin(), said.end(), n) == said.end() && doc_on(d, thing, n)) all.push_back(n);
+    for (const std::string& w : said) if (!doc_thor_letter(w) || doc_on(d, thing, w.c_str())) all.push_back(w);
+    return all;
+}
+// Whether a thing's effects are laid on it as the camera sees it (one of them a file: then all of them, in turn, there:
+// screen.h thing_effects_draw), not in its own picture as ThorVG draws it.
+static bool doc_fx_files(const std::vector<std::string>& list) {
+    return std::any_of(list.begin(), list.end(), [](const std::string& w) { return !doc_thor_letter(w); });
+}
+static std::string doc_fx_join(const std::vector<std::string>& list) {
+    std::string all;
+    for (const std::string& w : list) all += (all.empty() ? "" : " ") + w;
+    return all;
+}
 static double doc_most(Doc& d, int thing, const char* name, double otherwise) {
     double most = doc_number(d, thing, name, 0, otherwise);
     if (doc_keys(d, thing, name, -1.0)) doc_rows(d, sqlite3_mprintf("select max(value) from fact where thing = %d and name = %Q", thing, name), [&](sqlite3_stmt* row) { most = sqlite3_column_double(row, 0); });
@@ -1582,7 +1611,7 @@ static double doc_most(Doc& d, int thing, const char* name, double otherwise) {
 // The effects of a flat thing at a moment (or, `most`, as far as each reaches at its most), ThorVG's own: in shares of
 // its height from points of the picture (`units` to a unit of the stage, as it was made). false: a colour is not
 // six digits (why says which).
-static bool doc_fx(Doc& d, int thing, double at, bool most, double units, DrawnFx& fx, std::string& why) {
+static bool doc_fx(Doc& d, int thing, double at, bool most, double units, DrawnFx& fx, std::string& why, bool camera = false) {
     const auto num = [&](const char* name, double otherwise) { return most ? doc_most(d, thing, name, otherwise) : doc_number(d, thing, name, at, otherwise); };
     bool ok = true;
     const auto hue = [&](const char* name, const char* otherwise, float3* to) {   // (a colour said as six digits; not said: as it comes)
@@ -1609,6 +1638,14 @@ static bool doc_fx(Doc& d, int thing, double at, bool most, double units, DrawnF
     }
     if ((fx.tint = (float)num("tint", 0)) > 0.f) hue("tint_black", "1b1f5c", &fx.tints[0]), hue("tint_white", "ff8a65", &fx.tints[1]);   // (a deep blue and a warm pink, as it comes)
     if ((fx.tritone = (float)num("tritone", 0)) > 0.f) hue("tritone_shadow", "1b1f5c", &fx.tones[0]), hue("tritone_midtone", "c44569", &fx.tones[1]), hue("tritone_highlight", "ffd166", &fx.tones[2]);
+    {   // (in the order its list lays them; with a file among them all are laid as the camera sees it, none in its picture)
+        const std::vector<std::string> list = doc_fx_list(d, thing);
+        int n = 0;
+        if (!doc_fx_files(list))
+            for (const std::string& w : list) if (const char k = doc_thor_letter(w); k && n < 5) fx.order[n++] = k;
+        fx.order[n] = 0;
+        if (!n && !camera) fx.blur = 0.f, fx.shadow.w = 0.f, fx.glow.w = 0.f, fx.tint = 0.f, fx.tritone = 0.f;   // (camera: as a step of its stack lays them, screen.h thing_thor)
+    }
     fx.reach = (float)(std::max(0.0, num("offset", 0)) + std::fabs(num("zigzag", 0)) + 0.5 * std::max(0.0, num("bloat", 0)) + std::fabs(num("warp", 0)));
     return ok;
 }
@@ -1682,11 +1719,11 @@ static void doc_moment(Doc& d, double now) {
         //  kit copies the picture so far before it, kit.h pictures_of; never the first run, which has nothing under it)
         // (a thing with effects of its own is a run of its own too, drawn alone and then given them: screen.h thing_effects_draw;
         //  never the first run either, the stage's own view, which draws what is behind everything)
-        const std::string fx = doc_word(d, lies[i].thing, "fx");
+        const bool effected = doc_fx_files(doc_fx_list(d, lies[i].thing));
         const std::string laidOn = doc_word(d, lies[i].thing, "blend");
-        const bool laysOwn = !fx.empty() && fx != "none" && !laidOn.empty() && laidOn != "normal";   // (with effects of its own, any way but normal is taken last, over what is under: screen.h)
+        const bool laysOwn = effected && !laidOn.empty() && laidOn != "normal";   // (with effects of its own, any way but normal is taken last, over what is under: screen.h)
         const bool reads = !lies[i].solid && (doc_blend_way(laidOn) || laysOwn || doc_word(d, lies[i].thing, "fill") == "behind");   // (a blend that reads, or a fill of what is behind)
-        const int sort = !fx.empty() && fx != "none" ? 3 : lies[i].solid ? 1 : reads ? 2 : 0;
+        const int sort = effected ? 3 : lies[i].solid ? 1 : reads ? 2 : 0;
         if (sort >= 2 && sorts.empty()) sorts.push_back(0), runReads.push_back(0);
         if (sorts.empty() || sorts.back() != sort || sort >= 2) sorts.push_back(sort), runReads.push_back(reads);
         runOf[i] = (int)sorts.size() - 1;
@@ -1721,7 +1758,7 @@ static void doc_moment(Doc& d, double now) {
         if (runOf[i] > base && sorts[(size_t)runOf[i]] == 3) {
             const int thing = lies[i].thing;
             ScreenStack& st = d.fx[thing];
-            thing_effects(s, st, doc_word(d, thing, "fx"));
+            thing_effects(s, st, doc_fx_join(doc_fx_list(d, thing)));
             const ScreenNumbers numbers = [&d, thing](const std::string& file, const std::string& name, double usual) {
                 std::lock_guard<std::recursive_timed_mutex> hold(d.lock);   // (asked while the picture is drawn)
                 if (name == "origin_x" || name == "origin_y" || name == "turn" || name == "extent") {   // (where the thing is on the picture now, how turned, how large: an effect's pattern stuck to it)
@@ -1733,7 +1770,22 @@ static void doc_moment(Doc& d, double now) {
             };
             const std::string laid = doc_word(d, thing, "blend");   // (its way of lying on what is under, taken last: the W3C's 1-21, then add, multiply, screen)
             const int way = doc_blend_way(laid) ? doc_blend_way(laid) : laid == "add" ? 22 : laid == "multiply" ? 23 : laid == "screen" ? 24 : 0;
-            s.layerDraw[(size_t)(runOf[i] - base - 1)] = [&s, &st, numbers, way](View* v) { thing_effects_draw(s, st, v, numbers, way); };
+            const auto thorFx = [&d, thing] {   // (ThorVG's own among its steps, as they are now: lengths in points of the stage)
+                std::lock_guard<std::recursive_timed_mutex> hold(d.lock);
+                DrawnFx fx;
+                std::string why;
+                doc_fx(d, thing, d.stage->now, false, 1.0, fx, why, true);
+                // (as large as in its own picture: there its lengths go with how large it is drawn, so here too, by how
+                //  large it is now against how large it was made)
+                double frame[8];
+                const auto t = d.shown.find(thing);
+                if (t != d.shown.end() && t->second.drawn && t->second.drawn->fx.overHigh > 0.f && doc_frame(d, thing, d.stage->now, frame)) {
+                    const float k = (float)(frame[3] / (t->second.units * t->second.drawn->fx.overHigh));
+                    fx.blur *= k, fx.fall *= k, fx.soft *= k, fx.glowSoft *= k;
+                }
+                return fx;
+            };
+            s.layerDraw[(size_t)(runOf[i] - base - 1)] = [&s, &st, numbers, way, thorFx](View* v) { thing_effects_draw(s, st, v, numbers, way, thorFx); };
         }
     if (std::find(s.backdropBefore.begin(), s.backdropBefore.end(), (char)1) != s.backdropBefore.end())   // (as large as what the views draw into: the desk's when it is drawn there, else the stage's)
         backdrop_as(s, s.desk.w && !s.over ? s.desk.w : (uint32_t)s.w, s.desk.w && !s.over ? s.desk.h : (uint32_t)s.h);
@@ -2145,7 +2197,7 @@ static bool doc_match(Doc& d) {
     for (auto& [thing, of] : told) of += doc_bends(d, thing) ? " bent=1" : " bent=0";   // (bent or not: cut fine, or only round its curves)
     for (auto& [thing, of] : told) {   // (its effects: which are on and the room they reach, not their numbers (doc_fxing))
         const auto on = [&](const char* name) { return std::max(doc_most(d, thing, name, 0), doc_number(d, thing, name, 0, 0)) > 0.0; };
-        of += " fx=" + std::to_string((int)on("blur")) + (doc_word(d, thing, "shadow").empty() ? "0" : "1") + (doc_word(d, thing, "glow").empty() ? "0" : "1") + std::to_string((int)on("tint")) + std::to_string((int)on("tritone"))
+        of += " order=" + doc_fx_join(doc_fx_list(d, thing)) + " fx=" + std::to_string((int)on("blur")) + (doc_word(d, thing, "shadow").empty() ? "0" : "1") + (doc_word(d, thing, "glow").empty() ? "0" : "1") + std::to_string((int)on("tint")) + std::to_string((int)on("tritone"))
             + " room=" + std::to_string(doc_fx_room(d, thing));
     }
     if (const auto held = told.find(d.held.thing); held != told.end())   // (what a hand carries of its making shows too: it is made again as it would be)
@@ -2185,8 +2237,7 @@ static bool doc_match(Doc& d) {
         if (d.shown.count(thing)) continue;
         Doc::Shown made{of};
         const std::string kind = doc_word(d, thing, "kind"), file = doc_word(d, thing, "file"), laid = doc_word(d, thing, "blend"), shape = doc_word(d, thing, "shape");
-        const std::string ownFx = doc_word(d, thing, "fx");
-        const bool effected = !ownFx.empty() && ownFx != "none";   // (with effects of its own: drawn alone as normal, its way of lying on what is under taken once they are on: screen.h)
+        const bool effected = doc_fx_files(doc_fx_list(d, thing));   // (with effects of its own: drawn alone as normal, its way of lying on what is under taken once they are on: screen.h)
         const char* lay = effected || laid.empty() || laid == "normal" || doc_blend_way(laid) ? nullptr : laid.c_str();   // (one that reads what is under: drawn as normal, flat.mat mixes it)
         std::string why = "it could not be read";
         const std::string fill = doc_word(d, thing, "fill");
@@ -3242,9 +3293,26 @@ static std::string doc_has(Doc& d, int thing) {
 }
 // The cards of a thing: "title: name name; title: name" (those of its values its kind has; a card with none, left out).
 static bool doc_on(Doc& d, int thing, const char* name);
+// An effect of a thing's list as its card is called: ThorVG's own by its card's title (Gaussian Blur...), a file by its
+// name made a title (halftone -> Halftone).
+static std::string doc_fx_title(const std::string& name) {
+    if (doc_thor_letter(name))
+        for (const DocCard& card : doc_cards) if (card.when && card.is[0] == '+' && name == card.when) return card.title;
+    std::string t = std::filesystem::path(name).stem().string();
+    for (char& c : t) if (c == '_') c = ' ';
+    if (!t.empty()) t[0] = (char)std::toupper((unsigned char)t[0]);
+    return t;
+}
+// The titles of a thing's effect cards in the order its effects are laid ("Halftone;Gaussian Blur").
+static std::string doc_fx_titles(Doc& d, int thing) {
+    std::string all;
+    for (const std::string& w : doc_fx_list(d, thing)) all += (all.empty() ? "" : ";") + doc_fx_title(w);
+    return all;
+}
 static std::string doc_cards_of(Doc& d, int thing) {
     const std::string has = " " + doc_has(d, thing) + " ";
     std::string all;
+    std::map<std::string, std::string> effects;   // (ThorVG's own effects' cards by the value that puts each on: laid out as its list lays them)
     const bool behaviour = doc_word(d, thing, "kind") == "behaviour";
     for (const DocCard& card : doc_cards) {
         if (behaviour && !(card.when && !strcmp(card.when, "file"))) continue;   // (a behaviour: only its own card, not those of things that happen to share a name with its knobs)
@@ -3267,12 +3335,25 @@ static std::string doc_cards_of(Doc& d, int thing) {
             if (has.find(" " + n + " ") != std::string::npos && !still) names += (names.empty() ? "" : " ") + n;
             at += len + (at[len] ? 1 : 0);
         }
-        if (!names.empty()) all += (all.empty() ? "" : "; ") + std::string(card.title) + ": " + names;
+        if (names.empty()) continue;
+        if (card.when && card.is[0] == '+' && doc_thor_letter(card.when)) effects[card.when] = std::string(card.title) + ": " + names;
+        else all += (all.empty() ? "" : "; ") + std::string(card.title) + ": " + names;
     }
+    if (thing != 0)   // (its effects, a card each, in the order they are laid: ThorVG's own and the files' alike)
+        for (const std::string& w : doc_fx_list(d, thing)) {
+            std::string card;
+            if (doc_thor_letter(w)) { if (const auto at = effects.find(w); at != effects.end()) card = at->second; }
+            else if (const DocScript* sc = doc_script_of(w)) {
+                for (const DocValue& one : sc->values) card += (card.empty() ? "" : " ") + std::string(one.name);
+                if (!card.empty()) card = doc_fx_title(w) + ": " + card;
+            }
+            if (!card.empty()) all += (all.empty() ? "" : "; ") + card;
+        }
     if (doc_among("picture text shape stage", doc_word(d, thing, "kind")))   // (its script's own card: the knobs its head declares)
         if (const std::vector<DocScript*> scs = doc_scripts_on(d, thing); !scs.empty()) {
             std::string names = thing == 0 ? "script follow" : "script";
             for (const DocScript* sc : scs)
+                if (thing == 0 || sc == doc_script_of(doc_word(d, thing, "script")))   // (a thing's effect files have cards of their own, above)
                 for (const DocValue& one : sc->values)
                     if ((" " + names + " ").find(" " + std::string(one.name) + " ") == std::string::npos) names += std::string(" ") + one.name;   // (a knob two effects share is one)
             if (names != "script") all += (all.empty() ? "" : "; ") + std::string("Script: ") + names;   // (none of them with knobs: no card)
@@ -3318,10 +3399,41 @@ static std::string doc_effect_names() {
     return all;
 }
 // An effect put on a thing at a moment, or taken off it if it is on (unsaid, its keys too), one step.
+// A thing's list of effects said as it now is (none: unsaid).
+static bool doc_fx_say(Doc& d, int thing, const std::vector<std::string>& list) {
+    if (!list.empty()) return doc_say(d, thing, "fx", doc_fx_join(list).c_str());
+    return !doc_knows(d, thing, "fx") || doc_word(d, thing, "fx").empty() || doc_change(d, sqlite3_mprintf("delete from fact where thing = %d and name = 'fx'", thing));
+}
+// An effect file put at the end of a thing's effects, or taken out if it is among them (one step).
+static bool doc_fx_file(Doc& d, int thing, const char* file) {
+    std::vector<std::string> list = doc_fx_list(d, thing);
+    if (const auto at = std::find(list.begin(), list.end(), file); at != list.end()) list.erase(at);
+    else list.push_back(file);
+    doc_act(d);
+    if (!doc_fx_say(d, thing, list)) d.act_ok = false;
+    return doc_acted(d);
+}
+// One of a thing's effects (a file, or ThorVG's own by its value's name) moved `by` places in its list, After Effects'
+// dragging an effect up or down its stack (one step).
+static bool doc_fx_move(Doc& d, int thing, const char* name, int by) {
+    std::vector<std::string> list = doc_fx_list(d, thing);
+    auto at = std::find(list.begin(), list.end(), name);
+    if (at == list.end()) at = std::find_if(list.begin(), list.end(), [&](const std::string& w) { return doc_fx_title(w) == name; });   // (or by its card's title)
+    if (at == list.end()) return d.trouble = std::string(name) + " is not among its effects", false;
+    const int from = (int)(at - list.begin()), to = std::clamp(from + by, 0, (int)list.size() - 1);
+    if (from == to) return true;
+    const std::string one = list[(size_t)from];
+    list.erase(list.begin() + from);
+    list.insert(list.begin() + to, one);
+    doc_act(d);
+    if (!doc_fx_say(d, thing, list)) d.act_ok = false;
+    return doc_acted(d);
+}
 static bool doc_effect(Doc& d, int thing, const char* name, double at) {
     for (const DocEffect& e : doc_effects) {
         if (strcmp(e.name, name)) continue;
         const bool on = !strcmp(e.value, "fill") ? doc_word(d, thing, "fill") == e.on : doc_on(d, thing, e.value);   // (a fill: on when it is this one)
+        std::vector<std::string> list = doc_fx_list(d, thing);   // (ThorVG's own in the thing's list: put on at its end, as After Effects does, or out)
         doc_act(d);
         bool ok;
         if (on) ok = doc_knows(d, thing, e.value) && doc_change(d, sqlite3_mprintf("delete from fact where thing = %d and name = %Q", thing, e.value));   // (unsaid: as it was before it was put on)
@@ -3336,6 +3448,11 @@ static bool doc_effect(Doc& d, int thing, const char* name, double at) {
             const std::string n = one.substr(0, at_), v = one.substr(at_ + 1);
             const bool said = one[at_] == '=' ? !std::isnan(doc_number(d, thing, n.c_str(), at, NAN)) : !doc_word(d, thing, n.c_str()).empty();
             if (!said) ok = one[at_] == '=' ? doc_set(d, thing, n.c_str(), std::atof(v.c_str())) : doc_say(d, thing, n.c_str(), v.c_str());   // (one said already, by a hand or before, is left as it is)
+        }
+        if (ok && doc_thor_letter(e.value)) {
+            if (const auto had = std::find(list.begin(), list.end(), e.value); had != list.end()) list.erase(had);
+            if (!on) list.push_back(e.value);
+            ok = doc_fx_say(d, thing, list);
         }
         if (!ok) d.act_ok = false;
         return doc_acted(d);

@@ -114,10 +114,25 @@ class ValuesCard extends StatelessWidget {
     final x = Ctx.of(context), doc = x.doc, ed = Ed(x.cfg.ed), k = 'v.${card.name}', adv = doc.b['$k.adv'] ?? false;
     final heroes = [for (final p in card.params) if (!p.advanced) p], rest = [for (final p in card.params) if (p.advanced) p];
     // (the first row, then the rest folded under the name of what they are; the fold says nothing more than its glyph)
+    final at = doc.movable.indexOf(card.name);   // (one of its effects: up or down its stack, After Effects' dragging a card)
     final sect = Sect(
       title: card.name,
       tone: card.tone,
       mark: card.mark,
+      trailing: at < 0 || doc.onCardMove == null
+          ? null
+          : Row(mainAxisSize: MainAxisSize.min, children: [
+              for (final (by, up) in const [(-1, true), (1, false)])
+                Hov(
+                  key: ValueKey('card-move:${card.name}:$by'),
+                  onTap: (up ? at > 0 : at < doc.movable.length - 1) ? () => doc.onCardMove!(card.name, by) : null,
+                  builder: (_, h) => SizedBox(
+                    width: Shape.z(16),
+                    height: Shape.z(16),
+                    child: CustomPaint(painter: _Chevron(up, (up ? at > 0 : at < doc.movable.length - 1) ? (h ? Grey.g95 : Grey.g56) : Grey.g26)),
+                  ),
+                ),
+            ]),
       children: [
         ?top,
         if (side case final square?)
@@ -173,4 +188,30 @@ class ValuesCard extends StatelessWidget {
     );
     return side == null ? sect : CardOver(child: sect); // (a hand anywhere on the card plays its preview)
   }
+}
+
+/// A small chevron, up or down: a card moved up or down its stack.
+class _Chevron extends CustomPainter {
+  const _Chevron(this.up, this.ink);
+  final bool up;
+  final Color ink;
+  @override
+  void paint(Canvas c, Size s) {
+    final y0 = s.height * (up ? .62 : .38), y1 = s.height * (up ? .38 : .62);
+    c.drawPath(
+      Path()
+        ..moveTo(s.width * .3, y0)
+        ..lineTo(s.width * .5, y1)
+        ..lineTo(s.width * .7, y0),
+      Paint()
+        ..color = ink
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.4
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_Chevron o) => o.up != up || o.ink != ink;
 }

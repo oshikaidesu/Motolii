@@ -19,6 +19,8 @@ class InspHost extends StatefulWidget {
     this.seats,
     this.onFxRemove,
     this.onFxMove,
+    this.movable = const [],
+    this.onCardMove,
     this.onPath,
     this.cards,
     this.title,
@@ -59,6 +61,10 @@ class InspHost extends StatefulWidget {
   /// The host's say on an effect taken off, and on their order (see [Doc.onFxRemove]).
   final bool Function(String id)? onFxRemove;
   final bool Function()? onFxMove;
+
+  /// The host's effects as cards that move up or down its stack (see [Doc.movable]).
+  final List<String> movable;
+  final void Function(String title, int by)? onCardMove;
 
   /// How the thing moves over a while, as the host places it (see [Doc.onPath]).
   final List<double>? Function(double to, int n, int copy)? onPath;
@@ -125,6 +131,8 @@ class _InspHostState extends State<InspHost> {
       ..seats = widget.seats
       ..onFxRemove = widget.onFxRemove
       ..onFxMove = widget.onFxMove
+      ..movable = widget.movable
+      ..onCardMove = widget.onCardMove
       ..onPath = widget.onPath
       ..v.addAll(widget.values)
       ..s2.addAll(widget.strs)
@@ -265,6 +273,8 @@ class _InspHostState extends State<InspHost> {
       ..seats = widget.seats
       ..onFxRemove = widget.onFxRemove
       ..onFxMove = widget.onFxMove
+      ..movable = widget.movable
+      ..onCardMove = widget.onCardMove
       ..onPath = widget.onPath;
     doc.choices
       ..clear()

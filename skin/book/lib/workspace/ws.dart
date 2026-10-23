@@ -122,9 +122,6 @@ class Ws extends ChangeNotifier {
     _inside = inside;
     if (!_peeking) SchedulerBinding.instance.addPersistentFrameCallback(_peek);
     _peeking = true;
-    _beat ??= Timer.periodic(const Duration(milliseconds: 500), (_) {   // (what changes with no picture (pictures kept on disk while the hand rests): a picture asked for, so the peek looks)
-      if (!_gone && _inside?.counters != _counted) SchedulerBinding.instance.scheduleFrame();
-    });
     inside.shaping;   // (read once, at the opening: what a card is made by)
     var asking = false;
     inside.again = () {   // (a read put off while the hand was busy: the seats look again a picture later, once)
@@ -199,6 +196,12 @@ class Ws extends ChangeNotifier {
   /// a moment, a relation) is [seen]: what shows numbers reads its own again, nothing is built again.
   bool _peeking = false, _gone = false;
   Timer? _beat;
+
+  /// What changes with no picture (pictures kept on disk while the hand rests) looked at twice a second: a picture asked
+  /// for when a counter moved, so the peek reads it. The window's while it is open (it disposes this).
+  void beat() => _beat ??= Timer.periodic(const Duration(milliseconds: 500), (_) {
+    if (!_gone && _inside?.counters != _counted) SchedulerBinding.instance.scheduleFrame();
+  });
   (int, int, int, int)? _counted;
   int _readRevision = -1;
   final seen = ValueNotifier<int>(0);
@@ -472,9 +475,13 @@ class Ws extends ChangeNotifier {
   bool screenToggle(String file) {
     final m = _inside, t = int.tryParse(selected ?? '');
     if (m == null) return false;
+    if (t != null) { // (a thing's: at the end of its effects or out, by the inside's rule for its list)
+      after(m.later('fx_file', thing: t, word: file));
+      return true;
+    }
     final now = screenFx, on = now.remove(file);
     if (!on) now.add(file);
-    after(m.later('say', thing: t ?? 0, name: t == null ? 'script' : 'fx', word: now.isEmpty ? 'none' : now.join(' '))); // (an effect's shader made: the window does not wait for it)
+    after(m.later('say', thing: 0, name: 'script', word: now.isEmpty ? 'none' : now.join(' '))); // (an effect's shader made: the window does not wait for it)
     return true;
   }
 
