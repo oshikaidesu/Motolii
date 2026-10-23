@@ -38,6 +38,7 @@
 #include "script.h"
 #include "ways.h"
 #include "screen.h"
+#include "mosh.h"
 #include <filesystem>
 #include <mutex>
 #include <dlfcn.h>
@@ -192,7 +193,8 @@ static const DocValue doc_values[] = {
     {"sun_halo", "light", 0, 100, true, nullptr},
     // (Filament's light channels: a light of group 1 to 7 lights only the solids of that group; 0, as it comes: the solids of group 0 and every other)
     {"light_group", "light solid", 0, 7, false, nullptr},
-    {"parent", doc_kinds, 0, 1e9, false, nullptr},   // (the thing it goes with: it is moved, turned and sized as that one is, then as it is itself; 0: none)
+    {"parent", doc_kinds, 0, 1e9, false, nullptr},
+    {"mosh", "film", 0, 1, false, nullptr}, {"mosh_with", "film", 0, 1e9, false, nullptr}, {"mosh_at", "film", 0, 1e6, false, nullptr},   // (a real datamosh: from that moment of its film, the other's motion poured into its last picture: mosh.h)   // (the thing it goes with: it is moved, turned and sized as that one is, then as it is itself; 0: none)
     {"space", "film picture text shape", 0, 0, false, "2d 2.5d"},   // (the past repository's three tags: 2d is not in the world and lies by the order alone; 2.5d is a sheet in the world, before or behind by depth; a solid is 3d)
     {"align", "text", 0, 1, false, nullptr},
     // (ThorVG's own scene effects on a thing it draws: a blur, and a shadow of a colour, how far it falls, which way, how
@@ -525,6 +527,7 @@ static const DocShown doc_shown[] = {
     {"distance", "", "px", "Distance", 0.05, 4, nullptr}, {"zoom", "share", "%", "Zoom", 0.1, 4, nullptr},
     {"anchor_x", "", "%", "Anchor X", -1, 1, "Anchor"}, {"anchor_y", "", "%", "Anchor Y", -1, 1, "Anchor"}, {"anchor_z", "", "%", "Anchor Z", -1, 1, "Anchor"},
     {"parent", "thing", "", "Parent", 0, 0, nullptr},   // (the thing it goes with: shown by its name)
+    {"mosh_with", "thing", "", "Motion of", 0, 0, nullptr}, {"mosh_at", "", "s", "From", 0, 10, nullptr},
     {"connect_to", "thing", "", "With", 0, 0, nullptr},
     {"resample", "", "", "Points", 0, 64, nullptr},
     {"voxel", "share", "%", "Squares", 0, 0.2, nullptr},
@@ -711,7 +714,8 @@ static const DocCard doc_cards[] = {
     {"Push", "strength leader radius", "file", "push"},
     {"Group", "strength lag x y spread scatter rotate rotate_y size opacity", "file", "group"},   // (things in an order and nothing else: away by its own move, turn, size and opacity, each in turn)
     {"Note", "note"},   // (what a maker wrote of it: After Effects' layer comment)
-    {"Trim Paths", "trim trim_begin trim_offset", "trim", "+"},   // (After Effects' shape operator: added from the shelf)
+    {"Trim Paths", "trim trim_begin trim_offset", "trim", "+"},
+    {"Datamosh", "mosh_with mosh_at", "mosh", "+"},   // (the film's own compressed pictures, mosh.h)   // (After Effects' shape operator: added from the shelf)
     {"Gaussian Blur", "blur blur_direction", "blur", "+"},   // (the effects (doc_effects), each its card while it is on, as After Effects' Effect Controls)
     {"Drop Shadow", "shadow shadow_distance shadow_angle shadow_blur shadow_opacity", "shadow", "+"},
     {"Glow", "glow glow_blur glow_opacity", "glow", "+"},
@@ -2159,7 +2163,7 @@ static void doc_moment(Doc& d, double now) {
 // call for its kind), one the stage has and the document has not is taken off, one whose making is told otherwise now
 // is made again. false: a thing could not be made (d.trouble says which, and why).
 // All that a thing's making goes by: one changed, the thing is made again (doc_match), carried by a hand too (doc_carry).
-static const char* const doc_making = "'kind','file','shape','path','blend','fx','keyed','space','begin','duration','speed','text','fill','fill_rule','wide','points','inner','round','bloat','zigzag','offset','warp','clip','stroke','stroke_width','align','copies','letter_spacing','line_spacing','italic','cap','join','heads','head_size','head_shape','dash','dash_offset','metallic','roughness','reflectance','clear_coat','clear_coat_roughness','falloff','shadows','shadow_softness','contact_shadows','sheen','anisotropy','shading','thickness','light_group','script','copy_fill','gradient','gradient_angle','gradient_scale','gradient_spread','wrap','wrap_at','split','ior','dispersion','swim','dark','vivid','marker'";
+static const char* const doc_making = "'kind','file','shape','path','blend','fx','keyed','space','begin','duration','speed','text','fill','fill_rule','wide','points','inner','round','bloat','zigzag','offset','warp','clip','stroke','stroke_width','align','copies','letter_spacing','line_spacing','italic','cap','join','heads','head_size','head_shape','dash','dash_offset','metallic','roughness','reflectance','clear_coat','clear_coat_roughness','falloff','shadows','shadow_softness','contact_shadows','sheen','anisotropy','shading','thickness','light_group','script','copy_fill','gradient','gradient_angle','gradient_scale','gradient_spread','wrap','wrap_at','split','ior','dispersion','swim','dark','vivid','marker','mosh','mosh_with','mosh_at'";
 // A flat thing's effects (ThorVG's, doc_fx): told again at each moment (fx_at), never a reason to make it again. What
 // they ask of its making is only which are on and how much room round it they reach (doc_fx_room).
 static const char* const doc_fxing = "'blur','shadow','shadow_distance','shadow_angle','shadow_blur','shadow_opacity','glow','glow_blur','glow_opacity','tint','tint_black','tint_white','tritone','tritone_shadow','tritone_midtone','tritone_highlight'";
@@ -2184,6 +2188,15 @@ static bool doc_bends(Doc& d, int thing) {
         for (const auto& [name, is] : d.held.tried) any = any || (is != 0.0 && strstr(doc_bending, ("'" + name + "'").c_str()));
     return any;
 }
+// A film thing's real datamosh (mosh.h): the film made again with the other's motion poured in, once made; "" none
+// (not on, no other film, or not made yet: its own film meanwhile).
+static std::string doc_mosh(Doc& d, int thing) {
+    if (!doc_on(d, thing, "mosh") || doc_word(d, thing, "kind") != "film") return "";
+    const int with = (int)doc_number(d, thing, "mosh_with", 0, 0);
+    const std::string file = doc_word(d, thing, "file"), other = with > 0 && with != thing ? doc_word(d, with, "file") : "";
+    if (other.empty() || doc_word(d, with, "kind") != "film") return "";
+    return mosh_file(file, doc_number(d, thing, "mosh_at", 0, 1), other);
+}
 static bool doc_match(Doc& d) {
     Stage& s = *d.stage;
     std::map<int, std::string> told;   // every thing of the document, and all that its making goes by
@@ -2197,6 +2210,7 @@ static bool doc_match(Doc& d) {
     for (auto& [thing, of] : told) of += doc_bends(d, thing) ? " bent=1" : " bent=0";   // (bent or not: cut fine, or only round its curves)
     for (auto& [thing, of] : told) {   // (its effects: which are on and the room they reach, not their numbers (doc_fxing))
         const auto on = [&](const char* name) { return std::max(doc_most(d, thing, name, 0), doc_number(d, thing, name, 0, 0)) > 0.0; };
+        if (doc_on(d, thing, "mosh")) of += " moshed=" + doc_mosh(d, thing);   // (made again once its datamosh is made)
         of += " order=" + doc_fx_join(doc_fx_list(d, thing)) + " fx=" + std::to_string((int)on("blur")) + (doc_word(d, thing, "shadow").empty() ? "0" : "1") + (doc_word(d, thing, "glow").empty() ? "0" : "1") + std::to_string((int)on("tint")) + std::to_string((int)on("tritone"))
             + " room=" + std::to_string(doc_fx_room(d, thing));
     }
@@ -2316,8 +2330,9 @@ static bool doc_match(Doc& d) {
         }
         else if (shape.empty() && !std::filesystem::is_regular_file(file)) why = "there is no such file";
         else if (kind == "film") {
-            const double from = doc_number(d, thing, "begin", 0, 0), length = doc_number(d, thing, "duration", 0, -1), speed = doc_number(d, thing, "speed", 0, 1);
-            made.film = video(s, file.c_str(), mat4f{}, 1.f, (float)from, length < 0 ? -1.f : (float)(from + length * std::fabs(speed)), (float)speed, lay);
+            const std::string moshed = doc_mosh(d, thing);   // (its datamosh, once made: played in its place, from its start)
+            const double from = moshed.empty() ? doc_number(d, thing, "begin", 0, 0) : 0.0, length = doc_number(d, thing, "duration", 0, -1), speed = doc_number(d, thing, "speed", 0, 1);
+            made.film = video(s, (moshed.empty() ? file : moshed).c_str(), mat4f{}, 1.f, (float)from, length < 0 ? -1.f : (float)(from + length * std::fabs(speed)), (float)speed, lay);
             if (!made.film) why = video_trouble;
             else if (const double keyed = doc_number(d, thing, "keyed", 0, -1); keyed != 0.0) key_own(made.film, keyed > 0.5);   // (not said: keyed if it has a ground of its own)
             if (made.film) s.playing.erase(made.film);   // (the document tells it its moment, and when its sound comes on)
@@ -3384,6 +3399,7 @@ static const DocEffect doc_effects[] = {
     {"Drop Shadow", "shadow", "000000", true, "Light", "shadow_distance=10 shadow_angle=135 shadow_blur=10 shadow_opacity=0.5"},
     {"Glow", "glow", "ffd166", true, "Light", "glow_blur=40 glow_opacity=1"},
     {"Trim Paths", "trim", "keys 0 1 1 0", false, "Path"},
+    {"Datamosh", "mosh", "1", false, "Glitch", "mosh_at=1"},
     {"Duotone", "tint", "1", false, "Color", "tint_black:1b1f5c tint_white:ff8a65"},
     {"Gradient Map", "tritone", "1", false, "Color", "tritone_shadow:1b1f5c tritone_midtone:c44569 tritone_highlight:ffd166"},
     {"Background Copy", "fill", "behind", true, "Utility"},   // (its fill what is behind it: the effects on it then work on the background in its shape, and it still lies on what is under as its blend says; After Effects' adjustment layer as one more effect)

@@ -224,6 +224,11 @@ static void motolii_hand(Motolii* m, std::string document, int wide, int high, s
                 m->peek.seq.fetch_add(1, std::memory_order_release);
             }
         }
+        if (mosh_done.exchange(false)) {   // (a datamosh made meanwhile: the thing made again with it)
+            std::lock_guard<std::recursive_timed_mutex> holding(m->d->lock);
+            doc_match(*m->d);
+            m->changed = true;
+        }
         if (!m->playing) for (auto& [who, h] : m->heard) if (h.on) gst_element_set_state(h.bin, GST_STATE_PAUSED), h.on = false;   // (the stage stopped: so does its sound)
         const bool ready = !m->live || live_ready(*m->s, m->live);   // (the picture begun before, offered once the GPU has finished it)
         const auto t = std::chrono::steady_clock::now();
