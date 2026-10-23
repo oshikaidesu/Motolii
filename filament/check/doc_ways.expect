@@ -17,7 +17,7 @@ define: NOT done: a way begins at the one key's value and ends at the other's: f
 define: NOT done: near "*": syntax error
 way: NOT done: a way is one of: Hold, Linear, Bezier (x1 y1 x2 y2), Bounce (first_dip dip), Elastic (limit period damp), Cyclic (period peak linear envelope_end), Random (seed grain center_u center_v bias), Steps (width smooth), ElasticSteps (width elasticity); by name: SlowIn SlowOut SlowInSlowOut VerySlowIn VerySlowOut SpringOut SmallSpringOut BounceOut Overshoot; defined here: overshoot
 way: NOT done: x has no key at that moment: a stretch begins at a key
-way: NOT done: start does not move: keys go on x, y, z, rotate, rotate_x, rotate_y, scale_x, scale_y, scale_z, size, anchor_x, anchor_y, anchor_z, emissive
+way: NOT done: start does not move: keys go on x, y, z, rotate, rotate_x, rotate_y, scale_x, scale_y, scale_z, size, anchor_x, anchor_y, anchor_z, dissolve, grain, emissive
 way: NOT done: Random is said alone or with its 5 numbers (seed grain center_u center_v bias)
 way: NOT done: Bezier is said alone or with its 4 numbers (x1 y1 x2 y2): x1 and x2 are from 0 to 1
 define: NOT done: Bounce is one of the nine kinds already
