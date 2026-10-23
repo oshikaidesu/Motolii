@@ -72,10 +72,26 @@ struct Motolii {
     double budget = std::getenv("MOTOLII_BUDGET") ? std::atof(std::getenv("MOTOLII_BUDGET")) : 12.0;   // (the milliseconds the GPU may take for a live picture, of the 16.7 a picture has)
     long judged = 0;
     double gpu_ms = 0.0, gpu_most = 0.0;   // (the GPU's middle time for the last pictures, and the most it was)
+    double scale = 1.0;   // (how large the stage's views are drawn now: stage_scale)
     double spent[4] = {0, 0, 0, 0};   // (seconds the hand spent: asked to change, asked to read, telling the moment, drawing)
     long many[4] = {0, 0, 0, 0};
 };
 
+// While it plays and the GPU takes longer than it may, the stage's views are drawn smaller and made large again (as
+// Filament's own dynamic resolution does; its own reckoning needs timer queries Dawn's backend has not, so the scale is
+// set here from the pictures' own times); at rest, full size, for looking. MOTOLII_SCALE: a scale kept, to measure.
+static void stage_scale(Motolii* m) {
+    static const double kept = std::getenv("MOTOLII_SCALE") ? std::atof(std::getenv("MOTOLII_SCALE")) : 0.0;
+    double want = 1.0;
+    if (kept > 0.0) want = kept;
+    else if (m->playing && m->gpu_ms > 0.0) want = std::clamp(m->scale * std::sqrt(m->budget / m->gpu_ms), 0.5, 1.0);   // (the GPU's time goes with the pixels drawn: as many fewer as it is over)
+    if (std::fabs(want - m->scale) < 0.05 && !(want == 1.0 && m->scale != 1.0)) return;
+    m->scale = want;
+    View::DynamicResolutionOptions o;
+    o.enabled = want < 1.0, o.minScale = o.maxScale = math::float2{(float)want}, o.quality = QualityLevel::MEDIUM;
+    m->s->view->setDynamicResolutionOptions(o);
+    for (View* v : m->s->layers) v->setDynamicResolutionOptions(o);
+}
 template <class Does> static auto asked(Motolii* m, Does does, bool changes, const char* who) -> decltype(does()) {
     std::packaged_task<decltype(does())()> task(does);
     auto done = task.get_future();
@@ -222,6 +238,7 @@ static void motolii_hand(Motolii* m, std::string document, int wide, int high, s
         // (asked something: a shell that writes reads next, so the picture waits a moment for it rather than it for a
         //  whole picture; never more than two pictures' time since the last was drawn)
         if (!todo.empty()) due = std::min(std::max(due, t + std::chrono::milliseconds(3)), drawn + std::chrono::milliseconds(33));
+        if (m->live && !m->playing && m->scale != 1.0 && !std::getenv("MOTOLII_SCALE")) stage_scale(m), m->changed = true;   // (stopped: the last picture drawn again full size, for looking)
         if (!m->live || t < due || !(m->playing || m->changed) || !ready) { last = m->playing || !ready ? last : t; continue; }   // (not ready: no other picture is begun till it is)
         if (m->playing) {   // (time goes on by the clock, and round again at the document's end)
             std::lock_guard<std::recursive_timed_mutex> holding(m->d->lock);
@@ -285,6 +302,7 @@ static void motolii_hand(Motolii* m, std::string document, int wide, int high, s
                 const double ms = (double)took[took.size() / 2] / 1e6;
                 m->gpu_ms = ms, m->gpu_most = std::max(m->gpu_most, ms);
             }
+            stage_scale(m);
         }
         m->spent[2] += std::chrono::duration<double>(told - t).count(), m->many[2]++;
         m->spent[3] += std::chrono::duration<double>(drawn - told).count(), m->many[3]++;
