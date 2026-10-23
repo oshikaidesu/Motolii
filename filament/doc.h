@@ -39,6 +39,7 @@
 #include "ways.h"
 #include "screen.h"
 #include "mosh.h"
+#include "points.h"
 #include <filesystem>
 #include <mutex>
 #include <dlfcn.h>
@@ -107,7 +108,7 @@ struct Doc {
     std::map<std::pair<int, std::string>, std::string> words;   // a value's word, the same way
     std::map<std::pair<int, std::string>, std::vector<double>> keyed;   // the moments of a value's keys, the same way
     std::map<std::string, sqlite3_stmt*> named, goes;     // a way by its name, and by its expression: made ready once (SQLite works it out)
-    struct Shown { std::string of; Video* film = nullptr; Drawn* drawn = nullptr; Solid* solid = nullptr; Mesh* shape = nullptr; bool in = true, clipped = false, camera = false, drivenLooks = false, behaviour = false; int run = -1, lies = -1;
+    struct Shown { std::string of; Video* film = nullptr; Drawn* drawn = nullptr; Solid* solid = nullptr; Mesh* shape = nullptr; bool in = true, clipped = false, camera = false, drivenLooks = false, behaviour = false, grains = false; int run = -1, lies = -1;
                    utils::Entity light;   // (a light, Filament's own: in every scene of the stage while it is on)
                    double units = 1.0;    // (a flat thing's: points of the picture to a unit of the stage as it was made, which its effects are counted in)
                    int space = 3;
@@ -194,6 +195,7 @@ static const DocValue doc_values[] = {
     // (Filament's light channels: a light of group 1 to 7 lights only the solids of that group; 0, as it comes: the solids of group 0 and every other)
     {"light_group", "light solid", 0, 7, false, nullptr},
     {"parent", doc_kinds, 0, 1e9, false, nullptr},
+    {"dissolve", "solid", 0, 100, true, nullptr}, {"grain", "solid", 0.05, 20, true, nullptr},   // (a point cloud's: its grains thrown out each its own way, so far; and how large they are drawn: points.h)
     {"mosh", "film", 0, 1, false, nullptr}, {"mosh_with", "film", 0, 1e9, false, nullptr}, {"mosh_at", "film", 0, 1e6, false, nullptr},   // (a real datamosh: from that moment of its film, the other's motion poured into its last picture: mosh.h)   // (the thing it goes with: it is moved, turned and sized as that one is, then as it is itself; 0: none)
     {"space", "film picture text shape", 0, 0, false, "2d 2.5d"},   // (the past repository's three tags: 2d is not in the world and lies by the order alone; 2.5d is a sheet in the world, before or behind by depth; a solid is 3d)
     {"align", "text", 0, 1, false, nullptr},
@@ -527,7 +529,7 @@ static const DocShown doc_shown[] = {
     {"distance", "", "px", "Distance", 0.05, 4, nullptr}, {"zoom", "share", "%", "Zoom", 0.1, 4, nullptr},
     {"anchor_x", "", "%", "Anchor X", -1, 1, "Anchor"}, {"anchor_y", "", "%", "Anchor Y", -1, 1, "Anchor"}, {"anchor_z", "", "%", "Anchor Z", -1, 1, "Anchor"},
     {"parent", "thing", "", "Parent", 0, 0, nullptr},   // (the thing it goes with: shown by its name)
-    {"mosh_with", "thing", "", "Motion of", 0, 0, nullptr}, {"mosh_at", "", "s", "From", 0, 10, nullptr},
+    {"mosh_with", "thing", "", "Motion of", 0, 0, nullptr}, {"dissolve", "", "", "Dissolve", 0, 2, nullptr}, {"grain", "share", "%", "Grain", 0.1, 4, nullptr}, {"mosh_at", "", "s", "From", 0, 10, nullptr},
     {"connect_to", "thing", "", "With", 0, 0, nullptr},
     {"resample", "", "", "Points", 0, 64, nullptr},
     {"voxel", "share", "%", "Squares", 0, 0.2, nullptr},
@@ -715,7 +717,8 @@ static const DocCard doc_cards[] = {
     {"Group", "strength lag x y spread scatter rotate rotate_y size opacity", "file", "group"},   // (things in an order and nothing else: away by its own move, turn, size and opacity, each in turn)
     {"Note", "note"},   // (what a maker wrote of it: After Effects' layer comment)
     {"Trim Paths", "trim trim_begin trim_offset", "trim", "+"},
-    {"Datamosh", "mosh_with mosh_at", "mosh", "+"},   // (the film's own compressed pictures, mosh.h)   // (After Effects' shape operator: added from the shelf)
+    {"Datamosh", "mosh_with mosh_at", "mosh", "+"},
+    {"Points", "dissolve grain", "file", "~.ply"},   // (a point cloud's own: points.h)   // (the film's own compressed pictures, mosh.h)   // (After Effects' shape operator: added from the shelf)
     {"Gaussian Blur", "blur blur_direction", "blur", "+"},   // (the effects (doc_effects), each its card while it is on, as After Effects' Effect Controls)
     {"Drop Shadow", "shadow shadow_distance shadow_angle shadow_blur shadow_opacity", "shadow", "+"},
     {"Glow", "glow glow_blur glow_opacity", "glow", "+"},
@@ -1965,6 +1968,7 @@ static void doc_moment(Doc& d, double now) {
         const mat4f place = mat4f(doc_place(d, thing, now));
         const bool staggered = doc_staggered(d, thing, now);   // (each copy, the first too, as late as its order says, waving as its place in the wave says)
         const std::vector<math::mat4> joins = doc_number(d, thing, "connect", 0, 0) != 0.0 ? doc_joins(d, thing, now) : std::vector<math::mat4>{};   // (a joining thing: its copies lie between another's)
+        if (t.grains && t.look) t.look->setParameter("dissolve", (float)doc_number(d, thing, "dissolve", now, 0)), t.look->setParameter("grain", (float)doc_number(d, thing, "grain", now, 1));
         if (t.solid) solid_to(s, t.solid, place);
         else if (doc_number(d, thing, "connect", 0, 0) != 0.0) move(s, m, [&](int nth, const mat4f&) { return (size_t)nth < joins.size() ? mat4f(joins[(size_t)nth]) : mat4f::scaling(float3{0.f}); });
         else {
@@ -2396,6 +2400,9 @@ static bool doc_match(Doc& d) {
                 if (look && glass) glassy(look);
                 if (!look) made.shape = nullptr;
                 else if (!glass) plain(look, fill.empty() ? float3{0xd9, 0xd2, 0xc3} / 255.f : colour, surface);
+            } else if (std::filesystem::path(file).extension() == ".ply") {   // (a point cloud: its grains, one buffer, points.h)
+                made.shape = points(s, file.c_str(), why, &made.look);
+                made.grains = made.shape != nullptr;
             } else if (glass) {   // (a file's shape as glass: its triangles alone, for the kit's glass, which draws a shape three times)
                 MaterialInstance* look = (made.shape = solid_mesh(file.c_str())) ? thick_glass(s, made.shape, {mat4f{}}) : nullptr;
                 made.look = look;
@@ -2406,7 +2413,7 @@ static bool doc_match(Doc& d) {
         } else why = std::string("its kind is one of: ") + doc_kinds;
         if (!made.film && !made.drawn && !made.solid && !made.shape && !made.camera && made.light.isNull() && kind != "behaviour") { d.trouble = why + ": the " + kind + " " + std::filesystem::path(file + shape).filename().string() + " could not be made"; all = false; continue; }
         d.shown[thing] = made;
-        if (made.solid || made.shape) {   // (a solid thing casts a shadow from a light that throws them, and takes one)
+        if ((made.solid || made.shape) && !made.grains) {   // (a solid thing casts a shadow from a light that throws them, and takes one; a cloud's grains are their own light)
             const int group = (int)doc_number(d, thing, "light_group", 0, 0);
             doc_parts(s, d.shown[thing], [group](RenderableManager& faces, RenderableManager::Instance one) {
                 faces.setCastShadows(one, true), faces.setReceiveShadows(one, true), faces.setScreenSpaceContactShadows(one, true);   // (contact shadows: Filament draws them only where the light asks too)
@@ -2713,7 +2720,7 @@ static bool doc_knows(Doc& d, int thing, const char* name = nullptr, const doubl
 // What kind of thing a file makes, by its name's end ("": none): the one place that says so.
 static const char* doc_kind_of(const char* file) {
     static const struct { const char* kind; const char* ends; } made[] = {
-        {"film", "mp4 mov m4v webm mkv"}, {"picture", "png jpg jpeg webp svg json lot"}, {"solid", "glb gltf"}, {"text", "ttf otf ttc"}};
+        {"film", "mp4 mov m4v webm mkv"}, {"picture", "png jpg jpeg webp svg json lot"}, {"solid", "glb gltf ply"}, {"text", "ttf otf ttc"}};
     std::string end = std::filesystem::path(file).extension().string();
     for (char& c : end) c = (char)std::tolower((unsigned char)c);
     if (doc_among(doc_shapes, file)) return "solid";

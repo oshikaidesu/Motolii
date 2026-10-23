@@ -1,0 +1,37 @@
+// points.mat: a point cloud's grains (points.h), each a little square turned to face the eye and cut round, its own
+// colour, as large as its point says. `dissolve`: each grain thrown out its own way (fixed by its seed) as far as it
+// says, the cloud coming apart as the drift of 点云飘散 does. Unlit: the colours are the scan's own light.
+material {
+    name : points,
+    shadingModel : unlit,
+    requires : [ custom0, color ],
+    variables : [ corner ],
+    culling : none,
+    blending : opaque,
+    parameters : [
+        { type : float, name : dissolve },   // how far each grain is thrown out, in the cloud's own units (it is 1 tall)
+        { type : float, name : grain }       // how large the grains are drawn against their own size (1: as they are)
+    ]
+}
+
+vertex {
+    float hash(float n) { return fract(sin(n) * 43758.5453); }
+    void materialVertex(inout MaterialVertexInputs material) {
+        vec4 c = getCustom0();   // (corner x, corner y in -1..1; the grain's half size in the cloud's units; its seed)
+        mat4 eye = getWorldFromViewMatrix();
+        vec3 way = normalize(vec3(hash(c.w * 12.9898) - 0.5, hash(c.w * 78.233) - 0.5, hash(c.w * 39.425) - 0.5) + vec3(0.0, 0.35, 0.0));
+        float far = materialParams.dissolve * (0.3 + 1.4 * hash(c.w * 7.137));
+        mat4 place = getWorldFromModelMatrix();
+        vec3 grow = (eye[0].xyz * c.x + eye[1].xyz * c.y) * c.z * materialParams.grain * length(place[0].xyz);   // (the eye's own across and up: it faces the eye)
+        material.worldPosition.xyz += mulMat3x3Float3(place, way * far) + grow;
+        material.corner = vec4(c.xy, 0.0, 0.0);
+    }
+}
+
+fragment {
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        if (dot(variable_corner.xy, variable_corner.xy) > 1.0) discard;
+        material.baseColor = vec4(pow(getColor().rgb, vec3(2.2)), 1.0);   // (the scan's colours are the screen's numbers: back to light)
+    }
+}
