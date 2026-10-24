@@ -536,8 +536,8 @@ List<Fx> _makeCards(Ws ws, Motolii m, int t) {
 /// A value of the inside's own cards as the inspector counts it: another thing by its place (None first), a number
 /// in the card's units, a word by its place among those it may be (the stage's and a thing's alike).
 double _onCard(Ws ws, Motolii m, int t, String n, double at) {
-  final seen = n == 'x' || n == 'y' ? m.shows(t, n, at) : null;
-  if (seen != null && seen.$2) return _shown(m, t, n, seen.$1);   // (a place a relation moves: where it shows, as After Effects shows a value an expression drives)
+  final seen = const {'x', 'y', 'z', 'rotate', 'scale_x', 'scale_y', 'opacity'}.contains(n) ? m.shows(t, n, at) : null;   // (the values the moment's copy carries as the stage shows them: picture.h)
+  if (seen != null) return _shown(m, t, n, seen.$1);   // (where it shows: a hand carrying it, a relation moving it, as After Effects shows a value an expression drives)
   return m.shown(n)?.look == 'thing' ? (_others(ws, t).values.toList().indexOf((m.value(t, n, 0) ?? 0).round()) + 1).toDouble() : m.words(t, n).isEmpty ? _shown(m, t, n, m.value(t, n, at) ?? 0) : math.max(0, m.words(t, n).indexOf(m.word(t, n))).toDouble(); // (the inside's own cards: a number as it is, a word by its place among those it may be)
 }
 
