@@ -125,7 +125,7 @@ class _ScPart extends StatelessWidget {
             Expanded(
               child: Text(label, style: T.micro(Grey.g76).copyWith(fontWeight: FontWeight.w700)),
             ),
-            if (id != null) OnOff(on: (doc.get(id) ?? 0) > 0, onChanged: (v) => doc.set(id, v ? 1 : 0)),
+            if (id != null) ListenableBuilder(listenable: doc.watch(id), builder: (context, _) => OnOff(on: (doc.get(id) ?? 0) > 0, onChanged: (v) => doc.set(id, v ? 1 : 0))),   // (a number shown as a switch: drawn again when it is told anew)
           ],
         ),
       ),

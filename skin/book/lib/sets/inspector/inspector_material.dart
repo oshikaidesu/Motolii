@@ -51,7 +51,10 @@ class BlendRows extends StatelessWidget {
           cells: [
             Align(
               alignment: Alignment.centerLeft,
-              child: OnOff(on: (doc.get('v_clip') ?? 0) > .5, onChanged: (v) => doc.set('v_clip', v ? 1 : 0)),
+              child: ListenableBuilder( // (a number shown as a switch: drawn again when it is told anew, as the shadow's drawing is)
+                listenable: doc.watch('v_clip'),
+                builder: (context, _) => OnOff(on: (doc.get('v_clip') ?? 0) > .5, onChanged: (v) => doc.set('v_clip', v ? 1 : 0)),
+              ),
             ),
           ],
         ),

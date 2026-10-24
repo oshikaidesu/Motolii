@@ -183,7 +183,11 @@ void main() {
     final cube = m.add('solid', 'cube');
     expect(cube, isNot(0));
     await t.tap(find.byKey(const ValueKey('ws-top-size')));
-    await t.pumpAndSettle();
+    for (var i = 0; i < 100 && identical(ws.inside, m); i++) {   // (opened again in real time, once the inside has the size: BRIDGE.md rule 6)
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+      await t.pump();
+    }
+    await settled(t, ws);
     final again = ws.inside!;
     expect(identical(again, m), isFalse, reason: 'closed and opened again');
     expect(again.size, (1080, 1920));
@@ -241,11 +245,8 @@ void main() {
     await t.tap(clip);
     await t.pumpAndSettle();
     expect(m.value(cube, 'clip', 0), 1, reason: 'the seat is the document\'s clip');
-    for (var i = 0; i < 20 && ws.waiting; i++) {
-      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
-      await t.pump();
-    }
-    expect(find.descendant(of: clip, matching: find.text('On')), findsOneWidget);
+    await settled(t, ws);
+    expect(t.widget<OnOff>(clip).on, isTrue, reason: 'the switch is on (however the skin draws it)');
     expect(find.byWidgetPredicate((w) => w is PropRow && w.id == 'ghost'), findsNothing, reason: 'the document has no ghost: no switch that moves nothing');
     expect(m.undo() && m.value(cube, 'clip', 0) == 0, isTrue, reason: 'one step back: the clip');
     expect(t.takeException(), isNull);
@@ -340,11 +341,11 @@ void main() {
     }
     final box = m.add('solid', 'cube');
     expect(m.key(box, 'x', 0, 0) && m.key(box, 'x', 1, 2), isTrue, reason: m.trouble);
-    final linear = m.value(box, 'x', .5)!;
+    final linear = (await m.shownAt([(box, 'x', .5)])).single!;   // (another moment: asked, BRIDGE.md rule 7)
     expect(m.way(box, 'x', 0, 'Snappy'), isTrue, reason: m.trouble);
-    expect(m.value(box, 'x', .5), closeTo(2 * bezierY(const Offset(.2, 0), const Offset(0, 1), .5), 1e-3), reason: 'the stretch goes by it');
+    expect((await m.shownAt([(box, 'x', .5)])).single, closeTo(2 * bezierY(const Offset(.2, 0), const Offset(0, 1), .5), 1e-3), reason: 'the stretch goes by it');
     expect(m.ways, contains('defined here: Snappy'), reason: 'written into the document, which goes so wherever it is opened');
-    expect(m.undo() && m.value(box, 'x', .5) == linear && !m.ways.contains('defined here: Snappy'), isTrue, reason: 'one step: the way and its writing');
+    expect(m.undo() && (await m.shownAt([(box, 'x', .5)])).single == linear && !m.ways.contains('defined here: Snappy'), isTrue, reason: 'one step: the way and its writing');
     await expectSameAfterReopen(t);
     await _close(t);
   }, skip: !_built);
@@ -457,9 +458,11 @@ void main() {
     expect(m.set(cube, 'visible', 1), isTrue);
 
     // (Animate all turned on at 0, the thing carried at 2: it is where it was at 0 and travels to where it was let go)
-    expect(m.at(0), isTrue);
+    ws.frame = 0 * Ws.fps;   // (the playhead is the window's, told to the inside by it: BRIDGE.md rule 9)
+    await settled(t, ws);
     m.keying(true);
-    expect(m.at(2), isTrue);
+    ws.frame = 2 * Ws.fps;   // (the playhead is the window's, told to the inside by it: BRIDGE.md rule 9)
+    await settled(t, ws);
     expect(m.hold(cube) && m.carry('x', 3, 0) && m.letGo(true), isTrue, reason: m.trouble);
     expect(await m.shownAt([(cube, 'x', 0), (cube, 'x', 1), (cube, 'x', 2)]), [0, 1.5, 3],   // (other moments: asked, BRIDGE.md rule 7)
         reason: 'from where it was to where it was let go');
@@ -469,7 +472,8 @@ void main() {
     m.keying(false);
 
     // (not being keyed: a value with keys gets a key where it is changed, the others as they were (After Effects))
-    expect(m.at(1), isTrue);
+    ws.frame = 1 * Ws.fps;   // (the playhead is the window's, told to the inside by it: BRIDGE.md rule 9)
+    await settled(t, ws);
     final was = [m.value(cube, 'x', 0), m.value(cube, 'x', 2)];
     expect(m.put(cube, 'x', 1, 2.5), isTrue, reason: m.trouble);
     expect([m.value(cube, 'x', 0), m.value(cube, 'x', 1), m.value(cube, 'x', 2)], [was[0], 2.5, was[1]]);
