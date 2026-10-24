@@ -16,6 +16,8 @@ import 'timeline_kept.dart';
 import 'timeline_paint.dart';
 import 'relate.dart';
 import 'ws.dart';
+part 'timeline_2.dart';
+part 'timeline_3.dart';
 
 class WsTimeline extends StatefulWidget {
   const WsTimeline({super.key});
@@ -57,45 +59,6 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
     super.dispose();
   }
 
-  // ---------------------------------------------------------------- play
-
-  void _changed() {
-    final ws = _ws!;
-    if (ws.playing && !_ticker.isActive) {
-      _ticker.start();
-      _last = -1;
-      if (ws.frame >= Ws.duration) ws.frame = 0;
-    } else if (!ws.playing && _ticker.isActive) {
-      _ticker.stop();
-    }
-    _follow(ws.frame);
-  }
-
-  void _tick(Duration e) => Timeline.timeSync('ws tick', () => _tickNow(e)); // (named in Flutter's timeline: frames_test TRACE)
-  void _tickNow(Duration e) {
-    final ws = _ws!;
-    _last = (ws.inside!.drawnAt * Ws.fps).round().clamp(0, Ws.duration); // (the inside keeps the clock, the playhead shows the moment of the picture it drew last)
-    ws.frame = _last;
-  }
-
-  void _toggle() {
-    final ws = _ws!;
-    ws.playing = !ws.playing;
-  }
-
-  void _step(int d) {
-    final ws = _ws!;
-    ws.playing = false;
-    ws.frame = ws.frame + d;
-  }
-
-  // ---------------------------------------------------------------- view
-
-  double get _fit => math.max(.1, (_trackW - WtM.padL - WtM.padR) / Ws.duration);
-  WtView get _view => WtView(_fit * _zoom, _scroll);
-  double get _visible => Ws.duration / _zoom;
-  double _clampScroll(double s) => s.clamp(0.0, math.max(0.0, Ws.duration - _visible)).toDouble();
-
   void _setZoom(double z, {int? anchor}) {
     final nz = z.clamp(1.0, WtM.maxZoom);
     final a = anchor ?? _ws!.frame, ax = _view.x(a);
@@ -125,40 +88,6 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
     }
   }
 
-  double _clampV(int rows) => _vscroll.clamp(0.0, math.max(0.0, rows * WtM.row - _rowsH)).toDouble();
-
-  // ---------------------------------------------------------------- input
-
-  void _trackDown(Offset p) {
-    final ws = _ws!, v = _view;
-    final i = ((p.dy + _vscroll) / WtM.row).floor();
-    if (i < 0 || i >= ws.layers.length) { // (below the rows: nothing picked, After Effects' manner; joined, the inspector is then the whole picture's)
-      ws.clearKeys();
-      ws.select(null);
-      return;
-    }
-    final l = ws.layers[i];
-    final cy = i * WtM.row - _vscroll + WtM.row / 2;
-    if (!_isLocked(ws, l.id) && (p.dy - cy).abs() <= WtM.bar / 2 + 2) {
-      int? best;
-      var bd = WtM.keyPicked + 2;
-      for (final k in l.keys) {
-        final d = (v.x(k) - p.dx).abs();
-        if (d <= bd) {
-          bd = d;
-          best = k;
-        }
-      }
-      if (best != null) return ws.pickKey((layer: l.id, frame: best), add: HardwareKeyboard.instance.isShiftPressed);
-    }
-    final f = v.frameAt(p.dx);
-    if (f >= l.inF && f <= l.outF) {
-      ws.select(l.id);
-    } else {
-      ws.clearKeys();
-    }
-  }
-
   // Joined: a bar held by a hand: by its body it slides, by an end it is cut there. The timeline only says which part
   // is held and how many seconds the hand has gone; what that does to the thing (its limits, a film's head) is the
   // inside's, and the bar is drawn from what the inside then says.
@@ -167,14 +96,6 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
 
   // The pointer over a bar says what it would do: an end cuts, the body slides, a key slides; the room between draws a box.
   MouseCursor _cursor = MouseCursor.defer;
-  MouseCursor _cursorAt(Offset p) {
-    final ws = _ws!, v = _view, i = ((p.dy + _vscroll) / WtM.row).floor();
-    if (i < 0 || i >= ws.layers.length) return MouseCursor.defer;
-    final l = ws.layers[i], a = v.x(l.inF), b = v.x(l.outF);
-    if (_isLocked(ws, l.id) || p.dx < a - 6 || p.dx > b + 6) return SystemMouseCursors.precise;
-    if (l.keys.any((k) => (v.x(k) - p.dx).abs() <= WtM.keyPicked + 2)) return SystemMouseCursors.click;
-    return (p.dx - a).abs() <= 6 || (p.dx - b).abs() <= 6 ? SystemMouseCursors.resizeLeftRight : SystemMouseCursors.grab;
-  }
 
   // A key held by a hand: it (and the keys picked with it) slides in time; the playhead shows where, let go it is so.
   ({List<WsKey> keys, int grab, int by})? _slide;
@@ -210,29 +131,6 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
     }
   }
 
-  bool _grab(Offset p) {
-    final ws = _ws!, v = _view, m = ws.inside;
-    final i = ((p.dy + _vscroll) / WtM.row).floor();
-    if (m == null || i < 0 || i >= ws.layers.length) return false;
-    final l = ws.layers[i], a = v.x(l.inF), b = v.x(l.outF);
-    if (_isLocked(_ws!, l.id) || p.dx < a - 6 || p.dx > b + 6) return false;
-    for (final k in l.keys) {
-      if ((v.x(k) - p.dx).abs() > WtM.keyPicked + 2) continue;
-      final held = (layer: l.id, frame: k), all = ws.keys.contains(held) ? ws.keys.toList() : [held];
-      if (!ws.keys.contains(held)) ws.pickKey(held);
-      if (ws.playing) ws.playing = false;
-      _slide = (keys: all, grab: k, by: 0);
-      return true;
-    }
-    m.take(int.parse(l.id));
-    ws.select(l.id);
-    if (ws.playing) ws.playing = false;
-    _barIn = l.inF;
-    _barOut = l.outF;
-    _bar = (id: l.id, part: (p.dx - b).abs() <= 6 ? 'tail' : ((p.dx - a).abs() <= 6 ? 'head' : 'bar'), grab: v.frameAt(p.dx), moved: false);
-    return true;
-  }
-
   void _barMove(Offset p) {
     if (_box case (final from, _)?) return setState(() => _box = (from, p));
     if (_slide case final s?) {
@@ -264,19 +162,6 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
     ws.after(m.later('let_go', number: keep && h.moved ? 1 : 0));   // (let go without waiting)
   }
 
-  // A relation's row: the label colours of the things it moves, in its order (none: a thing's row, one colour).
-  List<Color>? _mixOf(Ws ws, String id) {
-    final m = ws.inside, t = int.tryParse(id);
-    if (m == null || t == null || m.word(t, 'kind') != 'behaviour' || !wsRelations.contains(m.word(t, 'file'))) return null;
-    return [for (final s in m.word(t, 'members').split(' ')) if (s.isNotEmpty && s != '_') wsLabel(s)];
-  }
-
-  // The eye of a row. Joined: the thing is put aside in the document (visible 0) and is not on the stage; one step.
-  bool _isHidden(Ws ws, String id) => ws.layers.any((l) => l.id == id && l.hidden);   // (as last read: no call to the inside while a row is built)
-  void _eye(Ws ws, String id) {
-    ws.after(ws.inside!.later('set', thing: int.parse(id), name: 'visible', number: _isHidden(ws, id) ? 1 : 0));
-  }
-
   double _lift = 0; // how far a label row has been carried up or down
 
   int? _workDrag; // 0 in, 1 out, 2 both, null scrub
@@ -291,16 +176,6 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
   (double, String)? _naming;
   final _markWords = TextEditingController();
   late final FocusNode _markFocus = FocusNode()..addListener(() => _markFocus.hasFocus ? null : _named());   // (the field left: the name said)
-
-  /// The mark whose flag is under the hand, if any.
-  (double, String)? _flagAt(Offset p) {
-    if (p.dy < WtM.band + 1 || p.dy > WtM.band + 15) return null;
-    for (final m in _ws!.marks.reversed) {
-      final x = _view.x((m.$1 * Ws.fps).round());
-      if (p.dx >= x - 2 && p.dx <= x + wtFlagWidth(m.$2)) return m;
-    }
-    return null;
-  }
 
   void _rulerTwice(Offset p) {
     final ws = _ws!, m = ws.inside;
@@ -325,29 +200,6 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
     if (was == null) return;
     setState(() => _naming = null);
     if (words.isNotEmpty && words != was.$2 && ws.inside != null) ws.after(ws.inside!.later('mark', number: was.$1, word: words));
-  }
-
-  void _rulerDown(Offset p) {
-    final v = _view, f = v.frameAt(p.dx);
-    _workDrag = null;
-    if (_flagAt(p) case final flag?) {
-      _markHeld = flag;
-      _markTo = (flag.$1 * Ws.fps).round();
-      _markOff = false;
-      return;
-    }
-    if (p.dy <= WtM.band + 2) {
-      final a = v.x(_workIn), b = v.x(_workOut);
-      if ((p.dx - a).abs() <= 6) {
-        _workDrag = 0;
-      } else if ((p.dx - b).abs() <= 6) {
-        _workDrag = 1;
-      } else if (p.dx > a && p.dx < b) {
-        _workDrag = 2;
-        _workGrab = f - _workIn;
-      }
-    }
-    _rulerMove(p);
   }
 
   void _rulerMove(Offset p) {
@@ -395,29 +247,9 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
     _workDrag = null;
   }
 
-  /// The marks on the ruler: the document's own (moments with a name).
-  List<(int, String)> _marksOf(Ws ws) {
-    return [
-      for (final (at, name) in _ws!.marks)
-        if ((at, name) != _markHeld) ((at * Ws.fps).round(), name)
-        else if (!_markOff) (_markTo, name),   // (the one carried: where the hand has it; off the ruler, gone)
-    ];
-  }
-
   void _overview(Offset p, double w) {
     final f = (p.dx - 4) / (w - 8) * Ws.duration;
     setState(() => _scroll = _clampScroll(f - _visible / 2));
-  }
-
-
-  // Joined: solo and lock are the document's (After Effects keeps both in its project): while any thing is solo only
-  // those are seen; a locked thing is not changed (the inside refuses, and says so). Else the sample's own sets.
-  bool _isSolo(Ws ws, String id) => ws.layers.any((l) => l.id == id && l.solo);
-  bool _isLocked(Ws ws, String id) => ws.layers.any((l) => l.id == id && l.locked);
-  bool _anySolo(Ws ws) => ws.layers.any((l) => _isSolo(ws, l.id));
-  void _flag(Ws ws, String name, String id) {
-    final m = ws.inside!;
-    ws.after(m.later('set', thing: int.parse(id), name: name, number: (name == 'solo' ? _isSolo(ws, id) : _isLocked(ws, id)) ? 0 : 1));
   }
 
   // ---------------------------------------------------------------- build
@@ -525,59 +357,6 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
       ),
     );
   }
-
-  Widget _labels(Ws ws, List<WtRow> rows) => Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
-      _LabelHeader(count: ws.layers.length, solo: _anySolo(ws)),
-      Expanded(
-        child: Listener(
-          onPointerSignal: _wheel,
-          child: ClipRect(
-            child: LayoutBuilder(
-              builder: (context, box) {
-                final top = _clampV(rows.length);
-                return Stack(
-                  children: [
-                    for (var i = 0; i < rows.length; i++)
-                      Positioned(
-                        key: ValueKey('ws-tl-label-${ws.layers[i].id}'),
-                        left: 0,
-                        right: 0,
-                        top: i * WtM.row - top,
-                        height: WtM.row,
-                        // Joined: a row carried up or down is the thing brought nearer or further back, by as many rows as it was carried.
-                        child: GestureDetector(
-                          dragStartBehavior: DragStartBehavior.down, // (all of the way it was carried counts, from where the hand came down)
-                          onVerticalDragStart: (_) => _lift = 0,
-                          onVerticalDragUpdate: (d) => _lift += d.delta.dy,
-                          onVerticalDragEnd: (_) {
-                                  final by = (_lift / WtM.row).round();
-                                  if (by != 0) ws.after(ws.inside!.later('raise', thing: int.parse(ws.layers[i].id), number: -by.toDouble()));
-                                },
-                          child: _LabelRow(
-                            index: i,
-                            row: rows[i],
-                            hidden: _isHidden(ws, ws.layers[i].id),
-                            solo: _isSolo(ws, ws.layers[i].id),
-                            onSelect: () => HardwareKeyboard.instance.isShiftPressed
-                                ? wsPickRange(ws, ws.layers[i].id)   // (Shift: every row from the last picked to this, After Effects' manner)
-                                : HardwareKeyboard.instance.isMetaPressed ? wsPickAlso(ws, ws.layers[i].id) : ws.select(ws.layers[i].id),   // (Cmd: one more, or one less)
-                            onEye: () => _eye(ws, ws.layers[i].id),
-                            onSolo: () => _flag(ws, 'solo', ws.layers[i].id),
-                            onLock: () => _flag(ws, 'lock', ws.layers[i].id),
-                          ),
-                        ),
-                      ),
-                  ],
-                );
-              },
-            ),
-          ),
-        ),
-      ),
-    ],
-  );
 
   Widget _tracks(Ws ws, List<WtRow> rows) => LayoutBuilder(
     builder: (context, box) {
@@ -691,333 +470,3 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
 }
 
 // ---------------------------------------------------------------- header strip
-
-class _Header extends StatelessWidget {
-  const _Header({
-    required this.ws,
-    required this.loop,
-    required this.zoom,
-    required this.onToggle,
-    required this.onStep,
-    required this.onLoop,
-    required this.onZoom,
-  });
-  final Ws ws;
-  final bool loop;
-  final double zoom;
-  final VoidCallback onToggle, onLoop;
-  final ValueChanged<int> onStep;
-  final void Function(double z, {int? anchor}) onZoom;
-
-  @override
-  Widget build(BuildContext context) {
-    final big = T.value(Grey.g76).copyWith(fontSize: T.px(14), fontWeight: FontWeight.w500, fontFeatures: const [FontFeature.tabularFigures()]);
-    final picked = ws.keys.length, layer = ws.layer;
-    return Container(
-      height: WtM.header,
-      padding: EdgeInsets.symmetric(horizontal: WsT.inset),
-      decoration: BoxDecoration(
-        color: WsT.body,
-        border: Border(bottom: BorderSide(color: WsT.line)),
-      ),
-      child: LayoutBuilder(
-        builder: (context, box) {
-          final roomy = box.maxWidth >= 1000, mid = box.maxWidth >= 820, slide = box.maxWidth >= 600;   // (narrower: the zoom by its buttons alone, as the document's name and length go)
-          return Row(
-            children: [
-              if (mid) ...[_Chip(ws.document?.replaceFirst(RegExp(r'\.motolii$'), '') ?? 'Main', mono: false), SizedBox(width: Shape.s(12))], // (joined: the document's name)
-              _Btn(TpGlyph.toStart, key: const ValueKey('ws-tl-start'), onTap: () => onStep(-ws.frame)),
-              SizedBox(width: Shape.s(2)),
-              _Btn(TpGlyph.stepBack, key: const ValueKey('ws-tl-back'), onTap: () => onStep(-1)),
-              SizedBox(width: Shape.s(2)),
-              ValueListenableBuilder<int>(   // (only the button follows play: the rows are not built again)
-                valueListenable: ws.on[WsAspect.playing]!,
-                builder: (_, _, _) => _Btn(ws.playing ? TpGlyph.pause : TpGlyph.play, key: const ValueKey('ws-tl-play'), width: Shape.z(34), on: ws.playing, rest: WsT.accent, onTap: onToggle),
-              ),
-              SizedBox(width: Shape.s(2)),
-              _Btn(TpGlyph.stepFwd, key: const ValueKey('ws-tl-fwd'), onTap: () => onStep(1)),
-              SizedBox(width: Shape.s(2)),
-              _Btn(TpGlyph.loop, key: const ValueKey('ws-tl-loop'), on: loop, onTap: onLoop),
-              SizedBox(width: Shape.s(12)),
-              ValueListenableBuilder<int>(valueListenable: ws.moment, builder: (_, _, _) => Text(ws.timecode(), style: big)),   // (one number, one weight: not three colours)
-              SizedBox(width: Shape.s(8)),
-              if (roomy) ...[Text('/ ${ws.timecode(Ws.duration)}', style: T.value(Grey.g56)), SizedBox(width: Shape.s(10))],
-              _Chip('${Ws.fps} fps'),
-              SizedBox(width: Shape.s(12)),
-              if (mid && layer != null)
-                Flexible(
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      WtKindChip(layer.kind, tone: layer.tone),
-                      SizedBox(width: Shape.s(6)),
-                      Flexible(
-                        child: FittedBox( // (drawn smaller, never cut)
-                          fit: BoxFit.scaleDown,
-                          alignment: Alignment.centerLeft,
-                          child: Text(
-                            picked > 0 ? '${layer.name}  ·  $picked key${picked == 1 ? '' : 's'}' : '${layer.name}  ·  ${layer.keys.length} keys',
-                            style: T.label(Grey.g76),
-                            maxLines: 1,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              const Spacer(),
-              _Btn(TpGlyph.minus, key: const ValueKey('ws-tl-zoom-out'), size: Shape.z(22), onTap: () => onZoom(zoom / 1.5)),
-              SizedBox(width: Shape.s(4)),
-              if (slide) ...[_ZoomSlider(zoom: zoom, onZoom: onZoom), SizedBox(width: Shape.s(4))],
-              _Btn(TpGlyph.plus, key: const ValueKey('ws-tl-zoom-in'), size: Shape.z(22), onTap: () => onZoom(zoom * 1.5)),
-              SizedBox(width: Shape.s(4)),
-              _Btn(TpGlyph.fit, key: const ValueKey('ws-tl-fit'), size: Shape.z(22), width: Shape.z(46), label: 'Fit', lit: zoom <= 1.001, onTap: () => onZoom(1)),
-            ],
-          );
-        },
-      ),
-    );
-  }
-}
-
-/// A round touchable: a well that lights on hover; [on] fills it with the accent, [lit] raises it in grey.
-class _Btn extends StatefulWidget {
-  const _Btn(this.g, {super.key, this.onTap, this.on = false, this.lit = false, this.size = 24, this.width, this.rest, this.label});
-  final TpGlyph g;
-  final VoidCallback? onTap;
-  final bool on, lit;
-  final double size;
-  final double? width;
-  final Color? rest;
-  final String? label;
-  @override
-  State<_Btn> createState() => _BtnState();
-}
-
-class _BtnState extends State<_Btn> {
-  bool _h = false, _d = false;
-  @override
-  Widget build(BuildContext context) {
-    final on = widget.on;
-    final bg = on ? WsT.accent : (_d || widget.lit ? Grey.g26 : (_h ? WsT.raised : const Color(0x00000000)));   // (flat at rest: a button shows itself when the hand is on it)
-    final ink = on ? WsT.onAccent : (_h || widget.lit ? Grey.g100 : (widget.rest ?? Grey.g56));
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      onEnter: (_) => setState(() => _h = true),
-      onExit: (_) => setState(() => _h = false),
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTapDown: (_) => setState(() => _d = true),
-        onTapUp: (_) => setState(() => _d = false),
-        onTapCancel: () => setState(() => _d = false),
-        onTap: widget.onTap,
-        child: AnimatedContainer(
-          duration: Mo.dur,
-          curve: Mo.ease,
-          width: widget.width ?? widget.size,
-          height: widget.size,
-          decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.all(Shape.r(WsT.radius))),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              CustomPaint(size: const Size.square(11), painter: TpGlyphPainter(widget.g, ink)),
-              if (widget.label case final l?) ...[SizedBox(width: Shape.s(4)), Text(l, style: T.micro(ink).copyWith(fontWeight: FontWeight.w700))],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _Chip extends StatelessWidget {
-  const _Chip(this.text, {this.mono = true});
-  final String text;
-  final bool mono;
-  @override
-  Widget build(BuildContext context) => Container(
-    height: Shape.z(20),
-    padding: EdgeInsets.symmetric(horizontal: Shape.s(7)),
-    alignment: Alignment.center,
-    decoration: BoxDecoration(color: WsT.well, borderRadius: BorderRadius.all(Shape.r(WsT.radius))),
-    child: Text(text, style: mono ? T.value(Grey.g91).copyWith(fontSize: T.px(10.5)) : T.micro(Grey.g91).copyWith(fontWeight: FontWeight.w600)),
-  );
-}
-
-class _ZoomSlider extends StatelessWidget {
-  const _ZoomSlider({required this.zoom, required this.onZoom});
-  final double zoom;
-  final void Function(double z, {int? anchor}) onZoom;
-  static double get w => Shape.z(96.0);
-  @override
-  Widget build(BuildContext context) {
-    final t = math.log(zoom) / math.log(WtM.maxZoom);
-    void at(Offset p) => onZoom(math.pow(WtM.maxZoom, ((p.dx - 6) / (w - 12)).clamp(0.0, 1.0)).toDouble());
-    return MouseRegion(
-      cursor: SystemMouseCursors.resizeLeftRight,
-      child: GestureDetector(
-        key: const ValueKey('ws-tl-zoom'),
-        behavior: HitTestBehavior.opaque,
-        onPanDown: (d) => at(d.localPosition),
-        onPanUpdate: (d) => at(d.localPosition),
-        child: SizedBox(
-          width: w,
-          height: Shape.z(22),
-          child: CustomPaint(painter: _ZoomTrack(t)),
-        ),
-      ),
-    );
-  }
-}
-
-class _ZoomTrack extends CustomPainter {
-  const _ZoomTrack(this.t);
-  final double t;
-  @override
-  void paint(Canvas c, Size s) {
-    final cy = s.height / 2, x = 6 + (s.width - 12) * t, p = Paint();
-    c.drawRRect(RRect.fromLTRBR(0, cy - 3, s.width, cy + 3, Shape.r(3)), p..color = WsT.well);
-    c.drawRRect(RRect.fromLTRBR(0, cy - 3, x, cy + 3, Shape.r(3)), p..color = Grey.g44);
-    c.drawCircle(Offset(x, cy), 6, p..color = Grey.g91);
-  }
-
-  @override
-  bool shouldRepaint(_ZoomTrack o) => o.t != t;
-}
-
-// ---------------------------------------------------------------- label column
-
-class _LabelHeader extends StatelessWidget {
-  const _LabelHeader({required this.count, required this.solo});
-  final int count;
-  final bool solo;
-  @override
-  Widget build(BuildContext context) => Container(
-    height: WtM.ruler,
-    padding: EdgeInsets.only(left: Shape.s(8), right: Shape.s(6)),
-    decoration: BoxDecoration(
-      color: Grey.g10,
-      border: Border(bottom: BorderSide(color: WsT.line)),
-    ),
-    child: Row(
-      children: [
-        Text('#', style: T.micro(Grey.g56)),
-        SizedBox(width: Shape.s(12)),
-        Text('LAYER', style: T.micro(Grey.g63).copyWith(letterSpacing: 1)),
-        SizedBox(width: Shape.s(6)),
-        Text('$count', style: T.value(Grey.g56).copyWith(fontSize: T.px(10))),
-        const Spacer(),
-        for (final g in const [TpGlyph.eye, TpGlyph.solo, TpGlyph.lock])
-          SizedBox(
-            width: Shape.z(20),
-            child: Center(
-              child: CustomPaint(size: const Size.square(10), painter: TpGlyphPainter(g, g == TpGlyph.solo && solo ? WsT.accent : Grey.g56)),
-            ),
-          ),
-      ],
-    ),
-  );
-}
-
-class _LabelRow extends StatefulWidget {
-  const _LabelRow({
-    required this.index,
-    required this.row,
-    required this.hidden,
-    required this.solo,
-    required this.onSelect,
-    required this.onEye,
-    required this.onSolo,
-    required this.onLock,
-  });
-  final int index;
-  final WtRow row;
-  final bool hidden, solo;
-  final VoidCallback onSelect, onEye, onSolo, onLock;
-  @override
-  State<_LabelRow> createState() => _LabelRowState();
-}
-
-class _LabelRowState extends State<_LabelRow> {
-  bool _h = false;
-  @override
-  Widget build(BuildContext context) {
-    final r = widget.row, sel = r.selected;
-    return MouseRegion(
-      onEnter: (_) => setState(() => _h = true),
-      onExit: (_) => setState(() => _h = false),
-      child: Forms.worn.track(
-        context,
-        TrackSpec(
-          index: widget.index,
-          name: r.name,
-          selected: sel,
-          dim: r.dim,
-          hot: _h,
-          onSelect: widget.onSelect,
-          kind: WtKindChip(r.kind, dim: r.dim, tone: r.tone),
-          eye: _Toggle(widget.hidden ? TpGlyph.eyeOff : TpGlyph.eye, on: false, lit: !widget.hidden, onTap: widget.onEye),
-          solo: _Toggle(TpGlyph.solo, on: widget.solo, lit: _h || sel, onTap: widget.onSolo),
-          lock: _Toggle(r.locked ? TpGlyph.lock : TpGlyph.unlock, on: false, lit: r.locked || _h || sel, strong: r.locked, onTap: widget.onLock),
-        ),
-      ),
-    );
-  }
-}
-
-/// A row toggle: a bare glyph; [on] puts it on an accent chip, [strong] on a raised grey one.
-class _Toggle extends StatelessWidget {
-  const _Toggle(this.g, {required this.on, required this.lit, this.strong = false, required this.onTap});
-  final TpGlyph g;
-  final bool on, lit, strong;
-  final VoidCallback onTap;
-  @override
-  Widget build(BuildContext context) => GestureDetector(
-    behavior: HitTestBehavior.opaque,
-    onTap: onTap,
-    child: SizedBox(
-      width: Shape.z(20),
-      height: WtM.row - 1,
-      child: Center(
-        child: Container(
-          width: Shape.z(17),
-          height: Shape.z(17),
-          alignment: Alignment.center,
-          decoration: BoxDecoration(color: on ? WsT.accent : (strong ? Grey.g26 : null), borderRadius: BorderRadius.all(Shape.r(WsT.chipRadius))),
-          child: CustomPaint(size: const Size.square(10), painter: TpGlyphPainter(g, on ? WsT.onAccent : (strong ? Grey.g95 : (lit ? Grey.g76 : Grey.g38)))),
-        ),
-      ),
-    ),
-  );
-}
-
-// ---------------------------------------------------------------- overview
-
-class _Overview extends StatefulWidget {
-  const _Overview({required this.from, required this.to, required this.frame, required this.onDrag});
-  final double from, to;
-  final int frame;
-  final ValueChanged<Offset> onDrag;
-  @override
-  State<_Overview> createState() => _OverviewState();
-}
-
-class _OverviewState extends State<_Overview> {
-  bool _h = false;
-  @override
-  Widget build(BuildContext context) => MouseRegion(
-    onEnter: (_) => setState(() => _h = true),
-    onExit: (_) => setState(() => _h = false),
-    child: GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onPanDown: (d) => widget.onDrag(d.localPosition),
-      onPanUpdate: (d) => widget.onDrag(d.localPosition),
-      child: SizedBox(
-        height: WtM.overview,
-        child: CustomPaint(
-          painter: WtOverviewPainter(from: widget.from, to: widget.to, frame: widget.frame, hot: _h),
-        ),
-      ),
-    ),
-  );
-}
