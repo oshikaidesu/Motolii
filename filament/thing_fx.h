@@ -138,6 +138,7 @@ static ThingFx& thing_fx_made(Stage& s, ThingFx& e) {
     for (float2 c : {float2{-1, -1}, float2{1, -1}, float2{1, 1}, float2{-1, 1}}) e.sheet->pos.push_back({c.x, c.y, 0.f}), e.sheet->nrm.push_back({0, 0, 1}), e.sheet->uv.push_back(c * 0.5f + 0.5f);
     e.sheet->idx = {0, 1, 2, 0, 2, 3};
     e.look = add(s, e.sheet, "effected.filamat");
+    e.look->setParameter("image", white_point(s), TextureSampler());   // (a picture from the start, as image.mat's sample sets it at once: Filament readies every instance before any view, the thing's own drawn first; never seen, its picture set before the stage's view)
     return e;
 }
 

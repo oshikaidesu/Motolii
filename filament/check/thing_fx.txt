@@ -11,3 +11,5 @@ say 2 fx ../../effects/halftone.wgsl
 still out/fx_1.png
 say 3 fx ../../effects/Bad TV.fs
 still out/fx_2.png
+say 3 fx ../../effects/no_such.fs
+say 2 fx ../../effects/no_such.fs

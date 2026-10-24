@@ -432,6 +432,7 @@ static bool begins(Stage& s) {
 // All the pictures of one frame, the helper pictures first (between Filament's beginFrame and endFrame). Every way
 // of drawing the stage goes through here.
 static void pictures_of(Stage& s) {
+    for (const auto& one : s.before) one();   // (the things with effects of their own, each drawn alone first, as FilamentApp draws its offscreen views before every other: thing_fx.h)
     for (Stage::Matte& m : s.mattes) {
         s.renderer->render(m.view);
         if (m.soft) m.picture->generateMipmaps(*s.engine);
@@ -439,7 +440,6 @@ static void pictures_of(Stage& s) {
     if (s.view_floor) s.renderer->render(s.view_floor);
     if (s.behindRead) s.renderer->render(s.view_behind);   // (the picture of what is behind: only once glass or the paper reads it; a whole pass of every thing's points)
     if (s.view_through) s.renderer->render(s.view_through);
-    for (const auto& one : s.before) one();   // (the things with effects of their own, each drawn alone first: thing_fx.h)
     s.renderer->render(s.view);   // (one view: everything is in the stage's own scene)
     if (s.over) s.over();
     if (s.lastly) s.lastly();
