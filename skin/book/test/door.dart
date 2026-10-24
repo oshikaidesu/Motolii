@@ -149,7 +149,7 @@ Future<void> pick(WidgetTester t, String id, String word) async {
   } else {
     await t.tap(find.descendant(of: on, matching: find.byWidgetPredicate((w) => w is Text && w.data?.toLowerCase() == word.toLowerCase()))); // (buttons say it in capitals)
   }
-  await t.pumpAndSettle();
+  await settled(t, wsOf(t));   // (the choice told to the inside, done in real time)
 }
 
 /// The changes a hand told the inside, all done (as the window shows them once it rests).

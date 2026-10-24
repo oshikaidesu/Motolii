@@ -583,7 +583,9 @@ void main() {
       ..select('$cube');
     await t.pumpAndSettle();
     final before = m.frame(cube)!;
-    await pick(t, 'v_parent', 'Rect'); // (the inside's Transform card: Parent, another thing)
+    final parent = find.byWidgetPredicate((w) => w is Chooser && w.id == 'v_parent');
+    await seen(t, parent);
+    await pick(t, 'v_parent', t.widget<Chooser>(parent).options.firstWhere((o) => o.endsWith('Rect'))); // (the inside's Transform card: Parent, another thing, named with its number: '2. Rect')
     expect(m.value(cube, 'parent', 0), rect, reason: m.trouble);
     final given = m.frame(cube)!;
     expect([given[0], given[1]], [closeTo(before[0], 1), closeTo(before[1], 1)], reason: 'it did not move when it was given a parent');
@@ -753,7 +755,7 @@ void main() {
     ws
       ..reread()
       ..select('$camera')
-      ..openDesk('Depth');
+      ..front('Camera');   // (a pane of its own since c1d8253: the camera seen from above, whatever is picked)
     await t.pumpAndSettle();
     expect(find.text('45 mm'), findsWidgets, reason: 'zoom 1 on Filament\'s 24 mm film');
     expect(find.text('On ${m.word(cube, 'name')}'), findsOneWidget, reason: 'the focus is on what lies where it looks: the document says so, not the window');
@@ -815,21 +817,23 @@ void main() {
     await _close(t);
   }, skip: !_built);
 
-  testWidgets('Edit and Animate are one truth with the inspector\'s Animate all (the inside\'s keying); a new kind picked keeps it', (t) async {
+  testWidgets('Animate all in the inspector is the inside\'s keying; a new kind picked keeps it (the top bar\'s Edit/Animate band went: f052e7e)', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final rect = m.add('shape', 'rect'), cube = m.add('solid', 'cube');
     ws
       ..reread()
       ..select('$rect');
     await t.pumpAndSettle();
-    await t.tap(find.text('Animate'));
-    await t.pumpAndSettle();
-    expect(m.keyingNow, isTrue, reason: 'Animate keys every change');
+    Finder animateAll() => find.descendant(of: find.ancestor(of: find.text('Animate all'), matching: find.byType(Row)).first, matching: find.byType(OnOff));
+    await t.tap(animateAll());
+    await settled(t, ws);
+    expect(m.keyingNow, isTrue, reason: 'Animate all keys every change');
     ws.select('$cube');
     await t.pumpAndSettle();
     expect(m.keyingNow, isTrue, reason: 'another kind picked does not turn it off');
-    await t.tap(find.text('Edit'));
-    await t.pumpAndSettle();
+    expect(t.widget<OnOff>(animateAll()).on, isTrue, reason: 'and its switch says so');
+    await t.tap(animateAll());
+    await settled(t, ws);
     expect(m.keyingNow, isFalse);
     expect(t.takeException(), isNull);
     await expectSameAfterReopen(t);
