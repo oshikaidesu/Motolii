@@ -127,19 +127,27 @@ class Ws extends ChangeNotifier {
     if (!_peeking) SchedulerBinding.instance.addPersistentFrameCallback(_peek);
     _peeking = true;
     inside.shaping;   // (read once, at the opening: what a card is made by)
-    var asking = false;
-    inside.again = () {   // (a read put off while the hand was busy: the seats look again a picture later, once)
+    var asking = false, document = false;
+    inside.again = (atMoment) {   // (a read put off while the hand was busy: looked at again a picture later, once; a value at the playhead by what shows the moment, one of the document's by all the seats)
+      document = document || !atMoment;
       if (asking) return;
       asking = true;
       SchedulerBinding.instance.addPostFrameCallback((_) {
         asking = false;
-        if (!_gone) shown();   // (the window may be closed by then)
+        if (_gone) return;   // (the window may be closed by then)
+        if (document) {
+          document = false;
+          shown();
+        } else {
+          moment.again();
+          seen.value++;
+        }
       });
       SchedulerBinding.instance.ensureVisualUpdate();
     };
     fps = inside.rate; // (a frame is the inside's: the timeline counts what a written film has)
     WsArt.comp = Size(inside.size.$1.toDouble(), inside.size.$2.toDouble());
-    _frame = (inside.now * fps).round(); // (the playhead is the inside's moment from the first)
+    moment.value = (inside.now * fps).round(); // (the playhead is the inside's moment from the first)
     reread();
   }
 
@@ -236,6 +244,7 @@ class Ws extends ChangeNotifier {
     _beat?.cancel();
     seen.dispose();
     kept.dispose();
+    moment.dispose();
     super.dispose();
   }
 
@@ -346,14 +355,15 @@ class Ws extends ChangeNotifier {
     notifyListeners();
   }
 
-  int _frame = 112;
-  int get frame => _frame;
+  /// The playhead, told on its own (Flutter's ValueNotifier): only what shows the moment listens ([WsScope.frameOf]),
+  /// the rest of the window is not built again as it moves.
+  final moment = WsMomentNow(112);
+  int get frame => moment.value;
   set frame(int f) {
     final v = f.clamp(0, duration);
-    if (v == _frame) return;
-    _frame = v;
+    if (v == moment.value) return;
+    moment.value = v;
     if (!_playing) _inside?.at(v / fps);   // (standing: the stage goes to the moment the playhead is put at)
-    notifyListeners();
   }
 
   bool _playing = false;
@@ -361,7 +371,7 @@ class Ws extends ChangeNotifier {
   set playing(bool p) {
     if (p == _playing) return;
     _playing = p;
-    if (p) _inside?.at(_frame / fps);
+    if (p) _inside?.at(frame / fps);
     _inside?.play(p);   // (the inside keeps the clock; the playhead follows its moment: timeline.dart)
     notifyListeners();
   }
@@ -526,7 +536,7 @@ class Ws extends ChangeNotifier {
 
 
   String timecode([int? f]) {
-    final v = f ?? _frame, s = v ~/ fps, fr = v % fps;
+    final v = f ?? frame, s = v ~/ fps, fr = v % fps;
     return '${(s ~/ 60).toString().padLeft(2, '0')}:${(s % 60).toString().padLeft(2, '0')}:${fr.toString().padLeft(2, '0')}';
   }
 }
@@ -535,10 +545,31 @@ class Ws extends ChangeNotifier {
 /// The font a new text is set in, a font every machine of its kind has (one place: the Create shelf and the stage's tool).
 final wsTextFont = Platform.isWindows ? 'C:/Windows/Fonts/arial.ttf' : '/System/Library/Fonts/Supplemental/Arial Unicode.ttf';
 
-class WsScope extends InheritedNotifier<Ws> {
-  const WsScope({super.key, required Ws ws, required super.child}) : super(notifier: ws);
-  static Ws of(BuildContext c) => c.dependOnInheritedWidgetOfExactType<WsScope>()!.notifier!;
-  static Ws read(BuildContext c) => c.getInheritedWidgetOfExactType<WsScope>()!.notifier!;
+class WsScope extends StatelessWidget {
+  const WsScope({super.key, required this.ws, required this.child});
+  final Ws ws;
+  final Widget child;
+  static Ws of(BuildContext c) => c.dependOnInheritedWidgetOfExactType<_WsAll>()!.notifier!;
+  static Ws read(BuildContext c) => c.getInheritedWidgetOfExactType<_WsAll>()!.notifier!;
+  /// The playhead, and built again when it moves (nothing else of the window does that).
+  static int frameOf(BuildContext c) => c.dependOnInheritedWidgetOfExactType<WsMoment>()!.notifier!.value;
+  @override
+  Widget build(BuildContext context) => _WsAll(ws: ws, child: WsMoment(notifier: ws.moment, child: child));
+}
+
+class _WsAll extends InheritedNotifier<Ws> {
+  const _WsAll({required Ws ws, required super.child}) : super(notifier: ws);
+}
+
+/// The playhead: told when it moves, and again when what was read at it was put off (the inside busy).
+class WsMomentNow extends ValueNotifier<int> {
+  WsMomentNow(super.value);
+  void again() => notifyListeners();
+}
+
+/// The playhead's own scope, under [WsScope]: [WsScope.frameOf].
+class WsMoment extends InheritedNotifier<ValueNotifier<int>> {
+  const WsMoment({super.key, required super.notifier, required super.child});
 }
 
 /// A seat's header: title on the left, [trailing] on the right, a hairline under it.

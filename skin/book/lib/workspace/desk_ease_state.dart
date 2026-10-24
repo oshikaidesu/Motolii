@@ -123,7 +123,7 @@ class DeskEaseState extends State<DeskEase> {
               Expanded(
                 child: ColoredBox(
                   color: WsT.card,
-                  child: EaseGraph(ease: ease, span: span, frame: ws.frame, onChanged: set),
+                  child: ValueListenableBuilder<int>(valueListenable: ws.moment, builder: (_, frame, _) => EaseGraph(ease: ease, span: span, frame: frame, onChanged: set))   // (only the graph follows the playhead),
                 ),
               ),
               const SizedBox(width: WsT.gutter),

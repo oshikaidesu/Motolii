@@ -69,6 +69,7 @@ class _StageState extends State<_Stage> {
 
   @override
   Widget build(BuildContext context) {
+    WsScope.frameOf(context);   // (the scene is at the playhead)
     final ws = WsScope.of(context), scene = Ws.timed('stage scene', () => ArtScene.of(ws, camera: _camera));
     return DragTarget<VoidCallback>(   // (a tile of a shelf dropped here does what its double press does: Ableton's drop of a device on a track)
       onWillAcceptWithDetails: (_) => true,

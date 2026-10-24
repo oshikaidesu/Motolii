@@ -755,8 +755,10 @@ class _InspectorSeatState extends State<_InspectorSeat> {
     final ws = WsScope.read(context);
     if (ws != _ws) {
       _ws?.removeListener(_changed);
+      _ws?.moment.removeListener(_changed);
       _ws?.seen.removeListener(_seenNow);
       _ws = ws..addListener(_changed);
+      ws.moment.addListener(_changed);   // (the playhead too: the inspector's numbers are at the moment)
       ws.seen.addListener(_seenNow);
       _seen = _now(ws);
       _frame = ws.frame;
@@ -766,6 +768,7 @@ class _InspectorSeatState extends State<_InspectorSeat> {
   @override
   void dispose() {
     _ws?.removeListener(_changed);
+    _ws?.moment.removeListener(_changed);
     _ws?.seen.removeListener(_seenNow);
     _settle?.cancel();
     _live.dispose();

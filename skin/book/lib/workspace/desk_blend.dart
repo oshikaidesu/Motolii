@@ -38,7 +38,7 @@ class _RowState extends State<_Row> {
     final ways = m == null || t == null ? const <String>[] : m.words(t, 'blend');
     final now = ways.isEmpty ? '' : (m!.word(t!, 'blend').isEmpty ? ways.first : m.word(t, 'blend'));
     final clip = ways.isNotEmpty && (m!.value(t!, 'clip', 0) ?? 0) > 0.5;
-    final opacity = ways.isEmpty ? 1.0 : (m!.value(t!, 'opacity', ws.frame / Ws.fps) ?? 1).clamp(0.0, 1.0);
+    final opacity = ways.isEmpty ? 1.0 : (m!.value(t!, 'opacity', WsScope.frameOf(context) / Ws.fps) ?? 1).clamp(0.0, 1.0);
     void say(String name, String word) {
       if (m != null && t != null) ws.after(m.later('say', thing: t, name: name, word: word));
     }

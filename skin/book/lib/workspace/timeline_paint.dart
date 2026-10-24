@@ -3,7 +3,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart' show setEquals;
-import 'package:flutter/foundation.dart' show listEquals;
+import 'package:flutter/foundation.dart' show listEquals, ValueListenable;
 import 'package:flutter/widgets.dart';
 
 import '../sets/panels/timeline_parts_parts.dart' show tpFine, tpMajor;
@@ -356,13 +356,15 @@ class WtTracksPainter extends CustomPainter {
 // ---------------------------------------------------------------- playhead
 
 class WtPlayheadPainter extends CustomPainter {
-  const WtPlayheadPainter({required this.view, required this.frame, required this.headTop});
+  const WtPlayheadPainter({required this.view, required this.frame, required this.headTop, this.moment}) : super(repaint: moment);
   final WtView view;
   final int frame;
   final double headTop;
+  final ValueListenable<int>? moment;   // (where it is now, read as it is painted: painted again as it moves, nothing built)
 
   @override
   void paint(Canvas c, Size s) {
+    final frame = moment?.value ?? this.frame;
     final x = view.x(frame).roundToDouble();
     if (x < -40 || x > s.width + 40) return;
     final p = Paint()..color = WsT.playhead;
@@ -385,7 +387,7 @@ class WtPlayheadPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(WtPlayheadPainter o) => o.view != view || o.frame != frame || o.headTop != headTop;
+  bool shouldRepaint(WtPlayheadPainter o) => o.view != view || o.frame != frame || o.headTop != headTop || o.moment != moment;
 }
 
 // ---------------------------------------------------------------- overview (the horizontal scroll strip)

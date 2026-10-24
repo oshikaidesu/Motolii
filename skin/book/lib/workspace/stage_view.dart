@@ -596,7 +596,7 @@ class _RelationMarks extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
-    listenable: WsScope.read(context),
+    listenable: Listenable.merge([WsScope.read(context), WsScope.read(context).moment]),   // (where things are at the playhead)
     builder: (context, _) {
       final ws = WsScope.read(context), m = ws.inside;
       Offset? on(String id) => scene.box(id) == null ? null : v.toScreen(WsArt.toView(scene, scene.box(id)!.c));

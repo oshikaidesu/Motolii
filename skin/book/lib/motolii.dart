@@ -651,18 +651,19 @@ class Motolii {
     _dontWait(_m, 0);
     if (_refused(_m) == 0) return into[key] = v;
     if (was.containsKey(key)) {
-      again?.call();
+      again?.call(identical(into, _atMoment));
       return was[key] as T;
     }
     if (SchedulerBinding.instance.schedulerPhase == SchedulerPhase.persistentCallbacks) {   // (a picture being built: shown empty this once, not kept, and asked again the next)
-      again?.call();
+      again?.call(identical(into, _atMoment));
       return v;
     }
     return into[key] = ask();
   }
 
-  /// What the window does when a read was put off (the hand busy): ask again a picture later.
-  void Function()? again;
+  /// What the window does when a read was put off (the hand busy): ask again a picture later. [atMoment]: a value at
+  /// the playhead (what shows the moment asks again), else one of the document's.
+  void Function(bool atMoment)? again;
 
   /// The window's thread watched: while on, a change it waits for, or a read that waits on the document over 2 ms, is
   /// kept; [broken] says each, one to a line ('' none). Turned on, what was kept is forgotten.

@@ -128,7 +128,23 @@ void main() {
     debugPrint('FRAMES a move of the hand took: median ${moves[moves.length ~/ 2].toStringAsFixed(2)} ms, 90th ${moves[(moves.length * .9).floor()].toStringAsFixed(2)} ms, most ${moves.last.toStringAsFixed(2)} ms');
     await g.up();
 
-    await traced('the playhead moved', (f) async => ws.frame = (f * 3) % (Ws.fps * 8));
+    final rebuilt = <String, int>{};   // (REBUILDS, a debug run: which widgets are built again while only the playhead moves, Flutter's own hook)
+    final roots = <String, int>{}, now = <Element>{};   // (and where each began: one built again whose parents were not)
+    if (const bool.fromEnvironment('REBUILDS')) {
+      SchedulerBinding.instance.addPersistentFrameCallback((_) => now.clear());
+      debugOnRebuildDirtyWidget = (e, _) {
+        rebuilt[e.widget.runtimeType.toString()] = (rebuilt[e.widget.runtimeType.toString()] ?? 0) + 1;
+        var under = false;
+        e.visitAncestorElements((a) => !(under = now.contains(a)));
+        if (!under) roots['${e.widget.runtimeType} in ${e.findAncestorWidgetOfExactType<Workspace>() == null ? '?' : (e.debugGetDiagnosticChain().skip(1).map((a) => a.widget.runtimeType.toString()).firstWhere((n) => !n.startsWith('_') && n != 'Builder', orElse: () => '?'))}'] = (roots['${e.widget.runtimeType} in ${e.findAncestorWidgetOfExactType<Workspace>() == null ? '?' : (e.debugGetDiagnosticChain().skip(1).map((a) => a.widget.runtimeType.toString()).firstWhere((n) => !n.startsWith('_') && n != 'Builder', orElse: () => '?'))}'] ?? 0) + 1;
+        if (e is! InheritedElement) now.add(e);   // (a scope telling what changed is no beginning: those who read it are)
+      };
+    }
+    var moved = 0;
+    await traced('the playhead moved', (f) async => (ws.frame = (f * 3) % (Ws.fps * 8), moved++));
+    debugOnRebuildDirtyWidget = null;
+    if (roots.isNotEmpty) debugPrint('REBUILT FROM a move of the playhead: ${(roots.entries.toList()..sort((a, b) => b.value.compareTo(a.value))).take(30).map((e) => '${e.key} ${(e.value / moved).toStringAsFixed(1)}').join(', ')}');
+    if (rebuilt.isNotEmpty) debugPrint('REBUILDS a move of the playhead: ${(rebuilt.entries.toList()..sort((a, b) => b.value.compareTo(a.value))).take(40).map((e) => '${e.key} ${(e.value / moved).toStringAsFixed(1)}').join(', ')}');
 
     // (a thing carried on the stage, to and fro: the inspector's numbers and drawing follow the hand by the window's peek)
     if (m.frame(int.tryParse(ws.selected ?? '') ?? -1) case final box?) {

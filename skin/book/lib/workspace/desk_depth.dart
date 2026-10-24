@@ -78,6 +78,7 @@ class DeskDepth extends StatefulWidget {
 class _DeskDepthState extends State<DeskDepth> {
   @override
   Widget build(BuildContext context) {
+    WsScope.frameOf(context);   // (the lens as it is at the playhead)
     final ws = WsScope.of(context), lens = _lenses[ws] ??= _Lens(), joined = _lensOf(ws, lens);
     void edit(void Function() f) {
       setState(f);

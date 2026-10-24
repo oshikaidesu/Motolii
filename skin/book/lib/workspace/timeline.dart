@@ -38,7 +38,9 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
     final ws = WsScope.read(context);
     if (ws != _ws) {
       _ws?.removeListener(_changed);
+      _ws?.moment.removeListener(_changed);
       _ws = ws..addListener(_changed);
+      ws.moment.addListener(_changed);
       if (ws.playing) SchedulerBinding.instance.addPostFrameCallback((_) => mounted ? _changed() : null);
     }
   }
@@ -46,6 +48,7 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
   @override
   void dispose() {
     _ws?.removeListener(_changed);
+    _ws?.moment.removeListener(_changed);
     _ticker.dispose();
     _focus.dispose();
     _markWords.dispose();
@@ -621,7 +624,7 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
                 ),
               ),
                 ),
-              _Overview(from: _scroll, to: _scroll + _visible, frame: ws.frame, onDrag: (p) => _overview(p, box.maxWidth)),
+              ValueListenableBuilder<int>(valueListenable: ws.moment, builder: (_, frame, _) => _Overview(from: _scroll, to: _scroll + _visible, frame: frame, onDrag: (p) => _overview(p, box.maxWidth))),
             ],
           ),
           Positioned(
@@ -633,7 +636,7 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
               child: RepaintBoundary(
                 child: ClipRect(
                   child: CustomPaint(
-                    painter: WtPlayheadPainter(view: v, frame: ws.frame, headTop: WtM.band + 1),
+                    painter: WtPlayheadPainter(view: v, frame: ws.frame, headTop: WtM.band + 1, moment: ws.moment),   // (painted again as the playhead moves, nothing built)
                   ),
                 ),
               ),
@@ -721,7 +724,7 @@ class _Header extends StatelessWidget {
               SizedBox(width: Shape.s(2)),
               _Btn(TpGlyph.loop, key: const ValueKey('ws-tl-loop'), on: loop, onTap: onLoop),
               SizedBox(width: Shape.s(12)),
-              Text(ws.timecode(), style: big),   // (one number, one weight: not three colours)
+              ValueListenableBuilder<int>(valueListenable: ws.moment, builder: (_, _, _) => Text(ws.timecode(), style: big)),   // (one number, one weight: not three colours)
               SizedBox(width: Shape.s(8)),
               if (roomy) ...[Text('/ ${ws.timecode(Ws.duration)}', style: T.value(Grey.g56)), SizedBox(width: Shape.s(10))],
               _Chip('${Ws.fps} fps'),
