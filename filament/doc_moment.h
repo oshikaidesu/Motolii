@@ -53,37 +53,14 @@ static void doc_moment(Doc& d, double now) {
     d.round = doc_seconds(d);
     // Who is before whom (the past repository's law of 2026-09-12: a flat thing is not in the world). Flat things take
     // no part in depth and lie by the order of the things alone; solid things that follow one another settle depth
-    // among themselves; a run of the one sort is drawn whole over the run before it. By Filament's own means: the
-    // stage's own view holds the first run, and with it the first run of solid things when flat things lie under them
-    // (a ground; Filament's channels keep the two in order there, and its depth of field, which only an opaque view
-    // takes, blurs that ground as far off); each run after those is a view of its own laid over the ones before (kit.h
-    // layer_view; flat things there are sharp). The order within a run of flat things is the blend order, and a flat
-    // thing's looks neither ask nor write depth.
-    // (the things another's effect reads as one of its images (ISF's images past the first): each drawn alone with its
-    //  effects, as a run of its own, and quiet, its picture given to the one that reads it: screen.h ScreenStack seen)
-    std::set<int> readBy;
-    for (const auto& one : lies)
-        for (const std::string& file : doc_fx_list(d, one.thing))
-            if (!doc_thor_letter(file))
-                if (DocScript* sc = doc_script_of(file))
-                    for (const ScriptKnob& k : sc->knobs)
-                        if (k.kind == "picture")
-                            if (const int other = (int)doc_number(d, one.thing, doc_screen_knob(file, k.name).c_str(), now, 0); other > 0 && other != one.thing) readBy.insert(other);
+    // among themselves; a run of the one sort lies whole over the run before it. All in the stage's own view, the runs
+    // kept in order by Filament's channels; within a run of flat things, the blend order. A flat thing's looks neither
+    // ask nor write depth.
     std::vector<int> runOf(lies.size(), -1), sorts;
-    std::vector<char> runReads;   // (whether a run reads what is under it: a blend that reads, or one with effects of its own that does)
     for (size_t i = 0; i < lies.size(); ++i) {
         if (!lies[i].on || lies[i].shown->camera || lies[i].shown->behaviour || !lies[i].shown->light.isNull()) continue;   // (a camera, a behaviour or a light is in no run: nothing of it is drawn)
-        // (a flat thing that reads what is under (doc_blend_way) is a run of its own, drawn once all under it is: the
-        //  kit copies the picture so far before it, kit.h pictures_of; never the first run, which has nothing under it)
-        // (a thing with effects of its own is a run of its own too, drawn alone and then given them: screen.h thing_effects_draw;
-        //  never the first run either, the stage's own view, which draws what is behind everything)
-        const bool effected = doc_fx_files(doc_fx_list(d, lies[i].thing)) || readBy.count(lies[i].thing) || !doc_word(d, lies[i].thing, "glow").empty();   // (a glow too: Filament's bloom on its own picture)
-        const std::string laidOn = doc_word(d, lies[i].thing, "blend");
-        const bool laysOwn = effected && !laidOn.empty() && laidOn != "normal";   // (with effects of its own, any way but normal is taken last, over what is under: screen.h)
-        const bool reads = !lies[i].solid && (doc_blend_way(laidOn) || laysOwn || doc_word(d, lies[i].thing, "fill") == "behind");   // (a blend that reads, or a fill of what is behind)
-        const int sort = effected ? 3 : lies[i].solid ? 1 : reads ? 2 : 0;
-        if (sort >= 2 && sorts.empty()) sorts.push_back(0), runReads.push_back(0);
-        if (sorts.empty() || sorts.back() != sort || sort >= 2) sorts.push_back(sort), runReads.push_back(reads);
+        const int sort = lies[i].solid ? 1 : 0;
+        if (sorts.empty() || sorts.back() != sort) sorts.push_back(sort);
         runOf[i] = (int)sorts.size() - 1;
     }
     const int base = sorts.size() > 1 && sorts[0] == 0 && sorts[1] == 1 ? 1 : 0;   // (the last run in the stage's own view: flat things under the first solid ones)
