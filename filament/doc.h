@@ -639,9 +639,9 @@ static std::string doc_screen_knob(const std::string& file, const std::string& k
 }
 // ThorVG's own effects by the value that puts each on, as a thing's list of effects names them, and their letters
 // (DrawnFx::order).
-static const char* const doc_thor_names[] = {"tint", "tritone", "shadow", "glow", "blur"};
+static const char* const doc_thor_names[] = {"tint", "tritone", "shadow", "blur"};   // (a glow is not ThorVG's: Filament's bloom on the thing's own picture, doc_moment)
 static char doc_thor_letter(const std::string& w) {
-    for (int i = 0; i < 5; ++i) if (w == doc_thor_names[i]) return "trsgb"[i];
+    for (int i = 0; i < 4; ++i) if (w == doc_thor_names[i]) return "trsb"[i];
     return 0;
 }
 static DocScript* doc_script_of(const std::string& file) {
@@ -725,7 +725,7 @@ static const DocCard doc_cards[] = {
     {"Points", "dissolve grain", "file", "~.ply"},   // (a point cloud's own: points.h)   // (the film's own compressed pictures, mosh.h)   // (After Effects' shape operator: added from the shelf)
     {"Gaussian Blur", "blur blur_direction", "blur", "+"},   // (the effects (doc_effects), each its card while it is on, as After Effects' Effect Controls)
     {"Drop Shadow", "shadow shadow_distance shadow_angle shadow_blur shadow_opacity", "shadow", "+"},
-    {"Glow", "glow glow_blur glow_opacity", "glow", "+"},
+    {"Glow", "glow_opacity", "glow", "+"},   // (how strong: Filament's bloom on its own picture, doc_moment)
     {"Duotone", "tint tint_black tint_white", "tint", "+"},
     {"Gradient Map", "tritone tritone_shadow tritone_midtone tritone_highlight", "tritone", "+"},
 };
@@ -1598,7 +1598,7 @@ static bool doc_on(Doc& d, int thing, const char* name);
 // lies first, in the old order (colours, shadow, glow, blur).
 static std::vector<std::string> doc_fx_list(Doc& d, int thing) {
     std::vector<std::string> said, all;
-    for (const std::string& w : script_files(doc_word(d, thing, "fx"))) if (w != "none") said.push_back(w);
+    for (const std::string& w : script_files(doc_word(d, thing, "fx"))) if (w != "none" && w != "glow") said.push_back(w);   // (a glow is no step of the stack: Filament's bloom, doc_moment)
     for (const char* n : doc_thor_names) if (std::find(said.begin(), said.end(), n) == said.end() && doc_on(d, thing, n)) all.push_back(n);
     for (const std::string& w : said) if (!doc_thor_letter(w) || doc_on(d, thing, w.c_str())) all.push_back(w);
     return all;
@@ -1641,11 +1641,6 @@ static bool doc_fx(Doc& d, int thing, double at, bool most, double units, DrawnF
         fx.shadow = float4{dark, (float)num("shadow_opacity", 0.5)};
         fx.fall = (float)(num("shadow_distance", 10) / units), fx.way = (float)num("shadow_angle", 135), fx.soft = (float)(num("shadow_blur", 10) / units);
     }
-    if (!doc_word(d, thing, "glow").empty()) {   // (a warm light all round it, as it comes: soft 40, all of it; ThorVG's shadow spreads narrowly)
-        float3 light{0.f};
-        hue("glow", "ffd166", &light);
-        fx.glow = float4{light, (float)num("glow_opacity", 1)}, fx.glowSoft = (float)(num("glow_blur", 40) / units);
-    }
     if ((fx.tint = (float)num("tint", 0)) > 0.f) hue("tint_black", "1b1f5c", &fx.tints[0]), hue("tint_white", "ff8a65", &fx.tints[1]);   // (a deep blue and a warm pink, as it comes)
     if ((fx.tritone = (float)num("tritone", 0)) > 0.f) hue("tritone_shadow", "1b1f5c", &fx.tones[0]), hue("tritone_midtone", "c44569", &fx.tones[1]), hue("tritone_highlight", "ffd166", &fx.tones[2]);
     {   // (in the order its list lays them; with a file among them all are laid as the camera sees it, none in its picture)
@@ -1654,7 +1649,7 @@ static bool doc_fx(Doc& d, int thing, double at, bool most, double units, DrawnF
         if (!doc_fx_files(list))
             for (const std::string& w : list) if (const char k = doc_thor_letter(w); k && n < 5) fx.order[n++] = k;
         fx.order[n] = 0;
-        if (!n && !camera) fx.blur = 0.f, fx.shadow.w = 0.f, fx.glow.w = 0.f, fx.tint = 0.f, fx.tritone = 0.f;   // (camera: as a step of its stack lays them, screen.h thing_thor)
+        if (!n && !camera) fx.blur = 0.f, fx.shadow.w = 0.f, fx.tint = 0.f, fx.tritone = 0.f;   // (camera: as a step of its stack lays them, screen.h thing_thor)
     }
     fx.reach = (float)(std::max(0.0, num("offset", 0)) + std::fabs(num("zigzag", 0)) + 0.5 * std::max(0.0, num("bloat", 0)) + std::fabs(num("warp", 0)));
     return ok;
@@ -1739,7 +1734,7 @@ static void doc_moment(Doc& d, double now) {
         //  kit copies the picture so far before it, kit.h pictures_of; never the first run, which has nothing under it)
         // (a thing with effects of its own is a run of its own too, drawn alone and then given them: screen.h thing_effects_draw;
         //  never the first run either, the stage's own view, which draws what is behind everything)
-        const bool effected = doc_fx_files(doc_fx_list(d, lies[i].thing)) || readBy.count(lies[i].thing);
+        const bool effected = doc_fx_files(doc_fx_list(d, lies[i].thing)) || readBy.count(lies[i].thing) || !doc_word(d, lies[i].thing, "glow").empty();   // (a glow too: Filament's bloom on its own picture)
         const std::string laidOn = doc_word(d, lies[i].thing, "blend");
         const bool laysOwn = effected && !laidOn.empty() && laidOn != "normal";   // (with effects of its own, any way but normal is taken last, over what is under: screen.h)
         const bool reads = !lies[i].solid && (doc_blend_way(laidOn) || laysOwn || doc_word(d, lies[i].thing, "fill") == "behind");   // (a blend that reads, or a fill of what is behind)
@@ -1771,6 +1766,16 @@ static void doc_moment(Doc& d, double now) {
         t.run = run, t.lies = (int)i;
     }
     s.layered = sorts.size() > (size_t)base + 1 ? sorts.size() - (size_t)base - 1 : 0;
+    {   // (a glow: Filament's bloom on the glowing thing's own picture (a run of its own), all of it bright or not, so strong)
+        std::vector<float> glows(s.layered, 0.f);
+        for (size_t i = 0; i < lies.size(); ++i)
+            if (runOf[i] > base && !doc_word(d, lies[i].thing, "glow").empty()) glows[(size_t)(runOf[i] - base - 1)] = (float)doc_number(d, lies[i].thing, "glow_opacity", now, 1);
+        for (size_t k = 0; k < s.layered; ++k) {
+            View::BloomOptions one = s.layers[k]->getBloomOptions();   // (each made as its run was laid, above)
+            one.enabled = glows[k] > 0.f, one.threshold = false, one.strength = std::clamp(0.35f * glows[k], 0.f, 1.f);
+            s.layers[k]->setBloomOptions(one);
+        }
+    }
     s.backdropBefore.assign(s.layered, 0);
     for (size_t k = 0; k < s.layered; ++k) s.backdropBefore[k] = sorts[k + (size_t)base + 1] == 2 || (sorts[k + (size_t)base + 1] == 3 && k + (size_t)base + 1 < runReads.size() && runReads[k + (size_t)base + 1]);
     s.layerDraw.assign(s.layered, nullptr);
@@ -1807,7 +1812,7 @@ static void doc_moment(Doc& d, double now) {
                 const auto t = d.shown.find(thing);
                 if (t != d.shown.end() && t->second.drawn && t->second.drawn->fx.overHigh > 0.f && doc_frame(d, thing, d.stage->now, frame)) {
                     const float k = (float)(frame[3] / (t->second.units * t->second.drawn->fx.overHigh));
-                    fx.blur *= k, fx.fall *= k, fx.soft *= k, fx.glowSoft *= k;
+                    fx.blur *= k, fx.fall *= k, fx.soft *= k;
                 }
                 return fx;
             };
@@ -2210,7 +2215,6 @@ static double doc_fx_room(Doc& d, int thing) {
     const auto most = [&](const char* name, double otherwise) { return std::max(doc_most(d, thing, name, otherwise), doc_number(d, thing, name, 0, otherwise)); };
     double r = 3.0 * most("blur", 0);
     if (!doc_word(d, thing, "shadow").empty()) r = std::max(r, most("shadow_distance", 10) + 3.0 * most("shadow_blur", 10));
-    if (!doc_word(d, thing, "glow").empty()) r = std::max(r, 3.0 * most("glow_blur", 40));
     return r <= 0.0 ? 0.0 : std::exp2(std::ceil(std::log2(std::max(r, 1.0))));
 }
 // The values that move a flat shape's points as it is drawn (flat.mat's vertex stage): a shape with any of them cut
@@ -2404,7 +2408,7 @@ static bool doc_match(Doc& d) {
                 // (its outline alone, in one colour: cut into triangles and drawn by Filament as the scene's other things
                 //  are, flat_mesh; with an edge, a ramp, a dash, effects, a trim or a bend made on the CPU: ThorVG's picture)
                 const std::string drawn = doc_word(d, thing, "path"), form = shape != "path" ? shape : drawn.empty() ? "M0 0" : drawn;   // (a path shape: its own path is its form; none yet: nothing)
-                const bool plain = !wave && shape != "spiral" && shape != "null" && fx.ramp.size() < 2 && fx.blur <= 0.f && fx.shadow.w <= 0.f && fx.glow.w <= 0.f && fx.tint <= 0.f && fx.tritone <= 0.f;
+                const bool plain = !wave && shape != "spiral" && shape != "null" && fx.ramp.size() < 2 && fx.blur <= 0.f && fx.shadow.w <= 0.f && fx.tint <= 0.f && fx.tritone <= 0.f;
                 if (plain)
                     made.drawn = flat_mesh(s, form.c_str(), (float)doc_number(d, thing, "wide", 0, line ? 25 : 1), mat4f{}, high, fill.empty() ? float3{0xd9, 0xd2, 0xc3} / 255.f : colour, lay,
                                            float4{edge.xyz, edge.w / high}, fx.over(high), (int)doc_number(d, thing, "points", 0, shape == "star" ? 5 : shape == "arc" ? 270 : shape == "squircle" ? 4 : shape == "cog" ? 12 : shape == "spiral" ? 3 : 6), (float)doc_number(d, thing, "inner", 0, shape == "cog" ? 0.2 : shape == "arc" ? 0.3 : shape == "spiral" ? 0.1 : shape == "chamfer" ? 0.3 : 0.5), (float)doc_number(d, thing, "round", 0, 0), doc_bends(d, thing));
@@ -3456,7 +3460,7 @@ struct DocEffect { const char* name; const char* value; const char* on; bool wor
 static const DocEffect doc_effects[] = {
     {"Gaussian Blur", "blur", "12", false, "Light"},
     {"Drop Shadow", "shadow", "000000", true, "Light", "shadow_distance=10 shadow_angle=135 shadow_blur=10 shadow_opacity=0.5"},
-    {"Glow", "glow", "ffd166", true, "Light", "glow_blur=40 glow_opacity=1"},
+    {"Glow", "glow", "on", true, "Light", "glow_opacity=1"},
     {"Trim Paths", "trim", "keys 0 1 1 0", false, "Path"},
     {"Datamosh", "mosh", "1", false, "Glitch", "mosh_at=1"},
     {"Duotone", "tint", "1", false, "Color", "tint_black:1b1f5c tint_white:ff8a65"},

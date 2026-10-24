@@ -531,7 +531,7 @@ static void thing_effects_draw(Stage& s, ScreenStack& st, View* v, const ScreenN
         if (!st.lay) { std::fprintf(stderr, "a thing's way of lying with effects is not made: %s\n", why.c_str()); return; }
     }
     const bool spill = std::any_of(st.fx.begin(), st.fx.end(), [](const ScreenFx* f) { return f->spill; });
-    const bool spreads = std::any_of(st.steps.begin(), st.steps.end(), [](char k) { return k == 'b' || k == 's' || k == 'g'; });   // (a blur, a shadow, a glow of ThorVG's: past its shape)
+    const bool spreads = std::any_of(st.steps.begin(), st.steps.end(), [](char k) { return k == 'b' || k == 's'; });   // (a blur, a shadow of ThorVG's: past its shape)
     const bool own = spreads || (!st.steps.back() && st.fx.back()->alpha);   // (the last effect lays its own see-through, or one reaches past the thing's shape)
     const float knobs[4] = {(float)(s.backdrop ? way : 0), spill ? 1.f : 0.f, own ? 1.f : 0.f, 0};
     door::knobs(s.engine, st.lay, knobs, sizeof knobs);

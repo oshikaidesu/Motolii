@@ -251,8 +251,9 @@ static void motolii_hand(Motolii* m, std::string document, int wide, int high, s
             }
         }
         // (asked something: a shell that writes reads next, so the picture waits a moment for it rather than it for a
-        //  whole picture; never more than two pictures' time since the last was drawn)
-        if (!todo.empty()) due = std::min(std::max(due, t + std::chrono::milliseconds(3)), drawn + std::chrono::milliseconds(33));
+        //  whole picture; never more than two pictures' time since the last was drawn. Not on the hand's own beat: the
+        //  shell asks on its screen's, and two beats a little apart left out a picture now and then)
+        if (!todo.empty()) due = std::min(std::max(drawn + std::chrono::milliseconds(8), t + std::chrono::milliseconds(3)), drawn + std::chrono::milliseconds(33));
         if (m->live && !m->playing && m->scale != 1.0 && !std::getenv("MOTOLII_SCALE")) stage_scale(m), m->changed = true;   // (stopped: the last picture drawn again full size, for looking)
         if (!m->live || t < due || !(m->playing || m->changed) || !ready) { last = m->playing || !ready ? last : t; continue; }   // (not ready: no other picture is begun till it is)
         if (m->playing) {   // (time goes on by the clock, and round again at the document's end)
