@@ -1,0 +1,139 @@
+// Floor hits for the octahedron. Same pixel layout as xcube_hit, so the quad pass is unchanged.
+// IOR per wavelength is Filament's solid dispersion (offsets 0.70795215 .. -0.29204785, P = dispersion/20).
+// The triangle test is three-mesh-bvh intersectsTriangle (MIT, Garrett Johnson). No cube, no dichroic coat.
+material {
+    name : xcube_octa_hit,
+    shadingModel : unlit,
+    vertexDomain : device,
+    depthWrite : false,
+    depthCulling : false,
+    culling : none,
+    doubleSided : true,
+    parameters : [
+        { type : sampler2d, name : tris, format : float, filter : nearest },
+        { type : float3, name : center },
+        { type : float3, name : dir },
+        { type : float3, name : tangent },
+        { type : float3, name : bitangent },
+        { type : float, name : extent },
+        { type : float, name : grid },
+        { type : float, name : bands },
+        { type : float, name : ior },
+        { type : float, name : dispersion },
+        { type : float, name : bounces },
+        { type : float, name : triCount },
+        { type : float, name : hitW },
+        { type : float, name : hitH }
+    ],
+    requires : [ uv0 ]
+}
+
+fragment {
+    float n_of(float nm) {
+        float offset = 0.70795215 + (nm - 486.1) / (656.3 - 486.1) * (-0.29204785 - 0.70795215);
+        float P = materialParams.dispersion / 20.0;
+        return max(1.05, materialParams.ior + P * (materialParams.ior - 1.0) * offset);
+    }
+
+    float fresnel(float cosi, float n1, float n2) {
+        float r0 = (n1 - n2) / (n1 + n2);
+        r0 *= r0;
+        float c = clamp(1.0 - cosi, 0.0, 1.0);
+        return r0 + (1.0 - r0) * c * c * c * c * c;
+    }
+
+    bool first_hit(vec3 ro, vec3 rd, inout float dist, inout vec3 faceN) {
+        int count = int(materialParams.triCount + 0.5);
+        bool found = false;
+        float best = 1e9;
+        vec3 bestN = vec3(0.0, 1.0, 0.0);
+        for (int i = 0; i < 64; i++) {
+            if (i >= count) break;
+            float u0 = (float(i * 3) + 0.5) / (materialParams.triCount * 3.0);
+            float u1 = (float(i * 3 + 1) + 0.5) / (materialParams.triCount * 3.0);
+            float u2 = (float(i * 3 + 2) + 0.5) / (materialParams.triCount * 3.0);
+            vec3 a = textureLod(materialParams_tris, vec2(u0, 0.5), 0.0).xyz;
+            vec3 b = textureLod(materialParams_tris, vec2(u1, 0.5), 0.0).xyz;
+            vec3 c = textureLod(materialParams_tris, vec2(u2, 0.5), 0.0).xyz;
+            vec3 e1 = b - a;
+            vec3 e2 = c - a;
+            vec3 ng = cross(e1, e2);
+            float det = -dot(rd, ng);
+            float inv = 1.0 / det;
+            vec3 AO = ro - a;
+            vec3 DAO = cross(AO, rd);
+            vec4 uvt;
+            uvt.x = dot(e2, DAO) * inv;
+            uvt.y = -dot(e1, DAO) * inv;
+            uvt.z = dot(AO, ng) * inv;
+            uvt.w = 1.0 - uvt.x - uvt.y;
+            vec4 test = uvt + vec4(1e-5);
+            if (all(greaterThanEqual(test, vec4(0.0))) && uvt.z < best && uvt.z > 1e-4) {
+                best = uvt.z;
+                bestN = sign(det) * normalize(ng);
+                found = true;
+            }
+        }
+        dist = best;
+        faceN = bestN;
+        return found;
+    }
+
+    vec3 walk(int ix, int iy, int path, float n) {
+        if (path != 0) return vec3(0.0);
+        float cell = (2.0 * materialParams.extent) / (materialParams.grid - 1.0);
+        float su = -materialParams.extent + float(ix) * cell;
+        float sv = -materialParams.extent + float(iy) * cell;
+        vec3 rd = materialParams.dir;
+        vec3 ro = materialParams.center - rd * 1.6 + materialParams.tangent * su + materialParams.bitangent * sv;
+        float dist;
+        vec3 N;
+        if (!first_hit(ro, rd, dist, N)) return vec3(0.0);
+        vec3 inside = refract(rd, N, 1.0 / n);
+        if (dot(inside, inside) == 0.0) return vec3(0.0);
+        float e = 1.0 - fresnel(clamp(-dot(rd, N), 0.0, 1.0), 1.0, n);
+        vec3 o = ro + rd * dist + inside * 0.001;
+        rd = inside;
+        int maxB = int(materialParams.bounces + 0.5);
+        for (int i = 0; i < 5; i++) {
+            if (i >= maxB) break;
+            if (!first_hit(o, rd, dist, N)) break;
+            vec3 hit = o + rd * max(dist - 0.001, 0.0);
+            vec3 outDir = refract(rd, N, n);
+            if (dot(outDir, outDir) != 0.0) {
+                e *= 1.0 - fresnel(clamp(-dot(rd, N), 0.0, 1.0), n, 1.0);
+                if (outDir.y < -0.001) {
+                    float t = -hit.y / outDir.y;
+                    if (t > 0.002 && t < 6.0) {
+                        vec3 p = hit + outDir * t;
+                        return vec3(p.x, p.z, e);
+                    }
+                }
+                return vec3(0.0);
+            }
+            rd = reflect(rd, N);
+            o = hit + rd * 0.01;
+        }
+        return vec3(0.0);
+    }
+
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        int w = int(materialParams.hitW);
+        int h = int(materialParams.hitH);
+        int x = int(getUV0().x * materialParams.hitW);
+        int y = int(getUV0().y * materialParams.hitH);
+        if (x >= w) x = w - 1;
+        if (y >= h) y = h - 1;
+        if (x < 0) x = 0;
+        if (y < 0) y = 0;
+        int grid = int(materialParams.grid);
+        int gx = x - (x / grid) * grid;
+        int band = x / grid;
+        int gy = y - (y / grid) * grid;
+        int path = y / grid;
+        float nm = 450.0 + 220.0 * ((float(band) + 0.5) / materialParams.bands);
+        vec3 hit = walk(gx, gy, path, n_of(nm));
+        material.baseColor = vec4(hit, hit.z > 0.0 ? 1.0 : 0.0);
+    }
+}
