@@ -43,7 +43,7 @@ class _TabHandsState extends State<TabHands> {
       if (int.tryParse(l.id) case final t? when ws.inside != null && !const {'behaviour', 'camera', 'light'}.contains(ws.inside!.word(t, 'kind'))) (t, l.tone, l.name, ws.inside!.word(t, 'kind') == 'text'),
   ];
 
-  Offset _seat(Motolii m, int t, double now) => _screen(m.value(t, 'x', now) ?? 0, m.value(t, 'y', now) ?? 0);
+  Offset _seat(Motolii m, int t, double now) => _screen(wsValue(m, t, 'x', now, 0), wsValue(m, t, 'y', now, 0));
 
   Rect _box(Motolii m, WsMove mv) {
     var r = Rect.zero;
@@ -131,11 +131,11 @@ class _TabHandsState extends State<TabHands> {
         wsMoveSet(ws, mv.by, 'lag', math.max(0, (_laneT(s.dx) - mv.start) / (mv.who.length - 1)));
       case _Grip.move:
         var x = e('x') + d.dx / _k, y = e('y') - d.dy / _k;
-        final now = mv.away, seats = [for (final t in mv.who) (m.value(t, 'x', now) ?? 0, m.value(t, 'y', now) ?? 0)];
+        final now = mv.away, seats = [for (final t in mv.who) (wsValue(m, t, 'x', now, 0), wsValue(m, t, 'y', now, 0))];
         final cx = seats.fold(0.0, (a, p) => a + p.$1) / seats.length, cy = seats.fold(0.0, (a, p) => a + p.$2) / seats.length;
         for (final (t, _, _, _) in _things(ws)) {   // (laid on a thing that is not in the group: gathered into it)
           if (mv.who.contains(t)) continue;
-          final tx = m.value(t, 'x', now) ?? 0, ty = m.value(t, 'y', now) ?? 0;
+          final tx = wsValue(m, t, 'x', now, 0), ty = wsValue(m, t, 'y', now, 0);
           if (((cx + x - tx) * _k).abs() < 10 && ((cy + y - ty) * _k).abs() < 10) (x, y) = (tx - cx, ty - cy);
         }
         wsMoveSet(ws, mv.by, 'x', x);

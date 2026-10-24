@@ -50,7 +50,7 @@ class TabDrawState extends State<TabDraw> {
       if (int.tryParse(l.id) case final t? when ws.inside != null && !const {'behaviour', 'camera', 'light'}.contains(ws.inside!.word(t, 'kind'))) (t, l.tone, l.name, ws.inside!.word(t, 'kind') == 'text'),
   ];
 
-  Offset _seat(Motolii m, int t, double at) => _screen(m.value(t, 'x', at) ?? 0, m.value(t, 'y', at) ?? 0);
+  Offset _seat(Motolii m, int t, double at) => _screen(wsValue(m, t, 'x', at, 0), wsValue(m, t, 'y', at, 0));
 
   // ---- the hand
 
@@ -160,9 +160,9 @@ class TabDrawState extends State<TabDraw> {
     }
     wsMoveHold(ws, true);
     if (onto != null) {
-      final cx = mv.who.fold(0.0, (s, t) => s + (m.value(t, 'x', at) ?? 0)) / mv.who.length, cy = mv.who.fold(0.0, (s, t) => s + (m.value(t, 'y', at) ?? 0)) / mv.who.length;
-      wsMoveSet(ws, mv.by, 'x', (m.value(onto, 'x', at) ?? 0) - cx);
-      wsMoveSet(ws, mv.by, 'y', (m.value(onto, 'y', at) ?? 0) - cy);
+      final cx = mv.who.fold(0.0, (s, t) => s + wsValue(m, t, 'x', at, 0)) / mv.who.length, cy = mv.who.fold(0.0, (s, t) => s + wsValue(m, t, 'y', at, 0)) / mv.who.length;
+      wsMoveSet(ws, mv.by, 'x', wsValue(m, onto, 'x', at, 0) - cx);
+      wsMoveSet(ws, mv.by, 'y', wsValue(m, onto, 'y', at, 0) - cy);
       wsMoveSet(ws, mv.by, 'spread', 0);
     } else {
       wsMoveSet(ws, mv.by, 'x', dir.dx / _k);

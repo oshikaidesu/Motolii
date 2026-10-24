@@ -59,7 +59,7 @@ class _TabPosesState extends State<TabPoses> {
       if (int.tryParse(l.id) case final t? when ws.inside != null && !const {'behaviour', 'camera', 'light'}.contains(ws.inside!.word(t, 'kind'))) (t, l.tone, ws.inside!.word(t, 'kind') == 'text'),
   ];
 
-  Offset _seat(Motolii m, int t, double now) => _screen(m.value(t, 'x', now) ?? 0, m.value(t, 'y', now) ?? 0);
+  Offset _seat(Motolii m, int t, double now) => _screen(wsValue(m, t, 'x', now, 0), wsValue(m, t, 'y', now, 0));
 
   double _easeOf(WsMove mv) => _ease ?? (mv.over > 0 ? 1 + mv.over : mv.out);   // (0 even .. 1 slowing hard .. 1.6 past the seat)
 
@@ -330,7 +330,7 @@ class _Paint extends CustomPainter {
     final now = ws.frame / Ws.fps;
     for (final (t, tone, text) in h._things(ws)) {
       final member = mv?.who.contains(t) ?? false;
-      final p = (x: 0.0, y: 0.0, size: m.value(t, 'size', now) ?? 1, opacity: 1.0, flip: 0.0);
+      final p = (x: 0.0, y: 0.0, size: wsValue(m, t, 'size', now, 1), opacity: 1.0, flip: 0.0);
       _thing(c, h._seat(m, t, now), 1, text, p, tone, member ? ink : null);
     }
     if (h._grip == _Grip.sweep) {

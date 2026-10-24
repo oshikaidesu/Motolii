@@ -125,6 +125,7 @@ void wsMoveEase(Ws ws, WsMove mv, double out, double over) {
   if (!m.isNow(at)) {   // (not the picture's moment)
     if (!identical(_posesOf, m.documentNow)) {
       _poses.clear();
+      _values.clear();
       _posesOf = m.documentNow;
     }
     if (!_poses.containsKey((m, t, at))) {
@@ -144,6 +145,31 @@ void wsMoveEase(Ws ws, WsMove mv, double out, double over) {
 final _poses = <(Motolii, int, double), ({double x, double y, double size, double opacity, double flip})?>{};
 Object? _posesOf;
 final wsPosesTold = ValueNotifier<int>(0);
+
+/// A thing's own value at a moment, as the document says it (its seat, not where a relation shows it): from the copies
+/// when they hold it, another moment asked ([Motolii.valuesAt]) and kept as [wsShows] keeps where it shows.
+double wsValue(Motolii m, int t, String n, double at, double or) {
+  if (!m.moving(t).contains(n) || at == 0 || m.keyMoments(t, n).any((k) => (k - at).abs() < .5 / m.rate)) return m.value(t, n, at) ?? or;   // (the document's copy holds it: as it stays, at its first moment, at a key)
+  if (m.isNow(at)) {
+    if (m.value(t, n, at) case final v?) return v;   // (the moment's copy: a thing the window watches)
+  }
+  if (!identical(_posesOf, m.documentNow)) {
+    _poses.clear();
+    _values.clear();
+    _posesOf = m.documentNow;
+  }
+  if (!_values.containsKey((m, t, n, at))) {
+    _values[(m, t, n, at)] = null;
+    final of = _posesOf;
+    m.valuesAt([(t, n, at)]).then((v) {
+      if (!identical(of, _posesOf)) return;
+      _values[(m, t, n, at)] = v.single;
+      wsPosesTold.value++;
+    });
+  }
+  return _values[(m, t, n, at)] ?? or;   // (as it is until told)
+}
+final _values = <(Motolii, int, String, double), double?>{};
 
 /// The same at any moment: a question of the inside (skin/BRIDGE.md Q), answered later.
 Future<({double x, double y, double size, double opacity, double flip})> wsShowsAt(Motolii m, int t, double at) async {
