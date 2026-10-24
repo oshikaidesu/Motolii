@@ -136,6 +136,7 @@ static std::string isf_wgsl(const std::string& text, const std::string& name, st
     glslang::TShader sh(EShLangFragment);
     const char* src = glsl.c_str();
     sh.setStrings(&src, 1);
+    sh.setPreamble("#define GL_ES 1\n");   // (WebGPU is GLSL ES's side, as WebGL is, where GL_ES is said by the compiler itself: an ISF file's own #ifndef GL_ES parts left out, as Vidvox's ISF-JS-Renderer runs them)
     sh.setEnvInput(glslang::EShSourceGlsl, EShLangFragment, glslang::EShClientVulkan, 100);
     sh.setEnvClient(glslang::EShClientVulkan, glslang::EShTargetVulkan_1_1);
     sh.setEnvTarget(glslang::EShTargetSpv, glslang::EShTargetSpv_1_3);
