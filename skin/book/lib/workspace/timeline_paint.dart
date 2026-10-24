@@ -295,7 +295,9 @@ class WtTracksPainter extends CustomPainter {
         final x = xa + (xb - xa) * i / (st.shape.length - 1), y = base - st.shape[i].clamp(-.5, 1.5) * h;
         i == 0 ? line.moveTo(x, y) : line.lineTo(x, y);
       }
-      c.drawPath(line, Paint()..style = PaintingStyle.stroke..strokeWidth = 1.3..strokeJoin = StrokeJoin.round..color = WsT.keyDot.withValues(alpha: r.dim ? .25 : .7));
+      final area = Path.from(line)..lineTo(xb, base)..lineTo(xa, base)..close();   // (the shape under it, faint: read at a glance)
+      c.drawPath(area, Paint()..color = ink.withValues(alpha: r.dim ? .05 : .14));
+      c.drawPath(line, Paint()..style = PaintingStyle.stroke..strokeWidth = 1.6..strokeJoin = StrokeJoin.round..color = ink.withValues(alpha: r.dim ? .35 : .9));
     }
     for (final k in r.keys) {
       final x = view.x(k);

@@ -10,26 +10,65 @@ import 'package:lab_book/workspace/desk_ease_span_strip.dart';
 import 'package:lab_book/workspace/ws.dart';
 
 class DeskEaseState extends State<DeskEase> {
-  // Joined: while a hand is down the ease is only shown here; when it lets go it is told to the document once.
-  bool _down = false;
-  Ease? _pending;
+  // Joined: while a hand is down the ease is told to the document as it goes (the stage and the bars follow), the newest
+  // one at a time (one still on its way: the next waits, those between are skipped); all of it one step of undo.
+  bool _down = false, _open = false, _going = false;
+  Ease? _pending, _waiting;
   String? _trouble;
 
-  void _settle(Ws ws, EaseSpan? span) {
-    final e = _pending;
-    _pending = null;
-    if (e == null || span == null) return;
-    final m = ws.inside!, to = said(e);
-    // (every picked key's stretch, on whatever bar it is: each value keyed there; one step. A last key has no stretch
-    // after it: the one that ends at it, as the desk shows)
-    final all = [
+  // Every picked key's stretch, on whatever bar it is: each value keyed there. A last key has no stretch after it: the
+  // one that ends at it, as the desk shows.
+  List<(int, String, double)> _stretches(Ws ws) => [
       for (final k in ws.keys)
         if (ws.layers.where((l) => l.id == k.layer).firstOrNull case final l?)
           for (final at in keysAt(ws, (layer: l, from: l.keys.any((f) => f > k.frame) ? k.frame : (l.keys.where((f) => f < k.frame).fold<int?>(null, (a, f) => a == null || f > a ? f : a) ?? k.frame), to: k.frame, picked: k.frame)).entries)
             (int.parse(l.id), at.key, at.value),
-    ];
-    // (as it already goes, each: nothing is told, so a way's own numbers that have no seat here are not written over)
-    final told = [for (final (t, name, at) in all) if (said(heard(m.wayOf(t, name, at))) != to) (t, name, at)];
+      ];
+
+  // (while the hand is down: the newest ease told, one at a time; the step opened at the first)
+  void _live(Ws ws, Ease e) {
+    final m = ws.inside!;
+    if (_going) {
+      _waiting = e;
+      return;
+    }
+    final all = _stretches(ws);
+    if (all.isEmpty) return;
+    if (!_open) {
+      m.later('together', number: 1);
+      _open = true;
+    }
+    _going = true;
+    var last = 0;
+    for (final (t, name, at) in all) {
+      last = m.later('way', thing: t, name: name, number: at, word: said(e));
+    }
+    ws.after(last, (_, _) {
+      _going = false;
+      final next = _waiting;
+      _waiting = null;
+      if (next != null) _live(ws, next);
+    });
+  }
+
+  void _settle(Ws ws, EaseSpan? span) {
+    final e = _pending;
+    _pending = null;
+    _waiting = null;
+    if (e == null || span == null) return;
+    final m = ws.inside!, to = said(e);
+    final all = _stretches(ws);
+    // (as it already goes, each: nothing is told, so a way's own numbers that have no seat here are not written over;
+    //  told as the hand went: told once more as it let go, and the step it opened closed)
+    final told = [for (final (t, name, at) in all) if (_open || said(heard(m.wayOf(t, name, at))) != to) (t, name, at)];
+    if (_open) {
+      _open = false;
+      for (final (t, name, at) in told) {
+        m.later('way', thing: t, name: name, number: at, word: to);
+      }
+      ws.after(m.later('together'), (done, why) => mounted ? setState(() => _trouble = done ? null : why) : null);
+      return;
+    }
     if (told.isEmpty) return setState(() => _trouble = all.isEmpty ? 'No key where the stretch begins' : null);
     m.later('together', number: 1);   // (one step, without waiting)
     for (final (t, name, at) in told) {
@@ -50,7 +89,7 @@ class DeskEaseState extends State<DeskEase> {
       }
       void set(Ease e) {
         setState(() => _pending = e);
-        if (!_down) _settle(ws, span);
+        _down ? _live(ws, e) : _settle(ws, span);
       }
 
       return Listener(
