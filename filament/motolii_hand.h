@@ -32,7 +32,7 @@ struct Motolii {
     int pick = 0, hover = 0;   // the thing picked in the window and the one under its hand: marked on the desk (motolii_pick)
     std::set<int> watched;     // the things the window shows the moving values of (later "watch", Anthem's subscription): in the moment's picture
     std::map<const void*, Heard> heard;   // the things' sound heard as the live stage plays (heard.h)
-    std::string trouble, listed, word;
+    std::string trouble, listed;
     std::thread hand;
     std::mutex asked_lock;
     std::condition_variable asked_now;
@@ -376,6 +376,9 @@ void motolii_close(Motolii* m) {
     if (m->beat) m->beat->stop();
     if (m->d) sqlite3_close(m->d->file);
 }
+// A word a call answers with, kept till that same thread asks again: each asker its own (the hand, the window, a question
+// on another isolate), as motolii_kept keeps its runs; one kept for all was written over while another still read it.
+static std::string& said_word() { static thread_local std::string w; return w; }
 const char* motolii_trouble(Motolii* m) { return m->trouble.empty() ? m->d->trouble.c_str() : m->trouble.c_str(); }
 static int told(Motolii* m, bool ok, const char* otherwise = nullptr) { if (!ok && otherwise) m->trouble = otherwise; return ok ? 1 : 0; }
 static Doc& doc(Motolii* m) { m->trouble.clear(); m->d->trouble.clear(); return *m->d; }
@@ -439,14 +442,14 @@ const char* motolii_heard(Motolii* m) {
             std::snprintf(line, sizeof line, "%s %.3f %.3f %d\n", h.file.c_str(), h.wanted, is < 0 ? -1.0 : (double)is / GST_SECOND, h.on ? 1 : 0);
             all += line;
         }
-        return (m->word = all).c_str();
+        return (said_word() = all).c_str();
     });
 }
 const char* motolii_shaping(Motolii* m) {
     return by_look(m, [=] {
         std::string all = "kind script shape file split name";   // (and its name: the inspector says it)
         for (const DocCard& c : doc_cards) if (c.when && !doc_among(all, c.when)) all += std::string(" ") + c.when;
-        return (m->word = all).c_str();
+        return (said_word() = all).c_str();
     });
 }
 const char* motolii_spent(Motolii* m) {
@@ -460,21 +463,21 @@ const char* motolii_spent(Motolii* m) {
             doors.push_back({cost.second, one});
         }
         std::sort(doors.rbegin(), doors.rend());
-        m->word = line;
-        { char parts[300]; std::snprintf(parts, sizeof parts, "; the hand's round: files %.0f ms (most %.1f), changes %.0f (%.1f) of which done %.0f (%.1f), telling %.0f (%.1f), GPU asked %.0f (%.1f), ahead %.0f (%.1f), moment and draw %.0f (%.1f)", m->part_ms[0], m->part_most[0], m->part_ms[1], m->part_most[1], m->part_ms[6], m->part_most[6], m->part_ms[2], m->part_most[2], m->part_ms[3], m->part_most[3], m->part_ms[4], m->part_most[4], m->part_ms[5], m->part_most[5]); m->word += parts; for (double& x : m->part_most) x = 0; }
+        said_word() = line;
+        { char parts[300]; std::snprintf(parts, sizeof parts, "; the hand's round: files %.0f ms (most %.1f), changes %.0f (%.1f) of which done %.0f (%.1f), telling %.0f (%.1f), GPU asked %.0f (%.1f), ahead %.0f (%.1f), moment and draw %.0f (%.1f)", m->part_ms[0], m->part_most[0], m->part_ms[1], m->part_most[1], m->part_ms[6], m->part_most[6], m->part_ms[2], m->part_most[2], m->part_ms[3], m->part_most[3], m->part_ms[4], m->part_most[4], m->part_ms[5], m->part_most[5]); said_word() += parts; for (double& x : m->part_most) x = 0; }
         char waits[260];
         std::snprintf(waits, sizeof waits, "; reads waited for the document %.0f ms, the longest %.1f ms, %ld over 2 ms; the GPU took %.1f ms a picture, at most %.1f, of %.0f it may", 1e3 * m->read_waited, 1e3 * m->read_waited_most, m->read_waits, m->gpu_ms, m->gpu_most, m->budget);
-        m->word += waits;
+        said_word() += waits;
         {   // (what the window's own thread asked, the most waited on first)
             std::lock_guard<std::mutex> hold(m->asked_lock);
             std::vector<std::pair<std::string, std::array<double, 4>>> all(m->window.begin(), m->window.end());
             std::sort(all.begin(), all.end(), [](const auto& a, const auto& b) { return a.second[1] + a.second[3] > b.second[1] + b.second[3]; });
-            m->word += "; FROM THE WINDOW";
-            for (const auto& [name, w] : all) { char one[200]; std::snprintf(one, sizeof one, "; %s %.0f calls, waited %.1f ms (most %.2f), took %.1f ms", name.c_str(), w[0], 1e3 * w[1], 1e3 * w[2], 1e3 * w[3]); m->word += one; }
+            said_word() += "; FROM THE WINDOW";
+            for (const auto& [name, w] : all) { char one[200]; std::snprintf(one, sizeof one, "; %s %.0f calls, waited %.1f ms (most %.2f), took %.1f ms", name.c_str(), w[0], 1e3 * w[1], 1e3 * w[2], 1e3 * w[3]); said_word() += one; }
         }
-        { std::lock_guard<std::mutex> hold(m->asked_lock); for (const auto& [name, r] : m->rounds) if (r.second) { char one[160]; std::snprintf(one, sizeof one, "; %s waited for the hand up to %.1f ms, %ld over 4 ms", name.c_str(), 1e3 * r.first, r.second); m->word += one; } }
-        for (size_t i = 0; i < doors.size() && i < 20; ++i) m->word += "; " + doors[i].second;   // (the dearest calls)
-        return m->word.c_str();
+        { std::lock_guard<std::mutex> hold(m->asked_lock); for (const auto& [name, r] : m->rounds) if (r.second) { char one[160]; std::snprintf(one, sizeof one, "; %s waited for the hand up to %.1f ms, %ld over 4 ms", name.c_str(), 1e3 * r.first, r.second); said_word() += one; } }
+        for (size_t i = 0; i < doors.size() && i < 20; ++i) said_word() += "; " + doors[i].second;   // (the dearest calls)
+        return said_word().c_str();
     });
 }
 int motolii_play(Motolii* m, int playing) { return posted(m, "play", [m, playing] { m->playing = playing != 0; }); }

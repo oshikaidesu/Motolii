@@ -29,7 +29,7 @@ int motolii_shows(Motolii* m, int thing, const char* name, double at, double* is
 int motolii_things(Motolii* m, int* things, int room) {
     return by_look(m, [=] { const std::vector<int> all = doc_things(*m->d); for (int i = 0; i < room && i < (int)all.size(); ++i) things[i] = all[(size_t)i]; return (int)all.size(); });
 }
-const char* motolii_word(Motolii* m, int thing, const char* name) { return by_look(m, [=] { return (m->word = !strcmp(name, "name") ? doc_name(*m->d, thing) : doc_word(*m->d, thing, name)).c_str(); }); }
+const char* motolii_word(Motolii* m, int thing, const char* name) { return by_look(m, [=] { return (said_word() = !strcmp(name, "name") ? doc_name(*m->d, thing) : doc_word(*m->d, thing, name)).c_str(); }); }
 double motolii_lasts(Motolii* m, int thing) { return by_look(m, [=] { return doc_lasts(*m->d, thing); }); }
 int motolii_key_moments(Motolii* m, int thing, const char* name, double* at, int room) {
     return by_look(m, [=] { const std::vector<double> all = doc_key_moments(*m->d, thing, name); for (int i = 0; i < room && i < (int)all.size(); ++i) at[i] = all[(size_t)i]; return (int)all.size(); });
@@ -146,8 +146,8 @@ int motolii_strikes(Motolii* m, int thing, double rise, int own, double* at, int
 }
 int motolii_mark(Motolii* m, double at, const char* word) { return by_hand(m, [=] { return changes(m, (int)doc_mark(doc(m), at, word)); }); }
 int motolii_guide(Motolii* m, const char* axis, double at, int on) { return by_hand(m, [=] { return changes(m, (int)doc_guide(doc(m), axis, at, on != 0)); }); }
-const char* motolii_guides(Motolii* m) { return by_look(m, [=] { return (m->word = doc_guides(*m->d)).c_str(); }); }
-const char* motolii_marks(Motolii* m) { return by_look(m, [=] { return (m->word = doc_marks(*m->d)).c_str(); }); }
+const char* motolii_guides(Motolii* m) { return by_look(m, [=] { return (said_word() = doc_guides(*m->d)).c_str(); }); }
+const char* motolii_marks(Motolii* m) { return by_look(m, [=] { return (said_word() = doc_marks(*m->d)).c_str(); }); }
 int motolii_fits(Motolii* m) {
     return by_look(m, [=] {   // (a read: the document's size against the stage's)
         int wide = m->s->w, high = m->s->h;
@@ -162,7 +162,7 @@ int motolii_stay(Motolii* m, int thing, const char* name, double at) { return by
 int motolii_keyed(Motolii* m, int thing, const char* name, double at) {
     return by_look(m, [=] { return doc_keyed(*m->d, thing, name, at); });
 }
-const char* motolii_words(Motolii* m, int thing, const char* name) { return by_look(m, [=] { return (m->word = doc_words(*m->d, thing, name)).c_str(); }); }
+const char* motolii_words(Motolii* m, int thing, const char* name) { return by_look(m, [=] { return (said_word() = doc_words(*m->d, thing, name)).c_str(); }); }
 // Every moment a key of any of a thing's values that take keys stands at, each once and in time: a timeline's bar
 // marks in one call (asked a value at a time, a document of fifteen recipes was hundreds of calls each reading).
 int motolii_thing_key_moments(Motolii* m, int thing, double* at, int room) {
@@ -175,23 +175,23 @@ int motolii_thing_key_moments(Motolii* m, int thing, double* at, int room) {
         return i;
     });
 }
-const char* motolii_moving(Motolii* m, int thing) { return by_look(m, [=] { return (m->word = doc_moving(*m->d, thing)).c_str(); }); }
-const char* motolii_values(Motolii* m, int thing) { return by_look(m, [=] { return (m->word = doc_has(*m->d, thing)).c_str(); }); }
+const char* motolii_moving(Motolii* m, int thing) { return by_look(m, [=] { return (said_word() = doc_moving(*m->d, thing)).c_str(); }); }
+const char* motolii_values(Motolii* m, int thing) { return by_look(m, [=] { return (said_word() = doc_has(*m->d, thing)).c_str(); }); }
 int motolii_range(Motolii* m, int thing, const char* name, double* low, double* high) { return by_look(m, [=] { return (int)doc_range(*m->d, thing, name, low, high); }); }
-const char* motolii_recipes(Motolii* m) { return by_look(m, [=] { return (m->word = doc_recipe_names()).c_str(); }); }
-const char* motolii_effects(Motolii* m) { return by_look(m, [=] { return (m->word = doc_folder_names("effects", ".wgsl .fs .mjs")).c_str(); }); }
-const char* motolii_animators(Motolii* m) { return by_look(m, [=] { return (m->word = doc_folder_names("animators", ".js")).c_str(); }); }
+const char* motolii_recipes(Motolii* m) { return by_look(m, [=] { return (said_word() = doc_recipe_names()).c_str(); }); }
+const char* motolii_effects(Motolii* m) { return by_look(m, [=] { return (said_word() = doc_folder_names("effects", ".wgsl .fs .mjs")).c_str(); }); }
+const char* motolii_animators(Motolii* m) { return by_look(m, [=] { return (said_word() = doc_folder_names("animators", ".js")).c_str(); }); }
 int motolii_make(Motolii* m, const char* recipe) { return by_hand(m, [=] { return changes(m, doc_make(doc(m), recipe)); }); }
 const char* motolii_shown(Motolii* m, const char* name) {
     return by_look(m, [=] {
         const DocShown* s = doc_shown_of(name);
         char line[512] = "";
         if (s) std::snprintf(line, sizeof line, "%s\t%s\t%s\t%g\t%g\t%s", s->look, s->unit, s->label, s->low, s->high, s->fold ? s->fold : "");
-        return (m->word = line).c_str();
+        return (said_word() = line).c_str();
     });
 }
-const char* motolii_cards(Motolii* m, int thing) { return by_look(m, [=] { return (m->word = doc_cards_of(*m->d, thing)).c_str(); }); }
-const char* motolii_fx_titles(Motolii* m, int thing) { return by_look(m, [=] { return (m->word = doc_fx_titles(*m->d, thing)).c_str(); }); }
+const char* motolii_cards(Motolii* m, int thing) { return by_look(m, [=] { return (said_word() = doc_cards_of(*m->d, thing)).c_str(); }); }
+const char* motolii_fx_titles(Motolii* m, int thing) { return by_look(m, [=] { return (said_word() = doc_fx_titles(*m->d, thing)).c_str(); }); }
 const char* motolii_kind_of(const char* file) { return doc_kind_of(file); }
 int motolii_sets(const char* font, const char* words) { return type_sets(font, words) ? 1 : 0; }
 // The names of the ways a stretch may go (the nine kinds, then the ways defined in this document), with spaces between;
@@ -211,12 +211,12 @@ const char* motolii_way_numbers(Motolii*, const char* kind) {   // (the kinds ar
 }
 const char* motolii_way_names(Motolii* m) {
     return by_look(m, [=] {
-        m->word.clear();
-        for (const auto& kind : interp_kinds) m->word += std::string(m->word.empty() ? "" : " ") + kind.name;
+        said_word().clear();
+        for (const auto& kind : interp_kinds) said_word() += std::string(said_word().empty() ? "" : " ") + kind.name;
         std::set<std::string> here;
-        doc_rows(*m->d, sqlite3_mprintf("select name from way order by name"), [&](sqlite3_stmt* row) { here.insert((const char*)sqlite3_column_text(row, 0)); m->word += std::string(" ") + (const char*)sqlite3_column_text(row, 0); });
-        for (const auto& [name, goes] : doc_own_ways()) if (!here.count(name)) m->word += " " + name;   // (then the maker's own, not yet in this document)
-        return m->word.c_str();
+        doc_rows(*m->d, sqlite3_mprintf("select name from way order by name"), [&](sqlite3_stmt* row) { here.insert((const char*)sqlite3_column_text(row, 0)); said_word() += std::string(" ") + (const char*)sqlite3_column_text(row, 0); });
+        for (const auto& [name, goes] : doc_own_ways()) if (!here.count(name)) said_word() += " " + name;   // (then the maker's own, not yet in this document)
+        return said_word().c_str();
     });
 }
 double motolii_way_at(Motolii* m, const char* way, double u) {
@@ -317,10 +317,10 @@ const char* motolii_thing_stretches(Motolii* m, int thing) {
             std::snprintf(line, sizeof line, "%.17g\t%.17g\t", sqlite3_column_double(row, 0), sqlite3_column_double(row, 1));
             all += line + way + "\n";
         });
-        return (m->word = all).c_str();
+        return (said_word() = all).c_str();
     });
 }
-const char* motolii_way_of(Motolii* m, int thing, const char* name, double at) { return by_look(m, [=] { return (m->word = doc_way_of(*m->d, thing, name, at)).c_str(); }); }
+const char* motolii_way_of(Motolii* m, int thing, const char* name, double at) { return by_look(m, [=] { return (said_word() = doc_way_of(*m->d, thing, name, at)).c_str(); }); }
 // How many points of the picture one unit of the stage is, where things stand when their z is 0.
 static double point_of(Motolii* m) {   // (points of the picture to one unit of the stage, at its middle, as the stage's own eye sees it:
     // 6 units off with 30 degrees up and down (motolii_open): the document's scale, whatever camera the stage looks through now)
@@ -355,7 +355,7 @@ const char* motolii_reading(Motolii* m, int thing, const char* name) {
         }
         char line[64];
         std::snprintf(line, sizeof line, "%.17g %.17g", times, from);
-        return (m->word = line).c_str();
+        return (said_word() = line).c_str();
     });
 }
 // A change asked without waiting (a shell's hand that must not stand still while the hand works it): queued in order
