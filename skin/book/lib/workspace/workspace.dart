@@ -492,7 +492,7 @@ final _cardsMade = <int, (String, List<Fx>, Motolii)>{};
 int? _holding; // (the thing a hand on the inspector holds now: held once, carried at every step, let go when it lets go)
 
 List<Fx> _makeCards(Ws ws, Motolii m, int t) {
-  final at = ws.frame / Ws.fps;
+  final at = _drawn(ws);   // (as the picture shown has it)
   String field(String n) {
     final sh = m.shown(n), label = '@label(${sh?.label ?? n.replaceAll('_', ' ').replaceRange(0, 1, n[0].toUpperCase())})';
     if (sh?.look == 'thing') {
@@ -784,7 +784,7 @@ class _InspectorSeatState extends State<_InspectorSeat> {
         onRoute: ws.route,
         onPath: int.tryParse(l?.id ?? '') == null
             ? null
-            : (to, n, copy) => m.path(int.parse(l!.id), copy: copy, to: to, n: n)?.indexed.map((e) => e.$1 % 4 < 2 ? e.$2 * m.point : e.$2).toList(), // (where it is in points of the picture, as the card's numbers are) // (the wave card's preview asks once, then plays by itself)
+            : (to, n, copy) => m.path(int.parse(l!.id), copy: copy, to: to, n: n).then((p) => p?.indexed.map((e) => e.$1 % 4 < 2 ? e.$2 * m.point : e.$2).toList()), // (where it is in points of the picture, as the card's numbers are) // (the wave card's preview asks once, then plays by itself)
         onAim: (at) => ws.aim = at.startsWith('v_') ? at.substring(2) : null, // (a colour link of a card is aimed at that value)
         movable: int.tryParse(l?.id ?? '') == null ? const [] : m.fxTitles(int.parse(l!.id)), // (its effects, up or down their stack)
         onCardMove: int.tryParse(l?.id ?? '') == null ? null : (title, by) => ws.after(m.later('fx_move', thing: int.parse(l!.id), word: title, number: by.toDouble())),

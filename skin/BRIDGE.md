@@ -70,6 +70,16 @@ Thermion（描けは前が終わるまで捨てる）。調べた記録は `rese
 - コマの写し：時刻、物ごとの枠・見えている四角・見えている値（x y z rotate scale_x scale_y opacity と、関係が動かしているか）、選んだ物の動く値・点・取っ手。
 - 測った（10/24）：あなたの書類で写し全部 12 ms・50 KB、物1つの編集で 3.4 ms。15レシピの重い書類で全部 48 ms・252 KB、物1つで 4.1 ms。コマの写しは 3 KB、作るのに約 1.1 ms（手のスレッドで、絵1枚ごと）。
 
+## 2段目（10/24）
+
+- 購読：窓は見ている物（選んだ物・一緒に選んだ物・カメラ・選んだ関係の仲間）を中身に伝える（`Motolii.subscribe`、later "watch"）。中身はその物の動く値をコマの写しに入れ、購読が変わったらその場で写しを作り直す。
+- キーの値（`keyValues`）を書類の写しに。キーの時刻・時刻 0 の値は書類の写しから答える。
+- 再生ヘッドの時刻で読んでいた所（desk_blend、desk_depth、desk_relations、stage、stage_view、インスペクタのカード）は、見えている絵の時刻（`m.now`）で読む。
+- 問い合わせ（別の isolate、`Motolii._ask`）：`shownAt`（別の時刻の見え方。関係の desk の道とキーごとの形、`wsShowsAt`）、`path`（インスペクタの波のプレビュー、`onPath` は Future に）、`loudnessOver`・`strikes`（タイムラインの音の波と拍）。
+- 写しに無い読みは中身に聞かずに null、`BRIDGE:` と1回だけ言う（`_unasked`）。frames_test（あなたの書類）で 0 件。
+- 判断待ち：Widgetbook の関係の study（`sets/relation_tabs` の tab_draw・tab_hands・tab_poses・tab_samples、`sets/group_rule_tries`）は、別の時刻の見え方を組み立ての中で読む（約25か所）。本番の窓では使われていない。直すか消すか。
+- 測った（frames_test、あなたの書類、各5秒）：窓が中身を待った回数 0。つまみを引く・物を運ぶ間の窓の1コマ中央値 4.0・4.2 ms。書類の読み直しは つまみ・運ぶ 0回。
+
 ## 進め方
 
 1. 中身：写しを作る（rapidjson、ThorVG に入っている物を使う）、知らせを1本足す。窓：受け取って `Ws` の口に置く。写しを作る時間と大きさを測る。

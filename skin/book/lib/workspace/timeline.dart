@@ -421,37 +421,48 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
 
   // ---------------------------------------------------------------- build
 
-  // The films' beats (their Beats value, the inside's strikes), asked again only when the document changes.
+  // The films' beats (their Beats value, the inside's strikes), asked again only when the document changes: a question
+  // of the inside (another isolate), shown when it comes.
   (int, List<int>)? _beats;
+  int? _beatsAsked;
   List<int> _beatsOf(Ws ws) {
     final m = ws.inside;
     if (m == null) return const [];
     if (_beats case (final r, final b) when r == ws.reads) return b;
-    final all = <int>[];
+    if (_beatsAsked == ws.reads) return _beats?.$2 ?? const [];
+    final asks = <Future<List<double>>>[];
     for (final l in ws.layers) {
       final t = int.tryParse(l.id), rise = t == null ? 0.0 : m.value(t, 'beats', 0) ?? 0;
-      if (rise > 0 && _waveOf(ws, l) != null) all.addAll([for (final at in m.strikes(t!, rise)) (at * Ws.fps).round()]);   // (only once its sound is read)
+      if (rise > 0 && _waveOf(ws, l) != null) asks.add(m.strikes(t!, rise));   // (only once its sound is read)
     }
-    _beats = (ws.reads, all);
-    return all;
+    final reads = _beatsAsked = ws.reads;
+    Future.wait(asks).then((all) => mounted ? setState(() => _beats = (reads, [for (final s in all) for (final at in s) (at * Ws.fps).round()])) : null);
+    return _beats?.$2 ?? const [];
   }
 
   // A film's sound on its bar: read once on another isolate (the inside keeps it), then laid on the document's frames
   // where the film shows them, asked again only when the document changes.
   final _waves = <String, (int, int, int, List<double>?)>{};   // (thing: document read, from, to, loudness a frame)
   final _asked = <String>{};
+  final _waveAsked = <String, (int, int, int)>{};
   List<double>? _waveOf(Ws ws, WsLayer l) {
     final m = ws.inside, t = int.tryParse(l.id);
     if (m == null || t == null || m.word(t, 'kind') != 'film') return null;
-    if (_waves[l.id] case (final r, final a, final b, final w) when r == ws.reads && a == l.inF && b == l.outF) return w;
-    final w = m.loudnessOver(t, l.inF / Ws.fps, l.outF / Ws.fps, l.outF - l.inF);
-    if (w == null) {
-      if (_asked.add(l.id)) m.loudness(t).then((_) => mounted ? setState(() => (_waves.remove(l.id), _beats = null)) : null);
-      return null;
+    final key = (ws.reads, l.inF, l.outF);
+    final had = _waves[l.id];
+    if (had case (final r, final a, final b, final w) when (r, a, b) == key) return w;
+    if (_waveAsked[l.id] != key) {   // (a question of the inside, another isolate: laid on the bar when it comes)
+      _waveAsked[l.id] = key;
+      m.loudnessOver(t, l.inF / Ws.fps, l.outF / Ws.fps, l.outF - l.inF).then((w) {
+        if (!mounted) return;
+        if (w == null) {
+          if (_asked.add(l.id)) m.loudness(t).then((_) => mounted ? setState(() => (_waveAsked.remove(l.id), _beats = null, _beatsAsked = null)) : null);
+          return;
+        }
+        setState(() => (_waves[l.id] = (key.$1, key.$2, key.$3, w.isEmpty ? null : w), _beats = null, _beatsAsked = null));   // (its sound now read: the beats asked again)
+      });
     }
-    _waves[l.id] = (ws.reads, l.inF, l.outF, w.isEmpty ? null : w);
-    _beats = null;   // (its sound now read: the beats asked again)
-    return _waves[l.id]!.$4;
+    return had?.$4;
   }
 
   @override

@@ -351,7 +351,7 @@ Color? _colourOf(String word) => word.split(' ').first.length == 6 ? (int.tryPar
     width: m.word(t, 'stroke').isEmpty ? 'None' : '${(w ?? 0).round()} px',
     round: '${((r ?? 0) * 200).round()}%', // (of the shorter side's half)
     font: text ? m.word(t, 'file').split('/').last.replaceFirst(RegExp(r'\.ttf$'), '') : '—',
-    size: text ? '${((m.value(t, 'size', ws.frame / Ws.fps) ?? 1) * m.point).round()} px' : '—',
+    size: text ? '${((m.value(t, 'size', m.now) ?? 1) * m.point).round()} px' : '—',
     align: ((m.value(t, 'align', 0) ?? 0) * 2).round().clamp(0, 2),
   );
 }

@@ -20,41 +20,50 @@ class DeskRelations extends StatefulWidget {
 
 class _DeskRelationsState extends State<DeskRelations> {
   double _yaw = 0, _pitch = 0, _zoom = 1;   // (turned: 0, 0 is from the front, the camera's own way; a scroll comes closer)
-  (int, Map<String, List<_P3>>)? _paths;   // (each thing's way through the whole stretch, as the document stood: read again when it changes)
+  (int, Map<String, List<_P3>>)? _paths;   // (each thing's way through the whole stretch, as the document stood: asked again when it changes)
+  int? _pathsAsked;
+  Object? _stationsAsked;
 
   /// A picked relation's things at each of its keys' moments, in time's order: the shapes it goes through, not the way.
+  /// Other moments than the picture's: asked of the inside (another isolate), shown when they come.
   (Object, Map<String, List<_P3>>)? _stations;
   Map<String, List<_P3>> _stationsOf(Ws ws) {
     final m = ws.inside, r = int.tryParse(ws.selected ?? '');
     final at = (ws.rev, ws.selected);
-    if (_stations?.$1 == at) return _stations!.$2;
-    final out = <String, List<_P3>>{};
-    if (m != null && r != null && m.word(r, 'kind') == 'behaviour') {
-      final moments = {for (final n in m.moving(r)) ...m.keyMoments(r, n)}.toList()..sort();
-      for (final s in m.word(r, 'members').split(' ')) {
-        final t = int.tryParse(s);
-        if (t == null || moments.length < 2) continue;
-        double v(String n, double a) => m.shows(t, n, a)?.$1 ?? m.value(t, n, a) ?? 0;
-        out[s] = [for (final a in moments) (x: v('x', a), y: v('y', a), z: v('z', a))];
-      }
-    }
-    return (_stations = (at, out)).$2;
+    if (_stations?.$1 == at || _stationsAsked == at || m == null) return _stations?.$2 ?? const {};
+    _stationsAsked = at;
+    final moments = r != null && m.word(r, 'kind') == 'behaviour' ? ({for (final n in m.moving(r)) ...m.keyMoments(r, n)}.toList()..sort()) : <double>[];
+    final members = [for (final s in r == null ? const <String>[] : m.word(r, 'members').split(' ')) if (int.tryParse(s) case final t? when moments.length > 1) t];
+    m.shownAt([for (final t in members) for (final a in moments) for (final n in const ['x', 'y', 'z']) (t, n, a)]).then((v) {
+      if (!mounted) return;
+      var i = 0;
+      double next() => v[i++] ?? 0;
+      setState(() => _stations = (at, {for (final t in members) '$t': [for (final _ in moments) (x: next(), y: next(), z: next())]}));
+    });
+    return _stations?.$2 ?? const {};
   }
 
   Map<String, List<_P3>> _pathsOf(Ws ws) {
-    if (_paths?.$1 == ws.rev) return _paths!.$2;
-    final m = ws.inside, out = <String, List<_P3>>{};
-    if (m != null) {
-      const steps = 60;
-      for (final l in ws.layers) {
-        final t = int.tryParse(l.id);
-        if (t == null || m.word(t, 'kind') == 'behaviour' || m.word(t, 'kind') == 'camera') continue;
-        double v(String n, double at) => m.shows(t, n, at)?.$1 ?? m.value(t, n, at) ?? 0;
-        final way = [for (var k = 0; k <= steps; k++) (x: v('x', k / steps * Ws.duration / Ws.fps), y: v('y', k / steps * Ws.duration / Ws.fps), z: v('z', k / steps * Ws.duration / Ws.fps))];
-        if (way.any((p) => (p.x - way.first.x).abs() + (p.y - way.first.y).abs() + (p.z - way.first.z).abs() > 1e-4)) out[l.id] = way;   // (only what moves)
+    final m = ws.inside;
+    if (_paths?.$1 == ws.rev || _pathsAsked == ws.rev || m == null) return _paths?.$2 ?? const {};
+    final rev = _pathsAsked = ws.rev;
+    const steps = 60;
+    final things = [
+      for (final l in ws.layers)
+        if (int.tryParse(l.id) case final t? when m.word(t, 'kind') != 'behaviour' && m.word(t, 'kind') != 'camera') t,
+    ];
+    m.shownAt([for (final t in things) for (var k = 0; k <= steps; k++) for (final n in const ['x', 'y', 'z']) (t, n, k / steps * Ws.duration / Ws.fps)]).then((v) {
+      if (!mounted) return;
+      var i = 0;
+      double next() => v[i++] ?? 0;
+      final out = <String, List<_P3>>{};
+      for (final t in things) {
+        final way = [for (var k = 0; k <= steps; k++) (x: next(), y: next(), z: next())];
+        if (way.any((p) => (p.x - way.first.x).abs() + (p.y - way.first.y).abs() + (p.z - way.first.z).abs() > 1e-4)) out['$t'] = way;   // (only what moves)
       }
-    }
-    return (_paths = (ws.rev, out)).$2;
+      setState(() => _paths = (rev, out));
+    });
+    return _paths?.$2 ?? const {};
   }
 
   @override
@@ -119,7 +128,7 @@ class _World {
   static _World of(Ws ws) {
     final m = ws.inside;
     if (m == null) return _World(const {}, null, const [], Size.zero);
-    final now = ws.frame / Ws.fps, things = <String, (_P3, Color, String)>{};
+    final now = m.now, things = <String, (_P3, Color, String)>{};   // (the moment of the picture shown)
     _P3? camera;
     double v(int t, String n) => (n == 'x' || n == 'y' || n == 'z' ? m.shows(t, n, now)?.$1 : null) ?? m.value(t, n, now) ?? 0;   // (a place where it shows: a relation moves depth too)
     final rels = <_Relation>[];

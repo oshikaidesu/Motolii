@@ -74,21 +74,20 @@ class _MotionPreviewState extends State<MotionPreview> with SingleTickerProvider
     }
   }
 
-  /// How each copy moves, as the inside has it now (fewer moments each when there are many).
-  List<List<double>> _all(Doc doc) {
+  /// How each copy moves, as the inside has it now (fewer moments each when there are many): asked, answered later.
+  Future<List<List<double>>> _all(Doc doc) async {
     final copies = (doc.get('v_copies') ?? 1).round().clamp(1, MotionPreview.most);
-    return [
-      for (var c = 0; c < copies; c++)
-        if (doc.onPath?.call(_round, copies > 1 ? 24 : MotionPreview.samples, c) case final p? when p.length >= 8) p,
-    ];
+    final asked = await Future.wait([for (var c = 0; c < copies; c++) if (doc.onPath?.call(_round, copies > 1 ? 24 : MotionPreview.samples, c) case final p?) p]);
+    return [for (final p in asked) if (p != null && p.length >= 8) p];
   }
 
   static bool _moving(List<List<double>> paths) =>
       paths.any((p) => [for (var i = 0; i + 3 < p.length; i += 4) (p[i] - p[0]).abs() + (p[i + 1] - p[1]).abs() + (p[i + 2] - p[2]).abs() + (p[i + 3] - p[3]).abs()].any((d) => d > 1e-6));
 
-  void _ask(Doc doc) { // (how they move, as the inside has it now)
+  Future<void> _ask(Doc doc) async { // (how they move, as the inside has it now)
     if (!mounted) return;
-    final all = _all(doc);
+    final all = await _all(doc);
+    if (!mounted) return;
     setState(() {
       _paths = all;
       _moves = _moving(all);
@@ -118,8 +117,7 @@ class _MotionPreviewState extends State<MotionPreview> with SingleTickerProvider
       _round = round;
       _clock.duration = Duration(milliseconds: (round * 1000).round());
       if (first) {
-        _paths = _all(doc);
-        _moves = _moving(_paths);
+        _ask(doc);   // (asked of the host: drawn when it comes)
       } else {
         _changed = DateTime.now();
         _after(60, () => _ask(doc)); // (what the hand set reaches the inside in its queue)

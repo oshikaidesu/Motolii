@@ -67,7 +67,7 @@ class InspHost extends StatefulWidget {
   final void Function(String title, int by)? onCardMove;
 
   /// How the thing moves over a while, as the host places it (see [Doc.onPath]).
-  final List<double>? Function(double to, int n, int copy)? onPath;
+  final Future<List<double>?> Function(double to, int n, int copy)? onPath;   // (a question of the host's: answered later)
 
 
   /// The host's own cards of values (see [Doc.cards]).

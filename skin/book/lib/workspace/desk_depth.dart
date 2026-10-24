@@ -38,7 +38,7 @@ const _filmMm = 12 / 0.2679491924311227;
 ({int camera, double eye})? _lensOf(Ws ws, _Lens lens) {
   final m = ws.inside, cam = ws.layers.where((l) => l.kind == WsKind.camera).firstOrNull;
   if (m == null || cam == null) return null;
-  final t = int.parse(cam.id), at = ws.frame / Ws.fps, p = m.point, eye = 6 * (m.value(t, 'distance', at) ?? 1) * p;
+  final t = int.parse(cam.id), at = m.now, p = m.point, eye = 6 * (m.value(t, 'distance', at) ?? 1) * p;
   final stop = m.value(t, 'aperture', at) ?? 0, focus = m.value(t, 'focus', at) ?? 0;
   lens
     ..focal = (m.value(t, 'zoom', at) ?? 1) * _filmMm

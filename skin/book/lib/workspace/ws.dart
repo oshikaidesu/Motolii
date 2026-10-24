@@ -2,7 +2,6 @@
 // This file is what every seat shares: the mock document they all read (Ws), and the window's own tokens (WsT).
 // Tone and manner come from the Inspector's Pop rules (sets/inspector_parts.dart): containers square and tiled edge to edge,
 // what you touch or read round, colour flat and opaque, one lime accent, each kind of thing wearing its own hue.
-import 'dart:async' show Timer;
 import 'dart:developer' show Timeline, TimelineTask;
 import 'dart:io' show Platform;
 import 'package:flutter/scheduler.dart';
@@ -260,6 +259,26 @@ class Ws extends ChangeNotifier {
     if (id == _stageTexture) return;
     _stageTexture = id;
     notifyListeners();
+  }
+
+  /// The things whose moving values the window shows (told the inside: Motolii.subscribe): the picked one and those picked
+  /// with it, the cameras (the Depth desk's lens), and a picked relation's things.
+  void _watch() {
+    final m = _inside;
+    if (m == null) return;
+    final sel = int.tryParse(_sel ?? '');
+    m.subscribe({
+      ?sel,
+      for (final id in many) ?int.tryParse(id),
+      for (final l in layers) if (l.kind == WsKind.camera) ?int.tryParse(l.id),
+      if (sel != null && m.word(sel, 'kind') == 'behaviour') for (final w in m.word(sel, 'members').split(' ')) ?int.tryParse(w),
+    });
+  }
+
+  @override
+  void notifyListeners() {
+    _watch();
+    super.notifyListeners();
   }
 
   String? _sel; // (nothing picked, as a document opens)

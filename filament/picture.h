@@ -75,6 +75,16 @@ static void picture_thing(Motolii* m, int thing, PictureWriter& w) {
         w.EndArray();
     }
     w.EndObject();
+    w.Key("keyValues"), w.StartObject();   // (what each key holds)
+    for (const std::string& n : names) {
+        double at[512];
+        const int k = std::min(motolii_key_moments(m, thing, n.c_str(), at, 512), 512);
+        if (k <= 0) continue;
+        w.Key(n.c_str()), w.StartArray();
+        for (int i = 0; i < k; ++i) if (double v = 0; doc_value(*m->d, thing, n.c_str(), at[i], &v)) w.Double(v); else w.Null();
+        w.EndArray();
+    }
+    w.EndObject();
     w.Key("keyWays"), w.StartObject();   // (the way of the stretch each key begins, as it is said: "" none)
     for (const std::string& n : names) {
         double at[512];
@@ -184,14 +194,13 @@ static void picture_moment(Motolii* m) {
         for (const char* name : {"x", "y", "z", "rotate", "scale_x", "scale_y", "opacity"})
             if (double v = 0; const int got = motolii_shows(m, t, name, at, &v)) w.Key(name), w.StartArray(), w.Double(v), w.Bool(got == 2), w.EndArray();
         w.EndObject();
-        if (t == m->pick) {
-            w.Key("value"), w.StartObject();   // (its values that move, at the moment)
+        if (t == m->pick || m->watched.count(t)) {   // (its values that move, at the moment: the picked thing's and those the window watches)
+            w.Key("value"), w.StartObject();
             for (const std::string& name : picture_words(motolii_moving(m, t)))
                 if (double v = 0; doc_value(d, t, name.c_str(), at, &v)) w.Key(name.c_str()), w.Double(v);
             w.EndObject();
-            w.Key("keyed"), w.StartObject();   // (0 no keys, 1 keys elsewhere, 2 a key here)
-            for (const std::string& name : picture_names(m, t)) if (const int k = doc_keyed(d, t, name.c_str(), at)) w.Key(name.c_str()), w.Int(k);
-            w.EndObject();
+        }
+        if (t == m->pick) {
             double xy[512], of[256];
             const int p = std::min(doc_points(d, t, at, xy, 256), 256);
             w.Key("points"), w.StartArray(); for (int k = 0; k < 2 * p; ++k) w.Double(xy[k]); w.EndArray();

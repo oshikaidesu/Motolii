@@ -23,6 +23,7 @@ void main() {
     }
     ws.reread();
     await t.pumpWidget(const SizedBox());
+    Future<({double x, double y, double size, double opacity, double flip})> shows(int thing, double at) async => (await t.runAsync(() => wsShowsAt(m, thing, at)))!;
     Future<void> rest() async {
       for (var i = 0; i < 80 && ws.waiting; i++) {
         await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 25)));
@@ -37,7 +38,7 @@ void main() {
     expect([mv.start, mv.length, mv.lag], [1.0, closeTo(.6, 1e-9), .08]);
     expect(mv.coming, true);
     expect(mv.end['opacity'], 0);
-    final away = wsShows(m, made[1], mv.away), home = wsShows(m, made[1], mv.last + .1);
+    final away = await shows(made[1], mv.away), home = await shows(made[1], mv.last + .1);
     expect([away.y, away.opacity], [closeTo(.05, 1e-6), closeTo(0, 1e-6)]);   // (from below, clear)
     expect([home.y, home.opacity], [closeTo(.2, 1e-6), closeTo(1, 1e-6)]);   // (at its seat)
 
@@ -50,7 +51,7 @@ void main() {
     await rest();
     mv = wsMoves(ws).single;
     expect(mv.coming, false);
-    expect(wsShows(m, made[0], 1.5).y, closeTo(.2, 1e-6));   // (going out: at its seat before)
+    expect((await shows(made[0], 1.5)).y, closeTo(.2, 1e-6));   // (going out: at its seat before)
 
     wsMoveEase(ws, mv, 0, .3);
     await rest();
@@ -64,11 +65,12 @@ void main() {
 
     wsMoveTurn(ws, mv);   // (in again)
     await rest();
-    final before = wsShows(m, made[0], 5);
+    final before = await shows(made[0], 5);
     wsMakeMove(ws, ['${made[0]}', '${made[1]}'], 6);   // (made later of things that came in already: they go out, what is before is left alone)
     await rest();
     final out = wsMoves(ws).reduce((a, b) => a.by > b.by ? a : b);
     expect(out.coming, false);
-    expect([wsShows(m, made[0], 5).y, wsShows(m, made[0], 5).opacity, wsShows(m, made[0], 7).opacity], [closeTo(before.y, 1e-6), closeTo(before.opacity, 1e-6), closeTo(0, 1e-6)]);
+    final five = await shows(made[0], 5), seven = await shows(made[0], 7);
+    expect([five.y, five.opacity, seven.opacity], [closeTo(before.y, 1e-6), closeTo(before.opacity, 1e-6), closeTo(0, 1e-6)]);
   }, skip: !insideBuilt);
 }

@@ -604,7 +604,7 @@ class _RelationMarks extends StatelessWidget {
       final rel = int.tryParse(ws.selected ?? ''), kind = rel == null || m == null ? '' : m.word(rel, 'file');
       final isRelation = rel != null && m != null && m.word(rel, 'kind') == 'behaviour' && wsRelations.contains(kind);
       final members = [for (final id in wsMembersOf(ws)) if (on(id) case final p?) (id, p)];
-      final now = ws.frame / Ws.fps;
+      final now = m?.now ?? 0;   // (the moment of the picture shown)
       // (a place of the stage in its own units, on the screen; and back)
       Offset screen(double x, double y) => v.toScreen(WsArt.toView(scene, Offset(WsArt.comp.width / 2 + x * m!.point, WsArt.comp.height / 2 - y * m.point)));
       (double, double) units(Offset p) {

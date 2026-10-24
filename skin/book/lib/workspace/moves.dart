@@ -115,8 +115,15 @@ void wsMoveEase(Ws ws, WsMove mv, double out, double over) {
   if (ws.inside case final m?) ws.after(m.later('way', thing: mv.by, name: 'strength', number: mv.start, word: wsMoveWay(out.clamp(0, 1), over.clamp(0, .6))), (_, _) => ws.reread());
 }
 
-/// Where a thing shows at a moment (x, y, z, size, opacity, turned round), as the inside says.
+/// Where a thing shows at a moment (x, y, z, size, opacity, turned round), as the inside says: the picture's moment from
+/// the pictures (Widgetbook's relation studies, `sets/relation_tabs`, read it so; another moment is not in them).
 ({double x, double y, double size, double opacity, double flip}) wsShows(Motolii m, int t, double at) {
   double v(String n, double or) => m.shows(t, n, at)?.$1 ?? m.value(t, n, at) ?? or;
   return (x: v('x', 0), y: v('y', 0), size: v('size', 1), opacity: v('opacity', 1), flip: v('rotate_y', 0));
+}
+
+/// The same at any moment: a question of the inside (skin/BRIDGE.md Q), answered later.
+Future<({double x, double y, double size, double opacity, double flip})> wsShowsAt(Motolii m, int t, double at) async {
+  final v = await m.shownAt([for (final n in const ['x', 'y', 'size', 'opacity', 'rotate_y']) (t, n, at)]);
+  return (x: v[0] ?? 0, y: v[1] ?? 0, size: v[2] ?? 1, opacity: v[3] ?? 1, flip: v[4] ?? 0);
 }

@@ -29,6 +29,7 @@ struct Motolii {
     Doc* d = nullptr;
     Live* live = nullptr;
     int pick = 0, hover = 0;   // the thing picked in the window and the one under its hand: marked on the desk (motolii_pick)
+    std::set<int> watched;     // the things the window shows the moving values of (later "watch", Anthem's subscription): in the moment's picture
     // What the window reads of the picked thing at every picture (its cards' values, which have keys there, its frame),
     // set down by the hand after each moment, at the frame the window counts it in, and looked at without the document
     // (a seqlock: odd while it is written). A change to the document puts it aside till the next moment.
@@ -942,6 +943,13 @@ int motolii_later(Motolii* m, const char* call, int thing, const char* name, con
             }
             else if (c == "live") ok = live_is(m);   // (the stage's live picture opened: answer 1 once it is)
             else if (c == "pick") ok = pick_is(m, thing, (int)number);   // (the thing picked in the window, number: the one under its hand)
+            else if (c == "watch") {   // (word: the things the window shows the moving values of, spaced; their values in the moment's picture from the next)
+                m->watched.clear();
+                std::istringstream in(w);
+                for (int t; in >> t;) m->watched.insert(t);
+                picture_moment(m);   // (their values at once, not with the next picture)
+                ok = 1, m->changed = true;
+            }
             else if (c == "desk") {   // (word: "w h x y scale point", as motolii_desk; answer 1 once the desk's picture exists)
                 int dw = 0, dh = 0;
                 double x = 0.0, y = 0.0, sc = 0.0, pt = 0.0;

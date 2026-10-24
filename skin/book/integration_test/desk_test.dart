@@ -375,8 +375,8 @@ void main() {
     await wait(100);
     await t.pump();
     await shoot('Sound');
-    final wave = m.loudnessOver(clicks, 0, 1, 60) ?? const <double>[];
-    final beats = m.strikes(clicks, m.value(clicks, 'beats', 0) ?? 0);
+    final wave = await t.runAsync(() => m.loudnessOver(clicks, 0, 1, 60)) ?? const <double>[];
+    final beats = await t.runAsync(() => m.strikes(clicks, m.value(clicks, 'beats', 0) ?? 0)) ?? const <double>[];
     final card = find.text('Beats').evaluate().isNotEmpty;
     report.add('Sound: the inspector shows Beats: $card; bar loudest ${wave.reduce(math.max).toStringAsFixed(1)} dB, quietest ${wave.reduce(math.min).toStringAsFixed(1)} dB in the first second; beats ${beats.map((b) => b.toStringAsFixed(2)).join(' ')} (want 0.00 0.50 ... 3.50)');
     expect(card, true);

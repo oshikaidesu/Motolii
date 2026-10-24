@@ -469,7 +469,7 @@ class Doc extends ChangeNotifier {
 
   /// The host's answer to how the thing (its copy, the first is 0) moves over a while (see Motolii.path): four numbers a
   /// moment; null: it has none.
-  List<double>? Function(double to, int n, int copy)? onPath;
+  Future<List<double>?> Function(double to, int n, int copy)? onPath;
 
   void moveFx(String id, int by) {
     if (!(onFxMove?.call() ?? true)) return;

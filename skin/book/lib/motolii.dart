@@ -8,6 +8,7 @@ import 'dart:io';
 import 'dart:isolate';
 
 import 'package:ffi/ffi.dart';
+import 'package:flutter/foundation.dart' show debugPrint, setEquals;
 import 'package:flutter/services.dart';
 
 /// Where the inside lives. Override with --dart-define=MOTOLII_DIR=/path/to/motolii/filament.
@@ -78,7 +79,7 @@ class Motolii {
   Map<String, dynamic> _document = const {};   // (the document's own part)
   final _thing = <int, Map<String, dynamic>>{};   // (each thing's part, as of the version it came with)
   Map<String, dynamic> _moment = const {'thing': {}};
-  int _documentAt = -1;
+  int _documentAt = -1, _momentAt = -1;
 
   /// What the window does when the inside's pictures are new: [document] the document's (and which things changed in
   /// it), [moment] the moment's, [kept] the stretches of the stage's pictures kept on disk.
@@ -95,6 +96,7 @@ class Motolii {
     if (which & 1 != 0) {
       final p = _picture(_m, 1, _documentAt, version), all = jsonDecode(p.toDartString()) as Map<String, dynamic>;
       malloc.free(p);
+      if (version.value == _documentAt) which &= ~1;   // (asked again, not new: nothing told)
       _documentAt = version.value;
       if (all['document'] case final Map<String, dynamic> d) _document = d;
       (all['thing'] as Map<String, dynamic>).forEach((t, part) => _thing[int.parse(t)] = part as Map<String, dynamic>);
@@ -104,11 +106,16 @@ class Motolii {
     }
     if (which & 2 != 0) {
       final p = _picture(_m, 2, 0, version);
-      _moment = jsonDecode(p.toDartString()) as Map<String, dynamic>;
+      if (version.value == _momentAt) {
+        which &= ~2;   // (asked again, not new)
+      } else {
+        _moment = jsonDecode(p.toDartString()) as Map<String, dynamic>;
+        _momentAt = version.value;
+      }
       malloc.free(p);
     }
     malloc.free(version);
-    told?.call(document: which & 1 != 0, moment: which & 2 != 0, kept: which & 4 != 0);
+    if (which != 0) told?.call(document: which & 1 != 0, moment: which & 2 != 0, kept: which & 4 != 0);
   }
 
   /// A change the window waited for (skin/BRIDGE.md C3, going): its pictures taken at once, as the inside made them
@@ -144,9 +151,7 @@ class Motolii {
   late final _key = _lib.lookupFunction<Int32 Function(_P, Int32, _S, Double, Double), int Function(_P, int, _S, double, double)>('motolii_key');
   late final _unkey = _lib.lookupFunction<Int32 Function(_P, Int32, _S, Double), int Function(_P, int, _S, double)>('motolii_unkey');
   late final _way = _lib.lookupFunction<Int32 Function(_P, Int32, _S, Double, _S), int Function(_P, int, _S, double, _S)>('motolii_way');
-  late final _value = _lib.lookupFunction<Int32 Function(_P, Int32, _S, Double, Pointer<Double>), int Function(_P, int, _S, double, Pointer<Double>)>('motolii_value');
   late final _path3 = _lib.lookupFunction<Int32 Function(_P, Int32, Int32, Double, Double, Int32, Pointer<Double>), int Function(_P, int, int, double, double, int, Pointer<Double>)>('motolii_path3');
-  late final _path = _lib.lookupFunction<Int32 Function(_P, Int32, Int32, Double, Double, Int32, Pointer<Double>), int Function(_P, int, int, double, double, int, Pointer<Double>)>('motolii_path');
   late final _keying = _lib.lookupFunction<Int32 Function(_P, Int32), int Function(_P, int)>('motolii_keying');
   late final _hold = _lib.lookupFunction<Int32 Function(_P, Int32), int Function(_P, int)>('motolii_hold');
   late final _carry = _lib.lookupFunction<Int32 Function(_P, _S, Double, Double), int Function(_P, _S, double, double)>('motolii_carry');
@@ -209,6 +214,15 @@ class Motolii {
   /// The thing picked in the window and the one under its hand (0: none): the desk marks them (later: pick).
   void pick(int thing, int hover) => later('pick', thing: thing, number: hover.toDouble());
 
+  /// The things the window shows the moving values of (Anthem's subscription): their values are in the moment's picture
+  /// from the next (later: watch). Told again only when they change.
+  void subscribe(Set<int> things) {
+    if (setEquals(things, _watched)) return;
+    _watched = things;
+    later('watch', word: things.join(' '));
+  }
+  Set<int> _watched = const {};
+
   /// The desk's picture as a Flutter texture (-1: none).
   Future<int> deskTexture() async => _deskId ??= await _channel.invokeMethod<int>('start', {'lib': libPath, 'handle': _m.address, 'front': 'motolii_desk_front', 'frames': 'motolii_desk_frames'}) ?? -1;
   int? _deskId;
@@ -231,6 +245,27 @@ class Motolii {
       return done;
     });
   }
+  /// As the stage shows each thing's value at each moment asked (what a relation makes of it, else its own; null: it
+  /// has none): another moment than the picture's, a question (skin/BRIDGE.md Q), asked on another isolate.
+  Future<List<double?>> shownAt(List<(int, String, double)> asks) {
+    final lib = libPath, at = _m.address;
+    return Isolate.run(() {
+      final l = DynamicLibrary.open(lib), m = Pointer<Void>.fromAddress(at);
+      final shows = l.lookupFunction<Int32 Function(Pointer<Void>, Int32, Pointer<Utf8>, Double, Pointer<Double>), int Function(Pointer<Void>, int, Pointer<Utf8>, double, Pointer<Double>)>('motolii_shows');
+      final out = malloc<Double>();
+      final all = [
+        for (final (t, n, moment) in asks)
+          () {
+            final name = n.toNativeUtf8(), got = shows(m, t, name, moment, out);
+            malloc.free(name);
+            return got == 0 ? null : out.value;
+          }(),
+      ];
+      malloc.free(out);
+      return all;
+    });
+  }
+
   /// Of these font files, those a text can be [words] in (asked on another isolate: the window does not wait).
   Future<List<String>> setting(List<String> fonts, String words) {
     final lib = libPath;
@@ -292,33 +327,31 @@ class Motolii {
   /// A value at a moment, its own (not what a relation makes of it: [shows]): one that stays, the document's; one that
   /// moves, the picked thing's at the moment's picture's moment.
   double? value(int thing, String name, double at) {
-    if (!moving(thing).contains(name)) return ((_of(thing)['value'] as Map<String, dynamic>?)?[name] as num?)?.toDouble() ?? _usual(thing, name);
-    final here = _momentOf(thing);
-    if (_isNow(at)) {
-      if ((here?['value'] as Map<String, dynamic>?)?[name] case final num v) return v.toDouble();
+    if (!moving(thing).contains(name) || at == 0) return ((_of(thing)['value'] as Map<String, dynamic>?)?[name] as num?)?.toDouble() ?? _usual(thing, name);   // (the document's picture holds each value at its first moment)
+    if (_isNow(at)) {   // (the picked thing's, and those the window watches: [watch])
+      if ((_momentOf(thing)?['value'] as Map<String, dynamic>?)?[name] case final num v) return v.toDouble();
     }
-    return _valueAt(thing, name, at);   // TODO(bridge Q): another moment, asked of the inside
+    final keys = keyMoments(thing, name), i = keys.indexWhere((k) => (k - at).abs() < .5 / rate);
+    if (i >= 0) return (((_of(thing)['keyValues'] as Map<String, dynamic>?)?[name] as List<dynamic>?)?[i] as num?)?.toDouble();   // (at one of its keys: what the key holds)
+    return _unasked('value', thing, name, at);
   }
-  double? _valueAt(int thing, String name, double at) => _with([name], (s) {
-    final out = malloc<Double>();
-    final ok = _value(_m, thing, s[0], at, out) != 0, v = out.value;
-    malloc.free(out);
-    return ok ? v : null;
-  });
+
+  /// A read the pictures do not hold (another moment of a thing not watched): not asked of the inside here, the window
+  /// would wait (skin/BRIDGE.md rule 1); ask it as a question ([shownAt]), or watch the thing ([subscribe]). Said once.
+  double? _unasked(String what, int thing, String name, double at) {
+    if (_watched.contains(thing)) return null;   // (watched just now: in the next picture)
+    if (_unaskedSaid.add('$what $name')) debugPrint('BRIDGE: $what($thing, $name, $at) is not in the pictures: ask it ([shownAt]) or watch the thing');
+    return null;
+  }
+  final _unaskedSaid = <String>{};
 
   /// A value as the stage shows it (what a relation or behaviour makes of it), and whether one drives it; null: none.
   (double, bool)? shows(int thing, String name, double at) {
-    if (!_isNow(at)) return _showsAt(thing, name, at);   // TODO(bridge Q): another moment, asked of the inside
+    if (!_isNow(at)) return switch (_unasked('shows', thing, name, at)) { _ => null };
     final v = (_momentOf(thing)?['shows'] as Map<String, dynamic>?)?[name] as List<dynamic>?;
     return v == null ? null : ((v[0] as num).toDouble(), v[1] as bool);
   }
-  late final _shows = _lib.lookupFunction<Int32 Function(_P, Int32, _S, Double, Pointer<Double>), int Function(_P, int, _S, double, Pointer<Double>)>('motolii_shows');
-  (double, bool)? _showsAt(int thing, String name, double at) => _with([name], (s) {
-    final out = malloc<Double>();
-    final got = _shows(_m, thing, s[0], at, out), v = out.value;
-    malloc.free(out);
-    return got == 0 ? null : (v, got == 2);
-  });
+
 
   /// The numbers of the things there are.
   List<int> get things => [for (final t in (_document['things'] as List<dynamic>?) ?? const []) t as int];
@@ -358,7 +391,19 @@ class Motolii {
   /// How a thing moves over a while, as the stage places it (its wave and all): [n] moments from [from] to before [to],
   /// four numbers each: where it is (x, y, units of the stage), how far turned (degrees), how large (a share). null: no
   /// such thing. Asked once when its values change, for a small preview that then plays by itself (motolii_path).
-  List<double>? path(int thing, {int copy = 0, double from = 0, required double to, int n = 60}) => _pathNow(thing, copy: copy, from: from, to: to, n: n);   // TODO(bridge Q): asked of the inside
+  Future<List<double>?> path(int thing, {int copy = 0, double from = 0, required double to, int n = 60}) => _ask((l, m) {
+    final out = malloc<Double>(4 * n);
+    final got = l.lookupFunction<Int32 Function(_P, Int32, Int32, Double, Double, Int32, Pointer<Double>), int Function(_P, int, int, double, double, int, Pointer<Double>)>('motolii_path')(m, thing, copy, from, to, n, out);
+    final p = [for (var i = 0; i < 4 * got; i++) out[i]];
+    malloc.free(out);
+    return got > 0 ? p : null;
+  });
+
+  /// A question of the inside (skin/BRIDGE.md Q): asked on another isolate, the window does not wait for its answer.
+  Future<T> _ask<T>(T Function(DynamicLibrary lib, _P m) ask) {
+    final lib = libPath, at = _m.address;
+    return Isolate.run(() => ask(DynamicLibrary.open(lib), Pointer<Void>.fromAddress(at)));
+  }
   /// The same in the round: four numbers a moment, where it is (x, y, z, units of the stage) and how large (motolii_path3).
   List<double>? path3(int thing, {int copy = 0, double from = 0, required double to, int n = 24}) {
     final out = malloc<Double>(4 * n);
@@ -367,12 +412,6 @@ class Motolii {
     return got > 0 ? p : null;
   }
 
-  List<double>? _pathNow(int thing, {int copy = 0, double from = 0, required double to, int n = 60}) {
-    final out = malloc<Double>(4 * n);
-    final got = _path(_m, thing, copy, from, to, n, out), p = [for (var i = 0; i < 4 * got; i++) out[i]];
-    malloc.free(out);
-    return got > 0 ? p : null;
-  }
 
   /// A thing held by a hand, carried, and let go (motolii.h): the one form of everything a hand drags. [by] is
   /// 'place' (on the stage: how far the hand has gone, in points of the picture), 'bar', 'head' or 'tail' (its bar on
@@ -446,7 +485,6 @@ class Motolii {
       if (line.indexOf(' ') case final i when i > 0) (double.parse(line.substring(0, i)), line.substring(i + 1)),
   ];
   bool mark(double at, String word) => _took(_with([word], (s) => _mark(_m, at, s[0])) != 0);
-  late final _strikes = _lib.lookupFunction<Int32 Function(_P, Int32, Double, Int32, Pointer<Double>, Int32), int Function(_P, int, double, int, Pointer<Double>, int)>('motolii_strikes');
 
   /// A film's sound: its loudness (dB, 0 at full) 100 times a second of its own (none: no sound, or not a film). Read
   /// on another isolate, the file decoded once: the window does not wait.
@@ -461,29 +499,26 @@ class Motolii {
     });
   }
 
-  late final _loudnessOver = _lib.lookupFunction<Int32 Function(_P, Int32, Double, Double, Int32, Pointer<Float>), int Function(_P, int, double, double, int, Pointer<Float>)>('motolii_loudness_over');
 
   /// How loud a film's sound is at [n] moments of the document from [from] to before [to], where its film shows them
   /// (dB; -100 silent or not shown). null: its sound not read yet ([loudness] reads it); empty: no sound.
-  List<double>? loudnessOver(int thing, double from, double to, int n) {
-    return _loudnessOverNow(thing, from, to, n);   // TODO(bridge Q): asked of the inside
-  }
-  List<double>? _loudnessOverNow(int thing, double from, double to, int n) {
-    final out = malloc<Float>(n < 1 ? 1 : n), got = _loudnessOver(_m, thing, from, to, n, out);
+  Future<List<double>?> loudnessOver(int thing, double from, double to, int n) => _ask((l, m) {
+    final out = malloc<Float>(n < 1 ? 1 : n);
+    final got = l.lookupFunction<Int32 Function(_P, Int32, Double, Double, Int32, Pointer<Float>), int Function(_P, int, double, double, int, Pointer<Float>)>('motolii_loudness_over')(m, thing, from, to, n, out);
     final all = got < 0 ? null : [for (var i = 0; i < got; i++) out[i].toDouble()];
     malloc.free(out);
     return all;
-  }
+  });
 
   /// Where a film's sound strikes (grows [rise] dB louder at once): the document's moments where it shows them, or
   /// [own] the film's own seconds. Asked once its loudness has been read ([loudness]).
-  List<double> strikes(int thing, double rise, {bool own = false}) => _strikesNow(thing, rise, own: own);   // TODO(bridge Q): asked of the inside
-  List<double> _strikesNow(int thing, double rise, {bool own = false}) {
-    final n = _strikes(_m, thing, rise, own ? 1 : 0, nullptr, 0), out = malloc<Double>(n < 1 ? 1 : n);
-    final got = _strikes(_m, thing, rise, own ? 1 : 0, out, n), all = [for (var i = 0; i < got && i < n; i++) out[i]];
+  Future<List<double>> strikes(int thing, double rise, {bool own = false}) => _ask((l, m) {
+    final ask = l.lookupFunction<Int32 Function(_P, Int32, Double, Int32, Pointer<Double>, Int32), int Function(_P, int, double, int, Pointer<Double>, int)>('motolii_strikes');
+    final n = ask(m, thing, rise, own ? 1 : 0, nullptr, 0), out = malloc<Double>(n < 1 ? 1 : n);
+    final got = ask(m, thing, rise, own ? 1 : 0, out, n), all = [for (var i = 0; i < got && i < n; i++) out[i]];
     malloc.free(out);
     return all;
-  }
+  });
   late final _guide = _lib.lookupFunction<Int32 Function(_P, _S, Double, Int32), int Function(_P, _S, double, int)>('motolii_guide');
 
   /// The guides: lines across the picture, 'x' upright and 'y' level, at so many points from its left or top.

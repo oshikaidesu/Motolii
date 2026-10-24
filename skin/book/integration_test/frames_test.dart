@@ -56,7 +56,7 @@ void main() {
     Future<void> phase(String what, Future<void> Function(int frame) step) async {
       debugPrint('INSIDE before $what: ${ws.inside!.spent}');
       Ws.spent.clear();
-      final from = timings.length, drawn = ws.inside!.frames, clock = Stopwatch()..start();
+      final from = timings.length, drawn = ws.inside!.frames, reads = ws.reads, clock = Stopwatch()..start();
       ws.inside!.watch(true);   // (the window's thread may not wait on the inside: what did is kept)
       var steps = 0;
       for (var f = 0; clock.elapsedMilliseconds < _seconds * 1000; f++, steps++) {
@@ -72,7 +72,7 @@ void main() {
       debugPrint('FRAMES $what: the late ones at ${[for (final (i, f) in timings.skip(from).indexed) if (f.totalSpan.inMicroseconds > 1000000 / 60) '#$i ${(f.totalSpan.inMicroseconds / 1000).toStringAsFixed(0)} ms (build ${(f.buildDuration.inMicroseconds / 1000).toStringAsFixed(0)}, waited ${((f.timestampInMicroseconds(FramePhase.buildStart) - f.timestampInMicroseconds(FramePhase.vsyncStart)) / 1000).toStringAsFixed(0)})'].join(', ')}');
       late += over;
       if (stage < 59) late++;
-      report.add('$what: the hand moved ${(steps / (clock.elapsedMicroseconds / 1e6)).toStringAsFixed(1)} a second, the stage drew ${stage.toStringAsFixed(1)} a second; ${spans.length} pictures, late $over, median ${spans.isEmpty ? 0 : spans[spans.length ~/ 2].toStringAsFixed(2)} ms, '
+      report.add('$what: the document read again ${ws.reads - reads} times, the hand moved ${(steps / (clock.elapsedMicroseconds / 1e6)).toStringAsFixed(1)} a second, the stage drew ${stage.toStringAsFixed(1)} a second; ${spans.length} pictures, late $over, median ${spans.isEmpty ? 0 : spans[spans.length ~/ 2].toStringAsFixed(2)} ms, '
           '99th ${spans.isEmpty ? 0 : spans[(spans.length * 0.99).floor().clamp(0, spans.length - 1)].toStringAsFixed(2)} ms, most ${spans.isEmpty ? 0 : spans.last.toStringAsFixed(2)} ms');
       final slow = [for (final f in timings.skip(from)) if (f.totalSpan.inMicroseconds > 16667) f];
       double mid(Iterable<double> xs) { final l = xs.toList()..sort(); return l.isEmpty ? 0 : l[l.length ~/ 2]; }
