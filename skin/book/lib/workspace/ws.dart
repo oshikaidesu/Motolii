@@ -327,6 +327,16 @@ class Ws extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Keys picked together (a box drawn round them): these and no others.
+  void pickKeys(Iterable<WsKey> ks) {
+    _keys
+      ..clear()
+      ..addAll(ks);
+    if (_keys.isNotEmpty) _sel = _keys.first.layer;
+    deskManual = null;
+    notifyListeners();
+  }
+
   void clearKeys() {
     if (_keys.isEmpty) return;
     _keys.clear();

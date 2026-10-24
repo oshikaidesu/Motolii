@@ -160,31 +160,78 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
   // inside's, and the bar is drawn from what the inside then says.
   ({String id, String part, double grab, bool moved})? _bar;
 
+  int _barIn = 0, _barOut = 0;   // (the held bar's ends when it was taken: a cut stops one frame short of nothing, since a bar cut to nothing cannot be seen, taken again, or kept: the document is as long as its longest thing)
+
+  // The pointer over a bar says what it would do: an end cuts, the body slides, a key slides; the room between draws a box.
+  MouseCursor _cursor = MouseCursor.defer;
+  MouseCursor _cursorAt(Offset p) {
+    final ws = _ws!, v = _view, i = ((p.dy + _vscroll) / WtM.row).floor();
+    if (i < 0 || i >= ws.layers.length) return MouseCursor.defer;
+    final l = ws.layers[i], a = v.x(l.inF), b = v.x(l.outF);
+    if (_isLocked(ws, l.id) || p.dx < a - 6 || p.dx > b + 6) return SystemMouseCursors.precise;
+    if (l.keys.any((k) => (v.x(k) - p.dx).abs() <= WtM.keyPicked + 2)) return SystemMouseCursors.click;
+    return (p.dx - a).abs() <= 6 || (p.dx - b).abs() <= 6 ? SystemMouseCursors.resizeLeftRight : SystemMouseCursors.grab;
+  }
   // A key held by a hand: it (and the keys picked with it) slides in time; the playhead shows where, let go it is so.
   ({List<WsKey> keys, int grab, int by})? _slide;
 
   void _barDown(Offset p) {
+  // A box drawn over the empty room of the tracks (any direction): the keys inside it are picked, else the things whose
+  // bars it touches (Ableton's and After Effects' marquee). Corners, in the tracks' own points.
+  (Offset, Offset)? _box;
+
     final ws = _ws!, v = _view, m = ws.inside;
+    if (!_grab(p)) setState(() => _box = (p, p));
+  }
+
+  void _boxUp() {
+    final b = _box;
+    setState(() => _box = null);
+    if (b == null) return;
+    final ws = _ws!, v = _view, r = Rect.fromPoints(b.$1, b.$2);
+    if (r.width < 4 && r.height < 4) return;   // (a click, not a box: the tap has done it)
+    final keys = <WsKey>[], things = <String>[];
+    for (var i = 0; i < ws.layers.length; i++) {
+      final l = ws.layers[i], top = i * WtM.row - _vscroll;
+      if (top + WtM.row < r.top || top > r.bottom || _isLocked(ws, l.id)) continue;
+      for (final k in l.keys) {
+        if (v.x(k) >= r.left && v.x(k) <= r.right) keys.add((layer: l.id, frame: k));
+      }
+      if (v.x(l.outF) >= r.left && v.x(l.inF) <= r.right) things.add(l.id);
+    }
+    if (keys.isNotEmpty) {
+      ws.pickKeys(keys);
+    } else if (things.isNotEmpty) {
+      ws.clearKeys();
+      ws.pickMany(things, byHand: false);
+    }
+  }
+
+  bool _grab(Offset p) {
     final i = ((p.dy + _vscroll) / WtM.row).floor();
-    if (m == null || i < 0 || i >= ws.layers.length) return;
+    if (m == null || i < 0 || i >= ws.layers.length) return false;
     final l = ws.layers[i], a = v.x(l.inF), b = v.x(l.outF);
-    if (_isLocked(_ws!, l.id) || p.dx < a - 6 || p.dx > b + 6) return;
+    if (_isLocked(_ws!, l.id) || p.dx < a - 6 || p.dx > b + 6) return false;
     for (final k in l.keys) {
       if ((v.x(k) - p.dx).abs() > WtM.keyPicked + 2) continue;
       final held = (layer: l.id, frame: k), all = ws.keys.contains(held) ? ws.keys.toList() : [held];
       if (!ws.keys.contains(held)) ws.pickKey(held);
       if (ws.playing) ws.playing = false;
       _slide = (keys: all, grab: k, by: 0);
-      return;
+      return true;
     }
     m.take(int.parse(l.id));
     ws.select(l.id);
     if (ws.playing) ws.playing = false;
     _bar = (id: l.id, part: (p.dx - b).abs() <= 6 ? 'tail' : ((p.dx - a).abs() <= 6 ? 'head' : 'bar'), grab: v.frameAt(p.dx), moved: false);
+    _barIn = l.inF;
+    _barOut = l.outF;
   }
+    return true;
 
   void _barMove(Offset p) {
     if (_slide case final s?) {
+    if (_box case (final from, _)?) return setState(() => _box = (from, p));
       final by = _view.frameAt(p.dx).round() - s.grab;
       _slide = (keys: s.keys, grab: s.grab, by: by);
       _ws!.frame = (s.grab + by).clamp(0, Ws.duration);
@@ -192,13 +239,17 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
     }
     final h = _bar, ws = _ws!, m = ws.inside;
     if (h == null || m == null) return;
-    m.carry(h.part, (_view.frameAt(p.dx) - h.grab).round() / Ws.fps); // (by whole frames)
+    var by = (_view.frameAt(p.dx) - h.grab).round();   // (by whole frames)
+    if (h.part == 'tail') by = math.max(by, _barIn + 1 - _barOut);
+    if (h.part == 'head') by = math.min(by, _barOut - 1 - _barIn);
+    m.carry(h.part, by / Ws.fps);
     _bar = (id: h.id, part: h.part, grab: h.grab, moved: true);
     ws.respan(h.id);
   }
 
   void _barUp({bool keep = true}) {
     if (_slide case final s?) {
+    if (_box != null) return keep ? _boxUp() : setState(() => _box = null);
       _slide = null;
       if (keep) wsSlideKeys(_ws!, s.keys, s.by);
       return;
@@ -305,9 +356,9 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
     }
     switch (_workDrag) {
       case 0:
-        setState(() => _workIn = f.clamp(0, _workOut - 2));
+        setState(() => _workIn = f.clamp(0, _workOut - Ws.fps ~/ 2));   // (never shut to nothing: half a second at least, so the document cannot be dragged out of sight)
       case 1:
-        setState(() => _workOut = f.clamp(_workIn + 2, Ws.duration));
+        setState(() => _workOut = f.clamp(_workIn + Ws.fps ~/ 2, Ws.duration));
       case 2:
         final len = _workOut - _workIn, a = (_view.frameAt(p.dx) - _workGrab).round().clamp(0, Ws.duration - len);
         setState(() {
@@ -543,17 +594,23 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
                 ),
               ),
               Expanded(
-                child: Listener(
+                child: MouseRegion(
+                  cursor: _cursor,
+                  onHover: (e) {
+                    final c = _cursorAt(e.localPosition);
+                    if (c != _cursor) setState(() => _cursor = c);
+                  },
+                  child: Listener(
                   onPointerSignal: _wheel,
                   child: GestureDetector(
                     key: const ValueKey('ws-tl-tracks'),
                     behavior: HitTestBehavior.opaque,
                     dragStartBehavior: DragStartBehavior.down,
                     onTapDown: (d) => _trackDown(d.localPosition),
-                    onHorizontalDragStart: (d) => _barDown(d.localPosition),
-                    onHorizontalDragUpdate: (d) => _barMove(d.localPosition),
-                    onHorizontalDragEnd: (_) => _barUp(),
-                    onHorizontalDragCancel: () => _barUp(keep: false),
+                    onPanStart: (d) => _barDown(d.localPosition),
+                    onPanUpdate: (d) => _barMove(d.localPosition),
+                    onPanEnd: (_) => _barUp(),
+                    onPanCancel: () => _barUp(keep: false),
                     child: RepaintBoundary(
                       child: CustomPaint(
                         size: Size.infinite,
@@ -563,6 +620,7 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
                   ),
                 ),
               ),
+                ),
               _Overview(from: _scroll, to: _scroll + _visible, frame: ws.frame, onDrag: (p) => _overview(p, box.maxWidth)),
             ],
           ),
@@ -582,6 +640,15 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
             ),
           ),
           if (_naming case (final at, _)?)   // (a mark's name written over its flag)
+          if (_box case (final a, final b)?)
+            Positioned.fromRect(
+              rect: Rect.fromPoints(a, b).shift(Offset(0, WtM.ruler)),
+              child: IgnorePointer(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(color: WsT.accent.withAlpha(36), border: Border.all(color: WsT.accent, width: 1)),
+                ),
+              ),
+            ),
             Positioned(
               left: v.x((at * Ws.fps).round()),
               top: WtM.band + 1,
@@ -629,8 +696,7 @@ class _Header extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tc = ws.timecode().split(':');
-    final big = T.value(Grey.g95).copyWith(fontSize: T.px(17), fontWeight: FontWeight.w600, fontFeatures: const [FontFeature.tabularFigures()]);
+    final big = T.value(Grey.g76).copyWith(fontSize: T.px(14), fontWeight: FontWeight.w500, fontFeatures: const [FontFeature.tabularFigures()]);
     final picked = ws.keys.length, layer = ws.layer;
     return Container(
       height: WtM.header,
@@ -655,11 +721,7 @@ class _Header extends StatelessWidget {
               SizedBox(width: Shape.s(2)),
               _Btn(TpGlyph.loop, key: const ValueKey('ws-tl-loop'), on: loop, onTap: onLoop),
               SizedBox(width: Shape.s(12)),
-              Text(tc[0], style: big.copyWith(color: T.ink(Grey.g56))),
-              Text(':', style: big.copyWith(color: T.ink(Grey.g56))),
-              Text(tc[1], style: big),
-              Text(':', style: big.copyWith(color: T.ink(Grey.g56))),
-              Text(tc[2], style: big.copyWith(color: T.ink(WsT.accent))),
+              Text(ws.timecode(), style: big),   // (one number, one weight: not three colours)
               SizedBox(width: Shape.s(8)),
               if (roomy) ...[Text('/ ${ws.timecode(Ws.duration)}', style: T.value(Grey.g56)), SizedBox(width: Shape.s(10))],
               _Chip('${Ws.fps} fps'),
@@ -720,8 +782,8 @@ class _BtnState extends State<_Btn> {
   @override
   Widget build(BuildContext context) {
     final on = widget.on;
-    final bg = on ? WsT.accent : (_d || widget.lit ? Grey.g26 : (_h ? WsT.raised : WsT.well));
-    final ink = on ? WsT.onAccent : (_h || widget.lit ? Grey.g100 : (widget.rest ?? Grey.g91));
+    final bg = on ? WsT.accent : (_d || widget.lit ? Grey.g26 : (_h ? WsT.raised : const Color(0x00000000)));   // (flat at rest: a button shows itself when the hand is on it)
+    final ink = on ? WsT.onAccent : (_h || widget.lit ? Grey.g100 : (widget.rest ?? Grey.g56));
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       onEnter: (_) => setState(() => _h = true),

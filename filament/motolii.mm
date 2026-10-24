@@ -807,7 +807,7 @@ const char* motolii_reading(Motolii* m, int thing, const char* name) {
 // behind every other, a ticket said at once; motolii_answer says whether it is done (-1 not yet, 0 refused: then
 // motolii_answer_why says why, 1 done; for add and make, the new thing). The calls: say, set, let_go (number: keep),
 // undo, redo, together (number: begin 1, end 0: the end's answer is the step's), add (name: kind, word: file), make
-// (word: recipe), remove, mark (number: at, word), guide (name: axis, number: at, word "off" takes it away), work
+// (word: recipe), duplicate (the answer is the new thing), remove, mark (number: at, word), guide (name: axis, number: at, word "off" takes it away), work
 // (number: from, word: to), raise (number: places), sequence (number: overlap), key_here, unkey, stay (number: at), way
 // (number: at, word: way), effect (number: at), hold (a hand takes hold of it). A thing -1: the one the last add or make made.
 int motolii_later(Motolii* m, const char* call, int thing, const char* name, const char* word, double number) {
@@ -820,6 +820,7 @@ int motolii_later(Motolii* m, const char* call, int thing, const char* name, con
             if (thing == -1) thing = m->made;   // (the thing the last add or make asked later made)
             const long rows = sqlite3_total_changes(m->d->file);
             int ok = 0;
+            try {   // (a call that throws is refused with its words, not the end of the hand: the window waits on its ticket)
             if (c == "say") ok = changes(m, (int)doc_say(doc(m), thing, n.c_str(), w.c_str()));
             else if (c == "set") ok = changes(m, (int)doc_set(doc(m), thing, n.c_str(), w == "made" ? m->made : number));   // (word "made": the number is the thing the last add made, as a value that names a thing: a behaviour connected, a leader)
             else if (c == "let_go") ok = changes(m, (int)doc_let_go(doc(m), number != 0.0));
@@ -828,6 +829,7 @@ int motolii_later(Motolii* m, const char* call, int thing, const char* name, con
             else if (c == "together") ok = number != 0.0 ? (doc_act(*m->d), 1) : (m->d->act ? (int)doc_acted(*m->d) : 0);
             else if (c == "add") ok = m->made = changes(m, doc_add(doc(m), n.c_str(), w.c_str()));   // (name: the kind, word: the file; the answer is the new thing)
             else if (c == "make") ok = m->made = changes(m, doc_make(doc(m), w.c_str()));
+            else if (c == "duplicate") ok = m->made = changes(m, doc_duplicate(doc(m), thing));   // (the answer is the new thing)
             else if (c == "remove") ok = changes(m, (int)doc_remove(doc(m), thing));
             else if (c == "relate") ok = changes(m, (int)doc_relate(doc(m), thing, w.c_str(), m->now));
             else if (c == "fx_file") ok = changes(m, (int)doc_fx_file(doc(m), thing, w.c_str()));   // (an effect file put at the end of the thing's effects, or taken out)
@@ -860,7 +862,12 @@ int motolii_later(Motolii* m, const char* call, int thing, const char* name, con
                 ok = desk_is(m, dw, dh, x, y, sc, pt);
             }
             else if (c == "hold") ok = (int)doc_hold(doc(m), thing);   // (a hand takes hold: what it carries next is this thing's)
-            else m->trouble = "a change asked later is one of: say, set, hold, let_go, undo, redo, together, add, make, pen, remove, mark, guide, work, raise, sequence, key_here, unkey, stay, way, effect, fx_file, fx_move";
+            else m->trouble = "a change asked later is one of: say, set, hold, let_go, undo, redo, together, add, make, pen, duplicate, remove, mark, guide, work, raise, sequence, key_here, unkey, stay, way, effect, fx_file, fx_move";
+            } catch (const std::exception& e) {
+                ok = 0;
+                std::fprintf(stderr, "motolii: %s threw: %s\n", c.c_str(), e.what());
+                m->trouble = std::string(c) + " threw: " + e.what();
+            }
             if (sqlite3_total_changes(m->d->file) != rows) m->revision.fetch_add(1, std::memory_order_release);   // (counted before the answer: the window reads again what is so now)
             m->changed = true;
             std::lock_guard<std::mutex> hold(m->asked_lock);

@@ -68,6 +68,7 @@
 | 間の定義9種類（過去の倉庫の写し） | `filament/interp.h` | 今の土台で動く（倉庫の式と差 0） |
 | 文書（SQLite に事実を並べる）、取り消し、キーと間 | `filament/doc.h` | 今の土台で動く。**形と名前を過去の倉庫に揃える途中** |
 | 編集の口（C の関数）と、その客（行を読む道具、素の C）。エンジンを触る係は中の1本の糸で、時計も中身が持つ | `filament/motolii.h`、`motolii.mm`、`edit.cpp`、`edit.sh`、`filament/check/api.c` | 今の土台で動く |
+| 編集の口のライブラリだけを作る（`out/libmotolii.dylib`、約27秒。edit.sh は確認用の道具まで作り直す。作ったらアプリを立て直す） | `filament/build_lib.sh` | 今の土台で動く |
 | **物理の試し：踊る猫が玉を弾く（2D、Box2D）、ハリネズミのボールプール（3D、Jolt）**。緑を抜いた動画の輪郭を毎コマ OpenCV で焼き、玉をその輪郭に当てて、キーに焼いて書類にする | `filament/catball/` | 今の土台で動く（Box2D 3.1.1 は Homebrew。どの物理に決めるかは TASKS の 0 と 8） |
 | **物理エンジンの測り台**：同じ4場面（かけらの山・関節の格子・ロープ・猫の壁と球）を Rapier（Rust）と Jolt（C++）で測る。エンジン本体は `filament/third_party/physics/`（リポジトリ外、取ってきた物） | `filament/physics_bench/`（Rapier の測り台と Jolt の測り台） | 測り終えた（Jolt に決めた、TASKS の 0） |
 | **書類の中の物理（Jolt）**：物の値 physics（none・moves・still）・bounce・friction、段の gravity。最後のキーまではキー通り、そこから物理（速さを引き継ぐ）。1/60 秒刻みで回して毎コマ貯める、書類が変わったら回し直す | `filament/physics.h`、`filament/physics.cpp`（Jolt は `filament/third_party/physics/`、ビルドは `filament/edit.sh`） | 今の土台で動く |

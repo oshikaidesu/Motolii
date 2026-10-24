@@ -21,6 +21,7 @@ import 'dock.dart';
 import 'dock_glyphs.dart';
 import 'panes.dart';
 import 'desk_kit.dart';
+import 'key_drag.dart';
 import 'keys.dart';
 import 'stage.dart';
 import 'stage_view.dart' show WsRelationStack;
@@ -137,12 +138,29 @@ class _WorkspaceState extends State<Workspace> {
       'edit.cut': () => _typed(const CopySelectionTextIntent.cut(SelectionChangedCause.keyboard)),
       'edit.copy': () => _typed(CopySelectionTextIntent.copy),
       'edit.paste': () => _typed(const PasteTextIntent(SelectionChangedCause.keyboard)),
-      'edit.selectAll': () => _typed(const SelectAllTextIntent(SelectionChangedCause.keyboard)),
-      'thing.remove': () {
+      'edit.selectAll': () => _typed(const SelectAllTextIntent(SelectionChangedCause.keyboard)) ? null : ws.pickMany([for (final l in ws.layers) l.id]),   // (no words being written: every thing, as Ableton's Cmd+A in the arrangement)
+      'thing.deactivate': () {
         final t = int.tryParse(ws.selected ?? '');
         if (t == null) return;
-        ws.after(m.later('remove', thing: t));   // (without waiting; undo brings it back)
+        final hidden = ws.layers.any((l) => l.id == ws.selected && l.hidden);
+        ws.after(m.later('set', thing: t, name: 'visible', number: hidden ? 1 : 0));
+      },
+      'thing.remove': () {
+        if (ws.keys.isNotEmpty) return wsRemoveKeys(ws, ws.keys.toList());   // (keys picked: those, not the thing)
+        final all = ws.many.isNotEmpty ? ws.many.toList() : [if (ws.selected != null) ws.selected!];   // (things picked together: all of them, one step)
+        final ts = [for (final id in all) if (int.tryParse(id) case final t?) t];
+        if (ts.isEmpty) return;
+        m.later('together', number: 1);
+        for (final t in ts) {
+          m.later('remove', thing: t);   // (without waiting; undo brings them back)
+        }
+        ws.after(m.later('together'));
         ws.select(null);   // (nothing picked after it: a second Delete takes nothing else)
+      },
+      'thing.duplicate': () {
+        final t = int.tryParse(ws.selected ?? '');
+        if (t == null) return;
+        ws.after(m.later('duplicate', thing: t), null, (made) => ws.select('$made'));   // (the new one picked, as After Effects does)
       },
       'layers.sequence': () => ws.after(m.later('sequence')),   // (After Effects' Keyframe Assistant: one after another, from the top)
       'play.toggle': () => ws.playing = !ws.playing,
@@ -195,6 +213,7 @@ class _WorkspaceState extends State<Workspace> {
               item('Select All', 'edit.selectAll'),
             ],
           ),
+          item('Duplicate', 'thing.duplicate'),
           item('Remove', 'thing.remove'),
         ],
       ),

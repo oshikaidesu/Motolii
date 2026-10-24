@@ -18,6 +18,8 @@ const defaultKeys = <(String, String)>[
   ('cmd+c', 'edit.copy'),
   ('cmd+v', 'edit.paste'),
   ('cmd+a', 'edit.selectAll'),
+  ('cmd+d', 'thing.duplicate'),
+  ('0', 'thing.deactivate'),   // (Ableton's: 0 switches a clip off and on; here the eye)
   ('backspace', 'thing.remove'),
   ('delete', 'thing.remove'),
   ('space', 'play.toggle'),

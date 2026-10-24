@@ -2783,6 +2783,15 @@ static int doc_add(Doc& d, const char* kind, const char* file) {
     doc_rows(d, sqlite3_mprintf("select max(id) from thing"), [&](sqlite3_stmt* row) { thing = sqlite3_column_int(row, 0); });
     return thing;
 }
+// A thing made again: a new number with every fact of it (its keys and ways too), lying where it lies (After Effects'
+// Duplicate Layer; the new one is the newest number, as for add).
+static int doc_duplicate(Doc& d, int thing) {
+    if (!doc_knows(d, thing)) return d.trouble = "that is no thing", 0;
+    if (!doc_change(d, sqlite3_mprintf("insert into thing default values; insert into fact(thing, name, at, value, way) select last_insert_rowid(), name, at, value, way from fact where thing = %d;", thing))) return 0;
+    int made = 0;
+    doc_rows(d, sqlite3_mprintf("select max(id) from thing"), [&](sqlite3_stmt* row) { made = sqlite3_column_int(row, 0); });
+    return made;
+}
 static bool doc_release(Doc& d, int by, double now);
 static bool doc_free(Doc& d, int thing, int by, double now, bool stay);
 static std::vector<int> doc_things(Doc& d);

@@ -20,7 +20,7 @@ abstract final class WtM {
   static double get overview => Shape.z(12.0);
 
   /// The work-area band on top of the ruler, and the room left of frame 0 / right of the last frame.
-  static double get band => Shape.z(9.0);
+  static double get band => Shape.z(12.0);
   static double get padL => Shape.s(10.0);
   static double get padR => Shape.s(14.0);
   static const barRadius = 4.0;
@@ -252,8 +252,11 @@ class WtTracksPainter extends CustomPainter {
     }
     c.save();
     c.clipRRect(rr);
-    c.drawRect(Rect.fromLTWH(x0, bar.top, 3, bar.height), p..color = grip);
-    c.drawRect(Rect.fromLTWH(x1 - 3, bar.top, 3, bar.height), p..color = grip);
+    c.drawRect(Rect.fromLTWH(x0, bar.top, 5, bar.height), p..color = grip);   // (the ends a hand cuts the bar by: wide, with a light notch)
+    c.drawRect(Rect.fromLTWH(x1 - 5, bar.top, 5, bar.height), p..color = grip);
+    final notch = ink.withAlpha(r.selected ? 200 : 120);
+    c.drawRect(Rect.fromLTWH(x0 + 2, bar.top + 4, 1.5, bar.height - 8), p..color = notch);
+    c.drawRect(Rect.fromLTWH(x1 - 3.5, bar.top + 4, 1.5, bar.height - 8), p..color = notch);
     if (r.wave case final w?) _wave(c, bar, ink, fill, r.inF, w);
     final nameX = math.max(x0 + 8, 6.0);
     final t = _text(r.name, T.name(ink).copyWith(fontWeight: FontWeight.w700));

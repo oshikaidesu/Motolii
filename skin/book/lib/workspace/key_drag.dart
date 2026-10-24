@@ -28,3 +28,20 @@ void wsSlideKeys(Ws ws, Iterable<WsKey> keys, int by) {
   }
   ws.after(m.later('together'), (_, _) => ws.reread());
 }
+
+/// The picked keys taken away (every value of the thing that has a key at that moment), one step.
+void wsRemoveKeys(Ws ws, Iterable<WsKey> keys) {
+  final m = ws.inside;
+  if (m == null || keys.isEmpty) return;
+  m.later('together', number: 1);
+  for (final k in keys) {
+    final t = int.tryParse(k.layer);
+    if (t == null) continue;
+    final at = k.frame / Ws.fps;
+    for (final n in m.moving(t)) {
+      if (m.keyMoments(t, n).any((s) => (s - at).abs() < .5 / Ws.fps)) m.later('unkey', thing: t, name: n, number: at);
+    }
+  }
+  ws.clearKeys();
+  ws.after(m.later('together'), (_, _) => ws.reread());
+}
