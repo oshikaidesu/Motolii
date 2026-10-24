@@ -86,7 +86,7 @@
 | 板の材質（色抜き、型、重ね方4つ、動画の色） | `filament/flat.mat`、`matte.mat`、`matte.glsl` | 今の土台で動く |
 | 場面の見本：民衆、人形劇、マスク、重ね方、壁、AE再生、AEの動き、文書 | `filament/neko.mm`、`puppet.mm`、`mask.mm`、`lay.mm`、`wall.mm`、`ae.mm`、`led.mm`（開くのは `filament/neko.sh`、`puppet.sh`、`lay.sh`、`led.sh`。led の動きは `filament/led.json`、3Dシェイプレイヤーつきは `filament/led_card.json`） | 今の土台で動く。動画は `reports/show/` |
 | ビルド：今の土台用。Filament と ThorVG を Dawn で作る手順、Filament の中に仕事を入れる口、計算の口の確かめ | `filament/dawn_probe/`（場面を作るのは `kit_wgpu.sh`、ThorVG は `tvg_on_dawn.sh`） | 今の土台で動く |
-| 人の物への手入れ：Filament（計算の口、機械を借りる口、外の絵を受ける口、動画の共有の機能）、ThorVG main 9203245（3つ目の数 z、4 MiB を超える書き込みを分けて書く、曲線の長さと破線の不具合よけ、デスクの印を重ねて描く over、元が不透明な形1つのアルファマットをクリップにする matte_clip） | `filament/dawn_probe/filament_dawn_compute.patch`、`thorvg_z.patch`、`thorvg_wg_upload.patch`、`gpu_door.h`、`gpu_door.cpp` | 今の土台で動く。ThorVG の物は本家に送らない |
+| 人の物への手入れ：Filament（計算の口、機械を借りる口、外の絵を受ける口、動画の共有の機能）、ThorVG main 9203245（3つ目の数 z、4 MiB を超える書き込みを分けて書く、曲線の長さと破線の不具合よけ、デスクの印を重ねて描く over、元が不透明な形1つのアルファマットをクリップにする matte_clip） | `filament/dawn_probe/filament_dawn_compute.patch`、`thorvg_z.patch`、`thorvg_wg_upload.patch`、`gpu_door.h`、`gpu_door.cpp` | 今の土台で動く。ThorVG の物は本家に送らない。本家の同じ話（10/24 調べ）：GPU の絵をそのまま受け取る `thorvg_texture.patch` は本家の要望 thorvg/thorvg#3365（OPEN、開発者 hermet「同じ描画の文脈で作られた絵なら」）と同じ物、3D は本家が向き（or）まで対応（thorvg/thorvg#4150）で奥行きを外に渡す口は無い、over に似た直しは thorvg/thorvg#4720（閉）、length・wg_upload・matte_clip は本家に同じ報告なし |
 
 ## 4. ガラスと光（残すと決まっている）
 
