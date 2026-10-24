@@ -9,6 +9,7 @@ import 'package:widgetbook/widgetbook.dart';
 
 part 'op_02_kit.dart';
 part 'op_02_falloff.dart';
+part 'op_02_falloff_2.dart';
 part 'op_02_echo.dart';
 part 'op_02_blur.dart';
 
