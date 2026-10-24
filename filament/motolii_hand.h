@@ -43,6 +43,7 @@ struct Motolii {
     std::atomic<void*> shown_with{nullptr};
     std::deque<std::function<void()>> asked;
     std::map<std::string, std::shared_ptr<std::function<void()>>> latest;
+    std::string lastPosted;                                      // (the kind of the queue's last, if posted: only that one is replaced)
     int tickets = 0;                                             // (motolii_later: the last ticket given)
     std::map<int, std::pair<int, std::string>> answers;          // (and each change's answer once done: done or not, and why not)
     std::string answered_why;                                    // (the last answer's why, told to the shell)   // (posted and not done yet, by what it is: a later one of the same takes its place)
@@ -104,6 +105,7 @@ template <class Does> static auto asked(Motolii* m, Does does, bool changes, con
     auto done = task.get_future();
     {
         std::lock_guard<std::mutex> hold(m->asked_lock);
+        m->lastPosted.clear();
         m->asked.push_back([&task, m, changes, who] {
             const auto t0 = std::chrono::steady_clock::now();
             task();
@@ -142,22 +144,25 @@ template <class Does> static auto by_hand(Motolii* m, Does does, const char* who
 // (the hand holds it only while it changes the document or tells it a moment, never while a picture is drawn), so a
 // shell's hundreds of reads a build never wait on a picture. (The Flutter kin read so: research_notes/flutter_native_kin.md)
 // A change the shell does not wait for (where a hand is, the moment the playhead is put at, play or stop): put in the
-// hand's queue and answered at once; one of the same kind still waiting there is replaced by it, keeping its place, so
-// a hand moving faster than the pictures leaves only where it is now. What it says absolutely (where the hand is, not
-// how far it moved), the document's own reckoning.
+// hand's queue and answered at once; one of the same kind last in the queue is replaced by it, keeping its place, so
+// a hand moving faster than the pictures leaves only where it is now. Only the last: one with others asked after it
+// stays, so nothing is done out of the order it was asked (Chromium's input queue coalesces with its back alone:
+// MainThreadEventQueue). What it says absolutely (where the hand is, not how far it moved), the document's own reckoning.
 static int posted(Motolii* m, const std::string& kind, std::function<void()> does) {
     {
         std::lock_guard<std::mutex> hold(m->asked_lock);
         auto& waiting = m->latest[kind];
-        if (waiting) *waiting = std::move(does);
+        if (waiting && m->lastPosted == kind) *waiting = std::move(does);
         else {
-            waiting = std::make_shared<std::function<void()>>(std::move(does));
-            m->asked.push_back([m, kind] {
+            auto mine = std::make_shared<std::function<void()>>(std::move(does));
+            waiting = mine;
+            m->asked.push_back([m, kind, mine] {
                 std::function<void()> now;
-                { std::lock_guard<std::mutex> hold(m->asked_lock); now = std::move(*m->latest[kind]); m->latest.erase(kind); }
+                { std::lock_guard<std::mutex> hold(m->asked_lock); now = std::move(*mine); if (m->latest[kind] == mine) m->latest.erase(kind); }
                 now();
                 m->changed = true;
             });
+            m->lastPosted = kind;
         }
     }
     m->asked_now.notify_one();

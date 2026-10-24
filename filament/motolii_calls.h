@@ -371,6 +371,7 @@ int motolii_later(Motolii* m, const char* call, int thing, const char* name, con
     {
         std::lock_guard<std::mutex> hold(m->asked_lock);
         ticket = ++m->tickets;
+        m->lastPosted.clear();
         m->asked.push_back([m, c, n, w, thing = thing, number, ticket]() mutable {
             if (thing == -1) thing = m->made;   // (the thing the last add or make asked later made)
             const long rows = sqlite3_total_changes(m->d->file);

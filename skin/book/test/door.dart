@@ -1,6 +1,7 @@
 // The door for trying a pane, a desk tool or a preset of your own on a real document, in a test (README.md tells how).
 import 'dart:io';
 
+import 'package:flutter/gestures.dart' show kDoubleTapMinTime;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -159,6 +160,13 @@ Future<void> settled(WidgetTester t, Ws ws) async {
     await t.pump();
   }
   await t.pumpAndSettle();
+}
+
+/// Two presses, as Flutter's own tests make a double tap (tap, kDoubleTapMinTime, tap): a dock tile is put on so (f052e7e).
+Future<void> doubleTap(WidgetTester t, Finder f) async {
+  await t.tap(f);
+  await t.pump(kDoubleTapMinTime);
+  await t.tap(f);
 }
 
 /// The window's state, as a pane reads it with WsScope.of.

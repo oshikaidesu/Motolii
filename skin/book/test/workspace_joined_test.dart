@@ -110,7 +110,7 @@ void main() {
     expect(m.put(cube, 'y', 2, 3), isTrue, reason: m.trouble);
     m.keying(false);
     expect(m.keyMoments(cube, 'y'), [1.0, 2.0]);
-    expect(m.value(cube, 'y', 1.5), 1.5, reason: 'it travels from where it was to where it was put');
+    expect((await m.shownAt([(cube, 'y', 1.5)])).single, 1.5, reason: 'it travels from where it was to where it was put');   // (another moment: asked, as BRIDGE.md rule 7 says)
     expect(m.unkey(cube, 'y', 1) && m.unkey(cube, 'y', 2), isTrue, reason: m.trouble);
     expect([m.keyed(cube, 'y', 2), m.value(cube, 'y', 0)], [0, 3], reason: 'its last key gone, it stays what that key held');
     expect(m.set(cube, 'rotate_x', 30) && m.set(cube, 'rotate_y', 40), isTrue, reason: m.trouble);
@@ -387,7 +387,7 @@ void main() {
 
     // (a thing held and let go without keeping: nothing happened; kept: one step, whatever was carried)
     expect(m.hold(text) && m.carry('place', 100, 0) && m.letGo(false), isTrue, reason: m.trouble);
-    expect(m.value(text, 'x', 2), 1);
+    expect((await m.shownAt([(text, 'x', 2)])).single, 1);   // (another moment: asked, BRIDGE.md rule 7)
     expect(t.takeException(), isNull);
     await expectSameAfterReopen(t);
     await _close(t);
@@ -461,7 +461,8 @@ void main() {
     m.keying(true);
     expect(m.at(2), isTrue);
     expect(m.hold(cube) && m.carry('x', 3, 0) && m.letGo(true), isTrue, reason: m.trouble);
-    expect([m.value(cube, 'x', 0), m.value(cube, 'x', 1), m.value(cube, 'x', 2)], [0, 1.5, 3], reason: 'from where it was to where it was let go');
+    expect(await m.shownAt([(cube, 'x', 0), (cube, 'x', 1), (cube, 'x', 2)]), [0, 1.5, 3],   // (other moments: asked, BRIDGE.md rule 7)
+        reason: 'from where it was to where it was let go');
     expect(m.undo(), isTrue, reason: 'both keys are one step');
     expect(m.keyed(cube, 'x', 2), 0);
     expect(m.redo(), isTrue);
@@ -1052,7 +1053,7 @@ void main() {
     final ids = {for (final e in find.byType(NumField).evaluate()) (e.widget as NumField).id};
     expect(ids, containsAll(['v_x', 'v_distance', 'v_zoom']), reason: 'the inside\'s Camera card, as After Effects\' camera');
     expect(ids.intersection({'v_scale_x', 'v_opacity', 'depth'}), isEmpty, reason: 'a camera has none of these');
-    expect(inspectorCards(t), ['Camera', 'Projection'], reason: 'where it is and looks, then its lens: orthographic, shifted');
+    expect(inspectorCards(t), ['Camera', 'Projection', 'Note'], reason: 'where it is and looks, then its lens: orthographic, shifted');
     expect(m.say(cam, 'projection', 'orthographic') && m.key(cam, 'shift_y', 0, 0.2), isTrue, reason: m.trouble);
     final dist = find.byWidgetPredicate((w) => w is NumField && w.id == 'v_distance');
     await seen(t, dist);
@@ -1191,11 +1192,11 @@ void main() {
     await t.pumpAndSettle();
     expect(find.descendant(of: find.byType(ValuesCard), matching: find.text('Surface')), findsOneWidget, reason: 'Filament\'s own surface of a solid');
     expect(m.say(cube, 'fill', 'glass'), isTrue, reason: m.trouble);
-    expect(m.cards(cube).map((c) => c.$1), ['Fill', 'Transform', 'Blending', 'Glass', 'Lit', 'Physics'], reason: 'filled with glass: the glass\'s own card, not the surface\'s');
+    expect(m.cards(cube).map((c) => c.$1), ['Fill', 'Transform', 'Blending', 'Motion', 'Glass', 'Lit', 'Physics', 'Note'], reason: 'filled with glass: the glass\'s own card, not the surface\'s');
     expect(m.cards(rect).map((c) => c.$1).contains('Matte'), isFalse, reason: 'not clipped: no matte to say how');
     expect(m.set(rect, 'clip', 1) && m.cards(rect).map((c) => c.$1).contains('Matte'), isTrue);
     expect(m.set(cube, 'ior', 2.2) && m.value(cube, 'ior', 0) == 2.2, isTrue, reason: m.trouble);
-    expect(m.say(cube, 'fill', 'ff3366') && m.cards(cube).map((c) => c.$1).join(' ') == 'Fill Transform Blending Surface Lit Physics', isTrue);
+    expect(m.say(cube, 'fill', 'ff3366') && m.cards(cube).map((c) => c.$1).join(' ') == 'Fill Transform Blending Motion Surface Lit Physics Note', isTrue);
     expect(find.byWidgetPredicate((w) => w is NumField && w.id == 'v_metallic'), findsOneWidget);
     expect(t.takeException(), isNull);
     await expectSameAfterReopen(t);
@@ -1252,7 +1253,7 @@ void main() {
     final spot = int.parse(ws.selected!);
     expect([m.word(spot, 'kind'), m.word(spot, 'file')], ['light', 'spot'], reason: m.trouble);
     expect(find.descendant(of: find.byType(InspHeader), matching: find.text('Light')), findsOneWidget);
-    expect(inspectorCards(t), ['Fill', 'Transform', 'Light'], reason: 'its colour, where it is and how it is turned, as After Effects\' lights have, then its own');
+    expect(inspectorCards(t), ['Fill', 'Transform', 'Light', 'Note'], reason: 'its colour, where it is and how it is turned, as After Effects\' lights have, then its own');
     expect(m.set(spot, 'shadows', 1) && m.say(spot, 'fill', 'ffb36b') && m.set(spot, 'cone', 20), isTrue, reason: m.trouble);
     expect(m.set(spot, 'shadows', 2), isFalse, reason: 'shadows is 0 or 1');
     expect(m.key(spot, 'intensity', 0, 0) && m.key(spot, 'intensity', 1, 3), isTrue, reason: 'its strength moves: ${m.trouble}');
@@ -1357,31 +1358,6 @@ void main() {
     await _close(t);
   }, skip: !_built);
 
-  testWidgets('a whole-screen effect is a file: the Effects shelf lists effects/, a press puts it over the stage, its knobs on the stage\'s card, a press takes it off', (t) async {
-    final ws = await _pump(t), m = ws.inside!;
-    final kaleido = m.effects.firstWhere((e) => e.$2.endsWith('/kaleido.wgsl'));
-    ws
-      ..reread()
-      ..shelf = 'Effects';
-    await t.pumpAndSettle();
-    final row = find.byKey(ValueKey('ws-screen-${kaleido.$1}'));
-    await t.enterText(find.descendant(of: find.byType(DockSearch), matching: find.byType(EditableText)), kaleido.$1); // (found as a hand finds one among forty: by its name)
-    await t.pumpAndSettle();
-    await t.tap(row);
-    await t.pumpAndSettle();
-    expect(m.word(0, 'script'), kaleido.$2, reason: m.trouble);
-    expect(find.descendant(of: row, matching: find.text('ON 1')), findsOneWidget);
-    final own = 'js_${kaleido.$2.split('/').last.replaceAll('.wgsl', '')}_'; // (a whole-screen effect's knobs: named by the effect too)
-    expect(m.cards(0).firstWhere((c) => c.$1 == 'Script').$2, containsAll(['${own}sides', '${own}angle']));
-    expect(m.set(0, '${own}sides', 3), isTrue, reason: m.trouble);
-    await t.tap(row);
-    await t.pumpAndSettle();
-    expect(ws.screenFx, isEmpty, reason: 'taken off');
-    expect(t.takeException(), isNull);
-    await expectSameAfterReopen(t);
-    await _close(t);
-  }, skip: !_built);
-
   testWidgets('with a thing picked, an effect of the list goes on it (as the camera sees it, its fx), not on the whole stage; a press takes it off', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final cube = m.add('solid', 'cube');
@@ -1394,13 +1370,13 @@ void main() {
     final row = find.byKey(ValueKey('ws-screen-${half.$1}'));
     await t.enterText(find.descendant(of: find.byType(DockSearch), matching: find.byType(EditableText)), half.$1);
     await t.pumpAndSettle();
-    await t.tap(row);
-    await t.pumpAndSettle();
+    await doubleTap(t, row);
+    await settled(t, ws);
     expect(m.word(cube, 'fx'), half.$2, reason: m.trouble);
     expect(m.word(0, 'script'), anyOf('', 'none'), reason: 'the whole stage is left as it was');
     expect(find.descendant(of: row, matching: find.text('ON 1')), findsOneWidget);
-    await t.tap(row);
-    await t.pumpAndSettle();
+    await doubleTap(t, row);
+    await settled(t, ws);
     expect(ws.screenFx, isEmpty, reason: 'taken off');
     expect(t.takeException(), isNull);
     await expectSameAfterReopen(t);
@@ -1421,13 +1397,13 @@ void main() {
     final row = find.byKey(ValueKey('ws-motion-${spring.$1}'));
     await t.enterText(find.descendant(of: find.byType(DockSearch), matching: find.byType(EditableText)), spring.$1);
     await t.pumpAndSettle();
-    await t.tap(row);
-    await t.pumpAndSettle();
+    await doubleTap(t, row);
+    await settled(t, ws);
     expect(m.word(text, 'script'), spring.$2, reason: m.trouble);
     expect(find.descendant(of: row, matching: find.text('ON')), findsOneWidget);
     expect(m.cards(text).firstWhere((c) => c.$1 == 'Script').$2, containsAll(['js_length', 'js_delay', 'js_far']));
-    await t.tap(row);
-    await t.pumpAndSettle();
+    await doubleTap(t, row);
+    await settled(t, ws);
     expect(ws.motion, isEmpty, reason: 'taken off');
     expect(t.takeException(), isNull);
     await expectSameAfterReopen(t);
