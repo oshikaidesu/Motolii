@@ -6,7 +6,7 @@ set 1 rotate_x 62
 set 1 rotate 18
 set 1 y 0.35
 say 1 fill ff6a3d
-say 1 fx ../../effects/isf_god_rays.wgsl
+say 1 fx ../../effects/God Rays.fs
 set 1 js_isf_god_rays_lightPositionOnScreen_y 0.42
 add text ../arial_black.ttf
 say 2 text MOTOLII
