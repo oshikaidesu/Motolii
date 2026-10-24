@@ -98,7 +98,6 @@ static void stage_scale(Motolii* m) {
     View::DynamicResolutionOptions o;
     o.enabled = want < 1.0, o.minScale = o.maxScale = math::float2{(float)want}, o.quality = QualityLevel::MEDIUM;
     m->s->view->setDynamicResolutionOptions(o);
-    for (View* v : m->s->layers) v->setDynamicResolutionOptions(o);
 }
 template <class Does> static auto asked(Motolii* m, Does does, bool changes, const char* who) -> decltype(does()) {
     std::packaged_task<decltype(does())()> task(does);

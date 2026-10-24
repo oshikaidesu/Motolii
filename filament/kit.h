@@ -129,18 +129,13 @@ struct Stage {
     // doc_frame gives them) and of the one under the hand; `point`: desk pixels a point of the screen the marks are sized in.
     struct { uint32_t w = 0, h = 0; double x = 0, y = 0, scale = 1, point = 2; math::mat4 was, wasCulled;
              bool picked = false, hovered = false, knob = true; double pick[8] = {}, hover[8] = {}; } desk;
-    std::vector<View*> layers;   // further pictures laid over the stage's own view, in order (layer_view); the first `layered` of them are drawn
-    size_t layered = 0;
     std::function<void()> over;   // drawn last, over all of them (a whole-screen effect: screen.h)
     std::function<void()> lastly;   // and after everything, in the same frame (the desk: its stage's picture placed on it, live.h)
     // A picture laid over that reads what is under it (doc.h doc_blend_way): before it, the picture so far is copied to
     // `backdrop` for its material to read. drawnInto: the picture the views draw into (live.h, screen.h); none (the
     // screen, a written film): they draw into `composed` instead while one reads, and it is put on the screen at the end.
-    std::vector<char> backdropBefore;
-    std::vector<std::function<void(View*)>> layerDraw;   // a layer drawn by a hand of its own instead (a thing with effects of its own: screen.h thing_effects_draw)
     Texture* drawnInto = nullptr;
     Texture* backdrop = nullptr; RenderTarget* backdropTarget = nullptr;
-    Texture* composed = nullptr; Texture* composedDepth = nullptr; RenderTarget* composedTarget = nullptr;
     std::function<void(Texture*, RenderTarget*)> copyDoor;   // (a picture copied as it is: screen.h gives it; to none, the screen)
     RenderTarget* out = nullptr;   // where the picture goes at last (none: the screen; the window's live picture: live.h)
 };
@@ -190,32 +185,6 @@ static Stage open_stage(int w, int h) {
 // which takes nothing of depth (no depth of field, no bloom, no shade where things meet); its colours still go the way
 // the stage's own do (with no post-processing at all they would not be made ready for the screen: darker). Made when
 // first wanted, lit by the stage's own room, seen by the stage's eye; the k-th is layers[k].
-static View* layer_view(Stage& s, size_t k, bool flat) {
-    while (s.layers.size() <= k) {
-        View* v = s.engine->createView();
-        v->setScene(s.engine->createScene());
-        v->getScene()->setIndirectLight(s.scene->getIndirectLight());
-        v->setCamera(s.camera);
-        v->setViewport(s.view->getViewport());
-        v->setDithering(View::Dithering::NONE);
-        v->setAntiAliasing(s.view->getAntiAliasing());
-        v->setMultiSampleAntiAliasingOptions(s.view->getMultiSampleAntiAliasingOptions());
-        v->setAmbientOcclusionOptions(s.view->getAmbientOcclusionOptions());
-        v->setColorGrading(const_cast<ColorGrading*>(s.view->getColorGrading()));   // (the same one: Filament hands it out read-only)
-        v->setScreenSpaceRefractionEnabled(false);
-        v->setVisibleLayers(0x03, 0x03);
-        v->setBlendMode(View::BlendMode::TRANSLUCENT);
-        if (s.view->getRenderTarget()) v->setRenderTarget(s.view->getRenderTarget());
-        s.layers.push_back(v);
-        Renderer::ClearOptions clear = s.renderer->getClearOptions();   // (a picture laid over another begins clear, not black: the stage's own view covers all of it anyway)
-        clear.clearColor = {0, 0, 0, 0};
-        s.renderer->setClearOptions(clear);
-    }
-    View::AmbientOcclusionOptions shade = s.view->getAmbientOcclusionOptions();
-    shade.enabled = shade.enabled && !flat;
-    s.layers[k]->setAmbientOcclusionOptions(shade);
-    return s.layers[k];
-}
 
 // The stage's pictures laid out on the desk (on: before they are drawn) or on the stage again (off: after): the views the
 // stage's eye sees by, their viewport the desk's, the eye's projection moved and shrunk so the stage lies where the desk
@@ -223,7 +192,6 @@ static View* layer_view(Stage& s, size_t k, bool flat) {
 static void desk_lay(Stage& s, bool on) {
     const Viewport at = on ? Viewport{0, 0, s.desk.w, s.desk.h} : Viewport{0, 0, (uint32_t)s.w, (uint32_t)s.h};
     for (View* v : {s.view, s.view_behind, s.view_through}) if (v) v->setViewport(at);
-    for (View* v : s.layers) v->setViewport(at);
     const double near = s.camera->getNear(), far = s.camera->getCullingFar();
     if (!on) return s.camera->setCustomProjection(s.desk.was, s.desk.wasCulled, near, far);
     s.desk.was = s.camera->getProjectionMatrix(), s.desk.wasCulled = s.camera->getCullingProjectionMatrix();
@@ -947,31 +915,7 @@ static void pictures_of(Stage& s) {
     if (s.view_floor) s.renderer->render(s.view_floor);
     if (s.behindRead) s.renderer->render(s.view_behind);   // (the picture of what is behind: only once glass or the paper reads it; a whole pass of every thing's points)
     if (s.view_through) s.renderer->render(s.view_through);
-    const bool reads = std::any_of(s.backdropBefore.begin(), s.backdropBefore.end(), [](char b) { return b != 0; });
-    Texture* into = s.drawnInto;
-    const bool routed = reads && !into;   // (drawn for the screen: into a picture of its own first, so what is under can be copied)
-    if (routed) {
-        if (!s.composed) {
-            s.composed = Texture::Builder().width((uint32_t)s.w).height((uint32_t)s.h).levels(1).usage(Texture::Usage::COLOR_ATTACHMENT | Texture::Usage::SAMPLEABLE).format(Texture::InternalFormat::RGBA8).build(*s.engine);
-            s.composedDepth = Texture::Builder().width((uint32_t)s.w).height((uint32_t)s.h).levels(1).usage(Texture::Usage::DEPTH_ATTACHMENT).format(Texture::InternalFormat::DEPTH24).build(*s.engine);
-            s.composedTarget = RenderTarget::Builder().texture(RenderTarget::AttachmentPoint::COLOR, s.composed).texture(RenderTarget::AttachmentPoint::DEPTH, s.composedDepth).build(*s.engine);
-        }
-        into = s.composed;
-        s.view->setRenderTarget(s.composedTarget);
-        for (View* v : s.layers) v->setRenderTarget(s.composedTarget);
-    }
-    if (reads && into) backdrop_as(s, into->getWidth(), into->getHeight());   // (made before, as the moment was told: doc.h; here only if the size has moved since)
-    s.renderer->render(s.view);
-    for (size_t k = 0; k < s.layered && k < s.layers.size(); ++k) {
-        if (k < s.backdropBefore.size() && s.backdropBefore[k] && into && s.copyDoor) s.copyDoor(into, s.backdropTarget);   // (what is under it, as it is now)
-        if (k < s.layerDraw.size() && s.layerDraw[k]) s.layerDraw[k](s.layers[k]);
-        else s.renderer->render(s.layers[k]);
-    }
-    if (routed) {
-        if (s.copyDoor) s.copyDoor(s.composed, nullptr);   // (put on the screen, as it would have been drawn there)
-        s.view->setRenderTarget(nullptr);
-        for (View* v : s.layers) v->setRenderTarget(nullptr);
-    }
+    s.renderer->render(s.view);   // (one view: everything is in the stage's own scene)
     if (s.over) s.over();
     if (s.lastly) s.lastly();
 }

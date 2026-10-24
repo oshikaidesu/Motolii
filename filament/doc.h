@@ -1489,7 +1489,6 @@ static void doc_look(Doc& d) {
                                 .slopeOffsetPower(float3{slope}, float3{offset}, float3{power})
                                 .shadowsMidtonesHighlights(low, mid, high, float4{0.f, 0.333f, 0.55f, 1.f}).build(*s.engine);   // (the ranges as Filament's own)
         s.view->setColorGrading(now);
-        for (View* v : s.layers) v->setColorGrading(now);   // (the same grade on every picture laid over the stage's own)
         if (was) s.engine->destroy(was);
         d.graded = grade;
     }
@@ -1509,7 +1508,6 @@ static void doc_look(Doc& d) {
     View::MultiSampleAntiAliasingOptions many = s.view->getMultiSampleAntiAliasingOptions();
     many.enabled = smooth == "msaa", many.sampleCount = 4;
     s.view->setMultiSampleAntiAliasingOptions(many);
-    for (View* v : s.layers) v->setAntiAliasing(s.view->getAntiAliasing()), v->setTemporalAntiAliasingOptions(s.view->getTemporalAntiAliasingOptions()), v->setMultiSampleAntiAliasingOptions(many);
     View::VignetteOptions corners = s.view->getVignetteOptions();
     corners.enabled = doc_number(d, 0, "vignette", 0, 0) > 0.0, corners.midPoint = 1.f - 0.9f * (float)doc_number(d, 0, "vignette", 0, 0), corners.color = LinearColorA{hex("vignette_color", float3{0.f}), 1.f};
     s.view->setVignetteOptions(corners);
@@ -1531,7 +1529,6 @@ static void doc_look(Doc& d) {
         const auto found = made.find(which);
         if (found != made.end()) s.scene->setIndirectLight(found->second);
         else if (room(s, ("out/" + which + "/" + which + "_ibl.ktx").c_str(), d.roomLight)) made[which] = s.scene->getIndirectLight();
-        for (View* v : s.layers) v->getScene()->setIndirectLight(s.scene->getIndirectLight());
         d.roomIs = which;
     }
     if (IndirectLight* room = s.scene->getIndirectLight()) {
@@ -1765,7 +1762,6 @@ static void doc_moment(Doc& d, double now) {
             });
         t.run = run, t.lies = (int)i;
     }
-    s.layered = 0;   // (no views laid over: each run after the first is a channel of the stage's own view, its depth cleared, so it lies whole over the runs before)
     {   // (a glow: Filament's own, a thing past 1 bright taken up by the stage's bloom (its threshold), as emissive is)
         float most = 0.f;
         for (size_t i = 0; i < lies.size(); ++i)
@@ -1776,67 +1772,6 @@ static void doc_moment(Doc& d, double now) {
             s.view->setBloomOptions(glow);
         }
     }
-    s.backdropBefore.assign(s.layered, 0);
-    for (size_t k = 0; k < s.layered; ++k) s.backdropBefore[k] = sorts[k + (size_t)base + 1] == 2 || (sorts[k + (size_t)base + 1] == 3 && k + (size_t)base + 1 < runReads.size() && runReads[k + (size_t)base + 1]);
-    s.layerDraw.assign(s.layered, nullptr);
-    for (size_t i = 0; i < lies.size(); ++i)   // (those with effects of their own: their run drawn by their effects)
-        if (runOf[i] > base && sorts[(size_t)runOf[i]] == 3 && (size_t)(runOf[i] - base - 1) < s.layerDraw.size()) {   // (none while every run is in the one view)
-            const int thing = lies[i].thing;
-            ScreenStack& st = d.fx[thing];
-            thing_effects(s, st, doc_fx_join(doc_fx_list(d, thing)));
-            st.quiet = readBy.count(thing) > 0;
-            const ScreenPictures pictures = [&d, thing](const std::string& file, const std::string& name) -> Texture* {
-                std::lock_guard<std::recursive_timed_mutex> hold(d.lock);
-                const auto other = d.fx.find((int)doc_number(d, thing, doc_screen_knob(file, name).c_str(), d.stage->now, 0));
-                return other != d.fx.end() && other->first != thing ? other->second.seen : nullptr;   // (drawn before it this time when it lies under it; else as it was last time)
-            };
-            const ScreenNumbers numbers = [&d, thing](const std::string& file, const std::string& name, double usual) {
-                std::lock_guard<std::recursive_timed_mutex> hold(d.lock);   // (asked while the picture is drawn)
-                if (name == "origin_x" || name == "origin_y" || name == "turn" || name == "extent") {   // (where the thing is on the picture now, how turned, how large: an effect's pattern stuck to it)
-                    double frame[8];
-                    if (!doc_frame(d, thing, d.stage->now, frame)) return usual;
-                    return name == "origin_x" ? frame[0] : name == "origin_y" ? frame[1] : name == "turn" ? frame[4] : std::max(frame[2], frame[3]);
-                }
-                return doc_number(d, thing, doc_screen_knob(file, name).c_str(), d.stage->now, usual);
-            };
-            const std::string laid = doc_word(d, thing, "blend");   // (its way of lying on what is under, taken last: the W3C's 1-21, then add, multiply, screen)
-            const int way = doc_blend_way(laid) ? doc_blend_way(laid) : laid == "add" ? 22 : laid == "multiply" ? 23 : laid == "screen" ? 24 : 0;
-            const auto thorFx = [&d, thing] {   // (ThorVG's own among its steps, as they are now: lengths in points of the stage)
-                std::lock_guard<std::recursive_timed_mutex> hold(d.lock);
-                DrawnFx fx;
-                std::string why;
-                doc_fx(d, thing, d.stage->now, false, 1.0, fx, why, true);
-                // (as large as in its own picture: there its lengths go with how large it is drawn, so here too, by how
-                //  large it is now against how large it was made)
-                double frame[8];
-                const auto t = d.shown.find(thing);
-                if (t != d.shown.end() && t->second.drawn && t->second.drawn->fx.overHigh > 0.f && doc_frame(d, thing, d.stage->now, frame)) {
-                    const float k = (float)(frame[3] / (t->second.units * t->second.drawn->fx.overHigh));
-                    fx.blur *= k, fx.fall *= k, fx.soft *= k;
-                }
-                return fx;
-            };
-            s.layerDraw[(size_t)(runOf[i] - base - 1)] = [&s, &st, numbers, way, thorFx, pictures](View* v) { thing_effects_draw(s, st, v, numbers, way, thorFx, pictures); };
-        }
-    if (std::find(s.backdropBefore.begin(), s.backdropBefore.end(), (char)1) != s.backdropBefore.end())   // (as large as what the views draw into: the desk's when it is drawn there, else the stage's)
-        backdrop_as(s, s.desk.w && !s.over ? s.desk.w : (uint32_t)s.w, s.desk.w && !s.over ? s.desk.h : (uint32_t)s.h);
-    for (size_t i = 0; i < lies.size(); ++i)   // (those that read what is under: which way, and the picture of it)
-        if (runOf[i] >= 0 && (sorts[(size_t)runOf[i]] == 2 || (sorts[(size_t)runOf[i]] == 3 && runReads[(size_t)runOf[i]]))) {   // (every part of it: its fill, its edge, each copy's own look)
-            const Doc::Shown& t = *lies[i].shown;
-            const Mesh* sheet = t.film ? t.film->sheet : t.drawn ? t.drawn->sheet : nullptr;
-            auto& faces = s.engine->getRenderableManager();
-            const float way = (float)doc_blend_way(doc_word(d, lies[i].thing, "blend"));
-            for (const Stage::Made& made : s.made) {
-                if (!sheet || made.of != sheet || made.matte) continue;
-                const auto one = faces.getInstance(made.thing);
-                for (size_t part = 0; part < faces.getPrimitiveCount(one); ++part) {
-                    MaterialInstance* look = faces.getMaterialInstanceAt(one, part);
-                    look->setParameter("blendWay", sorts[(size_t)runOf[i]] == 3 ? 0.f : way);   // (with effects of its own: its way taken once they are on)
-                    look->setParameter("behind", doc_word(d, lies[i].thing, "fill") == "behind" ? 1.f : 0.f);
-                    if (s.backdrop) look->setParameter("backdrop", s.backdrop, TextureSampler(TextureSampler::MinFilter::NEAREST, TextureSampler::MagFilter::NEAREST));
-                }
-            }
-        }
     View::DepthOfFieldOptions lens = s.view->getDepthOfFieldOptions();   // (the camera's lens, on the stage's own view when solid things are in it)
     if (lens.enabled != (d.blurred && (base == 1 || (!sorts.empty() && sorts[0]))))
         lens.enabled = !lens.enabled, s.view->setDepthOfFieldOptions(lens);
@@ -2106,7 +2041,6 @@ static void doc_moment(Doc& d, double now) {
         const utils::Entity e = one.shown->light;
         if (e.isNull()) continue;
         std::vector<Scene*> all{s.scene};
-        for (View* v : s.layers) all.push_back(v->getScene());
         for (Scene* sc : all) one.on ? (sc->hasEntity(e) ? void() : sc->addEntity(e)) : sc->remove(e);
         if (!one.on) continue;
         auto& lights = s.engine->getLightManager();
@@ -2280,7 +2214,6 @@ static bool doc_match(Doc& d) {
         if (it->second.solid) solid_off(s, it->second.solid);
         if (!it->second.light.isNull()) {   // (out of every scene, and done away with)
             s.scene->remove(it->second.light);
-            for (View* v : s.layers) v->getScene()->remove(it->second.light);
             s.engine->getLightManager().destroy(it->second.light), utils::EntityManager::get().destroy(it->second.light);
         }
         if (it->second.shape) s.playing.erase(it->second.shape), take_off(s, it->second.shape);   // (a cloud's sort goes with it)

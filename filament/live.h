@@ -176,7 +176,6 @@ static void live_draw(Stage& s, Live* l) {
     }
     if (!s.over) {   // (with a whole-screen effect the stage draws to its own picture and the effect to this one: screen.h)
         s.view->setRenderTarget(s.out);
-        for (View* v : s.layers) v->setRenderTarget(s.out);   // (the pictures laid over it go to the same place)
     }
     draw(s, nullptr, false);
     s.lastly = nullptr;
@@ -192,7 +191,6 @@ static void live_draw(Stage& s, Live* l) {
     l->pendingIn = l->next;
     if (!s.over) {
         s.view->setRenderTarget(nullptr);
-        for (View* v : s.layers) v->setRenderTarget(nullptr);
     }
     s.out = nullptr;
     if (desk && !placed) l->pendingIn = -1;   // (the stage's own buffer was not drawn: its last picture stays the front)

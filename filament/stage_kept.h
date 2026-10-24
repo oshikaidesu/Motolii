@@ -113,7 +113,6 @@ static bool stage_kept_one(StageKept& k, Doc& d, Stage& s, int rate, double budg
     if (!s.over) {
         s.drawnInto = k.into;
         s.view->setRenderTarget(k.target);
-        for (View* v : s.layers) v->setRenderTarget(k.target);
     }
     auto* pixels = new std::vector<uint8_t>((size_t)s.w * s.h * 4);
     while (!begins(s)) {}
@@ -129,7 +128,6 @@ static bool stage_kept_one(StageKept& k, Doc& d, Stage& s, int rate, double budg
     if (std::getenv("MOTOLII_KEEP_LOG")) std::fprintf(stderr, "KEPT %d moment %.1f gpu %.1f ms\n", at, moment, gpu);
     if (!s.over) {
         s.view->setRenderTarget(nullptr);
-        for (View* v : s.layers) v->setRenderTarget(nullptr);
     }
     s.out = wasOut, s.drawnInto = wasInto;   // (left at that moment: the next picture shown is told its own first, and films step on rather than seek back)
     if (took > budget_ms) {
