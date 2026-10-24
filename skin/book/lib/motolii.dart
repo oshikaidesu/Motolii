@@ -2,6 +2,7 @@
 // sets/glass_live.dart calls the old glass. The skin holds no document: it holds this handle and the numbers of things.
 // One call = one change = one step of undo. A call that is not done returns false and [trouble] says why.
 // macOS only, Debug build only (the Debug entitlements have the sandbox off so that the library can be loaded).
+import 'dart:async';
 import 'dart:convert';
 import 'dart:ffi';
 import 'dart:io';
@@ -117,7 +118,13 @@ class Motolii {
       malloc.free(p);
     }
     malloc.free(version);
-    if (which != 0) told?.call(document: which & 1 != 0, moment: which & 2 != 0, kept: which & 4 != 0);
+    if (which & 8 != 0) {   // (an answer is there: the changes waited for, each looked at once)
+      for (final t in [..._waiting.keys]) {
+        final a = _answer(_m, t);
+        if (a >= 0) _waiting.remove(t)!.complete((a, a >= 1 ? '' : answerWhy));
+      }
+    }
+    if (which & 7 != 0) told?.call(document: which & 1 != 0, moment: which & 2 != 0, kept: which & 4 != 0);
   }
 
   /// A change the window waited for (skin/BRIDGE.md C3, going): its pictures taken at once, as the inside made them
@@ -198,12 +205,7 @@ class Motolii {
 
   /// The stage's picture as a Flutter texture (the inside draws it by its own clock; nothing is copied). -1: none.
   Future<int> texture() async {
-    final ticket = later('live');   // (opened by the hand, a moment at a time waited for here: the window never stands still for it)
-    var a = answer(ticket);
-    while (a < 0) {
-      await Future<void>.delayed(const Duration(milliseconds: 4));
-      a = answer(ticket);
-    }
+    final (a, _) = await answered(later('live'));   // (opened by the hand: the window never stands still for it)
     if (a == 0) return -1;
     return await _channel.invokeMethod<int>('start', {'lib': libPath, 'handle': _m.address}) ?? -1;
   }
@@ -714,6 +716,15 @@ class Motolii {
   /// A change asked without waiting for the inside's hand (say, set, let_go, undo, redo, together): queued in order behind
   /// every other, its ticket said at once ([answer] says when it is done).
   int later(String call, {int thing = 0, String name = '', String word = '', double number = 0}) => _with([call, name, word], (s) => _later(_m, s[0], thing, s[1], s[2], number));
+
+  /// A ticket's answer when it comes, and why not if refused: Thermion's VoidCallbackRegistry, as it is (a Completer under
+  /// each request's number, completed when the inside says an answer is there: motolii_tell 8). Nothing looks again and again.
+  Future<(int, String)> answered(int ticket) {
+    final a = answer(ticket);
+    if (a >= 0) return Future.value((a, a >= 1 ? '' : answerWhy));
+    return (_waiting[ticket] ??= Completer<(int, String)>()).future;
+  }
+  final _waiting = <int, Completer<(int, String)>>{};
 
   /// A ticket's answer: -1 not done yet, 0 refused ([answerWhy] says why), 1 done; said once.
   int answer(int ticket) {

@@ -336,29 +336,17 @@ class Ws extends ChangeNotifier {
   /// Whether changes told to the inside are not all done yet (the window shows them before the document has them).
   bool get waiting => _afters > 0;
   void after(int ticket, [void Function(bool done, String why)? then, void Function(int answer)? got]) {
-    int? answer;
+    final m = _inside;
+    if (m == null) return;
     _afters++;
-    void look(Duration _) {
-      final m = _inside;
-      if (m == null) return;
-      if (answer == null) {
-        final a = m.answer(ticket);
-        if (a >= 0) answer = a;
-      }
-      if (answer == null) {
-        SchedulerBinding.instance.scheduleFrameCallback(look);
-        return;
-      }
-      final a = answer!;
-      then?.call(a >= 1, a >= 1 ? '' : m.answerWhy);
+    m.answered(ticket).then((r) {   // (told by the inside when it is done: nothing looked at each picture)
+      final (a, why) = r;
+      then?.call(a >= 1, why);
       if (a >= 1) got?.call(a);   // (an add's or a make's answer: the new thing)
       _afters--;   // (what it changed comes with the inside's next picture of the document)
-    }
-
-    SchedulerBinding.instance
-      ..scheduleFrameCallback(look)
-      ..ensureVisualUpdate();
+    });
   }
+
 
   /// Joined: the effects on the picked thing (its fx: as the camera sees it, After Effects' effects on a layer), nearest
   /// the picture first. Effects are always a thing's: there is no stage-wide one (a whole picture's is a 2D plate showing
