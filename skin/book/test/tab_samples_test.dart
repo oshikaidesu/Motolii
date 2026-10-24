@@ -67,9 +67,11 @@ void main() {
     await rest();
     mv = wsMoves(ws).single;
     final at = mv.away, c = int.parse(cube);
-    double mid(String n) => mv.who.fold(0.0, (a, o) => a + (m.value(o, n, at) ?? 0)) / mv.who.length;
+    final asked = await m.valuesAt([for (final n in const ['x', 'y']) ...[for (final o in mv.who) (o, n, at), (c, n, at)]]);   // (another moment: asked, BRIDGE.md rule 7)
+    final k = mv.who.length + 1;
+    double mid(int i) => asked.sublist(i * k, i * k + mv.who.length).fold(0.0, (a, v) => a + (v ?? 0)) / mv.who.length;
     expect(mv.coming, true);
-    expect([mv.end['spread'], mv.end['x']! + mid('x'), mv.end['y']! + mid('y')], [closeTo(0, 1e-6), closeTo(m.value(c, 'x', at)!, 1e-6), closeTo(m.value(c, 'y', at)!, 1e-6)]);
+    expect([mv.end['spread'], mv.end['x']! + mid(0), mv.end['y']! + mid(1)], [closeTo(0, 1e-6), closeTo(asked[k - 1]!, 1e-6), closeTo(asked[2 * k - 1]!, 1e-6)]);
     expect(ws.selected, '${mv.by}', reason: 'the move picked again');
 
     ws.frame = 5 * Ws.fps;   // (going out of the things that come in: a move of its own from the playhead, what came in stays)

@@ -259,6 +259,25 @@ class Motolii {
       malloc.free(out);
       return all;
     });
+  }  /// Each thing's own value at each moment asked, as the document says it (not what a relation makes of it; null: it
+  /// has none): another moment than the picture's, a question (skin/BRIDGE.md Q), asked on another isolate as [shownAt].
+  Future<List<double?>> valuesAt(List<(int, String, double)> asks) {
+    final lib = libPath, at = _m.address;
+    return Isolate.run(() {
+      final l = DynamicLibrary.open(lib), m = _P.fromAddress(at);
+      final value = c.MotoliiBindings(l).motolii_value;
+      final out = malloc<Double>();
+      final all = [
+        for (final (t, n, moment) in asks)
+          () {
+            final name = n.toNativeUtf8(), got = value(m, t, name, moment, out);
+            malloc.free(name);
+            return got == 0 ? null : out.value;
+          }(),
+      ];
+      malloc.free(out);
+      return all;
+    });
   }
 
   /// Of these font files, those a text can be [words] in (asked on another isolate: the window does not wait).

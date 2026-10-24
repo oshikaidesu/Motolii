@@ -132,17 +132,19 @@ class _TabSamplesState extends State<TabSamples> with SingleTickerProviderStateM
 
   /// The pick whip let go on a thing (the next one picked that is not a move nor in it): they come out of it (go into
   /// it): their middle there, gathered, small, clear; the move picked again.
-  void _whipped(Ws ws) {
+  Future<void> _whipped(Ws ws) async {
     final w = _whip, m = ws.inside, t = int.tryParse(ws.selected ?? '');
     if (w == null || m == null || t == null) return;
     final moves = wsMoves(ws), mv = w.move == null ? (moves.isEmpty ? null : moves.reduce((a, b) => a.by > b.by ? a : b)) : wsMoveOf(m, int.parse(w.move!));
     if (mv == null || mv.by == t || mv.who.contains(t) || m.word(t, 'kind') == 'behaviour') return;
     _whip = null;
-    final now = mv.away;
-    double mid(String n) => mv.who.fold(0.0, (a, o) => a + (m.value(o, n, now) ?? 0)) / mv.who.length;
+    final k = mv.who.length + 1, now = mv.away;   // (where they are as they come or go: another moment than the picture's, asked: BRIDGE.md rule 7)
+    final asked = await m.valuesAt([for (final n in const ['x', 'y']) ...[for (final o in mv.who) (o, n, now), (t, n, now)]]);
+    if (!mounted) return;
+    double mid(int i) => asked.sublist(i * k, i * k + mv.who.length).fold(0.0, (a, v) => a + (v ?? 0)) / mv.who.length;
     wsMoveHold(ws, true);
-    wsMoveSet(ws, mv.by, 'x', (m.value(t, 'x', now) ?? 0) - mid('x'));
-    wsMoveSet(ws, mv.by, 'y', (m.value(t, 'y', now) ?? 0) - mid('y'));
+    wsMoveSet(ws, mv.by, 'x', (asked[k - 1] ?? 0) - mid(0));
+    wsMoveSet(ws, mv.by, 'y', (asked[2 * k - 1] ?? 0) - mid(1));
     for (final (n, v) in const [('spread', 0.0), ('size', .2), ('opacity', 0.0), ('scatter', 0.0)]) {
       wsMoveSet(ws, mv.by, n, v);
     }
