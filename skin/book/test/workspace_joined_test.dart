@@ -780,15 +780,13 @@ void main() {
       ..select('$rect')
       ..shelf = 'Colors';
     await t.pumpAndSettle();
-    await t.enterText(find.descendant(of: find.byType(DockSearch), matching: find.byType(EditableText)), 'gradient');
+    await t.enterText(find.descendant(of: find.byType(DockSearch), matching: find.byType(EditableText)), 'Hot pink');   // (found by its name)
     await t.pumpAndSettle();
-    final tile = find.byWidgetPredicate((w) => w.runtimeType.toString() == '_Grad').at(1); // (the second saved gradient: Hot pink)
+    final tile = find.byWidgetPredicate((w) => w.runtimeType.toString() == '_Grad').first; // (a starter gradient: Hot pink)
     await seen(t, tile);
-    await t.tap(tile);
-    await t.pumpAndSettle();
-    await t.tap(find.descendant(of: find.byType(DockFooter), matching: find.text('Fill')));
-    await t.pumpAndSettle();
-    expect(m.word(rect, 'fill'), 'e974ab f08a5d efcb4e', reason: m.trouble);
+    await doubleTap(t, tile);   // (two presses put it on: f052e7e)
+    await settled(t, ws);
+    expect(m.word(rect, 'fill').split(' '), allOf(hasLength(11), containsAllInOrder(['e974ab', 'f08a5d', 'efcb4e'])), reason: 'its three colours in order, mixed between as CAM16 mixes them (f052e7e): ${m.trouble}');
     expect(m.say(m.add('solid', 'cube'), 'fill', 'e974ab f08a5d'), isFalse, reason: 'a solid is filled with one colour');
     expect(t.takeException(), isNull);
     await expectSameAfterReopen(t);
@@ -887,22 +885,21 @@ void main() {
       ..select(null)
       ..shelf = 'Colors';
     await t.pumpAndSettle();
-    await t.enterText(find.descendant(of: find.byType(DockSearch), matching: find.byType(EditableText)), 'gradient');
+    await t.enterText(find.descendant(of: find.byType(DockSearch), matching: find.byType(EditableText)), 'Lime dusk');   // (found by its name)
     await t.pumpAndSettle();
     final tile = find.byWidgetPredicate((w) => w.runtimeType.toString() == '_Grad').first;
     await seen(t, tile);
-    await t.tap(tile);
-    await t.pumpAndSettle();
-    await t.tap(find.descendant(of: find.byType(DockFooter), matching: find.text('Fill')));
-    await t.pumpAndSettle();
-    expect(ws.ink, 'b3c66b 4781e5', reason: 'nothing picked: the ink');
+    await doubleTap(t, tile);   // (two presses put it on: f052e7e)
+    await settled(t, ws);
+    final ink = ws.ink.split(' ');
+    expect([ink.first, ink.last], ['b3c66b', '4781e5'], reason: 'nothing picked: the ink');
     final stage = t.getRect(find.byKey(const ValueKey('ws-stage-comp')));
     await t.tap(find.byKey(const ValueKey('ws-tool-2')));
     await t.pumpAndSettle();
     await t.dragFrom(stage.center, Offset(stage.width * .1, stage.height * .1));
     await t.pumpAndSettle();
     final rect = int.parse(ws.selected!);
-    expect(m.word(rect, 'fill'), 'b3c66b 4781e5', reason: 'drawn in the ink');
+    expect(m.word(rect, 'fill'), ws.ink, reason: 'drawn in the ink');
     await t.tap(find.byKey(const ValueKey('ws-tool-1')));
     await t.pumpAndSettle();
     await t.tap(find.text('X').first); // (the strip's, before the inspector's)
@@ -988,14 +985,14 @@ void main() {
     await t.pumpAndSettle();
     expect(find.text('1 used here'), findsOneWidget);
     ws.shelf = 'Effects';
-    await t.pumpAndSettle();
+    await settled(t, ws);
     final fx = m.thingEffects.length + m.effects.length;
     expect(fx, greaterThan(3));
     expect(find.text('$fx ready'), findsOneWidget);
     ws.shelf = 'Create';
     await t.pumpAndSettle();
     final r = ws.inside!.recipes.length; // (a recipe is a file: the shelf grows by what is in recipes/)
-    expect(find.text('${18 + r} ready'), findsOneWidget);
+    expect(find.text('${17 + r} ready'), findsOneWidget, reason: 'seventeen tiles of its own since K5 (one Repeater for Radial and Grid), and the recipes');
     expect(t.takeException(), isNull);
     await expectSameAfterReopen(t);
     await _close(t);
@@ -1475,10 +1472,10 @@ void main() {
       ..select(null);
     await t.pumpAndSettle();
     expect(find.byWidgetPredicate((w) => w is NumField && w.id == 'v_follow'), findsNothing, reason: 'not a knob of numbers');
-    final follow = find.byWidgetPredicate((w) => w is Segmented && w.items.contains('Cube')); // (a few things: a segmented choice, None first, by their names)
+    final follow = find.byWidgetPredicate((w) => w is Segmented && w.items.any((i) => i.endsWith('Cube'))); // (a few things: a segmented choice, None first, by their names with their numbers: '2. Cube')
     await seen(t, follow);
     await t.tap(find.descendant(of: follow, matching: find.textContaining(RegExp('cube', caseSensitive: false))));
-    await t.pumpAndSettle();
+    await settled(t, ws);
     expect(m.value(0, 'follow', 0), cube, reason: m.trouble);
     await expectSameAfterReopen(t);
     await _close(t);
