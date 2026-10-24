@@ -172,19 +172,21 @@ struct ScreenStack {
     void* device[3] = {nullptr, nullptr, nullptr};  // (the WGPUTextures of shot, between[0], between[1])
     tvg::WgCanvas* thor[2] = {nullptr, nullptr};    // (ThorVG drawing into each picture between)
     Texture* seen = nullptr;                        // (its picture as the camera sees it, its effects on, this time)
+    double pw = 0, ph = 0;                          // (its pictures' size in points of the stage, ISF's RENDERSIZE: a thing's box; 0: the stage's)
 };
 static Texture* screen_picture(Stage& s) {
     return Texture::Builder().width((uint32_t)s.w).height((uint32_t)s.h).levels(1).format(Texture::InternalFormat::RGBA8)
         .usage(Texture::Usage::COLOR_ATTACHMENT | Texture::Usage::SAMPLEABLE).build(*s.engine);
 }
-static void screen_knobs(Stage& s, ScreenFx& fx, const ScreenNumbers& numbers, int pass = 0) {
+static void screen_knobs(Stage& s, ScreenFx& fx, const ScreenNumbers& numbers, int pass = 0, double pw = 0, double ph = 0) {
     std::vector<float> at(fx.bytes / 4, 0.f);
+    const double w = pw > 0 ? pw : s.w, h = ph > 0 ? ph : s.h;   // (the picture it is given: ISF's RENDERSIZE)
     for (const ScreenFx::Field& f : fx.fields) {
         float v[4] = {0, 0, 0, 0};
         if (f.name == "time") v[0] = (float)s.now;
-        else if (f.name == "aspect") v[0] = (float)s.w / (float)s.h;
-        else if (f.name == "resolution") v[0] = (float)s.w, v[1] = (float)s.h;
-        else if (f.name == "width" || f.name == "height") v[0] = (float)(f.name == "width" ? s.w : s.h);   // (three's way of saying it)
+        else if (f.name == "aspect") v[0] = (float)(w / h);
+        else if (f.name == "resolution") v[0] = (float)w, v[1] = (float)h;
+        else if (f.name == "width" || f.name == "height") v[0] = (float)(f.name == "width" ? w : h);   // (three's way of saying it)
         else if (f.name == "frame") v[0] = (float)std::lround(s.now * 60.0);   // (ISF's FRAMEINDEX: the picture's number at sixty a second)
         else if (f.name == "passindex") v[0] = (float)pass;   // (ISF's PASSINDEX: `pass` is a word WGSL keeps for itself)
         else if (f.name == "history_head") v[0] = (float)std::max(0, fx.head);
@@ -271,13 +273,13 @@ static void screen_draw(Stage& s, ScreenStack& st, ScreenFx& fx, Texture* from, 
     };
     if (fx.passes.empty()) {
         gather();
-        screen_knobs(s, fx, numbers);
+        screen_knobs(s, fx, numbers, 0, st.pw, st.ph);
         door::draw(s.engine, fx.door, read.data(), to, w, h, 0, nullptr, over);
         return;
     }
     for (size_t p = 0; p < fx.passes.size(); ++p) {
         gather();
-        screen_knobs(s, fx, numbers, (int)p);
+        screen_knobs(s, fx, numbers, (int)p, st.pw, st.ph);
         const int t = fx.passes[p];
         if (t < 0) { door::draw(s.engine, fx.door, read.data(), to, w, h, (int)p, nullptr, over); continue; }
         ScreenFx::Target& into = fx.targets[(size_t)t];

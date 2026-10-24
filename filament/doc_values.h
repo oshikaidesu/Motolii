@@ -464,6 +464,7 @@ static void doc_parts(Stage& s, const Doc::Shown& t, const std::function<void(Re
     doc_entities(s, t, [&](utils::Entity e) { each(faces, faces.getInstance(e)); });
 }
 static bool doc_covers(Doc& d, int thing, double now, double* box);
+static bool doc_seen_box(Doc& d, int thing, double now, double* box);
 static int doc_outline(Doc& d, int thing, double now, double* xy);
 static bool doc_half(Doc& d, int thing, float2* half, float* deep = nullptr);
 // Where a thing is at a moment, as a matrix: moved, turned about z, y and x, made its size, all about its anchor (a

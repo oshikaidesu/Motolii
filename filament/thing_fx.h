@@ -93,7 +93,7 @@ static void thing_effects_draw(Stage& s, ScreenStack& st, View* v, const ScreenN
     s.renderer->setClearOptions(clearWas);
     st.seen = st.shot;
     if (st.steps.empty()) return;   // (quiet with no effects: only its picture, for another's)
-    const float ppp = (float)vp.width / (float)std::max(1, s.w);   // (pixels of its picture a point of the stage: the desk's are fewer)
+    const float ppp = (float)s.view->getViewport().width / (float)std::max(1, s.w);   // (pixels of its picture a point of the stage, as the stage's view draws: the desk's are fewer)
     const DrawnFx thor = thorFx && std::any_of(st.steps.begin(), st.steps.end(), [](char k) { return k != 0; }) ? thorFx() : DrawnFx{};
     for (size_t i = 0, f = 0; i < st.steps.size(); ++i) {   // (each into a picture between: the effects take the whole picture as theirs, and fill what is clear)
         Texture* from = i == 0 ? st.shot : st.between[(i - 1) % 2];
@@ -114,15 +114,20 @@ struct ThingFx {
     View* view = nullptr;
     Mesh* sheet = nullptr;
     MaterialInstance* look = nullptr;
+    utils::Entity eye;                     // (its own camera's: told the stage's each picture, as samples/rendertarget.cpp's offscreen camera is)
+    Camera* camera = nullptr;
+    double box[4] = {0, 0, 0, 0};          // (where it is seen, in points of the stage: left, top, right, bottom)
 };
 
 // The view a thing is drawn alone in: samples/rendertarget.cpp's offscreen view (its own scene, the stage's eye, its
 // post-processing off: the stage's own view does that once, over everything).
-static View* thing_fx_view(Stage& s) {
+static View* thing_fx_view(Stage& s, ThingFx& e) {
     View* v = s.engine->createView();
     v->setScene(s.engine->createScene());
     v->getScene()->setIndirectLight(s.scene->getIndirectLight());
-    v->setCamera(s.camera);
+    e.eye = utils::EntityManager::get().create();
+    e.camera = s.engine->createCamera(e.eye);
+    v->setCamera(e.camera);
     v->setViewport(s.view->getViewport());
     v->setPostProcessingEnabled(false);
     v->setVisibleLayers(0x03, 0x03);   // (both of the stage's layers seen, as the stage's own view sees them)
@@ -133,17 +138,41 @@ static View* thing_fx_view(Stage& s) {
 // The sheet: the whole picture, samples/materials/image.mat's way (its points are the screen's own corners).
 static ThingFx& thing_fx_made(Stage& s, ThingFx& e) {
     if (e.view) return e;
-    e.view = thing_fx_view(s);
+    e.view = thing_fx_view(s, e);
     e.sheet = new Mesh;
     for (float2 c : {float2{-1, -1}, float2{1, -1}, float2{1, 1}, float2{-1, 1}}) e.sheet->pos.push_back({c.x, c.y, 0.f}), e.sheet->nrm.push_back({0, 0, 1}), e.sheet->uv.push_back(c * 0.5f + 0.5f);
     e.sheet->idx = {0, 1, 2, 0, 2, 3};
     e.look = add(s, e.sheet, "effected.filamat");
-    e.look->setParameter("image", white_point(s), TextureSampler());   // (a picture from the start, as image.mat's sample sets it at once: Filament readies every instance before any view, the thing's own drawn first; never seen, its picture set before the stage's view)
+    e.look->setParameter("image", white_point(s), TextureSampler());
+    e.look->setParameter("place", math::mat4f{});   // (the whole stage till it is aimed)   // (a picture from the start, as image.mat's sample sets it at once: Filament readies every instance before any view, the thing's own drawn first; never seen, its picture set before the stage's view)
     return e;
 }
 
 static void thing_fx_off(Stage& s, ThingFx& e) {
     if (e.sheet) take_off(s, e.sheet), delete e.sheet;
     if (e.view) s.engine->destroy(e.view->getScene()), s.engine->destroy(e.view);
+    if (e.camera) s.engine->destroyCameraComponent(e.eye), utils::EntityManager::get().destroy(e.eye);
     e = ThingFx{};
+}
+
+// Aimed at the box the thing is seen in (left, top, right, bottom, points of the stage): its own camera told the stage's
+// projection and place, as samples/rendertarget.cpp tells its offscreen camera each frame (setCustomProjection,
+// setModelMatrix), the projection narrowed to the box so the box is the whole of its picture (After Effects' layer: its
+// effects work on the layer's own picture, an ISF effect's centre its middle); its picture as many pixels as the box
+// covers on the stage's view; its sheet laid on the box (effected.mat place).
+static void thing_fx_aim(Stage& s, ThingFx& e, const double* box) {
+    std::copy(box, box + 4, e.box);
+    const double ppp = (double)s.view->getViewport().width / std::max(1, s.w);
+    const double x0 = 2 * box[0] / s.w - 1, x1 = 2 * box[2] / s.w - 1, y0 = 1 - 2 * box[3] / s.h, y1 = 1 - 2 * box[1] / s.h;   // (the box in the stage's clip space, y up)
+    math::mat4 crop;
+    crop[0][0] = 2 / (x1 - x0), crop[1][1] = 2 / (y1 - y0), crop[3][0] = -(x0 + x1) / (x1 - x0), crop[3][1] = -(y0 + y1) / (y1 - y0);
+    const Camera& c = *s.camera;
+    e.camera->setCustomProjection(crop * c.getProjectionMatrix(), crop * c.getCullingProjectionMatrix(), c.getNear(), c.getCullingFar());
+    e.camera->setModelMatrix(c.getModelMatrix());
+    e.camera->setExposure(c.getAperture(), c.getShutterSpeed(), c.getSensitivity());
+    e.view->setViewport({0, 0, (uint32_t)std::max(1L, std::lround((box[2] - box[0]) * ppp)), (uint32_t)std::max(1L, std::lround((box[3] - box[1]) * ppp))});
+    e.st.pw = box[2] - box[0], e.st.ph = box[3] - box[1];
+    math::mat4f place;
+    place[0][0] = (float)((x1 - x0) / 2), place[1][1] = (float)((y1 - y0) / 2), place[3][0] = (float)((x0 + x1) / 2), place[3][1] = (float)((y0 + y1) / 2);
+    e.look->setParameter("place", place);
 }

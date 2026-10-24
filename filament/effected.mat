@@ -1,7 +1,7 @@
 // effected.mat: a thing's picture with its effects on, laid over the stage where the thing lies (in its order).
-// Filament's own sample material samples/materials/image.mat (Apache-2.0), as it is but for two things: it is laid
-// over what is under it (blending transparent, premultiplied, as Filament's transparent takes it), and no background
-// colour is put where the picture is clear. What Filament's makers say to do for an effect of one's own: draw it into
+// Filament's own sample material samples/materials/image.mat (Apache-2.0), as it is but for three things: it is laid
+// over what is under it (blending transparent, premultiplied, as Filament's transparent takes it), no background
+// colour is put where the picture is clear, and it lies only where the thing is seen (clipSpaceTransform). What Filament's makers say to do for an effect of one's own: draw it into
 // a texture offscreen, then draw with that texture and a material of one's own (google/filament#1818, #7676, #3784).
 material {
     name : Effected,
@@ -9,6 +9,10 @@ material {
         {
             type : sampler2d,
             name : image
+        },
+        {
+            type : mat4,
+            name : place
         }
     ],
     variables : [
@@ -26,6 +30,7 @@ material {
 vertex {
     void materialVertex(inout MaterialVertexInputs material) {
         material.imageUV.st = getPosition().st * 0.5 + 0.5;
+        material.clipSpaceTransform = materialParams.place;   // (where on the stage its picture lies: the box the thing is seen in, Filament's own way of moving a device-domain sheet)
     }
 }
 
