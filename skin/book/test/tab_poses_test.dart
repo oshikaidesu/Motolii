@@ -49,7 +49,7 @@ void main() {
     mv = wsMoves(ws).single;
     expect(mv.end['x'], greaterThan(.05));
     expect(mv.end['y'], closeTo(-.15, 1e-9));
-    final p = wsShows(m, mv.who.first, mv.away), seat = m.value(mv.who.first, 'x', mv.away)!;
+    final p = await wsShowsAt(m, mv.who.first, mv.away), seat = (await m.valuesAt([(mv.who.first, 'x', mv.away)])).single!;   // (another moment: asked, BRIDGE.md rule 7)
     expect(p.x, greaterThan(seat));   // (the inside shows it there, to the right of its seat)
 
     // the arrow tapped: going out

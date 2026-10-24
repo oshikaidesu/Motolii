@@ -238,7 +238,7 @@ class TabDrawState extends State<TabDraw> {
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
-    listenable: WsScope.read(context),
+    listenable: Listenable.merge([WsScope.read(context), wsPosesTold]),   // (and drawn again when the inside tells where something is at another moment: moves.dart wsShows)
     builder: (context, _) {
       final ws = WsScope.read(context), m = ws.inside;
       if (m == null) return const SizedBox.expand();

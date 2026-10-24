@@ -5,6 +5,8 @@
 // inside (where it shows while the strength is whole), never worked out here.
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show ValueNotifier;
+
 import '../motolii.dart';
 import 'ws.dart';
 
@@ -116,11 +118,32 @@ void wsMoveEase(Ws ws, WsMove mv, double out, double over) {
 }
 
 /// Where a thing shows at a moment (x, y, z, size, opacity, turned round), as the inside says: the picture's moment from
-/// the pictures (Widgetbook's relation studies, `sets/relation_tabs`, read it so; another moment is not in them).
+/// the pictures (Widgetbook's relation studies, `sets/relation_tabs`, read it so); another moment asked of the inside
+/// ([wsShowsAt]) and kept while the document stays, as it is until told (skin/BRIDGE.md rule 7: a question, never
+/// waited for; [wsPosesTold] ticks when one is told, for what draws it to draw again).
 ({double x, double y, double size, double opacity, double flip}) wsShows(Motolii m, int t, double at) {
+  if (!m.isNow(at)) {   // (not the picture's moment)
+    if (!identical(_posesOf, m.documentNow)) {
+      _poses.clear();
+      _posesOf = m.documentNow;
+    }
+    if (!_poses.containsKey((m, t, at))) {
+      _poses[(m, t, at)] = null;
+      final of = _posesOf;
+      wsShowsAt(m, t, at).then((p) {
+        if (!identical(of, _posesOf)) return;
+        _poses[(m, t, at)] = p;
+        wsPosesTold.value++;
+      });
+    }
+    return _poses[(m, t, at)] ?? (x: 0, y: 0, size: 1, opacity: 1, flip: 0);   // (as it is until told)
+  }
   double v(String n, double or) => m.shows(t, n, at)?.$1 ?? m.value(t, n, at) ?? or;
   return (x: v('x', 0), y: v('y', 0), size: v('size', 1), opacity: v('opacity', 1), flip: v('rotate_y', 0));
 }
+final _poses = <(Motolii, int, double), ({double x, double y, double size, double opacity, double flip})?>{};
+Object? _posesOf;
+final wsPosesTold = ValueNotifier<int>(0);
 
 /// The same at any moment: a question of the inside (skin/BRIDGE.md Q), answered later.
 Future<({double x, double y, double size, double opacity, double flip})> wsShowsAt(Motolii m, int t, double at) async {

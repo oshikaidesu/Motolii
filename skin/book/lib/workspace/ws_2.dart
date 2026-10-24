@@ -164,7 +164,7 @@ class Ws extends ChangeNotifier {
   }
 
   /// The things whose moving values the window shows (told the inside: Motolii.subscribe): the picked one and those picked
-  /// with it, the cameras (the Depth desk's lens), and a picked relation's things.
+  /// with it, the cameras (the Depth desk's lens), the relations (the Relations desk's map), and a picked relation's things.
   void _watch() {
     final m = _inside;
     if (m == null) return;
@@ -173,6 +173,7 @@ class Ws extends ChangeNotifier {
       ?sel,
       for (final id in many) ?int.tryParse(id),
       for (final l in layers) if (l.kind == WsKind.camera) ?int.tryParse(l.id),
+      for (final l in layers) if (int.tryParse(l.id) case final t? when m.word(t, 'kind') == 'behaviour') t,   // (the relations: the Relations desk draws each by its knobs, at the moment)
       if (sel != null && m.word(sel, 'kind') == 'behaviour') for (final w in m.word(sel, 'members').split(' ')) ?int.tryParse(w),
     });
   }

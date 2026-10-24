@@ -80,6 +80,11 @@ class Motolii {
   late final _tell = _b.motolii_tell;
   NativeCallable<Void Function(Int)>? _told;
   Map<String, dynamic> _document = const {};   // (the document's own part)
+  /// The document's copy as now (BRIDGE.md rule 3: replaced whole when the document changes): an answer kept for it
+  /// holds while it is the same one (identical).
+  Object get documentNow => _document;
+  /// Whether [at] is the moment of the picture shown (what the moment's copy holds).
+  bool isNow(double at) => _isNow(at);
   final _thing = <int, Map<String, dynamic>>{};   // (each thing's part, as of the version it came with)
   Map<String, dynamic> _moment = const {'thing': {}};
   int _documentAt = -1, _momentAt = -1;
