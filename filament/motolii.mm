@@ -38,6 +38,7 @@ struct Motolii {
     std::condition_variable asked_now;
     std::unique_ptr<thermion::FrameScheduler> beat;   // (the screen's beat, Thermion's: a picture is drawn on each; CVDisplayLink, DXGI on Windows)
     uint64_t beats = 0, drew_at = 0;                  // (beats come, and the one the last picture was drawn on: under asked_lock)
+    long beats_drawn = 0, beats_gpu_busy = 0, beats_still = 0, writes_on_beat = 0, beats_two = 0, beats_unseen = 0; uint64_t busy_at = 0, still_at = 0, seen_beat = 0; double films_ms = 0, films_most = 0, part_ms[7] = {}, part_most[7] = {};   // (the hand's round in parts: files looked at, changes, telling, GPU asked, ahead, the rest)   // (beats a picture was drawn on, and beats the GPU had not finished the last: for the spent line)
     std::atomic<void (*)(void*)> shown{nullptr};      // (motolii_finished: told when a picture is finished, to tell Flutter)
     std::atomic<void*> shown_with{nullptr};
     std::deque<std::function<void()>> asked;
@@ -220,20 +221,28 @@ static void motolii_hand(Motolii* m, std::string document, int wide, int high, s
             if (m->closing) break;
             todo.swap(m->asked);
             beat = m->beats;
+            if (m->seen_beat && beat > m->seen_beat + 1) m->beats_unseen += (long)(beat - m->seen_beat - 1);   // (beats that came while the hand was busy elsewhere)
+            m->seen_beat = beat;
         }
+        auto lap_at = std::chrono::steady_clock::now();
+        const auto lap = [&](int i) { const auto n = std::chrono::steady_clock::now(); const double ms = 1e3 * std::chrono::duration<double>(n - lap_at).count(); m->part_ms[i] += ms; m->part_most[i] = std::max(m->part_most[i], ms); lap_at = n; };
         if (todo.empty() && m->live && !m->playing && !m->changed) {
             std::lock_guard<std::recursive_timed_mutex> holding(m->d->lock);
             if (doc_files_moved(*m->d)) m->changed = true;
         }   // (a shader or a script saved: drawn again)
+        lap(0);
         {
             std::lock_guard<std::recursive_timed_mutex> holding(m->d->lock);
             const long rows = sqlite3_total_changes(m->d->file);
             const auto held = m->d->held.tried;
             for (auto& does : todo) does();
+            if (!todo.empty()) ++m->writes_on_beat;
+            lap(6);
             if (sqlite3_total_changes(m->d->file) != rows) picture_update(m);   // (the window's picture of the document, where it changed)
             if (sqlite3_total_changes(m->d->file) != rows || m->d->held.tried != held)
                 (sqlite3_total_changes(m->d->file) != rows ? m->revision : m->carried).fetch_add(1, std::memory_order_release);   // (the document changed, or only what a hand carries: the kept pictures go by these)
         }
+        lap(1);
         if (mosh_done.exchange(false)) {   // (a datamosh made meanwhile: the thing made again with it)
             std::lock_guard<std::recursive_timed_mutex> holding(m->d->lock);
             doc_match(*m->d);
@@ -241,10 +250,12 @@ static void motolii_hand(Motolii* m, std::string document, int wide, int high, s
         }
         picture_tell(m);   // (the document let go: the window told what is new)
         if (!m->playing) for (auto& [who, h] : m->heard) if (h.on) gst_element_set_state(h.bin, GST_STATE_PAUSED), h.on = false;   // (the stage stopped: so does its sound)
+        lap(2);
         const auto finished = [m] { return m->live ? m->live->frames.load() + (m->live->desk ? m->live->desk->frames.load() : 0) : 0ull; };
         const auto had = finished();
         const bool ready = !m->live || live_ready(*m->s, m->live);   // (the picture begun before, offered once the GPU has finished it)
         if (finished() != had) if (auto tell = m->shown.load()) tell(m->shown_with.load());   // (and Flutter told: Thermion's markTextureFrameAvailable)
+        lap(3);
         const auto t = std::chrono::steady_clock::now();
         if (!todo.empty() || m->playing || m->changed) m->stirred = t;
         m->ahead = false;
@@ -260,7 +271,10 @@ static void motolii_hand(Motolii* m, std::string document, int wide, int high, s
                 m->ahead = stage_kept_one(m->kept, *m->d, *m->s, RATE, m->budget) || m->ahead;
             }
         }
+        lap(4);
         if (m->live && !m->playing && m->scale != 1.0 && !std::getenv("MOTOLII_SCALE")) stage_scale(m), m->changed = true;   // (stopped: the last picture drawn again full size, for looking)
+        if (m->live && beat != m->drew_at && (m->playing || m->changed) && !ready && beat != m->busy_at) m->busy_at = beat, ++m->beats_gpu_busy;
+        if (m->live && beat != m->drew_at && !m->playing && !m->changed && beat != m->still_at) m->still_at = beat, ++m->beats_still;   // (a beat with nothing new to draw)
         if (!m->live || beat == m->drew_at || !(m->playing || m->changed) || !ready) { last = m->playing || !ready ? last : t; continue; }   // (not ready: no other picture is begun till it is)
         if (m->playing) {   // (time goes on by the clock, and round again at the document's end)
             std::lock_guard<std::recursive_timed_mutex> holding(m->d->lock);
@@ -272,6 +286,9 @@ static void motolii_hand(Motolii* m, std::string document, int wide, int high, s
         }
         last = t;
         { std::lock_guard<std::mutex> hold(m->asked_lock); m->drew_at = beat; }
+        ++m->beats_drawn;
+        if (m->writes_on_beat > 1) ++m->beats_two;   // (more than one change came for this picture: one of them never seen)
+        m->writes_on_beat = 0;
         m->s->by_clock = m->playing;
         std::vector<std::function<void()>> films;   // (what the moment asks of the films: done once the document is let go)
         std::map<const void*, Stage::Sound> sounds;
@@ -292,7 +309,10 @@ static void motolii_hand(Motolii* m, std::string document, int wide, int high, s
             sounds = heard_told(*m->s);   // (where each sound is to be: read of the document)
         }
         picture_tell(m);
-        for (const auto& now : films) now();   // (films put back or stepped on, while the shell reads the document)
+        const auto films_from = std::chrono::steady_clock::now();
+        for (const auto& now : films) now();
+
+        { const double ms = 1e3 * std::chrono::duration<double>(std::chrono::steady_clock::now() - films_from).count(); m->films_ms += ms; m->films_most = std::max(m->films_most, ms); }   // (films put back or stepped on, while the shell reads the document)
         heard(sounds, m->heard, m->now, m->playing);   // (and their sound sought and played so)
         const auto told = std::chrono::steady_clock::now();
         {
@@ -301,6 +321,7 @@ static void motolii_hand(Motolii* m, std::string document, int wide, int high, s
         }
         if (!m->playing || !stage_kept_show(m->kept, *m->s, m->live, m->now, RATE)) live_draw(*m->s, m->live);   // (played: a picture kept is put on the stage, not drawn)
         const auto drawn = std::chrono::steady_clock::now();
+        lap(5);
         if (++m->judged % 30 == 0) {   // (how long the GPU took for its last pictures, against the time each may have)
             std::vector<int64_t> took;
             for (const auto& f : m->s->renderer->getFrameInfoHistory(30))
@@ -420,8 +441,8 @@ const char* motolii_shaping(Motolii* m) {
 }
 const char* motolii_spent(Motolii* m) {
     return by_look(m, [=] {
-        char line[200];
-        std::snprintf(line, sizeof line, "changes %ld %.0f ms, reads %ld %.0f ms, moments %ld %.0f ms, draws %ld %.0f ms (waiting for the GPU %.0f ms)", m->many[0], 1e3 * m->spent[0], m->many[1], 1e3 * m->spent[1], m->many[2], 1e3 * m->spent[2], m->many[3], 1e3 * m->spent[3], m->live ? 1e3 * m->live->waited : 0.0);
+        char line[400];
+        std::snprintf(line, sizeof line, "changes %ld %.0f ms, reads %ld %.0f ms, moments %ld %.0f ms, draws %ld %.0f ms (waiting for the GPU %.0f ms); beats drawn on %ld, the GPU not done at %ld, nothing new at %ld, two changes in one %ld, unseen %ld; films put %.0f ms (most %.1f); films' frames kept %ld, from disk %ld, drawn %ld", m->many[0], 1e3 * m->spent[0], m->many[1], 1e3 * m->spent[1], m->many[2], 1e3 * m->spent[2], m->many[3], 1e3 * m->spent[3], m->live ? 1e3 * m->live->waited : 0.0, m->beats_drawn, m->beats_gpu_busy, m->beats_still, m->beats_two, m->beats_unseen, m->films_ms, m->films_most, films_kept.load(), films_disk.load(), films_drawn.load());
         std::vector<std::pair<double, std::string>> doors;
         for (const auto& [name, cost] : m->by_door) {
             char one[160];
@@ -430,6 +451,7 @@ const char* motolii_spent(Motolii* m) {
         }
         std::sort(doors.rbegin(), doors.rend());
         m->word = line;
+        { char parts[300]; std::snprintf(parts, sizeof parts, "; the hand's round: files %.0f ms (most %.1f), changes %.0f (%.1f) of which done %.0f (%.1f), telling %.0f (%.1f), GPU asked %.0f (%.1f), ahead %.0f (%.1f), moment and draw %.0f (%.1f)", m->part_ms[0], m->part_most[0], m->part_ms[1], m->part_most[1], m->part_ms[6], m->part_most[6], m->part_ms[2], m->part_most[2], m->part_ms[3], m->part_most[3], m->part_ms[4], m->part_most[4], m->part_ms[5], m->part_most[5]); m->word += parts; for (double& x : m->part_most) x = 0; }
         char waits[260];
         std::snprintf(waits, sizeof waits, "; reads waited for the document %.0f ms, the longest %.1f ms, %ld over 2 ms; the GPU took %.1f ms a picture, at most %.1f, of %.0f it may", 1e3 * m->read_waited, 1e3 * m->read_waited_most, m->read_waits, m->gpu_ms, m->gpu_most, m->budget);
         m->word += waits;
@@ -931,7 +953,7 @@ int motolii_at(Motolii* m, double seconds) {
     //  ends it is refused there, and said in the trouble)
     return posted(m, "at", [m, seconds] {
         if (!(seconds >= 0.0 && seconds <= doc_seconds(*m->d))) { char runs[80]; std::snprintf(runs, sizeof runs, "the document runs from 0 to %.2f seconds", doc_seconds(*m->d)); m->d->trouble = runs; return; }
-        m->now = seconds; m->telling = true; time_is(*m->s, seconds); m->telling = false;
+        m->now = seconds;   // (told to the stage in the hand's round, the films put there after the document is let go: not here, under its lock)
     });
 }
 static bool ends(const char* name, const char* with) { return strlen(name) > strlen(with) && !strcmp(name + strlen(name) - strlen(with), with); }

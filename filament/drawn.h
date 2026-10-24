@@ -432,6 +432,7 @@ static void kept_draw(Stage& s, Drawn* d, int at, bool keep, const std::filesyst
 // at its own frames, as After Effects plays it, so that a moment within the frame already drawn draws nothing again
 // (ThorVG's frame() says when the frame is the same; the ThorVG author's own advice for Lottie on a GPU, Godot #91580).
 // A frame drawn once is shown again from where it was kept, on the GPU or on disk.
+static std::atomic<long> films_kept{0}, films_disk{0}, films_drawn{0};   // (how each film's frame was shown: for the inside's spent line)
 static void picture_at(Stage& s, Drawn* d, float seconds) {
     const int at = (int)std::floor(std::min(seconds / d->seconds * d->frames, d->frames - 1.f) + 1e-3f);
     if (at == d->shownAt) return;
@@ -440,6 +441,7 @@ static void picture_at(Stage& s, Drawn* d, float seconds) {
     kept_take(s, d);
     if (const auto k = d->kept.find(at); k != d->kept.end() && k->second) {   // (drawn before: shown as kept)
         if (d->look) d->look->setParameter("picture", k->second, smooth);
+        ++films_kept;
         return;
     }
     if (d->look) d->look->setParameter("picture", d->texture, smooth);
@@ -448,9 +450,9 @@ static void picture_at(Stage& s, Drawn* d, float seconds) {
     const std::filesystem::path file = kept_file(d, at);
     auto pixels = std::make_shared<std::vector<uint8_t>>();
     if (d->look && kept_read(file, *pixels, kept_one(d)))   // (drawn before, on disk: put up as it is, not drawn)
-        door::on_driver(s.engine, [&s, d, at, pixels, keep, age = d->keepAge.load()] { kept_put(s, d, at, *pixels, true, keep, age); });
+        ++films_disk, door::on_driver(s.engine, [&s, d, at, pixels, keep, age = d->keepAge.load()] { kept_put(s, d, at, *pixels, true, keep, age); });
     else
-        door::on_driver(s.engine, [&s, d, at, keep, file, age = d->keepAge.load()] { kept_draw(s, d, at, keep, file, age); });
+        ++films_drawn, door::on_driver(s.engine, [&s, d, at, keep, file, age = d->keepAge.load()] { kept_draw(s, d, at, keep, file, age); });
 }
 
 // While the hand rests: a few of a film's frames after the one shown, kept before they are asked for (as Final Cut
