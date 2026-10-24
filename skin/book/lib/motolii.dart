@@ -88,6 +88,7 @@ class Motolii {
   late final _seen = _lib.lookupFunction<Int32 Function(_P, Int32, Pointer<Double>), int Function(_P, int, Pointer<Double>)>('motolii_seen');
   late final _points = _lib.lookupFunction<Int32 Function(_P, Int32, Pointer<Double>, Int32), int Function(_P, int, Pointer<Double>, int)>('motolii_points');
   late final _handles = _lib.lookupFunction<Int32 Function(_P, Int32, Pointer<Double>, Pointer<Double>, Int32), int Function(_P, int, Pointer<Double>, Pointer<Double>, int)>('motolii_handles');
+  late final _path3 = _lib.lookupFunction<Int32 Function(_P, Int32, Int32, Double, Double, Int32, Pointer<Double>), int Function(_P, int, int, double, double, int, Pointer<Double>)>('motolii_path3');
   late final _path = _lib.lookupFunction<Int32 Function(_P, Int32, Int32, Double, Double, Int32, Pointer<Double>), int Function(_P, int, int, double, double, int, Pointer<Double>)>('motolii_path');
   late final _keying = _lib.lookupFunction<Int32 Function(_P, Int32), int Function(_P, int)>('motolii_keying');
   late final _hold = _lib.lookupFunction<Int32 Function(_P, Int32), int Function(_P, int)>('motolii_hold');
@@ -354,6 +355,14 @@ class Motolii {
   /// four numbers each: where it is (x, y, units of the stage), how far turned (degrees), how large (a share). null: no
   /// such thing. Asked once when its values change, for a small preview that then plays by itself (motolii_path).
   List<double>? path(int thing, {int copy = 0, double from = 0, required double to, int n = 60}) => _keptCarried(('path', thing, copy, from, to, n), () => _pathNow(thing, copy: copy, from: from, to: to, n: n));   // (the same while the document and what a hand carries are)
+  /// The same in the round: four numbers a moment, where it is (x, y, z, units of the stage) and how large (motolii_path3).
+  List<double>? path3(int thing, {int copy = 0, double from = 0, required double to, int n = 24}) {
+    final out = malloc<Double>(4 * n);
+    final got = _path3(_m, thing, copy, from, to, n, out), p = [for (var i = 0; i < 4 * got; i++) out[i]];
+    malloc.free(out);
+    return got > 0 ? p : null;
+  }
+
   List<double>? _pathNow(int thing, {int copy = 0, double from = 0, required double to, int n = 60}) {
     final out = malloc<Double>(4 * n);
     final got = _path(_m, thing, copy, from, to, n, out), p = [for (var i = 0; i < 4 * got; i++) out[i]];

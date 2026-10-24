@@ -563,6 +563,19 @@ int motolii_path(Motolii* m, int thing, int copy, double from, double to, int n,
         return n;
     });
 }
+// The same, in the round: path[4i..4i+3] = where it is (x, y, z, units of the stage) and how large; for a preview that
+// draws it as seen from any side.
+int motolii_path3(Motolii* m, int thing, int copy, double from, double to, int n, double* path) {
+    return by_look(m, [=] {
+        if (!doc_knows(doc(m), thing) || n < 1) return 0;
+        for (int i = 0; i < n; ++i) {
+            const double at = from + (to - from) * i / n;
+            const math::mat4 p = doc_place(*m->d, thing, at, 0, copy, copy > 0 || doc_staggered(*m->d, thing, at));
+            path[4 * i] = p[3][0], path[4 * i + 1] = p[3][1], path[4 * i + 2] = p[3][2], path[4 * i + 3] = length(p[0].xyz);
+        }
+        return n;
+    });
+}
 int motolii_keying(Motolii* m, int on) {   // (on below 0: only says whether every change is keyed: a read, answered at once, not queued behind the hand's picture)
     if (on < 0) return (int)m->keying.load();
     m->keying = on != 0;   // (said at once; the document told in the hand's turn, without waiting)

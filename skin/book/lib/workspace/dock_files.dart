@@ -40,7 +40,6 @@ class FileNode {
 /// What a file of the disk is here: the inside says what kind of thing it makes (null: none, not shown); the mark for
 /// each kind is the shelf's own.
 String Function(String file) _kindOfFile = (_) => '';
-Future<String?> Function(String film)? _thumbnailOf;
 Future<String?> Function(String film, int step, int steps)? _thumbnailAtOf;
 DockG? _glyphOf(String file) => switch (_kindOfFile(file)) {
   'film' => DockG.video,
@@ -110,7 +109,6 @@ int? _usedRev;
 /// The locations of a joined window: what the document is made of (its files, and the folders they are in), then the disk.
 List<FileNode> _rootsOf(DockCtx c) {
   _kindOfFile = c.ws.inside!.kindOf;
-  _thumbnailOf = c.ws.inside!.thumbnail;
   _thumbnailAtOf = c.ws.inside!.thumbnailAt;
   final files = _used(c.ws).keys.toList()..sort();
   return [

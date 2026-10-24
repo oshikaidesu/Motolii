@@ -45,6 +45,8 @@ const char* motolii_trouble(Motolii* m);                           /* why the la
 const char* motolii_kind_of(const char* file);                     /* what kind of thing a file makes ("": none) */
 int motolii_sets(const char* font, const char* words);             /* 1 if a text in that font file can be those words (any thread, while a document is open) */
 int motolii_thumbnail(const char* film, const char* png, int wide);   /* a film's first picture written small, as a .png (asks nothing of a document: callable from any thread) */
+int motolii_thumbnail_at(const char* film, const char* png, int wide, double fraction);   /* the same, a picture that far along the film (0 to 1) */
+const char* motolii_font_tags(const char* path);   /* a font file's kinds as CoreText reads them: serif sans script mono bold light italic symbols ornaments */
 int motolii_add(Motolii* m, const char* kind, const char* file);   /* a new thing (kind "": what the file makes), on from the stage's present moment: its number (0: not made) */
 int motolii_remove(Motolii* m, int thing);
 int motolii_set(Motolii* m, int thing, const char* name, double number);          /* a value that stays */
@@ -97,6 +99,7 @@ int motolii_seen(Motolii* m, int thing, double* box);   /* what of it is seen: t
    from `from` to before `to`: path[4i..4i+3] = where it is (x, y, units of the stage), how far it is turned (degrees) and
    how large (a share of its own size). For a shell's small preview that plays by itself. 0: there is no such thing. */
 int motolii_path(Motolii* m, int thing, int copy, double from, double to, int n, double* path);
+int motolii_path3(Motolii* m, int thing, int copy, double from, double to, int n, double* path);   /* the same in the round: x, y, z (units of the stage) and how large */
 /* A thing held by a hand, carried, and let go: the one form of everything a hand drags. What is carried shows at once
    and is not the document's until it is let go; then it is one step (keep 0: nothing happened). The reckoning is the
    inside's: a shell says where the hand is, never what the document is to hold.

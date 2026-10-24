@@ -25,8 +25,8 @@ class DockMem {
   /// Media: the folders below the open one listed with it (all at once), and where the tree lies (0 by the room, 1 left, 2 above).
   bool mediaDeep = false;
 
-  /// Create: the sections folded away (the recipes, which are many, start folded).
-  final createFolded = <String>{'Recipes'};
+  /// Create: the sections folded away by the hand (none at first: the recipes' moving tiles are the list to look over).
+  final createFolded = <String>{};
   int treeSide = 0;
 
   String folder = 'Footage';

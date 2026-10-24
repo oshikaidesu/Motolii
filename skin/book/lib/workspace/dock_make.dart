@@ -1,4 +1,5 @@
 // The making shelves: Colors (pop palettes, a swatch field, saved gradients) and Create (tiles for every new layer, shape and copier).
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
@@ -14,6 +15,7 @@ import '../tokens.dart';
 import 'dock_glyphs.dart';
 import 'dock_parts.dart';
 import 'dock_tags.dart';
+import 'create_preview.dart';
 import 'ws.dart';
 
 // ---------------------------------------------------------------- colors
@@ -885,10 +887,13 @@ class _MakeTile extends StatelessWidget {
         color: sel ? WsT.accent : (h ? WsT.raised : WsT.card),
         child: Stack(
           children: [
-            Align(
-              alignment: Alignment.topLeft,
-              child: DockGlyph(m.g, size: Shape.z(26), color: sel ? WsT.onAccent : m.hue),
-            ),
+            if (_isRecipe(c, m.name))   // (a recipe: its motion as the inside reckons it, drawn by the window, the whole list moving at once)
+              Positioned.fill(child: RecipeMotionView(m.name))
+            else
+              Align(
+                alignment: Alignment.topLeft,
+                child: DockGlyph(m.g, size: Shape.z(26), color: sel ? WsT.onAccent : m.hue),
+              ),
             if (m.key.isNotEmpty)
               Align(
                 alignment: Alignment.topRight,
@@ -1002,4 +1007,12 @@ class _CopiesPanel extends StatelessWidget {
       ),
     );
   }
+}
+
+// ---- a recipe's motion: asked of the inside once (create_preview.dart), on a document of its own.
+bool _isRecipe(DockCtx c, String name) {
+  final m = c.ws.inside;
+  if (m == null || !m.recipes.any((r) => r.$1 == name)) return false;
+  RecipeMotions.ask(File(m.libPath).parent.parent.path, [for (final r in m.recipes) r.$1]);
+  return true;
 }
