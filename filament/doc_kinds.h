@@ -10,6 +10,7 @@
 #include "isf.h"
 #include "ways.h"
 #include "screen.h"
+#include "thing_fx.h"
 #include "mosh.h"
 #include "points.h"
 #include <filesystem>
@@ -60,6 +61,7 @@ struct Doc {
     std::string phys_made;              // all the world was made of, as the document said it then (made again only when that changes)
     struct Scripted { double at = -1; int made = -1; std::vector<ScriptCopy> copies; };
     std::map<int, Scripted> scripted;
+    std::map<int, ThingFx> thingFx;     // the things with effects of their own (thing_fx.h): each drawn alone, its effects on, laid where it lies
     ScreenStack screen;                 // the stage's whole-screen effects, its script .wgsl files one over another (screen.h)   // each thing's copies as its script said them, at one moment (worked out once a picture)
     bool phys_keyed = false;            // reading where a thing's keys put it (not where the world has it)
     bool writing = false;               // it is being written as a film: it is read, not changed, until that is done

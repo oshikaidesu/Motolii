@@ -68,7 +68,8 @@ static void doc_moment(Doc& d, double now) {
         if (runOf[i] < 0) continue;
         const int run = runOf[i];
         Doc::Shown& t = *lies[i].shown;
-        Scene* into = s.scene;   // (one view: every run in the stage's own scene, kept in order by Filament's channels)
+        const bool own = doc_fx_files(doc_fx_list(d, lies[i].thing));   // (with effects of its own: drawn alone, its picture laid here: thing_fx.h)
+        Scene* into = own ? thing_fx_made(s, d.thingFx[lies[i].thing]).view->getScene() : s.scene;   // (one view: every other run in the stage's own scene, kept in order by Filament's channels)
         Scene* const was = t.scene ? t.scene : s.scene;
         if (was != into) {   // (into the scene of its run; one not seen goes in when it is seen)
             if (t.in) doc_entities(s, t, [&](utils::Entity e) { was->remove(e), into->addEntity(e); });
@@ -84,6 +85,50 @@ static void doc_moment(Doc& d, double now) {
                 for (size_t part = 0; part < faces.getPrimitiveCount(one); ++part) faces.setBlendOrderAt(one, part, (uint16_t)(i * 128)), faces.setGlobalBlendOrderEnabledAt(one, part, true);   // (128 places for each: its copies lie among themselves by how far off they are)
             });
         t.run = run, t.lies = (int)i;
+        if (own) {   // (its sheet where it lies: the same channel and the same blend order as it has)
+            auto& faces = s.engine->getRenderableManager();
+            for (const Stage::Made& made : s.made)
+                if (made.of == d.thingFx[lies[i].thing].sheet) {
+                    const auto one = faces.getInstance(made.thing);
+                    faces.setCulling(one, false), faces.setChannel(one, (uint8_t)std::min(run, 7)), faces.setBlendOrderAt(one, 0, (uint16_t)(i * 128)), faces.setGlobalBlendOrderEnabledAt(one, 0, true);   // (its points are the screen's corners: never culled, as image.mat's sheet is not)
+                }
+        }
+    }
+    for (auto e = d.thingFx.begin(); e != d.thingFx.end();) {   // (no longer with effects of its own, or gone: let go)
+        const auto at = std::find_if(lies.begin(), lies.end(), [&](const auto& l) { return l.thing == e->first; });
+        if (at == lies.end() || runOf[(size_t)(at - lies.begin())] < 0 || !doc_fx_files(doc_fx_list(d, e->first))) thing_fx_off(s, e->second), e = d.thingFx.erase(e);
+        else ++e;
+    }
+    s.before.clear();
+    for (auto& [thing, e] : d.thingFx) {   // (each drawn alone into a picture, its effects run on it, before the stage's own view: thing_fx.h)
+        thing_effects(s, e.st, doc_fx_join(doc_fx_list(d, thing)));
+        const ScreenNumbers numbers = [&d, thing = thing](const std::string& file, const std::string& name, double usual) {
+            std::lock_guard<std::recursive_timed_mutex> hold(d.lock);   // (asked while the picture is drawn)
+            if (name == "origin_x" || name == "origin_y" || name == "turn" || name == "extent") {   // (where the thing is on the picture now, how turned, how large: an effect's pattern stuck to it)
+                double frame[8];
+                if (!doc_frame(d, thing, d.stage->now, frame)) return usual;
+                return name == "origin_x" ? frame[0] : name == "origin_y" ? frame[1] : name == "turn" ? frame[4] : std::max(frame[2], frame[3]);
+            }
+            return doc_number(d, thing, doc_screen_knob(file, name).c_str(), d.stage->now, usual);
+        };
+        const auto thorFx = [&d, thing = thing] {   // (ThorVG's own among its steps, as they are now: lengths in points of the stage)
+            std::lock_guard<std::recursive_timed_mutex> hold(d.lock);
+            DrawnFx fx;
+            std::string why;
+            doc_fx(d, thing, d.stage->now, false, 1.0, fx, why, true);
+            double frame[8];
+            const auto t = d.shown.find(thing);
+            if (t != d.shown.end() && t->second.drawn && t->second.drawn->fx.overHigh > 0.f && doc_frame(d, thing, d.stage->now, frame)) {
+                const float k = (float)(frame[3] / (t->second.units * t->second.drawn->fx.overHigh));
+                fx.blur *= k, fx.fall *= k, fx.soft *= k;
+            }
+            return fx;
+        };
+        s.before.push_back([&s, &e = e, numbers, thorFx] {
+            e.view->setViewport(s.view->getViewport());
+            thing_effects_draw(s, e.st, e.view, numbers, thorFx);
+            if (e.st.seen && e.look) e.look->setParameter("image", e.st.seen, TextureSampler(TextureSampler::MinFilter::LINEAR, TextureSampler::MagFilter::LINEAR));
+        });
     }
     {   // (a glow: Filament's own, a thing past 1 bright taken up by the stage's bloom (its threshold), as emissive is)
         float most = 0.f;

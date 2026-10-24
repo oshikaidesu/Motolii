@@ -128,6 +128,7 @@ struct Stage {
     struct { uint32_t w = 0, h = 0; double x = 0, y = 0, scale = 1, point = 2; math::mat4 was, wasCulled;
              bool picked = false, hovered = false, knob = true; double pick[8] = {}, hover[8] = {}; } desk;
     std::function<void()> over;   // drawn last, over all of them (a whole-screen effect: screen.h)
+    std::vector<std::function<void()>> before;   // drawn before the stage's own view, each into a picture of its own (a thing with effects of its own: thing_fx.h)
     std::function<void()> lastly;   // and after everything, in the same frame (the desk: its stage's picture placed on it, live.h)
     Texture* drawnInto = nullptr;   // the picture the views draw into (live.h, screen.h); none: the screen
     RenderTarget* out = nullptr;   // where the picture goes at last (none: the screen; the window's live picture: live.h)

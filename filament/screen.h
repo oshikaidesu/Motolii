@@ -165,6 +165,13 @@ struct ScreenStack {
     Texture* between[2] = {nullptr, nullptr};
     RenderTarget* betweenTarget[2] = {nullptr, nullptr};
     door::Screen* copy = nullptr;   // a picture put out as it is (an effect whose last pass draws into its own picture)
+    // A thing's effects as steps in turn, After Effects' stack (thing_effects): 0 the next of `fx` (a file's, drawn by
+    // Filament), else one of ThorVG's own by its letter (DrawnFx::order), drawn by ThorVG reading the picture the step
+    // before made. So the pictures are the device's own, given to both: Filament draws into them, ThorVG reads and draws.
+    std::vector<char> steps;
+    void* device[3] = {nullptr, nullptr, nullptr};  // (the WGPUTextures of shot, between[0], between[1])
+    tvg::WgCanvas* thor[2] = {nullptr, nullptr};    // (ThorVG drawing into each picture between)
+    Texture* seen = nullptr;                        // (its picture as the camera sees it, its effects on, this time)
 };
 static Texture* screen_picture(Stage& s) {
     return Texture::Builder().width((uint32_t)s.w).height((uint32_t)s.h).levels(1).format(Texture::InternalFormat::RGBA8)

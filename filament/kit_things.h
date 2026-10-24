@@ -439,6 +439,7 @@ static void pictures_of(Stage& s) {
     if (s.view_floor) s.renderer->render(s.view_floor);
     if (s.behindRead) s.renderer->render(s.view_behind);   // (the picture of what is behind: only once glass or the paper reads it; a whole pass of every thing's points)
     if (s.view_through) s.renderer->render(s.view_through);
+    for (const auto& one : s.before) one();   // (the things with effects of their own, each drawn alone first: thing_fx.h)
     s.renderer->render(s.view);   // (one view: everything is in the stage's own scene)
     if (s.over) s.over();
     if (s.lastly) s.lastly();
