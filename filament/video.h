@@ -26,6 +26,8 @@ struct Video {
     GstSample* next = nullptr;         // the one after it, once it has come: it says until when `held` is the picture
     GstSample* on = nullptr;           // the picture that is on the sheet (`held`, but for the moment a surface is first shared)
     double nextAt = 0.0;               // when `next` is due, in seconds of the film's run (on through its repeats)
+    bool seeking = false;              // a seek back asked and its first picture not yet come (Pitivi's way: one at a time)
+    float want = -1.f;                 // and the moment asked for meanwhile, sought once it has come (-1: none)
     double origin = 0.0, last = 0.0;   // the stage's time at which that run began; the stage's time last asked for
     int w = 0, h = 0, turned = 0;      // turned: quarter turns clockwise the film asks for before it is shown
     float seconds = 0.f;               // how long it is as it is shown (its cut, at its speed)
@@ -419,20 +421,30 @@ static void key_own(Video* v, bool always) {
 // The film at its moment, `seconds` of the stage's time (it goes round again when it ends), for the picture that comes
 // next. The picture for a moment is the last one due by then, by the film's own time stamps.
 static void video_at(Stage& s, Video* v, float seconds) {
-    if (seconds < v->last) {   // (time went back: from that moment afresh. Asked on this thread: tried from another,
-        video_from(v, std::fmod(seconds, v->seconds), true);   //  it left out as many pictures and the films took longer to settle)
-        v->origin = seconds;
+    const auto back = [v](float to) {   // (from that moment afresh. Asked on this thread: tried from another, it left out as many pictures and the films took longer to settle)
+        video_from(v, std::fmod(to, v->seconds), true);
+        v->origin = to;
         v->ended = false;
+        v->seeking = true;
         if (v->next) { gst_sample_unref(v->next); v->next = nullptr; }
-    }
+    };
+    if (v->seeking) v->want = seconds;   // (a seek still under way: this moment kept, the latest only, as Pitivi keeps its next seek till ASYNC_DONE)
+    else if (seconds < v->last) back(seconds);   // (time went back)
     v->last = seconds;
     const double now = (double)seconds - v->origin;
     // (a stage played by the clock does not wait for a film: one that is not ready keeps its picture for that frame and
     //  catches up at the next; made picture by picture, every picture is waited for, up to half a second)
-    const gint64 until = g_get_monotonic_time() + (s.by_clock ? 0 : 500000);
+    const gint64 until = g_get_monotonic_time() + (s.by_clock || v->seeking ? 0 : 500000);   // (a seek under way is not waited for: the picture held is shown till its first comes)
     bool sure = false;   // (known: the picture held is the one for now)
     while (true) {
-        if (!v->next && (v->next = gst_app_sink_try_pull_sample(v->out, s.by_clock ? 0 : 2 * GST_MSECOND))) v->nextAt = video_due(v->next);
+        if (!v->next && (v->next = gst_app_sink_try_pull_sample(v->out, s.by_clock || v->seeking ? 0 : 2 * GST_MSECOND))) v->nextAt = video_due(v->next);
+        if (v->next && v->seeking) {   // (the seek's first picture: it is done; shown, and the moment asked meanwhile sought next)
+            if (v->held != v->on) gst_sample_unref(v->held);
+            v->held = v->next, v->next = nullptr, v->seeking = false;
+            if (v->want >= 0.f && v->want != (float)v->origin) { const float to = v->want; v->want = -1.f; back(to); }
+            else v->want = -1.f;
+            break;
+        }
         if (v->next) {
             if (v->nextAt > now) { sure = true; break; }
             if (v->held != v->on) gst_sample_unref(v->held);   // (the next one is due: it is the picture now)

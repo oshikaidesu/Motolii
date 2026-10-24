@@ -310,7 +310,9 @@ static void motolii_hand(Motolii* m, std::string document, int wide, int high, s
         }
         picture_tell(m);
         const auto films_from = std::chrono::steady_clock::now();
+        const long films_late = video_late;
         for (const auto& now : films) now();
+        const bool again = !m->playing && video_late != films_late;   // (a film without its picture for now yet, a seek under way: drawn again next beat, as a video sink shows its picture once it comes)
 
         { const double ms = 1e3 * std::chrono::duration<double>(std::chrono::steady_clock::now() - films_from).count(); m->films_ms += ms; m->films_most = std::max(m->films_most, ms); }   // (films put back or stepped on, while the shell reads the document)
         heard(sounds, m->heard, m->now, m->playing);   // (and their sound sought and played so)
@@ -335,7 +337,7 @@ static void motolii_hand(Motolii* m, std::string document, int wide, int high, s
         }
         m->spent[2] += std::chrono::duration<double>(told - t).count(), m->many[2]++;
         m->spent[3] += std::chrono::duration<double>(drawn - told).count(), m->many[3]++;
-        m->changed = false;
+        m->changed = again;
         } catch (const std::exception& e) {
         std::fprintf(stderr, "motolii: the hand's round threw: %s\n", e.what());
         m->trouble = std::string("the hand's round threw: ") + e.what();
