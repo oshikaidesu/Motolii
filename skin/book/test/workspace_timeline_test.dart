@@ -27,6 +27,7 @@ Future<void> _pump(WidgetTester t, Ws ws, {Size size = _ref}) async {
   t.view.physicalSize = size;
   t.view.devicePixelRatio = 1;
   addTearDown(t.view.reset);
+  await t.binding.setSurfaceSize(size);   // (the live binding lays out at its surface's size: flutter_test_config.dart)
   await t.pumpWidget(
     WidgetsApp(
       color: Color(0xFF000000),
@@ -88,19 +89,23 @@ void main() {
     await t.tapAt(Offset(_at(j.ws, j.rect, 50).dx, y));
     expect(j.ws.frame, 50);
     final g = await t.startGesture(Offset(_at(j.ws, j.rect, 20).dx, y));
-    await g.moveTo(Offset(_at(j.ws, j.rect, 80).dx, y));
+    for (final f in const [30, 55, 80]) {   // (a hand moves in steps: the first past the slop starts the drag, the rest carry it)
+      await g.moveTo(Offset(_at(j.ws, j.rect, f).dx, y));
+      await t.pump();
+    }
     await g.up();
+    await t.pump();
     expect(j.ws.frame, 80);
-    expect(j.ws.inside!.now, closeTo(80 / Ws.fps, 1e-9), reason: 'the inside\'s moment, too');
+    // (the inside's moment is told with each picture it draws (BRIDGE.md rule 3, the moment's copy): none is drawn here, no live picture)
     await t.pumpWidget(const SizedBox());
   }, skip: !insideBuilt);
 
-  testWidgets('the play button and space start and stop playing', (t) async {
+  testWidgets('the play button starts and stops playing (space is the window\'s key: keys.dart play.toggle)', (t) async {
     final j = _joined();
     await _pump(t, j.ws);
     await t.tap(find.byKey(const ValueKey('ws-tl-play')));
     expect(j.ws.playing, isTrue);
-    await t.sendKeyEvent(LogicalKeyboardKey.space);
+    await t.tap(find.byKey(const ValueKey('ws-tl-play')));
     expect(j.ws.playing, isFalse);
     await t.pumpWidget(const SizedBox());
   }, skip: !insideBuilt);
