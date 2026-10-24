@@ -1,0 +1,479 @@
+// doc_values.h: part of doc.h (a value read at a moment, its keys and ways). Read only through doc.h.
+static const DocShown doc_shown[] = {
+    {"text", "words", "", "Text", 0, 0, nullptr},
+    {"file", "file", "", "Font", 0, 0, nullptr},
+    {"size", "", "px", "Size", 0, 2, nullptr},
+    {"align", "share", "%", "Align", 0, 1, nullptr},
+    {"fill", "colours", "", "Fill", 0, 0, nullptr},
+    {"stroke", "colour", "", "Stroke", 0, 0, nullptr},
+    {"stroke_width", "", "px", "Stroke width", 0, 16, nullptr},
+    {"split", "", "", "Split", 0, 0, nullptr},
+    {"letter_spacing", "", "×", "Tracking", 0, 3, nullptr},
+    {"line_spacing", "", "×", "Line gap", 0, 3, nullptr},
+    {"italic", "share", "%", "Slant", 0, 0.5, nullptr},
+    {"wrap", "", "", "Wrap", 0, 0, nullptr},
+    {"wrap_at", "", "×", "Wrap at", 0, 40, nullptr},
+    {"gradient", "", "", "Gradient", 0, 0, nullptr},
+    {"gradient_angle", "angle", "°", "Angle", -180, 180, nullptr},
+    {"round", "share", "%", "Round", 0, 0.5, nullptr},
+    {"trim", "share", "%", "Trim end", 0, 1, nullptr},
+    {"trim_begin", "share", "%", "Trim start", 0, 1, nullptr},
+    {"trim_offset", "share", "%", "Trim offset", -1, 1, nullptr},
+    {"bloat", "", "", "Bloat", -1, 1, nullptr},
+    {"offset", "", "", "Offset", -0.5, 0.5, nullptr},
+    {"zigzag", "", "", "Zig zag", -0.3, 0.3, nullptr},
+    {"zigzag_ridges", "count", "", "Ridges", 0, 20, "Zig zag"},
+    {"zigzag_smooth", "onoff", "", "Smooth", 0, 1, "Zig zag"},
+    {"warp", "", "", "Wave", -0.5, 0.5, nullptr},
+    {"warp_width", "", "", "Wave length", 0.05, 2, "Wave"},
+    {"warp_angle", "angle", "°", "Wave angle", -180, 180, "Wave"},
+    {"warp_speed", "", "/s", "Wave speed", -5, 5, "Wave"},
+    {"bend", "angle", "°", "Bend", -360, 360, nullptr},
+    {"bend_direction", "", "", "Bend way", 0, 0, "Bend"},
+    {"twist", "angle", "°", "Twist", -720, 720, nullptr},
+    {"pinch", "", "", "Pinch", -1, 1, nullptr},
+    {"skew", "angle", "°", "Skew", -80, 80, nullptr},
+    {"skew_axis", "angle", "°", "Skew axis", -180, 180, "Skew"},
+    {"squash", "", "", "Squash", -0.9, 2, nullptr},
+    {"wiggle", "", "", "Wiggle", 0, 0.3, nullptr},
+    {"wiggle_detail", "", "", "Detail", 0.5, 20, "Wiggle"},
+    {"wiggle_speed", "", "/s", "Wiggle speed", 0, 10, "Wiggle"},
+    {"stretch", "", "", "Stretch", 0, 0.5, nullptr},
+    {"pin_tl_x", "", "", "Pin TL x", -0.5, 0.5, "Corner pin"}, {"pin_tl_y", "", "", "Pin TL y", -0.5, 0.5, "Corner pin"},
+    {"pin_tr_x", "", "", "Pin TR x", -0.5, 0.5, "Corner pin"}, {"pin_tr_y", "", "", "Pin TR y", -0.5, 0.5, "Corner pin"},
+    {"pin_bl_x", "", "", "Pin BL x", -0.5, 0.5, "Corner pin"}, {"pin_bl_y", "", "", "Pin BL y", -0.5, 0.5, "Corner pin"},
+    {"pin_br_x", "", "", "Pin BR x", -0.5, 0.5, "Corner pin"}, {"pin_br_y", "", "", "Pin BR y", -0.5, 0.5, "Corner pin"},
+    {"gradient_scale", "", "×", "Stretch", 0.1, 4, nullptr},
+    {"gradient_spread", "", "", "Past end", 0, 0, nullptr},
+    {"copies", "count", "", "How many", 1, 200, nullptr},
+    {"copy_columns", "count", "", "Per row", 0, 40, nullptr},
+    {"copy_x", "stage", "px", "Gap X", -2, 2, nullptr},
+    {"copy_y", "down", "px", "Gap Y", -2, 2, nullptr},
+    {"copy_turn", "angle", "°", "Turn all", 0, 720, nullptr},
+    {"stagger", "", "s", "Delay", 0, 3, nullptr},
+    {"copy_fill", "colours", "", "Colours", 0, 0, nullptr},
+    {"copy_z", "stage", "px", "Gap deep", -2, 2, "Each copy"},
+    {"copy_rotate_x", "angle", "°", "Tilt", -180, 180, "Each copy"},
+    {"copy_rotate_y", "angle", "°", "Swing", -180, 180, "Each copy"},
+    {"copy_rotate", "angle", "°", "Turn", -180, 180, "Each copy"},
+    {"copy_size", "", "×", "Grow", 0.5, 1.5, "Each copy"},
+    {"copy_wide", "", "×", "Wider", 0.2, 5, "Each copy"},
+    {"tall", "", "×", "Height", 0, 3, "Each copy"},
+    {"copy_tall", "numbers", "", "Heights", 0, 0, "Each copy"},
+    {"stagger_from", "", "", "From", 0, 0, nullptr},
+    {"copy_fill_way", "", "", "Order", 0, 0, "Each copy"},
+    {"wave_y", "stage", "px", "Up/down", -1, 1, nullptr},
+    {"wave_x", "stage", "px", "Sideways", -1, 1, nullptr},
+    {"wave_z", "stage", "px", "In/out", -1, 1, nullptr},
+    {"wave_rotate", "angle", "°", "Swing", -90, 90, nullptr},
+    {"wave_size", "share", "%", "Pulse", -1, 2, nullptr},
+    {"wave_speed", "", "/s", "Speed", 0, 4, nullptr},
+    {"wave_phase", "", "waves", "Ripple", -4, 4, nullptr},
+    {"wave_noise", "share", "%", "Random", 0, 1, "Noise"},
+    {"noise_scale", "stage", "px", "Blob", 0, 3, "Noise"},
+    {"field_x", "stage", "px", "At X", -3, 3, nullptr},
+    {"field_y", "down", "px", "At Y", -2, 2, nullptr},
+    {"field_radius", "stage", "px", "Size", 0, 4, nullptr},
+    {"strength", "share", "%", "Strength", 0, 1, nullptr},   // (a relation's: how much of it works)
+    {"radius", "stage", "px", "Radius", 0, 2, nullptr},
+    {"tilt", "angle", "°", "Tilt", -90, 90, nullptr},   // (an around's ring tipped back: 0 faces the camera, 90 lies flat)
+    {"gap", "stage", "px", "Gap", -1, 1, nullptr},
+    {"centre_x", "stage", "px", "Centre X", -2, 2, nullptr},
+    {"centre_y", "down", "px", "Centre Y", -2, 2, nullptr},
+    {"leader", "thing", "", "Leader", 0, 0, nullptr},
+    {"leader_b", "thing", "", "Hand to", 0, 0, nullptr},
+    {"hand", "share", "%", "Handed", 0, 1, nullptr},
+    {"lag", "", "s", "Lag", 0, 1, nullptr},
+    {"spread", "share", "%", "Spread", 0, 3, nullptr},
+    {"scatter", "stage", "px", "Scatter", 0, 2, nullptr},
+    {"field_size", "share", "%", "Grow", -1, 5, nullptr},
+    {"field_push", "stage", "px", "Push", -2, 2, nullptr},
+    {"field_band", "stage", "px", "Ring", 0, 2, nullptr},
+    {"field_z", "stage", "px", "At Z", -2, 2, nullptr},
+    {"field_rotate", "angle", "°", "Turn", -180, 180, nullptr},
+    {"scatter_x", "stage", "px", "Spread X", 0, 4, nullptr},
+    {"scatter_y", "stage", "px", "Spread Y", 0, 3, nullptr},
+    {"scatter_z", "stage", "px", "Spread Z", 0, 3, nullptr},
+    {"scatter_rotate", "angle", "°", "Turn", 0, 180, nullptr},
+    {"scatter_size", "share", "%", "Size", 0, 1, nullptr},
+    {"seed", "seed", "", "Seed", 0, 9999, nullptr},
+    {"drift_x", "stage", "px/s", "Flow X", -2, 2, nullptr},
+    {"drift_y", "down", "px/s", "Flow Y", -2, 2, nullptr},
+    {"emissive", "", "×", "Light up", 0, 10, nullptr},
+    {"marker", "", "", "Part", 0, 0, nullptr},
+    {"animation", "", "", "Movement", 0, 0, nullptr},
+    {"speed", "", "×", "Speed", -4, 4, nullptr},
+    {"beats", "", "dB", "Beats", 0, 30, nullptr},
+    {"clip_matte", "", "", "Cut by", 0, 0, nullptr},
+    {"clip_invert", "onoff", "", "Invert", 0, 1, nullptr},
+    {"clip_feather", "", "px", "Feather", 0, 100, nullptr},
+    {"copy_on", "thing", "", "On", 0, 0, nullptr},
+    {"copy_on_offset", "share", "%", "Slide", -1, 1, nullptr},
+    {"connect", "thing", "", "Join", 0, 0, nullptr},
+    {"x", "", "px", "Position X", -4, 4, nullptr}, {"y", "", "px", "Position Y", -3, 3, nullptr}, {"z", "", "px", "Position Z", -6, 6, nullptr},   // (in points of the picture from its top left: motolii_reading)
+    {"scale_x", "share", "%", "Scale X", 0, 4, nullptr}, {"scale_y", "share", "%", "Scale Y", 0, 4, nullptr}, {"scale_z", "share", "%", "Scale Z", 0, 4, nullptr},
+    {"rotate", "angle", "°", "Rotation", -180, 180, nullptr}, {"rotate_x", "angle", "°", "X Rotation", -180, 180, nullptr}, {"rotate_y", "angle", "°", "Y Rotation", -180, 180, nullptr},
+    {"opacity", "share", "%", "Opacity", 0, 1, nullptr},
+    {"blend", "", "", "Blend", 0, 0, nullptr}, {"clip", "onoff", "", "Clip to below", 0, 1, nullptr},
+    {"orient", "onoff", "", "Auto-orient", 0, 1, nullptr}, {"note", "words", "", "Note", 0, 0, nullptr},
+    {"distance", "", "px", "Distance", 0.05, 4, nullptr}, {"zoom", "share", "%", "Zoom", 0.1, 4, nullptr},
+    {"anchor_x", "", "%", "Anchor X", -1, 1, "Anchor"}, {"anchor_y", "", "%", "Anchor Y", -1, 1, "Anchor"}, {"anchor_z", "", "%", "Anchor Z", -1, 1, "Anchor"},
+    {"parent", "thing", "", "Parent", 0, 0, nullptr},   // (the thing it goes with: shown by its name)
+    {"mosh_with", "thing", "", "Motion of", 0, 0, nullptr}, {"dissolve", "", "", "Dissolve", 0, 2, nullptr}, {"grain", "share", "%", "Grain", 0.1, 4, nullptr}, {"mosh_at", "", "s", "From", 0, 10, nullptr},
+    {"connect_to", "thing", "", "With", 0, 0, nullptr},
+    {"resample", "", "", "Points", 0, 64, nullptr},
+    {"voxel", "share", "%", "Squares", 0, 0.2, nullptr},
+    {"rough", "share", "%", "Rough", 0, 0.2, nullptr},
+    {"rough_detail", "share", "%", "Detail", 0.005, 0.2, nullptr},
+    {"trail", "thing", "", "Trail", 0, 0, nullptr},
+    {"trail_length", "", "s", "Trail length", 0.05, 4, nullptr},
+    {"fill_rule", "", "", "Fill rule", 0, 0, nullptr},
+    {"morph", "share", "%", "Morph", 0, 1, nullptr},
+    {"morph_to", "thing", "", "Into", 0, 0, nullptr},
+    {"morph_steps", "", "", "Steps", 0, 32, nullptr},
+    {"boolean", "", "", "Boolean", 0, 0, nullptr},
+    {"boolean_with", "thing", "", "Shape", 0, 0, nullptr},
+    {"follow", "thing", "", "Follow", 0, 0, nullptr},
+    {"connect_reach", "stage", "px", "Reach", 0, 2, nullptr},
+    {"cap", "", "", "Ends", 0, 0, nullptr},
+    {"heads", "", "", "Heads", 0, 0, nullptr},
+    {"head_size", "", "×", "Head", 0.5, 12, nullptr},
+    {"head_shape", "", "", "Head shape", 0, 0, nullptr},
+    {"join", "", "", "Corners", 0, 0, nullptr},
+    {"dash", "", "px", "Dash", 0, 100, nullptr},
+    {"dash_offset", "", "px", "Offset", -100, 100, nullptr},
+    {"metallic", "share", "%", "Metal", 0, 1, nullptr},
+    {"roughness", "share", "%", "Rough", 0, 1, nullptr},
+    {"reflectance", "share", "%", "Shine", 0, 1, nullptr},
+    {"clear_coat", "share", "%", "Varnish", 0, 1, nullptr},
+    {"clear_coat_roughness", "share", "%", "Haze", 0, 1, nullptr},
+    {"sheen", "share", "%", "Sheen", 0, 1, nullptr},
+    {"shading", "", "", "Model", 0, 0, nullptr},
+    {"thickness", "share", "%", "Thick", 0, 1, nullptr},
+    {"anisotropy", "", "", "Brushed", -1, 1, nullptr},
+    {"ior", "", "", "Bend", 1, 3, nullptr},
+    {"dispersion", "share", "%", "Rainbow", 0, 0.5, nullptr},
+    {"swim", "share", "%", "Wobble", 0, 1, nullptr},
+    {"dark", "", "", "Darken", 0, 20, nullptr},
+    {"vivid", "", "×", "Colour", 0, 3, nullptr},
+    {"intensity", "", "", "Bright", 0, 100, nullptr},
+    {"falloff", "stage", "px", "Reach", 0, 20, nullptr},
+    {"cone", "angle", "°", "Cone", 1, 89, nullptr},
+    {"shadows", "onoff", "", "Shadows", 0, 1, nullptr},
+    {"shadow_softness", "share", "%", "Soft", 0, 1, nullptr},
+    {"sun_size", "angle", "°", "Disk", 0, 10, nullptr},
+    {"sun_halo", "", "×", "Halo", 0, 100, nullptr},
+    {"light_group", "", "", "Group", 0, 7, nullptr},
+    {"contact_shadows", "onoff", "", "Contact", 0, 1, nullptr},
+    {"projection", "", "", "Lens", 0, 0, nullptr},
+    {"shift_x", "", "", "Shift X", -2, 2, nullptr},
+    {"shift_y", "", "", "Shift Y", -2, 2, nullptr},
+    {"tone_mapper", "", "", "Look", 0, 0, nullptr},
+    {"exposure", "", "stops", "Bright", -5, 5, nullptr},
+    {"contrast", "", "×", "Contrast", 0, 2, nullptr},
+    {"saturation", "", "×", "Colour", 0, 2, nullptr},
+    {"vibrance", "", "×", "Vibrance", 0, 2, nullptr},
+    {"temperature", "", "", "Warmth", -1, 1, nullptr},
+    {"bloom", "share", "%", "Bloom", 0, 1, nullptr},
+    {"physics", "", "", "Physics", 0, 0, nullptr},
+    {"bounce", "share", "%", "Bounce", 0, 1, nullptr},
+    {"friction", "", "", "Friction", 0, 2, nullptr},
+    {"gravity", "", "", "Gravity", 0, 30, nullptr},
+    {"ambient_occlusion", "share", "%", "AO", 0, 1, nullptr},
+    {"reflections", "share", "%", "Mirror", 0, 1, nullptr},
+    {"vignette", "share", "%", "Vignette", 0, 1, nullptr},
+    {"vignette_color", "colour", "", "Vignette", 0, 0, "Tints"},
+    {"fog", "share", "%", "Fog", 0, 1, nullptr},
+    {"fog_color", "colour", "", "Fog", 0, 0, "Tints"},
+    {"lens_flare", "share", "%", "Flare", 0, 1, nullptr},
+    {"anti_aliasing", "", "", "Smooth", 0, 0, nullptr},
+    {"slope", "", "", "Slope", 0, 4, nullptr},
+    {"offset", "", "", "Offset", -1, 1, nullptr},
+    {"power", "", "", "Power", 0.1, 4, nullptr},
+    {"shadows_color", "colour", "", "Shadows", 0, 0, nullptr},
+    {"midtones_color", "colour", "", "Mids", 0, 0, nullptr},
+    {"highlights_color", "colour", "", "Highs", 0, 0, nullptr},
+    {"room", "", "", "Room", 0, 0, nullptr},
+    {"environment", "", "×", "Bright", 0, 10, nullptr},
+    {"environment_rotate", "angle", "°", "Turn", -180, 180, nullptr},
+    {"behind", "", "", "Behind", 0, 0, nullptr},
+    {"background", "colour", "", "Colour", 0, 0, nullptr},
+};
+// A thing's script (script.h): the knobs its file's head declares, as values of the thing named js_ and the knob's name,
+// and its code, made once a file and again when the file changes (a script written and saved shows at once).
+struct DocScript {
+    long long stamp = -1;
+    std::chrono::steady_clock::time_point looked{};   // (when the file was last asked whether it changed: a few times a second at most)
+    std::vector<ScriptKnob> knobs;
+    std::vector<std::string> names;
+    std::vector<DocValue> values;
+    std::vector<DocShown> shown;
+    std::unique_ptr<Script> run;
+    bool clears = false;   // (its copies may each be as clear as it says: its text says opacity; drawn each of its own, not in one go)
+};
+static std::map<std::string, DocScript>& doc_scripts() { static std::map<std::string, DocScript> all; return all; }
+static int& doc_scripts_made() { static int made = 0; return made; }
+static const DocShown* doc_shown_of(const char* name) {
+    for (const DocShown& one : doc_shown) if (!strcmp(one.name, name)) return &one;
+    for (const auto& [file, script] : doc_scripts())
+        for (const DocShown& one : script.shown) if (!strcmp(one.name, name)) return &one;
+    return nullptr;
+}
+// A whole-screen effect's knob in the document: its file's name before the knob's, as several lie on one stage and two
+// may each have a knob of one name (Posterize's gamma and Boxinator's are not one value).
+static std::string doc_screen_knob(const std::string& file, const std::string& knob) {   // (a value's name is one word: an ISF file's "Frosted Glass" says Frosted_Glass)
+    std::string stem = std::filesystem::path(file).stem().string();
+    for (char& c : stem) if (!std::isalnum((unsigned char)c) && c != '_') c = '_';
+    return "js_" + stem + "_" + knob;
+}
+// ThorVG's own effects by the value that puts each on, as a thing's list of effects names them, and their letters
+// (DrawnFx::order).
+static const char* const doc_thor_names[] = {"tint", "tritone", "shadow", "blur"};   // (a glow is not ThorVG's: Filament's bloom on the thing's own picture, doc_moment)
+static char doc_thor_letter(const std::string& w) {
+    for (int i = 0; i < 4; ++i) if (w == doc_thor_names[i]) return "trsb"[i];
+    return 0;
+}
+static DocScript* doc_script_of(const std::string& file) {
+    if (file.empty() || file == "none") return nullptr;
+    const std::string ext = std::filesystem::path(file).extension().string();
+    const bool screen = ext == ".wgsl" || ext == ".fs" || ext == ".mjs";   // (.mjs: a PlayCanvas splat effect, its knobs its attributes: splatfx.h)   // (a whole-screen effect's knobs: named by the effect too)
+    DocScript& s = doc_scripts()[file];
+    const auto now = std::chrono::steady_clock::now();
+    if (s.stamp >= 0 && now - s.looked < std::chrono::milliseconds(250)) return &s;
+    s.looked = now;
+    std::error_code wrong;
+    const long long stamp = (long long)std::filesystem::last_write_time(file, wrong).time_since_epoch().count();
+    if (wrong) return s.stamp >= 0 ? &s : nullptr;
+    if (s.stamp != stamp) {
+        s = DocScript{};
+        s.stamp = stamp, s.looked = now, s.knobs = ext == ".mjs" ? SplatEffect(file).knobs() : script_knobs(screen ? isf_file(file) : file);
+        doc_scripts_made()++;   // (what was worked out from the old one is forgotten)
+        for (const ScriptKnob& k : s.knobs) s.names.push_back(screen ? doc_screen_knob(file, k.name) : "js_" + k.name);
+        for (size_t i = 0; i < s.knobs.size(); ++i) {   // (the names are all made first: what points into them stays put)
+            const ScriptKnob& k = s.knobs[i];
+            s.values.push_back(DocValue{s.names[i].c_str(), "film picture text shape solid stage", k.kind == "select" ? 0.0 : k.low, k.kind == "select" ? 0.0 : k.high, k.kind == "track", k.kind == "select" ? k.words.c_str() : nullptr});
+            s.shown.push_back(DocShown{s.names[i].c_str(), k.kind == "check" ? "onoff" : k.kind == "picture" ? "thing" : "", "", k.label.c_str(), k.low, k.high, nullptr});
+        }
+        if (!screen) s.run = std::make_unique<Script>(file);   // (a .wgsl or an ISF .fs is drawn, not run: screen.h)
+        { std::ifstream in(screen ? isf_file(file) : file); std::stringstream text; text << in.rdbuf(); s.clears = text.str().find("opacity") != std::string::npos; }
+    }
+    return &s;
+}
+// A thing's scripts: its one (a path may have spaces) and its own effects (paths with spaces between), or the stage's
+// effects, one over another.
+static std::string doc_word(Doc& d, int thing, const char* name);
+static std::vector<DocScript*> doc_scripts_on(Doc& d, int thing) {
+    const std::string said = doc_word(d, thing, "script");
+    std::vector<DocScript*> all;
+    if (thing != 0) {
+        if (DocScript* sc = doc_script_of(said)) all.push_back(sc);
+        for (const std::string& file : script_files(doc_word(d, thing, "fx"))) if (!doc_thor_letter(file)) if (DocScript* sc = doc_script_of(file)) all.push_back(sc);
+        return all;
+    }
+    for (const std::string& file : script_files(said)) if (DocScript* sc = doc_script_of(file)) all.push_back(sc);
+    return all;
+}
+static const DocCard doc_cards[] = {
+    {"Text", "text file size align", "kind", "text"},   // (After Effects' Source Text and Character, Cavalry's Text Shape: what it says, in which font, how large, which way it lines up)
+    {"Fill", "fill stroke stroke_width"},   // (After Effects' Fill and Stroke, Cavalry's Fill and Stroke: a colour, colours down it, or the material glass; its edge and how wide)
+    {"Transform", "space parent anchor_x anchor_y anchor_z x y z scale_x scale_y scale_z rotate_x rotate_y rotate opacity", "kind", "!camera"},   // (After Effects' Transform group: where it is, how large, how turned, how seen; each its own value)
+    {"Camera", "parent x y z rotate_x rotate_y rotate distance zoom", "kind", "camera"},   // (After Effects' camera: what it looks at, where it is and how turned, how far its eye is, its zoom)
+    {"Blending", "blend clip"},   // (After Effects' layer mode and its track matte, in its simplest: drawn over what lies below as it says, or only inside the one before it)
+    {"Type", "split letter_spacing line_spacing italic wrap wrap_at"},
+    {"Gradient", "gradient gradient_angle gradient_scale gradient_spread", "fill", "~ "},
+    {"Copies", "copies copy_columns copy_x copy_y copy_rotate copy_rotate_x copy_rotate_y copy_turn copy_size copy_wide copy_z tall copy_tall stagger stagger_from copy_fill copy_fill_way"},
+    {"Wave", "wave_x wave_y wave_z wave_rotate wave_size wave_speed wave_phase wave_noise noise_scale"},
+    {"Field", "field_x field_y field_z field_radius field_band field_size field_rotate field_push"},
+    {"Scatter", "scatter_x scatter_y scatter_z scatter_rotate scatter_size seed drift_x drift_y"},
+    {"Shine", "emissive", "kind", "!solid"},   // (a flat thing lit from within: past 1, the stage's bloom takes it up where it lies in the stage's own view; laid over a solid thing, a picture of its own is clear round it and keeps no halo: ThorVG's glow does that)
+    {"Motion", "orient", "kind", "!camera"},   // (how it goes along its way: turned the way it is going, After Effects' Auto-Orient)
+    {"Play", "marker animation speed"},
+    {"Sound", "beats", "kind", "film"},   // (its beats: shown on the timeline's ruler where it strikes)
+    {"Matte", "clip_matte clip_invert clip_feather", "clip", "1"},
+    {"Connect", "connect connect_to connect_reach"},
+    {"Line", "cap join dash dash_offset"},
+    {"Path", "round bloat offset zigzag zigzag_ridges zigzag_smooth", "kind", "shape"},   // (its path made anew: After Effects' shape operators, ThorVG's own)
+    {"Deform", "warp bend twist pinch skew squash wiggle stretch bend_direction pin_tl_x pin_tl_y pin_tr_x pin_tr_y pin_bl_x pin_bl_y pin_br_x pin_br_y warp_width warp_angle warp_speed skew_axis wiggle_detail wiggle_speed", "kind", "shape"},   // (its points moved as it is drawn: Cavalry's deformers)
+    {"Surface", "shading metallic roughness reflectance clear_coat clear_coat_roughness sheen anisotropy thickness emissive", "fill", "!glass"},
+    {"Glass", "ior dispersion swim dark vivid", "fill", "glass"},
+    {"Lit", "light_group", "kind", "solid"},   // (which lights reach it)
+    {"Light", "intensity falloff cone shadows shadow_softness contact_shadows light_group sun_size sun_halo", "kind", "light"},
+    {"Projection", "projection shift_x shift_y"},
+    {"Grade", "tone_mapper exposure contrast saturation vibrance temperature slope offset power shadows_color midtones_color highlights_color"},
+    {"Lens", "bloom ambient_occlusion reflections lens_flare vignette vignette_color fog fog_color anti_aliasing"},
+    {"Room", "room environment environment_rotate behind background"},
+    {"Physics", "physics bounce friction gravity"},
+    {"Around", "strength radius offset tilt leader centre_x centre_y rotate rotate_y lag", "file", "around"},   // (a relation's card: its things round a middle, or round a leader; turned in turn, lag apart)
+    {"Row", "strength gap centre_x centre_y rotate rotate_y lag", "file", "row"},
+    {"Follow", "strength leader lag leader_b hand", "file", "follow"},
+    {"Push", "strength leader radius", "file", "push"},
+    {"Group", "strength lag x y spread scatter rotate rotate_y size opacity", "file", "group"},   // (things in an order and nothing else: away by its own move, turn, size and opacity, each in turn)
+    {"Note", "note"},   // (what a maker wrote of it: After Effects' layer comment)
+    {"Trim Paths", "trim trim_begin trim_offset", "trim", "+"},
+    {"Datamosh", "mosh_with mosh_at", "mosh", "+"},
+    {"Points", "dissolve grain", "file", "~.ply"},   // (a point cloud's own: points.h)   // (the film's own compressed pictures, mosh.h)   // (After Effects' shape operator: added from the shelf)
+    {"Gaussian Blur", "blur blur_direction", "blur", "+"},   // (the effects (doc_effects), each its card while it is on, as After Effects' Effect Controls)
+    {"Drop Shadow", "shadow shadow_distance shadow_angle shadow_blur shadow_opacity", "shadow", "+"},
+    {"Glow", "glow_opacity", "glow", "+"},   // (how strong: Filament's bloom on its own picture, doc_moment)
+    {"Duotone", "tint tint_black tint_white", "tint", "+"},
+    {"Gradient Map", "tritone tritone_shadow tritone_midtone tritone_highlight", "tritone", "+"},
+};
+static bool doc_among(const std::string& words, const std::string& one) { return (" " + words + " ").find(" " + one + " ") != std::string::npos; }
+
+// Rows of the document: `each` is told every row of what is asked (in SQLite's own words).
+static bool doc_rows(Doc& d, char* ask, const std::function<void(sqlite3_stmt*)>& each = nullptr) {
+    sqlite3_stmt* rows = nullptr;
+    bool ok = sqlite3_prepare_v2(d.file, ask, -1, &rows, nullptr) == SQLITE_OK;
+    while (ok && sqlite3_step(rows) == SQLITE_ROW)
+        if (each) each(rows);
+    sqlite3_finalize(rows);
+    sqlite3_free(ask);
+    return ok;
+}
+static void doc_forget(Doc& d) {
+    d.phys_stale = true, d.scripted.clear();   // (the world made again only if what it is made of changed: doc_physics)
+    d.moving.clear(), d.literals.clear(), d.words.clear(), d.keyed.clear(), d.halves.clear(), d.heardWords.clear(), d.talls.clear();
+    d.named.clear(), d.tracks.clear(), d.drivers.clear(), d.connects.clear(), d.relationsOf.clear();
+    d.laid.clear();
+}
+// The things in the order they lie, the one furthest back first: by `order` where it is said, else as they were made.
+static const std::vector<int>& doc_laid(Doc& d) {
+    if (d.laid.empty())
+        doc_rows(d, sqlite3_mprintf("select f.thing from fact f where f.name = 'kind' order by coalesce((select o.value from fact o where o.thing = f.thing and o.name = 'order' and o.at = 0), f.thing), f.thing"),
+                 [&](sqlite3_stmt* row) { d.laid.push_back(sqlite3_column_int(row, 0)); });
+    return d.laid;
+}
+
+// A way's expression made ready for SQLite to work out (nullptr: SQLite does not take it; d.trouble says why).
+static sqlite3_stmt* doc_goes(Doc& d, const std::string& expression) {
+    auto ready = d.goes.find(expression);
+    if (ready != d.goes.end()) return ready->second;
+    sqlite3_stmt* made = nullptr;
+    char* asked = sqlite3_mprintf("with v(u, t, d, a, b, p1, p2, p3, p4) as (select ?, ?, ?, ?, ?, ?, ?, ?, ?) select (%s) from v", expression.c_str());
+    if (sqlite3_prepare_v2(d.file, asked, -1, &made, nullptr) != SQLITE_OK) d.trouble = sqlite3_errmsg(d.file), made = nullptr;
+    sqlite3_free(asked);
+    return made ? d.goes[expression] = made : nullptr;
+}
+static double doc_went(sqlite3_stmt* way, double u, double t, double length, double a, double b, const double* p) {
+    const double told[] = {u, t, length, a, b, p[0], p[1], p[2], p[3]};
+    for (int i = 0; i < 9; ++i) sqlite3_bind_double(way, i + 1, told[i]);
+    const double is = sqlite3_step(way) == SQLITE_ROW ? sqlite3_column_double(way, 0) : a;
+    sqlite3_reset(way);
+    return is;
+}
+static sqlite3_stmt* doc_way_named(Doc& d, const std::string& name) {
+    auto known = d.named.find(name);
+    if (known != d.named.end()) return known->second;
+    sqlite3_stmt* way = nullptr;
+    doc_rows(d, sqlite3_mprintf("select goes from way where name = %Q", name.c_str()), [&](sqlite3_stmt* row) { way = doc_goes(d, (const char*)sqlite3_column_text(row, 0)); });
+    if (!way)   // (not defined here: one of the ways by name, ways.h)
+        for (const auto& one : named_ways) if (name == one.name) way = doc_goes(d, std::string("a + (b - a) * (") + one.goes + ")");
+    return d.named[name] = way;
+}
+// A stretch that goes a way defined in the document (`own`: its name, then its numbers): the value at `u` of the way
+// through, `t` seconds in, between a key of `a` and a key of `b`, `length` seconds apart (no such way: `a`).
+static double doc_went_by(Doc& d, const std::string& own, double u, double t, double length, double a, double b) {
+    std::istringstream said(own);
+    std::string way;
+    double p[4] = {0, 0, 0, 0};
+    said >> way;
+    for (double& one : p) said >> one;
+    sqlite3_stmt* goes = doc_way_named(d, way);
+    return goes ? doc_went(goes, u, t, length, a, b, p) : a;
+}
+
+// A value at a moment: `otherwise` where the document does not say; where it has keys, the value the stretch it is in
+// gives (before the first key and after the last: theirs). A stretch goes the way said for it (not said: Linear).
+static double doc_keys_at(Doc& d, const Doc::Keys& k, double at, double otherwise);
+// Where a value's keys are kept (read from the facts once, as doc_number reads them): kept until the document changes.
+static const Doc::Keys& doc_keys_of(Doc& d, int thing, const char* name);
+static double doc_number(Doc& d, int thing, const char* name, double at, double otherwise) {
+    if (d.held.thing == thing)   // (what a hand is carrying shows in place of the document's own)
+        if (const auto tried = d.held.tried.find(name); tried != d.held.tried.end()) return tried->second;
+    return doc_keys_at(d, doc_keys_of(d, thing, name), at, otherwise);
+}
+static const Doc::Keys& doc_keys_of(Doc& d, int thing, const char* name) {
+    auto& of = d.moving[thing];
+    auto found = of.find(std::string_view(name));
+    if (found == of.end()) {
+        Doc::Keys keys;
+        doc_rows(d, sqlite3_mprintf("select at, value, coalesce(way, '') from fact where thing = %d and name = %Q order by at", thing, name), [&](sqlite3_stmt* row) {
+            keys.at.push_back(sqlite3_column_double(row, 0));
+            keys.value.push_back(sqlite3_column_double(row, 1));
+            const std::string way = (const char*)sqlite3_column_text(row, 2);
+            Interp kind;
+            const bool of_the_nine = interp_said(way.empty() ? "Linear" : way, &kind) == 0;   // (not said: Linear, as a new key is in the past repository)
+            keys.interp.push_back(kind);
+            keys.own.push_back(of_the_nine ? "" : way);
+        });
+        found = of.emplace(std::string(name), std::move(keys)).first;
+    }
+    return found->second;
+}
+// A value from its keys at a moment (doc_number's own reckoning: before the first key and after the last, theirs).
+static double doc_keys_at(Doc& d, const Doc::Keys& k, double at, double otherwise) {
+    if (k.at.empty()) return otherwise;
+    if (k.at.size() == 1 || at <= k.at.front()) return k.value.front();
+    if (at >= k.at.back()) return k.value.back();
+    const size_t i = (size_t)(std::upper_bound(k.at.begin(), k.at.end(), at) - k.at.begin()) - 1;   // (the stretch it is in begins at key i)
+    const double u = (at - k.at[i]) / (k.at[i + 1] - k.at[i]);
+    if (k.own[i].empty()) return k.value[i] + (k.value[i + 1] - k.value[i]) * interp_ease(k.interp[i], u);
+    return doc_went_by(d, k.own[i], u, at - k.at[i], k.at[i + 1] - k.at[i], k.value[i], k.value[i + 1]);
+}
+static std::string doc_word(Doc& d, int thing, const char* name) {
+    if (thing == 0 && !strcmp(name, "kind")) return "stage";   // (thing 0 is the stage: its values are the whole picture's)
+    if (d.held.thing == thing)   // (what a hand is carrying shows in place of the document's own)
+        if (const auto said = d.held.said.find(name); said != d.held.said.end()) return said->second;
+    const auto known = d.words.find({thing, name});   // (asked again and again between changes: the document asked once)
+    if (known != d.words.end()) return known->second;
+    std::string is;
+    doc_rows(d, sqlite3_mprintf("select value from fact where thing = %d and name = %Q", thing, name), [&](sqlite3_stmt* row) { is = (const char*)sqlite3_column_text(row, 0); });
+    d.words.emplace(std::make_pair(thing, std::string(name)), is);
+    return is;
+}
+
+// Every look of a thing as it is on the stage (a sheet's one; a kit shape's, as many as it is drawn by; every face of a 3D file).
+// A way of lying on what is under that reads what is under (the W3C's compositing, After Effects' and ThorVG's): its
+// number in flat.mat's blendWay (0: one the GPU's own blending does: normal, add, multiply, screen).
+static int doc_blend_way(const std::string& word) {
+    static const char* const ways[] = {"darken", "lighten", "overlay", "soft_light", "hard_light", "color_dodge", "color_burn", "difference", "exclusion", "hue", "saturation", "color", "luminosity",
+                                       "linear_burn", "linear_light", "vivid_light", "pin_light", "darker_color", "lighter_color", "subtract", "divide"};
+    for (int i = 0; i < 21; ++i) if (word == ways[i]) return i + 1;
+    return 0;
+}
+static void doc_looks(Stage& s, const Doc::Shown& t, const std::function<void(MaterialInstance*)>& each) {
+    auto& faces = s.engine->getRenderableManager();
+    if (t.film) each(t.film->look);
+    if (t.drawn) each(t.drawn->look);
+    for (const Stage::Made& made : s.made)
+        if (t.shape && made.of == t.shape) each(faces.getMaterialInstanceAt(faces.getInstance(made.thing), 0));
+    for (size_t i = 0; t.solid && i < t.solid->made->getRenderableEntityCount(); ++i) {
+        const auto one = faces.getInstance(t.solid->made->getRenderableEntities()[i]);
+        for (size_t part = 0; part < faces.getPrimitiveCount(one); ++part) each(faces.getMaterialInstanceAt(one, part));
+    }
+}
+// Each drawn part of a thing (Filament's renderables), and the scene it is in (its run's: run 0 or not yet put, the stage's own).
+static void doc_entities(Stage& s, const Doc::Shown& t, const std::function<void(utils::Entity)>& each) {
+    const Mesh* m = t.film ? t.film->sheet : t.drawn ? t.drawn->sheet : t.shape;
+    for (const Stage::Made& made : s.made)
+        if (m && made.of == m && !made.matte) each(made.thing);
+    for (size_t i = 0; t.solid && i < t.solid->made->getRenderableEntityCount(); ++i) each(t.solid->made->getRenderableEntities()[i]);
+}
+static void doc_parts(Stage& s, const Doc::Shown& t, const std::function<void(RenderableManager&, RenderableManager::Instance)>& each) {
+    auto& faces = s.engine->getRenderableManager();
+    doc_entities(s, t, [&](utils::Entity e) { each(faces, faces.getInstance(e)); });
+}
+static bool doc_covers(Doc& d, int thing, double now, double* box);
+static int doc_outline(Doc& d, int thing, double now, double* xy);
+static bool doc_half(Doc& d, int thing, float2* half, float* deep = nullptr);
+// Where a thing is at a moment, as a matrix: moved, turned about z, y and x, made its size, all about its anchor (a
+// point of its own box: 0 its middle, 1 its edge on that side; the past repository's `anchor`, keyed as it was).
+static math::mat4 doc_place(Doc& d, int thing, double now, int deeper = 0, int copy = 0, bool member = false);
+static math::mat4 doc_shown_at(Doc& d, int thing, double now);
+int sk_along(const tvg::PathCommand* cmds, uint32_t cmdsCnt, const tvg::Point* pts, int n, float from, std::vector<float>& out);
+static double doc_point(Doc& d, int thing, double now);
+static double doc_seconds(Doc& d);
+// A thing's copies given back its own look, their own looks done away with (no longer coloured each, or taken off).
+// What a behaviour gives the nth of n copies at a moment (Cavalry's stagger, oscillator, noise and random, its names):
+// from its minimum to its maximum.
+static int doc_driven_by(Doc& d, int thing, const char* name);
