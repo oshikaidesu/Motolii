@@ -16,6 +16,7 @@ import '../../tokens.dart';
 
 part 'pheno_e_core.dart';
 part 'pheno_e_face.dart';
+part 'pheno_e_face_2.dart';
 part 'pheno_e_wire.dart';
 part 'pheno_e_motion.dart';
 

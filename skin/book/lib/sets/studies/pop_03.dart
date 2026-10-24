@@ -9,7 +9,9 @@ import 'package:widgetbook/widgetbook.dart';
 
 part 'pop_03_noise.dart';
 part 'pop_03_warp.dart';
+part 'pop_03_warp_2.dart';
 part 'pop_03_shadow.dart';
+part 'pop_03_shadow_2.dart';
 
 WidgetbookComponent pop03Set() => WidgetbookComponent(name: 'Pop 03', useCases: [
       WidgetbookUseCase(name: 'Noise x20', builder: (_) => const _Pop03Sheet(concept: 'Noise', panels: _noisePanels)),

@@ -10,8 +10,11 @@ import 'package:widgetbook/widgetbook.dart';
 
 part 'op_01_kit.dart';
 part 'op_01_glow.dart';
+part 'op_01_glow_2.dart';
 part 'op_01_scatter.dart';
+part 'op_01_scatter_2.dart';
 part 'op_01_stagger.dart';
+part 'op_01_stagger_2.dart';
 
 WidgetbookComponent op01Set() => WidgetbookComponent(name: 'OP 01', useCases: [
       WidgetbookUseCase(

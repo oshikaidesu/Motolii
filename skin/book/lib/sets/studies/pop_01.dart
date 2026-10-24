@@ -9,8 +9,10 @@ import 'package:flutter/widgets.dart';
 import 'package:widgetbook/widgetbook.dart';
 
 part 'pop_01_glow.dart';
+part 'pop_01_glow_2.dart';
 part 'pop_01_scatter.dart';
 part 'pop_01_stagger.dart';
+part 'pop_01_stagger_2.dart';
 
 WidgetbookComponent pop01Set() => WidgetbookComponent(name: 'Pop 01', useCases: [
       WidgetbookUseCase(name: 'Glow x20', builder: (c) => const PopSheet(concept: 'Glow', specs: _glowSpecs)),

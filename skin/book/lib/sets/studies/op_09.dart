@@ -10,7 +10,9 @@ import 'package:widgetbook/widgetbook.dart';
 
 part 'op_09_figs.dart';
 part 'op_09_spin.dart';
+part 'op_09_spin_2.dart';
 part 'op_09_scale.dart';
+part 'op_09_scale_2.dart';
 
 WidgetbookComponent op09Set() => WidgetbookComponent(name: 'OP 09', useCases: [
       WidgetbookUseCase(name: 'Rotation / Spin x20', builder: (c) => _O9Sheet(concept: 'Rotation', panels: _spinPanels())),

@@ -16,13 +16,19 @@ import '../panels/media_parts.dart' show MiniSlider, Pill, QuietButton, StarButt
 
 part 'panel_inspector_b_data.dart';
 part 'panel_inspector_b_parts.dart';
+part 'panel_inspector_b_parts_2.dart';
+part 'panel_inspector_b_parts_3.dart';
 part 'panel_inspector_b_i7.dart';
 part 'panel_inspector_b_i9.dart';
+part 'panel_inspector_b_i9_2.dart';
 part 'panel_inspector_b_i11.dart';
+part 'panel_inspector_b_i11_2.dart';
 part 'panel_inspector_b_i8.dart';
 part 'panel_inspector_b_i12.dart';
 part 'panel_inspector_b_x.dart';
+part 'panel_inspector_b_x_2.dart';
 part 'panel_inspector_b_sheets.dart';
+part 'panel_inspector_b_sheets_2.dart';
 
 List<WidgetbookUseCase> _starting(List<WidgetbookUseCase> all, List<String> prefixes) => [for (final u in all) if (prefixes.any(u.name.startsWith)) u];
 

@@ -9,8 +9,11 @@ import 'package:widgetbook/widgetbook.dart';
 
 part 'op_03_kit.dart';
 part 'op_03_noise.dart';
+part 'op_03_noise_2.dart';
 part 'op_03_warp.dart';
+part 'op_03_warp_2.dart';
 part 'op_03_shadow.dart';
+part 'op_03_shadow_2.dart';
 
 WidgetbookComponent op03Set() => WidgetbookComponent(name: 'OP 03', useCases: [
       WidgetbookUseCase(name: 'Noise x20', builder: (_) => const _OpSheet(concept: 'Noise', panels: _noisePanels)),

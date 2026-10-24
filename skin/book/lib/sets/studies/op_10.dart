@@ -11,7 +11,9 @@ import 'package:widgetbook/widgetbook.dart';
 
 part 'op_10_figs.dart';
 part 'op_10_pos.dart';
+part 'op_10_pos_2.dart';
 part 'op_10_macro.dart';
+part 'op_10_macro_2.dart';
 
 WidgetbookComponent op10Set() => WidgetbookComponent(name: 'OP 10', useCases: [
       WidgetbookUseCase(name: 'Position / Transform x20', builder: (c) => _O10Sheet(concept: 'Position', panels: _posPanels())),

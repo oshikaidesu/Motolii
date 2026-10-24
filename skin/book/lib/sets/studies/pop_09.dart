@@ -8,6 +8,7 @@ import 'package:flutter/widgets.dart';
 import 'package:widgetbook/widgetbook.dart';
 
 part 'pop_09_rot.dart';
+part 'pop_09_rot_2.dart';
 part 'pop_09_scale.dart';
 
 WidgetbookComponent pop09Set() => WidgetbookComponent(name: 'Pop 09', useCases: [

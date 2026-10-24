@@ -11,6 +11,7 @@ import 'package:widgetbook/widgetbook.dart';
 part 'op_08_figs.dart';
 part 'op_08_repeat.dart';
 part 'op_08_fill.dart';
+part 'op_08_fill_2.dart';
 
 WidgetbookComponent op08Set() => WidgetbookComponent(name: 'OP 08', useCases: [
       WidgetbookUseCase(name: 'Repeat / Clone x20', builder: (c) => _O8Sheet(concept: 'Repeat', panels: _repeatPanels())),

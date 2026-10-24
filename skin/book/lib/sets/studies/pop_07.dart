@@ -8,7 +8,9 @@ import 'package:flutter/scheduler.dart';
 import 'package:widgetbook/widgetbook.dart';
 
 part 'pop_07_blend.dart';
+part 'pop_07_blend_2.dart';
 part 'pop_07_glass.dart';
+part 'pop_07_glass_2.dart';
 
 WidgetbookComponent pop07Set() => WidgetbookComponent(name: 'Pop 07', useCases: [
       WidgetbookUseCase(name: 'Opacity / Blend x20', builder: (_) => _P7Sheet(concept: 'Opacity', specs: _blendSpecs)),

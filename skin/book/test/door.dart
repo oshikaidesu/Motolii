@@ -170,6 +170,18 @@ Future<void> doubleTap(WidgetTester t, Finder f) async {
   await t.tap(f);
 }
 
+/// A drag as a hand makes it, in real time: down, moved in [steps] steps a frame each (the first past the slop starts
+/// it, the rest carry it), up, and what it told the inside done.
+Future<void> handDrag(WidgetTester t, Offset from, Offset by, {int steps = 6}) async {
+  final g = await t.startGesture(from);
+  for (var i = 1; i <= steps; i++) {
+    await g.moveTo(from + by * (i / steps));
+    await t.pump();
+  }
+  await g.up();
+  await settled(t, wsOf(t));
+}
+
 /// The window's state, as a pane reads it with WsScope.of.
 Ws wsOf(WidgetTester t) => WsScope.read(t.element(find.byType(WsTimeline)));
 

@@ -11,7 +11,9 @@ import 'package:widgetbook/widgetbook.dart';
 
 part 'op_06_kit.dart';
 part 'op_06_mask.dart';
+part 'op_06_mask_2.dart';
 part 'op_06_stroke.dart';
+part 'op_06_stroke_2.dart';
 
 WidgetbookComponent op06Set() => WidgetbookComponent(name: 'OP 06', useCases: [
       WidgetbookUseCase(name: 'Mask feather / reveal x20', builder: (c) => const Op06Sheet(concept: 'mask', panels: op06MaskPanels)),

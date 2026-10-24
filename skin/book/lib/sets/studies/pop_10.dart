@@ -9,7 +9,9 @@ import 'package:flutter/widgets.dart';
 import 'package:widgetbook/widgetbook.dart';
 
 part 'pop_10_pos.dart';
+part 'pop_10_pos_2.dart';
 part 'pop_10_macro.dart';
+part 'pop_10_macro_2.dart';
 
 WidgetbookComponent pop10Set() => WidgetbookComponent(name: 'Pop 10', useCases: [
       WidgetbookUseCase(name: 'Position / Transform x20', builder: (c) => _P10Sheet(concept: 'Position', panels: _posPanels())),

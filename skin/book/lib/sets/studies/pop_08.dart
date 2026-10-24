@@ -10,7 +10,9 @@ import 'package:flutter/widgets.dart';
 import 'package:widgetbook/widgetbook.dart';
 
 part 'pop_08_repeat.dart';
+part 'pop_08_repeat_2.dart';
 part 'pop_08_fill.dart';
+part 'pop_08_fill_2.dart';
 
 WidgetbookComponent pop08Set() => WidgetbookComponent(name: 'Pop 08', useCases: [
       WidgetbookUseCase(name: 'Repeat / Clone x20', builder: (c) => _P8Sheet(concept: 'Repeat', panels: _repeatPanels())),
