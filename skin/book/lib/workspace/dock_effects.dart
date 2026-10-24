@@ -26,7 +26,7 @@ class EffectsShelf extends StatelessWidget {
           (name: n, label: m.label(n), on: on.contains(n), apply: () => ws.fxToggle(n), said: _said(ws, n),
            tile: _Tile(n, file: m.picture(n), look: _FxLook(n), on: on.contains(n) ? 'ON' : null, picked: c.sel == n, onTap: () => c.pick(n), onApply: () => ws.fxToggle(n), star: c)),
       for (final (n, f) in m.effects)
-        (name: n, label: m.label(n), on: screen.contains(f), apply: () => ws.screenToggle(f), said: 'On the whole picture',
+        (name: n, label: m.label(n), on: screen.contains(f), apply: () => ws.screenToggle(f), said: 'On the picked thing',
          tile: _Tile(n, key: ValueKey('ws-screen-$n'), file: m.picture(n), on: screen.contains(f) ? 'ON ${screen.indexOf(f) + 1}' : null, picked: c.sel == n, onTap: () => c.pick(n), onApply: () => ws.screenToggle(f))),
       if (picked)
         for (final (n, f) in m.animators)
@@ -55,7 +55,7 @@ class EffectsShelf extends StatelessWidget {
                   ),
                 ),
         ),
-        if (sel != null) _FxFooter(sel.name, kind: sel.label, said: sel.said, done: sel.on, ws: ws, onAction: sel.apply, needs: !picked && ws.inside!.thingEffects.any((e) => e.$1 == sel.name)),
+        if (sel != null) _FxFooter(sel.name, kind: sel.label, said: sel.said, done: sel.on, ws: ws, onAction: sel.apply, needs: !picked),   // (an effect is always a thing's: none picked, none put on)
       ],
     );
   }

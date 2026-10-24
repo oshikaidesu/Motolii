@@ -482,28 +482,24 @@ class Ws extends ChangeNotifier {
       ..ensureVisualUpdate();
   }
 
-  /// Joined: the effects on the picked thing (its fx: as the camera sees it, After Effects' effects on a layer), or with
-  /// nothing picked on the whole stage (its script), nearest the picture first.
+  /// Joined: the effects on the picked thing (its fx: as the camera sees it, After Effects' effects on a layer), nearest
+  /// the picture first. Effects are always a thing's: there is no stage-wide one (a whole picture's is a 2D plate showing
+  /// what is behind it, as a lens, with the effect on the plate).
   static final _files = RegExp(r'/.*?\.(?:wgsl|fs|js|mjs)(?= |$)|[^ ]+'); // (as the inside reads the list: a path, spaces and all, to its extension: script.h script_files)
   List<String> get screenFx {
     final t = int.tryParse(selected ?? '');
+    if (t == null) return const [];
     return [
-      for (final f in _files.allMatches(_inside?.word(t ?? 0, t == null ? 'script' : 'fx') ?? '').map((m) => m[0]!))
+      for (final f in _files.allMatches(_inside?.word(t, 'fx') ?? '').map((m) => m[0]!))
         if (f != 'none') f,
     ];
   }
 
-  /// Joined: an effect put over the others on the picked thing (none picked: the whole stage), or taken off (one step either way).
+  /// Joined: an effect put over the others on the picked thing, or taken off (one step either way). Nothing picked: nothing.
   bool screenToggle(String file) {
     final m = _inside, t = int.tryParse(selected ?? '');
-    if (m == null) return false;
-    if (t != null) { // (a thing's: at the end of its effects or out, by the inside's rule for its list)
-      after(m.later('fx_file', thing: t, word: file));
-      return true;
-    }
-    final now = screenFx, on = now.remove(file);
-    if (!on) now.add(file);
-    after(m.later('say', thing: 0, name: 'script', word: now.isEmpty ? 'none' : now.join(' '))); // (an effect's shader made: the window does not wait for it)
+    if (m == null || t == null) return false;
+    after(m.later('fx_file', thing: t, word: file));   // (at the end of its effects or out, by the inside's rule for its list)
     return true;
   }
 
