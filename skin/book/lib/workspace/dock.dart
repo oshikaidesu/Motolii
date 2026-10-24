@@ -20,9 +20,10 @@ const dockShelves = <(String, DockG, String)>[
   ('Fonts', DockG.fonts, 'Search 15 families'),
   ('Colors', DockG.colors, 'Search palettes'),
   ('Create', DockG.create, 'Search layers and shapes'),
+  ('Presets', DockG.files, 'Search presets'),   // (motion and effects together, kept as one: saving them comes once editing is settled)
 ];
 
-const _facts = {'Effects': '33 in library', 'Fonts': '15 families', 'Colors': '6 palettes', 'Create': '24 kinds'};
+const _facts = {'Presets': '0', 'Effects': '33 in library', 'Fonts': '15 families', 'Colors': '6 palettes', 'Create': '24 kinds'};
 
 class WsShelf extends StatefulWidget {
   const WsShelf(this.name, {super.key});
@@ -165,6 +166,10 @@ class _WsShelfState extends State<WsShelf> {
             'Fonts' => FontsShelf(c),
             'Colors' => ColorsShelf(c),
             'Create' => CreateShelf(c),
+            'Presets' => Padding(
+              padding: EdgeInsets.all(Shape.s(24)),
+              child: Text('No presets yet', textAlign: TextAlign.center, style: T.label(Grey.g63)),
+            ),
             _ => MediaShelf(c),
           },
         ),
