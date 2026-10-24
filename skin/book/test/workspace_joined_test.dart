@@ -182,7 +182,10 @@ void main() {
     expect(m.size, (1920, 1080));
     final cube = m.add('solid', 'cube');
     expect(cube, isNot(0));
-    await t.tap(find.byKey(const ValueKey('ws-top-size')));
+    await doubleTap(t, find.byKey(const ValueKey('ws-top-size')));   // (two presses open its numbers: f052e7e)
+    await t.pumpAndSettle();
+    await t.enterText(find.byWidgetPredicate((w) => w is EditableText && w.focusNode.hasFocus), '1080x1920');
+    await t.testTextInput.receiveAction(TextInputAction.done);
     for (var i = 0; i < 100 && identical(ws.inside, m); i++) {   // (opened again in real time, once the inside has the size: BRIDGE.md rule 6)
       await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
       await t.pump();
@@ -631,50 +634,36 @@ void main() {
     Future<void> pick(String name) async {
       await t.enterText(find.descendant(of: find.byType(DockSearch), matching: find.byType(EditableText)), name); // (the shelf's own search: the row is in sight)
       await t.pumpAndSettle();
-      final row = find.text(name).last; // (the first is the search box's own words)
+      final row = find.byElementPredicate((e) => e.widget is Text && (e.widget as Text).data == name && e.findAncestorWidgetOfExactType<DockSearch>() == null && e.findAncestorWidgetOfExactType<DockFooter>() == null).first; // (the tile: not the search box's words, nor the foot that names the one picked)
       await seen(t, row);
-      await t.tap(row);
-      await t.pumpAndSettle();
+      await doubleTap(t, row);   // (two presses put it on, or take it off: f052e7e)
+      await settled(t, ws);
     }
 
     await pick('Gaussian Blur');
-    await t.tap(find.text('Add'));
-    await t.pumpAndSettle();
     expect(m.value(rect, 'blur', 0), 12, reason: m.trouble);
     expect(ws.fxOf('$rect'), ['Gaussian Blur']);
     expect(wsTransform(ws, '$rect')['v_blur'], 12, reason: 'the Blur card says the document\'s blur');
-    await t.tap(find.text('Remove'));
-    await t.pumpAndSettle();
+    await pick('Gaussian Blur');
     expect(m.value(rect, 'blur', 0), 0);
 
     await pick('Drop Shadow');
-    await t.tap(find.text('Add'));
-    await t.pumpAndSettle();
     expect(m.word(rect, 'shadow'), '000000', reason: m.trouble);
     expect(m.undo() && m.word(rect, 'shadow').isEmpty, isTrue, reason: 'one step');
 
     await pick('Duotone');
-    await t.tap(find.text('Add'));
-    await t.pumpAndSettle();
     expect(m.value(rect, 'tint', 0), 1, reason: m.trouble);
     await pick('Gradient Map');
-    await t.tap(find.text('Add'));
-    await t.pumpAndSettle();
     expect(m.value(rect, 'tritone', 0), 1, reason: m.trouble);
     expect(ws.fxOf('$rect'), ['Duotone', 'Gradient Map']);
 
     await pick('Glow');
-    await t.tap(find.text('Add'));
-    await t.pumpAndSettle();
-    expect(m.word(rect, 'glow'), 'ffd166', reason: m.trouble);
+    expect(m.word(rect, 'glow'), 'on', reason: m.trouble);   // (Filament's bloom on its own picture, its strength glow_opacity: 72e9aea)
 
     await pick('Trim Paths');
-    await t.tap(find.text('Add'));
-    await t.pumpAndSettle();
     expect(m.keyMoments(rect, 'trim'), [0, 1], reason: 'drawn on in a second, from the playhead');
     expect([m.value(rect, 'trim', 0), m.value(rect, 'trim', 1)], [1, 0]);
-    await t.tap(find.text('Remove'));
-    await t.pumpAndSettle();
+    await pick('Trim Paths');
     expect([m.keyMoments(rect, 'trim'), m.value(rect, 'trim', 0)], [isEmpty, 0], reason: 'taken off with its keys');
 
     const none = 'Extrude'; // (one After Effects has and the inside does not)
@@ -711,8 +700,9 @@ void main() {
 
   testWidgets('Create: Polygon, Star, Line and Null are ThorVG shapes of the document; a Null is a thing to go with', (t) async {
     final ws = await _pump(t), m = ws.inside!;
+    final made_ = <String, int>{};
     for (final (shape, name) in const [('polygon', 'Polygon'), ('star', 'Star'), ('line', 'Line'), ('null', 'Null')]) {
-      final made = m.add('shape', shape);
+      final made = made_[shape] = m.add('shape', shape);
       expect(made, isNot(0), reason: m.trouble);
       expect(m.word(made, 'name'), name);
       expect(m.frame(made), isNotNull, reason: 'it can be held, even if nothing of it is seen');
@@ -727,8 +717,8 @@ void main() {
     expect(ws.layers.first.kind, WsKind.camera);
     final seen = wsTransform(ws, '$camera');
     expect([seen['v_rotate_y'], seen['v_zoom'], seen['v_distance']], [30, 200, closeTo(1.5 * 6 * m.point, .1)], reason: 'the Camera card says the document');
-    expect(m.set(m.things[1], 'points', 8) && m.set(m.things[1], 'inner', .7), isTrue, reason: m.trouble);
-    expect(m.set(m.things[0], 'points', 2), isFalse, reason: 'a polygon has three points at least');
+    expect(m.set(made_['star']!, 'points', 8) && m.set(made_['star']!, 'inner', .7), isTrue, reason: m.trouble);   // (by what each is, not where it lies in the list: the list is the top row first)
+    expect(m.set(made_['polygon']!, 'points', 0), isFalse, reason: 'points from 1 (one value for every shape since 7ec94ea: an arc\'s degrees too)');
     expect(t.takeException(), isNull);
     await expectSameAfterReopen(t);
     await _close(t);
