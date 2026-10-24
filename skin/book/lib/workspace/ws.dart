@@ -152,6 +152,9 @@ class Ws extends ChangeNotifier {
   /// Joined: how the document is written as a film (the host does it), and what the window has to say about the
   /// document just now (it is being written, where it was written, why something was not done); null: nothing.
   VoidCallback? onRender;
+
+  /// Where the next film is written (set by the settings window; the window's own default when null).
+  String? renderTo;
   /// Joined: the inks the drawing tools give a new thing (a fill word, a stroke colour; '': the document's own).
   String ink = '', edge = '';
 
@@ -481,7 +484,7 @@ class Ws extends ChangeNotifier {
 
   /// Joined: the effects on the picked thing (its fx: as the camera sees it, After Effects' effects on a layer), or with
   /// nothing picked on the whole stage (its script), nearest the picture first.
-  static final _files = RegExp(r'/.*?\.(?:wgsl|fs|js)(?= |$)|[^ ]+'); // (as the inside reads the list: a path, spaces and all, to its extension: script.h script_files)
+  static final _files = RegExp(r'/.*?\.(?:wgsl|fs|js|mjs)(?= |$)|[^ ]+'); // (as the inside reads the list: a path, spaces and all, to its extension: script.h script_files)
   List<String> get screenFx {
     final t = int.tryParse(selected ?? '');
     return [

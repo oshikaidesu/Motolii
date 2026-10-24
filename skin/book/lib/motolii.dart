@@ -19,16 +19,16 @@ typedef _S = Pointer<Utf8>;
 /// A film's thumbnail, made by the inside's own call on another isolate (nothing of a document is handed over: the
 /// call asks nothing of one). Kept in the system's temp folder under the film's place and when it was last changed.
 final _thumbnails = <String, Future<String?>>{};
-Future<String?> _thumbnail(String lib, String film) async {
+Future<String?> _thumbnail(String lib, String film, [int step = 0, int steps = 1]) async {
   final folder = Directory('${Directory.systemTemp.path}/motolii_thumbnails')..createSync(recursive: true);
   // (named by the film's own place, so it is found again in another run, and by when the film was last changed)
   final named = film.replaceAll(RegExp(r'[^A-Za-z0-9]'), '_');
-  final png = '${folder.path}/${named.length > 150 ? named.substring(named.length - 150) : named}_${File(film).statSync().modified.millisecondsSinceEpoch}.png';
+  final png = '${folder.path}/${named.length > 150 ? named.substring(named.length - 150) : named}_${File(film).statSync().modified.millisecondsSinceEpoch}${step == 0 ? '' : '_$step'}.png';
   if (File(png).existsSync()) return png;
   final made = await Isolate.run(() {
-    final ask = DynamicLibrary.open(lib).lookupFunction<Int32 Function(Pointer<Utf8>, Pointer<Utf8>, Int32), int Function(Pointer<Utf8>, Pointer<Utf8>, int)>('motolii_thumbnail');
+    final ask = DynamicLibrary.open(lib).lookupFunction<Int32 Function(Pointer<Utf8>, Pointer<Utf8>, Int32, Double), int Function(Pointer<Utf8>, Pointer<Utf8>, int, double)>('motolii_thumbnail_at');
     final from = film.toNativeUtf8(), to = png.toNativeUtf8();
-    final done = ask(from, to, 240) != 0;
+    final done = ask(from, to, 240, step / steps) != 0;
     malloc
       ..free(from)
       ..free(to);
@@ -661,6 +661,15 @@ class Motolii {
   /// A film's first picture, small, as a .png file (null: none could be made). Made once and on another isolate: the
   /// window does not wait.
   Future<String?> thumbnail(String film) => _thumbnails[film] ??= _thumbnail(libPath, film);
+
+  late final _fontTags = _lib.lookupFunction<_S Function(_S), _S Function(_S)>('motolii_font_tags');
+  final _fontKinds = <String, Set<String>>{};
+
+  /// A font file's kinds as CoreText reads them (serif, sans, script, mono, bold, light…): the system's own, not guessed from a name.
+  Set<String> fontTags(String path) => _fontKinds[path] ??= _with([path], (s) => _fontTags(s[0]).toDartString()).split(' ').where((w) => w.isNotEmpty).toSet();
+
+  /// A picture [step] of [steps] along the film (a tile looked along by the hand's place on it, or played).
+  Future<String?> thumbnailAt(String film, int step, int steps) => step == 0 ? thumbnail(film) : _thumbnails['$film#$step/$steps'] ??= _thumbnail(libPath, film, step, steps);
 
   /// The names of the ways a stretch may go, and how one of the nine kinds goes at [u] of the way through (0 to 1).
   /// A way of this document's own, by name: how far it is (`a` the one key's value, `b` the next's, `u` from 0 to 1

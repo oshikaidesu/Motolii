@@ -7,6 +7,7 @@ import 'package:flutter/widgets.dart';
 import '../tokens.dart';
 import 'dock_files.dart' show dockRead;
 import 'dock_parts.dart';
+import 'dock_tags.dart';
 import 'ws.dart';
 
 // ---------------------------------------------------------------- fonts
@@ -74,11 +75,20 @@ class FontsShelf extends StatelessWidget {
         if (m.word(int.parse(l.id), 'kind') == 'text') m.whole(m.word(int.parse(l.id), 'file')): l,
     };
     bool used(_Font f) => setIn.containsKey(f.path);
-    final hits = fonts.where((f) => c.hit(f.family)).toList();
+    Set<String> tagsOf(_Font f) => DockTags.of('Fonts', f.family, f.path == null ? const <String>{} : (c.ws.inside?.fontTags(f.path!) ?? const <String>{}));
+    final hits = fonts.where((f) => DockTags.hit(c.query, f.family, tagsOf(f))).toList();
+    final vocab = <String, int>{};
+    for (final f in hits) {
+      for (final t in tagsOf(f)) {
+        vocab[t] = (vocab[t] ?? 0) + 1;
+      }
+    }
+    final top = vocab.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
     bool keep(_Font f) => switch (c.chip) {
+      'All' => true,
       'Used' => used(f),
       'Starred' => c.starred(f.family),
-      _ => true,
+      final tag => tagsOf(f).contains(tag),   // (a tag chip: the families with it)
     };
     final list = hits.where(keep).toList();
     final sel = fonts.where((f) => f.family == c.sel).firstOrNull;
@@ -91,6 +101,7 @@ class FontsShelf extends StatelessWidget {
             ('All', hits.length),
             ('Used', hits.where(used).length),
             ('Starred', hits.where((f) => c.starred(f.family)).length),
+            for (final t in top.take(8)) (t.key, t.value),
           ],
           active: c.chip,
           onPick: c.pickChip,
@@ -167,6 +178,7 @@ class _FontRow extends StatelessWidget {
     final sel = c.sel == f.family, star = c.starred(f.family);
     return DockHover(
       onTap: () => c.pick(f.family),
+      onDoubleTap: () => _setFont(c, f),   // (two presses set it; carried to the stage it does the same)
       builder: (context, h) => AnimatedContainer(
         duration: Mo.dur,
         curve: Mo.ease,
@@ -186,7 +198,7 @@ class _FontRow extends StatelessWidget {
                   Row(
                     children: [
                       Flexible(
-                        child: Text(f.family, maxLines: 1, overflow: TextOverflow.ellipsis, style: T.label(dockInk(sel, Grey.g76))),
+                        child: Text('${f.family}  ·  ${DockTags.of('Fonts', f.family, f.path == null ? const <String>{} : (c.ws.inside?.fontTags(f.path!) ?? const <String>{})).take(2).join(' ')}', maxLines: 1, overflow: TextOverflow.ellipsis, style: T.label(dockInk(sel, Grey.g76))),
                       ),
                       if (usedBy case final u?) ...[SizedBox(width: Shape.s(6)), DockTag(u, hue: sel ? null : WsT.toneText)],
                     ],
@@ -213,6 +225,7 @@ class _FontCard extends StatelessWidget {
     final sel = c.sel == f.family, star = c.starred(f.family);
     return DockHover(
       onTap: () => c.pick(f.family),
+      onDoubleTap: () => _setFont(c, f),
       builder: (context, h) => AnimatedContainer(
         duration: Mo.dur,
         curve: Mo.ease,
@@ -234,7 +247,7 @@ class _FontCard extends StatelessWidget {
             Row(
               children: [
                 Flexible(
-                  child: Text(f.family, maxLines: 1, overflow: TextOverflow.ellipsis, style: T.label(dockInk(sel, Grey.g76))),
+                  child: Text('${f.family}  ·  ${DockTags.of('Fonts', f.family, f.path == null ? const <String>{} : (c.ws.inside?.fontTags(f.path!) ?? const <String>{})).take(2).join(' ')}', maxLines: 1, overflow: TextOverflow.ellipsis, style: T.label(dockInk(sel, Grey.g76))),
                 ),
                 if (usedBy case final u?) ...[SizedBox(width: Shape.s(6)), DockTag(u, hue: sel ? null : WsT.toneText)],
               ],

@@ -70,7 +70,13 @@ class _StageState extends State<_Stage> {
   @override
   Widget build(BuildContext context) {
     final ws = WsScope.of(context), scene = Ws.timed('stage scene', () => ArtScene.of(ws, camera: _camera));
-    return Focus(
+    return DragTarget<VoidCallback>(   // (a tile of a shelf dropped here does what its double press does: Ableton's drop of a device on a track)
+      onWillAcceptWithDetails: (_) => true,
+      onAcceptWithDetails: (d) => d.data(),
+      builder: (context, hot, _) => DecoratedBox(
+        position: DecorationPosition.foreground,
+        decoration: BoxDecoration(border: hot.isEmpty ? null : Border.all(color: WsT.accent, width: 2)),
+        child: Focus(
       focusNode: _focus,
       onKeyEvent: _key,
       child: Column(
@@ -107,6 +113,8 @@ class _StageState extends State<_Stage> {
         ],
       ),
     );
+    ),
+      ),
   }
 }
 

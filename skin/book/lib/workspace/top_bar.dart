@@ -1,6 +1,7 @@
 // The window's top bar: who and what (wordmark, project, comp), the mode, and the one loud action (Render).
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/widgets.dart';
 import '../forms/forms.dart';
@@ -33,28 +34,11 @@ class WsTopBar extends StatelessWidget {
           SizedBox(width: Shape.s(6)),
           Text(ws.layer?.name ?? 'Stage', style: T.name(Grey.g76)), // (where the hand is: the picked thing, or the stage itself)
           SizedBox(width: Shape.s(10)),
-          // Joined: the document's own size; a tap goes to the next of the usual three (wide, tall, square) and the document is opened again at it.
-          GestureDetector(
-            key: const ValueKey('ws-top-size'),
-            onTap: ws.onSize == null
-                ? null
-                : () {
-                    const usual = [(1920, 1080), (1080, 1920), (1080, 1080)];
-                    final now = usual.indexOf((WsArt.comp.width.round(), WsArt.comp.height.round())), to = usual[(now + 1) % usual.length];
-                    ws.onSize!(to.$1, to.$2);
-                  },
-            child: _Chip('${WsArt.comp.width.round()} × ${WsArt.comp.height.round()}'),
-          ),
+          const _SizeChip(),
           SizedBox(width: Shape.s(4)),
           _Chip('${Ws.fps} fps'),
           SizedBox(width: Shape.s(4)),
           _Chip(ws.timecode(Ws.duration)),
-          const Spacer(),
-          // (Edit and Animate are whether every change is keyed, the inside's one truth; Export writes the work area as a film, lit while it is written)
-          _Modes(
-            index: (ws.notice ?? '').startsWith('Writing') ? 2 : (ws.animating ? 1 : 0),
-            onPick: (i) => i == 2 ? ws.onRender?.call() : ws.animating = i == 1,
-          ),
           const Spacer(),
           const WsZoomReadout(),
           const _ShadeSwitch(),
@@ -119,16 +103,6 @@ class _HoverState extends State<_Hover> {
     onExit: (_) => setState(() => _h = false),
     child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: widget.onTap, child: widget.builder(_h)),
   );
-}
-
-/// Edit / Animate / Export: the mode is the one segmented control in the bar, lit in the accent.
-class _Modes extends StatelessWidget {
-  const _Modes({required this.index, required this.onPick});
-  final int index;
-  final ValueChanged<int> onPick;
-  static const items = ['Edit', 'Animate', 'Export'];
-  @override
-  Widget build(BuildContext context) => Forms.worn.tabs(context, ChoiceSpec(labels: items, selected: index, onSelect: onPick)); // (as the skin's forms draw it)
 }
 
 class _UndoRedo extends StatelessWidget {
@@ -268,10 +242,201 @@ class _Saved extends StatelessWidget {
 }
 
 /// The one loud action: a flat lime pill with dark ink.
-class _Render extends StatelessWidget {
+class _Render extends StatefulWidget {
   const _Render();
   @override
-  Widget build(BuildContext context) => Forms.worn.action(context, ActionSpec('Render', WsScope.of(context).onRender)); // (as the skin's forms draw it)
+  State<_Render> createState() => _RenderState();
+}
+
+/// Cmd+R and the Render button both ask for the settings window (the film's name, its range and size, its rate) before a film is written.
+final wsAskRender = ValueNotifier<int>(0);
+
+class _RenderState extends State<_Render> {
+  final _open = OverlayPortalController(), _name = TextEditingController(), _focus = FocusNode();
+  @override
+  void initState() {
+    super.initState();
+    wsAskRender.addListener(_ask);
+  }
+
+  @override
+  void dispose() {
+    wsAskRender.removeListener(_ask);
+    _name.dispose();
+    _focus.dispose();
+    super.dispose();
+  }
+
+  void _ask() {
+    if (!mounted || _open.isShowing) return;
+    final ws = WsScope.read(context), doc = ws.document ?? 'film.motolii';
+    _name.text = '${doc.replaceFirst(RegExp(r'\.motolii$'), '')}.mp4';
+    _open.show();
+    WidgetsBinding.instance.addPostFrameCallback((_) => mounted ? _focus.requestFocus() : null);
+  }
+
+  void _go(Ws ws) {
+    var name = _name.text.trim();
+    if (name.isEmpty) return;
+    if (!name.toLowerCase().endsWith('.mp4')) name = '$name.mp4';
+    ws.renderTo = name.startsWith('/') ? name : '${ws.documentFolder ?? '.'}/$name';
+    _open.hide();
+    ws.onRender?.call();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ws = WsScope.of(context);
+    return OverlayPortal(
+      controller: _open,
+      overlayChildBuilder: (_) {
+        final (from, to) = ws.work;
+        final frames = ((to - from) * Ws.fps).round();
+        String t(double s) => '${s.toStringAsFixed(2)} s';
+        Widget row(String k, Widget v) => Padding(
+          padding: EdgeInsets.only(bottom: Shape.s(8)),
+          child: Row(crossAxisAlignment: CrossAxisAlignment.center, children: [SizedBox(width: Shape.z(70), child: Text(k, style: T.label(Grey.g56))), Expanded(child: v)]),
+        );
+        Text fact(String v) => Text(v, style: T.value(Grey.g91));
+        return Stack(
+          children: [
+            Positioned.fill(child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: _open.hide, child: const ColoredBox(color: Color(0x88000000)))),
+            Center(
+              child: Container(
+                width: Shape.z(380),
+                padding: EdgeInsets.all(Shape.s(16)),
+                decoration: BoxDecoration(color: WsT.card, borderRadius: BorderRadius.all(Shape.r(8)), border: Border.all(color: WsT.line)),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Padding(
+                      padding: EdgeInsets.only(bottom: Shape.s(12)),
+                      child: Text('Render', style: T.title(Grey.g95).copyWith(fontWeight: FontWeight.w700)),
+                    ),
+                    row(
+                      'File',
+                      Container(
+                        padding: EdgeInsets.symmetric(horizontal: Shape.s(8), vertical: Shape.s(5)),
+                        decoration: BoxDecoration(color: WsT.well, borderRadius: BorderRadius.all(Shape.r(4))),
+                        child: EditableText(
+                          controller: _name,
+                          focusNode: _focus,
+                          style: T.value(Grey.g95),
+                          cursorColor: WsT.accent,
+                          backgroundCursorColor: Grey.g38,
+                          maxLines: 1,
+                          onSubmitted: (_) => _go(ws),
+                        ),
+                      ),
+                    ),
+                    row('Folder', Text(ws.documentFolder ?? '', maxLines: 1, overflow: TextOverflow.ellipsis, style: T.label(Grey.g76))),
+                    row('Range', fact('Work area  ${t(from)} – ${t(to)}  ·  $frames frames')),
+                    row('Size', fact('${WsArt.comp.width.round()} × ${WsArt.comp.height.round()}')),
+                    row('Rate', fact('${Ws.fps} frames a second')),
+                    row('Format', fact("H.264 .mp4, with the films' sound")),
+                    SizedBox(height: Shape.s(4)),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        GestureDetector(
+                          onTap: _open.hide,
+                          child: Padding(padding: EdgeInsets.symmetric(horizontal: Shape.s(12), vertical: Shape.s(6)), child: Text('Cancel', style: T.name(Grey.g76))),
+                        ),
+                        SizedBox(width: Shape.s(6)),
+                        Forms.worn.action(context, ActionSpec('Render', () => _go(ws))),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+      child: Forms.worn.action(context, ActionSpec('Render', _ask)), // (as the skin's forms draw it)
+    );
+  }
+}
+
+/// The document's size, beside the others: pressed twice it is written over (a width alone keeps the shape; width and
+/// height, as 1080x1920, set both), scrubbed sideways it moves the width 1% every 3 px, the shape kept, and
+/// the document is opened again at it when the hand lets go.
+class _SizeChip extends StatefulWidget {
+  const _SizeChip();
+  @override
+  State<_SizeChip> createState() => _SizeChipState();
+}
+
+class _SizeChipState extends State<_SizeChip> {
+  final _text = TextEditingController(), _focus = FocusNode();
+  bool _editing = false;
+  double? _scrub;   // (the width being scrubbed to)
+  double _dx = 0;
+
+  @override
+  void dispose() {
+    _text.dispose();
+    _focus.dispose();
+    super.dispose();
+  }
+
+  void _commit(Ws ws) {
+    final nums = RegExp(r'\d+').allMatches(_text.text).map((m) => int.parse(m.group(0)!)).toList();
+    setState(() => _editing = false);
+    if (nums.isEmpty || ws.onSize == null) return;
+    final w0 = WsArt.comp.width, h0 = WsArt.comp.height;
+    final w = nums[0], h = nums.length > 1 ? nums[1] : (nums[0] * h0 / w0).round();
+    if (w >= 16 && h >= 16 && w <= 16384 && h <= 16384 && (w != w0.round() || h != h0.round())) ws.onSize!(w, h);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ws = WsScope.of(context), w0 = WsArt.comp.width, h0 = WsArt.comp.height;
+    final shownW = (_scrub ?? w0).round(), shownH = (shownW * h0 / w0).round();
+    if (_editing) {
+      return Container(
+        height: Shape.z(20),
+        width: Shape.z(92),
+        padding: EdgeInsets.symmetric(horizontal: Shape.s(7)),
+        alignment: Alignment.centerLeft,
+        decoration: BoxDecoration(color: WsT.well, borderRadius: BorderRadius.all(Shape.r(WsT.chipRadius)), border: Border.all(color: WsT.accent)),
+        child: EditableText(
+          controller: _text,
+          focusNode: _focus,
+          style: T.value(Grey.g95).copyWith(fontSize: T.px(10)),
+          cursorColor: WsT.accent,
+          backgroundCursorColor: Grey.g38,
+          maxLines: 1,
+          onSubmitted: (_) => _commit(ws),
+          onTapOutside: (_) => _commit(ws),
+        ),
+      );
+    }
+    return MouseRegion(
+      cursor: SystemMouseCursors.resizeLeftRight,
+      child: GestureDetector(
+        key: const ValueKey('ws-top-size'),
+        behavior: HitTestBehavior.opaque,
+        onDoubleTap: ws.onSize == null
+            ? null
+            : () {
+                _text.text = '${w0.round()}x${h0.round()}';
+                _text.selection = TextSelection(baseOffset: 0, extentOffset: _text.text.length);
+                setState(() => _editing = true);
+                WidgetsBinding.instance.addPostFrameCallback((_) => _focus.requestFocus());
+              },
+        onHorizontalDragStart: (_) => _dx = 0,
+        onHorizontalDragUpdate: (e) => setState(() => _scrub = math.max(16, w0 + w0 * ((_dx += e.delta.dx) / 3).round() / 100)),
+        onHorizontalDragEnd: (_) {
+          final w = _scrub?.round();
+          setState(() => _scrub = null);
+          if (w != null && w != w0.round() && ws.onSize != null) ws.onSize!(w, (w * h0 / w0).round());
+        },
+        child: _Chip('$shownW × $shownH'),
+      ),
+    );
+  }
 }
 
 /// How many times the window waited on the inside (the rule: never), a red dot and the count only when it did; a tap

@@ -10,6 +10,7 @@ import 'dock_fonts.dart';
 import 'dock_glyphs.dart';
 import 'dock_make.dart';
 import 'dock_parts.dart';
+import 'dock_tags.dart';
 import 'ws.dart';
 
 /// The shelves: name (also the pane's id and [Ws.shelf]), the mark on its tab, the search hint.
@@ -103,6 +104,8 @@ class _WsShelfState extends State<WsShelf> {
             if (name == 'Media') ...[
               DockIconButton(DockG.grid, on: !_mem.mediaList, onTap: () => setState(() => _mem.mediaList = false)),
               DockIconButton(DockG.list, on: _mem.mediaList, onTap: () => setState(() => _mem.mediaList = true)),
+              DockIconButton(DockG.folder, on: _mem.mediaDeep, onTap: () => setState(() => _mem.mediaDeep = !_mem.mediaDeep)),   // (the folders below listed with it)
+              DockIconButton(DockG.files, on: _mem.treeSide != 0, onTap: () => setState(() => _mem.treeSide = (_mem.treeSide + 1) % 3)),   // (the tree: by the room, left, above)
             ] else
               ConstrainedBox(
                 constraints: BoxConstraints(maxWidth: Shape.z(88)),
@@ -127,6 +130,34 @@ class _WsShelfState extends State<WsShelf> {
         DockSearch(
           controller: _search,
           hint: name == 'Fonts' ? 'Search fonts' : hint,
+        ),
+        Builder(
+          builder: (context) {
+            // (the word being typed, finished by the tags the shelf has: a press takes one)
+            final done = DockTags.completing(name, _search.text);
+            if (done.isEmpty) return const SizedBox.shrink();
+            return Padding(
+              padding: EdgeInsets.symmetric(horizontal: WsT.inset, vertical: Shape.s(3)),
+              child: Wrap(
+                spacing: Shape.s(4),
+                runSpacing: Shape.s(3),
+                children: [
+                  for (final t in done)
+                    DockHover(
+                      onTap: () {
+                        final text = DockTags.complete(_search.text, t);
+                        _search.value = TextEditingValue(text: text, selection: TextSelection.collapsed(offset: text.length));
+                      },
+                      builder: (context, h) => Container(
+                        padding: EdgeInsets.symmetric(horizontal: Shape.s(7), vertical: Shape.s(2)),
+                        decoration: BoxDecoration(color: h ? WsT.raised : WsT.well, borderRadius: BorderRadius.all(Shape.r(WsT.chipRadius))),
+                        child: Text(t, style: T.micro(Grey.g91)),
+                      ),
+                    ),
+                ],
+              ),
+            );
+          },
         ),
         Expanded(
           child: switch (name) {

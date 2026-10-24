@@ -1,6 +1,8 @@
 // The Media shelf, AEViewer 2 style: one browser for the project's files and media. A folder tree (locations, then folders only) beside
 // or above the open folder's contents, shown as thumbnails or as a list. Wide: tree | contents. Narrow: tree band (height by drag) over contents.
+import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/widgets.dart';
 
@@ -9,6 +11,7 @@ import '../tokens.dart';
 import 'dock_resizable.dart';
 import 'dock_glyphs.dart';
 import 'dock_parts.dart';
+import 'dock_tags.dart';
 import 'ws.dart';
 
 /// The tree band's height when the shelf is narrow (double-click on its grip comes back here).
@@ -38,6 +41,7 @@ class FileNode {
 /// each kind is the shelf's own.
 String Function(String file) _kindOfFile = (_) => '';
 Future<String?> Function(String film)? _thumbnailOf;
+Future<String?> Function(String film, int step, int steps)? _thumbnailAtOf;
 DockG? _glyphOf(String file) => switch (_kindOfFile(file)) {
   'film' => DockG.video,
   'picture' => DockG.image,
@@ -107,6 +111,7 @@ int? _usedRev;
 List<FileNode> _rootsOf(DockCtx c) {
   _kindOfFile = c.ws.inside!.kindOf;
   _thumbnailOf = c.ws.inside!.thumbnail;
+  _thumbnailAtOf = c.ws.inside!.thumbnailAt;
   final files = _used(c.ws).keys.toList()..sort();
   return [
     FileNode(
@@ -207,7 +212,7 @@ class MediaShelf extends StatelessWidget {
     if (at != 'Project' && !at.startsWith('/')) c.mem.folder = _rootsOf(c).first.id;
     return LayoutBuilder(
       builder: (context, box) {
-        if (box.maxWidth >= _wide) {
+        if (switch (c.mem.treeSide) { 1 => true, 2 => false, _ => box.maxWidth >= _wide }) {   // (the tree by the room, or where the hand put it)
           return Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -339,7 +344,7 @@ class _Contents extends StatelessWidget {
         for (final k in n.kids) {
           if (k.folder) {
             if (k.listed) walk(k);
-          } else if (c.hit(k.name)) {
+          } else if (DockTags.hit(c.query, k.name, DockTags.of('Media', k.id, {_kindOf(k).toLowerCase(), if (k.id.contains('.')) k.id.split('.').last.toLowerCase()}))) {
             found.add(k);
           }
         }
@@ -348,7 +353,24 @@ class _Contents extends StatelessWidget {
       walk(root);
       items = found;
     } else {
-      items = [...here.kids.where((k) => k.folder), ...here.kids.where((k) => !k.folder)];
+      if (c.mem.mediaDeep) {   // (the folder and every folder below it, their files together: a folder looked at as one pile)
+        final all = <FileNode>[];
+        void below(FileNode f, int depth) {
+          if (f.disk && !f.listed && depth > 0) _read(f.id);
+          for (final k in f.kids) {
+            if (k.folder) {
+              if (depth < 4) below(k, depth + 1);
+            } else {
+              all.add(k);
+            }
+          }
+        }
+
+        below(here, 0);
+        items = [...here.kids.where((k) => k.folder), ...all];
+      } else {
+        items = [...here.kids.where((k) => k.folder), ...here.kids.where((k) => !k.folder)];
+      }
     }
     final kinds = <String, int>{};
     for (final n in items) {
@@ -444,8 +466,9 @@ class _Crumbs extends StatelessWidget {
 
 /// A file's picture: its thumbnail if it is media, otherwise a flat tile with its kind's mark.
 class _Art extends StatelessWidget {
-  const _Art(this.n);
+  const _Art(this.n, {this.step = 0});
   final FileNode n;
+  final int step;   // (a film: the picture this far along it, of eight)
   @override
   Widget build(BuildContext context) {
     if (n.disk && (n.g == DockG.video || n.g == DockG.image)) {
@@ -454,12 +477,12 @@ class _Art extends StatelessWidget {
       final flat = Container(color: WsT.well, alignment: Alignment.center, child: DockBadge(n.g, Grey.g63, size: Shape.z(26)));
       if (n.g == DockG.video) {
         return FutureBuilder<String?>(
-          future: _thumbnailOf?.call(n.id),
-          builder: (context, made) => made.data == null ? flat : Image.file(File(made.data!), fit: BoxFit.cover, gaplessPlayback: true),
+          future: _thumbnailAtOf?.call(n.id, step, 8),
+          builder: (context, made) => made.data == null ? flat : ColoredBox(color: WsT.well, child: Image.file(File(made.data!), fit: BoxFit.contain, gaplessPlayback: true)),   // (the whole picture, not cut to a square)
         );
       }
       final photo = RegExp(r'\.(png|jpe?g|webp)$', caseSensitive: false).hasMatch(n.id);
-      return photo ? Image.file(File(n.id), fit: BoxFit.cover, cacheWidth: 240, errorBuilder: (_, _, _) => flat) : flat;
+      return photo ? ColoredBox(color: WsT.well, child: Image.file(File(n.id), fit: BoxFit.contain, cacheWidth: 240, errorBuilder: (_, _, _) => flat)) : flat;
     }
     return switch (n.g) {
       DockG.font => Container(
@@ -479,35 +502,93 @@ class _Art extends StatelessWidget {
 
 void _open(FileNode n, DockCtx c) => n.folder ? _go(c, n.id) : c.pick(n.id);
 
-class _Tile extends StatelessWidget {
+class _Tile extends StatefulWidget {
   const _Tile(this.n, this.c);
   final FileNode n;
   final DockCtx c;
   @override
+  State<_Tile> createState() => _TileState();
+}
+
+/// A tile: a film is looked along by the hand's place across it, or played in the tile by the mark at its corner (eight
+/// pictures along it, round and round); a file's kind is told by a small tag only where the hand is or it is picked.
+class _TileState extends State<_Tile> {
+  int _step = 0;
+  bool _playing = false;
+  Timer? _clock;
+
+  FileNode get n => widget.n;
+  bool get _film => n.disk && n.g == DockG.video;
+
+  void _play() {
+    setState(() => _playing = !_playing);
+    _clock?.cancel();
+    if (_playing) _clock = Timer.periodic(const Duration(milliseconds: 280), (_) => mounted ? setState(() => _step = (_step + 1) % 8) : null);
+    if (!_playing) setState(() => _step = 0);
+  }
+
+  @override
+  void dispose() {
+    _clock?.cancel();
+    super.dispose();
+  }
+
+  // (the kind's own tag; a vector picture says what it is by its file's end: a .json is a Lottie)
+  String _badge(MediaType t) {
+    if (t != MediaType.image || !n.disk || RegExp(r'\.(png|jpe?g|webp)$', caseSensitive: false).hasMatch(n.id)) return t.badge;
+    final end = n.id.split('.').last.toLowerCase();
+    return end == 'json' ? 'LOTTIE' : end.toUpperCase();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final sel = c.sel == n.id, t = _typeOf(n.g);
+    final c = widget.c, sel = c.sel == n.id, t = _typeOf(n.g), can = _kindOfFile(n.id).isNotEmpty;
     return DockHover(
       key: ValueKey('browser:file:${n.id}'),
       onTap: () => _open(n, c),
+      onDoubleTap: can && !n.folder ? () => _place(c, n) : null,   // (two presses place it; carried to the stage it does the same)
       builder: (context, h) => Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           AspectRatio(
-            aspectRatio: 1.25,
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                _Art(n),
-                if (t != null) Positioned(left: 3, top: 3, child: DockTag(t.badge, hue: t.hue, edge: true)),
-                if (n.folder && n.listed) Positioned(right: 4, bottom: 3, child: Text('${n.kids.length}', style: T.value(Grey.g63).copyWith(fontSize: T.px(10)))),
-                if (_inUse(n, c)) const Positioned(right: 3, top: 3, child: _InUse()),
-                if (sel || h)
-                  DecoratedBox(
-                    decoration: BoxDecoration(
-                      border: Border.all(color: sel ? WsT.accentInk : Grey.g76, width: sel ? 2 : 1),
+            aspectRatio: 16 / 9,   // (a film's own shape: the whole of it seen, not a square cut out of it)
+            child: MouseRegion(
+              onHover: !_film || _playing ? null : (e) {
+                final w = (context.size?.width ?? 1) * 1.0, k = (e.localPosition.dx / math.max(1, w) * 8).floor().clamp(0, 7);
+                if (k != _step) setState(() => _step = k);
+              },
+              onExit: (_) => !_film || _playing || _step == 0 ? null : setState(() => _step = 0),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  _Art(n, step: _step),
+                  if (_film)
+                    Positioned(
+                      left: 4,
+                      top: 4,
+                      child: GestureDetector(
+                        onTap: _play,
+                        child: Container(
+                          width: Shape.z(16),
+                          height: Shape.z(16),
+                          decoration: BoxDecoration(color: const Color(0xAA000000), borderRadius: BorderRadius.all(Shape.r(8))),
+                          child: Center(child: Text(_playing ? '■' : '▶', style: TextStyle(fontSize: Shape.z(8), height: 1, color: const Color(0xFFFFFFFF)))),
+                        ),
+                      ),
+                    )
+                  else if (t != null && (h || sel))
+                    Positioned(left: 3, top: 3, child: DockTag(_badge(t), hue: t.hue, edge: true)),
+                  if (_film && (h || sel) && t != null) Positioned(right: 3, top: 3, child: DockTag(_badge(t), hue: t.hue, edge: true)),
+                  if (n.folder && n.listed) Positioned(right: 4, bottom: 3, child: Text('${n.kids.length}', style: T.value(Grey.g63).copyWith(fontSize: T.px(10)))),
+                  if (_inUse(n, c)) const Positioned(right: 3, bottom: 3, child: _InUse()),
+                  if (sel || h)
+                    DecoratedBox(
+                      decoration: BoxDecoration(
+                        border: Border.all(color: sel ? WsT.accentInk : Grey.g76, width: sel ? 2 : 1),
+                      ),
                     ),
-                  ),
-              ],
+                ],
+              ),
             ),
           ),
           AnimatedContainer(

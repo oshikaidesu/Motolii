@@ -102,7 +102,8 @@ class _WorkspaceState extends State<Workspace> {
   Future<void> _render() async {
     final m = _inside, doc = _doc;
     if (m == null || doc == null) return;
-    final mp4 = '${doc.substring(0, doc.lastIndexOf('.'))}.mp4';
+    final mp4 = _ws.renderTo ?? '${doc.substring(0, doc.lastIndexOf('.'))}.mp4';
+    _ws.renderTo = null;
     _ws.notice = 'Writing ${mp4.split('/').last} …';
     final done = await m.write(mp4);
     if (mounted) _ws.notice = done ? 'Written: ${mp4.split('/').last}' : 'Not written: ${m.trouble}';
@@ -132,7 +133,7 @@ class _WorkspaceState extends State<Workspace> {
 
     return {
       'file.new': () => _open(_fresh()),
-      'file.render': _render,
+      'file.render': () => wsAskRender.value++,   // (the settings window first)
       'edit.undo': () => _typed(const UndoTextIntent(SelectionChangedCause.keyboard)) ? null : ws.after(m.later('undo')),
       'edit.redo': () => _typed(const RedoTextIntent(SelectionChangedCause.keyboard)) ? null : ws.after(m.later('redo')),
       'edit.cut': () => _typed(const CopySelectionTextIntent.cut(SelectionChangedCause.keyboard)),

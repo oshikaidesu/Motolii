@@ -1,10 +1,12 @@
 // motolii.mm: motolii.h's calls, each handed on to doc.h (the document) and kit.h (the stage). Nothing is worked out here.
+#include <CoreText/CoreText.h>
 #include "kit.h"
 #include "doc.h"
 #include "live.h"
 #include "stage_kept.h"
 #include "heard.h"
 #include "sound.h"
+#include <CoreText/CoreText.h>
 #include "motolii.h"
 #include <set>
 #include <sstream>
@@ -198,6 +200,8 @@ static void motolii_hand(Motolii* m, std::string document, int wide, int high, s
     if (!ok) return;
     auto last = std::chrono::steady_clock::now(), due = last, drawn = last;
     for (;;) {
+    try {   // (a throw in the hand's round, a Filament precondition, say: its words said, the round given up: the hand goes on, as the window's own does)
+
         std::deque<std::function<void()>> todo;
         {
             std::unique_lock<std::mutex> hold(m->asked_lock);
@@ -323,6 +327,13 @@ static void motolii_hand(Motolii* m, std::string document, int wide, int high, s
         m->spent[3] += std::chrono::duration<double>(drawn - told).count(), m->many[3]++;
         m->changed = false;
         due = std::max(due + std::chrono::microseconds(16667), t);   // (sixty a second)
+        } catch (const std::exception& e) {
+        std::fprintf(stderr, "motolii: the hand's round threw: %s\n", e.what());
+        m->trouble = std::string("the hand's round threw: ") + e.what();
+        m->telling = false;
+        m->changed = false;
+        m->playing = false;
+    }
     }
     for (auto& [who, h] : m->heard) heard_off(h);
 }
@@ -725,7 +736,8 @@ double motolii_way_at(Motolii* m, const char* way, double u) {
 }
 // A film's first picture as a small .png: GStreamer's own line for it (decode, scale, into a .png), held at its first
 // picture, which is taken and written. It asks nothing of a stage, so a shell may call it from another thread.
-int motolii_thumbnail(const char* film, const char* png, int wide) {
+// (fraction: where in the film, 0 to 1; a picture there, not the first: a hand moving over a tile looks along the film)
+static int thumbnail_at(const char* film, const char* png, int wide, double fraction) {
     gst_init(nullptr, nullptr);
     gchar* uri = gst_filename_to_uri(film, nullptr);
     if (!uri) return 0;
@@ -736,6 +748,14 @@ int motolii_thumbnail(const char* film, const char* png, int wide) {
     GstElement* out = gst_bin_get_by_name(GST_BIN(made), "out");
     gst_element_set_state(made, GST_STATE_PAUSED);
     GstSample* first = gst_app_sink_try_pull_preroll(GST_APP_SINK(out), 4 * GST_SECOND);
+    if (first && fraction > 0.0) {
+        gint64 length = 0;
+        if (gst_element_query_duration(made, GST_FORMAT_TIME, &length) && length > 0) {
+            gst_sample_unref(first);
+            gst_element_seek_simple(made, GST_FORMAT_TIME, (GstSeekFlags)(GST_SEEK_FLAG_FLUSH | GST_SEEK_FLAG_ACCURATE), (gint64)(std::min(fraction, 0.98) * (double)length));
+            first = gst_app_sink_try_pull_preroll(GST_APP_SINK(out), 4 * GST_SECOND);
+        }
+    }
     bool done = false;
     GstMapInfo bytes;
     if (first && gst_buffer_map(gst_sample_get_buffer(first), &bytes, GST_MAP_READ)) {
@@ -747,6 +767,41 @@ int motolii_thumbnail(const char* film, const char* png, int wide) {
     gst_object_unref(out);
     gst_object_unref(made);
     return done;
+}
+int motolii_thumbnail(const char* film, const char* png, int wide) { return thumbnail_at(film, png, wide, 0.0); }
+int motolii_thumbnail_at(const char* film, const char* png, int wide, double fraction) { return thumbnail_at(film, png, wide, fraction); }
+// A font file's kinds, as CoreText reads them (its own: the file's family class and traits): serif, sans, script,
+// mono, bold, light, italic, symbols, ornaments, space separated; "" for none.
+const char* motolii_font_tags(const char* path) {
+    static thread_local std::string out;
+    out.clear();
+    CFURLRef url = CFURLCreateFromFileSystemRepresentation(nullptr, (const UInt8*)path, (CFIndex)std::strlen(path), false);
+    CFArrayRef all = url ? CTFontManagerCreateFontDescriptorsFromURL(url) : nullptr;
+    if (all && CFArrayGetCount(all) > 0) {
+        CTFontDescriptorRef one = (CTFontDescriptorRef)CFArrayGetValueAtIndex(all, 0);
+        CFDictionaryRef traits = (CFDictionaryRef)CTFontDescriptorCopyAttribute(one, kCTFontTraitsAttribute);
+        if (traits) {
+            SInt32 symbolic = 0;
+            float weight = 0.f;
+            if (CFNumberRef n = (CFNumberRef)CFDictionaryGetValue(traits, kCTFontSymbolicTrait)) CFNumberGetValue(n, kCFNumberSInt32Type, &symbolic);
+            if (CFNumberRef n = (CFNumberRef)CFDictionaryGetValue(traits, kCTFontWeightTrait)) CFNumberGetValue(n, kCFNumberFloatType, &weight);
+            const uint32_t kind = ((uint32_t)symbolic & kCTFontClassMaskTrait) >> kCTFontClassMaskShift;
+            if (kind >= 1 && kind <= 7) out += "serif ";
+            else if (kind == 8) out += "sans ";
+            else if (kind == 9) out += "ornaments ";
+            else if (kind == 10) out += "script ";
+            else if (kind == 12) out += "symbols ";
+            if ((uint32_t)symbolic & kCTFontMonoSpaceTrait) out += "mono ";
+            if ((uint32_t)symbolic & kCTFontBoldTrait || weight > 0.3f) out += "bold ";
+            if (weight < -0.3f) out += "light ";
+            if ((uint32_t)symbolic & kCTFontItalicTrait) out += "italic ";
+            CFRelease(traits);
+        }
+    }
+    if (all) CFRelease(all);
+    if (url) CFRelease(url);
+    if (!out.empty()) out.pop_back();
+    return out.c_str();
 }
 int motolii_together(Motolii* m, int on) { return by_hand(m, [=] { return on ? (doc_act(*m->d), 1) : (m->d->act ? (int)doc_acted(*m->d) : 0); }); }
 // Every stretch of a thing's keyed values, a line each: from, to, its way ("from\tto\tway\n"): a timeline draws how each

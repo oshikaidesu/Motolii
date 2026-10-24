@@ -22,6 +22,13 @@ class DockMem {
   bool mediaList = false;
 
   /// The Media shelf: the open folder (a [FileNode] id) and the tree band's height when the shelf is narrow.
+  /// Media: the folders below the open one listed with it (all at once), and where the tree lies (0 by the room, 1 left, 2 above).
+  bool mediaDeep = false;
+
+  /// Create: the sections folded away (the recipes, which are many, start folded).
+  final createFolded = <String>{'Recipes'};
+  int treeSide = 0;
+
   String folder = 'Footage';
   double treeHeight = 132;
 
@@ -66,9 +73,19 @@ class _DockHoverState extends State<DockHover> {
     cursor: widget.onTap == null ? MouseCursor.defer : SystemMouseCursors.click,
     onEnter: (_) => setState(() => _h = true),
     onExit: (_) => setState(() => _h = false),
-    child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: widget.onTap, onDoubleTap: widget.onDoubleTap, child: widget.builder(context, _h)),
+    child: _carried(GestureDetector(behavior: HitTestBehavior.opaque, onTap: widget.onTap, onDoubleTap: widget.onDoubleTap, child: widget.builder(context, _h))),
   );
 }
+
+  /// A tile that has an action of its own can be carried to the stage: dropped there, it does what two presses do.
+  Widget _carried(Widget tile) => widget.onDoubleTap == null
+      ? tile
+      : Draggable<VoidCallback>(
+          data: widget.onDoubleTap!,
+          dragAnchorStrategy: pointerDragAnchorStrategy,
+          feedback: IgnorePointer(child: Container(width: Shape.z(22), height: Shape.z(22), decoration: BoxDecoration(color: WsT.accent, borderRadius: BorderRadius.all(Shape.r(4))))),
+          child: tile,
+        );
 
 /// Pop selection colours: a picked item is the accent with dark ink; hover is one grey step up.
 Color dockFill(bool sel, bool hover, [Color? rest]) => sel ? WsT.accent : (hover ? WsT.card : rest ?? WsT.body);

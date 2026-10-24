@@ -19,19 +19,26 @@ class EffectsShelf extends StatelessWidget {
     if (m == null) return DockEmpty(c.query);
     final on = ws.fxOf(ws.selected), screen = ws.screenFx, picked = int.tryParse(ws.selected ?? '') != null;
     // (a thing's own effects and motions go on a picked thing only; the whole-screen ones on it, or on the stage)
-    final all = [
-      if (picked) for (final (n, _) in m.thingEffects) (n, m.label(n), _Tile(n, file: m.picture(n), look: _FxLook(n), on: on.contains(n) ? 'ON' : null, picked: c.sel == n, onTap: () => c.pick(n), star: c)),
-      for (final (n, f) in m.effects)
-        (n, m.label(n), _Tile(n, key: ValueKey('ws-screen-$n'), file: m.picture(n), on: screen.contains(f) ? 'ON ${screen.indexOf(f) + 1}' : null, onTap: () => ws.screenToggle(f))),
+    // (each: its name, what it is for, its tile, whether it is on, what two presses do (also what a drop on the stage does), what it says of itself)
+    final all = <({String name, String label, Widget tile, bool on, VoidCallback apply, String said})>[
       if (picked)
-        for (final (n, f) in m.animators) (n, 'Motion', _Tile(n, key: ValueKey('ws-motion-$n'), on: ws.motion == f ? 'ON' : null, onTap: () => ws.motionToggle(f))),
-    ].where((e) => c.hit(e.$1)).toList();
+        for (final (n, _) in m.thingEffects)
+          (name: n, label: m.label(n), on: on.contains(n), apply: () => ws.fxToggle(n), said: _said(ws, n),
+           tile: _Tile(n, file: m.picture(n), look: _FxLook(n), on: on.contains(n) ? 'ON' : null, picked: c.sel == n, onTap: () => c.pick(n), onApply: () => ws.fxToggle(n), star: c)),
+      for (final (n, f) in m.effects)
+        (name: n, label: m.label(n), on: screen.contains(f), apply: () => ws.screenToggle(f), said: 'On the whole picture',
+         tile: _Tile(n, key: ValueKey('ws-screen-$n'), file: m.picture(n), on: screen.contains(f) ? 'ON ${screen.indexOf(f) + 1}' : null, picked: c.sel == n, onTap: () => c.pick(n), onApply: () => ws.screenToggle(f))),
+      if (picked)
+        for (final (n, f) in m.animators)
+          (name: n, label: 'Motion', on: ws.motion == f, apply: () => ws.motionToggle(f), said: 'A motion for the picked thing',
+           tile: _Tile(n, key: ValueKey('ws-motion-$n'), on: ws.motion == f ? 'ON' : null, picked: c.sel == n, onTap: () => c.pick(n), onApply: () => ws.motionToggle(f))),
+    ].where((e) => c.hit(e.name)).toList();
     final kinds = <String, int>{};
     for (final e in all) {
-      if (e.$2.isNotEmpty) kinds[e.$2] = (kinds[e.$2] ?? 0) + 1;
+      if (e.label.isNotEmpty) kinds[e.label] = (kinds[e.label] ?? 0) + 1;
     }
-    final chip = kinds.containsKey(c.chip) ? c.chip : 'All', shown = [for (final e in all) if (chip == 'All' || e.$2 == chip) e.$3];
-    final sel = m.thingEffects.any((e) => e.$1 == c.sel) && picked ? c.sel : null;
+    final chip = kinds.containsKey(c.chip) ? c.chip : 'All', shown = [for (final e in all) if (chip == 'All' || e.label == chip) e.tile];
+    final sel = all.where((e) => e.name == c.sel).firstOrNull;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -48,7 +55,7 @@ class EffectsShelf extends StatelessWidget {
                   ),
                 ),
         ),
-        if (sel != null) _FxFooter(sel, ws: ws, done: on.contains(sel)),
+        if (sel != null) _FxFooter(sel.name, kind: sel.label, said: sel.said, done: sel.on, ws: ws, onAction: sel.apply, needs: !picked && ws.inside!.thingEffects.any((e) => e.$1 == sel.name)),
       ],
     );
   }
@@ -58,16 +65,18 @@ class EffectsShelf extends StatelessWidget {
 /// without one, a thing's effect its small drawing, else a plain tile), its name, ON (and its place among
 /// those on the stage) when it is on, the star for a thing's effect.
 class _Tile extends StatelessWidget {
-  const _Tile(this.name, {super.key, this.file, this.look, required this.on, required this.onTap, this.picked = false, this.star});
+  const _Tile(this.name, {super.key, this.file, this.look, required this.on, required this.onTap, this.onApply, this.picked = false, this.star});
   final String name;
   final String? file, on;
   final CustomPainter? look;
   final bool picked;
   final VoidCallback onTap;
+  final VoidCallback? onApply;   // (two presses: it is put on, or taken off)
   final DockCtx? star;
   @override
   Widget build(BuildContext context) => DockHover(
     onTap: onTap,
+    onDoubleTap: onApply,
     builder: (context, h) => Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -106,21 +115,21 @@ String _said(Ws ws, String name) {
   return now.isEmpty ? '$v · none on it' : '$v · $now';
 }
 
-/// The foot: the picked effect, what the analysis says about it, and Add (keeps the try-on, or adds straight away).
+/// The foot: the picked effect, what it is for and what it does, and Add (or Remove): one press picks, two put it on.
 class _FxFooter extends StatelessWidget {
-  const _FxFooter(this.name, {required this.ws, required this.done});
-  final String name;
+  const _FxFooter(this.name, {required this.kind, required this.said, required this.ws, required this.done, required this.onAction, required this.needs});
+  final String name, kind, said;
   final Ws ws;
-  final bool done;
+  final bool done, needs;   // (needs: an effect of a thing, with no thing picked)
+  final VoidCallback onAction;
   @override
   Widget build(BuildContext context) => DockFooter(
     title: name,
-    meta: _said(ws, name),
-    // (an effect goes on or comes off the picked thing)
+    meta: kind.isEmpty ? said : '$kind · $said · double-click to add',
     action: done ? 'Remove' : 'Add',
-    done: ws.selected == null,
+    done: needs,
     doneLabel: 'Pick a thing',
-    onAction: () => ws.fxToggle(name),
+    onAction: onAction,
   );
 }
 

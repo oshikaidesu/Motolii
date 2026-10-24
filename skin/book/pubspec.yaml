@@ -12,6 +12,7 @@ dependencies:
   ffi: ^2.1.0
   flutter:
     sdk: flutter
+  flutter_colorpicker: ^1.1.0
   flutter_svg: ^2.3.0
   material_color_utilities: any   # (Google's HCT colours, already in Flutter: a skin's greys made from its Background and Foreground)
   naked_ui: ^1.2.1
