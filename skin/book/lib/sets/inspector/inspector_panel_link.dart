@@ -78,7 +78,7 @@ class LinkLine extends StatelessWidget {
             Expanded(
               child: Text(value, maxLines: 1, overflow: TextOverflow.ellipsis, style: blockValue(off ? Grey.g56 : Grey.g95)),
             ),
-            Text(to.shelf, style: T.micro(h && !off ? Grey.g95 : Grey.g56)),
+            Flexible(child: Text(to.shelf, maxLines: 1, overflow: TextOverflow.ellipsis, style: T.micro(h && !off ? Grey.g95 : Grey.g56))),   // (a narrow tile: cut short as its value is, never over the edge)
             SizedBox(width: Shape.s(2)),
             CustomPaint(size: const Size(7, 7), painter: _LinkArrowPaint(h && !off ? Grey.g95 : Grey.g56)),
           ],
