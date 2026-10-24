@@ -154,10 +154,8 @@ const char* motolii_animators(Motolii* m);
 const char* motolii_spent(Motolii* m);
 /* Whether the inside is telling the stage a moment just now (the document held): a shell that reads each picture may
    leave this picture's reading out rather than wait (it is asked without the document, at once). */
-int motolii_busy(Motolii* m);
 /* What the document's steps changed since last asked, a line each ("things" when a thing came or went, then "thing
    name" per value; asking forgets them), and the names of the values that change what cards a thing has. */
-const char* motolii_changes(Motolii* m);
 const char* motolii_heard(Motolii* m);   /* each thing's sound as heard now: "file wanted is playing" a line (seconds in its file; -1 not heard): for checks */
 const char* motolii_shaping(Motolii* m);
 /* A change asked without waiting for the hand (say, set, let_go, undo, redo, together: number is let_go's keep and
@@ -182,12 +180,8 @@ int motolii_at(Motolii* m, double seconds);                        /* the stage'
 int motolii_still(Motolii* m, const char* png);                    /* the stage as it is now, as a picture */
 int motolii_write(Motolii* m, const char* mp4);                    /* the whole document as a film, with its films' sound; other calls are answered meanwhile (from another thread), but the document is not changed and nothing is held until it is done */
 int motolii_rate(Motolii* m);                                      /* how many pictures a second that film has (a shell that counts in frames counts in these) */
-long motolii_revision(Motolii* m);   /* how many times the document (or what a hand carries) has changed, read without waiting: a shell keeps its copy of what it read while this stays the same */
-long motolii_carried(Motolii* m);   /* how many times what a hand carries has changed (its values shown while it is on them), read without waiting */
 char* motolii_picture(Motolii* m, int which, long since, long* version);   /* the window's pictures of the document (skin/BRIDGE.md), read without the document: 1 the document's (its own part and each thing's part newer than since), 2 the moment's; JSON, a copy freed with free(); *version: as of which */
 void motolii_tell(Motolii* m, void (*told)(int which));   /* the window's one listener, called (from the hand) when pictures are new: 1 the document's, 2 the moment's, 4 the kept pictures (motolii_kept), or'd */
-void motolii_dont_wait(Motolii* m, int on);   /* this thread's reads from now on are refused rather than waited for, if the hand holds the document longer than a millisecond */
-int motolii_refused(Motolii* m);   /* whether a read since was refused (and forgets it) */
 void motolii_watch(Motolii* m, int on);   /* on from the opening; while on, the window's (main) thread may not wait on the hand: a change it waits for, or a read waiting on the document over 2 ms, is kept */
 const char* motolii_broken(Motolii* m);   /* what was kept since motolii_watch(1): one to a line, named and timed; "" none */
 long motolii_broken_count(Motolii* m);   /* how many times the window's thread waited since it was watched (watched from the opening), read without waiting */
@@ -214,10 +208,8 @@ const char* motolii_kept(Motolii* m);
 /* A thing's effect cards' titles in the order its effects are laid, ";" between ("" none): ThorVG's own and files' alike.
    Moved with motolii_later "fx_move" (word: a title, number: places, up less than 0). */
 const char* motolii_fx_titles(Motolii* m, int thing);
-long motolii_kept_count(Motolii* m);
 int motolii_play(Motolii* m, int playing);                         /* time goes on by the clock (and round again at the end), or stands */
 double motolii_now(Motolii* m);                                    /* the stage's moment */
-double motolii_drawn_at(Motolii* m);   /* the moment of the last moment told the stage, at a frame of the document's rate: the window's playhead while it plays (what it reads there is set down, not waited for) */
 void motolii_timed(Motolii* m, int pictures);                      /* played by the clock for that many pictures: says on its output what it cost and what was left out */
 #ifdef __cplusplus
 }
