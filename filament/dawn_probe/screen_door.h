@@ -1,6 +1,10 @@
 // screen_door: one picture drawn over another by a fragment shader in WGSL, through Filament's own driver (as
 // compute_door runs compute): a whole-screen effect. Filament 1.77.2 has no public way to put one's own shader over
-// a picture; its post-processing draws Filament's own full-screen triangle with a program, and so does this.
+// a picture; its post-processing draws Filament's own full-screen triangle with a program, and so does this (its makers:
+// "currently not directly possible ... via off screen render targets", google/filament discussion #7676; the same calls as
+// its own: third_party/filament_src/filament/src/PostProcessManager.cpp, beginRenderPass then
+// draw(pipeline, getFullScreenRenderPrimitive(), 0, 3, 1)). Filament is built here from its source as kept (third_party),
+// so its inside is the one this was written against until that is changed on purpose.
 // The shader is a fragment shader as vgpu writes one: `fn main(@builtin(position) frag: vec4f, @location(0) uv: vec2f)
 // -> @location(0) vec4f` (uv 0,0 at the top left), the picture `@group(0) @binding(0) var <name>: texture_2d<f32>`,
 // its sampler `@binding(1)`, and, if it has knobs, `@binding(2) var<uniform> <name>: <struct>`.
