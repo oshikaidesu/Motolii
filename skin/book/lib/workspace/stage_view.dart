@@ -4,6 +4,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/gestures.dart';
+import 'package:flutter/scheduler.dart' show SchedulerBinding;
 import 'package:flutter/services.dart' show HardwareKeyboard;
 import 'package:flutter/widgets.dart';
 
@@ -153,9 +154,19 @@ class _StageViewState extends State<StageView> implements StageHandles {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || _toldDesk != v || _toldDpr != dpr) return;
       final m = _deskOf!;
-      if (!m.desk((v.area.width * dpr).round(), (v.area.height * dpr).round(), (v.o.dx - v.area.left) * dpr, (v.o.dy - v.area.top) * dpr, v.s * dpr, dpr)) return;
-      _toldPick = null;
-      if (_desk == null) m.deskTexture().then((id) => mounted && id >= 0 ? setState(() => _desk = id) : null);
+      final ticket = m.desk((v.area.width * dpr).round(), (v.area.height * dpr).round(), (v.o.dx - v.area.left) * dpr, (v.o.dy - v.area.top) * dpr, v.s * dpr, dpr);
+      void look(Duration _) {   // (a picture at a time till the inside has made the desk: the window never stands still for it)
+        if (!mounted) return;
+        final a = m.answer(ticket);
+        if (a < 0) {
+          SchedulerBinding.instance.scheduleFrameCallback(look);
+          return;
+        }
+        if (a == 0) return;
+        _toldPick = null;
+        if (_desk == null) m.deskTexture().then((id) => mounted && id >= 0 ? setState(() => _desk = id) : null);
+      }
+      SchedulerBinding.instance..scheduleFrameCallback(look)..ensureVisualUpdate();
     });
   }
 

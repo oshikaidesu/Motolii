@@ -67,9 +67,6 @@ class Motolii {
     return m == nullptr ? null : Motolii._(lib, m, path, '$dir/out/wgpu_kit');
   }
 
-  late final _live = _lib.lookupFunction<Int32 Function(_P), int Function(_P)>('motolii_live');
-  late final _desk = _lib.lookupFunction<Int32 Function(_P, Int32, Int32, Double, Double, Double, Double), int Function(_P, int, int, double, double, double, double)>('motolii_desk');
-  late final _pick = _lib.lookupFunction<Int32 Function(_P, Int32, Int32), int Function(_P, int, int)>('motolii_pick');
   late final _play = _lib.lookupFunction<Int32 Function(_P, Int32), int Function(_P, int)>('motolii_play');
   late final _now = _lib.lookupFunction<Double Function(_P), double Function(_P)>('motolii_now');
   late final _drawnAt = _lib.lookupFunction<Double Function(_P), double Function(_P)>('motolii_drawn_at');
@@ -153,17 +150,23 @@ class Motolii {
 
   /// The stage's picture as a Flutter texture (the inside draws it by its own clock; nothing is copied). -1: none.
   Future<int> texture() async {
-    if (_live(_m) == 0) return -1;
+    final ticket = later('live');   // (opened by the hand, a moment at a time waited for here: the window never stands still for it)
+    var a = answer(ticket);
+    while (a < 0) {
+      await Future<void>.delayed(const Duration(milliseconds: 4));
+      a = answer(ticket);
+    }
+    if (a == 0) return -1;
     return await _channel.invokeMethod<int>('start', {'lib': libPath, 'handle': _m.address}) ?? -1;
   }
 
   /// The desk: the stage pane's whole picture, [w] x [h] pixels, the stage lying at [x], [y] (its top left) [scale]
   /// pixels a point, what lies off it seen round it, the picked thing marked over it ([point]: pixels a point of the
-  /// screen) (motolii_desk). [w] 0: off, the stage's own picture again.
-  bool desk(int w, int h, double x, double y, double scale, double point) => _desk(_m, w, h, x, y, scale, point) != 0;
+  /// screen) (later: desk). [w] 0: off, the stage's own picture again.
+  int desk(int w, int h, double x, double y, double scale, double point) => later('desk', word: '$w $h $x $y $scale $point');   // (a ticket: [answer] says when the desk's picture exists)
 
-  /// The thing picked in the window and the one under its hand (0: none): the desk marks them (motolii_pick).
-  void pick(int thing, int hover) => _pick(_m, thing, hover);
+  /// The thing picked in the window and the one under its hand (0: none): the desk marks them (later: pick).
+  void pick(int thing, int hover) => later('pick', thing: thing, number: hover.toDouble());
 
   /// The desk's picture as a Flutter texture (-1: none).
   Future<int> deskTexture() async => _deskId ??= await _channel.invokeMethod<int>('start', {'lib': libPath, 'handle': _m.address, 'front': 'motolii_desk_front', 'frames': 'motolii_desk_frames'}) ?? -1;

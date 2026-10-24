@@ -356,7 +356,8 @@ static int changes(Motolii* m, int done) {
 }
 
 // The stage's picture, live: started once; then the last finished picture and how many there have been (any thread).
-int motolii_live(Motolii* m) { return by_hand(m, [m] { return m->live || (m->live = live_open(*m->s)) ? 1 : 0; }); }
+static int live_is(Motolii* m) { return m->live || (m->live = live_open(*m->s)) ? 1 : 0; }
+int motolii_live(Motolii* m) { return by_hand(m, [m] { return live_is(m); }); }
 void* motolii_front(Motolii* m) { return m->live ? live_front(m->live) : nullptr; }
 unsigned long long motolii_frames(Motolii* m) { return m->live ? m->live->frames.load() : 0; }
 const char* motolii_kept(Motolii* m) {
@@ -365,22 +366,24 @@ const char* motolii_kept(Motolii* m) {
     return (runs = m->kept.runs).c_str();
 }
 long motolii_kept_count(Motolii* m) { return m->kept.told.load(std::memory_order_acquire); }
-int motolii_pick(Motolii* m, int thing, int hover) { return by_hand(m, [=] { m->pick = thing, m->hover = hover, m->changed = true; return 1; }); }
+static int pick_is(Motolii* m, int thing, int hover) { m->pick = thing, m->hover = hover, m->changed = true; return 1; }
+static int desk_is(Motolii* m, int w, int h, double x, double y, double scale, double point) {
+    if (!m->live) return 0;
+    Stage& s = *m->s;
+    if (w < 16 || h < 16 || scale <= 0.0) return s.desk.w = 0, m->changed = true, 0;
+    if (!m->live->desk || s.desk.w != (uint32_t)w || s.desk.h != (uint32_t)h) {   // (made again at its new size)
+        Live* was = m->live->desk;
+        m->live->desk = nullptr;
+        live_close(s, was);
+        m->live->desk = live_open(s, (uint32_t)w, (uint32_t)h);
+    }
+    s.desk.w = (uint32_t)w, s.desk.h = (uint32_t)h, s.desk.x = x, s.desk.y = y, s.desk.scale = scale, s.desk.point = point;
+    m->changed = true;
+    return m->live->desk ? 1 : 0;
+}
+int motolii_pick(Motolii* m, int thing, int hover) { return by_hand(m, [=] { return pick_is(m, thing, hover); }); }
 int motolii_desk(Motolii* m, int w, int h, double x, double y, double scale, double point) {
-    return by_hand(m, [=] {
-        if (!m->live) return 0;
-        Stage& s = *m->s;
-        if (w < 16 || h < 16 || scale <= 0.0) return s.desk.w = 0, m->changed = true, 0;
-        if (!m->live->desk || s.desk.w != (uint32_t)w || s.desk.h != (uint32_t)h) {   // (made again at its new size)
-            Live* was = m->live->desk;
-            m->live->desk = nullptr;
-            live_close(s, was);
-            m->live->desk = live_open(s, (uint32_t)w, (uint32_t)h);
-        }
-        s.desk.w = (uint32_t)w, s.desk.h = (uint32_t)h, s.desk.x = x, s.desk.y = y, s.desk.scale = scale, s.desk.point = point;
-        m->changed = true;
-        return m->live->desk ? 1 : 0;
-    });
+    return by_hand(m, [=] { return desk_is(m, w, h, x, y, scale, point); });
 }
 void* motolii_desk_front(Motolii* m) { return m->live && m->live->desk ? live_front(m->live->desk) : nullptr; }
 unsigned long long motolii_desk_frames(Motolii* m) { return m->live && m->live->desk ? m->live->desk->frames.load() : 0; }
@@ -847,6 +850,14 @@ int motolii_later(Motolii* m, const char* call, int thing, const char* name, con
                 double x = 0.0, y = 0.0, hx = 0.0, hy = 0.0;
                 std::sscanf(w.c_str(), "%lf %lf %lf %lf", &x, &y, &hx, &hy);
                 ok = m->made = changes(m, doc_pen(doc(m), thing, x, y, hx, hy));
+            }
+            else if (c == "live") ok = live_is(m);   // (the stage's live picture opened: answer 1 once it is)
+            else if (c == "pick") ok = pick_is(m, thing, (int)number);   // (the thing picked in the window, number: the one under its hand)
+            else if (c == "desk") {   // (word: "w h x y scale point", as motolii_desk; answer 1 once the desk's picture exists)
+                int dw = 0, dh = 0;
+                double x = 0.0, y = 0.0, sc = 0.0, pt = 0.0;
+                std::sscanf(w.c_str(), "%d %d %lf %lf %lf %lf", &dw, &dh, &x, &y, &sc, &pt);
+                ok = desk_is(m, dw, dh, x, y, sc, pt);
             }
             else if (c == "hold") ok = (int)doc_hold(doc(m), thing);   // (a hand takes hold: what it carries next is this thing's)
             else m->trouble = "a change asked later is one of: say, set, hold, let_go, undo, redo, together, add, make, pen, remove, mark, guide, work, raise, sequence, key_here, unkey, stay, way, effect, fx_file, fx_move";
