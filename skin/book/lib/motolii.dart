@@ -190,16 +190,7 @@ class Motolii {
   late final _still = _b.motolii_still;
   late final _close = _b.motolii_close;
 
-  T _with<T>(List<String> words, T Function(List<_S>) call) {
-    final s = [for (final w in words) w.toNativeUtf8()];
-    try {
-      return call(s);
-    } finally {
-      for (final p in s) {
-        malloc.free(p);
-      }
-    }
-  }
+  T _with<T>(List<String> words, T Function(List<_S>) call) => using((a) => call([for (final w in words) w.toNativeUtf8(allocator: a)]));   // (package:ffi's Arena: all let go when the call is done)
 
   static const _channel = MethodChannel('motolii/stage');
 
