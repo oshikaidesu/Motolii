@@ -721,7 +721,7 @@ class _Header extends StatelessWidget {
       ),
       child: LayoutBuilder(
         builder: (context, box) {
-          final roomy = box.maxWidth >= 1000, mid = box.maxWidth >= 820;
+          final roomy = box.maxWidth >= 1000, mid = box.maxWidth >= 820, slide = box.maxWidth >= 600;   // (narrower: the zoom by its buttons alone, as the document's name and length go)
           return Row(
             children: [
               if (mid) ...[_Chip(ws.document?.replaceFirst(RegExp(r'\.motolii$'), '') ?? 'Main', mono: false), SizedBox(width: Shape.s(12))], // (joined: the document's name)
@@ -767,8 +767,7 @@ class _Header extends StatelessWidget {
               const Spacer(),
               _Btn(TpGlyph.minus, key: const ValueKey('ws-tl-zoom-out'), size: Shape.z(22), onTap: () => onZoom(zoom / 1.5)),
               SizedBox(width: Shape.s(4)),
-              _ZoomSlider(zoom: zoom, onZoom: onZoom),
-              SizedBox(width: Shape.s(4)),
+              if (slide) ...[_ZoomSlider(zoom: zoom, onZoom: onZoom), SizedBox(width: Shape.s(4))],
               _Btn(TpGlyph.plus, key: const ValueKey('ws-tl-zoom-in'), size: Shape.z(22), onTap: () => onZoom(zoom * 1.5)),
               SizedBox(width: Shape.s(4)),
               _Btn(TpGlyph.fit, key: const ValueKey('ws-tl-fit'), size: Shape.z(22), width: Shape.z(46), label: 'Fit', lit: zoom <= 1.001, onTap: () => onZoom(1)),
