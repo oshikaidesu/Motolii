@@ -61,7 +61,6 @@ struct Doc {
     struct Scripted { double at = -1; int made = -1; std::vector<ScriptCopy> copies; };
     std::map<int, Scripted> scripted;
     ScreenStack screen;                 // the stage's whole-screen effects, its script .wgsl files one over another (screen.h)   // each thing's copies as its script said them, at one moment (worked out once a picture)
-    std::map<int, ScreenStack> fx;      // each thing's own effects (its fx: .wgsl files), as the camera sees it (screen.h thing_effects)
     bool phys_keyed = false;            // reading where a thing's keys put it (not where the world has it)
     bool writing = false;               // it is being written as a film: it is read, not changed, until that is done
     double written_from = 0.0;          // the moment of the document that a film being written begins at (its work area's start)
