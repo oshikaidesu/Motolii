@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
+import 'package:lab_book/forms/number_paint.dart';
 import 'package:lab_book/parts/controls.dart';
 import 'package:lab_book/sets/inspector/inspector_parts.dart';
 import 'package:lab_book/tokens.dart';
@@ -387,132 +388,51 @@ class NumFieldState extends State<NumField> {
                           )
                         : null));
         final block = widget.caption != null;
-        final body = Container(
-          height: block ? Pop.tile : (pop ? Pop.cell : cellH),
-          decoration: BoxDecoration(
-            color: fillC,
-            borderRadius: BorderRadius.circular(pop ? 6 : 4),
-            border: Border.all(color: picked ? Pop.accentInk.withValues(alpha: .7) : (pop && !(_focus || _editing || live) ? const Color(0x00000000) : edge)),
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(pop ? 5 : 3),
-            child: Stack(
-              children: [
-                // the range tick sits on the field's bottom edge, never behind the text
-                if (_bounded && widget.bipolar)
-                  Positioned(
-                    left: (w - 2) * math.min(t, _zeroAt),
-                    bottom: 0,
-                    height: Shape.z(2),
-                    width: math.max(1, (w - 2) * (t - _zeroAt).abs()),
-                    child: ColoredBox(color: on ? Grey.g56 : Grey.g44),
-                  )
-                else if (_bounded)
-                  Positioned(
-                    left: 0,
-                    bottom: 0,
-                    height: Shape.z(2),
-                    width: math.max(0, (w - 2) * t),
-                    child: ColoredBox(color: look == Look.glow ? Role.selected : (on ? Grey.g56 : Grey.g44)),
-                  ),
-                // contract: animated = a dim dot, keyed at the playhead = a lit dot (the automation blip, not a column).
-                if (row != null && row.keys != KeyS.off)
-                  Positioned(
-                    top: block ? null : 3,
-                    bottom: block ? 7 : null,
-                    right: block ? Pop.tilePad : 3,
-                    child: Container(
-                      width: Shape.z(4),
-                      height: Shape.z(4),
-                      decoration: BoxDecoration(color: row.keys == KeyS.at ? Pop.keyDot : Pop.keyDot.withValues(alpha: .4), shape: BoxShape.circle),
-                    ),
-                  ),
-                if (widget.axis != null && !pop) Positioned(left: 0, top: 5, bottom: 5, width: Shape.z(2), child: ColoredBox(color: widget.axis!)),
-                if (widget.glyph != null)
-                  Positioned(
-                    right: widget.glyphTall ? 4 : Pop.tilePad - 3,
-                    top: 4,
-                    width: Pop.glyph,
-                    height: widget.glyphTall ? null : Pop.glyph,
-                    bottom: widget.glyphTall ? 4 : null,
-                    child: Center(child: widget.glyph),
-                  ),
-                if (block)
-                  Positioned.fill(
-                    child: Padding(
-                      padding: EdgeInsets.fromLTRB(Pop.tilePad, Shape.s(4), widget.glyph != null ? Pop.glyph + Pop.tilePad : Pop.tilePad, Shape.s(5)),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerLeft, child: Text(widget.caption!, maxLines: 1, style: T.micro(on ? Grey.g63 : Grey.g44).copyWith(height: 1.1))),
-                          if (_editing)
-                            SizedBox(
-                              height: Shape.z(18),
-                              child: EditableText(
-                                controller: _ctl,
-                                focusNode: _ef,
-                                style: blockValue(Grey.g95),
-                                cursorColor: Grey.g95,
-                                backgroundCursorColor: Grey.g20,
-                                selectionColor: Role.selected.withValues(alpha: .4),
-                                maxLines: 1,
-                                keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
-                                inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.\-+eE]'))],
-                                onChanged: (_) {
-                                  if (_err) setState(() => _err = false);
-                                },
-                              ),
-                            )
-                          else
-                            SizedBox(
-                              height: Shape.z(18),
-                              child: Align(alignment: Alignment.centerLeft, child: valueText()),
-                            ),
-                        ],
-                      ),
-                    ),
-                  )
-                else
-                  Positioned.fill(
-                    child: Padding(
-                      padding: EdgeInsets.only(left: widget.axis != null && !pop ? Shape.s(8) : Shape.s(7), right: Shape.s(6)),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          if (lead != null) Flexible(child: lead) else if (_err) const ErrMark(),
-                          if (!_editing)
-                            Expanded(
-                              flex: 4,
-                              child: Align(alignment: pop ? Alignment.center : Alignment.centerRight, child: valueText()),
-                            )
-                          else
-                            const Spacer(),
-                          if (_editing)
-                            SizedBox(
-                              width: math.min(72, math.max(28, w - 36)),
-                              child: EditableText(
-                                controller: _ctl,
-                                focusNode: _ef,
-                                style: T.value(Grey.g95),
-                                cursorColor: Grey.g95,
-                                backgroundCursorColor: Grey.g20,
-                                selectionColor: Role.selected.withValues(alpha: .4),
-                                textAlign: pop ? TextAlign.center : TextAlign.right,
-                                maxLines: 1,
-                                keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
-                                inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.\-+eE]'))],
-                                onChanged: (_) {
-                                  if (_err) setState(() => _err = false);
-                                },
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                  ),
-              ],
-            ),
+        // contract: animated = a dim dot, keyed at the playhead = a lit dot (the automation blip, not a column).
+        final editor = _editing
+            ? EditableText(
+                controller: _ctl,
+                focusNode: _ef,
+                style: block ? blockValue(Grey.g95) : T.value(Grey.g95),
+                cursorColor: Grey.g95,
+                backgroundCursorColor: Grey.g20,
+                selectionColor: Role.selected.withValues(alpha: .4),
+                textAlign: block ? TextAlign.left : (pop ? TextAlign.center : TextAlign.right),
+                maxLines: 1,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
+                inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.\-+eE]'))],
+                onChanged: (_) {
+                  if (_err) setState(() => _err = false);
+                },
+              )
+            : null;
+        final body = paintNumber(
+          context,
+          NumberSpec(
+            value: valueText(),
+            editor: editor,
+            lead: lead ?? (_err ? const ErrMark() : null),
+            glyph: widget.glyph,
+            caption: widget.caption,
+            width: w,
+            height: block ? Pop.tile : (pop ? Pop.cell : cellH),
+            fillColor: fillC,
+            borderColor: picked ? Pop.accentInk.withValues(alpha: .7) : (pop && !(_focus || _editing || live) ? const Color(0x00000000) : edge),
+            rangeColor: _bounded && widget.bipolar ? (on ? Grey.g56 : Grey.g44) : (look == Look.glow ? Role.selected : (on ? Grey.g56 : Grey.g44)),
+            fill: _bounded && v != null ? t : null,
+            zeroAt: _zeroAt,
+            bipolar: _bounded && widget.bipolar,
+            block: block,
+            pop: pop,
+            editing: _editing,
+            glyphTall: widget.glyphTall,
+            on: on,
+            hot: _hover,
+            live: live,
+            axis: widget.axis,
+            keyDot: row != null && row.keys != KeyS.off ? (row.keys == KeyS.at ? Pop.keyDot : Pop.keyDot.withValues(alpha: .4)) : null,
+            pad: Pop.tilePad,
+            glyphBox: Pop.glyph,
           ),
         );
         return Focus(

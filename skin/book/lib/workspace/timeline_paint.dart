@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart' show setEquals;
 import 'package:flutter/foundation.dart' show listEquals, ValueListenable;
 import 'package:flutter/widgets.dart';
 
+import '../forms/forms.dart';
 import '../sets/panels/timeline_parts_parts.dart' show tpFine, tpMajor;
 import '../tokens.dart';
 import 'ws.dart';
@@ -207,10 +208,10 @@ class WtRulerPainter extends CustomPainter {
 
 // ---------------------------------------------------------------- tracks
 
-Color wtBand(int i, bool selected) => selected ? Grey.g20 : (i.isEven ? Grey.bandA : Grey.bandB);
+Color wtBand(int i, bool selected) => Forms.worn.trackBand(i, selected);
 
 /// The bar's fill: the kind's hue, a step quieter when not selected; a hidden or soloed-out layer drops to grey.
-Color wtBarFill(WtRow r) => r.dim ? Grey.g26 : (r.selected ? Color.lerp(r.tone ?? wsTone(r.kind), const Color(0xFFFFFFFF), .18)! : r.tone ?? wsTone(r.kind));   // (its colour as it is, as Ableton's clips; picked, a little lighter)
+Color wtBarFill(WtRow r) => Forms.worn.trackFill(r.tone ?? wsTone(r.kind), dim: r.dim, selected: r.selected);
 
 class WtTracksPainter extends CustomPainter {
   const WtTracksPainter({required this.rows, required this.view, required this.fps, required this.vscroll});
@@ -242,7 +243,8 @@ class WtTracksPainter extends CustomPainter {
   void _row(Canvas c, Size s, WtRow r, double cy) {
     final p = Paint(), x0 = view.x(r.inF), x1 = math.max(view.x(r.outF), x0 + 4);
     if (x1 < 0 || x0 > s.width) return;
-    final bar = Rect.fromLTRB(x0, cy - WtM.bar / 2, x1, cy + WtM.bar / 2), rr = RRect.fromRectAndRadius(bar, const Radius.circular(WtM.barRadius));
+    final h = Forms.worn.trackBar(selected: r.selected);
+    final bar = Rect.fromLTRB(x0, cy - h / 2, x1, cy + h / 2), rr = RRect.fromRectAndRadius(bar, Radius.circular(Forms.worn.trackRadius));
     final fill = wtBarFill(r), ink = r.dim ? Grey.g56 : WsT.onAccent, grip = Color.lerp(fill, Grey.g00, .28)!;
     final mix = r.mix;
     if (mix != null && mix.length > 1 && !r.dim) {   // (a relation: its things' colours side by side, blended)

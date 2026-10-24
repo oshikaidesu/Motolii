@@ -37,6 +37,11 @@ void main() {
       for (final (name, what) in m.recipes.where((r) => !r.$2.contains('Canvalry')).take(15)) (name, m.make(name), what),
     ];
     debugPrint('FRAMES the document: ${made.where((r) => r.$2 != 0).length} recipes (${made.map((r) => r.$1).join(', ')})');
+    if (const int.fromEnvironment('HIDE', defaultValue: -1) case final k when k >= 0) {   // (HIDE=k: the document's k-th thing switched off, to see what it costs)
+      final thing = m.things[k];
+      m.set(thing, 'visible', 0);
+      debugPrint('FRAMES hidden: #$k ${m.word(thing, 'name')} (${m.word(thing, 'kind')})');
+    }
     if (const bool.fromEnvironment('FX')) { // (FX: every recipe given ThorVG's blur, shadow and glow: effects piled on)
       for (final (_, thing, _) in made) {
         if (thing != 0) for (final fx in const ['Gaussian Blur', 'Drop Shadow', 'Glow']) m.effect(thing, fx, 0);
@@ -48,6 +53,10 @@ void main() {
       ..select(const bool.fromEnvironment('NONE') ? null : '${made.firstWhere((r) => r.$2 != 0).$2}'); // (NONE: nothing picked, the stage's cards: to see what the picked thing's inspector costs)
     await t.pumpAndSettle();
 
+    for (var i = 0; i < 30; i++) {   // (what the window reads as it opens (the shelves' folders, the films' sound) let finish first: it is not a hand moving)
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+      await t.pump();
+    }
     final timings = <FrameTiming>[];
     void took(List<FrameTiming> ts) => timings.addAll(ts);
     SchedulerBinding.instance.addTimingsCallback(took);
@@ -60,7 +69,9 @@ void main() {
       ws.inside!.watch(true);   // (the window's thread may not wait on the inside: what did is kept)
       var steps = 0;
       for (var f = 0; clock.elapsedMilliseconds < _seconds * 1000; f++, steps++) {
+        if (const bool.fromEnvironment('LIGHT') && f > 30 && timings.skip(from + 5).any((t) => t.totalSpan.inMicroseconds > 16667)) break;   // (LIGHT: stopped once a late one has come, so the timeline still holds it)
         await step(f);
+        SchedulerBinding.instance.scheduleFrame();   // (a picture asked for each move: one where nothing changed was not asked, and the wait for it ran past a picture)
         await SchedulerBinding.instance.endOfFrame;   // (one move a picture of the window: t.pump's wait took two, the hand moved 29 a second)
       }
       final stage = (ws.inside!.frames - drawn) / (clock.elapsedMicroseconds / 1e6);   // (the stage's own pictures a second: what the thing moves at)
@@ -130,7 +141,7 @@ void main() {
     final g = await t.startGesture(t.getCenter(knob));
     Future<void> traced(String what, Future<void> Function(int) step) async { // (TRACE: Flutter's own timeline of it, kept in /tmp)
       if (!const bool.fromEnvironment('TRACE')) return phase(what, step);
-      debugProfileBuildsEnabled = true;
+      debugProfileBuildsEnabled = !const bool.fromEnvironment('LIGHT');   // (LIGHT: no widget named, so the whole of it fits in the timeline)
       debugProfileBuildsEnabledUserWidgets = true;   // (only the window's own widgets named: light enough to leave the frames as they are)
       await binding.traceAction(() => phase(what, step), reportKey: 'timeline', streams: const ['Dart', 'Embedder', 'GC']);
       debugProfileBuildsEnabled = false;
@@ -161,7 +172,7 @@ void main() {
       };
     }
     var moved = 0;
-    await traced('the playhead moved', (f) async => (ws.frame = (f * 3) % (Ws.fps * 8), moved++));
+    await traced('the playhead moved', (f) async => (f == 260 && const bool.fromEnvironment('SAMPLE') ? Process.start('sample', ['$pid', '3', '1', '-file', '/tmp/motolii_playhead_sample.txt']) : null, ws.frame = const bool.fromEnvironment('BOUNCE') ? ((f * 3) % (Ws.fps * 16) < Ws.fps * 8 ? (f * 3) % (Ws.fps * 8) : Ws.fps * 8 - (f * 3) % (Ws.fps * 8)) : (f * 3) % (Ws.fps * 8), moved++));   // (BOUNCE: to and fro, never a jump back to the start)
     if (const bool.fromEnvironment('REBUILDS')) {   // (and play pressed and pressed again: what is built again for it)
       final before = rebuilt.values.fold(0, (a, b) => a + b), rootsBefore = Map.of(roots);
       for (var i = 0; i < 10; i++) {

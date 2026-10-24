@@ -1,6 +1,7 @@
 // The dock's shared pieces: what a shelf remembers, hover, chips, section heads, the detail strip at the foot of a shelf.
 import 'package:flutter/widgets.dart';
 
+import '../forms/forms.dart';
 import '../sets/inspector/inspector_parts.dart' show Pop;
 import '../sets/panels/media_parts.dart' show drawStar, glyph;
 import '../tokens.dart';
@@ -21,7 +22,6 @@ class DockMem {
   final trouble = <String, String>{};
   bool mediaList = false;
 
-  /// The Media shelf: the open folder (a [FileNode] id) and the tree band's height when the shelf is narrow.
   /// Media: the folders below the open one listed with it (all at once), and where the tree lies (0 by the room, 1 left, 2 above).
   bool mediaDeep = false;
 
@@ -29,6 +29,7 @@ class DockMem {
   final createFolded = <String>{};
   int treeSide = 0;
 
+  /// The Media shelf: the open folder (a [FileNode] id) and the tree band's height when the shelf is narrow.
   String folder = 'Footage';
   double treeHeight = 132;
 
@@ -75,7 +76,6 @@ class _DockHoverState extends State<DockHover> {
     onExit: (_) => setState(() => _h = false),
     child: _carried(GestureDetector(behavior: HitTestBehavior.opaque, onTap: widget.onTap, onDoubleTap: widget.onDoubleTap, child: widget.builder(context, _h))),
   );
-}
 
   /// A tile that has an action of its own can be carried to the stage: dropped there, it does what two presses do.
   Widget _carried(Widget tile) => widget.onDoubleTap == null
@@ -86,6 +86,7 @@ class _DockHoverState extends State<DockHover> {
           feedback: IgnorePointer(child: Container(width: Shape.z(22), height: Shape.z(22), decoration: BoxDecoration(color: WsT.accent, borderRadius: BorderRadius.all(Shape.r(4))))),
           child: tile,
         );
+}
 
 /// Pop selection colours: a picked item is the accent with dark ink; hover is one grey step up.
 Color dockFill(bool sel, bool hover, [Color? rest]) => sel ? WsT.accent : (hover ? WsT.card : rest ?? WsT.body);
@@ -98,40 +99,7 @@ class DockChips extends StatelessWidget {
   final String active;
   final ValueChanged<String> onPick;
   @override
-  Widget build(BuildContext context) => SizedBox(
-    height: Shape.z(28),
-    child: SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      padding: EdgeInsets.fromLTRB(WsT.inset, Shape.s(2), WsT.inset, Shape.s(6)),
-      child: Row(
-        children: [
-          for (final (name, n) in chips) ...[
-            DockHover(
-              onTap: () => onPick(name),
-              builder: (context, h) {
-                final on = name == active;
-                return AnimatedContainer(
-                  duration: Mo.dur,
-                  curve: Mo.ease,
-                  height: Shape.z(20),
-                  padding: EdgeInsets.symmetric(horizontal: Shape.s(7)),
-                  decoration: BoxDecoration(color: on ? WsT.accent : (h ? WsT.raised : WsT.well), borderRadius: BorderRadius.all(Shape.r(WsT.radius))),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(name, style: T.micro(on ? WsT.onAccent : Grey.g91).copyWith(fontWeight: on ? FontWeight.w700 : FontWeight.w500)),
-                      if (n != null) ...[SizedBox(width: Shape.s(4)), Text('$n', style: T.value(on ? WsT.onAccent : Grey.g56).copyWith(fontSize: T.px(10)))],
-                    ],
-                  ),
-                );
-              },
-            ),
-            SizedBox(width: WsT.gap),
-          ],
-        ],
-      ),
-    ),
-  );
+  Widget build(BuildContext context) => Forms.worn.chips(context, ChipsSpec(chips: chips, active: active, onPick: onPick));
 }
 
 /// A section head inside a shelf body: a flat hue block, the name in caps, a count; optional fold chevron.

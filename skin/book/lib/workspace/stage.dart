@@ -2,6 +2,7 @@
 // The picture is the work (stage_art.dart); the chrome around it stays grey and round, with the accent only on what is on.
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
+import '../forms/forms.dart';
 import '../parts/skin_parts.dart';
 
 import '../parts/glyphs.dart';
@@ -114,9 +115,9 @@ class _StageState extends State<_Stage> {
           _OptionsStrip(tool: _tool, opts: _opts, onOpt: (k, v) => setState(() => _opts[k] = v), scene: scene, layer: ws.layer, ws: ws),
         ],
       ),
-    );
     ),
       ),
+    );
   }
 }
 
@@ -148,27 +149,7 @@ class _Seg extends StatelessWidget {
   final int index;
   final ValueChanged<int> onChanged;
   @override
-  Widget build(BuildContext context) => Container(
-    height: Shape.z(20),
-    padding: EdgeInsets.all(Shape.s(2)),
-    decoration: BoxDecoration(color: WsT.well, borderRadius: BorderRadius.all(Shape.r(WsT.radius))),
-    child: Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        for (var i = 0; i < items.length; i++)
-          _Hov(
-            onTap: () => onChanged(i),
-            builder: (_, h) => Container(
-              height: Shape.z(16),
-              padding: EdgeInsets.symmetric(horizontal: Shape.s(7)),
-              alignment: Alignment.center,
-              decoration: BoxDecoration(color: i == index ? WsT.accent : (h ? WsT.raised : WsT.well), borderRadius: BorderRadius.all(Shape.r(WsT.chipRadius))),
-              child: Text(items[i], style: T.label(i == index ? WsT.onAccent : (h ? Grey.g95 : Grey.g76)).copyWith(fontWeight: FontWeight.w600)),
-            ),
-          ),
-      ],
-    ),
-  );
+  Widget build(BuildContext context) => Forms.worn.segment(context, ChoiceSpec(labels: items, selected: index, onSelect: onChanged));
 }
 
 enum _Icon { safe, grid }
@@ -182,24 +163,17 @@ class _Toggle extends StatelessWidget {
   final _Icon? icon;
   final G? glyph;
   @override
-  Widget build(BuildContext context) => _Hov(
-    onTap: onTap,
-    builder: (_, h) {
-      final mark = on ? WsT.accent : (h ? Grey.g91 : Grey.g56);
-      return Container(
-        height: Shape.z(20),
-        padding: EdgeInsets.only(left: Shape.s(6), right: Shape.s(8)),
-        decoration: BoxDecoration(color: on ? Grey.g26 : (h ? WsT.raised : WsT.well), borderRadius: BorderRadius.all(Shape.r(WsT.radius))),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (glyph case final g?) Glyph(g, size: Shape.z(14), color: mark) else CustomPaint(size: const Size.square(12), painter: _IconPainter(icon!, mark)),
-            SizedBox(width: Shape.s(5)),
-            Text(label, style: T.label(on || h ? Grey.g95 : Grey.g63).copyWith(fontWeight: FontWeight.w600)),
-          ],
-        ),
-      );
-    },
+  Widget build(BuildContext context) => Forms.worn.flag(
+    context,
+    FlagSpec(
+      label: label,
+      on: on,
+      onTap: onTap,
+      mark: (ink) {
+        if (glyph case final g?) return Glyph(g, size: Shape.z(14), color: ink);
+        return CustomPaint(size: const Size.square(12), painter: _IconPainter(icon!, ink));
+      },
+    ),
   );
 }
 

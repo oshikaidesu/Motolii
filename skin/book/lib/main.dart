@@ -24,6 +24,7 @@ import 'sets/panels/media_set.dart';
 import 'sets/foundations/navigation.dart';
 import 'sets/panels/relation_set.dart';
 import 'sets/panels/stage_set.dart';
+import 'sets/sheet_page.dart';
 import 'sets/panels/timeline_parts.dart';
 import 'sets/panels/transport.dart';
 import 'sets/workflows/workflow_set.dart';
@@ -39,7 +40,13 @@ import 'workspace/workspace.dart';
 void main() {
   // a tester's window (AGENT_DIR): only the cards table, the whole window, driven by its inbox
   if (Platform.environment['AGENT_DIR'] != null) {
-    return runApp(WidgetsApp(color: const Color(0xFF000000), builder: (c, _) => cardsAgentPage(Platform.environment['AGENT_PAGE'] ?? 'Link')));
+    return runApp(
+      WidgetsApp(
+        color: const Color(0xFF000000),
+        builder: (c, _) =>
+            cardsAgentPage(Platform.environment['AGENT_PAGE'] ?? 'Link'),
+      ),
+    );
   }
   if (const bool.fromEnvironment('MOTOLII_HANDS')) {
     return runApp(WidgetsApp(color: const Color(0xFF000000), builder: (c, _) => const GroupHands()));
@@ -54,7 +61,10 @@ void main() {
 }
 
 /// The page the window opens on. Another one: --dart-define=LAB_ROUTE=/?path=glass/glass/live
-const _route = String.fromEnvironment('LAB_ROUTE', defaultValue: '/?path=workspace/workspace/window');
+const _route = String.fromEnvironment(
+  'LAB_ROUTE',
+  defaultValue: '/?path=workspace/workspace/window',
+);
 
 Widget _onGround(Widget child, {double? width, double? height}) => ColoredBox(
   color: N.g07,
@@ -78,14 +88,29 @@ class LabBook extends StatelessWidget {
           WidgetbookComponent(
             name: 'Workspace',
             useCases: [
-              WidgetbookUseCase(name: 'Window', builder: (c) => const Workspace()),
+              WidgetbookUseCase(
+                name: 'Window',
+                builder: (c) => const Workspace(),
+              ),
               // the same window joined to the inside (motolii.dart): its stage is the inside's own picture
-              WidgetbookUseCase(name: 'Live', builder: (c) => const Workspace(document: String.fromEnvironment('MOTOLII_DOC', defaultValue: '$motoliiDir/out/skin.motolii'))),
+              WidgetbookUseCase(
+                name: 'Live',
+                builder: (c) => const Workspace(
+                  document: String.fromEnvironment(
+                    'MOTOLII_DOC',
+                    defaultValue: '$motoliiDir/out/skin.motolii',
+                  ),
+                ),
+              ),
             ],
           ),
         ],
       ),
-      WidgetbookCategory(name: 'インスペクタ案', children: [cardsSet(), inspectorPlansSet(), lassoSet()]),
+      WidgetbookCategory(name: 'Sheet', children: [sheetSet()]),
+      WidgetbookCategory(
+        name: 'インスペクタ案',
+        children: [cardsSet(), inspectorPlansSet(), lassoSet()],
+      ),
       WidgetbookCategory(name: 'Relation', children: [relationTabsSet(), groupHandsSet(), relationBenchSet(), relationIdeasSet(), groupRuleTriesSet()]),
       WidgetbookCategory(name: 'Glass', children: [glassLiveSet()]),
       WidgetbookCategory(
@@ -110,7 +135,12 @@ class LabBook extends StatelessWidget {
         children: [
           WidgetbookComponent(
             name: 'Tokens',
-            useCases: [WidgetbookUseCase(name: 'Families and greys', builder: (c) => _onGround(const _Tokens()))],
+            useCases: [
+              WidgetbookUseCase(
+                name: 'Families and greys',
+                builder: (c) => _onGround(const _Tokens()),
+              ),
+            ],
           ),
           WidgetbookComponent(
             name: 'Controls',
@@ -122,22 +152,42 @@ class LabBook extends StatelessWidget {
                     width: 260,
                     child: ValueWell(
                       label: 'Density',
-                      value: c.knobs.double.slider(label: 'Value', initialValue: .72, min: 0, max: 1),
-                      fam: Fam.all[c.knobs.int.slider(label: 'Family', initialValue: 0, min: 0, max: 5)],
+                      value: c.knobs.double.slider(
+                        label: 'Value',
+                        initialValue: .72,
+                        min: 0,
+                        max: 1,
+                      ),
+                      fam:
+                          Fam.all[c.knobs.int.slider(
+                            label: 'Family',
+                            initialValue: 0,
+                            min: 0,
+                            max: 5,
+                          )],
                     ),
                   ),
                 ),
               ),
               WidgetbookUseCase(
                 name: 'Switch',
-                builder: (c) => _onGround(PillSwitch(on: c.knobs.boolean(label: 'On', initialValue: true))),
+                builder: (c) => _onGround(
+                  PillSwitch(
+                    on: c.knobs.boolean(label: 'On', initialValue: true),
+                  ),
+                ),
               ),
               WidgetbookUseCase(
                 name: 'Segmented',
                 builder: (c) => _onGround(
                   Segmented(
                     items: const ['Edit', 'Play', 'Export'],
-                    index: c.knobs.int.slider(label: 'Index', initialValue: 0, min: 0, max: 2),
+                    index: c.knobs.int.slider(
+                      label: 'Index',
+                      initialValue: 0,
+                      min: 0,
+                      max: 2,
+                    ),
                   ),
                 ),
               ),
@@ -148,7 +198,10 @@ class LabBook extends StatelessWidget {
           feedbackSet().copyWith(name: 'Feedback'),
         ],
       ),
-      WidgetbookCategory(name: 'Workflows', children: [workflowSet(), doseSet()]),
+      WidgetbookCategory(
+        name: 'Workflows',
+        children: [workflowSet(), doseSet()],
+      ),
       archiveCategory(),
     ],
   );

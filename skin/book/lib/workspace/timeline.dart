@@ -8,6 +8,7 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
+import '../forms/forms.dart';
 import '../sets/panels/timeline_parts_parts.dart' show TpGlyph, TpGlyphPainter;
 import '../tokens.dart';
 import 'key_drag.dart';
@@ -162,7 +163,6 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
   // is held and how many seconds the hand has gone; what that does to the thing (its limits, a film's head) is the
   // inside's, and the bar is drawn from what the inside then says.
   ({String id, String part, double grab, bool moved})? _bar;
-
   int _barIn = 0, _barOut = 0;   // (the held bar's ends when it was taken: a cut stops one frame short of nothing, since a bar cut to nothing cannot be seen, taken again, or kept: the document is as long as its longest thing)
 
   // The pointer over a bar says what it would do: an end cuts, the body slides, a key slides; the room between draws a box.
@@ -175,15 +175,15 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
     if (l.keys.any((k) => (v.x(k) - p.dx).abs() <= WtM.keyPicked + 2)) return SystemMouseCursors.click;
     return (p.dx - a).abs() <= 6 || (p.dx - b).abs() <= 6 ? SystemMouseCursors.resizeLeftRight : SystemMouseCursors.grab;
   }
+
   // A key held by a hand: it (and the keys picked with it) slides in time; the playhead shows where, let go it is so.
   ({List<WsKey> keys, int grab, int by})? _slide;
 
-  void _barDown(Offset p) {
   // A box drawn over the empty room of the tracks (any direction): the keys inside it are picked, else the things whose
   // bars it touches (Ableton's and After Effects' marquee). Corners, in the tracks' own points.
   (Offset, Offset)? _box;
 
-    final ws = _ws!, v = _view, m = ws.inside;
+  void _barDown(Offset p) {
     if (!_grab(p)) setState(() => _box = (p, p));
   }
 
@@ -211,6 +211,7 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
   }
 
   bool _grab(Offset p) {
+    final ws = _ws!, v = _view, m = ws.inside;
     final i = ((p.dy + _vscroll) / WtM.row).floor();
     if (m == null || i < 0 || i >= ws.layers.length) return false;
     final l = ws.layers[i], a = v.x(l.inF), b = v.x(l.outF);
@@ -226,15 +227,15 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
     m.take(int.parse(l.id));
     ws.select(l.id);
     if (ws.playing) ws.playing = false;
-    _bar = (id: l.id, part: (p.dx - b).abs() <= 6 ? 'tail' : ((p.dx - a).abs() <= 6 ? 'head' : 'bar'), grab: v.frameAt(p.dx), moved: false);
     _barIn = l.inF;
     _barOut = l.outF;
-  }
+    _bar = (id: l.id, part: (p.dx - b).abs() <= 6 ? 'tail' : ((p.dx - a).abs() <= 6 ? 'head' : 'bar'), grab: v.frameAt(p.dx), moved: false);
     return true;
+  }
 
   void _barMove(Offset p) {
-    if (_slide case final s?) {
     if (_box case (final from, _)?) return setState(() => _box = (from, p));
+    if (_slide case final s?) {
       final by = _view.frameAt(p.dx).round() - s.grab;
       _slide = (keys: s.keys, grab: s.grab, by: by);
       _ws!.frame = (s.grab + by).clamp(0, Ws.duration);
@@ -251,8 +252,8 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
   }
 
   void _barUp({bool keep = true}) {
-    if (_slide case final s?) {
     if (_box != null) return keep ? _boxUp() : setState(() => _box = null);
+    if (_slide case final s?) {
       _slide = null;
       if (keep) wsSlideKeys(_ws!, s.keys, s.by);
       return;
@@ -633,8 +634,8 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
                     ),
                   ),
                 ),
-              ),
                 ),
+              ),
               ValueListenableBuilder<int>(valueListenable: ws.moment, builder: (_, frame, _) => _Overview(from: _scroll, to: _scroll + _visible, frame: frame, onDrag: (p) => _overview(p, box.maxWidth))),
             ],
           ),
@@ -653,7 +654,6 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
               ),
             ),
           ),
-          if (_naming case (final at, _)?)   // (a mark's name written over its flag)
           if (_box case (final a, final b)?)
             Positioned.fromRect(
               rect: Rect.fromPoints(a, b).shift(Offset(0, WtM.ruler)),
@@ -663,6 +663,7 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
                 ),
               ),
             ),
+          if (_naming case (final at, _)?)   // (a mark's name written over its flag)
             Positioned(
               left: v.x((at * Ws.fps).round()),
               top: WtM.band + 1,
@@ -942,44 +943,22 @@ class _LabelRowState extends State<_LabelRow> {
   @override
   Widget build(BuildContext context) {
     final r = widget.row, sel = r.selected;
-    final bg = sel ? wtBand(widget.index, true) : (_h ? Grey.g15 : wtBand(widget.index, false));
-    final ink = r.dim ? Grey.g56 : (sel ? Grey.g100 : Grey.g91);
     return MouseRegion(
       onEnter: (_) => setState(() => _h = true),
       onExit: (_) => setState(() => _h = false),
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: widget.onSelect,
-        child: Container(
-          color: bg,
-          padding: EdgeInsets.only(bottom: Shape.s(1)),
-          child: Stack(
-            children: [
-              if (sel) Positioned(left: 0, top: 0, bottom: 0, width: Shape.z(3), child: ColoredBox(color: WsT.accent)),
-              Padding(
-                padding: EdgeInsets.only(left: Shape.s(8), right: Shape.s(6)),
-                child: Row(
-                  children: [
-                    SizedBox(width: 14, child: Text('${widget.index + 1}', style: T.value(sel ? Grey.g91 : Grey.g56).copyWith(fontSize: T.px(10)))),
-                    SizedBox(width: Shape.s(6)),
-                    WtKindChip(r.kind, dim: r.dim, tone: r.tone),
-                    SizedBox(width: Shape.s(7)),
-                    Expanded(
-                      child: Text(
-                        r.name,
-                        style: T.name(ink).copyWith(fontWeight: sel ? FontWeight.w700 : FontWeight.w500),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    _Toggle(widget.hidden ? TpGlyph.eyeOff : TpGlyph.eye, on: false, lit: !widget.hidden, onTap: widget.onEye),
-                    _Toggle(TpGlyph.solo, on: widget.solo, lit: _h || sel, onTap: widget.onSolo),
-                    _Toggle(r.locked ? TpGlyph.lock : TpGlyph.unlock, on: false, lit: r.locked || _h || sel, strong: r.locked, onTap: widget.onLock),
-                  ],
-                ),
-              ),
-            ],
-          ),
+      child: Forms.worn.track(
+        context,
+        TrackSpec(
+          index: widget.index,
+          name: r.name,
+          selected: sel,
+          dim: r.dim,
+          hot: _h,
+          onSelect: widget.onSelect,
+          kind: WtKindChip(r.kind, dim: r.dim, tone: r.tone),
+          eye: _Toggle(widget.hidden ? TpGlyph.eyeOff : TpGlyph.eye, on: false, lit: !widget.hidden, onTap: widget.onEye),
+          solo: _Toggle(TpGlyph.solo, on: widget.solo, lit: _h || sel, onTap: widget.onSolo),
+          lock: _Toggle(r.locked ? TpGlyph.lock : TpGlyph.unlock, on: false, lit: r.locked || _h || sel, strong: r.locked, onTap: widget.onLock),
         ),
       ),
     );

@@ -47,6 +47,11 @@ Motolii の窓（Flutter、`skin/book`）の見た目は、中身（書類・動
 | `choice(context, ChoiceSpec)` | 同上＋`glyphs`（16×14 の箱に描く関数） | インスペクタの Space（2D・2.5D・3D） |
 | `onOff(context, SwitchSpec)` | `on`、`onChanged`、`enabled` | オン・オフ（Animate all など） |
 | `card(context, CardSpec)` | `title`、`tone`（札の種類の色）、`open`、`onToggle`、`trailing`、`body`（行）、`head` と `own`（窓のいつもの組み立て） | インスペクタの札1枚 |
+| `segment` | `ChoiceSpec`（言葉が並ぶ。幅は言葉の分だけ） | Fit・50%・100%、Layer・Group など |
+| `flag` | `FlagSpec`（言葉、オン、印） | Snap、Safe、Grid など |
+| `chips` | `ChipsSpec` | 棚の絞り込み |
+| `track` | `TrackSpec`（名前、種類の印、目・ソロ・錠） | タイムラインの層の名前 |
+| `number` | `NumberSpec`（数の文字、打っている欄、範囲） | 数の入力欄。こすって変える動きは窓が持つ |
 
 約束の細かい所：
 - `ChoiceSpec.glyphs` の関数は `(Canvas c, Paint stroke)`。**Paint はフォームが作って渡す**（色・太さ・塗りか線かはフォームが決める）。印は 16×14 の箱に描かれるので、大きく描くなら `c.scale()` してから呼ぶ。
@@ -102,9 +107,9 @@ Anthropic 公式の考え方（[frontend-design スキル](https://github.com/an
 
 > `skin/book/skins/README.md` と `ROLES.md` を読んで、`~/.motolii/skins/<名前>/theme.xml` に「（欲しい見た目）」の革を書いて。`skin/book/skins/shoot.sh ~/.motolii/skins/<名前>` で撮って `preview.png` を見て、直して、また撮る。読めない文字や差し色の埋もれがなくなるまで。
 
-**フォーム**（組み立てから変える）。頼む前に：フォームが届くのは今は5つの部品（§3 の表）だけ。数の欄・層の行・小さな切り替えなど残りは、革の色と書体で合わせるところまで（§7）。
+**フォーム**（組み立てから変える）。届く部品は §3 の表。ドックのタブそのもの（`docking` が描く）はまだ外（§7）。
 
-> `skin/book/skins/HANDOFF.md` を読んで、`lib/forms/<名前>.dart` に「（欲しい見た目）」のフォームを書き、登録して、`skin/book/skins/<名前>/theme.xml` で着る革を作って。先に色4〜6個・書体・ASCII の配置図を書いて「ありがちな所」を直してから書くこと。フォームが届くのは5つの部品だけなので、残りの部品は革の色と書体で合わせる。`skins/shoot.sh skins/<名前>` で撮って見て直す。最後に skin_fit_test に足して流して切れ0・はみ出し0を、`flutter test` で新しい落ち0を確かめる。
+> `skin/book/skins/HANDOFF.md` を読んで、`lib/forms/<名前>.dart` に「（欲しい見た目）」のフォームを書き、登録して、`skin/book/skins/<名前>/theme.xml` で着る革を作って。先に色4〜6個・書体・ASCII の配置図を書いて「ありがちな所」を直してから書くこと。§3 の表の関数を全部書く（書かない関数は窓のいつもの絵のまま）。ドックのタブはまだ届かない。`skins/shoot.sh skins/<名前>` で撮って見て直す。最後に skin_fit_test に足して流して切れ0・はみ出し0を、`flutter test` で新しい落ち0を確かめる。
 
 ## 6. 落とし穴（踏んだ物）
 
@@ -118,7 +123,7 @@ Anthropic 公式の考え方（[frontend-design スキル](https://github.com/an
 
 ## 7. まだのこと
 
-- フォームを通っている部品は5種類（Render、Edit/Animate/Export、Space、オン・オフ、札）。次は数の入力欄（`NumField`）、小さな切り替え（Snap、Layer/Group、Fit・50%・100%）、ドックのタブ、タイムラインの行。
+- フォームを通っている部品は、Render、Edit/Animate/Export、Space、オン・オフ、札、小さな切り替え（Fit、Layer/Group、Snap、Safe、Grid）、棚の絞り込み、タイムラインの層の名前と帯、数の入力欄。帯の角と地は `trackRadius` と `trackBand`。ドックのタブそのもの（`docking` パッケージが描く）は、まだフォームの外。
 - フォームはアプリに組み込まれるので、配った人が置くだけでは着られない。
 - 細い線（1画素）の太さは革で変わらない。
 - 舞台の中（枠の外の暗い所も）は作品の絵なので、革では変わらない。

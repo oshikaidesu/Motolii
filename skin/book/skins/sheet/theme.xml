@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Sheet: one paper ground. Ink is the structure. The red mark is only where you are (the mode, a key).
+     Layer kinds stay a whisper of graphite, so the picture on the stage keeps the colour.
+     How the five controls are put together is lib/forms/sheet.dart. -->
+<Motolii>
+	<Theme>
+		<Forms Value="sheet"/>
+		<Background Value="#f3f1ec"/>
+		<Foreground Value="#1a1a1a"/>
+		<Grey00 Value="#f3f1ec"/>
+		<Grey07 Value="#f3f1ec"/>
+		<Grey10 Value="#f3f1ec"/>
+		<Grey13 Value="#f3f1ec"/>
+		<Grey15 Value="#e8e4dc"/>
+		<Grey20 Value="#ddd8cf"/>
+		<Grey26 Value="#cfc9be"/>
+		<BandA Value="#f3f1ec"/>
+		<BandB Value="#eceae4"/>
+		<RowLine Value="#e4e0d8"/>
+		<ChosenDefault Value="#cfc9be"/>
+		<ControlOnForeground Value="#1a1a1a"/>
+		<ChosenInk Value="#1a1a1a"/>
+		<Keyframe Value="#d23c2e"/>
+		<Clip1 Value="#5c564e"/>
+		<Clip2 Value="#6a5c52"/>
+		<Clip3 Value="#4e5c58"/>
+		<Clip4 Value="#525860"/>
+		<Clip5 Value="#5c5662"/>
+		<Clip6 Value="#645648"/>
+		<Clip7 Value="#4e5860"/>
+		<AxisX Value="#d23c2e"/>
+		<AxisY Value="#1f6b4a"/>
+		<AxisZ Value="#2a4f8f"/>
+		<Corner Value="0"/>
+		<FontSans Value="Helvetica Neue"/>
+		<FontMono Value="PT Mono"/>
+	</Theme>
+</Motolii>

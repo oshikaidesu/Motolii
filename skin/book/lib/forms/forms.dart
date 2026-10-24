@@ -6,12 +6,16 @@
 import 'package:flutter/widgets.dart';
 
 import '../theme.dart';
+import '../tokens.dart';
 import 'lighttable.dart';
+import 'number_paint.dart';
 import 'own.dart';
 import 'poster.dart';
+import 'sheet.dart';
+import 'usual.dart';
 
 /// Every form the window knows, by the name a skin says.
-const forms = <String, Forms>{'own': OwnForms(), 'poster': PosterForms(), 'lighttable': LightTableForms()};
+const forms = <String, Forms>{'own': OwnForms(), 'poster': PosterForms(), 'lighttable': LightTableForms(), 'sheet': SheetForms()};
 
 /// One loud action (Render).
 class ActionSpec {
@@ -50,12 +54,54 @@ class CardSpec {
   final Widget own;
 }
 
+/// One of a few small words (Fit · 50% · 100%, Layer · Group). Unlike [ChoiceSpec] in a cell, the row sizes to its words.
+class FlagSpec {
+  const FlagSpec({required this.label, required this.on, required this.onTap, this.mark});
+  final String label;
+  final bool on;
+  final VoidCallback onTap;
+
+  /// The window's picture of the flag, in the ink the form chooses.
+  final Widget Function(Color ink)? mark;
+}
+
+/// A shelf's filter chips: a word, an optional count, which one is on.
+class ChipsSpec {
+  const ChipsSpec({required this.chips, required this.active, required this.onPick});
+  final List<(String, int?)> chips;
+  final String active;
+  final ValueChanged<String> onPick;
+}
+
+/// One timeline name. The kind and the three toggles are the window's, because their behaviour is not the form's.
+class TrackSpec {
+  const TrackSpec({
+    required this.index,
+    required this.name,
+    required this.selected,
+    required this.dim,
+    required this.hot,
+    required this.onSelect,
+    required this.kind,
+    required this.eye,
+    required this.solo,
+    required this.lock,
+  });
+  final int index;
+  final String name;
+  final bool selected, dim, hot;
+  final VoidCallback onSelect;
+  final Widget kind, eye, solo, lock;
+}
+
 /// How a skin draws the window's controls.
+///
+/// Dragging a number, typing it, and carrying a timeline row stay in the window. A form is given the pieces and returns the picture.
 abstract class Forms {
   const Forms();
 
   /// The forms the skin worn names (none, or one the window does not know: its own).
-  static Forms get worn => forms[ColorTheme.word('Forms', 'own')] ?? const OwnForms();
+  static Forms get worn => _numbersBound ? (forms[ColorTheme.word('Forms', 'own')] ?? const OwnForms()) : const OwnForms();
 
   Widget action(BuildContext context, ActionSpec a);
   Widget choice(BuildContext context, ChoiceSpec c);
@@ -64,4 +110,37 @@ abstract class Forms {
   Widget tabs(BuildContext context, ChoiceSpec c);
   Widget onOff(BuildContext context, SwitchSpec s);
   Widget card(BuildContext context, CardSpec c);
+
+  /// Fit, Layer/Group, and the other small one-of-a-few. The default is the window's own well.
+  Widget segment(BuildContext context, ChoiceSpec c) => Usual.segment(context, c);
+
+  /// Snap, Safe, Grid, and the other small on/off chips.
+  Widget flag(BuildContext context, FlagSpec f) => Usual.flag(context, f);
+
+  /// A shelf's row of filter chips.
+  Widget chips(BuildContext context, ChipsSpec c) => Usual.chips(context, c);
+
+  /// One layer's name in the timeline.
+  Widget track(BuildContext context, TrackSpec t) => Usual.track(context, t);
+
+  /// A number's picture. The field calls [paintNumber], which was bound to this when the forms loaded.
+  Widget number(BuildContext context, NumberSpec n) => usualNumber(context, n);
+
+  /// The bar of a layer in the timeline: its fill, how tall and how round it is, and the band behind its row.
+  Color trackFill(Color kind, {required bool dim, required bool selected}) => dim ? Grey.g26 : (selected ? Color.lerp(kind, const Color(0xFFFFFFFF), .18)! : kind);   // (its colour as it is, as Ableton's clips; picked, a little lighter)
+  double get trackRadius => 4;
+  double trackBar({required bool selected}) => Shape.z(18);
+  Color trackBand(int index, bool selected) => selected ? Grey.g20 : (index.isEven ? Grey.bandA : Grey.bandB);
+
+  /// The mark at the front of a pane's tab. The window's own mark, unless a form puts a shape there.
+  Widget paneMark(BuildContext context, {required bool selected, required Widget mark}) => mark;
+
+  /// The tab strip keeps the package's cards. A form that returns true clears them, so the mark is the tab.
+  bool get plainTabs => false;
 }
+
+/// Installed as this library loads, so a number field can ask the worn form without importing it back.
+final bool _numbersBound = () {
+  bindNumber((context, spec) => Forms.worn.number(context, spec));
+  return true;
+}();

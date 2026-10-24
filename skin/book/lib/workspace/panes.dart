@@ -4,6 +4,7 @@
 import 'package:docking/docking.dart';
 import 'package:flutter/widgets.dart';
 
+import '../forms/forms.dart';
 import '../tokens.dart';
 import 'dock_glyphs.dart';
 import 'ws.dart';
@@ -93,7 +94,13 @@ class _WsPanesState extends State<WsPanes> {
         button: true,
         child: Padding(
           padding: EdgeInsets.only(right: p.iconOnly ? Shape.s(0) : Shape.s(5)),
-          child: p.glyph == null ? Text(p.name.characters.first, style: T.micro(status == TabStatus.selected ? Grey.g95 : Grey.g56)) : DockGlyph(p.glyph!, size: Shape.z(12), color: status == TabStatus.selected ? Grey.g95 : Grey.g56),
+          child: Forms.worn.paneMark(
+            context,
+            selected: status == TabStatus.selected,
+            mark: p.glyph == null
+                ? Text(p.name.characters.first, style: T.micro(status == TabStatus.selected ? Grey.g95 : Grey.g56))
+                : DockGlyph(p.glyph!, size: Shape.z(12), color: status == TabStatus.selected ? Grey.g95 : Grey.g56),
+          ),
         ),
       ),
       widget: WsSeat(child: p.build()),
@@ -121,35 +128,39 @@ class _WsPanesState extends State<WsPanes> {
 }
 
 /// Tab strips in the window's manner: a quiet band on the gutter, the front tab wears the seat's body and an accent underline.
+/// A form with [Forms.plainTabs] drops the cards, so its own mark is the only thing that says which pane is in front.
 TabbedViewThemeData _tabs() {
   final t = Grey.light ? TabbedViewThemeData.minimalist() : TabbedViewThemeData.dark();
+  final plain = Forms.worn.plainTabs;
   t.tabsArea
     ..color = WsT.ground
     ..border = null
     ..initialGap = 0
-    ..middleGap = WsT.gutter
+    ..middleGap = plain ? Shape.s(2) : WsT.gutter
     ..gapBottomBorder = BorderSide.none
     ..dropColor = WsT.accent.withValues(alpha: .35)
     ..normalButtonColor = Grey.g56
     ..hoverButtonColor = Grey.g91;
   t.tab
-    ..padding = EdgeInsets.fromLTRB(Shape.s(10), Shape.s(5), Shape.s(10), Shape.s(5))
+    ..padding = EdgeInsets.fromLTRB(Shape.s(plain ? 4 : 10), Shape.s(5), Shape.s(plain ? 4 : 10), Shape.s(5))
     ..margin = EdgeInsets.zero
     ..innerBottomBorder = null
     ..innerTopBorder = null
     ..textStyle = T.micro(Grey.g63).copyWith(fontWeight: FontWeight.w600, letterSpacing: .6)
-    ..decoration = BoxDecoration(color: WsT.card)
-    ..draggingDecoration = BoxDecoration(color: WsT.raised)
+    ..decoration = plain ? const BoxDecoration() : BoxDecoration(color: WsT.card)
+    ..draggingDecoration = BoxDecoration(color: plain ? WsT.body : WsT.raised)
     ..normalButtonColor = Grey.g56
     ..hoverButtonColor = Grey.g91
     ..selectedStatus = (TabStatusThemeData()
-      ..decoration = BoxDecoration(
-        color: WsT.body,
-        border: Border(bottom: BorderSide(color: WsT.accentInk, width: 2)),
-      )
+      ..decoration = plain
+          ? const BoxDecoration()
+          : BoxDecoration(
+              color: WsT.body,
+              border: Border(bottom: BorderSide(color: WsT.accentInk, width: 2)),
+            )
       ..fontColor = Grey.g95)
     ..highlightedStatus = (TabStatusThemeData()
-      ..decoration = BoxDecoration(color: WsT.raised)
+      ..decoration = plain ? const BoxDecoration() : BoxDecoration(color: WsT.raised)
       ..fontColor = Grey.g91);
   t.contentArea
     ..decoration = BoxDecoration(color: WsT.body)
