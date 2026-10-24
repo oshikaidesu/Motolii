@@ -106,7 +106,7 @@ Future<void> expectSameAfterReopen(WidgetTester t, {List<WsPane> extra = const [
     if ((e as StatefulElement).state case final ScrollableState l when l.position.hasPixels) l.position.jumpTo(l.position.minScrollExtent);
   }
   await t.pumpAndSettle();
-  final selected = ws.selected, frame = ws.frame, keys = ws.keys.toList(), desk = ws.deskManual, shelf = ws.shelf, ink = ws.ink, edge = ws.edge, aim = ws.aim, animating = ws.animating, view = Map.of(ws.view), doc = openedDocument!;
+  final selected = ws.selected, frame = ws.frame, keys = ws.keys.toList(), desk = ws.deskManual, shelf = ws.shelf, ink = ws.ink, edge = ws.edge, aim = ws.aim, animating = ws.animating, view = Map.of(ws.view), fronted = ws.fronted?.$1, doc = openedDocument!;
   final before = windowWords(t);
   await closeWorkspace(t);
   final again = await openWorkspace(t, extra: extra, tools: tools, document: doc, view: view);
@@ -116,6 +116,7 @@ Future<void> expectSameAfterReopen(WidgetTester t, {List<WsPane> extra = const [
   }
   again.frame = frame;
   if (desk != null) again.openDesk(desk);
+  if (fronted != null) again.front(fronted);   // (the pane a hand brought to the front: the window's, as the shelf is)
   again
     ..shelf = shelf
     ..ink = ink

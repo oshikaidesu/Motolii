@@ -2,7 +2,6 @@
 // document's way of a stretch, Depth the camera's lens.
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:lab_book/workspace/desk.dart';
 import 'package:lab_book/workspace/desk_ease.dart';
 import 'package:lab_book/workspace/desk_kit.dart';
 import 'package:lab_book/workspace/ws.dart' show WsHeader;
@@ -10,11 +9,12 @@ import 'package:lab_book/workspace/ws.dart' show WsHeader;
 import 'door.dart';
 
 /// The window on a new document with a cube whose x has two keys, at 0 and 1 s.
-Future<(Ws, int)> _keyed(WidgetTester t, {Size size = const Size(1600, 960)}) async {
+Future<(Ws, int)> _keyed(WidgetTester t, {Size size = const Size(1600, 960), bool desk = true}) async {
   final ws = await openWorkspace(t, size: size), m = ws.inside!;
   final cube = m.add('solid', 'cube');
   expect(m.key(cube, 'x', 0, 0) && m.key(cube, 'x', 1, 1), isTrue, reason: m.trouble);
   ws.reread();
+  if (desk) ws.front('Desk');   // (a pane among others in its tabs: brought to the front, as its tab is pressed)
   await t.pumpAndSettle();
   return (ws, cube);
 }
@@ -22,7 +22,7 @@ Future<(Ws, int)> _keyed(WidgetTester t, {Size size = const Size(1600, 960)}) as
 Finder get _toolsButton => find.descendant(of: find.byType(WsHeader), matching: find.byType(DeskIconButton));
 
 void main() {
-  testWidgets('the desk follows the selection: Tools, then Ease for keys, then Depth for the camera', (t) async {
+  testWidgets('the desk is Tools whatever is picked: Ease and Camera are panes of their own (c1d8253)', (t) async {
     final (ws, cube) = await _keyed(t);
     expect(ws.desk, 'Tools');
     expect(find.text('Follows selection'), findsOneWidget);
@@ -31,13 +31,13 @@ void main() {
     }
     ws.pickKey((layer: '$cube', frame: 0));
     await t.pumpAndSettle();
-    expect(ws.desk, 'Ease');
+    expect(ws.desk, 'Tools', reason: 'keys picked: the Ease pane shows them, the desk stays');
     final cam = ws.inside!.add('camera', 'camera');
     ws
       ..reread()
       ..select('$cam');
     await t.pumpAndSettle();
-    expect(ws.desk, 'Depth');
+    expect(ws.desk, 'Tools', reason: 'a camera picked: the Camera pane shows it, the desk stays');
     expect(t.takeException(), isNull);
     await closeWorkspace(t);
   }, skip: !insideBuilt);
@@ -52,13 +52,13 @@ void main() {
     expect([ws.deskManual, ws.desk], [null, 'Tools']);
     ws.pickKey((layer: '$cube', frame: 0));
     await t.pumpAndSettle();
-    expect(ws.desk, 'Ease');
+    expect(ws.desk, 'Tools', reason: 'followed: Tools (keys are the Ease pane\'s)');
     await t.tap(_toolsButton);
     await t.pumpAndSettle();
     expect(ws.deskManual, 'Tools');
-    await t.tap(find.text('Depth').last);
+    await t.tap(find.text('Align').last);   // (the desk's tools are Blend and Align: Depth is the Camera pane's since c1d8253)
     await t.pumpAndSettle();
-    expect(ws.desk, 'Depth');
+    expect(ws.desk, 'Align');
     expect(t.takeException(), isNull);
     await closeWorkspace(t);
   }, skip: !insideBuilt);
@@ -70,16 +70,18 @@ void main() {
   });
 
   testWidgets('Ease: a preset is the document\'s way of the stretch, Reverse turns it, and it is read back from the document', (t) async {
-    final (ws, cube) = await _keyed(t);
+    final (ws, cube) = await _keyed(t, desk: false);
     final m = ws.inside!;
-    ws.pickKey((layer: '$cube', frame: 0));
+    ws
+      ..pickKey((layer: '$cube', frame: 0))
+      ..front('Ease');   // (a pane of its own since c1d8253)
     await t.pumpAndSettle();
     for (final (tile, said) in const [('Back', 'Bezier 0.34 1.56'), ('Out', 'Bezier 0 0 0.58 1')]) {
-      await t.tap(find.descendant(of: find.byType(WsDesk), matching: find.text(tile)).first);
+      await t.tap(find.descendant(of: find.byType(DeskEase), matching: find.text(tile)).first);
       await settled(t, ws);
       expect(m.wayOf(cube, 'x', 0), startsWith(said), reason: tile);
     }
-    await t.tap(find.descendant(of: find.byType(WsDesk), matching: find.byType(DeskIconButton)).last); // (Reverse)
+    await t.tap(find.descendant(of: find.byType(DeskEase), matching: find.byType(DeskIconButton)).last); // (Reverse)
     await settled(t, ws);
     expect(m.wayOf(cube, 'x', 0), startsWith('Bezier 0.42 0 1 1'), reason: 'Out turned is In');
     expect(t.takeException(), isNull);
