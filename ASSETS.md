@@ -142,7 +142,6 @@
 | 動く Filament を Mac の窓に出した最初の確かめ | `bridge/` | 前の土台で動いた（git には入っていない） |
 | `filmask/`、`thorvg/`（Rust の小さい物） | `filmask/`、`thorvg/` | 未確認 |
 | 大きさで分けた続き（V3・V10：中身は1行も変えず、元のファイルが順に読む。関数の外の切れ目は header、1つの関数が長い時は LLVM の TableGen の .inc と同じく関数の中で読む断片。プリプロセッサの出力が分ける前と同じ） | `filament/*_[0-9].h`、`filament/*_[0-9].inc` | 組み立て・静止画が前と同じ |
-| `filament_base/`、`filament_holes/`、`filament_premerge/`、`filament_walls/` | 同名のフォルダ | 未確認（10/12 の filament フォルダの写しに見える） |
 | 調べた紙：編集の中身、Flutter のガワの作り、過去の倉庫との対応、ガラス、マスク、二つのカメラ | `reports/ae_rubric/research_*.md`、`past_document_map.md`、`reports/`、`research_notes/` | — |
 
 ## 8. 素材（git には入れていない物が多い）
