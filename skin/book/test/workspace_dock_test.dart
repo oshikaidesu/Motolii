@@ -26,12 +26,16 @@ Future<void> _shelf(WidgetTester t, Ws ws, Size size, String shelf) async {
   t.view.physicalSize = size;
   t.view.devicePixelRatio = 1;
   addTearDown(t.view.reset);
+  await t.binding.setSurfaceSize(size);   // (the live binding lays out at its surface's size: flutter_test_config.dart)
   await t.pumpWidget(
     WidgetsApp(
       color: const Color(0xFF000000),
       builder: (_, _) => WsScope(
         ws: ws,
-        child: Align(alignment: Alignment.topLeft, child: SizedBox(width: size.width, height: size.height, child: WsShelf(shelf, key: ValueKey(shelf)))),
+        child: Overlay(   // (a tile is carried to the stage on an overlay, as the window gives it: Draggable's own need)
+          key: ValueKey('$shelf $size'),   // (a new one for each: an overlay keeps the entries it began with)
+          initialEntries: [OverlayEntry(builder: (_) => Align(alignment: Alignment.topLeft, child: SizedBox(width: size.width, height: size.height, child: WsShelf(shelf, key: ValueKey(shelf)))))],
+        ),
       ),
     ),
   );
