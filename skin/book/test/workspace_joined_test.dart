@@ -1085,7 +1085,7 @@ void main() {
     ws
       ..fxToggle('Drop Shadow')
       ..fxToggle('Glow');   // (sent without waiting: put on as the window looks again)
-    await t.pumpAndSettle();
+    await settled(t, ws);
     expect(inspectorCards(t), containsAll(['Drop Shadow', 'Glow']), reason: 'an effect on it is one of its cards');
     final far = find.byWidgetPredicate((w) => w is NumField && w.id == 'v_shadow_distance'), was = m.value(a, 'shadow_distance', 0);
     await seen(t, far);
@@ -1315,11 +1315,11 @@ void main() {
   }, skip: !_built);
 
   testWidgets('a recipe is a file: one put in recipes/ is on the shelf at once, its knobs on a Script card, a drag on one is the document\'s', (t) async {
-    final ws = await _pump(t), m = ws.inside!;
-    final file = File('$motoliiDir/recipes/zz_window_test.js');
+    final file = File('$motoliiDir/recipes/zz_window_test.js');   // (put in before the window opens: the folders are read once as it opens, BRIDGE.md rule 8)
     addTearDown(() => file.existsSync() ? file.deleteSync() : null);
     file.writeAsStringSync('// Window test: dots in a ring\n// make shape circle\n// set copies 24\n// --track@reach:Reach,0,3,1,0.01\n\n'
         'function each(i, n, t, k) { const a = 2 * Math.PI * i / n; return { x: k.reach * Math.cos(a), y: k.reach * Math.sin(a) }; }\n');
+    final ws = await _pump(t), m = ws.inside!;
     expect(m.recipes.map((r) => r.$1), contains('Window test'), reason: 'on the shelf without a build');
     final dots = m.make('Window test');
     expect(dots, isNot(0), reason: m.trouble);
