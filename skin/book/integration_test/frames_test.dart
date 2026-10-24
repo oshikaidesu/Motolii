@@ -29,10 +29,11 @@ void main() {
   testWidgets('the window at 60 a second: playing, a knob dragged, the playhead moved, over a heavy document', (t) async {
     t.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.menu, (_) async => null);
     final doc = '${Directory.systemTemp.createTempSync('frames').path}/frames.motolii';
+    if (const String.fromEnvironment('DOC') case final from when from.isNotEmpty) File(from).copySync(doc);   // (DOC=path: a copy of that document, as it is, instead of the recipes)
     await t.pumpWidget(WidgetsApp(color: const Color(0xFF000000), builder: (c, _) => Workspace(document: doc)));
     await t.pumpAndSettle();
     final ws = WsScope.read(t.element(find.byType(WsTimeline))), m = ws.inside!;
-    final made = [
+    final made = const String.fromEnvironment('DOC').isNotEmpty ? [for (final t in m.things) ('', t, '')] : [
       for (final (name, what) in m.recipes.where((r) => !r.$2.contains('Canvalry')).take(15)) (name, m.make(name), what),
     ];
     debugPrint('FRAMES the document: ${made.where((r) => r.$2 != 0).length} recipes (${made.map((r) => r.$1).join(', ')})');
@@ -55,12 +56,13 @@ void main() {
     Future<void> phase(String what, Future<void> Function(int frame) step) async {
       debugPrint('INSIDE before $what: ${ws.inside!.spent}');
       Ws.spent.clear();
-      final from = timings.length, clock = Stopwatch()..start();
+      final from = timings.length, drawn = ws.inside!.frames, clock = Stopwatch()..start();
       ws.inside!.watch(true);   // (the window's thread may not wait on the inside: what did is kept)
       for (var f = 0; clock.elapsedMilliseconds < _seconds * 1000; f++) {
         await step(f);
         await t.pump(const Duration(milliseconds: 16));
       }
+      final stage = (ws.inside!.frames - drawn) / (clock.elapsedMicroseconds / 1e6);   // (the stage's own pictures a second: what the thing moves at)
       await t.pump(const Duration(milliseconds: 100));
       ws.inside!.watch(false);
       if (ws.inside!.broken case final b when b.isNotEmpty) broke.add('$what:\n$b');
@@ -68,7 +70,8 @@ void main() {
       final over = spans.where((s) => s > 1000 / 60).length;
       debugPrint('FRAMES $what: the late ones at ${[for (final (i, f) in timings.skip(from).indexed) if (f.totalSpan.inMicroseconds > 1000000 / 60) '#$i ${(f.totalSpan.inMicroseconds / 1000).toStringAsFixed(0)} ms (build ${(f.buildDuration.inMicroseconds / 1000).toStringAsFixed(0)}, waited ${((f.timestampInMicroseconds(FramePhase.buildStart) - f.timestampInMicroseconds(FramePhase.vsyncStart)) / 1000).toStringAsFixed(0)})'].join(', ')}');
       late += over;
-      report.add('$what: ${spans.length} pictures, late $over, median ${spans.isEmpty ? 0 : spans[spans.length ~/ 2].toStringAsFixed(2)} ms, '
+      if (stage < 59) late++;
+      report.add('$what: the stage drew ${stage.toStringAsFixed(1)} a second; ${spans.length} pictures, late $over, median ${spans.isEmpty ? 0 : spans[spans.length ~/ 2].toStringAsFixed(2)} ms, '
           '99th ${spans.isEmpty ? 0 : spans[(spans.length * 0.99).floor().clamp(0, spans.length - 1)].toStringAsFixed(2)} ms, most ${spans.isEmpty ? 0 : spans.last.toStringAsFixed(2)} ms');
       final slow = [for (final f in timings.skip(from)) if (f.totalSpan.inMicroseconds > 16667) f];
       double mid(Iterable<double> xs) { final l = xs.toList()..sort(); return l.isEmpty ? 0 : l[l.length ~/ 2]; }
