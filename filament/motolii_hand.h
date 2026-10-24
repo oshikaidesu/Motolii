@@ -130,7 +130,11 @@ template <class Does> static auto by_hand(Motolii* m, Does does, const char* who
         const auto now = [m] { return m->d ? (long)sqlite3_total_changes(m->d->file) : 0L; };
         const long rows = now();
         auto out = does();
-        if (now() != rows) m->revision.fetch_add(1, std::memory_order_release), picture_update(m), picture_moment(m);   // (the pictures new before the asker hears the answer)
+        if (now() != rows) {   // (the pictures new before the asker hears the answer; their reads leave why it was refused as it was, as doc_match's own way back does)
+            const std::string why = m->d->trouble;
+            m->revision.fetch_add(1, std::memory_order_release), picture_update(m), picture_moment(m);
+            m->d->trouble = why;
+        }
         return out;
     }, true, who);
 }
