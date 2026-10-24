@@ -746,6 +746,22 @@ int motolii_thumbnail(const char* film, const char* png, int wide) {
     return done;
 }
 int motolii_together(Motolii* m, int on) { return by_hand(m, [=] { return on ? (doc_act(*m->d), 1) : (m->d->act ? (int)doc_acted(*m->d) : 0); }); }
+// Every stretch of a thing's keyed values, a line each: from, to, its way ("from\tto\tway\n"): a timeline draws how each
+// goes between its two keys (the stretch is the inside's own: the window only draws what it says).
+const char* motolii_thing_stretches(Motolii* m, int thing) {
+    return by_look(m, [=] {
+        std::string all;
+        doc_rows(*m->d, sqlite3_mprintf("select at, next, way from (select at, lead(at) over (partition by name order by at) as next, coalesce(way, 'Linear') as way from fact where thing = %d and name in (select name from fact where thing = %d group by name having count(*) > 1 or max(at) <> 0 or max(way) is not null)) where next is not null order by at", thing, thing), [&](sqlite3_stmt* row) {
+            std::string way = (const char*)sqlite3_column_text(row, 2);
+            Interp kind;
+            if (interp_said(way, &kind) == 0) way = interp_words(kind);
+            char line[64];
+            std::snprintf(line, sizeof line, "%.17g\t%.17g\t", sqlite3_column_double(row, 0), sqlite3_column_double(row, 1));
+            all += line + way + "\n";
+        });
+        return (m->word = all).c_str();
+    });
+}
 const char* motolii_way_of(Motolii* m, int thing, const char* name, double at) { return by_look(m, [=] { return (m->word = doc_way_of(*m->d, thing, name, at)).c_str(); }); }
 // How many points of the picture one unit of the stage is, where things stand when their z is 0.
 static double point_of(Motolii* m) {   // (points of the picture to one unit of the stage, at its middle, as the stage's own eye sees it:

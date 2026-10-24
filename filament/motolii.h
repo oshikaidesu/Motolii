@@ -72,6 +72,7 @@ int motolii_define(Motolii* m, const char* way, const char* expression);
 const char* motolii_effect_names(Motolii* m);
 int motolii_effect(Motolii* m, int thing, const char* name, double at);
 const char* motolii_way_of(Motolii* m, int thing, const char* name, double at);   /* the way of the stretch that begins at that key, as it is said ("": no key there; until the next call) */
+const char* motolii_thing_stretches(Motolii* m, int thing);   /* every stretch of a thing's keyed values, a line each: "from\tto\tway" (until the next call) */
 const char* motolii_ways(Motolii* m);
 const char* motolii_way_names(Motolii* m);                         /* the names alone, with spaces between: the nine kinds, then the ways defined here (until the next call) */
 const char* motolii_way_numbers(Motolii* m, const char* kind);   /* a kind's numbers as a hand takes them: name, lowest, highest for each ("seed 1 999 grain 0 0.5 ..."); "" for a kind with none or a way defined in the document */

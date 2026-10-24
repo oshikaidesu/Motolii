@@ -91,15 +91,19 @@ Color wsTone(WsKind k) => switch (k) {
 
 /// One layer of the mock composition: where it lives in time, and where its keys are (frames).
 class WsLayer {
-  WsLayer(this.id, this.name, this.kind, this.inF, this.outF, this.keys, {this.parent, this.hidden = false, this.solo = false, this.locked = false});
+  WsLayer(this.id, this.name, this.kind, this.inF, this.outF, this.keys, {this.parent, this.hidden = false, this.solo = false, this.locked = false, this.stretches = const []});
   final String id, name;
   final WsKind kind;
   int inF, outF;
   final List<int> keys;
+  final List<WsStretch> stretches; // (how it goes between its keys, as the inside says: drawn on its bar)
   final String? parent;
   final bool hidden, solo, locked; // (as the inside said when the layers were last read: a row asks nothing of it while the stage plays)
   Color get tone => wsLabel(id);   // (its label colour)
 }
+
+/// A stretch between two keys: its frames and how it goes there (the way's shape, 0 to 1, at 17 points along it).
+typedef WsStretch = ({int from, int to, String way, List<double> shape});
 
 /// A key the user picked: which layer, which frame.
 typedef WsKey = ({String layer, int frame});
@@ -267,7 +271,11 @@ class Ws extends ChangeNotifier {
               'film' || 'picture' => WsKind.image,
               _ => WsKind.shape,
             }, from, _outF(from, lasts), keys,
-                hidden: (m.value(t, 'visible', 0) ?? 1) < .5, solo: (m.value(t, 'solo', 0) ?? 0) > .5, locked: (m.value(t, 'lock', 0) ?? 0) > .5);
+                hidden: (m.value(t, 'visible', 0) ?? 1) < .5, solo: (m.value(t, 'solo', 0) ?? 0) > .5, locked: (m.value(t, 'lock', 0) ?? 0) > .5,
+                stretches: [
+                  for (final (a, b, way) in m.thingStretches(t))
+                    (from: (a * fps).round(), to: (b * fps).round(), way: way, shape: [for (var i = 0; i <= 16; i++) m.wayAt(way, i / 16)]),
+                ]);
           }(),
       ]);
     if (_sel != null && layers.every((l) => l.id != _sel)) _sel = layers.firstOrNull?.id; // (a picked thing gone: the first; nothing picked stays so, the stage's)

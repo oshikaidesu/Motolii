@@ -417,6 +417,7 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
           inF: l.inF,
           outF: l.outF,
           keys: l.keys,
+          stretches: l.stretches,
           picked: {
             for (final k in picks)
               if (k.layer == l.id) k.frame,

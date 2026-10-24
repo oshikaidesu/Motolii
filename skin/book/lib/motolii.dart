@@ -128,6 +128,7 @@ class Motolii {
   late final _keptCount = _lib.lookupFunction<Int64 Function(_P), int Function(_P)>('motolii_kept_count', isLeaf: true);
   late final _keptRuns = _lib.lookupFunction<Pointer<Utf8> Function(_P), Pointer<Utf8> Function(_P)>('motolii_kept');
   late final _wayOf = _lib.lookupFunction<_S Function(_P, Int32, _S, Double), _S Function(_P, int, _S, double)>('motolii_way_of');
+  late final _thingStretches = _lib.lookupFunction<_S Function(_P, Int32), _S Function(_P, int)>('motolii_thing_stretches');
   late final _point = _lib.lookupFunction<Double Function(_P), double Function(_P)>('motolii_point');
   late final _reading = _lib.lookupFunction<_S Function(_P, Int32, _S), _S Function(_P, int, _S)>('motolii_reading');
   late final _undo = _lib.lookupFunction<Int32 Function(_P), int Function(_P)>('motolii_undo');
@@ -695,6 +696,12 @@ class Motolii {
       _together(_m, 0);
     }
   }
+
+  /// Every stretch of a thing's keyed values: from, to (seconds), its way, as the inside says them (a timeline draws how each goes).
+  List<(double, double, String)> thingStretches(int thing) => _kept(('thingStretches', thing), () => [
+        for (final l in _thingStretches(_m, thing).toDartString().split('\n'))
+          if (l.split('\t') case [final a, final b, final w]) (double.parse(a), double.parse(b), w),
+      ]);
 
   /// The way of the stretch that begins at a value's key, as it is said ('': no key there).
   String wayOf(int thing, String name, double at) => _kept(('wayOf', thing, name, at), () => _with([name], (s) => _wayOf(_m, thing, s[0], at).toDartString()));

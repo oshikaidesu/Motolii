@@ -60,7 +60,9 @@ class WtRow {
     this.wave,
     this.tone,
     this.mix,
+    this.stretches = const [],
   });
+  final List<WsStretch> stretches;   // (how it goes between its keys: each stretch's way drawn between them)
   final Color? tone;   // (its label colour; none: its kind's)
   final List<Color>? mix;   // (a relation's: its things' label colours, its bar their gradient)
   final String name;
@@ -86,7 +88,9 @@ class WtRow {
       other.selected == selected &&
       other.dim == dim &&
       other.locked == locked &&
-      identical(other.wave, wave);   // (read once a change: the same list until the document changes)
+      identical(other.wave, wave) &&   // (read once a change: the same list until the document changes)
+      other.stretches.length == stretches.length &&
+      [for (var i = 0; i < stretches.length; i++) other.stretches[i].from == stretches[i].from && other.stretches[i].to == stretches[i].to && other.stretches[i].way == stretches[i].way].every((same) => same);
   @override
   int get hashCode => Object.hash(name, kind, inF, outF, Object.hashAll(keys), Object.hashAllUnordered(picked), selected, dim, locked);
 }
@@ -281,6 +285,17 @@ class WtTracksPainter extends CustomPainter {
           ..strokeWidth = 1.5
           ..color = Grey.g100,
       );
+    }
+    for (final st in r.stretches) {   // (each stretch's way, from its key to the next, as a line inside the bar: how it goes there)
+      final xa = view.x(st.from), xb = view.x(st.to);
+      if (xb - xa < 6 || xb < 0 || xa > s.width) continue;
+      final h = bar.height * .62, base = cy + h / 2;
+      final line = Path();
+      for (var i = 0; i < st.shape.length; i++) {
+        final x = xa + (xb - xa) * i / (st.shape.length - 1), y = base - st.shape[i].clamp(-.5, 1.5) * h;
+        i == 0 ? line.moveTo(x, y) : line.lineTo(x, y);
+      }
+      c.drawPath(line, Paint()..style = PaintingStyle.stroke..strokeWidth = 1.3..strokeJoin = StrokeJoin.round..color = WsT.keyDot.withValues(alpha: r.dim ? .25 : .7));
     }
     for (final k in r.keys) {
       final x = view.x(k);
