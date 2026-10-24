@@ -26,13 +26,13 @@ Thermion（描けは前が終わるまで捨てる）。調べた記録は `rese
 
 | # | 物 | 場所 | 何をしていたか | 置き換え | 済 |
 |---|---|---|---|---|---|
-| H1 | `_kept` `_keptCarried` `_copy` `_was` `_copyCarried` `_wasCarried` | `skin/book/lib/motolii.dart` 604〜641 | 書類の版が変わるまで読んだ物を覚える | 書類の写し（D） | |
-| H2 | `_asked` `_atMoment` `_dontWait` `_refused` | 同 643〜665 | 中身が忙しければ断って前の値を出す | 写し（D・M）。待つ場面がもう無い | |
-| H3 | `again` | 同 663、`workspace/ws.dart` 130〜148 | 断られた値を次のコマで窓全体／コマを見る部品にもう一度読ませる | 写しの差し替えの知らせ | |
-| H4 | `_readings` `_shownOf` `_fontKinds` `_folders` | 同 | 1回読んだら覚える | D（読み方・見せ方）、S（フォルダ・フォント） | |
-| H5 | `forget()` | 同 605 | 覚えた物を捨てる | 写しの差し替え | |
-| H6 | `counters`（revision・carried・frames・kept の数字） | 同 225 | 窓が毎コマ数字を見て変化を探す | 中身からの知らせ（決まり4） | |
-| H7 | `_peek` `_counted` `beat()` | `workspace/ws.dart` 205〜235 | 毎コマ数字を覗き、変わっていれば読み直し | 中身からの知らせ | |
+| H1 | `_kept` `_keptCarried` `_copy` `_was` `_copyCarried` `_wasCarried` | `skin/book/lib/motolii.dart` 604〜641 | 書類の版が変わるまで読んだ物を覚える | 書類の写し（D） || 橋から消した（10/24） |
+| H2 | `_asked` `_atMoment` `_dontWait` `_refused` | 同 643〜665 | 中身が忙しければ断って前の値を出す | 写し（D・M）。待つ場面がもう無い || 橋から消した（10/24） |
+| H3 | `again` | 同 663、`workspace/ws.dart` 130〜148 | 断られた値を次のコマで窓全体／コマを見る部品にもう一度読ませる | 写しの差し替えの知らせ || 橋と ws.dart から消した（10/24） |
+| H4 | `_readings` `_shownOf` `_fontKinds` `_folders` | 同 | 1回読んだら覚える | D（読み方・見せ方）、S（フォルダ・フォント） || `_readings` は消した。`_shownOf` は写しを読み解いた物の置き場として残る（写しが新しくなると空にする）。`_folders`（S）と `_fontKinds`（書類を読まない CoreText の答え）は残す |
+| H5 | `forget()` | 同 605 | 覚えた物を捨てる | 写しの差し替え || 消した（10/24） |
+| H6 | `counters`（revision・carried・frames・kept の数字） | 同 225 | 窓が毎コマ数字を見て変化を探す | 中身からの知らせ（決まり4） || 消した（10/24） |
+| H7 | `_peek` `_counted` `beat()` | `workspace/ws.dart` 205〜235 | 毎コマ数字を覗き、変わっていれば読み直し | 中身からの知らせ || 消した（10/24）：中身の聞き口（`motolii_tell`、`NativeCallable.listener`）から受け取る |
 | H8 | `seen` | 同 214 | 「何か新しく見えた」を数を足して知らせる | コマの写しの `ValueNotifier` | |
 | H9 | `shown()` `rev` | 同 252 | 何か変わったら窓全体に知らせる | 物ごとの書類の `ValueNotifier` | |
 | H10 | `reread()` `_reread` `reads` | 同 258〜297 | 書類を窓が全部読み直して `layers` を作り直す | 書類の写しから `layers` を作る（読み直しは中身がやる） | |
@@ -63,6 +63,12 @@ Thermion（描けは前が終わるまで捨てる）。調べた記録は `rese
 | W 書き | later 129, at 57, add 23, carry 10, take 9, close 5, key 2, make 2, resize 2, set 2, desk 1, pick 1, forget 1, play 1, keying 1 | 246 |
 
 （at・add・close など、名前が中身の物ではない呼びの取り違えが混ざっている。置き換えの時に1行ずつ見て、違う物は「済」に「対象外」と書く。）
+
+## 写しの中身（10/24、`filament/picture.h`）
+
+- 書類の写し：全体の部分（長さ・大きさ・作業範囲・印・ガイド・方の一覧・方の曲線（65点）・効果の一覧・変わった物の一覧・値の初期値の表・種類ごとに知っている値の表）と、物ごとの部分（長さ・値の名前・動く値の名前・カード・効果の並び・区間・キーの時刻・言葉・止まっている値・範囲・言葉の選択肢・読み方・見せ方・値ごとのキーの時刻とその方）。物ごとの部分は作った版の番号を持ち、窓は「この版より新しい物」を頼む。
+- コマの写し：時刻、物ごとの枠・見えている四角・見えている値（x y z rotate scale_x scale_y opacity と、関係が動かしているか）、選んだ物の動く値・点・取っ手。
+- 測った（10/24）：あなたの書類で写し全部 12 ms・50 KB、物1つの編集で 3.4 ms。15レシピの重い書類で全部 48 ms・252 KB、物1つで 4.1 ms。コマの写しは 3 KB、作るのに約 1.1 ms（手のスレッドで、絵1枚ごと）。
 
 ## 進め方
 

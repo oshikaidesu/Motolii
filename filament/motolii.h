@@ -184,6 +184,8 @@ int motolii_write(Motolii* m, const char* mp4);                    /* the whole 
 int motolii_rate(Motolii* m);                                      /* how many pictures a second that film has (a shell that counts in frames counts in these) */
 long motolii_revision(Motolii* m);   /* how many times the document (or what a hand carries) has changed, read without waiting: a shell keeps its copy of what it read while this stays the same */
 long motolii_carried(Motolii* m);   /* how many times what a hand carries has changed (its values shown while it is on them), read without waiting */
+char* motolii_picture(Motolii* m, int which, long since, long* version);   /* the window's pictures of the document (skin/BRIDGE.md), read without the document: 1 the document's (its own part and each thing's part newer than since), 2 the moment's; JSON, a copy freed with free(); *version: as of which */
+void motolii_tell(Motolii* m, void (*told)(int which));   /* the window's one listener, called (from the hand) when pictures are new: 1 the document's, 2 the moment's, 4 the kept pictures (motolii_kept), or'd */
 void motolii_dont_wait(Motolii* m, int on);   /* this thread's reads from now on are refused rather than waited for, if the hand holds the document longer than a millisecond */
 int motolii_refused(Motolii* m);   /* whether a read since was refused (and forgets it) */
 void motolii_watch(Motolii* m, int on);   /* on from the opening; while on, the window's (main) thread may not wait on the hand: a change it waits for, or a read waiting on the document over 2 ms, is kept */

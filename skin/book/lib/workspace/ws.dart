@@ -124,26 +124,12 @@ class Ws extends ChangeNotifier {
   Motolii? get inside => _inside;
   void join(Motolii inside) {
     _inside = inside;
-    if (!_peeking) SchedulerBinding.instance.addPersistentFrameCallback(_peek);
-    _peeking = true;
     inside.shaping;   // (read once, at the opening: what a card is made by)
-    var asking = false, document = false;
-    inside.again = (atMoment) {   // (a read put off while the hand was busy: looked at again a picture later, once; a value at the playhead by what shows the moment, one of the document's by all the seats)
-      document = document || !atMoment;
-      if (asking) return;
-      asking = true;
-      SchedulerBinding.instance.addPostFrameCallback((_) {
-        asking = false;
-        if (_gone) return;   // (the window may be closed by then)
-        if (document) {
-          document = false;
-          shown();
-        } else {
-          moment.again();
-          seen.value++;
-        }
-      });
-      SchedulerBinding.instance.ensureVisualUpdate();
+    inside.told = ({required document, required moment, required kept}) {   // (the inside's pictures are new: skin/BRIDGE.md)
+      if (_gone) return;
+      if (kept) this.kept.value = inside.kept;
+      if (document) reread();
+      if (moment) seen.value++;
     };
     fps = inside.rate; // (a frame is the inside's: the timeline counts what a written film has)
     WsArt.comp = Size(inside.size.$1.toDouble(), inside.size.$2.toDouble());
@@ -205,43 +191,16 @@ class Ws extends ChangeNotifier {
     shown();
   }
 
-  /// The window peeks at the inside as Chromium's compositor does: at each picture the window draws anyway (the stage's
-  /// texture brings one whenever the inside draws), three counters are looked at; nothing is read unless one moved. A
-  /// document changed by no one the window waits for is read again; anything else the inside shows anew (a hand carrying,
-  /// a moment, a relation) is [seen]: what shows numbers reads its own again, nothing is built again.
-  bool _peeking = false, _gone = false;
-  Timer? _beat;
-
-  /// What changes with no picture (pictures kept on disk while the hand rests) looked at twice a second: a picture asked
-  /// for when a counter moved, so the peek reads it. The window's while it is open (it disposes this).
-  void beat() => _beat ??= Timer.periodic(const Duration(milliseconds: 500), (_) {
-    if (!_gone && _inside?.counters != _counted) SchedulerBinding.instance.scheduleFrame();
-  });
-  (int, int, int, int)? _counted;
-  int _readRevision = -1;
+  bool _gone = false;
   final seen = ValueNotifier<int>(0);
 
   /// The stage's pictures kept on disk for playing, as stretches of frames (the timeline marks them, as After Effects'
-  /// green line): read again only when the inside says they changed.
+  /// green line): told again by the inside when they change.
   final kept = ValueNotifier<List<(int, int)>>(const []);
-  void _peek(Duration _) {
-    final m = _inside;
-    if (m == null || _gone) return;
-    final c = m.counters, was = _counted;
-    if (c == was) return;
-    _counted = c;
-    SchedulerBinding.instance.addPostFrameCallback((_) {   // (told once the picture is out: what it marks is drawn at the next)
-      if (_gone) return;
-      if (c.$4 != was?.$4) kept.value = m.kept;
-      if (c.$1 != _readRevision && _afters == 0) return reread();   // (not waited for by any after: read here)
-      seen.value++;
-    });
-  }
 
   @override
   void dispose() {
     _gone = true;
-    _beat?.cancel();
     seen.dispose();
     kept.dispose();
     moment.dispose();
@@ -261,8 +220,6 @@ class Ws extends ChangeNotifier {
     final m = _inside;
     if (m == null) return;
     if (!m.fits && refit != null) return refit!(); // (the document says another size, by a hand or by undo: the host opens it again, and that reads it)
-    m.forget();
-    _readRevision = m.counters.$1;
     lastChange = m.changes();
     rev++;
     reads++;
@@ -468,7 +425,6 @@ class Ws extends ChangeNotifier {
   bool get waiting => _afters > 0;
   void after(int ticket, [void Function(bool done, String why)? then, void Function(int answer)? got]) {
     int? answer;
-    var waited = 0;
     _afters++;
     void look(Duration _) {
       final m = _inside;
@@ -477,14 +433,14 @@ class Ws extends ChangeNotifier {
         final a = m.answer(ticket);
         if (a >= 0) answer = a;
       }
-      if (answer == null || (m.busy && waited++ < 3)) { // (done: read once the inside has told the stage the new moment too, so the reading does not wait on it; three pictures at most)
+      if (answer == null) {
         SchedulerBinding.instance.scheduleFrameCallback(look);
         return;
       }
       final a = answer!;
       then?.call(a >= 1, a >= 1 ? '' : m.answerWhy);
       if (a >= 1) got?.call(a);   // (an add's or a make's answer: the new thing)
-      if (--_afters == 0) reread();
+      _afters--;   // (what it changed comes with the inside's next picture of the document)
     }
 
     SchedulerBinding.instance

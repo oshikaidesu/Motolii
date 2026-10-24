@@ -79,7 +79,18 @@ struct Motolii {
     StageKept kept;       // (the stage's pictures kept on disk for playing: stage_kept.h)
     double spent[4] = {0, 0, 0, 0};   // (seconds the hand spent: asked to change, asked to read, telling the moment, drawing)
     long many[4] = {0, 0, 0, 0};
+    // The window's pictures of the document (picture.h, skin/BRIDGE.md), set down by the hand, read under their own lock.
+    std::mutex pictureLock;
+    std::map<int, std::pair<long, std::string>> pictured;   // (each thing's part of the document's picture, and the version it was made at)
+    std::string pictureAll, momentPicture;                  // (the document's own part; the moment's picture)
+    long pictureVersion = 0, momentVersion = 0;
+    int pictureTold = 0;                                     // (which are new since the window was told: 1 the document's, 2 the moment's)
+    long keptTold = 0;                                       // (what of the kept pictures the window was last told of)
+    void (*told)(int) = nullptr;                             // (the window's one listener)
 };
+static void picture_update(Motolii* m);
+static void picture_moment(Motolii* m);
+static void picture_tell(Motolii* m);
 
 // While it plays and the GPU takes longer than it may, the stage's views are drawn smaller and made large again (as
 // Filament's own dynamic resolution does; its own reckoning needs timer queries Dawn's backend has not, so the scale is
@@ -127,7 +138,7 @@ template <class Does> static auto by_hand(Motolii* m, Does does, const char* who
         const auto now = [m] { return m->d ? (long)sqlite3_total_changes(m->d->file) : 0L; };
         const long rows = now();
         auto out = does();
-        if (now() != rows) m->revision.fetch_add(1, std::memory_order_release);
+        if (now() != rows) m->revision.fetch_add(1, std::memory_order_release), picture_update(m), picture_moment(m);   // (the pictures new before the asker hears the answer)
         return out;
     }, true, who);
 }
@@ -196,6 +207,10 @@ static void motolii_hand(Motolii* m, std::string document, int wide, int high, s
     m->s->view->setColorGrading(ColorGrading::Builder().toneMapper(&as_it_is).build(*m->s->engine));
     const bool ok = room(*m->s, "out/small_studio/small_studio_ibl.ktx", 60000.f) && (m->d = doc_open(*m->s, document.c_str()));
     if (ok && !says) doc_size_is(m->d->file, wide, high), doc_forget(*m->d);   // (a new one is the size it was first opened at; what was read before is read again)
+    if (ok) {   // (the window's first pictures of it)
+        std::lock_guard<std::recursive_timed_mutex> holding(m->d->lock);
+        picture_update(m), picture_moment(m);
+    }
     opened->set_value(ok);
     if (!ok) return;
     auto last = std::chrono::steady_clock::now(), due = last, drawn = last;
@@ -221,6 +236,7 @@ static void motolii_hand(Motolii* m, std::string document, int wide, int high, s
             const long rows = sqlite3_total_changes(m->d->file);
             const auto held = m->d->held.tried;
             for (auto& does : todo) does();
+            if (sqlite3_total_changes(m->d->file) != rows) picture_update(m);   // (the window's picture of the document, where it changed)
             if (sqlite3_total_changes(m->d->file) != rows || m->d->held.tried != held) {   // (the document changed, or what a hand carries: what was set down for the window is put aside; a moment asked, a pick, play: it stays)
                 (sqlite3_total_changes(m->d->file) != rows ? m->revision : m->carried).fetch_add(1, std::memory_order_release);   // (the document changed, or only what a hand carries)
                 m->peek.seq.fetch_add(1, std::memory_order_acq_rel);
@@ -233,6 +249,7 @@ static void motolii_hand(Motolii* m, std::string document, int wide, int high, s
             doc_match(*m->d);
             m->changed = true;
         }
+        picture_tell(m);   // (the document let go: the window told what is new)
         if (!m->playing) for (auto& [who, h] : m->heard) if (h.on) gst_element_set_state(h.bin, GST_STATE_PAUSED), h.on = false;   // (the stage stopped: so does its sound)
         const bool ready = !m->live || live_ready(*m->s, m->live);   // (the picture begun before, offered once the GPU has finished it)
         const auto t = std::chrono::steady_clock::now();
@@ -301,9 +318,11 @@ static void motolii_hand(Motolii* m, std::string document, int wide, int high, s
                 }
                 p.seq.fetch_add(1, std::memory_order_release);
             }
+            picture_moment(m);   // (the window's picture of this moment)
             m->telling = false;
             sounds = heard_told(*m->s);   // (where each sound is to be: read of the document)
         }
+        picture_tell(m);
         for (const auto& now : films) now();   // (films put back or stepped on, while the shell reads the document)
         heard(sounds, m->heard, m->now, m->playing);   // (and their sound sought and played so)
         const auto told = std::chrono::steady_clock::now();
@@ -936,7 +955,7 @@ int motolii_later(Motolii* m, const char* call, int thing, const char* name, con
                 std::fprintf(stderr, "motolii: %s threw: %s\n", c.c_str(), e.what());
                 m->trouble = std::string(c) + " threw: " + e.what();
             }
-            if (sqlite3_total_changes(m->d->file) != rows) m->revision.fetch_add(1, std::memory_order_release);   // (counted before the answer: the window reads again what is so now)
+            if (sqlite3_total_changes(m->d->file) != rows) m->revision.fetch_add(1, std::memory_order_release), picture_update(m), picture_moment(m);   // (the pictures new before the answer: the window reads what is so now)
             m->changed = true;
             std::lock_guard<std::mutex> hold(m->asked_lock);
             m->answers[ticket] = {ok, ok ? std::string() : std::string(motolii_trouble(m))};
@@ -1029,3 +1048,18 @@ const char* motolii_list(Motolii* m) {
     });
 }
 void motolii_timed(Motolii* m, int pictures) { by_hand(m, [m, pictures] { clock(*m->s, pictures, [](float) {}); return 0; }); }
+
+#include "picture.h"
+// The window's pictures of the document (skin/BRIDGE.md), read without the document: 1 the document's (its own part,
+// and each thing's part newer than `since`), 2 the moment's. A copy as JSON, freed by the asker; *version: as of which.
+char* motolii_picture(Motolii* m, int which, long since, long* version) {
+    std::lock_guard<std::mutex> hold(m->pictureLock);
+    if (which == 2) return *version = m->momentVersion, strdup(m->momentPicture.c_str());
+    std::string all = "{\"document\":" + (m->pictureAll.empty() ? std::string("null") : m->pictureAll) + ",\"thing\":{";
+    bool first = true;
+    for (const auto& [thing, part] : m->pictured)
+        if (part.first > since) all += (first ? "\"" : ",\"") + std::to_string(thing) + "\":" + part.second, first = false;
+    *version = m->pictureVersion;
+    return strdup((all + "}}").c_str());
+}
+void motolii_tell(Motolii* m, void (*told)(int which)) { m->told = told; }   // (the window's one listener: which pictures are new)

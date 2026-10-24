@@ -267,8 +267,7 @@ class _WorkspaceState extends State<Workspace> {
         _open(doc);
         _inside?.at(at);
       }
-      ..join(inside)
-      ..beat();
+      ..join(inside);
     setState(() {}); // (the menus are the open document's)
   }
 
@@ -719,11 +718,6 @@ class _InspectorSeatState extends State<_InspectorSeat> {
     } else if (ws.frame != _frame) {
       _frame = ws.frame;
       if (!_keyed(ws)) return;
-      if (ws.inside?.busy ?? false) { // (the inside is telling the stage this moment: read at the next, or when it rests, rather than wait)
-        _settle?.cancel();
-        _settle = Timer(const Duration(milliseconds: 150), () => mounted ? setState(() {}) : null);
-        return;
-      }
       _live.value = (Ws.timed('transform', () => wsTransform(ws, ws.layer?.id)), Ws.timed('key marks', () => _keyMarks(ws, ws.layer?.id)));
       _settle?.cancel();
       _settle = Timer(const Duration(milliseconds: 150), () => mounted ? setState(() {}) : null); // (the moment at rest: built once, whatever does not watch its own number shows it too)
@@ -737,7 +731,6 @@ class _InspectorSeatState extends State<_InspectorSeat> {
   void _seenNow() {
     final ws = _ws!;
     if (_now(ws) != _seen || ws.selected == null || ws.playing) return; // (played: the moment's own reading above)
-    if (ws.inside?.busy ?? false) return; // (the inside is drawing: read at the next picture it shows, rather than wait)
     _live.value = (Ws.timed('transform', () => wsTransform(ws, ws.layer?.id)), Ws.timed('key marks', () => _keyMarks(ws, ws.layer?.id)));
   }
 

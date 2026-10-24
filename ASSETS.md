@@ -46,6 +46,7 @@
 | 間の定義を触る習作（イージング、ウィグル） | `skin/book/lib/sets/studies/`（`panel_inspector_a_ease.dart`、`op_04_wiggle.dart`、`pop_04_wiggle.dart` ほか 160 本） | 未確認（在る事だけ） |
 | 設計の紙 | `skin/DESIGN.md`、`skin/OVERVIEW.md`、`skin/PROCESS.md` | — |
 | 窓と中身の境目の決まりと、潰す物の表（窓が中身を呼ぶ所は `skin/book/tool/bridge_sites.py` で数える） | `skin/BRIDGE.md` | 書いた（10/24）、置き換えはこれから |
+| 窓が読む書類とコマの写し（中身の手が書類を持っている間に JSON で作り、窓は聞き口で受け取る） | `filament/picture.h` | 今の土台で動く（10/24） |
 | **過去の製品の窓**：橋、セッション、タイムライン、インスペクタ、舞台、机（ease、blend、depth、history、relations、notes） | `~/rust_ae/Motolii/motolii/ui/lib/` | 読んだだけ |
 | 過去のスキンと中身の間の約束：命令 JSON 約 90 個、返事の「様子」の JSON、絵のテクスチャ番号 | `~/rust_ae/Motolii/motolii/ui/lib/bridge/protocol.dart`、`~/rust_ae/Motolii/motolii/ui/native/src/port.rs`、`snapshot.rs` | 読んだだけ。対応表は `reports/ae_rubric/past_document_map.md` |
 | 過去の「Ease の机」と、間の種類のいつもの数 | `~/rust_ae/Motolii/motolii/ui/lib/desks/ease/`、`~/rust_ae/Motolii/motolii/ui/native/src/editor/ease_kinds.rs` | 読んだだけ。数は `filament/interp.h` に持ってきた |

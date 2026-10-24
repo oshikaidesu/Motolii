@@ -2,13 +2,12 @@
 // sets/glass_live.dart calls the old glass. The skin holds no document: it holds this handle and the numbers of things.
 // One call = one change = one step of undo. A call that is not done returns false and [trouble] says why.
 // macOS only, Debug build only (the Debug entitlements have the sandbox off so that the library can be loaded).
-import 'dart:math' as math;
+import 'dart:convert';
 import 'dart:ffi';
 import 'dart:io';
 import 'dart:isolate';
 
 import 'package:ffi/ffi.dart';
-import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 
 /// Where the inside lives. Override with --dart-define=MOTOLII_DIR=/path/to/motolii/filament.
@@ -65,14 +64,79 @@ class Motolii {
     malloc
       ..free(home)
       ..free(doc);
-    return m == nullptr ? null : Motolii._(lib, m, path, '$dir/out/wgpu_kit');
+    if (m == nullptr) return null;
+    return Motolii._(lib, m, path, '$dir/out/wgpu_kit').._listen();
   }
 
+  // ------------------------------------------------------------------ the pictures (skin/BRIDGE.md)
+  // What the window reads of the document is the inside's two pictures, set down by its hand: the document's, made
+  // again where it changes, and the moment's, made with each picture. The inside tells which is new through one
+  // listener; nothing here asks the document itself, and nothing waits for the hand.
+  late final _picture = _lib.lookupFunction<Pointer<Utf8> Function(_P, Int32, Int64, Pointer<Int64>), Pointer<Utf8> Function(_P, int, int, Pointer<Int64>)>('motolii_picture');
+  late final _tell = _lib.lookupFunction<Void Function(_P, Pointer<NativeFunction<Void Function(Int32)>>), void Function(_P, Pointer<NativeFunction<Void Function(Int32)>>)>('motolii_tell');
+  NativeCallable<Void Function(Int32)>? _told;
+  Map<String, dynamic> _document = const {};   // (the document's own part)
+  final _thing = <int, Map<String, dynamic>>{};   // (each thing's part, as of the version it came with)
+  Map<String, dynamic> _moment = const {'thing': {}};
+  int _documentAt = -1;
+
+  /// What the window does when the inside's pictures are new: [document] the document's (and which things changed in
+  /// it), [moment] the moment's, [kept] the stretches of the stage's pictures kept on disk.
+  void Function({required bool document, required bool moment, required bool kept})? told;
+
+  void _listen() {
+    _told = NativeCallable<Void Function(Int32)>.listener(_take);
+    _tell(_m, _told!.nativeFunction);
+    _take(7);
+  }
+
+  void _take(int which) {
+    final version = malloc<Int64>();
+    if (which & 1 != 0) {
+      final p = _picture(_m, 1, _documentAt, version), all = jsonDecode(p.toDartString()) as Map<String, dynamic>;
+      malloc.free(p);
+      _documentAt = version.value;
+      if (all['document'] case final Map<String, dynamic> d) _document = d;
+      (all['thing'] as Map<String, dynamic>).forEach((t, part) => _thing[int.parse(t)] = part as Map<String, dynamic>);
+      final are = {0, ...things};
+      _thing.removeWhere((t, _) => !are.contains(t));
+      _shownOf.clear();
+    }
+    if (which & 2 != 0) {
+      final p = _picture(_m, 2, 0, version);
+      _moment = jsonDecode(p.toDartString()) as Map<String, dynamic>;
+      malloc.free(p);
+    }
+    malloc.free(version);
+    told?.call(document: which & 1 != 0, moment: which & 2 != 0, kept: which & 4 != 0);
+  }
+
+  /// A change the window waited for (skin/BRIDGE.md C3, going): its pictures taken at once, as the inside made them
+  /// before it answered.
+  T _took<T>(T answer) {
+    _take(3);
+    return answer;
+  }
+
+  Map<String, dynamic> _of(int thing) => _thing[thing] ?? const {};
+
+  /// A value said nowhere: as it comes, if the thing's kind has it (the inside's tables: its `doc_usual`, `doc_knows`).
+  double? _usual(int thing, String name) {
+    if (!_thing.containsKey(thing)) return null;
+    final kind = thing == 0 ? 'stage' : word(thing, 'kind');
+    final knows = _knows.putIfAbsent(kind, () => _spaced((_document['knows'] as Map<String, dynamic>?)?[kind]).toSet());
+    return knows.contains(name) ? ((_document['usual'] as Map<String, dynamic>?)?[name] as num?)?.toDouble() : null;
+  }
+  final _knows = <String, Set<String>>{};   // (the maker's tables, the same for every document: read once)
+  Map<String, dynamic>? _momentOf(int thing) => (_moment['thing'] as Map<String, dynamic>)['$thing'] as Map<String, dynamic>?;
+  static List<String> _spaced(Object? said) => [for (final w in ((said as String?) ?? '').split(' ')) if (w.isNotEmpty) w];
+  static List<double> _numbers(Object? said) => [for (final n in (said as List<dynamic>?) ?? const []) (n as num).toDouble()];
+
+  /// Whether [at] is the moment the moment's picture is of (to a frame).
+  bool _isNow(double at) => (((_moment['now'] as num?)?.toDouble() ?? -1) - at).abs() < .5 / rate;
+
   late final _play = _lib.lookupFunction<Int32 Function(_P, Int32), int Function(_P, int)>('motolii_play');
-  late final _now = _lib.lookupFunction<Double Function(_P), double Function(_P)>('motolii_now');
-  late final _drawnAt = _lib.lookupFunction<Double Function(_P), double Function(_P)>('motolii_drawn_at');
   late final _at = _lib.lookupFunction<Int32 Function(_P, Double), int Function(_P, double)>('motolii_at');
-  late final _seconds = _lib.lookupFunction<Double Function(_P), double Function(_P)>('motolii_seconds');
   late final _add = _lib.lookupFunction<Int32 Function(_P, _S, _S), int Function(_P, _S, _S)>('motolii_add');
   late final _remove = _lib.lookupFunction<Int32 Function(_P, Int32), int Function(_P, int)>('motolii_remove');
   late final _set = _lib.lookupFunction<Int32 Function(_P, Int32, _S, Double), int Function(_P, int, _S, double)>('motolii_set');
@@ -81,14 +145,6 @@ class Motolii {
   late final _unkey = _lib.lookupFunction<Int32 Function(_P, Int32, _S, Double), int Function(_P, int, _S, double)>('motolii_unkey');
   late final _way = _lib.lookupFunction<Int32 Function(_P, Int32, _S, Double, _S), int Function(_P, int, _S, double, _S)>('motolii_way');
   late final _value = _lib.lookupFunction<Int32 Function(_P, Int32, _S, Double, Pointer<Double>), int Function(_P, int, _S, double, Pointer<Double>)>('motolii_value');
-  late final _things = _lib.lookupFunction<Int32 Function(_P, Pointer<Int32>, Int32), int Function(_P, Pointer<Int32>, int)>('motolii_things');
-  late final _word = _lib.lookupFunction<_S Function(_P, Int32, _S), _S Function(_P, int, _S)>('motolii_word');
-  late final _lasts = _lib.lookupFunction<Double Function(_P, Int32), double Function(_P, int)>('motolii_lasts');
-  late final _keyMoments = _lib.lookupFunction<Int32 Function(_P, Int32, _S, Pointer<Double>, Int32), int Function(_P, int, _S, Pointer<Double>, int)>('motolii_key_moments');
-  late final _frame = _lib.lookupFunction<Int32 Function(_P, Int32, Pointer<Double>), int Function(_P, int, Pointer<Double>)>('motolii_frame');
-  late final _seen = _lib.lookupFunction<Int32 Function(_P, Int32, Pointer<Double>), int Function(_P, int, Pointer<Double>)>('motolii_seen');
-  late final _points = _lib.lookupFunction<Int32 Function(_P, Int32, Pointer<Double>, Int32), int Function(_P, int, Pointer<Double>, int)>('motolii_points');
-  late final _handles = _lib.lookupFunction<Int32 Function(_P, Int32, Pointer<Double>, Pointer<Double>, Int32), int Function(_P, int, Pointer<Double>, Pointer<Double>, int)>('motolii_handles');
   late final _path3 = _lib.lookupFunction<Int32 Function(_P, Int32, Int32, Double, Double, Int32, Pointer<Double>), int Function(_P, int, int, double, double, int, Pointer<Double>)>('motolii_path3');
   late final _path = _lib.lookupFunction<Int32 Function(_P, Int32, Int32, Double, Double, Int32, Pointer<Double>), int Function(_P, int, int, double, double, int, Pointer<Double>)>('motolii_path');
   late final _keying = _lib.lookupFunction<Int32 Function(_P, Int32), int Function(_P, int)>('motolii_keying');
@@ -98,38 +154,21 @@ class Motolii {
   late final _put = _lib.lookupFunction<Int32 Function(_P, Int32, _S, Double, Double), int Function(_P, int, _S, double, double)>('motolii_put');
   late final _keyHere = _lib.lookupFunction<Int32 Function(_P, Int32, _S, Double), int Function(_P, int, _S, double)>('motolii_key_here');
   late final _size = _lib.lookupFunction<Int32 Function(_P, Int32, Int32), int Function(_P, int, int)>('motolii_size');
-  late final _sizeOf = _lib.lookupFunction<Int32 Function(_P, Pointer<Int32>, Pointer<Int32>), int Function(_P, Pointer<Int32>, Pointer<Int32>)>('motolii_size_of');
   late final _raise = _lib.lookupFunction<Int32 Function(_P, Int32, Int32), int Function(_P, int, int)>('motolii_raise');
   late final _stay = _lib.lookupFunction<Int32 Function(_P, Int32, _S, Double), int Function(_P, int, _S, double)>('motolii_stay');
-  late final _keyed = _lib.lookupFunction<Int32 Function(_P, Int32, _S, Double), int Function(_P, int, _S, double)>('motolii_keyed');
-  late final _moving = _lib.lookupFunction<_S Function(_P, Int32), _S Function(_P, int)>('motolii_moving');
-  late final _values = _lib.lookupFunction<_S Function(_P, Int32), _S Function(_P, int)>('motolii_values');
-  late final _cards = _lib.lookupFunction<_S Function(_P, Int32), _S Function(_P, int)>('motolii_cards');
-  late final _fxTitles = _lib.lookupFunction<_S Function(_P, Int32), _S Function(_P, int)>('motolii_fx_titles');
-  late final _shown = _lib.lookupFunction<_S Function(_P, _S), _S Function(_P, _S)>('motolii_shown');
   late final _recipes = _lib.lookupFunction<_S Function(_P), _S Function(_P)>('motolii_recipes');
   late final _make = _lib.lookupFunction<Int32 Function(_P, _S), int Function(_P, _S)>('motolii_make');
   late final _effects = _lib.lookupFunction<_S Function(_P), _S Function(_P)>('motolii_effects');
   late final _animators = _lib.lookupFunction<_S Function(_P), _S Function(_P)>('motolii_animators');
   late final _spent = _lib.lookupFunction<_S Function(_P), _S Function(_P)>('motolii_spent');
-  late final _range = _lib.lookupFunction<Int32 Function(_P, Int32, _S, Pointer<Double>, Pointer<Double>), int Function(_P, int, _S, Pointer<Double>, Pointer<Double>)>('motolii_range');
-  late final _words = _lib.lookupFunction<_S Function(_P, Int32, _S), _S Function(_P, int, _S)>('motolii_words');
-  late final _ways = _lib.lookupFunction<_S Function(_P), _S Function(_P)>('motolii_ways');
   late final _define = _lib.lookupFunction<Int32 Function(_P, _S, _S), int Function(_P, _S, _S)>('motolii_define');
-  late final _wayNames = _lib.lookupFunction<_S Function(_P), _S Function(_P)>('motolii_way_names');
   late final _wayNumbers = _lib.lookupFunction<_S Function(_P, _S), _S Function(_P, _S)>('motolii_way_numbers');
-  late final _effectNames = _lib.lookupFunction<_S Function(_P), _S Function(_P)>('motolii_effect_names');
   late final _effect = _lib.lookupFunction<Int32 Function(_P, Int32, _S, Double), int Function(_P, int, _S, double)>('motolii_effect');
   late final _wayAt = _lib.lookupFunction<Double Function(_P, _S, Double), double Function(_P, _S, double)>('motolii_way_at');
   late final _kindOf = _lib.lookupFunction<_S Function(_S), _S Function(_S)>('motolii_kind_of');
   late final _together = _lib.lookupFunction<Int32 Function(_P, Int32), int Function(_P, int)>('motolii_together');
   late final _frames = _lib.lookupFunction<Uint64 Function(_P), int Function(_P)>('motolii_frames');
-  late final _keptCount = _lib.lookupFunction<Int64 Function(_P), int Function(_P)>('motolii_kept_count', isLeaf: true);
   late final _keptRuns = _lib.lookupFunction<Pointer<Utf8> Function(_P), Pointer<Utf8> Function(_P)>('motolii_kept');
-  late final _wayOf = _lib.lookupFunction<_S Function(_P, Int32, _S, Double), _S Function(_P, int, _S, double)>('motolii_way_of');
-  late final _thingStretches = _lib.lookupFunction<_S Function(_P, Int32), _S Function(_P, int)>('motolii_thing_stretches');
-  late final _point = _lib.lookupFunction<Double Function(_P), double Function(_P)>('motolii_point');
-  late final _reading = _lib.lookupFunction<_S Function(_P, Int32, _S), _S Function(_P, int, _S)>('motolii_reading');
   late final _undo = _lib.lookupFunction<Int32 Function(_P), int Function(_P)>('motolii_undo');
   late final _redo = _lib.lookupFunction<Int32 Function(_P), int Function(_P)>('motolii_redo');
   late final _trouble = _lib.lookupFunction<_S Function(_P), _S Function(_P)>('motolii_trouble');
@@ -208,21 +247,16 @@ class Motolii {
     });
   }
 
-  double get now => _now(_m);
-
-  /// The moment of the picture the stage last drew, at a frame: where a playhead is while it plays (what is read there
-  /// is set down, not waited for).
-  double get drawnAt => _drawnAt(_m);
-  double get seconds => _keptCarried('seconds', () => _seconds(_m));
+  /// The moment of the picture the stage last drew: where a playhead is while it plays.
+  double get now => (_moment['now'] as num?)?.toDouble() ?? 0;
+  double get drawnAt => now;
+  double get seconds => (_document['seconds'] as num?)?.toDouble() ?? 0;
   late final _rate = _lib.lookupFunction<Int32 Function(_P), int Function(_P)>('motolii_rate');
 
   /// How many pictures a second a film written of the document has: what a frame is.
   int get rate => _rate(_m);
   bool play(bool on) => _play(_m, on ? 1 : 0) != 0;
   int get frames => _frames(_m); // (how many pictures the live stage has drawn: motolii_frames)
-  /// The three counters a window peeks at once a picture (Chromium's BeginFrame): the document's revision, how often what
-  /// a hand carries has changed, how many pictures the stage drew. None waits for the inside.
-  (int, int, int, int) get counters => (_revision(_m), _carried(_m), _frames(_m), _keptCount(_m));
 
   /// The stage's pictures kept on disk for playing, as stretches of frames [from, to) (motolii_kept).
   List<(int, int)> get kept {
@@ -233,11 +267,11 @@ class Motolii {
 
   /// A new thing (film, picture, text, solid) from a file (a solid: a file, or ring, gem or cube): its number, 0 if it was not made.
   /// What a solid is made of is its `fill`: a colour, or `glass`.
-  int add(String kind, String file) => _with([kind, file], (s) => _add(_m, s[0], s[1]));
-  bool remove(int thing) => _remove(_m, thing) != 0;
-  bool set(int thing, String name, double number) => _with([name], (s) => _set(_m, thing, s[0], number)) != 0;
-  bool say(int thing, String name, String word) => _with([name, word], (s) => _say(_m, thing, s[0], s[1])) != 0;
-  bool key(int thing, String name, double at, double number) => _with([name], (s) => _key(_m, thing, s[0], at, number)) != 0;
+  int add(String kind, String file) => _took(_with([kind, file], (s) => _add(_m, s[0], s[1])));
+  bool remove(int thing) => _took(_remove(_m, thing) != 0);
+  bool set(int thing, String name, double number) => _took(_with([name], (s) => _set(_m, thing, s[0], number)) != 0);
+  bool say(int thing, String name, String word) => _took(_with([name, word], (s) => _say(_m, thing, s[0], s[1])) != 0);
+  bool key(int thing, String name, double at, double number) => _took(_with([name], (s) => _key(_m, thing, s[0], at, number)) != 0);
   late final _keyMany = _lib.lookupFunction<Int32 Function(_P, Int32, _S, Int32, Pointer<Double>, Pointer<Double>), int Function(_P, int, _S, int, Pointer<Double>, Pointer<Double>)>('motolii_key_many');
 
   /// Many keys of one value in one call and one step (a baked motion, beats): [at] and [numbers] side by side.
@@ -251,112 +285,80 @@ class Motolii {
     malloc
       ..free(a)
       ..free(v);
-    return ok;
+    return _took(ok);
   }
-  bool unkey(int thing, String name, double at) => _with([name], (s) => _unkey(_m, thing, s[0], at)) != 0;
-  bool way(int thing, String name, double at, String way) => _with([name, way], (s) => _way(_m, thing, s[0], at, s[1])) != 0;
-  double? value(int thing, String name, double at) => moving(thing).contains(name)
-      ? _asked(('value', thing, name), _atMoment, _atMoment, () => _valueAt(thing, name, at))   // (at a moment: the hand busy, what it was a picture ago, asked again)
-      : _keptCarried(('value', thing, name), () => _valueAt(thing, name, at));
-  final _atMoment = <Object, Object?>{};   // (each moving value's last reading)   // (a value that takes no keys is the same at every moment: kept in the copy)
+  bool unkey(int thing, String name, double at) => _took(_with([name], (s) => _unkey(_m, thing, s[0], at)) != 0);
+  bool way(int thing, String name, double at, String way) => _took(_with([name, way], (s) => _way(_m, thing, s[0], at, s[1])) != 0);
+  /// A value at a moment, its own (not what a relation makes of it: [shows]): one that stays, the document's; one that
+  /// moves, the picked thing's at the moment's picture's moment.
+  double? value(int thing, String name, double at) {
+    if (!moving(thing).contains(name)) return ((_of(thing)['value'] as Map<String, dynamic>?)?[name] as num?)?.toDouble() ?? _usual(thing, name);
+    final here = _momentOf(thing);
+    if (_isNow(at)) {
+      if ((here?['value'] as Map<String, dynamic>?)?[name] case final num v) return v.toDouble();
+    }
+    return _valueAt(thing, name, at);   // TODO(bridge Q): another moment, asked of the inside
+  }
   double? _valueAt(int thing, String name, double at) => _with([name], (s) {
     final out = malloc<Double>();
     final ok = _value(_m, thing, s[0], at, out) != 0, v = out.value;
     malloc.free(out);
     return ok ? v : null;
   });
+
   /// A value as the stage shows it (what a relation or behaviour makes of it), and whether one drives it; null: none.
+  (double, bool)? shows(int thing, String name, double at) {
+    if (!_isNow(at)) return _showsAt(thing, name, at);   // TODO(bridge Q): another moment, asked of the inside
+    final v = (_momentOf(thing)?['shows'] as Map<String, dynamic>?)?[name] as List<dynamic>?;
+    return v == null ? null : ((v[0] as num).toDouble(), v[1] as bool);
+  }
   late final _shows = _lib.lookupFunction<Int32 Function(_P, Int32, _S, Double, Pointer<Double>), int Function(_P, int, _S, double, Pointer<Double>)>('motolii_shows');
-  (double, bool)? shows(int thing, String name, double at) => _asked(('shows', thing, name), _atMoment, _atMoment, () => _showsAt(thing, name, at));   // (the hand busy: what it was a picture ago, asked again)
   (double, bool)? _showsAt(int thing, String name, double at) => _with([name], (s) {
     final out = malloc<Double>();
     final got = _shows(_m, thing, s[0], at, out), v = out.value;
     malloc.free(out);
     return got == 0 ? null : (v, got == 2);
   });
+
   /// The numbers of the things there are.
-  List<int> get things => _kept('things', _thingsNow);
-  List<int> _thingsNow() {
-    var room = 64;
-    while (true) {
-      final out = malloc<Int32>(room);
-      final n = _things(_m, out, room), all = [for (var i = 0; i < n && i < room; i++) out[i]];
-      malloc.free(out);
-      if (n <= room) return all;
-      room = n;
-    }
-  }
+  List<int> get things => [for (final t in (_document['things'] as List<dynamic>?) ?? const []) t as int];
 
   /// A thing's word by name (kind, file, shape, blend, text, fill); '' if it has none.
-  String word(int thing, String name) => _kept(('word', thing, name), () => _with([name], (s) => _word(_m, thing, s[0]).toDartString()));
+  String word(int thing, String name) => ((_of(thing)['word'] as Map<String, dynamic>?)?[name] as String?) ?? '';
 
   /// How long a thing is on, in seconds; below 0: for good.
-  double lasts(int thing) => _keptCarried(('lasts', thing), () => _lasts(_m, thing));
+  double lasts(int thing) => (_of(thing)['lasts'] as num?)?.toDouble() ?? -1;
 
-  late final _thingKeys = _lib.lookupFunction<Int32 Function(_P, Int32, Pointer<Double>, Int32), int Function(_P, int, Pointer<Double>, int)>('motolii_thing_key_moments');
-
-  /// Every moment a key of any of a thing's values stands at, each once, in time: one call (a timeline bar's marks).
-  List<double> thingKeyMoments(int thing) => _kept(('thingKeys', thing), () => _thingKeyMomentsNow(thing));
-  List<double> _thingKeyMomentsNow(int thing) {
-    var room = 256;
-    for (;;) {
-      final out = malloc<Double>(room);
-      final n = _thingKeys(_m, thing, out, room);
-      final all = [for (var i = 0; i < n && i < room; i++) out[i]];
-      malloc.free(out);
-      if (n <= room) return all;
-      room = n;
-    }
-  }
+  /// Every moment a key of any of a thing's values stands at, each once, in time: a timeline bar's marks.
+  List<double> thingKeyMoments(int thing) => _numbers(_of(thing)['keys']);
 
   /// The moments of a value's keys (none if the value stays): how many keys it has is their count.
-  List<double> keyMoments(int thing, String name) => _kept(('keys', thing, name), () => _with([name], (s) {
-    const room = 256;
-    final out = malloc<Double>(room);
-    final n = _keyMoments(_m, thing, s[0], out, room), all = [for (var i = 0; i < n && i < room; i++) out[i]];
-    malloc.free(out);
-    return all;
-  }));
+  List<double> keyMoments(int thing, String name) => _numbers((_of(thing)['keyMoments'] as Map<String, dynamic>?)?[name]);
+
   /// A thing's frame on the picture at the stage's moment: its middle (x, y), how wide, how high (points of the picture,
   /// from the top left), how far it is turned (degrees, clockwise as seen), the point it turns about (x, y), and how deep
-  /// it is (0: flat). null: there is no such thing.
-  List<double>? frame(int thing) => _asked(('frame', thing), _atMoment, _atMoment, () => _frameNow(thing));   // (the hand busy: where it was a picture ago)
-  List<double>? _frameNow(int thing) {
-    final out = malloc<Double>(8);
-    final ok = _frame(_m, thing, out) != 0, f = [for (var i = 0; i < 8; i++) out[i]];
-    malloc.free(out);
-    return ok ? f : null;
-  }
+  /// it is (0: flat). null: not shown.
+  List<double>? frame(int thing) => switch (_momentOf(thing)?['frame']) { final List<dynamic> f => _numbers(f), _ => null };
 
   /// What of a thing is seen: the upright box of its outline on the picture (points from the top left). null: not shown.
-  Rect? seen(int thing) => _asked(('seen', thing), _atMoment, _atMoment, () => _seenNow(thing));
+  Rect? seen(int thing) => switch (_momentOf(thing)?['seen']) { final List<dynamic> b => Rect.fromLTRB((b[0] as num).toDouble(), (b[1] as num).toDouble(), (b[2] as num).toDouble(), (b[3] as num).toDouble()), _ => null };
 
-  /// A path shape's points where the picture shows them (points from the top left; its handles not); empty: none.
-  List<Offset> points(int thing) => _asked(('points', thing), _atMoment, _atMoment, () {
-        final out = malloc<Double>(512), n = math.min(_points(_m, thing, out, 256), 256), at = [for (var i = 0; i < n; i++) Offset(out[2 * i], out[2 * i + 1])];
-        malloc.free(out);
-        return at;
-      });
+  /// A path shape's points where the picture shows them (the picked thing's; its handles not); empty: none.
+  List<Offset> points(int thing) {
+    final p = _numbers(_momentOf(thing)?['points']);
+    return [for (var i = 0; i + 1 < p.length; i += 2) Offset(p[i], p[i + 1])];
+  }
 
   /// Its curves' handles the same way, each with the point it is the handle of.
-  List<(Offset, Offset)> handles(int thing) => _asked(('handles', thing), _atMoment, _atMoment, () {
-        final out = malloc<Double>(512), of = malloc<Double>(512), n = math.min(_handles(_m, thing, out, of, 256), 256);
-        final at = [for (var i = 0; i < n; i++) (Offset(out[2 * i], out[2 * i + 1]), Offset(of[2 * i], of[2 * i + 1]))];
-        malloc.free(out);
-        malloc.free(of);
-        return at;
-      });
-  Rect? _seenNow(int thing) {
-    final out = malloc<Double>(4);
-    final ok = _seen(_m, thing, out) != 0, r = Rect.fromLTRB(out[0], out[1], out[2], out[3]);
-    malloc.free(out);
-    return ok ? r : null;
+  List<(Offset, Offset)> handles(int thing) {
+    final h = _numbers(_momentOf(thing)?['handles']), of = _numbers(_momentOf(thing)?['of']), p = points(thing);
+    return [for (var i = 0; i + 1 < h.length; i += 2) (Offset(h[i], h[i + 1]), i ~/ 2 < of.length && of[i ~/ 2].toInt() < p.length ? p[of[i ~/ 2].toInt()] : Offset.zero)];
   }
 
   /// How a thing moves over a while, as the stage places it (its wave and all): [n] moments from [from] to before [to],
   /// four numbers each: where it is (x, y, units of the stage), how far turned (degrees), how large (a share). null: no
   /// such thing. Asked once when its values change, for a small preview that then plays by itself (motolii_path).
-  List<double>? path(int thing, {int copy = 0, double from = 0, required double to, int n = 60}) => _keptCarried(('path', thing, copy, from, to, n), () => _pathNow(thing, copy: copy, from: from, to: to, n: n));   // (the same while the document and what a hand carries are)
+  List<double>? path(int thing, {int copy = 0, double from = 0, required double to, int n = 60}) => _pathNow(thing, copy: copy, from: from, to: to, n: n);   // TODO(bridge Q): asked of the inside
   /// The same in the round: four numbers a moment, where it is (x, y, z, units of the stage) and how large (motolii_path3).
   List<double>? path3(int thing, {int copy = 0, double from = 0, required double to, int n = 24}) {
     final out = malloc<Double>(4 * n);
@@ -381,14 +383,12 @@ class Motolii {
 
   /// Whether every change a hand makes is keyed now (Animate all).
   bool get keyingNow => _keying(_m, -1) != 0;
-  late final _busy = _lib.lookupFunction<Int32 Function(_P), int Function(_P)>('motolii_busy');
-  late final _changes = _lib.lookupFunction<_S Function(_P), _S Function(_P)>('motolii_changes');
   late final _shaping = _lib.lookupFunction<_S Function(_P), _S Function(_P)>('motolii_shaping');
 
   /// What the document's steps changed since last asked (asking forgets them): whether a thing came or went, and each
   /// value changed as (thing, name), from each step's own changeset.
   ({bool things, Set<(int, String)> values}) changes() {
-    final lines = _changes(_m).toDartString().split('\n');
+    final lines = ((_document['changes'] as String?) ?? '').split('\n');
     return (
       things: lines.contains('things'),
       values: {
@@ -401,54 +401,39 @@ class Motolii {
   /// The names of the values that change what cards a thing has (and its name): the inside's own rule, asked once.
   late final Set<String> shaping = _shaping(_m).toDartString().split(' ').toSet();
 
-  /// Whether the inside is telling the stage a moment just now: a reading made now would wait for it (asked at once).
-  bool get busy => _busy(_m) != 0;
-  bool hold(int thing) => _hold(_m, thing) != 0;
+  bool hold(int thing) => _took(_hold(_m, thing) != 0);
 
   /// A hand takes hold, without waiting (the window's way: refused, its let go says why).
   void take(int thing) => later('hold', thing: thing);
-  bool carry(String by, double a, [double b = 0]) => _with([by], (s) => _carry(_m, s[0], a, b)) != 0;
-  bool letGo(bool keep) => _letGo(_m, keep ? 1 : 0) != 0;
+  bool carry(String by, double a, [double b = 0]) => _took(_with([by], (s) => _carry(_m, s[0], a, b)) != 0);
+  bool letGo(bool keep) => _took(_letGo(_m, keep ? 1 : 0) != 0);
 
   /// What a hand does to a value at a moment, by the document's own rules (motolii.h): the value changed there (a key
   /// if it has keys, else the value that stays); a key there holding what it is; its keys gone; and how it is keyed
   /// at that moment (0 no keys, 1 keys but none there, 2 a key there).
-  bool put(int thing, String name, double at, double number) => _with([name], (s) => _put(_m, thing, s[0], at, number)) != 0;
-  bool keyHere(int thing, String name, double at) => _with([name], (s) => _keyHere(_m, thing, s[0], at)) != 0;
-  bool stay(int thing, String name, double at) => _with([name], (s) => _stay(_m, thing, s[0], at)) != 0;
-  int keyed(int thing, String name, double at) => _asked(('keyed', thing, name), _atMoment, _atMoment, () => _with([name], (s) => _keyed(_m, thing, s[0], at)));   // (the hand busy: as it was a picture ago)
+  bool put(int thing, String name, double at, double number) => _took(_with([name], (s) => _put(_m, thing, s[0], at, number)) != 0);
+  bool keyHere(int thing, String name, double at) => _took(_with([name], (s) => _keyHere(_m, thing, s[0], at)) != 0);
+  bool stay(int thing, String name, double at) => _took(_with([name], (s) => _stay(_m, thing, s[0], at)) != 0);
+  int keyed(int thing, String name, double at) {
+    final keys = keyMoments(thing, name);
+    return keys.isEmpty ? 0 : keys.any((k) => (k - at).abs() < .5 / rate) ? 2 : 1;
+  }
 
   /// The size of the stage the document is open on; and the size it is to be when it is next opened (close, open again).
-  late final (int, int) size = () {
-    final at = malloc<Int32>(2);
-    _sizeOf(_m, at, at + 1);
-    final is_ = (at[0], at[1]);
-    malloc.free(at);
-    return is_;
-  }();
-  bool resize(int wide, int high) => _size(_m, wide, high) != 0;
-  late final _fits = _lib.lookupFunction<Int32 Function(_P), int Function(_P)>('motolii_fits');
+  (int, int) get size => switch (_document['size']) { [final int w, final int h] => (w, h), _ => (0, 0) };
+  bool resize(int wide, int high) => _took(_size(_m, wide, high) != 0);
   late final _work = _lib.lookupFunction<Int32 Function(_P, Double, Double), int Function(_P, double, double)>('motolii_work');
-  late final _workOf = _lib.lookupFunction<Int32 Function(_P, Pointer<Double>, Pointer<Double>), int Function(_P, Pointer<Double>, Pointer<Double>)>('motolii_work_of');
   late final _mark = _lib.lookupFunction<Int32 Function(_P, Double, _S), int Function(_P, double, _S)>('motolii_mark');
   late final _sequence = _lib.lookupFunction<Int32 Function(_P, Double), int Function(_P, double)>('motolii_sequence');
 
   /// Sequence Layers: the things that have a length and stand on their own, from the front, one after another
   /// ([overlap] seconds over each other), on frames, their keys with them; one step ([trouble] says why not).
-  bool sequence(double overlap) => _sequence(_m, overlap) != 0;
-  late final _marks = _lib.lookupFunction<_S Function(_P), _S Function(_P)>('motolii_marks');
+  bool sequence(double overlap) => _took(_sequence(_m, overlap) != 0);
 
   /// The work area, in seconds: the stretch played round and written as a film (not said: all of it); a change is a step.
-  (double, double) get work => _kept('work', _workNow);
-  (double, double) _workNow() {
-    final at = malloc<Double>(2);
-    _workOf(_m, at, at + 1);
-    final w = (at[0], at[1]);
-    malloc.free(at);
-    return w;
-  }
+  (double, double) get work => switch (_document['work']) { [final num a, final num b] => (a.toDouble(), b.toDouble()), _ => (0.0, 0.0) };
 
-  bool setWork(double from, double to) => _work(_m, from, to) != 0;
+  bool setWork(double from, double to) => _took(_work(_m, from, to) != 0);
   late final _loopIs = _lib.lookupFunction<Int32 Function(_P, Int32), int Function(_P, int)>('motolii_loop');
 
   /// Whether play goes round the work area (or stops at its end).
@@ -456,11 +441,11 @@ class Motolii {
   set looping(bool on) => _loopIs(_m, on ? 1 : 0);
 
   /// The marks: moments with a name, in time; a mark said with '' is taken away.
-  List<(double, String)> get marks => _kept('marks', () => [
-    for (final line in _marks(_m).toDartString().split('\n'))
+  List<(double, String)> get marks => [
+    for (final line in ((_document['marks'] as String?) ?? '').split('\n'))
       if (line.indexOf(' ') case final i when i > 0) (double.parse(line.substring(0, i)), line.substring(i + 1)),
-  ]);
-  bool mark(double at, String word) => _with([word], (s) => _mark(_m, at, s[0])) != 0;
+  ];
+  bool mark(double at, String word) => _took(_with([word], (s) => _mark(_m, at, s[0])) != 0);
   late final _strikes = _lib.lookupFunction<Int32 Function(_P, Int32, Double, Int32, Pointer<Double>, Int32), int Function(_P, int, double, int, Pointer<Double>, int)>('motolii_strikes');
 
   /// A film's sound: its loudness (dB, 0 at full) 100 times a second of its own (none: no sound, or not a film). Read
@@ -481,9 +466,7 @@ class Motolii {
   /// How loud a film's sound is at [n] moments of the document from [from] to before [to], where its film shows them
   /// (dB; -100 silent or not shown). null: its sound not read yet ([loudness] reads it); empty: no sound.
   List<double>? loudnessOver(int thing, double from, double to, int n) {
-    final key = ('loudness', thing, from, to, n), v = _kept(key, () => _loudnessOverNow(thing, from, to, n));
-    if (v == null) _copy.remove(key);   // (its sound not read yet: asked again, not kept as none)
-    return v;
+    return _loudnessOverNow(thing, from, to, n);   // TODO(bridge Q): asked of the inside
   }
   List<double>? _loudnessOverNow(int thing, double from, double to, int n) {
     final out = malloc<Float>(n < 1 ? 1 : n), got = _loudnessOver(_m, thing, from, to, n, out);
@@ -494,7 +477,7 @@ class Motolii {
 
   /// Where a film's sound strikes (grows [rise] dB louder at once): the document's moments where it shows them, or
   /// [own] the film's own seconds. Asked once its loudness has been read ([loudness]).
-  List<double> strikes(int thing, double rise, {bool own = false}) => _kept(('strikes', thing, rise, own), () => _strikesNow(thing, rise, own: own));
+  List<double> strikes(int thing, double rise, {bool own = false}) => _strikesNow(thing, rise, own: own);   // TODO(bridge Q): asked of the inside
   List<double> _strikesNow(int thing, double rise, {bool own = false}) {
     final n = _strikes(_m, thing, rise, own ? 1 : 0, nullptr, 0), out = malloc<Double>(n < 1 ? 1 : n);
     final got = _strikes(_m, thing, rise, own ? 1 : 0, out, n), all = [for (var i = 0; i < got && i < n; i++) out[i]];
@@ -502,26 +485,25 @@ class Motolii {
     return all;
   }
   late final _guide = _lib.lookupFunction<Int32 Function(_P, _S, Double, Int32), int Function(_P, _S, double, int)>('motolii_guide');
-  late final _guides = _lib.lookupFunction<_S Function(_P), _S Function(_P)>('motolii_guides');
 
   /// The guides: lines across the picture, 'x' upright and 'y' level, at so many points from its left or top.
-  List<(String, double)> get guides => _kept('guides', () => [
-    for (final line in _guides(_m).toDartString().split('\n'))
+  List<(String, double)> get guides => [
+    for (final line in ((_document['guides'] as String?) ?? '').split('\n'))
       if (line.length > 2) (line[0], double.parse(line.substring(2))),
-  ]);
-  bool guide(String axis, double at, bool on) => _with([axis], (s) => _guide(_m, s[0], at, on ? 1 : 0)) != 0;
+  ];
+  bool guide(String axis, double at, bool on) => _took(_with([axis], (s) => _guide(_m, s[0], at, on ? 1 : 0)) != 0);
 
   /// Whether the stage is the size the document says now (not, after [resize] or an undo of one: open it again).
-  bool get fits => _kept('fits', () => _fits(_m) != 0);
+  bool get fits => (_document['fits'] as bool?) ?? true;
 
   /// A thing brought [places] places nearer among the things (below 0: further back).
-  bool raise(int thing, int places) => _raise(_m, thing, places) != 0;
+  bool raise(int thing, int places) => _took(_raise(_m, thing, places) != 0);
 
   /// The names of a thing's values that take keys.
-  List<String> moving(int thing) => _kept(('moving', thing), () => _moving(_m, thing).toDartString().split(' ').where((n) => n.isNotEmpty).toList());
+  List<String> moving(int thing) => _spaced(_of(thing)['moving']);
 
   /// The names of all a thing's values.
-  List<String> values(int thing) => _kept(('values', thing), () => _values(_m, thing).toDartString().split(' ').where((n) => n.isNotEmpty).toList());
+  List<String> values(int thing) => _spaced(_of(thing)['values']);
 
   /// Pictures in one call: each recipe's name and what it makes.
   List<(String, String)> get recipes => _folders.putIfAbsent('recipes', () => [
@@ -567,103 +549,38 @@ class Motolii {
   String get spent => _spent(_m).toDartString();
 
   /// A recipe made at the present moment, as one step: the new thing (0: not made, [trouble] says why).
-  int make(String recipe) => _with([recipe], (s) => _make(_m, s[0]));
+  int make(String recipe) => _took(_with([recipe], (s) => _make(_m, s[0])));
 
   /// The cards a maker sees a thing's values on, besides where it is and its fill: each a title and the values on it.
-  List<(String, List<String>)> cards(int thing) => _kept(('cards', thing), () => [
-    for (final c in _cards(_m, thing).toDartString().split('; '))
+  List<(String, List<String>)> cards(int thing) => [
+    for (final c in ((_of(thing)['cards'] as String?) ?? '').split('; '))
       if (c.indexOf(': ') case final at when at > 0) (c.substring(0, at), c.substring(at + 2).split(' ')),
-  ]);
+  ];
 
   /// The titles of a thing's effect cards in the order its effects are laid (motolii_fx_titles): moved with `fx_move`.
-  List<String> fxTitles(int thing) => _kept(('fx titles', thing), () => [for (final t in _fxTitles(_m, thing).toDartString().split(';')) if (t.isNotEmpty) t]);
+  List<String> fxTitles(int thing) => [for (final t in ((_of(thing)['fx'] as String?) ?? '').split(';')) if (t.isNotEmpty) t];
 
   /// How a value is shown to a hand, as the inside says (null: as its range says): its look, the unit it is read in,
   /// its name in plain words, the span its knob covers (in the document's units) and the fold it lies in.
-  Shown? shown(String name) => _shownOf.containsKey(name) ? _shownOf[name] as Shown? : _asked(name, _shownOf, _shownOf, () {
-    final f = _with([name], (s) => _shown(_m, s[0]).toDartString()).split('\t');
-    return f.length < 6 ? null : Shown(f[0], f[1], f[2], double.parse(f[3]), double.parse(f[4]), f[5].isEmpty ? null : f[5]);
+  Shown? shown(String name) => _shownOf.putIfAbsent(name, () {
+    for (final part in _thing.values) {
+      if ((part['shown'] as Map<String, dynamic>?)?[name] case final String said) {
+        final f = said.split('\t');
+        return f.length < 6 ? null : Shown(f[0], f[1], f[2], double.parse(f[3]), double.parse(f[4]), f[5].isEmpty ? null : f[5]);
+      }
+    }
+    return null;
   });
-  final _shownOf = <Object, Object?>{};
+  final _shownOf = <String, Shown?>{};   // (read out of the things' parts once a picture of the document)
 
   /// A number value's lowest and highest (null: the thing has no such number).
-  (double, double)? range(int thing, String name) => _kept(('range', thing, name), () => _rangeNow(thing, name));
-  (double, double)? _rangeNow(int thing, String name) {
-    final lo = malloc<Double>(), hi = malloc<Double>();
-    final ok = _with([name], (s) => _range(_m, thing, s[0], lo, hi)) != 0, r = (lo.value, hi.value);
-    malloc
-      ..free(lo)
-      ..free(hi);
-    return ok ? r : null;
-  }
+  (double, double)? range(int thing, String name) => switch ((_of(thing)['range'] as Map<String, dynamic>?)?[name]) { [final num lo, final num hi] => (lo.toDouble(), hi.toDouble()), _ => null };
 
   /// The words a value of a thing may be (a blend's): none if any word will do, or the thing has no such value.
-  List<String> words(int thing, String name) => _kept(('words', thing, name), () => _with([name], (s) => _words(_m, thing, s[0]).toDartString()).split(' ').where((w) => w.isNotEmpty).toList());
+  List<String> words(int thing, String name) => _spaced((_of(thing)['words'] as Map<String, dynamic>?)?[name]);
 
-  /// The words a value may be, kept till the document is read again ([forget]): what a value may be changes with the
-  /// document (a thing's kind, a script's select), not with each picture's reading of the inspector.
-  void forget() {
-    _copy.clear();
-    _copyCarried.clear();
-  }
-
-  /// The window's copy of what it read of the document, kept while the document stays as it was: its revision, read
-  /// without waiting for the inside (motolii_revision). A read the copy holds is never asked again.
-  late final _revision = _lib.lookupFunction<Int64 Function(_P), int Function(_P)>('motolii_revision', isLeaf: true);
-  late final _carried = _lib.lookupFunction<Int64 Function(_P), int Function(_P)>('motolii_carried', isLeaf: true);
   /// What the folders hold (recipes, effects, animators): not the document's, read once.
   final _folders = <String, List<(String, String)>>{};
-  final _copy = <Object, Object?>{}, _copyCarried = <Object, Object?>{}, _was = <Object, Object?>{}, _wasCarried = <Object, Object?>{};
-  int _copyAt = -1, _carriedAt = -1;
-  T _kept<T>(Object key, T Function() ask) {
-    final r = _revision(_m);
-    if (r != _copyAt) {
-      _was.addAll(_copy);   // (what was read before: shown while the hand is too busy to be asked)
-      _copy.clear();
-      _wasCarried.addAll(_copyCarried);
-      _copyCarried.clear();
-      _copyAt = r;
-    }
-    if (_copy.containsKey(key)) return _copy[key] as T;
-    return _asked(key, _copy, _was, ask);
-  }
-
-  /// And what a hand's carrying changes too (a value that takes no keys, how long a thing lasts): kept while neither moves.
-  T _keptCarried<T>(Object key, T Function() ask) {
-    _kept('', () => null);   // (the document's revision looked at first)
-    final c = _carried(_m);
-    if (c != _carriedAt) {
-      _wasCarried.addAll(_copyCarried);
-      _copyCarried.clear();
-      _carriedAt = c;
-    }
-    if (_copyCarried.containsKey(key)) return _copyCarried[key] as T;
-    return _asked(key, _copyCarried, _wasCarried, ask);
-  }
-
-  // Asked without waiting (motolii_dont_wait): the hand busy with the document, what was read before is shown and it is
-  // asked again a picture later ([again]); never read before, empty while a picture is built, else (a hand's one ask) waited for, once.
-  late final _dontWait = _lib.lookupFunction<Void Function(_P, Int32), void Function(_P, int)>('motolii_dont_wait', isLeaf: true);
-  late final _refused = _lib.lookupFunction<Int32 Function(_P), int Function(_P)>('motolii_refused', isLeaf: true);
-  T _asked<T>(Object key, Map<Object, Object?> into, Map<Object, Object?> was, T Function() ask) {
-    _dontWait(_m, 1);
-    final v = ask();
-    _dontWait(_m, 0);
-    if (_refused(_m) == 0) return into[key] = v;
-    if (was.containsKey(key)) {
-      again?.call(identical(into, _atMoment));
-      return was[key] as T;
-    }
-    if (SchedulerBinding.instance.schedulerPhase == SchedulerPhase.persistentCallbacks) {   // (a picture being built: shown empty this once, not kept, and asked again the next)
-      again?.call(identical(into, _atMoment));
-      return v;
-    }
-    return into[key] = ask();
-  }
-
-  /// What the window does when a read was put off (the hand busy): ask again a picture later. [atMoment]: a value at
-  /// the playhead (what shows the moment asks again), else one of the document's.
-  void Function(bool atMoment)? again;
 
   /// The window's thread watched: while on, a change it waits for, or a read that waits on the document over 2 ms, is
   /// kept; [broken] says each, one to a line ('' none). Turned on, what was kept is forgotten.
@@ -691,26 +608,32 @@ class Motolii {
   /// A way of this document's own, by name: how far it is (`a` the one key's value, `b` the next's, `u` from 0 to 1
   /// through the stretch, `p1`..`p4` its numbers; `bezier(u, x1, y1, x2, y2)` an ease by its two handles). It is then
   /// one of [wayNames], a tile of the Ease desk, and saved with the document.
-  bool define(String way, String expression) => _with([way, expression], (s) => _define(_m, s[0], s[1])) != 0;
+  bool define(String way, String expression) => _took(_with([way, expression], (s) => _define(_m, s[0], s[1])) != 0);
   /// The ways a stretch may go, as the document says them: the nine kinds with their numbers, the named ones, and
   /// each defined here ('; defined here: Snappy').
-  String get ways => _kept('ways', () => _ways(_m).toDartString());
+  String get ways => (_document['ways'] as String?) ?? '';
 
   /// The effects a thing may be given, by name, with the value that puts each on (the Effects shelf); its card shows
   /// while it is on ([cards]).
-  List<(String, String)> get thingEffects => _kept('thingEffects', () => _labelled(_effectNames(_m).toDartString()));
+  List<(String, String)> get thingEffects => _labelled((_document['effectNames'] as String?) ?? '');
 
   /// An effect put on a thing at a moment, or taken off if it is on (its keys too), one step.
-  bool effect(int thing, String name, double at) => _with([name], (s) => _effect(_m, thing, s[0], at)) != 0;
+  bool effect(int thing, String name, double at) => _took(_with([name], (s) => _effect(_m, thing, s[0], at)) != 0);
 
-  List<String> get wayNames => _kept('wayNames', () => _wayNames(_m).toDartString().split(' ').where((w) => w.isNotEmpty).toList());
+  List<String> get wayNames => _spaced(_document['wayNames']);
   /// A kind's numbers as a hand takes them: each one's name, lowest and highest (none: a kind without, or one defined).
   List<(String, double, double)> wayNumbers(String kind) {
     final w = _with([kind], (s) => _wayNumbers(_m, s[0]).toDartString()).split(' ').where((x) => x.isNotEmpty).toList();
     return [for (var i = 0; i + 2 < w.length; i += 3) (w[i], double.parse(w[i + 1]), double.parse(w[i + 2]))];
   }
 
-  double wayAt(String way, double u) => _kept(('wayAt', way, u), () => _with([way], (s) => _wayAt(_m, s[0], u)));
+  double wayAt(String way, double u) {   // (a way of the document's, by its curve in the picture; one said with its numbers, by the inside's own reckoning, which asks nothing of the document)
+    if ((_document['wayCurves'] as Map<String, dynamic>?)?[way] case final List<dynamic> c when c.length > 1) {
+      final at = u.clamp(0.0, 1.0) * (c.length - 1), i = at.floor().clamp(0, c.length - 2), f = at - i;
+      return (c[i] as num).toDouble() * (1 - f) + (c[i + 1] as num).toDouble() * f;
+    }
+    return _with([way], (s) => _wayAt(_m, s[0], u));
+  }
 
   /// What kind of thing a file makes ('': none).
   String kindOf(String file) => _with([file], (s) => _kindOf(s[0]).toDartString());
@@ -726,24 +649,27 @@ class Motolii {
   }
 
   /// Every stretch of a thing's keyed values: from, to (seconds), its way, as the inside says them (a timeline draws how each goes).
-  List<(double, double, String)> thingStretches(int thing) => _kept(('thingStretches', thing), () => [
-        for (final l in _thingStretches(_m, thing).toDartString().split('\n'))
+  List<(double, double, String)> thingStretches(int thing) => [
+        for (final l in ((_of(thing)['stretches'] as String?) ?? '').split('\n'))
           if (l.split('\t') case [final a, final b, final w]) (double.parse(a), double.parse(b), w),
-      ]);
+      ];
 
   /// The way of the stretch that begins at a value's key, as it is said ('': no key there).
-  String wayOf(int thing, String name, double at) => _kept(('wayOf', thing, name, at), () => _with([name], (s) => _wayOf(_m, thing, s[0], at).toDartString()));
+  String wayOf(int thing, String name, double at) {
+    final keys = keyMoments(thing, name), ways = (_of(thing)['keyWays'] as Map<String, dynamic>?)?[name] as List<dynamic>?;
+    final i = keys.indexWhere((k) => (k - at).abs() < .5 / rate);
+    return i < 0 || ways == null || i >= ways.length ? '' : ways[i] as String;
+  }
 
   /// Points of the picture to one unit of the stage, at z 0.
-  late final double point = _point(_m);
+  double get point => (_document['point'] as num?)?.toDouble() ?? 1;
 
   /// How a hand reads a thing's value, as the inside says it: shown = value x times + from (places in points of the
   /// picture from its top left, shares in hundredths...). Asked once a thing and a name.
-  (double, double) reading(int thing, String name) => (_readings['$thing $name'] as (double, double)?) ?? _asked('$thing $name', _readings, _readings, () {
-    final f = _with([name], (s) => _reading(_m, thing, s[0]).toDartString()).split(' ');
-    return f.length < 2 ? (1.0, 0.0) : (double.parse(f[0]), double.parse(f[1]));   // (put off: as it is, for this one picture)
-  });
-  final _readings = <Object, Object?>{};
+  (double, double) reading(int thing, String name) {
+    final f = (((_of(thing)['reading'] as Map<String, dynamic>?)?[name] as String?) ?? '').split(' ');
+    return f.length < 2 ? (1.0, 0.0) : (double.parse(f[0]), double.parse(f[1]));
+  }
   late final _later = _lib.lookupFunction<Int32 Function(_P, _S, Int32, _S, _S, Double), int Function(_P, _S, int, _S, _S, double)>('motolii_later');
   late final _answer = _lib.lookupFunction<Int32 Function(_P, Int32), int Function(_P, int)>('motolii_answer');
   late final _answerWhy = _lib.lookupFunction<_S Function(_P), _S Function(_P)>('motolii_answer_why');
@@ -753,11 +679,19 @@ class Motolii {
   int later(String call, {int thing = 0, String name = '', String word = '', double number = 0}) => _with([call, name, word], (s) => _later(_m, s[0], thing, s[1], s[2], number));
 
   /// A ticket's answer: -1 not done yet, 0 refused ([answerWhy] says why), 1 done; said once.
-  int answer(int ticket) => _answer(_m, ticket);
+  int answer(int ticket) {
+    final a = _answer(_m, ticket);
+    if (a >= 0) _take(3);   // (done: the pictures as the inside made them before it answered)
+    return a;
+  }
   String get answerWhy => _answerWhy(_m).toDartString();
-  bool undo() => _undo(_m) != 0;
-  bool redo() => _redo(_m) != 0;
-  void close() => _close(_m);
+  bool undo() => _took(_undo(_m) != 0);
+  bool redo() => _took(_redo(_m) != 0);
+  void close() {
+    _tell(_m, nullptr);
+    _told?.close();
+    _close(_m);
+  }
 }
 
 /// How a value is shown to a hand (Motolii.shown): look, unit, plain name, knob span, folded away.
