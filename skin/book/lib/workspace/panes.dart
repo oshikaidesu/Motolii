@@ -43,14 +43,14 @@ class _WsPanesState extends State<WsPanes> {
     super.didChangeDependencies();
     final ws = WsScope.read(context);
     if (ws == _ws) return;
-    _ws?.removeListener(_follow);
-    _ws = ws..addListener(_follow);
+    _ws?.on[WsAspect.fronted]!.removeListener(_follow);
+    _ws = ws..on[WsAspect.fronted]!.addListener(_follow);
     _shelf = ws.shelf;
   }
 
   @override
   void dispose() {
-    _ws?.removeListener(_follow);
+    _ws?.on[WsAspect.fronted]!.removeListener(_follow);
     super.dispose();
   }
 

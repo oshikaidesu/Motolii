@@ -34,7 +34,7 @@ class DeskSticker extends StatelessWidget {
   final double size;
   @override
   Widget build(BuildContext context) {
-    final tone = name == 'Tools' ? Grey.g76 : deskTool(WsScope.of(context), name).tone, own = name != 'Tools' && deskTools.every((t) => t.name != name);
+    final tone = name == 'Tools' ? Grey.g76 : deskTool(WsScope.read(context), name).tone, own = name != 'Tools' && deskTools.every((t) => t.name != name);
     return Container(
       width: size,
       height: size,

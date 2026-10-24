@@ -928,6 +928,12 @@ int motolii_later(Motolii* m, const char* call, int thing, const char* name, con
             else if (c == "mark") ok = changes(m, (int)doc_mark(doc(m), number, w.c_str()));
             else if (c == "guide") ok = changes(m, (int)doc_guide(doc(m), n.c_str(), number, w != "off"));
             else if (c == "work") ok = changes(m, (int)doc_work_is(doc(m), number, std::atof(w.c_str())));
+            else if (c == "size") {   // (word: "wide high", the stage's size the document says: opened at it again by the window)
+                int wide = 0, high = 0;
+                std::sscanf(w.c_str(), "%d %d", &wide, &high);
+                char* say = doc_size_words(wide, high);
+                ok = say ? changes(m, (int)doc_change(*m->d, say)) : (m->d->trouble = "a stage is from 16 to 8192 points each way, an even number of them", 0);
+            }
             else if (c == "raise") ok = changes(m, (int)doc_raise(doc(m), thing, (int)number));
             else if (c == "sequence") ok = changes(m, (int)doc_sequence(doc(m), number, RATE));
             else if (c == "key_here") ok = changes(m, (int)doc_key_here(doc(m), thing, n.c_str(), number));
@@ -957,7 +963,7 @@ int motolii_later(Motolii* m, const char* call, int thing, const char* name, con
                 ok = desk_is(m, dw, dh, x, y, sc, pt);
             }
             else if (c == "hold") ok = (int)doc_hold(doc(m), thing);   // (a hand takes hold: what it carries next is this thing's)
-            else m->trouble = "a change asked later is one of: say, set, hold, let_go, undo, redo, together, add, make, pen, duplicate, remove, mark, guide, work, raise, sequence, key_here, unkey, stay, way, effect, fx_file, fx_move";
+            else m->trouble = "a change asked later is one of: say, set, hold, let_go, undo, redo, together, add, make, pen, duplicate, remove, mark, guide, work, raise, sequence, key_here, unkey, stay, way, effect, fx_file, fx_move, size, watch, pick, desk, live, relate, lead, free, release";
             } catch (const std::exception& e) {
                 ok = 0;
                 std::fprintf(stderr, "motolii: %s threw: %s\n", c.c_str(), e.what());

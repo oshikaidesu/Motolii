@@ -265,7 +265,7 @@ class DockFooter extends StatelessWidget {
   final bool done;
   @override
   Widget build(BuildContext context) {
-    final ws = WsScope.of(context), l = fresh ? null : ws.layer;
+    final ws = WsScope.of(context, {WsAspect.document, WsAspect.picked}), l = fresh ? null : ws.layer;
     return Container(
       height: Shape.z(52),
       padding: EdgeInsets.symmetric(horizontal: WsT.inset),

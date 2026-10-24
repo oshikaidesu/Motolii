@@ -596,7 +596,7 @@ class _RelationMarks extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
-    listenable: Listenable.merge([WsScope.read(context), WsScope.read(context).moment]),   // (where things are at the playhead)
+    listenable: Listenable.merge([WsScope.read(context).on[WsAspect.document], WsScope.read(context).on[WsAspect.picked], WsScope.read(context).seen]),   // (where things are in the picture shown)
     builder: (context, _) {
       final ws = WsScope.read(context), m = ws.inside;
       Offset? on(String id) => scene.box(id) == null ? null : v.toScreen(WsArt.toView(scene, scene.box(id)!.c));
@@ -785,7 +785,7 @@ class _MarksPainter extends CustomPainter {
 class WsRelationStack extends StatelessWidget {
   const WsRelationStack({super.key});
   @override
-  Widget build(BuildContext context) => ListenableBuilder(listenable: WsScope.read(context), builder: (context, _) => _built(context));   // (its own: the inspector is not built again for a value of another thing)
+  Widget build(BuildContext context) => ListenableBuilder(listenable: Listenable.merge([WsScope.read(context).on[WsAspect.document], WsScope.read(context).on[WsAspect.picked]]), builder: (context, _) => _built(context));   // (its own: the inspector is not built again for a value of another thing)
 
   Widget _built(BuildContext context) {
     final ws = WsScope.read(context), m = ws.inside, t = ws.selected;

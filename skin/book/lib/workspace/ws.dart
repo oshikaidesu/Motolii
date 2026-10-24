@@ -5,6 +5,7 @@
 import 'dart:developer' show Timeline, TimelineTask;
 import 'dart:io' show Platform;
 import 'package:flutter/scheduler.dart';
+import 'package:flutter/foundation.dart' show mapEquals;
 import 'package:flutter/widgets.dart';
 
 import '../motolii.dart';
@@ -110,7 +111,19 @@ typedef WsKey = ({String layer, int frame});
 /// The window's state: the document's things as rows (read again from the inside), what is picked, the moment, the
 /// view. Every seat listens to this and nothing else; a seat never keeps a copy of what is here.
 /// contract: changes notify once per user action; nothing here ticks while idle (play advances only while [playing]).
+/// What of the window changed: a part of it is built again only when one it reads did (Flutter's InheritedModel
+/// aspects: [WsScope.of]). [WsAspect.document]: the inside's picture of the document was read again.
+enum WsAspect { document, picked, playing, shelf, view, fronted, route, animating, notice, stage }
+
 class Ws extends ChangeNotifier {
+  /// Each aspect told on its own (a Flutter ValueNotifier: what listens to one hears only it).
+  late final on = {for (final a in WsAspect.values) a: ValueNotifier<int>(0)};
+  void _tell(WsAspect a) {
+    if (a == WsAspect.picked || a == WsAspect.document) _watch();   // (what the inside puts in the moment's picture follows what is picked)
+    on[a]!.value++;
+    notifyListeners();   // (WsScope's own: it says which aspects to the parts below)
+  }
+
 
   final layers = <WsLayer>[];
 
@@ -156,7 +169,7 @@ class Ws extends ChangeNotifier {
   set notice(String? said) {
     if (said == _notice) return;
     _notice = said;
-    notifyListeners();
+    _tell(WsAspect.notice);
   }
 
   /// How many times the document has been read again.
@@ -203,6 +216,9 @@ class Ws extends ChangeNotifier {
     seen.dispose();
     kept.dispose();
     moment.dispose();
+    for (final n in on.values) {
+      n.dispose();
+    }
     super.dispose();
   }
 
@@ -210,7 +226,7 @@ class Ws extends ChangeNotifier {
   void shown() {
     lastChange = null; // (not a step of the document: what it changed is not known)
     rev++;
-    notifyListeners();
+    _tell(WsAspect.document);
   }
 
   /// The document read again, after any change to it: what the seats list is what the document holds.
@@ -249,7 +265,7 @@ class Ws extends ChangeNotifier {
     if (_sel != null && layers.every((l) => l.id != _sel)) _sel = layers.firstOrNull?.id; // (a picked thing gone: the first; nothing picked stays so, the stage's)
     _keys.removeWhere((k) => !layers.any((l) => l.id == k.layer && l.keys.contains(k.frame))); // (a picked key stays picked while it is still there)
     tl.finish();
-    Timeline.timeSync('MARK notify', notifyListeners);
+    _tell(WsAspect.document);
   }
 
   /// The inside's own picture of the stage, as a Flutter texture, when the window is joined to it (null: the stand-in art).
@@ -258,7 +274,7 @@ class Ws extends ChangeNotifier {
   set stageTexture(int? id) {
     if (id == _stageTexture) return;
     _stageTexture = id;
-    notifyListeners();
+    _tell(WsAspect.stage);
   }
 
   /// The things whose moving values the window shows (told the inside: Motolii.subscribe): the picked one and those picked
@@ -275,11 +291,6 @@ class Ws extends ChangeNotifier {
     });
   }
 
-  @override
-  void notifyListeners() {
-    _watch();
-    super.notifyListeners();
-  }
 
   String? _sel; // (nothing picked, as a document opens)
   String? get selected => _sel;
@@ -291,7 +302,7 @@ class Ws extends ChangeNotifier {
     aim = null;
     _keys.clear();
     deskManual = null;
-    notifyListeners();
+    _tell(WsAspect.picked);
   }
 
   /// The things picked together (drawn round on the stage): what a relation is made of. Picking one alone clears them.
@@ -302,7 +313,7 @@ class Ws extends ChangeNotifier {
       ..clear()
       ..addAll(ids);
     manyByHand = byHand;
-    notifyListeners();
+    _tell(WsAspect.picked);
   }
 
   final _keys = <WsKey>{};
@@ -312,7 +323,7 @@ class Ws extends ChangeNotifier {
     _keys.add(k);
     _sel = k.layer;
     deskManual = null;
-    notifyListeners();
+    _tell(WsAspect.picked);
   }
 
   /// Keys picked together (a box drawn round them): these and no others.
@@ -322,13 +333,13 @@ class Ws extends ChangeNotifier {
       ..addAll(ks);
     if (_keys.isNotEmpty) _sel = _keys.first.layer;
     deskManual = null;
-    notifyListeners();
+    _tell(WsAspect.picked);
   }
 
   void clearKeys() {
     if (_keys.isEmpty) return;
     _keys.clear();
-    notifyListeners();
+    _tell(WsAspect.picked);
   }
 
   /// The playhead, told on its own (Flutter's ValueNotifier): only what shows the moment listens ([WsScope.frameOf]),
@@ -349,7 +360,7 @@ class Ws extends ChangeNotifier {
     _playing = p;
     if (p) _inside?.at(frame / fps);
     _inside?.play(p);   // (the inside keeps the clock; the playhead follows its moment: timeline.dart)
-    notifyListeners();
+    _tell(WsAspect.playing);
   }
 
   /// The browser shelf in front: Media, Effects, Fonts, Colors, Create (Motolii's Browser shelves, each a pane of its own).
@@ -358,7 +369,7 @@ class Ws extends ChangeNotifier {
   set shelf(String s) {
     if (s == _shelf) return;
     _shelf = s;
-    notifyListeners();
+    _tell(WsAspect.shelf);
   }
 
   /// How the window looks, by name ('stage.tool', 'fold.Transform'...): what a pane keeps of itself that is not the
@@ -368,7 +379,7 @@ class Ws extends ChangeNotifier {
   void setView(String name, Object? value) {
     if (view[name] == value) return;
     view[name] = value;
-    notifyListeners();
+    _tell(WsAspect.view);
   }
 
   /// What the user opened in the desk by hand; null lets the desk follow the selection.
@@ -384,7 +395,7 @@ class Ws extends ChangeNotifier {
   /// A pane brought to the front of its tabs (the panes follow: panes.dart).
   void front(String pane) {
     fronted = (pane, (fronted?.$2 ?? 0) + 1);
-    notifyListeners();
+    _tell(WsAspect.fronted);
   }
   (String, int)? fronted;
 
@@ -404,7 +415,7 @@ class Ws extends ChangeNotifier {
       case final s when s.startsWith('Browser'):
         _shelf = s.split('›').last.trim();
     }
-    notifyListeners();
+    _tell(WsAspect.route);
   }
 
   /// The shelf's effects on the thing: those whose card the inside shows (an effect's card shows while it is on).
@@ -418,17 +429,13 @@ class Ws extends ChangeNotifier {
   /// Joined: whether every change a hand makes is keyed (the top bar's Animate, the inspector's Animate all: one truth, the inside's).
   bool get animating => _inside?.keyingNow ?? false;
 
-  /// Joined: what changes only with the document (the work area, the marks, the guides), read once a reading of it:
-  /// asked each picture they would wait for the inside's moment while it plays.
-  (int, (double, double))? _work;
-  (int, List<(double, String)>)? _marks;
-  (int, List<(String, double)>)? _guides;
-  (double, double) get work => (_work?.$1 == rev ? _work! : (_work = (rev, _inside!.work))).$2;
-  List<(double, String)> get marks => (_marks?.$1 == rev ? _marks! : (_marks = (rev, _inside!.marks))).$2;
-  List<(String, double)> get guides => (_guides?.$1 == rev ? _guides! : (_guides = (rev, _inside!.guides))).$2;
+  /// Joined: the work area, the marks, the guides: the document's picture's.
+  (double, double) get work => _inside!.work;
+  List<(double, String)> get marks => _inside!.marks;
+  List<(String, double)> get guides => _inside!.guides;
   set animating(bool on) {
     _inside?.keying(on);
-    notifyListeners();
+    _tell(WsAspect.animating);
   }
 
 
@@ -520,20 +527,68 @@ class Ws extends ChangeNotifier {
 /// The font a new text is set in, a font every machine of its kind has (one place: the Create shelf and the stage's tool).
 final wsTextFont = Platform.isWindows ? 'C:/Windows/Fonts/arial.ttf' : '/System/Library/Fonts/Supplemental/Arial Unicode.ttf';
 
-class WsScope extends StatelessWidget {
+/// The window's state to the parts below (Flutter's InheritedModel): a part says which aspects it reads
+/// ([WsScope.of]) and is built again only when one of those changed.
+class WsScope extends StatefulWidget {
   const WsScope({super.key, required this.ws, required this.child});
   final Ws ws;
   final Widget child;
-  static Ws of(BuildContext c) => c.dependOnInheritedWidgetOfExactType<_WsAll>()!.notifier!;
-  static Ws read(BuildContext c) => c.getInheritedWidgetOfExactType<_WsAll>()!.notifier!;
+  /// The window's state, the part built again when one of [aspects] changes (none said: any, as a pane of your own
+  /// may: the window's own parts each say theirs).
+  static Ws of(BuildContext c, [Set<WsAspect>? aspects]) {
+    for (final a in aspects ?? WsAspect.values) {
+      InheritedModel.inheritFrom<_WsAll>(c, aspect: a);
+    }
+    return read(c);
+  }
+  static Ws read(BuildContext c) => c.getInheritedWidgetOfExactType<_WsAll>()!.ws;
   /// The playhead, and built again when it moves (nothing else of the window does that).
   static int frameOf(BuildContext c) => c.dependOnInheritedWidgetOfExactType<WsMoment>()!.notifier!.value;
+  /// The inside's moment's picture: built again when a new one comes (what shows values at the moment shown).
+  static int pictureOf(BuildContext c) => c.dependOnInheritedWidgetOfExactType<_WsPicture>()!.notifier!.value;
   @override
-  Widget build(BuildContext context) => _WsAll(ws: ws, child: WsMoment(notifier: ws.moment, child: child));
+  State<WsScope> createState() => _WsScopeState();
 }
 
-class _WsAll extends InheritedNotifier<Ws> {
-  const _WsAll({required Ws ws, required super.child}) : super(notifier: ws);
+class _WsScopeState extends State<WsScope> {
+  late Map<WsAspect, int> _told = _now();
+  Map<WsAspect, int> _now() => {for (final MapEntry(:key, :value) in widget.ws.on.entries) key: value.value};
+  @override
+  void initState() {
+    super.initState();
+    widget.ws.addListener(_changed);
+  }
+  @override
+  void didUpdateWidget(WsScope old) {
+    super.didUpdateWidget(old);
+    if (old.ws != widget.ws) {
+      old.ws.removeListener(_changed);
+      widget.ws.addListener(_changed);
+      _told = _now();
+    }
+  }
+  @override
+  void dispose() {
+    widget.ws.removeListener(_changed);
+    super.dispose();
+  }
+  void _changed() => setState(() => _told = _now());
+  @override
+  Widget build(BuildContext context) => _WsAll(ws: widget.ws, told: _told, child: WsMoment(notifier: widget.ws.moment, child: _WsPicture(notifier: widget.ws.seen, child: widget.child)));
+}
+
+class _WsPicture extends InheritedNotifier<ValueNotifier<int>> {
+  const _WsPicture({required super.notifier, required super.child});
+}
+
+class _WsAll extends InheritedModel<WsAspect> {
+  const _WsAll({required this.ws, required this.told, required super.child});
+  final Ws ws;
+  final Map<WsAspect, int> told;   // (how many times each aspect was told, as of this build)
+  @override
+  bool updateShouldNotify(_WsAll old) => !mapEquals(told, old.told) || ws != old.ws;
+  @override
+  bool updateShouldNotifyDependent(_WsAll old, Set<WsAspect> dependencies) => ws != old.ws || dependencies.any((a) => told[a] != old.told[a]);
 }
 
 /// The playhead: told when it moves, and again when what was read at it was put off (the inside busy).

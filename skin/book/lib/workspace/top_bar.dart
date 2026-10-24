@@ -18,7 +18,7 @@ class WsTopBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final ws = WsScope.of(context);
+    final ws = WsScope.of(context, {WsAspect.animating, WsAspect.document, WsAspect.picked});
     return Container(
       color: WsT.body,
       padding: EdgeInsets.symmetric(horizontal: Shape.s(10)),
@@ -235,7 +235,7 @@ class _Saved extends StatelessWidget {
       SizedBox(width: Shape.s(6)),
       ConstrainedBox(
         constraints: BoxConstraints(maxWidth: Shape.z(260)),
-        child: Text(WsScope.of(context).notice ?? _savedAt(WsScope.of(context)), maxLines: 1, overflow: TextOverflow.ellipsis, style: T.label(Grey.g63)),
+        child: Text(WsScope.of(context, {WsAspect.document, WsAspect.notice}).notice ?? _savedAt(WsScope.of(context, {WsAspect.document, WsAspect.notice})), maxLines: 1, overflow: TextOverflow.ellipsis, style: T.label(Grey.g63)),
       ),
     ],
   );
@@ -286,7 +286,7 @@ class _RenderState extends State<_Render> {
 
   @override
   Widget build(BuildContext context) {
-    final ws = WsScope.of(context);
+    final ws = WsScope.of(context, {WsAspect.document});
     return OverlayPortal(
       controller: _open,
       overlayChildBuilder: (_) {
@@ -392,7 +392,7 @@ class _SizeChipState extends State<_SizeChip> {
 
   @override
   Widget build(BuildContext context) {
-    final ws = WsScope.of(context), w0 = WsArt.comp.width, h0 = WsArt.comp.height;
+    final ws = WsScope.of(context, {WsAspect.document}), w0 = WsArt.comp.width, h0 = WsArt.comp.height;
     final shownW = (_scrub ?? w0).round(), shownH = (shownW * h0 / w0).round();
     if (_editing) {
       return Container(
@@ -470,7 +470,7 @@ class _WaitedState extends State<_Waited> {
   @override
   Widget build(BuildContext context) {
     if (_count == 0) return const SizedBox.shrink();
-    final lines = _open.isShowing ? (WsScope.of(context).inside?.broken ?? '').split('\n').reversed.take(40).toList() : const <String>[];
+    final lines = _open.isShowing ? (WsScope.read(context).inside?.broken ?? '').split('\n').reversed.take(40).toList() : const <String>[];
     return CompositedTransformTarget(
       link: _at,
       child: OverlayPortal(

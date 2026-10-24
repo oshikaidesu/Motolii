@@ -33,15 +33,15 @@ Thermion（描けは前が終わるまで捨てる）。調べた記録は `rese
 | H5 | `forget()` | 同 605 | 覚えた物を捨てる | 写しの差し替え || 消した（10/24） |
 | H6 | `counters`（revision・carried・frames・kept の数字） | 同 225 | 窓が毎コマ数字を見て変化を探す | 中身からの知らせ（決まり4） || 消した（10/24） |
 | H7 | `_peek` `_counted` `beat()` | `workspace/ws.dart` 205〜235 | 毎コマ数字を覗き、変わっていれば読み直し | 中身からの知らせ || 消した（10/24）：中身の聞き口（`motolii_tell`、`NativeCallable.listener`）から受け取る |
-| H8 | `seen` | 同 214 | 「何か新しく見えた」を数を足して知らせる | コマの写しの `ValueNotifier` | |
-| H9 | `shown()` `rev` | 同 252 | 何か変わったら窓全体に知らせる | 物ごとの書類の `ValueNotifier` | |
-| H10 | `reread()` `_reread` `reads` | 同 258〜297 | 書類を窓が全部読み直して `layers` を作り直す | 書類の写しから `layers` を作る（読み直しは中身がやる） | |
-| H11 | `dock._later` `_seen` `_rev` `_due` | `workspace/dock.dart` 55〜90 | 棚が全部の変化を聞いて、自分に関係あるか比べる | 棚は自分の見る物（書類の該当部分・選択）だけ聞く | |
-| H12 | インスペクタの `_changed` `_changedNow` `_onlyNumbers` `_seenNow` `_live` `_settle` `_keyed` `_frame` | `workspace/workspace.dart` 700〜765 | インスペクタが全部の変化を聞き、数字だけか比べ、忙しければ 150 ms 後に読み直す | 選んだ物の書類の写し＋コマの写しを聞く | |
-| H13 | `timeline._changed`（再生の開始・停止を変化から探す） | `workspace/timeline.dart` 37〜72 | 全部の変化を聞いて再生中かを見る | 再生中の `ValueNotifier` を聞く | |
-| H14 | `panes._follow` | `workspace/panes.dart` 40〜60 | 全部の変化を聞いて前に出すパネルを探す | 前に出すパネルの `ValueNotifier` | |
-| H15 | `Ws` 全体の `notifyListeners` 15か所 | `workspace/ws.dart` 174 255 296 305 318 329 339 349 355 376 385 395 411 431 455 | 何が変わっても全員に知らせる | 決まり5の口ごとに分ける | |
-| H16 | `WsScope.of`（全部を聞く） | 27か所・14ファイル | 何が変わっても組み立て直し | 聞く物ごとの口（`WsScope.frameOf` と同じ形） | |
+| H8 | `seen` | 同 214 | 「何か新しく見えた」を数を足して知らせる | コマの写しの `ValueNotifier` || 口は残す（コマの写しが届いた知らせ）。`WsScope.pictureOf` でも聞ける（10/24） |
+| H9 | `shown()` `rev` | 同 252 | 何か変わったら窓全体に知らせる | 物ごとの書類の `ValueNotifier` || `shown()` は書類の面を鳴らす形に（respan だけが使う）（10/24） |
+| H10 | `reread()` `_reread` `reads` | 同 258〜297 | 書類を窓が全部読み直して `layers` を作り直す | 書類の写しから `layers` を作る（読み直しは中身がやる） || 書類の写しが届いた時だけ読み直す（10/24） |
+| H11 | `dock._later` `_seen` `_rev` `_due` | `workspace/dock.dart` 55〜90 | 棚が全部の変化を聞いて、自分に関係あるか比べる | 棚は自分の見る物（書類の該当部分・選択）だけ聞く || 棚は書類と選択の面だけを聞く（中の比べ方は残る）（10/24） |
+| H12 | インスペクタの `_changed` `_changedNow` `_onlyNumbers` `_seenNow` `_live` `_settle` `_keyed` `_frame` | `workspace/workspace.dart` 700〜765 | インスペクタが全部の変化を聞き、数字だけか比べ、忙しければ 150 ms 後に読み直す | 選んだ物の書類の写し＋コマの写しを聞く || インスペクタは書類・選択・Animate の面と、再生ヘッド・コマの写しだけを聞く。中身が忙しい時の 150 ms 待ちは消した（中の比べ方 `_onlyNumbers` は残る）（10/24） |
+| H13 | `timeline._changed`（再生の開始・停止を変化から探す） | `workspace/timeline.dart` 37〜72 | 全部の変化を聞いて再生中かを見る | 再生中の `ValueNotifier` を聞く || タイムラインの時計は再生中の面と再生ヘッドだけ、再生ボタンだけが再生中の面で組み立て直る（10/24） |
+| H14 | `panes._follow` | `workspace/panes.dart` 40〜60 | 全部の変化を聞いて前に出すパネルを探す | 前に出すパネルの `ValueNotifier` || 前に出すパネルの面だけを聞く（10/24） |
+| H15 | `Ws` 全体の `notifyListeners` 15か所 | `workspace/ws.dart` 174 255 296 305 318 329 339 349 355 376 385 395 411 431 455 | 何が変わっても全員に知らせる | 決まり5の口ごとに分ける || 面ごとの口（`Ws.on`、`WsAspect`）に分けた（10/24） |
+| H16 | `WsScope.of`（全部を聞く） | 27か所・14ファイル | 何が変わっても組み立て直し | 聞く物ごとの口（`WsScope.frameOf` と同じ形） || `WsScope` は InheritedModel。窓の部品は全部、聞く面を言う（外の人のパネルは言わなければ全部）（10/24） |
 | C1 | `by_look`（46か所）・`dont_wait`・`refused` | `filament/motolii.mm` 159〜182、984〜985 | 窓が書類の鍵を取って読む／忙しければ断る | 写しを作る所（手のスレッド）だけが書類を読む | |
 | C2 | `Peek`・`peeked` | 同 35〜45、298〜318、515〜522 | 選んだ物の値だけ鍵なしで置いておく | コマの写し（全部の物） | |
 | C3 | `by_hand` の待ち（31か所、`done.get()`） | 同 125〜135、`asked` | 窓が書きの終わりを待つ | 投げるだけ（決まり6） | |
@@ -79,6 +79,12 @@ Thermion（描けは前が終わるまで捨てる）。調べた記録は `rese
 - 写しに無い読みは中身に聞かずに null、`BRIDGE:` と1回だけ言う（`_unasked`）。frames_test（あなたの書類）で 0 件。
 - 判断待ち：Widgetbook の関係の study（`sets/relation_tabs` の tab_draw・tab_hands・tab_poses・tab_samples、`sets/group_rule_tries`）は、別の時刻の見え方を組み立ての中で読む（約25か所）。本番の窓では使われていない。直すか消すか。
 - 測った（frames_test、あなたの書類、各5秒）：窓が中身を待った回数 0。つまみを引く・物を運ぶ間の窓の1コマ中央値 4.0・4.2 ms。書類の読み直しは つまみ・運ぶ 0回。
+
+## 3・4段目（10/24）
+
+- 書き：窓が中身の書きを待つ所は 0。大きさの変更も投げる形（later "size"）。`carry` は投げるだけ。
+- 知らせ：`Ws` は面ごとの口（書類・選択・再生中・棚・見え方・前のパネル・行き先・Animate・通知文・ステージの絵）。`WsScope` は InheritedModel、窓の部品は全部聞く面を言う。全部を聞いているのは Widgetbook の study（判断待ち）だけ。
+- 測った（frames_test、あなたの書類、各10秒、2回）：物の絵 59.0〜60.0／秒、窓が待った回数 0、写しに無い読み 0、書類の読み直し 0。窓の遅れ 2／2400：再生の 7〜10コマ目（組み立て 20 ms。窓を開いた後の棚の読み込みが終わった知らせが重なる）、再生ヘッドの終わり近くの1コマ（組み立て前に 26〜30 ms、窓のスレッドが組み立ての外で止まっている。原因はまだ）。
 
 ## 進め方
 

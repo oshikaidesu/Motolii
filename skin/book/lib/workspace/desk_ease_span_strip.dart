@@ -15,7 +15,7 @@ class SpanStrip extends StatelessWidget {
   final VoidCallback onReverse;
   @override
   Widget build(BuildContext context) {
-    final s = span, ws = WsScope.of(context);
+    final s = span, ws = WsScope.of(context, {WsAspect.document});
     final frames = s == null ? 0 : s.to - s.from;
     return DeskStrip(
       left: [

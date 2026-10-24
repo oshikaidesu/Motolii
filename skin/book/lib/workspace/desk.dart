@@ -11,7 +11,7 @@ class WsDesk extends StatelessWidget {
   const WsDesk({super.key});
   @override
   Widget build(BuildContext context) {
-    final ws = WsScope.of(context), name = ws.desk;
+    final ws = WsScope.of(context, {WsAspect.fronted, WsAspect.picked}), name = ws.desk;
     return WsSeat(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -35,7 +35,7 @@ class _DeskHeader extends StatelessWidget {
   final String name;
   @override
   Widget build(BuildContext context) {
-    final ws = WsScope.of(context), pinned = ws.deskManual != null;
+    final ws = WsScope.of(context, {WsAspect.fronted, WsAspect.picked}), pinned = ws.deskManual != null;
     return LayoutBuilder(
       builder: (context, box) {
         final wide = box.maxWidth >= 340;
@@ -63,11 +63,11 @@ class _Catalog extends StatelessWidget {
   static const _cell = 104.0, _minTile = 62.0, _maxTile = 92.0;
   @override
   Widget build(BuildContext context) {
-    final ws = WsScope.of(context), auto = ws.deskAuto;
+    final ws = WsScope.read(context), auto = ws.deskAuto;
     return LayoutBuilder(
       builder: (context, box) {
         final w = box.maxWidth - WsT.gap * 2, h = box.maxHeight - WsT.gap * 2;
-        final cols = wsCols(w, _cell, gap: WsT.gap, min: 2), rows = (WsScope.of(context).tools.length / cols).ceil();
+        final cols = wsCols(w, _cell, gap: WsT.gap, min: 2), rows = (WsScope.read(context).tools.length / cols).ceil();
         final tile = ((h - WsT.gap * (rows - 1)) / rows).clamp(_minTile, _maxTile), cw = wsCell(w, cols, gap: WsT.gap);
         return ListView(
           padding: EdgeInsets.all(WsT.gap),
@@ -76,7 +76,7 @@ class _Catalog extends StatelessWidget {
               spacing: WsT.gap,
               runSpacing: WsT.gap,
               children: [
-                for (final t in WsScope.of(context).tools)
+                for (final t in WsScope.read(context).tools)
                   SizedBox(
                     width: cw,
                     height: tile,

@@ -78,8 +78,8 @@ class DeskDepth extends StatefulWidget {
 class _DeskDepthState extends State<DeskDepth> {
   @override
   Widget build(BuildContext context) {
-    WsScope.frameOf(context);   // (the lens as it is at the playhead)
-    final ws = WsScope.of(context), lens = _lenses[ws] ??= _Lens(), joined = _lensOf(ws, lens);
+    WsScope.pictureOf(context);   // (the lens as it is in the picture shown)
+    final ws = WsScope.of(context, {WsAspect.document, WsAspect.picked}), lens = _lenses[ws] ??= _Lens(), joined = _lensOf(ws, lens);
     void edit(void Function() f) {
       setState(f);
       if (joined != null) _carryLens(ws, joined.camera, lens);
@@ -230,7 +230,7 @@ class _DiagramState extends State<_Diagram> {
 
   @override
   Widget build(BuildContext context) {
-    final slabs = _slabsOf(WsScope.of(context));
+    final slabs = _slabsOf(WsScope.of(context, {WsAspect.document}));
     return LayoutBuilder(
       builder: (context, box) {
         final m = _Map(box.biggest);

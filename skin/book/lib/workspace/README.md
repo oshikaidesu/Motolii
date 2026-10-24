@@ -10,7 +10,7 @@ Workspace(document: path, extra: [
 ])
 ```
 - 足したパネルは Inspector の横にタブで並ぶ。本家のファイルは 1 行も変えない。
-- パネルの中では `WsScope.of(context)` が窓の状態（`Ws`）：`inside` が書類（`Motolii`）、`selected` が選ばれた物、`frame` が今のコマ。値は `inside.value(thing, name, seconds)`、変えるのは `inside.set(...)`、キーは `inside.keyHere(...)`。
+- パネルの中では `WsScope.of(context)` が窓の状態（`Ws`。何かが変わるたびに組み立て直る。聞く面を言えば、その面が変わった時だけ：`WsScope.of(context, {WsAspect.picked})`。再生ヘッドは `WsScope.frameOf(context)`）：`inside` が書類（`Motolii`）、`selected` が選ばれた物、`frame` が今のコマ。値は `inside.value(thing, name, seconds)`、変えるのは `inside.set(...)`、キーは `inside.keyHere(...)`。
 - 物を絵の上で動かす（画素で）：`inside.hold(t)`、`inside.carry('place', 10, 0)`、`inside.letGo(true)`（手で引いたのと同じ 1 歩）。値をそのまま変えるのは `inside.set(t, name, value)`（書類の単位）。キーの数は `inside.keyMoments(t, name).length`。
 - 気をつける 4 つ：選ばれた物 `selected` は文字なので `int.parse` してから書類に渡す。今の秒は `frame / Ws.fps`。物の名前は `inside.word(t, 'name')`。書類を変えたら `ws.reread()`（窓の他のパネルが読み直す）。
 - 例：`test/workspace_window_test.dart` の「a pane of your own」（書類なし）。本物の書類で試すなら `import 'door.dart';`（`test/door.dart`）の `openWorkspace(tester, extra: [...], tools: [...])` と `wsOf(tester)`、`closeWorkspace`、`skip: !insideBuilt`。Inspector は見えているカードしか作らないので、下のカードは `seen(tester, finder)` でスクロールして出す（カードの名前の一覧は `inspectorCards(tester)`）。

@@ -68,7 +68,7 @@ class _DeskRelationsState extends State<DeskRelations> {
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
-    listenable: Listenable.merge([WsScope.read(context), WsScope.read(context).moment]),   // (where things are at the playhead)
+    listenable: Listenable.merge([WsScope.read(context).on[WsAspect.document], WsScope.read(context).on[WsAspect.picked], WsScope.read(context).seen]),   // (where things are in the picture shown)
     builder: (context, _) {
       final ws = WsScope.read(context), world = _World.of(ws);
       return Column(

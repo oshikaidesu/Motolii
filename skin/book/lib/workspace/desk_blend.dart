@@ -13,7 +13,7 @@ class DeskBlend extends StatelessWidget {
   const DeskBlend({super.key});
   @override
   Widget build(BuildContext context) {
-    final ws = WsScope.of(context);
+    final ws = WsScope.of(context, {WsAspect.document, WsAspect.picked});
     return ListView(
       padding: EdgeInsets.symmetric(horizontal: WsT.gap, vertical: Shape.s(6)),
       children: [for (final l in ws.layers) _Row(l, picked: l.id == ws.selected)],
@@ -34,7 +34,7 @@ class _RowState extends State<_Row> {
   String? _hover;
   @override
   Widget build(BuildContext context) {
-    final l = widget.l, ws = WsScope.of(context), m = ws.inside, t = int.tryParse(l.id);
+    final l = widget.l, ws = WsScope.of(context, {WsAspect.document}), m = ws.inside, t = int.tryParse(l.id);
     final ways = m == null || t == null ? const <String>[] : m.words(t, 'blend');
     final now = ways.isEmpty ? '' : (m!.word(t!, 'blend').isEmpty ? ways.first : m.word(t, 'blend'));
     final clip = ways.isNotEmpty && (m!.value(t!, 'clip', 0) ?? 0) > 0.5;

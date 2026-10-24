@@ -37,9 +37,9 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
     super.didChangeDependencies();
     final ws = WsScope.read(context);
     if (ws != _ws) {
-      _ws?.removeListener(_changed);
+      _ws?.on[WsAspect.playing]!.removeListener(_changed);
       _ws?.moment.removeListener(_changed);
-      _ws = ws..addListener(_changed);
+      _ws = ws..on[WsAspect.playing]!.addListener(_changed);
       ws.moment.addListener(_changed);
       if (ws.playing) SchedulerBinding.instance.addPostFrameCallback((_) => mounted ? _changed() : null);
     }
@@ -47,7 +47,7 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
 
   @override
   void dispose() {
-    _ws?.removeListener(_changed);
+    _ws?.on[WsAspect.playing]!.removeListener(_changed);
     _ws?.moment.removeListener(_changed);
     _ticker.dispose();
     _focus.dispose();
@@ -472,7 +472,7 @@ class _WsTimelineState extends State<WsTimeline> with SingleTickerProviderStateM
       _workIn = (from * Ws.fps).round();
       _workOut = (to * Ws.fps).round();
     }
-    final ws = WsScope.of(context);
+    final ws = WsScope.of(context, {WsAspect.document, WsAspect.picked});
     final sel = ws.selected, picks = ws.keys, lit = {...ws.many, ...wsMembersOf(ws)};   // (picked together, or moved by the relation picked: lit with it)
     final rows = <WtRow>[
       for (final l in ws.layers)
@@ -729,7 +729,10 @@ class _Header extends StatelessWidget {
               SizedBox(width: Shape.s(2)),
               _Btn(TpGlyph.stepBack, key: const ValueKey('ws-tl-back'), onTap: () => onStep(-1)),
               SizedBox(width: Shape.s(2)),
-              _Btn(ws.playing ? TpGlyph.pause : TpGlyph.play, key: const ValueKey('ws-tl-play'), width: Shape.z(34), on: ws.playing, rest: WsT.accent, onTap: onToggle),
+              ValueListenableBuilder<int>(   // (only the button follows play: the rows are not built again)
+                valueListenable: ws.on[WsAspect.playing]!,
+                builder: (_, _, _) => _Btn(ws.playing ? TpGlyph.pause : TpGlyph.play, key: const ValueKey('ws-tl-play'), width: Shape.z(34), on: ws.playing, rest: WsT.accent, onTap: onToggle),
+              ),
               SizedBox(width: Shape.s(2)),
               _Btn(TpGlyph.stepFwd, key: const ValueKey('ws-tl-fwd'), onTap: () => onStep(1)),
               SizedBox(width: Shape.s(2)),

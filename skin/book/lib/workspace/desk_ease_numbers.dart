@@ -41,7 +41,7 @@ class EaseNumbers extends StatelessWidget {
       ],
     );
     // (a kind with no seat here: each of its own numbers to scrub, as far as a hand takes it; said back as the kind and all of them)
-    final words = easeOther(e) ? e.name!.split(' ') : const <String>[], inside = WsScope.of(context).inside;
+    final words = easeOther(e) ? e.name!.split(' ') : const <String>[], inside = WsScope.of(context, {WsAspect.document}).inside;
     final own = words.isEmpty || inside == null ? const <(String, double, double)>[] : inside.wayNumbers(words.first);
     if (own.isNotEmpty) {
       final now = words.length == own.length + 1 ? [for (final w in words.skip(1)) double.tryParse(w) ?? 0] : [for (final n in own) (n.$2 + n.$3) / 2];

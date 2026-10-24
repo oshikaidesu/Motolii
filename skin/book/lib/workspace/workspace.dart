@@ -259,7 +259,7 @@ class _WorkspaceState extends State<Workspace> {
       ..notice = null
       ..onRender = _render
       ..onSize = (wide, high) {
-        if (inside.resize(wide, high)) _ws.reread();
+        _ws.after(inside.later('size', word: '$wide $high'));   // (without waiting: the document's picture then says it does not fit, and it is opened again)
       }
       ..refit = () {
         // (a stage is opened at a size: the document closed and opened again, at the moment it was at)
@@ -704,6 +704,7 @@ class _InspectorSeatState extends State<_InspectorSeat> {
     }
     return true;
   }
+  static const _hears = [WsAspect.document, WsAspect.picked, WsAspect.animating];   // (what the inspector shows: the picked thing's cards, Animate all)
   void _changed() => Timeline.timeSync('inspector at a moment', _changedNow); // (named in Flutter's timeline: frames_test TRACE)
   void _changedNow() {
     final ws = _ws!, now = _now(ws), was = _seen;
@@ -747,10 +748,13 @@ class _InspectorSeatState extends State<_InspectorSeat> {
     super.didChangeDependencies();
     final ws = WsScope.read(context);
     if (ws != _ws) {
-      _ws?.removeListener(_changed);
+      for (final a in _hears) {
+        _ws?.on[a]!.removeListener(_changed);
+        ws.on[a]!.addListener(_changed);
+      }
       _ws?.moment.removeListener(_changed);
       _ws?.seen.removeListener(_seenNow);
-      _ws = ws..addListener(_changed);
+      _ws = ws;
       ws.moment.addListener(_changed);   // (the playhead too: the inspector's numbers are at the moment)
       ws.seen.addListener(_seenNow);
       _seen = _now(ws);
@@ -760,7 +764,9 @@ class _InspectorSeatState extends State<_InspectorSeat> {
 
   @override
   void dispose() {
-    _ws?.removeListener(_changed);
+    for (final a in _hears) {
+      _ws?.on[a]!.removeListener(_changed);
+    }
     _ws?.moment.removeListener(_changed);
     _ws?.seen.removeListener(_seenNow);
     _settle?.cancel();

@@ -79,14 +79,19 @@ class _WsShelfState extends State<WsShelf> {
     super.didChangeDependencies();
     final ws = WsScope.read(context);
     if (ws != _ws) {
-      _ws?.removeListener(_later);
-      _ws = ws..addListener(_later);
+      for (final a in const [WsAspect.document, WsAspect.picked]) {
+        _ws?.on[a]!.removeListener(_later);
+        ws.on[a]!.addListener(_later);
+      }
+      _ws = ws;
     }
   }
 
   @override
   void dispose() {
-    _ws?.removeListener(_later);
+    for (final a in const [WsAspect.document, WsAspect.picked]) {
+      _ws?.on[a]!.removeListener(_later);
+    }
     _search.dispose();
     super.dispose();
   }

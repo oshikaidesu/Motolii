@@ -79,7 +79,7 @@ class DeskEaseState extends State<DeskEase> {
 
   @override
   Widget build(BuildContext context) {
-    final ws = WsScope.of(context), span = easeSpan(ws), store = eases[ws] ??= {}, id = spanId(span);
+    final ws = WsScope.of(context, {WsAspect.document, WsAspect.picked}), span = easeSpan(ws), store = eases[ws] ??= {}, id = spanId(span);
     if (ws.inside case final m?) {
       final at = span == null ? const <String, double>{} : keysAt(ws, span);
       var ease = _pending ?? (at.isEmpty ? easePreset('Linear') : heard(m.wayOf(int.parse(span!.layer.id), at.keys.first, at.values.first)));

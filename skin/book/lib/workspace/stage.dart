@@ -70,7 +70,8 @@ class _StageState extends State<_Stage> {
   @override
   Widget build(BuildContext context) {
     WsScope.frameOf(context);   // (the scene is at the playhead)
-    final ws = WsScope.of(context), scene = Ws.timed('stage scene', () => ArtScene.of(ws, camera: _camera));
+    WsScope.pictureOf(context);   // (and as the picture shown has it)
+    final ws = WsScope.of(context, {WsAspect.document, WsAspect.picked, WsAspect.stage, WsAspect.view}), scene = Ws.timed('stage scene', () => ArtScene.of(ws, camera: _camera));
     return DragTarget<VoidCallback>(   // (a tile of a shelf dropped here does what its double press does: Ableton's drop of a device on a track)
       onWillAcceptWithDetails: (_) => true,
       onAcceptWithDetails: (d) => d.data(),
@@ -291,7 +292,7 @@ class _Swatches extends StatelessWidget {
   const _Swatches();
   @override
   Widget build(BuildContext context) {
-    final ws = WsScope.of(context), p = _paintOf(ws);
+    final ws = WsScope.of(context, {WsAspect.document, WsAspect.picked}), p = _paintOf(ws);
     final fill = p.fill ?? WsT.body, stroke = p.stroke ?? WsT.line;
     return SizedBox(
     width: Shape.z(26),
@@ -474,7 +475,7 @@ class _Readout extends StatelessWidget {
   final WsLayer? layer;
   @override
   Widget build(BuildContext context) {
-    final l = layer, box = WsArt.boxOf(scene, l?.id), ws = WsScope.of(context);
+    final l = layer, box = WsArt.boxOf(scene, l?.id), ws = WsScope.of(context, {WsAspect.document, WsAspect.picked});
     if (l == null) return Text(ws.many.isEmpty ? 'Nothing selected' : '${ws.many.length} picked', style: T.label(Grey.g56));   // (picked together: said so, as the bar over the stage does)
     Widget pair(String k, String v) => Padding(
       padding: EdgeInsets.only(left: Shape.s(10)),

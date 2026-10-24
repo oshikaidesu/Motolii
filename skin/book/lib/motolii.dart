@@ -444,7 +444,7 @@ class Motolii {
 
   /// A hand takes hold, without waiting (the window's way: refused, its let go says why).
   void take(int thing) => later('hold', thing: thing);
-  bool carry(String by, double a, [double b = 0]) => _took(_with([by], (s) => _carry(_m, s[0], a, b)) != 0);
+  bool carry(String by, double a, [double b = 0]) => _with([by], (s) => _carry(_m, s[0], a, b)) != 0;   // (sent, not waited for: what it carries shows in the moment's picture)
   bool letGo(bool keep) => _took(_letGo(_m, keep ? 1 : 0) != 0);
 
   /// What a hand does to a value at a moment, by the document's own rules (motolii.h): the value changed there (a key

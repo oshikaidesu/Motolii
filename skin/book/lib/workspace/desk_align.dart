@@ -33,7 +33,7 @@ class DeskAlign extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final ws = WsScope.of(context), r = _seen(ws), pic = WsArt.comp;
+    final ws = WsScope.of(context, {WsAspect.document, WsAspect.picked}), r = _seen(ws), pic = WsArt.comp;
     bool at(int side) => r != null && switch (side) {
       0 => r.left.abs() < .5,
       1 => (r.center.dx - pic.width / 2).abs() < .5,

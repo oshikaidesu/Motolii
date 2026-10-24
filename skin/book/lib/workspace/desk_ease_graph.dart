@@ -69,7 +69,7 @@ class _EaseGraphState extends State<EaseGraph> {
           child: CustomPaint(
             size: box.biggest,
             painter: _GraphPainter(
-              ghosts: _ghosts(WsScope.of(context), widget.span),
+              ghosts: _ghosts(WsScope.of(context, {WsAspect.document}), widget.span),
               ease: widget.ease,
               from: widget.span?.from,
               to: widget.span?.to,

@@ -91,6 +91,26 @@ void main() {
       final kept = Directory('${Platform.environment['HOME']}/Library/Caches/Motolii/frames').listSync().where((f) => f.path.contains('/stage_')).length;
       debugPrint('FRAMES kept on disk after resting: $kept pictures (all documents)');
     }
+    if (const bool.fromEnvironment('REBUILDS')) {   // (what is built again in the first pictures of playing, each picture's beginnings)
+      final now = <Element>{};
+      final started = <String>[];
+      SchedulerBinding.instance.addPersistentFrameCallback((_) => now.clear());
+      debugOnRebuildDirtyWidget = (e, _) {
+        var under = false;
+        e.visitAncestorElements((a) => !(under = now.contains(a)));
+        if (!under) started.add('${e.widget.runtimeType}');
+        if (e is! InheritedElement) now.add(e);
+      };
+      ws.playing = true;
+      for (var i = 0; i < 15; i++) {
+        started.add('|${i + 1}');
+        await SchedulerBinding.instance.endOfFrame;
+      }
+      ws.playing = false;
+      debugOnRebuildDirtyWidget = null;
+      debugPrint('REBUILT FROM the first pictures of playing: ${started.join(' ')}');
+      await t.pump(const Duration(milliseconds: 200));
+    }
     ws.playing = true;
     if (const bool.fromEnvironment('TRACE_PLAYING')) { // (TRACE_PLAYING: Flutter's own timeline of the playing, every widget's build and the collector: heavy, a gigabyte and more)
       debugProfileLayoutsEnabled = true;
@@ -142,6 +162,16 @@ void main() {
     }
     var moved = 0;
     await traced('the playhead moved', (f) async => (ws.frame = (f * 3) % (Ws.fps * 8), moved++));
+    if (const bool.fromEnvironment('REBUILDS')) {   // (and play pressed and pressed again: what is built again for it)
+      final before = rebuilt.values.fold(0, (a, b) => a + b), rootsBefore = Map.of(roots);
+      for (var i = 0; i < 10; i++) {
+        ws.playing = !ws.playing;
+        await SchedulerBinding.instance.endOfFrame;
+      }
+      ws.playing = false;
+      debugPrint('REBUILDS play pressed: ${((rebuilt.values.fold(0, (a, b) => a + b) - before) / 10).toStringAsFixed(1)} widgets each time');
+      debugPrint('REBUILT FROM play pressed: ${[for (final e in roots.entries) if (e.value != (rootsBefore[e.key] ?? 0)) '${e.key} ${((e.value - (rootsBefore[e.key] ?? 0)) / 10).toStringAsFixed(1)}'].join(', ')}');
+    }
     debugOnRebuildDirtyWidget = null;
     if (roots.isNotEmpty) debugPrint('REBUILT FROM a move of the playhead: ${(roots.entries.toList()..sort((a, b) => b.value.compareTo(a.value))).take(30).map((e) => '${e.key} ${(e.value / moved).toStringAsFixed(1)}').join(', ')}');
     if (rebuilt.isNotEmpty) debugPrint('REBUILDS a move of the playhead: ${(rebuilt.entries.toList()..sort((a, b) => b.value.compareTo(a.value))).take(40).map((e) => '${e.key} ${(e.value / moved).toStringAsFixed(1)}').join(', ')}');
