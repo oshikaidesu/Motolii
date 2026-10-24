@@ -7,13 +7,11 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lab_book/motolii.dart';
-import 'package:lab_book/theme.dart';
 import 'package:lab_book/sets/inspector/inspector_parts.dart' show InspectorPanel, LinkMark, NumField;
 import 'package:lab_book/workspace/stage_view.dart';
-import 'package:lab_book/workspace/timeline.dart';
-import 'package:lab_book/workspace/workspace.dart' show Workspace, wsTransform;
+import 'package:lab_book/workspace/workspace.dart' show wsTransform;
 import 'package:lab_book/workspace/ws.dart';
-import 'package:lab_book/workspace/zoom.dart';
+import 'door.dart';
 
 final _built = File('$motoliiDir/out/libmotolii.dylib').existsSync();
 const _font = '$motoliiDir/out/arial_black.ttf';
@@ -29,18 +27,7 @@ const _handleFor = {
   'body': {'x', 'y', 'z'},
 };
 
-Future<Ws> _pump(WidgetTester t) async {
-  t.view.physicalSize = const Size(1600, 2400);
-  t.view.devicePixelRatio = 1;
-  t.binding.defaultBinaryMessenger.setMockMethodCallHandler(const MethodChannel('motolii/stage'), (_) async => -1);
-  t.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.menu, (_) async => null);
-  final doc = '${Directory.systemTemp.createTempSync('sweep').path}/sweep.motolii';
-  ColorTheme.at = '${Directory.systemTemp.path}/motolii_test_no_theme.xml'; // (the window's own skin and 100%, whatever the home folder keeps)
-  WsZoom.set(1, keep: false);
-  await t.pumpWidget(WidgetsApp(color: const Color(0xFF000000), builder: (c, _) => Workspace(document: doc)));
-  await t.pumpAndSettle();
-  return WsScope.read(t.element(find.byType(WsTimeline)));
-}
+Future<Ws> _pump(WidgetTester t) => openWorkspace(t, size: const Size(1600, 2400), document: '${Directory.systemTemp.createTempSync('sweep').path}/sweep.motolii');   // (the test door's own opening, tall: every card shows)
 
 /// Whether a knob is greyed by its row (a row that is off takes no hand: not a knob to work).
 bool _off(Element e) {

@@ -22,6 +22,7 @@ final insideBuilt = File('$motoliiDir/out/libmotolii.dylib').existsSync();
 Future<Ws> openWorkspace(WidgetTester t, {List<WsPane> extra = const [], List<DeskTool> tools = const [], String? document, Map<String, Object?> view = const {}, Size size = const Size(1600, 960)}) async {
   t.view.physicalSize = size;
   t.view.devicePixelRatio = 1;
+  await t.binding.setSurfaceSize(size);   // (the live binding lays out at its surface's size, not the view's: flutter_test_config.dart)
   t.binding.defaultBinaryMessenger.setMockMethodCallHandler(const MethodChannel('motolii/stage'), (_) async => -1);   // (no picture of the stage: the seat's texture is the runner's)
   t.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.menu, (_) async => null);   // (the system's menu bar is not there in a test)
   final doc = document ?? '${Directory.systemTemp.createTempSync('door').path}/door.motolii';
@@ -29,6 +30,10 @@ Future<Ws> openWorkspace(WidgetTester t, {List<WsPane> extra = const [], List<De
   ColorTheme.at = '${Directory.systemTemp.path}/motolii_test_no_theme.xml'; // (the window's own skin and 100%, whatever the home folder keeps)
   WsZoom.set(1, keep: false);
   await t.pumpWidget(WidgetsApp(color: const Color(0xFF000000), builder: (c, _) => Workspace(document: doc, extra: extra, tools: tools, view: view)));
+  for (var i = 0; i < 100 && find.byType(WsTimeline).evaluate().isEmpty; i++) {   // (the inside answers in real time, not the test's: Flutter's runAsync, as settled does)
+    await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+    await t.pump();
+  }
   await t.pumpAndSettle();
   return wsOf(t);
 }
@@ -40,7 +45,8 @@ String? openedDocument;
 /// a moment (when it was saved, a change refused just now, where the mouse is).
 List<String> windowWords(WidgetTester t) {
   // (nor where the mouse is: the stage's readout of it, under the hand of the moment)
-  final hud = find.descendant(of: find.byWidgetPredicate((w) => w.runtimeType.toString() == '_Hud'), matching: find.byType(Text)).evaluate().toSet();
+  // (nor how many times the window waited for the inside: a count of the session, not of the document)
+  final hud = find.descendant(of: find.byWidgetPredicate((w) => const {'_Hud', '_Waited'}.contains(w.runtimeType.toString())), matching: find.byType(Text)).evaluate().toSet();
   return [
     for (final e in find.byType(Text).evaluate())
       if (!hud.contains(e)) '${_rowOf(e)}${(e.widget as Text).data ?? (e.widget as Text).textSpan?.toPlainText() ?? ''}',

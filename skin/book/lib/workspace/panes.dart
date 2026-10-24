@@ -44,13 +44,15 @@ class _WsPanesState extends State<WsPanes> {
     final ws = WsScope.read(context);
     if (ws == _ws) return;
     _ws?.on[WsAspect.fronted]!.removeListener(_follow);
-    _ws = ws..on[WsAspect.fronted]!.addListener(_follow);
+    _ws?.on[WsAspect.shelf]!.removeListener(_follow);
+    _ws = ws..on[WsAspect.fronted]!.addListener(_follow)..on[WsAspect.shelf]!.addListener(_follow);   // (a shelf named by anyone, not only a tab: brought to the front)
     _shelf = ws.shelf;
   }
 
   @override
   void dispose() {
     _ws?.on[WsAspect.fronted]!.removeListener(_follow);
+    _ws?.on[WsAspect.shelf]!.removeListener(_follow);
     super.dispose();
   }
 

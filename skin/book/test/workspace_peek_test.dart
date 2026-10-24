@@ -25,7 +25,7 @@ void main() {
       await g.moveBy(Offset(stage.width * .02, 0));
       await t.pump(const Duration(milliseconds: 16));
     }
-    await t.pump(const Duration(milliseconds: 16));
+    await settled(t, ws);   // (the hand still down: what it told the inside done, in real time)
     final carried = _shown(t, 'v_x'), went = _gizmo(t);
     await g.up();
     await t.pumpAndSettle();

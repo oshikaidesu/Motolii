@@ -320,12 +320,12 @@ void main() {
 
   testWidgets('two whole-screen effects with a knob of one name are two values: Posterize\'s gamma and Boxinator\'s', (t) async {
     final ws = await _pump(t), m = ws.inside!;
-    String file(String name) => m.effects.firstWhere((e) => e.$2.contains(name)).$2;
-    expect(m.say(0, 'script', '${file('posterize')} ${file('boxinator')}'), isTrue, reason: m.trouble);
+    String file(String name) => m.effects.firstWhere((e) => e.$2.endsWith('/$name.fs')).$2;   // (Vidvox's own ISF files, by their own names)
+    expect(m.say(0, 'script', '${file('Posterize')} ${file('Boxinator')}'), isTrue, reason: m.trouble);
     final names = m.values(0).where((n) => n.endsWith('_gamma')).toList()..sort();
-    expect(names, ['js_isf_boxinator_gamma', 'js_isf_posterize_gamma']);
+    expect(names, ['js_Boxinator_gamma', 'js_Posterize_gamma']);
     expect([m.value(0, names[0], 0), m.value(0, names[1], 0)], [-.3, 1.25], reason: 'each as its own head says');
-    expect(m.set(0, 'js_isf_posterize_gamma', 1.5), isTrue, reason: m.trouble);
+    expect(m.set(0, 'js_Posterize_gamma', 1.5), isTrue, reason: m.trouble);
     expect([m.value(0, names[0], 0), m.value(0, names[1], 0)], [-.3, 1.5], reason: 'the other stays');
     await expectSameAfterReopen(t);
     await _close(t);
