@@ -70,6 +70,7 @@
 | AEの動きを物に渡す（3Dレイヤー、カメラ） | `filament/motion.h`、ThorVG へのパッチ | 今の土台で動く |
 | 間の定義9種類（過去の倉庫の写し） | `filament/interp.h` | 今の土台で動く（倉庫の式と差 0） |
 | 文書（SQLite に事実を並べる）、取り消し、キーと間 | `filament/doc.h`（順に読む9つ：`doc_kinds.h`・`doc_values.h`・`doc_relations.h`・`doc_place.h`・`doc_moment.h`・`doc_match.h`・`doc_edit.h`・`doc_recipes.h`・`doc_paths.h`） | 今の土台で動く。**形と名前を過去の倉庫に揃える途中** |
+| **断った理由の置き場**（`d.trouble`、窓へは `motolii_trouble`）：失敗した呼び出しは理由を1つの置き場に書き、呼んだ側が後で聞く。SQLite の `sqlite3_errmsg`（最後に失敗した呼び出しの理由を、C の口で返す）と同じ形。C の口の向こう（Flutter）へはこの形しか渡せないので、中だけ `std::expected` にしても出口は同じ。変更の後に絵を作り直す読み取りは、理由を書き換えないよう前の理由を残す（`filament/motolii_hand.h` の by_hand） | `filament/doc_*.h`、`filament/motolii_hand.h`、`filament/motolii.h` | 104か所、21本 |
 | 中身の C の口の Dart 側（手書きしない） | `skin/book/lib/motolii_bindings.dart`（Dart 公式の ffigen が `filament/motolii.h` から作る：`skin/book/ffigen.yaml`、`dart run ffigen --config ffigen.yaml`） | 今の土台で動く |
 | 500行以下に分けた部分（中身は元のまま、元のファイルが順に読む） | `filament/drawn_kept.h`・`drawn_made.h`・`drawn_flat.h`（drawn.h）、`filament/kit_stage.h`・`kit_things.h`・`kit_draw.h`（kit.h）、`filament/motolii_hand.h`・`motolii_calls.h`・`motolii_write.h`（motolii.mm） | 今の土台で動く |
 | 編集の口（C の関数）と、その客（行を読む道具、素の C）。エンジンを触る係は中の1本の糸で、時計も中身が持つ | `filament/motolii.h`、`motolii.mm`、`edit.cpp`、`edit.sh`、`filament/check/api.c` | 今の土台で動く |
