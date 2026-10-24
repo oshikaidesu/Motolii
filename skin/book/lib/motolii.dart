@@ -10,11 +10,12 @@ import 'dart:isolate';
 import 'package:ffi/ffi.dart';
 import 'package:flutter/foundation.dart' show debugPrint, setEquals;
 import 'package:flutter/services.dart';
+import 'package:lab_book/motolii_bindings.dart' as c;   // (the inside's calls as Dart's ffigen made them: ffigen.yaml)
 
 /// Where the inside lives. Override with --dart-define=MOTOLII_DIR=/path/to/motolii/filament.
 const motoliiDir = String.fromEnvironment('MOTOLII_DIR', defaultValue: '/Users/motolii_maker/motolii/filament');
 
-typedef _P = Pointer<Void>;
+typedef _P = Pointer<c.Motolii>;
 typedef _S = Pointer<Utf8>;
 
 /// A film's thumbnail, made by the inside's own call on another isolate (nothing of a document is handed over: the
@@ -27,7 +28,7 @@ Future<String?> _thumbnail(String lib, String film, [int step = 0, int steps = 1
   final png = '${folder.path}/${named.length > 150 ? named.substring(named.length - 150) : named}_${File(film).statSync().modified.millisecondsSinceEpoch}${step == 0 ? '' : '_$step'}.png';
   if (File(png).existsSync()) return png;
   final made = await Isolate.run(() {
-    final ask = DynamicLibrary.open(lib).lookupFunction<Int32 Function(Pointer<Utf8>, Pointer<Utf8>, Int32, Double), int Function(Pointer<Utf8>, Pointer<Utf8>, int, double)>('motolii_thumbnail_at');
+    final ask = c.MotoliiBindings(DynamicLibrary.open(lib)).motolii_thumbnail_at;
     final from = film.toNativeUtf8(), to = png.toNativeUtf8();
     final done = ask(from, to, 240, step / steps) != 0;
     malloc
@@ -41,6 +42,7 @@ Future<String?> _thumbnail(String lib, String film, [int step = 0, int steps = 1
 class Motolii {
   Motolii._(this._lib, this._m, this.libPath, this.home);
   final DynamicLibrary _lib;
+  late final _b = c.MotoliiBindings(_lib);   // (the inside's calls, made by Dart's ffigen from motolii.h: ffigen.yaml)
   final _P _m;
   final String libPath;
 
@@ -60,8 +62,8 @@ class Motolii {
       return null;
     }
     final home = '$dir/out/wgpu_kit'.toNativeUtf8(), doc = document.toNativeUtf8();
-    lib.lookupFunction<Void Function(_S), void Function(_S)>('motolii_home')(home);
-    final m = lib.lookupFunction<_P Function(_S, Int32, Int32), _P Function(_S, int, int)>('motolii_open')(doc, wide, high);
+    c.MotoliiBindings(lib).motolii_home(home);
+    final m = c.MotoliiBindings(lib).motolii_open(doc, wide, high);
     malloc
       ..free(home)
       ..free(doc);
@@ -73,9 +75,9 @@ class Motolii {
   // What the window reads of the document is the inside's two pictures, set down by its hand: the document's, made
   // again where it changes, and the moment's, made with each picture. The inside tells which is new through one
   // listener; nothing here asks the document itself, and nothing waits for the hand.
-  late final _picture = _lib.lookupFunction<Pointer<Utf8> Function(_P, Int32, Int64, Pointer<Int64>), Pointer<Utf8> Function(_P, int, int, Pointer<Int64>)>('motolii_picture');
-  late final _tell = _lib.lookupFunction<Void Function(_P, Pointer<NativeFunction<Void Function(Int32)>>), void Function(_P, Pointer<NativeFunction<Void Function(Int32)>>)>('motolii_tell');
-  NativeCallable<Void Function(Int32)>? _told;
+  late final _picture = _b.motolii_picture;
+  late final _tell = _b.motolii_tell;
+  NativeCallable<Void Function(Int)>? _told;
   Map<String, dynamic> _document = const {};   // (the document's own part)
   final _thing = <int, Map<String, dynamic>>{};   // (each thing's part, as of the version it came with)
   Map<String, dynamic> _moment = const {'thing': {}};
@@ -86,13 +88,13 @@ class Motolii {
   void Function({required bool document, required bool moment, required bool kept})? told;
 
   void _listen() {
-    _told = NativeCallable<Void Function(Int32)>.listener(_take);
+    _told = NativeCallable<Void Function(Int)>.listener(_take);
     _tell(_m, _told!.nativeFunction);
     _take(7);
   }
 
   void _take(int which) {
-    final version = malloc<Int64>();
+    final version = malloc<Long>();
     if (which & 1 != 0) {
       final p = _picture(_m, 1, _documentAt, version), all = jsonDecode(p.toDartString()) as Map<String, dynamic>;
       malloc.free(p);
@@ -142,44 +144,44 @@ class Motolii {
   /// Whether [at] is the moment the moment's picture is of (to a frame).
   bool _isNow(double at) => (((_moment['now'] as num?)?.toDouble() ?? -1) - at).abs() < .5 / rate;
 
-  late final _play = _lib.lookupFunction<Int32 Function(_P, Int32), int Function(_P, int)>('motolii_play');
-  late final _at = _lib.lookupFunction<Int32 Function(_P, Double), int Function(_P, double)>('motolii_at');
-  late final _add = _lib.lookupFunction<Int32 Function(_P, _S, _S), int Function(_P, _S, _S)>('motolii_add');
-  late final _remove = _lib.lookupFunction<Int32 Function(_P, Int32), int Function(_P, int)>('motolii_remove');
-  late final _set = _lib.lookupFunction<Int32 Function(_P, Int32, _S, Double), int Function(_P, int, _S, double)>('motolii_set');
-  late final _say = _lib.lookupFunction<Int32 Function(_P, Int32, _S, _S), int Function(_P, int, _S, _S)>('motolii_say');
-  late final _key = _lib.lookupFunction<Int32 Function(_P, Int32, _S, Double, Double), int Function(_P, int, _S, double, double)>('motolii_key');
-  late final _unkey = _lib.lookupFunction<Int32 Function(_P, Int32, _S, Double), int Function(_P, int, _S, double)>('motolii_unkey');
-  late final _way = _lib.lookupFunction<Int32 Function(_P, Int32, _S, Double, _S), int Function(_P, int, _S, double, _S)>('motolii_way');
-  late final _path3 = _lib.lookupFunction<Int32 Function(_P, Int32, Int32, Double, Double, Int32, Pointer<Double>), int Function(_P, int, int, double, double, int, Pointer<Double>)>('motolii_path3');
-  late final _keying = _lib.lookupFunction<Int32 Function(_P, Int32), int Function(_P, int)>('motolii_keying');
-  late final _hold = _lib.lookupFunction<Int32 Function(_P, Int32), int Function(_P, int)>('motolii_hold');
-  late final _carry = _lib.lookupFunction<Int32 Function(_P, _S, Double, Double), int Function(_P, _S, double, double)>('motolii_carry');
-  late final _letGo = _lib.lookupFunction<Int32 Function(_P, Int32), int Function(_P, int)>('motolii_let_go');
-  late final _put = _lib.lookupFunction<Int32 Function(_P, Int32, _S, Double, Double), int Function(_P, int, _S, double, double)>('motolii_put');
-  late final _keyHere = _lib.lookupFunction<Int32 Function(_P, Int32, _S, Double), int Function(_P, int, _S, double)>('motolii_key_here');
-  late final _size = _lib.lookupFunction<Int32 Function(_P, Int32, Int32), int Function(_P, int, int)>('motolii_size');
-  late final _raise = _lib.lookupFunction<Int32 Function(_P, Int32, Int32), int Function(_P, int, int)>('motolii_raise');
-  late final _stay = _lib.lookupFunction<Int32 Function(_P, Int32, _S, Double), int Function(_P, int, _S, double)>('motolii_stay');
-  late final _recipes = _lib.lookupFunction<_S Function(_P), _S Function(_P)>('motolii_recipes');
-  late final _make = _lib.lookupFunction<Int32 Function(_P, _S), int Function(_P, _S)>('motolii_make');
-  late final _effects = _lib.lookupFunction<_S Function(_P), _S Function(_P)>('motolii_effects');
-  late final _animators = _lib.lookupFunction<_S Function(_P), _S Function(_P)>('motolii_animators');
-  late final _spent = _lib.lookupFunction<_S Function(_P), _S Function(_P)>('motolii_spent');
-  late final _define = _lib.lookupFunction<Int32 Function(_P, _S, _S), int Function(_P, _S, _S)>('motolii_define');
-  late final _wayNumbers = _lib.lookupFunction<_S Function(_P, _S), _S Function(_P, _S)>('motolii_way_numbers');
-  late final _effect = _lib.lookupFunction<Int32 Function(_P, Int32, _S, Double), int Function(_P, int, _S, double)>('motolii_effect');
-  late final _wayAt = _lib.lookupFunction<Double Function(_P, _S, Double), double Function(_P, _S, double)>('motolii_way_at');
-  late final _kindOf = _lib.lookupFunction<_S Function(_S), _S Function(_S)>('motolii_kind_of');
-  late final _together = _lib.lookupFunction<Int32 Function(_P, Int32), int Function(_P, int)>('motolii_together');
-  late final _frames = _lib.lookupFunction<Uint64 Function(_P), int Function(_P)>('motolii_frames');
-  late final _keptRuns = _lib.lookupFunction<Pointer<Utf8> Function(_P), Pointer<Utf8> Function(_P)>('motolii_kept');
-  late final _undo = _lib.lookupFunction<Int32 Function(_P), int Function(_P)>('motolii_undo');
-  late final _redo = _lib.lookupFunction<Int32 Function(_P), int Function(_P)>('motolii_redo');
-  late final _trouble = _lib.lookupFunction<_S Function(_P), _S Function(_P)>('motolii_trouble');
-  late final _list = _lib.lookupFunction<_S Function(_P), _S Function(_P)>('motolii_list');
-  late final _still = _lib.lookupFunction<Int32 Function(_P, _S), int Function(_P, _S)>('motolii_still');
-  late final _close = _lib.lookupFunction<Void Function(_P), void Function(_P)>('motolii_close');
+  late final _play = _b.motolii_play;
+  late final _at = _b.motolii_at;
+  late final _add = _b.motolii_add;
+  late final _remove = _b.motolii_remove;
+  late final _set = _b.motolii_set;
+  late final _say = _b.motolii_say;
+  late final _key = _b.motolii_key;
+  late final _unkey = _b.motolii_unkey;
+  late final _way = _b.motolii_way;
+  late final _path3 = _b.motolii_path3;
+  late final _keying = _b.motolii_keying;
+  late final _hold = _b.motolii_hold;
+  late final _carry = _b.motolii_carry;
+  late final _letGo = _b.motolii_let_go;
+  late final _put = _b.motolii_put;
+  late final _keyHere = _b.motolii_key_here;
+  late final _size = _b.motolii_size;
+  late final _raise = _b.motolii_raise;
+  late final _stay = _b.motolii_stay;
+  late final _recipes = _b.motolii_recipes;
+  late final _make = _b.motolii_make;
+  late final _effects = _b.motolii_effects;
+  late final _animators = _b.motolii_animators;
+  late final _spent = _b.motolii_spent;
+  late final _define = _b.motolii_define;
+  late final _wayNumbers = _b.motolii_way_numbers;
+  late final _effect = _b.motolii_effect;
+  late final _wayAt = _b.motolii_way_at;
+  late final _kindOf = _b.motolii_kind_of;
+  late final _together = _b.motolii_together;
+  late final _frames = _b.motolii_frames;
+  late final _keptRuns = _b.motolii_kept;
+  late final _undo = _b.motolii_undo;
+  late final _redo = _b.motolii_redo;
+  late final _trouble = _b.motolii_trouble;
+  late final _list = _b.motolii_list;
+  late final _still = _b.motolii_still;
+  late final _close = _b.motolii_close;
 
   T _with<T>(List<String> words, T Function(List<_S>) call) {
     final s = [for (final w in words) w.toNativeUtf8()];
@@ -238,9 +240,9 @@ class Motolii {
   Future<bool> write(String mp4) {
     final lib = libPath, at = _m.address;
     return Isolate.run(() {
-      final ask = DynamicLibrary.open(lib).lookupFunction<Int32 Function(Pointer<Void>, Pointer<Utf8>), int Function(Pointer<Void>, Pointer<Utf8>)>('motolii_write');
+      final ask = c.MotoliiBindings(DynamicLibrary.open(lib)).motolii_write;
       final to = mp4.toNativeUtf8();
-      final done = ask(Pointer<Void>.fromAddress(at), to) != 0;
+      final done = ask(_P.fromAddress(at), to) != 0;
       malloc.free(to);
       return done;
     });
@@ -250,8 +252,8 @@ class Motolii {
   Future<List<double?>> shownAt(List<(int, String, double)> asks) {
     final lib = libPath, at = _m.address;
     return Isolate.run(() {
-      final l = DynamicLibrary.open(lib), m = Pointer<Void>.fromAddress(at);
-      final shows = l.lookupFunction<Int32 Function(Pointer<Void>, Int32, Pointer<Utf8>, Double, Pointer<Double>), int Function(Pointer<Void>, int, Pointer<Utf8>, double, Pointer<Double>)>('motolii_shows');
+      final l = DynamicLibrary.open(lib), m = _P.fromAddress(at);
+      final shows = c.MotoliiBindings(l).motolii_shows;
       final out = malloc<Double>();
       final all = [
         for (final (t, n, moment) in asks)
@@ -270,7 +272,7 @@ class Motolii {
   Future<List<String>> setting(List<String> fonts, String words) {
     final lib = libPath;
     return Isolate.run(() {
-      final ask = DynamicLibrary.open(lib).lookupFunction<Int32 Function(Pointer<Utf8>, Pointer<Utf8>), int Function(Pointer<Utf8>, Pointer<Utf8>)>('motolii_sets');
+      final ask = c.MotoliiBindings(DynamicLibrary.open(lib)).motolii_sets;
       final said = words.toNativeUtf8(), out = <String>[];
       for (final f in fonts) {
         final file = f.toNativeUtf8();
@@ -286,7 +288,7 @@ class Motolii {
   double get now => (_moment['now'] as num?)?.toDouble() ?? 0;
   double get drawnAt => now;
   double get seconds => (_document['seconds'] as num?)?.toDouble() ?? 0;
-  late final _rate = _lib.lookupFunction<Int32 Function(_P), int Function(_P)>('motolii_rate');
+  late final _rate = _b.motolii_rate;
 
   /// How many pictures a second a film written of the document has: what a frame is.
   int get rate => _rate(_m);
@@ -307,7 +309,7 @@ class Motolii {
   bool set(int thing, String name, double number) => _took(_with([name], (s) => _set(_m, thing, s[0], number)) != 0);
   bool say(int thing, String name, String word) => _took(_with([name, word], (s) => _say(_m, thing, s[0], s[1])) != 0);
   bool key(int thing, String name, double at, double number) => _took(_with([name], (s) => _key(_m, thing, s[0], at, number)) != 0);
-  late final _keyMany = _lib.lookupFunction<Int32 Function(_P, Int32, _S, Int32, Pointer<Double>, Pointer<Double>), int Function(_P, int, _S, int, Pointer<Double>, Pointer<Double>)>('motolii_key_many');
+  late final _keyMany = _b.motolii_key_many;
 
   /// Many keys of one value in one call and one step (a baked motion, beats): [at] and [numbers] side by side.
   bool keyMany(int thing, String name, List<double> at, List<double> numbers) {
@@ -393,7 +395,7 @@ class Motolii {
   /// such thing. Asked once when its values change, for a small preview that then plays by itself (motolii_path).
   Future<List<double>?> path(int thing, {int copy = 0, double from = 0, required double to, int n = 60}) => _ask((l, m) {
     final out = malloc<Double>(4 * n);
-    final got = l.lookupFunction<Int32 Function(_P, Int32, Int32, Double, Double, Int32, Pointer<Double>), int Function(_P, int, int, double, double, int, Pointer<Double>)>('motolii_path')(m, thing, copy, from, to, n, out);
+    final got = c.MotoliiBindings(l).motolii_path(m, thing, copy, from, to, n, out);
     final p = [for (var i = 0; i < 4 * got; i++) out[i]];
     malloc.free(out);
     return got > 0 ? p : null;
@@ -402,7 +404,7 @@ class Motolii {
   /// A question of the inside (skin/BRIDGE.md Q): asked on another isolate, the window does not wait for its answer.
   Future<T> _ask<T>(T Function(DynamicLibrary lib, _P m) ask) {
     final lib = libPath, at = _m.address;
-    return Isolate.run(() => ask(DynamicLibrary.open(lib), Pointer<Void>.fromAddress(at)));
+    return Isolate.run(() => ask(DynamicLibrary.open(lib), _P.fromAddress(at)));
   }
   /// The same in the round: four numbers a moment, where it is (x, y, z, units of the stage) and how large (motolii_path3).
   List<double>? path3(int thing, {int copy = 0, double from = 0, required double to, int n = 24}) {
@@ -422,7 +424,7 @@ class Motolii {
 
   /// Whether every change a hand makes is keyed now (Animate all).
   bool get keyingNow => _keying(_m, -1) != 0;
-  late final _shaping = _lib.lookupFunction<_S Function(_P), _S Function(_P)>('motolii_shaping');
+  late final _shaping = _b.motolii_shaping;
 
   /// What the document's steps changed since last asked (asking forgets them): whether a thing came or went, and each
   /// value changed as (thing, name), from each step's own changeset.
@@ -461,9 +463,9 @@ class Motolii {
   /// The size of the stage the document is open on; and the size it is to be when it is next opened (close, open again).
   (int, int) get size => switch (_document['size']) { [final int w, final int h] => (w, h), _ => (0, 0) };
   bool resize(int wide, int high) => _took(_size(_m, wide, high) != 0);
-  late final _work = _lib.lookupFunction<Int32 Function(_P, Double, Double), int Function(_P, double, double)>('motolii_work');
-  late final _mark = _lib.lookupFunction<Int32 Function(_P, Double, _S), int Function(_P, double, _S)>('motolii_mark');
-  late final _sequence = _lib.lookupFunction<Int32 Function(_P, Double), int Function(_P, double)>('motolii_sequence');
+  late final _work = _b.motolii_work;
+  late final _mark = _b.motolii_mark;
+  late final _sequence = _b.motolii_sequence;
 
   /// Sequence Layers: the things that have a length and stand on their own, from the front, one after another
   /// ([overlap] seconds over each other), on frames, their keys with them; one step ([trouble] says why not).
@@ -473,7 +475,7 @@ class Motolii {
   (double, double) get work => switch (_document['work']) { [final num a, final num b] => (a.toDouble(), b.toDouble()), _ => (0.0, 0.0) };
 
   bool setWork(double from, double to) => _took(_work(_m, from, to) != 0);
-  late final _loopIs = _lib.lookupFunction<Int32 Function(_P, Int32), int Function(_P, int)>('motolii_loop');
+  late final _loopIs = _b.motolii_loop;
 
   /// Whether play goes round the work area (or stops at its end).
   bool get looping => _loopIs(_m, -1) != 0;
@@ -491,8 +493,8 @@ class Motolii {
   Future<List<double>> loudness(int thing) {
     final lib = libPath, at = _m.address;
     return Isolate.run(() {
-      final ask = DynamicLibrary.open(lib).lookupFunction<Int32 Function(Pointer<Void>, Int32, Pointer<Float>, Int32), int Function(Pointer<Void>, int, Pointer<Float>, int)>('motolii_loudness');
-      final m = Pointer<Void>.fromAddress(at), n = ask(m, thing, nullptr, 0), out = malloc<Float>(n < 1 ? 1 : n);
+      final ask = c.MotoliiBindings(DynamicLibrary.open(lib)).motolii_loudness;
+      final m = _P.fromAddress(at), n = ask(m, thing, nullptr, 0), out = malloc<Float>(n < 1 ? 1 : n);
       final got = ask(m, thing, out, n), all = [for (var i = 0; i < got && i < n; i++) out[i].toDouble()];
       malloc.free(out);
       return all;
@@ -504,7 +506,7 @@ class Motolii {
   /// (dB; -100 silent or not shown). null: its sound not read yet ([loudness] reads it); empty: no sound.
   Future<List<double>?> loudnessOver(int thing, double from, double to, int n) => _ask((l, m) {
     final out = malloc<Float>(n < 1 ? 1 : n);
-    final got = l.lookupFunction<Int32 Function(_P, Int32, Double, Double, Int32, Pointer<Float>), int Function(_P, int, double, double, int, Pointer<Float>)>('motolii_loudness_over')(m, thing, from, to, n, out);
+    final got = c.MotoliiBindings(l).motolii_loudness_over(m, thing, from, to, n, out);
     final all = got < 0 ? null : [for (var i = 0; i < got; i++) out[i].toDouble()];
     malloc.free(out);
     return all;
@@ -513,13 +515,13 @@ class Motolii {
   /// Where a film's sound strikes (grows [rise] dB louder at once): the document's moments where it shows them, or
   /// [own] the film's own seconds. Asked once its loudness has been read ([loudness]).
   Future<List<double>> strikes(int thing, double rise, {bool own = false}) => _ask((l, m) {
-    final ask = l.lookupFunction<Int32 Function(_P, Int32, Double, Int32, Pointer<Double>, Int32), int Function(_P, int, double, int, Pointer<Double>, int)>('motolii_strikes');
+    final ask = c.MotoliiBindings(l).motolii_strikes;
     final n = ask(m, thing, rise, own ? 1 : 0, nullptr, 0), out = malloc<Double>(n < 1 ? 1 : n);
     final got = ask(m, thing, rise, own ? 1 : 0, out, n), all = [for (var i = 0; i < got && i < n; i++) out[i]];
     malloc.free(out);
     return all;
   });
-  late final _guide = _lib.lookupFunction<Int32 Function(_P, _S, Double, Int32), int Function(_P, _S, double, int)>('motolii_guide');
+  late final _guide = _b.motolii_guide;
 
   /// The guides: lines across the picture, 'x' upright and 'y' level, at so many points from its left or top.
   List<(String, double)> get guides => [
@@ -619,18 +621,18 @@ class Motolii {
 
   /// The window's thread watched: while on, a change it waits for, or a read that waits on the document over 2 ms, is
   /// kept; [broken] says each, one to a line ('' none). Turned on, what was kept is forgotten.
-  late final _watch = _lib.lookupFunction<Void Function(_P, Int32), void Function(_P, int)>('motolii_watch');
-  late final _broken = _lib.lookupFunction<_S Function(_P), _S Function(_P)>('motolii_broken');
+  late final _watch = _b.motolii_watch;
+  late final _broken = _b.motolii_broken;
   void watch(bool on) => _watch(_m, on ? 1 : 0);
   String get broken => _broken(_m).toDartString();
-  late final _brokenCount = _lib.lookupFunction<Int64 Function(_P), int Function(_P)>('motolii_broken_count', isLeaf: true);
+  late final _brokenCount = _b.motolii_broken_count;
   int get brokenCount => _brokenCount(_m);   // (how many times since watched: read without waiting)
 
   /// A film's first picture, small, as a .png file (null: none could be made). Made once and on another isolate: the
   /// window does not wait.
   Future<String?> thumbnail(String film) => _thumbnails[film] ??= _thumbnail(libPath, film);
 
-  late final _fontTags = _lib.lookupFunction<_S Function(_S), _S Function(_S)>('motolii_font_tags');
+  late final _fontTags = _b.motolii_font_tags;
   final _fontKinds = <String, Set<String>>{};
 
   /// A font file's kinds as CoreText reads them (serif, sans, script, mono, bold, light…): the system's own, not guessed from a name.
@@ -705,9 +707,9 @@ class Motolii {
     final f = (((_of(thing)['reading'] as Map<String, dynamic>?)?[name] as String?) ?? '').split(' ');
     return f.length < 2 ? (1.0, 0.0) : (double.parse(f[0]), double.parse(f[1]));
   }
-  late final _later = _lib.lookupFunction<Int32 Function(_P, _S, Int32, _S, _S, Double), int Function(_P, _S, int, _S, _S, double)>('motolii_later');
-  late final _answer = _lib.lookupFunction<Int32 Function(_P, Int32), int Function(_P, int)>('motolii_answer');
-  late final _answerWhy = _lib.lookupFunction<_S Function(_P), _S Function(_P)>('motolii_answer_why');
+  late final _later = _b.motolii_later;
+  late final _answer = _b.motolii_answer;
+  late final _answerWhy = _b.motolii_answer_why;
 
   /// A change asked without waiting for the inside's hand (say, set, let_go, undo, redo, together): queued in order behind
   /// every other, its ticket said at once ([answer] says when it is done).
