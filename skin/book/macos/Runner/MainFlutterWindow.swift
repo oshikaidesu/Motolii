@@ -21,14 +21,14 @@ class MainFlutterWindow: NSWindow {
 
 /// A library's own picture as a Flutter texture, without a copy: the library draws each frame into a pixel buffer on
 /// the GPU, and its last finished buffer is handed to Flutter as it is. Flutter is told whenever another is finished.
-/// front: the last finished buffer, retained (Flutter releases it); frames: how many have been finished.
+/// front: the last finished buffer, retained (Flutter releases it); frames: how many have been finished. Whoever knows
+/// another is finished says so (check).
 final class LiveTexture: NSObject, FlutterTexture {
   private let front: () -> UnsafeMutableRawPointer?
   private let frames: () -> UInt64
   private let textures: FlutterTextureRegistry
   private(set) var id: Int64 = -1
   private var seen: UInt64 = 0
-  private var timer: Timer?
 
   init(textures: FlutterTextureRegistry, front: @escaping () -> UnsafeMutableRawPointer?, frames: @escaping () -> UInt64) {
     self.front = front
@@ -36,19 +36,17 @@ final class LiveTexture: NSObject, FlutterTexture {
     self.textures = textures
     super.init()
     id = textures.register(self)
-    timer = Timer.scheduledTimer(withTimeInterval: 1.0 / 120.0, repeats: true) { [weak self] _ in
-      guard let me = self else { return }
-      let now = me.frames()
-      if now != me.seen {
-        me.seen = now
-        me.textures.textureFrameAvailable(me.id)
-      }
+  }
+
+  func check() {
+    let now = frames()
+    if now != seen {
+      seen = now
+      textures.textureFrameAvailable(id)
     }
-    RunLoop.main.add(timer!, forMode: .common)
   }
 
   func stop() {
-    timer?.invalidate()
     textures.unregisterTexture(id)
   }
 
@@ -69,6 +67,7 @@ enum GlassTexture {
 
   private static var shared: LiveTexture?
   private static var start: StartFn?
+  private static var timer: Timer?   // (the glass study keeps its own clock: it says nothing when a picture is finished)
 
   static func attach(to controller: FlutterViewController) {
     let registrar = controller.registrar(forPlugin: "MotoliiGlass")
@@ -88,6 +87,8 @@ enum GlassTexture {
         for (name, value) in a["env"] as? [String: String] ?? [:] { setEnv(name, value) }
         _ = start?(base, Int32(a["width"] as? Int ?? 1920), Int32(a["height"] as? Int ?? 1080))
         shared = LiveTexture(textures: registrar.textures, front: { front() }, frames: { frames() })
+        timer = Timer.scheduledTimer(withTimeInterval: 1.0 / 120.0, repeats: true) { _ in shared?.check() }
+        RunLoop.main.add(timer!, forMode: .common)
       }
       result(shared?.id ?? -1)
     }
@@ -100,9 +101,11 @@ enum GlassTexture {
 /// Channel "motolii/stage", method "start" {lib, handle (the Motolii* as a number), and which picture: front and frames,
 /// the names of its two calls ("motolii_front" and "motolii_frames", the stage's own, unless told)} -> texture id, or -1.
 /// Each picture its own texture: the stage's, and a card's small one of a thing alone ("motolii_solo_front").
+/// The inside tells when a picture is finished (motolii_finished, on its own thread); Flutter is told then, on the main thread.
 enum StageTexture {
   private typealias FrontFn = @convention(c) (UnsafeMutableRawPointer?) -> UnsafeMutableRawPointer?
   private typealias FramesFn = @convention(c) (UnsafeMutableRawPointer?) -> UInt64
+  private typealias FinishedFn = @convention(c) (UnsafeMutableRawPointer?, @convention(c) (UnsafeMutableRawPointer?) -> Void, UnsafeMutableRawPointer?) -> Void
 
   private static var shared: [String: LiveTexture] = [:]
 
@@ -120,6 +123,9 @@ enum StageTexture {
       if let h = dlopen(lib, RTLD_NOW), let f = dlsym(h, frontName), let n = dlsym(h, framesName) {
         let front = unsafeBitCast(f, to: FrontFn.self), frames = unsafeBitCast(n, to: FramesFn.self), inside = UnsafeMutableRawPointer(bitPattern: handle)
         shared[frontName] = LiveTexture(textures: registrar.textures, front: { front(inside) }, frames: { frames(inside) })
+        if let t = dlsym(h, "motolii_finished") {
+          unsafeBitCast(t, to: FinishedFn.self)(inside, { _ in DispatchQueue.main.async { StageTexture.shared.values.forEach { $0.check() } } }, nil)
+        }
       }
       result(shared[frontName]?.id ?? -1)
     }

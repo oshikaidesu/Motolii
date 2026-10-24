@@ -8,6 +8,7 @@
 #include "sound.h"
 #include <CoreText/CoreText.h>
 #include "motolii.h"
+#include "rendering/FrameScheduler.hpp"   // (third_party/thermion_frame: the screen's own beat)
 #include <set>
 #include <sstream>
 #include <atomic>
@@ -35,6 +36,10 @@ struct Motolii {
     std::thread hand;
     std::mutex asked_lock;
     std::condition_variable asked_now;
+    std::unique_ptr<thermion::FrameScheduler> beat;   // (the screen's beat, Thermion's: a picture is drawn on each; CVDisplayLink, DXGI on Windows)
+    uint64_t beats = 0, drew_at = 0;                  // (beats come, and the one the last picture was drawn on: under asked_lock)
+    std::atomic<void (*)(void*)> shown{nullptr};      // (motolii_finished: told when a picture is finished, to tell Flutter)
+    std::atomic<void*> shown_with{nullptr};
     std::deque<std::function<void()>> asked;
     std::map<std::string, std::shared_ptr<std::function<void()>>> latest;
     int tickets = 0;                                             // (motolii_later: the last ticket given)
@@ -193,19 +198,28 @@ static void motolii_hand(Motolii* m, std::string document, int wide, int high, s
     }
     opened->set_value(ok);
     if (!ok) return;
-    auto last = std::chrono::steady_clock::now(), due = last, drawn = last;
+    auto last = std::chrono::steady_clock::now();
+    m->beat.reset(thermion::FrameScheduler::create(RATE));
+    m->beat->setTargetFps(RATE);
+    m->beat->start([](uint64_t, void* p) {
+        auto* m = static_cast<Motolii*>(p);
+        { std::lock_guard<std::mutex> hold(m->asked_lock); ++m->beats; }
+        m->asked_now.notify_one();
+    }, m);
     for (;;) {
     try {   // (a throw in the hand's round, a Filament precondition, say: its words said, the round given up: the hand goes on, as the window's own does)
 
         std::deque<std::function<void()>> todo;
+        uint64_t beat;
         {
             std::unique_lock<std::mutex> hold(m->asked_lock);
             const bool goes = m->live && (m->playing || m->changed), begun = m->live && m->live->pending;   // (begun: a picture the GPU has not finished)
             if (begun) m->asked_now.wait_for(hold, std::chrono::milliseconds(1), [m] { return !m->asked.empty() || m->closing; });   // (looked at again a moment later)
-            else if (goes) m->asked_now.wait_until(hold, due, [m] { return !m->asked.empty() || m->closing; });
+            else if (goes) m->asked_now.wait(hold, [m] { return !m->asked.empty() || m->closing || m->beats != m->drew_at; });
             else m->asked_now.wait_for(hold, std::chrono::milliseconds(m->ahead ? 15 : 500), [m] { return !m->asked.empty() || m->closing || (m->live && (m->playing || m->changed)); });   // (twice a second: a file written over; often, while frames ahead are kept)
             if (m->closing) break;
             todo.swap(m->asked);
+            beat = m->beats;
         }
         if (todo.empty() && m->live && !m->playing && !m->changed) {
             std::lock_guard<std::recursive_timed_mutex> holding(m->d->lock);
@@ -227,7 +241,10 @@ static void motolii_hand(Motolii* m, std::string document, int wide, int high, s
         }
         picture_tell(m);   // (the document let go: the window told what is new)
         if (!m->playing) for (auto& [who, h] : m->heard) if (h.on) gst_element_set_state(h.bin, GST_STATE_PAUSED), h.on = false;   // (the stage stopped: so does its sound)
+        const auto finished = [m] { return m->live ? m->live->frames.load() + (m->live->desk ? m->live->desk->frames.load() : 0) : 0ull; };
+        const auto had = finished();
         const bool ready = !m->live || live_ready(*m->s, m->live);   // (the picture begun before, offered once the GPU has finished it)
+        if (finished() != had) if (auto tell = m->shown.load()) tell(m->shown_with.load());   // (and Flutter told: Thermion's markTextureFrameAvailable)
         const auto t = std::chrono::steady_clock::now();
         if (!todo.empty() || m->playing || m->changed) m->stirred = t;
         m->ahead = false;
@@ -243,12 +260,8 @@ static void motolii_hand(Motolii* m, std::string document, int wide, int high, s
                 m->ahead = stage_kept_one(m->kept, *m->d, *m->s, RATE, m->budget) || m->ahead;
             }
         }
-        // (asked something: a shell that writes reads next, so the picture waits a moment for it rather than it for a
-        //  whole picture; never more than two pictures' time since the last was drawn. Not on the hand's own beat: the
-        //  shell asks on its screen's, and two beats a little apart left out a picture now and then)
-        if (!todo.empty()) due = std::min(std::max(drawn + std::chrono::milliseconds(8), t + std::chrono::milliseconds(3)), drawn + std::chrono::milliseconds(33));
         if (m->live && !m->playing && m->scale != 1.0 && !std::getenv("MOTOLII_SCALE")) stage_scale(m), m->changed = true;   // (stopped: the last picture drawn again full size, for looking)
-        if (!m->live || t < due || !(m->playing || m->changed) || !ready) { last = m->playing || !ready ? last : t; continue; }   // (not ready: no other picture is begun till it is)
+        if (!m->live || beat == m->drew_at || !(m->playing || m->changed) || !ready) { last = m->playing || !ready ? last : t; continue; }   // (not ready: no other picture is begun till it is)
         if (m->playing) {   // (time goes on by the clock, and round again at the document's end)
             std::lock_guard<std::recursive_timed_mutex> holding(m->d->lock);
             const double runs = doc_seconds(*m->d), on = m->now + std::chrono::duration<double>(t - last).count();
@@ -258,6 +271,7 @@ static void motolii_hand(Motolii* m, std::string document, int wide, int high, s
             else m->now = on >= to || on < from ? from : on;
         }
         last = t;
+        { std::lock_guard<std::mutex> hold(m->asked_lock); m->drew_at = beat; }
         m->s->by_clock = m->playing;
         std::vector<std::function<void()>> films;   // (what the moment asks of the films: done once the document is let go)
         std::map<const void*, Stage::Sound> sounds;
@@ -286,7 +300,7 @@ static void motolii_hand(Motolii* m, std::string document, int wide, int high, s
             stage_kept_fresh(m->kept, *m->d, *m->s, m->revision.load(), RATE);
         }
         if (!m->playing || !stage_kept_show(m->kept, *m->s, m->live, m->now, RATE)) live_draw(*m->s, m->live);   // (played: a picture kept is put on the stage, not drawn)
-        drawn = std::chrono::steady_clock::now();
+        const auto drawn = std::chrono::steady_clock::now();
         if (++m->judged % 30 == 0) {   // (how long the GPU took for its last pictures, against the time each may have)
             std::vector<int64_t> took;
             for (const auto& f : m->s->renderer->getFrameInfoHistory(30))
@@ -301,7 +315,6 @@ static void motolii_hand(Motolii* m, std::string document, int wide, int high, s
         m->spent[2] += std::chrono::duration<double>(told - t).count(), m->many[2]++;
         m->spent[3] += std::chrono::duration<double>(drawn - told).count(), m->many[3]++;
         m->changed = false;
-        due = std::max(due + std::chrono::microseconds(16667), t);   // (sixty a second)
         } catch (const std::exception& e) {
         std::fprintf(stderr, "motolii: the hand's round threw: %s\n", e.what());
         m->trouble = std::string("the hand's round threw: ") + e.what();
@@ -329,6 +342,7 @@ void motolii_close(Motolii* m) {
     { std::lock_guard<std::mutex> hold(m->asked_lock); m->closing = true; }
     m->asked_now.notify_one();
     m->hand.join();
+    if (m->beat) m->beat->stop();
     if (m->d) sqlite3_close(m->d->file);
 }
 const char* motolii_trouble(Motolii* m) { return m->trouble.empty() ? m->d->trouble.c_str() : m->trouble.c_str(); }
@@ -346,6 +360,7 @@ static int live_is(Motolii* m) { return m->live || (m->live = live_open(*m->s)) 
 int motolii_live(Motolii* m) { return by_hand(m, [m] { return live_is(m); }); }
 void* motolii_front(Motolii* m) { return m->live ? live_front(m->live) : nullptr; }
 unsigned long long motolii_frames(Motolii* m) { return m->live ? m->live->frames.load() : 0; }
+void motolii_finished(Motolii* m, void (*tell)(void*), void* with) { m->shown_with = with; m->shown = tell; }
 const char* motolii_kept(Motolii* m) {
     static thread_local std::string runs;   // (the asker's own copy: the hand may tell it again meanwhile)
     std::lock_guard<std::mutex> hold(m->kept.runsLock);

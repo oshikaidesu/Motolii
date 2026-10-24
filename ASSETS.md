@@ -20,6 +20,7 @@
 | 何 | どこ | 状態 |
 |---|---|---|
 | OS ごとに違う所だけの口（絵の置き場3枚と「描き終わった」の知らせ） | `filament/glass_door.h` | 前の土台で動いた |
+| 画面の拍子（Mac は CVDisplayLink、Win は DXGI WaitForVBlank、遅れた拍子は捨てる）：手はこの拍子で1枚描き、描き終わりを窓に知らせる | `filament/third_party/thermion_frame`（Thermion から丸ごと、Apache-2.0） | Mac で動いた、Win は未確認 |
 | その Mac 版：Filament の出口を CVPixelBuffer に差し替える（Metal） | `filament/glass_door_mac.mm` | 前の土台で動いた |
 | C の顔：描く係を始める、数を1個渡す、最後の絵を渡す（`glass_start`、`glass_env`、`glass_front`、`glass_frames`） | `filament/glass_live.h`、`glass_live.mm` | 前の土台で動いた |
 | ライブラリにするビルド（`out/libglass_live.dylib`） | `filament/build_live.sh` | 前の土台で動いた |

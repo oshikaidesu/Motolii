@@ -202,6 +202,9 @@ int motolii_pick(Motolii* m, int thing, int hover);   /* the thing picked in the
 void* motolii_desk_front(Motolii* m);
 unsigned long long motolii_desk_frames(Motolii* m);
 unsigned long long motolii_frames(Motolii* m);
+/* Told on the hand's thread whenever a picture (the stage's or the desk's) is finished: `tell(with)`; then motolii_front
+   or motolii_desk_front has it (Thermion's markTextureFrameAvailable: the shell asks nothing on a clock of its own). */
+void motolii_finished(Motolii* m, void (*tell)(void*), void* with);
 /* The stage's pictures kept on disk for playing (stage_kept.h): as stretches of frames at motolii_rate, "from to from to"
    ("" none), and how many times that has changed (read without waiting, as motolii_revision). */
 const char* motolii_kept(Motolii* m);
