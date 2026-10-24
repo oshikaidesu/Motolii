@@ -23,7 +23,6 @@ enum DockG {
   blur,
   distort,
   colour,
-  stylize,
   copies,
   paths,
   text,
@@ -33,7 +32,6 @@ enum DockG {
   shape,
   camera,
   nullObj,
-  solid,
   adjust,
   group,
   rect,
@@ -203,13 +201,6 @@ class _P extends CustomPainter {
       case DockG.colour:
         cv.drawCircle(p(.5, .5), w * .36, st);
         cv.drawArc(r(.14, .14, .72, .72), -math.pi / 2, math.pi, true, fl);
-      case DockG.stylize:
-        for (var i = 0; i < 3; i++) {
-          for (var j = 0; j < 3; j++) {
-            if ((i + j).isEven) cv.drawRect(r(.14 + i * .24, .14 + j * .24, .24, .24), fl);
-          }
-        }
-        cv.drawRect(r(.14, .14, .72, .72), st..strokeWidth = math.max(1, w * .06));
       case DockG.copies:
         cv.drawRRect(rr(.12, .12, .46, .46), st);
         cv.drawRRect(rr(.27, .27, .46, .46), st);
@@ -248,8 +239,6 @@ class _P extends CustomPainter {
         cv.drawRect(r(.18, .18, .64, .64), st);
         cv.drawLine(p(.5, .3), p(.5, .7), st);
         cv.drawLine(p(.3, .5), p(.7, .5), st);
-      case DockG.solid:
-        cv.drawRect(r(.16, .16, .68, .68), fl);
       case DockG.adjust:
         cv.drawRect(r(.16, .16, .68, .68), st);
         cv.drawPath(poly(const [Offset(.16, .84), Offset(.84, .16), Offset(.84, .84)]), fl);
