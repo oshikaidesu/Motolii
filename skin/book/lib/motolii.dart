@@ -8,6 +8,7 @@ import 'dart:io';
 import 'dart:isolate';
 
 import 'package:ffi/ffi.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 
 /// Where the inside lives. Override with --dart-define=MOTOLII_DIR=/path/to/motolii/filament.
@@ -266,7 +267,8 @@ class Motolii {
   });
   /// A value as the stage shows it (what a relation or behaviour makes of it), and whether one drives it; null: none.
   late final _shows = _lib.lookupFunction<Int32 Function(_P, Int32, _S, Double, Pointer<Double>), int Function(_P, int, _S, double, Pointer<Double>)>('motolii_shows');
-  (double, bool)? shows(int thing, String name, double at) => _with([name], (s) {
+  (double, bool)? shows(int thing, String name, double at) => _asked(('shows', thing, name), _atMoment, _atMoment, () => _showsAt(thing, name, at));   // (the hand busy: what it was a picture ago, asked again)
+  (double, bool)? _showsAt(int thing, String name, double at) => _with([name], (s) {
     final out = malloc<Double>();
     final got = _shows(_m, thing, s[0], at, out), v = out.value;
     malloc.free(out);
@@ -578,11 +580,11 @@ class Motolii {
 
   /// How a value is shown to a hand, as the inside says (null: as its range says): its look, the unit it is read in,
   /// its name in plain words, the span its knob covers (in the document's units) and the fold it lies in.
-  Shown? shown(String name) => _shownOf.putIfAbsent(name, () {
+  Shown? shown(String name) => _shownOf.containsKey(name) ? _shownOf[name] as Shown? : _asked(name, _shownOf, _shownOf, () {
     final f = _with([name], (s) => _shown(_m, s[0]).toDartString()).split('\t');
     return f.length < 6 ? null : Shown(f[0], f[1], f[2], double.parse(f[3]), double.parse(f[4]), f[5].isEmpty ? null : f[5]);
   });
-  final _shownOf = <String, Shown?>{};
+  final _shownOf = <Object, Object?>{};
 
   /// A number value's lowest and highest (null: the thing has no such number).
   (double, double)? range(int thing, String name) => _kept(('range', thing, name), () => _rangeNow(thing, name));
@@ -640,7 +642,7 @@ class Motolii {
   }
 
   // Asked without waiting (motolii_dont_wait): the hand busy with the document, what was read before is shown and it is
-  // asked again a picture later ([again]); never read before, waited for, once.
+  // asked again a picture later ([again]); never read before, empty while a picture is built, else (a hand's one ask) waited for, once.
   late final _dontWait = _lib.lookupFunction<Void Function(_P, Int32), void Function(_P, int)>('motolii_dont_wait', isLeaf: true);
   late final _refused = _lib.lookupFunction<Int32 Function(_P), int Function(_P)>('motolii_refused', isLeaf: true);
   T _asked<T>(Object key, Map<Object, Object?> into, Map<Object, Object?> was, T Function() ask) {
@@ -651,6 +653,10 @@ class Motolii {
     if (was.containsKey(key)) {
       again?.call();
       return was[key] as T;
+    }
+    if (SchedulerBinding.instance.schedulerPhase == SchedulerPhase.persistentCallbacks) {   // (a picture being built: shown empty this once, not kept, and asked again the next)
+      again?.call();
+      return v;
     }
     return into[key] = ask();
   }
@@ -732,11 +738,11 @@ class Motolii {
 
   /// How a hand reads a thing's value, as the inside says it: shown = value x times + from (places in points of the
   /// picture from its top left, shares in hundredths...). Asked once a thing and a name.
-  (double, double) reading(int thing, String name) => _readings.putIfAbsent('$thing $name', () {
+  (double, double) reading(int thing, String name) => (_readings['$thing $name'] as (double, double)?) ?? _asked('$thing $name', _readings, _readings, () {
     final f = _with([name], (s) => _reading(_m, thing, s[0]).toDartString()).split(' ');
-    return (double.parse(f[0]), double.parse(f[1]));
+    return f.length < 2 ? (1.0, 0.0) : (double.parse(f[0]), double.parse(f[1]));   // (put off: as it is, for this one picture)
   });
-  final _readings = <String, (double, double)>{};
+  final _readings = <Object, Object?>{};
   late final _later = _lib.lookupFunction<Int32 Function(_P, _S, Int32, _S, _S, Double), int Function(_P, _S, int, _S, _S, double)>('motolii_later');
   late final _answer = _lib.lookupFunction<Int32 Function(_P, Int32), int Function(_P, int)>('motolii_answer');
   late final _answerWhy = _lib.lookupFunction<_S Function(_P), _S Function(_P)>('motolii_answer_why');
