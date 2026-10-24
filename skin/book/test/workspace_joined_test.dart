@@ -499,16 +499,15 @@ void main() {
       ..select('$text')
       ..shelf = 'Fonts';
     await t.pumpAndSettle();
-    final georgia = find.text('Andale Mono');
-    await t.scrollUntilVisible(georgia, 300, scrollable: find.descendant(of: find.byType(FontsShelf), matching: find.byType(Scrollable)).first, maxScrolls: 200);
+    final georgia = find.textContaining('Andale Mono');   // (its row says its tags beside: 'Andale Mono  ·  mono')
+    await t.scrollUntilVisible(georgia, 300, scrollable: find.descendant(of: find.byType(FontsShelf), matching: find.byType(Scrollable)).last, maxScrolls: 200);
     expect(georgia, findsWidgets, reason: 'a font file of the system is on the shelf');
     await t.pumpAndSettle();
-    await t.tap(georgia.first);
-    await t.pumpAndSettle();
-    await t.tap(find.text('Apply'));
-    await t.pumpAndSettle();
+    await doubleTap(t, georgia.first);   // (one press picks, two put it on: f052e7e)
+    await settled(t, ws);
     expect(m.word(text, 'file'), endsWith('/Andale Mono.ttf'), reason: m.trouble);
-    expect(find.text('In use'), findsOneWidget);
+    final chips = [for (final e in find.descendant(of: find.byType(FontsShelf), matching: find.byType(Text)).evaluate()) (e.widget as Text).data];
+    expect(chips[chips.indexOf('Used') + 1], '1', reason: 'the shelf counts the one in use (its Used tag)');
     expect(m.undo(), isTrue);
     expect(m.word(text, 'file'), _font);
     expect(t.takeException(), isNull);
@@ -735,7 +734,7 @@ void main() {
     await _close(t);
   }, skip: !_built);
 
-  testWidgets('Create: Repeater and Radial lay the picked thing out in copies, as one step', (t) async {
+  testWidgets('Create: the Repeater lays the picked thing out in copies, as one step (one tile, its numbers continuous: K5)', (t) async {
     final ws = await _pump(t), m = ws.inside!;
     final star = m.add('shape', 'star');
     ws
@@ -743,32 +742,16 @@ void main() {
       ..select('$star')
       ..shelf = 'Create';
     await t.pumpAndSettle();
-    Future<void> search(String what) async {
-      await t.enterText(find.descendant(of: find.byType(DockSearch), matching: find.byType(EditableText)), what);
-      await t.pumpAndSettle();
-    }
-
-    await search('Radial');
-    final tile = find.descendant(of: find.byType(CreateShelf), matching: find.text('Radial')).first;
+    await t.enterText(find.descendant(of: find.byType(DockSearch), matching: find.byType(EditableText)), 'Repeat');
+    await t.pumpAndSettle();
+    final tile = find.descendant(of: find.byType(CreateShelf), matching: find.text('Repeater')).first;
     await seen(t, tile);
-    await t.tap(tile);
-    await t.pump(const Duration(milliseconds: 400)); // (two presses would make it: one is known when the second does not come)
-    await t.pumpAndSettle();
-    await t.tap(find.text('Lay out'));
-    await t.pumpAndSettle();
-    expect([m.value(star, 'copies', 0), m.value(star, 'copy_rotate', 0)], [8, 45], reason: m.trouble);
+    await doubleTap(t, tile);   // (two presses put it on: f052e7e)
+    await settled(t, ws);
+    expect([m.value(star, 'copies', 0), m.value(star, 'copy_x', 0), m.value(star, 'copy_size', 0)], [5, 1.3, .92], reason: m.trouble);
     expect(m.undo() && m.value(star, 'copies', 0) == 1, isTrue, reason: 'one step');
     expect(m.set(star, 'copies', 1001), isFalse, reason: 'a thousand at most');
-    await search('Grid');
-    final grid = find.descendant(of: find.byType(CreateShelf), matching: find.text('Grid')).first;
-    await seen(t, grid);
-    await t.tap(grid);
-    await t.pump(const Duration(milliseconds: 400)); // (two presses would make it: one is known when the second does not come)
-    await t.pumpAndSettle();
-    await t.tap(find.text('Lay out'));
-    await t.pumpAndSettle();
-    expect([m.value(star, 'copies', 0), m.value(star, 'copy_columns', 0)], [9, 3], reason: m.trouble);
-    expect(t.takeException(), isNull, reason: 'an anchor outside the box is named Custom');
+    expect(t.takeException(), isNull);
     await expectSameAfterReopen(t);
     await _close(t);
   }, skip: !_built);
@@ -1223,6 +1206,7 @@ void main() {
     expect(m.value(0, 'bloom', 0), greaterThan(0), reason: 'the stage glows: ${ws.notice}');
     expect(m.undo() && m.value(0, 'bloom', 0) == 0, isTrue, reason: 'one step');
     // (a colour on a card: its link aims the Colors shelf at it; a swatch picked there is set to it)
+    await seen(t, find.byKey(const ValueKey('link:colors:v_background')));
     await t.tap(find.byKey(const ValueKey('link:colors:v_background')));
     await t.pumpAndSettle();
     expect(ws.aim, 'background');

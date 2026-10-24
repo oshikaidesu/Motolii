@@ -299,7 +299,7 @@ class Ws extends ChangeNotifier {
   void route(String to) {
     switch (to) {
       case final s when s.startsWith('Browser'):
-        _shelf = s.split('›').last.trim();
+        shelf = s.split('›').last.trim();   // (told as any shelf named is: the panes bring it to the front)
     }
     _tell(WsAspect.route);
   }

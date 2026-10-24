@@ -175,7 +175,7 @@ class DockSection extends StatelessWidget {
               style: T.micro(Grey.g91).copyWith(fontWeight: FontWeight.w700, letterSpacing: .9),
             ),
           ),
-          ?trailing,
+          if (trailing case final w?) Flexible(child: FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerRight, child: w)),   // (drawn smaller in a narrow shelf, never cut)
           if (count != null) Text('$count', style: T.value(Grey.g56).copyWith(fontSize: T.px(10))),
         ],
       ),
