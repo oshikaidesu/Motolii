@@ -70,6 +70,7 @@
 | AEの動きを物に渡す（3Dレイヤー、カメラ） | `filament/motion.h`、ThorVG へのパッチ | 今の土台で動く |
 | 間の定義9種類（過去の倉庫の写し） | `filament/interp.h` | 今の土台で動く（倉庫の式と差 0） |
 | 文書（SQLite に事実を並べる）、取り消し、キーと間 | `filament/doc.h`（順に読む9つ：`doc_kinds.h`・`doc_values.h`・`doc_relations.h`・`doc_place.h`・`doc_moment.h`・`doc_match.h`・`doc_edit.h`・`doc_recipes.h`・`doc_paths.h`） | 今の土台で動く。**形と名前を過去の倉庫に揃える途中** |
+| 500行以下に分けた部分（中身は元のまま、元のファイルが順に読む） | `filament/drawn_kept.h`・`drawn_made.h`・`drawn_flat.h`（drawn.h）、`filament/kit_stage.h`・`kit_things.h`・`kit_draw.h`（kit.h）、`filament/motolii_hand.h`・`motolii_calls.h`・`motolii_write.h`（motolii.mm） | 今の土台で動く |
 | 編集の口（C の関数）と、その客（行を読む道具、素の C）。エンジンを触る係は中の1本の糸で、時計も中身が持つ | `filament/motolii.h`、`motolii.mm`、`edit.cpp`、`edit.sh`、`filament/check/api.c` | 今の土台で動く |
 | 編集の口のライブラリだけを作る（`out/libmotolii.dylib`、約27秒。edit.sh は確認用の道具まで作り直す。作ったらアプリを立て直す） | `filament/build_lib.sh` | 今の土台で動く |
 | **物理の試し：踊る猫が玉を弾く（2D、Box2D）、ハリネズミのボールプール（3D、Jolt）**。緑を抜いた動画の輪郭を毎コマ OpenCV で焼き、玉をその輪郭に当てて、キーに焼いて書類にする | `filament/catball/` | 今の土台で動く（Box2D 3.1.1 は Homebrew。どの物理に決めるかは TASKS の 0 と 8） |
