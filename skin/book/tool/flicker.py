@@ -20,8 +20,18 @@ def pictures(film):
     return [raw[i:i + n] for i in range(0, len(raw) - n + 1, n)]
 
 
-def apart(a, b):   # (how unlike two pictures are: the share of their points that moved by more than a little)
-    return sum(abs(x - y) > 24 for x, y in zip(a, b)) / len(a)
+TX, TY = 8, 5   # (the screen in 8 x 5 pieces, each looked at alone: a thin line gone wrong in one panel is much of its piece)
+
+
+def apart(a, b):   # (how unlike two pictures are, piece by piece: the share of each piece's points that moved by more than a little)
+    pw, ph = W // TX, H // TY
+    out = [0] * (TX * TY)
+    for y in range(H):
+        row, ty = y * W, min(y // ph, TY - 1) * TX
+        for x in range(W):
+            if abs(a[row + x] - b[row + x]) > 24:
+                out[ty + min(x // pw, TX - 1)] += 1
+    return [n / (pw * ph) for n in out]
 
 
 def main():
@@ -35,18 +45,20 @@ def main():
         if all_[i] != all_[kept[-1]]:
             kept.append(i)
     seen = [all_[i] for i in kept]
+    step = [apart(seen[k], seen[k + 1]) for k in range(len(seen) - 1)]
     out_by = []
-    for k in range(1, len(seen) - 1):
-        out_by.append((min(apart(seen[k - 1], seen[k]), apart(seen[k], seen[k + 1])) - apart(seen[k - 1], seen[k + 1]), k))
+    for k in range(1, len(seen) - 1):   # (the piece most unlike both sides, though they are like each other)
+        over = apart(seen[k - 1], seen[k + 1])
+        out_by.append((max(min(p, n) - o for p, n, o in zip(step[k - 1], step[k], over)), k))
     if not out_by:
         return print('too short')
     usual = statistics.median(abs(o) for o, _ in out_by)
-    found = [(o, k) for o, k in out_by if o > max(0.02, 8 * usual)]   # (a share of the screen unlike both sides, far past the usual)
+    found = [(o, k) for o, k in out_by if o > max(0.1, 8 * usual)]   # (a tenth of a piece unlike both sides, far past the usual)
     print(f'{len(all_)} pictures recorded, {len(seen)} different; usual {usual:.4f}; flickers {len(found)}')
     os.makedirs(out, exist_ok=True)
     for o, k in sorted(found, reverse=True):
         n = kept[k]
-        print(f'  picture {n}: {o:.3f} of the screen unlike both sides')
+        print(f'  picture {n}: {o:.3f} of a piece of the screen unlike both sides')
         sel = '+'.join(f'eq(n,{kept[j]})' for j in (k - 1, k, k + 1))
         subprocess.run(['ffmpeg', '-hide_banner', '-loglevel', 'error', '-y', '-i', film, '-vf', f"fps=60,select='{sel}',scale=980:-1,tile=3x1",   # (counted as pictures() counts them: 60 a second)
                         '-frames:v', '1', f'{out}/flicker_{n:05d}.png'], check=True)
