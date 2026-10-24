@@ -85,8 +85,7 @@ void main() {
         final before = _all(m, at), shown = wsTransform(ws, ws.selected);
         var moved = <String>{};
         for (final by in const [Offset(40, -40), Offset(-80, 80)]) {
-          await t.drag(knob, by);
-          await t.pumpAndSettle();
+          await handDrag(t, t.getCenter(knob), by);   // (in steps, as a hand drags: in real time one jump is not always taken)
           moved = _moved(before, _all(m, at));
           if (moved.isNotEmpty) break;
         }

@@ -5,7 +5,7 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
-import '../motolii.dart' show Motolii;
+import '../motolii.dart' show Motolii, MotoliiReads;
 import 'ws.dart';
 
 /// The poster's own inks: flat, saturated, opaque. They belong to the picture, never to the chrome.
