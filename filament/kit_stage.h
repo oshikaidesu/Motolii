@@ -129,12 +129,7 @@ struct Stage {
              bool picked = false, hovered = false, knob = true; double pick[8] = {}, hover[8] = {}; } desk;
     std::function<void()> over;   // drawn last, over all of them (a whole-screen effect: screen.h)
     std::function<void()> lastly;   // and after everything, in the same frame (the desk: its stage's picture placed on it, live.h)
-    // A picture laid over that reads what is under it (doc.h doc_blend_way): before it, the picture so far is copied to
-    // `backdrop` for its material to read. drawnInto: the picture the views draw into (live.h, screen.h); none (the
-    // screen, a written film): they draw into `composed` instead while one reads, and it is put on the screen at the end.
-    Texture* drawnInto = nullptr;
-    Texture* backdrop = nullptr; RenderTarget* backdropTarget = nullptr;
-    std::function<void(Texture*, RenderTarget*)> copyDoor;   // (a picture copied as it is: screen.h gives it; to none, the screen)
+    Texture* drawnInto = nullptr;   // the picture the views draw into (live.h, screen.h); none: the screen
     RenderTarget* out = nullptr;   // where the picture goes at last (none: the screen; the window's live picture: live.h)
 };
 

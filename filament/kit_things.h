@@ -431,16 +431,6 @@ static bool begins(Stage& s) {
 
 // All the pictures of one frame, the helper pictures first (between Filament's beginFrame and endFrame). Every way
 // of drawing the stage goes through here.
-// The picture of what lies under a picture that reads it, as large as what the views draw into (the stage's, or the
-// desk's): made when the moment is told (doc.h), so the looks that read it are told it before the frame begins.
-static Texture* backdrop_as(Stage& s, uint32_t w, uint32_t h) {
-    if (s.backdrop && s.backdrop->getWidth() == w && s.backdrop->getHeight() == h) return s.backdrop;
-    if (s.backdropTarget) s.engine->destroy(s.backdropTarget);
-    if (s.backdrop) s.engine->destroy(s.backdrop);
-    s.backdrop = Texture::Builder().width(w).height(h).levels(1).usage(Texture::Usage::COLOR_ATTACHMENT | Texture::Usage::SAMPLEABLE).format(Texture::InternalFormat::RGBA8).build(*s.engine);
-    s.backdropTarget = RenderTarget::Builder().texture(RenderTarget::AttachmentPoint::COLOR, s.backdrop).build(*s.engine);
-    return s.backdrop;
-}
 static void pictures_of(Stage& s) {
     for (Stage::Matte& m : s.mattes) {
         s.renderer->render(m.view);

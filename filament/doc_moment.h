@@ -1,7 +1,6 @@
 // doc_moment.h: part of doc.h (the stage told a moment). Read only through doc.h.
 static void doc_moment(Doc& d, double now) {
     Stage& s = *d.stage;
-    screen_copier(s);   // (once: the kit copies what lies under a picture that reads it)
     d.halves.clear(), d.talls.clear();   // (made again since: a flat thing's sheet is as large as its picture now)
     const std::vector<int> lie = doc_laid(d);
     // Each thing as it is now, in the order they lie: whether it is on, and whether it is a solid thing.

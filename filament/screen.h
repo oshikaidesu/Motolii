@@ -238,9 +238,6 @@ static door::Screen* screen_copy(Stage& s, ScreenStack& st) {   // (a picture pu
 // stage, its whole-screen effects drawn as a written film has them: live.h).
 static void screen_place(Stage& s, Texture* from, RenderTarget* to, uint32_t w, uint32_t h, const int* at);
 // The kit's copier (a picture as it is, to another or to the screen): what lies under a picture that reads it.
-static void screen_copier(Stage& s) {
-    if (!s.copyDoor) s.copyDoor = [&s](Texture* from, RenderTarget* to) { screen_place(s, from, to, from->getWidth(), from->getHeight(), nullptr); };
-}
 static void screen_place(Stage& s, Texture* from, RenderTarget* to, uint32_t w, uint32_t h, const int* at) {
     static std::map<Engine*, door::Screen*> copies;
     door::Screen*& copy = copies[s.engine];
