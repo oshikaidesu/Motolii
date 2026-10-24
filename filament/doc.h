@@ -1748,13 +1748,13 @@ static void doc_moment(Doc& d, double now) {
         if (runOf[i] < 0) continue;
         const int run = runOf[i];
         Doc::Shown& t = *lies[i].shown;
-        Scene* into = run <= base ? s.scene : layer_view(s, (size_t)(run - base - 1), !lies[i].solid)->getScene();
+        Scene* into = s.scene;   // (one view: every run in the stage's own scene, kept in order by Filament's channels)
         Scene* const was = t.scene ? t.scene : s.scene;
         if (was != into) {   // (into the scene of its run; one not seen goes in when it is seen)
             if (t.in) doc_entities(s, t, [&](utils::Entity e) { was->remove(e), into->addEntity(e); });
             t.scene = into;
         }
-        if (const int channel = run <= base ? run : 2; channel != t.channel) {
+        if (const int channel = std::min(run, 7); channel != t.channel) {
             doc_parts(s, t, [&](RenderableManager& faces, RenderableManager::Instance one) { faces.setChannel(one, (uint8_t)channel); });
             t.channel = channel;
         }
@@ -1765,22 +1765,22 @@ static void doc_moment(Doc& d, double now) {
             });
         t.run = run, t.lies = (int)i;
     }
-    s.layered = sorts.size() > (size_t)base + 1 ? sorts.size() - (size_t)base - 1 : 0;
-    {   // (a glow: Filament's bloom on the glowing thing's own picture (a run of its own), all of it bright or not, so strong)
-        std::vector<float> glows(s.layered, 0.f);
+    s.layered = 0;   // (no views laid over: each run after the first is a channel of the stage's own view, its depth cleared, so it lies whole over the runs before)
+    {   // (a glow: Filament's own, a thing past 1 bright taken up by the stage's bloom (its threshold), as emissive is)
+        float most = 0.f;
         for (size_t i = 0; i < lies.size(); ++i)
-            if (runOf[i] > base && !doc_word(d, lies[i].thing, "glow").empty()) glows[(size_t)(runOf[i] - base - 1)] = (float)doc_number(d, lies[i].thing, "glow_opacity", now, 1);
-        for (size_t k = 0; k < s.layered; ++k) {
-            View::BloomOptions one = s.layers[k]->getBloomOptions();   // (each made as its run was laid, above)
-            one.enabled = glows[k] > 0.f, one.threshold = false, one.strength = std::clamp(0.35f * glows[k], 0.f, 1.f);
-            s.layers[k]->setBloomOptions(one);
+            if (runOf[i] >= 0 && !doc_word(d, lies[i].thing, "glow").empty()) most = std::max(most, (float)doc_number(d, lies[i].thing, "glow_opacity", now, 1));
+        if (most > 0.f) {
+            View::BloomOptions glow = s.view->getBloomOptions();
+            glow.enabled = true, glow.threshold = true, glow.strength = std::max(glow.strength, std::clamp(0.35f * most, 0.f, 1.f));
+            s.view->setBloomOptions(glow);
         }
     }
     s.backdropBefore.assign(s.layered, 0);
     for (size_t k = 0; k < s.layered; ++k) s.backdropBefore[k] = sorts[k + (size_t)base + 1] == 2 || (sorts[k + (size_t)base + 1] == 3 && k + (size_t)base + 1 < runReads.size() && runReads[k + (size_t)base + 1]);
     s.layerDraw.assign(s.layered, nullptr);
     for (size_t i = 0; i < lies.size(); ++i)   // (those with effects of their own: their run drawn by their effects)
-        if (runOf[i] > base && sorts[(size_t)runOf[i]] == 3) {
+        if (runOf[i] > base && sorts[(size_t)runOf[i]] == 3 && (size_t)(runOf[i] - base - 1) < s.layerDraw.size()) {   // (none while every run is in the one view)
             const int thing = lies[i].thing;
             ScreenStack& st = d.fx[thing];
             thing_effects(s, st, doc_fx_join(doc_fx_list(d, thing)));
@@ -2091,7 +2091,7 @@ static void doc_moment(Doc& d, double now) {
                 }
             }
         }
-        const float shine = (float)doc_number(d, thing, "emissive", now, 0);   // (how much it lights itself now: a flat thing's sheet, a solid's own faces)
+        const float shine = (float)doc_number(d, thing, "emissive", now, 0) + (doc_word(d, thing, "glow").empty() ? 0.f : 0.35f * (float)doc_number(d, thing, "glow_opacity", now, 1));   // (how much it lights itself now: a flat thing's sheet, a solid's own faces; a glow past 1, for the bloom)
         doc_looks(s, t, [&](MaterialInstance* look) { if (look->getMaterial()->hasParameter("glowing")) look->setParameter("glowing", shine); });
     }
     // Soft shadows (Filament's PCSS) on the stage's own view while any light that is on says so; else its crisp ones.
