@@ -1,0 +1,31 @@
+// solid_image.mat: a thing's picture, its effects on, laid on the faces of a solid by their UVs (solid_three.cpp,
+// thing_fx.h). Filament's own sample materials/texturedLit.mat (Apache-2.0: baseColor from the texture at getUV0()),
+// lit as floor_lit.mat is; built once more unlit (kit_wgpu.sh: -TSHADE=unlit -DFLAT), its colour as
+// materials/image.mat gives it. Clear where the picture is (masked), both sides drawn: a tunnel's inside, a hollow
+// box's. Its UVs as three.js's, v up, as Filament reads a picture it drew (its origin bottom left).
+material {
+    name : SolidImage,
+    requires : [
+        uv0
+    ],
+    shadingModel : ${SHADE},
+    blending : masked,
+    doubleSided : true,
+    parameters : [
+        { type : sampler2d, name : image },
+        { type : float, name : roughness },
+        { type : float, name : metallic }
+    ]
+}
+
+fragment {
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        highp vec2 uv = getUV0();
+        material.baseColor = max(texture(materialParams_image, uv), 0.0);
+#if !defined(FLAT)
+        material.roughness = materialParams.roughness;
+        material.metallic = materialParams.metallic;
+#endif
+    }
+}

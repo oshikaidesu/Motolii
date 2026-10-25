@@ -1,0 +1,33 @@
+add picture ../../fx_sample.jpg
+add text ../arial_black.ttf
+say 2 text MOTOLII
+say 2 fill ffffff
+add picture ../../fx_sample.jpg
+add light sun
+set 1 duration 4
+set 2 duration 4
+set 3 duration 4
+set 4 duration 4
+set 1 x -2
+set 1 size 0.75
+set 2 size 0.32
+set 2 y -0.05
+set 3 x 2
+set 3 size 0.75
+say 1 fx ../../solids/Cube.js
+say 2 fx ../../solids/Raster_Extrude.js
+say 3 fx ../../solids/Heart.js
+set 2 js_Raster_Extrude_depth 0.6
+set 2 rotate_x -20
+set 1 rotate_x -15
+set 3 rotate_x 10
+key 1 rotate_y 0 0
+key 1 rotate_y 4 360
+key 2 rotate_y 0 -40
+key 2 rotate_y 2 40
+key 2 rotate_y 4 -40
+key 3 rotate_y 0 0
+key 3 rotate_y 4 -360
+at 1
+still out/turn_1s.png
+write out/turn.mp4

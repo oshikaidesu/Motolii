@@ -5,6 +5,7 @@
 // #1818, #7676, #3784). The functions as they were before the one view (git bf0d4c2, screen.h), less what laid the
 // picture over the screen.
 #pragma once
+#include "solid_three.h"
 static char doc_thor_letter(const std::string& w);
 static void thing_effects(Stage& s, ScreenStack& st, const std::string& files) {
     if (st.files == files) return;
@@ -15,6 +16,7 @@ static void thing_effects(Stage& s, ScreenStack& st, const std::string& files) {
         if (file == "none") continue;
         if (const char k = doc_thor_letter(file)) { st.steps.push_back(k); continue; }   // (one of ThorVG's own: drawn by ThorVG, in its place)
         if (std::filesystem::path(file).extension() == ".mjs") continue;   // (a splat effect: in the cloud's own look, points.h)
+        if (solid_is(file)) continue;   // (a solid's shape: its picture laid on it, not an effect on its picture: thing_fx_solid)
         ScreenFx*& made = st.made[file];
         if (!made) {
             made = new ScreenFx;
@@ -75,7 +77,7 @@ static void thing_effects_draw(Stage& s, ScreenStack& st, View* v, const ScreenN
             static const char* const names[3] = {"thing shot", "thing between 0", "thing between 1"};
             like.label = {names[n], WGPU_STRLEN};
             void* made = st.device[n++] = wgpuDeviceCreateTexture((WGPUDevice)door::device(s.engine), &like);
-            return Texture::Builder().width(w).height(h).levels(1).format(Texture::InternalFormat::RGBA8).usage(Texture::Usage::COLOR_ATTACHMENT | Texture::Usage::SAMPLEABLE).import((intptr_t)made).build(*s.engine);
+            return Texture::Builder().width(w).height(h).levels(1).format(Texture::InternalFormat::RGBA8).usage(Texture::Usage::COLOR_ATTACHMENT | Texture::Usage::SAMPLEABLE | Texture::Usage::BLIT_SRC).import((intptr_t)made).build(*s.engine);
         };
         st.shot = picture();
         st.depth = Texture::Builder().width(w).height(h).levels(1).usage(Texture::Usage::DEPTH_ATTACHMENT).format(Texture::InternalFormat::DEPTH24).build(*s.engine);
@@ -117,6 +119,17 @@ struct ThingFx {
     utils::Entity eye;                     // (its own camera's: told the stage's each picture, as samples/rendertarget.cpp's offscreen camera is)
     Camera* camera = nullptr;
     double box[4] = {0, 0, 0, 0};          // (where it is seen, in points of the stage: left, top, right, bottom)
+    // (its picture on a solid's faces, when its fx names a shape (solids/*.js): the shape's file, what the solid was last
+    //  made of, the solid and its look; for one made of its outline, its coverage as last read back, and how many times)
+    std::string solidFile, solidSaid, solidAs;   // (solidAs: its look's material)
+    std::map<std::string, double> knobs;   // (its shape's knobs as said now, its words, and the thing's size: its own units)
+    std::map<std::string, std::string> words;
+    float2 size{1.f};
+    Mesh* solid = nullptr;
+    MaterialInstance* solidLook = nullptr;
+    bool solidRepeat = false;
+    struct Cover { std::vector<uint8_t> a; int w = 0, h = 0, times = 0; };
+    std::shared_ptr<Cover> cover = std::make_shared<Cover>();
 };
 
 // The view a thing is drawn alone in: samples/rendertarget.cpp's offscreen view (its own scene, the stage's eye, its
@@ -150,6 +163,7 @@ static ThingFx& thing_fx_made(Stage& s, ThingFx& e) {
 
 static void thing_fx_off(Stage& s, ThingFx& e) {
     if (e.sheet) take_off(s, e.sheet), delete e.sheet;
+    if (e.solid) take_off(s, e.solid), delete e.solid;
     if (e.view) s.engine->destroy(e.view->getScene()), s.engine->destroy(e.view);
     if (e.camera) s.engine->destroyCameraComponent(e.eye), utils::EntityManager::get().destroy(e.eye);
     e = ThingFx{};
@@ -175,4 +189,74 @@ static void thing_fx_aim(Stage& s, ThingFx& e, const double* box) {
     math::mat4f place;
     place[0][0] = (float)((x1 - x0) / 2), place[1][1] = (float)((y1 - y0) / 2), place[3][0] = (float)((x0 + x1) / 2), place[3][1] = (float)((y0 + y1) / 2);
     e.look->setParameter("place", place);
+}
+
+// Aimed square at the thing's own face, for a solid's faces (its picture the same however it is turned): an orthographic
+// camera on its own z line, as wide and high as it is (Filament's Camera::setProjection ORTHO; told each frame, as
+// samples/rendertarget.cpp tells its offscreen camera), its picture 1024 pixels along its longer side.
+static void thing_fx_face(Stage& s, ThingFx& e, const math::mat4& place, float2 half) {
+    math::double3 x = place[0].xyz, y = place[1].xyz;
+    const double sx = length(x), sy = length(y), wide = half.x * sx, high = half.y * sy, far = 4.0 * std::max(wide, high) + 1.0;
+    if (wide < 1e-9 || high < 1e-9) return;
+    x /= sx, y = normalize(y - dot(y, x) * x);
+    const math::double3 z = cross(x, y);
+    e.camera->setModelMatrix(math::mat4(math::double4{x, 0}, math::double4{y, 0}, math::double4{z, 0}, math::double4{place[3].xyz + 0.5 * far * z, 1}));
+    e.camera->setProjection(Camera::Projection::ORTHO, -wide, wide, -high, high, 0.0, far);
+    const Camera& c = *s.camera;
+    e.camera->setExposure(c.getAperture(), c.getShutterSpeed(), c.getSensitivity());
+    const uint32_t w = (uint32_t)std::max(1L, std::lround(1024 * wide / std::max(wide, high))), h = (uint32_t)std::max(1L, std::lround(1024 * high / std::max(wide, high)));
+    e.view->setViewport({0, 0, w, h});
+    const double ppp = (double)s.view->getViewport().width / std::max(1, s.w);
+    e.st.pw = w / ppp, e.st.ph = h / ppp;
+}
+
+// Its solid made again when what it is made of has changed (its shape's file, knobs and size; its coverage): put in the
+// stage's own scene, casting and taking shadows, unlit when its Lit is off; one already there given its new points in
+// place (reshape). Within a frame only that: a look made then is not ready till the next (Filament readies every look
+// as a frame begins, FEngine::prepare), so a new one waits for the next moment.
+static void thing_fx_solid(Stage& s, ThingFx& e, bool inFrame) {
+    std::string said = e.solidFile + " " + std::to_string(e.size.x) + " " + std::to_string(e.size.y) + " " + std::to_string(e.cover->times);
+    for (const auto& [n, v] : e.knobs) said += " " + n + "=" + std::to_string(v);
+    for (const auto& [n, w] : e.words) said += " " + n + ":" + w;
+    const auto lit = e.knobs.find("lit");
+    const bool flat = lit != e.knobs.end() && lit->second == 0;
+    const char* const look = flat ? "solid_image_flat.filamat" : "solid_image.filamat";
+    const bool anew = !e.solid || e.solidAs != look;
+    if (said == e.solidSaid || (anew && inFrame)) return;
+    SolidMade made;
+    std::string why;
+    if (!solid_three(e.solidFile, e.knobs, e.words, e.size.x, e.size.y, e.cover->a, e.cover->w, e.cover->h, made, why)) std::fprintf(stderr, "the solid %s is not made: %s\n", e.solidFile.c_str(), why.substr(0, 600).c_str());
+    if (made.idx.empty() || made.pos.size() != made.nrm.size() || made.uv.size() * 3 != made.pos.size() * 2) made = SolidMade{{0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 1, 0, 0, 1, 0, 0, 1}, {0, 0, 0, 0, 0, 0}, {0, 1, 2}};   // (none yet, Raster Extrude's before its picture is read: a point, its look ready)
+    e.solidSaid = said;
+    if (anew && e.solid) take_off(s, e.solid), delete e.solid, e.solid = nullptr;
+    Mesh* m = e.solid ? e.solid : new Mesh;
+    m->pos.resize(made.pos.size() / 3), m->nrm.resize(made.pos.size() / 3), m->uv.resize(made.uv.size() / 2);
+    std::memcpy(m->pos.data(), made.pos.data(), made.pos.size() * sizeof(float)), std::memcpy(m->nrm.data(), made.nrm.data(), made.nrm.size() * sizeof(float));
+    std::memcpy(m->uv.data(), made.uv.data(), made.uv.size() * sizeof(float));
+    m->idx = std::move(made.idx);
+    e.solidRepeat = made.repeat;
+    if (!anew) return reshape(s, m, {(uint32_t)m->idx.size()});
+    e.solid = m, e.solidAs = look;
+    e.solidLook = add(s, m, look, {mat4f{}}, 1, true);
+    if (!e.solidLook) return;
+    e.solidLook->setParameter("image", white_point(s), TextureSampler());   // (a picture from the start, as the sheet's)
+    if (!flat) e.solidLook->setParameter("roughness", 0.5f), e.solidLook->setParameter("metallic", 0.f);
+}
+
+// Its picture's coverage read back for a shape made of its outline (Filament's Renderer::readPixels, its callback on a
+// later frame: the shape made of it then), every so many pixels, at most `cells` along the longer side.
+static void thing_fx_cover(Stage& s, ThingFx& e, int cells) {
+    RenderTarget* const from = e.st.steps.empty() ? e.st.target : e.st.betweenTarget[(e.st.steps.size() - 1) % 2];
+    const Viewport vp = e.view->getViewport();
+    if (!from || !vp.width || !vp.height) return;
+    auto* pixels = new std::vector<uint8_t>((size_t)vp.width * vp.height * 4);
+    s.renderer->readPixels(from, 0, 0, vp.width, vp.height, backend::PixelBufferDescriptor::make(pixels->data(), pixels->size(), backend::PixelDataFormat::RGBA, backend::PixelDataType::UBYTE,
+        [pixels, cover = e.cover, w = (int)vp.width, h = (int)vp.height, cells](void const*, size_t) {
+            const double every = (double)std::max(w, h) / std::max(2, cells);
+            const int cw = std::max(2, (int)(w / every)), ch = std::max(2, (int)(h / every));
+            std::vector<uint8_t> a((size_t)cw * ch);
+            for (int y = 0; y < ch; ++y) for (int x = 0; x < cw; ++x) a[(size_t)(y * cw + x)] = (*pixels)[4 * ((size_t)std::min(h - 1, (int)(y * every)) * w + std::min(w - 1, (int)(x * every))) + 3];
+            if (a != cover->a || cw != cover->w) cover->a = std::move(a), cover->w = cw, cover->h = ch, cover->times++;
+            delete pixels;
+        }));
 }

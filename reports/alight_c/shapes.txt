@@ -1,0 +1,78 @@
+add picture ../../fx_sample.jpg
+add text ../arial_black.ttf
+say 2 text MOTOLII
+say 2 fill ffffff
+set 1 x -1.25
+set 2 x 1.2
+set 2 size 0.6
+add light sun
+set 1 rotate_y 35
+set 1 rotate_x -20
+set 2 rotate_y 35
+set 2 rotate_x -20
+say 1 fx ../../solids/Box.js
+say 2 fx ../../solids/Box.js
+still out/c_Box.png
+say 1 fx ../../solids/Cube.js
+say 2 fx ../../solids/Cube.js
+still out/c_Cube.png
+say 1 fx ../../solids/Cylinder.js
+say 2 fx ../../solids/Cylinder.js
+still out/c_Cylinder.png
+say 1 fx ../../solids/Ellipsoid.js
+say 2 fx ../../solids/Ellipsoid.js
+set 1 js_Ellipsoid_width 1.4
+set 1 js_Ellipsoid_depth 0.6
+set 2 js_Ellipsoid_width 1.4
+set 2 js_Ellipsoid_depth 0.6
+still out/c_Ellipsoid.png
+say 1 fx ../../solids/Heart.js
+say 2 fx ../../solids/Heart.js
+still out/c_Heart.png
+say 1 fx ../../solids/Hexagonal_Prism.js
+say 2 fx ../../solids/Hexagonal_Prism.js
+still out/c_Hexagonal_Prism.png
+say 1 fx ../../solids/Hollow_Box.js
+say 2 fx ../../solids/Hollow_Box.js
+say 1 js_Hollow_Box_cutout circle
+say 2 js_Hollow_Box_cutout square
+still out/c_Hollow_Box.png
+say 1 fx ../../solids/Octahedron.js
+say 2 fx ../../solids/Octahedron.js
+still out/c_Octahedron.png
+say 1 fx ../../solids/Pyramid.js
+say 2 fx ../../solids/Pyramid.js
+still out/c_Pyramid.png
+say 1 fx ../../solids/Raster_Extrude.js
+say 2 fx ../../solids/Raster_Extrude.js
+still out/c_Raster_Extrude.png
+say 1 fx ../../solids/Spherize.js
+say 2 fx ../../solids/Spherize.js
+still out/c_Spherize.png
+say 1 fx ../../solids/Star_Prism.js
+say 2 fx ../../solids/Star_Prism.js
+still out/c_Star_Prism.png
+say 1 fx ../../solids/Three-axis_Cross.js
+say 2 fx ../../solids/Three-axis_Cross.js
+still out/c_Three-axis_Cross.png
+say 1 fx ../../solids/Torus.js
+say 2 fx ../../solids/Torus.js
+still out/c_Torus.png
+set 1 rotate_y 12
+set 1 rotate_x -8
+set 2 rotate_y 12
+set 2 rotate_x -8
+say 1 fx ../../solids/Tunnel.js
+say 2 fx ../../solids/Tunnel.js
+still out/c_Tunnel.png
+set 1 rotate_y 35
+set 2 rotate_y 35
+say 1 fx ../../solids/Box.js
+say 2 fx ../../solids/Box.js
+set 1 js_Box_lit 0
+set 2 js_Box_lit 0
+still out/c_Box_flat.png
+set 1 js_Box_lit 1
+say 1 fx ../../effects/Bad TV.fs ../../solids/Box.js
+still out/c_Box_badtv.png
+time 60
