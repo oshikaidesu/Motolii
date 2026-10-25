@@ -11,6 +11,7 @@
 #include "dawn_probe/gpu_door.h"
 #include <gst/gst.h>
 #include <gst/app/gstappsink.h>
+#include <gst/pbutils/pbutils.h>
 #include <gst/video/video.h>
 #include <CoreVideo/CoreVideo.h>
 #include <IOSurface/IOSurface.h>
@@ -282,10 +283,18 @@ static Video* video(Stage& s, const char* file, const mat4f& place, float high, 
     static const bool started = (gst_init(nullptr, nullptr), true);
     (void)started;
     Video* v = new Video;
-    {
-        std::string end = std::filesystem::path(file).extension().string();
-        for (char& c : end) c = (char)std::tolower((unsigned char)c);
-        v->heard = std::string(" .mp3 .wav .m4a .aac .flac .ogg .opus ").find(" " + end + " ") != std::string::npos;
+    {   // (sound alone: GStreamer's discoverer finds sound in it and no picture but stills (an album's cover), as gst-discoverer-1.0 tells)
+        GstDiscoverer* looks = gst_discoverer_new(5 * GST_SECOND, nullptr);
+        gchar* uri = gst_filename_to_uri(file, nullptr);
+        if (GstDiscovererInfo* info = looks && uri ? gst_discoverer_discover_uri(looks, uri, nullptr) : nullptr) {
+            GList* pictures = gst_discoverer_info_get_video_streams(info), *sounds = gst_discoverer_info_get_audio_streams(info);
+            bool moving = false;
+            for (GList* p = pictures; p; p = p->next) moving = moving || !gst_discoverer_video_info_is_image((GstDiscovererVideoInfo*)p->data);
+            v->heard = sounds && !moving;
+            gst_discoverer_stream_info_list_free(pictures), gst_discoverer_stream_info_list_free(sounds), g_object_unref(info);
+        }
+        g_free(uri);
+        if (looks) g_object_unref(looks);
     }
     // (read by the machine's decoder; where it has no room (59 films at once on an M4) by a decoder of the CPU, the
     //  pictures then copied up: decodebin, told to pass the machine's decoders over, and a converter to NV12)

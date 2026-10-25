@@ -8,5 +8,5 @@ if [ ! -f out/vid/cat_green.mp4 ]; then   # the clip: an After Effects cat on a 
     ffmpeg -loglevel error -y -i out/wgpu_kit/out/ae.mp4 -an -vf fps=30 -c:v libx264 -crf 20 -pix_fmt yuv420p out/vid/cat_green.mp4 || exit 1
 fi
 # (films are read by GStreamer: Homebrew's, 1.28)
-KIT_EXTRA="$(pkg-config --cflags --libs gstreamer-1.0 gstreamer-app-1.0 gstreamer-video-1.0)" BUILDONLY=1 ./dawn_probe/kit_wgpu.sh puppet || exit 1
+KIT_EXTRA="$(pkg-config --cflags --libs gstreamer-1.0 gstreamer-app-1.0 gstreamer-video-1.0 gstreamer-pbutils-1.0)" BUILDONLY=1 ./dawn_probe/kit_wgpu.sh puppet || exit 1
 cd out/wgpu_kit && BACKEND="${BACKEND:-webgpu}" ../puppet_wgpu "$@" 2>&1 | grep -v "FrameInfo's circular queue\|libvulkan\|BackendVk"

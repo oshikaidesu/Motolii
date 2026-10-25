@@ -9,6 +9,7 @@
 #include "midi_roll.h"
 #include "midi.h"
 #include <quickjs.h>
+#include <thorvg.h>
 #include <cmath>
 #include <filesystem>
 #include <fstream>
@@ -91,12 +92,13 @@ std::string midi_roll_file(const std::string& file, double bpm, std::string& why
     return out;
 }
 
-bool midi_roll_box(const std::string& svg, double& w, double& h) {   // (its viewBox: points of the roll, 300 a second)
-    std::ifstream in(svg);
-    std::string head(512, '\0');
-    in.read(head.data(), (std::streamsize)head.size());
-    const size_t at = head.find("viewBox=\"");
-    return at != std::string::npos && std::sscanf(head.c_str() + at + 9, "%*f %*f %lf %lf", &w, &h) == 2 && w > 0 && h > 0;
+bool midi_roll_box(const std::string& svg, double& w, double& h) {   // (as ThorVG reads it: its size, points of the roll, 300 a second)
+    static const bool started = tvg::Initializer::init(0) == tvg::Result::Success;
+    tvg::Picture* p = tvg::Picture::gen();
+    float fw = 0.f, fh = 0.f;
+    const bool read = started && p->load(svg.c_str()) == tvg::Result::Success && p->size(&fw, &fh) == tvg::Result::Success && fw > 0.f && fh > 0.f;
+    tvg::Paint::rel(p);
+    return read && (w = fw, h = fh, true);
 }
 
 std::vector<MidiRollNote> midi_roll_notes(const std::string& svg) {   // (where each note's rect is, from the SVG; what it is, from bladeSk's own notes beside it)

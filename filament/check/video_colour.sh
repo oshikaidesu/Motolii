@@ -4,7 +4,7 @@
 cd "$(dirname "$0")/.."
 W=out/wgpu_kit/out/colour_check
 rm -rf $W && mkdir -p $W
-KIT_EXTRA="$(pkg-config --cflags --libs gstreamer-1.0 gstreamer-app-1.0 gstreamer-video-1.0)" KIT_SRC=check/video_colour.mm BUILDONLY=1 ./dawn_probe/kit_wgpu.sh colour_check || exit 1
+KIT_EXTRA="$(pkg-config --cflags --libs gstreamer-1.0 gstreamer-app-1.0 gstreamer-video-1.0 gstreamer-pbutils-1.0)" KIT_SRC=check/video_colour.mm BUILDONLY=1 ./dawn_probe/kit_wgpu.sh colour_check || exit 1
 for f in ${1:-out/vid_odd}/*; do
     n=${f:t:r}
     ffmpeg -hide_banner -loglevel error -y -ss 1.0 -i $f -frames:v 1 -vf "scale=w=640:h=640:force_original_aspect_ratio=decrease:force_divisible_by=2:flags=bilinear,format=rgb24" $W/${n}_ref.png

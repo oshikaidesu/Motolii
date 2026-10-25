@@ -3,7 +3,7 @@
 #   ./records.sh          (about ten minutes; each run is given up after a set time, so none hangs the rest)
 cd "$(dirname "$0")"
 R=$PWD/../reports/ae_rubric/records
-E="$(pkg-config --cflags --libs gstreamer-1.0 gstreamer-app-1.0 gstreamer-video-1.0)"
+E="$(pkg-config --cflags --libs gstreamer-1.0 gstreamer-app-1.0 gstreamer-video-1.0 gstreamer-pbutils-1.0)"
 mkdir -p $R
 within() { perl -e 'alarm shift; exec @ARGV' "$@" }   # (seconds, then the command)
 quiet() { grep -v "FEngine\|WebGPU adapter\|Backend feature\|libvulkan\|BackendVk\|^$" }
