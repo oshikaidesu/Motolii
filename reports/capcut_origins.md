@@ -1,5 +1,27 @@
 # CapCut の効果の「本当の元ネタ」（見た目と動きで探した、10/25）
 
+## 式で確かめた 7 本：剪映・CapCut の初期の切り替えは gl-transitions そのもの（10/26）
+
+qcut（ライセンス無し、事実だけ使う）の `research/jianying-runtime-probe/TWENTY-TRANSITIONS.md` が 剪映の切り替え 33 本の式と数を書き出している。それを gl-transitions の元のファイルと 1 行ずつ比べた（research_notes/capcut/origins_code.md）。
+
+| 剪映 | gl-transitions（ライセンス） | どれだけ同じか |
+|---|---|---|
+| 爱心 | HeartWipe（MIT） | 同じ |
+| 窗格 | WindowSlices（MIT） | 同じ |
+| 弹跳 | Bounce（MIT） | 影の高さだけ半分（0.0375、元は 0.075） |
+| 倒影 | Swap（MIT） | 同じ |
+| 放射 | CrossZoom（MIT） | 同じ |
+| 风车 | Pinwheel（MIT） | 同じ |
+| 翻页 | InvertedPageCurl（BSD-3） | 同じ |
+
+- 7 本とも 2019 年（剪映の 1 年目）に作られた（素材の番号の頭 32 ビットが作った時刻：6 本が 10/15〜16、放射が 8/12）。CapCut も同じ素材（翻页・倒影は md5 まで同じ）。
+- 2022 年より後の切り替えは gl-transitions ではない（AE 風のキーを Lua で動かす AETools、Lumi、連番の絵）。
+- ほかの CapCut の解析：montage、OpenFrame（GPL-3）、rea-capcut（MIT）、TrimCut、jianying-headless。名前と番号の一覧：pyJianYingDraft（Apache-2.0、切り替え 453）、pyCapCut（1,137）。
+- 借りない物：trinity・AwemeLike（抖音の素材そのものが入っているらしい）、effect-lab（ByteDance のモデルと素材を配っている）。ByteDance は 2023 年に 10 件以上を DMCA で消させている。
+- 調べた言葉：中国語・日本語・韓国語・ロシア語・ベトナム語・インドネシア語・ポルトガル語・スペイン語・タイ語・トルコ語・アラビア語（research_notes/capcut/origins_*.md）。「CapCut がどこから写したか」を書いた人はどの言葉にもいない。抖音の「6 つの定番」の再現記事は 2018 年の 1 本から広がった物。
+- ByteDance 自身の数え：CapCut のテンプレート約 3 万 5 千本でよく使われる切り替えの上位 30（AutoTransition、ECCV 2022、arxiv 2207.13479）。風車・キューブ・つぶし・ブラインド・時計回し・万華鏡は gl-transitions にある。
+- 借りられる新しい出所：CainCamera（Apache-2.0、抖音の 灵魂出窍・幻觉・抖动・缩放・闪白 と画面分割 7 種の GLSL、README にだけライセンス）。
+
 ## 手元の CapCut の中を見た（10/26）
 
 中身は写していない。暗号は解いていない。読んだのは、手元の CapCut が落とした効果のファイルにある「出典の書き込み」（URL・作者・ライセンス）だけ。
@@ -150,9 +172,9 @@
 | 73 | Blur（模糊・つなぎ目） | ぼかしながら入れ替わる※ | gl-transitions LinearBlur（「ぼかしを通るクロスフェード」、2018 年まで） | たぶん | MIT ○。手元：Linear Blur |
 | 74 | Shake 3（抖动・つなぎ目） | ゆれながら次の絵へ※ | Videohive の Premiere 用つなぎ目パック（2018 年ごろ、Shake・Camera Shake） https://videohive.net/item/handy-transitions-for-premiere-pro/22125468 | たぶん | 売り物 ✕。手元：Shake＋Fade ○ |
 | 75 | Zoom Shake 2 | 寄りながらゆれて次の絵へ※ | 74 と同じパックの Zoom Shake（2018 年ごろ） | たぶん | ✕。手元：CrossZoom＋Shake ○ |
-| 76 | Windmill（风车） | 真ん中から細い扇が回りながら開き、次の絵が見える | glsl-transitions の pinwheel（2014-05）→ gl-transitions https://raw.githubusercontent.com/gl-transitions/gl-transitions/master/transitions/pinwheel.glsl 。もっと前の型：SMIL 2.0 の pinWheelWipe（2001） https://www.w3.org/TR/2001/WD-smil20-20010301/smil-transitions.html 、PowerPoint の Wheel。CapCut の見た目 https://www.youtube.com/watch?v=XKbA5YhJgeM | たぶん（羽の数は違う） | MIT ○。手元：Pinwheel |
+| 76 | Windmill（风车） | 真ん中から細い扇が回りながら開き、次の絵が見える | glsl-transitions の pinwheel（2014-05）→ gl-transitions https://raw.githubusercontent.com/gl-transitions/gl-transitions/master/transitions/pinwheel.glsl 。もっと前の型：SMIL 2.0 の pinWheelWipe（2001） https://www.w3.org/TR/2001/WD-smil20-20010301/smil-transitions.html 、PowerPoint の Wheel。CapCut の見た目 https://www.youtube.com/watch?v=XKbA5YhJgeM | **確か**（式と数が gl-transitions の Pinwheel と同じ、羽 8 枚。下の「式で確かめた 7 本」） | MIT ○。手元：Pinwheel |
 | 77 | Cube（立方体） | 黒い地で立方体が回り、床に映り込む | glsl-transitions の cube（2014-06） https://raw.githubusercontent.com/gl-transitions/gl-transitions/master/transitions/cube.glsl 。CapCut の見た目 https://www.youtube.com/watch?v=IYO9_lu_gF4 | たぶん（床の映り込みまで同じ） | MIT ○。手元：cube |
-| 78 | Page Turning（翻页） | 右から紙が筒のようにめくれ、裏は白っぽい | PowerPoint 2013 の Page Curl（2012） https://thepowerpointblog.com/new-page-curl-transition/ 、glsl-transitions の PageCurl（2014）。CapCut の見た目 https://www.youtube.com/watch?v=kNN1AK3-uJ0 | 似ているだけ | 手元：Inverted Page Curl（BSD-3）○ |
+| 78 | Page Turning（翻页） | 右から紙が筒のようにめくれ、裏は白っぽい | PowerPoint 2013 の Page Curl（2012） https://thepowerpointblog.com/new-page-curl-transition/ 、glsl-transitions の PageCurl（2014）。CapCut の見た目 https://www.youtube.com/watch?v=kNN1AK3-uJ0 | **確か**（式と数が gl-transitions の InvertedPageCurl と同じ） | 手元：Inverted Page Curl（BSD-3）○ |
 | 79 | Blinds（百叶窗） | 横の帯ごとに次の絵が開く | PowerPoint の Blinds https://learn.microsoft.com/pt-br/previous-versions/office/developer/office-2010/cc795536(v=office.14) 、gl-transitions windowblinds（2017）。CapCut の見た目 https://www.youtube.com/watch?v=6WgcZLnZWWM | 似ているだけ | 手元：Window Slice（90° 回す）○ |
 | 80 | Mosaic（马赛克・つなぎ目） | 大きな四角の点になってから次の絵へ※ | glsl-transitions の pixelize（2014） | 似ているだけ | MIT ○。手元：Pixelize |
 | 81 | Whirlpool（漩涡・つなぎ目） | 強く渦にねじれたまま次の絵へ | glsl-transitions の Swirl（2014）。CapCut の見た目 https://www.youtube.com/watch?v=FUTxMCdHjU0 | 似ているだけ | MIT ○。手元：Swirl |
