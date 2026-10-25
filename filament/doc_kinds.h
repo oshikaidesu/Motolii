@@ -22,6 +22,7 @@
 #include "solid.h"
 #include "video.h"
 #include "sound.h"
+#include "midi.h"
 #include <filament/Skybox.h>
 #include <set>
 #include <sstream>
@@ -151,7 +152,7 @@ static const DocValue doc_values[] = {
     {"visible", "film picture text solid shape camera light behaviour", 0, 1, false, nullptr}, {"order", doc_kinds, -1e9, 1e9, false, nullptr}, {"wide", "shape", 1e-3, 1e3, false, nullptr}, {"shape", "shape", 0, 0, false, "rect circle solid polygon star line wave null ring arc arrow squircle cog path spiral chamfer"},
     {"points", "shape", 1, 360, false, nullptr}, {"inner", "shape", 0.01, 1, false, nullptr}, {"round", "shape", 0, 0.5, true, nullptr},   // (a polygon's or star's points, a star's inner points, its corners rounded)
     {"start", doc_kinds, 0, 1e6, false, nullptr}, {"duration", doc_kinds, 1e-3, 1e6, false, nullptr},
-    {"begin", "film", 0, 1e6, false, nullptr}, {"speed", "film solid", -100, 100, false, nullptr}, {"keyed", "film", 0, 1, false, nullptr},
+    {"begin", "film", 0, 1e6, false, nullptr}, {"speed", "film solid picture text shape", -100, 100, false, nullptr}, {"keyed", "film", 0, 1, false, nullptr},
     {"beats", "film", 0, 60, false, nullptr},   // (where its sound strikes: louder by so many dB at once; 0, none shown)
     {"blend", "film picture text shape", 0, 0, false, "normal add multiply screen darken lighten overlay soft_light hard_light color_dodge color_burn difference exclusion hue saturation color luminosity linear_burn linear_light vivid_light pin_light darker_color lighter_color subtract divide"}, {"file", "film picture solid text", 0, 0, false, ""}, {"shape", "solid", 0, 0, false, doc_shapes},
     {"text", "text", 0, 0, false, ""}, {"fill", "text solid shape light", 0, 0, false, ""},

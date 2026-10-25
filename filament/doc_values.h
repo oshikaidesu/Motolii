@@ -239,7 +239,7 @@ static char doc_thor_letter(const std::string& w) {
     return 0;
 }
 static DocScript* doc_script_of(Doc& d, const std::string& file) {
-    if (file.empty() || file == "none") return nullptr;
+    if (file.empty() || file == "none" || std::filesystem::path(file).extension() == ".mid") return nullptr;   // (a MIDI file's notes are copies, not a script: midi.h)
     const std::string ext = std::filesystem::path(file).extension().string();
     const bool screen = ext == ".wgsl" || ext == ".fs" || ext == ".mjs" || three_is(file);   // (a three.js effect: as an ISF one, three_isf.cpp)
     const bool lottie = ext == ".json" || ext == ".lot";   // (an After Effects file: its slots its knobs, lottie_slots.h)   // (.mjs: a PlayCanvas splat effect, its knobs its attributes: splatfx.h)   // (a whole-screen effect's knobs: named by the effect too)

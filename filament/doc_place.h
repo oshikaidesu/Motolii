@@ -74,7 +74,14 @@ static math::mat4 doc_place(Doc& d, int thing, double now, int deeper, int copy,
         own = own * math::mat4::rotation(w * doc_literal(d, thing, "wave_rotate", said, 0) * (double)TAU / 360.0, math::double3{0, 0, 1}) *
               math::mat4::scaling(std::max(0.0, 1.0 + w * doc_literal(d, thing, "wave_size", said, 0)));
     }
-    if (member)   // (a recipe as code: each copy where the thing's script says, on top of what its copies' values say)
+    if (const std::string notes = member ? doc_literal_word(d, thing, "script") : std::string(); std::filesystem::path(notes).extension() == ".mid") {   // (a MIDI file's notes, copies: midi.h)
+        Doc::Scripted& kept = d.scripted[thing];
+        if (kept.at != said || (int)kept.copies.size() != n)   // (its speed: the file's beats faster or slower, as a film's)
+            kept.at = said, kept.copies = midi_copies(midi_of(notes), n, (said - doc_literal(d, thing, "start", 0, 0)) * doc_literal(d, thing, "speed", 0, 1), doc_number(d, 0, "high", 0, 1080) / 1080.0 * (double)d.stage->h / std::max(1.0, doc_number(d, 0, "high", 0, 1080) * doc_point(d, thing, said)));
+        const ScriptCopy c = copy < n ? kept.copies[(size_t)copy] : ScriptCopy{};
+        shift += math::double3{c.x, c.y, c.z};
+        own = own * math::mat4::scaling(c.size);
+    } else if (member)   // (a recipe as code: each copy where the thing's script says, on top of what its copies' values say)
         if (DocScript* sc = doc_script_of(d, doc_literal_word(d, thing, "script")); sc && sc->run && sc->run->ok()) {
             Doc::Scripted& kept = d.scripted[thing];
             if (kept.at != said || kept.made != doc_scripts_made(d) || (int)kept.copies.size() != n) {   // (every copy at once, the knobs read once)
