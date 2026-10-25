@@ -51,6 +51,7 @@ int main(int argc, char** argv) {
         else if (call == "carry" && w.size() == 4) { const double a = number(2), b = number(3); if (numbers) ok = motolii_carry(m, w[1].c_str(), a, b); }
         else if (call == "let_go" && w.size() == 2) ok = motolii_let_go(m, w[1] != "0");
         else if (call == "say" && w.size() >= 3) { const int n = thing(); if (numbers) ok = motolii_say(m, n, w[2].c_str(), w.size() > 3 ? rest(3).c_str() : ""); }   // (a text's words are the rest of the line; none: said empty)
+        else if (call == "midi" && w.size() >= 5) { const int n = thing(); const int ch = (int)number(3); if (numbers) ok = motolii_midi(m, n, w[2].c_str(), rest(4).c_str(), ch); }   // (midi <thing> <name> <channel, -1: any> <file.mid>)
         else if (call == "key" && w.size() == 5) { const int n = thing(); const double at = number(3), is = number(4); if (numbers) ok = motolii_key(m, n, w[2].c_str(), at, is); }
         else if (call == "unkey" && w.size() == 4) { const int n = thing(); const double at = number(3); if (numbers) ok = motolii_unkey(m, n, w[2].c_str(), at); }
         else if (call == "way" && w.size() >= 5) { const int n = thing(); const double at = number(3); if (numbers) ok = motolii_way(m, n, w[2].c_str(), at, rest(4).c_str()); }   // (the stretch from that key on)

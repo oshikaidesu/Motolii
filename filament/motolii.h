@@ -61,6 +61,7 @@ int motolii_points(Motolii* m, int thing, double* xy, int room);
 int motolii_handles(Motolii* m, int thing, double* xy, double* of, int room);   /* and its curves' handles, the same way, of: the point each is the handle of (may be null); carry "point" takes whichever lies nearest */       /* a word */
 int motolii_key(Motolii* m, int thing, const char* name, double at, double number);   /* a key at a moment */
 int motolii_key_many(Motolii* m, int thing, const char* name, int n, const double* at, const double* number);   /* n keys of one value in one call and one step (at[i], number[i]) */
+int motolii_midi(Motolii* m, int thing, const char* name, const char* file, int channel);   /* a MIDI file's notes as keys of a value: velocity (0..1) where each comes on, 0 where it goes off, held; channel -1: any */
 int motolii_unkey(Motolii* m, int thing, const char* name, double at);
 int motolii_keys(Motolii* m, int thing, const char* name);         /* how many keys a value has */
 /* The stretch from the key at a moment to the next key is itself defined: how the value goes there. A way is a name

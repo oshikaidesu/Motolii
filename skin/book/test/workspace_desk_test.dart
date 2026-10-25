@@ -97,7 +97,7 @@ void main() {
       ..select('$cam');
     await t.pumpAndSettle();
     final was = m.value(cam, 'zoom', 0) ?? 1;
-    await t.drag(find.text('Focal'), const Offset(40, 0));
+    await t.timedDrag(find.text('Focal'), const Offset(40, 0), const Duration(milliseconds: 300));
     await settled(t, ws);
     expect(m.value(cam, 'zoom', 0), isNot(was), reason: 'the focal length is its zoom');
     expect(t.takeException(), isNull);

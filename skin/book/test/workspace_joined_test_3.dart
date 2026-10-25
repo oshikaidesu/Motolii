@@ -124,7 +124,7 @@ void _tests3() {
     expect(m.say(cam, 'projection', 'orthographic') && m.key(cam, 'shift_y', 0, 0.2), isTrue, reason: m.trouble);
     final dist = find.byWidgetPredicate((w) => w is NumField && w.id == 'v_distance');
     await seen(t, dist);
-    await t.drag(dist, const Offset(60, 0));
+    await t.timedDrag(dist, const Offset(60, 0), const Duration(milliseconds: 300));
     await t.pumpAndSettle();
     expect(m.value(cam, 'distance', 0), isNot(anyOf(isNull, 1.0)), reason: 'the distance is the document\'s: ${ws.notice}');
     expect(t.takeException(), isNull);
@@ -177,7 +177,7 @@ void _tests3() {
     await seen(t, far);
     final ids = {for (final e in find.byType(NumField).evaluate()) (e.widget as NumField).id};
     expect(ids, containsAll(['v_shadow_distance', 'v_shadow_angle', 'v_shadow_blur', 'v_shadow_opacity']));
-    await t.drag(far, const Offset(40, 0));
+    await t.timedDrag(far, const Offset(40, 0), const Duration(milliseconds: 300));
     await t.pumpAndSettle();
     expect(m.value(a, 'shadow_distance', 0), isNot(was), reason: 'the distance is the document\'s: ${ws.notice}');
     expect(m.undo(), isTrue);
@@ -238,7 +238,7 @@ void _tests3() {
     final wide = m.frame(text)![2], letters = find.byWidgetPredicate((w) => w is NumField && w.id == 'v_letter_spacing');
     expect(letters, findsOneWidget);
     await seen(t, letters);
-    await t.drag(letters, const Offset(80, 0));
+    await t.timedDrag(letters, const Offset(80, 0), const Duration(milliseconds: 300));
     await t.pumpAndSettle();
     expect(m.value(text, 'letter_spacing', 0), greaterThan(1), reason: 'the letters further apart: ${ws.notice}');
     expect(m.frame(text)![2], greaterThan(wide), reason: 'and the words wider on the stage');
@@ -281,7 +281,7 @@ void _tests3() {
     expect(titles, ['Grade', 'Lens', 'Room', 'Physics']);
     final bloom = find.byWidgetPredicate((w) => w is NumField && w.id == 'v_bloom');
     await seen(t, bloom);
-    await t.drag(bloom, const Offset(60, 0));
+    await t.timedDrag(bloom, const Offset(60, 0), const Duration(milliseconds: 300));
     await t.pumpAndSettle();
     expect(m.value(0, 'bloom', 0), greaterThan(0), reason: 'the stage glows: ${ws.notice}');
     expect(m.undo() && m.value(0, 'bloom', 0) == 0, isTrue, reason: 'one step');
@@ -334,7 +334,7 @@ void _tests3() {
     await t.pumpAndSettle();
     final strong = find.byWidgetPredicate((w) => w is NumField && w.id == 'v_intensity');
     await seen(t, strong);
-    await t.drag(strong, const Offset(40, 0));
+    await t.timedDrag(strong, const Offset(40, 0), const Duration(milliseconds: 300));
     await t.pumpAndSettle();
     expect(m.keyMoments(spot, 'intensity'), [0], reason: 'a key where the playhead is: ${ws.notice}');
     expect(wsKeyMarks(ws, '$spot')['v_intensity'], KeyS.at);
@@ -418,7 +418,7 @@ void _tests3() {
     await seen(t, knob);
     expect(knob, findsOneWidget, reason: 'ids: ${[for (final e in find.byType(NumField).evaluate()) (e.widget as NumField).id]}');
     await seen(t, knob);
-    await t.drag(knob, const Offset(60, 0));
+    await t.timedDrag(knob, const Offset(60, 0), const Duration(milliseconds: 300));
     await t.pumpAndSettle();
     expect(m.value(dots, 'js_reach', 0), isNot(1.0), reason: 'the knob is the document\'s: ${ws.notice}');
     expect(t.takeException(), isNull);

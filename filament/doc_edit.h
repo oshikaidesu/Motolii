@@ -334,7 +334,7 @@ static bool doc_key(Doc& d, int thing, const char* name, double at, double is) {
 }
 // Many keys of one value at once (doc_key's rule, asked once: the value that stayed goes when keys come), one statement
 // made ready and said again for each; one act, the stage made again at its end.
-static bool doc_key_many(Doc& d, int thing, const char* name, int n, const double* at, const double* is) {
+static bool doc_key_many(Doc& d, int thing, const char* name, int n, const double* at, const double* is, const char* way = nullptr) {   // (way: each key's, as a MIDI file's are Hold)
     for (int i = 0; i < n; ++i) {
         double v = is[i];
         if (!(at[i] >= 0.0 && at[i] <= 1e6)) return d.trouble = "a key is at a moment of the stage: from 0 to 1000000 seconds", false;
@@ -349,7 +349,8 @@ static bool doc_key_many(Doc& d, int thing, const char* name, int n, const doubl
     for (int i = 0; ok && i < n; ++i) {
         sqlite3_reset(put);
         sqlite3_bind_int(put, 1, thing), sqlite3_bind_text(put, 2, name, -1, SQLITE_STATIC), sqlite3_bind_double(put, 3, at[i]), sqlite3_bind_double(put, 4, is[i]);
-        if (at[i] == 0.0) sqlite3_bind_text(put, 5, "Linear", -1, SQLITE_STATIC);
+        if (way) sqlite3_bind_text(put, 5, way, -1, SQLITE_STATIC);
+        else if (at[i] == 0.0) sqlite3_bind_text(put, 5, "Linear", -1, SQLITE_STATIC);
         else sqlite3_bind_null(put, 5);
         ok = sqlite3_step(put) == SQLITE_DONE;
     }

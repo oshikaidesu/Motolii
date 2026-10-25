@@ -6,6 +6,7 @@
 #include "stage_kept.h"
 #include "heard.h"
 #include "sound.h"
+#include "midi.h"
 #include <CoreText/CoreText.h>
 #include "motolii.h"
 #include "rendering/FrameScheduler.hpp"   // (third_party/thermion_frame: the screen's own beat)
@@ -496,6 +497,21 @@ int motolii_key_many(Motolii* m, int thing, const char* name, int n, const doubl
     return by_hand(m, [=] {
         return changes(m, (int)doc_key_many(doc(m), thing, name, n, at, number));
     });
+}
+// A MIDI file's notes made keys of a value, as om_midi makes them in After Effects (midi.h): where a note of the channel
+// (-1: any) comes on, its velocity (0 to 1), where it goes off 0, each held till the next; one step.
+int motolii_midi(Motolii* m, int thing, const char* name, const char* file, int channel) {
+    const std::vector<MidiNote> notes = midi_notes(file);
+    std::map<double, double> keys;
+    for (const MidiNote& n : notes) {
+        if (channel >= 0 && n.channel != channel) continue;
+        keys[n.on] = std::max(keys.count(n.on) ? keys[n.on] : 0.0, n.velocity / 127.0);
+        if (n.off > n.on && !keys.count(n.off)) keys[n.off] = 0.0;
+    }
+    std::vector<double> at, is;
+    for (const auto& [t, v] : keys) at.push_back(t), is.push_back(v);
+    if (at.empty()) return by_hand(m, [=] { return (doc(m).trouble = std::string("no notes in ") + file, 0); });
+    return by_hand(m, [=] { return changes(m, (int)doc_key_many(doc(m), thing, name, (int)at.size(), at.data(), is.data(), "Hold")); });
 }
 int motolii_unkey(Motolii* m, int thing, const char* name, double at) { return by_hand(m, [=] { return changes(m, (int)(doc_unkey(doc(m), thing, name, at))); }); }
 int motolii_keys(Motolii* m, int thing, const char* name) { return by_look(m, [=] { return (int)(doc_keys(doc(m), thing, name)); }); }
