@@ -3,8 +3,9 @@ static int way_is(Motolii* m, int thing, const char* name, double at, const char
     Doc& d = doc(m);
     bool here = false;
     doc_rows(d, sqlite3_mprintf("select 1 from way where name = %Q", way), [&](sqlite3_stmt*) { here = true; });
-    const auto own = doc_own_ways().find(way);
-    if (here || own == doc_own_ways().end()) return changes(m, (int)(doc_way(d, thing, name, at, way)));
+    const auto ways = doc_own_ways();
+    const auto own = ways.find(way);
+    if (here || own == ways.end()) return changes(m, (int)(doc_way(d, thing, name, at, way)));
     doc_act(d);   // (the maker's own way: written into the document and put on the key, one step)
     if (!doc_define(d, way, own->second.c_str()) || !doc_way(d, thing, name, at, way)) d.act_ok = false;
     return changes(m, (int)doc_acted(d));
@@ -225,8 +226,9 @@ double motolii_way_at(Motolii* m, const char* way, double u) {
     return by_look(m, [=] {
         bool here = false;
         doc_rows(*m->d, sqlite3_mprintf("select 1 from way where name = %Q", way), [&](sqlite3_stmt*) { here = true; });
-        const auto own = doc_own_ways().find(way);
-        if (!here && own != doc_own_ways().end()) {   // (the maker's own, not yet in this document: as its file says it)
+        const auto ways = doc_own_ways();
+        const auto own = ways.find(way);
+        if (!here && own != ways.end()) {   // (the maker's own, not yet in this document: as its file says it)
             const double p[4] = {1, 1, 1, 1};
             sqlite3_stmt* goes = doc_goes(*m->d, own->second);
             return goes ? doc_went(goes, u, u, 1.0, 0.0, 1.0, p) : u;

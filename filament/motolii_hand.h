@@ -76,6 +76,7 @@ struct Motolii {
     // The window's pictures of the document (picture.h, skin/BRIDGE.md), set down by the hand, read under their own lock.
     std::mutex pictureLock;
     std::map<int, std::pair<long, std::string>> pictured;   // (each thing's part of the document's picture, and the version it was made at)
+    int picturedWays = -1;                                       // (the maker's own ways as they were read when it was last made: doc_own_ways_made)
     long picturedRows = -1;                                      // (the document's changes, by SQLite's count, the document's picture was last made after)
     std::string pictureAll, momentPicture;                  // (the document's own part; the moment's picture)
     long pictureVersion = 0, momentVersion = 0;
@@ -243,7 +244,8 @@ static void motolii_hand(Motolii* m, std::string document, int wide, int high, s
             for (auto& does : todo) does();
             if (!todo.empty()) ++m->writes_on_beat;
             lap(6);
-            if (sqlite3_total_changes(m->d->file) != m->picturedRows) picture_update(m);   // (the window's picture of the document, where it changed since it was last made: a call that made it already is not made again, its list of what changed kept)
+            if (doc_own_ways(), doc_own_ways_made() != m->picturedWays) m->picturedWays = doc_own_ways_made(), picture_update(m);   // (a way put in the maker's folder: a tile of the Ease desk at once)
+            else if (sqlite3_total_changes(m->d->file) != m->picturedRows) picture_update(m);   // (the window's picture of the document, where it changed since it was last made: a call that made it already is not made again, its list of what changed kept)
             if (sqlite3_total_changes(m->d->file) != rows || m->d->held.tried != held)
                 (sqlite3_total_changes(m->d->file) != rows ? m->revision : m->carried).fetch_add(1, std::memory_order_release);   // (the document changed, or only what a hand carries: the kept pictures go by these)
         }

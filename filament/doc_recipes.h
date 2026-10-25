@@ -61,13 +61,17 @@ static std::string doc_folder_names(const char* folder, const char* extension) {
 // before the colon; the rest is how far it is, as a way defined in a document says it (doc_define: a, b, u, p1..p4,
 // bezier(u, x1, y1, x2, y2)). Put on a key, it is written into the document, so the document goes as it did wherever it
 // is opened. The maker's own of a name goes before the library's.
-static const std::map<std::string, std::string>& doc_own_ways() {
-    static std::map<std::string, std::string> all;
+// One for the whole program, read by every document's hand and every window's look: held by a lock, given as a copy.
+static std::mutex& doc_own_ways_lock() { static std::mutex one; return one; }
+static std::atomic<int>& doc_own_ways_made() { static std::atomic<int> made{0}; return made; }   // (how many times what was read was not what was before: the window's picture made again, motolii_hand.h)
+static std::map<std::string, std::string> doc_own_ways() {
+    std::lock_guard<std::mutex> hold(doc_own_ways_lock());
+    static std::map<std::string, std::string> kept;
     static std::chrono::steady_clock::time_point looked{};
     const auto now = std::chrono::steady_clock::now();
-    if (looked != std::chrono::steady_clock::time_point{} && now - looked < std::chrono::milliseconds(500)) return all;   // (looked at again at most twice a second: a file put there shows at once)
+    if (looked != std::chrono::steady_clock::time_point{} && now - looked < std::chrono::milliseconds(500)) return kept;   // (looked at again at most twice a second, Node's fs.watchFile way: the OS's own watch, GIO's GFileMonitor, tells only while GLib's default main context runs, and none runs here)
     looked = now;
-    all.clear();
+    std::map<std::string, std::string> all;
     std::error_code wrong;
     for (const auto& dir : doc_folders("ways"))
         for (const auto& e : std::filesystem::directory_iterator(dir, wrong)) {
@@ -82,7 +86,8 @@ static const std::map<std::string, std::string>& doc_own_ways() {
             if (name.empty()) name = e.path().stem().string();
             if (goes.find_first_not_of(' ') != std::string::npos) all[name] = goes;   // (the maker's folder is read last: theirs of a name stands)
         }
-    return all;
+    if (all != kept) kept = all, ++doc_own_ways_made();
+    return kept;
 }
 // The recipe of that name made at the stage's present moment, one step (0: not made, d.trouble says why).
 static int doc_make(Doc& d, const char* name) {
