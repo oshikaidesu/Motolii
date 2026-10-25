@@ -163,7 +163,15 @@ static bool doc_match(Doc& d) {
                 return Stage::Sound{file, v->from, v->to, v->speed, late, std::max(0.0, on), lasts < 0.0 ? lasts : std::max(1e-3, lasts - late)};
             };
         } else if (kind == "picture") {
-            if (fxOk && (made.drawn = picture(s, file.c_str(), mat4f{}, 1.f, float3{-1.f}, true, lay, fx, doc_word(d, thing, "marker").c_str()))) s.playing.erase(made.drawn);
+            std::string shown = file;
+            float rollHigh = 1.f;   // (a MIDI file: its piano roll, at its speed's tempo: midi_roll.cpp)
+            if (std::filesystem::path(file).extension() == ".mid") {
+                const double speed = doc_number(d, thing, "speed", 0, 1);
+                shown = midi_roll_file(file, speed == 1.0 ? 0.0 : midi_bpm(file.c_str()) * speed, why);
+                double w = 0, h = 0;   // (a point of it a point of the document, as ALMaMPlayer's 1920 x 1080 screen shows it)
+                if (!shown.empty() && midi_roll_box(shown, w, h)) rollHigh = (float)(h / doc_point(d, thing, 0));
+            }
+            if (fxOk && !shown.empty() && (made.drawn = picture(s, shown.c_str(), mat4f{}, rollHigh, float3{-1.f}, true, lay, fx, doc_word(d, thing, "marker").c_str()))) s.playing.erase(made.drawn);
             if (made.drawn && made.drawn->lottie && !picture_deep(s, made.drawn).empty()) {   // (its 3D layers stood up where they are, as After Effects shows them)
                 made.motion = std::make_shared<Motion>();
                 if (motion_open(*made.motion, file.c_str()))

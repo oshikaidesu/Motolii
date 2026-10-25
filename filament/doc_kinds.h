@@ -10,6 +10,7 @@
 #include "lottie_slots.h"
 #include "isf.h"
 #include "three_isf.h"
+#include "midi_roll.h"
 #include "ways.h"
 #include "screen.h"
 #include "thing_fx.h"

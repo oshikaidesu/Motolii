@@ -74,6 +74,13 @@ static math::mat4 doc_place(Doc& d, int thing, double now, int deeper, int copy,
         own = own * math::mat4::rotation(w * doc_literal(d, thing, "wave_rotate", said, 0) * (double)TAU / 360.0, math::double3{0, 0, 1}) *
               math::mat4::scaling(std::max(0.0, 1.0 + w * doc_literal(d, thing, "wave_size", said, 0)));
     }
+    if (const std::string file = doc_literal_word(d, thing, "file"); std::filesystem::path(file).extension() == ".mid") {   // (a MIDI file's roll going by: its start at the thing at its first moment, 300 points a second, ALMaMPlayer's track.gd)
+        const double speed = doc_literal(d, thing, "speed", 0, 1), point = doc_point(d, thing, said);
+        std::string why;
+        double w = 0, h = 0;
+        if (point > 0 && midi_roll_box(midi_roll_file(file, speed == 1.0 ? 0.0 : midi_bpm(file.c_str()) * speed, why), w, h))
+            shift.x += (0.5 * w - 300.0 * (said - doc_literal(d, thing, "start", 0, 0))) / point;
+    }
     if (const std::string notes = member ? doc_literal_word(d, thing, "script") : std::string(); std::filesystem::path(notes).extension() == ".mid") {   // (a MIDI file's notes, copies: midi.h)
         Doc::Scripted& kept = d.scripted[thing];
         if (kept.at != said || (int)kept.copies.size() != n)   // (its speed: the file's beats faster or slower, as a film's)
