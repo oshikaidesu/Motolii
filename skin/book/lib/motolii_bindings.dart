@@ -986,10 +986,11 @@ class MotoliiBindings {
     int thing,
     ffi.Pointer<pkg_ffi.Utf8> name,
     ffi.Pointer<pkg_ffi.Utf8> file,
+    ffi.Pointer<pkg_ffi.Utf8> kind,
     int channel,
     double bpm,
   ) {
-    return _motolii_midi(m, thing, name, file, channel, bpm);
+    return _motolii_midi(m, thing, name, file, kind, channel, bpm);
   }
 
   late final _motolii_midiPtr =
@@ -998,6 +999,7 @@ class MotoliiBindings {
           ffi.Int Function(
             ffi.Pointer<Motolii>,
             ffi.Int,
+            ffi.Pointer<pkg_ffi.Utf8>,
             ffi.Pointer<pkg_ffi.Utf8>,
             ffi.Pointer<pkg_ffi.Utf8>,
             ffi.Int,
@@ -1010,6 +1012,7 @@ class MotoliiBindings {
         int Function(
           ffi.Pointer<Motolii>,
           int,
+          ffi.Pointer<pkg_ffi.Utf8>,
           ffi.Pointer<pkg_ffi.Utf8>,
           ffi.Pointer<pkg_ffi.Utf8>,
           int,

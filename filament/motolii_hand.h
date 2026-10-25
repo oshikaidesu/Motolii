@@ -498,24 +498,23 @@ int motolii_key_many(Motolii* m, int thing, const char* name, int n, const doubl
         return changes(m, (int)doc_key_many(doc(m), thing, name, n, at, number));
     });
 }
-// A MIDI file's notes made keys of a value, as om_midi makes them in After Effects (midi.h): where a note of the channel
-// (-1: any) comes on, its velocity (0 to 1), where it goes off 0, each held till the next; one step.
-int motolii_midi(Motolii* m, int thing, const char* name, const char* file, int channel, double bpm) {
-    std::vector<MidiNote> notes = midi_notes(file);
+// A MIDI file's notes made keys of a value, as om_midi makes them in After Effects (midi.h: midi_keys), each held; one step.
+int motolii_midi(Motolii* m, int thing, const char* name, const char* file, const char* kind, int channel, double bpm) {
+    std::vector<MidiEvent> events = midi_events(file);
     if (bpm > 0) {   // (the file's beats at another tempo, as om_midi's BPM box: a time is its beats times 60 / BPM)
         const double by = midi_bpm(file) / bpm;
-        for (MidiNote& n : notes) n.on *= by, n.off = n.off < 0 ? n.off : n.off * by;
+        for (MidiEvent& e : events) e.at *= by;
     }
-    std::map<double, double> keys;
-    for (const MidiNote& n : notes) {
-        if (channel >= 0 && n.channel != channel) continue;
-        keys[n.on] = std::max(keys.count(n.on) ? keys[n.on] : 0.0, n.velocity / 127.0);
-        if (n.off > n.on && !keys.count(n.off)) keys[n.off] = 0.0;
-    }
+    const std::map<double, double> keys = midi_keys(events, kind, channel);
     std::vector<double> at, is;
     for (const auto& [t, v] : keys) at.push_back(t), is.push_back(v);
-    if (at.empty()) return by_hand(m, [=] { return (doc(m).trouble = std::string("no notes in ") + file, 0); });
-    return by_hand(m, [=] { return changes(m, (int)doc_key_many(doc(m), thing, name, (int)at.size(), at.data(), is.data(), "Hold")); });
+    if (at.empty()) return by_hand(m, [=, said = std::string(kind)] { return (doc(m).trouble = "no " + said + " keys of notes in " + file + " (kinds: velocity pitch count on bool)", 0); });
+    return by_hand(m, [=] {   // (the keys it had go first: made again from the file, as om_midi makes a new null object each time; together, one step)
+        Doc& d = doc(m);
+        doc_act(d);
+        const bool ok = doc_stay(d, thing, name, 0.0) && doc_key_many(d, thing, name, (int)at.size(), at.data(), is.data(), "Hold");
+        return changes(m, (int)(doc_acted(d) && ok));
+    });
 }
 double motolii_midi_bpm(const char* file) { return midi_bpm(file); }
 int motolii_unkey(Motolii* m, int thing, const char* name, double at) { return by_hand(m, [=] { return changes(m, (int)(doc_unkey(doc(m), thing, name, at))); }); }
