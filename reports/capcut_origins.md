@@ -1,5 +1,25 @@
 # CapCut の効果の「本当の元ネタ」（見た目と動きで探した、10/25）
 
+## 手元の CapCut の中を見た（10/26）
+
+中身は写していない。暗号は解いていない。読んだのは、手元の CapCut が落とした効果のファイルにある「出典の書き込み」（URL・作者・ライセンス）だけ。
+
+- 場所：`~/Movies/CapCut/User Data/Cache/effect`（効果 905 個、シェーダーと Lua 12,640 本、普通の文字）。
+- 出典の URL が残っていた物は 16 本だけ（0.1%）：
+  - Patrick Hebron の Sobel のエッジの gist（ライセンス書かれず）：「ヤンデレ」「ブラー2」「サンフランシスコ」「カラフルなキラキラ」ほか、計 10 本。
+  - ISF の共有サイトの「Bounding Box」（editor.isf.video、作者・ライセンス書かれず）：粒子ノイズ（Grain）の部品。
+  - ashima / stegu の webgl-noise（MIT）：粒のステッカー。
+  - OpenCV の説明と StackOverflow（Photoshop のハイパス）：考え方の出所。
+- ほかに残らない理由：CapCut の GLSL は、ByteDance 自身のシェーダー言語（.ausl）から機械で作った物（変数名が `_f0` など、コメントは消える）。出典の書き込みは元の .ausl にしか無く、それは配られていない。
+- 部品の名前は After Effects の効果名そのまま（`AETools`、`AdjustGlow`、`Grain`、`GaussianBlur`、`StrongSharpen`）。作り手は AE の効果をまねて組んでいる。
+- アプリ本体に入っている外の物：Qt 6（QtBodymovin＝Lottie を含む）、Chromium（CEF）、FFmpeg（libavfilter ほか）、dav1d、LAME、OpenFX（smart_cut、BSD-3）、Sparkle。効果は `libEffectPlatform` が配り、`libvecryptor` という暗号の部品もある。
+
+### CapCut を解析している公開プロジェクト
+- **chukcut**（GPL-3、Linux の動画編集アプリ）：`docs/research/effect-package-format.md` が CapCut の効果の入れ物の形を 1,474 行で書いている（逆コンパイルせず、キャッシュのファイルを読んだだけ）。`capcut-stack.md`・`effect-runtime.md` も。GPL なのでコードは借りない。分かった事実だけ使える。
+- **qcut**（ライセンス無し）：CapCut の美顔などの効果を調べている。ライセンスが無いので借りない。
+- **pyCapCut・CapCutAPI**：下書きのファイル（draft）の形。
+- **marcosp34bpm/capcut-rea**：Windows 版の中の部品の一覧。
+
 ## 疲れている時はここだけ
 
 1. よく使われる 100 本のうち、元ネタが見つかった（確か・たぶん）のは **30 本**。似ているだけが 59 本、見つからないのが 11 本。「ByteDance が写した」と書いた公開の資料は **0**。
